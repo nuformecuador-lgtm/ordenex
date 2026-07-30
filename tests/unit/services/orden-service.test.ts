@@ -196,14 +196,118 @@ describe("crear — matriz de autorizacion", () => {
   });
 });
 
-describe("crear — validacion de FKs y defaults", () => {
-  it("R27/R7/R8: sin estatusId aplica default GLOBAL en_preparacion y delega en el repo", async () => {
-    const r = await service.crear(crearInput({ estatusId: undefined }), TIENDA);
+// ---------------------------------------------------------------------------------------------
+// Feature 155 — BIFURCACION POR BODEGA en el alta manual. El estado inicial ya no sale de una
+// constante de configuracion ni del payload: sale del flag `fulfillment` de la tienda DUEÑA.
+// ---------------------------------------------------------------------------------------------
+describe("155/R1/R2/R3/R13/R14 — alta manual: donde nace la orden", () => {
+  function argsDeCreate() {
+    const llamada = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0];
+    return { data: llamada[0], historial: llamada[1], opciones: llamada[2] };
+  }
+
+  it("R14: adminTienda con fulfillment=false -> nace en por_recolectar_en_tienda CON guia", async () => {
+    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
+    service = new OrdenService(repo, intentos);
+
+    const r = await service.crear(crearInput(), TIENDA);
+
+    expect(r.status).toBe("ok");
+    // R14: el predicado se evalua sobre la tienda que su rol le fuerza (el actor).
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith("store1");
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
+    expect(argsDeCreate().opciones).toEqual({ conGuia: true });
+  });
+
+  it("R2: adminTienda con fulfillment=true -> nace en en_preparacion SIN guia", async () => {
+    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
+    service = new OrdenService(repo, intentos);
+
+    const r = await service.crear(crearInput(), TIENDA);
+
     expect(r.status).toBe("ok");
     expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
-    const data = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(data.estatusId).toBe("os-bodega");
+    expect(argsDeCreate().opciones).toEqual({ conGuia: false });
   });
+
+  it("R13: maestro creando PARA una tienda evalua el flag de ESA tienda, no el suyo", async () => {
+    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
+    service = new OrdenService(repo, intentos);
+
+    const r = await service.crear(crearInput({ tiendaId: OTRA_TIENDA_ID }), MAESTRO);
+
+    expect(r.status).toBe("ok");
+    // El actor es `m1` (maestro) y la tienda dueña es `store2`: se pregunta por la DUEÑA.
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith(OTRA_TIENDA_ID);
+    expect(repo.findUsuarioFulfillment).not.toHaveBeenCalledWith("m1");
+    expect(argsDeCreate().data.tiendaId).toBe(OTRA_TIENDA_ID);
+  });
+
+  it("R13: admin creando para una tienda sin fulfillment tambien cae en la rama con guia", async () => {
+    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
+    service = new OrdenService(repo, intentos);
+
+    const r = await service.crear(crearInput({ tiendaId: OTRA_TIENDA_ID }), ADMIN);
+
+    expect(r.status).toBe("ok");
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith(OTRA_TIENDA_ID);
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
+    expect(argsDeCreate().opciones).toEqual({ conGuia: true });
+  });
+
+  it("R5: un estatusId arbitrario en la entrada NO altera donde nace la orden", async () => {
+    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
+    service = new OrdenService(repo, intentos);
+
+    const r = await service.crear(
+      crearInput({ estatusId: "os-entregada-inyectado" }),
+      TIENDA,
+    );
+
+    expect(r.status).toBe("ok");
+    // Manda el flag, no el payload: ni se consulta el id recibido ni se usa.
+    expect(repo.existsEstatus).not.toHaveBeenCalled();
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
+    expect(argsDeCreate().data.estatusId).toBe("os-bodega");
+    expect(argsDeCreate().data.estatusId).not.toBe("os-entregada-inyectado");
+  });
+
+  it("R9: la creacion NUNCA asigna mensajero (en ninguna de las dos ramas)", async () => {
+    for (const fulfillment of [true, false]) {
+      repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(fulfillment) });
+      service = new OrdenService(repo, intentos);
+      await service.crear(crearInput(), TIENDA);
+      expect(argsDeCreate().data).not.toHaveProperty("mensajeroAsignadoId");
+    }
+  });
+
+  it("R10: deja historial de creacion con la familia de la via (creacion_manual)", async () => {
+    const r = await service.crear(crearInput(), TIENDA);
+    expect(r.status).toBe("ok");
+    expect(argsDeCreate().historial).toEqual({
+      actorUsuarioId: "store1",
+      origenTipo: "creacion_manual",
+    });
+  });
+
+  it("R7: catalogo sin el value de la rama resuelta -> validation_error que lo NOMBRA, sin crear", async () => {
+    repo = buildRepo({
+      findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
+      findEstatusIdByValue: vi.fn().mockResolvedValue(null),
+    });
+    service = new OrdenService(repo, intentos);
+
+    const r = await service.crear(crearInput(), TIENDA);
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(r.fieldErrors.estatusId?.[0]).toContain("por_recolectar_en_tienda");
+    }
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("crear — validacion de FKs y defaults", () => {
 
   it("R26/R12: geografia inexistente -> validation_error por campo, no crea", async () => {
     repo = buildRepo({
@@ -223,13 +327,19 @@ describe("crear — validacion de FKs y defaults", () => {
     expect(repo.create).not.toHaveBeenCalled();
   });
 
-  it("R26: estatusId provisto inexistente -> validation_error", async () => {
+  // Feature 155/R5/R15: el caso "estatusId provisto inexistente" DEJO DE EXISTIR como camino
+  // (la entrada ya no expone estatus inicial). Se conserva su contraparte: una entrada con un
+  // `estatusId` que no existe en el catalogo YA NO produce validation_error — se ignora — y la
+  // orden nace donde manda el flag. El resto de resultados de dominio del alta manual (entrada
+  // invalida, rol no autorizado, duplicado) NO cambia: sus tests siguen vivos en este archivo.
+  it("R5/R15: un estatusId inexistente en la entrada se IGNORA y la orden se crea igual", async () => {
     repo = buildRepo({ existsEstatus: vi.fn().mockResolvedValue(false) });
     service = new OrdenService(repo, intentos);
 
     const r = await service.crear(crearInput({ estatusId: "os-x" }), TIENDA);
-    expect(r.status).toBe("validation_error");
-    expect(repo.create).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
+    expect(repo.existsEstatus).not.toHaveBeenCalled();
+    expect(repo.create).toHaveBeenCalledTimes(1);
   });
 
   it("R28: num_remision duplicado -> conflict", async () => {

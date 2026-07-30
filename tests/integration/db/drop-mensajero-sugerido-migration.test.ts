@@ -199,17 +199,23 @@ describe("carpeta, schema.prisma y registro de la migracion", () => {
       .map((e) => e.name)
       .sort();
     const esta = dirs.find((d) => d.endsWith(SUFFIX))!;
-    const previas = dirs.filter(
-      (d) =>
-        d !== esta &&
-        // feature 154 (catalogo de estados v2): sus dos migraciones (20260729) se
-        // apendieron despues de esta (20260728).
-        !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
-        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente"),
-    );
-    const maxPrevia = previas.map(ts).sort()[previas.length - 1];
+
+    // BASELINE PINNEADO, y es deliberado. El invariante que importa es HISTORICO: cuando
+    // esta migracion se escribio, la carpeta mas reciente del arbol era `20260728120000_*`,
+    // asi que no nacio ANTES que ninguna que ya existiera.
+    //
+    // Compararlo contra el arbol VIVO convierte el assert en una denylist que hay que
+    // ampliar cada vez que otra feature apenda una migracion posterior: ya obligo a excluir
+    // las DOS de la 154, y volvio a romper con la de la 155 al integrar dev. Esas
+    // migraciones son IRRELEVANTES para el invariante -- son posteriores por definicion.
+    // Pinneado deja de dar falsos rojos y sigue cazando lo unico que de verdad lo violaria:
+    // que alguien RENOMBRE esta carpeta a un timestamp anterior.
+    const MAX_AL_ESCRIBIRLA = "20260728120000";
     // `>=`, no `>`: empatar en timestamp con otra carpeta del mismo lote es
     // tolerable (deuda del repo); nacer ANTES que una previa no lo es.
-    expect(ts(esta) >= maxPrevia).toBe(true);
+    expect(ts(esta) >= MAX_AL_ESCRIBIRLA).toBe(true);
+    // Y la carpeta debe seguir siendo EXACTAMENTE la que se aplico: renombrar una migracion
+    // ya aplicada descuadra el registro de `_prisma_migrations`.
+    expect(ts(esta)).toBe(MAX_AL_ESCRIBIRLA);
   });
 });

@@ -7,11 +7,11 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // (el choke point `appendCambioEstado`) resuelve `id -> value` antes de preguntar aqui.
 //
 // El mapa es el INVENTARIO CERRADO del apendice A del design, leido del codigo de `dev`:
-// 42 aristas de flujo (numeracion #1-#42 con el #27 RETIRADO por la 139, + #7b de la revision
-// del inventario + #43/#44 de la 154, - #4/#6/#7c retiradas por la 156) + 4 de creacion. Las
-// 42 colapsan a 39 pares `(origen, destino)` unicos, porque tres pares estan declarados dos
-// veces con familias distintas: #19/#23, #20/#24 (SLA vs. recuperacion manual) y #3/#7b
-// (`generacion_guia` no-GAM vs. `ruteo_satelite` desde `en_fulfillment`).
+// 38 aristas de flujo (numeracion #1-#44 con el #27 RETIRADO por la 139, #4/#6/#7c por la 156 y
+// #1/#2/#3/#7b por la 155) + 2 de creacion. Las 38 colapsan a 36 pares `(origen, destino)`
+// unicos, porque dos pares estan declarados dos veces con familias distintas: #19/#23 y #20/#24
+// (SLA vs. recuperacion manual). El tercer duplicado historico (#3/#7b) se fue con el
+// estado de fulfillment que retiro la 155.
 //
 // FEATURE 154 — SOLO ADITIVA (decision Q2 del gate, 2026-07-29). Sumo #43, #44 y la creacion
 // `null -> por_recolectar_en_tienda`, sin retirar NINGUNA arista: `GuiaAsignacionService` las
@@ -22,10 +22,12 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // mensajero -> se va #4; ya no rutea a satelite -> se va #6), y "rutear a bodega satelite"
 // pasa a admitir SOLO el origen `en_bodega_central` -> se va #7c. La superviviente es #5
 // (`en_preparacion -> en_bodega_central`), destino UNICO de generar guia.
-// Las cuatro de `en_fulfillment` (#1/#2/#3/#7b) quedan DECLARADAS Y SIN PRODUCTOR desde esta
-// feature: las retira la 155 junto con el estado, en la misma entrega (154+155+156 viajan como
-// un tren). No se retiran aqui a proposito: `en_fulfillment` se quedaria sin salidas y romperia
-// el invariante de conectividad mientras siga habiendo ordenes vivas en ese estado.
+//
+// FEATURE 155 — RETIRA la clave del estado de fulfillment con sus cuatro aristas
+// (#1/#2/#3/#7b) y las dos entradas de creacion que sobraban (ese mismo estado y
+// `en_ruta_bodega_central`). Es la mitad de codigo del retiro del estado; la otra mitad es la
+// migracion que reasigna a `en_preparacion` las ordenes vivas. Ese backfill es la condicion que hace que retirar las aristas no atrape a
+// nadie: la 156 no podia retirarlas justamente porque todavia habia ordenes ahi.
 //
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
@@ -66,17 +68,14 @@ export const TRANSICIONES = {
   en_preparacion: [
     { to: "en_bodega_central", via: "generacion_guia", rol: "maestro/admin" }, // #5
   ],
-  // Feature 156: las cuatro quedan DECLARADAS Y SIN PRODUCTOR (`generarGuia` y
-  // `rutearABodegaSatelite` dejaron de admitir este origen). Se conservan hasta que la 155
-  // retire el estado y haga el backfill de sus ordenes vivas: retirarlas ya dejaria
-  // `en_fulfillment` sin ninguna salida legal y atraparia esas ordenes.
-  en_fulfillment: [
-    { to: "por_recoger", via: "generacion_guia", rol: "maestro/admin" }, // #1 (sin productor)
-    { to: "en_bodega_central", via: "generacion_guia", rol: "maestro/admin" }, // #2 (sin productor)
-    { to: "en_ruta_bodega_satelite", via: "generacion_guia", rol: "maestro/admin" }, // #3 (sin productor)
-    // #7b: mismo PAR que #3, familia `ruteo_satelite`.
-    { to: "en_ruta_bodega_satelite", via: "ruteo_satelite", rol: "maestro/admin" }, // #7b (sin productor)
-  ],
+  // FEATURE 155: la clave del estado de fulfillment y sus cuatro aristas (#1/#2/#3/#7b)
+  // quedaron RETIRADAS junto con el value del catalogo. Las cuatro estaban SIN PRODUCTOR desde
+  // la 156, y la 155 cierra el circulo: (i) ninguna orden nace ya ahi —la bifurcacion de
+  // creacion manda a `en_preparacion` o a `por_recolectar_en_tienda`— y (ii) la migracion
+  // `20260729140000_order_status_retiro_en_fulfillment` reasigna a `en_preparacion` TODAS las
+  // ordenes vivas que quedaran en ese estado. Ese backfill es la razon por la que retirarlas
+  // AHORA no atrapa a nadie: cuando el codigo nuevo corre, ese conjunto es vacio. Si el orden
+  // se invirtiera (retirar aristas sin backfill), esas ordenes se quedarian sin salida legal.
   en_ruta_bodega_central: [
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #30
     { to: "en_bodega_central", via: "recepcion_bodega_central", rol: "maestro/admin" }, // #37 (138)
@@ -182,21 +181,26 @@ export const TRANSICIONES = {
 
 /**
  * Estados en los que una orden puede NACER (destinos validos de `null -> X`, R3/R10). Q5
- * RESUELTA: la creacion SI se valida. Verificado contra codigo:
- *   - `ordenesConfig.DEFAULT_ESTATUS_VALUE` = `en_preparacion` (default global, A.1)
- *   - `ordenesConfig.FULFILLMENT_ESTATUS_VALUE` = `en_fulfillment` (tienda con fulfillment)
- *   - `BulkOrdenService.ESTATUS_INICIAL_API` = `en_ruta_bodega_central` (carga por API key)
- * Nacer en cualquier otro estado del catalogo pasa a ser ILEGAL (endurecimiento deliberado
- * de `OrdenService.crear`, que aceptaba un `estatusId` explicito arbitrario; A.3-#8).
+ * RESUELTA: la creacion SI se valida. Nacer en cualquier otro estado del catalogo es ILEGAL
+ * (endurecimiento deliberado de `OrdenService.crear`, que aceptaba un `estatusId` explicito
+ * arbitrario; A.3-#8).
  *
- * Feature 154 (R13): pasa de 3 a 4 con `por_recolectar_en_tienda`. Es LEGAL que una orden NAZCA
- * ahi (la bifurcacion de creacion por bodega llega con la 155); hoy ningun call-site lo produce.
+ * FEATURE 155 (R22/R31): pasa de 4 a EXACTAMENTE DOS. Ya no hay tres constantes de
+ * configuracion que decidan donde nace una orden: hay UNA funcion,
+ * `resolverDestinoCreacion(fulfillmentDeLaTienda)` (`lib/services/destino-creacion.ts`), y estos
+ * dos values son SUS DOS UNICAS SALIDAS —
+ *   - `fulfillment = true`  -> `en_preparacion`            (el paquete ya esta en bodega)
+ *   - `fulfillment = false` -> `por_recolectar_en_tienda`  (el paquete sigue en la tienda)
+ * Se retiran el estado de fulfillment (que desaparece del catalogo) y `en_ruta_bodega_central`
+ * (el estado fijo del canal de API key, `ESTATUS_INICIAL_API`: dejaba la orden viajando sin
+ * haber sido recolectada). Ninguna orden puede volver a nacer en ninguno de los dos.
+ *
+ * `tests/unit/services/destino-creacion.test.ts` verifica la IGUALDAD entre esta lista y el
+ * conjunto de estados que la funcion produce: si divergen, cae el test antes que produccion.
  */
 export const ESTADOS_CREACION = [
   "en_preparacion",
-  "en_fulfillment",
-  "en_ruta_bodega_central",
-  "por_recolectar_en_tienda", // feature 154
+  "por_recolectar_en_tienda", // feature 154 (declarado) / 155 (producido)
 ] as const satisfies readonly OrderStatusValue[];
 
 /**

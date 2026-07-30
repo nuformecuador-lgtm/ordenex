@@ -171,9 +171,13 @@ describe("EscanerRecepcion (cámara)", () => {
 
   it("R13: estado_invalido → toast de error con el estado actual", async () => {
     const user = userEvent.setup();
+    // Feature 155/R28: el estado de este caso era el de fulfillment en bodega, que salio
+    // del catalogo. Se sustituye por otro estado VIGENTE que tampoco es recibible en una
+    // bodega satelite (una orden aun en la tienda), para que el caso siga afirmando lo que
+    // le importa: que el toast muestra la etiqueta LEGIBLE y no el value crudo.
     recibirMock.mockResolvedValue({
       status: "estado_invalido",
-      estado: "en_fulfillment",
+      estado: "en_preparacion",
     });
     render(<EscanerRecepcion onRecibida={vi.fn()} />);
 
@@ -181,7 +185,7 @@ describe("EscanerRecepcion (cámara)", () => {
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     // Estado legible derivado del value crudo.
-    expect(errorMock.mock.calls[0][0]).toMatch(/En fulfillment/);
+    expect(errorMock.mock.calls[0][0]).toMatch(/En preparación/);
   });
 
   it("R15: no_encontrada → toast de error 'orden no encontrada'", async () => {

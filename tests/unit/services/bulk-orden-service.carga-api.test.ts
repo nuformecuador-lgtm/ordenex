@@ -42,8 +42,14 @@ function buildService(
 }
 
 // Feature 88 — BulkOrdenService.cargarViaApi: reusa la resolucion/dedup/validacion de la
-// carga masiva pero autoriza SOLO al rol apiKey, fija el estado inicial en
-// en_ruta_bodega_central y persiste con num_guia inmediato.
+// carga masiva pero autoriza SOLO al rol apiKey y persiste con num_guia inmediato.
+//
+// FEATURE 155 (R19-R23): el estado inicial DEJA DE SER FIJO. Se resuelve con el mismo punto de
+// decision que la via sesion (`resolverDestinoCreacion`) sobre el flag `fulfillment` del dueño
+// de la key. Las aserciones de "no consulta fulfillment" no se borran: se INVIERTEN, porque son
+// justamente el contrato que esta feature cambia. En la practica el dueño de una key tiene rol
+// `apiKey` y el flag solo se acepta para `adminTienda`, asi que el caso vivo es siempre la
+// rama (b): `por_recolectar_en_tienda` con guia en el acto.
 
 const APIKEY: Actor = { usuarioId: "key-user-1", rol: "apiKey" as RolValue };
 const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
@@ -51,13 +57,19 @@ const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 const MENSAJERO: Actor = { usuarioId: "msg1", rol: "mensajero" };
 
 // Mock por defecto de la persistencia con guia: hace eco de las filas recibidas,
-// asignando guias consecutivas desde 1000 y el estado inicial de la via API.
-function conGuiaEco(data: CreateOrdenData[]): CreateOrdenConGuiaResultRow[] {
+// asignando guias consecutivas desde 1000 y el estado inicial resuelto por la bifurcacion.
+// Feature 155/R21: respeta `opciones.conGuia` — con `false` NO reparte numeros (devuelve
+// `null`), que es exactamente lo que hace el repositorio real.
+function conGuiaEco(
+  data: CreateOrdenData[],
+  opciones?: { conGuia?: boolean },
+): CreateOrdenConGuiaResultRow[] {
+  const conGuia = opciones?.conGuia ?? true;
   return data.map((d, i) => ({
     ordenId: `ord-${d.numRemision}`,
     numRemision: d.numRemision,
-    numGuia: 1000 + i,
-    estatusValue: "en_ruta_bodega_central",
+    numGuia: conGuia ? 1000 + i : null,
+    estatusValue: conGuia ? "por_recolectar_en_tienda" : "en_preparacion",
   }));
 }
 
@@ -81,7 +93,17 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
       ]),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
-    createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => conGuiaEco(data)),
+    // Feature 155: la firma gana `opciones.conGuia` (la bifurcacion por bodega decide si el
+    // lote nace con guia). Feature 159: `findResumenByNumRemisiones` sigue en el contrato --
+    // el resumen del lote se restituyo en el cierre de la 159.
+    createManyOrdenesConGuia: vi.fn(
+      async (
+        data: CreateOrdenData[],
+        _batchSize: number,
+        _historial: unknown,
+        opciones?: { conGuia?: boolean },
+      ) => conGuiaEco(data, opciones),
+    ),
     // Feature 16: resumen del lote (solo lectura), exigido por IOrdenRepository y no
     // ejercitado por la carga via API.
     findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
@@ -179,16 +201,63 @@ describe("cargarViaApi — dueño y estado inicial (R8, D4)", () => {
     expect(conGuiaArg(repo)[0].tiendaId).toBe("key-user-1");
   });
 
-  it("R8: estado inicial FIJO en_ruta_bodega_central (no consulta fulfillment)", async () => {
+  // Feature 155/R19/R20/R22 — el caso de la 88 no se borra: se INVIERTE. Donde decia "estado
+  // inicial FIJO, no consulta fulfillment" ahora dice "estado resuelto por el flag del dueño".
+  it("155/R19/R20: consulta el flag del dueño de la key y nace en por_recolectar_en_tienda", async () => {
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi([row()], APIKEY);
 
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_ruta_bodega_central");
-    expect(repo.findUsuarioFulfillment).not.toHaveBeenCalled(); // la via API no ramifica por fulfillment
+    // R19: el predicado se evalua sobre el DUEÑO de la key, una sola vez.
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledTimes(1);
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith("key-user-1");
+    // R20/R22: nace en el estado de la rama (b), NUNCA en el viejo estado fijo.
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
+    expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_central");
     if (r.status === "ok") {
-      expect(r.summary.filas[0].estatus).toBe("en_ruta_bodega_central");
+      expect(r.summary.filas[0].estatus).toBe("por_recolectar_en_tienda");
+      expect(r.summary.filas[0].numGuia).toBe(1000); // R20: guia asignada, reportada
+      expect(r.destino).toEqual({
+        estatus: "por_recolectar_en_tienda",
+        conGuia: true,
+        emiteManifiesto: true,
+      });
     }
     expect(conGuiaArg(repo)[0].estatusId).toBe("os-erbp");
+  });
+
+  // R21 — RAMA DEFENSIVA, hoy inalcanzable (decision del gate del 2026-07-29, pregunta 3): el
+  // switch de fulfillment solo se acepta para `adminTienda` y el dueño de una key es de rol
+  // `apiKey`. Se prueba igual: el dia que un integrador con bodega propia pueda marcarse, la
+  // respuesta NO debe fabricar un numero de guia.
+  it("155/R21: dueño con fulfillment=true -> en_preparacion y numGuia null, sin fabricar numero", async () => {
+    const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
+    const r = await buildService(repo).cargarViaApi([row({ num_remision: "REM-1" })], APIKEY);
+
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
+    if (r.status === "ok") {
+      expect(r.summary.creadas).toBe(1);
+      expect(r.summary.filas[0].numGuia).toBeNull();
+      expect(r.summary.ordenes[0]).toMatchObject({
+        numRemision: "REM-1",
+        numGuia: null,
+        estado: "en_preparacion",
+      });
+      // El resto del bloque de respuesta se conserva (R23).
+      expect(r.summary.ordenes[0].costoEnvio).toBe("3.92");
+      expect(r.destino.emiteManifiesto).toBe(false); // R26: la rama (a) no emite manifiesto
+    }
+    // Se persiste por la MISMA ruta, con la numeracion desactivada: nadie consume la secuencia.
+    const opciones = (repo.createManyOrdenesConGuia as ReturnType<typeof vi.fn>).mock.calls[0][3];
+    expect(opciones).toEqual({ conGuia: false });
+  });
+
+  it("155/R4: resuelve el flag UNA sola vez por lote, no una vez por fila", async () => {
+    const repo = buildRepo();
+    await buildService(repo).cargarViaApi(
+      [row({ num_remision: "A" }), row({ num_remision: "B" }), row({ num_remision: "C" })],
+      APIKEY,
+    );
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -204,13 +273,13 @@ describe("cargarViaApi — resultado con num_guia (R10)", () => {
     if (r.status === "ok") {
       expect(r.summary.creadas).toBe(2);
       // Filas creadas extendidas con numGuia.
-      expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", numGuia: 1000, estatus: "en_ruta_bodega_central" });
+      expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", numGuia: 1000, estatus: "por_recolectar_en_tienda" });
       expect(r.summary.filas[1]).toMatchObject({ resultado: "creada", numGuia: 1001 });
       // Bloque plano `ordenes` (R10): id + numGuia + estado + costoEnvio (feature 98/R5) por
       // creada. No-central con TARIFA por defecto -> 3.50 + 12% = "3.92".
       expect(r.summary.ordenes).toEqual([
-        { id: "ord-REM-1", numRemision: "REM-1", numGuia: 1000, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
-        { id: "ord-REM-2", numRemision: "REM-2", numGuia: 1001, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
+        { id: "ord-REM-1", numRemision: "REM-1", numGuia: 1000, estado: "por_recolectar_en_tienda", costoEnvio: "3.92" },
+        { id: "ord-REM-2", numRemision: "REM-2", numGuia: 1001, estado: "por_recolectar_en_tienda", costoEnvio: "3.92" },
       ]);
     }
   });
@@ -408,9 +477,10 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
       [row({ num_remision: "REM-1" })],
       APIKEY,
     );
-    // Estado inicial FIJO (no consulta fulfillment) y num_guia inmediato (via createManyOrdenesConGuia).
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_ruta_bodega_central");
-    expect(repo.findUsuarioFulfillment).not.toHaveBeenCalled();
+    // Feature 155: estado inicial RESUELTO por el flag (asercion invertida respecto de la 88)
+    // y num_guia inmediato (via createManyOrdenesConGuia). El resto del contrato, intacto.
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith("key-user-1");
     expect(repo.createManyOrdenesConGuia).toHaveBeenCalledTimes(1);
     if (r.status === "ok") {
       // El bloque `ordenes` es EXACTAMENTE el de la 88 (id/numRemision/numGuia/estado) + costoEnvio,
@@ -419,7 +489,7 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
         id: "ord-REM-1",
         numRemision: "REM-1",
         numGuia: 1000,
-        estado: "en_ruta_bodega_central",
+        estado: "por_recolectar_en_tienda",
         costoEnvio: "3.92",
       });
     }

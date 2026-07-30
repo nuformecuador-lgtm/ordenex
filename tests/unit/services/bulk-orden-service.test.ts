@@ -132,8 +132,34 @@ function row(overrides: Partial<RawRow> = {}): RawRow {
   };
 }
 
+// Feature 155: la via sesion persiste por UNA de dos rutas segun la rama que resuelva el flag
+// `fulfillment` de la tienda — `createManyOrdenes` (rama a, sin guia) o
+// `createManyOrdenesConGuia` (rama b, con guia). Los helpers preguntan por "lo persistido" sin
+// casarse con la ruta, para que los tests ortogonales a la bifurcacion (geografia, dedup,
+// monto, direccion...) sigan diciendo lo que dicen.
+function rutasDePersistencia(repo: IOrdenRepository) {
+  return [
+    repo.createManyOrdenes as ReturnType<typeof vi.fn>,
+    repo.createManyOrdenesConGuia as ReturnType<typeof vi.fn>,
+  ];
+}
+
+/** Filas que el service mando a persistir, por la ruta que haya usado. */
 function createManyArg(repo: IOrdenRepository) {
-  return (repo.createManyOrdenes as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  const usada = rutasDePersistencia(repo).find((m) => m.mock.calls.length > 0);
+  if (!usada) throw new Error("no se persistio por ninguna de las dos rutas");
+  return usada.mock.calls[0][0];
+}
+
+/** Numero total de llamadas de persistencia (debe ser 0 o 1: una ruta y un solo camino). */
+function vecesPersistido(repo: IOrdenRepository): number {
+  return rutasDePersistencia(repo).reduce((acc, m) => acc + m.mock.calls.length, 0);
+}
+
+/** Asercion de "no se escribio NADA": ninguna de las dos rutas fue llamada. */
+function expectSinPersistir(repo: IOrdenRepository) {
+  expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+  expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
 }
 
 describe("BulkOrdenService.cargarMasiva — autorizacion (R11)", () => {
@@ -148,7 +174,7 @@ describe("BulkOrdenService.cargarMasiva — autorizacion (R11)", () => {
       expect(r.status).toBe("forbidden");
       expect(repo.findExistingRemisiones).not.toHaveBeenCalled();
       expect(repo.findAllProvincias).not.toHaveBeenCalled();
-      expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+      expectSinPersistir(repo);
     },
   );
 
@@ -188,7 +214,7 @@ describe("BulkOrdenService.cargarMasiva — campos obligatorios (R18)", () => {
       expect(r.summary.conError).toBe(1);
       expect(r.summary.filas[0].errores).toHaveProperty("destinatario");
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 });
 
@@ -263,7 +289,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
       expect(r.summary.filas[0].resultado).toBe("error");
       expect(r.summary.filas[0].errores).toHaveProperty("direccion_destinatario");
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 
   it("distrito sin zona asignada -> error de fila", async () => {
@@ -284,7 +310,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
       expect(errores).toHaveProperty("distrito");
       expect(errores.distrito.join(" ")).toContain("no tiene zona asignada");
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 
   it("distrito provisto pero inexistente en el canton -> error de fila", async () => {
@@ -332,7 +358,7 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
       expect(errores).toHaveProperty("direccion_destinatario");
       expect(errores.direccion_destinatario.join(" ")).toContain("Formato esperado");
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 
   it.each([
@@ -354,7 +380,7 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
       expect(r.summary.filas[0].resultado).toBe("error");
       expect(r.summary.filas[0].errores).toHaveProperty("direccion_destinatario");
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 
   it("R30/R32: un lote mixto crea las validas y cuenta las imparseables en conError", async () => {
@@ -468,7 +494,7 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
       expect(r.summary.creadas).toBe(0);
       expect(r.summary.filas[0].errores).toHaveProperty("direccion_destinatario");
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 
   it("R9/R39: la columna direccion vieja NO se usa como direccion literal", async () => {
@@ -611,7 +637,7 @@ describe("BulkOrdenService.cargarMasiva — deduplicacion (R25/R26)", () => {
       expect(r.summary.creadas).toBe(0);
       expect(r.summary.filas[0]).toMatchObject({ resultado: "duplicada", estatus: "entregada" });
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 
   it("R26: duplicado intra-archivo -> una creada (primera), el resto duplicada", async () => {
@@ -627,8 +653,9 @@ describe("BulkOrdenService.cargarMasiva — deduplicacion (R25/R26)", () => {
       expect(r.summary.filas[0].resultado).toBe("creada");
       expect(r.summary.filas[1].resultado).toBe("duplicada");
       expect(r.summary.filas[2].resultado).toBe("duplicada");
-      // R30: la duplicada intra-archivo tambien expone estatus (el de la ganadora).
-      expect(r.summary.filas[1].estatus).toBe("en_preparacion");
+      // R30: la duplicada intra-archivo tambien expone estatus (el de la ganadora), que desde
+      // la 155 es el que resuelve la bifurcacion del lote (aqui, la rama por defecto: b).
+      expect(r.summary.filas[1].estatus).toBe("por_recolectar_en_tienda");
     }
     const arg = createManyArg(repo);
     expect(arg).toHaveLength(1);
@@ -636,21 +663,23 @@ describe("BulkOrdenService.cargarMasiva — deduplicacion (R25/R26)", () => {
 });
 
 describe("BulkOrdenService.cargarMasiva — estatus por defecto (R7)", () => {
-  it("resuelve en_preparacion como estatus de las filas creadas", async () => {
+  // Feature 155: el fixture por defecto tiene `fulfillment = false` (el default de la columna),
+  // asi que la rama por defecto de este archivo es la (b).
+  it("resuelve por_recolectar_en_tienda como estatus de las filas creadas (rama b)", async () => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
     if (r.status === "ok") {
-      expect(r.summary.filas[0].estatus).toBe("en_preparacion");
+      expect(r.summary.filas[0].estatus).toBe("por_recolectar_en_tienda");
     }
     const arg = createManyArg(repo);
     expect(arg[0].estatusId).toBe("os-preparacion");
   });
 
-  it("estatus por defecto no disponible -> todas las filas quedan en error, sin persistir", async () => {
+  it("estatus inicial no disponible -> todas las filas quedan en error, sin persistir", async () => {
     const repo = buildRepo({ findEstatusIdByValue: vi.fn().mockResolvedValue(null) });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
@@ -659,41 +688,51 @@ describe("BulkOrdenService.cargarMasiva — estatus por defecto (R7)", () => {
     if (r.status === "ok") {
       expect(r.summary.conError).toBe(1);
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 });
 
-describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulfillment (feature 27/R16/R17/R18/R19/R20)", () => {
-  it("R16: tienda con fulfillment=true -> ordenes en_fulfillment", async () => {
+// Feature 155 (R1/R4/R7/R16/R17/R18) — BIFURCACION POR BODEGA en la carga masiva por UI. El
+// describe de la feature 27 sigue vivo: cambia el ESTADO al que mapea cada rama del flag y,
+// sobre todo, que la rama (b) numera. Lo que NO cambia es que el predicado se lee UNA vez por
+// lote sobre la tienda del actor.
+describe("BulkOrdenService.cargarMasiva — bifurcacion por bodega (feature 27 + 155/R16/R17/R18)", () => {
+  it("R16: tienda con fulfillment=true -> nace en en_preparacion, SIN guia", async () => {
     const repo = buildRepo({
       findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
-      findEstatusIdByValue: vi.fn().mockResolvedValue("os-fulfillment"),
+      findEstatusIdByValue: vi.fn().mockResolvedValue("os-preparacion"),
     });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_fulfillment"); // R16/R20
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
     if (r.status === "ok") {
-      expect(r.summary.filas[0].estatus).toBe("en_fulfillment"); // R19
+      // R16: se reporta, por cada fila creada, el estado inicial resuelto.
+      expect(r.summary.filas[0].estatus).toBe("en_preparacion");
     }
-    const arg = createManyArg(repo);
-    expect(arg[0].estatusId).toBe("os-fulfillment");
+    expect(createManyArg(repo)[0].estatusId).toBe("os-preparacion");
+    // La rama (a) NO consume la secuencia de guias.
+    expect(repo.createManyOrdenes).toHaveBeenCalledTimes(1);
+    expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
   });
 
-  it("R17: tienda con fulfillment=false -> ordenes en_preparacion (no-regresion)", async () => {
+  it("R16: tienda con fulfillment=false -> nace en por_recolectar_en_tienda, CON guia", async () => {
     const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion"); // R17
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
     if (r.status === "ok") {
-      expect(r.summary.filas[0].estatus).toBe("en_preparacion");
+      expect(r.summary.filas[0].estatus).toBe("por_recolectar_en_tienda");
     }
+    // La rama (b) numera en la MISMA tx de la creacion.
+    expect(repo.createManyOrdenesConGuia).toHaveBeenCalledTimes(1);
+    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
   });
 
-  it("R15/R18: lee fulfillment de la tienda del actor UNA vez por lote", async () => {
+  it("R4/R15/R18: lee fulfillment de la tienda del actor UNA vez por LOTE, no por fila", async () => {
     const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
@@ -702,28 +741,41 @@ describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulf
       TIENDA,
     );
 
-    expect(repo.findUsuarioFulfillment).toHaveBeenCalledTimes(1); // R18
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledTimes(1); // R4/R18
     expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith("store1"); // R15: actor.usuarioId
   });
 
-  it("R19: el estatus resuelto se reporta tambien en duplicadas intra-archivo", async () => {
-    const repo = buildRepo({
-      findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
-      findEstatusIdByValue: vi.fn().mockResolvedValue("os-fulfillment"),
-    });
+  it("R1: solo el flag decide; una columna `estatus` en el archivo no altera nada", async () => {
+    const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    const r = await service.cargarMasiva([row({ estatus: "entregada" })], TIENDA);
+
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
+    expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("entregada");
+    if (r.status === "ok") expect(r.summary.filas[0].estatus).toBe("en_preparacion");
+  });
+
+  it("R18: el estatus resuelto se reporta tambien en duplicadas intra-archivo, sin numerar", async () => {
+    const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row(), row()], TIENDA);
 
     if (r.status === "ok") {
-      expect(r.summary.filas[0].estatus).toBe("en_fulfillment");
-      expect(r.summary.filas[1]).toMatchObject({ resultado: "duplicada", estatus: "en_fulfillment" });
+      expect(r.summary.filas[0].estatus).toBe("por_recolectar_en_tienda");
+      expect(r.summary.filas[1]).toMatchObject({
+        resultado: "duplicada",
+        estatus: "por_recolectar_en_tienda",
+      });
     }
+    // R18: la duplicada NO llega al repositorio, asi que no consume guia ni deja historial.
+    expect(createManyArg(repo)).toHaveLength(1);
   });
 
-  it("R20: estatus en_fulfillment inexistente -> 0 creadas, error de estatus por fila", async () => {
+  it("R7/R20: el value de la rama resuelta no esta en el catalogo -> 0 creadas y error que lo NOMBRA", async () => {
     const repo = buildRepo({
-      findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
+      findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
       findEstatusIdByValue: vi.fn().mockResolvedValue(null),
     });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
@@ -733,9 +785,24 @@ describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulf
     if (r.status === "ok") {
       expect(r.summary.creadas).toBe(0);
       expect(r.summary.conError).toBe(1);
-      expect(r.summary.filas[0].errores).toHaveProperty("estatus");
+      expect(r.summary.filas[0].errores?.estatus?.[0]).toContain("por_recolectar_en_tienda");
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
+  });
+
+  it("R17: el dryRun de la rama (b) NO consume ninguna guia (no toca el repositorio)", async () => {
+    const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    const r = await service.cargarMasiva([row()], TIENDA, { dryRun: true });
+
+    // Reporta igualmente el estado inicial que corresponderia...
+    if (r.status === "ok") {
+      expect(r.summary.creadas).toBe(1);
+      expect(r.summary.filas[0].estatus).toBe("por_recolectar_en_tienda");
+    }
+    // ...pero no persiste nada, asi que la secuencia de guias no avanza.
+    expectSinPersistir(repo);
   });
 });
 
@@ -782,7 +849,7 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
       expect(r.summary.duplicadas).toBe(1);
     }
     // La validación previa NO escribe en la DB (esencia del dry-run).
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expectSinPersistir(repo);
   });
 
   it("dryRun devuelve el MISMO summary que la carga real (misma clasificación)", async () => {
@@ -812,9 +879,9 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
     if (real.status === "ok" && dry.status === "ok") {
       expect(dry.summary).toEqual(real.summary);
     }
-    // La real persiste la válida; la dry-run no.
-    expect(repoReal.createManyOrdenes).toHaveBeenCalledTimes(1);
-    expect(repoDry.createManyOrdenes).not.toHaveBeenCalled();
+    // La real persiste la válida; la dry-run no (por ninguna de las dos rutas).
+    expect(vecesPersistido(repoReal)).toBe(1);
+    expectSinPersistir(repoDry);
   });
 
   it("dryRun=false persiste con normalidad (no-regresión)", async () => {
@@ -823,25 +890,39 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
 
     await service.cargarMasiva([row()], TIENDA, { dryRun: false });
 
-    expect(repo.createManyOrdenes).toHaveBeenCalledTimes(1);
+    expect(vecesPersistido(repo)).toBe(1);
   });
 });
 
-// Feature 88/R14 — la vía sesión (cargarMasiva) NO cambia de forma con la nueva vía API:
-// mismo default de estado, sin asignación inmediata de num_guia (usa createManyOrdenes, NO
-// createManyOrdenesConGuia), y sigue exigiendo adminTienda.
-describe("BulkOrdenService.cargarMasiva — no-regresión frente a la vía API (feature 88/R14)", () => {
-  it("persiste vía createManyOrdenes (sin guía inmediata) y NUNCA vía createManyOrdenesConGuia", async () => {
+// Feature 88/R14 + 155/R1/R6 — la vía sesión y la vía API dejan de diferenciarse por el CANAL.
+// Lo que decide la ruta de persistencia es la RAMA (el flag de la tienda), y es la misma regla
+// para las dos vías: el canal por el que entra un dato no dice nada sobre dónde está el paquete.
+describe("BulkOrdenService.cargarMasiva — la ruta la decide la rama, no el canal (88/R14 + 155/R6)", () => {
+  it("la ruta de persistencia la elige el flag, no la vía: cada rama usa la suya", async () => {
+    const repoA = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
+    await new BulkOrdenService(repoA, tarifaRepoStub).cargarMasiva([row()], TIENDA);
+    expect(repoA.createManyOrdenes).toHaveBeenCalledTimes(1);
+    expect(repoA.createManyOrdenesConGuia).not.toHaveBeenCalled();
+
+    const repoB = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
+    await new BulkOrdenService(repoB, tarifaRepoStub).cargarMasiva([row()], TIENDA);
+    expect(repoB.createManyOrdenesConGuia).toHaveBeenCalledTimes(1);
+    expect(repoB.createManyOrdenes).not.toHaveBeenCalled();
+  });
+
+  it("155/R22: la vía sesión NUNCA crea en en_ruta_bodega_central (el viejo estado fijo de la API)", async () => {
+    for (const fulfillment of [true, false]) {
+      const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(fulfillment) });
+      await new BulkOrdenService(repo, tarifaRepoStub).cargarMasiva([row()], TIENDA);
+      expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_central");
+    }
+  });
+
+  it("sigue exigiendo adminTienda (la bifurcación no relaja la autorización)", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo, tarifaRepoStub);
-
-    await service.cargarMasiva([row()], TIENDA);
-
-    expect(repo.createManyOrdenes).toHaveBeenCalledTimes(1);
-    expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
-    // Estado inicial de la vía sesión intacto (en_preparacion), NO en_ruta_bodega_central.
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
-    expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_central");
+    const r = await new BulkOrdenService(repo, tarifaRepoStub).cargarMasiva([row()], MAESTRO);
+    expect(r.status).toBe("forbidden");
+    expectSinPersistir(repo);
   });
 });
 

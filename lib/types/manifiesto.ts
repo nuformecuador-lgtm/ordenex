@@ -7,10 +7,18 @@ import { z } from "zod";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 
 /**
- * Los 6 puntos de enganche del manifiesto (design.md §4). `generacion_guia` cubre
+ * Los puntos de enganche del manifiesto (design.md §4). `generacion_guia` cubre
  * tanto "Generar guia" como su variante "asignar desde bodega" (R19): el movimiento
  * fisico y el responsable se derivan de los datos ya persistidos de la orden, no del
  * boton que se pulso.
+ *
+ * FEATURE 155/R24 (opcion C de la puerta T0.1, 2026-07-29): entra un SEPTIMO flujo,
+ * `recoleccion_tienda`, para el lote que nace por la rama (b) de la bifurcacion de creacion
+ * (la orden se queda en la tienda esperando al mensajero). Su mapeo origen/destino es el
+ * MISMO que `carga_masiva` — sale de la tienda, llega a la bodega central — y aun asi no se
+ * reuso aquel: el flujo es la ETIQUETA de la operacion, y llamar "carga masiva" a lo que
+ * produjo un alta manual o una carga por API key seria mentir en el papel que alguien firma.
+ * El mapeo igual es una coincidencia del movimiento fisico, no de la operacion.
  */
 export const MANIFIESTO_FLUJOS = [
   "carga_masiva",
@@ -19,6 +27,7 @@ export const MANIFIESTO_FLUJOS = [
   "asignacion_satelite",
   "devolucion_central",
   "envio_tienda",
+  "recoleccion_tienda", // feature 155/R24
 ] as const;
 
 export type ManifiestoFlujo = (typeof MANIFIESTO_FLUJOS)[number];
@@ -80,10 +89,15 @@ export interface ManifiestoOmitidaDTO {
 
 /**
  * R30 — Entrada del borde. Union de las DOS formas de seleccion del lote
- * (design.md §2): por ids de orden (5 de los 6 flujos) o por `num_remision`, que es
- * la UNICA via de la carga masiva porque su `BulkSummary` no lleva ids.
+ * (design.md §2): por ids de orden (todos los flujos) o por `num_remision`, que es la UNICA
+ * via de la carga masiva porque su `BulkSummary` no lleva ids.
  * Seleccion vacia, id malformado o flujo desconocido -> ZodError -> validation_error.
  * El techo de `numRemisiones` es el mismo de la carga masiva (design.md §8.5).
+ *
+ * Feature 155/R24: `recoleccion_tienda` se suma a la seleccion por `numRemisiones` por el
+ * mismo motivo que `carga_masiva` — cuando el lote nace por la rama (b) desde la carga masiva
+ * por UI, lo unico que el cliente tiene en la mano son las remisiones. Por `ordenIds` ya
+ * entraba (esa rama admite todos los flujos), y es la via que usa el canal de API key.
  */
 export const manifiestoSchema = z.union([
   z.object({
@@ -91,7 +105,7 @@ export const manifiestoSchema = z.union([
     ordenIds: z.array(z.string().min(1)).min(1),
   }),
   z.object({
-    flujo: z.literal("carga_masiva"),
+    flujo: z.enum(["carga_masiva", "recoleccion_tienda"]),
     numRemisiones: z.array(z.string().min(1)).min(1).max(cargaMasivaConfig.MAX_ROWS),
   }),
 ]);

@@ -16,7 +16,7 @@ import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHi
 const VALUE_POR_ID: Record<string, string> = {
   "s-entregada": "entregada", // publico
   "s-en-reparto": "en_reparto", // publico
-  "s-fulfillment": "en_fulfillment", // NO publico (interno)
+  "s-fulfillment": "en_preparacion", // NO publico (interno de preparacion en bodega)
 };
 
 function buildTx(ordenesElegibles: Set<string>): WebhookEmisorTx {
@@ -114,7 +114,7 @@ describe("R15 — politica EVENTOS_PUBLICOS", () => {
       repo,
     );
 
-    // Solo la transicion publica (en_reparto) encola; la interna (en_fulfillment) no.
+    // Solo la transicion publica (en_reparto) encola; la interna (en_preparacion) no.
     expect(enqueue).toHaveBeenCalledTimes(1);
     expect((enqueue.mock.calls[0] as unknown as unknown[])[1]).toMatchObject({ ordenId: "o1" });
   });

@@ -383,10 +383,12 @@ describe("recibir (R11-R18)", () => {
 
   it("R13: origen distinto de en_ruta_bodega_satelite -> estado_invalido con el estado actual", async () => {
     const repo = fakeRepo({
-      findByNumGuiaForTransicion: vi.fn(async () => transicionRow({ estatusValue: "en_fulfillment" })),
+      findByNumGuiaForTransicion: vi.fn(async () =>
+        transicionRow({ estatusValue: "por_recolectar_en_tienda" }),
+      ),
     });
     const r = await newService(repo).recibir(10, ADMIN);
-    expect(r).toEqual({ status: "estado_invalido", estado: "en_fulfillment" });
+    expect(r).toEqual({ status: "estado_invalido", estado: "por_recolectar_en_tienda" });
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
@@ -434,7 +436,7 @@ describe("recibir (R11-R18)", () => {
   it("R18: race — UPDATE no afecta y al re-leer NO esta recibida -> conflict", async () => {
     const lecturas: (OrdenTransicionRow | null)[] = [
       transicionRow(),
-      transicionRow({ estatusValue: "en_fulfillment" }),
+      transicionRow({ estatusValue: "por_recolectar_en_tienda" }),
     ];
     let i = 0;
     const repo = fakeRepo({
