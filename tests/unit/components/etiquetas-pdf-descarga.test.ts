@@ -21,6 +21,10 @@ class JsPDFDoble {
   text = () => undefined;
   addImage = () => undefined;
   splitTextToSize = (texto: string) => [texto];
+  // La maqueta mide el rotulo mas ancho para colocar la columna del valor; 1 mm
+  // por caracter basta para que el doble responda algo coherente (el ancho real
+  // se afirma con jspdf de verdad en `etiquetas-pdf.test.ts`).
+  getTextWidth = (texto: string) => texto.length;
 }
 
 vi.mock("jspdf", () => ({

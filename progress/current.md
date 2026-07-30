@@ -8,11 +8,40 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🗓️ Sesión 2026-07-30 (quater) — arranca el LOTE DE ANALÍTICA (14 features)
+## 🗓️ Sesión 2026-07-30 (quater) — arranca el LOTE DE ANALÍTICA — **EMPIEZA A LEER POR AQUÍ**
 
-**Feature 135 → `spec_ready`.** Rama `feature/135-analitica-catalogo-kpis-rangos` desde `origin/dev`
-@ `664840f3`. Spec en `specs/135-analitica-catalogo-kpis-rangos/`: **26 R en EARS**, 6 alternativas
-descartadas, 12 hechos de inventario **leídos en el código**. Ni una línea de producción tocada.
+> **Corrige el «CIERRE (noche)» de más abajo en un punto:** ese bloque dice «registro con CERO
+> `in_progress`» y ya no es cierto — la **135 está `in_progress`** desde esta sesión. Todo lo demás
+> de aquel cierre sigue en pie.
+
+**Feature 135 → implementada y revisada.** Rama `feature/135-analitica-catalogo-kpis-rangos`,
+nacida de `dev` @ `664840f3` y **sincronizada después con `dev` @ `72b75954`** (45 commits: los
+PRs #208/#210/#211/#212). Spec: **36 R en EARS** (26 + 10 tras la puerta), 6 alternativas
+descartadas, 12 hechos de inventario **leídos en el código**.
+
+**Implementación:** `lib/analytics/{types,metrics,ranges,filters}.ts` + 9 suites propias.
+Delta medido en árbol limpio: **617 archivos / 6973 tests → 626 / 7150**, cero regresiones.
+**Reviewer APROBADO-CON-NOTAS: 35 de 36 R verificados POR MUTACIÓN** (38 mutaciones, 35 muertas,
+3 supervivientes, todas el mismo punto de R22 — dos redes redundantes, sin agujero de
+comportamiento). El R36 no es mutable: es la puerta ejecutable.
+
+### ⚠️ El incidente de esta sesión, para que no se repita
+
+**Otra sesión movió este checkout de `feature/135-…` a `ux` a mitad de la implementación**
+(`git reflog`: `checkout: moving from feature/135-… to ux`, más un `reset`). El implementer se
+quedó sin `specs/135-…/` en disco y perdió las casillas ya marcadas, el parche del guard y el
+bookkeeping. **Hizo lo correcto: paró y no ejecutó nada destructivo.** El código sobrevivió por ser
+untracked. Se recuperó montando un **worktree aparte** sobre la rama y moviendo allí los archivos,
+**sin tocar el árbol compartido** ni sus ~100 archivos staged.
+
+> **LECCIÓN: en un repo con varias sesiones vivas, la rama es un recurso compartido.** Antes de
+> `checkout`, mirar si hay trabajo ajeno en vuelo; y si hay que recuperar una rama secuestrada,
+> `git worktree` en vez de arrebatar el árbol de vuelta.
+
+**El `typecheck` rojo NO era «cliente Prisma contaminado».** Ese fue el diagnóstico inicial —
+plausible, y con delta 0 verificado dos veces— pero la causa real era otra: **`dev` había avanzado
+45 commits** y la rama se había quedado atrás, sin el `orden_incidente` de la 158 que el cliente
+generado ya conocía. Se resolvió sincronizando con `dev`, no regenerando nada.
 
 **Es la raíz del lote.** El orden lo dicta `depends_on`, no es elegible:
 `135` → `122` (alcance por rol) → `127` → `128`/`132`/`134`, y `135` → `123` (rollup) → `124` →
@@ -43,7 +72,70 @@ o sea una ventana **18:00–18:00 hora CR**; los filtros de `/ordenes` (feature 
 `inicioDelDiaCREnUtc`, o sea **00:00–24:00 CR**. Analítica no puede adoptar las dos, y elegir la
 correcta hará que ranking y analítica reporten cifras distintas para «hoy» hasta que se sanee.
 
-## 🗓️ Sesión 2026-07-30 (tarde) — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 CIERRE 2026-07-30 (noche)
+
+**Todo mergeado a `dev`. Registro con CERO `in_progress`.**
+
+| PR | Qué | |
+|---|---|---|
+| **#208** | 158 · camino del mensajero (R1-R36) | ✅ mergeado |
+| **#210** | 158 · camino del admin (R37-R64) | ✅ mergeado |
+| **#168** | 141 · tabla `carga` + `carga_id` | ✅ mergeado, tras 3 días abierto |
+
+**Gate final con todo conviviendo: 636 archivos / 7493 tests / 0 fallos.**
+
+### ⚠️ LA TRAMPA DE ESTA SESIÓN, para que no se repita
+
+**El PR #209 se mergeó contra `feature/158-incidente-indemnizacion` cuando esa rama YA se había
+consumido** con el merge del #208 a `dev` tres horas antes. GitHub lo marcó **MERGED** y no avisó de
+nada: el camino del admin —tabla `orden_incidente`, su migración, la página `/incidentes` y el segundo
+emisor de wallet— **se quedó varado fuera de `dev`**. Se detectó verificando `origin/dev` **por
+archivos** (cero coincidencias de `IncidenteAdmin`, `incidentes/` y `orden_incidente`) y se corrigió
+con el **#210**.
+
+> **LECCIÓN: en PRs apilados, si la base se mergea antes que el hijo, el hijo queda huérfano y su
+> estado sigue diciendo MERGED.** Verificar SIEMPRE que el contenido llegó a `dev` **por archivos**,
+> nunca por el estado del PR. De no haberse mirado, producción se habría llevado media feature 158 y
+> una migración de menos.
+
+### 🚀 Despliegue `dev → prod` — pre-vuelo COMPLETO
+
+- **✅ `T24.1`: CERO órdenes**, re-corrida contra producción justo antes.
+- **✅ El retiro de `en_fulfillment` es NO-OP en producción**: su `DELETE` es condicional y hay 8 filas
+  de historial apuntando al value → la fila sobrevive inalcanzable, **sin violación de FK**.
+- **🔎 Producción tiene un value `pendiente` vestigial** (0 órdenes, 0 historial). Explica el desfase
+  «18 estados» de las specs frente a los 19 de la base.
+- **⚠️ Cosmético tras desplegar:** el desplegable de filtro leerá `en_fulfillment` y `pendiente`, que
+  no están en `ORDER_STATUS_SEED` → se muestran como **slug crudo** (fallback documentado, `R17` de la
+  feature 29). No rompe.
+
+### 📋 Decisiones que el humano delegó y quedaron aplicadas
+
+- **`R56` DECLARADO** en la spec de la 141, antes de mergear el #168. Es el invariante que destapó la
+  mutación superviviente: una orden revertida conserva `carga_id` y `download_url`. Redactado **más
+  ancho que el mutante** a propósito.
+- **Feature 162 REGISTRADA** — `OrdenEnvioReader.findParaEnvio` no filtra por estado, así que un
+  mensajero puede seguir mandando plantillas de WhatsApp **al destinatario de un paquete robado**.
+  Preexistente, agravado por Q-J + Q-K.
+
+### 🧰 Deuda de arnés nueva, registrada y SIN tocar (no es de ninguna feature)
+
+1. **`scripts/db-rollback.ts` elige la migración por NOMBRE de carpeta**, no por la última aplicada
+   (`readdirSync` + `sort`, sin consultar `_prisma_migrations`). Correrlo dos veces revierte la misma
+   migración dos veces.
+2. **El orden obligatorio de los `down.sql` no lo impone ningún gate**: revertir la migración del PR 1
+   de la 158 con la del admin aplicada **aborta**.
+   > **Tercera y cuarta vez que una herramienta de este repo decide algo mirando el árbol de archivos
+   > en vez de la fuente de verdad.** Las otras dos: los guards con `fs.readdir` en vez de
+   > `git ls-files`, y la denylist de migraciones (muerta en el #207).
+3. **E2E: decisión del humano el 2026-07-30 — «no más e2e, pruebas básicas nada más».** No se
+   construye harness ni se escriben specs. Cuando `CHECKPOINTS.md` lo exija: declararlo **inaplicable
+   con su razón** y **cubrir el riesgo concreto por otra vía**, como hizo el reviewer del PR 2
+   probando la idempotencia contra el índice real de Postgres.
+
+---
+
+## 🗓️ Sesión 2026-07-30 (tarde)
 
 > Lo de más abajo sigue válido en su detalle técnico; esto lo corrige donde se contradiga.
 
@@ -161,8 +253,130 @@ admin no puede reportar desde bodega, **que es el estado de hoy**. La pregunta s
 palabra «entrega» y **se malentendió**: en este dominio «entrega» es lo que hace un mensajero con un
 paquete. Reformulada como «un PR o dos PRs».
 
-**Estado:** spec en la rama `feature/158-incidente-indemnizacion` (base = `dev` + los 3 commits del
-#207), commits `9a02ed5` y `3183127`. **Ni una línea de código de producción tocada.**
+### ✅ PR 1 de la 158 ENTREGADO — **PR #208**, camino del mensajero (R1-R36)
+
+`https://github.com/nuformecuador-lgtm/ordenex/pull/208` · rama `feature/158-incidente-indemnizacion`
+· 21 commits · `./init.sh` **617 archivos / 6973 tests / 0 fallos** (baseline de partida 599/6634 →
+**+339 tests**) · `tests/integration/db` 72/715 · `next build` exit 0.
+
+**Reviewer: OK — 0 bloqueantes, 10 menores** (`progress/review_158.md`). **36/36 R verificados hasta
+un test concreto y NO VACUO**, sin fiarse del mapa de las bitácoras; **17 mutaciones propias del
+reviewer, las 17 discriminan, 0 supervivientes**. El reviewer además **cerró la limitación que se le
+declaró** en vez de aceptarla: insertó una fila real de la categoría nueva y comprobó que el DOWN
+aborta en el `ALTER COLUMN` — el `USING` cast que no se había podido ejercer con la tabla vacía.
+
+**m5 y m6 saldados antes de abrir el PR**, por decisión del humano:
+- **m5 (el monto sin tope frente al `DECIMAL(12,2)`)**: el tope se puso **en el borde de la 158**, NO
+  en `montoPositivoSchema` — el defecto es preexistente (feature 45 lo tiene igual) y tocar el schema
+  compartido cambiaría otras features sin su puerta. La frontera **se midió contra Postgres**, no se
+  dedujo: `9999999999.99` cabe, `10000000000.00` desborda. En cliente se comparó **por texto**, porque
+  11 dígitos no caben exactos en un `number` de JS.
+- **m6 (media compensación vacua en el censo)**: **reforzado, no retirado**. Las dos mutaciones que
+  ahora lo matan (degradar el `case` a comentario, degradar la guardia de evidencias) **antes dejaban
+  el test verde**.
+
+**⚠️ `R29` queda a medias en el PR 1 A PROPÓSITO**: pide «exactamente DOS» emisores de
+`egreso_indemnizacion` y allí hay uno. El guard lo fija con un assert que obliga a que pase a 2 en el
+PR 2. **El PR 2 lo cumplió** (ver abajo).
+
+**⚠️ La dispensa de E2E del PR 1 es explícita y NO EXTENSIBLE al PR 2.** La deuda de fondo —que no
+haya harness de E2E en el repo— sigue viva y sin dueño.
+
+### ✅ PR 2 de la 158 ENTREGADO — **PR #209** · y **PR #168 RESCATADO**
+
+**PR #209** (`feature/158b-incidente-admin`) — ⚠️ **apilado sobre el #208, no sobre `dev`. Mergear el
+#208 primero.** `./init.sh` **630 archivos / 7354 tests / 0 fallos** · `next build` exit 0 con
+`/incidentes` en el manifiesto · **Reviewer OK, 0 bloqueantes**, 7 menores, **28/28 R verificados**,
+**32 mutaciones, 31 discriminan**.
+
+- **`R29` cumplido y verificado EN LAS DOS DIRECCIONES**: son exactamente dos emisores — un tercero
+  pone el guard rojo **y quitar uno también**. Es igualdad, no `some()`.
+- **Contra Postgres real**: el `USING` del down aborta con filas en las tres tablas; los 6 índices
+  vuelven byte-idénticos; y **la idempotencia del egreso contra el índice real de la 42**, que hasta
+  ahora sólo estaba simulada en memoria.
+- **E2E declarado INAPLICABLE con razón verificada** (no por inercia): `./init.sh` no corre
+  `test:e2e` y los 20+ specs existentes declaran *«WRITTEN but NOT EXECUTED»*. **No se dispensó
+  gratis**: el reviewer cubrió por otra vía el riesgo concreto. **La deuda del harness sigue viva
+  desde la 148.**
+- **Alcance añadido a media fase por el humano**: el `adminSatelite` reporta desde
+  `/recepcion-satelite`. El modal se **reusó, no se duplicó**. `en_ruta_bodega_satelite` queda fuera
+  con razón escrita y el reviewer lo juzgó: **ningún requisito incumplido**.
+
+**PR #168 (feature 141) RESCATADO** — de `CONFLICTING` a **`MERGEABLE`/`CLEAN`**. Un solo conflicto y
+era `zonas-migration.test.ts`: la rama traía la denylist a mano de 107 líneas, `dev` el baseline
+pinneado del #207. **Re-review OK, 0 bloqueantes, el veredicto del 27/07 sigue válido** y queda
+**saldada su nota menor 2** (round-trip, hecho ahora con la 141 aplicada DESPUÉS de las del 28/29/30,
+`DOWN` con datos vivos y RE-UP con esquema idéntico). 27 mutaciones, 26 muertas.
+
+> **El mutante superviviente, cerrado:** añadir `carga_id = NULL, download_url = NULL` al `SET` de
+> `deshacerAsignacionLote` dejaba **7110/7110 tests verdes**. El comportamiento era correcto, pero
+> **nada lo protegía**. Test nuevo colocado a propósito LEJOS de los unitarios que afirman la *forma*
+> del SQL. `./init.sh` 623 / 7112 / 0.
+
+### 🚀 Pre-vuelo del despliegue `dev → prod` — HECHO el 2026-07-30
+
+- **✅ `T24.1` PASA: CERO órdenes.** Consulta de retroactividad contra producción (solo lectura).
+  Contexto comparable: órdenes en `devuelta` **2 → 0**, filas de historial **167 → 169**,
+  `reprogramada`+`gestion` **10**, `reprogramada`+`reprogramacion_tienda` **0**.
+- **✅ Verificado lo único que podía romper: no rompe.** La 155 retira `en_fulfillment` y producción
+  tiene **8 filas de historial** apuntando a ese value. Su `DELETE` es **CONDICIONAL** y su comentario
+  ya anticipaba este caso: en base con historial real es **NO-OP** y la fila del catálogo sobrevive,
+  inalcanzable desde la app. **Sin violación de FK.**
+- **🔎 Encontrado el desfase que las specs arrastraban:** producción tiene un value **`pendiente`** con
+  **0 órdenes y 0 filas de historial** — vestigial. Por eso las specs decían «18 estados de hoy»
+  mientras la base tiene 19.
+- **⚠️ Consecuencia cosmética tras desplegar:** el desplegable de filtro leerá 21 filas, incluidas
+  `en_fulfillment` y `pendiente`, que **no están en `ORDER_STATUS_SEED`**. El fallback está
+  documentado (`R17` de la feature 29): **se muestran como slug crudo**. No rompe.
+
+### ⏭️ Decisiones humanas pendientes al cerrar
+
+1. **Desplegar `dev → prod`** (140 commits, tren 154+155+156). **No queda nada técnico por comprobar.**
+2. **Mergear #208 → luego #209** (están apilados) y **#168**.
+3. **¿Se añade el `R56` a la spec de la 141?** («al deshacer la asignación el sistema DEBE conservar
+   `carga_id` y `download_url`»). Redactado más ancho que el mutante a propósito. **No se aplicó: es
+   decisión humana.**
+4. **⚠️ Candidata a ficha propia — `OrdenEnvioReader.findParaEnvio` NO filtra por estado**, sólo por
+   `mensajeroAsignadoId`: un mensajero podría seguir mandando plantillas de WhatsApp **al destinatario
+   de un paquete robado**. Patrón **preexistente** (pasa igual con `entregada`/`devuelta`), pero Q-J y
+   Q-K juntas lo agravan.
+
+### 🔨 PR 2 de la 158 — camino del admin (R37-R64) · detalle de implementación
+
+Rama `feature/158b-incidente-admin`, apilada sobre el #208 (su migración es aditiva sobre la del PR 1).
+
+**Fase 1B (backend) COMPLETA**: 14/14 tasks · `./init.sh` **624 archivos / 7228 tests / 0 fallos** ·
+`tests/integration/db` **73/742** · 97 migraciones sin drift · **18 mutaciones, 18 discriminan**.
+**`R29` queda en DOS emisores** — el caso del PR 1 se **invirtió, no se borró**, y cada emisor declara
+su `origen_tipo` en su código. Fase 2B (frontend) en implementación.
+
+**Dos mutaciones revelaron guardias que sólo medían FORMA** (el shape del `where`, 1 rojo cada una):
+el `estado: "aprobado"` del feed y el `estado: "solicitado"` de `resolver`. Con dobles que honran el
+`where`, ahora ponen 3 rojos cada una, **dos sobre el dinero**.
+
+### 🔎 Dos hallazgos operativos del PR 2 que NO son de la feature
+
+1. **⚠️ EL ORDEN DE LOS DOS `down.sql` IMPORTA, y el spec no lo decía.** Revertir la migración del PR 1
+   con la del admin aplicada **ABORTA**: `orden_incidente.causa` depende de `gestion_causa_incidente`.
+   En orden inverso las dos corren completas. **Quien revierta en producción tiene que ir del más
+   nuevo al más viejo**, que es lo natural pero nadie lo había verificado.
+2. **🐛 `scripts/db-rollback.ts` elige la migración por NOMBRE, no por la última APLICADA.** Verificado:
+   `readdirSync` + `sort` por nombre + coger la última (`:9-18`); **nunca consulta
+   `_prisma_migrations`**, sólo borra el registro por nombre después. **Correrlo dos veces revierte la
+   misma migración dos veces**, y una carpeta con timestamp fuera de orden le hace elegir la
+   equivocada. Hoy los nombres coinciden con el orden real, así que no ha mordido.
+   > **Es la TERCERA vez que una herramienta de este repo lee el sistema de archivos en vez de la
+   > fuente de verdad**: los guards con `fs.readdir` en vez de `git ls-files`, la denylist de
+   > migraciones que se mantenía a mano (ya arreglada en el #207 pinneando el baseline), y ahora esto.
+   > El patrón tiene nombre y conviene usarlo al revisar: **si un script decide algo mirando el árbol
+   > de archivos, la fuente de verdad casi siempre está en otro sitio.**
+
+**Q-J ya no es teórica:** un admin puede reportar un incidente sobre una orden `por_recoger` **ya
+asignada**, y esa orden desaparece de «Mis asignaciones» del mensajero **sin aviso**. Sigue siendo
+follow-up declarado, no lo cierra el PR 2.
+
+**Estado del registro:** ficha **158 `in_progress`** con las 14 decisiones en su `status_note`; ficha
+**161** registrada (follow-up de Q-E). Regla 1 respetada: backend 1 (la 141), fullstack 1 (la 158).
 
 ---
 
@@ -287,6 +501,105 @@ Detalle en la sección «Deudas de arnés vivas». Las que más cuestan hoy:
 en la sección «Backlog pendiente».
 
 ---
+
+## 🗓️ Sesión 2026-07-30 (ter) — feature 164: botón de instalar la PWA + screenshots
+
+Salió de una pregunta del humano: *¿la PWA es instalable?* Respuesta comprobada archivo a
+archivo: **sí en producción** (manifest, `display: standalone`, iconos 192/512 que son PNG
+reales de esas dimensiones, SW con `fetch` que cae a `/offline.html`, HTTPS por Vercel, metas
+de iOS). Faltaban el gesto propio y las capturas; pidió añadir ambos.
+
+- **164 (frontend, `in_progress`)** — IMPLEMENTADA. `hooks/useInstalarPwa.ts` +
+  `components/shared/InstalarPwaButton.tsx`, montado en `PageHeader`. Tres screenshots
+  **reales** capturadas con Playwright contra la app corriendo (ocultando el indicador de dev
+  de Next, que no puede acabar en una imagen publicada) y declaradas en el manifest.
+  **27 tests propios verdes + 6 mutaciones, las 6 muertas.** Suite completa: 18 rojas, **las
+  mismas que antes** → cero regresiones. Spec en `specs/164-instalar-pwa/`.
+- **Guardia nueva**: `tests/unit/pwa/manifest.test.ts`. No existía NINGÚN test del manifest, y
+  es un fallo silencioso de manual: si declara un archivo que no está, o dimensiones que no
+  son, el navegador degrada el diálogo o deja de ofrecer la instalación **sin decir nada**.
+
+**Hallazgo que conviene no olvidar: la instalabilidad NO se puede probar en local.** En dev el
+registro des-registra los SW y limpia caches (`app/layout.tsx`), y además `sw.js` se
+**autodestruye** con hostname `localhost`/`127.0.0.1` sin mirar `NODE_ENV` (`public/sw.js:7-9`)
+— así que **`pnpm build && pnpm start` tampoco sirve**. Hace falta despliegue, túnel o un
+hostname que no sea localhost.
+
+**Límite del estándar, no de la implementación:** `beforeinstallprompt` es de Chromium. Safari
+(iOS incluido) y Firefox no lo disparan nunca, así que ahí el botón **no aparece** y la
+instalación sigue siendo manual. Guiar al mensajero de iPhone exige una ayuda aparte, **no
+hecha**.
+
+**⚠️ AVISO DE ARNÉS — decisión humana pendiente.** Con esta alta la zona `frontend` queda con
+**TRES** features `in_progress` (161, 163, 164) y la regla 1 admite **dos**: `./init.sh` falla
+en esa comprobación hasta que se cierre alguna. Se registró igual y se avisó, en vez de dejar
+la feature sin registrar o de marcar otra como `done` sin haberla mergeado. Las tres están
+implementadas y verificadas; ninguna está commiteada.
+
+## 🗓️ Sesión 2026-07-30 (bis) — feature 163: carrusel de "En reparto" (vista mosaico)
+
+Pedido directo del humano, en tres mensajes sucesivos: carrusel de shadcn de 3 en 3 por
+breakpoints con etiqueta debajo ("orden 5 de 5" / "1-3 de 5") sobre las cards en reparto;
+**solo en la vista mosaico**; y **el carrusel debe ser un componente shared**.
+
+- **163 (frontend, `in_progress`)** — IMPLEMENTADA. Spec en `specs/163-carrusel-en-reparto/`.
+  Dependencia NUEVA: `embla-carousel-react`. Piezas: `components/ui/carousel.tsx` (primitiva
+  shadcn adaptada), `components/shared/CarruselCards.tsx` (compuesto genérico, D3) y
+  `components/shared/carrusel-rango.ts` (la aritmética de la etiqueta, aparte para poder
+  probarla sin layout). 23 tests propios verdes + **4 mutaciones, las 4 muertas**.
+- **Dos desviaciones del shadcn original**, ambas forzadas y documentadas en el archivo: el
+  estado de "se puede avanzar" se lee de embla con `useSyncExternalStore` porque aquí
+  `react-hooks/set-state-in-effect` es **error**; y las flechas van debajo, no flotando fuera
+  del contenedor (`-left-12` se sale del viewport en móvil, que es donde trabaja el mensajero).
+- **`tests/setup/jest-dom.ts` gana un stub de `IntersectionObserver`**: embla lo EXIGE y sin él
+  montar el carrusel LANZA. Medido: no empeora nada (en `Modal` + `MarcarLuegoToggle` pasa de
+  3 fallos a 1).
+
+**⚠️ El baseline de tests se movió DURANTE la sesión, y no por estas features.** A las 07:23
+eran 14 rojas; ahora son 18. El delta se explica entero por cambios sin commitear que
+entraron a las 08:02–08:04 en `AsignacionDetalle.tsx` y `GestionarOrdenPanel.tsx`: este último
+ahora pinta `Parada ${orden.secuenciaRuta} de ${count}` —línea que **no existe en HEAD**— y eso
+DUPLICA el texto que las cards ya mostraban, tumbando 4 tests por "Found multiple elements"
+(`R28`, `R17`, `R1` de `MisAsignacionesModule` y `R19` de `MarcarLuegoToggle`). Comprobado
+aislando: con la grilla en vez del carrusel y sin el stub, salen los mismos fallos. La 18.ª
+(`Modal` R30) es flakiness bajo carga: aislada pasa.
+
+**Sin verificar:** no se levantó la app. El arrastre táctil, el momentum y los cortes reales de
+breakpoint (redimensionar de 1 a 2 a 3) NO los cubren los tests, porque jsdom no mide anchos.
+
+## 🗓️ Sesión 2026-07-30 — feature 161 (tono de notificaciones) implementada
+
+Arrancó como pregunta, no como feature: *«¿cómo agrego un tono breve para notificaciones, o
+Google trae algo por defecto?»*. La respuesta define el alcance: **no hay API para invocar el
+tono del sistema desde JS**; el tono nativo solo existe con la Notification API. Así que el
+aviso in-app hay que generarlo.
+
+- **161 (frontend, `in_progress`)** — IMPLEMENTADA y verificada por tests. Tono sintetizado con
+  `AudioContext` (cero assets), en la **campana** y en el **chat del mensajero**. Spec completa
+  en `specs/161-tono-notificacion/`, bitácora en `progress/impl_161-tono-notificacion.md`.
+  R1–R24 mapeados uno a uno; 72 tests propios; **7 mutaciones, las 7 muertas**.
+- **162 (frontend, `pending`)** — Notification API con la app abierta. **Registrada a pedido
+  del humano, sin implementar.** Es la única vía al tono del SO. Web Push con la app cerrada
+  sigue siendo otra feature, mayor.
+
+**Requisito descubierto implementando (R24):** el diseño decía «el primer render no suena» y
+estaba mal — el primer render ocurre antes de que resuelva el fetch, así que la primera carga
+se leía como salto de 0 a N y sonaba al abrir un hilo con mensajes previos. **Lo cazó el test
+de R23, no el diseño.** Y la mutación que quita esa guarda **sobrevivió** en su primera
+versión (`null <= n` coacciona a 0); el test se reescribió para atacar lo que la guarda
+protege de verdad y entonces murió.
+
+**⚠️ `./init.sh` está ROJO, y no por esta feature.** Corta en `typecheck` por
+`_TmpSincronizarPlantillasButton.tsx` y `_TmpProbarJobsButton.tsx` (untracked, WIP de otra
+sesión), que importan `@/lib/actions/_tmp-sincronizar-plantillas` y `@/lib/actions/_tmp-probar-jobs`,
+**módulos que no existen**. Hasta que se creen o se borren esos dos botones, el gate no puede
+ponerse verde. Además la suite trae **14 rojas previas** (`MisAsignacionesModule` 13 +
+`MisAsignacionesPage` 1) por los KPIs animados y los filtros cantón/distrito de la 117, ambos
+en obra en esta rama `ux`. Medido retirando el enganche del chat: **mismas 14**.
+
+**Sin verificar (no lo tapo):** la app no se levantó — los tests prueban CUÁNDO se pide el
+tono, no que se oiga; falta **móvil real**, en particular iOS Safari (exige gesto y suspende el
+contexto al ir a background), que es la prueba que vale.
 
 ## 🗓️ Sesión 2026-07-29 — estado en vivo
 

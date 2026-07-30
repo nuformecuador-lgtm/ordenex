@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 describe("RecepcionSatelitePage — control de acceso por rol (R3)", () => {
-  it("R3: el rol adminSatelite ve el módulo con sus dos secciones", async () => {
+  it("R3: el rol adminSatelite ve el módulo con su listado de órdenes", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminSatelite" });
 
     const page = await RecepcionSatelitePage();
@@ -92,10 +92,12 @@ describe("RecepcionSatelitePage — control de acceso por rol (R3)", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Mis asignaciones" }),
     ).toBeInTheDocument();
+    // Rediseño ux: los cuatro grupos por estado se presentan en un listado único con
+    // barra de filtros; "Por recibir" solo aparece cuando hay algo que recibir (este
+    // fixture no lo trae).
     expect(
-      screen.getByRole("region", { name: "Por recibir" }),
+      screen.getByRole("region", { name: "Órdenes de la bodega" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Recibidas" })).toBeInTheDocument();
   });
 
   it("R3: cualquier rol distinto de adminSatelite NO ve el módulo (notFound)", async () => {

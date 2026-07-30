@@ -51,6 +51,16 @@ export interface PorAceptarSectionProps<T extends PorAceptarOrdenBase> {
   /** Render opcional del detalle de cada orden (evita acoplar el detalle). */
   renderDetalle?: (orden: T) => ReactNode;
   /**
+   * Render opcional de la TARJETA COMPLETA de cada orden. Si se pasa, reemplaza la
+   * `Card` por defecto (título + acción + `renderDetalle`): el consumidor pinta su
+   * propia card — p. ej. el mensajero reutiliza la card POS de "En reparto" para que
+   * "Por recoger" tenga el mismo estilo. La sección sigue aportando el encabezado,
+   * el banner del contador y el estado vacío.
+   */
+  renderItem?: (orden: T) => ReactNode;
+  /** Clases de la `<ul>` (p. ej. una grilla). Default: columna con separación. */
+  listClassName?: string;
+  /**
    * Si es `false`, oculta el botón en lote y los botones por-orden (p. ej. el
    * adminSatelite sin zona: se listan, pero no se puede aceptar). Default `true`.
    */
@@ -71,6 +81,8 @@ export function PorAceptarSection<T extends PorAceptarOrdenBase>({
   textoBotonUna,
   vacio,
   renderDetalle,
+  renderItem,
+  listClassName = "flex flex-col gap-3",
   mostrarAcciones = true,
 }: PorAceptarSectionProps<T>) {
   return (
@@ -101,9 +113,12 @@ export function PorAceptarSection<T extends PorAceptarOrdenBase>({
       {ordenes.length === 0 ? (
         <p className="text-sm text-muted-foreground">{vacio}</p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className={listClassName}>
           {ordenes.map((orden) => (
             <li key={orden.id}>
+              {renderItem ? (
+                renderItem(orden)
+              ) : (
               <Card>
                 <CardHeader>
                   <CardTitle>
@@ -125,6 +140,7 @@ export function PorAceptarSection<T extends PorAceptarOrdenBase>({
                   <CardContent>{renderDetalle(orden)}</CardContent>
                 ) : null}
               </Card>
+              )}
             </li>
           ))}
         </ul>

@@ -7,11 +7,15 @@ import {
   CircleAlert,
   Package,
   TriangleAlert,
+  Volume2,
+  VolumeX,
   X,
   type LucideProps,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { usePreferenciaSonido } from "@/hooks/usePreferenciaSonido";
+import { useTonoAlIncrementar } from "@/hooks/useTonoAlIncrementar";
 import {
   useNotificaciones,
   type NotificacionesData,
@@ -80,9 +84,22 @@ function datosIniciales(
  * `notification_type`, descripción, anexo (R49) y una X para descartar (R46).
  */
 export function NotificationsBell({ notifications }: NotificationsBellProps) {
-  const { items, noLeidas, mutate, mutateOptimista } = useNotificaciones({
-    fallbackData: datosIniciales(notifications),
-  });
+  const { items, noLeidas, error, isLoading, mutate, mutateOptimista } =
+    useNotificaciones({
+      fallbackData: datosIniciales(notifications),
+    });
+
+  // Feature 161 (R19/R20): el tono suena cuando el polling de 60 s trae mas no leidas.
+  // Las bajadas no suenan, asi que marcar todas como leidas o descartar no dispara nada.
+  //
+  // `null` MIENTRAS no hay conteo real (R24): cargando, o lectura fallida -- que degrada a
+  // cero por R48 de la 146 y, tomada como dato, haria sonar el tono al recuperarse.
+  useTonoAlIncrementar(isLoading || error != null ? null : noLeidas);
+
+  // Feature 161 (R16/R18): preferencia de sonido del dispositivo. El hook la lee como
+  // fuente externa a React para no romper la hidratacion (ver `usePreferenciaSonido`).
+  const { activado: sonidoActivado, establecer: establecerSonido } =
+    usePreferenciaSonido();
 
   const total = items.length;
   const badge = noLeidas > BADGE_MAX ? `+${BADGE_MAX}` : String(noLeidas);
@@ -155,14 +172,35 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
                   {total}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => void marcarTodas()}
-                disabled={noLeidas === 0}
-                className="text-xs font-medium text-navy/70 outline-none transition-colors hover:text-navy focus-visible:underline disabled:pointer-events-none disabled:opacity-40"
-              >
-                Marcar todas como leídas
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void marcarTodas()}
+                  disabled={noLeidas === 0}
+                  className="text-xs font-medium text-navy/70 outline-none transition-colors hover:text-navy focus-visible:underline disabled:pointer-events-none disabled:opacity-40"
+                >
+                  Marcar todas como leídas
+                </button>
+                {/* Feature 161 (R18): silenciar el tono. El estado va en el nombre
+                    accesible, no solo en el icono. */}
+                <button
+                  type="button"
+                  onClick={() => establecerSonido(!sonidoActivado)}
+                  aria-pressed={!sonidoActivado}
+                  aria-label={
+                    sonidoActivado
+                      ? "Silenciar el sonido de las notificaciones"
+                      : "Activar el sonido de las notificaciones"
+                  }
+                  className="shrink-0 cursor-pointer rounded-md p-1 text-navy/70 outline-none transition-colors hover:bg-navy/5 hover:text-navy focus-visible:ring-2 focus-visible:ring-navy/40"
+                >
+                  {sonidoActivado ? (
+                    <Volume2 className="size-4" aria-hidden="true" />
+                  ) : (
+                    <VolumeX className="size-4" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Lista de notificaciones */}

@@ -427,9 +427,10 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
         a.origen !== "incidente" &&
         a.destino !== "incidente",
     );
-    // Feature 158: las aristas que TOCAN los values de la 154 pasan de 2 a 3 — la 158 anade
-    // #53 (`incidente -> en_reparto`, el deshacer). El descuento sube de 2 a 3 con ella.
-    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 3; // #43, #44 (154) + #53 (158)
+    // Feature 158: las aristas que TOCAN los values de la 154 pasan de 2 a 13. El PR 1 anadio
+    // #53 (`incidente -> en_reparto`, el deshacer del mensajero) y el PR 2 las DIEZ del camino
+    // del ADMIN (#48-#52 entradas + #54-#58 inversas). El descuento se mueve con ellas.
+    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 13; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158)
     expect(previas).toHaveLength(
       RECUENTO_INVENTARIO.aristasFlujo - ARISTAS_QUE_TOCAN_LOS_VALUES_154,
     );

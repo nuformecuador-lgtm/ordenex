@@ -48,6 +48,16 @@ export interface ProcesarChunksOpts {
   endpoint?: string;
   onProgress?: (procesadas: number, total: number) => void;
   fetchImpl?: typeof fetch;
+  /**
+   * Feature 141 (R8/R20): nombre OPCIONAL del lote, definido por el usuario. Viaja en todos
+   * los chunks, pero solo lo persiste el que CREA el lote (R21/R23).
+   */
+  name?: string;
+  /**
+   * Feature 141 (R29): total de filas de la SESIÓN. Por defecto, el largo del arreglo
+   * completo que se trocea (que ES el total de la sesión), nunca el tamaño de un chunk.
+   */
+  totalFiles?: number;
 }
 
 /** Error de un lote (HTTP no-ok); el llamador lo traduce a alerta/toast. */
@@ -71,17 +81,35 @@ export async function procesarEnChunks(
   const lotes = chunk(filas, opts.chunkSize);
   const resultados: RowResult[] = [];
   let procesadas = 0;
+  // Feature 141 (R15/R16/R17): el identificador del lote lo EMITE EL SERVIDOR. El primer
+  // chunk en firme va SIN `cargaId`; la respuesta trae el token, que se guarda aquí y se
+  // reenvía tal cual en los chunks siguientes para que todos cuelguen del MISMO lote (R26).
+  // El cliente NUNCA lo genera. El dry-run no persiste nada, así que no lleva lote (R27).
+  let cargaId: string | null = null;
+  // R29: el total de la SESIÓN (el arreglo completo que se trocea), nunca el del chunk; y
+  // el nombre opcional del lote (R20), que solo persiste el chunk que lo crea.
+  const totalFiles = opts.totalFiles ?? filas.length;
 
   for (const lote of lotes) {
     const rows = lote.map((f) => f.row);
+    const body: Record<string, unknown> = { rows, dryRun: opts.dryRun };
+    if (!opts.dryRun) {
+      body.totalFiles = totalFiles;
+      if (opts.name !== undefined) body.name = opts.name;
+      if (cargaId !== null) body.cargaId = cargaId; // solo a partir del 2.º chunk
+    }
     const res = await doFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows, dryRun: opts.dryRun }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new ChunkRequestError(res.status);
 
     const summary = (await res.json()) as BulkSummary;
+    // Token del lote emitido por el servidor: se conserva el primero que llegue (los chunks
+    // se envían EN SERIE, así que el 2.º ya lo conoce). Si un chunk no creó ninguna orden,
+    // su `cargaId` es null y se sigue esperando al siguiente.
+    if (cargaId === null && summary.cargaId) cargaId = summary.cargaId;
     // El servidor conserva el orden de entrada: filas[i] ↔ lote[i].
     summary.filas.forEach((rr, i) => {
       resultados.push({ ...rr, fila: lote[i]?.linea ?? rr.fila });

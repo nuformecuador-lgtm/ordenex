@@ -39,7 +39,10 @@ export default async function AppLayout({
             El contenido genuinamente ancho (tablas) scrollea dentro de su propio
             contenedor overflow-x-auto, así que este clip no lo recorta. clip (no
             hidden) para no convertir el main en contenedor de scroll vertical. */}
-        <SidebarInset className="overflow-x-clip">
+        {/* `pb-12` (48px): aire al final de TODAS las páginas del portal. Sin él, el
+            último elemento queda pegado al borde inferior y, en el módulo del mensajero,
+            debajo del botón flotante del chat. */}
+        <SidebarInset className="overflow-x-clip pb-12">
           <SidebarTrigger className={"relative md:hidden"} />
           {children}
         </SidebarInset>

@@ -6,6 +6,12 @@ import type { HojaEtiqueta } from "@/lib/config/etiquetas-hoja";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
 import {
+  lineasDisponibles,
+  recortarConElipsis,
+  repartirLineas,
+} from "@/lib/pdf/etiquetas-ajuste";
+
+import {
   crearLayout,
   LIENZO_BASE_MM,
   MAQUETA_BASE,
@@ -44,30 +50,92 @@ function barcodeDataUrl(value: string, layout: EtiquetaLayout): string {
   return canvas.toDataURL("image/png");
 }
 
+/** Primera linea base del bloque de campos, en unidades del lienzo base. */
+const CAMPOS_Y_INICIO = 18;
+/** Aire entre la ultima linea de texto y el borde superior del QR, en mm base. */
+const GAP_TEXTO_CODIGOS = 2;
+/** Separacion entre la columna del rotulo y la del valor, en mm base. */
+const GAP_ROTULO_VALOR = 2;
+
+interface CampoEtiqueta {
+  label: string;
+  value: string;
+}
+
 /**
- * Dibuja un par etiqueta/valor con ajuste de linea; devuelve la `y` siguiente.
- * `y` viaja en unidades del lienzo base (0-100) y se mapea al dibujar, para que
- * el interlineado y las separaciones escalen con el mismo factor (R16).
+ * Dibuja el bloque de campos rotulo/valor EN LINEA (el rotulo en su columna, el
+ * valor a la derecha) y garantiza que el texto nunca invada la banda del QR y
+ * del codigo de barras.
+ *
+ * El rotulo va en la misma linea base que el valor —y no encima, como en la
+ * maqueta original de la feature 32— por una razon geometrica: a dos lineas por
+ * campo, los siete campos gastan ~66 mm desde `y = 24` y desbordan la banda de
+ * codigos (que empieza en `y = 68`, fija), de modo que PRODUCTO / MONTO / TIENDA
+ * se imprimian ENCIMA del QR. En linea gastan la mitad, y ademas coincide con la
+ * vista previa DOM (`EtiquetaGuia.tsx`, `grid-cols-[auto_1fr]`).
+ *
+ * Lo que sobra tras el reparto se corta con puntos suspensivos: perder la cola
+ * de una direccion larga es preferible a superponerla sobre el QR, que deja de
+ * escanear (feature 33).
  */
-function drawField(
+function drawCampos(
   doc: jsPDF,
   layout: EtiquetaLayout,
-  label: string,
-  value: string,
-  y: number,
-): number {
+  campos: CampoEtiqueta[],
+  yLimite: number,
+): void {
   const { margin, lineHeight, fieldGap } = MAQUETA_BASE;
+  const xRotulo = layout.x(margin);
 
+  // Columna del rotulo: la mide el rotulo mas ancho ("MONTO A COBRAR"), asi no
+  // hay que mantener a mano un numero que depende de la fuente. `getTextWidth`
+  // devuelve mm de PAGINA (la tipografia ya viene escalada), que es la unidad en
+  // la que se usa: solo la `y` viaja en el lienzo base.
   doc.setFont("helvetica", "bold");
   doc.setFontSize(layout.fontRotulo);
-  doc.text(label.toUpperCase(), layout.x(margin), layout.y(y));
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(layout.fontValor);
+  const anchoRotulo =
+    Math.max(...campos.map((c) => doc.getTextWidth(c.label.toUpperCase()))) +
+    layout.escala(GAP_ROTULO_VALOR);
   // El ancho de corte va escalado: con 88 mm fijos sobre una hoja A4 el texto
   // se ajustaria a una columna angosta y quedaria "encogido" (design.md §4.3).
-  const lines = doc.splitTextToSize(value, layout.contentWidth) as string[];
-  doc.text(lines, layout.x(margin), layout.y(y + lineHeight));
-  return y + lineHeight + lines.length * lineHeight + fieldGap;
+  const anchoValor = layout.contentWidth - anchoRotulo;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(layout.fontValor);
+  const naturales = campos.map(
+    (c) => doc.splitTextToSize(c.value, anchoValor) as string[],
+  );
+  const cupo = repartirLineas(
+    naturales.map((l) => l.length),
+    lineasDisponibles(
+      CAMPOS_Y_INICIO,
+      yLimite,
+      lineHeight,
+      fieldGap,
+      campos.length,
+    ),
+  );
+  const medir = (texto: string) => doc.getTextWidth(texto);
+
+  let y = CAMPOS_Y_INICIO;
+  campos.forEach((campo, i) => {
+    const lineas = recortarConElipsis(naturales[i], cupo[i], anchoValor, medir);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(layout.fontRotulo);
+    doc.text(campo.label.toUpperCase(), xRotulo, layout.y(y));
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(layout.fontValor);
+    // Linea a linea con el interlineado de la maqueta: el avance automatico de
+    // `doc.text(array)` usa el leading de la fuente y se desincronizaria del
+    // `lineHeight` con el que aqui se calcula el cupo.
+    lineas.forEach((linea, k) => {
+      doc.text(linea, xRotulo + anchoRotulo, layout.y(y + k * lineHeight));
+    });
+
+    y += lineas.length * lineHeight + fieldGap;
+  });
 }
 
 /** Une la geografia disponible; omite el distrito si es null (R4). */
@@ -110,19 +178,27 @@ function drawEtiqueta(
     align: "right",
   });
 
-  // R20: los nueve datos de la etiqueta, en cualquier tamaño del catalogo.
-  let y = margin + 18;
-  y = drawField(doc, layout, "Destinatario", etiqueta.destinatario, y);
-  y = drawField(doc, layout, "Teléfono", etiqueta.telefonoDest, y);
-  y = drawField(doc, layout, "Dirección", etiqueta.direccion ?? "—", y);
-  y = drawField(doc, layout, "Ubicación", geografiaLegible(etiqueta), y);
-  y = drawField(doc, layout, "Producto", etiqueta.producto, y);
-  y = drawField(doc, layout, "Monto a cobrar", formatMonto(etiqueta.montoCobrar), y);
-  drawField(doc, layout, "Tienda", etiqueta.tiendaNombre, y);
-
   // Codigos: QR (raster del canvas de qrcode.react) + barcode (jsbarcode).
   const qrSize = MAQUETA_BASE.qrSize;
   const qrY = LIENZO_BASE_MM - margin - qrSize;
+
+  // R20: los nueve datos de la etiqueta, en cualquier tamaño del catalogo. El
+  // limite es el borde superior del QR: el texto se ajusta a lo que queda libre.
+  drawCampos(
+    doc,
+    layout,
+    [
+      { label: "Destinatario", value: etiqueta.destinatario },
+      { label: "Teléfono", value: etiqueta.telefonoDest },
+      { label: "Dirección", value: etiqueta.direccion ?? "—" },
+      { label: "Ubicación", value: geografiaLegible(etiqueta) },
+      { label: "Producto", value: etiqueta.producto },
+      { label: "Monto a cobrar", value: formatMonto(etiqueta.montoCobrar) },
+      { label: "Tienda", value: etiqueta.tiendaNombre },
+    ],
+    qrY - GAP_TEXTO_CODIGOS,
+  );
+
   if (qrCanvas) {
     doc.addImage(
       qrCanvas.toDataURL("image/png"),

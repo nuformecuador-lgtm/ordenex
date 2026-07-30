@@ -12,6 +12,7 @@ import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenReposi
 import { hashDireccion } from "@/lib/geo/direccion-query";
 import { dedupeKeyGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { buildCargaDelegate, loteCtx } from "@/tests/fixtures/carga-lote";
 
 // Feature 91 (R6, R7, R8, R12, R13) — encolado TRANSACTIONAL OUTBOX desde los writers de
 // direccion. Prisma va mockeado (patron de tests/integration/repositories), pero el
@@ -120,6 +121,8 @@ function buildPrisma(overrides: {
   const prisma = {
     orden,
     ordenHistorialEstado,
+    // Feature 141: delegate del lote asegurado en la tx de la insercion batch.
+    carga: buildCargaDelegate(),
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
     $queryRaw: vi.fn(async () => []),
     $executeRaw: vi.fn(async () => 0),
@@ -218,9 +221,10 @@ describe("R8 — carga masiva", () => {
       [CREATE_DATA, { ...CREATE_DATA, numRemision: "REM-2" }, { ...CREATE_DATA, numRemision: "REM-3" }],
       100,
       { ...HISTORIAL, origenTipo: "carga_masiva" },
+      loteCtx({ totalFiles: 3 }),
     );
 
-    expect(insertadas).toBe(2);
+    expect(insertadas.inserted).toBe(2);
     expect(cola.geo.map((f) => f.payload)).toEqual([
       { ordenId: "orden-a" },
       { ordenId: "orden-b" },
@@ -242,10 +246,12 @@ describe("R8 — carga masiva", () => {
     const cola = new ColaEnMemoria();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, cola);
 
-    await repo.createManyOrdenes([CREATE_DATA], 100, {
-      ...HISTORIAL,
-      origenTipo: "carga_masiva",
-    });
+    await repo.createManyOrdenes(
+      [CREATE_DATA],
+      100,
+      { ...HISTORIAL, origenTipo: "carga_masiva" },
+      loteCtx(),
+    );
 
     expect(cola.geo.map((f) => f.payload)).toEqual([{ ordenId: "orden-a" }]);
   });

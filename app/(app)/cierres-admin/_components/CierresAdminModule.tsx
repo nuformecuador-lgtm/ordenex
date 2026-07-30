@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,27 +36,13 @@ import {
   money,
   EstadoCierreBadge,
   EstadoHistoricoRotulo,
-  ORDEN_RESULTADOS,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
-  RESULTADO_LABEL,
-  RESULTADO_VACIO,
-  PagoMensajeroTotal,
-  IngresoBodegaRechazosDesglose,
-  TotalesIngresoPanel,
-  MontoDerivadoCard,
-  INGRESO_BRUTO_LABEL,
-  INGRESO_BRUTO_NOTA,
-  GANANCIA_DEBE_LABEL,
-  PAGO_TIENDA_LABEL,
-  PAGO_TIENDA_NOTA,
-  GANANCIA_NOTA,
-  esMontoNegativo,
-  DesgloseIngresoOrdenex,
-  desgloseAriaLabel,
-  TotalItem,
-  columnasPara,
 } from "./cierre-detalle-shared";
+import {
+  CierreFacturaResumen,
+  CierreFacturaDetalle,
+} from "./cierre-factura";
 
 // Feature 38 (T13, R3-R11): módulo cliente de "Cierres del día" del admin. Recibe
 // del Server Component padre los cierres del alcance ya resueltos (pendientes de
@@ -422,6 +407,77 @@ export function CierresAdminModule({
         </div>
       </section>
 
+      {/* ---------- Vista tipo factura (previsualización de UX) ----------
+          Lectura alternativa de LOS MISMOS cierres que las dos tablas de arriba, como
+          comprobante. Va DEBAJO y a propósito no reemplaza nada: es para comparar las
+          dos lecturas antes de decidir cuál se queda. */}
+      <section
+        aria-label="Vista tipo factura"
+        className="flex flex-col gap-4 border-t pt-6"
+      >
+        <div className="flex flex-col gap-1">
+          <h2 className="text-lg font-semibold">Vista tipo factura</h2>
+          <p className="text-sm text-muted-foreground">
+            Previsualización: los mismos cierres de arriba leídos como comprobante.
+          </p>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          {[...pendientes, ...historico].map((c) => (
+            <CierreFacturaResumen
+              key={c.cierreId}
+              cierre={c}
+              acciones={
+                // Los nombres accesibles llevan el sufijo de la vista: los botones de
+                // la tabla ya se llaman "Ver / decidir" / "Destrabar cierre vencido",
+                // y duplicarlos haría ambigua la localización por nombre.
+                c.estado === "vencido" ? (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      aria-label={`Ver el comprobante del cierre de ${c.mensajeroNombre}`}
+                      onClick={() => abrirDetalle(c.cierreId)}
+                    >
+                      Ver
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setDestrabar(c)}
+                      aria-label={`Destrabar desde el comprobante el cierre vencido abandonado de ${c.mensajeroNombre}`}
+                    >
+                      Destrabar cierre vencido
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={c.estado === "solicitado" ? "default" : "outline"}
+                    aria-label={
+                      c.estado === "solicitado"
+                        ? `Ver / decidir desde el comprobante el cierre de ${c.mensajeroNombre}`
+                        : `Ver el comprobante del cierre de ${c.mensajeroNombre}`
+                    }
+                    onClick={() => abrirDetalle(c.cierreId)}
+                  >
+                    {c.estado === "solicitado" ? "Ver / decidir" : "Ver"}
+                  </Button>
+                )
+              }
+            />
+          ))}
+          {pendientes.length === 0 && historico.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No hay cierres para previsualizar.
+            </p>
+          ) : null}
+        </div>
+      </section>
+
       {/* ---------- Detalle del cierre (R6-R8) ---------- */}
       <Modal
         open={detalle !== null}
@@ -442,124 +498,21 @@ export function CierresAdminModule({
       >
         {detalle ? (
           <div className="flex max-h-[70vh] flex-col gap-6 overflow-y-auto pr-1">
-            {/* Panel de totales snapshot por método (R8). */}
-            <section
-              aria-label="Totales del cierre"
-              className="flex flex-col gap-3"
-            >
-              <h3 className="text-base font-semibold">Totales del cierre</h3>
-              <Card>
-                <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-4">
-                  <TotalItem
-                    label="Efectivo"
-                    value={money(detalle.cierre.totales.efectivo)}
-                  />
-                  <TotalItem
-                    label="SINPE"
-                    value={money(detalle.cierre.totales.simpe)}
-                  />
-                  <TotalItem
-                    label="Transferencia"
-                    value={money(detalle.cierre.totales.transferencia)}
-                  />
-                  <TotalItem
-                    label="Total general"
-                    value={money(detalle.cierre.totales.general)}
-                    emphasis
-                  />
-                </CardContent>
-              </Card>
-            </section>
-
-            {/* Primero los ingresos: qué facturó Ordenex. Después la resta completa, en
-                orden: bruto, pago al mensajero, ganancia. */}
-            <TotalesIngresoPanel totales={detalle.totalesIngreso} />
-
-            {/* Bruto y ganancia: el bruto es el mismo total del panel de arriba, repetido
-                acá a propósito para que la resta de la ganancia se lea completa. */}
-            <MontoDerivadoCard
-              value={detalle.totalesIngreso.total}
-              label={INGRESO_BRUTO_LABEL}
-              nota={INGRESO_BRUTO_NOTA}
+            {/* El detalle es UNA sola lectura: el comprobante. Reemplazó a los paneles
+                sueltos + las 4 tablas por resultado (R6-R8) sin perder ningún dato: los
+                totales snapshot, el ingreso de Ordenex, la liquidación y las gestiones
+                (ahora en pestañas, con su desglose por fila) viven todos ahí dentro. */}
+            <CierreFacturaDetalle
+              cierre={detalle.cierre}
+              grupos={detalle.grupos}
+              totalesIngreso={detalle.totalesIngreso}
+              desgloseIngresoBodegaRechazos={
+                detalle.desgloseIngresoBodegaRechazos
+              }
+              ganancia={detalle.ganancia}
+              pagoTienda={detalle.pagoTienda}
+              onVerEvidencia={setEvidencia}
             />
-            {/* Feature 39/R17: total snapshot a pagar al mensajero, separado del dinero recibido.
-                Va encima de la ganancia: es el sustraendo, así que la resta se lee de arriba
-                hacia abajo (bruto − pago = ganancia). */}
-            <PagoMensajeroTotal
-              value={detalle.cierre.totalPagoMensajero}
-              ariaLabel="Pago al mensajero del cierre"
-            />
-            {/* La ganancia solo se muestra cuando es NEGATIVA: ahí Ordenex pagó al
-                mensajero más de lo que facturó, así que es una DEUDA ("Debe") y el
-                monto va en rojo. Si es ≥ 0 no se muestra card de ganancia. */}
-            {esMontoNegativo(detalle.ganancia) ? (
-              <MontoDerivadoCard
-                value={detalle.ganancia}
-                label={GANANCIA_DEBE_LABEL}
-                nota={GANANCIA_NOTA}
-                tone="danger"
-              />
-            ) : null}
-
-            {/* Feature 56/R16 + 102/R8: total snapshot del ingreso de bodega por rechazos,
-                separado, AHORA con el desglose SLA (cron) vs manual (mensajero) debajo. */}
-            <IngresoBodegaRechazosDesglose
-              desglose={detalle.desgloseIngresoBodegaRechazos}
-              ariaLabel="Ingreso de bodega por rechazos del cierre"
-            />
-
-            {/* Cierra el detalle: lo que se le paga a la tienda. Parte del total general
-                RECIBIDO, no del bruto facturado — por eso va aparte de la ganancia. */}
-            <MontoDerivadoCard
-              value={detalle.pagoTienda}
-              label={PAGO_TIENDA_LABEL}
-              nota={PAGO_TIENDA_NOTA}
-            />
-
-            {/* Motivo de rechazo si el cierre del histórico fue rechazado. */}
-            {detalle.cierre.motivoRechazo ? (
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  Motivo de rechazo:{" "}
-                </span>
-                {detalle.cierre.motivoRechazo}
-              </p>
-            ) : null}
-
-            {/* Secciones por resultado (reuso del render de la 37, R6). */}
-            {ORDEN_RESULTADOS.map((resultado) => {
-              const filas = detalle.grupos[resultado] ?? [];
-              // Pedido: no mostrar las secciones sin registros (p. ej. reprogramadas con 0).
-              if (filas.length === 0) return null;
-              return (
-                <section
-                  key={resultado}
-                  aria-label={RESULTADO_LABEL[resultado]}
-                  className="flex flex-col gap-3"
-                >
-                  <h3 className="text-base font-semibold">
-                    {RESULTADO_LABEL[resultado]}{" "}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      ({filas.length})
-                    </span>
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <DataTable
-                      columns={columnasPara(resultado, setEvidencia)}
-                      data={filas}
-                      rowKey="gestionId"
-                      ariaLabel={RESULTADO_LABEL[resultado]}
-                      emptyMessage={RESULTADO_VACIO[resultado]}
-                      // Desglose por orden: de qué tarifa salió cada monto.
-                      renderExpanded={(g) =>
-                        g.ingresoOrdenex ? <DesgloseIngresoOrdenex g={g} /> : null
-                      }
-                      expandAriaLabel={desgloseAriaLabel}
-                    />
-                  </div>
-                </section>
-              );
-            })}
 
             {/* Acciones: solo en un cierre `solicitado` (feature 111/R15); histórico y
                 `vencido` = sin decisión aquí (el `vencido` se destraba desde la cola, R16). */}

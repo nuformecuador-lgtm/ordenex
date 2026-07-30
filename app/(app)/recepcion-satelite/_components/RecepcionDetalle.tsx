@@ -33,11 +33,30 @@ function ubicacion(orden: RecepcionSateliteDTO): string {
     .join(" · ");
 }
 
-function Campo({ label, children }: { label: string; children: ReactNode }) {
+/**
+ * Un dato del detalle. Rediseño ux: MISMO formato que `AsignacionDetalle` del mensajero
+ * (etiqueta pequeña en mayúsculas + valor destacado, `mono` para los números que se leen
+ * dígito a dígito), para que los dos módulos se lean igual.
+ */
+function Campo({
+  label,
+  children,
+  mono,
+}: {
+  label: string;
+  children: ReactNode;
+  mono?: boolean;
+}) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className="text-sm">{children}</dd>
+    <div className="min-w-0">
+      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd
+        className={`mt-0.5 text-sm font-semibold text-foreground${mono ? " font-mono" : ""}`}
+      >
+        {children}
+      </dd>
     </div>
   );
 }
@@ -51,17 +70,25 @@ export interface RecepcionDetalleProps {
 /** Detalle de una orden del módulo satélite (R9). */
 export function RecepcionDetalle({ orden, estadoLegible }: RecepcionDetalleProps) {
   return (
-    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <Campo label="Nº Guía">{orden.numGuia ?? "—"}</Campo>
-      <Campo label="Nº Remisión">{orden.numRemision}</Campo>
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-3">
+      <Campo label="Nº Guía" mono>
+        {orden.numGuia ?? "—"}
+      </Campo>
+      <Campo label="Nº Remisión" mono>
+        {orden.numRemision}
+      </Campo>
       <Campo label="Estado">{estadoLegible}</Campo>
       <Campo label="Tienda">{orden.tiendaNombre}</Campo>
       <Campo label="Destinatario">{orden.destinatario}</Campo>
-      <Campo label="Teléfono">{orden.telefonoDest}</Campo>
+      <Campo label="Teléfono" mono>
+        {orden.telefonoDest}
+      </Campo>
       <Campo label="Dirección">{orden.direccion ?? "—"}</Campo>
       <Campo label="Ubicación">{ubicacion(orden) || "—"}</Campo>
       <Campo label="Producto">{orden.producto}</Campo>
-      <Campo label="Monto a cobrar">{formatMonto(orden.montoCobrar)}</Campo>
+      <Campo label="Monto a cobrar" mono>
+        {formatMonto(orden.montoCobrar)}
+      </Campo>
       {/* Feature 160 (R18/R19/R25): intentos de entrega como UN CAMPO MAS del detalle
           —mismo `Campo` (<dt>/<dd>) que sus hermanos, misma jerarquia—, en los dos
           grupos que se presentan como cards ("Por recibir" y "Devueltas"). Se muestra

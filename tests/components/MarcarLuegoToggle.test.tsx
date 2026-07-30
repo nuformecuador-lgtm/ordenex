@@ -110,16 +110,27 @@ function renderModule(porGestionar: MiAsignacionDTO[]) {
 }
 
 /**
- * Card (`<article>` de `PosOrderCard`) de una remisión. El rediseño POS dejó el
- * `<article>` sin nombre accesible, así que se llega a él desde su CTA interno.
+ * Card (`<article>` de `PosOrderCard`) de una remisión. La card ya no tiene CTA
+ * interno: ella misma es el target de selección, con `aria-label` propio.
  */
 function cardDe(numRemision: string): HTMLElement {
-  const cta = screen.getByRole("button", {
+  return screen.getByRole("article", {
     name: new RegExp(`Gestionar orden ${numRemision}`),
   });
-  const card = cta.closest("article");
-  if (card === null) throw new Error(`sin <article> para ${numRemision}`);
-  return card;
+}
+
+/**
+ * BADGE "Gestionar más tarde" de una card, o `null` si no está. Desde el rediseño ux el
+ * toggle homónimo vive DENTRO de la card (en su pie, ya no como hermano del `<article>`),
+ * así que acotar al article ya no basta para aislar el badge: se descarta el texto que
+ * cuelga de un `<button>` (el toggle) y queda el badge.
+ */
+function badgeMarcarLuego(card: HTMLElement): HTMLElement | null {
+  return (
+    within(card)
+      .queryAllByText("Gestionar más tarde")
+      .find((el) => el.closest("button") === null) ?? null
+  );
 }
 
 /**
@@ -252,12 +263,11 @@ describe("MarcarLuegoToggle (feature 115 / T8)", () => {
       makeAsignacion({ id: "g2", numRemision: "REM-G2", marcarLuego: false }),
     ]);
 
-    // Rediseño POS: la card es el `<article>` (PosOrderCard) y el botón "Gestionar
-    // orden" es su CTA interno, no la card entera. El badge vive DENTRO del article;
-    // el toggle homónimo es HERMANO del article, así que acotar al article sigue
-    // aislando el badge del toggle.
-    expect(within(cardDe("REM-G1")).getByText("Gestionar más tarde")).toBeInTheDocument();
-    expect(within(cardDe("REM-G2")).queryByText("Gestionar más tarde")).toBeNull();
+    // Rediseño POS: la card es el `<article>`. Tanto el badge como el toggle homónimo
+    // viven DENTRO de ella, así que el badge se aísla descartando el texto del `<button>`
+    // (ver `badgeMarcarLuego`).
+    expect(badgeMarcarLuego(cardDe("REM-G1"))).toBeInTheDocument();
+    expect(badgeMarcarLuego(cardDe("REM-G2"))).toBeNull();
   });
 
   // ---------------- R19: orden visual (hunde las marcadas al final) ----------------
@@ -286,7 +296,7 @@ describe("MarcarLuegoToggle (feature 115 / T8)", () => {
     ]);
 
     const cards = screen
-      .getAllByRole("button", { name: /Gestionar orden REM-G/ })
+      .getAllByRole("article", { name: /Gestionar orden REM-G/ })
       .map((b) => b.getAttribute("aria-label"));
 
     // Presentación: la marcada (g1) baja al final; g2 y g3 conservan su orden de ruta.
@@ -309,7 +319,7 @@ describe("MarcarLuegoToggle (feature 115 / T8)", () => {
     ]);
 
     const cards = screen
-      .getAllByRole("button", { name: /Gestionar orden REM-G/ })
+      .getAllByRole("article", { name: /Gestionar orden REM-G/ })
       .map((b) => b.getAttribute("aria-label"));
     expect(cards).toEqual([
       "Gestionar orden REM-G1 · Ana Pérez",

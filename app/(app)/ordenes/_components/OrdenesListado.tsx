@@ -160,7 +160,9 @@ export function OrdenesListado({
   accionesLote = false,
   catalogoFiltros = null,
   incluirFiltroTienda = true,
+  incluirFiltroReasignables = true,
   permitirDescarga = true,
+  puedeReportarIncidente = false,
 }: Readonly<{
   exclude?: string[];
   puedeCargarMasiva?: boolean;
@@ -202,6 +204,12 @@ export function OrdenesListado({
    */
   incluirFiltroTienda?: boolean;
   /**
+   * Declara el interruptor "Reasignables" (prioridad + no reprogramada + sin
+   * mensajero). Es un filtro de despacho: solo sirve a quien reasigna mensajeros
+   * (`maestro`/`admin`). `adminTienda` lo recibe en `false`.
+   */
+  incluirFiltroReasignables?: boolean;
+  /**
    * Feature 151 (R33): ofrece la descarga del dataset COMPLETO acotado a los filtros
    * vigentes de la barra. Por defecto `true`: ésta ES la superficie del listado de
    * órdenes, y quien ve el listado descarga lo que ese listado ya le muestra (gate P5;
@@ -209,6 +217,12 @@ export function OrdenesListado({
    * apagarla en una superficie concreta sin tocar el módulo.
    */
   permitirDescarga?: boolean;
+  /**
+   * Feature 158 (T2.7, Q-H): ofrece la acción POR FILA "Reportar incidente" en el listado.
+   * Se pasa tal cual a `OrdenesModule`, que la monta sólo en las filas cuyo estado admite el
+   * reporte. Es una acción por ORDEN, no por lote: no entra en `accionesDe`.
+   */
+  puedeReportarIncidente?: boolean;
 }>) {
   const { mutate } = useSWRConfig();
   const { data: catalogo, isLoading } = useSWR(
@@ -426,9 +440,10 @@ export function OrdenesListado({
       // estado viene de otra fuente y sigue operativo.
       ...construirFiltrosOrdenes(catalogoFiltros ?? CATALOGO_FILTROS_VACIO, {
         incluirTienda: incluirFiltroTienda,
+        incluirReasignables: incluirFiltroReasignables,
       }).map((f) => (catalogoFiltros === null ? { ...f, disabled: true } : f)),
     ],
-    [catalogoFiltros, incluirFiltroTienda, opciones],
+    [catalogoFiltros, incluirFiltroTienda, incluirFiltroReasignables, opciones],
   );
 
   // R46/R58/R59: `status_id` (feature 63) y los filtros nuevos se funden en UN solo
@@ -573,6 +588,7 @@ export function OrdenesListado({
         acciones={accionesLote ? accionesPara : undefined}
         resaltarPrioridad={valueUnico === ESTADO_EN_BODEGA}
         permitirDescarga={permitirDescarga}
+        puedeReportarIncidente={puedeReportarIncidente}
       />
 
       {/* Modales de acción por lote (solo acceso total). Montados una vez; `open` por

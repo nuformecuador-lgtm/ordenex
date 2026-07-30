@@ -1,57 +1,145 @@
 "use client";
 
-import { Package, StickyNote, Truck } from "lucide-react";
+import {
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
+import { ChevronDown, Package, StickyNote } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "../AsignacionDetalle";
 import { PosAmountRow } from "./PosAmountRow";
 import { PosCardHeader } from "./PosCardHeader";
-import { PosComms } from "./PosComms";
 import { PosNavBlock } from "./PosNavBlock";
 
 // POS card · card de una orden EN REPARTO, réplica del `PosCardExpand` de la
 // referencia (terminal de reparto: navegación primero, targets grandes, alto
 // contraste, paleta navy/brand del rebrand). Ensambla las piezas separadas
-// (cabecera, navegación, cobro, contacto) y conserva las señales del módulo del
-// mensajero: badges de ruta/"gestionar más tarde", preview de la nota privada y el
-// detalle COMPLETO inline (feature 113/R1) plegado en un `<details>` para no perder
-// información. El botón "Gestionar orden" reemplaza el click-en-toda-la-card: al
-// pulsarlo se selecciona la orden y se abre el panel de gestión grande de abajo.
+// (cabecera, navegación, cobro) y conserva las señales del módulo del mensajero:
+// badges de ruta/"gestionar más tarde", preview de la nota privada y el detalle
+// COMPLETO inline (feature 113/R1) plegado para no perder información.
+//
+// Pedido humano (rama ux): la card NO lleva acciones de contacto ("Llamar" /
+// "WhatsApp") ni el CTA "Gestionar orden". El contacto vive en el panel de gestión;
+// la selección se hace pulsando la card, que para eso es un target accesible
+// (`aria-label` + foco de teclado con Enter/Espacio).
 
 export interface PosOrderCardProps {
   orden: MiAsignacionDTO;
   /** Total de órdenes en reparto, para el "N de total" de la cabecera. */
   total: number;
   /** La orden tiene el puntero de gestión 1-a-1 fijado (R19/R20). */
-  esActiva: boolean;
+  esActiva?: boolean;
   /** La orden es la mostrada en el panel de detalle grande de abajo. */
-  esDetalle: boolean;
+  esDetalle?: boolean;
   /** Mensajero bloqueado por cierre pendiente (feature 111/R14): deshabilita gestionar. */
-  bloqueado: boolean;
-  /** Selecciona esta orden para el panel de gestión (equivale al antiguo click en la card). */
-  onGestionar: () => void;
+  bloqueado?: boolean;
+  /**
+   * Selecciona esta orden para el panel de gestión. Si NO se pasa, la card es de
+   * solo-visualización (superficies como "Por recoger"): no es clickeable ni
+   * enfocable.
+   */
+  onGestionar?: () => void;
+  /** Etiqueta de estado; por defecto se deriva de `esActiva`/`esDetalle`. */
+  estado?: string;
+  /**
+   * `false` para superficies sin ruta optimizada ("Por recoger"): oculta el nº de parada
+   * de la cabecera y la marca "Pendiente de optimizar". Default `true`.
+   */
+  mostrarRuta?: boolean;
+  /**
+   * Controles propios del consumidor al PIE de la card, DENTRO de ella (pedido humano:
+   * el toggle "gestionar más tarde" va dentro de la tarjeta, no como hermano suelto).
+   * La card es un `<article>`, no un botón, así que alojar controles es HTML válido; el
+   * gate de selección los ignora (ver `pos-seleccion`), no seleccionan de rebote.
+   */
+  acciones?: ReactNode;
 }
 
 export function PosOrderCard({
   orden,
   total,
-  esActiva,
-  esDetalle,
-  bloqueado,
+  esActiva = false,
+  esDetalle = false,
+  bloqueado = false,
   onGestionar,
+  estado: estadoProp,
+  mostrarRuta = true,
+  acciones,
 }: PosOrderCardProps) {
-  const estado = esActiva ? "En gestión" : esDetalle ? "En detalle" : "En reparto";
+  // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
+  const [detalleAbierto, setDetalleAbierto] = useState(false);
+
+  // Seleccionar la orden pulsando CUALQUIER parte de la card (pedido humano). La card ya
+  // no tiene CTA propio, así que este handler es la única vía de selección.
+  //
+  // La card contiene sus PROPIOS controles (Ir, el desplegable del detalle), y un
+  // `<article>` clickeable no puede envolverlos en un botón sin producir HTML inválido:
+  // se queda como `<article>` con `aria-label` + `tabIndex` en lugar de `role="button"`.
+  // El click se ignora cuando nace dentro de un control: navegar o abrir el detalle NO
+  // debe seleccionar de rebote.
+  function nacidoEnControl(target: EventTarget | null) {
+    return Boolean(
+      (target as HTMLElement | null)?.closest("a, button, input, summary, label"),
+    );
+  }
+
+  function handleCardClick(event: MouseEvent<HTMLElement>) {
+    if (!onGestionar || bloqueado) return;
+    if (nacidoEnControl(event.target)) return;
+    onGestionar();
+  }
+
+  // Paridad de teclado con el click: Enter/Espacio sobre la card la selecciona. Solo
+  // cuando la tecla nace en la card misma, para no secuestrar los controles internos.
+  function handleCardKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (!onGestionar || bloqueado) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    onGestionar();
+  }
+
+  // La card responde a puntero/teclado solo si hay selección disponible y no está bloqueada.
+  const seleccionable = Boolean(onGestionar) && !bloqueado;
+  const estado =
+    estadoProp ??
+    (esActiva ? "En gestión" : esDetalle ? "En detalle" : "En reparto");
 
   return (
     <article
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      tabIndex={seleccionable ? 0 : undefined}
+      aria-label={
+        onGestionar
+          ? `Gestionar orden ${orden.numRemision} · ${orden.destinatario}`
+          : undefined
+      }
       className={`overflow-hidden rounded-3xl bg-card shadow-sm ring-2 transition-all ${
         esDetalle ? "ring-brand" : "ring-border"
+      } ${
+        seleccionable
+          ? "cursor-pointer hover:ring-brand/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          : ""
       }`}
     >
-      <PosCardHeader orden={orden} total={total} estado={estado} />
+      <PosCardHeader
+        orden={orden}
+        total={total}
+        estado={estado}
+        mostrarParada={mostrarRuta}
+      />
 
       <div className="space-y-3 p-4">
         {/* Destinatario + producto (réplica del bloque `Package` de la referencia). */}
@@ -78,9 +166,9 @@ export function PosOrderCard({
 
         {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más tarde):
             marcas informativas de la card, en una fila que envuelve. */}
-        {orden.secuenciaRuta === null || orden.marcarLuego ? (
+        {(mostrarRuta && orden.secuenciaRuta === null) || orden.marcarLuego ? (
           <div className="flex flex-wrap gap-1.5">
-            {orden.secuenciaRuta === null ? (
+            {mostrarRuta && orden.secuenciaRuta === null ? (
               <Badge variant="outline" className="w-fit">
                 Pendiente de optimizar
               </Badge>
@@ -108,32 +196,33 @@ export function PosOrderCard({
 
         <PosNavBlock orden={orden} />
         <PosAmountRow montoCobrar={orden.montoCobrar} />
-        <PosComms telefono={orden.telefonoDest} nombre={orden.destinatario} />
 
         {/* Feature 113/R1: detalle COMPLETO (Pedido/Entrega/Cobro) disponible sin salir
-            de la card, plegado para no competir con la navegación. */}
-        <details className="rounded-2xl border border-border bg-muted/40 px-3 py-2 [&_summary]:cursor-pointer">
-          <summary className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            Ver detalle completo
-          </summary>
-          <div className="mt-3 border-t border-border pt-3">
-            <AsignacionDetalle orden={orden} />
-          </div>
-        </details>
-
-        {/* "Gestionar orden": selecciona la orden y abre el panel de gestión grande de
-            abajo. Reemplaza el click en toda la card; deshabilitado si el mensajero
-            está bloqueado por cierre pendiente (feature 111/R14). */}
-        <button
-          type="button"
-          disabled={bloqueado}
-          aria-pressed={esDetalle}
-          onClick={onGestionar}
-          aria-label={`Gestionar orden ${orden.numRemision} · ${orden.destinatario}`}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-5 text-lg font-black uppercase tracking-wide text-white shadow-lg shadow-brand/20 transition-transform active:scale-[0.99] disabled:pointer-events-none disabled:opacity-60"
+            de la card, plegado para no competir con la navegación. Es un `Collapsible` de
+            Base UI (no un `<details>`) para que abra y cierre BARRIENDO la altura, igual
+            que el resto de desplegables de la app (`collapsible-panel`, globals.css);
+            `keepMounted` deja el detalle en el DOM plegado, así la información sigue
+            estando (y siendo buscable) sin depender de la animación. */}
+        <Collapsible
+          open={detalleAbierto}
+          onOpenChange={setDetalleAbierto}
+          className="group/detalle rounded-2xl border border-border bg-muted/40 px-3 py-2"
         >
-          <Truck className="size-6" aria-hidden="true" /> Gestionar orden
-        </button>
+          <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Ver detalle completo
+            <ChevronDown
+              aria-hidden="true"
+              className="size-4 shrink-0 transition-transform duration-200 group-data-[open]/detalle:rotate-180 motion-reduce:transition-none"
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent keepMounted className="collapsible-panel">
+            <div className="mt-3 border-t border-border pt-3">
+              <AsignacionDetalle orden={orden} />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {acciones}
       </div>
     </article>
   );

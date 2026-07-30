@@ -1,8 +1,7 @@
-import { Truck, PackageCheck, Wallet, Coins } from "lucide-react";
-
 import { Card, CardContent } from "@/components/ui/card";
-import { PriceLabel } from "@/components/shared/PriceLabel";
 import type { MisAsignacionesKpis } from "@/lib/interfaces/services/IMisAsignacionesService";
+
+import { KpiValorAnimado } from "./KpiValorAnimado";
 
 // Feature 61 — fila de KPIs del portal del mensajero, sobre la lista de sus
 // asignaciones. Los 3 indicadores vienen ya calculados server-side (autoritativos):
@@ -16,30 +15,31 @@ export interface KpisMensajeroProps {
 
 interface Tile {
   label: string;
-  icon: typeof Truck;
+  /** Icono en `public/icons/`. Se sirve con <img>: next/image falla aquí. */
+  icon: string;
   render: (kpis: MisAsignacionesKpis) => React.ReactNode;
 }
 
 const TILES: Tile[] = [
   {
     label: "Pendientes",
-    icon: Truck,
-    render: (k) => <span className="tabular-nums">{k.pendientes}</span>,
+    icon: "/icons/icono_envios.png",
+    render: (k) => <KpiValorAnimado value={k.pendientes} />,
   },
   {
     label: "Entregadas",
-    icon: PackageCheck,
-    render: (k) => <span className="tabular-nums">{k.entregadas}</span>,
+    icon: "/icons/icono_entregadas.png",
+    render: (k) => <KpiValorAnimado value={k.entregadas} />,
   },
   {
     label: "Por cobrar",
-    icon: Wallet,
-    render: (k) => <PriceLabel value={k.porCobrar} />,
+    icon: "/icons/icono_wallet.png",
+    render: (k) => <KpiValorAnimado value={k.porCobrar} moneda />,
   },
   {
     label: "Total a cobrar",
-    icon: Coins,
-    render: (k) => <PriceLabel value={k.totalACobrar} />,
+    icon: "/icons/icono_transacciones.png",
+    render: (k) => <KpiValorAnimado value={k.totalACobrar} moneda />,
   },
 ];
 
@@ -47,31 +47,37 @@ export function KpisMensajero({ kpis }: Readonly<KpisMensajeroProps>) {
   return (
     <section
       aria-label="Indicadores de mis asignaciones"
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
     >
-      {TILES.map((tile) => {
-        const Icon = tile.icon;
-        return (
-          <Card key={tile.label}>
-            <CardContent className="flex items-center gap-3 py-4">
-              <span
-                aria-hidden="true"
-                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-navy/10 text-navy"
-              >
-                <Icon className="size-5" />
+      {TILES.map((tile) => (
+        <Card
+          key={tile.label}
+          // Sombra permanente + degradado morado claro → blanco al pasar el
+          // cursor. background-image no interpola, así que el degradado vive
+          // siempre en un ::before y lo que se anima es su opacidad.
+          className="relative overflow-hidden shadow-xl transition-shadow duration-300 hover:shadow-lg before:pointer-events-none before:absolute before:inset-0 before:bg-linear-to-br before:from-purple-200 before:to-white before:opacity-0 before:transition-opacity before:duration-300 before:content-[''] hover:before:opacity-100"
+        >
+          <CardContent className="relative flex items-center gap-3 py-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              aria-hidden="true"
+              src={tile.icon}
+              alt=""
+              width={56}
+              height={56}
+              className="size-14 shrink-0 object-contain"
+            />
+            <div className="flex flex-col">
+              <span className="text-xs font-medium text-muted-foreground">
+                {tile.label}
               </span>
-              <div className="flex flex-col">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {tile.label}
-                </span>
-                <span className="text-2xl font-semibold text-navy">
-                  {tile.render(kpis)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+              <span className="text-2xl font-semibold text-navy">
+                {tile.render(kpis)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </section>
   );
 }

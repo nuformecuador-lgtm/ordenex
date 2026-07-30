@@ -108,6 +108,74 @@ beforeEach(() => {
   barcodeToBuffer.mockClear();
 });
 
+/** Pagina cuadrada de 100 mm expresada en puntos (unidad interna del PDF). */
+const SIZE_PT = (100 * 72) / 25.4;
+
+/**
+ * Posiciones del texto dibujado, en mm desde el borde SUPERIOR (la misma
+ * orientacion en la que maqueta el generador). jsPDF emite un `x y Td` por
+ * llamada a `text()` y coordenadas en pt medidas desde el borde inferior.
+ */
+function textosConY(bytes: Uint8Array): Array<{ y: number; texto: string }> {
+  const re = /([\d.-]+)\s+([\d.-]+)\s+Td\s*\n?\(((?:\\[\s\S]|[^()\\])*)\)\s*Tj/g;
+  const out: Array<{ y: number; texto: string }> = [];
+  let m: RegExpExecArray | null;
+  const stream = textoDelPdf(bytes);
+  while ((m = re.exec(stream)) !== null) {
+    out.push({ y: ((SIZE_PT - Number(m[2])) * 25.4) / 72, texto: m[3] });
+  }
+  return out;
+}
+
+describe("buildEtiquetasLotePdf — el texto no invade la banda del QR", () => {
+  // El QR se dibuja en una `y` FIJA: 100 - 6 (margen) - 26 (lado) = 68 de borde
+  // superior. Antes de este arreglo el texto fluia hasta ~y=90 y los ultimos
+  // campos (PRODUCTO, MONTO, TIENDA) se imprimian ENCIMA del QR.
+  const QR_TOP_MM = 100 - 6 - 26;
+
+  it("con datos normales, ninguna linea baja del borde superior del QR", async () => {
+    const bytes = await buildEtiquetasLotePdf([etiqueta()]);
+    const textos = textosConY(bytes);
+    // Sanidad del parseo: cabecera (2) + 7 rotulos + 7 valores.
+    expect(textos.length).toBeGreaterThanOrEqual(16);
+    const masAbajo = Math.max(...textos.map((t) => t.y));
+    expect(masAbajo).toBeLessThanOrEqual(QR_TOP_MM);
+  });
+
+  it("con direccion, ubicacion y producto largos tampoco (se recorta, no se superpone)", async () => {
+    const bytes = await buildEtiquetasLotePdf([
+      etiqueta({
+        destinatario: "María Fernanda de los Ángeles Rodríguez Villalobos",
+        direccion:
+          "Avenida Siempre Viva 742, casa esquinera de dos plantas color celeste, 300 metros al norte de la escuela, portón negro",
+        producto:
+          "Juego de sartenes antiadherentes de cinco piezas con tapa de vidrio templado y mango desmontable",
+        zonaNombre: "Zona Metropolitana Ampliada Norte",
+        provinciaNombre: "Provincia de San José",
+        cantonNombre: "Cantón Central de San José",
+        distritoNombre: "Distrito Catedral",
+        tiendaNombre: "Comercializadora de Electrodomésticos del Valle S.A.",
+      }),
+    ]);
+    const textos = textosConY(bytes);
+    const masAbajo = Math.max(...textos.map((t) => t.y));
+    expect(masAbajo).toBeLessThanOrEqual(QR_TOP_MM);
+    // Y los siete rotulos siguen dibujados: el recorte quita cola de texto,
+    // nunca campos enteros.
+    const s = textoDelPdf(bytes);
+    for (const rotulo of [
+      "DESTINATARIO",
+      "DIRECCI",
+      "UBICACI",
+      "PRODUCTO",
+      "MONTO A COBRAR",
+      "TIENDA",
+    ]) {
+      expect(s).toContain(rotulo);
+    }
+  });
+});
+
 describe("buildEtiquetasLotePdf (R1-R7)", () => {
   it("genera un PDF con una pagina por etiqueta", async () => {
     const etiquetas = [
