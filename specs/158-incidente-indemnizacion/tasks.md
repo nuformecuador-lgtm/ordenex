@@ -41,19 +41,23 @@
       dispara AL APROBAR**; y **quien reporta no aprueba**. Verificado que `cierre_bodega` no sirve (no
       tiene detalle por orden) y que una fila de `gestion_orden` tampoco (§9.7, bug del corte diario).
 
-### 🔴 T0.6 — Puerta PENDIENTE del frontend del camino del admin (NO bloquea backend)
+### ✅ T0.6-T0.8 — CERRADAS el 2026-07-30 (segunda ronda de la puerta)
 
-- [ ] **T0.6** Cerrar **Q-H** (¿desde dónde reporta el admin?) y **Q-I** (¿página propia `/incidentes` o
-      sección dentro de Cierres?). Recomendación razonada en `design.md` §10.
-      *Hecho cuando:* las dos respuestas quedan escritas en este spec.
-      *Bloquea:* **T2.7, T2.8**. No bloquea nada de F1 ni F1B.
-- [ ] **T0.7** [P] Registrar/decidir **Q-J** (¿se avisa al mensajero asignado?) y **Q-K** (¿se limpia
-      `mensajero_asignado_id` al reportar desde `por_recoger`?).
-      *Hecho cuando:* Q-K está confirmada (el diseño asume **no tocarla**) y Q-J tiene respuesta o ficha
-      de follow-up. Si Q-K se decide al revés, **R60 y §13.2 cambian** y hay que persistir la asignación
+- [x] **T0.6** **Q-H = modal por orden en el módulo de órdenes**, abierto desde la acción de fila
+      (precedentes: `RecuperarABodegaModal` de la 100 y `DeshacerAsignacionModal` de la 149). **Q-I =
+      página propia `/incidentes`**, espejo de `cierres-admin` (precedente: `cierres-bodega-admin`).
+      Las dos por la recomendación del `design.md` §10. **T2.7 y T2.8 DESBLOQUEADAS.**
+- [x] **T0.7** [P] **Q-J = fuera de alcance con follow-up escrito** — el mensajero cuya orden pasa a
+      `incidente` NO recibe aviso y la orden desaparece de «Mis asignaciones» en silencio; queda dicho
+      en voz alta, no disimulado. **Q-K = NO se toca `mensajero_asignado_id`** (confirmada la asunción
+      del diseño), así que **R60 y §13.2 se quedan como están** y no hay que persistir la asignación
       previa.
-- [ ] **T0.8** [P] Decidir **Q-L**: ¿una entrega o dos? (`design.md` §15).
-      *Hecho cuando:* está escrito; si son dos, el leader abre dos ramas/PRs.
+- [x] **T0.8** [P] **Q-L = DOS PRs.** PR 1 = camino del MENSAJERO (Fase 1 + Fase 2, R1-R36). PR 2 =
+      camino del ADMIN (Fase 1B + Fase 2B, R37-R64). Corte de `design.md` §15.2, que demuestra que no
+      deja nada funcional roto en el intermedio.
+      ⚠️ **Nota de vocabulario:** esta pregunta se planteó primero con la palabra «entrega» y se
+      malentendió — en este dominio «entrega» es lo que hace un mensajero con un paquete. En este spec
+      «PR» significa PR y nada más.
 
 ---
 
