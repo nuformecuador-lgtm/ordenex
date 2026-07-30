@@ -7,11 +7,19 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // (el choke point `appendCambioEstado`) resuelve `id -> value` antes de preguntar aqui.
 //
 // El mapa es el INVENTARIO CERRADO del apendice A del design, leido del codigo de `dev`:
-// 41 aristas de flujo (numeracion #1-#47 con el #27 RETIRADO por la 139, #4/#6/#7c por la 156,
-// #1/#2/#3/#7b por la 155, + #43/#44 de la 154 + #45/#46/#47 de la 149) + 2 de creacion. Las 41
-// colapsan a 39 pares `(origen, destino)` unicos, porque dos pares estan declarados dos veces
-// con familias distintas: #19/#23 y #20/#24 (SLA vs. recuperacion manual). El tercer duplicado
-// historico (#3/#7b) se fue con el estado de fulfillment que retiro la 155.
+// 42 aristas de flujo (numeracion #1-#53 con el #27 RETIRADO por la 139, #4/#6/#7c por la 156,
+// #1/#2/#3/#7b por la 155, + #43/#44 de la 154 + #45/#46/#47 de la 149 + #53 de la 158) + 2 de
+// creacion. Las 42 colapsan a 40 pares `(origen, destino)` unicos, porque dos pares estan
+// declarados dos veces con familias distintas: #19/#23 y #20/#24 (SLA vs. recuperacion
+// manual). El tercer duplicado historico (#3/#7b) se fue con el estado de fulfillment que
+// retiro la 155.
+//
+// NUMERACION: la 158 toma el #53 y NO los #48-#52, que quedan RESERVADOS para las cinco
+// entradas del admin (`en_bodega_central`/`en_bodega_satelite`/`en_ruta_bodega_*`/`por_recoger`
+// -> `incidente`) y sus cinco inversas #54-#58. Esas DIEZ aristas NO se declaran aqui a
+// proposito (design §15.2): llegan en el PR del camino del admin, JUNTO A SU PRODUCTOR.
+// Declararlas antes dejaria diez aristas legales que ningun service ejecuta — exactamente el
+// problema que la 154 dejo abierto con #43/#44 y que costo el tren 154+155+156.
 //
 // Aritmetica de la integracion, por si alguien la rehace: `dev` con la 155 dentro queda en 38
 // aristas / 36 pares. La 149 suma TRES aristas y sus tres pares son NUEVOS, asi que 38+3=41 y
@@ -40,6 +48,10 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // de ser ilegal: era un caso del test de pares ilegales de la 140 y se actualizo a proposito.
 // El spec numeraba estas aristas #43/#44/#45; se renumeraron a #45/#46/#47 al integrar `dev`,
 // porque la 154 ya habia tomado #43/#44 mientras la 149 iba en su rama.
+//
+// FEATURE 158 — SOLO ADITIVA en aristas: suma #53 (`incidente -> en_reparto`, deshacer) y
+// REALINEA el `via` de #44 (`gestion` -> `incidente`) para que el metadato coincida con el
+// `origen_tipo` que realmente se persiste (Q-G). No retira ninguna arista.
 //
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
@@ -137,10 +149,15 @@ export const TRANSICIONES = {
     { to: "devuelta", via: "gestion", rol: "mensajero" }, // #14
     { to: "rechazada", via: "gestion", rol: "mensajero" }, // #15
     { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #16
-    // #44 (154): resultado `incidente` de la gestion. Va via `gestion` —y no via la familia
-    // `incidente`— porque quien la marca es el mensajero DESDE su gestion (decision Q4). La
-    // familia `incidente` del enum de historial queda declarada sin productor hasta la 158.
-    { to: "incidente", via: "gestion", rol: "mensajero" }, // #44 (154)
+    // #44 (154, con el `via` REALINEADO por la 158/Q-G el 2026-07-30): resultado `incidente`
+    // de la gestion. La 154 la declaro con `via: "gestion"` y dejo la familia `incidente` del
+    // enum de historial «declarada SIN PRODUCTOR hasta la 158». La 158 ES ese productor: el
+    // append de esta transicion escribe `origen_tipo = incidente`
+    // (`GestionOrdenRepository.crearGestionYTransicionar`), asi que el metadato tenia que
+    // decir lo mismo que la fila que se escribe. El `via` NO participa de la decision de
+    // legalidad (:26-35), asi que el cambio es cosmetico — pero un metadato que miente sobre
+    // lo que se persiste es peor que no tenerlo.
+    { to: "incidente", via: "incidente", rol: "mensajero" }, // #44 (154 / via 158)
   ],
 
   // --- Resultados de gestion -----------------------------------------------------------
@@ -200,10 +217,26 @@ export const TRANSICIONES = {
   // TERMINAL (Q1): la tienda de origen la recibio; sin salida esperada.
   devuelta_a_tienda: [],
   // TERMINAL (feature 154, decision del humano del 2026-07-29): `incidente` cierra el ciclo de
-  // la orden y NO tiene ninguna arista de salida. En el gate se planteo un estado `indemnizada`
-  // que lo desterminara: se DESCARTO. No se declara, ni se deja preparado. Tiene entrada (#44),
-  // asi que cumple el invariante de conectividad de los terminales.
-  incidente: [],
+  // la orden. En el gate de la 154 se planteo un estado `indemnizada` que lo desterminara: se
+  // DESCARTO, y la 158 NO lo reabre (no existe, no se declara, no se deja preparado).
+  //
+  // ⚠️ FEATURE 158 (Q-D, 2026-07-30) — REVERSION PARCIAL, EXPLICITA Y FECHADA de la decision
+  // de la 154 de dejar `incidente: []`. Razon textual del humano: «como es una app usada por
+  // seres humanos y nosotros solemos cometer errores, lo ideal es que cada accion se pueda
+  // deshacer, obviamente dentro de un ambiente controlado». Lo que se revierte es SOLO la via
+  // de REVERSION: `incidente` sigue siendo TERMINAL —ningun camino de negocio lo continua ni
+  // lo devuelve a bodega— y conserva UNA salida, la de deshacer el error humano dentro de la
+  // ventana `cierre_id IS NULL` (`CierreDiaService.deshacerGestion`).
+  //
+  // El destino es `en_reparto` porque ES el estado de origen: una gestion solo puede nacer
+  // desde `en_reparto` (guardia `cargarOrdenGestionable` de `MisAsignacionesService`), asi que
+  // para el camino del MENSAJERO destino = origen, no es un hardcode aproximado (design §13.1).
+  //
+  // Sigue en ESTADOS_TERMINALES y eso es COMPATIBLE: ese conjunto EXIME de tener salida, no la
+  // prohibe (:236-237), y `entregada` es el precedente exacto (terminal Y con su #31).
+  incidente: [
+    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #53 (158, Q-D)
+  ],
 } as const satisfies Record<OrderStatusValue, readonly DestinoTransicion[]>;
 
 /**
@@ -236,9 +269,15 @@ export const ESTADOS_CREACION = [
  * inalcanzable tambien es un bug. `entregada` conserva la salida #31 (deshacer gestion), y
  * eso es legal: el test exime, no prohibe.
  *
- * Feature 154 (R16): pasa de 2 a 3 con `incidente`, que a diferencia de `entregada` NO conserva
- * ninguna salida (decision del humano del 2026-07-29; la idea de un estado `indemnizada` que lo
- * desterminara se descarto).
+ * Feature 154 (R16): pasa de 2 a 3 con `incidente`. La 154 lo dejo SIN ninguna salida
+ * (decision del humano del 2026-07-29; la idea de un estado `indemnizada` que lo desterminara
+ * se descarto — y sigue descartada).
+ *
+ * Feature 158 (Q-D, 2026-07-30): esa parte se REVIERTE. `incidente` gana su arista de
+ * DESHACER (#53, `-> en_reparto`) y por tanto queda igual que `entregada`: TERMINAL y con una
+ * salida de reversion. El conjunto NO cambia — `incidente` se queda aqui — porque este test
+ * exime de necesitar salida, no la prohibe. La decision de la 154 no se borra: se acota a lo
+ * que sigue vigente (no hay continuacion de negocio desde `incidente`).
  */
 export const ESTADOS_TERMINALES = [
   "entregada",

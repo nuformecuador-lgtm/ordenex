@@ -126,7 +126,9 @@ describe("cierres-admin actions — delegacion en el service", () => {
     const service = fakeService();
     const r = await aprobarCierre({ cierreId: CIERRE_ID }, { service, getActor: actorMaestro });
     expect(r).toMatchObject({ status: "ok", estado: "aprobado" });
-    expect(service.aprobarCierre).toHaveBeenCalledWith(CIERRE_ID, MAESTRO);
+    // Feature 158/R36: sin `indemnizaciones` en el request, el `.default([])` del schema hace
+    // que llegue la lista VACIA — el contrato de la 38 sigue siendo valido tal cual.
+    expect(service.aprobarCierre).toHaveBeenCalledWith(CIERRE_ID, MAESTRO, []);
   });
 
   it("rechazarCierre con motivo -> delega con cierreId + motivo (trim del zod) + actor", async () => {

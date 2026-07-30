@@ -9,6 +9,7 @@ import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService"
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { CrearMovimientoTiendaInput } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
+import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 
 // Feature 69/R17/R18 — EL CORAZON DE LA FEATURE. Los dos casos son money-critical.
 //
@@ -273,6 +274,8 @@ function aprobar(db: Db, cierreId: string) {
       obtenerNombreMensajero: vi.fn(),
     },
     { construirMovimientosDePago: vi.fn(async () => ({ libro: [], egresoCaja: [] })) },
+    // Feature 158: feed del egreso de indemnizacion (real: sin incidentes devuelve []).
+    new WalletIndemnizacionFeedService(),
   );
   return repo.resolverCierre({
     cierreId,

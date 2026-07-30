@@ -52,7 +52,7 @@ const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 function resultadoBase() {
   return {
     status: "ok" as const,
-    grupos: { entregada: [], reprogramada: [], devuelta: [], rechazada: [] },
+    grupos: { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] },
     totales: {
       efectivo: "0.00",
       simpe: "0.00",
@@ -92,6 +92,10 @@ function gestionEntregada(): CierreDetalleGestion {
     ingresoBodegaRechazo: null,
     tarifaFaltante: false,
     esRechazoSla: false, // feature 102
+    // Feature 158/R9/R19: campos POR RAMA del incidente; los casos del incidente los
+    // sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
   };
 }
 
@@ -117,6 +121,7 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
         reprogramada: [],
         devuelta: [],
         rechazada: [],
+        incidente: [],
       },
     });
 

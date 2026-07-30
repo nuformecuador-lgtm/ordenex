@@ -18,6 +18,9 @@ import type {
   CierreResultado,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+// Feature 158 (T2.3): la columna de la causa es la MISMA que la del detalle del admin — se
+// reusa en vez de reescribirla, para que las dos pantallas no puedan divergir en la etiqueta.
+import { COLUMNA_CAUSA_INCIDENTE } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 
 // Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
 // del Server Component padre los grupos ya resueltos (por resultado), los totales
@@ -109,6 +112,7 @@ const RESULTADO_LABEL: Record<CierreResultado, string> = {
   reprogramada: "Reprogramadas",
   devuelta: "Devueltas",
   rechazada: "Rechazadas",
+  incidente: "Incidentes", // feature 158/R18
 };
 
 const RESULTADO_VACIO: Record<CierreResultado, string> = {
@@ -116,6 +120,7 @@ const RESULTADO_VACIO: Record<CierreResultado, string> = {
   reprogramada: "No hay reprogramaciones.",
   devuelta: "No hay devoluciones.",
   rechazada: "No hay rechazos.",
+  incidente: "No hay incidentes.", // feature 158/R18
 };
 
 const METODO_LABEL: Record<MetodoPagoValue, string> = {
@@ -136,12 +141,17 @@ const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
   bodega_satelite: "Bodega satélite",
 };
 
-/** Orden fijo de las 4 secciones (R3). */
+/**
+ * Orden fijo de las secciones (R3). Feature 158/R18: los `incidente` son un grupo PROPIO y
+ * van AL FINAL, después de los cuatro desenlaces normales — el mismo criterio que en el paso
+ * de resultados del panel del mensajero: no es una forma más de terminar la entrega.
+ */
 const ORDEN_RESULTADOS: CierreResultado[] = [
   "entregada",
   "reprogramada",
   "devuelta",
   "rechazada",
+  "incidente",
 ];
 
 /**
@@ -535,7 +545,7 @@ function TotalItem({
   );
 }
 
-// --- Columnas comunes a las 4 secciones (R4) ---
+// --- Columnas comunes a TODAS las secciones (R4; feature 158: tambien al grupo `incidente`) ---
 const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
   {
     id: "numGuia",
@@ -569,7 +579,8 @@ function columnasPara(
     value: PAGO_MENSAJERO_COL,
     render: (g) => money(g.pagoMensajero),
   };
-  // Feature 67/R35: "Devolver a gestión" por fila, en las 4 tablas. NO hay estado
+  // Feature 67/R35: "Devolver a gestión" por fila, en todas las tablas — feature 158/Q-D:
+  // tambien en la del `incidente`, que SI se puede deshacer. NO hay estado
   // "no deshacible" que pintar: la vista solo lista gestiones dentro de la ventana
   // (`findGestionesPendientes` filtra `cierre_id IS NULL` + `anulada_at IS NULL`) y
   // son todas del actor (`/cierre-dia` es exclusivo del mensajero dueño, `page.tsx`
@@ -625,30 +636,60 @@ function columnasPara(
       columnaAcciones,
     ];
   }
+  // Feature 158/R17/R18: el `incidente` es un grupo PROPIO y NO lleva NINGUNA columna de
+  // dinero — ni pago al mensajero (un incidente no se paga) ni el monto de la indemnización
+  // (es plata que se le paga a la tienda, no al mensajero: no es suya y no la ve, design §7.2).
+  // El backend lo garantiza en la CONSULTA: `WITH_DETALLE` ni siquiera selecciona la columna,
+  // así que aquí `indemnizacion` es SIEMPRE `null` y no hay monto que pintar.
+  //
+  // La CAUSA sí llega y sí se muestra: es el hecho que el propio mensajero reportó, no dinero.
+  // Sin esta columna, el `select` que el backend puso a propósito no lo vería nadie.
+  //
+  // Sí conserva la columna de acciones: un `incidente` SE PUEDE deshacer mientras no esté
+  // vinculado a un cierre (Q-D/R14), por la misma vía que el resto de resultados.
+  if (resultado === "incidente") {
+    return [
+      ...COLUMNAS_COMUNES,
+      COLUMNA_CAUSA_INCIDENTE,
+      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      columnaEvidencia(verEvidencia),
+      columnaAcciones,
+    ];
+  }
   // rechazada: motivo + evidencia firmada (R5)
   return [
     ...COLUMNAS_COMUNES,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
-    {
-      id: "evidencia",
-      value: "Evidencia",
-      render: (g) =>
-        g.evidenciaUrl ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => verEvidencia(g.evidenciaUrl as string)}
-          >
-            Ver evidencia
-          </Button>
-        ) : (
-          "—"
-        ),
-    },
+    columnaEvidencia(verEvidencia),
     columnaPago,
     columnaAcciones,
   ];
+}
+
+/**
+ * Columna de la evidencia FIRMADA (R5), compartida por `rechazada` y `incidente` (158/R18):
+ * abre el visor con la URL que ya viene firmada del servidor, nunca el storage_path crudo.
+ */
+function columnaEvidencia(
+  verEvidencia: (url: string) => void,
+): Column<CierreDetalleGestion> {
+  return {
+    id: "evidencia",
+    value: "Evidencia",
+    render: (g) =>
+      g.evidenciaUrl ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => verEvidencia(g.evidenciaUrl as string)}
+        >
+          Ver evidencia
+        </Button>
+      ) : (
+        "—"
+      ),
+  };
 }
 
 // --- Columnas del histórico de cierres (R18) ---

@@ -78,14 +78,15 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
         ? await this.signedUrls.createSignedUrls(paths, cierreConfig.SIGNED_URL_TTL_SECONDS)
         : {};
 
-    // R11: por cada cierre_dia, agrupa sus gestiones por resultado (4 claves siempre)
-    // con el mapper reuso 37. Totales = snapshot del cierre_dia (R13).
+    // R11: por cada cierre_dia, agrupa sus gestiones por resultado (5 claves siempre desde la
+    // feature 158) con el mapper reuso 37. Totales = snapshot del cierre_dia (R13).
     const cierres: CierreBodegaDetalleCierre[] = found.cierresDia.map((cd) => {
       const grupos: CierreGrupos = {
         entregada: [],
         reprogramada: [],
         devuelta: [],
         rechazada: [],
+        incidente: [], // feature 158/R18
       };
       for (const g of cd.gestiones) {
         grupos[g.resultado].push(toDetalleDTO(g, urlByPath));

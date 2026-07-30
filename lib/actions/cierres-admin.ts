@@ -11,6 +11,7 @@ import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
+import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { gestionConfig } from "@/lib/config/gestion";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -82,6 +83,10 @@ function buildService(): ICierresAdminService {
       // egreso egreso_pago_mensajero=P en la caja 42 (F1.4-Qa=SI). Sin dependencias externas.
       new PagoMensajeroMovimientoRepository(prisma),
       new WalletMensajeroFeedService(),
+      // Feature 158/T1.14 (R22/R26): emite el egreso `egreso_indemnizacion` del cierre al
+      // aprobar, en la MISMA tx que 42/43/44. Sin dependencias externas: LEE de la propia tx
+      // la suma de `gestion_orden.indemnizacion` que la aprobacion acaba de escribir.
+      new WalletIndemnizacionFeedService(),
     ),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),
@@ -132,9 +137,11 @@ export async function aprobarCierre(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError();
-    const data = aprobarCierreSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = aprobarCierreSchema.parse(input); // ZodError -> VALIDATION_ERROR (R20/R24)
     const service = deps.service ?? buildService();
-    return service.aprobarCierre(data.cierreId, actor);
+    // Feature 158/R19: la lista viaja TAL CUAL (montos STRING, sin coercion a number). Ausente
+    // en el request -> `[]` por el `.default([])` del schema -> camino de la 38 intacto (R36).
+    return service.aprobarCierre(data.cierreId, actor, data.indemnizaciones);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }

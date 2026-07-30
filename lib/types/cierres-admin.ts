@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
+import { montoPositivoSchema } from "@/lib/types/wallet";
 import type {
   ListarCierresAdminServiceResult,
   CierreDetalleAdminServiceResult,
@@ -17,7 +19,67 @@ export const cierreIdSchema = z.object({
   cierreId: z.string().uuid(),
 });
 
-export const aprobarCierreSchema = cierreIdSchema;
+/**
+ * Feature 158 (m5 del review) — TOPE del monto de indemnizacion, DERIVADO DE LA COLUMNA y no
+ * elegido a ojo. `gestion_orden.indemnizacion` es `DECIMAL(12,2)`
+ * (`db/migrations/20260730120000_incidente_indemnizacion/migration.sql`, y el
+ * `@db.Decimal(12, 2)` del modelo): precision 12, escala 2 -> 12 - 2 = **10 digitos enteros**
+ * -> el mayor valor representable es `9999999999.99`. Un centimo mas y Postgres responde
+ * `numeric field overflow`.
+ *
+ * Si algun dia la columna cambia de precision, este numero se recalcula de la MISMA cuenta;
+ * no es un limite de negocio.
+ */
+const INDEMNIZACION_DIGITOS_ENTEROS = 10; // = precision(12) - escala(2)
+export const INDEMNIZACION_MONTO_MAX = `${"9".repeat(INDEMNIZACION_DIGITOS_ENTEROS)}.99`;
+
+/**
+ * Feature 158 (R19/R20/R24) — un monto de indemnizacion por gestion `incidente` del cierre.
+ * El monto viaja como STRING de extremo a extremo (`montoPositivoSchema` de la wallet: hasta 2
+ * decimales, > 0, comparado con `Prisma.Decimal`) y solo se convierte a Decimal AL ESCRIBIR:
+ * nunca `number`, nunca `parseFloat`. Un monto vacio, 0, negativo, con 3 decimales o con coma
+ * cae aqui -> ZodError -> `validation_error` por campo.
+ *
+ * m5 del review: ademas se acota POR ARRIBA. Sin el tope, un monto de 11+ digitos pasaba el
+ * borde y la guardia de cobertura, y reventaba DENTRO de la transaccion de aprobacion con un
+ * `numeric field overflow` de Postgres: la tx revertia (sin corrupcion) pero el admin veia un
+ * error generico y perdia todo lo tecleado. Con el tope, el rechazo ocurre ANTES de abrir la
+ * transaccion del dinero y llega como `validation_error`, igual que el resto de errores de
+ * este mismo borde.
+ *
+ * EL TOPE VIVE AQUI, en el borde de la 158, y NO en `montoPositivoSchema`: ese schema lo
+ * comparten la wallet (42/45) y sus formularios, que tienen la misma carencia pero cuya
+ * columna y cuyo flujo no han pasado por esta puerta. Endurecerlo desde aqui cambiaria el
+ * comportamiento de otras features sin decision suya. La correccion global es una feature
+ * propia, no un efecto colateral de esta.
+ */
+export const indemnizacionSchema = z.object({
+  gestionId: z.string().uuid(),
+  monto: montoPositivoSchema.refine((v) => {
+    try {
+      return new Prisma.Decimal(v).lte(INDEMNIZACION_MONTO_MAX);
+    } catch {
+      // Zod v4 corre este refine AUNQUE el regex de `montoPositivoSchema` ya haya fallado
+      // (mismo motivo documentado alli). Un valor no numerico no es un problema DE TOPE: se
+      // devuelve `true` para no anadir un mensaje enganoso, y el regex + el `> 0` lo rechazan
+      // igual con el suyo.
+      return true;
+    }
+  }, `El monto no puede superar ${INDEMNIZACION_MONTO_MAX}.`),
+});
+
+// Feature 158 (R19/R36): `aprobarCierre` gana la lista de indemnizaciones. `.default([])` la
+// hace RETROCOMPATIBLE con el contrato de la 38: un cierre sin incidentes se aprueba
+// exactamente como hoy, sin campos nuevos obligatorios. La cobertura EXACTA (que no falte ni
+// sobre ninguna) la valida el SERVICE contra las gestiones reales del cierre, no el borde: el
+// borde no sabe que gestiones tiene ese cierre.
+export const aprobarCierreSchema = z.object({
+  cierreId: z.string().uuid(),
+  indemnizaciones: z.array(indemnizacionSchema).default([]),
+});
+
+export type IndemnizacionInput = z.infer<typeof indemnizacionSchema>;
+export type AprobarCierreInput = z.infer<typeof aprobarCierreSchema>;
 
 // Feature 111/R16: la valvula de escape identifica el cierre `vencido` a destrabar por su id
 // (mismo shape que aprobar). Un id mal formado -> VALIDATION_ERROR en el borde.

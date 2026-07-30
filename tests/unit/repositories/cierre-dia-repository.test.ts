@@ -1457,3 +1457,102 @@ describe("Feature 69/R16 — la vista EN VIVO no depende del snapshot", () => {
     expect(prisma.cierreDetail.createMany).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// Feature 158 (T1.10, R16) — la gestion `incidente` entra al cierre SIN cambios de repo.
+// El `updateMany` que vincula NO filtra por `resultado` (solo propiedad + sin cierre + no
+// anulada), asi que el quinto resultado entra solo. Este bloque lo FIJA: si alguien anadiera
+// un filtro por resultado "para no cobrar el incidente", las gestiones `incidente` se quedarian
+// fuera del cierre y el admin no tendria donde capturar el monto de la indemnizacion.
+// ============================================================================
+
+describe("Feature 158/R16 — crearCierre vincula tambien las gestiones `incidente`", () => {
+  it("R16: el WHERE de la vinculacion NO filtra por `resultado` (el incidente entra solo)", async () => {
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.crearCierre({
+      mensajeroId: "m1",
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z1",
+      totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+      pagoByGestionId: { "g-inc": "0.00" },
+      totalPagoMensajero: "0.00",
+      ingresoByGestionId: { "g-inc": "0.00" },
+      totalIngresoBodegaRechazos: "0.00",
+    });
+
+    const where = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
+    expect(where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(where).not.toHaveProperty("resultado");
+  });
+
+  it("R16: la orden de un `incidente` recibe su fila de cierre_detail (mismo grano por orden)", async () => {
+    // El snapshot se construye leyendo lo que la tx VINCULO; una gestion `incidente` aporta su
+    // fila igual que cualquier otra (el dedupe es por `ordenId`, no por resultado).
+    const rows = [snapshotRow({ ordenId: "o-incidente" })];
+    const tx = buildSnapshotTx(rows);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre({
+      ...INPUT_CIERRE,
+      pagoByGestionId: { "g-inc": "0.00" },
+      ingresoByGestionId: { "g-inc": "0.00" },
+    });
+
+    const arg = (tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      data: { cierreId: string; ordenId: string }[];
+    };
+    expect(arg.data).toHaveLength(1);
+    expect(arg.data[0]).toMatchObject({ cierreId: "c1", ordenId: "o-incidente" });
+  });
+
+  it("R17: el snapshot de dinero de un `incidente` es 0.00 en pago y en ingreso de bodega", async () => {
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.crearCierre({
+      mensajeroId: "m1",
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z1",
+      totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+      pagoByGestionId: { "g-inc": "0.00" },
+      totalPagoMensajero: "0.00",
+      ingresoByGestionId: { "g-inc": "0.00" },
+      totalIngresoBodegaRechazos: "0.00",
+    });
+
+    const calls = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls;
+    // [0] = vinculacion; [1] = pago_mensajero; [2] = ingreso_bodega_rechazo.
+    expect(calls[1][0].data.pagoMensajero.toString()).toBe("0");
+    expect(calls[2][0].data.ingresoBodegaRechazo.toString()).toBe("0");
+    // Y la `indemnizacion` NO se toca al SOLICITAR: se captura al APROBAR (R19/R22).
+    for (const c of calls) expect(c[0].data).not.toHaveProperty("indemnizacion");
+  });
+});

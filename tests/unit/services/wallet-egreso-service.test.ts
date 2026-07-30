@@ -39,7 +39,12 @@ function buildRepo(overrides: Partial<IWalletMovimientoRepository> = {}): IWalle
     obtenerPorId: vi.fn().mockResolvedValue(null),
     agregarPorCategoria: vi
       .fn()
-      .mockResolvedValue({ gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00" }),
+      .mockResolvedValue({
+        gastoFijo: "0.00",
+        gastoVariable: "0.00",
+        sueldo: "0.00",
+        indemnizacion: "0.00", // feature 158/R32
+      }),
     ...overrides,
   };
 }
@@ -247,7 +252,12 @@ describe("WalletEgresoService.verDesgloseEgresos (R11/R17)", () => {
     const repo = buildRepo({
       agregarPorCategoria: vi
         .fn()
-        .mockResolvedValue({ gastoFijo: "100.00", gastoVariable: "50.50", sueldo: "1000.00" }),
+        .mockResolvedValue({
+          gastoFijo: "100.00",
+          gastoVariable: "50.50",
+          sueldo: "1000.00",
+          indemnizacion: "25.25", // feature 158/R32: entra en el desglose Y en el total
+        }),
     });
     const svc = new WalletEgresoService(repo, writeClient);
     const desde = new Date("2026-07-01T00:00:00.000Z");
@@ -258,7 +268,8 @@ describe("WalletEgresoService.verDesgloseEgresos (R11/R17)", () => {
       gastoFijo: "100.00",
       gastoVariable: "50.50",
       sueldo: "1000.00",
-      total: "1150.50",
+      indemnizacion: "25.25", // feature 158/R32
+      total: "1175.75", // 1150.50 + 25.25 — la indemnizacion SUMA al total
     });
     expect(typeof r.desglose.total).toBe("string");
     expect(repo.agregarPorCategoria).toHaveBeenCalledWith({

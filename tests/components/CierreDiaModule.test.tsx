@@ -72,12 +72,16 @@ function makeGestion(
     ingresoBodegaRechazo: null, // feature 56
     tarifaFaltante: false, // feature 56/R23
     esRechazoSla: false, // feature 102
+    // Feature 158/R9/R19: campos POR RAMA del incidente; los casos del incidente los
+    // sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
     ...over,
   };
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
+  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
 }
 
 const ZERO_TOTALES: CierreTotales = {
@@ -125,6 +129,7 @@ describe("CierreDiaModule", () => {
       reprogramada: [makeGestion({ gestionId: "g2", resultado: "reprogramada", numRemision: "REM-REP" })],
       devuelta: [makeGestion({ gestionId: "g3", resultado: "devuelta", numRemision: "REM-DEV" })],
       rechazada: [makeGestion({ gestionId: "g4", resultado: "rechazada", numRemision: "REM-REC" })],
+      incidente: [], // feature 158/R18: la 5.a seccion la puebla la fase 2 (T2.2)
     };
     renderModule({ grupos });
 
