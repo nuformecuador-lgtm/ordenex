@@ -76,10 +76,10 @@ describe("Feature 158 (T2.7) — el conjunto de estados reportables es el del SE
   });
 
   it.each(
-    ORDER_STATUS_SEED.map((s) => s.value).filter(
+    ORDER_STATUS_SEED.filter(
       (v) => !(ORIGENES_INCIDENTE_ADMIN as readonly string[]).includes(v),
     ),
-  )("el estado `%s` NO es reportable", (value) => {
+  )("el estado `%s` del catálogo NO es reportable", (value) => {
     expect(esEstadoReportable(value)).toBe(false);
   });
 

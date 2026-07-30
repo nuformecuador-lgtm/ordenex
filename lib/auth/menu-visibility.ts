@@ -17,7 +17,11 @@ export type IconKey =
   | "truck"
   | "megaphone"
   | "trophy"
-  | "wallet";
+  | "wallet"
+  // Feature 158 (T2.8, Q-I): cola de incidentes. Icono propio y no otro `clipboardCheck`:
+  // un incidente NO es un cierre, y compartir el icono con "Cierres del día" invitaría a
+  // leerlo como una sección suya, que es justo lo que la decisión del humano descartó.
+  | "shieldAlert";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -152,6 +156,18 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     label: "Cierres del día",
     href: "/cierres-admin",
     iconKey: "clipboardCheck",
+    roles: ["maestro", "admin", "adminSatelite"],
+  },
+  {
+    // Feature 158 (T2.8, Q-I): cola de aprobación de incidentes (paquetes dañados,
+    // perdidos o robados reportados por un admin). PÁGINA PROPIA, no una sección de
+    // "Cierres": un incidente no es un cierre. Los roles son los que el service autoriza
+    // (`IncidenteAdminService.resolveAlcance`, R48): acceso total (maestro/admin) sin
+    // restricción de zona y `adminSatelite` acotado a la suya. La defensa real es el
+    // `notFound` de `/incidentes`; este ítem sólo decide qué se MUESTRA.
+    label: "Incidentes",
+    href: "/incidentes",
+    iconKey: "shieldAlert",
     roles: ["maestro", "admin", "adminSatelite"],
   },
   {
