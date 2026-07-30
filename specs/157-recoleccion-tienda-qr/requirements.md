@@ -212,6 +212,32 @@ del mapa de paradas y de los KPIs de reparto del mensajero (`pendientes`, `por c
 cantón/distrito del portal del mensajero (el cantón/distrito de la orden es el del DESTINO de
 entrega, no el de la tienda donde se recoge), y sus órdenes NO DEBEN aportar opciones a ese filtro.
 
+### Bloque E — Manifiesto de la recolección por la vía SESIÓN (heredado de la 155)
+
+> **Traspaso decidido por el humano el 2026-07-29.** Lo levantó el review de la feature 155
+> (`progress/review_155.md` §5.7) y **no lo rompió esa feature**: la 155 cumple su R24 al pie de la
+> letra, entregando el manifiesto por el canal de **API key**, que es el que no tiene cookie de
+> sesión. El hueco es de la vía **sesión** y su causa está en la 159: el commit `b2181e7` dejó
+> `OrdenesCargaResumenPaso.tsx` **huérfano** (sigue pidiendo `flujo="carga_masiva"`, con test vivo
+> que lo asevera) y el modal monta `OrdenesCargaResumen` directo. Resultado hoy: **una tienda que
+> carga por UI en la rama (b) no puede obtener su manifiesto por ninguna vía.**
+
+**R41 (Ubicuo).** Una tienda que crea órdenes por la **carga masiva de la UI** (vía sesión) y cuyo
+interruptor de fulfillment está en `false` DEBE poder obtener el manifiesto del lote recién creado,
+con el mismo flujo `recoleccion_tienda` y el mismo servicio único que ya usa el canal de API key.
+
+**R42 (Ubicuo).** El sistema NO DEBE duplicar la construcción del manifiesto: la vía sesión y la vía
+API key DEBEN compartir el servicio que lo arma, y su única diferencia legítima es cómo se resuelve
+el actor (cookie de sesión frente a API key).
+
+**R43 (Condicional).** SI se decide dar consumidor a `OrdenesCargaResumenPaso.tsx`, ENTONCES su
+`flujo` DEBE dejar de ser `carga_masiva` fijo y pasar a depender de la rama de creación; SI se
+decide retirarlo, ENTONCES el botón de manifiesto de la **feature 148** que cuelga de él DEBE quedar
+enganchado en el contenedor que sí se monta, y su test vivo actualizarse en el mismo commit.
+
+> **Lo que ESTA feature no hereda:** el **aviso a integradores** del cambio de estado inicial de la
+> 155. El humano lo declaró **NO necesario** el 2026-07-29. No es deuda de la 157 ni de nadie.
+
 ---
 
 ## Trazabilidad (mapa requisito → prueba; lo completa el implementer)
