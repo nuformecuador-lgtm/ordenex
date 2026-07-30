@@ -43,6 +43,7 @@ export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
   egreso_ajuste: "Ajuste (egreso)",
   egreso_gasto_fijo: "Gasto fijo",
   egreso_gasto_variable: "Gasto variable",
+  egreso_indemnizacion: "Indemnización por incidente", // feature 158/R31
 };
 
 /** Etiqueta legible del origen de un movimiento. */

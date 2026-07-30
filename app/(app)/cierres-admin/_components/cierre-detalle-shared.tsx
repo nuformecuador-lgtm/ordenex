@@ -32,6 +32,7 @@ export const RESULTADO_LABEL: Record<CierreResultado, string> = {
   reprogramada: "Reprogramadas",
   devuelta: "Devueltas",
   rechazada: "Rechazadas",
+  incidente: "Incidentes", // feature 158/R18
 };
 
 export const RESULTADO_VACIO: Record<CierreResultado, string> = {
@@ -39,6 +40,7 @@ export const RESULTADO_VACIO: Record<CierreResultado, string> = {
   reprogramada: "No hay reprogramaciones.",
   devuelta: "No hay devoluciones.",
   rechazada: "No hay rechazos.",
+  incidente: "No hay incidentes.", // feature 158/R18
 };
 
 export const METODO_LABEL: Record<MetodoPagoValue, string> = {

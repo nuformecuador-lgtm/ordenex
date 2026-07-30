@@ -116,7 +116,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
+  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
 }
 
 /**

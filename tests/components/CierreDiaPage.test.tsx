@@ -52,7 +52,7 @@ const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 function resultadoBase() {
   return {
     status: "ok" as const,
-    grupos: { entregada: [], reprogramada: [], devuelta: [], rechazada: [] },
+    grupos: { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] },
     totales: {
       efectivo: "0.00",
       simpe: "0.00",
@@ -117,6 +117,7 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
         reprogramada: [],
         devuelta: [],
         rechazada: [],
+        incidente: [],
       },
     });
 

@@ -138,7 +138,14 @@ export class CierresAdminService implements ICierresAdminService {
         : {};
 
     // R6: agrupa por resultado (4 claves siempre presentes) con el mapper reuso 37.
-    const grupos: CierreGrupos = { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
+    // Feature 158/R18: 5 claves — el `incidente` es un grupo PROPIO del detalle del admin.
+    const grupos: CierreGrupos = {
+      entregada: [],
+      reprogramada: [],
+      devuelta: [],
+      rechazada: [],
+      incidente: [],
+    };
     for (const g of found.gestiones) {
       grupos[g.resultado].push(toDetalleDTO(g, urlByPath));
     }
