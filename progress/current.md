@@ -8,6 +8,41 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗓️ Sesión 2026-07-30 (quater) — arranca el LOTE DE ANALÍTICA (14 features)
+
+**Feature 135 → `spec_ready`.** Rama `feature/135-analitica-catalogo-kpis-rangos` desde `origin/dev`
+@ `664840f3`. Spec en `specs/135-analitica-catalogo-kpis-rangos/`: **26 R en EARS**, 6 alternativas
+descartadas, 12 hechos de inventario **leídos en el código**. Ni una línea de producción tocada.
+
+**Es la raíz del lote.** El orden lo dicta `depends_on`, no es elegible:
+`135` → `122` (alcance por rol) → `127` → `128`/`132`/`134`, y `135` → `123` (rollup) → `124` →
+`125` → `126` → `131` → `133`. `129` (ruta/shell) y `130` (gráficas) son frontend y no dependen de
+nadie. **Ninguna de las 14 tenía spec en disco.**
+
+**⏸️ PUERTA F1.4 ABIERTA — 10 preguntas bloqueantes** en `requirements.md > Preguntas abiertas`,
+espejadas en el bloque `T0` de `tasks.md`. Las que más arrastran: **Q1** (la ficha no enumera ni una
+métrica; el design propone 13 operativas + 6 financieras y cada una que entre obliga a la 126/127),
+**Q6** (cuál es el «día operativo» canónico) y **Q5**/**Q9**/**Q10** (granos y atribución, que fijan
+la PK del rollup de la 123).
+
+### Tres correcciones a la ficha, verificadas en código
+
+1. **`order_status` tiene 19 values vigentes, no 20.** La 154 apendió dos (18→20) y **la 155 retiró
+   `en_fulfillment`** (20→19). Peor: su migración solo borra la fila del catálogo si nadie la
+   referencia, así que en una base con historial **`en_fulfillment` sobrevive huérfana** e
+   inalcanzable desde el código. Un embudo debe citar los 19 del seed, no lo que haya en la tabla.
+2. **«La lógica de fecha del corte diario» que pide la ficha NO EXISTE.** `CorteDiarioService`
+   no usa fecha alguna: opera sobre «mensajeros con actividad sin cierre». La lógica de día en hora
+   CR vive en `lib/utils/fecha-cr.ts` y es reutilizable tal cual, sin extracción.
+3. **`orden.zona_id` y `orden.tienda_id` son NOT NULL** → «órdenes sin zona/tienda» no puede
+   ocurrir. Lo nullable es `mensajero_asignado_id` (y `distrito_id`) — de ahí sale Q5.
+
+**🔎 Hallazgo que hay que resolver antes de implementar (Q6): hay dos convenciones de «día» vivas y
+no coinciden.** `RankingService.ts:60-61` compara columnas `timestamp` contra `startOfDayCR` + 24 h,
+o sea una ventana **18:00–18:00 hora CR**; los filtros de `/ordenes` (feature 144) usan
+`inicioDelDiaCREnUtc`, o sea **00:00–24:00 CR**. Analítica no puede adoptar las dos, y elegir la
+correcta hará que ranking y analítica reporten cifras distintas para «hoy» hasta que se sanee.
+
 ## 🗓️ Sesión 2026-07-30 (tarde) — **EMPIEZA A LEER POR AQUÍ**
 
 > Lo de más abajo sigue válido en su detalle técnico; esto lo corrige donde se contradiga.
