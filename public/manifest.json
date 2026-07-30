@@ -12,5 +12,10 @@
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/inicio-narrow.png", "sizes": "540x1170", "type": "image/png", "form_factor": "narrow", "label": "Pantalla de inicio de Ordenex" },
+    { "src": "/screenshots/ingreso-narrow.png", "sizes": "540x1170", "type": "image/png", "form_factor": "narrow", "label": "Inicio de sesión en Ordenex" },
+    { "src": "/screenshots/inicio-wide.png", "sizes": "1280x720", "type": "image/png", "form_factor": "wide", "label": "Ordenex en escritorio" }
   ]
 }

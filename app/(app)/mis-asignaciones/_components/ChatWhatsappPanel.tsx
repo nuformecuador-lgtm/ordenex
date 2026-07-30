@@ -7,15 +7,8 @@ import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useToast";
-import { useUbicacionActual, type Coords } from "@/hooks/useUbicacionActual";
+import { useTonoAlIncrementar } from "@/hooks/useTonoAlIncrementar";
 import {
   enviarMensajeChat,
   enviarPlantillaChat,
@@ -28,7 +21,7 @@ import type {
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
-import { UbicacionMapa } from "./UbicacionMapa";
+import { UbicacionModal } from "./UbicacionModal";
 import type { UbicacionPunto } from "./ubicacion-mapa-tipos";
 
 // Feature 109 (design §5, R22-R24) — panel del chat del mensajero con el cliente de la
@@ -168,26 +161,15 @@ export function ChatWhatsappPanel({
   const [enviando, setEnviando] = useState(false);
 
   // Feature 121 (R10-R13): una sola ubicacion seleccionada a la vez. `ubicacionCliente != null`
-  // = modal abierto con ese punto. El GPS del repartidor se pide LAZY al abrir (P3), nunca al
-  // montar el panel; `gpsPedido` distingue "aun capturando" de "ya se intento y fallo" (R12).
-  const { pedirUbicacion, denegado } = useUbicacionActual();
+  // = modal abierto con ese punto. La captura LAZY del GPS del repartidor (P3) y el aviso de
+  // R12 viven dentro de `UbicacionModal`, compartido con el pin de la card del mensajero.
   const [ubicacionCliente, setUbicacionCliente] = useState<UbicacionPunto | null>(
     null,
   );
-  const [gpsRepartidor, setGpsRepartidor] = useState<Coords | null>(null);
-  const [gpsPedido, setGpsPedido] = useState(false);
 
-  /**
-   * Feature 121 (R10/R11): abre el modal con el punto del cliente y, en el acto, pide el GPS
-   * EN VIVO del repartidor (lazy, P3). `pedirUbicacion` nunca lanza: resuelve `Coords` o `null`.
-   */
-  async function abrirUbicacion(punto: UbicacionPunto) {
+  /** Feature 121 (R10/R11): abre el modal con el punto compartido por el cliente. */
+  function abrirUbicacion(punto: UbicacionPunto) {
     setUbicacionCliente(punto);
-    setGpsRepartidor(null);
-    setGpsPedido(false);
-    const coords = await pedirUbicacion();
-    setGpsRepartidor(coords);
-    setGpsPedido(true);
   }
 
   /** Cierra el modal sin recargar (R13); el hilo y su refresco siguen vivos. */
@@ -209,6 +191,21 @@ export function ChatWhatsappPanel({
   // mensaje entrante en el hilo) se habilita el input de texto libre y se OCULTA la burbuja de
   // plantillas: ya se puede conversar. El backend sigue siendo la defensa de la ventana de 24 h.
   const hayEntrante = mensajes.some((m) => m.direccion === "entrante");
+  // Feature 161 (R21-R23): tono cuando el refresco de 10 s trae un mensaje NUEVO del
+  // cliente. Se cuentan solo los entrantes, de modo que un saliente propio no suene (R22),
+  // y el primer render solo registra el valor, de modo que abrir un hilo con entrantes
+  // previos tampoco suene (R23).
+  //
+  // LIMITE declarado (design §4): este panel solo esta montado mientras el mensajero tiene
+  // abierto el panel de gestion de ESTA orden. Con el panel cerrado no hay polling del hilo
+  // y no suena nada; el aviso global exigiria un contador real de no leidos, que hoy no
+  // existe (el de `chat-demo` es dato quemado).
+  //
+  // `null` MIENTRAS el hilo no ha cargado (R24): sin eso, la primera carga se leeria como un
+  // salto de cero a N y sonaria al abrir un hilo con mensajes previos.
+  useTonoAlIncrementar(
+    hiloOk ? mensajes.filter((m) => m.direccion === "entrante").length : null,
+  );
   // Feature 120 (pedido humano): si YA se envio una plantilla (hay un saliente) y el cliente
   // AUN NO respondio (no hay entrante), se BLOQUEA la burbuja para no reenviar otra plantilla
   // hasta que conteste. Como este bloque solo se pinta cuando `!hayEntrante`, basta con mirar
@@ -430,31 +427,7 @@ export function ChatWhatsappPanel({
       {/* Feature 121 (R10-R13): modal con el minimapa de una ubicacion compartida. Se abre
           DENTRO de la misma ventana (Dialog) y se cierra sin recargar. El minimapa (Leaflet) se
           monta via `next/dynamic({ ssr:false })` en `UbicacionMapa` (R14). */}
-      <Dialog open={ubicacionCliente !== null} onOpenChange={cerrarUbicacion}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Ubicación compartida</DialogTitle>
-            <DialogDescription>
-              El punto compartido por el cliente y tu ubicación actual.
-            </DialogDescription>
-          </DialogHeader>
-          {ubicacionCliente ? (
-            <UbicacionMapa
-              cliente={ubicacionCliente}
-              repartidor={gpsRepartidor}
-            />
-          ) : null}
-          {/* R12: sin GPS del repartidor (denegado/timeout) el mapa pinta solo el punto del
-              cliente y se avisa, sin bloquear apertura ni cierre. */}
-          {gpsPedido && gpsRepartidor === null ? (
-            <p role="status" className="text-xs text-muted-foreground">
-              {denegado
-                ? "No se pudo obtener tu ubicación actual: el permiso de ubicación está denegado."
-                : "No se pudo obtener tu ubicación actual."}
-            </p>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <UbicacionModal punto={ubicacionCliente} onOpenChange={cerrarUbicacion} />
     </section>
   );
 }

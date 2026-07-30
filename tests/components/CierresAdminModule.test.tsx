@@ -148,6 +148,25 @@ function zeroIngreso(over: Partial<TotalesIngresoOrdenex> = {}): TotalesIngresoO
   };
 }
 
+/**
+ * Despliega la fila de una gestión en el comprobante del detalle. Lo que antes eran
+ * columnas de la tabla (dinero recibido, método, ingreso de bodega, evidencia, badges)
+ * ahora vive en el desplegable de su fila: hay que abrirla para afirmarlo.
+ */
+async function abrirFila(
+  user: ReturnType<typeof userEvent.setup>,
+  scope: HTMLElement,
+  remision: string,
+  destinatario = "Beto Ruiz",
+) {
+  // Con snapshot el desplegable se anuncia como el desglose de ingreso; sin snapshot,
+  // como el detalle de la orden. Se acepta cualquiera de los dos nombres.
+  const nombre = new RegExp(
+    `(Desglose de ingreso|Detalle) de la orden ${remision} · ${destinatario}`,
+  );
+  await user.click(within(scope).getByRole("button", { name: nombre }));
+}
+
 function renderModule(props?: Partial<Parameters<typeof CierresAdminModule>[0]>) {
   render(
     <CierresAdminModule
@@ -275,11 +294,15 @@ describe("CierresAdminModule", () => {
     await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
 
-    const bruto = within(dialog).getByRole("region", { name: "Ingreso bruto" });
-    expect(within(bruto).getByText("₡3672.50")).toBeInTheDocument();
-    // Ganancia positiva: no se muestra ninguna card de ganancia ni de "Debe".
-    expect(within(dialog).queryByRole("region", { name: "Ganancia" })).toBeNull();
-    expect(within(dialog).queryByRole("region", { name: "Debe" })).toBeNull();
+    // El bruto es un renglón del bloque de liquidación del comprobante.
+    const liquidacion = within(dialog).getByRole("region", {
+      name: "Liquidación",
+    });
+    expect(within(liquidacion).getByText("₡3672.50")).toBeInTheDocument();
+    // Ganancia positiva: no se muestra ni la ganancia ni el "Debe".
+    expect(within(liquidacion).queryByText("Ganancia")).toBeNull();
+    expect(within(liquidacion).queryByText("Debe")).toBeNull();
+    expect(within(liquidacion).queryByText("₡2172.50")).toBeNull();
   });
 
   it("el detalle muestra el pago a tienda derivado server-side (sin recalcular)", async () => {
@@ -326,9 +349,12 @@ describe("CierresAdminModule", () => {
     await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
     // Ganancia negativa -> se rotula "Debe" y el monto va en rojo.
-    expect(within(dialog).queryByRole("region", { name: "Ganancia" })).toBeNull();
-    const debe = within(dialog).getByRole("region", { name: "Debe" });
-    const monto = within(debe).getByText("₡-1500.00");
+    const liquidacion = within(dialog).getByRole("region", {
+      name: "Liquidación",
+    });
+    expect(within(liquidacion).queryByText("Ganancia")).toBeNull();
+    expect(within(liquidacion).getByText("Debe")).toBeInTheDocument();
+    const monto = within(liquidacion).getByText("₡-1500.00");
     expect(monto).toBeInTheDocument();
     expect(monto).toHaveClass("text-danger-strong");
   });
@@ -488,8 +514,11 @@ describe("CierresAdminModule", () => {
       name: "Detalle del cierre",
     });
     const region = within(dialog).getByRole("region", { name: "Entregadas" });
-    expect(within(region).getByText("₡1250.50")).toBeInTheDocument();
-    expect(within(region).getByText("SINPE")).toBeInTheDocument();
+    await abrirFila(user, region, "REM-001");
+    // Monto recibido y método van juntos en el desplegable de la orden.
+    expect(
+      within(region).getByText("₡1250.50 · SINPE"),
+    ).toBeInTheDocument();
   });
 
   it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante en ENTREGAS", async () => {
@@ -522,6 +551,7 @@ describe("CierresAdminModule", () => {
       name: "Detalle del cierre",
     });
     const region = within(dialog).getByRole("region", { name: "Entregadas" });
+    await abrirFila(user, region, "REM-SINTARIFA");
     expect(within(region).getByText("Sin tarifa")).toBeInTheDocument();
   });
 
@@ -563,7 +593,17 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    expect(within(dialog).queryByText("Sin tarifa")).not.toBeInTheDocument();
+
+    // Entrega con pago 0.00 pero SIN el flag: nada de badge, ni desplegada.
+    const entregadas = within(dialog).getByRole("region", { name: "Entregadas" });
+    await abrirFila(user, entregadas, "REM-ENT");
+    expect(within(entregadas).queryByText("Sin tarifa")).not.toBeInTheDocument();
+
+    // Mismo caso en el rechazo: hay que pasar a su pestaña para verlo.
+    await user.click(within(dialog).getByRole("tab", { name: /Rechazadas/ }));
+    const rechazadas = within(dialog).getByRole("region", { name: "Rechazadas" });
+    await abrirFila(user, rechazadas, "REM-REC");
+    expect(within(rechazadas).queryByText("Sin tarifa")).not.toBeInTheDocument();
   });
 
   it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante también en RECHAZOS", async () => {
@@ -594,6 +634,7 @@ describe("CierresAdminModule", () => {
       name: "Detalle del cierre",
     });
     const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    await abrirFila(user, region, "REM-REC");
     expect(within(region).getByText("Sin tarifa")).toBeInTheDocument();
   });
 
@@ -625,6 +666,7 @@ describe("CierresAdminModule", () => {
       name: "Detalle del cierre",
     });
     const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    await abrirFila(user, region, "REM-REC");
     expect(within(region).getByText("₡3500.00")).toBeInTheDocument();
   });
 
@@ -706,12 +748,12 @@ describe("CierresAdminModule", () => {
     });
     const region = within(dialog).getByRole("region", { name: "Rechazadas" });
     // Cada fila trae su marca de origen: SLA para el escalado, Manual para el del mensajero.
-    const filaSla = within(region).getByText("REM-SLA").closest("tr");
-    const filaManual = within(region).getByText("REM-MAN").closest("tr");
-    expect(filaSla).not.toBeNull();
-    expect(filaManual).not.toBeNull();
-    expect(within(filaSla as HTMLElement).getByText("Automático")).toBeInTheDocument();
-    expect(within(filaManual as HTMLElement).getByText("Manual")).toBeInTheDocument();
+    await abrirFila(user, region, "REM-SLA", "Cliente SLA");
+    expect(within(region).getByText("Automático")).toBeInTheDocument();
+    expect(within(region).queryByText("Manual")).not.toBeInTheDocument();
+
+    await abrirFila(user, region, "REM-MAN", "Cliente Manual");
+    expect(within(region).getByText("Manual")).toBeInTheDocument();
   });
 
   it("R7: la evidencia se muestra vía URL firmada en el visor (nunca el path crudo)", async () => {
@@ -737,8 +779,16 @@ describe("CierresAdminModule", () => {
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
     await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
-    await screen.findByRole("dialog", { name: "Detalle del cierre" });
-    await user.click(screen.getByRole("button", { name: "Ver evidencia" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    await abrirFila(user, region, "REM-001");
+    await user.click(
+      within(region).getByRole("button", {
+        name: "Ver evidencia de la orden REM-001 · Beto Ruiz",
+      }),
+    );
 
     const visor = await screen.findByRole("dialog", {
       name: "Evidencia de la gestión",

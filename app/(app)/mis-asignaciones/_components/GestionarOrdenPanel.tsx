@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { PackageCheck, RotateCcw, Undo2, X, XCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  MessageCircle,
+  Navigation,
+  PackageCheck,
+  Phone,
+  QrCode,
+  RotateCcw,
+  Truck,
+  Undo2,
+  X,
+  XCircle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
@@ -21,15 +31,11 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { NotaPrivadaMensajero } from "./NotaPrivadaMensajero";
-import {
-  ChatWhatsappPanel,
-  BORRADOR_CHAT_VACIO,
-  type BorradorChat,
-} from "./ChatWhatsappPanel";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
 import { VerificarGuiaGate } from "./VerificarGuiaGate";
+import { UbicacionTrigger } from "./UbicacionTrigger";
 
 // Feature 36 / rediseño 63 (pedido humano): detalle GRANDE y centrado de UNA
 // orden en reparto con gestión multi-paso, ahora como PANEL INLINE (no modal /
@@ -117,6 +123,11 @@ export interface GestionarOrdenPanelProps {
   /** Se invoca tras un "ok" para que el padre refresque el listado. */
   onSuccess: () => void;
   count: number;
+  /**
+   * Rediseño ux: abre el CHAT del módulo (modal del botón flotante) en la conversación de
+   * esta orden. El hilo ya no se lee dentro del panel: la acción "Mensaje" lleva a él.
+   */
+  onAbrirChat: () => void;
 }
 
 /** Primer mensaje de error de un campo (o undefined). */
@@ -144,8 +155,12 @@ export function GestionarOrdenPanel({
   onCancelarGestion,
   onSuccess,
   count,
+  onAbrirChat,
 }: Readonly<GestionarOrdenPanelProps>) {
   const toast = useToast();
+  // Ancla del bloque "Confirmar guía": el CTA fijo de abajo lleva hasta él (no lo
+  // sustituye — la guía se sigue verificando antes de habilitar la gestión, feature 98).
+  const guiaRef = useRef<HTMLDivElement>(null);
 
   // El padre remonta este panel (`key={orden.id}`) al cambiar de orden, por lo
   // que el estado interno arranca limpio: si la orden ya está activa, directo en
@@ -164,10 +179,6 @@ export function GestionarOrdenPanel({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [enviando, setEnviando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
-  // Feature 120: borrador COMPARTIDO entre la burbuja de plantillas (junto al teléfono) y el
-  // panel de chat. Al elegir una plantilla desde la burbuja, su texto renderizado se "pega" en
-  // el input del chat, listo para editar/enviar. Se remonta limpio al cambiar de orden (`key`).
-  const [borradorChat, setBorradorChat] = useState<BorradorChat>(BORRADOR_CHAT_VACIO);
 
   // Feature 119 (R14/R16): agrega las fotos SELECCIONADAS a la lista. Cada foto se comprime
   // en el cliente antes de guardarla (una foto de celular sin comprimir revienta el limite de
@@ -367,82 +378,108 @@ export function GestionarOrdenPanel({
   return (
     <section
       aria-label="Detalle de la orden"
-      className="mx-auto flex w-full max-w-2xl flex-col gap-5 overflow-x-hidden rounded-xl border border-border bg-card p-6 shadow-xs"
+      className="relative mx-auto flex w-full max-w-md flex-col overflow-x-hidden rounded-2xl border border-border bg-background shadow-xs"
     >
-      <div className="flex flex-row items-center gap-1.5">
-        {orden.secuenciaRuta && <h2 className="m-1 text-lg font-semibold bg-brand-light w-6 h-6 flex items-center justify-center rounded pt-1 pb-1 px-1">{orden.secuenciaRuta}</h2>}
-        <div>
-        <p className="text-xs text-muted-foreground">{orden.numGuia}</p>
-        <p className="text-xs text-muted-foreground">
-          {orden.secuenciaRuta} de {count}
-        </p>
+      {/* Cabecera: guía, posición en la ruta y estado. Pegada arriba mientras se hace
+          scroll por el detalle (el mensajero siempre sabe qué orden tiene abierta). */}
+      <header className="sticky top-0 z-10 flex items-center gap-3 rounded-t-2xl border-b border-border bg-card/90 px-4 py-3 backdrop-blur-md">
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-sm font-bold text-foreground">
+            Guía {orden.numGuia ?? orden.numRemision}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {orden.secuenciaRuta === null
+              ? `${count} ${count === 1 ? "orden" : "órdenes"} en reparto`
+              : `Parada ${orden.secuenciaRuta} de ${count}`}
+          </p>
         </div>
-      </div>
+        <span className="shrink-0 rounded-full bg-warning/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-warning-strong">
+          {estatusLabel(orden.estatusValue)}
+        </span>
+      </header>
 
-      {/* Detalle completo: nombre, teléfono, dirección, notas, producto (+ más). */}
-      <div className="rounded-lg border border-border bg-muted/30 p-4">
+      <div className="flex flex-col gap-4 px-4 py-4">
+        {/* Detalle completo en 3 cards: Pedido / Entrega / Cobro. */}
         <AsignacionDetalle orden={orden} />
-      </div>
 
-      {/* Feature 116 (R7/R11/R14): editor de la NOTA PRIVADA del mensajero, HERMANO de
-          `AsignacionDetalle` (que sigue como presentación pura). Queda claramente separado de la
-          "Notas" de la tienda (dentro del detalle) y acompaña a la orden activa también en modo
-          foco. `notaPrivada` viaja en el DTO filtrada por el actor; el panel se remonta con
-          `key={orden.id}` al cambiar de orden, así que el editor arranca con la nota correcta. */}
-      <NotaPrivadaMensajero
-        ordenId={orden.id}
-        notaInicial={orden.notaPrivada ?? null}
-      />
+        {/* Acciones de contacto y navegación, los tres gestos de la puerta. "Llamar" y
+            "Navegar" salen de la app (tel: y Maps); "Mensaje" abre el CHAT del módulo en
+            la conversación de esta orden (ahí se leen y envían los mensajes). */}
+        <div className="flex gap-2">
+          {/* Feature 87 (R17): marcar con el teléfono CRUDO del destinatario, como hacía
+              `ContactoButtons` (que aquí se sustituye por la fila de tres acciones del
+              rediseño, no por un comportamiento distinto). */}
+          <a
+            href={`tel:${orden.telefonoDest}`}
+            aria-label={`Llamar a ${orden.destinatario}`}
+            className="flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl bg-primary py-3.5 text-xs font-bold uppercase tracking-wide text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <Phone className="size-5" aria-hidden="true" />
+            Llamar
+          </a>
+          <button
+            type="button"
+            onClick={onAbrirChat}
+            aria-label={`Abrir el chat con ${orden.destinatario}`}
+            className="flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl bg-success-strong py-3.5 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <MessageCircle className="size-5" aria-hidden="true" />
+            Mensaje
+          </button>
+          <UbicacionTrigger
+            orden={orden}
+            ariaLabel={`Ver en el mapa la ruta hasta ${orden.destinatario}`}
+            className="flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl bg-navy py-3.5 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <Navigation className="size-5" aria-hidden="true" />
+            Navegar
+          </UbicacionTrigger>
+        </div>
 
-      {/* Paso 1: llamar, whatsapp y verificar la guía antes de gestionar. */}
-      {paso === "detalle" ? (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Feature 87 (R17): boton "Llamar". El WhatsApp wa.me plano se reemplaza (pedido
-                humano) por el boton de plantilla->wa.me de abajo, que abre WhatsApp con el texto
-                de la plantilla elegida. */}
-            <ContactoButtons
-              telefono={orden.telefonoDest}
-              nombre={orden.destinatario}
-              size="lg"
-              mostrarWhatsapp={false}
-            />
-            {/* Pedido humano (Option 1): el "globo" ahora elige una plantilla y REDIRIGE FUERA
-                abriendo WhatsApp (wa.me) con el texto renderizado. Sin `onElegirPlantilla` usa
-                ese flujo wa.me. Funciona con plantillas `pending` (no valida estado activo). */}
-            <EnviarPlantillaWhatsappButton orden={orden} size="lg" />
-            {/* Feature 120: burbuja que, al elegir una plantilla, PEGA el mensaje en el input del
-                chat (borrador compartido) listo para enviar EN LA APP. */}
-            <EnviarPlantillaWhatsappButton
-              orden={orden}
-              size="lg"
-              onElegirPlantilla={(p) =>
-                setBorradorChat({ texto: p.textoRenderizado, plantillaId: p.id })
-              }
+        {/* Feature 87 (R17): plantilla -> wa.me. Sigue disponible como salida a WhatsApp
+            del propio mensajero (sirve con plantillas `pending`, que el chat no admite). */}
+        {/* <div className="flex items-center gap-2">
+          <EnviarPlantillaWhatsappButton orden={orden} size="sm" />
+          <span className="text-xs text-muted-foreground">
+            Abrir WhatsApp con una plantilla
+          </span>
+        </div> */}
+
+        {/* Feature 116 (R7/R11/R14): editor de la NOTA PRIVADA del mensajero, HERMANO de
+            `AsignacionDetalle` (que sigue como presentación pura). Queda claramente separado
+            de la "Notas" de la tienda (dentro del detalle) y acompaña a la orden activa
+            también en modo foco. `notaPrivada` viaja en el DTO filtrada por el actor; el
+            panel se remonta con `key={orden.id}` al cambiar de orden, así que el editor
+            arranca con la nota correcta. */}
+        <NotaPrivadaMensajero
+          ordenId={orden.id}
+          notaInicial={orden.notaPrivada ?? null}
+        />
+
+        {/* Paso 1: verificar la guía antes de gestionar. */}
+        {paso === "detalle" ? (
+          <div
+            ref={guiaRef}
+            className="scroll-mt-20 rounded-2xl border border-border bg-card p-4"
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <QrCode className="size-5 shrink-0 text-brand" aria-hidden="true" />
+              <h3 className="text-sm font-bold text-foreground">Confirmar guía</h3>
+            </div>
+            {/* Feature 98: gate de verificación. Antes de fijar el puntero y avanzar
+                a los 4 botones, el mensajero DEBE confirmar la guía del paquete
+                (escaneo o tecleo) y esta debe COINCIDIR con `orden.numGuia`. Solo
+                entonces se dispara `handleGestionarPedido` (escogerParaGestion). */}
+            <VerificarGuiaGate
+              numGuiaEsperado={orden.numGuia}
+              onVerificado={handleGestionarPedido}
             />
           </div>
-          {/* Feature 109 (G4/R22-R24) + 120: chat 1:1 con el cliente vía WhatsApp. Cuelga del
-              paso "detalle"; el propio panel impone la ventana de 24 h y refresca solo. El
-              composer está controlado por el borrador compartido con la burbuja. */}
-          <ChatWhatsappPanel
-            orden={orden}
-            borrador={borradorChat}
-            onBorradorChange={setBorradorChat}
-          />
-          {/* Feature 98: gate de verificación. Antes de fijar el puntero y avanzar
-              a los 4 botones, el mensajero DEBE confirmar la guía del paquete
-              (escaneo o tecleo) y esta debe COINCIDIR con `orden.numGuia`. Solo
-              entonces se dispara `handleGestionarPedido` (escogerParaGestion). */}
-          <VerificarGuiaGate
-            numGuiaEsperado={orden.numGuia}
-            onVerificado={handleGestionarPedido}
-          />
-        </div>
-      ) : null}
+        ) : null}
 
       {/* Paso 2: 4 botones GRANDES de resultado (entrada suave). */}
       {paso === "resultados" ? (
-        <div className="flex flex-col gap-3 duration-300 animate-in fade-in slide-in-from-bottom-2">
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 duration-300 animate-in fade-in slide-in-from-bottom-2">
           <p className="text-sm font-medium text-muted-foreground">
             ¿Cómo terminó la gestión?
           </p>
@@ -473,7 +510,7 @@ export function GestionarOrdenPanel({
 
       {/* Paso 3: campos condicionales del resultado elegido. */}
       {paso === "formulario" ? (
-        <div className="flex flex-col gap-4 duration-300 animate-in fade-in slide-in-from-bottom-2">
+        <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 duration-300 animate-in fade-in slide-in-from-bottom-2">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-semibold">{resultadoLabel}</h3>
             <Button
@@ -602,6 +639,27 @@ export function GestionarOrdenPanel({
               {comprimiendo ? "Procesando foto…" : "Guardar gestión"}
             </Button>
           </div>
+        </div>
+      ) : null}
+      </div>
+
+      {/* CTA fijo abajo mientras se lee el detalle. NO salta el gate de la feature 98: lleva
+          al bloque "Confirmar guía" y pone el foco en su input, que es donde arranca la
+          gestión de verdad. Con la gestión ya en curso (resultados/formulario) desaparece:
+          el CTA de ese paso es "Guardar gestión". */}
+      {paso === "detalle" && orden.numGuia !== null ? (
+        <div className="sticky bottom-0 z-10 rounded-b-2xl border-t border-border bg-card/90 p-4 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => {
+              guiaRef.current?.scrollIntoView({ block: "center" });
+              guiaRef.current?.querySelector("input")?.focus();
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-4 text-base font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <Truck className="size-5" aria-hidden="true" />
+            Gestionar esta orden
+          </button>
         </div>
       ) : null}
     </section>

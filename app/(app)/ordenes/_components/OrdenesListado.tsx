@@ -158,6 +158,7 @@ export function OrdenesListado({
   accionesLote = false,
   catalogoFiltros = null,
   incluirFiltroTienda = true,
+  incluirFiltroReasignables = true,
   permitirDescarga = true,
 }: Readonly<{
   exclude?: string[];
@@ -199,6 +200,12 @@ export function OrdenesListado({
    * backend pisa cualquier `tienda_id` con la suya.
    */
   incluirFiltroTienda?: boolean;
+  /**
+   * Declara el interruptor "Reasignables" (prioridad + no reprogramada + sin
+   * mensajero). Es un filtro de despacho: solo sirve a quien reasigna mensajeros
+   * (`maestro`/`admin`). `adminTienda` lo recibe en `false`.
+   */
+  incluirFiltroReasignables?: boolean;
   /**
    * Feature 151 (R33): ofrece la descarga del dataset COMPLETO acotado a los filtros
    * vigentes de la barra. Por defecto `true`: ésta ES la superficie del listado de
@@ -399,9 +406,10 @@ export function OrdenesListado({
       // estado viene de otra fuente y sigue operativo.
       ...construirFiltrosOrdenes(catalogoFiltros ?? CATALOGO_FILTROS_VACIO, {
         incluirTienda: incluirFiltroTienda,
+        incluirReasignables: incluirFiltroReasignables,
       }).map((f) => (catalogoFiltros === null ? { ...f, disabled: true } : f)),
     ],
-    [catalogoFiltros, incluirFiltroTienda, opciones],
+    [catalogoFiltros, incluirFiltroTienda, incluirFiltroReasignables, opciones],
   );
 
   // R46/R58/R59: `status_id` (feature 63) y los filtros nuevos se funden en UN solo

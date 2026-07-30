@@ -87,6 +87,7 @@ async function abrirRama(
       onGestionarPedido={vi.fn().mockResolvedValue(true)}
       onCancelarGestion={vi.fn()}
       onSuccess={vi.fn()}
+      onAbrirChat={vi.fn()}
       // Total de órdenes en reparto, para el "N de total" de la cabecera: aquí se
       // monta el panel con una sola orden.
       count={1}

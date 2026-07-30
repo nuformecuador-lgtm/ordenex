@@ -126,6 +126,105 @@ en la sección «Backlog pendiente».
 
 ---
 
+## 🗓️ Sesión 2026-07-30 (ter) — feature 164: botón de instalar la PWA + screenshots
+
+Salió de una pregunta del humano: *¿la PWA es instalable?* Respuesta comprobada archivo a
+archivo: **sí en producción** (manifest, `display: standalone`, iconos 192/512 que son PNG
+reales de esas dimensiones, SW con `fetch` que cae a `/offline.html`, HTTPS por Vercel, metas
+de iOS). Faltaban el gesto propio y las capturas; pidió añadir ambos.
+
+- **164 (frontend, `in_progress`)** — IMPLEMENTADA. `hooks/useInstalarPwa.ts` +
+  `components/shared/InstalarPwaButton.tsx`, montado en `PageHeader`. Tres screenshots
+  **reales** capturadas con Playwright contra la app corriendo (ocultando el indicador de dev
+  de Next, que no puede acabar en una imagen publicada) y declaradas en el manifest.
+  **27 tests propios verdes + 6 mutaciones, las 6 muertas.** Suite completa: 18 rojas, **las
+  mismas que antes** → cero regresiones. Spec en `specs/164-instalar-pwa/`.
+- **Guardia nueva**: `tests/unit/pwa/manifest.test.ts`. No existía NINGÚN test del manifest, y
+  es un fallo silencioso de manual: si declara un archivo que no está, o dimensiones que no
+  son, el navegador degrada el diálogo o deja de ofrecer la instalación **sin decir nada**.
+
+**Hallazgo que conviene no olvidar: la instalabilidad NO se puede probar en local.** En dev el
+registro des-registra los SW y limpia caches (`app/layout.tsx`), y además `sw.js` se
+**autodestruye** con hostname `localhost`/`127.0.0.1` sin mirar `NODE_ENV` (`public/sw.js:7-9`)
+— así que **`pnpm build && pnpm start` tampoco sirve**. Hace falta despliegue, túnel o un
+hostname que no sea localhost.
+
+**Límite del estándar, no de la implementación:** `beforeinstallprompt` es de Chromium. Safari
+(iOS incluido) y Firefox no lo disparan nunca, así que ahí el botón **no aparece** y la
+instalación sigue siendo manual. Guiar al mensajero de iPhone exige una ayuda aparte, **no
+hecha**.
+
+**⚠️ AVISO DE ARNÉS — decisión humana pendiente.** Con esta alta la zona `frontend` queda con
+**TRES** features `in_progress` (161, 163, 164) y la regla 1 admite **dos**: `./init.sh` falla
+en esa comprobación hasta que se cierre alguna. Se registró igual y se avisó, en vez de dejar
+la feature sin registrar o de marcar otra como `done` sin haberla mergeado. Las tres están
+implementadas y verificadas; ninguna está commiteada.
+
+## 🗓️ Sesión 2026-07-30 (bis) — feature 163: carrusel de "En reparto" (vista mosaico)
+
+Pedido directo del humano, en tres mensajes sucesivos: carrusel de shadcn de 3 en 3 por
+breakpoints con etiqueta debajo ("orden 5 de 5" / "1-3 de 5") sobre las cards en reparto;
+**solo en la vista mosaico**; y **el carrusel debe ser un componente shared**.
+
+- **163 (frontend, `in_progress`)** — IMPLEMENTADA. Spec en `specs/163-carrusel-en-reparto/`.
+  Dependencia NUEVA: `embla-carousel-react`. Piezas: `components/ui/carousel.tsx` (primitiva
+  shadcn adaptada), `components/shared/CarruselCards.tsx` (compuesto genérico, D3) y
+  `components/shared/carrusel-rango.ts` (la aritmética de la etiqueta, aparte para poder
+  probarla sin layout). 23 tests propios verdes + **4 mutaciones, las 4 muertas**.
+- **Dos desviaciones del shadcn original**, ambas forzadas y documentadas en el archivo: el
+  estado de "se puede avanzar" se lee de embla con `useSyncExternalStore` porque aquí
+  `react-hooks/set-state-in-effect` es **error**; y las flechas van debajo, no flotando fuera
+  del contenedor (`-left-12` se sale del viewport en móvil, que es donde trabaja el mensajero).
+- **`tests/setup/jest-dom.ts` gana un stub de `IntersectionObserver`**: embla lo EXIGE y sin él
+  montar el carrusel LANZA. Medido: no empeora nada (en `Modal` + `MarcarLuegoToggle` pasa de
+  3 fallos a 1).
+
+**⚠️ El baseline de tests se movió DURANTE la sesión, y no por estas features.** A las 07:23
+eran 14 rojas; ahora son 18. El delta se explica entero por cambios sin commitear que
+entraron a las 08:02–08:04 en `AsignacionDetalle.tsx` y `GestionarOrdenPanel.tsx`: este último
+ahora pinta `Parada ${orden.secuenciaRuta} de ${count}` —línea que **no existe en HEAD**— y eso
+DUPLICA el texto que las cards ya mostraban, tumbando 4 tests por "Found multiple elements"
+(`R28`, `R17`, `R1` de `MisAsignacionesModule` y `R19` de `MarcarLuegoToggle`). Comprobado
+aislando: con la grilla en vez del carrusel y sin el stub, salen los mismos fallos. La 18.ª
+(`Modal` R30) es flakiness bajo carga: aislada pasa.
+
+**Sin verificar:** no se levantó la app. El arrastre táctil, el momentum y los cortes reales de
+breakpoint (redimensionar de 1 a 2 a 3) NO los cubren los tests, porque jsdom no mide anchos.
+
+## 🗓️ Sesión 2026-07-30 — feature 161 (tono de notificaciones) implementada
+
+Arrancó como pregunta, no como feature: *«¿cómo agrego un tono breve para notificaciones, o
+Google trae algo por defecto?»*. La respuesta define el alcance: **no hay API para invocar el
+tono del sistema desde JS**; el tono nativo solo existe con la Notification API. Así que el
+aviso in-app hay que generarlo.
+
+- **161 (frontend, `in_progress`)** — IMPLEMENTADA y verificada por tests. Tono sintetizado con
+  `AudioContext` (cero assets), en la **campana** y en el **chat del mensajero**. Spec completa
+  en `specs/161-tono-notificacion/`, bitácora en `progress/impl_161-tono-notificacion.md`.
+  R1–R24 mapeados uno a uno; 72 tests propios; **7 mutaciones, las 7 muertas**.
+- **162 (frontend, `pending`)** — Notification API con la app abierta. **Registrada a pedido
+  del humano, sin implementar.** Es la única vía al tono del SO. Web Push con la app cerrada
+  sigue siendo otra feature, mayor.
+
+**Requisito descubierto implementando (R24):** el diseño decía «el primer render no suena» y
+estaba mal — el primer render ocurre antes de que resuelva el fetch, así que la primera carga
+se leía como salto de 0 a N y sonaba al abrir un hilo con mensajes previos. **Lo cazó el test
+de R23, no el diseño.** Y la mutación que quita esa guarda **sobrevivió** en su primera
+versión (`null <= n` coacciona a 0); el test se reescribió para atacar lo que la guarda
+protege de verdad y entonces murió.
+
+**⚠️ `./init.sh` está ROJO, y no por esta feature.** Corta en `typecheck` por
+`_TmpSincronizarPlantillasButton.tsx` y `_TmpProbarJobsButton.tsx` (untracked, WIP de otra
+sesión), que importan `@/lib/actions/_tmp-sincronizar-plantillas` y `@/lib/actions/_tmp-probar-jobs`,
+**módulos que no existen**. Hasta que se creen o se borren esos dos botones, el gate no puede
+ponerse verde. Además la suite trae **14 rojas previas** (`MisAsignacionesModule` 13 +
+`MisAsignacionesPage` 1) por los KPIs animados y los filtros cantón/distrito de la 117, ambos
+en obra en esta rama `ux`. Medido retirando el enganche del chat: **mismas 14**.
+
+**Sin verificar (no lo tapo):** la app no se levantó — los tests prueban CUÁNDO se pide el
+tono, no que se oiga; falta **móvil real**, en particular iOS Safari (exige gesto y suspende el
+contexto al ir a background), que es la prueba que vale.
+
 ## 🗓️ Sesión 2026-07-29 — estado en vivo
 
 > Reemplaza al apartado «PENDIENTES» de arriba en todo lo que se contradiga. Lo verificado hoy va

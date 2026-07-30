@@ -5,6 +5,8 @@ import {
   RutaTokenError,
 } from "@/lib/auth/google-token-shared";
 import { RutaPeticionRechazadaError } from "@/lib/clients/google-route-optimization";
+import { construirTokenProvider } from "@/lib/auth/google-sa-token";
+import { construirTokenProviderWif } from "@/lib/auth/google-wif-token";
 import type {
   IRouteOptimizationClient,
   OptimizarInput,
@@ -85,6 +87,49 @@ describe("FallbackRouteOptimizationClient", () => {
       new FallbackRouteOptimizationClient(primary, fallback).optimizar(INPUT),
     ).rejects.toBeInstanceOf(RutaPeticionRechazadaError);
     expect(fallback.optimizar).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ REGRESION REAL (no hipotetica): `google-sa-token.ts` llego a REDECLARAR su propia
+  // `RutaNoConfiguradoError`, asi que la que lanzaba `construirTokenProvider` NO era la que
+  // este compuesto compara con `instanceof`. Todos los tests de arriba pasaban —construyen el
+  // error a mano desde `google-token-shared`— mientras en produccion el error escapaba y un
+  // despliegue sin credencial reventaba con INTERNAL en vez de ordenar en local. Estos dos
+  // casos usan el error REAL de cada fabrica de token, que es lo unico que detecta el fallo.
+  it.each([
+    [
+      "SA (construirTokenProvider)",
+      () =>
+        construirTokenProvider({
+          GOOGLE_ROUTE_OPT_PROJECT_ID: null,
+          GOOGLE_ROUTE_OPT_SA_EMAIL: null,
+          GOOGLE_ROUTE_OPT_SA_PRIVATE_KEY: null,
+        }),
+    ],
+    [
+      "WIF (construirTokenProviderWif)",
+      () =>
+        construirTokenProviderWif({
+          GOOGLE_WIF_PROJECT_NUMBER: null,
+          GOOGLE_WIF_POOL_ID: null,
+          GOOGLE_WIF_PROVIDER_ID: null,
+          GOOGLE_ROUTE_OPT_SA_EMAIL: null,
+        }),
+    ],
+  ])("el error REAL de %s cae al fallback local (identidad de clase)", async (_n, construir) => {
+    let real: unknown;
+    try {
+      construir();
+    } catch (e) {
+      real = e;
+    }
+    expect(real).toBeInstanceOf(RutaNoConfiguradoError);
+
+    const primary = stub({ throws: real });
+    const fallback = stub({ outcome: OK_FALLBACK });
+    const r = await new FallbackRouteOptimizationClient(primary, fallback).optimizar(INPUT);
+
+    expect(r).toEqual(OK_FALLBACK);
+    expect(fallback.optimizar).toHaveBeenCalledWith(INPUT);
   });
 
   it("un outcome transitorio/config_invalida del primario se PROPAGA tal cual (no es excepcion)", async () => {

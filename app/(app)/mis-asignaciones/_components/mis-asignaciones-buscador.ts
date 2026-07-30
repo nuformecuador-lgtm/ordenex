@@ -5,8 +5,19 @@
 // la coincidencia sea PARCIAL e insensible a mayúsculas/acentos (R3). Es importable sin
 // arrastrar jsdom: se testea aparte en `tests/unit/components`.
 
-import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { normalizeName } from "@/lib/utils/normalize";
+
+/**
+ * Lo UNICO que el buscador necesita de una orden. Tipar por forma —y no por
+ * `MiAsignacionDTO`— permite reusarlo tal cual en la bodega satelite
+ * (`RecepcionSateliteDTO`), que trae los mismos cuatro campos buscables.
+ */
+export interface OrdenBuscable {
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  telefonoDest: string;
+}
 
 /** Solo los dígitos de un texto: "8888-0000" → "88880000". */
 function soloDigitos(texto: string): string {
@@ -33,7 +44,7 @@ function pareceTelefono(query: string): boolean {
  * (p. ej. "8888-0000" aporta también "88880000"), para que el número se encuentre igual
  * se teclee con o sin separadores.
  */
-export function textoBuscable(orden: MiAsignacionDTO): string {
+export function textoBuscable(orden: OrdenBuscable): string {
   const guia = orden.numGuia === null ? "" : String(orden.numGuia);
   const telefono = orden.telefonoDest ?? "";
   const digitos = soloDigitos(telefono);
@@ -49,7 +60,7 @@ export function textoBuscable(orden: MiAsignacionDTO): string {
  * sola vez).
  */
 export function coincideBusqueda(
-  orden: MiAsignacionDTO,
+  orden: OrdenBuscable,
   queryNormalizado: string,
 ): boolean {
   if (queryNormalizado === "") return true; // R5: sin búsqueda ⇒ todo coincide.
@@ -70,10 +81,10 @@ export function coincideBusqueda(
  * entrada. Query vacío o solo-espacios ⇒ devuelve la MISMA lista sin filtrar (R5):
  * `normalizeName("   ")` colapsa a "".
  */
-export function filtrarAsignaciones(
-  ordenes: MiAsignacionDTO[],
+export function filtrarAsignaciones<T extends OrdenBuscable>(
+  ordenes: T[],
   query: string,
-): MiAsignacionDTO[] {
+): T[] {
   const q = normalizeName(query);
   if (q === "") return ordenes; // R5: misma referencia, sin recorrer.
   return ordenes.filter((orden) => coincideBusqueda(orden, q));

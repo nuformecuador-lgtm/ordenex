@@ -67,16 +67,13 @@ const guardarMock = vi.mocked(guardarNotaPrivada);
 const limpiarMock = vi.mocked(limpiarNotaPrivada);
 
 /**
- * Card (`<article>` de `PosOrderCard`) de una remisión. El rediseño POS dejó el
- * `<article>` sin nombre accesible, así que se llega a él desde su CTA interno.
+ * Card (`<article>` de `PosOrderCard`) de una remisión. La card ya no tiene CTA
+ * interno: ella misma es el target de selección, con `aria-label` propio.
  */
 function cardDe(numRemision: string): HTMLElement {
-  const cta = screen.getByRole("button", {
+  return screen.getByRole("article", {
     name: new RegExp(`Gestionar orden ${numRemision}`),
   });
-  const card = cta.closest("article");
-  if (card === null) throw new Error(`sin <article> para ${numRemision}`);
-  return card;
 }
 
 function makeAsignacion(
@@ -273,6 +270,7 @@ describe("Inserción en el detalle: 'Notas' (tienda) vs 'Mi nota' (privada) (F2 
         onGestionarPedido={vi.fn().mockResolvedValue(true)}
         onCancelarGestion={vi.fn()}
         onSuccess={vi.fn()}
+        onAbrirChat={vi.fn()}
         // Total de órdenes en reparto ("N de total" de la cabecera): una sola aquí.
         count={1}
       />,

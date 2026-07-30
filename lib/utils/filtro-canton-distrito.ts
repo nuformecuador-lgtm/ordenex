@@ -4,7 +4,6 @@
 // módulo (R12). Reutiliza `normalizeName` (feature 24) para deduplicar/comparar de
 // forma insensible a mayúsculas/acentos/espacios, sin duplicar la normalización.
 
-import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { normalizeName } from "@/lib/utils/normalize";
 
 /**
@@ -14,6 +13,18 @@ import { normalizeName } from "@/lib/utils/normalize";
 export interface OpcionFiltro {
   value: string;
   label: string;
+}
+
+/**
+ * Lo ÚNICO que este filtro necesita de una orden. Tipar por forma —y no por
+ * `MiAsignacionDTO`— permite reusarlo tal cual en la bodega satélite
+ * (`RecepcionSateliteDTO`), que trae los mismos tres campos de zona. Sin `any`, sin
+ * duplicar la lógica y sin acoplar dos módulos por un DTO que no comparten.
+ */
+export interface ZonaDeOrden {
+  provinciaNombre: string;
+  cantonNombre: string;
+  distritoNombre: string | null;
 }
 
 // Colación en español, insensible a acentos/caso, para un orden alfabético estable
@@ -32,7 +43,7 @@ function compararEs(a: string, b: string): number {
  *   - `value` = nombre original del cantón (el filtrado es por nombre de cantón);
  *   - orden alfabético por la etiqueta (cantón y, dentro de homónimos, provincia).
  */
-export function derivarCantones(ordenes: MiAsignacionDTO[]): OpcionFiltro[] {
+export function derivarCantones(ordenes: readonly ZonaDeOrden[]): OpcionFiltro[] {
   const vistos = new Map<string, OpcionFiltro>();
   for (const orden of ordenes) {
     const clave = `${normalizeName(orden.cantonNombre)}|${normalizeName(
@@ -55,7 +66,7 @@ export function derivarCantones(ordenes: MiAsignacionDTO[]): OpcionFiltro[] {
  * `label` = nombre original del distrito.
  */
 export function derivarDistritos(
-  ordenes: MiAsignacionDTO[],
+  ordenes: readonly ZonaDeOrden[],
   cantonNombre: string,
 ): OpcionFiltro[] {
   const cantonNorm = normalizeName(cantonNombre);
@@ -81,10 +92,10 @@ export function derivarDistritos(
  *   - con distrito además: exige `distritoNombre !== null` y coincidencia normalizada;
  *     las órdenes con `distritoNombre === null` quedan excluidas bajo distrito (R6).
  */
-export function filtrarAsignaciones(
-  ordenes: MiAsignacionDTO[],
+export function filtrarAsignaciones<T extends ZonaDeOrden>(
+  ordenes: T[],
   filtro: { canton: string; distrito: string },
-): MiAsignacionDTO[] {
+): T[] {
   const { canton, distrito } = filtro;
   if (canton === "") return ordenes; // R7: sin filtro, misma referencia.
   const cantonNorm = normalizeName(canton);

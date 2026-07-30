@@ -17,10 +17,20 @@ import type { NotificacionDTO } from "@/lib/types/notificacion";
 // Mocks — las 5 operaciones son Server Actions (R38): se espían, no se llaman.
 // ---------------------------------------------------------------------------
 
-const { listarMock, marcarTodasMock, descartarMock } = vi.hoisted(() => ({
-  listarMock: vi.fn(),
-  marcarTodasMock: vi.fn(),
-  descartarMock: vi.fn(),
+const { listarMock, marcarTodasMock, descartarMock, reproducirTonoMock } = vi.hoisted(
+  () => ({
+    listarMock: vi.fn(),
+    marcarTodasMock: vi.fn(),
+    descartarMock: vi.fn(),
+    // Feature 161: jsdom no tiene Web Audio API; el generador se espía.
+    reproducirTonoMock: vi.fn(),
+  }),
+);
+
+vi.mock("@/lib/audio/tono-notificacion", () => ({
+  reproducirTono: reproducirTonoMock,
+  prepararAudio: vi.fn(),
+  reiniciarAudioParaTests: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/notificaciones", () => ({
@@ -411,5 +421,162 @@ describe("NotificationsBell — contrato de tipos (R50)", () => {
     expect(screen.getByText("Desde props.")).toBeInTheDocument();
     // El distintivo sale de los datos iniciales: 1 no leída.
     expect(trigger()).toHaveAttribute("aria-label", "Notificaciones, 1 sin leer");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 161 — tono de aviso y preferencia de sonido (R18–R20)
+// ---------------------------------------------------------------------------
+describe("NotificationsBell — tono de aviso (feature 161, R18–R20)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("R19: suena cuando el total sin leer aumenta entre revalidaciones", async () => {
+    const user = userEvent.setup();
+    listarMock.mockResolvedValue(ok([dto({ id: "a", read: true })]));
+    renderBell();
+
+    await waitFor(() => expect(listarMock).toHaveBeenCalled());
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
+
+    // Llega una notificación nueva; abrir la campana revalida (R47 de la 146).
+    listarMock.mockResolvedValue(
+      ok([dto({ id: "a", read: true }), dto({ id: "b", read: false })]),
+    );
+    await user.click(trigger());
+
+    await waitFor(() => expect(reproducirTonoMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("R11/R24: no suena al montar, aunque el servidor devuelva no leídas", async () => {
+    listarMock.mockResolvedValue(
+      ok([dto({ id: "a", read: false }), dto({ id: "b", read: false })]),
+    );
+    renderBell();
+
+    await waitFor(() => expect(screen.getByText("2")).toBeInTheDocument());
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
+  });
+
+  it("R11/R24: tampoco suena al montar con no leídas en los datos iniciales", async () => {
+    listarMock.mockImplementation(() => new Promise(() => {}));
+    renderBell({ notifications: [dto({ id: "a", read: false })] });
+
+    await waitFor(() =>
+      expect(trigger()).toHaveAttribute("aria-label", "Notificaciones, 1 sin leer"),
+    );
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
+  });
+
+  it("R24: si la lectura falla y luego se recupera, el regreso a un conteo real no suena", async () => {
+    listarMock.mockResolvedValue({ status: "unauthenticated" });
+    renderBell();
+
+    await waitFor(() => expect(listarMock).toHaveBeenCalled());
+
+    listarMock.mockResolvedValue(ok([dto({ id: "a", read: false })]));
+    await waitFor(() => expect(listarMock).toHaveBeenCalled());
+
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
+  });
+
+  it("R20: marcar todas como leídas no suena", async () => {
+    const user = userEvent.setup();
+    listarMock.mockResolvedValue(
+      ok([dto({ id: "a", read: false }), dto({ id: "b", read: false })]),
+    );
+    renderBell();
+
+    await waitFor(() => expect(screen.getByText("2")).toBeInTheDocument());
+    reproducirTonoMock.mockClear(); // se descuenta la subida inicial (R19)
+
+    await abrir(user);
+
+    // Tras marcar todas, SWR revalida: el servidor ya las devuelve leídas. Sin esto el
+    // doble contradiría al servidor real y el contador volvería a subir. Se cambia DESPUÉS
+    // de abrir porque abrir ya revalida (R47) y dejaría el control deshabilitado.
+    listarMock.mockResolvedValue(
+      ok([dto({ id: "a", read: true }), dto({ id: "b", read: true })]),
+    );
+
+    await user.click(screen.getByText("Marcar todas como leídas"));
+
+    await waitFor(() => expect(marcarTodasMock).toHaveBeenCalled());
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
+  });
+
+  it("R20: descartar una notificación no suena", async () => {
+    const user = userEvent.setup();
+    listarMock.mockResolvedValue(
+      ok([dto({ id: "a", read: false }), dto({ id: "b", read: false })]),
+    );
+    renderBell();
+
+    await waitFor(() => expect(screen.getByText("2")).toBeInTheDocument());
+    reproducirTonoMock.mockClear();
+
+    await abrir(user);
+
+    // Tras descartar, el servidor ya no devuelve la descartada: el contador BAJA a 1.
+    listarMock.mockResolvedValue(ok([dto({ id: "b", read: false })]));
+
+    await user.click(screen.getAllByLabelText("Descartar notificación")[0]);
+
+    await waitFor(() => expect(descartarMock).toHaveBeenCalled());
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
+  });
+
+  it("R18: el control de sonido expone su estado en el nombre accesible", async () => {
+    const user = userEvent.setup();
+    renderBell();
+
+    await abrir(user);
+    const silenciar = screen.getByLabelText("Silenciar el sonido de las notificaciones");
+    expect(silenciar).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(silenciar);
+
+    const activar = await screen.findByLabelText(
+      "Activar el sonido de las notificaciones",
+    );
+    expect(activar).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("R16/R18: la preferencia silenciada se conserva al volver a montar", async () => {
+    const user = userEvent.setup();
+    renderBell();
+    await abrir(user);
+    await user.click(screen.getByLabelText("Silenciar el sonido de las notificaciones"));
+
+    cleanup();
+    renderBell();
+    await abrir(user);
+
+    expect(
+      await screen.findByLabelText("Activar el sonido de las notificaciones"),
+    ).toBeInTheDocument();
+  });
+
+  it("R14: con el sonido silenciado la subida de no leídas no suena", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("ordenex:sonido-notificaciones", "off");
+    listarMock.mockResolvedValue(ok([dto({ id: "a", read: true })]));
+    renderBell();
+
+    await waitFor(() => expect(listarMock).toHaveBeenCalled());
+
+    // Misma subida que hace sonar en el test de R19, pero con el tono silenciado.
+    listarMock.mockResolvedValue(
+      ok([dto({ id: "a", read: true }), dto({ id: "b", read: false })]),
+    );
+    await user.click(trigger());
+
+    await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
   });
 });

@@ -49,12 +49,13 @@ export const CLAVE_ESTADO = "status_id";
 export const CLAVE_REASIGNABLES = "reasignables";
 
 /**
- * Declara los SEIS filtros de la barra de ordenes (cinco si el rol no lleva tienda,
- * R62) sobre el contrato del bloque A.
+ * Declara los SIETE filtros de la barra de ordenes sobre el contrato del bloque A.
+ * Caen claves segun el rol: sin tienda si el rol esta acotado a la suya (R62) y sin
+ * REASIGNABLES si el rol no reasigna mensajeros (`adminTienda`).
  */
 export function construirFiltrosOrdenes(
   cat: CatalogoFiltrosOrdenesDTO,
-  opts: { incluirTienda: boolean; ahora?: Date },
+  opts: { incluirTienda: boolean; incluirReasignables?: boolean; ahora?: Date },
 ): FilterDef[] {
   // `ahora` inyectable para poder fijar los rangos de los atajos en los tests.
   const ahora = opts.ahora ?? new Date();
@@ -76,6 +77,19 @@ export function construirFiltrosOrdenes(
         },
       ]
     : [];
+
+  const reasignables: FilterDef[] =
+    opts.incluirReasignables ?? true
+      ? [
+          {
+            // Interruptor: o esta puesto o no esta. El predicado (prioridad + no
+            // reprogramada + sin mensajero) lo resuelve el backend; aqui solo se declara.
+            key: CLAVE_REASIGNABLES,
+            label: "Reasignables",
+            kind: "boolean",
+          },
+        ]
+      : [];
 
   return [
     {
@@ -130,13 +144,7 @@ export function construirFiltrosOrdenes(
         defaultRange: ultimosNDiasCalendarioCR(a.dias, ahora),
       })),
     },
-    {
-      // Interruptor: o esta puesto o no esta. El predicado (prioridad + no
-      // reprogramada + sin mensajero) lo resuelve el backend; aqui solo se declara.
-      key: CLAVE_REASIGNABLES,
-      label: "Reasignables",
-      kind: "boolean",
-    },
+    ...reasignables,
   ];
 }
 

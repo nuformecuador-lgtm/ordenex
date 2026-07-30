@@ -24,7 +24,11 @@ import {
   buildEtiquetasPdf,
   etiquetasPdfFilename,
 } from "@/app/(app)/ordenes/_components/etiquetas-pdf";
-import { crearLayout } from "@/app/(app)/ordenes/_components/etiquetas-layout";
+import {
+  crearLayout,
+  LIENZO_BASE_MM,
+  MAQUETA_BASE,
+} from "@/app/(app)/ordenes/_components/etiquetas-layout";
 import { HOJAS_ETIQUETA, getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
 import { formatMonto } from "@/lib/config/moneda";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
@@ -226,6 +230,72 @@ describe("etiquetasPdfFilename / descargarEtiquetasPdf (R19)", () => {
   // `etiquetas-pdf-descarga.test.ts`: `save` es una propiedad de INSTANCIA de
   // jsPDF (no del prototipo) y en el build de Node escribe el archivo en disco,
   // asi que ahi se sustituye jspdf por un doble que captura el nombre.
+});
+
+/**
+ * Posiciones del texto dibujado, en mm desde el borde SUPERIOR de la pagina (la
+ * orientacion en la que maqueta el generador). jsPDF emite un `x y Td` por
+ * llamada a `text()`, en pt y medido desde el borde inferior.
+ */
+function textosConY(buf: Buffer, altoMm: number): number[] {
+  const altoPt = altoMm * MM_A_PT;
+  const re = /([\d.-]+)\s+([\d.-]+)\s+Td\s*\n?\((?:\\[\s\S]|[^()\\])*\)\s*Tj/g;
+  const stream = textoDelPdf(buf);
+  const out: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stream)) !== null) {
+    out.push(((altoPt - Number(m[2])) * 25.4) / 72);
+  }
+  return out;
+}
+
+describe("buildEtiquetasPdf — el texto no invade la banda del QR", () => {
+  // El bloque QR + barcode va pegado al borde inferior del cuadrado util, en una
+  // `y` FIJA (base: 100 - 6 - 26 = 68). El texto fluye desde la cabecera, y antes
+  // de este arreglo llegaba a ~y=90: PRODUCTO / MONTO / TIENDA salian impresos
+  // ENCIMA del QR, que ademas deja de escanear (feature 33).
+  const qrTopBase =
+    LIENZO_BASE_MM - MAQUETA_BASE.margin - MAQUETA_BASE.qrSize;
+
+  it("en las cuatro hojas y con datos largos, ninguna linea entra en la banda", () => {
+    const larga = etiqueta({
+      destinatario: "María Fernanda de los Ángeles Rodríguez Villalobos",
+      direccion:
+        "Avenida Siempre Viva 742, casa esquinera de dos plantas color celeste, 300 metros al norte de la escuela, portón negro",
+      producto:
+        "Juego de sartenes antiadherentes de cinco piezas con tapa de vidrio templado y mango desmontable",
+      zonaNombre: "Zona Metropolitana Ampliada Norte",
+      tiendaNombre: "Comercializadora de Electrodomésticos del Valle S.A.",
+    });
+    for (const hoja of HOJAS_ETIQUETA) {
+      const layout = crearLayout(hoja);
+      const doc = buildEtiquetasPdf([larga], new Map(), hoja);
+      const ys = textosConY(bytesDe(doc), hoja.altoMm);
+      expect(ys.length).toBeGreaterThanOrEqual(16); // sanidad del parseo
+      // El limite en mm de PAGINA: el borde superior del QR ya escalado y
+      // desplazado por el centrado de la hoja.
+      expect(Math.max(...ys)).toBeLessThanOrEqual(layout.y(qrTopBase) + 1e-6);
+    }
+  });
+
+  it("los siete rotulos siguen dibujados: se recorta la cola, no el campo", () => {
+    const doc = buildEtiquetasPdf(
+      [etiqueta({ producto: "P".repeat(400), direccion: "D".repeat(400) })],
+      new Map(),
+      getHojaEtiqueta("100x100"),
+    );
+    const s = textoDelPdf(bytesDe(doc));
+    for (const rotulo of [
+      "DESTINATARIO",
+      "DIRECCI",
+      "UBICACI",
+      "PRODUCTO",
+      "MONTO A COBRAR",
+      "TIENDA",
+    ]) {
+      expect(s).toContain(rotulo);
+    }
+  });
 });
 
 describe("buildEtiquetasPdf — contenido de la etiqueta (R20)", () => {

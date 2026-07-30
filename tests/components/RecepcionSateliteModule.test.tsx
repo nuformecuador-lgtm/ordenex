@@ -124,6 +124,13 @@ afterEach(() => {
   cleanup();
 });
 
+// Pedido humano (rama ux): las cuatro secciones por estado (Recibidas / Por devolver /
+// En tránsito a central / Devueltas) se fundieron en UN listado con barra de filtros, al
+// estilo del listado del admin. Las pruebas se reapuntan a esa región y tabla únicas; las
+// acciones ya no viven en la cabecera de cada sección, sino como acciones de LOTE que
+// aparecen al seleccionar filas del mismo estado.
+const LISTADO = "Órdenes de la bodega";
+
 describe("RecepcionSateliteModule", () => {
   it("R6/R8: muestra DOS secciones separadas 'Por recibir' y 'Recibidas'", () => {
     renderModule({
@@ -140,7 +147,7 @@ describe("RecepcionSateliteModule", () => {
     expect(
       screen.getByRole("region", { name: "Por recibir" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Recibidas" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: LISTADO })).toBeInTheDocument();
   });
 
   it("Feature 63: la sección 'Por recibir' expone 'Aceptar todas' + 'Aceptar' por-orden, pero NO asignar/gestionar", () => {
@@ -179,7 +186,7 @@ describe("RecepcionSateliteModule", () => {
       zonaNombre: "Limón",
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     expect(
       within(region).getByText(ESTADO_SATELITE_LIMON),
     ).toBeInTheDocument();
@@ -197,7 +204,7 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     // El texto aparece tanto en el título de la card como en el detalle.
     expect(within(region).getAllByText(/REM-RECIBIDA/).length).toBeGreaterThan(0);
     expect(within(region).getAllByText(/Beto Ruiz/).length).toBeGreaterThan(0);
@@ -220,16 +227,32 @@ describe("RecepcionSateliteModule", () => {
 
   // El camino del lector físico (input keyboard-wedge, R10) se retiró por decisión
   // humana: la cámara es la ÚNICA entrada de recepción por escaneo.
-  it("con zona, ofrece el escáner (cámara) como única entrada, sin input de teclado", () => {
-    renderModule({ sinZona: false });
+  // Pedido humano (rama ux): la recepción se opera igual que la recogida del mensajero
+  // (cámara O número tecleado, misma tarjeta) y solo se ofrece si hay algo por recibir.
+  it("con zona y órdenes por recibir, ofrece cámara y número de guía tecleado", () => {
+    renderModule({
+      sinZona: false,
+      porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
+    });
+
+    const region = screen.getByRole("region", {
+      name: "Recibir por número de guía o escaneo",
+    });
+    expect(
+      within(region).getByRole("button", { name: "Escanear con cámara" }),
+    ).toBeInTheDocument();
+    expect(within(region).getByRole("textbox")).toBeInTheDocument();
+  });
+
+  it("sin órdenes por recibir no se muestra la tarjeta de recepción ni la sección", () => {
+    renderModule({ sinZona: false, porRecibir: [] });
 
     expect(
-      screen.getByRole("region", { name: "Recepción por escaneo" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Escanear con cámara" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("textbox")).toBeNull();
+      screen.queryByRole("region", {
+        name: "Recibir por número de guía o escaneo",
+      }),
+    ).toBeNull();
+    expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
   });
 
   // ---------- Feature 34 (T8) ----------
@@ -246,7 +269,7 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     const asignar = within(region).getByRole("button", { name: "Asignar" });
     // Sin selección, la acción está deshabilitada.
     expect(asignar).toBeDisabled();
@@ -278,9 +301,9 @@ describe("RecepcionSateliteModule", () => {
       zonaNombre: "Limón",
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     // Es una tabla, no una lista de cards.
-    const tabla = within(region).getByRole("table", { name: "Recibidas" });
+    const tabla = within(region).getByRole("table", { name: LISTADO });
     // Cabeceras: la de selección (checkbox "seleccionar todo", sin texto) + las de
     // datos espejadas de ordenes-columns.
     const headers = within(tabla)
@@ -318,7 +341,7 @@ describe("RecepcionSateliteModule", () => {
     // La cabecera de la columna de selección es un checkbox "seleccionar todo".
     expect(
       within(tabla).getByRole("checkbox", {
-        name: "Seleccionar todas las recibidas",
+        name: "Seleccionar todas las órdenes",
       }),
     ).toBeInTheDocument();
   });
@@ -343,9 +366,9 @@ describe("RecepcionSateliteModule", () => {
       zonaNombre: "Limón",
     });
 
-    const tabla = screen.getByRole("table", { name: "Recibidas" });
+    const tabla = screen.getByRole("table", { name: LISTADO });
     const seleccionarTodo = within(tabla).getByRole("checkbox", {
-      name: "Seleccionar todas las recibidas",
+      name: "Seleccionar todas las órdenes",
     });
     const fila1 = within(tabla).getByRole("checkbox", { name: "Seleccionar REM-B1" });
     const fila2 = within(tabla).getByRole("checkbox", { name: "Seleccionar REM-B2" });
@@ -374,8 +397,8 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const tabla = within(
-      screen.getByRole("region", { name: "Recibidas" }),
-    ).getByRole("table", { name: "Recibidas" });
+      screen.getByRole("region", { name: LISTADO }),
+    ).getByRole("table", { name: LISTADO });
     expect(within(tabla).getByText("Pendiente")).toBeInTheDocument();
   });
 
@@ -383,10 +406,10 @@ describe("RecepcionSateliteModule", () => {
     renderModule({ recibidas: [] });
 
     const tabla = within(
-      screen.getByRole("region", { name: "Recibidas" }),
-    ).getByRole("table", { name: "Recibidas" });
+      screen.getByRole("region", { name: LISTADO }),
+    ).getByRole("table", { name: LISTADO });
     expect(
-      within(tabla).getByText("Aún no has recibido órdenes."),
+      within(tabla).getByText("No hay órdenes en la bodega."),
     ).toBeInTheDocument();
   });
 
@@ -403,8 +426,8 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
-    const tabla = within(region).getByRole("table", { name: "Recibidas" });
+    const region = screen.getByRole("region", { name: LISTADO });
+    const tabla = within(region).getByRole("table", { name: LISTADO });
     const asignar = within(region).getByRole("button", { name: "Asignar" });
     expect(asignar).toBeDisabled();
 
@@ -458,8 +481,9 @@ describe("RecepcionSateliteModule", () => {
       },
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
-    const alerta = within(region).getByRole("alert");
+    // El aviso de bloqueo precede al listado (no está dentro de su región).
+    const alerta = screen.getByRole("alert");
+    const region = screen.getByRole("region", { name: LISTADO });
     expect(alerta).toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
     expect(alerta).not.toHaveTextContent(/cierre de bodega hacia la central/i);
 
@@ -487,8 +511,9 @@ describe("RecepcionSateliteModule", () => {
       },
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
-    const alerta = within(region).getByRole("alert");
+    // El aviso de bloqueo precede al listado (no está dentro de su región).
+    const alerta = screen.getByRole("alert");
+    const region = screen.getByRole("region", { name: LISTADO });
     expect(alerta).toHaveTextContent(/cierre de bodega hacia la central está pendiente de aprobación/i);
     expect(alerta).not.toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
     expect(within(region).getByRole("button", { name: "Asignar" })).toBeDisabled();
@@ -510,9 +535,8 @@ describe("RecepcionSateliteModule", () => {
       },
     });
 
-    const alerta = within(
-      screen.getByRole("region", { name: "Recibidas" }),
-    ).getByRole("alert");
+    // El aviso precede al listado (no está dentro de su región).
+    const alerta = screen.getByRole("alert");
     expect(alerta).toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
     expect(alerta).toHaveTextContent(/cierre de bodega hacia la central/i);
   });
@@ -529,7 +553,7 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     expect(within(region).queryByRole("alert")).toBeNull();
     await user.click(
       within(region).getByRole("checkbox", { name: "Seleccionar REM-B1" }),
@@ -551,9 +575,9 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Por devolver" });
+    const region = screen.getByRole("region", { name: LISTADO });
     // Es una tabla (patrón "Recibidas"), no cards con botón por fila.
-    const tabla = within(region).getByRole("table", { name: "Por devolver" });
+    const tabla = within(region).getByRole("table", { name: LISTADO });
     expect(within(tabla).getByText("REM-PORDEV")).toBeInTheDocument();
     expect(within(tabla).getAllByText(/Caro Díaz/).length).toBeGreaterThan(0);
     // Checkbox de selección por fila + botón de acción por lote.
@@ -577,7 +601,7 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Por devolver" });
+    const region = screen.getByRole("region", { name: LISTADO });
     const enviar = within(region).getByRole("button", { name: "Enviar a central" });
     expect(enviar).toBeDisabled();
 
@@ -597,11 +621,11 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Por devolver" });
+    const region = screen.getByRole("region", { name: LISTADO });
     // Selecciona todas con el checkbox de cabecera.
     await user.click(
       within(region).getByRole("checkbox", {
-        name: "Seleccionar todas las órdenes por devolver",
+        name: "Seleccionar todas las órdenes",
       }),
     );
     await user.click(
@@ -625,7 +649,7 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Por devolver" });
+    const region = screen.getByRole("region", { name: LISTADO });
     await user.click(
       within(region).getByRole("checkbox", { name: "Seleccionar REM-A" }),
     );
@@ -642,14 +666,15 @@ describe("RecepcionSateliteModule", () => {
   it("sin órdenes por devolver la tabla muestra el vacío y no hay 'Enviar a central' activo", () => {
     renderModule({ porDevolver: [] });
 
-    const region = screen.getByRole("region", { name: "Por devolver" });
-    const tabla = within(region).getByRole("table", { name: "Por devolver" });
+    const region = screen.getByRole("region", { name: LISTADO });
+    const tabla = within(region).getByRole("table", { name: LISTADO });
     expect(
-      within(tabla).getByText("No hay órdenes por devolver."),
+      within(tabla).getByText("No hay órdenes en la bodega."),
     ).toBeInTheDocument();
+    // Sin órdenes `por_devolver` la acción ni siquiera se ofrece.
     expect(
-      within(region).getByRole("button", { name: "Enviar a central" }),
-    ).toBeDisabled();
+      within(region).queryByRole("button", { name: "Enviar a central" }),
+    ).toBeNull();
   });
 
   // ---------- Feature 139 (T3.3) — "En tránsito a central" (informativa) ----------
@@ -665,25 +690,23 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "En tránsito a central" });
-    const tabla = within(region).getByRole("table", {
-      name: "En tránsito a central",
-    });
+    const region = screen.getByRole("region", { name: LISTADO });
+    const tabla = within(region).getByRole("table", { name: LISTADO });
     expect(within(tabla).getByText("REM-TRANSITO")).toBeInTheDocument();
-    // Informativa: sin checkbox ni botón de acción.
-    expect(within(region).queryByRole("checkbox")).toBeNull();
-    expect(within(region).queryByRole("button")).toBeNull();
+    // Informativa: no hay NINGUNA acción de lote para este estado (ni asignar, ni
+    // enviar a central, ni recuperar), aunque la fila se pueda seleccionar.
+    for (const accion of ["Asignar", "Enviar a central", "Recuperar"]) {
+      expect(within(region).queryByRole("button", { name: accion })).toBeNull();
+    }
   });
 
   it("R21: 'En tránsito a central' sin órdenes muestra el vacío", () => {
     renderModule({ enTransitoACentral: [] });
 
-    const region = screen.getByRole("region", { name: "En tránsito a central" });
-    const tabla = within(region).getByRole("table", {
-      name: "En tránsito a central",
-    });
+    const region = screen.getByRole("region", { name: LISTADO });
+    const tabla = within(region).getByRole("table", { name: LISTADO });
     expect(
-      within(tabla).getByText("No hay órdenes en tránsito a central."),
+      within(tabla).getByText("No hay órdenes en la bodega."),
     ).toBeInTheDocument();
   });
 
@@ -701,7 +724,7 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     expect(within(region).getAllByText(/REM-DEVUELTA/).length).toBeGreaterThan(0);
     expect(within(region).getAllByText(/Caro Díaz/).length).toBeGreaterThan(0);
     expect(
@@ -722,7 +745,11 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: LISTADO });
+    // Rediseño ux: "Recuperar" es una acción de LOTE sobre la selección.
+    await user.click(
+      within(region).getByRole("checkbox", { name: "Seleccionar REM-DEVUELTA" }),
+    );
     await user.click(within(region).getByRole("button", { name: "Recuperar" }));
 
     expect(recuperarABodegaMock).toHaveBeenCalledTimes(1);
@@ -743,19 +770,24 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: LISTADO });
+    await user.click(
+      within(region).getByRole("checkbox", { name: "Seleccionar REM-DEVUELTA" }),
+    );
     await user.click(within(region).getByRole("button", { name: "Recuperar" }));
 
     await vi.waitFor(() => expect(recuperarABodegaMock).toHaveBeenCalled());
-    expect(refreshMock).not.toHaveBeenCalled();
+    // El lote SIEMPRE relee el estado del servidor al terminar (puede haber éxitos
+    // parciales); lo que un fallo no hace es dar el mensaje de éxito.
+    expect(recuperarABodegaMock).toHaveBeenCalledWith({ ordenId: "n1" });
   });
 
   it("sin órdenes devueltas muestra el vacío", () => {
     renderModule({ devueltas: [] });
 
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     expect(
-      within(region).getByText("No hay órdenes por recuperar."),
+      within(region).getByText("No hay órdenes en la bodega."),
     ).toBeInTheDocument();
     expect(
       within(region).queryByRole("button", { name: "Recuperar" }),
@@ -815,22 +847,18 @@ describe("RecepcionSateliteModule", () => {
     );
   });
 
-  it("Feature 63: sin zona NO muestra los botones de aceptar (solo se listan)", () => {
+  it("Feature 63 + pedido humano: sin zona no se ofrece nada de recepción", () => {
     renderModule({
       sinZona: true,
       zonaNombre: null,
       porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
     });
 
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    expect(
-      within(region).queryByRole("button", { name: "Aceptar todas" }),
-    ).toBeNull();
-    expect(
-      within(region).queryByRole("button", { name: "Aceptar" }),
-    ).toBeNull();
-    // La orden sigue listándose aunque no se pueda aceptar.
-    expect(within(region).getAllByText(/REM-R1/).length).toBeGreaterThan(0);
+    // Sin zona no hay recepción posible: ni la tarjeta ni la lista se muestran; el
+    // aviso accionable de arriba explica el porqué.
+    expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Aceptar todas" })).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(/zona asignada/i);
   });
 
   // ---------- Feature 101 (R8/R10) — resalte de prioridad ----------
@@ -846,7 +874,7 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Recibidas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     // El estado prioritario NO se comunica solo por color: hay un texto accesible.
     expect(within(region).getByText("Prioritaria")).toBeInTheDocument();
     // La fila lleva la clase de resalte compartida.
@@ -868,7 +896,7 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: LISTADO });
     // La orden se lista, pero SIN el badge de prioridad y SIN el tinte de resalte.
     expect(within(region).getAllByText(/REM-DEV/).length).toBeGreaterThan(0);
     expect(within(region).queryByText("Prioritaria")).toBeNull();
@@ -912,7 +940,7 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
         }),
       ],
     });
-    const tabla = screen.getByRole("table", { name: "Recibidas" });
+    const tabla = screen.getByRole("table", { name: LISTADO });
     expect(
       within(tabla).getByRole("columnheader", { name: "Intentos" }),
     ).toBeInTheDocument();
@@ -938,7 +966,7 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
         }),
       ],
     });
-    const tabla = screen.getByRole("table", { name: "Por devolver" });
+    const tabla = screen.getByRole("table", { name: LISTADO });
     expect(
       within(tabla).getByRole("columnheader", { name: "Intentos" }),
     ).toBeInTheDocument();
@@ -963,12 +991,12 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
         }),
       ],
     });
-    const tabla = screen.getByRole("table", { name: "En tránsito a central" });
+    const tabla = screen.getByRole("table", { name: LISTADO });
     expect(
       within(tabla).getByRole("columnheader", { name: "Intentos" }),
     ).toBeInTheDocument();
-    expect(celdaIntentos(tabla, "REM-T1", false)).toHaveTextContent(/^1$/);
-    expect(celdaIntentos(tabla, "REM-T0", false)).toHaveTextContent(/^0$/);
+    expect(celdaIntentos(tabla, "REM-T1", true)).toHaveTextContent(/^1$/);
+    expect(celdaIntentos(tabla, "REM-T0", true)).toHaveTextContent(/^0$/);
   });
 
   it("R18/R25: 'Por recibir' (cards) muestra el dato etiquetado como un campo más", () => {
@@ -1013,11 +1041,11 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
         }),
       ],
     });
-    const region = screen.getByRole("region", { name: "Devueltas" });
-    const valores = within(region)
-      .getAllByText("Intentos")
-      .map((dt) => dt.parentElement?.querySelector("dd")?.textContent);
-    expect(valores).toEqual(["4", "0"]);
+    // Rediseño ux: las devueltas viven en el listado único (tabla), así que el dato se
+    // lee de la columna "Intentos", como el resto de los estados.
+    const tabla = screen.getByRole("table", { name: LISTADO });
+    expect(celdaIntentos(tabla, "REM-N1", true)).toHaveTextContent(/^4$/);
+    expect(celdaIntentos(tabla, "REM-N0", true)).toHaveTextContent(/^0$/);
   });
 
   it("R21/R32: el badge 'Prioritaria' sigue en la celda de Nº Guía, no en la nueva columna", () => {
@@ -1032,7 +1060,7 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
         }),
       ],
     });
-    const tabla = screen.getByRole("table", { name: "Recibidas" });
+    const tabla = screen.getByRole("table", { name: LISTADO });
     const celdas = within(
       within(tabla).getByRole("row", { name: /REM-PR/ }),
     ).getAllByRole("cell");

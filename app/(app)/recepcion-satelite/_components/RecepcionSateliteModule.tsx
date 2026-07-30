@@ -4,14 +4,6 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable, type Column } from "@/components/shared/DataTable";
-import {
-  conBadgePrioridad,
-  resaltarFilaPrioridad,
-} from "@/components/shared/PrioridadResalte";
-import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
@@ -27,8 +19,8 @@ import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { envioDevolucionCentralErrorMessage } from "@/app/(app)/ordenes/_components/envio-devolucion-central-error-messages";
 import { recuperarBodegaErrorMessage } from "@/app/(app)/ordenes/_components/recuperar-bodega-error-messages";
 import { EscanerRecepcion } from "./EscanerRecepcion";
-import { RecepcionDetalle } from "./RecepcionDetalle";
-import { recibidasColumns } from "./recibidas-columns";
+import { SateliteOrderCard } from "./SateliteOrderCard";
+import { SateliteOrdenesListado } from "./SateliteOrdenesListado";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
 import {
   BODEGA_BLOQUEADA_TITULO,
@@ -112,62 +104,6 @@ function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): 
   return zona ? `${base} de ${zona}` : base;
 }
 
-/**
- * Feature 100 (T4.1, R12): fila de la sección "Devueltas". Cada orden `devuelta` de
- * la zona ofrece la acción "Recuperar", que ejecuta la recuperación
- * `devuelta → en_bodega_satelite` vía la Server Action `recuperarABodega`. Espejo
- * EXACTO de `FilaPorDevolver` (48): estado de carga POR FILA (botón deshabilitado
- * mientras procesa) y feedback por toast (éxito relee el estado del servidor; un
- * `status != ok` muestra el error claro por estado sin afectar a las demás filas).
- */
-function FilaDevuelta({
-  orden,
-  zonaNombre,
-  onRecuperada,
-  onError,
-}: {
-  orden: RecepcionSateliteDTO;
-  zonaNombre: string | null;
-  onRecuperada: () => void;
-  onError: (mensaje: string) => void;
-}) {
-  const [procesando, setProcesando] = useState(false);
-
-  async function handleRecuperar() {
-    setProcesando(true);
-    const result = await recuperarABodega({ ordenId: orden.id });
-    if (result.status !== "ok") {
-      onError(recuperarBodegaErrorMessage(result.status));
-      setProcesando(false);
-      return;
-    }
-    onRecuperada(); // relee el estado del servidor; la fila desaparece del listado
-  }
-
-  return (
-    <li className="flex flex-col gap-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {orden.numRemision} · {orden.destinatario}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <RecepcionDetalle
-            orden={orden}
-            estadoLegible={estadoLegible(orden, zonaNombre)}
-          />
-          <div className="flex justify-end">
-            <Button type="button" onClick={handleRecuperar} disabled={procesando}>
-              {procesando ? "Recuperando…" : "Recuperar"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </li>
-  );
-}
-
 export function RecepcionSateliteModule({
   porRecibir,
   recibidas,
@@ -182,18 +118,30 @@ export function RecepcionSateliteModule({
 }: RecepcionSateliteModuleProps) {
   const router = useRouter();
   const toast = useToast();
-  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  // Órdenes elegidas para asignar: SNAPSHOT que el listado entrega al pulsar "Asignar".
+  // Vive aquí porque es lo que consume el modal de asignación.
+  const [ordenesAAsignar, setOrdenesAAsignar] = useState<RecepcionSateliteDTO[]>(
+    [],
+  );
   const [modalOpen, setModalOpen] = useState(false);
-  // Feature 139/T3.3 (R13): Set de selección PROPIO de la sección "Por devolver"
-  // (independiente del de "Recibidas"), para el envío por lote a la bodega central.
-  const [seleccionadosPorDevolver, setSeleccionadosPorDevolver] = useState<
-    Set<string>
-  >(new Set());
   const [enviandoACentral, setEnviandoACentral] = useState(false);
+  const [recuperando, setRecuperando] = useState(false);
   // Feature 148 (T13, R22): ids del ÚLTIMO envío a central que salieron `ok`. El lote
   // vive solo aquí (el service es por-orden, §9.1), así que se conserva para poder
   // ofrecer su manifiesto después del refresco. Vacío = sin descarga que ofrecer (R17).
   const [ultimoEnvioACentral, setUltimoEnvioACentral] = useState<string[]>([]);
+
+  // Pedido humano: "Por recibir" (tarjeta de recepción + lista) solo se pinta si hay algo
+  // que recibir y el actor tiene zona; el separador del listado depende de lo mismo.
+  const mostrarPorRecibir = !sinZona && porRecibir.length > 0;
+
+  // Feature 139/T3.3 + pedido humano: las CUATRO listas por estado se presentan en un
+  // solo listado filtrable. El orden de concatenación es el del flujo de la bodega, y es
+  // el que ve quien no toca los filtros.
+  const ordenesBodega = useMemo<RecepcionSateliteDTO[]>(
+    () => [...recibidas, ...porDevolver, ...enTransitoACentral, ...devueltas],
+    [recibidas, porDevolver, enTransitoACentral, devueltas],
+  );
 
   // Feature 63: recepción EN LOTE ("Aceptar todas" / "Aceptar" por-orden), análoga
   // al "Recoger" del mensajero. Cablea la Server Action `recibirLote`; tras éxito
@@ -213,144 +161,52 @@ export function RecepcionSateliteModule({
     );
   }
 
-  function toggleSeleccion(id: string, checked: boolean) {
-    setSeleccionados((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
+  /** Abre el modal de asignación con lo seleccionado en el listado. */
+  function abrirAsignacion(ordenes: RecepcionSateliteDTO[]) {
+    if (ordenes.length === 0) return;
+    setOrdenesAAsignar(ordenes);
+    setModalOpen(true);
   }
 
-  function toggleTodos(ids: string[], checked: boolean) {
-    setSeleccionados((prev) => {
-      const next = new Set(prev);
-      if (checked) ids.forEach((id) => next.add(id));
-      else ids.forEach((id) => next.delete(id));
-      return next;
-    });
+  /**
+   * Feature 100 (T4.1, R12) — recuperación `devuelta → en_bodega_satelite`. Antes era una
+   * acción POR FILA; con el listado único pasa a LOTE sobre la selección, con el mismo
+   * patrón que el envío a central: bucle `await`, se acumulan los errores para no ocultar
+   * un fallo parcial y en cualquier caso se relee el estado del servidor.
+   */
+  async function recuperarSeleccionadas(seleccionadas: RecepcionSateliteDTO[]) {
+    if (seleccionadas.length === 0 || recuperando) return;
+    setRecuperando(true);
+    let recuperadas = 0;
+    const errores: string[] = [];
+    for (const orden of seleccionadas) {
+      const result = await recuperarABodega({ ordenId: orden.id });
+      if (result.status === "ok") recuperadas += 1;
+      else errores.push(recuperarBodegaErrorMessage(result.status));
+    }
+    setRecuperando(false);
+    if (recuperadas > 0) {
+      toast.success(`${recuperadas} orden(es) recuperada(s) a bodega.`);
+    }
+    if (errores.length > 0) toast.error(errores[0]);
+    router.refresh();
   }
-
-  // Snapshot de las órdenes seleccionadas (por id, filtrando las que sigan en la
-  // lista actual) para pasarlas al modal de asignación.
-  const ordenesSeleccionadas = useMemo(
-    () => recibidas.filter((orden) => seleccionados.has(orden.id)),
-    [recibidas, seleccionados],
-  );
-
-  // Feature 63 (pedido humano): "Recibidas" pasa de cards a DataTable. La columna
-  // inicial "Seleccionar" se compone aquí (fuente de verdad de la selección, R4),
-  // igual que `OrdenesApartado` prepende su checkbox a `ordenesColumns`. Las
-  // columnas de datos viven en `recibidas-columns.tsx`.
-  const columnasRecibidas = useMemo<Column<RecepcionSateliteDTO>[]>(
-    () => [
-      {
-        id: "seleccionar",
-        value: "Seleccionar",
-        // Cabecera = checkbox "seleccionar todo" sobre las recibidas visibles.
-        renderHeader: () => {
-          const ids = recibidas.map((orden) => orden.id);
-          return (
-            <SelectAllCheckbox
-              selectableIds={ids}
-              selectedIds={seleccionados}
-              onToggleAll={(checked) => toggleTodos(ids, checked)}
-              ariaLabel="Seleccionar todas las recibidas"
-            />
-          );
-        },
-        render: (orden: RecepcionSateliteDTO) => (
-          <Checkbox
-            checked={seleccionados.has(orden.id)}
-            onCheckedChange={(checked) =>
-              toggleSeleccion(orden.id, checked === true)
-            }
-            aria-label={`Seleccionar ${orden.numRemision}`}
-          />
-        ),
-      },
-      // Feature 101/R8: decora las columnas de datos para anexar el badge "Prioritaria"
-      // a las órdenes liberadas por el SLA (prioridad=true) que esperan reasignación en
-      // ESTE grupo ("Recibidas", en_bodega_satelite). El checkbox va delante del decorado,
-      // así el badge cae en la primera columna de datos (Nº Guía).
-      ...conBadgePrioridad(recibidasColumns(zonaNombre)),
-    ],
-    [seleccionados, zonaNombre, recibidas],
-  );
 
   function handleSuccess() {
-    setSeleccionados(new Set());
+    setOrdenesAAsignar([]);
     setModalOpen(false);
     router.refresh(); // relee el estado del servidor (patrón feature 33)
   }
 
   // ---------- Feature 139/T3.3 (R13/R21) — envío por lote a bodega central ----------
-  function togglePorDevolver(id: string, checked: boolean) {
-    setSeleccionadosPorDevolver((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }
-
-  function togglePorDevolverTodos(ids: string[], checked: boolean) {
-    setSeleccionadosPorDevolver((prev) => {
-      const next = new Set(prev);
-      if (checked) ids.forEach((id) => next.add(id));
-      else ids.forEach((id) => next.delete(id));
-      return next;
-    });
-  }
-
-  // Columnas de "Por devolver": mismo patrón que "Recibidas" (checkbox de selección
-  // compuesto aquí, fuente de verdad, + columnas de datos reusadas). SIN badge de
-  // prioridad (el resalte por SLA es exclusivo de "Recibidas", R10 de la feature 101).
-  const columnasPorDevolver = useMemo<Column<RecepcionSateliteDTO>[]>(
-    () => [
-      {
-        id: "seleccionar",
-        value: "Seleccionar",
-        renderHeader: () => {
-          const ids = porDevolver.map((orden) => orden.id);
-          return (
-            <SelectAllCheckbox
-              selectableIds={ids}
-              selectedIds={seleccionadosPorDevolver}
-              onToggleAll={(checked) => togglePorDevolverTodos(ids, checked)}
-              ariaLabel="Seleccionar todas las órdenes por devolver"
-            />
-          );
-        },
-        render: (orden: RecepcionSateliteDTO) => (
-          <Checkbox
-            checked={seleccionadosPorDevolver.has(orden.id)}
-            onCheckedChange={(checked) =>
-              togglePorDevolver(orden.id, checked === true)
-            }
-            aria-label={`Seleccionar ${orden.numRemision}`}
-          />
-        ),
-      },
-      ...recibidasColumns(zonaNombre),
-    ],
-    [seleccionadosPorDevolver, zonaNombre, porDevolver],
-  );
-
-  // Columnas de "En tránsito a central": SOLO lectura (sin checkbox), reusa las de datos.
-  const columnasEnTransito = useMemo<Column<RecepcionSateliteDTO>[]>(
-    () => recibidasColumns(zonaNombre),
-    [zonaNombre],
-  );
-
   // R13: "Enviar a central" recorre la selección de `por_devolver` y dispara
   // `enviarACentral({ ordenId })` por cada una (loop await, patrón DevolverATiendaModal),
   // acumulando errores para no ocultar un fallo parcial. Feedback por toast; en cualquier
   // caso se relee el estado del servidor y se limpia la selección.
-  async function enviarSeleccionadasACentral() {
-    const ids = porDevolver
-      .filter((orden) => seleccionadosPorDevolver.has(orden.id))
-      .map((orden) => orden.id);
+  async function enviarSeleccionadasACentral(
+    seleccionadas: RecepcionSateliteDTO[],
+  ) {
+    const ids = seleccionadas.map((orden) => orden.id);
     if (ids.length === 0) return;
     setEnviandoACentral(true);
     let enviadas = 0;
@@ -366,7 +222,6 @@ export function RecepcionSateliteModule({
       } else errores.push(envioDevolucionCentralErrorMessage(result.status));
     }
     setEnviandoACentral(false);
-    setSeleccionadosPorDevolver(new Set());
     setUltimoEnvioACentral(enviadasIds);
     if (enviadas > 0) {
       toast.success(`${enviadas} orden(es) enviada(s) a bodega central.`);
@@ -374,8 +229,6 @@ export function RecepcionSateliteModule({
     if (errores.length > 0) toast.error(errores[0]);
     router.refresh();
   }
-
-  const porDevolverSeleccionadas = seleccionadosPorDevolver.size;
 
   return (
     <div className="flex flex-col gap-8">
@@ -388,38 +241,65 @@ export function RecepcionSateliteModule({
           No tienes una zona asignada. Pide a un administrador que te asigne una
           zona para poder recibir órdenes.
         </p>
-      ) : (
-        <EscanerRecepcion onRecibida={() => router.refresh()} />
-      )}
+      ) : null}
 
       {/* ---------- Sección: Por recibir (en_ruta_bodega_satelite) ---------- */}
-      {/* Feature 63: REUTILIZA la sección compartida "por aceptar" del mensajero:
-          banner con contador de nuevas + "Aceptar todas" (lote -> recibirLote con
-          todos los ids) + "Aceptar" por-orden (recibirLote con uno). Sin zona no se
-          muestran los botones (solo se listan). Escáner QR y demás secciones intactos. */}
-      <PorAceptarSection
-        titulo="Por recibir"
-        nuevasLabel={(n) => `${n} Órdenes nuevas por recibir`}
-        ordenes={porRecibir}
-        onAceptarTodas={(ids) => void aceptarRecepcion(ids)}
-        onAceptarUna={(id) => void aceptarRecepcion([id])}
-        textoBotonTodas="Aceptar todas"
-        textoBotonUna="Aceptar"
-        vacio="No hay órdenes por recibir."
-        mostrarAcciones={!sinZona}
-        renderDetalle={(orden) => (
-          <RecepcionDetalle
-            orden={orden}
-            estadoLegible={estadoLegible(orden, zonaNombre)}
+      {/* Pedido humano: sin NADA por recibir, ni la tarjeta de recepción ni la lista se
+          muestran — no hay guía que resolver, así que solo estorbarían. Con zona sin
+          asignar (R5) tampoco: el aviso de arriba explica el porqué. */}
+      {mostrarPorRecibir ? (
+        <>
+          {/* Recepción por guía: MISMA tarjeta que la recogida del mensajero
+              (`EscanerGuiaCard`), con los dos caminos — cámara y número tecleado. */}
+          <EscanerRecepcion onRecibida={() => router.refresh()} />
+          {/* Feature 63: REUTILIZA la sección compartida "por aceptar" del mensajero:
+              banner con contador de nuevas + "Aceptar todas" (lote -> recibirLote con
+              todos los ids) + "Aceptar" por-orden (recibirLote con uno). Sin zona no se
+              muestran los botones (solo se listan). */}
+          <PorAceptarSection
+            titulo="Por recibir"
+            nuevasLabel={(n) => `${n} Órdenes nuevas por recibir`}
+            ordenes={porRecibir}
+            onAceptarTodas={(ids) => void aceptarRecepcion(ids)}
+            onAceptarUna={(id) => void aceptarRecepcion([id])}
+            textoBotonTodas="Aceptar todas"
+            textoBotonUna="Aceptar"
+            vacio="No hay órdenes por recibir."
+            mostrarAcciones={!sinZona}
+            listClassName="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            // Rediseño ux: la card completa la pinta el módulo (`renderItem`), con el
+            // MISMO lenguaje visual que las del mensajero. "Aceptar" va al pie de cada
+            // card; sin zona asignada (R5) se listan sin acción.
+            renderItem={(orden) => (
+              <SateliteOrderCard
+                orden={orden}
+                estadoLegible={estadoLegible(orden, zonaNombre)}
+                acciones={
+                  sinZona ? null : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void aceptarRecepcion([orden.id])}
+                    >
+                      Aceptar
+                    </Button>
+                  )
+                }
+              />
+            )}
           />
-        )}
-      />
+        </>
+      ) : null}
 
-      {/* ---------- Sección: Recibidas (en_bodega_satelite) ---------- */}
-      {/* Feature 34 (R4): lista seleccionable + acción "Asignar". */}
+      {/* ---------- Listado único de la bodega (pedido humano) ---------- */}
+      {/* Las cuatro secciones por estado (Recibidas / Por devolver / En tránsito a
+          central / Devueltas) se funden en UN listado con la barra de filtros del admin.
+          Las acciones pasan a ser de LOTE sobre la selección, habilitadas según el estado
+          común de lo seleccionado (ver `SateliteOrdenesListado`). */}
+      {/* El separador solo tiene sentido si ARRIBA hay algo de lo que separarse: sin
+          sección "Por recibir" el listado es lo primero de la pantalla. */}
       <section
-        aria-label="Recibidas"
-        className="flex flex-col gap-3 border-t pt-6"
+        className={`flex flex-col gap-3${mostrarPorRecibir ? " border-t pt-6" : ""}`}
       >
         {/* Feature 41 (R22): aviso de bodega BLOQUEADA con causa diferenciada (bloqueo
             duro: todos los mensajeros con cierre O CierreBodega pendiente). */}
@@ -448,120 +328,30 @@ export function RecepcionSateliteModule({
             <span>{BODEGA_CIERRES_ABIERTOS_DETALLE}</span>
           </div>
         ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Recibidas</h2>
-        </div>
-        {/* "Asignar" vive en el flujo, encima de la tabla y alineado a la derecha;
-            queda deshabilitado sin selección o con la bodega bloqueada. */}
+
+        {/* Feature 148 (T13, R22): manifiesto del ÚLTIMO envío a central, solo con las
+            órdenes que salieron `ok`. Botón EXPLÍCITO (§9.7): ni descarga automática ni
+            acción dentro del toast. */}
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            disabled={
-              ordenesSeleccionadas.length === 0 || bloqueoBodega.bloqueada
-            }
-          >
-            Asignar
-          </Button>
-        </div>
-        <DataTable
-          columns={columnasRecibidas}
-          data={recibidas}
-          rowKey="id"
-          ariaLabel="Recibidas"
-          rowClassName={resaltarFilaPrioridad}
-          emptyMessage="Aún no has recibido órdenes."
-        />
-      </section>
-
-      {/* ---------- Sección: Por devolver (por_devolver) ---------- */}
-      {/* Feature 139/T3.3 (R13/R21): órdenes en `por_devolver` de la zona. Tabla
-          seleccionable (patrón "Recibidas") + acción POR LOTE "Enviar a central"
-          (por_devolver → devolviendo_a_bodega_central) sobre la selección. Tras el
-          envío se releé el estado del servidor y se limpia la selección. */}
-      <section
-        aria-label="Por devolver"
-        className="flex flex-col gap-3 border-t pt-6"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Por devolver</h2>
-          <Button
-            type="button"
-            onClick={() => void enviarSeleccionadasACentral()}
-            disabled={porDevolverSeleccionadas === 0 || enviandoACentral}
-          >
-            {enviandoACentral ? "Enviando…" : "Enviar a central"}
-          </Button>
-        </div>
-        <DataTable
-          columns={columnasPorDevolver}
-          data={porDevolver}
-          rowKey="id"
-          ariaLabel="Por devolver"
-          emptyMessage="No hay órdenes por devolver."
-        />
-      </section>
-
-      {/* ---------- Sección: En tránsito a central (devolviendo_a_bodega_central) ---------- */}
-      {/* Feature 139/T3.3 (R21): órdenes ya enviadas, en tránsito a la bodega central.
-          Solo lectura (la recepción la hace la central por QR, no el satélite). */}
-      <section
-        aria-label="En tránsito a central"
-        className="flex flex-col gap-3 border-t pt-6"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">En tránsito a central</h2>
-          {/* Feature 148 (T13, R22): manifiesto del último envío a central, solo con
-              las órdenes que salieron `ok`. Botón EXPLÍCITO (§9.7): ni descarga
-              automática ni acción en el toast. */}
           <DescargarManifiestoButton
             flujo="devolucion_central"
             seleccion={{ ordenIds: ultimoEnvioACentral }}
             label="Descargar manifiesto del último envío"
           />
         </div>
-        <p className="text-sm text-muted-foreground">
-          Órdenes ya enviadas; la bodega central las recibirá por escaneo. Aquí solo
-          se muestran para seguimiento.
-        </p>
-        <DataTable
-          columns={columnasEnTransito}
-          data={enTransitoACentral}
-          rowKey="id"
-          ariaLabel="En tránsito a central"
-          emptyMessage="No hay órdenes en tránsito a central."
-        />
-      </section>
 
-      {/* ---------- Sección: Devueltas (devuelta) ---------- */}
-      {/* Feature 100/T4.1 (R12): órdenes `devuelta` (novedad) de la zona; cada una
-          ofrece "Recuperar" (devuelta → en_bodega_satelite) con estado por fila. En
-          éxito se relee el estado del servidor + toast; un error se avisa por toast. */}
-      <section
-        aria-label="Devueltas"
-        className="flex flex-col gap-3 border-t pt-6"
-      >
-        <h2 className="text-lg font-semibold">Devueltas</h2>
-        {devueltas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No hay órdenes por recuperar.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {devueltas.map((orden) => (
-              <FilaDevuelta
-                key={orden.id}
-                orden={orden}
-                zonaNombre={zonaNombre}
-                onRecuperada={() => {
-                  toast.success("Orden recuperada a bodega.");
-                  router.refresh();
-                }}
-                onError={(mensaje) => toast.error(mensaje)}
-              />
-            ))}
-          </ul>
-        )}
+        <SateliteOrdenesListado
+          ordenes={ordenesBodega}
+          zonaNombre={zonaNombre}
+          puedeAsignar={!bloqueoBodega.bloqueada}
+          onAsignar={abrirAsignacion}
+          onEnviarACentral={(ordenes) =>
+            void enviarSeleccionadasACentral(ordenes)
+          }
+          onRecuperar={(ordenes) => void recuperarSeleccionadas(ordenes)}
+          enviandoACentral={enviandoACentral}
+          recuperando={recuperando}
+        />
       </section>
 
       {/* Feature 46 (R15/R16): aviso derivado "Liberadas hoy (reprogramación)" de la
@@ -570,7 +360,7 @@ export function RecepcionSateliteModule({
 
       <AsignarSateliteModal
         open={modalOpen}
-        ordenes={ordenesSeleccionadas}
+        ordenes={ordenesAAsignar}
         mensajeros={mensajeros}
         mensajerosBloqueadosIds={bloqueoBodega.mensajerosConCierreIds ?? []}
         onOpenChange={setModalOpen}

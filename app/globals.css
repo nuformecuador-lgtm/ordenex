@@ -177,6 +177,27 @@
   html {
     @apply font-sans;
   }
+  /*
+   * Pedido humano (rama ux): todo control accionable se siente pulsable. El navegador
+   * pinta `cursor: default` en <button>, así que se corrige de raíz —aquí y no botón a
+   * botón— para <button>, los <a role="button"> y los inputs de tipo botón. Deshabilitado
+   * = `not-allowed`: la pista de "no se puede" también es información.
+   */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  input[type="button"]:disabled,
+  input[type="submit"]:disabled {
+    cursor: not-allowed;
+  }
 }
 
 /*
@@ -230,5 +251,91 @@
   .animate-scanline {
     animation: none;
     top: 50%;
+  }
+}
+
+/*
+ * Panel desplegable (`Collapsible.Panel` de Base UI): abre y cierra barriendo la
+ * altura. Base UI publica la altura medida en `--collapsible-panel-height` y marca los
+ * dos extremos de la transición con `data-starting-style` / `data-ending-style`; aquí
+ * solo se les da un valor y una duración.
+ *
+ * Va como CSS propio y no como utilidades de Tailwind (`h-[var(…)]` +
+ * `data-starting-style:h-0`) porque esa versión no llegó a animar en el navegador y
+ * aquí la regla no depende de cómo se traduzcan los variantes ni de qué utilidad gane:
+ * las tres declaraciones que importan están a la vista, en un solo sitio.
+ */
+.collapsible-panel {
+  overflow: hidden;
+  height: var(--collapsible-panel-height);
+  opacity: 1;
+  transition:
+    height 300ms ease-out,
+    opacity 300ms ease-out;
+}
+
+.collapsible-panel[data-starting-style],
+.collapsible-panel[data-ending-style] {
+  height: 0;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapsible-panel {
+    transition: none;
+  }
+}
+
+/*
+ * Cambio de vista de la lista de órdenes del mensajero (mosaico ⇄ detalle). Dos tramos
+ * ENCADENADOS, no simultáneos: primero las cards actuales BAJAN mientras se desvanecen
+ * (`salida`) y, sólo cuando termina, las nuevas SUBEN desde abajo apareciendo
+ * (`entrada`). El encadenado lo lleva el módulo (`useTransicionVista`), que sostiene la
+ * lista vieja hasta el final del primer tramo; aquí viven únicamente las dos animaciones.
+ *
+ * Las duraciones se publican como variables para que el hook use EXACTAMENTE las mismas
+ * y ninguna de las dos partes se desincronice de la otra al retocarlas.
+ */
+:root {
+  --vista-cards-salida-ms: 180ms;
+  --vista-cards-entrada-ms: 220ms;
+}
+
+@keyframes vista-cards-salida {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes vista-cards-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.vista-cards-saliendo {
+  animation: vista-cards-salida var(--vista-cards-salida-ms) ease-in both;
+}
+
+.vista-cards-entrando {
+  animation: vista-cards-entrada var(--vista-cards-entrada-ms) ease-out both;
+}
+
+/* Quien pidió menos movimiento cambia de vista de golpe, sin desplazamiento ni fundido.
+   El hook detecta lo mismo y salta los dos tramos, así que el cambio es instantáneo. */
+@media (prefers-reduced-motion: reduce) {
+  .vista-cards-saliendo,
+  .vista-cards-entrando {
+    animation: none;
   }
 }

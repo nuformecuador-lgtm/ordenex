@@ -122,7 +122,9 @@ describe("crearLayout — todas las constantes escalan (R16)", () => {
     expect(a4.fontRemision).toBeCloseTo(21, 10);
     expect(a4.fontGuia).toBeCloseTo(46.2, 10);
     expect(a4.lineHeight).toBeCloseTo(8.4, 10);
-    expect(a4.fieldGap).toBeCloseTo(3.15, 10);
+    // fieldGap base = 1.0 (era 1.5 cuando el rotulo iba en su propia linea; ver
+    // MAQUETA_BASE): 1.0 * 2.1.
+    expect(a4.fieldGap).toBeCloseTo(2.1, 10);
     expect(a4.qrSize).toBeCloseTo(54.6, 10);
     expect(a4.barcodeHeight).toBeCloseTo(33.6, 10);
     expect(a4.gapQrBarcode).toBeCloseTo(8.4, 10);
