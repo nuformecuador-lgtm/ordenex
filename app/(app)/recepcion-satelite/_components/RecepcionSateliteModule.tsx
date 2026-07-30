@@ -216,6 +216,21 @@ export function RecepcionSateliteModule({
     router.refresh();
   }
 
+  /**
+   * Feature 158 (T2.7) — «Reportar incidente» POR FILA. El merge del rediseño ux fundió las
+   * tablas por sección en UN listado, así que la columna ya no se compone aquí: la monta
+   * `SateliteOrdenesListado` y ESTE módulo sólo aporta lo que el listado no puede saber —qué
+   * hacer tras el éxito—. La regla de disponibilidad (estado R41 + zona R48) sigue viviendo
+   * en `incidente-satelite.ts`, que el listado aplica FILA A FILA; con una tabla única esa
+   * decisión por fila es además la única posible.
+   *
+   * Tras el éxito se RELEE del servidor (patrón de todas las acciones de este módulo): la
+   * orden pasa a `incidente` y desaparece del listado.
+   */
+  function handleIncidenteReportado() {
+    router.refresh();
+  }
+
   function handleSuccess() {
     setOrdenesAAsignar([]);
     setModalOpen(false);
@@ -395,6 +410,10 @@ export function RecepcionSateliteModule({
           onDeshacerAsignacion={abrirDeshacer}
           enviandoACentral={enviandoACentral}
           recuperando={recuperando}
+          // Feature 158 (T2.7): el listado necesita `sinZona` SÓLO para la regla de
+          // disponibilidad del incidente (R48); las demás acciones ya llegan decididas.
+          sinZona={sinZona}
+          onIncidenteReportado={handleIncidenteReportado}
         />
       </section>
 

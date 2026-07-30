@@ -15,7 +15,7 @@ function fila(numRemision: string, linea: number, extra: Record<string, string> 
 }
 
 /** Respuesta fake del endpoint: clasifica cada fila como "creada" en orden. */
-function okResponse(rows: Array<Record<string, string>>): Response {
+function okResponse(rows: Array<Record<string, string>>, cargaId: string | null = null): Response {
   const summary: BulkSummary = {
     total: rows.length,
     creadas: rows.length,
@@ -27,6 +27,7 @@ function okResponse(rows: Array<Record<string, string>>): Response {
       resultado: "creada",
       estatus: "en_preparacion",
     })),
+    cargaId, // feature 141/R38: token del lote emitido por el SERVIDOR
   };
   return new Response(JSON.stringify(summary), { status: 200 });
 }
@@ -126,5 +127,132 @@ describe("carga-masiva-chunks — combinarResultados", () => {
     );
     expect(combinado.filas).toHaveLength(2);
     expect(combinado.filas[1].resultado).toBe("duplicada");
+  });
+});
+
+// --- Feature 141: el token del lote lo EMITE EL SERVIDOR (R15/R16/R17/R20/R27/R29) ---
+
+const TOKEN_SERVIDOR = "f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1";
+
+/**
+ * Captura los cuerpos JSON enviados por `procesarEnChunks` y responde con el summary del
+ * endpoint. `cargaId` es el TOKEN que el servidor emite: por defecto el mismo en todas las
+ * respuestas (el primer chunk lo crea, los siguientes lo reutilizan).
+ */
+function fetchCaptor(cargaIds: Array<string | null> = []): {
+  fetchImpl: typeof fetch;
+  bodies: Array<Record<string, unknown>>;
+} {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    bodies.push(body);
+    const cargaId = cargaIds.length > 0 ? (cargaIds[bodies.length - 1] ?? null) : TOKEN_SERVIDOR;
+    return okResponse(body.rows, cargaId);
+  }) as unknown as typeof fetch;
+  return { fetchImpl, bodies };
+}
+
+describe("carga-masiva-chunks — lote emitido por el servidor (feature 141)", () => {
+  it("R15/R16: el PRIMER chunk NO envia cargaId (el cliente nunca lo genera)", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+
+    await procesarEnChunks([fila("A", 1), fila("B", 2)], {
+      dryRun: false,
+      chunkSize: 1,
+      fetchImpl,
+    });
+
+    expect(bodies[0]).not.toHaveProperty("cargaId");
+  });
+
+  it("R17/R26: los chunks 2..N reenvian EXACTAMENTE el token devuelto por el servidor", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+    const filas = [fila("A", 1), fila("B", 2), fila("C", 3), fila("D", 4), fila("E", 5)];
+
+    await procesarEnChunks(filas, { dryRun: false, chunkSize: 2, fetchImpl });
+
+    expect(bodies).toHaveLength(3);
+    expect(bodies.map((b) => b.cargaId)).toEqual([undefined, TOKEN_SERVIDOR, TOKEN_SERVIDOR]);
+  });
+
+  it("si el primer chunk no crea lote (cargaId null), el siguiente vuelve a ir sin token", async () => {
+    // Chunk 1 sin ordenes creadas -> el servidor no emite lote; chunk 2 lo crea y el 3 lo usa.
+    const { fetchImpl, bodies } = fetchCaptor([null, TOKEN_SERVIDOR, TOKEN_SERVIDOR]);
+    const filas = [fila("A", 1), fila("B", 2), fila("C", 3)];
+
+    await procesarEnChunks(filas, { dryRun: false, chunkSize: 1, fetchImpl });
+
+    expect(bodies.map((b) => b.cargaId)).toEqual([undefined, undefined, TOKEN_SERVIDOR]);
+  });
+
+  it("R29: todos los chunks declaran el total de la SESION, no el del chunk", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+    const filas = [fila("A", 1), fila("B", 2), fila("C", 3), fila("D", 4), fila("E", 5)];
+
+    await procesarEnChunks(filas, { dryRun: false, chunkSize: 2, fetchImpl });
+
+    expect(bodies.map((b) => b.totalFiles)).toEqual([5, 5, 5]);
+  });
+
+  it("R20: el nombre del lote viaja en todos los chunks cuando el llamador lo pasa", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+
+    await procesarEnChunks([fila("A", 1), fila("B", 2)], {
+      dryRun: false,
+      chunkSize: 1,
+      fetchImpl,
+      name: "carga de enero",
+    });
+
+    expect(bodies.map((b) => b.name)).toEqual(["carga de enero", "carga de enero"]);
+  });
+
+  it("R22: sin nombre, el cuerpo no lleva `name` (el lote nace con name NULL)", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+
+    await procesarEnChunks([fila("A", 1)], { dryRun: false, chunkSize: 10, fetchImpl });
+
+    expect(bodies[0]).not.toHaveProperty("name");
+  });
+
+  it("R27: el dry-run NO envia cargaId, name ni totalFiles (no crea lote)", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+
+    await procesarEnChunks([fila("A", 1), fila("B", 2)], {
+      dryRun: true,
+      chunkSize: 1,
+      fetchImpl,
+      name: "carga de enero",
+    });
+
+    for (const body of bodies) {
+      expect(body).not.toHaveProperty("cargaId");
+      expect(body).not.toHaveProperty("totalFiles");
+      expect(body).not.toHaveProperty("name");
+    }
+  });
+
+  it("los chunks se envian EN SERIE: el 2.o sale despues de responder el 1.o", async () => {
+    // Invariante del cliente del que depende R26: si se paralelizaran, dos chunks sin
+    // `cargaId` crearian dos lotes.
+    const eventos: string[] = [];
+    let n = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      const idx = ++n;
+      const body = JSON.parse((init?.body as string) ?? "{}");
+      eventos.push(`req-${idx}`);
+      await new Promise((r) => setTimeout(r, 5));
+      eventos.push(`res-${idx}`);
+      return okResponse(body.rows, TOKEN_SERVIDOR);
+    }) as unknown as typeof fetch;
+
+    await procesarEnChunks([fila("A", 1), fila("B", 2)], {
+      dryRun: false,
+      chunkSize: 1,
+      fetchImpl,
+    });
+
+    expect(eventos).toEqual(["req-1", "res-1", "req-2", "res-2"]);
   });
 });

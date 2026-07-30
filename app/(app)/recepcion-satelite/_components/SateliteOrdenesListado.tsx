@@ -17,6 +17,11 @@ import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { normalizeName } from "@/lib/utils/normalize";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
+// Feature 158 (T2.7, decisión del humano del 2026-07-30): el reporte de incidente también
+// vive en la bodega satélite. Se IMPORTA el mismo disparador y el mismo modal de `/ordenes`;
+// esta superficie sólo aporta SU regla de disponibilidad (alcance por zona, R48).
+import { ReportarIncidenteAccion } from "@/app/(app)/ordenes/_components/ReportarIncidenteAccion";
+import { puedeReportarIncidenteSatelite } from "./incidente-satelite";
 import { recibidasColumns } from "./recibidas-columns";
 import {
   CLAVE_CANTON,
@@ -72,6 +77,13 @@ export interface SateliteOrdenesListadoProps {
   enviandoACentral?: boolean;
   /** `true` mientras la recuperación está en vuelo. */
   recuperando?: boolean;
+  /**
+   * Feature 158 (R48): `true` si el actor no tiene zona asignada. Sin zona no tiene alcance
+   * sobre NADA, así que no se le ofrece reportar incidentes sobre ninguna fila.
+   */
+  sinZona?: boolean;
+  /** Feature 158 (T2.7): qué hacer tras reportar un incidente (el módulo relee del servidor). */
+  onIncidenteReportado?: () => void;
 }
 
 export function SateliteOrdenesListado({
@@ -84,6 +96,8 @@ export function SateliteOrdenesListado({
   onDeshacerAsignacion,
   enviandoACentral = false,
   recuperando = false,
+  sinZona = false,
+  onIncidenteReportado,
 }: Readonly<SateliteOrdenesListadoProps>) {
   const [seleccion, setSeleccion] = useState<FilterSelection>({});
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
@@ -205,8 +219,27 @@ export function SateliteOrdenesListado({
       },
       // Feature 101/R8: badge "Prioritaria" sobre la primera columna de datos.
       ...conBadgePrioridad(recibidasColumns(zonaNombre)),
+      // Feature 158 (T2.7) — «Reportar incidente» POR FILA. Antes vivía en las tablas de
+      // «Recibidas» y «Asignadas (por recoger)», las dos únicas cuyo estado es un origen
+      // válido; al fundirse las secciones en ESTA tabla la columna se monta siempre y la
+      // decisión pasa a ser POR FILA: `puedeReportarIncidenteSatelite` exige estado origen
+      // (R41) Y zona del actor (R48), así que una `por_devolver`, una `devuelta` o una de
+      // otra zona no pintan disparador —el componente no renderiza nada cuando no está
+      // disponible—. Es la única forma posible con una tabla única, y el criterio no se
+      // relaja: es el MISMO predicado de antes, sin una segunda copia.
+      {
+        id: "incidente",
+        value: "Incidente",
+        render: (orden: RecepcionSateliteDTO) => (
+          <ReportarIncidenteAccion
+            orden={orden}
+            disponible={puedeReportarIncidenteSatelite(orden, zonaNombre, sinZona)}
+            onSuccess={onIncidenteReportado}
+          />
+        ),
+      },
     ],
-    [seleccionados, zonaNombre, visibles],
+    [seleccionados, zonaNombre, visibles, sinZona, onIncidenteReportado],
   );
 
   return (

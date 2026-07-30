@@ -18,11 +18,15 @@ import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
 // buscarlo asi marcaria como emisor a cualquier archivo que lo mencione en prosa, y un guard
 // que grita por un comentario acaba desactivado.
 //
-// R29 REESCRITO por el corte en dos PRs (design §15.2): el requisito pide «exactamente DOS
-// puntos de emision». En ESTE PR existe UNO —la aprobacion del cierre del dia, camino del
-// MENSAJERO—; el segundo (la aprobacion del incidente del ADMIN) llega con su PR y DEBE
-// sumarse a la lista de abajo. La comparacion es de IGUALDAD: un emisor nuevo, declarado o no,
-// pone este archivo en rojo y obliga a decidirlo a proposito.
+// R29 se cumple ENTERO desde el PR 2 (camino del ADMIN). Historia, conservada porque explica el
+// caso de abajo: el requisito pide «exactamente DOS puntos de emision, uno por camino, y ningun
+// tercero». El PR 1 (camino del mensajero) tenia UNO y este archivo lo declaraba asi con un caso
+// que EXIGIA que el numero pasara a 2 cuando llegara el segundo. Llego: la aprobacion del
+// incidente del ADMIN. El caso no se borro, se INVIRTIO — ahora fija el DOS y nombra a los dos.
+//
+// La comparacion es de IGUALDAD: un emisor nuevo, declarado o no, pone este archivo en rojo y
+// obliga a decidirlo a proposito. Un TERCERO —accion manual, cron o endpoint— es exactamente lo
+// que R29 prohibe.
 
 const LIB_DIR = path.join(__dirname, "..", "..", "..", "lib");
 const APP_DIR = path.join(__dirname, "..", "..", "..", "app");
@@ -31,12 +35,20 @@ const APP_DIR = path.join(__dirname, "..", "..", "..", "app");
 const RE_EMISION = /categoria:\s*["']egreso_indemnizacion["']/;
 
 /** Rutas (relativas a `lib/`, POSIX) que PUEDEN emitir, con su razon. */
-const EMISORES_DECLARADOS: Array<{ archivo: string; razon: string }> = [
+const EMISORES_DECLARADOS: Array<{ archivo: string; razon: string; origenTipo: string }> = [
   {
     archivo: "services/WalletIndemnizacionFeedService.ts",
+    origenTipo: "cierre_dia",
     razon:
       "camino del MENSAJERO: construye el egreso del cierre (origen_tipo = cierre_dia) dentro " +
       "de la tx de aprobacion, leyendo los montos que esa misma tx acaba de escribir",
+  },
+  {
+    archivo: "services/WalletIndemnizacionIncidenteFeedService.ts",
+    origenTipo: "orden_incidente",
+    razon:
+      "camino del ADMIN: construye el egreso del incidente (origen_tipo = orden_incidente) " +
+      "dentro de la tx de aprobacion, leyendo el monto que esa misma tx acaba de escribir",
   },
 ];
 
@@ -81,12 +93,30 @@ describe("Feature 158/R29 — quien puede emitir `egreso_indemnizacion`", () => 
     }
   });
 
-  it("en ESTE PR hay UN emisor; el 2.º (camino del admin) debe sumarse aqui cuando llegue", () => {
-    // Cuando el PR del camino del ADMIN aterrice, este numero pasa a 2 y la lista gana su feed
-    // (`origen_tipo = orden_incidente`). Que este assert exista es lo que impide que ese
-    // emisor entre sin que nadie lo mire.
-    expect(EMISORES_DECLARADOS).toHaveLength(1);
-    expect(EMISORES_DECLARADOS[0].archivo).toBe("services/WalletIndemnizacionFeedService.ts");
+  it("R29: son EXACTAMENTE DOS emisores, uno por camino, y ningun tercero", () => {
+    // El caso que el PR 1 dejo exigiendo que este numero pasara a 2 cuando llegara el segundo
+    // emisor. Ya llego, asi que aqui se COBRA: dos, nombrados, uno por camino del dinero.
+    expect(EMISORES_DECLARADOS).toHaveLength(2);
+    expect(EMISORES_DECLARADOS.map((e) => e.archivo)).toEqual([
+      "services/WalletIndemnizacionFeedService.ts", // camino del MENSAJERO
+      "services/WalletIndemnizacionIncidenteFeedService.ts", // camino del ADMIN
+    ]);
+  });
+
+  it("R29/R64: los dos emisores usan origenes DISTINTOS (ninguno absorbe al otro)", () => {
+    // Los dos egresos coexisten y son movimientos distintos: mismo `categoria`, distinto
+    // `origen_tipo`/`origen_id`. Si los dos emitieran con el MISMO origen, el indice unico
+    // parcial de la 42 haria que el segundo se tragara al primero en silencio.
+    const origenes = EMISORES_DECLARADOS.map((e) => e.origenTipo);
+    expect(new Set(origenes).size).toBe(origenes.length);
+    expect(origenes.sort()).toEqual(["cierre_dia", "orden_incidente"]);
+    // Y cada emisor declara EN SU CODIGO el `origen_tipo` que dice declarar.
+    for (const { archivo, origenTipo } of EMISORES_DECLARADOS) {
+      const fuente = fs.readFileSync(path.join(LIB_DIR, ...archivo.split("/")), "utf8");
+      expect(fuente, `${archivo} no emite con origenTipo ${origenTipo}`).toMatch(
+        new RegExp(`origenTipo:\\s*["']${origenTipo}["']`),
+      );
+    }
   });
 
   it("NINGUN emisor vive en actions/, jobs/ ni en un handler de cron", () => {

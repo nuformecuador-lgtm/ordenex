@@ -326,6 +326,10 @@ describe("RecepcionSateliteModule", () => {
       "Cantón",
       "Distrito",
       "Monto a cobrar",
+      // Feature 158 (T2.7, decisión del humano del 2026-07-30): acción POR FILA "Reportar
+      // incidente". `en_bodega_satelite` es uno de los cinco orígenes del conjunto cerrado y
+      // el adminSatelite tiene el paquete delante. Va al FINAL, como columna de acción.
+      "Incidente",
     ]);
     // La fila muestra los datos de la orden en columnas.
     expect(within(tabla).getByText("REM-B1")).toBeInTheDocument();

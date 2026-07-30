@@ -6,6 +6,7 @@ import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
+import { IncidenteAdminRepository } from "@/lib/repositories/IncidenteAdminRepository";
 import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 
 // Feature 49 — T5.2 (R6): TEST DE COBERTURA. Enumera los 12 call-sites que ESCRIBEN
@@ -33,6 +34,10 @@ const REPOS = {
   RecuperacionBodegaRepository:
     RecuperacionBodegaRepository.prototype as unknown as Record<string, unknown>,
   CierresAdminRepository: CierresAdminRepository.prototype as unknown as Record<string, unknown>,
+  IncidenteAdminRepository: IncidenteAdminRepository.prototype as unknown as Record<
+    string,
+    unknown
+  >,
 };
 
 // Los 24 puntos del mapa (design §2), 1 por familia de transicion.
@@ -213,6 +218,49 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "crearGestionYTransicionar",
     origenTipo: "incidente",
   },
+  // #25/#26: feature 158, PR 2 (camino del ADMIN). `IncidenteAdminRepository.reportar`
+  // transiciona la orden desde uno de los CINCO estados de bodega/transito interno a `incidente`
+  // (aristas #48-#52) y `.resolver` la DEVUELVE a su estado de origen cuando el incidente se
+  // rechaza o se retracta (aristas #54-#58). Las dos escriben `orden.estatus_id` y las dos
+  // appendean por el choke point con la MISMA familia `incidente` que el punto #24: no se anade
+  // ninguna familia nueva, y design §9.10 midio por que (un value nuevo obligaria a editar ~9
+  // archivos de test de otras features).
+  //
+  // NO enlazan `gestion_orden_id`: un incidente del admin NO es una gestion (design §9.7), y su
+  // destino (`incidente`, o uno de los cinco de bodega) NO es `devuelta` ni `reprogramada`, asi
+  // que queda fuera de las dos ramas del criterio de intento (160/R1).
+  {
+    n: 25,
+    repo: "IncidenteAdminRepository",
+    simbolo: "reportar",
+    origenTipo: "incidente",
+  },
+  {
+    n: 26,
+    repo: "IncidenteAdminRepository",
+    simbolo: "resolver",
+    origenTipo: "incidente",
+  },
+] as const;
+
+// Feature 158/PR2 — familias con MAS DE UN punto de escritura, declaradas UNA A UNA con su
+// razon. Hasta la 158 el mapa cumplia «1 punto por familia» y ese caso era su guardia; el camino
+// del ADMIN lo rompe a proposito: reusa la familia `incidente` que la 154 dio de alta, en vez de
+// pedir un value nuevo del enum (design §9.10 midio el coste de lo contrario en ~9 archivos de
+// test ajenos).
+//
+// La lista NO es un `default` permisivo: es explicita y se compara por IGUALDAD. Una familia que
+// gane un segundo productor sin declararse aqui pone el archivo en rojo, que es exactamente lo
+// que hacia el caso viejo.
+const FAMILIAS_CON_VARIOS_PUNTOS = [
+  {
+    origenTipo: "incidente",
+    puntos: 3,
+    razon:
+      "un solo hecho (el paquete se dana/pierde/roba) con TRES productores: la gestion del " +
+      "mensajero (#24), el reporte del admin (#25) y su reversion (#26). La direccion se lee " +
+      "de `estatus_destino_id`, no de la familia.",
+  },
 ] as const;
 
 // Feature 154 (R28) — FAMILIAS DECLARADAS SIN PRODUCTOR. La 154 da de alta dos valores del enum
@@ -252,11 +300,12 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 24 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(24);
-    // numeracion 1..24 sin huecos ni duplicados.
+  it("son EXACTAMENTE 26 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(26);
+    // numeracion 1..26 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26,
     ]);
   });
 
@@ -267,14 +316,17 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 24 origen_tipo con productor + el 1 sin productor cubren EXACTAMENTE el enum (R23)", () => {
-    const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
+  it("las familias con productor + la 1 sin productor cubren EXACTAMENTE el enum (R23)", () => {
+    // Feature 158/PR2: se compara por CONJUNTO de familias, no por lista de puntos, porque
+    // desde el camino del ADMIN una familia (`incidente`) tiene TRES productores. La cobertura
+    // del enum es lo que este caso mide y no se debilita: sigue exigiendo IGUALDAD exacta.
+    const familiasDelMapa = [...new Set(PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo))];
     const tiposSinProductor = FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo);
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
-    expect([...tiposDelMapa, ...tiposSinProductor].sort()).toEqual(tiposDelSeed);
+    expect([...familiasDelMapa, ...tiposSinProductor].sort()).toEqual(tiposDelSeed);
     // Y no se solapan: una familia o tiene productor instrumentado o no lo tiene, nunca las dos.
     for (const familia of tiposSinProductor) {
-      expect(tiposDelMapa as readonly string[]).not.toContain(familia);
+      expect(familiasDelMapa as readonly string[]).not.toContain(familia);
     }
   });
 
@@ -310,8 +362,6 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
       origenTipo: "incidente",
     });
     expect(typeof REPOS.GestionOrdenRepository.crearGestionYTransicionar).toBe("function");
-    // Una sola familia, un solo punto.
-    expect(PUNTOS_DE_ESCRITURA.filter((p) => p.origenTipo === "incidente")).toHaveLength(1);
     // El MISMO simbolo sirve DOS familias (`gestion` para los 4 resultados previos e
     // `incidente` para el quinto). Es deliberado y tiene precedente: el #20 y el #22 son los
     // dos `CierresAdminRepository.resolverCierre`.
@@ -321,9 +371,44 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     expect([...puntosDelSimbolo].sort()).toEqual(["gestion", "incidente"]);
   });
 
-  it("cada familia (origen_tipo) aparece UNA sola vez en el mapa (1 punto por familia)", () => {
-    const tipos = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
-    expect(new Set(tipos).size).toBe(tipos.length);
+  // Feature 158/PR2 — el camino del ADMIN escribe estado en DOS puntos mas, los dos con la
+  // familia `incidente`. Este caso fija QUE son y DONDE viven: si alguien los renombra, los
+  // borra o hace que el reporte del admin appendee con otra familia, rompe aqui.
+  it("feature 158/PR2: el camino del ADMIN aporta los puntos #25 (reporte) y #26 (reversion)", () => {
+    expect(PUNTOS_DE_ESCRITURA.find((p) => p.n === 25)).toMatchObject({
+      repo: "IncidenteAdminRepository",
+      simbolo: "reportar",
+      origenTipo: "incidente",
+    });
+    expect(PUNTOS_DE_ESCRITURA.find((p) => p.n === 26)).toMatchObject({
+      repo: "IncidenteAdminRepository",
+      simbolo: "resolver",
+      origenTipo: "incidente",
+    });
+    expect(typeof REPOS.IncidenteAdminRepository.reportar).toBe("function");
+    expect(typeof REPOS.IncidenteAdminRepository.resolver).toBe("function");
+    // Y NO se anadio ninguna familia nueva al enum por el camino del admin: reusa la de la 154.
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[]).not.toContain("deshacer_incidente");
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[]).not.toContain("incidente_admin");
+  });
+
+  // Feature 158/PR2 — REESCRITO, no borrado. El caso afirmaba «cada familia aparece UNA sola vez
+  // en el mapa». El camino del ADMIN lo rompe A PROPOSITO (reusa `incidente` en vez de pedir un
+  // value nuevo del enum), asi que la regla pasa a ser: una familia puede tener varios puntos
+  // SOLO si esta declarada en `FAMILIAS_CON_VARIOS_PUNTOS`, con su razon y su recuento EXACTO.
+  // Conserva toda su fuerza: un duplicado no declarado sigue poniendo el archivo en rojo.
+  it("cada familia aparece una sola vez, salvo las declaradas con varios puntos y su recuento", () => {
+    const conteo = new Map<string, number>();
+    for (const p of PUNTOS_DE_ESCRITURA) {
+      conteo.set(p.origenTipo, (conteo.get(p.origenTipo) ?? 0) + 1);
+    }
+    const duplicadas = [...conteo.entries()]
+      .filter(([, n]) => n > 1)
+      .map(([familia, n]) => ({ origenTipo: familia, puntos: n }))
+      .sort((a, b) => a.origenTipo.localeCompare(b.origenTipo));
+    expect(duplicadas).toEqual(
+      FAMILIAS_CON_VARIOS_PUNTOS.map((f) => ({ origenTipo: f.origenTipo, puntos: f.puntos })),
+    );
   });
 
   it("documenta los metodos que NO escriben estado (no instrumentan historial)", () => {

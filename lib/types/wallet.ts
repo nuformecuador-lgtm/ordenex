@@ -62,6 +62,11 @@ export const WALLET_ORIGEN_TIPO_SEED = [
   "pago_tienda",
   "pago_mensajero",
   "gasto",
+  // Feature 158 (R37): origen del egreso de indemnizacion del camino del ADMIN. Valor PROPIO y
+  // NO el reservado `gestion_orden` (design §9.12): el indice `(origen_tipo, origen_id)` existe
+  // para responder "movimientos de este origen", y un `origen_id` que apunta a `orden_incidente`
+  // etiquetado como `gestion_orden` devolveria basura.
+  "orden_incidente",
 ] as const satisfies readonly PrismaWalletOrigenTipo[];
 
 export type WalletOrigenTipo = (typeof WALLET_ORIGEN_TIPO_SEED)[number];

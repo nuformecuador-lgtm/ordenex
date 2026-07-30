@@ -162,6 +162,7 @@ export function OrdenesListado({
   incluirFiltroTienda = true,
   incluirFiltroReasignables = true,
   permitirDescarga = true,
+  puedeReportarIncidente = false,
 }: Readonly<{
   exclude?: string[];
   puedeCargarMasiva?: boolean;
@@ -216,6 +217,12 @@ export function OrdenesListado({
    * apagarla en una superficie concreta sin tocar el módulo.
    */
   permitirDescarga?: boolean;
+  /**
+   * Feature 158 (T2.7, Q-H): ofrece la acción POR FILA "Reportar incidente" en el listado.
+   * Se pasa tal cual a `OrdenesModule`, que la monta sólo en las filas cuyo estado admite el
+   * reporte. Es una acción por ORDEN, no por lote: no entra en `accionesDe`.
+   */
+  puedeReportarIncidente?: boolean;
 }>) {
   const { mutate } = useSWRConfig();
   const { data: catalogo, isLoading } = useSWR(
@@ -581,6 +588,7 @@ export function OrdenesListado({
         acciones={accionesLote ? accionesPara : undefined}
         resaltarPrioridad={valueUnico === ESTADO_EN_BODEGA}
         permitirDescarga={permitirDescarga}
+        puedeReportarIncidente={puedeReportarIncidente}
       />
 
       {/* Modales de acción por lote (solo acceso total). Montados una vez; `open` por

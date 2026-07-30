@@ -92,17 +92,23 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
       .mockResolvedValue([
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
       ]),
-    createManyOrdenes: vi.fn().mockResolvedValue(0),
-    // Feature 155: la firma gana `opciones.conGuia` (la bifurcacion por bodega decide si el
-    // lote nace con guia). Feature 159: `findResumenByNumRemisiones` sigue en el contrato --
-    // el resumen del lote se restituyo en el cierre de la 159.
+    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }),
+    // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
+    setCargaDownloadUrl: vi.fn(async () => {}),
+    setOrdenesDownloadUrl: vi.fn(async () => {}),
+    // Feature 141: el repo devuelve las creadas + el `cargaId` del lote de ESTA peticion.
+    // Feature 155/R21: `opciones.conGuia` viaja ahora en el 5.º parametro (detras del contexto
+    // del lote de la 141), y sigue decidiendo si la fila nace numerada.
+    // Feature 159: `findResumenByNumRemisiones` sigue en el contrato — el resumen del lote
+    // se restituyo en el cierre de la 159.
     createManyOrdenesConGuia: vi.fn(
       async (
         data: CreateOrdenData[],
         _batchSize: number,
         _historial: unknown,
+        _lote: unknown,
         opciones?: { conGuia?: boolean },
-      ) => conGuiaEco(data, opciones),
+      ) => ({ creadas: conGuiaEco(data, opciones), cargaId: "carga-api-1" }),
     ),
     // Feature 16: resumen del lote (solo lectura), exigido por IOrdenRepository y no
     // ejercitado por la carga via API.
@@ -249,7 +255,8 @@ describe("cargarViaApi — dueño y estado inicial (R8, D4)", () => {
       expect(r.destino.emiteManifiesto).toBe(false); // R26: la rama (a) no emite manifiesto
     }
     // Se persiste por la MISMA ruta, con la numeracion desactivada: nadie consume la secuencia.
-    const opciones = (repo.createManyOrdenesConGuia as ReturnType<typeof vi.fn>).mock.calls[0][3];
+    // Feature 141: `opciones` es el 5.o argumento — el 4.o es el contexto del LOTE.
+    const opciones = (repo.createManyOrdenesConGuia as ReturnType<typeof vi.fn>).mock.calls[0][4];
     expect(opciones).toEqual({ conGuia: false });
   });
 

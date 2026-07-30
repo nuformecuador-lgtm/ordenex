@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { buildCargaDelegate, loteCtx } from "@/tests/fixtures/carga-lote";
 
 // Feature 49/#1: createManyOrdenes envuelve cada chunk en `$transaction`; el fake
 // invoca el callback con el propio `prisma` como `tx` (tiene orden.* + el choke point
@@ -25,6 +26,8 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     distrito: { findUnique: vi.fn(), findMany: vi.fn() },
     usuario: { findMany: vi.fn() },
     ordenHistorialEstado: { createMany: vi.fn() },
+    // Feature 141: delegate del lote (el repo lo asegura dentro de la tx del batch).
+    carga: buildCargaDelegate(),
     $transaction: vi.fn(),
     ...overrides,
   };
@@ -208,9 +211,9 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
       baseCreateData({ numRemision: "REM-3" }),
     ];
 
-    const total = await repo.createManyOrdenes(data, 2, HIST_CARGA);
+    const total = await repo.createManyOrdenes(data, 2, HIST_CARGA, loteCtx());
 
-    expect(total).toBe(3);
+    expect(total.inserted).toBe(3);
     expect(prisma.orden.createMany).toHaveBeenCalledTimes(2);
     const firstCall = prisma.orden.createMany.mock.calls[0][0];
     expect(firstCall.skipDuplicates).toBe(true);
@@ -224,7 +227,7 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     prisma.orden.createMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.createManyOrdenes([baseCreateData({ peso: null })], 500, HIST_CARGA);
+    await repo.createManyOrdenes([baseCreateData({ peso: null })], 500, HIST_CARGA, loteCtx());
 
     const arg = prisma.orden.createMany.mock.calls[0][0];
     expect(arg.data[0].peso).toBeNull();
@@ -238,7 +241,7 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     prisma.orden.createMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.createManyOrdenes([baseCreateData()], 500, HIST_CARGA);
+    await repo.createManyOrdenes([baseCreateData()], 500, HIST_CARGA, loteCtx());
 
     const arg = prisma.orden.createMany.mock.calls[0][0];
     expect(arg.data[0]).not.toHaveProperty("numGuia");
@@ -263,9 +266,10 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
       [baseCreateData({ numRemision: "REM-1" }), baseCreateData({ numRemision: "REM-2" })],
       500,
       HIST_CARGA,
+      loteCtx(),
     );
 
-    expect(total).toBe(1);
+    expect(total.inserted).toBe(1);
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
     const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
     // Solo la nueva (ord-new) deja rastro; origen null (creacion), tipo carga_masiva.
@@ -291,7 +295,12 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     prisma.orden.createMany.mockResolvedValue({ count: 0 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.createManyOrdenes([baseCreateData({ numRemision: "REM-DUP" })], 500, HIST_CARGA);
+    await repo.createManyOrdenes(
+      [baseCreateData({ numRemision: "REM-DUP" })],
+      500,
+      HIST_CARGA,
+      loteCtx(),
+    );
 
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });

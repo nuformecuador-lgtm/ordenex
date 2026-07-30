@@ -243,6 +243,8 @@ describe("Cruce fila ↔ linea a través de procesarEnChunks (R4)", () => {
           resultado: "error" as const,
           errores: { telefono: ["debe tener 8 dígitos"] },
         })),
+        // Feature 141/R28: ninguna fila persistida -> ningun lote.
+        cargaId: null,
       };
       return new Response(JSON.stringify(summary), { status: 200 });
     }) as unknown as typeof fetch;

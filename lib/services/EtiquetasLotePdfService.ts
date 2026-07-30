@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IEtiquetaGuiaService } from "@/lib/interfaces/services/IEtiquetaGuiaService";
 import type {
+  EtiquetaOrdenPdfResultado,
   EtiquetasLotePdfResultado,
   IEtiquetasLotePdfService,
 } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
@@ -77,5 +78,46 @@ export class EtiquetasLotePdfService implements IEtiquetasLotePdfService {
     const signedUrl = await this.signedUrls.createSignedUrl(path, this.ttlSeg);
 
     return { path, signedUrl, expiraEnSegundos: this.ttlSeg };
+  }
+
+  /**
+   * Feature 141 (R48/R49/R52) — modo `individual`: N PDFs de UNA etiqueta. Reusa las mismas
+   * piezas que el consolidado (`generarEtiquetas`, `build`, `storage`, `signedUrls`): la
+   * unica diferencia es que `build` recibe un array de UN DTO por iteracion, asi que no hace
+   * falta ningun builder ni servicio de render nuevo.
+   */
+  async generarYAlmacenarPorOrden(
+    ordenIds: string[],
+    actor: Actor,
+  ): Promise<EtiquetaOrdenPdfResultado[]> {
+    // 1. UNA sola consulta de etiquetas para todo el lote (sin N+1). `forbidden` o cero
+    //    etiquetas imprimibles -> nada que generar (R49/R50): no se toca Storage.
+    const res = await this.etiquetaService.generarEtiquetas({ ordenIds }, actor);
+    if (res.status !== "ok" || res.etiquetas.length === 0) return [];
+
+    // 2. MISMO tope que el consolidado, ANTES de construir nada (R52): el modo individual
+    //    cuesta el mismo render total MAS N uploads y N firmas, asi que reutilizarlo es la
+    //    opcion conservadora (design §6.1, alternativa O descartada).
+    if (res.etiquetas.length > this.maxEtiquetas) {
+      throw new EtiquetasLoteExcedeTopeError(res.etiquetas.length, this.maxEtiquetas);
+    }
+
+    // 3. Un PDF de una pagina por etiqueta, cada uno con su path aislado por dueño y su URL
+    //    firmada. Se correlaciona por `ordenId` (el DTO ya lo lleva) para que el llamador
+    //    persista cada URL en el `orden.download_url` de SU orden.
+    const resultados: EtiquetaOrdenPdfResultado[] = [];
+    for (const etiqueta of res.etiquetas) {
+      const bytes = await this.build([etiqueta]);
+      const path = `${actor.usuarioId}/${randomUUID()}.pdf`;
+      await this.storage.upload({ path, bytes, contentType: "application/pdf" });
+      const signedUrl = await this.signedUrls.createSignedUrl(path, this.ttlSeg);
+      resultados.push({
+        ordenId: etiqueta.ordenId,
+        path,
+        signedUrl,
+        expiraEnSegundos: this.ttlSeg,
+      });
+    }
+    return resultados;
   }
 }

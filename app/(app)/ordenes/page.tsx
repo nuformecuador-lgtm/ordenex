@@ -67,6 +67,15 @@ export default async function OrdenesPage() {
   // opera estas transiciones. `rol` está definido aquí (el guard previo descarta
   // sin-sesión/mensajero/adminSatelite antes de llegar).
   const accionesLote = rol ? esAccesoTotal(rol) : false;
+  // Feature 158 (T2.7, Q-H): acción POR FILA "Reportar incidente", para roles de ACCESO
+  // TOTAL. NO va por `accionesLote` aunque hoy coincida el predicado: un incidente pide causa,
+  // motivo y fotos POR ORDEN y no puede ser una acción de lote, así que se declara aparte para
+  // que nadie lo meta en la barra de selección al leer esto dentro de seis meses.
+  //
+  // ⚠️ Declarado, no disimulado: el service admite además al `adminSatelite` acotado a su zona
+  // (R48), pero `/ordenes` le hace `notFound` (arriba) porque su superficie es
+  // `/recepcion-satelite`. Hoy, en la práctica, sólo maestro/admin tienen desde dónde reportar.
+  const puedeReportarIncidente = rol ? esAccesoTotal(rol) : false;
 
   // Feature 144/TB2.5 (R47, R64): el catálogo de los filtros (zonas, cuentas tienda y
   // geografía) se resuelve AQUÍ, en el servidor, tras las guardias de rol; sus cinco
@@ -98,6 +107,7 @@ export default async function OrdenesPage() {
           catalogoFiltros={catalogoFiltros}
           incluirFiltroTienda={incluirFiltroTienda}
           incluirFiltroReasignables={incluirFiltroReasignables}
+          puedeReportarIncidente={puedeReportarIncidente}
         />
       ) : (
         // adminSatelite / mensajero / sin sesión: listado plano previo, SIN
