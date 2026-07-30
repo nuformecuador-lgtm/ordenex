@@ -42,6 +42,11 @@ export interface CargaViaApiSummary {
   conError: number;
   filas: CargaViaApiRow[];
   ordenes: CargaViaApiOrden[];
+  /**
+   * Feature 141/R39: identificador del LOTE creado por ESTA peticion (una peticion = un
+   * lote, R30). `null` si no se creo ninguna orden y por tanto ningun lote (R33).
+   */
+  cargaId: string | null;
 }
 
 // Feature 88 — resultado discriminado de la carga por API (espejo de `BulkOrdenResult`):
@@ -68,11 +73,20 @@ export interface IBulkOrdenService {
    * ninguna orden. Devuelve el mismo `BulkSummary` que la carga real, para que
    * la UI muestre los hallazgos (errores de geografía, num_remision duplicados)
    * ANTES de escribir en la DB. La carga real re-valida (es la autoridad final).
+   *
+   * Feature 141 (R15-R17/R20/R29): `options.cargaId` es el TOKEN OPACO del lote que el
+   * SERVIDOR emitio al persistir el primer chunk y que el cliente reenvia en los siguientes;
+   * el cliente NUNCA elige el id. Ausente = esta peticion crea el lote (id generado dentro de
+   * la transaccion). `options.totalFiles` es el total de filas de la SESION declarado por el
+   * cliente (nunca el del chunk) y `options.name` el nombre opcional del lote; ambos solo se
+   * escriben al CREAR la fila. Puede lanzar `CargaLoteAjenoError` (lote desconocido o ajeno →
+   * 403, R19) o `CargaNombreDuplicadoError` (nombre repetido del actor → 409, R24); ninguno se
+   * captura aqui: son condiciones del borde, no clasificacion de filas.
    */
   cargarMasiva(
     rows: RawRow[],
     actor: Actor,
-    options?: { dryRun?: boolean },
+    options?: { dryRun?: boolean; cargaId?: string; name?: string; totalFiles?: number },
   ): Promise<BulkOrdenResult>;
 
   /**
@@ -87,6 +101,14 @@ export interface IBulkOrdenService {
    * `fulfillment` del dueño de la key. En la practica ese dueño tiene rol `apiKey` y el flag
    * solo se acepta para `adminTienda`, asi que el caso vivo es siempre la rama (b):
    * `por_recolectar_en_tienda` con `num_guia` en el acto.
+   *
+   * Feature 141 (R20/R21/R30-R33): `options.name` es el nombre OPCIONAL del lote; el id del
+   * lote lo genera SIEMPRE el servidor (una peticion = un lote). Puede lanzar
+   * `CargaNombreDuplicadoError` (→ 409, R24), que el borde traduce.
    */
-  cargarViaApi(rows: RawRow[], actor: Actor): Promise<CargaViaApiResult>;
+  cargarViaApi(
+    rows: RawRow[],
+    actor: Actor,
+    options?: { name?: string },
+  ): Promise<CargaViaApiResult>;
 }

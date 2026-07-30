@@ -135,6 +135,7 @@ model Usuario {
   notificacionesRecibidas             Notificacion[]            @relation("NotificacionDestinatario") // feature 146/R1: notificaciones dirigidas a ESTE usuario (D4)
   notificacionesDeSuTienda            Notificacion[]            @relation("NotificacionTienda") // feature 146/F1.4-1: notificaciones ACOTADAS a esta tienda (el adminTienda ES la tienda)
   notificacionLecturas                NotificacionLectura[] // feature 146/R2/R3: lectura/descarte de ESTE usuario, aislado de los demas del mismo rol
+  cargasRealizadas                    Carga[]                   @relation("CargaUsuario") // feature 141/R2: lotes de carga masiva que ESTE usuario realizo (adminTienda o usuario dedicado de la API key)
   incidentesReportados                OrdenIncidente[]          @relation("IncidenteReportadoPor") // feature 158/R39/R51: incidentes que este admin REPORTO (y que por tanto NO puede aprobar)
   incidentesResueltos                 OrdenIncidente[]          @relation("IncidenteResueltoPor") // feature 158/R52/R54: incidentes que este admin aprobo/rechazo
 
@@ -490,6 +491,12 @@ model Orden {
   geocodedAt             DateTime? @map("geocoded_at")
   geocodePrecision       String?   @map("geocode_precision")
   geocodeStatus          String?   @map("geocode_status")
+  // Feature 141 (R4/R5/D1/D7): lote de carga masiva del que nacio esta orden. NULL = orden
+  // sin lote (alta manual o historica anterior a la feature; sin backfill, R11).
+  // `downloadUrl` = URL del PDF INDIVIDUAL de ESTA orden (via API key, modo `individual`,
+  // R48); NULL en modo `consolidate`, en la via sesion (R40) y sin etiqueta imprimible (R49).
+  cargaId                String?   @map("carga_id")
+  downloadUrl            String?   @map("download_url")
   deletedAt              DateTime? @map("deleted_at") // soft delete
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
@@ -501,6 +508,7 @@ model Orden {
   canton            Canton      @relation(fields: [cantonId], references: [id])
   distrito          Distrito?   @relation(fields: [distritoId], references: [id])
   mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
+  carga             Carga?      @relation("OrdenCarga", fields: [cargaId], references: [id], onDelete: Restrict) // feature 141/R4: un lote con ordenes no se puede borrar
 
   gestiones             GestionOrden[] // feature 36: gestiones registradas sobre esta orden
   mensajerosGestionando Usuario[]              @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
@@ -522,7 +530,33 @@ model Orden {
   @@index([provinciaId])
   @@index([cantonId])
   @@index([distritoId])
+  @@index([cargaId]) // feature 141/R4: "ordenes de este lote"
   @@map("orden")
+}
+
+// Feature 141 — LOTE de carga masiva. Una fila por carga masiva efectiva (>=1 orden
+// persistida), tanto por sesion (UI /ordenes, XLSX en chunks) como por API key. El alta
+// manual de UNA orden NO crea lote (R37). Sin `status` (D3) y sin `batch_url` (D2). RLS
+// habilitada sin policies: la autorizacion vive en el service (patron orden_mensajero_meta /
+// plantilla_mensaje). `id` lo genera SIEMPRE el SERVIDOR dentro de la tx (R15/D8): el cliente
+// nunca lo propone. `name` es el UNICO campo definido por el usuario (D9).
+model Carga {
+  id           String   @id @default(uuid())
+  fechaCarga   DateTime @default(now()) @map("fecha_carga")
+  usuarioCarga String   @map("usuario_carga") // FK -> usuario: quien realizo la carga (R2)
+  name         String? // R8: nombre OPCIONAL del lote definido por el usuario; NULL = sin nombre
+  downloadUrl  String?  @map("download_url") // R47: URL del PDF CONSOLIDADO del lote (modo consolidate); NULL en la via sesion (R40)
+  totalFiles   Int      @default(0) @map("total_files") // R7/R29/R32: tamano TOTAL del lote, nunca el del chunk/batch
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  usuario Usuario @relation("CargaUsuario", fields: [usuarioCarga], references: [id], onDelete: Restrict)
+  ordenes Orden[] @relation("OrdenCarga")
+
+  @@unique([usuarioCarga, name]) // R9/R10: unicidad del nombre POR USUARIO (los NULL conviven)
+  @@index([usuarioCarga])
+  @@index([fechaCarga])
+  @@map("carga")
 }
 
 // Feature 115 — meta PRIVADA por (mensajero, orden). `marcar_luego` (115) = "gestionar

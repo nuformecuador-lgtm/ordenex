@@ -19,6 +19,13 @@ export interface BulkSummary {
   duplicadas: number;
   conError: number;
   filas: RowResult[];
+  /**
+   * Feature 141/R38: identificador del LOTE de carga masiva al que quedaron asociadas las
+   * ordenes creadas (creado en esta peticion o reutilizado). Es un TOKEN OPACO emitido por el
+   * servidor: el cliente lo reenvia en los chunks siguientes. `null` cuando no hubo lote
+   * (dry-run o cero ordenes persistidas).
+   */
+  cargaId: string | null;
 }
 
 // R16: columnas obligatorias de CABECERA (estructura del archivo). Distinto de

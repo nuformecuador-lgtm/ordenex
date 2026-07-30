@@ -4,6 +4,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { buildCargaDelegate, loteCtx } from "@/tests/fixtures/carga-lote";
 
 // Feature 155 (T3.1/T3.2) — el lado REPOSITORIO de la bifurcacion de creacion:
 //   R3/R8  `create` puede numerar en la MISMA tx, con la guarda idempotente `num_guia IS NULL`
@@ -81,6 +82,10 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       findUniqueOrThrow: vi.fn(),
     },
     ordenHistorialEstado: { createMany: vi.fn() },
+    // Feature 141: las dos rutas de lote aseguran la fila de `carga` DENTRO de la misma tx,
+    // asi que el fake de Prisma necesita el delegate. Este archivo no prueba el lote (eso vive
+    // en `orden-repository.carga-lote.test.ts`): solo lo deja funcionar.
+    carga: buildCargaDelegate(),
     $executeRawUnsafe: vi.fn().mockResolvedValue(1),
     // Lo exige el `JobRepository` real (encolado outbox) cuando el test NO inyecta un doble.
     $queryRaw: vi.fn().mockResolvedValue([]),
@@ -313,6 +318,7 @@ describe("155/R11 — un encolado de geocodificacion por orden EFECTIVAMENTE ins
       [baseCreateData({ numRemision: "REM-1" }), baseCreateData({ numRemision: "REM-2" })],
       100,
       HIST_API,
+      loteCtx({ totalFiles: 2 }), // feature 141: contexto del lote (4.o parametro)
     );
 
     expect(enqueue).toHaveBeenCalledTimes(2);
@@ -344,13 +350,14 @@ describe("155/R11 — un encolado de geocodificacion por orden EFECTIVAMENTE ins
     const { jobRepo, enqueue } = buildJobRepo();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, jobRepo);
 
-    const creadas = await repo.createManyOrdenesConGuia(
+    const { creadas } = await repo.createManyOrdenesConGuia(
       [
         baseCreateData({ numRemision: "REM-VIEJA" }),
         baseCreateData({ numRemision: "REM-NUEVA" }),
       ],
       100,
       HIST_API,
+      loteCtx({ totalFiles: 2 }), // feature 141
     );
 
     expect(creadas.map((c) => c.ordenId)).toEqual(["o-nueva"]);
@@ -379,6 +386,7 @@ describe("155/R11 — un encolado de geocodificacion por orden EFECTIVAMENTE ins
       [baseCreateData({ estatusId: idEstado("en_preparacion") })],
       100,
       HIST_MASIVA,
+      loteCtx(), // feature 141
     );
 
     expect(enqueue).toHaveBeenCalledTimes(1);
@@ -399,7 +407,7 @@ describe("155/R11 — un encolado de geocodificacion por orden EFECTIVAMENTE ins
     const { jobRepo, enqueue } = buildJobRepo();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, jobRepo);
 
-    await repo.createManyOrdenesConGuia([baseCreateData()], 100, HIST_API);
+    await repo.createManyOrdenesConGuia([baseCreateData()], 100, HIST_API, loteCtx());
 
     expect(enqueue).not.toHaveBeenCalled();
   });
@@ -420,10 +428,11 @@ describe("155/R21 — createManyOrdenesConGuia con `conGuia: false`", () => {
     const { jobRepo, enqueue } = buildJobRepo();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, jobRepo);
 
-    const creadas = await repo.createManyOrdenesConGuia(
+    const { creadas } = await repo.createManyOrdenesConGuia(
       [baseCreateData({ estatusId: idEstado("en_preparacion") })],
       100,
       HIST_API,
+      loteCtx(), // feature 141: el contexto del lote se cuela ANTES de `opciones`
       { conGuia: false },
     );
 
@@ -456,7 +465,12 @@ describe("155/R21 — createManyOrdenesConGuia con `conGuia: false`", () => {
     prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 4242 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const creadas = await repo.createManyOrdenesConGuia([baseCreateData()], 100, HIST_API);
+    const { creadas } = await repo.createManyOrdenesConGuia(
+      [baseCreateData()],
+      100,
+      HIST_API,
+      loteCtx(), // feature 141
+    );
 
     expect(creadas[0].numGuia).toBe(4242);
     expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);

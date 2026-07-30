@@ -69,8 +69,11 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
-    createManyOrdenes: vi.fn().mockResolvedValue(0),
-    createManyOrdenesConGuia: vi.fn().mockResolvedValue([]), // feature 88
+    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }), // feature 141
+    createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null }), // feature 88/141
+    // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
+    setCargaDownloadUrl: vi.fn(async () => {}),
+    setOrdenesDownloadUrl: vi.fn(async () => {}),
     // Feature 16: resumen del lote (solo lectura), no ejercitado por el CRUD
     // (feature 6) pero exigido por la interfaz IOrdenRepository.
     findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
