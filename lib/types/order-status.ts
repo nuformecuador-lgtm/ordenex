@@ -41,12 +41,21 @@
 // 20260729120000_order_status_v2_por_recolectar_incidente (INSERT ... WHERE NOT EXISTS por value).
 // La 154 es SOLO ADITIVA (decision Q2 del gate, 2026-07-29): DECLARA los values y sus aristas,
 // pero ningun service los produce todavia — eso llega con las features 155/157/158.
+// Feature 155/R27: RETIRA el estado de fulfillment (que ocupaba el indice 4), de modo que el
+// sembrado idempotente (`seedOrderStatus`) deja de incluirlo y el catalogo pasa de 20 a 19. Es el
+// PRIMER value que sale del seed: los 19 restantes conservan su orden relativo y solo se corren
+// una posicion los que estaban despues del 4. La 155 sustituye las tres reglas de nacimiento que
+// convivian (default global, estado de fulfillment y estado fijo de la API) por UNA sola
+// bifurcacion (`lib/services/destino-creacion.ts`), en la que este estado ya no aparece: la orden
+// cuya tienda tiene el paquete en bodega nace en `en_preparacion`. La migracion
+// `20260729140000_order_status_retiro_en_fulfillment` reasigna las ordenes vivas y solo borra la
+// fila del catalogo si NADIE la referencia (el historial pasado es inmutable), asi que en una base
+// con historial real la fila SOBREVIVE huerfana y deliberadamente inalcanzable desde el codigo.
 export const ORDER_STATUS_SEED = [
   "entregada",
   "devuelta",
   "devolviendo_a_tienda", // feature 135 (antes en el flujo de devolucion)
   "reprogramada",
-  "en_fulfillment",
   "en_ruta_bodega_central", // feature 135
   "en_bodega_central", // feature 135
   "en_preparacion",
@@ -55,13 +64,13 @@ export const ORDER_STATUS_SEED = [
   "en_reparto", // feature 36: recogida por el mensajero / en reparto (renombrado en feature 135 y en la 153)
   "rechazada", // feature 36: resultado RECHAZO de la gestion
   "en_bodega_satelite", // feature 33: recibida en la bodega satelite de su zona
-  "devuelta_a_tienda", // 14mo valor: cierre del flujo de devolucion, la tienda de origen la recibio (renombrado en feature 135)
-  "sin_gestionar", // feature 109 (15mo valor): orden que quedo en en_reparto al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
-  "por_devolver", // feature 139 (16mo valor): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
-  "devolviendo_a_bodega_central", // feature 139 (17mo valor): en transito satelite -> central (tras "enviar a central")
-  "por_devolver_a_tienda", // feature 139 (18mo valor): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
-  "por_recolectar_en_tienda", // feature 154 (19no valor): estado de ESPERA en la tienda; el mensajero la recolecta y sale hacia en_ruta_bodega_central (#43, feature 157)
-  "incidente", // feature 154 (20mo valor): resultado TERMINAL de la gestion del mensajero (#44, feature 158). Sin aristas de salida (decision del gate 2026-07-29)
+  "devuelta_a_tienda", // 13er valor (14mo antes de la 155): cierre del flujo de devolucion, la tienda de origen la recibio (renombrado en feature 135)
+  "sin_gestionar", // feature 109 (14mo; 15mo antes de la 155): orden que quedo en en_reparto al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
+  "por_devolver", // feature 139 (15mo; 16mo antes de la 155): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
+  "devolviendo_a_bodega_central", // feature 139 (16mo; 17mo antes de la 155): en transito satelite -> central (tras "enviar a central")
+  "por_devolver_a_tienda", // feature 139 (17mo; 18mo antes de la 155): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
+  "por_recolectar_en_tienda", // feature 154 (18mo; 19no antes de la 155): estado de ESPERA en la tienda; ahi NACE la rama (b) de la 155 y de ahi sale hacia en_ruta_bodega_central (#43, feature 157)
+  "incidente", // feature 154 (19no; 20mo antes de la 155): resultado TERMINAL de la gestion del mensajero (#44, feature 158). Sin aristas de salida (decision del gate 2026-07-29)
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

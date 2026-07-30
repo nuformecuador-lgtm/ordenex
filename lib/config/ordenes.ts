@@ -1,6 +1,19 @@
 // Configuracion del CRUD de ordenes. Sobreescribible por variable de entorno
 // para no hardcodear cotas de negocio (docs/architecture.md: "Sin hardcode de
 // contexto"), patron de lib/config/auth.ts.
+//
+// FEATURE 155/R30 — aqui YA NO se configura en que estado nace una orden. Se retiraron
+// `DEFAULT_ESTATUS_VALUE` y `FULFILLMENT_ESTATUS_VALUE` con sus dos variables de entorno
+// (`ORDENES_DEFAULT_ESTATUS_VALUE`, `ORDENES_FULFILLMENT_ESTATUS_VALUE`), y NO queda ninguna
+// otra palanca de entorno capaz de fijarlo: la decision vive entera en
+// `resolverDestinoCreacion` (`lib/services/destino-creacion.ts`).
+//
+// El motivo no es purismo. `docs/architecture.md` §Principios-4 ("sin hardcode de contexto")
+// habla de pais, moneda, cuenta y credenciales, no de la maquina de estados; y desde la feature
+// 140 la creacion se valida contra `ESTADOS_CREACION` con fallo CERRADO. Exportar
+// `ORDENES_DEFAULT_ESTATUS_VALUE=cualquier_cosa` no producia "otra configuracion": producia
+// `TransicionIlegalError` en CADA creacion, es decir produccion caida. Una palanca cuyo unico
+// efecto posible es romper la aplicacion no es configuracion, es una trampa.
 
 function readPositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -9,40 +22,17 @@ function readPositiveInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function readNonEmpty(name: string, fallback: string): string {
-  const raw = process.env[name];
-  if (raw === undefined || raw.trim() === "") return fallback;
-  return raw;
-}
-
 export interface OrdenesConfig {
   /** Tamano de pagina por defecto del listado (N2). */
   DEFAULT_PAGE_SIZE: number;
   /** Cota maxima del tamano de pagina, evita consultas sin limite (R33). */
   MAX_PAGE_SIZE: number;
-  /**
-   * Valor de estatus inicial por defecto al crear si no se especifica
-   * (N1/R10/R27). Feature 15/R7/R8: default GLOBAL "en_preparacion" (antes
-   * "en_bodega_central"), compartido por el CRUD (feature 6) y la carga masiva.
-   */
-  DEFAULT_ESTATUS_VALUE: string;
-  /**
-   * Feature 27/R16/R23: estatus inicial de la carga masiva cuando la tienda que
-   * carga tiene `fulfillment = true`. Reutiliza el valor de catalogo ya sembrado
-   * (`en_fulfillment`, feature 28); hermana de DEFAULT_ESTATUS_VALUE.
-   */
-  FULFILLMENT_ESTATUS_VALUE: string;
 }
 
 export function loadOrdenesConfig(): OrdenesConfig {
   return {
     DEFAULT_PAGE_SIZE: readPositiveInt("ORDENES_DEFAULT_PAGE_SIZE", 25),
     MAX_PAGE_SIZE: readPositiveInt("ORDENES_MAX_PAGE_SIZE", 100),
-    DEFAULT_ESTATUS_VALUE: readNonEmpty("ORDENES_DEFAULT_ESTATUS_VALUE", "en_preparacion"),
-    FULFILLMENT_ESTATUS_VALUE: readNonEmpty(
-      "ORDENES_FULFILLMENT_ESTATUS_VALUE",
-      "en_fulfillment",
-    ),
   };
 }
 

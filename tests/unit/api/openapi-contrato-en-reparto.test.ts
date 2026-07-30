@@ -108,9 +108,85 @@ describe("153/R13 — enum de estados del OpenAPI por API key", () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------------
+// Feature 155/R42 — el contrato publico tras el retiro del estado de fulfillment y el cambio
+// del estado en que nacen las ordenes creadas por API. El literal retirado se construye por
+// concatenacion (patron de este archivo) para no aparecer como ofensor del censo.
+// ---------------------------------------------------------------------------------------------
+const VALUE_RETIRADO_155 = ["en", "fulfillment"].join("_");
+const RE_VALUE_RETIRADO_155 = new RegExp(`\\b${VALUE_RETIRADO_155}\\b`);
+const VALUE_NACIMIENTO_API = "por_recolectar_en_tienda";
+
+describe("155/R42 — el contrato del canal por API key tras el retiro", () => {
+  const enumsTs = enumsDeEstado(openApiSpec);
+
+  it("ningun enum del objeto TS documenta ya el estado retirado", () => {
+    expect(enumsTs).toHaveLength(4);
+    for (const lista of enumsTs) {
+      expect(lista.some((v) => RE_VALUE_RETIRADO_155.test(v))).toBe(false);
+    }
+  });
+
+  it("todo enum documenta el estado en que nacen las ordenes creadas por API", () => {
+    for (const lista of enumsTs) expect(lista).toContain(VALUE_NACIMIENTO_API);
+  });
+
+  it("el .yaml no menciona el value retirado en NINGUNA linea (enum ni prosa)", () => {
+    const ofensoras = yaml
+      .split(/\r?\n/)
+      .map((linea, idx) => ({ linea, n: idx + 1 }))
+      .filter(({ linea }) => RE_VALUE_RETIRADO_155.test(linea))
+      .map(({ n }) => n);
+    expect(ofensoras).toEqual([]);
+  });
+
+  it("la descripcion del endpoint de carga anuncia el estado nuevo y el cambio incompatible", () => {
+    const descripcion = openApiSpec.paths["/api/ordenes/api-key/carga"].post.description;
+    expect(descripcion).toContain(VALUE_NACIMIENTO_API);
+    expect(descripcion).toMatch(/CAMBIO INCOMPATIBLE/);
+    // El .yaml es espejo textual: la misma nota debe estar publicada.
+    expect(yaml).toMatch(/CAMBIO INCOMPATIBLE/);
+    expect(yaml).toContain(VALUE_NACIMIENTO_API);
+  });
+
+  it("los ejemplos publicados NO siguen mostrando el estado inicial viejo", () => {
+    const ejemplo = JSON.stringify(
+      openApiSpec.paths["/api/ordenes/api-key/carga"].post.responses["200"],
+    );
+    expect(ejemplo).not.toContain('"estatus":"en_ruta_bodega_central"');
+    expect(ejemplo).toContain(`"estatus":"${VALUE_NACIMIENTO_API}"`);
+    expect(ejemplo).toContain(`"estado":"${VALUE_NACIMIENTO_API}"`);
+  });
+});
+
 describe("153/R13 — eventos publicos de webhook", () => {
-  it("EVENTOS_PUBLICOS sigue teniendo 9 elementos", () => {
-    expect(EVENTOS_PUBLICOS.size).toBe(9);
+  // Feature 155/R43: pasa de 9 a 10 con `por_recolectar_en_tienda`. La ampliacion es ADITIVA:
+  // el conteo sube y ningun estado sale (lo verifica el test siguiente, contra la foto de la 153).
+  it("EVENTOS_PUBLICOS tiene 10 elementos (9 de la 153 + el nacimiento de la 155)", () => {
+    expect(EVENTOS_PUBLICOS.size).toBe(10);
+  });
+
+  it("155/R43: los 9 eventos previos siguen TODOS en la politica (nadie deja de recibir)", () => {
+    for (const previo of [
+      "en_ruta_bodega_central",
+      "en_bodega_central",
+      "en_reparto",
+      "entregada",
+      "reprogramada",
+      "devuelta",
+      "rechazada",
+      "devolviendo_a_tienda",
+      "devuelta_a_tienda",
+    ] as const) {
+      expect(EVENTOS_PUBLICOS.has(previo), `dejo de ser evento publico: ${previo}`).toBe(true);
+    }
+  });
+
+  it("155/R43: el estado de nacimiento de la rama (b) ES evento publico", () => {
+    // Sin esto, el integrador que hoy recibe un evento al crear una orden dejaria de recibir
+    // cualquier cosa hasta que la orden llegue a la bodega central, y el silencio se leeria
+    // como "no se creo".
+    expect(EVENTOS_PUBLICOS.has("por_recolectar_en_tienda")).toBe(true);
   });
 
   it("incluye en_reparto y no el value antiguo; los vecinos no cambian", () => {

@@ -115,7 +115,11 @@ function makeOrden(
     numGuia: null,
     numRemision: "REM-000",
     estatusId: "id-estatus",
-    estatusValue: "en_fulfillment",
+    // Feature 155/R28: el estado de fulfillment en bodega salio del catalogo. El fixture
+    // usa `en_preparacion`, que es donde nace ahora la orden que YA esta en bodega y el
+    // origen del primer flujo de esta suite ("Generar guia"). Ningun caso asevera sobre
+    // este campo: es solo un default valido del DTO.
+    estatusValue: "en_preparacion",
     destinatario: "Destino",
     telefonoDest: "88880000",
     tiendaId: "tienda-uuid",
