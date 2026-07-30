@@ -437,12 +437,17 @@
 > diseño; si el humano decide otra cosa, cambia el sitio, no el contenido. **El humano cerró las dos
 > en la segunda ronda de la puerta**, así que la fase se implementó tal cual está escrita.
 >
-> Bitácora: **`progress/impl_158b_frontend.md`** (mapa R→test de **R1-R64**, **25 mutaciones** de las
-> que **2 NO discriminaron** —una obligó a reforzar el caso del dinero y la otra dejó al descubierto
-> una guardia redundante que se declara en vez de fingir cobertura—, y el hueco del `adminSatelite`,
-> que **no tiene superficie de reporte** y se dice en voz alta).
-> `./init.sh` verde: **629 archivos / 7329 tests / 0 fallos** (baseline de F1B: 624 / 7228); lint
+> Bitácora: **`progress/impl_158b_frontend.md`** (mapa R→test de **R1-R64**, **31 mutaciones** de las
+> que **3 NO discriminaron** —dos obligaron a reforzar casos y la tercera dejó al descubierto una
+> guardia redundante que se declara en vez de fingir cobertura—).
+> `./init.sh` verde: **630 archivos / 7354 tests / 0 fallos** (baseline de F1B: 624 / 7228); lint
 > **0 errores / 19 warnings** (los del baseline).
+>
+> ✅ **2.ª pasada (2026-07-30): el humano CERRÓ la pregunta abierta que dejó la 1.ª.** El
+> `adminSatelite` estaba autorizado por el service (R48) y veía la cola, pero `/ordenes` le hace
+> `notFound` desde la feature 63, así que no tenía ninguna puerta para reportar —y dos de los cinco
+> orígenes son los que ese rol tiene delante—. **Decisión: montar el reporte también en
+> `/recepcion-satelite`.** Hecho, reusando el modal y parametrizando el disparador. Ver T2.7.
 > **R49 y R51 quedan CERRADOS en sus dos mitades**: la de servidor la puso F1B, la visible es de aquí.
 
 - [x] **T2.7** Modal de reporte `app/(app)/ordenes/_components/ReportarIncidenteModal.tsx`, abierto desde
@@ -460,9 +465,21 @@
       familia `incidente`, que por diseño son el mismo conjunto que los orígenes) y un test los
       fija **por igualdad** contra `ORIGENES_INCIDENTE_ADMIN` del servidor — el service no se puede
       importar desde el cliente porque arrastra `@prisma/client`.
-      ⚠️ **Declarado, no disimulado:** el service autoriza además al `adminSatelite` (R48), pero
-      `/ordenes` le hace `notFound` (su superficie es `/recepcion-satelite`), así que hoy **sólo
-      maestro/admin tienen desde dónde reportar**. Ver `progress/impl_158b_frontend.md` §5.
+      ⚠️ *(historia, conservada)* La 1.ª pasada **declaró sin disimular** que el service autoriza
+      además al `adminSatelite` (R48) pero `/ordenes` le hace `notFound` (su superficie es
+      `/recepcion-satelite`), así que sólo maestro/admin tenían desde dónde reportar. **No se
+      resolvió por cuenta propia**: montar una superficie nueva es decisión de producto que Q-H no
+      había tomado.
+      ✅ **AMPLIADA 2026-07-30 (2.ª pasada, decisión del humano): el reporte se monta TAMBIÉN en
+      `/recepcion-satelite`.** `ReportarIncidenteModal` se **reusa tal cual**; lo que se parametrizó
+      es el disparador (`disponible` + `onSuccess`), de modo que la regla de «cuándo se ofrece» vive
+      en la superficie que la tiene: `/ordenes` decide sólo por estado, `/recepcion-satelite` añade
+      su alcance por zona (`incidente-satelite.ts`, que falla CERRADO en sus tres condiciones). La
+      columna se monta **sólo** en «Recibidas» (`en_bodega_satelite`) y «Asignadas (por recoger)»
+      (`por_recoger`). `en_ruta_bodega_satelite` queda fuera con su razón escrita (el paquete aún no
+      está en esa bodega y su sección es un componente COMPARTIDO con la cola del mensajero).
+      **6 mutaciones nuevas, 5 discriminan**; la que no, se reforzó y ahora sí. Detalle en
+      `progress/impl_158b_frontend.md` §1.5, §3.4 y §5.
 - [x] **T2.8** Cola de aprobación `app/(app)/incidentes/` + `IncidentesAdminModule.tsx`, espejo de
       `CierresAdminModule`: **dos** `DataTable` («Pendientes de decisión» + «Histórico»), modal de detalle
       con causa, motivo, evidencias **firmadas** y datos de la orden; sub-modal de aprobación con el
@@ -494,11 +511,12 @@
 - [x] **T2.10** Cierre de fase F2B: `./init.sh` + suite completa en verde; mapa R→test completo (R1-R64).
       *Depende de:* T2.7-T2.9.
       *Hecho cuando:* el reviewer puede recorrer cada uno de los 64 R hasta un test concreto.
-      ✅ `./init.sh` verde: **629 archivos / 7329 tests / 0 fallos** (baseline de F1B: 624 / 7228);
+      ✅ `./init.sh` verde: **630 archivos / 7354 tests / 0 fallos** (baseline de F1B: 624 / 7228);
       lint **0 errores / 19 warnings** (los del baseline). Mapa R→test de **R1-R64 completo** en
-      `progress/impl_158b_frontend.md` §2, con el archivo concreto de cada uno de los 64.
-      **25 mutaciones, 23 discriminan**; las 2 que NO lo hicieron están escritas con su razón (§3),
-      y una de ellas obligó a reforzar el caso del dinero (commit propio).
+      `progress/impl_158b_frontend.md` §2, con el archivo concreto de cada uno de los 64 —R41 y R48
+      citan además la superficie del satélite de la 2.ª pasada—.
+      **31 mutaciones, 28 discriminan**; las 3 que NO lo hicieron están escritas con su razón (§3),
+      y dos de ellas obligaron a reforzar casos (el del dinero y el de la columna muerta).
 
 ---
 

@@ -11,22 +11,33 @@
 
 ## Veredicto
 
-**Fase 2B completa y verde.** `./init.sh` OK: **629 archivos / 7329 tests / 0 fallos**, lint
+> **Actualizado el 2026-07-30 (2.ª pasada).** El humano resolvió la **pregunta abierta 1**:
+> **el reporte se monta también en `/recepcion-satelite`**, la superficie propia del
+> `adminSatelite`. Hecho en §1.5; el hueco de §5 queda **CERRADO** y se conserva su rastro.
+
+**Fase 2B completa y verde.** `./init.sh` OK: **630 archivos / 7354 tests / 0 fallos**, lint
 **0 errores / 19 warnings** (los mismos 19 del baseline). Delta sobre F1B (624 / 7228):
-**+5 archivos de test, +101 tests, 0 warnings nuevos.**
+**+6 archivos de test, +126 tests, 0 warnings nuevos.**
+
+| hito | archivos | tests |
+| --- | --- | --- |
+| baseline (cierre de F1B) | 624 | 7228 |
+| 1.ª pasada (T2.7-T2.10) | 629 | 7329 |
+| **2.ª pasada (reporte desde la bodega satélite)** | **630** | **7354** |
 
 **R49 y R51 quedan CERRADOS en sus dos mitades.** F1B las dejó cubiertas sólo en el servidor y lo
 declaró; aquí entra la mitad visible, y R51 con su **caso de CONTROL** para que el bloqueo no pase
 por la razón equivocada.
 
-**25 mutaciones, 23 discriminan.** Las **2 que no** están escritas con su razón en §3: una obligó a
-reforzar el caso del dinero (commit propio, como hizo F1B con sus mutaciones D/E) y la otra dejó al
-descubierto una guardia genuinamente redundante que se **declara** en vez de inventarle un test de
-forma.
+**31 mutaciones, 28 discriminan.** Las **3 que no** están escritas con su razón en §3: dos
+obligaron a reforzar casos (el del dinero y el de la columna muerta del satélite) y la tercera dejó
+al descubierto una guardia genuinamente redundante que se **declara** en vez de inventarle un test
+de forma.
 
-**Un hueco real, dicho en voz alta:** el `adminSatelite` está autorizado por el service (R48) pero
-**no tiene ninguna superficie desde la que reportar** — `/ordenes` le hace `notFound`. Detalle y
-opciones en §5.
+**El hueco del `adminSatelite` está CERRADO** (§1.5): lo decidió el humano tras leerlo aquí, y el
+reporte vive ahora también en `/recepcion-satelite`. Se conserva escrito el hallazgo original
+porque el mecanismo —declarar en vez de resolver por cuenta propia una decisión de producto—
+funcionó.
 
 ---
 
@@ -120,6 +131,44 @@ opciones en §5.
 - El servidor **sigue siendo la guardia real**: hay un caso que reproduce el `conflict` de R51
   llegando del servidor (dos pestañas, un reintento) y comprueba que su mensaje llega tal cual.
 
+### T2.7 (extensión) — El reporte también desde la bodega satélite ✅ *(2.ª pasada)*
+
+**Creado:** `app/(app)/recepcion-satelite/_components/incidente-satelite.ts`.
+**Modificados:** `app/(app)/ordenes/_components/ReportarIncidenteAccion.tsx` (parametrizado),
+`app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx`.
+
+**Por qué:** el service autoriza al `adminSatelite` acotado a su zona (R48) y `/incidentes` le
+muestra la cola, pero `/ordenes` le hace `notFound` **desde la feature 63** —decisión deliberada,
+no descuido— así que no tenía ninguna puerta para reportar. Y **dos de los cinco orígenes**
+(`en_bodega_satelite`, `en_ruta_bodega_satelite`) son justo los que ese rol tiene delante: un
+paquete dañado en bodega satélite habría necesitado que alguien de la central lo registrara sin
+verlo. La redacción de R48 ya lo daba por hecho: su cláusula «`adminSatelite` cuya zona **no** es la
+de la orden» sólo tiene sentido si puede reportar sobre las de su zona.
+
+- **El modal se REUSA tal cual, no se duplica.** Lo que se parametrizó es el **disparador**:
+  `ReportarIncidenteAccion` gana `disponible?` (override de «¿se ofrece?») y `onSuccess?` (qué hacer
+  tras el éxito). Así la regla de disponibilidad vive **en la superficie que la tiene** y no se
+  acumula en el disparador: `/ordenes` decide sólo por estado (su actor es de acceso total),
+  `/recepcion-satelite` añade su alcance por zona. `ReportarIncidenteAccionOrden` es la forma
+  mínima que cumplen por estructura **los dos** DTOs (`OrdenListItemDTO` y `RecepcionSateliteDTO`),
+  así que no hay adaptador ni segunda implementación que pueda divergir.
+- **`puedeReportarIncidenteSatelite` falla CERRADO en sus tres condiciones**: sin zona → nada; zona
+  de la ORDEN distinta de la del actor → nada; estado fuera de los cinco → nada. Es el mismo
+  criterio con el que R51 apaga la decisión de un incidente propio: **el servidor manda, la UI no
+  invita**. Dicho sin adornos: el servidor ya acota la lectura por `zonaId`, así que hoy una orden
+  ajena no llega a esta pantalla — la comparación por nombre de zona es **defensa en profundidad**,
+  no la guardia. Se escribe para que nadie la lea como la guardia.
+- **Dónde se ofrece, y dónde NO.** El módulo tiene seis secciones y sólo dos son orígenes válidos:
+  «Recibidas» (`en_bodega_satelite`) y «Asignadas (por recoger)» (`por_recoger`). «Por devolver»,
+  «En tránsito a central» y «Devueltas» **no montan siquiera la columna**.
+- **`en_ruta_bodega_satelite` («Por recibir») queda fuera, con su razón.** Es el quinto origen que
+  esta superficie *podría* mostrar, y no se montó por dos motivos que se refuerzan: (1) el paquete
+  **aún no está** en la bodega satélite —va en tránsito desde la central—, así que quien lo tiene
+  delante y puede fotografiarlo es la central, que **sí** lo cubre desde `/ordenes`; y (2) esa
+  sección no es una `DataTable` sino el componente COMPARTIDO `PorAceptarSection`, que también pinta
+  la cola del MENSAJERO: abrirle un slot habría cambiado una superficie ajena a esta feature. Queda
+  como **pregunta abierta 5** de §6 por si el humano prefiere lo contrario.
+
 ### T2.10 — Cierre de fase ✅
 
 `./init.sh` verde con los tests de componente incluidos, mapa R→test de **R1-R64** en §2 y
@@ -184,13 +233,13 @@ verificación por mutación en §3.
 | R38 | `tests/unit/guards/incidente-admin-aislamiento.test.ts` (incl. el caso de CONTROL de §9.7) · `tests/integration/db/orden-incidente-migration.test.ts` (RLS) |
 | R39 | `tests/integration/db/orden-incidente-migration.test.ts` · `tests/unit/repositories/incidente-admin-repository.test.ts` |
 | R40 | `tests/integration/db/orden-incidente-migration.test.ts` (bloque del `down`) + round-trip real (`impl_158b_backend.md` §3) |
-| **R41** | `tests/unit/repositories/incidente-admin-repository.test.ts` (`it.each` de los 5 estados) · `tests/unit/services/incidente-admin-service.test.ts` · `tests/integration/actions/incidentes-action.test.ts` · **`tests/components/ReportarIncidenteAccion.test.tsx` › «la acción sólo se ofrece en los cinco estados» (5 casos + 5 negativos + el barrido del catálogo) y «el conjunto es EXACTAMENTE `ORIGENES_INCIDENTE_ADMIN`»** · **`tests/components/ReportarIncidenteModal.test.tsx` › «el envío válido llama a la action con la forma esperada»** |
+| **R41** | `tests/unit/repositories/incidente-admin-repository.test.ts` (`it.each` de los 5 estados) · `tests/unit/services/incidente-admin-service.test.ts` · `tests/integration/actions/incidentes-action.test.ts` · **`tests/components/ReportarIncidenteAccion.test.tsx` › «la acción sólo se ofrece en los cinco estados» (5 casos + 5 negativos + el barrido del catálogo) y «el conjunto es EXACTAMENTE `ORIGENES_INCIDENTE_ADMIN`»** · **`tests/components/ReportarIncidenteModal.test.tsx` › «el envío válido llama a la action con la forma esperada»** · **`tests/components/RecepcionSateliteIncidente.test.tsx` › bloque «R41: sólo en los estados que son orígenes válidos» (5 casos) y el `it.each` de los 5 orígenes del predicado en aislado** |
 | R42 | `tests/unit/repositories/incidente-admin-repository.test.ts` · `tests/unit/services/incidente-admin-service.test.ts` |
 | R43 | `tests/unit/repositories/incidente-admin-repository.test.ts` |
 | R44 | `tests/unit/repositories/incidente-admin-repository.test.ts` · `tests/unit/repositories/orden-historial-cobertura.test.ts` |
 | **R45** | `tests/unit/types/incidente-schema.test.ts` · **`tests/components/ReportarIncidenteModal.test.tsx` › bloque «la causa es la MISMA lista CERRADA de tres, traducida» (3 casos) y «no deja enviar sin causa / sin motivo» (incluido el motivo de sólo espacios)** · **`tests/components/IncidentesAdminModule.test.tsx` › `it.each` «la causa `%s` se pinta con su etiqueta del catálogo compartido»** |
 | **R46** | `tests/unit/types/incidente-schema.test.ts` · `tests/unit/services/incidente-admin-service.test.ts` (URL firmada) · **`tests/components/ReportarIncidenteModal.test.tsx` › `it.each` «con causa «%s» y motivo, pero SIN foto, no llama a la action» (las 3 causas) + «el copy dice QUÉ fotografiar cuando NO hay paquete» + «una sola foto basta»** · **`tests/components/IncidentesAdminModule.test.tsx` › «muestra causa, motivo, quién reportó, el estado de la orden y la evidencia FIRMADA» (el `src` ES la URL firmada, nunca un path del bucket)** |
-| **R48** | `tests/unit/services/incidente-admin-service.test.ts` · `tests/unit/repositories/incidente-admin-repository.test.ts` · **`tests/components/IncidentesPage.test.tsx` › «quién entra a /incidentes» (3 roles OK + 2 `notFound` + sin sesión + `forbidden` del service)** · **`tests/components/IncidentesAdminModule.test.tsx` › «un adminSatelite SIN zona ve un aviso y NINGUNA cola»** · **`tests/unit/auth/menu-visibility.test.ts` (roles del ítem «Incidentes», por igualdad de lista)** |
+| **R48** | `tests/unit/services/incidente-admin-service.test.ts` · `tests/unit/repositories/incidente-admin-repository.test.ts` · **`tests/components/IncidentesPage.test.tsx` › «quién entra a /incidentes» (3 roles OK + 2 `notFound` + sin sesión + `forbidden` del service)** · **`tests/components/IncidentesAdminModule.test.tsx` › «un adminSatelite SIN zona ve un aviso y NINGUNA cola»** · **`tests/unit/auth/menu-visibility.test.ts` (roles del ítem «Incidentes», por igualdad de lista)** · **`tests/components/RecepcionSateliteIncidente.test.tsx` › bloque «R48: alcance por zona» (orden de otra zona → no se ofrece, su caso de CONTROL en la zona propia, y `sinZona` → nada) + «el adminSatelite sigue SIN poder entrar a /ordenes»** |
 | **R49** | `tests/unit/services/incidente-admin-service.test.ts` (bloque «dos colas») · **`tests/components/IncidentesAdminModule.test.tsx` › bloque «las DOS colas» (5 casos: las dos tablas, el recuento, los dos vacíos, el aviso sin zona y «el histórico es de SOLO LECTURA»)** |
 | **R50** | `tests/unit/types/incidente-schema.test.ts` · `tests/unit/services/incidente-admin-service.test.ts` · `tests/integration/actions/incidentes-action.test.ts` · **`tests/components/IncidentesAdminModule.test.tsx` › bloque «no se aprueba con un monto inválido» (`it.each` de 7 inválidos + el tope + el máximo EXACTO + los dos mensajes + el `validation_error` por campo)** |
 | **R51** | `tests/unit/services/incidente-admin-service.test.ts` › bloque «QUIEN REPORTA NO APRUEBA» (5 casos) · `tests/integration/actions/incidentes-action.test.ts` · **`tests/components/IncidentesAdminR51.test.tsx` (11 casos: las dos decisiones deshabilitadas, el motivo visible, que el click NO abre nada ni llama a la action, el bloque de CONTROL con un incidente AJENO, y el `conflict` del servidor con su mensaje)** |
@@ -246,6 +295,17 @@ Todas en memoria (`git checkout --` tras cada una; `git status` limpio antes de 
 | X | el rechazo manda el motivo sin recortar | 1 rojo |
 | Y | la aprobación manda el monto con `parseFloat` | 1 rojo |
 
+### Mutaciones de la 2.ª pasada (el reporte desde la bodega satélite), 5 de 6 discriminan
+
+| # | mutación | resultado |
+| --- | --- | --- |
+| **Z1** | el satélite ofrece la acción en **cualquier estado** (se cae la comprobación de los cinco orígenes) | **6 rojos** |
+| **Z2** | el satélite ofrece la acción sobre una orden de **OTRA zona** (se cae la comparación) | **2 rojos** (el caso y su control) |
+| **Z3** | la ofrece aunque el `adminSatelite` **no tenga zona** | **2 rojos** |
+| **Z4** | la columna se cuela en «Por devolver», donde ningún estado es origen | **1.ª pasada: 0 rojos — NO DISCRIMINABA** (§3.4) · **tras reforzar: 1 rojo** |
+| **Z5** | la columna desaparece de «Recibidas» | **4 rojos** en 2 archivos (incluido el de la 33/63, que compara la cabecera por igualdad) |
+| **Z6** | el disparador IGNORA el `disponible` que le pasa la superficie y decide sólo por estado | **2 rojos** |
+
 ### 3.1 La mutación L: no discriminaba, y por eso hay un commit más
 
 El primer caso de money-safe del histórico usaba `"1234567.89"`, y **`parseFloat("1234567.89")`
@@ -271,6 +331,17 @@ cambio futuro (si el schema relajara un campo, el botón seguiría siendo el ún
 precedente literal de `DeshacerAsignacionModal` (149), que lleva la misma guardia con el mismo
 comentario. Queda declarada aquí para que nadie la lea como cobertura.
 
+### 3.4 La mutación Z4: el botón no bastaba, la cabecera sí
+
+Los dos casos que afirmaban ««Por devolver» NO ofrece la acción» miraban el **botón**, y el botón
+falta igual aunque la columna se cuele: el disparador se auto-oculta por estado (Z1 ya lo protege).
+La mutación **no discriminaba**, y no era un falso positivo del arnés: colar la columna deja una
+columna de acción **muerta** en una tabla que ya tiene 14, y ningún test lo habría notado.
+
+Se cerró con dos casos que miran la **CABECERA** —«Por devolver» no la monta; «Recibidas» sí, como
+control— y la misma mutación pone ahora **1 rojo**. Es la misma clase de hallazgo que L: un caso que
+mide lo correcto **por el sitio equivocado**.
+
 ### 3.3 Un test que pasaba por la razón equivocada, cazado por `typecheck`
 
 El barrido «ningún otro estado del catálogo es reportable» se escribió como
@@ -290,6 +361,8 @@ caso «verde por la razón equivocada» es justo lo que estas verificaciones bus
 | --- | --- | --- | --- |
 | `tests/unit/auth/menu-visibility.test.ts` (varias) | las listas de ítems visibles de `maestro`, `admin` y `adminSatelite`, por **igualdad exacta** | las mismas listas **con «Incidentes» en su sitio**, y **5 asserts nuevos**: los tres roles que sí lo ven, y los dos (`mensajero`, `adminTienda`) que no | la comparación por igualdad es justamente la que garantiza que un ítem nuevo no se cuela sin decisión: hizo su trabajo. El invariante que protegía (el menú de cada rol es exactamente éste) sigue protegido, sobre un conjunto mayor. **Es el coste declarado de Q-I** |
 
+| `tests/components/RecepcionSateliteModule.test.tsx` (33/63) *(2.ª pasada)* | la cabecera de «Recibidas» es **exactamente** estas 14 columnas | las mismas 14 **+ «Incidente»**, con la razón escrita en el propio assert | igual que el del menú: la comparación por igualdad es la que impide que una columna se cuele sin decisión. Hizo su trabajo y **es el test que caza la mutación Z5**. No perdió ningún assert |
+
 `tests/components/Sidebar.test.tsx` **no se tocó**: no compara listas exhaustivas.
 Las 20 suites de `tests/components/Ordenes*` pasan **sin tocar ninguna expectativa**: la acción de
 fila es opt-in y por defecto está apagada.
@@ -298,17 +371,23 @@ fila es opt-in y por defecto está apagada.
 
 ## 5. Lo que NO se hizo, con su razón
 
-### El `adminSatelite` NO tiene superficie desde la que reportar — hallazgo, no olvido
+### ✅ CERRADO — El `adminSatelite` ya tiene superficie desde la que reportar
 
-El service autoriza al `adminSatelite` acotado a su zona (R48) y la cola de `/incidentes` **sí** se
-la ofrece. Pero **el reporte vive en `/ordenes`, y `/ordenes` le hace `notFound`** (`page.tsx:54`,
-feature 63: su superficie es `/recepcion-satelite`). Consecuencia real: hoy sólo maestro/admin
-pueden reportar, y dos de los cinco orígenes (`en_bodega_satelite`, `en_ruta_bodega_satelite`) son
-justamente los que el satélite ve de cerca.
+*(Se conserva el hallazgo tal como se declaró, porque el mecanismo funcionó: se midió, se dijo, y
+el humano decidió. Borrarlo borraría ese rastro.)*
 
-**No se arregló aquí, a propósito.** Montar la acción en `/recepcion-satelite` es una superficie
-nueva que Q-H no decidió —el diseño evaluó y descartó colgar el reporte de ese módulo *como único
-sitio*, no como segundo—, y decidirlo es del humano. Queda como **pregunta abierta 1** de §6.
+**Lo que se declaró en la 1.ª pasada:** el service autoriza al `adminSatelite` acotado a su zona
+(R48) y la cola de `/incidentes` **sí** se la ofrece. Pero el reporte vivía sólo en `/ordenes`, y
+`/ordenes` le hace `notFound` (`page.tsx:54`, feature 63: su superficie es `/recepcion-satelite`).
+Consecuencia real: sólo maestro/admin podían reportar, y dos de los cinco orígenes
+(`en_bodega_satelite`, `en_ruta_bodega_satelite`) son justamente los que el satélite ve de cerca.
+**No se arregló entonces, a propósito**: montar una superficie nueva es decisión de producto que
+Q-H no había tomado.
+
+**Resolución (2026-07-30, decisión del humano): se monta también en `/recepcion-satelite`.** Hecho
+en §1.5, con el modal reusado y el disparador parametrizado. Lo único que **sigue** abierto de este
+hilo es `en_ruta_bodega_satelite` («Por recibir»), que se dejó fuera con su razón — pregunta
+abierta 5.
 
 ### Tasks NO marcadas
 
@@ -356,16 +435,23 @@ sitio*, no como segundo—, y decidirlo es del humano. Queda como **pregunta abi
 
 ## 6. Preguntas abiertas que deja esta fase
 
-1. **El `adminSatelite` no puede reportar** (§5). Está autorizado en el servidor y ve la cola, pero
-   no tiene botón. Decidir: (a) montar la acción también en `/recepcion-satelite`, (b) dejarlo
-   explícitamente como «el satélite avisa y el central reporta», o (c) quitarle la autorización de
-   reporte en el service. **Las tres son decisiones de producto**, no de implementación.
+1. ~~**El `adminSatelite` no puede reportar.**~~ **CERRADA el 2026-07-30**: el humano eligió montar
+   la acción también en `/recepcion-satelite`. Hecho en §1.5.
 2. **Q-J sigue abierta** (heredada de F1B): el mensajero asignado no se entera de que su orden pasó
    a `incidente`. Ahora la UI del admin lo hace trivial de provocar.
 3. **El E2E sigue sin harness.** `playwright.config.ts` existe pero ningún gate lo corre, así que una
    spec nueva sería un archivo que nadie ejecuta. Esta fase **no** trae E2E y lo deja como hallazgo
    abierto para el reviewer, igual que F1B — con el agravante de que ahora existe el camino completo
    de UI que un E2E podría recorrer.
+5. **`en_ruta_bodega_satelite` sigue sin acción desde el satélite** (§1.5). Es el quinto origen que
+   esa superficie podría mostrar; se dejó fuera porque el paquete aún no está en su bodega (lo
+   cubre la central desde `/ordenes`) y porque su sección usa un componente COMPARTIDO con la cola
+   del mensajero. Si el humano prefiere ofrecerlo, es una `DataTable` nueva o un slot en
+   `PorAceptarSection`, y esto último toca una superficie ajena a la feature.
+6. **La comparación de zona del satélite es por NOMBRE, no por id.** El DTO del módulo no lleva
+   `zonaId`, así que el guard de UI compara `zonaNombre`. Es defensa en profundidad (el servidor
+   acota por `zonaId` y es la guardia real), pero si dos zonas compartieran nombre el guard de
+   cliente no las distinguiría. Añadir `zonaId` al DTO es **backend** y no se tocó.
 4. **El sub-modal de aprobación no muestra las evidencias.** El admin las ve en el detalle y luego
    abre el sub-modal, que sólo repite orden + causa. Es suficiente (el detalle sigue detrás) pero un
    admin que quiera volver a mirar la foto tiene que cancelar. No se resolvió porque implicaría
@@ -376,7 +462,7 @@ sitio*, no como segundo—, y decidirlo es del humano. Queda como **pregunta abi
 ## 7. Salida real de la verificación
 
 ```
-$ ./init.sh
+$ ./init.sh   # 2.ª pasada (con el reporte desde la bodega satélite)
 == Arnes SDD :: init ==
 ✓ node
 ✓ dependencias presentes
@@ -388,9 +474,9 @@ $ ./init.sh
 ✖ 19 problems (0 errors, 19 warnings)
 ✓ lint paso
 -> pnpm run test
- Test Files  629 passed (629)
-      Tests  7329 passed (7329)
-   Duration  164.30s
+ Test Files  630 passed (630)
+      Tests  7354 passed (7354)
+   Duration  172.28s
 ✓ test paso
 ✓ todas las migraciones tienen down.sql
 ✓ .env presente
@@ -398,7 +484,8 @@ $ ./init.sh
 ```
 
 Baseline de la fase anterior (F1B): **624 archivos / 7228 tests**, lint 0 errores / 19 warnings.
-**Delta: +5 archivos de test, +101 tests, 0 fallos, 0 warnings nuevos.**
+**Delta total: +6 archivos de test, +126 tests, 0 fallos, 0 warnings nuevos** (101 en la 1.ª
+pasada + 25 en la 2.ª).
 
 ---
 
@@ -417,9 +504,11 @@ tests/components/ReportarIncidenteAccion.test.tsx
 tests/components/IncidentesAdminModule.test.tsx
 tests/components/IncidentesAdminR51.test.tsx
 tests/components/IncidentesPage.test.tsx
+app/(app)/recepcion-satelite/_components/incidente-satelite.ts   ← 2.ª pasada
+tests/components/RecepcionSateliteIncidente.test.tsx             ← 2.ª pasada
 ```
 
-*(Son 10 rutas: 5 de producción y 5 de test.)*
+*(Son 12 rutas: 6 de producción y 6 de test.)*
 
 ### Modificados — producción (5)
 
@@ -429,12 +518,15 @@ app/(app)/ordenes/_components/OrdenesListado.tsx     ← pasa la prop
 app/(app)/ordenes/page.tsx                           ← la enciende para acceso total (con la salvedad del satélite)
 lib/auth/menu-visibility.ts                          ← ítem «Incidentes» + `IconKey` nuevo
 app/(app)/_components/Sidebar.tsx                    ← mapa iconKey → lucide
+app/(app)/ordenes/_components/ReportarIncidenteAccion.tsx             ← 2.ª: `disponible` + `onSuccess`
+app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx  ← 2.ª: columna de incidente
 ```
 
 ### Modificados — tests (1)
 
 ```
-tests/unit/auth/menu-visibility.test.ts   ← 3 listas actualizadas + 5 asserts nuevos (§4)
+tests/unit/auth/menu-visibility.test.ts           ← 3 listas actualizadas + 5 asserts nuevos (§4)
+tests/components/RecepcionSateliteModule.test.tsx ← cabecera de «Recibidas» + «Incidente» (§4)
 ```
 
 ### Modificados — spec (1)
@@ -451,6 +543,8 @@ specs/158-incidente-indemnizacion/tasks.md   ← T2.7-T2.10 marcadas, con lo ver
 a65319f  feat(158…): modal por orden para reportar un incidente desde el listado   (T2.7)
 25f2414  feat(158…): cola de aprobacion de incidentes en pagina propia             (T2.8/T2.9)
 ecd5d13  test(158…): mata la mutacion del monto que el caso previo no distinguia  (§3.1)
+5388cf6  docs(158…): cierra la fase frontend del camino del admin                 (T2.10)
+c1b2a3d  feat(158…): reporte de incidente tambien desde la bodega satelite        (T2.7, 2.ª pasada)
 ```
 
 **No se hizo `git push` ni se abrió PR**: lo decide el humano.
