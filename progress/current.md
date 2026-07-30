@@ -8,6 +8,85 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗓️ Sesión 2026-07-30 (tarde) — **EMPIEZA A LEER POR AQUÍ**
+
+> Lo de más abajo sigue válido en su detalle técnico; esto lo corrige donde se contradiga.
+
+### Tres correcciones al «cierre del día» de esta misma mañana
+
+1. **✅ El pendiente #1 ya estaba saldado.** `prisma migrate status` contra `localhost:5432`:
+   **95/95, «Database schema is up to date!»**. Las dos migraciones que el cierre daba por pendientes
+   (`chat_mensaje_error_meta` y `orden_historial_origen_deshacer_asignacion`) ya están aplicadas.
+2. **PR #207 está listo:** `MERGEABLE` / `mergeStateStatus: CLEAN`, Vercel **SUCCESS**, 10 archivos
+   (+176/−177). Sólo falta el merge (humano). **Conviene mergearlo ANTES de implementar la 158:** la
+   158 trae migración, y sin el #207 paga el peaje de la denylist.
+3. **⚠️ PR #168 (feature 141) YA NO es mergeable:** pasó a `CONFLICTING` / `DIRTY` (43 archivos). El
+   cierre lo daba por «MERGEABLE con gate verde» — cierto antes de los merges de ayer. Ahora necesita
+   **rebase** además del re-review que ya se sabía pendiente. Sigue siendo la `in_progress` más vieja
+   (27/07) y la única de la zona backend.
+
+### 🚪 Puerta F1.4 de la feature 158 — **CERRADA hoy**, 10 decisiones
+
+> Se escriben aquí Y en el spec. Es la lección de la «CORRECCIÓN 1» de más abajo: gate aprobado en la
+> bitácora no es lo mismo que preguntas del spec respondidas por escrito.
+
+- **Q-A = LOS DOS reportan.** Textual del humano: «los dos ya que los dos manipulan paquetes».
+  Mensajero al gestionar desde `en_reparto` (arista #44, ya declarada por la 154) **+ admin desde
+  bodega y tránsitos internos**: `en_bodega_central`, `en_bodega_satelite`, `en_ruta_bodega_central`,
+  `en_ruta_bodega_satelite`, `por_recoger`. **Son 5 aristas nuevas** al mapa de la guardia central.
+  ⚠️ **Es alcance nuevo:** la spec estaba escrita de punta a punta (R1-R36) para el mensajero solo. El
+  humano eligió **ampliar la 158 ahora** en vez de partirla en dos features.
+- **Q-B (alcance) = causa tipada + evidencia OBLIGATORIA SIEMPRE**, en las tres causas. Enum cerrado
+  de 3 valores, sin «Otro»; `motivo` en texto libre obligatorio siempre. **Se le planteó la objeción**
+  (en `perdido`/`robado` no hay paquete que fotografiar y bloquea al mensajero en la calle) y eligió
+  esta opción de todas formas. Queda **declarado como consecuencia aceptada**, no disimulado.
+- **Q-B (idioma) = ESPAÑOL** (`danado`, `perdido`, `robado`). Rompe **a propósito** la coherencia con
+  `causa_devolucion`, que está en INGLÉS (`not_found`, `wrong_number`, `wrong_address`) por decisión
+  consciente del humano en la feature 73, a favor de la coherencia con `gestion_resultado` y
+  `order_status`. **Que nadie lo «arregle» después.**
+- **Q-C = columna nueva `gestion_orden.indemnizacion`.** `cierre_detail` descartado **por evidencia**:
+  es snapshot inmutable escrito al *solicitar* el cierre, y el monto se captura al *aprobar*.
+- **Q-D = SÍ se puede deshacer**, en ventana controlada. Textual: «como es una app usada por seres
+  humanos y nosotros solemos cometer errores, lo ideal es que cada acción se pueda deshacer,
+  obviamente dentro de un ambiente controlado». ⚠️ **Revierte parcialmente la decisión de la 154 ya
+  mergeada** (`incidente: []`, `order-status-transiciones.ts:206`, «a diferencia de `entregada` NO
+  conserva ninguna salida — decisión del humano del 2026-07-29»). Compatible con dejarlo terminal:
+  `ESTADOS_TERMINALES` **exime de tener salida pero no la prohíbe** (`:236-237`) y `entregada` es el
+  precedente exacto.
+  - **Problema técnico duro que abre:** hoy el destino del deshacer está **hardcodeado a `en_reparto`**
+    (`CierreDiaService.ts:65,388`) y **repone la asignación al autor de la gestión** (`:399`). Con
+    orígenes múltiples eso es incorrecto dos veces: un incidente reportado por un admin sobre un
+    paquete en `en_bodega_central`, al deshacerse, mandaría la orden a `en_reparto` **asignada al
+    admin**. El destino tiene que ser **el estado de origen**.
+  - Red de seguridad: `ESTADOS_ESPERADOS` es un `Record<GestionResultado, …>` exhaustivo → añadir
+    `incidente` al enum **rompe el build** hasta declararlo.
+- **Q-E = fuera de alcance**, con follow-up explícito: «crédito de indemnización en el ledger por
+  tienda» (feature 43). **Falta registrar la ficha** — tarea del leader.
+- **Q-F = no se reescriben los `down.sql` previos.** `20260713140000_wallet_egreso_gasto_fijo_variable/down.sql`
+  es punto-en-el-tiempo y su test asserta exactamente 12 valores. Sí se corre `tests/integration/db`
+  completo en la fase backend.
+- **Q-G = el append escribe `origen_tipo = incidente`** + se alinea el `via` de la arista #44. La 154
+  dejó esa familia «declarada SIN PRODUCTOR hasta la 158» (`orden-historial.ts:35`).
+- **NUEVA — aprobación del camino del admin.** Textual: «la idea es que sea aprobado, y para esto
+  podemos usar los cierres ya existentes, verás que tenemos ya dos tablas en cierres, podemos usar el
+  mismo modelo». Se reusa el **PATRÓN, no la tabla**: `CierreEstado` (`solicitado → aprobado/rechazado`),
+  cola «Pendientes de decisión» + «Histórico» (`CierresAdminModule.tsx:270,291`), motivo obligatorio
+  sólo al rechazar. Es la **tercera** aplicación: la feature 40 ya fue la segunda y se declara «espejo
+  de CierresAdminService (38)».
+  - **`cierre_bodega` NO puede alojarlos** — verificado: agrupa `CierreDia[]`, es por `zonaId` y sólo
+    satélite, sin detalle por orden (`schema.prisma:732-758`).
+  - **El egreso a la wallet se dispara AL APROBAR.** Requisito explícito del humano: **quien reporta
+    no aprueba**. Consecuencia: la feature queda con **dos puntos de entrada al egreso** (mensajero vía
+    cierre del día, admin vía aprobación del incidente) y la idempotencia de la wallet tiene que
+    cubrir los dos para que una orden no se pague dos veces.
+
+**Estado:** `spec_author` ampliando `specs/158-incidente-indemnizacion/` en la rama
+`feature/158-incidente-indemnizacion` (base = `dev` + los 3 commits del #207). **No se ha tocado
+código de producción.** Al volver el spec hay **nueva puerta humana** sobre los requisitos del bloque
+del admin antes de implementar.
+
+---
+
 > ### Reconciliado el 2026-07-28 contra `origin/dev` @ `0bcc360`
 >
 > Verificado PR por PR con `gh pr list` y contra el código, no supuesto. **`feature_list.json`
@@ -135,7 +214,10 @@ en la sección «Backlog pendiente».
 > Reemplaza al apartado «PENDIENTES» de arriba en todo lo que se contradiga. Lo verificado hoy va
 > con su número; lo no verificado se dice.
 
-> ## 🏁 CIERRE DEL DÍA — 2026-07-30. **Empieza a leer por aquí.**
+> ## 🏁 Cierre de la MAÑANA del 2026-07-30
+>
+> *(Ya no es el punto de entrada: lo es la «Sesión 2026-07-30 (tarde)» del principio del archivo, que
+> corrige tres cosas de aquí. Este bloque sigue válido en todo lo demás.)*
 >
 > Lo de abajo (el «Cierre de la sesión del 2026-07-29») sigue siendo válido en su detalle técnico;
 > esto lo actualiza en lo que cambió al mergear.
