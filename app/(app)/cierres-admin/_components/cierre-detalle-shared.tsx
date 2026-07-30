@@ -174,12 +174,17 @@ export const PAGO_SIN_TARIFA_LABEL = "Sin tarifa";
 export const PAGO_SIN_TARIFA_NOTA =
   "El pago al mensajero de esta entrega se resolvió en ₡0.00 (posible tarifa de zona sin configurar).";
 
-/** Orden fijo de las 4 secciones del detalle (R11). */
+/**
+ * Orden fijo de las secciones del detalle (R11). Feature 158/R18: `incidente` es un grupo
+ * PROPIO y va AL FINAL, tras los cuatro desenlaces normales — mismo criterio que el detalle
+ * del mensajero (37) y que el paso de resultados del panel.
+ */
 export const ORDEN_RESULTADOS: CierreResultado[] = [
   "entregada",
   "reprogramada",
   "devuelta",
   "rechazada",
+  "incidente",
 ];
 
 /**
@@ -714,6 +719,31 @@ function columnaConcepto(
   };
 }
 
+/**
+ * Columna de la evidencia FIRMADA (R12), compartida por `rechazada` e `incidente`
+ * (feature 158/R18): abre el visor con la URL que ya llega firmada del servidor, nunca el
+ * `storage_path` crudo. Se extrajo para no duplicar el render en dos ramas.
+ */
+const COLUMNA_EVIDENCIA = (
+  verEvidencia: (url: string) => void,
+): Column<CierreDetalleGestion> => ({
+  id: "evidencia",
+  value: "Evidencia",
+  render: (g) =>
+    g.evidenciaUrl ? (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => verEvidencia(g.evidenciaUrl as string)}
+      >
+        Ver evidencia
+      </Button>
+    ) : (
+      "—"
+    ),
+});
+
 const COLUMNA_INGRESO_TOTAL: Column<CierreDetalleGestion> = {
   id: "ingresoTotal",
   value: INGRESO_TOTAL_COL,
@@ -745,6 +775,23 @@ export function columnasPara(
   resultado: CierreResultado,
   verEvidencia: (url: string) => void,
 ): Column<CierreDetalleGestion>[] {
+  // Feature 158 (R17/R18): el `incidente` NO deriva ningún concepto de ingreso de Ordenex
+  // (ni flete, ni comisión, ni sus IVA), NO paga al mensajero y NO genera ingreso de bodega:
+  // esas columnas serían "—" en todas las filas. Quedan el motivo y la evidencia firmada.
+  //
+  // ⚠️ La causa tipificada y el monto de la indemnización NO se pintan todavía: no viajan en
+  // `CierreDetalleGestion` (el DTO no expone `causaIncidente` ni `indemnizacion`, igual que
+  // tampoco expone la `causaDevolucion` de la 73). Añadirlos es trabajo de BACKEND (DTO +
+  // select del repo + mapeo del service) y esta fase no toca `lib/`. Queda declarado en
+  // `progress/impl_158_frontend.md`, no disimulado con un "—" que parecería un dato ausente.
+  if (resultado === "incidente") {
+    return [
+      ...COLUMNAS_COMUNES,
+      COLUMNA_MONTO_COBRAR,
+      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      COLUMNA_EVIDENCIA(verEvidencia),
+    ];
+  }
   if (resultado === "entregada") {
     return [
       ...COLUMNAS_COMUNES,
@@ -798,23 +845,7 @@ export function columnasPara(
     COLUMNA_RECHAZO_ORIGEN,
     COLUMNA_MONTO_COBRAR,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
-    {
-      id: "evidencia",
-      value: "Evidencia",
-      render: (g) =>
-        g.evidenciaUrl ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => verEvidencia(g.evidenciaUrl as string)}
-          >
-            Ver evidencia
-          </Button>
-        ) : (
-          "—"
-        ),
-    },
+    COLUMNA_EVIDENCIA(verEvidencia),
     columnaConcepto(
       "fleteDevolucionConIva",
       FLETE_DEV_CON_IVA_LABEL,
