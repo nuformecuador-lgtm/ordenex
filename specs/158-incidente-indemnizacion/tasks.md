@@ -215,14 +215,24 @@
 
 ---
 
-## Fase 1B — Backend (camino del ADMIN) · arranca con F1 en verde
+## Fase 1B — Backend (camino del ADMIN) · ✅ **COMPLETA el 2026-07-30**
 
-> **Alcance nuevo del 2026-07-30 (R37-R64).** Si el humano acepta el corte de §15, esta fase y F2B son
-> la **entrega 2** y viven en su propio PR. Ninguna task de aquí bloquea nada de F1/F2.
+> **Alcance nuevo del 2026-07-30 (R37-R64).** El humano aceptó el corte de §15 (Q-L, T0.8): esta fase
+> y F2B son el **PR 2** y viven en su propia rama, `feature/158b-incidente-admin`, apilada sobre el
+> PR 1 (#208). Ninguna task de aquí bloquea nada de F1/F2.
+>
+> Bitácora: **`progress/impl_158b_backend.md`** (mapa R→test de R37-R64, round-trip real de la
+> migración —incluido el ORDEN de los dos `down.sql`—, **18 mutaciones** de las que dos revelaron
+> guardias que sólo medían FORMA y hubo que reforzar, y los 6 tests de otras features reescritos).
+> `./init.sh` verde: **624 archivos / 7228 tests / 0 fallos** (baseline del PR 1: 617 / 6973);
+> `tests/integration/db` completo: **73 / 742 / 0**.
+> **R29 QUEDA CUMPLIDO:** el guard de emisores pasa de UNO a **DOS**, nombrados y con `origen_tipo`
+> distinto — era la deuda que el PR 1 dejó declarada y con candado.
+> **R49 y R51 quedan cubiertos SÓLO en su mitad de servidor**; su mitad visible es T2.8/T2.9.
 
 ### Datos y catálogos del admin
 
-- [ ] **T1.19** Migración `db/migrations/<ts>_orden_incidente/` con `migration.sql` + `down.sql`
+- [x] **T1.19** Migración `db/migrations/<ts>_orden_incidente/` con `migration.sql` + `down.sql`
       (design §12.2): `ALTER TYPE "wallet_origen_tipo" ADD VALUE IF NOT EXISTS 'orden_incidente'` +
       `CREATE TABLE "orden_incidente"` y `"orden_incidente_evidencia"` con FKs, índices, el **índice
       único PARCIAL** `(orden_id) WHERE estado <> 'rechazado'` y **RLS habilitada sin policies**.
@@ -232,18 +242,18 @@
       **migra `origen_tipo` con `USING` en las TRES tablas que usan el tipo** (`wallet_movimiento`,
       `wallet_tienda_movimiento`, `pago_mensajero_movimiento`) — olvidar una deja el tipo `_old`
       colgando y el down falla.
-- [ ] **T1.20** `db/schema.prisma`: `WalletOrigenTipo + orden_incidente`, modelos `OrdenIncidente` y
+- [x] **T1.20** `db/schema.prisma`: `WalletOrigenTipo + orden_incidente`, modelos `OrdenIncidente` y
       `OrdenIncidenteEvidencia` (design §12.1) con las relaciones inversas en `Orden` y `Usuario`.
       *Depende de:* T1.19.
       *Hecho cuando:* `prisma generate` limpio, `migrate status` sin drift, y el comentario del modelo
       **cita la razón de no ser una `gestion_orden`** (§9.7, bug del corte diario) para que nadie lo
       "simplifique" después.
-- [ ] **T1.21** [P] SEED/tipos: `WALLET_ORIGEN_TIPO_SEED` (`lib/types/wallet.ts:55`) con el valor nuevo,
+- [x] **T1.21** [P] SEED/tipos: `WALLET_ORIGEN_TIPO_SEED` (`lib/types/wallet.ts:55`) con el valor nuevo,
       doble candado intacto.
       *Depende de:* T1.20.
       *Hecho cuando:* `tsc` verde y test que afirma que el SEED contiene el valor y que el build rompe
       si divergiera (comprobado a mano quitándolo).
-- [ ] **T1.22** [P] Test estático de la migración del admin
+- [x] **T1.22** [P] Test estático de la migración del admin
       (`tests/integration/db/orden-incidente-migration.test.ts`): UP aditivo, las dos tablas con RLS, el
       índice único parcial presente, el down recrea el enum con los **6** previos y suelta las tablas,
       precondición documentada (R37/R39/R40).
@@ -252,14 +262,14 @@
 
 ### Mapa de estados del admin
 
-- [ ] **T1.23** Declarar en `lib/types/order-status-transiciones.ts` las **10 aristas** restantes:
+- [x] **T1.23** Declarar en `lib/types/order-status-transiciones.ts` las **10 aristas** restantes:
       entradas **#48-#52** (los 5 orígenes → `incidente`, `via: "incidente"`) e inversas **#54-#58**,
       con el `rol` calcado de las vecinas según la tabla de `design.md` §12.3.
       *Depende de:* T1.20.
       *Hecho cuando:* R61/R62 con test — las 10 son legales, `incidente` sigue TERMINAL y alcanzable, el
       resto del catálogo sigue ilegal desde `incidente`, el recuento del fixture queda en **52 / 50** y
       los dos tests de conectividad genéricos siguen verdes **sin tocarlos**.
-- [ ] **T1.24** Actualizar el fixture `tests/fixtures/inventario-transiciones-140.ts` con las 10 filas
+- [x] **T1.24** Actualizar el fixture `tests/fixtures/inventario-transiciones-140.ts` con las 10 filas
       nuevas transcritas a mano y el recuento; y los asserts de recuento de `guardia.test.ts`.
       *Depende de:* T1.23.
       *Hecho cuando:* «el mapa declara exactamente las aristas del inventario» pasa, que es el test que
@@ -267,13 +277,13 @@
 
 ### Reporte, aprobación y egreso del admin
 
-- [ ] **T1.25** Borde zod `lib/types/incidente.ts`: `reportarIncidenteSchema` (causa del enum cerrado,
+- [x] **T1.25** Borde zod `lib/types/incidente.ts`: `reportarIncidenteSchema` (causa del enum cerrado,
       motivo no vacío, `evidencias` 1..N reusando `evidenciasSchema`), `aprobarIncidenteSchema`
       (`montoPositivoSchema`), `rechazarIncidenteSchema` (motivo no vacío).
       *Depende de:* T1.20.
       *Hecho cuando:* R45/R46/R50/R55 con test de borde: causa fuera de lista, motivo vacío, lista de
       fotos vacía, monto vacío/0/negativo/3 decimales/con coma → `validation_error`.
-- [ ] **T1.26** `IncidenteAdminRepository.reportar` (design §12.5): `$transaction` con el
+- [x] **T1.26** `IncidenteAdminRepository.reportar` (design §12.5): `$transaction` con el
       `orden.updateMany` **guardado por los 5 estados** + `deletedAt: null`, el `create` del incidente en
       `solicitado`, las N evidencias y el `appendCambioEstado` con `origen_tipo = incidente`.
       *Depende de:* T1.23, T1.25.
@@ -281,7 +291,7 @@
       desde cualquier otro estado o con la orden borrada → **cero efectos** (ni fila, ni transición, ni
       historial); segundo reporte vivo → rechazado **por el índice único parcial** (test de integración,
       no sólo por la comprobación previa); y cero movimientos de dinero.
-- [ ] **T1.27** `WalletIndemnizacionIncidenteFeed` + `IncidenteAdminRepository.resolver`: `updateMany`
+- [x] **T1.27** `WalletIndemnizacionIncidenteFeed` + `IncidenteAdminRepository.resolver`: `updateMany`
       guardado por `estado = 'solicitado'` + alcance, escritura del monto, y emisión de **UN** egreso
       `egreso_indemnizacion` con `origen_tipo = orden_incidente`, todo en la MISMA `tx`. El feed **lee de
       la base lo que la tx acaba de escribir**, no recibe el monto por parámetro.
@@ -290,14 +300,14 @@
       origen_id` exactos y monto igual al persistido; un fallo en cualquier paso deja TODO sin aplicar;
       reintentar no duplica (índice único parcial de la 42); y **el guard de T1.15 pasa a declarar DOS
       emisores** (R29 reescrito), no uno permisivo.
-- [ ] **T1.28** `IncidenteAdminService`: alcance por rol/zona en el WHERE del repo, **R51 (quien reporta
+- [x] **T1.28** `IncidenteAdminService`: alcance por rol/zona en el WHERE del repo, **R51 (quien reporta
       no aprueba)**, subida secuencial y **compensada** de las N evidencias antes de la transacción
       (molde de `MisAsignacionesService:340-372`), y las dos colas de listado.
       *Depende de:* T1.27.
       *Hecho cuando:* R48/R49/R51 con test: `adminSatelite` de otra zona → sin filtrar datos; rol no
       autorizado → `forbidden`; **autor == resolutor → `conflict` sin efectos**; y un fallo de subida no
       deja objetos huérfanos en el bucket.
-- [ ] **T1.29** Reversión (design §13.2): `rechazar` y `retractar` — leen el estado de origen con
+- [x] **T1.29** Reversión (design §13.2): `rechazar` y `retractar` — leen el estado de origen con
       **`IOrdenHistorialRepository.findOrigenesReversion` (feature 149, reusado tal cual)**, lo validan
       contra el conjunto CERRADO de los 5, resuelven su id y devuelven la orden ahí, todo en la misma
       `tx` que marca el incidente.
@@ -306,7 +316,7 @@
       historial sin origen o con un origen fuera del conjunto → `conflict` **sin mover nada**;
       `aprobado` → reversión rechazada con mensaje propio; rechazo sin motivo → `validation_error`; y
       `mensajero_asignado_id`/`asignado_at` quedan **byte-idénticos** a antes del reporte.
-- [ ] **T1.30** [P] Aislamiento del camino del admin (R38/R56/R63): tests de que un incidente de admin
+- [x] **T1.30** [P] Aislamiento del camino del admin (R38/R56/R63): tests de que un incidente de admin
       **no** hace que `CorteDiarioRepository.findMensajerosConActividadSinCierre` devuelva a su autor,
       **no** entra en `RankingRepository.contarEntregadasPorMensajero`, **no** se vincula a ningún cierre
       del día ni altera sus totales, **no** toca el ledger por tienda, y que una orden **no** puede
@@ -314,13 +324,13 @@
       *Depende de:* T1.27.
       *Hecho cuando:* los cinco pasan y el de la doble indemnización está escrito como invariante, no
       como comentario.
-- [ ] **T1.31** Server Actions `lib/actions/incidentes.ts` + composition root (inyección de repos,
+- [x] **T1.31** Server Actions `lib/actions/incidentes.ts` + composition root (inyección de repos,
       `SignedUrlProvider`, storage y el feed nuevo), con el mismo `withErrorHandler` y el mismo mapeo
       `ZodError → validation_error` que `lib/actions/cierres-admin.ts`.
       *Depende de:* T1.29.
       *Hecho cuando:* `tests/integration/actions/incidentes-action.test.ts` cubre los cuatro verbos
       (reportar/aprobar/rechazar/retractar) con sus resultados de dominio.
-- [ ] **T1.32** Cierre de fase F1B: `./init.sh` + suite completa en verde, `tests/integration/db`
+- [x] **T1.32** Cierre de fase F1B: `./init.sh` + suite completa en verde, `tests/integration/db`
       completo; mapa R→test de R37-R64 en el impl.
       *Depende de:* T1.19-T1.31.
       *Hecho cuando:* no queda ningún R de I-M sin test citado.
@@ -478,6 +488,16 @@
       `progress/impl_158_backend.md` §3, con verificación por mutación de la precondición del
       `down`. La casilla cubre **las dos** migraciones, así que se marca cuando exista la del
       camino del admin (T1.19).
+      ✅ **ACTUALIZACIÓN 2026-07-30 (F1B):** la segunda migración existe y su round-trip real
+      (up→down→up) está hecho y documentado en `progress/impl_158b_backend.md` §3, con la
+      precondición verificada POR MUTACIÓN en **las tres** tablas que usan `wallet_origen_tipo`.
+      Se verificó además, contra Postgres, el **ORDEN** de los dos `down`: revertir la del
+      MENSAJERO con la del ADMIN aplicada **ABORTA** (`orden_incidente.causa` depende del enum
+      `gestion_causa_incidente`), y en el orden correcto (admin → mensajero) las dos corren
+      completas. **Hallazgo colateral, declarado:** `scripts/db-rollback.ts` elige la última
+      carpeta por NOMBRE, no la última migración APLICADA — aquí coinciden, pero no es lo mismo.
+      ⚠️ La casilla **sigue sin marcar** porque su cláusula «con los datos de las pruebas de humo
+      BORRADOS antes» depende de T3.1/T3.2, que son manuales y siguen sin hacer.
 - [ ] **T3.4** `feature_list.json` (158 → `done`) y `progress/current.md` actualizados; nada de
       código de producción sin su commit `feat(158-incidente-indemnizacion): …`.
 - [ ] **T3.5** *(nueva)* Verificar que el **follow-up de Q-E** («crédito de indemnización en el ledger por
