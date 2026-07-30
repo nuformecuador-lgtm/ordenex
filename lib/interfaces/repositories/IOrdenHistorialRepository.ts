@@ -42,6 +42,14 @@ export interface HistorialContexto {
   origenTipo: OrdenHistorialOrigenTipo;
 }
 
+// Feature 149 (design §3.3) — una orden del lote a revertir, con el `estatus_id` ACTUAL que el
+// service ya leyo (`findByIdsForTransicion`). El repo NO vuelve a leer el estado: recibe el par
+// y busca la fila de historial que produjo ese estado.
+export interface OrigenReversionItem {
+  ordenId: string;
+  estatusActualId: string;
+}
+
 /**
  * Feature 160 (design §1.1/§3.2, R1/R6) — ids de catalogo que materializan el criterio de
  * "intento de entrega". El repositorio NO conoce los `value` del catalogo (eso vive en
@@ -120,4 +128,24 @@ export interface IOrdenHistorialRepository {
    * el historial de una orden que le fue/esta asignada, aunque hoy ya no la tenga asignada.
    */
   existeActuacionDe(ordenId: string, usuarioId: string): Promise<boolean>;
+  /**
+   * Feature 149 (design §3.3, R11) — LECTURA PURA que alimenta la derivacion del destino de
+   * una reversion. Por cada item devuelve el `value` del estado de ORIGEN de la fila de
+   * historial MAS RECIENTE de esa orden cuyo `estatus_destino_id` es su `estatusActualId`:
+   * literalmente "de donde salio la transicion que se esta deshaciendo".
+   *
+   * UNA sola consulta para todo el lote (sin N+1): `DISTINCT ON (orden_id)` con
+   * `ORDER BY orden_id, created_at DESC, id DESC` (el desempate por `id` solo existe para que
+   * la consulta sea determinista, Q3) sobre el indice `(orden_id, estatus_destino_id)`.
+   *
+   * Semantica del resultado (el service la interpreta, R13 — aqui NO hay logica de negocio):
+   *   - clave ausente  => la orden no tiene ninguna fila con ese destino;
+   *   - valor `null`   => la fila existe pero su `estatus_origen_id` es NULL (fila de creacion);
+   *   - valor `string` => el `value` del estado de origen.
+   * Los tres casos que no producen un `value` normalizable terminan en rechazo (fallo CERRADO).
+   * Mapa vacio si `items` esta vacio.
+   */
+  findOrigenesReversion(
+    items: readonly OrigenReversionItem[],
+  ): Promise<Map<string, string | null>>;
 }

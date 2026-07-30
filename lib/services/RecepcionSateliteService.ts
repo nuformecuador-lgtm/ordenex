@@ -30,6 +30,13 @@ const ESTADO_EN_TRANSITO_CENTRAL = "devolviendo_a_bodega_central";
 // `porDevolver` (48): SIEMPRE acotadas a la zona del adminSatelite. La transicion la
 // ejecuta RecuperacionBodegaService (autz rol + zona); aqui SOLO listado por zona.
 const ESTADO_DEVUELTA = "devuelta";
+// Feature 149/T6.3/R35: estado de las ordenes de la zona YA ASIGNADAS a un mensajero que aun no
+// las recogio (`por_recoger`), elegibles para la accion por lote "Deshacer asignacion". Mismo
+// patron que `porDevolver` (139) y `devueltas` (100): SIEMPRE acotadas a la zona del
+// adminSatelite por `findRecepcionSateliteByZona(zonaId, ...)`; aqui SOLO listado — la autz de
+// ejecutar la reversion (rol + zona + destino derivado) la impone `DeshacerAsignacionService`.
+// El caso (b) (`en_ruta_bodega_satelite`) NO entra en este bucket (R36): sigue en "Por recibir".
+const ESTADO_ASIGNADA = "por_recoger";
 
 // Solo el rol autorizado en el modulo (R3/R17): el adminSatelite, SIEMPRE acotado
 // a su propia zona (R4/R12).
@@ -79,6 +86,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
         porDevolver: [], // Feature 139/R21: sin zona -> tampoco hay `por_devolver`
         enTransitoACentral: [], // Feature 139/R21: sin zona -> tampoco hay `devolviendo_a_bodega_central`
         devueltas: [], // Feature 100/T4.1: sin zona -> tampoco hay ordenes por recuperar
+        asignadas: [], // Feature 149/T6.3/R35: sin zona -> tampoco hay ordenes por deshacer
         zonaNombre: null,
         sinZona: true,
       };
@@ -95,7 +103,8 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       ESTADO_POR_DEVOLVER,
       ESTADO_EN_TRANSITO_CENTRAL,
       ESTADO_DEVUELTA,
-    ]); // R6/R8 + Feature 139/R21 + Feature 100/R12
+      ESTADO_ASIGNADA, // Feature 149/T6.3/R35
+    ]); // R6/R8 + Feature 139/R21 + Feature 100/R12 + Feature 149/R35
 
     // Feature 160 (R12/R13/R15): UN SOLO lote con la union de los ids de los CINCO grupos, ya
     // acotados a la zona del actor por `findRecepcionSateliteByZona`. Cinco llamadas (una por
@@ -107,6 +116,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     const porDevolver: RecepcionSateliteDTO[] = []; // Feature 139/R21: por_devolver (accionable)
     const enTransitoACentral: RecepcionSateliteDTO[] = []; // Feature 139/R21: en transito (informativo)
     const devueltas: RecepcionSateliteDTO[] = []; // Feature 100/T4.1/R12
+    const asignadas: RecepcionSateliteDTO[] = []; // Feature 149/T6.3/R35 (por_recoger)
     let zonaNombre: string | null = null;
     for (const row of rows) {
       zonaNombre = row.zonaNombre; // derivado de orden.zonaId (misma zona para todas)
@@ -117,6 +127,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       else if (row.estatusValue === ESTADO_POR_DEVOLVER) porDevolver.push(dto);
       else if (row.estatusValue === ESTADO_EN_TRANSITO_CENTRAL) enTransitoACentral.push(dto);
       else if (row.estatusValue === ESTADO_DEVUELTA) devueltas.push(dto);
+      else if (row.estatusValue === ESTADO_ASIGNADA) asignadas.push(dto); // feature 149/R35
     }
     return {
       status: "ok",
@@ -125,6 +136,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       porDevolver,
       enTransitoACentral,
       devueltas,
+      asignadas,
       zonaNombre,
       sinZona: false,
     };

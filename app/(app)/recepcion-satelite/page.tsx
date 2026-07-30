@@ -70,6 +70,9 @@ export default async function RecepcionSatelitePage() {
         porDevolver={result.porDevolver}
         enTransitoACentral={result.enTransitoACentral}
         devueltas={result.devueltas}
+        // Feature 149/T6.3 (R35): órdenes `por_recoger` de SU zona (acotadas server-side por
+        // `RecepcionSateliteService.listar`), sobre las que el módulo ofrece "Deshacer asignación".
+        asignadas={result.asignadas}
         zonaNombre={result.zonaNombre}
         sinZona={result.sinZona}
         mensajeros={mensajeros}
