@@ -12,13 +12,17 @@
 
 - **Defecto de redacción de la ficha (no perpetuar).** `feature_list.json:1394` dice «Depende de
   120». Ese id es **viejo**: la dependencia real registrada es `depends_on: 135`
-  (`feature_list.json:1400`), ya `done` y mergeada en `dev @ 79056b24`. El mismo desfase de
+  (`feature_list.json:1400`), ya `done` y mergeada en `dev` (lo estaba ya en `79056b24`; `dev` ha
+  avanzado desde entonces y la base de esta rama es la sincronización del 2026-07-31). El desfase de
   numeración está documentado por la 129 (`specs/129-analitica-ruta-shell-sidebar/design.md:256-263`:
   «Los `depends_on` son la referencia fiable; las descripciones, no»). Las fichas de 126, 127, 133
   y 134 citan a esta feature como «121»: se refieren a **esta** (122).
 - **Contrato vigente que esta feature CONSUME, no reinventa** (feature 135, mergeada):
-  `lib/analytics/types.ts`, `metrics.ts`, `ranges.ts`, `filters.ts` y sus 10 suites en
-  `tests/unit/analytics/`.
+  `lib/analytics/types.ts`, `metrics.ts`, `ranges.ts`, `filters.ts` y sus suites en
+  `tests/unit/analytics/`, que tras el chore de saneamiento (PR #232) son **ocho** archivos:
+  `types`, `metrics`, `ranges`, `filters`, `modulo-puro.guardia`, `metrics-dinero.guardia`,
+  `ranges-reuso.guardia`, `definiciones-catalogo.guardia`. El noveno,
+  `frontera.guardia.test.ts`, **fue retirado** (ver la nota de R33).
 - **Avisos dirigidos a esta feature** (`specs/135-analitica-catalogo-kpis-rangos/design.md:385-388`):
   D7 → el criterio de acceso total es `esAccesoTotal(rol)` (`lib/auth/acceso-total.ts:7-9`), que la
   135 **no duplica**; D9 → el recorte por zona del `adminSatelite` se aplica sobre `orden.zona_id`,
@@ -214,8 +218,16 @@ DEBE ser inyectable (parámetro `now`, patrón `resolverRango`,
 componentes; los archivos tocados DEBEN limitarse a `lib/analytics/**` y `tests/unit/analytics/**`
 —incluida la **única excepción autorizada**: la ampliación de
 `tests/unit/analytics/modulo-puro.guardia.test.ts`, archivo heredado de la 135 (D8, R35)—.
-Un guardia de frontera medido sobre el diff real DEBE comprobarlo (patrón
-`tests/unit/analytics/frontera.guardia.test.ts`).
+La parte **permanente** de esta propiedad —que todo lo que hay en `lib/analytics/**` es puro y está
+vigilado— la sostiene el guardia único de R35. La parte **de rama** —que este diff no crea
+migraciones, páginas ni componentes— **NO tiene guardia automático** y DEBE comprobarse en el cierre
+(T5.5) y en el review con `git diff --name-only <merge-base>..HEAD`.
+
+> **Hueco declarado, no tapado.** `tests/unit/analytics/frontera.guardia.test.ts` **fue retirado**
+> por el chore de saneamiento (PR #232, 2026-07-31) porque medía el diff de la rama actual y uno de
+> sus casos prohibía crear páginas. La 122 **no lo resucita**: un guardia que mide el diff caduca
+> con cada merge y produce verdes vacíos. Se acepta que R33 pasa de propiedad **ejecutable** a
+> propiedad **verificada en el cierre**, y se deja escrito para que nadie la dé por automática.
 
 **R34.** El **módulo puro** de esta feature **NO DEBE** registrar nada en logs ni incluir en mensajes
 de error ids ajenos, PII ni el contenido de la sesión; un motivo de denegación es un literal cerrado,
@@ -329,7 +341,7 @@ cierra el implementer en `progress/impl_122.md`.
 | R30 | `actor.test.ts`: el tipo `Actor` de `IOrdenService` es asignable a la forma estructural del módulo (test de tipos); censo: `lib/analytics/**` no importa `interfaces/services` ni `next/headers`. |
 | R31 | `modulo-puro.guardia.test.ts`: imports directos de `lib/analytics/**` sin capas prohibidas; import sin `DATABASE_URL`; sin `process.env`; sin `'use server'`. |
 | R32 | `consulta.test.ts`: dos invocaciones con el mismo `now` inyectado dan resultado idéntico; censo de `Date.now()`/`new Date()` sin parámetro en el módulo. |
-| R33 | `frontera-122.guardia.test.ts`: diff de la rama contra la base; 0 archivos en `db/migrations/`, `app/`, `components/`, y código solo en `lib/analytics/**` + `tests/unit/analytics/**` (más la ampliación autorizada de `modulo-puro.guardia.test.ts`, D8). |
+| R33 | **Parte permanente:** `modulo-puro.guardia.test.ts` (R35) censa todo `lib/analytics/**` leyendo el directorio (`:199-207`), así que ningún módulo nuevo escapa a la vigilancia. **Parte de rama (sin guardia, ver nota de R33):** T5.5 — `git diff --name-only <merge-base>..HEAD` en el cierre: 0 archivos en `db/migrations/`, `app/`, `components/`; solo `lib/analytics/**`, `tests/unit/analytics/**` y la ampliación autorizada de `modulo-puro.guardia.test.ts` (D8); resultado pegado en `progress/impl_122.md`. |
 | R34 | `alcance.test.ts`: todo motivo de denegación pertenece a la unión literal declarada y no contiene ids; espía de `console.*` en el módulo puro = 0 llamadas. |
 | R35 | `modulo-puro.guardia.test.ts` (ampliado, **mismo archivo**): la clausura **transitiva** de `lib/analytics/**` se recorre y se censa; censo repo-wide = 0 guardias de pureza duplicados en `tests/unit/analytics/` (ningún otro archivo declara `CAPAS_PROHIBIDAS`). |
 | R36 | `modulo-puro.guardia.test.ts`: la allowlist tiene `length === 1`; una arista `acceso-total → @prisma/client` con `PrismaClient` en los nombres pone el guardia rojo; una arista transitiva prohibida inyectada a mano pone el guardia rojo; import de la clausura completa con `delete process.env.DATABASE_URL` no lanza. |

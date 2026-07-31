@@ -49,14 +49,22 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
 ## T1 · Preparación
 
 - **T1.1** — Medir el baseline **antes** de tocar nada: `pnpm db:generate` desde el schema limpio,
-  luego typecheck y suite completa; anotar los rojos preexistentes (~20 del rediseño `ux`, PR #212)
-  en `progress/impl_122.md`.
-  **Hecho:** el baseline está escrito con fecha y conteo; ningún rojo ajeno se atribuye a la 122.
-  *(Depende de: nada. Puede correr durante T0.)*
+  luego `./init.sh` completo, y anotarlo con fecha en `progress/impl_122.md`. **La base está
+  verde:** tras sincronizar con `origin/dev` (2026-07-31), `./init.sh` termina en `== init OK ==`
+  con 665 archivos / 8052 tests, **0 rojos** y 0 errores de lint (PR #232). La excusa heredada de la
+  135 («dev arrastra ~20 rojos de `ux`») **ya no aplica**.
+  **Hecho:** el baseline está escrito con fecha y conteo. Si el baseline propio **no** sale en 0
+  rojos, se para y se avisa al leader **antes** de escribir código: sobre base limpia, un rojo
+  inexplicado es un problema del entorno, no ruido ajeno que se pueda descontar.
+  *(Depende de: nada.)*
 
 - **T1.2 [P]** — Verificar que la base de la rama contiene el contrato de la 135: existen los
-  cuatro módulos de `lib/analytics/` y sus 10 suites en `tests/unit/analytics/`, y estas pasan.
-  **Hecho:** las 10 suites de la 135 en verde sobre esta rama.
+  cuatro módulos de `lib/analytics/` y sus **ocho** suites en `tests/unit/analytics/` (`types`,
+  `metrics`, `ranges`, `filters`, `modulo-puro.guardia`, `metrics-dinero.guardia`,
+  `ranges-reuso.guardia`, `definiciones-catalogo.guardia`). **No busques
+  `frontera.guardia.test.ts`: fue retirado por el PR #232 y su ausencia es correcta.**
+  **Hecho:** las ocho suites en verde sobre esta rama, y constancia de que el archivo retirado no se
+  echa de menos ni se recrea.
 
 ---
 
@@ -212,12 +220,17 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
   matriz queda sin aserción (conteo de casos afirmado explícitamente); el test de la reasignación
   lleva en su nombre que es comportamiento **esperado** por D3, no un defecto.
 
-- **T5.5 [P]** — Frontera de la rama (R33): `frontera-122.guardia.test.ts` sobre el diff real
-  contra la base `origin/dev @ 79056b24`, patrón `frontera.guardia.test.ts` (incluida la
-  distinción «no hay git» vs «hay git y ninguna base resuelve»). La allowlist del guardia incluye
+- **T5.5** — Frontera de la rama (R33), **comprobación de cierre, NO un test nuevo**. El patrón
+  `frontera.guardia.test.ts` **ya no existe**: lo retiró el chore de saneamiento (PR #232,
+  2026-07-31) por medir el diff de la rama y prohibir crear páginas. **No se resucita** ni se
+  reescribe como `frontera-122.guardia.test.ts`: un guardia de diff caduca en el siguiente merge y
+  pasaría en vacío pareciendo verde.
+  Se ejecuta y se pega la salida: `git diff --name-only $(git merge-base origin/dev HEAD)..HEAD`.
+  **Hecho:** la lista pegada en `progress/impl_122.md` no contiene nada en `db/migrations/`, `app/`
+  ni `components/`; solo hay archivos en `lib/analytics/**` y `tests/unit/analytics/**`, más
   **exactamente una** excepción heredada: `tests/unit/analytics/modulo-puro.guardia.test.ts` (D8).
-  **Hecho:** 0 infractores; el guardia se autocomprueba con rutas prohibidas escritas a mano y sale
-  rojo si se le añade una segunda excepción.
+  La parte permanente de R33 la cubre T5.1 (el censo de `modulo-puro` lee el directorio de
+  `lib/analytics`, `:199-207`, así que los cinco módulos quedan vigilados sin lista fija).
 
 ---
 
@@ -228,7 +241,9 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
   concreto. Atención especial a los siete nacidos en la puerta (R35–R41).
 
 - **T6.2** — `./init.sh` + suite completa; comparar contra el baseline de T1.1.
-  **Hecho:** verde, o delta 0 respecto de los rojos preexistentes de `ux` documentados en T1.1.
+  **Hecho:** **verde absoluto** — `== init OK ==`, 0 rojos, 0 errores de lint, y el conteo de
+  archivos = 665 + los suites nuevas de la 122. La base era limpia (665/8052), así que el criterio
+  es **cero**, no «delta 0 respecto de rojos ajenos»: cualquier rojo al cerrar es de la 122.
 
 - **T6.3** — Avisos dirigidos: propagar `design.md §7` a los `status_note` de 123, 126, 127, 133 y
   134 en `feature_list.json`.

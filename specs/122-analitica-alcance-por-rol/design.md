@@ -209,8 +209,9 @@ Cómo esto hace que **olvidarlo sea imposible**, en cuatro piezas que se sostien
    filtro: **falla el build**, no los datos (R17).
 
 La quinta pieza, para lo que los tipos no alcanzan (SQL crudo, `$queryRaw`, un servicio que
-reconstruya el filtro a mano): el **guardia estructural** de R18, siguiendo el patrón ya establecido
-por `frontera.guardia.test.ts` y `modulo-puro.guardia.test.ts` — censo por fichero, con
+reconstruya el filtro a mano): el **guardia estructural** de R18, siguiendo el único patrón que
+sigue vivo en el repo, `modulo-puro.guardia.test.ts` (`frontera.guardia.test.ts` fue retirado por el
+PR #232 y no se resucita, ver §8) — censo por fichero, con
 **autocomprobación** por fixtures para que no quede verde por vacío mientras 126/127 no existan
 (exactamente la trampa que `modulo-puro.guardia.test.ts:436-448` ya se pone a sí mismo).
 
@@ -504,6 +505,17 @@ Ninguna externa. Dependencias internas, todas ya existentes:
 - **La defensa es única.** Sin RLS (alternativa 10), esta capa es la **única** que separa tenants en
   analítica. Un bug aquí no tiene red debajo. Es la razón de que R22 exija matriz exhaustiva y no
   casos de ejemplo.
+- **La frontera de rama se queda sin guardia ejecutable (hueco real, declarado).** El chore de
+  saneamiento retiró `tests/unit/analytics/frontera.guardia.test.ts` (PR #232, 2026-07-31) porque
+  medía el diff de la rama actual y uno de sus casos prohibía crear páginas. Lo que ese archivo
+  cubría se reparte así: la parte **permanente** (todo `lib/analytics/**` es puro y ningún módulo
+  nuevo escapa al censo) la absorbe R35 sin cambios —`modulo-puro.guardia.test.ts` lee el
+  directorio, no una lista fija (`:199-207`), así que `alcance.ts`, `identidad.ts` y `auditoria.ts`
+  quedan vigilados el día que existan—; la parte **de rama** (que este diff no cree migraciones,
+  páginas ni componentes) **no la absorbe nadie** y no se inventa un requisito nuevo para taparla:
+  un guardia que mide el diff caduca en el siguiente merge y da verdes vacíos, que es exactamente
+  por lo que lo retiraron. R33 lo dice explícito y T5.5 pasa a ser una comprobación de cierre con
+  comando y salida pegada, no un test.
 
 ## 9. Verificación
 
@@ -512,8 +524,11 @@ familias: comportamiento (`alcance.test.ts`, `consulta.test.ts`, `alcance-adapta
 `alcance-granos.test.ts`, `identidad.test.ts`, `auditoria.test.ts`),
 **matriz exhaustiva** 5 roles × 23 métricas × 4 formas de filtro (`alcance-matriz.test.ts`),
 **guardias estructurales** (fuente única, columnas, alcance obligatorio, dinero, aislamiento,
-pureza transitiva, frontera de rama) y **tests de tipos** (`@ts-expect-error`) para R16/R17/R30.
-Cierre con `./init.sh`.
+pureza transitiva) y **tests de tipos** (`@ts-expect-error`) para R16/R17/R30. La frontera de rama
+**no** es un guardia: es la comprobación de cierre de T5.5 (R33). Cierre con `./init.sh`.
 
-> Nota de medición: `dev` arrastra ~20 tests rojos del rediseño de `ux` (PR #212), ajenos a esta
-> feature. El baseline se mide **antes** de implementar y esos rojos no se cuentan como propios.
+> Nota de medición (actualizada 2026-07-31, tras sincronizar con `origin/dev`): **`dev` está
+> verde** — `./init.sh` termina en `== init OK ==` con 665 archivos / 8052 tests, 0 rojos y 0
+> errores de lint (PR #232). Se acabó la excusa heredada de la 135 («dev arrastra ~20 rojos de
+> `ux`»): **la 122 nace sobre base limpia y su delta se mide contra cero**. Un solo rojo al cerrar
+> es un rojo de la 122.
