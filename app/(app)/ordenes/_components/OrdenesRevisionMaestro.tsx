@@ -14,6 +14,7 @@ import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionRe
 import { OrdenesApartado } from "./OrdenesApartado";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
+import { AsignarRecoleccionModal } from "./AsignarRecoleccionModal";
 import { RutearSateliteModal } from "./RutearSateliteModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 
@@ -31,6 +32,7 @@ export interface OrdenesRevisionMaestroProps {
 type ModalAbierto =
   | "generar-guia"
   | "asignar-bodega"
+  | "asignar-recoleccion" // feature 157
   | "rutear-satelite"
   | "etiquetas"
   | null;
@@ -124,6 +126,12 @@ export function OrdenesRevisionMaestro({
     setModalAbierto("asignar-bodega");
   }
 
+  // Feature 157/R3: quien va a la tienda a recoger el lote. No transiciona la orden.
+  function abrirAsignarRecoleccion(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("asignar-recoleccion");
+  }
+
   // Feature 30/R13: "Rutear a bodega satélite" solo aplica a órdenes NO-GAM
   // (`zonaEsGam === false`). Se filtra el snapshot seleccionado antes de abrir el
   // modal; el service revalida (defensa en profundidad).
@@ -190,6 +198,22 @@ export function OrdenesRevisionMaestro({
         onAction={readOnly ? undefined : abrirEtiquetas}
         mostrarHistorial
       />
+      {/* Feature 157 (R1/R2): el paquete sigue en la TIENDA. Va antes de "En bodega" porque
+          ese es su lugar en el flujo v2: la orden nace aqui (155) y solo llega a la central
+          cuando el mensajero la recolecta. Estas ordenes nacen CON `num_guia` y etiqueta, de
+          ahi la accion secundaria. La columna "Mensajero" ya pinta el asignado con fallback
+          "—", asi que R2 sale de la variante de columnas por defecto. */}
+      <OrdenesApartado
+        titulo="Por recolectar en tienda"
+        estatusValue="por_recolectar_en_tienda"
+        estatusId={estatusIdPorValue.get("por_recolectar_en_tienda")}
+        selectable={!readOnly}
+        actionLabel={readOnly ? undefined : "Asignar mensajero para recolección"}
+        onAction={readOnly ? undefined : abrirAsignarRecoleccion}
+        secondaryActionLabel={readOnly ? undefined : "Imprimir etiquetas"}
+        onSecondaryAction={readOnly ? undefined : abrirEtiquetas}
+        mostrarHistorial
+      />
       <OrdenesApartado
         titulo="En bodega"
         estatusValue="en_bodega_central"
@@ -246,6 +270,14 @@ export function OrdenesRevisionMaestro({
           <GenerarGuiaModal
             open={modalAbierto === "generar-guia"}
             ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          <AsignarRecoleccionModal
+            open={modalAbierto === "asignar-recoleccion"}
+            ordenes={ordenesSeleccionadas}
+            mensajeros={mensajeros}
+            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />

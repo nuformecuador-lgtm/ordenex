@@ -25,6 +25,7 @@ import {
 import { FiltroCantonDistrito } from "./FiltroCantonDistrito";
 import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
 import { RecogerPaqueteCard } from "./RecogerPaqueteCard";
+import { RecoleccionTiendaPanel } from "./RecoleccionTiendaPanel";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { ChatFlotante } from "./chat-demo/ChatFlotante";
@@ -57,6 +58,15 @@ import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 export interface MisAsignacionesModuleProps {
   /** Órdenes en `por_recoger`. */
   porRecoger: MiAsignacionDTO[];
+  /**
+   * Feature 157 (R11): TERCER grupo — lo que el mensajero va a recoger EN LA TIENDA. No entra
+   * en `unionAsignaciones` (no aporta opciones al filtro cantón/distrito ni se filtra por él,
+   * R40) ni en el mapa ni en los KPIs (R39): el paquete todavía no está en la calle.
+   *
+   * Opcional por el patrón aditivo del repo: los fixtures que montan el módulo para probar
+   * otra cosa no tienen que declarar un grupo que no les interesa. La página SIEMPRE lo pasa.
+   */
+  porRecolectar?: MiAsignacionDTO[];
   /** Órdenes en `en_reparto` (por gestionar), YA ordenadas por la ruta (R28). */
   porGestionar: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
@@ -95,6 +105,7 @@ const SIN_COINCIDENCIAS_REPARTO = "Ninguna guía en reparto coincide con el filt
 
 export function MisAsignacionesModule({
   porRecoger,
+  porRecolectar = [],
   porGestionar,
   ordenEnGestionId,
   ruta,
@@ -407,6 +418,18 @@ export function MisAsignacionesModule({
             onCantonChange={filtro.setCantonYReset}
             onDistritoChange={filtro.setDistrito}
             onLimpiar={filtro.limpiar}
+          />
+
+          {/* ---------- Apartado: Por recolectar en tienda (feature 157) ---------- */}
+          {/* Va ENCIMA de "Por recoger" porque es lo primero del viaje: el paquete sigue en
+              la tienda y hay que ir por él. El buscador SÍ se le aplica (buscar una guía por
+              número sirve igual recolectando); el filtro cantón/distrito NO (R40): esas
+              órdenes no son paradas de la ruta y su geografía no dice dónde hay que ir, que
+              es la tienda. El panel se oculta solo cuando no hay nada que recolectar. */}
+          <RecoleccionTiendaPanel
+            porRecolectar={filtrarAsignaciones(porRecolectar, query)}
+            bloqueado={bloqueado}
+            onRecolectada={() => router.refresh()}
           />
 
           {/* ---------- Apartado: Por recoger (por_recoger) ---------- */}

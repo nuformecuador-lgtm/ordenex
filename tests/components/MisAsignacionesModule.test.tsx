@@ -182,6 +182,7 @@ function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0
   return render(
     <MisAsignacionesModule
       porRecoger={props?.porRecoger ?? []}
+      porRecolectar={props?.porRecolectar ?? []} // feature 157
       porGestionar={props?.porGestionar ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
@@ -2436,5 +2437,78 @@ describe("MisAsignaciones — intentos de entrega (feature 160)", () => {
     });
     const dato = within(cardDe("REM-G1")).getAllByText("Intentos: 2")[0];
     expect(dato.textContent).toBe("Intentos: 2");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 157 (R11/R25/R39/R40) — el TERCER apartado convive con los dos de siempre sin
+// contaminarlos. Lo que se protege aquí es sobre todo la NO interferencia: la recolección no
+// entra al mapa, ni al filtro de zona, ni cambia el modo foco del flujo de gestión.
+// ---------------------------------------------------------------------------------------
+describe("MisAsignacionesModule — apartado por recolectar en tienda (feature 157)", () => {
+  function recoleccion(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
+    return makeAsignacion({
+      id: "rec-1",
+      numGuia: 9001,
+      numRemision: "REM-REC",
+      estatusValue: "por_recolectar_en_tienda",
+      tiendaNombre: "Tienda Norte",
+      secuenciaRuta: null,
+      ...over,
+    });
+  }
+
+  it("R11: los tres apartados coexisten y se distinguen", () => {
+    renderModule({
+      porRecolectar: [recoleccion()],
+      porRecoger: [makeAsignacion({ id: "p1", numRemision: "REM-P" })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
+    });
+
+    expect(
+      screen.getByRole("region", { name: "Por recolectar en tienda" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Por recoger" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "En reparto / por gestionar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R40: no aporta opciones al filtro cantón/distrito (no es una parada de la ruta)", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecolectar: [recoleccion({ cantonNombre: "Escazú", provinciaNombre: "San José" })],
+      porGestionar: [
+        makeAsignacion({ id: "g1", cantonNombre: "Curridabat", provinciaNombre: "San José" }),
+      ],
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Filtrar por cantón" }));
+    const listbox = await screen.findByRole("listbox");
+
+    // El cantón de la recolección NO se ofrece: filtrar el reparto por la geografía de un
+    // paquete que sigue en la tienda no significa nada.
+    expect(within(listbox).getByRole("option", { name: /Curridabat/ })).toBeInTheDocument();
+    expect(within(listbox).queryByRole("option", { name: /Escazú/ })).toBeNull();
+  });
+
+  it("R39: no entra en los KPIs de ruta ni en el mapa (sigue en la tienda)", () => {
+    renderModule({ porRecolectar: [recoleccion()], porGestionar: [] });
+
+    // Sin órdenes en reparto no hay paradas que dibujar, aunque haya recolecciones.
+    expect(screen.queryByTestId("ruta-mapa")).toBeNull();
+  });
+
+  it("R25: el MODO FOCO sigue siendo del flujo de gestión y no muestra el apartado", () => {
+    renderModule({
+      porRecolectar: [recoleccion()],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
+      ordenEnGestionId: "g1",
+    });
+
+    // En foco solo vive la orden activa: la recolección no compite por la pantalla.
+    expect(
+      screen.queryByRole("region", { name: "Por recolectar en tienda" }),
+    ).toBeNull();
   });
 });

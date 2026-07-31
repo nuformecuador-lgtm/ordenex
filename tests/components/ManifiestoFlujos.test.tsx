@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { OrdenesCargaResumenPaso } from "@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso";
+import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
 import { GenerarGuiaModal } from "@/app/(app)/ordenes/_components/GenerarGuiaModal";
 import { AsignarBodegaModal } from "@/app/(app)/ordenes/_components/AsignarBodegaModal";
 import { RutearSateliteModal } from "@/app/(app)/ordenes/_components/RutearSateliteModal";
@@ -29,6 +29,10 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 // sin alterar la llamada de negocio ni su resultado (R25, R27).
 
 vi.mock("@/lib/actions/manifiesto", () => ({ obtenerManifiesto: vi.fn() }));
+// El paso 3 de la carga masiva pide su tabla al montar; aqui solo se ejercita el manifiesto.
+vi.mock("@/lib/actions/carga-masiva-resumen", () => ({
+  resumenCargaMasiva: vi.fn(async () => ({ status: "ok", ordenes: [] })),
+}));
 vi.mock("@/lib/actions/ordenes-guia", () => ({
   generarGuia: vi.fn(),
   asignarDesdeBodega: vi.fn(),
@@ -194,15 +198,10 @@ function botonManifiesto(): HTMLElement {
 describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
   it("R18: tras la carga masiva ofrece el manifiesto de las remisiones creadas", async () => {
     const user = userEvent.setup();
-    render(
-      <OrdenesCargaResumenPaso
-        clasificacion={{
-          numRemisionesNuevas: ["REM-A", "REM-B"],
-          existentes: [],
-          errores: [],
-        }}
-      />,
-    );
+    // Feature 157 (bloque E): el boton vive ahora en el paso que el modal MONTA de verdad.
+    // Antes colgaba de `OrdenesCargaResumenPaso`, huerfano desde la 159 — por eso una tienda
+    // que cargaba por la UI no tenia forma de sacar su manifiesto.
+    render(<OrdenesCargaResumen numRemisiones={["REM-A", "REM-B"]} />);
 
     await user.click(botonManifiesto());
 
@@ -214,15 +213,7 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
   });
 
   it("R17/R18: sin órdenes nuevas el paso de carga masiva NO ofrece manifiesto", () => {
-    render(
-      <OrdenesCargaResumenPaso
-        clasificacion={{
-          numRemisionesNuevas: [],
-          existentes: [{ numRemision: "REM-X", estatus: "en_bodega_central" }],
-          errores: [],
-        }}
-      />,
-    );
+    render(<OrdenesCargaResumen numRemisiones={[]} />);
 
     expect(
       screen.queryByRole("button", { name: /descargar manifiesto/i }),
