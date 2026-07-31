@@ -53,38 +53,38 @@
 
 ## T1 — Preparación de la migración
 
-- [ ] **T1.1 [P]** Fijar el nombre de carpeta `db/migrations/<timestamp>_analytics_daily/` con
+- [x] **T1.1 [P]** Fijar el nombre de carpeta `db/migrations/<timestamp>_analytics_daily/` con
       `pnpm run db:migrate:create` (solo crea el `.sql`, no aplica).
       *Hecho:* la carpeta existe y `ls db/migrations | sort | tail -1` devuelve **esta** carpeta. Si
       no, se anota el conflicto: `scripts/db-rollback.ts` revierte **por nombre de carpeta**, no por
       última aplicada.
-- [ ] **T1.2 [P]** Verificar contra `db/schema.prisma` que el enum `gestion_causa_devolucion` existe
+- [x] **T1.2 [P]** Verificar contra `db/schema.prisma` que el enum `gestion_causa_devolucion` existe
       con sus tres valores (`not_found`, `wrong_number`, `wrong_address`).
       *Hecho:* confirmado; la migración **no** crea ningún enum nuevo (mantiene R41 aditiva y deja
       el `down.sql` en una sola sentencia).
 
 ## T2 — `migration.sql` (depende de T1)
 
-- [ ] **T2.1** `CREATE TABLE "analytics_daily"` con las **19 columnas** de `design.md §3.1`: 6 de
+- [x] **T2.1** `CREATE TABLE "analytics_daily"` con las **19 columnas** de `design.md §3.1`: 6 de
       grano, 10 medidas, `id`, `created_at`, `updated_at`.
       *Hecho:* el DDL coincide columna a columna con la tabla de §3.1; `seg_ciclo_acum` es `BIGINT`,
       la columna del embudo se llama `ordenes_estado_stock` y ninguna medida es de coma flotante ni
       `DECIMAL`.
-- [ ] **T2.2** Los tres `CHECK` estructurales: `primer_intento_ok <= entregas` (R25),
+- [x] **T2.2** Los tres `CHECK` estructurales: `primer_intento_ok <= entregas` (R25),
       `seg_ciclo_n > 0 OR seg_ciclo_acum = 0` (R22) y no negatividad de las diez medidas (R26).
       *Hecho:* tres `ADD CONSTRAINT ... CHECK` con nombre explícito
       (`analytics_daily_pio_lte_entregas`, `analytics_daily_ciclo_coherente`,
       `analytics_daily_medidas_no_negativas`).
-- [ ] **T2.3** Las cuatro FKs con `ON DELETE RESTRICT ON UPDATE CASCADE` (`zona`, `usuario`×2,
+- [x] **T2.3** Las cuatro FKs con `ON DELETE RESTRICT ON UPDATE CASCADE` (`zona`, `usuario`×2,
       `order_status`).
       *Hecho:* cuatro `ADD CONSTRAINT ... FOREIGN KEY`; ninguna `CASCADE`/`SET NULL` en `ON DELETE`.
-- [ ] **T2.4** Índice único del grano con `NULLS NOT DISTINCT` (§4.3), en el orden de columnas
+- [x] **T2.4** Índice único del grano con `NULLS NOT DISTINCT` (§4.3), en el orden de columnas
       declarado, más los tres índices de recorte `(tienda_id, fecha)`, `(mensajero_id, fecha)`,
       `(zona_id, fecha)`.
       *Hecho:* exactamente **4** sentencias `CREATE [UNIQUE] INDEX`; la del único contiene
       literalmente `NULLS NOT DISTINCT` y empieza por `fecha`; ninguna sobre `estatus_id` ni
       `causa_devolucion` sueltos (R40).
-- [ ] **T2.5** Comentarios en la base: **1 `COMMENT ON TABLE`** con el invariante de inmutabilidad
+- [x] **T2.5** Comentarios en la base: **1 `COMMENT ON TABLE`** con el invariante de inmutabilidad
       hacia atrás (R35) y **9 `COMMENT ON COLUMN`** (R30): las cuatro medidas delicadas
       (`ordenes_estado_stock` con la frase literal de **no sumar por `fecha`**; `seg_ciclo_acum` con
       la atribución al **evento terminal**, R34; `seg_ciclo_n`; `primer_intento_ok` con su universo
@@ -93,9 +93,9 @@
       NULL = sin causa tipificada R12).
       *Hecho:* 10 sentencias de comentario; `pg_description` las devuelve tras el UP (se verifica en
       T8.3).
-- [ ] **T2.6** `ALTER TABLE "analytics_daily" ENABLE ROW LEVEL SECURITY;` sin ninguna policy.
+- [x] **T2.6** `ALTER TABLE "analytics_daily" ENABLE ROW LEVEL SECURITY;` sin ninguna policy.
       *Hecho:* la sentencia está y no hay ningún `CREATE POLICY` en el archivo.
-- [ ] **T2.7** Cabecera de comentario al estilo del repo (`20260727120000_notificacion`): qué crea,
+- [x] **T2.7** Cabecera de comentario al estilo del repo (`20260727120000_notificacion`): qué crea,
       por qué el grano es de 6 columnas, por qué `NULLS NOT DISTINCT`, por qué no hay dinero y por
       qué existen los tres `CHECK`.
       *Hecho:* la cabecera cita la feature 123, la 135 y las decisiones D1–D4 de este spec más
@@ -103,7 +103,7 @@
 
 ## T3 — `down.sql` (depende de T2)
 
-- [ ] **T3.1** `DROP TABLE IF EXISTS "analytics_daily";` con cabecera que explique que arrastra PK,
+- [x] **T3.1** `DROP TABLE IF EXISTS "analytics_daily";` con cabecera que explique que arrastra PK,
       índices, FKs, CHECKs, comentarios y RLS, y que la migración es aditiva (no toca nada
       preexistente ni retira enums).
       *Hecho:* el archivo existe, `./init.sh` no avisa por `down.sql` faltante, y el DOWN no
@@ -111,7 +111,7 @@
 
 ## T4 — Modelo Prisma (depende de T2; `[P]` con T3)
 
-- [ ] **T4.1 [P]** `model AnalyticsDaily` en `db/schema.prisma` con `@@map("analytics_daily")`,
+- [x] **T4.1 [P]** `model AnalyticsDaily` en `db/schema.prisma` con `@@map("analytics_daily")`,
       `@map` snake_case en todos los campos, `fecha DateTime @db.Date`,
       `segCicloAcum BigInt @map("seg_ciclo_acum")`, `ordenesEstadoStock Int
       @map("ordenes_estado_stock")`, `causaDevolucion GestionCausaDevolucion?`, relaciones a
@@ -119,19 +119,19 @@
       *Hecho:* `pnpm db:generate` pasa; el modelo **no** declara `@@unique` del grano y lleva un
       comentario apuntando a que el único con `NULLS NOT DISTINCT` y los tres `CHECK` viven en el
       SQL (patrón `gestion_orden` / `orden_incidente`).
-- [ ] **T4.2 [P]** `pnpm run typecheck` con el cliente regenerado desde el schema limpio.
+- [x] **T4.2 [P]** `pnpm run typecheck` con el cliente regenerado desde el schema limpio.
       *Hecho:* 0 errores nuevos respecto del baseline **medido en esta misma sesión** (no del citado
       en `progress/current.md`).
 
 ## T5 — Guard de contrato con la 135 (`[P]`, puede escribirse antes que T2)
 
-- [ ] **T5.1 [P]** `tests/unit/analytics/analytics-daily-contrato.test.ts`: importa `METRICAS` de
+- [x] **T5.1 [P]** `tests/unit/analytics/analytics-daily-contrato.test.ts`: importa `METRICAS` de
       `lib/analytics/metrics.ts`, deriva (a) la unión de `granos` de las métricas con
       `fuente.tipo === "rollup"` y (b) las dimensiones exclusivas de métricas `clase: "live"`, y las
       contrasta con las columnas declaradas en `db/schema.prisma`.
       *Hecho:* el test pasa; y **falla** si se le quita a mano `causa_devolucion` del modelo o si se
       le añade `metodo_pago` (mutación comprobada, no supuesta).
-- [ ] **T5.2 [P]** En el mismo archivo: asertar que no hay columna monetaria ni `REAL`/`DOUBLE`, que
+- [x] **T5.2 [P]** En el mismo archivo: asertar que no hay columna monetaria ni `REAL`/`DOUBLE`, que
       los componentes de toda `definicion.razon` del catálogo están entre las medidas (incluida
       `incidentes`), que `ordenes_creadas` **existe en el catálogo** como métrica propia (R27) y que
       **no** existe columna para `sin_gestionar` (R19).
@@ -139,22 +139,22 @@
 
 ## T6 — Test estático de la migración (depende de T2, T3, T4)
 
-- [ ] **T6.1** `tests/integration/db/analytics-daily-migration.test.ts`, patrón
+- [x] **T6.1** `tests/integration/db/analytics-daily-migration.test.ts`, patrón
       `notificacion-migration.test.ts`: lee `migration.sql`, `down.sql` y `db/schema.prisma` y los
       contrasta por regex.
       *Hecho:* cubre los requisitos que le asigna el mapa de abajo y pasa.
-- [ ] **T6.2** Aserciones negativas explícitas: ningún `CREATE POLICY`, ningún
+- [x] **T6.2** Aserciones negativas explícitas: ningún `CREATE POLICY`, ningún
       `DECIMAL`/`REAL`/`DOUBLE`, ningún `ALTER TABLE` sobre tabla preexistente, ningún
       `INSERT`/`UPDATE`/`DELETE` de datos, exactamente 4 índices y exactamente 3 `CHECK`.
       *Hecho:* las seis aserciones negativas están y pasan.
 
 ## T7 — Guards de frontera y de suma (`[P]` con T6)
 
-- [ ] **T7.1 [P]** `tests/integration/db/analytics-daily-guards.test.ts` — **frontera (R44)**:
+- [x] **T7.1 [P]** `tests/integration/db/analytics-daily-guards.test.ts` — **frontera (R44)**:
       ninguna referencia a `analytics_daily` / `analyticsDaily` fuera de `db/`, `specs/`, `tests/` y
       `lib/analytics/types.ts` (donde el literal existe como tipo `TablaRollup` de la 135).
       *Hecho:* el guard pasa y deja la frontera con la 124 verificada, no prometida.
-- [ ] **T7.2 [P]** En el mismo archivo — **tripwire de suma (R29)**: rastrea `lib/` y `app/`
+- [x] **T7.2 [P]** En el mismo archivo — **tripwire de suma (R29)**: rastrea `lib/` y `app/`
       buscando agregaciones de `ordenes_estado_stock` (`SUM(`, `_sum`, `sum:`) que no estén acotadas
       a una fecha única, y falla si aparece alguna.
       *Hecho:* pasa hoy en vacío **y discrimina**: con una cadena de prueba que simule
@@ -166,7 +166,7 @@
 > Método y formato: `progress/roundtrip_155_migracion.md`. Base **local** `localhost:5432/ordenex`.
 > **Producción no se toca en ningún momento.**
 
-- [ ] **T8.0** **Sanear el drift de la base local antes de medir nada** (D7): la base tiene
+- [x] **T8.0** **Sanear el drift de la base local antes de medir nada** (D7): la base tiene
       2 migraciones sin aplicar y 1 aplicada que no está en el árbol local (el checkout está en
       `ux`). Diagnosticar con `npx prisma migrate status --schema db/schema.prisma`, dejar por
       escrito el estado de partida y resolverlo (aplicar las pendientes y decidir explícitamente qué
@@ -174,48 +174,58 @@
       *Hecho:* `migrate status` reporta la base al día respecto del árbol de esta rama, y el estado
       de partida —antes y después del saneo— queda escrito en el archivo de round-trip. Sin esta
       task, T8.4 revertiría la migración equivocada.
-- [ ] **T8.1** Confirmar el destino con `npx prisma migrate status --schema db/schema.prisma` (solo
+- [x] **T8.1** Confirmar el destino con `npx prisma migrate status --schema db/schema.prisma` (solo
       lectura; imprime el host sin exponer credenciales) y anotar host/base.
       *Hecho:* el host anotado es `localhost:5432/ordenex` y **no** es el de producción.
-- [ ] **T8.2** Confirmar que `ls db/migrations | sort | tail -1` sigue siendo la carpeta de la 123
+- [x] **T8.2** Confirmar que `ls db/migrations | sort | tail -1` sigue siendo la carpeta de la 123
       (deuda conocida de `scripts/db-rollback.ts`: revierte por nombre, no por última aplicada).
       *Hecho:* verificado **inmediatamente antes** de T8.4; si no lo es, T8 se detiene y se escala.
-- [ ] **T8.3** `npx prisma migrate deploy` (UP real). Medir: existencia de la tabla, índices
+- [x] **T8.3** `npx prisma migrate deploy` (UP real). Medir: existencia de la tabla, índices
       (`pg_indexes`), FKs, CHECKs (`pg_constraint`), `relrowsecurity`, comentarios
       (`pg_description`) y fila en `_prisma_migrations`.
       *Hecho:* 4 índices, 4 FKs, 3 CHECKs, RLS `true`, 10 comentarios (1 de tabla + 9 de columna) y
       1 fila de bookkeeping.
-- [ ] **T8.4** `pnpm db:rollback` (DOWN real). **Una sola vez.**
+- [x] **T8.4** `pnpm db:rollback` (DOWN real). **Una sola vez.**
       *Hecho:* la tabla no existe, `_prisma_migrations` ya no tiene la fila y `migrate status` la
       vuelve a listar como pendiente.
-- [ ] **T8.5** `npx prisma migrate deploy` (re-aplicación).
+- [x] **T8.5** `npx prisma migrate deploy` (re-aplicación).
       *Hecho:* el estado medido es **idéntico** al de T8.3, comparado por checksum del conjunto
       índices + FKs + CHECKs + comentarios, no a ojo.
-- [ ] **T8.6** **Verificación por mutación del único (R14).** Insertar dos filas idénticas con
+- [x] **T8.6** **Verificación por mutación del único (R14).** Insertar dos filas idénticas con
       `mensajero_id IS NULL`, dentro de una transacción revertida.
       *Hecho:* la segunda es **rechazada** por `analytics_daily_grano_key`; y con el índice mutado
       en memoria a `NULLS DISTINCT`, la segunda **entra** → la aserción no es vacía.
-- [ ] **T8.7** **Verificación por mutación de los CHECK (R22, R25, R26).** Intentar, en transacción
+- [x] **T8.7** **Verificación por mutación de los CHECK (R22, R25, R26).** Intentar, en transacción
       revertida: `primer_intento_ok = 2, entregas = 1`; `seg_ciclo_n = 0, seg_ciclo_acum = 5`; y una
       medida negativa.
       *Hecho:* los tres `INSERT` son **rechazados** por su constraint nombrada. Es la prueba de que
       la tasa de `primer_intento_ok` no puede pasar de 1 ni siquiera con un job mal escrito.
-- [ ] **T8.8** Escribir `progress/roundtrip_123_analytics_daily.md` con las tablas de medidas, los
+- [x] **T8.8** Escribir `progress/roundtrip_123_analytics_daily.md` con las tablas de medidas, los
       comandos exactos, el estado del drift antes/después de T8.0, el estado final de la base local
       y una sección **«lo que esto NO demuestra»**.
       *Hecho:* el archivo existe y sus números están **medidos**, no reportados por terceros.
 
 ## T9 — Cierre
 
-- [ ] **T9.1** `./init.sh` en verde (incluye el chequeo de `down.sql` de toda migración).
-      *Hecho:* sin `warn` de migraciones sin `down.sql`.
-- [ ] **T9.2** `pnpm run typecheck`, `pnpm run lint`, `pnpm test` sin regresión respecto del baseline
+- [x] **T9.1** `./init.sh` en verde (incluye el chequeo de `down.sql` de toda migración).
+      *Hecho, con salvedad honesta:* **`init.sh` NO termina en verde, y tampoco lo hacía en el
+      baseline**: aborta en `pnpm run lint` por los 3 errores heredados de
+      `app/(app)/ordenes/_components/OrdenesModule.tsx` (340:34, 345:7, 345:21,
+      `react-hooks/preserve-manual-memoization`), que vienen de `dev`. Delta 0, no verde absoluto.
+      Como el script aborta antes del paso §6, el chequeo de `down.sql` se reprodujo a mano con su
+      mismo criterio: **todas las migraciones tienen `down.sql`**, incluida la de la 123. Sin `warn`.
+- [x] **T9.2** `pnpm run typecheck`, `pnpm run lint`, `pnpm test` sin regresión respecto del baseline
       medido en esta sesión.
-      *Hecho:* delta 0 frente a la medición propia previa a tocar nada.
-- [ ] **T9.3** `progress/impl_123.md` con el mapa `R<n> → test` completo (los **45**) y las deudas
+      *Hecho:* delta 0 frente a la medición propia previa a tocar nada — typecheck 0→0 errores; lint
+      3 errores/23 warnings → 3/23; suite 661→664 archivos con **0 archivos rojos nuevos** y 96 tests
+      nuevos todos verdes. **Única excepción, escalada al leader:** +3 tests rojos dentro de
+      `tests/unit/analytics/frontera.guardia.test.ts`, el guard *branch-scoped* de la feature 135 que
+      prohíbe tocar `db/migrations/` y `db/schema.prisma` — justo lo que la 123 debe hacer. No se
+      tocó ese archivo. Detalle y opciones en `progress/impl_123.md §5`.
+- [x] **T9.3** `progress/impl_123.md` con el mapa `R<n> → test` completo (los **45**) y las deudas
       vivas (el follow-up de retención D5 y el riesgo de despliegue D6).
       *Hecho:* ningún `R<n>` sin test; el reviewer rechaza si falta uno (`CHECKPOINTS.md`).
-- [ ] **T9.4** Todas las tasks de este archivo marcadas `[x]`.
+- [x] **T9.4** Todas las tasks de este archivo marcadas `[x]`.
 
 ---
 

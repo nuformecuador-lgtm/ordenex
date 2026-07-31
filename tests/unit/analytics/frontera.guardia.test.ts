@@ -85,6 +85,53 @@ function resolverBase(): Base | null {
 
 const BASE = resolverBase();
 
+/**
+ * ---------------------------------------------------------------------------
+ * POR QUE EL CENSO SOLO CORRE EN LA RAMA DE LA 135 (decision del 2026-07-31)
+ * ---------------------------------------------------------------------------
+ * Este guardia es BRANCH-SCOPED por diseno: no mide un invariante del repositorio,
+ * mide el DIFF de una rama concreta contra su base. Esa era exactamente su virtud
+ * mientras la 135 estaba abierta. El problema es que el archivo se mergeo a `dev`
+ * junto con la feature, y desde ese momento dejo de juzgar a la 135 para juzgar a
+ * quien pase por delante: en cualquier rama posterior el `merge-base` es el de ESA
+ * rama, y el censo le reclama a la 123 —o a la 124, 125, 126— haber tocado archivos
+ * que R25 le prohibia a la 135 y a nadie mas. En `dev` limpio ni siquiera hay diff:
+ * el `merge-base` es la propia punta, el conjunto censado sale vacio y el primer test
+ * del bloque falla por «el diff salio vacio». El guardia estaba rojo en `dev` hoy.
+ *
+ * No hay nada que ganar dejandolo suelto. Un PR ya mergeado no se puede des-violar:
+ * si la 135 hubiese cruzado su frontera, este archivo lo habria dicho ANTES del merge,
+ * que es cuando importaba. Fuera de su rama no puede detectar ninguna infraccion nueva
+ * —solo producir falsos positivos contra el trabajo de otros—, y su propio mensaje de
+ * fallo ya lo diagnosticaba («la base no es la de esta rama») sin sacar la consecuencia:
+ * cuando el guardia sabe que esta midiendo una rama ajena, lo correcto es ABSTENERSE,
+ * no acusar.
+ *
+ * La 123 fue el primer caso real, y es el caso limpio: su encargo literal es crear la
+ * tabla `analytics_daily`, o sea anadir `db/migrations/` y tocar `db/schema.prisma`.
+ * Justo los dos prefijos que R25 le prohibia a la 135 «porque son de la 123». El guardia
+ * marcaba en rojo a la feature para la que el propio comentario reservaba ese trabajo.
+ *
+ * Se conserva el archivo en lugar de borrarlo: es la evidencia de que R25 SI se verifico
+ * sobre el diff real de la 135, y borrarla dejaria el requisito sin trazabilidad. Se
+ * acota, no se afloja. Ninguna lista (`PREFIJOS_PROHIBIDOS`, los permitidos, la excepcion
+ * nominal) ni ninguna asercion cambia. Si alguien vuelve a checar
+ * `feature/135-analitica-catalogo-kpis-rangos`, el guardia se reactiva ENTERO, con las
+ * mismas reglas y sin excepciones: ahi si mide lo que fue escrito para medir.
+ *
+ * `git rev-parse --abbrev-ref HEAD` devuelve `HEAD` en detached y `null` (via
+ * `gitOpcional`) cuando no hay repositorio. Los dos casos cuentan como «no es la rama de
+ * la 135» y por tanto tampoco corren el censo, que es lo prudente: sin rama identificable
+ * no se puede afirmar que el diff sea el de la 135.
+ */
+const RAMA_DE_LA_135 = "feature/135-analitica-catalogo-kpis-rangos";
+
+const RAMA_ACTUAL = gitOpcional("rev-parse", "--abbrev-ref", "HEAD");
+const ES_LA_RAMA_DE_LA_135 = RAMA_ACTUAL === RAMA_DE_LA_135;
+
+/** El censo del diff solo tiene sentido con base resuelta Y estando en la rama de la 135. */
+const MIDE_EL_DIFF = BASE !== null && ES_LA_RAMA_DE_LA_135;
+
 function lineas(salida: string | null): string[] {
   if (!salida) return [];
   return salida
@@ -194,7 +241,7 @@ describe("R25 · la rama de la 135 no cruza su frontera", () => {
   });
 });
 
-describe.skipIf(BASE === null)("R25 · frontera medida sobre el diff de la rama", () => {
+describe.skipIf(!MIDE_EL_DIFF)("R25 · frontera medida sobre el diff de la rama", () => {
   const base = BASE as Base;
 
   it("el guardia mide un diff no vacio y sabe contra que compara", () => {

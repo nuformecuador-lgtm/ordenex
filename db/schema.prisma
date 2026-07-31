@@ -138,6 +138,8 @@ model Usuario {
   cargasRealizadas                    Carga[]                   @relation("CargaUsuario") // feature 141/R2: lotes de carga masiva que ESTE usuario realizo (adminTienda o usuario dedicado de la API key)
   incidentesReportados                OrdenIncidente[]          @relation("IncidenteReportadoPor") // feature 158/R39/R51: incidentes que este admin REPORTO (y que por tanto NO puede aprobar)
   incidentesResueltos                 OrdenIncidente[]          @relation("IncidenteResueltoPor") // feature 158/R52/R54: incidentes que este admin aprobo/rechazo
+  analyticsDailyComoTienda            AnalyticsDaily[]          @relation("AnalyticsDailyTienda") // feature 123/R31: filas del rollup diario cuya TIENDA (de la orden) es este usuario
+  analyticsDailyComoMensajero         AnalyticsDaily[]          @relation("AnalyticsDailyMensajero") // feature 123/R32: filas del rollup diario de este mensajero (el cubo sin_asignar NO cuelga de aqui: es NULL)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -374,6 +376,8 @@ model OrderStatus {
   historialComoOrigen  OrdenHistorialEstado[] @relation("HistorialOrigen") // feature 49: transiciones que SALEN de este estado
   historialComoDestino OrdenHistorialEstado[] @relation("HistorialDestino") // feature 49: transiciones que ENTRAN a este estado
 
+  analyticsDaily AnalyticsDaily[] // feature 123/R33/R36: filas del rollup diario congeladas en este estatus al corte del dia
+
   @@map("order_status")
 }
 
@@ -399,6 +403,7 @@ model Zona {
   cierresBodega        CierreBodega[] // feature 40: cierres de bodega de esta zona satelite
   cierreDetalles       CierreDetail[] // feature 69/R6: snapshots que congelaron esta zona
   notificaciones       Notificacion[] // feature 146/F1.4-1: notificaciones ACOTADAS a esta zona (alcance del adminSatelite)
+  analyticsDaily       AnalyticsDaily[] // feature 123/R31: filas del rollup diario cuya zona (DE LA ORDEN) es esta
 
   @@map("zona")
 }
@@ -1655,4 +1660,68 @@ model NotificacionLectura {
   @@unique([notificacionId, usuarioId])
   @@index([usuarioId])
   @@map("notificacion_lectura")
+}
+
+// Feature 123 (design §3.1) — ROLLUP DIARIO de analitica. Tabla DERIVADA y reconstruible:
+// no es fuente de verdad de nada. La escribe el job diario (feature 124) y la recomputa el
+// backfill (feature 125); la consulta la 126. Mientras dura la 123 nace y se queda VACIA
+// (R44): esta feature entrega solo el DDL.
+//
+// GRANO (R2): (fecha, zonaId, tiendaId, mensajeroId, estatusId, causaDevolucion). No es una
+// eleccion de esta feature: es la UNION de los `granos` de las metricas con
+// `fuente.tipo = "rollup"` del catalogo de la 135 (`lib/analytics/metrics.ts`). La septima
+// dimension del catalogo, `metodo_pago`, NO tiene columna (R3): su unica consumidora es
+// `clase: "live"` sobre cierres y ledger.
+//
+// El `@@unique` del grano NO se declara aqui A PROPOSITO. Vive en la migracion
+// (`analytics_daily_grano_key`) porque necesita `NULLS NOT DISTINCT`, que Prisma no
+// expresa: dos columnas del grano son nullable con significado de dominio
+// (`mensajeroId IS NULL` = cubo sin_asignar, `causaDevolucion IS NULL` = sin causa
+// tipificada) y con la semantica UNIQUE por defecto el upsert de la 124 duplicaria filas
+// sin un solo error. Tampoco se declaran aqui los tres CHECK estructurales
+// (`analytics_daily_pio_lte_entregas`, `analytics_daily_ciclo_coherente`,
+// `analytics_daily_medidas_no_negativas`): mismo patron que `gestion_orden` /
+// `orden_incidente`, Prisma no expresa CHECK. Los tres `@@index` de abajo si son
+// declarables y se corresponden con los tres roles `acotado` del catalogo.
+//
+// MEDIDAS: solo componentes ADITIVOS (R17). Ninguna tasa, promedio ni porcentaje guardado;
+// ninguna columna de dinero (R5). `segCicloAcum` es BigInt y no Int por desbordamiento
+// (R21) y se atribuye a la fecha del EVENTO TERMINAL (D4/R34); `ordenesEstadoStock` es un
+// STOCK al corte y NO se suma por fecha (R28/R29). La semantica completa viaja en los
+// `COMMENT ON COLUMN` de la migracion (R30).
+model AnalyticsDaily {
+  id              String                  @id @default(uuid())
+  fecha           DateTime                @db.Date // fecha calendario de COSTA RICA del dia agregado, nunca un instante (R6)
+  zonaId          String                  @map("zona_id") // zona DE LA ORDEN, congelada (D9/R34 de la 135; R31)
+  tiendaId        String                  @map("tienda_id") // tienda DE LA ORDEN; en este esquema la tienda ES un usuario adminTienda (R31)
+  mensajeroId     String?                 @map("mensajero_id") // NULL = cubo sin_asignar, NUNCA "todos los mensajeros" (D5/R30 de la 135; R11)
+  estatusId       String                  @map("estatus_id") // estado de la orden EN EL CORTE del dia (R33)
+  causaDevolucion GestionCausaDevolucion? @map("causa_devolucion") // NULL = sin causa tipificada (R12)
+
+  ordenesCreadas     Int    @default(0) @map("ordenes_creadas") // FLUJO: ordenes nacidas ese dia; metrica propia del catalogo (R27)
+  ordenesEstadoStock Int    @default(0) @map("ordenes_estado_stock") // STOCK al corte: NO sumar por fecha (R28)
+  entregas           Int    @default(0) // gestiones vigentes `entregada`
+  devoluciones       Int    @default(0) // gestiones vigentes `devuelta`
+  rechazos           Int    @default(0) // gestiones vigentes `rechazada`
+  reprogramaciones   Int    @default(0) // gestiones vigentes `reprogramada`
+  incidentes         Int    @default(0) // gestiones vigentes `incidente`: 4.o termino de DENOMINADOR_GESTIONES (R18)
+  primerIntentoOk    Int    @default(0) @map("primer_intento_ok") // CONTEO entero, subconjunto de `entregas` de la misma fila (D1/R23/R24)
+  segCicloAcum       BigInt @default(0) @map("seg_ciclo_acum") // numerador: segundos de ciclo acumulados (R20/R21)
+  segCicloN          Int    @default(0) @map("seg_ciclo_n") // denominador: ordenes que cerraron ciclo (R20)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at") // rastro de la ultima recomputacion (R8)
+
+  // R37: las cuatro FK son ON DELETE RESTRICT / ON UPDATE CASCADE. Borrar una coordenada
+  // con historia agregada dejaria el rollup mintiendo (Cascade) o con NULL que colisiona
+  // con el significado de "sin asignar" (SetNull); que el borrado falle es lo correcto.
+  zona      Zona        @relation(fields: [zonaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tienda    Usuario     @relation("AnalyticsDailyTienda", fields: [tiendaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  mensajero Usuario?    @relation("AnalyticsDailyMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  estatus   OrderStatus @relation(fields: [estatusId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([tiendaId, fecha]) // recorte de adminTienda (122)
+  @@index([mensajeroId, fecha]) // recorte de mensajero; cubre el cubo sin_asignar
+  @@index([zonaId, fecha]) // recorte de adminSatelite, por zona DE LA ORDEN
+  @@map("analytics_daily")
 }
