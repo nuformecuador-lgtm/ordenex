@@ -2242,3 +2242,49 @@
 - **Contrato externo roto sin aviso, por decisión del humano** (misma política que la 135): el
   value cambia en `api-key-openapi.yaml` y en el payload de webhook sin bumpear `info.version`
   (sigue en `1.0.0`) ni publicar changelog. Segunda rotura en una semana, anotada a conciencia.
+
+## Feature 167 — apartado propio de recolección para el mensajero · PR #231 (2026-07-31)
+
+**Origen: un reporte de uso, no un ticket.** El humano dijo «no veo la forma de recolectar». Resultó
+ser **dos** problemas distintos, y solo uno era de código:
+
+1. **Su base local tenía 4 migraciones sin aplicar**, incluida `order_status_recolectando`. Sin ese
+   value en el catálogo no existe ninguna orden en `recolectando`, así que no había nada que
+   recolectar ni forma de asignarlo. Se aplicó con `prisma migrate deploy`.
+2. **La recolección estaba escondida por diseño.** La forma de recolectar —cámara de QR + número de
+   guía— existía desde la 157, pero vivía dentro del módulo de Entregas y
+   `RecoleccionTiendaPanel.tsx:121` hacía `if (porRecolectar.length === 0) return null`: el bloque de
+   escaneo **desaparecía entero justo cuando la lista estaba vacía**, que es el momento en que se lo
+   busca. El modo foco (113) tampoco lo montaba.
+
+**Qué se entregó:** página propia `/recoleccion` con ítem de menú, escáner montado SIEMPRE (solo lo
+apaga el bloqueo por cierre), lista agrupada por tienda, «Recolectadas hoy» y corte limpio en
+Entregas con guard de no-reintroducción. Una sola migración: un índice
+`(actor_usuario_id, origen_tipo, created_at)` sobre `orden_historial_estado`.
+
+- **La decisión de diseño que importaba, y que el spec destapó:** el hook rechazaba **en cliente**
+  toda guía que no estuviera en la lista cargada. Con el escáner siempre montado eso convertía la
+  feature en su propio problema disfrazado: **con lista vacía ningún escaneo podría tener éxito
+  jamás.** Se retiró el pre-chequeo y la autoridad pasó al servidor, cuyas guardias de rol,
+  propiedad, estado, bloqueo y carrera ya estaban probadas y cuya opacidad (157/R30) hace que una
+  guía ajena responda «no encontrada» sin filtrar que existe. Invalidó el test R21 de la 157, que se
+  sustituyó por su equivalente contra el servidor. Decisión del humano en la puerta F1.4.
+- **«Recolectadas hoy» sale del HISTORIAL, no del estado.** Derivarla del estado actual era la opción
+  simple y era incorrecta: cuando la bodega central recibe el paquete (138) la orden pasa a
+  `en_bodega_central` y el mensajero vería evaporarse su trabajo del día justo al llegar. Ventana =
+  día natural de Costa Rica (convención de la 144), **no** la 18:00–18:00 de `RankingService`, que es
+  deuda con ticket propio (166) y copiarla habría propagado el defecto a una superficie más.
+- **Verificación medida por el leader, no copiada del agente:** `typecheck` verde,
+  `pnpm test` **8038/8045** (los 7 rojos, en 2 guards ajenos ya rojos en `dev`), `lint` sin un solo
+  problema nuevo. 39 requisitos EARS trazados a test; reviewer **0 bloqueantes**, 6 menores, de los
+  que **4 se cerraron con mutación demostrada** en cada uno.
+- **Un guard que protegía contra un nombre muerto.** El de no-reintroducción vigilaba
+  `RecoleccionTiendaPanel`, que ya no existe tras el `git mv`: un tercio del guard defendía contra
+  algo imposible, y se demostró por mutación que importar el nombre nuevo lo dejaba verde. Corregido.
+- **Deuda declarada, no disfrazada:** `MiAsignacionDTO.tiendaTelefono` queda sin consumidor **y** sin
+  cobertura (sus dos tests se fueron con el bloque retirado); el humano decidió dejarlo declarado en
+  vez de retirarlo. Y **la verificación en pantalla sigue pendiente**: no hay harness de E2E, así que
+  nadie ha visto todavía la cámara leer una etiqueta real. La lista está en `impl_167`.
+- **Incidente de arnés, saldado aparte:** el primer `backend_dev` **murió al arrancar** porque las
+  definiciones de `.claude/agents/*.md` fijaban `model: opus-4.8`, un id que ya no existe.
+  `spec_author` y `reviewer` sobrevivieron por no fijar modelo. Ver el chore de saneamiento.

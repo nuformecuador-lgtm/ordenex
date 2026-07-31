@@ -81,6 +81,11 @@ const WHITELIST_FILES = new Set([
   // este guard como molde del suyo (`entregas-sin-recoleccion.test.ts`); no menciona el value
   // 'embalaje' por ningun lado. Alta por archivo, no por carpeta.
   "specs/167-apartado-recoleccion-mensajero/design.md",
+  // Feature 135: MISMO caso, y era el ULTIMO rojo del repo (2026-07-31). Su `tasks.md:187` narra
+  // en la bitacora un flaky de CI nombrando este guard ("timeout del guard `no-embalaje`"); es
+  // prosa sobre la herramienta, no una reintroduccion del value. Estuvo rojo dias porque cada
+  // feature que lo encontraba lo declaraba deuda ajena y seguia: nadie lo daba de alta.
+  "specs/135-analitica-catalogo-kpis-rangos/tasks.md",
 ]);
 
 function toRelPosix(absPath: string): string {

@@ -258,7 +258,7 @@ se documenta en la bitácora y se continúa.
   pendiente no hay escáner pero sí aviso, lista e historial del día; (6) Entregas no menciona la
   recolección por ningún lado.
 
-- [ ] **T3.5 — Estado y bitácora.**
+- [x] **T3.5 — Estado y bitácora.**
   `feature_list.json` (167 → `done`, `branch`, `spec_path`, `status_note` de 3–6 líneas),
   `progress/current.md` y una entrada en `progress/history.md`.
   *Depende de:* T3.2, T3.4.
