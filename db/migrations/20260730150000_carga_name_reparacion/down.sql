@@ -1,0 +1,8 @@
+-- DOWN deliberadamente VACIO, y es la unica reversion correcta.
+--
+-- El UP es condicional: crea `carga.name` y su indice unico SOLO donde faltaban. Un DROP
+-- aqui no puede distinguir la base que reparo de la que ya los tenia por la migracion
+-- `20260727120000_carga_orden_carga_id`, y en esta ultima borraria objetos que pertenecen
+-- a esa otra migracion — justo el desfase que esta reparacion vino a cerrar.
+--
+-- Para deshacer la columna del todo, la reversion valida es el down.sql de la 141.

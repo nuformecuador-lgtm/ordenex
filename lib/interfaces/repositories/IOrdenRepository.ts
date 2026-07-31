@@ -220,6 +220,13 @@ export interface OrdenTransicionRow {
   // el tiendaId, misma identidad que usa OrdenService.listar). Permite acotar por
   // tienda sin una consulta extra, igual que `zonaId` lo permite por zona.
   tiendaId: string;
+  /**
+   * Feature 157 (R30): mensajero asignado, para que la guardia de PROPIEDAD de la
+   * recoleccion en tienda pueda resolverse sin una consulta extra. OPCIONAL (`?`) por el
+   * mismo patron aditivo que `OrdenListItemDTO.mensajeroAsignadoId?`: no rompe los dobles
+   * de test de las features 138/139, y el repo SIEMPRE lo emite.
+   */
+  mensajeroAsignadoId?: string | null;
 }
 
 /**
@@ -909,6 +916,39 @@ export interface IOrdenRepository {
     ordenId: string,
     origenValue: string,
     destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean>;
+
+  // --- Feature 157: recoleccion en tienda por el mensajero (R3-R5, R26-R38) ---
+
+  /**
+   * Feature 157 (R3/R4/R5/R38): fija SOLO `mensajeroAsignadoId` en el lote de ordenes que
+   * siguen en `origenValue` (`por_recolectar_en_tienda`) y no estan borradas. NO transiciona,
+   * NO escribe historial (no hay arista que registrar: lo rechazaria el choke point de la 140),
+   * NO estampa `asignadoAt` (R38: es el denominador del ranking) y NO toca `numGuia` ni
+   * `prioridad`. Todo-o-nada: si la guarda no alcanza a todas las ordenes pedidas, lanza y la
+   * transaccion revierte (R5). Devuelve el numero de filas afectadas.
+   */
+  asignarRecoleccionLote(
+    ordenIds: string[],
+    mensajeroId: string,
+    origenValue: string,
+  ): Promise<number>;
+
+  /**
+   * Feature 157 (R26/R28/R34/R35): transiciona `por_recolectar_en_tienda ->
+   * en_ruta_bodega_central` (arista #43) la orden del mensajero que la recolecta. Espejo de
+   * `recibirEnBodegaCentral` con `mensajeroAsignadoId` en la guarda atomica (ambos `where`),
+   * de modo que la PROPIEDAD no dependa de una comprobacion previa (R34). Append del historial
+   * (`origenTipo` = `recoleccion_tienda`) en la MISMA tx y SOLO si transiciono. NO toca
+   * `numGuia` ni `mensajeroAsignadoId` (R35). Devuelve `true` si afecto 1 fila, `false` si 0
+   * (ya no estaba en el origen, o no es suya -> race).
+   */
+  recolectarEnTienda(
+    ordenId: string,
+    origenValue: string,
+    destinoEstatusId: string,
+    mensajeroId: string,
     historial: HistorialContexto,
   ): Promise<boolean>;
 

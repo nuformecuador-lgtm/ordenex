@@ -72,6 +72,17 @@ export interface MiAsignacionDTO {
    * incluido (R14). La UI del mensajero lo pinta con `?? 0` como un dato mas de la orden (R19).
    */
   intentosEntrega?: number;
+  /**
+   * Feature 157 (R15): telefono de la TIENDA dueña de la orden, para que el mensajero pueda
+   * llamarla o escribirle antes de ir a recolectar. Distinto de `telefonoDest` (el del
+   * destinatario final). El modelo no tiene direccion de la tienda, asi que el contacto es lo
+   * unico que se puede ofrecer para llegar a ella (pregunta abierta 2 de requirements.md).
+   *
+   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`/`notaPrivada?`: no rompe los
+   * fixtures que construyen `MiAsignacionDTO` sin el; el repo SIEMPRE lo emite (`null` cuando
+   * la tienda no tiene telefono registrado).
+   */
+  tiendaTelefono?: string | null;
 }
 
 /**
@@ -129,6 +140,13 @@ export type ListarMisAsignacionesServiceResult =
        * `secuencia` asc; despues las que no la tienen, conservando su `createdAt desc`.
        */
       porGestionar: MiAsignacionDTO[];
+      /**
+       * Feature 157 (R11): TERCER grupo — ordenes en `por_recolectar_en_tienda` asignadas al
+       * actor, que el mensajero va a RECOLECTAR en la tienda. No son paradas de ninguna ruta
+       * (`secuenciaRuta: null` siempre) y NO alimentan los KPIs, el mapa ni el corte del dia
+       * (R39): ahi no hay gestion ni dinero todavia, solo un paquete que sigue en la tienda.
+       */
+      porRecolectar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis;
       /** Feature 92 (R27/R28/R30): estado de la ruta que produjo ese orden. */

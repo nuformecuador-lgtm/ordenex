@@ -182,6 +182,7 @@ function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0
   return render(
     <MisAsignacionesModule
       porRecoger={props?.porRecoger ?? []}
+      porRecolectar={props?.porRecolectar ?? []} // feature 157
       porGestionar={props?.porGestionar ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
@@ -211,13 +212,21 @@ function cardDe(numRemision: string): HTMLElement {
  * `<span class="sr-only">Parada </span>` y `{parada} de {total}`, así que se busca
  * por el `<p>` que los contiene en lugar de por una cadena exacta.
  */
-function paradaEnCabecera(parada: number, total: number): HTMLElement {
-  return screen.getByText(
-    (_, el) =>
-      el?.tagName === "P" &&
-      (el.textContent ?? "")
-        .replace(/\s+/g, " ")
-        .includes(`Parada ${parada} de ${total}`),
+/**
+ * ¿La card dice que es la parada `parada` de `total`? Acotado a la CARD: el rediseño pinta
+ * el número de parada en más de un sitio de la misma tarjeta, así que una búsqueda global ya
+ * no puede distinguir la parada de una orden de la de otra. Ligarlo a su card es además lo
+ * que el caso quiere afirmar —que ESA orden tiene ESA posición—.
+ */
+function diceParada(card: HTMLElement, parada: number, total: number): boolean {
+  return (
+    within(card).queryAllByText(
+      (_, el) =>
+        el?.tagName === "P" &&
+        (el.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .includes(`Parada ${parada} de ${total}`),
+    ).length > 0
   );
 }
 
@@ -542,7 +551,15 @@ describe("MisAsignacionesModule", () => {
       within(card2).getByRole("button", { name: /Ver en el mapa la ruta hasta/ }),
     );
 
-    expect(within(panelDetalle()).getByText("Uno")).toBeInTheDocument();
+    // "Ir" abre el minimapa en un diálogo, que deja el resto de la página inaccesible: se
+    // cierra para poder mirar las cards de nuevo.
+    await user.keyboard("{Escape}");
+
+    // La selección sigue en la primera card. Ya no se comprueba contra el panel "Detalle de
+    // la orden": el rediseño lo reserva al MODO FOCO (con una gestión activa), y en vista
+    // completa la orden elegida se distingue por el badge "En detalle" de su propia card.
+    expect(within(cardDe("REM-G1")).getByText("En detalle")).toBeInTheDocument();
+    expect(within(cardDe("REM-G2")).queryByText("En detalle")).toBeNull();
   });
 
   // Feature 113 (T6) reescribe el antiguo test de R19/R20: el spec 36 dejaba las demás
@@ -1040,14 +1057,14 @@ describe("MisAsignacionesModule", () => {
     const region = screen.getByRole("region", {
       name: "En reparto / por gestionar",
     });
-    // La posición 1 y 2 se leen de forma accesible ("Parada N de TOTAL").
-    expect(paradaEnCabecera(1, 3)).toBeInTheDocument();
-    expect(paradaEnCabecera(2, 3)).toBeInTheDocument();
+    // La posición 1 y 2 se leen de forma accesible ("Parada N de TOTAL"), cada una en SU card.
+    expect(diceParada(cardDe("REM-G1"), 1, 3)).toBe(true);
+    expect(diceParada(cardDe("REM-G2"), 2, 3)).toBe(true);
     // La orden sin posición muestra la marca de pendiente (y no un número de parada).
     expect(
       within(region).getByText("Pendiente de optimizar"),
     ).toBeInTheDocument();
-    expect(() => paradaEnCabecera(3, 3)).toThrow();
+    expect(diceParada(cardDe("REM-G3"), 3, 3)).toBe(false);
   });
 
   it("R30: con la ruta 'desactualizada' muestra el aviso de que el orden no está actualizado", () => {
@@ -1250,12 +1267,13 @@ describe("MisAsignacionesModule", () => {
       expect(within(card).getByText("Entrega")).toBeInTheDocument();
       expect(within(card).getByText("Cobro")).toBeInTheDocument();
       expect(within(card).getByText("Valor a cobrar")).toBeInTheDocument();
-      expect(within(card).getByText("Dirección")).toBeInTheDocument();
     }
     // ...con los datos propios de cada orden (no los del vecino).
-    // La dirección aparece DOS veces por card (bloque de navegación POS + campo
-    // "Dirección" del detalle plegado), de ahí el getAll; lo que importa es que
-    // cada card lleve la suya y NO la del vecino.
+    // Ya no se busca el label "Dirección": el rediseño la sacó de la lista de campos y la
+    // subió a un bloque propio con pin ("la dirección manda", legible al llegar). El dato
+    // sigue ahí —que es lo que este caso protege—, ahora sin etiqueta que lo anuncie.
+    // Aparece DOS veces por card (bloque de navegación POS + bloque del detalle plegado),
+    // de ahí el getAll; lo que importa es que cada card lleve la suya y NO la del vecino.
     expect(within(card1).getAllByText("Calle Uno 111").length).toBeGreaterThan(0);
     expect(within(card1).queryByText("Calle Dos 222")).toBeNull();
     expect(within(card2).getAllByText("Calle Dos 222").length).toBeGreaterThan(0);
@@ -2419,5 +2437,78 @@ describe("MisAsignaciones — intentos de entrega (feature 160)", () => {
     });
     const dato = within(cardDe("REM-G1")).getAllByText("Intentos: 2")[0];
     expect(dato.textContent).toBe("Intentos: 2");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 157 (R11/R25/R39/R40) — el TERCER apartado convive con los dos de siempre sin
+// contaminarlos. Lo que se protege aquí es sobre todo la NO interferencia: la recolección no
+// entra al mapa, ni al filtro de zona, ni cambia el modo foco del flujo de gestión.
+// ---------------------------------------------------------------------------------------
+describe("MisAsignacionesModule — apartado por recolectar en tienda (feature 157)", () => {
+  function recoleccion(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
+    return makeAsignacion({
+      id: "rec-1",
+      numGuia: 9001,
+      numRemision: "REM-REC",
+      estatusValue: "por_recolectar_en_tienda",
+      tiendaNombre: "Tienda Norte",
+      secuenciaRuta: null,
+      ...over,
+    });
+  }
+
+  it("R11: los tres apartados coexisten y se distinguen", () => {
+    renderModule({
+      porRecolectar: [recoleccion()],
+      porRecoger: [makeAsignacion({ id: "p1", numRemision: "REM-P" })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
+    });
+
+    expect(
+      screen.getByRole("region", { name: "Por recolectar en tienda" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Por recoger" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "En reparto / por gestionar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R40: no aporta opciones al filtro cantón/distrito (no es una parada de la ruta)", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecolectar: [recoleccion({ cantonNombre: "Escazú", provinciaNombre: "San José" })],
+      porGestionar: [
+        makeAsignacion({ id: "g1", cantonNombre: "Curridabat", provinciaNombre: "San José" }),
+      ],
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Filtrar por cantón" }));
+    const listbox = await screen.findByRole("listbox");
+
+    // El cantón de la recolección NO se ofrece: filtrar el reparto por la geografía de un
+    // paquete que sigue en la tienda no significa nada.
+    expect(within(listbox).getByRole("option", { name: /Curridabat/ })).toBeInTheDocument();
+    expect(within(listbox).queryByRole("option", { name: /Escazú/ })).toBeNull();
+  });
+
+  it("R39: no entra en los KPIs de ruta ni en el mapa (sigue en la tienda)", () => {
+    renderModule({ porRecolectar: [recoleccion()], porGestionar: [] });
+
+    // Sin órdenes en reparto no hay paradas que dibujar, aunque haya recolecciones.
+    expect(screen.queryByTestId("ruta-mapa")).toBeNull();
+  });
+
+  it("R25: el MODO FOCO sigue siendo del flujo de gestión y no muestra el apartado", () => {
+    renderModule({
+      porRecolectar: [recoleccion()],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
+      ordenEnGestionId: "g1",
+    });
+
+    // En foco solo vive la orden activa: la recolección no compite por la pantalla.
+    expect(
+      screen.queryByRole("region", { name: "Por recolectar en tienda" }),
+    ).toBeNull();
   });
 });

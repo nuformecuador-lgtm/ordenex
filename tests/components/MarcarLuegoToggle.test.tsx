@@ -134,16 +134,24 @@ function badgeMarcarLuego(card: HTMLElement): HTMLElement | null {
 }
 
 /**
- * Nº de parada de la cabecera POS. El texto se reparte entre un `<span class="sr-only">
- * Parada </span>` y `{parada} de {total}`, así que se busca por el `<p>` que los contiene.
+ * ¿La card dice que es la parada `parada` de `total`? El texto se reparte entre un
+ * `<span class="sr-only">Parada </span>` y `{parada} de {total}`, así que se busca por el
+ * `<p>` que los contiene.
+ *
+ * Acotado a la CARD, no a la pantalla: el rediseño de la vista del mensajero pinta el número
+ * de parada en más de un sitio, y una búsqueda global ya no puede distinguir la parada de una
+ * orden de la de otra. Ligarlo a su card es además lo que R19 quiere afirmar —que ESA orden
+ * conserva SU posición de ruta—, que la búsqueda global nunca llegó a comprobar.
  */
-function paradaEnCabecera(parada: number, total: number): HTMLElement {
-  return screen.getByText(
-    (_, el) =>
-      el?.tagName === "P" &&
-      (el.textContent ?? "")
-        .replace(/\s+/g, " ")
-        .includes(`Parada ${parada} de ${total}`),
+function diceParada(card: HTMLElement, parada: number, total: number): boolean {
+  return (
+    within(card).queryAllByText(
+      (_, el) =>
+        el?.tagName === "P" &&
+        (el.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .includes(`Parada ${parada} de ${total}`),
+    ).length > 0
   );
 }
 
@@ -306,10 +314,11 @@ describe("MarcarLuegoToggle (feature 115 / T8)", () => {
       "Gestionar orden REM-G1 · Ana Pérez",
     ]);
 
-    // R16/R19: la secuencia de ruta NO se altera — g1 sigue siendo la parada 1.
-    expect(paradaEnCabecera(1, 3)).toBeInTheDocument();
-    expect(paradaEnCabecera(2, 3)).toBeInTheDocument();
-    expect(paradaEnCabecera(3, 3)).toBeInTheDocument();
+    // R16/R19: la secuencia de ruta NO se altera — g1 baja al final en la PRESENTACIÓN,
+    // pero sigue siendo la parada 1 de la ruta.
+    expect(diceParada(cardDe("REM-G1"), 1, 3)).toBe(true);
+    expect(diceParada(cardDe("REM-G2"), 2, 3)).toBe(true);
+    expect(diceParada(cardDe("REM-G3"), 3, 3)).toBe(true);
   });
 
   it("R19: sin órdenes marcadas, el orden de ruta del server se conserva intacto", () => {

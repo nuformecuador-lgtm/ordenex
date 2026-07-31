@@ -16,6 +16,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
       status: "ok" as const,
       porRecoger: [],
       porGestionar: [],
+      porRecolectar: [], // feature 157: tercer grupo del portal
       ordenEnGestionId: null,
       kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
       ruta: { estado: "vigente" as const, calculadaAt: null, origenFuente: null, paradasSinOptimizar: 0 },
