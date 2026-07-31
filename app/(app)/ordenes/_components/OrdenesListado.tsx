@@ -501,8 +501,22 @@ export function OrdenesListado({
   // R55/R56: las declaraciones de la barra salen del catálogo precargado (más la de
   // estado, que sale del catálogo de estatus). Sin catálogo geográfico se declaran
   // igual, pero sin opciones y deshabilitadas (R64): la tabla sigue viva.
-  const filtrosBarra = useMemo<FilterDef[]>(
-    () => [
+  const filtrosBarra = useMemo<FilterDef[]>(() => {
+    // Feature 169/R32: `construirFiltrosOrdenes` declara el BUSCADOR primero, y primero
+    // se queda: el filtro de estado —que se declara aquí, porque su catálogo viene de
+    // otra fuente— se inserta DETRÁS de él, no delante de todo.
+    const [busqueda, ...declarados] = construirFiltrosOrdenes(
+      catalogoFiltros ?? CATALOGO_FILTROS_VACIO,
+      {
+        incluirTienda: incluirFiltroTienda,
+        incluirReasignables: incluirFiltroReasignables,
+      },
+    );
+    return [
+      // El buscador NO depende del catálogo geográfico: que ese catálogo falle no puede
+      // apagar la búsqueda por guía (R64 apaga los filtros que se quedaron sin opciones,
+      // no los que nunca las tuvieron).
+      busqueda,
       // El estado va parametrizado como un filtro más, no por fuera: mismo control,
       // misma limpieza y misma salida agregada que zona, tienda o geografía.
       {
@@ -516,13 +530,11 @@ export function OrdenesListado({
       },
       // R64: si el catálogo geográfico no cargó, se deshabilitan SUS filtros; el de
       // estado viene de otra fuente y sigue operativo.
-      ...construirFiltrosOrdenes(catalogoFiltros ?? CATALOGO_FILTROS_VACIO, {
-        incluirTienda: incluirFiltroTienda,
-        incluirReasignables: incluirFiltroReasignables,
-      }).map((f) => (catalogoFiltros === null ? { ...f, disabled: true } : f)),
-    ],
-    [catalogoFiltros, incluirFiltroTienda, incluirFiltroReasignables, opciones],
-  );
+      ...declarados.map((f) =>
+        catalogoFiltros === null ? { ...f, disabled: true } : f,
+      ),
+    ];
+  }, [catalogoFiltros, incluirFiltroTienda, incluirFiltroReasignables, opciones]);
 
   // R46/R58/R59: `status_id` (feature 63) y los filtros nuevos se funden en UN solo
   // `filter`. Sin nada seleccionado, el objeto queda vacío y se envía `undefined`, de
@@ -671,9 +683,9 @@ export function OrdenesListado({
       {header}
 
       {/* Feature 144 (R55, R63): barra genérica con TODOS los filtros declarados —
-          estado incluido (siete; seis sin tienda). Toda la lógica de selección,
-          búsqueda, acotamiento, agrupado, exclusión mutua y poda vive en el
-          componente; aquí solo se declara y se traduce lo emitido. */}
+          estado incluido (ocho con el buscador de la 169; siete sin tienda). Toda la
+          lógica de selección, búsqueda, acotamiento, agrupado, exclusión mutua y poda
+          vive en el componente; aquí solo se declara y se traduce lo emitido. */}
       <FilterComponent
         filters={filtrosBarra}
         onChange={setSeleccionFiltros}

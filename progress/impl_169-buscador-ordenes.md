@@ -1,10 +1,13 @@
-# impl — Feature 169 · Buscador de texto en el listado de órdenes (T0 + T1 + T2)
+# impl — Feature 169 · Buscador de texto en el listado de órdenes (T0 + T1 + T2 + T3)
 
 > Rama `feature/169-buscador-ordenes` · worktree `.claude/worktrees/lote-135` · 2026-07-31
-> Alcance de esta bitácora: **T0, T1 y T2**. **T3 (frontend) y T4 (medición) NO están
-> hechos**: T3 lo hace `frontend_dev`; T4 vuelve a backend cuando la UI exista.
-> Nada de lo entregado aquí es visible para el usuario todavía: el `filter.q` está abierto
-> en el servidor, pero ninguna superficie lo envía.
+> Alcance de esta bitácora: **T0, T1 y T2** (§1-§10, `backend_dev`) y **T3** (§11-§17,
+> `frontend_dev`). **T4 (medición) sigue SIN hacer**: vuelve a backend ahora que la UI
+> existe. **R31 sigue sin cubrir.**
+>
+> Los párrafos de §1-§10 se conservan **tal como los escribió el backend**, incluido
+> "ninguna superficie lo envía": era cierto al cerrar T2. Desde T3 (§11) `/ordenes` sí lo
+> envía.
 
 ---
 
@@ -277,7 +280,7 @@ Solo los requisitos dentro del alcance T0-T2. **R31 a R42 no están cubiertos to
 | R29 | bloque `DOWN — revierte en orden INVERSO y es idempotente (R29)` (5 casos) + **el round-trip real de §3.1** | `tests/integration/db/orden-busqueda-trgm-migration.test.ts` |
 | R30 | bloque `carpeta y schema.prisma (R30)` (5 casos) + **el diff vacío real de §3.2** | `tests/integration/db/orden-busqueda-trgm-migration.test.ts` |
 | **R31** | **PENDIENTE — T4.1/T4.2** | — |
-| **R32-R42** | **PENDIENTE — T3 (`frontend_dev`)** | — |
+| **R32-R42** | ~~PENDIENTE~~ → **cubiertos en T3: tabla completa en §13** | ver §13 |
 
 ---
 
@@ -386,3 +389,257 @@ $ pnpm exec vitest run <los 12 archivos>
 requisito de despliegue), T1 y T2 completas: migración aplicada y revertida contra Postgres
 real con diff cero, paridad SQL↔TS demostrada por test, y el término compone en AND detrás
 del acotamiento por rol con 205 tests propios en verde y la suite entera intacta.**
+
+---
+---
+
+# T3 — Frontend (`frontend_dev`, 2026-07-31)
+
+> Alcance: **T3.1 a T3.6**. **T4 NO se tocó** (medición: vuelve a backend). **R31 sigue
+> sin cubrir**, por lo mismo. Nada de lo de abajo cambia una línea de `lib/`, `db/` ni
+> `app/api/`: la capa de datos es la que dejó T2, tal cual.
+
+## 11 · Archivos
+
+### Creados
+
+| Archivo | Qué es |
+| --- | --- |
+| `tests/unit/components/filter-component-texto.test.tsx` | El `kind: "text"` genérico, con filtros de FANTASÍA (26 casos) |
+| `tests/unit/components/ordenes-buscador-declaracion.test.ts` | Declaración en la barra de órdenes + traducción escalar (15) |
+| `tests/unit/components/ordenes-module-busqueda.test.tsx` | Key SWR, reset de página/selección y vacío con término (15) |
+| `tests/unit/components/ordenes-listado-buscador.test.tsx` | Cableado en la superficie real: primer control y término que llega a la action (8) |
+
+### Modificados
+
+| Archivo | Cambio |
+| --- | --- |
+| `components/shared/FilterComponent.tsx` | `kind: "text"`, `minChars` en `FilterDef`, el control `TextFilter` y `avisoMinimoCaracteres` |
+| `app/(app)/ordenes/_components/ordenes-filtros-def.ts` | `CLAVE_BUSQUEDA`, `PLACEHOLDER_BUSQUEDA` y el `FilterDef` del buscador, PRIMERO |
+| `app/(app)/ordenes/_components/seleccion-a-filter.ts` | `q` baja de lista a **escalar** |
+| `app/(app)/ordenes/_components/OrdenesListado.tsx` | El buscador va delante del filtro de estado y NO se deshabilita con el catálogo geográfico |
+| `app/(app)/ordenes/_components/OrdenesModule.tsx` | `emptyState` alternativo cuando hay término (R40) |
+| `tests/unit/components/ordenes-filtros-def.test.ts` | **único test existente tocado** (ver §12.5) |
+| `specs/169-buscador-ordenes/tasks.md` | `[x]` de T3.1-T3.6 |
+
+**No se tocó** `DataTable`, `MultiSelectFilter`, `DateRangeFilter`, `TableFilters`,
+`serializar-filtro.ts`, el buscador del mensajero (114), `SateliteOrdenesListado` (el otro
+consumidor de `FilterComponent`) ni ninguna otra superficie. **Ningún archivo nuevo en
+`components/`**: el control de texto vive DENTRO de `FilterComponent.tsx` (§12.1).
+
+---
+
+## 12 · Decisiones de implementación (y las tres que el design no cerraba)
+
+### 12.1 El control de texto NO es un archivo nuevo
+
+`MultiSelectFilter` y `DateRangeFilter` son componentes propios porque tienen sustancia
+(panel, buscador interno, calendario, atajos). El de texto es un `Input`, una X y una
+regla de mínimo: `TextFilter` vive como componente de módulo dentro de
+`FilterComponent.tsx`, sin exportarse. Así la tabla "capas tocadas" del design §9 sigue
+siendo exacta (UI = tres archivos de órdenes + `FilterComponent`) y la 145 no hereda una
+pieza más que mantener.
+
+### 12.2 El design decía "primero en `ordenes-filtros-def.ts`"; eso NO bastaba
+
+`OrdenesListado` compone la barra como `[estado, ...construirFiltrosOrdenes(...)]`: el
+filtro de ESTADO se declara ahí (su catálogo viene de `listarOrderStatus`, no del
+catálogo geográfico). Declarar el buscador primero dentro de `construirFiltrosOrdenes` lo
+dejaba **segundo** en pantalla, detrás del estado — R32 dice "primer control de su barra",
+no "primer elemento de un array". Se reordenó el cableado: `[buscador, estado, ...resto]`.
+El test que lo afirma **no mira el array**, mira el DOM: `compareDocumentPosition` del
+campo contra los ocho controles restantes.
+
+### 12.3 El buscador NO se apaga cuando falla el catálogo geográfico
+
+`OrdenesListado` deshabilitaba en bloque todo lo que devolvía `construirFiltrosOrdenes`
+cuando `catalogoFiltros === null` (R64 de la 144). Aplicar eso al buscador habría apagado
+la búsqueda por guía porque no cargó la lista de provincias — dos cosas sin relación. El
+`.map` que deshabilita se aplica ahora solo al resto; `reasignables` sigue cayendo con
+ellos, como antes (no se cambia lo que no toca esta feature). Hay test de las dos mitades:
+buscador `enabled`, Zona `disabled`.
+
+### 12.4 Emisión: recortada, y solo cuando cambia algo
+
+Dos reglas que el design no escribe y que decide la implementación:
+
+1. **Se emite el término RECORTADO** (`"  pepe  "` produce `["pepe"]`). El borde ya hace
+   `.trim()` antes de validar, así que mandar los espacios solo serviría para que
+   `"pepe"` y `"pepe "` fueran dos keys de caché distintas con el mismo resultado.
+2. **No se emite si lo que se emitiría es lo ya aplicado.** Sin esta guarda, cada
+   pulsación por debajo del mínimo (y cada espacio final) reprogramaba el debounce y
+   avisaba al consumidor de un cambio que no existía. Con ella, "teclear 2 caracteres **no
+   emite**" (T3.1) y "vaciar el campo **emite sin la clave**" (T3.1) conviven: lo primero
+   es que nada cambió; lo segundo es que había término y dejó de haberlo — si eso no se
+   emitiera, el listado se quedaría filtrado por un texto que ya no está en el campo.
+
+La guarda vive en el control (compara contra `aplicado`, el valor de su clave en la
+selección), **no** en `fijar`: tocar `fijar` habría cambiado el comportamiento de los
+cuatro tipos previos.
+
+### 12.5 El único test existente que se tocó
+
+`tests/unit/components/ordenes-filtros-def.test.ts`, cuatro asertos (`claves(true)`,
+`claves(false)`, `toHaveLength(7)` a `8`, y la lista de `incluirReasignables: false`).
+Es el **censo** de la barra —la enumera entera para que ampliarla sea explícita—, mismo
+caso y mismo motivo que el `orden-filter-144.test.ts` que tocó el backend (§6):
+mantenerlo intacto exigía dejar el buscador fuera de la barra declarada. Se añadió `"q"`
+en primera posición y un comentario que dice por qué. **Ningún otro test existente se
+modificó** (`git diff` vacío en `filter-component.test.tsx`,
+`multi-select-filter-grupos.test.tsx`, `date-range-filter.test.tsx`,
+`mis-asignaciones-buscador.test.ts`, `seleccion-a-filter.test.ts`,
+`ordenes-module-filter-key.test.tsx`, `ordenes-listado-filtros.test.tsx`,
+`ordenes-listado.test.tsx`, `ordenes-module.test.tsx` y todo `tests/components/`).
+
+### 12.6 Lo que R38/R39 costaron: nada
+
+Confirmado midiendo, no suponiendo: `serializarFiltro` ya serializa escalares
+(`q=juan perez`) y `OrdenesModule` ya vuelve a página 1 y limpia la selección ante
+cualquier cambio de key. Los tests de T3.4 **verifican** ese comportamiento con el
+término; no hay una línea nueva para conseguirlo.
+
+### 12.7 El vacío con término no lleva botón
+
+R40 pide "ofrecer limpiar la búsqueda". Se ofrece **en el texto**
+(«…». Revisa el texto o limpia la búsqueda.), como escribe el design §8.3, no como CTA:
+`OrdenesModule` no es dueño de la barra —lo es `OrdenesListado`, y el `FilterComponent` es
+no controlado—, así que un botón ahí exigiría un canal de "vaciar el filtro de fuera hacia
+dentro" que hoy no existe. Es una limitación consciente, anotada en §16.
+
+---
+
+## 13 · Mapa R → test (T3)
+
+| R | Test que lo cubre | Archivo |
+| --- | --- | --- |
+| R32 | `R32: el PRIMER filtro declarado es el de busqueda` + `sigue siendo el primero aunque caigan los filtros que dependen del rol` + `es UNO solo` + `se declara aunque el catalogo geografico venga vacio` | `tests/unit/components/ordenes-buscador-declaracion.test.ts` |
+| R32 | `R32: precede a TODOS los demas controles de la barra, el de estado incluido` (DOM real) + `la barra monta UN campo de busqueda, con su placeholder` | `tests/unit/components/ordenes-listado-buscador.test.tsx` |
+| R33 | `R33: es GENERICO — funciona con una clave y una etiqueta que no son de dominio` + `R33: no obtiene datos por si mismo` (el archivo entero usa filtros de fantasía) | `tests/unit/components/filter-component-texto.test.tsx` |
+| R33 | `R33: se declara sobre el tipo generico text, con su etiqueta visible` | `tests/unit/components/ordenes-buscador-declaracion.test.ts` |
+| R34 | `R34: no avisa en el acto` + `R34: una rafaga de DIEZ pulsaciones produce UNA sola emision` + `R34: usa el debounce del orquestador, no uno propio` | `tests/unit/components/filter-component-texto.test.tsx` |
+| R34 | `R34: teclear un termino lo envia como ESCALAR q, en una sola consulta` | `tests/unit/components/ordenes-listado-buscador.test.tsx` |
+| R35 | `R35: por debajo del minimo NO emite nada` + `avisa de cuantos caracteres hacen falta, sin error` + `con el campo vacio no hay aviso` + `alcanzado el minimo, el aviso desaparece` + `los espacios NO cuentan` | `tests/unit/components/filter-component-texto.test.tsx` |
+| R35 | `R35: por debajo del minimo no se consulta nada y se avisa del minimo` (ninguna llamada a `listarOrdenes`) | `tests/unit/components/ordenes-listado-buscador.test.tsx` |
+| R36 | `R36: vaciar el campo emite la seleccion SIN la clave` + `bajar del minimo borrando tambien retira la clave` + `al vaciarlo, el resto de filtros sigue en la salida` | `tests/unit/components/filter-component-texto.test.tsx` |
+| R36 | `R36: [\"juan perez\"] -> q: \"juan perez\", no una lista` + `sin termino, la clave NO aparece` + `una lista vacia se omite` + `mandarlo como LISTA seria validation_error` | `tests/unit/components/ordenes-buscador-declaracion.test.ts` |
+| R36 | `R36: vaciar el campo devuelve el listado a la consulta SIN busqueda` | `tests/unit/components/ordenes-listado-buscador.test.tsx` |
+| R37 | `R37: se limpia individualmente con su propia accion, sin tocar a los demas` + `la accion de limpiar solo existe cuando hay algo escrito` + `Limpiar todo vacia el campo y lo saca de la salida` + `Limpiar todo emite UNA sola vez` | `tests/unit/components/filter-component-texto.test.tsx` |
+| R37 | `R37: Limpiar todo vacia tambien el buscador y su clave sale de la consulta` | `tests/unit/components/ordenes-listado-buscador.test.tsx` |
+| R38 | `R38: cambiar el termino vuelve a la PAGINA 1` + `R38: cambiar el termino limpia la seleccion de filas` + `R38: vaciar la busqueda tambien vuelve a la pagina 1` | `tests/unit/components/ordenes-module-busqueda.test.tsx` |
+| R39 | bloque `serializarFiltro — el termino entra en la key de cache (R39)` (4 casos) + `re-renderizar con el MISMO termino no dispara una consulta nueva` + `cambiar el termino SI dispara la consulta del termino nuevo` | `tests/unit/components/ordenes-module-busqueda.test.tsx` |
+| R40 | bloque `vacio CON busqueda activa (R40)` (5 casos: dice "Sin coincidencias", repite el término, ofrece limpiar, y SIN término el vacío es el de siempre) | `tests/unit/components/ordenes-module-busqueda.test.tsx` |
+| R41 | `R41: se monta como campo de busqueda con nombre accesible propio y su placeholder` + `R41: el aviso es una region status a la que el campo APUNTA (aria-describedby)` | `tests/unit/components/filter-component-texto.test.tsx` |
+| R42 | `R42: una barra sin kind text no monta ningun campo de busqueda ni aviso` | `tests/unit/components/filter-component-texto.test.tsx` |
+| R42 | Las nueve suites vecinas **sin modificar** y en verde (145 tests): `filter-component`, `multi-select-filter-grupos`, `date-range-filter`, `mis-asignaciones-buscador` (114), `seleccion-a-filter`, `ordenes-module-filter-key`, `ordenes-listado-filtros`, `ordenes-listado`, `ordenes-module` | §14 |
+| R14 (en la UI) | `R14: convive con el resto de claves en el MISMO objeto, sin pisarlas` + `R14: el termino se COMBINA con el resto de filtros, sin anularlos` | `ordenes-buscador-declaracion.test.ts`, `ordenes-listado-buscador.test.tsx` |
+| R64 (de la 144) | `R64: si el catalogo geografico no cargo, el buscador sigue OPERATIVO` (y Zona sigue deshabilitada) | `tests/unit/components/ordenes-listado-buscador.test.tsx` |
+
+**R31 NO está aquí y no lo está por olvido:** se mide en T4, después de esto.
+
+---
+
+## 14 · Salida real de las puertas (T3)
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+(sin salida: 0 errores)
+
+$ pnpm run lint
+✖ 20 problems (0 errors, 20 warnings)
+  (las MISMAS 20 warnings del baseline: `_input`/`_actor`/`_args`/`_items`…)
+
+$ pnpm test
+ Test Files  680 passed (680)
+      Tests  8297 passed (8297)
+   Duration  201.29s
+
+$ ./init.sh
+✓ typecheck paso
+✓ lint paso
+✓ test paso        (680 archivos / 8297 tests, 211.47s)
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+== init OK ==
+```
+
+**Baseline al empezar T3: 676 archivos / 8233 tests.** Delta: **+4 archivos de test,
++64 tests, 0 rojos**.
+
+Los archivos de T3, en aislado:
+
+```
+$ pnpm exec vitest run <los 4 nuevos + el censo tocado>
+ Test Files  5 passed (5)
+      Tests  84 passed (84)
+```
+
+Las suites vecinas que NO se tocaron, en aislado (evidencia de R42):
+
+```
+$ pnpm exec vitest run filter-component multi-select-filter-grupos date-range-filter
+    mis-asignaciones-buscador seleccion-a-filter ordenes-module-filter-key
+    ordenes-listado-filtros ordenes-module ordenes-listado
+ Test Files  9 passed (9)
+      Tests  145 passed (145)
+
+$ git diff --stat -- <esos 9 archivos + tests/components/>
+(vacío)
+```
+
+El `DeprecationWarning` de `pg` sigue apareciendo en la salida de la suite: es el ruido
+preexistente que documenta §9.6, **no** lo introduce T3.
+
+---
+
+## 15 · Lo que un humano debería mirar en pantalla
+
+Los tests afirman comportamiento, no estética. Sin ojos delante quedan sin verificar:
+
+1. Que el campo **quepa** en la fila de la barra en pantalla estrecha (`min-w-56` sobre un
+   `flex flex-wrap` con otros ocho controles).
+2. Que el aviso del mínimo (una línea `text-xs` bajo el campo) no descoloque
+   verticalmente el resto de controles, que se alinean con `items-end`.
+3. Que la X nativa de `type="search"` de algunos navegadores no se superponga a la X
+   propia. En jsdom no se renderiza ninguna de las dos, así que ningún test lo ve.
+
+---
+
+## 16 · Preguntas abiertas y deuda que dejo (T3)
+
+1. **El vacío con término no ofrece un BOTÓN para limpiar** (§12.7), solo lo dice el
+   texto. Si el humano quiere el botón, hace falta un canal para vaciar el
+   `FilterComponent` desde fuera (hoy es no controlado y solo se limpia desde dentro):
+   es una ampliación del componente genérico, no un retoque del listado.
+2. **"Limpiar todo" no aparece con 1-2 caracteres escritos y nada más.** El botón se
+   ofrece cuando hay al menos una clave en la selección (regla de la 144, R22), y por
+   debajo del mínimo el buscador no pone clave. El campo se vacía con su propia X, así que
+   R37 se cumple; pero si el humano espera ver "Limpiar todo" en cuanto haya *algo*
+   escrito, eso es un cambio en la regla del orquestador que afecta a las dos superficies
+   que lo montan.
+3. **El término no se lleva a la URL** (decisión (g) de la 144, design §8.4): recargar
+   `/ordenes` pierde la búsqueda igual que pierde el resto de filtros. Coherente, pero es
+   lo primero que suele pedirse de un buscador ("mándame este enlace").
+4. **`minChars` es del control, no del contrato**: el buscador de órdenes lo toma de
+   `BUSQUEDA_MIN_CHARS`, pero otro consumidor de la 145 podría declarar `2` y su filtro
+   emitiría términos que el borde rechaza. El componente es genérico a propósito
+   (no conoce el borde de nadie); la disciplina es de quien declara.
+5. **El texto de la UI está hardcodeado en español** ("Buscar", el placeholder, el aviso
+   del mínimo, "Sin coincidencias"), como todo lo que dejó la 144. `avisoMinimoCaracteres`
+   se exportó para que los tests no reescriban la cadena, lo que además deja UN punto por
+   el que pasar cuando exista i18n. No se montó nada de i18n aquí: no hay infraestructura
+   en el repo y no se inventa.
+6. **R31 sigue sin cubrir y T4 sin hacer.** Ahora hay un camino completo desde el campo de
+   texto hasta el `where`, que es lo que T4 necesitaba para medir de punta a punta.
+
+---
+
+## 17 · Veredicto (T3)
+
+**T3.1-T3.6 completas: el buscador es el primer control de la barra de `/ordenes`, sale
+del `kind: "text"` genérico que la 145 va a heredar, aplaza la consulta con el debounce que
+ya existía —una por ráfaga—, calla por debajo de tres caracteres avisando de por qué, viaja
+como escalar `q`, entra en la key de caché devolviendo el listado a la página 1, y con 0
+resultados dice que no hay coincidencias con ESE texto. 64 tests nuevos en verde, un solo
+test existente tocado (el censo de la barra) y las nueve suites vecinas intactas. R31
+sigue siendo deuda de T4.**

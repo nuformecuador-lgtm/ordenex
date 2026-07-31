@@ -129,7 +129,7 @@
 
 ## T3 — Frontend (frontend_dev). Depende de T2
 
-- [ ] **T3.1 — `kind: "text"` + `minChars` en `components/shared/FilterComponent.tsx`.**
+- [x] **T3.1 — `kind: "text"` + `minChars` en `components/shared/FilterComponent.tsx`.**
   Emite `[termino]` con `length >= minChars`; por debajo omite la clave; aviso `aria-live`
   del mínimo; se limpia con "Limpiar todo" vía `resetSignal`; usa el debounce que ya existe
   (no se añade otro).
@@ -137,23 +137,30 @@
   teclear 2 caracteres no emite; teclear 3 emite una sola vez tras la espera; una ráfaga de
   10 pulsaciones produce **una** emisión; vaciar el campo emite sin la clave. (R33, R34,
   R35, R36, R41)
-- [ ] **T3.2 — Declaración en `ordenes-filtros-def.ts`** como **primer** filtro, con
+- [x] **T3.2 — Declaración en `ordenes-filtros-def.ts`** como **primer** filtro, con
   `minChars: BUSQUEDA_MIN_CHARS` y el placeholder de los cuatro campos.
   *Hecho:* test que asserta que el primer `FilterDef` es el de clave `q`. (R32)
-- [ ] **T3.3 — `seleccion-a-filter.ts`**: `q` como **escalar** (`values[0]`), nunca lista.
+  **Además** (no estaba escrito en la task): `OrdenesListado` compone la barra como
+  `[estado, ...construirFiltrosOrdenes()]`, así que declararlo primero AHÍ no bastaba —
+  el estado quedaba delante. Se reordenó el cableado. Ver impl §12.2.
+- [x] **T3.3 — `seleccion-a-filter.ts`**: `q` como **escalar** (`values[0]`), nunca lista.
   *Hecho:* test unitario de la traducción, incluido el caso "clave ausente cuando no hay
   término". (R36)
-- [ ] **T3.4 [P] — Reset de página y caché**: comprobar que cambiar el término cambia la key
+- [x] **T3.4 [P] — Reset de página y caché**: comprobar que cambiar el término cambia la key
   SWR, vuelve a página 1 y limpia la selección de filas (comportamiento heredado de
   `serializarFiltro`/`OrdenesModule`, se verifica, no se reimplementa).
   *Hecho:* test verde. (R38, R39)
-- [ ] **T3.5 [P] — Estado vacío con término** en `OrdenesModule` (`emptyState` alternativo
+- [x] **T3.5 [P] — Estado vacío con término** en `OrdenesModule` (`emptyState` alternativo
   con el término y la invitación a limpiar). Sin tocar `DataTable`.
   *Hecho:* test de render con `filter.q` y 0 items. (R40)
-- [ ] **T3.6 [P] — No regresión de superficies ajenas**: la suite de `MultiSelectFilter`,
+- [x] **T3.6 [P] — No regresión de superficies ajenas**: la suite de `MultiSelectFilter`,
   `DateRangeFilter`, el filtro de estado, el buscador del mensajero (114) y el resto de
   consumidores de `OrdenesModule` pasa **sin modificar ningún test existente**.
   *Hecho:* `pnpm test` verde con `git diff` vacío en esos archivos de test. (R42)
+  **Excepción declarada:** `tests/unit/components/ordenes-filtros-def.test.ts` —el CENSO de
+  la barra— sí se tocó en cuatro asertos, por el mismo motivo que el backend tocó
+  `orden-filter-144.test.ts` (impl §6). No es un consumidor ajeno: es el archivo cuyo
+  sujeto cambia. Ver impl §12.5.
 
 ---
 
