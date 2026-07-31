@@ -8,7 +8,47 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento — **EMPIEZA A LEER POR AQUÍ**
+## 🗓️ Sesión 2026-07-31 (cont.) — feature 169: buscador de órdenes — **EMPIEZA A LEER POR AQUÍ**
+
+**Pedido del humano:** un input que encuentre una orden por cualquiera de sus datos importantes, con
+aviso EXPRESO de cuidar el rendimiento («no vaya a ser que sea lenta por una mala implementación de
+consultas»).
+
+### Auditoría antes de registrar — sí estaba pedido, pero no se construyó
+
+- **144 «DataTable: búsqueda y filtros»** figuraba `pending` con su **PR #180 MERGEADO desde el
+  2026-07-29**. Lo que entró son los **filtros** (catálogo + tiempo) y los componentes compartidos;
+  su migración `20260728120000_orden_indices_filtros` crea **cuatro btree de catálogo, ninguno de
+  texto**. **La búsqueda de texto se quedó fuera** al redefinirse la feature. → ficha a `done`.
+- **`ordenFilterSchema` es `.strict()` y no acepta ningún campo de texto**: hoy NO se puede buscar
+  una orden por guía, remisión, teléfono ni destinatario en `/ordenes`.
+- La única búsqueda existente es la **114** del mensajero: 100% de cliente sobre lo ya cargado.
+  Inservible para una tabla paginada en servidor — solo encontraría lo que ya está en pantalla.
+- **145** (rollout a todas las tablas) pasa a `depends_on: 169`: no puede adoptar una capacidad que
+  todavía no existe.
+
+### Decisiones del humano (2026-07-31)
+
+1. **Campos: guía, remisión, teléfono y destinatario.** Los cuatro viven en la tabla `orden` → sin
+   joins y con índice pequeño. Descarta dirección, producto y nombre de tienda.
+2. **Se empieza por `/ordenes`**; el rollout al resto queda en la 145.
+3. **Volumen:** hoy pocas órdenes, pero espera **muchas decenas de miles pronto**.
+
+### Enfoque técnico que va al spec (y por qué)
+
+- **`pg_trgm` + GIN sobre columna generada STORED**, NO `tsvector`. El FTS no encuentra fragmentos en
+  medio de una cadena, y aquí se teclean los últimos 4 dígitos de un teléfono o un trozo de remisión.
+- **Ruta rápida**: término numérico → igualdad contra `num_guia` (índice único ya existente). El caso
+  más frecuente del día no paga el coste del trigram.
+- **Se indexa YA, y el volumen bajo es la razón, no la excusa:** añadir una columna generada reescribe
+  la tabla con lock exclusivo. Instantáneo con pocas filas; ventana de mantenimiento con medio millón.
+- **Dos riesgos declarados de antemano:** el `count(*)` exacto de la paginación se paga entero en cada
+  tecleo (plan B: conteo con tope), y **`unaccent()` NO es `IMMUTABLE`**, así que no puede ir tal cual
+  en una columna generada — la trampa que rompe la migración a mitad.
+- El término se compone **en AND con el alcance por rol**: un buscador que se lo salte es una fuga de
+  datos, no un fallo de UX.
+
+## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento (histórico)
 
 **Feature 167 (apartado propio de recolección) → `done`, PR #231 MERGEADO.** Nació de un reporte de
 uso —«no veo la forma de recolectar»— que resultó ser dos problemas: la base local del humano tenía 4
