@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Inbox } from "lucide-react";
+import { Inbox, SearchX } from "lucide-react";
 import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
@@ -88,6 +88,20 @@ function mensajeLimite(total: number, limite: number): string {
 const SUFIJO_REINTENTO = "Vuelve a intentarlo; el listado no cambió.";
 
 /**
+ * Feature 169/R40 — vacío CON búsqueda activa. El mensaje de siempre ("No hay órdenes /
+ * cuando lleguen, aparecerán aquí") es literalmente falso buscando: sí hay órdenes, lo
+ * que no hay es coincidencias con ESE texto, y quien lo lea puede concluir que el
+ * listado se rompió en vez de revisar lo que tecleó. Se le devuelve su término —para que
+ * vea el error de dedo— y qué hacer con él.
+ */
+function vacioConBusqueda(termino: string): { title: string; description: string } {
+  return {
+    title: "Sin coincidencias",
+    description: `Ninguna orden coincide con «${termino}». Revisa el texto o limpia la búsqueda.`,
+  };
+}
+
+/**
  * Módulo de órdenes reutilizable: tabla + paginación + carga masiva sobre la
  * action `listarOrdenes` (SWR). Única implementación de tabla/fetch (feature 26,
  * R10). La prop `columns` es de presentación: por defecto muestra las 5 columnas
@@ -136,6 +150,10 @@ export function OrdenesModule({
    * cantón, distrito y tiempo (`created_preset` / `created_desde` / `created_hasta`),
    * todas de la MISMA lista blanca server-side. El módulo no las interpreta: las
    * pasa tal cual y las serializa para la key de caché.
+   *
+   * Feature 169 (R38/R39/R40): admite `q`, el término de búsqueda, como ESCALAR. Es la
+   * única clave que el módulo sí mira —para el estado vacío (R40)—; para todo lo demás
+   * sigue siendo opaca y entra en la key de caché como cualquier otra.
    */
   filter?: OrdenesFilterUI;
   /**
@@ -220,6 +238,10 @@ export function OrdenesModule({
   // selecciones equivalentes (en distinto orden o de distinta identidad de objeto)
   // comparten caché en vez de refetchear en cada render.
   const filterKey = serializarFiltro(filter);
+
+  // Feature 169/R40: término de búsqueda VIGENTE, si lo hay. Viaja como escalar
+  // (`seleccion-a-filter.ts`); un valor de otra forma se ignora en vez de pintarse.
+  const terminoBuscado = typeof filter?.q === "string" ? filter.q : undefined;
   const { data, error, isLoading } = useSWR(
     ["ordenes:list", filterKey, page, pageSize],
     () => ordenesFetcher(page, pageSize, filter),
@@ -469,11 +491,17 @@ export function OrdenesModule({
         descarga={descarga}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las órdenes" : null}
-        emptyState={{
-          icon: Inbox,
-          title: "No hay órdenes",
-          description: "Cuando lleguen órdenes, aparecerán aquí.",
-        }}
+        emptyState={
+          // R40: el vacío de una BÚSQUEDA no es el vacío del listado. `DataTable` no se
+          // toca: ya recibe el estado vacío por props (R42).
+          terminoBuscado
+            ? { icon: SearchX, ...vacioConBusqueda(terminoBuscado) }
+            : {
+                icon: Inbox,
+                title: "No hay órdenes",
+                description: "Cuando lleguen órdenes, aparecerán aquí.",
+              }
+        }
       />
       <Pagination
         page={page}

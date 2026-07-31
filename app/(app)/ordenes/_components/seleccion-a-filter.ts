@@ -3,7 +3,11 @@ import type { OrdenFilterInput } from "@/lib/types/orden";
 
 import { BOOLEAN_MARCADO } from "@/components/shared/FilterComponent";
 
-import { CLAVE_CREACION, CLAVE_REASIGNABLES } from "./ordenes-filtros-def";
+import {
+  CLAVE_BUSQUEDA,
+  CLAVE_CREACION,
+  CLAVE_REASIGNABLES,
+} from "./ordenes-filtros-def";
 
 // Feature 144 / B3 (design.md §4.2, R58) — traduccion de la seleccion agregada del
 // componente GENERICO a las claves del `filter` de `listarOrdenes`.
@@ -11,9 +15,9 @@ import { CLAVE_CREACION, CLAVE_REASIGNABLES } from "./ordenes-filtros-def";
 // Esta traduccion es responsabilidad de la SUPERFICIE, no del componente (R20): otro
 // consumidor con otro transporte (query string, body REST) escribira la suya. Las
 // claves de catalogo se eligieron IGUALES a las del `filter`, asi que ahi la
-// traduccion es la identidad; la unica transformacion real es la del tiempo, que pasa
+// traduccion es la identidad; las transformaciones reales son la del tiempo —que pasa
 // de una clave posicional de tres huecos a `created_preset` O `created_desde`/
-// `created_hasta`.
+// `created_hasta`— y la del BUSCADOR (feature 169), que baja de lista a escalar.
 
 /**
  * `FilterSelection` -> `filter` de `listarOrdenes`.
@@ -39,6 +43,17 @@ export function seleccionAFilter(sel: FilterSelection): Partial<OrdenFilterInput
       }
       if (desde !== "") out.created_desde = desde;
       if (hasta !== "") out.created_hasta = hasta;
+      continue;
+    }
+
+    if (key === CLAVE_BUSQUEDA) {
+      // Feature 169/R36 — ESCALAR, nunca lista. El resto de claves de esta barra son
+      // conjuntos de ids (`IN (...)`); esta es UN termino, y el borde la declara
+      // `z.string()`: mandarla como `["juan"]` seria `validation_error`.
+      // El control ya omite la clave por debajo del minimo, asi que si llega, llega con
+      // termino; la guarda del vacio es por si el filter se construye a mano.
+      const termino = values[0] ?? "";
+      if (termino !== "") out.q = termino;
       continue;
     }
 
