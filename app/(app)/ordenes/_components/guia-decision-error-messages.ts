@@ -26,32 +26,55 @@ function isGuiaErrorStatus(value: unknown): value is GuiaErrorStatus {
   return typeof value === "string" && value in GUIA_ERROR_MESSAGES;
 }
 
-// Ajuste maestro: mensaje específico cuando el `conflict` viene por rutear a una bodega
-// satélite bloqueada. La regla real (decisión del humano 2026-07-16) es AL MENOS 1
-// mensajero con cierre abierto (`solicitado`/`vencido`), no "todos". Coincide con el
-// `motivo` que emite `GuiaAsignacionService` (substring estable, tolerante a
-// acentos/variantes).
-const MOTIVO_BODEGA_SATELITE_BLOQUEADA = "bodega satelite bloqueada";
-const MSG_BODEGA_SATELITE_BLOQUEADA =
-  "No se puede enviar a una bodega satélite que tiene al menos un mensajero con un cierre abierto. Espera a que se resuelva el cierre.";
+// Motivos del `detalle` de un `conflict` que tienen CAUSA PROPIA, y por tanto mensaje
+// propio: sin ellos todos caen en el genérico de `conflict`, que habla de "estado" y
+// miente cuando la orden estaba en un estado perfectamente válido. Se reconocen por
+// substring estable del `motivo` que emite `GuiaAsignacionService` (tolerante a
+// acentos/variantes); el ORDEN define la precedencia cuando el lote acumula varios.
+const MOTIVOS_CON_CAUSA_PROPIA: readonly { fragmento: string; mensaje: string }[] = [
+  {
+    // Ruteo a satélite. La regla real (decisión del humano 2026-07-16) es AL MENOS 1
+    // mensajero con cierre abierto (`solicitado`/`vencido`), no "todos".
+    fragmento: "bodega satelite bloqueada",
+    mensaje:
+      "No se puede enviar a una bodega satélite que tiene al menos un mensajero con un cierre abierto. Espera a que se resuelva el cierre.",
+  },
+  {
+    // Asignación desde bodega: el mensajero ELEGIDO arrastra un cierre sin resolver
+    // (`solicitado`/`vencido`/`rechazado`), así que no recibe órdenes nuevas.
+    fragmento: "mensajero bloqueado por cierre pendiente",
+    mensaje:
+      "El mensajero que elegiste tiene un cierre sin resolver, así que no puede recibir órdenes nuevas. Resuelve el cierre o elige otro mensajero.",
+  },
+  {
+    // Feature 46/R2: la orden está congelada hasta su fecha de reprogramación.
+    fragmento: "orden reprogramada",
+    mensaje:
+      "Alguna orden está reprogramada y queda bloqueada hasta su fecha. Quítala de la selección para continuar.",
+  },
+];
 
-/** ¿El `conflict` incluye el motivo de bodega satélite bloqueada? */
-function tieneBodegaSateliteBloqueada(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
+/** Mensaje propio del primer motivo reconocido en el `detalle`, o `null` si no hay ninguno. */
+function mensajePorMotivo(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
   const detalle = (error as { detalle?: unknown }).detalle;
-  if (!Array.isArray(detalle)) return false;
-  return detalle.some(
-    (d) =>
-      d &&
-      typeof d === "object" &&
-      typeof (d as { motivo?: unknown }).motivo === "string" &&
-      (d as { motivo: string }).motivo.includes(MOTIVO_BODEGA_SATELITE_BLOQUEADA),
+  if (!Array.isArray(detalle)) return null;
+  const motivos = detalle
+    .map((d) =>
+      d && typeof d === "object" ? (d as { motivo?: unknown }).motivo : undefined,
+    )
+    .filter((m): m is string => typeof m === "string");
+  return (
+    MOTIVOS_CON_CAUSA_PROPIA.find(({ fragmento }) =>
+      motivos.some((m) => m.includes(fragmento)),
+    )?.mensaje ?? null
   );
 }
 
 /** Mensaje de usuario para el error lanzado por `Modal.onConfirm`; fallback genérico defensivo. */
 export function guiaDecisionErrorMessage(error: unknown): string {
-  if (tieneBodegaSateliteBloqueada(error)) return MSG_BODEGA_SATELITE_BLOQUEADA;
+  const porMotivo = mensajePorMotivo(error);
+  if (porMotivo !== null) return porMotivo;
   // Feature 93 (R9): el mapeo de los `motivo` del gate de coordenadas (feature 92) vive en UN
   // solo sitio (`geocodificacion-motivo-messages`) y lo consultan LOS DOS mappers de asignación
   // (este y `asignacionSateliteErrorMessage`). Se lee ANTES del switch por `status` para no caer

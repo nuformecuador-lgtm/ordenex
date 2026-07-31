@@ -398,7 +398,7 @@ export function MisAsignacionesModule({
               distrito va deshabilitado sin cantón (R3). En modo foco no se renderiza (no hay
               cards que filtrar). Puro filtro de cliente, así que permanece aunque el mensajero
               esté bloqueado (la lista sigue como solo-visualización). */}
-          {/* <FiltroCantonDistrito
+          <FiltroCantonDistrito
             canton={filtro.canton}
             distrito={filtro.distrito}
             cantones={filtro.cantones}
@@ -407,7 +407,7 @@ export function MisAsignacionesModule({
             onCantonChange={filtro.setCantonYReset}
             onDistritoChange={filtro.setDistrito}
             onLimpiar={filtro.limpiar}
-          /> */}
+          />
 
           {/* ---------- Apartado: Por recoger (por_recoger) ---------- */}
           {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia

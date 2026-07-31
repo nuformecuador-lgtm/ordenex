@@ -211,13 +211,21 @@ function cardDe(numRemision: string): HTMLElement {
  * `<span class="sr-only">Parada </span>` y `{parada} de {total}`, así que se busca
  * por el `<p>` que los contiene en lugar de por una cadena exacta.
  */
-function paradaEnCabecera(parada: number, total: number): HTMLElement {
-  return screen.getByText(
-    (_, el) =>
-      el?.tagName === "P" &&
-      (el.textContent ?? "")
-        .replace(/\s+/g, " ")
-        .includes(`Parada ${parada} de ${total}`),
+/**
+ * ¿La card dice que es la parada `parada` de `total`? Acotado a la CARD: el rediseño pinta
+ * el número de parada en más de un sitio de la misma tarjeta, así que una búsqueda global ya
+ * no puede distinguir la parada de una orden de la de otra. Ligarlo a su card es además lo
+ * que el caso quiere afirmar —que ESA orden tiene ESA posición—.
+ */
+function diceParada(card: HTMLElement, parada: number, total: number): boolean {
+  return (
+    within(card).queryAllByText(
+      (_, el) =>
+        el?.tagName === "P" &&
+        (el.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .includes(`Parada ${parada} de ${total}`),
+    ).length > 0
   );
 }
 
@@ -542,7 +550,15 @@ describe("MisAsignacionesModule", () => {
       within(card2).getByRole("button", { name: /Ver en el mapa la ruta hasta/ }),
     );
 
-    expect(within(panelDetalle()).getByText("Uno")).toBeInTheDocument();
+    // "Ir" abre el minimapa en un diálogo, que deja el resto de la página inaccesible: se
+    // cierra para poder mirar las cards de nuevo.
+    await user.keyboard("{Escape}");
+
+    // La selección sigue en la primera card. Ya no se comprueba contra el panel "Detalle de
+    // la orden": el rediseño lo reserva al MODO FOCO (con una gestión activa), y en vista
+    // completa la orden elegida se distingue por el badge "En detalle" de su propia card.
+    expect(within(cardDe("REM-G1")).getByText("En detalle")).toBeInTheDocument();
+    expect(within(cardDe("REM-G2")).queryByText("En detalle")).toBeNull();
   });
 
   // Feature 113 (T6) reescribe el antiguo test de R19/R20: el spec 36 dejaba las demás
@@ -1040,14 +1056,14 @@ describe("MisAsignacionesModule", () => {
     const region = screen.getByRole("region", {
       name: "En reparto / por gestionar",
     });
-    // La posición 1 y 2 se leen de forma accesible ("Parada N de TOTAL").
-    expect(paradaEnCabecera(1, 3)).toBeInTheDocument();
-    expect(paradaEnCabecera(2, 3)).toBeInTheDocument();
+    // La posición 1 y 2 se leen de forma accesible ("Parada N de TOTAL"), cada una en SU card.
+    expect(diceParada(cardDe("REM-G1"), 1, 3)).toBe(true);
+    expect(diceParada(cardDe("REM-G2"), 2, 3)).toBe(true);
     // La orden sin posición muestra la marca de pendiente (y no un número de parada).
     expect(
       within(region).getByText("Pendiente de optimizar"),
     ).toBeInTheDocument();
-    expect(() => paradaEnCabecera(3, 3)).toThrow();
+    expect(diceParada(cardDe("REM-G3"), 3, 3)).toBe(false);
   });
 
   it("R30: con la ruta 'desactualizada' muestra el aviso de que el orden no está actualizado", () => {
@@ -1250,12 +1266,13 @@ describe("MisAsignacionesModule", () => {
       expect(within(card).getByText("Entrega")).toBeInTheDocument();
       expect(within(card).getByText("Cobro")).toBeInTheDocument();
       expect(within(card).getByText("Valor a cobrar")).toBeInTheDocument();
-      expect(within(card).getByText("Dirección")).toBeInTheDocument();
     }
     // ...con los datos propios de cada orden (no los del vecino).
-    // La dirección aparece DOS veces por card (bloque de navegación POS + campo
-    // "Dirección" del detalle plegado), de ahí el getAll; lo que importa es que
-    // cada card lleve la suya y NO la del vecino.
+    // Ya no se busca el label "Dirección": el rediseño la sacó de la lista de campos y la
+    // subió a un bloque propio con pin ("la dirección manda", legible al llegar). El dato
+    // sigue ahí —que es lo que este caso protege—, ahora sin etiqueta que lo anuncie.
+    // Aparece DOS veces por card (bloque de navegación POS + bloque del detalle plegado),
+    // de ahí el getAll; lo que importa es que cada card lleve la suya y NO la del vecino.
     expect(within(card1).getAllByText("Calle Uno 111").length).toBeGreaterThan(0);
     expect(within(card1).queryByText("Calle Dos 222")).toBeNull();
     expect(within(card2).getAllByText("Calle Dos 222").length).toBeGreaterThan(0);

@@ -382,13 +382,12 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
       screen.queryByRole("button", { name: /descargar manifiesto/i }),
     ).toBeNull();
 
-    const porDevolver = screen.getByRole("region", { name: "Por devolver" });
-    await user.click(
-      within(porDevolver).getByRole("checkbox", { name: "Seleccionar REM-D1" }),
-    );
-    await user.click(
-      within(porDevolver).getByRole("checkbox", { name: "Seleccionar REM-D2" }),
-    );
+    // El rediseño de la bodega satélite (pedido humano) fundió las cuatro secciones por
+    // estado en UN listado con barra de filtros, así que ya no hay región "Por devolver" que
+    // acotar: los checkboxes se buscan por su nombre, que sigue siendo único por remisión.
+    // Lo que este caso protege —el manifiesto lleva SOLO las enviadas con éxito— no cambia.
+    await user.click(screen.getByRole("checkbox", { name: "Seleccionar REM-D1" }));
+    await user.click(screen.getByRole("checkbox", { name: "Seleccionar REM-D2" }));
     await user.click(screen.getByRole("button", { name: "Enviar a central" }));
 
     const boton = await screen.findByRole("button", {
