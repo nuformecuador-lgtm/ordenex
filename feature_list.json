@@ -1969,14 +1969,54 @@
       "id": 169,
       "name": "buscador de texto en el listado de ordenes",
       "description": "Un input que encuentra una orden por guia, remision, telefono o destinatario, resuelto en el servidor.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "depends_on": 144,
       "branch": "feature/169-buscador-ordenes",
       "spec_path": "specs/169-buscador-ordenes",
-      "status_note": "Pedida por el humano el 2026-07-31: necesita encontrar una orden por cualquiera de sus datos importantes, y pidio EXPRESAMENTE cuidado con el rendimiento. Auditado antes de registrar: la 144 entrego filtros pero NO busqueda de texto, y la unica busqueda existente (114, del mensajero) es 100% de cliente sobre lo ya cargado, inservible para una tabla paginada en servidor. DECISIONES DEL HUMANO: (1) campos = guia, remision, telefono y destinatario, los CUATRO en la tabla orden (sin joins, indice pequeno); descarta direccion, producto y nombre de tienda; (2) se empieza por /ordenes y el rollout al resto de tablas queda en la 145. VOLUMEN: hoy pocas ordenes, pero el humano espera muchas decenas de miles pronto; de ahi que se indexe YA — anadir la columna generada reescribe la tabla con lock exclusivo, instantaneo con pocas filas y ventana de mantenimiento con medio millon. ENFOQUE A ESPECIFICAR: pg_trgm + GIN sobre columna generada STORED (NO tsvector: el FTS no encuentra fragmentos en medio, y aqui se teclean 4 digitos de un telefono), mas ruta rapida por igualdad contra num_guia cuando el termino es numerico. DOS RIESGOS DECLARADOS: el count(*) exacto de la paginacion se paga entero en cada tecleo (plan B: conteo con tope) y unaccent() NO es IMMUTABLE, asi que no puede ir tal cual en una columna generada. El termino DEBE componerse en AND con el alcance por rol: un buscador que se lo salte es una fuga de datos. SPEC ESCRITA el 2026-07-31: 42 requisitos EARS trazados a test, con 4 preguntas abiertas para la puerta. El spec CORRIGIO dos datos del estado del arte que le paso el leader: OrdenRepository.list usa Promise.all([findMany,count]) y no $transaction, y adminSatelite NO lista ordenes en esta superficie (recibe forbidden, no un acotamiento por zona). Y corrigio el analisis de rendimiento: capar el count NO elimina el coste dominante porque el findMany con ORDER BY sobre un predicado trigram YA es O(coincidencias) — de ahi que v1 conserve el conteo exacto y el plan B quede disenado con umbrales medibles. Acentos: translate() con mapa de 48 caracteres espejado en TS, NO envoltorio IMMUTABLE de unaccent, porque asi la paridad Node<->Postgres es demostrable con un test en vez de un acto de fe. PUERTA F1.4 CERRADA: el humano aprobo el 2026-07-31 sin responder P2 ni P3, asi que se toman los DEFAULTS declarados en el spec: (P3) un termino solo-digitos que coincide con una guia devuelve esa guia y solo esa; (P2) la migracion crea pg_trgm si no existe y falla ruidosamente si esta en otro esquema, verificando antes de aplicar en cada base."
+      "status_note": "Pedida por el humano el 2026-07-31: necesita encontrar una orden por cualquiera de sus datos importantes, y pidio EXPRESAMENTE cuidado con el rendimiento. Auditado antes de registrar: la 144 entrego filtros pero NO busqueda de texto, y la unica busqueda existente (114, del mensajero) es 100% de cliente sobre lo ya cargado, inservible para una tabla paginada en servidor. DECISIONES DEL HUMANO: (1) campos = guia, remision, telefono y destinatario, los CUATRO en la tabla orden (sin joins, indice pequeno); descarta direccion, producto y nombre de tienda; (2) se empieza por /ordenes y el rollout al resto de tablas queda en la 145. VOLUMEN: hoy pocas ordenes, pero el humano espera muchas decenas de miles pronto; de ahi que se indexe YA — anadir la columna generada reescribe la tabla con lock exclusivo, instantaneo con pocas filas y ventana de mantenimiento con medio millon. ENFOQUE A ESPECIFICAR: pg_trgm + GIN sobre columna generada STORED (NO tsvector: el FTS no encuentra fragmentos en medio, y aqui se teclean 4 digitos de un telefono), mas ruta rapida por igualdad contra num_guia cuando el termino es numerico. DOS RIESGOS DECLARADOS: el count(*) exacto de la paginacion se paga entero en cada tecleo (plan B: conteo con tope) y unaccent() NO es IMMUTABLE, asi que no puede ir tal cual en una columna generada. El termino DEBE componerse en AND con el alcance por rol: un buscador que se lo salte es una fuga de datos. SPEC ESCRITA el 2026-07-31: 42 requisitos EARS trazados a test, con 4 preguntas abiertas para la puerta. El spec CORRIGIO dos datos del estado del arte que le paso el leader: OrdenRepository.list usa Promise.all([findMany,count]) y no $transaction, y adminSatelite NO lista ordenes en esta superficie (recibe forbidden, no un acotamiento por zona). Y corrigio el analisis de rendimiento: capar el count NO elimina el coste dominante porque el findMany con ORDER BY sobre un predicado trigram YA es O(coincidencias) — de ahi que v1 conserve el conteo exacto y el plan B quede disenado con umbrales medibles. Acentos: translate() con mapa de 48 caracteres espejado en TS, NO envoltorio IMMUTABLE de unaccent, porque asi la paridad Node<->Postgres es demostrable con un test en vez de un acto de fe. PUERTA F1.4 CERRADA: el humano aprobo el 2026-07-31 sin responder P2 ni P3, asi que se toman los DEFAULTS declarados en el spec: (P3) un termino solo-digitos que coincide con una guia devuelve esa guia y solo esa; (P2) la migracion crea pg_trgm si no existe y falla ruidosamente si esta en otro esquema, verificando antes de aplicar en cada base. CERRADA el 2026-07-31, PR #239. Entregado: campo de busqueda en la barra de filtros, columna generada con los cuatro campos normalizados e indice GIN trigram, ruta rapida numerica contra num_guia y composicion en AND con el alcance por rol. RENDIMIENTO MEDIDO sobre 50.067 filas, no prometido: guia exacta 4,7 ms (umbral 50), termino amplio 25,4 ms (umbral 500), escritura +15,9 % (tope +20 %), con Bitmap Index Scan verificado sobre el SQL real emitido. El plan B (conteo con tope) NO se activo: el conteo resulto mas barato que la pagina, asi que caparlo habria recortado la mitad barata. Reviewer aprobado-con-notas, 0 bloqueantes, tras reproducir el banco entero desde cero; encontro un falso negativo silencioso que se corrigio (buscar 2026-0912 no hallaba REM-2026-0912). VERIFICACION DE PRODUCCION hecha por el MCP de Supabase ANTES de mergear: pg_trgm NO instalada (sin conflicto de esquema, que era lo que podia tumbar el build y bloquear despliegues) y 69 filas en orden (sin ventana de mantenimiento). DEUDA VIVA declarada: con la pending list del GIN sin consolidar -el estado justo despues de una carga masiva- el planificador puede abandonar el indice; medido, sin cruzar umbrales y sin decidir.",
+      "merged_pr": 239
+    },
+    {
+      "id": 171,
+      "name": "desglose del dinero por tienda en la wallet",
+      "description": "Cada tienda muestra el detalle de su saldo, como ya lo hacen los mensajeros.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "depends_on": 43,
+      "branch": null,
+      "spec_path": null,
+      "status_note": "Pedida por el humano el 2026-07-31: en /wallet/mensajeros cada mensajero tiene un desplegable con el detalle de su dinero (DesglosePagosMensajero.tsx) y en /wallet/tiendas NO existe: solo hay SaldosTiendasTable.tsx. Verificado en codigo. Es tambien PREREQUISITO de la 172: el humano decidio que el pago a una tienda se registre DESDE ese desglose. Al especificar, mirar IWalletTiendaFeedService: hoy solo construye los movimientos que se emiten al aprobar un cierre, no expone un feed de detalle por tienda."
+    },
+    {
+      "id": 172,
+      "name": "liquidacion: pagar cuentas por pagar de mensajeros y saldos de tiendas",
+      "description": "Registrar el pago de lo que se debe, para que deje de acumularse sin salida.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "depends_on": 171,
+      "branch": null,
+      "spec_path": null,
+      "status_note": "HUECO OBJETIVO confirmado en codigo el 2026-07-31: el valor 'liquidacion' (ledger de mensajero, feature 44 F1.4-Qf) y 'pago_tienda' (ledger de tienda, feature 43 F1.4-Q4) estan declarados en los enums y NINGUN codigo los emite; cero acciones de pago en lib/actions. El sistema sabe cuanto debe y a quien, pero no tiene como decir \"ya pague\", asi que los montos solo crecen. Medido en la base de PRODUCCION el mismo dia: 35 movimientos de caja y 6 cierres, con CERO pagos registrados. DECISIONES DEL HUMANO: (1) pagos PARCIALES permitidos; (2) al mensajero se le pregunta AL APROBAR SU CIERRE y el pago queda ATADO a ese cierre -encaja con el modelo actual, donde pago_efectivo = min(deuda, efectivo recaudado) y la cuenta por pagar es justo el resto-; (3) PERO aprobar y pagar son DOS PASOS: por la feature 111 un cierre sin resolver BLOQUEA al mensajero, y exigir el pago para aprobar lo dejaria sin trabajar al dia siguiente por un motivo administrativo ajeno a el; el cierre se aprueba y la deuda queda abierta, visible y atada al cierre, que no se considera liquidado hasta registrar el pago; (4) a las tiendas se les paga contra SALDO ACUMULADO desde el desglose de la 171: no hay cierre de tienda porque su saldo viene de muchos cierres de muchos mensajeros, y se descarto crear un ciclo de corte por tienda; (5) cada pago guarda metodo, referencia o comprobante, nota, FECHA REAL del pago distinta de la de registro, y actor e instante de registro."
+    },
+    {
+      "id": 173,
+      "name": "caja principal en modo tesoreria",
+      "description": "Que la caja refleje todo el dinero que entra y sale, no solo la ganancia.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "depends_on": 172,
+      "branch": null,
+      "spec_path": null,
+      "status_note": "DECISION DEL HUMANO (2026-07-31). Hoy la caja principal modela RESULTADO: solo emite los conceptos que Ordenex gana (flete, comision COD, IVAs) y sus egresos. El COD -el dinero total de la orden- SI se registra, pero como credito 'cod_recaudado' en el ledger POR TIENDA, porque no es ingreso de Ordenex sino dinero que se le debe a la tienda. El humano quiere ver el flujo completo: el COD entra como ingreso de caja y sale al pagarle a la tienda. AL ESPECIFICAR HAY QUE RESOLVER LO QUE ESTO ROMPE: el balance dejara de ser \"lo que gane\", asi que saldo de caja y ganancia tienen que quedar SEPARADOS y nombrados, o el numero se leera como utilidad y no lo sera. Afecta a derivarBalance, a la vista de wallet y al catalogo de metricas financieras de analitica (127/135), que hoy suman las categorias de ingreso como resultado. Depende de la 172 porque el pago a tienda es la mitad del flujo que esto debe reflejar."
     }
   ]
 }
