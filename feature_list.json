@@ -1379,7 +1379,8 @@
       "name": "analitica: catalogo de KPIs + rangos temporales",
       "spec_path": "specs/135-analitica-catalogo-kpis-rangos",
       "description": "Backend, sin DB ni UI. Fuente unica del catalogo de KPIs en lib/analytics/metrics.ts (por metrica: id, nombre, dominio operativa|financiera, grano, fuente, clase live|snapshot, alcance por rol) + lib/analytics/ranges.ts con limites de dia/semana/mes en America/Costa_Rica (UTC-6) reusando la logica de fecha del corte diario + esquema zod de filtros (rango, zona_id, tienda_id, mensajero_id). Contrato que consume todo el modulo; ningun KPI se define fuera de aqui.",
-      "status": "pending",
+      "status": "in_progress",
+      "status_note": "in_progress 2026-07-30 (aprobado explicito del humano tras la puerta F1.4). IMPLEMENTADA: lib/analytics/{types,metrics,ranges,filters}.ts + 9 suites en tests/unit/analytics. Delta medido en worktree limpio sobre ed5f66bd: 617 archivos/6973 tests -> 626/7150, CERO regresiones; 36/36 R con test nombrado; lint y typecheck delta 0. tasks 21/22 tras el cierre del 2026-07-30: solo T6.1 sigue sin marcar, con su razon escrita. El diagnostico de 'cliente Prisma contaminado de otra sesion' resulto FALSO: la causa real era que la rama iba 45 commits por detras de dev y se disolvio al sincronizar -- db/schema.prisma es hoy byte-identico entre dev y esta rama, y typecheck y lint dan exit 0. Lo que mantiene T6.1 abierta es AJENO a la 135: pnpm test sigue rojo por fallos PREEXISTENTES en dev y ./init.sh cae ademas por la regla 1 (frontend con tres in_progress: 161, 163, 164). Bitacora en progress/impl_135.md. INCIDENTE: otra sesion movio el checkout a ux a mitad de la implementacion; se recupero en un worktree aparte sin tocar el arbol compartido. Dos defectos del spec corregidos hoy: GestionCausaDevolucion tiene 3 valores, no 5 (el codigo ya usaba los 3 correctos), y R27 llamaba miercoles al martes 2026-07-14. spec_ready 2026-07-30: spec escrita en specs/135-analitica-catalogo-kpis-rangos (26 R EARS, 6 alternativas descartadas, 12 hechos de inventario verificados en codigo). Raiz del lote de analitica (135 -> 122/123 -> ... -> 134). PUERTA F1.4 CERRADA el 2026-07-30 con las 10 decisiones del humano (D1-D10) escritas EN el spec; spec crece a 36 R (R27-R36 apendados, 7 reescritos en su sitio: R3/R7/R11/R13/R16/R20/R22). D7 se respondio 'solo maestro' y se RECTIFICO el mismo dia a 'admin y maestro': el dominio financiera se ancla a esAccesoTotal(); adminTienda/adminSatelite/mensajero quedan en 'prohibido' (avisadas 132 y 133). Supuestos del spec_author, no decisiones humanas: 'periodo en curso' (mitad no respondida de Q3) y el tope de 366 dias. Falta el aprobado explicito para F2.0. Tres correcciones a la ficha verificadas en codigo: (a) order_status vigente tiene 19 values, no 20 (la 155 retiro en_fulfillment); (b) el corte diario NO tiene logica de fecha reusable, la de dia CR vive en lib/utils/fecha-cr.ts; (c) orden.zona_id y orden.tienda_id son NOT NULL, lo nullable es mensajero_asignado_id. Ni una linea de codigo de produccion tocada. CIERRE 2026-07-30: R22 CERRADO POR MUTACION -- 3 aserciones nuevas en tests/unit/analytics/filters.test.ts ('2026-13-45' en hasta, el par inexistente en desde/hasta, y el ano expandido '+002026-07-15'); las 3 mutaciones que sobrevivieron al review ahora mueren POR SEPARADO (1, 1 y 2 rojos). Suite de analitica 177 -> 180 tests, 9/9 archivos verdes. DELTA CONTRA dev @ 72b75954 MEDIDO, no declarado: baseline 646 archivos/7627 tests/22 rojos -> esta rama 655/7807/20 rojos, y los 20 son SUBCONJUNTO ESTRICTO de los 22 (mismos tests uno a uno) => CERO REGRESIONES. Los 20 vienen del rediseno de ux que entro a dev por el PR #212. T0.3 cerrada con la ficha 166 (saneamiento de la ventana de dia de RankingService). T6.5 cerrada con avisos a OCHO features (122, 123, 124, 125, 126, 127, 132, 133), no a las cinco que nombraba la task: design.md seccion 6.1 tambien dirige avisos a la 122 y a la 124/125. AVISO DE REGISTRO, ajeno a esta feature: el id 162 esta DUPLICADO en este archivo (lo comparten la notificacion del sistema y el filtro de whatsapp por estado); no se renumera porque las dos fichas estan citadas por escrito fuera de aqui -- es decision del humano cual cede el id.",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
@@ -1396,7 +1397,8 @@
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/122-analitica-alcance-por-rol",
-      "depends_on": 135
+      "depends_on": 135,
+      "status_note": "HEREDA de la 135 (D7, D9). El criterio de acceso total es esAccesoTotal(rol) en lib/auth/acceso-total.ts, que la 135 NO duplica: maestro ~ admin sigue en pie. El recorte por zona del adminSatelite se aplica sobre orden.zona_id, NUNCA sobre la zona del mensajero (D9). Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 123,
@@ -1408,7 +1410,8 @@
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/123-analitica-rollup-diario-migracion",
-      "depends_on": 135
+      "depends_on": 135,
+      "status_note": "HEREDA de la 135 (D5, D9). El cubo sin_asignar obliga a que mensajero_id sea NULLABLE en el grano del rollup. Postgres no considera iguales dos NULL en un indice unico, asi que esta feature DEBE elegir explicitamente entre (i) indice unico parcial por cada combinacion de nulidad o (ii) valor centinela no nulo: un UNIQUE ingenuo sobre el grano hace que el upsert diario DUPLIQUE las filas de mensajero no asignado. La columna de zona es orden.zona_id congelada (D9). Debe ademas tolerar la fila huerfana en_fulfillment, que la migracion de la 155 solo borra si nadie la referencia y por tanto puede aparecer en un GROUP BY estatus_id real. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 124,
@@ -1420,7 +1423,8 @@
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/124-analitica-job-agregacion-diaria",
-      "depends_on": 123
+      "depends_on": 123,
+      "status_note": "HEREDA de la 135 (D3, D6). El dia que recomputa es el dia natural CR 00:00-24:00 via inicioDelDiaCREnUtc, NO la ventana 18:00-18:00 del RankingService (ver ficha 166). Ojo con D3: mes es una ventana movil de 30 dias, asi que un recomputo 'del mes' no es un rango de calendario. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 125,
@@ -1432,7 +1436,8 @@
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/125-analitica-backfill-historico",
-      "depends_on": 124
+      "depends_on": 124,
+      "status_note": "HEREDA de la 135 (D3, D6). Igual que la 124: dia natural CR via inicioDelDiaCREnUtc. Como mes es una ventana movil de 30 dias (D3), el backfill debe iterar FECHAS CALENDARIO CR, nunca presets. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 126,
@@ -1444,7 +1449,8 @@
       "complexity": "high",
       "zone": "backend",
       "branch": "feature/126-analitica-operativa-servicios",
-      "depends_on": 125
+      "depends_on": 125,
+      "status_note": "HEREDA de la 135 (D10). Las cinco metricas de gestion cuentan GESTIONES VIGENTES (anulada_at IS NULL), no ordenes; ordenes_creadas y ordenes_por_estado cuentan ordenes. NO son sumables entre si, y sonSumables() existe para impedirlo. Las tres tasas tienen denominador de GESTIONES: no las 'corrijas' dividiendo entre ordenes. Debe tolerar la fila huerfana en_fulfillment en un GROUP BY estatus_id real. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 127,
@@ -1456,7 +1462,8 @@
       "complexity": "high",
       "zone": "backend",
       "branch": "feature/127-analitica-financiera-servicios",
-      "depends_on": 122
+      "depends_on": 122,
+      "status_note": "HEREDA de la 135 (D7). El calculo de la cuenta por pagar de tienda y del devengado de mensajero NO cambia, pero ninguna de esas cifras se expone a adminTienda, adminSatelite ni mensajero: solo a maestro y admin. NO hay vista financiera recortada por tienda o por mensajero que construir. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 128,
@@ -1516,7 +1523,8 @@
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/132-analitica-tablero-financiero",
-      "depends_on": 127
+      "depends_on": 127,
+      "status_note": "HEREDA de la 135 (D7). El tablero financiero es de DOS ROLES: exactamente los que esAccesoTotal(rol) acepta. No disenes un tablero financiero 'para tienda'. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 133,
@@ -1528,7 +1536,8 @@
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/133-analitica-recortes-por-rol",
-      "depends_on": 132
+      "depends_on": 132,
+      "status_note": "HEREDA de la 135 (D7). listarMetricas({ rol }) ya devuelve CERO metricas financieras para adminTienda, adminSatelite y mensajero: el recorte de presentacion es consultar esa funcion, no reimplementar reglas. Para esos tres roles el dominio financiera no es 'vacio por falta de datos', es PROHIBIDO: la UI debe NO OFRECER la pestana, no mostrarla vacia. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 134,
@@ -1919,6 +1928,19 @@
       "zone": "backend",
       "depends_on": null,
       "status_note": "Hallazgo del reviewer del PR 2 de la 158 (observacion O1, 2026-07-30), NO es defecto de esa feature. OrdenEnvioReader.findParaEnvio NO filtra por estado: solo por mensajeroAsignadoId. Consecuencia REAL de cara al cliente: un mensajero puede seguir mandando plantillas de WhatsApp al DESTINATARIO de un paquete robado o dañado. El patron es PREEXISTENTE -- pasa igual con entregada y devuelta -- pero la 158 lo agrava porque suma el estado incidente, y las decisiones Q-J (no se avisa al mensajero cuando su orden pasa a incidente) y Q-K (no se limpia mensajero_asignado_id) juntas hacen que la orden le siga colgando. Al especificar hay que decidir el conjunto de estados elegibles, que NO es obvio: una orden entregada podria querer mensaje de seguimiento y una robada no.",
+      "spec_path": null
+    },
+    {
+      "id": 166,
+      "name": "saneamiento de la ventana de dia de RankingService (18:00-18:00 CR)",
+      "description": "Backend. lib/services/RankingService.ts:60-61 compara columnas timestamp contra startOfDayCR(now) + 24 h, o sea una ventana 00:00Z-24:00Z que en hora de Costa Rica es 18:00-18:00, no el dia natural. Alinearlo con inicioDelDiaCREnUtc (convencion de la 144, adoptada por analitica en la decision D6 de la 135). Al especificar hay que decidir que pasa con los rankings ya publicados: cambiar la ventana cambia cifras historicas.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "Ticket de saneamiento acordado en la decision D6 de la feature 135 (puerta F1.4 del 2026-07-30) y exigido por su task T0.3. Es trabajo FUERA de la 135 y no la bloquea. Hasta que se cierre, analitica y ranking reportan cifras distintas para 'hoy': divergencia CONOCIDA Y ACEPTADA, escrita en la cabecera de lib/analytics/ranges.ts y verificada por ranges-reuso.guardia.test.ts, no un defecto a reportar. La alternativa de replicar la ventana 18:00-18:00 en analitica se descarto (design.md alternativa 9): habria propagado el defecto a un rollup persistido que luego habria que backfillear.",
       "spec_path": null
     }
   ]
