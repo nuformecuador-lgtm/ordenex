@@ -111,8 +111,19 @@ export const TRANSICIONES = {
   // Feature 154: estado de ESPERA en la tienda. Nace por creacion (esta en ESTADOS_CREACION) y
   // sale hacia la central cuando el mensajero la recolecta. La arista queda DECLARADA y SIN USO
   // hasta la feature 157 (escaner de recoleccion en tienda).
+  // Feature 157 (ampliacion 2026-07-31): el estado de ESPERA se parte en dos. Aqui nadie va
+  // todavia a por el paquete; en cuanto el maestro decide quien va, la orden pasa a
+  // `recolectando` y deja de estar disponible para asignar.
   por_recolectar_en_tienda: [
-    { to: "en_ruta_bodega_central", via: "recoleccion_tienda", rol: "mensajero" }, // #43 (154)
+    { to: "recolectando", via: "asignacion_recoleccion", rol: "maestro/admin" }, // #45 (157)
+  ],
+
+  // Alguien va en camino a la tienda. Dos salidas: la recoleccion efectiva (#43, que la 154
+  // declaro desde el estado anterior y esta ampliacion mueve aqui, porque solo puede
+  // recolectar quien fue asignado) y la reversion, si ese mensajero no puede ir.
+  recolectando: [
+    { to: "en_ruta_bodega_central", via: "recoleccion_tienda", rol: "mensajero" }, // #43 (154/157)
+    { to: "por_recolectar_en_tienda", via: "deshacer_asignacion", rol: "maestro/admin" }, // #46 (157)
   ],
 
   // --- Bodegas y reparto ---------------------------------------------------------------

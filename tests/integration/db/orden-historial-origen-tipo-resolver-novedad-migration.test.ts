@@ -82,6 +82,7 @@ describe("Feature 100 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
     // del 100 recrea el enum a su estado PRE-100 (fijo, historico); sin descontar los posteriores el
     // SEED crecido divergiria (patron del down del 67/99).
     const AÑADIDOS_EN_O_DESPUES_DEL_100 = new Set<string>([
+      "asignacion_recoleccion", // feature 157 (ampliacion)
       ...NUEVOS,
       "cancelacion_api", // feature 106
       "corte_sin_gestionar", // feature 109

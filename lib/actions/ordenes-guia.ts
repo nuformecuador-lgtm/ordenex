@@ -3,6 +3,7 @@
 import {
   asignarBodegaSchema,
   asignarRecoleccionSchema,
+  desasignarRecoleccionSchema,
   generarGuiaSchema,
   rutearSateliteSchema,
   type AsignarBodegaResult,
@@ -155,6 +156,24 @@ export async function asignarRecoleccion(
     const data = asignarRecoleccionSchema.parse(input);
     const service = deps.guiaService ?? buildGuiaService();
     return service.asignarRecoleccion(data, actor);
+  });
+  return isAppErrorShape(r) ? toGuiaActionError(r) : r;
+}
+
+/**
+ * Feature 157 (ampliacion): "Quitar mensajero" de una recolección asignada. La devuelve a
+ * `por_recolectar_en_tienda` y sin mensajero, para poder asignarla a otro. Solo acceso total.
+ */
+export async function desasignarRecoleccion(
+  input: unknown,
+  deps: GuiaActionDeps = {},
+): Promise<AsignarRecoleccionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = desasignarRecoleccionSchema.parse(input);
+    const service = deps.guiaService ?? buildGuiaService();
+    return service.desasignarRecoleccion(data, actor);
   });
   return isAppErrorShape(r) ? toGuiaActionError(r) : r;
 }

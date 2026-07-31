@@ -72,6 +72,7 @@ describe("Feature 106 · DOWN — reversible con irreversibilidad parcial docume
     // `liberacion_sin_gestionar`), apendidos despues (patron del down del 67/99/100). El down.sql
     // del 106 recrea el enum a su estado PRE-106 (fijo, historico).
     const AÑADIDOS_EN_O_DESPUES_DEL_106 = new Set([
+      "asignacion_recoleccion", // feature 157 (ampliacion)
       NUEVO,
       "corte_sin_gestionar", // feature 109
       "liberacion_sin_gestionar", // feature 109

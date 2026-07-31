@@ -110,6 +110,7 @@ describe("Feature 67 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
     // (`reprogramacion_tienda`/`recuperacion_manual`), apendidos despues. Sin este descuento,
     // el SEED crecido divergiria del enum recreado por el 67.
     const AÑADIDOS_EN_O_DESPUES_DEL_67 = new Set([
+      "asignacion_recoleccion", // feature 157 (ampliacion)
       "deshacer_gestion",
       "carga_api",
       "liberacion_devuelta_sla",
