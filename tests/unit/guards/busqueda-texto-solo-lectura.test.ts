@@ -25,6 +25,15 @@ const EXTENSIONES = new Set([".ts", ".tsx"]);
  *   · `lib/interfaces/repositories/IOrdenRepository.ts` -> documentacion del contrato.
  *   · `lib/utils/busqueda-orden.ts` -> la nombra en su cabecera para decir de que columna
  *     es espejo; no la lee ni la escribe (es un modulo puro, sin Prisma).
+ *   · `scripts/bench-busqueda-ordenes.ts` (feature 169 / T4.1) -> el banco de rendimiento.
+ *     Es el UNICO sitio que la nombra en DDL, y hacerlo es su trabajo: para medir el
+ *     sobrecoste de escritura del indice (E5 del design §6) tiene que dropear la columna y
+ *     el indice, medir, y reponerlos con el SQL LITERAL de `migration.sql`. Ademas la
+ *     nombra al pedir `pg_relation_size('orden_busqueda_texto_trgm_idx')` — el nombre del
+ *     indice CONTIENE el de la columna, asi que ni evitandolo se evitaria. Lo que este
+ *     guardia protege sigue intacto: el banco NO la mete en ningun `data:` de Prisma, y los
+ *     tres casos de abajo (verbo de escritura, `data:`, `select:`) lo comprueban sobre EL
+ *     MISMO archivo, porque solo esta lista de nombres se amplia, no las reglas.
  * Cualquier archivo nuevo en esta lista es una decision que hay que tomar a mano.
  */
 const PERMITIDOS = new Set([
@@ -32,6 +41,7 @@ const PERMITIDOS = new Set([
   "lib/repositories/OrdenRepository.ts",
   "lib/interfaces/repositories/IOrdenRepository.ts",
   "lib/utils/busqueda-orden.ts",
+  "scripts/bench-busqueda-ordenes.ts",
 ]);
 
 function archivosDeCodigo(): string[] {

@@ -42,6 +42,50 @@ export function crearPrismaDeTest(): PrismaClient {
   }) as unknown as PrismaClient;
 }
 
+/**
+ * Feature 169 / T4.2 — una consulta tal y como Prisma la mando al servidor.
+ *
+ * `params` viene serializado a JSON por Prisma y con los numericos convertidos a string;
+ * `parametrosDe` lo devuelve a la forma que espera `$queryRawUnsafe`.
+ */
+export interface EventoSqlDeTest {
+  query: string;
+  params: string;
+  duration: number;
+}
+
+export function parametrosDe(evento: EventoSqlDeTest): unknown[] {
+  return (JSON.parse(evento.params) as unknown[]).map((v) =>
+    typeof v === "string" && /^-?\d+$/.test(v) ? Number.parseInt(v, 10) : v,
+  );
+}
+
+/**
+ * Cliente que ADEMAS apunta cada consulta que emite. Es la unica forma de comprobar el PLAN
+ * de la consulta REAL: si el test escribiera el SQL a mano, demostraria que un SQL inventado
+ * usa el indice, no que lo use el que emite el repositorio (que es lo que corre en produccion
+ * y lo que puede cambiar sin avisar al actualizar Prisma).
+ *
+ * Mismo `omit` que `crearPrismaDeTest`: sin el, el `SELECT` traeria `busqueda_texto` y el SQL
+ * medido no seria el de produccion.
+ */
+export function crearPrismaDeTestConEspia(): {
+  prisma: PrismaClient;
+  eventos: EventoSqlDeTest[];
+} {
+  const eventos: EventoSqlDeTest[] = [];
+  const cliente = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: urlDeBaseDeDatos(), max: 2 }),
+    omit: PRISMA_OMIT,
+    log: [{ emit: "event", level: "query" }],
+  });
+  (cliente as unknown as { $on: (e: "query", cb: (v: EventoSqlDeTest) => void) => void }).$on(
+    "query",
+    (e) => eventos.push(e),
+  );
+  return { prisma: cliente as unknown as PrismaClient, eventos };
+}
+
 /** Portador del valor: se lanza para forzar el ROLLBACK sin perder lo que se calculo. */
 class Revertir extends Error {
   constructor(readonly valor: unknown) {

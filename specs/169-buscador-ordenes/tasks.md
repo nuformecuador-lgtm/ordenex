@@ -166,7 +166,11 @@
 
 ## T4 — Medición de rendimiento con datos (backend_dev). Depende de T3
 
-- [ ] **T4.1 — Banco de pruebas y números reales.**
+- [x] **T4.1 — Banco de pruebas y números reales.** Ejecutada sobre 50 000 filas contra
+  Postgres real. **Las cinco aserciones se cumplen y ningún umbral dispara el plan B.**
+  Hallazgo declarado (impl §19.4): la `pending list` del GIN que deja una carga masiva
+  degrada la búsqueda hasta 3× y hace que un término amplio recorra la tabla, hasta que
+  `autovacuum` la vacía.
   `scripts/bench-busqueda-ordenes.ts`: siembra **50 000 órdenes** (nombres con y sin
   tildes, teléfonos con y sin guiones, remisiones variadas), lanza los cinco escenarios del
   design §6 con `EXPLAIN (ANALYZE, BUFFERS)` y **10 repeticiones** cada uno, e imprime
@@ -183,25 +187,34 @@
   *Umbrales de acción:* E2 p95 > 300 ms o E3 p95 > 500 ms ⇒ se implementa el **plan B**
   (conteo con tope, design §6) y se **vuelve a medir**; E5 > +20 % ⇒ se anota como deuda con
   su número. (R31)
-- [ ] **T4.2 — Test de plan de ejecución** `tests/integration/db/busqueda-usa-indice.test.ts`:
+- [x] **T4.2 — Test de plan de ejecución** `tests/integration/db/busqueda-usa-indice.test.ts`:
   `EXPLAIN` de la consulta con término y aserción de que el plan **no** contiene
   `Seq Scan on orden`.
-  *Hecho:* verde contra Postgres real (se salta si no hay DB, patrón del repo). (R31)
+  *Hecho:* verde contra Postgres real, 10 casos (se salta si no hay DB, patrón del repo).
+  **Alcance declarado** (impl §19.5): la aserción del trigram va con `enable_seqscan = off`
+  porque la elección por coste resultó **medida como no determinista** en un corpus de test
+  (`pending list` del GIN + bloat de la tabla); la elección por coste se demuestra en T4.1,
+  sobre 50 000 filas. La ruta rápida por guía **sí** se aserta sin forzar nada. (R31)
 
 ---
 
 ## T5 — Cierre
 
-- [ ] **T5.1 — Trazabilidad**: `progress/impl_169-buscador-ordenes.md` con el mapa
+- [x] **T5.1 — Trazabilidad**: `progress/impl_169-buscador-ordenes.md` con el mapa
   `R<n> → test` completo (tabla de abajo, con rutas de archivo reales) y los números de
   T4.1.
-  *Hecho:* los 42 requisitos aparecen con al menos un test.
+  *Hecho:* los **42** requisitos (R1-R42; el spec no tiene más) aparecen con al menos un
+  test. Mapa completo y verificado en impl §20.
 - [ ] **T5.2 — Puertas del arnés**: `./init.sh`, `pnpm run typecheck`, `pnpm run lint`,
-  `pnpm test` en verde.
-- [ ] **T5.3 — Orden de despliegue y de reversión escrito en el impl**: desplegar
+  `pnpm test` en verde. ⚠️ **typecheck y lint en verde; la suite tiene UN rojo AJENO a esta
+  feature** — `tests/components/Modal.test.tsx > R30: atrapa el foco con Tab`, reproducido
+  en `HEAD` con todo el trabajo de T4/T5 guardado en `stash`. No se toca: es de la capa de
+  componentes. `./init.sh` cae por ese mismo rojo. Detalle en impl §21.
+- [x] **T5.3 — Orden de despliegue y de reversión escrito en el impl**: desplegar
   **migración primero, código después**; revertir **código primero, migración después**
   (design §2.4).
-  *Hecho:* la nota existe y el reviewer la encuentra.
+  *Hecho:* impl §22, con la lista de comprobaciones previas por base (incluida la de
+  `random_page_cost`, que T4.1 demostró que decide el plan) y sus umbrales.
 - [ ] **T5.4 — Entrada en `progress/history.md`** y `feature_list.json` a `done` con
   `status_note` de 3-6 líneas técnicas.
 
