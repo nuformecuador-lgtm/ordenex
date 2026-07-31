@@ -21,7 +21,12 @@ export type IconKey =
   // Feature 158 (T2.8, Q-I): cola de incidentes. Icono propio y no otro `clipboardCheck`:
   // un incidente NO es un cierre, y compartir el icono con "Cierres del día" invitaría a
   // leerlo como una sección suya, que es justo lo que la decisión del humano descartó.
-  | "shieldAlert";
+  | "shieldAlert"
+  // Feature 129: tablero de analítica. Icono propio y no otro existente:
+  // `IconKey` es una unión cerrada y compartir icono con otra sección invitaría a
+  // leer analítica como parte de esa sección — mismo criterio que se escribió al
+  // crear `shieldAlert` para incidentes.
+  | "chartColumn";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -46,6 +51,19 @@ export interface MenuItem {
 }
 
 /**
+ * Feature 129: único punto de verdad de quién accede a analítica. Lo usan TANTO
+ * el `roles` del ítem de menú de "Analítica" (abajo) COMO el gate `notFound()`
+ * de `app/(app)/analitica/page.tsx`, para que las dos capas no puedan divergir
+ * (R10).
+ *
+ * NO se usa `esAccesoTotal` (`lib/auth/acceso-total.ts`): ese helper significa
+ * "acceso total de gestión", un concepto distinto que hoy coincide con este y
+ * que la feature 133 va a separar. Tampoco se usa `ROLES_SEED`: incluye
+ * `apiKey` (`lib/types/roles.ts`), que es una cuenta de máquina y no navega.
+ */
+export const ROLES_ANALITICA = ["maestro", "admin"] as const;
+
+/**
  * Fuente de verdad del menu. Vive en este modulo server-safe (NO en el
  * "use client" del Sidebar): un Server Component que importa un export de un
  * modulo cliente recibe una referencia-proxy, no el valor real, y `.filter`
@@ -66,6 +84,17 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/dashboard",
     iconKey: "home",
     roles: ["maestro", "admin"],
+  },
+  {
+    // Feature 129: tablero de analítica (ruta/shell). SOLO `maestro`/`admin`: hasta
+    // la 131 no hay métrica y dar la entrada a mensajero/adminTienda/adminSatelite
+    // sería publicar un control que no lleva a ninguna parte. La feature 133 amplía
+    // a los tres roles restantes tocando TAMBIÉN `ROLES_ANALITICA`. Este ítem solo
+    // decide qué se MUESTRA; la defensa real es el `notFound()` de la página.
+    label: "Analítica",
+    href: "/analitica",
+    iconKey: "chartColumn",
+    roles: ROLES_ANALITICA,
   },
   {
     label: "Órdenes",

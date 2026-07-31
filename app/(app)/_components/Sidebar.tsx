@@ -4,6 +4,7 @@ import { useEffect, useState, type ComponentType, type CSSProperties } from "rea
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ChartColumn,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -148,6 +149,8 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   // Feature 158 (T2.8): cola de incidentes. Icono propio, distinto del de "Cierres del
   // dia": un incidente no es un cierre.
   shieldAlert: ShieldAlert,
+  // Feature 129: tablero de analitica. Icono propio (no otro existente).
+  chartColumn: ChartColumn,
 };
 
 // Entrada escalonada de los items al cargar (solo la primera vez). Cada item

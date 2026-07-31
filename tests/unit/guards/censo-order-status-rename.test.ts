@@ -91,6 +91,19 @@ const ALLOWLIST = new Set([
   // porque el HISTORIAL es inmutable y sobrevive al catalogo.
   "DeshacerAsignacionService.ts",
   "deshacer-asignacion-service.test.ts", // cubre esa misma fila de la tabla cerrada (origen historico)
+  // Feature 135 (T3.4 + R8) — guard HERMANO, no infractor: es el que verifica el catalogo de
+  // KPIs de analitica (`lib/analytics/metrics.ts`) y afirma exactamente lo CONTRARIO de lo que
+  // este censo teme. R8 exige que todo estado citado por una metrica pertenezca a
+  // `ORDER_STATUS_SEED` (19 values) y que NINGUNA cite el value retirado por la 155; la tarea
+  // T3.4 del spec exige ademas un "caso explicito" para ese value. Para poder censar la
+  // AUSENCIA de un literal hay que nombrarlo, igual que le pasa a este mismo archivo (la
+  // primera entrada de esta allowlist). El motivo por el que ese caso explicito existe es que
+  // el `DELETE` de la migracion de la 155 solo borra la fila del catalogo si nadie la
+  // referencia: en una base con historial la fila SOBREVIVE HUERFANA y puede aparecer en un
+  // `GROUP BY estatus_id` real, asi que la 123/126 deben tolerarla aunque el catalogo no la
+  // cite. La alternativa —construir el literal por concatenacion para esquivar este censo—
+  // se descarto a proposito: seria evadir el guard, no cumplirlo.
+  "definiciones-catalogo.guardia.test.ts",
 ]);
 
 // Feature 153 (R17) — censo de la ETIQUETA antigua. Se busca el literal EXACTO entre

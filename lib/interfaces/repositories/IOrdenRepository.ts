@@ -932,6 +932,14 @@ export interface IOrdenRepository {
    * `prioridad`. Todo-o-nada: si la guarda no alcanza a todas las ordenes pedidas, lanza y la
    * transaccion revierte (R5). Devuelve el numero de filas afectadas.
    */
+  /**
+   * Feature 157 (regla de dedicacion) — de `ids`, los mensajeros con AL MENOS una orden
+   * VIVA en alguno de los `estados`. El llamador decide que cuenta como "ocupado": el
+   * reparto y la recoleccion se excluyen mutuamente, pero varias recolecciones conviven
+   * (un viaje a la tienda son N ordenes).
+   */
+  findMensajerosConOrdenesEn(ids: string[], estados: string[]): Promise<Set<string>>;
+
   asignarRecoleccionLote(
     ordenIds: string[],
     mensajeroId: string,

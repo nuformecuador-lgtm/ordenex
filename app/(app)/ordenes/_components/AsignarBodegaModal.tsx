@@ -23,6 +23,11 @@ export interface AsignarBodegaModalProps {
   mensajeros: MensajeroLiteDTO[];
   /** Ajuste maestro: ids de mensajeros con cierre abierto; se deshabilitan en el selector. */
   mensajerosBloqueadosIds?: string[];
+  /**
+   * Feature 157 (regla de dedicación): ids con una RECOLECCIÓN en tienda sin confirmar.
+   * Tienen un viaje comprometido, así que no reciben reparto hasta cerrarlo.
+   */
+  mensajerosConRecoleccionIds?: string[];
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
@@ -38,6 +43,7 @@ export function AsignarBodegaModal({
   ordenes,
   mensajeros,
   mensajerosBloqueadosIds = [],
+  mensajerosConRecoleccionIds = [],
   onOpenChange,
   onSuccess,
 }: AsignarBodegaModalProps) {
@@ -62,6 +68,9 @@ export function AsignarBodegaModal({
   const mensajeroOptions = toMensajeroOptions(
     mensajeros,
     new Set(mensajerosBloqueadosIds),
+    new Map(
+      mensajerosConRecoleccionIds.map((id) => [id, "tiene recolección pendiente"]),
+    ),
   );
 
   async function handleConfirm() {

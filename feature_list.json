@@ -1379,7 +1379,8 @@
       "name": "analitica: catalogo de KPIs + rangos temporales",
       "spec_path": "specs/135-analitica-catalogo-kpis-rangos",
       "description": "Backend, sin DB ni UI. Fuente unica del catalogo de KPIs en lib/analytics/metrics.ts (por metrica: id, nombre, dominio operativa|financiera, grano, fuente, clase live|snapshot, alcance por rol) + lib/analytics/ranges.ts con limites de dia/semana/mes en America/Costa_Rica (UTC-6) reusando la logica de fecha del corte diario + esquema zod de filtros (rango, zona_id, tienda_id, mensajero_id). Contrato que consume todo el modulo; ningun KPI se define fuera de aqui.",
-      "status": "pending",
+      "status": "in_progress",
+      "status_note": "in_progress 2026-07-30 (aprobado explicito del humano tras la puerta F1.4). IMPLEMENTADA: lib/analytics/{types,metrics,ranges,filters}.ts + 9 suites en tests/unit/analytics. Delta medido en worktree limpio sobre ed5f66bd: 617 archivos/6973 tests -> 626/7150, CERO regresiones; 36/36 R con test nombrado; lint y typecheck delta 0. tasks 21/22 tras el cierre del 2026-07-30: solo T6.1 sigue sin marcar, con su razon escrita. El diagnostico de 'cliente Prisma contaminado de otra sesion' resulto FALSO: la causa real era que la rama iba 45 commits por detras de dev y se disolvio al sincronizar -- db/schema.prisma es hoy byte-identico entre dev y esta rama, y typecheck y lint dan exit 0. Lo que mantiene T6.1 abierta es AJENO a la 135: pnpm test sigue rojo por fallos PREEXISTENTES en dev y ./init.sh cae ademas por la regla 1 (frontend con tres in_progress: 161, 163, 164). Bitacora en progress/impl_135.md. INCIDENTE: otra sesion movio el checkout a ux a mitad de la implementacion; se recupero en un worktree aparte sin tocar el arbol compartido. Dos defectos del spec corregidos hoy: GestionCausaDevolucion tiene 3 valores, no 5 (el codigo ya usaba los 3 correctos), y R27 llamaba miercoles al martes 2026-07-14. spec_ready 2026-07-30: spec escrita en specs/135-analitica-catalogo-kpis-rangos (26 R EARS, 6 alternativas descartadas, 12 hechos de inventario verificados en codigo). Raiz del lote de analitica (135 -> 122/123 -> ... -> 134). PUERTA F1.4 CERRADA el 2026-07-30 con las 10 decisiones del humano (D1-D10) escritas EN el spec; spec crece a 36 R (R27-R36 apendados, 7 reescritos en su sitio: R3/R7/R11/R13/R16/R20/R22). D7 se respondio 'solo maestro' y se RECTIFICO el mismo dia a 'admin y maestro': el dominio financiera se ancla a esAccesoTotal(); adminTienda/adminSatelite/mensajero quedan en 'prohibido' (avisadas 132 y 133). Supuestos del spec_author, no decisiones humanas: 'periodo en curso' (mitad no respondida de Q3) y el tope de 366 dias. Falta el aprobado explicito para F2.0. Tres correcciones a la ficha verificadas en codigo: (a) order_status vigente tiene 19 values, no 20 (la 155 retiro en_fulfillment); (b) el corte diario NO tiene logica de fecha reusable, la de dia CR vive en lib/utils/fecha-cr.ts; (c) orden.zona_id y orden.tienda_id son NOT NULL, lo nullable es mensajero_asignado_id. Ni una linea de codigo de produccion tocada. CIERRE 2026-07-30: R22 CERRADO POR MUTACION -- 3 aserciones nuevas en tests/unit/analytics/filters.test.ts ('2026-13-45' en hasta, el par inexistente en desde/hasta, y el ano expandido '+002026-07-15'); las 3 mutaciones que sobrevivieron al review ahora mueren POR SEPARADO (1, 1 y 2 rojos). Suite de analitica 177 -> 180 tests, 9/9 archivos verdes. DELTA CONTRA dev @ 72b75954 MEDIDO, no declarado: baseline 646 archivos/7627 tests/22 rojos -> esta rama 655/7807/20 rojos, y los 20 son SUBCONJUNTO ESTRICTO de los 22 (mismos tests uno a uno) => CERO REGRESIONES. Los 20 vienen del rediseno de ux que entro a dev por el PR #212. T0.3 cerrada con la ficha 166 (saneamiento de la ventana de dia de RankingService). T6.5 cerrada con avisos a OCHO features (122, 123, 124, 125, 126, 127, 132, 133), no a las cinco que nombraba la task: design.md seccion 6.1 tambien dirige avisos a la 122 y a la 124/125. AVISO DE REGISTRO, ajeno a esta feature: el id 162 esta DUPLICADO en este archivo (lo comparten la notificacion del sistema y el filtro de whatsapp por estado); no se renumera porque las dos fichas estan citadas por escrito fuera de aqui -- es decision del humano cual cede el id.",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
@@ -1396,7 +1397,8 @@
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/122-analitica-alcance-por-rol",
-      "depends_on": 135
+      "depends_on": 135,
+      "status_note": "HEREDA de la 135 (D7, D9). El criterio de acceso total es esAccesoTotal(rol) en lib/auth/acceso-total.ts, que la 135 NO duplica: maestro ~ admin sigue en pie. El recorte por zona del adminSatelite se aplica sobre orden.zona_id, NUNCA sobre la zona del mensajero (D9). Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 123,
@@ -1408,7 +1410,8 @@
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/123-analitica-rollup-diario-migracion",
-      "depends_on": 135
+      "depends_on": 135,
+      "status_note": "HEREDA de la 135 (D5, D9). El cubo sin_asignar obliga a que mensajero_id sea NULLABLE en el grano del rollup. Postgres no considera iguales dos NULL en un indice unico, asi que esta feature DEBE elegir explicitamente entre (i) indice unico parcial por cada combinacion de nulidad o (ii) valor centinela no nulo: un UNIQUE ingenuo sobre el grano hace que el upsert diario DUPLIQUE las filas de mensajero no asignado. La columna de zona es orden.zona_id congelada (D9). Debe ademas tolerar la fila huerfana en_fulfillment, que la migracion de la 155 solo borra si nadie la referencia y por tanto puede aparecer en un GROUP BY estatus_id real. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 124,
@@ -1420,7 +1423,8 @@
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/124-analitica-job-agregacion-diaria",
-      "depends_on": 123
+      "depends_on": 123,
+      "status_note": "HEREDA de la 135 (D3, D6). El dia que recomputa es el dia natural CR 00:00-24:00 via inicioDelDiaCREnUtc, NO la ventana 18:00-18:00 del RankingService (ver ficha 166). Ojo con D3: mes es una ventana movil de 30 dias, asi que un recomputo 'del mes' no es un rango de calendario. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 125,
@@ -1432,7 +1436,8 @@
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/125-analitica-backfill-historico",
-      "depends_on": 124
+      "depends_on": 124,
+      "status_note": "HEREDA de la 135 (D3, D6). Igual que la 124: dia natural CR via inicioDelDiaCREnUtc. Como mes es una ventana movil de 30 dias (D3), el backfill debe iterar FECHAS CALENDARIO CR, nunca presets. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 126,
@@ -1444,7 +1449,8 @@
       "complexity": "high",
       "zone": "backend",
       "branch": "feature/126-analitica-operativa-servicios",
-      "depends_on": 125
+      "depends_on": 125,
+      "status_note": "HEREDA de la 135 (D10). Las cinco metricas de gestion cuentan GESTIONES VIGENTES (anulada_at IS NULL), no ordenes; ordenes_creadas y ordenes_por_estado cuentan ordenes. NO son sumables entre si, y sonSumables() existe para impedirlo. Las tres tasas tienen denominador de GESTIONES: no las 'corrijas' dividiendo entre ordenes. Debe tolerar la fila huerfana en_fulfillment en un GROUP BY estatus_id real. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 127,
@@ -1456,7 +1462,8 @@
       "complexity": "high",
       "zone": "backend",
       "branch": "feature/127-analitica-financiera-servicios",
-      "depends_on": 122
+      "depends_on": 122,
+      "status_note": "HEREDA de la 135 (D7). El calculo de la cuenta por pagar de tienda y del devengado de mensajero NO cambia, pero ninguna de esas cifras se expone a adminTienda, adminSatelite ni mensajero: solo a maestro y admin. NO hay vista financiera recortada por tienda o por mensajero que construir. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 128,
@@ -1474,8 +1481,9 @@
       "id": 129,
       "name": "analitica: ruta, shell y sidebar",
       "spec_path": "specs/129-analitica-ruta-shell-sidebar",
+      "status_note": "ENTREGADA el 2026-07-30 -- PR #224 hacia dev, 7 commits, 15 archivos, MERGEABLE, pendiente del merge humano. Reviewer APROBADO-CON-NOTAS, 0 bloqueantes, 7 menores (progress/review_129.md): 24/25 R hasta test no vacuo -- el 25 es 'sin dependencias nuevas' y se verifica por diff vacio -- y 20 mutaciones del reviewer, 17 discriminando. Las 3 supervivientes se cerraron ANTES del PR (473317e2) y una era un DEFECTO REAL, no un hueco de test: la nota de traspaso a la 133 mandaba ampliar 'dos sitios' que hoy son el mismo, o sea inducia a desenganchar el item con un literal, que es justo el bug que R10 vigila; reescrita a 'editar UNA constante' con aviso de que R3/R9/R17 se pondran rojos por diseno al ampliar. Las otras dos eran tests que median FORMA (el icono se asertaba por unicidad de la clave, asi que chartColumn:Home pasaba; y el encabezado se podia sustituir por un div+h1 perdiendo PageHeader y Container). La cuarta mutacion NO se tapo con un test fragil: 'use client' en la pagina pasa los 59 tests y solo revienta en next build -- ejecutado de verdad, exit 0 con /analitica en el manifiesto y exit 1 con la mutacion puesta. AVISO: init.sh no corre next build, asi que la frontera RSC no la cubre ningun gate; y pnpm build encadena migrate-deploy contra una base REAL, para solo compilar es pnpm exec next build. GATE: suite completa 652 archivos / 7753 tests / 0 fallos con dev (PRs #213-#221) integrado; los 20 rojos que se heredaban de dev los saldo su commit 25ab36e0. T5.2 queda SIN marcar por causa AJENA: init.sh corta en lint con 3 errores en app/(app)/ordenes/_components/OrdenesModule.tsx:340,345 (regla del React Compiler), archivo byte-identico a origin/dev introducido por a4eb7813, y como lint corre antes que test el gate no llega a ejecutar la suite. Deuda de dev sin dueno. Fase 1 (spec) escrita el 2026-07-30: specs/129-analitica-ruta-shell-sidebar/ con R1-R25 en EARS mapeados a archivos de test, y el bloque T0 CERRADO (7 preguntas resueltas por el humano el 2026-07-30 y escritas EN el spec como D1-D8, no solo en la bitacora). Prefetch de la description DECLARADO FUERA DE ALCANCE con punto de extension, porque la 129 no depende de ninguna feature backend y las Server Actions de analitica no existen todavia. DECISIONES: Q1 el item es SOLO maestro/admin -- la spec SE DESVIA A PROPOSITO de esta misma ficha, que dice cinco roles, porque hasta la 131 la pagina esta vacia; ampliar es alcance explicito de la 133 y queda una nota de traspaso diciendo que ampliar y donde. Q2 etiqueta Analitica. Q3 iconKey nueva chartColumn (verificado: ChartColumn existe con ese nombre exacto en el lucide-react instalado, ^1.23.0). Q4 pila vertical de regiones, no pestanas. Q5 la region financiera la anade la 132. Q6 (decision del leader, no habia regla escrita) el item va tras Inicio y antes de Ordenes, porque comparte sus dos roles exactos. Q7 el desfase de numeracion de las fichas 130/131/132 (citan graficas de 129 y ruta 128) es renumeracion previa, NO cambio de alcance; anotado en el design, feature_list.json sin tocar. Los R crecieron de 23 a 25 por dos requisitos que nacieron de las decisiones: R10 (el gate de la pagina y la visibilidad del item declaran el MISMO conjunto de roles, con test que falla si divergen) y R16 (posicion del item). Hallazgos de la verificacion: el mapa iconKey->lucide vive en app/(app)/_components/Sidebar.tsx:138-151 con tipo Record<IconKey, SidebarIcon>, o sea exhaustividad garantizada por el compilador al anadir la clave nueva; y ROLES_SEED es Object.values(RolValue) e incluye apiKey (6 valores, no 5), asi que el item NO puede reusarlo como hace Perfil.",
       "description": "Frontend. Ruta analitica (app/(app)/analitica): Server Component que valida rol y prefetchea, shell del tablero e item de sidebar visible por rol (maestro/admin/adminSatelite/adminTienda/mensajero). Sin logica de metrica; usa la sesion/gating existentes.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "low",
       "zone": "frontend",
@@ -1516,7 +1524,8 @@
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/132-analitica-tablero-financiero",
-      "depends_on": 127
+      "depends_on": 127,
+      "status_note": "HEREDA de la 135 (D7). El tablero financiero es de DOS ROLES: exactamente los que esAccesoTotal(rol) acepta. No disenes un tablero financiero 'para tienda'. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 133,
@@ -1528,7 +1537,8 @@
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/133-analitica-recortes-por-rol",
-      "depends_on": 132
+      "depends_on": 132,
+      "status_note": "HEREDA de la 135 (D7). listarMetricas({ rol }) ya devuelve CERO metricas financieras para adminTienda, adminSatelite y mensajero: el recorte de presentacion es consultar esa funcion, no reimplementar reglas. Para esos tres roles el dominio financiera no es 'vacio por falta de datos', es PROHIBIDO: la UI debe NO OFRECER la pestana, no mostrarla vacia. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
     },
     {
       "id": 134,
@@ -1848,7 +1858,7 @@
       "id": 161,
       "name": "tono breve para notificaciones in-app (campana y chat del mensajero)",
       "description": "Frontend. Anade un tono corto -- dos notas SINTETIZADAS con la Web Audio API, sin ningun archivo de audio en el repo -- que suena cuando llega algo nuevo MIENTRAS la app esta abierta. Dos superficies, decididas por el humano: la campana de notificaciones (feature 146, sube noLeidas en el polling de 60 s) y el hilo del chat del mensajero (feature 120/121, entra un mensaje del cliente en el polling de 10 s). Los toasts genericos quedan FUERA. Hoy el repo no tiene NADA de audio: cero .mp3/.wav/.ogg en public/, cero new Audio, cero AudioContext, cero navigator.vibrate. PREMISA que motiva la feature: no existe API para invocar el tono del sistema desde JS; el tono del SO solo suena con la Notification API (eso es la feature 162), asi que para el aviso in-app hay que generar el sonido. PIEZAS: lib/audio/tono-notificacion.ts (singleton perezoso de AudioContext, desbloqueo por primer gesto del usuario -- obligatorio por la politica de autoplay, no existe infraestructura de este tipo en el repo -- y dos osciladores cortos con rampa de salida para que no chasquee) y hooks/useTonoAlIncrementar.ts (compara el contador con el previo via useRef; NO suena en el primer render, para que recargar la pagina con no-leidas pendientes no pite; solo suena al SUBIR, de modo que marcar todas como leidas no dispare nada). Preferencia de silencio en localStorage con toggle en la cabecera del popover de la campana: es POR DISPOSITIVO, no por cuenta, porque no hay tabla de preferencias y la spec 146 las declara fuera de alcance. Todo fallo es SILENCIOSO por diseno (mismo criterio que el R48 de la 146): un tono que no puede sonar no rompe la cabecera. LIMITE declarado: ChatWhatsappPanel solo esta montado mientras el mensajero tiene abierto el panel de gestion de ESA orden; con el panel cerrado no hay polling del hilo y no suena nada. El aviso global de chat exigiria un contador real de no-leidos, que hoy es DATO QUEMADO en chat-demo/chat-demo-data.ts y no tiene tabla equivalente a notificacion_lectura: es otra feature, no esta.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "frontend",
@@ -1874,7 +1884,7 @@
       "id": 163,
       "name": "carrusel de las ordenes en reparto (vista mosaico) con etiqueta de posicion",
       "description": "Frontend. Sustituye la GRILLA de la vista MOSAICO de En reparto por un CARRUSEL, y solo ahi: la vista detalle (una fila por orden) se queda intacta. Se ven de 3 en 3 segun el ancho, con los MISMOS cortes que tenia la grilla -- 1 en movil, basis-full; 2 desde sm; 3 desde lg -- asi que la densidad no cambia al adoptarlo. El avance es por PAGINA (slidesToScroll auto de embla): mueve tantas como quepan, no de una en una, que es lo que hace legible la etiqueta. Debajo, entre las flechas, una etiqueta de posicion que se lee en singular cuando solo cabe una (Orden 5 de 5) y como rango en plural cuando caben varias (Ordenes 1-3 de 5), con aria-live polite para que el lector la anuncie sin mover el foco. PIEZAS: components/ui/carousel.tsx (primitiva shadcn sobre embla-carousel-react, dependencia NUEVA) y, por pedido explicito del humano, el compuesto es un COMPONENTE SHARED -- components/shared/CarruselCards.tsx -- generico y sin dominio (recibe items y renderItem), con la aritmetica de la etiqueta aparte en components/shared/carrusel-rango.ts para poder probarla sin layout. Las cards son las MISMAS (PosOrderCardMosaico); se extrajo renderCardEnReparto en el modulo para que carrusel y lista rendericen exactamente la misma card con las mismas senales.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "frontend",
@@ -1887,7 +1897,7 @@
       "id": 164,
       "name": "boton de instalar la PWA y screenshots del manifest",
       "description": "Frontend. La app YA cumplia los criterios de instalabilidad (manifest enlazado, display standalone, iconos 192 y 512 reales, service worker con fetch que cae a offline.html, HTTPS en Vercel), pero la instalacion dependia por completo del gesto propio del navegador -- el icono de la barra de direcciones o el menu Instalar aplicacion -- que es invisible para quien no lo conoce, o sea el mensajero en la calle. Esta feature anade DOS cosas. (1) BOTON: hooks/useInstalarPwa.ts captura beforeinstallprompt, llama preventDefault para que el aviso propio del navegador no se duplique con el boton de la app, y expone disponible + instalar; components/shared/InstalarPwaButton.tsx se pinta SOLO cuando hay oferta viva -- si ya esta instalada, si no cumple criterios o si el navegador no soporta el evento, no hay boton, nunca un control que no lleva a ninguna parte. Montado en PageHeader (solo icono por debajo de sm, con texto desde sm). La oferta es de UN SOLO USO: se descarta tanto si acepta como si rechaza, y el evento appinstalled la retira sin pulsarla. (2) SCREENSHOTS: tres capturas REALES de la app corriendo -- dos narrow 540x1170 (inicio y login) y una wide 1280x720 -- declaradas en public/manifest.json. Sin una narrow, Android degrada el dialogo de instalacion al aviso pequeno en vez de la ficha completa. Se anade ademas tests/unit/pwa/manifest.test.ts, que hasta ahora no existia: comprueba que cada icono y screenshot declarado EXISTE en public/ y que sus dimensiones declaradas son las reales del PNG, que las narrow comparten proporcion (lo exige el navegador) y que display sigue siendo instalable. Es una guardia contra un fallo SILENCIOSO: un manifest que miente no rompe nada visible, solo hace que el navegador degrade o deje de ofrecer la instalacion sin decir nada.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "frontend",
@@ -1919,6 +1929,19 @@
       "zone": "backend",
       "depends_on": null,
       "status_note": "Hallazgo del reviewer del PR 2 de la 158 (observacion O1, 2026-07-30), NO es defecto de esa feature. OrdenEnvioReader.findParaEnvio NO filtra por estado: solo por mensajeroAsignadoId. Consecuencia REAL de cara al cliente: un mensajero puede seguir mandando plantillas de WhatsApp al DESTINATARIO de un paquete robado o dañado. El patron es PREEXISTENTE -- pasa igual con entregada y devuelta -- pero la 158 lo agrava porque suma el estado incidente, y las decisiones Q-J (no se avisa al mensajero cuando su orden pasa a incidente) y Q-K (no se limpia mensajero_asignado_id) juntas hacen que la orden le siga colgando. Al especificar hay que decidir el conjunto de estados elegibles, que NO es obvio: una orden entregada podria querer mensaje de seguimiento y una robada no.",
+      "spec_path": null
+    },
+    {
+      "id": 166,
+      "name": "saneamiento de la ventana de dia de RankingService (18:00-18:00 CR)",
+      "description": "Backend. lib/services/RankingService.ts:60-61 compara columnas timestamp contra startOfDayCR(now) + 24 h, o sea una ventana 00:00Z-24:00Z que en hora de Costa Rica es 18:00-18:00, no el dia natural. Alinearlo con inicioDelDiaCREnUtc (convencion de la 144, adoptada por analitica en la decision D6 de la 135). Al especificar hay que decidir que pasa con los rankings ya publicados: cambiar la ventana cambia cifras historicas.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "Ticket de saneamiento acordado en la decision D6 de la feature 135 (puerta F1.4 del 2026-07-30) y exigido por su task T0.3. Es trabajo FUERA de la 135 y no la bloquea. Hasta que se cierre, analitica y ranking reportan cifras distintas para 'hoy': divergencia CONOCIDA Y ACEPTADA, escrita en la cabecera de lib/analytics/ranges.ts y verificada por ranges-reuso.guardia.test.ts, no un defecto a reportar. La alternativa de replicar la ventana 18:00-18:00 en analitica se descarto (design.md alternativa 9): habria propagado el defecto a un rollup persistido que luego habria que backfillear.",
       "spec_path": null
     }
   ]
