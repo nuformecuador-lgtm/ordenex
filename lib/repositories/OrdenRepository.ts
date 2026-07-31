@@ -1334,6 +1334,8 @@ export class OrdenRepository implements IOrdenRepository {
         zonaId: true,
         zona: { select: { esCentral: true } },
         tiendaId: true,
+        // Feature 157 (R30): dueño de la recoleccion, para la guardia de propiedad.
+        mensajeroAsignadoId: true,
       },
     });
     if (!r) return null;
@@ -1345,6 +1347,7 @@ export class OrdenRepository implements IOrdenRepository {
       zonaId: r.zonaId,
       zonaEsGam: r.zona.esCentral,
       tiendaId: r.tiendaId,
+      mensajeroAsignadoId: r.mensajeroAsignadoId,
     };
   }
 
@@ -1613,6 +1616,51 @@ export class OrdenRepository implements IOrdenRepository {
           origenTipo: historial.origenTipo, // asignacion_bodega
         })),
       );
+      return result.count;
+    });
+  }
+
+  /**
+   * Feature 157 (R3/R4/R5/R38): fija SOLO el mensajero que ira a recolectar a la tienda.
+   *
+   * Es la unica asignacion del repo que NO transiciona, y por eso no se parece a
+   * `asignarBodegaLote` aunque comparta el nombre de familia:
+   * - **Sin `appendCambioEstado`.** No hay cambio de estado que registrar, y el choke point
+   *   de la feature 140 valida contra `TRANSICIONES`: una auto-arista
+   *   `por_recolectar_en_tienda -> por_recolectar_en_tienda` NO existe en el mapa y haria
+   *   lanzar `TransicionIlegalError`. Registrarla seria falsificar el historial (design Q3).
+   * - **Sin `asignadoAt`** (R38): esa columna es el denominador del ranking
+   *   (`RankingRepository.contarAsignadasPorMensajero`) y el numerador solo cuenta entregas,
+   *   asi que estamparla aqui bajaria el porcentaje del mensajero sin poder subirlo jamas.
+   *   Cuando la orden llegue a la central y se asigne para repartir, `asignarBodegaLote` la
+   *   estampa en el instante correcto y el ranking la cuenta una sola vez.
+   * - **Sin `prioridad: false`** (a diferencia de `asignarBodegaLote`, que la apaga): una
+   *   recoleccion no participa del ciclo de reasignacion prioritaria de la feature 101.
+   *
+   * La guarda del `WHERE` (estado de origen + no borrada) es la defensa REAL —la validacion
+   * del service solo sirve para reportar mejor, mismo criterio que `recibirEnBodegaCentral`—.
+   * Si no alcanza a TODAS las ordenes pedidas, lanza para que la tx revierta: todo-o-nada (R5).
+   */
+  async asignarRecoleccionLote(
+    ordenIds: string[],
+    mensajeroId: string,
+    origenValue: string,
+  ): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.orden.updateMany({
+        where: {
+          id: { in: ordenIds },
+          deletedAt: null,
+          estatus: { value: origenValue },
+        },
+        data: { mensajeroAsignadoId: mensajeroId },
+      });
+      if (result.count !== ordenIds.length) {
+        throw new Error(
+          `asignarRecoleccionLote: ${result.count} de ${ordenIds.length} ordenes elegibles`,
+        );
+      }
       return result.count;
     });
   }
@@ -1933,6 +1981,59 @@ export class OrdenRepository implements IOrdenRepository {
             estatusDestinoId: destinoEstatusId,
             actorUsuarioId: historial.actorUsuarioId,
             origenTipo: historial.origenTipo, // recepcion_bodega_central
+          },
+        ]);
+      }
+      return result.count === 1;
+    });
+  }
+
+  /**
+   * Feature 157 (R26/R28/R34/R35): el mensajero confirma la recoleccion en la tienda
+   * (`por_recolectar_en_tienda -> en_ruta_bodega_central`, arista #43). Espejo de
+   * `recibirEnBodegaCentral` con UNA diferencia sustantiva: `mensajeroAsignadoId` entra en
+   * AMBOS `where`, de modo que la PROPIEDAD es parte de la guardia atomica y no solo una
+   * comprobacion previa del service (R34). Dos mensajeros no pueden recolectar la misma orden,
+   * y quien no la tiene asignada no la mueve ni ganando la carrera.
+   *
+   * NO toca `numGuia` (lo tiene desde que nacio) ni `mensajeroAsignadoId` (R35): el mensajero
+   * sigue siendo el mismo, ahora con el paquete encima. `appendCambioEstado` solo si
+   * transiciono (count 1), en la MISMA tx (choke point feature 49).
+   */
+  async recolectarEnTienda(
+    ordenId: string,
+    origenValue: string,
+    destinoEstatusId: string,
+    mensajeroId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const actual = await tx.orden.findFirst({
+        where: {
+          id: ordenId,
+          deletedAt: null,
+          estatus: { value: origenValue },
+          mensajeroAsignadoId: mensajeroId,
+        },
+        select: { estatusId: true },
+      });
+      const result = await tx.orden.updateMany({
+        where: {
+          id: ordenId,
+          deletedAt: null,
+          estatus: { value: origenValue },
+          mensajeroAsignadoId: mensajeroId,
+        },
+        data: { estatusId: destinoEstatusId },
+      });
+      if (result.count === 1 && actual !== null) {
+        await appendCambioEstado(tx, [
+          {
+            ordenId,
+            estatusOrigenId: actual.estatusId,
+            estatusDestinoId: destinoEstatusId,
+            actorUsuarioId: historial.actorUsuarioId,
+            origenTipo: historial.origenTipo, // recoleccion_tienda
           },
         ]);
       }

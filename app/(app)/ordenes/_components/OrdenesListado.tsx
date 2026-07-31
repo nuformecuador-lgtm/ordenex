@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
+import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import {
   listarMensajerosParaAsignacion,
   listarZonasBloqueadasPorCierre,
@@ -79,6 +80,17 @@ async function zonasBloqueadasFetcher(): Promise<Set<string>> {
 // `exclude`: `listarOrderStatus()` devuelve el catálogo COMPLETO (R1) y el front
 // filtra antes de construir las opciones del filtro (aclaración del humano, R14).
 const DEFAULT_EXCLUDE = ["pendiente"];
+
+/**
+ * Values que el código RECONOCE hoy. La tabla `order_status` conserva values ya
+ * RETIRADOS del seed: su migración de retiro solo borra la fila si nadie la referencia,
+ * y el historial pasado —inmutable— la referencia para siempre (caso del estado interno
+ * de fulfillment en bodega, retirado por la feature 155). Esa fila sobrevive huérfana y
+ * ninguna orden viva puede volver a tenerla, así que ofrecerla como filtro es ofrecer un
+ * estado que nunca devuelve nada. El catálogo de la BD manda sobre los ids;
+ * `ORDER_STATUS_SEED` manda sobre QUÉ existe.
+ */
+const VALUES_VIGENTES: ReadonlySet<string> = new Set(ORDER_STATUS_SEED);
 
 // Estado cuyo listado muestra ademas "Liberada el" (la fecha para la que quedo
 // reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
@@ -397,10 +409,13 @@ export function OrdenesListado({
     }
   }
 
-  // R14: opciones del filtro = catálogo − exclude (por value), en el orden
+  // R14: opciones del filtro = catálogo − retirados − exclude (por value), en el orden
   // determinista del catálogo (R5). Se filtra en el front.
   const estadosDisponibles = useMemo<OrderStatusLiteRow[]>(
-    () => (catalogo ?? []).filter((s) => !exclude.includes(s.value)),
+    () =>
+      (catalogo ?? []).filter(
+        (s) => VALUES_VIGENTES.has(s.value) && !exclude.includes(s.value),
+      ),
     [catalogo, exclude],
   );
 

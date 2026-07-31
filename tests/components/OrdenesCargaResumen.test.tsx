@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
@@ -19,6 +20,26 @@ import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 // ---------------------------------------------------------------------------
 
 const { resumenCargaMasivaMock } = vi.hoisted(() => ({ resumenCargaMasivaMock: vi.fn() }));
+
+// Feature 157 (bloque E): el paso 3 gano el boton de manifiesto, que avisa por toast. Se
+// mockea el hook —en vez de envolver cada render en el provider— porque estos casos miran la
+// TABLA del resumen; el manifiesto tiene su propia suite (`ManifiestoFlujos`).
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    error: vi.fn(),
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  }),
+}));
+
+// El paso 3 monta el modal de etiquetas; su action se mockea para no arrastrar la
+// generacion de PDF/QR en jsdom. Cada caso decide que devuelve.
+vi.mock("@/lib/actions/etiquetas-guia", () => ({
+  generarEtiquetas: vi.fn(async () => ({ status: "ok", etiquetas: [], omitidas: [] })),
+}));
+vi.mock("qrcode.react", () => ({ QRCodeCanvas: () => null }));
+vi.mock("react-barcode", () => ({ default: () => null }));
 
 vi.mock("@/lib/actions/carga-masiva-resumen", () => ({
   resumenCargaMasiva: resumenCargaMasivaMock,
@@ -122,10 +143,13 @@ describe("OrdenesCargaResumen — DataTable del resumen (R12, R22)", () => {
     expect(
       screen.queryByRole("button", { name: /descargar filas con error/i }),
     ).toBeNull();
-    const descargas = screen
+    // La red era "ninguna descarga en absoluto"; se acota a lo que R20 protege —las FILAS
+    // CON ERROR, que solo se exportan desde la vista previa—, porque desde la 157 este paso
+    // sí ofrece una descarga legítima y distinta: el manifiesto del lote recién creado.
+    const descargasDeErrores = screen
       .queryAllByRole("button")
-      .filter((b) => /descargar/i.test(b.textContent ?? ""));
-    expect(descargas).toHaveLength(0);
+      .filter((b) => /error/i.test(b.textContent ?? ""));
+    expect(descargasDeErrores).toHaveLength(0);
   });
 });
 
@@ -141,8 +165,12 @@ describe("OrdenesCargaResumen — solo lectura (R12, R13, R14)", () => {
     expect(
       screen.queryByRole("button", { name: /sugerir asignación/i }),
     ).not.toBeInTheDocument();
-    // Ninguna acción: el paso no tiene botones propios (el "Cerrar" es del modal).
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // Lo que la 159 retiró es la ASIGNACIÓN de mensajero desde este paso, no cualquier
+    // control: desde la 157 hay un botón de manifiesto, que no decide nada sobre la orden.
+    // Sigue sin haber acciones que muten las órdenes recién creadas.
+    expect(
+      screen.queryByRole("button", { name: /asignar|mensajero/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("la tabla no tiene columna de mensajero", async () => {
@@ -218,5 +246,46 @@ describe("OrdenesCargaResumen — estados de carga", () => {
 
     expect(await screen.findByText("No hay órdenes en este lote")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Las órdenes de una tienda SIN fulfillment nacen ya CON `num_guia` (feature 155), así que
+// su etiqueta existe desde la carga misma y el mensajero puede llevárselas impresas. Antes
+// había que salir a buscarlas al listado orden por orden.
+// ---------------------------------------------------------------------------------------
+describe("OrdenesCargaResumen — etiquetas del lote recién cargado", () => {
+  it("ofrece descargar las etiquetas de las órdenes creadas", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(
+      screen.getByRole("button", { name: "Descargar etiquetas" }),
+    ).toBeInTheDocument();
+  });
+
+  it("al pulsarlo pide las etiquetas de ESAS órdenes, por su id", async () => {
+    const user = userEvent.setup();
+    const { generarEtiquetas } = await import("@/lib/actions/etiquetas-guia");
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    await user.click(screen.getByRole("button", { name: "Descargar etiquetas" }));
+
+    await waitFor(() =>
+      expect(vi.mocked(generarEtiquetas)).toHaveBeenCalledWith({
+        ordenIds: ["o1", "o2"],
+      }),
+    );
+  });
+
+  it("sin filas resueltas no se ofrece (no tendría ids que imprimir)", async () => {
+    resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: [] });
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+    await screen.findByText("No hay órdenes en este lote");
+
+    expect(
+      screen.queryByRole("button", { name: "Descargar etiquetas" }),
+    ).toBeNull();
   });
 });

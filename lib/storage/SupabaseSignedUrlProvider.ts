@@ -65,11 +65,16 @@ export class SupabaseSignedUrlProvider implements ISignedUrlProvider {
     if (error || !data) {
       throw new Error(`fallo al firmar URLs de documentos: ${error?.message ?? "sin data"}`);
     }
+    // El resultado es PARCIAL a proposito: una entrada que el storage no pudo firmar se
+    // OMITE en vez de tumbar el lote entero. Un objeto perdido o inaccesible es un dato
+    // que falta, no un fallo de la operacion que lo pide: quien consume este Record ya
+    // resuelve la ausencia (`urlByPath[path] ?? null`), porque un documento puede no
+    // existir por diseño. Lanzar aqui convertia una evidencia huerfana en una pantalla
+    // entera caida — asi se quedo un cierre de dia sin poder aprobarse (2026-07-29), y
+    // con el, bloqueadas todas las asignaciones de la zona de ese mensajero.
     const result: Record<string, string> = {};
     for (const entry of data) {
-      if (entry.error || !entry.path) {
-        throw new Error(`fallo al firmar URL de documento: ${entry.error ?? "path vacio"}`);
-      }
+      if (entry.error || !entry.path) continue;
       result[entry.path] = entry.signedUrl;
     }
     return result;

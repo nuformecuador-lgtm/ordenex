@@ -247,6 +247,35 @@ describe("OrdenesRevisionMaestro", () => {
     expect(screen.getByRole("region", { name: "En bodega" })).toBeInTheDocument();
   });
 
+  // Feature 157 (R1/R2): el apartado del paquete que sigue EN LA TIENDA. Va antes de "En
+  // bodega" porque ese es su sitio en el flujo v2: la orden nace ahi y solo llega a la
+  // central cuando el mensajero la recolecta.
+  it("157/R1: monta el apartado 'Por recolectar en tienda' con sus dos acciones", async () => {
+    renderComponent();
+
+    await screen.findByText("REM-P1");
+    expect(
+      screen.getByRole("region", { name: "Por recolectar en tienda" }),
+    ).toBeInTheDocument();
+    // Asignar quien va a recogerlo, e imprimir sus etiquetas: estas ordenes NACEN con
+    // `num_guia` (feature 155), asi que la etiqueta ya existe antes de salir de la tienda.
+    expect(
+      screen.getByRole("button", { name: "Asignar mensajero para recolección" }),
+    ).toBeInTheDocument();
+  });
+
+  it("157/R1: con readOnly (admin) el apartado se lista sin acciones de escritura", async () => {
+    renderComponent(true);
+
+    await screen.findByText("REM-P1");
+    expect(
+      screen.getByRole("region", { name: "Por recolectar en tienda" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Asignar mensajero para recolección" }),
+    ).toBeNull();
+  });
+
   it("R12-UI: readOnly (admin) no muestra checkboxes ni botones de ESCRITURA", async () => {
     renderComponent(true);
 

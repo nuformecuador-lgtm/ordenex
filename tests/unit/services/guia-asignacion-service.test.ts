@@ -89,6 +89,8 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
       async (ids: string[]): Promise<Set<string>> => new Set(ids),
     ),
     rutearBodegaSateliteLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
+    // Feature 157: la asignacion de recoleccion escribe SOLO el mensajero (sin transicion).
+    asignarRecoleccionLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
     // Feature 41/R13: por defecto nadie bloqueado (los tests de bloqueo lo overridean).
     findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
@@ -937,5 +939,170 @@ describe("Ajuste maestro — no rutear a bodega satelite con >=1 mensajero en ci
     const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
 
     expect(r.status).toBe("ok");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 157 (R3-R9) — asignarRecoleccion: la CUARTA accion. Es la unica que NO transiciona
+// (la orden sigue en `por_recolectar_en_tienda`) y la unica que no pasa por el gate de
+// coordenadas. El mensajero NO se acota por zona (decision del humano 2026-07-30): el filtro
+// de las otras asignaciones es la zona de ENTREGA, que para ir a recoger no significa nada.
+// ---------------------------------------------------------------------------------------
+describe("GuiaAsignacionService.asignarRecoleccion (feature 157)", () => {
+  const ORIGEN = "por_recolectar_en_tienda";
+
+  it.each([
+    ["adminTienda", ADMIN_TIENDA],
+    ["mensajero", MENSAJERO],
+  ])("R8: %s no asigna recolecciones (sin efectos)", async (_n, actor) => {
+    const repo = fakeRepo();
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      actor,
+    );
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("R3: asigna el lote entero y escribe UNA sola vez, sin transicionar", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: ORIGEN }),
+        ordenRow({ id: "o2", estatusValue: ORIGEN }),
+      ]),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1", "o2"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r).toEqual({ status: "ok", resultados: [{ ordenId: "o1" }, { ordenId: "o2" }] });
+    expect(repo.asignarRecoleccionLote).toHaveBeenCalledWith(["o1", "o2"], "m1", ORIGEN);
+    // Ninguna de las otras escrituras: esto NO es una transicion.
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["estado de origen invalido", ordenRow({ id: "o2", estatusValue: "en_bodega_central" })],
+    ["borrada", ordenRow({ id: "o2", estatusValue: ORIGEN, deletedAt: new Date() })],
+  ])("R5: una orden %s aborta el lote ENTERO sin efectos", async (_n, mala) => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: ORIGEN }), mala]),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1", "o2"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("conflict");
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("R5: una orden inexistente tambien aborta el lote, con su motivo", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: ORIGEN })]),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1", "fantasma"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r).toMatchObject({
+      status: "conflict",
+      detalle: [{ ordenId: "fantasma", motivo: expect.stringMatching(/no existe/i) }],
+    });
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("R6: mensajeroId que no es mensajero -> validation_error, sin escribir", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: ORIGEN })]),
+      findMensajeroIdsValidos: vi.fn(async (): Promise<Set<string>> => new Set()),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "no-es-mensajero" },
+      MAESTRO,
+    );
+
+    expect(r).toMatchObject({ status: "validation_error" });
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("R6: el mensajero se valida SIN acotar por zona (no se consulta la zona GAM)", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        // Orden de zona NO-GAM: para una recoleccion la zona de entrega es irrelevante.
+        ordenRow({ id: "o1", estatusValue: ORIGEN, zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m-de-otra-zona" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    expect(repo.findMensajeroIdsValidos).toHaveBeenCalledWith(["m-de-otra-zona"]);
+    expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
+  });
+
+  it("R7: mensajero con cierre pendiente -> conflict con motivo por orden, sin escribir", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: ORIGEN })]),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m-bloq" },
+      MAESTRO,
+    );
+
+    expect(r).toMatchObject({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: expect.stringMatching(/cierre pendiente/i) }],
+    });
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("R9: una orden SIN coordenadas SI se asigna (el gate no corre: no entra a ninguna ruta)", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: ORIGEN })]),
+    });
+    // Gate que rechazaria TODO si llegara a consultarse.
+    const gateQueRechaza: IAsignabilidadCoordenadasService = {
+      evaluar: vi.fn(
+        async (rows: OrdenAsignabilidadRow[]) =>
+          new Map<string, EstadoAsignabilidad>(
+            rows.map((row) => [row.id, "sin_coordenadas" as EstadoAsignabilidad]),
+          ),
+      ),
+    };
+
+    const r = await newService(repo, fakeZonaRepo(), gateQueRechaza).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    expect(gateQueRechaza.evaluar).not.toHaveBeenCalled();
+  });
+
+  it("lote vacio -> ok trivial sin tocar el repo (idempotencia, patron de las otras acciones)", async () => {
+    const repo = fakeRepo();
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: [], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r).toEqual({ status: "ok", resultados: [] });
+    expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,26 @@
 // toHaveAttribute, etc.) para todos los archivos de test. Es un no-op
 // inocuo en los tests que corren en entorno "node" (backend), y necesario
 // para los tests de componente que corren en "jsdom".
+import { vi } from "vitest";
+
 import "@testing-library/jest-dom/vitest";
+
+// `react-countup` anima el valor DESDE 0 (`start={0}` explícito en `KpiValorAnimado`), asi
+// que en el primer render un KPI vale "0" y solo llega a su valor real cuando la animacion
+// termina, ~1.2 s despues por requestAnimationFrame. Un test que lea el KPI justo tras
+// renderizar lee el cero — no porque el dato este mal, sino porque la cuenta no ha subido.
+// El doble renderiza el valor FINAL ya formateado: lo que los tests verifican es que el KPI
+// muestre su cifra, no que la anime. Va en el setup y no en cada archivo porque los KPIs
+// aparecen en varias pantallas (portal del mensajero, cierres) y el tropiezo es el mismo.
+vi.mock("react-countup", () => ({
+  default: ({
+    end,
+    formattingFn,
+  }: {
+    end: number;
+    formattingFn?: (n: number) => string;
+  }) => (formattingFn ? formattingFn(end) : String(end)),
+}));
 
 // Polyfills para componentes que dependen de APIs del navegador ausentes en
 // jsdom (p. ej. el Sidebar de shadcn usa `matchMedia` vía use-mobile, y el

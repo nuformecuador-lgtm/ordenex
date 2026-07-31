@@ -18,15 +18,20 @@ import type {
   EtiquetaOmitidaDTO,
   GenerarEtiquetasResult,
 } from "@/lib/types/etiqueta-guia";
-import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { EtiquetaGuia } from "./EtiquetaGuia";
 import { descargarEtiquetasPdf } from "./etiquetas-pdf";
 
 export interface EtiquetasGuiaModalProps {
   open: boolean;
-  /** Órdenes seleccionadas al abrir (snapshot de un apartado con `num_guia`). */
-  ordenes: OrdenListItemDTO[];
+  /**
+   * Órdenes seleccionadas al abrir (snapshot). Se pide la forma MÍNIMA que este modal
+   * realmente usa —el `id`, que es lo único que viaja a `generarEtiquetas`— y no el
+   * `OrdenListItemDTO` completo: así también puede abrirse desde el resumen de la carga
+   * masiva, cuyas filas son `ResumenCargaOrdenDTO`. Un `OrdenListItemDTO[]` sigue siendo
+   * asignable, así que los consumidores existentes no cambian.
+   */
+  ordenes: readonly { id: string }[];
   onOpenChange: (open: boolean) => void;
   /** Reservado para simetría con los demás modales; no muta datos (READ). */
   onSuccess?: () => void;
