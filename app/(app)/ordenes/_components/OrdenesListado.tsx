@@ -40,6 +40,7 @@ import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
 import {
   construirFiltrosOrdenes,
   CATALOGO_FILTROS_VACIO,
+  CLAVE_BUSQUEDA,
   CLAVE_ESTADO,
 } from "./ordenes-filtros-def";
 import { seleccionAFilter } from "./seleccion-a-filter";
@@ -505,18 +506,25 @@ export function OrdenesListado({
     // Feature 169/R32: `construirFiltrosOrdenes` declara el BUSCADOR primero, y primero
     // se queda: el filtro de estado —que se declara aquí, porque su catálogo viene de
     // otra fuente— se inserta DETRÁS de él, no delante de todo.
-    const [busqueda, ...declarados] = construirFiltrosOrdenes(
+    //
+    // El buscador se separa POR SU CLAVE, no por su posición (M7 del review): con
+    // `const [busqueda, ...resto]`, reordenar `construirFiltrosOrdenes` dejaba al filtro
+    // que quedara primero fuera del apagado por catálogo —y al buscador dentro— sin que
+    // nada en este archivo lo delatara. Filtrando por `key` da igual el orden de origen.
+    const declarados = construirFiltrosOrdenes(
       catalogoFiltros ?? CATALOGO_FILTROS_VACIO,
       {
         incluirTienda: incluirFiltroTienda,
         incluirReasignables: incluirFiltroReasignables,
       },
     );
+    const busqueda = declarados.filter((f) => f.key === CLAVE_BUSQUEDA);
+    const dependenDelCatalogo = declarados.filter((f) => f.key !== CLAVE_BUSQUEDA);
     return [
       // El buscador NO depende del catálogo geográfico: que ese catálogo falle no puede
       // apagar la búsqueda por guía (R64 apaga los filtros que se quedaron sin opciones,
       // no los que nunca las tuvieron).
-      busqueda,
+      ...busqueda,
       // El estado va parametrizado como un filtro más, no por fuera: mismo control,
       // misma limpieza y misma salida agregada que zona, tienda o geografía.
       {
@@ -530,7 +538,7 @@ export function OrdenesListado({
       },
       // R64: si el catálogo geográfico no cargó, se deshabilitan SUS filtros; el de
       // estado viene de otra fuente y sigue operativo.
-      ...declarados.map((f) =>
+      ...dependenDelCatalogo.map((f) =>
         catalogoFiltros === null ? { ...f, disabled: true } : f,
       ),
     ];

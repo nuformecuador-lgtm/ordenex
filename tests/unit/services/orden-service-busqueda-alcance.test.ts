@@ -88,8 +88,15 @@ function repoEnMemoria(filas: FilaFake[]) {
         return false;
       }
       if (where.numGuia !== undefined && f.numGuia !== where.numGuia) return false;
-      if (where.busqueda !== undefined && !textoBuscable(f).includes(where.busqueda)) {
-        return false;
+      if (where.busqueda !== undefined) {
+        // M1 del review: el termino puede viajar en DOS formas (tal cual y solo digitos) y
+        // el repositorio real las une con un OR sobre la MISMA columna. Este doble hace lo
+        // mismo: si no, los casos de abajo pasarian por una razon distinta a la real.
+        const texto = textoBuscable(f);
+        const formas = [where.busqueda, where.busquedaDigitos].filter(
+          (t): t is string => t !== undefined,
+        );
+        if (!formas.some((t) => texto.includes(t))) return false;
       }
       return true;
     });
@@ -144,6 +151,18 @@ describe("adminTienda (R22)", () => {
   it("busca el TELEFONO EXACTO de una orden ajena y no obtiene nada", async () => {
     const r = await buscar("60005555", TIENDA);
     expect(r.status === "ok" && r.total).toBe(0);
+  });
+
+  it("busca el TELEFONO ajeno CON separadores y sigue sin obtener nada (M1: las dos formas acotan)", async () => {
+    // El termino de M1 viaja en dos formas y las dos van dentro del mismo OR, hermano del
+    // acotamiento por rol. Si alguna de las dos se hubiera colado FUERA de ese AND, este
+    // caso devolveria la orden de la otra tienda. La contraprueba de maestro esta al final
+    // del archivo: con el mismo termino, el maestro SI la encuentra.
+    const r = await buscar("6000-5555", TIENDA);
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items).toEqual([]);
+    expect(r.total).toBe(0);
   });
 
   it("busca la GUIA EXACTA de una orden ajena y no obtiene nada (la ruta rapida tambien acota)", async () => {
@@ -256,6 +275,9 @@ describe("maestro (contraprueba: el catalogo si contiene lo que los demas no ven
       ["bernarda quesada", "ajena"],
       ["carlos vega", "mia"],
       ["60005555", "ajena"],
+      // M1: el mismo telefono tecleado CON separadores. Es la contraprueba del caso de
+      // adminTienda de arriba: el termino encuentra la orden, y lo que la esconde es el rol.
+      ["6000-5555", "ajena"],
     ] as const) {
       const r = await buscar(termino, MAESTRO);
       expect(r.status).toBe("ok");

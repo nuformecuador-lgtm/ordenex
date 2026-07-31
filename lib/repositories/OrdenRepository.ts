@@ -686,6 +686,37 @@ export class OrdenRepository implements IOrdenRepository {
     return valor.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
   }
 
+  /**
+   * Feature 169 (M1 del review) — el termino sobre la columna generada, en UNA o en DOS
+   * formas.
+   *
+   * Con una sola forma (el caso normal: cualquier termino sin separadores) emite la clave
+   * escalar de siempre, y el plan de ejecucion es el ya medido en T4.1. Con dos —un termino
+   * de digitos con separadores, que hay que buscar tal cual Y reducido— emite un `OR` de dos
+   * `contains` SOBRE LA MISMA COLUMNA.
+   *
+   * Ese `OR` no abre ninguna fuga y la diferencia importa: las dos ramas comparan LA MISMA
+   * columna generada y nada mas, y el `OR` entero es una clave HERMANA del resto del
+   * `where`, asi que Postgres recibe `... AND (<columna> LIKE a OR <columna> LIKE b)`. El
+   * acotamiento por rol sigue fuera y sigue mandando. Lo prohibido —y sigue prohibido— es
+   * meter el termino en un `OR` con OTRA cosa: ahi el rol dejaria de acotar (design §7).
+   *
+   * Coste: un segundo recorrido del mismo indice trigram, y solo para terminos con
+   * separadores. Medido en `scripts/bench-busqueda-ordenes.ts` (E6/E7): el plan sigue siendo
+   * por indice — un `BitmapOr` de dos `Bitmap Index Scan` sobre ese mismo indice.
+   */
+  private static criterioBusqueda(
+    termino: string | undefined,
+    digitos: string | undefined,
+  ): Prisma.OrdenWhereInput {
+    if (!termino) return {};
+    const casa = (t: string): Prisma.OrdenWhereInput => ({
+      busquedaTexto: { contains: OrdenRepository.escaparLike(t) },
+    });
+    if (!digitos || digitos === termino) return casa(termino);
+    return { OR: [casa(termino), casa(digitos)] };
+  }
+
   private static criterio(
     columna: string,
     valor: string | string[] | undefined,
@@ -756,9 +787,12 @@ export class OrdenRepository implements IOrdenRepository {
       // en minusculas y sin acentos, y el termino tambien, asi que `LIKE` a secas es lo
       // que el trigram acelera mejor; `ILIKE` obligaria a plegar caja en cada recheck para
       // nada. El termino llega YA normalizado y aqui solo se le escapan los comodines.
-      ...(params.where.busqueda
-        ? { busquedaTexto: { contains: OrdenRepository.escaparLike(params.where.busqueda) } }
-        : {}),
+      // Si el service mando ademas su forma solo-digitos, se buscan las dos (ver
+      // `criterioBusqueda`: `OR` de dos `contains` sobre LA MISMA columna).
+      ...OrdenRepository.criterioBusqueda(
+        params.where.busqueda,
+        params.where.busquedaDigitos,
+      ),
     };
     // Feature 101/R6: `prioridad DESC` PRIMERO y LUEGO el orden vigente (lista blanca R31:
     // created_at/num_guia/num_remision). El sort va en la QUERY para respetar la paginacion

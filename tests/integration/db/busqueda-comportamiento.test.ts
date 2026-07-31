@@ -101,6 +101,16 @@ const SEMILLAS: Semilla[] = [
     notas: "Nota Malaquita",
   },
   {
+    // M1 del review: una remision NUMERICA CON SEPARADORES. La columna indexa la remision
+    // TAL CUAL (a diferencia del telefono, que va tambien en su forma solo-digitos), asi que
+    // esta fila es la unica que puede demostrar que teclear `2026-0912` la encuentra.
+    clave: "remision-numerica",
+    numGuia: 44559900,
+    numRemision: `REM-2026-0912-${SUFIJO}`,
+    telefonoDest: "21212121",
+    destinatario: "Rebeca Numerica",
+  },
+  {
     clave: "sin-guia",
     numGuia: null,
     numRemision: `REM-${SUFIJO}-NOGUIA`,
@@ -377,6 +387,84 @@ describeSiHayBase("comportamiento de la busqueda contra Postgres", () => {
       });
       // Mismo conjunto y mismo ORDEN: la busqueda filtra, no ranquea por relevancia.
       expect(conTermino).toEqual(sinTermino);
+    });
+  });
+
+  describe("M1: un termino de digitos CON separadores se busca en sus DOS formas", () => {
+    /**
+     * Busca POR EL CAMINO COMPLETO (service: es el que decide las formas del termino) y
+     * devuelve solo las filas DEL CORPUS que casaron. El acotamiento por `createdAt` no
+     * sirve aqui —el service construye su propio `where`—, asi que las filas ajenas de la
+     * base de desarrollo se descartan por id: los conteos siguen afirmando algo.
+     */
+    async function buscarConServicio(termino: string): Promise<string[]> {
+      return conCorpus(async ({ service, idPorClave }) => {
+        const r = await service.listar(
+          listarOrdenesSchema.parse({ filter: { q: termino }, pageSize: 100 }),
+          MAESTRO,
+        );
+        if (r.status !== "ok") throw new Error(`status ${r.status}`);
+        const porId = new Map([...idPorClave].map(([clave, id]) => [id, clave]));
+        return r.items.map((o) => porId.get(o.id)).filter((c): c is string => c !== undefined);
+      });
+    }
+
+    it("`2026-0912` encuentra la remision `REM-2026-0912` (R5, el falso negativo de M1)", async () => {
+      if (!fks) return;
+      expect(await buscarConServicio("2026-0912")).toEqual(["remision-numerica"]);
+    });
+
+    it("y NO la encontraba reducido a digitos: por eso hacen falta las dos formas", async () => {
+      // Contraprueba del caso de arriba. `20260912` es el termino tal como viajaba ANTES de
+      // M1 (la reduccion a digitos aplicada siempre): no casa nada, porque la remision se
+      // indexa con sus guiones. Si algun dia esta asercion se volviera falsa, seria que
+      // alguien amplio la columna generada — y entonces la de arriba habria que releerla.
+      if (!fks) return;
+      expect(await buscarConServicio("20260912")).toEqual([]);
+    });
+
+    it("un telefono tecleado CON guiones sigue encontrando el guardado SIN ellos (R13)", async () => {
+      // La mitad que motivo la reduccion a digitos, y que no se puede perder: `60011234`
+      // esta guardado pelado, y aqui se teclea con guion.
+      if (!fks) return;
+      expect(await buscarConServicio("6001-1234")).toEqual(["sin-tilde"]);
+    });
+
+    it("y un telefono guardado CON guiones se sigue encontrando de las dos maneras", async () => {
+      if (!fks) return;
+      expect(await buscarConServicio("8712-3456")).toEqual(["telefono-guion"]);
+      expect(await buscarConServicio("87123456")).toEqual(["telefono-guion"]);
+    });
+
+    it("R9 intacto: una guia tecleada en limpio devuelve SOLO esa orden", async () => {
+      // La ruta rapida no la toca M1: un termino de digitos PELADOS sigue resolviendose por
+      // igualdad contra `num_guia`, sin trigram y sin segunda forma. La guia 44559900 es la
+      // de la fila de remision numerica, cuyo texto contiene ademas `2026`: si la ruta
+      // rapida hubiera degradado a coincidencia parcial, saldrian mas filas.
+      if (!fks) return;
+      expect(await buscarConServicio("44559900")).toEqual(["remision-numerica"]);
+    });
+
+    it("las dos formas SOLO ESTRECHAN: nunca devuelven mas que el corpus", async () => {
+      // El OR de las dos formas vive dentro de la dimension de busqueda; el resto del
+      // `where` sigue siendo AND. Con un estado inexistente, cero filas.
+      if (!fks) return;
+      const r = await conCorpus(async ({ repo, marca }) =>
+        repo.list({
+          where: {
+            createdAt: { gte: marca },
+            busqueda: "2026-0912",
+            busquedaDigitos: "20260912",
+            estatusId: "no-existe",
+          },
+          sortBy: "created_at",
+          sortDir: "asc",
+          skip: 0,
+          take: 50,
+        }),
+      );
+      expect(r.total).toBe(0);
+      expect(r.items).toEqual([]);
     });
   });
 

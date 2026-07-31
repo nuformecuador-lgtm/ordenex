@@ -103,11 +103,12 @@ describe("coincidencia parcial (R2/R13)", () => {
     expect(where.numGuia).toBeUndefined();
   });
 
-  it("R13: digitos con separadores de telefono viajan en su forma SOLO DIGITOS", async () => {
-    // La columna indexa el telefono en las dos formas, asi que buscar los digitos cubre
-    // tanto "8888-0000" como "88880000" guardado. Una consulta, no dos.
-    expect((await wherePrimero({ q: "8888-0000" })).busqueda).toBe("88880000");
-    expect((await wherePrimero({ q: "(506) 8888 0000" })).busqueda).toBe("50688880000");
+  it("R13: digitos con separadores de telefono viajan TAMBIEN en su forma SOLO DIGITOS", async () => {
+    // La columna indexa el telefono en las dos formas, asi que la forma solo-digitos cubre
+    // el telefono guardado SIN separadores. Sigue viajando; lo que cambia (M1) es que ya no
+    // viaja SOLA.
+    expect((await wherePrimero({ q: "8888-0000" })).busquedaDigitos).toBe("88880000");
+    expect((await wherePrimero({ q: "(506) 8888 0000" })).busquedaDigitos).toBe("50688880000");
   });
 
   it("R13: un telefono con separadores NO entra por la ruta rapida de la guia", async () => {
@@ -121,6 +122,79 @@ describe("coincidencia parcial (R2/R13)", () => {
     const where = await wherePrimero({ q: "juan" });
     expect(where).toEqual({ busqueda: "juan" });
     expect(JSON.stringify(where)).not.toContain("OR");
+  });
+});
+
+// M1 del review: el termino de digitos CON separadores viajaba solo reducido a digitos, y
+// eso hacia inencontrable una remision numerica con guiones (`2026-0912` no casaba
+// `REM-2026-0912`, que la columna indexa TAL CUAL). Falso negativo silencioso: sin error,
+// sin log, la orden "no aparece". El contrato ahora manda las DOS formas; la union la hace
+// el repositorio, siempre sobre la misma columna.
+describe("las DOS formas del termino numerico con separadores (M1: R5 sin romper R13)", () => {
+  it("el termino tecleado viaja TAL CUAL, ademas de reducido a digitos", async () => {
+    const where = await wherePrimero({ q: "2026-0912" });
+    // La forma tal cual es la que encuentra `REM-2026-0912`...
+    expect(where.busqueda).toBe("2026-0912");
+    // ...y la reducida sigue siendo la que encuentra un telefono guardado sin separadores.
+    expect(where.busquedaDigitos).toBe("20260912");
+    expect(where.numGuia).toBeUndefined();
+  });
+
+  it("el termino tal cual llega NORMALIZADO, no crudo", async () => {
+    const where = await wherePrimero({ q: "  2026 - 0912  " });
+    expect(where.busqueda).toBe("2026 - 0912");
+    expect(where.busquedaDigitos).toBe("20260912");
+  });
+
+  it("las dos claves son HERMANAS del resto: el service NUNCA construye un OR", async () => {
+    // El `OR` (de las dos formas, sobre la MISMA columna) es dialecto del repositorio. Lo
+    // que este nivel garantiza es que el termino no se mezcla con nada mas: aqui hay dos
+    // claves de busqueda y las del acotamiento, y ninguna anida a otra.
+    const where = await wherePrimero({ q: "8888-0000", zona_id: ["z1"] }, {
+      usuarioId: "store1",
+      rol: "adminTienda",
+    });
+    expect(Object.keys(where).sort()).toEqual([
+      "busqueda",
+      "busquedaDigitos",
+      "tiendaId",
+      "zonaId",
+    ]);
+    expect(JSON.stringify(where)).not.toContain("OR");
+    expect(where.tiendaId).toBe("store1");
+  });
+
+  it("un termino SIN separadores NO produce segunda forma: el `where` es el de siempre", async () => {
+    // Importa para el plan de ejecucion: la ruta parcial numerica (y el fallback de R10)
+    // siguen emitiendo UNA sola condicion, o sea el plan ya medido en T4.1.
+    const digitos = await wherePrimero({ q: "2147483648" });
+    expect(digitos.busqueda).toBe("2147483648");
+    expect(digitos.busquedaDigitos).toBeUndefined();
+
+    const texto = await wherePrimero({ q: "jose pena" });
+    expect(texto.busqueda).toBe("jose pena");
+    expect(texto.busquedaDigitos).toBeUndefined();
+  });
+
+  it("un termino con letras y guiones tampoco produce segunda forma", async () => {
+    // `soloDigitosSiPareceNumero` devuelve null en cuanto hay una letra: ahi no hay nada
+    // que reducir y el texto se busca tal cual, como siempre.
+    const where = await wherePrimero({ q: "rem-2026-0912" });
+    expect(where.busqueda).toBe("rem-2026-0912");
+    expect(where.busquedaDigitos).toBeUndefined();
+  });
+
+  it("el fallback de la guia tambien manda las dos formas", async () => {
+    // La ruta rapida solo la toma un termino de digitos PELADOS, asi que este caso entra
+    // directo a parcial; se comprueba que la descarga y el listado ven lo mismo.
+    const { repo, list } = repoConGuia(0, 3);
+    await servicio(repo).listarCompleto(
+      listarOrdenesCompletoSchema.parse({ filter: { q: "2026-0912" } }),
+      MAESTRO,
+    );
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(list.mock.calls[0][0].where.busqueda).toBe("2026-0912");
+    expect(list.mock.calls[0][0].where.busquedaDigitos).toBe("20260912");
   });
 });
 

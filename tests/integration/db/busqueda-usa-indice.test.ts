@@ -125,7 +125,7 @@ describeSiHayBase("R31 — la busqueda usa el indice y no recorre `orden`", () =
   /** Ejecuta la consulta REAL del repositorio y devuelve el SQL que Prisma mando al servidor. */
   async function sqlDeLaBusqueda(
     ctx: Contexto,
-    where: { busqueda?: string; numGuia?: number },
+    where: { busqueda?: string; busquedaDigitos?: string; numGuia?: number },
   ): Promise<{ findMany: EventoSqlDeTest; count: EventoSqlDeTest }> {
     ctx.eventos.length = 0;
     await ctx.repo.list({ where, sortBy: "created_at", sortDir: "desc", skip: 0, take: 25 });
@@ -202,6 +202,78 @@ describeSiHayBase("R31 — la busqueda usa el indice y no recorre `orden`", () =
       });
       expect(conIndice).toBe(FILAS / 30);
       expect(sinIndice).toBe(conIndice);
+    });
+  });
+
+  describe("las DOS formas del termino tambien se resuelven por el indice (M1)", () => {
+    // M1 del review anadio un segundo `LIKE` sobre la MISMA columna cuando el termino trae
+    // separadores. La pregunta que hay que contestar —y no dar por hecha— es si el indice
+    // sigue sirviendo con el `OR` en medio: un `OR` es justo la construccion que puede
+    // dejar un indice inservible. Contestada aqui (¿SIRVE?) y en el banco de T4.1 (¿lo
+    // ELIGE, y a que precio?), con el mismo reparto y por los mismos motivos que R31.
+    //
+    // El termino: un telefono del corpus tecleado CON guion. La forma tal cual no casa nada
+    // —los telefonos se siembran pelados— y la reducida casa una fila; las dos tienen
+    // trigramas, que es lo unico que el plan necesita.
+    const TEL_CON_GUION = "8000-0007";
+    const TEL_PELADO = "80000007";
+
+    it("el findMany usa un BitmapOr de DOS Bitmap Index Scan sobre el MISMO indice", async () => {
+      if (!fks) return;
+      const plan = await conCorpus(async (ctx) => {
+        const { findMany } = await sqlDeLaBusqueda(ctx, {
+          busqueda: TEL_CON_GUION,
+          busquedaDigitos: TEL_PELADO,
+        });
+        return explicar(ctx, findMany, { forzarIndice: true });
+      });
+      expect(plan).toContain("BitmapOr");
+      expect(plan.match(/Bitmap Index Scan on orden_busqueda_texto_trgm_idx/g)).toHaveLength(2);
+      expect(plan).not.toContain("Seq Scan on orden");
+    });
+
+    it("el CONTEO paga lo mismo: el mismo OR por el mismo indice", async () => {
+      if (!fks) return;
+      const plan = await conCorpus(async (ctx) => {
+        const { count } = await sqlDeLaBusqueda(ctx, {
+          busqueda: TEL_CON_GUION,
+          busquedaDigitos: TEL_PELADO,
+        });
+        return explicar(ctx, count, { forzarIndice: true });
+      });
+      expect(plan).toContain("BitmapOr");
+      expect(plan.match(/Bitmap Index Scan on orden_busqueda_texto_trgm_idx/g)).toHaveLength(2);
+      expect(plan).not.toContain("Seq Scan on orden");
+    });
+
+    it("el OR emitido compara SOLO `busqueda_texto`, con las dos formas como parametros", async () => {
+      // La forma del SQL es la garantia de alcance: `... AND (busqueda_texto LIKE $1 OR
+      // busqueda_texto LIKE $2)`. El `AND` de fuera es donde vive el acotamiento por rol; si
+      // el OR se hubiera abierto a otra columna, el rol dejaria de acotar.
+      if (!fks) return;
+      const { sql, params } = await sinCorpus(async (ctx) => {
+        const { findMany } = await sqlDeLaBusqueda(ctx, {
+          busqueda: TEL_CON_GUION,
+          busquedaDigitos: TEL_PELADO,
+        });
+        return { sql: findMany.query, params: JSON.parse(findMany.params) as unknown[] };
+      });
+      expect(sql).toContain(
+        `("public"."orden"."busqueda_texto"::text LIKE ('%' || $1 || '%')` +
+          ` OR "public"."orden"."busqueda_texto"::text LIKE ('%' || $2 || '%'))`,
+      );
+      expect(sql).not.toContain("ESCAPE");
+      expect(params[0]).toBe(TEL_CON_GUION);
+      expect(params[1]).toBe(TEL_PELADO);
+    });
+
+    it("una sola forma sigue emitiendo UNA condicion (sin OR): el plan medido en T4.1 no cambia", async () => {
+      if (!fks) return;
+      const sql = await sinCorpus(async (ctx) => {
+        const { findMany } = await sqlDeLaBusqueda(ctx, { busqueda: RARO });
+        return findMany.query;
+      });
+      expect(sql).not.toContain(" OR ");
     });
   });
 

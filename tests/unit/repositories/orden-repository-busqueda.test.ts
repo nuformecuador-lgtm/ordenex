@@ -74,6 +74,75 @@ describe("termino -> `contains` sobre la columna generada", () => {
   });
 });
 
+// M1 del review. El service manda DOS formas del mismo termino cuando lo tecleado trae
+// separadores; el dialecto de unirlas es de esta capa. Lo que se fija aqui es que la union
+// vive DENTRO de la dimension de busqueda: las dos ramas comparan la misma columna y el
+// `OR` entero es hermano del acotamiento por rol. Un `OR` que sacara una rama de
+// `busquedaTexto` seria la fuga que el design §7 prohibe.
+describe("las DOS formas del termino, sobre la MISMA columna (M1)", () => {
+  it("emite un OR de dos `contains`, los dos sobre `busquedaTexto`", async () => {
+    const { findMany } = await whereDe({ busqueda: "2026-0912", busquedaDigitos: "20260912" });
+    expect(findMany.OR).toEqual([
+      { busquedaTexto: { contains: "2026-0912" } },
+      { busquedaTexto: { contains: "20260912" } },
+    ]);
+    // Y NO como clave escalar ademas del OR: seria un AND con una de las dos formas, o sea
+    // exactamente el falso negativo que M1 describe.
+    expect(findMany).not.toHaveProperty("busquedaTexto");
+  });
+
+  it("NINGUNA rama del OR toca otra columna (es la unica razon por la que este OR es seguro)", async () => {
+    const { findMany } = await whereDe({
+      busqueda: "8888-0000",
+      busquedaDigitos: "88880000",
+      tiendaId: "store1",
+      estatusId: ["os-1"],
+    });
+    const ramas = findMany.OR as Record<string, unknown>[];
+    expect(ramas).toHaveLength(2);
+    for (const rama of ramas) expect(Object.keys(rama)).toEqual(["busquedaTexto"]);
+    // El acotamiento por rol se queda FUERA del OR => AND. Si `tiendaId` cayera dentro, un
+    // adminTienda veria ordenes ajenas con solo teclear un telefono con guiones.
+    expect(findMany.tiendaId).toBe("store1");
+    expect(findMany.estatusId).toEqual({ in: ["os-1"] });
+    expect(findMany.deletedAt).toBeNull();
+  });
+
+  it("las dos formas se escapan por igual (R7 no se pierde en la segunda)", async () => {
+    const { findMany } = await whereDe({ busqueda: "100%-2", busquedaDigitos: "1002" });
+    expect(findMany.OR).toEqual([
+      { busquedaTexto: { contains: "100\\%-2" } },
+      { busquedaTexto: { contains: "1002" } },
+    ]);
+  });
+
+  it("el conteo recibe el MISMO OR (R15 tambien con dos formas)", async () => {
+    const { findMany, count } = await whereDe({
+      busqueda: "8888-0000",
+      busquedaDigitos: "88880000",
+      zonaId: ["z1"],
+    });
+    expect(count).toEqual(findMany);
+  });
+
+  it("si las dos formas COINCIDEN, no hay OR: una sola condicion, el plan de siempre", async () => {
+    const { findMany } = await whereDe({ busqueda: "88880000", busquedaDigitos: "88880000" });
+    expect(findMany).not.toHaveProperty("OR");
+    expect(findMany.busquedaTexto).toEqual({ contains: "88880000" });
+  });
+
+  it("la segunda forma SOLA no filtra nada (sin termino no hay busqueda)", async () => {
+    const { findMany } = await whereDe({ busquedaDigitos: "88880000" });
+    expect(findMany).not.toHaveProperty("OR");
+    expect(findMany).not.toHaveProperty("busquedaTexto");
+  });
+
+  it("con la ruta rapida no hay OR: la guia es igualdad y punto", async () => {
+    const { findMany } = await whereDe({ numGuia: 12345, tiendaId: "store1" });
+    expect(findMany).not.toHaveProperty("OR");
+  });
+});
+
 describe("escape de comodines de LIKE (R7)", () => {
   it("`%` viaja escapado: buscar `100%` no puede devolver todo lo que empieza por 100", async () => {
     const { findMany } = await whereDe({ busqueda: "100%" });

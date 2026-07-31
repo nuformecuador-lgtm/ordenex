@@ -64,6 +64,13 @@ const CADA_ZUNIGA = 833;
  *  DONDE esta la frontera, que es el unico dato accionable.
  *  Los modulos son PRIMOS entre si para que los solapes sean despreciables y cada peldaño
  *  tenga la cardinalidad que dice tener. */
+/** 1 de cada N filas lleva una remision NUMERICA CON GUIONES (`BENCH169-2026-000021`) en vez
+ *  del prefijo alfabetico. Existe por M1 del review: la remision se indexa TAL CUAL (a
+ *  diferencia del telefono, que va tambien en su forma solo-digitos), asi que sin filas de
+ *  esta forma el banco no puede medir el escenario que M1 arregla —ni el sobrecoste de
+ *  buscar las dos formas—. Con 7 son ~14 % de la tabla, que da a la vez un termino MUY
+ *  selectivo (una remision concreta) y uno amplio (`2026-0`). */
+const CADA_REMISION_NUMERICA = 7;
 const CADA_KOPPER = 251; // ~199 filas -> 0,4 % de la tabla
 const CADA_LIZANO = 101; // ~495 filas -> 1,0 %
 const CADA_BARQUERO = 47; // ~1 063 filas -> 2,1 %
@@ -320,6 +327,38 @@ async function main(): Promise<void> {
         " GROUP BY estatus_id ORDER BY n DESC LIMIT 1",
     );
 
+    // --- Terminos de los escenarios de M1 (dos formas del mismo termino) ---
+    // Se LEEN de la tabla en vez de calcularse: si la siembra cambiara, el banco mediria
+    // igualmente terminos que existen de verdad, en vez de buscar cadenas inventadas.
+    const remisiones = await consulta<{ num_remision: string }[]>(
+      `SELECT num_remision FROM orden WHERE num_remision LIKE '${MARCA}2026-%'` +
+        " ORDER BY num_remision DESC LIMIT 1",
+    );
+    const telefonos = await consulta<{ telefono_dest: string }[]>(
+      `SELECT telefono_dest FROM orden WHERE num_remision LIKE '${MARCA}%'` +
+        " AND telefono_dest LIKE '%-%' LIMIT 1",
+    );
+    // `2026-049994` (sin la marca): una remision concreta, tecleada tal como se lee.
+    const terminoRemision = remisiones[0].num_remision.slice(MARCA.length);
+    const terminoTelefono = telefonos[0].telefono_dest;
+    /** Prefijo comun de TODAS las remisiones numericas: el caso poco selectivo de M1. */
+    const TERMINO_M1_AMPLIO = "2026-0";
+
+    // La evidencia de M1, en numeros y sobre 50 000 filas: cuantas filas encuentra el
+    // termino TAL COMO SE ESCRIBE y cuantas su forma solo-digitos (que es lo unico que se
+    // buscaba antes). La diferencia es exactamente el falso negativo que M1 describe.
+    const soloDigitosRemision = terminoRemision.replace(/\D/g, "");
+    const m1 = await consulta<{ tal_cual: number; solo_digitos: number }[]>(
+      "SELECT (SELECT count(*)::int FROM orden WHERE busqueda_texto LIKE $1) tal_cual," +
+        " (SELECT count(*)::int FROM orden WHERE busqueda_texto LIKE $2) solo_digitos",
+      `%${terminoRemision}%`,
+      `%${soloDigitosRemision}%`,
+    );
+    console.log(
+      `\nM1 (falso negativo): '${terminoRemision}' tal cual = ${m1[0].tal_cual} fila(s);` +
+        ` reducido a digitos ('${soloDigitosRemision}') = ${m1[0].solo_digitos} fila(s).`,
+    );
+
     const base = { page: 1, pageSize: 25, sortBy: "created_at", sortDir: "desc" } as const;
     const escenarios: Escenario[] = [
       {
@@ -381,6 +420,34 @@ async function main(): Promise<void> {
           },
         },
         planEsperado: null,
+      },
+      // --- M1 del review: los escenarios de DOS formas -------------------------------
+      // El termino con separadores viaja tal cual Y reducido a digitos, unidos por un `OR`
+      // sobre la MISMA columna. Eso mete un segundo recorrido del trigram en el plan, y la
+      // pregunta que hay que contestar con numeros —no con fe— es si el planificador sigue
+      // eligiendo el indice y cuanto cuesta el segundo recorrido.
+      {
+        id: "E6",
+        titulo: `M1: telefono con guion ('${terminoTelefono}', dos formas)`,
+        input: { ...base, filter: { q: terminoTelefono } },
+        planEsperado: "trigram",
+      },
+      {
+        id: "E7",
+        titulo: `M1: remision numerica con guiones ('${terminoRemision}', dos formas)`,
+        input: { ...base, filter: { q: terminoRemision } },
+        planEsperado: "trigram",
+      },
+      {
+        id: "E8",
+        titulo: `M1 poco selectivo: '${TERMINO_M1_AMPLIO}' (~14 % por la forma tal cual)`,
+        input: { ...base, filter: { q: TERMINO_M1_AMPLIO } },
+        planEsperado: "trigram",
+        // Informativo, como los peldaños de la escalera: un termino que casa una de cada
+        // siete filas puede legitimamente salirle mas barato a Postgres recorriendo la
+        // tabla. Lo que importa es SABERLO y compararlo con E3 (mismo orden de magnitud de
+        // coincidencias, una sola forma).
+        exploratorio: true,
       },
     ];
 
@@ -492,7 +559,10 @@ async function sembrar(prisma: PrismaClient, filas: number): Promise<void> {
       SELECT
         gen_random_uuid(),
         $1::int + g,
-        '${MARCA}' || ($2::text[])[1 + (g % array_length($2::text[], 1))] || '-' || lpad(g::text, 7, '0'),
+        '${MARCA}' || (CASE WHEN g % ${CADA_REMISION_NUMERICA} = 0
+              THEN '2026-' || lpad(g::text, 6, '0')
+              ELSE ($2::text[])[1 + (g % array_length($2::text[], 1))] || '-' || lpad(g::text, 7, '0')
+              END),
         ($3::text[])[1 + (g % array_length($3::text[], 1))],
         (CASE WHEN g % ${CADA_MARIA} = 0
               THEN 'María'
@@ -876,6 +946,20 @@ function imprimirInforme(
     } else {
       console.log(`  (info) ${m.escenario.id}: sin asercion de plan; Seq Scan presente = ${seq}`);
     }
+  }
+
+  // M1: los dos escenarios selectivos de dos formas tienen que resolver el `OR` por el MISMO
+  // indice, DOS veces (`BitmapOr` de dos `Bitmap Index Scan`). Si alguno cayera a un solo
+  // scan es que una de las dos formas se perdio; si cayera a Seq Scan, el `OR` habria
+  // inutilizado el indice — que es exactamente lo que no se puede dar por supuesto.
+  for (const id of ["E6", "E7"]) {
+    const m = mediciones.find((x) => x.escenario.id === id);
+    if (!m) continue;
+    const scans = (
+      m.planFindMany.match(/Bitmap Index Scan on orden_busqueda_texto_trgm_idx/g) ?? []
+    ).length;
+    const ok = scans === 2 && m.planFindMany.includes("BitmapOr");
+    fallos += informar(`${id}: BitmapOr de DOS Bitmap Index Scan (medido: ${scans})`, ok, true);
   }
 
   console.log("\n--- E5: coste de ESCRITURA del indice ---");

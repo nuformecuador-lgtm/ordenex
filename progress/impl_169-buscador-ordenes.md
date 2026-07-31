@@ -1128,6 +1128,79 @@ hubo que quitarle para conseguirlo).
   el orden de despliegue **ya lo garantiza el pipeline**. Lo que no garantiza nadie es el
   orden de reversión: eso es manual y por eso está escrito aquí.
 
+### EN VERCEL, MERGEAR ES APLICAR (M4 del review)
+
+Esto no es un matiz de proceso, es lo primero que hay que saber:
+
+- El `build` de este repo es
+  `prisma generate && tsx scripts/migrate-deploy.ts && next build`. **Las migraciones se
+  aplican ANTES de compilar**, dentro del propio build del deployment. No hay un paso
+  manual, no hay una ventana entre "mergeado" y "aplicado": **mergear a la rama que
+  despliega producción ES aplicar esta migración a la base de producción.** Las dos
+  consultas de T0.1/T0.2 hay que correrlas **antes del merge**, no antes del despliegue.
+- En **preview** solo se aplica si ese entorno declara `MIGRATE_ON_PREVIEW=true`
+  (`scripts/migrate-deploy-guardas.ts`, `decidirMigracion`). Compruébalo en Vercel antes de
+  abrir el PR: sin el flag, el preview corre el código nuevo contra una base **sin la
+  columna** y `/ordenes` revienta en cuanto alguien teclee un término.
+
+### SI LA MIGRACIÓN FALLA: qué pasa exactamente, y cómo se sale
+
+El fallo ruidoso de (b) —`pg_trgm` en otro esquema— es **deliberado y sigue siéndolo**, pero
+tiene una consecuencia operativa que hay que conocer ANTES de descubrirla con producción
+parada:
+
+1. `migrate deploy` falla ⇒ **el build muere ahí** ⇒ el deployment no sale. Hasta aquí, bien:
+   el código nuevo no llega a una base sin columna.
+2. Pero Prisma deja la migración **marcada como FALLIDA** en `_prisma_migrations`
+   (`finished_at IS NULL`, sin `rolled_back_at`). A partir de ese momento **`migrate deploy`
+   se niega a hacer nada más en esa base**: cualquier despliegue posterior —aunque no tenga
+   relación con esta feature— **muere en el mismo paso**. La base queda con **todo el
+   pipeline de despliegue bloqueado** hasta que alguien lo resuelva a mano.
+3. La DDL en sí **no queda a medias**: Prisma envuelve cada migración en una transacción y
+   esta es DDL corriente (sin `CONCURRENTLY`), así que el fallo revierte la columna y el
+   índice. Lo que sobrevive es **la marca**, no un esquema mutilado.
+
+**Recuperación, en este orden:**
+
+```bash
+# 1) ARREGLAR LA CAUSA en esa base (es lo que la consulta (b) avisaba):
+#    ALTER EXTENSION pg_trgm SET SCHEMA extensions;
+
+# 2) DESBLOQUEAR el historial. Es `--rolled-back` y NO `--applied`: la transaccion
+#    revirtio, asi que la migracion NO esta aplicada; marcarla como aplicada dejaria la
+#    base sin columna y a Prisma creyendo que la tiene (el peor de los dos errores).
+DATABASE_URL='<la de ESA base, en modo SESION :5432>' \
+  pnpm exec prisma migrate resolve \
+    --rolled-back 20260731160000_orden_busqueda_trgm \
+    --schema db/schema.prisma
+
+# 3) Redesplegar (Vercel: "Redeploy" del mismo commit). El build vuelve a intentar la
+#    migracion, ahora contra una base donde `extensions.gin_trgm_ops` si resuelve.
+```
+
+- **La URL tiene que ser la de MIGRACIONES de esa base** (`DIRECT_URL ?? DATABASE_URL`,
+  misma precedencia que `prisma.config.ts`) y **en modo sesión (`:5432`)**: contra el pooler
+  transaccional (`:6543` o `pgbouncer=true`) `migrate resolve` no funciona por el mismo
+  advisory lock que guarda `validarUrlMigraciones`.
+- **Si esa URL no es recuperable** —el `DATABASE_URL` de producción está marcado *sensitive*
+  en Vercel y no se puede leer ni por CLI ni por dashboard—, el desbloqueo se hace por SQL
+  desde el MCP de Supabase o el editor SQL del proyecto, que es lo mismo que hace
+  `migrate resolve --rolled-back`:
+
+  ```sql
+  -- Desbloquea el historial. La condicion `finished_at IS NULL` es la red de seguridad:
+  -- si la migracion hubiera terminado bien, esta sentencia no toca NADA.
+  UPDATE _prisma_migrations
+     SET rolled_back_at = now()
+   WHERE migration_name = '20260731160000_orden_busqueda_trgm'
+     AND finished_at IS NULL
+     AND rolled_back_at IS NULL;
+  ```
+
+- **Comprobación de que quedó desbloqueado**, antes de redesplegar:
+  `SELECT migration_name, finished_at, rolled_back_at FROM _prisma_migrations WHERE finished_at IS NULL;`
+  ⇒ debe devolver **cero filas sin `rolled_back_at`**.
+
 ### Comprobaciones OBLIGATORIAS antes de aplicar, en CADA base (preview y producción)
 
 **T0.1 y T0.2 siguen PARCIALES** y esta sesión tampoco pudo cerrarlas: el `DATABASE_URL` de
@@ -1236,3 +1309,337 @@ un término amplio recorre la tabla**; queda escrito con sus números, sus tres 
 ninguna decisión tomada por cuenta propia. Los **42** requisitos tienen test. Puertas:
 `typecheck` y `lint` en verde; **la suite tiene un único rojo, en `Modal.test.tsx`,
 reproducido en `HEAD` con este trabajo guardado en `stash` y ajeno a la feature.**
+
+---
+---
+
+# Cierre de menores del review (`backend_dev`, 2026-07-31)
+
+> Encargo: cerrar **M1, M4 y M7** del review (`progress/review_169-buscador-ordenes.md`,
+> *aprobado con notas*, 0 bloqueantes). **Nada más.** Fuera de alcance por instrucción
+> expresa: el rojo ajeno de `Modal.test.tsx` (C1), el registro `feature_list.json` (M6) y la
+> decisión de diseño de la `pending list` del GIN (M3), que sigue esperando dueño.
+>
+> Lo de abajo NO reescribe las fases anteriores: §5, §13 y §20 siguen diciendo lo que decían.
+> Lo que cambia de comportamiento respecto a T2 es **una** cosa —cómo viaja un término de
+> dígitos con separadores— y está aquí, con su medición.
+
+---
+
+## 25 · M1 — el falso negativo silencioso: `2026-0912` ya encuentra `REM-2026-0912`
+
+### 25.1 Qué estaba mal, dicho en una línea
+
+`escribirBusqueda` reducía **siempre** a dígitos un término formado por dígitos y
+separadores. La columna generada indexa el **teléfono** en sus dos formas (por eso reducir
+bastaba para R13), pero la **remisión va tal cual**: teclear `2026-0912` buscaba `20260912`
+y **no encontraba** `REM-2026-0912`, que existe. Sin error, sin log, sin señal. Medido sobre
+el banco de 50 000 filas, con una remisión real del corpus:
+
+```
+M1 (falso negativo): '2026-049994' tal cual = 1 fila(s); reducido a digitos ('2026049994') = 0 fila(s).
+```
+
+### 25.2 Qué se hizo, y por qué esta opción y no otra
+
+**Se buscan las DOS formas**: el término tal como se escribió (normalizado) **y** su forma
+solo-dígitos, unidas por un `OR` **sobre la misma columna**. La segunda forma solo aparece
+cuando **difiere** de la primera, así que un término sin separadores produce el `where` de
+siempre, con una sola condición.
+
+- **Servicio** (`OrdenService.escribirBusqueda`): escribe `busqueda` (tal cual) y, si
+  difiere, `busquedaDigitos`. Sigue sin conocer SQL: entrega **términos**, no patrones.
+- **Contrato** (`ListOrdenesWhere`): clave nueva `busquedaDigitos?: string`, documentada con
+  la doctrina de por qué su `OR` no abre una fuga.
+- **Repositorio** (`criterioBusqueda`): una forma, la clave escalar de siempre; dos formas,
+  `OR: [{busquedaTexto: contains a}, {busquedaTexto: contains b}]`. Las dos ramas comparan
+  **la misma columna** y el `OR` entero es **clave hermana** del resto del `where`, así que
+  Postgres recibe `... AND (busqueda_texto LIKE a OR busqueda_texto LIKE b)`: el acotamiento
+  por rol queda **fuera** del `OR` y sigue mandando. Lo prohibido por el design §7 —meter el
+  término en un `OR` **con otra cosa**— sigue prohibido, y hay test que lo fija enumerando
+  las ramas.
+- La **ruta rápida (R9) no se toca**: un término de dígitos pelados sigue resolviéndose por
+  igualdad contra `num_guia`, y el fallback de R10 sigue emitiendo **una sola** condición
+  (las dos formas coinciden cuando el término ya venía limpio).
+
+**Alternativas descartadas, con su motivo:**
+
+| Alternativa | Por qué no |
+| --- | --- |
+| Buscar **solo** el término tal cual (quitar la reducción) | Rompe R13 en el otro sentido: `8888-0000` dejaría de encontrar un teléfono guardado `88880000`. Es cambiar un falso negativo por otro. |
+| Indexar también la **remisión en forma solo-dígitos** (6º segmento de la columna) | Sería la opción de una sola condición, pero **cuesta una reescritura de la tabla** (`ADD COLUMN GENERATED` otra vez), engorda el GIN y sube el coste de escritura, que ya está en **+15,9 %** con un tope de +20 % (§19.6). Y no generaliza: cualquier otro campo con separadores volvería a pedir su segmento. |
+| Dejarlo documentado como limitación (salida (a) del review) | Es un **dato que existe y no se encuentra**, en el campo que el operador tiene impreso delante. La opción (b) costó lo que está medido abajo: nada que justifique convivir con el fallo. |
+
+### 25.3 El coste, MEDIDO — no se da por hecho que siga usando el índice
+
+Banco completo re-corrido de cero (`pnpm exec tsx scripts/bench-busqueda-ordenes.ts`,
+50 067 filas, 10 repeticiones). El corpus **cambió a propósito**: 1 de cada 7 filas lleva
+ahora una remisión **numérica con guiones** (`BENCH169-2026-000021`), porque sin filas de esa
+forma el banco no podía medir el escenario que M1 arregla. Tres escenarios nuevos:
+
+**ESTADO B — estacionario (números canónicos). Milisegundos.**
+
+| Escenario | Formas | Coincidencias | findMany p50 | findMany p95 | count p50 | total p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| E1 guía exacta (ruta rápida) | — | 1 | 0,8 | 1,0 | 0,7 | 5,4 |
+| E2 `zuniga` (referencia, 1 forma) | 1 | 61 | 1,0 | 1,4 | 0,7 | 6,7 |
+| **E6 teléfono con guion `1000-7919`** | **2** | 1 | **1,4** | **2,0** | 1,4 | 6,9 |
+| **E7 remisión numérica `2026-049994`** | **2** | 1 | **1,8** | **3,6** | 1,6 | 9,8 |
+| E3 `maria` (1 forma, 19,98 %) | 1 | 10 004 | 15,7 | 18,1 | 9,4 | 25,0 |
+| **E8 `2026-0` (2 formas, 14,27 %)** | **2** | 7 144 | **11,8** | **13,9** | 7,4 | 20,4 |
+
+**Los planes (el punto que el encargo pedía comprobar, no suponer):**
+
+```
+===== E6 findMany =====
+->  Bitmap Heap Scan on orden  (actual time=0.380..0.382 rows=1.00)
+      Recheck Cond: ((busqueda_texto ~~ '%1000-7919%') OR (busqueda_texto ~~ '%10007919%'))
+      Heap Blocks: exact=1     Buffers: shared hit=41
+      ->  BitmapOr  (actual time=0.362..0.363)
+            ->  Bitmap Index Scan on orden_busqueda_texto_trgm_idx (rows=1.00)  Buffers: shared hit=23
+            ->  Bitmap Index Scan on orden_busqueda_texto_trgm_idx (rows=2.00)  Buffers: shared hit=17
+Execution Time: 0.464 ms
+```
+
+- **El índice se sigue usando, y se usa DOS veces**: `BitmapOr` de dos
+  `Bitmap Index Scan on orden_busqueda_texto_trgm_idx`. **No hay `Seq Scan`** en ninguno de
+  los tres escenarios nuevos, **sin forzar nada** (elección por coste del planificador, sobre
+  50 000 filas y estadísticas frescas), y **el mismo plan con `random_page_cost = 1.1`**.
+- **Lo que cuesta el segundo recorrido son páginas de índice, y son calderilla**: E6 gasta
+  **40** páginas de índice (23 + 17) frente a las **9** de E2 con una sola forma; E7, **74**
+  (49 + 25). Todas `shared hit`. En tiempo: **+0,4 ms de p50 sobre E2** (1,4 vs 1,0).
+- **El caso amplio es el que lo demuestra mejor**: E8 casa 7 144 filas con **dos** formas y
+  cuesta **11,8 ms**; E3 casa 10 004 con **una** y cuesta **15,7 ms**. Los planes explican por
+  qué: E8 usa **51** páginas de índice (36 + 15) contra las **22** de E3, pero las dos hacen
+  **~3 335 lecturas de heap**, y el heap es el ~85 % del tiempo. El coste sigue siendo
+  `O(coincidencias)`, no `O(formas)`. Extrapolando la curva de una sola forma (E2d 2 841 →
+  6,1 ms; E3 10 004 → 15,7 ms), a 7 144 coincidencias le tocarían ~11,9 ms: **E8 cae
+  exactamente sobre esa curva**. El segundo `Bitmap Index Scan` no se ve en el reloj.
+- **Ningún umbral del design se cruza, con el mismo margen que antes**: E6/E7 (clase E2, tope
+  p95 300 ms) van a **2,0 y 3,6 ms**; E8 (clase E3, tope 500 ms) a **13,9 ms**.
+- El banco lo **asierta**, no lo cuenta: dos comprobaciones nuevas exigen `BitmapOr` + **dos**
+  `Bitmap Index Scan` sobre el mismo índice en E6 y E7. Salida real:
+
+```
+  OK   E6: Bitmap Index Scan on orden_busqueda_texto_trgm_idx
+  OK   E6: NO hay 'Seq Scan on orden'
+  OK   E7: Bitmap Index Scan on orden_busqueda_texto_trgm_idx
+  OK   E7: NO hay 'Seq Scan on orden'
+  OK   (escalera, informativo) E8: Bitmap Index Scan on orden_busqueda_texto_trgm_idx
+  OK   E6: BitmapOr de DOS Bitmap Index Scan (medido: 2)
+  OK   E7: BitmapOr de DOS Bitmap Index Scan (medido: 2)
+
+>>> TODAS LAS ASERCIONES DE PLAN PASAN. R31 verificado empiricamente.
+```
+
+**Y lo que empeora, dicho igual de claro.** Con la **`pending list` del GIN sin vaciar**
+(estado A: justo después de una carga masiva), un término de **dos formas** cae a `Seq Scan`
+**aunque sea muy selectivo**, y eso no pasaba con una sola forma:
+
+| Escenario | Formas | Plan recién cargado | Plan estacionario | findMany p50 A | findMany p50 B |
+| --- | ---: | --- | --- | ---: | ---: |
+| E2 (61 coincidencias) | 1 | **Bitmap Index Scan** | Bitmap Index Scan | 3,1 | 1,0 |
+| E6 (1 coincidencia) | 2 | **Seq Scan** | Bitmap Index Scan | 26,4 | 1,4 |
+| E7 (1 coincidencia) | 2 | **Seq Scan** | Bitmap Index Scan | 27,6 | 1,8 |
+| E8 (7 144) | 2 | Seq Scan | Bitmap Index Scan | 28,9 | 11,8 |
+
+El motivo es el de §19.4: la pending list **se recorre entera por cada `Bitmap Index Scan`**,
+así que con dos formas el planificador ve el doble de coste estimado y se rinde antes. **No
+cambia ninguna conclusión** —26 ms de p50 siguen estando 10x por debajo del tope de 300 ms de
+esa clase, y el estacionario es donde el sistema vive el 99 % del tiempo—, pero **sí añade
+argumento a M3**: si algún día se decide vaciar la lista tras cada carga masiva, este es un
+motivo más, y no era visible antes de M1. **No se implementa nada por cuenta propia**: sigue
+siendo decisión de diseño con dueño pendiente.
+
+**El resto del banco, sin cambios materiales** (misma corrida): E5 escritura **+15,9 %**
+(brazo de control +11,0 %) contra un tope de +20 % —la diferencia con el +15,1 % de §19.6 es
+ruido entre corridas; E5 no toca el camino de lectura—; aplicar la migración,
+`ADD COLUMN` **2,68 s** + `CREATE INDEX` **0,47 s** sobre 50 067 filas (≈3,2 s, consistente
+con §19.6); limpieza final **67 filas, tabla 40 kB, índice 56 kB**: el banco no ensucia.
+
+### 25.4 Tests que lo cierran
+
+| Caso exigido | Test | Archivo |
+| --- | --- | --- |
+| `"2026-0912"` encuentra `REM-2026-0912` | *"`2026-0912` encuentra la remision `REM-2026-0912` (R5, el falso negativo de M1)"* | `tests/integration/db/busqueda-comportamiento.test.ts` (Postgres real) |
+| …y la contraprueba de que hacía falta | `y NO la encontraba reducido a digitos: por eso hacen falta las dos formas` | ídem |
+| Teléfono con separadores sigue encontrando | `un telefono tecleado CON guiones sigue encontrando el guardado SIN ellos (R13)` + `y un telefono guardado CON guiones se sigue encontrando de las dos maneras` | ídem |
+| Guía en limpio ⇒ ruta rápida y **solo** esa orden | `R9 intacto: una guia tecleada en limpio devuelve SOLO esa orden` (+ los R9/R11 de T2, intactos) | ídem + `tests/unit/services/orden-service-busqueda.test.ts` |
+| El plan no degrada | `el findMany usa un BitmapOr de DOS Bitmap Index Scan sobre el MISMO indice` + el mismo para el `count` | `tests/integration/db/busqueda-usa-indice.test.ts` |
+| El `OR` no abre alcance | `NINGUNA rama del OR toca otra columna` + `las dos claves son HERMANAS del resto: el service NUNCA construye un OR` | `tests/unit/repositories/orden-repository-busqueda.test.ts`, `tests/unit/services/orden-service-busqueda.test.ts` |
+| El rol sigue pisando | `busca el TELEFONO ajeno CON separadores y sigue sin obtener nada (M1)` + su **contraprueba de maestro** | `tests/unit/services/orden-service-busqueda-alcance.test.ts` |
+| R15 (mismo criterio en el conteo) con dos formas | `el conteo recibe el MISMO OR` + `el CONTEO paga lo mismo: el mismo OR por el mismo indice` | repo unit + integración |
+| Una sola forma ⇒ plan de siempre | `si las dos formas COINCIDEN, no hay OR` + `una sola forma sigue emitiendo UNA condicion (sin OR)` | repo unit + integración |
+
+**Delta de tests: +24**, todos verdes: `orden-service-busqueda` 24 → **30**,
+`orden-repository-busqueda` 17 → **24**, `orden-service-busqueda-alcance` 13 → **14**,
+`busqueda-comportamiento` 32 → **38**, `busqueda-usa-indice` 10 → **14**. El doble en memoria
+del test de alcance se actualizó para unir las dos formas como el repositorio real: sin eso,
+sus casos pasarían por una razón distinta de la real.
+
+**Un test existente se rompió, y hacía bien.** El censo de
+`tests/unit/guards/busqueda-texto-solo-lectura.test.ts` exige que toda línea de
+`OrdenRepository.ts` que nombre la columna (fuera de un `//`) contenga `contains`. Dos líneas
+de la **documentación** del método nuevo la nombraban de pasada, dentro de un bloque `/** */`.
+**No se tocó la regla**: se reescribió el comentario para no nombrarla («la MISMA columna
+generada», «ese mismo índice»). El guardia sigue prohibiendo exactamente lo que prohibía.
+
+### 25.5 Lo que M1 deja escrito para la 145
+
+La 145 hereda este patrón en 31 tablas, así que la regla queda explícita: **un buscador que
+reduce el término pierde datos que existen**. Si la columna generada indexa un campo **tal
+cual** —y todas lo hacen—, el término tecleado tiene que buscarse **tal cual**; la forma
+reducida es un **añadido**, nunca un sustituto. El precio de ese añadido está medido aquí: un
+`Bitmap Index Scan` más, decenas de páginas de índice, invisible en el reloj mientras el
+índice esté consolidado.
+
+---
+
+## 26 · M4 — el aviso de despliegue que faltaba
+
+Escrito en §22, en dos apartados nuevos que van **antes** de las comprobaciones previas
+porque es lo primero que hay que saber:
+
+- **«EN VERCEL, MERGEAR ES APLICAR»**: el `build` es
+  `prisma generate && tsx scripts/migrate-deploy.ts && next build`, o sea que las migraciones
+  corren **antes de compilar**, dentro del deployment. Las consultas de T0.1/T0.2 se corren
+  **antes del merge**, no antes del despliegue. Y el matiz del otro lado: **preview solo migra
+  si `MIGRATE_ON_PREVIEW=true`** en ese entorno (`decidirMigracion`); sin el flag, el preview
+  corre el código nuevo contra una base **sin la columna**.
+- **«SI LA MIGRACIÓN FALLA: qué pasa exactamente, y cómo se sale»**: el fallo ruidoso tumba el
+  build —bien: el código no llega a una base sin columna— **pero deja la migración marcada
+  como fallida en `_prisma_migrations`, y eso bloquea TODO despliegue posterior de esa base**,
+  tenga o no que ver con esta feature, hasta que alguien lo resuelva a mano. Con el
+  procedimiento exacto: (1) arreglar la causa
+  (`ALTER EXTENSION pg_trgm SET SCHEMA extensions;`), (2)
+  `prisma migrate resolve --rolled-back 20260731160000_orden_busqueda_trgm` contra la URL de
+  **esa** base y **en modo sesión (`:5432`)** —`--rolled-back` y **no** `--applied`, porque la
+  transacción revirtió y marcarla como aplicada dejaría la base sin columna y a Prisma
+  creyendo que la tiene—, (3) redesplegar el mismo commit. Y la salida cuando la URL **no es
+  recuperable** (el `DATABASE_URL` de producción está *sensitive* en Vercel): el `UPDATE`
+  equivalente sobre `_prisma_migrations` desde el MCP de Supabase, con `finished_at IS NULL`
+  como red de seguridad, más la consulta que verifica que quedó desbloqueado.
+
+---
+
+## 27 · M7 — el acoplamiento posicional, arreglado
+
+**Se arregló.** `OrdenesListado` hacía
+`const [busqueda, ...declarados] = construirFiltrosOrdenes(…)` y aplicaba el `disabled` por
+catálogo geográfico en bloque a `declarados`: si alguien reordenara `construirFiltrosOrdenes`,
+el filtro que quedara primero se libraría del apagado y el buscador se lo comería, **sin que
+nada en el archivo lo delatara**. Ahora el buscador se separa **por su clave**:
+
+```ts
+const declarados = construirFiltrosOrdenes(…);
+const busqueda = declarados.filter((f) => f.key === CLAVE_BUSQUEDA);
+const dependenDelCatalogo = declarados.filter((f) => f.key !== CLAVE_BUSQUEDA);
+```
+
+- **Cero cambio de comportamiento**: mismo orden en pantalla (buscador, estado, resto en su
+  orden de declaración), mismo apagado, mismas props. Lo confirman las suites que ya existían,
+  **sin tocarlas**: `ordenes-listado-buscador` (R32 por posición en el **DOM**; R64 buscador
+  operativo con Zona deshabilitada), `ordenes-listado-filtros`, `ordenes-listado` y
+  `ordenes-buscador-declaracion` — **58 tests, todos verdes**.
+- No hace falta manejar `undefined`: `filter` + *spread* da un array (vacío si algún día no
+  hubiera buscador) en vez de un `FilterDef | undefined` que habría que guardar.
+  `CLAVE_BUSQUEDA` ya se exportaba.
+- Es la única línea de `app/` que toca este encargo, y es exactamente la que el review señaló.
+
+---
+
+## 28 · Archivos de este cierre
+
+### Modificados
+
+| Archivo | Cambio |
+| --- | --- |
+| `lib/services/OrdenService.ts` | `escribirBusqueda` escribe las DOS formas (M1) |
+| `lib/interfaces/repositories/IOrdenRepository.ts` | `ListOrdenesWhere.busquedaDigitos?: string`, con su doctrina |
+| `lib/utils/busqueda-orden.ts` | **solo documentación**: el doc de `soloDigitosSiPareceNumero` decía "una sola consulta, sin reintentos" y habría inducido al siguiente a repetir M1. Ni una línea de código |
+| `lib/repositories/OrdenRepository.ts` | `criterioBusqueda`: una forma ⇒ escalar; dos ⇒ `OR` sobre la MISMA columna |
+| `app/(app)/ordenes/_components/OrdenesListado.tsx` | M7: el buscador se separa por `key`, no por posición |
+| `scripts/bench-busqueda-ordenes.ts` | corpus con remisiones numéricas + E6/E7/E8 + 2 aserciones de plan + evidencia numérica de M1 |
+| `tests/unit/services/orden-service-busqueda.test.ts` | +8 casos (las dos formas, R13 reformulado, R9 intacto) |
+| `tests/unit/repositories/orden-repository-busqueda.test.ts` | +7 casos (forma del `OR`, escape de las dos, R15, sin OR cuando no toca) |
+| `tests/unit/services/orden-service-busqueda-alcance.test.ts` | doble en memoria alineado con el repo real + caso de fuga con separadores + contraprueba |
+| `tests/integration/db/busqueda-comportamiento.test.ts` | semilla `remision-numerica` + 6 casos contra Postgres real |
+| `tests/integration/db/busqueda-usa-indice.test.ts` | +4 casos de plan/forma del `OR` |
+| `progress/impl_169-buscador-ordenes.md` | §22 (M4) + esta sección |
+
+**No se tocó**: la migración (ni `migration.sql` ni `down.sql`, así que **no hay drift ni
+reescritura de tabla**), `db/schema.prisma`, `lib/utils/busqueda-orden.ts`, `lib/types/orden.ts`,
+`components/**`, `feature_list.json`, ni un solo archivo de las features vecinas.
+
+---
+
+## 29 · Puertas — salida REAL de esta sesión
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+(sin salida: 0 errores)
+
+$ pnpm run lint
+✖ 20 problems (0 errors, 20 warnings)
+  (las MISMAS 20 warnings del baseline: `_input`/`_actor`/`_args`/`_items`/`_origenes`…)
+
+$ pnpm test
+ Test Files  681 passed (681)
+      Tests  8331 passed (8331)
+   Duration  310.19s
+```
+
+**La suite entera está VERDE, `Modal.test.tsx` incluido.** No se tocó ni ese test ni
+`components/shared/Modal.tsx` (siguen byte-idénticos a `origin/dev`); simplemente **hoy no
+falla**: dos corridas completas en esta sesión (una a mitad del trabajo, con un rojo mío en el
+censo del guardia, y esta) y `Modal` pasó en las dos. Es un dato para el leader sobre C1 —
+refuerza la lectura de "fragilidad de entorno" (foco en jsdom) y no la de regresión—, **no una
+declaración de que esté arreglado**: nadie ha tocado su causa, así que puede volver.
+
+Baseline de la fase anterior: 681 archivos / 8307 tests con 1 rojo. Ahora: 681 / **8331**
+con **0**. Delta: **+24 tests**, ningún archivo nuevo (los 24 caen en cinco archivos que ya
+existían).
+
+```
+$ pnpm exec vitest run <los 5 archivos tocados>
+ Test Files  5 passed (5)
+      Tests  120 passed (120)
+
+$ ./init.sh
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada
+✓ specs presentes para features sdd en vuelo
+✓ typecheck paso
+✓ lint paso
+✓ test paso        (681 archivos / 8331 tests, 275.21s)
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+== init OK ==
+```
+
+Es la **tercera** corrida completa de la suite en esta sesión y la tercera con `Modal` en
+verde. Insisto en lo de arriba: eso **no cierra C1** —nadie ha tocado la causa—, pero el
+leader ya tiene un `./init.sh` en verde sobre esta rama, que es lo que `CHECKPOINTS.md` exige
+para `done`.
+
+---
+
+## 30 · Veredicto del cierre
+
+**M1 cerrado arreglándolo, no documentándolo**: el término de dígitos con separadores se
+busca ahora **tal cual y reducido**, unidos por un `OR` que vive dentro de la dimensión de
+búsqueda, así que `2026-0912` encuentra `REM-2026-0912` (medido: 1 fila contra las 0 que
+devolvía) sin perder el teléfono con guiones ni tocar la ruta rápida de la guía. **El coste
+está medido, no supuesto**: sobre 50 000 filas el plan sigue siendo por índice —`BitmapOr` de
+**dos** `Bitmap Index Scan`, elegido por coste y sin forzar nada—, el segundo recorrido cuesta
+decenas de páginas de índice (**+0,4 ms** en el caso selectivo) y en el caso amplio el término
+de dos formas sale **más barato** que el de una sola con más coincidencias (11,8 ms vs
+15,7 ms), porque el coste sigue siendo `O(coincidencias)`. Se declara además lo que empeora:
+con la `pending list` sin vaciar, dos formas caen a `Seq Scan` donde una no lo hacía —26 ms,
+10x por debajo del umbral, y argumento nuevo para M3, que **no** se decide aquí. **M4 cerrado**
+con las palabras que faltaban («en Vercel mergear es aplicar») y el procedimiento exacto de
+recuperación cuando la migración falla y deja `_prisma_migrations` bloqueando todo despliegue
+posterior. **M7 cerrado** separando el buscador por su clave, sin un solo cambio de
+comportamiento. Puertas: **typecheck 0 errores, lint 0 errores, suite 8 331/8 331 en verde.**

@@ -88,8 +88,12 @@ export function normalizarTerminoBusqueda(termino: string): string {
  * Para que sirve (R13): la columna generada indexa el telefono DOS veces, tal cual y en su
  * forma solo-digitos, asi que buscar `"88880000"` encuentra tanto `"88880000"` como
  * `"8888-0000"`. Lo que falta es el sentido contrario — teclear `"8888-0000"` cuando el
- * dato esta guardado sin guiones—, y se resuelve reduciendo el TERMINO a digitos antes de
- * consultar. Una sola consulta, sin reintentos.
+ * dato esta guardado sin guiones—, y se resuelve buscando TAMBIEN esta forma del termino.
+ *
+ * OJO (M1 del review): esta forma es un AÑADIDO, nunca un sustituto del termino tecleado.
+ * La columna indexa el telefono en dos formas, pero la REMISION va tal cual: buscando solo
+ * los digitos, `"2026-0912"` no encuentra `REM-2026-0912`, que existe. Quien llame a esto
+ * tiene que buscar las dos formas (lo hace `OrdenService.escribirBusqueda`).
  *
  * `"1234"` (ya solo digitos) devuelve `"1234"`: es la entrada de la ruta rapida por
  * `num_guia` (design §5), que decide el llamador.

@@ -250,10 +250,21 @@ export class OrdenService implements IOrdenService {
    * Dos caminos, y el segundo no es opcional:
    *   · Termino de SOLO DIGITOS que cabe en `int4` -> igualdad contra `num_guia` (ruta
    *     rapida, indice unico ya existente). Devuelve esa orden y solo esa (R9).
-   *   · Todo lo demas -> coincidencia parcial sobre la columna generada. Si el termino son
-   *     digitos con separadores de telefono, se busca su forma SOLO DIGITOS: la columna
-   *     indexa el telefono en las dos formas, asi que una sola consulta cubre "8888-0000"
-   *     y "88880000" en cualquier combinacion (R13).
+   *   · Todo lo demas -> coincidencia parcial sobre la columna generada, con el termino TAL
+   *     COMO SE ESCRIBIO (normalizado) y, si trae separadores, TAMBIEN con su forma solo
+   *     digitos.
+   *
+   * LAS DOS FORMAS, y por que (M1 del review). Hasta aqui un termino de digitos con
+   * separadores viajaba SOLO reducido a digitos, y eso rompia R5 en silencio: la columna
+   * indexa el telefono en sus dos formas —de ahi que reducir bastara para R13—, pero la
+   * REMISION va tal cual, asi que teclear `2026-0912` buscaba `20260912` y NO encontraba
+   * `REM-2026-0912`, que existe. Un falso negativo sin error ni log es lo peor que puede
+   * hacer un buscador. Al reves tampoco vale: buscar solo el texto tecleado dejaria de
+   * encontrar un telefono guardado como `88880000` al teclearlo `8888-0000` (R13).
+   * Se escriben las dos y el repositorio las une; el resultado es siempre un SUPERCONJUNTO
+   * del anterior, nunca menos filas. La segunda forma solo aparece cuando DIFIERE de la
+   * primera: un termino ya limpio produce el `where` de siempre, con una sola condicion
+   * (que es lo que mantiene intacto el plan de la ruta parcial numerica y el del fallback).
    *
    * `sinRutaRapida` es lo que hace posible el fallback de R10: el segundo intento repite
    * la traduccion prohibiendo la ruta rapida, en vez de parchear el `where` ya construido
@@ -276,7 +287,10 @@ export class OrdenService implements IOrdenService {
         return;
       }
     }
-    where.busqueda = normalizarTerminoBusqueda(digitos ?? termino);
+    where.busqueda = normalizarTerminoBusqueda(termino);
+    // `digitos` ya es solo digitos: normalizarlo seria la identidad. Se compara contra la
+    // forma normalizada para no mandar dos veces lo mismo cuando el termino ya venia limpio.
+    if (digitos !== null && digitos !== where.busqueda) where.busquedaDigitos = digitos;
   }
 
   private construirWhere(
