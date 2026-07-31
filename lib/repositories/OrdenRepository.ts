@@ -670,6 +670,22 @@ export class OrdenRepository implements IOrdenRepository {
    * degradar a "sin filtro" y devolver de mas (R35). El schema `.nonempty()` ya hace
    * la lista vacia inalcanzable desde el borde; esto es defensa en profundidad.
    */
+  /**
+   * Feature 169 (design §4.3, R7) — escapa lo que `LIKE` interpreta como comodin.
+   *
+   * Prisma interpola el valor de `contains` DENTRO del patron `%valor%` sin escaparlo: sin
+   * esto, buscar `"100%"` devolveria todo lo que empieza por `100`, y `"_"` casaria con
+   * cualquier caracter. No es solo una molestia de precision — es una fuga de alcance del
+   * filtro: `"%"` devolveria el listado entero.
+   *
+   * Se escapa con `\` porque es el caracter de escape POR DEFECTO de `LIKE` en Postgres, y
+   * Prisma no emite clausula `ESCAPE`. El `\` va primero en la clase para que el propio
+   * backslash se duplique en la misma pasada.
+   */
+  private static escaparLike(valor: string): string {
+    return valor.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
+  }
+
   private static criterio(
     columna: string,
     valor: string | string[] | undefined,
@@ -729,6 +745,19 @@ export class OrdenRepository implements IOrdenRepository {
             mensajeroAsignadoId: null,
             estatus: { value: ESTATUS_EN_BODEGA_CENTRAL },
           }
+        : {}),
+      // Feature 169 (design §4.3/§5) — BUSCADOR. Dos claves excluyentes que el service ya
+      // resolvio; las dos van HERMANAS del resto (AND), nunca dentro de un `OR`.
+      //
+      // `numGuia`: ruta rapida por el indice unico `orden_num_guia_key`.
+      ...(params.where.numGuia !== undefined ? { numGuia: params.where.numGuia } : {}),
+      // `busquedaTexto`: coincidencia parcial sobre la columna GENERADA, acelerada por el
+      // indice GIN de trigramas. SIN `mode: "insensitive"` a proposito: la columna ya esta
+      // en minusculas y sin acentos, y el termino tambien, asi que `LIKE` a secas es lo
+      // que el trigram acelera mejor; `ILIKE` obligaria a plegar caja en cada recheck para
+      // nada. El termino llega YA normalizado y aqui solo se le escapan los comodines.
+      ...(params.where.busqueda
+        ? { busquedaTexto: { contains: OrdenRepository.escaparLike(params.where.busqueda) } }
         : {}),
     };
     // Feature 101/R6: `prioridad DESC` PRIMERO y LUEGO el orden vigente (lista blanca R31:

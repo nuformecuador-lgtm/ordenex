@@ -15,7 +15,11 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 // el `where`: si el schema lanza, no hay consulta.
 
 describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
-  it("R30: la whitelist son exactamente estas claves (9 de la 144 + `reasignables`)", () => {
+  it("R30: la whitelist son exactamente estas claves (9 de la 144 + `reasignables` + `q`)", () => {
+    // Este caso es un CENSO: enumera la whitelist entera para que ampliarla sea una
+    // decision explicita y no un descuido. La feature 169 la amplio en UNA clave (`q`, el
+    // termino de busqueda, su R1/R19) y por eso se actualiza aqui; el resto del archivo
+    // —incluido "una clave desconocida sigue fallando"— no cambia.
     expect([...ORDEN_FILTER_FIELDS]).toEqual([
       "status_id",
       "zona_id",
@@ -27,6 +31,7 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
       "created_desde",
       "created_hasta",
       "reasignables",
+      "q",
     ]);
   });
 

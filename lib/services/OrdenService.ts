@@ -1,6 +1,7 @@
 import { NumRemisionDuplicadoError } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   IOrdenRepository,
+  ListOrdenesResult,
   ListOrdenesWhere,
   UpdateOrdenData,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -22,7 +23,13 @@ import type {
   ListarOrdenesCompletoInput,
   ListarOrdenesInput,
   OrdenFilterInput,
+  SortDir,
+  SortField,
 } from "@/lib/types/orden";
+import {
+  normalizarTerminoBusqueda,
+  soloDigitosSiPareceNumero,
+} from "@/lib/utils/busqueda-orden";
 import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
 // Feature 151: el limite de filas de `listarCompleto`. `ordenesConfig` salio de este archivo
 // al integrar la 155: su unico consumidor aqui era el default `DEFAULT_ESTATUS_VALUE` del alta
@@ -91,6 +98,13 @@ function rangoCreacion(
   if (filter.created_hasta) rango.lt = inicioDelDiaSiguienteCREnUtc(filter.created_hasta);
   return rango.gte || rango.lt ? rango : undefined;
 }
+
+/**
+ * Feature 169 (design §5) — mayor valor representable por `num_guia`, que es `int4`. Un
+ * termino numerico por encima de esto NO se intenta como guia (el cast reventaria en la
+ * base): va directo a la coincidencia parcial (R12).
+ */
+const NUM_GUIA_MAX = 2_147_483_647;
 
 // Feature 160 (design §3.5): el derivador de intentos EN LOTE. `Pick` para dobles de test sin
 // DB, e `import type` para que la dependencia sea SOLO de tipo (sin ciclo de modulos:
@@ -230,9 +244,45 @@ export class OrdenService implements IOrdenService {
    * modo sin paginacion (`listarCompleto`) comparta literalmente este codigo y no
    * pueda divergir del listado en autorizacion ni en acotamiento (design §4.1, D3).
    */
+  /**
+   * Feature 169 (design §4.2/§5) — traduce el TERMINO de busqueda a claves del `where`.
+   *
+   * Dos caminos, y el segundo no es opcional:
+   *   · Termino de SOLO DIGITOS que cabe en `int4` -> igualdad contra `num_guia` (ruta
+   *     rapida, indice unico ya existente). Devuelve esa orden y solo esa (R9).
+   *   · Todo lo demas -> coincidencia parcial sobre la columna generada. Si el termino son
+   *     digitos con separadores de telefono, se busca su forma SOLO DIGITOS: la columna
+   *     indexa el telefono en las dos formas, asi que una sola consulta cubre "8888-0000"
+   *     y "88880000" en cualquier combinacion (R13).
+   *
+   * `sinRutaRapida` es lo que hace posible el fallback de R10: el segundo intento repite
+   * la traduccion prohibiendo la ruta rapida, en vez de parchear el `where` ya construido
+   * (que dejaria `numGuia` y `busqueda` conviviendo, o sea un AND imposible de satisfacer).
+   *
+   * NUNCA escribe dentro de un `OR`: la clave es hermana del resto del `where`, de modo que
+   * el termino solo puede ESTRECHAR el conjunto (R21).
+   */
+  private escribirBusqueda(
+    where: ListOrdenesWhere,
+    termino: string,
+    sinRutaRapida: boolean,
+  ): void {
+    const digitos = soloDigitosSiPareceNumero(termino);
+    const esSoloDigitos = digitos !== null && digitos === termino.trim();
+    if (!sinRutaRapida && esSoloDigitos) {
+      const guia = Number(digitos);
+      if (Number.isSafeInteger(guia) && guia > 0 && guia <= NUM_GUIA_MAX) {
+        where.numGuia = guia;
+        return;
+      }
+    }
+    where.busqueda = normalizarTerminoBusqueda(digitos ?? termino);
+  }
+
   private construirWhere(
     input: Pick<ListarOrdenesInput, "estatusId" | "filter">,
     actor: Actor,
+    opciones?: { sinRutaRapida?: boolean },
   ): ListOrdenesWhere {
     const where: ListOrdenesWhere = {};
     // R10: el `estatusId` escalar preexistente sigue funcionando (sin regresion).
@@ -269,6 +319,14 @@ export class OrdenService implements IOrdenService {
     // FILTER_TO_COLUMN; el repositorio lo traduce. Solo acota (nunca amplia), asi que
     // convive sin conflicto con el acotamiento por rol que se escribe debajo.
     if (input.filter?.reasignables) where.reasignables = true;
+    // Feature 169/R2/R14/R21: el TERMINO. Como las claves temporales y `reasignables`, no
+    // es una columna y por eso no pasa por FILTER_TO_COLUMN. Se escribe ANTES del
+    // acotamiento por rol —igual que todos los filtros— para que el rol siga teniendo la
+    // ultima palabra: un adminTienda que teclee el nombre de un destinatario de otra
+    // tienda obtiene cero filas y `total: 0`, no la orden ajena.
+    if (input.filter?.q !== undefined) {
+      this.escribirBusqueda(where, input.filter.q, opciones?.sinRutaRapida === true);
+    }
     // R9/R21 + feature 144/R36: adminTienda sigue acotado a SUS ordenes. Se escribe
     // DESPUES del filtro: si el actor inyecto `filter.tienda_id = [otraTienda]`, este
     // escalar lo SOBRESCRIBE. El filtro de tienda nunca amplia su alcance.
@@ -282,17 +340,46 @@ export class OrdenService implements IOrdenService {
     return where;
   }
 
+  /**
+   * Feature 169 (design §5, R10/R11) — la consulta del listado CON el fallback de la ruta
+   * rapida numerica.
+   *
+   * La ruta rapida (`num_guia = N`) no puede ser terminal: el segundo caso de uso mas
+   * frecuente —"los ultimos cuatro digitos del telefono"— tambien es un termino de solo
+   * digitos. Si la guia exacta no existe dentro del alcance del actor y del resto de
+   * filtros, se repite la consulta resolviendo el termino como coincidencia parcial.
+   *
+   * EL DISPARADOR ES `total`, NUNCA `items.length`, y esta linea es todo el motivo por el
+   * que este metodo existe: pidiendo la pagina 3 de una guia exacta, `items` viene VACIO y
+   * `total` vale 1. Con `items.length` se caeria al trigram en unas paginas si y en otras
+   * no, y el mismo termino mostraria resultados distintos segun por donde se entrase (R11).
+   *
+   * Coste: UNA consulta extra —de indice unico, sobre cero filas— y solo cuando el termino
+   * numerico no es una guia. Lo comparte `listar` y `listarCompleto`, para que la descarga
+   * no pueda resolver un termino distinto del que se ve en pantalla (R20).
+   */
+  private async listarConFallbackDeGuia(
+    input: Pick<ListarOrdenesInput, "estatusId" | "filter">,
+    actor: Actor,
+    pagina: { sortBy: SortField; sortDir: SortDir; skip: number; take: number },
+  ): Promise<ListOrdenesResult> {
+    const where = this.construirWhere(input, actor);
+    const primerIntento = await this.repo.list({ where, ...pagina });
+    if (primerIntento.total > 0 || where.numGuia === undefined) return primerIntento;
+    return this.repo.list({
+      where: this.construirWhere(input, actor, { sinRutaRapida: true }),
+      ...pagina,
+    });
+  }
+
   async listar(
     input: ListarOrdenesInput,
     actor: Actor,
   ): Promise<ListarOrdenesServiceResult> {
     if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
 
-    const where = this.construirWhere(input, actor);
-
     const skip = (input.page - 1) * input.pageSize;
-    const { items, total } = await this.repo.list({
-      where,
+    const { items, total } = await this.listarConFallbackDeGuia(input, actor, {
       sortBy: input.sortBy,
       sortDir: input.sortDir,
       skip,
@@ -333,14 +420,17 @@ export class OrdenService implements IOrdenService {
   ): Promise<ListarOrdenesCompletoServiceResult> {
     if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R14/R24
 
-    const where = this.construirWhere(input, actor);
     const limite = descargaConfig.MAX_FILAS;
 
     // `take: limite + 1` acota la MEMORIA por construccion (R22): aunque el dataset
     // sean 50 000 filas, nunca se materializan mas de N+1. El `total` sigue siendo
     // exacto porque `repo.list` lo obtiene con un `count` independiente del `take`.
-    const { items, total } = await this.repo.list({
-      where,
+    //
+    // Feature 169/R20: pasa por el MISMO camino que el listado en pantalla —termino
+    // incluido, fallback de guia incluido—, de modo que lo descargado sea exactamente lo
+    // listado. Si esto llamara a `repo.list` directamente, un termino numerico que no es
+    // guia devolveria filas en pantalla y un archivo vacio.
+    const { items, total } = await this.listarConFallbackDeGuia(input, actor, {
       sortBy: input.sortBy, // R17: mismos defaults del schema (created_at/desc)
       sortDir: input.sortDir,
       skip: 0,

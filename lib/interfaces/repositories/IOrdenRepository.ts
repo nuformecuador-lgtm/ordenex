@@ -91,6 +91,29 @@ export interface ListOrdenesWhere {
    * que exigirla dejaba fuera a las ordenes que nunca tuvieron mensajero.
    */
   reasignables?: true;
+  /**
+   * Feature 169 (design §4.2) — TERMINO de busqueda YA NORMALIZADO por el service
+   * (minusculas, sin los acentos del mapa, espacios colapsados). Es un TERMINO, nunca un
+   * patron: los comodines y su escape son dialecto de la capa de datos y se aplican en el
+   * repositorio (R7). Se resuelve contra la columna generada `busqueda_texto`, que solo
+   * contiene los cuatro campos buscables — por construccion no puede coincidir con la
+   * direccion, el producto, las notas ni el nombre de la tienda (R2).
+   *
+   * Es una clave HERMANA de las demas => AND con todo lo que haya (R14/R21). Meterla
+   * dentro de un `OR` con cualquier otra cosa abriria una fuga: el acotamiento por rol
+   * dejaria de acotar.
+   */
+  busqueda?: string;
+  /**
+   * Feature 169 (design §5) — RUTA RAPIDA: igualdad contra `num_guia`, que ya tiene indice
+   * unico (`orden_num_guia_key`). Es el caso mas frecuente en operacion (el operador tiene
+   * la guia delante) y cuesta una busqueda por indice unico, sin tocar el trigram.
+   *
+   * NO es terminal: si la consulta con esta clave devuelve `total === 0`, el service
+   * reintenta con `busqueda` (R10), porque "los ultimos digitos del telefono" tambien es
+   * un termino de solo digitos. El disparador es el TOTAL, nunca `items.length`.
+   */
+  numGuia?: number;
 }
 
 export interface ListOrdenesParams {
