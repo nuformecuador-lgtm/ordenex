@@ -30,7 +30,7 @@ describe("guiaDecisionErrorMessage", () => {
       status: "conflict",
       detalle: [{ ordenId: "o1", motivo: "estado de origen no permitido: en_bodega_central" }],
     };
-    expect(guiaDecisionErrorMessage(error)).toMatch(/estado válido para esta acción/i);
+    expect(guiaDecisionErrorMessage(error)).toMatch(/ya cambió de estado/i);
   });
 
   it("status conocido sin detalle -> mensaje por status", () => {
@@ -38,7 +38,7 @@ describe("guiaDecisionErrorMessage", () => {
   });
 
   it("error desconocido -> fallback generico", () => {
-    expect(guiaDecisionErrorMessage(null)).toBe("No se pudo completar la operación.");
+    expect(guiaDecisionErrorMessage(null)).toBe("No se pudo completar la operación. Actualiza la página y vuelve a intentarlo.");
   });
 
   // Feature 156: el mapper lo comparten "Generar guia" (sin seleccion de mensajero) y
@@ -49,7 +49,7 @@ describe("guiaDecisionErrorMessage", () => {
       status: "validation_error",
       fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
     });
-    expect(msg).toBe("Datos inválidos.");
+    expect(msg).toBe("Datos inválidos: revisa la selección y vuelve a intentarlo.");
     expect(msg).not.toMatch(/mensajero/i);
   });
 });

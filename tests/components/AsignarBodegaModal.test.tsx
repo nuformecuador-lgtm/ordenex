@@ -136,7 +136,7 @@ describe("AsignarBodegaModal", () => {
     await vi.waitFor(() =>
       // Feature 156: el mapper es compartido con "Generar guía", que ya no elige
       // mensajero, así que el texto es genérico.
-      expect(errorMock).toHaveBeenCalledWith("Datos inválidos."),
+      expect(errorMock).toHaveBeenCalledWith("Datos inválidos: revisa la selección y vuelve a intentarlo."),
     );
   });
 

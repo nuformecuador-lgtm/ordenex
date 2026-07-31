@@ -46,5 +46,5 @@ export function reprogramarNovedadErrorMessage(error: unknown): string {
       : error;
   return isReprogramarNovedadErrorStatus(status)
     ? REPROGRAMAR_NOVEDAD_ERROR_MESSAGES[status]
-    : "No se pudo completar la operación.";
+    : "No se pudo completar la operación. Actualiza la página y vuelve a intentarlo.";
 }
