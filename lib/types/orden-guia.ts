@@ -74,6 +74,12 @@ export const asignarRecoleccionSchema = z.object({
 });
 export type AsignarRecoleccionActionInput = z.infer<typeof asignarRecoleccionSchema>;
 
+// Feature 157 (ampliacion): la reversion no elige mensajero, solo el lote.
+export const desasignarRecoleccionSchema = z.object({
+  ordenIds: z.array(z.string().uuid()).min(1),
+});
+export type DesasignarRecoleccionActionInput = z.infer<typeof desasignarRecoleccionSchema>;
+
 export type AsignarRecoleccionResult =
   | { status: "ok"; resultados: { ordenId: string }[] }
   | { status: "unauthenticated" }

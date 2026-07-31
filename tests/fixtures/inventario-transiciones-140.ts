@@ -114,7 +114,12 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // #43/#44: feature 154. DECLARADAS Y SIN PRODUCTOR — ningun service las ejecuta todavia; el
   // `callSite` nombra la feature que lo hara. Por eso NO aparecen en el mapa de puntos de
   // escritura de `tests/unit/repositories/orden-historial-cobertura.test.ts`.
-  { n: "43", origen: "por_recolectar_en_tienda", destino: "en_ruta_bodega_central", via: "recoleccion_tienda", callSite: "SIN PRODUCTOR (154): escaner de recoleccion en tienda, feature 157" },
+  // Feature 157 (ampliacion 2026-07-31): la #43 CAMBIA DE ORIGEN. Solo recolecta quien fue
+  // asignado, y estar asignado es exactamente lo que significa `recolectando`. Se suman la
+  // asignacion (#45b) y su reversion (#46b), que son las que impiden reasignar en bucle.
+  { n: "43", origen: "recolectando", destino: "en_ruta_bodega_central", via: "recoleccion_tienda", callSite: "RecoleccionTiendaService.recolectarEnTienda (157)" },
+  { n: "45b", origen: "por_recolectar_en_tienda", destino: "recolectando", via: "asignacion_recoleccion", callSite: "GuiaAsignacionService.asignarRecoleccion (157)" },
+  { n: "46b", origen: "recolectando", destino: "por_recolectar_en_tienda", via: "deshacer_asignacion", callSite: "GuiaAsignacionService.desasignarRecoleccion (157)" },
   // #44: la 154 la declaro SIN PRODUCTOR y con `via: "gestion"`. La feature 158 le pone
   // PRODUCTOR (`crearGestionYTransicionar` con `resultado = incidente`) y le REALINEA el `via`
   // a la familia `incidente`, que es la que el append persiste (Q-G). La fila NO se borra: se
@@ -190,7 +195,7 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
  * aristas del camino del admin repite un par ya declarado, por eso la diferencia no se mueve.
  */
 export const RECUENTO_INVENTARIO = {
-  aristasFlujo: 52,
-  paresUnicos: 50,
+  aristasFlujo: 54, // +2 (157: asignacion de recoleccion y su reversion)
+  paresUnicos: 52,
   aristasCreacion: 2,
 } as const;

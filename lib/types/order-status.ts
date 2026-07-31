@@ -71,6 +71,11 @@ export const ORDER_STATUS_SEED = [
   "por_devolver_a_tienda", // feature 139 (17mo; 18mo antes de la 155): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
   "por_recolectar_en_tienda", // feature 154 (18mo; 19no antes de la 155): estado de ESPERA en la tienda; ahi NACE la rama (b) de la 155 y de ahi sale hacia en_ruta_bodega_central (#43, feature 157)
   "incidente", // feature 154 (19no; 20mo antes de la 155): resultado TERMINAL de la gestion del mensajero (#44, feature 158). Sin aristas de salida (decision del gate 2026-07-29)
+  // Feature 157 (ampliacion 2026-07-31): la asignacion del mensajero que va a la tienda pasa a
+  // ser una TRANSICION. Sin este estado la orden se quedaba en `por_recolectar_en_tienda` con
+  // el mensajero escrito, seguia saliendo como asignable y se podia reasignar indefinidamente.
+  // `por_recolectar_en_tienda` = nadie va todavia; `recolectando` = alguien va en camino.
+  "recolectando",
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

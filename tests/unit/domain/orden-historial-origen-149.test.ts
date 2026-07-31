@@ -52,7 +52,15 @@ describe("R26 — `deshacer_asignacion` NO entra en ORIGEN_TIPOS_CON_GESTION", (
       .filter((d) => d.via === DESHACER)
       .map((d) => d.to);
     expect(destinos.length).toBeGreaterThan(0);
-    expect([...new Set(destinos)].sort()).toEqual(["en_bodega_central", "en_bodega_satelite"]);
+    // Feature 157 (ampliacion): la familia gana un tercer destino — la reversion de una
+    // recoleccion devuelve la orden a la espera en la tienda—. Sigue cumpliendo lo que este
+    // guard protege: los destinos de `deshacer_asignacion` son sitios donde la orden ESPERA a
+    // que alguien la tome, nunca `devuelta`, que la metería en el criterio de intentos (160).
+    expect([...new Set(destinos)].sort()).toEqual([
+      "en_bodega_central",
+      "en_bodega_satelite",
+      "por_recolectar_en_tienda",
+    ]);
     expect(destinos).not.toContain("devuelta");
   });
 });

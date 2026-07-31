@@ -26,6 +26,8 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   por_recoger: "os-espera",
   en_bodega_central: "os-bodega",
   en_ruta_bodega_satelite: "os-ruta-satelite", // feature 30
+  recolectando: "os-recolectando", // feature 157 (ampliacion): destino de la asignacion
+  por_recolectar_en_tienda: "os-por-recolectar", // destino de su reversion
 };
 
 // Feature 30: por defecto la orden es GAM (zonaId === GAM_ZONA_ID).
@@ -91,6 +93,7 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     rutearBodegaSateliteLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
     // Feature 157: la asignacion de recoleccion escribe SOLO el mensajero (sin transicion).
     asignarRecoleccionLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
+    desasignarRecoleccionLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
     // Feature 157 (regla de dedicacion): por defecto NADIE esta ocupado; los casos de la
     // regla lo overridean para simular reparto o recoleccion pendiente.
     findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set()),
@@ -982,7 +985,15 @@ describe("GuiaAsignacionService.asignarRecoleccion (feature 157)", () => {
     );
 
     expect(r).toEqual({ status: "ok", resultados: [{ ordenId: "o1" }, { ordenId: "o2" }] });
-    expect(repo.asignarRecoleccionLote).toHaveBeenCalledWith(["o1", "o2"], "m1", ORIGEN);
+    // Feature 157 (ampliacion): la asignacion TRANSICIONA, asi que ademas del origen viaja el
+    // destino (`recolectando`) y el contexto del historial — es lo que deja el rastro.
+    expect(repo.asignarRecoleccionLote).toHaveBeenCalledWith(
+      ["o1", "o2"],
+      "m1",
+      ORIGEN,
+      "os-recolectando",
+      { actorUsuarioId: MAESTRO.usuarioId, origenTipo: "asignacion_recoleccion" },
+    );
     // Ninguna de las otras escrituras: esto NO es una transicion.
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
     expect(repo.generarGuiaLote).not.toHaveBeenCalled();
@@ -1214,7 +1225,7 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
 
     expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(
       ["m1"],
-      ["por_recolectar_en_tienda"],
+      ["recolectando"], // lo que ocupa es la recoleccion ASIGNADA, no la que espera sin dueño
     );
     expect(r.status).toBe("ok");
   });

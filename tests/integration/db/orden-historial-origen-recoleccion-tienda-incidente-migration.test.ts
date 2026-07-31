@@ -71,8 +71,9 @@ describe("Feature 154 · SEED del enum — las dos familias del flujo v2 (R7/R8/
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual(
       Object.values(PrismaOrdenHistorialOrigenTipo).sort(),
     );
-    // 25 tras integrar la 149, que apendio `deshacer_asignacion` DESPUES de estos dos.
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(25);
+    // 26: la 149 apendio `deshacer_asignacion` y la 157 `asignacion_recoleccion`, ambas
+    // DESPUES de estos dos valores.
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(26);
   });
 
   it("R12: NINGUNA de las dos entra en ORIGEN_TIPOS_CON_GESTION (no alteran los intentos)", () => {
@@ -123,7 +124,11 @@ describe("Feature 154 · DOWN — recrea el tipo con las 22 familias previas (R1
     // Las 22 previas = el SEED actual menos las AÑADIDAS EN O DESPUES de la 154. La 149 aterrizo
     // `deshacer_asignacion` DESPUES (migracion `20260729140000_...`), asi que se descuenta tambien:
     // este down recrea el enum a su estado PRE-154, que es fijo e historico (patron 67/99/100/106/138).
-    const AÑADIDOS_EN_O_DESPUES_DEL_154 = new Set<string>([...NUEVOS, "deshacer_asignacion"]);
+    const AÑADIDOS_EN_O_DESPUES_DEL_154 = new Set<string>([
+      "asignacion_recoleccion", // feature 157 (ampliacion)
+      ...NUEVOS,
+      "deshacer_asignacion",
+    ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_154.has(v))),
     );

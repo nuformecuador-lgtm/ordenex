@@ -221,7 +221,7 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
     // R15: el alcance lo impuso la consulta del repo, acotada al actor.
     // Feature 157: la MISMA lectura trae ademas el tercer grupo (`por_recolectar_en_tienda`).
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
-      "por_recolectar_en_tienda",
+      "recolectando",
       "por_recoger",
       "en_reparto",
     ]);
@@ -262,7 +262,7 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     expect(r.ordenEnGestionId).toBe("b");
     // R13: la consulta se hizo con el mensajero del actor.
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
-      "por_recolectar_en_tienda", // feature 157
+      "recolectando", // feature 157 (ampliacion)
       "por_recoger",
       "en_reparto",
     ]);
@@ -973,7 +973,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 // esta feature se juzga tanto por lo que muestra como por lo que NO toca.
 // ---------------------------------------------------------------------------------------
 describe("MisAsignacionesService — tercer grupo por recolectar (feature 157)", () => {
-  const RECOLECCION = "por_recolectar_en_tienda";
+  const RECOLECCION = "recolectando"; // feature 157 (ampliacion): el estado propio del asignado
 
   it("R11: la orden en por_recolectar_en_tienda sale en `porRecolectar` y en ningun otro grupo", async () => {
     const repo = fakeRepo({
