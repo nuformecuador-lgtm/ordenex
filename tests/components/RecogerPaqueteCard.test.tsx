@@ -113,6 +113,21 @@ const porRecoger = [
   makeAsignacion({ id: "ord-2", numGuia: 1002, numRemision: "REM-002" }),
 ];
 
+/**
+ * Monta la tarjeta y la DESPLIEGA. Desde el 2026-07-31 (decisión del humano) la tarjeta
+ * vive plegada tras el disparador de `EscanerDesplegable`, igual que en el resto de la app:
+ * montada dejaba `QrScanner` vivo —la cámara encendida— todo el tiempo que el mensajero
+ * tuviera la pantalla abierta, en la calle. Cada caso abre primero, que es exactamente lo
+ * que hace el mensajero cuando va a recoger.
+ */
+async function renderAbierta(
+  user: ReturnType<typeof userEvent.setup>,
+  onRecogida: () => void = vi.fn(),
+) {
+  render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={onRecogida} />);
+  await user.click(screen.getByRole("button", { name: "Recoger paquete" }));
+}
+
 /** Teclea el número de guía y confirma con Enter (submit del form). */
 async function tecleaYConfirma(
   user: ReturnType<typeof userEvent.setup>,
@@ -125,7 +140,7 @@ describe("RecogerPaqueteCard — camino cámara", () => {
   it("al escanear una guía por recoger, recoge esa orden por su id (misma action)", async () => {
     const user = userEvent.setup();
     recogerMock.mockResolvedValue({ status: "ok", recogidas: ["ord-2"] });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     await escanear(user, qrDeGuia(1002));
 
@@ -137,7 +152,7 @@ describe("RecogerPaqueteCard — camino cámara", () => {
   it("robusto ante barra final en la URL del paquete", async () => {
     const user = userEvent.setup();
     recogerMock.mockResolvedValue({ status: "ok", recogidas: ["ord-1"] });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     await escanear(user, `${qrDeGuia(1001)}/`);
 
@@ -150,7 +165,7 @@ describe("RecogerPaqueteCard — camino cámara", () => {
     const user = userEvent.setup();
     const onRecogida = vi.fn();
     recogerMock.mockResolvedValue({ status: "ok", recogidas: ["ord-1"] });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={onRecogida} />);
+    await renderAbierta(user, onRecogida);
 
     await escanear(user, qrDeGuia(1001));
 
@@ -163,7 +178,7 @@ describe("RecogerPaqueteCard — camino cámara", () => {
   it("una guía que no está entre las órdenes por recoger se rechaza en cliente, sin llamar a la action", async () => {
     const user = userEvent.setup();
     const onRecogida = vi.fn();
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={onRecogida} />);
+    await renderAbierta(user, onRecogida);
 
     await escanear(user, qrDeGuia(9999));
 
@@ -175,7 +190,7 @@ describe("RecogerPaqueteCard — camino cámara", () => {
 
   it("un QR que no es la URL del paquete se rechaza en cliente, sin llamar a la action", async () => {
     const user = userEvent.setup();
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     await escanear(user, "###");
 
@@ -188,7 +203,7 @@ describe("RecogerPaqueteCard — camino cámara", () => {
     const user = userEvent.setup();
     const onRecogida = vi.fn();
     recogerMock.mockResolvedValue({ status: "conflict", detalle: [] });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={onRecogida} />);
+    await renderAbierta(user, onRecogida);
 
     await escanear(user, qrDeGuia(1001));
 
@@ -200,7 +215,7 @@ describe("RecogerPaqueteCard — camino cámara", () => {
     const user = userEvent.setup();
     const onRecogida = vi.fn();
     recogerMock.mockResolvedValue({ status: "forbidden" });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={onRecogida} />);
+    await renderAbierta(user, onRecogida);
 
     await escanear(user, qrDeGuia(1001));
 
@@ -211,7 +226,7 @@ describe("RecogerPaqueteCard — camino cámara", () => {
 
   it("expone el botón de cámara y alterna su estado (aria-pressed)", async () => {
     const user = userEvent.setup();
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     const boton = screen.getByRole("button", { name: "Escanear con cámara" });
     expect(boton).toHaveAttribute("aria-pressed", "false");
@@ -226,7 +241,7 @@ describe("RecogerPaqueteCard — camino manual (número tecleado)", () => {
   it("al teclear una guía por recoger, recoge esa orden por su id (misma action)", async () => {
     const user = userEvent.setup();
     recogerMock.mockResolvedValue({ status: "ok", recogidas: ["ord-2"] });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     await tecleaYConfirma(user, "1002");
 
@@ -239,7 +254,7 @@ describe("RecogerPaqueteCard — camino manual (número tecleado)", () => {
     const user = userEvent.setup();
     const onRecogida = vi.fn();
     recogerMock.mockResolvedValue({ status: "ok", recogidas: ["ord-1"] });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={onRecogida} />);
+    await renderAbierta(user, onRecogida);
 
     await tecleaYConfirma(user, "1001");
 
@@ -255,7 +270,7 @@ describe("RecogerPaqueteCard — camino manual (número tecleado)", () => {
   it("también recoge con el botón 'Recoger' (no solo con Enter)", async () => {
     const user = userEvent.setup();
     recogerMock.mockResolvedValue({ status: "ok", recogidas: ["ord-2"] });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     await user.type(screen.getByLabelText("Número de guía"), "1002");
     await user.click(screen.getByRole("button", { name: "Recoger" }));
@@ -268,7 +283,7 @@ describe("RecogerPaqueteCard — camino manual (número tecleado)", () => {
   it("una guía que NO está entre las órdenes por recoger se rechaza en cliente, sin llamar a la action", async () => {
     const user = userEvent.setup();
     const onRecogida = vi.fn();
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={onRecogida} />);
+    await renderAbierta(user, onRecogida);
 
     await tecleaYConfirma(user, "9999");
 
@@ -280,7 +295,7 @@ describe("RecogerPaqueteCard — camino manual (número tecleado)", () => {
 
   it("robustez: campo VACÍO no llama a la action (botón deshabilitado y Enter inerte)", async () => {
     const user = userEvent.setup();
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     expect(screen.getByRole("button", { name: "Recoger" })).toBeDisabled();
     await user.type(screen.getByLabelText("Número de guía"), "{Enter}");
@@ -289,7 +304,7 @@ describe("RecogerPaqueteCard — camino manual (número tecleado)", () => {
 
   it("robustez: entrada NO numérica no llama a la action y CONSERVA lo tecleado", async () => {
     const user = userEvent.setup();
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     await tecleaYConfirma(user, "abc");
 
@@ -302,7 +317,7 @@ describe("RecogerPaqueteCard — camino manual (número tecleado)", () => {
     const user = userEvent.setup();
     const onRecogida = vi.fn();
     recogerMock.mockResolvedValue({ status: "forbidden" });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={onRecogida} />);
+    await renderAbierta(user, onRecogida);
 
     await tecleaYConfirma(user, "1001");
 
@@ -313,8 +328,9 @@ describe("RecogerPaqueteCard — camino manual (número tecleado)", () => {
 });
 
 describe("RecogerPaqueteCard — la tarjeta", () => {
-  it("ofrece los DOS caminos en un solo control", () => {
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+  it("ofrece los DOS caminos en un solo control", async () => {
+    const user = userEvent.setup();
+    await renderAbierta(user);
 
     const tarjeta = screen.getByRole("region", {
       name: "Recoger por número de guía o escaneo",
@@ -329,7 +345,7 @@ describe("RecogerPaqueteCard — la tarjeta", () => {
   it("tras recoger, la confirmación del último acierto queda a la vista", async () => {
     const user = userEvent.setup();
     recogerMock.mockResolvedValue({ status: "ok", recogidas: ["ord-1"] });
-    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+    await renderAbierta(user);
 
     await tecleaYConfirma(user, "1001");
 
@@ -337,5 +353,53 @@ describe("RecogerPaqueteCard — la tarjeta", () => {
       expect(screen.getByText(/recogida correctamente/i)).toBeInTheDocument(),
     );
     expect(screen.getByText("1001")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// 2026-07-31 (decisión del humano): la tarjeta vive tras un desplegable, plegada de
+// entrada. El motivo no es estético — dentro vive `QrScanner`, y montado significaba la
+// cámara ENCENDIDA todo el rato que el mensajero tuviera abierta `/mis-asignaciones`.
+// ---------------------------------------------------------------------------------------
+describe("RecogerPaqueteCard — el desplegable (cámara apagada por defecto)", () => {
+  it("arranca PLEGADA: se ofrece el acceso, pero la cámara no está montada", () => {
+    render(<RecogerPaqueteCard porRecoger={porRecoger} onRecogida={vi.fn()} />);
+
+    // El acceso a recoger sigue estando (nombra su propio acto, no el de otra pantalla).
+    expect(
+      screen.getByRole("button", { name: "Recoger paquete" }),
+    ).toBeInTheDocument();
+    // Pero nada del escáner está en el DOM todavía.
+    expect(
+      screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Escanear con cámara" }),
+    ).toBeNull();
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("al cerrar, la tarjeta se DESMONTA: es lo que apaga la cámara", async () => {
+    const user = userEvent.setup();
+    await renderAbierta(user);
+
+    // Cámara abierta dentro de la tarjeta desplegada.
+    await user.click(screen.getByRole("button", { name: "Escanear con cámara" }));
+    await vi.waitFor(() => expect(decodeCallback.current).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+
+    // Nada del escáner queda en el DOM: no es un `hidden`, es un desmontaje — que es lo
+    // que dispara el cleanup de `QrScanner` y detiene html5-qrcode.
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
+      ).toBeNull(),
+    );
+    expect(screen.queryByRole("button", { name: "Cerrar cámara" })).toBeNull();
+    // Y el acceso sigue ahí: cerrar no es perder la forma de recoger.
+    expect(
+      screen.getByRole("button", { name: "Recoger paquete" }),
+    ).toBeInTheDocument();
   });
 });
