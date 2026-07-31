@@ -36,11 +36,18 @@ suyas**. Estado:
   `spec_ready`; se mergeó en tres PRs: #217, #225 y #227, verificado por archivos contra
   `origin/dev`). El **id 162 duplicado** se resuelve renumerando la ficha de WhatsApp a **168**, con
   el mismo criterio que se aplicó a la 165: la de `ux` conserva el id porque ya tenía rama.
-- ⏳ **3 errores de lint en `OrdenesModule.tsx`** (React Compiler, `preserve-manual-memoization`).
-  Impiden que `./init.sh` llegue siquiera a ejecutar la suite. En curso.
-- ⏳ **Guard de frontera de la 135 + drift de Prisma.** El guard mide el diff de la rama actual y uno
-  de sus casos **prohíbe crear páginas**, así que rompía a toda feature futura: se retira. El drift
-  son 10 sentencias que `migrate dev` arrastra a la migración de turno. En curso.
+- ✅ **3 errores de lint en `OrdenesModule.tsx`** saldados. La causa no era la memoizacion sino un
+  `= {}` INALCANZABLE en el destructuring de props: sin props congeladas, React Compiler descarta la
+  optimizacion del componente entero. Se quita el default; sin `eslint-disable`.
+- ✅ **Guard de frontera de la 135: RETIRADO.** Medía el diff de la rama actual y uno de sus casos
+  prohibía crear páginas. La propiedad permanente ya la cubre `modulo-puro.guardia.test.ts`.
+- ✅ **Drift de Prisma: era del `schema.prisma`, no de la base.** Las 10 sentencias son 10 defectos
+  del modelo; se reconcilian con 9 líneas declarativas y **cero DDL**. Dos eran peligrosas en
+  producción (una FK money-critical a `SET NULL` y un `RENAME` que dejaba mudo un `down.sql`).
+
+> ✅ **`./init.sh` termina en `== init OK ==`: 665 archivos / 8052 tests, 0 rojos, 0 errores de lint.**
+> Entregado en el **PR #232**. El último rojo era el guard `no-embalaje` acusando prosa de la 135 que
+> nombra el propio guard: llevaba días rojo porque cada feature lo declaraba deuda ajena y seguía.
 
 ## 🗓️ Sesión 2026-07-30 (noche, cuarta) — feature 129: fase 1
 
