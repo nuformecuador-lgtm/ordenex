@@ -247,11 +247,14 @@ describe("AsignarSateliteModal", () => {
     },
   );
 
-  it("92/R9: un conflict SIN motivos del gate conserva el mensaje genérico del mapper", async () => {
+  // `estado_invalido` dejo de caer en el generico: ahora tiene su propia frase, que dice que
+  // paso y que hacer. Para seguir cubriendo el generico se usa un motivo que el mapper NO
+  // conoce, que es cuando de verdad toca.
+  it("92/R9: un conflict con un motivo DESCONOCIDO conserva el mensaje genérico del mapper", async () => {
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "conflict",
-      detalle: [{ ordenId: "o1", motivo: "estado_invalido" }],
+      detalle: [{ ordenId: "o1", motivo: "motivo_que_nadie_mapea" }],
     });
     renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
 
@@ -259,7 +262,7 @@ describe("AsignarSateliteModal", () => {
 
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith(
-        "Alguna orden ya no está en un estado válido para asignarse.",
+        "Alguna orden de la selección ya no se puede asignar. Actualiza la lista y vuelve a intentarlo.",
       ),
     );
   });

@@ -144,7 +144,10 @@ const CASOS_NO_OK: {
         },
       ],
     },
-    mensaje: "Alguna orden ya no está en un estado válido para esta acción.",
+    // Este motivo dejo de caer en el generico: ahora dice QUE paso (la orden cambio de
+    // estado) y QUE hacer (actualizar la lista).
+    mensaje:
+      "Alguna orden ya cambió de estado y esta acción no le aplica. Actualiza la lista y vuelve a intentarlo.",
   },
   {
     nombre: "forbidden",
@@ -163,7 +166,7 @@ const CASOS_NO_OK: {
       // Forma real del caso alcanzable en producción: catálogo de estados sin sembrar.
       fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
     },
-    mensaje: "Datos inválidos.",
+    mensaje: "Datos inválidos: revisa la selección y vuelve a intentarlo.",
   },
 ];
 
