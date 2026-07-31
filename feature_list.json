@@ -1959,6 +1959,45 @@
       "merged_pr": 231,
       "status_note": "Pedida por el humano el 2026-07-31: no encontraba como recolectar. La forma existia (QR + numero de guia) pero vivia dentro de Entregas y RecoleccionTiendaPanel devolvia null con la lista vacia, o sea que el escaner desaparecia justo cuando se lo busca. Decisiones del humano en la puerta: escaner montado SIEMPRE (solo lo apaga el bloqueo por cierre), corte limpio en Entregas sin aviso ni enlace, lista 'Recolectadas hoy' derivada del HISTORIAL (si saliera del estado, desapareceria al recibirla la bodega central) con ventana de dia natural CR, y retirada del pre-chequeo local de guias ajenas: con el escaner siempre montado ningun escaneo podria funcionar con la lista vacia, asi que decide el servidor (invalida el test R21 de la 157, sustituido). Migracion unica: indice (actor_usuario_id, origen_tipo, created_at) en orden_historial_estado. 39 R en EARS trazados a test, reviewer 0 bloqueantes, 4 menores cerrados con mutacion. Detalle en progress/impl_ y review_167. PENDIENTE: verificacion humana en pantalla con camara y etiqueta real.",
       "spec_path": "specs/167-apartado-recoleccion-mensajero"
+    },
+    {
+      "id": 171,
+      "name": "desglose del dinero por tienda en la wallet",
+      "description": "Cada tienda muestra el detalle de su saldo, como ya lo hacen los mensajeros.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "depends_on": 43,
+      "branch": null,
+      "spec_path": null,
+      "status_note": "Pedida por el humano el 2026-07-31: en /wallet/mensajeros cada mensajero tiene un desplegable con el detalle de su dinero (DesglosePagosMensajero.tsx) y en /wallet/tiendas NO existe: solo hay SaldosTiendasTable.tsx. Verificado en codigo. Es tambien PREREQUISITO de la 172: el humano decidio que el pago a una tienda se registre DESDE ese desglose. Al especificar, mirar IWalletTiendaFeedService: hoy solo construye los movimientos que se emiten al aprobar un cierre, no expone un feed de detalle por tienda."
+    },
+    {
+      "id": 172,
+      "name": "liquidacion: pagar cuentas por pagar de mensajeros y saldos de tiendas",
+      "description": "Registrar el pago de lo que se debe, para que deje de acumularse sin salida.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "depends_on": 171,
+      "branch": null,
+      "spec_path": null,
+      "status_note": "HUECO OBJETIVO confirmado en codigo el 2026-07-31: el valor 'liquidacion' (ledger de mensajero, feature 44 F1.4-Qf) y 'pago_tienda' (ledger de tienda, feature 43 F1.4-Q4) estan declarados en los enums y NINGUN codigo los emite; cero acciones de pago en lib/actions. El sistema sabe cuanto debe y a quien, pero no tiene como decir \"ya pague\", asi que los montos solo crecen. Los dos follow-ups quedaron escritos en sus specs y nadie los registro como ficha. DECISIONES DEL HUMANO: (1) pagos PARCIALES permitidos; (2) al mensajero se le pregunta AL APROBAR SU CIERRE y el pago queda ATADO a ese cierre -encaja con el modelo actual, donde pago_efectivo = min(deuda, efectivo recaudado) y la cuenta por pagar es justo el resto-; (3) PERO aprobar y pagar son DOS PASOS: por la feature 111 un cierre sin resolver BLOQUEA al mensajero, y exigir el pago para aprobar lo dejaria sin trabajar al dia siguiente por un motivo administrativo ajeno a el; el cierre se aprueba y la deuda queda abierta, visible y atada al cierre, que no se considera liquidado hasta registrar el pago; (4) a las tiendas se les paga contra SALDO ACUMULADO desde el desglose de la 171: no hay cierre de tienda porque su saldo viene de muchos cierres de muchos mensajeros, y se descarto crear un ciclo de corte por tienda; (5) cada pago guarda metodo, referencia o comprobante, nota, FECHA REAL del pago distinta de la de registro, y actor e instante de registro."
+    },
+    {
+      "id": 173,
+      "name": "caja principal en modo tesoreria",
+      "description": "Que la caja refleje todo el dinero que entra y sale, no solo la ganancia.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "depends_on": 172,
+      "branch": null,
+      "spec_path": null,
+      "status_note": "DECISION DEL HUMANO (2026-07-31). Hoy la caja principal modela RESULTADO: solo emite los conceptos que Ordenex gana (flete, comision COD, IVAs) y sus egresos. El COD -el dinero total de la orden- SI se registra, pero como credito 'cod_recaudado' en el ledger POR TIENDA, porque no es ingreso de Ordenex sino dinero que se le debe a la tienda. El humano quiere ver el flujo completo: el COD entra como ingreso de caja y sale al pagarle a la tienda. AL ESPECIFICAR HAY QUE RESOLVER LO QUE ESTO ROMPE: el balance dejara de ser \"lo que gane\", asi que saldo de caja y ganancia tienen que quedar SEPARADOS y nombrados, o el numero se leera como utilidad y no lo sera. Afecta a derivarBalance, a la vista de wallet y al catalogo de metricas financieras de analitica (127/135), que hoy suman las categorias de ingreso como resultado. Depende de la 172 porque el pago a tienda es la mitad del flujo que esto debe reflejar."
     }
   ]
 }
