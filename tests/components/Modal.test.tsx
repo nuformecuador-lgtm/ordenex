@@ -513,12 +513,22 @@ describe("Modal — accesibilidad de foco (R28, R29, R30)", () => {
     const user = userEvent.setup();
     renderModal({ children: <input aria-label="campo" /> });
     const dialog = await screen.findByRole("dialog");
+    const primerEnfocable = screen.getByLabelText("campo");
 
-    // Desde el último enfocable (Confirmar), Tab envuelve de vuelta al interior
-    // del diálogo mediante las guardas de foco de Base UI (no escapa al body).
+    // Desde el último enfocable (Confirmar), Tab sale a la guarda de foco de Base UI
+    // y esta devuelve el foco al primer enfocable del diálogo. Ese rebote NO es
+    // síncrono: la guarda lo agenda con requestAnimationFrame (ver
+    // `floating-ui-react/utils/enqueueFocus`). En un navegador el frame corre antes
+    // del pintado y el usuario nunca ve el foco fuera, así que el atrapado es real.
+    //
+    // Afirmarlo de forma síncrona convertía el test en una carrera contra el frame de
+    // jsdom (~16 ms): pasaba o fallaba según cuánto tardara el propio `user.tab()`,
+    // sin que cambiara una línea de código. Por eso se espera al HECHO observable
+    // (el foco aterrizó en el primer enfocable) y no a un plazo: subir un timeout
+    // habría dejado la carrera intacta.
     confirmBtn().focus();
     await user.tab();
-    await user.tab();
+    await waitFor(() => expect(document.activeElement).toBe(primerEnfocable));
     expect(dialog.contains(document.activeElement)).toBe(true);
     expect(document.activeElement).not.toBe(document.body);
   });
