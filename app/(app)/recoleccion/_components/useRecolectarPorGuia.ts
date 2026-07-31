@@ -4,52 +4,50 @@ import { useCallback, useState } from "react";
 
 import { useToast } from "@/hooks/useToast";
 import { recolectarEnTiendaPorQr } from "@/lib/actions/recoleccion-tienda";
-import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 157 (R21/R23) — espejo de `useRecogerPorGuia` para la RECOLECCIÓN EN TIENDA.
-// Lógica compartida por las dos vías de entrada del panel (escáner de cámara e input de
-// número de guía): resuelve un `num_guia` contra las órdenes "por recolectar" del PROPIO
-// mensajero y confirma la recolección con la MISMA Server Action
-// (`por_recolectar_en_tienda` -> `en_ruta_bodega_central`), traduciendo el resultado a toasts.
+// Lógica compartida por las dos vías de entrada del apartado (escáner de cámara e input de
+// número de guía): confirma la recolección con la MISMA Server Action por las dos vías
+// (`recolectando` -> `en_ruta_bodega_central`) y traduce el resultado a toasts (R10/R13).
 //
-// Restricción "asignada a mí": una guía que NO esté entre las suyas se rechaza AQUÍ, con
-// toast y SIN llamar a la action (el backend la vuelve a exigir: guardia de propiedad del
-// service + `mensajero_asignado_id` dentro del WHERE del repo). Es lo que hace que escanear
-// una etiqueta ajena en el mostrador de la tienda no gaste un viaje al servidor.
+// Feature 167 (R12) — SIN pre-chequeo local de "esa guía no es tuya". El hook vivía dentro
+// de Entregas y rechazaba en cliente toda guía que no estuviera en la lista cargada. Con el
+// escáner SIEMPRE montado (R7) eso se vuelve una trampa: con lista vacía ningún escaneo
+// podría tener éxito jamás, y con la página abierta desde hace rato rechazaría guías que el
+// maestro ACABA de asignarle. El servidor es la autoridad y ya tiene las guardias reales
+// —rol, propiedad, estado, bloqueo y carrera (`RecoleccionTiendaService`)—, y la opacidad
+// de la 157/R30 hace que una guía ajena responda `no_encontrada` sin filtrar su existencia.
+// Coste aceptado: un viaje de servidor por escaneo equivocado.
+//
+// Lo que SÍ sigue cortándose en el cliente es el código MAL FORMADO (R11): eso no consulta
+// datos, solo evita mandar basura. Lo hace el llamador (`extractNumGuiaFromScan` para la
+// cámara, `/^\d+$/` para el teclado) antes de entrar aquí.
 //
 // NO parsea URLs de QR: el llamador entrega ya el `num_guia`. Tampoco decide la
 // revalidación: `recolectar` devuelve `true` en éxito y el consumidor dispara su refresh.
 
 export interface UseRecolectarPorGuia {
   /**
-   * Confirma la recolección de la orden cuyo `numGuia` coincide. Devuelve `true` SOLO si
-   * la orden quedó en ruta a la bodega central (el consumidor revalida y limpia su control).
+   * Confirma la recolección de la orden de ese `numGuia`. Devuelve `true` SOLO si la orden
+   * quedó en ruta a la bodega central —o ya lo estaba, que para el mensajero es el mismo
+   * hecho consumado— para que el consumidor revalide y limpie su control.
    */
   recolectar: (numGuia: number) => Promise<boolean>;
   /** `true` mientras hay una recolección en curso (para deshabilitar controles). */
   procesando: boolean;
 }
 
-export function useRecolectarPorGuia(
-  porRecolectar: MiAsignacionDTO[],
-): UseRecolectarPorGuia {
+export function useRecolectarPorGuia(): UseRecolectarPorGuia {
   const toast = useToast();
   const [procesando, setProcesando] = useState(false);
 
   const recolectar = useCallback(
     async (numGuia: number): Promise<boolean> => {
       if (procesando) return false;
-      const orden = porRecolectar.find((o) => o.numGuia === numGuia);
-      if (!orden) {
-        toast.error(
-          `La guía ${numGuia} no está entre tus órdenes por recolectar en tienda.`,
-        );
-        return false;
-      }
       setProcesando(true);
       try {
         const result = await recolectarEnTiendaPorQr({ numGuia });
-        // Un toast DISTINTO por resultado (R23): en una recolección de decenas de paquetes,
+        // Un toast DISTINTO por resultado (R13): en una recolección de decenas de paquetes,
         // "ya la habías escaneado" y "esa no es tuya" piden reacciones opuestas del mensajero.
         switch (result.status) {
           case "ok":
@@ -65,6 +63,8 @@ export function useRecolectarPorGuia(
             );
             break;
           case "no_encontrada":
+            // R12: este es el mensaje que ANTES daba el corte local. Ahora lo decide el
+            // servidor, que es quien sabe de quién es la orden; el mensajero lee lo mismo.
             toast.error(`La guía ${numGuia} no está entre tus órdenes por recolectar.`);
             break;
           case "conflict":
@@ -85,7 +85,7 @@ export function useRecolectarPorGuia(
         setProcesando(false);
       }
     },
-    [porRecolectar, procesando, toast],
+    [procesando, toast],
   );
 
   return { recolectar, procesando };

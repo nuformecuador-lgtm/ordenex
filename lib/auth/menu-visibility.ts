@@ -26,7 +26,13 @@ export type IconKey =
   // `IconKey` es una unión cerrada y compartir icono con otra sección invitaría a
   // leer analítica como parte de esa sección — mismo criterio que se escribió al
   // crear `shieldAlert` para incidentes.
-  | "chartColumn";
+  | "chartColumn"
+  // Feature 167 (R5): apartado propio de RECOLECCIÓN EN TIENDA del mensajero. Icono
+  // propio y NO el `truck` de "Entregas": recolectar en la tienda y repartir en la calle
+  // son dos trabajos distintos, y compartir icono con Entregas invitaría a leer la
+  // recolección como una sección suya — que es exactamente de donde esta feature la sacó.
+  // Mismo criterio que `shieldAlert` (158) y `chartColumn` (129).
+  | "store";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -109,6 +115,17 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     label: "Entregas",
     href: "/mis-asignaciones",
     iconKey: "truck",
+    roles: ["mensajero"],
+  },
+  {
+    // Feature 167 (R4): apartado PROPIO de la recolección en tienda. Va justo debajo de
+    // "Entregas" porque son hermanos del mismo portal del mensajero, y es un ítem y no un
+    // subítem de Entregas porque la 167 sacó la recolección de allí: el mensajero no la
+    // encontraba enterrada dentro del módulo de reparto. Exclusivo del rol `mensajero`;
+    // la defensa real es el `notFound` de `/recoleccion` (resuelve el rol server-side).
+    label: "Recolección",
+    href: "/recoleccion",
+    iconKey: "store",
     roles: ["mensajero"],
   },
   {

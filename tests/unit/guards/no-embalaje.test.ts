@@ -77,6 +77,10 @@ const WHITELIST_FILES = new Set([
   "specs/155-creacion-bifurcada-fulfillment/design.md",
   "specs/159-quitar-sugerencia-mensajeros/design.md",
   "specs/159-quitar-sugerencia-mensajeros/tasks.md",
+  // Feature 167: MISMO caso que los tres de arriba. `design.md §8` cita el NOMBRE DE ARCHIVO de
+  // este guard como molde del suyo (`entregas-sin-recoleccion.test.ts`); no menciona el value
+  // 'embalaje' por ningun lado. Alta por archivo, no por carpeta.
+  "specs/167-apartado-recoleccion-mensajero/design.md",
 ]);
 
 function toRelPosix(absPath: string): string {

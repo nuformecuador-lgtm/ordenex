@@ -8,6 +8,130 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗓️ Sesión 2026-07-31 — feature 167: apartado propio de recolección (fase 1) — **EMPIEZA A LEER POR AQUÍ**
+
+**Pedido del humano:** las órdenes por recolectar deben salir del apartado de entregas a un apartado
+propio de recolección, y «no veo la forma de recolectar».
+
+### Diagnóstico — la forma de recolectar YA existe; está escondida
+
+`RecoleccionTiendaPanel.tsx:133` monta `EscanerGuiaCard`, que es cámara QR (`QrScanner`) **más** input
+de número de guía. No se alcanza por tres motivos, y el primero es el que da la cara:
+
+1. `RecoleccionTiendaPanel.tsx:121` — `if (porRecolectar.length === 0) return null`: **sin órdenes
+   asignadas desaparece el apartado entero, escáner incluido.**
+2. Vive dentro de `MisAsignacionesModule.tsx:429` (menú «Entregas») y en la rama de vista completa, así
+   que el MODO FOCO también lo oculta.
+3. Solo hay órdenes en `recolectando` si el maestro las asigna antes desde `/ordenes`.
+
+**Causa inmediata en la máquina del humano: la base local tenía 4 migraciones sin aplicar**, entre ellas
+`20260731130000_order_status_recolectando`. Sin ese valor en el catálogo no existe el estado y no hay
+nada que recolectar. **Aplicadas con `prisma migrate deploy`** (base `ordenex`, localhost:5432).
+
+### Decisiones del humano (2026-07-31)
+
+1. **El escaneo se monta SIEMPRE**, haya o no órdenes asignadas (salvo mensajero bloqueado por cierre,
+   regla ya vigente de la 111). Es lo que arregla el «no veo la forma de recolectar».
+2. **Corte limpio:** «Entregas» deja de montar el panel y **no** conserva aviso, conteo ni enlace.
+3. **Lista «Recolectadas hoy»** en el apartado nuevo. Al especificar: debe salir del **historial**
+   (`origen_tipo = recoleccion_tienda`, actor y fecha), no del estado actual — cuando la bodega central
+   las recibe pasan a `en_bodega_central` y desaparecerían de la vista.
+
+### F1.0/F1.1 — hechos
+
+- Ficha **167** registrada en `feature_list.json` (`pending`, fullstack, `medium`, `depends_on: 157`).
+  El id 167 estaba libre en `origin/dev`.
+- Rama `feature/167-apartado-recoleccion-mensajero` creada **desde `origin/dev`** en el worktree
+  `lote-135` (su rama previa, `fix/mensajes-de-error-precisos`, ya estaba integrada en `dev`).
+- `./init.sh`: arnés en verde (JSON válido, regla máx-2-por-zona con `in_progress=2`, specs presentes)
+  y typecheck en verde. **Corta en lint con los MISMOS 3 errores de `OrdenesModule.tsx:340,345`** ya
+  declarados abajo como deuda de `dev` sin dueño. No es de esta feature.
+
+### 🚀 F2.4 — **PR #231 ABIERTO** hacia `dev`, esperando revisión y merge humano
+
+`https://github.com/nuformecuador-lgtm/ordenex/pull/231` · rama
+`feature/167-apartado-recoleccion-mensajero` · 47 archivos, +5479/-682. La ficha 167 sigue
+`in_progress` y pasa a `done` cuando el humano mergee (F2.5), momento en que se cierra T3.5 y se
+añade la entrada a `history.md` (F2.6).
+
+Decisión del humano al abrir el PR: **`tiendaTelefono` se deja declarado como deuda**, no se retira.
+
+### ✅ FASE 2 COMPLETA Y REVISADA (histórico)
+
+Backend (`backend_dev`) y frontend (`frontend_dev`) entregados en la misma rama, más el cierre de
+menores del review. **Reviewer: aprobado-con-notas, 0 bloqueantes**, 6 menores y 3 hallazgos ajenos.
+Verificó los 39 requisitos leyendo los cuerpos de los tests y por mutación propia, no fiándose de la
+tabla de trazabilidad.
+
+**Medido por el LEADER, no copiado del agente** (`pnpm test` completo, 2026-07-31):
+
+```
+Test Files  2 failed | 663 passed (665)
+     Tests  7 failed | 8038 passed (8045)
+```
+
+Los 7 rojos son los DOS guards ajenos de siempre (`frontera.guardia` ×6 + `no-embalaje` ×1).
+`pnpm run typecheck` **verde**. `pnpm run lint`: 25 problemas / 3 errores, todos de `OrdenesModule.tsx`
+(deuda de `dev`); la feature no añade ni uno. `git rev-list HEAD..origin/dev` = **0**: `dev` no avanzó
+desde que se ramificó, así que F2.3 (sincronización) no tiene nada que hacer y no hay conflictos.
+
+**Cuatro menores del review CERRADOS** (con mutación demostrada en cada uno): el guard nuevo vigilaba
+el nombre viejo del componente (un tercio del guard protegía contra algo imposible); el tope 100
+estaba duplicado como literal en la UI y ahora deriva de `lib/constants/recoleccion-tienda.ts`; R13
+pasa de 5 a 8 mensajes aseverados; y la tabla de trazabilidad deja de afirmar más de lo que sus tests
+prueban. `recoleccion-no-contamina.test.ts` sigue con diff VACÍO, como exige T2.11.
+
+**Pendiente de decisión humana (m4):** `MiAsignacionDTO.tiendaTelefono` quedó sin consumidor **y** sin
+cobertura (los dos casos que lo cubrían se fueron con el `describe` retirado). El equivalente vivo
+(`RecoleccionOrdenDTO.tiendaTelefono`) sí está probado. ¿Se retira del DTO de Entregas o se deja
+declarado? Mientras tanto, se deja.
+
+### ✅ F1.4 — **PUERTA CERRADA: el humano aprobó el spec el 2026-07-31.** Ficha → `in_progress`
+
+Fase 2 en marcha, secuenciada **backend → frontend** en la misma rama (memoria de arnés: se delega en
+`backend_dev` y `frontend_dev`, no en `implementer`). Zona `fullstack` tenía 0 features en vuelo, así
+que la regla 1 se cumple sin conflicto de archivos posible.
+
+### 🚪 F1.2/F1.3 — spec escrita, ficha en `spec_ready`, **PUERTA ABIERTA** (histórico)
+
+`specs/167-apartado-recoleccion-mensajero/` con los tres archivos: **39 requisitos EARS** (bloques
+A-F: ruta/menú, escaneo siempre disponible, lista por recolectar, «Recolectadas hoy», corte limpio,
+no contaminación), 7 alternativas descartadas y 5 preguntas abiertas. Todos los `R<n>` con prueba
+prevista. Backend → frontend en la misma rama, sin merge intermedio.
+
+**Hallazgo del diseño que obliga a decidir:** `useRecolectarPorGuia.ts:42` rechaza HOY en cliente toda
+guía que no esté en la lista cargada. Con el escáner siempre montado y la lista vacía, **ningún
+escaneo podría tener éxito jamás** — el problema que la feature viene a resolver, disfrazado. El
+diseño **retira el pre-chequeo y deja al servidor como autoridad** (R12): las guardias reales ya
+existen y están probadas, y la opacidad de 157/R30 hace que una guía ajena responda `no_encontrada`
+sin filtrar nada. Coste: un viaje de servidor por escaneo equivocado. **Invalida el test «R21: una
+guía que NO es suya se rechaza en cliente, sin llamar a la action»** de la 157, que se sustituye.
+
+**Preguntas abiertas RESUELTAS por el humano en la puerta (2026-07-31).** Las cuatro confirman la
+decisión provisional del diseño, así que el spec NO se reescribe:
+
+1. **Pre-chequeo local: se retira, decide el servidor.** Confirmado con conocimiento del coste (un
+   viaje por escaneo equivocado) y de que invalida el test R21 de la 157.
+2. **Sin buscador** en el apartado nuevo: la acción es escanear, la lista es referencia.
+3. **«Recolectadas hoy»: solo hoy, tope 100** con aviso de recorte. Sin histórico de días anteriores.
+4. **Etiqueta «Recolección»**, situada bajo «Entregas».
+
+Sigue **sin responder** (decisión del diseño en pie, revocable): órdenes borradas EXCLUIDAS de
+«Recolectadas hoy» (R29). Y la deuda heredada de la 157: el modelo no tiene dirección de tienda, el
+mensajero llega con nombre y teléfono.
+
+Otras dos consecuencias declaradas: la feature trae **una migración** (índice
+`(actor_usuario_id, origen_tipo, created_at)` en `orden_historial_estado`, sin enum nuevo, con `down.sql`
+idempotente) y **desplaza 4 archivos de test** de Entregas, con sustituto declarado para cada caso que
+se retira.
+
+### Deudas de registro que esta sesión encontró y NO tocó
+
+- **La 157 sigue en `spec_ready` con su código ya mergeado en `dev`.** Debe pasar a `done`; no se hizo
+  porque no está claro cuál de las PRs mergeadas es su `merged_pr` y no se inventa.
+- **El id 162 sigue duplicado** en `feature_list.json` (verificado contra `origin/dev`, no es de esta
+  rama). Ya está descrito más abajo en esta misma bitácora.
+
 ## 🗓️ Sesión 2026-07-30 (noche, cuarta) — feature 129: fase 1
 
 **Pedido del humano: «comienza con la feature 129»** (analítica: ruta, shell y sidebar).

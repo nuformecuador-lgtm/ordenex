@@ -1943,6 +1943,19 @@
       "depends_on": null,
       "status_note": "Ticket de saneamiento acordado en la decision D6 de la feature 135 (puerta F1.4 del 2026-07-30) y exigido por su task T0.3. Es trabajo FUERA de la 135 y no la bloquea. Hasta que se cierre, analitica y ranking reportan cifras distintas para 'hoy': divergencia CONOCIDA Y ACEPTADA, escrita en la cabecera de lib/analytics/ranges.ts y verificada por ranges-reuso.guardia.test.ts, no un defecto a reportar. La alternativa de replicar la ventana 18:00-18:00 en analitica se descarto (design.md alternativa 9): habria propagado el defecto a un rollup persistido que luego habria que backfillear.",
       "spec_path": null
+    },
+    {
+      "id": 167,
+      "name": "apartado propio de recoleccion para el mensajero",
+      "description": "sacar la recoleccion en tienda a su propia pagina, con el escaneo siempre disponible",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "depends_on": 157,
+      "branch": "feature/167-apartado-recoleccion-mensajero",
+      "status_note": "Pedida por el humano el 2026-07-31 tras no encontrar como recolectar en la app. Causa: la recoleccion de la 157 vive dentro del modulo de Entregas (MisAsignacionesModule.tsx) y RecoleccionTiendaPanel devuelve null con la lista vacia, asi que el bloque de escaneo (QR + numero de guia, que SI existe) desaparece justo cuando no hay nada asignado; en modo foco tampoco se monta. Decisiones del humano: (1) el escaneo se monta SIEMPRE, haya o no ordenes asignadas, salvo mensajero bloqueado por cierre (regla de la 111); (2) corte limpio, Entregas deja de montar el panel y NO conserva aviso ni enlace; (3) se anade una lista 'Recolectadas hoy'. Al especificar: esa lista debe derivar del historial (origen_tipo recoleccion_tienda, actor y fecha), no del estado actual, porque cuando la bodega central las recibe pasan a en_bodega_central y desapareceran de la vista. Se mantiene el aislamiento de la 157 (R39/R40): nada de esto entra en ruta, KPIs, mapa ni cierre. Registrada con el OK del humano. SPEC ESCRITA el 2026-07-31 (39 requisitos EARS, 7 alternativas descartadas, 5 preguntas abiertas): esperando la puerta F1.4. Hallazgo del diseño que exige decision humana: useRecolectarPorGuia rechaza HOY en cliente toda guia que no este en la lista cargada, asi que con el escaner siempre montado y la lista vacia ningun escaneo podria funcionar; el diseno retira ese pre-chequeo y deja al servidor como autoridad (R12), lo que invalida el test R21 de la 157.",
+      "spec_path": "specs/167-apartado-recoleccion-mensajero"
     }
   ]
 }

@@ -1303,6 +1303,16 @@ model OrdenHistorialEstado {
 
   @@index([ordenId, createdAt]) // R5: linea de tiempo de UNA orden
   @@index([ordenId, estatusDestinoId]) // R24: conteo de intentos (destinos `devuelta`)
+  // Feature 167 (R32) — «Recolectadas hoy» del mensajero: `actor_usuario_id` = actor,
+  // `origen_tipo` = 'recoleccion_tienda', `created_at` en la ventana del dia CR. Los dos indices
+  // de arriba empiezan por `orden_id` y esta consulta NO filtra por orden: sin este indice seria
+  // un seq scan sobre una tabla append-only que crece con CADA transicion del sistema, en una
+  // pantalla que el mensajero abre decenas de veces al dia desde el movil.
+  // Orden de columnas: igualdad -> igualdad -> rango, el unico que un btree recorre sin filtro
+  // residual. `map:` EXPLICITO porque el nombre por defecto de Prisma
+  // (`orden_historial_estado_actor_usuario_id_origen_tipo_created_at_idx`, 66 caracteres) excede
+  // el limite de 63 de Postgres y quedaria truncado de forma no evidente.
+  @@index([actorUsuarioId, origenTipo, createdAt], map: "orden_historial_actor_origen_created_idx")
   @@map("orden_historial_estado")
 }
 
