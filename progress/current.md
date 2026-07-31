@@ -47,7 +47,16 @@ nada que recolectar. **Aplicadas con `prisma migrate deploy`** (base `ordenex`, 
   y typecheck en verde. **Corta en lint con los MISMOS 3 errores de `OrdenesModule.tsx:340,345`** ya
   declarados abajo como deuda de `dev` sin dueño. No es de esta feature.
 
-### ✅ FASE 2 COMPLETA Y REVISADA — falta solo el PR (pendiente de OK humano)
+### 🚀 F2.4 — **PR #231 ABIERTO** hacia `dev`, esperando revisión y merge humano
+
+`https://github.com/nuformecuador-lgtm/ordenex/pull/231` · rama
+`feature/167-apartado-recoleccion-mensajero` · 47 archivos, +5479/-682. La ficha 167 sigue
+`in_progress` y pasa a `done` cuando el humano mergee (F2.5), momento en que se cierra T3.5 y se
+añade la entrada a `history.md` (F2.6).
+
+Decisión del humano al abrir el PR: **`tiendaTelefono` se deja declarado como deuda**, no se retira.
+
+### ✅ FASE 2 COMPLETA Y REVISADA (histórico)
 
 Backend (`backend_dev`) y frontend (`frontend_dev`) entregados en la misma rama, más el cierre de
 menores del review. **Reviewer: aprobado-con-notas, 0 bloqueantes**, 6 menores y 3 hallazgos ajenos.
