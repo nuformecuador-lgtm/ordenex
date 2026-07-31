@@ -51,23 +51,23 @@ Todas las preguntas están respondidas por escrito y propagadas a
 
 Sin dependencias (T0 cerrada).
 
-- [ ] **T1.1** Añadir la clave `chartColumn` al tipo `IconKey` en
+- [x] **T1.1** Añadir la clave `chartColumn` al tipo `IconKey` en
   `lib/auth/menu-visibility.ts`, con comentario que diga por qué NO se reutiliza
   ninguna existente (criterio ya escrito en las líneas 21-24 de ese archivo).
   HECHO: `pnpm run typecheck` falla señalando `ICON_BY_KEY` como incompleto — esa
   falla ES la prueba de que R12 tiene garantía de compilador; se resuelve en T1.3.
-- [ ] **T1.2** Añadir el ítem a `SIDEBAR_ITEMS`: `label: "Analítica"`,
+- [x] **T1.2** Añadir el ítem a `SIDEBAR_ITEMS`: `label: "Analítica"`,
   `href: "/analitica"`, `iconKey: "chartColumn"`, `roles: ROLES_ANALITICA`, sin
   `children`, **como segundo elemento del array** (tras "Inicio", antes de
   "Órdenes"). Comentario del patrón: qué feature lo introduce, por qué SOLO
   `maestro`/`admin` (sin métrica hasta la 131), que la 133 amplía, y "este ítem sólo
   decide qué se MUESTRA; la defensa real es el `notFound()` de la página".
   HECHO: el ítem existe en esa posición y `pnpm run lint` pasa.
-- [ ] **T1.3** Añadir el import `ChartColumn` de `lucide-react` y la entrada
+- [x] **T1.3** Añadir el import `ChartColumn` de `lucide-react` y la entrada
   `chartColumn: ChartColumn` en `ICON_BY_KEY` de
   `app/(app)/_components/Sidebar.tsx` (mapa en las líneas 138-151).
   HECHO: `pnpm run typecheck` vuelve a verde.
-- [ ] **T1.4** Declarar y exportar `ROLES_ANALITICA = ["maestro", "admin"] as const`
+- [x] **T1.4** Declarar y exportar `ROLES_ANALITICA = ["maestro", "admin"] as const`
   en `lib/auth/menu-visibility.ts` y usarla en el `roles` del ítem (la reusará
   T2.1). **No usar `esAccesoTotal`** (`design.md` §2) ni `ROLES_SEED` (incluye
   `apiKey`, `design.md` §5).
@@ -78,7 +78,7 @@ Sin dependencias (T0 cerrada).
 
 Depende de: T1.4 (por `ROLES_ANALITICA`).
 
-- [ ] **T2.1** Crear `app/(app)/analitica/page.tsx`: Server Component `async` que
+- [x] **T2.1** Crear `app/(app)/analitica/page.tsx`: Server Component `async` que
   llama `resolveActorFromSession()`, aplica `notFound()` si no hay actor o el rol no
   está en `ROLES_ANALITICA`, y devuelve el shell. Comentario de cabecera al estilo
   de `app/(app)/incidentes/page.tsx:10-24`: qué feature, qué defiende, por qué sólo
@@ -86,7 +86,7 @@ Depende de: T1.4 (por `ROLES_ANALITICA`).
   queda fuera de alcance con su razón.
   HECHO: `/analitica` responde el shell para `maestro`/`admin` y 404 para el resto,
   verificado por los tests de T4.3.
-- [ ] **T2.2** Verificar que NO se importa nada de analítica de datos: la página no
+- [x] **T2.2** Verificar que NO se importa nada de analítica de datos: la página no
   referencia `lib/actions/*analitica*`, `lib/services/*Analitica*` ni repositorios.
   HECHO: la lista de imports de `page.tsx` contiene sólo `next/navigation`,
   `resolve-actor`, `menu-visibility` (por `ROLES_ANALITICA`) y el shell.
@@ -95,24 +95,24 @@ Depende de: T1.4 (por `ROLES_ANALITICA`).
 
 Sin dependencias (T0 cerrada). Paralelizable con T1/T2 salvo el ensamblaje de T2.1.
 
-- [ ] **T3.1** `[P]` Crear
+- [x] **T3.1** `[P]` Crear
   `app/(app)/analitica/_components/AnaliticaShell.tsx` con la interfaz
   `AnaliticaShellProps` de exactamente DOS slots (`filtros?`, `operativo?`) — **sin
   `financiero`** (D6) —, sin `"use client"`, sin fetch, sin cálculo.
   HECHO: el componente compila y su superficie de props es exactamente la del
   `design.md` §3.
-- [ ] **T3.2** `[P]` Renderizar el encabezado con `AppPage`
+- [x] **T3.2** `[P]` Renderizar el encabezado con `AppPage`
   (`components/shared/AppPage.tsx`, título "Analítica") y las dos regiones apiladas
   verticalmente como `<section aria-label="Filtros">` y
   `<section aria-label="Tablero operativo">`.
   HECHO: el DOM expone un heading de página y exactamente dos `region` con esos
   nombres accesibles.
-- [ ] **T3.3** `[P]` Placeholder por región con `components/shared/EmptyState.tsx`
+- [x] **T3.3** `[P]` Placeholder por región con `components/shared/EmptyState.tsx`
   cuando el slot llega vacío. Texto que declare que el panel llega en una entrega
   posterior. **Cero cifras, cero series, cero ejes** (R22).
   HECHO: `rg` sobre el shell no encuentra ningún literal numérico de métrica y el
   test de T4.4 lo asegura.
-- [ ] **T3.4** Documentar en el JSDoc del shell quién enchufa cada slot
+- [x] **T3.4** Documentar en el JSDoc del shell quién enchufa cada slot
   (130 componentes, 131 filtros + operativo, 133 recorte por rol) **y los tres pasos
   mecánicos que debe dar la 132 para añadir la región financiera** (`design.md` §3.2:
   prop nueva, `<section aria-label="Tablero financiero">` bajo la operativa, su
@@ -123,7 +123,7 @@ Sin dependencias (T0 cerrada). Paralelizable con T1/T2 salvo el ensamblaje de T2
 
 Depende de: T1, T2, T3. Los cuatro archivos son `[P]` entre sí.
 
-- [ ] **T4.1** `[P]` Extender `tests/unit/auth/menu-visibility.test.ts`: el ítem
+- [x] **T4.1** `[P]` Extender `tests/unit/auth/menu-visibility.test.ts`: el ítem
   "Analítica" existe y es único por `href` (R7); `puedeVer`/`itemsVisibles` lo
   incluye para `maestro` y `admin` (R8); lo excluye para `mensajero`,
   `adminTienda`, `adminSatelite`, `apiKey` y actor `null` (R9); su `iconKey` es
@@ -132,12 +132,12 @@ Depende de: T1, T2, T3. Los cuatro archivos son `[P]` entre sí.
   `/ordenes` (R16); el conjunto de etiquetas visibles por rol no cambia salvo la
   adición para maestro/admin (R17).
   HECHO: los siete casos pasan.
-- [ ] **T4.2** `[P]` Extender `tests/components/Sidebar.test.tsx`: toda clave de
+- [x] **T4.2** `[P]` Extender `tests/components/Sidebar.test.tsx`: toda clave de
   `IconKey` resuelve a un componente en `ICON_BY_KEY` (R12); el ítem renderiza un
   enlace a `/analitica` con la etiqueta "Analítica" y su icono (R13); con
   `pathname="/analitica"` el enlace queda `aria-current="page"` (R14).
   HECHO: los tres casos pasan; se usa el helper `linkPorHref` ya existente.
-- [ ] **T4.3** `[P]` Crear `tests/components/AnaliticaPage.test.tsx`, calcado de
+- [x] **T4.3** `[P]` Crear `tests/components/AnaliticaPage.test.tsx`, calcado de
   `tests/components/IncidentesPage.test.tsx` (mock de `resolveActorFromSession` y de
   `notFound` que lanza): `maestro` y `admin` ven el shell (R1, R2); `mensajero`,
   `adminTienda`, `adminSatelite` y `apiKey` reciben `notFound` (R3); sin sesión,
@@ -145,20 +145,20 @@ Depende de: T1, T2, T3. Los cuatro archivos son `[P]` entre sí.
   gate corre antes de renderizar (R6); la página renderiza con SÓLO `resolve-actor`
   mockeado, es decir no invoca ninguna acción de analítica (R24).
   HECHO: todos los casos pasan.
-- [ ] **T4.4** `[P]` Crear `tests/components/AnaliticaShell.test.tsx`: el shell es un
+- [x] **T4.4** `[P]` Crear `tests/components/AnaliticaShell.test.tsx`: el shell es un
   componente con props tipadas y renderiza el encabezado (R18, R19); expone
   exactamente las regiones "Filtros" y "Tablero operativo" por nombre accesible y
   **ninguna región financiera** (R20); con contenido en un slot lo renderiza en su
   región (R21); sin contenido muestra el estado vacío y ningún texto numérico de
   métrica (R22); render sin mocks de datos ⇒ no fetchea (R23).
   HECHO: todos los casos pasan.
-- [ ] **T4.5** Verificar R10 (las dos capas autorizan el mismo conjunto): test que
+- [x] **T4.5** Verificar R10 (las dos capas autorizan el mismo conjunto): test que
   compara el `roles` del ítem `/analitica` de `SIDEBAR_ITEMS` con `ROLES_ANALITICA`
   usada por el guard, y falla si divergen. Vive en
   `tests/unit/auth/menu-visibility.test.ts`.
   HECHO: el test existe y falla si se edita uno solo de los dos sitios (verificado
   a mano cambiando uno y revirtiendo).
-- [ ] **T4.6** Verificar R25 (sin dependencias nuevas): `git diff` de `package.json`
+- [x] **T4.6** Verificar R25 (sin dependencias nuevas): `git diff` de `package.json`
   y `pnpm-lock.yaml` vacío.
   HECHO: ambos archivos sin cambios en la rama.
 
@@ -196,16 +196,24 @@ Depende de: T1, T2, T3. Los cuatro archivos son `[P]` entre sí.
 
 Depende de: T4.
 
-- [ ] **T5.1** Medir el baseline ANTES de afirmar nada: `pnpm run typecheck`,
+- [x] **T5.1** Medir el baseline ANTES de afirmar nada: `pnpm run typecheck`,
   `pnpm run lint`, `pnpm test` sobre la rama base, y luego sobre la rama de la
   feature. Delta esperado de tests rojos: **0**.
   HECHO: ambas salidas pegadas en `progress/impl_129-analitica-ruta-shell-sidebar.md`.
 - [ ] **T5.2** `./init.sh` en verde.
   HECHO: salida pegada en el archivo de progreso.
-- [ ] **T5.3** Escribir `progress/impl_129-analitica-ruta-shell-sidebar.md` con el
+  **SIN MARCAR (2026-07-30, implementer):** `./init.sh` pasa node/dependencias/
+  typecheck/lint y corta en el gate de tests por **20 rojos HEREDADOS de
+  `origin/dev`** (5 archivos: `MisAsignacionesModule` ×16, `MisAsignacionesPage`,
+  `MarcarLuegoToggle`, `ManifiestoFlujos`, `EscanerRecepcion`). Ninguno referencia
+  nada de esta feature y el código implicado es byte-idéntico a `origin/dev`
+  (el único commit de la rama es el spec, que es documentación). **Delta de rojos
+  de la 129 = 0.** Prueba completa en `progress/impl_129-analitica-ruta-shell-sidebar.md`
+  §4.6. La casilla la cierra el leader cuando se sanee la base, no el implementer.
+- [x] **T5.3** Escribir `progress/impl_129-analitica-ruta-shell-sidebar.md` con el
   mapa `R<n> → test` real (no el previsto) y las decisiones D1–D8 de T0.
   HECHO: el archivo existe y cubre los 25 requisitos.
-- [ ] **T5.4** Dejar constancia de dos cosas para que el reviewer no las lea como
+- [x] **T5.4** Dejar constancia de dos cosas para que el reviewer no las lea como
   omisiones: (a) el E2E se declaró **inaplicable** (`design.md` A7: decisión del
   humano 2026-07-30 + la feature no toca un flujo crítico de los listados en
   `CHECKPOINTS.md`), con su cobertura sustitutiva; (b) la **desviación deliberada
