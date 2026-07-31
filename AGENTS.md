@@ -61,19 +61,18 @@ particion en `progress/current.md > Evaluaciones`.
 | `medium` | 2-3 capas, condiciones, multiples archivos |
 | `high` | multi-feature, webhooks, integraciones externas |
 
-## Modelos por complejidad
+## Modelos
 
-Cada feature tiene un campo `complexity` (`low`, `medium`, `high`).
-El leader elige modelo al delegar:
+**Ningun subagente fija modelo: todos HEREDAN el de la sesion.** El frontmatter de
+`.claude/agents/*.md` no lleva `model:`, y el leader no pasa override al delegar salvo razon
+concreta para esa llamada.
 
-| Agente | `low` | `medium` | `high` |
-| --- | --- | --- | --- |
-| `spec_author` | `opus-4.8` | `opus-4.8` | `opus-4.8` |
-| `reviewer` | `opus-4.8` | `opus-4.8` | `opus-4.8` |
-| `frontend_dev` | `opus-4.8` | `opus-4.8` | `opus-4.8` |
-| `backend_dev` | `opus-4.8` | `opus-4.8` | `opus-4.8` |
-| `implementer` | `opus-4.8` | `opus-4.8` | `opus-4.8` |
-| `leader` | `opus-4.8` | `opus-4.8` | `opus-4.8` |
+Antes habia una tabla que asignaba `opus-4.8` a los seis agentes por igual — la misma columna
+repetida tres veces, o sea que no discriminaba nada por `complexity`. El 2026-07-31 ese id dejo de
+estar disponible y **el `backend_dev` de la feature 167 murio al arrancar** sin escribir una linea;
+`spec_author` y `reviewer` siguieron funcionando porque no fijaban modelo. Un id escrito a mano
+envejece y rompe el arnes entero en silencio; la herencia no. Si algun dia hace falta discriminar por
+`complexity`, se hace en la llamada concreta, no en el frontmatter.
 
 ## Paralelismo
 

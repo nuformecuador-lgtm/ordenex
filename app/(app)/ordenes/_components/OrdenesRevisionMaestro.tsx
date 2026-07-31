@@ -15,6 +15,7 @@ import { OrdenesApartado } from "./OrdenesApartado";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { AsignarRecoleccionModal } from "./AsignarRecoleccionModal";
+import { QuitarRecoleccionModal } from "./QuitarRecoleccionModal";
 import { RutearSateliteModal } from "./RutearSateliteModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 
@@ -33,6 +34,7 @@ type ModalAbierto =
   | "generar-guia"
   | "asignar-bodega"
   | "asignar-recoleccion" // feature 157
+  | "quitar-recoleccion" // feature 157 (ampliacion)
   | "rutear-satelite"
   | "etiquetas"
   | null;
@@ -48,7 +50,14 @@ async function mensajerosFetcher() {
   if (res.status !== "ok") throw new Error(res.status);
   // Ajuste maestro: incluye los ids de mensajeros GAM con cierre abierto para
   // deshabilitarlos en los selectores.
-  return { mensajeros: res.mensajeros, bloqueadosIds: res.bloqueadosIds ?? [] };
+  return {
+    mensajeros: res.mensajeros,
+    bloqueadosIds: res.bloqueadosIds ?? [],
+    // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
+    // mezclan". Ambos fetchers comparten la key SWR, así que devuelven la MISMA forma.
+    conRepartoIds: res.conRepartoIds ?? [],
+    conRecoleccionIds: res.conRecoleccionIds ?? [],
+  };
 }
 
 /**
@@ -104,6 +113,9 @@ export function OrdenesRevisionMaestro({
   );
   const mensajeros = mensajerosData?.mensajeros ?? [];
   const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
+  // Feature 157 (regla de dedicación): repartir y recolectar son viajes incompatibles.
+  const mensajerosConRepartoIds = mensajerosData?.conRepartoIds ?? [];
+  const mensajerosConRecoleccionIds = mensajerosData?.conRecoleccionIds ?? [];
 
   const [modalAbierto, setModalAbierto] = useState<ModalAbierto>(null);
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<
@@ -126,10 +138,15 @@ export function OrdenesRevisionMaestro({
     setModalAbierto("asignar-bodega");
   }
 
-  // Feature 157/R3: quien va a la tienda a recoger el lote. No transiciona la orden.
+  // Feature 157/R3: quien va a la tienda a recoger el lote.
   function abrirAsignarRecoleccion(seleccionadas: OrdenListItemDTO[]) {
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("asignar-recoleccion");
+  }
+  // Feature 157 (ampliacion): devolverla al monton de asignables.
+  function abrirQuitarRecoleccion(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("quitar-recoleccion");
   }
 
   // Feature 30/R13: "Rutear a bodega satélite" solo aplica a órdenes NO-GAM
@@ -214,6 +231,20 @@ export function OrdenesRevisionMaestro({
         onSecondaryAction={readOnly ? undefined : abrirEtiquetas}
         mostrarHistorial
       />
+      {/* Feature 157 (ampliacion): ya tiene mensajero y va en camino a la tienda. Va DESPUES
+          del apartado de espera porque es su continuacion natural, y su unica decision es
+          retirarle la orden a ese mensajero si no puede ir. */}
+      <OrdenesApartado
+        titulo="Recolectando"
+        estatusValue="recolectando"
+        estatusId={estatusIdPorValue.get("recolectando")}
+        selectable={!readOnly}
+        actionLabel={readOnly ? undefined : "Quitar mensajero"}
+        onAction={readOnly ? undefined : abrirQuitarRecoleccion}
+        secondaryActionLabel={readOnly ? undefined : "Imprimir etiquetas"}
+        onSecondaryAction={readOnly ? undefined : abrirEtiquetas}
+        mostrarHistorial
+      />
       <OrdenesApartado
         titulo="En bodega"
         estatusValue="en_bodega_central"
@@ -278,6 +309,13 @@ export function OrdenesRevisionMaestro({
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros}
             mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            mensajerosConRepartoIds={mensajerosConRepartoIds}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          <QuitarRecoleccionModal
+            open={modalAbierto === "quitar-recoleccion"}
+            ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />

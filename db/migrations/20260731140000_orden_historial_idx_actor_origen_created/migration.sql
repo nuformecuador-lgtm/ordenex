@@ -1,0 +1,31 @@
+-- Feature 167 (design.md §4.2, R32) — INDICE que sostiene «Recolectadas hoy» del mensajero.
+--
+-- La consulta es: `actor_usuario_id = :actor` AND `origen_tipo = 'recoleccion_tienda'` AND
+-- `created_at` dentro de la ventana del dia natural de Costa Rica, ordenada por `created_at`
+-- desc. Los DOS indices que ya tiene `orden_historial_estado` empiezan por `orden_id`
+-- (`(orden_id, created_at)` y `(orden_id, estatus_destino_id)`) y esta consulta NO filtra por
+-- orden: sin este indice seria un seq scan sobre una tabla append-only que crece con CADA
+-- transicion de CADA orden del sistema, en una pantalla que el mensajero abre decenas de veces
+-- al dia desde el movil.
+--
+-- Orden de columnas: igualdad (`actor_usuario_id`) -> igualdad (`origen_tipo`) -> rango
+-- (`created_at`). Es el unico orden que un btree recorre sin filtro residual.
+--
+-- Nombre EXPLICITO (`map:` en el schema): el nombre por defecto de Prisma
+-- (`orden_historial_estado_actor_usuario_id_origen_tipo_created_at_idx`, 66 caracteres) excede
+-- el limite de 63 de Postgres y quedaria truncado de forma no evidente.
+--
+-- SIN `CONCURRENTLY`: Prisma corre cada migracion dentro de una transaccion y
+-- `CREATE INDEX CONCURRENTLY` no puede correr ahi. La tabla no tiene hoy un volumen que lo
+-- justifique; si alguna vez lo tuviera, se aplica fuera de Prisma y se registra.
+--
+-- Solo indice: sin tablas nuevas, sin columnas nuevas => sin RLS nueva
+-- (`orden_historial_estado` conserva la RLS que le puso la feature 49).
+--
+-- NOTA DE PROCEDENCIA: `prisma migrate dev --create-only` emitio, ademas de este CREATE INDEX,
+-- diez sentencias de DRIFT PREEXISTENTE ajenas a esta feature (defaults de `updated_at` en
+-- api_key/jobs/premio_ranking/ruta_optimizada/webhook_suscripcion, el default de
+-- `plantilla_mensaje.variables`, la FK `cierre_detail_tarifa_id_fkey` y dos RenameIndex de
+-- chat_mensaje/notificacion). Se RETIRARON a mano: esta migracion hace UNA cosa. El drift es
+-- anterior a esta rama y sigue vivo; se declara en la bitacora.
+CREATE INDEX "orden_historial_actor_origen_created_idx" ON "orden_historial_estado"("actor_usuario_id", "origen_tipo", "created_at");

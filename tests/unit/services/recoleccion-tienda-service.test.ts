@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { RecoleccionTiendaService } from "@/lib/services/RecoleccionTiendaService";
+// El tope vive en `lib/constants/` (una sola fuente): lo aplica el service y lo NOMBRA el aviso
+// de recorte de la UI. Se importa de su casa, no del service que lo consume.
+import { TOPE_RECOLECTADAS_HOY } from "@/lib/constants/recoleccion-tienda";
+import type { MiAsignacionRow } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
+import type { RecoleccionHistorialRow } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type {
   IOrdenRepository,
   OrdenTransicionRow,
@@ -11,6 +16,11 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // con tres diferencias: el rol autorizado es `mensajero`, hay guardia de PROPIEDAD (R30) y hay
 // guardia de BLOQUEO por cierre pendiente (R31). Cada guardia asegura ademas "sin efectos".
 // Un caso por resultado de la maquina (design §4.1).
+//
+// Feature 167 (T1.6): el MISMO service gana la LECTURA del apartado propio (`listarRecoleccion`)
+// en el bloque del final. Los casos R26-R35 de la 157 de arriba NO se tocan (167/R16: la logica
+// de confirmacion se conserva intacta); lo unico que cambio de ellos es el cableado del
+// constructor en `makeRepo`, que ahora inyecta los dos repos de lectura y el reloj.
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const OTRO_MENSAJERO: Actor = { usuarioId: "m2", rol: "mensajero" };
@@ -31,7 +41,7 @@ type RepoMethods = Pick<
 function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
   return {
     id: "o1",
-    estatusValue: "por_recolectar_en_tienda",
+    estatusValue: "recolectando",
     numGuia: NUM_GUIA,
     deletedAt: null,
     zonaId: "z-1",
@@ -51,7 +61,15 @@ function makeRepo(overrides: Partial<RepoMethods> = {}) {
     findMensajerosBloqueados: vi.fn().mockResolvedValue(new Set<string>()),
     ...overrides,
   };
-  return { repo, service: new RecoleccionTiendaService(repo) };
+  // Feature 167: los dos repos de LECTURA son dependencias REQUERIDAS del constructor (una
+  // opcional dejaria que el wiring se la olvidara). Los casos de confirmacion de la 157 no los
+  // usan: aqui van como dobles vacios.
+  const repoGestion = { findMisAsignaciones: vi.fn().mockResolvedValue([]) };
+  const repoHistorial = { findRecoleccionesDeActor: vi.fn().mockResolvedValue([]) };
+  return {
+    repo,
+    service: new RecoleccionTiendaService(repo, repoGestion, repoHistorial),
+  };
 }
 
 describe("RecoleccionTiendaService — autorizacion y bloqueo (R29/R31)", () => {
@@ -169,7 +187,7 @@ describe("RecoleccionTiendaService — camino feliz y carrera (R26/R27/R34)", ()
     // El mensajero viaja al repo: es parte de la guardia ATOMICA, no solo del chequeo previo.
     expect(repo.recolectarEnTienda).toHaveBeenCalledWith(
       "o1",
-      "por_recolectar_en_tienda",
+      "recolectando", // feature 157 (ampliacion): se recolecta lo que YA esta asignado
       DESTINO_ID,
       MENSAJERO.usuarioId,
       { actorUsuarioId: MENSAJERO.usuarioId, origenTipo: "recoleccion_tienda" },
@@ -205,5 +223,519 @@ describe("RecoleccionTiendaService — camino feliz y carrera (R26/R27/R34)", ()
 
     expect(res).toMatchObject({ status: "conflict" });
     expect(res).toHaveProperty("motivo", expect.any(String));
+  });
+});
+
+// =======================================================================================
+// Feature 167 (T1.6) — `listarRecoleccion`: la LECTURA del apartado propio `/recoleccion`.
+//
+// Dos listas con fuentes DISTINTAS a proposito:
+//   - «Por recolectar» sale del ESTADO ACTUAL (`recolectando`), acotado al actor;
+//   - «Recolectadas hoy» sale del HISTORIAL de la transicion, porque el estado actual ya
+//     cambio en cuanto la bodega central recibio el paquete (138) y el mensajero veria
+//     evaporarse su trabajo del dia justo al llegar a la central (R26).
+// =======================================================================================
+
+const RECOLECTANDO = "recolectando";
+const ORIGEN_TIPO = "recoleccion_tienda";
+
+/** Fila de "mis asignaciones" (estado actual). Los campos que R38 prohibe transportar van a
+ *  valores NO nulos a proposito: si el DTO los copiara, el test lo veria. */
+function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRow {
+  return {
+    id: "o-rec",
+    numGuia: 1001,
+    numRemision: "REM-1",
+    estatusValue: RECOLECTANDO,
+    destinatario: "Ana Solis",
+    telefonoDest: "70001111",
+    direccion: "200m sur de la iglesia",
+    producto: "Zapatos",
+    peso: 1.2,
+    montoCobrar: 25000,
+    latitud: 9.93,
+    longitud: -84.08,
+    notas: "llamar antes",
+    tiendaNombre: "Tienda Central",
+    tiendaTelefono: "88880000",
+    zonaNombre: "GAM",
+    provinciaNombre: "San Jose",
+    cantonNombre: "Escazu",
+    distritoNombre: "San Rafael",
+    mensajeroAsignadoId: MENSAJERO.usuarioId,
+    ...overrides,
+  };
+}
+
+/** Una fila del historial tal como la entrega `findRecoleccionesDeActor`. */
+function recoleccionRow(
+  overrides: Partial<RecoleccionHistorialRow> = {},
+): RecoleccionHistorialRow {
+  return {
+    ordenId: "o-hist",
+    numGuia: 2002,
+    numRemision: "REM-H",
+    tiendaNombre: "Tienda Sur",
+    recolectadaAt: new Date("2026-07-31T15:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+/**
+ * Fila CRUDA del historial para el doble "con semantica": lleva el actor, la familia, el
+ * instante y si la orden esta borrada, de modo que el doble pueda aplicar el MISMO filtro que
+ * el WHERE real del repositorio (probado aparte en
+ * `tests/unit/repositories/orden-historial-recolecciones-actor.test.ts`). Sin esto, "no trae la
+ * de otro actor ni la de ayer" no seria mas que "el service reenvia los argumentos".
+ */
+interface FilaCruda extends RecoleccionHistorialRow {
+  actorUsuarioId: string;
+  origenTipo: string;
+  ordenBorrada: boolean;
+}
+
+function cruda(overrides: Partial<FilaCruda> = {}): FilaCruda {
+  return {
+    ...recoleccionRow(),
+    actorUsuarioId: MENSAJERO.usuarioId,
+    origenTipo: ORIGEN_TIPO,
+    ordenBorrada: false,
+    ...overrides,
+  };
+}
+
+/** Doble del repo de historial que APLICA el filtro real: actor + familia + [desde, hasta) +
+ *  no borrada, `createdAt` desc, `take`. */
+function historialConSemantica(filas: FilaCruda[]): HistorialDoble {
+  return {
+    findRecoleccionesDeActor: vi.fn(
+      async (actorUsuarioId: string, desde: Date, hasta: Date, limite: number) => {
+        if (limite <= 0) return [];
+        return filas
+          .filter(
+            (f) =>
+              f.actorUsuarioId === actorUsuarioId &&
+              f.origenTipo === ORIGEN_TIPO &&
+              !f.ordenBorrada &&
+              f.recolectadaAt.getTime() >= desde.getTime() &&
+              f.recolectadaAt.getTime() < hasta.getTime(),
+          )
+          .sort((a, b) => b.recolectadaAt.getTime() - a.recolectadaAt.getTime())
+          .slice(0, limite)
+          .map(({ ordenId, numGuia, numRemision, tiendaNombre, recolectadaAt }) => ({
+            ordenId,
+            numGuia,
+            numRemision,
+            tiendaNombre,
+            recolectadaAt,
+          }));
+      },
+    ),
+  };
+}
+
+/** Doble tipado del repo de historial: el `Mock` conserva la firma real del metodo. */
+type HistorialDoble = {
+  findRecoleccionesDeActor: ReturnType<
+    typeof vi.fn<
+      (
+        actorUsuarioId: string,
+        desde: Date,
+        hasta: Date,
+        limite: number,
+      ) => Promise<RecoleccionHistorialRow[]>
+    >
+  >;
+};
+
+/** Doble simple: devuelve SIEMPRE las mismas filas, sin aplicar ningun filtro. */
+function historialFijo(filas: RecoleccionHistorialRow[] = []): HistorialDoble {
+  return { findRecoleccionesDeActor: vi.fn(async () => filas) };
+}
+
+interface LecturaOpts {
+  pendientes?: MiAsignacionRow[];
+  historial?: HistorialDoble;
+  ahora?: Date;
+}
+
+/** Service cableado SOLO para la lectura (los metodos de confirmacion no se ejercitan aqui). */
+function makeLectura(opts: LecturaOpts = {}) {
+  const repo: RepoMethods = {
+    findByNumGuiaForTransicion: vi.fn(),
+    findEstatusIdByValue: vi.fn(),
+    recolectarEnTienda: vi.fn(),
+    findMensajerosBloqueados: vi.fn(),
+  };
+  const repoGestion = {
+    findMisAsignaciones: vi.fn().mockResolvedValue(opts.pendientes ?? []),
+  };
+  const repoHistorial = opts.historial ?? historialFijo();
+  // Por defecto: 09:00 hora CR del 31 de julio de 2026.
+  const ahora = opts.ahora ?? new Date("2026-07-31T15:00:00.000Z");
+  const service = new RecoleccionTiendaService(
+    repo,
+    repoGestion,
+    repoHistorial,
+    () => ahora,
+  );
+  return { repo, repoGestion, repoHistorial, service };
+}
+
+describe("listarRecoleccion — autorizacion (R21)", () => {
+  it.each([
+    ["maestro", MAESTRO],
+    ["adminTienda", ADMIN_TIENDA],
+  ])("%s -> forbidden, sin leer NADA (ni pendientes ni historial)", async (_n, actor) => {
+    const { repoGestion, repoHistorial, service } = makeLectura();
+
+    expect(await service.listarRecoleccion(actor)).toEqual({ status: "forbidden" });
+    expect(repoGestion.findMisAsignaciones).not.toHaveBeenCalled();
+    expect(repoHistorial.findRecoleccionesDeActor).not.toHaveBeenCalled();
+  });
+});
+
+describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
+  it("R21: pide EXACTAMENTE el estado `recolectando` del PROPIO actor", async () => {
+    const { repoGestion, service } = makeLectura();
+
+    await service.listarRecoleccion(MENSAJERO);
+
+    expect(repoGestion.findMisAsignaciones).toHaveBeenCalledTimes(1);
+    // Lista EXACTA: si algun dia entrara `por_recoger` o `en_reparto` aqui, este apartado
+    // empezaria a mostrar ordenes de reparto y R21 se romperia en silencio.
+    expect(repoGestion.findMisAsignaciones).toHaveBeenCalledWith(MENSAJERO.usuarioId, [
+      RECOLECTANDO,
+    ]);
+  });
+
+  it("R21: la lectura va acotada al actor, asi que otro mensajero no ve estas ordenes", async () => {
+    const repoGestion = {
+      findMisAsignaciones: vi.fn(async (mensajeroId: string) =>
+        mensajeroId === MENSAJERO.usuarioId ? [asignacionRow()] : [],
+      ),
+    };
+    const service = new RecoleccionTiendaService(
+      {
+        findByNumGuiaForTransicion: vi.fn(),
+        findEstatusIdByValue: vi.fn(),
+        recolectarEnTienda: vi.fn(),
+        findMensajerosBloqueados: vi.fn(),
+      },
+      repoGestion,
+      historialFijo(),
+    );
+
+    const mio = await service.listarRecoleccion(MENSAJERO);
+    const ajeno = await service.listarRecoleccion(OTRO_MENSAJERO);
+
+    if (mio.status !== "ok" || ajeno.status !== "ok") throw new Error("esperaba ok");
+    expect(mio.porRecolectar.map((o) => o.id)).toEqual(["o-rec"]);
+    expect(ajeno.porRecolectar).toEqual([]);
+  });
+
+  it("R18/R38: el DTO lleva SOLO lo pertinente a una recoleccion", async () => {
+    const { service } = makeLectura({ pendientes: [asignacionRow()] });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecolectar).toEqual([
+      {
+        id: "o-rec",
+        numGuia: 1001,
+        numRemision: "REM-1",
+        producto: "Zapatos",
+        destinatario: "Ana Solis",
+        tiendaNombre: "Tienda Central",
+        tiendaTelefono: "88880000",
+      },
+    ]);
+  });
+
+  it("R38: NO transporta cobro ni ruta al navegador, aunque la fila los traiga", async () => {
+    // La fila de origen SI tiene montoCobrar/latitud/longitud (asignacionRow los pone): el corte
+    // lo hace el service. Que este test mire las CLAVES —y no valores— es lo que convierte R38
+    // en una verificacion de contrato en vez de una revision visual.
+    const { service } = makeLectura({ pendientes: [asignacionRow()] });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    const dto = r.porRecolectar[0]!;
+    for (const prohibido of [
+      "montoCobrar",
+      "latitud",
+      "longitud",
+      "secuenciaRuta",
+      "marcarLuego",
+      "notaPrivada",
+      "intentosEntrega",
+      "direccion",
+      "notas",
+    ]) {
+      expect(dto).not.toHaveProperty(prohibido);
+    }
+  });
+
+  it("R20: sin telefono de tienda el campo es `null`, nunca `undefined`", async () => {
+    // El campo es opcional en la fila (patron aditivo de la 157): un doble que no lo declare
+    // debe producir `null`, que es lo que la UI usa para NO pintar controles de contacto.
+    const sinTelefono = asignacionRow();
+    delete sinTelefono.tiendaTelefono; // la fila lo declara `?`: aqui NI SIQUIERA esta la clave
+    const { service } = makeLectura({ pendientes: [sinTelefono] });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecolectar[0]!.tiendaTelefono).toBeNull();
+  });
+
+  it("R8: sin nada asignado devuelve la lista VACIA (no un error ni un ausente)", async () => {
+    const { service } = makeLectura();
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    expect(r).toEqual({
+      status: "ok",
+      porRecolectar: [],
+      recolectadasHoy: [],
+      recolectadasHoyRecortada: false,
+    });
+  });
+});
+
+describe("listarRecoleccion — «Recolectadas hoy» sale del HISTORIAL (R24/R25/R26/R29)", () => {
+  it("R25: la lista se pide al repo de HISTORIAL, no al de asignaciones por estado", async () => {
+    const { repoGestion, repoHistorial, service } = makeLectura();
+
+    await service.listarRecoleccion(MENSAJERO);
+
+    expect(repoHistorial.findRecoleccionesDeActor).toHaveBeenCalledTimes(1);
+    // Una sola lectura por estado, y es la de pendientes: «Recolectadas hoy» NO deriva de ahi.
+    expect(repoGestion.findMisAsignaciones).toHaveBeenCalledTimes(1);
+    expect(repoGestion.findMisAsignaciones).toHaveBeenCalledWith(MENSAJERO.usuarioId, [
+      RECOLECTANDO,
+    ]);
+  });
+
+  it("R25/R26: una orden YA recibida en la bodega central sigue figurando", async () => {
+    // El caso que hace obligatoria esta feature: la orden ya no esta en `recolectando` ni en
+    // `en_ruta_bodega_central` —la central la recibio (138) y quedo en `en_bodega_central`—, asi
+    // que NO aparece en ninguna lectura por estado. La fila de historial no se movio.
+    const { service } = makeLectura({
+      pendientes: [],
+      historial: historialConSemantica([cruda({ ordenId: "o-ya-en-central" })]),
+    });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecolectar).toEqual([]);
+    expect(r.recolectadasHoy.map((o) => o.ordenId)).toEqual(["o-ya-en-central"]);
+  });
+
+  it("R29: no trae la de OTRO actor, ni la de AYER, ni la BORRADA, ni la de otra familia", async () => {
+    const { service } = makeLectura({
+      historial: historialConSemantica([
+        cruda({ ordenId: "mia-hoy" }),
+        cruda({ ordenId: "de-otro", actorUsuarioId: OTRO_MENSAJERO.usuarioId }),
+        cruda({
+          ordenId: "de-ayer",
+          recolectadaAt: new Date("2026-07-30T20:00:00.000Z"), // 14:00 CR del 30
+        }),
+        cruda({ ordenId: "borrada", ordenBorrada: true }),
+        cruda({ ordenId: "otra-familia", origenTipo: "gestion" }),
+      ]),
+    });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recolectadasHoy.map((o) => o.ordenId)).toEqual(["mia-hoy"]);
+  });
+
+  it("R28: llega ordenada de la MAS RECIENTE a la mas antigua y el service no la reordena", async () => {
+    const { service } = makeLectura({
+      historial: historialFijo([
+        recoleccionRow({ ordenId: "b", recolectadaAt: new Date("2026-07-31T20:00:00.000Z") }),
+        recoleccionRow({ ordenId: "a", recolectadaAt: new Date("2026-07-31T08:00:00.000Z") }),
+      ]),
+    });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recolectadasHoy.map((o) => o.ordenId)).toEqual(["b", "a"]);
+  });
+
+  it("R28/R38: cada item lleva guia, remision, tienda e instante — y nada mas", async () => {
+    const { service } = makeLectura({
+      historial: historialFijo([recoleccionRow()]),
+    });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recolectadasHoy).toEqual([
+      {
+        ordenId: "o-hist",
+        numGuia: 2002,
+        numRemision: "REM-H",
+        tiendaNombre: "Tienda Sur",
+        recolectadaAt: new Date("2026-07-31T15:00:00.000Z"),
+      },
+    ]);
+  });
+});
+
+describe("listarRecoleccion — la ventana de HOY es el dia natural de Costa Rica (R27)", () => {
+  /** Los argumentos `desde`/`hasta` con los que el service llamo al repo de historial. */
+  function ventanaDe(repoHistorial: { findRecoleccionesDeActor: ReturnType<typeof vi.fn> }) {
+    const [, desde, hasta] = repoHistorial.findRecoleccionesDeActor.mock.calls[0]!;
+    return { desde: desde as Date, hasta: hasta as Date };
+  }
+
+  it("a media mañana de CR la ventana es [06:00Z de hoy, 06:00Z de mañana)", async () => {
+    // 2026-07-31T15:00Z = 09:00 hora CR del 31.
+    const { repoHistorial, service } = makeLectura({
+      ahora: new Date("2026-07-31T15:00:00.000Z"),
+    });
+
+    await service.listarRecoleccion(MENSAJERO);
+
+    const { desde, hasta } = ventanaDe(repoHistorial);
+    expect(desde.toISOString()).toBe("2026-07-31T06:00:00.000Z");
+    expect(hasta.toISOString()).toBe("2026-08-01T06:00:00.000Z");
+    // 24 h exactas: CR es UTC-6 FIJO, sin horario de verano.
+    expect(hasta.getTime() - desde.getTime()).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it("BORDE 23:59 CR: sigue siendo el dia en curso, no el siguiente", async () => {
+    // 2026-08-01T05:59Z = 23:59 hora CR del 31 de julio.
+    const { repoHistorial, service } = makeLectura({
+      ahora: new Date("2026-08-01T05:59:00.000Z"),
+    });
+
+    await service.listarRecoleccion(MENSAJERO);
+
+    const { desde, hasta } = ventanaDe(repoHistorial);
+    expect(desde.toISOString()).toBe("2026-07-31T06:00:00.000Z");
+    expect(hasta.toISOString()).toBe("2026-08-01T06:00:00.000Z");
+  });
+
+  it("BORDE 00:00 CR: el dia cambia, y la recoleccion de las 23:59 de anoche ya NO figura", async () => {
+    // 2026-08-01T06:00Z = 00:00 hora CR del 1 de agosto.
+    const { repoHistorial, service } = makeLectura({
+      ahora: new Date("2026-08-01T06:00:00.000Z"),
+      historial: historialConSemantica([
+        cruda({ ordenId: "anoche", recolectadaAt: new Date("2026-08-01T05:59:00.000Z") }),
+        cruda({ ordenId: "recien", recolectadaAt: new Date("2026-08-01T06:00:00.000Z") }),
+      ]),
+    });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    const { desde, hasta } = ventanaDe(repoHistorial);
+    expect(desde.toISOString()).toBe("2026-08-01T06:00:00.000Z");
+    expect(hasta.toISOString()).toBe("2026-08-02T06:00:00.000Z");
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recolectadasHoy.map((o) => o.ordenId)).toEqual(["recien"]);
+  });
+
+  it("las 19:00 hora CR pertenecen al dia que el mensajero llama HOY (no al siguiente)", async () => {
+    // 2026-08-01T01:00Z = 19:00 hora CR del 31 de julio. La convencion 18:00-18:00 de
+    // `RankingService` (deuda con ticket propio, feature 166) lo contaria en el dia siguiente;
+    // aqui se usa la de la analitica (144/135) a proposito. Ver design §6.
+    const { repoHistorial, service } = makeLectura({
+      ahora: new Date("2026-08-01T01:00:00.000Z"),
+    });
+
+    await service.listarRecoleccion(MENSAJERO);
+
+    const { desde } = ventanaDe(repoHistorial);
+    expect(desde.toISOString()).toBe("2026-07-31T06:00:00.000Z");
+  });
+
+  it("sin reloj inyectado usa el del sistema (el default del constructor existe)", async () => {
+    const repoHistorial = historialFijo();
+    const service = new RecoleccionTiendaService(
+      {
+        findByNumGuiaForTransicion: vi.fn(),
+        findEstatusIdByValue: vi.fn(),
+        recolectarEnTienda: vi.fn(),
+        findMensajerosBloqueados: vi.fn(),
+      },
+      { findMisAsignaciones: vi.fn().mockResolvedValue([]) },
+      repoHistorial,
+    );
+
+    await service.listarRecoleccion(MENSAJERO);
+
+    const [, desde, hasta] = repoHistorial.findRecoleccionesDeActor.mock.calls[0]!;
+    expect((desde as Date).toISOString()).toMatch(/T06:00:00\.000Z$/);
+    expect((hasta as Date).getTime() - (desde as Date).getTime()).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
+describe("listarRecoleccion — tope de presentacion (R31)", () => {
+  function nRecolecciones(n: number): RecoleccionHistorialRow[] {
+    return Array.from({ length: n }, (_, i) =>
+      recoleccionRow({
+        ordenId: `o${i}`,
+        recolectadaAt: new Date(Date.UTC(2026, 6, 31, 23, 59) - i * 60_000),
+      }),
+    );
+  }
+
+  it("el tope es 100 y se pide UNA MAS para saber si hay recorte (sin un conteo extra)", async () => {
+    const repoHistorial = historialFijo();
+    const { service } = makeLectura({ historial: repoHistorial });
+
+    await service.listarRecoleccion(MENSAJERO);
+
+    expect(TOPE_RECOLECTADAS_HOY).toBe(100);
+    const [, , , limite] = repoHistorial.findRecoleccionesDeActor.mock.calls[0]!;
+    expect(limite).toBe(TOPE_RECOLECTADAS_HOY + 1);
+  });
+
+  it("justo en el tope: devuelve las 100 y NO marca recorte", async () => {
+    const { service } = makeLectura({
+      historial: historialFijo(nRecolecciones(100)),
+    });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recolectadasHoy).toHaveLength(100);
+    expect(r.recolectadasHoyRecortada).toBe(false);
+  });
+
+  it("por encima del tope: recorta a las 100 MAS RECIENTES y marca el recorte", async () => {
+    const { service } = makeLectura({
+      historial: historialFijo(nRecolecciones(101)),
+    });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recolectadasHoy).toHaveLength(100);
+    expect(r.recolectadasHoyRecortada).toBe(true);
+    // Las que sobreviven son las primeras de la lista, que viene `createdAt desc`: las mas
+    // recientes. La #101 (la mas antigua del dia) es la que se cae.
+    expect(r.recolectadasHoy[0]!.ordenId).toBe("o0");
+    expect(r.recolectadasHoy.at(-1)!.ordenId).toBe("o99");
+  });
+
+  it("por debajo del tope no marca recorte", async () => {
+    const { service } = makeLectura({
+      historial: historialFijo(nRecolecciones(3)),
+    });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recolectadasHoy).toHaveLength(3);
+    expect(r.recolectadasHoyRecortada).toBe(false);
   });
 });

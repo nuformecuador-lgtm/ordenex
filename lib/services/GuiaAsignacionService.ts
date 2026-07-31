@@ -29,6 +29,7 @@ import type {
   AsignarBodegaServiceResult,
   AsignarRecoleccionInput,
   AsignarRecoleccionServiceResult,
+  DesasignarRecoleccionInput,
   DetalleConflicto,
   GenerarGuiaInput,
   GenerarGuiaServiceResult,
@@ -64,6 +65,9 @@ const ESTATUS_REPROGRAMADA = "reprogramada";
 const ESTATUS_EN_ESPERA_ACEPTACION = "por_recoger"; // R26 (asignarDesdeBodega)
 const ESTATUS_EN_BODEGA = "en_bodega_central"; // feature 156/R3: destino UNICO de generar guia
 const ESTATUS_EN_RUTA_BODEGA_SATELITE = "en_ruta_bodega_satelite"; // feature 30/R9
+// Feature 157 (ampliacion): destino de la asignacion de recoleccion. Que exista este estado
+// es lo que impide reasignar en bucle: al asignar, la orden SALE del monton de disponibles.
+const ESTATUS_RECOLECTANDO = "recolectando";
 
 // Feature 30/R4: mensaje del guardia de zona GAM no configurada (accionable, sin
 // filtrar internals: convenciones de manejo de errores).
@@ -74,6 +78,24 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
 // Feature 41/R13: motivo accionable cuando un mensajero destino esta bloqueado por un
 // cierre pendiente (solicitado/vencido). No se le asignan nuevas ordenes hasta resolverlo.
 const MSG_MENSAJERO_BLOQUEADO = "mensajero bloqueado por cierre pendiente";
+
+// Feature 157 (regla de DEDICACION, decision del humano 2026-07-31) — recolectar en tienda
+// y repartir son viajes incompatibles: quien va a una tienda a recoger un lote sale con el
+// vehiculo vacio y vuelve a la central, asi que no puede llevar encima entregas pendientes.
+// La regla vale en las DOS direcciones y por eso vive en este service, que es el que decide
+// las dos asignaciones.
+//
+// Asimetria deliberada en lo que cuenta como "ocupado": las otras RECOLECCIONES no
+// bloquean —un viaje a la tienda son N ordenes, y exigir cero pendientes impediria asignar
+// la segunda del mismo lote—, pero cualquier orden de REPARTO si.
+const ESTADOS_REPARTO_PENDIENTE = ["por_recoger", "en_reparto"];
+// Lo que ocupa a un mensajero es la recoleccion que TIENE ASIGNADA (`recolectando`); las que
+// esperan sin dueño no son de nadie y por tanto no bloquean a nadie.
+const ESTADOS_RECOLECCION_PENDIENTE = [ESTATUS_RECOLECTANDO];
+const MSG_MENSAJERO_CON_REPARTO =
+  "el mensajero tiene ordenes de reparto pendientes: una recoleccion en tienda exige ir sin carga";
+const MSG_MENSAJERO_CON_RECOLECCION =
+  "el mensajero tiene una recoleccion en tienda pendiente: debe cerrarla antes de recibir reparto";
 
 // Ajuste maestro: motivo cuando una orden se rutearia a una bodega satelite que tiene al
 // menos un mensajero con un cierre abierto. Con un cierre pendiente la bodega esta
@@ -316,6 +338,23 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
+    // --- Feature 157: simetrica de la anterior. Un mensajero con una recoleccion sin
+    //     confirmar tiene un viaje a la tienda comprometido; darle reparto ahora lo obliga
+    //     a elegir cual incumple. Se le libera en cuanto confirme la recoleccion. ---
+    const conRecoleccion = await this.repo.findMensajerosConOrdenesEn(
+      [input.mensajeroId],
+      ESTADOS_RECOLECCION_PENDIENTE,
+    );
+    if (conRecoleccion.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({
+          ordenId,
+          motivo: MSG_MENSAJERO_CON_RECOLECCION,
+        })),
+      };
+    }
+
     // --- Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de persistir ---
     // Aqui TODAS las ordenes del lote reciben mensajero (es la accion "asignar desde
     // bodega"), asi que se evalua el lote entero.
@@ -411,8 +450,97 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
-    // --- 6/7. Unica escritura: solo el mensajero, sin estado, sin historial, sin asignado_at ---
-    await this.repo.asignarRecoleccionLote(ordenIds, input.mensajeroId, ORIGEN_RECOLECCION);
+    // --- 5b. Regla de dedicacion: quien recolecta va sin carga de reparto ---
+    const conReparto = await this.repo.findMensajerosConOrdenesEn(
+      [input.mensajeroId],
+      ESTADOS_REPARTO_PENDIENTE,
+    );
+    if (conReparto.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({
+          ordenId,
+          motivo: MSG_MENSAJERO_CON_REPARTO,
+        })),
+      };
+    }
+
+    // --- 6. El destino debe existir en el catalogo (sembrado por seedOrderStatus) ---
+    const destinoId = await this.repo.findEstatusIdByValue(ESTATUS_RECOLECTANDO);
+    if (destinoId === null) {
+      return {
+        status: "validation_error",
+        fieldErrors: { estatus: [`el catalogo no tiene ${ESTATUS_RECOLECTANDO}`] },
+      };
+    }
+
+    // --- 7. Unica escritura: mensajero + TRANSICION a `recolectando`, con su rastro ---
+    await this.repo.asignarRecoleccionLote(
+      ordenIds,
+      input.mensajeroId,
+      ORIGEN_RECOLECCION,
+      destinoId,
+      { actorUsuarioId: actor.usuarioId, origenTipo: "asignacion_recoleccion" },
+    );
+
+    return { status: "ok", resultados: ordenIds.map((ordenId) => ({ ordenId })) };
+  }
+
+  /**
+   * Feature 157 (ampliacion 2026-07-31) — "Quitar mensajero": revierte una recoleccion
+   * asignada (`recolectando` -> `por_recolectar_en_tienda`) y la deja SIN mensajero.
+   *
+   * Es el camino explicito que sustituye a la reasignacion silenciosa: antes, asignar sobre
+   * una orden ya asignada la sobreescribia sin dejar rastro y sin sacarla nunca del monton.
+   * Ahora cambiar de mensajero son dos actos deliberados —revertir y volver a asignar— y los
+   * dos quedan en el historial. Mismas guardias y mismo todo-o-nada que la asignacion.
+   */
+  async desasignarRecoleccion(
+    input: DesasignarRecoleccionInput,
+    actor: Actor,
+  ): Promise<AsignarRecoleccionServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
+
+    const ordenIds = distinct(input.ordenIds);
+    if (ordenIds.length === 0) return { status: "ok", resultados: [] };
+
+    const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
+    const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
+
+    const detalle: DetalleConflicto[] = [];
+    for (const id of ordenIds) {
+      const orden = ordenMap.get(id);
+      if (!orden) {
+        detalle.push({ ordenId: id, motivo: "orden no existe" });
+        continue;
+      }
+      if (orden.deletedAt !== null) {
+        detalle.push({ ordenId: id, motivo: "orden borrada" });
+        continue;
+      }
+      // Origen UNICO: solo se revierte lo que esta asignado. Una orden ya recolectada
+      // (en ruta a la central) no vuelve por aqui: ese tramo tiene su propio camino.
+      if (orden.estatusValue !== ESTATUS_RECOLECTANDO) {
+        detalle.push({
+          ordenId: id,
+          motivo: `estado de origen no permitido: ${orden.estatusValue}`,
+        });
+      }
+    }
+    if (detalle.length > 0) return { status: "conflict", detalle };
+
+    const destinoId = await this.repo.findEstatusIdByValue(ORIGEN_RECOLECCION);
+    if (destinoId === null) {
+      return {
+        status: "validation_error",
+        fieldErrors: { estatus: [`el catalogo no tiene ${ORIGEN_RECOLECCION}`] },
+      };
+    }
+
+    await this.repo.desasignarRecoleccionLote(ordenIds, ESTATUS_RECOLECTANDO, destinoId, {
+      actorUsuarioId: actor.usuarioId,
+      origenTipo: "deshacer_asignacion",
+    });
 
     return { status: "ok", resultados: ordenIds.map((ordenId) => ({ ordenId })) };
   }

@@ -44,3 +44,72 @@ export type RecolectarEnTiendaResult =
   | { status: "conflict"; motivo: string }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "unauthenticated" };
+
+// ---------------------------------------------------------------------------------------
+// Feature 167 — LECTURA del apartado propio de recoleccion (`/recoleccion`). La confirmacion
+// de arriba NO cambia (R16); lo que se agrega es el contrato de lo que la pagina muestra.
+// ---------------------------------------------------------------------------------------
+
+/**
+ * Feature 167 (R18/R38) — una orden que el mensajero tiene que ir a RECOLECTAR a la tienda.
+ *
+ * DELIBERADAMENTE POBRE. No es `MiAsignacionDTO`: aquel arrastra `montoCobrar`, `latitud`,
+ * `longitud`, `secuenciaRuta`, `marcarLuego`, `notaPrivada` e `intentosEntrega`. Una superficie
+ * que por requisito NO muestra cobro (R18) tampoco debe TRANSPORTAR cobro hasta el navegador, ni
+ * coordenadas ni secuencia de ruta (R38). Con un DTO propio, R38 se verifica con un test de
+ * contrato en vez de con una revision visual.
+ *
+ * Los cuatro datos de orden son los pertinentes a una recoleccion: identificar el paquete
+ * (`numGuia`, `numRemision`), saber que es (`producto`) y para quien (`destinatario`). Los dos
+ * de tienda sostienen la agrupacion (R17) y el contacto (R19/R20).
+ */
+export interface RecoleccionOrdenDTO {
+  id: string;
+  numGuia: number | null;
+  numRemision: string;
+  producto: string;
+  destinatario: string;
+  tiendaNombre: string;
+  /** `null` = la tienda no tiene telefono registrado -> sin controles de contacto (R20). */
+  tiendaTelefono: string | null;
+}
+
+/**
+ * Feature 167 (R24/R25) — una recoleccion YA hecha HOY por el propio actor.
+ *
+ * Deriva del HISTORIAL (`orden_historial_estado`, familia `recoleccion_tienda`), no del estado
+ * actual de la orden: en cuanto la bodega central recibe el paquete (138) la orden pasa a
+ * `en_bodega_central` y desapareceria de cualquier lista derivada del estado, justo cuando el
+ * mensajero llega a la central y quiere ver su trabajo del dia (R26).
+ *
+ * `recolectadaAt` es el `created_at` de esa fila de historial: el instante REAL de la
+ * recoleccion, no "ahora" ni la fecha de la orden.
+ */
+export interface RecolectadaHoyDTO {
+  ordenId: string;
+  numGuia: number | null;
+  numRemision: string;
+  tiendaNombre: string;
+  recolectadaAt: Date;
+}
+
+/**
+ * Resultado expuesto por la Server Action `listarRecoleccion`. Espeja
+ * `ListarRecoleccionServiceResult` agregando `unauthenticated` (borde), igual que hace
+ * `RecolectarEnTiendaResult` con la confirmacion.
+ * - `ok`: las dos listas del apartado + el flag de recorte.
+ * - `forbidden`: el actor no es mensajero (misma guardia que `recolectarEnTienda`).
+ * - `unauthenticated`: no hay sesion; lo agrega el borde, no el service.
+ */
+export type ListarRecoleccionResult =
+  | {
+      status: "ok";
+      /** R21: SOLO ordenes del propio actor en el estado de recoleccion asignada. */
+      porRecolectar: RecoleccionOrdenDTO[];
+      /** R28: de la MAS RECIENTE a la mas antigua; ya viene ordenada del servidor. */
+      recolectadasHoy: RecolectadaHoyDTO[];
+      /** R31: hoy hay MAS recolecciones de las que se devuelven (la lista esta recortada). */
+      recolectadasHoyRecortada: boolean;
+    }
+  | { status: "forbidden" }
+  | { status: "unauthenticated" };

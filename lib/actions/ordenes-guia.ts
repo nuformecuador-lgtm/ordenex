@@ -3,6 +3,7 @@
 import {
   asignarBodegaSchema,
   asignarRecoleccionSchema,
+  desasignarRecoleccionSchema,
   generarGuiaSchema,
   rutearSateliteSchema,
   type AsignarBodegaResult,
@@ -40,7 +41,9 @@ function buildGuiaService(): IGuiaAsignacionService {
 
 function buildOrdenRepo(): Pick<
   IOrdenRepository,
-  "findMensajerosByZona" | "findMensajerosBloqueados"
+  | "findMensajerosByZona"
+  | "findMensajerosBloqueados"
+  | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
 > {
   return new OrdenRepository(getPrismaClient());
 }
@@ -68,7 +71,9 @@ export interface GuiaActionDeps {
 export interface ListarMensajerosDeps {
   ordenRepo?: Pick<
     IOrdenRepository,
-    "findMensajerosByZona" | "findMensajerosBloqueados"
+    | "findMensajerosByZona"
+    | "findMensajerosBloqueados"
+    | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
   >;
   zonaRepo?: Pick<IZonaRepository, "findCentralZonaId">;
   getActor?: () => Promise<Actor | null>;
@@ -156,6 +161,24 @@ export async function asignarRecoleccion(
 }
 
 /**
+ * Feature 157 (ampliacion): "Quitar mensajero" de una recolección asignada. La devuelve a
+ * `por_recolectar_en_tienda` y sin mensajero, para poder asignarla a otro. Solo acceso total.
+ */
+export async function desasignarRecoleccion(
+  input: unknown,
+  deps: GuiaActionDeps = {},
+): Promise<AsignarRecoleccionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = desasignarRecoleccionSchema.parse(input);
+    const service = deps.guiaService ?? buildGuiaService();
+    return service.desasignarRecoleccion(data, actor);
+  });
+  return isAppErrorShape(r) ? toGuiaActionError(r) : r;
+}
+
+/**
  * Feature 30/R5/R18: SOLO los usuarios rol mensajero de la zona GAM (firma y tipo
  * `MensajeroLiteDTO[]` intactos respecto a la feature 17). Resuelve `centralZonaId` y
  * filtra por zona en el repo; si aun no hay zona GAM configurada -> lista vacia
@@ -182,11 +205,21 @@ export async function listarMensajerosParaAsignacion(
     const mensajeros = await repo.findMensajerosByZona(centralZonaId);
     // Ajuste maestro: marca los mensajeros GAM con un cierre abierto para que la UI los
     // deshabilite en el selector (no se les asignan nuevas órdenes hasta resolverlo).
-    const bloqueados = await repo.findMensajerosBloqueados(mensajeros.map((m) => m.id));
+    const ids = mensajeros.map((m) => m.id);
+    const bloqueados = await repo.findMensajerosBloqueados(ids);
+    // Feature 157 (regla de dedicación): repartir y recolectar son viajes incompatibles.
+    // Se marcan las DOS caras para que cada modal deshabilite la suya y el maestro vea el
+    // motivo en vez de toparse con un rechazo del servidor al confirmar.
+    const [conReparto, conRecoleccion] = await Promise.all([
+      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto"]),
+      repo.findMensajerosConOrdenesEn(ids, ["por_recolectar_en_tienda"]),
+    ]);
     return {
       status: "ok" as const,
       mensajeros,
       bloqueadosIds: [...bloqueados],
+      conRepartoIds: [...conReparto],
+      conRecoleccionIds: [...conRecoleccion],
     };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el

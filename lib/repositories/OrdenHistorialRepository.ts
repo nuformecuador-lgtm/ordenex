@@ -4,6 +4,7 @@ import type {
   CriterioIntento,
   IOrdenHistorialRepository,
   OrigenReversionItem,
+  RecoleccionHistorialRow,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import {
   appendCambioEstado,
@@ -39,6 +40,31 @@ const WITH_LABELS = {
 } as const;
 
 type HistorialRow = Prisma.OrdenHistorialEstadoGetPayload<typeof WITH_LABELS>;
+
+// Feature 167 (design §5.3) — familia de historial que deja la confirmacion de la recoleccion
+// en tienda (`RecoleccionTiendaService` la escribe en su append, arista #43). Es la UNICA
+// fuente estable de "lo que YO recolecte hoy": el estado actual de la orden ya cambio en cuanto
+// la bodega central la recibio (138).
+const ORIGEN_TIPO_RECOLECCION_TIENDA = "recoleccion_tienda" as const;
+
+// Feature 167 — proyeccion MINIMA de una recoleccion ya hecha: la fila de historial aporta el
+// instante y la orden aporta como nombrarla. Ni monto, ni coordenadas, ni el estado actual: la
+// lista es un acuse de trabajo hecho, no una superficie operativa (R38).
+const WITH_RECOLECCION = {
+  select: {
+    ordenId: true,
+    createdAt: true,
+    orden: {
+      select: {
+        numGuia: true,
+        numRemision: true,
+        tienda: { select: { nombre: true } },
+      },
+    },
+  },
+} as const;
+
+type RecoleccionRow = Prisma.OrdenHistorialEstadoGetPayload<typeof WITH_RECOLECCION>;
 
 // R26/R28: serializa una fila a DTO legible. `estatusOrigenValue` NULL = creacion (R1/R20);
 // `actorNombre` NULL = sistema/cron (R21); `motivo` NULL cuando no viene de una gestion (R22).
@@ -227,5 +253,44 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
       LEFT JOIN "order_status" os ON os."id" = h."estatus_origen_id"
       ORDER BY h."orden_id", h."created_at" DESC, h."id" DESC`;
     return new Map(rows.map((r) => [r.orden_id, r.value ?? null]));
+  }
+
+  /**
+   * Feature 167 (design §5.3, R24/R25/R26/R28/R29/R32) — «Recolectadas hoy» del mensajero.
+   * Query PURA: la ventana `[desde, hasta)` viene YA calculada por el service (R27).
+   *
+   * El aislamiento REAL de esta lectura es el WHERE: `actorUsuarioId` sale del actor de sesion,
+   * nunca de un parametro externo, asi que un mensajero no puede pedir las recolecciones de
+   * otro. `orden: { deletedAt: null }` excluye las borradas (R29).
+   *
+   * NO filtra por `estatus_destino_id` a proposito (R26): la familia `recoleccion_tienda` tiene
+   * una sola arista y el estado actual de la orden es irrelevante — una orden ya recibida en la
+   * central debe seguir figurando.
+   */
+  async findRecoleccionesDeActor(
+    actorUsuarioId: string,
+    desde: Date,
+    hasta: Date,
+    limite: number,
+  ): Promise<RecoleccionHistorialRow[]> {
+    if (limite <= 0) return []; // ni una consulta: `take: 0` en Prisma es una consulta inutil
+    const rows: RecoleccionRow[] = await this.prisma.ordenHistorialEstado.findMany({
+      where: {
+        actorUsuarioId,
+        origenTipo: ORIGEN_TIPO_RECOLECCION_TIENDA,
+        createdAt: { gte: desde, lt: hasta },
+        orden: { deletedAt: null }, // R29
+      },
+      orderBy: { createdAt: "desc" }, // R28: de la mas reciente a la mas antigua
+      take: limite,
+      ...WITH_RECOLECCION,
+    });
+    return rows.map((r) => ({
+      ordenId: r.ordenId,
+      numGuia: r.orden.numGuia,
+      numRemision: r.orden.numRemision,
+      tiendaNombre: r.orden.tienda.nombre,
+      recolectadaAt: r.createdAt,
+    }));
   }
 }

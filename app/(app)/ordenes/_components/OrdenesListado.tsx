@@ -32,6 +32,7 @@ import {
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { AsignarRecoleccionModal } from "./AsignarRecoleccionModal";
+import { QuitarRecoleccionModal } from "./QuitarRecoleccionModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
@@ -48,6 +49,7 @@ type ModalAbierto =
   | "generar-guia"
   | "asignar-bodega"
   | "asignar-recoleccion" // feature 157
+  | "quitar-recoleccion" // feature 157 (ampliacion)
   | "etiquetas"
   | "devolver-tienda"
   | "recuperar-bodega"
@@ -62,7 +64,14 @@ async function mensajerosFetcher() {
   // SELECTOR de los modales de asignación, para no ofrecer a alguien a quien el service
   // va a rechazar. La key SWR "ordenes:mensajeros" la comparte OrdenesRevisionMaestro,
   // así que ambos fetchers deben devolver la MISMA forma.
-  return { mensajeros: res.mensajeros, bloqueadosIds: res.bloqueadosIds ?? [] };
+  return {
+    mensajeros: res.mensajeros,
+    bloqueadosIds: res.bloqueadosIds ?? [],
+    // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
+    // mezclan". Ambos fetchers comparten la key SWR, así que devuelven la MISMA forma.
+    conRepartoIds: res.conRepartoIds ?? [],
+    conRecoleccionIds: res.conRecoleccionIds ?? [],
+  };
 }
 
 /**
@@ -253,6 +262,10 @@ export function OrdenesListado({
   // Feature 157: los bloqueados por cierre SÍ se usan aquí — el selector de la recolección
   // los deshabilita para no ofrecer a alguien a quien el service va a rechazar.
   const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
+  // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
+  // mezclan". Cada modal deshabilita la suya, con el motivo a la vista.
+  const mensajerosConRepartoIds = mensajerosData?.conRepartoIds ?? [];
+  const mensajerosConRecoleccionIds = mensajerosData?.conRecoleccionIds ?? [];
 
   // Zonas bloqueadas por cierre (≥1 mensajero con cierre abierto), central y satélites
   // por igual. Solo se pide si hay acciones por lote (sin checkbox no hay qué bloquear).
@@ -278,6 +291,11 @@ export function OrdenesListado({
   function abrirAsignarRecoleccion(seleccionadas: OrdenListItemDTO[]) {
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("asignar-recoleccion");
+  }
+  // Feature 157 (ampliacion): devolverla al monton de asignables.
+  function abrirQuitarRecoleccion(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("quitar-recoleccion");
   }
   function abrirEtiquetas(seleccionadas: OrdenListItemDTO[]) {
     setOrdenesSeleccionadas(seleccionadas);
@@ -368,6 +386,24 @@ export function OrdenesListado({
             key: "asignar-recoleccion",
             label: "Asignar mensajero para recolección",
             onRun: abrirAsignarRecoleccion,
+          },
+          {
+            key: "etiquetas",
+            label: "Imprimir etiquetas",
+            variant: "outline",
+            onRun: abrirEtiquetas,
+          },
+        ];
+      // Feature 157 (ampliacion): ya tiene mensajero y va en camino. La unica decision que
+      // queda al maestro es RETIRARSELA, si ese mensajero no puede ir. Asignar a otro exige
+      // pasar por aqui primero: es lo que impide reasignar en bucle.
+      case "recolectando":
+        return [
+          {
+            key: "quitar-recoleccion",
+            label: "Quitar mensajero",
+            variant: "outline",
+            onRun: abrirQuitarRecoleccion,
           },
           {
             key: "etiquetas",
@@ -680,6 +716,13 @@ export function OrdenesListado({
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
             mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            mensajerosConRepartoIds={mensajerosConRepartoIds}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          <QuitarRecoleccionModal
+            open={modalAbierto === "quitar-recoleccion"}
+            ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
@@ -687,6 +730,7 @@ export function OrdenesListado({
             open={modalAbierto === "asignar-bodega"}
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
+            mensajerosConRecoleccionIds={mensajerosConRecoleccionIds}
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
           />

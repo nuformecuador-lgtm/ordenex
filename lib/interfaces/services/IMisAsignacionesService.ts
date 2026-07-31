@@ -81,6 +81,14 @@ export interface MiAsignacionDTO {
    * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`/`notaPrivada?`: no rompe los
    * fixtures que construyen `MiAsignacionDTO` sin el; el repo SIEMPRE lo emite (`null` cuando
    * la tienda no tiene telefono registrado).
+   *
+   * DEUDA DECLARADA (feature 167, P1). Este campo entro con la 157 EXCLUSIVAMENTE para el panel
+   * de recoleccion que vivia dentro de Entregas. La 167 retiro ese panel (R33), asi que hoy
+   * NINGUN consumidor de Entregas lee este campo: el apartado de recoleccion usa su propio
+   * `RecoleccionOrdenDTO`. No se retira porque `design.md §2.3` no lo lista entre las retiradas y
+   * hacerlo tocaria fixtures de varios tests de Entregas, ampliando el alcance sin que nadie lo
+   * pidiera (decision del leader, 2026-07-31). OJO: el campo homonimo de `MiAsignacionRow` SI
+   * sigue siendo necesario — de ahi lo lee `listarRecoleccion` para construir su DTO.
    */
   tiendaTelefono?: string | null;
 }
@@ -127,6 +135,11 @@ export interface MisAsignacionesKpis {
 // R9/R10/R20: dos grupos separados (por recoger vs por gestionar) + el puntero de
 // bloqueo del actor (para que la UI marque la orden activa y bloquee las demas).
 // Feature 61: + `kpis` para la fila de indicadores del portal.
+//
+// Feature 167 (R34): DOS grupos, no tres. La recoleccion en tienda tiene contrato propio
+// (`ListarRecoleccionResult`) y service propio; este contrato NO transporta ordenes en estado
+// de recoleccion. La ausencia es el requisito: lo que no viaja por aqui no puede reaparecer en
+// los KPIs, en el mapa ni en el corte del dia.
 export type ListarMisAsignacionesServiceResult =
   | {
       status: "ok";
@@ -140,13 +153,6 @@ export type ListarMisAsignacionesServiceResult =
        * `secuencia` asc; despues las que no la tienen, conservando su `createdAt desc`.
        */
       porGestionar: MiAsignacionDTO[];
-      /**
-       * Feature 157 (R11): TERCER grupo — ordenes en `por_recolectar_en_tienda` asignadas al
-       * actor, que el mensajero va a RECOLECTAR en la tienda. No son paradas de ninguna ruta
-       * (`secuenciaRuta: null` siempre) y NO alimentan los KPIs, el mapa ni el corte del dia
-       * (R39): ahi no hay gestion ni dinero todavia, solo un paquete que sigue en la tienda.
-       */
-      porRecolectar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis;
       /** Feature 92 (R27/R28/R30): estado de la ruta que produjo ese orden. */

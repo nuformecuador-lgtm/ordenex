@@ -4,6 +4,7 @@ import {
   puedeVer,
   itemsVisibles,
   SIDEBAR_ITEMS,
+  ROLES_ANALITICA,
   type MenuItem,
 } from "@/lib/auth/menu-visibility";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -29,6 +30,10 @@ const wallet = byLabel("Wallet");
 const ranking = byLabel("Ranking");
 // Feature 158 (T2.8, Q-I): la cola de incidentes es PÁGINA PROPIA, así que trae ítem propio.
 const incidentes = byLabel("Incidentes");
+// Feature 129: tablero de analítica (ruta/shell + ítem de sidebar).
+const analitica = byLabel("Analítica");
+// Feature 167 (R4): apartado propio de recolección en tienda del mensajero.
+const recoleccion = byLabel("Recolección");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -116,14 +121,18 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve Inicio, Órdenes, Wallet, Configuración, Cierres del día, Incidentes y Perfil en orden real", () => {
+  it("maestro ve Inicio, Analítica, Órdenes, Wallet, Configuración, Cierres del día, Incidentes y Perfil en orden real", () => {
     // Feature 42: "Wallet" (caja principal, solo maestro) va antes de "Configuración".
     // Feature 92: "Inicio" (acceso a /dashboard) va PRIMERO en SIDEBAR_ITEMS.
+    // Feature 129 (R16/R17, D7): "Analítica" entra en SEGUNDA posición, justo tras
+    // "Inicio" y antes de "Órdenes" — el único cambio en el conjunto visible del
+    // maestro respecto al de antes de esta feature.
     // Feature 158 (Q-I): "Incidentes" entra DESPUÉS de "Cierres del día" — el coste
     // declarado de que la cola sea página propia y no una sección de cierres. La lista se
     // compara por IGUALDAD: un ítem nuevo no declarado aquí pone el caso rojo.
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
       "Inicio",
+      "Analítica",
       "Órdenes",
       "Ranking",
       "Wallet",
@@ -134,12 +143,15 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     ]);
   });
 
-  it("admin ve Inicio, Órdenes, Ranking, Wallet, Cierres del día y Perfil, NO Configuración (paridad con maestro salvo Configuración)", () => {
+  it("admin ve Inicio, Analítica, Órdenes, Ranking, Wallet, Cierres del día y Perfil, NO Configuración (paridad con maestro salvo Configuración)", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("admin")));
     // Feature 94 (paridad adm↔maestro): el admin ve Ranking, Wallet y Cierres del día
     // igual que el maestro; solo Configuración sigue siendo maestro-only.
+    // Feature 129 (R16/R17, D7): "Analítica" entra en SEGUNDA posición (tras
+    // "Inicio"), único cambio en el conjunto visible del admin.
     expect(visibles).toEqual([
       "Inicio",
+      "Analítica",
       "Órdenes",
       "Ranking",
       "Wallet",
@@ -159,7 +171,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Entregas + Ranking + Cierre del día + Perfil, NO Órdenes, Novedades ni Configuración", () => {
+  it("mensajero ve Entregas + Recolección + Ranking + Cierre del día + Perfil, NO Órdenes, Novedades ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
@@ -167,8 +179,11 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // (roles maestro+mensajero); su defensa real es el notFound de la página.
     // Feature 87 (R20): "Novedades" ahora es exclusivo del adminTienda; el
     // mensajero DEJA de verlo.
+    // Feature 167 (R4): "Recolección" es el apartado propio de la recolección en
+    // tienda, que dejó de vivir dentro de "Entregas". Va justo debajo de ella.
     expect(visibles).toEqual([
       "Entregas",
+      "Recolección",
       "Ranking",
       "Cierre del día",
       "Perfil",
@@ -235,5 +250,165 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     );
     expect(ordenes.children).toBeUndefined();
     expect(ordenes.href).toBe("/ordenes");
+  });
+});
+
+// Feature 129 — el ítem de sidebar "Analítica" (R7, R8, R9, R11, R15, R16).
+describe("Feature 129 — ítem de sidebar de Analítica", () => {
+  it("R7: existe exactamente UN ítem con href '/analitica' y su label es 'Analítica'", () => {
+    const conEseHref = SIDEBAR_ITEMS.filter((i) => i.href === "/analitica");
+    expect(conEseHref).toHaveLength(1);
+    expect(conEseHref[0].label).toBe("Analítica");
+  });
+
+  it("R8: puedeVer e itemsVisibles incluyen el ítem para maestro y admin", () => {
+    expect(puedeVer(analitica, actor("maestro"))).toBe(true);
+    expect(puedeVer(analitica, actor("admin"))).toBe(true);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, actor("maestro")).some(
+        (i) => i.href === "/analitica",
+      ),
+    ).toBe(true);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, actor("admin")).some(
+        (i) => i.href === "/analitica",
+      ),
+    ).toBe(true);
+  });
+
+  it("R9: puedeVer e itemsVisibles lo excluyen para el resto de roles y sin actor", () => {
+    for (const rol of [
+      "mensajero",
+      "adminTienda",
+      "adminSatelite",
+      "apiKey",
+    ] as RolValue[]) {
+      expect(puedeVer(analitica, actor(rol))).toBe(false);
+      expect(
+        itemsVisibles(SIDEBAR_ITEMS, actor(rol)).some(
+          (i) => i.href === "/analitica",
+        ),
+      ).toBe(false);
+    }
+    expect(puedeVer(analitica, null)).toBe(false);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, null).some((i) => i.href === "/analitica"),
+    ).toBe(false);
+  });
+
+  it("R11: su iconKey es 'chartColumn' y ningún otro ítem de SIDEBAR_ITEMS usa esa clave", () => {
+    expect(analitica.iconKey).toBe("chartColumn");
+    const otrosConMismaClave = SIDEBAR_ITEMS.filter(
+      (i) => i !== analitica && i.iconKey === "chartColumn",
+    );
+    expect(otrosConMismaClave).toHaveLength(0);
+  });
+
+  it("R15: el ítem de analítica no declara subítems (children)", () => {
+    expect(analitica.children).toBeUndefined();
+  });
+
+  it("R16: el ítem de analítica va justo después de 'Inicio' y antes del primer 'Órdenes'", () => {
+    const indiceInicio = SIDEBAR_ITEMS.findIndex((i) => i.label === "Inicio");
+    const indiceAnalitica = SIDEBAR_ITEMS.findIndex(
+      (i) => i.href === "/analitica",
+    );
+    const indicePrimerOrdenes = SIDEBAR_ITEMS.findIndex(
+      (i) => i.href === "/ordenes",
+    );
+    expect(indiceAnalitica).toBe(indiceInicio + 1);
+    expect(indiceAnalitica).toBeLessThan(indicePrimerOrdenes);
+  });
+
+  // R10 (T4.5) — el test más importante de este bloque: las dos capas de
+  // autorización (el ítem del menú y el guard de la página) deben declarar
+  // EXACTAMENTE el mismo conjunto de roles. Se compara por CONJUNTO (inclusión
+  // mutua), no por identidad de referencia (`toBe`): un test que solo comprobara
+  // `analitica.roles === ROLES_ANALITICA` pasaría igual aunque alguien copiara los
+  // valores a mano en el ítem y luego cambiara sólo uno de los dos sitios — el
+  // bug exacto que R10 existe para atrapar. La feature 133 ("recortes por rol")
+  // debe tocar los DOS sitios (`lib/auth/menu-visibility.ts`: el `roles` del ítem,
+  // Y `ROLES_ANALITICA`, que también usa el guard de `app/(app)/analitica/page.tsx`)
+  // o este test se pone rojo.
+  it("R10: el 'roles' del ítem de analítica es el mismo CONJUNTO que ROLES_ANALITICA (usada por el guard de la página)", () => {
+    const rolesItem = [...analitica.roles].sort();
+    const rolesGuard = [...ROLES_ANALITICA].sort();
+    expect(rolesItem).toEqual(rolesGuard);
+    // Inclusión mutua explícita, además de la igualdad de arrays ordenados.
+    for (const rol of ROLES_ANALITICA) {
+      expect(analitica.roles).toContain(rol);
+    }
+    for (const rol of analitica.roles) {
+      expect(ROLES_ANALITICA).toContain(rol);
+    }
+  });
+});
+
+// Feature 167 — el ítem de sidebar "Recolección" (R4, R5). La 167 sacó la recolección en
+// tienda de dentro de "Entregas" porque el mensajero no la encontraba; este ítem ES la pista
+// permanente de dónde está ahora (design §11, riesgo 1). Si desaparece, la feature vuelve al
+// problema que vino a resolver.
+describe("Feature 167 — ítem de sidebar de Recolección", () => {
+  it("R4: existe exactamente UN ítem con href '/recoleccion' y su label es 'Recolección'", () => {
+    const conEseHref = SIDEBAR_ITEMS.filter((i) => i.href === "/recoleccion");
+    expect(conEseHref).toHaveLength(1);
+    expect(conEseHref[0].label).toBe("Recolección");
+  });
+
+  it("R4: lo ve el mensajero", () => {
+    expect(puedeVer(recoleccion, actor("mensajero"))).toBe(true);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")).some(
+        (i) => i.href === "/recoleccion",
+      ),
+    ).toBe(true);
+  });
+
+  it("R4: NINGÚN otro rol lo ve, ni un actor ausente", () => {
+    // El acto físico de recolectar en la tienda es del mensajero. El maestro asigna la
+    // recolección (157) desde otra pantalla; nadie más tiene nada que hacer aquí.
+    for (const rol of [
+      "maestro",
+      "admin",
+      "adminTienda",
+      "adminSatelite",
+      "apiKey",
+    ] as RolValue[]) {
+      expect(puedeVer(recoleccion, actor(rol))).toBe(false);
+      expect(
+        itemsVisibles(SIDEBAR_ITEMS, actor(rol)).some(
+          (i) => i.href === "/recoleccion",
+        ),
+      ).toBe(false);
+    }
+    expect(puedeVer(recoleccion, null)).toBe(false);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, null).some((i) => i.href === "/recoleccion"),
+    ).toBe(false);
+  });
+
+  it("R5: su iconKey es 'store' y ningún otro ítem de SIDEBAR_ITEMS usa esa clave", () => {
+    expect(recoleccion.iconKey).toBe("store");
+    const otrosConMismaClave = SIDEBAR_ITEMS.filter(
+      (i) => i !== recoleccion && i.iconKey === "store",
+    );
+    expect(otrosConMismaClave).toHaveLength(0);
+    // En particular NO reusa el `truck` de "Entregas": recolectar en la tienda y repartir
+    // en la calle son dos trabajos distintos, y ese es el punto entero de la feature.
+    expect(recoleccion.iconKey).not.toBe(entregas.iconKey);
+  });
+
+  it("decisión del humano (2026-07-31): va justo debajo de 'Entregas'", () => {
+    const indiceEntregas = SIDEBAR_ITEMS.findIndex(
+      (i) => i.href === "/mis-asignaciones",
+    );
+    const indiceRecoleccion = SIDEBAR_ITEMS.findIndex(
+      (i) => i.href === "/recoleccion",
+    );
+    expect(indiceRecoleccion).toBe(indiceEntregas + 1);
+  });
+
+  it("R4: el ítem no declara subítems (no es una sección de Entregas)", () => {
+    expect(recoleccion.children).toBeUndefined();
   });
 });

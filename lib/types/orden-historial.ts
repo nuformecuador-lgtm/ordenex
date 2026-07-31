@@ -33,6 +33,7 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "devolucion_rechazada", // feature 139: al APROBAR el cierre, rechazada -> por_devolver/por_devolver_a_tienda (actor admin). NO enlaza gestion; fuera del criterio de intento (160)
   "recoleccion_tienda", // feature 154: el mensajero recolecta en la tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43). SIN PRODUCTOR hasta la 157. NO enlaza gestion; fuera del criterio de intento (160)
   "incidente", // feature 154: familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158 (la arista #44 viaja via `gestion`, decision Q4). NO enlaza gestion; fuera del criterio de intento (160)
+  "asignacion_recoleccion", // feature 157 (ampliacion): el maestro decide quien va a la tienda, por_recolectar_en_tienda -> recolectando (#45). NO enlaza gestion; fuera del criterio de intento (160)
   "deshacer_asignacion", // feature 149: reversion de la asignacion/ruteo ANTES de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite -> en_bodega_central; actor maestro/admin/adminSatelite). NO enlaza gestion; fuera del criterio de intento (160): sus destinos son de BODEGA, jamas `devuelta` ni `reprogramada`
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 

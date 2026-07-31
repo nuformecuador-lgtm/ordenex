@@ -27,7 +27,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
     },
   );
 
-  it("el inventario de flujo tiene las 52 aristas y 50 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53 + 158 admin #48-#52/#54-#58)", () => {
+  it("el inventario de flujo tiene las 54 aristas y 52 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53 + 158 admin #48-#52/#54-#58 + 157 #45b/#46b)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);
@@ -196,10 +196,28 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
     expect([...ESTADOS_CREACION]).toContain("por_recolectar_en_tienda");
   });
 
-  it("R14: es LEGAL por_recolectar_en_tienda -> en_ruta_bodega_central (#43)", () => {
+  // Feature 157 (ampliacion): la #43 se parte en dos actos. Primero el maestro decide QUIEN
+  // va (`recolectando`), y solo entonces ese mensajero puede recolectar. Antes se podia
+  // recolectar desde la espera, que es lo mismo que decir que la asignacion no significaba nada.
+  it("R14: es LEGAL recolectando -> en_ruta_bodega_central (#43)", () => {
+    expect(() =>
+      assertTransicionValida("recolectando", "en_ruta_bodega_central"),
+    ).not.toThrow();
+  });
+
+  it("157: es LEGAL por_recolectar_en_tienda -> recolectando (#45b) y su reversion (#46b)", () => {
+    expect(() =>
+      assertTransicionValida("por_recolectar_en_tienda", "recolectando"),
+    ).not.toThrow();
+    expect(() =>
+      assertTransicionValida("recolectando", "por_recolectar_en_tienda"),
+    ).not.toThrow();
+  });
+
+  it("157: ya NO se puede recolectar desde la espera, sin pasar por la asignacion", () => {
     expect(() =>
       assertTransicionValida("por_recolectar_en_tienda", "en_ruta_bodega_central"),
-    ).not.toThrow();
+    ).toThrow();
   });
 
   it("R15: es LEGAL en_reparto -> incidente (#44)", () => {
@@ -298,7 +316,7 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
     }
   });
 
-  it("R17: la unica salida legal de por_recolectar_en_tienda es en_ruta_bodega_central", () => {
+  it("R17 (+157): la unica salida legal de por_recolectar_en_tienda es recolectando", () => {
     const legales = ORDER_STATUS_SEED.filter((destino) => {
       try {
         assertTransicionValida("por_recolectar_en_tienda", destino);
@@ -307,7 +325,7 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
         return false;
       }
     });
-    expect(legales).toEqual(["en_ruta_bodega_central"]);
+    expect(legales).toEqual(["recolectando"]);
   });
 });
 
@@ -341,7 +359,7 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     expect(legales).toEqual(["en_bodega_central"]);
   });
 
-  it("el mapa retira las aristas de la 156 y de la 155, la 149 suma tres y la 158 once: 45 -> 52 (y 42 -> 50 pares)", () => {
+  it("el mapa retira las aristas de la 156 y de la 155, la 149 suma tres y la 158 once: 45 -> 52 (y 42 -> 52 pares)", () => {
     const total = Object.entries(TRANSICIONES).reduce(
       (acc, [, destinos]) => acc + (destinos as readonly unknown[]).length,
       0,
@@ -352,8 +370,8 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // 158/PR2 (#48-#52 entradas, #54-#58 inversas) = 52.
     // El invariante que protege este caso son las BAJAS (los pares retirados siguen siendo
     // ilegales, ver los casos de arriba); el recuento absoluto se mueve con cada feature aditiva.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(52);
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(50);
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(54); // +2: feature 157 (ampliacion)
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(52); // +2: feature 157 (ampliacion)
   });
 });
 
@@ -472,7 +490,12 @@ describe("154/R24 — el error de transicion ilegal no filtra nada del cliente",
 describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", () => {
   it("las dos aristas nuevas estan en el inventario transcrito a mano", () => {
     const pares = INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino} (${a.via})`);
-    expect(pares).toContain("por_recolectar_en_tienda->en_ruta_bodega_central (recoleccion_tienda)");
+    // Feature 157 (ampliacion): la recoleccion parte de `recolectando` — solo recolecta quien
+    // fue asignado—, y la espera sin dueño lleva ahora a la asignacion.
+    expect(pares).toContain("recolectando->en_ruta_bodega_central (recoleccion_tienda)");
+    expect(pares).toContain(
+      "por_recolectar_en_tienda->recolectando (asignacion_recoleccion)",
+    );
     // Feature 158/Q-G: el `via` de #44 pasa de `gestion` a `incidente`, que es la familia que
     // el append persiste de verdad (`origen_tipo = incidente`). El caso NO se borra: afirma la
     // forma nueva, y si alguien devolviera el `via` a `gestion` sin tocar el append —o al
@@ -542,10 +565,10 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // Feature 149: 38/36/2 -> 41/39/2 con sus tres aristas (#45/#46/#47), que son pares NUEVOS.
   // Feature 158/PR1: 41/39/2 -> 42/40/2 con #53 (`incidente -> en_reparto`), par NUEVO.
   // Feature 158/PR2: 42/40/2 -> 52/50/2 con las diez del ADMIN, las diez pares NUEVOS.
-  it("los recuentos del inventario son 52 flujo / 50 pares / 2 creacion", () => {
+  it("los recuentos del inventario son 54 flujo / 52 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 52,
-      paresUnicos: 50,
+      aristasFlujo: 54, // feature 157 (ampliacion)
+      paresUnicos: 52, // feature 157 (ampliacion)
       aristasCreacion: 2,
     });
   });
