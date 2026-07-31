@@ -42,9 +42,10 @@ export const CLAVE_CREACION = "created";
 export const CLAVE_ESTADO = "status_id";
 
 /**
- * Clave del filtro REASIGNABLES. Marcado, el backend devuelve solo las ordenes que
- * esperan que alguien les vuelva a poner mensajero: con prioridad, no reprogramadas y
- * sin mensajero asignado. Desmarcado, el filtro no existe.
+ * Clave del filtro REASIGNABLES. Marcado, el backend devuelve las ordenes que esperan una
+ * decision de despacho: estan en la bodega central y no tienen mensajero, que es el punto
+ * desde el que se les asigna uno o se rutean a una bodega satelite. Desmarcado, el filtro
+ * no existe.
  */
 export const CLAVE_REASIGNABLES = "reasignables";
 

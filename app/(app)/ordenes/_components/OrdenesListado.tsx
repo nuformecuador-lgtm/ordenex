@@ -31,6 +31,7 @@ import {
 } from "./ordenes-columns";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
+import { AsignarRecoleccionModal } from "./AsignarRecoleccionModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
@@ -46,6 +47,7 @@ import type { OrdenesFilterUI } from "./serializar-filtro";
 type ModalAbierto =
   | "generar-guia"
   | "asignar-bodega"
+  | "asignar-recoleccion" // feature 157
   | "etiquetas"
   | "devolver-tienda"
   | "recuperar-bodega"
@@ -55,11 +57,11 @@ type ModalAbierto =
 async function mensajerosFetcher() {
   const res = await listarMensajerosParaAsignacion();
   if (res.status !== "ok") throw new Error(res.status);
-  // `bloqueadosIds` (mensajeros GAM con cierre abierto) NO se usa en esta vista: el
-  // bloqueo del checkbox se deriva por ZONA de la orden (`zonasBloqueadasFetcher`).
-  // Se mantiene en el objeto porque la key SWR "ordenes:mensajeros" la comparte
-  // OrdenesRevisionMaestro, que sí lo consume (selector de mensajeros del modal):
-  // dos fetchers con la misma key deben devolver la MISMA forma.
+  // `bloqueadosIds` = mensajeros con cierre abierto. El bloqueo del CHECKBOX se sigue
+  // derivando por ZONA de la orden (`zonasBloqueadasFetcher`); estos ids alimentan el
+  // SELECTOR de los modales de asignación, para no ofrecer a alguien a quien el service
+  // va a rechazar. La key SWR "ordenes:mensajeros" la comparte OrdenesRevisionMaestro,
+  // así que ambos fetchers deben devolver la MISMA forma.
   return { mensajeros: res.mensajeros, bloqueadosIds: res.bloqueadosIds ?? [] };
 }
 
@@ -248,6 +250,9 @@ export function OrdenesListado({
     mensajerosFetcher,
   );
   const mensajeros = mensajerosData?.mensajeros;
+  // Feature 157: los bloqueados por cierre SÍ se usan aquí — el selector de la recolección
+  // los deshabilita para no ofrecer a alguien a quien el service va a rechazar.
+  const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
 
   // Zonas bloqueadas por cierre (≥1 mensajero con cierre abierto), central y satélites
   // por igual. Solo se pide si hay acciones por lote (sin checkbox no hay qué bloquear).
@@ -268,6 +273,11 @@ export function OrdenesListado({
   function abrirAsignarBodega(seleccionadas: OrdenListItemDTO[]) {
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("asignar-bodega");
+  }
+  // Feature 157: quien va a la tienda a recoger el lote.
+  function abrirAsignarRecoleccion(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("asignar-recoleccion");
   }
   function abrirEtiquetas(seleccionadas: OrdenListItemDTO[]) {
     setOrdenesSeleccionadas(seleccionadas);
@@ -349,6 +359,23 @@ export function OrdenesListado({
       // catálogo y con él su `case`. `en_preparacion` queda como único origen de
       // "Generar guía"; un value fuera del catálogo cae al `default` (sin acciones
       // por lote), que es la degradación segura.
+      // Feature 157: el paquete sigue EN LA TIENDA. La accion es decidir QUIEN va a
+      // recogerlo; la orden no cambia de estado hasta que ese mensajero lo confirme
+      // escaneando. Nacen con `num_guia` (feature 155), asi que la etiqueta ya existe.
+      case "por_recolectar_en_tienda":
+        return [
+          {
+            key: "asignar-recoleccion",
+            label: "Asignar mensajero para recolección",
+            onRun: abrirAsignarRecoleccion,
+          },
+          {
+            key: "etiquetas",
+            label: "Imprimir etiquetas",
+            variant: "outline",
+            onRun: abrirEtiquetas,
+          },
+        ];
       case "en_preparacion":
         return [{ key: "guia", label: "Generar guía", onRun: abrirGenerarGuia }];
       case "por_recoger":
@@ -521,22 +548,45 @@ export function OrdenesListado({
   }
 
   /**
-   * Acciones ofrecidas para la selección actual = INTERSECCIÓN (por `key`) de las
-   * acciones de los estados presentes en ella. Con filas de un solo estado son las de
-   * ese estado; al mezclar estados solo sobrevive lo que aplica a TODAS (p. ej.
-   * "Imprimir etiquetas" entre `por_recoger` y `en_bodega_central`). Si nada aplica a
-   * todas, no se ofrece ninguna acción en vez de ejecutar una que descartaría filas.
+   * Acciones ofrecidas para la selección actual = UNIÓN (por `key`) de las acciones de
+   * los estados presentes, cada una acotada al SUBCONJUNTO de órdenes al que aplica.
+   *
+   * Antes era la INTERSECCIÓN, y eso dejaba la barra vacía en el caso más natural: marcar
+   * "seleccionar todo" sobre una página con estados mezclados no ofrecía NADA, porque casi
+   * ningún par de estados comparte acción. El usuario veía todo marcado y ningún botón.
+   *
+   * Con la unión, cada acción se ejecuta solo sobre las filas que la admiten —el resto ni
+   * se toca— y el botón lo dice: cuando no alcanza a toda la selección, lleva el conteo
+   * ("Generar guía (5)"). Con un solo estado no hay conteo, porque no hay nada que aclarar.
+   *
+   * El orden es el de aparición: primero las acciones del primer estado encontrado. Así la
+   * barra no baila entre renders aunque cambie la selección.
    */
   function accionesPara(seleccionadas: OrdenListItemDTO[]): AccionLote[] {
     if (seleccionadas.length === 0) return [];
-    const valores = [...new Set(seleccionadas.map((o) => o.estatusValue))];
-    const [primero, ...resto] = valores;
-    let comunes = accionesDe(primero);
-    for (const value of resto) {
-      const keys = new Set(accionesDe(value).map((a) => a.key));
-      comunes = comunes.filter((a) => keys.has(a.key));
+
+    const porKey = new Map<
+      string,
+      { accion: AccionLote; ordenes: OrdenListItemDTO[] }
+    >();
+    for (const orden of seleccionadas) {
+      for (const accion of accionesDe(orden.estatusValue)) {
+        const entrada = porKey.get(accion.key);
+        if (entrada) entrada.ordenes.push(orden);
+        else porKey.set(accion.key, { accion, ordenes: [orden] });
+      }
     }
-    return comunes;
+
+    return [...porKey.values()].map(({ accion, ordenes }) => {
+      const parcial = ordenes.length < seleccionadas.length;
+      return {
+        ...accion,
+        label: parcial ? `${accion.label} (${ordenes.length})` : accion.label,
+        // Se ignora lo que la barra pasa (la selección entera) y se usa el subconjunto
+        // elegible: es lo que hace que la acción no descarte filas en silencio ni falle.
+        onRun: () => accion.onRun(ordenes),
+      };
+    });
   }
 
   // La carga masiva y los escáneres viven a nivel del contenedor (no dependen del
@@ -618,6 +668,20 @@ export function OrdenesListado({
             ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
+          />
+          {/* Feature 157: NO se le aplica el bloqueo por zona con cierre abierto que sí
+              guarda a `AsignarBodegaModal`. Esa regla protege la asignación de reparto,
+              atada a la zona de ENTREGA de la orden; una recolección la puede hacer
+              cualquier mensajero (decisión del humano), así que su zona no dice nada. El
+              cierre del mensajero ELEGIDO sí se respeta: lo revalida el service, y aquí
+              se le deshabilita en el selector. */}
+          <AsignarRecoleccionModal
+            open={modalAbierto === "asignar-recoleccion"}
+            ordenes={ordenesSeleccionadas}
+            mensajeros={mensajeros ?? []}
+            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
           />
           <AsignarBodegaModal
             open={modalAbierto === "asignar-bodega"}
