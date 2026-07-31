@@ -1,10 +1,15 @@
-# Feature 170 — Descarga a Excel en todas las tablas · design
+# Feature 170 — Descarga a Excel en todas las tablas (+ paginación) · design
 
 > El QUÉ está en `requirements.md`. Aquí van el censo, el contrato por tabla, el reparto
-> backend/frontend, el tratamiento del volumen y las alternativas descartadas.
+> backend/frontend, el tratamiento del volumen, la paginación de Familia B (§11) y las
+> alternativas descartadas.
 >
 > Todas las rutas y símbolos citados fueron verificados leyendo el archivo real en el
 > worktree. Los números de línea son del estado de `dev` al 2026-07-31.
+>
+> **§11 es NUEVO (2026-07-31):** el humano respondió la pregunta abierta P6 eligiendo paginar
+> las 16 pantallas de Familia B dentro de esta feature. Las secciones §1–§10 se conservan
+> como estaban salvo las notas marcadas «(P6)».
 
 ---
 
@@ -273,9 +278,11 @@ Lo que esta feature AÑADE sobre eso:
 | El binario revienta el navegador | todas | El archivo se arma en el cliente con `exceljs` cargado por `import()` dinámico. 5000 filas × ~15 columnas ≈ 0,5–1,5 MB de `xlsx`, medido en la 151 | round-trip de integración con 5000 filas |
 | El payload RSC de 5000 filas satura la función | Familia A | Es el techo que el tope fija. Si una tabla resulta más pesada por fila que órdenes, la salida es BAJAR `N`, no truncar | se mide con el round-trip; queda registrado en `progress/impl_170` |
 
-**Lo que este diseño NO resuelve y hay que decir:** los 16 listados de Familia B ya leen hoy
-su dataset entero sin paginación, ANTES de esta feature. La descarga no lo empeora (no
-relee), pero tampoco lo arregla. Ver P6 en `requirements.md`.
+**(P6 — RESUELTO el 2026-07-31 por el humano):** los 16 listados de Familia B leen hoy su
+dataset entero sin paginación, ANTES de esta feature. En la primera versión de este diseño eso
+quedaba declarado como riesgo heredado y se proponía un ticket aparte. El humano decidió
+**paginarlos dentro de esta feature**. Todo el tratamiento está en **§11**. Durante la fase 1
+(export) sigue vigente R30: la descarga NO relee, así que el riesgo no crece mientras tanto.
 
 ---
 
@@ -307,7 +314,10 @@ futura sin tocarla. Precedente de guardia estática en el repo:
 
 ---
 
-## §8 — Orden de ejecución: 6 tandas revisables
+## §8 — Orden de ejecución de la FASE 1 (export): 8 tandas revisables
+
+> El plan COMPLETO de las dos fases (14 tandas) está en `tasks.md`. Esta sección solo
+> justifica el agrupamiento de la fase 1; la fase 2 (paginación) se justifica en §11.6.
 
 Agrupadas por DUEÑO DEL DATO y por forma (no por pantalla), para que cada tanda sea un PR
 pequeño, con un solo servicio o un solo tipo de proyección, y verificable por sí sola.
@@ -387,5 +397,171 @@ cambio es aditivo.
 | 24 cableados casi iguales invitan a copiar y pegar el bloque de errores | Tanda 0: `filasDesdeResultado` / `filasLocales` centralizan el bloque; `OrdenesModule` se migra a ellos para que no queden dos caminos. |
 | Un campo sensible entra por una tabla nueva dentro de un año | Guardia de FORMA sobre todas las `COLUMNAS_DESCARGA_*` (§7), no una revisión manual. |
 | Una tabla nueva nace sin descarga y nadie se entera | Guardia de cobertura: enumera los `<DataTable>` del árbol y exige que cada uno declare `descarga` o figure en la lista de exclusiones (R4). |
-| Los 16 listados de Familia B siguen leyendo sin paginación | Declarado, no oculto: P6. La descarga no agrava (R30). |
-| El modal de detalle de cierre se llena de botones | Decisión consciente (una descarga por sección) + P2 abierta al humano. |
+| Los 16 listados de Familia B siguen leyendo sin paginación | RESUELTO por decisión del humano: se paginan en la fase 2 (§11). Durante la fase 1 no se agrava (R30). |
+| El modal de detalle de cierre se llena de botones | Decisión consciente (una descarga por sección), **P2 RATIFICADA** por el humano el 2026-07-31. |
+| Paginar cambia comportamiento visible de pantallas en uso | Inventario pantalla a pantalla en §11.2/§11.3, con 3 exclusiones propuestas y argumentadas. |
+
+---
+
+## §11 — PARTE 2: paginación server-side de Familia B (decisión P6)
+
+### §11.1 — Qué se decidió y quién
+
+**El humano, el 2026-07-31**, al responder la pregunta abierta P6 de la primera versión de
+este spec, eligió **paginar las 16 pantallas de Familia B dentro de esta feature** en vez de
+registrarlo como ticket aparte, **con constancia explícita de que convierte un rollout
+mecánico en una reescritura mucho mayor**. Este diseño no discute esa decisión: la
+instrumenta y acota su riesgo.
+
+### §11.2 — El riesgo real: paginar CAMBIA comportamiento visible
+
+Pasar una pantalla de «recibe todo por props» a «pagina en servidor» no es un cambio interno.
+Rompe, en este orden de gravedad:
+
+1. **Filtros de cliente.** Un `Array.filter` sobre el conjunto completo pasa a filtrar solo la
+   página. El filtro debe MUDARSE al servidor o deja de funcionar.
+2. **Opciones de filtro derivadas de los datos.** Si el desplegable de cantones se construye
+   con los cantones presentes en el array, paginar lo reduce a los de la página visible.
+3. **Cálculos agregados sobre el conjunto.** Contadores de cabecera, totales, «hay al menos
+   una fila en estado X», posiciones de un ranking: todos pasan a ver una página.
+4. **Selección de filas y acciones de lote.** «Seleccionar todo» deja de significar «todo».
+5. **Vistas agrupadas.** Una pantalla que parte el dataset en N listas necesita N paginaciones
+   y N conteos.
+
+### §11.3 — Inventario pantalla a pantalla (las 16)
+
+Verificado leyendo cada componente. **13 se paginan · 3 se proponen fuera.**
+
+#### Riesgo ALTO — se paginan, pero necesitan trabajo extra más allá de paginar (2)
+
+| Pantalla | Qué se rompe (verificado) | Qué hay que hacer |
+| --- | --- | --- |
+| **Órdenes de la bodega satélite** (`SateliteOrdenesListado.tsx`) | (a) TRES filtros en AND resueltos en cliente (`visibles`, :113-138); (b) las OPCIONES de cantón y distrito se derivan del array completo (`construirFiltrosSatelite(ordenes)`, :107 → `derivarCantones`/`derivarDistritos`); (c) `SelectAllCheckbox` marca todas las `visibles` (:202); (d) `hayEstado()` decide qué acciones de lote se ofrecen mirando el conjunto (:177-179) | Mover los 3 filtros al servicio; **acción de catálogos** para las opciones (precedente exacto: `lib/actions/filtros-ordenes.ts`, feature 144, ya acotada por rol) — R46; selección por página (precedente: `OrdenesModule`) — R47; las acciones de lote pasan a decidirse sobre lo SELECCIONADO — R48 |
+| **Cuentas por pagar a mensajeros** (`CuentasPorPagarTable.tsx`) | (a) búsqueda por nombre en cliente sobre el conjunto (`filtrados`, :76-80); (b) cada fila EXPANDE una tabla anidada que YA pagina (`DesglosePagosMensajero`) | Mover la búsqueda al servicio (R45); la tabla anidada no cambia, pero hay que verificar que expandir en la página 2 sigue funcionando |
+
+#### Riesgo MEDIO — se paginan; solo rompe el contador de cabecera (4)
+
+Todas muestran `({array.length})` junto al título. Bajo paginación eso mostraría el tamaño de
+página, no el total: hay que sustituirlo por el `total` del servidor (R42).
+
+| Pantalla | Línea del contador |
+| --- | --- |
+| Cierres del día pendientes de decisión | `CierresAdminModule.tsx:392` |
+| Cierres de bodega pendientes | `CierresBodegaAdminModule.tsx:206` |
+| Cierres del día a consolidar | `ConsolidacionBodegaModule.tsx:161` |
+| Incidentes pendientes de decisión | `IncidentesAdminModule.tsx:288` |
+
+Nota verificada: en las tres pantallas de cierres los TOTALES de dinero llegan por props
+propias ya calculadas server-side (`totalesAgregados`, `totalPagoMensajeroAgregado`,
+`totalNetoAgregado`…), **no se derivan del array de la tabla**. Paginar no los toca (R49 se
+cumple sin trabajo extra). Lo mismo con `puedesSolicitar`/`motivoBloqueo` (R50).
+
+#### Riesgo BAJO — se paginan sin más (7)
+
+Solo lectura, sin filtros de cliente, sin agregados derivados del array, sin selección:
+
+Cierres del día — histórico · Cierres de bodega resueltos · Cierres de bodega solicitados ·
+Cierres solicitados por el mensajero · Incidentes — histórico · Saldos de tiendas ·
+Plantillas de gasto fijo.
+
+Los cinco primeros son **históricos que crecen sin techo con el tiempo**: son los que de
+verdad justifican esta fase. Saldos de tiendas crece con el número de tiendas. Plantillas de
+gasto fijo es un puñado de filas y se pagina solo por uniformidad.
+
+#### SE PROPONE DEJAR FUERA — paginarlas las rompe de forma inaceptable (3)
+
+| Pantalla | Ruptura verificada | Por qué no compensa |
+| --- | --- | --- |
+| **Ranking del día** (`RankingModule.tsx:91`) | `ocupanteDe(posicion)` busca en el array del ranking al mensajero de los puestos 1-3 para la tarjeta de premios (:75-78). Si el usuario está en la página 2, `ranking.find(...)` no encuentra a nadie y el podio queda «sin ocupante». `posicion` la calcula el servidor sobre el conjunto completo. | Un ranking paginado deja de ser un ranking: su valor ES ver el orden completo. El conjunto está acotado por el nº de mensajeros activos: no crece con el tiempo. Paginarlo obligaría además a una segunda consulta solo para el podio. |
+| **Gestiones del cierre del día por resultado** (`CierreDiaModule.tsx:374`) | Vista AGRUPADA en 4 listas (`ORDEN_RESULTADOS.map`, :357-389). La sección se OCULTA si su grupo está vacío (`if (filas.length === 0) return null`, :360) y el encabezado lleva `({filas.length})` (:370). Ambas cosas dejan de ser ciertas por página. | Exigiría 4 consultas + 4 conteos por render (contra R54). El conjunto está acotado por la jornada de UN mensajero (decenas de gestiones), no por el paso del tiempo. |
+| **Gestiones de un cierre por resultado (detalle admin)** (`cierre-detalle-shared.tsx:968`, `DetalleSecciones`) | Idéntico problema agrupado (`filas.length === 0` :954, `({filas.length})` :963), agravado por vivir dentro de un MODAL de detalle de UN cierre, cuyo contenido llega por una acción de detalle bajo demanda. | Mismo argumento: acotado por la jornada de UN mensajero. Paginar dentro de un modal de detalle añade estado y consultas para nada. |
+
+Las tres siguen recibiendo su dataset completo (R53) y **siguen teniendo descarga** (están en
+el Anexo I). Ver Q1 en `requirements.md`: si el humano quiere las 16 sin excepción, hay que
+decidir además qué se hace con el podio y con los contadores por grupo.
+
+### §11.4 — Cómo se pagina: piezas y contrato
+
+No hay invención. El repo ya tiene el patrón entero, aplicado en 5 listados:
+
+| Pieza existente | Ruta | Uso |
+| --- | --- | --- |
+| Control de paginación | `components/shared/Pagination.tsx` | REUSO tal cual |
+| Config por dominio | `lib/config/<dominio>.ts` (`DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`) | Se amplía por dominio |
+| Molde de módulo paginado | `UsuariosModule` / `PlantillasModule` / `ApiKeysModule` (SWR + `fallbackData` del servidor) | MOLDE |
+| Molde de servicio paginado | `OrdenService.listar` (`construirWhere` + `skip`/`take` + `count`) | MOLDE |
+| Catálogos de filtro acotados por rol | `lib/actions/filtros-ordenes.ts` (feature 144) | MOLDE para R46 |
+
+Contrato por listado que pasa a paginar:
+
+```
+Servicio:   listar(input, actor)  -> { status, items, page, pageSize, total }
+            listarCompleto(input, actor) -> ya existe de la fase 1 (mismo `construirWhere`)
+Action:     listarX({ page, pageSize, ...filtros })   // schema .strict()
+Página:     Server Component pre-carga la página 1 y la pasa como `initialData`
+Módulo:     SWR sobre [clave, page, pageSize, filtros] + <Pagination/> + total del servidor
+```
+
+**Punto clave de coherencia:** el `construirWhere` que la fase 1 ya extrajo para
+`listarCompleto` es EL MISMO que usa el `listar` paginado. Por eso la fase 2 no puede
+introducir una divergencia de alcance por rol: R44 se cumple por construcción, y su test es
+«el listado paginado y el dataset completo devuelven el mismo conjunto para el mismo actor y
+los mismos filtros».
+
+### §11.5 — El coste de entregar el export ANTES que la paginación
+
+Durante la fase 1, las 16 pantallas de Familia B cablean su descarga con `filasLocales(datos,
+proyector)` (sobre el array que ya tienen). Al paginarlas en la fase 2, ese cableado pasa a
+`filasDesdeResultado(listarXCompleto(filtros), proyector)`.
+
+Lo que cambia y lo que no:
+
+- **NO cambia** el módulo `*-descarga-columnas.ts` de cada tabla: es el activo caro
+  (~24 módulos, todas las decisiones de columnas y de datos sensibles) y sobrevive intacto.
+- **NO cambian** sus tests de proyección ni la guardia de datos sensibles.
+- **CAMBIA una línea** por tabla: el `obtenerFilas`.
+- **SE MUEVE** el test de alcance por rol: de nivel componente a nivel servicio (donde es más
+  fuerte, porque ahí se prueba contra el `where` real).
+
+Es rework pequeño y acotado, a cambio de entregar el pedido literal del humano semanas antes.
+Ver Q3.
+
+### §11.6 — Por qué la fase 2 va en 6 tandas y en ESE orden
+
+Criterio: **riesgo creciente**, para que el patrón esté rodado cuando se llegue a las dos
+pantallas difíciles, y **por rol afectado**, para que ninguna tanda cambie a la vez la
+experiencia de dos roles distintos.
+
+1. **H — base de paginación**: contrato, config y el arreglo de contadores. Sin pantallas.
+2. **I — riesgo bajo (7)**: históricos y catálogos. Si el patrón está mal, se descubre aquí,
+   sobre pantallas de solo lectura donde equivocarse no bloquea a nadie.
+3. **J — riesgo medio (4)**: las cuatro colas con contador de cabecera. Mismo patrón que I más
+   un cambio de una línea por contador.
+4. **K — bodega satélite**: la más cara. Toca al `adminSatelite`, que trabaja en bodega.
+5. **L — cuentas por pagar**: toca a los roles de acceso total y tiene fila expandible.
+6. **M — cierre de fase 2**: no-regresión transversal, medición y bitácora.
+
+K y L van al final **a propósito**: son las únicas que cambian comportamiento que el usuario
+nota, y llegan cuando el contrato ya lleva 11 pantallas de rodaje.
+
+### §11.7 — Alternativas descartadas de la fase 2
+
+**A8 — Paginar en el cliente (cortar el array ya cargado).**
+Descartada: no resuelve nada del problema real. El servidor seguiría leyendo y serializando el
+dataset entero; solo se maquilla la tabla. El objetivo de P6 es dejar de traer todo.
+
+**A9 — Scroll infinito en vez de paginación.**
+Descartada: el repo tiene UN patrón de paginación con control explícito
+(`components/shared/Pagination.tsx`) usado en 5 listados. Meter un segundo patrón de recorrido
+en las mismas pantallas donde conviven tablas paginadas y no paginadas es incoherencia
+gratuita, y empeora los contadores y la selección por página.
+
+**A10 — Un helper genérico que pagine cualquier lista en memoria dentro del servicio.**
+Descartada: paginar «después de leer todo» no reduce ni la consulta ni la memoria del
+servidor; solo reduce el payload. Es media solución con el coste completo.
+
+**A11 — Paginar las 16 sin excepciones.**
+Descartada como propuesta (sujeta a Q1): las 3 del Anexo IV pierden su significado al
+paginarse y sus conjuntos están acotados por entidad o por jornada. Forzarlas cuesta 4
+consultas por render (las agrupadas) o una consulta extra solo para el podio, a cambio de cero
+beneficio de volumen.
