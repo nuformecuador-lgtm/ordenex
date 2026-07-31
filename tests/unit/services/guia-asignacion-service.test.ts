@@ -1079,7 +1079,7 @@ describe("GuiaAsignacionService.asignarRecoleccion (feature 157)", () => {
       evaluar: vi.fn(
         async (rows: OrdenAsignabilidadRow[]) =>
           new Map<string, EstadoAsignabilidad>(
-            rows.map((row) => [row.ordenId, "sin_coordenadas" as EstadoAsignabilidad]),
+            rows.map((row) => [row.id, "sin_coordenadas" as EstadoAsignabilidad]),
           ),
       ),
     };
