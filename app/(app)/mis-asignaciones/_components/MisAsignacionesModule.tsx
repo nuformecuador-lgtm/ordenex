@@ -12,6 +12,10 @@ import {
   escogerParaGestion,
   liberarGestion,
 } from "@/lib/actions/mis-asignaciones";
+// Feature 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado, i18n-ready). Desde la
+// 167 lo COMPARTEN los dos portales del mensajero (Entregas y Recolección), así que vive en
+// `lib/constants/` para que no puedan divergir en un mensaje que el humano declaró preciso.
+import { BLOQUEO_AVISO } from "@/lib/constants/bloqueo-mensajero";
 import type {
   MiAsignacionDTO,
   RutaResumenDTO,
@@ -25,7 +29,6 @@ import {
 import { FiltroCantonDistrito } from "./FiltroCantonDistrito";
 import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
 import { RecogerPaqueteCard } from "./RecogerPaqueteCard";
-import { RecoleccionTiendaPanel } from "./RecoleccionTiendaPanel";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { ChatFlotante } from "./chat-demo/ChatFlotante";
@@ -58,15 +61,12 @@ import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 export interface MisAsignacionesModuleProps {
   /** Órdenes en `por_recoger`. */
   porRecoger: MiAsignacionDTO[];
-  /**
-   * Feature 157 (R11): TERCER grupo — lo que el mensajero va a recoger EN LA TIENDA. No entra
-   * en `unionAsignaciones` (no aporta opciones al filtro cantón/distrito ni se filtra por él,
-   * R40) ni en el mapa ni en los KPIs (R39): el paquete todavía no está en la calle.
-   *
-   * Opcional por el patrón aditivo del repo: los fixtures que montan el módulo para probar
-   * otra cosa no tienen que declarar un grupo que no les interesa. La página SIEMPRE lo pasa.
-   */
-  porRecolectar?: MiAsignacionDTO[];
+  // Feature 167 (R33) — CORTE LIMPIO: aquí NO hay ningún grupo de recolección en tienda.
+  // La 157 lo había montado como tercer apartado de este módulo y el mensajero no lo
+  // encontraba; desde la 167 vive en su página propia (`/recoleccion`), con su ítem de menú.
+  // Este módulo no monta lista, ni escáner, ni aviso, ni conteo, ni enlace a esa página: la
+  // pista permanente es el ítem del menú (decisión del humano, 2026-07-31). El guard
+  // `tests/unit/guards/entregas-sin-recoleccion.test.ts` impide que vuelva a colarse.
   /** Órdenes en `en_reparto` (por gestionar), YA ordenadas por la ruta (R28). */
   porGestionar: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
@@ -80,10 +80,6 @@ export interface MisAsignacionesModuleProps {
    */
   bloqueado: boolean;
 }
-
-// Feature 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado, i18n-ready).
-const BLOQUEO_AVISO =
-  "No puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente. Ve a «Cierre del día» para resolverlo.";
 
 // Feature 114: textos del buscador (separados para i18n futura, lenguaje claro). La
 // región y la etiqueta del campo son DISTINTAS a propósito: si coincidieran, el nombre
@@ -105,7 +101,6 @@ const SIN_COINCIDENCIAS_REPARTO = "Ninguna guía en reparto coincide con el filt
 
 export function MisAsignacionesModule({
   porRecoger,
-  porRecolectar = [],
   porGestionar,
   ordenEnGestionId,
   ruta,
@@ -418,18 +413,6 @@ export function MisAsignacionesModule({
             onCantonChange={filtro.setCantonYReset}
             onDistritoChange={filtro.setDistrito}
             onLimpiar={filtro.limpiar}
-          />
-
-          {/* ---------- Apartado: Por recolectar en tienda (feature 157) ---------- */}
-          {/* Va ENCIMA de "Por recoger" porque es lo primero del viaje: el paquete sigue en
-              la tienda y hay que ir por él. El buscador SÍ se le aplica (buscar una guía por
-              número sirve igual recolectando); el filtro cantón/distrito NO (R40): esas
-              órdenes no son paradas de la ruta y su geografía no dice dónde hay que ir, que
-              es la tienda. El panel se oculta solo cuando no hay nada que recolectar. */}
-          <RecoleccionTiendaPanel
-            porRecolectar={filtrarAsignaciones(porRecolectar, query)}
-            bloqueado={bloqueado}
-            onRecolectada={() => router.refresh()}
           />
 
           {/* ---------- Apartado: Por recoger (por_recoger) ---------- */}

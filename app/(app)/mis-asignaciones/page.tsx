@@ -43,7 +43,6 @@ export default async function MisAsignacionesPage() {
       <KpisMensajero kpis={result.kpis} />
       <MisAsignacionesModule
         porRecoger={result.porRecoger}
-        porRecolectar={result.porRecolectar}
         porGestionar={result.porGestionar}
         ordenEnGestionId={result.ordenEnGestionId}
         ruta={result.ruta}
