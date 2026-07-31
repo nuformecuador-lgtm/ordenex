@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, MapPin, Store, Undo2, Warehouse } from "lucide-react";
+import {
+  Calendar,
+  ChevronDown,
+  MapPin,
+  Store,
+  Undo2,
+  User,
+  Warehouse,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,7 +72,6 @@ import {
 const FACTURA_TITULO = "Cierre del día";
 const FACTURA_FOLIO_LABEL = "Comprobante";
 const FACTURA_MENSAJERO_LABEL = "Mensajero";
-const FACTURA_DESTINO_LABEL = "Destino";
 const FACTURA_SOLICITADO_LABEL = "Solicitado";
 const FACTURA_RESUELTO_LABEL = "Resuelto";
 // Conserva el nombre del panel al que reemplazó: es el que localizan los tests y el E2E.
@@ -74,6 +81,13 @@ const FACTURA_ORDENES_TITULO = "Órdenes del cierre";
 const FACTURA_TOTAL_GENERAL_LABEL = "Total general";
 const FACTURA_MOTIVO_RECHAZO_LABEL = "Motivo de rechazo";
 const FACTURA_ORDENES_KPI_LABEL = "Órdenes";
+// --- Rótulos de la tarjeta compacta del resumen ---
+const RESUMEN_TOTAL_LABEL = "Total";
+const RESUMEN_VER_DETALLES = "Ver detalles";
+const RESUMEN_OCULTAR_DETALLES = "Ocultar";
+const RESUMEN_METODOS_TITULO = "Desglose por método";
+const RESUMEN_AJUSTES_TITULO = "Ajustes";
+const RESUMEN_FECHAS_TITULO = "Fechas";
 
 const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
   bodega_central: "Bodega central",
@@ -98,21 +112,6 @@ function fecha(iso: string | null): string {
 /* ------------------------------------------------------------------ *
  * Piezas del comprobante
  * ------------------------------------------------------------------ */
-
-/** Bloque `etiqueta / valor` de la cabecera del comprobante. */
-function DatoCabecera({
-  label,
-  children,
-}: Readonly<{ label: string; children: ReactNode }>) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-sm font-medium text-navy">{children}</span>
-    </div>
-  );
-}
 
 /**
  * Renglón de la factura: concepto a la izquierda, monto a la derecha, alineados por
@@ -180,21 +179,6 @@ function BloqueRenglones({
   );
 }
 
-/** Total de cierre del comprobante, destacado sobre fondo de marca. */
-function TotalFactura({
-  label,
-  value,
-}: Readonly<{ label: string; value: string }>) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-navy px-4 py-3 text-white">
-      <span className="text-sm font-medium uppercase tracking-wider">
-        {label}
-      </span>
-      <span className="text-xl font-semibold tabular-nums">{value}</span>
-    </div>
-  );
-}
-
 /** KPI animado del comprobante (contador desde 0, igual que el portal del mensajero). */
 function KpiFactura({
   label,
@@ -244,47 +228,6 @@ function ParPagoIngreso({
   );
 }
 
-/** Cabecera común del comprobante: marca, folio, estado y las partes involucradas. */
-function CabeceraFactura({
-  cierre,
-  acciones,
-}: Readonly<{ cierre: CierreAdminResumen; acciones?: ReactNode }>) {
-  return (
-    <div className="flex flex-col gap-4 border-b border-border pb-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-brand">
-            Ordenex
-          </span>
-          <h3 className="text-lg font-semibold text-navy">{FACTURA_TITULO}</h3>
-          <span className="font-mono text-xs text-muted-foreground">
-            {FACTURA_FOLIO_LABEL} #{folio(cierre.cierreId)}
-          </span>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <EstadoCierreBadge estado={cierre.estado} />
-          {acciones}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <DatoCabecera label={FACTURA_MENSAJERO_LABEL}>
-          {cierre.mensajeroNombre}
-        </DatoCabecera>
-        <DatoCabecera label={FACTURA_DESTINO_LABEL}>
-          {destino(cierre)}
-        </DatoCabecera>
-        <DatoCabecera label={FACTURA_SOLICITADO_LABEL}>
-          {fecha(cierre.solicitadoAt)}
-        </DatoCabecera>
-        <DatoCabecera label={FACTURA_RESUELTO_LABEL}>
-          {fecha(cierre.resueltoAt)}
-        </DatoCabecera>
-      </div>
-    </div>
-  );
-}
-
 /** Envoltorio del comprobante: card con la franja de marca arriba. */
 function HojaFactura({
   ariaLabel,
@@ -293,12 +236,21 @@ function HojaFactura({
   return (
     // gap-0/py-0: la card por defecto separa y acolcha sus hijos; acá la franja de
     // marca tiene que pegarse al borde superior y el padding lo pone el cuerpo.
+    //
+    // min-h-0 + overflow-y-auto: dentro del modal esta card es un flex item de un
+    // contenedor con `max-h`. El `overflow-hidden` que trae `Card` por defecto ya le
+    // fijaba `min-height: 0` (regla de tamaño mínimo automático de flexbox), así que
+    // en vez de desbordar el contenedor -y hacerlo scrollear- la card se ENCOGÍA y
+    // recortaba el comprobante sin dejar barra. Con `overflow-y-auto` el mismo encogido
+    // ahora produce scroll dentro de la card; `overflow-x-hidden` conserva el recorte
+    // horizontal que redondea las esquinas. Fuera del modal no hay `max-h`, la card
+    // crece con su contenido y esto no cambia nada.
     <Card
       aria-label={ariaLabel}
       role="region"
-      className="gap-0 overflow-hidden py-0 shadow-sm"
+      className="min-h-0 gap-0 overflow-x-hidden overflow-y-auto py-0 shadow-sm"
     >
-      <div aria-hidden="true" className="h-1.5 w-full bg-brand" />
+      <div aria-hidden="true" className="h-1.5 w-full shrink-0 bg-brand" />
       <div className="flex flex-col gap-5 p-5">{children}</div>
     </Card>
   );
@@ -308,6 +260,70 @@ function HojaFactura({
  * Resumen (cola + histórico) como comprobante
  * ------------------------------------------------------------------ */
 
+/**
+ * ¿El monto STRING es cero? Comparación TEXTUAL ("0", "0.00"), no aritmética: sirve para
+ * apagar visualmente un renglón sin romper el money-safe (nada de `Number`/`parseFloat`).
+ */
+function esMontoCero(monto: string): boolean {
+  return /^-?0(\.0+)?$/.test(monto.trim());
+}
+
+/** Renglón `concepto ..... monto` del desplegable compacto. El monto en cero va apagado. */
+function LineaMonto({
+  label,
+  monto,
+  ultima = false,
+}: Readonly<{ label: string; monto: string; ultima?: boolean }>) {
+  return (
+    <div
+      className={cn(
+        "flex justify-between gap-3 py-1 text-[13px]",
+        !ultima && "border-b border-dashed border-border",
+      )}
+    >
+      <span className="text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "tabular-nums",
+          esMontoCero(monto)
+            ? "text-muted-foreground"
+            : "font-medium text-navy",
+        )}
+      >
+        {money(monto)}
+      </span>
+    </div>
+  );
+}
+
+/** Rótulo de una columna del desplegable compacto. */
+function TituloColumna({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+/** Dato `rótulo / valor` de la columna de fechas. */
+function LineaFecha({
+  label,
+  value,
+  ultima = false,
+}: Readonly<{ label: string; value: string; ultima?: boolean }>) {
+  return (
+    <div
+      className={cn(
+        "flex justify-between gap-3 py-1 text-[13px]",
+        !ultima && "border-b border-dashed border-border",
+      )}
+    >
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-navy tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 export interface CierreFacturaResumenProps {
   cierre: CierreAdminResumen;
   /** Botonera de la fila equivalente en la tabla (Ver / decidir, Destrabar…). */
@@ -315,67 +331,155 @@ export interface CierreFacturaResumenProps {
 }
 
 /**
- * Un cierre de la cola o del histórico leído como comprobante: cabecera con las partes,
- * KPIs animados, el desglose del dinero recibido y el total. Mismos datos que la fila de
- * la tabla, sin nada derivado acá.
+ * Un cierre de la cola o del histórico leído como comprobante COMPACTO: una cabecera de
+ * dos líneas —marca, folio, estado, las partes y el total— y el desglose (métodos,
+ * ajustes, fechas) detrás de un desplegable. Mismos datos que la fila de la tabla, sin
+ * nada derivado acá: los montos llegan STRING y se muestran con `money()`.
+ *
+ * Lo que NO se esconde tras el desplegable, a propósito: la botonera `acciones` (es la
+ * decisión del cierre, no un detalle) y el motivo de rechazo (explica el estado). El
+ * toggle se renderiza UNA sola vez y se reordena por CSS: duplicarlo por breakpoint
+ * duplicaría también los nombres accesibles de los botones.
  */
 export function CierreFacturaResumen({
   cierre,
   acciones,
 }: Readonly<CierreFacturaResumenProps>) {
-  return (
-    <HojaFactura
-      ariaLabel={`Comprobante del cierre de ${cierre.mensajeroNombre}`}
-    >
-      <CabeceraFactura cierre={cierre} acciones={acciones} />
+  const [open, setOpen] = useState(false);
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <KpiFactura
-          label={FACTURA_TOTAL_GENERAL_LABEL}
-          value={cierre.totales.general}
-          moneda
-        />
-        <KpiFactura
-          label={PAGO_MENSAJERO_LABEL}
-          value={cierre.totalPagoMensajero}
-          moneda
-        />
-        <KpiFactura
-          label={INGRESO_BODEGA_RECHAZOS_LABEL}
-          value={cierre.totalIngresoBodegaRechazos}
-          moneda
-        />
+  return (
+    // gap-0/py-0: el padding lo ponen la cabecera y el panel; la franja de marca es el
+    // borde superior de la card, así que no hay hueco que separar.
+    <Card
+      aria-label={`Comprobante del cierre de ${cierre.mensajeroNombre}`}
+      role="region"
+      className="gap-0 overflow-hidden border-t-[3px] border-t-brand py-0 shadow-sm"
+    >
+      <div className="flex flex-col gap-2.5 px-4 py-3.5 md:gap-2 md:px-5">
+        {/* Línea 1: marca · título · folio · estado — y a la derecha acciones + toggle. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex flex-wrap items-center gap-2 md:gap-2.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand">
+              Ordenex
+            </span>
+            <span className="text-base font-semibold text-navy">
+              {FACTURA_TITULO}
+            </span>
+            <span className="font-mono text-xs text-muted-foreground">
+              #{folio(cierre.cierreId)}
+            </span>
+            <EstadoCierreBadge estado={cierre.estado} />
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {acciones}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-expanded={open}
+              aria-label={`${
+                open ? RESUMEN_OCULTAR_DETALLES : RESUMEN_VER_DETALLES
+              } del cierre de ${cierre.mensajeroNombre}`}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? RESUMEN_OCULTAR_DETALLES : RESUMEN_VER_DETALLES}
+              <ChevronDown
+                size={15}
+                aria-hidden="true"
+                className={cn("transition-transform", open && "rotate-180")}
+              />
+            </Button>
+          </div>
+        </div>
+
+        {/* Línea 2: las partes involucradas — y el total del cierre. */}
+        <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between md:gap-4">
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12.5px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <User size={14} aria-hidden="true" />
+              {cierre.mensajeroNombre}
+            </span>
+            <span aria-hidden="true" className="hidden text-border md:inline">
+              |
+            </span>
+            <span className="flex items-center gap-1">
+              <Warehouse size={14} aria-hidden="true" />
+              {destino(cierre)}
+            </span>
+            <span aria-hidden="true" className="hidden text-border md:inline">
+              |
+            </span>
+            <span className="flex items-center gap-1">
+              <Calendar size={14} aria-hidden="true" />
+              {fecha(cierre.solicitadoAt)}
+            </span>
+          </div>
+
+          <div className="flex items-baseline gap-2 whitespace-nowrap md:justify-end">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground md:text-[11px]">
+              {RESUMEN_TOTAL_LABEL}
+            </span>
+            <span className="text-[20px] font-semibold text-navy tabular-nums md:text-[22px]">
+              <KpiValorAnimado value={cierre.totales.general} moneda />
+            </span>
+          </div>
+        </div>
+
+        {/* El motivo explica el estado: no se esconde tras el desplegable. */}
+        {cierre.motivoRechazo ? (
+          <p className="text-[12.5px] text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {FACTURA_MOTIVO_RECHAZO_LABEL}:{" "}
+            </span>
+            {cierre.motivoRechazo}
+          </p>
+        ) : null}
       </div>
 
-      <BloqueRenglones titulo={FACTURA_RECIBIDO_TITULO}>
-        <Renglon label="Efectivo" value={money(cierre.totales.efectivo)} />
-        <Renglon label="SINPE" value={money(cierre.totales.simpe)} />
-        <Renglon
-          label="Transferencia"
-          value={money(cierre.totales.transferencia)}
-        />
-      </BloqueRenglones>
+      {open ? (
+        <div className="border-t border-border bg-muted/50 px-4 py-4 md:px-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.2fr_1fr_1fr] md:gap-5">
+            <section aria-label={FACTURA_RECIBIDO_TITULO}>
+              <TituloColumna>{RESUMEN_METODOS_TITULO}</TituloColumna>
+              <LineaMonto label="Efectivo" monto={cierre.totales.efectivo} />
+              <LineaMonto label="SINPE" monto={cierre.totales.simpe} />
+              <LineaMonto
+                label="Transferencia"
+                monto={cierre.totales.transferencia}
+                ultima
+              />
+            </section>
 
-      {/* Pago al mensajero e ingreso de bodega: siempre en la misma línea. */}
-      <ParPagoIngreso
-        pagoMensajero={cierre.totalPagoMensajero}
-        ingresoBodegaRechazos={cierre.totalIngresoBodegaRechazos}
-      />
+            <section aria-label={RESUMEN_AJUSTES_TITULO}>
+              <TituloColumna>{RESUMEN_AJUSTES_TITULO}</TituloColumna>
+              <LineaMonto
+                label={PAGO_MENSAJERO_LABEL}
+                monto={cierre.totalPagoMensajero}
+              />
+              <LineaMonto
+                label={INGRESO_BODEGA_RECHAZOS_LABEL}
+                monto={cierre.totalIngresoBodegaRechazos}
+                ultima
+              />
+            </section>
 
-      <TotalFactura
-        label={FACTURA_TOTAL_GENERAL_LABEL}
-        value={money(cierre.totales.general)}
-      />
-
-      {cierre.motivoRechazo ? (
-        <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {FACTURA_MOTIVO_RECHAZO_LABEL}:{" "}
-          </span>
-          {cierre.motivoRechazo}
-        </p>
+            <section aria-label={RESUMEN_FECHAS_TITULO}>
+              <TituloColumna>{RESUMEN_FECHAS_TITULO}</TituloColumna>
+              <LineaFecha
+                label={FACTURA_SOLICITADO_LABEL}
+                value={fecha(cierre.solicitadoAt)}
+              />
+              <LineaFecha
+                label={FACTURA_RESUELTO_LABEL}
+                value={fecha(cierre.resueltoAt)}
+                ultima
+              />
+            </section>
+          </div>
+        </div>
       ) : null}
-    </HojaFactura>
+    </Card>
   );
 }
 

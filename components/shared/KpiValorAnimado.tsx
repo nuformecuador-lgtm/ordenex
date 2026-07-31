@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import CountUp from "react-countup";
 
 import { cn } from "@/lib/utils";
@@ -30,13 +31,22 @@ export function KpiValorAnimado({
 
   // es-CR: separador de miles "." y decimal ",". minimumFractionDigits 0 para no
   // forzar ",00" en enteros, igual que PriceLabel.
-  const formatear = (n: number) => {
-    const formatted = new Intl.NumberFormat("es-CR", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: decimals,
-    }).format(n);
-    return moneda ? `${SIMBOLO} ${formatted}` : formatted;
-  };
+  //
+  // MEMOIZADA A PROPÓSITO: react-countup reinicia la animación desde `start` en un
+  // efecto que depende de la IDENTIDAD de `formattingFn`. Si se recreara en cada
+  // render, cualquier re-render del padre (abrir el detalle de un cierre, por
+  // ejemplo) relanzaría el conteo desde 0. Las deps son los únicos valores que la
+  // función lee, así que el formato sigue correcto.
+  const formatear = useCallback(
+    (n: number) => {
+      const formatted = new Intl.NumberFormat("es-CR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: decimals,
+      }).format(n);
+      return moneda ? `${SIMBOLO} ${formatted}` : formatted;
+    },
+    [decimals, moneda],
+  );
 
   return (
     <span className={cn("tabular-nums whitespace-nowrap", className)}>
