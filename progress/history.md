@@ -2288,3 +2288,68 @@ Entregas con guard de no-reintroducción. Una sola migración: un índice
 - **Incidente de arnés, saldado aparte:** el primer `backend_dev` **murió al arrancar** porque las
   definiciones de `.claude/agents/*.md` fijaban `model: opus-4.8`, un id que ya no existe.
   `spec_author` y `reviewer` sobrevivieron por no fijar modelo. Ver el chore de saneamiento.
+
+## Feature 123 — la tabla rollup diaria `analytics_daily` (2026-07-31)
+
+- **Solo el DDL, y la tabla nace vacía a propósito.** `migration.sql` + `down.sql` + modelo
+  Prisma + tests. Cero filas escritas: el job que la puebla es la 124 y el backfill la 125.
+  Un guard verifica que no tiene consumidores (R44), así que la frontera con la 124 queda
+  medida en vez de prometida.
+- **El grano de la ficha estaba mal y el catálogo lo corrigió.** La ficha declaraba 5
+  columnas; son **6**. Faltaba `causa_devolucion`, que la métrica `motivos_devolucion` de la
+  135 necesita para existir —es `producida` con fuente rollup—, así que sin ella la tabla
+  nacía inservible para su única consumidora. En cambio `metodo_pago` se omite bien: su única
+  consumidora es `live`, que no se materializa. **Regla que sale de aquí: mandar el catálogo
+  filtrado por clase, nunca `DIMENSIONES` en bruto.**
+- **Tres promesas se volvieron estructura.** `primer_intento_ok <= entregas` como `CHECK` se
+  cumple fila a fila, luego la suma también: la tasa **no puede pasar de 1 en ninguna
+  agregación**, ni con un job mal escrito. Los otros dos impiden segundos acumulados con
+  denominador vacío y medidas negativas. El dilema del NULL de `mensajero_id` se resolvió con
+  `NULLS NOT DISTINCT` (PG ≥ 15; el motor local es **16.1**, medido con `version()`, no
+  inferido). Producción sin confirmar: riesgo de despliegue escrito, no enterrado.
+- **La no-aditividad del stock, impedida en tres capas** —el sufijo `_stock` en el nombre, un
+  `COMMENT ON COLUMN` con la frase literal, y un tripwire que rastrea `lib/` y `app/`—. Se
+  descartó sacarlo a otra tabla porque `TablaRollup` es un literal **cerrado** en el contrato
+  de la 135: habría obligado a modificar la dependencia y las otras diez features del clado.
+- **El bloqueante: el modelo iba a hacer que Prisma borrara el único del grano.** El
+  `schema.prisma` omitía el `@@unique`, así que para Prisma `analytics_daily_grano_key`
+  sobraba en la base. En cuanto la 124 corriera `pnpm db:migrate`, habría emitido un
+  `DROP INDEX` colado dentro de su cambio legítimo — y entonces pasa lo que describe la
+  cabecera de la propia migración: **el rollup se duplica sin un solo error**. Ninguno de los
+  tres tests lo veía, porque leen el `.sql` y el `.prisma`, **no la relación entre ambos**.
+  Agravante: la red protegía el bug, con un `not.toMatch(/@@unique/)`. El repo ya tenía el
+  caso resuelto y documentado en la migración de tarifas y nadie lo miró.
+- **Lo que de verdad faltaba no era el `@@unique`, sino el test que lo vigila.** Se añadió uno
+  que corre `migrate diff` y compara objeto a objeto contra el `.sql`, para que un drift
+  futuro salga rojo en su propio PR en vez de aparecer como un `DROP INDEX` escondido en el de
+  otra feature. Verificado por mutación en tres variantes; quitar el `map:` lo pone rojo y
+  revela que el nombre por defecto **se trunca a 63 caracteres**, o sea que el `map:` nunca
+  fue cosmético.
+- **Verificación medida por el leader, no copiada del agente:** typecheck 0, lint delta 0
+  (los 3 errores de React Compiler en `OrdenesModule.tsx` son heredados de `dev`), suite de
+  **664 archivos** con 1 rojo determinista ajeno (`no-embalaje`, que dispara por un texto en
+  los specs de la 135). Round-trip UP→DOWN→UP contra Postgres real con checksum sha256
+  idéntico. **45 R, 45 mapeados.** Reviewer: 1 bloqueante —cerrado— y 9 menores.
+- **Trazabilidad honesta, por insistencia del reviewer:** de los 45 R, **33 los mide una
+  aserción que discrimina y 12 solo una regex sobre el texto del SQL** (asseveran que existe
+  un `COMMENT`, no un comportamiento). Es aceptable en una feature de solo-DDL —no hay dato
+  con el que falsarlos— pero se separó en el mapa en vez de presentarlos con la misma tinta.
+  La deuda de verificación va dirigida a la 124.
+- **Una grieta declarada y otra que no lo estaba.** El spec admite que una gestión anulada
+  días después cambiaría un día ya cerrado y que el job **no** lo corrige (desvío por exceso,
+  corrección deliberada vía la 125). El reviewer encontró la hermana: las coordenadas
+  (`zona_id`, `tienda_id`, `mensajero_id`, `estatus_id`) se leen de la orden **en el corte** y
+  esos campos cambian después, así que **la 125 recomputando el día D no reproduce lo que la
+  124 escribió**, aunque R35 venda inmutabilidad. Dirigida a la 124/125 con la disyuntiva
+  explícita: congelar coordenadas o rebajar R35.
+- **Incidente de arnés — el guardia de frontera de la 135, resuelto dos veces en paralelo.**
+  Puso 4 rojos aquí. No era la 123 cruzando una frontera: era un guardia branch-scoped que
+  quedó commiteado en `dev` y pasó a juzgar el diff de toda rama posterior; estaba rojo **en
+  `dev` mismo** por diff vacío, y su propio mensaje lo delataba. Esta rama lo acotó con un
+  `skipIf`; otra sesión lo borró entero en `dev` (`8699443d`). El merge aceptó el borrado:
+  resucitarlo habría revertido en silencio una decisión ajena. **Lección: un guard que mide el
+  diff contra `dev` caduca en el instante en que se mergea, y hay que decidir su retirada en
+  el mismo PR que lo introduce.**
+- **El worktree aislado se ganó el sueldo.** El checkout principal cambió de rama a mitad de
+  la feature (otra sesión), justo lo que ya había matado tres agentes en la 122. Trabajar en
+  `ordenex-wt-123` lo hizo irrelevante.
