@@ -67,6 +67,20 @@ export interface CriterioIntento {
   reprogramadaId: string | null;
 }
 
+/**
+ * Feature 167 (design §5.3, R24/R25/R28) — una recoleccion en tienda YA HECHA, leida del
+ * HISTORIAL. `recolectadaAt` es el `created_at` de la fila de historial: el instante REAL de la
+ * transicion, que es el unico dato que no miente sobre lo ya hecho (el historial es append-only
+ * e inmutable, 49/R2). No lleva el estado ACTUAL de la orden a proposito: es irrelevante (R26).
+ */
+export interface RecoleccionHistorialRow {
+  ordenId: string;
+  numGuia: number | null;
+  numRemision: string;
+  tiendaNombre: string;
+  recolectadaAt: Date;
+}
+
 export interface IOrdenHistorialRepository {
   /**
    * R6/R7: CHOKE POINT del historial. Inserta un LOTE de transiciones (createMany) en la
@@ -148,4 +162,34 @@ export interface IOrdenHistorialRepository {
   findOrigenesReversion(
     items: readonly OrigenReversionItem[],
   ): Promise<Map<string, string | null>>;
+  /**
+   * Feature 167 (design §5.3, R24/R25/R26/R28/R29/R32) — las recolecciones en tienda que
+   * `actorUsuarioId` actuo en la ventana `[desde, hasta)`, de la MAS RECIENTE a la mas antigua,
+   * como mucho `limite` filas.
+   *
+   * LECTURA PURA: la ventana la calcula el service (R27, `lib/utils/fecha-cr.ts`); aqui solo se
+   * aplica. `desde` INCLUSIVO, `hasta` EXCLUSIVO.
+   *
+   *   where: actorUsuarioId + origenTipo `recoleccion_tienda` + createdAt en rango
+   *          + orden.deletedAt = null           (R29: las borradas no figuran)
+   *   orderBy: createdAt desc                   (R28)
+   *   take: limite
+   *
+   * NOTA DELIBERADA: **no** filtra por `estatus_destino_id`. La familia `recoleccion_tienda`
+   * tiene una sola arista (#43) y el estado ACTUAL de la orden es IRRELEVANTE — eso es justo lo
+   * que R26 exige: una orden ya recibida en la bodega central (138, `en_bodega_central`) tiene
+   * que SEGUIR figurando como recolectada hoy.
+   *
+   * Resuelve sobre el indice `orden_historial_actor_origen_created_idx`
+   * (actor_usuario_id, origen_tipo, created_at), R32.
+   *
+   * `limite <= 0` -> lista vacia SIN emitir consulta (patron
+   * `contarIntentosVigentesEnLote` / `OrdenRepository.findMensajerosBloqueados`).
+   */
+  findRecoleccionesDeActor(
+    actorUsuarioId: string,
+    desde: Date,
+    hasta: Date,
+    limite: number,
+  ): Promise<RecoleccionHistorialRow[]>;
 }

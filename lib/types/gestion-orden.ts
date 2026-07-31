@@ -201,13 +201,13 @@ export type GestionarActionInput = z.infer<typeof gestionarSchema>;
 
 // --- Resultados expuestos por la Server Action (agregan `unauthenticated`) ---
 
+// Feature 167 (R34): DOS grupos. Lo que espera al mensajero EN LA TIENDA salio a su apartado
+// propio (`/recoleccion`) con su propio contrato (`ListarRecoleccionResult`).
 export type ListarMisAsignacionesResult =
   | {
       status: "ok";
       porRecoger: MiAsignacionDTO[];
       porGestionar: MiAsignacionDTO[];
-      /** Feature 157 (R11): tercer grupo — lo que espera al mensajero EN LA TIENDA. */
-      porRecolectar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis; // Feature 61
       ruta: RutaResumenDTO; // Feature 92/R27/R28/R30

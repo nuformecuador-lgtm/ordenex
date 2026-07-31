@@ -168,7 +168,10 @@ model PlantillaMensaje {
   id             String          @id @default(uuid())
   nombre         String          @unique // R10: identificador unico
   cuerpo         String // texto con placeholders {{clave}}
-  variables      String[] // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
+  // `@default([])` NO es cosmetico: la migracion `20260722130000_plantilla_mensaje` creo la
+  // columna `text[] NOT NULL DEFAULT '{}'` como REQUISITO escrito (R12/R15/R27: "nunca null").
+  // Sin declararlo aqui, todo `migrate dev` proponia `DROP DEFAULT` y habria roto ese requisito.
+  variables      String[]        @default([]) // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
   estado         PlantillaEstado @default(pending) // R12 (Decision humana 1)
   // Integracion WhatsApp: enlace al Message Template de Meta. NULL = todavia no propagada a
   // Meta (o Meta no la ha devuelto en la sincronizacion). El envio usa `nombre` + `templateIdioma`
@@ -277,7 +280,12 @@ model ChatMensaje {
   plantilla    PlantillaMensaje? @relation("ChatMensajePlantilla", fields: [plantillaId], references: [id], onDelete: SetNull)
 
   @@index([conversacionId, ocurridoAt]) // R22: historial ordenado
-  @@index([errorCodigo, ocurridoAt(sort: Desc)]) // diagnostico: fallos recientes por codigo
+  // El indice REAL es PARCIAL (`WHERE error_codigo IS NOT NULL`) y va a mano en
+  // `20260728230000_chat_mensaje_error_meta`; Prisma no expresa el predicado, asi que aqui se
+  // declara el btree equivalente. El `map:` es OBLIGATORIO: sin el, Prisma propone renombrarlo a
+  // su nombre por defecto y ese rename dejaria mudo al `DROP INDEX IF EXISTS
+  // "chat_mensaje_error_codigo_idx"` del `down.sql` de esa migracion.
+  @@index([errorCodigo, ocurridoAt(sort: Desc)], map: "chat_mensaje_error_codigo_idx") // diagnostico: fallos recientes por codigo
   @@map("chat_mensaje")
 }
 
@@ -1231,7 +1239,10 @@ model PremioRanking {
   monto       Decimal? @db.Decimal(12, 2) // NULLABLE = sin premio asignado (R9)
   descripcion String?  @map("descripcion") // feature 76 (cambio de alcance 2026-07-16): rotulo libre opcional por posicion, INDEPENDIENTE del monto (NULLABLE = sin descripcion)
   createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  // `@default(now())` declara el default que la migracion `20260716130000_premio_ranking` ya
+  // creo en la columna. No es decorativo: la SEMILLA de esa misma migracion inserta las 3
+  // posiciones SIN nombrar `updated_at`, asi que el default es lo que hace valido ese INSERT.
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("premio_ranking")
 }
@@ -1303,6 +1314,16 @@ model OrdenHistorialEstado {
 
   @@index([ordenId, createdAt]) // R5: linea de tiempo de UNA orden
   @@index([ordenId, estatusDestinoId]) // R24: conteo de intentos (destinos `devuelta`)
+  // Feature 167 (R32) — «Recolectadas hoy» del mensajero: `actor_usuario_id` = actor,
+  // `origen_tipo` = 'recoleccion_tienda', `created_at` en la ventana del dia CR. Los dos indices
+  // de arriba empiezan por `orden_id` y esta consulta NO filtra por orden: sin este indice seria
+  // un seq scan sobre una tabla append-only que crece con CADA transicion del sistema, en una
+  // pantalla que el mensajero abre decenas de veces al dia desde el movil.
+  // Orden de columnas: igualdad -> igualdad -> rango, el unico que un btree recorre sin filtro
+  // residual. `map:` EXPLICITO porque el nombre por defecto de Prisma
+  // (`orden_historial_estado_actor_usuario_id_origen_tipo_created_at_idx`, 66 caracteres) excede
+  // el limite de 63 de Postgres y quedaria truncado de forma no evidente.
+  @@index([actorUsuarioId, origenTipo, createdAt], map: "orden_historial_actor_origen_created_idx")
   @@map("orden_historial_estado")
 }
 
@@ -1371,7 +1392,12 @@ model CierreDetail {
   orden  Orden     @relation(fields: [ordenId], references: [id])
   zona   Zona      @relation(fields: [zonaId], references: [id])
   tienda Usuario   @relation("CierreDetailTienda", fields: [tiendaId], references: [id])
-  tarifa Tarifa?   @relation(fields: [tarifaId], references: [id])
+  // `onDelete: Restrict` NO es el default de Prisma para una relacion OPCIONAL (seria SetNull):
+  // se declara porque la migracion `20260715140000_cierre_detail` creo la FK con ON DELETE
+  // RESTRICT, igual que sus cuatro hermanas. La fila es INMUTABLE (R10) y `tarifa_id` es la
+  // contrapartida auditable de la tarifa congelada: un SET NULL borraria esa traza en silencio
+  // al borrar una tarifa. Sin esta linea, todo `migrate dev` proponia drop+add de la FK.
+  tarifa Tarifa?   @relation(fields: [tarifaId], references: [id], onDelete: Restrict)
 
   @@unique([cierreId, ordenId]) // R2: el grano. Es tambien el indice de la ruta caliente (los feeds filtran por cierre_id)
   @@index([ordenId]) // trazar en que cierres aparecio una orden
@@ -1404,7 +1430,9 @@ model ApiKey {
   usuarioId     String       @unique @map("usuario_id") // [D6] 1:1 con la cuenta dedicada (R21)
   createdById   String       @map("created_by_id") // actor que la genero (R21)
   createdAt     DateTime     @default(now()) @map("created_at") // R21
-  updatedAt     DateTime     @updatedAt @map("updated_at")
+  // Default declarado para que coincida con `20260716150000_api_key`, que creo la columna
+  // como `NOT NULL DEFAULT CURRENT_TIMESTAMP` (espejo de `created_at`).
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at")
 
   usuario   Usuario @relation("ApiKeyUsuario", fields: [usuarioId], references: [id])
   createdBy Usuario @relation("ApiKeyCreadaPor", fields: [createdById], references: [id])
@@ -1428,7 +1456,8 @@ model WebhookSuscripcion {
   secret         String // CIPHERTEXT del secreto de firma HMAC (design §1.3, D2/R32) — nunca en claro
   activa         Boolean  @default(true) // R8: baja = activa=false
   createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  // Default declarado para que coincida con `20260721130000_webhook_suscripcion`.
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
   owner Usuario @relation("WebhookSuscripcionOwner", fields: [ownerUsuarioId], references: [id], onDelete: Restrict)
 
@@ -1480,7 +1509,8 @@ model Job {
   lastError   String?   @map("last_error")
   dedupeKey   String?   @unique @map("dedupe_key") // el indice REAL es unico PARCIAL (WHERE dedupe_key IS NOT NULL)
   createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  // Default declarado para que coincida con `20260717120000_jobs_cola`.
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@map("jobs")
 }
@@ -1535,7 +1565,8 @@ model RutaOptimizada {
   huellaSet    String?    @map("huella_set")
   ultimoError  String?    @map("ultimo_error")
   createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  // Default declarado para que coincida con `20260720130000_ruta_optimizada`.
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at")
 
   mensajero Usuario                @relation("RutaOptimizadaMensajero", fields: [mensajeroId], references: [id], onDelete: Cascade)
   paradas   RutaOptimizadaParada[]
@@ -1632,8 +1663,10 @@ model Notificacion {
   // Los indices del listado y del alcance son PARCIALES (WHERE ... IS NOT NULL) y van a
   // mano en la migracion; Prisma no los expresa. Lo mismo el unico de dedupe
   // (`notificacion_dedupe_key`, NULLS NOT DISTINCT). Se declaran aqui los btree simples
-  // equivalentes para que el cliente generado conozca la forma de la tabla.
-  @@index([entidadTipo, entidadId])
+  // equivalentes para que el cliente generado conozca la forma de la tabla. El `map:` reproduce
+  // el nombre que la migracion `20260727120000_notificacion` le puso a mano: sin el, Prisma
+  // propone un `ALTER INDEX ... RENAME` en toda migracion futura.
+  @@index([entidadTipo, entidadId], map: "notificacion_entidad_idx")
   @@map("notificacion")
 }
 

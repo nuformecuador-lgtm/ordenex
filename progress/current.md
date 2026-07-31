@@ -8,6 +8,47 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento — **EMPIEZA A LEER POR AQUÍ**
+
+**Feature 167 (apartado propio de recolección) → `done`, PR #231 MERGEADO.** Nació de un reporte de
+uso —«no veo la forma de recolectar»— que resultó ser dos problemas: la base local del humano tenía 4
+migraciones sin aplicar (sin `recolectando` no hay nada que recolectar) y la recolección vivía
+escondida dentro de Entregas, donde el escáner desaparecía justo con la lista vacía. **El relato
+completo, las decisiones y la deuda están en `progress/history.md`**; el detalle técnico, en
+`impl_167-…` y `review_167-…`. Verificación final medida por el leader: `typecheck` verde,
+`pnpm test` **8038/8045** (7 rojos, todos de 2 guards ajenos), `lint` sin un problema nuevo.
+
+> **PENDIENTE HUMANO:** nadie ha visto todavía la cámara leer una etiqueta real. La lista de
+> verificación en pantalla está en `impl_167-apartado-recoleccion-mensajero.md`.
+
+### 🧹 Chore de saneamiento — rama `chore/saneamiento-deudas-arnes` (2026-07-31)
+
+Pedido del humano: «arregla todo lo que viste». Cuatro deudas que la 167 destapó y que **no eran
+suyas**. Estado:
+
+- ✅ **Definiciones de agentes con un modelo inexistente.** Los cinco `.claude/agents/*.md` fijaban
+  `model: opus-4.8` y el primer `backend_dev` de la 167 **murió al arrancar**; `spec_author` y
+  `reviewer` sobrevivieron por no fijar modelo. **Se retiró la línea `model:` de los cuatro que la
+  tenían**: heredar el modelo de la sesión es la única opción que no envejece. Las tablas de
+  `AGENTS.md` y `leader.md` —que repetían la misma columna tres veces sin discriminar nada por
+  `complexity`— se sustituyen por la regla y el porqué.
+- ✅ **Registro saneado.** La **157 → `done`** (su código llevaba días en `dev` con la ficha en
+  `spec_ready`; se mergeó en tres PRs: #217, #225 y #227, verificado por archivos contra
+  `origin/dev`). El **id 162 duplicado** se resuelve renumerando la ficha de WhatsApp a **168**, con
+  el mismo criterio que se aplicó a la 165: la de `ux` conserva el id porque ya tenía rama.
+- ✅ **3 errores de lint en `OrdenesModule.tsx`** saldados. La causa no era la memoizacion sino un
+  `= {}` INALCANZABLE en el destructuring de props: sin props congeladas, React Compiler descarta la
+  optimizacion del componente entero. Se quita el default; sin `eslint-disable`.
+- ✅ **Guard de frontera de la 135: RETIRADO.** Medía el diff de la rama actual y uno de sus casos
+  prohibía crear páginas. La propiedad permanente ya la cubre `modulo-puro.guardia.test.ts`.
+- ✅ **Drift de Prisma: era del `schema.prisma`, no de la base.** Las 10 sentencias son 10 defectos
+  del modelo; se reconcilian con 9 líneas declarativas y **cero DDL**. Dos eran peligrosas en
+  producción (una FK money-critical a `SET NULL` y un `RENAME` que dejaba mudo un `down.sql`).
+
+> ✅ **`./init.sh` termina en `== init OK ==`: 665 archivos / 8052 tests, 0 rojos, 0 errores de lint.**
+> Entregado en el **PR #232**. El último rojo era el guard `no-embalaje` acusando prosa de la 135 que
+> nombra el propio guard: llevaba días rojo porque cada feature lo declaraba deuda ajena y seguía.
+
 ## 🗓️ Sesión 2026-07-30 (noche, cuarta) — feature 129: fase 1
 
 **Pedido del humano: «comienza con la feature 129»** (analítica: ruta, shell y sidebar).
