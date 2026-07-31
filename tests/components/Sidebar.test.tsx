@@ -310,6 +310,7 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     "wallet",
     "shieldAlert",
     "chartColumn",
+    "store",
   ] as const satisfies readonly IconKey[];
   // Comprobación de exhaustividad tipada: si `IconKey` gana una clave que no está en
   // el array de arriba, `Exclude<IconKey, (typeof TODAS_LAS_CLAVES)[number]>` deja de
@@ -387,6 +388,40 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     expect(otrosIconos.length).toBeGreaterThan(0);
     for (const svg of otrosIconos) {
       expect(svg.getAttribute("class")).not.toBe(analiticaClass);
+    }
+  });
+
+  // Feature 167 (R4/R5) — el apartado de recolección tiene entrada propia y su clave de
+  // icono resuelve a un icono PROPIO. Mismo molde que el caso de Analítica de arriba: la
+  // exhaustividad tipada de `TODAS_LAS_CLAVES` prueba que la clave existe en el mapa, pero
+  // no que apunte al componente correcto. Una mutación `store: Truck` en `ICON_BY_KEY`
+  // pasaría todo lo demás y dejaría la recolección con el icono de Entregas — precisamente
+  // la confusión que R5 existe para impedir.
+  it("R4/R5: el enlace a /recoleccion existe y su icono es PROPIO (no el de Entregas)", () => {
+    renderSidebar(SIDEBAR_ITEMS);
+
+    const recoleccionLink = linkPorHref("/recoleccion");
+    expect(recoleccionLink).toHaveAccessibleName("Recolección");
+    const recoleccionSvg = recoleccionLink.querySelector("svg");
+    expect(recoleccionSvg).not.toBeNull();
+    const recoleccionClass = recoleccionSvg!.getAttribute("class") ?? "";
+    // `Store` de lucide marca su svg con esta clase; con `store: Truck` desaparece.
+    expect(recoleccionClass).toMatch(/lucide-store/);
+
+    // Contra "Entregas" en particular (el caso concreto de la mutación).
+    const entregasSvg = linkPorHref("/mis-asignaciones").querySelector("svg");
+    expect(entregasSvg).not.toBeNull();
+    expect(entregasSvg!.getAttribute("class")).not.toBe(recoleccionClass);
+
+    // Contra CUALQUIER otro item/subitem del menú.
+    const otrosIconos = [...screen.getAllByRole("link"), ...screen.getAllByRole("button")]
+      .filter((el) => el !== recoleccionLink)
+      .map((el) => el.querySelector("svg"))
+      .filter((svg): svg is SVGSVGElement => svg !== null && svg !== recoleccionSvg);
+
+    expect(otrosIconos.length).toBeGreaterThan(0);
+    for (const svg of otrosIconos) {
+      expect(svg.getAttribute("class")).not.toBe(recoleccionClass);
     }
   });
 });

@@ -86,6 +86,7 @@ describe("Feature 138 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
     // down.sql del 138 recrea el enum a su estado PRE-138 (fijo, historico); sin descontar los
     // posteriores el SEED crecido divergiria (patron del down del 67/99/100/106).
     const AÑADIDOS_EN_O_DESPUES_DEL_138 = new Set([
+      "asignacion_recoleccion", // feature 157 (ampliacion)
       NUEVO,
       "devolucion_rechazada",
       "recoleccion_tienda", // feature 154

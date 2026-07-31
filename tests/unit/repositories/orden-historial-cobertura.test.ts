@@ -241,6 +241,19 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "resolver",
     origenTipo: "incidente",
   },
+  // #27: feature 157 (ampliacion 2026-07-31). La asignacion de una recoleccion pasa a ser una
+  // TRANSICION (`por_recolectar_en_tienda -> recolectando`) y por tanto deja rastro con familia
+  // propia. Antes solo escribia el mensajero, sin mover el estado: por eso la misma orden se
+  // podia reasignar indefinidamente. La REVERSION reusa `deshacer_asignacion` (#23), que ya
+  // significa revertir una asignacion antes de la recogida. NO enlaza gestion; destino !=
+  // devuelta/reprogramada -> fuera del criterio de intento (160/R1). NO toca num_guia,
+  // prioridad ni asignado_at.
+  {
+    n: 27,
+    repo: "OrdenRepository",
+    simbolo: "asignarRecoleccionLote",
+    origenTipo: "asignacion_recoleccion",
+  },
 ] as const;
 
 // Feature 158/PR2 — familias con MAS DE UN punto de escritura, declaradas UNA A UNA con su
@@ -300,12 +313,12 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 26 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(26);
-    // numeracion 1..26 sin huecos ni duplicados.
+  it("son EXACTAMENTE 27 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(27); // +1: feature 157 (ampliacion)
+    // numeracion 1..27 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-      26,
+      26, 27,
     ]);
   });
 

@@ -28,6 +28,7 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4
   por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4
   por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29 (Q5 confirmada)
+  recolectando: "Recolectando", // feature 157 (ampliacion): ya tiene mensajero y va en camino
   incidente: "Incidente", // feature 154/R30 (Q5 confirmada)
 };
 

@@ -182,7 +182,6 @@ function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0
   return render(
     <MisAsignacionesModule
       porRecoger={props?.porRecoger ?? []}
-      porRecolectar={props?.porRecolectar ?? []} // feature 157
       porGestionar={props?.porGestionar ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
@@ -195,6 +194,21 @@ function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0
 function panelDetalle() {
   return screen.getByRole("region", { name: "Detalle de la orden" });
 }
+
+/**
+ * Despliega la tarjeta de recogida. Desde el 2026-07-31 (decisión del humano) vive plegada
+ * tras su disparador: dentro vive `QrScanner`, y montada dejaba la cámara ENCENDIDA todo el
+ * tiempo que el mensajero tuviera abierta la pantalla. Que el acceso siga existiendo es lo
+ * que estos casos comprueban; que dentro haya un escáner que funciona lo fija
+ * `RecogerPaqueteCard.test.tsx`.
+ */
+async function abrirRecogida(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Recoger paquete" }));
+}
+
+/** El acceso a la recogida por guía/escaneo, plegado o no. */
+const accesoRecogida = () =>
+  screen.queryByRole("button", { name: "Recoger paquete" });
 
 /**
  * Card de una remisión: el `<article>` de `PosOrderCard`. La card ya no tiene CTA
@@ -399,9 +413,11 @@ describe("MisAsignacionesModule", () => {
     expect(within(region).getByText(/REM-R2/)).toBeInTheDocument();
   });
 
-  it("Feature 96: la recogida se ofrece SOLO por input de número de guía y por escáner (sin modal)", () => {
+  it("Feature 96: la recogida se ofrece SOLO por input de número de guía y por escáner (sin modal)", async () => {
+    const user = userEvent.setup();
     renderModule({ porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })] });
 
+    await abrirRecogida(user);
     expect(
       screen.getByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeInTheDocument();
@@ -424,6 +440,7 @@ describe("MisAsignacionesModule", () => {
       ],
     });
 
+    await abrirRecogida(user);
     const region = screen.getByRole("region", { name: "Recoger por número de guía o escaneo" });
     await user.type(within(region).getByLabelText("Número de guía"), "1002");
     await user.click(within(region).getByRole("button", { name: "Recoger" }));
@@ -440,6 +457,7 @@ describe("MisAsignacionesModule", () => {
       porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
     });
 
+    await abrirRecogida(user);
     const region = screen.getByRole("region", { name: "Recoger por número de guía o escaneo" });
     await user.type(within(region).getByLabelText("Número de guía"), "9999");
     await user.click(within(region).getByRole("button", { name: "Recoger" }));
@@ -1166,6 +1184,8 @@ describe("MisAsignacionesModule", () => {
     });
 
     // Los controles de recogida no se renderizan; sí la lista de solo-visualización.
+    // Bloqueado no queda ni el ACCESO: sin disparador no hay forma de abrir la tarjeta.
+    expect(accesoRecogida()).toBeNull();
     expect(
       screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeNull();
@@ -1214,9 +1234,8 @@ describe("MisAsignacionesModule", () => {
     expect(
       screen.getByRole("region", { name: "Detalle de la orden" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("region", { name: "Recoger por número de guía o escaneo" }),
-    ).toBeInTheDocument();
+    // El acceso a la recogida está (la tarjeta se despliega desde ahí).
+    expect(accesoRecogida()).toBeInTheDocument();
   });
 
   // Pedido humano: sin NADA por recoger no hay guía que resolver, así que el input y el
@@ -1227,6 +1246,7 @@ describe("MisAsignacionesModule", () => {
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
+    expect(accesoRecogida()).toBeNull();
     expect(
       screen.queryByRole("region", {
         name: "Recoger por número de guía o escaneo",
@@ -2441,74 +2461,66 @@ describe("MisAsignaciones — intentos de entrega (feature 160)", () => {
 });
 
 // ---------------------------------------------------------------------------------------
-// Feature 157 (R11/R25/R39/R40) — el TERCER apartado convive con los dos de siempre sin
-// contaminarlos. Lo que se protege aquí es sobre todo la NO interferencia: la recolección no
-// entra al mapa, ni al filtro de zona, ni cambia el modo foco del flujo de gestión.
+// Feature 167 (R33) — CORTE LIMPIO. La 157 había montado la recolección en tienda como
+// TERCER apartado de este módulo, y ahí el mensajero no la encontraba: se ocultaba entera
+// cuando la lista estaba vacía, que es justo cuando iba a buscarla. Desde la 167 vive en su
+// página propia (`/recoleccion`).
+//
+// Sustituye al `describe` "apartado por recolectar en tienda (feature 157)" (4 casos), que
+// quedó sin sujeto: R11 ("los tres apartados coexisten") deja de ser cierto POR DISEÑO, y
+// R39/R40/R25 (no entra al mapa, ni al filtro, ni al modo foco) ya no pueden probarse aquí
+// porque no hay nada que pueda entrar. Su cobertura real migró al backend, donde ahora es
+// más fuerte: `mis-asignaciones-service.test.ts` exige la lista EXACTA
+// `["por_recoger","en_reparto"]` (R34) — si el estado no se lee, no puede contaminar nada.
+//
+// Este caso es la ausencia escrita como aserción; el guard estático
+// `tests/unit/guards/entregas-sin-recoleccion.test.ts` la protege del lado del fuente.
 // ---------------------------------------------------------------------------------------
-describe("MisAsignacionesModule — apartado por recolectar en tienda (feature 157)", () => {
-  function recoleccion(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
-    return makeAsignacion({
-      id: "rec-1",
-      numGuia: 9001,
-      numRemision: "REM-REC",
-      estatusValue: "por_recolectar_en_tienda",
-      tiendaNombre: "Tienda Norte",
-      secuenciaRuta: null,
-      ...over,
-    });
-  }
-
-  it("R11: los tres apartados coexisten y se distinguen", () => {
+describe("MisAsignacionesModule — Entregas no monta ninguna superficie de recolección (feature 167)", () => {
+  it("R33: ni región, ni escáner, ni aviso, ni conteo, ni enlace al apartado nuevo", () => {
     renderModule({
-      porRecolectar: [recoleccion()],
       porRecoger: [makeAsignacion({ id: "p1", numRemision: "REM-P" })],
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
     });
 
-    expect(
-      screen.getByRole("region", { name: "Por recolectar en tienda" }),
-    ).toBeInTheDocument();
+    // Los dos apartados de Entregas siguen ahí (R35: el flujo de gestión no cambia).
     expect(screen.getByRole("region", { name: "Por recoger" })).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "En reparto / por gestionar" }),
     ).toBeInTheDocument();
-  });
 
-  it("R40: no aporta opciones al filtro cantón/distrito (no es una parada de la ruta)", async () => {
-    const user = userEvent.setup();
-    renderModule({
-      porRecolectar: [recoleccion({ cantonNombre: "Escazú", provinciaNombre: "San José" })],
-      porGestionar: [
-        makeAsignacion({ id: "g1", cantonNombre: "Curridabat", provinciaNombre: "San José" }),
-      ],
-    });
-
-    await user.click(screen.getByRole("combobox", { name: "Filtrar por cantón" }));
-    const listbox = await screen.findByRole("listbox");
-
-    // El cantón de la recolección NO se ofrece: filtrar el reparto por la geografía de un
-    // paquete que sigue en la tienda no significa nada.
-    expect(within(listbox).getByRole("option", { name: /Curridabat/ })).toBeInTheDocument();
-    expect(within(listbox).queryByRole("option", { name: /Escazú/ })).toBeNull();
-  });
-
-  it("R39: no entra en los KPIs de ruta ni en el mapa (sigue en la tienda)", () => {
-    renderModule({ porRecolectar: [recoleccion()], porGestionar: [] });
-
-    // Sin órdenes en reparto no hay paradas que dibujar, aunque haya recolecciones.
-    expect(screen.queryByTestId("ruta-mapa")).toBeNull();
-  });
-
-  it("R25: el MODO FOCO sigue siendo del flujo de gestión y no muestra el apartado", () => {
-    renderModule({
-      porRecolectar: [recoleccion()],
-      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
-      ordenEnGestionId: "g1",
-    });
-
-    // En foco solo vive la orden activa: la recolección no compite por la pantalla.
+    // La recolección, en cambio, NO deja rastro de ningún tipo.
     expect(
       screen.queryByRole("region", { name: "Por recolectar en tienda" }),
     ).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recolectar por número de guía o escaneo" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Confirmar recolección" }),
+    ).toBeNull();
+    // Sin aviso ni conteo: ninguna mención de la palabra en toda la pantalla.
+    expect(screen.queryByText(/recolect/i)).toBeNull();
+    // Sin enlace al apartado nuevo (decisión 2 del humano: la pista es el ítem del menú).
+    const enlaces = screen.queryAllByRole("link");
+    for (const enlace of enlaces) {
+      expect(enlace.getAttribute("href")).not.toBe("/recoleccion");
+    }
+  });
+
+  it("R33: tampoco con el mensajero BLOQUEADO (donde el aviso podría colarse)", () => {
+    renderModule({
+      porRecoger: [makeAsignacion({ id: "p1", numRemision: "REM-P" })],
+      bloqueado: true,
+    });
+
+    // El aviso de bloqueo de Entregas sí está…
+    expect(
+      screen.getByText(
+        /no puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente/i,
+      ),
+    ).toBeInTheDocument();
+    // …y no arrastra ninguna mención de la recolección con él.
+    expect(screen.queryByText(/recolect/i)).toBeNull();
   });
 });

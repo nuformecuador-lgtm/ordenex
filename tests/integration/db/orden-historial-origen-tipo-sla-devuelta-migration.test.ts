@@ -83,6 +83,7 @@ describe("Feature 99 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
     // dos de la 99 (`liberacion_devuelta_sla`/`escalado_devuelta_sla`) y los dos de la feature 100
     // (`reprogramacion_tienda`/`recuperacion_manual`), apendidos despues (patron del down del 67).
     const AÑADIDOS_EN_O_DESPUES_DEL_99 = new Set([
+      "asignacion_recoleccion", // feature 157 (ampliacion)
       ...NUEVOS,
       "reprogramacion_tienda", // feature 100
       "recuperacion_manual", // feature 100

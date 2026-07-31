@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { PackageCheck } from "lucide-react";
 
+import { EscanerDesplegable } from "@/components/shared/EscanerDesplegable";
 import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
 import { extractNumGuiaFromScan } from "@/lib/utils/paquete-url";
@@ -76,23 +77,30 @@ export function RecogerPaqueteCard({
   );
 
   return (
-    <EscanerGuiaCard
-      ariaLabel="Recoger por número de guía o escaneo"
-      titulo="Recoger paquete"
-      descripcion="Escanea o ingresa el número de guía"
-      icono={PackageCheck}
-      onDecoded={onDecoded}
-      procesando={procesando}
-      mensajeErrorCamara="No se pudo abrir la cámara."
-      manual={{ onSubmit: onManual, submitLabel: "Recoger" }}
-      exito={
-        ultimaRecogida === null ? undefined : (
-          <>
-            Guía <span className="font-semibold">{ultimaRecogida}</span> recogida
-            correctamente.
-          </>
-        )
-      }
-    />
+    /* 2026-07-31 (decisión del humano): la tarjeta vive PLEGADA tras su disparador, como
+       en el resto de la app. Sin él, `QrScanner` quedaba montado todo el tiempo que el
+       mensajero tuviera abierta la pantalla — o sea, la cámara encendida en la calle. La
+       confirmación de la última recogida vive FUERA de la tarjeta (en el estado de este
+       componente), así que cerrar y reabrir no la pierde. */
+    <EscanerDesplegable label="Recoger paquete" labelAbierto="Ocultar escáner">
+      <EscanerGuiaCard
+        ariaLabel="Recoger por número de guía o escaneo"
+        titulo="Recoger paquete"
+        descripcion="Escanea o ingresa el número de guía"
+        icono={PackageCheck}
+        onDecoded={onDecoded}
+        procesando={procesando}
+        mensajeErrorCamara="No se pudo abrir la cámara."
+        manual={{ onSubmit: onManual, submitLabel: "Recoger" }}
+        exito={
+          ultimaRecogida === null ? undefined : (
+            <>
+              Guía <span className="font-semibold">{ultimaRecogida}</span> recogida
+              correctamente.
+            </>
+          )
+        }
+      />
+    </EscanerDesplegable>
   );
 }

@@ -18,13 +18,13 @@ import {
   listarZonasBloqueadasPorCierre,
 } from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
+import { EscanerDesplegable } from "@/components/shared/EscanerDesplegable";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
-import { ReceptorDesplegable } from "./ReceptorDesplegable";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
   ordenesColumnsReprogramada,
@@ -32,6 +32,7 @@ import {
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { AsignarRecoleccionModal } from "./AsignarRecoleccionModal";
+import { QuitarRecoleccionModal } from "./QuitarRecoleccionModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
@@ -48,6 +49,7 @@ type ModalAbierto =
   | "generar-guia"
   | "asignar-bodega"
   | "asignar-recoleccion" // feature 157
+  | "quitar-recoleccion" // feature 157 (ampliacion)
   | "etiquetas"
   | "devolver-tienda"
   | "recuperar-bodega"
@@ -290,6 +292,11 @@ export function OrdenesListado({
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("asignar-recoleccion");
   }
+  // Feature 157 (ampliacion): devolverla al monton de asignables.
+  function abrirQuitarRecoleccion(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("quitar-recoleccion");
+  }
   function abrirEtiquetas(seleccionadas: OrdenListItemDTO[]) {
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("etiquetas");
@@ -379,6 +386,24 @@ export function OrdenesListado({
             key: "asignar-recoleccion",
             label: "Asignar mensajero para recolección",
             onRun: abrirAsignarRecoleccion,
+          },
+          {
+            key: "etiquetas",
+            label: "Imprimir etiquetas",
+            variant: "outline",
+            onRun: abrirEtiquetas,
+          },
+        ];
+      // Feature 157 (ampliacion): ya tiene mensajero y va en camino. La unica decision que
+      // queda al maestro es RETIRARSELA, si ese mensajero no puede ir. Asignar a otro exige
+      // pasar por aqui primero: es lo que impide reasignar en bucle.
+      case "recolectando":
+        return [
+          {
+            key: "quitar-recoleccion",
+            label: "Quitar mensajero",
+            variant: "outline",
+            onRun: abrirQuitarRecoleccion,
           },
           {
             key: "etiquetas",
@@ -611,11 +636,14 @@ export function OrdenesListado({
   // igual. Quien no puede recibir no ve ni el botón.
   // El receptor y su disparador viven a la IZQUIERDA, donde empieza la lectura de la
   // pagina; la carga masiva sigue a la derecha de la misma fila. El disparador despliega
-  // la tarjeta con animacion y la desmonta al cerrar (apaga la camara).
+  // la tarjeta con animacion y la desmonta al cerrar (apaga la camara): el mismo
+  // `EscanerDesplegable` compartido que usan las demás superficies de escaneo.
   const header =
     puedeCargarMasiva || puedeEscanearQr || puedeRecibirBodegaCentral ? (
       puedeEscanearQr || puedeRecibirBodegaCentral ? (
-        <ReceptorDesplegable
+        <EscanerDesplegable
+          label="Recibir paquete"
+          labelAbierto="Ocultar escáner"
           acciones={puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
         >
           {puedeRecibirBodegaCentral ? (
@@ -624,7 +652,7 @@ export function OrdenesListado({
           {puedeEscanearQr ? (
             <EscanerRecepcionOrigen onRecibida={handleSuccess} />
           ) : null}
-        </ReceptorDesplegable>
+        </EscanerDesplegable>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <OrdenesCargaMasivaButton />
@@ -692,6 +720,12 @@ export function OrdenesListado({
             mensajeros={mensajeros ?? []}
             mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             mensajerosConRepartoIds={mensajerosConRepartoIds}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          <QuitarRecoleccionModal
+            open={modalAbierto === "quitar-recoleccion"}
+            ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />

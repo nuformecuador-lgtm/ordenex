@@ -31,6 +31,14 @@ function migrationDirFor(suffix: string): string {
 const migrationDir = migrationDirFor("_orden_historial_origen_deshacer_asignacion");
 const upSql = fs.readFileSync(path.join(migrationDir, "migration.sql"), "utf8");
 const downSql = fs.readFileSync(path.join(migrationDir, "down.sql"), "utf8");
+
+// Valores añadidos POR la 149 o DESPUES de ella. Su down recrea el enum a su estado PRE-149,
+// asi que ninguno debe aparecer ahi. Una migracion futura que añada otro valor DEBE apendirlo
+// aqui — igual que la 149 hizo con los downs del 67/99/100/106/138.
+const AÑADIDOS_EN_O_DESPUES_DEL_149 = new Set<string>([
+  "deshacer_asignacion", // feature 149
+  "asignacion_recoleccion", // feature 157 (ampliacion)
+]);
 const schemaPrisma = fs.readFileSync(
   path.join(__dirname, "..", "..", "..", "db", "schema.prisma"),
   "utf8",
@@ -103,16 +111,21 @@ describe("Feature 149 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
     // Hoy el unico es el propio `deshacer_asignacion` (es el ultimo del enum); cuando una feature
     // futura añada otro valor, DEBE apendirlo a este set —igual que la 149 hizo con los downs del
     // 67/99/100/106/138—, porque este down recrea el enum a su estado PRE-149 (fijo, historico).
-    const AÑADIDOS_EN_O_DESPUES_DEL_149 = new Set([NUEVO]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_149.has(v))),
     );
   });
 
-  it("el orden de los 24 valores del down coincide con el del SEED (sin reordenar el enum)", () => {
+  it("el orden de los valores del down coincide con el del SEED (sin reordenar el enum)", () => {
     const match = downSql.match(/CREATE TYPE "orden_historial_origen_tipo" AS ENUM \(([\s\S]*?)\);/);
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    expect(valores).toEqual(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => v !== NUEVO));
+    // Este down recrea el enum a su estado PRE-149, asi que se excluye tanto el valor de la
+    // 149 como TODO lo añadido despues (mismo criterio que el caso de arriba).
+    expect(valores).toEqual(
+      ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter(
+        (v) => !AÑADIDOS_EN_O_DESPUES_DEL_149.has(v),
+      ),
+    );
   });
 
   it("migra `origen_tipo` con USING y suelta el tipo viejo", () => {
