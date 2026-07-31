@@ -48,7 +48,14 @@ async function mensajerosFetcher() {
   if (res.status !== "ok") throw new Error(res.status);
   // Ajuste maestro: incluye los ids de mensajeros GAM con cierre abierto para
   // deshabilitarlos en los selectores.
-  return { mensajeros: res.mensajeros, bloqueadosIds: res.bloqueadosIds ?? [] };
+  return {
+    mensajeros: res.mensajeros,
+    bloqueadosIds: res.bloqueadosIds ?? [],
+    // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
+    // mezclan". Ambos fetchers comparten la key SWR, así que devuelven la MISMA forma.
+    conRepartoIds: res.conRepartoIds ?? [],
+    conRecoleccionIds: res.conRecoleccionIds ?? [],
+  };
 }
 
 /**
@@ -104,6 +111,9 @@ export function OrdenesRevisionMaestro({
   );
   const mensajeros = mensajerosData?.mensajeros ?? [];
   const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
+  // Feature 157 (regla de dedicación): repartir y recolectar son viajes incompatibles.
+  const mensajerosConRepartoIds = mensajerosData?.conRepartoIds ?? [];
+  const mensajerosConRecoleccionIds = mensajerosData?.conRecoleccionIds ?? [];
 
   const [modalAbierto, setModalAbierto] = useState<ModalAbierto>(null);
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<
@@ -278,6 +288,7 @@ export function OrdenesRevisionMaestro({
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros}
             mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            mensajerosConRepartoIds={mensajerosConRepartoIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />

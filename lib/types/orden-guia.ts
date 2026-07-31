@@ -108,6 +108,18 @@ export type ListarMensajerosParaAsignacionResult =
        * órdenes. Opcional (aditivo): ausente = ninguno bloqueado.
        */
       bloqueadosIds?: string[];
+      /**
+       * Feature 157 (regla de dedicación): ids con órdenes de REPARTO pendientes. No
+       * pueden recibir una recolección en tienda —ese viaje se hace sin carga—, así que
+       * el selector de ESE modal los deshabilita. Opcional (aditivo).
+       */
+      conRepartoIds?: string[];
+      /**
+       * Feature 157: ids con una RECOLECCIÓN en tienda sin confirmar. Tienen un viaje
+       * comprometido, así que el selector de la asignación desde bodega los deshabilita.
+       * Opcional (aditivo).
+       */
+      conRecoleccionIds?: string[];
     }
   | { status: "unauthenticated" }
   | { status: "forbidden" };

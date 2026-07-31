@@ -2279,6 +2279,35 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
+   * Feature 157 (regla de dedicacion) — de `ids`, los mensajeros que tienen AL MENOS una
+   * orden VIVA en alguno de los `estados` dados. Generico a proposito: el llamador decide
+   * que cuenta como "ocupado", que no es lo mismo segun lo que se le vaya a asignar
+   * (reparto y recoleccion se excluyen mutuamente, pero varias recolecciones conviven).
+   *
+   * `distinct` sobre el mensajero: interesa QUIEN esta ocupado, no cuanto.
+   */
+  async findMensajerosConOrdenesEn(
+    ids: string[],
+    estados: string[],
+  ): Promise<Set<string>> {
+    if (ids.length === 0 || estados.length === 0) return new Set();
+    const rows = await this.prisma.orden.findMany({
+      where: {
+        mensajeroAsignadoId: { in: ids },
+        deletedAt: null,
+        estatus: { value: { in: estados } },
+      },
+      select: { mensajeroAsignadoId: true },
+      distinct: ["mensajeroAsignadoId"],
+    });
+    return new Set(
+      rows
+        .map((r) => r.mensajeroAsignadoId)
+        .filter((id): id is string => id !== null),
+    );
+  }
+
+  /**
    * Zonas (central y satelite) con AL MENOS 1 mensajero con un cierre abierto
    * (`solicitado`/`vencido`) — misma regla y mismos estados que la causa (i) de
    * `existeBodegaSateliteBloqueada`, para que el gate de lectura de la UI y la guarda de

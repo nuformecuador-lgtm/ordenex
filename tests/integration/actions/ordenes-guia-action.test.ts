@@ -52,6 +52,8 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
     const ordenRepo = {
       findMensajerosByZona: vi.fn(),
       findMensajerosBloqueados: vi.fn(),
+      findMensajerosConOrdenesEn: vi.fn(), // feature 157
+
     };
     const zonaRepo = { findCentralZonaId: vi.fn() };
     const r = await listarMensajerosParaAsignacion({ ordenRepo, zonaRepo, getActor: getActor(null) });
@@ -200,7 +202,12 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
       .fn()
       .mockResolvedValue(new Set(["m2"]));
     const r = await listarMensajerosParaAsignacion({
-      ordenRepo: { findMensajerosByZona, findMensajerosBloqueados },
+      ordenRepo: {
+        findMensajerosByZona,
+        findMensajerosBloqueados,
+        // feature 157: sin carga por defecto; los casos de la regla lo overridean.
+        findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+      },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
     });
@@ -212,6 +219,10 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         { id: "m2", nombre: "Beto" },
       ],
       bloqueadosIds: ["m2"],
+      // Feature 157: las dos caras de la regla de dedicacion viajan con la lista, para que
+      // cada modal deshabilite la suya con el motivo a la vista.
+      conRepartoIds: [],
+      conRecoleccionIds: [],
     });
     expect(findMensajerosByZona).toHaveBeenCalledWith("z-gam"); // R5: filtrado por zona GAM
     expect(findMensajerosBloqueados).toHaveBeenCalledWith(["m1", "m2"]);
@@ -222,7 +233,12 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     const findMensajerosByZona = vi.fn();
     const findMensajerosBloqueados = vi.fn();
     const r = await listarMensajerosParaAsignacion({
-      ordenRepo: { findMensajerosByZona, findMensajerosBloqueados },
+      ordenRepo: {
+        findMensajerosByZona,
+        findMensajerosBloqueados,
+        // feature 157: sin carga por defecto; los casos de la regla lo overridean.
+        findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+      },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
     });
@@ -236,7 +252,12 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     const findMensajerosByZona = vi.fn().mockResolvedValue([]);
     const findMensajerosBloqueados = vi.fn().mockResolvedValue(new Set());
     const r = await listarMensajerosParaAsignacion({
-      ordenRepo: { findMensajerosByZona, findMensajerosBloqueados },
+      ordenRepo: {
+        findMensajerosByZona,
+        findMensajerosBloqueados,
+        // feature 157: sin carga por defecto; los casos de la regla lo overridean.
+        findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+      },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(ADMIN),
     });
@@ -249,7 +270,12 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     const findMensajerosByZona = vi.fn();
     const findMensajerosBloqueados = vi.fn();
     const r = await listarMensajerosParaAsignacion({
-      ordenRepo: { findMensajerosByZona, findMensajerosBloqueados },
+      ordenRepo: {
+        findMensajerosByZona,
+        findMensajerosBloqueados,
+        // feature 157: sin carga por defecto; los casos de la regla lo overridean.
+        findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+      },
       zonaRepo: { findCentralZonaId },
       getActor: getActor({ usuarioId: "u-msg", rol: "mensajero" }),
     });
