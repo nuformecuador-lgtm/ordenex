@@ -50,7 +50,9 @@ const WITH_ASIGNACION = {
     notas: true,
     mensajeroAsignadoId: true,
     estatus: { select: { value: true } },
-    tienda: { select: { nombre: true } },
+    // Feature 157 (R15): el telefono de la TIENDA acompaña a su nombre — el mensajero que va
+    // a recolectar necesita poder contactarla, y el modelo no tiene direccion de tienda.
+    tienda: { select: { nombre: true, telefono: true } },
     zona: { select: { nombre: true } },
     provincia: { select: { nombre: true } },
     canton: { select: { nombre: true } },
@@ -78,6 +80,7 @@ function toMiAsignacionRow(row: AsignacionRow): MiAsignacionRow {
     longitud: row.longitud ? row.longitud.toNumber() : null,
     notas: row.notas,
     tiendaNombre: row.tienda.nombre,
+    tiendaTelefono: row.tienda.telefono, // feature 157/R15
     zonaNombre: row.zona.nombre,
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,

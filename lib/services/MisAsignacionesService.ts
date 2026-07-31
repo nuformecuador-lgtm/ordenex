@@ -35,6 +35,9 @@ const MSG_BLOQUEADO =
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "por_recoger";
+// Feature 157 (R11): estado del TERCER grupo — el paquete sigue en la tienda y el mensajero
+// va a recolectarlo. No es parada de ninguna ruta ni alimenta KPIs (R39).
+const ORIGEN_RECOLECCION = "por_recolectar_en_tienda";
 const ESTADO_EN_REPARTO = "en_reparto";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
 const ORIGEN_GESTION = "en_reparto";
@@ -129,7 +132,13 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta, marcadasLuego, notasPrivadas] =
       await Promise.all([
         this.repo.getOrdenEnGestion(actor.usuarioId), // R20
-        this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
+        // Feature 157 (R11): el tercer estado entra en la MISMA lectura, no en una consulta
+        // aparte: es una asignacion mas del mensajero, solo que en otra fase de su viaje.
+        this.repo.findMisAsignaciones(actor.usuarioId, [
+          ORIGEN_RECOLECCION,
+          ORIGEN_RECOGER,
+          ESTADO_EN_REPARTO,
+        ]), // R9/R13
         this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
         this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
         this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
@@ -151,6 +160,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
+    // Feature 157 (R11): tercer bucket. Nunca lleva `secuenciaRuta` (no es parada) y no entra
+    // en el reordenado por ruta de mas abajo.
+    const porRecolectar: MiAsignacionDTO[] = [];
     for (const row of rows) {
       // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
       // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
@@ -163,7 +175,10 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         notaPrivada: notasPrivadas.get(row.id) ?? null,
         intentosEntrega: intentos.get(row.id) ?? 0,
       };
-      if (row.estatusValue === ORIGEN_RECOGER) {
+      if (row.estatusValue === ORIGEN_RECOLECCION) {
+        // Feature 157 (R11/R39): el paquete sigue en la tienda. `secuenciaRuta: null` SIEMPRE.
+        porRecolectar.push({ ...dto, secuenciaRuta: null });
+      } else if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
         porRecoger.push(dto);
       } else if (row.estatusValue === ESTADO_EN_REPARTO) {
@@ -200,6 +215,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       status: "ok",
       porRecoger,
       porGestionar,
+      // Feature 157 (R39): va DESPUES de los KPIs a proposito — no participa de ninguno de
+      // los calculos de arriba (`pendientes`, `porCobrar`, `totalACobrar` y
+      // `paradasSinOptimizar` siguen derivando solo de `porGestionar`). Una recoleccion no
+      // es dinero en la calle ni una parada de ruta: es un paquete que sigue en la tienda.
+      porRecolectar,
       ordenEnGestionId,
       kpis,
       // Feature 92 (R27/R30): sin ruta persistida el estado es `vigente` con
@@ -464,6 +484,10 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     longitud: row.longitud,
     notas: row.notas,
     tiendaNombre: row.tiendaNombre,
+    // Feature 157 (R15): contacto de la tienda para el mensajero que va a recolectar. `?? null`
+    // porque la fila lo declara opcional (patron aditivo): un doble de test que no lo ponga
+    // produce `null`, no `undefined`, igual que hace el repo real cuando la tienda no lo tiene.
+    tiendaTelefono: row.tiendaTelefono ?? null,
     zonaNombre: row.zonaNombre,
     provinciaNombre: row.provinciaNombre,
     cantonNombre: row.cantonNombre,

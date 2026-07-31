@@ -65,6 +65,22 @@ export type AsignarBodegaResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict"; detalle: DetalleConflicto[] };
 
+// Feature 157 — asignacion del mensajero que RECOLECTA en la tienda. Mismo shape que
+// `AsignarBodegaResult` (a proposito: el modal reusa `guiaDecisionErrorMessage` sin
+// cambios), salvo que el item no lleva `estado`: la orden no transiciona (R4).
+export const asignarRecoleccionSchema = z.object({
+  ordenIds: z.array(z.string().uuid()).min(1),
+  mensajeroId: z.string().uuid(),
+});
+export type AsignarRecoleccionActionInput = z.infer<typeof asignarRecoleccionSchema>;
+
+export type AsignarRecoleccionResult =
+  | { status: "ok"; resultados: { ordenId: string }[] }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "conflict"; detalle: DetalleConflicto[] };
+
 // Feature 30/R13/R16 — resultado discriminado del ruteo a satelite. `conflict`
 // trae `detalle` por orden (origen invalido / borrada / orden GAM).
 export type RutearSateliteResult =

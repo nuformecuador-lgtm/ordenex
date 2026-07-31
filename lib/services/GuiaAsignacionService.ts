@@ -27,6 +27,8 @@ import type {
   AsignarBodegaInput,
   AsignarBodegaResultadoItem,
   AsignarBodegaServiceResult,
+  AsignarRecoleccionInput,
+  AsignarRecoleccionServiceResult,
   DetalleConflicto,
   GenerarGuiaInput,
   GenerarGuiaServiceResult,
@@ -46,6 +48,9 @@ import { esAccesoTotal } from "@/lib/auth/acceso-total";
 const ORIGEN_GENERAR_GUIA = "en_preparacion";
 // R27: unico estado de origen valido para "asignar desde bodega".
 const ORIGEN_BODEGA = "en_bodega_central";
+// Feature 157/R5: unico estado de origen valido para "asignar recoleccion en tienda". El
+// paquete sigue fisicamente en la tienda; de ahi solo sale recolectandolo.
+const ORIGEN_RECOLECCION = "por_recolectar_en_tienda";
 // Feature 156/R15 + 155/R29: UNICO estado de origen valido para rutear a satelite (antes un
 // Set de tres estados). Se deja como constante SEPARADA de `ORIGEN_BODEGA` aunque hoy valgan
 // lo mismo: documentan dos acciones distintas y un cambio futuro en una no debe arrastrar a
@@ -337,6 +342,79 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       estado: ESTATUS_EN_ESPERA_ACEPTACION,
     }));
     return { status: "ok", resultados };
+  }
+
+  /**
+   * Feature 157 (R3-R9) — cuarta accion del mismo service: el maestro decide QUE mensajero va
+   * a la tienda a recolectar. Vive aqui, y no en un service nuevo, porque es la misma
+   * responsabilidad que las otras tres y reusa sus mismas piezas (`findByIdsForTransicion`,
+   * `findMensajerosBloqueados` y el contrato `DetalleConflicto` que la UI ya sabe pintar).
+   *
+   * Es la unica que NO transiciona: la orden sigue en `por_recolectar_en_tienda` hasta que el
+   * mensajero confirme la recoleccion. Dos ausencias deliberadas frente a `asignarDesdeBodega`:
+   *   - NO se acota el mensajero por zona (decision del humano, 2026-07-30): el filtro de las
+   *     otras asignaciones es la zona de ENTREGA de la orden, que para ir a recoger a una
+   *     tienda no significa nada. Basta rol `mensajero` y no estar bloqueado por cierre.
+   *   - NO se invoca `gateCoordenadas` (R9): la orden no entra a ninguna ruta todavia, asi que
+   *     exigirle coordenadas bloquearia una recoleccion por un dato que aun no hace falta.
+   */
+  async asignarRecoleccion(
+    input: AsignarRecoleccionInput,
+    actor: Actor,
+  ): Promise<AsignarRecoleccionServiceResult> {
+    // --- 1. Autorizacion (R8) ---
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
+
+    // --- 2. Lote vacio: idempotencia trivial, patron de las otras tres acciones ---
+    const ordenIds = distinct(input.ordenIds);
+    if (ordenIds.length === 0) return { status: "ok", resultados: [] };
+
+    // --- 3. Validacion por orden (R5): origen UNICO `por_recolectar_en_tienda` ---
+    const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
+    const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
+
+    const detalle: DetalleConflicto[] = [];
+    for (const id of ordenIds) {
+      const orden = ordenMap.get(id);
+      if (!orden) {
+        detalle.push({ ordenId: id, motivo: "orden no existe" });
+        continue;
+      }
+      if (orden.deletedAt !== null) {
+        detalle.push({ ordenId: id, motivo: "orden borrada" });
+        continue;
+      }
+      if (orden.estatusValue !== ORIGEN_RECOLECCION) {
+        detalle.push({
+          ordenId: id,
+          motivo: `estado de origen no permitido: ${orden.estatusValue}`,
+        });
+      }
+    }
+    if (detalle.length > 0) return { status: "conflict", detalle }; // aborta sin efectos (R5)
+
+    // --- 4. R6: el mensajero existe y su rol es `mensajero`. SIN filtro de zona ---
+    const mensajerosValidos = await this.repo.findMensajeroIdsValidos([input.mensajeroId]);
+    if (!mensajerosValidos.has(input.mensajeroId)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { mensajeroId: ["mensajeroId no valido"] },
+      };
+    }
+
+    // --- 5. R7: mensajero bloqueado por cierre pendiente, ANTES de persistir ---
+    const bloqueados = await this.repo.findMensajerosBloqueados([input.mensajeroId]);
+    if (bloqueados.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_MENSAJERO_BLOQUEADO })),
+      };
+    }
+
+    // --- 6/7. Unica escritura: solo el mensajero, sin estado, sin historial, sin asignado_at ---
+    await this.repo.asignarRecoleccionLote(ordenIds, input.mensajeroId, ORIGEN_RECOLECCION);
+
+    return { status: "ok", resultados: ordenIds.map((ordenId) => ({ ordenId })) };
   }
 
   async rutearABodegaSatelite(

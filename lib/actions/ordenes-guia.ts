@@ -2,9 +2,11 @@
 
 import {
   asignarBodegaSchema,
+  asignarRecoleccionSchema,
   generarGuiaSchema,
   rutearSateliteSchema,
   type AsignarBodegaResult,
+  type AsignarRecoleccionResult,
   type GenerarGuiaResult,
   type ListarCatalogoEstatusResult,
   type ListarMensajerosParaAsignacionResult,
@@ -130,6 +132,25 @@ export async function asignarDesdeBodega(
     const data = asignarBodegaSchema.parse(input);
     const service = deps.guiaService ?? buildGuiaService();
     return service.asignarDesdeBodega(data, actor);
+  });
+  return isAppErrorShape(r) ? toGuiaActionError(r) : r;
+}
+
+/**
+ * Feature 157 (R3-R9): asigna el mensajero que ira a la tienda a RECOLECTAR el lote. NO
+ * transiciona (la orden sigue en `por_recolectar_en_tienda` hasta que el mensajero confirme):
+ * escribe solo `mensajero_asignado_id`. Solo acceso total.
+ */
+export async function asignarRecoleccion(
+  input: unknown,
+  deps: GuiaActionDeps = {},
+): Promise<AsignarRecoleccionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = asignarRecoleccionSchema.parse(input);
+    const service = deps.guiaService ?? buildGuiaService();
+    return service.asignarRecoleccion(data, actor);
   });
   return isAppErrorShape(r) ? toGuiaActionError(r) : r;
 }
