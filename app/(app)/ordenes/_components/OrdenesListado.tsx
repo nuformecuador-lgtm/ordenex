@@ -18,13 +18,13 @@ import {
   listarZonasBloqueadasPorCierre,
 } from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
+import { EscanerDesplegable } from "@/components/shared/EscanerDesplegable";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
-import { ReceptorDesplegable } from "./ReceptorDesplegable";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
   ordenesColumnsReprogramada,
@@ -656,11 +656,14 @@ export function OrdenesListado({
   // igual. Quien no puede recibir no ve ni el botón.
   // El receptor y su disparador viven a la IZQUIERDA, donde empieza la lectura de la
   // pagina; la carga masiva sigue a la derecha de la misma fila. El disparador despliega
-  // la tarjeta con animacion y la desmonta al cerrar (apaga la camara).
+  // la tarjeta con animacion y la desmonta al cerrar (apaga la camara): el mismo
+  // `EscanerDesplegable` compartido que usan las demás superficies de escaneo.
   const header =
     puedeCargarMasiva || puedeEscanearQr || puedeRecibirBodegaCentral ? (
       puedeEscanearQr || puedeRecibirBodegaCentral ? (
-        <ReceptorDesplegable
+        <EscanerDesplegable
+          label="Recibir paquete"
+          labelAbierto="Ocultar escáner"
           acciones={puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
         >
           {puedeRecibirBodegaCentral ? (
@@ -669,7 +672,7 @@ export function OrdenesListado({
           {puedeEscanearQr ? (
             <EscanerRecepcionOrigen onRecibida={handleSuccess} />
           ) : null}
-        </ReceptorDesplegable>
+        </EscanerDesplegable>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <OrdenesCargaMasivaButton />

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import { EscanerDesplegable } from "@/components/shared/EscanerDesplegable";
 import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
 import { recibirPorQr } from "@/lib/actions/recepcion-satelite";
@@ -145,22 +146,27 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
   );
 
   return (
-    <EscanerGuiaCard
-      ariaLabel="Recibir por número de guía o escaneo"
-      titulo="Recibir paquete"
-      descripcion="Escanea o ingresa el número de guía"
-      onDecoded={onDecoded}
-      procesando={procesando}
-      mensajeErrorCamara="No se pudo abrir la cámara."
-      manual={{ onSubmit: onManual, submitLabel: "Recibir" }}
-      exito={
-        ultimaRecibida === null ? undefined : (
-          <>
-            Guía <span className="font-semibold">{ultimaRecibida}</span> recibida
-            correctamente.
-          </>
-        )
-      }
-    />
+    /* 2026-07-31 (decisión del humano): la tarjeta vive PLEGADA tras su disparador, como en
+       el resto de la app. Sin él, `QrScanner` quedaba montado todo el tiempo que la bodega
+       tuviera la pantalla abierta, con la cámara encendida detrás del listado. */
+    <EscanerDesplegable label="Recibir paquete" labelAbierto="Ocultar escáner">
+      <EscanerGuiaCard
+        ariaLabel="Recibir por número de guía o escaneo"
+        titulo="Recibir paquete"
+        descripcion="Escanea o ingresa el número de guía"
+        onDecoded={onDecoded}
+        procesando={procesando}
+        mensajeErrorCamara="No se pudo abrir la cámara."
+        manual={{ onSubmit: onManual, submitLabel: "Recibir" }}
+        exito={
+          ultimaRecibida === null ? undefined : (
+            <>
+              Guía <span className="font-semibold">{ultimaRecibida}</span> recibida
+              correctamente.
+            </>
+          )
+        }
+      />
+    </EscanerDesplegable>
   );
 }

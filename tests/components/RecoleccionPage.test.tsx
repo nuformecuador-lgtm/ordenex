@@ -57,6 +57,16 @@ const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarRecoleccion);
 const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 
+/**
+ * El acceso al escaneo, que es lo que R7 exige que no desaparezca nunca. Desde el
+ * 2026-07-31 la tarjeta vive PLEGADA tras este disparador (`EscanerDesplegable`, decisión
+ * del humano): montada dejaba la cámara encendida todo el rato que el mensajero tuviera la
+ * pantalla abierta. Aquí se mira el disparador porque es lo que la página renderiza; que al
+ * abrirlo salga un escáner que funciona lo fija `RecoleccionModule.test.tsx`.
+ */
+const escaner = () =>
+  screen.queryByRole("button", { name: "Recolectar en tienda" });
+
 beforeEach(() => {
   vi.clearAllMocks();
   bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
@@ -121,7 +131,7 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
     ).toBeInTheDocument();
   });
 
-  it("R6/R7: los datos del payload llegan al módulo POR PROPS (y el escáner va montado)", async () => {
+  it("R6/R7: los datos del payload llegan al módulo POR PROPS (y el escáner va accesible)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
     listarMock.mockResolvedValue({
       status: "ok",
@@ -158,20 +168,18 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
     ).toBeInTheDocument();
     // El flag de recorte también viaja por props (R31).
     expect(screen.getByText(/se muestran las 100 más recientes de hoy/i)).toBeInTheDocument();
-    // R7: el bloque de captura está montado incluso antes de escanear nada.
-    expect(
-      screen.getByRole("region", { name: "Recolectar por número de guía o escaneo" }),
-    ).toBeInTheDocument();
+    // R7 (forma vigente desde el 2026-07-31): el bloque de captura es ACCESIBLE desde que
+    // la página carga — la tarjeta vive plegada tras su disparador para no dejar la cámara
+    // encendida, pero el acceso a ella no depende de nada.
+    expect(escaner()).toBeInTheDocument();
   });
 
-  it("R7/R8: con NADA asignado la página sigue montando el escáner y explica el vacío", async () => {
+  it("R7/R8: con NADA asignado la página sigue ofreciendo el escáner y explica el vacío", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
 
     render(await RecoleccionPage());
 
-    expect(
-      screen.getByRole("region", { name: "Recolectar por número de guía o escaneo" }),
-    ).toBeInTheDocument();
+    expect(escaner()).toBeInTheDocument();
     expect(
       screen.getByText(/no tienes órdenes por recolectar en tienda ahora mismo/i),
     ).toBeInTheDocument();
@@ -183,9 +191,7 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
 
     render(await RecoleccionPage());
 
-    expect(
-      screen.queryByRole("region", { name: "Recolectar por número de guía o escaneo" }),
-    ).toBeNull();
+    expect(escaner()).toBeNull();
     expect(screen.getByRole("alert")).toHaveTextContent(
       /resolver tu cierre pendiente/i,
     );
@@ -199,9 +205,7 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
 
     // Mismo criterio que `/mis-asignaciones`: un fallo al derivar el flag no puede dejar al
     // mensajero sin poder trabajar; el backend de la 157/R31 sigue siendo la defensa real.
-    expect(
-      screen.getByRole("region", { name: "Recolectar por número de guía o escaneo" }),
-    ).toBeInTheDocument();
+    expect(escaner()).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
