@@ -8,7 +8,34 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🗓️ Sesión 2026-07-31 (cont. 2) — Excel en todas las tablas + wallet incompleta — **EMPIEZA A LEER POR AQUÍ**
+## 🗓️ Sesión 2026-07-31 (cierre) — 169 CERRADA · wallet registrada · 170 desbloqueada — **EMPIEZA A LEER POR AQUÍ**
+
+**Feature 169 (buscador de órdenes) → `done`, PR #239 mergeado.** El relato completo va a
+`history.md`. Lo que importa para quien siga:
+
+- **Verificación de producción HECHA por el MCP de Supabase antes de mergear** (el humano autorizó el
+  acceso): `pg_trgm` **no instalada** → sin conflicto de esquema, que era lo único que podía tumbar el
+  build y dejar `_prisma_migrations` bloqueando despliegues; y **69 filas** en `orden` → la columna
+  generada se añade sin ventana de mantenimiento.
+- **Se confirmó CUÁL es la base de producción con evidencia**, no por suposición: el proyecto
+  `scfnwxqbsgkzwsdntdvd` tiene aplicada la migración del índice de la 167 (que se desplegó a prod hoy)
+  y **no** tiene la del buscador (que solo está en `dev`). Todas las migraciones sanas, ninguna
+  fallida ni revertida.
+- **La migración del buscador NO está en producción todavía**: entra con el próximo `dev → prod`.
+
+### 💰 Wallet: tres fichas registradas (171, 172, 173)
+
+Con todas las decisiones del humano dentro de cada `status_note`, para que quien las especifique no
+tenga que reconstruir la conversación. **Dato nuevo, medido en la base de producción:** 35 movimientos
+de caja y 6 cierres con **CERO pagos registrados** — el agujero de la liquidación ya es visible en
+datos reales, no es una hipótesis.
+
+### 📊 La 170 (Excel + paginación) queda DESBLOQUEADA
+
+Su Tanda 0 tocaba `lib/types/orden.ts` y `OrdenesModule.tsx`, los mismos archivos que la 169 estaba
+modificando. Con la 169 en `dev`, la intersección desaparece y puede arrancar.
+
+## 🗓️ Sesión 2026-07-31 (cont. 2) — Excel en todas las tablas + wallet incompleta (histórico)
 
 Dos reportes del humano. **Los dos son ciertos, por motivos distintos de los que parecían.**
 
