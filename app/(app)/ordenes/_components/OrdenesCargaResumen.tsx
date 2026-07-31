@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
+import { Button } from "@/components/ui/button";
 import { resumenCargaMasiva } from "@/lib/actions/carga-masiva-resumen";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
+
+import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 
 export interface OrdenesCargaResumenProps {
   /** `num_remision` del lote recién creado (feature 15, filas con `resultado==="creada"`), R7/R21. */
@@ -37,6 +40,9 @@ export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps)
   // silenciar `exhaustive-deps`) deja el efecto honesto: depende de un valor estable,
   // no de la identidad del array que llegue por prop en cada render.
   const [lote] = useState(numRemisiones);
+  // Etiquetas del lote recién cargado. Se abre sobre las filas YA resueltas del resumen,
+  // que son las que traen el `id` de cada orden (las remisiones del prop no bastan).
+  const [etiquetasAbierto, setEtiquetasAbierto] = useState(false);
 
   // R6/R7: resumen del lote. Una sola lectura al montar el paso; no hay mutación
   // que revalidar (el listado ya se revalida tras la carga real, en el padre).
@@ -110,6 +116,24 @@ export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps)
           ya está cometida: esto es un añadido posterior, no un paso más del asistente. */}
       {numRemisiones.length > 0 ? (
         <div className="flex flex-wrap justify-end gap-2">
+          {/* Etiquetas del lote recién cargado. Las órdenes de una tienda SIN fulfillment
+              nacen ya CON `num_guia` (feature 155), así que su etiqueta existe desde este
+              mismo momento y el mensajero puede llevárselas impresas. Las que nacen en
+              `en_preparacion` todavía no tienen guía: el modal las reporta como omitidas
+              "sin guía" en vez de fallar, y sus etiquetas salen tras "Generar guía".
+
+              El botón espera a que el resumen resuelva porque necesita los `id` de las
+              órdenes, que es lo que la generación consume; las remisiones del prop no los
+              traen. Mientras carga no se ofrece, para no abrir un modal vacío. */}
+          {filas.length > 0 ? (
+            <Button
+              type="button"
+              variant="brand-outline"
+              onClick={() => setEtiquetasAbierto(true)}
+            >
+              Descargar etiquetas
+            </Button>
+          ) : null}
           <DescargarManifiestoButton
             flujo="carga_masiva"
             seleccion={{ numRemisiones }}
@@ -125,6 +149,12 @@ export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps)
         error={filasState.status === "error" ? filasState.message : null}
         emptyMessage="No hay órdenes en este lote"
         ariaLabel="Resumen de la carga masiva"
+      />
+
+      <EtiquetasGuiaModal
+        open={etiquetasAbierto}
+        ordenes={filas}
+        onOpenChange={setEtiquetasAbierto}
       />
     </div>
   );
