@@ -13,8 +13,11 @@ import path from "path";
 //   R12         — RLS habilitada en `carga`, sin policies.
 //   R13         — down.sql revierte EXACTAMENTE lo que crea el UP.
 //   R14         — `num_guia` intacto (ni el UP ni el DOWN lo mencionan).
-// NOTA: la migracion se modifico EN SITIO (gate F1.4-10): no esta aplicada en ninguna base
-// ni mergeado su PR, asi que `name` y su indice entran en este mismo par de archivos.
+// NOTA: la migracion se modifico EN SITIO (gate F1.4-10) para meter `name` y su indice en
+// este mismo par de archivos, dando por hecho que no estaba aplicada en ninguna base. NO era
+// cierto: produccion ya la habia aplicado en su version previa (2026-07-27 14:53Z, cuando
+// preview y produccion compartian base) y Prisma no reejecuta lo ya registrado, asi que la
+// columna nunca llego alli. Lo cierra `*_carga_name_reparacion`, cubierta al final del fichero.
 
 const ROOT = path.join(__dirname, "..", "..", "..");
 const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
@@ -216,5 +219,43 @@ describe("Feature 141 · schema.prisma refleja la migracion (sin drift) (R1-R9)"
   it("R2: Usuario expone el lado inverso de la relacion (cargasRealizadas)", () => {
     const bloqueUsuario = schema.match(/model Usuario \{([\s\S]*?)\n\}/)?.[1] ?? "";
     expect(bloqueUsuario).toMatch(/cargasRealizadas\s+Carga\[\]\s+@relation\("CargaUsuario"\)/);
+  });
+});
+
+// La reparacion que alcanza a la base que aplico la version PREVIA de la 141 (sin `name`).
+// Su valor entero esta en ser idempotente: la misma migracion tiene que ser no-op en una
+// base creada desde cero y correctiva en la que se quedo corta. Un `ADD COLUMN` pelado aqui
+// tumbaria el build de cualquier entorno sano.
+describe("Reparacion · `*_carga_name_reparacion` es idempotente", () => {
+  const reparacionDir = migrationDirFor("_carga_name_reparacion");
+  const reparacionUp = fs.readFileSync(path.join(reparacionDir, "migration.sql"), "utf8");
+  const reparacionDown = fs.readFileSync(path.join(reparacionDir, "down.sql"), "utf8");
+  const reparacionUpEjecutable = sinComentarios(reparacionUp);
+
+  it("corre DESPUES de la 141 (si corriera antes, la tabla aun no existiria)", () => {
+    expect(path.basename(reparacionDir) > path.basename(migrationDir)).toBe(true);
+  });
+
+  it("R8: anade `name` con IF NOT EXISTS y sin NOT NULL", () => {
+    expect(reparacionUpEjecutable).toMatch(
+      /ALTER TABLE "carga" ADD COLUMN IF NOT EXISTS "name" TEXT;/,
+    );
+    expect(reparacionUpEjecutable).not.toMatch(/"name" TEXT NOT NULL/);
+  });
+
+  it("R9/R10: recrea el unico compuesto (usuario_carga, name) con IF NOT EXISTS", () => {
+    expect(reparacionUpEjecutable).toMatch(
+      /CREATE UNIQUE INDEX IF NOT EXISTS "carga_usuario_carga_name_key" ON "carga"\("usuario_carga", "name"\)/,
+    );
+  });
+
+  it("no destruye nada: ni DROP, ni backfill, ni cambios en otras tablas", () => {
+    expect(reparacionUpEjecutable).not.toMatch(/DROP/i);
+    expect(reparacionUpEjecutable).not.toMatch(/UPDATE\s+"?carga"?/i);
+    expect(reparacionUpEjecutable).not.toMatch(/ALTER TABLE "orden"/);
+  });
+
+  it("el DOWN es un no-op: no puede saber si la columna vino de aqui o de la 141", () => {
+    expect(sinComentarios(reparacionDown).trim()).toBe("");
   });
 });
