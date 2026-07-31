@@ -75,6 +75,22 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
 // cierre pendiente (solicitado/vencido). No se le asignan nuevas ordenes hasta resolverlo.
 const MSG_MENSAJERO_BLOQUEADO = "mensajero bloqueado por cierre pendiente";
 
+// Feature 157 (regla de DEDICACION, decision del humano 2026-07-31) — recolectar en tienda
+// y repartir son viajes incompatibles: quien va a una tienda a recoger un lote sale con el
+// vehiculo vacio y vuelve a la central, asi que no puede llevar encima entregas pendientes.
+// La regla vale en las DOS direcciones y por eso vive en este service, que es el que decide
+// las dos asignaciones.
+//
+// Asimetria deliberada en lo que cuenta como "ocupado": las otras RECOLECCIONES no
+// bloquean —un viaje a la tienda son N ordenes, y exigir cero pendientes impediria asignar
+// la segunda del mismo lote—, pero cualquier orden de REPARTO si.
+const ESTADOS_REPARTO_PENDIENTE = ["por_recoger", "en_reparto"];
+const ESTADOS_RECOLECCION_PENDIENTE = [ORIGEN_RECOLECCION];
+const MSG_MENSAJERO_CON_REPARTO =
+  "el mensajero tiene ordenes de reparto pendientes: una recoleccion en tienda exige ir sin carga";
+const MSG_MENSAJERO_CON_RECOLECCION =
+  "el mensajero tiene una recoleccion en tienda pendiente: debe cerrarla antes de recibir reparto";
+
 // Ajuste maestro: motivo cuando una orden se rutearia a una bodega satelite que tiene al
 // menos un mensajero con un cierre abierto. Con un cierre pendiente la bodega esta
 // cuadrando caja: no recibe ordenes nuevas hasta resolverlo.
@@ -316,6 +332,23 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
+    // --- Feature 157: simetrica de la anterior. Un mensajero con una recoleccion sin
+    //     confirmar tiene un viaje a la tienda comprometido; darle reparto ahora lo obliga
+    //     a elegir cual incumple. Se le libera en cuanto confirme la recoleccion. ---
+    const conRecoleccion = await this.repo.findMensajerosConOrdenesEn(
+      [input.mensajeroId],
+      ESTADOS_RECOLECCION_PENDIENTE,
+    );
+    if (conRecoleccion.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({
+          ordenId,
+          motivo: MSG_MENSAJERO_CON_RECOLECCION,
+        })),
+      };
+    }
+
     // --- Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de persistir ---
     // Aqui TODAS las ordenes del lote reciben mensajero (es la accion "asignar desde
     // bodega"), asi que se evalua el lote entero.
@@ -408,6 +441,21 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       return {
         status: "conflict",
         detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_MENSAJERO_BLOQUEADO })),
+      };
+    }
+
+    // --- 5b. Regla de dedicacion: quien recolecta va sin carga de reparto ---
+    const conReparto = await this.repo.findMensajerosConOrdenesEn(
+      [input.mensajeroId],
+      ESTADOS_REPARTO_PENDIENTE,
+    );
+    if (conReparto.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({
+          ordenId,
+          motivo: MSG_MENSAJERO_CON_REPARTO,
+        })),
       };
     }
 

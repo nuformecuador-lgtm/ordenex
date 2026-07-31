@@ -91,6 +91,9 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     rutearBodegaSateliteLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
     // Feature 157: la asignacion de recoleccion escribe SOLO el mensajero (sin transicion).
     asignarRecoleccionLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
+    // Feature 157 (regla de dedicacion): por defecto NADIE esta ocupado; los casos de la
+    // regla lo overridean para simular reparto o recoleccion pendiente.
+    findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set()),
     // Feature 41/R13: por defecto nadie bloqueado (los tests de bloqueo lo overridean).
     findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
@@ -1104,5 +1107,115 @@ describe("GuiaAsignacionService.asignarRecoleccion (feature 157)", () => {
     expect(r).toEqual({ status: "ok", resultados: [] });
     expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
     expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 157 — REGLA DE DEDICACIÓN (decisión del humano, 2026-07-31). Recolectar en tienda
+// y repartir son viajes incompatibles: quien va a recoger un lote sale con el vehículo
+// vacío y vuelve a la central. La regla vale en las DOS direcciones.
+//
+// Asimetría deliberada de lo que cuenta como "ocupado": las otras RECOLECCIONES no
+// bloquean —un viaje a la tienda son N órdenes y hay que poder asignar el lote entero—,
+// pero cualquier orden de REPARTO sí.
+// ---------------------------------------------------------------------------------------
+describe("GuiaAsignacionService — dedicación: reparto y recolección no se mezclan", () => {
+  const ORIGEN_RECOLECCION = "por_recolectar_en_tienda";
+
+  it("no se le asigna una recolección a quien tiene reparto pendiente", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
+      ]),
+      findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set(["m1"])),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r).toMatchObject({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: expect.stringMatching(/sin carga/i) }],
+    });
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("pregunta EXACTAMENTE por los estados de reparto, no por otras recolecciones", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
+      ]),
+    });
+
+    await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    // Si preguntara por `por_recolectar_en_tienda`, el segundo lote de un mismo viaje a la
+    // tienda seria inasignable: el mensajero ya tendria la primera orden encima.
+    expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(
+      ["m1"],
+      ["por_recoger", "en_reparto"],
+    );
+  });
+
+  it("un mensajero con OTRAS recolecciones SÍ recibe más del mismo viaje", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
+      ]),
+      // Sin reparto: el doble responde vacío para los estados que se le preguntan.
+      findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set()),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    expect(repo.asignarRecoleccionLote).toHaveBeenCalledTimes(1);
+  });
+
+  it("SIMÉTRICA: no se le asigna reparto a quien tiene una recolección sin confirmar", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+      ]),
+      findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set(["m1"])),
+    });
+
+    const r = await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r).toMatchObject({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: expect.stringMatching(/recoleccion/i) }],
+    });
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+
+  it("SIMÉTRICA: pregunta por el estado de recolección, y sin ella la asignación sigue", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+      ]),
+    });
+
+    const r = await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(
+      ["m1"],
+      ["por_recolectar_en_tienda"],
+    );
+    expect(r.status).toBe("ok");
   });
 });

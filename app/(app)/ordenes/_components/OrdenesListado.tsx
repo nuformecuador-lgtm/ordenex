@@ -62,7 +62,14 @@ async function mensajerosFetcher() {
   // SELECTOR de los modales de asignación, para no ofrecer a alguien a quien el service
   // va a rechazar. La key SWR "ordenes:mensajeros" la comparte OrdenesRevisionMaestro,
   // así que ambos fetchers deben devolver la MISMA forma.
-  return { mensajeros: res.mensajeros, bloqueadosIds: res.bloqueadosIds ?? [] };
+  return {
+    mensajeros: res.mensajeros,
+    bloqueadosIds: res.bloqueadosIds ?? [],
+    // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
+    // mezclan". Ambos fetchers comparten la key SWR, así que devuelven la MISMA forma.
+    conRepartoIds: res.conRepartoIds ?? [],
+    conRecoleccionIds: res.conRecoleccionIds ?? [],
+  };
 }
 
 /**
@@ -253,6 +260,10 @@ export function OrdenesListado({
   // Feature 157: los bloqueados por cierre SÍ se usan aquí — el selector de la recolección
   // los deshabilita para no ofrecer a alguien a quien el service va a rechazar.
   const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
+  // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
+  // mezclan". Cada modal deshabilita la suya, con el motivo a la vista.
+  const mensajerosConRepartoIds = mensajerosData?.conRepartoIds ?? [];
+  const mensajerosConRecoleccionIds = mensajerosData?.conRecoleccionIds ?? [];
 
   // Zonas bloqueadas por cierre (≥1 mensajero con cierre abierto), central y satélites
   // por igual. Solo se pide si hay acciones por lote (sin checkbox no hay qué bloquear).
@@ -680,6 +691,7 @@ export function OrdenesListado({
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
             mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            mensajerosConRepartoIds={mensajerosConRepartoIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
@@ -687,6 +699,7 @@ export function OrdenesListado({
             open={modalAbierto === "asignar-bodega"}
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
+            mensajerosConRecoleccionIds={mensajerosConRecoleccionIds}
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
           />

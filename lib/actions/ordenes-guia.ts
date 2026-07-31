@@ -40,7 +40,9 @@ function buildGuiaService(): IGuiaAsignacionService {
 
 function buildOrdenRepo(): Pick<
   IOrdenRepository,
-  "findMensajerosByZona" | "findMensajerosBloqueados"
+  | "findMensajerosByZona"
+  | "findMensajerosBloqueados"
+  | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
 > {
   return new OrdenRepository(getPrismaClient());
 }
@@ -68,7 +70,9 @@ export interface GuiaActionDeps {
 export interface ListarMensajerosDeps {
   ordenRepo?: Pick<
     IOrdenRepository,
-    "findMensajerosByZona" | "findMensajerosBloqueados"
+    | "findMensajerosByZona"
+    | "findMensajerosBloqueados"
+    | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
   >;
   zonaRepo?: Pick<IZonaRepository, "findCentralZonaId">;
   getActor?: () => Promise<Actor | null>;
@@ -182,11 +186,21 @@ export async function listarMensajerosParaAsignacion(
     const mensajeros = await repo.findMensajerosByZona(centralZonaId);
     // Ajuste maestro: marca los mensajeros GAM con un cierre abierto para que la UI los
     // deshabilite en el selector (no se les asignan nuevas órdenes hasta resolverlo).
-    const bloqueados = await repo.findMensajerosBloqueados(mensajeros.map((m) => m.id));
+    const ids = mensajeros.map((m) => m.id);
+    const bloqueados = await repo.findMensajerosBloqueados(ids);
+    // Feature 157 (regla de dedicación): repartir y recolectar son viajes incompatibles.
+    // Se marcan las DOS caras para que cada modal deshabilite la suya y el maestro vea el
+    // motivo en vez de toparse con un rechazo del servidor al confirmar.
+    const [conReparto, conRecoleccion] = await Promise.all([
+      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto"]),
+      repo.findMensajerosConOrdenesEn(ids, ["por_recolectar_en_tienda"]),
+    ]);
     return {
       status: "ok" as const,
       mensajeros,
       bloqueadosIds: [...bloqueados],
+      conRepartoIds: [...conReparto],
+      conRecoleccionIds: [...conRecoleccion],
     };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el
