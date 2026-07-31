@@ -2288,3 +2288,50 @@ Entregas con guard de no-reintroducción. Una sola migración: un índice
 - **Incidente de arnés, saldado aparte:** el primer `backend_dev` **murió al arrancar** porque las
   definiciones de `.claude/agents/*.md` fijaban `model: opus-4.8`, un id que ya no existe.
   `spec_author` y `reviewer` sobrevivieron por no fijar modelo. Ver el chore de saneamiento.
+
+## Feature 169 — buscador de texto en el listado de órdenes · PR #239 (2026-07-31)
+
+**Origen: un pedido con una advertencia.** El humano pidió «un input para buscar por cualquiera de los
+datos más importantes de una orden» y añadió: *«ten mucho cuidado con cómo lo construyes, no vaya a ser
+que sea lenta la búsqueda por una mala implementación de consultas»*. Esa frase decidió el diseño entero.
+
+**La auditoría previa cambió el encargo.** El humano creía que ya estaba pedido, y lo estaba — pero la
+feature 144 (`PR #180`, mergeada dos días antes con la ficha aún en `pending`) entregó **filtros**, no
+búsqueda: `ordenFilterSchema` es `.strict()` y no admitía ni una clave de texto. La única búsqueda
+existente (114, del mensajero) filtra **en el navegador** sobre lo ya cargado: sobre una tabla paginada
+solo encontraría lo que ya está en pantalla.
+
+- **`pg_trgm` + GIN sobre columna generada, no búsqueda de texto completo.** El FTS no encuentra
+  fragmentos *en medio* de una cadena, y el caso real es teclear los últimos cuatro dígitos de un
+  teléfono. Decisión tomada mirando el uso, no la moda.
+- **Acentos por `translate()` con mapa espejado en TypeScript, no `unaccent`.** El término se normaliza
+  en Node y el dato en Postgres: si divergen, la búsqueda falla **en silencio**. Con `unaccent` la
+  paridad es un acto de fe (sus reglas pliegan cosas que `normalize("NFD")` no, y cambian con la
+  versión del servidor); con un mapa de 48 caracteres compartido, se demuestra con un test.
+- **El backend corrigió el diseño con una medición, no con una opinión:** el SQL colapsa espacios con
+  `[ \t\n\r\f\v]+` y no con `\s+`, porque el `\s` de Postgres depende del ctype — el build local
+  colapsa el NBSP y uno de glibc (Supabase) no. Con `\s`, la columna se habría calculado **distinto en
+  local y en producción** y la paridad habría sido indemostrable.
+- **El análisis de rendimiento corrigió al leader.** Se había señalado el `count(*)` como el coste a
+  evitar; el plan mostró que el `findMany` con `ORDER BY` sobre predicado trigram **ya es
+  `O(coincidencias)`**, así que capar el conteo habría eliminado la mitad barata y roto el contrato de
+  paginación a cambio de nada. Medido después: el conteo salió **más barato** que la página.
+- **Números, no impresiones** (50.067 filas, 10 repeticiones, p95, camino real completo): guía exacta
+  **4,7 ms** (umbral 50), término amplio con 10.004 coincidencias **25,4 ms** (umbral 500), término más
+  filtros **11,2 ms**, y la carga masiva se encarece **+15,9 %** contra un tope de +20 %. Plan
+  verificado con `EXPLAIN` **y sobre el SQL real emitido**.
+- **El reviewer encontró un falso negativo silencioso**: buscar `2026-0912` no hallaba
+  `REM-2026-0912` — el término se reducía a dígitos y la remisión lleva guiones. **El dato existía y la
+  búsqueda decía que no.** Se corrigió buscando ambas formas y **se midió** que el plan sigue por
+  índice y que el coste depende de las coincidencias, no de las formas.
+- **Verificación de producción antes de mergear, no después.** En este proyecto el build migra antes de
+  compilar: **mergear es aplicar**. Con el acceso que autorizó el humano se comprobó que `pg_trgm` no
+  está instalada (sin conflicto de esquema) y que `orden` tiene 69 filas (sin ventana). También se
+  confirmó **con evidencia** cuál era la base de producción, en vez de asumirlo.
+- **Deuda declarada, no disfrazada:** con la *pending list* del GIN sin consolidar —el estado justo
+  después de una carga masiva— el planificador puede abandonar el índice. Medido, sin cruzar umbrales,
+  **sin decidir**: las tres salidas tocan diseño y ninguna era necesaria hoy.
+- **De propina, un misterio de la suite resuelto:** el test de foco del modal fallaba de forma
+  intermitente y tumbaba `init.sh`. No era regresión: afirmaba de forma síncrona un efecto que la
+  librería produce en el siguiente frame. Se arregló esperando al hecho observable, con la aserción
+  **más estricta** que antes y demostrando que no quedó en un no-op (PR #238).
