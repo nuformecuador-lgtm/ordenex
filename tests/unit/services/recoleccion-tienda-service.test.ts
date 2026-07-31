@@ -31,7 +31,7 @@ type RepoMethods = Pick<
 function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
   return {
     id: "o1",
-    estatusValue: "por_recolectar_en_tienda",
+    estatusValue: "recolectando",
     numGuia: NUM_GUIA,
     deletedAt: null,
     zonaId: "z-1",
@@ -169,7 +169,7 @@ describe("RecoleccionTiendaService — camino feliz y carrera (R26/R27/R34)", ()
     // El mensajero viaja al repo: es parte de la guardia ATOMICA, no solo del chequeo previo.
     expect(repo.recolectarEnTienda).toHaveBeenCalledWith(
       "o1",
-      "por_recolectar_en_tienda",
+      "recolectando", // feature 157 (ampliacion): se recolecta lo que YA esta asignado
       DESTINO_ID,
       MENSAJERO.usuarioId,
       { actorUsuarioId: MENSAJERO.usuarioId, origenTipo: "recoleccion_tienda" },

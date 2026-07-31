@@ -21,6 +21,7 @@ function fakeGuiaService(overrides: Partial<IGuiaAsignacionService> = {}): IGuia
     asignarDesdeBodega: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     rutearABodegaSatelite: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     asignarRecoleccion: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
+    desasignarRecoleccion: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     ...overrides,
   };
 }

@@ -58,7 +58,7 @@ function archivosDeAnalytics(): string[] {
 
 describe("R8 · los estados citados existen en el catalogo vigente", () => {
   it("el catalogo de order_status tiene diecinueve values", () => {
-    expect(ORDER_STATUS_SEED).toHaveLength(19);
+    expect(ORDER_STATUS_SEED).toHaveLength(20); // +1: feature 157 (recolectando)
   });
 
   it("todo estado citado por una metrica pertenece a ORDER_STATUS_SEED", () => {

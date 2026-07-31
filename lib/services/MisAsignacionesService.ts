@@ -35,9 +35,11 @@ const MSG_BLOQUEADO =
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "por_recoger";
-// Feature 157 (R11): estado del TERCER grupo — el paquete sigue en la tienda y el mensajero
-// va a recolectarlo. No es parada de ninguna ruta ni alimenta KPIs (R39).
-const ORIGEN_RECOLECCION = "por_recolectar_en_tienda";
+// Feature 157 (R11, ampliada 2026-07-31): estado del TERCER grupo. Es `recolectando` —no el
+// estado de espera— porque en el portal del mensajero solo aparece lo que es SUYO: una orden
+// en `por_recolectar_en_tienda` todavia no tiene dueño. No es parada de ninguna ruta ni
+// alimenta KPIs (R39).
+const ORIGEN_RECOLECCION = "recolectando";
 const ESTADO_EN_REPARTO = "en_reparto";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
 const ORIGEN_GESTION = "en_reparto";

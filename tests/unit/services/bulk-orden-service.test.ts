@@ -80,6 +80,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     recibirEnBodegaCentral: vi.fn().mockResolvedValue(false),
     // feature 157: recoleccion en tienda (asignacion sin transicion + confirmacion por QR)
     asignarRecoleccionLote: vi.fn().mockResolvedValue(0),
+    desasignarRecoleccionLote: vi.fn().mockResolvedValue(0),
     // feature 157: regla de dedicacion (reparto y recoleccion no se mezclan)
     findMensajerosConOrdenesEn: vi.fn().mockResolvedValue(new Set()),
     recolectarEnTienda: vi.fn().mockResolvedValue(false),

@@ -16,7 +16,10 @@ import type {
 //   - hay guardia de BLOQUEO por cierre pendiente (R31), la misma que `MisAsignacionesService`.
 // El par ORIGEN->DESTINO es UNICO, asi que no hay tabla state-aware que resolver.
 
-const ORIGEN_RECOLECCION = "por_recolectar_en_tienda";
+// Feature 157 (ampliada 2026-07-31): se recolecta lo que ALGUIEN tiene asignado, y eso es
+// `recolectando`. Una orden en `por_recolectar_en_tienda` no tiene mensajero, asi que la
+// guardia de propiedad la rechazaria igualmente: el origen y el dueño van de la mano.
+const ORIGEN_RECOLECCION = "recolectando";
 const DESTINO_RECOLECCION = "en_ruta_bodega_central";
 
 // Feature 111/R1: mismo texto que usa `MisAsignacionesService` para el bloqueo total. Mientras

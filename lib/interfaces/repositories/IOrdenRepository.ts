@@ -925,25 +925,42 @@ export interface IOrdenRepository {
   // --- Feature 157: recoleccion en tienda por el mensajero (R3-R5, R26-R38) ---
 
   /**
-   * Feature 157 (R3/R4/R5/R38): fija SOLO `mensajeroAsignadoId` en el lote de ordenes que
-   * siguen en `origenValue` (`por_recolectar_en_tienda`) y no estan borradas. NO transiciona,
-   * NO escribe historial (no hay arista que registrar: lo rechazaria el choke point de la 140),
-   * NO estampa `asignadoAt` (R38: es el denominador del ranking) y NO toca `numGuia` ni
-   * `prioridad`. Todo-o-nada: si la guarda no alcanza a todas las ordenes pedidas, lanza y la
-   * transaccion revierte (R5). Devuelve el numero de filas afectadas.
-   */
-  /**
-   * Feature 157 (regla de dedicacion) — de `ids`, los mensajeros con AL MENOS una orden
-   * VIVA en alguno de los `estados`. El llamador decide que cuenta como "ocupado": el
-   * reparto y la recoleccion se excluyen mutuamente, pero varias recolecciones conviven
-   * (un viaje a la tienda son N ordenes).
+   * Feature 157 (regla de dedicacion) — de `ids`, los mensajeros con AL MENOS una orden VIVA
+   * en alguno de los `estados`. El llamador decide que cuenta como "ocupado": el reparto y la
+   * recoleccion se excluyen mutuamente, pero varias recolecciones conviven (un viaje a la
+   * tienda son N ordenes).
    */
   findMensajerosConOrdenesEn(ids: string[], estados: string[]): Promise<Set<string>>;
 
+  /**
+   * Feature 157 (R3/R5/R38, ampliada 2026-07-31): asigna el mensajero que ira a la tienda y
+   * TRANSICIONA el lote de `origenValue` (`por_recolectar_en_tienda`) a `destinoEstatusId`
+   * (`recolectando`), con su rastro (`asignacion_recoleccion`) en la MISMA tx.
+   *
+   * Antes solo escribia el mensajero: la orden se quedaba en el estado de espera, seguia
+   * ofreciendose como asignable y se podia reasignar indefinidamente. NO estampa `asignadoAt`
+   * (R38: denominador del ranking), ni toca `numGuia` ni `prioridad`. Todo-o-nada (R5).
+   */
   asignarRecoleccionLote(
     ordenIds: string[],
     mensajeroId: string,
     origenValue: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<number>;
+
+  /**
+   * Feature 157 (ampliacion 2026-07-31): revierte la asignacion — `recolectando` ->
+   * `por_recolectar_en_tienda`— dejando la orden SIN mensajero, para que vuelva al monton de
+   * asignables. Es el camino explicito que sustituye a la reasignacion silenciosa: cambiar de
+   * mensajero exige revertir primero, y las dos mitades quedan en el historial. Familia
+   * `deshacer_asignacion` (149). Todo-o-nada.
+   */
+  desasignarRecoleccionLote(
+    ordenIds: string[],
+    origenValue: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
   ): Promise<number>;
 
   /**

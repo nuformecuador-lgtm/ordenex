@@ -1266,6 +1266,7 @@ enum OrdenHistorialOrigenTipo {
   recoleccion_tienda // feature 154: el mensajero recolecta en la tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43; lo ejecutara la 157)
   incidente // feature 154: familia propia del resultado `incidente` de la gestion. DECLARADA SIN PRODUCTOR hasta la 158 (la arista #44 en_reparto -> incidente viaja via `gestion`, decision Q4)
   deshacer_asignacion // feature 149: reversion de asignacion/ruteo antes de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite -> en_bodega_central)
+  asignacion_recoleccion // feature 157 (ampliacion): el maestro decide quien va a la tienda (por_recolectar_en_tienda -> recolectando)
 
   @@map("orden_historial_origen_tipo")
 }

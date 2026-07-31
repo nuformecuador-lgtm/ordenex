@@ -48,30 +48,35 @@ describe("Feature 157 — la recoleccion no contamina el ranking (R38)", () => {
   // El denominador del ranking es `orden.asignadoAt ∈ [hoy)`; el numerador cuenta entregas.
   // Una recoleccion no puede acreditarse como entrega, asi que si estampara `asignado_at`
   // restaria sin poder sumar jamas.
-  it("`asignarRecoleccionLote` NO escribe asignadoAt, estatusId, numGuia ni prioridad", () => {
+  // La ampliacion del 2026-07-31 hizo que la asignacion SI transicione (a `recolectando`) y
+  // por tanto SI escriba historial: sin eso, la orden nunca salia del monton y se podia
+  // reasignar sin fin. Lo que este guard protege sigue en pie y es lo que de verdad importa
+  // para el ranking: `asignado_at` NO se estampa.
+  it("`asignarRecoleccionLote` NO estampa asignadoAt, ni toca numGuia ni prioridad", () => {
     const src = leer("lib/repositories/OrdenRepository.ts");
-    const metodo = src.match(/async asignarRecoleccionLote\([\s\S]*?\n  \}/);
+    const metodo = src.match(/async asignarRecoleccionLote\([\s\S]*?\n {2}\}/);
 
     expect(metodo, "no se encontro asignarRecoleccionLote").not.toBeNull();
     const cuerpo = sinComentarios(metodo![0]);
     const data = cuerpo.match(/data:\s*\{([^}]*)\}/);
     expect(data, "no se encontro el `data` del updateMany").not.toBeNull();
-    // La escritura es EXACTAMENTE una columna.
+    // Escribe el mensajero y el estado nuevo, nada mas.
     expect(data![1]).toContain("mensajeroAsignadoId");
+    expect(data![1]).toContain("estatusId");
+    // `asignado_at` es el denominador del ranking y el numerador solo cuenta entregas: una
+    // recoleccion que lo estampara bajaria el porcentaje del mensajero sin poder subirlo.
     expect(data![1]).not.toContain("asignadoAt");
-    expect(data![1]).not.toContain("estatusId");
     expect(data![1]).not.toContain("numGuia");
     expect(data![1]).not.toContain("prioridad");
   });
 
-  it("`asignarRecoleccionLote` NO escribe historial (no hay arista que registrar, R36)", () => {
+  it("`asignarRecoleccionLote` SI deja rastro, con familia propia (auditoria de la asignacion)", () => {
     const src = leer("lib/repositories/OrdenRepository.ts");
-    const metodo = src.match(/async asignarRecoleccionLote\([\s\S]*?\n  \}/);
+    const metodo = src.match(/async asignarRecoleccionLote\([\s\S]*?\n {2}\}/);
 
-    // `appendCambioEstado` sobre una auto-arista inexistente lanzaria `TransicionIlegalError`
-    // en el choke point de la 140: registrar la asignacion como transicion seria falsificar
-    // el historial (design Q3).
-    expect(sinComentarios(metodo![0])).not.toContain("appendCambioEstado");
+    // Toda transicion pasa por el choke point de la feature 49; que esta lo haga es
+    // justamente lo que permite saber QUIEN asigno la recoleccion y cuando.
+    expect(sinComentarios(metodo![0])).toContain("appendCambioEstado");
   });
 
   it("el service de asignacion no toca `gestion_orden` (R36: no hay gestion todavia)", () => {

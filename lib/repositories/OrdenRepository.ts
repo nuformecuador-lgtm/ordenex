@@ -1631,46 +1631,122 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Feature 157 (R3/R4/R5/R38): fija SOLO el mensajero que ira a recolectar a la tienda.
+   * Feature 157 (R3/R5/R38, ampliada el 2026-07-31): asigna el mensajero que ira a la tienda
+   * y TRANSICIONA el lote a `recolectando`.
    *
-   * Es la unica asignacion del repo que NO transiciona, y por eso no se parece a
-   * `asignarBodegaLote` aunque comparta el nombre de familia:
-   * - **Sin `appendCambioEstado`.** No hay cambio de estado que registrar, y el choke point
-   *   de la feature 140 valida contra `TRANSICIONES`: una auto-arista
-   *   `por_recolectar_en_tienda -> por_recolectar_en_tienda` NO existe en el mapa y haria
-   *   lanzar `TransicionIlegalError`. Registrarla seria falsificar el historial (design Q3).
-   * - **Sin `asignadoAt`** (R38): esa columna es el denominador del ranking
-   *   (`RankingRepository.contarAsignadasPorMensajero`) y el numerador solo cuenta entregas,
-   *   asi que estamparla aqui bajaria el porcentaje del mensajero sin poder subirlo jamas.
-   *   Cuando la orden llegue a la central y se asigne para repartir, `asignarBodegaLote` la
-   *   estampa en el instante correcto y el ranking la cuenta una sola vez.
-   * - **Sin `prioridad: false`** (a diferencia de `asignarBodegaLote`, que la apaga): una
-   *   recoleccion no participa del ciclo de reasignacion prioritaria de la feature 101.
+   * Antes solo escribia el mensajero, sin mover el estado. Eso dejaba la orden en el monton de
+   * "sin asignar": seguia ofreciendose para asignar y se podia reasignar indefinidamente, que
+   * es el bug que esta version cierra. Ahora la asignacion es una transicion de verdad, con su
+   * rastro (`asignacion_recoleccion`) en la MISMA tx — el choke point de la feature 49.
    *
-   * La guarda del `WHERE` (estado de origen + no borrada) es la defensa REAL —la validacion
-   * del service solo sirve para reportar mejor, mismo criterio que `recibirEnBodegaCentral`—.
-   * Si no alcanza a TODAS las ordenes pedidas, lanza para que la tx revierta: todo-o-nada (R5).
+   * Lo que sigue SIN tocarse:
+   * - **`asignadoAt`** (R38): es el denominador del ranking y el numerador solo cuenta
+   *   entregas, asi que estamparlo bajaria el porcentaje del mensajero sin poder subirlo. Se
+   *   estampa cuando la orden llegue a la central y se asigne para repartir.
+   * - **`numGuia`**: lo tiene desde que nacio.
+   * - **`prioridad`**: una recoleccion no participa del ciclo de reasignacion prioritaria.
+   *
+   * La guarda del `WHERE` (estado de origen + no borrada) es la defensa REAL; la validacion
+   * del service solo sirve para reportar mejor. Si no alcanza a TODAS las ordenes pedidas,
+   * lanza para que la tx revierta: todo-o-nada (R5).
    */
   async asignarRecoleccionLote(
     ordenIds: string[],
     mensajeroId: string,
     origenValue: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
   ): Promise<number> {
     if (ordenIds.length === 0) return 0;
     return this.prisma.$transaction(async (tx) => {
+      // Origen pre-leido bajo la MISMA guarda, para el `estatusOrigenId` del historial.
+      const origenRows = await tx.orden.findMany({
+        where: {
+          id: { in: ordenIds },
+          deletedAt: null,
+          estatus: { value: origenValue },
+        },
+        select: { id: true, estatusId: true },
+      });
       const result = await tx.orden.updateMany({
         where: {
           id: { in: ordenIds },
           deletedAt: null,
           estatus: { value: origenValue },
         },
-        data: { mensajeroAsignadoId: mensajeroId },
+        data: { mensajeroAsignadoId: mensajeroId, estatusId: destinoEstatusId },
       });
       if (result.count !== ordenIds.length) {
         throw new Error(
           `asignarRecoleccionLote: ${result.count} de ${ordenIds.length} ordenes elegibles`,
         );
       }
+      await appendCambioEstado(
+        tx,
+        origenRows.map((r) => ({
+          ordenId: r.id,
+          estatusOrigenId: r.estatusId,
+          estatusDestinoId: destinoEstatusId,
+          actorUsuarioId: historial.actorUsuarioId,
+          origenTipo: historial.origenTipo, // asignacion_recoleccion
+        })),
+      );
+      return result.count;
+    });
+  }
+
+  /**
+   * Feature 157 (ampliacion 2026-07-31) — REVIERTE la asignacion de una recoleccion:
+   * `recolectando -> por_recolectar_en_tienda`, dejando la orden sin mensajero para que
+   * vuelva al monton de asignables.
+   *
+   * Es el camino explicito que sustituye a la reasignacion silenciosa de antes (decision del
+   * humano): cambiar de mensajero exige revertir primero, y las dos mitades quedan en el
+   * historial. Reusa la familia `deshacer_asignacion` (feature 149), que ya significa
+   * exactamente esto: revertir una asignacion ANTES de la recogida.
+   *
+   * Todo-o-nada, misma guarda que la asignacion. Devuelve el numero de filas afectadas.
+   */
+  async desasignarRecoleccionLote(
+    ordenIds: string[],
+    origenValue: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      const origenRows = await tx.orden.findMany({
+        where: {
+          id: { in: ordenIds },
+          deletedAt: null,
+          estatus: { value: origenValue },
+        },
+        select: { id: true, estatusId: true },
+      });
+      const result = await tx.orden.updateMany({
+        where: {
+          id: { in: ordenIds },
+          deletedAt: null,
+          estatus: { value: origenValue },
+        },
+        // El mensajero se limpia: la orden vuelve a estar disponible para cualquiera.
+        data: { mensajeroAsignadoId: null, estatusId: destinoEstatusId },
+      });
+      if (result.count !== ordenIds.length) {
+        throw new Error(
+          `desasignarRecoleccionLote: ${result.count} de ${ordenIds.length} ordenes elegibles`,
+        );
+      }
+      await appendCambioEstado(
+        tx,
+        origenRows.map((r) => ({
+          ordenId: r.id,
+          estatusOrigenId: r.estatusId,
+          estatusDestinoId: destinoEstatusId,
+          actorUsuarioId: historial.actorUsuarioId,
+          origenTipo: historial.origenTipo, // deshacer_asignacion
+        })),
+      );
       return result.count;
     });
   }
