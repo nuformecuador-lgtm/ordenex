@@ -32,7 +32,7 @@ producción sin esperar a la siguiente.
 
 ## Tanda 0 — Base compartida (bloquea todo lo demás)
 
-### [ ] T0.1 [P] — Tipo del resultado «completo»
+### [x] T0.1 [P] — Tipo del resultado «completo»
 - Crear `lib/types/descarga-listado.ts` con `ListarCompletoResult<T>` (`ok` con
   `items`/`total`, `limite_excedido` con `total`/`limite`, y el `ActionError` común).
 - Reexpresar `ListarOrdenesCompletoResult` (`lib/types/orden.ts:167-171`) en términos del tipo
@@ -40,12 +40,14 @@ producción sin esperar a la siguiente.
 - **Depende de:** —
 - **Hecho:** `pnpm typecheck` verde; el módulo no importa React, Prisma ni `lib/services`.
 
-### [ ] T0.2 — Adaptadores cliente + mensajes canónicos
+### [x] T0.2 — Adaptadores cliente + mensajes canónicos
 - Crear `components/shared/descarga-resultado.ts` con `filasDesdeResultado(res, proyectar)`
   (Familia A), `filasLocales(filas, proyectar)` (Familia B, con el tope de
   `descargaConfig.MAX_FILAS`), `mensajeLimite(total, limite)` y `SUFIJO_REINTENTO`. Los textos
   se PROMUEVEN sin editarlos desde `OrdenesModule.tsx:75-88`.
-- Test: `tests/unit/components/descarga-resultado.test.ts`
+- Test: `tests/unit/components/descarga-resultado.test.ts` (9 casos: los 6 declarados +
+  «traduce el array local en el mismo orden», «vacío tal cual» también en Familia B y el
+  test que fija los DOS textos promovidos palabra por palabra)
   - «traduce el resultado ok a filas proyectadas, en el mismo orden» (R11)
   - «traduce limite_excedido a un error accionable con total y tope, sin filas» (R27)
   - «traduce cualquier error de acción a un mensaje accionable sin datos personales» (R36)
@@ -55,13 +57,13 @@ producción sin esperar a la siguiente.
 - **Depende de:** T0.1 · **Cubre:** R11, R26, R27, R28, R31, R36
 - **Hecho:** los 6 tests verdes; ningún literal de mensaje duplicado en `app/`.
 
-### [ ] T0.3 — Migrar `OrdenesModule` a los adaptadores (refactor sin cambio funcional)
+### [x] T0.3 — Migrar `OrdenesModule` a los adaptadores (refactor sin cambio funcional)
 - Sustituir el bloque inline `OrdenesModule.tsx:378-403` por `filasDesdeResultado`.
 - Test: `tests/components/OrdenesDescarga.test.tsx` **sin modificar** debe seguir verde.
 - **Depende de:** T0.2 · **Cubre:** — (habilitante; evita dos caminos)
 - **Hecho:** suite de la 151 verde sin editar ni un test.
 
-### [ ] T0.4 [P] — Guardia de datos sensibles
+### [x] T0.4 [P] — Guardia de datos sensibles
 - Test: `tests/unit/descarga/columnas-sensibles.guardia.test.ts`
   - «ninguna declaración de columnas contiene claves de credencial, token o secreto» (R21)
   - «ninguna fila de export emite una ruta de almacenamiento ni una URL firmada» (R22)
@@ -70,18 +72,31 @@ producción sin esperar a la siguiente.
 - Descubre los módulos `*-descarga-columnas.ts` por convención de nombre.
 - **Depende de:** — · **Cubre:** R21, R22, R23, R25
 - **Hecho:** 4 tests verdes; añadir a mano una columna `passwordHash` hace fallar la guardia.
+- **MEDIDO (2026-07-31):** las tres formas de fuga se demostraron y se revirtieron —
+  columna `passwordHash` (falla el test de declaración), celda que lee `orden.id` (falla el
+  de uuid, y la sonda dice qué campo se leyó) y celda con URL firmada de Storage (falla el
+  de rutas). Ver `progress/impl_170-export-todas-las-tablas.md`.
+- Cómo prueba la PROYECCIÓN sin un fixture por módulo (que sería otra lista fija): ejecuta
+  cada `fila*()` con una SONDA (proxy que responde a cualquier lectura con un marcador que
+  recuerda el campo leído), así el valor emitido delata su origen sea cual sea el DTO.
 
-### [ ] T0.5 [P] — Guardia de cobertura del censo
-- Crear el registro del censo (25 dentro / 6 fuera del Anexo II).
+### [x] T0.5 [P] — Guardia de cobertura del censo
+- Crear el registro del censo (25 dentro / 6 fuera del Anexo II) →
+  `tests/unit/descarga/censo-tablas.ts`. Cada tabla declara su estado: `con_descarga`,
+  `pendiente` (con la tanda que la cablea; estado TRANSITORIO que debe quedar vacío al
+  cerrar la fase 1) o `fuera` (con el motivo). La guardia contrasta ese estado declarado
+  contra el código instancia a instancia, en los dos sentidos.
 - Test: `tests/unit/descarga/cobertura-tablas.guardia.test.ts`
   - «toda tabla del árbol o declara descarga o figura como exclusión justificada» (R4)
   - «las tablas declaradas fuera de alcance no montan control de descarga» (R2)
 - **Depende de:** — · **Cubre:** R2, R4
 - **Hecho:** ambos tests verdes; un `<DataTable>` nuevo sin registrar hace fallar la guardia.
+- **MEDIDO (2026-07-31):** demostrado con un componente nuevo con `<DataTable>` sin
+  registrar — la guardia lo nombra (`… /TablaDemoGuardia.tsx #1`) y falla; revertido.
 
 ## Tanda A — Órdenes (frontend puro, cero backend)
 
-### [ ] T A.1 — Apartado de órdenes por estado
+### [x] T A.1 — Apartado de órdenes por estado
 - `OrdenesApartado`: `descarga` en el render con `listarOrdenesCompleto({ estatusId })` +
   `COLUMNAS_DESCARGA_ORDENES` + `filaDescargaOrden` (ya existen).
 - Test: `tests/components/descarga/OrdenesApartadoDescarga.test.tsx`
@@ -91,8 +106,14 @@ producción sin esperar a la siguiente.
   - «el listado paginado sigue comportándose igual» (R3)
 - **Depende de:** T0.3 · **Cubre:** R1, R3, R9, R10
 - **Hecho:** 4 tests verdes; cero código nuevo en `lib/services`.
+- **MEDIDO (2026-07-31):** 5 verdes (el 5.º: sin `estatusId` resuelto NO se ofrece el
+  control, porque descargar ahí mandaría un filtro vacío y traería todas las órdenes).
+- **Efecto colateral, declarado:** montar el control hace que el apartado use `useToast`.
+  `tests/components/OrdenesApartado.test.tsx` (feature 49) renderizaba sin proveedor y sus
+  6 tests reventaban; se envolvió su `render` en `ToastProvider` — SOLO el arnés, ninguna
+  aserción. En producción no cambia nada: `app/(app)/layout.tsx` ya envuelve el grupo.
 
-### [ ] T A.2 [P] — Órdenes de la bodega satélite
+### [x] T A.2 [P] — Órdenes de la bodega satélite
 - `satelite-descarga-columnas.ts` + cableado con `filasLocales` sobre el array **YA filtrado**.
 - Test: `tests/components/descarga/SateliteDescarga.test.tsx`
   - «ofrece la descarga de las órdenes de la bodega» (R1)
@@ -101,6 +122,10 @@ producción sin esperar a la siguiente.
   - «solo contiene órdenes de la zona del actor» (R14, R20)
 - **Depende de:** T0.2, T0.4 · **Cubre:** R1, R10, R14, R20, R30, R32
 - **Hecho:** 4 tests verdes.
+- **MEDIDO (2026-07-31):** 4 verdes. R30/R32 se verifican de forma ESTÁTICA sobre el
+  módulo (no importa `lib/actions|services|repositories`, no hay `fetch` ni `useSWR`, y
+  usa `filasLocales` y no `filasDesdeResultado`): la propiedad «no relee» vive ahí, no en
+  un espía que solo cubre el camino que el test recorra.
 
 ## Tanda B — Configuración (backend → frontend)
 

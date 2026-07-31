@@ -4,16 +4,25 @@ import { useMemo, useState } from "react";
 import { Inbox } from "lucide-react";
 import useSWR from "swr";
 
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DataTableDescarga,
+} from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { ordenesConfig } from "@/lib/config/ordenes";
-import { listarOrdenes } from "@/lib/actions/ordenes";
+import { listarOrdenes, listarOrdenesCompleto } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { ordenesColumns } from "./ordenes-columns";
+import {
+  COLUMNAS_DESCARGA_ORDENES,
+  filaDescargaOrden,
+} from "./ordenes-descarga-columnas";
 import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
@@ -203,6 +212,32 @@ export function OrdenesApartado({
     onTertiaryAction?.(seleccionadas);
   }
 
+  /**
+   * Feature 170 (T A.1, R1/R9/R10) — descarga del dataset completo DEL APARTADO.
+   *
+   * Cero código de servidor: `listarOrdenesCompletoSchema` ya deriva de
+   * `listarOrdenesSchema`, que incluye `estatusId`, así que la misma Server Action del
+   * listado principal cubre el apartado con solo pasarle su estado. Es el mismo servicio,
+   * con la misma autorización, el mismo acotamiento por rol y el mismo tope.
+   *
+   * Se construye EN EL RENDER (no en un memo): el closure lee el `estatusId` de ESTE
+   * render, así que la descarga siempre refleja el estado vigente del apartado (R10).
+   * Sin `estatusId` (el catálogo aún no resolvió) no se ofrece el control: descargar
+   * entonces enviaría un filtro vacío y traería TODAS las órdenes, que no es lo que el
+   * apartado muestra.
+   */
+  const descarga: DataTableDescarga | undefined = estatusId
+    ? {
+        titulo,
+        columnas: COLUMNAS_DESCARGA_ORDENES,
+        obtenerFilas: () =>
+          filasDesdeResultado(
+            listarOrdenesCompleto({ estatusId }),
+            filaDescargaOrden,
+          ),
+      }
+    : undefined;
+
   return (
     <section className="flex flex-col gap-3" aria-label={titulo}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -250,6 +285,7 @@ export function OrdenesApartado({
         data={items}
         rowKey="id"
         ariaLabel={titulo}
+        descarga={descarga}
         isLoading={isLoading || estatusId === undefined}
         error={error ? "No se pudieron cargar las órdenes" : null}
         emptyState={{

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ordenesConfig } from "@/lib/config/ordenes";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 
 // Campos ordenables permitidos (lista blanca, evita inyeccion de columnas; R31).
@@ -329,9 +330,11 @@ export type ListarOrdenesResult =
   | ActionError;
 // Feature 151 (R11/R20): resultado del modo completo en el borde. `limite_excedido`
 // lleva SOLO conteos (sin PII) y NUNCA filas; el resto de fallos son `ActionError`.
-export type ListarOrdenesCompletoResult =
-  | { status: "ok"; items: OrdenListItemDTO[]; total: number }
-  | { status: "limite_excedido"; total: number; limite: number }
-  | ActionError;
+//
+// Feature 170 (T0.1): se REEXPRESA sobre `ListarCompletoResult<T>` (lib/types/descarga-listado),
+// que generaliza este mismo union para los siete `listarCompleto` que la 170 anade. La forma
+// publica NO cambia —es el mismo union, con los mismos nombres de campo—, asi que ningun
+// consumidor de la 151 se entera; lo que cambia es que ahora hay UNA sola definicion.
+export type ListarOrdenesCompletoResult = ListarCompletoResult<OrdenListItemDTO>;
 export type ActualizarOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type BorrarOrdenResult = { status: "ok" } | ActionError;
