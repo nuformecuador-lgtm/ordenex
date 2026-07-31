@@ -1644,11 +1644,15 @@
       "id": 144,
       "name": "DataTable: busqueda y filtros",
       "description": "Frontend. Agrega al DataTable generico (components/shared/DataTable.tsx) dos capacidades opt-in por props, sin que la tabla conozca dominio: (a) input de busqueda global que matchea contra el valor de CUALQUIER columna de la fila; (b) integracion del TableFilters existente (components/shared/TableFilters.tsx, hoy UI suelta y sin consumidores). El export a Excel NO entra aqui: se decidio server-side y vive en la 151. Requisito para esa 151: el estado de busqueda/filtros debe quedar legible desde fuera (elevable o expuesto por callback), de modo que el boton de export pueda enviar al backend EXACTAMENTE los mismos filtros con los que se lista. ATENCION (reconciliacion 2026-07-28): hay trabajo EN VUELO fuera de dev -- PR #180, rama feature/144-filtros-ordenes. En ese PR el humano REDEFINIO la ficha (pasa a componente de filtros parametrizable + su cableado en ordenes, fullstack/high, con migracion de indices 20260728120000_orden_indices_filtros) y ahi viajan su spec (specs/144-filtros-ordenes), su spec_path, su branch y su status in_progress. En dev se deja pending A PROPOSITO porque su spec NO esta en dev y la regla 4 de init.sh exige spec para toda feature en vuelo. NO tomar este id ni este alcance sin leer el PR #180; el registro se reconcilia solo al mergearlo.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": "low",
-      "zone": "frontend",
-      "depends_on": null
+      "complexity": "high",
+      "zone": "fullstack",
+      "depends_on": null,
+      "branch": "feature/144-filtros-ordenes",
+      "spec_path": "specs/144-filtros-ordenes",
+      "merged_pr": 180,
+      "status_note": "CERRADA el 2026-07-31 (bookkeeping atrasado: el PR #180 se mergeo el 2026-07-29 y la ficha seguia `pending`, como declaraba su propia description mientras el trabajo estaba en vuelo). Entregado: componente de filtros parametrizable + su cableado en /ordenes (catalogo: estado, zona, tienda, provincia, canton, distrito; y tiempo: atajo o rango), con la migracion de indices 20260728120000_orden_indices_filtros — cuatro btree de catalogo (zona, provincia, canton, distrito), NINGUNO de texto. LA BUSQUEDA DE TEXTO SE QUEDO FUERA al redefinirse la feature: `ordenFilterSchema` es .strict() y no acepta ningun campo de texto, asi que hoy no hay forma de buscar una orden por guia, remision, telefono ni destinatario en /ordenes. Ese hueco lo cierra la 169, pedida por el humano el 2026-07-31. La `zone` pasa de `frontend` a `fullstack` y la `complexity` de `low` a `high`: la ficha original describia un buscador de cliente sobre el DataTable, y lo que el humano redefinio y se construyo lleva migracion, contrato zod y repositorio."
     },
     {
       "id": 145,
@@ -1658,7 +1662,8 @@
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
-      "depends_on": 144
+      "depends_on": 169,
+      "status_note": "depends_on pasa de 144 a 169 el 2026-07-31. La 144 ya esta mergeada, pero entrego SOLO filtros: la busqueda de texto —que es la mitad del alcance de este rollout— la construye la 169 en /ordenes. Adoptar aqui una capacidad que todavia no existe seria imposible. Cuando la 169 cierre, este rollout hereda su patron ya medido con datos reales (indice GIN + ruta rapida numerica + estrategia de conteo), en vez de inventar uno por tabla. Sigue dependiendo tambien de la 151 para el export."
     },
     {
       "id": 146,
@@ -1959,6 +1964,19 @@
       "merged_pr": 231,
       "status_note": "Pedida por el humano el 2026-07-31: no encontraba como recolectar. La forma existia (QR + numero de guia) pero vivia dentro de Entregas y RecoleccionTiendaPanel devolvia null con la lista vacia, o sea que el escaner desaparecia justo cuando se lo busca. Decisiones del humano en la puerta: escaner montado SIEMPRE (solo lo apaga el bloqueo por cierre), corte limpio en Entregas sin aviso ni enlace, lista 'Recolectadas hoy' derivada del HISTORIAL (si saliera del estado, desapareceria al recibirla la bodega central) con ventana de dia natural CR, y retirada del pre-chequeo local de guias ajenas: con el escaner siempre montado ningun escaneo podria funcionar con la lista vacia, asi que decide el servidor (invalida el test R21 de la 157, sustituido). Migracion unica: indice (actor_usuario_id, origen_tipo, created_at) en orden_historial_estado. 39 R en EARS trazados a test, reviewer 0 bloqueantes, 4 menores cerrados con mutacion. Detalle en progress/impl_ y review_167. PENDIENTE: verificacion humana en pantalla con camara y etiqueta real.",
       "spec_path": "specs/167-apartado-recoleccion-mensajero"
+    },
+    {
+      "id": 169,
+      "name": "buscador de texto en el listado de ordenes",
+      "description": "Un input que encuentra una orden por guia, remision, telefono o destinatario, resuelto en el servidor.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "depends_on": 144,
+      "branch": "feature/169-buscador-ordenes",
+      "spec_path": "specs/169-buscador-ordenes",
+      "status_note": "Pedida por el humano el 2026-07-31: necesita encontrar una orden por cualquiera de sus datos importantes, y pidio EXPRESAMENTE cuidado con el rendimiento. Auditado antes de registrar: la 144 entrego filtros pero NO busqueda de texto, y la unica busqueda existente (114, del mensajero) es 100% de cliente sobre lo ya cargado, inservible para una tabla paginada en servidor. DECISIONES DEL HUMANO: (1) campos = guia, remision, telefono y destinatario, los CUATRO en la tabla orden (sin joins, indice pequeno); descarta direccion, producto y nombre de tienda; (2) se empieza por /ordenes y el rollout al resto de tablas queda en la 145. VOLUMEN: hoy pocas ordenes, pero el humano espera muchas decenas de miles pronto; de ahi que se indexe YA — anadir la columna generada reescribe la tabla con lock exclusivo, instantaneo con pocas filas y ventana de mantenimiento con medio millon. ENFOQUE A ESPECIFICAR: pg_trgm + GIN sobre columna generada STORED (NO tsvector: el FTS no encuentra fragmentos en medio, y aqui se teclean 4 digitos de un telefono), mas ruta rapida por igualdad contra num_guia cuando el termino es numerico. DOS RIESGOS DECLARADOS: el count(*) exacto de la paginacion se paga entero en cada tecleo (plan B: conteo con tope) y unaccent() NO es IMMUTABLE, asi que no puede ir tal cual en una columna generada. El termino DEBE componerse en AND con el alcance por rol: un buscador que se lo salte es una fuga de datos. SPEC ESCRITA el 2026-07-31: 42 requisitos EARS trazados a test, con 4 preguntas abiertas para la puerta. El spec CORRIGIO dos datos del estado del arte que le paso el leader: OrdenRepository.list usa Promise.all([findMany,count]) y no $transaction, y adminSatelite NO lista ordenes en esta superficie (recibe forbidden, no un acotamiento por zona). Y corrigio el analisis de rendimiento: capar el count NO elimina el coste dominante porque el findMany con ORDER BY sobre un predicado trigram YA es O(coincidencias) — de ahi que v1 conserve el conteo exacto y el plan B quede disenado con umbrales medibles. Acentos: translate() con mapa de 48 caracteres espejado en TS, NO envoltorio IMMUTABLE de unaccent, porque asi la paridad Node<->Postgres es demostrable con un test en vez de un acto de fe. PUERTA F1.4 CERRADA: el humano aprobo el 2026-07-31 sin responder P2 ni P3, asi que se toman los DEFAULTS declarados en el spec: (P3) un termino solo-digitos que coincide con una guia devuelve esa guia y solo esa; (P2) la migracion crea pg_trgm si no existe y falla ruidosamente si esta en otro esquema, verificando antes de aplicar en cada base."
     }
   ]
 }

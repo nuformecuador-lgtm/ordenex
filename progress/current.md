@@ -8,7 +8,134 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento — **EMPIEZA A LEER POR AQUÍ**
+## 🗓️ Sesión 2026-07-31 (cont. 2) — Excel en todas las tablas + wallet incompleta — **EMPIEZA A LEER POR AQUÍ**
+
+Dos reportes del humano. **Los dos son ciertos, por motivos distintos de los que parecían.**
+
+### 📊 Excel: la capacidad existe, el rollout no — feature 170 (nueva)
+
+`DataTable` **ya integra** la descarga del dataset completo (feature 151, server-side y sin
+paginación), **opt-in por la prop `descarga`**. El problema es que **solo 1 de 25 tablas la
+activa** (`OrdenesModule`); las otras 24 nunca recibieron la prop. Medido, no estimado.
+
+Estaba dentro de la **145**, que mezcla búsqueda + filtros + export y desde hoy depende de la 169.
+**Decisión del humano: el export se SEPARA a la 170 y se hace YA** — no depende del buscador. La 145
+se queda con búsqueda y filtros. Spec en curso, en rama propia.
+
+### 💰 Wallet: un hueco objetivo y un cambio de modelo — feature 171 (por registrar)
+
+**El hueco, confirmado en código:** `egreso_pago_tienda` (caja principal) y `pago_tienda` (ledger de
+tienda) están declarados en los enums **desde la feature 43** y **NINGÚN código los emite** — solo
+aparecen en tipos, etiquetas y el catálogo de analítica. O sea: **no existe el flujo de pagarle a la
+tienda**, así que el saldo a favor de cada tienda crece indefinidamente y nunca se salda en el
+sistema. Para mensajeros sí existe el equivalente (feature 44). Para tiendas quedó como follow-up
+`F1.4-Q4` de la 43 y **nadie lo registró como ficha**.
+
+**Lo que el humano describía como «falta el ingreso del dinero total de la orden» sí se registra**,
+pero en el **ledger por tienda** (`cod_recaudado`, crédito a favor de la tienda), no en la caja
+principal. Eso era deliberado: el COD no es ingreso de Ordenex, es dinero de la tienda que se le
+debe. La caja principal modela **resultado** (flete, comisión COD, IVAs), no **tesorería**.
+
+> **DECISIÓN DEL HUMANO (2026-07-31): la caja principal pasa a reflejar TESORERÍA COMPLETA.** El COD
+> entra como ingreso de caja y sale al pagarle a la tienda, de modo que se vea el flujo entero. Al
+> especificar hay que resolver lo que esto rompe: **el balance dejará de ser «lo que gané»**, así que
+> «saldo de caja» y «ganancia» tienen que quedar separados y nombrados, o el número se leerá como
+> utilidad y no lo será. Afecta a `derivarBalance`, a la vista de wallet y al catálogo de analítica
+> (métricas financieras, features 127/135), que hoy suman categorías `ingreso_*` como resultado.
+
+**Prioridad decidida:** el Excel primero; la wallet después.
+
+### 💸 Segundo reporte de wallet (mismo día): no hay forma de PAGAR nada
+
+El humano pregunta cómo salda las cuentas por pagar de mensajeros y el monto a favor de las tiendas,
+y si «ya existe o hay que implementarlo». **Auditado: no existe, y no está escondido.** Cero acciones
+de pago o liquidación en `lib/actions/`. El detalle:
+
+- **`/wallet/tiendas` NO tiene desglose por tienda.** Mensajeros sí (`DesglosePagosMensajero.tsx`);
+  tiendas solo tiene `SaldosTiendasTable.tsx`.
+- **Liquidar la cuenta por pagar de un mensajero: no existe.** La categoría `liquidacion` del ledger
+  está marcada «RESERVADO para el follow-up de saldar la cuenta por pagar» desde la **feature 44**
+  (`F1.4-Qf`) y nadie la emite.
+- **Pagar a una tienda: no existe.** `pago_tienda` idéntico, reservado desde la **43** (`F1.4-Q4`).
+
+**Es el mismo agujero en los dos: el sistema sabe cuánto debe y a quién, pero no tiene cómo decir
+«ya pagué».** Por eso los montos solo crecen. Los dos follow-ups quedaron en sus specs y ninguno se
+convirtió en ficha, así que se perdieron.
+
+### Decisiones del humano (2026-07-31) para la liquidación
+
+1. **Pagos PARCIALES permitidos.** Se registra lo que se pagó de verdad y el saldo baja en esa
+   cantidad.
+2. **Mensajeros: el pago se pregunta AL APROBAR EL CIERRE y queda ATADO a ese cierre.** Idea del
+   humano, mejor que las opciones ofrecidas: no tiene sentido aprobar un cierre que genera una deuda
+   que después nadie mira. Encaja con el modelo actual, donde `pago_efectivo = min(deuda, efectivo
+   recaudado)` y **la cuenta por pagar es justo el resto**.
+3. **PERO aprobar y pagar son DOS PASOS.** El humano eligió primero «bloquear el cierre hasta pagar»
+   y se le señaló la consecuencia en cadena: por la **feature 111**, un cierre `solicitado`/`vencido`
+   sin resolver **BLOQUEA al mensajero**; un cierre no aprobado por falta de pago lo dejaría sin poder
+   trabajar al día siguiente por un motivo administrativo ajeno a él. Decisión final: **el cierre se
+   aprueba** (el mensajero queda libre) y la deuda queda **abierta, visible y atada al cierre**, que
+   no se considera liquidado hasta registrar el pago.
+4. **Tiendas: contra el saldo acumulado**, desde el desglose nuevo. No hay «cierre de tienda» al que
+   atar el pago: su saldo se acumula de muchos cierres de muchos mensajeros. Se descartó crear un
+   ciclo de corte por tienda (sería una feature en sí misma).
+5. **Datos de cada pago:** método (efectivo/SINPE/transferencia), referencia o comprobante, nota
+   libre, **fecha real del pago distinta de la de registro**, y —pedido explícito— «todo dato que dé
+   trazabilidad»: actor que lo registra e instante de registro.
+
+### Fichas a registrar cuando haya rama libre (borrador acordado, ids provisionales)
+
+| id | Qué | Depende de |
+| --- | --- | --- |
+| 171 | desglose por tienda en `/wallet/tiendas` (espejo del de mensajeros) | — |
+| 172 | liquidación: pagar a mensajeros (atado al cierre) y a tiendas (contra saldo) | 171 |
+| 173 | caja principal en modo TESORERÍA (el COD entra y sale) | 172 |
+
+> No se registran todavía porque el checkout principal está ocupado por el backend de la 169 y el
+> otro worktree escribiendo el spec de la 170: meter estas fichas ahí mezclaría registro con ramas
+> ajenas. **Todo el contenido acordado está aquí arriba**, que es lo que evita perderlo.
+
+## 🗓️ Sesión 2026-07-31 (cont.) — feature 169: buscador de órdenes (histórico)
+
+**Pedido del humano:** un input que encuentre una orden por cualquiera de sus datos importantes, con
+aviso EXPRESO de cuidar el rendimiento («no vaya a ser que sea lenta por una mala implementación de
+consultas»).
+
+### Auditoría antes de registrar — sí estaba pedido, pero no se construyó
+
+- **144 «DataTable: búsqueda y filtros»** figuraba `pending` con su **PR #180 MERGEADO desde el
+  2026-07-29**. Lo que entró son los **filtros** (catálogo + tiempo) y los componentes compartidos;
+  su migración `20260728120000_orden_indices_filtros` crea **cuatro btree de catálogo, ninguno de
+  texto**. **La búsqueda de texto se quedó fuera** al redefinirse la feature. → ficha a `done`.
+- **`ordenFilterSchema` es `.strict()` y no acepta ningún campo de texto**: hoy NO se puede buscar
+  una orden por guía, remisión, teléfono ni destinatario en `/ordenes`.
+- La única búsqueda existente es la **114** del mensajero: 100% de cliente sobre lo ya cargado.
+  Inservible para una tabla paginada en servidor — solo encontraría lo que ya está en pantalla.
+- **145** (rollout a todas las tablas) pasa a `depends_on: 169`: no puede adoptar una capacidad que
+  todavía no existe.
+
+### Decisiones del humano (2026-07-31)
+
+1. **Campos: guía, remisión, teléfono y destinatario.** Los cuatro viven en la tabla `orden` → sin
+   joins y con índice pequeño. Descarta dirección, producto y nombre de tienda.
+2. **Se empieza por `/ordenes`**; el rollout al resto queda en la 145.
+3. **Volumen:** hoy pocas órdenes, pero espera **muchas decenas de miles pronto**.
+
+### Enfoque técnico que va al spec (y por qué)
+
+- **`pg_trgm` + GIN sobre columna generada STORED**, NO `tsvector`. El FTS no encuentra fragmentos en
+  medio de una cadena, y aquí se teclean los últimos 4 dígitos de un teléfono o un trozo de remisión.
+- **Ruta rápida**: término numérico → igualdad contra `num_guia` (índice único ya existente). El caso
+  más frecuente del día no paga el coste del trigram.
+- **Se indexa YA, y el volumen bajo es la razón, no la excusa:** añadir una columna generada reescribe
+  la tabla con lock exclusivo. Instantáneo con pocas filas; ventana de mantenimiento con medio millón.
+- **Dos riesgos declarados de antemano:** el `count(*)` exacto de la paginación se paga entero en cada
+  tecleo (plan B: conteo con tope), y **`unaccent()` NO es `IMMUTABLE`**, así que no puede ir tal cual
+  en una columna generada — la trampa que rompe la migración a mitad.
+- El término se compone **en AND con el alcance por rol**: un buscador que se lo salte es una fuga de
+  datos, no un fallo de UX.
+
+## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento (histórico)
 
 **Feature 167 (apartado propio de recolección) → `done`, PR #231 MERGEADO.** Nació de un reporte de
 uso —«no veo la forma de recolectar»— que resultó ser dos problemas: la base local del humano tenía 4
