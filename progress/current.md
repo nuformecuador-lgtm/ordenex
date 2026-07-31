@@ -8,7 +8,93 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🏁 CIERRE 2026-07-30 (noche) — **EMPIEZA A LEER POR AQUÍ**
+## 🗓️ Sesión 2026-07-30 (noche, cuarta) — feature 129: fase 1
+
+**Pedido del humano: «comienza con la feature 129»** (analítica: ruta, shell y sidebar).
+
+### ✅ Registro RECONCILIADO — la zona `frontend` estaba falsamente saturada
+
+El registro declaraba **3 features `in_progress` en `frontend`** (161, 163, 164) y la regla 1 admite 2,
+así que la 129 —que es `frontend`— parecía bloqueada de entrada. **No lo estaba: las tres ya están en
+`dev`.** Se mergearon con el **PR #212** (`ux` → `dev`, MERGED el 2026-07-30 22:23Z); lo que faltaba era
+el bookkeeping del F2.5, no el trabajo.
+
+**Verificado POR ARCHIVOS contra `origin/dev`, no por el estado del PR** — que es la lección del #209
+escrita más abajo: `hooks/useInstalarPwa.ts`, `components/shared/InstalarPwaButton.tsx`,
+`components/shared/CarruselCards.tsx`, `components/shared/carrusel-rango.ts`, `components/ui/carousel.tsx`,
+`hooks/useTonoAlIncrementar.ts` y `lib/audio/tono-notificacion.ts` están **todos** en `origin/dev`.
+
+**161, 163 y 164 → `done`.** La zona `frontend` queda en **0 `in_progress`** y el aviso de arné que la
+164 dejó anotado («`./init.sh` falla hasta que se cierre alguna») **queda saldado**.
+
+> ⚠️ **`./init.sh` NO detectó la infracción de la regla 1 con las 3 abiertas.** El bloque que la valida
+> está entero dentro de un `if command -v jq`, y **`jq` no está instalado en esta máquina** (solo emite
+> el `warn` del paso 1). O sea: **el gate del que depende la regla 1 lleva tiempo sin ejecutarse**, y
+> con él la comprobación 4 (specs presentes para features en vuelo). Cuarta aparición del patrón de
+> este repo: *una herramienta que decide algo mirando lo que tiene a mano en vez de la fuente de verdad*.
+
+### 📊 Baseline MEDIDO al arrancar (no heredado de la bitácora)
+
+`./init.sh` → **635 archivos / 7385 tests / 2 rojos**. Los 2 **NO son fallos de test**: son
+`Failed to start forks worker` / `Timeout waiting for worker to respond` en `usuario-form.test.tsx` y
+`PostulacionForm.test.tsx`. **Re-corridos aislados: 2 archivos / 23 tests / 0 fallos.** Es saturación de
+workers de vitest bajo carga, no regresión. Baseline efectivo **verde**.
+
+### ⚠️ HAY OTRA SESIÓN VIVA EN ESTE MISMO CHECKOUT — no se cambió de rama
+
+A mitad de sesión aparecieron cambios sin commitear que **no son de esta sesión**: un rediseño de podio
+del ranking (`app/(app)/ranking/_components/RankingPodio.tsx` **untracked**, creado a las 19:59, y
+`ranking-labels.ts` modificado a las 19:58 con `iniciales`, `anchoBarra` y `PODIO_LABELS`). Al abrir la
+sesión `git status` estaba **limpio**, así que se escribieron **en vivo**.
+
+**Decisión: no se creó la rama `feature/129-...` ni se movió HEAD.** Crear la rama habría arrastrado el
+WIP ajeno, y cambiar de rama habría movido HEAD debajo de la otra sesión — que es exactamente el
+incidente del `backend_dev` con worktree ya registrado. **La fase 1 solo escribe bajo `specs/`, así que
+no necesita rama**; la creación de la rama se difiere a la fase 2. Al implementar hay que **volver a
+mirar** si ese WIP sigue suelto.
+
+### 📝 Fase 1 de la 129 — spec escrita, puerta CERRADA
+
+`specs/129-analitica-ruta-shell-sidebar/` (requirements EARS + design + tasks). La 129 es **solo el
+andamio**: ruta, shell vacío e ítem de menú. **Cero métrica, cero gráficas, cero fetch.**
+
+- **El `prefetch` que pide la ficha se declara FUERA DE ALCANCE con su razón**: la 129 tiene
+  `depends_on: null` y las Server Actions de analítica **no existen todavía** (son la 125/126/127). Se
+  deja el punto de extensión donde la 131 lo enchufará, en vez de inventar una fuente.
+- **7 preguntas de puerta, T0 CERRADA y escrita EN el spec** (no solo aquí): las Q quedan marcadas
+  `[x] RESUELTA` con su respuesta textual, y además viven como bloque `D1-D8` en `requirements.md`,
+  propagadas a los R y al `design.md`. **Los R crecieron de 23 a 25**, y los dos nuevos salen de las
+  propias decisiones: **`R10`** —el gate de la página y la visibilidad del ítem declaran el **mismo**
+  conjunto de roles, con test que falla si divergen— y **`R16`**, la posición del ítem. Las respuestas:
+  **Q1** el ítem es **solo `maestro`/`admin`** — la 129 **se desvía de su propia ficha a propósito**
+  (dice cinco roles) porque hasta la 131 la página está vacía; **ampliar es alcance de la 133**.
+  **Q2** etiqueta «Analítica». **Q3** `iconKey` nueva `chartColumn`. **Q4** pila vertical de regiones,
+  no pestañas. **Q5** la región financiera la añade la 132. **Q6** (decisión del leader, no había regla
+  escrita) el ítem va tras «Inicio» y antes de «Órdenes», porque comparte sus dos roles exactos.
+- **Q7 — desfase de numeración confirmado, no cambio de alcance:** las fichas de la 130/131/132 citan
+  «gráficas de 129» y «ruta 128» por una renumeración previa; mismo desfase en 124/125/126. Anotado en
+  el `design.md` para que no confunda a quien implemente la 131. **`feature_list.json` no se tocó.**
+
+### 🔎 Dos hallazgos de la verificación del spec
+
+1. El mapa `iconKey -> componente lucide` vive en **`app/(app)/_components/Sidebar.tsx:138-151`** y su
+   tipo es `Record<IconKey, SidebarIcon>` → añadir la clave a la union **rompe el build** hasta mapearla.
+   Exhaustividad garantizada por el compilador; no hace falta un test que la vigile.
+2. **`ROLES_SEED` es `Object.values(RolValue)` e incluye `apiKey`: son 6 valores, no 5.** El ítem
+   «Perfil» lo usa como «cualquier rol autenticado», así que **hoy «Perfil» es visible también para
+   `apiKey`** — preexistente, ajeno a la 129 y no se toca aquí, pero es una trampa para quien copie ese
+   patrón creyendo que `ROLES_SEED` son los roles humanos. Queda escrito en el `design.md` §5.
+3. **`ChartColumn` existe con ese nombre exacto** en el `lucide-react` instalado (`^1.23.0`,
+   `lucide-react.d.ts:4138` lo declara y `:24763` lo exporta). Comprobado contra el paquete, no supuesto.
+
+**Estado del registro:** **129 → `spec_ready`** con sus decisiones en el `status_note`. `in_progress` = **0**.
+
+---
+
+## 🏁 CIERRE 2026-07-30 (noche) — ~~EMPIEZA A LEER POR AQUÍ~~
+
+> *(Ya no es el punto de entrada: lo es la «Sesión 2026-07-30 (noche, cuarta)» de arriba. Sigue válido
+> en todo su detalle técnico; lo de arriba lo corrige en el estado del registro y en el baseline.)*
 
 **Todo mergeado a `dev`. Registro con CERO `in_progress`.**
 
