@@ -3,6 +3,7 @@ import type {
   WalletTiendaMovimientoTipo as PrismaWalletTiendaMovimientoTipo,
   WalletTiendaMovimientoCategoria as PrismaWalletTiendaMovimientoCategoria,
 } from "@prisma/client";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 
 // Feature 43 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del ledger POR
 // TIENDA, respaldada por los enums Postgres nativos (patron lib/types/wallet.ts). El
@@ -124,3 +125,25 @@ export const listarMovimientosTiendaSchema = z.object({
 });
 
 export type ListarMovimientosTiendaInput = z.infer<typeof listarMovimientosTiendaSchema>;
+
+// Feature 170 (T C.1) — entrada del modo SIN paginacion del ledger de la tienda (descarga
+// del dataset completo). Derivada del schema del listado quitando `page`/`pageSize`, de modo
+// que ambos caminos resuelvan los MISMOS filtros.
+//
+// `.strict()` importa MAS aqui que en los listados de configuracion: este es el ledger de UNA
+// tienda, y el acotado por `tienda_id` lo pone el service desde el actor (R19). Con `.strict()`
+// un cliente que intente colar `tiendaId` en la peticion recibe `validation_error` en el
+// BORDE, sin llegar al service (R18) — y si llegara, el service lo ignoraria igual (R15),
+// porque nunca lee esa clave. Dos cierres independientes para la misma fuga.
+export const listarMovimientosTiendaCompletoSchema = listarMovimientosTiendaSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarMovimientosTiendaCompletoInput = z.infer<
+  typeof listarMovimientosTiendaCompletoSchema
+>;
+
+// Feature 170 (T C.2): resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO
+// conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18).
+export type ListarMovimientosTiendaCompletoResult =
+  ListarCompletoResult<WalletTiendaMovimientoDTO>;

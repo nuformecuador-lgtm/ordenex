@@ -33,3 +33,19 @@ export type ListarCompletoResult<T> =
   | { status: "ok"; items: T[]; total: number }
   | { status: "limite_excedido"; total: number; limite: number }
   | ActionError;
+
+/**
+ * Feature 170 (T B.1 / T C.1) — el mismo resultado visto desde el SERVICIO, que no conoce
+ * el borde: no hay `unauthenticated` (eso lo decide la Server Action antes de llamarlo) ni
+ * `validation_error` (eso lo decide zod), pero SI hay `forbidden`, que es un resultado de
+ * DOMINIO —el rol del actor no puede ver ese listado (R17)— y por tanto lo devuelve quien
+ * conoce el dominio.
+ *
+ * Existe por el mismo motivo que su hermano de borde: seis servicios nuevos escriben este
+ * union en la Tanda B y la C, y seis copias divergen. Las tres formas son EXCLUYENTES: ni
+ * `limite_excedido` ni `forbidden` llevan nunca `items` (R17/R27).
+ */
+export type ListarCompletoServiceResult<T> =
+  | { status: "ok"; items: T[]; total: number }
+  | { status: "limite_excedido"; total: number; limite: number }
+  | { status: "forbidden" };

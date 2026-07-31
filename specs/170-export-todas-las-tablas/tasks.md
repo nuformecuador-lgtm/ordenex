@@ -129,25 +129,45 @@ producción sin esperar a la siguiente.
 
 ## Tanda B — Configuración (backend → frontend)
 
-### [ ] T B.1 — `listarCompleto` en usuarios, plantillas y API keys
+### [x] T B.1 — `listarCompleto` en usuarios, plantillas y API keys
 - Por servicio: extraer `construirWhere(input, actor)` **sin cambio de comportamiento** y
   añadir `listarCompleto` (`design.md §2.1`). Ampliar su interfaz.
+- **HALLAZGO (2026-07-31), declarado en vez de forzado:** en los TRES servicios NO HAY
+  `construirWhere` que extraer, porque `listar` no construye ningún predicado. El
+  repositorio lista todo (usuarios y API keys) o filtra por su cuenta (plantillas,
+  `deletedAt: null`), y el módulo entero es exclusivo de `maestro`, que no está acotado a un
+  subconjunto. **El alcance por rol de estos tres listados ES su guard `ALLOWED_ROLES`**, y
+  `listarCompleto` usa literalmente el mismo objeto, evaluado antes de tocar la base. La
+  paridad (R9/R11/R19) se sostiene sobre llamar al MISMO `repo.list`.
 - Test: `tests/unit/services/{usuario,plantilla,api-key}-descarga.test.ts`, cada uno:
   - «todas las filas sin recorte por página» (R9) · «forbidden sin filas» (R17)
   - «mismo criterio de orden que el listado» (R11) · «excluye borradas» (R19)
   - «limite_excedido con total y límite, sin filas» (R27) · «nunca más de N+1 filas» (R29)
 - **Depende de:** T0.1 · **Cubre:** R9, R11, R17, R19, R27, R29
 - **Hecho:** 18 tests verdes y las suites de listado existentes verdes SIN editar.
+- **MEDIDO (2026-07-31):** 26 verdes (9 usuarios + 8 plantillas + 9 API keys). Cada archivo
+  añade la CONTRAPRUEBA de R17 (el maestro SÍ recibe filas, para que el test de acotamiento
+  no pase por vacío) y el de «sin truncado» (R28). R19 se prueba de verdad en plantillas
+  (borrada excluida) y como PARIDAD en usuarios y API keys, que no tienen borrado lógico: el
+  conjunto completo == la concatenación de las páginas.
+- **Efecto colateral, declarado:** al ampliar las 3 interfaces, 4 archivos de test con dobles
+  que las implementan dejaban de compilar. Se les añadió el método al doble
+  (`usuarios.test`, `plantillas-actions.test`, `api-keys.test`, `api-keys-listar.test`):
+  SOLO el arnés, ninguna aserción tocada.
 
-### [ ] T B.2 — Server Actions de los tres listados
+### [x] T B.2 — Server Actions de los tres listados
 - `listarXCompleto(input, deps)` calcada de `listarOrdenesCompleto`.
 - Test: `tests/unit/actions/{usuarios,plantillas,api-keys}-descarga-action.test.ts`:
   - «unauthenticated sin filas» (R16) · «clave fuera de la lista blanca» (R18)
   - «propaga limite_excedido tal cual» (R27)
 - **Depende de:** T B.1 · **Cubre:** R16, R18
 - **Hecho:** 9 tests verdes; ninguna rama devuelve filas junto a un error.
+- **MEDIDO (2026-07-31):** 18 verdes (6 por action). Los `*CompletoSchema` se derivan del
+  schema del listado con `.omit({page,pageSize}).strict()`; el `.strict()` se añade AQUÍ y no
+  en el schema del listado (cuyo contrato esta feature no toca), así que R18 cubre tanto una
+  clave inventada como `page`/`pageSize`, que en el modo completo no significan nada.
 
-### [ ] T B.3 — Columnas de export de los tres listados
+### [x] T B.3 — Columnas de export de los tres listados
 - **Usuarios:** nombre, email, rol legible, estado — sin `passwordHash` ni `id`.
   **API keys:** identificador, prefijo, usuario dedicado, fecha, estado — **sin `keyHash`, sin
   la clave, sin el secreto de webhook**. **Plantillas:** nombre, canal, estado, fecha.
@@ -157,6 +177,18 @@ producción sin esperar a la siguiente.
   - «un campo nuevo del DTO no aparece hasta declararlo» (R6) · «columnas enumeradas» (R5)
 - **Depende de:** T0.4 · **Cubre:** R5, R6, R7, R8, R23, R24
 - **Hecho:** 18 tests verdes.
+- **MEDIDO (2026-07-31):** 20 verdes. **DOS divergencias con lo que esta task proponía para
+  PLANTILLAS, declaradas en vez de forzadas:** (a) «canal» NO EXISTE — `PlantillaListItem` no
+  tiene ese campo y hoy la única superficie es WhatsApp; inventar una columna con un literal
+  constante sería inventar un dato; (b) «fecha» sí existe en el DTO pero la TABLA NO LA
+  MUESTRA, y R24 prohíbe emitir lo que el listado no enseña. Salen `nombre`, `estado` y
+  `cuerpo` (éste COMPLETO, sin el truncado a 80 de pantalla: truncarlo sería entregar el dato
+  a medias sin avisar). Usuarios y API keys sí salen tal cual proponía la task.
+- **Efecto colateral, declarado:** las etiquetas de estado vivían dentro de los
+  `*-columns.tsx`, que importan `Badge`/`Button`. Se PROMOVIERON sin editar ni un texto a
+  tres módulos puros (`usuario-estado-label.ts`, `plantilla-estado-label.ts`,
+  `api-key-estado-label.ts`) para que el módulo de export no arrastre React; los `.tsx` las
+  leen de ahí. Misma operación que ya se hizo con `ROL_LABELS`.
 
 ### [ ] T B.4 — Cableado de los tres módulos
 - Test: `tests/components/descarga/ConfiguracionDescarga.test.tsx`
@@ -168,7 +200,7 @@ producción sin esperar a la siguiente.
 
 ## Tanda C — Ledgers paginados (backend → frontend)
 
-### [ ] T C.1 — `listarCompleto` en los cuatro servicios de dinero
+### [x] T C.1 — `listarCompleto` en los cuatro servicios de dinero
 - `WalletService` (caja), `WalletMensajeroService` (desglose de un mensajero **y** mis pagos),
   `WalletTiendaService` (mis movimientos). Mismo procedimiento que T B.1.
 - **Punto caliente:** «mis movimientos» acota por la tienda del actor y «mis pagos» por su
@@ -181,20 +213,48 @@ producción sin esperar a la siguiente.
 - **Depende de:** T0.1 · **Cubre:** R9, R11, R14, R15, R17, R27, R29
 - **Hecho:** tests verdes en los 4 servicios. **R14/R15 son los que impiden la fuga: la task
   no se cierra sin ellos.**
+- **MEDIDO (2026-07-31):** 41 verdes (9 caja + 11 tienda + 11 mis pagos + 10 desglose). Los
+  tres servicios ganaron su `construirFiltros(input)` privado —éste SÍ existía inline y se
+  extrajo sin cambio de comportamiento—, compartido por el listado paginado, el balance/saldo
+  y la descarga: los filtros no pueden divergir porque son el mismo código.
+- **R14 con CONTRAPRUEBA, no por vacío:** en los dos ledgers acotados por dato propio el test
+  corre con DOS actores y comprueba que cada uno recibe su conjunto NO VACÍO y disjunto del
+  otro. En los dos acotados por rol, que maestro y admin SÍ reciben filas mientras el resto
+  recibe `forbidden` sin una sola consulta.
+- **R15 VERIFICADO POR MUTACIÓN (2026-07-31):** cambiar `tiendaId: actor.usuarioId` por
+  `input.tiendaId ?? actor.usuarioId` (y su gemelo en mensajero) hace fallar exactamente el
+  test de fuga y ningún otro. Revertido. El acotamiento se escribe AL FINAL del objeto que va
+  al repositorio, después del spread de filtros, igual que en `OrdenService`.
 
-### [ ] T C.2 — Server Actions de los cuatro ledgers
+### [x] T C.2 — Server Actions de los cuatro ledgers
 - Test: `tests/unit/actions/wallet-*-descarga-action.test.ts`:
   - «unauthenticated sin filas» (R16) · «clave fuera de la lista blanca» (R18)
   - «el actor no puede pedir el desglose de otro mensajero» (R14)
 - **Depende de:** T C.1 · **Cubre:** R14, R16, R18 · **Hecho:** tests verdes.
+- **MEDIDO (2026-07-31):** 23 verdes en 3 archivos (los dos ledgers de mensajero comparten
+  archivo porque comparten servicio). En el ledger de la TIENDA, `.strict()` convierte un
+  `tiendaId` inyectado en `validation_error` sin llegar al servicio: es la PRIMERA de las dos
+  barreras contra la fuga. En «mis pagos» el `mensajeroId` SÍ se acepta —el schema del
+  listado lo admite y la paridad manda— y quien lo ignora es el servicio.
 
-### [ ] T C.3 [P] — Columnas de export de los cuatro ledgers
+### [x] T C.3 [P] — Columnas de export de los cuatro ledgers
 - Money-safe: el monto viaja como **STRING tal cual**. Fecha, tipo, concepto y origen legibles;
   nunca ids ni `origen_id`.
 - Test: `tests/unit/descarga/wallet-*-descarga-columnas.test.ts`:
   - «el monto se emite tal cual, sin recalcularlo» (R7) · «etiquetas legibles» (R8)
   - «no expone identificadores internos» (R23)
 - **Depende de:** T0.4 · **Cubre:** R7, R8, R23 · **Hecho:** tests verdes en los 4 módulos.
+- **MEDIDO (2026-07-31):** 22 verdes. El monto viaja como STRING tal cual, sin `Number` y sin
+  el símbolo de colón (que rompería la celda como número); el test lo demuestra con
+  `"1000.10"`, que un `Number` intermedio devolvería como `"1000.1"` — los céntimos.
+- **Pieza compartida nueva:** `lib/utils/fecha-dia-iso.ts`. Los cuatro ledgers exponen
+  `fechaMovimiento` como STRING ISO y las cuatro tablas lo pintan con `.slice(0, 10)`;
+  repetir ese `slice` en cuatro módulos son cuatro sitios donde el criterio puede divergir.
+  Además, llamar a un MÉTODO sobre un campo revienta la sonda de la guardia T0.4, así que el
+  helper coacciona con `String(...)` y usa una expresión regular: sobrevive a la sonda y
+  CONSERVA su rastro, que es lo que permite a la guardia decir de qué campo salió la celda.
+- Los dos ledgers de mensajero declaran módulos SEPARADOS (misma tabla, dos superficies con
+  alcances distintos) y un test de paridad comprueba que hoy proyectan la misma fila.
 
 ### [ ] T C.4 — Cableado de los cuatro ledgers
 - Los componentes de presentación **no pasan a fetchear**: reciben la función por props.

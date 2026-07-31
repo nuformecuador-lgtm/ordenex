@@ -3,11 +3,13 @@
 import {
   apiKeyIdSchema,
   generarApiKeySchema,
+  listarApiKeysCompletoSchema,
   listarApiKeysSchema,
   type ActivarApiKeyResult,
   type ApiKeyActionErrorResult,
   type DesactivarApiKeyResult,
   type GenerarApiKeyResult,
+  type ListarApiKeysCompletoResult,
   type ListarApiKeysResult,
   type RotarApiKeyResult,
 } from "@/lib/types/api-key";
@@ -113,6 +115,26 @@ export async function listarApiKeys(
     const data = listarApiKeysSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR (R3)
     const service = deps.apiKeyService ?? buildApiKeyService();
     return service.listar(data, actor);
+  });
+  return isAppErrorShape(r) ? toApiKeyActionError(r) : r;
+}
+
+/**
+ * Feature 170 (T B.2, design §4) — inventario COMPLETO de API keys, sin paginacion, para
+ * la descarga. Calcado de `listarApiKeys`: mismo borde, mismo actor, mismo schema (menos
+ * `page`/`pageSize`) y el MISMO servicio. Ninguna rama devuelve filas junto a un error
+ * (R16/R17/R18), y el secreto sigue sin existir en este camino (82/R6).
+ */
+export async function listarApiKeysCompleto(
+  input: unknown,
+  deps: ApiKeyActionDeps = {},
+): Promise<ListarApiKeysCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
+    const data = listarApiKeysCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
+    const service = deps.apiKeyService ?? buildApiKeyService();
+    return service.listarCompleto(data, actor);
   });
   return isAppErrorShape(r) ? toApiKeyActionError(r) : r;
 }

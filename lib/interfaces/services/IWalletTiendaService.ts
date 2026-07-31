@@ -1,10 +1,12 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  ListarMovimientosTiendaCompletoInput,
   ListarMovimientosTiendaInput,
   SaldoTiendaDTO,
   SaldoTiendaResumenDTO,
   WalletTiendaMovimientoDTO,
 } from "@/lib/types/wallet-tienda";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 
 // Feature 43 (design §2.1) — contrato del servicio de lectura del ledger POR TIENDA.
 // Roles: `adminTienda` ve SU saldo/movimientos (acotado a su usuarioId = tienda_id, R19);
@@ -27,6 +29,16 @@ export type ListarMisMovimientosServiceResult =
   | { status: "ok"; data: ListarMisMovimientosPayload }
   | { status: "forbidden" };
 
+/**
+ * Feature 170 (T C.1) — el ledger de la tienda del actor SIN recorte por pagina, para la
+ * descarga. Es uno de los DOS puntos calientes de R14/R15 de la feature: el conjunto lo
+ * define un dato del actor (`tienda_id = actor.usuarioId`), no su rol, asi que un fallo
+ * aqui no reduce el archivo: lo llena de movimientos de OTRA tienda. Ni `forbidden` ni
+ * `limite_excedido` viajan con filas (R17/R27).
+ */
+export type ListarMisMovimientosCompletoServiceResult =
+  ListarCompletoServiceResult<WalletTiendaMovimientoDTO>;
+
 export type ListarSaldosTiendasServiceResult =
   | { status: "ok"; tiendas: SaldoTiendaResumenDTO[] }
   | { status: "forbidden" };
@@ -39,6 +51,15 @@ export interface IWalletTiendaService {
     input: ListarMovimientosTiendaInput,
     actor: Actor,
   ): Promise<ListarMisMovimientosServiceResult>;
+  /**
+   * Feature 170/R9/R14/R15: el MISMO ledger sin recorte por pagina, para la descarga. Mismo
+   * guard (`adminTienda`), los MISMOS filtros que la pantalla y el acotado a `tienda_id =
+   * actor.usuarioId` escrito AL FINAL, con `take: tope + 1` y el guard del tope (R27/R29).
+   */
+  listarMisMovimientosCompleto(
+    input: ListarMovimientosTiendaCompletoInput,
+    actor: Actor,
+  ): Promise<ListarMisMovimientosCompletoServiceResult>;
   /** R20: solo maestro; saldo a favor de TODAS las tiendas (una fila por tienda). */
   listarSaldosTiendas(actor: Actor): Promise<ListarSaldosTiendasServiceResult>;
 }

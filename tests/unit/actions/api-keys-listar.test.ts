@@ -19,6 +19,11 @@ function makeService(result?: ListarApiKeysResult) {
       capturado.push(input);
       return result ?? { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 };
     }),
+    // Feature 170 (T B.1): el modo sin paginacion lo ejercita
+    // `api-keys-descarga-action.test.ts`; aqui lanza para delatar una invocacion.
+    listarCompleto: vi.fn(async () => {
+      throw new Error("listarCompleto no debe invocarse desde listarApiKeys");
+    }),
     // Ciclo de vida: no lo ejercita este archivo; lanza para delatar una invocacion.
     rotar: vi.fn(async () => {
       throw new Error("rotar no debe invocarse desde listarApiKeys");
