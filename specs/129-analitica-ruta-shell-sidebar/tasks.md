@@ -215,6 +215,17 @@ Depende de: T4.
   (el único commit de la rama es el spec, que es documentación). **Delta de rojos
   de la 129 = 0.** Prueba completa en `progress/impl_129-analitica-ruta-shell-sidebar.md`
   §4.6. La casilla la cierra el leader cuando se sanee la base, no el implementer.
+  **ACTUALIZACIÓN del leader (2026-07-30, tras integrar `dev`):** los 20 rojos
+  **quedaron saldados** por `25ab36e0` de `dev` («restaura el filtro cantón/distrito
+  y pone la suite entera en verde»); re-medido, no supuesto: **`pnpm test` da 652
+  archivos / 7753 tests / 0 fallos**, con la feature dentro. **La casilla sigue SIN
+  marcar por una causa DISTINTA y también ajena:** `./init.sh` corta ahora en `lint`
+  con 3 errores en `app/(app)/ordenes/_components/OrdenesModule.tsx:340,345`
+  (`Compilation Skipped: Existing memoization could not be preserved`, regla del
+  React Compiler). Ese archivo es **byte-idéntico a `origin/dev`** y lo introdujo
+  `a4eb7813`. Como `lint` corre antes que `test`, el gate **no llega a ejecutar la
+  suite**: de ahí que los números haya que sacarlos con `pnpm test` aparte. Es deuda
+  de `dev` sin dueño; **no se marca verde algo que corta, aunque la causa sea ajena.**
 - [x] **T5.3** Escribir `progress/impl_129-analitica-ruta-shell-sidebar.md` con el
   mapa `R<n> → test` real (no el previsto) y las decisiones D1–D8 de T0.
   HECHO: el archivo existe y cubre los 25 requisitos.

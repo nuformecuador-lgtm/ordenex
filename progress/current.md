@@ -58,6 +58,29 @@ implementer al reportar 20 rojos contra mis 2, y se confirmó corriendo los cinc
 > misma familia que el bug de `run_if` documentado dentro de `init.sh`: un gate que termina en verde
 > porque **no llegó a mirar**, no porque estuviera bien.
 
+### ✅ Los 20 rojos SE SALDARON — y el gate ahora corta en LINT, también por deuda de `dev`
+
+`dev` avanzó **16 commits** durante la sesión (PRs #213-#221: la 157, dos hotfix, etiquetas en carga
+masiva) y se integró en la rama de la 129 sin un solo conflicto: **`dev` no toca ni los archivos de la
+129 ni `app/(app)/ranking/`**, así que el WIP ajeno sobrevivió al merge intacto.
+
+- **Los 20 rojos desaparecieron.** Los saldó `25ab36e0` («restaura el filtro cantón/distrito y pone la
+  suite entera en verde»). Re-medido tras el merge, no dado por hecho por el mensaje del commit: los 5
+  archivos que fallaban + los 4 de la feature dan **9 archivos / 188 tests / 0 fallos**, y la **suite
+  completa `pnpm test` da 652 archivos / 7753 tests / 0 FALLOS** — verde entera, con el WIP de ranking
+  de la otra sesión dentro. (El recuento de archivos sube de 649 a 652 y es coherente: +2 de la feature,
+  +1 del ranking ajeno. Comprobarlo es justamente la lección del párrafo anterior.)
+- **⚠️ Pero `./init.sh` sigue sin poder ponerse verde, y otra vez no es de la 129:** corta en `lint`
+  con **3 errores** en `app/(app)/ordenes/_components/OrdenesModule.tsx:340,345`
+  (`Compilation Skipped: Existing memoization could not be preserved`, la regla del React Compiler).
+  El archivo es **byte-idéntico a `origin/dev`** y lo introdujo `a4eb7813` («fix(ordenes): filtro sin
+  estados retirados»). **Es deuda de `dev` y necesita dueño.**
+- Efecto colateral: como `lint` corre **antes** que `test` en `init.sh`, mientras eso siga rojo el gate
+  **nunca llega a ejecutar la suite**. Los números de tests hay que sacarlos con `pnpm test` aparte.
+
+> **Segunda vez en la misma sesión que la 129 queda bloqueada por deuda ajena heredada de `dev`**:
+> primero 20 tests, ahora 3 errores de lint. La feature en sí está limpia — sus 4 archivos dan 59/59.
+
 ### ⚠️ HAY OTRA SESIÓN VIVA EN ESTE MISMO CHECKOUT — no se cambió de rama
 
 A mitad de sesión aparecieron cambios sin commitear que **no son de esta sesión**: un rediseño de podio
