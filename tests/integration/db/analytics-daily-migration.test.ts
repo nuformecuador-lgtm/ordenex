@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 
@@ -184,11 +185,51 @@ describe("R14/R15 — el unico del grano deduplica los NULL, o la migracion fall
     expect(upDdl).not.toMatch(/current_setting|server_version/i);
   });
 
-  it("el modelo Prisma NO declara el unico del grano: vive en el SQL y lo dice", () => {
-    expect(MODELO).not.toMatch(/@@unique/);
+  it("el modelo Prisma SI declara el unico del grano, con el nombre y el orden del SQL", () => {
+    // Historia de este test: nacio afirmando lo CONTRARIO (`expect(MODELO).not.toMatch(/@@unique/)`),
+    // razonando que como Prisma no sabe expresar `NULLS NOT DISTINCT` el indice debia vivir
+    // solo en el `.sql`. Eso protegia el bug: sin `@@unique` en el datamodel, Prisma no ve el
+    // indice y el primer `prisma migrate dev` de la 124 emite `DROP INDEX
+    // "analytics_daily_grano_key"`; al caer el unico, el upsert del rollup se duplica sin un
+    // solo error. Que Prisma no exprese la CLAUSULA no es razon para ocultarle el INDICE.
+    const unico = /@@unique\(\[([^\]]*)\]\s*,\s*map:\s*"([^"]+)"\)/.exec(MODELO);
+    expect(
+      unico,
+      'el modelo debe declarar @@unique([...], map: "analytics_daily_grano_key")',
+    ).not.toBeNull();
+    expect(unico![2]).toBe("analytics_daily_grano_key");
+
+    // El orden de campos NO se escribe a mano aqui: se DERIVA del CREATE UNIQUE INDEX del
+    // `.sql` y se traduce snake_case -> camelCase. Si alguien reordena una de las dos caras,
+    // el test lo ve; una lista literal solo comprobaria que el modelo se parece a si mismo.
+    const columnasSql = /CREATE UNIQUE INDEX "analytics_daily_grano_key"\s*\n?\s*ON "analytics_daily"\(([^)]*)\)/
+      .exec(upSql)![1]
+      .split(",")
+      .map((s) => s.trim().replace(/"/g, ""));
+    const esperado = columnasSql.map((c) => c.replace(/_([a-z])/g, (_, l: string) => l.toUpperCase()));
+    expect(esperado).toEqual([...GRANO].map((c) => c.replace(/_([a-z])/g, (_, l: string) => l.toUpperCase())));
+    expect(unico![1].split(",").map((s) => s.trim())).toEqual(esperado);
+
+    // Los tres indices de recorte llevan `map:` por el mismo motivo: sin el, Prisma esperaria
+    // `analytics_daily_tienda_id_fecha_idx` y renombraria los tres de la base.
+    const mapsDeIndice = Array.from(MODELO.matchAll(/@@index\([^)]*map:\s*"([^"]+)"\)/g)).map(
+      (m) => m[1],
+    );
+    expect(mapsDeIndice.sort()).toEqual([
+      "analytics_daily_mensajero_fecha_idx",
+      "analytics_daily_tienda_fecha_idx",
+      "analytics_daily_zona_fecha_idx",
+    ]);
+
+    // Lo que sigue viviendo SOLO en el SQL —y el comentario del modelo lo sigue diciendo—:
+    // la clausula `NULLS NOT DISTINCT` y los tres CHECK estructurales.
+    // La negativa se hace sobre el modelo SIN comentarios: los comentarios inline SI nombran
+    // `NULLS NOT DISTINCT`, y deben hacerlo — lo que no puede existir es un atributo.
+    const modeloSinComentarios = MODELO.replace(/\/\/.*$/gm, "");
+    expect(modeloSinComentarios).not.toMatch(/NULLS NOT DISTINCT/);
+    expect(modeloSinComentarios).not.toMatch(/CHECK/);
     expect(MODELO_DOC).toContain("NULLS NOT DISTINCT");
     expect(MODELO_DOC).toContain("analytics_daily_grano_key");
-    // Y apunta tambien a que los tres CHECK viven en el SQL.
     expect(MODELO_DOC).toContain("analytics_daily_pio_lte_entregas");
   });
 });
@@ -404,9 +445,11 @@ describe("R39/R40 — exactamente cuatro indices, y ninguno de mas", () => {
     expect(upSql).toMatch(
       /CREATE INDEX "analytics_daily_zona_fecha_idx" ON "analytics_daily"\("zona_id", "fecha"\);/,
     );
-    expect(MODELO).toMatch(/@@index\(\[tiendaId, fecha\]\)/);
-    expect(MODELO).toMatch(/@@index\(\[mensajeroId, fecha\]\)/);
-    expect(MODELO).toMatch(/@@index\(\[zonaId, fecha\]\)/);
+    // El `map:` es obligatorio (ver el bloque R14/R15): se acepta cualquier atributo detras
+    // de la lista de campos, pero el ORDEN de los campos es lo que se afirma aqui.
+    expect(MODELO).toMatch(/@@index\(\[tiendaId, fecha\]/);
+    expect(MODELO).toMatch(/@@index\(\[mensajeroId, fecha\]/);
+    expect(MODELO).toMatch(/@@index\(\[zonaId, fecha\]/);
   });
 
   it("R40: ningun indice sobre estatus_id ni causa_devolucion sueltos, ni sobre fecha sola", () => {
@@ -486,4 +529,176 @@ describe("R42 — el down revierte exactamente lo que el up crea", () => {
     expect(downSql).toMatch(/RLS/);
     expect(downSql).toMatch(/ADITIVA/i);
   });
+});
+
+// ===========================================================================================
+// R14/R39 — GUARDIA DE DRIFT: lo que Prisma DERIVA del datamodel vs. lo que el `.sql` CREA
+// ===========================================================================================
+// POR QUE EXISTE ESTE BLOQUE (hallazgo B1 del reviewer de la 123, 2026-07-31)
+// -------------------------------------------------------------------------------------------
+// Todos los tests de arriba leen TEXTO: el `.sql` por un lado, `db/schema.prisma` por otro.
+// Ese metodo tiene un punto ciego estructural: no puede ver lo que Prisma HARA con el
+// datamodel. El bug real fue exactamente eso — el modelo `AnalyticsDaily` no declaraba el
+// `@@unique` del grano y sus tres `@@index` no llevaban `map:`. Los dos archivos eran, cada
+// uno por separado, perfectamente correctos; el desajuste solo existia en la traduccion.
+// Consecuencia concreta: el primer `prisma migrate dev` de la 124 habria emitido
+// `DROP INDEX "analytics_daily_grano_key"` mas tres RENAME, mezclados con su cambio legitimo.
+// Al caer el unico, el `ON CONFLICT` del upsert del rollup se queda sin donde agarrarse y los
+// agregados se duplican SIN UN SOLO ERROR. Ningun test textual lo habria visto: uno de ellos
+// llegaba a AFIRMAR que el modelo no debia declarar el unico.
+//
+// COMO SE MIDE, Y POR QUE NO HACE FALTA UNA BASE DE DATOS
+// -------------------------------------------------------------------------------------------
+// `prisma migrate diff --from-empty --to-schema db/schema.prisma --script` le pide a Prisma
+// el DDL que generaria para levantar el datamodel desde cero. Es puro calculo local: no abre
+// conexion, no necesita `DATABASE_URL` ni shadow database, tarda ~2,5 s y es determinista.
+// Se descarto `--from-migrations` a proposito: exige `datasource.shadowDatabaseUrl` en
+// `prisma.config.ts` —config compartida— y una base viva. Precedente en el repo de spawnear
+// un CLI dentro de un test: `tests/unit/analytics/frontera.guardia.test.ts` lanza `git`.
+//
+// LA ASERCION NUCLEAR
+// -------------------------------------------------------------------------------------------
+// El CONJUNTO de nombres de indice/constraint que Prisma deriva para `analytics_daily` debe
+// coincidir EXACTAMENTE con el que crea `migration.sql`: sin sobrantes y sin faltantes.
+//   - si el datamodel omite el `@@unique`  -> falta `analytics_daily_grano_key`  -> ROJO
+//   - si a un `@@index` se le quita `map:` -> aparece un nombre inventado por Prisma -> ROJO
+// Verificado por mutacion (ambas comprobadas en rojo antes de restaurar el schema).
+//
+// Se comparan indices, PK y FK. Se EXCLUYEN los tres CHECK a proposito: Prisma no expresa
+// CHECK en el datamodel, asi que su ausencia del diff no es drift sino una limitacion
+// conocida y documentada. El ultimo test de este bloque fija esa exclusion por escrito para
+// que no se convierta en una rendija por la que colar cualquier otra cosa.
+//
+// Si el CLI de Prisma no estuviera disponible, estos tests FALLAN con el motivo escrito.
+// No se saltan: un guardia de drift que se abstiene en silencio queda verde por vacio, que
+// es justo el modo de fallo que este bloque existe para cerrar.
+
+const PRISMA_CLI = path.join(ROOT, "node_modules", "prisma", "build", "index.js");
+
+let diffCache: { salida: string } | { error: string } | null = null;
+
+/** DDL que Prisma generaria para el datamodel actual. Lanza (no salta) si no se puede obtener. */
+function ddlDerivadoDelDatamodel(): string {
+  if (diffCache === null) {
+    try {
+      if (!fs.existsSync(PRISMA_CLI)) {
+        throw new Error(`no se encontro el CLI de Prisma en ${PRISMA_CLI}`);
+      }
+      diffCache = {
+        salida: execFileSync(
+          process.execPath,
+          [
+            PRISMA_CLI,
+            "migrate",
+            "diff",
+            "--from-empty",
+            "--to-schema",
+            path.join(ROOT, "db", "schema.prisma"),
+            "--script",
+          ],
+          { cwd: ROOT, encoding: "utf8", timeout: 180_000, stdio: ["ignore", "pipe", "pipe"] },
+        ),
+      };
+    } catch (e) {
+      const stderr = (e as { stderr?: string | Buffer }).stderr;
+      diffCache = {
+        error: `${e instanceof Error ? e.message : String(e)}\n${stderr ? String(stderr) : ""}`,
+      };
+    }
+  }
+  if ("error" in diffCache) {
+    throw new Error(
+      "No se pudo derivar el DDL del datamodel con `prisma migrate diff --from-empty " +
+        "--to-schema db/schema.prisma --script`. Este guardia NO se salta: sin el diff no hay " +
+        "forma de detectar que el datamodel y la migracion se han separado, y el fallo que " +
+        "previene (DROP INDEX del unico del grano en el proximo `migrate dev`) es silencioso.\n" +
+        `Motivo: ${diffCache.error}`,
+    );
+  }
+  return diffCache.salida;
+}
+
+/**
+ * Nombres de indice / PK / FK que un DDL crea SOBRE `analytics_daily`.
+ * Los CHECK quedan fuera por diseno (Prisma no los expresa); ver la cabecera del bloque.
+ */
+function objetosDeAnalyticsDaily(ddl: string): string[] {
+  const nombres: string[] = [];
+  for (const sentencia of ddl.replace(/^\s*--.*$/gm, "").split(";")) {
+    if (!sentencia.includes('"analytics_daily"')) continue;
+    for (const m of sentencia.matchAll(/CREATE (?:UNIQUE )?INDEX "([a-z_0-9]+)"/g)) {
+      nombres.push(m[1]);
+    }
+    for (const m of sentencia.matchAll(
+      /CONSTRAINT "([a-z_0-9]+)"\s*\n?\s*(?:PRIMARY KEY|FOREIGN KEY)/g,
+    )) {
+      nombres.push(m[1]);
+    }
+  }
+  return [...new Set(nombres)].sort();
+}
+
+describe("R14/R39 — el datamodel y la migracion no se separan (guardia de drift)", () => {
+  it(
+    "Prisma deriva del datamodel EXACTAMENTE los mismos indices/PK/FK que crea migration.sql",
+    () => {
+      const derivados = objetosDeAnalyticsDaily(ddlDerivadoDelDatamodel());
+      const enLaMigracion = objetosDeAnalyticsDaily(upSql);
+
+      // Red de seguridad: si la extraccion se rompiera, ambos saldrian vacios y el test
+      // pasaria por vacio en lugar de por igualdad.
+      expect(
+        enLaMigracion.length,
+        "la extraccion no encontro ningun objeto en migration.sql: el guardia no mide nada",
+      ).toBe(9); // pkey + grano_key + 3 idx + 4 fkey
+      expect(derivados.length, "el diff de Prisma no menciona analytics_daily").toBeGreaterThan(0);
+
+      expect(
+        derivados,
+        "el datamodel y la migracion se han separado: `prisma migrate dev` emitiria DROP/RENAME " +
+          "de indices sobre analytics_daily. Faltan en el datamodel: " +
+          JSON.stringify(enLaMigracion.filter((n) => !derivados.includes(n))) +
+          "; sobran en el datamodel: " +
+          JSON.stringify(derivados.filter((n) => !enLaMigracion.includes(n))),
+      ).toEqual(enLaMigracion);
+    },
+    180_000,
+  );
+
+  it(
+    "el unico del grano esta entre lo que Prisma deriva, y sobre las mismas seis columnas",
+    () => {
+      const ddl = ddlDerivadoDelDatamodel();
+      const unico = /CREATE UNIQUE INDEX "analytics_daily_grano_key" ON "analytics_daily"\(([^)]*)\)/.exec(
+        ddl,
+      );
+      expect(
+        unico,
+        "Prisma no deriva `analytics_daily_grano_key`: al modelo le falta el @@unique o su `map:`",
+      ).not.toBeNull();
+      expect(unico![1].split(",").map((s) => s.trim().replace(/"/g, ""))).toEqual([...GRANO]);
+    },
+    180_000,
+  );
+
+  it(
+    "lo unico que el datamodel NO reproduce son los tres CHECK y el NULLS NOT DISTINCT",
+    () => {
+      // Frontera explicita de la exclusion anterior: se admite que falten estas tres cosas y
+      // nada mas. Si manana Prisma aprendiera a expresarlas, este test se pone rojo y obliga a
+      // meterlas en el datamodel en lugar de dejarlas fuera por inercia.
+      const ddl = ddlDerivadoDelDatamodel();
+      for (const check of [
+        "analytics_daily_pio_lte_entregas",
+        "analytics_daily_ciclo_coherente",
+        "analytics_daily_medidas_no_negativas",
+      ]) {
+        expect(upDdl, `${check} debe existir en la migracion`).toContain(check);
+        expect(ddl, `${check} no es expresable en el datamodel`).not.toContain(check);
+      }
+      expect(upSql).toContain("NULLS NOT DISTINCT");
+      expect(ddl).not.toContain("NULLS NOT DISTINCT");
+    },
+    180_000,
+  );
 });

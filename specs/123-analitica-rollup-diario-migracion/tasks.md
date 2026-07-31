@@ -217,14 +217,27 @@
 - [x] **T9.2** `pnpm run typecheck`, `pnpm run lint`, `pnpm test` sin regresión respecto del baseline
       medido en esta sesión.
       *Hecho:* delta 0 frente a la medición propia previa a tocar nada — typecheck 0→0 errores; lint
-      3 errores/23 warnings → 3/23; suite 661→664 archivos con **0 archivos rojos nuevos** y 96 tests
-      nuevos todos verdes. **Única excepción, escalada al leader:** +3 tests rojos dentro de
-      `tests/unit/analytics/frontera.guardia.test.ts`, el guard *branch-scoped* de la feature 135 que
-      prohíbe tocar `db/migrations/` y `db/schema.prisma` — justo lo que la 123 debe hacer. No se
-      tocó ese archivo. Detalle y opciones en `progress/impl_123.md §5`.
+      3 errores/23 warnings → 3/23; suite 661→664 archivos con **0 archivos rojos nuevos** y **99**
+      tests nuevos todos verdes (96 + 3 del `describe` de drift añadido tras la revisión).
+      La colisión con el guard *branch-scoped* de la 135 (`frontera.guardia.test.ts`), escalada como
+      bloqueo, **quedó RESUELTA por el leader** en `3a2b2500` acotando el censo a su propia rama; hoy
+      ese archivo es verde (`3 passed | 6 skipped`). Detalle en `progress/impl_123.md §5`.
 - [x] **T9.3** `progress/impl_123.md` con el mapa `R<n> → test` completo (los **45**) y las deudas
       vivas (el follow-up de retención D5 y el riesgo de despliegue D6).
       *Hecho:* ningún `R<n>` sin test; el reviewer rechaza si falta uno (`CHECKPOINTS.md`).
+      Tras la revisión, el mapa distingue además los **33 medidos** de los **12 nominales**
+      (R11/R12/R13/R15/R24/R28/R31/R32/R33/R34/R35/R36, cubiertos por regex sobre el texto), y recoge
+      los pagarés dirigidos a la 124/125 (m3 grieta hermana de reproducibilidad, m4 R13 sin contención).
+- [x] **T9.5 (post-revisión)** **B1 corregido:** el datamodel no declaraba el único del grano, así que
+      `prisma migrate diff --from-empty --to-schema` omitía `analytics_daily_grano_key` y renombraba
+      los tres índices; el primer `migrate dev` de la 124 habría emitido un `DROP INDEX` y el rollup se
+      habría duplicado sin un solo error.
+      *Hecho:* `@@unique(..., map: "analytics_daily_grano_key")` + `map:` en los tres `@@index`,
+      comentario reescrito citando el precedente de `tarifa_zona_mensajero`, la aserción que exigía
+      `not.toMatch(/@@unique/)` invertida, y un `describe` nuevo que compara datamodel contra
+      `migration.sql` objeto a objeto. **Criterio de hecho medido:** nada aparece solo en el datamodel
+      (9 objetos coinciden; solo los 3 CHECK viven únicamente en el `.sql`). Mutación comprobada:
+      quitar el `map:` pone el test rojo. `migration.sql` no se tocó, así que R43 sigue válido.
 - [x] **T9.4** Todas las tasks de este archivo marcadas `[x]`.
 
 ---

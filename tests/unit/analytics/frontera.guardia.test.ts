@@ -294,7 +294,20 @@ describe.skipIf(!MIDE_EL_DIFF)("R25 · frontera medida sobre el diff de la rama"
     const infractores = archivosDeLaRama(base).filter(esCodigo).filter((f) => !codigoPermitido(f));
     expect(infractores, "codigo fuera del alcance declarado de la 135 (R25)").toEqual([]);
   });
+});
 
+/**
+ * ---------------------------------------------------------------------------
+ * AUTOCOMPROBACIONES: LOGICA PURA, CORREN SIEMPRE
+ * ---------------------------------------------------------------------------
+ * Estos dos tests no miran el diff de ninguna rama: solo ejercitan las listas y los
+ * predicados de arriba (`PREFIJOS_PROHIBIDOS`, `codigoPermitido`, `esCodigo`). Vivian dentro
+ * del `describe.skipIf(...)` de la seccion anterior y, al acotarse el censo a la rama de la
+ * 135, dejaron de correr en cualquier otra rama — justo la cobertura que impide que el filtro
+ * se rompa o que la excepcion nominal degenere en permiso de carpeta sin que nadie se entere.
+ * Se mueven de bloque y nada mas: ni una lista ni una asercion cambia.
+ */
+describe("R25 · autocomprobacion de las listas del guardia (sin diff, siempre activa)", () => {
   it("el censo de prefijos detecta un archivo prohibido escrito a mano (autocomprobacion)", () => {
     // Si el filtro se rompiera, los censos de arriba pasarian siempre. Estos son los
     // archivos que la tentacion crearia; el censo debe marcarlos todos.

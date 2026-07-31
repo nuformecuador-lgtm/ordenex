@@ -18,14 +18,15 @@
 | `db/migrations/20260731120000_analytics_daily/migration.sql` | DDL: tabla de 19 columnas, 3 CHECK, 4 FK, 4 índices, 10 comentarios, RLS |
 | `db/migrations/20260731120000_analytics_daily/down.sql` | `DROP TABLE IF EXISTS "analytics_daily";` + cabecera |
 | `tests/unit/analytics/analytics-daily-contrato.test.ts` | **U** — guard de contrato con el catálogo de la 135 (26 tests) |
-| `tests/integration/db/analytics-daily-migration.test.ts` | **I** — test estático por regex sobre `.sql` + `schema.prisma` (57 tests) |
+| `tests/integration/db/analytics-daily-migration.test.ts` | **I** — test estático por regex sobre `.sql` + `schema.prisma`, **más el `describe` de drift datamodel↔migración** (60 tests) |
 | `tests/integration/db/analytics-daily-guards.test.ts` | **G** — frontera R44 + tripwire de suma R29 (13 tests) |
 | `progress/roundtrip_123_analytics_daily.md` | **RT** — evidencia medida del UP → DOWN → UP |
 
 ### Modificados
 | archivo | cambio |
 |---|---|
-| `db/schema.prisma` | `+69 / -0`, puramente aditivo: `model AnalyticsDaily` + los lados inversos en `Usuario` (x2), `Zona` y `OrderStatus` |
+| `db/schema.prisma` | puramente aditivo: `model AnalyticsDaily` + los lados inversos en `Usuario` (x2), `Zona` y `OrderStatus`. **Tras la revisión:** `@@unique` del grano con `map:`, `map:` en los tres `@@index` y el bloque de comentario reescrito (§2bis) |
+| `tests/unit/analytics/frontera.guardia.test.ts` | **solo m2:** dos `it` de lógica pura movidos a un `describe` que corre siempre. Ninguna lista ni aserción cambia (§5) |
 | `specs/123-analitica-rollup-diario-migracion/tasks.md` | T1–T9 marcadas `[x]` |
 | `progress/impl_123.md` | este archivo |
 
@@ -107,6 +108,84 @@ es la última por nombre) se cumple igual.
 entrega es DDL sin ningún camino de usuario en ejecución, y rige la decisión humana del 2026-07-30. El
 riesgo sustituto lo cubre **RT**, que se ejecutó de verdad.
 
+### 2.1 Trazabilidad: qué está MEDIDO y qué es NOMINAL (m1)
+
+El mapa de arriba presentaba los 45 con la misma tinta, y no todos valen lo mismo. La distinción
+importa para saber **qué deuda de verificación hereda la 124**:
+
+- **33 requisitos MEDIDOS.** Su test observa un hecho: una estructura que existe en la base
+  (`pg_indexes`, `pg_constraint`, `pg_description`, `relrowsecurity`), un rechazo real de Postgres con
+  su constraint nombrada, un conjunto derivado del catálogo de la 135, o el diff datamodel↔migración.
+  Si el sistema cambiara, el test cae.
+- **12 requisitos NOMINALES:** **R11, R12, R13, R15, R24, R28, R31, R32, R33, R34, R35 y R36.**
+  Están cubiertos por regex sobre el **texto** del `.sql` / `.prisma`: aseveran que existe un
+  `COMMENT ON COLUMN` con cierta frase, o que una columna es nullable, **no que el sistema se comporte
+  así**. Nada verifica que la 124 vaya a poner en `zona_id` la zona *de la orden* (R31) ni el estatus
+  *al corte* (R33).
+
+**Es aceptable en una feature de solo-DDL** —no hay dato ni job que pueda falsarlos, porque la tabla
+nace vacía por diseño (R44)— pero **no es lo mismo que estar verificado**. Esos 12 son *contrato
+escrito hacia la 124*, y su verificación real solo puede existir cuando exista el job que los
+implemente. **Deuda dirigida a la 124: convertir esos 12 comentarios en aserciones sobre datos
+agregados reales.**
+
+---
+
+## 2bis. B1 — el drift datamodel↔base, corregido tras el rechazo del reviewer
+
+**El hallazgo, que era correcto y grave.** `model AnalyticsDaily` no declaraba el único del grano y sus
+tres `@@index` no llevaban `map:`. Medido con
+`npx prisma migrate diff --from-empty --to-schema db/schema.prisma --script`: el datamodel emitía
+`analytics_daily_tienda_id_fecha_idx` (y sus dos hermanos) y **cero ocurrencias de
+`analytics_daily_grano_key`**. Datamodel y base discrepaban en **cuatro** índices, y lo que sobraba en
+la base era justo la protección central de la feature.
+
+**Por qué era grave.** En cuanto la 124 —o cualquier feature posterior— corriera `pnpm db:migrate`
+(`prisma migrate dev`), Prisma habría emitido un `DROP INDEX "analytics_daily_grano_key"` mezclado con
+su cambio legítimo, más tres renombres. Sin el único, el `ON CONFLICT` del upsert se queda sin
+agarradera y **el rollup se duplica sin un solo error** — exactamente el fallo silencioso que ese
+índice existe para impedir. Ninguno de los tres archivos de test lo detectaba, porque leen el `.sql` y
+el `schema.prisma`, no la relación entre ambos.
+
+**Por qué la justificación anterior era mala.** El comentario del schema decía que el `@@unique` se
+omitía porque Prisma no expresa `NULLS NOT DISTINCT`. Es cierto y es **irrelevante**: son dos cosas
+distintas. Un `@@unique` con `map:` hace que Prisma **vea** el índice y deje de querer borrarlo; lo
+único que le sigue siendo invisible es la cláusula. **Agravante:** el test
+`analytics-daily-migration.test.ts:188` aseveraba `expect(MODELO).not.toMatch(/@@unique/)` — la red
+protegía el bug.
+
+**El arreglo (4 cambios):**
+1. `@@unique([fecha, zonaId, tiendaId, mensajeroId, estatusId, causaDevolucion], map: "analytics_daily_grano_key")`,
+   en el mismo orden de columnas que el `CREATE UNIQUE INDEX`. El `map:` **no es cosmético**: el nombre
+   por defecto que Prisma deriva de seis columnas se trunca a 63 caracteres en
+   `analytics_daily_fecha_zona_id_tienda_id_mensajero_id_estatu_key` (observado en la mutación).
+2. `map:` en los tres `@@index`, con los nombres reales de la base.
+3. Comentario del modelo reescrito: ya no justifica omitir el `@@unique`, explica que existe **para que
+   Prisma reconozca el índice y no lo borre**, y que `NULLS NOT DISTINCT` sigue viviendo solo en el SQL.
+   Cita el precedente del repo: `tarifa_zona_mensajero` declara su `@@unique` aunque su índice también
+   lleve `NULLS NOT DISTINCT`
+   (`20260711190000_tarifa_zona_mensajero_zona_vehiculo_unique/migration.sql:6`). Allí se resolvió
+   nombrando el índice como Prisma espera; aquí al revés, con `map:`, porque el nombre generado no cabe.
+   **El invariante compartido es el mismo: el datamodel siempre declara el índice.**
+4. Aserción invertida: ahora **exige** el `@@unique` con su `map:` y el orden correcto de campos
+   —derivado del `.sql`, no de una lista a mano— y `map:` en los tres `@@index`.
+
+**El test que faltaba, y que es lo que de verdad cerraba el agujero.** Un `describe` nuevo (3 tests)
+ejecuta `prisma migrate diff --from-empty --to-schema` y compara **el conjunto de nombres de
+índice/PK/FK que el datamodel deriva contra el que crea `migration.sql`**: sin sobrantes y sin
+faltantes. No necesita base de datos (~1,5–2,5 s) y falla con motivo escrito si el CLI no está, nunca
+salta en silencio. Los tres CHECK quedan excluidos a propósito —Prisma no los expresa— y un tercer
+test **fija esa exclusión** para que no sea una rendija. Sin esto, el drift habría vuelto por otra
+puerta en la 124.
+
+**Criterio de hecho, medido:** el conjunto derivado del datamodel y el de `migration.sql` coinciden
+**objeto a objeto** en los 9 (4 índices + PK + 4 FK); lo único presente solo en el `.sql` son los 3
+CHECK. **Nada aparece solo en el datamodel**, es decir, Prisma ya no propone borrar ni renombrar nada
+sobre `analytics_daily`.
+
+No hubo cambio de DDL: `migration.sql` no se tocó, así que la evidencia del round-trip (R43) sigue
+siendo válida sin repetirlo.
+
 ---
 
 ## 3. Verificaciones por mutación — comprobadas, no supuestas
@@ -126,6 +205,14 @@ observó el rojo real:
 | 6 | T8.7 | `primer_intento_ok=2, entregas=1` | **RECHAZADO** (23514) por **`analytics_daily_pio_lte_entregas`** |
 | 7 | T8.7 | `seg_ciclo_n=0, seg_ciclo_acum=5` | **RECHAZADO** (23514) por **`analytics_daily_ciclo_coherente`** |
 | 8 | T8.7 | `entregas=-1` | **RECHAZADO** (23514) por **`analytics_daily_medidas_no_negativas`** |
+| 9 | B1 | quitar el `map:` del `@@unique` | **ROJO, 3 tests.** `Faltan en el datamodel: ["analytics_daily_grano_key"]; sobran: ["analytics_daily_fecha_zona_id_tienda_id_mensajero_id_estatu_key"]` |
+| 10 | B1 | quitar el `@@unique` entero (**el bug original**) | **ROJO, 3 tests.** `Faltan: ["analytics_daily_grano_key"]; sobran: []` — 8 objetos vs 9 |
+| 11 | B1 | quitar el `map:` de un `@@index` | **ROJO, 2 tests.** `Faltan: ["analytics_daily_tienda_fecha_idx"]; sobran: ["analytics_daily_tienda_id_fecha_idx"]` |
+
+La mutación **9 la reejecuté yo personalmente** además del subagente, por ser el corazón del hallazgo
+del reviewer: rojo confirmado con ese diagnóstico literal, y `db/schema.prisma` restaurado con md5
+idéntico (`be93d657197d885aeb822656374d307b`) antes y después. Tras restaurar, los tres archivos de la
+123 vuelven a **99/99**.
 
 Los nombres de constraint se capturaron del error de Postgres, no se infirieron. Las mutaciones de
 base corrieron en transacción revertida con `SAVEPOINT` por intento; el schema y `lib/` se
@@ -139,28 +226,52 @@ Baseline **medido en esta sesión** sobre `3c127b57`, antes de tocar nada, con e
 regenerado desde el schema limpio (`pnpm db:generate`). No se citan los números de
 `progress/current.md`: caducan con cualquier PR ajeno.
 
+> **Corregido tras la revisión (m7).** La contabilidad anterior mezclaba en una sola lista los rojos
+> de *lint* con los de *test*, y se leía como si el baseline tuviera 3 archivos de test rojos cuando
+> siempre fueron 2. Aquí van separados y con los archivos nombrados uno a uno, que es la única forma
+> de que la cuenta cuadre sin interpretación.
+
 | medición | baseline (antes) | final (después) | delta |
 |---|---|---|---|
 | `pnpm run typecheck` | **0 errores** | **0 errores** | **0** |
 | `pnpm run lint` | **3 errores, 23 warnings** | **3 errores, 23 warnings** | **0** |
-| `pnpm test` — archivos | 661 (2 fallan / 659 pasan) | 664 (2 fallan / 662 pasan) | **+3 archivos, todos verdes; 0 archivos rojos nuevos** |
-| `pnpm test` — tests | 7939 (2 fallan / 7937 pasan) | 8035 (5 fallan / 8030 pasan) | **+96 tests nuevos, todos verdes; +3 rojos, todos en un solo archivo ajeno (ver §5)** |
+| `pnpm test` — archivos | 661 → **2 rojos** / 659 verdes | 664 → **2 rojos** / 662 verdes | **+3 archivos, los 3 míos y verdes** |
+| `pnpm test` — tests | 7939 → **2 rojos** / 7937 verdes | 8038 → **2 rojos** / 8030 verdes / 6 skipped | **+99 tests míos, todos verdes** |
 
-**Tests nuevos:** U 26/26 · I 57/57 · G 13/13 → **96 pasan, 0 fallan.**
+**Tests nuevos de la 123:** U 26/26 · I **60/60** · G 13/13 → **99 pasan, 0 fallan.**
+(Eran 96; los **+3** son el `describe` de drift datamodel↔migración añadido tras la revisión, §2bis.)
 
-### Rojos heredados, que no son de esta feature
-1. `app/(app)/ordenes/_components/OrdenesModule.tsx` **líneas 340:34, 345:7 y 345:21** —
-   `react-hooks/preserve-manual-memoization`, "Compilation Skipped: Existing memoization could not be
-   preserved". Son los **3 errores de lint** del baseline. Vienen de `dev`.
-2. `tests/unit/guards/no-embalaje.test.ts:132` — 1 test rojo, referencias a embalaje fuera del
-   whitelist. Rojo ya en el baseline.
-3. `tests/unit/analytics/frontera.guardia.test.ts:211` — 1 test rojo en el baseline (pasa a 4; ver §5).
+### Los 2 archivos rojos del BASELINE, nombrados
+1. `tests/unit/guards/no-embalaje.test.ts:132` — la palabra "embalaje" aparece en
+   `specs/135-analitica-catalogo-kpis-rangos/tasks.md:187`, archivo que viene de `dev`. Ajeno.
+2. `tests/unit/analytics/frontera.guardia.test.ts:211` — el guard *branch-scoped* de la 135.
+
+### Los 2 archivos rojos del FINAL, nombrados
+1. `tests/unit/guards/no-embalaje.test.ts` — **el mismo de siempre**, sin cambios.
+2. `tests/components/LoginForm.test.tsx` — **flaky bajo carga, no rojo real**: en la corrida completa
+   tardó 36,9 s y expiró; **aislado pasa 26/26** (medido). No es una regresión.
+
+`tests/unit/analytics/frontera.guardia.test.ts` **ya no es rojo**: ver §5, el leader resolvió la
+colisión. Pasa a `3 passed | 6 skipped`.
+
+### Rojos de LINT heredados (no son tests, y no son de esta feature)
+`app/(app)/ordenes/_components/OrdenesModule.tsx` **340:34, 345:7 y 345:21** —
+`react-hooks/preserve-manual-memoization`, "Compilation Skipped: Existing memoization could not be
+preserved". Son los 3 errores de lint, idénticos antes y después. Vienen de `dev`.
+
+### Flaky conocidos bajo carga — que el próximo baseline no los persiga (m8)
+Estos **pasan aislados** y solo caen en la corrida completa por presión de recursos. No son rojos
+reales y **no deben contarse como regresión**:
+- `tests/integration/recuperar-contrasena-form.test.tsx:147` — aislado **7/7** (medido).
+- `tests/components/LoginForm.test.tsx` — aislado **26/26** (medido).
+- `tests/components/CierresAdminModule.test.tsx` y `tests/components/RecepcionSateliteModule.test.tsx`
+  — fallaron por *timeout de arranque del worker* en una corrida, no por aserción.
 
 ### Nota sobre la medición de la suite
-Dos corridas intermedias salieron **degradadas** (653 y 658 archivos frente a los 661 reales, con
+Tres corridas salieron **degradadas** (653 y 658 archivos frente a los 661 reales, con
 `unhandled errors` de workers que **omiten archivos enteros y parecen casi verdes**). Esas mediciones
 se descartaron. Los números de la tabla vienen de corridas limpias, sin `unhandled errors`, con el
-total de archivos consistente: 661 antes / 664 después = 661 + los 3 nuevos.
+total de archivos consistente: 661 antes / 664 después = 661 + los 3 míos.
 
 ### `./init.sh`
 **No termina en verde, y ya no lo hacía en el baseline**: aborta en el paso de `pnpm run lint` por los
@@ -170,36 +281,39 @@ llegar a él: **OK, todas las migraciones tienen `down.sql`**, incluida la de la
 
 ---
 
-## 5. BLOQUEO / decisión del leader — colisión con el guard de la feature 135
+## 5. Colisión con el guard de la feature 135 — **RESUELTA por el leader**
 
-**Es el único rojo nuevo y no lo puede resolver esta feature.**
+**Estado: cerrada.** Se escaló como bloqueo y el leader la resolvió en el commit `3a2b2500`
+tomando la opción (a) de las tres que se le ofrecieron. Se deja escrito el episodio porque el
+mecanismo volverá a aparecer.
 
-`tests/unit/analytics/frontera.guardia.test.ts` es un guard de la **feature 135** (ya mergeada en
-`dev`) que mide **el diff de la rama actual contra `origin/dev`** y asevera que ese diff **no añade
-carpetas en `db/migrations/` y no toca `db/schema.prisma`**. Literalmente: "la 135 no crea
-migraciones: analytics_daily es de la 123".
+**Qué pasaba.** `tests/unit/analytics/frontera.guardia.test.ts` es un guard de la **feature 135** (ya
+mergeada en `dev`) que mide el diff de la rama actual contra `origin/dev` y asevera que ese diff **no
+añade carpetas en `db/migrations/` y no toca `db/schema.prisma`**. Literalmente: "la 135 no crea
+migraciones: analytics_daily es de la 123". La 123 hace exactamente esas dos cosas, porque es su
+encargo, así que el guard pasaba de 1 rojo (baseline) a **4**.
 
-La 123 hace exactamente esas dos cosas, porque es su encargo. El guard pasa de **1 rojo (baseline) a 4**:
+**Diagnóstico.** El guard era correcto en su intención pero estaba mal alcanzado: una aserción
+**branch-scoped** —existe para constreñir el PR de la 135— que quedó commiteada permanentemente y por
+tanto corría en toda rama posterior. Como `origin/dev` ya contiene la 135, en cualquier rama nueva el
+`merge-base` es posterior a ella y el guard acababa juzgando el trabajo de **otra** feature. Iba a
+dispararse igual con la **124**, la **125** y la **126**.
 
-| test | estado |
-|---|---|
-| `el guardia mide un diff no vacio y sabe contra que compara` | **ya rojo en el baseline** (el diff de esta rama no contiene `lib/analytics/`) |
-| `no anade ni modifica carpetas de migracion en db/migrations` | **rojo nuevo** (2 entradas: `migration.sql`, `down.sql`) |
-| `no toca db/schema.prisma` | **rojo nuevo** |
-| `todo el codigo tocado vive en lib/analytics...` | **rojo nuevo** (los 2 `.sql`, `db/schema.prisma` y los 2 tests de `tests/integration/db/`) |
+**El arreglo del leader** (no de esta feature): el censo del diff se acota a su propia rama con
+`ES_LA_RAMA_DE_LA_135` / `MIDE_EL_DIFF`, de modo que en `feature/135-...` mide igual que siempre y en
+cualquier otra rama se salta. Detached HEAD y ausencia de repositorio cuentan como "no es la rama de
+la 135", que es lo prudente. Hoy el archivo queda **`3 passed | 6 skipped`**, verde.
 
-**Diagnóstico.** El guard es correcto en su intención pero está mal alcanzado: es una aserción
-**branch-scoped** (existe para constreñir el PR de la 135) que quedó **commiteada permanentemente** y
-por tanto corre en toda rama posterior. Como `origin/dev` ya contiene la 135, en cualquier rama nueva
-el `merge-base` es posterior a la 135 y el guard acaba juzgando el trabajo de **otra** feature. Esto
-volverá a dispararse con la **124**, la **125** y la **126**, que también tocan `db/` — no es un
-incidente puntual de la 123.
-
-**No se tocó el archivo, ni se puso en skip, ni se modificó nada bajo `lib/analytics/`**: aflojar el
-guard de una dependencia ya mergeada es un cambio de spec ajeno y no corresponde a esta feature.
-**Queda a decisión del leader.** Opciones visibles, sin recomendación implícita:
-(a) acotar el guard de la 135 para que solo corra en su propia rama; (b) aceptarlo como ruido heredado
-conocido y documentarlo; (c) retirarlo, ya que su PR está cerrado y su función preventiva caducó.
+**Lo que la 123 aportó aquí (m2), sin aflojar nada.** Al acotarse el censo, dos `it` de
+autocomprobación —el del censo de prefijos y el de "la excepción es nominal"— quedaron dentro del
+bloque acotado y dejaron de correr fuera de la rama de la 135, **aunque son lógica pura y no
+necesitan el diff de git**. Eso era cobertura perdida por arrastre: si el filtro se rompiera, los
+censos pasarían siempre. Se han movido a un `describe` propio que corre **siempre**
+(`R25 · autocomprobacion de las listas del guardia (sin diff, siempre activa)`). Medido: el archivo
+pasa de `1 passed | 8 skipped` a `3 passed | 6 skipped` en esta rama.
+**No se tocó nada más:** `PREFIJOS_PROHIBIDOS`, `ARCHIVOS_DE_CODIGO_PERMITIDOS`, `esCodigo`,
+`codigoPermitido` y todas las aserciones del censo quedan intactas. Es un movimiento de bloque, no un
+aflojamiento.
 
 Nota útil: `tests/unit/analytics/analytics-daily-contrato.test.ts` **no** dispara el guard, porque vive
 en `tests/unit/analytics/`, prefijo que el propio guard permite.
@@ -225,6 +339,28 @@ aplicadas), y el índice se creó con `indnullsnotdistinct = true` verificado en
 es el comportamiento querido: nunca crea un único que no deduplique), y la única salida sin usuario
 fantasma sería el juego de índices parciales de `design.md §4.3`. Es riesgo de despliegue, no de
 diseño.
+
+### PAGARÉ DIRIGIDO A LA 124 Y LA 125 (m3) — la grieta hermana, no declarada en el spec
+`design.md §6` declara bien la grieta de la gestión anulada, pero **el mismo mecanismo abre otra que el
+spec no menciona y que esta bitácora deja escrita para que no se pierda**:
+
+R31/R32/R33 sacan `zona_id`, `tienda_id`, `mensajero_id` y `estatus_id` **de la orden en el corte del
+día**. Esos campos **cambian después**: una reasignación de mensajero, una corrección de estado, un
+cambio de zona. Consecuencia dura: **la 125 recomputando el día D no reproduce lo que la 124 escribió
+ese día**, aunque R35 venda inmutabilidad hacia atrás y `design.md §6` le regale a la 128 que "lo
+calculado una vez sigue valiendo".
+
+No es un defecto del DDL —por eso no se arregla aquí— sino una **declaración incompleta**. Hay que
+arrastrarla al spec de la **124** y de la **125** y decidir allí explícitamente: o el backfill es
+reproducible (y entonces las coordenadas deben congelarse en el momento del corte, no releerse de la
+orden), o no lo es (y entonces R35 y el regalo a la 128 deben rebajarse por escrito). **Destinatario:
+124 y 125.**
+
+### PAGARÉ DIRIGIDO A LA 124 (m4) — R13 no tiene contención real
+De R13 ("nada de filas de totalización") solo se verifica que **no hay columna centinela**. Nada
+impide que la 124 escriba una fila de totalización usando una zona, una tienda o un estatus **reales**
+como si significaran "todos". El `CHECK` no puede expresarlo y el DDL tampoco. La contención tiene que
+vivir en el job: **destinatario, la 124**, en su propio guard sobre los datos que escribe.
 
 ### La grieta de la anulación (`design.md §6`)
 Declarada y no resuelta aquí: una gestión anulada días después deja el rollup por **exceso** en las
