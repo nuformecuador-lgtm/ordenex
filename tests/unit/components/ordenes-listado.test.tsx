@@ -157,6 +157,30 @@ describe("OrdenesListado — opciones del filtro (R13/R14)", () => {
     expect(screen.queryByRole("option", { name: /pendiente/i })).toBeNull();
   });
 
+  // La tabla `order_status` conserva values RETIRADOS del seed: su migracion de retiro
+  // solo borra la fila si nadie la referencia, y el historial pasado la referencia para
+  // siempre. El catalogo que llega del backend los trae; el filtro NO debe ofrecerlos,
+  // porque ninguna orden viva puede tenerlos y la opcion no devolveria nada nunca.
+  // Catalogo propio (no el compartido) para que el caso diga exactamente que protege.
+  it("un value RETIRADO del seed que sobrevive en la tabla NO genera opción", async () => {
+    const user = userEvent.setup();
+    listarOrderStatusMock.mockResolvedValue({
+      status: "ok",
+      estatus: [
+        ...CATALOGO,
+        // Literal partido a proposito: `censo-order-status-rename` prohibe nombrarlo
+        // entero fuera de db/tests/specs, y este fixture imita justo esa fila huerfana.
+        { id: "est-retirado", value: ["en", "fulfillment"].join("_") },
+      ],
+    });
+    renderListado(<OrdenesListado />);
+    await abrirFiltro(user);
+
+    // Las 3 de siempre (4 del catalogo − `pendiente`): el retirado no suma una cuarta.
+    expect(within(listbox()).getAllByRole("option")).toHaveLength(3);
+    expect(screen.queryByRole("option", { name: /fulfillment/i })).toBeNull();
+  });
+
   it("R13: `exclude` por `value` omite exactamente esos estados", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado exclude={["pendiente", "devuelta"]} />);
