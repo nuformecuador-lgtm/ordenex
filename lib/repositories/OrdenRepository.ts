@@ -204,9 +204,9 @@ const TARIFA_SELECT = {
 // `LiberacionReprogramadaRepository`, el cron que consume la misma fecha).
 const RESULTADO_REPROGRAMADA = "reprogramada";
 
-// `order_status.value` de una orden reprogramada: sigue bloqueada hasta que el cron de
-// liberacion la desbloquee, asi que queda FUERA del filtro de reasignables.
-const ESTATUS_REPROGRAMADA = "reprogramada";
+// Origen UNICO de las dos decisiones de despacho del maestro —asignar mensajero y rutear a
+// una bodega satelite—, y por tanto el estado del filtro REASIGNABLES.
+const ESTATUS_EN_BODEGA_CENTRAL = "en_bodega_central";
 
 // Feature 87 (T2/R6): `gestion_orden.resultado` de una DEVOLUCION. Mismo valor del enum
 // `GestionResultado` que ya usa el historial; la vigencia se filtra por `anuladaAt: null`
@@ -707,17 +707,27 @@ export class OrdenRepository implements IOrdenRepository {
       ...criterioColumna("distritoId", params.where.distritoId),
       // Feature 144 (R41/R42): rango temporal ya resuelto a instantes UTC por el service.
       ...(params.where.createdAt ? { createdAt: params.where.createdAt } : {}),
-      // Filtro REASIGNABLES: las tres condiciones van como claves hermanas => AND
-      // entre ellas y con el resto de filtros. El estado se compara por VALUE (no por
-      // id): `reprogramada` esta bloqueada hasta que el cron la libere, asi que no es
-      // reasignable todavia. `mensajeroAsignadoId: null` es la parte "sin mensajero";
-      // no colisiona con el acotamiento del rol mensajero, que fija un id concreto
-      // (un mensajero pidiendo reasignables obtiene cero filas, que es lo correcto).
+      // Filtro REASIGNABLES: las ordenes que ESPERAN que alguien decida su siguiente paso
+      // — darles mensajero, o rutearlas a una bodega satelite—. Ambas decisiones parten del
+      // MISMO origen (`en_bodega_central`), asi que el filtro es "esta en la central y no
+      // tiene mensajero". Las claves van hermanas => AND entre ellas y con el resto.
+      //
+      // NO exige `prioridad`. Esa columna solo se enciende al DESHACER una asignacion
+      // (feature 101), asi que exigirla dejaba fuera a toda orden que llego a la central y
+      // nunca tuvo mensajero — que son la mayoria, y las mas obvias de asignar. La prioridad
+      // sigue cumpliendo su funcion real: ordenar primero (`prioridad DESC`, abajo) y
+      // resaltar la fila en la UI. Filtrar por ella convertia "reasignables" en "las que
+      // alguien ya libero", que es un subconjunto muy estrecho y no lo que el nombre promete.
+      //
+      // Tampoco hace falta excluir `reprogramada`: acotar al estado de la central ya la deja
+      // fuera. `mensajeroAsignadoId: null` no colisiona con el acotamiento del rol mensajero,
+      // que fija un id concreto (un mensajero pidiendo reasignables obtiene cero filas, que
+      // es lo correcto). Las de `en_bodega_satelite` quedan fuera A PROPOSITO: esas las
+      // asigna el adminSatelite desde su propia pantalla, no esta vista.
       ...(params.where.reasignables
         ? {
-            prioridad: true,
             mensajeroAsignadoId: null,
-            estatus: { value: { not: ESTATUS_REPROGRAMADA } },
+            estatus: { value: ESTATUS_EN_BODEGA_CENTRAL },
           }
         : {}),
     };

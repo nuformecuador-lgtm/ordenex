@@ -111,10 +111,10 @@ export const ordenFilterSchema = z
     created_preset: z.enum(CREATED_PRESETS).optional(),
     created_desde: fechaCalendario.optional(),
     created_hasta: fechaCalendario.optional(),
-    // Filtro REASIGNABLES: ordenes que esperan que alguien les vuelva a poner
-    // mensajero. Es un predicado COMPUESTO (prioridad + no reprogramada + sin
-    // mensajero asignado), no una columna, y solo sabe ACOTAR: `z.literal(true)`
-    // porque "no filtrar" se expresa OMITIENDO la clave, no mandando `false`.
+    // Filtro REASIGNABLES: ordenes que esperan una decision de despacho (mensajero o
+    // ruteo a satelite). Es un predicado COMPUESTO (en bodega central + sin mensajero
+    // asignado), no una columna, y solo sabe ACOTAR: `z.literal(true)` porque "no
+    // filtrar" se expresa OMITIENDO la clave, no mandando `false`.
     reasignables: z.literal(true).optional(),
   })
   .strict()

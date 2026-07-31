@@ -177,26 +177,35 @@ describe("sin regresion del where previo (R45)", () => {
 });
 
 describe("filtro REASIGNABLES -> predicado compuesto", () => {
-  it("traduce el interruptor a las TRES condiciones, como claves hermanas (AND)", async () => {
+  // "Reasignable" = espera una decision de despacho: darle mensajero o rutearla a una
+  // bodega satelite. Las dos parten del MISMO sitio —la bodega central—, asi que el
+  // predicado es "esta ahi y no tiene mensajero".
+  it("traduce el interruptor a estado en bodega central + sin mensajero (AND)", async () => {
     const { findMany } = await whereDe({ reasignables: true });
     expect(findMany).toEqual({
       deletedAt: null,
-      prioridad: true,
       mensajeroAsignadoId: null,
-      estatus: { value: { not: "reprogramada" } },
+      estatus: { value: "en_bodega_central" },
     });
   });
 
-  it("el estado se compara por VALUE, no por id: `reprogramada` queda fuera", async () => {
+  // Regresion: exigir `prioridad` dejaba fuera a TODA orden que llego a la central y nunca
+  // tuvo mensajero, que son la mayoria. Esa columna solo se enciende al DESHACER una
+  // asignacion, asi que el filtro mostraba unicamente las liberadas — en produccion, 0 de 8.
+  it("NO exige prioridad: una orden que nunca tuvo mensajero tambien es reasignable", async () => {
     const { findMany } = await whereDe({ reasignables: true });
-    // Una reprogramada sigue bloqueada hasta que el cron la libere: no es reasignable.
-    expect(findMany.estatus).toEqual({ value: { not: "reprogramada" } });
+    expect(findMany).not.toHaveProperty("prioridad");
+  });
+
+  it("el estado se compara por VALUE, no por id", async () => {
+    const { findMany } = await whereDe({ reasignables: true });
+    expect(findMany.estatus).toEqual({ value: "en_bodega_central" });
   });
 
   it("convive con el resto de filtros sin pisarlos (AND)", async () => {
     const { findMany } = await whereDe({ reasignables: true, zonaId: ["z1"] });
     expect(findMany.zonaId).toEqual({ in: ["z1"] });
-    expect(findMany.prioridad).toBe(true);
+    expect(findMany.mensajeroAsignadoId).toBeNull();
   });
 
   it("`count` usa EXACTAMENTE el mismo where que la pagina", async () => {
@@ -204,7 +213,7 @@ describe("filtro REASIGNABLES -> predicado compuesto", () => {
     expect(count).toEqual(findMany);
   });
 
-  it("sin la clave no aparece ninguna de las tres condiciones", async () => {
+  it("sin la clave no aparece ninguna de las condiciones", async () => {
     const { findMany } = await whereDe({ zonaId: ["z1"] });
     expect(findMany).not.toHaveProperty("prioridad");
     expect(findMany).not.toHaveProperty("mensajeroAsignadoId");

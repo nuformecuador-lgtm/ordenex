@@ -319,3 +319,90 @@ describe("OrdenesListado — bloqueo del checkbox por zona con cierre abierto", 
     expect(screen.queryByText(/cierre de mensajero abierto/i)).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// Acciones con selección MIXTA (unión, no intersección) y la acción de recolección en esta
+// vista. Antes, marcar "seleccionar todo" sobre estados mezclados dejaba la barra vacía:
+// todo marcado y ningún botón, que es exactamente lo que se reportó.
+// ---------------------------------------------------------------------------------------
+describe("OrdenesListado — acciones sobre una selección de estados mezclados", () => {
+  it("ofrece TODAS las acciones posibles, cada una con el nº de órdenes a las que aplica", async () => {
+    renderListado([
+      makeOrden("REM-prep", ZONA_LIBRE, false, "en_preparacion"),
+      makeOrden("REM-bodega", ZONA_LIBRE, false, "en_bodega_central"),
+    ]);
+
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: "Seleccionar orden REM-prep" }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-bodega" }),
+    );
+
+    // Cada estado aporta la suya, y el conteo avisa de que no alcanza a toda la selección.
+    expect(
+      screen.getByRole("button", { name: "Generar guía (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Asignar mensajero (1)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("con un solo estado las acciones NO llevan conteo (no hay nada que aclarar)", async () => {
+    renderListado([
+      makeOrden("REM-a", ZONA_LIBRE, false, "en_preparacion"),
+      makeOrden("REM-b", ZONA_LIBRE, false, "en_preparacion"),
+    ]);
+
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: "Seleccionar orden REM-a" }),
+    );
+
+    expect(screen.getByRole("button", { name: "Generar guía" })).toBeInTheDocument();
+  });
+
+  it("una acción compartida por los dos estados aplica a TODAS y no lleva conteo", async () => {
+    // "Imprimir etiquetas" la tienen `en_bodega_central` y `por_recolectar_en_tienda`.
+    renderListado([
+      makeOrden("REM-bodega", ZONA_LIBRE, false, "en_bodega_central"),
+      makeOrden("REM-tienda", ZONA_LIBRE, false, "por_recolectar_en_tienda"),
+    ]);
+
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: "Seleccionar orden REM-bodega" }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-tienda" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Imprimir etiquetas" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("OrdenesListado — asignar la recolección en tienda (feature 157)", () => {
+  it("una orden por recolectar SÍ se puede marcar y ofrece asignar mensajero", async () => {
+    renderListado([makeOrden("REM-tienda", ZONA_LIBRE, false, "por_recolectar_en_tienda")]);
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Seleccionar orden REM-tienda",
+    });
+    expect(checkbox).not.toHaveAttribute("aria-disabled", "true");
+
+    await userEvent.click(checkbox);
+
+    expect(
+      screen.getByRole("button", { name: "Asignar mensajero para recolección" }),
+    ).toBeInTheDocument();
+  });
+
+  it("no se bloquea por zona con cierre abierto: la recolección no depende de la zona", async () => {
+    // Misma zona que deja inseleccionable una orden de bodega central.
+    renderListado([makeOrden("REM-tienda", ZONA_GAM, true, "por_recolectar_en_tienda")]);
+
+    expect(
+      await screen.findByRole("checkbox", { name: "Seleccionar orden REM-tienda" }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+  });
+});
