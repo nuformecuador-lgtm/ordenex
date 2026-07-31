@@ -71,7 +71,7 @@ describe("R9 · mapeo de motivos del gate de coordenadas", () => {
   it("R9: el motivo se lee ANTES del switch por status (no cae en el genérico de conflict)", () => {
     const generico = guiaDecisionErrorMessage({ status: "conflict" });
     expect(generico).toBe(
-      "Alguna orden ya no está en un estado válido para esta acción.",
+      "Alguna orden de la selección ya no admite esta acción. Actualiza la lista y vuelve a intentarlo.",
     );
     expect(guiaDecisionErrorMessage(conflict("geocodificacion_agotada"))).not.toBe(
       generico,
@@ -80,10 +80,10 @@ describe("R9 · mapeo de motivos del gate de coordenadas", () => {
 
   it("R9: no hay regresión — un conflict con otro motivo sigue en el mensaje por status", () => {
     expect(guiaDecisionErrorMessage(conflict("orden_borrada"))).toBe(
-      "Alguna orden ya no está en un estado válido para esta acción.",
+      "Alguna orden de la selección ya no admite esta acción. Actualiza la lista y vuelve a intentarlo.",
     );
     expect(asignacionSateliteErrorMessage(conflict("orden_borrada"))).toBe(
-      "Alguna orden ya no está en un estado válido para asignarse.",
+      "Alguna orden de la selección ya no se puede asignar. Actualiza la lista y vuelve a intentarlo.",
     );
   });
 
@@ -113,12 +113,42 @@ describe("R9 · mapeo de motivos del gate de coordenadas", () => {
   });
 
   it("R9: entradas defensivas (null, sin detalle, detalle no-array) no rompen el mapper", () => {
-    expect(guiaDecisionErrorMessage(null)).toBe("No se pudo completar la operación.");
+    expect(guiaDecisionErrorMessage(null)).toBe(
+      "No se pudo completar la operación. Actualiza la página y vuelve a intentarlo.",
+    );
     expect(guiaDecisionErrorMessage({ status: "forbidden" })).toBe(
       "No tienes permiso para esta acción.",
     );
     expect(guiaDecisionErrorMessage({ status: "conflict", detalle: "nope" })).toBe(
-      "Alguna orden ya no está en un estado válido para esta acción.",
+      "Alguna orden de la selección ya no admite esta acción. Actualiza la lista y vuelve a intentarlo.",
     );
+  });
+});
+
+// El reporte que motivo esta tanda: asignar reparto a un mensajero que estaba recolectando
+// devolvia "Alguna orden ya no está en un estado válido", que es falso —el estado era
+// correcto— e inútil: no decia que hacer. Cada motivo que el backend sabe distinguir tiene
+// ahora su frase, y todas terminan en una accion posible.
+describe("cada motivo del backend llega al usuario con su causa y su salida", () => {
+  it.each([
+    ["mensajero con recoleccion pendiente (el bug reportado)",
+     "el mensajero tiene una recoleccion en tienda pendiente: debe cerrarla antes de recibir reparto",
+     /recolección en tienda sin confirmar/i],
+    ["mensajero con reparto pendiente",
+     "el mensajero tiene ordenes de reparto pendientes: una recoleccion en tienda exige ir sin carga",
+     /órdenes de reparto pendientes/i],
+    ["estado cambiado bajo los pies",
+     "estado de origen no permitido: en_bodega_central",
+     /ya cambió de estado/i],
+    ["orden inexistente", "orden no existe", /ya no existe/i],
+    ["orden borrada", "orden borrada", /fue eliminada/i],
+    ["orden GAM que no se rutea a satelite",
+     "orden GAM no se rutea a satelite", /zona central/i],
+    ["orden no-GAM en la bodega central", "orden de zona no-GAM", /bodega satélite/i],
+  ])("%s", (_caso, motivo, esperado) => {
+    const mensaje = guiaDecisionErrorMessage(conflict(motivo));
+    expect(mensaje).toMatch(esperado);
+    // Ninguno cae ya en el generico, que es lo que hacia el mensaje impreciso.
+    expect(mensaje).not.toMatch(/ya no admite esta acción/i);
   });
 });

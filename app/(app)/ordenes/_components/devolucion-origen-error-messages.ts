@@ -24,7 +24,7 @@ const DEVOLUCION_ORIGEN_ERROR_MESSAGES: Record<
   config_error:
     "Falta configuración del catálogo de estados. Contacta a un administrador.",
   unauthenticated: "Tu sesión expiró. Inicia sesión de nuevo.",
-  validation_error: "Datos inválidos.",
+  validation_error: "Datos inválidos: revisa la selección y vuelve a intentarlo.",
 };
 
 function isDevolucionOrigenErrorStatus(
@@ -47,5 +47,5 @@ export function devolucionOrigenErrorMessage(error: unknown): string {
       : error;
   return isDevolucionOrigenErrorStatus(status)
     ? DEVOLUCION_ORIGEN_ERROR_MESSAGES[status]
-    : "No se pudo completar la operación.";
+    : "No se pudo completar la operación. Actualiza la página y vuelve a intentarlo.";
 }
