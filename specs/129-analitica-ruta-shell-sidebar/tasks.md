@@ -156,8 +156,13 @@ Depende de: T1, T2, T3. Los cuatro archivos son `[P]` entre sí.
   compara el `roles` del ítem `/analitica` de `SIDEBAR_ITEMS` con `ROLES_ANALITICA`
   usada por el guard, y falla si divergen. Vive en
   `tests/unit/auth/menu-visibility.test.ts`.
-  HECHO: el test existe y falla si se edita uno solo de los dos sitios (verificado
-  a mano cambiando uno y revirtiendo).
+  HECHO: el test existe y falla si las dos capas se DESALINEAN (verificado a mano
+  desenganchando una y revirtiendo).
+  **Aclaración (2026-07-30, M-5):** "dos capas" NO significa "dos sitios que editar".
+  Hoy hay UNA sola constante `ROLES_ANALITICA` y las dos capas la leen; ampliar el
+  acceso (feature 133) es editar ESA constante y nada más. Escribir un literal en el
+  `roles` del ítem o en el guard es justo el anti-patrón que este test vigila. Ver la
+  "Nota de traspaso" de `requirements.md`.
 - [x] **T4.6** Verificar R25 (sin dependencias nuevas): `git diff` de `package.json`
   y `pnpm-lock.yaml` vacío.
   HECHO: ambos archivos sin cambios en la rama.

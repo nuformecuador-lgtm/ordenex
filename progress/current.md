@@ -33,12 +33,30 @@ escrita más abajo: `hooks/useInstalarPwa.ts`, `components/shared/InstalarPwaBut
 > con él la comprobación 4 (specs presentes para features en vuelo). Cuarta aparición del patrón de
 > este repo: *una herramienta que decide algo mirando lo que tiene a mano en vez de la fuente de verdad*.
 
-### 📊 Baseline MEDIDO al arrancar (no heredado de la bitácora)
+### 🔴 `origin/dev` ESTÁ ROJO: 20 tests — y mi primera medición del baseline fue FALSA
 
-`./init.sh` → **635 archivos / 7385 tests / 2 rojos**. Los 2 **NO son fallos de test**: son
-`Failed to start forks worker` / `Timeout waiting for worker to respond` en `usuario-form.test.tsx` y
-`PostulacionForm.test.tsx`. **Re-corridos aislados: 2 archivos / 23 tests / 0 fallos.** Es saturación de
-workers de vitest bajo carga, no regresión. Baseline efectivo **verde**.
+**El dato que importa: `dev` tiene 20 tests rojos ahora mismo, y no los puso esta feature.** Viven en
+`MisAsignacionesModule` (×16), `MisAsignacionesPage`, `MarcarLuegoToggle`, `ManifiestoFlujos` y
+`EscanerRecepcion`. Reproducen en aislado (20/125), ninguno de esos archivos está modificado en la rama
+de la 129 y en los cinco el grep de `analitica|menu-visibility|Sidebar|ROLES_ANALITICA` da **0**. Son
+los **KPIs animados del rediseño del mensajero** que la bitácora de la rama `ux` ya declaraba como «14
+rojas previas» → 18 → 20, y que **el PR #212 metió en `dev` sin que nadie los saldara**.
+
+> ⚠️ **Consecuencia: cualquier feature que arranque desde `dev` hereda 20 rojos y no puede poner
+> `./init.sh` en verde.** No es de la 129; es deuda de `dev` y necesita dueño.
+
+**Y el error de método, que conviene que quede escrito.** Al arrancar medí `./init.sh` y leí
+**«635 archivos / 7385 tests / 2 rojos»**, concluí que los 2 eran saturación de workers y di el baseline
+por **verde**. Era falso. Esa corrida traía **11 `unhandled errors`** de arranque de workers de vitest y
+reportó **635 archivos donde en realidad hay 649**: **catorce archivos nunca llegaron a ejecutarse**, y
+entre ellos estaban los cinco que fallan. **Medí una suite degradada y la leí como sana.** Lo destapó el
+implementer al reportar 20 rojos contra mis 2, y se confirmó corriendo los cinco archivos a mano.
+
+> **LECCIÓN: en vitest, un recuento de archivos más bajo de lo normal y un bloque de `Errors` son parte
+> del resultado, no ruido.** Una suite que no arranca del todo **no reporta rojo: reporta de menos.** El
+> total de archivos hay que compararlo contra el esperado antes de creerse el número de fallos. Es la
+> misma familia que el bug de `run_if` documentado dentro de `init.sh`: un gate que termina en verde
+> porque **no llegó a mirar**, no porque estuviera bien.
 
 ### ⚠️ HAY OTRA SESIÓN VIVA EN ESTE MISMO CHECKOUT — no se cambió de rama
 

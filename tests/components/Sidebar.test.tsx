@@ -349,4 +349,44 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     expect(link).toHaveAttribute("aria-current", "page");
     expect(link).toHaveAttribute("data-active");
   });
+
+  // R11 / decision D4 / alternativa A2 del design.md: "compartir icono con otra
+  // sección invita a leer analítica como parte de esa sección". El test R12 de
+  // arriba solo prueba que la CLAVE `chartColumn` es única en el mapa `IconKey`
+  // (garantía tipada) y que ALGÚN svg se pinta; no prueba que ese svg sea un
+  // ícono PROPIO. Una mutación que resuelva `chartColumn` al mismo componente
+  // que "Inicio" (`chartColumn: Home` en `ICON_BY_KEY`) pasaría esas
+  // comprobaciones intactas: la clave sigue existiendo y sigue pintando un
+  // <svg>, solo que es el ícono equivocado. Lucide marca cada ícono con una
+  // clase `lucide-<nombre-kebab>` propia (`createLucideIcon`), así que
+  // comparamos esa clase (no solo la presencia de un <svg>) contra la de
+  // "Inicio" y la de TODOS los demás items del menú.
+  it("R11/D4/A2: el icono de Analítica es propio — no coincide con el de Inicio ni con el de ningún otro item", () => {
+    renderSidebar(SIDEBAR_ITEMS);
+
+    const analiticaLink = linkPorHref("/analitica");
+    const analiticaSvg = analiticaLink.querySelector("svg");
+    expect(analiticaSvg).not.toBeNull();
+    const analiticaClass = analiticaSvg!.getAttribute("class") ?? "";
+    // El ícono real del mapa (`ChartColumn`) lleva esta clase; si la mutación
+    // resuelve `chartColumn` a `Home`, esta clase deja de aparecer.
+    expect(analiticaClass).toMatch(/lucide-chart-column/);
+
+    // Contra "Inicio" en particular (el caso concreto de la mutación).
+    const inicioSvg = linkPorHref("/dashboard").querySelector("svg");
+    expect(inicioSvg).not.toBeNull();
+    expect(inicioSvg!.getAttribute("class")).not.toBe(analiticaClass);
+
+    // Contra CUALQUIER otro item/subitem del menú (enlaces y triggers
+    // colapsables), no solo "Inicio": ningún ícono del menú debe reutilizarse.
+    const otrosIconos = [...screen.getAllByRole("link"), ...screen.getAllByRole("button")]
+      .filter((el) => el !== analiticaLink)
+      .map((el) => el.querySelector("svg"))
+      .filter((svg): svg is SVGSVGElement => svg !== null && svg !== analiticaSvg);
+
+    expect(otrosIconos.length).toBeGreaterThan(0);
+    for (const svg of otrosIconos) {
+      expect(svg.getAttribute("class")).not.toBe(analiticaClass);
+    }
+  });
 });

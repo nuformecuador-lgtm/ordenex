@@ -315,3 +315,229 @@ del arnés lo deciden el leader y el reviewer, no el implementer.
   ni `reset`). La reversión de las mutaciones se hizo con copias de respaldo y
   `diff`, precisamente para no necesitar `git checkout`.
 - No se tocó nada bajo `app/(app)/ranking/` ni sus tests.
+
+---
+
+# Ronda 2 — cierre de los hallazgos del reviewer (2026-07-30)
+
+El reviewer aprobó la 129 **sin bloqueantes** (`progress/review_129.md`): 24/25 R con
+test no vacuo, 20 mutaciones propias, 17 letales. Quedaban **3 mutaciones
+supervivientes** (M-1, M-2, M-3) y **un defecto real de documentación** (M-5). Se
+cierran las cuatro. Todo lo de abajo está medido, no supuesto.
+
+## M-5 — el defecto real: la nota de traspaso inducía el bug que R10 vigila
+
+**Qué estaba mal.** La "Nota de traspaso a la feature 133" mandaba ampliar **DOS**
+sitios: el `roles` del ítem y la constante `ROLES_ANALITICA`. Hoy **son el mismo
+sitio** (el ítem escribe `roles: ROLES_ANALITICA`). Un implementer que siguiera la
+nota al pie desengancharía el ítem escribiendo un literal — exactamente el
+anti-patrón que R10 existe para vigilar. La nota inducía el bug que la feature
+previene. Que la bitácora lo aclarase no bastaba: **la 133 va a leer el spec, no la
+bitácora**.
+
+**Qué dice ahora.** Reescrita en `requirements.md`, con la corrección fechada y
+firmada como hallazgo M-5:
+
+1. **Ampliar es editar UNA sola constante**, `ROLES_ANALITICA` en
+   `lib/auth/menu-visibility.ts`, con el snippet exacto. Y nada más: esa constante
+   alimenta ya las dos capas (visibilidad del ítem y guard `notFound()`).
+2. **Qué NO hacer**, explícito: no escribir un literal de roles ni en el `roles` del
+   ítem ni en el guard, con las dos formas concretas de romper R10 (sólo menú → 404
+   para los roles nuevos; sólo guard → entran por URL sin entrada de menú) y qué test
+   mata cada una.
+3. **Qué se pondrá rojo AL AMPLIAR, y que es correcto**: R9 (roles excluidos), las
+   listas de labels por rol de R17, y R3 en `AnaliticaPage.test.tsx`. Con la regla de
+   oro escrita: **se mueve el rol de una lista a la otra, nunca se relaja el guard ni
+   se borra el caso**; si para poner verde un test hay que eliminar una aserción de
+   exclusión en vez de moverla, el cambio está mal hecho. Y el aviso de que `apiKey`
+   y el actor nulo **siguen excluidos siempre**.
+4. **Cuándo**: después de que 131/132 cableen contenido.
+
+**Duplicados corregidos, para que no queden dos versiones de la verdad:**
+
+- `design.md` §7: decía "tocando los DOS sitios"; ahora dice "editando UNA sola
+  constante" y por qué no hay un segundo sitio.
+- `design.md` §9, riesgo **R-2**: reescrita la mitigación para nombrar las dos
+  variantes de desenganche y qué test mata cada una.
+- `tasks.md` T4.5: el criterio de HECHO decía "falla si se edita uno solo de los dos
+  sitios"; ahora distingue **dos capas** (que es lo cierto) de **dos sitios que
+  editar** (que es falso), con puntero a la nota.
+
+## M-3 (R11/D4) — el icono propio ahora se asserta
+
+**Hueco.** Se afirmaba que la CLAVE `chartColumn` era única, no que el COMPONENTE de
+icono lo fuera: mapear `chartColumn: Home` pasaba los 57 tests. Justo lo que la
+alternativa **A2** del `design.md` quería impedir.
+
+**Cierre.** Nuevo caso en `tests/components/Sidebar.test.tsx`:
+`R11/D4/A2: el icono de Analítica es propio — no coincide con el de Inicio ni con el
+de ningún otro item`. Compara la clase del `svg` del enlace `/analitica`
+(`lucide-chart-column`) contra la de `/dashboard` y contra la de todos los demás
+ítems del menú, exigiendo desigualdad.
+
+**Verificado por mutación (por el implementer, no delegado):** `chartColumn: Home` en
+`ICON_BY_KEY` produce:
+
+```
+FAIL tests/components/Sidebar.test.tsx > ... > R11/D4/A2: el icono de Analitica es propio ...
+AssertionError: expected "lucide lucide-house" to match /lucide-chart-column/
+Tests  1 failed | 16 passed (17)
+```
+
+## M-1 (R19) — el envoltorio AppPage ahora se asserta
+
+**Hueco.** R19 exige el encabezado "usando el envoltorio único de página del repo
+(`AppPage`)", pero sustituirlo por un `div`+`h1` a pelo pasaba los 57 tests,
+perdiendo `PageHeader` y `Container` sin que nada lo notara.
+
+**Cierre.** Nuevo caso en `tests/components/AnaliticaShell.test.tsx`:
+`R19: el encabezado llega por el envoltorio único de página (AppPage -> PageHeader),
+no por un header improvisado`. Se apoya en **dos rasgos que sólo aporta el
+envoltorio**, no en clases de Tailwind arbitrarias:
+
+- el landmark `banner` (el `<header>` de `PageHeader`, que un `<div>` no produce), y
+- el `LogoutButton` que `PageHeader` monta siempre en su topbar, ajeno al contenido
+  del shell.
+
+Es una aserción semántica (roles ARIA), no acoplada a detalles internos: **no se tapó
+el hueco con una aserción vacua**, que era el riesgo que el leader marcó
+explícitamente.
+
+**Verificado por mutación (por el implementer):** `AppPage` sustituido por
+`div` + `h1` conservando las dos `section`:
+
+```
+FAIL tests/components/AnaliticaShell.test.tsx > ... > R19: el encabezado llega por el envoltorio unico ...
+TestingLibraryElementError: Unable to find an accessible element with the role "banner"
+Tests  1 failed | 8 passed (9)
+```
+
+## M-2 (R1) — la garantía es el BUILD, no la suite
+
+**Hueco.** Poner `"use client"` en `app/(app)/analitica/page.tsx` pasaba los 57 tests.
+En producción revienta, pero **`init.sh` no corre `next build`**, así que el arnés no
+lo atrapaba.
+
+**Decisión: no se inventó un test frágil.** Un test de vitest que intentara distinguir
+Server de Client Component tendría que inspeccionar la directiva del archivo como
+texto — una aserción de forma, del tipo que este repo ya sabe que envejece mal. **La
+garantía correcta de R1 es el build de Next**, que es quien de verdad conoce la
+frontera RSC. Se ejecutó de verdad.
+
+**Nota operativa:** se corrió `pnpm exec next build`, **no `pnpm build`**. El script
+`build` del `package.json` es
+`prisma generate && tsx scripts/migrate-deploy.ts && next build`, y su paso intermedio
+aplica migraciones contra una base real. Para verificar la frontera RSC sólo hace
+falta el `next build`.
+
+### Build en verde con el código entregado
+
+```
+✓ Compiled successfully in 19.9s
+✓ Generating static pages using 11 workers (39/39) in 550ms
+├ ƒ /analitica
+EXIT_CODE=0
+```
+
+`/analitica` aparece en el listado de rutas y en el manifiesto emitido
+(`.next/app-path-routes-manifest.json` contiene la entrada `/analitica`). La marca
+**`ƒ`** es `(Dynamic) server-rendered on demand`: confirma por partida doble que la
+ruta es un Server Component dinámico, tal como exige R1 (dinámica de facto porque
+`resolveActorFromSession()` llama a `cookies()`).
+
+Repetido tras revertir todas las mutaciones: `Compiled successfully in 14.8s`,
+`├ ƒ /analitica`, `EXIT_CODE=0`.
+
+### Y el build en rojo con la mutación
+
+Con `"use client"` en la página, `next build` **falla con exit 1**, y la traza señala
+el archivo por su nombre:
+
+```
+Import trace:
+  Client Component Browser:
+    ./node_modules/.pnpm/pg@8.22.0/.../pg/lib/index.js [Client Component Browser]
+    ./node_modules/.pnpm/@prisma+adapter-pg@7.8.0/.../index.mjs [Client Component Browser]
+    ./lib/db/prisma-client.ts [Client Component Browser]
+    ./lib/auth/resolve-actor.ts [Client Component Browser]
+    ./app/(app)/analitica/page.tsx [Client Component Browser]
+    ./app/(app)/analitica/page.tsx [Server Component]
+EXIT_CODE=1
+```
+
+Marcar la página como cliente arrastra Prisma y el driver `pg` al bundle del
+navegador y el build se cae. **M-2 muere en el build.**
+
+> **Límite del arnés, declarado:** la garantía de R1 —y de la frontera
+> servidor/cliente en general— es `next build`, **no** la suite de vitest. `init.sh`
+> hoy **no** corre el build, así que esta clase de regresión no la atrapa el gate
+> automático. Recomendación para el leader: añadir `next build` a `init.sh` o al
+> pipeline de CI si se quiere cobertura permanente. No se toca `init.sh` desde esta
+> feature: es infraestructura del arnés, no alcance de la 129.
+
+## Re-verificación de las tres mutaciones
+
+Aplicadas de nuevo **por el implementer**, no dadas por buenas del subagente:
+
+| # | Mutación | Antes (reviewer) | Ahora | Qué salta |
+| --- | --- | --- | --- | --- |
+| M-1 | `AppPage` → `div`+`h1` a pelo | SOBREVIVÍA | **MUERE** — 1 rojo | `R19: el encabezado llega por el envoltorio único...` (falta `role="banner"`) |
+| M-2 | `"use client"` en `page.tsx` | SOBREVIVÍA | **MUERE en `next build`** — exit 1 | `Module not found`, con traza a `page.tsx [Client Component Browser]` |
+| M-3 | `chartColumn: Home` en `ICON_BY_KEY` | SOBREVIVÍA | **MUERE** — 1 rojo | `R11/D4/A2: el icono de Analítica es propio...` |
+
+**Reversión verificada con copia de respaldo propia, nunca con `git checkout`.** Los
+cuatro archivos de producción se compararon con `diff` contra la copia previa:
+
+```
+IDENTICO: lib/auth/menu-visibility.ts
+IDENTICO: app/(app)/_components/Sidebar.tsx
+IDENTICO: app/(app)/analitica/page.tsx
+IDENTICO: app/(app)/analitica/_components/AnaliticaShell.tsx
+```
+
+Y además idénticos a la copia de la ronda 1: **el subagente que añadió las dos
+aserciones no tocó producción**, comprobado antes de empezar a mutar.
+
+## Estado tras la ronda 2
+
+- `pnpm run typecheck` → **0 errores**.
+- `pnpm run lint` → **0 errores**, 21 warnings preexistentes y ajenos.
+- Los 4 archivos de test de la feature → **59/59 verdes** (eran 57; +2 por M-1 y M-3).
+- `pnpm exec next build` → **exit 0**, con `/analitica` como ruta dinámica.
+- Suite completa: sin cambios respecto de la ronda 1 — los 20 rojos heredados de
+  `origin/dev` siguen ahí y siguen sin ser de esta feature (§4.6). **T5.2 sigue sin
+  marcar** por eso.
+
+### Mapa `R → test`: filas actualizadas
+
+| R | Cobertura tras la ronda 2 |
+| --- | --- |
+| R1 | `AnaliticaPage.test.tsx` (la ruta renderiza) **+ `next build` exit 0 con `/analitica` como `ƒ` dinámica**, que es la garantía real de la frontera RSC |
+| R11 | `R11: su iconKey es 'chartColumn'...` (unicidad de la CLAVE) **+ `R11/D4/A2: el icono de Analítica es propio...`** (unicidad del COMPONENTE) |
+| R19 | `Feature 129 (R18, R19) — ...` **+ `R19: el encabezado llega por el envoltorio único de página (AppPage -> PageHeader)...`** |
+
+### Lo que NO se cerró, y por qué
+
+- **M-4** (asimetría de trazabilidad de R10: el test compara ítem↔constante, no
+  guard↔constante). El reviewer lo dejó como deuda anotada, no como defecto: la
+  divergencia del lado del guard **sí** muere, pero por los tests de página, que
+  enumeran los seis roles del enum. La conducta está cubierta; lo asimétrico es a qué
+  R se le atribuye el mérito. No se toca: cerrarlo bien pide un test que importe la
+  lista efectiva del guard y la compare con la constante, y el guard no la exporta.
+  Queda para la 133, que es quien va a tocar esa constante.
+- **M-6** (entrada en `progress/history.md`) y **M-7** (R25 sin test, verificado por
+  diff): son del leader y de criterio de proceso, no del implementer.
+- **T5.2** (`init.sh` en verde): bloqueada por los 20 rojos heredados de `dev`.
+
+### Archivos tocados en la ronda 2
+
+- `specs/129-analitica-ruta-shell-sidebar/requirements.md` (nota de traspaso reescrita)
+- `specs/129-analitica-ruta-shell-sidebar/design.md` (§7 y riesgo R-2)
+- `specs/129-analitica-ruta-shell-sidebar/tasks.md` (criterio de HECHO de T4.5)
+- `tests/components/Sidebar.test.tsx` (+1 caso, M-3)
+- `tests/components/AnaliticaShell.test.tsx` (+1 caso, M-1)
+- `progress/impl_129-analitica-ruta-shell-sidebar.md` (esta sección)
+
+**Cero cambios en código de producción en la ronda 2**, verificado por `diff`.
+Sin `git commit`, sin `git push`, sin `git` que mueva HEAD, y sin tocar
+`app/(app)/ranking/` ni sus tests.

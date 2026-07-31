@@ -189,14 +189,64 @@ de gráficas u otras) para cumplir esta feature.
 ## Nota de traspaso a la feature 133
 
 La 133 ("analítica: recortes por rol") es la que amplía el acceso a
-`adminSatelite`, `adminTienda` y `mensajero`. Debe tocar **dos** sitios, y los dos:
+`adminSatelite`, `adminTienda` y `mensajero`.
 
-1. `lib/auth/menu-visibility.ts` → el `roles` del ítem con `href: "/analitica"`:
-   añadir los tres roles a `["maestro","admin"]`.
-2. El guard de `app/(app)/analitica/page.tsx` (la constante `ROLES_ANALITICA`,
-   `design.md` §2) → el mismo conjunto, para no romper R10. Si sólo se toca el
-   menú, los tres roles nuevos verán la entrada y recibirán 404; si sólo se toca el
-   guard, entrarán por URL pero sin entrada de menú.
+> **Corregida el 2026-07-30 (hallazgo M-5 del reviewer).** La versión anterior de
+> esta nota mandaba "tocar DOS sitios: el `roles` del ítem y la constante
+> `ROLES_ANALITICA`". **Eso era falso y además peligroso**: hoy los dos sitios son
+> el mismo (el ítem escribe `roles: ROLES_ANALITICA`), así que un implementer que
+> siguiera la nota al pie desengancharía el ítem escribiendo un literal — que es
+> exactamente el anti-patrón que R10 existe para vigilar. La nota inducía el bug
+> que la feature previene.
 
-Y sólo tiene sentido hacerlo **después** de que 131/132 hayan cableado contenido:
-ampliar antes reintroduce exactamente el problema que D1 evita.
+### Qué hay que hacer: editar UNA sola constante
+
+Ampliar el acceso es **un único cambio, en un único sitio**:
+
+```ts
+// lib/auth/menu-visibility.ts
+export const ROLES_ANALITICA = ["maestro", "admin", "adminSatelite", "adminTienda", "mensajero"] as const;
+```
+
+Y **nada más**. Esa constante alimenta ya las dos capas:
+
+- el `roles` del ítem con `href: "/analitica"` en `SIDEBAR_ITEMS` (visibilidad del
+  menú), y
+- el guard `notFound()` de `app/(app)/analitica/page.tsx` (la defensa real), que la
+  importa desde este mismo módulo.
+
+### Qué NO hay que hacer
+
+**NO escribas un literal de roles ni en el `roles` del ítem ni en el guard.** En
+cuanto una de las dos capas deja de leer `ROLES_ANALITICA`, las dos pueden divergir
+y se rompe **R10**: si sólo se amplía el menú, los roles nuevos ven la entrada y
+reciben 404; si sólo se amplía el guard, entran por URL sin entrada de menú. El test
+de R10 (`tests/unit/auth/menu-visibility.test.ts`) está puesto precisamente para
+matar la primera variante, y los tests de página, que enumeran los seis roles del
+enum uno a uno, matan la segunda.
+
+### Tests que se pondrán rojos AL AMPLIAR, y que es CORRECTO actualizar
+
+Ampliar la constante deja rojos, **por diseño**, los tests que hoy congelan el
+alcance restringido de la 129. Son aserciones que describen la decisión D1, no
+invariantes de seguridad: hay que **actualizarlas** para reflejar el alcance nuevo.
+
+1. **R9** (`R9: puedeVer e itemsVisibles lo excluyen para el resto de roles y sin
+   actor`): los roles ampliados dejan de estar excluidos. Quitar de la lista de
+   exclusión los que pasen a tener acceso; **`apiKey` y el actor `null` deben seguir
+   excluidos** (es cuenta de máquina y sesión ausente, no se amplían nunca).
+2. **R17** (las listas de labels por rol comparadas por IGUALDAD): cada rol que gane
+   el acceso tendrá "Analítica" en su lista de ítems visibles. Añadirlo en la
+   posición que corresponda a cada lista.
+3. **R3** en `tests/components/AnaliticaPage.test.tsx`: los roles ampliados dejan de
+   recibir `notFound()` y pasan al caso de R2 (ven el shell).
+
+**Regla al actualizarlos: se mueve el rol de una lista a la otra, nunca se relaja el
+guard ni se borra el caso.** Si para poner un test en verde hace falta eliminar una
+aserción de exclusión en vez de moverla, es señal de que el cambio está mal hecho.
+
+### Cuándo
+
+Sólo tiene sentido **después** de que 131/132 hayan cableado contenido: ampliar antes
+reintroduce exactamente el problema que D1 evita (una entrada de menú que lleva a una
+página vacía).

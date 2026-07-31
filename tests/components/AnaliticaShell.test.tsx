@@ -47,6 +47,29 @@ describe("Feature 129 (R18, R19) — el shell es un componente propio con props 
       screen.getByRole("heading", { name: "Analítica" }),
     ).toBeInTheDocument();
   });
+
+  // R19 exige explícitamente el "envoltorio único de página del repo"
+  // (`AppPage`), no cualquier encabezado con un `<h1>`. Un `<div><h1>` a mano
+  // pasaría la prueba de arriba (que solo busca el heading) sin pasar por
+  // `AppPage` -> `PageHeader` -> `Container`. Se afirma sobre DOS rasgos que
+  // solo aporta esa cadena real y que un envoltorio improvisado no reproduce
+  // por accidente:
+  // 1) el landmark `banner`: lo da el `<header>` semántico de `PageHeader`
+  //    (ningún `<div>` lo aporta implícitamente);
+  // 2) el control "Salir" (`LogoutButton`) que `PageHeader` monta siempre en
+  //    su topbar — no es contenido del shell, así que solo aparece si de
+  //    verdad se pasó por `PageHeader`.
+  // Se evita apoyarse en clases de Tailwind (detalle de estilo, no de
+  // estructura) y en el propio heading (ya cubierto arriba y reproducible por
+  // cualquier `<h1>` suelto).
+  it("R19: el encabezado llega por el envoltorio único de página (AppPage -> PageHeader), no por un header improvisado", () => {
+    render(<AnaliticaShell />);
+
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /salir/i }),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("Feature 129 (R20) — exactamente dos regiones, sin región financiera", () => {

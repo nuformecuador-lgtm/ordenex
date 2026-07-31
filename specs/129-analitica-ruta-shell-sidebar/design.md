@@ -235,10 +235,14 @@ un control que no lleva a ninguna parte, para justo los tres roles cuyos recorte
 presentación son alcance de la 133.
 
 **Quién lo cierra:** la feature 133 ("analítica: recortes por rol"), que amplía a los
-tres roles restantes tocando los DOS sitios listados en la "Nota de traspaso" de
-`requirements.md` (`SIDEBAR_ITEMS` y la constante `ROLES_ANALITICA` del guard). Con
-eso, la letra de la ficha queda cumplida al final de la cadena 129 → 131/132 → 133,
-no en la 129.
+tres roles restantes **editando UNA sola constante**: `ROLES_ANALITICA` en
+`lib/auth/menu-visibility.ts`. **No hay un segundo sitio que tocar** — el `roles` del
+ítem y el guard de la página ya leen esa misma constante, y escribir un literal en
+cualquiera de los dos es precisamente lo que rompe R10 (corregido el 2026-07-30,
+hallazgo M-5: la redacción anterior mandaba "tocar DOS sitios" e inducía ese error).
+El detalle —qué NO hacer, y qué tests se ponen rojos por diseño al ampliar— está en
+la "Nota de traspaso" de `requirements.md`. Con eso, la letra de la ficha queda
+cumplida al final de la cadena 129 → 131/132 → 133, no en la 129.
 
 No se modifica `feature_list.json` desde esta feature: ese registro lo lleva el
 leader.
@@ -265,8 +269,12 @@ Los `depends_on` son la referencia fiable; las descripciones, no.
   cambios mínimos y aditivos (una clave en la unión, una entrada en el mapa, un
   objeto insertado en el array); nada de reordenar los ítems existentes.
 - **R-2. Que la 133 amplíe sólo el menú y olvide el guard**, dejando tres roles con
-  entrada visible y 404. Mitigación: R10 + la "Nota de traspaso" de
-  `requirements.md` + la constante única `ROLES_ANALITICA`.
+  entrada visible y 404. Mitigación: la constante única `ROLES_ANALITICA` (que hace
+  imposible la divergencia mientras las dos capas la lean) + R10, que mata la
+  variante "el ítem se desengancha con un literal" + los tests de página, que
+  enumeran los seis roles del enum y matan la variante "el guard se desengancha con
+  un literal" + la "Nota de traspaso" de `requirements.md`, reescrita el 2026-07-30
+  para no inducir precisamente ese desenganche.
 - **R-3. Que el shell se congele como contrato equivocado.** Mitigación: superficie
   de props mínima (dos slots opcionales), nada de props de datos, y el punto de
   extensión de la 132 escrito en el JSDoc (§3.2).
