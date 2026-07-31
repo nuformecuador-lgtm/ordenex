@@ -102,10 +102,11 @@ describe("Feature 154 · SEED del catalogo — los dos values del flujo v2 (R1/R
   // Feature 155/R27: el catalogo baja a 19 al RETIRAR un value de los 18 previos (el de
   // fulfillment, que ocupaba el indice 4). Los 17 que quedan conservan su ORDEN RELATIVO, que
   // es lo que la 154 prometio no tocar; el que falta lo retiro otra feature, con su migracion.
-  it("R3 (+155/R27): los previos conservan su orden relativo; el catalogo tiene 19", () => {
+  it("R3 (+155/R27, +157): los previos conservan su orden relativo; el catalogo tiene 20", () => {
     const previosVigentes = PREVIOS_18.filter((v) => v !== RETIRADO_155);
     expect(ORDER_STATUS_SEED.slice(0, previosVigentes.length)).toEqual(previosVigentes);
-    expect(ORDER_STATUS_SEED).toHaveLength(19);
+    // 20: la 157 apendio `recolectando` DESPUES de los dos de la 154.
+    expect(ORDER_STATUS_SEED).toHaveLength(20);
     expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(RETIRADO_155);
   });
 });
@@ -140,11 +141,15 @@ describe("Feature 154 · UP — alta aditiva e idempotente en la tabla catalogo 
     expect(dosVeces).toHaveLength(20);
     expect(dosVeces).toEqual(unaVez);
     expect(new Set(dosVeces).size).toBe(dosVeces.length);
-    // Feature 155/R27: el catalogo VIGENTE es el resultado de esta migracion MENOS el value
-    // que retiro la 155 (con su propia migracion y su backfill). Se resta aqui explicitamente
-    // para que el invariante de la 154 —"el UP deja exactamente estos values"— siga probandose.
+    // El catalogo VIGENTE es el resultado de esta migracion MENOS el value que retiro la 155
+    // (con su propia migracion y su backfill) MAS los que apendieron features posteriores. Se
+    // ajusta aqui explicitamente para que el invariante de la 154 —"el UP deja exactamente
+    // estos values"— siga probandose sin congelar el catalogo entero.
+    const APENDIDOS_DESPUES = ["recolectando"]; // feature 157 (ampliacion)
     expect([...dosVeces].filter((v) => v !== RETIRADO_155).sort()).toEqual(
-      [...ORDER_STATUS_SEED].sort(),
+      [...ORDER_STATUS_SEED]
+        .filter((v) => !APENDIDOS_DESPUES.includes(v))
+        .sort(),
     );
   });
 

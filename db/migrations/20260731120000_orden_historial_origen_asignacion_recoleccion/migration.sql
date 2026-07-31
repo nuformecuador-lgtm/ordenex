@@ -1,0 +1,24 @@
+-- Feature 157 (estado `recolectando`) — añade el valor `asignacion_recoleccion` al enum
+-- `orden_historial_origen_tipo`. Es la clasificacion propia de la asignacion del mensajero
+-- que va a la tienda:
+--   por_recolectar_en_tienda -> recolectando   (actor maestro/admin)
+--
+-- Hasta ahora esa asignacion NO transicionaba: la orden se quedaba en
+-- `por_recolectar_en_tienda` con el mensajero escrito, asi que seguia apareciendo como
+-- asignable y se podia reasignar indefinidamente (bug reportado desde produccion). Con el
+-- estado propio la asignacion pasa a ser una transicion de verdad, y toda transicion deja
+-- rastro: de ahi esta familia. La REVERSION reusa `deshacer_asignacion` (feature 149), que
+-- ya significa exactamente eso — revertir una asignacion ANTES de la recogida—.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR
+-- un valor de enum recien añadido en la misma transaccion que lo añadio (error 55P04 "unsafe
+-- use of new value of enum type") y Prisma Migrate corre cada migration.sql en una transaccion.
+-- Aqui SOLO se añade el valor; su primer uso ocurre en runtime
+-- (`OrdenRepository.asignarRecoleccionLote`), en transacciones posteriores. Mismo precedente
+-- que `deshacer_asignacion` (149) y `devolucion_rechazada` (139). El backfill del estado nuevo
+-- vive en la migracion siguiente y usa `ajuste_estado`, un valor YA existente, justamente para
+-- no chocar con esta regla.
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva
+-- su RLS de la feature 49). No crea tablas ni columnas.
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'asignacion_recoleccion';

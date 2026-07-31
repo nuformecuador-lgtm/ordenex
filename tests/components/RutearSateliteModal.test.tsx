@@ -176,7 +176,7 @@ describe("RutearSateliteModal", () => {
 
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith(
-        "Alguna orden ya no está en un estado válido para esta acción.",
+        "Alguna orden de la selección ya no admite esta acción. Actualiza la lista y vuelve a intentarlo.",
       ),
     );
   });

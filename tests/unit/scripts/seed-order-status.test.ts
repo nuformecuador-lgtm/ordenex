@@ -45,7 +45,7 @@ describe("seedOrderStatus siembra los 19 estatus por value (R2/R5/R9 · 30 · 33
       "orderStatus"
     >);
 
-    expect(fake.upsert).toHaveBeenCalledTimes(19);
+    expect(fake.upsert).toHaveBeenCalledTimes(20);
     const valores = [...fake.rows.values()].map((r) => r.value).sort();
     expect(valores).toEqual([...ORDER_STATUS_SEED].sort());
   });
@@ -97,11 +97,11 @@ describe("seedOrderStatus es idempotente (R3)", () => {
     >;
 
     await seedOrderStatus(client);
-    expect(fake.rows.size).toBe(19);
+    expect(fake.rows.size).toBe(20);
     const idsPrimera = new Map([...fake.rows.entries()].map(([k, v]) => [k, v.id]));
 
     await seedOrderStatus(client);
-    expect(fake.rows.size).toBe(19); // no crece
+    expect(fake.rows.size).toBe(20); // no crece
 
     for (const [k, v] of fake.rows.entries()) {
       expect(v.id).toBe(idsPrimera.get(k)); // id conservado (R3)

@@ -32,6 +32,8 @@ const ranking = byLabel("Ranking");
 const incidentes = byLabel("Incidentes");
 // Feature 129: tablero de analítica (ruta/shell + ítem de sidebar).
 const analitica = byLabel("Analítica");
+// Feature 167 (R4): apartado propio de recolección en tienda del mensajero.
+const recoleccion = byLabel("Recolección");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -169,7 +171,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Entregas + Ranking + Cierre del día + Perfil, NO Órdenes, Novedades ni Configuración", () => {
+  it("mensajero ve Entregas + Recolección + Ranking + Cierre del día + Perfil, NO Órdenes, Novedades ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
@@ -177,8 +179,11 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // (roles maestro+mensajero); su defensa real es el notFound de la página.
     // Feature 87 (R20): "Novedades" ahora es exclusivo del adminTienda; el
     // mensajero DEJA de verlo.
+    // Feature 167 (R4): "Recolección" es el apartado propio de la recolección en
+    // tienda, que dejó de vivir dentro de "Entregas". Va justo debajo de ella.
     expect(visibles).toEqual([
       "Entregas",
+      "Recolección",
       "Ranking",
       "Cierre del día",
       "Perfil",
@@ -336,5 +341,74 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     for (const rol of analitica.roles) {
       expect(ROLES_ANALITICA).toContain(rol);
     }
+  });
+});
+
+// Feature 167 — el ítem de sidebar "Recolección" (R4, R5). La 167 sacó la recolección en
+// tienda de dentro de "Entregas" porque el mensajero no la encontraba; este ítem ES la pista
+// permanente de dónde está ahora (design §11, riesgo 1). Si desaparece, la feature vuelve al
+// problema que vino a resolver.
+describe("Feature 167 — ítem de sidebar de Recolección", () => {
+  it("R4: existe exactamente UN ítem con href '/recoleccion' y su label es 'Recolección'", () => {
+    const conEseHref = SIDEBAR_ITEMS.filter((i) => i.href === "/recoleccion");
+    expect(conEseHref).toHaveLength(1);
+    expect(conEseHref[0].label).toBe("Recolección");
+  });
+
+  it("R4: lo ve el mensajero", () => {
+    expect(puedeVer(recoleccion, actor("mensajero"))).toBe(true);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")).some(
+        (i) => i.href === "/recoleccion",
+      ),
+    ).toBe(true);
+  });
+
+  it("R4: NINGÚN otro rol lo ve, ni un actor ausente", () => {
+    // El acto físico de recolectar en la tienda es del mensajero. El maestro asigna la
+    // recolección (157) desde otra pantalla; nadie más tiene nada que hacer aquí.
+    for (const rol of [
+      "maestro",
+      "admin",
+      "adminTienda",
+      "adminSatelite",
+      "apiKey",
+    ] as RolValue[]) {
+      expect(puedeVer(recoleccion, actor(rol))).toBe(false);
+      expect(
+        itemsVisibles(SIDEBAR_ITEMS, actor(rol)).some(
+          (i) => i.href === "/recoleccion",
+        ),
+      ).toBe(false);
+    }
+    expect(puedeVer(recoleccion, null)).toBe(false);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, null).some((i) => i.href === "/recoleccion"),
+    ).toBe(false);
+  });
+
+  it("R5: su iconKey es 'store' y ningún otro ítem de SIDEBAR_ITEMS usa esa clave", () => {
+    expect(recoleccion.iconKey).toBe("store");
+    const otrosConMismaClave = SIDEBAR_ITEMS.filter(
+      (i) => i !== recoleccion && i.iconKey === "store",
+    );
+    expect(otrosConMismaClave).toHaveLength(0);
+    // En particular NO reusa el `truck` de "Entregas": recolectar en la tienda y repartir
+    // en la calle son dos trabajos distintos, y ese es el punto entero de la feature.
+    expect(recoleccion.iconKey).not.toBe(entregas.iconKey);
+  });
+
+  it("decisión del humano (2026-07-31): va justo debajo de 'Entregas'", () => {
+    const indiceEntregas = SIDEBAR_ITEMS.findIndex(
+      (i) => i.href === "/mis-asignaciones",
+    );
+    const indiceRecoleccion = SIDEBAR_ITEMS.findIndex(
+      (i) => i.href === "/recoleccion",
+    );
+    expect(indiceRecoleccion).toBe(indiceEntregas + 1);
+  });
+
+  it("R4: el ítem no declara subítems (no es una sección de Entregas)", () => {
+    expect(recoleccion.children).toBeUndefined();
   });
 });

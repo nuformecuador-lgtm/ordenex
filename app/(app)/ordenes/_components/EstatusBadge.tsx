@@ -33,6 +33,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4: en tránsito satélite → central
   por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4: en la central, elegible para "enviar a la tienda"
   por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29: espera en la tienda a que el mensajero la recolecte
+  recolectando: "Recolectando", // feature 157 (ampliacion): ya tiene mensajero y va en camino a la tienda
   incidente: "Incidente", // feature 154/R30: resultado terminal de la gestión
 };
 
@@ -72,6 +73,9 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   // `warning`, igual que `por_devolver`; `incidente` es un cierre en error -> `danger`, igual
   // que `rechazada`. Ninguno lleva refuerzo de acento de marca en `ORDER_STATUS_CLASS`.
   por_recolectar_en_tienda: "warning",
+  // Feature 157: ya hay alguien yendo, asi que NO es una espera sin dueño como el anterior:
+  // es trabajo en curso, la misma familia visual que el resto de tramos en movimiento.
+  recolectando: "info",
   incidente: "danger",
 };
 

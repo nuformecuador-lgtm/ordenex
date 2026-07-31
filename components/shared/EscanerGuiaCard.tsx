@@ -129,7 +129,13 @@ export function EscanerGuiaCard({
               >
                 {manual.label ?? "Número de guía"}
               </label>
-              <div className="flex flex-col gap-3 sm:flex-row">
+              {/* Botón SIEMPRE debajo del input, en cualquier ancho. En fila
+                  (`sm:flex-row`) el input no bajaba de su ancho intrínseco y el botón
+                  no encoge (`shrink-0` + `whitespace-nowrap` de la primitiva), así que
+                  una etiqueta larga —"Confirmar recolección"— se salía de la tarjeta
+                  (`max-w-md`, 384px interiores). Apilado no depende del largo de la
+                  etiqueta: no lo vuelvas a poner en fila por consumidor. */}
+              <div className="flex flex-col gap-3">
                 {/* Sin `type="number"` a proposito: dispararia la validacion nativa
                     del form y se tragaria el corte limpio del consumidor ("Código
                     inválido") antes de que este lo pueda reportar. */}
@@ -141,14 +147,14 @@ export function EscanerGuiaCard({
                   disabled={procesando}
                   onChange={(e) => setValor(e.target.value)}
                   placeholder={manual.placeholder ?? "Ej. 1024"}
-                  className="h-11 flex-1 rounded-lg border border-input bg-background px-3.5 text-base text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-base text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <Button
                   type="submit"
                   size="lg"
                   loading={procesando}
                   disabled={valor.trim() === ""}
-                  className="h-11 shrink-0 px-6"
+                  className="h-11 w-full"
                 >
                   {manual.submitLabel}
                 </Button>

@@ -60,11 +60,12 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "devolucion_rechazada", // feature 139: CierresAdminRepository.resolverCierre (aprobar, rechazada -> por_devolver/por_devolver_a_tienda)
     "recoleccion_tienda", // feature 154 (R7): recoleccion en tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43). SIN PRODUCTOR hasta la 157
     "incidente", // feature 154 (R8): familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158
-    "deshacer_asignacion", // feature 149: OrdenRepository.deshacerAsignacionLote (reversion antes de la recogida)
+    "deshacer_asignacion", // feature 149: OrdenRepository.deshacerAsignacionLote (reversion antes de la recogida); la 157 le suma la reversion de una recoleccion
+    "asignacion_recoleccion", // feature 157 (ampliacion): GuiaAsignacionService.asignarRecoleccion (por_recolectar_en_tienda -> recolectando)
   ];
 
-  it("contiene exactamente los 25 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(25);
+  it("contiene exactamente los 26 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(26);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

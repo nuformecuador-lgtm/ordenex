@@ -67,6 +67,12 @@ export interface AsignarRecoleccionInput {
   mensajeroId: string;
 }
 
+// Feature 157 (ampliacion 2026-07-31): la reversion no elige mensajero — lo quita—, asi que
+// su entrada es solo el lote.
+export interface DesasignarRecoleccionInput {
+  ordenIds: string[];
+}
+
 // Feature 157: mismo shape que `AsignarBodegaServiceResult` a proposito, para que el
 // traductor de errores del modal (`guia-decision-error-messages.ts`) sirva sin cambios.
 // El `resultados` no lleva `estado` porque no hay transicion que reportar (R4).
@@ -125,6 +131,15 @@ export interface IGuiaAsignacionService {
    */
   asignarRecoleccion(
     input: AsignarRecoleccionInput,
+    actor: Actor,
+  ): Promise<AsignarRecoleccionServiceResult>;
+  /**
+   * Feature 157 (ampliacion): revierte la asignacion de una recoleccion — `recolectando` ->
+   * `por_recolectar_en_tienda`, sin mensajero—. Cambiar de mensajero exige pasar por aqui:
+   * asi la orden vuelve al monton de asignables y las dos mitades quedan en el historial.
+   */
+  desasignarRecoleccion(
+    input: DesasignarRecoleccionInput,
     actor: Actor,
   ): Promise<AsignarRecoleccionServiceResult>;
 }

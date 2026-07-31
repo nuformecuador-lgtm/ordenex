@@ -85,6 +85,6 @@ describe("154 — el mapa de presentacion sigue cubriendo el catalogo EXACTO", (
   // `Record<OrderStatusValue, ...>` solo caza si FALTA una clave, no si sobra en runtime.
   it("tiene una etiqueta por cada uno de los 19 values, sin sobrantes", () => {
     expect(Object.keys(ORDER_STATUS_LABELS).sort()).toEqual([...ORDER_STATUS_SEED].sort());
-    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(19);
+    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(20); // +1: feature 157 (recolectando)
   });
 });
