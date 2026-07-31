@@ -141,10 +141,23 @@ export class CierresAdminService implements ICierresAdminService {
     const paths = found.gestiones
       .map((g) => g.evidenciaStoragePath)
       .filter((p): p is string => p !== null);
-    const urlByPath =
-      paths.length > 0
-        ? await this.signedUrls.createSignedUrls(paths, cierreConfig.SIGNED_URL_TTL_SECONDS)
-        : {};
+    // Best-effort DELIBERADO: si el storage no responde (credencial ausente, servicio
+    // caido), el detalle se sirve SIN evidencias en vez de no servirse. Las evidencias
+    // ilustran la decision; no son la decision. Bloquear el comprobante entero por ellas
+    // deja el cierre sin poder aprobarse ni rechazarse, y un cierre atascado bloquea a su
+    // mensajero y, por la regla de zona, las asignaciones de toda su zona. El fallo por
+    // objeto concreto ya lo absorbe el provider, que omite lo que no puede firmar.
+    let urlByPath: Record<string, string> = {};
+    if (paths.length > 0) {
+      try {
+        urlByPath = await this.signedUrls.createSignedUrls(
+          paths,
+          cierreConfig.SIGNED_URL_TTL_SECONDS,
+        );
+      } catch {
+        urlByPath = {};
+      }
+    }
 
     // R6: agrupa por resultado (4 claves siempre presentes) con el mapper reuso 37.
     // Feature 158/R18: 5 claves — el `incidente` es un grupo PROPIO del detalle del admin.

@@ -62,6 +62,7 @@ beforeEach(() => {
     status: "ok",
     porRecoger: [],
     porGestionar: [],
+    porRecolectar: [], // feature 157: tercer grupo del portal
     ordenEnGestionId: null,
     kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
     // Feature 92/R27/R30: bloque de estado de la ruta que acompana al listado.
@@ -99,6 +100,7 @@ describe("MisAsignacionesPage — control de acceso por rol (R9/R12)", () => {
       status: "ok",
       porRecoger: [],
       porGestionar: [],
+      porRecolectar: [], // feature 157: tercer grupo del portal
       ordenEnGestionId: null,
       kpis: { pendientes: 3, entregadas: 7, porCobrar: 350, totalACobrar: 750 },
       ruta: { estado: "vigente", calculadaAt: null, origenFuente: null, paradasSinOptimizar: 0 },

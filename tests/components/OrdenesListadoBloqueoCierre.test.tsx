@@ -291,4 +291,31 @@ describe("OrdenesListado — bloqueo del checkbox por zona con cierre abierto", 
       }),
     ).not.toHaveAttribute("aria-disabled", "true");
   });
+
+  // ---------- El motivo, a la vista y no solo en el tooltip ----------
+  // Una pagina entera de casillas grises se lee como "los checkbox no funcionan" (reporte
+  // real con el filtro "Reasignables" sobre una zona con cierre abierto). El aviso saca el
+  // motivo del tooltip; con filas mixtas NO se avisa, porque ahi si se puede marcar algo.
+
+  it("pagina ENTERA bloqueada por cierre -> el motivo se muestra sobre la tabla", async () => {
+    renderListado([
+      makeOrden("REM-a", ZONA_GAM, true),
+      makeOrden("REM-b", ZONA_GAM, true),
+    ]);
+
+    expect(
+      await screen.findByText(/cierre de mensajero abierto/i),
+    ).toBeInTheDocument();
+  });
+
+  it("pagina MIXTA -> no se avisa (el usuario puede marcar la fila libre)", async () => {
+    renderListado([
+      makeOrden("REM-bloqueada", ZONA_GAM, true),
+      makeOrden("REM-libre", ZONA_LIBRE, false),
+    ]);
+
+    // La fila libre confirma que la tabla ya pinto; el aviso no debe estar.
+    await screen.findByRole("checkbox", { name: "Seleccionar orden REM-libre" });
+    expect(screen.queryByText(/cierre de mensajero abierto/i)).toBeNull();
+  });
 });

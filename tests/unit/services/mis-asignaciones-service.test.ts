@@ -219,7 +219,12 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
     expect(r.status).toBe("ok");
     expect(llamadasIntentos(intentos)).toEqual([[]]);
     // R15: el alcance lo impuso la consulta del repo, acotada al actor.
-    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", ["por_recoger", "en_reparto"]);
+    // Feature 157: la MISMA lectura trae ademas el tercer grupo (`por_recolectar_en_tienda`).
+    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
+      "por_recolectar_en_tienda",
+      "por_recoger",
+      "en_reparto",
+    ]);
   });
 
   it("R15: un rol no autorizado ni siquiera llega al derivador", async () => {
@@ -257,6 +262,7 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     expect(r.ordenEnGestionId).toBe("b");
     // R13: la consulta se hizo con el mensajero del actor.
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
+      "por_recolectar_en_tienda", // feature 157
       "por_recoger",
       "en_reparto",
     ]);
@@ -957,5 +963,135 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     const r = await service.gestionar(entrega(), MENSAJERO);
     if (r.status !== "conflict") throw new Error("esperaba conflict");
     expect(r.motivo).not.toMatch(/m1|o1|c1/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 157 (R11/R12/R39) — TERCER grupo del portal: `porRecolectar`. El paquete sigue en la
+// tienda, asi que la orden no es parada de ninguna ruta, no es dinero en la calle y no puede
+// contaminar los KPIs, el corte del dia ni el ranking. Los casos de AUSENCIA son el punto:
+// esta feature se juzga tanto por lo que muestra como por lo que NO toca.
+// ---------------------------------------------------------------------------------------
+describe("MisAsignacionesService — tercer grupo por recolectar (feature 157)", () => {
+  const RECOLECCION = "por_recolectar_en_tienda";
+
+  it("R11: la orden en por_recolectar_en_tienda sale en `porRecolectar` y en ningun otro grupo", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "o-rec", estatusValue: RECOLECCION }),
+        asignacionRow({ id: "o-recoger", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "o-reparto", estatusValue: "en_reparto" }),
+      ]),
+    });
+
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.porRecolectar.map((o) => o.id)).toEqual(["o-rec"]);
+    expect(r.porRecoger.map((o) => o.id)).toEqual(["o-recoger"]);
+    expect(r.porGestionar.map((o) => o.id)).toEqual(["o-reparto"]);
+  });
+
+  it("R11: el tercer estado entra en la MISMA lectura acotada al actor (no una consulta aparte)", async () => {
+    const repo = fakeRepo();
+
+    await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    expect(repo.findMisAsignaciones).toHaveBeenCalledTimes(1);
+    expect(repo.findMisAsignaciones).toHaveBeenCalledWith(
+      MENSAJERO.usuarioId,
+      expect.arrayContaining([RECOLECCION, "por_recoger", "en_reparto"]),
+    );
+  });
+
+  it("R11: nunca lleva secuencia de ruta (no es parada)", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "o-rec", estatusValue: RECOLECCION }),
+      ]),
+    });
+
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecolectar[0]!.secuenciaRuta).toBeNull();
+  });
+
+  it("R15: expone el telefono de la TIENDA, distinto del telefono del destinatario", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({
+          id: "o-rec",
+          estatusValue: RECOLECCION,
+          telefonoDest: "099-destinatario",
+          tiendaTelefono: "088-tienda",
+        }),
+      ]),
+    });
+
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecolectar[0]!.tiendaTelefono).toBe("088-tienda");
+    expect(r.porRecolectar[0]!.telefonoDest).toBe("099-destinatario");
+  });
+
+  it("R15: sin telefono de tienda el campo es null (nunca undefined)", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "o-rec", estatusValue: RECOLECCION }),
+      ]),
+    });
+
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecolectar[0]!.tiendaTelefono).toBeNull();
+  });
+
+  it("R39: NO contamina los KPIs — ni pendientes, ni por cobrar, ni total a cobrar", async () => {
+    const soloRecolecciones = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "o-rec1", estatusValue: RECOLECCION, montoCobrar: 5000 }),
+        asignacionRow({ id: "o-rec2", estatusValue: RECOLECCION, montoCobrar: 3000 }),
+      ]),
+    });
+
+    const r = await newService(soloRecolecciones).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecolectar).toHaveLength(2);
+    // El COD de una orden que sigue en la tienda NO es plata en la calle del mensajero.
+    expect(r.kpis).toMatchObject({ pendientes: 0, porCobrar: 0, totalACobrar: 0 });
+  });
+
+  it("R39: NO cuenta como parada sin optimizar (no entra a la ruta)", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "o-rec", estatusValue: RECOLECCION }),
+      ]),
+    });
+
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.ruta.paradasSinOptimizar).toBe(0);
+  });
+
+  it("R12: la lectura va acotada al actor, asi que otro mensajero no ve estas recolecciones", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async (mensajeroId: string) =>
+        mensajeroId === MENSAJERO.usuarioId
+          ? [asignacionRow({ id: "o-rec", estatusValue: RECOLECCION })]
+          : [],
+      ),
+    });
+
+    const otro = await newService(repo).listarMisAsignaciones(OTRO);
+
+    if (otro.status !== "ok") throw new Error("esperaba ok");
+    expect(otro.porRecolectar).toEqual([]);
+    expect(repo.findMisAsignaciones).toHaveBeenCalledWith(OTRO.usuarioId, expect.any(Array));
   });
 });

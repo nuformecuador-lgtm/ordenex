@@ -101,11 +101,24 @@ describe("EscanerRecepcion (cámara)", () => {
   });
 
   // La entrada por teclado se retiró: solo queda la cámara.
-  it("ya no expone el input de escaneo por teclado", () => {
+  // El rediseño de la UI (PR #212) devolvió la entrada MANUAL al receptor: la cámara no
+  // siempre está disponible (permiso denegado, teléfono sin cámara, etiqueta ilegible), y sin
+  // ella el paquete no se puede recibir. Este caso afirmaba lo contrario y se quedó obsoleto;
+  // lo que hay que fijar ahora es que las DOS vías existan y lleven a la misma acción.
+  it("expone la entrada manual por número de guía, equivalente al escaneo", async () => {
+    const user = userEvent.setup();
+    recibirMock.mockResolvedValue({
+      status: "ok",
+      ordenId: "ord-1",
+      estado: "en_bodega_satelite",
+    });
     render(<EscanerRecepcion onRecibida={vi.fn()} />);
 
-    expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
+    await user.type(screen.getByRole("textbox"), "1001");
+    await user.click(screen.getByRole("button", { name: "Recibir" }));
+
+    // Mismo contrato que el camino de la cámara: el número tecleado ES el `num_guia`.
+    await vi.waitFor(() => expect(recibirMock).toHaveBeenCalledWith({ numGuia: 1001 }));
   });
 
   it("QR con URL del paquete → extrae el código del último segmento y llama recibirPorQr", async () => {

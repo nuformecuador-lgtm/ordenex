@@ -20,6 +20,18 @@ import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 
 const { resumenCargaMasivaMock } = vi.hoisted(() => ({ resumenCargaMasivaMock: vi.fn() }));
 
+// Feature 157 (bloque E): el paso 3 gano el boton de manifiesto, que avisa por toast. Se
+// mockea el hook —en vez de envolver cada render en el provider— porque estos casos miran la
+// TABLA del resumen; el manifiesto tiene su propia suite (`ManifiestoFlujos`).
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    error: vi.fn(),
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  }),
+}));
+
 vi.mock("@/lib/actions/carga-masiva-resumen", () => ({
   resumenCargaMasiva: resumenCargaMasivaMock,
 }));
@@ -122,10 +134,13 @@ describe("OrdenesCargaResumen — DataTable del resumen (R12, R22)", () => {
     expect(
       screen.queryByRole("button", { name: /descargar filas con error/i }),
     ).toBeNull();
-    const descargas = screen
+    // La red era "ninguna descarga en absoluto"; se acota a lo que R20 protege —las FILAS
+    // CON ERROR, que solo se exportan desde la vista previa—, porque desde la 157 este paso
+    // sí ofrece una descarga legítima y distinta: el manifiesto del lote recién creado.
+    const descargasDeErrores = screen
       .queryAllByRole("button")
-      .filter((b) => /descargar/i.test(b.textContent ?? ""));
-    expect(descargas).toHaveLength(0);
+      .filter((b) => /error/i.test(b.textContent ?? ""));
+    expect(descargasDeErrores).toHaveLength(0);
   });
 });
 
@@ -141,8 +156,12 @@ describe("OrdenesCargaResumen — solo lectura (R12, R13, R14)", () => {
     expect(
       screen.queryByRole("button", { name: /sugerir asignación/i }),
     ).not.toBeInTheDocument();
-    // Ninguna acción: el paso no tiene botones propios (el "Cerrar" es del modal).
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // Lo que la 159 retiró es la ASIGNACIÓN de mensajero desde este paso, no cualquier
+    // control: desde la 157 hay un botón de manifiesto, que no decide nada sobre la orden.
+    // Sigue sin haber acciones que muten las órdenes recién creadas.
+    expect(
+      screen.queryByRole("button", { name: /asignar|mensajero/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("la tabla no tiene columna de mensajero", async () => {

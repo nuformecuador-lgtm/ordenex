@@ -113,6 +113,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
     recibirEnBodegaCentral: vi.fn().mockResolvedValue(false),
+    // feature 157: recoleccion en tienda (asignacion sin transicion + confirmacion por QR)
+    asignarRecoleccionLote: vi.fn().mockResolvedValue(0),
+    recolectarEnTienda: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.

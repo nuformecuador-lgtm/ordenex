@@ -1286,3 +1286,56 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// El comprobante se sirve AUNQUE el storage falle. Incidente de produccion (2026-07-29): una
+// evidencia referenciada ya no estaba en el bucket, la firma lanzo y el detalle entero dejo de
+// abrirse. Sin detalle no hay boton de aprobar/rechazar; sin aprobar, el mensajero sigue
+// bloqueado; y con el bloqueado, la regla de zona impide asignar en TODA su zona. Una foto que
+// falta no puede costar eso: las evidencias ilustran la decision, no son la decision.
+// ---------------------------------------------------------------------------------------
+describe("CierresAdminService.verCierreDetalle — el storage no puede bloquear la decision", () => {
+  function repoConEvidencias() {
+    return fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones: [
+          gestionRow({
+            gestionId: "a",
+            resultado: "entregada",
+            evidenciaStoragePath: "o1/entregada.jpg",
+          }),
+        ],
+      })),
+    });
+  }
+
+  it("storage caido (la firma lanza) -> el detalle SIGUE abriendose, sin URL de evidencia", async () => {
+    const signedUrls = fakeSignedUrls({
+      createSignedUrls: vi.fn(async () => {
+        throw new Error("fallo al firmar URLs de documentos: supabaseUrl is required");
+      }),
+    });
+    const { service } = newService({ repo: repoConEvidencias(), signedUrls });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.grupos.entregada[0]!.evidenciaUrl).toBeNull();
+    // Y lo que decide el dinero sigue intacto: el comprobante no depende de las fotos.
+    expect(r.grupos.entregada[0]!.gestionId).toBe("a");
+  });
+
+  it("evidencia que el storage no pudo firmar -> esa gestion queda sin URL, el resto igual", async () => {
+    // El provider real ya omite lo que no puede firmar: aqui se simula ese mapa PARCIAL.
+    const signedUrls = fakeSignedUrls({ createSignedUrls: vi.fn(async () => ({})) });
+    const { service } = newService({ repo: repoConEvidencias(), signedUrls });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.grupos.entregada[0]!.evidenciaUrl).toBeNull();
+  });
+});

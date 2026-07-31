@@ -34,6 +34,15 @@ export interface MiAsignacionRow {
   longitud: number | null;
   notas: string | null;
   tiendaNombre: string;
+  /**
+   * Feature 157 (R15): telefono de la tienda dueña, para que el mensajero pueda contactarla
+   * antes de ir a recolectar. `null` si no lo tiene registrado. No confundir con
+   * `telefonoDest`, que es el del destinatario final.
+   *
+   * Opcional (`?`) por el mismo patron aditivo que el DTO: no rompe los fixtures que
+   * construyen `MiAsignacionRow` sin el; el repo SIEMPRE lo emite.
+   */
+  tiendaTelefono?: string | null;
   zonaNombre: string;
   provinciaNombre: string;
   cantonNombre: string;

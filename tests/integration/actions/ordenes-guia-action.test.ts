@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   generarGuia,
   asignarDesdeBodega,
+  asignarRecoleccion,
   listarMensajerosParaAsignacion,
   listarCatalogoEstatus,
   listarZonasBloqueadasPorCierre,
@@ -19,6 +20,7 @@ function fakeGuiaService(overrides: Partial<IGuiaAsignacionService> = {}): IGuia
     generarGuia: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     asignarDesdeBodega: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     rutearABodegaSatelite: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
+    asignarRecoleccion: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     ...overrides,
   };
 }
@@ -393,5 +395,72 @@ describe("listarZonasBloqueadasPorCierre — zonas con >=1 mensajero en cierre",
 
     expect(r).toEqual({ status: "unauthenticated" });
     expect(findZonasConMensajeroBloqueado).not.toHaveBeenCalled();
+  });
+});
+
+// Feature 157 (T1.14) — borde de la asignacion de recoleccion. El UUID en el schema es la
+// diferencia con `asignarBodegaSchema` (que acepta cualquier string no vacio): esta action
+// nace con el contrato mas estricto, y el borde lo impone antes de llegar al service.
+describe("asignarRecoleccion (feature 157)", () => {
+  const ORDEN_ID = "11111111-1111-4111-8111-111111111111";
+  const MENSAJERO_ID = "22222222-2222-4222-8222-222222222222";
+
+  it("R8: sin sesion -> unauthenticated, sin tocar el service", async () => {
+    const service = fakeGuiaService();
+
+    const r = await asignarRecoleccion(
+      { ordenIds: [ORDEN_ID], mensajeroId: MENSAJERO_ID },
+      { guiaService: service, getActor: getActor(null) },
+    );
+
+    expect(r.status).toBe("unauthenticated");
+    expect(service.asignarRecoleccion).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["ordenIds vacio", { ordenIds: [], mensajeroId: MENSAJERO_ID }],
+    ["ordenId que no es uuid", { ordenIds: ["no-uuid"], mensajeroId: MENSAJERO_ID }],
+    ["mensajeroId que no es uuid", { ordenIds: [ORDEN_ID], mensajeroId: "m1" }],
+  ])("validation_error con %s, sin llegar al service", async (_n, input) => {
+    const service = fakeGuiaService();
+
+    const r = await asignarRecoleccion(input, {
+      guiaService: service,
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r.status).toBe("validation_error");
+    expect(service.asignarRecoleccion).not.toHaveBeenCalled();
+  });
+
+  it("passthrough del `conflict{detalle}` del service (la UI lo pinta por orden)", async () => {
+    const detalle = [{ ordenId: ORDEN_ID, motivo: "estado de origen no permitido: en_bodega_central" }];
+    const service = fakeGuiaService({
+      asignarRecoleccion: vi.fn().mockResolvedValue({ status: "conflict", detalle }),
+    });
+
+    const r = await asignarRecoleccion(
+      { ordenIds: [ORDEN_ID], mensajeroId: MENSAJERO_ID },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r).toEqual({ status: "conflict", detalle });
+  });
+
+  it("passthrough del `ok` con el input ya validado", async () => {
+    const service = fakeGuiaService({
+      asignarRecoleccion: vi.fn().mockResolvedValue({ status: "ok", resultados: [{ ordenId: ORDEN_ID }] }),
+    });
+
+    const r = await asignarRecoleccion(
+      { ordenIds: [ORDEN_ID], mensajeroId: MENSAJERO_ID },
+      { guiaService: service, getActor: getActor(ADMIN) },
+    );
+
+    expect(r).toEqual({ status: "ok", resultados: [{ ordenId: ORDEN_ID }] });
+    expect(service.asignarRecoleccion).toHaveBeenCalledWith(
+      { ordenIds: [ORDEN_ID], mensajeroId: MENSAJERO_ID },
+      ADMIN,
+    );
   });
 });

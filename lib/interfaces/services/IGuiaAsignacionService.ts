@@ -59,6 +59,23 @@ export type AsignarBodegaServiceResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict"; detalle: DetalleConflicto[] };
 
+// Feature 157/R3: un solo mensajero para el lote completo, mismo patron que
+// `AsignarBodegaInput`. La orden NO cambia de estado (sigue en `por_recolectar_en_tienda`
+// hasta que el mensajero la recolecte): esto solo dice QUIEN va a ir a la tienda.
+export interface AsignarRecoleccionInput {
+  ordenIds: string[];
+  mensajeroId: string;
+}
+
+// Feature 157: mismo shape que `AsignarBodegaServiceResult` a proposito, para que el
+// traductor de errores del modal (`guia-decision-error-messages.ts`) sirva sin cambios.
+// El `resultados` no lleva `estado` porque no hay transicion que reportar (R4).
+export type AsignarRecoleccionServiceResult =
+  | { status: "ok"; resultados: { ordenId: string }[] }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "conflict"; detalle: DetalleConflicto[] };
+
 // Feature 30/R13/R16/R17: resultado del ruteo a satelite. `validation_error`
 // cubre la guardia R4 (zona GAM no configurada) y catalogo incompleto; `conflict`
 // cubre origen invalido / borrada / orden GAM (no se rutea a satelite).
@@ -98,4 +115,16 @@ export interface IGuiaAsignacionService {
     input: RutearSateliteInput,
     actor: Actor,
   ): Promise<RutearSateliteServiceResult>;
+  /**
+   * Feature 157 (R3-R9): asigna el mensajero que ira a la tienda a RECOLECTAR un lote de
+   * ordenes en `por_recolectar_en_tienda` (origen unico). A diferencia de las otras tres
+   * acciones NO transiciona: escribe solo `mensajero_asignado_id`, y ni `num_guia` (ya lo
+   * tiene desde que nacio) ni `asignado_at` (R38: la recoleccion no entra al ranking, cuyo
+   * denominador es esa columna). Tampoco pasa por el gate de coordenadas (R9): la orden no
+   * entra a ninguna ruta todavia. Solo acceso total.
+   */
+  asignarRecoleccion(
+    input: AsignarRecoleccionInput,
+    actor: Actor,
+  ): Promise<AsignarRecoleccionServiceResult>;
 }

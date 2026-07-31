@@ -184,7 +184,17 @@ export function CierresAdminModule({
 
   /** Abre el detalle de un cierre (pide las gestiones + evidencias firmadas). */
   async function abrirDetalle(cierreId: string) {
-    const result = await verCierreDetalle({ cierreId });
+    // Un fallo INESPERADO de la action (que lanza ante un `AppErrorCode` que no sabe
+    // traducir) rechazaba esta promesa sin que nadie la escuchara: el modal no abria y no
+    // aparecia ningun mensaje, que es como se ve "el boton no funciona". El toast no
+    // arregla la causa, pero convierte el silencio en algo que se puede reportar.
+    let result: Awaited<ReturnType<typeof verCierreDetalle>>;
+    try {
+      result = await verCierreDetalle({ cierreId });
+    } catch {
+      toast.error("No se pudo abrir el detalle del cierre. Intentá de nuevo.");
+      return;
+    }
     if (result.status === "ok") {
       setDetalle({
         cierre: result.cierre,
