@@ -61,7 +61,31 @@ describe("SupabaseSignedUrlProvider (R8/R9)", () => {
     await expect(provider.createSignedUrl("x", 300)).rejects.toThrow(/fallo al firmar/);
   });
 
-  it("lanza si una entrada del batch trae error", async () => {
+  // El batch devuelve un resultado PARCIAL: la entrada que el storage no pudo firmar se
+  // omite. Antes lanzaba, y un solo objeto perdido tumbaba a quien pidiera el lote entero:
+  // asi se quedo un cierre de dia sin poder abrirse (produccion, 2026-07-29) y, con el,
+  // bloqueadas las asignaciones de la zona de ese mensajero. Quien consume el mapa ya
+  // resuelve la ausencia con `?? null`, porque un documento puede faltar por diseño.
+  it("una entrada con error se OMITE del mapa, sin tumbar el resto del batch", async () => {
+    const { client, from } = buildClient();
+    from.mockReturnValue({
+      createSignedUrl: vi.fn(),
+      createSignedUrls: vi.fn().mockResolvedValue({
+        data: [
+          { path: "a.jpg", signedUrl: "", error: "not found" },
+          { path: "b.jpg", signedUrl: "https://signed/b.jpg", error: null },
+        ],
+        error: null,
+      }),
+    });
+    const provider = new SupabaseSignedUrlProvider(client);
+
+    const map = await provider.createSignedUrls(["a.jpg", "b.jpg"], 300);
+
+    expect(map).toEqual({ "b.jpg": "https://signed/b.jpg" });
+  });
+
+  it("un batch entero fallido devuelve mapa vacio, no una excepcion por entrada", async () => {
     const { client, from } = buildClient();
     from.mockReturnValue({
       createSignedUrl: vi.fn(),
@@ -71,6 +95,22 @@ describe("SupabaseSignedUrlProvider (R8/R9)", () => {
       }),
     });
     const provider = new SupabaseSignedUrlProvider(client);
+
+    expect(await provider.createSignedUrls(["a.jpg"], 300)).toEqual({});
+  });
+
+  // El error GLOBAL (credencial ausente, storage caido) sigue lanzando: no es "falta este
+  // objeto", es "no se pudo preguntar". Quien lo necesite best-effort lo decide arriba.
+  it("un error global del backend SI lanza (distinto de una entrada fallida)", async () => {
+    const { client, from } = buildClient();
+    from.mockReturnValue({
+      createSignedUrl: vi.fn(),
+      createSignedUrls: vi
+        .fn()
+        .mockResolvedValue({ data: null, error: { message: "supabaseUrl is required" } }),
+    });
+    const provider = new SupabaseSignedUrlProvider(client);
+
     await expect(provider.createSignedUrls(["a.jpg"], 300)).rejects.toThrow(/fallo al firmar/);
   });
 });
