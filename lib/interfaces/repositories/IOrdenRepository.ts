@@ -81,11 +81,14 @@ export interface ListOrdenesWhere {
   // `lt` EXCLUSIVO (= comienzo del dia CR siguiente al `hasta` pedido).
   createdAt?: { gte?: Date; lt?: Date };
   /**
-   * Filtro REASIGNABLES: ordenes pendientes de que alguien les vuelva a poner
-   * mensajero. NO es una columna: es el predicado COMPUESTO `prioridad = true` Y
-   * estado distinto de `reprogramada` Y `mensajero_asignado_id IS NULL`, que el
-   * repositorio traduce (el estado se compara por VALUE, via la relacion). Solo
-   * acota: `true` filtra, ausente no filtra.
+   * Filtro REASIGNABLES: ordenes que esperan una decision de despacho — que se les
+   * ponga mensajero, o que se ruteen a una bodega satelite—. NO es una columna: es el
+   * predicado COMPUESTO `estado = en_bodega_central` Y `mensajero_asignado_id IS NULL`
+   * (el origen unico de ambas decisiones), que el repositorio traduce comparando el
+   * estado por VALUE via la relacion. Solo acota: `true` filtra, ausente no filtra.
+   *
+   * NO exige `prioridad`: esa columna solo se enciende al deshacer una asignacion, asi
+   * que exigirla dejaba fuera a las ordenes que nunca tuvieron mensajero.
    */
   reasignables?: true;
 }

@@ -164,6 +164,121 @@ andamio**: ruta, shell vacío e ítem de menú. **Cero métrica, cero gráficas,
 
 > *(Ya no es el punto de entrada: lo es la «Sesión 2026-07-30 (noche, cuarta)» de arriba. Sigue válido
 > en todo su detalle técnico; lo de arriba lo corrige en el estado del registro y en el baseline.)*
+## 🗓️ Sesión 2026-07-30 (quater) — arranca el LOTE DE ANALÍTICA — **EMPIEZA A LEER POR AQUÍ**
+
+> **Corrige el «CIERRE (noche)» de más abajo en un punto:** ese bloque dice «registro con CERO
+> `in_progress`» y ya no es cierto — la **135 está `in_progress`** desde esta sesión. Todo lo demás
+> de aquel cierre sigue en pie.
+
+**Feature 135 → implementada y revisada.** Rama `feature/135-analitica-catalogo-kpis-rangos`,
+nacida de `dev` @ `664840f3` y **sincronizada después con `dev` @ `72b75954`** (45 commits: los
+PRs #208/#210/#211/#212). Spec: **36 R en EARS** (26 + 10 tras la puerta), 6 alternativas
+descartadas, 12 hechos de inventario **leídos en el código**.
+
+**Implementación:** `lib/analytics/{types,metrics,ranges,filters}.ts` + 9 suites propias.
+Delta medido en árbol limpio: **617 archivos / 6973 tests → 626 / 7150**, cero regresiones.
+**Reviewer APROBADO-CON-NOTAS: 35 de 36 R verificados POR MUTACIÓN** (38 mutaciones, 35 muertas,
+3 supervivientes, todas el mismo punto de R22 — dos redes redundantes, sin agujero de
+comportamiento). El R36 no es mutable: es la puerta ejecutable.
+
+### ⚠️ El incidente de esta sesión, para que no se repita
+
+**Otra sesión movió este checkout de `feature/135-…` a `ux` a mitad de la implementación**
+(`git reflog`: `checkout: moving from feature/135-… to ux`, más un `reset`). El implementer se
+quedó sin `specs/135-…/` en disco y perdió las casillas ya marcadas, el parche del guard y el
+bookkeeping. **Hizo lo correcto: paró y no ejecutó nada destructivo.** El código sobrevivió por ser
+untracked. Se recuperó montando un **worktree aparte** sobre la rama y moviendo allí los archivos,
+**sin tocar el árbol compartido** ni sus ~100 archivos staged.
+
+> **LECCIÓN: en un repo con varias sesiones vivas, la rama es un recurso compartido.** Antes de
+> `checkout`, mirar si hay trabajo ajeno en vuelo; y si hay que recuperar una rama secuestrada,
+> `git worktree` en vez de arrebatar el árbol de vuelta.
+
+**El `typecheck` rojo NO era «cliente Prisma contaminado».** Ese fue el diagnóstico inicial —
+plausible, y con delta 0 verificado dos veces— pero la causa real era otra: **`dev` había avanzado
+45 commits** y la rama se había quedado atrás, sin el `orden_incidente` de la 158 que el cliente
+generado ya conocía. Se resolvió sincronizando con `dev`, no regenerando nada.
+
+> **Confirmado por segunda vez y por otra vía el 2026-07-30 (cierre):** `git diff origin/dev
+> feature/135-… -- db/schema.prisma` sale **vacío** (los schemas son byte-idénticos) y
+> `npx tsc --noEmit` da **exit 0**. **Regla que conviene fijar: antes de dar por bueno un
+> «cliente Prisma contaminado», comparar los dos `db/schema.prisma`.** Si son iguales, la causa es
+> otra. Se perdió tiempo dos veces con este diagnóstico.
+
+### ✅ Cierre de la 135 — 2026-07-30, en worktree aparte (el checkout de `ux` no se movió)
+
+**R22 cerrado por mutación.** Era el único hueco del review: 3 mutaciones vivas porque el
+comportamiento estaba protegido por **dos redes redundantes** (el regex de ancho fijo y el
+`.refine` del tope, que trata `NaN` como rechazo) y ningún test discriminaba una sola. Tres
+aserciones nuevas, elegidas **midiendo**: `"2026-13-45"` (pasa el regex, `Date.parse` da `NaN`) y
+`"+002026-07-15"` (año expandido ISO: el regex lo rechaza, `Date.parse` lo acepta). Las tres
+mutaciones ahora **mueren por separado**. Suite de analítica 177 → **180 tests**.
+
+> **Descartado sobre la marcha:** `"2026-02-30"` parecía el caso obvio de «fecha que no existe» y
+> **no sirve** — V8 la desborda a marzo y `Date.parse` devuelve finito. Se vio corriéndolo.
+
+**Delta contra `dev` MEDIDO con baseline propio**, no deducido de «esos rojos no son míos»:
+
+| | archivos | tests | rojos |
+|---|---|---|---|
+| `dev` @ `72b75954` | 646 | 7627 | **22** |
+| rama 135 | 655 | 7807 | **20** |
+
+Los 20 son **subconjunto estricto** de los 22, test a test → **cero regresiones**, +9 archivos /
++180 tests.
+
+**⚠️ `dev` ESTÁ ROJO con 20 tests, y no es de la 135.** Todos del rediseño de `ux` que entró por el
+**PR #212**: filtros cantón/distrito de la 117 (`MisAsignacionesModule`) y las cards en reparto.
+Es lo que mantiene `pnpm test` en rojo para cualquiera que ramifique de `dev` hoy.
+
+**T0.3, T6.3 y T6.5 cerradas.** T6.5 avisó a **ocho** features (122, 123, 124, 125, 126, 127, 132,
+133), no a las cinco que nombraba la task: `design.md §6.1` también dirige avisos a la 122 y a la
+124/125. **T6.1 sigue sin marcar a propósito** — `./init.sh` no está verde y marcarla sería fingir.
+
+**🆕 Ficha 166 registrada** (T0.3): saneamiento de la ventana de día de `RankingService`
+(18:00–18:00 CR → día natural CR).
+
+### ⚠️ DEFECTO DE REGISTRO SIN RESOLVER — el id 162 está DUPLICADO
+
+`feature_list.json` tiene **dos features distintas con `id: 162`**: «notificación del sistema con la
+app abierta (Notification API)» y «no enviar mensajes de whatsapp sobre órdenes en estado no
+elegible». Es la **misma colisión** que obligó a renumerar la 161 → 165 al mergear `dev` en `ux`,
+pero aquella renumeración **arregló un id de los cuatro**. Por eso la ficha nueva tomó el **166**.
+
+**No se renumera desde la sesión:** las dos fichas están citadas por escrito fuera del registro (la
+158 y este mismo archivo), así que cuál cede el id es **decisión del humano**. Mientras tanto,
+cualquier búsqueda por id 162 devuelve dos cosas.
+
+**Es la raíz del lote.** El orden lo dicta `depends_on`, no es elegible:
+`135` → `122` (alcance por rol) → `127` → `128`/`132`/`134`, y `135` → `123` (rollup) → `124` →
+`125` → `126` → `131` → `133`. `129` (ruta/shell) y `130` (gráficas) son frontend y no dependen de
+nadie. **Ninguna de las 14 tenía spec en disco.**
+
+**⏸️ PUERTA F1.4 ABIERTA — 10 preguntas bloqueantes** en `requirements.md > Preguntas abiertas`,
+espejadas en el bloque `T0` de `tasks.md`. Las que más arrastran: **Q1** (la ficha no enumera ni una
+métrica; el design propone 13 operativas + 6 financieras y cada una que entre obliga a la 126/127),
+**Q6** (cuál es el «día operativo» canónico) y **Q5**/**Q9**/**Q10** (granos y atribución, que fijan
+la PK del rollup de la 123).
+
+### Tres correcciones a la ficha, verificadas en código
+
+1. **`order_status` tiene 19 values vigentes, no 20.** La 154 apendió dos (18→20) y **la 155 retiró
+   `en_fulfillment`** (20→19). Peor: su migración solo borra la fila del catálogo si nadie la
+   referencia, así que en una base con historial **`en_fulfillment` sobrevive huérfana** e
+   inalcanzable desde el código. Un embudo debe citar los 19 del seed, no lo que haya en la tabla.
+2. **«La lógica de fecha del corte diario» que pide la ficha NO EXISTE.** `CorteDiarioService`
+   no usa fecha alguna: opera sobre «mensajeros con actividad sin cierre». La lógica de día en hora
+   CR vive en `lib/utils/fecha-cr.ts` y es reutilizable tal cual, sin extracción.
+3. **`orden.zona_id` y `orden.tienda_id` son NOT NULL** → «órdenes sin zona/tienda» no puede
+   ocurrir. Lo nullable es `mensajero_asignado_id` (y `distrito_id`) — de ahí sale Q5.
+
+**🔎 Hallazgo que hay que resolver antes de implementar (Q6): hay dos convenciones de «día» vivas y
+no coinciden.** `RankingService.ts:60-61` compara columnas `timestamp` contra `startOfDayCR` + 24 h,
+o sea una ventana **18:00–18:00 hora CR**; los filtros de `/ordenes` (feature 144) usan
+`inicioDelDiaCREnUtc`, o sea **00:00–24:00 CR**. Analítica no puede adoptar las dos, y elegir la
+correcta hará que ranking y analítica reporten cifras distintas para «hoy» hasta que se sanee.
+
+## 🏁 CIERRE 2026-07-30 (noche)
 
 **Todo mergeado a `dev`. Registro con CERO `in_progress`.**
 
