@@ -158,6 +158,46 @@ describe("R22 — el cliente no manda instantes, epochs ni offsets", () => {
       analiticaFiltroSchema.safeParse({ ...base, desde: "2026-07-15" }).success,
     ).toBe(true);
   });
+
+  // Los cuatro casos de arriba los rechazan DOS redes a la vez —el regex de ancho
+  // fijo y el `.refine` del tope, que trata `NaN` como rechazo—, asi que ninguno
+  // discrimina cual de las dos funciona. Los tres de abajo si: cada uno pasa una
+  // red y solo lo para la otra. Sin ellos, quitar el regex O aflojar el `NaN` deja
+  // la suite verde (medido: 3 mutantes supervivientes en el review de la 135).
+
+  it("rechaza la fecha que pasa el regex pero NO existe en el calendario, en hasta", () => {
+    // `"2026-13-45"` tiene la forma \d{4}-\d{2}-\d{2}, asi que el regex la deja
+    // pasar; `Date.parse` da NaN. Lo para el `Number.isFinite` del cuarto refine.
+    // Va en `hasta` porque el mes 13 es lexicograficamente MAYOR que cualquier mes
+    // real, y con la fecha invalida en `desde` la cortaria antes el refine (3).
+    const res = analiticaFiltroSchema.safeParse({
+      rango: "personalizado",
+      desde: "2026-07-01",
+      hasta: "2026-13-45",
+    });
+    expect(res.success).toBe(false);
+  });
+
+  it("rechaza el par de fechas inexistentes en desde y hasta a la vez", () => {
+    // Mismo mecanismo por el lado de `desde`: el par es lexicograficamente valido
+    // (son iguales), pasa el refine (3) y la ventana queda con duracion NaN.
+    const res = analiticaFiltroSchema.safeParse({
+      rango: "personalizado",
+      desde: "2026-13-45",
+      hasta: "2026-13-45",
+    });
+    expect(res.success).toBe(false);
+  });
+
+  it("rechaza el ano expandido +002026-07-15 (lo para el regex, NO el tope)", () => {
+    // Este es el reves del anterior y el unico caso que discrimina el regex por si
+    // solo: `Date.parse("+002026-07-15T00:00:00.000Z")` es VALIDO (ano expandido de
+    // ISO 8601, verificado en node) y la ventana resultante cabe de sobra en el
+    // tope, asi que sin el patron de ancho fijo el filtro lo aceptaria. R22 exige
+    // fecha calendario de ancho fijo, y esta no lo es.
+    const res = analiticaFiltroSchema.safeParse({ ...base, desde: "+002026-07-15" });
+    expect(res.success).toBe(false);
+  });
 });
 
 describe("R23 — resultado de validacion tipado, sin excepciones", () => {

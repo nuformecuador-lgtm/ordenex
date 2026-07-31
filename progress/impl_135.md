@@ -4,11 +4,17 @@
 > Spec aprobado por el humano el 2026-07-30; puerta T0 CERRADA (D1-D10).
 > Backend PURO: sin migracion, sin UI, sin Server Actions.
 >
-> **ESTADO: implementacion COMPLETA y RE-VERIFICADA en un worktree limpio.** La suite entera
-> pasa (**626 archivos / 7150 tests, 0 fallos**). Queda **un** punto abierto que no es de la 135:
-> el typecheck arrastra 2 errores por **contaminacion del cliente Prisma** (delta 0, medido).
-> **La medicion que vale es la de la seccion 11**, hecha en el worktree; las secciones 1 y 5
-> quedan como rastro historico de la sesion interrumpida.
+> **ESTADO: implementacion COMPLETA, REVISADA y CERRADA por el leader.**
+> **La medicion que vale es la de la SECCION 12** (2026-07-30, posterior al review); la seccion 11
+> queda como rastro y las secciones 1 y 5 como historia de la sesion interrumpida.
+> Titulares: `typecheck` y `lint` en **verde**; **R22 cerrado por mutacion** (los 3 supervivientes
+> del review, muertos); delta contra `dev` @ `72b75954` **medido con baseline propio**:
+> 646/7627/22 rojos -> **655/7807/20 rojos**, subconjunto estricto = **cero regresiones**.
+> **`pnpm test` e `./init.sh` siguen ROJOS por causa ajena** —`dev` viene rojo del PR #212 y la
+> regla 1 esta violada en `frontend`—, asi que **T6.1 se queda sin marcar**.
+>
+> ⚠️ **El diagnostico de «contaminacion del cliente Prisma» que esta bitacora repite mas abajo
+> resulto FALSO.** La causa era que la rama iba 45 commits por detras de `dev`. Ver 12.1.
 > Nada de lo que sigue se da por hecho sin salida real pegada.
 
 ---
@@ -475,6 +481,19 @@ ticket de T0.3 se resuelva, **analitica y ranking reportan cifras distintas para
 divergencia conocida y aceptada, no un defecto a reportar (R31). Queda escrita en la cabecera de
 `lib/analytics/ranges.ts` y verificada por `ranges-reuso.guardia.test.ts`.
 
+> **T0.3 CERRADA el 2026-07-30: el ticket es la ficha 166** de `feature_list.json`
+> (`pending` / `backend` / `low`), «saneamiento de la ventana de dia de RankingService
+> (18:00-18:00 CR)». Cita D6, esta feature y la **alternativa 9 del design** (replicar la ventana
+> 18:00-18:00 en analitica se descarto para no propagar el defecto a un rollup persistido que
+> luego habria que backfillear).
+>
+> **Por que 166 y no el id siguiente: el 162 esta DUPLICADO** en `feature_list.json` — lo comparten
+> «notificacion del sistema con la app abierta» y «no enviar mensajes de whatsapp sobre ordenes en
+> estado no elegible». Es la misma colision que obligo a renumerar la 161 a 165, pero aquella
+> renumeracion arreglo **un id de los cuatro**. No se renumera desde aqui: las dos fichas estan
+> citadas por escrito fuera de este archivo (la 158 y `progress/current.md`), asi que cual cede el
+> id es **decision del humano**.
+
 **(b) Fila huerfana del value retirado por la 155.** El catalogo vigente tiene **19** values
 (`ORDER_STATUS_SEED`, `lib/types/order-status.ts:54-74`). La migracion
 `20260729140000_order_status_retiro_en_fulfillment` **solo borra la fila si nadie la referencia**,
@@ -776,3 +795,83 @@ casilla para fingir una verificacion que nadie hizo.
    `progress/current.md`. Lo hace el leader; esta sesion tiene prohibido tocar ese archivo.
 3. Los dos defectos de redaccion del spec —(e) y (f) de la seccion 8— los lleva **el leader al
    humano**; no se corrigen por cuenta propia porque **(f) cambiaria el catalogo contratado**.
+
+---
+
+## 12. Cierre del leader — 2026-07-30 (sesion posterior al review)
+
+Todo lo de esta seccion esta **medido en un worktree aparte** sobre la rama, con el arbol limpio.
+El checkout principal (`ux`) no se movio de rama en ningun momento.
+
+### 12.1 El typecheck NO era "cliente Prisma contaminado" — y ya no cae
+
+El diagnostico de 11.6 (y el que repeti yo al arrancar) era **plausible y equivocado**. La causa
+real: la rama iba **45 commits por detras de `dev`**, y el cliente generado ya conocia
+`orden_incidente` (feature 158) mientras el schema de la rama no. **Se disolvio al sincronizar con
+`dev`**, no regenerando nada:
+
+```
+$ git diff --stat origin/dev feature/135-analitica-catalogo-kpis-rangos -- db/schema.prisma
+(vacio -> los schemas son byte-identicos)
+
+$ npx tsc --noEmit   ->  exit 0
+$ npx eslint         ->  0 errores
+```
+
+**Leccion para el arnes:** «cliente Prisma contaminado» es un diagnostico caro de dar por bueno.
+Antes de aceptarlo, comparar los dos `db/schema.prisma` — si son iguales, la causa es otra.
+
+### 12.2 R22: los 3 mutantes supervivientes del review, MUERTOS
+
+El review dejo R22 con **3 mutaciones vivas** (unico hueco de la feature): el comportamiento estaba
+protegido por **dos redes redundantes** —el regex de ancho fijo y el `.refine` del tope, que trata
+`NaN` como rechazo— y los tests solo caian si se quitaban **las dos**. Ningun test discriminaba el
+mecanismo que R22 nombra por su nombre.
+
+Tres aserciones nuevas en `tests/unit/analytics/filters.test.ts`, cada una elegida **por medicion**,
+no por intuicion:
+
+| caso | regex | `Date.parse` | que red discrimina |
+|---|---|---|---|
+| `"2026-13-45"` en `hasta` | pasa | `NaN` | solo el `.refine` del tope |
+| `desde` = `hasta` = `"2026-13-45"` | pasa | `NaN` | idem, por el lado de `desde` |
+| `"+002026-07-15"` (ano expandido ISO) | **rechaza** | valido | solo el regex |
+
+> Descartado sobre la marcha: `"2026-02-30"` **no** sirve. Parece el caso obvio de "fecha que no
+> existe", pero V8 la desborda a marzo y `Date.parse` devuelve un valor **finito**, asi que no
+> discrimina nada. Se vio corriendo el caso, no leyendo la spec de ECMAScript.
+
+Re-corridas las 3 mutaciones del review, cada una por separado:
+
+```
+[base]  Tests  38 passed (38)          # 35 previos + 3 nuevos
+[R22]   Tests  1 failed | 37 passed    # desde/hasta a z.string()      -> MUERTA
+[R22b]  Tests  1 failed | 37 passed    # fechaCalendario = z.string()  -> MUERTA
+[R22c]  Tests  2 failed | 36 passed    # el refine falla ABIERTO       -> MUERTA
+```
+
+Suite de analitica: **9 archivos / 180 tests** (eran 177). `git status` limpio tras restaurar.
+
+### 12.3 Delta contra `dev`, medido con baseline propio
+
+No basta con «los rojos no son mios»: se monto un **segundo worktree en `dev` @ `72b75954`** y se
+corrio la suite entera en los dos.
+
+| | archivos | tests | rojos | archivos rojos |
+|---|---|---|---|---|
+| `dev` @ `72b75954` (baseline) | 646 | 7627 | **22** | 7 |
+| rama 135 | 655 | 7807 | **20** | 5 |
+
+**Los 20 son subconjunto ESTRICTO de los 22**, test a test. => **CERO REGRESIONES**, y la feature
+aporta **+9 archivos / +180 tests**. Los 2 que solo caen en el baseline son los flaky ya conocidos
+(`filter-component` debounce y timeout del guard `no-embalaje`), agravados por correr las dos
+suites a la vez.
+
+### 12.4 Lo que sigue rojo, y de quien es
+
+1. **`dev` esta ROJO con 20 tests**, todos del rediseno de `ux` que entro por el **PR #212**:
+   filtros canton/distrito de la 117 (`MisAsignacionesModule`) y las cards en reparto. **No lo
+   introduce esta feature: se lo encuentra.** Es lo que mantiene `pnpm test` en rojo.
+2. **`./init.sh` cae ademas por la REGLA 1**: la zona `frontend` tiene **tres** `in_progress`
+   (161, 163, 164) y el arnes admite dos. `backend` tiene una sola, la 135. Decision humana.
+3. Por eso **T6.1 sigue SIN MARCAR**. Lo demas de T6 esta cerrado.

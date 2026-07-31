@@ -43,6 +43,56 @@ plausible, y con delta 0 verificado dos veces— pero la causa real era otra: **
 45 commits** y la rama se había quedado atrás, sin el `orden_incidente` de la 158 que el cliente
 generado ya conocía. Se resolvió sincronizando con `dev`, no regenerando nada.
 
+> **Confirmado por segunda vez y por otra vía el 2026-07-30 (cierre):** `git diff origin/dev
+> feature/135-… -- db/schema.prisma` sale **vacío** (los schemas son byte-idénticos) y
+> `npx tsc --noEmit` da **exit 0**. **Regla que conviene fijar: antes de dar por bueno un
+> «cliente Prisma contaminado», comparar los dos `db/schema.prisma`.** Si son iguales, la causa es
+> otra. Se perdió tiempo dos veces con este diagnóstico.
+
+### ✅ Cierre de la 135 — 2026-07-30, en worktree aparte (el checkout de `ux` no se movió)
+
+**R22 cerrado por mutación.** Era el único hueco del review: 3 mutaciones vivas porque el
+comportamiento estaba protegido por **dos redes redundantes** (el regex de ancho fijo y el
+`.refine` del tope, que trata `NaN` como rechazo) y ningún test discriminaba una sola. Tres
+aserciones nuevas, elegidas **midiendo**: `"2026-13-45"` (pasa el regex, `Date.parse` da `NaN`) y
+`"+002026-07-15"` (año expandido ISO: el regex lo rechaza, `Date.parse` lo acepta). Las tres
+mutaciones ahora **mueren por separado**. Suite de analítica 177 → **180 tests**.
+
+> **Descartado sobre la marcha:** `"2026-02-30"` parecía el caso obvio de «fecha que no existe» y
+> **no sirve** — V8 la desborda a marzo y `Date.parse` devuelve finito. Se vio corriéndolo.
+
+**Delta contra `dev` MEDIDO con baseline propio**, no deducido de «esos rojos no son míos»:
+
+| | archivos | tests | rojos |
+|---|---|---|---|
+| `dev` @ `72b75954` | 646 | 7627 | **22** |
+| rama 135 | 655 | 7807 | **20** |
+
+Los 20 son **subconjunto estricto** de los 22, test a test → **cero regresiones**, +9 archivos /
++180 tests.
+
+**⚠️ `dev` ESTÁ ROJO con 20 tests, y no es de la 135.** Todos del rediseño de `ux` que entró por el
+**PR #212**: filtros cantón/distrito de la 117 (`MisAsignacionesModule`) y las cards en reparto.
+Es lo que mantiene `pnpm test` en rojo para cualquiera que ramifique de `dev` hoy.
+
+**T0.3, T6.3 y T6.5 cerradas.** T6.5 avisó a **ocho** features (122, 123, 124, 125, 126, 127, 132,
+133), no a las cinco que nombraba la task: `design.md §6.1` también dirige avisos a la 122 y a la
+124/125. **T6.1 sigue sin marcar a propósito** — `./init.sh` no está verde y marcarla sería fingir.
+
+**🆕 Ficha 166 registrada** (T0.3): saneamiento de la ventana de día de `RankingService`
+(18:00–18:00 CR → día natural CR).
+
+### ⚠️ DEFECTO DE REGISTRO SIN RESOLVER — el id 162 está DUPLICADO
+
+`feature_list.json` tiene **dos features distintas con `id: 162`**: «notificación del sistema con la
+app abierta (Notification API)» y «no enviar mensajes de whatsapp sobre órdenes en estado no
+elegible». Es la **misma colisión** que obligó a renumerar la 161 → 165 al mergear `dev` en `ux`,
+pero aquella renumeración **arregló un id de los cuatro**. Por eso la ficha nueva tomó el **166**.
+
+**No se renumera desde la sesión:** las dos fichas están citadas por escrito fuera del registro (la
+158 y este mismo archivo), así que cuál cede el id es **decisión del humano**. Mientras tanto,
+cualquier búsqueda por id 162 devuelve dos cosas.
+
 **Es la raíz del lote.** El orden lo dicta `depends_on`, no es elegible:
 `135` → `122` (alcance por rol) → `127` → `128`/`132`/`134`, y `135` → `123` (rollup) → `124` →
 `125` → `126` → `131` → `133`. `129` (ruta/shell) y `130` (gráficas) son frontend y no dependen de

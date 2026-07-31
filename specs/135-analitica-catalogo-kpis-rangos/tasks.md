@@ -32,11 +32,18 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   **Hecho (verificado):** 36 requisitos, tabla de trazabilidad completa con un test unitario
   nombrado para cada R nuevo o reescrito.
 
-- [ ] **T0.3** Abrir el **ticket de saneamiento de `RankingService`** acordado en D6
-  (`lib/services/RankingService.ts:60-61` usa `startOfDayCR` + 24 h ⇒ ventana 18:00–18:00 CR).
-  Es trabajo **fuera** de la 135 y **no la bloquea**. **Hecho:** entrada nueva en
-  `feature_list.json` (o issue) referenciando D6 y esta feature; anotado en
-  `progress/impl_135.md > hallazgos colaterales`.
+- [x] **T0.3** ✅ **2026-07-30 (cierre)** — Abrir el **ticket de saneamiento de `RankingService`**
+  acordado en D6 (`lib/services/RankingService.ts:60-61` usa `startOfDayCR` + 24 h ⇒ ventana
+  18:00–18:00 CR). Es trabajo **fuera** de la 135 y **no la bloquea**. **Hecho:** ficha **166**
+  en `feature_list.json` (`pending` / `backend` / `low`), que cita D6, esta feature y la
+  alternativa 9 del design (replicar la ventana en analítica se descartó para no propagar el
+  defecto a un rollup persistido). Anotado en `progress/impl_135.md §8 (a)`.
+  > **⚠️ Tomó el id 166, no el 163 ni el 166 «siguiente»: el id 162 está DUPLICADO** en
+  > `feature_list.json` (lo comparten «notificación del sistema con la app abierta» y «no enviar
+  > mensajes de whatsapp sobre órdenes en estado no elegible»). Es la misma colisión que ya obligó
+  > a renumerar la 161→165, pero aquella renumeración **arregló un id de los cuatro**. No se
+  > renumera aquí: las dos fichas están citadas por escrito fuera de este archivo (la 158 y
+  > `progress/current.md`), así que es **decisión del humano** cuál cede el id.
 
 ---
 
@@ -167,17 +174,38 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
 
 - [ ] **T6.1** Ejecutar `pnpm run typecheck`, `pnpm run lint`, `pnpm test` y `./init.sh`.
   **Hecho:** los cuatro en verde, con la salida real pegada en `progress/impl_135.md`.
+  > **SIGUE ABIERTA a propósito — 2026-07-30 (cierre).** Dos de los cuatro ya están en verde y los
+  > otros dos NO, así que la casilla no se marca. Estado medido, no declarado:
+  > - **`typecheck` y `lint`: VERDE, exit 0.** Los 2 errores que el reviewer midió eran el cliente
+  >   Prisma de otra rama y **desaparecieron al sincronizar con `dev`**: `db/schema.prisma` es hoy
+  >   **byte-idéntico** entre `dev` y esta rama (`git diff` vacío). La causa se disolvió, no se tapó.
+  > - **`pnpm test` y `./init.sh`: ROJOS por causa AJENA, con delta 0 MEDIDO contra baseline.**
+  >   `dev` @ `72b75954`: 646 archivos / 7627 tests / **22 rojos**. Esta rama: 655 / 7807 /
+  >   **20 rojos**, y los 20 son **subconjunto estricto** de los 22, test a test. Los 20 vienen del
+  >   rediseño de `ux` que entró a `dev` por el **PR #212** (filtros cantón/distrito de la 117 y
+  >   cards en reparto). Los 2 que solo caen en el baseline son los flaky conocidos
+  >   (`filter-component` debounce y timeout del guard `no-embalaje`), agravados por haber corrido
+  >   las dos suites a la vez.
+  > - **`./init.sh` cae además por la REGLA 1**, no por la 135: la zona `frontend` tiene **tres**
+  >   `in_progress` (161, 163, 164) y admite dos. `backend` tiene una sola, la 135.
+  >
+  > **La cierra quien arregle `dev`, no esta feature.** Marcarla ahora sería fingir la verificación.
 
 - [x] **T6.2** Escribir en `progress/impl_135.md` el mapa completo **`R1..R36 → test`** (archivo
   + nombre del test). **Hecho:** los **36** requisitos aparecen, ninguno con "pendiente"; el
   reviewer puede verificar cada fila sin abrir el código.
 
-- [ ] **T6.3** Actualizar `progress/current.md` y la entrada de la 135 en `feature_list.json`
-  (`status`, `status_note` con las **10 decisiones D1–D10 del 2026-07-30**, incluida la
-  rectificación de D7). **Hecho:** `./init.sh` valida el estado del arnés en verde y el diff de
-  `feature_list.json` contiene **solo** la modificación de la 135 (nunca un `git checkout` para
-  deshacer). *(La `status_note` es bookkeeping: la fuente de verdad de las decisiones es el
-  spec, no la bitácora.)*
+- [x] **T6.3** ✅ **2026-07-30 (cierre)** — Actualizar `progress/current.md` y la entrada de la 135
+  en `feature_list.json` (`status`, `status_note` con las **10 decisiones D1–D10 del 2026-07-30**,
+  incluida la rectificación de D7). **Hecho:** `current.md` encabeza con el bloque del lote de
+  analítica y ya corrige el «registro con CERO `in_progress`» del cierre anterior; la `status_note`
+  de la 135 queda al día y **se corrigió lo que había quedado FALSO en ella** (decía que el
+  typecheck caía por «cliente Prisma contaminado de otra sesión» — no era eso). Diff de
+  `feature_list.json` verificado: **solo altas y `status_note`**; las 8 líneas borradas son
+  exactamente los `depends_on` que ganan una coma. Ningún `git checkout` para deshacer.
+  > **Se aparta de la letra en un punto, a propósito:** la task pedía `./init.sh` **en verde** como
+  > prueba. No lo está, por lo escrito en T6.1 (fallos preexistentes de `dev` + regla 1), así que la
+  > validación se hizo **por el diff y por el delta medido**, y se dice.
 
 - [x] **T6.4** Documentar en `progress/impl_135.md` los hallazgos colaterales y las consecuencias
   aceptadas para que no se pierdan: (a) la divergencia de "día" entre `RankingService` y los
@@ -187,8 +215,13 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   / centinela que la 123 debe elegir; (d) el supuesto no confirmado "período EN CURSO" (D3).
   **Hecho:** los cuatro apuntados con su referencia de archivo:línea o de decisión.
 
-- [ ] **T6.5 [P]** Avisar en `feature_list.json > status_note` (o en el spec de cada una) a las
-  features **123, 126, 127, 132 y 133** de lo que heredan según `design.md §6.1`.
-  **Hecho:** las cinco tienen la referencia a `specs/135-analitica-catalogo-kpis-rangos/design.md
-  §6.1`; en particular la 132 y la 133 saben que el dominio financiera es de **dos roles**
-  (`esAccesoTotal`) y que no existe vista financiera recortada para tienda, satélite ni mensajero.
+- [x] **T6.5 [P]** ✅ **2026-07-30 (cierre)** — Avisar en `feature_list.json > status_note` (o en el
+  spec de cada una) a las features **123, 126, 127, 132 y 133** de lo que heredan según
+  `design.md §6.1`. **Hecho: son OCHO, no cinco.** La task nombraba 5, pero §6.1 dirige avisos
+  también a la **122** (D7/D9) y a la **124**/**125** (D3/D6), y dejarlas fuera habría sido cumplir
+  la letra perdiendo el aviso. Las ocho tienen ahora `status_note` con la referencia literal a
+  `specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1` y el contenido del aviso, no solo
+  el puntero. En particular: la **132** y la **133** saben que el dominio financiera es de **dos
+  roles** (`esAccesoTotal`) y que **no existe** vista financiera recortada para tienda, satélite ni
+  mensajero — para esos tres el dominio es **prohibido**, no vacío; y la **123** sabe que un
+  `UNIQUE` ingenuo sobre el grano **duplicará filas** de mensajero no asignado.
