@@ -99,6 +99,15 @@ const SUFIJO_REINTENTO = "Vuelve a intentarlo; el listado no cambió.";
  * "Ver historial" por fila que abre el drawer `HistorialOrdenSheet` (datos por props via
  * Server Action). Por defecto `false` para NO alterar el contrato de columnas de otras
  * superficies (p. ej. el dashboard del adminTienda, feature 26).
+ *
+ * OJO (React Compiler): el parámetro de props NO lleva valor por defecto (`= {}`). React
+ * siempre invoca los componentes con un objeto de props, así que ese default era
+ * inalcanzable, pero hacía que el compilador dejase de ver las props como CONGELADAS: al
+ * llamar a `selectable(...)` / `bloqueoSeleccion(...)` daba por hecho que esos valores
+ * podían cambiar después, así que ningún `useMemo` que los declare como dependencia era
+ * preservable y abortaba la compilación del componente entero
+ * (`react-hooks/preserve-manual-memoization`). Todas las props siguen siendo opcionales:
+ * `<OrdenesModule />` sin ninguna es válido.
  */
 export function OrdenesModule({
   columns = ordenesColumns,
@@ -182,7 +191,7 @@ export function OrdenesModule({
    * NO es una acción por LOTE a propósito: un incidente pide causa, motivo y fotos por orden.
    */
   puedeReportarIncidente?: boolean;
-} = {}) {
+}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
   const [seleccionIds, setSeleccionIds] = useState<Set<string>>(new Set());
@@ -227,7 +236,11 @@ export function OrdenesModule({
     setSeleccionIds(new Set());
   }
 
-  const items = data?.items ?? [];
+  // Identidad estable de la página: `data?.items ?? []` fabrica un array NUEVO en cada
+  // render mientras SWR no tiene datos, y esa identidad inestable se propaga a los
+  // `useMemo` que dependen de ella (columnas, motivos de bloqueo), que se recalculaban
+  // siempre. Con memo propio, `items` sólo cambia cuando cambia la respuesta.
+  const items = useMemo<OrdenListItemDTO[]>(() => data?.items ?? [], [data]);
 
   // ¿Se monta la columna de checkbox? Con un predicado, lo deciden las filas de la
   // página. NO se usa `bloqueoSeleccion` para esto: una página en la que todas las

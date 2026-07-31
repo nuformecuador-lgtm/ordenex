@@ -367,7 +367,7 @@ la consumen pueda definir un KPI, una ventana temporal o un filtro por su cuenta
 | R22 | `filters.test.ts`: `rechaza instantes, epochs y offsets en desde/hasta` — `"2026-07-15T10:00:00Z"`, `1752537600000`, `"2026-07-15T00:00:00-06:00"` y `"2026-7-5"` → error. |
 | R23 | `filters.test.ts`: el error se mapea a `fieldErrors` con la clave del campo culpable; sin `throw`. |
 | R24 | `filters.test.ts`: `{ ...valido, rol: "maestro" }` y `{ ...valido, usuario_id: "u1" }` → error por `.strict()`. |
-| R25 | `tests/unit/analytics/frontera.guardia.test.ts`: `db/migrations` sin carpeta nueva; sin archivos nuevos en `app/**`, `components/**`, `lib/actions/**`, `lib/services/**`, `lib/repositories/**` (diff de la rama). |
+| R25 | ~~`tests/unit/analytics/frontera.guardia.test.ts`~~ — **guard RETIRADO el 2026-07-31, ver nota abajo.** La parte de R25 que es una propiedad permanente la vigila `tests/unit/analytics/modulo-puro.guardia.test.ts` (`lib/analytics/**` no importa db, repositories, services ni actions, censado sobre el directorio en caliente). |
 | R26 | Salida de `./init.sh` y de la suite pegada en `progress/impl_135.md`. |
 | R27 | `ranges.test.ts`: `la semana empieza el lunes CR y llega hasta hoy` — caso literal de R27 + un `now` en domingo (la semana es la que empezó el lunes anterior, 7 días) + cruce de mes. |
 | R28 | `ranges.test.ts`: `el preset mes es una ventana movil de 30 dias, no el mes calendario` — caso literal de R28; `hasta - desde === 30 * 24 * 3600_000`; caso con `now` el día 1 del mes (el rango arranca en el mes anterior). |
@@ -576,3 +576,28 @@ la consumen pueda definir un KPI, una ventana temporal o un filtro por su cuenta
     (`RankingRepository.ts:15-26`). Para el embudo lo natural es contar órdenes por estado
     actual; para productividad, gestiones. ¿Se declaran ambas familias en el catálogo, con `id`
     distintos y explícitos, o se elige una sola convención?
+
+---
+
+## Nota de cierre — R25 y la retirada de su guard (2026-07-31)
+
+`tests/unit/analytics/frontera.guardia.test.ts` **se retiró** en el chore
+`chore/saneamiento-deudas-arnes`. No es una relajación de R25: es que ese guard medía el **diff de la
+rama actual** contra `origin/dev`, y con la 135 ya mergeada esa medición dejó de significar nada.
+
+Qué hacía en la práctica antes de retirarse:
+
+- fallaba en `dev` limpia (el diff contra sí misma sale vacío y su propia autocomprobación exige un
+  diff no vacío);
+- fallaba en **cualquier rama ajena**, culpando a la 135 de archivos escritos por terceros. Dio 6
+  falsos positivos contra la feature 167, cuyo R1 era **crear una página** — uno de sus casos es
+  literalmente «no anade rutas, paginas ni componentes en app o components»;
+- ninguno de sus criterios sobrevive como regla de contenido: `app/(app)/analitica/` existe en `dev`
+  desde la feature 129, y `db/migrations/` recibe migraciones de otras features constantemente.
+
+**R25 se cumplió y quedó verificado durante la vida de la rama de la 135**, que es la única ventana
+en la que un requisito de alcance de rama puede violarse. Una feature mergeada no puede infringir
+retroactivamente su propia frontera. La propiedad que sí es permanente —que `lib/analytics/**` siga
+siendo un módulo puro— la vigila `modulo-puro.guardia.test.ts`, que además cubre más superficie:
+`next/headers`, `@prisma/client` como valor, `process.env`, `'use server'` y la importación sin
+`DATABASE_URL`.
