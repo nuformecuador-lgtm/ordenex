@@ -94,6 +94,34 @@ incidente del `backend_dev` con worktree ya registrado. **La fase 1 solo escribe
 no necesita rama**; la creación de la rama se difiere a la fase 2. Al implementar hay que **volver a
 mirar** si ese WIP sigue suelto.
 
+### ✅ 129 ENTREGADA — **PR #224**, esperando merge humano
+
+`https://github.com/nuformecuador-lgtm/ordenex/pull/224` · rama `feature/129-analitica-ruta-shell-sidebar`
+· 7 commits · 15 archivos (+2377/−9) · **`MERGEABLE`** (`UNSTABLE` sólo mientras Vercel despliega).
+
+**Reviewer: APROBADO-CON-NOTAS, 0 bloqueantes**, 7 menores (`progress/review_129.md`). **24/25 R
+verificados hasta test no vacuo**; el 25.º («sin dependencias nuevas») se verifica por diff, que está
+vacío. **20 mutaciones del reviewer, 17 discriminaron** — ninguna reutilizada de las 9 del implementer.
+
+**Las 3 supervivientes quedaron cerradas antes del PR** (`473317e2`), y una de ellas era un defecto
+real de lo entregado, no un hueco de test:
+
+- **La nota de traspaso a la 133 inducía el bug que la feature previene.** Mandaba ampliar «DOS sitios»
+  que hoy son **el mismo** (`roles: ROLES_ANALITICA`); seguirla al pie llevaba a desenganchar el ítem
+  con un literal, que es exactamente lo que `R10` vigila. Reescrita: ampliar es **editar UNA constante**,
+  con apartado de qué NO hacer y aviso de que `R3`, `R9` y las listas de `R17` se pondrán **rojos por
+  diseño** —el rol se mueve de una lista a la otra, nunca se relaja el guard—.
+- Las otras dos eran **tests que medían forma**: el icono se asertaba por unicidad de la *clave*, así
+  que `chartColumn: Home` pasaba; y el encabezado se podía sustituir por un `div`+`h1` perdiendo
+  `PageHeader` y `Container` sin que nada lo notara.
+- **La cuarta no se tapó con un test frágil.** `"use client"` en la página **pasa los 59 tests** y sólo
+  revienta en `next build`, arrastrando `pg`/Prisma al bundle del cliente. Se ejecutó el build de
+  verdad: **exit 0** con `/analitica` en el manifiesto, y **exit 1** con la mutación puesta.
+
+> ⚠️ **`init.sh` NO corre `next build`, así que la frontera RSC no la cubre ningún gate automático.**
+> Y ojo con el atajo: **`pnpm build` encadena `tsx scripts/migrate-deploy.ts`**, que **aplica
+> migraciones contra una base real**. Para sólo compilar, `pnpm exec next build`.
+
 ### 📝 Fase 1 de la 129 — spec escrita, puerta CERRADA
 
 `specs/129-analitica-ruta-shell-sidebar/` (requirements EARS + design + tasks). La 129 es **solo el
