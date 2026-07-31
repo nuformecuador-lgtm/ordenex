@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps, ReactNode } from "react";
 import { Sidebar } from "@/app/(app)/_components/Sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import type { MenuItem } from "@/lib/auth/menu-visibility";
+import { SIDEBAR_ITEMS, type IconKey, type MenuItem } from "@/lib/auth/menu-visibility";
 
 // usePathname es configurable por test; useRouter se mockea porque el patrón
 // del repo lo espera aunque el Sidebar no lo consuma directamente.
@@ -285,5 +285,108 @@ describe("Sidebar estructura", () => {
     expect(
       within(nav).getByRole("link", { name: "Usuarios" }),
     ).toBeInTheDocument();
+  });
+});
+
+// Feature 129 — el ítem de sidebar "Analítica" (R12, R13, R14).
+describe("Feature 129 — ítem de sidebar de Analítica", () => {
+  // R12: `IconKey` es un TIPO, no existe en runtime, así que no se puede iterar.
+  // La garantía FUERTE de R12 la da el compilador: `ICON_BY_KEY` en
+  // `app/(app)/_components/Sidebar.tsx` está tipado como `Record<IconKey, SidebarIcon>`,
+  // así que si se añade una clave a `IconKey` sin darle icono, `pnpm run typecheck`
+  // falla (ver T1.1). Este array literal, tipado con `satisfies readonly IconKey[]`,
+  // hace que el compilador también se queje si aquí falta o sobra una clave respecto
+  // al tipo real. Este test es la red de seguridad en RUNTIME (que de verdad se pinte
+  // un <svg>), no la garantía principal.
+  const TODAS_LAS_CLAVES = [
+    "home",
+    "settings",
+    "user",
+    "package",
+    "clipboardCheck",
+    "truck",
+    "megaphone",
+    "trophy",
+    "wallet",
+    "shieldAlert",
+    "chartColumn",
+  ] as const satisfies readonly IconKey[];
+  // Comprobación de exhaustividad tipada: si `IconKey` gana una clave que no está en
+  // el array de arriba, `Exclude<IconKey, (typeof TODAS_LAS_CLAVES)[number]>` deja de
+  // ser `never` y esta asignación deja de compilar.
+  type ClavesFaltantes = Exclude<IconKey, (typeof TODAS_LAS_CLAVES)[number]>;
+  const _exhaustividad: ClavesFaltantes extends never ? true : never = true;
+  void _exhaustividad;
+
+  it("R12: toda clave de IconKey resuelve a un ícono renderizado (svg) en el Sidebar", () => {
+    const items: readonly MenuItem[] = TODAS_LAS_CLAVES.map((clave) => ({
+      label: clave,
+      href: `/prueba-${clave}`,
+      iconKey: clave,
+      roles: [],
+    }));
+    renderSidebar(items);
+
+    for (const clave of TODAS_LAS_CLAVES) {
+      const link = linkPorHref(`/prueba-${clave}`);
+      expect(link.querySelector("svg")).not.toBeNull();
+    }
+  });
+
+  it("R13: renderiza un enlace a /analitica con la etiqueta 'Analítica' y su icono", () => {
+    renderSidebar(SIDEBAR_ITEMS);
+
+    const link = linkPorHref("/analitica");
+    expect(link).toHaveAccessibleName("Analítica");
+    expect(link.querySelector("svg")).not.toBeNull();
+  });
+
+  it("R14: con pathname '/analitica' el enlace de Analítica queda activo", () => {
+    currentPathname = "/analitica";
+    renderSidebar(SIDEBAR_ITEMS);
+
+    const link = linkPorHref("/analitica");
+    expect(link).toHaveAttribute("aria-current", "page");
+    expect(link).toHaveAttribute("data-active");
+  });
+
+  // R11 / decision D4 / alternativa A2 del design.md: "compartir icono con otra
+  // sección invita a leer analítica como parte de esa sección". El test R12 de
+  // arriba solo prueba que la CLAVE `chartColumn` es única en el mapa `IconKey`
+  // (garantía tipada) y que ALGÚN svg se pinta; no prueba que ese svg sea un
+  // ícono PROPIO. Una mutación que resuelva `chartColumn` al mismo componente
+  // que "Inicio" (`chartColumn: Home` en `ICON_BY_KEY`) pasaría esas
+  // comprobaciones intactas: la clave sigue existiendo y sigue pintando un
+  // <svg>, solo que es el ícono equivocado. Lucide marca cada ícono con una
+  // clase `lucide-<nombre-kebab>` propia (`createLucideIcon`), así que
+  // comparamos esa clase (no solo la presencia de un <svg>) contra la de
+  // "Inicio" y la de TODOS los demás items del menú.
+  it("R11/D4/A2: el icono de Analítica es propio — no coincide con el de Inicio ni con el de ningún otro item", () => {
+    renderSidebar(SIDEBAR_ITEMS);
+
+    const analiticaLink = linkPorHref("/analitica");
+    const analiticaSvg = analiticaLink.querySelector("svg");
+    expect(analiticaSvg).not.toBeNull();
+    const analiticaClass = analiticaSvg!.getAttribute("class") ?? "";
+    // El ícono real del mapa (`ChartColumn`) lleva esta clase; si la mutación
+    // resuelve `chartColumn` a `Home`, esta clase deja de aparecer.
+    expect(analiticaClass).toMatch(/lucide-chart-column/);
+
+    // Contra "Inicio" en particular (el caso concreto de la mutación).
+    const inicioSvg = linkPorHref("/dashboard").querySelector("svg");
+    expect(inicioSvg).not.toBeNull();
+    expect(inicioSvg!.getAttribute("class")).not.toBe(analiticaClass);
+
+    // Contra CUALQUIER otro item/subitem del menú (enlaces y triggers
+    // colapsables), no solo "Inicio": ningún ícono del menú debe reutilizarse.
+    const otrosIconos = [...screen.getAllByRole("link"), ...screen.getAllByRole("button")]
+      .filter((el) => el !== analiticaLink)
+      .map((el) => el.querySelector("svg"))
+      .filter((svg): svg is SVGSVGElement => svg !== null && svg !== analiticaSvg);
+
+    expect(otrosIconos.length).toBeGreaterThan(0);
+    for (const svg of otrosIconos) {
+      expect(svg.getAttribute("class")).not.toBe(analiticaClass);
+    }
   });
 });

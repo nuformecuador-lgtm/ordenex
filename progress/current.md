@@ -8,6 +8,162 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗓️ Sesión 2026-07-30 (noche, cuarta) — feature 129: fase 1
+
+**Pedido del humano: «comienza con la feature 129»** (analítica: ruta, shell y sidebar).
+
+### ✅ Registro RECONCILIADO — la zona `frontend` estaba falsamente saturada
+
+El registro declaraba **3 features `in_progress` en `frontend`** (161, 163, 164) y la regla 1 admite 2,
+así que la 129 —que es `frontend`— parecía bloqueada de entrada. **No lo estaba: las tres ya están en
+`dev`.** Se mergearon con el **PR #212** (`ux` → `dev`, MERGED el 2026-07-30 22:23Z); lo que faltaba era
+el bookkeeping del F2.5, no el trabajo.
+
+**Verificado POR ARCHIVOS contra `origin/dev`, no por el estado del PR** — que es la lección del #209
+escrita más abajo: `hooks/useInstalarPwa.ts`, `components/shared/InstalarPwaButton.tsx`,
+`components/shared/CarruselCards.tsx`, `components/shared/carrusel-rango.ts`, `components/ui/carousel.tsx`,
+`hooks/useTonoAlIncrementar.ts` y `lib/audio/tono-notificacion.ts` están **todos** en `origin/dev`.
+
+**161, 163 y 164 → `done`.** La zona `frontend` queda en **0 `in_progress`** y el aviso de arné que la
+164 dejó anotado («`./init.sh` falla hasta que se cierre alguna») **queda saldado**.
+
+> ⚠️ **`./init.sh` NO detectó la infracción de la regla 1 con las 3 abiertas.** El bloque que la valida
+> está entero dentro de un `if command -v jq`, y **`jq` no está instalado en esta máquina** (solo emite
+> el `warn` del paso 1). O sea: **el gate del que depende la regla 1 lleva tiempo sin ejecutarse**, y
+> con él la comprobación 4 (specs presentes para features en vuelo). Cuarta aparición del patrón de
+> este repo: *una herramienta que decide algo mirando lo que tiene a mano en vez de la fuente de verdad*.
+
+### 🔴 `origin/dev` ESTÁ ROJO: 20 tests — y mi primera medición del baseline fue FALSA
+
+**El dato que importa: `dev` tiene 20 tests rojos ahora mismo, y no los puso esta feature.** Viven en
+`MisAsignacionesModule` (×16), `MisAsignacionesPage`, `MarcarLuegoToggle`, `ManifiestoFlujos` y
+`EscanerRecepcion`. Reproducen en aislado (20/125), ninguno de esos archivos está modificado en la rama
+de la 129 y en los cinco el grep de `analitica|menu-visibility|Sidebar|ROLES_ANALITICA` da **0**. Son
+los **KPIs animados del rediseño del mensajero** que la bitácora de la rama `ux` ya declaraba como «14
+rojas previas» → 18 → 20, y que **el PR #212 metió en `dev` sin que nadie los saldara**.
+
+> ⚠️ **Consecuencia: cualquier feature que arranque desde `dev` hereda 20 rojos y no puede poner
+> `./init.sh` en verde.** No es de la 129; es deuda de `dev` y necesita dueño.
+
+**Y el error de método, que conviene que quede escrito.** Al arrancar medí `./init.sh` y leí
+**«635 archivos / 7385 tests / 2 rojos»**, concluí que los 2 eran saturación de workers y di el baseline
+por **verde**. Era falso. Esa corrida traía **11 `unhandled errors`** de arranque de workers de vitest y
+reportó **635 archivos donde en realidad hay 649**: **catorce archivos nunca llegaron a ejecutarse**, y
+entre ellos estaban los cinco que fallan. **Medí una suite degradada y la leí como sana.** Lo destapó el
+implementer al reportar 20 rojos contra mis 2, y se confirmó corriendo los cinco archivos a mano.
+
+> **LECCIÓN: en vitest, un recuento de archivos más bajo de lo normal y un bloque de `Errors` son parte
+> del resultado, no ruido.** Una suite que no arranca del todo **no reporta rojo: reporta de menos.** El
+> total de archivos hay que compararlo contra el esperado antes de creerse el número de fallos. Es la
+> misma familia que el bug de `run_if` documentado dentro de `init.sh`: un gate que termina en verde
+> porque **no llegó a mirar**, no porque estuviera bien.
+
+### ✅ Los 20 rojos SE SALDARON — y el gate ahora corta en LINT, también por deuda de `dev`
+
+`dev` avanzó **16 commits** durante la sesión (PRs #213-#221: la 157, dos hotfix, etiquetas en carga
+masiva) y se integró en la rama de la 129 sin un solo conflicto: **`dev` no toca ni los archivos de la
+129 ni `app/(app)/ranking/`**, así que el WIP ajeno sobrevivió al merge intacto.
+
+- **Los 20 rojos desaparecieron.** Los saldó `25ab36e0` («restaura el filtro cantón/distrito y pone la
+  suite entera en verde»). Re-medido tras el merge, no dado por hecho por el mensaje del commit: los 5
+  archivos que fallaban + los 4 de la feature dan **9 archivos / 188 tests / 0 fallos**, y la **suite
+  completa `pnpm test` da 652 archivos / 7753 tests / 0 FALLOS** — verde entera, con el WIP de ranking
+  de la otra sesión dentro. (El recuento de archivos sube de 649 a 652 y es coherente: +2 de la feature,
+  +1 del ranking ajeno. Comprobarlo es justamente la lección del párrafo anterior.)
+- **⚠️ Pero `./init.sh` sigue sin poder ponerse verde, y otra vez no es de la 129:** corta en `lint`
+  con **3 errores** en `app/(app)/ordenes/_components/OrdenesModule.tsx:340,345`
+  (`Compilation Skipped: Existing memoization could not be preserved`, la regla del React Compiler).
+  El archivo es **byte-idéntico a `origin/dev`** y lo introdujo `a4eb7813` («fix(ordenes): filtro sin
+  estados retirados»). **Es deuda de `dev` y necesita dueño.**
+- Efecto colateral: como `lint` corre **antes** que `test` en `init.sh`, mientras eso siga rojo el gate
+  **nunca llega a ejecutar la suite**. Los números de tests hay que sacarlos con `pnpm test` aparte.
+
+> **Segunda vez en la misma sesión que la 129 queda bloqueada por deuda ajena heredada de `dev`**:
+> primero 20 tests, ahora 3 errores de lint. La feature en sí está limpia — sus 4 archivos dan 59/59.
+
+### ⚠️ HAY OTRA SESIÓN VIVA EN ESTE MISMO CHECKOUT — no se cambió de rama
+
+A mitad de sesión aparecieron cambios sin commitear que **no son de esta sesión**: un rediseño de podio
+del ranking (`app/(app)/ranking/_components/RankingPodio.tsx` **untracked**, creado a las 19:59, y
+`ranking-labels.ts` modificado a las 19:58 con `iniciales`, `anchoBarra` y `PODIO_LABELS`). Al abrir la
+sesión `git status` estaba **limpio**, así que se escribieron **en vivo**.
+
+**Decisión: no se creó la rama `feature/129-...` ni se movió HEAD.** Crear la rama habría arrastrado el
+WIP ajeno, y cambiar de rama habría movido HEAD debajo de la otra sesión — que es exactamente el
+incidente del `backend_dev` con worktree ya registrado. **La fase 1 solo escribe bajo `specs/`, así que
+no necesita rama**; la creación de la rama se difiere a la fase 2. Al implementar hay que **volver a
+mirar** si ese WIP sigue suelto.
+
+### ✅ 129 ENTREGADA — **PR #224**, esperando merge humano
+
+`https://github.com/nuformecuador-lgtm/ordenex/pull/224` · rama `feature/129-analitica-ruta-shell-sidebar`
+· 7 commits · 15 archivos (+2377/−9) · **`MERGEABLE`** (`UNSTABLE` sólo mientras Vercel despliega).
+
+**Reviewer: APROBADO-CON-NOTAS, 0 bloqueantes**, 7 menores (`progress/review_129.md`). **24/25 R
+verificados hasta test no vacuo**; el 25.º («sin dependencias nuevas») se verifica por diff, que está
+vacío. **20 mutaciones del reviewer, 17 discriminaron** — ninguna reutilizada de las 9 del implementer.
+
+**Las 3 supervivientes quedaron cerradas antes del PR** (`473317e2`), y una de ellas era un defecto
+real de lo entregado, no un hueco de test:
+
+- **La nota de traspaso a la 133 inducía el bug que la feature previene.** Mandaba ampliar «DOS sitios»
+  que hoy son **el mismo** (`roles: ROLES_ANALITICA`); seguirla al pie llevaba a desenganchar el ítem
+  con un literal, que es exactamente lo que `R10` vigila. Reescrita: ampliar es **editar UNA constante**,
+  con apartado de qué NO hacer y aviso de que `R3`, `R9` y las listas de `R17` se pondrán **rojos por
+  diseño** —el rol se mueve de una lista a la otra, nunca se relaja el guard—.
+- Las otras dos eran **tests que medían forma**: el icono se asertaba por unicidad de la *clave*, así
+  que `chartColumn: Home` pasaba; y el encabezado se podía sustituir por un `div`+`h1` perdiendo
+  `PageHeader` y `Container` sin que nada lo notara.
+- **La cuarta no se tapó con un test frágil.** `"use client"` en la página **pasa los 59 tests** y sólo
+  revienta en `next build`, arrastrando `pg`/Prisma al bundle del cliente. Se ejecutó el build de
+  verdad: **exit 0** con `/analitica` en el manifiesto, y **exit 1** con la mutación puesta.
+
+> ⚠️ **`init.sh` NO corre `next build`, así que la frontera RSC no la cubre ningún gate automático.**
+> Y ojo con el atajo: **`pnpm build` encadena `tsx scripts/migrate-deploy.ts`**, que **aplica
+> migraciones contra una base real**. Para sólo compilar, `pnpm exec next build`.
+
+### 📝 Fase 1 de la 129 — spec escrita, puerta CERRADA
+
+`specs/129-analitica-ruta-shell-sidebar/` (requirements EARS + design + tasks). La 129 es **solo el
+andamio**: ruta, shell vacío e ítem de menú. **Cero métrica, cero gráficas, cero fetch.**
+
+- **El `prefetch` que pide la ficha se declara FUERA DE ALCANCE con su razón**: la 129 tiene
+  `depends_on: null` y las Server Actions de analítica **no existen todavía** (son la 125/126/127). Se
+  deja el punto de extensión donde la 131 lo enchufará, en vez de inventar una fuente.
+- **7 preguntas de puerta, T0 CERRADA y escrita EN el spec** (no solo aquí): las Q quedan marcadas
+  `[x] RESUELTA` con su respuesta textual, y además viven como bloque `D1-D8` en `requirements.md`,
+  propagadas a los R y al `design.md`. **Los R crecieron de 23 a 25**, y los dos nuevos salen de las
+  propias decisiones: **`R10`** —el gate de la página y la visibilidad del ítem declaran el **mismo**
+  conjunto de roles, con test que falla si divergen— y **`R16`**, la posición del ítem. Las respuestas:
+  **Q1** el ítem es **solo `maestro`/`admin`** — la 129 **se desvía de su propia ficha a propósito**
+  (dice cinco roles) porque hasta la 131 la página está vacía; **ampliar es alcance de la 133**.
+  **Q2** etiqueta «Analítica». **Q3** `iconKey` nueva `chartColumn`. **Q4** pila vertical de regiones,
+  no pestañas. **Q5** la región financiera la añade la 132. **Q6** (decisión del leader, no había regla
+  escrita) el ítem va tras «Inicio» y antes de «Órdenes», porque comparte sus dos roles exactos.
+- **Q7 — desfase de numeración confirmado, no cambio de alcance:** las fichas de la 130/131/132 citan
+  «gráficas de 129» y «ruta 128» por una renumeración previa; mismo desfase en 124/125/126. Anotado en
+  el `design.md` para que no confunda a quien implemente la 131. **`feature_list.json` no se tocó.**
+
+### 🔎 Dos hallazgos de la verificación del spec
+
+1. El mapa `iconKey -> componente lucide` vive en **`app/(app)/_components/Sidebar.tsx:138-151`** y su
+   tipo es `Record<IconKey, SidebarIcon>` → añadir la clave a la union **rompe el build** hasta mapearla.
+   Exhaustividad garantizada por el compilador; no hace falta un test que la vigile.
+2. **`ROLES_SEED` es `Object.values(RolValue)` e incluye `apiKey`: son 6 valores, no 5.** El ítem
+   «Perfil» lo usa como «cualquier rol autenticado», así que **hoy «Perfil» es visible también para
+   `apiKey`** — preexistente, ajeno a la 129 y no se toca aquí, pero es una trampa para quien copie ese
+   patrón creyendo que `ROLES_SEED` son los roles humanos. Queda escrito en el `design.md` §5.
+3. **`ChartColumn` existe con ese nombre exacto** en el `lucide-react` instalado (`^1.23.0`,
+   `lucide-react.d.ts:4138` lo declara y `:24763` lo exporta). Comprobado contra el paquete, no supuesto.
+
+**Estado del registro:** **129 → `spec_ready`** con sus decisiones en el `status_note`. `in_progress` = **0**.
+
+---
+
+## 🏁 CIERRE 2026-07-30 (noche) — ~~EMPIEZA A LEER POR AQUÍ~~
+
+> *(Ya no es el punto de entrada: lo es la «Sesión 2026-07-30 (noche, cuarta)» de arriba. Sigue válido
+> en todo su detalle técnico; lo de arriba lo corrige en el estado del registro y en el baseline.)*
 ## 🗓️ Sesión 2026-07-30 (quater) — arranca el LOTE DE ANALÍTICA — **EMPIEZA A LEER POR AQUÍ**
 
 > **Corrige el «CIERRE (noche)» de más abajo en un punto:** ese bloque dice «registro con CERO
