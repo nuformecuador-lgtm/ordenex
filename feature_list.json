@@ -1996,14 +1996,14 @@
       "id": 171,
       "name": "desglose del dinero por tienda en la wallet",
       "description": "Cada tienda muestra el detalle de su saldo, como ya lo hacen los mensajeros.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "depends_on": 43,
       "branch": null,
-      "spec_path": null,
-      "status_note": "Pedida por el humano el 2026-07-31: en /wallet/mensajeros cada mensajero tiene un desplegable con el detalle de su dinero (DesglosePagosMensajero.tsx) y en /wallet/tiendas NO existe: solo hay SaldosTiendasTable.tsx. Verificado en codigo. Es tambien PREREQUISITO de la 172: el humano decidio que el pago a una tienda se registre DESDE ese desglose. Al especificar, mirar IWalletTiendaFeedService: hoy solo construye los movimientos que se emiten al aprobar un cierre, no expone un feed de detalle por tienda."
+      "spec_path": "specs/171-desglose-por-tienda",
+      "status_note": "Pedida por el humano el 2026-07-31: en /wallet/mensajeros cada mensajero tiene un desplegable con el detalle de su dinero (DesglosePagosMensajero.tsx) y en /wallet/tiendas NO existe: solo hay SaldosTiendasTable.tsx. Es PREREQUISITO de la 172 (el pago a una tienda se registrara DESDE este desglose). SPEC ESCRITA el 2026-07-31: 49 requisitos EARS trazados a test, 6 preguntas abiertas. DECISIONES: cabecera de CUATRO importes (a favor / cargos de Ordenex / pagado a la tienda / saldo) en vez de copiar la del mensajero -separar 'pagado' hoy, con valor 0.00, evita rehacer la pantalla cuando la 172 emita pago_tienda-; lectura nueva `listarMovimientosDeTienda` con tiendaId en el input y gate esAccesoTotal, y adminTienda EXCLUIDO incluso pidiendo su propia tienda (su superficie sigue siendo /mi-wallet, espejo de listarMisPagos vs listarPagosDeMensajero); carga al EXPANDIR via SWR dentro del desplegable (N filas = 0 consultas) y 2 llamadas de repositorio constantes por apertura, sin consultar el nombre (el desglose del mensajero paga esa consulta de mas para un dato que ni usa). SIN MIGRACION: los indices de la 43 ya sirven. La descarga se ofrece y obliga a actualizar el censo de la 170 (25/30/25/31 -> 26/31/26/32). CONFLICTO DECLARADO (P5): la Tanda I de la 170 pagina 'Saldos de tiendas' y toca 6 de los mismos archivos; la implementacion no arranca hasta que el leader lo resuelva."
     },
     {
       "id": 172,
