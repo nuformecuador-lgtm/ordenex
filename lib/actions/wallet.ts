@@ -11,7 +11,12 @@ import type {
   RegistrarMovimientoManualServiceResult,
   VerBalanceServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
-import { listarMovimientosSchema, registrarMovimientoManualSchema } from "@/lib/types/wallet";
+import {
+  listarMovimientosCompletoSchema,
+  listarMovimientosSchema,
+  registrarMovimientoManualSchema,
+  type ListarMovimientosCompletoResult,
+} from "@/lib/types/wallet";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -78,6 +83,26 @@ export async function listarMovimientosAction(
     const data = listarMovimientosSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarMovimientos(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Feature 170 (T C.2, design §4) — libro de caja COMPLETO, sin paginacion, para la descarga.
+ * Calcado de `listarMovimientosAction`: mismo borde, mismo actor, mismo schema (menos
+ * `page`/`pageSize`, y `.strict()`) y el MISMO servicio, que es quien autoriza y aplica el
+ * tope. Ninguna rama devuelve filas junto a un error (R16/R17/R18).
+ */
+export async function listarMovimientosCompletoAction(
+  input: unknown,
+  deps: WalletDeps = {},
+): Promise<ListarMovimientosCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
+    const data = listarMovimientosCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarMovimientosCompleto(data, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }

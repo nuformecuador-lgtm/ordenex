@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CrearMovimientoTiendaInput,
+  DesgloseTiendaAgregadoRow,
   IWalletTiendaMovimientoRepository,
   ListarPorTiendaFiltros,
   ListarPorTiendaPage,
@@ -120,6 +121,35 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       else debitos = new Prisma.Decimal(suma);
     }
     return { creditos: creditos.toFixed(2), debitos: debitos.toFixed(2) };
+  }
+
+  /**
+   * Feature 171 (R22/R24/R34) — Σ monto por (tipo, categoria) para UNA tienda + filtros.
+   *
+   * UNA sola sentencia, siempre: el desglose de la cabecera no crece con el tamaño de pagina
+   * ni con el numero de tiendas listadas. `tiendaId` va en el WHERE, no en memoria — es el
+   * unico acotado que impide que la cabecera de una tienda sume el dinero de otra.
+   *
+   * No clasifica ni resta: eso es negocio y vive en `derivarDesgloseTienda`. Salida STRING.
+   */
+  async agregarDesglosePorTienda(
+    tiendaId: string,
+    filtros: SaldoTiendaFiltros,
+  ): Promise<DesgloseTiendaAgregadoRow[]> {
+    const where: Prisma.WalletTiendaMovimientoWhereInput = {
+      tiendaId, // R24: acotado por tienda en el WHERE
+      ...buildFiltrosWhere(filtros),
+    };
+    const grupos = await this.prisma.walletTiendaMovimiento.groupBy({
+      by: ["tipo", "categoria"],
+      where,
+      _sum: { monto: true },
+    });
+    return grupos.map((g) => ({
+      tipo: g.tipo,
+      categoria: g.categoria,
+      total: new Prisma.Decimal(g._sum.monto ?? 0).toFixed(2), // money-safe
+    }));
   }
 
   /** R20: una fila por tienda (con nombre) + totales credito/debito, para la vista del maestro. */

@@ -1,5 +1,6 @@
 import type { FilterDef } from "@/components/shared/FilterComponent";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+import { BUSQUEDA_MIN_CHARS } from "@/lib/types/orden";
 import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // Feature 144 / B3 (design.md §4.1) — TODO lo especifico de ordenes vive aqui.
@@ -50,9 +51,26 @@ export const CLAVE_ESTADO = "status_id";
 export const CLAVE_REASIGNABLES = "reasignables";
 
 /**
- * Declara los SIETE filtros de la barra de ordenes sobre el contrato del bloque A.
+ * Feature 169 — clave del BUSCADOR de texto libre. Es la misma que espera el `filter`
+ * de `listarOrdenes`, pero NO viaja como lista: `seleccionAFilter` la traduce a un
+ * escalar (es un termino, no un conjunto de ids).
+ */
+export const CLAVE_BUSQUEDA = "q";
+
+/**
+ * Que se puede teclear ahi. El placeholder ES la documentacion del buscador: sin el, el
+ * usuario no tiene forma de saber que el campo alcanza cuatro datos y no solo la guia.
+ * El orden es el de uso esperado en bodega.
+ */
+export const PLACEHOLDER_BUSQUEDA = "Guía, remisión, teléfono o destinatario";
+
+/**
+ * Declara los OCHO filtros de la barra de ordenes sobre el contrato del bloque A.
  * Caen claves segun el rol: sin tienda si el rol esta acotado a la suya (R62) y sin
  * REASIGNABLES si el rol no reasigna mensajeros (`adminTienda`).
+ *
+ * Feature 169/R32: el BUSCADOR va PRIMERO y no cae por rol — el acotamiento por rol lo
+ * impone el servicio, no la barra.
  */
 export function construirFiltrosOrdenes(
   cat: CatalogoFiltrosOrdenesDTO,
@@ -93,6 +111,16 @@ export function construirFiltrosOrdenes(
       : [];
 
   return [
+    {
+      // R32: PRIMER control de la barra. `minChars` sale de la MISMA constante que valida
+      // el borde (`lib/types/orden.ts`): si el minimo cambiara ahi, el control dejaria de
+      // mandar terminos que el servidor ya rechazaba, sin tocar esta linea.
+      key: CLAVE_BUSQUEDA,
+      label: "Buscar",
+      kind: "text",
+      minChars: BUSQUEDA_MIN_CHARS,
+      placeholder: PLACEHOLDER_BUSQUEDA,
+    },
     {
       key: "zona_id",
       label: "Zona",

@@ -21,10 +21,17 @@ const UUID = "11111111-1111-4111-8111-111111111111";
  * Stubs de los metodos que NO ejercita el test en curso: fallan ruidosamente en vez de
  * devolver un vacio que haria pasar un test por la razon equivocada.
  */
-function otrosStubs(): Pick<IApiKeyService, "listar" | "rotar" | "activar" | "desactivar"> {
+function otrosStubs(): Pick<
+  IApiKeyService,
+  "listar" | "listarCompleto" | "rotar" | "activar" | "desactivar"
+> {
   return {
     listar: vi.fn(async (): Promise<ListarApiKeysResult> => {
       throw new Error("listar no debe invocarse aqui");
+    }),
+    // Feature 170 (T B.1): igual que los demas stubs de este archivo, delata su uso.
+    listarCompleto: vi.fn(async (): Promise<never> => {
+      throw new Error("listarCompleto no debe invocarse aqui");
     }),
     rotar: vi.fn(async (): Promise<RotarApiKeyResult> => {
       throw new Error("rotar no debe invocarse aqui");

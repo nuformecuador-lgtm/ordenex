@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
@@ -17,8 +19,12 @@ import { MultiSelectFilter } from "./MultiSelectFilter";
 /**
  * Tipos de control soportados (decision (k) del spec). `boolean` es un INTERRUPTOR:
  * o el filtro esta puesto o no esta, sin opciones que elegir.
+ *
+ * Feature 169 (design §8.1): `text` es un campo de TEXTO LIBRE. Sigue siendo generico
+ * —el componente no sabe que se busca ni contra que— y su unica particularidad es
+ * `minChars`: por debajo de ese minimo la clave NO viaja.
  */
-export type FilterKind = "multi" | "single" | "dateRange" | "boolean";
+export type FilterKind = "multi" | "single" | "dateRange" | "boolean" | "text";
 
 export interface FilterOption {
   /** Valor emitido TAL CUAL (R5): id de catalogo, o valor de atajo en `dateRange`. */
@@ -59,6 +65,14 @@ export interface FilterDef {
   searchPlaceholder?: string;
   emptyMessage?: string;
   disabled?: boolean;
+  /**
+   * Solo en `text` (feature 169, design §8.1): minimo de caracteres —ya recortados los
+   * extremos— con el que el termino EMPIEZA a viajar. Por debajo, la clave desaparece
+   * de la salida y el control avisa de cuantos hacen falta; no es un error de
+   * validacion, es "todavia no hay busqueda". Default `0` (sin minimo): un filtro de
+   * texto que no lo declara emite en cuanto haya algo escrito.
+   */
+  minChars?: number;
 }
 
 /** Salida agnostica y uniforme (R16/R18/R19/R20). */
@@ -88,6 +102,7 @@ const KINDS_SOPORTADOS = new Set<string>([
   "single",
   "dateRange",
   "boolean",
+  "text",
 ]);
 
 /**
@@ -101,6 +116,119 @@ export const BOOLEAN_MARCADO = "true";
 export const DEBOUNCE_MS_DEFAULT = 500;
 /** Los tipos basados en opciones: sin opciones ofrecidas, su control va deshabilitado (R14). */
 const KINDS_CON_OPCIONES = new Set<string>(["multi", "single"]);
+
+/**
+ * Aviso del filtro de texto MIENTRAS lo escrito no alcanza su minimo (feature 169, R35).
+ * No es un error: es "sigue escribiendo". Se expone como funcion para que quien lo
+ * afirme en un test no reescriba la cadena a mano.
+ */
+export function avisoMinimoCaracteres(minChars: number): string {
+  return `Escribe al menos ${minChars} caracteres para buscar`;
+}
+
+/**
+ * Filtro de TEXTO LIBRE (feature 169, design §8.1). Vive aqui, junto al orquestador,
+ * porque no tiene nada que no sea el orquestador: un `Input`, su limpieza y la regla
+ * del minimo.
+ *
+ * Reglas (R33-R37, R41):
+ * - **el campo responde al instante** (estado interno); lo que se aplaza es la EMISION,
+ *   que ya hace `FilterComponent` con su debounce. No hay un segundo temporizador aqui:
+ *   sumaria dos esperas y una rafaga de pulsaciones dispararia mas de una consulta;
+ * - emite `[termino]` —recortado— solo con `>= minChars`; por debajo, la clave DESAPARECE
+ *   (patron `boolean`/`dateRange`), de modo que 1-2 caracteres no viajan y el borde nunca
+ *   responde `validation_error` por algo que el usuario esta todavia escribiendo;
+ * - **no emite si lo que emitiria es lo ya aplicado**: teclear por debajo del minimo, o
+ *   añadir un espacio al final de un termino ya aplicado, no avisa al consumidor. Sin esta
+ *   guarda, cada pulsacion inerte reprogramaria el debounce y la cache del consumidor;
+ * - se vacia con su propia X y con "Limpiar todo" (via `resetSignal`);
+ * - `aria-label` propio + aviso del minimo en una region `status`, que el campo referencia
+ *   con `aria-describedby`.
+ */
+function TextFilter({
+  label,
+  placeholder,
+  minChars,
+  aplicado,
+  onChange,
+  resetSignal,
+  disabled,
+}: {
+  label: string;
+  placeholder?: string;
+  minChars: number;
+  /** Valor de esta clave en la seleccion agregada (`[]` = sin busqueda aplicada). */
+  aplicado: string[];
+  onChange: (valores: string[]) => void;
+  resetSignal: number;
+  disabled: boolean;
+}) {
+  const idBase = useId();
+  const idAviso = `${idBase}-minimo`;
+  const [texto, setTexto] = useState("");
+
+  // Limpieza externa ("Limpiar todo"): mismo patron que `DateRangeFilter` — se ajusta el
+  // estado DURANTE el render, sin efecto y sin emitir (el orquestador ya emite `{}`).
+  const [signalPrevio, setSignalPrevio] = useState(resetSignal);
+  if (resetSignal !== signalPrevio) {
+    setSignalPrevio(resetSignal);
+    setTexto("");
+  }
+
+  const termino = texto.trim();
+  const faltanCaracteres = termino.length > 0 && termino.length < minChars;
+
+  function escribir(valor: string) {
+    setTexto(valor);
+    const recortado = valor.trim();
+    // `!== ""` aparte del minimo: con `minChars` 0 (default) un campo vacio seguiria
+    // cumpliendo `length >= 0`, y "sin texto" no es un filtro puesto.
+    const emitido =
+      recortado !== "" && recortado.length >= minChars ? [recortado] : [];
+    const sinCambio =
+      emitido.length === aplicado.length && emitido[0] === aplicado[0];
+    if (sinCambio) return;
+    onChange(emitido);
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="relative flex items-center">
+        <Input
+          type="search"
+          value={texto}
+          // R41: nombre accesible propio, el mismo que la etiqueta declarada.
+          aria-label={label}
+          aria-describedby={faltanCaracteres ? idAviso : undefined}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="min-w-56 pr-8"
+          onChange={(e) => escribir(e.target.value)}
+        />
+        {/* R37: limpieza individual, sin tocar el resto de la barra. */}
+        {texto !== "" ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            disabled={disabled}
+            aria-label={`Limpiar ${label}`}
+            className="absolute right-1 hover:bg-transparent hover:text-foreground"
+            onClick={() => escribir("")}
+          >
+            <X className="h-4 w-4 opacity-60" aria-hidden />
+          </Button>
+        ) : null}
+      </div>
+      {/* R35/R41: la region vive SIEMPRE en el arbol —un `aria-live` que aparece con su
+          texto ya dentro no se anuncia— y solo cambia su contenido. Vacia no ocupa alto,
+          asi que la barra no se mueve al aparecer el aviso. */}
+      <p id={idAviso} role="status" className="text-xs text-muted-foreground">
+        {faltanCaracteres ? avisoMinimoCaracteres(minChars) : ""}
+      </p>
+    </div>
+  );
+}
 
 /**
  * # `FilterComponent` — barra de filtros GENERICA y parametrizable
@@ -156,6 +284,7 @@ const KINDS_CON_OPCIONES = new Set<string>(["multi", "single"]);
  * | `single` | exactamente 1 valor |
  * | `dateRange` | exactamente 3 posiciones `[atajo, desde, hasta]`, **sin compactar** |
  * | `boolean` | `["true"]` marcado; **clave ausente** desmarcado (nunca `["false"]`) |
+ * | `text` | exactamente 1 valor, el termino recortado; **clave ausente** por debajo de `minChars` |
  *
  * ### Que emite el filtro de tiempo en cada caso (R19)
  *
@@ -259,6 +388,23 @@ export function FilterComponent({
         // R14 + R15: sin opciones ofrecidas, o con el consumidor deshabilitando.
         const inhabilitado = disabled || filtro.disabled === true || sinOpciones;
         const valores = seleccion[filtro.key] ?? [];
+
+        if (filtro.kind === "text") {
+          return (
+            <TextFilter
+              key={filtro.key}
+              label={filtro.label}
+              placeholder={filtro.placeholder}
+              // Sin minimo declarado, cualquier texto viaja: el minimo es una decision
+              // del consumidor (aqui, del coste de su consulta), no del control.
+              minChars={filtro.minChars ?? 0}
+              aplicado={valores}
+              onChange={(v) => fijar(filtro.key, v)}
+              resetSignal={resetSignal}
+              disabled={inhabilitado}
+            />
+          );
+        }
 
         if (filtro.kind === "multi") {
           return (

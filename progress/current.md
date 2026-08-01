@@ -8,7 +8,263 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento — **EMPIEZA A LEER POR AQUÍ**
+## 🚀 RELEASE 2026-08-01 — `dev → prod` DESPLEGADA — **EMPIEZA A LEER POR AQUÍ**
+
+**Hecho. Producción ya no está por detrás: `dev` y `prod` están al día (0 commits de diferencia).**
+PR **#246** (`dev → prod`), precedido del **#245** que cerró el bookkeeping de la jornada anterior.
+
+La release llevó 215 archivos (+30703/−2162): buscador de órdenes (**169**), descarga a Excel de las
+25 tablas (**170 fase 1**), desglose del dinero por tienda (**171**) y el borrado de la vista legacy
+del listado. Despliegue de producción `dpl_6yAcpx6NvF5otCBk5Xuy1Dzimh44` en **READY**.
+
+### ✅ La migración del buscador está APLICADA en producción — verificado en la base, no deducido
+
+`20260731160000_orden_busqueda_trgm`, `finished_at` **2026-08-01 18:56:26Z**, `applied_steps_count`
+1, `rolled_back_at` NULL. **Cero migraciones rotas** en toda la tabla.
+
+| Comprobación | Resultado |
+| --- | --- |
+| `pg_trgm` en el esquema `extensions` | ✅ instalada ahí, que es donde el índice la cualifica |
+| Columna `orden.busqueda_texto` e índice GIN | ✅ ambos existen |
+| Columna generada calculada | ✅ **69 de 69 filas** con texto no vacío |
+| Búsqueda por fragmento y ruta rápida por guía | ✅ las dos devuelven la fila; un término inexistente devuelve 0 |
+| Plan de ejecución | ✅ **`Bitmap Index Scan on orden_busqueda_texto_trgm_idx`** — el planificador USA el índice, no cae a seq scan |
+| Errores de runtime en Vercel tras desplegar | ✅ ninguno |
+
+> El pre-vuelo se **rehízo** antes de mergear (no se reutilizó el del día anterior): `pg_trgm` no
+> estaba instalada en ningún esquema, así que el único modo de fallo que la migración declara —la
+> extensión viviendo en otro esquema— no se materializó.
+
+### ⏭️ Lo siguiente, por orden
+
+1. **170 FASE 2** y las features **172** / **173**, tal como quedaron especificadas más abajo.
+2. **PRs abiertos que NO entraron en esta release**, los dos del lote de analítica: **#241**
+   (`MERGEABLE`/`CLEAN`, renombre de `ROLES_ACCESO_ANALITICA`) y **#237**, que pasó a
+   **`CONFLICTING`/`DIRTY`** y necesita rebase — trae la migración `analytics_daily`, así que cuanto
+   más se rezague, peor el conflicto.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-07-31
+
+Todo lo trabajado ese día está **mergeado en `dev`** —y desde el 2026-08-01, **en producción**.
+Cinco PRs: #239, #240, #242, #243, #244.
+
+### ✅ Entregado hoy
+
+| Feature | Qué | Estado |
+| --- | --- | --- |
+| **167** | apartado propio de recolección para el mensajero | `done` · **en producción** |
+| **169** | buscador de órdenes (guía, remisión, teléfono, destinatario) | `done` · **en producción** |
+| **170** | descarga a Excel — **FASE 1**: las 25 tablas | `in_progress` · **en producción** |
+| **171** | desglose del dinero por tienda en la wallet | `done` · **en producción** |
+| — | escáner QR unificado y plegable + fix del botón desbordado | **en producción** |
+| — | saneamiento del arnés (`init.sh` volvió a verde) | **en producción** |
+| — | borrado de la vista legacy del listado del maestro | **en producción** |
+
+### ✅ ~~LO PRIMERO AL RETOMAR: desplegar `dev → prod`~~ — HECHO el 2026-08-01 (PR #246)
+
+Producción ya tiene el buscador, el Excel, el desglose por tienda y el borrado de la vista legacy.
+La migración del buscador quedó aplicada y verificada; el detalle está en el bloque de la release,
+arriba. El procedimiento de recuperación sigue documentado en
+`progress/impl_169-buscador-ordenes.md` §22 por si hiciera falta revertir.
+
+> Recordatorio que costó descubrir y que sigue vigente para la próxima migración: **en Vercel el
+> build migra antes de compilar, así que mergear a `prod` ES aplicar.**
+
+### 📋 Trabajo especificado y listo para arrancar
+
+1. **170 FASE 2** — paginar en servidor las 16 pantallas que hoy reciben su dataset entero. Spec
+   aprobado, 6 tandas, riesgo por pantalla ya inventariado (2 de riesgo alto: bodega satélite y
+   cuentas por pagar). El humano decidió que **basta con la suite**, sin verificación en pantalla.
+2. **172 — liquidación** (la que cierra el agujero de verdad): hoy **no existe forma de registrar un
+   pago**, ni a mensajeros ni a tiendas, así que los saldos solo crecen. Todas las decisiones están
+   en su ficha. **Condición técnica heredada del review de la 171: el CHECK de `categoria`↔`tipo`
+   debe ir en SU migración**, porque la liquidación será el segundo escritor del ledger.
+3. **173 — caja en modo tesorería.** Depende de la 172.
+
+### ⏭️ Decisiones del humano pendientes (ninguna bloquea)
+
+- **«Rutear a bodega satélite» no tiene interfaz.** Su backend está vivo y probado; el modal se
+  conservó listo para remontar. ¿Se vuelve a ofrecer en el listado vivo o se retira con su backend?
+- **La ficha de la feature 71 se diagnosticó contra código muerto** (`OrdenesApartado`, ya borrado).
+  La superficie viva SÍ tiene el bloqueo que la ficha pedía: **reevaluar antes de tomarla**.
+- **La cabecera de `/mi-wallet`** (lo que ve la tienda) sigue en «Créditos / Débitos». Cuando la 172
+  emita pagos, la tienda verá el pago **sumado dentro de "Débitos"** sin distinguirlo.
+
+### 🧹 Higiene
+
+Quedan **33 worktrees de agentes** en `.claude/worktrees/`. Todo su trabajo está pusheado y mergeado;
+se pueden podar. En Windows algunos fallan con «Filename too long»: `rm -rf` + `git worktree prune`.
+
+### 🔎 Deuda viva declarada (no de estas features)
+
+- **`pending list` del GIN**: justo después de una carga masiva el planificador puede abandonar el
+  índice del buscador. Medido, sin cruzar umbrales, **sin decidir**; las tres salidas tocan diseño.
+- **`exceljs` trunca a 31 caracteres el nombre de la pestaña** (el del archivo sale entero).
+- **Drift entre `schema.prisma` y las migraciones**: reconciliado en el chore de hoy con cero DDL,
+  pero conviene no volver a generar migraciones sin mirar el SQL propuesto.
+
+
+---
+
+# Histórico de la sesión
+
+## 🗓️ Sesión 2026-07-31 (cierre) — 169 CERRADA · wallet registrada · 170 desbloqueada — **EMPIEZA A LEER POR AQUÍ**
+
+**Feature 169 (buscador de órdenes) → `done`, PR #239 mergeado.** El relato completo va a
+`history.md`. Lo que importa para quien siga:
+
+- **Verificación de producción HECHA por el MCP de Supabase antes de mergear** (el humano autorizó el
+  acceso): `pg_trgm` **no instalada** → sin conflicto de esquema, que era lo único que podía tumbar el
+  build y dejar `_prisma_migrations` bloqueando despliegues; y **69 filas** en `orden` → la columna
+  generada se añade sin ventana de mantenimiento.
+- **Se confirmó CUÁL es la base de producción con evidencia**, no por suposición: el proyecto
+  `scfnwxqbsgkzwsdntdvd` tiene aplicada la migración del índice de la 167 (que se desplegó a prod hoy)
+  y **no** tiene la del buscador (que solo está en `dev`). Todas las migraciones sanas, ninguna
+  fallida ni revertida.
+- **La migración del buscador NO está en producción todavía**: entra con el próximo `dev → prod`.
+
+### 💰 Wallet: tres fichas registradas (171, 172, 173)
+
+Con todas las decisiones del humano dentro de cada `status_note`, para que quien las especifique no
+tenga que reconstruir la conversación. **Dato nuevo, medido en la base de producción:** 35 movimientos
+de caja y 6 cierres con **CERO pagos registrados** — el agujero de la liquidación ya es visible en
+datos reales, no es una hipótesis.
+
+### 📊 La 170 (Excel + paginación) queda DESBLOQUEADA
+
+Su Tanda 0 tocaba `lib/types/orden.ts` y `OrdenesModule.tsx`, los mismos archivos que la 169 estaba
+modificando. Con la 169 en `dev`, la intersección desaparece y puede arrancar.
+
+## 🗓️ Sesión 2026-07-31 (cont. 2) — Excel en todas las tablas + wallet incompleta (histórico)
+
+Dos reportes del humano. **Los dos son ciertos, por motivos distintos de los que parecían.**
+
+### 📊 Excel: la capacidad existe, el rollout no — feature 170 (nueva)
+
+`DataTable` **ya integra** la descarga del dataset completo (feature 151, server-side y sin
+paginación), **opt-in por la prop `descarga`**. El problema es que **solo 1 de 25 tablas la
+activa** (`OrdenesModule`); las otras 24 nunca recibieron la prop. Medido, no estimado.
+
+Estaba dentro de la **145**, que mezcla búsqueda + filtros + export y desde hoy depende de la 169.
+**Decisión del humano: el export se SEPARA a la 170 y se hace YA** — no depende del buscador. La 145
+se queda con búsqueda y filtros. Spec en curso, en rama propia.
+
+### 💰 Wallet: un hueco objetivo y un cambio de modelo — feature 171 (por registrar)
+
+**El hueco, confirmado en código:** `egreso_pago_tienda` (caja principal) y `pago_tienda` (ledger de
+tienda) están declarados en los enums **desde la feature 43** y **NINGÚN código los emite** — solo
+aparecen en tipos, etiquetas y el catálogo de analítica. O sea: **no existe el flujo de pagarle a la
+tienda**, así que el saldo a favor de cada tienda crece indefinidamente y nunca se salda en el
+sistema. Para mensajeros sí existe el equivalente (feature 44). Para tiendas quedó como follow-up
+`F1.4-Q4` de la 43 y **nadie lo registró como ficha**.
+
+**Lo que el humano describía como «falta el ingreso del dinero total de la orden» sí se registra**,
+pero en el **ledger por tienda** (`cod_recaudado`, crédito a favor de la tienda), no en la caja
+principal. Eso era deliberado: el COD no es ingreso de Ordenex, es dinero de la tienda que se le
+debe. La caja principal modela **resultado** (flete, comisión COD, IVAs), no **tesorería**.
+
+> **DECISIÓN DEL HUMANO (2026-07-31): la caja principal pasa a reflejar TESORERÍA COMPLETA.** El COD
+> entra como ingreso de caja y sale al pagarle a la tienda, de modo que se vea el flujo entero. Al
+> especificar hay que resolver lo que esto rompe: **el balance dejará de ser «lo que gané»**, así que
+> «saldo de caja» y «ganancia» tienen que quedar separados y nombrados, o el número se leerá como
+> utilidad y no lo será. Afecta a `derivarBalance`, a la vista de wallet y al catálogo de analítica
+> (métricas financieras, features 127/135), que hoy suman categorías `ingreso_*` como resultado.
+
+**Prioridad decidida:** el Excel primero; la wallet después.
+
+### 💸 Segundo reporte de wallet (mismo día): no hay forma de PAGAR nada
+
+El humano pregunta cómo salda las cuentas por pagar de mensajeros y el monto a favor de las tiendas,
+y si «ya existe o hay que implementarlo». **Auditado: no existe, y no está escondido.** Cero acciones
+de pago o liquidación en `lib/actions/`. El detalle:
+
+- **`/wallet/tiendas` NO tiene desglose por tienda.** Mensajeros sí (`DesglosePagosMensajero.tsx`);
+  tiendas solo tiene `SaldosTiendasTable.tsx`.
+- **Liquidar la cuenta por pagar de un mensajero: no existe.** La categoría `liquidacion` del ledger
+  está marcada «RESERVADO para el follow-up de saldar la cuenta por pagar» desde la **feature 44**
+  (`F1.4-Qf`) y nadie la emite.
+- **Pagar a una tienda: no existe.** `pago_tienda` idéntico, reservado desde la **43** (`F1.4-Q4`).
+
+**Es el mismo agujero en los dos: el sistema sabe cuánto debe y a quién, pero no tiene cómo decir
+«ya pagué».** Por eso los montos solo crecen. Los dos follow-ups quedaron en sus specs y ninguno se
+convirtió en ficha, así que se perdieron.
+
+### Decisiones del humano (2026-07-31) para la liquidación
+
+1. **Pagos PARCIALES permitidos.** Se registra lo que se pagó de verdad y el saldo baja en esa
+   cantidad.
+2. **Mensajeros: el pago se pregunta AL APROBAR EL CIERRE y queda ATADO a ese cierre.** Idea del
+   humano, mejor que las opciones ofrecidas: no tiene sentido aprobar un cierre que genera una deuda
+   que después nadie mira. Encaja con el modelo actual, donde `pago_efectivo = min(deuda, efectivo
+   recaudado)` y **la cuenta por pagar es justo el resto**.
+3. **PERO aprobar y pagar son DOS PASOS.** El humano eligió primero «bloquear el cierre hasta pagar»
+   y se le señaló la consecuencia en cadena: por la **feature 111**, un cierre `solicitado`/`vencido`
+   sin resolver **BLOQUEA al mensajero**; un cierre no aprobado por falta de pago lo dejaría sin poder
+   trabajar al día siguiente por un motivo administrativo ajeno a él. Decisión final: **el cierre se
+   aprueba** (el mensajero queda libre) y la deuda queda **abierta, visible y atada al cierre**, que
+   no se considera liquidado hasta registrar el pago.
+4. **Tiendas: contra el saldo acumulado**, desde el desglose nuevo. No hay «cierre de tienda» al que
+   atar el pago: su saldo se acumula de muchos cierres de muchos mensajeros. Se descartó crear un
+   ciclo de corte por tienda (sería una feature en sí misma).
+5. **Datos de cada pago:** método (efectivo/SINPE/transferencia), referencia o comprobante, nota
+   libre, **fecha real del pago distinta de la de registro**, y —pedido explícito— «todo dato que dé
+   trazabilidad»: actor que lo registra e instante de registro.
+
+### Fichas a registrar cuando haya rama libre (borrador acordado, ids provisionales)
+
+| id | Qué | Depende de |
+| --- | --- | --- |
+| 171 | desglose por tienda en `/wallet/tiendas` (espejo del de mensajeros) | — |
+| 172 | liquidación: pagar a mensajeros (atado al cierre) y a tiendas (contra saldo) | 171 |
+| 173 | caja principal en modo TESORERÍA (el COD entra y sale) | 172 |
+
+> No se registran todavía porque el checkout principal está ocupado por el backend de la 169 y el
+> otro worktree escribiendo el spec de la 170: meter estas fichas ahí mezclaría registro con ramas
+> ajenas. **Todo el contenido acordado está aquí arriba**, que es lo que evita perderlo.
+
+## 🗓️ Sesión 2026-07-31 (cont.) — feature 169: buscador de órdenes (histórico)
+
+**Pedido del humano:** un input que encuentre una orden por cualquiera de sus datos importantes, con
+aviso EXPRESO de cuidar el rendimiento («no vaya a ser que sea lenta por una mala implementación de
+consultas»).
+
+### Auditoría antes de registrar — sí estaba pedido, pero no se construyó
+
+- **144 «DataTable: búsqueda y filtros»** figuraba `pending` con su **PR #180 MERGEADO desde el
+  2026-07-29**. Lo que entró son los **filtros** (catálogo + tiempo) y los componentes compartidos;
+  su migración `20260728120000_orden_indices_filtros` crea **cuatro btree de catálogo, ninguno de
+  texto**. **La búsqueda de texto se quedó fuera** al redefinirse la feature. → ficha a `done`.
+- **`ordenFilterSchema` es `.strict()` y no acepta ningún campo de texto**: hoy NO se puede buscar
+  una orden por guía, remisión, teléfono ni destinatario en `/ordenes`.
+- La única búsqueda existente es la **114** del mensajero: 100% de cliente sobre lo ya cargado.
+  Inservible para una tabla paginada en servidor — solo encontraría lo que ya está en pantalla.
+- **145** (rollout a todas las tablas) pasa a `depends_on: 169`: no puede adoptar una capacidad que
+  todavía no existe.
+
+### Decisiones del humano (2026-07-31)
+
+1. **Campos: guía, remisión, teléfono y destinatario.** Los cuatro viven en la tabla `orden` → sin
+   joins y con índice pequeño. Descarta dirección, producto y nombre de tienda.
+2. **Se empieza por `/ordenes`**; el rollout al resto queda en la 145.
+3. **Volumen:** hoy pocas órdenes, pero espera **muchas decenas de miles pronto**.
+
+### Enfoque técnico que va al spec (y por qué)
+
+- **`pg_trgm` + GIN sobre columna generada STORED**, NO `tsvector`. El FTS no encuentra fragmentos en
+  medio de una cadena, y aquí se teclean los últimos 4 dígitos de un teléfono o un trozo de remisión.
+- **Ruta rápida**: término numérico → igualdad contra `num_guia` (índice único ya existente). El caso
+  más frecuente del día no paga el coste del trigram.
+- **Se indexa YA, y el volumen bajo es la razón, no la excusa:** añadir una columna generada reescribe
+  la tabla con lock exclusivo. Instantáneo con pocas filas; ventana de mantenimiento con medio millón.
+- **Dos riesgos declarados de antemano:** el `count(*)` exacto de la paginación se paga entero en cada
+  tecleo (plan B: conteo con tope), y **`unaccent()` NO es `IMMUTABLE`**, así que no puede ir tal cual
+  en una columna generada — la trampa que rompe la migración a mitad.
+- El término se compone **en AND con el alcance por rol**: un buscador que se lo salte es una fuga de
+  datos, no un fallo de UX.
+
+## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento (histórico)
 
 **Feature 167 (apartado propio de recolección) → `done`, PR #231 MERGEADO.** Nació de un reporte de
 uso —«no veo la forma de recolectar»— que resultó ser dos problemas: la base local del humano tenía 4
@@ -1227,7 +1483,7 @@ no ahora.
 | # | Feature | Zona | Estado real verificado |
 |---|---------|------|------------------------|
 | 70 | regla de selección de tarifa vigente | backend | Sin empezar. El `TODO:` sigue vivo en `TarifaVigentePorTiendaRepository.ts:50-62` y el `WHERE` **no filtra `status`** (líneas 70 y 89 lo dicen explícito). ⚠️ Requiere gate humano: es dinero. |
-| 71 | bloquear checkbox de órdenes con cierre sin resolver | fullstack | Sin empezar. `OrdenesApartado.tsx` no tiene `disabled` en el checkbox de fila (solo en los botones de acción masiva) ni existe `puedeAsignarse`/`motivoBloqueo` en el DTO. |
+| 71 | bloquear checkbox de órdenes con cierre sin resolver | fullstack | ⚠️ **Reevaluar: el diagnóstico previo apuntaba a código ya borrado.** Decía «`OrdenesApartado.tsx` no tiene `disabled` en el checkbox de fila», pero ese archivo se eliminó el 2026-07-31 con la vista legacy `OrdenesRevisionMaestro` (chore `borrar-vista-legacy-ordenes`). La superficie viva es `OrdenesListado`/`OrdenesModule`, que **sí** tiene `bloqueoSeleccion` (checkbox `disabled` + motivo en tooltip + aviso de página bloqueada). Falta comprobar qué queda por hacer contra ESA superficie —y si el `cierre` concreto de esta feature ya está cubierto por el bloqueo por zona existente— antes de darla por «sin empezar». La ficha de `feature_list.json` conserva el texto original a propósito: re-alcanzarla es decisión humana, no de este chore. |
 | 74 | explotar la causa de devolución | fullstack | **Alcance reducido: la mitad ya está.** El módulo de novedades **ya muestra** la causa (`NovedadesModule.tsx` con `CAUSA_DEVOLUCION_LABEL` y `null` → «Sin causa registrada»). Falta la causa en la línea de tiempo de `HistorialOrdenSheet.tsx` (no la menciona) y el **agregado** «devoluciones por causa». |
 | 80 | proveedor de correo real + sacar el OTP de los logs | backend | Sin empezar. `console.log("Codigo OTP generado:", code)` sigue en `OtpChallengeIssuer.ts:39` y **no hay ningún proveedor de correo en `package.json`** → ningún email sale hoy en producción. |
 | 85 | wallet - periodicidad de gastos fijos (frontend) | frontend | **Backend hecho** (feature 84: enum `PeriodicidadUnidad` + `periodicidadCantidad`, `lib/utils/periodicidad.ts`). El **hueco (A) del sidebar ya está cerrado** (`menu-visibility.ts` lista `/wallet` con sus 3 subitems). Falta **solo la UI de periodicidad**: `GastoFijoPlantillaDialog.tsx`, `GastosFijosPlantillasPanel.tsx` y `wallet-labels.ts` no la mencionan en ninguna línea. |

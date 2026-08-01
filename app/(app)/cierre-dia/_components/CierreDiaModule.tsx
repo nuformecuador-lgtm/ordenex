@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { MetodoPagoValue } from "@prisma/client";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { useToast } from "@/hooks/useToast";
+import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import { deshacerGestion, solicitarCierre } from "@/lib/actions/cierre-dia";
 import type {
   CierreDetalleGestion,
@@ -17,10 +17,33 @@ import type {
   CierrePasadoDTO,
   CierreResultado,
 } from "@/lib/interfaces/services/ICierreDiaService";
-import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+import type { CierreDestinoTipo } from "@/lib/types/cierre";
 // Feature 158 (T2.3): la columna de la causa es la MISMA que la del detalle del admin — se
 // reusa en vez de reescribirla, para que las dos pantallas no puedan divergir en la etiqueta.
 import { COLUMNA_CAUSA_INCIDENTE } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
+// Feature 170 (T E.4): las etiquetas compartidas salen del módulo PURO (sin React) para que
+// el archivo de la descarga y esta pantalla no puedan decir cosas distintas (R8).
+import {
+  DESTINO_TIPO_LABEL,
+  ESTADO_LABEL,
+  METODO_LABEL,
+  RESULTADO_LABEL,
+} from "@/app/(app)/cierres-admin/_components/cierre-labels";
+import { filasLocales } from "@/components/shared/descarga-resultado";
+import {
+  COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
+  COLUMNAS_DESCARGA_DIA_DEVUELTAS,
+  COLUMNAS_DESCARGA_DIA_ENTREGADAS,
+  COLUMNAS_DESCARGA_DIA_INCIDENTES,
+  COLUMNAS_DESCARGA_DIA_RECHAZADAS,
+  COLUMNAS_DESCARGA_DIA_REPROGRAMADAS,
+  filaDescargaDiaCierrePasado,
+  filaDescargaDiaDevuelta,
+  filaDescargaDiaEntregada,
+  filaDescargaDiaIncidente,
+  filaDescargaDiaRechazada,
+  filaDescargaDiaReprogramada,
+} from "./cierre-dia-descarga-columnas";
 
 // Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
 // del Server Component padre los grupos ya resueltos (por resultado), los totales
@@ -107,13 +130,11 @@ function deshacerAriaLabel(g: CierreDetalleGestion): string {
 }
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
-const RESULTADO_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregadas",
-  reprogramada: "Reprogramadas",
-  devuelta: "Devueltas",
-  rechazada: "Rechazadas",
-  incidente: "Incidentes", // feature 158/R18
-};
+//
+// Feature 170 (T E.4): `RESULTADO_LABEL`, `METODO_LABEL`, `ESTADO_LABEL` y `DESTINO_LABEL`
+// estaban DUPLICADAS palabra por palabra aquí y en `cierre-detalle-shared`. Ahora las dos
+// pantallas —y el archivo de la descarga, que no puede importar React— leen del módulo PURO
+// `cierre-labels`. Ni un texto cambió; lo que cambia es que ya no pueden divergir (R8).
 
 const RESULTADO_VACIO: Record<CierreResultado, string> = {
   entregada: "No hay entregas.",
@@ -123,23 +144,7 @@ const RESULTADO_VACIO: Record<CierreResultado, string> = {
   incidente: "No hay incidentes.", // feature 158/R18
 };
 
-const METODO_LABEL: Record<MetodoPagoValue, string> = {
-  efectivo: "Efectivo",
-  SINPE: "SINPE",
-  transferencia: "Transferencia",
-};
-
-const ESTADO_LABEL: Record<CierreEstado, string> = {
-  solicitado: "Solicitado",
-  aprobado: "Aprobado",
-  rechazado: "Rechazado",
-  vencido: "Vencido", // feature 41: etiqueta minima; el aviso de bloqueo (R21) lo hace frontend_dev
-};
-
-const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
-  bodega_central: "Bodega central",
-  bodega_satelite: "Bodega satélite",
-};
+const DESTINO_LABEL: Record<CierreDestinoTipo, string> = DESTINO_TIPO_LABEL;
 
 /**
  * Orden fijo de las secciones (R3). Feature 158/R18: los `incidente` son un grupo PROPIO y
@@ -153,6 +158,44 @@ const ORDEN_RESULTADOS: CierreResultado[] = [
   "rechazada",
   "incidente",
 ];
+
+/**
+ * Feature 170 (T E.4) — columnas y proyección de export POR RESULTADO, en el mismo orden de
+ * las secciones. UNA DESCARGA POR SECCIÓN (decisión del humano, P2 ratificada): cada
+ * resultado enseña columnas distintas, así que un archivo único sería media hoja vacía.
+ *
+ * El mapa vive aquí y no en el módulo de columnas porque un `Record` exportado desde un
+ * `*-descarga-columnas.ts` se le escaparía a la guardia de datos sensibles, que solo
+ * reconoce arrays de columnas y funciones de proyección.
+ */
+const DESCARGA_POR_RESULTADO: Record<
+  CierreResultado,
+  { columnas: DescargaColumna[]; fila: (g: CierreDetalleGestion) => DescargaFila }
+> = {
+  entregada: {
+    columnas: COLUMNAS_DESCARGA_DIA_ENTREGADAS,
+    fila: filaDescargaDiaEntregada,
+  },
+  reprogramada: {
+    columnas: COLUMNAS_DESCARGA_DIA_REPROGRAMADAS,
+    fila: filaDescargaDiaReprogramada,
+  },
+  devuelta: {
+    columnas: COLUMNAS_DESCARGA_DIA_DEVUELTAS,
+    fila: filaDescargaDiaDevuelta,
+  },
+  rechazada: {
+    columnas: COLUMNAS_DESCARGA_DIA_RECHAZADAS,
+    fila: filaDescargaDiaRechazada,
+  },
+  incidente: {
+    columnas: COLUMNAS_DESCARGA_DIA_INCIDENTES,
+    fila: filaDescargaDiaIncidente,
+  },
+};
+
+/** Nombre visible del histórico: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA_PASADOS = "Cierres solicitados";
 
 /**
  * Prefija el símbolo de colón a un monto que YA viene como string (money-safe,
@@ -382,6 +425,18 @@ export function CierreDiaModule({
                 rowKey="gestionId"
                 ariaLabel={RESULTADO_LABEL[resultado]}
                 emptyMessage={RESULTADO_VACIO[resultado]}
+                /**
+                 * Feature 170 (T E.4, R1/R8/R11/R22/R26/R30/R37) — una descarga POR SECCIÓN.
+                 * Familia B: `filas` es el grupo completo que ya llegó por props, así que el
+                 * archivo sale de lo que la tabla pinta, en su mismo orden y sin releer.
+                 * La URL firmada de la evidencia no viaja: la columna es un «Sí/No» (R22).
+                 */
+                descarga={{
+                  titulo: RESULTADO_LABEL[resultado],
+                  columnas: DESCARGA_POR_RESULTADO[resultado].columnas,
+                  obtenerFilas: () =>
+                    filasLocales(filas, DESCARGA_POR_RESULTADO[resultado].fila),
+                }}
               />
             </div>
           </section>
@@ -422,8 +477,16 @@ export function CierreDiaModule({
             columns={COLUMNAS_PASADOS}
             data={cierresPasados}
             rowKey="cierreId"
-            ariaLabel="Cierres solicitados"
+            ariaLabel={TITULO_DESCARGA_PASADOS}
             emptyMessage="Aún no has solicitado ningún cierre."
+            // Feature 170 (T E.4, R1/R11/R26/R30/R32): el histórico llega entero por props;
+            // el archivo lo proyecta tal cual, sin releer ni paginar.
+            descarga={{
+              titulo: TITULO_DESCARGA_PASADOS,
+              columnas: COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
+              obtenerFilas: () =>
+                filasLocales(cierresPasados, filaDescargaDiaCierrePasado),
+            }}
           />
         </div>
       </section>

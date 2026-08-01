@@ -5,12 +5,17 @@ import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DescargaFilasResult,
+} from "@/components/shared/DataTable";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import { reversarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 
+import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
   ORIGEN_LABEL,
@@ -44,17 +49,33 @@ function origenTexto(m: WalletMovimientoDTO): string {
   return m.descripcion ? `${base} · ${m.descripcion}` : base;
 }
 
+/** Nombre visible del libro: hoja, base del nombre de archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA = "Libro de movimientos";
+
 export interface WalletLedgerProps {
   movimientos: WalletMovimientoDTO[];
   isLoading?: boolean;
   /** Callback tras reversar con éxito (para que el módulo recargue libro + balance + desglose). */
   onReversado?: () => void;
+  /**
+   * Feature 170 (T C.4, design §5) — obtiene las filas del libro COMPLETO para la descarga.
+   *
+   * Es un CALLBACK, no unos filtros: esta tabla pinta la página que le llega por props y no
+   * conoce (ni debe conocer) los filtros vigentes; quien los conoce es `WalletModule`, que
+   * cierra sobre ellos al invocar la Server Action del modo completo. Bajar el callback es
+   * exactamente lo que manda el design §5 —«nunca los filtros a la tabla»— y deja este
+   * componente sin fetchear nada.
+   *
+   * Ausente ⇒ la tabla no monta el control y se comporta igual que antes (R39).
+   */
+  obtenerFilasDescarga?: () => Promise<DescargaFilasResult>;
 }
 
 export function WalletLedger({
   movimientos,
   isLoading = false,
   onReversado,
+  obtenerFilasDescarga,
 }: WalletLedgerProps) {
   const router = useRouter();
   const toast = useToast();
@@ -134,9 +155,22 @@ export function WalletLedger({
         columns={columns}
         data={movimientos}
         rowKey="id"
-        ariaLabel="Libro de movimientos"
+        ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
         emptyMessage="No hay movimientos que coincidan con los filtros."
+        // Feature 170 (T C.4, R1/R9/R13): el control aparece solo si el módulo bajó el
+        // callback; las columnas del archivo las declara ESTA tabla, que es la que sabe
+        // qué enseña. Money-safe: el monto viaja como el STRING del servidor, sin `money`
+        // (el símbolo de colón convertiría una celda numérica en texto).
+        descarga={
+          obtenerFilasDescarga
+            ? {
+                titulo: TITULO_DESCARGA,
+                columnas: COLUMNAS_DESCARGA_WALLET_CAJA,
+                obtenerFilas: obtenerFilasDescarga,
+              }
+            : undefined
+        }
       />
 
       <Modal

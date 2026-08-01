@@ -510,6 +510,22 @@ model Orden {
   // R48); NULL en modo `consolidate`, en la via sesion (R40) y sin etiqueta imprimible (R49).
   cargaId                String?   @map("carga_id")
   downloadUrl            String?   @map("download_url")
+  /// Feature 169 (design §2.5) — columna GENERADA ALWAYS ... STORED en la base: concatena
+  /// los cuatro campos buscables ya normalizados (guia, remision, telefono con y sin
+  /// separadores, destinatario). NUNCA se escribe desde la aplicacion — Postgres rechaza
+  /// cualquier INSERT/UPDATE sobre ella— y el cliente la OMITE globalmente
+  /// (`lib/db/prisma-client.ts`) para que no llegue a ningun DTO ni descarga (R28).
+  /// Se declara aqui para (a) poder filtrar con Prisma y (b) que schema.prisma no diverja
+  /// del SQL aplicado: si no estuviera, la siguiente migracion que alguien generase
+  /// propondria un DROP COLUMN fantasma. Prisma no tiene representacion de columnas
+  /// generadas, asi que la ve como un `text` nullable normal: por eso `String?`.
+  ///
+  /// `@default(dbgenerated())` NO es decorativo y se llego a el MIDIENDO (T1.5): sin el,
+  /// Prisma lee la expresion GENERATED como si fuera un DEFAULT de columna y cada
+  /// `migrate dev` futuro propone `ALTER COLUMN "busqueda_texto" DROP DEFAULT` — una
+  /// sentencia que, aplicada, no puede aplicarse (no hay default que quitar) y que solo
+  /// existe porque el modelo callaba. Con el, el diff sale VACIO.
+  busquedaTexto          String?   @default(dbgenerated()) @map("busqueda_texto")
   deletedAt              DateTime? @map("deleted_at") // soft delete
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
@@ -544,6 +560,14 @@ model Orden {
   @@index([cantonId])
   @@index([distritoId])
   @@index([cargaId]) // feature 141/R4: "ordenes de este lote"
+  // Feature 169: indice GIN de trigramas del buscador. `map:` reproduce el nombre exacto
+  // que la migracion escribio a mano (si no, Prisma propondria un RENAME INDEX, misma
+  // clase de drift que documenta schema-drift-saneamiento.test.ts). El opclass va SIN
+  // cualificar (`gin_trgm_ops`) porque eso es lo que Prisma lee de `pg_opclass`, que
+  // guarda nombre y esquema por separado: cualificarlo aqui reintroduce drift. El SQL
+  // aplicado SI lo cualifica (`extensions.gin_trgm_ops`), que es lo que importa para que
+  // la creacion no dependa del `search_path`.
+  @@index([busquedaTexto(ops: raw("gin_trgm_ops"))], type: Gin, map: "orden_busqueda_texto_trgm_idx")
   @@map("orden")
 }
 

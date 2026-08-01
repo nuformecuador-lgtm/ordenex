@@ -18,6 +18,7 @@ import type { RolValue } from "@prisma/client";
 
 import { SWRConfig } from "swr";
 
+import { ToastProvider } from "@/providers/ToastProvider";
 import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
 import type { CuentasPorPagarTableProps } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
 import type {
@@ -279,10 +280,17 @@ describe("WalletMensajerosPage — pre-fetch del maestro (R18/R21)", () => {
 // componente real que aparece en esa expansion (`DesglosePagosMensajero`), envuelto en un
 // `SWRConfig` con cache aislada (provider nuevo + sin dedup) para que cada test observe sus
 // propias llamadas a la Server Action del maestro (mockeada).
+//
+// Feature 170 (T C.4): el desglose monta el control de descarga del `DataTable`, que usa
+// `useToast`. En la app el proveedor está en `app/(app)/layout.tsx`, encima de esta pantalla;
+// aquí se envuelve por la misma razón que ya hace `OrdenesDescarga.test.tsx` (151). Cambio
+// del ARNÉS: ninguna aserción se toca.
 function renderDesglose(resumen: CuentaPorPagarResumenDTO = RESUMEN) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <DesglosePagosMensajero resumen={resumen} id="desglose-u1" />
+      <ToastProvider>
+        <DesglosePagosMensajero resumen={resumen} id="desglose-u1" />
+      </ToastProvider>
     </SWRConfig>,
   );
 }

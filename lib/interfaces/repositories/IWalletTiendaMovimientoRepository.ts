@@ -67,6 +67,22 @@ export interface SaldoTiendaAgregadoRow {
   debitos: string;
 }
 
+/**
+ * Feature 171 (design §4.2) — una fila por par (tipo, categoria) con su Σ monto, para UNA
+ * tienda y unos filtros. Es el material CRUDO del desglose: el repositorio no clasifica ni
+ * resta, solo agrega. Quien decide en que cubeta cae cada categoria es `derivarDesgloseTienda`
+ * (`lib/utils/desglose-tienda.ts`), donde la clasificacion esta declarada y es exhaustiva.
+ *
+ * `tipo` viaja aunque la cubeta se decida por `categoria`: es lo que permite comprobar contra
+ * la OTRA derivacion del mismo ledger (`derivarSaldoTienda`, que parte de credito/debito) que
+ * ambas cuadran sobre el mismo conjunto (R11). Money-safe: `total` STRING escala 2.
+ */
+export interface DesgloseTiendaAgregadoRow {
+  tipo: WalletTiendaMovimientoTipo;
+  categoria: WalletTiendaMovimientoCategoria;
+  total: string;
+}
+
 export interface IWalletTiendaMovimientoRepository {
   /**
    * R6/R13: inserta las filas de forma IDEMPOTENTE en la transaccion `tx`. Usa
@@ -81,4 +97,13 @@ export interface IWalletTiendaMovimientoRepository {
   agregarSaldoPorTienda(tiendaId: string, filtros: SaldoTiendaFiltros): Promise<SaldoTiendaAgregado>;
   /** R20: una fila por tienda (con nombre) con sus totales credito/debito, para el maestro. */
   listarSaldosTodasTiendas(): Promise<SaldoTiendaAgregadoRow[]>;
+  /**
+   * Feature 171 (R22/R24/R34): Σ monto agrupado por (tipo, categoria) para UNA tienda +
+   * filtros, con `tiendaId` SIEMPRE en el WHERE. UN solo `groupBy`, sea cual sea el tamaño de
+   * pagina o el numero de tiendas listadas. Salida STRING (money-safe).
+   */
+  agregarDesglosePorTienda(
+    tiendaId: string,
+    filtros: SaldoTiendaFiltros,
+  ): Promise<DesgloseTiendaAgregadoRow[]>;
 }
