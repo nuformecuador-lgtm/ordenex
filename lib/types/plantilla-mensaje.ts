@@ -5,6 +5,7 @@ import type {
   PlantillaPublica,
 } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 
 // Feature 107 — zod en el borde (patron lib/types/usuario.ts, `.strict()`).
 
@@ -74,9 +75,10 @@ export type ActionError =
   | { status: "conflict"; campo: "nombre" }; // R10
 
 export type CrearPlantillaResult = { status: "ok"; plantilla: PlantillaPublica } | ActionError;
-export type ListarPlantillasResult =
-  | { status: "ok"; items: PlantillaListItemDTO[]; page: number; pageSize: number; total: number }
-  | ActionError;
+// Feature 170 (T H.2): reexpresado sobre el contrato comun de listado paginado
+// (`lib/types/listado-paginado`), con el `ActionError` de ESTE modulo (su `conflict` lleva
+// `campo: "nombre"`). Misma forma publica, una sola definicion de pagina+total.
+export type ListarPlantillasResult = ListarPaginadoResult<PlantillaListItemDTO, ActionError>;
 // Feature 170 (T B.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
 // SOLO conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18).
 export type ListarPlantillasCompletoResult = ListarCompletoResult<PlantillaListItemDTO>;
