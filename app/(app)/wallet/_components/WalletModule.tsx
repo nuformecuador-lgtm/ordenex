@@ -3,8 +3,13 @@
 import { useState } from "react";
 
 import { Pagination } from "@/components/shared/Pagination";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
-import { listarMovimientosAction, verBalanceAction } from "@/lib/actions/wallet";
+import {
+  listarMovimientosAction,
+  listarMovimientosCompletoAction,
+  verBalanceAction,
+} from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasAction } from "@/lib/actions/gasto-fijo-plantilla";
 import type {
@@ -16,6 +21,7 @@ import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 import { WalletBalanceCard } from "./WalletBalanceCard";
 import { WalletLedger } from "./WalletLedger";
+import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
 import { WalletFiltros, FILTROS_VACIOS, type WalletFiltrosValue } from "./WalletFiltros";
 import { RegistrarMovimientoManualDialog } from "./RegistrarMovimientoManualDialog";
 import { RegistrarEgresoAdministrativoDialog } from "./RegistrarEgresoAdministrativoDialog";
@@ -46,6 +52,21 @@ export interface WalletModuleProps {
 /** Construye el input de las actions omitiendo los filtros vacíos (enum/fecha). */
 function buildInput(filtros: WalletFiltrosValue, page: number, pageSize: number): Record<string, unknown> {
   const input: Record<string, unknown> = { page, pageSize };
+  if (filtros.tipo) input.tipo = filtros.tipo;
+  if (filtros.categoria) input.categoria = filtros.categoria;
+  if (filtros.desde) input.desde = filtros.desde;
+  if (filtros.hasta) input.hasta = filtros.hasta;
+  return input;
+}
+
+/**
+ * Feature 170 (T C.4, R10/R18) — input del modo COMPLETO: los MISMOS filtros vigentes que
+ * el listado, SIN `page`/`pageSize`. No se reusa `buildInput` con un `delete` después: el
+ * schema del modo completo es `.strict()` y una paginación colada devolvería
+ * `validation_error` en vez de un archivo. Aquí no hay nada que quitar porque no se pone.
+ */
+function buildInputCompleto(filtros: WalletFiltrosValue): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
   if (filtros.tipo) input.tipo = filtros.tipo;
   if (filtros.categoria) input.categoria = filtros.categoria;
   if (filtros.desde) input.desde = filtros.desde;
@@ -171,10 +192,20 @@ export function WalletModule({
           disabled={loading}
         />
 
+        {/* Feature 170 (T C.4, R9/R10): la descarga trae el libro ENTERO con los filtros
+            VIGENTES, no la página pintada. El callback se construye EN EL RENDER (design
+            §5), así que cierra sobre los `filtros` de ESTE render: aplicar un filtro y
+            descargar sin más no puede entregar el conjunto anterior. */}
         <WalletLedger
           movimientos={movimientos}
           isLoading={loading}
           onReversado={() => void recargar(filtros, page)}
+          obtenerFilasDescarga={() =>
+            filasDesdeResultado(
+              listarMovimientosCompletoAction(buildInputCompleto(filtros)),
+              filaDescargaMovimientoCaja,
+            )
+          }
         />
 
         <Pagination

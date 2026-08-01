@@ -485,3 +485,342 @@ $ ./init.sh
    Si alguien bajara el tope por entorno, servidor y cliente podrían discrepar: el servidor
    sería el estricto, así que falla cerrado y nunca entrega de más. Anotado, no decidido; es
    herencia de la 151, no de esta tanda.
+
+---
+
+# TANDAS B.4, C.4, D y E — la UI de 21 tablas (2026-07-31)
+
+> Tercera entrega sobre la misma rama. **No reescribe nada de lo anterior**: T0.*, la tanda A y
+> el servidor de B y C siguen tal cual los dejaron las entregas previas. Aquí van **T B.4,
+> T C.4, toda la tanda D y toda la tanda E**: el cableado de UI de **21 tablas**.
+>
+> Fuera de esta entrega, por encargo: la tanda **F** (ranking) y la **G** (cierre de fase).
+
+## C0. Baseline medido AL EMPEZAR (2026-07-31)
+
+Medido, no heredado. El worktree venía sin `node_modules` ni `.env`: se instaló con
+`pnpm install --frozen-lockfile` y se corrió `prisma generate` con un `DATABASE_URL` de marcador
+(el generate no conecta), que es lo que evita los ~200 errores falsos de typecheck.
+
+| Puerta | Baseline |
+| --- | --- |
+| `pnpm run typecheck` | 0 errores |
+| `pnpm run lint` | 0 errores / 20 warnings |
+| `pnpm test` | **705 archivos** (701 passed + 4 skipped) · **8521 tests**: 8447 passed / 74 skipped / **0 fallos** |
+| `./init.sh` | `== init OK ==` |
+
+Coincide exactamente con lo que declaraba el encargo. **La rama ya venía integrada con
+`origin/dev`** (lo hizo la entrega anterior): `git merge origin/dev` dijo «Already up to date»,
+así que no hubo conflicto que resolver en `feature_list.json`; el de la 169/170 sigue tal cual lo
+dejó la fase previa (172 fichas, cero ids duplicados).
+
+> Nota de worktree: la rama `feature/170-export-todas-las-tablas` estaba tomada por otro
+> worktree, así que se trabajó en una rama local partiendo del MISMO commit (`6ccc3cbf`) y se
+> empuja a la rama de la feature. El contenido es el mismo; solo cambia el nombre local.
+
+## C1. Qué queda descargando, tabla a tabla
+
+**21 tablas nuevas.** Con las 3 de las tandas 0/A, quedan **24 de las 25 dentro de alcance**; la
+25.ª es el ranking (tanda F).
+
+| Tanda | Tabla(s) | Familia | Cómo obtiene las filas |
+| --- | --- | --- | --- |
+| B.4 | Usuarios | A | `listarUsuariosCompleto({})` |
+| B.4 | Plantillas de mensaje | A | `listarPlantillasCompleto({})` |
+| B.4 | API keys | A | `listarApiKeysCompleto({})` |
+| C.4 | Libro de caja | A | `listarMovimientosCompletoAction(filtros)` — callback del módulo |
+| C.4 | Mi wallet (tienda) | A | `listarMisMovimientosCompletoAction(filtros)` — callback |
+| C.4 | Mis pagos (mensajero) | A | `listarMisPagosCompletoAction(filtros)` — callback |
+| C.4 | Desglose de un mensajero | A | `listarPagosDeMensajeroCompletoAction(...)`, en sitio |
+| D.1 | Saldos de tiendas | B | `filasLocales(tiendas, ...)` |
+| D.2 | Cuentas por pagar | B | `filasLocales(filtrados, ...)` — el array YA filtrado |
+| D.3 | Plantillas de gasto fijo | B | `filasLocales(plantillas, ...)` |
+| E.1 | Cierres del día: pendientes · histórico | B | `filasLocales(...)` |
+| E.2 | Cierres de bodega: pendientes · resueltos | B | ídem |
+| E.3 | Consolidación: consolidables · solicitados | B | ídem |
+| E.4 | Cierre del día del mensajero: secciones por resultado · histórico | B | ídem |
+| E.5 | Gestiones del detalle compartido: secciones por resultado | B | ídem |
+| E.6 | Incidentes: pendientes · histórico | B | ídem |
+
+En `tests/unit/descarga/censo-tablas.ts` esas 21 pasaron de `pendiente` a `con_descarga`.
+**Queda UNA `pendiente`: el ranking del día (tanda F.1).**
+
+## C2. Familia A: por qué tres ledgers reciben un CALLBACK
+
+Los tres listados de configuración son directos: la config se construye EN EL RENDER y el input
+va **vacío**, porque el schema del modo completo es `.strict()` y sin `page`/`pageSize` —
+mandarlos devuelve `validation_error` en vez de un archivo — y `sortBy`/`sortDir` caen en el
+MISMO default que usa el listado, así que el archivo sale en el orden de pantalla.
+
+Los ledgers son el caso interesante. `WalletLedger`, `DesgloseTiendaLedger` y `DesglosePagos`
+**reciben la página por props y no conocen los filtros vigentes**; quien los conoce es su módulo
+padre. La salida es la del `design.md §5` —«si eso obliga a bajar un callback desde el módulo
+padre, se baja el callback; nunca los filtros a la tabla»—: cada uno gana una prop
+`obtenerFilasDescarga`, y **el título y las columnas del archivo los sigue declarando la tabla**,
+que es la que sabe qué enseña. Los tres siguen sin importar una sola Server Action de LECTURA, y
+hay un test ESTÁTICO que lo comprueba sobre los tres módulos (no un espía, que solo cubriría el
+camino que el test recorra).
+
+El cuarto, `DesglosePagosMensajero`, declara su `descarga` en sitio, y no es una excepción al
+principio: ese componente **ya fetcheaba** (SWR sobre `listarPagosDeMensajeroAction`) porque ya
+conocía su `mensajeroId` y sus filtros — es quien los usa para el listado paginado. Bajarle un
+callback habría sido indirección sin dueño nuevo.
+
+Un input de modo completo **no se deriva del de paginación con un `delete`**: cada módulo tiene
+su `buildInputCompleto` separado que sencillamente no pone `page`/`pageSize`. Un `delete` que
+alguien olvide mantener es exactamente cómo se cuela una clave en un schema `.strict()`.
+
+## C3. Familia B: el array que se exporta, y el tope
+
+Las 14 tablas de Familia B proyectan el MISMO array que la tabla pinta. Dos puntos donde eso
+significa algo:
+
+1. **Cuentas por pagar exporta `filtrados`, no `mensajeros`.** Su búsqueda es de cliente;
+   descargar el conjunto sin filtrar entregaría filas que el usuario no está viendo, que es la
+   otra forma de mentir (la primera es truncar). Hay un test que busca «Beto» y exige que el
+   archivo traiga UNA fila.
+2. **El tope de 5000 se aplica igual.** `filasLocales` devuelve un error accionable con total y
+   tope y **no produce archivo**. Se ejercita de verdad en `WalletPropsDescarga.test.tsx` con
+   5001 saldos.
+
+**Dónde NO se re-probó el tope, y por qué:** en la tanda E. Montar 5001 cierres en jsdom hace que
+esas pantallas rendericen además 5001 tarjetas de la «vista tipo factura»; el test tarda minutos
+(se midió: no terminaba en 5) y no afirma nada que no esté ya afirmado — el tope vive en el
+helper compartido, con tests unitarios en T0.2 y de componente en la tanda D. Queda escrito en el
+propio archivo de test, no solo aquí.
+
+## C4. Las columnas: lo que NO se exporta
+
+| Tabla | Fuera del archivo, y por qué |
+| --- | --- |
+| Saldos de tiendas | `tiendaId` (uuid). El identificador de negocio de la fila es el NOMBRE |
+| Cuentas por pagar | `mensajeroId` (uuid) |
+| Gasto fijo | `id` y **todo el ciclo** (`periodicidadUnidad`, `periodicidadCantidad`, `fechaCobro`, `createdAt`, `updatedAt`): el DTO los trae, la TABLA no los muestra (R24) |
+| Cierres (6 tablas) | `cierreId`, `cierreBodegaId`, `cierreDiaId`, `mensajeroId`, `zonaId`, `solicitadoPorId` (uuid) |
+| Gestiones (detalle y día) | `gestionId`, `ordenId` y —lo importante— **`evidenciaUrl`** |
+| Incidentes | `incidenteId`, `ordenId` y **`evidenciaUrls`** |
+
+**R22 es el riesgo propio de esta tanda.** Estas pantallas son las únicas del rollout cuyo dato de
+origen trae **URL FIRMADAS** de evidencia. Un `xlsx` con una dentro, reenviado por correo, es
+acceso a la foto sin sesión. En el archivo va **«Tiene evidencia: Sí/No»** y nunca el enlace. Y no
+se confía solo en la guardia estática: hay un test que descarga las secciones que TIENEN
+evidencia y revisa CADA celda del resultado real contra `http(s)://`, contra rutas de almacén y
+contra `token=`.
+
+**Money-safe en las 21.** Todo monto viaja como el STRING que devolvió el servidor, tal cual: sin
+`parseFloat`/`Number` (un `Decimal(12,2)` no cabe exacto en un `number`) y sin el símbolo de colón
+de `money`, que es presentación y convertiría una celda numérica en texto que la hoja no puede
+sumar. Los tests lo comprueban con montos acabados en `.10`, que un `Number` intermedio devolvería
+como `.1`: los céntimos.
+
+**Un `null` es celda VACÍA, no un "—".** El guion es presentación; en una hoja se leería como un
+valor. Y una `indemnizacion` nula NO es cero: es «todavía no se capturó» (o «no se indemnizó»),
+así que la celda queda vacía — un 0 afirmaría un monto que nadie decidió.
+
+## C5. Etiquetas promovidas (y una duplicación que desaparece)
+
+Mismo procedimiento que la tanda B con `usuario-estado-label`: el módulo de columnas debe ser
+PURO (design §3), así que el texto que comparten pantalla y archivo se promueve sin editarlo.
+
+| Módulo nuevo (puro) | De dónde salió |
+| --- | --- |
+| `app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label.ts` | del `SIGNO_BADGE` de `SaldosTiendasTable` (que además lleva la `variant` del badge) |
+| `app/(app)/wallet/_components/gasto-fijo-estado-label.ts` | del `Badge` inline de `GastosFijosPlantillasPanel` |
+| `app/(app)/cierres-admin/_components/cierre-labels.ts` | de `cierre-detalle-shared.tsx`, que importa `Card`/`Badge`/`Modal`/`DataTable` |
+
+El tercero es el que más rinde: `RESULTADO_LABEL`, `METODO_LABEL`, `ESTADO_LABEL` y la tabla del
+destino estaban **duplicadas palabra por palabra** en `cierre-detalle-shared` y en
+`CierreDiaModule`. Ahora las dos pantallas y los dos módulos de export leen del mismo sitio, y
+`cierre-detalle-shared` las **RE-EXPORTA**, así que ninguno de sus consumidores cambia una línea.
+Que archivo y pantalla digan lo mismo (R8/R24) pasa a ser cierto por construcción, no por
+coincidencia entre dos literales.
+
+Las cuentas por pagar no necesitaron promoción: `wallet-mensajeros-labels.ts` ya era puro, y el
+módulo de export lee de ahí sus encabezados y su etiqueta de estado.
+
+## C6. Dos decisiones de a11y que cambian el nombre del archivo
+
+`titulo` es a la vez el nombre de la hoja, la base del nombre de archivo (R12) y parte del nombre
+accesible del control (R13). Eso obliga a que sea **único en la pantalla**:
+
+1. **El desglose de un mensajero lleva su nombre** (`Desglose de Ana Mensajera`). La tabla de
+   cuentas por pagar admite varias filas expandidas A LA VEZ; tres botones llamados «Descargar
+   Desglose por cierre» no dirían de quién es cada archivo.
+2. **`DetalleSecciones` gana una prop `contexto`.** El detalle de un cierre de BODEGA monta las
+   mismas secciones una vez POR mensajero incluido; sin contexto habría tres «Descargar
+   Entregadas» en el mismo modal. Con él, el control se llama `Entregadas · <mensajero>` y el
+   archivo sale como `entregadas-<mensajero>-<fecha>.xlsx`.
+
+También por R13, en incidentes los controles NO se llaman como los encabezados de la pantalla
+(«Pendientes de decisión» / «Histórico»): un archivo `historico-<fecha>.xlsx` no diría de qué es.
+Se llaman «Incidentes pendientes» e «Incidentes resueltos».
+
+**Límite conocido de `titulo` (anotado, no decidido):** `exceljs` TRUNCA a 31 caracteres el nombre
+de la hoja (con un `console.warn`) y LANZA si lleva `* ? : \ / [ ]`. Con nombres de persona
+largos, el título compuesto puede pasar de 31: el archivo se genera igual y su NOMBRE conserva el
+slug completo; solo la pestaña sale recortada. Y si un nombre trajera uno de esos caracteres,
+`construirDescarga` lanza y el control avisa con un toast — falla cerrado, sin archivo a medias.
+Ver C13.1.
+
+## C7. Una descarga POR SECCIÓN en el detalle del cierre (P2 ratificada)
+
+Decisión del humano, ya cerrada: **no hay un archivo único del cierre**. Cada sección por
+resultado tiene su botón y su juego de columnas, porque las secciones no enseñan lo mismo — una
+entrega lleva método de pago y comisión; una reprogramación, la fecha nueva; un rechazo, el origen
+y el ingreso de bodega; un incidente, la causa y la indemnización. Fundirlas daría una hoja llena
+de celdas vacías que nadie sabría leer.
+
+**Son CINCO secciones, no cuatro.** El spec decía «hasta cuatro (entregadas / reprogramadas /
+devueltas / rechazadas)» porque se escribió antes de que la 158 añadiera el grupo `incidente`, que
+hoy es un resultado más del mismo `ORDEN_RESULTADOS`. Se cablearon las cinco: dejar una fuera
+habría sido dejar sin descarga justo la sección con el dinero de la indemnización.
+
+**Y el mensajero exporta MENOS que el admin, a propósito.** `CierreDiaModule` y `DetalleSecciones`
+proyectan el MISMO DTO pero declaran módulos de columnas DISTINTOS: la pantalla del mensajero no
+muestra el ingreso de Ordenex (flete, comisión, IVA, total) ni el monto de la indemnización — es
+dinero que no es suyo (158, design §7.2). Exportar ahí lo que ve el admin sería publicar por el
+archivo lo que la pantalla oculta, que es exactamente lo que R24 prohíbe.
+
+## C8. El mapa resultado→columnas vive en el `.tsx`, no en el módulo de columnas
+
+Detalle pequeño con motivo grande: la guardia de datos sensibles (T0.4) solo reconoce, dentro de
+un `*-descarga-columnas.ts`, los **arrays de columnas** y las **funciones de proyección**. Un
+`Record<CierreResultado, {columnas, fila}>` exportado desde ahí no sería ni una cosa ni la otra:
+**se le escaparía a la guardia entera**. Por eso los módulos exportan las cinco declaraciones
+sueltas —vigiladas una a una— y el mapa que elige cuál toca vive en el componente.
+
+## C9. Tests existentes tocados: el arnés, y UNA guardia que se siguió a su nuevo sitio
+
+**(a) Arnés, sin tocar una sola aserción.** Tres suites reventaron con «useToast debe usarse
+dentro de un ToastProvider» al montar el control. Es el precedente exacto de T A.1 y se trató
+igual — envolver el `render`:
+
+| Suite | Qué se cambió |
+| --- | --- |
+| `tests/components/CuentasPorPagarTable.test.tsx` (44) | los 5 `render` pasan por un helper que envuelve en `ToastProvider` |
+| `tests/components/CierreDetalleIncidente.test.tsx` (158) | ídem, 9 `render` |
+| `tests/integration/wallet-mensajeros-page.test.tsx` (44) | el helper `renderDesglose` se envuelve |
+
+En producción no cambia nada: `app/(app)/layout.tsx` ya envuelve en `ToastProvider` todo el grupo
+`(app)`, que es donde viven las tres pantallas.
+
+**(b) Una guardia de la 158 que apuntaba a un archivo que ya no tiene la etiqueta, y se dice
+claro.** `tests/unit/guards/incidente-exhaustividad.test.ts` exigía el literal
+`incidente: "Incidentes"` DENTRO de `cierre-detalle-shared.tsx` y de `CierreDiaModule.tsx`. Al
+promover `RESULTADO_LABEL` a `cierre-labels.ts` (C5), esas dos copias dejaron de existir y la
+guardia se puso roja.
+
+- **No se relajó ni se borró**: se SIGUIÓ la etiqueta a su nuevo sitio. Ahora exige (a) que la
+  ÚNICA declaración clasifique `incidente` y (b) que los dos detalles la USEN.
+- **Queda más fuerte, no más débil:** antes bastaba con que cada copia tuviera la clave; un tercer
+  detalle que la olvidara habría pasado inadvertido. Ahora no hay dónde olvidarla.
+- **VERIFICADO POR MUTACIÓN:** quitando `incidente: "Incidentes"` de `cierre-labels.ts` la guardia
+  falla («cierre-labels.ts sin etiqueta de incidente») y ningún otro test se mueve. Revertido.
+
+## C10. Mapa `R<n> → test` de esta entrega
+
+| R | Test |
+| --- | --- |
+| R1 | `ConfiguracionDescarga` :: los tres ofrecen su control con nombre accesible · `WalletDescarga` :: cada ledger ofrece su control… · `WalletPropsDescarga` :: las tres ofrecen su control… · `CierresDescarga` :: cada tabla de cierres ofrece su control… · `IncidentesDescarga` :: las dos tablas ofrecen su control… |
+| R3 | `ConfiguracionDescarga` :: los tres listados siguen comportándose igual… · `WalletDescarga` :: los cuatro ledgers siguen comportándose igual… |
+| R7 | `WalletPropsDescarga` :: los montos viajan TAL CUAL, sin recalcularlos ni adornarlos · `WalletDescarga` :: el archivo trae el ledger ENTERO (comprueba el monto STRING sin `₡`) |
+| R8 | `CierresDescarga` :: estados, causas y destinos salen como etiqueta legible… · `IncidentesDescarga` :: estados y causas salen como etiqueta legible… |
+| R9 | `ConfiguracionDescarga` :: el archivo trae TODAS las filas, no solo la página visible · `WalletDescarga` :: el archivo trae el ledger ENTERO, no la página pintada |
+| R10 | `WalletDescarga` :: usa los filtros de fecha vigentes y no manda paginación · `WalletPropsDescarga` :: cuentas por pagar exporta solo lo que la búsqueda deja a la vista |
+| R11 | `CierresDescarga` :: el archivo trae las filas de SU tabla, en el orden de la pantalla · `IncidentesDescarga` :: cada archivo trae SU tabla entera, en el orden de la pantalla |
+| R12 | `ConfiguracionDescarga` :: el nombre del archivo identifica el listado y la fecha · `IncidentesDescarga` :: (`incidentes-pendientes-YYYY-MM-DD.xlsx`) |
+| R13 | los cinco archivos :: el nombre accesible de cada control identifica SU tabla |
+| R14/R20 | `CierresDescarga` :: el archivo del adminSatelite solo trae los cierres de su zona · `IncidentesDescarga` :: el archivo del adminSatelite solo trae los incidentes de su alcance |
+| R18 | `ConfiguracionDescarga` y `WalletDescarga` :: ninguna clave de paginación viaja en el input del modo completo |
+| R22 | `CierresDescarga` :: ninguna URL firmada ni ruta de almacenamiento llega al archivo · `IncidentesDescarga` :: ídem |
+| R26/R27/R28 | `ConfiguracionDescarga` :: con el tope superado no se produce archivo… · `WalletPropsDescarga` :: por encima del tope rechaza con un error accionable y NO produce archivo |
+| R30/R32 | `WalletDescarga` :: los componentes de presentación no pasan a fetchear (estático) · `WalletPropsDescarga` :: ninguna de las tres relee del servidor (estático) · ambos :: la acción del modo completo no se llama hasta que alguien pulsa |
+| R37 | `CierresDescarga` :: descargar no cambia la fila expandida ni el modal abierto |
+| R2/R4 | `cobertura-tablas.guardia` (T0.5) con 21 tablas más declaradas `con_descarga`: contrasta lo declarado contra el código instancia a instancia, EN LOS DOS SENTIDOS |
+| R21/R23/R25 | `columnas-sensibles.guardia` (T0.4) recogió los **10 módulos de columnas nuevos** por convención de nombre, sin tocar la guardia |
+
+## C11. Archivos de esta entrega
+
+**Creados (16)**
+
+- Columnas de export (8): `app/(app)/wallet/tiendas/_components/saldos-tiendas-descarga-columnas.ts`,
+  `app/(app)/wallet/mensajeros/_components/cuentas-por-pagar-descarga-columnas.ts`,
+  `app/(app)/wallet/_components/gastos-fijos-descarga-columnas.ts`,
+  `app/(app)/cierres-admin/_components/cierres-admin-descarga-columnas.ts`,
+  `app/(app)/cierres-admin/_components/cierres-bodega-descarga-columnas.ts`,
+  `app/(app)/cierres-admin/_components/cierre-gestiones-descarga-columnas.ts`,
+  `app/(app)/cierre-dia/_components/cierre-dia-descarga-columnas.ts`,
+  `app/(app)/incidentes/_components/incidentes-descarga-columnas.ts`.
+- Etiquetas promovidas, puras (3): `app/(app)/cierres-admin/_components/cierre-labels.ts`,
+  `app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label.ts`,
+  `app/(app)/wallet/_components/gasto-fijo-estado-label.ts`.
+- Tests (5): `tests/components/descarga/{ConfiguracionDescarga,WalletDescarga,WalletPropsDescarga,CierresDescarga,IncidentesDescarga}.test.tsx`.
+
+**Modificados**
+
+- UI cableada (19): `UsuariosModule`, `PlantillasModule`, `ApiKeysModule`, `WalletModule`,
+  `WalletLedger`, `MiWalletModule`, `DesgloseTiendaLedger`, `MisPagosModule`, `DesglosePagos`,
+  `DesglosePagosMensajero`, `SaldosTiendasTable`, `CuentasPorPagarTable`,
+  `GastosFijosPlantillasPanel`, `CierresAdminModule`, `CierresBodegaAdminModule`,
+  `ConsolidacionBodegaModule`, `cierre-detalle-shared`, `CierreDiaModule`,
+  `IncidentesAdminModule`.
+- Censo: `tests/unit/descarga/censo-tablas.ts` (21 tablas de `pendiente` a `con_descarga`).
+- Tests existentes: los tres del arnés (C9.a) y `tests/unit/guards/incidente-exhaustividad.test.ts`
+  (C9.b, guardia seguida a su nuevo sitio y verificada por mutación).
+- `specs/170-export-todas-las-tablas/tasks.md` (T B.4, T C.4, T D.*, T E.* marcadas, con lo medido
+  y las divergencias declaradas).
+
+**Cero backend.** Ni servicios, ni repositorios, ni acciones, ni migraciones: las cuatro tandas son
+de presentación. Las 7 acciones del modo completo que se consumen aquí las entregó la fase previa.
+
+## C12. Puertas (medición final de esta entrega)
+
+Salida real, no prometida.
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ pnpm run lint
+✖ 20 problems (0 errors, 20 warnings)
+=== lint exit: 0 ===
+
+$ pnpm test
+ Test Files  706 passed | 4 skipped (710)
+      Tests  8473 passed | 74 skipped (8547)
+   Duration  218.98s
+
+$ ./init.sh
+✓ lint paso
+✓ test paso
+✓ todas las migraciones tienen down.sql
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+```
+
+| Puerta | Baseline (C0) | Después |
+| --- | --- | --- |
+| `pnpm run typecheck` | 0 errores | **0 errores** |
+| `pnpm run lint` | 0 errores / 20 warnings | **0 errores / 20 warnings** (los mismos) |
+| `pnpm test` | 705 archivos · 8521 tests: 8447 passed / 74 skipped / 0 fallos | **710 archivos** (706 passed + 4 skipped) · **8547 tests: 8473 passed / 74 skipped / 0 fallos** — +5 archivos, +26 tests, **0 rotos nuevos** |
+| `./init.sh` | `== init OK ==` | `== init OK ==` |
+
+## C13. Hallazgos y deuda declarada (no se actuó)
+
+1. **Nombre de hoja > 31 caracteres.** `exceljs` trunca la pestaña (con `console.warn`) cuando el
+   título compuesto se pasa; afecta a `Desglose de <mensajero>` y a `<Resultado> · <mensajero>`
+   con nombres largos. El archivo se genera correcto y su NOMBRE conserva el slug entero: solo la
+   pestaña sale recortada. Si se quiere cerrar del todo, la salida limpia es que
+   `DescargarDatasetButton` acepte un nombre de hoja distinto del título —lo que SÍ tocaría el
+   contrato de la 151— o que `construirDescarga` recorte con criterio. Candidato a la G.
+2. **El histórico de cierres exporta «Rechazado» sin el marcador «Bloqueante hasta
+   re-solicitud».** No se pierde información: el marcador se DERIVA del propio estado (todo
+   rechazado lo lleva), así que la columna ya lo dice. Anotado por si el humano prefiere el texto
+   completo en el archivo.
+3. **`DetalleSecciones` hoy solo lo monta `CierresBodegaAdminModule`.** `CierresAdminModule` pasó a
+   `CierreFacturaDetalle` (que no usa `DataTable`), así que la descarga por sección solo se ve en
+   el detalle de un cierre de BODEGA. La tabla sigue censada y cableada porque el módulo existe y
+   se usa; si mañana la vista factura reemplaza también esa, la guardia del censo lo dirá.
+4. **La tanda F (ranking) es la ÚNICA `pendiente` del censo.** Al cerrarla, el censo queda sin
+   ningún `pendiente` y la fase 1 puede cerrarse (T G.1/T G.2).

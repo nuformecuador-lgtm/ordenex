@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { solicitarCierreBodega } from "@/lib/actions/cierre-bodega";
 import type {
@@ -23,6 +24,16 @@ import {
   CentralDebeTotal,
   TotalesPanel,
 } from "./cierre-detalle-shared";
+import {
+  COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
+  COLUMNAS_DESCARGA_CONSOLIDABLES,
+  filaDescargaBodegaSolicitado,
+  filaDescargaConsolidable,
+} from "./cierres-bodega-descarga-columnas";
+
+/** Nombres visibles de las dos tablas: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA_CONSOLIDABLES = "Cierres del día a consolidar";
+const TITULO_DESCARGA_SOLICITADOS = "Cierres de bodega solicitados";
 
 // Feature 40 (T8) — módulo cliente del "Cierre de bodega" del adminSatelite (lado
 // SOLICITAR, espejo de la 37 un nivel arriba). Recibe del Server Component padre los
@@ -168,6 +179,18 @@ export function ConsolidacionBodegaModule({
                 rowKey="cierreDiaId"
                 ariaLabel="Cierres del día a consolidar"
                 emptyMessage="No hay cierres del día aprobados para consolidar."
+                /**
+                 * Feature 170 (T E.3, R1/R11/R14/R20/R26/R30/R32) — FAMILIA B: el array de
+                 * props ES el conjunto entero de consolidables de SU zona (el servidor ya
+                 * lo acotó), así que el archivo se proyecta de lo que la tabla pinta, sin
+                 * releer ni ampliar alcance.
+                 */
+                descarga={{
+                  titulo: TITULO_DESCARGA_CONSOLIDABLES,
+                  columnas: COLUMNAS_DESCARGA_CONSOLIDABLES,
+                  obtenerFilas: () =>
+                    filasLocales(consolidables, filaDescargaConsolidable),
+                }}
               />
             </div>
           </section>
@@ -218,6 +241,14 @@ export function ConsolidacionBodegaModule({
             rowKey="cierreBodegaId"
             ariaLabel="Cierres de bodega solicitados"
             emptyMessage="Aún no has solicitado ningún cierre de bodega."
+            // Feature 170 (T E.3, R1/R11/R26/R30/R32): el histórico propio de la zona, con
+            // SUS columnas — esta tabla enseña la fecha de SOLICITUD, no la de resolución.
+            descarga={{
+              titulo: TITULO_DESCARGA_SOLICITADOS,
+              columnas: COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
+              obtenerFilas: () =>
+                filasLocales(cierresBodegaPasados, filaDescargaBodegaSolicitado),
+            }}
           />
         </div>
       </section>

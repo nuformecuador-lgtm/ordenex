@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import {
   verCierreDetalle,
@@ -43,6 +44,13 @@ import {
   CierreFacturaResumen,
   CierreFacturaDetalle,
 } from "./cierre-factura";
+import { DESTINO_TIPO_LABEL } from "./cierre-labels";
+import {
+  COLUMNAS_DESCARGA_CIERRES_HISTORICO,
+  COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
+  filaDescargaCierreHistorico,
+  filaDescargaCierrePendiente,
+} from "./cierres-admin-descarga-columnas";
 
 // Feature 38 (T13, R3-R11): módulo cliente de "Cierres del día" del admin. Recibe
 // del Server Component padre los cierres del alcance ya resueltos (pendientes de
@@ -63,10 +71,14 @@ export interface CierresAdminModuleProps {
   sinZona: boolean;
 }
 
-const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
-  bodega_central: "Bodega central",
-  bodega_satelite: "Bodega satélite",
-};
+// Feature 170 (T E.1): la tabla de textos del destino vive en el módulo PURO `cierre-labels`
+// —donde también la lee el `CierreDiaModule` del mensajero, que la tenía duplicada— y esta
+// pantalla la lee de ahí. Así el "Destino" del archivo y el de la pantalla son el mismo texto (R8).
+const DESTINO_LABEL: Record<CierreDestinoTipo, string> = DESTINO_TIPO_LABEL;
+
+/** Nombres visibles de las dos tablas: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA_PENDIENTES = "Cierres pendientes de decisión";
+const TITULO_DESCARGA_HISTORICO = "Cierres del día resueltos";
 
 // --- Feature 158 (R19/R34): captura del monto de indemnización al aprobar. Textos
 // separados de la lógica (i18n-ready), como el resto del módulo. ---
@@ -399,6 +411,21 @@ export function CierresAdminModule({
             rowKey="cierreId"
             ariaLabel="Pendientes de decisión"
             emptyMessage="No hay cierres pendientes de decisión."
+            /**
+             * Feature 170 (T E.1, R1/R11/R14/R20/R26/R30/R32) — descarga de FAMILIA B: el
+             * array de props ES la cola entera (la página la pide sin paginar), así que el
+             * archivo se proyecta de lo que la tabla ya pinta y en el MISMO orden, sin
+             * releer nada. El alcance lo puso el servidor: un `adminSatelite` sólo recibe
+             * los cierres de su zona, y descargar no puede ampliar eso.
+             *
+             * El título no repite el de la otra tabla: dos controles en la misma pantalla
+             * necesitan nombres accesibles distintos (R13).
+             */
+            descarga={{
+              titulo: TITULO_DESCARGA_PENDIENTES,
+              columnas: COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
+              obtenerFilas: () => filasLocales(pendientes, filaDescargaCierrePendiente),
+            }}
           />
         </div>
       </section>
@@ -413,6 +440,13 @@ export function CierresAdminModule({
             rowKey="cierreId"
             ariaLabel="Histórico"
             emptyMessage="Aún no hay cierres resueltos."
+            // Feature 170 (T E.1, R1/R11/R26/R30/R32): mismo patrón que la cola, con SUS
+            // columnas (fecha resuelta y motivo, que la cola no tiene).
+            descarga={{
+              titulo: TITULO_DESCARGA_HISTORICO,
+              columnas: COLUMNAS_DESCARGA_CIERRES_HISTORICO,
+              obtenerFilas: () => filasLocales(historico, filaDescargaCierreHistorico),
+            }}
           />
         </div>
       </section>

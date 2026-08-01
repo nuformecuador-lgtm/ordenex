@@ -190,13 +190,17 @@ producción sin esperar a la siguiente.
   `api-key-estado-label.ts`) para que el módulo de export no arrastre React; los `.tsx` las
   leen de ahí. Misma operación que ya se hizo con `ROL_LABELS`.
 
-### [ ] T B.4 — Cableado de los tres módulos
+### [x] T B.4 — Cableado de los tres módulos
 - Test: `tests/components/descarga/ConfiguracionDescarga.test.tsx`
   - «los tres ofrecen su control con nombre accesible» (R1, R13)
   - «todas las filas, no solo la página visible» (R9) · «nombre del archivo» (R12)
   - «error de tope sin archivo» (R27) · «los tres siguen comportándose igual» (R3)
 - **Depende de:** T B.2, T B.3 · **Cubre:** R1, R3, R9, R12, R13
 - **Hecho:** 5 tests verdes.
+- **MEDIDO (2026-07-31):** 5 verdes. Los tres cablean `descarga` EN EL RENDER con el input
+  VACÍO: el schema del modo completo es `.strict()` y sin `page`/`pageSize`, y `sortBy`/
+  `sortDir` caen en el MISMO default que usa el listado, así que el archivo sale en el orden
+  de pantalla. El test comprueba explícitamente que ninguna clave de paginación viaja.
 
 ## Tanda C — Ledgers paginados (backend → frontend)
 
@@ -256,7 +260,7 @@ producción sin esperar a la siguiente.
 - Los dos ledgers de mensajero declaran módulos SEPARADOS (misma tabla, dos superficies con
   alcances distintos) y un test de paridad comprueba que hoy proyectan la misma fila.
 
-### [ ] T C.4 — Cableado de los cuatro ledgers
+### [x] T C.4 — Cableado de los cuatro ledgers
 - Los componentes de presentación **no pasan a fetchear**: reciben la función por props.
 - Test: `tests/components/descarga/WalletDescarga.test.tsx`
   - «cada ledger ofrece su control con nombre accesible» (R1, R13)
@@ -264,12 +268,26 @@ producción sin esperar a la siguiente.
   - «los de presentación no fetchean» (R32) · «los cuatro siguen igual» (R3)
 - **Depende de:** T C.2, T C.3 · **Cubre:** R1, R3, R9, R10, R13, R32
 - **Hecho:** 5 tests verdes.
+- **MEDIDO (2026-07-31):** 5 verdes. Tres de los cuatro (`WalletLedger`,
+  `DesgloseTiendaLedger`, `DesglosePagos`) reciben un CALLBACK `obtenerFilasDescarga` del
+  módulo padre —que es quien conoce los filtros— y siguen sin importar una sola Server Action
+  de lectura; se verifica de forma ESTÁTICA sobre los tres módulos. El cuarto
+  (`DesglosePagosMensajero`) declara su `descarga` en sitio porque YA conocía sus filtros y su
+  `mensajeroId` (los usa para el listado paginado): no estrena ninguna lectura, es la misma
+  superficie en modo completo.
+- **Decisión declarada:** el título del cuarto lleva el NOMBRE del mensajero
+  (`Desglose de <nombre>`) porque la tabla de cuentas por pagar admite varias filas expandidas
+  a la vez, y tres controles llamados «Descargar Desglose por cierre» no dirían de quién es
+  cada archivo (R13).
+- **Efecto colateral, declarado:** `tests/components/CuentasPorPagarTable.test.tsx` y
+  `tests/integration/wallet-mensajeros-page.test.tsx` renderizaban sin `ToastProvider`; se
+  envolvió SOLO el `render` (mismo precedente que T A.1). Ninguna aserción tocada.
 
 ## Tanda D — Dinero por props (frontend puro)
 
-### [ ] T D.1 [P] — Saldos de tiendas
-### [ ] T D.2 [P] — Cuentas por pagar a mensajeros (respeta la búsqueda de cliente)
-### [ ] T D.3 [P] — Plantillas de gasto fijo
+### [x] T D.1 [P] — Saldos de tiendas
+### [x] T D.2 [P] — Cuentas por pagar a mensajeros (respeta la búsqueda de cliente)
+### [x] T D.3 [P] — Plantillas de gasto fijo
 - Módulo de columnas + `descarga` con `filasLocales` sobre el array que la tabla ya pinta (en
   D.2, sobre `filtrados`, no sobre `mensajeros`).
 - Test: `tests/components/descarga/WalletPropsDescarga.test.tsx`
@@ -278,15 +296,23 @@ producción sin esperar a la siguiente.
   - «montos tal cual» (R7) · «rechaza con el error de tope» (R26)
 - **Depende de:** T0.2, T0.4 · **Cubre:** R1, R7, R10, R26, R30, R32
 - **Hecho:** 5 tests verdes.
+- **MEDIDO (2026-07-31):** 5 verdes. D.2 exporta `filtrados` (no `mensajeros`), con un test que
+  busca «Beto» y comprueba que el archivo trae UNA fila. El tope de 5000 se ejercita de verdad
+  aquí (5001 saldos ⇒ mensaje con total y tope, y NINGÚN archivo).
+- **Efecto colateral, declarado:** dos etiquetas se PROMOVIERON sin editar el texto a módulos
+  puros, para que el export no arrastre React: `saldo-tienda-signo-label.ts` (salía de
+  `SIGNO_BADGE`, que además lleva la `variant` del badge) y `gasto-fijo-estado-label.ts` (estaba
+  inline en el `Badge`). Las cuentas por pagar no lo necesitaron: `wallet-mensajeros-labels.ts`
+  ya era puro y el módulo de export lee de ahí sus encabezados y su etiqueta de estado.
 
 ## Tanda E — Cierres e incidentes (frontend puro, 11 tablas)
 
-### [ ] T E.1 [P] — Cierres del día del admin (pendientes + histórico)
-### [ ] T E.2 [P] — Cierres de bodega del admin (pendientes + resueltos)
-### [ ] T E.3 [P] — Consolidación de bodega (consolidables + solicitados)
-### [ ] T E.4 [P] — Cierre del día del mensajero (gestiones por resultado + cierres solicitados)
-### [ ] T E.5 [P] — Gestiones del cierre en el detalle compartido (`DetalleSecciones`)
-### [ ] T E.6 [P] — Incidentes (pendientes + histórico)
+### [x] T E.1 [P] — Cierres del día del admin (pendientes + histórico)
+### [x] T E.2 [P] — Cierres de bodega del admin (pendientes + resueltos)
+### [x] T E.3 [P] — Consolidación de bodega (consolidables + solicitados)
+### [x] T E.4 [P] — Cierre del día del mensajero (gestiones por resultado + cierres solicitados)
+### [x] T E.5 [P] — Gestiones del cierre en el detalle compartido (`DetalleSecciones`)
+### [x] T E.6 [P] — Incidentes (pendientes + histórico)
 - **E.5 (P2 RATIFICADA):** una descarga POR SECCIÓN de resultado, con el resultado en el
   título. El detalle trae URL FIRMADAS de evidencia: **no se exportan**; si se quiere el dato,
   va como «Tiene evidencia: sí/no».
@@ -298,6 +324,35 @@ producción sin esperar a la siguiente.
   - «descargar no cambia la fila expandida ni el modal abierto» (R37)
 - **Depende de:** T0.2, T0.4 · **Cubre:** R1, R8, R11, R14, R20, R22, R37
 - **Hecho:** tests verdes para las 11; añadir la URL firmada hace fallar T0.4.
+- **MEDIDO (2026-07-31):** 11 verdes (6 en `CierresDescarga.test.tsx` + 5 en
+  `IncidentesDescarga.test.tsx`), cubriendo las 11 tablas. R22 se comprueba sobre las filas
+  REALES que se generan: ni una celda con `http(s)://`, con ruta de almacén ni con `token=`.
+- **E.5:** una descarga POR SECCIÓN, con su propio juego de columnas (las cinco secciones no
+  enseñan lo mismo). El detalle de un cierre de BODEGA monta esas secciones una vez POR
+  mensajero incluido, así que `DetalleSecciones` gana una prop `contexto` (el nombre del
+  mensajero) que hace ÚNICO el nombre accesible de cada control (R13).
+- **E.4 diverge de E.5 a propósito:** el mensajero ve MENOS que el admin (ni ingreso de
+  Ordenex ni indemnización), así que su módulo de columnas es otro. Exportar aquí lo que el
+  admin ve sería publicar por el archivo lo que la pantalla oculta (R24).
+- **El tope NO se re-prueba en la tanda E, y se dice por qué:** montar 5001 cierres en jsdom
+  hace que estas pantallas rendericen además 5001 tarjetas de la «vista tipo factura» y el
+  test tarda minutos sin afirmar nada nuevo. El tope es del helper compartido (`filasLocales`),
+  con sus tests en T0.2 y en `WalletPropsDescarga.test.tsx`.
+- **Efecto colateral, declarado (1):** las etiquetas compartidas (`RESULTADO_LABEL`,
+  `METODO_LABEL`, `ESTADO_LABEL`, `DESTINO_TIPO_LABEL` y los encabezados de columna) se
+  PROMOVIERON sin editar ni un texto de `cierre-detalle-shared.tsx` —que importa React— al
+  módulo PURO `cierre-labels.ts`; el `.tsx` las RE-EXPORTA, así que ningún consumidor cambia.
+  De paso desaparece la duplicación literal que tenían `CierreDiaModule` y
+  `cierre-detalle-shared`.
+- **Efecto colateral, declarado (2):** `tests/components/CierreDetalleIncidente.test.tsx`
+  renderizaba sin `ToastProvider`; se envolvió SOLO el `render`. Ninguna aserción tocada.
+- **Efecto colateral, declarado (3) — una GUARDIA ajena:**
+  `tests/unit/guards/incidente-exhaustividad.test.ts` (feature 158) exigía el literal
+  `incidente: "Incidentes"` DENTRO de los dos `.tsx`; con la promoción, esas copias ya no
+  existen. No se relajó ni se borró: se SIGUIÓ la etiqueta a `cierre-labels.ts` y ahora exige
+  (a) que la ÚNICA declaración clasifique `incidente` y (b) que los dos detalles la USEN — queda
+  más fuerte, porque ya no hay dos sitios donde olvidarla. **Verificado por MUTACIÓN:** quitar
+  esa clave de `cierre-labels.ts` hace fallar la guardia y ningún otro test; revertido.
 
 ## Tanda F — Ranking
 

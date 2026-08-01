@@ -7,12 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { setActivaPlantillaAction } from "@/lib/actions/gasto-fijo-plantilla";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 import { GastoFijoPlantillaDialog } from "./GastoFijoPlantillaDialog";
+import { estadoPlantillaGastoFijo } from "./gasto-fijo-estado-label";
+import {
+  COLUMNAS_DESCARGA_GASTOS_FIJOS,
+  filaDescargaGastoFijo,
+} from "./gastos-fijos-descarga-columnas";
 import { money } from "./wallet-labels";
+
+/** Nombre visible del panel: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA = "Plantillas de gasto fijo";
 
 // Feature 45 (T24, R22b/R23/R24/R25/R26) — panel CRUD de PLANTILLAS de gasto fijo (solo
 // maestro; la página ya validó el rol). Lista todas las plantillas (activas e inactivas),
@@ -99,9 +108,11 @@ export function GastosFijosPlantillasPanel({
     {
       id: "estado",
       value: "Estado",
+      // Feature 170 (T D.3): el TEXTO del estado sale de `gasto-fijo-estado-label` (módulo
+      // puro), el mismo que lee el archivo de la descarga (R8). Aquí queda el color.
       render: (p) => (
         <Badge variant={p.activa ? "default" : "secondary"}>
-          {p.activa ? "Activa" : "Inactiva"}
+          {estadoPlantillaGastoFijo(p.activa)}
         </Badge>
       ),
     },
@@ -155,8 +166,20 @@ export function GastosFijosPlantillasPanel({
             columns={columns}
             data={plantillas}
             rowKey="id"
-            ariaLabel="Plantillas de gasto fijo"
+            ariaLabel={TITULO_DESCARGA}
             emptyMessage="Todavía no hay plantillas de gasto fijo."
+            /**
+             * Feature 170 (T D.3, R1/R7/R26/R30/R32) — descarga de FAMILIA B: el array de
+             * props ES el conjunto entero (el módulo lo pide sin paginar), así que el
+             * archivo se proyecta de lo que el panel ya pinta, sin releer nada. Salen
+             * TODAS las plantillas, activas e inactivas, igual que la tabla: aquí no hay
+             * filtro de pantalla que respetar.
+             */
+            descarga={{
+              titulo: TITULO_DESCARGA,
+              columnas: COLUMNAS_DESCARGA_GASTOS_FIJOS,
+              obtenerFilas: () => filasLocales(plantillas, filaDescargaGastoFijo),
+            }}
           />
         </div>
       </CardContent>

@@ -46,40 +46,40 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   {
     ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx",
     tablas: [
-      { nombre: "Gestiones del cierre del día por resultado", estado: "pendiente", nota: "tanda E.4" },
-      { nombre: "Cierres solicitados (mensajero)", estado: "pendiente", nota: "tanda E.4" },
+      { nombre: "Gestiones del cierre del día por resultado", estado: "con_descarga" },
+      { nombre: "Cierres solicitados (mensajero)", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
     tablas: [
-      { nombre: "Cierres del día pendientes de decisión", estado: "pendiente", nota: "tanda E.1" },
-      { nombre: "Cierres del día — histórico", estado: "pendiente", nota: "tanda E.1" },
+      { nombre: "Cierres del día pendientes de decisión", estado: "con_descarga" },
+      { nombre: "Cierres del día — histórico", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
     tablas: [
-      { nombre: "Cierres de bodega pendientes", estado: "pendiente", nota: "tanda E.2" },
-      { nombre: "Cierres de bodega resueltos", estado: "pendiente", nota: "tanda E.2" },
+      { nombre: "Cierres de bodega pendientes", estado: "con_descarga" },
+      { nombre: "Cierres de bodega resueltos", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx",
     tablas: [
-      { nombre: "Cierres del día a consolidar", estado: "pendiente", nota: "tanda E.3" },
-      { nombre: "Cierres de bodega solicitados", estado: "pendiente", nota: "tanda E.3" },
+      { nombre: "Cierres del día a consolidar", estado: "con_descarga" },
+      { nombre: "Cierres de bodega solicitados", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx",
     tablas: [
-      { nombre: "Gestiones de un cierre por resultado (detalle)", estado: "pendiente", nota: "tanda E.5" },
+      { nombre: "Gestiones de un cierre por resultado (detalle)", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/configuracion/_components/UsuariosModule.tsx",
-    tablas: [{ nombre: "Usuarios", estado: "pendiente", nota: "tanda B.4" }],
+    tablas: [{ nombre: "Usuarios", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/configuracion/_components/ZonasModule.tsx",
@@ -93,28 +93,28 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   },
   {
     ruta: "app/(app)/configuracion/api/_components/ApiKeysModule.tsx",
-    tablas: [{ nombre: "API keys", estado: "pendiente", nota: "tanda B.4" }],
+    tablas: [{ nombre: "API keys", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/configuracion/plantillas/_components/PlantillasModule.tsx",
-    tablas: [{ nombre: "Plantillas de mensaje", estado: "pendiente", nota: "tanda B.4" }],
+    tablas: [{ nombre: "Plantillas de mensaje", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/incidentes/_components/IncidentesAdminModule.tsx",
     tablas: [
-      { nombre: "Incidentes pendientes de decisión", estado: "pendiente", nota: "tanda E.6" },
-      { nombre: "Incidentes — histórico", estado: "pendiente", nota: "tanda E.6" },
+      { nombre: "Incidentes pendientes de decisión", estado: "con_descarga" },
+      { nombre: "Incidentes — histórico", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
     tablas: [
-      { nombre: "Desglose de movimientos de la tienda", estado: "pendiente", nota: "tanda C.4" },
+      { nombre: "Desglose de movimientos de la tienda", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/mis-pagos/_components/DesglosePagos.tsx",
-    tablas: [{ nombre: "Desglose de pagos del mensajero", estado: "pendiente", nota: "tanda C.4" }],
+    tablas: [{ nombre: "Desglose de pagos del mensajero", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/ordenes/_components/GenerarGuiaModal.tsx",
@@ -174,27 +174,27 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   },
   {
     ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
-    tablas: [{ nombre: "Plantillas de gasto fijo", estado: "pendiente", nota: "tanda D.3" }],
+    tablas: [{ nombre: "Plantillas de gasto fijo", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/wallet/_components/WalletLedger.tsx",
     tablas: [
-      { nombre: "Libro de movimientos de la caja principal", estado: "pendiente", nota: "tanda C.4" },
+      { nombre: "Libro de movimientos de la caja principal", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
-    tablas: [{ nombre: "Cuentas por pagar a mensajeros", estado: "pendiente", nota: "tanda D.2" }],
+    tablas: [{ nombre: "Cuentas por pagar a mensajeros", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
     tablas: [
-      { nombre: "Desglose de pagos por cierre de un mensajero", estado: "pendiente", nota: "tanda C.4" },
+      { nombre: "Desglose de pagos por cierre de un mensajero", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
-    tablas: [{ nombre: "Saldos de tiendas", estado: "pendiente", nota: "tanda D.1" }],
+    tablas: [{ nombre: "Saldos de tiendas", estado: "con_descarga" }],
   },
 ];
 

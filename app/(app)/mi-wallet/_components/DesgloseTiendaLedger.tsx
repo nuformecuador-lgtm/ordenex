@@ -1,9 +1,14 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DescargaFilasResult,
+} from "@/components/shared/DataTable";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 
+import { COLUMNAS_DESCARGA_MI_WALLET } from "./mi-wallet-descarga-columnas";
 import { CATEGORIA_TIENDA_LABEL, TIPO_TIENDA_LABEL, money, origenLabel } from "./mi-wallet-labels";
 
 // Feature 43 (T15, R18/R21) — DESGLOSE del ledger por cierre/concepto (tabla, mas reciente
@@ -55,14 +60,27 @@ const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
   },
 ];
 
+/** Nombre visible del desglose: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA = "Desglose de movimientos";
+
 export interface DesgloseTiendaLedgerProps {
   movimientos: WalletTiendaMovimientoDTO[];
   isLoading?: boolean;
+  /**
+   * Feature 170 (T C.4, design §5) — obtiene las filas del ledger COMPLETO de la tienda.
+   *
+   * Callback, no filtros: esta tabla recibe la página por props y no conoce los filtros;
+   * los conoce `MiWalletModule`, que cierra sobre ellos. Así este componente sigue sin
+   * fetchear nada, que es lo que exige `docs/architecture.md` para una superficie con
+   * datos de una sola tienda. Ausente ⇒ sin control, comportamiento anterior (R39).
+   */
+  obtenerFilasDescarga?: () => Promise<DescargaFilasResult>;
 }
 
 export function DesgloseTiendaLedger({
   movimientos,
   isLoading = false,
+  obtenerFilasDescarga,
 }: DesgloseTiendaLedgerProps) {
   return (
     <div className="overflow-x-auto">
@@ -70,9 +88,21 @@ export function DesgloseTiendaLedger({
         columns={COLUMNS}
         data={movimientos}
         rowKey="id"
-        ariaLabel="Desglose de movimientos"
+        ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
         emptyMessage="No hay movimientos que coincidan con los filtros."
+        // Feature 170 (T C.4, R1/R9/R13/R14): el archivo es el ledger de la tienda del
+        // actor y de nadie más — quien lo acota es el servicio, con el `tienda_id` del
+        // actor escrito al final del where; aquí no se puede ampliar ese alcance.
+        descarga={
+          obtenerFilasDescarga
+            ? {
+                titulo: TITULO_DESCARGA,
+                columnas: COLUMNAS_DESCARGA_MI_WALLET,
+                obtenerFilas: obtenerFilasDescarga,
+              }
+            : undefined
+        }
       />
     </div>
   );

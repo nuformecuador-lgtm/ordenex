@@ -8,18 +8,27 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/ui/button";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { usuariosConfig } from "@/lib/config/usuarios";
 import {
   cambiarEstadoUsuario,
   obtenerUsuario,
   listarUsuarios,
+  listarUsuariosCompleto,
 } from "@/lib/actions/usuarios";
 import type { UsuarioListItemDTO } from "@/lib/types/usuario";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
 
 import { buildUsuariosColumns } from "./usuarios-columns";
+import {
+  COLUMNAS_DESCARGA_USUARIOS,
+  filaDescargaUsuario,
+} from "./usuarios-descarga-columnas";
 import { UsuarioForm, type UsuarioFormHandle } from "./UsuarioForm";
+
+/** R12/R13: nombre visible del listado; da nombre a la hoja, al archivo y al control. */
+const TITULO_DESCARGA = "Usuarios";
 
 // R13: opciones acotadas por MAX_PAGE_SIZE del backend.
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
@@ -145,6 +154,24 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
         data={data?.items ?? []}
         rowKey="id"
         ariaLabel="Usuarios"
+        /**
+         * Feature 170 (T B.4, R1/R9/R12/R13) — descarga del listado COMPLETO, no de la
+         * página visible: la tabla es de Familia A (el `data` de arriba es un recorte
+         * server-side de `pageSize`), así que las filas las trae la Server Action del
+         * modo completo, con el mismo guard de rol y el mismo tope que el listado.
+         *
+         * Se construye EN EL RENDER (design §5): sin filtros que cerrar hoy, pero el día
+         * que los haya el closure leerá los de ESTE render y no los de un memo caducado.
+         * El input va VACÍO a propósito: el schema es `.strict()` y sin `page`/`pageSize`
+         * (mandarlos sería `validation_error`), y `sortBy`/`sortDir` caen en el MISMO
+         * default que usa `listarUsuarios`, así que el archivo sale en el orden de pantalla.
+         */
+        descarga={{
+          titulo: TITULO_DESCARGA,
+          columnas: COLUMNAS_DESCARGA_USUARIOS,
+          obtenerFilas: () =>
+            filasDesdeResultado(listarUsuariosCompleto({}), filaDescargaUsuario),
+        }}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar los usuarios" : null}
         emptyState={{
