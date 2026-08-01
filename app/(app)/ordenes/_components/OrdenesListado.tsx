@@ -63,13 +63,18 @@ async function mensajerosFetcher() {
   // `bloqueadosIds` = mensajeros con cierre abierto. El bloqueo del CHECKBOX se sigue
   // derivando por ZONA de la orden (`zonasBloqueadasFetcher`); estos ids alimentan el
   // SELECTOR de los modales de asignación, para no ofrecer a alguien a quien el service
-  // va a rechazar. La key SWR "ordenes:mensajeros" la comparte OrdenesRevisionMaestro,
-  // así que ambos fetchers deben devolver la MISMA forma.
+  // va a rechazar.
+  //
+  // La key SWR "ordenes:mensajeros" la compartía con la vista legacy
+  // `OrdenesRevisionMaestro`, borrada el 2026-07-31: hoy este es el ÚNICO fetcher de esa
+  // key. Se deja dicho porque la regla que lo motivó sigue en pie — quien añada otro
+  // fetcher bajo la misma key debe devolver esta MISMA forma, o la caché servirá una
+  // estructura distinta según quién monte primero (el bug de 2026-07-16).
   return {
     mensajeros: res.mensajeros,
     bloqueadosIds: res.bloqueadosIds ?? [],
     // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
-    // mezclan". Ambos fetchers comparten la key SWR, así que devuelven la MISMA forma.
+    // mezclan".
     conRepartoIds: res.conRepartoIds ?? [],
     conRecoleccionIds: res.conRecoleccionIds ?? [],
   };
@@ -369,9 +374,15 @@ export function OrdenesListado({
   }
 
   // Mapeo estado -> acciones por lote.
+  //
   // Nota: "Rutear a bodega satélite" NO se ofrece en esta vista (se retiró de
-  // `en_bodega_central` por decisión humana). La vista legacy OrdenesRevisionMaestro sí la
-  // ofrece, así que la paridad con esa vista ya no es total.
+  // `en_bodega_central` por decisión humana). Hasta el 2026-07-31 la ofrecía la vista
+  // legacy `OrdenesRevisionMaestro`; al borrarse ésa, la acción se quedó SIN NINGUNA
+  // superficie de UI. El backend sigue entero y probado (`rutearABodegaSatelite` en
+  // `lib/actions/ordenes-guia`, `GuiaAsignacionService.rutearABodegaSatelite`) y
+  // `RutearSateliteModal.tsx` se conservó a propósito, listo para volver a montarse.
+  // Devolverla —aquí o donde se decida— es una decisión de producto pendiente, no un
+  // olvido de este archivo.
   function accionesDe(estatusValue: string | undefined): AccionLote[] {
     switch (estatusValue) {
       // Feature 155/R32: el estado interno de fulfillment en bodega salió del

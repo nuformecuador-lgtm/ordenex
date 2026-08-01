@@ -84,7 +84,7 @@ vi.mock("@/hooks/useToast", () => ({
   }),
 }));
 
-import { OrdenesApartado } from "@/app/(app)/ordenes/_components/OrdenesApartado";
+import { OrdenesModule } from "@/app/(app)/ordenes/_components/OrdenesModule";
 import { UsuariosModule } from "@/app/(app)/configuracion/_components/UsuariosModule";
 import { CuentasPorPagarTable } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
 
@@ -172,16 +172,18 @@ function envolver(ui: ReactElement) {
  */
 const FORMAS = [
   {
+    // El representante de esta forma era `OrdenesApartado` («Apartado de órdenes por
+    // estado»), borrado el 2026-07-31 con la vista legacy que era su único consumidor.
+    // Se sustituye por `OrdenesModule` —el listado principal de `/ordenes`, que SÍ está
+    // montado— porque es la misma forma de cableado: recorte server-side con `filter`
+    // vigente, paginación propia y `obtenerFilas` contra `listarOrdenesCompleto`. La
+    // propiedad que este archivo juzga es del control compartido, así que el
+    // representante puede cambiar mientras la forma siga existiendo; lo que no puede es
+    // desaparecer, o «las tres formas se comportan igual» pasaría a afirmar solo dos.
     forma: "Familia A con filtros",
-    titulo: "En bodega central",
+    titulo: "Órdenes",
     montar: () =>
-      envolver(
-        <OrdenesApartado
-          titulo="En bodega central"
-          estatusValue="en_bodega_central"
-          estatusId={ESTATUS_ID}
-        />,
-      ),
+      envolver(<OrdenesModule filter={{ status_id: ESTATUS_ID }} permitirDescarga />),
     preparar: async (user: ReturnType<typeof userEvent.setup>) => {
       await screen.findByText("Destinatario 1");
       await user.click(screen.getByRole("button", { name: "Página siguiente" }));
@@ -488,9 +490,14 @@ describe("Control de descarga · consistencia transversal", () => {
   });
 
   it("ningún listado del árbol se sale del control común (barrido estático)", () => {
-    // Lo que extiende R33/R34/R38 de las 3 formas montadas a las 25 tablas y a las futuras.
+    // Lo que extiende R33/R34/R38 de las 3 formas montadas a las 24 tablas y a las futuras.
     // Un test de conducta solo cubre lo que monta; esto cubre lo que existe.
-    expect(MODULOS_CON_DESCARGA.length).toBeGreaterThanOrEqual(20);
+    //
+    // El suelo baja de 20 a 19 módulos: `OrdenesApartado.tsx` declaraba `descarga={…}` y se
+    // borró el 2026-07-31 con la vista legacy que lo montaba. Sigue siendo un SUELO (no una
+    // igualdad) para que este barrido no se vuelva a tocar cada vez que se cablea una tabla
+    // nueva; quien retire otra sin querer lo ve fallar igual.
+    expect(MODULOS_CON_DESCARGA.length).toBeGreaterThanOrEqual(19);
 
     for (const modulo of MODULOS_CON_DESCARGA) {
       // R34: nadie declara `formatos` ⇒ nadie ofrece elección (P7 ratificada).

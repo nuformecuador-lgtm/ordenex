@@ -283,8 +283,8 @@ describe("WalletMensajerosPage — pre-fetch del maestro (R18/R21)", () => {
 //
 // Feature 170 (T C.4): el desglose monta el control de descarga del `DataTable`, que usa
 // `useToast`. En la app el proveedor está en `app/(app)/layout.tsx`, encima de esta pantalla;
-// aquí se envuelve por la misma razón que ya hacen `OrdenesDescarga.test.tsx` (151) y
-// `OrdenesApartado.test.tsx` (170/T A.1). Cambio del ARNÉS: ninguna aserción se toca.
+// aquí se envuelve por la misma razón que ya hace `OrdenesDescarga.test.tsx` (151). Cambio
+// del ARNÉS: ninguna aserción se toca.
 function renderDesglose(resumen: CuentaPorPagarResumenDTO = RESUMEN) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
