@@ -2335,3 +2335,50 @@ solo encontraría lo que ya está en pantalla.
   intermitente y tumbaba `init.sh`. No era regresión: afirmaba de forma síncrona un efecto que la
   librería produce en el siguiente frame. Se arregló esperando al hecho observable, con la aserción
   **más estricta** que antes y demostrando que no quedó en un no-op (PR #238).
+
+## Features 170 y 171 — Excel en todas las tablas y desglose por tienda (2026-07-31)
+
+**170 · el pedido era «toda tabla debe poder descargarse a Excel».** La auditoría encontró que la
+capacidad **ya existía y estaba bien hecha** (feature 151, opt-in por una prop) y que **solo 1 de 25
+tablas la activaba**. No había que construir: había que recorrer. Entregada la FASE 1 con las 25
+tablas descargando; la FASE 2 (paginar 16 pantallas, decisión del humano) queda pendiente.
+
+- **Lo que más valor deja no son los 24 cableados, sino tres guardias**, las tres demostradas
+  fallando con fugas introducidas a mano: datos sensibles (una columna `passwordHash`, un id interno
+  o una URL firmada ponen la suite en rojo), cobertura del censo (**vigila en los dos sentidos**:
+  también falla si se declara una descarga que no existe) y adaptador único (nadie puede saltarse el
+  tope por otra vía).
+- **Un bug latente encontrado de paso**: `exceljs` **lanza** si el nombre de hoja lleva `/`, `:` o
+  `[ ]`. Efecto real en producción: pulsar descargar, no obtener archivo y ver un error genérico.
+  Cualquier tienda con una barra en el nombre lo habría disparado.
+- **Dos columnas NO se inventaron** (una que el modelo no tiene, otra que la tabla no muestra) y **una
+  guardia ajena se siguió en vez de relajarse** cuando el refactor la dejó sin su literal.
+- **El detalle de un cierre tenía CINCO secciones, no cuatro**: el spec se escribió antes de que la
+  158 añadiera incidentes. Se cablearon las cinco — dejar fuera la quinta habría dejado sin descarga
+  justo la sección con el dinero de indemnización.
+- **El cierre del mensajero exporta menos que el del admin, a propósito**: su pantalla no muestra el
+  ingreso de Ordenex ni la indemnización, y publicar por un archivo lo que la pantalla oculta habría
+  sido una fuga silenciosa.
+
+**171 · el desglose por tienda.** Espeja el de mensajeros solo donde el dinero se parece: cabecera
+propia de cuatro importes, porque a una tienda se le **debe** lo cobrado a sus clientes y se le
+**cobran** los servicios.
+
+- **«Pagado a la tienda» vale 0,00 y es un cero verdadero**: nadie emite ese movimiento todavía (lo
+  cierra la 172), pero la cifra sale de la categoría real del libro y hay test que siembra un pago a
+  mano. La pantalla se llenará sola.
+- **Cuidados de pantalla de dinero**: cero `Number`/`parseFloat`/`toFixed` en el frontend; «—» en vez
+  de cero mientras carga (un cero de "aún no llegó" es indistinguible de uno real); y las cuatro
+  cifras corresponden siempre al mismo conjunto — se corrigió un caso donde el saldo mostraba el
+  valor sin filtrar mientras los otros tres cargaban.
+- **El permiso se evalúa antes de tocar la base, demostrado en negativo**: moverlo detrás de la
+  consulta pone la suite en rojo con mensaje explícito.
+- **Ocho tests podían pasar en vacío** —y tres más que el review no enumeró—: un atajo los hacía
+  terminar en silencio si la respuesta no era la esperada, así que con el servicio denegando habrían
+  seguido verdes sin probar nada. Corregidos y demostrados con mutación.
+
+**De propina, la vista legacy del listado del maestro se borró** (5 archivos). Salió a la luz al
+cablearle la descarga: se le estaba dando una capacidad nueva a una tabla que **ninguna página
+montaba**. Destapó dos cosas: **«Rutear a bodega satélite» lleva tiempo sin interfaz** (su backend
+sigue vivo y probado, el modal se conservó listo para remontar) y **la ficha de la feature 71 se
+diagnosticó contra código muerto**, así que pide reevaluación antes de que alguien la tome.
