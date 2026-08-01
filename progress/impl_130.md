@@ -247,6 +247,118 @@ posteriores, ambos pasan. Son flakes por saturación, no regresiones.
 
 ---
 
+## 4-bis. Ronda 2 — los tres bloqueantes del reviewer, cerrados con mutación (2026-08-01)
+
+El reviewer **rechazó** la primera entrega. Los tres bloqueantes eran del mismo tipo y el
+diagnóstico era correcto: **tests verdes que no medían el requisito**. Se reprodujeron uno a
+uno antes de tocar nada, y se cierran con la mutación pegada.
+
+### B1 (R13) — el símbolo de moneda se podía reintroducir sin que nada fallara
+
+**Causa raíz, que es la parte interesante:** el test derivaba su esperado de `monedaConfig`, pero
+**con la configuración por defecto (`es-CR`/`CRC`) `formatMonto(3500)` y un `₡` escrito a mano
+producen el MISMO string byte a byte**. Ninguna aserción sobre la salida por defecto puede
+separarlos. El test no era flojo: era **incapaz**.
+
+```
+# ANTES del arreglo — mutacion: return `₡${numero(valor, { minimumFractionDigits: 2 })}`
+ Test Files  5 passed (5)
+      Tests  42 passed (42)          <- verde con el simbolo hardcodeado
+
+# DESPUES del arreglo — misma mutacion
+     x con otra moneda configurada el valor NO lleva el simbolo del colon 11ms
+     x ningun archivo del paquete escribe un simbolo de moneda, un codigo ISO ni un locale 7ms
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 34 passed (36)
+```
+
+### B2 (R20) — el literal de idioma, igual
+
+La cláusula «sin literal de idioma incrustado» de R20 **no la medía nada**. Es literalmente
+el punto de `CHECKPOINTS.md`: «no se hardcodeó país, moneda ni cuenta».
+
+```
+# ANTES — mutacion: new Intl.NumberFormat("es-CR", opciones)
+ Test Files  5 passed (5)
+      Tests  42 passed (42)          <- verde con el locale hardcodeado
+
+# DESPUES — misma mutacion
+     x con otro locale configurado cambian los separadores del conteo 7ms
+     x ningun archivo del paquete escribe un simbolo de moneda, un codigo ISO ni un locale 8ms
+     x el formato de moneda y el locale salen de lib/config/moneda, no del paquete 2ms
+ Test Files  2 failed (2)
+      Tests  3 failed | 23 passed (26)
+```
+
+**Arreglo de B1+B2, por dos vías que se cubren entre sí:**
+
+1. **Guard estático** en `analytics-paquete-guard.test.ts` › «ningun archivo del paquete escribe
+   un simbolo de moneda, un codigo ISO ni un locale» — el mismo censo que ya protegía a
+   `components/shared/KpiValorAnimado.tsx`, ahora sobre `components/private/analytics/**`. Cubre el
+   futuro: cualquier símbolo, código ISO o `xx-XX` nuevo cae aquí aunque el string resultante
+   coincida por casualidad con el correcto.
+2. **Test de comportamiento con OTRA configuración**, en `analytics-formato.test.ts`: recarga el
+   módulo con `MONEDA_CURRENCY=USD` / `MONEDA_LOCALE=en-US` (`vi.resetModules` + `vi.stubEnv` +
+   import dinámico). Con eso los dos strings **dejan de ser idénticos** y la aserción de
+   salida vuelve a medir el requisito en vez de la moneda de hoy.
+
+### B3 (R33-bis) — el recorte del donut era código de seguridad sin un solo test
+
+El más grave, y el reviewer tiene razón en que no era cosmético. `paleta.ts` lanza
+`IndiceSerieFueraDeRangoError` para todo índice `>= MAX_SERIES` **en cualquier `NODE_ENV`,
+producción incluida**, y `DonutLienzo` colorea por índice de segmento. Sin el recorte, **un donut
+de 6+ categorías —`ordenes_por_estado` tiene 19— reventaría en el navegador también en
+producción.**
+
+```
+# ANTES — mutacion: recorte sustituido por { items: serie.puntos, recortado: false, ... }
+ Test Files  3 passed (3)
+      Tests  37 passed (37)          <- ningun test se entera
+
+# DESPUES — misma mutacion
+       x con 6 categorias lanza SeriesExcedidasError fuera de produccion 6ms
+       x en produccion recorta a 5 segmentos, no revienta, y anuncia el recorte por texto 16ms
+ Test Files  1 failed (1)
+      Tests  2 failed | 28 passed (30)
+```
+
+**Y la regla quedó ratificada, no improvisada.** El humano confirmó la desviación el
+**2026-08-01**: el donut se queda con tope de **5** segmentos y conserva los **PRIMEROS**; barras y
+líneas **no se tocan** (62 y los últimos). Está escrito como **R33-bis** en `requirements.md`,
+con su porqué, y comunicado al dueño de la 131 en `tasks.md > T0.1`.
+
+### Menores de la review, también atendidos
+
+- **m5 — bookkeeping autocumplido, corregido.** T8.3 estaba marcada `[x]` afirmando que «los tres
+  artefactos existen», y `progress/review_130.md` **no existía**. Vuelve a `[ ]`: no la cierra el
+  implementer. Comprobado con `ls`, no de memoria.
+- **(a) — la escala del `porcentaje` ya no vive sólo en el código.** Estaba en `formato.ts`, en
+  esta bitácora y en el `status_note`, pero **no** donde la va a leer el spec_author de la 131.
+  Ahora es **R20-bis** en `requirements.md`, está en la trazabilidad y es el punto 3 de
+  `tasks.md > T0.1`.
+- **m1 — R28 se cumple, pero apoyado en un DEFAULT de terceros, y ahora se dice.** El código de
+  esta feature no emite ni una clase de animación, y eso sí se afirma. Pero **el lienzo SÍ
+  anima** cuando la preferencia está apagada: que deje de hacerlo cuando está encendida lo
+  resuelve `isAnimationActive: "auto"` → `usePrefersReducedMotion` de recharts, un default que
+  **nadie fijó con prop** y con `package.json` en `^3.10.1` (rango abierto). **Riesgo residual
+  declarado:** si recharts cambia ese default, el test seguiría verde y R28 se rompería sin
+  avisar. El comentario del test decía «sencillamente no anima» y era inexacto; está corregido.
+- **m2 — R25 es INVERIFICABLE aquí, y se marca como tal.** El texto del vacío es 100 % del
+  llamador (prop `vacio`), así que el test afirma el texto que él mismo pasó. No es un test
+  falso —comprueba que el texto del llamador llega y que **no** aparece el del shell— pero **no
+  puede** comprobar que un llamador real escriba un texto adecuado. Eso sólo se verifica cuando
+  exista la 131. Marcado «⚠ parcial» en la tabla, no «✅» a secas.
+- **m4 — cómo reproducir la medición de R27 sin adivinar.** El script vive fuera del repo (es
+  utilería de medición, no producto). Para repetirla: `pnpm exec next build --webpack` y luego
+  recorrer `.next/static/chunks/**/*.js` sumando tamaños y buscando la cadena `recharts` en cada
+  chunk; los entries de ruta son los de `.next/static/chunks/app/**`. **Vía más directa y
+  preferible si alguien la rehace:** `.next/app-build-manifest.json` da los chunks **por ruta** sin
+  inferir nada del contenido — no estaba disponible en la corrida de webpack de este árbol, por
+  eso se midió por contenido. La conclusión no cambia: `0` de `46` entries de ruta contienen
+  recharts.
+
+---
+
 ## 5. Mapa `R<n> → test` (los 41)
 
 | R | Test / evidencia | Estado |
@@ -263,27 +375,29 @@ posteriores, ambos pasan. Son flakes por saturación, no regresiones.
 | R10 | idem › «publica una entrada de texto por punto de dato aunque el lienzo mida cero» + «con 400 puntos, en produccion, nunca emite mas de MAX_SERIES x MAX_PUNTOS_SERIE entradas» | ✅ |
 | R11 | idem › «un punto nulo se muestra como dato ausente, no como cero» | ✅ |
 | R12 | `tests/components/AnalyticsKpiCard.test.tsx` › «muestra etiqueta y valor formateado por unidad: %s» (`it.each`, 4 unidades) | ✅ |
-| R13 | idem › «el valor en moneda usa el formato configurado, sin simbolo hardcodeado» | ✅ |
+| R13 | `analytics-paquete-guard.test.ts` › «ningun archivo del paquete escribe un simbolo de moneda, un codigo ISO ni un locale» + `analytics-formato.test.ts` › «con otra moneda configurada el valor NO lleva el simbolo del colon». **La aserción sobre la salida por defecto NO bastaba (B1)** | ✅ |
 | R14 | idem › «un valor nulo muestra el marcador de dato ausente y no cero» | ✅ |
 | R15 | idem › «la variacion dice su signo con texto, no solo con color» + «la variacion usa los tokens semanticos -strong, no la escala cruda» | ✅ |
 | R16 | `tests/unit/components/analytics-paleta.test.ts` › «ningun archivo del paquete contiene un hex ni un color crudo de tailwind» | ✅ |
 | R17 | idem › «el color de una serie es determinista para el mismo indice» | ✅ |
 | R18 | idem › «los tokens declarados existen en app/globals.css, en :root y en .dark» | ✅ |
 | R19 | idem › «los cinco indices del techo dan cinco tokens distintos: ninguna leyenda repite color» + «no cicla: un indice fuera del techo es un error, no el color de otra serie» | ✅ |
-| R20 | `tests/unit/components/analytics-formato.test.ts` › «formatea conteo, porcentaje, moneda y segundos segun la unidad» + «elige la unidad de tiempo por magnitud» | ✅ |
+| R20 | `analytics-formato.test.ts` › «formatea conteo, porcentaje, moneda y segundos segun la unidad» + «con otro locale configurado cambian los separadores del conteo» + guard › «… ni un locale». **La cláusula «sin literal de idioma» la mide el guard, no la salida (B2)** | ✅ |
 | R21 | idem › «formatea sin renderizar ningun componente» | ✅ |
 | R22 | `tests/components/AnalyticsTablaResumen.test.tsx` › «se apoya en DataTable: hereda skeleton, vacio y error» + «no emite un table propio: usa el unico del repo, con su caption» | ✅ |
 | R23 | idem › «la fila de totales se distingue de las filas de datos» + `analytics-formato.test.ts` › «totaliza en una funcion pura, ignorando los ausentes» | ✅ |
 | R24 | `tests/components/AnalyticsEncajeShell.test.tsx` › «renderiza dentro de una section flex-col gap-4 sin fijar ancho ni alto en pixeles» + «acepta una clase adicional del llamador sin perder la suya» | ✅ |
-| R25 | idem › «el vacio de la grafica habla del rango sin datos, no de una entrega posterior» | ✅ |
+| R25 | idem › «el vacio de la grafica habla del rango sin datos, no de una entrega posterior» | ⚠ **parcial** — el texto es 100 % del llamador, así que el test afirma lo que él mismo pasó. Comprueba que llega y que NO se repite el del shell; **no puede** comprobar que un llamador real escriba un texto adecuado. Se cierra con la 131 |
 | R26 | `analytics-paquete-guard.test.ts` › «recharts solo se importa desde el paquete de analitica» (censa TODO el repo) | ✅ |
 | R27 | **§3.2 (medición sobre `next build`)** + `analytics-paquete-guard.test.ts` › «los componentes de grafica se montan por importacion diferida» + «el paquete no tiene barril» | ✅ |
-| R28 | `AnalyticsGraficas.test.tsx` › «%s con prefers-reduced-motion no aplica clases de animacion» + `AnalyticsKpiCard.test.tsx` › «no anima» | ✅ |
+| R28 | `AnalyticsGraficas.test.tsx` › «%s con prefers-reduced-motion no aplica clases de animacion» + `AnalyticsKpiCard.test.tsx` › «no anima» | ⚠ **con dependencia externa** — nuestro código no anima (afirmado); el LIENZO lo resuelve un default de recharts (`isAnimationActive:"auto"`) que nadie fijó, con `^3.10.1`. Ver m1 en §4-bis |
 | R29 | Gate `pnpm lint` (0 errores) + `analytics-paquete-guard.test.ts` › «ningun componente sincroniza estado con useEffect» | ✅ |
 | R30 | `analytics-paleta.test.ts` › «MAX_SERIES vale 5 y coincide con el numero de tokens declarados» | ✅ |
 | R31 | `tests/unit/components/analytics-topes.test.ts` › «con 6 series lanza SeriesExcedidasError fuera de produccion» + «en produccion conserva las 5 primeras en orden y no lanza» + `AnalyticsGraficas.test.tsx` › «con 8 series, en produccion, anuncia por texto cuantas muestra de cuantas» | ✅ |
 | R32 | `analytics-topes.test.ts` › «MAX_PUNTOS_SERIE vale 62 y es mayor que 53 semanas y menor que 366 dias» | ✅ |
 | R33 | idem › «con 63 puntos lanza PuntosExcedidosError fuera de produccion» + «en produccion conserva los 62 ultimos: lo reciente, no lo de enero» | ✅ |
+| R33-bis | `AnalyticsGraficas.test.tsx` › «techo de SEGMENTOS del donut» › las dos ramas de `NODE_ENV` + «con 5 categorias exactas pinta las cinco y no anuncia recorte». **Enmienda ratificada por el humano el 2026-08-01**; mutación en §4-bis (B3) | ✅ |
+| R20-bis | `analytics-formato.test.ts` › «formatea conteo, porcentaje, moneda y segundos segun la unidad» (0,842 → 84,2 %) | ✅ |
 | R34 | `analytics-paquete-guard.test.ts` › «el paquete no agrupa en otros ni re-muestrea por semana o mes» | ✅ |
 | R35 | `tests/components/KpiValorAnimado.test.tsx` › «el valor en moneda usa lib/config/moneda y el archivo no tiene simbolo literal» (con mutación probada, §3.1) | ✅ |
 | R36 | **§3.3 (delta 0 de suite)** + `MisAsignacionesPage.test.tsx` y `CierresAdminModule.test.tsx` sin cambios y en verde | ✅ |

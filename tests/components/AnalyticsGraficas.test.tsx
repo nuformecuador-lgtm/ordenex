@@ -146,8 +146,19 @@ describe("montaje del lienzo (R41, unica asercion sobre el lienzo)", () => {
 
 describe("reduccion de movimiento (R28)", () => {
   it.each(GRAFICAS)("%s con prefers-reduced-motion no aplica clases de animacion", (_n, Grafica) => {
-    // El paquete no lee `matchMedia` (R4): sencillamente NO anima, ni con la
-    // preferencia activada ni sin ella, asi que no hay nada que suprimir.
+    // OJO CON LO QUE ESTE TEST MIDE Y LO QUE NO.
+    //
+    // Mide: el CODIGO DE ESTA FEATURE no emite ni una clase de animacion, ni con la
+    // preferencia activada ni sin ella. Eso si esta bajo nuestro control y se afirma.
+    //
+    // NO mide el lienzo, y decir "sencillamente no anima" seria inexacto: recharts
+    // SI anima sus barras y lineas cuando la preferencia esta APAGADA. Que las deje
+    // de animar cuando esta encendida lo resuelve un DEFAULT suyo
+    // (`isAnimationActive: "auto"` -> `usePrefersReducedMotion`), no una prop que
+    // nosotros fijemos. Es decir: R28 se cumple en el lienzo por cortesia de la
+    // libreria, con `package.json` en `^3.10.1` (rango abierto). Si un dia recharts
+    // cambia ese default, este test seguiria verde y R28 se romperia sin avisar.
+    // Anotado en `progress/impl_130.md` como dependencia de un default de terceros.
     const { container } = render(
       <Grafica titulo="Entregas" series={[serie("a", [1])]} unidad="conteo" vacio={VACIO} />,
     );
@@ -208,6 +219,74 @@ describe("topes de series y de puntos (R10 acotado, R31, R33)", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  // El donut se prueba APARTE porque su techo es distinto y el motivo importa:
+  // ahi el color distingue SEGMENTOS, no series, y `paleta.ts` lanza
+  // `IndiceSerieFueraDeRangoError` para cualquier indice >= MAX_SERIES **en todo
+  // NODE_ENV, produccion incluida**. Si `GraficaDonut` dejara de recortar, un donut
+  // de 6+ categorias -- `ordenes_por_estado` tiene 19 -- REVENTARIA EN EL NAVEGADOR
+  // tambien en produccion. El recorte es codigo de seguridad, no cosmetica, y estos
+  // dos tests son su unica red.
+  describe("techo de SEGMENTOS del donut (R30, R31 aplicados a las porciones)", () => {
+    const donut = (categorias: number) => [
+      {
+        id: "estados",
+        etiqueta: "Estados",
+        puntos: Array.from({ length: categorias }, (_, i) => ({
+          categoria: `estado-${i}`,
+          valor: i + 1,
+        })),
+      },
+    ];
+
+    it("con 6 categorias lanza SeriesExcedidasError fuera de produccion", () => {
+      expect(() =>
+        render(
+          <GraficaDonut titulo="Estados" series={donut(6)} unidad="conteo" vacio={VACIO} />,
+        ),
+      ).toThrow(/SeriesExcedidasError|6/);
+    });
+
+    it("en produccion recorta a 5 segmentos, no revienta, y anuncia el recorte por texto", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      try {
+        render(
+          <GraficaDonut
+            titulo="Estados"
+            series={donut(19)}
+            unidad="conteo"
+            vacio={VACIO}
+            avisoRecorte={aviso}
+          />,
+        );
+
+        const lista = screen.getByRole("list", { name: "Estados" });
+        expect(within(lista).getAllByRole("listitem")).toHaveLength(MAX_SERIES);
+        expect(screen.getByText("Se muestran 5 de 19")).toBeInTheDocument();
+        // Conserva las PRIMERAS en el orden recibido.
+        expect(within(lista).getByText("Estados, estado-0: 1")).toBeInTheDocument();
+        expect(within(lista).queryByText(/estado-5/)).toBeNull();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("con 5 categorias exactas pinta las cinco y no anuncia recorte", () => {
+      render(
+        <GraficaDonut
+          titulo="Estados"
+          series={donut(MAX_SERIES)}
+          unidad="conteo"
+          vacio={VACIO}
+          avisoRecorte={aviso}
+        />,
+      );
+
+      const lista = screen.getByRole("list", { name: "Estados" });
+      expect(within(lista).getAllByRole("listitem")).toHaveLength(MAX_SERIES);
+      expect(screen.queryByText(/Se muestran/)).toBeNull();
+    });
   });
 
   it("fuera de produccion, pasarse del techo revienta en el test del llamador", () => {

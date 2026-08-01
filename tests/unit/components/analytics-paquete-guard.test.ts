@@ -107,6 +107,36 @@ describe("ubicacion y pureza del paquete (R1, R2)", () => {
     }
   });
 
+  // El mismo censo de literales que ya protege a `components/shared/KpiValorAnimado.tsx`.
+  // Aqui no es un lujo: es la UNICA red que distingue `formatMonto(v)` de un
+  // `` `₡${…}` `` escrito a mano. Con la configuracion por defecto (es-CR/CRC) los
+  // dos producen strings BYTE-IDENTICOS, asi que ninguna asercion de salida puede
+  // separarlos y un test que derive su esperado de `monedaConfig` pasaria igual con
+  // el simbolo incrustado. Lo verifica `CHECKPOINTS.md`: "no se hardcodeo pais,
+  // moneda ni cuenta".
+  it("ningun archivo del paquete escribe un simbolo de moneda, un codigo ISO ni un locale", () => {
+    const simbolos = /[₡€£¥]/;
+    // `$` es legitimo en `${…}` de un template literal y en ningun otro sitio del paquete.
+    const dolar = /\$(?!\{)/;
+    const iso = /\b(?:CRC|USD|EUR|GBP|JPY|MXN|COP|ARS|CLP|PEN)\b/;
+    const locale = /["'`][a-z]{2}-[A-Z]{2}["'`]/;
+
+    for (const { ruta, codigo } of DEL_PAQUETE) {
+      expect(simbolos.test(codigo), `${ruta} escribe un simbolo de moneda`).toBe(false);
+      expect(dolar.test(codigo), `${ruta} escribe un simbolo de moneda`).toBe(false);
+      expect(iso.test(codigo), `${ruta} escribe un codigo ISO de moneda`).toBe(false);
+      expect(locale.test(codigo), `${ruta} incrusta un literal de idioma`).toBe(false);
+    }
+  });
+
+  it("el formato de moneda y el locale salen de lib/config/moneda, no del paquete", () => {
+    const formato = DEL_PAQUETE.find(({ ruta }) => ruta.endsWith("formato.ts"));
+    expect(formato, "falta formato.ts").toBeDefined();
+    expect(formato?.codigo).toMatch(/from\s+["']@\/lib\/config\/moneda["']/);
+    expect(formato?.codigo).toMatch(/\bformatMonto\b/);
+    expect(formato?.codigo).toMatch(/monedaConfig\.locale/);
+  });
+
   it("ningun componente sincroniza estado con useEffect", () => {
     for (const { ruta, codigo } of DEL_PAQUETE) {
       expect(/\buseEffect\b/.test(codigo), `${ruta} usa useEffect`).toBe(false);

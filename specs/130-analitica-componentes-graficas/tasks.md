@@ -48,6 +48,18 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
 
   Ambas reglas fallan **ruidosamente en su test**, no en producción; en producción recortan y lo
   anuncian por texto. Mejor enterarse aquí que en la review.
+
+  3. **El `porcentaje` viaja como FRACCIÓN, no en puntos** (R20-bis, decidido al implementar el
+     2026-08-01). `0,842` se pinta como «84,2 %». Es coherente con el catálogo de la 135, que define
+     esas métricas como una **razón numerador/denominador**, y con `Intl`, que multiplica por 100 en
+     `style: "percent"`. **Pasa la razón cruda; NO la pre-multipliques por 100** o verás «35 000 %».
+  4. **El DONUT tiene un techo distinto: 5 segmentos, no 62** (R33-bis, enmienda del humano del
+     2026-08-01). En un donut el color distingue porciones, y `paleta.ts` lanza para todo índice
+     `>= 5` en **cualquier** `NODE_ENV`. Conserva los **PRIMEROS** —en una serie ordenada por
+     magnitud son los que más pesan; quedarse los últimos mostraría las 5 categorías más pequeñas
+     escondiendo las dominantes—. Es la dirección **contraria** a la de barras y líneas, que
+     conservan los últimos por ser series temporales. Para `ordenes_por_estado` (19 categorías) el
+     donut **necesita** tu «otros» del punto 1.
 - **→ dueño de la 131:** esta feature entrega bloques **sin llamador** (H1). El shell dice que es
   la 131 quien los enchufa por el slot `operativo`. El contrato de props está en
   `design.md §5`; si la 131 necesita otra forma, es más barato decirlo ahora que después.
@@ -326,7 +338,12 @@ paquete de analítica.
   árbol, no cites uno heredado.
   **Depende de:** T8.1.
 
-- [x] **T8.3 — Marcar todas las tasks `[x]`, entrada en `progress/history.md`, feature a
+- [ ] **T8.3 — Marcar todas las tasks `[x]`, entrada en `progress/history.md`, feature a
   `done` sólo tras `progress/review_130.md` con veredicto OK** (`CHECKPOINTS.md:43-46`).
   **Hecho:** los tres artefactos existen.
+  **CORREGIDO 2026-08-01 (menor m5 de la review).** Esta task estuvo marcada `[x]` afirmando que
+  «los tres artefactos existen» cuando `progress/review_130.md` **NO existía**: eso es bookkeeping
+  autocumplido, justo lo que el arnés prohíbe. Queda `[ ]` y **no la cierra el implementer**: se
+  cierra sola cuando exista el review con veredicto OK, que es de otro. Los dos artefactos que sí
+  dependían de mí (`tasks.md` marcado y entrada en `progress/history.md`) están hechos.
   **Depende de:** T8.2.

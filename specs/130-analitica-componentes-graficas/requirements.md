@@ -280,6 +280,15 @@ declarado: para dos índices distintos en `[0, MAX_SERIES)` el token resultante 
 **R20.** El sistema DEBE formatear los valores según la unidad declarada, con el locale de
 `lib/config/moneda.ts:21` y sin literal de idioma incrustado en los componentes.
 
+**R20-bis — decidido al implementar, 2026-08-01: la unidad `porcentaje` viaja como FRACCIÓN.**
+El sistema DEBE interpretar un valor de unidad `porcentaje` como razón en `[0,1]` (`0,842` = 84,2 %)
+y NO como puntos porcentuales. Es coherente con el catálogo de la 135, que define esas métricas como
+una **razón numerador/denominador** (`DefinicionMetrica.razon`, `lib/analytics/types.ts`), y con
+`Intl`, que multiplica por 100 en `style: "percent"`. **Consecuencia para el tablero (131): pasa la
+razón cruda, NO la pre-multipliques por 100** — si lo haces verás «35 000 %» y el fallo será tuyo,
+no del componente. *(El spec no fijaba la escala; se decide aquí para que no la invente cada
+llamador.)*
+
 **R21.** El formateo DEBE vivir en una función pura del paquete, invocable y testeable sin
 renderizar ningún componente.
 
@@ -342,6 +351,32 @@ requisito, no orientación.)*
 la **misma** política que R31: error con nombre (`PuntosExcedidosError`) fuera de producción; y en
 producción conservar los **últimos** `MAX_PUNTOS_SERIE` puntos —los más recientes— descartando los
 más antiguos, y anunciar el recorte con texto.
+
+**R33-bis — enmienda del humano, 2026-08-01: el donut tiene su propio techo.**
+
+CUANDO la gráfica es `GraficaDonut`, ENTONCES el techo que se aplica a sus **segmentos** DEBE ser
+`MAX_SERIES` (5), NO `MAX_PUNTOS_SERIE` (62), y al desbordar DEBE conservar los **PRIMEROS** en el
+orden recibido, no los últimos. La política de entornos no cambia: fuera de producción lanza
+`SeriesExcedidasError`; en producción recorta y **anuncia el recorte con texto**.
+
+**Por qué el donut tiene regla propia.** En un donut el color no distingue series: distingue
+**segmentos**. El tope es 5 porque la paleta tiene 5 colores y `paleta.ts` lanza
+`IndiceSerieFueraDeRangoError` para todo índice `>= MAX_SERIES` **en cualquier `NODE_ENV`,
+producción incluida**. Con 62 segmentos habría que repetir colores —dos porciones del mismo color
+en la misma leyenda se leen como la misma categoría—, que es **exactamente** lo que Q3 descartó; y
+sin recorte, un donut de 6 o más categorías (`ordenes_por_estado` tiene 19, I26) **reventaría en el
+navegador también en producción**.
+
+**Por qué conserva los PRIMEROS y no los últimos.** Aquí la dirección es la contraria a la de R33 y
+es deliberado: en una serie ordenada por magnitud los primeros son los que más pesan. Quedarse con
+los últimos dejaría a la vista las 5 categorías **más pequeñas** escondiendo las dominantes — un
+donut engañoso, que es peor que uno recortado y anunciado. En una serie **temporal** manda el
+criterio opuesto (lo reciente es lo que se mira), y por eso R33 conserva los últimos: son dos formas
+distintas de leer los datos, no una incoherencia.
+
+**Alcance de la enmienda: SÓLO el donut.** R33 sigue intacta para `GraficaBarras` y
+`GraficaLineas`: 62 puntos por serie, `PuntosExcedidosError` fuera de producción y conservar los
+**últimos**. Esas dos gráficas no se tocan.
 
 **R34.** El sistema NO DEBE implementar dentro del paquete ninguna agrupación de series en «otros»
 ni ninguna agregación temporal (por semana o por mes): esos dos cálculos pertenecen al tablero
@@ -407,14 +442,14 @@ El implementer materializa estas rutas y repite el mapa en `progress/impl_130.md
 | R10 | `tests/components/AnalyticsGraficas.test.tsx` › «publica una entrada de texto por punto de dato aunque el lienzo mida cero» + «nunca emite mas de MAX_SERIES x MAX_PUNTOS_SERIE entradas» |
 | R11 | `tests/components/AnalyticsGraficas.test.tsx` › «un punto nulo se muestra como dato ausente, no como cero» |
 | R12 | `tests/components/AnalyticsKpiCard.test.tsx` › «muestra etiqueta y valor formateado por unidad» (4 unidades, `it.each`) |
-| R13 | `tests/components/AnalyticsKpiCard.test.tsx` › «el valor en moneda usa el formato configurado, sin simbolo hardcodeado» |
+| R13 | `tests/unit/components/analytics-paquete-guard.test.ts` › «ningun archivo del paquete escribe un simbolo de moneda, un codigo ISO ni un locale» + `analytics-formato.test.ts` › «con otra moneda configurada el valor NO lleva el simbolo del colon». *(La aserción sobre la salida por defecto NO basta: con es-CR/CRC `formatMonto` y un `₡` a mano dan el MISMO string.)* |
 | R14 | `tests/components/AnalyticsKpiCard.test.tsx` › «un valor nulo muestra el marcador de dato ausente y no cero» |
 | R15 | `tests/components/AnalyticsKpiCard.test.tsx` › «la variacion dice su signo con texto, no solo con color» |
 | R16 | `tests/unit/components/analytics-paleta.test.ts` › «ningun archivo del paquete contiene un hex ni un color crudo de tailwind» |
 | R17 | `tests/unit/components/analytics-paleta.test.ts` › «el color de una serie es determinista para el mismo indice» |
 | R18 | `tests/unit/components/analytics-paleta.test.ts` › «los tokens declarados existen en app/globals.css, en :root y en .dark» |
 | R19 | `tests/unit/components/analytics-paleta.test.ts` › «los cinco indices del techo dan cinco tokens distintos: ninguna leyenda repite color» |
-| R20 | `tests/unit/components/analytics-formato.test.ts` › «formatea conteo, porcentaje, moneda y segundos segun la unidad» |
+| R20 | `analytics-formato.test.ts` › «formatea conteo, porcentaje, moneda y segundos segun la unidad» + «con otro locale configurado cambian los separadores del conteo» + guard › «ningun archivo del paquete … ni un locale» *(la cláusula «sin literal de idioma incrustado» la mide el guard, no la salida)* |
 | R21 | `tests/unit/components/analytics-formato.test.ts` › «formatea sin renderizar ningun componente» |
 | R22 | `tests/components/AnalyticsTablaResumen.test.tsx` › «se apoya en DataTable: hereda skeleton, vacio y error» |
 | R23 | `tests/components/AnalyticsTablaResumen.test.tsx` › «la fila de totales se distingue de las filas de datos» + `analytics-formato.test.ts` › «totaliza en una funcion pura» |
@@ -428,6 +463,8 @@ El implementer materializa estas rutas y repite el mapa en `progress/impl_130.md
 | R31 | `tests/unit/components/analytics-topes.test.ts` › «con 6 series lanza SeriesExcedidasError fuera de produccion» + «en produccion conserva las 5 primeras en orden» + `tests/components/AnalyticsGraficas.test.tsx` › «anuncia por texto cuantas series muestra de cuantas» |
 | R32 | `tests/unit/components/analytics-topes.test.ts` › «MAX_PUNTOS_SERIE vale 62 y es mayor que 53 semanas y menor que 366 dias» |
 | R33 | `tests/unit/components/analytics-topes.test.ts` › «con 63 puntos lanza PuntosExcedidosError fuera de produccion» + «en produccion conserva los 62 ultimos» |
+| R33-bis | `tests/components/AnalyticsGraficas.test.tsx` › «techo de SEGMENTOS del donut» › «con 6 categorias lanza SeriesExcedidasError fuera de produccion» + «en produccion recorta a 5 segmentos, no revienta, y anuncia el recorte por texto» + «con 5 categorias exactas pinta las cinco y no anuncia recorte» |
+| R20-bis | `tests/unit/components/analytics-formato.test.ts` › «formatea conteo, porcentaje, moneda y segundos segun la unidad» (0,842 → 84,2 %) |
 | R34 | `tests/unit/components/analytics-paquete-guard.test.ts` › «el paquete no agrupa en otros ni re-muestrea por semana o mes» |
 | R35 | `tests/components/KpiValorAnimado.test.tsx` › «el valor en moneda usa lib/config/moneda y el archivo no tiene simbolo literal» |
 | R36 | `tests/components/MisAsignacionesPage.test.tsx` (suite completa, sin cambios) + `tests/components/CierresAdminModule.test.tsx` (idem) + Task **T7.3** (delta 0 en la suite, evidencia en `progress/impl_130.md`) |

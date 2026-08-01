@@ -1,10 +1,32 @@
 // Formato por unidad y total por columna (feature 130): R20, R21, R23.
 // Sin DOM: este archivo NO importa @testing-library/react a proposito (R21).
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { formatearValor, totalizar } from "@/components/private/analytics/formato";
 import { SIN_MONTO, monedaConfig } from "@/lib/config/moneda";
+
+/**
+ * Recarga `formato.ts` (y con el `lib/config/moneda.ts`, que resuelve su
+ * configuracion al importarse) con OTRA moneda y OTRO locale.
+ *
+ * Existe porque con la configuracion por defecto `formatMonto(3500)` y un
+ * `` `₡${…}` `` escrito a mano producen el MISMO string byte a byte: cualquier
+ * asercion sobre la salida por defecto es incapaz de distinguirlos. Cambiando la
+ * configuracion los dos dejan de coincidir y la asercion vuelve a medir el
+ * requisito (R13, R20) en vez de la moneda de hoy.
+ */
+async function conMoneda(locale: string, currency: string) {
+  vi.resetModules();
+  vi.stubEnv("MONEDA_LOCALE", locale);
+  vi.stubEnv("MONEDA_CURRENCY", currency);
+  return import("@/components/private/analytics/formato");
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.resetModules();
+});
 
 describe("formato por unidad (R20, R21)", () => {
   it("formatea sin renderizar ningun componente", () => {
@@ -80,6 +102,43 @@ describe("formato por unidad (R20, R21)", () => {
 
   it("el cero SI se muestra como cero: es un dato, no una ausencia", () => {
     expect(formatearValor(0, "conteo")).not.toBe(SIN_MONTO);
+  });
+});
+
+describe("la moneda y el idioma salen de configuracion, no del codigo (R13, R20)", () => {
+  it("con otra moneda configurada el valor NO lleva el simbolo del colon", async () => {
+    const { formatearValor: formatear } = await conMoneda("es-CR", "USD");
+
+    const salida = formatear(3500, "moneda");
+    expect(salida).toBe(
+      new Intl.NumberFormat("es-CR", { style: "currency", currency: "USD" }).format(3500),
+    );
+    // Lo que de verdad se afirma: el simbolo NO esta escrito en el paquete.
+    expect(salida).not.toContain("₡");
+  });
+
+  it("con otro locale configurado cambian los separadores del conteo", async () => {
+    const { formatearValor: formatear } = await conMoneda("en-US", "USD");
+
+    expect(formatear(3500, "conteo")).toBe(
+      new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(3500),
+    );
+    // "3,500" en en-US contra "3 500" en es-CR: si el locale estuviera incrustado,
+    // esta asercion no se movería.
+    expect(formatear(3500, "conteo")).toContain(",");
+  });
+
+  it("con otro locale cambia tambien el nombre de la unidad de tiempo", async () => {
+    const { formatearValor: formatear } = await conMoneda("en-US", "USD");
+
+    expect(formatear(600, "segundos")).toBe(
+      new Intl.NumberFormat("en-US", {
+        style: "unit",
+        unit: "minute",
+        unitDisplay: "short",
+        maximumFractionDigits: 1,
+      }).format(10),
+    );
   });
 });
 
