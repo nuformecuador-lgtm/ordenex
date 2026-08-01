@@ -8,35 +8,69 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🏁 CIERRE DE JORNADA 2026-07-31 — **EMPIEZA A LEER POR AQUÍ**
+## 🚀 RELEASE 2026-08-01 — `dev → prod` DESPLEGADA — **EMPIEZA A LEER POR AQUÍ**
 
-Todo lo trabajado hoy está **mergeado en `dev`**. Cinco PRs: #239, #240, #242, #243, #244.
+**Hecho. Producción ya no está por detrás: `dev` y `prod` están al día (0 commits de diferencia).**
+PR **#246** (`dev → prod`), precedido del **#245** que cerró el bookkeeping de la jornada anterior.
+
+La release llevó 215 archivos (+30703/−2162): buscador de órdenes (**169**), descarga a Excel de las
+25 tablas (**170 fase 1**), desglose del dinero por tienda (**171**) y el borrado de la vista legacy
+del listado. Despliegue de producción `dpl_6yAcpx6NvF5otCBk5Xuy1Dzimh44` en **READY**.
+
+### ✅ La migración del buscador está APLICADA en producción — verificado en la base, no deducido
+
+`20260731160000_orden_busqueda_trgm`, `finished_at` **2026-08-01 18:56:26Z**, `applied_steps_count`
+1, `rolled_back_at` NULL. **Cero migraciones rotas** en toda la tabla.
+
+| Comprobación | Resultado |
+| --- | --- |
+| `pg_trgm` en el esquema `extensions` | ✅ instalada ahí, que es donde el índice la cualifica |
+| Columna `orden.busqueda_texto` e índice GIN | ✅ ambos existen |
+| Columna generada calculada | ✅ **69 de 69 filas** con texto no vacío |
+| Búsqueda por fragmento y ruta rápida por guía | ✅ las dos devuelven la fila; un término inexistente devuelve 0 |
+| Plan de ejecución | ✅ **`Bitmap Index Scan on orden_busqueda_texto_trgm_idx`** — el planificador USA el índice, no cae a seq scan |
+| Errores de runtime en Vercel tras desplegar | ✅ ninguno |
+
+> El pre-vuelo se **rehízo** antes de mergear (no se reutilizó el del día anterior): `pg_trgm` no
+> estaba instalada en ningún esquema, así que el único modo de fallo que la migración declara —la
+> extensión viviendo en otro esquema— no se materializó.
+
+### ⏭️ Lo siguiente, por orden
+
+1. **170 FASE 2** y las features **172** / **173**, tal como quedaron especificadas más abajo.
+2. **PRs abiertos que NO entraron en esta release**, los dos del lote de analítica: **#241**
+   (`MERGEABLE`/`CLEAN`, renombre de `ROLES_ACCESO_ANALITICA`) y **#237**, que pasó a
+   **`CONFLICTING`/`DIRTY`** y necesita rebase — trae la migración `analytics_daily`, así que cuanto
+   más se rezague, peor el conflicto.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-07-31
+
+Todo lo trabajado ese día está **mergeado en `dev`** —y desde el 2026-08-01, **en producción**.
+Cinco PRs: #239, #240, #242, #243, #244.
 
 ### ✅ Entregado hoy
 
 | Feature | Qué | Estado |
 | --- | --- | --- |
 | **167** | apartado propio de recolección para el mensajero | `done` · **en producción** |
-| **169** | buscador de órdenes (guía, remisión, teléfono, destinatario) | `done` · en `dev` |
-| **170** | descarga a Excel — **FASE 1**: las 25 tablas | `in_progress` · en `dev` |
-| **171** | desglose del dinero por tienda en la wallet | `done` · en `dev` |
+| **169** | buscador de órdenes (guía, remisión, teléfono, destinatario) | `done` · **en producción** |
+| **170** | descarga a Excel — **FASE 1**: las 25 tablas | `in_progress` · **en producción** |
+| **171** | desglose del dinero por tienda en la wallet | `done` · **en producción** |
 | — | escáner QR unificado y plegable + fix del botón desbordado | **en producción** |
 | — | saneamiento del arnés (`init.sh` volvió a verde) | **en producción** |
-| — | borrado de la vista legacy del listado del maestro | en `dev` |
+| — | borrado de la vista legacy del listado del maestro | **en producción** |
 
-### 🚀 LO PRIMERO AL RETOMAR: desplegar `dev → prod`
+### ✅ ~~LO PRIMERO AL RETOMAR: desplegar `dev → prod`~~ — HECHO el 2026-08-01 (PR #246)
 
-**Producción está varios PRs por detrás.** No tiene el buscador, ni el Excel, ni el desglose por
-tienda, ni el borrado de la vista legacy.
+Producción ya tiene el buscador, el Excel, el desglose por tienda y el borrado de la vista legacy.
+La migración del buscador quedó aplicada y verificada; el detalle está en el bloque de la release,
+arriba. El procedimiento de recuperación sigue documentado en
+`progress/impl_169-buscador-ordenes.md` §22 por si hiciera falta revertir.
 
-**La migración del buscador todavía NO está aplicada en producción** (sí en `dev`). Su pre-vuelo ya
-está hecho y verificado por MCP contra la base real: **`pg_trgm` no instalada** (sin conflicto de
-esquema, que era lo único capaz de tumbar el build y bloquear despliegues) y **69 filas** en `orden`
-(sin ventana de mantenimiento). El procedimiento de recuperación por si algo falla está en
-`progress/impl_169-buscador-ordenes.md` §22.
-
-> Recordatorio que costó descubrir: **en Vercel el build migra antes de compilar, así que mergear a
-> `prod` ES aplicar.**
+> Recordatorio que costó descubrir y que sigue vigente para la próxima migración: **en Vercel el
+> build migra antes de compilar, así que mergear a `prod` ES aplicar.**
 
 ### 📋 Trabajo especificado y listo para arrancar
 
