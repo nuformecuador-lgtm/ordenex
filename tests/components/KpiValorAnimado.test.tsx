@@ -11,10 +11,14 @@
 // `formattingFn(end)`: lo que se verifica aqui es la CIFRA que el KPI muestra, no
 // que la anime.
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { KpiValorAnimado } from "@/components/shared/KpiValorAnimado";
+import { formatMonto, monedaConfig } from "@/lib/config/moneda";
 
 /** `Intl` usa espacio duro (U+00A0); testing-library normaliza el DOM, no el esperado. */
 const norm = (texto: string) => texto.replace(/\s/g, " ");
@@ -29,16 +33,25 @@ describe("KpiValorAnimado (R35, R37)", () => {
 
     expect(
       screen.getByText(
-        norm(new Intl.NumberFormat("es-CR", { maximumFractionDigits: 0 }).format(3500)),
+        norm(new Intl.NumberFormat(monedaConfig.locale, { maximumFractionDigits: 0 }).format(3500)),
       ),
     ).toBeInTheDocument();
   });
 
-  it("con moneda antepone el simbolo al valor", () => {
+  it("el valor en moneda usa lib/config/moneda y el archivo no tiene simbolo literal", () => {
     render(<KpiValorAnimado value={3500} moneda />);
 
-    expect(screen.getByText((contenido) => contenido.includes("3"))).toBeInTheDocument();
-    expect(document.body.textContent).toContain("₡");
+    // El esperado se DERIVA de la configuracion: si manana cambia la moneda, el
+    // test sigue midiendo el requisito y no el colon de hoy.
+    expect(screen.getByText(norm(formatMonto(3500)))).toBeInTheDocument();
+
+    const fuente = readFileSync(
+      path.join(process.cwd(), "components", "shared", "KpiValorAnimado.tsx"),
+      "utf8",
+    ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+    expect(fuente).not.toMatch(/["'`][^"'`]*[₡$€£][^"'`]*["'`]/);
+    expect(fuente).not.toMatch(/\b(?:CRC|USD|EUR)\b/);
+    expect(fuente).not.toMatch(/["']es-[A-Z]{2}["']/);
   });
 
   it("un valor nulo, indefinido o no numerico se muestra como cero y no rompe", () => {
@@ -57,7 +70,7 @@ describe("KpiValorAnimado (R35, R37)", () => {
 
     expect(
       screen.getByText(
-        norm(new Intl.NumberFormat("es-CR", { maximumFractionDigits: 0 }).format(1500)),
+        norm(new Intl.NumberFormat(monedaConfig.locale, { maximumFractionDigits: 0 }).format(1500)),
       ),
     ).toBeInTheDocument();
   });
