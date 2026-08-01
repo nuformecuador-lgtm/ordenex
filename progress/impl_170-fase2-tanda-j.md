@@ -392,3 +392,310 @@ Las 4 colas de riesgo MEDIO paginan en el servidor con el mismo acotamiento por 
 tenian, y el dinero agregado de la unica pantalla que lo tiene sigue calculandose sobre el
 conjunto completo — verificado por mutacion en los dos puntos, mas dos mutaciones del `WHERE`
 que pasaron verdes en los servicios y solo el test de repositorio detuvo.
+
+---
+---
+
+# T J.2 — Frontend: paginacion + contador por `total` en las 4 colas de riesgo MEDIO
+
+**Rama:** `feature/170-fase2-tanda-j` · **Fecha:** 2026-08-01 · **Rol:** `frontend_dev`
+**Alcance:** SOLO UI. Cero cambios en `lib/services/`, `lib/repositories/` y cero cambios de
+comportamiento en las Server Actions — no se encontro ningun defecto en lo que dejo T J.1.
+
+Todo lo que sigue esta MEDIDO. Las cuatro mutaciones se ejecutaron y se revirtieron.
+
+---
+
+## 12. Que se entrega, cola a cola
+
+| # | Cola | Contador (R42) | Nombre accesible del control (R43) | Descarga (R52) |
+| --- | --- | --- | --- | --- |
+| 1 | Cierres del dia pendientes | `({colaPendientes.total})` | Paginación de los cierres del día pendientes | `listarCierresAdmin().pendientes` |
+| 2 | Cierres de bodega pendientes | `({colaPendientes.total})` | Paginación de los cierres de bodega pendientes | `listarCierresBodegaAdmin().pendientes` |
+| 3 | Cierres del dia a consolidar | `({pagina.total})` | Paginación de los cierres del día a consolidar | `listarConsolidacion().consolidables` |
+| 4 | Incidentes pendientes | `({colaPendientes.total})` | Paginación de los incidentes pendientes | `listarIncidentes().pendientes` |
+
+Las dos pantallas (`cierres-admin`, `incidentes`) pre-cargan la PAGINA 1 de cada cola con la
+Server Action de T J.1 (input vacio: los defaults los pone el schema del dominio) y la bajan por
+props. Los cuatro modulos montan SWR con esa pagina como `fallbackData` y `<Pagination>`
+alimentado por el `total` del servidor. Molde: el que dejo T I.2, sin variaciones.
+
+Con esto, **las dos tablas de cada una de estas pantallas paginan**: la cola (J) y el historico
+(I). `cierres-admin` pasa a pre-cargar 4 paginas y `incidentes` 2.
+
+---
+
+## 13. Q-I6 RESUELTA: el control vive EN el modulo
+
+T I.2 dejo la eleccion a esta tanda y T J.1 la recomendo medida. **Se monta en el modulo**, no
+en un hijo, y el motivo es exactamente el agujero que Q-I6 describia: la guardia de T H.3 mira
+del archivo que monta `<Pagination>` **hacia los componentes que importa**, nunca hacia arriba.
+Con el control en un hijo, el contador del padre queda fuera de su vista y podria volver a
+`.length` sin que nada se pusiera rojo.
+
+Con el control en el modulo, los cuatro archivos entran en `pantallasPaginadas()` y la guardia
+los vigila de verdad. Medido: la mutacion 1 (contador desde la pagina) pone rojos **los tres
+tests de la guardia estatica** ademas del de comportamiento.
+
+Consecuencia deliberada: estos cuatro modulos NO se parten en dos archivos como hizo T I.2 con
+los historicos. Alli la mudanza era la unica forma de que un contador correcto conviviera con
+una tabla paginada; aqui el contador ya no cuenta un array, asi que no hay nada que separar y
+partir el archivo solo alejaria la tabla de su contador.
+
+---
+
+## 14. Las cuatro entradas `pendiente` del registro de T H.3, saldadas
+
+`tests/unit/descarga/contadores-cabecera.guardia.test.ts`:
+
+- las 4 entradas `pendiente` **salen del registro** (ya no existen en el codigo) y el conteo
+  del arbol baja de **6 a 2**: quedan solo las dos vistas agrupadas del Anexo IV;
+- el tercer test cambia de sentido y se endurece. Era «las cuatro colas siguen contando el
+  array, y por eso siguen pendientes»; ahora es **«las cuatro colas muestran el total del
+  servidor, y su pantalla se vigila»**, con tres afirmaciones: no queda ningun `pendiente`;
+  cada uno de los cuatro modulos ES una pantalla paginada a ojos de la guardia (Q-I6); y el
+  contador de cada uno sale de un `.total`. El primer test prohibe el patron viejo, este exige
+  el nuevo — sin el segundo, borrar las entradas habria dejado el test verde por vacuidad;
+- la anti-vacuidad sube de **17 → 28** archivos reconocidos (24 montan `<Pagination>` + 4
+  componentes de tabla que importan). T H.3 la dejo en 17, la tanda I la llevo a 24 sin
+  actualizar el numero, y T J.2 suma los 4 modulos;
+- el estado `"pendiente"` se conserva en el vocabulario del registro, con su doc: es el que hay
+  que usar si una tanda futura introduce una cola con contador antes de paginarla.
+
+---
+
+## 15. R49/R50 — el punto rojo, y por que no se movio
+
+Los **cinco** agregados de dinero de `ConsolidacionBodegaModule` siguen llegando por props
+desde `listarConsolidacion`, calculados sobre el CONJUNTO COMPLETO. La pagina solo recorta lo
+que la tabla PINTA. No se toco ni una linea de ese calculo, y el motivo esta escrito en el
+propio contrato de props del modulo para que no se pierda: dos de los cinco —el neto y «la
+central debe»— salen de repartir el efectivo entre los pagos INDIVIDUALES ordenados, y eso no
+lo produce ni una pagina ni un `SUM`.
+
+Como no dependen de la pagina, **R50 sale gratis**: cambiar de pagina no los toca. Lo mismo con
+`puedesSolicitar`/`motivoBloqueo` y `sinZona`.
+
+El test no se conforma con «siguen ahi»: los datos estan elegidos para que una suma sobre la
+pagina visible dé numeros DISTINTOS y reconocibles (250.00 / 100.00 / 350.00 / 750.00 / 25.00
+frente a 600.00 / 240.00 / 840.00 / 1800.00 / 60.00), y se afirma que **ninguno de los cinco
+numeros de la pagina aparece en pantalla**, antes y despues de paginar. Medido: mutacion 2.
+
+En las otras tres colas no hay agregado de dinero que proteger (verificado por T J.1 §3.1): el
+dinero va por fila o dentro del modal de detalle de UNA fila.
+
+---
+
+## 16. R50 — «ni el estado de los formularios»
+
+El tercer tramo de R50 se afirma sobre «Incidentes pendientes»: se abre el detalle, se abre el
+sub-modal de aprobacion, se teclea el monto de la indemnizacion y **entonces** cambia la pagina
+de la tabla de detras; el monto sigue ahi y el sub-modal sigue abierto.
+
+El control se acciona con `fireEvent` **a proposito y esta dicho en el test**: con el dialogo
+abierto, el resto de la pantalla queda fuera del arbol accesible (`aria-hidden`), que es lo
+correcto para un lector de pantalla. Lo que se prueba no es que se pueda pulsar a traves del
+modal, sino que **una relectura de pagina no reinicia el estado del modulo**. Por eso las
+consultas de ese tramo usan `hidden: true`, y solo ese tramo.
+
+---
+
+## 17. R52 — la descarga sigue siendo el conjunto completo
+
+Las cuatro colas eran **Familia B** y proyectaban con `filasLocales(<array de props>)`. Al pasar
+a pagina, esa MISMA linea pasa a significar «descarga lo que ves» y no falla en ninguna parte:
+el archivo sale, con 25 filas de 60. Las cuatro se cablean ahora con `filasDelConjuntoCompleto`
+(`components/shared/descarga-resultado.ts`, T I.2), que RELEE el conjunto al pulsar el control
+—una lectura mas, y solo cuando el usuario descarga— y lo proyecta con el MISMO `filasLocales`,
+sin perder el tope de 5000 ni su mensaje accionable (R26/R27/R28).
+
+Lo que se relee es **el mismo listado que la pantalla ya llamaba antes de paginar**
+(`listarCierresAdmin`, `listarCierresBodegaAdmin`, `listarConsolidacion`, `listarIncidentes`),
+con el mismo acotamiento por actor resuelto server-side: descargar no amplia el alcance ni una
+fila (R14/R44). En consolidables tiene un efecto extra util: el archivo y los agregados de la
+cabecera salen de la MISMA lectura, asi que no pueden hablar de conjuntos distintos.
+
+El test descarga **desde la pagina 2**, que es donde la degradacion seria mas facil de no notar.
+Medido: mutacion 3.
+
+---
+
+## 18. Q-I3 se extiende a la cola (la vista tipo factura)
+
+`CierresAdminModule` concatenaba `[...pendientes, ...historicoPagina.items]`. Ahora las DOS
+mitades son paginas: la tira muestra la pagina visible de la cola mas la del historico. Es la
+MISMA decision que T I.2 tomo y argumento para el historico (§15 de esta bitacora), aplicada a
+la otra mitad; la frase que define la seccion —«los mismos cierres de arriba»— sigue siendo
+literalmente cierta. Alimentarla del conjunto entero seria la unica razon por la que la cola
+completa seguiria cruzando a la pantalla.
+
+`BajoRiesgoPaginacion.test.tsx::Q-I3` sigue verde con la cola paginada.
+
+---
+
+## 19. Las cuatro mutaciones, con su salida real
+
+**Todas revertidas** (`grep MUTACION app/` sin resultados propios; suite completa verde
+despues).
+
+| # | Mutacion | Resultado medido |
+| --- | --- | --- |
+| 1 | **R42**: el contador de la cola de cierres pasa a `({colaPendientes.items.length})` | **ROJO (4)**: `ColasPaginacion::…(R42)` + los TRES de la guardia de T H.3 — `una pantalla paginada muestra el TOTAL del servidor…: expected [ Array(1) ] to deeply equal []`, `hay contadores sin registrar…`, `Cierres del dia pendientes de decision: su contador no sale del total del servidor (R42)` |
+| 2 | **R49/R50**: el total general de consolidables se calcula sumando `pagina.items` | **ROJO (1)**: `Unable to find an element with the text: ₡840.00` (renderiza ₡350.00, el de la pagina) |
+| 3 | **R52**: la descarga de la cola de incidentes pasa a `filasLocales(colaPendientes.items, …)` | **ROJO (1)**: `Incidentes pendientes: el archivo trae la PÁGINA, no el conjunto: expected […(25)] to have a length of 60 but got 25` |
+| 4 | **R43**: se quita el `ariaLabel` del control de la cola de bodega | **ROJO (3)**: `Unable to find an accessible element with the role "navigation" and name "Paginación de los cierres de bodega pendientes"` |
+
+Las dos que el encargo exigia —R42 derivado de la pagina y un total de dinero sobre la pagina
+visible— son la 1 y la 2. **La 1 es ademas la demostracion de Q-I6**: la guardia estatica solo
+se pone roja porque el control vive en el modulo.
+
+---
+
+## 20. Mapa `R<n> → archivo::test`
+
+Prefijo `P/` = `tests/components/paginacion/ColasPaginacion.test.tsx`.
+
+| R | Test |
+| --- | --- |
+| **R42** | `P/::el contador de cabecera muestra el total del servidor, no el tamaño de página (R42)` — las 4 colas, en la pagina 1 **y en la ULTIMA** (10 filas de 60), que es donde un contador derivado del array se delata |
+| **R42** | `tests/unit/descarga/contadores-cabecera.guardia.test.ts::ninguna pantalla con listado paginado deriva su contador de la longitud del array` (guardia estatica; ahora vigila los 4 modulos) |
+| **R42** | `tests/unit/descarga/contadores-cabecera.guardia.test.ts::las cuatro colas de la tanda J muestran el total del servidor, y su pantalla se vigila` |
+| **R43** | `P/::cada cola navega entre páginas y su control tiene nombre accesible (R43)` — las 4, por rol y nombre; ida y vuelta |
+| **R43** | `P/::las cuatro están cubiertas: ni una se queda fuera del recorrido` (anti-vacuidad + los 4 nombres de control son distintos entre si) |
+| **R50** | `P/::cambiar de página no altera los totales, los avisos de bloqueo ni los formularios (R50)` — los 5 agregados de dinero con su valor exacto, la ausencia de los 5 que produciria la pagina, el aviso de bloqueo con su boton deshabilitado y el monto tecleado en un sub-modal abierto |
+| **R52** | `P/::la descarga sigue entregando el dataset completo (R52)` — las 4, descargando DESDE la pagina 2 |
+| **R44** | `P/::el usuario ve exactamente las mismas filas que antes en la página 1 (R44)` — las 4, en el PRIMER pintado, sin `await` (el aviso de T I.2: sin esa exigencia, quitar el `fallbackData` pasa VERDE) |
+| **Q-I3** | `tests/components/paginacion/BajoRiesgoPaginacion.test.tsx::Q-I3: la vista tipo factura sigue a la tabla del histórico, no al conjunto entero` (sigue verde con la cola paginada) |
+
+**R40/R41 no se declaran cubiertos aqui** (son de T J.1, a nivel de servicio); la pantalla los
+consume: el `total` del contador y del control sale del servidor y el `pageSize` de
+`lib/config/<dominio>.ts`. **R45-R49, R51, R53, R54 no entran en esta task.**
+
+**Un test se RETIRA:** `BajoRiesgoPaginacion.test.tsx::el contador de la cola que NO pagina
+sigue contando el conjunto entero (R42)`. Su premisa —«la cola que NO pagina»— dejo de ser
+cierta. Su sustituto es estrictamente mas fuerte (afirma el total en la ULTIMA pagina, donde el
+array y el conjunto no coinciden), y en su lugar queda un comentario que dice donde vive ahora.
+
+---
+
+## 21. Decisiones tomadas al implementar
+
+1. **Una interfaz de pagina por modulo** (`CierresAdminColaPagina`, `CierresBodegaColaPagina`,
+   `ConsolidablesPagina`, `IncidentesColaPagina`), como hizo T I.2 con las suyas. Se valoro
+   declarar una sola forma compartida en `components/shared/`; se descarto porque obligaria a
+   reescribir las siete de la tanda I para que no queden dos vocabularios, y eso es refactor de
+   codigo ajeno a esta task. Queda anotado como Q-J4.
+2. **El tamano de pagina de consolidables sale de `cierreConfig`**, no de `cierreBodegaConfig`.
+   Sus filas son `cierre_dia`: es la misma decision que tomo T J.1 (§6.9) en el servidor, y las
+   dos tienen que coincidir o el `fallbackData` de la pagina 1 dejaria de valer.
+3. **El esqueleto de carga solo cuando NO hay nada que pintar** (`data === undefined`), como
+   T I.2. `isLoading` de SWR sigue en `true` mientras revalida aunque haya `fallbackData`.
+4. **Las paginas piden las dos mitades en paralelo** (`Promise.all`). Son lecturas
+   independientes; secuenciarlas duplicaria la latencia de la pantalla sin ganar nada.
+5. **Si una cola paginada no responde `ok`, la seccion no se muestra** (`notFound` en la pagina
+   de incidentes y en el prefetch de cierres del dia; la seccion de bodega/consolidacion
+   simplemente no se pinta). Es el MISMO criterio que ya tenia su listado compuesto: la
+   pantalla no se rompe y no expone nada.
+6. **La descarga de consolidables relee `listarConsolidacion`, que es cara** (calcula los cinco
+   agregados). Es la deuda Q-I5 heredada, no una nueva: ocurre una vez por clic en «Descargar»,
+   y hoy no existe otro origen del conjunto completo sin tocar backend.
+
+---
+
+## 22. Archivos
+
+**Nuevos (1)**
+
+- `tests/components/paginacion/ColasPaginacion.test.tsx` (6 tests)
+
+**Modificados — produccion (6)**
+
+- Paginas (2): `app/(app)/cierres-admin/page.tsx`, `app/(app)/incidentes/page.tsx`.
+- Modulos (4): `CierresAdminModule`, `CierresBodegaAdminModule`, `ConsolidacionBodegaModule`,
+  `IncidentesAdminModule`.
+
+**Modificados — tests ajenos (9).** Dos motivos, ninguno afecta a una asercion existente:
+(a) la prop de la cola deja de ser un array y pasa a ser la pagina; (b) hace falta el doble de
+la Server Action paginada, porque SWR revalida al montar y sin el la tabla se vaciaria a mitad
+del test. Son `CierresAdminModule`, `CierresAdminIndemnizacion`, `IncidentesAdminModule`,
+`IncidentesAdminR51`, `CierresAdminPage`, `IncidentesPage`, `descarga/CierresDescarga`,
+`descarga/IncidentesDescarga` y `paginacion/BajoRiesgoPaginacion` (montajes + el test retirado
+de §20).
+
+**Una guardia se actualiza a proposito y se dice por que en el propio archivo:**
+`contadores-cabecera.guardia.test.ts` (§14).
+
+`censo-tablas.ts` y `PANTALLAS_ANEXO_III` **no cambian**: ninguna tabla se muda de archivo y los
+cuatro modulos ya estaban en la lista de pantallas vigiladas.
+
+**Cero cambios en `lib/services`, `lib/repositories`, Server Actions, migraciones y RLS.**
+
+---
+
+## 23. Puertas (medicion final, salida real)
+
+```
+$ npx tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ npx eslint
+✖ 23 problems (0 errors, 23 warnings)
+=== lint exit: 0 ===
+(baseline de T J.1: 23 warnings. NINGUNA nueva.)
+
+$ npx vitest run
+ Test Files  741 passed (741)
+      Tests  8908 passed (8908)
+   Duration  216.67s
+```
+
+Suite completa en verde, sin flakes (el conocido `OrdenesModuleReuse` paso). Baseline de T J.1:
+740 archivos / 8903 tests → **+1 archivo y +5 tests** (6 nuevos − 1 retirado, §20).
+
+---
+
+## 24. Preguntas abiertas de T J.2
+
+**Q-J1 / Q-I4 — SE PUEDEN CERRAR YA, pero no aqui.** Con T J.2 en verde, las DOS mitades de cada
+particion pintan una pagina: los arrays de `listarCierresAdmin`, `listarCierresBodegaAdmin` y
+`listarIncidentes` **se quedan sin lector de tabla**. Lo unico que aun los consume es la
+DESCARGA (§17), que necesita el conjunto completo por definicion — asi que «retirarlos» no es
+borrarlos: es dejar de traerlos en el render y traerlos solo cuando alguien descarga, o darles
+un `listarXCompleto` propio. Eso toca `lib/services` y por eso NO se hizo en esta task, cuyo
+alcance declarado es solo UI.
+
+**Se propone dirigirlo a la tanda M**, coordinado backend+frontend, con dos avisos medidos:
+
+- `listarConsolidacion` **no puede** perder su array: el dinero se calcula sobre el. Lo que si
+  puede es dejar de CRUZARLO al cliente.
+- mientras tanto, cada una de estas pantallas hace **cuatro** consultas mas por render (dos
+  paginas × su conteo) ademas de las que ya hacia. Lo que si baja YA es lo que cruza a la
+  pantalla, que es de lo que habla el Anexo III.
+
+**Q-J4 — La forma `{ items, total, pageSize }` esta declarada once veces en `app/`** (siete de
+T I.2 + cuatro de T J.2), una por modulo paginado: la misma forma con once nombres. Unificarla
+en un tipo compartido es un refactor transversal de UI que ninguna task ha pedido; se deja
+propuesto, no inventado. Ojo: NO es `PaginaListado<T>` de T H.2 —esa lleva ademas `page`, que la
+pantalla no necesita porque el numero de pagina visible lo manda el cliente—.
+
+**Q-I5 sigue abierta y ahora afecta a una descarga mas:** la de consolidables relee
+`listarConsolidacion`, que calcula los cinco agregados de la zona para quedarse solo con un
+array (§21.6).
+
+**Heredadas y NO resueltas aqui:** Q-I1 (saldos recorta fuera de la base), Q-I2 (desviacion de
+R51 en saldos), Q-J2 (los agregados de consolidacion leen el conjunto entero desde Postgres),
+Q-J3 (ocho schemas de pagina escritos a mano), la deuda **D5.2** y las preguntas de la tanda H
+siguen exactamente como las dejo T J.1.
+
+**`tasks.md` no se toca**, igual que hizo T J.1: la marca de `[x]` y su bloque «MEDIDO» los
+escribe quien cierra la tanda entera.
+
+---
+
+## 25. Veredicto
+
+Las 4 colas de riesgo MEDIO paginan en pantalla y su contador de cabecera muestra el `total` del
+servidor —verificado tambien en la ultima pagina, donde el array y el conjunto no coinciden—;
+los cinco agregados de dinero de consolidacion siguen saliendo del conjunto completo y la
+descarga sigue entregandolo entero, con las cuatro afirmaciones verificadas por mutacion y la
+guardia de T H.3 vigilando por fin las cuatro pantallas.
