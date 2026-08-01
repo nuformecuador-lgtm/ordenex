@@ -203,4 +203,34 @@ describe("guardia de cobertura del censo de tablas", () => {
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
     expect(totalCensado).toBe(31);
   });
+
+  it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
+    // T G.1 — el estado `pendiente` fue el andamio del rollout por tandas: permitía que la
+    // suite siguiera verde con 3 tablas cableadas y 22 por cablear. Cerrada la fase, ese
+    // andamio se retira, y hace falta un test que lo exija: sin él, «FASE 1 terminada»
+    // sería una afirmación de una bitácora, no una propiedad del repo, y una tabla a
+    // medias podría convivir con el cierre sin que nada lo dijera.
+    //
+    // Vigila en los dos sentidos:
+    //  (a) ningún `pendiente` en el registro  -> la fase no se cierra con tablas a medias;
+    //  (b) los totales del Anexo I y del II   -> ni se cablea una exclusión ni se saca de
+    //      alcance una tabla que sí debe descargar, «de paso».
+    const censadas = [...CENSO_DATATABLE, ...CENSO_TABLAS_CRUDAS].flatMap((entrada) =>
+      entrada.tablas.map((tabla) => ({ ...tabla, ruta: entrada.ruta })),
+    );
+
+    const pendientes = censadas
+      .filter((tabla) => tabla.estado === "pendiente")
+      .map((tabla) => `${tabla.ruta} :: ${tabla.nombre} (${tabla.nota ?? "sin tanda"})`);
+    expect(
+      pendientes,
+      "la FASE 1 del export no puede cerrarse con tablas pendientes de cablear",
+    ).toEqual([]);
+
+    // Anexo I: las 25 tablas dentro de alcance, todas descargando. Anexo II: las 6
+    // exclusiones, ninguna con control. El reparto es el del spec, verificado contra el
+    // registro que a su vez se contrasta contra el árbol en el test de arriba.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(25);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(6);
+  });
 });

@@ -824,3 +824,425 @@ $ ./init.sh
    se usa; si mañana la vista factura reemplaza también esa, la guardia del censo lo dirá.
 4. **La tanda F (ranking) es la ÚNICA `pendiente` del censo.** Al cerrarla, el censo queda sin
    ningún `pendiente` y la fase 1 puede cerrarse (T G.1/T G.2).
+
+---
+
+# TANDAS F y G — la última tabla y el CIERRE DE LA FASE 1 (2026-07-31)
+
+> Cuarta y última entrega de la FASE 1 sobre la misma rama. **No reescribe nada de lo
+> anterior**: T0.\*, A, B, C, D y E siguen tal cual las dejaron las entregas previas. Aquí van
+> **T F.1** (el ranking del día, la 25.ª tabla) y **toda la tanda G** (el cierre de fase).
+>
+> Con esto **la FASE 1 queda entregada**: las 25 tablas del Anexo I descargan a Excel. La
+> **FASE 2 (paginación server-side, tandas H–M) NO entra**, por decisión del humano (Q3).
+
+## D0. Baseline medido AL EMPEZAR (2026-07-31)
+
+Medido, no heredado. El worktree venía sin `node_modules` ni `.env`: se instaló con
+`pnpm install --frozen-lockfile` y se corrió `prisma generate` con un `DATABASE_URL` de
+marcador (el generate no conecta), que es lo que evita los ~200 errores falsos de typecheck.
+
+| Puerta | Baseline |
+| --- | --- |
+| `pnpm run typecheck` | 0 errores |
+| `pnpm run lint` | 0 errores / 20 warnings |
+| `pnpm test` | **710 archivos** (706 passed + 4 skipped) · **8547 tests**: 8473 passed / 74 skipped / **0 fallos** |
+| `./init.sh` | `== init OK ==` |
+
+Coincide EXACTAMENTE con lo que declaraba el encargo. `git merge origin/dev` fue no-op: la
+rama ya lo traía integrado de la entrega anterior (`origin/dev` es ancestro de
+`origin/feature/170-…`), así que no hubo conflicto que resolver ni `feature_list.json` que
+tocar.
+
+> Nota de worktree: la rama `feature/170-export-todas-las-tablas` estaba tomada por otro
+> worktree, así que se trabajó en una rama local partiendo del MISMO commit (`8ff4edb8`) y se
+> empuja a la rama de la feature. El contenido es el mismo; solo cambia el nombre local.
+
+## D1. Tanda F — el ranking del día
+
+**La trampa de esta tanda no era la tabla: era la PANTALLA.** `/ranking` monta dos:
+
+| Tabla | Qué es | Decisión |
+| --- | --- | --- |
+| **Ranking del día** (`<DataTable>`) | listado de mensajeros ordenado por % de entregas | **dentro** de alcance (Anexo I #25) — cableada aquí |
+| **Premios del podio** (`<table>` cruda) | 3 filas de configuración con montos EDITABLES | **fuera** (P1 ratificada) — sigue sin control |
+
+Hay un test explícito para la segunda mitad: en esa pantalla existe **UN** control de descarga,
+no dos, y no cuelga de la tarjeta de premios. Es la comprobación que importa cuando las dos
+tablas comparten pantalla — «existe el del ranking» no descarta «y además el del podio»— y se
+hace con `esEditable`, que es cuando el podio pinta más controles.
+
+Es **FAMILIA B**, y no por descuido: el ranking está en el Anexo IV (no se paginará ni en la
+fase 2), porque la POSICIÓN y los ocupantes del podio se derivan del conjunto completo. El
+array de props ES el dataset, así que `filasLocales` sobre él, sin releer nada del servidor.
+
+### Las columnas: dos decisiones de contenido
+
+| # | Decisión | Por qué |
+| --- | --- | --- |
+| 1 | El conteo crudo se parte en **dos** columnas (`Entregadas`, `Asignadas`) | La tabla pinta una celda `5/5`. Ese `/` es glue de PRESENTACIÓN: en una hoja, `5/5` no se puede sumar ni promediar, y algún Excel lo interpreta como fecha. R7 pide valores crudos. No se añade información: se le quita el adorno a la que ya está en pantalla. |
+| 2 | El porcentaje viaja como el **STRING** del servidor, **sin `%`** | Mismo criterio money-safe del resto del rollout: un `Number` intermedio convierte `"100.0"` en `100` y `"80.0"` en `80` (se pierde el decimal), y el símbolo convierte una celda numérica en texto. La unidad la da el encabezado, que es literalmente el de la pantalla («% del día»). |
+
+**Lo que NO sale:** `mensajeroId` (uuid interno, R23) y **`premio`**. El `premio` sí está en el
+`RankingRowDTO`, pero quien lo muestra es la OTRA tarjeta —la del podio, fuera de alcance—, no
+esta tabla: exportarlo aquí sería publicar por el archivo un dato que esta tabla no enseña
+(R24) y colar por la puerta de atrás la tabla que el humano dejó fuera.
+
+**Un `null` es celda VACÍA, no el «—» de la pantalla:** la fila fuera del podio no tiene
+posición ni porcentaje. El guion es presentación y en una hoja se leería como un valor; un 0
+afirmaría un porcentaje que nadie calculó.
+
+**Un solo literal para el título.** `TITULO_DESCARGA = "Ranking del día"` da a la vez el
+encabezado de la tarjeta, el nombre de la hoja, la base del nombre de archivo (R12) y el nombre
+accesible del control (R13). Antes el encabezado era un literal suelto en el JSX; ahora no hay
+dos sitios que puedan decir cosas distintas.
+
+## D2. El censo, cerrado
+
+`tests/unit/descarga/censo-tablas.ts`: el ranking pasa de `pendiente` a `con_descarga` y **no
+queda ningún `pendiente`**.
+
+| Estado | Nº | Qué es |
+| --- | --- | --- |
+| `con_descarga` | **25** | el Anexo I completo |
+| `fuera` | **6** | el Anexo II (5 `<DataTable>` + la `<table>` cruda del podio) |
+| `pendiente` | **0** | — |
+
+Y no se declara: **se exige**. `cobertura-tablas.guardia` gana un test —«la FASE 1 del export
+queda cerrada: ninguna tabla del censo sigue pendiente»— que falla si alguien reintroduce un
+`pendiente`, y que además fija los dos totales (25 / 6) para que no se pueda cablear una
+exclusión ni sacar de alcance una tabla que sí debe descargar.
+
+**Por qué hacía falta un test nuevo y no bastaba con los que ya había — VERIFICADO POR
+MUTACIÓN:** se dejó la tabla del ranking A MEDIAS (censo en `pendiente` **y** sin la prop, que
+es el estado coherente de una tanda sin hacer). Los tests previos siguen **VERDES** —el censo
+coincide con el árbol, porque los dos dicen «no cableada»— y **solo falla el nuevo**:
+
+```
+AssertionError: la FASE 1 del export no puede cerrarse con tablas pendientes de cablear
+- Expected  []
++ Received  ["app/(app)/ranking/_components/RankingModule.tsx :: Ranking del día (tanda F.1)"]
+```
+
+Revertido; suite verde otra vez. Sin ese test, «FASE 1 terminada» sería una afirmación de una
+bitácora y no una propiedad del repo.
+
+El valor `pendiente` se conserva en el tipo `EstadoDescarga`: un rollout futuro volverá a
+necesitar el andamio. Lo que ya no se puede es cerrar una fase con él puesto.
+
+## D3. Tanda G — qué añade, y por qué no es papeleo
+
+Las tandas A–F contestan, tabla a tabla, «¿ésta descarga LO SUYO?». La G contesta otra pregunta
+que ninguna de ellas cubre: **¿las 25 se comportan IGUAL?** Tras seis tandas escritas en días
+distintos, la deriva plausible no es que una tabla no descargue —eso lo caza la guardia del
+censo— sino que una descargue DIFERENTE.
+
+### T G.1 — `ControlDescargaTransversal.test.tsx` (7 tests)
+
+En dos planos deliberadamente distintos.
+
+**(a) CONDUCTA**, sobre las TRES formas de cableado que existen, con componentes REALES:
+
+| Forma | Componente | Estado en que llega a la descarga |
+| --- | --- | --- |
+| A con filtros | `OrdenesApartado` | en la **página 2** |
+| A sin filtros | `UsuariosModule` | listado cargado |
+| B con filtro de cliente | `CuentasPorPagarTable` | con la búsqueda **«Beto»** aplicada |
+
+Que lleguen en un estado NO inicial es parte del test: con la pantalla recién montada,
+«descargar no altera la página ni la selección» no afirmaría nada.
+
+- **R34** — las tres producen `xlsx`, su disparador no anuncia menú (`aria-haspopup` ausente) y
+  tras pulsar no aparece ningún `role="menu"`. Descarga directa, sin elección (P7).
+- **R33** — el codificador (`buildXlsxRows`) se mockea con un buffer DISTINTO por caso y se
+  exige que el que llega a `descargarBlob` sea **ese mismo objeto**: demuestra el recorrido
+  `obtenerFilas → construirDescarga → buildXlsxRows → descargarBlob` entero, sin ramas propias.
+  `construirDescarga` corre REAL, así que el MIME y el nombre son los de producción.
+- **R35** — el punto de espera se pone en el CODIFICADOR, no en la acción: así vale igual para
+  Familia A (que espera al servidor) y para Familia B (que resuelve en memoria y sería
+  imposible de pillar «en vuelo»). En curso: `aria-busy="true"` y botón deshabilitado; un
+  segundo click no arranca una segunda descarga; al terminar, el control vuelve.
+- **R37** — se compara una FOTO de la pantalla (texto de la tabla, nº de filas, valor de la
+  búsqueda, paginación) antes y después, y se exige que el listado paginado no se vuelva a
+  consultar.
+- **R38** — con las Server Actions mockeadas, cualquier `fetch` durante el ciclo sería una
+  subida: se espía el global y se exige cero llamadas.
+
+**(b) BARRIDO ESTÁTICO** sobre todo `app/`, que es lo que extiende esas propiedades de 3 tablas
+a las 25 y a las futuras — un test de conducta solo cubre lo que monta:
+
+- ningún módulo declara `formatos` (R34), importa un generador de binario (R33) ni usa
+  `FormData`/`sendBeacon`/`localStorage` (R38);
+- **toda** descarga pasa por uno de los dos adaptadores comunes y **nadie** arma un
+  `DescargaFilasResult` a mano — ver D5.3;
+- los **3** componentes que reciben `obtenerFilas` por prop no son un agujero: se sigue la prop
+  hasta el módulo padre y se exige que allí también haya un adaptador común.
+
+### T G.2 — volumen (`descarga-170-volumen.test.ts`) y rollout parcial
+
+**Peso medido del archivo del tope**, sobre la tabla MÁS ANCHA del rollout (órdenes, 15
+columnas; se contaron las de los 18 módulos de columnas del árbol para elegirla):
+
+```
+[T G.2] xlsx de 5000 filas × 15 columnas: 0.34 MB (359311 bytes)
+```
+
+Generado y releído con `exceljs` en ~1 s. **Muy lejos** del techo que obligaría a bajar `N` (el
+test lo fija en 20 MB y falla si se acerca). El número lo imprime el propio test, para poder
+recomprobarlo en vez de creerlo.
+
+Además: las cabeceras releídas del binario son EXACTAMENTE las declaradas, la hoja tiene `N+1`
+filas, y la PRIMERA y la ÚLTIMA sobreviven en su posición (un recorte se habría comido justo la
+última).
+
+**R26/R27 por las DOS puertas del tope**, que son las dos familias: `filasLocales` (el array del
+cliente) y `filasDesdeResultado` con `limite_excedido` (el tope que aplica el servicio)
+devuelven **literalmente el mismo texto** y ninguna fila. Que coincidan es lo que hace que las
+25 tablas digan lo mismo ante el mismo problema.
+
+**R39 sigue vivo aunque la fase esté cerrada**, y por eso el test no es ceremonial: las 6
+exclusiones del Anexo II nunca tendrán la prop, la FASE 2 volverá a tocar estas pantallas una a
+una, y cualquier tabla futura nace sin ella. `rollout-parcial.test.tsx` compara el HTML de la
+tabla con y sin `descarga` (idéntico salvo el control), comprueba que sin la prop no se carga
+el generador ni se entrega archivo, y lo repite sobre una tabla REAL excluida
+(`OrdenesConErrorTabla`, feature 143).
+
+## D4. Mapa `R<n> → test` de la FASE 1 COMPLETA
+
+Los 39 requisitos de la PARTE 1. Abreviaturas: `svc` = `tests/unit/services/`,
+`act` = `tests/unit/actions/`, `desc` = `tests/unit/descarga/`,
+`cd` = `tests/components/descarga/`. En **negrita**, lo que aporta esta entrega.
+
+| R | Test |
+| --- | --- |
+| R1 | un «ofrece su control» por tabla: `cd/OrdenesApartadoDescarga` · `cd/SateliteDescarga` · `cd/ConfiguracionDescarga` :: los tres ofrecen su control con nombre accesible · `cd/WalletDescarga` :: cada ledger ofrece su control · `cd/WalletPropsDescarga` :: las tres ofrecen su control · `cd/CierresDescarga` :: cada tabla de cierres ofrece su control · `cd/IncidentesDescarga` :: las dos tablas ofrecen su control · **`cd/RankingDescarga` :: el ranking ofrece su control y el archivo trae una fila por mensajero** · **cobertura sistemática**: `desc/cobertura-tablas.guardia` :: estado declarado == código, instancia a instancia |
+| R2 | `desc/cobertura-tablas.guardia` :: las tablas declaradas fuera de alcance no montan control · **`cd/RankingDescarga` :: la tabla de premios del podio NO ofrece control de descarga** · **`cd/rollout-parcial` :: una tabla REAL declarada fuera sigue sin control y sin cambios** |
+| R3 | `cd/OrdenesApartadoDescarga` :: el listado paginado sigue comportándose igual · `cd/ConfiguracionDescarga` :: los tres listados siguen comportándose igual · `cd/WalletDescarga` :: los cuatro ledgers siguen comportándose igual · **`cd/rollout-parcial` :: sin `descarga` la tabla es idéntica** |
+| R4 | `desc/cobertura-tablas.guardia` :: toda tabla del árbol o declara descarga o figura como exclusión justificada (verificado con una tabla nueva sin registrar) |
+| R5 | los 6 archivos de `desc/*-descarga-columnas.test.ts` :: declara sus columnas ENUMERADAS, en el orden de la pantalla · **`cd/RankingDescarga` :: las columnas del archivo son las DECLARADAS, en su orden** |
+| R6 | `desc/usuarios-descarga-columnas` · `desc/plantillas-…` · `desc/api-keys-…` :: un campo nuevo del DTO no aparece en el archivo hasta declararlo |
+| R7 | los 6 archivos de columnas :: emite valores CRUDOS · `cd/WalletPropsDescarga` :: los montos viajan TAL CUAL · **`cd/RankingDescarga` :: porcentaje y conteo viajan TAL CUAL, sin el «%» ni el «/» de la pantalla** |
+| R8 | `desc/usuarios-…` :: rol y estado como ETIQUETA LEGIBLE (ídem plantillas, API keys y los 4 ledgers) · `cd/CierresDescarga` :: estados, causas y destinos como etiqueta legible · `cd/IncidentesDescarga` :: ídem |
+| R9 | `svc/{usuario,plantilla,api-key}-descarga` y `svc/wallet-{caja,tienda,mis-pagos,desglose-mensajero}-descarga` :: devuelve todas las filas del dataset, sin recorte por página · `cd/OrdenesApartadoDescarga` :: una fila por orden del apartado, no solo la página visible · `cd/ConfiguracionDescarga` :: el archivo trae TODAS las filas · `cd/WalletDescarga` :: el ledger ENTERO |
+| R10 | `cd/OrdenesApartadoDescarga` :: envía el estado del apartado como filtro vigente · `cd/SateliteDescarga` :: respeta los filtros de estado, cantón y distrito · `cd/WalletDescarga` :: usa los filtros de fecha vigentes · `cd/WalletPropsDescarga` :: cuentas por pagar exporta solo lo que la búsqueda deja a la vista |
+| R11 | `tests/unit/components/descarga-resultado` :: traduce a filas EN EL MISMO ORDEN (las dos familias) · los 7 servicios :: mismo criterio de orden que el listado · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: en el orden de la pantalla · **`cd/RankingDescarga` :: respeta el orden del ranking** (contrastado contra los nombres que la pantalla pinta) |
+| R12 | `cd/ConfiguracionDescarga` :: el nombre del archivo identifica el listado y la fecha · `cd/OrdenesApartadoDescarga` (`en-bodega-central-YYYY-MM-DD.xlsx`) · `cd/IncidentesDescarga` · **`tests/integration/descarga-170-volumen` :: `ordenes-2026-07-31.xlsx`** |
+| R13 | los siete archivos de `cd/` :: el nombre accesible de cada control identifica SU tabla · `cd/CierresDescarga` :: `<Resultado> · <mensajero>` en el detalle de bodega |
+| R14 | `svc/wallet-tienda-descarga` :: el archivo de la tienda A no trae ni una fila de la B, y viceversa · `svc/wallet-mis-pagos-descarga` :: ídem con dos mensajeros · `svc/wallet-desglose-mensajero-descarga` :: un mensajero NO puede pedir el desglose de otro · `cd/SateliteDescarga` :: solo órdenes de la zona del actor · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: solo lo del alcance del adminSatelite |
+| R15 | `svc/wallet-tienda-descarga` :: un `tiendaId` inyectado NO amplía el alcance · `svc/wallet-mis-pagos-descarga` :: ídem con `mensajeroId` — **ambos verificados por MUTACIÓN** |
+| R16 | las 7 de `act/*-descarga-action` :: devuelve unauthenticated y ninguna fila cuando no hay sesión |
+| R17 | los 7 servicios :: forbidden y ninguna fila a todo rol ajeno, con el repositorio SIN invocar, + CONTRAPRUEBA con el rol autorizado · las 7 actions :: propaga forbidden sin filas |
+| R18 | las 7 actions :: validation_error con una clave fuera de la lista blanca, y también con `page`/`pageSize` · `cd/ConfiguracionDescarga` y `cd/WalletDescarga` :: ninguna clave de paginación viaja en el input |
+| R19 | `svc/plantilla-descarga` :: excluye las plantillas borradas igual que el listado · `svc/usuario-descarga` y `svc/api-key-descarga` :: el conjunto completo == la concatenación de las páginas |
+| R20 | verificado LISTADO POR LISTADO, no en el mecanismo: `cd/SateliteDescarga` · `cd/CierresDescarga` · `cd/IncidentesDescarga` · los 4 servicios de dinero |
+| R21 | `desc/columnas-sensibles.guardia` :: ninguna declaración contiene claves de credencial, token o secreto · `svc/api-key-descarga` :: ninguna fila lleva el hash ni el secreto de la key |
+| R22 | `desc/columnas-sensibles.guardia` :: ninguna fila emite ruta de almacenamiento ni URL firmada · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: sobre las celdas REALES generadas |
+| R23 | `desc/columnas-sensibles.guardia` :: ninguna fila emite un identificador interno con forma de uuid · los 6 archivos de columnas :: no expone identificadores internos · **`cd/RankingDescarga` :: no exporta ni el id ni el premio** |
+| R24 | `desc/usuarios-…` y `desc/plantillas-descarga-columnas` :: no emite campos que el listado no muestra · los 4 ledgers :: la fecha como día calendario, igual que la tabla · **`cd/RankingDescarga` :: el `premio` que el DTO trae NO sale, porque lo muestra la otra tarjeta** |
+| R25 | `desc/columnas-sensibles.guardia` :: la guardia cubre TODAS las declaraciones del árbol, no una lista fija (convención de nombre + barrido del disco + prohibición de declararlas fuera de esa convención) |
+| R26 | `tests/unit/components/descarga-resultado` :: `filasLocales` rechaza y no produce archivo cuando el array supera el tope · `cd/WalletPropsDescarga` y **`cd/RankingDescarga`** :: por encima del tope, error accionable y NINGÚN archivo · **`tests/integration/descarga-170-volumen` :: con N+1 filas no se produce archivo** · **`cd/ControlDescargaTransversal` :: ninguna tabla se salta el tope (las 25, estático)** |
+| R27 | los 7 servicios :: limite_excedido con total y límite, sin filas · las 7 actions :: lo propagan · `descarga-resultado` :: lo traduce a un error accionable · **`descarga-170-volumen` :: el mensaje trae total y tope por las DOS puertas, con el mismo texto** |
+| R28 | los 7 servicios :: o entrega todas las filas o el error de tope · `descarga-resultado` :: `filasLocales` no trunca · `tests/integration/descarga-dataset-roundtrip` (60 filas) y **`descarga-170-volumen` (5000 filas releídas del binario)** |
+| R29 | los 7 servicios :: nunca pide al repositorio más de `N+1` filas (`take = N+1`, `skip = 0`) |
+| R30 | `cd/SateliteDescarga` :: no ejecuta ninguna lectura adicional al servidor (estático) · `cd/WalletPropsDescarga` :: ninguna de las tres relee del servidor (estático) |
+| R31 | `tests/unit/components/descarga-resultado` :: devuelve el resultado vacío tal cual para que el control avise sin archivo (las dos familias) · `tests/components/DescargarDataset` (151) :: sin filas no se produce archivo y se avisa |
+| R32 | `cd/OrdenesApartadoDescarga` :: la acción del modo completo no se llama hasta que alguien pulsa · `cd/WalletDescarga` y `cd/WalletPropsDescarga` :: ídem · **`cd/rollout-parcial` :: sin la prop no se carga ni el generador** |
+| R33 | **`cd/ControlDescargaTransversal` :: el contenido lo produce la función común, no cada listado** (identidad del buffer en las 3 formas) **+ barrido estático: ningún módulo importa un generador de binario** |
+| R34 | **`cd/ControlDescargaTransversal` :: las tres formas generan xlsx y ninguna ofrece elección de formato** + barrido estático: nadie declara `formatos` |
+| R35 | **`cd/ControlDescargaTransversal` :: mientras descarga, el control lo indica y no admite una segunda ejecución** |
+| R36 | `tests/unit/components/descarga-resultado` :: traduce cualquier error de acción a un mensaje accionable sin datos personales |
+| R37 | `cd/CierresDescarga` :: descargar no cambia la fila expandida ni el modal abierto · **`cd/ControlDescargaTransversal` :: descargar no altera la página, la búsqueda ni las filas visibles** |
+| R38 | **`cd/ControlDescargaTransversal` :: el archivo nace y muere en el navegador** (fetch espiado + entrega local) + barrido estático |
+| R39 | **`cd/rollout-parcial` ×3** :: sin la prop no hay control y el DOM es idéntico · no se carga el generador ni se entrega archivo · una tabla REAL excluida sigue igual |
+
+**Requisitos de la FASE 1 sin test: NINGUNO (0 de 39).**
+
+R40–R54 son de la **PARTE 2 (paginación)** y siguen **sin cubrir a propósito**: son las tandas
+H–M, que no entran en esta entrega.
+
+## D5. Las tres deudas: dos cerradas, una declarada
+
+Se miraron una a una. No se cerraron las tres por inercia.
+
+### D5.1 — `exceljs` trunca el nombre de la pestaña a 31 caracteres · **CERRADA**
+
+**Qué era.** Con títulos compuestos con datos (`Desglose de <mensajero>`,
+`<Resultado> · <mensajero>`), `exceljs` avisa por consola y trunca la pestaña. Y —esto no
+estaba en la deuda con la gravedad que tiene— **LANZA** si el nombre lleva `* ? : \ / [ ]` o
+empieza/termina en comilla simple, con lo que la descarga acaba en un toast genérico y
+**ningún archivo**. Verificado leyendo `exceljs/lib/doc/worksheet.js` (v4.4.0), no de memoria.
+
+**Cómo se cerró, y por qué así.** La salida que tocaba EL CONTRATO de la 151 (un nombre de hoja
+distinto del título en `DataTableDescarga`) sigue descartada. Se tomó la otra que la propia
+deuda apuntaba: **`construirDescarga` recorta con criterio**. Un `nombreHoja()` en
+`lib/utils/descarga-dataset.ts` sustituye los caracteres que hacen lanzar, quita las comillas
+de los extremos, cae a `Datos` si no queda nada utilizable (o si el nombre es `History`,
+reservado por Excel) y recorta a 31 **marcando el recorte con «…»**.
+
+- **El contrato de la 151 no se toca:** `DataTableDescarga` queda igual. Ninguna de las 25
+  tablas cambia una línea.
+- **El `titulo` no se toca:** sigue siendo el nombre accesible del control y la base del nombre
+  de archivo, que es donde el usuario reconoce lo que descargó. Solo se sanea la PESTAÑA, que es
+  un detalle del `xlsx` que esa función ya poseía (igual que ya poseía el slug del archivo).
+- **No se retrocede al espacio anterior** al recortar: sacrificaría hasta una palabra entera de
+  un nombre propio por estética en una etiqueta, y como cada archivo lleva UNA hoja, no hay dos
+  pestañas que distinguir.
+- **6 tests nuevos** en `tests/unit/utils/descarga-dataset.test.ts` (**añadidos**; ni una
+  aserción de la 151 tocada, porque para títulos cortos y limpios `nombreHoja` es la
+  identidad), incluido el caso que antes reventaba: un título con `/` ahora **produce archivo**.
+
+### D5.2 — `ListarOrdenesCompletoServiceResult` escrito a mano · **DECLARADA, no cerrada**
+
+Es un cambio de una línea y aun así **no se hace aquí**, por dos razones:
+
+1. **No es capa de presentación.** Vive en `lib/interfaces/services/IOrdenService.ts` — la
+   interfaz de un servicio, y esta entrega es de frontend. El hermano de BORDE
+   (`ListarOrdenesCompletoResult`), que es el que consume el cliente, ya quedó unificado como
+   `ListarCompletoResult<OrdenListItemDTO>` en la tanda 0.
+2. **No cubre ningún riesgo vivo.** El union de servicio de órdenes lo lee UN consumidor
+   (`OrdenService`), y TypeScript es estructural: no hay divergencia posible que un test pueda
+   cazar ni que un usuario pueda notar. Es cosmética de tipos.
+
+Queda para quien toque ese servicio (probablemente la FASE 2, que lo modifica de todos modos).
+
+### D5.3 — El tope no se re-probó en la tanda E · **CERRADA, por otra vía**
+
+**Por qué no se repitió lo que se intentó.** Montar 5001 cierres en jsdom hace que esas
+pantallas rendericen además 5001 tarjetas de la vista tipo factura: el test no terminaba.
+Repetirlo en 6 pantallas es caro y, además, solo probaría **esas** 6.
+
+**Lo que se hizo en su lugar**, en `cd/ControlDescargaTransversal` («ninguna tabla se salta el
+tope: el resultado lo arman los dos adaptadores comunes»): una comprobación ESTÁTICA de que
+**toda** tabla del árbol obtiene sus filas por uno de los dos adaptadores comunes —los dos
+únicos sitios donde vive el tope— y de que **ningún** módulo arma un `DescargaFilasResult` a
+mano (`{ status: "ok", filas: … }`), que es la única forma de saltárselo. Incluye los 3
+componentes que reciben `obtenerFilas` por prop, siguiendo la prop hasta el módulo padre.
+
+Es mejor que el test que sustituye, y no solo más barato:
+
+| | 5001 filas por pantalla | la guardia estática |
+| --- | --- | --- |
+| Cobertura | las 6 pantallas de la tanda E | **las 25 y las futuras** |
+| Coste | minutos (no terminaba) | **milisegundos** |
+| Qué caza | que ESA pantalla aplique el tope | que **ninguna** pueda esquivarlo |
+
+**VERIFICADA POR MUTACIÓN.** Se introdujo la fuga exacta que vigila —sustituir en el ranking
+`filasLocales(ranking, filaDescargaRanking)` por un
+`async () => ({ status: "ok", filas: ranking.map(filaDescargaRanking) })`, que es como se
+saltaría el tope alguien con prisa— y la guardia se puso roja diciendo dónde:
+
+```
+AssertionError: app/(app)/ranking/_components/RankingModule.tsx: su descarga no pasa por
+un adaptador común: expected false to be true
+```
+
+Ningún otro test se movió (los de conducta del ranking siguen verdes: con 3 filas, saltarse el
+tope no se nota — que es justo el punto). Revertido.
+
+Y no sustituye a los tests de conducta: el tope se sigue ejercitando de verdad con 5001 filas
+en `cd/WalletPropsDescarga` (tanda D), en `cd/RankingDescarga` (tanda F) y contra el binario en
+`descarga-170-volumen` (T G.2).
+
+## D6. Tests existentes tocados
+
+**Uno, y solo se le AÑADIÓ:** `tests/unit/utils/descarga-dataset.test.ts` gana un `describe` de
+6 tests para `nombreHoja` y un símbolo más en su import. **Ninguna aserción de la 151 se cambió
+ni se relajó**: sus 9 tests siguen escritos igual y verdes, porque el saneado es la identidad
+para sus títulos («Órdenes», «Órdenes en bodega»).
+
+`tests/components/RankingModule.test.tsx` (feature 76) **NO necesitó cambios** —ya mockeaba
+`useToast`, que es lo que había roto tres suites en las tandas anteriores— y sus 11 tests
+siguen verdes con el control montado.
+
+## D7. Archivos de esta entrega
+
+**Creados (5)**
+
+- `app/(app)/ranking/_components/ranking-descarga-columnas.ts` — columnas y proyección del ranking (T F.1).
+- `tests/components/descarga/RankingDescarga.test.tsx` — 5 tests (T F.1).
+- `tests/components/descarga/ControlDescargaTransversal.test.tsx` — 7 tests (T G.1).
+- `tests/integration/descarga-170-volumen.test.ts` — 2 tests (T G.2).
+- `tests/components/descarga/rollout-parcial.test.tsx` — 3 tests (T G.2).
+
+**Modificados (6)**
+
+- `app/(app)/ranking/_components/RankingModule.tsx` — prop `descarga` en la tabla del ranking + `TITULO_DESCARGA` único. La `<table>` de premios, intacta.
+- `lib/utils/descarga-dataset.ts` — `nombreHoja()` y su uso al nombrar la hoja (D5.1).
+- `tests/unit/descarga/censo-tablas.ts` — ranking a `con_descarga`; cero `pendiente`.
+- `tests/unit/descarga/cobertura-tablas.guardia.test.ts` — test de cierre de fase (+1).
+- `tests/unit/utils/descarga-dataset.test.ts` — 6 tests añadidos (D6).
+- `specs/170-export-todas-las-tablas/tasks.md` — T F.1, T G.1 y T G.2 marcadas, con lo medido.
+
+**Cero backend.** Ni servicios, ni repositorios, ni acciones, ni migraciones, ni RLS: las dos
+tandas son de presentación. `lib/utils/descarga-dataset.ts` es una utilidad de presentación sin
+dominio (no importa `lib/services`, `lib/actions` ni Prisma; su propio test lo vigila).
+
+## D8. Puertas (medición final)
+
+Salida real, no prometida.
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ pnpm run lint
+✖ 20 problems (0 errors, 20 warnings)
+=== lint exit: 0 ===
+
+$ pnpm test
+ Test Files  710 passed | 4 skipped (714)
+      Tests  8497 passed | 74 skipped (8571)
+   Duration  344.19s
+
+$ ./init.sh
+✓ lint paso
+ Test Files  710 passed | 4 skipped (714)
+      Tests  8497 passed | 74 skipped (8571)
+✓ test paso
+✓ todas las migraciones tienen down.sql
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+```
+
+| Puerta | Baseline (D0) | Después |
+| --- | --- | --- |
+| `pnpm run typecheck` | 0 errores | **0 errores** |
+| `pnpm run lint` | 0 errores / 20 warnings | **0 errores / 20 warnings** (los mismos) |
+| `pnpm test` | 710 archivos (706 passed + 4 skipped) · 8547 tests: 8473 passed / 74 skipped / 0 fallos | **714 archivos** (710 passed + 4 skipped) · **8571 tests: 8497 passed / 74 skipped / 0 fallos** — +4 archivos, +24 tests, **0 rotos nuevos** |
+| `./init.sh` | `== init OK ==` | `== init OK ==` |
+
+Los +24 cuadran uno a uno: 5 (Ranking) + 7 (transversal) + 2 (volumen) + 3 (rollout parcial) +
+1 (cierre del censo) + 6 (`nombreHoja`).
+
+## D9. Para el PR — qué NO entra en esta fase
+
+1. **La FASE 2 entera (paginación server-side, tandas H–M, R40–R54).** Decisión del humano en
+   Q3: primero el Excel, después la paginación. Las **13** tablas del Anexo III siguen
+   recibiendo su dataset entero por props, con el riesgo que eso ya tenía ANTES de esta feature
+   —no se agrava (R30)— y con el tope de 5000 como red. Las **3** del Anexo IV (ranking y las
+   dos vistas agrupadas de gestiones) se propone no paginarlas nunca; **Q1 sigue abierta**.
+2. **Búsqueda y filtros NUEVOS** en esas tablas: son la feature 145. Esta feature solo usa los
+   filtros que cada tabla YA tenía.
+3. **Descargas asíncronas** por encima del tope, **selección de columnas por el usuario** y
+   **formatos distintos de `xlsx`** (P7): fuera de alcance explícito.
+4. **Q4** (revisión en pantalla de bodega satélite y cuentas por pagar) y **Q5** (catálogos de la
+   bodega satélite) son preguntas de la fase 2.
+
+## D10. Lo que el leader debe llevarse al cierre
+
+1. **`OrdenesApartado` está cableada pero NADIE la monta.** Solo la usa
+   `OrdenesRevisionMaestro`, y ese módulo no lo monta ninguna página: el propio
+   `OrdenesListado.tsx:373` lo llama «la vista legacy». Es el mismo patrón por el que el Anexo
+   II dejó fuera el módulo de zonas (P4). **No se tocó** —el encargo la dejó explícitamente
+   pendiente de decisión del humano— y sigue en el censo como `con_descarga`, así que el test
+   de cierre de fase cuadra con ella DENTRO. Si el humano decide sacarla por coherencia con la
+   exclusión de zonas, el cambio es: quitar la prop, pasarla a `fuera` con su motivo y bajar el
+   total del Anexo I de 25 a 24 en la guardia. Tres líneas, ninguna sorpresa.
+2. **`DetalleSecciones` solo lo monta `CierresBodegaAdminModule`** (C13.3): la descarga por
+   sección solo se ve en el detalle de un cierre de BODEGA, porque `CierresAdminModule` pasó a
+   `CierreFacturaDetalle`, que no usa `DataTable`. Censada y cableada porque el módulo existe y
+   se usa.
+3. **La deuda D5.2 sigue abierta** y es de backend (una línea).
+4. **`descargaConfig.MAX_FILAS` se lee en servidor y en cliente** (B11.4): si alguien bajara el
+   tope por entorno, el servidor sería el estricto — falla cerrado, nunca entrega de más.

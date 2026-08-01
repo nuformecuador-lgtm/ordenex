@@ -15,6 +15,12 @@
 //   - `pendiente`: dentro de alcance, la cablea la tanda indicada. Estado TRANSITORIO del
 //     rollout: al cerrar la FASE 1 no debe quedar ninguno (T G.1/T G.2). Existe porque
 //     las tandas entregan por lotes y ninguna puede dejar la suite roja.
+//
+// Feature 170 (T G.1) — la FASE 1 está CERRADA: las 25 tablas del Anexo I descargan y no
+// queda ningún `pendiente`. El valor sigue existiendo en el tipo porque un rollout futuro
+// volverá a necesitarlo, pero `cobertura-tablas.guardia` («la FASE 1 del export queda
+// cerrada…») FALLA si alguien lo reintroduce sin reabrir la fase: la fase no puede darse
+// por terminada con tablas a medias, y una tabla a medias no puede colarse como terminada.
 
 /** Estado de una tabla censada respecto de la descarga. */
 export type EstadoDescarga = "con_descarga" | "pendiente" | "fuera";
@@ -166,7 +172,7 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   },
   {
     ruta: "app/(app)/ranking/_components/RankingModule.tsx",
-    tablas: [{ nombre: "Ranking del día", estado: "pendiente", nota: "tanda F.1" }],
+    tablas: [{ nombre: "Ranking del día", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx",

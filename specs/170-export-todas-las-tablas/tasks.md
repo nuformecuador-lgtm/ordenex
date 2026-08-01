@@ -356,17 +356,31 @@ producción sin esperar a la siguiente.
 
 ## Tanda F — Ranking
 
-### [ ] T F.1 — Ranking del día
+### [x] T F.1 — Ranking del día
 - `ranking-descarga-columnas.ts` (posición, mensajero, porcentaje, entregadas, asignadas) +
   `filasLocales`. Porcentaje y conteo **tal cual llegan del servidor**.
 - Test: `tests/components/descarga/RankingDescarga.test.tsx`
   - «el ranking ofrece su control» (R1) · «porcentaje y conteo tal cual» (R7)
   - «respeta el orden del ranking» (R11) · «la tabla de premios NO ofrece control» (R2)
 - **Depende de:** T0.2, T0.5 · **Cubre:** R1, R2, R7, R11 · **Hecho:** 4 tests verdes.
+- **MEDIDO (2026-07-31):** **5** verdes (los 4 del plan + el del tope). Con esto el censo queda
+  **sin ningún `pendiente`**: 25 tablas con descarga, 6 fuera.
+- **La trampa de esta tanda era la pantalla, no la tabla:** `/ranking` monta DOS tablas y solo
+  una entra. La del RANKING descarga; la de PREMIOS del podio (`<table>` cruda, 3 filas de
+  configuración editable) sigue FUERA (P1 ratificada) y hay un test que exige que en esa
+  pantalla haya UN control, no dos, y que no cuelgue de la tarjeta de premios.
+- **Dos decisiones de contenido, declaradas:**
+  1. El conteo crudo se parte en DOS columnas (`Entregadas`, `Asignadas`). La tabla lo pinta
+     como `5/5`, que es glue de presentación: en una hoja no se puede sumar, y algún Excel lo
+     leería como fecha. Se le quita el adorno; no se añade dato.
+  2. El porcentaje viaja como el STRING del servidor y **sin `%`** (mismo criterio money-safe
+     del resto). La unidad la da el encabezado, que es el de la pantalla («% del día»).
+- **Lo que NO sale:** `mensajeroId` (uuid, R23) y **`premio`** — el DTO lo trae, pero lo muestra
+  la OTRA tarjeta, la del podio, que está fuera de alcance (R24).
 
 ## Tanda G — Cierre de la FASE 1
 
-### [ ] T G.1 — Consistencia transversal del control
+### [x] T G.1 — Consistencia transversal del control
 - Test: `tests/components/descarga/ControlDescargaTransversal.test.tsx`, parametrizado sobre
   las tres formas (A con filtros, A sin filtros, B con filtro de cliente):
   - «genera xlsx y ninguna tabla ofrece elección de formato» (R34)
@@ -374,8 +388,21 @@ producción sin esperar a la siguiente.
   - «en carga y sin reentrada» (R35) · «no altera página/selección/filas» (R37)
   - «sin subida ni almacenamiento» (R38)
 - **Depende de:** tandas A–F · **Cubre:** R33, R34, R35, R37, R38 · **Hecho:** 5 verdes.
+- **MEDIDO (2026-07-31):** **7** verdes. Las tres formas se montan con componentes REALES
+  (`OrdenesApartado`, `UsuariosModule`, `CuentasPorPagarTable`), cada una llevada a un estado
+  NO inicial antes de descargar (página 2, búsqueda «Beto»): si la pantalla estuviera recién
+  montada, «no altera la página ni la selección» no afirmaría nada.
+- **Dos tests DE MÁS respecto del plan, y por qué:** un test de conducta solo cubre lo que
+  monta, y aquí la propiedad que interesa es de las **25** tablas. Se añadió un barrido
+  ESTÁTICO del árbol: (a) ningún módulo declara `formatos`, importa un generador de binario ni
+  usa `FormData`/`sendBeacon`/`localStorage` (R33/R34/R38 extendidos a todas); y (b) toda
+  descarga pasa por uno de los dos adaptadores comunes y nadie arma un `DescargaFilasResult` a
+  mano — que es **la deuda del tope que la tanda E dejó abierta**, cerrada por otra vía (ver
+  T G.2) y cubriendo además los 3 componentes que reciben `obtenerFilas` por prop.
+- **Verificado por MUTACIÓN:** con la tabla del ranking a medias (censo en `pendiente` y sin la
+  prop) los tests previos siguen VERDES y solo falla el nuevo de cierre de fase. Revertido.
 
-### [ ] T G.2 — Round-trip de volumen y entrega parcial
+### [x] T G.2 — Round-trip de volumen y entrega parcial
 - Test: `tests/integration/descarga-170-volumen.test.ts`
   - «un archivo de N filas se relee con las mismas cabeceras y el mismo nº de filas» (R28)
   - «con N+1 filas no se produce archivo y el mensaje trae total y tope» (R26, R27)
@@ -385,7 +412,22 @@ producción sin esperar a la siguiente.
   ancha; si supera lo estimado, la salida es BAJAR `N`, nunca truncar.
 - **Depende de:** T G.1 · **Cubre:** R39 + refuerzo R26–R28
 - **Hecho:** tests verdes, medición anotada, `./init.sh` verde.
+- **MEDIDO (2026-07-31):** 2 verdes en volumen + 3 en rollout parcial.
+  - **Peso del archivo del tope:** 5000 filas × 15 columnas (órdenes, la tabla MÁS ANCHA del
+    rollout) ⇒ **0,34 MB (359 311 bytes)**, generado y releído en ~1 s. Muy lejos de obligar a
+    bajar `N`. El número lo imprime el propio test, para poder recomprobarlo en vez de creerlo.
+  - **R26/R27 por las DOS puertas del tope:** `filasLocales` (el array del cliente) y
+    `filasDesdeResultado` con `limite_excedido` (el tope del servicio) devuelven **el mismo
+    texto** y ninguna fila. Que coincidan literalmente es lo que hace que las 25 tablas digan
+    lo mismo.
+  - **R39 sigue vivo aunque la fase esté cerrada:** las 6 exclusiones del Anexo II nunca
+    tendrán la prop, y la FASE 2 volverá a tocar estas pantallas. El test compara el HTML de
+    la tabla con y sin `descarga` (idéntico salvo el control) y lo repite sobre una tabla REAL
+    excluida (`OrdenesConErrorTabla`).
 - **FIN DE FASE 1: el pedido original del humano queda entregado.**
+- **NO entra en esta fase, y es deliberado:** toda la **FASE 2 (paginación server-side de 16
+  pantallas, tandas H–M)**. El humano ya decidió el orden en Q3: primero el Excel, después la
+  paginación. Las 13 tablas del Anexo III siguen recibiendo su dataset entero por props.
 
 ---
 
