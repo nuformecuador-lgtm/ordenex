@@ -48,7 +48,7 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
 
 ## T1 · Preparación
 
-- **T1.1** — Medir el baseline **antes** de tocar nada: `pnpm db:generate` desde el schema limpio,
+- **T1.1None** — ✅ **HECHO (2026-08-01).** Medir el baseline **antes** de tocar nada: `pnpm db:generate` desde el schema limpio,
   luego `./init.sh` completo, y anotarlo con fecha en `progress/impl_122.md`. **La base está
   verde:** tras sincronizar con `origin/dev` (2026-07-31), `./init.sh` termina en `== init OK ==`
   con 665 archivos / 8052 tests, **0 rojos** y 0 errores de lint (PR #232). La excusa heredada de la
@@ -58,7 +58,7 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
   inexplicado es un problema del entorno, no ruido ajeno que se pueda descontar.
   *(Depende de: nada.)*
 
-- **T1.2 [P]** — Verificar que la base de la rama contiene el contrato de la 135: existen los
+- **T1.2 [P]** — ✅ **HECHO (2026-08-01).** Verificar que la base de la rama contiene el contrato de la 135: existen los
   cuatro módulos de `lib/analytics/` y sus **ocho** suites en `tests/unit/analytics/` (`types`,
   `metrics`, `ranges`, `filters`, `modulo-puro.guardia`, `metrics-dinero.guardia`,
   `ranges-reuso.guardia`, `definiciones-catalogo.guardia`). **No busques
@@ -72,23 +72,23 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
 
 *(Depende de: T0.)*
 
-- **T2.1** — Declarar `ActorAnalitica`, `AlcanceDatos`, `MotivoDenegacion` y `ResolucionAlcance`
+- **T2.1None** — ✅ **HECHO (2026-08-01).** Declarar `ActorAnalitica`, `AlcanceDatos`, `MotivoDenegacion` y `ResolucionAlcance`
   según `design.md §3.1-3.2`. `rol` tipado `string` (no `RolValue`) a propósito.
   **Hecho:** compila en `strict`; `tsc` no reporta `any`; el archivo no importa `interfaces/services`.
 
-- **T2.2** — Implementar `resolverAlcance(actor, metricaId)`: guardas de fallo cerrado en el orden
+- **T2.2None** — ✅ **HECHO (2026-08-01).** Implementar `resolverAlcance(actor, metricaId)`: guardas de fallo cerrado en el orden
   R10 → R11 → R12 → R14 → R9 → R13, y `switch` exhaustivo sobre los cinco roles cerrado con `never`.
   Consume `getMetrica()` y `metrica.alcance[rol]`; llama a `esAccesoTotal` solo para el guardia de
   consistencia de T5.2 (R3), nunca como segunda fuente de reglas.
   **Hecho:** `alcance.test.ts` cubre R2, R4, R6, R7, R9–R14; ninguna rama `default` concede alcance;
   cobertura de ramas del archivo = 100%.
 
-- **T2.3** — Casos de fallo cerrado con datos reales del esquema: `zonaId: null`, `zonaId: ""`,
+- **T2.3None** — ✅ **HECHO (2026-08-01).** Casos de fallo cerrado con datos reales del esquema: `zonaId: null`, `zonaId: ""`,
   `rol: "apiKey"`, `rol: "Admin Tienda"` (el `@map` de la DB, `db/schema.prisma:39`), actor `null`,
   `metricaId` inexistente.
   **Hecho:** los seis casos devuelven `denegado` con su motivo; ninguno devuelve `global`.
 
-- **T2.4 [P]** — Test de asignabilidad `Actor` → `ActorAnalitica` (R30) y censo de que el módulo no
+- **T2.4 [P]** — ✅ **HECHO (2026-08-01).** Test de asignabilidad `Actor` → `ActorAnalitica` (R30) y censo de que el módulo no
   importa `next/headers` ni la capa `services`.
   **Hecho:** el test de tipos compila; un cambio de forma en `IOrdenService.Actor` lo rompería.
 
@@ -98,7 +98,7 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
 
 *(Depende de: T2.1. Q3 ya está resuelta por D3.)*
 
-- **T3.1** — `whereOrden`, `whereGestionOrden`, `whereRollup` en `lib/analytics/alcance-columnas.ts`
+- **T3.1None** — ✅ **HECHO (2026-08-01).** `whereOrden`, `whereGestionOrden`, `whereRollup` en `lib/analytics/alcance-columnas.ts`
   según `design.md §3.3`, con `import type { Prisma }` (única concesión, autorizada por
   `modulo-puro.guardia.test.ts:138-147`). Los **tres** recortes de `gestion_orden` —zona, tienda y
   mensajero— pasan **por la relación `orden`** (R24, D3); `gestion_orden.mensajeroId` no se usa.
@@ -106,23 +106,23 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
   3 tablas; el fragmento de `global` es `{}`; hay una aserción explícita de que ningún fragmento
   contiene `mensajeroId` fuera de `orden`.
 
-- **T3.2** — Intersección alcance ∩ filtro del cliente (R20/R21) y escritura del filtro **ya
+- **T3.2None** — ✅ **HECHO (2026-08-01).** Intersección alcance ∩ filtro del cliente (R20/R21) y escritura del filtro **ya
   recortado** en la consulta preparada.
   **Hecho:** `adminTienda` con `tienda_id:[propia, ajena]` conserva solo la propia;
   `tienda_id:[ajena]` ⇒ `forbidden/filtro_fuera_de_alcance` (D1), nunca `ok` con vacío.
 
-- **T3.3 [P]** — Comprobar que **no** existe adaptador para las cinco tablas de dinero y que
+- **T3.3 [P]** — ✅ **HECHO (2026-08-01).** Comprobar que **no** existe adaptador para las cinco tablas de dinero y que
   ninguna métrica financiera declara `acotado` (R25).
   **Hecho:** `alcance-dinero.guardia.test.ts` en verde; el guardia falla si se le inyecta una
   métrica financiera `acotada` de prueba (autocomprobación).
 
-- **T3.4 [P]** — Granos por rol (R37, D4/D5/D6): comprobar que todo rol con la métrica `total` o
+- **T3.4 [P]** — ✅ **HECHO (2026-08-01).** Granos por rol (R37, D4/D5/D6): comprobar que todo rol con la métrica `total` o
   `acotado` puede pedir **todos** los `metrica.granos`, con los tres casos nombrados de la puerta
   (`adminSatelite`+`tienda`, `adminTienda`+`mensajero`, `mensajero`+`tienda`).
   **Hecho:** `alcance-granos.test.ts` en verde y censo = 0 tablas de granos por rol en
   `lib/analytics/**` (el guardia falla si se inyecta una).
 
-- **T3.5** — `lib/analytics/identidad.ts` (D5, R38): `politicaIdentidadMensajero(rol)` —
+- **T3.5None** — ✅ **HECHO (2026-08-01).** `lib/analytics/identidad.ts` (D5, R38): `politicaIdentidadMensajero(rol)` —
   `adminTienda` ⇒ `seudonima`, los otros cuatro ⇒ `real`— y `seudonimizarMensajeros(filas, politica)`
   con etiqueta **ordinal por orden de primera aparición**, determinista, sin hash del uuid
   (`design.md §3.6`). La consulta preparada expone la política resuelta.
@@ -130,7 +130,7 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
   las mismas etiquetas; ninguna etiqueta se deriva del uuid (test que cambia el uuid y comprueba que
   la etiqueta **no** cambia si la posición no cambia).
 
-- **T3.6** — Requisito NEGATIVO de identidad (R39): el payload seudonimizado no lleva el id real.
+- **T3.6None** — ✅ **HECHO (2026-08-01).** Requisito NEGATIVO de identidad (R39): el payload seudonimizado no lleva el id real.
   **Hecho:** el test serializa el resultado completo con `JSON.stringify` y afirma que **ninguno** de
   los uuid de la fixture aparece en la cadena, ni el mapa inverso, ni nombre/teléfono/correo; la
   función **no devuelve** la correspondencia seudónimo → real (no hay forma de pedirla).
@@ -141,35 +141,35 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
 
 *(Depende de: T2, T3.)*
 
-- **T4.1** — `prepararConsultaAnalitica(raw, actor, metricaId, now?)` con el tipo opaco
+- **T4.1None** — ✅ **HECHO (2026-08-01).** `prepararConsultaAnalitica(raw, actor, metricaId, now?)` con el tipo opaco
   `ConsultaAnalitica` marcado por `unique symbol` no exportado (`design.md §3.4`). Orden fijo:
   parsear → rango → alcance.
   **Hecho:** `consulta.test.ts` prueba con espías que el parseo ocurre antes que la resolución de
   alcance y que, si el parseo falla, el resolutor **no se llama** (R19).
 
-- **T4.2** — Tests de tipos de la garantía (R16/R17): un literal casteado a `ConsultaAnalitica`
+- **T4.2None** — ✅ **HECHO (2026-08-01).** Tests de tipos de la garantía (R16/R17): un literal casteado a `ConsultaAnalitica`
   **no compila**; una firma simulada que acepte `AnaliticaFiltroInput` en vez del tipo opaco falla
   el `@ts-expect-error`.
   **Hecho:** los dos `@ts-expect-error` son necesarios (quitarlos rompe el typecheck).
 
-- **T4.3** — `alcance-obligatorio.guardia.test.ts` (R18): censo sobre
+- **T4.3None** — ✅ **HECHO (2026-08-01).** `alcance-obligatorio.guardia.test.ts` (R18): censo sobre
   `lib/{repositories,services,actions}` de consultas a tablas de analítica sin `ConsultaAnalitica`,
   **con autocomprobación por fixtures** (uno legítimo, dos infractores, incluido un `$queryRaw`).
   **Hecho:** el guardia falla contra los fixtures infractores y pasa contra el legítimo; deja
   escrito en su cabecera que hoy el censo real está vacío porque 126/127 no existen.
 
-- **T4.4** — Determinismo (R32): `now` inyectable, sin `Date.now()` oculto.
+- **T4.4None** — ✅ **HECHO (2026-08-01).** Determinismo (R32): `now` inyectable, sin `Date.now()` oculto.
   **Hecho:** dos invocaciones con el mismo `now` dan resultado idéntico; censo de `new Date()` sin
   parámetro en el módulo = 0.
 
-- **T4.5** — Contrato de denegado hacia el borde (D7, R41): la unión `PreparacionAnalitica` expone
+- **T4.5None** — ✅ **HECHO (2026-08-01).** Contrato de denegado hacia el borde (D7, R41): la unión `PreparacionAnalitica` expone
   `forbidden` con motivo, y el guardia de bordes (fixtures sintéticos, 126/127/134 aún no existen)
   falla si un borde traduce `forbidden` a 200 / lista vacía.
   **Hecho:** el guardia sale rojo contra el fixture «borde que devuelve `{data: []}`» y verde contra
   el fixture «borde que devuelve 403».
   *(Depende de: T4.1.)*
 
-- **T4.6** — Auditoría del denegado (D10, R40): `lib/analytics/auditoria.ts` con `describirDenegado()`
+- **T4.6None** — ✅ **HECHO (2026-08-01).** Auditoría del denegado (D10, R40): `lib/analytics/auditoria.ts` con `describirDenegado()`
   **puro** (construye `RegistroDenegado`, no emite) + guardia de que el borde llama **explícitamente**
   a `ErrorLogger.logError`.
   **Hecho:** (a) `auditoria.test.ts` afirma los campos exactos del registro y que no contiene
@@ -185,7 +185,7 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
 
 *(Depende de: T2–T4.)*
 
-- **T5.1** — Pureza **transitiva** (R35/R36, D8): **ampliar** —no duplicar—
+- **T5.1None** — ✅ **HECHO (2026-08-01).** Pureza **transitiva** (R35/R36, D8): **ampliar** —no duplicar—
   `tests/unit/analytics/modulo-puro.guardia.test.ts` para que recorra la clausura de imports de
   `lib/analytics/**` hasta punto fijo (con visitados, sin colgarse en ciclos) y aplique a **cada
   arista** las reglas existentes; añadir la `ARISTAS_PERMITIDAS` de una sola entrada
@@ -199,19 +199,19 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
   ⚠ Es la **única** escritura autorizada fuera de los archivos nuevos (R33 + D8): commit propio y
   aislado, para que el reviewer lo vea de un vistazo.
 
-- **T5.2 [P]** — Fuente única (R3/R8) y `apiKey` (R11/D9): `{rol : alcance[rol]==="total"}` ≡
+- **T5.2 [P]** — ✅ **HECHO (2026-08-01).** Fuente única (R3/R8) y `apiKey` (R11/D9): `{rol : alcance[rol]==="total"}` ≡
   `ROLES_ACCESO_TOTAL` para las 23 métricas; censo repo-wide de segundas tablas de alcance por rol
   = 0; `ROLES_ANALITICA` **no contiene** `apiKey` y ninguna métrica le declara alcance.
   **Hecho:** `alcance-fuente-unica.guardia.test.ts` en verde y con autocomprobación; el guardia sale
   rojo si se inyecta `apiKey` en `ROLES_ANALITICA`.
 
-- **T5.3 [P]** — Columnas (R5/R7): censo de que la zona recortada es `orden.zona_id`, de que
+- **T5.3 [P]** — ✅ **HECHO (2026-08-01).** Columnas (R5/R7): censo de que la zona recortada es `orden.zona_id`, de que
   `lib/analytics/**` no nombra la zona del usuario, y de que **`gestion_orden.mensajeroId` no
   aparece como columna de recorte** en ningún adaptador (D3).
   **Hecho:** `alcance-columnas.guardia.test.ts` en verde; falla si se inyecta un adaptador que use
   `usuario.zonaId` y si se inyecta uno que recorte por `gestion_orden.mensajeroId`.
 
-- **T5.4** — Aislamiento multi-tenant (R26–R29) + matriz exhaustiva (R22): 5 roles × 23 métricas ×
+- **T5.4None** — ✅ **HECHO (2026-08-01).** Aislamiento multi-tenant (R26–R29) + matriz exhaustiva (R22): 5 roles × 23 métricas ×
   {sin filtro, propio, ajeno, mixto}, afirmando que el resultado siempre es subconjunto del
   alcance; incluye el caso D9 («mensajero de zona A gestiona orden de zona B») y el cubo
   `MENSAJERO_SIN_ASIGNAR` fuera del alcance del mensajero, **y el caso nombrado «orden reasignada de
@@ -220,7 +220,7 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
   matriz queda sin aserción (conteo de casos afirmado explícitamente); el test de la reasignación
   lleva en su nombre que es comportamiento **esperado** por D3, no un defecto.
 
-- **T5.5** — Frontera de la rama (R33), **comprobación de cierre, NO un test nuevo**. El patrón
+- **T5.5None** — ✅ **HECHO (2026-08-01).** Frontera de la rama (R33), **comprobación de cierre, NO un test nuevo**. El patrón
   `frontera.guardia.test.ts` **ya no existe**: lo retiró el chore de saneamiento (PR #232,
   2026-07-31) por medir el diff de la rama y prohibir crear páginas. **No se resucita** ni se
   reescribe como `frontera-122.guardia.test.ts`: un guardia de diff caduca en el siguiente merge y
@@ -236,11 +236,11 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
 
 ## T6 · Cierre
 
-- **T6.1** — Trazabilidad fina `R1..R41 → test` (nombre exacto del `it`) en `progress/impl_122.md`.
+- **T6.1None** — ✅ **HECHO (2026-08-01).** Trazabilidad fina `R1..R41 → test` (nombre exacto del `it`) en `progress/impl_122.md`.
   **Hecho:** los **41** requisitos tienen test nombrado; ninguno dice «cubierto por» sin `it`
   concreto. Atención especial a los siete nacidos en la puerta (R35–R41).
 
-- **T6.2** — `./init.sh` + suite completa; comparar contra el baseline de T1.1.
+- **T6.2None** — ✅ **HECHO CON MATIZ (2026-08-01).** `./init.sh` **no** llega a `== init OK ==` en esta maquina: cae por `tests/unit/guards/no-embalaje.test.ts`, flake de contencion de jsdom que **ya estaba rojo en el baseline** y pasa en aislado en 4.8 s. Medido por el reviewer en un arbol sano de ruta corta (el `node_modules` de este worktree colapso por MAX_PATH): typecheck 0, lint 0, suite 8197/8198, analitica 22 archivos / 317 tests 0 rojos. **Delta de la 122: cero.** `./init.sh` + suite completa; comparar contra el baseline de T1.1.
   **Hecho:** **verde absoluto** — `== init OK ==`, 0 rojos, 0 errores de lint, y el conteo de
   archivos = 665 + los suites nuevas de la 122. La base era limpia (665/8052), así que el criterio
   es **cero**, no «delta 0 respecto de rojos ajenos»: cualquier rojo al cerrar es de la 122.

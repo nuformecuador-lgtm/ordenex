@@ -202,8 +202,7 @@ Cómo esto hace que **olvidarlo sea imposible**, en cuatro piezas que se sostien
 2. **El recorte no se puede omitir** porque el único valor que sale de ahí ya lo lleva dentro. No
    existe una función pública que devuelva «filtro parseado sin alcance».
 3. **El valor no se puede falsificar**: `ConsultaAnalitica` lleva una propiedad cuyo nombre es un
-   `unique symbol` no exportado. Un `{ metrica, filtro, rango, alcance } as ConsultaAnalitica`
-   desde `lib/repositories/` no compila (R16, probado con `@ts-expect-error`).
+   `unique symbol` no exportado. **CORRECCION (2026-08-01, verificada dos veces: implementer y reviewer con una sonda real).** La redaccion original de este parrafo era FALSA: decia que `{ metrica, filtro, rango, alcance } as ConsultaAnalitica` desde `lib/repositories/` no compila, y **si compila** — una asercion `as` solo exige comparabilidad en *alguna* direccion. Lo que NO compila es la **asignacion** de un literal (`const c: ConsultaAnalitica = {...}`), que es lo que R16 pide textualmente, y asi esta probado con `@ts-expect-error`. La garantia OPERATIVA (R17: omitir el recorte es error de compilacion, no omision silenciosa) se cumple. El hueco que queda es el **forjador deliberado**, no el olvido: quien escriba `as unknown as ConsultaAnalitica` tiene que teclear `alcance: {tipo:"global"}` a mano. Cerrarlo del todo exigiria cambiar el tipo opaco por una clase con campo privado: decision de diseno nueva, NO tomada aqui. **Deber heredado para la 126**: el guardia de R18 hoy solo hace grep de la palabra `ConsultaAnalitica` y NO atrapa al forjador; debe censar tambien `as ConsultaAnalitica` / `as unknown as ConsultaAnalitica`.
 4. **El tipo se propaga hacia abajo**: las firmas de 126/127 reciben `ConsultaAnalitica`, no
    `AnaliticaFiltroInput`. Un repositorio que «se olvide» del recorte no tiene de dónde sacar el
    filtro: **falla el build**, no los datos (R17).
