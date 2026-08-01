@@ -245,12 +245,12 @@ criterio de **hecho**. Un commit por tarea lógica (`docs/conventions.md:24-26`)
   archivos = 665 + los suites nuevas de la 122. La base era limpia (665/8052), así que el criterio
   es **cero**, no «delta 0 respecto de rojos ajenos»: cualquier rojo al cerrar es de la 122.
 
-- **T6.3** — Avisos dirigidos: propagar `design.md §7` a los `status_note` de 123, 126, 127, 133 y
+- **T6.3** — ✅ **HECHO POR EL LEADER (2026-08-01).** Avisos dirigidos: propagar `design.md §7` a los `status_note` de 123, 126, 127, 133 y
   134 en `feature_list.json`.
   **Hecho:** las cinco fichas citan `specs/122-analitica-alcance-por-rol/design.md §7`.
   ⚠ `feature_list.json` lo edita el **leader**, no el implementer (el archivo lo comparten varias
   sesiones vivas; ver `progress/history.md`).
 
-- **T6.4** — Corregir el defecto de redacción de la ficha 122: la descripción dice «Depende de
+- **T6.4** — ✅ **HECHO POR EL LEADER (2026-08-01).** Corregir el defecto de redacción de la ficha 122: la descripción dice «Depende de
   120» y el `depends_on` real es 135 (`feature_list.json:1394,1400`).
   **Hecho:** anotado en `status_note`; **no** se replica el id viejo en ningún documento nuevo.
