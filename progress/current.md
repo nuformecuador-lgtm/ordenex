@@ -8,6 +8,74 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🏁 CIERRE DE JORNADA 2026-07-31 — **EMPIEZA A LEER POR AQUÍ**
+
+Todo lo trabajado hoy está **mergeado en `dev`**. Cinco PRs: #239, #240, #242, #243, #244.
+
+### ✅ Entregado hoy
+
+| Feature | Qué | Estado |
+| --- | --- | --- |
+| **167** | apartado propio de recolección para el mensajero | `done` · **en producción** |
+| **169** | buscador de órdenes (guía, remisión, teléfono, destinatario) | `done` · en `dev` |
+| **170** | descarga a Excel — **FASE 1**: las 25 tablas | `in_progress` · en `dev` |
+| **171** | desglose del dinero por tienda en la wallet | `done` · en `dev` |
+| — | escáner QR unificado y plegable + fix del botón desbordado | **en producción** |
+| — | saneamiento del arnés (`init.sh` volvió a verde) | **en producción** |
+| — | borrado de la vista legacy del listado del maestro | en `dev` |
+
+### 🚀 LO PRIMERO AL RETOMAR: desplegar `dev → prod`
+
+**Producción está varios PRs por detrás.** No tiene el buscador, ni el Excel, ni el desglose por
+tienda, ni el borrado de la vista legacy.
+
+**La migración del buscador todavía NO está aplicada en producción** (sí en `dev`). Su pre-vuelo ya
+está hecho y verificado por MCP contra la base real: **`pg_trgm` no instalada** (sin conflicto de
+esquema, que era lo único capaz de tumbar el build y bloquear despliegues) y **69 filas** en `orden`
+(sin ventana de mantenimiento). El procedimiento de recuperación por si algo falla está en
+`progress/impl_169-buscador-ordenes.md` §22.
+
+> Recordatorio que costó descubrir: **en Vercel el build migra antes de compilar, así que mergear a
+> `prod` ES aplicar.**
+
+### 📋 Trabajo especificado y listo para arrancar
+
+1. **170 FASE 2** — paginar en servidor las 16 pantallas que hoy reciben su dataset entero. Spec
+   aprobado, 6 tandas, riesgo por pantalla ya inventariado (2 de riesgo alto: bodega satélite y
+   cuentas por pagar). El humano decidió que **basta con la suite**, sin verificación en pantalla.
+2. **172 — liquidación** (la que cierra el agujero de verdad): hoy **no existe forma de registrar un
+   pago**, ni a mensajeros ni a tiendas, así que los saldos solo crecen. Todas las decisiones están
+   en su ficha. **Condición técnica heredada del review de la 171: el CHECK de `categoria`↔`tipo`
+   debe ir en SU migración**, porque la liquidación será el segundo escritor del ledger.
+3. **173 — caja en modo tesorería.** Depende de la 172.
+
+### ⏭️ Decisiones del humano pendientes (ninguna bloquea)
+
+- **«Rutear a bodega satélite» no tiene interfaz.** Su backend está vivo y probado; el modal se
+  conservó listo para remontar. ¿Se vuelve a ofrecer en el listado vivo o se retira con su backend?
+- **La ficha de la feature 71 se diagnosticó contra código muerto** (`OrdenesApartado`, ya borrado).
+  La superficie viva SÍ tiene el bloqueo que la ficha pedía: **reevaluar antes de tomarla**.
+- **La cabecera de `/mi-wallet`** (lo que ve la tienda) sigue en «Créditos / Débitos». Cuando la 172
+  emita pagos, la tienda verá el pago **sumado dentro de "Débitos"** sin distinguirlo.
+
+### 🧹 Higiene
+
+Quedan **33 worktrees de agentes** en `.claude/worktrees/`. Todo su trabajo está pusheado y mergeado;
+se pueden podar. En Windows algunos fallan con «Filename too long»: `rm -rf` + `git worktree prune`.
+
+### 🔎 Deuda viva declarada (no de estas features)
+
+- **`pending list` del GIN**: justo después de una carga masiva el planificador puede abandonar el
+  índice del buscador. Medido, sin cruzar umbrales, **sin decidir**; las tres salidas tocan diseño.
+- **`exceljs` trunca a 31 caracteres el nombre de la pestaña** (el del archivo sale entero).
+- **Drift entre `schema.prisma` y las migraciones**: reconciliado en el chore de hoy con cero DDL,
+  pero conviene no volver a generar migraciones sin mirar el SQL propuesto.
+
+
+---
+
+# Histórico de la sesión
+
 ## 🗓️ Sesión 2026-07-31 (cierre) — 169 CERRADA · wallet registrada · 170 desbloqueada — **EMPIEZA A LEER POR AQUÍ**
 
 **Feature 169 (buscador de órdenes) → `done`, PR #239 mergeado.** El relato completo va a
