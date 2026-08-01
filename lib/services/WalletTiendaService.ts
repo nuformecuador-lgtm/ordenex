@@ -163,9 +163,18 @@ export class WalletTiendaService implements IWalletTiendaService {
    *
    * `tiendaId: input.tiendaId` se escribe AL FINAL del objeto que va al repositorio, despues
    * de esparcir los filtros (R24): aunque `construirFiltros` llegara a emitir un `tiendaId`, o
-   * alguien anadiera un spread encima, esta linea lo pisa. Es la tercera de tres barreras
-   * independientes — `.strict()` en el borde y `construirFiltros` leyendo claves EXPLICITAS
-   * son las otras dos.
+   * alguien anadiera un spread encima, esta linea lo pisa. Es la ULTIMA de tres barreras
+   * independientes contra una clave extra que pretenda ampliar el alcance; las otras dos son
+   * el schema del borde y `construirFiltros`, que lee claves EXPLICITAS.
+   *
+   * Precision sobre el borde de ESTE camino: `listarMovimientosDeTiendaSchema` NO es
+   * `.strict()`. Zod DESCARTA las claves desconocidas en vez de rechazarlas, asi que una
+   * clave colada no llega hasta aqui, pero tampoco devuelve `validation_error`. El
+   * `.strict()` que si responde error es el del modo completo
+   * (`listarMovimientosDeTiendaCompletoSchema`, R37). La contencion es equivalente —la clave
+   * no llega al repositorio— y esta probada en `tests/unit/services/wallet-tienda-desglose.
+   * test.ts` («R24: el repositorio recibe EXACTAMENTE el tiendaId de la entrada, tambien con
+   * claves extra coladas»).
    *
    * DOS llamadas al repositorio, en paralelo y constantes (R34): la pagina y la cabecera. Y
    * NINGUNA para el nombre de la tienda (R35), que ya baja por props desde la fila.

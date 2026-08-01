@@ -320,9 +320,11 @@ describe("WalletTiendaService.listarMovimientosDeTienda — contrato (R22/R24)",
 
   it("R24: el repositorio recibe EXACTAMENTE el tiendaId de la entrada, tambien con claves extra coladas", async () => {
     const { repo, listarPorTienda, agregarDesglosePorTienda } = repoEnMemoria(dosTiendas());
-    // Aunque el `.strict()` del borde ya lo habria rechazado, aqui se comprueba la SEGUNDA
-    // barrera: `construirFiltros` lee claves EXPLICITAS, asi que nada desconocido llega al
-    // repositorio, y el `tiendaId` se escribe AL FINAL, donde nada lo puede pisar.
+    // El borde de este camino PAGINADO no es `.strict()`: descarta las claves desconocidas en
+    // vez de rechazarlas (el `.strict()` esta en el modo completo). Por eso lo que se prueba
+    // aqui es la SEGUNDA barrera: `construirFiltros` lee claves EXPLICITAS, asi que nada
+    // desconocido llega al repositorio, y el `tiendaId` se escribe AL FINAL, donde nada lo
+    // puede pisar.
     const inyectado = {
       ...input({ tiendaId: "tienda-A" }),
       todasLasTiendas: true,
@@ -366,6 +368,7 @@ describe("WalletTiendaService.listarMovimientosDeTienda — contrato (R22/R24)",
       debito("medio", "tienda-A", "flete", "1.00", "2026-07-10T00:00:00.000Z"),
     ]);
     const r = await servicio(repo).listarMovimientosDeTienda(input(), MAESTRO);
+    expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(ids(r.data.movimientos)).toEqual(["nuevo", "medio", "viejo"]);
   });
@@ -383,6 +386,7 @@ describe("WalletTiendaService.listarMovimientosDeTienda — contrato (R22/R24)",
     const { repo } = repoEnMemoria(filas);
     const r = await servicio(repo).listarMovimientosDeTienda(input({ page: 2, pageSize: 20 }), MAESTRO);
 
+    expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.data.movimientos).toHaveLength(20);
     expect(r.data.total).toBe(45);
@@ -404,6 +408,7 @@ describe("WalletTiendaService.listarMovimientosDeTienda — importes (R11/R12)",
   it("R11: SIN filtros, el saldo del desglose es identico al que deriva la tabla de saldos", async () => {
     const { repo } = repoEnMemoria(LEDGER);
     const r = await servicio(repo).listarMovimientosDeTienda(input(), MAESTRO);
+    expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
 
     // La OTRA derivacion del mismo conjunto: la que alimenta la fila de `SaldosTiendasTable`.
@@ -431,6 +436,8 @@ describe("WalletTiendaService.listarMovimientosDeTienda — importes (R11/R12)",
       MAESTRO,
     );
 
+    expect(sinFiltro.status).toBe("ok");
+    expect(filtrado.status).toBe("ok");
     if (sinFiltro.status !== "ok" || filtrado.status !== "ok") return;
     expect(sinFiltro.data.desglose.aFavor).toBe("10000.00");
     // Filtrado por `flete`: ni COD ni IVA entran en la cabecera.
@@ -465,6 +472,7 @@ describe("WalletTiendaService.listarMovimientosDeTienda — importes (R11/R12)",
       input({ categoria: "ajuste_debito" }),
       MAESTRO,
     );
+    expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.data.total).toBe(0);
     expect(r.data.movimientos).toEqual([]);
@@ -529,6 +537,7 @@ describe("WalletTiendaService.listarMovimientosDeTienda — coste constante (R34
     // apertura, que es justo el defecto que el desglose del mensajero paga hoy.
     expect(listarSaldosTodasTiendas).not.toHaveBeenCalled();
     expect(agregarSaldoPorTienda).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.data).not.toHaveProperty("tiendaNombre");
   });
@@ -542,6 +551,7 @@ describe("WalletTiendaService.listarMovimientosDeTienda — «pagado a la tienda
   it("hoy, con el ledger REAL de produccion (nadie emite pagos), `pagado` vale 0.00", async () => {
     const { repo } = repoEnMemoria(dosTiendas());
     const r = await servicio(repo).listarMovimientosDeTienda(input(), MAESTRO);
+    expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.data.desglose.pagado).toBe("0.00");
   });
@@ -555,6 +565,7 @@ describe("WalletTiendaService.listarMovimientosDeTienda — «pagado a la tienda
     const { repo } = repoEnMemoria(conPago);
     const r = await servicio(repo).listarMovimientosDeTienda(input(), MAESTRO);
 
+    expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.data.desglose.pagado).toBe("4000.00");
     expect(r.data.desglose.cargos).toBe("1000.00"); // el pago NO se pliega en «cargos»
@@ -640,6 +651,8 @@ describe("WalletTiendaService.listarMovimientosDeTiendaCompleto — dataset comp
     const paginado = await svc.listarMovimientosDeTienda(input({ pageSize: 20 }), MAESTRO);
     const completo = await svc.listarMovimientosDeTiendaCompleto(inputCompleto(), MAESTRO);
 
+    expect(paginado.status).toBe("ok");
+    expect(completo.status).toBe("ok");
     if (paginado.status !== "ok" || completo.status !== "ok") return;
     expect(paginado.data.movimientos).toHaveLength(20);
     expect(completo.items).toHaveLength(140);
@@ -667,6 +680,8 @@ describe("WalletTiendaService.listarMovimientosDeTiendaCompleto — dataset comp
       MAESTRO,
     );
 
+    expect(a.status).toBe("ok");
+    expect(b.status).toBe("ok");
     if (a.status !== "ok" || b.status !== "ok") return;
     expect(ids(a.items)).toEqual(["A-cod", "A-flete"]);
     expect(ids(b.items)).toEqual(["B-cod", "B-flete"]);
@@ -717,6 +732,8 @@ describe("WalletTiendaService.listarMovimientosDeTiendaCompleto — dataset comp
     const paginado = await svc.listarMovimientosDeTienda(input({ ...filtros, pageSize: 50 }), MAESTRO);
     const completo = await svc.listarMovimientosDeTiendaCompleto(inputCompleto(filtros), MAESTRO);
 
+    expect(paginado.status).toBe("ok");
+    expect(completo.status).toBe("ok");
     if (paginado.status !== "ok" || completo.status !== "ok") return;
     expect(ids(completo.items)).toEqual(["A-cod"]);
     expect(ids(completo.items)).toEqual(ids(paginado.data.movimientos));

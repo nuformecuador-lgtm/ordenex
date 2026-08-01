@@ -280,12 +280,24 @@ export function DesgloseMovimientosTienda({
   );
 
   // R12: los cuatro importes son los del CONJUNTO FILTRADO, tal como los devolvió el
-  // servidor. Antes de la primera carga solo se conoce el saldo que ya venía en la fila
-  // (R11: sin filtros, es el mismo), y los otros tres se muestran como «—»: pendiente de
-  // cargar, que NO es lo mismo que cero.
+  // servidor. Mientras no hay respuesta se muestran como «—»: pendiente de cargar, que NO es
+  // lo mismo que cero.
+  //
+  // El saldo de la fila SOLO vale como valor de partida mientras no hay filtros aplicados:
+  // sin filtros, el conjunto pedido es el mismo que agrega la tabla de saldos y R11 garantiza
+  // que la cifra coincide. En cuanto hay filtros el conjunto es OTRO, así que el saldo de la
+  // fila dejaría de hablar de lo que se está viendo: mientras vuela esa recarga el saldo se
+  // muestra «—», como sus tres hermanos. Son cuatro cifras que se leen juntas en una pantalla
+  // de dinero; o las cuatro son del mismo conjunto, o no son.
   const desglose: DesgloseTiendaDTO | undefined = data?.desglose;
-  const signo = desglose?.signo ?? resumen.signo;
-  const badge = SIGNO_BADGE[signo];
+  const hayFiltros = Boolean(
+    filtros.cierreId || filtros.categoria || filtros.desde || filtros.hasta,
+  );
+  const saldoVigente = desglose?.saldo ?? (hayFiltros ? null : resumen.saldo);
+  const signoVigente = desglose?.signo ?? (hayFiltros ? null : resumen.signo);
+  // Sin signo no hay insignia: anunciar «A favor» junto a un «—» sería afirmar del conjunto
+  // filtrado algo que todavía no se sabe.
+  const badge = signoVigente ? SIGNO_BADGE[signoVigente] : null;
   const movimientos = data?.movimientos ?? [];
   const total = data?.total ?? 0;
 
@@ -343,10 +355,10 @@ export function DesgloseMovimientosTienda({
         />
         <Importe
           rotulo={DESGLOSE_TIENDA_LABEL.saldo}
-          valor={desglose?.saldo ?? resumen.saldo}
+          valor={saldoVigente}
           pista={DESGLOSE_TIENDA_LABEL.saldoHint}
-          className={SALDO_COLOR[signo]}
-          extra={<Badge variant={badge.variant}>{badge.label}</Badge>}
+          className={signoVigente ? SALDO_COLOR[signoVigente] : undefined}
+          extra={badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
         />
       </div>
 

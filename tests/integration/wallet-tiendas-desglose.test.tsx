@@ -551,6 +551,40 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     expect(within(region).queryByText("₡9000.00")).not.toBeInTheDocument();
   });
 
+  it("R12: mientras vuela la recarga filtrada, el saldo NO enseña la cifra sin filtrar", async () => {
+    // Las cuatro cifras se leen juntas: si tres muestran el marcador de carga y la cuarta
+    // muestra el saldo de la fila (el del conjunto SIN filtrar), esa cuarta se lee como si
+    // fuera el resultado de la consulta en curso. Con filtros aplicados el conjunto es otro,
+    // así que hasta que llegue la respuesta el saldo también es «—».
+    renderTabla([NORTE]);
+    const region = await desplegar("Tienda Norte");
+    await waitFor(() => expect(within(region).getByText("₡9000.00")).toBeInTheDocument());
+
+    // La recarga filtrada se deja EN VUELO a propósito: es el instante del defecto.
+    let resolver: (v: unknown) => void = () => {};
+    listarDesgloseMock.mockImplementationOnce(
+      () => new Promise((res) => { resolver = res; }),
+    );
+    fireEvent.change(within(region).getByLabelText("Cierre"), { target: { value: "c1" } });
+    fireEvent.submit(
+      screen.getByRole("form", { name: "Filtros del desglose de Tienda Norte" }),
+    );
+
+    const saldo = () => importesDeCabecera(region)[3];
+    await waitFor(() => expect(cifraDe(saldo())).toBe("—"));
+    // Los cuatro dicen lo mismo: nada que enseñar todavía.
+    expect(importesDeCabecera(region).map(cifraDe)).toEqual(["—", "—", "—", "—"]);
+    // Y la insignia de signo tampoco afirma nada del conjunto que aún no llegó.
+    expect(within(region).queryByText("A favor")).not.toBeInTheDocument();
+
+    // Al llegar la respuesta, las cuatro cifras son las del conjunto filtrado.
+    await act(async () => {
+      resolver({ status: "ok", data: DESGLOSE_FILTRADO });
+    });
+    await waitFor(() => expect(cifraDe(saldo())).toBe("₡-1000.00"));
+    expect(within(region).queryByText("₡9000.00")).not.toBeInTheDocument();
+  });
+
   it("R3/R36: filtrar en una fila abierta NO vuelve a consultar la otra", async () => {
     renderTabla();
     await desplegar("Tienda Norte");

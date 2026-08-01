@@ -649,3 +649,191 @@ feature— y typecheck verde.
 **Ningún rojo nuevo, y ninguna suite existente tocada.** El aviso `! no hay .env` de
 `init.sh` es el esperado en un worktree sin base alcanzable, y no es un fallo: esta feature
 no lleva migración (T3.1: `git status --porcelain db/` y `git diff --stat db/`, vacíos).
+
+---
+---
+
+# Cierre de menores del review
+
+> Cuatro menores del review (aprobado-con-notas, 0 bloqueantes): **m2, m3, m4 y m6**.
+> `m5`, `m7` y `m8` quedan **fuera** por indicación expresa, y la restricción
+> `categoria`↔`tipo` en la base sigue recomendada para la migración de la **172**, no aquí.
+>
+> Nota: `progress/review_171-desglose-por-tienda.md` **no existe en el repo** (ni en el
+> historial de ninguna rama: `git log --all -- 'progress/review_171*'` sale vacío). Se
+> trabajó sobre el enunciado de los cuatro menores, que trae las líneas exactas.
+
+## m2 — ocho tests que podían pasar en vacío
+
+`tests/unit/services/wallet-tienda-desglose.test.ts` hacía `if (r.status !== "ok") return;`
+**sin** aseverar antes que el status era `ok`. Si el servicio devolviera `forbidden`, esos
+tests salían verdes sin haber comprobado nada — y son los que sostienen el acotamiento y el
+cálculo del saldo de una pantalla de dinero.
+
+Arreglo: `expect(<r>.status).toBe("ok");` **antes** del early return, que es el patrón que el
+propio archivo ya usaba en otros ocho sitios (líneas 219, 275, 293, 312, 334, 352, 605, 699).
+
+### La demostración: mutación temporal del servicio
+
+Se metió `if (true as boolean) return { status: "forbidden" };` como PRIMERA línea de
+`listarMovimientosDeTienda` y de `listarMovimientosDeTiendaCompleto`, y se corrió el archivo
+con `--reporter=verbose` **antes** y **después** del arreglo.
+
+| Estado | Resultado del archivo |
+| --- | --- |
+| Con la mutación, **antes** del arreglo | `13 passed / 17 failed` |
+| Con la mutación, **después** del arreglo | `6 passed / 24 failed` |
+| **Sin** mutación, después del arreglo | `30 passed (30)` |
+
+Los **once** que pasaron de verde a rojo con el servicio roto son exactamente los que pasaban
+por vacío. Los ocho de la lista del review:
+
+| Línea | Test | Con mutación ANTES | Con mutación DESPUÉS |
+| --- | --- | --- | --- |
+| 369 | R16: los movimientos llegan del mas reciente al mas antiguo | ✓ verde | × rojo |
+| 386 | R17: pagina en el servidor y devuelve el total del conjunto filtrado | ✓ verde | × rojo |
+| 407 | R11: SIN filtros, el saldo del desglose es identico al de la tabla de saldos | ✓ verde | × rojo |
+| 434 | R12: CON filtros, los cuatro importes reflejan el conjunto filtrado | ✓ verde | × rojo |
+| 468 | tienda sin movimientos → los cuatro importes en 0.00 y total 0 | ✓ verde | × rojo |
+| 545 | hoy, con el ledger REAL, `pagado` vale 0.00 | ✓ verde | × rojo |
+| 558 | con un `pago_tienda` sembrado A MANO, la cabecera lo refleja | ✓ verde | × rojo |
+| 643 | R37: devuelve TODAS las filas del conjunto filtrado | ✓ verde | × rojo |
+
+Y **tres más** con el mismo defecto exacto que la lista del review no enumeraba, cerrados de
+paso porque son la misma línea y el mismo archivo (se declaran aquí para que se vean):
+
+| Línea | Test | Con mutación ANTES | Con mutación DESPUÉS |
+| --- | --- | --- | --- |
+| 532 | R35: NO se consulta el nombre de la tienda, y la respuesta no lo lleva | ✓ verde | × rojo |
+| 670 | R24: el archivo de la tienda A no trae ni una fila de la B | ✓ verde | × rojo |
+| 720 | aplica EXACTAMENTE los mismos filtros que el listado | ✓ verde | × rojo |
+
+Fallo tipo, con la mutación puesta:
+
+```
+ FAIL  tests/unit/services/wallet-tienda-desglose.test.ts > … > R16: los movimientos llegan
+       del mas reciente al mas antiguo
+AssertionError: expected 'forbidden' to be 'ok' // Object.is equality
+  Expected: "ok"
+  Received: "forbidden"
+ ❯ tests/unit/services/wallet-tienda-desglose.test.ts:369:22
+```
+
+La mutación se revirtió (`git diff lib/services/WalletTiendaService.ts` no la contiene) y el
+archivo vuelve a **30/30 en verde**.
+
+## m6 — coma flotante dentro del test money-safe
+
+`tests/unit/utils/desglose-tienda.test.ts` construía su propia expectativa con `Number()` +
+`Number.prototype.toFixed()`: el test que vigila que el dinero no pase por coma flotante la
+usaba para decidir si el código la evita.
+
+Ahora cada conjunto de `CONJUNTOS` declara sus totales **literales** (`creditos` / `debitos`,
+sumados a mano de las filas que tiene al lado), y lo poco que queda de aritmética es
+`Prisma.Decimal` — la misma que usa el código de producción:
+
+- `sumar(tipo)` agrega con `Prisma.Decimal` y **contraprueba los literales declarados**: un
+  literal mal escrito rompe el test, así que no son un número puesto a dedo.
+- `cargos + pagado === debitos` (que la partición en tres cubetas conserve el total de
+  débitos) se comprueba con `new Prisma.Decimal(cargos).add(pagado)`.
+
+`grep -n "Number(\|parseFloat" tests/unit/utils/desglose-tienda.test.ts` → **sin resultados**
+(los dos `toFixed(2)` que quedan son de `Prisma.Decimal`, no de `Number`). 20/20 en verde.
+
+## m3 — el saldo sin filtrar junto a tres marcadores de carga
+
+`DesgloseMovimientosTienda.tsx` hacía `desglose?.saldo ?? resumen.saldo`: mientras volaba una
+recarga **con filtros aplicados**, tres importes mostraban «—» y el cuarto mostraba el saldo
+de la fila —el del conjunto **sin** filtrar— como si fuera el de esa consulta.
+
+El saldo de la fila solo vale como valor de partida **mientras no hay filtros**: sin filtros
+el conjunto pedido es el mismo que agrega la tabla de saldos y R11 garantiza que la cifra
+coincide. Con filtros, el conjunto es otro. Ahora:
+
+```ts
+const hayFiltros = Boolean(filtros.cierreId || filtros.categoria || filtros.desde || filtros.hasta);
+const saldoVigente = desglose?.saldo ?? (hayFiltros ? null : resumen.saldo);
+const signoVigente = desglose?.signo ?? (hayFiltros ? null : resumen.signo);
+```
+
+La **insignia de signo** va con el saldo: sin signo no se renderiza. Anunciar «A favor» junto
+a un «—» sería afirmar del conjunto filtrado algo que aún no se sabe — el mismo defecto una
+línea más allá.
+
+Se ve fallar: revertida la línea a `desglose?.saldo ?? resumen.saldo`, el test nuevo cae con
+
+```
+ FAIL  tests/integration/wallet-tiendas-desglose.test.tsx > … > R12: mientras vuela la
+       recarga filtrada, el saldo NO enseña la cifra sin filtrar
+AssertionError: expected '₡9000.00' to be '—' // Object.is equality
+```
+
+El test deja la recarga filtrada **en vuelo** a propósito (una promesa que se resuelve a mano)
+y afirma tres cosas en ese instante: la cifra del saldo es «—», **los cuatro** importes dicen
+«—», y la insignia «A favor» no está. Después resuelve y comprueba que las cuatro pasan a ser
+las del conjunto filtrado. Lo que NO cambia: sin filtros, el desglose recién abierto sigue
+pintando el saldo de la fila desde el primer frame (R11).
+
+## m4 — un comentario que decía algo que no es
+
+El doc de `WalletTiendaService.listarMovimientosDeTienda` afirmaba que `.strict()` en el borde
+era una de las tres barreras del camino **paginado**. `listarMovimientosDeTiendaSchema` **no**
+es strict: zod **descarta** las claves desconocidas en vez de rechazarlas. El `.strict()` que
+devuelve `validation_error` es el del modo completo.
+
+Se corrigió el **comentario**, no el schema (el efecto de contención es equivalente —la clave
+no llega al repositorio— y está probado). El comentario ahora dice qué hace cada barrera y
+cuál es la diferencia entre los dos caminos. Se corrigió también la misma afirmación repetida
+en el comentario del test de R24 (`wallet-tienda-desglose.test.ts:323`), que decía «aunque el
+`.strict()` del borde ya lo habría rechazado».
+
+## Archivos tocados
+
+| Archivo | Menor | Qué |
+| --- | --- | --- |
+| `tests/unit/services/wallet-tienda-desglose.test.ts` | m2, m4 | 11 aserciones de status añadidas **antes** del early return; comentario de R24 corregido. Ninguna aserción existente borrada ni cambiada |
+| `tests/unit/utils/desglose-tienda.test.ts` | m6 | Totales literales por conjunto + `Prisma.Decimal` en lugar de `Number()`/`toFixed()` |
+| `app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx` | m3 | `saldoVigente` / `signoVigente`; la insignia solo se pinta con signo conocido |
+| `tests/integration/wallet-tiendas-desglose.test.tsx` | m3 | +1 test de regresión (visto fallar contra el código anterior) |
+| `lib/services/WalletTiendaService.ts` | m4 | Solo el comentario del método paginado. **Cero cambios de comportamiento** |
+
+## Puertas — salida real
+
+```
+$ pnpm run typecheck
+> ordenex@0.1.0 typecheck
+> tsc --noEmit
+(sin salida: 0 errores)
+
+$ pnpm run lint
+✖ 18 problems (0 errors, 18 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+$ pnpm test
+ Test Files  715 passed | 4 skipped (719)
+      Tests  8607 passed | 74 skipped (8681)
+
+$ ./init.sh
+✓ lint paso
+✓ test paso
+✓ todas las migraciones tienen down.sql
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+```
+
+**Frente a la línea base (719 archivos / 8680 tests, 8606 pasan, 74 se saltan):** mismos 719
+archivos, **+1 test** (el de regresión de m3), **0 fallos**, los mismos 18 warnings de lint y
+0 errores, typecheck verde. Ningún rojo nuevo.
+
+Entorno: el worktree venía sin `node_modules` ni `.env`. `pnpm install --frozen-lockfile` y
+`prisma generate` con un `DATABASE_URL` de marcador antes del typecheck. El aviso
+`! no hay .env` de `init.sh` es el esperado y no es un fallo.
+
+## Lo que se dejó sin tocar, a propósito
+
+- **m5, m7, m8**: cobertura indirecta de dos requisitos, la ficha del registro y la moneda
+  hardcodeada (deuda heredada de la 43). Fuera de este encargo.
+- **La restricción `categoria`↔`tipo` en la base**: sigue recomendada para la migración de la
+  **172**. Aquí no hay migración: `git status --porcelain db/` y `git diff --stat db/`, vacíos.
+- **Los schemas de borde**: `listarMovimientosDeTiendaSchema` sigue sin `.strict()`, como pide
+  m4 expresamente.

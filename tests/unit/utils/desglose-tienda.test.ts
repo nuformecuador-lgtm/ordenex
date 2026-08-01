@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { Prisma } from "@prisma/client";
 import {
   CUBETA_POR_CATEGORIA,
   derivarDesgloseTienda,
@@ -247,7 +248,17 @@ describe("derivarDesgloseTienda vs derivarSaldoTienda — las dos derivaciones c
   // Riesgo 2 del design: dos agregaciones sobre la MISMA tabla acaban divergiendo. La tabla de
   // saldos deriva de (creditos, debitos) y la cabecera del desglose de (categoria); si algun
   // dia dejaran de cuadrar, la fila y su desplegable mostrarian saldos distintos.
-  const CONJUNTOS: { nombre: string; filas: DesgloseTiendaAgregadoRow[] }[] = [
+  //
+  // `creditos` y `debitos` van LITERALES, sumados a mano de las filas de al lado. No se
+  // calculan aqui: este es justamente el test que vigila que el dinero no pase por coma
+  // flotante, y construir su propia expectativa con `Number()` + `toFixed()` seria usar la
+  // aritmetica que el test prohibe para decidir si el codigo la evita.
+  const CONJUNTOS: {
+    nombre: string;
+    filas: DesgloseTiendaAgregadoRow[];
+    creditos: string;
+    debitos: string;
+  }[] = [
     {
       nombre: "cierre tipico (COD + los 6 cargos)",
       filas: [
@@ -259,10 +270,14 @@ describe("derivarDesgloseTienda vs derivarSaldoTienda — las dos derivaciones c
         fila("iva_flete_devolucion", "52.00", "debito"),
         fila("iva_comision_cod", "65.00", "debito"),
       ],
+      creditos: "10000.00",
+      debitos: "2147.00", // 1000 + 400 + 500 + 130 + 52 + 65
     },
     {
       nombre: "solo devoluciones (saldo negativo)",
       filas: [fila("flete_devolucion", "400.00", "debito"), fila("iva_flete_devolucion", "52.00", "debito")],
+      creditos: "0.00",
+      debitos: "452.00", // 400 + 52
     },
     {
       nombre: "con pagos y ajustes (el escenario de la 172)",
@@ -273,30 +288,34 @@ describe("derivarDesgloseTienda vs derivarSaldoTienda — las dos derivaciones c
         fila("ajuste_debito", "50.00", "debito"),
         fila("pago_tienda", "3000.00", "debito"),
       ],
+      creditos: "10250.00", // 10000 + 250
+      debitos: "4050.00", // 1000 + 50 + 3000
     },
-    { nombre: "sin movimientos", filas: [] },
+    { nombre: "sin movimientos", filas: [], creditos: "0.00", debitos: "0.00" },
   ];
 
-  for (const { nombre, filas } of CONJUNTOS) {
+  for (const { nombre, filas, creditos, debitos } of CONJUNTOS) {
     it(`R11: mismo saldo y mismo signo que la tabla de saldos — ${nombre}`, () => {
       const desglose = derivarDesgloseTienda(filas);
 
-      // La otra derivacion, partiendo del MISMO conjunto pero por `tipo` (que es como lo
-      // agrega `agregarSaldoPorTienda` para la tabla de saldos).
-      const creditos = filas
-        .filter((f) => f.tipo === "credito")
-        .reduce((s, f) => s + Number(f.total), 0)
-        .toFixed(2);
-      const debitos = filas
-        .filter((f) => f.tipo === "debito")
-        .reduce((s, f) => s + Number(f.total), 0)
-        .toFixed(2);
+      // Contraprueba de los literales: los totales declarados son de verdad los del conjunto
+      // agregado por `tipo` (que es como `agregarSaldoPorTienda` alimenta la tabla de saldos).
+      // Con `Prisma.Decimal`, la misma aritmetica que usa el codigo de produccion.
+      const sumar = (tipo: WalletTiendaMovimientoTipo) =>
+        filas
+          .filter((f) => f.tipo === tipo)
+          .reduce((s, f) => s.add(new Prisma.Decimal(f.total)), new Prisma.Decimal(0))
+          .toFixed(2);
+      expect(sumar("credito")).toBe(creditos);
+      expect(sumar("debito")).toBe(debitos);
+
+      // La otra derivacion, partiendo del MISMO conjunto pero por `tipo`.
       const saldoTabla = derivarSaldoTienda(creditos, debitos);
 
       expect(desglose.saldo).toBe(saldoTabla.saldo);
       expect(desglose.signo).toBe(saldoTabla.signo);
       // Y la particion en tres cubetas conserva el total de debitos: cargos + pagado.
-      expect((Number(desglose.cargos) + Number(desglose.pagado)).toFixed(2)).toBe(debitos);
+      expect(new Prisma.Decimal(desglose.cargos).add(desglose.pagado).toFixed(2)).toBe(debitos);
       expect(desglose.aFavor).toBe(creditos);
     });
   }
