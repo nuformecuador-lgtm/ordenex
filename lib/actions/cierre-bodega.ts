@@ -16,9 +16,12 @@ import {
   cierreBodegaIdSchema,
   aprobarCierreBodegaSchema,
   rechazarCierreBodegaSchema,
+  listarCierresBodegaPaginadoSchema,
   type ListarConsolidacionResult,
   type SolicitarCierreBodegaResult,
   type ListarCierresBodegaAdminResult,
+  type ListarCierresBodegaSolicitadosResult,
+  type ListarHistoricoCierresBodegaResult,
   type VerCierreBodegaDetalleResult,
   type AprobarCierreBodegaResult,
   type RechazarCierreBodegaResult,
@@ -112,6 +115,43 @@ export async function listarCierresBodegaAdmin(
     return service.listarCierresBodegaAdmin(actor);
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41/R44): UNA pagina de los cierres de bodega SOLICITADOS
+ * por la zona del adminSatelite + el total. La zona NO viaja en el input: la resuelve el
+ * servicio desde el actor de la sesion.
+ */
+export async function listarCierresBodegaSolicitadosPaginado(
+  input: unknown,
+  deps: CierreBodegaDeps = {},
+): Promise<ListarCierresBodegaSolicitadosResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarCierresBodegaPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierreBodegaService ?? buildCierreBodegaService();
+    return service.listarCierresBodegaSolicitadosPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41/R44): UNA pagina del HISTORICO de cierres de bodega
+ * (los ya resueltos) + el total. Solo acceso total, y lo decide el servicio.
+ */
+export async function listarHistoricoCierresBodegaPaginado(
+  input: unknown,
+  deps: CierreBodegaDeps = {},
+): Promise<ListarHistoricoCierresBodegaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarCierresBodegaPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
+    return service.listarHistoricoCierresBodegaPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
 
 /** R2/R11-R13/R19: detalle agregado con evidencias firmadas; solo maestro (via service). */

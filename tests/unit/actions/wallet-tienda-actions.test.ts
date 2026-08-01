@@ -35,6 +35,16 @@ function fakeService(overrides: Partial<IWalletTiendaService> = {}): IWalletTien
       status: "ok" as const,
       tiendas: [{ tiendaId: "t1", tiendaNombre: "Tienda Uno", saldo: "8500.00", signo: "positivo" as const }],
     })),
+    // Feature 170 (T I.1): el doble sigue implementando la interfaz COMPLETA.
+    listarSaldosTiendasPaginado: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [
+        { tiendaId: "t1", tiendaNombre: "Tienda Uno", saldo: "8500.00", signo: "positivo" as const },
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+    })),
     // Feature 171: el doble sigue implementando la interfaz COMPLETA. El desglose de una
     // tienda elegida lo ejercita `wallet-tienda-desglose-action.test.ts`.
     listarMovimientosDeTienda: vi.fn(async () => ({

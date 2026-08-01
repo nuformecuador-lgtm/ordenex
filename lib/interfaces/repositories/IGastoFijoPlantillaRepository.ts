@@ -1,5 +1,6 @@
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 45 (design §2.1b) — contrato del repositorio de PLANTILLAS de gasto fijo
 // (configuracion recurrente mutable). Solo queries Prisma; sin logica de negocio. Money-safe:
@@ -33,6 +34,12 @@ export interface IGastoFijoPlantillaRepository {
   setActiva(id: string, activa: boolean): Promise<GastoFijoPlantillaDTO>;
   /** R26: lista TODAS las plantillas (activas e inactivas), mas recientes primero. */
   listar(): Promise<GastoFijoPlantillaDTO[]>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de las plantillas + el
+   * TOTAL. Es `listar()` con el recorte `skip`/`take`: mismas filas (activas e inactivas,
+   * R26) y mismo `orderBy createdAt desc` (R51). El `count` es la unica consulta anadida.
+   */
+  listarPaginado(rango: RangoPagina): Promise<PaginaRepositorio<GastoFijoPlantillaDTO>>;
   /** R27: lista solo las plantillas ACTIVAS (consumo del cron). */
   listarActivas(): Promise<GastoFijoPlantillaDTO[]>;
   /** Lee una plantilla por id; null si no existe. */

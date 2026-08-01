@@ -5,6 +5,7 @@ import type {
   IGastoFijoPlantillaRepository,
 } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletMovimientoRepository).
 type PlantillaPrismaClient = Pick<PrismaClient, "gastoFijoPlantilla">;
@@ -88,6 +89,24 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
   async listar(): Promise<GastoFijoPlantillaDTO[]> {
     const rows = await this.prisma.gastoFijoPlantilla.findMany({ orderBy: { createdAt: "desc" } });
     return rows.map(toDTO);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una pagina de las plantillas + el
+   * total. Sin `where`: este listado no acota nada (lo unico que decide quien lo ve es el ROL,
+   * y eso vive en el servicio), asi que la pagina y el conteo miran el mismo conjunto por
+   * construccion.
+   */
+  async listarPaginado(rango: RangoPagina): Promise<PaginaRepositorio<GastoFijoPlantillaDTO>> {
+    const [rows, total] = await Promise.all([
+      this.prisma.gastoFijoPlantilla.findMany({
+        orderBy: { createdAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+      }),
+      this.prisma.gastoFijoPlantilla.count(), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toDTO), total };
   }
 
   /** R27: solo las activas (consumo del cron). */

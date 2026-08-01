@@ -10,6 +10,7 @@ import type {
   WalletTiendaMovimientoDTO,
 } from "@/lib/types/wallet-tienda";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 43 (design §2.1) — contrato del servicio de lectura del ledger POR TIENDA.
 // Roles: `adminTienda` ve SU saldo/movimientos (acotado a su usuarioId = tienda_id, R19);
@@ -45,6 +46,13 @@ export type ListarMisMovimientosCompletoServiceResult =
 export type ListarSaldosTiendasServiceResult =
   | { status: "ok"; tiendas: SaldoTiendaResumenDTO[] }
   | { status: "forbidden" };
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41): UNA PAGINA de los saldos por tienda + el total de
+ * tiendas del conjunto. Contrato comun de T H.2, sin campos extra.
+ */
+export type ListarSaldosTiendasPaginadoServiceResult =
+  ListarPaginadoServiceResult<SaldoTiendaResumenDTO>;
 
 /**
  * Feature 171 — desglose de UNA tienda ELEGIDA (superficie del acceso total).
@@ -84,6 +92,19 @@ export interface IWalletTiendaService {
   ): Promise<ListarMisMovimientosCompletoServiceResult>;
   /** R20: solo maestro; saldo a favor de TODAS las tiendas (una fila por tienda). */
   listarSaldosTiendas(actor: Actor): Promise<ListarSaldosTiendasServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): los saldos por tienda, paginados en el
+   * servidor.
+   *
+   * MISMA guardia de rol que `listarSaldosTiendas` (`esAccesoTotal`, R20) evaluada ANTES de
+   * tocar el repositorio, y MISMA agregacion: paginar no puede ensanchar el alcance de nadie
+   * (R44). Un `adminTienda` recibe `forbidden` — su superficie es `listarMisMovimientos`, que
+   * acota por el actor; abrir esta le daria el saldo de su competencia.
+   */
+  listarSaldosTiendasPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarSaldosTiendasPaginadoServiceResult>;
   /**
    * Feature 171 (R22/R24/R26/R27/R28) — desglose de UNA tienda elegida: pagina de movimientos
    * + total del conjunto filtrado + los cuatro importes de la cabecera, en una sola respuesta.

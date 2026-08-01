@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { CierreEstado as PrismaCierreEstado, CierreDestinoTipo as PrismaCierreDestinoTipo } from "@prisma/client";
+import { cierreConfig } from "@/lib/config/cierre";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type {
+  CierrePasadoDTO,
   DeshacerGestionServiceResult,
   ListarCierreDiaServiceResult,
   SolicitarCierreServiceResult,
@@ -60,3 +63,39 @@ export const deshacerGestionSchema = z.object({
 // Feature 67 — resultado de la Server Action: el resultado de dominio del service + los dos
 // estados que resuelve el borde (`validation_error` de zod R10, `unauthenticated` sin sesion R7).
 export type DeshacerGestionResult = DeshacerGestionServiceResult | { status: "unauthenticated" };
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40) — entrada del listado paginado «Cierres solicitados» del
+ * mensajero. Sin filtros (design §11.3, riesgo BAJO) y sin alcance: el `mensajero_id` sale del
+ * actor de la sesion.
+ *
+ * `.strict()` para que un `mensajeroId` colado muera en el BORDE. Aqui no seria solo higiene:
+ * es el unico listado de los siete cuyo alcance ES el propio usuario, y una clave que el
+ * servicio llegara a leer algun dia abriria el historico de dinero de otro mensajero.
+ * Tamano de pagina desde `cierreConfig` (T H.1), recortado a `MAX_PAGE_SIZE`.
+ */
+export const listarCierresPasadosSchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(cierreConfig.DEFAULT_PAGE_SIZE)
+      .transform((n) => Math.min(n, cierreConfig.MAX_PAGE_SIZE)),
+  })
+  .strict();
+
+export type ListarCierresPasadosInput = z.infer<typeof listarCierresPasadosSchema>;
+
+/** Errores de BORDE del listado (dominio + los dos que resuelve la Server Action). */
+export type CierreDiaListadoError =
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+// Feature 170 (T I.1, R41): el contrato comun de listado paginado, aplicado al historico.
+export type ListarCierresPasadosResult = ListarPaginadoResult<
+  CierrePasadoDTO,
+  CierreDiaListadoError
+>;
