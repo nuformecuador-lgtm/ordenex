@@ -6,6 +6,8 @@ import { filasLocales } from "@/components/shared/descarga-resultado";
 import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 
 import { money } from "../../../mi-wallet/_components/mi-wallet-labels";
+import { DesgloseMovimientosTienda } from "./DesgloseMovimientosTienda";
+import { DESGLOSE_TIENDA_NOMBRE } from "./desglose-tienda-labels";
 import {
   COLUMNAS_DESCARGA_SALDOS_TIENDAS,
   filaDescargaSaldoTienda,
@@ -92,6 +94,24 @@ export function SaldosTiendasTable({ tiendas }: SaldosTiendasTableProps) {
           columnas: COLUMNAS_DESCARGA_SALDOS_TIENDAS,
           obtenerFilas: () => filasLocales(tiendas, filaDescargaSaldoTienda),
         }}
+        /**
+         * Feature 171 (T2.4, R1/R2/R32/R33) — cada fila despliega el DESGLOSE de SU tienda.
+         *
+         * `renderExpanded` se INVOCA en cada render, pero el `DataTable` solo MONTA el
+         * elemento cuando la fila está abierta; como el `useSWR` vive dentro de
+         * `DesgloseMovimientosTienda`, listar N tiendas no dispara ninguna lectura de
+         * desglose y abrir una fila dispara exactamente una, solo la de esa tienda.
+         *
+         * El nombre baja por props dentro de `resumen` (R35): esta fila ya lo tiene, y
+         * pedírselo al servidor costaría una consulta por apertura para un dato conocido.
+         *
+         * Lo demás de la tabla no se toca: mismas columnas, mismos datos, mismo estado
+         * vacío y la MISMA descarga sobre las props (R6).
+         */
+        renderExpanded={(t) => (
+          <DesgloseMovimientosTienda resumen={t} id={`desglose-tienda-${t.tiendaId}`} />
+        )}
+        expandAriaLabel={(t) => DESGLOSE_TIENDA_NOMBRE.expandir(t.tiendaNombre)}
       />
     </div>
   );

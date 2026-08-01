@@ -92,7 +92,7 @@
 
 ## T2 — Frontend (`frontend_dev`). Depende de T1
 
-- [ ] **T2.1 [P] — Etiquetas** `app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts`:
+- [x] **T2.1 [P] — Etiquetas** `app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts`:
   cabeceras de los cuatro importes (P1), etiquetas de filtros, vacío y error. Las etiquetas de
   `tipo`, `concepto` y `origen` y el helper `money` se **leen** de
   `mi-wallet/_components/mi-wallet-labels` (precedente ya vigente en `SaldosTiendasTable.tsx:8`);
@@ -100,7 +100,7 @@
   *Hecho:* test que afirma la **identidad** de los mapas de concepto y origen con los de
   `/mi-wallet` (mismo objeto, no una copia con los mismos valores) (R20) y que el mapa de signo
   es el de la tabla de saldos (R13).
-- [ ] **T2.2 [P] — Columnas de export**
+- [x] **T2.2 [P] — Columnas de export**
   `app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas.ts`: módulo PURO
   (sin React), `COLUMNAS_DESCARGA_DESGLOSE_TIENDA` + `filaDescargaDesgloseTienda`. Solo
   `fecha · tipo · concepto · monto · origen`; nada de `id`, `tiendaId`, `origenId` ni
@@ -109,7 +109,7 @@
   *Hecho:* `tests/unit/descarga/desglose-tienda-descarga-columnas.test.ts` en verde y
   `tests/unit/descarga/columnas-sensibles.guardia.test.ts` **sigue en verde** habiendo
   descubierto el módulo nuevo (R41).
-- [ ] **T2.3 — Componente** `app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx`:
+- [x] **T2.3 — Componente** `app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx`:
   cabecera de cuatro importes en el orden de R7, formulario de filtros (cierre / concepto /
   desde / hasta), `DataTable` con las cinco columnas, `Pagination`, y `useSWR` **dentro** del
   componente con la clave del helper exportado `claveDesgloseTienda`. Prop opcional
@@ -118,17 +118,17 @@
   Money-safe: los montos se pintan tal cual, sin `parseFloat`/`Number`.
   *Hecho:* compila, y el componente **no** importa ninguna acción de escritura ni construye
   ningún formulario de pago (R47).
-- [ ] **T2.4 — Cablear el desplegable** en `SaldosTiendasTable.tsx`: `renderExpanded` +
+- [x] **T2.4 — Cablear el desplegable** en `SaldosTiendasTable.tsx`: `renderExpanded` +
   `expandAriaLabel` (`Ver desglose de <tienda>`), sin tocar columnas, datos, estado vacío ni la
   descarga existente de la tabla.
   *Hecho:* la tabla de saldos sigue pintando lo mismo y su descarga sigue siendo `filasLocales`
   sobre las props (R6).
-- [ ] **T2.5 — Descarga del desglose**: prop `descarga` del `DataTable` del desglose con título
+- [x] **T2.5 — Descarga del desglose**: prop `descarga` del `DataTable` del desglose con título
   `Desglose de <tienda>` y `obtenerFilas: () => filasDesdeResultado(listarMovimientosDeTiendaCompletoAction(…), filaDescargaDesgloseTienda)`,
   cerrando sobre los filtros vigentes y **sin** `page`/`pageSize`.
   *Hecho:* con dos filas abiertas hay dos controles con nombre accesible distinto (R38); el
   input que se manda no lleva paginación (R37).
-- [ ] **T2.6 — Censo y guardias de la 170.** Añadir la entrada de
+- [x] **T2.6 — Censo y guardias de la 170.** Añadir la entrada de
   `DesgloseMovimientosTienda.tsx` a `CENSO_DATATABLE` (`con_descarga`) y actualizar los cuatro
   totales de `cobertura-tablas.guardia.test.ts`: 24→**25** archivos, 29→**30** instancias,
   24→**25** `con_descarga`, 30→**31** censadas (`fuera` sigue en 6).
@@ -141,7 +141,7 @@
   *Hecho:* se deja constancia en `progress/impl_171-desglose-por-tienda.md` de que la guardia
   **falló primero** con los totales viejos (prueba de que vigila) y de que quedó en verde
   después (R42).
-- [ ] **T2.7 — Test de pantalla** `tests/integration/wallet-tiendas-desglose.test.tsx`
+- [x] **T2.7 — Test de pantalla** `tests/integration/wallet-tiendas-desglose.test.tsx`
   (patrón de `wallet-mensajeros-page.test.tsx`: `SWRConfig` con caché aislada + `ToastProvider`).
   *Hecho:* en verde con:
   - render de la tabla con varias tiendas ⇒ **cero** llamadas a la action del desglose (R32);
@@ -161,7 +161,7 @@
   - prop `acciones` presente ⇒ el nodo aparece en la cabecera; ausente ⇒ no hay contenedor
     extra (R45);
   - `mutate` sobre `claveDesgloseTienda(tiendaId, …)` refresca **solo** ese desglose (R46).
-- [ ] **T2.8 [P] — Test de la página** `tests/integration/wallet-tiendas-page.test.tsx`
+- [x] **T2.8 [P] — Test de la página** `tests/integration/wallet-tiendas-page.test.tsx`
   (**no existe hoy**; espejo de `wallet-mensajeros-page.test.tsx`).
   *Hecho:* en verde con: `mensajero`, `adminTienda`, `adminSatelite` y sin sesión ⇒ `notFound`
   y **sin** pre-fetch; `maestro` y `admin` ⇒ tabla montada; saldos por props como STRING
@@ -171,17 +171,17 @@
 
 ## T3 — Cierre
 
-- [ ] **T3.1 — Verificar que no hay migración.** `pnpm run db:migrate:create` sobre el árbol y
+- [x] **T3.1 — Verificar que no hay migración.** `pnpm run db:migrate:create` sobre el árbol y
   comprobar que la migración propuesta está vacía; descartar la carpeta generada.
   *Hecho:* `db/migrations/` no gana ninguna carpeta en el diff de la rama (R48).
-- [ ] **T3.2 — Suite completa y arnés.** `./init.sh`, `pnpm run typecheck`, `pnpm run lint`,
+- [x] **T3.2 — Suite completa y arnés.** `./init.sh`, `pnpm run typecheck`, `pnpm run lint`,
   `pnpm test`.
   *Hecho:* todo en verde, incluidas las guardias de la 170 y los tests de `/mi-wallet` sin
   editar.
-- [ ] **T3.3 — Trazabilidad.** Escribir el mapa `R<n> → test` en
+- [x] **T3.3 — Trazabilidad.** Escribir el mapa `R<n> → test` en
   `progress/impl_171-desglose-por-tienda.md`, con los 49 requisitos.
   *Hecho:* ningún `R<n>` sin al menos un test nombrado y localizable.
-- [ ] **T3.4 — Nota para la 172.** Dejar en la bitácora las cuatro cosas que la 172 encuentra
+- [x] **T3.4 — Nota para la 172.** Dejar en la bitácora las cuatro cosas que la 172 encuentra
   hechas (§9 del design) y el nombre exacto de la prop `acciones` y del helper
   `claveDesgloseTienda`.
   *Hecho:* la 172 puede escribir su spec sin releer este código.

@@ -3,6 +3,9 @@
 > **Fase BACKEND (T1.1–T1.6) — COMPLETA.** El frontend (T2) y el censo de la 170 (T2.6) los
 > hace `frontend_dev` después, sobre esta misma rama.
 > Rama: `feature/171-desglose-por-tienda` (mergeada con `origin/dev` sin conflictos).
+>
+> **Fase FRONTEND (T2.1–T2.8) y CIERRE (T3) — COMPLETAS.** Ver `§ FRONTEND` al final de este
+> archivo. Nada de lo escrito arriba por `backend_dev` se ha tocado.
 
 ---
 
@@ -396,3 +399,253 @@ tiene formulario de pago ni campos de método/referencia/fecha.
    `tests/integration/db/**` que dependen de una base siguen saltándose como en la línea base.
 4. **R32/R33 no se pueden probar en backend**: son sobre cuántas veces el cliente llama a la
    action, y eso lo prueba el test de pantalla (T2.7).
+
+---
+---
+
+# FRONTEND (`frontend_dev`) — T2 completo + T3 de cierre
+
+> Escrito por `frontend_dev` sobre la misma rama, encima del backend ya pusheado. **Nada de
+> lo de arriba se ha reescrito**: esta sección solo añade.
+
+## Línea base **medida** al empezar la fase de frontend
+
+Medida en este worktree, sobre `feature/171` (`9297e6f4`) ya mergeada con `origin/dev`
+(«Already up to date»), **antes de escribir una línea**:
+
+```
+pnpm test        Test Files  711 passed | 4 skipped (715)
+                      Tests  8547 passed | 74 skipped (8621)
+pnpm run typecheck   (sin salida: 0 errores)
+pnpm run lint        ✖ 18 problems (0 errors, 18 warnings)
+```
+
+Coincide exactamente con el cierre del backend. **Cero fallos de partida.**
+
+Entorno: el worktree venía sin `node_modules` ni `.env`. Se hizo `pnpm install
+--frozen-lockfile` y `prisma generate` con un `DATABASE_URL` de marcador **antes** del
+typecheck; sin eso salen ~200 errores falsos por un cliente Prisma ausente.
+
+---
+
+## Archivos creados / modificados (solo frontend)
+
+### Nuevos (código)
+
+| Archivo | Qué |
+| --- | --- |
+| `app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx` | El desplegable: cabecera de 4 importes, filtros, tabla, paginación, descarga, `useSWR` **dentro** |
+| `app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts` | Textos propios + REEXPORT de los de `/mi-wallet` y del signo de la tabla de saldos |
+| `app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas.ts` | Columnas de export (módulo puro, descubierto por convención de nombre) |
+
+### Nuevos (tests)
+
+| Archivo | Tests |
+| --- | --- |
+| `tests/integration/wallet-tiendas-desglose.test.tsx` | 29 |
+| `tests/integration/wallet-tiendas-page.test.tsx` | 8 (**no existía**: la página nunca había tenido test) |
+| `tests/unit/descarga/desglose-tienda-descarga-columnas.test.ts` | 11 |
+| `tests/unit/components/desglose-tienda-labels.test.ts` | 11 |
+
+### Modificados
+
+| Archivo | Qué |
+| --- | --- |
+| `app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx` | **Solo** `renderExpanded` + `expandAriaLabel` y sus dos imports. Columnas, datos, estado vacío y descarga: intactos |
+| `tests/unit/descarga/censo-tablas.ts` | Entrada nueva `con_descarga` + cabecera del censo actualizada |
+| `tests/unit/descarga/cobertura-tablas.guardia.test.ts` | Los cuatro totales duros |
+| `specs/171-desglose-por-tienda/tasks.md` | `[x]` de T2.1–T2.8 y T3.1–T3.4 |
+
+### Suites existentes tocadas: **NINGUNA**
+
+No hizo falta arreglar el arnés de ningún test previo. Ninguna suite existente se rompió por
+falta de un proveedor de contexto (el caso que ya se dio dos veces en la 170): los dos tests
+nuevos que montan el control de descarga traen su propio `ToastProvider`, y ningún test
+anterior monta `SaldosTiendasTable`. **Cero aserciones existentes editadas.**
+
+---
+
+## T2.6 — Censo de la 170: se vio FALLAR primero, y en los dos sentidos
+
+Los números de partida **no** son los del design §7.4 (25/30/25/31): esos ya estaban
+obsoletos por el borrado de la vista legacy de órdenes. Se incrementó desde los **reales**
+que dejó anotados `backend_dev` en T0.3.
+
+| Constante | Antes (real) | Ahora |
+| --- | --- | --- |
+| `TOTAL_ARCHIVOS_CON_DATATABLE` | 24 | **25** |
+| `TOTAL_INSTANCIAS_DATATABLE` | 29 | **30** |
+| `con_descarga` | 24 | **25** |
+| `totalCensado` | 30 | **31** |
+| `fuera` | 6 | **6** (no cambia) |
+
+**Sentido 1 — una tabla nueva sin registrar no pasa.** Con el componente ya en el árbol y el
+censo sin tocar:
+
+```
+FAIL  tests/unit/descarga/cobertura-tablas.guardia.test.ts
+AssertionError: hay tablas sin registrar en tests/unit/descarga/censo-tablas.ts
++ [ "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx #1" ]
+```
+
+**Sentido 2 — un estado declarado que no case con el código tampoco.** Contraprueba hecha a
+propósito: se declaró la entrada nueva como `fuera` y la guardia cayó por **tres** sitios a
+la vez (estado declarado vs. real, el recuento de exclusiones y el de `con_descarga`):
+
+```
+AssertionError: …DesgloseMovimientosTienda.tsx #1: estado declarado "fuera": expected true to be false
+AssertionError: expected 6 to be 5
+AssertionError: expected […] to have a length of 25 but got 24
+```
+
+Restaurada la declaración correcta, `pnpm vitest run tests/unit/descarga` → **10 archivos /
+79 tests en verde** (8/57 antes de esta feature; +2 archivos y +22 tests son los nuevos).
+
+`columnas-sensibles.guardia.test.ts` descubrió el módulo nuevo **solo** (convención
+`*-descarga-columnas.ts`) y siguió en verde: el archivo no emite ningún uuid ni identificador
+interno. Por eso el módulo exporta **exactamente dos cosas** —las columnas y la proyección—
+y hay un test que lo afirma: la guardia ejecuta con una sonda TODA función exportada, y un
+tercer export la rompería con un fallo que se leería como un falso positivo.
+
+---
+
+## Decisiones de la capa de presentación (y por qué)
+
+**1. El `useSWR` vive DENTRO del desplegable.** `DataTable` invoca `renderExpanded(row)` en
+cada render, pero solo **monta** el elemento de la fila abierta. Por eso listar cuatro
+tiendas cuesta **cero** lecturas de desglose y abrir una cuesta **una**, solo de esa tienda.
+Probado con las dos mitades: la que cuenta las llamadas al abrir (R33) y la que las cuenta
+**sin** abrir nada (R32) — sin esta segunda, una implementación que precargara todo pasaría
+la primera.
+
+**2. Antes de la primera carga se muestra «—», no un cero.** El saldo sí se pinta desde la
+fila (R11: sin filtros es el mismo), pero «a favor», «cargos» y «pagado» no se conocen
+todavía y se muestran como «—». Un cero mientras carga sería una cifra falsa en una pantalla
+de dinero, y además haría indistinguible el estado «cargando» del cero verdadero de «pagado
+a la tienda».
+
+**3. «Pagado a la tienda» se pinta en `0,00`, sin adornos ni excusas.** Es la decisión con
+más consecuencias de la pantalla y está probada por partida doble: un test afirma que la
+cifra sale `₡0.00` **y que ahí no queda ningún «—»**, y otro le da al MISMO componente una
+respuesta con `pagado: "4000.00"` y comprueba que la cabecera lo refleja —y que el saldo baja
+a `5000.00`— sin tocar una línea. Si el cero estuviera escrito a mano en el cliente, el
+segundo test caería.
+
+**4. Money-safe, verificado por lectura del archivo.** No hay `Number(`, `parseFloat` ni
+`toFixed` en ninguno de los tres archivos nuevos: los cinco importes y cada monto se pintan
+con `money`, que solo antepone el símbolo al STRING. El único `number` del componente es la
+página.
+
+**5. Los nombres accesibles llevan SIEMPRE el nombre de la tienda**, y son funciones en el
+módulo de textos, no concatenaciones sueltas en el JSX. Con varias filas abiertas a la vez,
+tres formularios «Filtros del desglose» o tres botones «Descargar» no identificarían nada.
+Hay un test que recorre el mapa entero y exige que (a) todos contengan el nombre y (b) dos
+tiendas nunca produzcan el mismo nombre.
+
+**6. Cero etiquetas duplicadas.** Concepto, tipo, origen y `money` se **reexportan** de
+`/mi-wallet`, y el estado del saldo de `saldo-tienda-signo-label`. El test lo comprueba con
+`toBe` (misma referencia), no con `toEqual`: dos mapas con los mismos textos hoy son dos
+mapas que divergen mañana, y un test de igualdad escrito con los valores de hoy no se
+enteraría.
+
+---
+
+## Trazabilidad `R<n> → test` (alcance frontend)
+
+| R | Test |
+| --- | --- |
+| R1 | `wallet-tiendas-desglose.test.tsx` → «abrir una fila emite EXACTAMENTE una lectura…» (la fila se despliega y aparece la región) |
+| R2 | idem → «abrir una fila emite EXACTAMENTE una lectura, y con el tiendaId de ESA fila» (+ contraprueba: ninguna llamada pidió la otra tienda) |
+| R3 | idem → «abrir la segunda fila cuesta UNA lectura más, no vuelve a leer la primera» y «R3/R36: filtrar en una fila abierta NO vuelve a consultar la otra» |
+| R4 | idem → «con dos filas abiertas, ningún control comparte nombre con el de la otra tienda» (región, formulario, tabla, paginación y descarga); `desglose-tienda-labels.test.ts` → los dos de «nombres accesibles» |
+| R5 | idem → «el fallo se cuenta DENTRO de esa fila; la tabla de saldos y la otra fila siguen» |
+| R6 | idem → «mismas columnas, mismos datos y su descarga sigue proyectando las props» y «sin tiendas, el estado vacío de la tabla es el de siempre»; `wallet-tiendas-page.test.tsx` → «los saldos cruzan por props ya serializados como STRING» |
+| R7 | idem → «muestra los CUATRO importes en el orden de la fórmula…»; `desglose-tienda-labels.test.ts` → «declara los CUATRO importes con los textos decididos…» |
+| R11 | idem → «R11: sin filtros, el saldo del desglose es el MISMO de la fila de esa tienda» |
+| R12 | idem → «R12: al filtrar, los cuatro importes pasan a ser los del conjunto FILTRADO» |
+| R13 | idem → «R13: el estado del saldo usa la MISMA etiqueta que la tabla de saldos para ese signo»; `desglose-tienda-labels.test.ts` → «es el MISMO mapa de signo que usa la tabla de saldos» |
+| R14 | idem → «muestra los CUATRO importes… con los STRING del servidor» y «money-safe: los montos se pintan TAL CUAL» |
+| R15 | idem → «lista las CINCO columnas en orden…»; `desglose-tienda-descarga-columnas.test.ts` → «declara sus columnas ENUMERADAS, en el orden de la pantalla» |
+| R16 | idem → «lista las CINCO columnas en orden y del más reciente al más antiguo» |
+| R17 | idem → «R17: pagina contra el servidor usando el TOTAL del conjunto filtrado» |
+| R18 | idem → «R18/R19: aplicar filtros los manda al servidor y vuelve a la primera página» y «R44: `pago_tienda` es una opción del filtro por concepto» |
+| R19 | idem → «R18/R19: … y vuelve a la primera página» y «R19: limpiar los filtros también vuelve a la primera página» |
+| R20 | idem → «R20: concepto y origen salen con la MISMA etiqueta legible que /mi-wallet»; `desglose-tienda-labels.test.ts` → «concepto, tipo y origen son el MISMO objeto que usa /mi-wallet, no una copia» |
+| R21 | idem → «R21: el conjunto filtrado sin movimientos lo DICE, no deja una tabla muda» |
+| R30 | `wallet-tiendas-page.test.tsx` → «los roles sin acceso total NO ven los saldos…», «`adminTienda` tampoco entra por aquí…», «sin sesión tampoco…», «si la action responde forbidden…», «maestro/admin ven la tabla montada» |
+| R32 | `wallet-tiendas-desglose.test.tsx` → «con la tabla pintada y ninguna fila abierta NO se lee ningún desglose» (4 tiendas); `wallet-tiendas-page.test.tsx` → «R32: montar la página no dispara NINGUNA lectura de desglose» |
+| R33 | `wallet-tiendas-desglose.test.tsx` → «abrir una fila emite EXACTAMENTE una lectura…» y «cerrar y reabrir no acumula lecturas» |
+| R36 | idem → «R3/R36: filtrar en una fila abierta NO vuelve a consultar la otra» |
+| R37 | idem → «pide el modo COMPLETO con los filtros vigentes y SIN paginación» |
+| R38 | idem → «con dos filas abiertas, ningún control comparte nombre…» (incluye los dos botones de descarga) |
+| R41 | `desglose-tienda-descarga-columnas.test.ts` → «R41: no expone identificadores internos…» + `columnas-sensibles.guardia.test.ts`, que descubrió el módulo solo y sigue verde |
+| R42 | `cobertura-tablas.guardia.test.ts` con los cuatro totales actualizados (visto fallar antes, en los dos sentidos: ver arriba) |
+| R43 | `wallet-tiendas-desglose.test.tsx` → «R43: «Pagado a la tienda» se muestra en 0,00 — un cero verdadero…» y «R43 (contraprueba): el día que haya un pago, la MISMA cabecera lo refleja»; `desglose-tienda-descarga-columnas.test.ts` → «R43: un movimiento `pago_tienda` sale con su concepto propio» |
+| R44 | `wallet-tiendas-desglose.test.tsx` → «R44: `pago_tienda` es una opción del filtro por concepto»; `desglose-tienda-labels.test.ts` → «las opciones del filtro de concepto salen del SEED del enum» |
+| R45 | `wallet-tiendas-desglose.test.tsx` → «con `acciones`, el nodo se renderiza en la cabecera» y «sin `acciones` no se renderiza NINGÚN contenedor añadido» (compara el nº de nodos de la región con y sin la prop) |
+| R46 | idem → «`mutate` sobre su clave recarga SOLO esa tienda» y «la clave identifica a la tienda, la página y los filtros» |
+| R47 | idem → «R47: esta pantalla no ofrece registrar ningún pago»; el componente no importa ninguna acción de escritura (sus dos únicos imports de `lib/actions` son las dos LECTURAS de la 171) |
+| R48 | `git status --porcelain db/` y `git diff --stat db/` **vacíos** en toda la rama |
+
+Los requisitos de backend (R8–R10, R22–R29, R31, R34, R35, R39, R40, R49) los cubre la fase
+anterior; su mapa está más arriba, sin tocar.
+
+---
+
+## Nota adicional para la **172** (lo que deja el frontend)
+
+Los dos nombres que T3.4 dejó como «pendiente T2.3» ya existen, en
+`app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx`:
+
+| Cosa | Firma exacta | Estado |
+| --- | --- | --- |
+| Punto de extensión de acciones | `acciones?: ReactNode` (prop de `DesgloseMovimientosTiendaProps`) | **hecho** |
+| Clave de revalidación dirigida | `claveDesgloseTienda(tiendaId: string, page = 1, filtros = FILTROS_DESGLOSE_TIENDA_VACIOS)` | **hecho** |
+| Tipo de los filtros | `FiltrosDesgloseTienda` (`{ cierreId, categoria, desde, hasta }`), exportado | **hecho** |
+
+Cómo lo usa la 172, en dos líneas:
+
+1. Pasa su botón desde `SaldosTiendasTable`:
+   `renderExpanded={(t) => <DesgloseMovimientosTienda resumen={t} acciones={<RegistrarPagoButton tienda={t} />} />}`.
+   Sin la prop no se renderiza contenedor alguno, así que hoy no hay hueco en blanco.
+2. Tras registrar el pago: `mutate(claveDesgloseTienda(tiendaId))`. Refresca **solo** ese
+   desglose — no la página, no los demás. Probado.
+
+Y lo que **no** encontrará: ninguna escritura. El componente solo importa las dos lecturas
+(`listarMovimientosDeTiendaAction` y `…CompletoAction`); no hay formulario de pago ni campo
+de método/referencia/fecha (R47).
+
+---
+
+## T3.2 — Cierre: las cuatro puertas, salida real
+
+```
+$ pnpm run typecheck
+> ordenex@0.1.0 typecheck
+> tsc --noEmit
+(sin salida: 0 errores)
+
+$ pnpm run lint
+✖ 18 problems (0 errors, 18 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+$ pnpm test
+ Test Files  715 passed | 4 skipped (719)
+      Tests  8606 passed | 74 skipped (8680)
+
+$ ./init.sh
+✓ lint paso
+✓ test paso
+✓ todas las migraciones tienen down.sql
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+```
+
+**Balance frente a la línea base del frontend:** 715 → 719 archivos (**+4**), 8621 → 8680
+tests (**+59**: 29 + 8 + 11 + 11, exactamente los cuatro archivos nuevos), **0 fallos**, 0
+errores de lint —los 18 warnings son los mismos de siempre, todos en tests ajenos a esta
+feature— y typecheck verde.
+
+**Ningún rojo nuevo, y ninguna suite existente tocada.** El aviso `! no hay .env` de
+`init.sh` es el esperado en un worktree sin base alcanzable, y no es un fallo: esta feature
+no lleva migración (T3.1: `git status --porcelain db/` y `git diff --stat db/`, vacíos).

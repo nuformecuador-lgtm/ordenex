@@ -25,16 +25,24 @@ const RAIZ = path.resolve(__dirname, "../../..");
 const ARBOL_UI = "app";
 
 /**
- * Totales del censo VIGENTE: 30 tablas = 29 instancias de `<DataTable>` (en 24 archivos)
+ * Totales del censo VIGENTE: 31 tablas = 30 instancias de `<DataTable>` (en 25 archivos)
  * + 1 `<table>` cruda. Se afirman a propósito: si el árbol crece, este número cambia y
  * obliga a pasar por el registro en vez de sumar una tabla en silencio.
  *
- * El spec (design §1.4) censó 31 = 30 + 1 en 25 archivos. La diferencia es el borrado de
- * `OrdenesApartado.tsx` junto a la vista legacy `OrdenesRevisionMaestro` (chore del
- * 2026-07-31): una tabla menos, y era `con_descarga`. Ver la cabecera de `censo-tablas.ts`.
+ * Cómo se llegó hasta aquí, porque los números del spec 170 ya no valen como referencia:
+ *  - el spec (design §1.4) censó 31 = 30 + 1 en 25 archivos;
+ *  - el borrado de `OrdenesApartado.tsx` con la vista legacy `OrdenesRevisionMaestro`
+ *    (chore del 2026-07-31) lo bajó a 30 = 29 + 1 en 24 archivos — una tabla menos, y era
+ *    `con_descarga`;
+ *  - la feature 171 suma el desglose por tienda (`DesgloseMovimientosTienda.tsx`, también
+ *    `con_descarga`) y lo devuelve a 31 = 30 + 1 en 25 archivos.
+ *
+ * Que coincida con el total del spec es CASUALIDAD aritmética: el reparto no es el mismo
+ * (allí estaba el apartado de órdenes, aquí el desglose por tienda). Ver la cabecera de
+ * `censo-tablas.ts`.
  */
-const TOTAL_ARCHIVOS_CON_DATATABLE = 24;
-const TOTAL_INSTANCIAS_DATATABLE = 29;
+const TOTAL_ARCHIVOS_CON_DATATABLE = 25;
+const TOTAL_INSTANCIAS_DATATABLE = 30;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -201,11 +209,11 @@ describe("guardia de cobertura del censo de tablas", () => {
       }
     }
 
-    // El censo total vigente: 29 instancias + 1 tabla cruda = 30 tablas.
+    // El censo total vigente: 30 instancias + 1 tabla cruda = 31 tablas.
     const totalCensado =
       CENSO_DATATABLE.reduce((n, e) => n + e.tablas.length, 0) +
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
-    expect(totalCensado).toBe(30);
+    expect(totalCensado).toBe(31);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -235,10 +243,12 @@ describe("guardia de cobertura del censo de tablas", () => {
     // exclusiones, ninguna con control. El reparto se verifica contra el registro, que a
     // su vez se contrasta contra el árbol en el test de arriba.
     //
-    // 24, no las 25 del Anexo I: el «Apartado de órdenes por estado» se borró con la vista
-    // legacy que lo montaba (2026-07-31). Las exclusiones siguen siendo 6: el borrado se
-    // llevó una tabla que descargaba, no cambió ninguna decisión de alcance.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(24);
+    // 25: las 24 que quedaron tras borrarse el «Apartado de órdenes por estado» con su
+    // vista legacy (2026-07-31) + el desglose por tienda que suma la feature 171. Las
+    // exclusiones siguen siendo 6: ni el borrado ni la 171 cambiaron una sola decisión de
+    // alcance — el borrado se llevó una tabla que descargaba y la 171 añade otra que
+    // descarga.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(25);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(6);
   });
 });
