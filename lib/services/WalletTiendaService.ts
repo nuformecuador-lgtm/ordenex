@@ -7,15 +7,20 @@ import type {
   IWalletTiendaService,
   ListarMisMovimientosCompletoServiceResult,
   ListarMisMovimientosServiceResult,
+  ListarMovimientosDeTiendaCompletoServiceResult,
+  ListarMovimientosDeTiendaServiceResult,
   ListarSaldosTiendasServiceResult,
   VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
 import type {
+  ListarMovimientosDeTiendaCompletoInput,
+  ListarMovimientosDeTiendaInput,
   ListarMovimientosTiendaCompletoInput,
   ListarMovimientosTiendaInput,
   SaldoTiendaResumenDTO,
 } from "@/lib/types/wallet-tienda";
 import { descargaConfig } from "@/lib/config/descarga";
+import { derivarDesgloseTienda } from "@/lib/utils/desglose-tienda";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
@@ -142,5 +147,91 @@ export class WalletTiendaService implements IWalletTiendaService {
       return { tiendaId: r.tiendaId, tiendaNombre: r.tiendaNombre, saldo: s.saldo, signo: s.signo };
     });
     return { status: "ok", tiendas };
+  }
+
+  /**
+   * Feature 171 (T1.4, design §4.4) — DESGLOSE de UNA tienda elegida por el acceso total.
+   *
+   * Alcance por ROL, no por dato de la peticion (R26/R27/R28). El guard es el MISMO
+   * `esAccesoTotal` que `listarSaldosTiendas`, y va PRIMERO, antes de tocar el repositorio:
+   * si estuviera despues, el ledger de la tienda ya habria salido de la base aunque la
+   * respuesta fuera un error. Que `adminTienda` reciba `forbidden` incluso pidiendo su PROPIA
+   * tienda no es un descuido: su superficie es `listarMisMovimientos`, que IGNORA cualquier
+   * `tiendaId` del input y acota por `actor.usuarioId`. Abrir esta puerta a la tienda
+   * convertiria un contrato cuyo alcance fija el ROL en uno cuyo alcance fija un DATO de la
+   * peticion, con un `===` como unica barrera entre una tienda y el ledger de su competencia.
+   *
+   * `tiendaId: input.tiendaId` se escribe AL FINAL del objeto que va al repositorio, despues
+   * de esparcir los filtros (R24): aunque `construirFiltros` llegara a emitir un `tiendaId`, o
+   * alguien anadiera un spread encima, esta linea lo pisa. Es la tercera de tres barreras
+   * independientes — `.strict()` en el borde y `construirFiltros` leyendo claves EXPLICITAS
+   * son las otras dos.
+   *
+   * DOS llamadas al repositorio, en paralelo y constantes (R34): la pagina y la cabecera. Y
+   * NINGUNA para el nombre de la tienda (R35), que ya baja por props desde la fila.
+   */
+  async listarMovimientosDeTienda(
+    input: ListarMovimientosDeTiendaInput,
+    actor: Actor,
+  ): Promise<ListarMovimientosDeTiendaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R26/R27/R28
+
+    const filtros = this.construirFiltros(input);
+
+    const [{ movimientos, total }, desgloseAgg] = await Promise.all([
+      this.repo.listarPorTienda({
+        page: input.page,
+        pageSize: input.pageSize,
+        ...filtros,
+        tiendaId: input.tiendaId, // AL FINAL (R24): nada lo puede pisar
+      }),
+      this.repo.agregarDesglosePorTienda(input.tiendaId, filtros),
+    ]);
+
+    return {
+      status: "ok",
+      data: {
+        tiendaId: input.tiendaId,
+        movimientos,
+        total,
+        page: input.page,
+        pageSize: input.pageSize,
+        // R12: los cuatro importes reflejan el conjunto FILTRADO (mismos filtros que el
+        // listado), no el agregado total de la tienda.
+        desglose: derivarDesgloseTienda(desgloseAgg),
+      },
+    };
+  }
+
+  /**
+   * Feature 171 (T1.4) — el MISMO desglose sin recorte por pagina, para la descarga.
+   *
+   * Calcado de `listarPagosDeMensajeroCompleto`: mismo guard de rol evaluado antes de la base,
+   * mismos filtros, `page: 1` + `pageSize: limite + 1` (= `skip 0, take N+1`) y `tiendaId` al
+   * final. O van TODAS las filas del conjunto filtrado, o va el error accionable con sus
+   * conteos: `limite_excedido` NUNCA lleva un dataset truncado (R39/R40).
+   *
+   * La CABECERA no se recalcula aqui: es dato de pantalla, no columna del archivo. Pedirla
+   * seria una consulta de mas por descarga sin nadie que la use — el mismo criterio con el que
+   * la 170 dejo fuera el saldo agregado en los otros cuatro ledgers.
+   */
+  async listarMovimientosDeTiendaCompleto(
+    input: ListarMovimientosDeTiendaCompletoInput,
+    actor: Actor,
+  ): Promise<ListarMovimientosDeTiendaCompletoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R27
+
+    const limite = descargaConfig.MAX_FILAS;
+
+    const { movimientos, total } = await this.repo.listarPorTienda({
+      ...this.construirFiltros(input),
+      page: 1,
+      pageSize: limite + 1,
+      tiendaId: input.tiendaId, // AL FINAL (R24)
+    });
+
+    if (total > limite) return { status: "limite_excedido", total, limite };
+
+    return { status: "ok", items: movimientos, total };
   }
 }

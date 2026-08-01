@@ -147,3 +147,80 @@ export type ListarMovimientosTiendaCompletoInput = z.infer<
 // conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18).
 export type ListarMovimientosTiendaCompletoResult =
   ListarCompletoResult<WalletTiendaMovimientoDTO>;
+
+// ── Feature 171 — DESGLOSE del dinero de UNA tienda elegida (vista de ACCESO TOTAL) ──
+//
+// Superficie NUEVA y distinta de `/mi-wallet`: alli la tienda ve LO SUYO y el acotado lo pone
+// el actor (R19 de la 43); aqui el maestro elige la tienda y el acotado lo pone el INPUT
+// (`tiendaId`), con el alcance fijado por el ROL (`esAccesoTotal`, R26/R27/R28 de la 171).
+
+/**
+ * Feature 171 (design §2.1, R7/R8/R10) — cabecera del desglose: TRES cubetas exhaustivas
+ * sobre el ledger + el saldo que se deriva de ellas.
+ *
+ * `pagado` esta separado de `cargos` a proposito, y hoy vale siempre "0.00" porque ningun
+ * flujo emite `pago_tienda` (lo emitira la 172). No es un cero fijo: se lee de la categoria
+ * REAL del ledger, de modo que el dia que la 172 inserte el primer pago esta cabecera lo
+ * refleje sin tocar una linea (R43). Si «pagado» se plegara dentro de «cargos», nadie podria
+ * distinguir *lo que te cobre* de *lo que ya te pague* mirando la pantalla.
+ *
+ * Money-safe (R23): los cuatro importes cruzan la frontera como STRING escala 2.
+ */
+export type DesgloseTiendaDTO = {
+  aFavor: string; // Σ creditos (cod_recaudado, ajuste_credito)
+  cargos: string; // Σ debitos != pago_tienda (fletes, comision, los tres IVA, ajuste_debito)
+  pagado: string; // Σ debitos == pago_tienda (hoy siempre "0.00", ver R43)
+  saldo: string; // aFavor - cargos - pagado (puede venir "-123.45")
+  signo: SaldoTiendaSigno;
+};
+
+/**
+ * R22: TODO lo que la pantalla necesita para pintar un desglose, en UNA sola respuesta —
+ * pagina, total del conjunto filtrado, paginacion y los cuatro importes de la cabecera.
+ *
+ * NO lleva `tiendaNombre` (R35): el nombre ya esta en la fila desde la que se despliega
+ * (`SaldoTiendaResumenDTO.tiendaNombre`) y baja por props. Devolverlo costaria una consulta
+ * mas por apertura — la que el desglose del mensajero paga hoy de mas para un dato que su
+ * componente ni siquiera usa.
+ */
+export type ListarMovimientosDeTiendaResult = {
+  tiendaId: string;
+  movimientos: WalletTiendaMovimientoDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+  desglose: DesgloseTiendaDTO; // del CONJUNTO FILTRADO (R12), no del agregado total
+};
+
+/**
+ * R22/R25 — entrada del desglose de UNA tienda. Deriva del schema del listado propio, asi que
+ * hereda EXACTAMENTE los mismos filtros (cierre, concepto, rango de fechas) y paginacion; lo
+ * unico que anade es `tiendaId`, y lo anade REQUERIDO: sin tienda no hay desglose que pedir, y
+ * el borde responde `validation_error` sin consultar la base.
+ *
+ * Espejo exacto de `listarPagosDeMensajeroSchema`.
+ */
+export const listarMovimientosDeTiendaSchema = listarMovimientosTiendaSchema.extend({
+  tiendaId: z.string().min(1),
+});
+
+export type ListarMovimientosDeTiendaInput = z.infer<typeof listarMovimientosDeTiendaSchema>;
+
+/**
+ * R37 — el MISMO desglose sin recorte por pagina, para la descarga: los mismos filtros y el
+ * mismo `tiendaId` requerido, sin `page`/`pageSize`. `.strict()` cierra el resto de claves,
+ * de modo que ninguna clave extra de la peticion pueda ampliar el alcance a otra tienda o a
+ * todas (R24, primera de las tres barreras; las otras dos viven en el servicio).
+ */
+export const listarMovimientosDeTiendaCompletoSchema = listarMovimientosDeTiendaSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarMovimientosDeTiendaCompletoInput = z.infer<
+  typeof listarMovimientosDeTiendaCompletoSchema
+>;
+
+// Resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO conteos y ninguna
+// rama de error viaja con filas (R39/R40).
+export type ListarMovimientosDeTiendaCompletoResult =
+  ListarCompletoResult<WalletTiendaMovimientoDTO>;

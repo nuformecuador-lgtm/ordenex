@@ -18,11 +18,11 @@
   `WalletTiendaService` y `WalletTiendaMovimientoRepository` — los mismos que esta feature.
   *Hecho:* el leader deja escrito en `progress/current.md` si la 171 arranca (170 en `done` o
   reordenada) o queda bloqueada. Sin esa línea no se abre T1.
-- [ ] **T0.2 [P] — Confirmar P1 (textos de los cuatro importes) y P4 (columna de tienda en el
+- [x] **T0.2 [P] — Confirmar P1 (textos de los cuatro importes) y P4 (columna de tienda en el
   archivo).**
   *Hecho:* respuesta anotada, o se aplican los *defaults* de `requirements.md` dejando
   constancia expresa de que se aplicaron.
-- [ ] **T0.3 [P] — Fijar la línea base de las guardias de la 170.** Correr
+- [x] **T0.3 [P] — Fijar la línea base de las guardias de la 170.** Correr
   `pnpm vitest run tests/unit/descarga` y anotar los cuatro totales vigentes (25 / 30 / 25 / 31).
   *Hecho:* los cuatro números quedan escritos en `progress/impl_171-desglose-por-tienda.md`.
   Son los que T2.6 tendrá que ver **fallar** antes de actualizarlos.
@@ -31,14 +31,14 @@
 
 ## T1 — Backend (`backend_dev`). Bloquea T2
 
-- [ ] **T1.1 — Tipos y schemas del desglose** en `lib/types/wallet-tienda.ts`:
+- [x] **T1.1 — Tipos y schemas del desglose** en `lib/types/wallet-tienda.ts`:
   `DesgloseTiendaDTO`, `ListarMovimientosDeTiendaResult`,
   `ListarMovimientosDeTiendaCompletoResult`, `listarMovimientosDeTiendaSchema` (deriva del
   schema del listado con `tiendaId` REQUERIDO) y `listarMovimientosDeTiendaCompletoSchema`
   (`.omit({page,pageSize}).strict()`). Sin tocar los tipos existentes.
   *Hecho:* `pnpm run typecheck` en verde y un test de schema que comprueba: `tiendaId` ausente
   o vacío ⇒ error; `page`/`pageSize` en el schema completo ⇒ error por `.strict()`. (R22, R25)
-- [ ] **T1.2 [P] — Derivación pura** `lib/utils/desglose-tienda.ts`: `CUBETA_POR_CATEGORIA`
+- [x] **T1.2 [P] — Derivación pura** `lib/utils/desglose-tienda.ts`: `CUBETA_POR_CATEGORIA`
   (`Record` exhaustivo sobre `WalletTiendaMovimientoCategoria`) y `derivarDesgloseTienda`.
   `Prisma.Decimal` de punta a punta, salida STRING escala 2, signo calculado aquí. **No** se
   toca `lib/utils/saldo-tienda.ts`.
@@ -48,14 +48,14 @@
   pagado` en positivo, negativo y cero (R10); (c) conjunto con `pago_tienda` ⇒ ese monto sale
   en `pagado` y **no** en `cargos` (R43); (d) conjunto sin pagos ⇒ `pagado === "0.00"` (R43);
   (e) los cuatro campos son `string` con dos decimales (R23).
-- [ ] **T1.3 — Repositorio**: `agregarDesglosePorTienda(tiendaId, filtros)` en la interfaz y en
+- [x] **T1.3 — Repositorio**: `agregarDesglosePorTienda(tiendaId, filtros)` en la interfaz y en
   `WalletTiendaMovimientoRepository` — un `groupBy(["tipo","categoria"])` reutilizando
   `buildFiltrosWhere`, con `tiendaId` en el WHERE. Salida STRING. Los métodos existentes no se
   modifican.
   *Hecho:* test en `tests/unit/repositories/wallet-tienda-movimiento-repository.test.ts` que
   captura el argumento del `groupBy` y afirma que el `where` lleva `tiendaId` y los filtros, y
   que la salida es STRING (R24).
-- [ ] **T1.4 — Servicio**: `listarMovimientosDeTienda` y `listarMovimientosDeTiendaCompleto` en
+- [x] **T1.4 — Servicio**: `listarMovimientosDeTienda` y `listarMovimientosDeTiendaCompleto` en
   `IWalletTiendaService` + `WalletTiendaService`. Guard `esAccesoTotal` **antes** de tocar el
   repositorio; `construirFiltros` reutilizado; `tiendaId: input.tiendaId` escrito **al final**
   del objeto que va al repositorio; tope `descargaConfig.MAX_FILAS` con `pageSize: limite + 1`
@@ -73,7 +73,7 @@
     **ninguna** de nombre de tienda (R35);
   - modo completo: `limite_excedido` sin `items` (R39/R40) y sin llamar a
     `agregarDesglosePorTienda`.
-- [ ] **T1.5 — Server Actions** `listarMovimientosDeTiendaAction` y
+- [x] **T1.5 — Server Actions** `listarMovimientosDeTiendaAction` y
   `listarMovimientosDeTiendaCompletoAction` en `lib/actions/wallet-tienda.ts`, con el mismo
   esqueleto que las cuatro existentes (`resolveActorFromSession` → `UnauthenticatedError` →
   `schema.parse` → service bajo `withErrorHandler`).
@@ -81,7 +81,7 @@
   `unauthenticated` y **cero** llamadas al service (R29); `tiendaId` ausente/vacío ⇒
   `validation_error` y cero llamadas al service (R25); `page` colada en el modo completo ⇒
   `validation_error`; ninguna rama de error devuelve filas (R40).
-- [ ] **T1.6 — No regresión del backend existente.**
+- [x] **T1.6 — No regresión del backend existente.**
   *Hecho:* `tests/unit/services/wallet-tienda-service.test.ts`,
   `tests/unit/services/wallet-tienda-descarga.test.ts`,
   `tests/unit/actions/wallet-tienda-actions.test.ts` y
@@ -130,8 +130,14 @@
   input que se manda no lleva paginación (R37).
 - [ ] **T2.6 — Censo y guardias de la 170.** Añadir la entrada de
   `DesgloseMovimientosTienda.tsx` a `CENSO_DATATABLE` (`con_descarga`) y actualizar los cuatro
-  totales de `cobertura-tablas.guardia.test.ts`: 25→**26** archivos, 30→**31** instancias,
-  25→**26** `con_descarga`, 31→**32** censadas (`fuera` sigue en 6).
+  totales de `cobertura-tablas.guardia.test.ts`: 24→**25** archivos, 29→**30** instancias,
+  24→**25** `con_descarga`, 30→**31** censadas (`fuera` sigue en 6).
+  > **CORRECCIÓN (backend_dev, T0.3, 2026-07-31).** Esta task y el design §7.4 decían
+  > 25/30/25/31 → 26/31/26/32. Ese punto de partida quedó obsoleto: el chore «borrar la vista
+  > legacy del listado de órdenes» entró en `dev` y bajó el censo en una tabla `con_descarga`
+  > (`OrdenesApartado.tsx`). Los valores VIGENTES en el código, leídos y ejecutados en verde
+  > antes de tocar nada, son **24 / 29 / 24 / 30** (`fuera` = 6). Son los que hay que
+  > incrementar. Ver `progress/impl_171-desglose-por-tienda.md § T0.3`.
   *Hecho:* se deja constancia en `progress/impl_171-desglose-por-tienda.md` de que la guardia
   **falló primero** con los totales viejos (prueba de que vigila) y de que quedó en verde
   después (R42).
