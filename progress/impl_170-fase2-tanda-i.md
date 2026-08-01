@@ -374,3 +374,283 @@ Baseline de la tanda H: 726 archivos / 8794 tests → **+8 archivos y +59 tests*
 Los 7 listados de riesgo BAJO paginan en el servidor con el mismo acotamiento por actor que
 tenían, verificado por mutación en los dos puntos calientes; el WHERE quedó cubierto porque una
 mutación demostró que no lo estaba.
+
+---
+---
+
+# T I.2 — Frontend: `Pagination` + `initialData` en los 7 listados de riesgo BAJO
+
+**Rama:** `feature/170-fase2-tanda-i` · **Fecha:** 2026-08-01 · **Rol:** `frontend_dev`
+**Alcance:** SOLO UI. Cero cambios en `lib/services/`, `lib/repositories/` y cero cambios de
+comportamiento en las Server Actions (no se encontró ningún defecto en lo que dejó T I.1).
+
+Todo lo que sigue está MEDIDO. Las tres mutaciones se ejecutaron y se revirtieron; una de ellas
+pasó VERDE y por eso el test de R44 cambió de forma antes de darse por bueno.
+
+---
+
+## 12. Qué se entrega, listado a listado
+
+| # | Listado | Dónde vive la tabla + el control | Nombre accesible del control (R43) |
+| --- | --- | --- | --- |
+| 1 | Cierres del día — histórico | `CierresAdminHistoricoTabla.tsx` (nuevo) | Paginación del histórico de cierres del día |
+| 2 | Cierres de bodega resueltos | `CierresBodegaResueltosTabla.tsx` (nuevo) | Paginación de los cierres de bodega resueltos |
+| 3 | Cierres de bodega solicitados | `CierresBodegaSolicitadosTabla.tsx` (nuevo) | Paginación de los cierres de bodega solicitados |
+| 4 | Cierres solicitados del mensajero | `CierreDiaModule.tsx` (en el módulo) | Paginación de los cierres solicitados |
+| 5 | Incidentes — histórico | `IncidentesHistoricoTabla.tsx` (nuevo) | Paginación del histórico de incidentes |
+| 6 | Saldos de tiendas | `SaldosTiendasTable.tsx` | Paginación de los saldos por tienda |
+| 7 | Plantillas de gasto fijo | `GastosFijosPlantillasPanel.tsx` | Paginación de las plantillas de gasto fijo |
+
+Los cinco Server Components (`cierres-admin`, `cierre-dia`, `incidentes`, `wallet`,
+`wallet/tiendas`) pre-cargan la PÁGINA 1 con la Server Action paginada de T I.1 (input vacío:
+los defaults los pone el schema del dominio) y la bajan por props. Los módulos cliente montan
+SWR con esa página como `fallbackData` y `<Pagination>` alimentado por el `total` del servidor.
+Molde: `UsuariosModule`, tal cual.
+
+---
+
+## 13. Cuatro decisiones de estructura, con su motivo
+
+**13.1 — Cuatro históricos SE MUDAN a su propio archivo.** No es cosmética: los módulos
+`CierresAdminModule`, `CierresBodegaAdminModule`, `ConsolidacionBodegaModule` e
+`IncidentesAdminModule` muestran, junto al histórico, el contador de SU cola de pendientes, que
+hoy es correcto —ese array sigue siendo el conjunto entero— y que la **tanda J** debe sustituir
+por el `total` del servidor. La guardia de T H.3 prohíbe, con razón, que un contador derivado de
+un array conviva con un control de paginación en el mismo archivo, y T I.1 avisó (§7.5) de que
+se pondría roja. Se pondría roja **por el archivo, no por el hecho**: el número sigue siendo
+verdadero. Separar el listado que pagina del que no lo hace es lo que mantiene ciertas las dos
+cosas a la vez.
+
+Para que la separación no abra un agujero silencioso, la verdad se afirma además **por
+comportamiento**: `BajoRiesgoPaginacion.test.tsx::el contador de la cola que NO pagina sigue
+contando el conjunto entero (R42)`. La guardia estática vigila el patrón; ese test vigila el
+número.
+
+Las tablas MUDADAS se re-registran en `censo-tablas.ts` (30 instancias, 25 → **29 archivos**:
+ninguna tabla nace ni muere) y las cuatro rutas nuevas se añaden a `PANTALLAS_ANEXO_III` de la
+guardia de literales de T H.1 — si no, dejaría de vigilar exactamente los archivos donde hoy se
+escribiría un `pageSize` a mano.
+
+**13.2 — `CierreDiaModule` conserva su control DENTRO del módulo.** Su contador —derivado de
+`filas.length` en la vista agrupada por resultado— es del **Anexo IV** y está declarado
+`sin_paginar` en el censo de T H.3, con una nota que ya anticipaba este momento. Dejarlo aquí es
+lo que hace que esa exclusión se EJERCITE de verdad en vez de quedar decorativa.
+
+**13.3 — `CierresAdminHistoricoTabla` es CONTROLADO; los otros tres piden su propia página.**
+En esa pantalla, DOS lecturas pintan los mismos cierres (la tabla y la vista tipo factura). Si
+cada una pidiera su página, las dos lecturas de los MISMOS cierres podrían mostrar cosas
+distintas. La página se pide una vez, en el módulo, y las dos la leen.
+
+**13.4 — `destinoCierre` sale a `cierre-labels.ts`.** El texto «tipo · zona» estaba escrito dos
+veces (módulo y columnas de descarga) y la mudanza lo habría llevado a tres. Mismo motivo por el
+que la tanda E sacó `DESTINO_TIPO_LABEL`: que la pantalla y el archivo no puedan divergir (R8).
+
+---
+
+## 14. R52: cómo sigue siendo el CONJUNTO COMPLETO
+
+Es el punto crítico de esta task. Antes, estas siete tablas eran **Familia B**: recibían el
+dataset entero por props y el archivo se proyectaba de lo que la tabla pintaba
+(`filasLocales(loQueSePinta)`). Al paginar, esa MISMA línea pasa a significar «descargá lo que
+se ve» y no falla en ninguna parte: el archivo sale, con 25 filas de 300.
+
+Nace **`filasDelConjuntoCompleto`** en `components/shared/descarga-resultado.ts`, hermano de los
+dos adaptadores de la FASE 1: **relee** el conjunto del servidor al pulsar el control —una
+lectura más, y sólo cuando el usuario descarga— y lo proyecta con el MISMO `filasLocales`, para
+no perder el tope de 5000 ni su mensaje accionable (R26/R27/R28). No se usa
+`filasDesdeResultado` porque estos siete no tienen modo «completo» con tope server-side: sin
+`filasLocales` la descarga se quedaría sin tope ninguno, justo en los históricos que crecen sin
+techo.
+
+Lo que se relee es **el mismo listado que la pantalla ya llamaba antes de paginar**
+(`listarCierresAdmin`, `listarCierresBodegaAdmin`, `listarConsolidacion`, `listarCierreDia`,
+`listarIncidentes`, `listarSaldosTiendasAction`, `listarPlantillasAction`): mismo acotamiento
+por actor, resuelto server-side desde la sesión. Descargar no amplía el alcance ni una fila
+(R14/R44), y no hizo falta tocar ninguna Server Action.
+
+**La alternativa que se descartó:** seguir recibiendo el array completo por props sólo para la
+descarga. Habría dejado R52 verde sin escribir una línea, y habría convertido la paginación en
+maquillaje: el dataset entero seguiría cruzando a la pantalla en cada render, que es
+exactamente lo que la decisión P6 viene a quitar (design §11.7, A8).
+
+---
+
+## 15. Q-I3 — La vista tipo factura de `CierresAdminModule`
+
+**Decisión: la previsualización SIGUE A LA TABLA.** Muestra la cola de pendientes completa más
+la **página visible** del histórico, no el histórico entero.
+
+**Por qué.** La frase que define esa sección es suya: «los mismos cierres de arriba leídos como
+comprobante». Con el histórico paginado sólo hay tres salidas coherentes:
+
+1. **Seguir a la tabla** (elegida): la frase sigue siendo literalmente cierta y la sección queda
+   acotada, como la tabla.
+2. **Alimentarla del conjunto entero**: sería la ÚNICA razón por la que el histórico completo
+   seguiría cruzando a la pantalla —una tarjeta por cierre, para siempre—, justo lo que esta
+   fase viene a quitar.
+3. **Quitarle el histórico y dejar sólo la cola**: descartada porque la sección es un A/B
+   pendiente de decisión HUMANA (la 38 la dejó «para comparar las dos lecturas antes de decidir
+   cuál se queda»); mutilar la mitad de la comparación sería decidir por el humano.
+
+**SÍ cambia lo que el usuario ve, y hay que decirlo:** los cierres resueltos que caen fuera de
+la página dejan de aparecer como tarjeta en esa tira. No se pierde nada: el comprobante de
+cualquiera de ellos sigue a un clic, en el detalle, que monta el MISMO componente
+(`CierreFacturaDetalle`). Y al cambiar de página, la previsualización cambia con ella.
+
+Afirmado en `BajoRiesgoPaginacion.test.tsx::Q-I3: la vista tipo factura sigue a la tabla del
+histórico, no al conjunto entero`.
+
+---
+
+## 16. Las tres mutaciones, con su salida real
+
+**Todas revertidas** (`grep MUTACION app/` sin resultados; suite verde después de cada una).
+
+| # | Mutación | Resultado medido |
+| --- | --- | --- |
+| 1 | **R52**: `obtenerFilas` del histórico de cierres pasa a `filasLocales(pagina.items, …)` — «descargá lo que ves» | **ROJO (1)**: `Cierres del día — histórico: el archivo trae la PÁGINA, no el conjunto: expected [ … ] to have a length of 60 but got 25` |
+| 2 | **R44**: se quita el `fallbackData` de la página que pre-cargó el Server Component | **VERDE (6 pasan)** → ver abajo. Con el test endurecido: **ROJO**, `Cierres del día — histórico: expected [ Array(2) ] to have a length of 26 but got 2` |
+| 3 | **R43**: se quita el `ariaLabel` del control del histórico de incidentes | **ROJO (2)**: `Unable to find role="navigation" and name "Paginación del histórico de incidentes"` |
+
+### La mutación que cambió la entrega
+
+La 2 pasó **VERDE**, y el motivo importa: el test de R44 buscaba la tabla con `findByRole`
+(asíncrono). Sin `fallbackData`, la pantalla enseña un **esqueleto** y las filas aparecen después
+de un viaje al servidor por un dato que ya venía en la respuesta de la página; el `await` daba
+eso por bueno. R44 dice «el usuario ve exactamente las mismas filas que antes», y «antes» era el
+PRIMER pintado.
+
+El test se endureció a `getByRole` **sin `await`**: las 25 filas tienen que estar en el primer
+render. Con eso la mutación se pone roja.
+
+De ahí salió además un arreglo de producción que no estaba previsto: `isLoading` de SWR sigue
+siendo `true` mientras revalida **aunque haya `fallbackData`**, así que pasarlo tal cual al
+`DataTable` hacía que la página 1 apareciera como esqueleto antes de enseñar las filas. Los siete
+listados derivan ahora `const cargando = data === undefined`: esqueleto sólo cuando no hay
+literalmente nada que pintar (o sea, al saltar a una página aún no leída).
+
+---
+
+## 17. Mapa `R<n> → archivo::test`
+
+Prefijo `P/` = `tests/components/paginacion/BajoRiesgoPaginacion.test.tsx`.
+
+| R | Test |
+| --- | --- |
+| **R43** | `P/::cada listado navega entre páginas y el control tiene nombre accesible (R43)` — los 7, por rol y nombre; ida y vuelta |
+| **R43** | `P/::los siete están cubiertos: ni uno se queda fuera del recorrido` (anti-vacuidad + los 7 nombres de control son distintos entre sí) |
+| **R44** | `P/::el usuario ve exactamente las mismas filas que antes en la página 1 (R44)` — los 7, en el PRIMER pintado |
+| **R52** | `P/::la descarga sigue entregando el dataset completo, no la página (R52)` — los 7, descargando DESDE la página 2 |
+| **R52** | `tests/components/descarga/WalletPropsDescarga.test.tsx::las dos que paginan NO proyectan la página: releen el conjunto completo` (guardia estática, contraparte exacta de la de FASE 1) |
+| **R42** | `P/::el contador de la cola que NO pagina sigue contando el conjunto entero (R42)` — no es de esta task; se afirma porque la mudanza de §13.1 saca ese contador del alcance de la guardia estática |
+| **Q-I3** | `P/::Q-I3: la vista tipo factura sigue a la tabla del histórico, no al conjunto entero` |
+
+**R40/R41 no se declaran cubiertos aquí** (son de T I.1, a nivel de servicio); la pantalla los
+consume: el `total` del control sale del servidor y el `pageSize` de `lib/config/<dominio>.ts`.
+**R45–R51, R53, R54 no entran en esta task.**
+
+---
+
+## 18. Puertas (medición final, salida real)
+
+```
+$ npx tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ npx eslint
+✖ 21 problems (0 errors, 21 warnings)
+(baseline de T I.1: 21 warnings. NINGUNA nueva.)
+
+$ npx vitest run
+ Test Files  735 passed (735)
+      Tests  8860 passed (8860)
+   Duration  212.12s
+```
+
+Suite completa en verde, sin flakes (el conocido `OrdenesModuleReuse` pasó en las tres
+ejecuciones completas). Baseline de T I.1: 734 archivos / 8853 tests → **+1 archivo y +7 tests**
+(6 del archivo nuevo + 1 que nace al partir en dos la guardia estática de `WalletPropsDescarga`).
+
+---
+
+## 19. Archivos
+
+**Nuevos (6)**
+
+- `app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx`
+- `app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx`
+- `app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx`
+- `app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx`
+- `tests/components/paginacion/BajoRiesgoPaginacion.test.tsx` (6 tests)
+- `tests/fixtures/pagina-inicial.ts` — fixture de la página inicial, con `total` fijable aparte
+  para que ningún test confunda «el total del conjunto» con «las filas de la página».
+
+**Modificados — producción (16)**
+
+- Páginas (5): `cierres-admin`, `cierre-dia`, `incidentes`, `wallet`, `wallet/tiendas`.
+- Módulos (8): `CierresAdminModule`, `CierresBodegaAdminModule`, `ConsolidacionBodegaModule`,
+  `CierreDiaModule`, `IncidentesAdminModule`, `WalletModule`, `SaldosTiendasTable`,
+  `GastosFijosPlantillasPanel`.
+- Compartidos (3): `components/shared/descarga-resultado.ts` (+`filasDelConjuntoCompleto`),
+  `cierre-labels.ts` (+`destinoCierre`), `cierres-admin-descarga-columnas.ts` (lo consume).
+
+**Modificados — tests ajenos (20).** Tres motivos, ninguno afecta a una aserción existente:
+(a) la prop deja de ser un array y pasa a ser la página; (b) hace falta el doble de la Server
+Action paginada, porque SWR revalida al montar; (c) la caché de SWR se aísla por render
+(`SWRConfig` con `provider` propio) —la clave de la página 1 es la misma en todos los casos de un
+archivo y el dato del caso anterior ganaba sobre el `fallbackData` del siguiente—.
+
+Tres guardias se actualizan **a propósito**, y se dice por qué en cada una:
+`censo-tablas.ts` + `cobertura-tablas.guardia` (25 → 29 archivos, mismas 30 instancias),
+`paginacion-dominios.test.ts` (`PANTALLAS_ANEXO_III` sigue a las tablas mudadas) y
+`ControlDescargaTransversal.test.tsx` (el barrido reconoce el tercer adaptador; el tope sigue
+viviendo en un solo sitio, porque `filasDelConjuntoCompleto` delega en `filasLocales`).
+En `WalletPropsDescarga.test.tsx` la guardia «ninguna de las tres relee del servidor» se PARTE en
+dos: la que no pagina sigue sin releer, y las dos que paginan tienen ahora la afirmación
+CONTRARIA y explícita (R52).
+
+**Cero cambios en `lib/services`, `lib/repositories`, Server Actions, migraciones y RLS.**
+
+---
+
+## 20. Preguntas abiertas de T I.2
+
+**Q-I4 — Mientras el listado compuesto siga trayendo el histórico entero, cada una de estas
+pantallas hace DOS consultas más por render** (la página y su conteo) además de las que ya
+hacía: el compuesto sigue leyendo cola e histórico en una sola consulta y partiéndolos en
+memoria (T I.1 §2). Lo que esta tanda reduce **ya** es lo que cruza a la pantalla —el array
+entero deja de viajar— y lo que el navegador renderiza. La reducción en base llega cuando el
+compuesto deje de devolver el histórico, y eso es backend: cae en la **tanda J** (que pagina la
+otra mitad de esas mismas respuestas) o en la **M**. No se hizo aquí porque tocar
+`listarCierresAdmin` y compañía está fuera del alcance declarado de T I.2 y rompería a la cola
+antes de que la J la sostenga.
+
+**Q-I5 — La descarga de tres de los siete relee un listado CARO.** `listarCierreDia` firma las
+URL de evidencia de todas las gestiones del día y `listarConsolidacion` calcula los agregados de
+la zona; descargar el histórico dispara ese trabajo entero para quedarse sólo con un array.
+Ocurre una vez por clic en «Descargar», no por render, y es el único origen del conjunto completo
+que existe hoy sin tocar backend (estos siete no tienen `listarCompleto`, T I.1 §2). Un
+`listarXCompleto` dedicado —el que design §11.5 daba por hecho— lo dejaría fino; queda propuesto,
+no inventado.
+
+**Q-I6 — El agujero que abre la mudanza de §13.1, declarado.** La guardia de T H.3 mira hacia
+ABAJO (del archivo que monta el control a los componentes de tabla que importa), nunca hacia
+arriba. Con el listado paginado en un hijo, un contador del padre queda fuera de su vista. Hoy
+está cubierto por comportamiento (§13.1), pero si la **tanda J** pagina las colas desde otro
+componente hijo y deja el contador en el módulo, la guardia no la parará. Dos salidas, y la
+elección es de quien haga la J: paginar la cola EN el módulo (la guardia la ve y se pone roja
+hasta que el contador use el `total`), o ensanchar `pantallasPaginadas()` para que suba por los
+imports —lo que exige que las cuatro entradas `pendiente` del censo ya estén resueltas—.
+
+**Heredadas y NO resueltas aquí:** Q-I1 (saldos recorta fuera de la base), Q-I2 (desviación de
+R51 en saldos), la deuda **D5.2** y las preguntas de la tanda H siguen exactamente como las dejó
+T I.1.
+
+---
+
+## 21. Veredicto
+
+Los 7 listados de riesgo BAJO paginan en pantalla con la página que pre-carga el servidor, su
+control tiene nombre propio y la descarga sigue entregando el conjunto completo —verificado por
+mutación en los tres puntos, incluida una que pasó verde y obligó a endurecer el test de R44
+antes de darlo por bueno.
