@@ -11,13 +11,11 @@ import {
   verBalanceAction,
 } from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
-import { listarPlantillasAction } from "@/lib/actions/gasto-fijo-plantilla";
 import type {
   DesgloseEgresosDTO,
   WalletBalanceDTO,
   WalletMovimientoDTO,
 } from "@/lib/types/wallet";
-import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 import { WalletBalanceCard } from "./WalletBalanceCard";
 import { WalletLedger } from "./WalletLedger";
@@ -26,7 +24,10 @@ import { WalletFiltros, FILTROS_VACIOS, type WalletFiltrosValue } from "./Wallet
 import { RegistrarMovimientoManualDialog } from "./RegistrarMovimientoManualDialog";
 import { RegistrarEgresoAdministrativoDialog } from "./RegistrarEgresoAdministrativoDialog";
 import { DesgloseEgresosCard } from "./DesgloseEgresosCard";
-import { GastosFijosPlantillasPanel } from "./GastosFijosPlantillasPanel";
+import {
+  GastosFijosPlantillasPanel,
+  type GastosFijosPlantillasPagina,
+} from "./GastosFijosPlantillasPanel";
 
 // Feature 42 (T12, R18/R20/R21) — módulo cliente de la wallet. Recibe TODO por props
 // desde el Server Component padre (que ya validó rol y pre-fetch, R21): el cliente NUNCA
@@ -46,7 +47,11 @@ export interface WalletModuleProps {
   pageSize: number;
   balance: WalletBalanceDTO;
   desglose: DesgloseEgresosDTO;
-  plantillas: GastoFijoPlantillaDTO[];
+  /**
+   * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 de las plantillas de gasto fijo, ya
+   * resuelta server-side, más el `total` del conjunto. El panel pide las siguientes.
+   */
+  plantillas: GastosFijosPlantillasPagina;
 }
 
 /** Construye el input de las actions omitiendo los filtros vacíos (enum/fecha). */
@@ -81,7 +86,7 @@ export function WalletModule({
   pageSize,
   balance: initialBalance,
   desglose: initialDesglose,
-  plantillas: initialPlantillas,
+  plantillas,
 }: WalletModuleProps) {
   const toast = useToast();
 
@@ -90,7 +95,6 @@ export function WalletModule({
   const [page, setPage] = useState(initialPage);
   const [balance, setBalance] = useState(initialBalance);
   const [desglose, setDesglose] = useState(initialDesglose);
-  const [plantillas, setPlantillas] = useState(initialPlantillas);
   const [filtros, setFiltros] = useState<WalletFiltrosValue>(FILTROS_VACIOS);
   const [loading, setLoading] = useState(false);
 
@@ -140,12 +144,6 @@ export function WalletModule({
     }
   }
 
-  /** Recarga la lista de plantillas tras un cambio del CRUD (R23). */
-  async function recargarPlantillas() {
-    const res = await listarPlantillasAction();
-    if (res.status === "ok") setPlantillas(res.plantillas);
-  }
-
   function aplicarFiltros(value: WalletFiltrosValue) {
     void recargar(value, 1); // nuevos filtros → vuelve a la primera página
   }
@@ -179,10 +177,9 @@ export function WalletModule({
       </section>
 
       <section aria-label="Gastos fijos">
-        <GastosFijosPlantillasPanel
-          plantillas={plantillas}
-          onCambio={() => void recargarPlantillas()}
-        />
+        {/* Feature 170 — FASE 2 (T I.2): el panel pagina su propio listado y relee su página
+            tras cada cambio del CRUD (R23); la wallet ya no guarda la lista en su estado. */}
+        <GastosFijosPlantillasPanel initialData={plantillas} />
       </section>
 
       <section aria-label="Libro de movimientos" className="flex flex-col gap-4">

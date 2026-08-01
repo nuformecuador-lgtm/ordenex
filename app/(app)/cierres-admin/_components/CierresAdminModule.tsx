@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import {
   aprobarCierre,
   rechazarCierre,
   forzarSolicitudVencido,
+  listarHistoricoCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
@@ -22,7 +24,6 @@ import type {
   CierreGrupos,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
-import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import { montoValido } from "@/app/(app)/wallet/_components/wallet-labels";
 // Feature 158 (m5 del review): el tope del monto se IMPORTA del borde del servidor, no se
 // reescribe. Sale de la precisión de la columna (`DECIMAL(12,2)` → 9999999999.99); si algún
@@ -36,7 +37,6 @@ import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/
 import {
   money,
   EstadoCierreBadge,
-  EstadoHistoricoRotulo,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
 } from "./cierre-detalle-shared";
@@ -44,11 +44,13 @@ import {
   CierreFacturaResumen,
   CierreFacturaDetalle,
 } from "./cierre-factura";
-import { DESTINO_TIPO_LABEL } from "./cierre-labels";
+import { destinoCierre } from "./cierre-labels";
 import {
-  COLUMNAS_DESCARGA_CIERRES_HISTORICO,
+  CierresAdminHistoricoTabla,
+  type CierresAdminHistoricoPagina,
+} from "./CierresAdminHistoricoTabla";
+import {
   COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
-  filaDescargaCierreHistorico,
   filaDescargaCierrePendiente,
 } from "./cierres-admin-descarga-columnas";
 
@@ -65,20 +67,32 @@ import {
 export interface CierresAdminModuleProps {
   /** Cierres en estado `solicitado` del alcance del admin (cola de decisión, R4). */
   pendientes: CierreAdminResumen[];
-  /** Cierres ya resueltos (`aprobado`/`rechazado`) del alcance, solo lectura (R5). */
-  historico: CierreAdminResumen[];
+  /**
+   * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 del histórico de resueltos (R5), ya
+   * resuelta server-side, más el `total` del conjunto. Deja de ser el array entero: ese es
+   * justo el que crecía sin techo (design §11.3).
+   */
+  historico: CierresAdminHistoricoPagina;
   /** `true` si el adminSatelite no tiene zona asignada (R3). */
   sinZona: boolean;
 }
 
-// Feature 170 (T E.1): la tabla de textos del destino vive en el módulo PURO `cierre-labels`
-// —donde también la lee el `CierreDiaModule` del mensajero, que la tenía duplicada— y esta
-// pantalla la lee de ahí. Así el "Destino" del archivo y el de la pantalla son el mismo texto (R8).
-const DESTINO_LABEL: Record<CierreDestinoTipo, string> = DESTINO_TIPO_LABEL;
-
-/** Nombres visibles de las dos tablas: hoja, base del archivo y nombre del control (R12/R13). */
+/** Nombre visible de la cola: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA_PENDIENTES = "Cierres pendientes de decisión";
-const TITULO_DESCARGA_HISTORICO = "Cierres del día resueltos";
+
+/**
+ * Feature 170 — FASE 2 (T I.2, R40/R41): una página del histórico. El alcance NO viaja en el
+ * input —lo resuelve el servicio desde la sesión, igual que el listado sin paginar (R44)—;
+ * aquí solo van el número de página y el tamaño.
+ */
+async function leerHistorico(
+  page: number,
+  pageSize: number,
+): Promise<CierresAdminHistoricoPagina> {
+  const res = await listarHistoricoCierresAdminPaginado({ page, pageSize });
+  if (res.status !== "ok") throw new Error(res.status);
+  return { items: res.items, total: res.total, pageSize: res.pageSize };
+}
 
 // --- Feature 158 (R19/R34): captura del monto de indemnización al aprobar. Textos
 // separados de la lógica (i18n-ready), como el resto del módulo. ---
@@ -102,11 +116,6 @@ const INDEMNIZACION_CAUSA_DESCONOCIDA = "Sin causa registrada";
 const INDEMNIZACION_MONTO_AYUDA = `Mayor que 0 y hasta ₡${INDEMNIZACION_MONTO_MAX}, con hasta 2 decimales (por ejemplo 12500.00).`;
 const INDEMNIZACION_FALTAN =
   "Falta el monto de al menos un incidente, o alguno no es válido. No se puede aprobar así.";
-
-/** Destino legible de un cierre (tipo + zona). */
-function destino(c: CierreAdminResumen): string {
-  return `${DESTINO_LABEL[c.destinoTipo]} · ${c.destinoZonaNombre}`;
-}
 
 /** Detalle abierto: la cabecera del cierre + sus gestiones agrupadas por resultado. */
 interface DetalleAbierto {
@@ -156,6 +165,35 @@ export function CierresAdminModule({
   // Errores por gestión que devuelve el SERVIDOR (`fieldErrors` con clave = gestionId,
   // `CierresAdminService.validarCoberturaIndemnizaciones`). Se pintan por fila.
   const [montoErrores, setMontoErrores] = useState<Record<string, string>>({});
+
+  // Feature 170 — FASE 2 (T I.2, R40/R43): página visible del histórico. Vive AQUÍ y no en
+  // `CierresAdminHistoricoTabla` porque dos lecturas pintan los mismos cierres —la tabla y la
+  // «Vista tipo factura»— y pedir la página dos veces las dejaría enseñando cosas distintas
+  // (Q-I3). `fallbackData` es la página que ya resolvió el Server Component: al entrar no hay
+  // segunda lectura, y las filas son EXACTAMENTE las de antes (R44).
+  const [historicoPage, setHistoricoPage] = useState(1);
+  const [historicoPageSize, setHistoricoPageSize] = useState(historico.pageSize);
+  const { data: historicoData, error: historicoError } = useSWR(
+    ["cierres-admin:historico", historicoPage, historicoPageSize],
+    () => leerHistorico(historicoPage, historicoPageSize),
+    {
+      fallbackData:
+        historicoPage === 1 && historicoPageSize === historico.pageSize
+          ? historico
+          : undefined,
+    },
+  );
+  const historicoPagina: CierresAdminHistoricoPagina = historicoData ?? {
+    items: [],
+    total: 0,
+    pageSize: historicoPageSize,
+  };
+
+  // R44: el esqueleto de carga se muestra sólo cuando NO hay nada que pintar. `isLoading` de
+  // SWR sigue siendo `true` mientras revalida aunque haya `fallbackData`, y usarlo tal cual
+  // haría que la página 1 —la que el Server Component ya resolvió— apareciera como esqueleto
+  // antes de enseñar las filas que el usuario veía antes de paginar.
+  const historicoCargando = historicoData === undefined;
 
   // R3: adminSatelite sin zona → aviso accionable, sin tablas de acción.
   if (sinZona) {
@@ -430,31 +468,35 @@ export function CierresAdminModule({
         </div>
       </section>
 
-      {/* ---------- Histórico (solo lectura, R5) ---------- */}
-      <section aria-label="Histórico" className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Histórico</h2>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasHistorico(abrirDetalle)}
-            data={historico}
-            rowKey="cierreId"
-            ariaLabel="Histórico"
-            emptyMessage="Aún no hay cierres resueltos."
-            // Feature 170 (T E.1, R1/R11/R26/R30/R32): mismo patrón que la cola, con SUS
-            // columnas (fecha resuelta y motivo, que la cola no tiene).
-            descarga={{
-              titulo: TITULO_DESCARGA_HISTORICO,
-              columnas: COLUMNAS_DESCARGA_CIERRES_HISTORICO,
-              obtenerFilas: () => filasLocales(historico, filaDescargaCierreHistorico),
-            }}
-          />
-        </div>
-      </section>
+      {/* ---------- Histórico (solo lectura, R5) ----------
+          Feature 170 — FASE 2 (T I.2): la tabla y su control viven en su propio componente;
+          la página la pide este módulo (ver el comentario del `useSWR`). */}
+      <CierresAdminHistoricoTabla
+        pagina={historicoPagina}
+        page={historicoPage}
+        isLoading={historicoCargando}
+        hayError={Boolean(historicoError)}
+        onPageChange={setHistoricoPage}
+        onPageSizeChange={(s) => {
+          setHistoricoPageSize(s);
+          setHistoricoPage(1);
+        }}
+        onAbrir={abrirDetalle}
+      />
 
       {/* ---------- Vista tipo factura (previsualización de UX) ----------
           Lectura alternativa de LOS MISMOS cierres que las dos tablas de arriba, como
           comprobante. Va DEBAJO y a propósito no reemplaza nada: es para comparar las
-          dos lecturas antes de decidir cuál se queda. */}
+          dos lecturas antes de decidir cuál se queda.
+
+          Feature 170 — FASE 2 (T I.2, Q-I3): al paginar el histórico, esta vista SIGUE A LA
+          TABLA — muestra la cola completa más la PÁGINA visible de resueltos, no todo el
+          histórico. Cambia lo que el usuario ve: los cierres resueltos que caen fuera de la
+          página dejan de aparecer aquí como tarjeta (su comprobante sigue a un clic, en el
+          detalle, que es el MISMO componente). Se elige así porque la frase que define esta
+          sección es «los mismos cierres de arriba»: alimentarla del conjunto entero la
+          convertiría en la única razón por la que el histórico completo seguiría cruzando a
+          la pantalla, que es justo lo que esta fase viene a quitar. */}
       <section
         aria-label="Vista tipo factura"
         className="flex flex-col gap-4 border-t pt-6"
@@ -467,7 +509,7 @@ export function CierresAdminModule({
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
-          {[...pendientes, ...historico].map((c) => (
+          {[...pendientes, ...historicoPagina.items].map((c) => (
             <CierreFacturaResumen
               key={c.cierreId}
               cierre={c}
@@ -514,7 +556,7 @@ export function CierresAdminModule({
               }
             />
           ))}
-          {pendientes.length === 0 && historico.length === 0 ? (
+          {pendientes.length === 0 && historicoPagina.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No hay cierres para previsualizar.
             </p>
@@ -531,7 +573,7 @@ export function CierresAdminModule({
         title="Detalle del cierre"
         description={
           cierreAbierto
-            ? `${cierreAbierto.mensajeroNombre} · ${destino(cierreAbierto)}`
+            ? `${cierreAbierto.mensajeroNombre} · ${destinoCierre(cierreAbierto)}`
             : undefined
         }
         // Sin ancho propio: el default del Modal (75% de la pantalla) es el que corresponde
@@ -783,7 +825,7 @@ function columnasPendientes(
       value: "Fecha",
       render: (c) => c.solicitadoAt.slice(0, 10),
     },
-    { id: "destino", value: "Destino", render: (c) => destino(c) },
+    { id: "destino", value: "Destino", render: (c) => destinoCierre(c) },
     {
       id: "general",
       value: "Total general",
@@ -832,62 +874,6 @@ function columnasPendientes(
             Ver / decidir
           </Button>
         ),
-    },
-  ];
-}
-
-// --- Columnas del histórico (solo lectura, R5) ---
-function columnasHistorico(
-  abrir: (cierreId: string) => void,
-): Column<CierreAdminResumen>[] {
-  return [
-    // Feature 109/R31: un `rechazado` del histórico se rotula "bloqueante hasta
-    // re-solicitud" (no "resuelto/cerrado"); el resto conserva su etiqueta.
-    {
-      id: "estado",
-      value: "Estado",
-      render: (c) => <EstadoHistoricoRotulo estado={c.estado} />,
-    },
-    { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
-    {
-      id: "resueltoAt",
-      value: "Fecha resuelta",
-      render: (c) => c.resueltoAt?.slice(0, 10) ?? "—",
-    },
-    { id: "destino", value: "Destino", render: (c) => destino(c) },
-    {
-      id: "general",
-      value: "Total general",
-      render: (c) => money(c.totales.general),
-    },
-    {
-      id: "pagoMensajero",
-      value: PAGO_MENSAJERO_COL,
-      render: (c) => money(c.totalPagoMensajero),
-    },
-    {
-      id: "ingresoBodegaRechazos",
-      value: INGRESO_BODEGA_RECHAZOS_COL,
-      render: (c) => money(c.totalIngresoBodegaRechazos),
-    },
-    {
-      id: "motivoRechazo",
-      value: "Motivo",
-      render: (c) => c.motivoRechazo ?? "—",
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (c) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => abrir(c.cierreId)}
-        >
-          Ver
-        </Button>
-      ),
     },
   ];
 }

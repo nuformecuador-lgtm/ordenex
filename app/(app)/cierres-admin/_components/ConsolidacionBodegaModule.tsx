@@ -9,14 +9,10 @@ import { DataTable, type Column } from "@/components/shared/DataTable";
 import { filasLocales } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { solicitarCierreBodega } from "@/lib/actions/cierre-bodega";
-import type {
-  CierreBodegaResumen,
-  CierreBodegaResumenLite,
-} from "@/lib/interfaces/services/ICierreBodegaService";
+import type { CierreBodegaResumenLite } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import {
   money,
-  ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
   PagoMensajeroTotal,
@@ -25,15 +21,16 @@ import {
   TotalesPanel,
 } from "./cierre-detalle-shared";
 import {
-  COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
+  CierresBodegaSolicitadosTabla,
+  type CierresBodegaSolicitadosPagina,
+} from "./CierresBodegaSolicitadosTabla";
+import {
   COLUMNAS_DESCARGA_CONSOLIDABLES,
-  filaDescargaBodegaSolicitado,
   filaDescargaConsolidable,
 } from "./cierres-bodega-descarga-columnas";
 
-/** Nombres visibles de las dos tablas: hoja, base del archivo y nombre del control (R12/R13). */
+/** Nombre visible de la tabla de consolidables: hoja, archivo y control (R12/R13). */
 const TITULO_DESCARGA_CONSOLIDABLES = "Cierres del día a consolidar";
-const TITULO_DESCARGA_SOLICITADOS = "Cierres de bodega solicitados";
 
 // Feature 40 (T8) — módulo cliente del "Cierre de bodega" del adminSatelite (lado
 // SOLICITAR, espejo de la 37 un nivel arriba). Recibe del Server Component padre los
@@ -66,8 +63,11 @@ export interface ConsolidacionBodegaModuleProps {
   puedesSolicitar: boolean;
   /** Texto accionable del bloqueo si `!puedesSolicitar`. */
   motivoBloqueo: string | null;
-  /** Histórico de cierres de bodega de la zona (solo lectura, F1.4-h). */
-  cierresBodegaPasados: CierreBodegaResumen[];
+  /**
+   * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 del histórico de cierres de bodega de la
+   * zona (solo lectura, F1.4-h), ya resuelta server-side, más el `total` del conjunto.
+   */
+  cierresBodegaPasados: CierresBodegaSolicitadosPagina;
   /** `true` si el adminSatelite no tiene zona asignada (R4). */
   sinZona: boolean;
 }
@@ -228,30 +228,10 @@ export function ConsolidacionBodegaModule({
         </>
       )}
 
-      {/* ---------- Histórico de cierres de bodega (solo lectura, F1.4-h) ---------- */}
-      <section
-        aria-label="Cierres de bodega solicitados"
-        className="flex flex-col gap-3"
-      >
-        <h3 className="text-base font-semibold">Cierres de bodega solicitados</h3>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={COLUMNAS_PASADOS}
-            data={cierresBodegaPasados}
-            rowKey="cierreBodegaId"
-            ariaLabel="Cierres de bodega solicitados"
-            emptyMessage="Aún no has solicitado ningún cierre de bodega."
-            // Feature 170 (T E.3, R1/R11/R26/R30/R32): el histórico propio de la zona, con
-            // SUS columnas — esta tabla enseña la fecha de SOLICITUD, no la de resolución.
-            descarga={{
-              titulo: TITULO_DESCARGA_SOLICITADOS,
-              columnas: COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
-              obtenerFilas: () =>
-                filasLocales(cierresBodegaPasados, filaDescargaBodegaSolicitado),
-            }}
-          />
-        </div>
-      </section>
+      {/* ---------- Histórico de cierres de bodega (solo lectura, F1.4-h) ----------
+          Feature 170 — FASE 2 (T I.2): la tabla, su control de paginación y su descarga viven
+          en su propio componente (ver la cabecera de `CierresBodegaSolicitadosTabla`). */}
+      <CierresBodegaSolicitadosTabla initialData={cierresBodegaPasados} />
 
       {/* Confirmación de "Solicitar cierre de bodega". */}
       <Modal
@@ -291,40 +271,5 @@ const COLUMNAS_CONSOLIDABLES: Column<CierreBodegaResumenLite>[] = [
     id: "ingresoBodegaRechazos",
     value: INGRESO_BODEGA_RECHAZOS_COL,
     render: (c) => money(c.totalIngresoBodegaRechazos),
-  },
-];
-
-// --- Columnas del histórico de cierres de bodega (solo lectura, F1.4-h) ---
-const COLUMNAS_PASADOS: Column<CierreBodegaResumen>[] = [
-  { id: "estado", value: "Estado", render: (c) => ESTADO_LABEL[c.estado] },
-  {
-    id: "solicitadoAt",
-    value: "Fecha solicitud",
-    render: (c) => c.solicitadoAt.slice(0, 10),
-  },
-  {
-    id: "cantidadCierres",
-    value: "Cierres del día",
-    render: (c) => String(c.cantidadCierres),
-  },
-  {
-    id: "general",
-    value: "Total general",
-    render: (c) => money(c.totales.general),
-  },
-  {
-    id: "pagoMensajero",
-    value: PAGO_MENSAJERO_COL,
-    render: (c) => money(c.totalPagoMensajero),
-  },
-  {
-    id: "ingresoBodegaRechazos",
-    value: INGRESO_BODEGA_RECHAZOS_COL,
-    render: (c) => money(c.totalIngresoBodegaRechazos),
-  },
-  {
-    id: "motivoRechazo",
-    value: "Motivo",
-    render: (c) => c.motivoRechazo ?? "—",
   },
 ];

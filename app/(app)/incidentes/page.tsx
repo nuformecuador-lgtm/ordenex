@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { listarIncidentes } from "@/lib/actions/incidentes";
+import {
+  listarIncidentes,
+  listarHistoricoIncidentesPaginado,
+} from "@/lib/actions/incidentes";
 
 import { IncidentesAdminModule } from "./_components/IncidentesAdminModule";
 
@@ -28,8 +31,15 @@ export default async function IncidentesPage() {
     notFound(); // R48
   }
 
-  const result = await listarIncidentes();
+  // Feature 170 — FASE 2 (T I.2, R40): el listado compuesto sigue trayendo la cola, el aviso
+  // de «sin zona» y el alcance; el HISTÓRICO llega como PÁGINA 1 y su total (R41), no como
+  // array entero. El input va vacío: los defaults los pone el schema del dominio.
+  const [result, historicoResult] = await Promise.all([
+    listarIncidentes(),
+    listarHistoricoIncidentesPaginado({}),
+  ]);
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
+  if (historicoResult.status !== "ok") notFound(); // defensa en profundidad
 
   return (
     <AppPage
@@ -38,7 +48,11 @@ export default async function IncidentesPage() {
     >
       <IncidentesAdminModule
         pendientes={result.pendientes}
-        historico={result.historico}
+        historico={{
+          items: historicoResult.items,
+          total: historicoResult.total,
+          pageSize: historicoResult.pageSize,
+        }}
         sinZona={result.sinZona}
       />
     </AppPage>

@@ -16,6 +16,7 @@ import type { DescargaFilasResult } from "@/components/shared/DataTable";
 import { descargaConfig } from "@/lib/config/descarga";
 import type { DescargaFila } from "@/lib/types/descarga";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { ActionError } from "@/lib/types/orden";
 import { messageFromActionError } from "@/lib/utils/action-error-message";
 
 /**
@@ -93,4 +94,36 @@ export async function filasLocales<T>(
     return { status: "error", mensaje: mensajeLimite(filas.length, limite) };
   }
   return { status: "ok", filas: filas.map(proyectar) };
+}
+
+/**
+ * FAMILIA B **PAGINADA** (feature 170 — FASE 2, T I.2, R52): la tabla pinta UNA página que le
+ * llega del servidor, pero la descarga sigue entregando el CONJUNTO COMPLETO.
+ *
+ * Por qué hace falta un tercer adaptador y no vale ninguno de los dos de arriba: al paginar
+ * una tabla de Familia B, `filasLocales(loQueLaTablaPinta)` deja de significar «el dataset» y
+ * pasa a significar «lo que se ve». Eso es exactamente la degradación que R52 prohíbe, y no
+ * falla en ninguna parte: el archivo sale, con 25 filas de 300. Aquí el conjunto se **relee**
+ * del servidor al pulsar el control —una lectura más, y solo cuando el usuario descarga— y se
+ * proyecta con el MISMO `filasLocales`, para no perder el tope de filas ni su mensaje
+ * accionable (R26/R27/R28).
+ *
+ * `items` es lo que devuelve el listado SIN recorte que la pantalla ya llamaba antes de
+ * paginar; quien llama lo selecciona del resultado de su Server Action. No se usa
+ * `filasDesdeResultado` porque estos listados no tienen modo «completo» con tope server-side:
+ * sin `filasLocales` la descarga se quedaría sin tope ninguno, justo en los históricos que
+ * crecen sin techo.
+ */
+export async function filasDelConjuntoCompleto<T>(
+  resultado: Promise<{ status: "ok"; items: readonly T[] } | ActionError>,
+  proyectar: (item: T) => DescargaFila,
+): Promise<DescargaFilasResult> {
+  const res = await resultado;
+  if (res.status !== "ok") {
+    return {
+      status: "error",
+      mensaje: `${messageFromActionError(res)} ${SUFIJO_REINTENTO}`,
+    };
+  }
+  return filasLocales(res.items, proyectar);
 }
