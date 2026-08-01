@@ -1,5 +1,8 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  ListarMovimientosDeTiendaCompletoInput,
+  ListarMovimientosDeTiendaInput,
+  ListarMovimientosDeTiendaResult,
   ListarMovimientosTiendaCompletoInput,
   ListarMovimientosTiendaInput,
   SaldoTiendaDTO,
@@ -43,6 +46,25 @@ export type ListarSaldosTiendasServiceResult =
   | { status: "ok"; tiendas: SaldoTiendaResumenDTO[] }
   | { status: "forbidden" };
 
+/**
+ * Feature 171 — desglose de UNA tienda ELEGIDA (superficie del acceso total).
+ *
+ * Contrapartida exacta de `listarMisMovimientos`, con el alcance invertido: alli la tienda ve
+ * lo suyo y el acotado sale del ACTOR; aqui el maestro elige la tienda y el acotado sale del
+ * INPUT, con el permiso fijado por el ROL. `forbidden` NUNCA viaja con `data` (R27).
+ */
+export type ListarMovimientosDeTiendaServiceResult =
+  | { status: "ok"; data: ListarMovimientosDeTiendaResult }
+  | { status: "forbidden" };
+
+/**
+ * Feature 171 (R37/R39/R40) — el MISMO desglose sin recorte por pagina, para la descarga.
+ * Mismo guard de rol, los MISMOS filtros y el mismo `tiendaId`. Ni `forbidden` ni
+ * `limite_excedido` viajan con filas.
+ */
+export type ListarMovimientosDeTiendaCompletoServiceResult =
+  ListarCompletoServiceResult<WalletTiendaMovimientoDTO>;
+
 export interface IWalletTiendaService {
   /** R16/R17/R19: solo adminTienda; saldo a favor total DERIVADO, acotado a su tienda_id. */
   verMiSaldo(actor: Actor): Promise<VerMiSaldoServiceResult>;
@@ -62,4 +84,24 @@ export interface IWalletTiendaService {
   ): Promise<ListarMisMovimientosCompletoServiceResult>;
   /** R20: solo maestro; saldo a favor de TODAS las tiendas (una fila por tienda). */
   listarSaldosTiendas(actor: Actor): Promise<ListarSaldosTiendasServiceResult>;
+  /**
+   * Feature 171 (R22/R24/R26/R27/R28) — desglose de UNA tienda elegida: pagina de movimientos
+   * + total del conjunto filtrado + los cuatro importes de la cabecera, en una sola respuesta.
+   * SOLO acceso total, y el guard se evalua ANTES de tocar el repositorio: con el guard
+   * despues, el dato ya habria salido de la base aunque la respuesta fuera un error.
+   * `adminTienda` recibe `forbidden` incluso pidiendo su PROPIA tienda (su superficie es
+   * `listarMisMovimientos`, que acota por el actor).
+   */
+  listarMovimientosDeTienda(
+    input: ListarMovimientosDeTiendaInput,
+    actor: Actor,
+  ): Promise<ListarMovimientosDeTiendaServiceResult>;
+  /**
+   * Feature 171 (R37/R39/R40) — el MISMO desglose sin recorte por pagina, para la descarga.
+   * Mismo guard, los MISMOS filtros, `take: tope + 1` y el guard del tope.
+   */
+  listarMovimientosDeTiendaCompleto(
+    input: ListarMovimientosDeTiendaCompletoInput,
+    actor: Actor,
+  ): Promise<ListarMovimientosDeTiendaCompletoServiceResult>;
 }

@@ -11,13 +11,22 @@
 // podio del ranking), que por eso se registra aparte.
 //
 // DIVERGENCIA DELIBERADA con ese spec (chore «borrar la vista legacy del listado de
-// órdenes», 2026-07-31): hoy son **30 tablas = 24 dentro de alcance + 6 fuera**, con 29
+// órdenes», 2026-07-31): quedaron **30 tablas = 24 dentro de alcance + 6 fuera**, con 29
 // instancias de `<DataTable>` en 24 archivos. Se borró `OrdenesApartado.tsx` («Apartado de
 // órdenes por estado», nº 2 del Anexo I), cuyo ÚNICO consumidor de producción era
 // `OrdenesRevisionMaestro.tsx`, la vista legacy que ninguna página montaba. El spec 170 NO
 // se reescribe: era cierto cuando se aprobó, y falsearlo borraría el motivo por el que los
 // números bajaron. La capacidad no se pierde: `/ordenes` filtra por estado con
 // `OrdenesListado`/`OrdenesModule` («Órdenes (listado principal)», nº 1), que sí descarga.
+//
+// Feature 171 (T2.6, R42) — SUMA de una tabla: el desglose del dinero de UNA tienda
+// (`DesgloseMovimientosTienda.tsx`), que se despliega desde cada fila de «Saldos de
+// tiendas». Nace `con_descarga`, que es lo que la guardia obliga a decidir: es un libro de
+// dinero paginado en el servidor, la Familia A canónica de la 170, y declararla `fuera`
+// habría exigido un motivo que no existe. Totales VIGENTES: **31 tablas = 25 dentro de
+// alcance + 6 fuera**, con 30 instancias de `<DataTable>` en 25 archivos. Se incrementa
+// desde los números REALES de arriba (24/29/24/30), no desde los del spec original, que ya
+// estaban obsoletos cuando se escribió esta feature.
 //
 // Estados posibles de una tabla dentro de alcance:
 //   - `con_descarga`: ya declara la prop `descarga` del `DataTable`.
@@ -54,7 +63,7 @@ export interface ArchivoCensado {
 }
 
 /**
- * Las 29 instancias de `<DataTable>` del árbol (24 archivos), en el orden en que aparecen
+ * Las 30 instancias de `<DataTable>` del árbol (25 archivos), en el orden en que aparecen
  * en cada archivo. Verificado contra el código, no de memoria.
  */
 export const CENSO_DATATABLE: ArchivoCensado[] = [
@@ -201,6 +210,14 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ruta: "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
     tablas: [
       { nombre: "Desglose de pagos por cierre de un mensajero", estado: "con_descarga" },
+    ],
+  },
+  {
+    // Feature 171 (T2.6): el desplegable del dinero de UNA tienda. Va antes que
+    // `SaldosTiendasTable` porque la guardia recorre el árbol en orden alfabético.
+    ruta: "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
+    tablas: [
+      { nombre: "Desglose de movimientos de una tienda", estado: "con_descarga" },
     ],
   },
   {

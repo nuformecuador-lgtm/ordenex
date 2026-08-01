@@ -119,7 +119,7 @@ function buildRepo(prisma: ReturnType<typeof buildPrisma>) {
     prisma as unknown as PrismaClient,
     new WalletMovimientoRepository(prisma as unknown as PrismaClient),
     { construirMovimientosDeIngreso: vi.fn(async () => []) },
-    { crearMovimientos: vi.fn(async () => 0), listarPorTienda: vi.fn(), agregarSaldoPorTienda: vi.fn(), listarSaldosTodasTiendas: vi.fn() },
+    { crearMovimientos: vi.fn(async () => 0), listarPorTienda: vi.fn(), agregarSaldoPorTienda: vi.fn(), listarSaldosTodasTiendas: vi.fn(), agregarDesglosePorTienda: vi.fn() },
     { construirMovimientosPorTienda: vi.fn(async () => []) },
     { crearMovimientos: vi.fn(async () => 0), listarPorMensajero: vi.fn(), agregarCuentaPorPagar: vi.fn(), listarCuentasPorPagarTodos: vi.fn(), obtenerNombreMensajero: vi.fn() },
     { construirMovimientosDePago: vi.fn(async () => ({ libro: [], egresoCaja: [] })) },

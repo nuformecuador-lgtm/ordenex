@@ -8,12 +8,16 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletTiendaService,
   ListarMisMovimientosServiceResult,
+  ListarMovimientosDeTiendaServiceResult,
   ListarSaldosTiendasServiceResult,
   VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
 import {
+  listarMovimientosDeTiendaCompletoSchema,
+  listarMovimientosDeTiendaSchema,
   listarMovimientosTiendaCompletoSchema,
   listarMovimientosTiendaSchema,
+  type ListarMovimientosDeTiendaCompletoResult,
   type ListarMovimientosTiendaCompletoResult,
 } from "@/lib/types/wallet-tienda";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -38,6 +42,13 @@ export type ListarMisMovimientosActionResult =
 export type ListarSaldosTiendasActionResult =
   | ListarSaldosTiendasServiceResult
   | { status: "unauthenticated" };
+
+// Feature 171 — desglose de UNA tienda elegida. `forbidden` lo decide el servicio (dominio);
+// `unauthenticated` y `validation_error` los decide este borde, antes de llamarlo.
+export type ListarMovimientosDeTiendaActionResult =
+  | ListarMovimientosDeTiendaServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 // Traduce el AppErrorShape del borde: ZodError (VALIDATION_ERROR) o falta de sesion
 // (UNAUTHORIZED). Espejo de `toWalletActionError`.
@@ -129,4 +140,46 @@ export async function listarSaldosTiendasAction(
     return service.listarSaldosTiendas(actor);
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Feature 171 (T1.5, R22/R25/R29) — desglose de UNA tienda elegida por el acceso total:
+ * pagina de movimientos + total del conjunto filtrado + los cuatro importes de la cabecera.
+ *
+ * Mismo esqueleto que las cuatro de arriba, y el ORDEN importa: sin sesion se corta ANTES de
+ * validar y antes de llamar al servicio (R29), y un `tiendaId` ausente o vacio se corta en
+ * `schema.parse` (R25) — en ninguno de los dos casos se llega a consultar la base.
+ */
+export async function listarMovimientosDeTiendaAction(
+  input: unknown,
+  deps: WalletTiendaDeps = {},
+): Promise<ListarMovimientosDeTiendaActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R29: antes del schema y del service
+    const data = listarMovimientosDeTiendaSchema.parse(input); // R25: ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarMovimientosDeTienda(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * Feature 171 (T1.5, R37/R40) — el MISMO desglose sin paginacion, para la descarga. Mismo
+ * borde, mismo actor, mismo `tiendaId` requerido y el mismo servicio; el schema `.strict()`
+ * rechaza `page`/`pageSize` porque este modo no pagina. Ninguna rama devuelve filas junto a un
+ * error.
+ */
+export async function listarMovimientosDeTiendaCompletoAction(
+  input: unknown,
+  deps: WalletTiendaDeps = {},
+): Promise<ListarMovimientosDeTiendaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R29: antes de tocar el service
+    const data = listarMovimientosDeTiendaCompletoSchema.parse(input); // R25
+    const service = deps.service ?? buildService();
+    return service.listarMovimientosDeTiendaCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

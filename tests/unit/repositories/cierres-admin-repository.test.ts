@@ -38,6 +38,7 @@ function buildWalletDeps() {
     listarPorTienda: vi.fn(),
     agregarSaldoPorTienda: vi.fn(),
     listarSaldosTodasTiendas: vi.fn(),
+    agregarDesglosePorTienda: vi.fn(), // feature 171: doble no-op, este test no lee el ledger
   };
   const walletTiendaFeedService: IWalletTiendaFeedService = {
     construirMovimientosPorTienda: vi.fn().mockResolvedValue([]),
