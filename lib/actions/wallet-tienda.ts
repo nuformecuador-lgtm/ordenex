@@ -11,7 +11,11 @@ import type {
   ListarSaldosTiendasServiceResult,
   VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
-import { listarMovimientosTiendaSchema } from "@/lib/types/wallet-tienda";
+import {
+  listarMovimientosTiendaCompletoSchema,
+  listarMovimientosTiendaSchema,
+  type ListarMovimientosTiendaCompletoResult,
+} from "@/lib/types/wallet-tienda";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -90,6 +94,26 @@ export async function listarMisMovimientosAction(
     const data = listarMovimientosTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarMisMovimientos(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * Feature 170 (T C.2, design §4) — ledger COMPLETO de la tienda del actor, sin paginacion,
+ * para la descarga. Calcado de `listarMisMovimientosAction`: mismo borde, mismo actor, mismo
+ * schema (menos `page`/`pageSize`, y `.strict()`) y el MISMO servicio, que acota a su
+ * `tienda_id` (R14/R15). Ninguna rama devuelve filas junto a un error (R16/R17/R18).
+ */
+export async function listarMisMovimientosCompletoAction(
+  input: unknown,
+  deps: WalletTiendaDeps = {},
+): Promise<ListarMovimientosTiendaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
+    const data = listarMovimientosTiendaCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarMisMovimientosCompleto(data, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

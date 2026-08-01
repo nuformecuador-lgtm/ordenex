@@ -24,6 +24,13 @@ function fakeService(overrides: Partial<IWalletTiendaService> = {}): IWalletTien
       status: "ok" as const,
       data: { movimientos: [], total: 0, page: 1, pageSize: 20, saldo: SALDO },
     })),
+    // Feature 170 (T C.1): el doble implementa la interfaz COMPLETA. El modo sin
+    // paginacion lo ejercita `wallet-tienda-descarga-action.test.ts`.
+    listarMisMovimientosCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
+      total: 0,
+    })),
     listarSaldosTiendas: vi.fn(async () => ({
       status: "ok" as const,
       tiendas: [{ tiendaId: "t1", tiendaNombre: "Tienda Uno", saldo: "8500.00", signo: "positivo" as const }],

@@ -15,10 +15,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import { listarOrdenes, listarOrdenesCompleto } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
-import { messageFromActionError } from "@/lib/utils/action-error-message";
 
 import { ordenesColumns } from "./ordenes-columns";
 import {
@@ -72,20 +72,11 @@ async function ordenesFetcher(
 
 // Feature 151 (design §7) — título del dataset: nombre de la hoja, base del nombre de
 // archivo (`ordenes-YYYY-MM-DD.xlsx`, R37) y parte del nombre accesible del control.
+//
+// Feature 170 (T0.3): `mensajeLimite` y `SUFIJO_REINTENTO` vivían aquí; se PROMOVIERON
+// sin editar su texto a `components/shared/descarga-resultado`, que es de donde los leen
+// ahora las 25 tablas.
 const TITULO_DESCARGA = "Órdenes";
-
-/**
- * R20 — Mensaje ACCIONABLE del tope: dice el total encontrado, el tope vigente y qué
- * hacer (acotar los filtros). Solo lleva conteos, nunca PII. El tope lo decide y lo
- * aplica el SERVICIO; aquí solo se redacta lo que devolvió.
- */
-function mensajeLimite(total: number, limite: number): string {
-  return `La descarga supera el máximo de ${limite} filas (hay ${total}). Acota los filtros —por ejemplo, el rango de fechas o el estado— y vuelve a intentarlo.`;
-}
-
-// R27 — Cola accionable del resto de fallos: el mensaje canónico del error dice QUÉ
-// pasó; esto dice qué hacer a continuación.
-const SUFIJO_REINTENTO = "Vuelve a intentarlo; el listado no cambió.";
 
 /**
  * Feature 169/R40 — vacío CON búsqueda activa. El mensaje de siempre ("No hay órdenes /
@@ -401,26 +392,16 @@ export function OrdenesModule({
     ? {
         titulo: TITULO_DESCARGA,
         columnas: COLUMNAS_DESCARGA_ORDENES,
-        obtenerFilas: async () => {
-          const res = await listarOrdenesCompleto(filter ? { filter } : {});
-          if (res.status === "limite_excedido") {
-            // R20: sin archivo; el mensaje lleva total, tope y qué hacer.
-            return {
-              status: "error",
-              mensaje: mensajeLimite(res.total, res.limite),
-            };
-          }
-          if (res.status !== "ok") {
-            // R27: mensaje canónico del error (mismo mapeo que el resto de acciones)
-            // + qué hacer. La tabla no traduce códigos: los recibe ya saneados.
-            return {
-              status: "error",
-              mensaje: `${messageFromActionError(res)} ${SUFIJO_REINTENTO}`,
-            };
-          }
-          // R34: una fila por orden del dataset completo, no solo la página visible.
-          return { status: "ok", filas: res.items.map(filaDescargaOrden) };
-        },
+        // Feature 170 (T0.3): el bloque que traducía el resultado a filas —tope, error
+        // accionable y proyección— vivía aquí inline. Ahora es `filasDesdeResultado`,
+        // el MISMO adaptador que usan las otras 24 tablas: sin cambio funcional, y sin
+        // dos caminos que puedan divergir. R34: una fila por orden del dataset
+        // completo, no solo la página visible.
+        obtenerFilas: () =>
+          filasDesdeResultado(
+            listarOrdenesCompleto(filter ? { filter } : {}),
+            filaDescargaOrden,
+          ),
       }
     : undefined;
 

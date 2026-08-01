@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import {
   verCierreBodegaDetalle,
@@ -37,6 +38,16 @@ import {
   TotalesPanel,
   VisorEvidencia,
 } from "./cierre-detalle-shared";
+import {
+  COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
+  COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
+  filaDescargaBodegaPendiente,
+  filaDescargaBodegaResuelto,
+} from "./cierres-bodega-descarga-columnas";
+
+/** Nombres visibles de las dos tablas: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA_PENDIENTES = "Cierres de bodega pendientes";
+const TITULO_DESCARGA_RESUELTOS = "Cierres de bodega resueltos";
 
 // Feature 40 (T8) — módulo cliente de "Cierres de bodega satélite" del maestro (lado
 // APROBAR/RECHAZAR, espejo de la 38 aplicado a CierreBodega). Recibe del Server
@@ -213,6 +224,16 @@ export function CierresBodegaAdminModule({
             rowKey="cierreBodegaId"
             ariaLabel="Cierres de bodega pendientes"
             emptyMessage="No hay cierres de bodega pendientes de decisión."
+            /**
+             * Feature 170 (T E.2, R1/R11/R26/R30/R32) — FAMILIA B: el array de props ES la
+             * cola entera, así que el archivo se proyecta de lo que la tabla ya pinta, en
+             * el mismo orden y sin releer nada del servidor.
+             */
+            descarga={{
+              titulo: TITULO_DESCARGA_PENDIENTES,
+              columnas: COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
+              obtenerFilas: () => filasLocales(pendientes, filaDescargaBodegaPendiente),
+            }}
           />
         </div>
       </section>
@@ -230,6 +251,13 @@ export function CierresBodegaAdminModule({
             rowKey="cierreBodegaId"
             ariaLabel="Cierres de bodega resueltos"
             emptyMessage="Aún no hay cierres de bodega resueltos."
+            // Feature 170 (T E.2, R1/R11/R26/R30/R32): mismo patrón, con SUS columnas
+            // (estado, fecha resuelta y motivo, que la cola no tiene).
+            descarga={{
+              titulo: TITULO_DESCARGA_RESUELTOS,
+              columnas: COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
+              obtenerFilas: () => filasLocales(historico, filaDescargaBodegaResuelto),
+            }}
           />
         </div>
       </section>
@@ -363,9 +391,13 @@ export function CierresBodegaAdminModule({
                   nota={PAGO_TIENDA_NOTA}
                   ariaLabel={`Pago a tienda · ${cierreDia.mensajeroNombre}`}
                 />
+                {/* Feature 170 (T E.5/R13): el `contexto` da nombre ÚNICO a la descarga de
+                    cada sección — este modal monta las mismas cinco secciones una vez por
+                    mensajero incluido, y sin él todos los controles se llamarían igual. */}
                 <DetalleSecciones
                   grupos={cierreDia.grupos}
                   onVerEvidencia={setEvidencia}
+                  contexto={cierreDia.mensajeroNombre}
                 />
               </section>
             ))}

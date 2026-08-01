@@ -4,6 +4,7 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
+import { ToastProvider } from "@/providers/ToastProvider";
 import { OrdenesApartado } from "@/app/(app)/ordenes/_components/OrdenesApartado";
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { listarOrdenes } from "@/lib/actions/ordenes";
@@ -67,15 +68,21 @@ const ORDENES: OrdenListItemDTO[] = [
   makeOrden({ id: "o2", numRemision: "REM-2", estatusId: "id-bodega" }),
 ];
 
+// Feature 170 (T A.1): el apartado monta el control de descarga del `DataTable`, que usa
+// `useToast`. En la app el proveedor está en `app/(app)/layout.tsx`, encima de TODAS estas
+// pantallas; aquí se envuelve por la misma razón que ya hace `OrdenesDescarga.test.tsx`.
+// Es un cambio del ARNÉS de estos tests: ninguna aserción de la feature 49 se toca.
 function renderApartado(props: Partial<Parameters<typeof OrdenesApartado>[0]> = {}) {
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <OrdenesApartado
-        titulo="En bodega"
-        estatusValue="en_bodega_central"
-        estatusId="id-bodega"
-        {...props}
-      />
+      <ToastProvider>
+        <OrdenesApartado
+          titulo="En bodega"
+          estatusValue="en_bodega_central"
+          estatusId="id-bodega"
+          {...props}
+        />
+      </ToastProvider>
     </SWRConfig>,
   );
 }

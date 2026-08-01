@@ -42,6 +42,19 @@ function fakeService(overrides: Partial<IWalletMensajeroService> = {}): IWalletM
         cuenta: CUENTA,
       },
     })),
+    // Feature 170 (T C.1): el doble implementa la interfaz COMPLETA. Los modos sin
+    // paginacion los ejercitan `wallet-mis-pagos-descarga-action.test.ts` y
+    // `wallet-desglose-mensajero-descarga-action.test.ts`.
+    listarMisPagosCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
+      total: 0,
+    })),
+    listarPagosDeMensajeroCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
+      total: 0,
+    })),
     ...overrides,
   };
 }

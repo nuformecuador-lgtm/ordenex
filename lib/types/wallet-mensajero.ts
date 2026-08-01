@@ -3,6 +3,7 @@ import type {
   PagoMensajeroMovimientoTipo as PrismaPagoMensajeroMovimientoTipo,
   PagoMensajeroMovimientoCategoria as PrismaPagoMensajeroMovimientoCategoria,
 } from "@prisma/client";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 
 // Feature 44 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del LIBRO del pago
 // POR MENSAJERO, respaldada por los enums Postgres nativos (patron lib/types/wallet-tienda.ts).
@@ -144,3 +145,40 @@ export const listarPagosDeMensajeroSchema = listarPagosMensajeroSchema.extend({
 });
 
 export type ListarPagosDeMensajeroInput = z.infer<typeof listarPagosDeMensajeroSchema>;
+
+// ── Feature 170 (T C.1) — modo SIN paginacion (descarga del dataset completo) ──
+
+/**
+ * Vista PROPIA del mensajero (`/mis-pagos`). Derivada del schema del listado quitando
+ * `page`/`pageSize`, de modo que ambos caminos resuelvan los MISMOS filtros.
+ *
+ * `mensajeroId` SIGUE ADMITIENDOSE en el schema —se hereda del base— y sigue siendo
+ * IRRELEVANTE: el service lo ignora y acota por `actor.usuarioId` (R15/R20). Se conserva por
+ * paridad exacta con el listado: quitarlo aqui haria que la descarga rechazara una peticion
+ * que el listado acepta, o sea otra divergencia. `.strict()` cierra el resto de claves (R18).
+ */
+export const listarMisPagosCompletoSchema = listarPagosMensajeroSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarMisPagosCompletoInput = z.infer<typeof listarMisPagosCompletoSchema>;
+
+/**
+ * Vista del ACCESO TOTAL: desglose de UN mensajero elegido. `mensajeroId` sigue siendo
+ * REQUERIDO (igual que en el listado): sin el no hay desglose que pedir, y un `mensajeroId`
+ * ausente es `validation_error` antes de tocar la base.
+ */
+export const listarPagosDeMensajeroCompletoSchema = listarPagosDeMensajeroSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarPagosDeMensajeroCompletoInput = z.infer<
+  typeof listarPagosDeMensajeroCompletoSchema
+>;
+
+// Resultados del modo completo en el BORDE (T C.2). `limite_excedido` lleva SOLO conteos
+// (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Los dos ledgers proyectan el
+// mismo DTO; se nombran aparte porque son dos superficies con alcances distintos.
+export type ListarMisPagosCompletoResult = ListarCompletoResult<PagoMensajeroMovimientoDTO>;
+export type ListarPagosDeMensajeroCompletoResult =
+  ListarCompletoResult<PagoMensajeroMovimientoDTO>;

@@ -34,6 +34,13 @@ function fakeService(overrides: Partial<IWalletService> = {}): IWalletService {
       status: "ok" as const,
       data: { movimientos: [mov()], total: 1, page: 1, pageSize: 20 },
     })),
+    // Feature 170 (T C.1): el doble implementa la interfaz COMPLETA. El modo sin
+    // paginacion lo ejercita `wallet-caja-descarga-action.test.ts`.
+    listarMovimientosCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [mov()],
+      total: 1,
+    })),
     verBalance: vi.fn(async () => ({
       status: "ok" as const,
       balance: { ingresos: "1000.00", egresos: "300.00", balance: "700.00", signo: "positivo" as const },

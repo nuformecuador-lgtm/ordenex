@@ -12,6 +12,7 @@ import {
   columnasPara,
 } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
+import { ToastProvider } from "@/providers/ToastProvider";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -35,6 +36,16 @@ import type {
 // el hueco. El backend extendió el DTO (el candado se puso rojo y se INVIRTIÓ) y esta fase
 // pintó las columnas (el caso del hueco se puso rojo y se INVIRTIÓ también). Ninguno de los
 // dos se borró: los dos siguen protegiendo el invariante, ahora en su sentido correcto.
+
+/**
+ * Feature 170 (T E.5): cada sección del detalle monta el control de descarga del `DataTable`,
+ * que usa `useToast`. En la app el proveedor está en `app/(app)/layout.tsx`, encima de estas
+ * pantallas; aquí se envuelve por la misma razón que ya hacen `OrdenesDescarga.test.tsx` (151)
+ * y `OrdenesApartado.test.tsx` (170/T A.1). Cambio del ARNÉS: ninguna aserción se toca.
+ */
+function renderConToast(ui: React.ReactElement) {
+  return render(<ToastProvider>{ui}</ToastProvider>);
+}
 
 function ingreso(over: Partial<IngresoOrdenexDTO> = {}): IngresoOrdenexDTO {
   return {
@@ -131,7 +142,7 @@ describe("R18 — `incidente` es un grupo propio del detalle de admin", () => {
   });
 
   it("se pinta como región propia con su conteo y su motivo", () => {
-    render(
+    renderConToast(
       <DetalleSecciones
         grupos={{ ...emptyGrupos(), incidente: [unIncidente()] }}
         onVerEvidencia={() => {}}
@@ -145,14 +156,14 @@ describe("R18 — `incidente` es un grupo propio del detalle de admin", () => {
   });
 
   it("el grupo vacío NO se pinta", () => {
-    render(<DetalleSecciones grupos={emptyGrupos()} onVerEvidencia={() => {}} />);
+    renderConToast(<DetalleSecciones grupos={emptyGrupos()} onVerEvidencia={() => {}} />);
     expect(screen.queryByRole("region", { name: "Incidentes" })).toBeNull();
   });
 
   it("la evidencia se abre con la URL FIRMADA que llega del servidor", async () => {
     const user = userEvent.setup();
     let abierta: string | null = null;
-    render(
+    renderConToast(
       <DetalleSecciones
         grupos={{ ...emptyGrupos(), incidente: [unIncidente()] }}
         onVerEvidencia={(url) => {
@@ -170,7 +181,7 @@ describe("R18 — `incidente` es un grupo propio del detalle de admin", () => {
 
 describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", () => {
   it("sin origen SLA/manual, sin conceptos de ingreso, sin pago ni ingreso de bodega", () => {
-    render(
+    renderConToast(
       <DetalleSecciones
         grupos={{ ...emptyGrupos(), incidente: [unIncidente({ pagoMensajero: "0.00" })] }}
         onVerEvidencia={() => {}}
@@ -194,7 +205,7 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
   });
 
   it("un RECHAZO conserva exactamente sus columnas (no regresión, R35)", () => {
-    render(
+    renderConToast(
       <DetalleSecciones
         grupos={{
           ...emptyGrupos(),
@@ -294,7 +305,7 @@ describe("R34/R9 — la CAUSA se pinta traducida, nunca el slug del enum", () =>
     ["perdido", "Paquete perdido"],
     ["robado", "Paquete robado"],
   ] as const)("causa `%s` se muestra como «%s»", (value, etiqueta) => {
-    render(
+    renderConToast(
       <DetalleSecciones
         grupos={{ ...emptyGrupos(), incidente: [unIncidente({ causaIncidente: value })] }}
         onVerEvidencia={() => {}}
@@ -312,7 +323,7 @@ describe("R34/R9 — la CAUSA se pinta traducida, nunca el slug del enum", () =>
   it("la etiqueta sale del MISMO catálogo que usa el panel del mensajero", () => {
     // Si las dos pantallas tuvieran cadenas propias, podrían divergir sin que nada avisara.
     expect(CAUSA_INCIDENTE_LABEL.robado).toBe("Paquete robado");
-    render(
+    renderConToast(
       <DetalleSecciones
         grupos={{ ...emptyGrupos(), incidente: [unIncidente({ causaIncidente: "robado" })] }}
         onVerEvidencia={() => {}}
@@ -325,7 +336,7 @@ describe("R34/R9 — la CAUSA se pinta traducida, nunca el slug del enum", () =>
 
 describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero", () => {
   it("un incidente ya indemnizado muestra su monto TAL CUAL (STRING, sin parseFloat)", () => {
-    render(
+    renderConToast(
       <DetalleSecciones
         grupos={{
           ...emptyGrupos(),
@@ -340,7 +351,7 @@ describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero",
   });
 
   it("sin monto todavía muestra '—' CON la nota de que se captura al aprobar", () => {
-    render(
+    renderConToast(
       <DetalleSecciones
         grupos={{ ...emptyGrupos(), incidente: [unIncidente({ indemnizacion: null })] }}
         onVerEvidencia={() => {}}

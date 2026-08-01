@@ -21,7 +21,22 @@ vi.mock(
   }),
 );
 
+import { ToastProvider } from "@/providers/ToastProvider";
 import { CuentasPorPagarTable } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
+
+/**
+ * Feature 170 (T D.2): la tabla monta el control de descarga del `DataTable`, que usa
+ * `useToast`. En la app el proveedor está en `app/(app)/layout.tsx`, encima de esta pantalla;
+ * aquí se envuelve por la misma razón que ya hacen `OrdenesDescarga.test.tsx` (151) y
+ * `OrdenesApartado.test.tsx` (170/T A.1). Cambio del ARNÉS: ninguna aserción se toca.
+ */
+function renderTabla(mensajeros: CuentaPorPagarResumenDTO[]) {
+  return render(
+    <ToastProvider>
+      <CuentasPorPagarTable mensajeros={mensajeros} />
+    </ToastProvider>,
+  );
+}
 
 const MENSAJEROS: CuentaPorPagarResumenDTO[] = [
   {
@@ -52,7 +67,7 @@ afterEach(() => {
 
 describe("CuentasPorPagarTable — columnas y datos (R18/R21)", () => {
   it("renderiza las columnas del resumen por mensajero", () => {
-    render(<CuentasPorPagarTable mensajeros={MENSAJEROS} />);
+    renderTabla(MENSAJEROS);
 
     for (const header of [
       "Mensajero",
@@ -68,7 +83,7 @@ describe("CuentasPorPagarTable — columnas y datos (R18/R21)", () => {
   });
 
   it("money-safe: pinta los montos TAL CUAL (STRING con símbolo) y el badge por signo", () => {
-    render(<CuentasPorPagarTable mensajeros={MENSAJEROS} />);
+    renderTabla(MENSAJEROS);
 
     const filaAna = within(tabla())
       .getByText("Ana Mensajera")
@@ -88,7 +103,7 @@ describe("CuentasPorPagarTable — columnas y datos (R18/R21)", () => {
   });
 
   it("estado vacío estructurado cuando no hay mensajeros", () => {
-    render(<CuentasPorPagarTable mensajeros={[]} />);
+    renderTabla([]);
     expect(screen.getByText("No hay cuentas por pagar")).toBeInTheDocument();
   });
 });
@@ -96,7 +111,7 @@ describe("CuentasPorPagarTable — columnas y datos (R18/R21)", () => {
 describe("CuentasPorPagarTable — filtro por nombre (client-side)", () => {
   it("filtra la lista por nombre de mensajero sin tocar montos", async () => {
     const user = userEvent.setup();
-    render(<CuentasPorPagarTable mensajeros={MENSAJEROS} />);
+    renderTabla(MENSAJEROS);
 
     await user.type(
       screen.getByPlaceholderText("Buscar por nombre"),
@@ -111,7 +126,7 @@ describe("CuentasPorPagarTable — filtro por nombre (client-side)", () => {
 describe("CuentasPorPagarTable — expand del desglose por fila (R18)", () => {
   it("expande la fila del mensajero y monta su desglose por cierre", async () => {
     const user = userEvent.setup();
-    render(<CuentasPorPagarTable mensajeros={MENSAJEROS} />);
+    renderTabla(MENSAJEROS);
 
     // Sin expandir: ningún desglose montado.
     expect(screen.queryByTestId("desglose-stub-u1")).not.toBeInTheDocument();

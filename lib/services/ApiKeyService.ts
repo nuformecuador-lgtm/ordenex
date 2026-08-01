@@ -1,16 +1,22 @@
 import { UsuarioDuplicadoError } from "@/lib/interfaces/repositories/IUserRepository";
 import type { IApiKeyRepository } from "@/lib/interfaces/repositories/IApiKeyRepository";
-import type { Actor, IApiKeyService } from "@/lib/interfaces/services/IApiKeyService";
+import type {
+  Actor,
+  IApiKeyService,
+  ListarApiKeysCompletoServiceResult,
+} from "@/lib/interfaces/services/IApiKeyService";
 import type {
   ActivarApiKeyResult,
   ApiKeyIdInput,
   DesactivarApiKeyResult,
   GenerarApiKeyInput,
   GenerarApiKeyResult,
+  ListarApiKeysCompletoInput,
   ListarApiKeysInput,
   ListarApiKeysResult,
   RotarApiKeyResult,
 } from "@/lib/types/api-key";
+import { descargaConfig } from "@/lib/config/descarga";
 import { generateApiKey } from "@/lib/utils/api-key-generator";
 import { hashApiKey } from "@/lib/utils/api-key-hash";
 import { cedulaSintetica, emailSintetico, slugify } from "@/lib/utils/api-key-identity";
@@ -97,6 +103,36 @@ export class ApiKeyService implements IApiKeyService {
 
     // R9: si `skip` supera el final, `items` viene vacio y `total` sigue siendo el real.
     return { status: "ok", items, page: input.page, pageSize: input.pageSize, total };
+  }
+
+  /**
+   * Feature 170 (T B.1, design §2.1) — el MISMO inventario sin recorte por pagina, para la
+   * descarga del dataset completo.
+   *
+   * Como en usuarios y plantillas, NO hay `construirWhere` que extraer: `listar` no arma
+   * predicado alguno ([D2]: el inventario NO se acota por creador). El alcance por rol es
+   * el guard, y es el MISMO objeto `ALLOWED_ROLES` que usan `generar` y `listar` — no una
+   * copia (R17). Se evalua antes de tocar la base.
+   *
+   * El secreto sigue sin existir en este camino (82/R6): el repositorio no proyecta
+   * `keyHash` y el DTO no lo declara, asi que no hay nada que filtrar aqui.
+   */
+  async listarCompleto(
+    input: ListarApiKeysCompletoInput,
+    actor: Actor,
+  ): Promise<ListarApiKeysCompletoServiceResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R17: antes de la DB
+    void input; // el listado no admite filtros: el schema solo tenia `page`/`pageSize`
+
+    const limite = descargaConfig.MAX_FILAS;
+
+    // R29: nunca mas de N+1 filas materializadas. `total` exacto (viene del `count`).
+    const { items, total } = await this.repo.list({ skip: 0, take: limite + 1 });
+
+    // R27/R28: o todas las filas, o el error accionable. Nunca un archivo truncado.
+    if (total > limite) return { status: "limite_excedido", total, limite };
+
+    return { status: "ok", items, total };
   }
 
   /**
