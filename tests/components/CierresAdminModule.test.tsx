@@ -11,6 +11,7 @@ import {
   rechazarCierre,
   forzarSolicitudVencido,
   listarHistoricoCierresAdminPaginado,
+  listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
@@ -34,6 +35,8 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   forzarSolicitudVencido: vi.fn(),
   // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
   listarHistoricoCierresAdminPaginado: vi.fn(),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también.
+  listarPendientesCierresAdminPaginado: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -62,6 +65,7 @@ const aprobarMock = vi.mocked(aprobarCierre);
 const rechazarMock = vi.mocked(rechazarCierre);
 const forzarMock = vi.mocked(forzarSolicitudVencido);
 const historicoPaginadoMock = vi.mocked(listarHistoricoCierresAdminPaginado);
+const pendientesPaginadoMock = vi.mocked(listarPendientesCierresAdminPaginado);
 
 const ZERO_TOTALES: CierreTotales = {
   efectivo: "0.00",
@@ -178,22 +182,25 @@ async function abrirFila(
 }
 
 /**
- * Feature 170 — FASE 2 (T I.2): el histórico ya no es un array, es la PÁGINA que pre-carga el
- * Server Component. El helper sigue recibiendo el array para no reescribir cada caso, y ADEMÁS
- * programa la Server Action paginada con esa misma página: SWR revalida al montar, y sin el
- * doble la tabla se vaciaría a mitad del test.
+ * Feature 170 — FASE 2 (T I.2 el histórico, T J.2 la cola): las DOS tablas dejan de recibir un
+ * array y reciben la PÁGINA que pre-carga el Server Component. El helper sigue recibiendo los
+ * arrays para no reescribir cada caso, y ADEMÁS programa las dos Server Actions paginadas con
+ * esas mismas páginas: SWR revalida al montar, y sin los dobles las tablas se vaciarían a
+ * mitad del test.
  */
 function renderModule(props?: {
   pendientes?: CierreAdminResumen[];
   historico?: CierreAdminResumen[];
   sinZona?: boolean;
 }) {
+  const cola = paginaInicial(props?.pendientes ?? []);
   const pagina = paginaInicial(props?.historico ?? []);
+  pendientesPaginadoMock.mockResolvedValue({ status: "ok", page: 1, ...cola });
   historicoPaginadoMock.mockResolvedValue({ status: "ok", page: 1, ...pagina });
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <CierresAdminModule
-        pendientes={props?.pendientes ?? []}
+        pendientes={cola}
         historico={pagina}
         sinZona={props?.sinZona ?? false}
       />

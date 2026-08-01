@@ -49,6 +49,10 @@ const { paginado, completo } = vi.hoisted(() => ({
   /** Un doble por listado paginado (lo que la tabla pinta). */
   paginado: {
     cierresHistorico: vi.fn(),
+    cierresPendientes: vi.fn(),
+    bodegaPendientes: vi.fn(),
+    consolidables: vi.fn(),
+    incidentesPendientes: vi.fn(),
     bodegaResueltos: vi.fn(),
     bodegaSolicitados: vi.fn(),
     cierresPasados: vi.fn(),
@@ -76,6 +80,11 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   listarCierresAdmin: (...a: unknown[]) => completo.cierresAdmin(...a),
   listarHistoricoCierresAdminPaginado: (...a: unknown[]) =>
     paginado.cierresHistorico(...a),
+  // Feature 170 — FASE 2 (T J.2): las cuatro COLAS de riesgo MEDIO también paginan. Aquí se
+  // programan VACÍAS: este archivo habla de los siete listados de riesgo BAJO, y sin el doble
+  // la cola de la misma pantalla se quedaría en un esqueleto de carga permanente.
+  listarPendientesCierresAdminPaginado: (...a: unknown[]) =>
+    paginado.cierresPendientes(...a),
 }));
 vi.mock("@/lib/actions/cierre-bodega", () => ({
   verCierreBodegaDetalle: vi.fn(),
@@ -88,6 +97,9 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
     paginado.bodegaResueltos(...a),
   listarCierresBodegaSolicitadosPaginado: (...a: unknown[]) =>
     paginado.bodegaSolicitados(...a),
+  listarPendientesCierresBodegaPaginado: (...a: unknown[]) =>
+    paginado.bodegaPendientes(...a),
+  listarConsolidablesPaginado: (...a: unknown[]) => paginado.consolidables(...a),
 }));
 vi.mock("@/lib/actions/cierre-dia", () => ({
   solicitarCierre: vi.fn(),
@@ -104,6 +116,8 @@ vi.mock("@/lib/actions/incidentes", () => ({
   listarIncidentes: (...a: unknown[]) => completo.incidentes(...a),
   listarHistoricoIncidentesPaginado: (...a: unknown[]) =>
     paginado.incidentesHistorico(...a),
+  listarPendientesIncidentesPaginado: (...a: unknown[]) =>
+    paginado.incidentesPendientes(...a),
 }));
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarSaldosTiendasAction: (...a: unknown[]) => completo.saldos(...a),
@@ -346,6 +360,7 @@ const LISTADOS: Listado[] = [
     montar: () => {
       const todos = conjunto(cierreAdmin);
       servirPaginas(paginado.cierresHistorico, todos);
+      servirPaginas(paginado.cierresPendientes, []);
       completo.cierresAdmin.mockResolvedValue({
         status: "ok",
         pendientes: [],
@@ -354,7 +369,7 @@ const LISTADOS: Listado[] = [
       });
       envolver(
         <CierresAdminModule
-          pendientes={[]}
+          pendientes={pagina1([])}
           historico={pagina1(todos)}
           sinZona={false}
         />,
@@ -370,13 +385,17 @@ const LISTADOS: Listado[] = [
     montar: () => {
       const todos = conjunto(cierreBodega);
       servirPaginas(paginado.bodegaResueltos, todos);
+      servirPaginas(paginado.bodegaPendientes, []);
       completo.bodegaAdmin.mockResolvedValue({
         status: "ok",
         pendientes: [],
         historico: todos,
       });
       envolver(
-        <CierresBodegaAdminModule pendientes={[]} historico={pagina1(todos)} />,
+        <CierresBodegaAdminModule
+          pendientes={pagina1([])}
+          historico={pagina1(todos)}
+        />,
       );
     },
   },
@@ -389,6 +408,7 @@ const LISTADOS: Listado[] = [
     montar: () => {
       const todos = conjunto(cierreBodega);
       servirPaginas(paginado.bodegaSolicitados, todos);
+      servirPaginas(paginado.consolidables, []);
       completo.consolidacion.mockResolvedValue({
         status: "ok",
         consolidables: [],
@@ -404,7 +424,7 @@ const LISTADOS: Listado[] = [
       });
       envolver(
         <ConsolidacionBodegaModule
-          consolidables={[]}
+          consolidables={pagina1([])}
           totalesAgregados={TOTALES}
           totalPagoMensajeroAgregado="0.00"
           totalIngresoBodegaRechazosAgregado="0.00"
@@ -463,6 +483,7 @@ const LISTADOS: Listado[] = [
     montar: () => {
       const todos = conjunto(incidente);
       servirPaginas(paginado.incidentesHistorico, todos);
+      servirPaginas(paginado.incidentesPendientes, []);
       completo.incidentes.mockResolvedValue({
         status: "ok",
         pendientes: [],
@@ -471,7 +492,7 @@ const LISTADOS: Listado[] = [
       });
       envolver(
         <IncidentesAdminModule
-          pendientes={[]}
+          pendientes={pagina1([])}
           historico={pagina1(todos)}
           sinZona={false}
         />,
@@ -673,26 +694,12 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
     }
   });
 
-  it("el contador de la cola que NO pagina sigue contando el conjunto entero (R42)", async () => {
-    // Paginar el histórico de estas pantallas no puede tocar el contador de SU cola, que sale
-    // de un array que sigue siendo el conjunto completo (la tanda J lo pasará al `total` del
-    // servidor). Es la contraparte de comportamiento de la guardia estática de T H.3: aquella
-    // vigila que el patrón no se cuele en un archivo paginado; esta, que el número sea el que
-    // el usuario espera mientras tanto.
-    const pendientes = [cierreAdmin(101), cierreAdmin(102), cierreAdmin(103)];
-    const todos = conjunto(cierreAdmin);
-    servirPaginas(paginado.cierresHistorico, todos);
-    envolver(
-      <CierresAdminModule
-        pendientes={pendientes}
-        historico={pagina1(todos)}
-        sinZona={false}
-      />,
-    );
-
-    const cola = await screen.findByRole("region", { name: "Pendientes de decisión" });
-    expect(within(cola).getByText("(3)")).toBeInTheDocument();
-  });
+  // El contador de la cola de estas pantallas se afirmaba AQUÍ mientras la cola no paginaba
+  // («sigue contando el conjunto entero», R42). La tanda J la paginó: ese número sale ahora
+  // del `total` del servidor y se afirma en
+  // `ColasPaginacion.test.tsx::el contador de cabecera muestra el total del servidor, no el
+  // tamaño de página (R42)`, que además lo comprueba en la ÚLTIMA página —donde un contador
+  // derivado del array se delataría—. No se pierde cobertura: la sustituta es más estricta.
 
   it("Q-I3: la vista tipo factura sigue a la tabla del histórico, no al conjunto entero", async () => {
     // Decisión de T I.2 sobre la previsualización de comprobantes de `CierresAdminModule`,
@@ -704,8 +711,13 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
     const user = userEvent.setup();
     const todos = conjunto(cierreAdmin);
     servirPaginas(paginado.cierresHistorico, todos);
+    servirPaginas(paginado.cierresPendientes, []);
     envolver(
-      <CierresAdminModule pendientes={[]} historico={pagina1(todos)} sinZona={false} />,
+      <CierresAdminModule
+        pendientes={pagina1([])}
+        historico={pagina1(todos)}
+        sinZona={false}
+      />,
     );
 
     const factura = await screen.findByRole("region", { name: "Vista tipo factura" });

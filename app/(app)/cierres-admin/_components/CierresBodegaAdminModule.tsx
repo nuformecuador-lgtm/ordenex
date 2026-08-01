@@ -2,16 +2,21 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
-import { filasLocales } from "@/components/shared/descarga-resultado";
+import { Pagination } from "@/components/shared/Pagination";
+import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
+import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import {
   verCierreBodegaDetalle,
   aprobarCierreBodega,
   rechazarCierreBodega,
+  listarCierresBodegaAdmin,
+  listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type {
   CierreBodegaDetalleCierre,
@@ -48,6 +53,29 @@ import {
 
 /** Nombre visible de la cola: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA_PENDIENTES = "Cierres de bodega pendientes";
+/** Nombre accesible del control de la COLA (R43). La pantalla monta varias tablas paginadas. */
+export const PAGINACION_BODEGA_PENDIENTES_LABEL =
+  "Paginación de los cierres de bodega pendientes";
+const ERROR_CARGA_PENDIENTES = "No se pudieron cargar los cierres de bodega pendientes.";
+
+// R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla.
+const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
+  (s) => s <= cierreBodegaConfig.MAX_PAGE_SIZE,
+);
+
+/**
+ * Feature 170 — FASE 2 (T J.2, R40/R41): una página de la cola. El alcance NO viaja en el
+ * input —lo resuelve el servicio desde la sesión, igual que el listado sin paginar (R44)—;
+ * aquí solo van el número de página y el tamaño.
+ */
+async function leerPendientes(
+  page: number,
+  pageSize: number,
+): Promise<CierresBodegaColaPagina> {
+  const res = await listarPendientesCierresBodegaPaginado({ page, pageSize });
+  if (res.status !== "ok") throw new Error(res.status);
+  return { items: res.items, total: res.total, pageSize: res.pageSize };
+}
 
 // Feature 40 (T8) — módulo cliente de "Cierres de bodega satélite" del maestro (lado
 // APROBAR/RECHAZAR, espejo de la 38 aplicado a CierreBodega). Recibe del Server
@@ -58,9 +86,23 @@ const TITULO_DESCARGA_PENDIENTES = "Cierres de bodega pendientes";
 // obligatorio R17) van por Server Action y refrescan la ruta. Money-safe (R13): los
 // montos son STRING; se renderizan con `money()` sin `parseFloat`/`Number`.
 
+/**
+ * Feature 170 — FASE 2 (T J.2, R40/R41): la PÁGINA de la cola, tal como la devuelve el
+ * servidor. `total` es el del CONJUNTO —de él sale el contador de cabecera (R42)— y nunca
+ * `items.length`.
+ */
+export interface CierresBodegaColaPagina {
+  items: CierreBodegaResumen[];
+  total: number;
+  pageSize: number;
+}
+
 export interface CierresBodegaAdminModuleProps {
-  /** Cierres de bodega en estado `solicitado` (cola de decisión, R15). */
-  pendientes: CierreBodegaResumen[];
+  /**
+   * Feature 170 — FASE 2 (T J.2, R40/R41): PÁGINA 1 de los cierres de bodega `solicitado`
+   * (cola de decisión, R15), ya resuelta server-side, más el `total` del conjunto.
+   */
+  pendientes: CierresBodegaColaPagina;
   /**
    * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 de los resueltos (R15), ya resuelta
    * server-side, más el `total` del conjunto. Deja de ser el array entero.
@@ -96,6 +138,34 @@ export function CierresBodegaAdminModule({
   // Motivo del rechazo (obligatorio, R17) + su error de validación.
   const [motivo, setMotivo] = useState("");
   const [motivoError, setMotivoError] = useState<string | null>(null);
+
+  // Feature 170 — FASE 2 (T J.2, R40/R42/R43): página visible de la COLA. El control vive
+  // AQUÍ, en el módulo, junto al contador (decisión de Q-I6): así la guardia de T H.3 ve esta
+  // pantalla como paginada y vigila de verdad que el número salga del `total` del servidor.
+  //
+  // R50: el estado de esta pantalla —el detalle abierto, el motivo tecleado— vive en los
+  // `useState` de arriba, que la página no toca. Cambiar de página no los reinicia.
+  const [pendientesPage, setPendientesPage] = useState(1);
+  const [pendientesPageSize, setPendientesPageSize] = useState(pendientes.pageSize);
+  const { data: pendientesData, error: pendientesError } = useSWR(
+    ["cierres-bodega:pendientes", pendientesPage, pendientesPageSize],
+    () => leerPendientes(pendientesPage, pendientesPageSize),
+    {
+      fallbackData:
+        pendientesPage === 1 && pendientesPageSize === pendientes.pageSize
+          ? pendientes
+          : undefined,
+    },
+  );
+  const colaPendientes: CierresBodegaColaPagina = pendientesData ?? {
+    items: [],
+    total: 0,
+    pageSize: pendientesPageSize,
+  };
+  // R44: el esqueleto sólo cuando NO hay nada que pintar. `isLoading` de SWR sigue en `true`
+  // mientras revalida aunque haya `fallbackData`, y usarlo tal cual haría que la página 1 —la
+  // que el Server Component ya resolvió— apareciera como esqueleto antes de enseñar sus filas.
+  const pendientesCargando = pendientesData === undefined;
 
   /** R11-R13: abre el detalle agregado (pide totales + gestiones + evidencias firmadas). */
   async function abrirDetalle(cierreBodegaId: string) {
@@ -217,28 +287,58 @@ export function CierresBodegaAdminModule({
         <h3 className="text-base font-semibold">
           Cierres de bodega pendientes{" "}
           <span className="text-sm font-normal text-muted-foreground">
-            ({pendientes.length})
+            {/* R42: el TOTAL del conjunto que devuelve el servidor, no el tamaño de la
+                página. Cada fila de esta cola ES el dinero agregado de una zona entera:
+                un contador que mienta aquí esconde bodegas esperando decisión. */}
+            ({colaPendientes.total})
           </span>
         </h3>
         <div className="overflow-x-auto">
           <DataTable
             columns={columnasPendientes(abrirDetalle)}
-            data={pendientes}
+            data={colaPendientes.items}
             rowKey="cierreBodegaId"
             ariaLabel="Cierres de bodega pendientes"
             emptyMessage="No hay cierres de bodega pendientes de decisión."
+            isLoading={pendientesCargando}
+            error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
             /**
-             * Feature 170 (T E.2, R1/R11/R26/R30/R32) — FAMILIA B: el array de props ES la
-             * cola entera, así que el archivo se proyecta de lo que la tabla ya pinta, en
-             * el mismo orden y sin releer nada del servidor.
+             * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue siendo
+             * la COLA COMPLETA. Se relee con el MISMO listado que la pantalla ya llamaba
+             * antes de paginar (`listarCierresBodegaAdmin`), que resuelve el alcance desde la
+             * sesión: descargar no amplía el alcance ni una fila (R14/R44).
              */
             descarga={{
               titulo: TITULO_DESCARGA_PENDIENTES,
               columnas: COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
-              obtenerFilas: () => filasLocales(pendientes, filaDescargaBodegaPendiente),
+              obtenerFilas: () =>
+                filasDelConjuntoCompleto(
+                  listarCierresBodegaAdmin().then((res) =>
+                    res.status === "ok"
+                      ? ({ status: "ok", items: res.pendientes } as const)
+                      : res,
+                  ),
+                  filaDescargaBodegaPendiente,
+                ),
             }}
           />
         </div>
+
+        <Pagination
+          page={pendientesPage}
+          pageSize={pendientesPageSize}
+          total={colaPendientes.total}
+          disabled={pendientesCargando}
+          showFirstLast
+          siblingCount={1}
+          ariaLabel={PAGINACION_BODEGA_PENDIENTES_LABEL}
+          onPageChange={setPendientesPage}
+          onPageSizeChange={(s) => {
+            setPendientesPageSize(s);
+            setPendientesPage(1);
+          }}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        />
       </section>
 
       {/* ---------- Histórico (solo lectura, R15) ----------
