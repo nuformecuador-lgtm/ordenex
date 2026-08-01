@@ -111,6 +111,30 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
     return { items: rows.map(toBodegaResumenRow), total };
   }
 
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): una pagina de la COLA de cierres de
+   * bodega pendientes + el total.
+   *
+   * COMPLEMENTO EXACTO de `findHistoricoPaginado`: la misma constante
+   * (`ESTADOS_COLA_SOLICITADO`), aqui con `in` —el espejo del `if` del servicio— y alli con
+   * `notIn` —el del `else`—. Leer las dos de la misma lista es lo que impide que un estado
+   * nuevo del enum acabe en las dos colas o en ninguna.
+   */
+  async findColaPaginada(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
+    const where = { estado: { in: [...ESTADOS_COLA_SOLICITADO] } };
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreBodega.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: BODEGA_RESUMEN_SELECT,
+      }),
+      this.prisma.cierreBodega.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toBodegaResumenRow), total };
+  }
+
   /** R11 (+69/R15): cierre de bodega + cada cierre_dia con sus gestiones desde el SNAPSHOT. */
   async findCierreBodegaConDetalle(id: string): Promise<{
     cierre: CierreBodegaResumenRow;

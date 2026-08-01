@@ -32,6 +32,14 @@ export type ListarCierresBodegaAdminServiceResult =
 export type ListarHistoricoCierresBodegaServiceResult =
   ListarPaginadoServiceResult<CierreBodegaResumen>;
 
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42): UNA PAGINA de la COLA de cierres de bodega
+ * PENDIENTES + el total del conjunto. De ese total sale el contador de cabecera que hoy dice
+ * `({pendientes.length})` (`CierresBodegaAdminModule.tsx:220`).
+ */
+export type ListarPendientesCierresBodegaServiceResult =
+  ListarPaginadoServiceResult<CierreBodegaResumen>;
+
 // R2/R11-R13/R19: detalle agregado de UN cierre de bodega (por cada cierre_dia, su
 // detalle por resultado reuso 37 + totales). `no_encontrada` = id inexistente (R19).
 // `forbidden` = rol != maestro (R2).
@@ -86,6 +94,18 @@ export interface ICierresBodegaAdminService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarHistoricoCierresBodegaServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): la COLA de cierres de bodega
+   * PENDIENTES, paginada en el servidor.
+   *
+   * MISMA guardia de rol, evaluada ANTES del repositorio (la cabecera de un cierre de bodega
+   * es dinero agregado de una zona entera), y MISMA constante de estados que el historico con
+   * el corte invertido. Rol distinto de acceso total -> forbidden, sin filas y sin total.
+   */
+  listarPendientesCierresBodegaPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesCierresBodegaServiceResult>;
   /**
    * R2/R11-R13/R19: detalle agregado de un cierre de bodega (cada cierre_dia con sus
    * gestiones por resultado, evidencias firmadas). Solo lectura. Inexistente ->

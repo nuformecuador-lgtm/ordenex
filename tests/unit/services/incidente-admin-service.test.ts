@@ -89,6 +89,7 @@ function build(opts: DobleOpts = {}) {
     }),
     // Feature 170 (T I.1): el historico paginado vive en su propia suite (*-paginado).
     findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
+    findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
     findByIdEnAlcance: vi.fn(async (id: string, alcance: AlcanceIncidente) => {
       void id;
       void alcance;

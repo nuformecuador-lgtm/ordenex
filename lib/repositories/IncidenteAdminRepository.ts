@@ -357,6 +357,36 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
     return { items: rows.map(toRow), total };
   }
 
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): una pagina de la COLA de incidentes
+   * pendientes de decision + el total.
+   *
+   * COMPLEMENTO EXACTO de `findHistoricoPaginado`: mismo `alcanceWhere` (por la zona de la
+   * ORDEN, R48), mismo `orderBy createdAt desc` y la MISMA `ESTADOS_COLA_SOLICITADO`, aqui con
+   * `in`. El `where` lo comparten pagina y conteo: sin eso, el contador de cabecera de un
+   * `adminSatelite` acabaria contando incidentes de zonas que no puede leer.
+   */
+  async findColaPaginada(
+    alcance: AlcanceIncidente,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<IncidenteAdminRow>> {
+    const where = {
+      ...alcanceWhere(alcance),
+      estado: { in: [...ESTADOS_COLA_SOLICITADO] },
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.ordenIncidente.findMany({
+        where,
+        orderBy: { createdAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: INCIDENTE_SELECT,
+      }),
+      this.prisma.ordenIncidente.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toRow), total };
+  }
+
   /** R48: un incidente SOLO si su orden casa el alcance; fuera de alcance / inexistente -> null. */
   async findByIdEnAlcance(
     incidenteId: string,

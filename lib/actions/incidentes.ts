@@ -20,12 +20,14 @@ import {
   aprobarIncidenteSchema,
   incidenteIdSchema,
   listarHistoricoIncidentesSchema,
+  listarPendientesIncidentesSchema,
   rechazarIncidenteSchema,
   reportarIncidenteSchema,
   retractarIncidenteSchema,
   type AprobarIncidenteResult,
   type ListarHistoricoIncidentesResult,
   type ListarIncidentesResult,
+  type ListarPendientesIncidentesResult,
   type RechazarIncidenteResult,
   type ReportarIncidenteResult,
   type RetractarIncidenteResult,
@@ -128,6 +130,25 @@ export async function listarHistoricoIncidentesPaginado(
     const data = listarHistoricoIncidentesSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarHistoricoIncidentesPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toIncidenteActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42/R44): UNA pagina de la COLA de incidentes
+ * PENDIENTES de decision del alcance + el total de la cabecera. La zona no viaja en el input:
+ * la resuelve el servicio desde el actor.
+ */
+export async function listarPendientesIncidentesPaginado(
+  input: unknown,
+  deps: IncidentesDeps = {},
+): Promise<ListarPendientesIncidentesResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarPendientesIncidentesSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPendientesIncidentesPaginado(data, actor);
   });
   return isAppErrorShape(r) ? toIncidenteActionError(r) : r;
 }

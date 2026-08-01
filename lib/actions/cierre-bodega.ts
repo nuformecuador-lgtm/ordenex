@@ -17,11 +17,14 @@ import {
   aprobarCierreBodegaSchema,
   rechazarCierreBodegaSchema,
   listarCierresBodegaPaginadoSchema,
+  listarConsolidablesSchema,
   type ListarConsolidacionResult,
+  type ListarConsolidablesResult,
   type SolicitarCierreBodegaResult,
   type ListarCierresBodegaAdminResult,
   type ListarCierresBodegaSolicitadosResult,
   type ListarHistoricoCierresBodegaResult,
+  type ListarPendientesCierresBodegaResult,
   type VerCierreBodegaDetalleResult,
   type AprobarCierreBodegaResult,
   type RechazarCierreBodegaResult,
@@ -150,6 +153,46 @@ export async function listarHistoricoCierresBodegaPaginado(
     const data = listarCierresBodegaPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
     return service.listarHistoricoCierresBodegaPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42/R44): UNA pagina de la COLA de cierres de bodega
+ * PENDIENTES + el total de la cabecera. Solo acceso total, y lo decide el servicio.
+ */
+export async function listarPendientesCierresBodegaPaginado(
+  input: unknown,
+  deps: CierreBodegaDeps = {},
+): Promise<ListarPendientesCierresBodegaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarCierresBodegaPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
+    return service.listarPendientesCierresBodegaPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42/R44/R49): UNA pagina de los cierre_dia
+ * CONSOLIDABLES de la zona + el total de la cabecera. La zona la resuelve el servicio desde el
+ * actor.
+ *
+ * NO devuelve los totales de dinero de esa pantalla: siguen llegando por `listarConsolidacion`,
+ * calculados sobre el conjunto COMPLETO (R49).
+ */
+export async function listarConsolidablesPaginado(
+  input: unknown,
+  deps: CierreBodegaDeps = {},
+): Promise<ListarConsolidablesResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarConsolidablesSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierreBodegaService ?? buildCierreBodegaService();
+    return service.listarConsolidablesPaginado(data, actor);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }

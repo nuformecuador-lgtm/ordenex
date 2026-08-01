@@ -92,6 +92,19 @@ export type ListarConsolidacionServiceResult =
 export type ListarCierresBodegaSolicitadosServiceResult =
   ListarPaginadoServiceResult<CierreBodegaResumen>;
 
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42/R49): UNA PAGINA de los cierre_dia CONSOLIDABLES de
+ * la zona + el total del conjunto. De ese total sale el contador de cabecera que hoy dice
+ * `({consolidables.length})` (`ConsolidacionBodegaModule.tsx:172`).
+ *
+ * NO trae totales de dinero, a proposito: los cinco agregados de esa pantalla siguen viniendo
+ * por `listarConsolidacion`, calculados sobre el conjunto COMPLETO (R49). Dos de ellos
+ * (`totalNetoAgregado`, `totalCentralDebeAgregado`) dependen del reparto del efectivo entre
+ * los pagos INDIVIDUALES ordenados: una pagina no los puede producir ni aproximar.
+ */
+export type ListarConsolidablesServiceResult =
+  ListarPaginadoServiceResult<CierreBodegaResumenLite>;
+
 // R1/R4/R6-R10: solicitud del cierre de bodega. Sin input de negocio (el actor y su
 // zona lo determinan todo). `conflict` cubre R6 (pendientes) / R7 (vacio) / R8
 // (duplicado); `validation_error` cubre R4 (sin zona).
@@ -124,6 +137,21 @@ export interface ICierreBodegaService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarCierresBodegaSolicitadosServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): los cierre_dia CONSOLIDABLES de la
+   * zona del actor, paginados en el servidor.
+   *
+   * MISMO acotamiento que `listarConsolidacion` (guard de rol + `findUsuarioZonaId`) y MISMO
+   * `where` en el repositorio, que se declara una sola vez. Sin zona -> pagina vacia.
+   *
+   * **No devuelve dinero agregado (R49):** los cinco totales de la pantalla los sigue
+   * calculando `listarConsolidacion` sobre el conjunto COMPLETO. Este metodo recorta lo que la
+   * tabla pinta, no lo que la bodega debe.
+   */
+  listarConsolidablesPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarConsolidablesServiceResult>;
   /**
    * R1/R4/R6-R10: crea la solicitud de cierre de bodega (`solicitado`) consolidando
    * TODOS los cierre_dia aprobados de la zona, con snapshot de totales agregados

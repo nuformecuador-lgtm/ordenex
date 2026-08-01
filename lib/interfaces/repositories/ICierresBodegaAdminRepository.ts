@@ -52,6 +52,15 @@ export interface ICierresBodegaAdminRepository {
    */
   findHistoricoPaginado(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
   /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): UNA PAGINA de la COLA de cierres de
+   * bodega PENDIENTES (`solicitado`) + el TOTAL del conjunto, que es el que la cabecera de la
+   * pantalla mostrara (R42).
+   *
+   * COMPLEMENTO EXACTO de `findHistoricoPaginado`: misma proyeccion, mismo orden y la MISMA
+   * constante de estados, con `in` en vez de `notIn`.
+   */
+  findColaPaginada(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
+  /**
    * R11: el cierre de bodega (cabecera + totales snapshot) + por cada cierre_dia
    * incluido (WHERE cierre_bodega_id=id) su cabecera y sus gestiones (WITH_DETALLE,
    * reuso 37, WHERE cierre_id=cierre_dia.id). `null` si el cierre de bodega no existe

@@ -153,6 +153,17 @@ export interface IIncidenteAdminRepository {
     alcance: AlcanceIncidente,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<IncidenteAdminRow>>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): UNA PAGINA de la COLA de incidentes
+   * PENDIENTES de decision del alcance + el TOTAL del conjunto (el de la cabecera, R42).
+   *
+   * COMPLEMENTO EXACTO de `findHistoricoPaginado`: mismo alcance por zona de la ORDEN, mismo
+   * orden y la MISMA constante de estados, con `in` en vez de `notIn`.
+   */
+  findColaPaginada(
+    alcance: AlcanceIncidente,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<IncidenteAdminRow>>;
   /** R48/R49 — un incidente SOLO si su orden casa el alcance en el WHERE; si no, `null`. */
   findByIdEnAlcance(
     incidenteId: string,

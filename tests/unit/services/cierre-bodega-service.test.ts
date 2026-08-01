@@ -48,6 +48,11 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
       items: [] as CierreBodegaResumenRow[],
       total: 0,
     })),
+    // Feature 170 (T J.1): la cola de consolidables paginada vive en `consolidables-paginado`.
+    findCierresDiaConsolidablesPaginado: vi.fn(async () => ({
+      items: [] as CierreDiaConsolidableRow[],
+      total: 0,
+    })),
     ...overrides,
   };
 }

@@ -65,6 +65,14 @@ export type ListarIncidentesServiceResult =
 export type ListarHistoricoIncidentesServiceResult =
   ListarPaginadoServiceResult<IncidenteAdminDTO>;
 
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42): UNA PAGINA de la COLA de incidentes PENDIENTES de
+ * decision del alcance + el total del conjunto. De ese total sale el contador de cabecera que
+ * hoy dice `({pendientes.length})` (`IncidentesAdminModule.tsx:308`).
+ */
+export type ListarPendientesIncidentesServiceResult =
+  ListarPaginadoServiceResult<IncidenteAdminDTO>;
+
 export type VerIncidenteServiceResult =
   | { status: "ok"; incidente: IncidenteAdminDTO }
   | { status: "forbidden" }
@@ -108,6 +116,20 @@ export interface IIncidenteAdminService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarHistoricoIncidentesServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): la COLA de incidentes PENDIENTES de
+   * decision del alcance, paginada en el servidor.
+   *
+   * MISMO `resolveAlcance` (rol + zona de la ORDEN) y MISMA constante de estados que el
+   * historico, con el corte invertido: la union de las dos paginas es exactamente lo que
+   * devuelve `listarIncidentes` (R44). Las evidencias de la pagina se firman en UNA sola
+   * llamada (R46). Rol invalido -> forbidden; `adminSatelite` sin zona -> pagina vacia, sin
+   * base ni storage.
+   */
+  listarPendientesIncidentesPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesIncidentesServiceResult>;
   /** R46/R48: detalle con las evidencias FIRMADAS; fuera de alcance -> `no_encontrada`. */
   verIncidente(incidenteId: string, actor: Actor): Promise<VerIncidenteServiceResult>;
   /** R41-R48: reporta el incidente y transiciona la orden, en una unica transaccion. */
