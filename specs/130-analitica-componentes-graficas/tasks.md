@@ -61,27 +61,31 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
 
 ## T1 — Dependencia y línea base (después de T0)
 
-- [ ] **T1.1 — Medir la línea base de bundle ANTES de instalar recharts.**
+- [x] **T1.1 — Medir la línea base de bundle ANTES de instalar recharts.**
   Correr `pnpm build` y guardar la tabla por ruta (tamaño + First Load JS), con especial atención
   a `/analitica` y `/mis-asignaciones`.
+  **Corregido al ejecutar:** `pnpm build` encadena `migrate-deploy` contra una base real, así que
+  se midió con `pnpm exec next build --webpack`. Y Next 16 ya no imprime las columnas de tamaño /
+  First Load JS, así que la medición se hace sobre los chunks reales de `.next/static/chunks`. Las
+  tres tablas (base, después, y con sonda) están en `progress/impl_130.md §3.2`.
   **Hecho:** la tabla está pegada en `progress/impl_130.md` bajo «línea base», con el SHA del
   commit medido. *(Va primero: después de instalar ya no se puede medir el antes.)*
   **Depende de:** T0.
 
-- [ ] **T1.2 — Instalar `recharts` (D1).**
+- [x] **T1.2 — Instalar `recharts` (D1).**
   `pnpm add recharts` (el repo es pnpm, nunca npm). Verificar que `pnpm-lock.yaml` queda coherente.
   **Hecho:** `package.json` lista `recharts` en `dependencies`; `pnpm install --frozen-lockfile`
   pasa; `pnpm typecheck` sigue en verde.
   **Depende de:** T1.1.
 
-- [ ] **T1.3 [P] — Sincronizar la base con `dev`.**
+- [x] **T1.3 [P] — Sincronizar la base con `dev`.**
   El worktree está en `dev` @ `71778fa3` y **no tiene** la 129 ni la 135 (D2/D3). Sin ellas, R3 no
   compila. **Lo hace el leader**, no el implementer.
   **Hecho:** `lib/analytics/types.ts` y `app/(app)/analitica/_components/AnaliticaShell.tsx`
   existen en el árbol de trabajo y `pnpm test` está en el mismo estado que `dev`.
   **Depende de:** T0. **Bloquea:** T2.1, T3.*, T4.*.
 
-- [ ] **T1.4 [P] — Reconfirmar I19–I28 sobre el árbol de trabajo ya sincronizado.**
+- [x] **T1.4 [P] — Reconfirmar I19–I28 sobre el árbol de trabajo ya sincronizado.**
   Esos hechos están citados de `origin/dev` y son reproducibles con `git show origin/dev:<ruta>`;
   tras T1.3 se comprueban una vez más contra el árbol real (props del shell, `MetricaUnidad`,
   `RANGO_TOPE_DIAS`, `ROLES_ANALITICA`), porque `dev` avanza mientras esta feature vive.
@@ -101,13 +105,13 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
 
 ## T2 — Núcleo puro (sin React, sin DOM)
 
-- [ ] **T2.1 — `components/private/analytics/tipos.ts`.**
+- [x] **T2.1 — `components/private/analytics/tipos.ts`.**
   `PuntoDato`, `SerieDato`, `EstadoVisual`, `GraficaProps`, `KpiCardProps`, con
   `import type { MetricaUnidad } from "@/lib/analytics/types"` (R3). Sin runtime, sin `index.ts`.
   **Hecho:** `pnpm typecheck` pasa; el archivo no contiene ningún `import` que no sea `import type`.
   **Depende de:** T1.3, T1.4.
 
-- [ ] **T2.2 [P] — `paleta.ts` + su test** (R16–R19, R30).
+- [x] **T2.2 [P] — `paleta.ts` + su test** (R16–R19, R30).
   `TOKENS_SERIE`, `tokenDeSerie(indice)`, `varDeSerie(indice)`. **No cicla** (Q3): el índice válido
   es `[0, MAX_SERIES)` y la asignación es inyectiva.
   **Hecho:** `tests/unit/components/analytics-paleta.test.ts` verde, incluidos «cinco índices →
@@ -115,7 +119,7 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
   `app/globals.css` y afirma que los tokens existen en `:root` **y** en `.dark`.
   **Depende de:** T2.1.
 
-- [ ] **T2.4 [P] — `topes.ts` + su test** (R30–R33, Q3 y Q6).
+- [x] **T2.4 [P] — `topes.ts` + su test** (R30–R33, Q3 y Q6).
   `MAX_SERIES = 5`, `MAX_PUNTOS_SERIE = 62`, `SeriesExcedidasError`, `PuntosExcedidosError`,
   y las dos funciones puras de recorte: series → conserva las **primeras** 5 en orden; puntos →
   conserva los **últimos** 62. Fuera de `production` lanzan; en `production` recortan y devuelven
@@ -125,7 +129,7 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
   número de `design.md §3.4`. Sin DOM: el archivo no importa `@testing-library/react`.
   **Depende de:** T2.1.
 
-- [ ] **T2.3 [P] — `formato.ts` + su test** (R20, R21, y el total de R23).
+- [x] **T2.3 [P] — `formato.ts` + su test** (R20, R21, y el total de R23).
   `formatearValor(valor, unidad)` para las cuatro unidades, con `lib/config/moneda.ts` para
   `moneda` y `SIN_MONTO` para `null`. Sin símbolo literal en el paquete (R13).
   **Hecho:** `tests/unit/components/analytics-formato.test.ts` verde; el archivo de test no importa
@@ -136,7 +140,7 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
 
 ## T3 — Componentes
 
-- [ ] **T3.1 — `SerieTextual.tsx`** (R10, R11, R31, R33).
+- [x] **T3.1 — `SerieTextual.tsx`** (R10, R11, R31, R33).
   Alternativa textual compartida: una entrada por punto (categoría, serie, valor formateado), ya
   pasada por los recortes de `topes.ts`, más el **aviso textual** de recorte cuando lo haya.
   **No importa recharts.** Es la pieza de la que dependen casi todas las aserciones (§6.2).
@@ -145,14 +149,14 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
   «se muestran X de Y» cuando ha recortado.
   **Depende de:** T2.2, T2.3, T2.4.
 
-- [ ] **T3.2 — Envoltura de estados compartida** (R5–R8, R25).
+- [x] **T3.2 — Envoltura de estados compartida** (R5–R8, R25).
   Precedencia error > carga > vacío > datos, espejo de `DataTable.tsx:316-425`. El vacío usa
   `EmptyState` con texto de *métrica sin datos en el rango*, nunca el del shell (R25).
   **Hecho:** los tres estados renderizan lo suyo y **nada más**; con error y carga a la vez, gana
   el error.
   **Depende de:** T3.1.
 
-- [ ] **T3.3 — `KpiCard.tsx`** (R12–R15).
+- [x] **T3.3 — `KpiCard.tsx`** (R12–R15).
   Sin recharts y **sin animación**: formatea con `formato.ts`. Q5 decidió *arreglar* el compartido,
   **no** montarlo aquí (`design.md §7.2`); animar exigiría además enseñar a `KpiValorAnimado` a
   respetar `prefers-reduced-motion` (R28), y eso no está pedido.
@@ -160,7 +164,7 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
   el signo de la variación anunciado por texto; el archivo no importa `react-countup`.
   **Depende de:** T3.2.
 
-- [ ] **T3.4 [P] — `lienzo/BarrasLienzo.tsx`, `LineasLienzo.tsx`, `DonutLienzo.tsx`.**
+- [x] **T3.4 [P] — `lienzo/BarrasLienzo.tsx`, `LineasLienzo.tsx`, `DonutLienzo.tsx`.**
   Los **únicos** archivos que importan `recharts`. Sin lógica de dominio: reciben series y colores
   ya resueltos por `paleta.ts` (R16). Ancho fluido, sin píxeles fijos (R24). Ningún `useState` +
   `useEffect` sincronizando con recharts (R29; precedente `components/ui/carousel.tsx:42-80`).
@@ -170,14 +174,14 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
   sin `any`; `components/ui/chart.tsx` sigue sin existir.
   **Depende de:** T3.2.
 
-- [ ] **T3.5 [P] — `GraficaBarras.tsx`, `GraficaLineas.tsx`, `GraficaDonut.tsx`.**
+- [x] **T3.5 [P] — `GraficaBarras.tsx`, `GraficaLineas.tsx`, `GraficaDonut.tsx`.**
   Estados + título accesible (R9) + `SerieTextual` + montaje **diferido** del lienzo (R27, vía
   `next/dynamic`/`React.lazy`). El componente renderiza sin que el lienzo haya cargado.
   **Hecho:** con el chunk del lienzo sin resolver, el título y la alternativa textual ya están en
   el DOM.
   **Depende de:** T3.4.
 
-- [ ] **T3.6 — `TablaResumen.tsx`** (R22, R23, R38).
+- [x] **T3.6 — `TablaResumen.tsx`** (R22, R23, R38).
   **Q4 = (a): entra en esta feature.** Sobre `DataTable`, con formato por `MetricaUnidad` tomado de
   `formato.ts` y fila de totales calculada por función pura.
   **Hecho:** no existe ningún `<table>` propio en el archivo; la fila de totales es distinguible; y
@@ -189,32 +193,36 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
 
 ## T4 — Tests de componente
 
-- [ ] **T4.1 — `tests/components/AnalyticsGraficas.test.tsx`** (R5–R11, R28).
+- [x] **T4.1 — `tests/components/AnalyticsGraficas.test.tsx`** (R5–R11, R28).
   `// @vitest-environment jsdom` en la primera línea (`vitest.config.ts:10`). Mock **local** de
   recharts (`vi.mock`), nunca global (§6.3). Estados con `it.each` sobre las tres gráficas.
   **Hecho:** verde, y ninguna aserción depende de anchos, coordenadas ni de cuántos `<rect>` pintó
   recharts (§6.2.3).
   **Depende de:** T3.5.
 
-- [ ] **T4.2 [P] — `tests/components/AnalyticsKpiCard.test.tsx`** y, si aplica,
+- [x] **T4.2 [P] — `tests/components/AnalyticsKpiCard.test.tsx`** y, si aplica,
   `AnalyticsTablaResumen.test.tsx`.
   **Hecho:** verdes; el de la tabla afirma que hereda skeleton/vacío/error de `DataTable`.
   **Depende de:** T3.3, T3.6.
 
-- [ ] **T4.3 — Si hiciera falta tocar `tests/setup/jest-dom.ts`: medir la suite antes y después.**
+- [x] **T4.3 — Si hiciera falta tocar `tests/setup/jest-dom.ts`: medir la suite antes y después.**
+  **NO APLICÓ: el archivo global no se tocó.** El doble de los lienzos es `vi.mock` LOCAL en
+  `AnalyticsGraficas.test.tsx` y en `AnalyticsEncajeShell.test.tsx`, que era la preferencia dura del
+  design (§6.3). El mock global de `react-countup` siguió sirviendo sin cambios para el arreglo de
+  T7, tal como preveía §7.2.4.
   Ese archivo es global (§6.3). Precedente: la 163 con `IntersectionObserver` (`:62-82`).
   **Hecho:** conteo de tests pasados/fallados antes y después, pegado en `progress/impl_130.md`,
   con delta **0** en tests ajenos. Si el delta no es 0, se revierte y se vuelve al mock local.
   **Depende de:** T4.1.
 
-- [ ] **T4.4 — `tests/components/AnalyticsEncajeShell.test.tsx`** (R24, R25).
+- [x] **T4.4 — `tests/components/AnalyticsEncajeShell.test.tsx`** (R24, R25).
   Renderiza cada componente dentro de una `<section className="flex flex-col gap-4">`, que es el
   contenedor real del slot `operativo` (`design.md §8.1`).
   **Hecho:** ningún componente fija ancho ni alto en píxeles; el texto del vacío no repite el del
   shell.
   **Depende de:** T3.5.
 
-- [ ] **T4.5 — Comprobación de mutación de la única aserción sobre el lienzo** (R41).
+- [x] **T4.5 — Comprobación de mutación de la única aserción sobre el lienzo** (R41).
   El stub de `ResizeObserver` (`tests/setup/jest-dom.ts:45-55`) tiene `observe(){}` vacío, así que
   `ResponsiveContainer` renderiza **vacío** en vez de fallar: una aserción sobre el SVG puede estar
   verde sin medir nada (`design.md §6.2.1`). Se quita a mano el montaje del lienzo en
@@ -223,7 +231,7 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
   roja. Si la mutación no lo pone rojo, la aserción se reescribe: no vale como evidencia.
   **Depende de:** T4.1.
 
-- [ ] **T4.6 [P] — `tests/components/AnalyticsGraficas.test.tsx`: tope de series y de puntos**
+- [x] **T4.6 [P] — `tests/components/AnalyticsGraficas.test.tsx`: tope de series y de puntos**
   (R10 acotado, R31, R33).
   Con 8 series y con 400 puntos, en `NODE_ENV` de producción simulado: la alternativa textual no
   pasa de `MAX_SERIES × MAX_PUNTOS_SERIE` entradas y aparece el aviso «X de Y».
@@ -234,7 +242,7 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
 
 ## T5 — Guards y coste
 
-- [ ] **T5.1 — `tests/unit/components/analytics-paquete-guard.test.ts`** (R1–R4, R26, R29, R34,
+- [x] **T5.1 — `tests/unit/components/analytics-paquete-guard.test.ts`** (R1–R4, R26, R29, R34,
   R39, R40, R41).
   Censo estático sobre `components/private/analytics/**`: sin `fetch(`, sin `'use server'`, sin
   `next/headers`/`swr`/`lib/actions`/`lib/db`/`@prisma/client`; sin `@/lib/analytics/metrics`; sin
@@ -248,7 +256,7 @@ requisitos nuevos son **R30–R41** y la trazabilidad los cubre. La feature pasa
   `docs/verification.md:21-24`).
   **Depende de:** T3.5.
 
-- [ ] **T5.2 — Medir el bundle DESPUÉS y comparar** (R27).
+- [x] **T5.2 — Medir el bundle DESPUÉS y comparar** (R27).
   `pnpm build`; tabla por ruta frente a la línea base de T1.1.
   **Hecho:** en `progress/impl_130.md` están las dos tablas y una afirmación explícita de que el
   *First Load JS* de `/mis-asignaciones` **no cambia** y de que recharts viaja en un chunk propio,
@@ -265,7 +273,7 @@ solo, sin arrastrar el resto de la 130. **Un commit por task**, y ninguno mezcla
 Todo el bloque es **`[P]` respecto a T2–T5**: sólo depende de T1.3 y no toca ningún archivo del
 paquete de analítica.
 
-- [ ] **T7.1 — Test del comportamiento ACTUAL, antes de tocar nada** (R37).
+- [x] **T7.1 — Test del comportamiento ACTUAL, antes de tocar nada** (R37).
   `tests/components/KpiValorAnimado.test.tsx` (`// @vitest-environment jsdom` en la primera línea).
   Cubre: entero sin moneda, valor con `moneda`, `null`/no numérico. Hoy **no existe ningún** test de
   este componente (I30): su cobertura es indirecta.
@@ -273,13 +281,13 @@ paquete de analítica.
   del cambio no vale: certificaría el cambio, no lo que había.
   **Depende de:** T1.3.
 
-- [ ] **T7.2 — Medir la suite ANTES del cambio.**
+- [x] **T7.2 — Medir la suite ANTES del cambio.**
   `pnpm test` completo. Se anotan **archivos** y **tests** pasados/fallados, no sólo «verde»: una
   corrida con *unhandled errors* de workers omite archivos enteros y parece casi verde.
   **Hecho:** el conteo, con SHA, está en `progress/impl_130.md` bajo «baseline T7».
   **Depende de:** T7.1.
 
-- [ ] **T7.3 — Aplicar el arreglo y comparar** (R35, R36).
+- [x] **T7.3 — Aplicar el arreglo y comparar** (R35, R36).
   Quitar `const SIMBOLO = "₡"` (`components/shared/KpiValorAnimado.tsx:14`) y formatear con
   `lib/config/moneda.ts`. **No se toca `tests/setup/jest-dom.ts`**: el mock de `react-countup`
   (`:16-24`) llama a `formattingFn(end)` y sigue sirviendo sin cambios.
@@ -290,7 +298,7 @@ paquete de analítica.
   que encajen.
   **Depende de:** T7.2.
 
-- [ ] **T7.4 — Dejar escrita la limitación que el arreglo NO resuelve (H3), con su encuadre.**
+- [x] **T7.4 — Dejar escrita la limitación que el arreglo NO resuelve (H3), con su encuadre.**
   `loadMonedaConfig` lee `process.env[name]` con clave dinámica, así que en cliente la configuración
   cae al *default* `es-CR`/`CRC`. **No es una frontera que abra esta feature:** cinco componentes
   `"use client"` ya consumen `formatMonto` en producción (I33 corregido); `KpiValorAnimado` es el
@@ -305,20 +313,20 @@ paquete de analítica.
 
 ## T8 — Cierre
 
-- [ ] **T8.1 — Mapa `R<n> → test` completo en `progress/impl_130.md`.**
+- [x] **T8.1 — Mapa `R<n> → test` completo en `progress/impl_130.md`.**
   Las **41** filas de `requirements.md > Trazabilidad`, con el nombre real del test. Tres tienen
   evidencia que no es una aserción de vitest y **debe decirse cuál es**: R27 → medición de T5.2;
   R36 → delta 0 de suite de T7.3; R41 → comprobación de mutación de T4.5.
   **Hecho:** ningún `R<n>` sin test o sin evidencia (`CHECKPOINTS.md:11-13`).
   **Depende de:** T4.*, T5.*, T7.*.
 
-- [ ] **T8.2 — `./init.sh` en verde.**
+- [x] **T8.2 — `./init.sh` en verde.**
   Con `pnpm typecheck`, `pnpm lint` y `pnpm test` incluidos (`docs/verification.md:6-13`).
   **Hecho:** salida real pegada en `progress/impl_130.md`. Ojo con el baseline: mídelo en este
   árbol, no cites uno heredado.
   **Depende de:** T8.1.
 
-- [ ] **T8.3 — Marcar todas las tasks `[x]`, entrada en `progress/history.md`, feature a
+- [x] **T8.3 — Marcar todas las tasks `[x]`, entrada en `progress/history.md`, feature a
   `done` sólo tras `progress/review_130.md` con veredicto OK** (`CHECKPOINTS.md:43-46`).
   **Hecho:** los tres artefactos existen.
   **Depende de:** T8.2.
