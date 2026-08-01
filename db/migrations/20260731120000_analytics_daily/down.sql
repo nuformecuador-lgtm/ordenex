@@ -1,0 +1,18 @@
+-- DOWN (R42): revierte EXACTAMENTE lo que hace `migration.sql`, ni mas ni menos.
+-- Una sola sentencia basta porque la migracion crea UNA sola tabla y todo lo demas cuelga
+-- de ella: `DROP TABLE` arrastra la PK (`analytics_daily_pkey`), los tres CHECK
+-- (`analytics_daily_pio_lte_entregas`, `analytics_daily_ciclo_coherente`,
+-- `analytics_daily_medidas_no_negativas`), los cuatro indices (el unico del grano con
+-- NULLS NOT DISTINCT y los tres de recorte), las cuatro FK (zona, usuario x2,
+-- order_status), los diez comentarios de `pg_description` y la RLS habilitada.
+--
+-- No hay `DROP TYPE`: la migracion es puramente ADITIVA (R41) y NO crea ningun enum. El
+-- unico enum que la tabla usa, `gestion_causa_devolucion`, es PREEXISTENTE (viene de
+-- `20260715160000_gestion_orden_causa_devolucion`) y lo usa tambien `gestion_orden`;
+-- retirarlo aqui romperia una tabla ajena. Por la misma razon el DOWN no toca ninguna
+-- tabla preexistente: al revertir, el esquema queda identico al de partida.
+--
+-- La tabla es DERIVADA y reconstruible por el backfill (feature 125), asi que el DROP no
+-- destruye ningun dato irrecuperable. Ademas, mientras dure la feature 123 nace y se queda
+-- VACIA (R44): no existe todavia ningun productor ni consumidor.
+DROP TABLE IF EXISTS "analytics_daily";
