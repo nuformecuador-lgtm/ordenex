@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import {
   IncidentesAdminModule,
@@ -16,6 +17,7 @@ import {
   retractarIncidente,
 } from "@/lib/actions/incidentes";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
 // Feature 158 (T2.9 — R51) — **QUIEN REPORTA NO APRUEBA, también en la interfaz.**
 //
@@ -34,6 +36,14 @@ vi.mock("@/lib/actions/incidentes", () => ({
   retractarIncidente: vi.fn(),
   listarIncidentes: vi.fn(),
   reportarIncidente: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
+  listarHistoricoIncidentesPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -87,7 +97,15 @@ async function abrir(esPropio: boolean) {
   const user = userEvent.setup();
   const i = incidente(esPropio);
   verMock.mockResolvedValue({ status: "ok", incidente: i });
-  render(<IncidentesAdminModule pendientes={[i]} historico={[]} sinZona={false} />);
+  render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <IncidentesAdminModule
+        pendientes={[i]}
+        historico={paginaInicial<IncidenteAdminDTO>([])}
+        sinZona={false}
+      />
+    </SWRConfig>,
+  );
   await user.click(
     screen.getByRole("button", { name: "Ver o decidir el incidente de la orden REM-001" }),
   );

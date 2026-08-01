@@ -41,7 +41,11 @@ const ARBOL_UI = "app";
  * (allí estaba el apartado de órdenes, aquí el desglose por tienda). Ver la cabecera de
  * `censo-tablas.ts`.
  */
-const TOTAL_ARCHIVOS_CON_DATATABLE = 25;
+// Feature 170 — FASE 2 (T I.2): 25 → 29 archivos, MISMAS 30 instancias. Cuatro históricos se
+// llevaron su `<DataTable>` a un componente propio al pasar a paginación server-side (ver la
+// cabecera de `censo-tablas.ts`). Que las instancias no se muevan es justo lo que dice que fue
+// una mudanza y no una tabla nueva ni una perdida por el camino.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 29;
 const TOTAL_INSTANCIAS_DATATABLE = 30;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {

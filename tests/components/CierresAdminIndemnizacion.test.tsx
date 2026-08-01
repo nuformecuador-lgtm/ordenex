@@ -2,9 +2,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import { verCierreDetalle, aprobarCierre } from "@/lib/actions/cierres-admin";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
@@ -34,6 +36,14 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   rechazarCierre: vi.fn(),
   listarCierresAdmin: vi.fn(),
   forzarSolicitudVencido: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
+  listarHistoricoCierresAdminPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -174,7 +184,15 @@ const INC_2 = makeGestion({
 
 /** Abre el detalle del cierre `c1` y pulsa "Aprobar". */
 async function pulsarAprobar(user: ReturnType<typeof userEvent.setup>) {
-  render(<CierresAdminModule pendientes={[makeResumen({ cierreId: "c1" })]} historico={[]} sinZona={false} />);
+  render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <CierresAdminModule
+        pendientes={[makeResumen({ cierreId: "c1" })]}
+        historico={paginaInicial<CierreAdminResumen>([])}
+        sinZona={false}
+      />
+    </SWRConfig>,
+  );
   await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
   const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
   await user.click(within(dialog).getByRole("button", { name: "Aprobar" }));
