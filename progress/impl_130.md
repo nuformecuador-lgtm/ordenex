@@ -301,7 +301,26 @@ posteriores, ambos pasan. Son flakes por saturación, no regresiones.
 
 Medido en ESTE árbol, no heredado de ninguna bitácora.
 
-`./init.sh` corre `typecheck`, `lint` y `test` (`docs/verification.md`). Salida real:
+`./init.sh` corre `typecheck`, `lint` y `test` (`docs/verification.md`). Se corrió **dos veces**, y
+se pegan las dos: la primera con 2 rojos y la segunda entera en verde, con **el mismo total de
+archivos**. Esa es justamente la prueba de que los 2 rojos eran flakes por saturación y no
+regresiones — y esconder la primera corrida sería el tipo de limpieza que oculta información.
+
+**Corrida 2 — `EXIT=0`, todo verde:**
+
+```
+✓ node v22.13.1
+✓ dependencias presentes
+✓ typecheck paso
+✓ lint paso
+ Test Files  674 passed (674)
+      Tests  8136 passed (8136)
+✓ test paso
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+```
+
+**Corrida 1 — salida real, con los 2 flakes:**
 
 ```
 == Arnes SDD :: init ==
@@ -328,7 +347,8 @@ Medido en ESTE árbol, no heredado de ninguna bitácora.
   tests: coincide exactamente con el de T7.2 (674), así que **no hay archivos omitidos por
   *unhandled errors* de workers** y el conteo es creíble.
 
-**Los 2 rojos son flakes por saturación, no regresiones.** Ninguno de los dos archivos menciona
+**Los 2 rojos de la corrida 1 son flakes por saturación, no regresiones** — y la corrida 2, verde
+entera con el mismo total de archivos, lo confirma. Ninguno de los dos archivos menciona
 `KpiValorAnimado` ni `private/analytics` (comprobado con `grep -c`: 0 y 0). Ambos son tests de
 temporización que tardaron 15 s y 79 s bajo la carga de la suite completa, y **pasan en aislado**:
 
