@@ -12,7 +12,7 @@
 
 ## T0 — Verificación previa (bloquea T1)
 
-- [ ] **T0.1 — Resolver el conflicto de calendario con la 170 (P5).** La Tanda I de la 170
+- [x] **T0.1 — Resolver el conflicto de calendario con la 170 (P5).** RESUELTO por el leader el 2026-07-31: la FASE 1 de la 170 se mergeo (PR #242) antes de que esta feature tocara codigo, asi que la interseccion de archivos con su Tanda I no llego a existir. La FASE 2 de la 170, cuando arranque, parte de una base que ya incluye esta pantalla. La Tanda I de la 170
   pagina server-side «Saldos de tiendas» y toca `SaldosTiendasTable.tsx`,
   `wallet/tiendas/page.tsx`, `lib/actions/wallet-tienda.ts`, `lib/types/wallet-tienda.ts`,
   `WalletTiendaService` y `WalletTiendaMovimientoRepository` — los mismos que esta feature.
