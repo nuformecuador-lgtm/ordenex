@@ -20,7 +20,6 @@ import type {
 import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
 import {
   money,
-  ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
   DetalleSecciones,
@@ -39,15 +38,16 @@ import {
   VisorEvidencia,
 } from "./cierre-detalle-shared";
 import {
+  CierresBodegaResueltosTabla,
+  type CierresBodegaResueltosPagina,
+} from "./CierresBodegaResueltosTabla";
+import {
   COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
-  COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
   filaDescargaBodegaPendiente,
-  filaDescargaBodegaResuelto,
 } from "./cierres-bodega-descarga-columnas";
 
-/** Nombres visibles de las dos tablas: hoja, base del archivo y nombre del control (R12/R13). */
+/** Nombre visible de la cola: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA_PENDIENTES = "Cierres de bodega pendientes";
-const TITULO_DESCARGA_RESUELTOS = "Cierres de bodega resueltos";
 
 // Feature 40 (T8) — módulo cliente de "Cierres de bodega satélite" del maestro (lado
 // APROBAR/RECHAZAR, espejo de la 38 aplicado a CierreBodega). Recibe del Server
@@ -61,8 +61,11 @@ const TITULO_DESCARGA_RESUELTOS = "Cierres de bodega resueltos";
 export interface CierresBodegaAdminModuleProps {
   /** Cierres de bodega en estado `solicitado` (cola de decisión, R15). */
   pendientes: CierreBodegaResumen[];
-  /** Cierres de bodega resueltos (`aprobado`/`rechazado`), solo lectura (R15). */
-  historico: CierreBodegaResumen[];
+  /**
+   * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 de los resueltos (R15), ya resuelta
+   * server-side, más el `total` del conjunto. Deja de ser el array entero.
+   */
+  historico: CierresBodegaResueltosPagina;
 }
 
 /** Detalle abierto: la cabecera del cierre de bodega + sus cierre_dia incluidos. */
@@ -238,29 +241,10 @@ export function CierresBodegaAdminModule({
         </div>
       </section>
 
-      {/* ---------- Histórico (solo lectura, R15) ---------- */}
-      <section
-        aria-label="Cierres de bodega resueltos"
-        className="flex flex-col gap-3"
-      >
-        <h3 className="text-base font-semibold">Cierres de bodega resueltos</h3>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasHistorico(abrirDetalle)}
-            data={historico}
-            rowKey="cierreBodegaId"
-            ariaLabel="Cierres de bodega resueltos"
-            emptyMessage="Aún no hay cierres de bodega resueltos."
-            // Feature 170 (T E.2, R1/R11/R26/R30/R32): mismo patrón, con SUS columnas
-            // (estado, fecha resuelta y motivo, que la cola no tiene).
-            descarga={{
-              titulo: TITULO_DESCARGA_RESUELTOS,
-              columnas: COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
-              obtenerFilas: () => filasLocales(historico, filaDescargaBodegaResuelto),
-            }}
-          />
-        </div>
-      </section>
+      {/* ---------- Histórico (solo lectura, R15) ----------
+          Feature 170 — FASE 2 (T I.2): la tabla, su control de paginación y su descarga viven
+          en su propio componente (ver la cabecera de `CierresBodegaResueltosTabla`). */}
+      <CierresBodegaResueltosTabla initialData={historico} onAbrir={abrirDetalle} />
 
       {/* ---------- Detalle agregado del cierre de bodega (R11-R13) ---------- */}
       <Modal
@@ -527,60 +511,6 @@ function columnasPendientes(
           onClick={() => abrir(c.cierreBodegaId)}
         >
           Ver / decidir
-        </Button>
-      ),
-    },
-  ];
-}
-
-// --- Columnas del histórico (solo lectura, R15) ---
-function columnasHistorico(
-  abrir: (cierreBodegaId: string) => void,
-): Column<CierreBodegaResumen>[] {
-  return [
-    { id: "estado", value: "Estado", render: (c) => ESTADO_LABEL[c.estado] },
-    { id: "zona", value: "Zona", render: (c) => c.zonaNombre },
-    {
-      id: "solicitadoPor",
-      value: "Solicitó",
-      render: (c) => c.solicitadoPorNombre,
-    },
-    {
-      id: "resueltoAt",
-      value: "Fecha resuelta",
-      render: (c) => c.resueltoAt?.slice(0, 10) ?? "—",
-    },
-    {
-      id: "general",
-      value: "Total general",
-      render: (c) => money(c.totales.general),
-    },
-    {
-      id: "pagoMensajero",
-      value: PAGO_MENSAJERO_COL,
-      render: (c) => money(c.totalPagoMensajero),
-    },
-    {
-      id: "ingresoBodegaRechazos",
-      value: INGRESO_BODEGA_RECHAZOS_COL,
-      render: (c) => money(c.totalIngresoBodegaRechazos),
-    },
-    {
-      id: "motivoRechazo",
-      value: "Motivo",
-      render: (c) => c.motivoRechazo ?? "—",
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (c) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => abrir(c.cierreBodegaId)}
-        >
-          Ver
         </Button>
       ),
     },

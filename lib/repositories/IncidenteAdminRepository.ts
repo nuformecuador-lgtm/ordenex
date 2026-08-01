@@ -13,6 +13,8 @@ import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/
 import type { IWalletIndemnizacionIncidenteFeedService } from "@/lib/interfaces/services/IWalletIndemnizacionIncidenteFeedService";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
+import { ESTADOS_COLA_SOLICITADO } from "@/lib/utils/colas-cierre";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 158 (T1.26/T1.27, camino del ADMIN) — repositorio de `orden_incidente`. SOLO queries
 // Prisma; la autorizacion por rol, R51 (quien reporta no aprueba) y la derivacion del destino de
@@ -41,6 +43,19 @@ class OrdenNoAplicableError extends Error {
 /** Guardia de zona en el WHERE (R48). `null` = acceso total, sin restriccion. */
 function zonaWhere(alcance: AlcanceIncidente): { zonaId?: string } {
   return alcance.zonaId === null ? {} : { zonaId: alcance.zonaId };
+}
+
+/**
+ * R48 — la MISMA guardia, vista desde `orden_incidente`: el alcance se aplica por la ZONA DE
+ * LA ORDEN, no por la del autor (un maestro puede reportar sobre una orden de cualquier zona
+ * y el `adminSatelite` solo debe ver las suyas).
+ *
+ * Feature 170 (T I.1): estaba escrita a mano en las DOS lecturas del incidente y la pagina
+ * del historico habria sido la tercera. Es el `construirWhere` de este repositorio: extraerlo
+ * es lo que impide que la version paginada acote distinto de la que sustituye (R44).
+ */
+function alcanceWhere(alcance: AlcanceIncidente): { orden?: { zonaId: string } } {
+  return alcance.zonaId === null ? {} : { orden: { zonaId: alcance.zonaId } };
 }
 
 // Proyeccion de una fila de incidente con lo que la cola y el detalle necesitan. Las evidencias
@@ -305,14 +320,41 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
   /** R49: los incidentes del alcance, mas reciente primero. El service los parte en dos colas. */
   async findByAlcance(alcance: AlcanceIncidente): Promise<IncidenteAdminRow[]> {
     const rows = await this.prisma.ordenIncidente.findMany({
-      // R48: el alcance va en el WHERE, por la ZONA DE LA ORDEN (no la del autor: un maestro
-      // puede reportar sobre una orden de cualquier zona y el adminSatelite solo debe ver las
-      // suyas).
-      where: alcance.zonaId === null ? {} : { orden: { zonaId: alcance.zonaId } },
+      where: alcanceWhere(alcance), // R48: el alcance va en el WHERE, nunca en memoria
       orderBy: { createdAt: "desc" },
       select: INCIDENTE_SELECT,
     });
     return rows.map(toRow);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una pagina del HISTORICO + el total.
+   *
+   * MISMO `alcanceWhere` que `findByAlcance` (R48) y MISMO `orderBy createdAt desc` (R51),
+   * con dos anadidos: `estado NOT IN <cola>` —el espejo del `else` con que el servicio parte
+   * hoy las dos colas (R44)— y el recorte `skip`/`take`. El `where` se construye UNA vez y lo
+   * comparten `findMany` y `count`: si el conteo tuviera el suyo, un `adminSatelite` acabaria
+   * viendo cuantos incidentes hay en zonas que no puede leer.
+   */
+  async findHistoricoPaginado(
+    alcance: AlcanceIncidente,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<IncidenteAdminRow>> {
+    const where = {
+      ...alcanceWhere(alcance),
+      estado: { notIn: [...ESTADOS_COLA_SOLICITADO] },
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.ordenIncidente.findMany({
+        where,
+        orderBy: { createdAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: INCIDENTE_SELECT,
+      }),
+      this.prisma.ordenIncidente.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toRow), total };
   }
 
   /** R48: un incidente SOLO si su orden casa el alcance; fuera de alcance / inexistente -> null. */
@@ -321,10 +363,7 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
     alcance: AlcanceIncidente,
   ): Promise<IncidenteAdminRow | null> {
     const row = await this.prisma.ordenIncidente.findFirst({
-      where: {
-        id: incidenteId,
-        ...(alcance.zonaId === null ? {} : { orden: { zonaId: alcance.zonaId } }),
-      },
+      where: { id: incidenteId, ...alcanceWhere(alcance) }, // R48: la MISMA guardia del listado
       select: INCIDENTE_SELECT,
     });
     return row === null ? null : toRow(row);

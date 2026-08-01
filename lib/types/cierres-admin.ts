@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { montoPositivoSchema } from "@/lib/types/wallet";
+import { cierreConfig } from "@/lib/config/cierre";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type {
   ListarCierresAdminServiceResult,
+  CierreAdminResumen,
   CierreDetalleAdminServiceResult,
   AprobarCierreServiceResult,
   RechazarCierreServiceResult,
@@ -94,6 +97,49 @@ export const rechazarCierreSchema = z.object({
 
 export type CierreIdInput = z.infer<typeof cierreIdSchema>;
 export type RechazarCierreInput = z.infer<typeof rechazarCierreSchema>;
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40) — entrada del HISTORICO paginado de cierres del dia.
+ *
+ * `.strict()`: este listado NO tiene filtros (design §11.3, riesgo BAJO) y su alcance sale
+ * del ACTOR, nunca de la peticion. Con `.strict()`, un cliente que intente colar
+ * `destinoZonaId` recibe `validation_error` en el BORDE en vez de que la clave viaje hasta
+ * un servicio que —hoy— la ignoraria en silencio.
+ *
+ * El tamano de pagina sale de `cierreConfig` (T H.1) y se recorta a `MAX_PAGE_SIZE` con el
+ * mismo `transform` que usa el listado de usuarios: un `pageSize: 100000` no se rechaza, se
+ * acota (R40).
+ */
+export const listarHistoricoCierresAdminSchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(cierreConfig.DEFAULT_PAGE_SIZE)
+      .transform((n) => Math.min(n, cierreConfig.MAX_PAGE_SIZE)),
+  })
+  .strict();
+
+export type ListarHistoricoCierresAdminInput = z.infer<typeof listarHistoricoCierresAdminSchema>;
+
+/**
+ * Errores de BORDE de los listados de este modulo: los de dominio que decide el servicio
+ * (`forbidden`) mas los dos que decide la Server Action antes de llamarlo. Se declara aparte
+ * para poder pasarlo como parametro al contrato comun (T H.2): unificar la forma del EXITO no
+ * puede ensanchar los errores que esta pantalla tiene que manejar.
+ */
+export type CierresAdminListadoError =
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+// Feature 170 (T I.1, R41): el contrato comun de listado paginado, aplicado al historico.
+export type ListarHistoricoCierresAdminResult = ListarPaginadoResult<
+  CierreAdminResumen,
+  CierresAdminListadoError
+>;
 
 // Resultados de las Server Actions: resultado de dominio del service +
 // `unauthenticated` (sin sesion, lo resuelve el borde).

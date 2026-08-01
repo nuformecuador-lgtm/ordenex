@@ -31,7 +31,9 @@ vi.mock("@/lib/actions/wallet-egresos", () => ({
   verDesgloseEgresosAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
-  listarPlantillasAction: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): la página pre-carga la PÁGINA 1 de las plantillas, no el
+  // conjunto entero. El listado sin paginar sigue existiendo: lo usa la DESCARGA del panel.
+  listarPlantillasPaginadoAction: vi.fn(),
 }));
 
 class NotFoundError extends Error {
@@ -59,13 +61,13 @@ vi.mock("@/app/(app)/wallet/_components/WalletModule", () => ({
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMovimientosAction, verBalanceAction } from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
-import { listarPlantillasAction } from "@/lib/actions/gasto-fijo-plantilla";
+import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarMovimientosAction);
 const balanceMock = vi.mocked(verBalanceAction);
 const desgloseMock = vi.mocked(verDesgloseEgresosAction);
-const plantillasMock = vi.mocked(listarPlantillasAction);
+const plantillasMock = vi.mocked(listarPlantillasPaginadoAction);
 
 const MOVIMIENTOS_OK = {
   status: "ok" as const,
@@ -112,7 +114,10 @@ const DESGLOSE_OK = {
 
 const PLANTILLAS_OK = {
   status: "ok" as const,
-  plantillas: [
+  page: 1,
+  pageSize: 25,
+  total: 1,
+  items: [
     {
       id: "p1",
       concepto: "Alquiler",
@@ -221,8 +226,10 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
     // Feature 45 (R11/R12/R26): desglose y plantillas cruzan por props como STRING.
     expect(typeof props.desglose.total).toBe("string");
     expect(props.desglose.total).toBe("0.00");
-    expect(props.plantillas).toHaveLength(1);
-    expect(props.plantillas[0].concepto).toBe("Alquiler");
-    expect(typeof props.plantillas[0].monto).toBe("string");
+    // Feature 170 — FASE 2 (T I.2): la prop es la PÁGINA (`items` + `total`), no el array.
+    expect(props.plantillas.items).toHaveLength(1);
+    expect(props.plantillas.total).toBe(1);
+    expect(props.plantillas.items[0].concepto).toBe("Alquiler");
+    expect(typeof props.plantillas.items[0].monto).toBe("string");
   });
 });

@@ -178,6 +178,13 @@ const PANTALLAS_ANEXO_III = [
   "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
   "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
   "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
+  // Feature 170 — FASE 2 (T I.2): cuatro de esos listados se llevaron su tabla y su control
+  // de paginación a un componente propio. La guardia los sigue: si no, dejaría de vigilar
+  // exactamente los archivos donde se escribe hoy el `pageSize`.
+  "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
+  "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
+  "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
+  "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
 ];
 
 /**

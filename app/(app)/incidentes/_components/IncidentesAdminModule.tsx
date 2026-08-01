@@ -32,9 +32,11 @@ import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/
 import { money, EstadoCierreBadge } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import {
-  COLUMNAS_DESCARGA_INCIDENTES_HISTORICO,
+  IncidentesHistoricoTabla,
+  type IncidentesHistoricoPagina,
+} from "./IncidentesHistoricoTabla";
+import {
   COLUMNAS_DESCARGA_INCIDENTES_PENDIENTES,
-  filaDescargaIncidenteHistorico,
   filaDescargaIncidentePendiente,
 } from "./incidentes-descarga-columnas";
 
@@ -50,8 +52,11 @@ import {
 export interface IncidentesAdminModuleProps {
   /** Incidentes `solicitado` del alcance (cola de decisión, R49). */
   pendientes: IncidenteAdminDTO[];
-  /** Incidentes ya resueltos (`aprobado`/`rechazado`) del alcance, solo lectura (R49). */
-  historico: IncidenteAdminDTO[];
+  /**
+   * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 del histórico de resueltos (R49), ya
+   * resuelta server-side, más el `total` del conjunto. Deja de ser el array entero.
+   */
+  historico: IncidentesHistoricoPagina;
   /** `true` si el `adminSatelite` no tiene zona asignada (patrón 38/R3). */
   sinZona: boolean;
 }
@@ -329,27 +334,16 @@ export function IncidentesAdminModule({
         </div>
       </section>
 
-      {/* ---------- Histórico (solo lectura, R49) ---------- */}
-      <section aria-label={TITULO_HISTORICO} className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">{TITULO_HISTORICO}</h2>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasHistorico(abrirDetalle)}
-            data={historico}
-            rowKey="incidenteId"
-            ariaLabel={TITULO_HISTORICO}
-            emptyMessage={VACIO_HISTORICO}
-            // Feature 170 (T E.6, R1/R11/R26/R30/R32): mismo patrón, con SUS columnas
-            // (estado, indemnización, quién resolvió y motivo, que la cola no tiene).
-            descarga={{
-              titulo: TITULO_DESCARGA_HISTORICO,
-              columnas: COLUMNAS_DESCARGA_INCIDENTES_HISTORICO,
-              obtenerFilas: () =>
-                filasLocales(historico, filaDescargaIncidenteHistorico),
-            }}
-          />
-        </div>
-      </section>
+      {/* ---------- Histórico (solo lectura, R49) ----------
+          Feature 170 — FASE 2 (T I.2): la tabla, su control de paginación y su descarga viven
+          en su propio componente (ver la cabecera de `IncidentesHistoricoTabla`). */}
+      <IncidentesHistoricoTabla
+        initialData={historico}
+        titulo={TITULO_HISTORICO}
+        mensajeVacio={VACIO_HISTORICO}
+        tituloDescarga={TITULO_DESCARGA_HISTORICO}
+        onAbrir={abrirDetalle}
+      />
 
       {/* ---------- Detalle del incidente ---------- */}
       <Modal
@@ -658,50 +652,6 @@ function columnasPendientes(
           aria-label={`Ver o decidir el incidente de la orden ${i.numRemision}`}
         >
           Ver / decidir
-        </Button>
-      ),
-    },
-  ];
-}
-
-// --- Columnas del histórico (solo lectura, R49) ---
-function columnasHistorico(
-  abrir: (incidenteId: string) => void,
-): Column<IncidenteAdminDTO>[] {
-  return [
-    {
-      id: "estado",
-      value: "Estado",
-      render: (i) => <EstadoCierreBadge estado={i.estado} />,
-    },
-    { id: "numRemision", value: "Nº Remisión", render: (i) => i.numRemision },
-    { id: "destinatario", value: "Destinatario", render: (i) => i.destinatario },
-    { id: "causa", value: "Causa", render: (i) => CAUSA_INCIDENTE_LABEL[i.causa] },
-    // R55: el monto se renderiza TAL CUAL (STRING money-safe), sin `parseFloat` ni redondeo.
-    {
-      id: "indemnizacion",
-      value: "Indemnización",
-      render: (i) => money(i.indemnizacion),
-    },
-    { id: "resueltoPor", value: "Resuelto por", render: (i) => i.resueltoPorNombre ?? "—" },
-    {
-      id: "resueltoAt",
-      value: "Fecha resuelta",
-      render: (i) => i.resueltoAt?.slice(0, 10) ?? "—",
-    },
-    { id: "motivoRechazo", value: "Motivo", render: (i) => i.motivoRechazo ?? "—" },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (i) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => abrir(i.incidenteId)}
-          aria-label={`Ver el incidente de la orden ${i.numRemision}`}
-        >
-          Ver
         </Button>
       ),
     },

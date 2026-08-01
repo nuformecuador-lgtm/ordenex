@@ -22,7 +22,9 @@ import {
   aprobarCierreSchema,
   rechazarCierreSchema,
   forzarSolicitudVencidoSchema,
+  listarHistoricoCierresAdminSchema,
   type ListarCierresAdminResult,
+  type ListarHistoricoCierresAdminResult,
   type VerCierreDetalleResult,
   type AprobarCierreResult,
   type RechazarCierreResult,
@@ -112,6 +114,27 @@ export async function listarCierresAdmin(
   });
   // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41/R44): UNA pagina del HISTORICO del alcance + el total.
+ *
+ * Lectura interna del mismo proyecto -> Server Action, como el resto de este archivo. El
+ * alcance NO viaja en el input: lo resuelve el servicio desde el actor de la sesion, igual
+ * que en `listarCierresAdmin`.
+ */
+export async function listarHistoricoCierresAdminPaginado(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<ListarHistoricoCierresAdminResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el service
+    const data = listarHistoricoCierresAdminSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarHistoricoCierresAdminPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }
 
 /** R6-R9/R13: detalle de un cierre del alcance con evidencias firmadas. */

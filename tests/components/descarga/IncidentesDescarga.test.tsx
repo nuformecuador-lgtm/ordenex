@@ -8,12 +8,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
+import { listarIncidentes, listarHistoricoIncidentesPaginado } from "@/lib/actions/incidentes";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
 vi.mock("@/lib/actions/incidentes", () => ({
   aprobarIncidente: vi.fn(),
@@ -21,6 +24,8 @@ vi.mock("@/lib/actions/incidentes", () => ({
   retractarIncidente: vi.fn(),
   verIncidente: vi.fn(),
   listarIncidentes: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
+  listarHistoricoIncidentesPaginado: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -100,17 +105,39 @@ const HISTORICO = [
 ];
 
 function envolver(ui: ReactElement) {
-  return render(<ToastProvider>{ui}</ToastProvider>);
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <ToastProvider>{ui}</ToastProvider>
+    </SWRConfig>,
+  );
 }
 
+/**
+ * Feature 170 — FASE 2 (T I.2): el histórico se pinta desde la PÁGINA, y su descarga RELEE el
+ * conjunto completo del servidor (R52). El helper programa las dos lecturas con los mismos
+ * datos: la página que se ve y el conjunto que se descarga.
+ */
 function renderIncidentes(
   pendientes = PENDIENTES,
   historico = HISTORICO,
+  historicoCompleto = historico,
 ) {
+  const pagina = paginaInicial(historico, { total: historicoCompleto.length });
+  vi.mocked(listarHistoricoIncidentesPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...pagina,
+  });
+  vi.mocked(listarIncidentes).mockResolvedValue({
+    status: "ok",
+    pendientes,
+    historico: historicoCompleto,
+    sinZona: false,
+  });
   return envolver(
     <IncidentesAdminModule
       pendientes={pendientes}
-      historico={historico}
+      historico={pagina}
       sinZona={false}
     />,
   );

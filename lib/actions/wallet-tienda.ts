@@ -8,6 +8,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletTiendaService,
   ListarMisMovimientosServiceResult,
+  ListarSaldosTiendasPaginadoServiceResult,
   ListarMovimientosDeTiendaServiceResult,
   ListarSaldosTiendasServiceResult,
   VerMiSaldoServiceResult,
@@ -17,6 +18,7 @@ import {
   listarMovimientosDeTiendaSchema,
   listarMovimientosTiendaCompletoSchema,
   listarMovimientosTiendaSchema,
+  listarSaldosTiendasPaginadoSchema,
   type ListarMovimientosDeTiendaCompletoResult,
   type ListarMovimientosTiendaCompletoResult,
 } from "@/lib/types/wallet-tienda";
@@ -42,6 +44,13 @@ export type ListarMisMovimientosActionResult =
 export type ListarSaldosTiendasActionResult =
   | ListarSaldosTiendasServiceResult
   | { status: "unauthenticated" };
+
+// Feature 170 (T I.1, R41): el listado paginado de saldos. `forbidden` lo decide el servicio;
+// `unauthenticated` y `validation_error`, este borde.
+export type ListarSaldosTiendasPaginadoActionResult =
+  | ListarSaldosTiendasPaginadoServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 // Feature 171 — desglose de UNA tienda elegida. `forbidden` lo decide el servicio (dominio);
 // `unauthenticated` y `validation_error` los decide este borde, antes de llamarlo.
@@ -140,6 +149,27 @@ export async function listarSaldosTiendasAction(
     return service.listarSaldosTiendas(actor);
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41/R44): UNA pagina de los saldos por tienda + el total.
+ *
+ * Espejo exacto de `listarSaldosTiendasAction` con `page`/`pageSize` validados por zod. Quien
+ * puede verlo lo sigue decidiendo el servicio (acceso total, R20): este borde solo resuelve
+ * la sesion y la entrada.
+ */
+export async function listarSaldosTiendasPaginadoAction(
+  input: unknown,
+  deps: WalletTiendaDeps = {},
+): Promise<ListarSaldosTiendasPaginadoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarSaldosTiendasPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarSaldosTiendasPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }
 
 /**

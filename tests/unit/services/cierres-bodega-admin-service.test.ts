@@ -92,6 +92,11 @@ type Repo = ICierresBodegaAdminRepository;
 function fakeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     findCierresBodega: vi.fn(async () => [] as CierreBodegaResumenRow[]),
+    // Feature 170 (T I.1): el historico paginado vive en su propia suite (*-paginado).
+    findHistoricoPaginado: vi.fn(async () => ({
+      items: [] as CierreBodegaResumenRow[],
+      total: 0,
+    })),
     findCierreBodegaConDetalle: vi.fn(async () => null),
     resolverCierreBodega: vi.fn(async () => "updated" as const),
     ...overrides,

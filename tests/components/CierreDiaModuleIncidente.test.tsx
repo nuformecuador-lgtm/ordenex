@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaModule";
 import { deshacerGestion, solicitarCierre } from "@/lib/actions/cierre-dia";
@@ -23,6 +24,14 @@ vi.mock("@/lib/actions/cierre-dia", () => ({
   solicitarCierre: vi.fn(),
   listarCierreDia: vi.fn(),
   deshacerGestion: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): «Cierres solicitados» llega paginado del servidor.
+  listarCierresPasadosPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -94,17 +103,19 @@ const ZERO_TOTALES: CierreTotales = {
 
 function renderModule(grupos: CierreGrupos) {
   render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
     <CierreDiaModule
       grupos={grupos}
       totales={ZERO_TOTALES}
       totalPagoMensajero="0.00"
       puedesSolicitar
       motivoBloqueo={null}
-      cierresPasados={[]}
+      cierresPasados={{ items: [], total: 0, pageSize: 25 }}
       bloqueado={false}
       tieneVencido={false}
       tieneRechazado={false}
-    />,
+    />
+    </SWRConfig>,
   );
 }
 

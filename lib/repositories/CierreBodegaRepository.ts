@@ -5,6 +5,7 @@ import type {
   CrearCierreBodegaInput,
   ICierreBodegaRepository,
 } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Estados/destino relevantes (fuente de verdad en lib/types/cierre.ts). El cierre de
 // bodega se crea SIEMPRE en `solicitado`; consolida SOLO cierre_dia `aprobado`.
@@ -181,5 +182,32 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
       select: BODEGA_RESUMEN_SELECT,
     });
     return rows.map(toBodegaResumenRow);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una pagina de los cierres de bodega de
+   * la zona + el total.
+   *
+   * El `where` con el acotamiento por zona se construye UNA vez y lo comparten `findMany` y
+   * `count`. Que el `zonaId` sea el MISMO objeto en las dos consultas no es cosmetico: es lo
+   * que impide que el total cuente los cierres de toda la operacion mientras la pagina muestra
+   * los de una bodega.
+   */
+  async findCierresBodegaByZonaPaginado(
+    zonaId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
+    const where = { zonaId }; // R3: el alcance por zona, en el WHERE y nunca en memoria
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreBodega.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: BODEGA_RESUMEN_SELECT,
+      }),
+      this.prisma.cierreBodega.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toBodegaResumenRow), total };
   }
 }

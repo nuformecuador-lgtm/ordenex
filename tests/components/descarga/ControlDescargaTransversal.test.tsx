@@ -522,7 +522,9 @@ describe("Control de descarga · consistencia transversal", () => {
     // R26/R28 transversal, y la razón por la que este test es ESTÁTICO.
     //
     // El tope de 5000 vive en un solo sitio por familia (`filasLocales` y el
-    // `limite_excedido` que traduce `filasDesdeResultado`). Una tabla que construyera su
+    // `limite_excedido` que traduce `filasDesdeResultado`; feature 170 - FASE 2 suma
+    // `filasDelConjuntoCompleto`, que RELEE el conjunto y delega en `filasLocales`, o sea que
+    // no anade un tercer sitio donde viva el tope). Una tabla que construyera su
     // `DescargaFilasResult` a mano —`{ status: "ok", filas: … }`— se lo saltaría entera y
     // entregaría un archivo gigante o, peor, truncado en silencio; y ningún test de esa
     // pantalla lo notaría, porque su fixture tiene tres filas.
@@ -533,7 +535,7 @@ describe("Control de descarga · consistencia transversal", () => {
     // tabla que se añada dentro de un año.
     for (const modulo of MODULOS_CON_DESCARGA) {
       expect(
-        /\bfilasLocales\(|\bfilasDesdeResultado\(|\bobtenerFilasDescarga\b/.test(
+        /\bfilasLocales\(|\bfilasDesdeResultado\(|\bfilasDelConjuntoCompleto\(|\bobtenerFilasDescarga\b/.test(
           modulo.fuente,
         ),
         `${modulo.ruta}: su descarga no pasa por un adaptador común`,

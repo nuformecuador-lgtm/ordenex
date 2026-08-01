@@ -9,6 +9,7 @@ import type {
   ListarMisMovimientosServiceResult,
   ListarMovimientosDeTiendaCompletoServiceResult,
   ListarMovimientosDeTiendaServiceResult,
+  ListarSaldosTiendasPaginadoServiceResult,
   ListarSaldosTiendasServiceResult,
   VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
@@ -23,6 +24,7 @@ import { descargaConfig } from "@/lib/config/descarga";
 import { derivarDesgloseTienda } from "@/lib/utils/desglose-tienda";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 // Roles autorizados (R19/R20). El `adminTienda` ES la tienda: su usuarioId = tienda_id, y solo
 // ve lo suyo (acotado en el WHERE del repo). El acceso total (maestro/admin) ve el saldo de
@@ -147,6 +149,43 @@ export class WalletTiendaService implements IWalletTiendaService {
       return { tiendaId: r.tiendaId, tiendaNombre: r.tiendaNombre, saldo: s.saldo, signo: s.signo };
     });
     return { status: "ok", tiendas };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — los saldos por tienda, paginados.
+   *
+   * El guard de rol va PRIMERO, antes de tocar el repositorio: si estuviera despues, el saldo
+   * de TODAS las tiendas ya habria salido de la base aunque la respuesta fuera un error. Es la
+   * misma decision, y por el mismo motivo, que en `listarMovimientosDeTienda`.
+   *
+   * UNA sola llamada al repositorio (R54), la misma que hace el listado sin paginar: el total
+   * sale de esa agregacion y no de un conteo aparte.
+   */
+  async listarSaldosTiendasPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarSaldosTiendasPaginadoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R20
+
+    const { items, total } = await this.repo.listarSaldosTiendasPaginado(rangoDePagina(input));
+
+    return {
+      status: "ok",
+      // R16: el saldo se DERIVA con el MISMO helper que el listado sin paginar; nunca se lee
+      // de un saldo almacenado ni se recalcula de otra forma aqui.
+      items: items.map((r) => {
+        const s = derivarSaldoTienda(r.creditos, r.debitos);
+        return {
+          tiendaId: r.tiendaId,
+          tiendaNombre: r.tiendaNombre,
+          saldo: s.saldo,
+          signo: s.signo,
+        };
+      }),
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
   }
 
   /**

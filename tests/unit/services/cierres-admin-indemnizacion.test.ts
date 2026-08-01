@@ -23,6 +23,8 @@ const G2 = "g-incidente-2";
 function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdminRepository {
   return {
     findCierresByAlcance: vi.fn(async () => []),
+    // Feature 170 (T I.1): el historico paginado. Doble no-op: esta suite no lo ejercita.
+    findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),

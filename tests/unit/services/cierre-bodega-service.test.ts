@@ -43,6 +43,11 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     existeCierreBodegaSolicitado: vi.fn(async () => false),
     crearCierreBodega: vi.fn(async () => "cb1"),
     findCierresBodegaByZona: vi.fn(async () => [] as CierreBodegaResumenRow[]),
+    // Feature 170 (T I.1): el listado paginado vive en su propia suite (*-paginado).
+    findCierresBodegaByZonaPaginado: vi.fn(async () => ({
+      items: [] as CierreBodegaResumenRow[],
+      total: 0,
+    })),
     ...overrides,
   };
 }

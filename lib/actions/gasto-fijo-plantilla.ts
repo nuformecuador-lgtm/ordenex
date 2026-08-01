@@ -9,12 +9,14 @@ import type {
   ActualizarPlantillaServiceResult,
   CrearPlantillaServiceResult,
   IGastoFijoPlantillaService,
+  ListarPlantillasPaginadoServiceResult,
   ListarPlantillasServiceResult,
   SetActivaPlantillaServiceResult,
 } from "@/lib/interfaces/services/IGastoFijoPlantillaService";
 import {
   actualizarGastoFijoPlantillaSchema,
   crearGastoFijoPlantillaSchema,
+  listarPlantillasGastoFijoPaginadoSchema,
   setActivaPlantillaSchema,
 } from "@/lib/types/gasto-fijo-plantilla";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -43,6 +45,13 @@ export type SetActivaPlantillaActionResult =
 
 export type ListarPlantillasActionResult =
   | ListarPlantillasServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+// Feature 170 (T I.1, R41): el listado paginado. `forbidden` lo decide el servicio;
+// `unauthenticated` y `validation_error`, este borde.
+export type ListarPlantillasPaginadoActionResult =
+  | ListarPlantillasPaginadoServiceResult
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -128,6 +137,26 @@ export async function listarPlantillasAction(
     if (!actor) throw new UnauthenticatedError();
     const service = deps.service ?? buildService();
     return service.listarPlantillas(actor);
+  });
+  return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41/R44): UNA pagina de las plantillas + el total.
+ *
+ * Espejo exacto de `listarPlantillasAction` con `page`/`pageSize` validados por zod; el rol
+ * lo sigue decidiendo el servicio (R17).
+ */
+export async function listarPlantillasPaginadoAction(
+  input: unknown,
+  deps: PlantillaDeps = {},
+): Promise<ListarPlantillasPaginadoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarPlantillasGastoFijoPaginadoSchema.parse(input); // -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPlantillasPaginado(data, actor);
   });
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }

@@ -489,7 +489,7 @@ producción sin esperar a la siguiente.
 
 ## Tanda I — Riesgo BAJO: 7 listados de solo lectura
 
-### [ ] T I.1 — Backend: `listar` paginado de los 7
+### [x] T I.1 — Backend: `listar` paginado de los 7
 - Cierres del día histórico · Cierres de bodega resueltos · Cierres de bodega solicitados ·
   Cierres solicitados del mensajero · Incidentes histórico · Saldos de tiendas · Plantillas de
   gasto fijo.
@@ -501,14 +501,54 @@ producción sin esperar a la siguiente.
   - «no ejecuta más consultas que el listado sin paginar, salvo el conteo» (R54)
 - **Depende de:** T H.2, T B.1/T C.1 (por el `construirWhere`) · **Cubre:** R40, R41, R44, R51, R54
 - **Hecho:** tests verdes en los 7.
+- **MEDIDO (2026-08-01):** 53 verdes (44 de servicio en los 7 archivos `*-paginado` + 9 del WHERE).
+  Cada listado gana `listar<X>Paginado` en su servicio, su metodo de repositorio, su schema
+  `.strict()` y su Server Action. Detalle en `progress/impl_170-fase2-tanda-i.md`.
+  - **El `construirWhere` de estos siete NO es el de la FASE 1** (esos son de Familia A; estas
+    siete tablas descargan con `filasLocales`). Lo que se reusa es el ACOTAMIENTO POR ACTOR ya
+    existente —`resolveAlcance` (38/158), `findUsuarioZonaId` (40), `actor.usuarioId` (37),
+    `esAccesoTotal` (40/43/45)—, y el corte cola/historico se EXTRAE a `lib/utils/colas-cierre.ts`
+    para que la particion en memoria y el WHERE del paginado no puedan divergir (R44).
+  - **Verificado por MUTACION (9), todas revertidas:** alcance ignorado en el paginado → rojo;
+    `total: items.length` → rojo; acotamiento por mensajero fijo → rojo; `notIn` → `in` en el
+    repositorio → **VERDE**, y por eso nace `tests/unit/repositories/historicos-paginados-where.test.ts`;
+    conteo sin `where` → rojo; `where` del mensajero vacio → rojo; orden de saldos sin desempate
+    → rojo; guard de rol despues de la base → rojo; `rangoDePagina` en base 0 → 30 rojos.
+  - **DESVIACION declarada (R51):** «Saldos de tiendas» NO tenia criterio de ordenacion (el
+    `groupBy` devolvia las filas en orden no garantizado). Paginar exige un orden TOTAL o las
+    paginas se solapan: se ordena por nombre de tienda, con `tiendaId` de desempate.
+  - **Saldos de tiendas no corta en la base** y es deliberado: cada fila es una agregacion de
+    todo el ledger de esa tienda, asi que no hay nada que empujar al `LIMIT`. R54 se cumple en
+    su forma fuerte (cero consultas nuevas, ni la del conteo). Ver §6 de la bitacora.
 
-### [ ] T I.2 — Frontend: `Pagination` + `initialData` en los 7
+### [x] T I.2 — Frontend: `Pagination` + `initialData` en los 7
 - Server Component pre-carga página 1; módulo con SWR + `<Pagination>`. Molde: `UsuariosModule`.
 - Test: `tests/components/paginacion/BajoRiesgoPaginacion.test.tsx`
   - «cada listado navega entre páginas y el control tiene nombre accesible» (R43)
   - «la descarga sigue entregando el dataset completo, no la página» (R52)
   - «el usuario ve exactamente las mismas filas que antes en la página 1» (R44)
 - **Depende de:** T I.1 · **Cubre:** R43, R44, R52 · **Hecho:** tests verdes en los 7.
+- **MEDIDO (2026-08-01):** 6 verdes, los 7 listados en cada caso. Detalle en
+  `progress/impl_170-fase2-tanda-i.md` §12-§21.
+  - **R52 NO se resuelve proyectando la página:** nace `filasDelConjuntoCompleto`
+    (`components/shared/descarga-resultado.ts`), que RELEE el conjunto con el MISMO listado que
+    la pantalla ya llamaba antes de paginar y lo proyecta con `filasLocales`, conservando el
+    tope de 5000. Sin él, el cableado «natural» degrada la descarga a «lo que se ve» sin fallar.
+  - **Cuatro históricos SE MUDAN a su propio componente**, porque su módulo enseña además el
+    contador de la cola que la tanda J todavía debe arreglar y la guardia de T H.3 prohíbe —con
+    razón— esa convivencia. Censo actualizado: 30 instancias, 25 → 29 archivos. `CierreDiaModule`
+    conserva el control dentro (su contador es del Anexo IV y ya estaba declarado).
+  - **Verificado por MUTACIÓN (3), todas revertidas:** descargar la página → rojo; `ariaLabel`
+    del control fuera → rojo; `fallbackData` fuera → **VERDE**, y por eso el test de R44 pasa a
+    exigir las filas en el PRIMER pintado (sin `await`). De ahí sale además el arreglo de que el
+    esqueleto se muestre sólo cuando no hay nada que pintar (`data === undefined`), no mientras
+    SWR revalida con `fallbackData`.
+  - **Q-I3 RESUELTA:** la «vista tipo factura» de `CierresAdminModule` SIGUE A LA TABLA (cola
+    completa + página visible del histórico). Cambia lo que el usuario ve y está declarado.
+  - **Abiertas nuevas:** Q-I4 (2 consultas más por render mientras el listado compuesto siga
+    trayendo el histórico entero: se salda en la tanda J/M), Q-I5 (tres descargas releen un
+    listado caro por falta de `listarCompleto`), Q-I6 (la guardia de T H.3 no mira hacia arriba:
+    la tanda J debe elegir dónde monta el control de sus colas).
 
 ## Tanda J — Riesgo MEDIO: 4 colas con contador de cabecera
 

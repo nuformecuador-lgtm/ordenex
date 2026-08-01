@@ -5,9 +5,11 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   ICierreBodegaService,
+  ListarCierresBodegaSolicitadosServiceResult,
   ListarConsolidacionServiceResult,
   SolicitarCierreBodegaServiceResult,
 } from "@/lib/interfaces/services/ICierreBodegaService";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 // Solo el rol autorizado (R1): el adminSatelite, SIEMPRE acotado a SU zona (el filtro
 // por zona vive en el repo, en el WHERE).
@@ -208,6 +210,48 @@ export class CierreBodegaService implements ICierreBodegaService {
       motivoBloqueo,
       cierresBodegaPasados,
       sinZona: false,
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — los cierres de bodega SOLICITADOS por
+   * la zona, paginados en servidor.
+   *
+   * El alcance se resuelve EXACTAMENTE como en `listarConsolidacion`: mismo guard de rol
+   * (R1) y misma resolucion de zona por `findUsuarioZonaId` (R3/R4), que sale del usuario y
+   * NUNCA de la peticion. Por eso paginar no puede ampliar lo que ve un adminSatelite: R44 se
+   * cumple por construccion.
+   *
+   * Sin zona -> pagina VACIA, no `forbidden`: el rol tiene acceso al modulo, lo que no tiene
+   * es alcance que consultar. Es lo mismo que devuelve hoy `listarConsolidacion`
+   * (`cierresBodegaPasados: []`), y ni una consulta al historico llega a ejecutarse.
+   *
+   * DOS llamadas al repositorio: la zona y la pagina — las mismas dos que el listado sin
+   * paginar necesita para producir `cierresBodegaPasados` (R54). El conteo viaja dentro de la
+   * segunda.
+   */
+  async listarCierresBodegaSolicitadosPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarCierresBodegaSolicitadosServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
+
+    const zonaId = await this.ordenRepo.findUsuarioZonaId(actor.usuarioId); // R3/R4
+    if (zonaId === null) {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 };
+    }
+
+    const { items, total } = await this.repo.findCierresBodegaByZonaPaginado(
+      zonaId,
+      rangoDePagina(input),
+    );
+
+    return {
+      status: "ok",
+      items, // el repositorio ya devuelve el DTO de dominio (mismo que el listado sin paginar)
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
     };
   }
 

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { listarSaldosTiendasAction } from "@/lib/actions/wallet-tienda";
+import { listarSaldosTiendasPaginadoAction } from "@/lib/actions/wallet-tienda";
 
 import { SaldosTiendasTable } from "./_components/SaldosTiendasTable";
 
@@ -25,7 +25,9 @@ export default async function WalletTiendasPage() {
     notFound(); // R20: rol no autorizado / sin sesion → sin exponer datos
   }
 
-  const tiendasResult = await listarSaldosTiendasAction();
+  // Feature 170 — FASE 2 (T I.2, R40): PÁGINA 1 de los saldos, no el conjunto entero. El
+  // input va vacío: los defaults de `page`/`pageSize` los pone el schema del dominio.
+  const tiendasResult = await listarSaldosTiendasPaginadoAction({});
 
   // Defensa en profundidad: si el service niega, no renderizamos la tabla.
   if (tiendasResult.status !== "ok") {
@@ -38,7 +40,13 @@ export default async function WalletTiendasPage() {
       description="Saldo a favor de cada tienda para efectos de liquidación"
     >
       <section aria-label="Saldos por tienda" className="flex flex-col gap-4">
-        <SaldosTiendasTable tiendas={tiendasResult.tiendas} />
+        <SaldosTiendasTable
+          initialData={{
+            items: tiendasResult.items,
+            total: tiendasResult.total,
+            pageSize: tiendasResult.pageSize,
+          }}
+        />
       </section>
     </AppPage>
   );

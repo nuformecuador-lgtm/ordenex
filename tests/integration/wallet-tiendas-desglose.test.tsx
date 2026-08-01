@@ -33,10 +33,20 @@ import type {
 
 const listarDesgloseMock = vi.fn();
 const listarDesgloseCompletoMock = vi.fn();
+// Feature 170 - FASE 2 (T I.2): la tabla de saldos pide su pagina al servidor (SWR revalida
+// al montar) y relee el conjunto completo para descargar. Ninguna de las dos lecturas toca el
+// desglose, que es lo que este archivo vigila; se programan en `renderTabla`.
+const listarSaldosPaginaMock = vi.fn();
+const listarSaldosCompletoMock = vi.fn();
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarMovimientosDeTiendaAction: (...a: unknown[]) => listarDesgloseMock(...a),
   listarMovimientosDeTiendaCompletoAction: (...a: unknown[]) =>
     listarDesgloseCompletoMock(...a),
+  // Feature 170 - FASE 2 (T I.2): la tabla de saldos pide su pagina al servidor y relee el
+  // conjunto completo para descargar. Ninguna de las dos toca el desglose, que es lo que
+  // este archivo vigila.
+  listarSaldosTiendasPaginadoAction: (...a: unknown[]) => listarSaldosPaginaMock(...a),
+  listarSaldosTiendasAction: (...a: unknown[]) => listarSaldosCompletoMock(...a),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -44,6 +54,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { SaldosTiendasTable } from "@/app/(app)/wallet/tiendas/_components/SaldosTiendasTable";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import {
   DesgloseMovimientosTienda,
   claveDesgloseTienda,
@@ -188,8 +199,23 @@ function envolver(nodo: ReactNode) {
   );
 }
 
+/**
+ * Feature 170 — FASE 2 (T I.2): la tabla recibe la PÁGINA que pre-cargó el Server Component.
+ * El helper sigue tomando el array para no reescribir cada caso.
+ */
 function renderTabla(tiendas: SaldoTiendaResumenDTO[] = TIENDAS) {
-  return envolver(<SaldosTiendasTable tiendas={tiendas} />);
+  programarSaldos(tiendas);
+  return envolver(<SaldosTiendasTable initialData={paginaInicial(tiendas)} />);
+}
+
+/** Deja las dos lecturas de saldos devolviendo el MISMO conjunto que se monta. */
+function programarSaldos(tiendas: SaldoTiendaResumenDTO[]) {
+  listarSaldosPaginaMock.mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...paginaInicial(tiendas),
+  });
+  listarSaldosCompletoMock.mockResolvedValue({ status: "ok", tiendas });
 }
 
 /** Despliega la fila de una tienda por el nombre accesible de SU botón. */
@@ -776,10 +802,11 @@ describe("R46 — refrescar el desglose de UNA tienda desde fuera", () => {
     // Caché POR DEFECTO a propósito (sin `provider` propio): el `mutate` exportado por SWR
     // está atado a ella, y es el que la 172 llamará tras registrar un pago. Con una caché
     // aislada el test pasaría sin probar nada — el `mutate` no la alcanzaría siquiera.
+    programarSaldos(TIENDAS);
     render(
       <SWRConfig value={{ dedupingInterval: 0 }}>
         <ToastProvider>
-          <SaldosTiendasTable tiendas={TIENDAS} />
+          <SaldosTiendasTable initialData={paginaInicial(TIENDAS)} />
         </ToastProvider>
       </SWRConfig>,
     );
