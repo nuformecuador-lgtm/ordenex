@@ -4,6 +4,7 @@ import type {
   PlantillaListItem,
   PlantillaPublica,
 } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 
 // Feature 107 — zod en el borde (patron lib/types/usuario.ts, `.strict()`).
 
@@ -46,6 +47,16 @@ export const listarPlantillasSchema = z.object({
 });
 export type ListarPlantillasInput = z.infer<typeof listarPlantillasSchema>;
 
+// Feature 170 (T B.1) — entrada del modo SIN paginacion (descarga del dataset completo).
+// Derivada del schema del listado quitando `page`/`pageSize` (molde: la 151 con
+// `listarOrdenesCompletoSchema`), de modo que el modo completo no pueda aceptar una
+// entrada que el listado paginado rechazaria. `.strict()`: una clave desconocida es
+// `validation_error` sin devolver fila alguna (R18).
+export const listarPlantillasCompletoSchema = listarPlantillasSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+export type ListarPlantillasCompletoInput = z.infer<typeof listarPlantillasCompletoSchema>;
+
 // R18: vista previa de un cuerpo arbitrario (no requiere que la plantilla exista).
 export const previewPlantillaSchema = z.string().min(1);
 
@@ -66,6 +77,9 @@ export type CrearPlantillaResult = { status: "ok"; plantilla: PlantillaPublica }
 export type ListarPlantillasResult =
   | { status: "ok"; items: PlantillaListItemDTO[]; page: number; pageSize: number; total: number }
   | ActionError;
+// Feature 170 (T B.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
+// SOLO conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18).
+export type ListarPlantillasCompletoResult = ListarCompletoResult<PlantillaListItemDTO>;
 export type ObtenerPlantillaResult = { status: "ok"; plantilla: PlantillaPublica } | ActionError;
 export type ActualizarPlantillaResult = { status: "ok"; plantilla: PlantillaPublica } | ActionError;
 export type CambiarEstadoPlantillaResult =

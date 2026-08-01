@@ -10,6 +10,7 @@ import type {
   CrearPlantillaServiceResult,
   EliminarPlantillaServiceResult,
   IPlantillaMensajeService,
+  ListarPlantillasCompletoServiceResult,
   ListarPlantillasServiceResult,
   ObtenerPlantillaServiceResult,
   PreviewPlantillaServiceResult,
@@ -18,8 +19,10 @@ import type {
   ActualizarPlantillaInput,
   CambiarEstadoPlantillaInput,
   CrearPlantillaInput,
+  ListarPlantillasCompletoInput,
   ListarPlantillasInput,
 } from "@/lib/types/plantilla-mensaje";
+import { descargaConfig } from "@/lib/config/descarga";
 import { previewConEjemplos, validarCuerpo } from "@/lib/utils/plantilla-mensaje";
 import type { PlantillaWhatsappPropagator } from "@/lib/services/whatsapp/plantilla-whatsapp-sync";
 
@@ -75,6 +78,39 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     const skip = (input.page - 1) * input.pageSize;
     const { items, total } = await this.repo.list({ skip, take: input.pageSize }); // R28 en el repo
     return { status: "ok", items, page: input.page, pageSize: input.pageSize, total };
+  }
+
+  /**
+   * Feature 170 (T B.1, design §2.1) — el MISMO listado sin recorte por pagina, para la
+   * descarga del dataset completo.
+   *
+   * Como en usuarios, NO hay `construirWhere` que extraer: `listar` no arma ningun
+   * predicado; el `where` (incluida la exclusion de las borradas, `deletedAt: null`) vive
+   * ENTERO dentro de `repo.list`. Por eso la paridad de R19 no se consigue copiando un
+   * criterio, sino llamando al MISMO metodo: si manana el repositorio cambia lo que
+   * excluye, los dos caminos cambian a la vez porque son el mismo camino.
+   *
+   * El alcance por rol de este listado es su guard: solo `maestro`. Se evalua ANTES de
+   * tocar la base (R17).
+   */
+  async listarCompleto(
+    input: ListarPlantillasCompletoInput,
+    actor: Actor,
+  ): Promise<ListarPlantillasCompletoServiceResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R17
+    void input; // el listado no admite filtros: el schema solo tenia `page`/`pageSize`
+
+    const limite = descargaConfig.MAX_FILAS;
+
+    // R29: nunca mas de N+1 filas materializadas; el `total` sigue siendo exacto (sale
+    // del `count` del repositorio, independiente del `take`).
+    const { items, total } = await this.repo.list({ skip: 0, take: limite + 1 });
+
+    // R27/R28: o van TODAS las filas, o va el error accionable con los conteos. Jamas un
+    // archivo truncado en silencio.
+    if (total > limite) return { status: "limite_excedido", total, limite };
+
+    return { status: "ok", items, total };
   }
 
   async obtener(id: string, actor: Actor): Promise<ObtenerPlantillaServiceResult> {

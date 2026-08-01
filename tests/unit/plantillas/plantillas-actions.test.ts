@@ -42,6 +42,10 @@ function fakeService(overrides: Partial<IPlantillaMensajeService> = {}): IPlanti
     listar: vi
       .fn()
       .mockResolvedValue({ status: "ok", items: [], page: 1, pageSize: 25, total: 0 }),
+    // Feature 170 (T B.1): el doble implementa la interfaz COMPLETA. Este archivo no
+    // ejercita el modo sin paginacion (lo hace `plantillas-descarga-action.test.ts`); el
+    // stub existe para que el doble siga siendo un `IPlantillaMensajeService` valido.
+    listarCompleto: vi.fn().mockResolvedValue({ status: "ok", items: [], total: 0 }),
     obtener: vi.fn().mockResolvedValue({ status: "ok", plantilla: plantilla() }),
     actualizar: vi.fn().mockResolvedValue({ status: "ok", plantilla: plantilla() }),
     cambiarEstado: vi

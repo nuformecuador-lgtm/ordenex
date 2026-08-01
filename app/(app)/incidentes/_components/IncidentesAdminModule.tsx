@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import {
   aprobarIncidente,
@@ -30,6 +31,12 @@ import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/
 // puede volver a reportar; no bloquea a nadie).
 import { money, EstadoCierreBadge } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import {
+  COLUMNAS_DESCARGA_INCIDENTES_HISTORICO,
+  COLUMNAS_DESCARGA_INCIDENTES_PENDIENTES,
+  filaDescargaIncidenteHistorico,
+  filaDescargaIncidentePendiente,
+} from "./incidentes-descarga-columnas";
 
 // Feature 158 (T2.8, R49/R50/R54 — camino del ADMIN) — cola de aprobación de incidentes.
 // ESPEJO de `CierresAdminModule` (38), que es la aplicación original del patrón que el humano
@@ -53,6 +60,14 @@ export interface IncidentesAdminModuleProps {
 
 export const TITULO_PENDIENTES = "Pendientes de decisión";
 export const TITULO_HISTORICO = "Histórico";
+/**
+ * Feature 170 (T E.6, R12/R13): nombres de las DESCARGAS. No se reusan `TITULO_PENDIENTES`
+ * ni `TITULO_HISTORICO` porque son los encabezados DENTRO de la pantalla de incidentes: un
+ * archivo llamado `historico-2026-07-31.xlsx` no diría de qué es, y el nombre accesible del
+ * control («Descargar Histórico») sería el mismo que el de la pantalla de cierres.
+ */
+export const TITULO_DESCARGA_PENDIENTES = "Incidentes pendientes";
+export const TITULO_DESCARGA_HISTORICO = "Incidentes resueltos";
 export const VACIO_PENDIENTES = "No hay incidentes pendientes de decisión.";
 export const VACIO_HISTORICO = "Aún no hay incidentes resueltos.";
 export const SIN_ZONA_AVISO = "No tenés una zona asignada; contactá a tu administrador.";
@@ -295,6 +310,21 @@ export function IncidentesAdminModule({
             rowKey="incidenteId"
             ariaLabel={TITULO_PENDIENTES}
             emptyMessage={VACIO_PENDIENTES}
+            /**
+             * Feature 170 (T E.6, R1/R11/R14/R20/R22/R26/R30/R32) — FAMILIA B: el array de
+             * props ES la cola entera y ya viene acotada por el servidor (un `adminSatelite`
+             * solo recibe los de su zona), así que el archivo se proyecta de lo que la tabla
+             * pinta, en su orden, sin releer y sin ampliar alcance.
+             *
+             * Las URL firmadas de las evidencias NO viajan al archivo (R22): esta tabla no
+             * las muestra y el módulo de columnas ni siquiera las lee.
+             */
+            descarga={{
+              titulo: TITULO_DESCARGA_PENDIENTES,
+              columnas: COLUMNAS_DESCARGA_INCIDENTES_PENDIENTES,
+              obtenerFilas: () =>
+                filasLocales(pendientes, filaDescargaIncidentePendiente),
+            }}
           />
         </div>
       </section>
@@ -309,6 +339,14 @@ export function IncidentesAdminModule({
             rowKey="incidenteId"
             ariaLabel={TITULO_HISTORICO}
             emptyMessage={VACIO_HISTORICO}
+            // Feature 170 (T E.6, R1/R11/R26/R30/R32): mismo patrón, con SUS columnas
+            // (estado, indemnización, quién resolvió y motivo, que la cola no tiene).
+            descarga={{
+              titulo: TITULO_DESCARGA_HISTORICO,
+              columnas: COLUMNAS_DESCARGA_INCIDENTES_HISTORICO,
+              obtenerFilas: () =>
+                filasLocales(historico, filaDescargaIncidenteHistorico),
+            }}
           />
         </div>
       </section>

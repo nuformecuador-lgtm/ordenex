@@ -3,12 +3,17 @@
 import { useState } from "react";
 
 import { Pagination } from "@/components/shared/Pagination";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
-import { listarMisMovimientosAction } from "@/lib/actions/wallet-tienda";
+import {
+  listarMisMovimientosAction,
+  listarMisMovimientosCompletoAction,
+} from "@/lib/actions/wallet-tienda";
 import type { SaldoTiendaDTO, WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 
 import { SaldoTiendaCard } from "./SaldoTiendaCard";
 import { DesgloseTiendaLedger } from "./DesgloseTiendaLedger";
+import { filaDescargaMiWallet } from "./mi-wallet-descarga-columnas";
 import {
   MiWalletFiltros,
   FILTROS_TIENDA_VACIOS,
@@ -38,6 +43,21 @@ function buildInput(
   pageSize: number,
 ): Record<string, unknown> {
   const input: Record<string, unknown> = { page, pageSize };
+  if (filtros.cierreId) input.cierreId = filtros.cierreId;
+  if (filtros.categoria) input.categoria = filtros.categoria;
+  if (filtros.desde) input.desde = filtros.desde;
+  if (filtros.hasta) input.hasta = filtros.hasta;
+  return input;
+}
+
+/**
+ * Feature 170 (T C.4, R10/R18) — input del modo COMPLETO: los MISMOS filtros vigentes, SIN
+ * `page`/`pageSize`. El schema del modo completo es `.strict()`: una paginación colada
+ * devolvería `validation_error` en vez de un archivo, así que no se pone (y no hay que
+ * acordarse de quitarla).
+ */
+function buildInputCompleto(filtros: MiWalletFiltrosValue): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
   if (filtros.cierreId) input.cierreId = filtros.cierreId;
   if (filtros.categoria) input.categoria = filtros.categoria;
   if (filtros.desde) input.desde = filtros.desde;
@@ -119,7 +139,19 @@ export function MiWalletModule({
           disabled={loading}
         />
 
-        <DesgloseTiendaLedger movimientos={movimientos} isLoading={loading} />
+        {/* Feature 170 (T C.4, R9/R10): el archivo trae el ledger ENTERO de la tienda con
+            los filtros vigentes, no la página. El callback se construye en el render, así
+            que cierra sobre los `filtros` de ESTE render. */}
+        <DesgloseTiendaLedger
+          movimientos={movimientos}
+          isLoading={loading}
+          obtenerFilasDescarga={() =>
+            filasDesdeResultado(
+              listarMisMovimientosCompletoAction(buildInputCompleto(filtros)),
+              filaDescargaMiWallet,
+            )
+          }
+        />
 
         <Pagination
           page={page}

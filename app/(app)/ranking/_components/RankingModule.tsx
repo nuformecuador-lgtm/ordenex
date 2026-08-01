@@ -3,6 +3,7 @@
 import { Trophy } from "lucide-react";
 
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import {
   Card,
   CardContent,
@@ -13,6 +14,10 @@ import {
 import type { PremioRankingDTO, RankingRowDTO } from "@/lib/types/ranking";
 
 import { PremioInputRow } from "./PremioInputRow";
+import {
+  COLUMNAS_DESCARGA_RANKING,
+  filaDescargaRanking,
+} from "./ranking-descarga-columnas";
 import {
   PREMIOS_LABELS,
   RANKING_COLUMNAS,
@@ -60,6 +65,13 @@ const RANKING_COLUMNS: Column<RankingRowDTO>[] = [
 //     premio al mensajero elegible de esa posición (o "sin ocupante" si no hay, R15).
 //     Editable solo si `esEditable` (maestro, R16); el mensajero ve solo-lectura (R17).
 
+/**
+ * Feature 170 (T F.1) — nombre visible del listado: encabezado de la tarjeta, nombre de la
+ * hoja, base del nombre de archivo (R12) y nombre accesible del control (R13). Un solo
+ * literal para los cuatro usos, para que no puedan decir cosas distintas.
+ */
+const TITULO_DESCARGA = "Ranking del día";
+
 export interface RankingModuleProps {
   ranking: RankingRowDTO[];
   premios: PremioRankingDTO[];
@@ -81,7 +93,7 @@ export function RankingModule({ ranking, premios, esEditable }: RankingModulePro
     <div className="flex flex-col gap-8">
       <Card>
         <CardHeader className="border-b">
-          <CardTitle>Ranking del día</CardTitle>
+          <CardTitle>{TITULO_DESCARGA}</CardTitle>
           <CardDescription>
             Ordenado por porcentaje de entregas exitosas del día. El conteo crudo
             (entregadas / asignadas) hace el porcentaje auditable.
@@ -94,6 +106,25 @@ export function RankingModule({ ranking, premios, esEditable }: RankingModulePro
             rowKey="mensajeroId"
             ariaLabel={RANKING_LABELS.tablaAria}
             emptyState={{ icon: Trophy, title: RANKING_LABELS.vacio }}
+            /**
+             * Feature 170 (T F.1, R1/R7/R11/R30/R32) — descarga de FAMILIA B: el ranking
+             * NO pagina (Anexo IV: paginarlo dejaría al podio sin ocupante en la página 2),
+             * así que el array de props ES el dataset completo y el archivo se proyecta de
+             * lo que la tabla ya está pintando, sin releer nada del servidor.
+             *
+             * `filasLocales` aplica el MISMO tope de 5000 que el resto: por encima devuelve
+             * un error accionable y NO produce archivo, nunca un xlsx al que le faltan
+             * filas en silencio. Aquí el conjunto está acotado por el nº de mensajeros
+             * activos, así que el tope es una red, no un límite operativo.
+             *
+             * Solo esta tabla lo lleva: la de PREMIOS del podio queda fuera de alcance
+             * (P1 ratificada) y no monta control alguno.
+             */
+            descarga={{
+              titulo: TITULO_DESCARGA,
+              columnas: COLUMNAS_DESCARGA_RANKING,
+              obtenerFilas: () => filasLocales(ranking, filaDescargaRanking),
+            }}
           />
         </CardContent>
       </Card>

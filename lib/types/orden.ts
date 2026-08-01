@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ordenesConfig } from "@/lib/config/ordenes";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 
 // Campos ordenables permitidos (lista blanca, evita inyeccion de columnas; R31).
@@ -61,6 +62,9 @@ export type ActualizarOrdenInput = z.infer<typeof actualizarOrdenSchema>;
 // (zona/tienda/provincia/canton/distrito), mas las TRES claves temporales (atajo de
 // antiguedad, fecha desde y fecha hasta). `.strict()` sigue siendo la unica defensa
 // que impide que un nombre de columna arbitrario alcance Prisma (R31).
+// Feature 169/R1/R19: la whitelist crece en UNA clave, `q` (busqueda de texto libre). No
+// se abre: `.strict()` sigue siendo la unica defensa y cualquier otra clave sigue siendo
+// `validation_error` antes de tocar la base.
 export const ORDEN_FILTER_FIELDS = [
   "status_id",
   "zona_id",
@@ -72,8 +76,23 @@ export const ORDEN_FILTER_FIELDS = [
   "created_desde",
   "created_hasta",
   "reasignables",
+  "q",
 ] as const;
 export type OrdenFilterField = (typeof ORDEN_FILTER_FIELDS)[number];
+
+// Feature 169 (design §4.1) — limites del termino de busqueda. Se EXPORTAN porque el
+// minimo lo consume tambien la interfaz: un solo origen del 3, en vez de un 3 en el
+// schema y otro en el control de texto que se desincronizan a la primera.
+//
+// El minimo NO es una preferencia de UX, es de RENDIMIENTO: `pg_trgm` no genera trigramas
+// utiles por debajo de 3 caracteres, asi que un termino de 1-2 seria un Seq Scan
+// garantizado sobre la tabla mas grande del sistema — dos veces (pagina y conteo).
+export const BUSQUEDA_MIN_CHARS = 3;
+// El maximo no protege al motor (cuanto mas largo el termino, MAS selectivo y mas barato:
+// 3 caracteres generan 1 trigrama, 80 generan 78). Existe para acotar el peso de la clave
+// de cache del listado y para que el campo no se use como canal de datos. 80 cubre
+// cualquier nombre real de destinatario.
+export const BUSQUEDA_MAX_CHARS = 80;
 
 // Feature 144/R32: todo filtro de catalogo NUEVO es una LISTA NO VACIA de ids no
 // vacios. No se admite el escalar (eso es retrocompatibilidad exclusiva de
@@ -116,6 +135,16 @@ export const ordenFilterSchema = z
     // asignado), no una columna, y solo sabe ACOTAR: `z.literal(true)` porque "no
     // filtrar" se expresa OMITIENDO la clave, no mandando `false`.
     reasignables: z.literal(true).optional(),
+    // Feature 169/R1/R3/R4 — TERMINO DE BUSQUEDA. Se llama `q` y no `search`/`texto`
+    // porque es corto, es la convencion universal de un buscador y NO coincide con ningun
+    // nombre de columna: deja claro que no es un filtro de columna (como si lo son
+    // `zona_id`…), sino una clave publica que el service traduce, misma familia que
+    // `created_preset` y `reasignables`.
+    //
+    // `.trim()` va ANTES de `.min()` a proposito: `"  a  "` son 1 caracter, no 5 (R3), y
+    // lo que llega al service ya viene recortado. Por debajo del minimo o por encima del
+    // maximo el borde responde `validation_error` SIN ejecutar ninguna consulta.
+    q: z.string().trim().min(BUSQUEDA_MIN_CHARS).max(BUSQUEDA_MAX_CHARS).optional(),
   })
   .strict()
   // R39: rango no invertido. La comparacion lexicografica de `YYYY-MM-DD` es
@@ -301,9 +330,11 @@ export type ListarOrdenesResult =
   | ActionError;
 // Feature 151 (R11/R20): resultado del modo completo en el borde. `limite_excedido`
 // lleva SOLO conteos (sin PII) y NUNCA filas; el resto de fallos son `ActionError`.
-export type ListarOrdenesCompletoResult =
-  | { status: "ok"; items: OrdenListItemDTO[]; total: number }
-  | { status: "limite_excedido"; total: number; limite: number }
-  | ActionError;
+//
+// Feature 170 (T0.1): se REEXPRESA sobre `ListarCompletoResult<T>` (lib/types/descarga-listado),
+// que generaliza este mismo union para los siete `listarCompleto` que la 170 anade. La forma
+// publica NO cambia —es el mismo union, con los mismos nombres de campo—, asi que ningun
+// consumidor de la 151 se entera; lo que cambia es que ahora hay UNA sola definicion.
+export type ListarOrdenesCompletoResult = ListarCompletoResult<OrdenListItemDTO>;
 export type ActualizarOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type BorrarOrdenResult = { status: "ok" } | ActionError;

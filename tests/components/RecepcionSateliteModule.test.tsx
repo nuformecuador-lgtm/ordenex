@@ -116,6 +116,15 @@ function renderModule(
   );
 }
 
+/**
+ * El acceso al receptor por guía/escaneo, esté la tarjeta plegada o no. Desde el 2026-07-31
+ * (decisión del humano) la tarjeta vive plegada tras este disparador: dentro vive
+ * `QrScanner` y montada dejaba la cámara ENCENDIDA todo el rato que la bodega tuviera la
+ * pantalla abierta. Lo que hay dentro lo fija `EscanerRecepcion.test.tsx`.
+ */
+const accesoReceptor = () =>
+  screen.queryByRole("button", { name: "Recibir paquete" });
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -216,7 +225,9 @@ describe("RecepcionSateliteModule", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       /no tienes una zona asignada/i,
     );
-    // Sin zona → sin recepción posible: no se monta la sección de escaneo.
+    // Sin zona → sin recepción posible: no se monta la sección de escaneo, ni siquiera su
+    // acceso (el disparador del desplegable).
+    expect(accesoReceptor()).toBeNull();
     expect(
       screen.queryByRole("region", { name: "Recepción por escaneo" }),
     ).toBeNull();
@@ -229,12 +240,16 @@ describe("RecepcionSateliteModule", () => {
   // humana: la cámara es la ÚNICA entrada de recepción por escaneo.
   // Pedido humano (rama ux): la recepción se opera igual que la recogida del mensajero
   // (cámara O número tecleado, misma tarjeta) y solo se ofrece si hay algo por recibir.
-  it("con zona y órdenes por recibir, ofrece cámara y número de guía tecleado", () => {
+  it("con zona y órdenes por recibir, ofrece cámara y número de guía tecleado", async () => {
+    const user = userEvent.setup();
     renderModule({
       sinZona: false,
       porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
     });
 
+    // La tarjeta arranca plegada (la cámara no se enciende sola): el acceso está y al
+    // abrirlo aparecen los dos caminos.
+    await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
     const region = screen.getByRole("region", {
       name: "Recibir por número de guía o escaneo",
     });
@@ -247,6 +262,7 @@ describe("RecepcionSateliteModule", () => {
   it("sin órdenes por recibir no se muestra la tarjeta de recepción ni la sección", () => {
     renderModule({ sinZona: false, porRecibir: [] });
 
+    expect(accesoReceptor()).toBeNull();
     expect(
       screen.queryByRole("region", {
         name: "Recibir por número de guía o escaneo",

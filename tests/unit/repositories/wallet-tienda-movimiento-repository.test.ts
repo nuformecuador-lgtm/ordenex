@@ -181,3 +181,106 @@ describe("WalletTiendaMovimientoRepository.listarSaldosTodasTiendas (R20)", () =
     expect(prisma.usuario.findMany).not.toHaveBeenCalled();
   });
 });
+
+// ── Feature 171 / T1.3 — agregarDesglosePorTienda (R22/R24/R34/R43) ──
+
+describe("WalletTiendaMovimientoRepository.agregarDesglosePorTienda (R24/R34)", () => {
+  it("R24: agrupa por (tipo, categoria) con `tiendaId` SIEMPRE en el WHERE", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([
+      { tipo: "credito", categoria: "cod_recaudado", _sum: { monto: new Prisma.Decimal("10000.00") } },
+      { tipo: "debito", categoria: "flete", _sum: { monto: new Prisma.Decimal("1000.00") } },
+    ]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.agregarDesglosePorTienda("t1", {});
+
+    const arg = prisma.walletTiendaMovimiento.groupBy.mock.calls[0][0];
+    expect(arg.by).toEqual(["tipo", "categoria"]);
+    expect(arg.where).toEqual({ tiendaId: "t1" }); // R24: acotado en el WHERE, no en memoria
+    expect(arg._sum).toEqual({ monto: true });
+    expect(rows).toEqual([
+      { tipo: "credito", categoria: "cod_recaudado", total: "10000.00" },
+      { tipo: "debito", categoria: "flete", total: "1000.00" },
+    ]);
+  });
+
+  it("R24: los filtros del desglose van en el MISMO WHERE que el acotado por tienda", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const desde = new Date("2026-07-01T00:00:00.000Z");
+    const hasta = new Date("2026-07-31T00:00:00.000Z");
+    await repo.agregarDesglosePorTienda("t1", {
+      cierreId: "c1",
+      categoria: "iva_flete",
+      desde,
+      hasta,
+    });
+
+    const arg = prisma.walletTiendaMovimiento.groupBy.mock.calls[0][0];
+    expect(arg.where).toEqual({
+      tiendaId: "t1",
+      categoria: "iva_flete",
+      origenTipo: "cierre_dia",
+      origenId: "c1",
+      fechaMovimiento: { gte: desde, lte: hasta },
+    });
+  });
+
+  it("R34: UNA sola sentencia, sea cual sea el filtro (coste constante por apertura)", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.agregarDesglosePorTienda("t1", { categoria: "flete" });
+
+    expect(prisma.walletTiendaMovimiento.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.walletTiendaMovimiento.findMany).not.toHaveBeenCalled();
+    expect(prisma.walletTiendaMovimiento.count).not.toHaveBeenCalled();
+    // R35: el desglose NO consulta el nombre de la tienda; baja por props desde la fila.
+    expect(prisma.usuario.findMany).not.toHaveBeenCalled();
+  });
+
+  it("money-safe: los totales salen como STRING escala 2, tambien con _sum nulo", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([
+      { tipo: "credito", categoria: "cod_recaudado", _sum: { monto: new Prisma.Decimal("7") } },
+      { tipo: "debito", categoria: "flete", _sum: { monto: null } },
+    ]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.agregarDesglosePorTienda("t1", {});
+
+    expect(rows[0].total).toBe("7.00");
+    expect(rows[1].total).toBe("0.00");
+    for (const r of rows) expect(typeof r.total).toBe("string");
+  });
+
+  it("R43: una fila `pago_tienda` del ledger llega TAL CUAL, con su categoria real", async () => {
+    // Hoy ningun flujo emite `pago_tienda` (lo hara la 172). El repositorio no lo sabe ni le
+    // importa: lee lo que hay. Este test siembra la fila que la 172 insertara y comprueba que
+    // el repositorio la propaga sin filtrarla ni reclasificarla.
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([
+      { tipo: "credito", categoria: "cod_recaudado", _sum: { monto: new Prisma.Decimal("10000.00") } },
+      { tipo: "debito", categoria: "flete", _sum: { monto: new Prisma.Decimal("1000.00") } },
+      { tipo: "debito", categoria: "pago_tienda", _sum: { monto: new Prisma.Decimal("4000.00") } },
+    ]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.agregarDesglosePorTienda("t1", {});
+
+    expect(rows).toContainEqual({ tipo: "debito", categoria: "pago_tienda", total: "4000.00" });
+    // Y el WHERE no excluye ninguna categoria: si lo hiciera, el pago no llegaria nunca.
+    expect(prisma.walletTiendaMovimiento.groupBy.mock.calls[0][0].where).toEqual({ tiendaId: "t1" });
+  });
+
+  it("sin movimientos -> [] (la derivacion lo traduce a los cuatro importes en 0.00)", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+    expect(await repo.agregarDesglosePorTienda("t1", {})).toEqual([]);
+  });
+});

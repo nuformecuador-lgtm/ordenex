@@ -9,7 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { listarPagosDeMensajeroAction } from "@/lib/actions/wallet-mensajero";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
+import {
+  listarPagosDeMensajeroAction,
+  listarPagosDeMensajeroCompletoAction,
+} from "@/lib/actions/wallet-mensajero";
 import type {
   CuentaPorPagarDTO,
   CuentaPorPagarResumenDTO,
@@ -17,6 +21,10 @@ import type {
   PagoMensajeroMovimientoDTO,
 } from "@/lib/types/wallet-mensajero";
 
+import {
+  COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO,
+  filaDescargaDesgloseMensajero,
+} from "./desglose-mensajero-descarga-columnas";
 import {
   CATEGORIA_PAGO_LABEL,
   CUENTA_COLOR,
@@ -70,6 +78,23 @@ function buildInput(
     page,
     pageSize: DESGLOSE_PAGE_SIZE,
   };
+  if (filtros.cierreId) input.cierreId = filtros.cierreId;
+  if (filtros.desde) input.desde = filtros.desde;
+  if (filtros.hasta) input.hasta = filtros.hasta;
+  return input;
+}
+
+/**
+ * Feature 170 (T C.4, R10/R18) — input del modo COMPLETO: el `mensajeroId` (REQUERIDO por
+ * el schema, igual que en el listado) + los MISMOS filtros vigentes, SIN `page`/`pageSize`.
+ * El schema es `.strict()`: colar la paginación devolvería `validation_error` en vez de un
+ * archivo, así que este constructor es SEPARADO de `buildInput` y no la pone.
+ */
+function buildInputCompleto(
+  mensajeroId: string,
+  filtros: FiltrosDesglose,
+): Record<string, unknown> {
+  const input: Record<string, unknown> = { mensajeroId };
   if (filtros.cierreId) input.cierreId = filtros.cierreId;
   if (filtros.desde) input.desde = filtros.desde;
   if (filtros.hasta) input.hasta = filtros.hasta;
@@ -287,6 +312,28 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
           isLoading={isLoading}
           error={error ? "No se pudo cargar el desglose del mensajero." : null}
           emptyMessage={DESGLOSE_VACIO}
+          /**
+           * Feature 170 (T C.4, R1/R9/R10/R13) — descarga del desglose COMPLETO de ESTE
+           * mensajero. Aquí la config se declara en el propio componente (y no baja del
+           * módulo) porque, a diferencia de los otros tres ledgers, éste YA conoce sus
+           * filtros y su `mensajeroId`: es quien los usa para el listado paginado. No se
+           * estrena ninguna lectura: es la MISMA superficie, en modo completo.
+           *
+           * El título lleva el nombre del mensajero para que el control tenga un nombre
+           * accesible ÚNICO (R13): la tabla admite varias filas expandidas a la vez, y
+           * tres botones llamados «Descargar Desglose por cierre» no identificarían nada.
+           */
+          descarga={{
+            titulo: `Desglose de ${mensajeroNombre}`,
+            columnas: COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO,
+            obtenerFilas: () =>
+              filasDesdeResultado(
+                listarPagosDeMensajeroCompletoAction(
+                  buildInputCompleto(mensajeroId, filtros),
+                ),
+                filaDescargaDesgloseMensajero,
+              ),
+          }}
         />
       </div>
 

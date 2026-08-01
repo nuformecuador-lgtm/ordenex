@@ -196,6 +196,21 @@ function panelDetalle() {
 }
 
 /**
+ * Despliega la tarjeta de recogida. Desde el 2026-07-31 (decisión del humano) vive plegada
+ * tras su disparador: dentro vive `QrScanner`, y montada dejaba la cámara ENCENDIDA todo el
+ * tiempo que el mensajero tuviera abierta la pantalla. Que el acceso siga existiendo es lo
+ * que estos casos comprueban; que dentro haya un escáner que funciona lo fija
+ * `RecogerPaqueteCard.test.tsx`.
+ */
+async function abrirRecogida(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Recoger paquete" }));
+}
+
+/** El acceso a la recogida por guía/escaneo, plegado o no. */
+const accesoRecogida = () =>
+  screen.queryByRole("button", { name: "Recoger paquete" });
+
+/**
  * Card de una remisión: el `<article>` de `PosOrderCard`. La card ya no tiene CTA
  * interno ("Gestionar orden" se eliminó, pedido humano): el `<article>` mismo es el
  * target de selección y lleva el `aria-label` "Gestionar orden <rem> · <dest>".
@@ -398,9 +413,11 @@ describe("MisAsignacionesModule", () => {
     expect(within(region).getByText(/REM-R2/)).toBeInTheDocument();
   });
 
-  it("Feature 96: la recogida se ofrece SOLO por input de número de guía y por escáner (sin modal)", () => {
+  it("Feature 96: la recogida se ofrece SOLO por input de número de guía y por escáner (sin modal)", async () => {
+    const user = userEvent.setup();
     renderModule({ porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })] });
 
+    await abrirRecogida(user);
     expect(
       screen.getByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeInTheDocument();
@@ -423,6 +440,7 @@ describe("MisAsignacionesModule", () => {
       ],
     });
 
+    await abrirRecogida(user);
     const region = screen.getByRole("region", { name: "Recoger por número de guía o escaneo" });
     await user.type(within(region).getByLabelText("Número de guía"), "1002");
     await user.click(within(region).getByRole("button", { name: "Recoger" }));
@@ -439,6 +457,7 @@ describe("MisAsignacionesModule", () => {
       porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
     });
 
+    await abrirRecogida(user);
     const region = screen.getByRole("region", { name: "Recoger por número de guía o escaneo" });
     await user.type(within(region).getByLabelText("Número de guía"), "9999");
     await user.click(within(region).getByRole("button", { name: "Recoger" }));
@@ -1165,6 +1184,8 @@ describe("MisAsignacionesModule", () => {
     });
 
     // Los controles de recogida no se renderizan; sí la lista de solo-visualización.
+    // Bloqueado no queda ni el ACCESO: sin disparador no hay forma de abrir la tarjeta.
+    expect(accesoRecogida()).toBeNull();
     expect(
       screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeNull();
@@ -1213,9 +1234,8 @@ describe("MisAsignacionesModule", () => {
     expect(
       screen.getByRole("region", { name: "Detalle de la orden" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("region", { name: "Recoger por número de guía o escaneo" }),
-    ).toBeInTheDocument();
+    // El acceso a la recogida está (la tarjeta se despliega desde ahí).
+    expect(accesoRecogida()).toBeInTheDocument();
   });
 
   // Pedido humano: sin NADA por recoger no hay guía que resolver, así que el input y el
@@ -1226,6 +1246,7 @@ describe("MisAsignacionesModule", () => {
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
+    expect(accesoRecogida()).toBeNull();
     expect(
       screen.queryByRole("region", {
         name: "Recoger por número de guía o escaneo",

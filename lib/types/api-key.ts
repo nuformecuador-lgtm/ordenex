@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { EstadoApiKey } from "@prisma/client";
 import { apiKeysConfig } from "@/lib/config/api-keys";
 import type { ApiKeyListItem } from "@/lib/interfaces/repositories/IApiKeyRepository";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 
 // Feature 81 (design §3): contratos de I/O de la generacion de API keys.
 // Feature 82 (design §2.3): contratos de I/O del listado.
@@ -64,6 +65,15 @@ export const listarApiKeysSchema = z.object({
 
 export type ListarApiKeysInput = z.infer<typeof listarApiKeysSchema>;
 
+// Feature 170 (T B.1) — entrada del modo SIN paginacion (descarga del dataset completo).
+// Derivada del schema del listado quitando `page`/`pageSize` (molde: la 151 con
+// `listarOrdenesCompletoSchema`). `.strict()`: una clave desconocida es
+// `validation_error` sin devolver fila alguna (R18).
+export const listarApiKeysCompletoSchema = listarApiKeysSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+export type ListarApiKeysCompletoInput = z.infer<typeof listarApiKeysCompletoSchema>;
+
 /** R5: DTO de fila del listado; se alinea al item del repositorio (nunca `keyHash`). */
 export type ApiKeyListItemDTO = ApiKeyListItem;
 
@@ -76,6 +86,16 @@ export type ApiKeyListItemDTO = ApiKeyListItem;
 export type ListarApiKeysResult =
   | { status: "ok"; items: ApiKeyListItemDTO[]; page: number; pageSize: number; total: number }
   | ApiKeyActionErrorResult;
+
+/**
+ * Feature 170 (T B.2): resultado del modo COMPLETO en el borde (descarga del dataset sin
+ * paginacion). `limite_excedido` lleva SOLO conteos (R27) y ninguna rama de error viaja
+ * con filas (R16/R17/R18).
+ *
+ * La invariante R6 de la 82 se conserva intacta: `ApiKeyListItemDTO` no declara `keyHash`
+ * ni el secreto, asi que tampoco existe en este camino.
+ */
+export type ListarApiKeysCompletoResult = ListarCompletoResult<ApiKeyListItemDTO>;
 
 /**
  * Errores comunes al borde de las actions de API keys. `generarApiKey` los admite todos
