@@ -40,8 +40,8 @@ import type {
 /**
  * Feature 170 (T E.5): cada sección del detalle monta el control de descarga del `DataTable`,
  * que usa `useToast`. En la app el proveedor está en `app/(app)/layout.tsx`, encima de estas
- * pantallas; aquí se envuelve por la misma razón que ya hacen `OrdenesDescarga.test.tsx` (151)
- * y `OrdenesApartado.test.tsx` (170/T A.1). Cambio del ARNÉS: ninguna aserción se toca.
+ * pantallas; aquí se envuelve por la misma razón que ya hace `OrdenesDescarga.test.tsx` (151).
+ * Cambio del ARNÉS: ninguna aserción se toca.
  */
 function renderConToast(ui: React.ReactElement) {
   return render(<ToastProvider>{ui}</ToastProvider>);
