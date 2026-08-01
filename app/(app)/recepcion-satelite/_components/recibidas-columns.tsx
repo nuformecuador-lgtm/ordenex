@@ -26,7 +26,7 @@ function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): 
  * `en_bodega_satelite`). Espejan el estilo de `ordenes-columns.tsx` pero sobre
  * `RecepcionSateliteDTO`, que NO trae tarifa (sin flete/comisión/fulfillment).
  * La columna "Seleccionar" NO vive aquí: la compone el módulo padre (fuente de
- * verdad de la selección), igual que `OrdenesApartado` prepende su checkbox.
+ * verdad de la selección), igual que `OrdenesModule` prepende su checkbox.
  */
 export function recibidasColumns(
   zonaNombre: string | null,
