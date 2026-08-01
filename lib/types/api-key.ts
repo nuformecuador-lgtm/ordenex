@@ -3,6 +3,7 @@ import type { EstadoApiKey } from "@prisma/client";
 import { apiKeysConfig } from "@/lib/config/api-keys";
 import type { ApiKeyListItem } from "@/lib/interfaces/repositories/IApiKeyRepository";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 
 // Feature 81 (design §3): contratos de I/O de la generacion de API keys.
 // Feature 82 (design §2.3): contratos de I/O del listado.
@@ -82,10 +83,16 @@ export type ApiKeyListItemDTO = ApiKeyListItem;
  * que `GenerarApiKeyResult`: aqui no hay `conflict` ni `not_found` posibles.
  *
  * Invariante R6: ninguna rama de este union contiene `keyHash` ni el secreto en claro.
+ *
+ * Feature 170 (T H.2): la rama de exito se reexpresa sobre el contrato comun de listado
+ * paginado (`lib/types/listado-paginado`), conservando `ApiKeyActionErrorResult` como union
+ * de error — que es justo el motivo por el que ese contrato parametriza el error: unificar
+ * la forma del exito NO puede obligar a este listado a declarar errores que no produce.
  */
-export type ListarApiKeysResult =
-  | { status: "ok"; items: ApiKeyListItemDTO[]; page: number; pageSize: number; total: number }
-  | ApiKeyActionErrorResult;
+export type ListarApiKeysResult = ListarPaginadoResult<
+  ApiKeyListItemDTO,
+  ApiKeyActionErrorResult
+>;
 
 /**
  * Feature 170 (T B.2): resultado del modo COMPLETO en el borde (descarga del dataset sin

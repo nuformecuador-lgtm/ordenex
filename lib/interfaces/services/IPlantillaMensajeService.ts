@@ -9,6 +9,7 @@ import type {
   PlantillaListItemDTO,
 } from "@/lib/types/plantilla-mensaje";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 107 — contrato del service. Reutiliza el `Actor` de IOrdenService
 // (`{ usuarioId, rol }`), resuelto desde la sesion (R4). SOLO `maestro` (R5).
@@ -20,9 +21,9 @@ export type CrearPlantillaServiceResult =
   | { status: "conflict"; campo: "nombre" } // R10
   | { status: "forbidden" }; // R5
 
-export type ListarPlantillasServiceResult =
-  | { status: "ok"; items: PlantillaListItemDTO[]; page: number; pageSize: number; total: number }
-  | { status: "forbidden" };
+// Feature 170 (T H.2): reexpresado sobre el contrato comun de listado paginado
+// (`lib/types/listado-paginado`). Misma forma, una sola definicion.
+export type ListarPlantillasServiceResult = ListarPaginadoServiceResult<PlantillaListItemDTO>;
 
 /**
  * Feature 170 (T B.1) — lectura SIN paginacion para la descarga. Mismo guard de rol

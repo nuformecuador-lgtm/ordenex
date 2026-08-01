@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 
 // Campos ordenables permitidos (lista blanca, evita inyeccion de columnas; R31).
@@ -325,9 +326,12 @@ export interface OrdenListItemRelaciones {
 
 export type CrearOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ObtenerOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
-export type ListarOrdenesResult =
-  | { status: "ok"; items: OrdenListItemDTO[]; page: number; pageSize: number; total: number }
-  | ActionError;
+// Feature 170 (T H.2): se REEXPRESA sobre `ListarPaginadoResult<T>`
+// (lib/types/listado-paginado), el contrato comun de pagina+total que la FASE 2 extiende a
+// los 13 listados del Anexo III. La forma publica NO cambia —los mismos cinco campos, el
+// mismo union de error—, asi que ningun consumidor se entera; lo que cambia es que la
+// definicion pasa a estar en UN sitio.
+export type ListarOrdenesResult = ListarPaginadoResult<OrdenListItemDTO>;
 // Feature 151 (R11/R20): resultado del modo completo en el borde. `limite_excedido`
 // lleva SOLO conteos (sin PII) y NUNCA filas; el resto de fallos son `ActionError`.
 //

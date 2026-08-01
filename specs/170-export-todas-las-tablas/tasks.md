@@ -435,26 +435,57 @@ producción sin esperar a la siguiente.
 
 ## Tanda H — Base de paginación (bloquea I–L)
 
-### [ ] T H.1 [P] — Configuración de tamaño de página por dominio
+### [x] T H.1 [P] — Configuración de tamaño de página por dominio
 - Ampliar `lib/config/<dominio>.ts` con `DEFAULT_PAGE_SIZE` / `MAX_PAGE_SIZE` para los dominios
   que hoy no lo tienen (cierres, cierre de bodega, incidentes, wallet-tienda, gasto fijo,
   recepción satélite), con el patrón `readPositiveInt` ya vigente. Ver Q2.
 - Test: `tests/unit/config/paginacion-dominios.test.ts`
   - «cada dominio nuevo declara default y máximo, y el default no supera el máximo» (R40)
 - **Depende de:** — · **Cubre:** R40 · **Hecho:** test verde; ningún literal de tamaño en `app/`.
+- **MEDIDO (2026-08-01):** 5 verdes. Seis dominios, todos 25/100 (Q2 instrumentada como se
+  propuso: uno por dominio, no un tamaño único). `cierre.ts` y `wallet-tienda.ts` se amplían;
+  `cierre-bodega.ts`, `incidentes.ts`, `gasto-fijo.ts` y `recepcion-satelite.ts` nacen.
+  - **Cubren 12 de los 13 listados del Anexo III.** El 13.º, «Cuentas por pagar a mensajeros»
+    (wallet-mensajero, tanda L), NO tiene dominio en la lista de esta task: queda como
+    **pregunta abierta** (ver `progress/impl_170-fase2-tanda-h.md`), no se inventó config.
+  - «Ningún literal de tamaño en `app/`» se instrumenta como guardia sobre las 9 pantallas
+    del Anexo III: hoy verde por ausencia, roja en cuanto la tanda I/J/K escriba `pageSize: 20`.
+    Verificada apuntándola a `DesglosePagosMensajero` (`DESGLOSE_PAGE_SIZE = 20`): roja.
+  - **Deuda preexistente declarada, fuera del Anexo III:** `DESGLOSE_PAGE_SIZE = 20` en los dos
+    desgloses de wallet y `PAGE_SIZE = 100` en `TiendasModule`/`ZonasTarifasModule`.
 
-### [ ] T H.2 — Contrato de listado paginado
+### [x] T H.2 — Contrato de listado paginado
 - Documentar y tipar el contrato común `{ items, page, pageSize, total }` para los 13 listados,
   reusando lo que ya devuelven órdenes/usuarios/plantillas/API keys.
 - Test: `tests/unit/descarga/contrato-paginado.test.ts`
   - «todo listado paginado devuelve el total junto a la página» (R41)
 - **Depende de:** T H.1 · **Cubre:** R41 · **Hecho:** test verde.
+- **MEDIDO (2026-08-01):** 3 verdes. `lib/types/listado-paginado.ts` EXTRAE el contrato que ya
+  existía (no lo inventa) y es el hermano de `descarga-listado.ts` de la FASE 1: juntos cubren
+  las dos lecturas de un listado (`listar` y `listarCompleto`). Los 4 alias de borde + 3 de
+  servicio se reexpresan sobre él **sin cambiar su forma pública**.
+  - El union de error va como PARÁMETRO (`<T, E = ActionError>`): usuarios y plantillas tienen
+    su propio `ActionError` y las API keys uno más estrecho. Unificar la forma del éxito no
+    puede obligar a esas pantallas a manejar ramas que su listado no produce.
+  - **Verificado por MUTACIÓN (3):** `total: items.length` en `UsuarioService` → rojo;
+    `ListarTarifasResult` sin `total` → rojo; un alias devuelto a mano → rojo. Revertidas.
 
-### [ ] T H.3 [P] — Guardia de contadores de cabecera
+### [x] T H.3 [P] — Guardia de contadores de cabecera
 - Test: `tests/unit/descarga/contadores-cabecera.guardia.test.ts`
   - «ninguna pantalla con listado paginado deriva su contador de la longitud del array» (R42)
 - Guardia estática: busca `({X.length})` junto a un `DataTable` con `Pagination`.
 - **Depende de:** — · **Cubre:** R42 · **Hecho:** test verde; falla si se reintroduce el patrón.
+- **MEDIDO (2026-08-01):** 3 verdes. Pantalla paginada = archivo que monta `<Pagination>` **más
+  los componentes de tabla que importa** (17 hoy = 13 + 4 hijos), porque en tres pantallas el
+  control vive en el módulo y el `<DataTable>` en un hijo.
+  - **NO prohíbe `.length` a secas:** registro de los 6 contadores del árbol, con los 2 del
+    Anexo IV declarados `sin_paginar` y los 4 de la tanda J `pendiente`. Sin esa distinción el
+    test se pondría rojo en la **tanda I** en cuanto `CierreDiaModule` —que tiene una tabla que
+    se pagina y un grupo que no— reciba su control.
+  - **Verificado por MUTACIÓN (3):** contador nuevo en `UsuariosModule` (ya paginada) → rojo;
+    `<Pagination>` en `CierresAdminModule`, o sea la tanda J de verdad → rojo sobre
+    `({pendientes.length})`; entrada del registro que deja de existir → rojo. Revertidas.
+  - La primera mutación ENSANCHÓ el patrón: no veía `({(data?.items ?? []).length})`.
 
 ## Tanda I — Riesgo BAJO: 7 listados de solo lectura
 
