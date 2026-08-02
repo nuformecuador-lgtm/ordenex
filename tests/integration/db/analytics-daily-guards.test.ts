@@ -57,17 +57,29 @@ function leer(rel: string): string {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Los DOS unicos archivos de codigo que pueden nombrar la tabla, y por que:
+ * Los TRES unicos archivos de codigo que pueden nombrar la tabla, y por que:
  * - `lib/analytics/types.ts`: el literal es el tipo `TablaRollup` del contrato de la 135.
  * - `lib/analytics/metrics.ts`: el catalogo de la 135 DECLARA la fuente de sus 14 metricas
  *   snapshot (`fuente: { tipo: "rollup", tablas: ["analytics_daily"] }`). Es una
  *   declaracion, no un acceso: el caso de abajo comprueba que TODA ocurrencia en ese
  *   archivo esta dentro de un `tablas: [...]` y que no hay ni una consulta.
+ * - `lib/analytics/alcance-columnas.ts`: la unica ocurrencia es PROSA — el JSDoc de
+ *   `whereRollup` explica a que rollup pertenece el fragmento de `where` que devuelve.
+ *   No hay literal en codigo ejecutable: el caso de abajo comprueba que al quitar los
+ *   comentarios no queda ni una ocurrencia.
  *
  * `tasks.md` T7.1 solo cita `types.ts`; `metrics.ts` se admite aqui porque su referencia
- * es anterior a esta feature (135, ya mergeada) y es declarativa. Queda anotado.
+ * es anterior a esta feature (135, ya mergeada) y es declarativa. `alcance-columnas.ts`
+ * llega DESPUES (feature 122, mergeada tras la 123) y se admite con el mismo criterio,
+ * mas debil todavia: es un comentario. Ninguna de las tres relaja la propiedad DURA de
+ * R44 — "nadie la lee ni la escribe" —, que la sigue midiendo el caso de `ACCESOS` sobre
+ * TODOS los archivos, sin allowlist. Queda anotado.
  */
-const ARCHIVOS_QUE_PUEDEN_NOMBRARLA = ["lib/analytics/types.ts", "lib/analytics/metrics.ts"];
+const ARCHIVOS_QUE_PUEDEN_NOMBRARLA = [
+  "lib/analytics/types.ts",
+  "lib/analytics/metrics.ts",
+  "lib/analytics/alcance-columnas.ts",
+];
 
 /** Formas de ACCEDER a la tabla. Ninguna es legal en esta feature, ni siquiera en el catalogo. */
 const ACCESOS = [
@@ -122,6 +134,15 @@ describe("R44 — la tabla nace sin consumidores: frontera con la 124/125/126", 
 
     const types = leer("lib/analytics/types.ts");
     expect(types).toMatch(/type TablaRollup = "analytics_daily"/);
+  });
+
+  it("en `alcance-columnas.ts` (122) el literal vive SOLO en el JSDoc de `whereRollup`", () => {
+    const fuente = leer("lib/analytics/alcance-columnas.ts");
+    expect(fuente).toMatch(/analytics_daily/);
+    // Sin comentarios de bloque ni de linea no debe quedar ni una ocurrencia: la
+    // referencia es documentacion, no codigo.
+    const sinComentarios = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    expect(sinComentarios.match(/analytics_daily|analyticsDaily/g) ?? []).toEqual([]);
   });
 
   it("la feature no anade repositorio, servicio ni interfaz de la tabla", () => {
