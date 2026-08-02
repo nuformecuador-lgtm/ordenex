@@ -86,14 +86,18 @@ const LISTADO = "Cuentas por pagar a mensajeros";
 const PAGINACION = "Paginación de las cuentas por pagar";
 
 /**
- * Un apellido por bloque de veinte. Es lo que hace que una búsqueda case con filas que NO
- * están en la página visible: «Solís» son los mensajeros 41-60, y en la página 1 no hay ni uno.
+ * Un apellido por MITAD del conjunto, y treinta no es un número cualquiera: es más que una
+ * página (25) y menos que el conjunto (60). Así, con una búsqueda puesta, «la página», «lo
+ * encontrado» y «el conjunto» son tres números distintos —25, 30 y 60— y ninguna aserción
+ * puede pasar por casualidad. Además «Solís» son los mensajeros 31-60: en la página 1 sin
+ * filtro no hay ni uno, que es lo que hace medible «la búsqueda mira el conjunto».
  */
 function apellido(i: number): string {
-  if (i <= 20) return "Rojas";
-  if (i <= 40) return "Vega";
-  return "Solís";
+  return i <= 30 ? "Rojas" : "Solís";
 }
+
+/** Filas que casan con un apellido: 30, ni la página ni el conjunto. */
+const FILAS_POR_APELLIDO = 30;
 
 /**
  * Nombre con el índice a DOS cifras para que el orden alfabético del listado (T L.1, R51) y el
@@ -419,23 +423,32 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     const user = userEvent.setup();
     montar();
 
-    // «Solís» son los mensajeros 41-60: veinte filas que en la página 1 no aparecen ni una.
+    // «Solís» son los mensajeros 31-60: TREINTA filas, o sea dos páginas del conjunto
+    // filtrado. Hace falta que sean dos de verdad: con una sola, «Página siguiente» estaría
+    // deshabilitado y este caso no probaría nada (medido — la mutación 10 pasó verde así).
     await buscar(user, "Solís");
     const buscador = screen.getByRole("searchbox", {
       name: "Buscar por mensajero",
     }) as HTMLInputElement;
     expect(buscador.value).toBe("Solís");
-    expect(contador()).toHaveTextContent(`20 de ${TOTAL} mensajeros`);
-
-    // El importe de la fila 51 es el de su libro entero, y sigue siéndolo tras paginar.
+    expect(contador()).toHaveTextContent(`${FILAS_POR_APELLIDO} de ${TOTAL} mensajeros`);
+    expect(nombresVisibles()).toHaveLength(PAGE_SIZE);
+    // El importe de la fila 51 es el de su libro entero: ₡500.00 pendientes.
     expect(within(tabla()).getByText("₡500.00")).toBeInTheDocument();
 
-    await user.click(within(nav()).getByRole("button", { name: "Página anterior" }));
-    // La búsqueda sigue escrita y aplicada: paginar no la borra ni la reinterpreta.
+    await user.click(within(nav()).getByRole("button", { name: "Página siguiente" }));
+    await waitFor(() => expect(nombresVisibles()[0]).toBe(nombre(56)));
+
+    // La búsqueda sigue escrita y APLICADA: paginar no la borra ni la reinterpreta. Si se
+    // borrara, esta segunda página traería a los «Rojas» de vuelta sin que nadie lo pidiera.
     expect(buscador.value).toBe("Solís");
-    expect(nombresVisibles()[0]).toBe(nombre(41));
-    expect(within(tabla()).getByText("₡500.00")).toBeInTheDocument();
-    expect(contador()).toHaveTextContent(`20 de ${TOTAL} mensajeros`);
+    expect(nombresVisibles()).toEqual(
+      CONJUNTO.slice(55, 60).map((m) => m.mensajeroNombre),
+    );
+    expect(contador()).toHaveTextContent(`${FILAS_POR_APELLIDO} de ${TOTAL} mensajeros`);
+    // Y los importes siguen siendo los STRING del servidor, fila a fila.
+    expect(within(tabla()).getByText(`₡${CONJUNTO[55].cuentaPorPagar}`)).toBeInTheDocument();
+    expect(within(tabla()).getByText(`₡${CONJUNTO[55].devengado}`)).toBeInTheDocument();
   });
 
   it("la búsqueda mira el CONJUNTO y devuelve a la página 1 (R45)", async () => {
@@ -450,10 +463,10 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     await buscar(user, "Rojas");
 
     // Vuelve a la página 1 del conjunto filtrado: sin eso, la tabla se quedaría vacía junto a
-    // un contador que dice que hay veinte resultados.
+    // un contador que dice que hay treinta resultados.
     expect(nombresVisibles()[0]).toBe(nombre(1));
-    expect(nombresVisibles()).toHaveLength(20);
-    expect(contador()).toHaveTextContent(`20 de ${TOTAL} mensajeros`);
+    expect(nombresVisibles()).toHaveLength(PAGE_SIZE);
+    expect(contador()).toHaveTextContent(`${FILAS_POR_APELLIDO} de ${TOTAL} mensajeros`);
     expect(within(nav()).getByRole("button", { name: "Ir a la página 1" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -492,19 +505,20 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     const user = userEvent.setup();
     montar();
 
-    // Con «Vega» quedan veinte (21-40) y la tabla enseña veinte de una sola página; la trampa
-    // aquí es la contraria a la del caso anterior: descargar el conjunto SIN filtrar daría 60
+    // Con «Solís» quedan TREINTA (31-60) y la tabla enseña veinticinco: los tres números que
+    // el archivo podría traer son distintos, así que ninguna de las dos trampas cuela. La de
+    // este caso es la contraria a la del anterior: descargar el conjunto SIN filtrar daría 60
     // filas, o sea datos que el usuario no está viendo.
-    await buscar(user, "Vega");
-    expect(nombresVisibles()).toHaveLength(20);
+    await buscar(user, "Solís");
+    expect(nombresVisibles()).toHaveLength(PAGE_SIZE);
 
     await user.click(botonDescarga());
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     const [, filas] = buildXlsxRowsMock.mock.calls[0];
-    expect(filas).toHaveLength(20);
+    expect(filas).toHaveLength(FILAS_POR_APELLIDO);
     expect(filas.map((f) => f.mensajero)).toEqual(
-      CONJUNTO.slice(20, 40).map((m) => m.mensajeroNombre),
+      CONJUNTO.slice(30, 60).map((m) => m.mensajeroNombre),
     );
     expect(filas.map((f) => f.mensajero)).not.toContain(nombre(1));
   });
