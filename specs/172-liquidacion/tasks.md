@@ -429,7 +429,17 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA E — Frontend: pagar a un mensajero (toca la aprobación)
 
-### [ ] T E.1 — Se pregunta al aprobar
+### [x] T E.1 — Se pregunta al aprobar
+- **HECHA el 2026-08-02.** `CierresAdminModule` gana la prop **opcional** `puedeRegistrarPago`
+  (default `false`, falla cerrado; la página la resuelve con `esAccesoTotal`) y, tras
+  `aprobarCierre` con `ok`, ofrece el pago solo si `hayPendienteDeLiquidar(pendiente)` **y** el
+  actor puede pagar. La oferta se monta **fuera** del modal de detalle: cuando aparece, el cierre
+  ya está aprobado y su detalle cerrado. `RegistrarPagoMensajeroDialog` envuelve el diálogo
+  compartido de T D.1 (**sin editarlo**, salvo una prop opcional `cancelLabel` aprobada por el
+  leader) y traduce el fallo: avisa **y relanza**, para que la clave de idempotencia se conserve.
+  **Ninguna ruta de este bloque toca el cierre**: ni «Ahora no», ni un pago fallido.
+  `tests/components/CierresAdminPagoMensajero.test.tsx` (**37 casos**), con **5 mutaciones**
+  ejecutadas (permiso, pendiente 0, aviso de fallo, insignia, estado del cierre).
 - En `CierresAdminModule`: tras `aprobarCierre` con `ok`, si `pendientePagoMensajero > 0` **y** el
   actor puede pagar, se abre el mismo diálogo, prefijado con el pendiente. «Ahora no» cierra sin
   persistir nada.
@@ -440,13 +450,28 @@ queda el registro de cierre y lo que cada una desencadenó.
   pendiente 0 no abre el diálogo; **un `adminSatelite` aprueba sin que aparezca el diálogo**
   (R6); los tests de la 158 (sub-modal de indemnizaciones) siguen verdes sin editarlos.
 
-### [ ] T E.2 — Pagar después, desde el cierre aprobado
+### [x] T E.2 — Pagar después, desde el cierre aprobado
+- **HECHA el 2026-08-02.** `PagoMensajeroSeccion.tsx`: pendiente (pintado, nunca calculado),
+  lista de comprobantes por SWR (`clavePagosDeCierre`, refresco dirigido) y botón. La monta el
+  detalle **solo** si el cierre está `aprobado` y el actor puede pagar; en cualquier otro estado
+  ni se monta ni se pide la lista (R28, verificado contando llamadas). Tras registrar, el
+  pendiente se vuelve a **LEER** del servidor (`verCierreDetalle`), no se resta en el cliente.
+  **Desviación declarada:** con pendiente 0 la sección **sí** aparece, sin botón y con el texto
+  «ya está liquidado» — el bullet decía ocultarla entera, pero el «Hecho» pide «no hay botón» y
+  ocultarla escondería los comprobantes justo cuando existen (R49). Detalle en la bitácora.
 - Sección «Pago al mensajero» en el detalle de un cierre `aprobado`: pendiente, lista de
   comprobantes y botón de registrar. No aparece en cierres no aprobados ni con pendiente 0.
 - **Depende de:** T E.1, T D.2 · **Cubre:** R19, R27, R28, R49
 - **Hecho:** los cuatro estados de cierre se prueban; con pendiente 0 no hay botón.
 
-### [ ] T E.3 [P] — La deuda se ve sin abrir nada
+### [x] T E.3 [P] — La deuda se ve sin abrir nada
+- **HECHA el 2026-08-02.** Columna «Pendiente de liquidar» en el **histórico** —donde viven los
+  cierres aprobados; en la cola el pendiente es `null` por definición y la columna estaría vacía
+  siempre— con `PendienteLiquidarBadge`, compartida con el detalle para que la deuda se lea igual
+  en los dos sitios. **Tres estados distinguibles**: importe (aviso) / «Liquidado» (éxito) / «—».
+  El valor es el STRING del servidor pintado tal cual: **cero `Number`/`parseFloat`**, con
+  barrido sobre los 6 archivos de la tanda y su contraprueba. `CierresAdminModule.test.tsx` sigue
+  verde **sin editarlo**, así que R26 se mide en el archivo nuevo.
 - Columna «pendiente de liquidar» con su `Badge` en el listado de cierres, alimentada por
   `pendientePagoMensajero` (nunca calculada en el cliente).
 - **Depende de:** T C.2 · **Cubre:** R26

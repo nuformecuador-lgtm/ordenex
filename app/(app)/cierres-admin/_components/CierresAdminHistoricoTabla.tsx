@@ -19,6 +19,8 @@ import {
   COLUMNAS_DESCARGA_CIERRES_HISTORICO,
   filaDescargaCierreHistorico,
 } from "./cierres-admin-descarga-columnas";
+import { PENDIENTE_LIQUIDAR_COL } from "./pago-mensajero-labels";
+import { PendienteLiquidarBadge } from "./PendienteLiquidarBadge";
 
 /**
  * Feature 170 — FASE 2 (T I.2, R43/R44/R52): el HISTÓRICO de «Cierres del día» (feature 38,
@@ -161,6 +163,20 @@ function columnasHistorico(
       id: "pagoMensajero",
       value: PAGO_MENSAJERO_COL,
       render: (c) => money(c.totalPagoMensajero),
+    },
+    // Feature 172 (T E.3, R26): LA DEUDA SE VE SIN ABRIR NADA. Va pegada al «Pago al
+    // mensajero» porque es su otra mitad: aquello es lo que se le debe por el cierre y esto,
+    // lo que de ello sigue sin entregarse. El valor lo DERIVA EL SERVIDOR (T C.2) y aquí solo
+    // se pinta (R14).
+    //
+    // La columna vive en el HISTÓRICO y no en la cola, y no es un olvido: la cola son los
+    // cierres `solicitado`/`vencido`, donde el pendiente es `null` por definición (R28) y la
+    // columna estaría vacía en todas las filas, siempre. Los cierres aprobados —los únicos que
+    // pueden deber algo— se listan aquí.
+    {
+      id: "pendienteLiquidar",
+      value: PENDIENTE_LIQUIDAR_COL,
+      render: (c) => <PendienteLiquidarBadge pendiente={c.pendientePagoMensajero} />,
     },
     {
       id: "ingresoBodegaRechazos",

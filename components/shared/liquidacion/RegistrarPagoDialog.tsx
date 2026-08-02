@@ -82,6 +82,17 @@ export interface RegistrarPagoDialogProps {
   onRegistrar: (campos: RegistrarPagoCampos) => Promise<RegistrarPagoResult>;
   /** Se invoca cuando el pago quedó registrado, con el comprobante que devolvió el servidor. */
   onRegistrado?: (pago: PagoRegistradoDTO, resultado: PagoRegistradoOk) => void;
+  /**
+   * Feature 172 (T E.1) — etiqueta del botón que cierra sin pagar. ADITIVA y opcional: por
+   * defecto es «Cancelar», que es lo que dice cuando alguien abre el formulario a propósito.
+   *
+   * Existe porque hay UN caso en el que ese botón no significa «cancelar»: el diálogo que se
+   * ofrece justo después de aprobar un cierre (§8). Ahí no hay nada que cancelar —el cierre YA
+   * está aprobado y el mensajero, libre— y el botón significa «pagar más tarde». Llamarlo
+   * «Cancelar» insinuaría que se está deshaciendo la aprobación, que es justo la lectura que
+   * R17/R18 existen para impedir.
+   */
+  cancelLabel?: string;
   /** Instante «ahora». Inyectable para poder fijar el día en los tests. */
   ahora?: Date;
 }
@@ -168,6 +179,7 @@ export function RegistrarPagoDialog({
   disponible,
   onRegistrar,
   onRegistrado,
+  cancelLabel = REGISTRAR_PAGO_TEXTO.cancelar,
   ahora = new Date(),
 }: RegistrarPagoDialogProps) {
   // Hoy en hora de COSTA RICA, no en UTC: entre las 18:00 y la medianoche de CR el día UTC
@@ -309,7 +321,7 @@ export function RegistrarPagoDialog({
       title={REGISTRAR_PAGO_TEXTO.titulo(beneficiario)}
       description={REGISTRAR_PAGO_TEXTO.descripcion}
       confirmLabel={REGISTRAR_PAGO_TEXTO.confirmar}
-      cancelLabel={REGISTRAR_PAGO_TEXTO.cancelar}
+      cancelLabel={cancelLabel}
       confirmDisabled={!formularioValido}
       onConfirm={confirmar}
       /* El cierre lo decide `confirmar`: un rechazo del servidor deja el diálogo abierto con

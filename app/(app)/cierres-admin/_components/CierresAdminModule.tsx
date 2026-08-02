@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,14 @@ import {
   COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
   filaDescargaCierrePendiente,
 } from "./cierres-admin-descarga-columnas";
+// Feature 172 (TANDA E): el pago al mensajero. Tres piezas, ninguna con lógica de dominio
+// propia — el pendiente lo deriva el servidor (T C.2) y el rol lo decide el servicio (R1/R6).
+import { hayPendienteDeLiquidar } from "./PendienteLiquidarBadge";
+import {
+  PagoMensajeroSeccion,
+  clavePagosDeCierre,
+} from "./PagoMensajeroSeccion";
+import { RegistrarPagoMensajeroDialog } from "./RegistrarPagoMensajeroDialog";
 
 // Feature 38 (T13, R3-R11): módulo cliente de "Cierres del día" del admin. Recibe
 // del Server Component padre los cierres del alcance ya resueltos (pendientes de
@@ -93,6 +101,35 @@ export interface CierresAdminModuleProps {
   historico: CierresAdminHistoricoPagina;
   /** `true` si el adminSatelite no tiene zona asignada (R3). */
   sinZona: boolean;
+  /**
+   * Feature 172 (T E.1/T E.2, [P3]/R6) — `true` si el actor puede REGISTRAR pagos. Lo resuelve
+   * el Server Component padre con el MISMO predicado (`esAccesoTotal`) que usa
+   * `LiquidacionService` para responder `forbidden`: son las dos mitades del control de
+   * acceso, y ninguna basta sola.
+   *
+   * Existe porque en esta pantalla **aprobar y pagar no son el mismo permiso**: un
+   * `adminSatelite` aprueba los cierres de su zona y NO mueve dinero (respuesta P3 del humano).
+   * Sin esta prop, la pantalla que aprueba sería la que paga.
+   *
+   * Opcional y con default `false` — FALLA CERRADO: un montaje que se olvide de pasarla no
+   * ofrece pagar a nadie, en vez de ofrecérselo a todos.
+   */
+  puedeRegistrarPago?: boolean;
+}
+
+/**
+ * Feature 172 (T E.1, §8) — la oferta de pago que aparece TRAS APROBAR. Guarda los tres datos
+ * que el diálogo necesita porque el detalle ya se cerró cuando se abre: el cierre aprobado
+ * desaparece de la cola y `detalle` vuelve a `null`.
+ *
+ * Es estado EFÍMERO de pantalla, no un estado del cierre (R18): «Ahora no» lo descarta y no
+ * persiste nada; el pendiente se vuelve a derivar cada vez que alguien mira el cierre.
+ */
+interface OfertaPago {
+  cierreId: string;
+  mensajeroNombre: string;
+  /** El pendiente que devolvió `aprobarCierre`, STRING del servidor (R14). */
+  pendiente: string;
 }
 
 /** Nombre visible de la cola: hoja, base del archivo y nombre del control (R12/R13). */
@@ -175,9 +212,11 @@ export function CierresAdminModule({
   pendientes,
   historico,
   sinZona,
+  puedeRegistrarPago = false,
 }: Readonly<CierresAdminModuleProps>) {
   const router = useRouter();
   const toast = useToast();
+  const { mutate } = useSWRConfig();
 
   // Detalle del cierre abierto (null = modal cerrado).
   const [detalle, setDetalle] = useState<DetalleAbierto | null>(null);
@@ -201,6 +240,8 @@ export function CierresAdminModule({
   // Errores por gestión que devuelve el SERVIDOR (`fieldErrors` con clave = gestionId,
   // `CierresAdminService.validarCoberturaIndemnizaciones`). Se pintan por fila.
   const [montoErrores, setMontoErrores] = useState<Record<string, string>>({});
+  // Feature 172/T E.1 (§8): oferta de pago tras aprobar; null = no se está ofreciendo nada.
+  const [ofertaPago, setOfertaPago] = useState<OfertaPago | null>(null);
 
   // Feature 170 — FASE 2 (T I.2, R40/R43): página visible del histórico. Vive AQUÍ y no en
   // `CierresAdminHistoricoTabla` porque dos lecturas pintan los mismos cierres —la tabla y la
@@ -379,9 +420,25 @@ export function CierresAdminModule({
         : { cierreId: detalle.cierre.cierreId, indemnizaciones },
     );
     if (result.status === "ok") {
+      // El cierre YA está aprobado y el mensajero, libre (feature 111): esta rama solo puede
+      // AÑADIR cosas, nunca condicionar lo anterior (R17/R18). Se declara el éxito, se cierra
+      // el detalle y se refresca la ruta EXACTAMENTE como antes de la 172; lo del pago va
+      // después y es aparte.
+      const { cierreId, mensajeroNombre } = detalle.cierre;
+      // Feature 172 (T C.2): el pendiente lo derivó el SERVIDOR al aprobar. La pantalla no lo
+      // calcula (R14) y no lo guarda en ningún sitio: si no se paga, se vuelve a derivar.
+      const pendiente = result.pendientePagoMensajero;
+
       toast.success("Cierre aprobado correctamente.");
       cerrarDetalle();
       router.refresh();
+
+      // R16 — se OFRECE registrar el pago si queda algo pendiente y el actor puede pagar.
+      // [P3]/R6: un `adminSatelite` aprueba y aquí no ve nada; el flujo termina como hoy y la
+      // deuda queda abierta y visible para quien tiene la caja (R26).
+      if (puedeRegistrarPago && hayPendienteDeLiquidar(pendiente)) {
+        setOfertaPago({ cierreId, mensajeroNombre, pendiente });
+      }
       return;
     }
     // Feature 158/R19-R21: el servidor valida la cobertura EXACTA de los montos y devuelve
@@ -483,6 +540,11 @@ export function CierresAdminModule({
   }
 
   const cierreAbierto = detalle?.cierre ?? null;
+  // Feature 172 (T E.2, R19/R28): la sección «Pago al mensajero» solo existe en un cierre
+  // APROBADO y solo para quien puede pagar ([P3]/R6). En cualquier otro estado no se muestra
+  // ni se ofrece nada relativo al pago — y, como el componente ni se monta, tampoco se pide su
+  // lista de comprobantes.
+  const ofrecerPagoEnDetalle = puedeRegistrarPago && cierreAbierto?.estado === "aprobado";
   // Feature 111/R15 (Q1-B): la vía NORMAL aprobar/rechazar aplica SOLO a `solicitado`.
   // Un `vencido` YA NO es resoluble por la vía normal (revierte la 41 R20): su único
   // camino normal es que el mensajero lo solicite (→ `solicitado`); la excepción es la
@@ -694,6 +756,22 @@ export function CierresAdminModule({
               onVerEvidencia={setEvidencia}
             />
 
+            {/* ---------- Feature 172 (T E.2, R19/R27/R28/R49): pago al mensajero ----------
+                El SEGUNDO camino del pago: un cierre aprobado se puede liquidar en cualquier
+                momento posterior desde su propio detalle. Tras registrar, el pendiente se
+                vuelve a LEER del servidor (`abrirDetalle`); no se descuenta en el cliente. */}
+            {ofrecerPagoEnDetalle && cierreAbierto ? (
+              <PagoMensajeroSeccion
+                cierreId={cierreAbierto.cierreId}
+                mensajeroNombre={cierreAbierto.mensajeroNombre}
+                pendiente={cierreAbierto.pendientePagoMensajero}
+                onRegistrado={async () => {
+                  await abrirDetalle(cierreAbierto.cierreId);
+                  router.refresh();
+                }}
+              />
+            ) : null}
+
             {/* Acciones: solo en un cierre `solicitado` (feature 111/R15); histórico y
                 `vencido` = sin decisión aquí (el `vencido` se destraba desde la cola, R16). */}
             {esResoluble ? (
@@ -876,6 +954,38 @@ export function CierresAdminModule({
         onConfirm={confirmarDestrabar}
         closeOnConfirm={false}
       />
+
+      {/* ---------- Feature 172 (T E.1, §8/R16/R17/R18): se pregunta AL APROBAR ----------
+          Se monta cuando `aprobarCierre` respondió `ok` con pendiente > 0 y el actor puede
+          pagar. Va FUERA del modal de detalle a propósito: cuando aparece, el cierre ya está
+          aprobado y su detalle cerrado.
+
+          LO QUE ESTE BLOQUE NO HACE, y es lo que decide si la tanda vale algo: no puede
+          revertir la aprobación. No hay una sola llamada aquí que toque el cierre — ni al
+          cerrarse con «Ahora no» (se descarta el estado local y ya), ni cuando el pago falla
+          (el diálogo se queda abierto con su clave y el aviso dice que el cierre sigue
+          aprobado). Si el pago pudiera tumbar la aprobación, el cierre volvería a
+          `solicitado`, que BLOQUEA al mensajero (feature 111): se quedaría sin trabajar al día
+          siguiente por un trámite administrativo ajeno a él. */}
+      {ofertaPago ? (
+        <RegistrarPagoMensajeroDialog
+          open
+          onOpenChange={(next) => {
+            // R17: cerrar —con «Ahora no», con Escape o con el overlay— no persiste nada.
+            if (!next) setOfertaPago(null);
+          }}
+          cierreId={ofertaPago.cierreId}
+          mensajeroNombre={ofertaPago.mensajeroNombre}
+          pendiente={ofertaPago.pendiente}
+          trasAprobar
+          onRegistrado={async () => {
+            // Refresco DIRIGIDO de los comprobantes de ESE cierre (R33) + la ruta, para que
+            // el listado vuelva a traer el pendiente derivado por el servidor (R26).
+            await mutate(clavePagosDeCierre(ofertaPago.cierreId));
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       {/* ---------- Visor de evidencia (URL firmada, R7) ---------- */}
       <Modal

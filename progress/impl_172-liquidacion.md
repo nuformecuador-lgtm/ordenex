@@ -1293,3 +1293,228 @@ Delta contra el baseline de la Tanda C (782 / 9550): **+4 archivos, +102 tests, 
 > su árbol de imports es `wallet-labels.ts`, y su diff es una **mudanza pura** (se borra la función
 > y se re-exporta la misma, promovida sin cambiarle una línea), así que no había cambio de
 > comportamiento que pudiera alcanzarla.
+
+---
+
+## TANDA E — Frontend: pagar a un mensajero (toca la aprobación) · **COMPLETA** (2026-08-02)
+
+T E.1, T E.2 y T E.3 hechas. Es la mitad delicada del frontend porque **modifica la aprobación
+del cierre**, la transacción que desbloquea al mensajero (feature 111). La propiedad que decide
+esta tanda no es «se puede pagar» —eso es fácil— sino **que pagar no pueda tumbar la aprobación**.
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `app/(app)/cierres-admin/_components/pago-mensajero-labels.ts` | Textos (módulo puro, i18n-ready). Sin siglas ni jerga |
+| `app/(app)/cierres-admin/_components/PendienteLiquidarBadge.tsx` | La marca de la deuda + `hayPendienteDeLiquidar` (type guard). La comparten la tabla y el detalle |
+| `app/(app)/cierres-admin/_components/RegistrarPagoMensajeroDialog.tsx` | Cableado del pago: le pone el `cierreId` al formulario compartido y traduce la respuesta |
+| `app/(app)/cierres-admin/_components/PagoMensajeroSeccion.tsx` | T E.2: sección «Pago al mensajero» del detalle + `clavePagosDeCierre` |
+| `tests/components/CierresAdminPagoMensajero.test.tsx` | **37 casos** |
+
+**Modificados**
+
+| Archivo | Qué |
+| --- | --- |
+| `app/(app)/cierres-admin/_components/CierresAdminModule.tsx` | Prop opcional `puedeRegistrarPago`; oferta de pago tras aprobar; sección en el detalle |
+| `app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx` | Columna «Pendiente de liquidar» (T E.3) |
+| `app/(app)/cierres-admin/page.tsx` | Pasa `puedeRegistrarPago={esAccesoTotal(actor.rol)}` |
+| `components/shared/liquidacion/RegistrarPagoDialog.tsx` | **Una prop opcional**: `cancelLabel` (ver abajo) |
+| `specs/172-liquidacion/tasks.md` | T E.1–T E.3 marcadas `[x]` |
+
+**CERO tests editados.** Ni los de la 158 (`CierresAdminIndemnizacion`), ni
+`CierresAdminModule.test.tsx`, ni los de la Tanda D. Es la condición de «Hecho» de las tres tasks
+y se cumple literalmente: R26 se mide en el archivo nuevo, no ampliando el de la 38.
+
+### El único cambio al código compartido de la Tanda D — aprobado por el leader
+
+`RegistrarPagoDialog` gana **`cancelLabel?: string`**, con default `REGISTRAR_PAGO_TEXTO.cancelar`
+(«Cancelar»): aditivo puro, sin cambio de comportamiento para la Tanda D. Existe porque hay UN
+caso en el que ese botón no significa «cancelar»: el diálogo que se ofrece **justo después de
+aprobar**. Ahí no hay nada que cancelar —el cierre YA está aprobado y el mensajero libre— y
+llamarlo «Cancelar» insinuaría que se está deshaciendo la aprobación, que es exactamente la
+lectura que R17/R18 existen para impedir. Hay dos tests que fijan las **dos** direcciones: tras
+aprobar el botón dice «Ahora no» y **no** existe «Cancelar»; pagando desde el detalle, al revés.
+`RegistrarPagoDialog.test.tsx` (44 casos) pasa **verde sin editarlo**: el default es lo que lo
+garantiza.
+
+### Las tres propiedades que decidían la tanda
+
+**1. «Ahora no» deja el cierre APROBADO y no llama a ninguna acción de pago.** El bloque de la
+oferta no tiene una sola ruta que toque el cierre: cerrar descarta estado local de pantalla y ya.
+El test lo afirma por ausencia — `registrarPagoMensajeroAction` sin llamadas, `aprobarCierre` una
+sola vez, `rechazarCierre` y `forzarSolicitudVencido` cero.
+
+**2. Si el pago FALLA, el cierre sigue aprobado y el mensaje lo dice.** Los tres caminos de fallo
+—red (throw), rechazo de dominio (`excede`) y `forbidden`— avisan con un texto que **empieza** por
+lo que sí quedó hecho: «El cierre quedó aprobado. El pago no se registró: podés registrarlo
+después desde el detalle del cierre». El aviso se emite **y el error se relanza**, para que el
+diálogo compartido conserve la clave de idempotencia y el reintento no cobre dos veces (R43).
+
+**3. `adminSatelite` aprueba sin que aparezca el diálogo.** El permiso se resuelve **solo
+server-side**, con el MISMO predicado (`esAccesoTotal`) que `LiquidacionService` usa para
+responder `forbidden`. La prop es **opcional con default `false`**: falla cerrado, y un montaje
+que se olvide de pasarla no ofrece pagar a nadie en vez de ofrecérselo a todos. Además de aprobar
+sin oferta, su detalle **no monta la sección** y **no pide la lista de comprobantes** — con
+contraprueba de que el gate discrimina (el mismo cierre CON permiso sí la ofrece).
+
+### PRUEBAS POR MUTACIÓN — cinco, con su salida real
+
+Un test de UI que pasa con el guard quitado no prueba nada. Se mutó el código cinco veces y se
+comprobó qué cae. Tras cada una se restauró desde copia y los 37 volvieron a verde.
+
+```
+MUTACION A: la oferta ignora el permiso de pagar
+     × aprueba con pendiente > 0 y NO le aparece el diálogo de pago
+ Tests  1 failed | 36 passed (37)
+
+MUTACION B: la oferta se abre con pendiente 0
+     × aprueba y termina, como antes de la 172
+ Tests  1 failed | 36 passed (37)
+
+MUTACION C: un pago fallido NO dice que el cierre sigue aprobado
+     × un fallo de red no toca la aprobación y el aviso empieza por lo que SÍ quedó hecho
+     × un rechazo del DOMINIO (`excede`) tampoco revierte nada, y también se avisa
+     × un `forbidden` del servidor deja igual el cierre: aprobado y con la deuda abierta
+ Tests  3 failed | 34 passed (37)
+
+MUTACION D: un cierre liquidado se sigue señalando con su importe
+     × no ofrece registrar, y lo dice con TEXTO en vez de con un hueco
+     × los TRES casos se distinguen entre sí (no es una etiqueta fija)
+ Tests  2 failed | 35 passed (37)
+
+MUTACION E: la sección de pago aparece en cualquier estado del cierre
+     × estado `solicitado` → sección visible: false
+     × estado `vencido` → sección visible: false
+     × estado `rechazado` → sección visible: false
+ Tests  3 failed | 34 passed (37)
+```
+
+A y B son el par que importa en el gate de la oferta: son las **dos** condiciones del mismo `if`
+y hacen caer tests distintos, así que ninguna está pasando por casualidad gracias a la otra.
+
+### R26 — el pendiente se PINTA, no se calcula
+
+El valor viene del servidor (`pendientePagoMensajero`, T C.2) y se muestra carácter por carácter:
+`"1234.50"` → `₡1234.50`, `"0.10"` → `₡0.10`. La única lectura que se hace del monto es «¿es mayor
+que cero?», y la hace `montoValido` comparando **texto**. Barrido money-safe sobre los **6**
+archivos de la tanda (los 4 nuevos + los 2 modificados): cero `Number(`, `parseFloat(`,
+`parseInt(` y `.toFixed(` en código —las únicas apariciones están dentro de comentarios que
+declaran justamente que no se usan—, con **contraprueba** de que el barrido detecta una
+conversión colada. En el test tampoco hay ninguna.
+
+Los **tres** estados se distinguen y el test lo mide **en la celda**, localizada por el rótulo de
+su columna (no por un índice escrito a mano): importe / «Liquidado» / «—». Que sean tres y no dos
+es deliberado: «no debe nada» (aprobado y liquidado, R27) y «todavía no aplica» (no aprobado, R28)
+no son lo mismo, y pintarlos igual haría que un cierre pagado pasara por uno sin aprobar.
+
+### Mapa `R<n> → test`
+
+Todos en `tests/components/CierresAdminPagoMensajero.test.tsx`.
+
+| R | Test | Qué afirma |
+| --- | --- | --- |
+| R6 | «aprueba con pendiente > 0 y NO le aparece el diálogo de pago» (**mutación A**) | el `adminSatelite` aprueba con éxito y refresco, y la oferta no existe para él |
+| R6 | «tampoco ve la sección … en el detalle de un cierre aprobado» + «CONTRAPRUEBA: el mismo cierre CON permiso sí ofrece pagar» | el gate discrimina; sin permiso ni siquiera se pide la lista de comprobantes |
+| R16 | «abre el mismo diálogo compartido, prefijado con el pendiente del SERVIDOR» | monto prefijado `50000.00` y disponible `₡50000.00`, y el cierre ya aprobado antes |
+| R16 | «el pendiente que prefija el formulario sale de la RESPUESTA de aprobar, no de la fila» | la fila trae `null`; si se leyera de ahí no habría nada que pagar |
+| R16 | «registrar el pago manda el `cierreId` y el monto TAL CUAL» | payload con `cierreId`, monto STRING, fecha de hoy CR y clave uuid |
+| R17 | «cierra el diálogo sin llamar a ninguna acción de pago» | **«Ahora no»**: cero pagos, cierre aprobado, ninguna otra decisión, ningún error |
+| R17 | «el botón se llama «Ahora no» y NO «Cancelar»» | el matiz que impide leer el botón como «deshacer la aprobación» |
+| R17 | los 3 casos de fallo (**mutación C**) | red, `excede` y `forbidden`: el cierre sigue aprobado, el mensaje lo dice y el formulario queda abierto para reintentar |
+| R18 | «el payload de aprobar es el MISMO de la 38» | `{ cierreId }` y ni una clave más: el contrato de la 38/158 no cambia |
+| R18 | «el éxito … se declara y la ruta se refresca ANTES de saber si se paga» | con el diálogo abierto y sin pagar, la aprobación ya está declarada |
+| R18 | «declinar … no deja rastro: el cierre no vuelve a decidirse» | «Ahora no» no es un estado |
+| R19 | «muestra la sección con el pendiente y el botón» · «el botón abre el diálogo y registrar manda el `cierreId` de ESE cierre» | el segundo camino del pago, desde el histórico |
+| R19 | «tras registrar, el pendiente se vuelve a LEER del servidor» | 2.ª llamada a `verCierreDetalle`; el cliente no resta |
+| R26 | «un cierre aprobado CON deuda se distingue en la tabla» · «los TRES casos se distinguen entre sí» (**mutación D**) | columna + insignia, con el importe del servidor tal cual |
+| R27 | «aprueba y termina, como antes de la 172» (**mutación B**) | pendiente 0 → no se abre el diálogo |
+| R27 | «no ofrece registrar, y lo dice con TEXTO en vez de con un hueco» | sin botón, con motivo escrito e insignia «Liquidado» |
+| R28 | «estado `%s` → sección visible: %s» (**mutación E**) | los **cuatro** estados; en los no aprobados no se muestra **ni se pide** nada |
+| R28 | «la COLA no muestra pendiente» | la columna no existe donde nada puede estar aprobado |
+| R49 | «se pide para ESE cierre y pinta fecha real, monto, método, referencia, nota, quién y cuándo» | los 7 datos del comprobante, en su fila |
+| R49 | «pero los COMPROBANTES se siguen viendo» (pendiente 0) · «un fallo de la lectura se dice en la tabla» | la lista no desaparece al liquidar; un error no tumba la sección |
+| R14 | bloque «money-safe» + contraprueba | 6 archivos barridos |
+
+### Verificación ejecutada — **el gate completo queda para el LEADER**
+
+Por indicación explícita del leader **no se corrió la suite completa** (las corridas largas están
+tumbando a los agentes por cortes de stream de la API). Lo que sí se corrió:
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: verde)
+
+$ pnpm lint
+✖ 27 problems (0 errors, 27 warnings)   # los 27 preexistentes del baseline, ninguno mío
+
+$ pnpm exec vitest run  <8 archivos: el nuevo + CierresAdminModule + CierresAdminIndemnizacion
+                         + RegistrarPagoDialog + PagosRegistradosTabla + 3 cierres-admin-*>
+ Test Files  8 passed (8)
+      Tests  261 passed (261)
+
+$ pnpm exec vitest run  <7 archivos: CierresDescarga + 3 de paginación + 3 guardias de descarga>
+ Test Files  7 passed (7)
+      Tests  38 passed (38)
+
+$ pnpm exec vitest run  <cierres-admin-historico-paginado + cierres-admin-pendientes-paginado
+                         + wallet-tiendas-pago (Tanda D)>
+ Test Files  3 passed (3)
+      Tests  40 passed (40)
+```
+
+**18 archivos / 339 tests / 0 fallos**, y ni uno editado. Se ampliaron a mano los dos vecinos que
+la columna nueva podía romper aunque no estaban en la lista del leader —la **descarga** del
+histórico y los tests de **paginación** de esta pantalla— más las tres **guardias** de
+`tests/unit/descarga` (censo de tablas, contadores de cabecera y columnas sensibles), porque la
+tanda monta una tabla más en `/cierres-admin`. **`./init.sh` y la suite completa: pendientes del
+leader.**
+
+### Hallazgos y desviaciones
+
+1. **`puedeRegistrarPago` es OPCIONAL, y es deliberado.** Hacerla obligatoria habría roto el
+   typecheck de cinco archivos de test ajenos (`CierresAdminModule`, `CierresAdminIndemnizacion`,
+   `CierresDescarga` y los de paginación) que montan el módulo — exactamente los que las tres
+   tasks exigen dejar intactos. El default es **`false`**, no `true`: un montaje que se olvide de
+   pasarla no ofrece pagar a nadie. Falla cerrado.
+
+2. **La columna de T E.3 va en el HISTÓRICO, no en la cola.** La cola son los cierres
+   `solicitado`/`vencido`, donde el pendiente es `null` por contrato (R28): la columna estaría
+   vacía en todas las filas, siempre. Los cierres aprobados —los únicos que pueden deber algo— se
+   listan en el histórico. Hay un test que fija las dos mitades: la columna existe en el histórico
+   y **no** existe en la cola.
+
+3. **La insignia se muestra a TODOS los roles que ven la pantalla, incluido `adminSatelite`.**
+   Solo se gatean las **acciones** (registrar) y la **lista de comprobantes**, que es lo que
+   `design.md §7` acota. El pendiente ya viaja en el `CierreAdminResumen` que ese rol recibe, y §7
+   dice que la deuda «queda abierta y **visible** para quien tiene la caja»: esconderle el número
+   a quien aprueba no protege nada y le quita el motivo por el que hay que pagar.
+
+4. **DESVIACIÓN de un bullet de T E.2: con pendiente 0 la sección SÍ aparece, sin botón.** El
+   bullet dice «no aparece … con pendiente 0»; el criterio de «Hecho» dice «con pendiente 0 no hay
+   botón». Se siguió el «Hecho», que es el criterio de record, porque el bullet esconde los
+   comprobantes justo cuando existen: un cierre llega a 0 **porque se pagó**, y ocultar la sección
+   dejaría sin ver el pago que lo liquidó (R49). Lo que R27 pide —«dejar de señalarlo como
+   pendiente y no ofrecer registrar más pagos»— se cumple entero: insignia «Liquidado», sin botón
+   y con el motivo escrito. Hay un test para cada mitad.
+
+5. **Tras registrar desde el detalle se RELEE el detalle entero** (`verCierreDetalle`), en vez de
+   descontar el monto en el cliente. Cuesta una consulta y es la única forma de que el pendiente
+   siga siendo un dato del servidor (R14/R26). El test lo mide contando llamadas y comprobando que
+   el botón desaparece cuando el servidor devuelve `0.00`.
+
+6. **El censo de tablas (R57) NO se toca aquí.** La guardia recorre solo `app/`, y la instancia
+   nueva de `<DataTable>` la aporta `PagosRegistradosTabla`, que vive en `components/shared/`
+   (igual que en la Tanda D). La guardia pasa verde sin cambios; el recuento de las **dos**
+   instancias es T H.1, tal como el spec lo asigna.
+
+7. **La descarga del histórico no gana la columna nueva.** Añadirla habría cambiado el archivo que
+   la 170 fijó (y sus tests, que no se pueden editar). El pendiente es un derivado que cambia con
+   cada pago; el archivo del histórico documenta el cierre. Queda anotado por si alguien lo quiere
+   en la Tanda H.
+
+8. **Preview sigue sin verificar** (hueco de T A.0). No lo resuelve esta tanda; sigue pendiente
+   **antes de mergear el PR**.
