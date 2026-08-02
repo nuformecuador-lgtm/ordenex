@@ -1,10 +1,12 @@
-# impl — Feature 170, FASE 2, Tanda K (T K.1 y T K.2: backend de la bodega satelite)
+# impl — Feature 170, FASE 2, Tanda K (T K.1, T K.2 y T K.3: la bodega satelite)
 
-**Rama:** `feature/170-fase2-tanda-k` · **Fecha:** 2026-08-01 · **Rol:** `backend_dev`
-**Alcance:** SOLO servidor. **Cero UI**: no se toco `app/**` ni `components/**`. T K.3 es de
-otro agente y su traspaso esta en §9.
+**Rama:** `feature/170-fase2-tanda-k` · **Fecha:** 2026-08-01
+**Roles:** `backend_dev` (§0-§14, T K.1/T K.2) · `frontend_dev` (§15-§23, T K.3)
+**Alcance de T K.1/T K.2:** SOLO servidor, cero UI. **Alcance de T K.3:** SOLO UI, cero
+`lib/services`, `lib/repositories` ni Server Actions.
 
-Todo lo que sigue esta MEDIDO. Las diez mutaciones se ejecutaron y se revirtieron.
+Todo lo que sigue esta MEDIDO. Las diez mutaciones del backend y las ocho del frontend se
+ejecutaron y se revirtieron.
 
 ---
 
@@ -30,26 +32,36 @@ El humano renuncio a la verificacion en pantalla (Q4) a cambio de que el PR desc
 cambio. Esto es lo que el `adminSatelite` hace HOY y lo que hara DESPUES, en la seccion
 «Órdenes de la bodega»:
 
+**Tabla actualizada por T K.3**: la columna «DESPUES» ya no anticipa nada, describe lo que
+esta commiteado. Los tres puntos que T K.1 dejo abiertos —seleccion, acciones de lote y
+descarga— llevan ahora la decision tomada.
+
 | | ANTES (hoy en `dev`) | DESPUES (con K.1+K.2+K.3) |
 | --- | --- | --- |
 | **Filas que recibe el navegador** | TODAS las de su zona en los cinco estados | una pagina (25 por defecto, `RECEPCION_SATELITE_*_PAGE_SIZE`) |
-| **Filtrar por estado/cantón/distrito** | filtra el conjunto entero, en el navegador | filtra el conjunto entero, **en el servidor**; la pagina se recalcula |
-| **Qué significa el contador** | `X de Y órdenes`, ambos del conjunto | el total sigue siendo el del CONJUNTO filtrado (lo devuelve el servidor) |
-| **Opciones de los desplegables** | las de las filas cargadas | las del **conjunto** del actor, por una accion propia |
+| **Filtrar por estado/cantón/distrito** | filtra el conjunto entero, en el navegador | filtra el conjunto entero, **en el servidor**; la pagina vuelve a la 1 y se recalcula |
+| **Qué significa el contador** | `X de Y órdenes`, ambos del conjunto | **sin filtros: `Y órdenes`** (el total del servidor). **Con filtros: `X de Y órdenes`**, X = total del conjunto FILTRADO que devuelve el servidor, Y = total del conjunto del actor (la pre-carga del Server Component). Ninguno sale de las filas de la pagina (R42) |
+| **Opciones de los desplegables** | las de las filas cargadas | las del **conjunto** del actor, por una accion propia; no cambian al paginar ni al filtrar (R46) |
 | **Orden de las filas** | los cinco grupos concatenados; dentro de cada uno, prioritarias primero y luego recientes | **el mismo**, ahora impuesto en el `ORDER BY` |
-| **Recorrer la lista** | scroll continuo | control de paginas (T K.3) |
-| **«Seleccionar todo»** | marca todas las filas visibles tras filtrar (= el conjunto) | marcara las de la **pagina visible** — R47, y es **trabajo de T K.3** |
-| **Qué acciones de lote se ofrecen** | se decide mirando el conjunto (`hayEstado`) | pasara a decidirse sobre lo SELECCIONADO — R48, **trabajo de T K.3** |
-| **Descargar** | el conjunto filtrado, ya en el cliente | debe seguir siendo el conjunto — R52, **trabajo de T K.3** |
+| **Recorrer la lista** | scroll continuo | **control de paginas** bajo la tabla, con primera/anterior/numeros/siguiente/ultima y selector de 10/25/50. Nombre accesible: «Paginación de las órdenes de la bodega» |
+| **«Seleccionar todo»** | marca todas las filas visibles tras filtrar (= el conjunto) | marca **exactamente las de la pagina visible**. Su etiqueta lo dice: «Seleccionar todas las órdenes de esta página» (antes, «…las órdenes») |
+| **Cambiar de pagina con filas marcadas** | no existia | lo marcado en otra pagina **no se pierde** (al volver sigue marcado) pero **no entra en ninguna accion**: la barra cuenta y actua solo sobre lo marcado EN LA PAGINA. Filtrar, en cambio, **limpia la seleccion** |
+| **Qué acciones de lote se ofrecen** | las cuatro se pintaban DESHABILITADAS con solo haber una orden de ese estado en el listado | **solo la de lo SELECCIONADO** (R48). Sin nada marcado no se ofrece ninguna; con seleccion mixta se ofrecen las de los estados marcados, deshabilitadas, y el aviso «Selecciona órdenes del mismo estado…» |
+| **Sobre qué actua una accion de lote** | sobre lo marcado | **igual: sobre lo marcado**, y ahora hay test que lo fija con conjunto y seleccion distintos |
+| **Descargar** | el conjunto filtrado, ya en el cliente | **el mismo conjunto filtrado**: al pulsar se RELEE el listado completo del servidor y se le aplican los filtros vigentes. Mismo archivo, mismas columnas, mismo tope de 5000 |
+| **Texto de la barra al marcar filas** | `N seleccionada(s) · <estado>` | `N seleccionada(s) **en esta página** · <estado>` |
 
 **Lo que un operador notara el primer dia:** la tabla ya no es infinita y aparece un control
 de paginas; «seleccionar todo» deja de significar «todas mis órdenes» y pasa a significar
-«las de esta página». Filtrar sigue funcionando igual —y a partir de ahora seguira
-funcionando con la tabla paginada, que es justo lo que se rompia si no se hacia esta tanda—.
+«las de esta página»; y los botones de lote ya no estan siempre a la vista en gris —aparecen
+al marcar—. Filtrar sigue funcionando igual —y a partir de ahora seguira funcionando con la
+tabla paginada, que es justo lo que se rompia si no se hacia esta tanda—.
 
 **Lo que NO cambia:** el alcance (su zona y solo su zona), el orden de las filas, las
-etiquetas de los filtros, el detalle de cada fila, los intentos de entrega, el resalte de
-prioritarias y las cuatro transiciones por lote.
+etiquetas de los filtros, las columnas y el detalle de cada fila, los intentos de entrega, el
+resalte de prioritarias, las cuatro transiciones por lote y a que ordenes aplica cada una, el
+reporte de incidente por fila, la seccion «Por recibir» (que NO pagina: no es de este
+listado), el manifiesto del ultimo envio y el aviso de «Liberadas hoy».
 
 ---
 
@@ -446,7 +458,7 @@ Baseline de la tanda J: 741 archivos / 8908 tests → **+3 archivos y +39 tests*
 
 ---
 
-## 14. Veredicto
+## 14. Veredicto (T K.1 + T K.2)
 
 Los tres filtros de la bodega satelite se resuelven ahora en el servidor y devuelven, para los
 mismos valores, exactamente el mismo conjunto que el filtro de cliente en las 64 combinaciones
@@ -454,3 +466,350 @@ posibles, con el orden de los cinco grupos conservado en el `ORDER BY` y el tota
 viajando dentro de la misma consulta que la pagina; el acotamiento por zona se afirma en los
 dos sentidos y en las dos capas, y tres mutaciones del SQL que los tests de servicio no vieron
 las detuvo el test de repositorio.
+
+---
+---
+
+# T K.3 — Frontend: paginacion, seleccion por pagina y acciones de lote
+
+**Rol:** `frontend_dev` · **Fecha:** 2026-08-01 · **Alcance:** SOLO capa de presentacion.
+**Cero cambios** en `lib/services`, `lib/repositories` ni Server Actions (no hubo defecto que
+declarar: las dos acciones de T K.1/T K.2 se cablearon tal cual).
+
+Baseline al empezar: `tsc` 0, `eslint` 0 errores / 25 warnings, suite 744 archivos / 8947
+tests, `git status` limpio.
+
+---
+
+## 15. Como quedo repartida la pantalla
+
+La pantalla tenia dos piezas y sigue teniendo dos, pero la linea que las separa se movio: de
+«el modulo trae los datos y el listado los filtra» a **«el modulo es la capa de datos y el
+listado es la de presentacion»**.
+
+| | `RecepcionSateliteModule` (padre) | `SateliteOrdenesListado` (hijo) |
+| --- | --- | --- |
+| **ANTES** | recibia los 5 arrays por estado y los CONCATENABA | filtraba en memoria, seleccionaba, pintaba y descargaba |
+| **DESPUES** | filtros vigentes, pagina pedida, SWR, `mutate`, `<Pagination>` y el origen del conjunto para la descarga | barra de filtros (emite), seleccion de filas, acciones de lote, tabla y contador |
+
+**Por que la capa de datos vive en el PADRE y no en el listado**, que seria lo natural:
+
+1. **`mutate` no se puede delegar.** Las cuatro acciones de lote y las dos de recepcion las
+   ejecuta el modulo, y dos de ellas terminan en un MODAL cuyo `onSuccess` tambien es suyo.
+   Antes bastaba `router.refresh()` porque las filas llegaban por props; ahora las tiene SWR,
+   y sin `mutate()` una orden recien enviada a central **seguiria en el listado** hasta
+   recargar la pagina. Con SWR en el hijo habria hecho falta una señal de recarga hacia abajo:
+   mas piezas para el mismo efecto. Nace `releerBodega()`, que hace las dos cosas
+   (`router.refresh()` para «Por recibir», el bloqueo y las liberadas; `mutate()` para la
+   tabla) y es lo unico que llaman los seis handlers.
+2. **La guardia de T H.3 mira hacia abajo, nunca hacia arriba** (Q-I6, cerrada en T J.2). Con
+   `<Pagination>` en el modulo, la guardia reconoce como «pantalla paginada» al modulo Y al
+   listado que importa —que es donde vive el contador—. Al reves, el contador quedaria fuera
+   de su vista.
+3. **La descarga necesita el filtro y el origen del conjunto**, y los dos son del modulo.
+
+Lo que el listado NO perdio: sigue siendo el dueño de lo que es suyo —que filas estan marcadas
+y que accion se ofrece—, que es exactamente lo que R47 y R48 regulan.
+
+---
+
+## 16. Los cinco requisitos, uno a uno
+
+### R43 — control de navegacion
+
+`<Pagination>` bajo la tabla, con `showFirstLast`, `siblingCount={1}` y selector de tamaño
+`[10, 25, 50]` acotado por `MAX_PAGE_SIZE` (el literal NO se escribe: sale de
+`recepcionSateliteConfig`, y `RecepcionSateliteModule.tsx` se añade a `PANTALLAS_ANEXO_III`
+de la guardia de T H.1 para que se siga vigilando ahi). Nombre accesible propio,
+`PAGINACION_BODEGA_LABEL`: la pantalla no tiene otro control de paginas hoy, pero un `<nav>`
+llamado «Paginación» a secas no dice de que listado es.
+
+### R47 — «seleccionar todo» = la pagina visible
+
+Dos cambios y una decision:
+
+- `SelectAllCheckbox` recibe los ids de `ordenes` (la pagina), no del conjunto;
+- `seleccionadas` = `ordenes ∩ seleccionados`, o sea **lo marcado que esta a la vista**;
+- la etiqueta pasa a **«Seleccionar todas las órdenes de esta página»**. No es cosmetica: la
+  casilla cambia de significado y el unico texto que el lector de pantalla anuncia es ese.
+  Que la etiqueta mintiera seria peor que no tenerla.
+
+**Q-K3 resuelta — que hace la seleccion al cambiar de pagina.** Se conserva (el `Set` de ids
+no se poda), pero **no participa**: la barra cuenta y las acciones actuan solo sobre lo que
+esta en la pagina. Volver a la pagina anterior recupera lo marcado. Molde: `OrdenesModule`
+(feature 144), que hace exactamente esto. Las dos alternativas se descartaron con motivo:
+*limpiar al paginar* obligaria a rehacer el trabajo por un scroll de mas y nadie lo pide;
+*acumular y actuar sobre todo lo marcado* es justo lo que R47 prohibe —el operador pulsaria
+«Enviar a central» viendo 3 filas marcadas y moveria 28—.
+
+**Filtrar SI limpia la seleccion**, y ahi no hay duda: el conjunto cambia, la fila marcada
+puede haber desaparecido de la vista y actuar sobre ella seria actuar a ciegas. Es lo que la
+pantalla ya hacia (podaba contra `visibles`) y lo que hace `OrdenesModule`.
+
+### R48 — las acciones se deciden sobre lo SELECCIONADO
+
+`hayEstado()` pasa de `visibles.some(...)` a `seleccionadas.some(...)`. **Cambia lo que se ve**
+y es el punto que mas se notara: hasta hoy los cuatro botones aparecian en gris con solo haber
+una orden de ese estado en el listado; ahora no aparece ninguno hasta marcar algo, y solo
+aparece el que corresponde a lo marcado.
+
+Se eligio esto y no «ofrecer segun la pagina» por lo que el propio traspaso adelantaba: con la
+pagina, un boton **dejaria de ofrecerse solo por estar sus ordenes en otra pagina** —el
+operador concluiria que su bodega no admite esa transicion—. Y por el riesgo grande: mientras
+la decision y la accion miren cosas distintas (una el listado, otra la seleccion), cualquier
+descuido al cablearlas mueve paquetes que el usuario no eligio. Ahora **miran lo mismo**.
+
+Lo que NO cambia: `disabled` sigue exigiendo estado UNICO (una seleccion mixta no ejecuta
+nada) y `puedeAsignar` sigue mandando sobre «Asignar» con la bodega bloqueada.
+
+### R46 — los desplegables conservan todas sus opciones
+
+`construirFiltrosSatelite` cambia de ORIGEN, no de contrato: recibia `RecepcionSateliteDTO[]`
+y ahora recibe el `CatalogoFiltrosSateliteDTO` de T K.2. Sigue produciendo los mismos
+`FilterDef`, porque el catalogo del servidor se deriva con las MISMAS funciones puras
+(`derivarCantones` / `derivarDistritos`) que usaba la pantalla. El Server Component lo
+pre-carga y baja por props (molde `obtenerCatalogoFiltrosOrdenes`, feature 144): ni un endpoint
+nuevo ni una consulta por cada seleccion del usuario.
+
+`ESTADOS_SATELITE` **deriva ahora sus `value`** de `ESTADOS_BODEGA_SATELITE`
+(`lib/utils/estados-bodega-satelite.ts`), como recomendaba el traspaso §9.2, y solo aporta las
+etiquetas mediante un `Record` EXHAUSTIVO: añadir un estado a la constante sin darle etiqueta
+**no compila**. El test que vigilaba que las dos listas dijeran lo mismo
+(`satelite-catalogos::la lista blanca del servidor y el desplegable…`) sigue verde, ahora por
+construccion.
+
+### R52 — la descarga sigue entregando el conjunto
+
+Se sigue la **recomendacion (a) del traspaso §9.6**, sin desviarse: al pulsar el control se
+RELEE `listarRecepcionSatelite()` —el mismo listado que la pantalla llamaba antes de paginar,
+acotado server-side a la zona del actor: descargar no amplia el alcance ni una fila—, se
+concatenan los cinco grupos EN EL ORDEN DEL FLUJO (el mismo del `ORDER BY`, R51) y se aplican
+los tres filtros vigentes en memoria con `filtrarOrdenesSatelite`, extraido literalmente del
+`useMemo` que el listado tenia. Todo eso alimenta `filasDelConjuntoCompleto` (T I.2), que
+conserva el tope de 5000 y su mensaje accionable.
+
+No se eligio (b) —pedir al backend un `listarOrdenesBodegaCompleto(filtros)`— porque es
+backend, y esta task es de UI. Queda como estaba: **Q-K4 sigue abierta para la tanda M**, y con
+un motivo mas ahora que hay codigo que lo sostiene (§20).
+
+---
+
+## 17. Donde se prueba cada cosa
+
+| Archivo | Que prueba |
+| --- | --- |
+| `tests/components/paginacion/SatelitePaginacion.test.tsx` (8, NUEVO) | los cinco casos que exige T K.3 + el primer pintado + el contador en la ultima pagina |
+| `tests/components/descarga/SateliteDescarga.test.tsx` (4, reescrito) | el archivo: columnas, valores crudos, los tres filtros y —nuevo— que descargar RELEE el conjunto y no pide paginas |
+| `tests/unit/descarga/contadores-cabecera.guardia.test.ts` (+1) | la guardia estatica de R42, ahora con esta pantalla dentro |
+
+El fixture de la pantalla vive en `tests/fixtures/satelite-bodega.ts` (hermano de
+`pagina-inicial.ts`, T I.2): seis archivos de la suite montan este modulo y todos necesitan la
+pagina y el catalogo. Escrito a mano en cada uno, el catalogo acabaria derivandose de las filas
+de la pagina por inercia — y entonces ningun test podria distinguir «las opciones del conjunto»
+de «las de la pagina», que es justo lo que R46 separa.
+
+**El doble de la Server Action FILTRA Y RECORTA de verdad**, y su filtro esta reimplementado en
+el test comparando por igualdad EXACTA del nombre (como el SQL) en vez de reusar
+`filtrarOrdenesSatelite`: si el doble fuera el mismo codigo que la pantalla, el test seria el
+codigo midiendose a si mismo. Los datos estan repartidos para que **pagina y conjunto no
+coincidan en nada de lo que se mide**: la pagina 1 es toda de un solo canton y un solo estado,
+la 2 mezcla tres estados y el conjunto tiene cuatro cantones (dos homonimos) y cinco estados.
+
+---
+
+## 18. Las ocho mutaciones, con su salida real
+
+**Todas revertidas** (`grep MUTACION app/` sin resultados; suite completa verde despues).
+
+| # | Mutacion | Resultado medido |
+| --- | --- | --- |
+| 1 | **R47**: «seleccionar todo» abarca el conjunto visto (acumulador de ids entre paginas) | **ROJO (1)**: `seleccionar todo marca exactamente las filas de la página visible (R47)` → `REM-01 quedó marcada sin estar a la vista` |
+| 2 | **R48 (a)**: `hayEstado` mira `ordenes` (el listado) en vez de `seleccionadas` | **ROJO (1)**: `las acciones de lote se deciden sobre lo seleccionado…` |
+| 3 | **R48 (b)**: `onEnviarACentral(ordenes)` en vez de `(seleccionadas)` — la accion sobre la pagina | **ROJO (1)**: `expected "vi.fn()" to be called 3 times, but got 25 times` |
+| 4 | **R46**: el catalogo se deriva de la PAGINA (el codigo de antes de T K.3) | **ROJO (1)**: `los desplegables de cantón y distrito conservan todas sus opciones (R46)` |
+| 5 | **R52**: `obtenerFilas` proyecta `data.items` — «descargá lo que ves» | **ROJO (3)**: los dos casos de descarga del archivo nuevo + `descargar relee el CONJUNTO…` |
+| 6 | **R43**: se quita el `ariaLabel` del control | **ROJO (5)**: todos los casos que navegan dejan de encontrar el `<nav>` por nombre |
+| 7 | **R42**: el contador sale de `ordenes.length` | **ROJO (2)** de comportamiento (`navega entre páginas`, `seleccionar todo…`) **y ROJO (1)** en la guardia estatica de T H.3 |
+| 8 | **R44**: se quita el `fallbackData` de SWR | **ROJO (6)**, empezando por `el usuario ve las mismas filas que antes en el PRIMER pintado` |
+
+Las dos que el encargo exigia son la **1** (seleccionar todo abarcando el conjunto) y la **3**
+(accion de lote sobre el conjunto en vez de la seleccion).
+
+**Sobre la 8**, que es el aviso medido de la tanda I: el test del primer pintado NO espera. Con
+`await`/`findBy*`, quitar el `fallbackData` pasaba VERDE —la pantalla enseñaba un esqueleto y
+las filas aparecian tras un viaje al servidor por un dato que ya venia en la respuesta— y aqui
+se comprueba que sigue sin colar.
+
+---
+
+## 19. Mapa `R<n> → archivo::test`
+
+Prefijos: `P/` = `tests/components/paginacion/SatelitePaginacion.test.tsx`,
+`D/` = `tests/components/descarga/SateliteDescarga.test.tsx`,
+`G/` = `tests/unit/descarga/contadores-cabecera.guardia.test.ts`.
+
+| R | Test |
+| --- | --- |
+| **R42** | `P/::navega entre páginas (R43)` — el contador dice 60 en la ULTIMA pagina, que trae 10 |
+| **R42** | `P/::seleccionar todo marca exactamente las filas de la página visible (R47)` — al soltar la seleccion vuelve a decir el total |
+| **R42** | `G/::el contador de la bodega satelite dice el total del servidor, y su pantalla se vigila` |
+| **R43** | `P/::navega entre páginas (R43)` — `<nav>` por rol y nombre, siguiente/ultima/primera, y las filas CAMBIAN |
+| **R44** | `P/::el usuario ve las mismas filas que antes en el PRIMER pintado (R44)` — sin `await` |
+| **R46** | `P/::los desplegables de cantón y distrito conservan todas sus opciones (R46)` — pagina de un solo canton, desplegable con los cuatro del conjunto, y el distrito de otro canton |
+| **R47** | `P/::seleccionar todo marca exactamente las filas de la página visible (R47)` — las 25 de la pagina 2 marcadas, y NINGUNA de la 1 |
+| **R48** | `P/::las acciones de lote se deciden sobre lo seleccionado, no sobre el conjunto (R48)` — pagina de tres estados, 3 marcadas de 10 del conjunto, la accion recibe esas 3 |
+| **R48** | `P/::una acción de otro estado actúa sobre su selección, no sobre la página (R48)` — «Enviar a central» no se ofrece aunque el conjunto tenga 10 por devolver en otra pagina |
+| **R52** | `P/::la descarga sigue entregando el dataset completo con los filtros vigentes (R52)` — desde la PAGINA 2 y con filtro: 30 filas, no las 5 que se ven |
+| **R52** | `P/::la descarga sin filtros entrega el conjunto entero, no la página (R52)` |
+| **R52** | `D/::descargar relee el CONJUNTO, no otra página del listado` |
+| **R52** | `D/::respeta los filtros de estado, cantón y distrito aplicados` |
+
+**R40/R41/R45/R51 no son de esta task** (los cubre T K.1, §8) y no se declaran cubiertos aqui;
+lo que esta pantalla añade es que el contrato se cablea sin perder nada por el camino.
+
+---
+
+## 20. Decisiones de T K.3
+
+1. **El modulo deja de recibir los cinco arrays por estado.** Recibe la PAGINA 1 y el
+   catalogo. La alternativa —seguir recibiendolos «total, ya estan»— habria dejado R52 verde
+   sin escribir una linea y convertido la paginacion en maquillaje: el conjunto entero
+   seguiria cruzando al cliente en cada render (T I.2, §14, mismo argumento).
+2. **El contador se resuelve sin una segunda llamada.** `Y` (el conjunto sin filtros) es el
+   `total` de la pagina 1 que el Server Component ya pre-carga; `X` es el `total` con los
+   filtros vigentes. Los dos son del servidor. Sin filtros solo se muestra un numero: «60 de
+   60 órdenes» no dice nada que «60 órdenes» no diga.
+3. **Sin filtros marcados, `X de Y` no se pinta**, y con ellos si. Es la unica lectura en la
+   que los dos numeros informan.
+4. **`filtrarOrdenesSatelite` se EXTRAE del `useMemo`** a `satelite-ordenes-filtros.ts`. La
+   tabla ya no lo usa (filtra el servidor); lo usa la descarga. Extraerlo lo hace importable
+   —hasta hoy vivia dentro de un componente y el test de T K.1 tuvo que copiarlo literalmente
+   (§6)— y deja el hueco en un solo sitio para cuando Q-K4 se cierre.
+5. **La descarga baja como CALLBACK, no como filtros** (design §5). El listado declara las
+   COLUMNAS del archivo (es quien sabe que enseña) y el modulo aporta `obtenerFilas`. Es el
+   patron que ya tienen `WalletLedger`, `DesgloseTiendaLedger` y `DesglosePagos`; el registro
+   de proveedores de `ControlDescargaTransversal` pasa de 3 a 4 y su regex admite ademas
+   `filasDelConjuntoCompleto`.
+6. **`releerBodega()` sustituye a `router.refresh()`** en los seis puntos donde la pantalla
+   relee. Ver §15.
+7. **El esqueleto se muestra solo si NO hay nada que pintar** (`data === undefined`), no
+   mientras SWR revalida con `fallbackData`. Arreglo de T I.2 heredado tal cual.
+8. **Un resultado que no sea `ok` se LANZA** en el fetcher: la tabla enseña «No se pudieron
+   cargar las órdenes de la bodega.» en vez de una tabla vacia, que se leeria como «no hay
+   órdenes» — que es justo lo contrario de lo que pasa.
+9. **El Server Component degrada suave**: si la pagina o el catalogo no responden `ok`, bajan
+   vacios (el `notFound` por rol ya se decidio antes, con `listarRecepcionSatelite`).
+10. **El texto de UI no gana siglas.** «en esta página», «Selecciona órdenes del mismo
+    estado…», «No se pudieron cargar las órdenes de la bodega.»
+
+---
+
+## 21. Preguntas abiertas de T K.3
+
+**Q-K3 — CERRADA** (§16, R47): la seleccion sobrevive al cambio de pagina pero no participa;
+filtrar la limpia. Molde `OrdenesModule`.
+
+**Q-K4 — SIGUE ABIERTA, y ahora tiene codigo que la sostiene.** La descarga relee
+`listarRecepcionSatelite()` y filtra en memoria. No es una regresion —es literalmente lo que la
+pantalla hacia—, pero **el conjunto entero vuelve a cruzar al cliente en ese momento**, solo
+que ahora unicamente al pulsar «Descargar» en vez de en cada render. Cerrarla es
+`listarOrdenesBodegaCompleto(filtros)` en el backend (tanda M): con el, `filtrarOrdenesSatelite`
+desaparece y el hueco «exacto vs normalizado» de Q-K1 deja de tener dos implementaciones.
+
+**Q-K5 — parcialmente cerrada.** Los cinco arrays de `listarRecepcionSatelite()` **ya no
+cruzan al cliente en el render**: `page.tsx` los sigue recibiendo pero no los pasa al modulo.
+Lo que sigue cruzando es «Por recibir» (que es de otra seccion y no pagina) y el conjunto en el
+momento de descargar (Q-K4).
+
+**Q-K6 — NUEVA: el Server Component hace ahora TRES lecturas de este dominio por render**
+(`listarRecepcionSatelite` para «Por recibir»/zona/`sinZona`, `listarOrdenesBodegaPaginado`
+para la tabla y `obtenerCatalogoFiltrosSatelite` para los desplegables). R54 habla del listado
+—y ese cumple: 2+1 consultas, §8— pero la PANTALLA lee mas que antes. Se deja declarado y sin
+tocar porque resolverlo es backend: o «Por recibir» sale de su propia accion acotada, o
+`listar()` deja de devolver los cinco grupos. **Ninguna de las dos es de T K.3.** El catalogo,
+ademas, es cacheable: no cambia con la pagina ni con los filtros.
+
+**Q-K7 — NUEVA: la seleccion no se avisa al cambiar de pagina.** Lo marcado en la pagina 1
+sigue marcado al volver, pero mientras se esta en la 2 nada lo dice. Con `pageSize` 25 y una
+bodega de 60 el caso es raro; si el humano lo ve en uso, la solucion (un aviso «tienes N
+marcadas en otras páginas») es una linea de texto en la barra. **No se hizo porque nadie lo
+pidio y añadir texto a una barra que ya avisa de dos cosas puede estorbar mas que ayudar.**
+
+**Heredadas y NO resueltas aqui:** Q-K1 (exacto vs normalizado), Q-K2 (sin test de integracion
+del SQL), Q-I1, Q-I2, Q-I5, Q-J1, Q-J2, Q-J3, Q-J4 y la deuda D5.2.
+
+---
+
+## 22. Archivos de T K.3
+
+**Nuevos (2)**
+
+- `tests/components/paginacion/SatelitePaginacion.test.tsx` (8 tests).
+- `tests/fixtures/satelite-bodega.ts` — `paginaBodega()` y `catalogoSatelite()`.
+
+**Modificados — produccion (4)**
+
+- `app/(app)/recepcion-satelite/page.tsx` — pre-carga de la pagina 1 y del catalogo; deja de
+  bajar los cinco arrays por estado.
+- `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx` — SWR + filtros +
+  pagina + `<Pagination>` + `releerBodega()` + origen del conjunto para la descarga.
+- `app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx` — pinta la pagina;
+  seleccion y acciones de lote acotadas a ella; contador por totales del servidor.
+- `app/(app)/recepcion-satelite/_components/satelite-ordenes-filtros.ts` —
+  `construirFiltrosSatelite(catalogo)`, `ESTADOS_SATELITE` derivado de `lib/`,
+  `seleccionAFiltroSatelite`, `serializarFiltroSatelite` y `filtrarOrdenesSatelite`.
+
+**Modificados — tests (8)**
+
+- `tests/components/descarga/SateliteDescarga.test.tsx` — monta el modulo; el caso estatico
+  «no relee nada» (R30/R32 de la FASE 1) se sustituye por «relee el CONJUNTO, no otra pagina».
+- `tests/components/RecepcionSateliteModule.test.tsx`, `RecepcionSateliteIncidente.test.tsx`,
+  `RecepcionSatelitePage.test.tsx`, `ManifiestoFlujos.test.tsx`,
+  `tests/unit/components/deshacer-asignacion.ui.test.tsx` — andamiaje: los casos siguen
+  describiendo la bodega POR GRUPOS y el helper los concatena para armar la pagina; caché de
+  SWR nueva por montaje. Los casos que afirmaban «sin selección el botón está deshabilitado»
+  pasan a «sin selección no se ofrece» (R48).
+- `tests/unit/actions/satelite-catalogos.test.ts` — `construirFiltrosSatelite` cambio de
+  firma; el helper del test le entrega el catalogo derivado del conjunto entero. **Ninguna
+  asercion se relajo**: las cuatro etiquetas, el orden y el encadenamiento se siguen afirmando.
+- `tests/components/descarga/ControlDescargaTransversal.test.tsx`,
+  `tests/unit/descarga/contadores-cabecera.guardia.test.ts`,
+  `tests/unit/config/paginacion-dominios.test.ts` — las tres guardias transversales, con esta
+  pantalla dentro.
+
+**Cero cambios en `lib/`.** `censo-tablas.ts` no se toca: la tabla no se muda ni nace otra.
+
+---
+
+## 23. Puertas de T K.3 (medicion final, salida real)
+
+```
+$ npx tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ npx eslint
+✖ 25 problems (0 errors, 25 warnings)      (baseline de T K.1/K.2: 25 warnings — sin delta)
+
+$ npx vitest run
+ Test Files  745 passed (745)
+      Tests  8956 passed (8956)
+   Duration  216.95s
+
+$ ./init.sh
+== init OK ==
+```
+
+Baseline de T K.1/T K.2: 744 archivos / 8947 tests → **+1 archivo y +9 tests**. Suite completa
+en verde a la primera y sin flakes: el conocido `OrdenesModuleReuse` paso en las dos corridas.
+
+---
+
+## 24. Veredicto (T K.3)
+
+La bodega satelite pinta ahora la pagina que le da el servidor con un control de navegacion
+propio y nombrado; «seleccionar todo» marca exactamente las filas visibles y lo dice en su
+etiqueta; las cuatro acciones de lote se ofrecen y se ejecutan sobre lo SELECCIONADO —probado
+con una pagina de tres estados y un conjunto de cinco, donde marcar 3 de 10 mueve 3—; los
+desplegables siguen ofreciendo los cuatro cantones del conjunto aunque la pagina tenga uno; y
+la descarga sigue entregando las 60 filas del conjunto con los filtros vigentes cuando la tabla
+enseña 5. Ocho mutaciones lo confirmaron en rojo y se revirtieron.
