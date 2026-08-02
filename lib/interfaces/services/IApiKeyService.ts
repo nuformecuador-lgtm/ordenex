@@ -1,16 +1,26 @@
 import type {
   ActivarApiKeyResult,
   ApiKeyIdInput,
+  ApiKeyListItemDTO,
   DesactivarApiKeyResult,
   GenerarApiKeyInput,
   GenerarApiKeyResult,
+  ListarApiKeysCompletoInput,
   ListarApiKeysInput,
   ListarApiKeysResult,
   RotarApiKeyResult,
 } from "@/lib/types/api-key";
 import type { Actor } from "@/lib/interfaces/services/IUsuarioService";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 
 export type { Actor };
+
+/**
+ * Feature 170 (T B.1) — lectura SIN paginacion para la descarga. Mismo guard de rol
+ * (`maestro`) que `listar`: quien no puede inventariar las keys tampoco puede
+ * descargarlas. Ni `forbidden` ni `limite_excedido` viajan con filas (R17/R27).
+ */
+export type ListarApiKeysCompletoServiceResult = ListarCompletoServiceResult<ApiKeyListItemDTO>;
 
 export interface IApiKeyService {
   /**
@@ -36,6 +46,19 @@ export interface IApiKeyService {
    * NO conoce HTTP ni Prisma: la autenticacion (R1) la resuelve la Server Action.
    */
   listar(input: ListarApiKeysInput, actor: Actor): Promise<ListarApiKeysResult>;
+
+  /**
+   * Feature 170/R9: el MISMO inventario sin recorte por pagina, para la descarga.
+   *
+   * - Mismo `ALLOWED_ROLES` que `listar` (R17): el resto -> `forbidden` SIN consultar.
+   * - Mismo `repo.list` y por tanto el MISMO orden fijo `createdAt desc` (R11).
+   * - `take: tope + 1` y guard del tope (R27/R29).
+   * - Sigue sin haber secreto que borrar: `ApiKeyListItem` no declara `keyHash` (82/R6).
+   */
+  listarCompleto(
+    input: ListarApiKeysCompletoInput,
+    actor: Actor,
+  ): Promise<ListarApiKeysCompletoServiceResult>;
 
   /**
    * Ciclo de vida/R1/R2/R3: rota el secreto de una key existente.

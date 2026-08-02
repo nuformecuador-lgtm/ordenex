@@ -49,6 +49,62 @@ function slugTitulo(titulo: string): string {
   return slug === "" ? SLUG_FALLBACK : slug;
 }
 
+// ---------------------------------------------------------------------------
+// Nombre de la HOJA (feature 170, T G.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reglas que `exceljs` impone al nombre de una hoja (verificadas en
+ * `exceljs/lib/doc/worksheet.js`, v4.4.0):
+ *
+ *  - LANZA si contiene `* ? : \ / [ ]`;
+ *  - LANZA si empieza o termina con comilla simple;
+ *  - LANZA si es exactamente `History` (nombre reservado de Excel);
+ *  - AVISA por consola y TRUNCA a 31 caracteres si se pasa de largo.
+ *
+ * Hasta la 170 el `titulo` del listado viajaba tal cual. Con títulos fijos («Órdenes»,
+ * «Usuarios») daba igual, pero el rollout introdujo títulos COMPUESTOS CON DATOS —
+ * `Desglose de <mensajero>`, `<Resultado> · <mensajero>`— y ahí las dos primeras reglas
+ * dejan de ser teóricas: un nombre con una barra convertiría la descarga en «no se pudo
+ * generar el archivo», sin archivo y sin explicación útil.
+ *
+ * Se sanea AQUÍ, en la función común, y no en el contrato del `DataTable`: el nombre de la
+ * hoja es un detalle del `xlsx` que este módulo ya posee (igual que posee el slug del
+ * nombre de archivo). El `titulo` que declara cada tabla sigue intacto — es el nombre
+ * accesible del control y la base del nombre del archivo, y NO se recorta.
+ */
+const CARACTERES_PROHIBIDOS_HOJA = /[*?:/\\[\]]/g;
+
+/** Máximo de caracteres del nombre de una hoja en Excel. */
+const MAX_NOMBRE_HOJA = 31;
+
+/** Nombre reservado por Excel que `exceljs` rechaza. */
+const NOMBRE_HOJA_RESERVADO = "History";
+
+/** Base del nombre de hoja cuando el título no deja nada utilizable. */
+const HOJA_FALLBACK = "Datos";
+
+/**
+ * Nombre de hoja válido y ESTABLE a partir del título del listado.
+ *
+ * El recorte se marca con «…» en vez de cortar en seco: una pestaña que termina a mitad de
+ * palabra parece un archivo corrupto; una que termina en puntos suspensivos dice lo que es.
+ * No se retrocede hasta el espacio anterior a propósito — sacrificaría hasta una palabra
+ * entera de un nombre propio para ganar estética en una etiqueta, y como cada archivo lleva
+ * UNA sola hoja, no hay dos pestañas que distinguir entre sí.
+ */
+export function nombreHoja(titulo: string): string {
+  const saneado = titulo
+    .replace(CARACTERES_PROHIBIDOS_HOJA, "-")
+    .replace(/^'+|'+$/g, "")
+    .trim();
+
+  if (saneado === "" || saneado === NOMBRE_HOJA_RESERVADO) return HOJA_FALLBACK;
+  if (saneado.length <= MAX_NOMBRE_HOJA) return saneado;
+
+  return `${saneado.slice(0, MAX_NOMBRE_HOJA - 1).trimEnd()}…`;
+}
+
 /** Cero-rellena a 2 digitos (componentes locales de la fecha). */
 function dos(valor: number): string {
   return String(valor).padStart(2, "0");
@@ -76,8 +132,9 @@ export function nombreArchivoDescarga(
  * Construye el contenido de una descarga de listado.
  *
  * - `tipo` ausente -> `xlsx` (R2).
- * - `xlsx` -> libro de UNA hoja nombrada con el titulo, cabecera + una fila por
- *   elemento en el orden recibido (R3, R8).
+ * - `xlsx` -> libro de UNA hoja nombrada con el titulo (saneado por `nombreHoja`, que
+ *   respeta las reglas de Excel), cabecera + una fila por elemento en el orden
+ *   recibido (R3, R8).
  * - `csv` -> texto con una linea de cabecera y una por elemento, todo escapado (R4).
  * - Se emiten EXACTAMENTE las columnas declaradas, en su orden (R5); una fila que no
  *   aporta la clave deja la celda vacia (R6).
@@ -115,7 +172,9 @@ export async function construirDescarga(
   }
 
   return {
-    contenido: await buildXlsxRows(columnasGenerador, filas, titulo),
+    // El nombre de la HOJA se sanea (ver `nombreHoja`); el del ARCHIVO conserva el slug
+    // del titulo entero, que es donde el usuario reconoce lo que descargo.
+    contenido: await buildXlsxRows(columnasGenerador, filas, nombreHoja(titulo)),
     mime: XLSX_MIME,
     nombreArchivo,
   };

@@ -14,8 +14,12 @@ import type {
   CierreBodegaDetalleServiceResult,
   ICierresBodegaAdminService,
   ListarCierresBodegaAdminServiceResult,
+  ListarHistoricoCierresBodegaServiceResult,
+  ListarPendientesCierresBodegaServiceResult,
   RechazarCierreBodegaServiceResult,
 } from "@/lib/interfaces/services/ICierresBodegaAdminService";
+import { esColaSolicitado } from "@/lib/utils/colas-cierre";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
   gananciaOrdenex,
@@ -53,10 +57,68 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
     const historico: CierreBodegaResumen[] = [];
     for (const row of rows) {
       const resumen = toResumen(row); // R13: totales snapshot (string) sin recomputar
-      if (row.estado === "solicitado") pendientes.push(resumen);
+      // Feature 170 (T I.1): el corte sale de `ESTADOS_COLA_SOLICITADO`, el MISMO que el
+      // repositorio escribe como WHERE al paginar el historico (R44).
+      if (esColaSolicitado(row.estado)) pendientes.push(resumen);
       else historico.push(resumen);
     }
     return { status: "ok", pendientes, historico };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — el HISTORICO, paginado en servidor.
+   *
+   * El guard de rol va PRIMERO, antes de tocar el repositorio: con el guard despues, las
+   * cabeceras de todos los cierres de bodega —dinero agregado de toda la operacion— ya
+   * habrian salido de la base aunque la respuesta fuera un error.
+   *
+   * UNA sola llamada al repositorio, igual que el listado sin paginar (R54): el conteo que
+   * R41 exige viaja dentro de ella.
+   */
+  async listarHistoricoCierresBodegaPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresBodegaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R2
+
+    const { items, total } = await this.repo.findHistoricoPaginado(rangoDePagina(input));
+
+    return {
+      status: "ok",
+      items: items.map(toResumen), // R13: mismo mapper que el listado sin paginar
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54) — la COLA de cierres de bodega
+   * PENDIENTES, paginada en servidor.
+   *
+   * El guard de rol va PRIMERO, antes de tocar el repositorio, por el mismo motivo que en el
+   * historico: la cabecera de un cierre de bodega ES dinero agregado de una zona entera, y con
+   * el guard despues ya habria salido de la base aunque la respuesta fuera un error.
+   *
+   * R49: no se agrega nada aqui. Los montos de esta pantalla son el SNAPSHOT de cada cierre de
+   * bodega (`toResumen` no recomputa) y la pantalla no deriva totales del array; el `total` que
+   * viaja es el CONTADOR de cabecera (R42), un conteo de filas.
+   */
+  async listarPendientesCierresBodegaPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesCierresBodegaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R2
+
+    const { items, total } = await this.repo.findColaPaginada(rangoDePagina(input));
+
+    return {
+      status: "ok",
+      items: items.map(toResumen), // R13: mismo mapper que el listado sin paginar
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
+    };
   }
 
   async verCierreBodegaDetalle(

@@ -1,6 +1,7 @@
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 40 — contrato del repositorio de "Cierres de bodega" del maestro (aprobar /
 // rechazar). Solo queries Prisma; sin logica de negocio (esa vive en
@@ -40,6 +41,25 @@ export interface ICierresBodegaAdminRepository {
    * filtro de zona (el maestro es global).
    */
   findCierresBodega(): Promise<CierreBodegaResumenRow[]>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA del historico (los cierres
+   * de bodega ya RESUELTOS) + el TOTAL del conjunto.
+   *
+   * Es `findCierresBodega` con dos anadidos: `estado NOT IN <cola>` —el espejo del `else`
+   * con que el servicio parte hoy las dos listas (R44)— y el recorte `skip`/`take`. Mismo
+   * `orderBy solicitadoAt desc` (R51) y mismas proyecciones. Pagina y total en la MISMA
+   * llamada: el `count` es la unica consulta que R54 permite anadir.
+   */
+  findHistoricoPaginado(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): UNA PAGINA de la COLA de cierres de
+   * bodega PENDIENTES (`solicitado`) + el TOTAL del conjunto, que es el que la cabecera de la
+   * pantalla mostrara (R42).
+   *
+   * COMPLEMENTO EXACTO de `findHistoricoPaginado`: misma proyeccion, mismo orden y la MISMA
+   * constante de estados, con `in` en vez de `notIn`.
+   */
+  findColaPaginada(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
   /**
    * R11: el cierre de bodega (cabecera + totales snapshot) + por cada cierre_dia
    * incluido (WHERE cierre_bodega_id=id) su cabecera y sus gestiones (WITH_DETALLE,

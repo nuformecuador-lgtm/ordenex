@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Inbox } from "lucide-react";
+import { Inbox, SearchX } from "lucide-react";
 import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
@@ -15,10 +15,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import { listarOrdenes, listarOrdenesCompleto } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
-import { messageFromActionError } from "@/lib/utils/action-error-message";
 
 import { ordenesColumns } from "./ordenes-columns";
 import {
@@ -72,20 +72,25 @@ async function ordenesFetcher(
 
 // Feature 151 (design §7) — título del dataset: nombre de la hoja, base del nombre de
 // archivo (`ordenes-YYYY-MM-DD.xlsx`, R37) y parte del nombre accesible del control.
+//
+// Feature 170 (T0.3): `mensajeLimite` y `SUFIJO_REINTENTO` vivían aquí; se PROMOVIERON
+// sin editar su texto a `components/shared/descarga-resultado`, que es de donde los leen
+// ahora las 25 tablas.
 const TITULO_DESCARGA = "Órdenes";
 
 /**
- * R20 — Mensaje ACCIONABLE del tope: dice el total encontrado, el tope vigente y qué
- * hacer (acotar los filtros). Solo lleva conteos, nunca PII. El tope lo decide y lo
- * aplica el SERVICIO; aquí solo se redacta lo que devolvió.
+ * Feature 169/R40 — vacío CON búsqueda activa. El mensaje de siempre ("No hay órdenes /
+ * cuando lleguen, aparecerán aquí") es literalmente falso buscando: sí hay órdenes, lo
+ * que no hay es coincidencias con ESE texto, y quien lo lea puede concluir que el
+ * listado se rompió en vez de revisar lo que tecleó. Se le devuelve su término —para que
+ * vea el error de dedo— y qué hacer con él.
  */
-function mensajeLimite(total: number, limite: number): string {
-  return `La descarga supera el máximo de ${limite} filas (hay ${total}). Acota los filtros —por ejemplo, el rango de fechas o el estado— y vuelve a intentarlo.`;
+function vacioConBusqueda(termino: string): { title: string; description: string } {
+  return {
+    title: "Sin coincidencias",
+    description: `Ninguna orden coincide con «${termino}». Revisa el texto o limpia la búsqueda.`,
+  };
 }
-
-// R27 — Cola accionable del resto de fallos: el mensaje canónico del error dice QUÉ
-// pasó; esto dice qué hacer a continuación.
-const SUFIJO_REINTENTO = "Vuelve a intentarlo; el listado no cambió.";
 
 /**
  * Módulo de órdenes reutilizable: tabla + paginación + carga masiva sobre la
@@ -136,6 +141,10 @@ export function OrdenesModule({
    * cantón, distrito y tiempo (`created_preset` / `created_desde` / `created_hasta`),
    * todas de la MISMA lista blanca server-side. El módulo no las interpreta: las
    * pasa tal cual y las serializa para la key de caché.
+   *
+   * Feature 169 (R38/R39/R40): admite `q`, el término de búsqueda, como ESCALAR. Es la
+   * única clave que el módulo sí mira —para el estado vacío (R40)—; para todo lo demás
+   * sigue siendo opaca y entra en la key de caché como cualquier otra.
    */
   filter?: OrdenesFilterUI;
   /**
@@ -220,6 +229,10 @@ export function OrdenesModule({
   // selecciones equivalentes (en distinto orden o de distinta identidad de objeto)
   // comparten caché en vez de refetchear en cada render.
   const filterKey = serializarFiltro(filter);
+
+  // Feature 169/R40: término de búsqueda VIGENTE, si lo hay. Viaja como escalar
+  // (`seleccion-a-filter.ts`); un valor de otra forma se ignora en vez de pintarse.
+  const terminoBuscado = typeof filter?.q === "string" ? filter.q : undefined;
   const { data, error, isLoading } = useSWR(
     ["ordenes:list", filterKey, page, pageSize],
     () => ordenesFetcher(page, pageSize, filter),
@@ -379,26 +392,16 @@ export function OrdenesModule({
     ? {
         titulo: TITULO_DESCARGA,
         columnas: COLUMNAS_DESCARGA_ORDENES,
-        obtenerFilas: async () => {
-          const res = await listarOrdenesCompleto(filter ? { filter } : {});
-          if (res.status === "limite_excedido") {
-            // R20: sin archivo; el mensaje lleva total, tope y qué hacer.
-            return {
-              status: "error",
-              mensaje: mensajeLimite(res.total, res.limite),
-            };
-          }
-          if (res.status !== "ok") {
-            // R27: mensaje canónico del error (mismo mapeo que el resto de acciones)
-            // + qué hacer. La tabla no traduce códigos: los recibe ya saneados.
-            return {
-              status: "error",
-              mensaje: `${messageFromActionError(res)} ${SUFIJO_REINTENTO}`,
-            };
-          }
-          // R34: una fila por orden del dataset completo, no solo la página visible.
-          return { status: "ok", filas: res.items.map(filaDescargaOrden) };
-        },
+        // Feature 170 (T0.3): el bloque que traducía el resultado a filas —tope, error
+        // accionable y proyección— vivía aquí inline. Ahora es `filasDesdeResultado`,
+        // el MISMO adaptador que usan las otras 24 tablas: sin cambio funcional, y sin
+        // dos caminos que puedan divergir. R34: una fila por orden del dataset
+        // completo, no solo la página visible.
+        obtenerFilas: () =>
+          filasDesdeResultado(
+            listarOrdenesCompleto(filter ? { filter } : {}),
+            filaDescargaOrden,
+          ),
       }
     : undefined;
 
@@ -469,11 +472,17 @@ export function OrdenesModule({
         descarga={descarga}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las órdenes" : null}
-        emptyState={{
-          icon: Inbox,
-          title: "No hay órdenes",
-          description: "Cuando lleguen órdenes, aparecerán aquí.",
-        }}
+        emptyState={
+          // R40: el vacío de una BÚSQUEDA no es el vacío del listado. `DataTable` no se
+          // toca: ya recibe el estado vacío por props (R42).
+          terminoBuscado
+            ? { icon: SearchX, ...vacioConBusqueda(terminoBuscado) }
+            : {
+                icon: Inbox,
+                title: "No hay órdenes",
+                description: "Cuando lleguen órdenes, aparecerán aquí.",
+              }
+        }
       />
       <Pagination
         page={page}

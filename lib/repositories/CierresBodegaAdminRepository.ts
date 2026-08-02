@@ -20,6 +20,8 @@ import {
   toPendienteRowDesdeSnapshot,
 } from "@/lib/repositories/CierresAdminRepository";
 import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
+import { ESTADOS_COLA_SOLICITADO } from "@/lib/utils/colas-cierre";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Solo el estado que la 40 puede transicionar (R18): la guardia del updateMany.
 const ESTADO_SOLICITADO = "solicitado";
@@ -82,6 +84,55 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
       select: BODEGA_RESUMEN_SELECT,
     });
     return rows.map(toBodegaResumenRow);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una pagina del HISTORICO + el total.
+   *
+   * El `where` se construye UNA vez y lo comparten `findMany` y `count`: escribirlo dos veces
+   * es como el total acaba contando un conjunto distinto del que se muestra.
+   */
+  async findHistoricoPaginado(
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
+    // R44: `notIn` es el espejo EXACTO del `else` del servicio. Con un
+    // `in: ["aprobado","rechazado"]`, un `vencido` desapareceria de las dos listas.
+    const where = { estado: { notIn: [...ESTADOS_COLA_SOLICITADO] } };
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreBodega.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: BODEGA_RESUMEN_SELECT,
+      }),
+      this.prisma.cierreBodega.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toBodegaResumenRow), total };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): una pagina de la COLA de cierres de
+   * bodega pendientes + el total.
+   *
+   * COMPLEMENTO EXACTO de `findHistoricoPaginado`: la misma constante
+   * (`ESTADOS_COLA_SOLICITADO`), aqui con `in` —el espejo del `if` del servicio— y alli con
+   * `notIn` —el del `else`—. Leer las dos de la misma lista es lo que impide que un estado
+   * nuevo del enum acabe en las dos colas o en ninguna.
+   */
+  async findColaPaginada(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
+    const where = { estado: { in: [...ESTADOS_COLA_SOLICITADO] } };
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreBodega.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: BODEGA_RESUMEN_SELECT,
+      }),
+      this.prisma.cierreBodega.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toBodegaResumenRow), total };
   }
 
   /** R11 (+69/R15): cierre de bodega + cada cierre_dia con sus gestiones desde el SNAPSHOT. */

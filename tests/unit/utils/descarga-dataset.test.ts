@@ -5,7 +5,7 @@ import ExcelJS from "exceljs";
 import { describe, it, expect } from "vitest";
 
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
-import { construirDescarga, CSV_MIME } from "@/lib/utils/descarga-dataset";
+import { construirDescarga, nombreHoja, CSV_MIME } from "@/lib/utils/descarga-dataset";
 import { XLSX_MIME } from "@/lib/utils/xlsx-template";
 
 // Feature 151 (T4) — despachador comun de la descarga: R1, R2, R3, R5, R6, R7, R8, R9, R10.
@@ -266,5 +266,75 @@ describe("construirDescarga", () => {
     expect(fuente).not.toMatch(/from ["']exceljs["']/);
     expect(fuente).not.toMatch(/import\(["']exceljs["']\)/);
     expect(fuente).not.toMatch(/require\(["']exceljs["']\)/);
+  });
+});
+
+// Feature 170 (T G.1) — saneado del nombre de HOJA. Añadido, no reescrito: los tests de la
+// 151 de más arriba siguen intactos y verdes, porque para títulos cortos y sin caracteres
+// raros —que son todos los suyos— `nombreHoja` es la identidad.
+//
+// El rollout de la 170 estrenó títulos COMPUESTOS CON DATOS (`Desglose de <mensajero>`), y
+// con ellos dos fallos que antes no podían darse: un nombre con `/` hacía LANZAR a exceljs
+// (descarga sin archivo y con un toast genérico) y uno de más de 31 caracteres salía
+// truncado en seco, con un `console.warn` en producción.
+describe("nombreHoja — reglas de Excel sobre el nombre de la pestaña", () => {
+  it("deja intacto un título corto y sin caracteres conflictivos", () => {
+    expect(nombreHoja("Órdenes")).toBe("Órdenes");
+    expect(nombreHoja("Cuentas por pagar a mensajeros")).toBe(
+      "Cuentas por pagar a mensajeros",
+    );
+  });
+
+  it("sustituye los caracteres que hacen LANZAR a exceljs", () => {
+    // `* ? : \ / [ ]` y las comillas simples al principio o al final. Sin esto, un nombre
+    // propio con una barra deja al usuario sin archivo y sin saber por qué.
+    const saneado = nombreHoja("Desglose de Ana/María [2026]: *?");
+    expect(saneado).not.toMatch(/[*?:/\\[\]]/);
+    expect(saneado).toContain("Ana-María");
+    expect(nombreHoja("'Entregadas'")).toBe("Entregadas");
+  });
+
+  it("recorta a 31 caracteres y MARCA el recorte", () => {
+    const largo = "Desglose de Ana María Fernández Rodríguez";
+    const hoja = nombreHoja(largo);
+    expect(hoja.length).toBeLessThanOrEqual(31);
+    expect(hoja.endsWith("…")).toBe(true);
+    expect(largo.startsWith(hoja.slice(0, -1))).toBe(true);
+  });
+
+  it("cae a un nombre válido cuando no queda nada utilizable", () => {
+    expect(nombreHoja("///")).not.toBe("");
+    expect(nombreHoja("   ")).toBe("Datos");
+    // `History` es un nombre reservado de Excel y exceljs lo rechaza.
+    expect(nombreHoja("History")).toBe("Datos");
+  });
+
+  it("el archivo generado con un título largo se abre y conserva su nombre de archivo", async () => {
+    // La prueba de que el saneado sirve: el libro se produce (antes lanzaba o avisaba) y el
+    // NOMBRE DEL ARCHIVO conserva el título entero, que es donde el usuario lo reconoce.
+    const titulo = "Desglose de Ana María Fernández Rodríguez";
+    const archivo = await construirDescarga(
+      { titulo, columnas: COLUMNAS, filas: FILAS },
+      FECHA,
+    );
+
+    const workbook = await leerLibro(archivo.contenido);
+    expect(workbook.worksheets[0].name).toBe(nombreHoja(titulo));
+    expect(workbook.worksheets[0].name.length).toBeLessThanOrEqual(31);
+    expect(archivo.nombreArchivo).toBe(
+      "desglose-de-ana-maria-fernandez-rodriguez-2026-07-29.xlsx",
+    );
+    // Y el contenido no se resiente: cabecera + las tres filas.
+    expect(workbook.worksheets[0].rowCount).toBe(FILAS.length + 1);
+  });
+
+  it("un título con una barra produce archivo en vez de reventar", async () => {
+    const archivo = await construirDescarga(
+      { titulo: "Entregadas · Ana/Beto", columnas: COLUMNAS, filas: FILAS },
+      FECHA,
+    );
+
+    const workbook = await leerLibro(archivo.contenido);
+    expect(workbook.worksheets[0].name).toBe("Entregadas · Ana-Beto");
   });
 });

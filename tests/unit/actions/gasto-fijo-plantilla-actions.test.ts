@@ -37,6 +37,14 @@ function fakeService(overrides: Partial<IGastoFijoPlantillaService> = {}): IGast
     actualizarPlantilla: vi.fn(async () => ({ status: "ok" as const, plantilla: plantilla() })),
     setActivaPlantilla: vi.fn(async () => ({ status: "ok" as const, plantilla: plantilla() })),
     listarPlantillas: vi.fn(async () => ({ status: "ok" as const, plantillas: [plantilla()] })),
+    // Feature 170 (T I.1): el doble sigue implementando la interfaz COMPLETA.
+    listarPlantillasPaginado: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [plantilla()],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+    })),
     ...overrides,
   };
 }

@@ -64,6 +64,20 @@ function qrDeGuia(numGuia: number): string {
   return `https://ordenex.app/paquete/${numGuia}`;
 }
 
+/**
+ * Monta el receptor y DESPLIEGA la tarjeta. Desde el 2026-07-31 (decisión del humano) vive
+ * plegada tras el disparador de `EscanerDesplegable`, como en el resto de la app: montada
+ * dejaba `QrScanner` vivo —la cámara encendida— todo el tiempo que la bodega tuviera la
+ * pantalla abierta. Cada caso abre primero, que es lo que hace quien va a recibir.
+ */
+async function renderAbierto(
+  user: ReturnType<typeof userEvent.setup>,
+  onRecibida: () => void = vi.fn(),
+) {
+  render(<EscanerRecepcion onRecibida={onRecibida} />);
+  await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   decodeCallback.current = null;
@@ -91,7 +105,7 @@ describe("EscanerRecepcion (cámara)", () => {
       ordenId: "ord-1",
       estado: "en_bodega_satelite",
     });
-    render(<EscanerRecepcion onRecibida={onRecibida} />);
+    await renderAbierto(user, onRecibida);
 
     await escanear(user, qrDeGuia(1001));
 
@@ -112,7 +126,7 @@ describe("EscanerRecepcion (cámara)", () => {
       ordenId: "ord-1",
       estado: "en_bodega_satelite",
     });
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Recibir" }));
@@ -128,7 +142,7 @@ describe("EscanerRecepcion (cámara)", () => {
       ordenId: "ord-1",
       estado: "en_bodega_satelite",
     });
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     await escanear(user, `${qrDeGuia(1001)}/`); // robusto ante barra final
 
@@ -145,7 +159,7 @@ describe("EscanerRecepcion (cámara)", () => {
       ordenId: "ord-1",
       estado: "en_bodega_satelite",
     });
-    render(<EscanerRecepcion onRecibida={onRecibida} />);
+    await renderAbierto(user, onRecibida);
 
     await escanear(user, qrDeGuia(1001));
 
@@ -160,7 +174,7 @@ describe("EscanerRecepcion (cámara)", () => {
     const user = userEvent.setup();
     const onRecibida = vi.fn();
     recibirMock.mockResolvedValue({ status: "ya_recibida" });
-    render(<EscanerRecepcion onRecibida={onRecibida} />);
+    await renderAbierto(user, onRecibida);
 
     await escanear(user, qrDeGuia(1002));
 
@@ -173,7 +187,7 @@ describe("EscanerRecepcion (cámara)", () => {
     const user = userEvent.setup();
     const onRecibida = vi.fn();
     recibirMock.mockResolvedValue({ status: "zona_ajena" });
-    render(<EscanerRecepcion onRecibida={onRecibida} />);
+    await renderAbierto(user, onRecibida);
 
     await escanear(user, qrDeGuia(1003));
 
@@ -192,7 +206,7 @@ describe("EscanerRecepcion (cámara)", () => {
       status: "estado_invalido",
       estado: "en_preparacion",
     });
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     await escanear(user, qrDeGuia(1004));
 
@@ -204,7 +218,7 @@ describe("EscanerRecepcion (cámara)", () => {
   it("R15: no_encontrada → toast de error 'orden no encontrada'", async () => {
     const user = userEvent.setup();
     recibirMock.mockResolvedValue({ status: "no_encontrada" });
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     await escanear(user, qrDeGuia(1005));
 
@@ -215,7 +229,7 @@ describe("EscanerRecepcion (cámara)", () => {
   it("R16: validation_error del servidor → toast de error 'código inválido'", async () => {
     const user = userEvent.setup();
     recibirMock.mockResolvedValue({ status: "validation_error", fieldErrors: {} });
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     await escanear(user, qrDeGuia(1007));
 
@@ -228,7 +242,7 @@ describe("EscanerRecepcion (cámara)", () => {
   // `validation_error` del borde, pero sin llamar a la acción.
   it("R16: un QR ajeno se rechaza en cliente, sin llamar a recibirPorQr", async () => {
     const user = userEvent.setup();
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     await escanear(user, "###");
 
@@ -242,7 +256,7 @@ describe("EscanerRecepcion (cámara)", () => {
   // otra vía: da error de validación y la etiqueta se reimprime.
   it("R16: el QR de una etiqueta vieja (UUID) NO se resuelve: error de validación sin llamar a la acción", async () => {
     const user = userEvent.setup();
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     await escanear(
       user,
@@ -257,7 +271,7 @@ describe("EscanerRecepcion (cámara)", () => {
   it("R5: sin_zona → toast de error 'no tienes una zona asignada'", async () => {
     const user = userEvent.setup();
     recibirMock.mockResolvedValue({ status: "sin_zona" });
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     await escanear(user, qrDeGuia(1006));
 
@@ -267,7 +281,7 @@ describe("EscanerRecepcion (cámara)", () => {
 
   it("expone el botón de cámara y alterna su estado (aria-pressed)", async () => {
     const user = userEvent.setup();
-    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+    await renderAbierto(user);
 
     const boton = screen.getByRole("button", { name: "Escanear con cámara" });
     expect(boton).toHaveAttribute("aria-pressed", "false");
@@ -275,5 +289,47 @@ describe("EscanerRecepcion (cámara)", () => {
     expect(
       screen.getByRole("button", { name: "Cerrar cámara" }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// 2026-07-31 (decisión del humano): el receptor vive tras un desplegable, plegado de
+// entrada. Dentro vive `QrScanner`: montado dejaba la cámara ENCENDIDA todo el rato que la
+// bodega satélite tuviera abierta su pantalla.
+// ---------------------------------------------------------------------------------------
+describe("EscanerRecepcion — el desplegable (cámara apagada por defecto)", () => {
+  it("arranca PLEGADO: se ofrece el acceso, pero la cámara no está montada", () => {
+    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+
+    expect(
+      screen.getByRole("button", { name: "Recibir paquete" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Recibir por número de guía o escaneo" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Escanear con cámara" })).toBeNull();
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("al cerrar, la tarjeta se DESMONTA: es lo que apaga la cámara", async () => {
+    const user = userEvent.setup();
+    await renderAbierto(user);
+
+    await user.click(screen.getByRole("button", { name: "Escanear con cámara" }));
+    await vi.waitFor(() => expect(decodeCallback.current).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+
+    // Desmontaje, no `hidden`: es lo que dispara el cleanup de `QrScanner`.
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Recibir por número de guía o escaneo" }),
+      ).toBeNull(),
+    );
+    expect(screen.queryByRole("button", { name: "Cerrar cámara" })).toBeNull();
+    // Y el acceso sigue ahí para volver a abrirlo.
+    expect(
+      screen.getByRole("button", { name: "Recibir paquete" }),
+    ).toBeInTheDocument();
   });
 });

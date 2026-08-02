@@ -8,13 +8,18 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/ui/button";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { apiKeysConfig } from "@/lib/config/api-keys";
-import { listarApiKeys } from "@/lib/actions/api-keys";
+import { listarApiKeys, listarApiKeysCompleto } from "@/lib/actions/api-keys";
 import { registrarWebhook } from "@/lib/actions/webhooks";
 import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 
 import { buildApiKeysColumns } from "./api-keys-columns";
+import {
+  COLUMNAS_DESCARGA_API_KEYS,
+  filaDescargaApiKey,
+} from "./api-keys-descarga-columnas";
 import {
   GenerarApiKeyForm,
   type GenerarApiKeyFormHandle,
@@ -25,6 +30,9 @@ import { RevelarSecretosModal } from "./RevelarSecretosModal";
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
   (s) => s <= apiKeysConfig.MAX_PAGE_SIZE,
 );
+
+/** R12/R13: nombre visible del inventario; da nombre a la hoja, al archivo y al control. */
+const TITULO_DESCARGA = "API keys";
 
 export interface ApiKeysPageData {
   items: ApiKeyListItemDTO[];
@@ -179,6 +187,22 @@ export function ApiKeysModule({ initialData }: ApiKeysModuleProps) {
         data={data?.items ?? []}
         rowKey="id"
         ariaLabel="API keys"
+        /**
+         * Feature 170 (T B.4, R1/R9/R12/R13) — descarga del inventario COMPLETO. Familia A:
+         * la tabla pinta una página, el archivo trae todo el inventario por la Server Action
+         * del modo completo (mismo servicio y mismo guard de `maestro`).
+         *
+         * El archivo NO puede llevar secreto alguno y no lo lleva por construcción: la clave
+         * en claro no existe en este camino (viaja una vez, 81/R19), `keyHash` no está en el
+         * DTO (82/R6) y el secreto de webhook no vive en la fila. Lo que sale es lo que la
+         * tabla enseña, con el `keyPrefix` que ya está en pantalla.
+         */
+        descarga={{
+          titulo: TITULO_DESCARGA,
+          columnas: COLUMNAS_DESCARGA_API_KEYS,
+          obtenerFilas: () =>
+            filasDesdeResultado(listarApiKeysCompleto({}), filaDescargaApiKey),
+        }}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las API keys" : null}
         emptyState={{

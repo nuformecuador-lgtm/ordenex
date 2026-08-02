@@ -138,6 +138,8 @@ model Usuario {
   cargasRealizadas                    Carga[]                   @relation("CargaUsuario") // feature 141/R2: lotes de carga masiva que ESTE usuario realizo (adminTienda o usuario dedicado de la API key)
   incidentesReportados                OrdenIncidente[]          @relation("IncidenteReportadoPor") // feature 158/R39/R51: incidentes que este admin REPORTO (y que por tanto NO puede aprobar)
   incidentesResueltos                 OrdenIncidente[]          @relation("IncidenteResueltoPor") // feature 158/R52/R54: incidentes que este admin aprobo/rechazo
+  analyticsDailyComoTienda            AnalyticsDaily[]          @relation("AnalyticsDailyTienda") // feature 123/R31: filas del rollup diario cuya TIENDA (de la orden) es este usuario
+  analyticsDailyComoMensajero         AnalyticsDaily[]          @relation("AnalyticsDailyMensajero") // feature 123/R32: filas del rollup diario de este mensajero (el cubo sin_asignar NO cuelga de aqui: es NULL)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -382,6 +384,8 @@ model OrderStatus {
   historialComoOrigen  OrdenHistorialEstado[] @relation("HistorialOrigen") // feature 49: transiciones que SALEN de este estado
   historialComoDestino OrdenHistorialEstado[] @relation("HistorialDestino") // feature 49: transiciones que ENTRAN a este estado
 
+  analyticsDaily AnalyticsDaily[] // feature 123/R33/R36: filas del rollup diario congeladas en este estatus al corte del dia
+
   @@map("order_status")
 }
 
@@ -407,6 +411,7 @@ model Zona {
   cierresBodega        CierreBodega[] // feature 40: cierres de bodega de esta zona satelite
   cierreDetalles       CierreDetail[] // feature 69/R6: snapshots que congelaron esta zona
   notificaciones       Notificacion[] // feature 146/F1.4-1: notificaciones ACOTADAS a esta zona (alcance del adminSatelite)
+  analyticsDaily       AnalyticsDaily[] // feature 123/R31: filas del rollup diario cuya zona (DE LA ORDEN) es esta
 
   @@map("zona")
 }
@@ -505,6 +510,22 @@ model Orden {
   // R48); NULL en modo `consolidate`, en la via sesion (R40) y sin etiqueta imprimible (R49).
   cargaId                String?   @map("carga_id")
   downloadUrl            String?   @map("download_url")
+  /// Feature 169 (design §2.5) — columna GENERADA ALWAYS ... STORED en la base: concatena
+  /// los cuatro campos buscables ya normalizados (guia, remision, telefono con y sin
+  /// separadores, destinatario). NUNCA se escribe desde la aplicacion — Postgres rechaza
+  /// cualquier INSERT/UPDATE sobre ella— y el cliente la OMITE globalmente
+  /// (`lib/db/prisma-client.ts`) para que no llegue a ningun DTO ni descarga (R28).
+  /// Se declara aqui para (a) poder filtrar con Prisma y (b) que schema.prisma no diverja
+  /// del SQL aplicado: si no estuviera, la siguiente migracion que alguien generase
+  /// propondria un DROP COLUMN fantasma. Prisma no tiene representacion de columnas
+  /// generadas, asi que la ve como un `text` nullable normal: por eso `String?`.
+  ///
+  /// `@default(dbgenerated())` NO es decorativo y se llego a el MIDIENDO (T1.5): sin el,
+  /// Prisma lee la expresion GENERATED como si fuera un DEFAULT de columna y cada
+  /// `migrate dev` futuro propone `ALTER COLUMN "busqueda_texto" DROP DEFAULT` — una
+  /// sentencia que, aplicada, no puede aplicarse (no hay default que quitar) y que solo
+  /// existe porque el modelo callaba. Con el, el diff sale VACIO.
+  busquedaTexto          String?   @default(dbgenerated()) @map("busqueda_texto")
   deletedAt              DateTime? @map("deleted_at") // soft delete
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
@@ -539,6 +560,14 @@ model Orden {
   @@index([cantonId])
   @@index([distritoId])
   @@index([cargaId]) // feature 141/R4: "ordenes de este lote"
+  // Feature 169: indice GIN de trigramas del buscador. `map:` reproduce el nombre exacto
+  // que la migracion escribio a mano (si no, Prisma propondria un RENAME INDEX, misma
+  // clase de drift que documenta schema-drift-saneamiento.test.ts). El opclass va SIN
+  // cualificar (`gin_trgm_ops`) porque eso es lo que Prisma lee de `pg_opclass`, que
+  // guarda nombre y esquema por separado: cualificarlo aqui reintroduce drift. El SQL
+  // aplicado SI lo cualifica (`extensions.gin_trgm_ops`), que es lo que importa para que
+  // la creacion no dependa del `search_path`.
+  @@index([busquedaTexto(ops: raw("gin_trgm_ops"))], type: Gin, map: "orden_busqueda_texto_trgm_idx")
   @@map("orden")
 }
 
@@ -1689,4 +1718,101 @@ model NotificacionLectura {
   @@unique([notificacionId, usuarioId])
   @@index([usuarioId])
   @@map("notificacion_lectura")
+}
+
+// Feature 123 (design §3.1) — ROLLUP DIARIO de analitica. Tabla DERIVADA y reconstruible:
+// no es fuente de verdad de nada. La escribe el job diario (feature 124) y la recomputa el
+// backfill (feature 125); la consulta la 126. Mientras dura la 123 nace y se queda VACIA
+// (R44): esta feature entrega solo el DDL.
+//
+// GRANO (R2): (fecha, zonaId, tiendaId, mensajeroId, estatusId, causaDevolucion). No es una
+// eleccion de esta feature: es la UNION de los `granos` de las metricas con
+// `fuente.tipo = "rollup"` del catalogo de la 135 (`lib/analytics/metrics.ts`). La septima
+// dimension del catalogo, `metodo_pago`, NO tiene columna (R3): su unica consumidora es
+// `clase: "live"` sobre cierres y ledger.
+//
+// EL `@@unique` DEL GRANO SI SE DECLARA AQUI, Y ES IMPRESCINDIBLE QUE ASI SEA.
+// El indice vive en la migracion como `analytics_daily_grano_key` con `NULLS NOT DISTINCT`,
+// clausula que Prisma no sabe expresar. Pero "Prisma no expresa la clausula" NO es razon
+// para omitir el `@@unique`: son dos cosas distintas. Si el datamodel no declara el indice,
+// Prisma no lo VE, y el primer `prisma migrate dev` de la 124 emitiria un
+// `DROP INDEX "analytics_daily_grano_key"` mezclado con su cambio legitimo. Al caer el
+// unico, el `ON CONFLICT` del upsert deja de tener donde agarrarse y el rollup se duplica
+// SIN UN SOLO ERROR — exactamente el fallo silencioso que ese indice existe para impedir
+// (ver la cabecera de la migracion). Ningun test que lea el `.sql` o este archivo lo
+// detectaria, porque el drift solo aparece al comparar datamodel contra base.
+//
+// Con el `@@unique` declarado, Prisma reconoce el indice y deja de proponer borrarlo; lo
+// unico que le sigue siendo invisible es `NULLS NOT DISTINCT`, que no le impide
+// reconocerlo. El `map:` es obligatorio porque el nombre por defecto que Prisma derivaria
+// de seis columnas (`analytics_daily_fecha_zona_id_tienda_id_..._key`) rebasa el limite de
+// 63 caracteres de un identificador de Postgres.
+//
+// PRECEDENTE DEL REPO, mismo problema y misma solucion: `tarifa_zona_mensajero` declara
+// `@@unique([zonaId, vehiculoId])` (linea ~952) aunque su indice real tambien lleva
+// `NULLS NOT DISTINCT`; alli se resolvio nombrando el indice con el nombre que Prisma
+// espera —ver `20260711190000_tarifa_zona_mensajero_zona_vehiculo_unique/migration.sql:6`,
+// «El nombre del indice coincide con el que Prisma espera para @@unique([zonaId,
+// vehiculoId])»—. Aqui se hace al reves, con `map:`, porque el nombre generado no cabe.
+// El invariante compartido es el mismo: el datamodel SIEMPRE declara el indice.
+//
+// Los tres `@@index` llevan `map:` por la misma razon: sin el, Prisma esperaria
+// `analytics_daily_tienda_id_fecha_idx` y renombraria los tres de la base.
+//
+// Recordatorio de por que el unico importa tanto: dos columnas del grano son nullable con
+// significado de dominio (`mensajeroId IS NULL` = cubo sin_asignar, `causaDevolucion IS
+// NULL` = sin causa tipificada) y con la semantica UNIQUE por defecto —que trata cada NULL
+// como distinto— el upsert de la 124 insertaria una fila nueva en cada pasada.
+//
+// Lo que SI se queda fuera del datamodel son los tres CHECK estructurales
+// (`analytics_daily_pio_lte_entregas`, `analytics_daily_ciclo_coherente`,
+// `analytics_daily_medidas_no_negativas`): mismo patron que `gestion_orden` /
+// `orden_incidente`, Prisma no expresa CHECK. Los tres `@@index` de abajo si son
+// declarables y se corresponden con los tres roles `acotado` del catalogo.
+//
+// MEDIDAS: solo componentes ADITIVOS (R17). Ninguna tasa, promedio ni porcentaje guardado;
+// ninguna columna de dinero (R5). `segCicloAcum` es BigInt y no Int por desbordamiento
+// (R21) y se atribuye a la fecha del EVENTO TERMINAL (D4/R34); `ordenesEstadoStock` es un
+// STOCK al corte y NO se suma por fecha (R28/R29). La semantica completa viaja en los
+// `COMMENT ON COLUMN` de la migracion (R30).
+model AnalyticsDaily {
+  id              String                  @id @default(uuid())
+  fecha           DateTime                @db.Date // fecha calendario de COSTA RICA del dia agregado, nunca un instante (R6)
+  zonaId          String                  @map("zona_id") // zona DE LA ORDEN, congelada (D9/R34 de la 135; R31)
+  tiendaId        String                  @map("tienda_id") // tienda DE LA ORDEN; en este esquema la tienda ES un usuario adminTienda (R31)
+  mensajeroId     String?                 @map("mensajero_id") // NULL = cubo sin_asignar, NUNCA "todos los mensajeros" (D5/R30 de la 135; R11)
+  estatusId       String                  @map("estatus_id") // estado de la orden EN EL CORTE del dia (R33)
+  causaDevolucion GestionCausaDevolucion? @map("causa_devolucion") // NULL = sin causa tipificada (R12)
+
+  ordenesCreadas     Int    @default(0) @map("ordenes_creadas") // FLUJO: ordenes nacidas ese dia; metrica propia del catalogo (R27)
+  ordenesEstadoStock Int    @default(0) @map("ordenes_estado_stock") // STOCK al corte: NO sumar por fecha (R28)
+  entregas           Int    @default(0) // gestiones vigentes `entregada`
+  devoluciones       Int    @default(0) // gestiones vigentes `devuelta`
+  rechazos           Int    @default(0) // gestiones vigentes `rechazada`
+  reprogramaciones   Int    @default(0) // gestiones vigentes `reprogramada`
+  incidentes         Int    @default(0) // gestiones vigentes `incidente`: 4.o termino de DENOMINADOR_GESTIONES (R18)
+  primerIntentoOk    Int    @default(0) @map("primer_intento_ok") // CONTEO entero, subconjunto de `entregas` de la misma fila (D1/R23/R24)
+  segCicloAcum       BigInt @default(0) @map("seg_ciclo_acum") // numerador: segundos de ciclo acumulados (R20/R21)
+  segCicloN          Int    @default(0) @map("seg_ciclo_n") // denominador: ordenes que cerraron ciclo (R20)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at") // rastro de la ultima recomputacion (R8)
+
+  // R37: las cuatro FK son ON DELETE RESTRICT / ON UPDATE CASCADE. Borrar una coordenada
+  // con historia agregada dejaria el rollup mintiendo (Cascade) o con NULL que colisiona
+  // con el significado de "sin asignar" (SetNull); que el borrado falle es lo correcto.
+  zona      Zona        @relation(fields: [zonaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tienda    Usuario     @relation("AnalyticsDailyTienda", fields: [tiendaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  mensajero Usuario?    @relation("AnalyticsDailyMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  estatus   OrderStatus @relation(fields: [estatusId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  // R14: el unico del grano. El `map:` apunta al indice REAL de la migracion, que ademas
+  // lleva `NULLS NOT DISTINCT` (invisible para Prisma, pero irrelevante para que lo
+  // reconozca). El orden de campos coincide exactamente con el del CREATE UNIQUE INDEX.
+  // Sin esta linea, `prisma migrate dev` propondria borrarlo. Ver el bloque de arriba.
+  @@unique([fecha, zonaId, tiendaId, mensajeroId, estatusId, causaDevolucion], map: "analytics_daily_grano_key")
+  @@index([tiendaId, fecha], map: "analytics_daily_tienda_fecha_idx") // recorte de adminTienda (122)
+  @@index([mensajeroId, fecha], map: "analytics_daily_mensajero_fecha_idx") // recorte de mensajero; cubre el cubo sin_asignar
+  @@index([zonaId, fecha], map: "analytics_daily_zona_fecha_idx") // recorte de adminSatelite, por zona DE LA ORDEN
+  @@map("analytics_daily")
 }

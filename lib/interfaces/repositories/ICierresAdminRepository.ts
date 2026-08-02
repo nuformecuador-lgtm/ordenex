@@ -1,5 +1,6 @@
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 38 — contrato del repositorio de "Cierres del dia" del admin. Solo queries
 // Prisma; sin logica de negocio (esa vive en CierresAdminService). El ALCANCE
@@ -106,6 +107,34 @@ export interface ICierresAdminRepository {
    * snapshot -> STRING. Usa el indice [destinoTipo, destinoZonaId].
    */
   findCierresByAlcance(alcance: Alcance): Promise<CierreAdminResumenRow[]>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA del HISTORICO del alcance
+   * (los cierres que NO estan en la cola de pendientes) + el TOTAL del conjunto.
+   *
+   * Mismo `alcanceWhere` que `findCierresByAlcance` y mismo `orderBy solicitadoAt desc`
+   * (R51): esta consulta es aquella con dos anadidos, `estado NOT IN <cola>` —el espejo del
+   * `else` con que el servicio parte hoy las dos listas (R44)— y el recorte `skip`/`take`.
+   *
+   * Devuelve pagina Y total en la MISMA llamada. El `count` es la UNICA consulta que R54
+   * permite anadir, y viaja aqui dentro para que no pueda resolverse contra un `where`
+   * distinto del de la pagina.
+   */
+  findHistoricoPaginado(
+    alcance: Alcance,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreAdminResumenRow>>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): UNA PAGINA de la COLA de pendientes de
+   * decision del alcance (`solicitado` y `vencido`) + el TOTAL del conjunto.
+   *
+   * COMPLEMENTO EXACTO de `findHistoricoPaginado`: mismo alcance, mismo orden y la MISMA
+   * constante de estados, con `in` en vez de `notIn`. Las dos leen `ESTADOS_COLA_CIERRE_DIA`,
+   * asi que la particion cola/historico no puede divergir ni dejar una fila fuera de las dos.
+   */
+  findColaPaginada(
+    alcance: Alcance,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreAdminResumenRow>>;
   /**
    * R6/R7/R9/R13: un cierre SOLO si su destino casa el alcance en el WHERE (guardia
    * R13) + sus gestiones (WITH_DETALLE, reuso 37, WHERE cierre_id = X). Fuera de

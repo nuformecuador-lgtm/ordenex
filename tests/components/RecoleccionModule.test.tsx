@@ -108,6 +108,20 @@ function renderModule(props: Partial<Parameters<typeof RecoleccionModule>[0]> = 
 const escaner = () =>
   screen.queryByRole("region", { name: "Recolectar por número de guía o escaneo" });
 
+/** El disparador del desplegable: el acceso al escaneo, esté la tarjeta abierta o no. */
+const disparador = () =>
+  screen.queryByRole("button", { name: "Recolectar en tienda" });
+
+/**
+ * Despliega la tarjeta de escaneo. El escáner arranca PLEGADO en toda la app (decisión del
+ * humano del 2026-07-31): dejarlo desplegado significaba la cámara encendida detrás de la
+ * pantalla, en un teléfono y en la calle. Todo caso que ejerza el escaneo abre primero, que
+ * es lo que hace el mensajero.
+ */
+async function abrirEscaner(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Recolectar en tienda" }));
+}
+
 /**
  * R31 — el aviso de recorte NOMBRA el tope, y el tope tiene UNA sola fuente
  * (`lib/constants/recoleccion-tienda.ts`, la misma que el service usa para recortar). El patrón
@@ -203,21 +217,40 @@ describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
 // ---------------------------------------------------------------------------------------
 // Feature 167 (R7/R8) — LA CAUSA RAÍZ. El panel de la 157 hacía `if (porRecolectar.length
 // === 0) return null`, así que el bloque de escaneo desaparecía justo cuando el mensajero
-// lo buscaba. Estos casos son la razón de existir de la feature entera.
+// lo buscaba ("no veo la forma de recolectar"). Estos casos son la razón de existir de la
+// feature entera y NO se borran.
+//
+// 2026-07-31 — R7 cambia de FORMA, no de fondo (decisión del humano). El escáner pasa de
+// "SIEMPRE MONTADO" a "SIEMPRE ACCESIBLE": vive tras el disparador de `EscanerDesplegable`,
+// plegado de entrada como en el resto de la app, porque montado significaba la cámara
+// encendida todo el rato que el mensajero tuviera la pantalla abierta. Lo que la 167 vino a
+// impedir sigue impedido y se sigue verificando aquí:
+//   · con la lista vacía el ACCESO al escaneo no desaparece (el disparador está ahí);
+//   · abrirlo da un escáner que funciona de verdad, no un adorno;
+//   · el vacío se sigue explicando (R8).
 // ---------------------------------------------------------------------------------------
-describe("RecoleccionModule — el escáner está SIEMPRE (R7/R8)", () => {
-  it("R7/R8: con la lista VACÍA el escáner sigue montado y el vacío se explica", () => {
+describe("RecoleccionModule — el escáner está SIEMPRE accesible (R7/R8)", () => {
+  it("R7/R8: con la lista VACÍA el acceso al escáner sigue ahí y el vacío se explica", () => {
     renderModule({ porRecolectar: [] });
 
     // SUSTITUYE al caso de la 157 "sin nada que recolectar el apartado no se muestra".
+    expect(disparador()).toBeInTheDocument();
+    // El vacío se DICE (R8): una pantalla muda es lo que hacía que el mensajero se perdiera.
+    expect(
+      screen.getByText(/no tienes órdenes por recolectar en tienda ahora mismo/i),
+    ).toBeInTheDocument();
+  });
+
+  it("R7/R8: con la lista VACÍA, al abrirlo aparece el escáner completo", async () => {
+    const user = userEvent.setup();
+    renderModule({ porRecolectar: [] });
+
+    await abrirEscaner(user);
+
     expect(escaner()).toBeInTheDocument();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Confirmar recolección" }),
-    ).toBeInTheDocument();
-    // El vacío se DICE (R8): una pantalla muda es lo que hacía que el mensajero se perdiera.
-    expect(
-      screen.getByText(/no tienes órdenes por recolectar en tienda ahora mismo/i),
     ).toBeInTheDocument();
   });
 
@@ -225,17 +258,43 @@ describe("RecoleccionModule — el escáner está SIEMPRE (R7/R8)", () => {
     const user = userEvent.setup();
     renderModule({ porRecolectar: [] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
     await waitFor(() => expect(recolectarMock).toHaveBeenCalledWith({ numGuia: 1001 }));
   });
 
-  it("R7: con órdenes asignadas el escáner sigue igual de montado", () => {
+  it("R7: con órdenes asignadas el acceso al escáner es EXACTAMENTE el mismo", async () => {
+    const user = userEvent.setup();
     renderModule({ porRecolectar: [makeOrden()] });
 
-    expect(escaner()).toBeInTheDocument();
+    expect(disparador()).toBeInTheDocument();
     expect(screen.queryByText(/no tienes órdenes por recolectar/i)).toBeNull();
+
+    await abrirEscaner(user);
+    expect(escaner()).toBeInTheDocument();
+  });
+
+  it("plegado, la CÁMARA no está montada; al cerrar se vuelve a desmontar", async () => {
+    const user = userEvent.setup();
+    renderModule({ porRecolectar: [makeOrden()] });
+
+    // Lo que apaga la cámara es el DESMONTAJE del panel, no un `hidden`: el doble de
+    // `QrScanner` solo existe en el DOM mientras la tarjeta está desplegada.
+    expect(screen.queryByRole("button", { name: "Simular escaneo" })).toBeNull();
+
+    await abrirEscaner(user);
+    expect(screen.getByRole("button", { name: "Simular escaneo" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Simular escaneo" })).toBeNull(),
+    );
+    expect(escaner()).toBeNull();
+    // Y el acceso sigue ahí para volver a abrirlo: cerrar no es perder el escáner.
+    expect(disparador()).toBeInTheDocument();
   });
 });
 
@@ -244,6 +303,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     const user = userEvent.setup();
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -258,6 +318,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     textoEscaneado = TEXTO_QR(1001);
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.click(screen.getByRole("button", { name: "Simular escaneo" }));
 
     await waitFor(() => expect(recolectarMock).toHaveBeenCalledWith({ numGuia: 1001 }));
@@ -269,6 +330,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     const user = userEvent.setup();
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "abc");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -280,6 +342,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     textoEscaneado = "esto-no-es-una-url";
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.click(screen.getByRole("button", { name: "Simular escaneo" }));
 
     expect(recolectarMock).not.toHaveBeenCalled();
@@ -294,6 +357,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     recolectarMock.mockResolvedValue({ status: "no_encontrada" });
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "9999");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -312,6 +376,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     recolectarMock.mockResolvedValue({ status: "ya_recolectada" });
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -329,6 +394,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     });
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -348,6 +414,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     });
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -366,6 +433,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     recolectarMock.mockResolvedValue({ status: "forbidden" });
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -382,6 +450,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     recolectarMock.mockResolvedValue({ status: "unauthenticated" });
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -399,6 +468,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     });
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     await user.type(screen.getByRole("textbox"), "1001");
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
 
@@ -413,6 +483,7 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     const user = userEvent.setup();
     renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
 
+    await abrirEscaner(user);
     expect(screen.queryByText(/recolectada correctamente/i)).toBeNull();
 
     await user.type(screen.getByRole("textbox"), "1001");
@@ -423,12 +494,34 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     const exito = await screen.findByText(/recolectada correctamente/i);
     expect(exito).toHaveTextContent("1001");
   });
+
+  it("R15: la confirmación sobrevive a cerrar y volver a abrir la tarjeta", async () => {
+    const user = userEvent.setup();
+    renderModule({ porRecolectar: [makeOrden({ numGuia: 1001 })] });
+
+    await abrirEscaner(user);
+    await user.type(screen.getByRole("textbox"), "1001");
+    await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
+    await screen.findByText(/recolectada correctamente/i);
+
+    // La guía confirmada la recuerda el MÓDULO, que vive por encima del desplegable: plegar
+    // apaga la cámara, no el rastro de lo que el mensajero acaba de recolectar.
+    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+    await waitFor(() => expect(escaner()).toBeNull());
+    await abrirEscaner(user);
+
+    expect(await screen.findByText(/recolectada correctamente/i)).toHaveTextContent(
+      "1001",
+    );
+  });
 });
 
 describe("RecoleccionModule — bloqueado por cierre pendiente (R9/R23)", () => {
   it("R9: sin bloque de captura y CON un aviso que dice el motivo y qué hacer", () => {
     renderModule({ porRecolectar: [makeOrden()], bloqueado: true });
 
+    // Bloqueado no queda ni el ACCESO: sin disparador no hay forma de abrir la tarjeta.
+    expect(disparador()).toBeNull();
     expect(escaner()).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirmar recolección" })).toBeNull();
@@ -460,6 +553,7 @@ describe("RecoleccionModule — bloqueado por cierre pendiente (R9/R23)", () => 
   it("R8/R9: bloqueado y sin nada asignado, el vacío se explica igual (sin escáner)", () => {
     renderModule({ porRecolectar: [], bloqueado: true });
 
+    expect(disparador()).toBeNull();
     expect(escaner()).toBeNull();
     expect(
       screen.getByText(/no tienes órdenes por recolectar en tienda ahora mismo/i),

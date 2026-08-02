@@ -19,6 +19,14 @@ function readBooleanDefaultTrue(name: string): boolean {
   return true;
 }
 
+// Feature 170 (T H.1) — mismo `readPositiveInt` que lib/config/usuarios.ts y hermanos.
+function readPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export interface WalletTiendaConfig {
   /**
    * R28/F1.4-Q3: si `true` (default), el ledger de la tienda registra los debitos
@@ -26,6 +34,14 @@ export interface WalletTiendaConfig {
    * negativo). Si `false`, esos dos debitos NO se generan en la tienda (los absorbe Ordenex).
    */
   TIENDA_DEBITA_FLETE_DEVOLUCION: boolean;
+  /**
+   * Feature 170 (T H.1, R40) — tamano de pagina por defecto del listado de SALDOS DE TIENDAS
+   * (`WalletTiendaService`), del Anexo III. No afecta al desglose de movimientos de UNA
+   * tienda, que ya pagina desde la feature 171.
+   */
+  DEFAULT_PAGE_SIZE: number;
+  /** Cota maxima del tamano de pagina, evita consultas sin limite (R40). */
+  MAX_PAGE_SIZE: number;
 }
 
 export function loadWalletTiendaConfig(): WalletTiendaConfig {
@@ -33,6 +49,8 @@ export function loadWalletTiendaConfig(): WalletTiendaConfig {
     TIENDA_DEBITA_FLETE_DEVOLUCION: readBooleanDefaultTrue(
       "WALLET_TIENDA_DEBITA_FLETE_DEVOLUCION",
     ),
+    DEFAULT_PAGE_SIZE: readPositiveInt("WALLET_TIENDA_DEFAULT_PAGE_SIZE", 25),
+    MAX_PAGE_SIZE: readPositiveInt("WALLET_TIENDA_MAX_PAGE_SIZE", 100),
   };
 }
 

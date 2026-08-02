@@ -16,7 +16,9 @@ import type {
   AprobarIncidenteServiceResult,
   IIncidenteAdminService,
   IncidenteAdminDTO,
+  ListarHistoricoIncidentesServiceResult,
   ListarIncidentesServiceResult,
+  ListarPendientesIncidentesServiceResult,
   RechazarIncidenteServiceResult,
   ReportarIncidenteInput,
   ReportarIncidenteServiceResult,
@@ -34,6 +36,8 @@ import {
   MSG_SIN_ORIGEN_REVERSIBLE,
   MSG_SOLO_EL_AUTOR_RETRACTA,
 } from "@/lib/services/mensajes-incidente-admin";
+import { esColaSolicitado } from "@/lib/utils/colas-cierre";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 // Feature 158 (T1.28/T1.29, camino del ADMIN) — logica de negocio del incidente reportado por un
 // admin. Espejo de forma de `CierresAdminService` (38), que es la aplicacion original del patron
@@ -116,10 +120,94 @@ export class IncidenteAdminService implements IIncidenteAdminService {
     const historico: IncidenteAdminDTO[] = [];
     for (const row of rows) {
       const dto = toDTO(row, urlByPath, actor.usuarioId);
-      if (row.estado === "solicitado") pendientes.push(dto);
+      // Feature 170 (T I.1): el corte sale de `ESTADOS_COLA_SOLICITADO`, el MISMO que el
+      // repositorio escribe como WHERE al paginar el historico (R44).
+      if (esColaSolicitado(row.estado)) pendientes.push(dto);
       else historico.push(dto);
     }
     return { status: "ok", pendientes, historico, sinZona: false };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — el HISTORICO de incidentes, paginado
+   * en servidor.
+   *
+   * Reusa `resolveAlcance` sin tocarlo: el alcance por rol+zona se resuelve server-side desde
+   * el usuario y NUNCA se acepta del cliente. Paginar no puede ampliar lo que ve un
+   * `adminSatelite` (R44).
+   *
+   * Se firman SOLO las evidencias de la PAGINA, y esa es la diferencia que importa frente al
+   * listado sin paginar: hoy `listarIncidentes` firma las de todo el historico en una llamada
+   * que crece sin techo con el tiempo. La consulta al storage sigue siendo UNA (R46), pero
+   * con N acotado por el tamano de pagina.
+   *
+   * `sinZona` -> pagina vacia, sin tocar la base ni el storage.
+   */
+  async listarHistoricoIncidentesPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarHistoricoIncidentesServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" };
+    if (scope.status === "sinZona") {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 };
+    }
+
+    const { items, total } = await this.repo.findHistoricoPaginado(
+      scope.alcance,
+      rangoDePagina(input),
+    );
+
+    // R46: una sola llamada al storage para toda la pagina (nunca una por fila).
+    const urlByPath = await this.firmar(items.flatMap((r) => r.evidenciaStoragePaths));
+
+    return {
+      status: "ok",
+      items: items.map((row) => toDTO(row, urlByPath, actor.usuarioId)), // mismo mapper (R51)
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54) — la COLA de incidentes PENDIENTES
+   * de decision, paginada en servidor.
+   *
+   * Espejo del metodo del historico: MISMO `resolveAlcance` (rol + zona de la ORDEN, resuelta
+   * server-side) y MISMA constante de estados, aqui con el corte invertido. R44 por
+   * construccion.
+   *
+   * Se firman SOLO las evidencias de la PAGINA, en UNA sola llamada (R46). `esPropio` lo
+   * decide el mismo `toDTO` que el listado sin paginar, con el actor de esta peticion: paginar
+   * no cambia quien puede resolver que (R51).
+   *
+   * R49: el unico monto de esta cola es `indemnizacion`, que viaja por FILA y solo existe una
+   * vez aprobado el incidente; la pantalla no deriva ningun agregado del array. El `total`
+   * alimenta el contador de cabecera (R42).
+   */
+  async listarPendientesIncidentesPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesIncidentesServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" };
+    if (scope.status === "sinZona") {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 };
+    }
+
+    const { items, total } = await this.repo.findColaPaginada(scope.alcance, rangoDePagina(input));
+
+    // R46: una sola llamada al storage para toda la pagina (nunca una por fila).
+    const urlByPath = await this.firmar(items.flatMap((r) => r.evidenciaStoragePaths));
+
+    return {
+      status: "ok",
+      items: items.map((row) => toDTO(row, urlByPath, actor.usuarioId)), // mismo mapper (R51)
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
+    };
   }
 
   async verIncidente(incidenteId: string, actor: Actor): Promise<VerIncidenteServiceResult> {

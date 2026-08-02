@@ -19,6 +19,8 @@ import type {
   IngresoOrdenexDTO,
   TarifaSnapshotDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import { ESTADOS_COLA_CIERRE_DIA } from "@/lib/utils/colas-cierre";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
@@ -369,6 +371,73 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       select: CIERRE_RESUMEN_SELECT,
     });
     return rows.map(toResumenRow);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una pagina del HISTORICO + el total.
+   *
+   * El `where` se construye UNA vez y lo comparten `findMany` y `count`: escribirlo dos veces
+   * es como el total acaba contando un conjunto distinto del que se muestra. El alcance sigue
+   * saliendo de `alcanceWhere` (R2/R13, el indice [destinoTipo, destinoZonaId]) y el orden
+   * sigue siendo `solicitadoAt desc` (R51), igual que el listado sin paginar.
+   */
+  async findHistoricoPaginado(
+    alcance: Alcance,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
+    // R44: `notIn` es el espejo EXACTO del `else` con que el servicio manda al historico todo
+    // lo que no esta en la cola. Con un `in: ["aprobado","rechazado"]` un estado nuevo del
+    // enum desapareceria de las dos listas en vez de caer en el historico.
+    const where = {
+      ...alcanceWhere(alcance),
+      estado: { notIn: [...ESTADOS_COLA_CIERRE_DIA] },
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreDia.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: CIERRE_RESUMEN_SELECT,
+      }),
+      this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO, no de la pagina
+    ]);
+    return { items: rows.map(toResumenRow), total };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): una pagina de la COLA de pendientes de
+   * decision + el total.
+   *
+   * Es el COMPLEMENTO EXACTO de `findHistoricoPaginado`: mismo `alcanceWhere`, mismo orden y
+   * el MISMO `ESTADOS_COLA_CIERRE_DIA`, aqui con `in` (el espejo del `if` del servicio) y alli
+   * con `notIn` (el espejo del `else`). Que los dos lean la misma constante es lo que garantiza
+   * que ninguna fila pueda quedar en las dos listas ni caerse de las dos — y en esta cola
+   * «caerse» significa que un cierre `vencido` deja de verse, con la bodega de su mensajero
+   * bloqueada hasta que alguien lo note.
+   *
+   * El total es el que la cabecera de la pantalla mostrara (R42): es el del CONJUNTO de la
+   * cola, no el de la pagina, y sale del mismo `where` que las filas.
+   */
+  async findColaPaginada(
+    alcance: Alcance,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
+    const where = {
+      ...alcanceWhere(alcance), // R2/R13: el alcance, en el WHERE y nunca en memoria
+      estado: { in: [...ESTADOS_COLA_CIERRE_DIA] },
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreDia.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: CIERRE_RESUMEN_SELECT,
+      }),
+      this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO, no de la pagina
+    ]);
+    return { items: rows.map(toResumenRow), total };
   }
 
   /**

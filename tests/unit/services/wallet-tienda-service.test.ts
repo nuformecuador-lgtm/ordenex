@@ -21,6 +21,11 @@ function fakeRepo(overrides: Partial<IWalletTiendaMovimientoRepository> = {}): I
     listarPorTienda: vi.fn(async () => ({ movimientos: [], total: 0 })),
     agregarSaldoPorTienda: vi.fn(async () => ({ creditos: "0.00", debitos: "0.00" })),
     listarSaldosTodasTiendas: vi.fn(async () => []),
+    // Feature 170 (T I.1): saldos paginados; su suite es `saldos-tiendas-paginado.test.ts`.
+    listarSaldosTiendasPaginado: vi.fn(async () => ({ items: [], total: 0 })),
+    // Feature 171: el doble implementa la interfaz COMPLETA. El desglose por tienda lo
+    // ejercita `wallet-tienda-desglose.test.ts`; aqui solo tiene que existir.
+    agregarDesglosePorTienda: vi.fn(async () => []),
     ...overrides,
   };
 }
