@@ -1,8 +1,9 @@
 # Feature 127 — analítica: servicios financieros · design
 
-> Este diseño **presupone la puerta T0 de `requirements.md` contestada**. Donde una decisión aún
-> abierta cambia la forma del código, está marcado con `⟨D_n⟩` y descrito bajo la recomendación del
-> spec_author. Ninguna de esas ramas se implementa antes de la respuesta.
+> **Puerta T0 CERRADA el 2026-08-02.** Las nueve decisiones están contestadas en `requirements.md`;
+> **D7 se cerró por implicación y no fue contestada directamente** (se reabre si el humano no la ve
+> así). Este diseño ya no tiene ramas condicionales: las marcas `⟨D_n⟩` que quedan son
+> **trazabilidad** —de dónde sale cada decisión de forma—, no incertidumbre.
 
 ---
 
@@ -28,9 +29,18 @@ lo que hace que la cifra del tablero y la cifra que alguien cobra vengan del mis
 es de **lectura**. Las cinco tablas que toca ya tienen RLS habilitada sin policies (solo service role,
 patrón `wallet_movimiento`/`cierre_dia`), y esta feature no la altera.
 
-Un solo cambio de contenido, y **necesita el visto bueno de ⟨D8⟩**: pasar `egresos` de
-`estadoProduccion: "declarada"` a `"producida"` en `lib/analytics/metrics.ts`. Es una línea, pero es
-el **catálogo**, y el catálogo se cambia con decisión humana fechada.
+### 2.0 El único cambio de contenido: el catálogo de la 135 ⟨D8⟩
+
+Esta feature **modifica un archivo ajeno**: `lib/analytics/metrics.ts`, propiedad de la 135. Pasa
+`egresos` de `estadoProduccion: "declarada"` a `"producida"`.
+
+> **Con visto bueno humano explícito, fechado el 2026-08-02 (D8 → (b)).** Es una línea, pero es **el
+> catálogo**, que es la fuente única de trece features. No es un retoque de paso, no es una
+> consecuencia técnica del código y **no se repite para ninguna otra métrica sin su propia decisión
+> fechada**. Quien lea el diff después tiene que poder llegar hasta aquí y encontrar de dónde salió.
+
+`R41` lo verifica por los dos lados: el catálogo declara `producida` **y** el servicio la produce de
+verdad; ninguna financiera queda `declarada` sin productor al cerrar la feature.
 
 ### 2.1 Las cinco tablas y las columnas que importan
 
@@ -39,8 +49,8 @@ el **catálogo**, y el catálogo se cambia con decisión humana fechada.
 | `wallet_movimiento` | `fecha_movimiento` | `monto` (Decimal 12,2), signo por `tipo` | `categoria` |
 | `wallet_tienda_movimiento` | `fecha_movimiento` | `monto`, signo por `tipo` | `tienda_id` × `categoria` |
 | `pago_mensajero_movimiento` | `fecha_movimiento` | `monto`, signo por `tipo` | `mensajero_id` × `categoria` |
-| `cierre_dia` | `solicitado_at` / `resuelto_at` ⟨D2⟩ | `total_efectivo`, `total_simpe`, `total_transferencia`, `total_general`, `total_pago_mensajero`, `total_ingreso_bodega_rechazos` | `estado` |
-| `cierre_bodega` | `solicitado_at` / `resuelto_at` ⟨D2⟩ | los mismos seis `total_*` agregados | `estado`, `zona_id` |
+| `cierre_dia` | **`resuelto_at`** para dinero; `solicitado_at` solo para los no resueltos ⟨D2/D4⟩ | `total_efectivo`, `total_simpe`, `total_transferencia`, `total_general`, `total_pago_mensajero`, `total_ingreso_bodega_rechazos` | `estado` |
+| `cierre_bodega` | ídem ⟨D2/D4⟩ | los mismos seis `total_*` agregados | `estado`, `zona_id` |
 
 **Hechos del esquema que condicionan el diseño** (verificados, con archivo:línea):
 
@@ -49,9 +59,12 @@ el **catálogo**, y el catálogo se cambia con decisión humana fechada.
 2. **El ledger de tienda no tiene método de pago** (`db/schema.prisma:1129-1150`). El método solo
    existe en los tres `total_*` del cierre. Origen de ⟨D6⟩.
 3. **Los ledgers son append-only sin `deleted_at`** (`:1078`, `:1141`, `:1203`). No hay filas a
-   excluir por borradas; las correcciones son filas `ajuste_*`. Origen de ⟨D1⟩.
+   excluir por borradas; las correcciones son filas `ajuste_*` **sin puntero al original**. Origen de
+   ⟨D1⟩ y razón por la que el `neto` se deriva por signo y no por emparejamiento.
 4. **`cierre_dia` no tiene fecha de negocio.** Solo `solicitado_at` y `resuelto_at`, que pueden caer
-   en días distintos. Origen de ⟨D2⟩ y ⟨D4⟩.
+   en días distintos. Origen de ⟨D2⟩ y ⟨D4⟩. Con D2(b), **el dinero del cierre se fecha por
+   `resuelto_at`**, que es el mismo instante en que el feed escribe en los ledgers: las dos caras de
+   la conciliación miran el mismo día y un descuadre deja de poder ser un artefacto de fechado.
 5. **El vínculo cierre↔ledger existe y es explícito:** `origen_tipo = cierre_dia` + `origen_id`, con
    índice `(origen_tipo, origen_id)` en las tres tablas. Es lo que hace la conciliación **barata y
    exacta** en vez de heurística.
@@ -186,15 +199,23 @@ cualquier clave así es un **error de validación**, no un vector de escalada.
 type RespuestaFinanciera =
   | { status: "ok"; datos: ResultadoFinanciero }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "forbidden"; code: "FORBIDDEN" }            // sin motivo ⟨D9⟩
-  | { status: "no_producida"; metricaId: string }         // solo si ⟨D8⟩ = (a)
+  | { status: "forbidden"; code: "FORBIDDEN" }            // sin motivo ⟨D9⟩ — R42
   | { status: "error"; mensaje: string };                 // con contexto, sin ids ajenos ni PII
 ```
 
+**No hay estado `no_producida`.** ⟨D8(b)⟩ cerró esa rama: la 127 produce las ocho métricas, así que un
+estado para «declarada sin productor» sería código muerto que invita a rellenarlo. Si algún día vuelve
+a haber una financiera sin productor, el estado se añade **con la decisión que lo cree**.
+
+**El cuerpo del `forbidden` no lleva `motivo`** (R42): el dominio cerrado de `MotivoDenegacion` viaja
+íntegro a `describirDenegado` y de ahí al `ErrorLogger`, y **solo ahí**. Un cliente que recibiera
+`metrica_desconocida` vs `metrica_prohibida` podría enumerar el catálogo y los permisos de cada rol
+preguntando.
+
 ```ts
 interface ImporteAnalitico {
-  readonly bruto: string;        // Σ de las categorías nominales                      ⟨D1⟩
-  readonly neto: string;         // Σ con signo (crédito − débito / ingreso − egreso)  ⟨D1⟩
+  readonly bruto: string;        // Σ de las categorías nominales                      ⟨D1⟩ R37
+  readonly neto: string;         // Σ CON SIGNO (crédito − débito / ingreso − egreso)  ⟨D1⟩ R37
   readonly moneda: string;       // de lib/config/moneda.ts — nunca literal
 }
 
@@ -203,8 +224,8 @@ interface ResultadoFinanciero {
   readonly etiqueta: string;                     // del catálogo, no escrita aquí
   readonly unidad: MetricaUnidad;                // del catálogo
   readonly rango: { desdeFecha: string; hastaFecha: string };
-  readonly esAcumulado: boolean;                 // true en las dos cuentas por pagar ⟨D3⟩
-  readonly vistas: readonly VistaFinanciera[];   // 1, salvo cod_recaudado que trae 2 ⟨D6⟩
+  readonly esAcumulado: boolean;                 // true EXACTAMENTE en las dos cuentas por pagar ⟨D3⟩ R43
+  readonly vistas: readonly VistaFinanciera[];   // 1, salvo cod_recaudado que trae 2 ⟨D6⟩ R38
 }
 
 interface VistaFinanciera {
@@ -220,10 +241,16 @@ interface VistaFinanciera {
 }
 ```
 
-**`sumableCon` no es decoración.** ⟨D6⟩ produce dos vistas de `cod_recaudado` que **no suman entre
-sí** (una es lo que el mensajero entregó, la otra lo acreditado a tiendas). Sin un campo que lo diga,
-la primera pantalla que las ponga juntas las va a sumar. Es el mismo razonamiento de `sonSumables()`
-en el catálogo, aplicado dentro de una métrica.
+**`sumableCon` no es decoración.** ⟨D6(a)⟩ produce dos vistas de `cod_recaudado` con **ids distintos**
+—`cod_recaudado__por_metodo` y `cod_recaudado__por_tienda`— que **no suman entre sí** (una es lo que
+el mensajero entregó; la otra, lo acreditado a tiendas). Ambas declaran `sumableCon: []`. Sin ese
+campo, la primera pantalla que las ponga juntas las va a sumar y va a mostrar el doble del dinero. Es
+el mismo razonamiento de `sonSumables()` del catálogo, aplicado **dentro** de una métrica (R38).
+
+**Por qué dos vistas y no dos métricas nuevas:** el catálogo de la 135 **no se recorta ni se amplía**
+(D6). `cod_recaudado` sigue siendo una métrica con sus tres granos; lo que la 127 declara es que ese
+cubo se sirve en dos proyecciones legales, porque el cubo cruzado no existe en las fuentes permitidas.
+Crear ids de métrica nuevos sería cambiar el catálogo sin decisión que lo respalde.
 
 **Ningún DTO lleva `mensajeroId`** (R14). `cuenta_por_pagar_mensajero` no declara grano `mensajero` en
 el catálogo, así que sirve **un total**, no filas por persona.
@@ -237,7 +264,7 @@ interface ResultadoConciliacion {
     readonly estado: "solicitado" | "aprobado" | "rechazado" | "vencido";
     readonly cantidad: number;                   // conteo: aquí sí es un entero, no dinero
     readonly totales: Record<"efectivo"|"simpe"|"transferencia"|"general", string>;
-    readonly fechadoPor: "resuelto_at" | "solicitado_at";   // ⟨D2⟩/⟨D4⟩, explícito por fila
+    readonly fechadoPor: "resuelto_at" | "solicitado_at";   // ⟨D2/D4⟩ explícito por fila — R39
   }[];
   readonly cuadre: {
     readonly cuadra: boolean;
@@ -248,6 +275,21 @@ interface ResultadoConciliacion {
   };
 }
 ```
+
+**La doble coordenada temporal es un DATO, no un sobreentendido** (R39). Con ⟨D2(b)⟩ + ⟨D4(b)⟩, las
+filas de estado `aprobado` se fechan por `resuelto_at` y las de `solicitado`/`vencido`/`rechazado` por
+`solicitado_at` — porque **no tienen** `resuelto_at`. Que cada fila lo declare evita que el consumidor
+tenga que saberse la regla, y hace que clavar el campo a un valor único se detecte con un test en vez
+de con un informe raro seis meses después.
+
+**Los cierres no resueltos no aportan importe a ninguna métrica de dinero** (R25): aparecen aquí, con
+su conteo y sus `total_*`, precisamente para que «hay dinero en el aire» sea visible sin que ese
+dinero se cuele en `cod_recaudado` — y sin que se cuente dos veces el día que se aprueben.
+
+**El descuadre se reporta, nunca revienta** (⟨D5⟩, R24): si `|diferencia|` supera el umbral de
+`lib/config/analitica-financiera.ts` (R40), se emite por el `ErrorLogger` y el DTO **igual se
+devuelve**. Un tablero financiero que se cae por un descuadre histórico es un tablero que alguien
+apaga.
 
 `cierresDescuadrados` lleva ids de **cierre**, nunca de mensajero ni de tienda: R14 y el criterio de
 la 122 sobre no reenviar ids ajenos por canales de diagnóstico.
@@ -261,12 +303,23 @@ la 122 sobre no reenviar ids ajenos por canales de diagnóstico.
 | `ingreso_flete` | Ingresos | `groupBy(categoria)` + `_sum(monto)` sobre `wallet_movimiento`, `categoria IN definicion.categorias`, `fecha_movimiento ∈ [desde,hasta)` | `derivarBalance` |
 | `ingreso_comision_cod` | Ingresos | idem, 1 categoría | `derivarBalance` |
 | `ingreso_iva` | Ingresos | idem, 3 categorías | `derivarBalance` |
-| `egresos` ⟨D8⟩ | Ingresos | idem, 8 categorías `egreso_*` | `derivarBalance` |
-| `cod_recaudado` vista A ⟨D6⟩ | Recaudo | `aggregate` de `total_efectivo/simpe/transferencia` sobre `cierre_dia` aprobados del rango | suma Decimal |
-| `cod_recaudado` vista B ⟨D6⟩ | Recaudo | `groupBy(tiendaId)` + `_sum` sobre `wallet_tienda_movimiento`, `categoria = cod_recaudado` | suma Decimal |
-| `cuenta_por_pagar_tienda` | CuentasPorPagar | `groupBy(tiendaId, tipo)` + `_sum`, `fecha_movimiento < hasta` ⟨D3⟩ | `derivarSaldoTienda` |
-| `cuenta_por_pagar_mensajero` | CuentasPorPagar | `groupBy(tipo)` + `_sum`, `fecha_movimiento < hasta` ⟨D3⟩ | `derivarCuentaPorPagar` |
-| `conciliacion_cierres` | Conciliación | `groupBy(estado)` sobre ambos cierres **+** `groupBy(origenId)` sobre los tres ledgers filtrado por los ids aprobados | comparación Decimal |
+| `egresos` ⟨D8(b)⟩ | Ingresos | idem, 8 categorías `egreso_*` | `derivarBalance` |
+| `cod_recaudado__por_metodo` ⟨D6(a)⟩ | Recaudo | `aggregate` de `total_efectivo/simpe/transferencia` sobre `cierre_dia` **resueltos** (`resuelto_at ∈ [desde,hasta)`, estado `aprobado`) | suma Decimal |
+| `cod_recaudado__por_tienda` ⟨D6(a)⟩ | Recaudo | `groupBy(tiendaId)` + `_sum` sobre `wallet_tienda_movimiento`, `categoria = cod_recaudado`, `fecha_movimiento ∈ [desde,hasta)` | suma Decimal |
+| `cuenta_por_pagar_tienda` | CuentasPorPagar | `groupBy(tiendaId, tipo)` + `_sum`, **`fecha_movimiento < hasta` sin cota inferior** ⟨D3(a)⟩ | `derivarSaldoTienda` |
+| `cuenta_por_pagar_mensajero` | CuentasPorPagar | `groupBy(tipo)` + `_sum`, **`fecha_movimiento < hasta` sin cota inferior** ⟨D3(a)⟩ | `derivarCuentaPorPagar` |
+| `conciliacion_cierres` | Conciliación | `groupBy(estado)` sobre ambos cierres (aprobados por `resuelto_at`, resto por `solicitado_at` ⟨D2/D4⟩) **+** `groupBy(origenId)` sobre los tres ledgers filtrado por los ids aprobados | comparación Decimal |
+
+**Las dos vistas de `cod_recaudado` no se suman** (R38): la de método sale de lo que los mensajeros
+entregaron en cierres aprobados; la de tienda, de lo acreditado en el ledger. Un mismo cierre puede
+contener órdenes de varias tiendas, así que sumarlas contaría el mismo colón dos veces.
+
+**Las dos cuentas por pagar ignoran `desde` a propósito** (R21/R43): son un **saldo al corte**, y el
+DTO lo declara con `esAcumulado: true` para que nadie las grafique como serie acumulativa.
+
+**Cada fila lleva `bruto` y `neto`** (R37). El `neto` sale de la resta con signo que ya hacen las tres
+funciones de derivación; **no** de emparejar `ajuste_*` con su original, que el esquema no permite
+saber.
 
 **Las categorías salen del catálogo, siempre** (R17): `consulta.metrica.definicion.categorias`. Ningún
 array literal de categorías vive en un repositorio de esta feature. Es la diferencia entre «el
@@ -286,8 +339,9 @@ es el bug caro de esta feature: no una consulta lenta, dos cifras del mismo dine
    la caché saldría gratis. **Descartada por tres razones acumuladas:** (a) el rollup se deriva de
    `orden`/`gestion_orden`, así que el dinero pasaría a recalcularse desde órdenes — la consigna que
    la ficha prohíbe en mayúsculas; (b) la 123 excluyó explícitamente las columnas de dinero de esa
-   tabla («Sin columnas de dinero: la financiera lee ledgers directos»); (c) el guardia **R42** de la
-   124 prohíbe que **cualquiera** lea `analytics_daily`. Que los tres apunten al mismo sitio no es
+   tabla («Sin columnas de dinero: la financiera lee ledgers directos»); (c) **el guardia R42 de la
+   124** (no confundir con el R42 *de esta* feature) prohíbe que **cualquiera** lea
+   `analytics_daily`. Que los tres apunten al mismo sitio no es
    coincidencia: es la decisión ya tomada tres veces. **Si algún día este diseño la necesitara, eso
    es una contradicción declarada que va al bloque T0, no una prohibición que se afloja de paso.**
 
@@ -309,10 +363,22 @@ es el bug caro de esta feature: no una consulta lenta, dos cifras del mismo dine
    `/mi-wallet`, que es otra superficie con otra puerta). Construirla aquí exigiría un adaptador de
    alcance para las tablas de dinero, que **R25 de la 122 prohíbe** con guardia en los dos sentidos.
 
-5. **Hacer que la conciliación falle (excepción) cuando no cuadra.** Máxima visibilidad. Descartada en
-   ⟨D5⟩: un descuadre histórico dejaría el tablero caído para siempre y la salida rápida sería
-   desactivar la comprobación — se perdería justo lo que se quería ganar. Se reporta y se emite por el
-   canal de logging existente.
+5. **Hacer que la conciliación falle (excepción) cuando no cuadra.** Máxima visibilidad. **Descartada
+   por el humano en ⟨D5⟩ (2026-08-02):** un descuadre histórico dejaría el tablero caído para siempre y
+   la salida rápida sería desactivar la comprobación — se perdería justo lo que se quería ganar. Se
+   reporta en el DTO **y** se emite por el `ErrorLogger` por encima del umbral de
+   `lib/config/analitica-financiera.ts`.
+
+   5-bis. **Fundir `cod_recaudado` en una sola cifra** cruzando tienda × método. **Descartada por el
+   humano en ⟨D6(a)⟩:** el cruce no existe en las fuentes permitidas (`cierre_dia` es por mensajero;
+   el ledger de tienda no tiene método) y construirlo exigiría bajar a `orden`/`gestion_orden`. La
+   alternativa que también se descartó es **recortar el catálogo** (quitarle el grano `tienda`): se
+   perdería una pregunta legítima que el ledger **sí** puede contestar.
+
+   5-ter. **Dejar `egresos` sin producir** (estado `no_producida`). **Descartada por el humano en
+   ⟨D8(b)⟩:** servir ingresos sin egresos deja un tablero que solo sabe sumar, y el coste marginal es
+   el mismo repositorio con otra lista de categorías. El precio pagado es tocar el catálogo ajeno, y
+   por eso llevó decisión fechada (§2.0).
 
 6. **Route handlers en `app/api/analitica/financiera/`** en vez de Server Actions. Descartada por
    `docs/architecture.md`: no hay consumidor externo, no hay webhook y no hay cron. Lectura interna
@@ -328,11 +394,18 @@ es el bug caro de esta feature: no una consulta lenta, dos cifras del mismo dine
 
 ## 8. Riesgos
 
-- **⟨D6⟩ es un agujero del catálogo, no de esta feature.** Si el humano elige recortar el grano, hay
-  que tocar `lib/analytics/metrics.ts` (135) y su cambio se propaga a 130/132/134. Cuanto antes se
-  decida, más barato.
+- **D7 se cerró por implicación, no por respuesta.** Si el humano lo reabre, cambia R23 (contra qué se
+  concilia) y podría caer una de las dos vistas de R19. Es el único punto del spec que no descansa en
+  una respuesta directa, y está marcado como tal en `requirements.md`.
+- **Esta feature toca el catálogo de la 135** (`egresos` → `producida`, §2.0). Es un archivo ajeno,
+  fuente única de trece features: el merge con `dev` tiene que mirar ese archivo con cuidado, y la
+  autorización que lo respalda es del 2026-08-02, no genérica.
+- **⟨D6(a)⟩ deja una asimetría visible en la UI:** dos vistas de la misma métrica que no suman. Si la
+  132 no lo explica en pantalla, alguien las va a sumar mentalmente. `sumableCon` lo impide en el
+  código, no en la cabeza del que mira.
 - **La 128 depende de esta feature** (`depends_on: 127`). Las formas de DTO que se fijen aquí son las
-  que esa feature va a cachear; un cambio posterior invalida su diseño.
+  que esa feature va a cachear; un cambio posterior invalida su diseño. Ojo con `esAcumulado`: un
+  saldo al corte cacheado con la clave de un rango es una trampa fácil.
 - **El guardia R35 va a ponerse rojo el día que alguien abra un recorte financiero.** Eso es su
   trabajo. La reacción correcta es diseñar el recorte del dinero; la incorrecta es añadir una
   excepción nominal (mirar la nota de `alcance-obligatorio.guardia.test.ts:144-149` sobre por qué las
