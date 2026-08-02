@@ -4,6 +4,7 @@ import {
   esFechaPagoValida,
   LIQUIDACION_MONTO_MAX,
   LIQUIDACION_NOTA_MAX,
+  LIQUIDACION_REFERENCIA_MAX,
   registrarPagoMensajeroSchema,
   registrarPagoTiendaSchema,
 } from "@/lib/types/liquidacion";
@@ -217,6 +218,70 @@ describe("R13 — la nota es libre, opcional y acotada", () => {
     const r = registrarPagoTiendaSchema.safeParse(pagoTiendaValido({ nota: `${alTope}n` }));
     expect(r.success).toBe(false);
     expect(camposConError(r)).toContain("nota");
+  });
+});
+
+describe("R12 — la referencia tambien esta acotada (desviacion declarada del diseño)", () => {
+  // `design.md §3.2` fija tope para la `nota` y calla sobre la `referencia`. Lo cierra el
+  // leader (2026-08-02): es texto libre de usuario contra una columna `text` en un libro de
+  // dinero. El numero sale de la convencion del repo para un identificador corto tecleado por
+  // una persona (`lib/types/api-key.ts:17`, 60 caracteres), no de un ojo a bulto.
+  it("FRONTERA: el tope EXACTO se acepta y un caracter mas se rechaza, en el campo `referencia`", () => {
+    const alTope = "9".repeat(LIQUIDACION_REFERENCIA_MAX);
+    expect(
+      registrarPagoTiendaSchema.safeParse(pagoTiendaValido({ metodo: "SINPE", referencia: alTope }))
+        .success,
+    ).toBe(true);
+
+    const r = registrarPagoTiendaSchema.safeParse(
+      pagoTiendaValido({ metodo: "SINPE", referencia: `${alTope}9` }),
+    );
+    expect(r.success).toBe(false);
+    expect(camposConError(r)).toContain("referencia");
+  });
+
+  it("el tope se mide DESPUES de recortar los espacios (el `.trim()` corre antes)", () => {
+    // Con el orden al reves, una referencia legitima rodeada de espacios se rechazaria.
+    const conEspacios = `  ${"9".repeat(LIQUIDACION_REFERENCIA_MAX)}  `;
+    const r = registrarPagoTiendaSchema.safeParse(
+      pagoTiendaValido({ metodo: "SINPE", referencia: conEspacios }),
+    );
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.referencia).toHaveLength(LIQUIDACION_REFERENCIA_MAX);
+  });
+
+  it("una referencia real (SINPE, transferencia) cabe de sobra", () => {
+    for (const referencia of ["1234567", "SINPE-2026-07-30-0001", "TRF 998877665544"]) {
+      const r = registrarPagoTiendaSchema.safeParse(
+        pagoTiendaValido({ metodo: "transferencia", referencia }),
+      );
+      expect(r.success, `rechazo la referencia "${referencia}"`).toBe(true);
+    }
+  });
+
+  it("el tope aplica igual al pago al MENSAJERO (es el mismo bloque de campos)", () => {
+    const r = registrarPagoMensajeroSchema.safeParse(
+      pagoMensajeroValido({ metodo: "SINPE", referencia: "9".repeat(LIQUIDACION_REFERENCIA_MAX + 1) }),
+    );
+    expect(r.success).toBe(false);
+    expect(camposConError(r)).toContain("referencia");
+  });
+
+  it("el tope de la referencia y el de la nota son numeros DISTINTOS y no se confunden", () => {
+    // Un identificador corto y un texto libre no comparten limite. Si alguien igualara los dos
+    // valores, esta asercion lo dice en voz alta.
+    expect(LIQUIDACION_REFERENCIA_MAX).toBeLessThan(LIQUIDACION_NOTA_MAX);
+    const entreLosDos = "x".repeat(LIQUIDACION_REFERENCIA_MAX + 1);
+    // Cabe como nota…
+    expect(
+      registrarPagoTiendaSchema.safeParse(pagoTiendaValido({ nota: entreLosDos })).success,
+    ).toBe(true);
+    // …y no como referencia.
+    expect(
+      registrarPagoTiendaSchema.safeParse(
+        pagoTiendaValido({ metodo: "SINPE", referencia: entreLosDos }),
+      ).success,
+    ).toBe(false);
   });
 });
 

@@ -53,6 +53,26 @@ export const LIQUIDACION_MONTO_MAX = `${"9".repeat(LIQUIDACION_MONTO_DIGITOS_ENT
 export const LIQUIDACION_NOTA_MAX = 500;
 
 /**
+ * R12 [P6] — tope de la REFERENCIA del pago (numero de SINPE, de transferencia o de recibo).
+ *
+ * **DESVIACION DECLARADA DEL DISENO, por decision del leader (2026-08-02).** `design.md §3.2`
+ * fija tope para la `nota` y calla sobre la `referencia`; el hueco se reporto en las tandas A, B
+ * 1/2 y B 2/2 y se cierra aqui: es texto libre de usuario contra una columna `text` y la 172 es
+ * un libro de dinero.
+ *
+ * El numero NO es inventado: **60** es el tope que este repo ya usa para un IDENTIFICADOR CORTO
+ * tecleado por una persona contra una columna `text` — el identificador de una API key
+ * (`lib/types/api-key.ts:17`, «El identificador no puede exceder 60 caracteres»), que es el unico
+ * campo de esa familia en el arbol y el tope mas corto del catalogo (60 / 200 / 300 / 500 /
+ * 2000 / 4096). Una referencia de SINPE o de transferencia son 6-25 caracteres en la practica,
+ * asi que 60 no recorta ningun caso real y cierra la puerta a un texto sin fin.
+ *
+ * La `nota` conserva el suyo (`LIQUIDACION_NOTA_MAX`, 500): son dos campos distintos —un
+ * identificador y un texto libre— y comparten tope solo si comparten naturaleza.
+ */
+export const LIQUIDACION_REFERENCIA_MAX = 60;
+
+/**
  * R11 — monto STRING con hasta 2 decimales y > 0 (`montoPositivoSchema`, reutilizado de la
  * wallet: la misma regla money-safe que ya valida los egresos), acotado ademas por arriba a lo
  * que la columna puede representar.
@@ -118,7 +138,16 @@ const camposComunesDelPago = {
   claveIdempotencia: z.string().uuid(),
   monto: montoLiquidacionSchema,
   metodo: z.enum(METODO_PAGO_SEED),
-  referencia: z.string().trim().optional(),
+  // R12: el `.trim()` corre ANTES del `.max()` (los checks de zod se aplican en orden), asi que
+  // el tope se mide sobre lo que de verdad se guarda, no sobre los espacios que rodean.
+  referencia: z
+    .string()
+    .trim()
+    .max(
+      LIQUIDACION_REFERENCIA_MAX,
+      `La referencia no puede superar ${LIQUIDACION_REFERENCIA_MAX} caracteres.`,
+    )
+    .optional(),
   nota: z
     .string()
     .max(LIQUIDACION_NOTA_MAX, `La nota no puede superar ${LIQUIDACION_NOTA_MAX} caracteres.`)
@@ -157,9 +186,20 @@ export const anularPagoSchema = z
   })
   .strict();
 
+/**
+ * R49 — el borde de la LISTA de comprobantes de un cierre. `.strict()` por el mismo motivo que
+ * en los registros: una clave de mas es una peticion que nadie escribio a proposito.
+ */
+export const listarPagosDeCierreSchema = z.object({ cierreId: z.string().uuid() }).strict();
+
+/** R50 — idem para una tienda (sin cierre: los pagos van contra el saldo acumulado). */
+export const listarPagosDeTiendaSchema = z.object({ tiendaId: z.string().uuid() }).strict();
+
 export type RegistrarPagoMensajeroInput = z.infer<typeof registrarPagoMensajeroSchema>;
 export type RegistrarPagoTiendaInput = z.infer<typeof registrarPagoTiendaSchema>;
 export type AnularPagoInput = z.infer<typeof anularPagoSchema>;
+export type ListarPagosDeCierreInput = z.infer<typeof listarPagosDeCierreSchema>;
+export type ListarPagosDeTiendaInput = z.infer<typeof listarPagosDeTiendaSchema>;
 
 // ── DTOs de salida (frontera Server Action -> cliente). Montos SIEMPRE STRING (R14) ──
 
@@ -195,6 +235,21 @@ export type RegistrarPagoResult =
   | { status: "sin_saldo" }
   | { status: "cierre_no_aprobado" }
   | { status: "no_encontrado" }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+/**
+ * R49/R50/R74 — resultado de LISTAR los comprobantes de un cierre o de una tienda. La lista
+ * llega COMPLETA y sin paginar (son pocos comprobantes por beneficiario, `design.md §10.4`) e
+ * incluye los pagos ANULADOS, marcados con su bloque de anulacion: un pago anulado deja de
+ * descontar, pero no deja de verse.
+ *
+ * No hay rama `no_encontrado`: un cierre o una tienda sin pagos devuelven la lista VACIA, que es
+ * la respuesta correcta y no revela si el id existe.
+ */
+export type ListarPagosResult =
+  | { status: "ok"; pagos: PagoRegistradoDTO[] }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "unauthenticated" };

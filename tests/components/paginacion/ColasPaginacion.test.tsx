@@ -178,6 +178,7 @@ function cierreAdmin(i: number): CierreAdminResumen {
     totales: CERO,
     totalPagoMensajero: "0.00",
     totalIngresoBodegaRechazos: "0.00",
+    pendientePagoMensajero: null, // feature 172/T C.2: la cola son cierres no aprobados (R28)
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,

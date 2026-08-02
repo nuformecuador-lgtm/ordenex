@@ -461,6 +461,8 @@ function cierreAdmin(i: number, estado: CierreAdminResumen["estado"]): CierreAdm
     totales: TOTALES,
     totalPagoMensajero: "100.10",
     totalIngresoBodegaRechazos: "5.00",
+    // Feature 172 (T C.2): el valor no lo mira esta suite; lo derivan los tests de la 172.
+    pendientePagoMensajero: estado === "aprobado" ? "0.00" : null,
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,

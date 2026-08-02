@@ -44,8 +44,15 @@ export interface CrearPagoMensajeroInput {
   fechaMovimiento?: Date;
 }
 
-// Filtros del listado del libro de UN mensajero (R20/R22). `cierreId` filtra por el origen
-// (origen_tipo=cierre_dia, origen_id=cierreId). Rango de fechas sobre fecha_movimiento.
+/**
+ * Filtros del listado del libro de UN mensajero (R20/R22). Rango de fechas sobre
+ * `fecha_movimiento`.
+ *
+ * **`cierreId` = «todo lo que pertenece a ese cierre», y son DOS orígenes** desde la feature
+ * 172 (T C.3, R52): lo que el feed escribio al aprobarlo (`origen_tipo = cierre_dia`) **y** los
+ * pagos registrados contra el, con sus contraasientos (`origen_tipo = pago_mensajero`, cuyo
+ * `origen_id` es el PAGO, no el cierre). La traduccion a SQL vive en el repositorio.
+ */
 export interface ListarPorMensajeroFiltros {
   mensajeroId: string;
   page: number;
@@ -61,7 +68,8 @@ export interface ListarPorMensajeroPage {
 }
 
 // Filtros de la cuenta por pagar de UN mensajero (R14/R22): mismo conjunto que el listado, sin
-// paginacion.
+// paginacion — y con la MISMA lectura de `cierreId` (172/T C.3), para que la cabecera y la
+// tabla del desglose no puedan contar cosas distintas.
 export interface CuentaPorPagarFiltros {
   cierreId?: string;
   desde?: Date;

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import * as accionesLiquidacion from "@/lib/actions/liquidacion";
 import {
+  listarPagosDeCierreAction,
+  listarPagosDeTiendaAction,
   registrarPagoMensajeroAction,
   registrarPagoTiendaAction,
 } from "@/lib/actions/liquidacion";
@@ -58,6 +60,10 @@ function fakeService(overrides: Partial<ILiquidacionService> = {}): ILiquidacion
       pago: comprobante(),
       restante: "85000.00",
     })),
+    // T C.1: los dos listados de comprobantes. Por defecto devuelven UN pago vigente, para que
+    // las aserciones de forma tengan algo que mirar.
+    listarPagosDeCierre: vi.fn(async () => ({ status: "ok" as const, pagos: [comprobante()] })),
+    listarPagosDeTienda: vi.fn(async () => ({ status: "ok" as const, pagos: [comprobante()] })),
     ...overrides,
   };
 }
@@ -335,12 +341,108 @@ describe("los resultados de DOMINIO se devuelven tal cual (el borde no los reinv
   });
 });
 
+// ── T C.1 — las dos acciones de LISTAR comprobantes (R3, R49, R50) ──────────────────────────
+
+describe("T C.1 — listar comprobantes: el borde resuelve sesion y forma; el resto, el servicio", () => {
+  it("R3: sin sesion -> `unauthenticated`, sin tocar el servicio, en los DOS listados", async () => {
+    const service = fakeService();
+
+    expect(
+      await listarPagosDeCierreAction({ cierreId: CIERRE }, { service, getActor: async () => null }),
+    ).toEqual({ status: "unauthenticated" });
+    expect(
+      await listarPagosDeTiendaAction({ tiendaId: TIENDA }, { service, getActor: async () => null }),
+    ).toEqual({ status: "unauthenticated" });
+
+    expect(service.listarPagosDeCierre).not.toHaveBeenCalled();
+    expect(service.listarPagosDeTienda).not.toHaveBeenCalled();
+  });
+
+  it("R3: sin sesion Y con la peticion rota, sigue ganando `unauthenticated`", async () => {
+    const service = fakeService();
+
+    const r = await listarPagosDeCierreAction(
+      { basura: true },
+      { service, getActor: async () => null },
+    );
+
+    expect(r).toEqual({ status: "unauthenticated" });
+  });
+
+  it("un id que no es uuid muere en el borde, en su campo", async () => {
+    const service = fakeService();
+
+    const r = await listarPagosDeCierreAction(
+      { cierreId: "no-soy-un-uuid" },
+      { service, getActor: async () => MAESTRO },
+    );
+
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") return;
+    expect(Object.keys(r.fieldErrors)).toContain("cierreId");
+    expect(service.listarPagosDeCierre).not.toHaveBeenCalled();
+  });
+
+  it("`.strict()`: una clave de mas no pasa (nadie escribe eso a proposito)", async () => {
+    const service = fakeService();
+
+    const r = await listarPagosDeTiendaAction(
+      { tiendaId: TIENDA, incluirAnulados: false },
+      { service, getActor: async () => MAESTRO },
+    );
+
+    expect(r.status).toBe("validation_error");
+    expect(service.listarPagosDeTienda).not.toHaveBeenCalled();
+  });
+
+  it("al servicio le llega el id parseado y el actor de la SESION, no el de la peticion", async () => {
+    const service = fakeService();
+
+    await listarPagosDeCierreAction({ cierreId: CIERRE }, { service, getActor: async () => ADMIN });
+
+    const mock = service.listarPagosDeCierre as unknown as { mock: { calls: unknown[][] } };
+    expect(mock.mock.calls[0]).toEqual([CIERRE, ADMIN]);
+  });
+
+  it("R1/R6: el `forbidden` del servicio se devuelve tal cual (el borde no duplica el guard)", async () => {
+    const service = fakeService({
+      listarPagosDeCierre: vi.fn(async () => ({ status: "forbidden" as const })),
+    });
+
+    const r = await listarPagosDeCierreAction(
+      { cierreId: CIERRE },
+      { service, getActor: async () => SIN_ACCESO },
+    );
+
+    expect(r).toEqual({ status: "forbidden" });
+  });
+
+  it("R49/R50: la lista llega entera y con montos STRING", async () => {
+    const service = fakeService();
+
+    const r = await listarPagosDeTiendaAction(
+      { tiendaId: TIENDA },
+      { service, getActor: async () => MAESTRO },
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.pagos).toHaveLength(1);
+    expect(typeof r.pagos[0]!.monto).toBe("string");
+    expect(r.pagos[0]!.monto).toMatch(/^\d+\.\d{2}$/);
+    // R56: ni el id de la tienda que se pidio viaja de vuelta en el comprobante.
+    expect(JSON.stringify(r)).not.toContain(TIENDA);
+  });
+});
+
 describe("R65 — NO se exporta ninguna accion de EDITAR un pago", () => {
-  it("la superficie del modulo es EXACTAMENTE la de registrar", () => {
-    // Lista cerrada a proposito: T C.1 (listados) y T F.4 (anulacion) la amplian, y al hacerlo
-    // tendran que tocar este test — que es justo el momento de mirar si lo que se anade tiene
-    // derecho a existir. Un `editarPagoAction` no lo tiene.
+  it("la superficie del modulo es EXACTAMENTE la de registrar y listar", () => {
+    // Lista cerrada a proposito: T C.1 (listados) la amplio a cuatro y T F.4 (anulacion) la
+    // dejara en cinco, y al hacerlo tendra que tocar este test — que es justo el momento de
+    // mirar si lo que se anade tiene derecho a existir. Un `editarPagoAction` no lo tiene.
     expect(Object.keys(accionesLiquidacion).sort()).toEqual([
+      "listarPagosDeCierreAction",
+      "listarPagosDeTiendaAction",
       "registrarPagoMensajeroAction",
       "registrarPagoTiendaAction",
     ]);
@@ -354,7 +456,7 @@ describe("R65 — NO se exporta ninguna accion de EDITAR un pago", () => {
     }
   });
 
-  it("las dos exportaciones son funciones asincronas (contrato de Server Action)", () => {
+  it("todas las exportaciones son funciones asincronas (contrato de Server Action)", () => {
     for (const valor of Object.values(accionesLiquidacion)) {
       expect(typeof valor).toBe("function");
     }

@@ -127,6 +127,8 @@ function buildDobles(opciones: {
   debitos: string;
   cierre?: CierreParaPagoDTO | null;
   pagadoVigente?: string;
+  /** T C.1: los comprobantes que devuelven los dos listados del repositorio. */
+  pagos?: LiquidacionPagoDTO[];
 }) {
   const log: Registro[] = [];
   const tx = buildTx();
@@ -162,8 +164,14 @@ function buildDobles(opciones: {
       return Object.fromEntries(ids.map((id) => [id, opciones.pagadoVigente ?? "0.00"]));
     }),
     sumarVigentesPorTienda: vi.fn(async () => "0.00"),
-    listarPorCierre: vi.fn(async () => []),
-    listarPorTienda: vi.fn(async () => []),
+    listarPorCierre: vi.fn(async () => {
+      log.push("listar:por-cierre");
+      return opciones.pagos ?? [];
+    }),
+    listarPorTienda: vi.fn(async () => {
+      log.push("listar:por-tienda");
+      return opciones.pagos ?? [];
+    }),
   };
 
   const tiendaRepo: IWalletTiendaMovimientoRepository = {
@@ -1020,6 +1028,245 @@ describe("R43/R47 — la rama idempotente del camino del mensajero", () => {
     await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
 
     expect(d.pagoRepo.obtenerPorClave).not.toHaveBeenCalled();
+  });
+});
+
+// ── T C.1 — las listas de comprobantes (R49, R50, R56, R74) ─────────────────────────────────
+
+/**
+ * Ids INTERNOS con forma de uuid. Se usan a proposito en lugar de `"m1"`/`"t1"`: el criterio
+ * duro de T C.1 es que el DTO no contenga NINGUN uuid salvo el `id` del pago, y con ids cortos
+ * el barrido no podria distinguir un identificador de un texto cualquiera.
+ */
+const UUID_MENSAJERO = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+const UUID_TIENDA = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
+const UUID_CIERRE = "cccccccc-3333-4333-8333-cccccccccccc";
+const UUID_PAGO = "dddddddd-4444-4444-8444-dddddddddddd";
+
+/** Un comprobante VIGENTE, con todos sus ids internos poblados. */
+function pagoDeCierre(over: Partial<LiquidacionPagoDTO> = {}): LiquidacionPagoDTO {
+  return pagoDTO({
+    id: UUID_PAGO,
+    mensajeroId: UUID_MENSAJERO,
+    tiendaId: null,
+    cierreId: UUID_CIERRE,
+    ...over,
+  });
+}
+
+/** El mismo comprobante, ANULADO: sigue entero y ademas trae quien, cuando y por que (R74). */
+function pagoAnulado(): LiquidacionPagoDTO {
+  return pagoDeCierre({
+    id: "eeeeeeee-5555-4555-8555-eeeeeeeeeeee",
+    anulacion: {
+      motivo: "Monto equivocado",
+      anuladoPorNombre: "Beto Maestro",
+      anuladoAt: "2026-08-02T16:00:00.000Z",
+    },
+  });
+}
+
+describe("R49/R50 — las listas de comprobantes", () => {
+  it("R49: los comprobantes de un CIERRE salen con sus siete datos y el nombre de quien registro", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [pagoDeCierre()] });
+
+    const r = await d.service.listarPagosDeCierre(UUID_CIERRE, ACTOR_ADMIN);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.pagos).toHaveLength(1);
+    expect(r.pagos[0]).toEqual({
+      id: UUID_PAGO,
+      monto: "15000.00",
+      metodo: "SINPE",
+      referencia: "1234567",
+      nota: "Pago parcial de julio",
+      fechaPago: "2026-07-30", // la fecha REAL del pago…
+      registradoPorNombre: "Ana Admin", // …el NOMBRE, no el id (R56)…
+      registradoAt: "2026-08-02T15:04:05.000Z", // …y el instante de registro (R9)
+      anulacion: null,
+    });
+    expect(d.pagoRepo.listarPorCierre).toHaveBeenCalledWith(UUID_CIERRE);
+  });
+
+  it("R50: los de una TIENDA salen por el otro listado, sin cierre de por medio", async () => {
+    const pago = pagoDTO({ id: UUID_PAGO, tiendaId: UUID_TIENDA, cierreId: null });
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [pago] });
+
+    const r = await d.service.listarPagosDeTienda(UUID_TIENDA, ACTOR_MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(d.pagoRepo.listarPorTienda).toHaveBeenCalledWith(UUID_TIENDA);
+    expect(d.pagoRepo.listarPorCierre).not.toHaveBeenCalled();
+    expect(r.pagos[0]!.id).toBe(UUID_PAGO);
+  });
+
+  it("un beneficiario sin pagos devuelve la lista VACIA (no `no_encontrado`: no revela nada)", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [] });
+
+    expect(await d.service.listarPagosDeCierre(UUID_CIERRE, ACTOR_ADMIN)).toEqual({
+      status: "ok",
+      pagos: [],
+    });
+    expect(await d.service.listarPagosDeTienda(UUID_TIENDA, ACTOR_ADMIN)).toEqual({
+      status: "ok",
+      pagos: [],
+    });
+  });
+
+  it("el orden que fija el repositorio se conserva: el servicio no reordena", async () => {
+    const primero = pagoDeCierre({ id: UUID_PAGO });
+    const segundo = pagoDeCierre({ id: "ffffffff-6666-4666-8666-ffffffffffff" });
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [primero, segundo] });
+
+    const r = await d.service.listarPagosDeCierre(UUID_CIERRE, ACTOR_ADMIN);
+
+    if (r.status !== "ok") return;
+    expect(r.pagos.map((p) => p.id)).toEqual([primero.id, segundo.id]);
+  });
+
+  it("es SOLO lectura: no abre transaccion, no toca candados y no escribe nada", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [pagoDeCierre()] });
+
+    await d.service.listarPagosDeCierre(UUID_CIERRE, ACTOR_ADMIN);
+
+    expect(d.llamadasTx.n).toBe(0);
+    expect(d.pagoRepo.bloquearBeneficiario).not.toHaveBeenCalled();
+    expect(d.pagoRepo.crear).not.toHaveBeenCalled();
+    expect(d.log).toEqual(["listar:por-cierre"]);
+  });
+});
+
+describe("R74 — un pago ANULADO se sigue listando, entero y marcado", () => {
+  it("viene con todos sus datos originales MAS el bloque de anulacion", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [pagoAnulado()] });
+
+    const r = await d.service.listarPagosDeCierre(UUID_CIERRE, ACTOR_ADMIN);
+
+    if (r.status !== "ok") return;
+    const pago = r.pagos[0]!;
+    // Los datos del pago NO cambian al anularlo (el documento es inmutable, R41/R78).
+    expect(pago.monto).toBe("15000.00");
+    expect(pago.referencia).toBe("1234567");
+    expect(pago.fechaPago).toBe("2026-07-30");
+    expect(pago.registradoPorNombre).toBe("Ana Admin");
+    // Y encima, quien anulo, cuando y por que — con el NOMBRE del anulador, no su id (R56/R73).
+    expect(pago.anulacion).toEqual({
+      motivo: "Monto equivocado",
+      anuladoPorNombre: "Beto Maestro",
+      anuladoAt: "2026-08-02T16:00:00.000Z",
+    });
+  });
+
+  it("el servicio NO filtra los anulados: vigentes y anulados salen juntos", async () => {
+    const d = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      pagos: [pagoDeCierre(), pagoAnulado()],
+    });
+
+    const r = await d.service.listarPagosDeCierre(UUID_CIERRE, ACTOR_ADMIN);
+
+    if (r.status !== "ok") return;
+    // Quien SI excluye los anulados es la SUMA del pendiente (R80); la lista, no (R74).
+    expect(r.pagos).toHaveLength(2);
+    expect(r.pagos.filter((p) => p.anulacion !== null)).toHaveLength(1);
+  });
+});
+
+describe("R56 — el comprobante que cruza no lleva ni un identificador interno", () => {
+  it("emite EXACTAMENTE nueve claves, y `id` es la unica que es un uuid", async () => {
+    const d = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      pagos: [pagoDeCierre(), pagoAnulado()],
+    });
+
+    const r = await d.service.listarPagosDeCierre(UUID_CIERRE, ACTOR_ADMIN);
+
+    if (r.status !== "ok") return;
+    for (const pago of r.pagos) {
+      expect(Object.keys(pago).sort()).toEqual([
+        "anulacion",
+        "fechaPago",
+        "id",
+        "metodo",
+        "monto",
+        "nota",
+        "referencia",
+        "registradoAt",
+        "registradoPorNombre",
+      ]);
+    }
+  });
+
+  it("CRITERIO DURO: en la respuesta serializada no hay ningun uuid salvo el `id` del pago", async () => {
+    const d = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      pagos: [pagoDeCierre(), pagoAnulado()],
+    });
+
+    const r = await d.service.listarPagosDeCierre(UUID_CIERRE, ACTOR_ADMIN);
+
+    if (r.status !== "ok") return;
+    const serializado = JSON.stringify(r);
+    // Ni el mensajero, ni la tienda, ni el cierre contra el que se pago.
+    expect(serializado).not.toContain(UUID_MENSAJERO);
+    expect(serializado).not.toContain(UUID_TIENDA);
+    expect(serializado).not.toContain(UUID_CIERRE);
+    // Y el barrido a la inversa: TODO uuid que aparezca es el id de uno de los pagos.
+    const uuids =
+      serializado.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) ?? [];
+    expect(uuids.sort()).toEqual(r.pagos.map((p) => p.id).sort());
+  });
+});
+
+describe("R1/R2/R6 — ver los comprobantes es la misma superficie de dinero que pagarlos", () => {
+  const sinAcceso: [string, RolValue][] = [
+    ["adminSatelite", RolValue.adminSatelite],
+    ["adminTienda", RolValue.adminTienda],
+    ["mensajero", RolValue.mensajero],
+    ["apiKey", RolValue.apiKey],
+  ];
+
+  for (const [nombre, rol] of sinAcceso) {
+    it(`${nombre} recibe forbidden en los DOS listados, sin que salga una fila`, async () => {
+      const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [pagoDeCierre()] });
+
+      expect(await d.service.listarPagosDeCierre(UUID_CIERRE, { usuarioId: "u", rol })).toEqual({
+        status: "forbidden",
+      });
+      expect(await d.service.listarPagosDeTienda(UUID_TIENDA, { usuarioId: "u", rol })).toEqual({
+        status: "forbidden",
+      });
+      // El log VACIO es la asercion: el gate va ANTES de leer, no despues de filtrar.
+      expect(d.log).toEqual([]);
+      expect(d.pagoRepo.listarPorCierre).not.toHaveBeenCalled();
+      expect(d.pagoRepo.listarPorTienda).not.toHaveBeenCalled();
+    });
+  }
+
+  it("R2 (contraprueba): `adminTienda` pidiendo los comprobantes de SU tienda tambien es forbidden", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [pagoDeCierre()] });
+
+    const r = await d.service.listarPagosDeTienda(UUID_TIENDA, {
+      usuarioId: UUID_TIENDA, // el actor ES la tienda
+      rol: RolValue.adminTienda,
+    });
+
+    // Lo suyo lo ve en `/mi-wallet`, que lee el LIBRO. Esta lista es la del que mueve el dinero.
+    expect(r).toEqual({ status: "forbidden" });
+    expect(d.log).toEqual([]);
+  });
+
+  it("maestro y admin si pueden (si no, las contrapruebas de arriba no dirian nada)", async () => {
+    for (const actor of [ACTOR_ADMIN, ACTOR_MAESTRO]) {
+      const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagos: [pagoDeCierre()] });
+      expect((await d.service.listarPagosDeCierre(UUID_CIERRE, actor)).status).toBe("ok");
+      expect((await d.service.listarPagosDeTienda(UUID_TIENDA, actor)).status).toBe("ok");
+    }
   });
 });
 

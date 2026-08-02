@@ -10,6 +10,7 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
   ILiquidacionService,
+  ListarPagosServiceResult,
   LiquidacionTxRunner,
   RegistrarPagoServiceResult,
 } from "@/lib/interfaces/services/ILiquidacionService";
@@ -262,6 +263,38 @@ export class LiquidacionService implements ILiquidacionService {
       }
       throw error;
     }
+  }
+
+  /**
+   * R49/R56/R74 (T C.1) — los comprobantes de UN cierre.
+   *
+   * Tres decisiones, las tres deliberadas:
+   *
+   *  1. **El gate va primero y es el MISMO de registrar** ([P3]/R1): un rol sin acceso total
+   *     recibe `forbidden` ANTES de que la lista salga de la base. Un listado de comprobantes
+   *     dice quien cobro, cuanto y como; es la misma superficie de dinero, no «solo lectura».
+   *  2. **El DTO se recorta con `aPagoRegistradoDTO`**, que escribe campo a campo: el documento
+   *     lleva `mensajeroId`/`tiendaId`/`cierreId` para el servicio, y ninguno de los tres cruza
+   *     (R56). El unico uuid que viaja es el `id` del pago, que es lo que la pantalla necesita
+   *     para pedir su anulacion.
+   *  3. **La lista trae los ANULADOS** (R74). Es el repositorio quien no filtra por vigencia
+   *     —a diferencia de las sumas, que si lo hacen (R80)—, y aqui no se vuelve a filtrar: un
+   *     pago anulado deja de descontar, pero no deja de verse, entero y marcado.
+   */
+  async listarPagosDeCierre(cierreId: string, actor: Actor): Promise<ListarPagosServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R6 — antes de leer nada
+    const pagos = await this.pagoRepo.listarPorCierre(cierreId);
+    return { status: "ok", pagos: pagos.map(aPagoRegistradoDTO) };
+  }
+
+  /**
+   * R50/R56/R74 (T C.1) — los comprobantes de UNA tienda, con el mismo criterio que los del
+   * cierre. Sin cierre de por medio: los pagos a una tienda van contra su saldo acumulado.
+   */
+  async listarPagosDeTienda(tiendaId: string, actor: Actor): Promise<ListarPagosServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R2/R6
+    const pagos = await this.pagoRepo.listarPorTienda(tiendaId);
+    return { status: "ok", pagos: pagos.map(aPagoRegistradoDTO) };
   }
 
   /**

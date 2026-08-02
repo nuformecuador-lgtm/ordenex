@@ -846,3 +846,314 @@ repositorios reales y el SQL crudo real. Lo único simulado es la base.
 
 8. **Preview sigue sin verificar** (hueco de T A.0). No lo resuelve esta tanda; sigue pendiente
    **antes de mergear el PR**.
+
+---
+
+## TANDA C — Lecturas: pendiente, comprobantes y filtro · **COMPLETA** (2026-08-02)
+
+> T C.1, T C.2 y T C.3. **No se tocó UI** (Tandas D/E) **ni la anulación** (Tanda F): `anular`
+> sigue sin declararse en el repositorio ni en el servicio. Lo único que la anulación aporta a
+> esta tanda es su BLOQUE en el DTO, que ya existía desde la Tanda A porque el modelo existe.
+>
+> **Baseline al inicio: 780 archivos / 9487 tests / 0 fallos.**
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts` | 12 casos de T C.3, **sobre el repositorio**, con un mini-motor que evalúa el `where` contra filas sembradas |
+| `tests/unit/services/cierres-admin-pendiente.test.ts` | 24 casos de T C.2 (derivación, los tres listados, el detalle, aprobar y el **conteo de llamadas**) |
+
+**Modificados — código**
+
+| Archivo | Qué |
+| --- | --- |
+| `lib/types/liquidacion.ts` | `LIQUIDACION_REFERENCIA_MAX` + tope en el schema (desviación declarada, abajo); `ListarPagosResult` y los 2 schemas `.strict()` de los listados |
+| `lib/interfaces/services/ILiquidacionService.ts` · `lib/services/LiquidacionService.ts` | `listarPagosDeCierre` / `listarPagosDeTienda` + `ListarPagosServiceResult` |
+| `lib/actions/liquidacion.ts` | `listarPagosDeCierreAction` / `listarPagosDeTiendaAction` (4 de las 5 acciones del diseño; falta la anulación, T F.4) |
+| `lib/interfaces/services/ICierresAdminService.ts` | `pendientePagoMensajero` en `CierreAdminResumen` (`string \| null`) y en `AprobarCierreServiceResult.ok` (`string`) |
+| `lib/services/CierresAdminService.ts` | 5.ª dependencia (solo lectura), `conPendiente`, `pendienteTrasAprobar`; `toResumen` emite `null` y sigue sin derivar dinero |
+| `lib/actions/cierres-admin.ts` | Cablea `LiquidacionPagoRepository` en el servicio |
+| `lib/interfaces/repositories/IPagoMensajeroMovimientoRepository.ts` · `lib/repositories/PagoMensajeroMovimientoRepository.ts` | El filtro `cierreId` pasa al `OR` de §5; el cliente Prisma gana `liquidacionPago` **solo para leer** |
+| `specs/172-liquidacion/tasks.md` | T C.1–T C.3 marcadas `[x]` |
+
+**Modificados — tests de la 172 (propios)**
+
+`liquidacion-service.test.ts` (67 → **82**), `liquidacion-action.test.ts` (23 → **30**),
+`liquidacion-schemas.test.ts` (57 → **62**).
+
+**Modificados — tests AJENOS (15 archivos): el detalle, archivo por archivo**
+
+Dos cambios mecánicos lo explican todo, y ninguno de los dos es opcional: (a)
+`CierreAdminResumen` y `AprobarCierreServiceResult.ok` ganaron un campo **obligatorio**, así que
+toda factoría de fixtures y todo `toEqual` de una aprobación tenía que declararlo o el
+`typecheck` no pasa; (b) `CierresAdminService` pasó de 4 a 5 parámetros de constructor.
+
+| Archivo | Qué se tocó | ¿Aserción tocada? |
+| --- | --- | --- |
+| `tests/components/CierresAdminModule.test.tsx` | +1 línea en la factoría `makeResumen`; +1 línea en el `aprobarMock.mockResolvedValue` | **No.** Las dos son datos de entrada (fixture y valor devuelto por un mock) |
+| `tests/components/CierresAdminIndemnizacion.test.tsx` | idem (factoría + `aprobarMock`) | **No** |
+| `tests/components/descarga/CierresDescarga.test.tsx` | +1 línea en la factoría | **No** |
+| `tests/components/paginacion/BajoRiesgoPaginacion.test.tsx` | +1 línea en la factoría | **No** |
+| `tests/components/paginacion/ColasPaginacion.test.tsx` | +1 línea en la factoría | **No** |
+| `tests/components/paginacion/paginacion-transversal.test.tsx` | +1 línea en la factoría (con el valor según el estado del cierre) | **No** |
+| `tests/unit/services/cierres-admin-service.test.ts` | 5.º argumento en `newService`; el campo añadido a **4** `toEqual` de `aprobarCierre` | **Sí, y solo añadiendo.** Los 4 siguen siendo `toEqual` (comparación exacta), con una clave más. Ni una aserción borrada ni relajada |
+| `tests/unit/services/cierres-admin-indemnizacion.test.ts` | 5.º argumento; el campo en **2** `toEqual` | **Sí, y solo añadiendo** (siguen siendo `toEqual`) |
+| `tests/unit/services/CierresAdminService.aprobar.devolucion.test.ts` | 5.º argumento; el campo en **1** `toEqual` | **Sí, y solo añadiendo** |
+| `tests/unit/services/cierres-admin-historico-paginado.test.ts` | 5.º argumento | **No** |
+| `tests/unit/services/cierres-admin-pendientes-paginado.test.ts` | 5.º argumento | **No** |
+| `tests/integration/db/devolucion-rechazadas-flow.test.ts` | 5.º argumento; el campo en **1** `toEqual` | **Sí, y solo añadiendo** |
+| `tests/unit/repositories/pago-mensajero-movimiento-repository.test.ts` | `liquidacionPago` en el doble de Prisma; el `where` esperado del filtro por cierre pasa a ser el `OR`; **+1 aserción nueva** (la lectura de ids va acotada por el cierre) | **Sí: es el ÚNICO cambio de EXPECTATIVA de toda la tanda.** Es inevitable —R52 cambia ese `WHERE`, que es literalmente lo que la task pide— y el test queda **más fuerte**, no más débil: sigue siendo `toEqual` del `where` completo y gana una aserción |
+| `tests/unit/actions/liquidacion-action.test.ts` (propio) | los 2 métodos nuevos en el doble del servicio; la lista EXACTA de exportaciones de R65 pasa de 2 a 4 | **Sí: R65 por diseño.** Ese test existe para que ampliar la superficie obligue a mirarla |
+| `tests/unit/services/liquidacion-service.test.ts` (propio) | `pagos` en `buildDobles` (los listados dejan de devolver `[]` fijo) | **No** |
+
+**Cero aserciones debilitadas y cero borradas.** En particular: **ningún `toEqual` se convirtió
+en `toMatchObject`**, y ningún `expect` previo desapareció. Comprobado leyendo el diff completo
+de los 15 archivos, no de memoria.
+
+### Mapa `R<n> → test` de esta tanda
+
+| R | Test | Qué afirma |
+| --- | --- | --- |
+| R49 | `tests/unit/services/liquidacion-service.test.ts` | el comprobante de un cierre sale con sus 7 datos + el NOMBRE de quien registró + el instante, comparados campo a campo (`toEqual`); el orden del repositorio se conserva |
+| R50 | idem | los de una tienda salen por el **otro** listado y `listarPorCierre` **no** se llama; sin pagos → lista vacía (no `no_encontrado`: no revela si el id existe) |
+| R56 | idem | **criterio duro por partida doble**: (a) el DTO emite EXACTAMENTE 9 claves; (b) barrido inverso sobre la respuesta serializada — **todo** uuid que aparece es el `id` de un pago, y los uuids de mensajero, tienda y cierre no están |
+| R74 | idem | el pago anulado sale **entero** (monto, referencia, fecha real, quién) **más** motivo/actor/instante; vigentes y anulados salen juntos (quien excluye anulados es la SUMA, R80, no la lista) |
+| R1/R2/R6 | idem | los **4** roles sin acceso total → `forbidden` en los **dos** listados con el log de llamadas **vacío**; `adminTienda` pidiendo **su propia** tienda, también; y la contraprueba de que `maestro`/`admin` sí pueden |
+| R3 | `tests/unit/actions/liquidacion-action.test.ts` | sin sesión → `unauthenticated` sin tocar el servicio en los dos listados, **y con la petición rota también** |
+| R22 | `tests/unit/services/cierres-admin-pendiente.test.ts` | `E=0` → todo `P`; `E` parcial menos lo ya pagado; exacto al céntimo (`0.30 − 0.10 − 0.10 = 0.10`, que un float daría `0.09999…`); y coincide con `derivarPendienteCierre` en 5 pares (la regla no se reimplementa) |
+| R26 | idem | los **tres** listados traen el campo (cola paginada, histórico paginado y sin paginar) **y el detalle**; y el **coste**: con páginas de 1, 5 y 50 filas el listado hace **1** llamada, medido contando |
+| R28 | idem | `solicitado`, `vencido` y `rechazado` → `null`, y sus ids **ni siquiera viajan** a la agregación; en una respuesta mezclada, cada fila lleva lo suyo |
+| R27 | idem | pagado del todo → `"0.00"`, que **no** es `null`: son dos cosas distintas y la pantalla las distingue |
+| R16/R18 | idem | tras aprobar, `ok` trae el pendiente derivado; el orden es `aprobar → leer-cierre` (la derivación **no** entra en la transacción de aprobación); `conflict`/`no_encontrada` no derivan nada |
+| R52 | `tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts` | **las dos mitades**: filtrando por SU cierre salen el pago y su contraasiento; filtrando por OTRO cierre **no sale ninguno**. Más: el `mensajeroId` sigue acotando aunque el `OR` case (R20), el rango de fechas compone por AND, la página y el conteo usan el MISMO `where`, y la **cabecera** (agregación) cuenta lo mismo que la tabla |
+| R12 | `tests/unit/types/liquidacion-schemas.test.ts` | frontera exacta de `LIQUIDACION_REFERENCIA_MAX`, un carácter más → error **en el campo `referencia`**; el tope se mide tras el `.trim()`; referencias reales caben; el tope de la referencia y el de la nota son números distintos y no se confunden |
+
+R14 se refuerza en los tres frentes (todo monto STRING de escala 2; cero `Number(` y cero
+`parseFloat` en los archivos nuevos y en los tocados, tests incluidos).
+
+### Verificación ejecutada
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: verde)
+
+$ pnpm run lint
+✖ 27 problems (0 errors, 27 warnings)      # los 27 preexistentes del baseline, intactos
+
+$ pnpm exec vitest run tests/integration/db
+ Test Files  85 passed (85)
+      Tests  1011 passed (1011)             # igual que la Tanda B: esta tanda no añade tests de db
+
+$ pnpm exec vitest run                      # SUITE COMPLETA
+ Test Files  782 passed (782)
+      Tests  9550 passed (9550)
+   Duration  227.75s
+
+$ ./init.sh                                 # gate del arnes (typecheck + lint + suite + down.sql)
+✓ typecheck paso
+✓ lint paso
+ Test Files  782 passed (782)
+      Tests  9550 passed (9550)
+   Duration  229.93s
+✓ test paso
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+== init OK ==
+```
+
+La suite completa se corrió **dos veces** (directa y dentro de `./init.sh`) con el mismo
+resultado exacto: **782 / 9550 / 0 fallos**. Regla de cierre de tanda cumplida.
+
+**Delta contra el baseline de la Tanda B (780 archivos / 9487 tests): +2 archivos, +63 tests, 0
+fallos.** Los 63 son 12 (filtro por cierre) + 24 (pendiente) + 15 (servicio: 67→82) + 7
+(acciones: 23→30) + 5 (schemas: 57→62). **Cero regresiones y CERO flakes**: los tres archivos con
+contención de jsdom conocida (`ControlDescargaTransversal`, `CuentasPorPagarTable`,
+`OrdenesModuleReuse`) salieron verdes en las dos corridas, sin reejecutar.
+
+### T C.3 — PRUEBA POR MUTACIÓN DEL `WHERE` (obligatoria)
+
+**Por qué el test vive en el repositorio.** Los tests de servicio del desglose usan un doble del
+repositorio: afirman que se le pasa `cierreId` y **no ven la traducción a SQL**. Por eso el doble
+de este archivo no devuelve filas fijas: es un mini-motor que **evalúa** el `where` emitido
+contra filas sembradas (el pago, su contraasiento, los dos movimientos del feed, otro cierre con
+su propio pago y una fila de otro mensajero colgando del mismo pago). Y **lanza** ante cualquier
+columna u operador que no conozca, para que una mutación que use otra construcción reviente en
+vez de pasar por «no casa nada» — hay dos tests que comprueban que el motor lanza de verdad.
+
+**Mutación 1 — volver al filtro VIEJO** (`origen_tipo = 'cierre_dia' AND origen_id = <cierre>`,
+que es literalmente lo que había antes de esta task):
+
+```
+ ❯ tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts (12 tests | 7 failed) 18ms
+     × MITAD 1: con el pago y su contraasiento sembrados, filtrar por SU cierre devuelve los dos
+     × MITAD 2: filtrar por OTRO cierre NO devuelve ninguno de los dos
+     × el acotado por MENSAJERO sigue mandando: el `OR` no lo desborda (R20)
+     × el rango de fechas tambien compone por AND con el `OR` del cierre
+     × la pagina y el conteo miran el MISMO conjunto (el total no cuenta otra cosa)
+     × la cuenta por pagar filtrada por el cierre incluye el pago y su contraasiento
+     × con el pago VIGENTE (sin anular), la cuenta por pagar del cierre baja en su monto
+
+AssertionError: expected [ 'f-devengo-c1', 'f-efectivo-c1' ] to include 'liquidacion-c1'
+ ❯ tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts:253:17
+
+AssertionError: expected 2 to be 4 // Object.is equality
+- Expected
++ Received
+- 4
++ 2
+ ❯ tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts:340:21
+
+AssertionError: expected { devengado: '50000.00', …(1) } to deeply equal { devengado: '80000.00', …(1) }
+- Expected
++ Received
+  {
+-   "devengado": "80000.00",
+-   "pagado": "50000.00",
++   "devengado": "50000.00",
++   "pagado": "20000.00",
+  }
+ ❯ tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts:354:17
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 5 passed (12)
+```
+
+**Mutación 2 — un `OR` QUE SE LO TRAE TODO** (la segunda rama sin el `origenId ∈ pagos`:
+`{ origenTipo: "pago_mensajero" }` a secas). Es la mutación que la mitad 1 sola **no** cazaría:
+
+```
+ ❯ tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts (12 tests | 5 failed) 18ms
+     × MITAD 2: filtrar por OTRO cierre NO devuelve ninguno de los dos
+     × un cierre SIN pagos no ensancha nada: la rama del pago no casa ninguna fila
+     × la pagina y el conteo miran el MISMO conjunto (el total no cuenta otra cosa)
+     × la cuenta por pagar filtrada por el cierre incluye el pago y su contraasiento
+     × con el pago VIGENTE (sin anular), la cuenta por pagar del cierre baja en su monto
+
+AssertionError: expected [ 'contraasiento-c1', …(3) ] to not include 'liquidacion-c1'
+ ❯ tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts:266:21
+
+AssertionError: expected [ 'contraasiento-c1', …(2) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "contraasiento-c1",
++   "liquidacion-c1",
++   "liquidacion-c2",
++ ]
+ ❯ tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts:276:61
+
+AssertionError: expected 5 to be 4 // Object.is equality
+ ❯ tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts:340:21
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 7 passed (12)
+```
+
+Tras cada mutación se restauró el archivo **desde copia** (`diff` limpio contra el respaldo) y
+los **12 tests volvieron a verde**. La lectura conjunta es la que vale: la mitad 1 cae con el
+filtro estrecho y la mitad 2 cae con el filtro ancho. Con una sola de las dos, uno de los dos
+defectos habría pasado en verde — que es exactamente lo que el «Hecho» de T C.3 anticipa.
+
+### T C.2 — prueba por mutación del COSTE (el criterio duro se afirma contando)
+
+Mutación: derivar el pendiente **por fila** (un `sumarVigentesPorCierre([id])` dentro del bucle)
+en vez de una sola llamada con los ids de la página. Es el error natural y **no cambia ni una
+cifra** del resultado: solo el número de consultas.
+
+```
+ ❯ tests/unit/services/cierres-admin-pendiente.test.ts (24 tests | 5 failed) 23ms
+     × un cierre `solicitado` lo devuelve `null` y NO entra en la agregacion
+     × un cierre `vencido` lo devuelve `null` y NO entra en la agregacion
+     × un cierre `rechazado` lo devuelve `null` y NO entra en la agregacion
+     × el listado SIN PAGINAR (cola + historico) usa una sola agregacion para las dos listas
+     × EL COSTE: el numero de llamadas NO crece con el tamaño de pagina
+
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ tests/unit/services/cierres-admin-pendiente.test.ts:237:48
+
+AssertionError: con pageSize=5 el listado hizo mas de una consulta de pagos:
+  expected "vi.fn()" to be called 1 times, but got 5 times
+ ❯ tests/unit/services/cierres-admin-pendiente.test.ts:286:9
+```
+
+Restaurado desde copia; los **24** volvieron a verde. Ninguna aserción de VALOR cambió con la
+mutación: sin contar llamadas, esta regresión sería invisible.
+
+### Desviación declarada del diseño — el tope de la `referencia`
+
+**Decisión del leader (2026-08-02), no del implementer.** `design.md §3.2` fija tope para la
+`nota` y **calla sobre la `referencia`**; el hueco se venía reportando desde la Tanda A (punto 3),
+la Tanda B 1/2 (punto 7) y la Tanda B 2/2 (punto 7). Se cierra aquí.
+
+- **Tope elegido: `LIQUIDACION_REFERENCIA_MAX = 60`.**
+- **De dónde sale, y por qué no es un número improvisado:** es el tope que este repo ya usa para
+  un **identificador corto tecleado por una persona contra una columna `text`** — el
+  identificador de una API key (`lib/types/api-key.ts:17`: «El identificador no puede exceder 60
+  caracteres»). Es el único campo de esa familia en el árbol y el más corto del catálogo de topes
+  de texto del repo (60 · 200 `ranking` · 300 `deshacer-asignacion` · 500 `nota` e `incidente` ·
+  2000 `nota-privada` · 4096 `chat`). Una referencia de SINPE o de transferencia son 6-25
+  caracteres en la práctica, así que 60 no recorta ningún caso real y cierra la puerta al texto
+  sin fin. **No hay ninguna columna `varchar` en el esquema** (todo es `text`), así que no existe
+  un límite de base del que derivarlo, al contrario que en el monto.
+- **Dónde vive:** en el schema zod de `lib/types/liquidacion.ts`, con `.trim()` **antes** del
+  `.max()` (los checks de zod corren en orden), así que el tope se mide sobre lo que de verdad se
+  guarda y no sobre los espacios que rodean. Aplica a los dos registros, porque el campo vive en
+  el bloque común de campos.
+- **Qué NO se hizo:** no se igualó al tope de la nota. Un identificador y un texto libre no
+  comparten límite porque no comparten naturaleza, y hay un test que afirma que los dos números
+  son distintos (un texto de 61 caracteres es una nota válida y una referencia inválida).
+
+### Hallazgos y desviaciones
+
+1. **`CierresAdminService` pasa de 4 a 5 dependencias, y la 5.ª es OBLIGATORIA.** Se consideró
+   hacerla opcional para no tocar los seis sitios que instancian el servicio, y se descartó: con
+   una dependencia opcional, olvidar cablearla dejaría **todos** los pendientes en `null` —una
+   deuda invisible en la pantalla— en vez de romper el build. Lo que sí se acotó es la
+   superficie: entra como `Pick<…, "sumarVigentesPorCierre" | "obtenerCierreParaPago">`, las dos
+   de **solo lectura**, así que el typecheck impide que esa pantalla registre o anule un pago.
+   Aprobar y pagar siguen siendo dos escrituras distintas (§8).
+
+2. **El pendiente entra TAMBIÉN en el detalle del cierre**, aunque el «Hecho» de T C.2 solo nombra
+   los tres listados. R26 dice literalmente «en el listado de cierres **y en el detalle de ese
+   cierre**», y `verCierreDetalle` devuelve un `CierreAdminResumen`: dejarlo en `null` ahí habría
+   sido una trampa para T E.2, que es justo la pantalla que lo necesita. Cuesta una agregación
+   con un solo id.
+
+3. **Tras aprobar, un cierre irreleíble devuelve `"0.00"`, no un error.** No puede pasar en el
+   camino real (se acaba de actualizar esa fila), y la respuesta segura es no ofrecer pagar una
+   cifra que nadie derivó: el pendiente real sigue apareciendo en el listado, que lo recalcula
+   cada vez que alguien mira. Está escrito en el docstring para que no se lea como un descuido.
+
+4. **T C.1 añade también las dos Server Actions de listar**, no solo los métodos del servicio. El
+   diseño (§3.1) habla de **5** acciones y la bitácora de T B.7 dejó anotado que «las otras tres
+   son de T C.1 y T F.4»; sin ellas, los métodos del servicio no tendrían llamador y las Tandas
+   D/E tendrían que inventárselo. Quedan **4 de 5**; la quinta (anular) es T F.4. El test de R65
+   sigue afirmando la lista **exacta** de exportaciones, ahora de cuatro.
+
+5. **Los listados de comprobantes se cierran a `maestro`/`admin`, igual que pagar.** Un listado
+   de comprobantes dice quién cobró, cuánto y cómo: es la misma superficie de dinero, no «solo
+   lectura». El `adminTienda` y el `mensajero` ven **lo suyo** por `/mi-wallet` y `/mis-pagos`,
+   que leen el LIBRO y no esta lista (Tanda G).
+
+6. **`agregarCuentaPorPagar` hereda el `OR` de T C.3, y es deliberado.** El «Hecho» de la task
+   solo habla del listado, pero las dos consultas alimentan la **misma** pantalla: la cabecera y
+   la tabla. Si solo cambiara el listado, el desglose filtrado por un cierre mostraría el pago en
+   la tabla y no lo restaría en la cabecera. Hay dos tests que fijan las cifras exactas
+   (80 000/50 000 con el pago anulado en medio, 50 000/50 000 con el pago vigente).
+
+7. **Coste añadido del filtro por cierre: una consulta.** Filtrar el desglose por un cierre pasa
+   de 2 consultas a 3 (la lectura de los ids de pago, 0-3 filas por el índice `cierre_id`). **Sin
+   filtro por cierre no se consulta nada nuevo**, y hay un test que lo afirma (`liquidacionPago`
+   con cero llamadas): el desglose sin filtrar no paga ese peaje.
+
+8. **`buildFiltrosWhere` deja de ser función de módulo y pasa a método `async` privado.** Necesita
+   el cliente Prisma para leer los ids de pago. Es un cambio de forma, no de alcance: los dos
+   únicos llamadores están en la misma clase.
+
+9. **Preview sigue sin verificar** (hueco de T A.0). No lo resuelve esta tanda; sigue pendiente
+   **antes de mergear el PR**.

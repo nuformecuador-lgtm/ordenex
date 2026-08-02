@@ -322,14 +322,34 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA C — Lecturas: pendiente, comprobantes y filtro
 
-### [ ] T C.1 [P] — Listas de comprobantes
+### [x] T C.1 [P] — Listas de comprobantes
+- **HECHA el 2026-08-02.** `listarPagosDeCierre` / `listarPagosDeTienda` en `LiquidacionService`
+  (mismo `esAccesoTotal` que registrar, **antes** de leer) + las **2 Server Actions** que
+  faltaban del diseño (quedan 4 de 5; la anulación es T F.4). `tests/unit/services/
+  liquidacion-service.test.ts` pasa de 67 a **82 casos** y `liquidacion-action.test.ts` de 23 a
+  **30**. El criterio duro se mide con un **barrido inverso**: todo uuid de la respuesta
+  serializada es el `id` de un pago (los ids de mensajero, tienda y cierre son uuids en el
+  fixture, justo para que el barrido pueda distinguirlos). Los **4 roles sin acceso** reciben
+  `forbidden` en los dos listados con el log de llamadas **vacío**, y `adminTienda` pidiendo
+  **su propia** tienda también.
 - `listarPagosDeCierre` / `listarPagosDeTienda` en el servicio (mismo gate de rol), devolviendo
   `PagoRegistradoDTO[]` con el **nombre** de quien registró y, si lo hay, el bloque de anulación.
 - **Depende de:** T B.1 · **Cubre:** R49, R50, R56, R74
 - **Hecho:** el DTO no contiene ningún uuid salvo el `id` del pago (que no se pinta ni se
   descarga); un rol sin acceso total → `forbidden`.
 
-### [ ] T C.2 — El pendiente viaja con el cierre
+### [x] T C.2 — El pendiente viaja con el cierre
+- **HECHA el 2026-08-02.** `CierreAdminResumen` gana `pendientePagoMensajero: string | null` y
+  `AprobarCierreServiceResult.ok`, `pendientePagoMensajero: string` (tras aprobar el cierre ES
+  aprobado, así que ahí no hay rama `null`). `CierresAdminService` recibe una **5.ª dependencia
+  de SOLO LECTURA** (`Pick<ILiquidacionPagoRepository, "sumarVigentesPorCierre" |
+  "obtenerCierreParaPago">`): esa pantalla puede derivar el pendiente y no puede escribir un
+  pago. `toResumen` sigue **sin recomputar dinero** —emite `null`— y la derivación vive en
+  `conPendiente`, con **una** `sumarVigentesPorCierre(ids de la página)` por listado.
+  `tests/unit/services/cierres-admin-pendiente.test.ts` (**24 casos**) lo mide **contando
+  llamadas** con páginas de 1, 5 y 50 filas: siempre 1. El detalle también trae el campo (R26
+  dice «en el listado **y** en el detalle»). Mutación comprobada: derivar por fila hace caer 5
+  tests, entre ellos el del coste (`got 5 times`).
 - `CierreAdminResumen` gana `pendientePagoMensajero: string | null` (`null` si no está aprobado) y
   `AprobarCierreServiceResult.ok` lo devuelve tras aprobar. Una sola llamada
   `sumarVigentesPorCierre(ids de la página)` por listado; `toResumen` sigue sin recomputar dinero.
@@ -339,7 +359,17 @@ queda el registro de cierre y lo que cada una desencadenó.
   `solicitado` lo devuelve `null`; el número de llamadas al repositorio por listado **no** crece
   con el tamaño de página.
 
-### [ ] T C.3 [P] — Filtrar el desglose del mensajero por cierre incluye sus pagos
+### [x] T C.3 [P] — Filtrar el desglose del mensajero por cierre incluye sus pagos
+- **HECHA el 2026-08-02.** `buildFiltrosWhere` pasa a método `async` del repositorio: lee los
+  ids de pago del cierre (`liquidacionPago.findMany`, acotado por `cierre_id`, `select: {id}`) y
+  emite el `OR` de §5. Lo consumen **el listado y la agregación**, para que la cabecera del
+  desglose y su tabla no cuenten cosas distintas. El test va **sobre el repositorio**
+  (`tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts`, **12 casos**) con un
+  mini-motor que EVALÚA el `where` contra filas sembradas —y que **lanza** ante cualquier
+  operador que no conozca, para que una mutación no pase por «no casa nada»—. Las **dos
+  mitades** afirmadas. **Prueba por mutación ejecutada dos veces**: volver al filtro viejo hace
+  caer **7** tests (la mitad 1 entre ellos) y un `OR` que se lo trae todo hace caer **5** (la
+  mitad 2 entre ellos). Salidas pegadas en `progress/impl_172-liquidacion.md`.
 - `PagoMensajeroMovimientoRepository`: el filtro `cierreId` pasa a `OR [ {cierre_dia, cierreId},
   {pago_mensajero, origenId ∈ pagos de ese cierre} ]` (`design.md §5`).
 - Test `tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts`.

@@ -9,16 +9,21 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ILiquidacionService } from "@/lib/interfaces/services/ILiquidacionService";
 import {
+  listarPagosDeCierreSchema,
+  listarPagosDeTiendaSchema,
   registrarPagoMensajeroSchema,
   registrarPagoTiendaSchema,
+  type ListarPagosResult,
   type RegistrarPagoResult,
 } from "@/lib/types/liquidacion";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
-// Feature 172 (T B.7, design §3.1) — Server Actions de REGISTRO de un pago. Son mutaciones
-// INTERNAS del mismo proyecto, asi que van como Server Action y no como Route Handler (no hay
-// CORS que servir ni cliente externo que las llame); el molde es `lib/actions/wallet-egresos.ts`:
+// Feature 172 (T B.7 + T C.1, design §3.1) — Server Actions de la LIQUIDACION: las dos de
+// REGISTRO y las dos de LISTAR comprobantes. Falta la quinta del diseño, la anulacion (T F.4).
+// Son operaciones INTERNAS del mismo proyecto, asi que van como Server Action y no como Route
+// Handler (no hay CORS que servir ni cliente externo que las llame); el molde es
+// `lib/actions/wallet-egresos.ts`:
 // resolver el actor por sesion -> `UnauthenticatedError` ANTES del servicio (R3) -> `schema.parse`
 // en el borde (ZodError -> `validation_error`) -> servicio bajo `withErrorHandler`.
 //
@@ -31,6 +36,7 @@ import type { AppErrorShape } from "@/lib/errors";
 // `monto: 15000` numerico muere en el borde con `validation_error` en vez de colarse.
 
 export type RegistrarPagoActionResult = RegistrarPagoResult;
+export type ListarPagosActionResult = ListarPagosResult;
 
 /**
  * Traduce el `AppErrorShape` del borde: ZodError (VALIDATION_ERROR) o falta de sesion
@@ -108,6 +114,43 @@ export async function registrarPagoTiendaAction(
     const data = registrarPagoTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.registrarPagoTienda(data, actor);
+  });
+  return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
+}
+
+/**
+ * R3/R49 — los comprobantes de un cierre. Es una LECTURA interna del mismo proyecto, asi que va
+ * como Server Action igual que las mutaciones (no hay CORS que servir ni cliente externo).
+ *
+ * El rol lo decide el servicio (`forbidden`, [P3]/R1): aqui solo se resuelve la sesion y se
+ * valida la forma del id. No hay `revalidate` ni cache: la lista se pide desde el cliente
+ * cuando se abre el detalle, y tras registrar o anular se vuelve a pedir.
+ */
+export async function listarPagosDeCierreAction(
+  input: unknown,
+  deps: LiquidacionDeps = {},
+): Promise<ListarPagosActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R3: antes de evaluar ningun otro dato
+    const data = listarPagosDeCierreSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPagosDeCierre(data.cierreId, actor);
+  });
+  return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
+}
+
+/** R3/R50 — los comprobantes de una tienda, con el mismo molde. */
+export async function listarPagosDeTiendaAction(
+  input: unknown,
+  deps: LiquidacionDeps = {},
+): Promise<ListarPagosActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R3
+    const data = listarPagosDeTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPagosDeTienda(data.tiendaId, actor);
   });
   return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
 }

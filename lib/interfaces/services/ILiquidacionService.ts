@@ -6,6 +6,7 @@ import type {
 import type { PagoMensajeroTxClient } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { WalletTiendaTxClient } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
+  ListarPagosResult,
   RegistrarPagoMensajeroInput,
   RegistrarPagoResult,
   RegistrarPagoTiendaInput,
@@ -50,6 +51,15 @@ export type RegistrarPagoServiceResult = Exclude<
   { status: "validation_error" } | { status: "unauthenticated" }
 >;
 
+/**
+ * Resultado de DOMINIO de listar comprobantes: `ok` con la lista o `forbidden`. Mismo recorte
+ * que arriba y por el mismo motivo — la sesion y la forma son del borde, no del servicio.
+ */
+export type ListarPagosServiceResult = Exclude<
+  ListarPagosResult,
+  { status: "validation_error" } | { status: "unauthenticated" }
+>;
+
 export interface ILiquidacionService {
   /**
    * R21 — registra un pago a un MENSAJERO contra un cierre APROBADO concreto. Mismo esqueleto
@@ -78,4 +88,17 @@ export interface ILiquidacionService {
     input: RegistrarPagoTiendaInput,
     actor: Actor,
   ): Promise<RegistrarPagoServiceResult>;
+  /**
+   * R49/R56/R74 — los comprobantes de UN cierre, anulados incluidos y marcados.
+   *
+   * MISMO gate que registrar (`esAccesoTotal`, [P3]/R1): quien no puede mover el dinero tampoco
+   * ve el detalle de como se movio. El `adminTienda` y el `mensajero` ven LO SUYO por sus
+   * propias pantallas (`/mi-wallet`, `/mis-pagos`), que leen el LIBRO, no esta lista.
+   *
+   * Devuelve `PagoRegistradoDTO[]`: el NOMBRE de quien registro (nunca su id) y, si lo hay, el
+   * bloque de anulacion con el nombre de quien anulo. Ni un identificador interno cruza (R56).
+   */
+  listarPagosDeCierre(cierreId: string, actor: Actor): Promise<ListarPagosServiceResult>;
+  /** R50/R56/R74 — idem para una TIENDA (sus pagos van contra el saldo acumulado, sin cierre). */
+  listarPagosDeTienda(tiendaId: string, actor: Actor): Promise<ListarPagosServiceResult>;
 }
