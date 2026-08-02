@@ -121,7 +121,7 @@ function buildRepo(prisma: ReturnType<typeof buildPrisma>) {
     { construirMovimientosDeIngreso: vi.fn(async () => []) },
     { crearMovimientos: vi.fn(async () => 0), listarPorTienda: vi.fn(), agregarSaldoPorTienda: vi.fn(), listarSaldosTodasTiendas: vi.fn(), listarSaldosTiendasPaginado: vi.fn(), agregarDesglosePorTienda: vi.fn() },
     { construirMovimientosPorTienda: vi.fn(async () => []) },
-    { crearMovimientos: vi.fn(async () => 0), listarPorMensajero: vi.fn(), agregarCuentaPorPagar: vi.fn(), listarCuentasPorPagarTodos: vi.fn(), obtenerNombreMensajero: vi.fn() },
+    { crearMovimientos: vi.fn(async () => 0), listarPorMensajero: vi.fn(), agregarCuentaPorPagar: vi.fn(), listarCuentasPorPagarTodos: vi.fn(), listarCuentasPorPagarPaginado: vi.fn(), obtenerNombreMensajero: vi.fn() },
     { construirMovimientosDePago: vi.fn(async () => ({ libro: [], egresoCaja: [] })) },
     // Feed REAL: es justo lo que se quiere ejercitar (lee de la tx lo recien escrito).
     new WalletIndemnizacionFeedService(),
