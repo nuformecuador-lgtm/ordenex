@@ -555,3 +555,166 @@ conteo: no hubo «unhandled errors» de workers ni archivos omitidos.
 **El unico rojo es `tests/components/descarga/WalletPropsDescarga.test.tsx`** («por encima del
 tope rechaza… y NO produce archivo», timeout a los 20 s tras 23,1 s), que es **deuda heredada de
 `dev`** y ya estaba en el baseline de §0. No aparecio ningun flake en esta corrida.
+
+## 9. Colisiones con la 122 tras el merge de dev
+
+Al mergear `dev` (commit `673f3573`) entro la feature 122 (alcance de analitica). Su guardia y el
+nuestro se acusan mutuamente: **dos colisiones semanticas, cero de codigo**. Ninguno de los dos
+guardias detecto nada real; los dos tenian razon dentro de su propio marco y ninguno conocia al
+otro. Se arreglan **los dos guardias**, no el codigo de produccion: `lib/` no se toca en esta
+seccion (`git status` al cerrar: solo los dos archivos de test).
+
+La suite post-merge daba **777 archivos / 9405 tests, 3 rojos**: estos dos, mas
+`tests/unit/guards/no-embalaje.test.ts`, que es el flake de saturacion conocido (pasa aislado) y
+**no se toca**.
+
+### 9.1 Colision 1 — nuestro guardia acusaba a un archivo de la 122
+
+`tests/integration/db/analytics-daily-guards.test.ts`, caso *«solo los modulos declarados del
+escritor y el catalogo de la 135 nombran la tabla»*, marcaba
+`lib/analytics/alcance-columnas.ts` como infractor.
+
+La mencion es **prosa**: el docblock de `whereRollup` (~linea 67) explica que el fragmento de
+`where` apunta al rollup diario `analytics_daily`. El archivo **no consulta la tabla por ningun
+lado** — devuelve un `Record<string, string>` y ni siquiera usa Prisma en runtime.
+
+**Que se hizo, y por que NO el allowlist.** Anadir `lib/analytics/alcance-columnas.ts` a
+`ARCHIVOS_QUE_PUEDEN_NOMBRARLA` compra el verde a cambio de un permiso **permanente sobre un
+archivo ajeno**: el dia que alguien meta ahi una consulta de verdad —y ese archivo es
+precisamente donde la 126 ira a buscar el recorte del rollup— el guardia ya no diria nada. El
+allowlist tiene que seguir describiendo **al escritor**, no a los vecinos que hablan de el.
+
+En su lugar se **despiojan los comentarios antes de buscar**: se replica la funcion `soloCodigo`
+del guardia de la 122 (`tests/unit/analytics/alcance-obligatorio.guardia.test.ts:42`) y se anade
+`leerCodigo(rel)`, memoizado. Se **replica** en vez de extraerse a un modulo compartido para no
+tocar un archivo de una feature ya mergeada: son cuatro lineas y cada guardia queda legible de
+arriba abajo.
+
+**Alcance de la despiojada — los CUATRO casos del bloque R42, no solo el del nombrado.** Los de
+*acceso*, *lectura* y *segundo escritor* leian igualmente el archivo crudo. Se les aplica el
+mismo texto despiojado porque el criterio «un comentario no es una consulta» vale identico para
+`prisma.analyticsDaily.findMany` citado en un docblock de ejemplo que para el nombre pelado de la
+tabla; si solo se despiojara el nombrado, el mismo archivo de la 122 volveria a salir rojo en
+cuanto alguien pegue un ejemplo de consulta en su prosa, y la reaccion seria —otra vez—
+allowlistearlo. Efecto lateral bueno: `cuerpoDeMetodo` pasa a contar llaves sobre texto sin
+comentarios, asi que una llave suelta dentro de un comentario ya no puede descuadrar el cuerpo.
+Tambien se despioja el caso T5.2(c) (los modulos del escritor son legales tal cual), que usa los
+mismos patrones `ACCESOS`.
+
+**Un caso sigue leyendo el crudo, a proposito:** *«no hay repositorio, servicio ni interfaz con el
+nombre de la TABLA»*. No busca accesos sino **nombres de modulo** (`AnalyticsDailyRepo`,
+`AnalyticsDailyService`, `IAnalyticsDaily`), y un modulo asi citado hasta en un comentario merece
+una mirada humana. Ademas no ha colisionado con nadie: la 122 nombra la **tabla**, no un modulo.
+Queda escrito en el propio archivo para que el proximo lector no lo lea como un olvido.
+
+**Coste: la despiojada no puede correr sobre los ~1200 archivos cinco veces.** La primera version
+tardaba **mas de 20 s** en un solo caso y la mato el `testTimeout` (medido: `Test timed out in
+20000ms`; el archivo entero, 45 s). Causa: el cuantificador perezoso del comentario de bloque
+recorre hasta el final del archivo cada vez que ve una apertura sin cierre. Solucion en dos
+piezas, ambas **exactas, no heuristicas**: memoizacion (`CODIGO_CACHE`) y un **prefiltro sobre el
+texto crudo** —quitar texto solo puede ELIMINAR coincidencias, nunca crearlas, asi que un archivo
+que no menciona la tabla en crudo tampoco la menciona despiojado—. El prefiltro usa
+`MENCIONA_LA_TABLA` (insensible a mayusculas) porque los patrones SQL de
+`ACCESOS`/`LECTURAS`/`ESCRITURAS` llevan `/i` y un `FROM "ANALYTICS_DAILY"` no debe colarse. El
+archivo pasa de 45 s a **~2 s**.
+
+**Que no sea una asercion vacia — caso nuevo:** *«el despiojado de comentarios DISCRIMINA: tapa la
+prosa, NO el codigo»*, con cuatro direcciones: (1) la prosa se tapa y el codigo sobrevive;
+(2) `analytics_daily` en SQL crudo y `prisma.analyticsDaily.findMany` en codigo **siguen
+detectados**, y ademas siguen disparando `ACCESOS`/`LECTURAS`; (3) un comentario no amnistia el
+codigo que lo acompana; (4) dos docblocks con codigo en medio, que es el fallo concreto —el
+cuantificador volviendose goloso— que convertiria el stripper en un borrador de codigo real.
+
+### 9.2 Colision 2 — el guardia de la 122 acusaba a nuestro escritor
+
+`tests/unit/analytics/alcance-obligatorio.guardia.test.ts`, caso *«ningun archivo de
+lib/{repositories,services,actions} consulta analitica sin el tipo opaco»*, marcaba:
+
+```
+lib/repositories/AnaliticaRollupRepository.ts: consulta analytics_daily (SQL crudo) en contexto
+de analitica sin recibir ConsultaAnalitica
+```
+
+Las dos mitades del diagnostico son **ciertas**: el archivo importa `@/lib/analytics/rollup-dia`
+(contexto de analitica) y lee `analytics_daily` con `$queryRaw`. Lo falso es la conclusion: no es
+un **consumidor**, es el **escritor** del rollup. Lo invoca un job programado que corre con
+service role, sin sesion de usuario y sin rol que resolver, y su trabajo es escribir **todas** las
+filas de **todas** las zonas de la fecha. Recibir un `ConsultaAnalitica` y recortarse por alcance
+seria exactamente el bug: el rollup quedaria agregado a medias y la 126 leeria numeros mutilados
+sin que nada fallara.
+
+**Que se hizo:** una exencion **nominal de un solo elemento** en el censo,
+`EXENTOS_POR_SER_ESCRITORES = ["lib/repositories/AnaliticaRollupRepository.ts"]`, con el motivo
+escrito ahi mismo. **No se toco `violacionDeAlcanceObligatorio`**: cualquier regla general que
+dejara pasar a este archivo (por ejemplo «los `$queryRaw` sobre `analytics_daily` no cuentan», o
+«los archivos con `Rollup` en el nombre no cuentan») amnistiaria tambien a
+`FIXTURE_INFRACTOR_RAW`, que lee la MISMA tabla con la MISMA tecnica, y se perderia la cobertura
+que la 122 monto para la 126/127. Los tres fixtures sinteticos de la 122 quedan **sin tocar**.
+
+**Aserciones nuevas para que la exencion no se pudra** (caso *«la exencion del escritor no queda
+colgada: el archivo existe y sigue siendo necesaria»*):
+- el archivo exento **existe** — si desaparece o se renombra, la entrada dejaria de cubrir nada y
+  el archivo nuevo entraria al censo sin que nadie lo hubiera pensado;
+- la exencion **soporta peso**: `violacionDeAlcanceObligatorio` sobre ese archivo sigue devolviendo
+  no-nulo. Si algun dia deja de disparar (porque pase a recibir `ConsultaAnalitica`, o porque deje
+  de consultar), la entrada sobra y hay que retirarla. Una exencion inerte es un permiso latente
+  que nadie recuerda revisar.
+
+### 9.3 Mutaciones ejecutadas (mutadas, corridas, revertidas)
+
+| # | mutacion | comando | resultado observado |
+|---|---|---|---|
+| M1 | `soloCodigo`: comentario de bloque de perezoso a **GOLOSO** (se traga el codigo entre dos docblocks) | `pnpm vitest run tests/integration/db/analytics-daily-guards.test.ts` | **ROJO 1/23**: *«el despiojado de comentarios DISCRIMINA…»* — `AssertionError: el stripper se comio el codigo entre dos docblocks: expected '\n      \n      export const NADA = 1…' to contain 'findMany'` |
+| M2 | archivo nuevo `lib/repositories/MutacionTmpAnaliticaRollupRepository.ts`: segundo repo de analitica con `$queryRaw` sobre `analytics_daily` y **sin** `ConsultaAnalitica` | `pnpm vitest run tests/unit/analytics/alcance-obligatorio.guardia.test.ts` | **ROJO 1/8**: `+ "lib/repositories/MutacionTmpAnaliticaRollupRepository.ts: consulta analytics_daily (SQL crudo) en contexto de analitica sin recibir ConsultaAnalitica"` — la exencion NO se extiende a un repo nuevo |
+| M3 | renombrado real del escritor a `AnaliticaRollupRepositorioRenombradoTmp.ts` (exencion colgada) | idem | **ROJO 2/8**, uno por cada direccion: el censo acusa al nombre nuevo (`…RenombradoTmp.ts: consulta analytics_daily (SQL crudo)…`) y la asercion de existencia cae con `lib/repositories/AnaliticaRollupRepository.ts esta exento del censo de R18 pero no existe: retira la entrada o corrige la ruta` |
+
+Las tres revertidas (M1 por script inverso, M2 borrando el archivo, M3 renombrando de vuelta);
+`git status` al cerrar muestra **solo** los dos archivos de test modificados. Los tres fixtures
+sinteticos de la 122 (`FIXTURE_LEGITIMO`, `FIXTURE_INFRACTOR_PRISMA`, `FIXTURE_INFRACTOR_RAW`)
+pasan **sin modificacion** en todas las corridas.
+
+### 9.4 Verificacion (medida, no supuesta)
+
+| # | medicion | comando | resultado |
+|---|---|---|---|
+| 1 | los dos guardias | `pnpm vitest run tests/integration/db/analytics-daily-guards.test.ts tests/unit/analytics/alcance-obligatorio.guardia.test.ts` | **2 archivos / 31 tests, 31 passed, 0 failed** (2,06 s) — 23 en el nuestro (+1 caso nuevo) y 8 en el de la 122 (+1 caso nuevo) |
+| 2 | typecheck | `pnpm exec tsc --noEmit` | **0 errores** (exit 0) |
+| 3 | lint de los archivos tocados | `pnpm exec eslint tests/integration/db/analytics-daily-guards.test.ts tests/unit/analytics/alcance-obligatorio.guardia.test.ts` | **sin salida, exit 0** — 0 errores, 0 warnings nuevos |
+| 4 | mutacion | ver 9.3 | **M1, M2 y M3 rojas y revertidas** |
+
+`pnpm build` no se corrio en ningun momento (encadena migraciones contra una base real). Ningun
+comando git de escritura. La base de datos no intervino: los dos archivos son guardias de texto
+sobre el arbol de fuentes.
+
+### 9.5 Tarea 3 — veredicto sobre `whereRollup` (CONFIRMADO, no tocado)
+
+`lib/analytics/alcance-columnas.ts:75-86` (feature 122, ya mergeada) devuelve para el caso
+`mensajero`:
+
+```ts
+export function whereRollup(alcance: AlcanceDatos): Record<string, string> {
+  ...
+  case "mensajero":
+    return { mensajeroAsignadoId: alcance.mensajeroId };
+}
+```
+
+**El defecto es real.** `mensajeroAsignadoId` es la clave del modelo `Orden`. En el rollup la
+columna se llama `mensajeroId` — `db/schema.prisma:1784`, dentro de `model AnalyticsDaily`:
+
+```prisma
+mensajeroId     String?                 @map("mensajero_id") // NULL = cubo sin_asignar, NUNCA "todos los mensajeros" (D5/R30 de la 135; R11)
+```
+
+y los indices lo confirman: `@@index([mensajeroId, fecha], map: "analytics_daily_mensajero_fecha_idx")`
+(`db/schema.prisma:1816`). No existe ninguna columna `mensajero_asignado_id` en `analytics_daily`.
+
+**Impacto:** el docblock de la funcion declara a proposito que las claves son «las MISMAS que ya
+usa `orden` (camelCase de Prisma)», porque la tabla no existia cuando se escribio; ahora existe y
+la equivalencia se rompio justo en esa clave. Como el retorno es `Record<string, string>` y no
+`Prisma.AnalyticsDailyWhereInput`, **el compilador no lo ve**: el dia que la 126 pase ese
+fragmento a un `where` del rollup, el recorte por mensajero fallara —o peor, se ignorara y
+devolvera datos de todos los mensajeros— sin un solo error de build.
+
+**NO se corrige aqui**: es codigo de una feature ya mergeada y el arreglo pertenece a quien la
+lleve (impacta a la 126). Se reporta al leader.

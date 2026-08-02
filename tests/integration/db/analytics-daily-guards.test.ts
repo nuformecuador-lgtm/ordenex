@@ -70,6 +70,55 @@ function leer(rel: string): string {
   return fs.readFileSync(path.join(ROOT, rel), "utf8");
 }
 
+/**
+ * Quita comentarios (`/* *\/` y `//`) antes de buscar el nombre de la tabla.
+ *
+ * POR QUE, y por que NO un allowlist (§9 de `progress/impl_124.md`): al mergear la feature
+ * 122 entro `lib/analytics/alcance-columnas.ts`, que NOMBRA `analytics_daily` en el docblock
+ * de `whereRollup` —prosa que explica a que tabla apunta el fragmento de `where`— y no la
+ * consulta por ningun lado. Meterlo en `ARCHIVOS_QUE_PUEDEN_NOMBRARLA` seria comprar el
+ * verde a cambio de un permiso PERMANENTE: el dia que alguien anada una consulta de verdad a
+ * ese archivo, el guardia ya no diria nada. Despiojar el texto ataca la causa —una mencion en
+ * prosa no es una referencia a la tabla— y deja el allowlist restringido al escritor real.
+ *
+ * La logica es la misma que la de `soloCodigo` en
+ * `tests/unit/analytics/alcance-obligatorio.guardia.test.ts` (guardia de la 122). Se REPLICA
+ * en vez de extraerse a un modulo compartido para no tocar un archivo de una feature ya
+ * mergeada: son cuatro lineas y cada guardia queda legible de arriba abajo. El caso «el
+ * despiojado DISCRIMINA» de mas abajo impide que esta funcion se convierta en un borrador
+ * silencioso de codigo real.
+ */
+function soloCodigo(fuente: string): string {
+  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+}
+
+/**
+ * El contenido del archivo SIN comentarios. Es lo que leen los CUATRO casos del bloque R42
+ * (nombrado, acceso, lectura y segundo escritor), no solo el del nombrado.
+ *
+ * La decision de aplicarlo a los cuatro es deliberada: el criterio «un comentario no es una
+ * consulta» vale igual para `prisma.analyticsDaily.findMany` citado dentro de un docblock de
+ * ejemplo que para el nombre pelado de la tabla. Si el nombrado se despiojara y el acceso no,
+ * el mismo archivo de la 122 volveria a salir rojo en cuanto alguien pegara un ejemplo de
+ * consulta en su prosa, y la reaccion seria —otra vez— allowlistearlo. Como efecto lateral,
+ * `cuerpoDeMetodo` se vuelve MAS fiable: una llave suelta dentro de un comentario ya no puede
+ * descuadrar el conteo de llaves del cuerpo.
+ *
+ * MEMOIZADO, y los casos de abajo ademas PREFILTRAN sobre el texto crudo: despiojar los ~1200
+ * archivos del arbol cinco veces cuesta decenas de segundos (el `/\*[\s\S]*?\*\/` lazy recorre
+ * hasta el final del archivo cada vez que ve un `/\*` sin cierre). El prefiltro es exacto, no
+ * una heuristica: quitar texto solo puede ELIMINAR coincidencias, nunca crearlas, asi que un
+ * archivo que no casa en crudo tampoco casa despiojado y no hace falta ni despiojarlo.
+ */
+const CODIGO_CACHE = new Map<string, string>();
+function leerCodigo(rel: string): string {
+  const cacheado = CODIGO_CACHE.get(rel);
+  if (cacheado !== undefined) return cacheado;
+  const codigo = soloCodigo(leer(rel));
+  CODIGO_CACHE.set(rel, codigo);
+  return codigo;
+}
+
 /* -------------------------------------------------------------------------- */
 /* T7.1 — frontera (R44)                                                       */
 /* -------------------------------------------------------------------------- */
@@ -131,6 +180,16 @@ const METODOS_ESCRITURA = ["escribirFecha", "retirarFilasRancias"];
  * otra lectura pertenece a la 122/126/128 y aqui es rojo (R3).
  */
 const METODO_LECTURA = "sumarMedidasEscritasDeFecha";
+
+/** Nombrar la tabla, por su nombre SQL o por el del modelo Prisma. Sin `g`: se reutiliza. */
+const NOMBRA_LA_TABLA = /analytics_daily|analyticsDaily/;
+
+/**
+ * Version INSENSIBLE A MAYUSCULAS, solo para el prefiltro de los tres casos de acceso. Tiene
+ * que ser un superconjunto de todo lo que casan `ACCESOS`/`LECTURAS`/`ESCRITURAS` —que llevan
+ * `/i` en sus patrones SQL— o el prefiltro se comeria un `FROM "ANALYTICS_DAILY"` a gritos.
+ */
+const MENCIONA_LA_TABLA = /analytics_daily|analyticsdaily/i;
 
 /** Cualquier forma de ACCEDER a la tabla, sea leyendo o escribiendo. */
 const ACCESOS = [
@@ -244,12 +303,14 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
     const infractores = ARCHIVOS_CODIGO.filter(
       (rel) =>
         !ARCHIVOS_QUE_PUEDEN_NOMBRARLA.includes(rel) &&
-        /analytics_daily|analyticsDaily/.test(leer(rel)),
+        NOMBRA_LA_TABLA.test(leer(rel)) && // prefiltro barato sobre el crudo
+        NOMBRA_LA_TABLA.test(leerCodigo(rel)), // y la mencion no es solo un comentario
     );
     expect(
       infractores,
-      "solo el escritor declarado de la 124 puede nombrar `analytics_daily`: el backfill es la " +
-        "125 y las consultas la 126/122/128. Estos archivos no estan en la lista y la nombran: " +
+      "solo el escritor declarado de la 124 puede nombrar `analytics_daily` EN CODIGO (los " +
+        "comentarios se despiojan antes de buscar): el backfill es la 125 y las consultas la " +
+        "126/122/128. Estos archivos no estan en la lista y la nombran: " +
         infractores.join(", "),
     ).toEqual([]);
   });
@@ -258,7 +319,8 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
     const accesos: string[] = [];
     for (const rel of ARCHIVOS_CODIGO) {
       if (rel === REPOSITORIO_ESCRITOR) continue;
-      const contenido = leer(rel);
+      if (!MENCIONA_LA_TABLA.test(leer(rel))) continue; // todo ACCESO nombra la tabla
+      const contenido = leerCodigo(rel);
       for (const patron of ACCESOS) {
         if (patron.test(contenido)) accesos.push(`${rel} :: ${patron}`);
       }
@@ -274,7 +336,8 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
   it("NADIE lee el rollup todavia, salvo la reconciliacion del propio job (R3/R34)", () => {
     const lecturas: string[] = [];
     for (const rel of ARCHIVOS_CODIGO) {
-      const contenido = leer(rel);
+      if (!MENCIONA_LA_TABLA.test(leer(rel))) continue; // toda LECTURA nombra la tabla
+      const contenido = leerCodigo(rel);
       const patronesQueDisparan = LECTURAS.filter((p) => p.test(contenido));
       if (patronesQueDisparan.length === 0) continue;
       if (rel !== REPOSITORIO_ESCRITOR) {
@@ -303,7 +366,8 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
   it("no hay un SEGUNDO escritor: la escritura vive en dos metodos del repositorio (R29/R30)", () => {
     const escrituras: string[] = [];
     for (const rel of ARCHIVOS_CODIGO) {
-      const contenido = leer(rel);
+      if (!MENCIONA_LA_TABLA.test(leer(rel))) continue; // toda ESCRITURA nombra la tabla
+      const contenido = leerCodigo(rel);
       const patronesQueDisparan = ESCRITURAS.filter((p) => p.test(contenido));
       if (patronesQueDisparan.length === 0) continue;
       if (rel !== REPOSITORIO_ESCRITOR) {
@@ -373,7 +437,7 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
     for (const rel of presentes) {
       expect(ARCHIVOS_QUE_PUEDEN_NOMBRARLA).toContain(rel);
       if (rel === REPOSITORIO_ESCRITOR) continue;
-      const contenido = leer(rel);
+      const contenido = leerCodigo(rel);
       for (const patron of ACCESOS) {
         expect(patron.test(contenido), `${rel} accede a la tabla y no es el repositorio`).toBe(
           false,
@@ -430,6 +494,67 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
     expect(cuerpoDeMetodo(conInterfaz, "retirarFilasRancias")).toContain("deleteMany");
   });
 
+  it("el despiojado de comentarios DISCRIMINA: tapa la prosa, NO el codigo", () => {
+    // Sin este caso, `soloCodigo` seria una asercion vacia: un stripper que devolviera cadena
+    // vacia dejaria los cuatro casos de arriba en verde para siempre y nadie se enteraria.
+    // Direccion 1 — la prosa se tapa. Es literalmente la forma del docblock de `whereRollup`
+    // en `lib/analytics/alcance-columnas.ts` (feature 122), que es lo que motivo el cambio.
+    const soloProsa = `
+      /**
+       * Fragmento de \`where\` para el rollup diario analytics_daily.
+       * Devuelve un objeto plano y no \`Prisma.AnalyticsDailyWhereInput\`.
+       */
+      export function whereRollup(alcance: AlcanceDatos): Record<string, string> {
+        return { zonaId: alcance.zonaId };
+      }
+      // otra mencion suelta en prosa: analytics_daily
+    `;
+    expect(NOMBRA_LA_TABLA.test(soloProsa)).toBe(true); // el archivo crudo SI la nombra...
+    expect(NOMBRA_LA_TABLA.test(soloCodigo(soloProsa))).toBe(false); // ...pero no en codigo
+    expect(soloCodigo(soloProsa)).toContain("whereRollup"); // y el codigo sobrevive entero
+
+    // Direccion 2 — LA QUE IMPORTA: nombrarla en CODIGO sigue siendo detectado. Si alguien
+    // rompe el stripper y se traga codigo real, estas tres se ponen rojas.
+    const enSqlCrudo = `const f = await prisma.$queryRaw\`SELECT 1 FROM "analytics_daily"\`;`;
+    expect(NOMBRA_LA_TABLA.test(soloCodigo(enSqlCrudo))).toBe(true);
+    expect(ACCESOS.some((p) => p.test(soloCodigo(enSqlCrudo)))).toBe(true);
+
+    const conModeloPrisma = `const f = await prisma.analyticsDaily.findMany({});`;
+    expect(NOMBRA_LA_TABLA.test(soloCodigo(conModeloPrisma))).toBe(true);
+    expect(LECTURAS.some((p) => p.test(soloCodigo(conModeloPrisma)))).toBe(true);
+
+    // Direccion 3 — el caso mixto: un comentario NO amnistia el codigo que lo acompana.
+    const mixto = `
+      // este archivo no deberia tocar analytics_daily
+      export async function colado() {
+        return prisma.analyticsDaily.findMany({ where: {} });
+      }
+    `;
+    const despiojado = soloCodigo(mixto);
+    expect(NOMBRA_LA_TABLA.test(despiojado)).toBe(true);
+    expect(despiojado).toContain("findMany");
+    expect(despiojado).not.toContain("no deberia tocar");
+
+    // Direccion 4 — el fallo CONCRETO que convertiria el stripper en un borrador de codigo:
+    // que el `[\\s\\S]*?` de los comentarios de bloque se vuelva GOLOSO. Con dos docblocks en
+    // el mismo archivo se tragaria todo lo que hay entre el primer `/*` y el ultimo cierre,
+    // consulta incluida, y los cuatro casos de arriba pasarian a estar verdes por vacio.
+    const dosDocblocks = `
+      /** primer docblock: menciona analytics_daily en prosa. */
+      export async function consultaDeVerdad() {
+        return prisma.analyticsDaily.findMany({ where: {} });
+      }
+      /** segundo docblock: tambien la menciona, analytics_daily. */
+      export const NADA = 1;
+    `;
+    const dosDespiojado = soloCodigo(dosDocblocks);
+    expect(dosDespiojado, "el stripper se comio el codigo entre dos docblocks").toContain(
+      "findMany",
+    );
+    expect(NOMBRA_LA_TABLA.test(dosDespiojado)).toBe(true);
+    expect(LECTURAS.some((p) => p.test(dosDespiojado))).toBe(true);
+  });
+
   it("en el catalogo de la 135 el literal es una DECLARACION de fuente, no una consulta", () => {
     // Sin las lineas de comentario: la cabecera del catalogo EXPLICA que ninguna metrica
     // financiera puede citar `analytics_daily`, y esa prosa no es una referencia al codigo.
@@ -448,6 +573,12 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
     // llaman `AnaliticaRollup*` (nombre del HECHO de negocio, `docs/conventions.md`) y no
     // `AnalyticsDaily*` (nombre de la tabla). Si manana apareciera un `AnalyticsDailyService`,
     // seria un consumidor de la 126 colandose por la puerta de atras.
+    //
+    // Este caso es el UNICO del bloque que sigue leyendo el archivo CRUDO, a proposito: no
+    // busca accesos a la tabla sino NOMBRES DE MODULO, y un modulo llamado `AnalyticsDaily*`
+    // citado hasta en un comentario ya merece una mirada humana (o existe, y entonces el
+    // rastreo lo encontrara por su propio contenido, o se esta planeando, y es el momento de
+    // discutirlo). Ademas no ha colisionado con nadie: la 122 nombra la TABLA, no un modulo.
     for (const patron of [/AnalyticsDailyRepo/, /AnalyticsDailyService/, /IAnalyticsDaily/]) {
       expect(ARCHIVOS_CODIGO.filter((rel) => patron.test(leer(rel)))).toEqual([]);
     }
