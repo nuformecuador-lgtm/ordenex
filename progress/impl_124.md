@@ -347,6 +347,116 @@ hay que actualizarlo**; esta escrito en el test.
 
 ---
 
+## 7. Trazabilidad (T7.1 / T7.2)
+
+> Criterio de la particion, aplicado uno a uno y **verificado abriendo cada test**, no
+> reconstruido de memoria:
+>
+> - **A — medido por asercion que discrimina sobre comportamiento EJECUTADO.** Postgres real con
+>   datos sembrados, dobles en memoria o funcion pura corrida. Es la tinta buena.
+> - **B — propiedad DEL CODIGO medida por escaneo del arbol, verificado que dispara.** El
+>   requisito habla del codigo (que nadie lea la tabla, que nadie escriba un literal, que el
+>   datamodel no derive), asi que el escaneo **es** la observacion, no un proxy. Los ocho llevan su
+>   sonda de discriminacion en §4.2 / §4.4 y el reviewer remuto seis.
+> - **C — SOLO regex sobre el texto de un artefacto, siendo el requisito de comportamiento.** Es
+>   cobertura por proxy y se nombra uno por uno.
+> - **D — sin verificacion.**
+>
+> **Cuenta: A = 36, B = 8, C = 4, D = 1. Total 49.** Los cuatro grupos son disjuntos y su union
+> es exactamente R1–R49.
+
+### 7.1 Mapa `R<n> → test` de las 49
+
+| R | clase | test que lo mide |
+|---|---|---|
+| R1 | A | `tests/integration/db/analytics-daily-job.test.ts:89` («la pareja de medianoche…»): la corrida escribe filas reales en `analytics_daily` derivadas de `orden`/`gestion_orden`/`orden_historial_estado`. Toda la suite T6 lo reejerce |
+| R2 | **C** | `tests/unit/analytics/analytics-daily-contrato.test.ts:130` (el grano es exactamente esa union) y `:224` (las medidas son exactamente diez), mas `tests/integration/db/analytics-daily-migration.test.ts` — **todo regex sobre `schema.prisma` / `migration.sql`**. Aceptable: la 124 no toca el DDL de la tabla. Se declara igual |
+| R3 | B | `tests/integration/db/analytics-daily-guards.test.ts:274` («NADIE lee el rollup todavia, salvo la reconciliacion del propio job») y `:257` (un solo archivo puede acceder). Sondas T5.2(a) y la 11 del reviewer: el allowlist **no** da derecho de acceso |
+| R4 | B | `tests/unit/analytics/rollup-guards.test.ts:311`, `:331`, `:350` (las trece tablas de R4 nombradas) y `:367` (`$executeRawUnsafe` prohibido). Sonda G1 / sonda 15 del reviewer. **El mas debil del grupo:** es una propiedad de RUNTIME medida por analisis estatico; ningun caso corre el job y comprueba que ninguna tabla de dominio cambio |
+| R5 | A | `tests/unit/analytics/rollup-dia.test.ts:31-58` (funcion pura, reloj congelado: D−1 en los cuatro bordes) y `:84` (la ventana es `[D T06:00Z, D+1 T06:00Z)`) |
+| R6 | B | `tests/unit/analytics/rollup-guards.test.ts:558`, `:577` (offset de CR acotado a 6 h en un solo archivo), `:615` (`toLocale*` sin `timeZone`), `:632` (contracara en verde); mas `rollup-dia.test.ts:123`. Sonda G3 |
+| R7 | A | `tests/integration/db/analytics-daily-job.test.ts:89` con datos reales (23:59:59 CR cae en D, 00:00:00 CR en D+1); `rollup-dia.test.ts:95` en la funcion pura |
+| R8 | A | `tests/unit/services/analitica-rollup-handler.test.ts:95` («el reloj esta INYECTADO: mover `now` mueve la fecha objetivo») y todo `rollup-dia.test.ts`, que controla la fecha desde fuera |
+| R9 | A | `tests/unit/analytics/rollup-dia.test.ts:66`: misma fecha y misma ventana con `TZ` en UTC, CR, Tokio y Kiritimati |
+| R10 | A | `analytics-daily-job.test.ts:350` (la orden BORRADA queda fuera, con control vivo al lado) y `rollup-service.test.ts:236` (una fila por grupo, sin doble conteo) |
+| R11 | A | `analytics-daily-job.test.ts:458`: la entregada hace TRES dias no esta en el stock de hoy; la que cerro hoy SI (universo B2) |
+| R12 | A | `analytics-daily-job.test.ts:397` (dos cambios el mismo dia: 1 al estatus de CIERRE) y `:424` (dos transiciones con el MISMO `created_at` se desempatan de forma determinista) |
+| R13 | A | `analytics-daily-job.test.ts:508` (gestion anulada), `:350` (gestion de orden borrada) y `rollup-service.test.ts:317` |
+| R14 | A | `analytics-daily-job.test.ts:508` |
+| R15 | A | `analytics-daily-job.test.ts:542` (la causa solo en las filas de `devuelta`, y sin causa tipificada queda NULL) y `rollup-service.test.ts:317`, `:338` |
+| R16 | A | `rollup-service.test.ts:351` (materializa `incidentes` y no inventa `sin_gestionar`) y `analytics-daily-job.test.ts:542` |
+| R17 | A | `analytics-daily-job.test.ts:602` (primer intento vs entrega tras una devolucion previa, con datos) y `rollup-service.test.ts:461` (UNA sola consulta al historial para todo el lote, ids deduplicados) |
+| R18 | A | `rollup-service.test.ts:489` (error propio ANTES de tocar la base, sin llamar a `escribirFecha`) y `analytics-daily-job.test.ts:980` (**el CHECK real de Postgres**, con el `conname` capturado del error) |
+| R19 | A | `analytics-daily-job.test.ts:666` (creada hace CINCO dias, entregada hoy → el ciclo va en la fila de hoy) y `:711` (entra a terminal, se revierte y vuelve el mismo dia → `n = 1`) |
+| R20 | A | `analytics-daily-job.test.ts:990` (`seg_ciclo_n = 0` con `acum > 0` lo rechaza la base). `rollup-service.test.ts:562` es la red en memoria, mas debil |
+| R21 | **C** | `rollup-service.test.ts:998`, un `not.toMatch(/AVG\(|::float|::numeric|porcentaje|promedio/i)` **sobre el fuente del repositorio**. Respaldo indirecto real: la reconciliacion de R34 exige enteros y `analytics-daily-contrato.test.ts:182` prohibe columna para las metricas de unidad `porcentaje` |
+| R22 | A | `analytics-daily-job.test.ts:227`: orden de la zona A gestionada por un mensajero de la zona B → escribe zona A |
+| R23 | A | `analytics-daily-job.test.ts:271`: la orden desasignada despues de gestionar produce DOS filas, una por familia de medida |
+| R24 | A | `analytics-daily-job.test.ts:145` (la transicion del corte, 00:00:00 CR del dia siguiente, NO entra: cota estricta) y `:424` (desempate). Los guards de texto de `rollup-service.test.ts:907-926` son red complementaria — **y M-3 del acta demuestra que no discriminan por sitio**: la medicion es el caso de datos |
+| R25 | A | `analytics-daily-job.test.ts:207`: `GROUP BY mensajero_id` crudo devuelve exactamente `[{ mensajero_id: null, n: 1 }]` |
+| R26 | B | `tests/unit/analytics/rollup-guards.test.ts:455` (ningun literal de coordenada en el escritor) con su caso de discriminacion en `:430`; mas `rollup-service.test.ts:992`. Sonda G2 |
+| R27 | A | `analytics-daily-job.test.ts:775` (dos corridas contra Postgres: mismo conjunto, `created_at` intacto, solo `updated_at` avanza) y `rollup-service.test.ts:701`. **Reejercido por el reviewer con huella md5 identica en la segunda corrida real** |
+| R28 | A | `analytics-daily-job.test.ts:775`, ultimas aserciones: el cubo con `mensajero_id` y `causa_devolucion` NULL **no se duplica** en la segunda corrida (es lo que `NULLS NOT DISTINCT` existe para garantizar). Sonda 4 del reviewer: reducir el `ON CONFLICT` a 4 columnas pone la escritura roja |
+| R29 | A | `analytics-daily-job.test.ts:801`: se anula la unica gestion del cubo, se recomputa y `filasRetiradas = 1`, la fila rancia ya no esta. Mas la 3.ª corrida real de §6 (21 filas retiradas) |
+| R30 | A | `analytics-daily-job.test.ts:861`: fallo forzado a mitad de la escritura contra Postgres → la fecha queda EXACTAMENTE como estaba (el barrido de rancias, que corre antes del fallo, tambien revierte) |
+| R31 | **C** | Medio requisito medido, medio no. «No duplicar filas» lo miden R27/R28 (`analytics-daily-job.test.ts:775`) y el `ON CONFLICT` lo fija `rollup-service.test.ts:1004`, una regex. **El SOLAPAMIENTO no lo mide nada**: no hay ni un caso con dos corridas concurrentes sobre la misma fecha, y el argumento de `design.md §5` de que el barrido no puede borrar las filas de la corrida rival es prosa razonada, no medicion. Es M-6 del acta |
+| R32 | A | `analitica-rollup-handler.test.ts:142` (un `BigInt` crudo en el registro hace LANZAR al handler) y `rollup-service.test.ts:585` (`JSON.stringify` del resumen con un acumulado mayor que `MAX_SAFE_INTEGER`) |
+| R33 | A | `rollup-service.test.ts:617`: se inyecta la fila de totalizacion disfrazada de coordenada real → `ReconciliacionError(ordenesCreadas, escrito 14, esperado 7)` **y** `repo.filasDe(FECHA) === []` |
+| R34 | A | `rollup-service.test.ts:617`, `:661` (doble conteo por JOIN), `:685` (las SIETE medidas) y `analytics-daily-job.test.ts:885` (la reconciliacion recibe las sumas REALMENTE persistidas). Sonda 2 del reviewer: **aborta de verdad contra Postgres**, `count(*) = 0` despues |
+| R35 | A | `analytics-daily-job.test.ts:170`: se agregan D−1 y D+1, se corre D y se compara fila a fila (incluido `updated_at`) antes y despues. Mas `rollup-service.test.ts:741` |
+| R36 | A | `tests/integration/db/job-tipo-analitica-rollup-migration.test.ts:189` (dos siembras del mismo objetivo dejan UNA fila en `jobs`, contra Postgres) y `:240`; `tests/unit/api/procesar-jobs-registro.test.ts:64` (esta en AMBOS mapas); `analitica-rollup-handler.test.ts:211-280` |
+| R37 | A | `analitica-rollup-handler.test.ts:160` (el registro NO lleva ids, destinatarios ni telefonos) y `rollup-service.test.ts:882` (el mensaje de error es exactamente `rollup analitica <fecha>: fallo en la etapa gestiones`) |
+| R38 | A | `rollup-service.test.ts:844-887`: **seis etapas** parametrizadas mas la de `escritura`; `analitica-rollup-handler.test.ts:177`, `:194` |
+| R39 | A | `rollup-dia.test.ts:133-175` (hoy y ayer si; anteayer, futura y basura no) y `analitica-rollup-handler.test.ts:282`. Comprobado ademas contra la base con la sonda J3: rechazo real y **cero** escrituras |
+| R40 | B | `tests/integration/db/analytics-daily-migration.test.ts:723` (descubrimiento por contenido), `:735` (Prisma deriva exactamente la union neta) y `:763` (el efecto NETO descuenta bajas y renombres). Mutacion doble T5.1(a)/(b), reejercida por el reviewer (sondas 12 y 13) |
+| R41 | B | `analytics-daily-migration.test.ts:744-748`, la red anti-vacio NO NUMERICA dentro del caso `:735`: no hay cifra esperada, el numero se deriva del conjunto de referencia. Sonda 14 del reviewer (extractor vaciado → «el guardia no mide nada») |
+| R42 | B | `analytics-daily-guards.test.ts:243`, `:257`, `:303` (no hay un SEGUNDO escritor), `:340` (toda ruta del allowlist existe), `:365` (el escritor legitimo, verde) y `:385` (el localizador de cuerpos de metodo discrimina). Mutado en las dos direcciones (T5.2 a–e) y remutado por el reviewer (sondas 6, 7, 9, 10, 11) |
+| R43 | B | `analytics-daily-guards.test.ts:548-686` (tres cadenas malas rojas, cuatro buenas verdes, escritor legitimo verde, `groupBy` con `_sum` sobre rango rojo) y `:688` (barrido de `lib/` y `app/`). Sonda 8 del reviewer |
+| R44 | **D → cerrado por esta seccion** | Su clausula de aceptacion (`requirements.md:460`) es que **este mapa exista y nombre, por cada uno de los once de la 123, el test de esta feature que lo mide**. Es §7.2. Hasta escribirla, era el unico de los 49 sin verificacion |
+| R45 | A | `analytics-daily-job.test.ts:319`: se siembra una transicion a `en_fulfillment` (huerfano del catalogo) y la corrida escribe su cubo sin fallar. **Verificado contra la base que el caso no es imaginario**: 37 referencias en `orden_historial_estado`, 0 en `orden` (§8.2) |
+| R46 | A | `analytics-daily-job.test.ts:78` (dia sin ordenes: CERO filas, sin fallar) y `rollup-service.test.ts:759`, `:769` (ni fila «todo a cero» ni cubo con todas las medidas a cero) |
+| R47 | A / B | **(a) el resumen**: `rollup-service.test.ts:789` (las tres cifras y la fecha, `Object.keys` cerrado), `:804` (filas retiradas cuando un cubo desaparece) y `analitica-rollup-handler.test.ts:116` — comportamiento ejecutado. **(b) constante unica**: `rollup-guards.test.ts:699`, `:710`, `:740`, `:794`, `:809` — escaneo del arbol (clase B), con sonda G4. Mas la medicion real de §6 |
+| R48 | **C** | `rollup-service.test.ts:929` (`>= desde` / `< hasta`, nunca `<= hasta`) y `:940`, `:945` (el universo B2 y `ESTADOS_TERMINALES` importado) — **`toMatch` / `not.toMatch` sobre el fuente del repositorio**. Respaldo parcial y real: `analytics-daily-job.test.ts:170` (D−1 y D+1 intactas) y `:458` (la entregada hace tres dias no esta en el stock) |
+| R49 | A | `analytics-daily-job.test.ts:1054` (a: mismo `estatus_id` tras un cambio posterior), `:1077` (b: coordenadas NUEVAS tras reasignar mensajero / cambiar zona / cambiar tienda) y `:1118` (c: recomputar tras borrar retira las contribuciones del pasado) |
+
+**Los cuatro de la clase C, dichos sin adorno.** R2 y R21 son aceptables por contexto (la 124 no
+toca el DDL; la reconciliacion respalda a R21). **R31 y R48 son los que dejan deuda de verdad**:
+en R31 el solapamiento concurrente **no lo mide nada**, y en R48 lo que hay es una regex sobre el
+SQL con dos casos de datos que la rozan. Los dos van al acta como M-6 y quedan aqui escritos para
+que la 125 no los herede como «medido».
+
+### 7.2 La deuda de la 123 (R44): **11 medidos, 1 texto**
+
+> Los once que la 123 dejo verificados **solo por una regex sobre el texto del SQL** y que esta
+> feature convierte en aserciones sobre **datos agregados reales**. Ninguna fila de abajo apunta a
+> un test de regex: todas son casos con datos sembrados contra el Postgres **local**
+> (`localhost:5432/ordenex`). La numeracion `R<n>` de la columna izquierda es **la de la 123**.
+
+| R de la 123 | que pedia | test de la 124 que lo mide **con datos** |
+|---|---|---|
+| **R11** | `mensajero_id` NULL significa *sin asignar*, nunca *todos* | `tests/integration/db/analytics-daily-job.test.ts:207` — «la orden sin mensajero escribe el cubo con mensajero_id NULL, nunca un centinela». El `GROUP BY` crudo devuelve `[{ mensajero_id: null, n: 1 }]` |
+| **R12** | `causa_devolucion` nullable = *sin causa tipificada* | `analytics-daily-job.test.ts:542` — «la causa solo se informa en las filas de `devuelta`, y sin causa queda NULL». Entregar y devolver produce DOS filas y la causa viaja solo en una |
+| **R13** | ninguna fila de totalizacion | `tests/unit/analytics/rollup-service.test.ts:617` (+ `:661`, `:685`) — la fila de totalizacion inyectada rompe la reconciliacion: `escrito 14, esperado 7`, y `filasDe(FECHA) === []`. **Verificado abortando de verdad contra Postgres** (sonda 2 del reviewer: `escrito 88, esperado 44`, `count(*) = 0` despues) |
+| **R24** | `primer_intento_ok <= entregas` | `analytics-daily-job.test.ts:602` — primer intento vs entrega tras una devolucion previa: `[entregas, pio] = [1,1]` y `[1,0]` en cubos distintos. Mas `:980`, el CHECK `analytics_daily_pio_lte_entregas` ejercido contra el motor con el `conname` **capturado del error**, no inferido |
+| **R28** | stock al corte, **NO** aditivo por fecha | `analytics-daily-job.test.ts:458` — la entregada hace TRES dias no esta en el stock de hoy; la que cerro hoy SI. El tripwire que prohibe sumar la columna entre fechas sigue vivo en `analytics-daily-guards.test.ts:688` |
+| **R31** | zona y tienda vienen de la **ORDEN** | `analytics-daily-job.test.ts:227` — orden de la zona A gestionada por un mensajero de la zona B: la fila escribe `zonaA`. **Alcance exacto de lo que NO se reproduce: R49(b)** (`:1077`) — la zona y la tienda **no se congelan** (D1→A2), asi que un recomputo posterior a un cambio escribe las nuevas |
+| **R32** | `mensajero_id` segun la familia de medida | `analytics-daily-job.test.ts:271` — la orden desasignada despues de gestionar produce DOS filas: la de medidas de orden con `mensajero = null` y la de gestion con `mensajero1`. **Igual que R31, remite a R49(b)**: `mensajero_id` tampoco se congela |
+| **R33** | `estatus_id` es el estado **al corte** del dia | `analytics-daily-job.test.ts:145` — la transicion del corte (00:00:00 CR del dia siguiente) NO entra en el cierre de D: la fila sale `pendiente` y no `sin_gestionar`. Mas `:397` (dos cambios el mismo dia → el de CIERRE) y `:424` (desempate determinista). **Se puede medir precisamente porque D1 cerro en A2**: `estatus_id` es la unica coordenada congelada, derivada de una tabla append-only |
+| **R34** | el ciclo se atribuye a la fecha del **evento terminal** | `analytics-daily-job.test.ts:666` — creada hace CINCO dias y entregada hoy: `seg_ciclo_n = 1` en la fila de hoy y nada en la de su creacion. Mas `:711` (entra a terminal, se revierte y vuelve el mismo dia → sigue `n = 1`) |
+| **R35** | inmutabilidad hacia atras | `analytics-daily-job.test.ts:170` — se agregan D−1 y D+1, se corre D y las filas vecinas quedan **identicas fila a fila, `updated_at` incluido**. **Con la rebaja fijada en R49**: la inmutabilidad es estructural solo en la dimension `estatus` |
+| **R36** | tolerar la fila **huerfana** del catalogo | `analytics-daily-job.test.ts:319` — el estatus `en_fulfillment` no descarta la orden ni hace fallar la corrida: `filasEscritas = 1` y la fila sale con ese estatus. Comprobado contra la base que el caso ocurre de verdad (37 referencias en `orden_historial_estado`) |
+
+**Y el duodecimo, declarado TEXTO:**
+
+| R de la 123 | que pedia | por que se declara texto |
+|---|---|---|
+| **R15** | que el `apply` falle si el motor no soporta `NULLS NOT DISTINCT` (sin fallback ni `IF NOT EXISTS`) | **No es falsable desde esta feature.** Es una propiedad del **despliegue** —del motor contra el que se aplica la migracion—, no del job: ningun test de la 124 puede provocar que Postgres deje de soportar la clausula. Su unico juez sigue siendo `tests/integration/db/analytics-daily-migration.test.ts:181`, una regex sobre `migration.sql`. Lo que **si** se mide es su CONSECUENCIA: que los cubos con NULL no se dupliquen (R28 de la 123, arriba) |
+
+**Cuenta final: 11 medidos, 1 texto.** Coincide con la de `requirements.md` R44 y con la que el
+reviewer comprobo uno a uno.
+
+---
+
 ## 8. Cierre del flanco: los tres rojos deterministas que la 124 dejo en tests AJENOS
 
 La implementacion no cambio; esto es solo el frente que quedaba abierto en suites de otras

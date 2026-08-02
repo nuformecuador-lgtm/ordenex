@@ -220,10 +220,19 @@ resultado dos veces.
 **Una transacción por fecha, sin lotes** (R30, D9). Dentro, en este orden:
 
 1. `marcaCorrida = now()` del servidor.
-2. **Upsert** de cada cubo con `ON CONFLICT ON CONSTRAINT "analytics_daily_grano_key" DO UPDATE`
+2. **Upsert** de cada cubo con `ON CONFLICT (<las seis columnas del grano>) DO UPDATE`
    (R28). El único lleva `NULLS NOT DISTINCT`, así que los cubos con `mensajero_id` o
    `causa_devolucion` nulos **sí** colisionan y se actualizan en vez de duplicarse. Producción corre
    **Postgres 17.6** (confirmado al cerrar la 123), así que la cláusula está disponible.
+
+   > **Corregido durante la implementación (desviación 3.1 de `progress/impl_124.md`).** Este paso
+   > prescribía `ON CONFLICT ON CONSTRAINT "analytics_daily_grano_key"`, y **eso no es ejecutable**:
+   > la 123 creó el único del grano con `CREATE UNIQUE INDEX` —hacía falta para poder escribir
+   > `NULLS NOT DISTINCT`— y **un índice suelto no tiene fila en `pg_constraint`**, así que Postgres
+   > responde *no existe la restricción «analytics_daily_grano_key»*. Se usa **inferencia por lista
+   > de columnas**, que resuelve **al mismo** índice y conserva su `NULLS NOT DISTINCT`; verificado
+   > contra Postgres 17 local y confirmado en la revisión. Queda escrito aquí y no solo en la
+   > bitácora porque la **125 reusa este agregador** y volvería a tropezar con la prescripción vieja.
 3. **Retirada de rancias (R29):** `DELETE FROM analytics_daily WHERE fecha = $fecha AND updated_at <
    $marcaCorrida`. Es lo que hace que un recomputo sea *desde cero* y no *acumulativo*.
 4. **Reconciliación (R34)**, aún dentro de la transacción. Si falla, `ROLLBACK`.
