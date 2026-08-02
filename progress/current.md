@@ -8,10 +8,52 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🏁 JORNADA 2026-08-01/02 — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 CIERRE DE JORNADA 2026-08-02 — **EMPIEZA A LEER POR AQUÍ**
 
-**Registro con CERO features `in_progress`.** Se desplegó producción, se saneó el backlog de PRs y se
-cerró la **feature 170 entera** (fases 1 y 2).
+**Registro con CERO features `in_progress`.** Se desplegó producción, se saneó el backlog de PRs, se
+cerró la **feature 170 entera** (fases 1 y 2) y se dejó la **172 en `spec_ready` con su puerta
+CERRADA**.
+
+### 🚀 LO PRIMERO AL RETOMAR: implementar la 172
+
+**No hay puerta pendiente. El spec está aprobado y se puede escribir código directamente.**
+
+`specs/172-liquidacion/` — **85 R en EARS, 9 tandas**, rama `feature/172-liquidacion`, PR **#259**.
+Todas las decisiones están DENTRO de los archivos, no solo en esta bitácora.
+
+**Empezar por la TANDA A, y con cuidado:** trae la migración con el **CHECK de `categoria`↔`tipo`**
+heredado del review de la 171. Ese CHECK **valida las filas existentes al aplicarse** y en Vercel el
+build migra antes de compilar, así que **mergear ES aplicar**. La propia task **T A.0** exige
+verificar producción y preview por MCP **antes** de escribir la migración. No saltársela.
+
+Las tres respuestas explícitas del humano que más mandan sobre el diseño:
+
+- **P4 — la ANULACIÓN entra en la feature.** Eligió lo contrario al default: entregar un libro de
+  dinero que no se puede corregir era el riesgo más caro. Se modela como **contraasiento**, nunca
+  borrar ni editar; el pago sigue siendo fila inmutable y «anulado» se **deriva**. Usa categorías ya
+  reservadas ⇒ **cero valores de enum nuevos** y ninguna cascada de `down.sql`.
+- **P1 — el pago que excede lo debido se RECHAZA**, lo que obliga a un **candado**
+  (`SELECT … FOR UPDATE` antes de leer el disponible, **uno por operación**). Su test **exige
+  mutación**: si quitar el candado no lo rompe, el test no prueba nada.
+- **P3 — pagan `maestro` y `admin`.** `adminSatelite` **no**, aunque sí apruebe cierres.
+
+### 🔧 Deuda con DECISIÓN YA TOMADA — solo falta hacerla
+
+**El humano pidió AÑADIR UN AVISO** en bodega satélite: hoy lo marcado en otra página se conserva
+pero **no participa** en la acción de lote y **nada lo advierte** (Q-K7 de la 170). Algo del estilo
+«tienes N órdenes marcadas en otras páginas que no entran en esta acción». Es un **chore de frontend
+pequeño y ya decidido**.
+
+### ⏳ Esperando al humano (nada bloquea)
+
+1. **N1 (nueva, de la 172):** el par pago+anulación deja los importes **brutos inflados** —«pagado a
+   la tienda» sigue contando lo anulado— **aunque el saldo queda exacto**. Netearlo exigiría 2
+   valores de enum nuevos o reescribir la derivación de la 171. **Default tomado: no netear y
+   declararlo en pantalla.** Si va a cambiar, mejor antes de implementarlo.
+2. **N2:** sin ventana temporal para anular (default tomado).
+3. **Orden alfabético** en «saldos de tiendas» y «cuentas por pagar» (170, ya en `dev`): **no es
+   realmente opcional** —esos listados no tenían orden y sin uno total las páginas se solapan u
+   omiten filas—. Queda informado, no a decisión.
 
 ### ✅ Entregado
 
