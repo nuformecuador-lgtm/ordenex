@@ -23,6 +23,11 @@ import { devolverATienda } from "@/lib/actions/devolucion-origen";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { ManifiestoFilaDTO } from "@/lib/types/manifiesto";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import {
+  PAGE_SIZE_SATELITE,
+  catalogoSatelite,
+  paginaBodega,
+} from "@/tests/fixtures/satelite-bodega";
 
 // Feature 148 (T20) — los 5 puntos de enganche (6 superficies de UI): cada flujo, tras
 // COMETER su operación de negocio, ofrece la descarga del manifiesto de SU lote (R18–R23)
@@ -38,11 +43,15 @@ vi.mock("@/lib/actions/ordenes-guia", () => ({
   asignarDesdeBodega: vi.fn(),
   rutearABodegaSatelite: vi.fn(),
 }));
+// Feature 170 — FASE 2 (T K.3): el listado de la bodega pide su página al servidor; el doble
+// devuelve las órdenes que el caso monta, sin recortar (aquí no se pagina nada).
+const { paginadoBodegaMock } = vi.hoisted(() => ({ paginadoBodegaMock: vi.fn() }));
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   asignarDesdeSatelite: vi.fn(),
   recibirLote: vi.fn(),
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
+  listarOrdenesBodegaPaginado: (...args: unknown[]) => paginadoBodegaMock(...args),
 }));
 vi.mock("@/lib/actions/envio-devolucion-central", () => ({
   enviarACentral: vi.fn(),
@@ -348,15 +357,22 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
       .mockResolvedValueOnce({ status: "ok" })
       .mockResolvedValueOnce({ status: "conflict", motivo: "estado inválido" });
 
+    const porDevolver = [
+      makeRecepcion({ id: "d1", numRemision: "REM-D1" }),
+      makeRecepcion({ id: "d2", numRemision: "REM-D2" }),
+    ];
+    paginadoBodegaMock.mockResolvedValue({
+      status: "ok",
+      items: porDevolver,
+      page: 1,
+      pageSize: PAGE_SIZE_SATELITE,
+      total: porDevolver.length,
+    });
     render(
       <RecepcionSateliteModule
         porRecibir={[]}
-        recibidas={[]}
-        porDevolver={[
-          makeRecepcion({ id: "d1", numRemision: "REM-D1" }),
-          makeRecepcion({ id: "d2", numRemision: "REM-D2" }),
-        ]}
-        enTransitoACentral={[]}
+        ordenesBodega={paginaBodega(porDevolver)}
+        catalogoFiltros={catalogoSatelite(porDevolver)}
         zonaNombre="Limón"
         sinZona={false}
         mensajeros={[]}

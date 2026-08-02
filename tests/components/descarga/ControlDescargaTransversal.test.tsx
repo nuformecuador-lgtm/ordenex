@@ -276,9 +276,11 @@ const MODULOS_CON_DESCARGA = MODULOS_APP.filter((modulo) =>
 
 /**
  * Los que BAJAN el callback a una tabla de presentación (`WalletLedger`,
- * `DesgloseTiendaLedger`, `DesglosePagos`): esas tres no conocen sus filtros, así que su
- * `obtenerFilas` llega por prop desde el módulo padre. Son el único punto del rollout donde
- * el adaptador común NO está en el mismo archivo que la tabla, y por eso se vigilan aparte.
+ * `DesgloseTiendaLedger`, `DesglosePagos` y, desde la FASE 2, `SateliteOrdenesListado`):
+ * esas tablas no conocen sus filtros —ni, en la satélite, de dónde sale el conjunto
+ * completo—, así que su `obtenerFilas` llega por prop desde el módulo padre. Son el único
+ * punto del rollout donde el adaptador común NO está en el mismo archivo que la tabla, y por
+ * eso se vigilan aparte.
  */
 const MODULOS_PROVEEDORES = MODULOS_APP.filter((modulo) =>
   /obtenerFilasDescarga=\{/.test(modulo.fuente),
@@ -548,12 +550,14 @@ describe("Control de descarga · consistencia transversal", () => {
       );
     }
 
-    // Y los tres componentes de presentación que reciben `obtenerFilas` por prop no son un
-    // agujero: quien se la pasa también usa un adaptador común.
-    expect(MODULOS_PROVEEDORES.length).toBe(3);
+    // Y los componentes de presentación que reciben `obtenerFilas` por prop no son un
+    // agujero: quien se la pasa también usa un adaptador común. Eran tres hasta la FASE 2;
+    // T K.3 suma `RecepcionSateliteModule`, que baja el callback a `SateliteOrdenesListado`
+    // porque el conjunto completo ya no está en la tabla (R52).
+    expect(MODULOS_PROVEEDORES.length).toBe(4);
     for (const modulo of MODULOS_PROVEEDORES) {
       expect(modulo.fuente, `${modulo.ruta} pasa filas sin adaptador`).toMatch(
-        /obtenerFilasDescarga=\{[^}]*?(filasDesdeResultado|filasLocales)\(/,
+        /obtenerFilasDescarga=\{[^}]*?(filasDesdeResultado|filasLocales|filasDelConjuntoCompleto)\(/,
       );
     }
   });

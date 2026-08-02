@@ -9,7 +9,10 @@ import {
   listarRecepcionSatelite,
   listarMensajerosSatelite,
   estadoBloqueoBodegaSatelite,
+  listarOrdenesBodegaPaginado,
+  obtenerCatalogoFiltrosSatelite,
 } from "@/lib/actions/recepcion-satelite";
+import { PAGE_SIZE_SATELITE } from "@/tests/fixtures/satelite-bodega";
 
 // Feature 33 (T11) — la página resuelve el rol SOLO server-side; rol ≠
 // adminSatelite (o sin sesión) → `notFound`. Se mockean el resolver, la action de
@@ -23,6 +26,10 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   listarMensajerosSatelite: vi.fn(),
   estadoBloqueoBodegaSatelite: vi.fn(),
   recibirPorQr: vi.fn(),
+  // Feature 170 — FASE 2 (T K.3): la página pre-carga la PÁGINA 1 del listado y el catálogo
+  // de cantón/distrito, y los baja por props al módulo.
+  listarOrdenesBodegaPaginado: vi.fn(),
+  obtenerCatalogoFiltrosSatelite: vi.fn(),
 }));
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
@@ -54,6 +61,8 @@ const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarRecepcionSatelite);
 const listarMensajerosMock = vi.mocked(listarMensajerosSatelite);
 const bloqueoMock = vi.mocked(estadoBloqueoBodegaSatelite);
+const paginaMock = vi.mocked(listarOrdenesBodegaPaginado);
+const catalogoMock = vi.mocked(obtenerCatalogoFiltrosSatelite);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -75,6 +84,17 @@ beforeEach(() => {
   bloqueoMock.mockResolvedValue({
     status: "ok",
     bloqueo: { bloqueada: false, porMensajeros: false, porCierreBodega: false },
+  });
+  paginaMock.mockResolvedValue({
+    status: "ok",
+    items: [],
+    page: 1,
+    pageSize: PAGE_SIZE_SATELITE,
+    total: 0,
+  });
+  catalogoMock.mockResolvedValue({
+    status: "ok",
+    catalogo: { cantones: [], distritos: [] },
   });
 });
 
