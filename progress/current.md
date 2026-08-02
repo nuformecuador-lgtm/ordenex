@@ -8,11 +8,17 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🔨 2026-08-02 (tarde) — **172 EN CURSO** · **EMPIEZA A LEER POR AQUÍ**
+## ✅ 2026-08-02 (tarde) — **172 IMPLEMENTADA: las 9 tandas** · **EMPIEZA A LEER POR AQUÍ**
 
-**La 172 arrancó. Ficha en `in_progress`, rama `feature/172-liquidacion`, PR #259.** La bitácora
-viva de la implementación es **`progress/impl_172-liquidacion.md`**; aquí solo va lo que decide
-qué hacer a continuación.
+**Ya existe forma de registrar un pago.** Era el agujero de fondo del sistema: hasta hoy los saldos
+solo crecían, ni a mensajeros ni a tiendas se les podía decir «ya pagué». Rama
+`feature/172-liquidacion`, PR #259, **11 commits, sin push**. La bitácora completa está en
+**`progress/impl_172-liquidacion.md`**; aquí solo va lo que decide qué hacer a continuación.
+
+### 🚦 LO PRIMERO AL RETOMAR: **una sola cosa bloquea el merge, y no es código**
+
+**Hay que verificar la base de PREVIEW antes de mergear el PR.** Es el único requisito sin cerrar
+(**R61**, 84 de 85 trazados). El detalle está abajo y la consulta exacta, en la bitácora.
 
 ### ✅ T0.9 resuelta (era lo único abierto de la Tanda 0): **la 172 arranca YA, sin esperar**
 
@@ -37,24 +43,89 @@ del ledger de tienda y **5/5** del libro del mensajero, ni una de más. La migra
 > salvo; lo que puede pasar es que el build del PR salga rojo y deje una fila fallida en el
 > `_prisma_migrations` de preview, que **bloquea los despliegues de preview siguientes** hasta
 > repararla a mano. La consulta exacta que hay que correr está en `impl_172-liquidacion.md`.
+> **Para cerrarlo hace falta el `project_ref` de preview, o correr esa consulta en su SQL editor.**
 
-### 📦 Avance
+### ✅ T H.3 — los constraints ACTÚAN, no solo están escritos
 
-| Tanda | Estado |
-| --- | --- |
-| **0** — puerta | ✅ cerrada (T0.9 incluida) |
-| **A** — base de datos, integridad y piezas puras | ✅ **completa**, commit `240c4f6b` |
-| **B** — registrar un pago (servicio, candado, idempotencia, borde) | 🔨 en curso |
-| C · D · E · F · G · H | pendientes |
+Verificado contra Postgres local, porque los tests de migración de este repo son **estáticos**
+(regex sobre el SQL) y un CHECK bien escrito que no se aplica no protege nada. Round-trip
+`up → down → up` verde con los enums intactos y cero filas reescritas; y 14 INSERT bajo savepoint:
+`pago_tienda`+`credito` → **rechazado 23514**, `liquidacion`+`devengo` → **rechazado 23514**,
+segunda anulación del mismo pago → **rechazado 23505** con el pago intacto. Tres contrapruebas
+aceptadas, que es la mitad que suele faltar: **el CHECK no rechaza de más**.
 
-**Suite tras la Tanda A: 775 archivos / 9340 tests, 0 fallos** (baseline al arrancar: 772 / 9257).
-`./init.sh` en `== init OK ==`. Nada pusheado todavía.
+### 📦 Las 9 tandas, entregadas
 
-**Hallazgo de la Tanda A que sobrevive a la feature:** `esFechaFutura`
-(`lib/types/gestion-orden.ts:102-106`) afirma en su comentario que `new Date("2026-02-31…")` da
-`Invalid Date`. **Es falso en V8**: rueda al 3 de marzo, y solo el *mes* fuera de rango da
-`Invalid Date`. O sea que hoy **`2026-02-31` se acepta como fecha de reprogramación y se guarda
-como 3 de marzo**. Es de la 36/73, no de esta feature, y **no se tocó**. Necesita dueño.
+| Tanda | Qué | Commit |
+| --- | --- | --- |
+| **0** | puerta cerrada (T0.9 resuelta por el leader) | `dd0902ee` |
+| **A** | migración: 2 tablas + los 2 CHECK heredados, tipos y derivación pura | `240c4f6b` |
+| **B** | registrar un pago: repositorio, candado, servicio, idempotencia, acciones | `bb0b4992` · `23b817c4` |
+| **C** | lecturas: pendiente por cierre, comprobantes, filtro por cierre | `0dc79605` |
+| **D** | frontend del pago a **tienda** | `b1b57835` |
+| **E** | frontend del pago a **mensajero** (toca la aprobación) | `1720d373` |
+| **F** | **anulación** por contraasiento, backend y frontend | `a7af2bb7` · `9de22953` |
+| **G** | lo que ven los beneficiarios (`/mis-pagos`, `/mi-wallet`) | `c5a62b35` |
+| **H** | guardias, censo, verificación real contra Postgres y cierre | `5d9f144` |
+
+**`./init.sh` → `== init OK ==` · 793 archivos / 9857 tests, 0 fallos.** Baseline al arrancar:
+772 / 9257 ⇒ **+21 archivos, +600 tests, cero regresiones**. **Review en curso; nada pusheado.**
+
+### 🧪 Lo que de verdad sostiene esta feature: **13 pruebas por mutación**
+
+No es adorno. En este repo ya hubo tests verdes que no medían el requisito, y aquí volvió a pasar
+**dentro del propio arnés de test**: el primer store en memoria de la Tanda B tomaba la foto de las
+filas **después** de ceder el turno, y con eso **quitar el candado dejaba el test de carrera en
+verde**. Corregido a instantánea al inicio de la sentencia (la semántica real de `READ COMMITTED`),
+desde ahí discrimina: sin candado caen 8 de 10 y se pagan 120 000 de una tienda con 100 000.
+
+Las que más valen, cada una con su salida pegada en la bitácora:
+
+- **el candado** (B): quitarlo → 8 de 10 caen; no-op → 3; movido tras la lectura → 4;
+- **la clave de idempotencia** (D), **las dos direcciones del mismo eje**: renovarla tras un fallo
+  tumba 2 tests, conservarla tras un éxito tumba otros 2;
+- **el refresco dirigido** (D): hacerlo global tumba 4;
+- **el monto de la anulación** (F): tomarlo del input en vez del pago tumba 4 — es la diferencia
+  entre anular y poder escribir cualquier cifra en el libro;
+- **el `WHERE` del filtro por cierre** (C): probado **en el repositorio, donde vive**, porque los
+  dobles del servicio no ven la traducción a SQL. Volver al filtro viejo tumba 7 de 12.
+
+### 🔎 Hallazgos que sobreviven a la feature (ninguno es suyo, ninguno se tapó)
+
+1. **`esFechaFutura` (`lib/types/gestion-orden.ts:102-106`) documenta algo falso.** Dice que
+   `new Date("2026-02-31…")` da `Invalid Date`; en V8 **rueda al 3 de marzo** (solo el *mes* fuera
+   de rango invalida). O sea que hoy **`31/02` se acepta como fecha de reprogramación y se guarda
+   como 3 de marzo**. Es de la 36/73. **No se tocó. Necesita dueño.**
+2. **La guardia del censo de tablas solo recorría `app/`.** Una tabla en `components/shared/` **no
+   existía para el censo**. Al abrir el recorrido apareció además una tabla **preexistente de la
+   130** (`TablaResumen`) que llevaba sin registrar. **`contadores-cabecera.guardia.test.ts` tiene
+   el mismo punto ciego y NO se tocó** (es de la 170): deuda ajena, ahora identificada.
+3. **Un `as unknown as <Interfaz>` en un test de la 170 esconde el drift al typechecker.**
+   `wallet-tienda-descarga.test.ts` pasó el typecheck y aun así **3 tests se pusieron rojos** al
+   ampliar la interfaz. El cast convierte un error de compilación en un rojo en tiempo de test.
+
+### 🗣️ Decisiones que tomó el LEADER durante la implementación (revisables, ninguna del spec)
+
+1. **T0.9 — la 172 arranca ya**, sin esperar a la 170. Comprobado, no supuesto.
+2. **`referencia` gana tope de 60 caracteres.** El diseño fijaba tope para `nota` y **callaba sobre
+   `referencia`**; llevaba tres tandas seguidas reportándose como hueco. El 60 sale de
+   `lib/types/api-key.ts:17`, el único campo del repo de la misma familia (identificador corto
+   tecleado por una persona contra columna `text`) — no es un número inventado.
+3. **El aviso de N1 va donde hay un IMPORTE AGREGADO que incluye lo anulado, no donde solo se
+   listan movimientos** (ahí el pago y su reverso se ven los dos y se explican solos). Aplicada la
+   regla, resultó que **`/mis-pagos` y `/wallet/mensajeros` también tienen agregados inflados**, así
+   que N1 queda declarada en **4 pantallas**, no en una.
+4. **La descarga del histórico de cierres NO gana la columna «pendiente de liquidar»**: tocaría el
+   archivo que fijó la 170 y sus tests, y ningún R lo pide. Alcance deliberado, no olvido.
+
+### ⏳ Esperando al humano (además del preview, que sí bloquea)
+
+- **N1 quedó cerrada por su default** —no netear y declararlo en pantalla— y ya está el texto en
+  las 4 superficies. Si prefiere netear, es ahora: exigiría 2 valores de enum nuevos o reescribir
+  la derivación de la 171.
+- **N2:** sin ventana temporal para anular (default tomado). Hoy un pago se puede anular siempre.
+- **Nadie ha visto estas pantallas en uso.** La feature entera está verificada por suite, no en
+  pantalla; el humano ya aceptó ese trato en la 170.
 
 ---
 
