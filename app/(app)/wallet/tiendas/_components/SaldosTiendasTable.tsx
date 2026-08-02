@@ -194,12 +194,21 @@ export function SaldosTiendasTable({
          * toca (R34). Sin permiso NO se pasa el nodo: la prop es opcional en el desglose y
          * sin ella no se renderiza ni contenedor, así que quien no puede pagar ve
          * exactamente la pantalla de la 171.
+         *
+         * T F.5 (R81) — `puedeAnular` sale del MISMO valor: pagar y anular los deciden los
+         * mismos roles (`esAccesoTotal`, resuelto en el servidor). Se pasa explícito y no se
+         * deduce de que alguien haya montado el bloque, porque el default de la tabla es
+         * `false` y el permiso debe viajar, no adivinarse.
          */
         renderExpanded={(t) => (
           <DesgloseMovimientosTienda
             resumen={t}
             id={`desglose-tienda-${t.tiendaId}`}
-            acciones={puedeRegistrarPago ? <PagoTiendaAcciones resumen={t} /> : undefined}
+            acciones={
+              puedeRegistrarPago ? (
+                <PagoTiendaAcciones resumen={t} puedeAnular={puedeRegistrarPago} />
+              ) : undefined
+            }
           />
         )}
         expandAriaLabel={(t) => DESGLOSE_TIENDA_NOMBRE.expandir(t.tiendaNombre)}

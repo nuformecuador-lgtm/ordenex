@@ -6,8 +6,10 @@ import useSWR, { useSWRConfig } from "swr";
 import { Button } from "@/components/ui/button";
 import { PagosRegistradosTabla } from "@/components/shared/liquidacion/PagosRegistradosTabla";
 import { PAGOS_REGISTRADOS_TEXTO } from "@/components/shared/liquidacion/liquidacion-labels";
-import { listarPagosDeCierreAction } from "@/lib/actions/liquidacion";
-import type { PagoRegistradoDTO } from "@/lib/types/liquidacion";
+import type { PagoAnuladoOk } from "@/components/shared/liquidacion/AnularPagoDialog";
+import { useToast } from "@/hooks/useToast";
+import { anularPagoAction, listarPagosDeCierreAction } from "@/lib/actions/liquidacion";
+import type { AnularPagoResult, PagoRegistradoDTO } from "@/lib/types/liquidacion";
 
 import { PAGO_MENSAJERO_TEXTO } from "./pago-mensajero-labels";
 import {
@@ -62,7 +64,16 @@ export interface PagoMensajeroSeccionProps {
    * trata como «nada que ofrecer»: falla cerrado.
    */
   pendiente: string | null;
-  /** Se invoca tras registrar, para que el padre vuelva a leer el pendiente DEL SERVIDOR. */
+  /**
+   * T F.5 (R4/R81) — `true` solo si el actor puede anular: los mismos roles que pagan. El
+   * padre solo monta la sección con permiso, pero la prop viaja igual y con **default
+   * `false`**, para que el permiso sea un dato y no una consecuencia del montaje.
+   */
+  puedeAnular?: boolean;
+  /**
+   * Se invoca tras registrar o anular, para que el padre vuelva a leer el pendiente DEL
+   * SERVIDOR. Las dos operaciones lo mueven, así que las dos tienen que releerlo.
+   */
   onRegistrado?: () => void | Promise<void>;
 }
 
@@ -70,9 +81,11 @@ export function PagoMensajeroSeccion({
   cierreId,
   mensajeroNombre,
   pendiente,
+  puedeAnular = false,
   onRegistrado,
 }: Readonly<PagoMensajeroSeccionProps>) {
   const { mutate } = useSWRConfig();
+  const toast = useToast();
   const [abierto, setAbierto] = useState(false);
 
   const { data, error, isLoading } = useSWR(clavePagosDeCierre(cierreId), () =>
@@ -86,6 +99,24 @@ export function PagoMensajeroSeccion({
     // Refresco DIRIGIDO: la lista de ESTE cierre, y nada más (mismo criterio que T D.3/R33).
     await mutate(clavePagosDeCierre(cierreId));
     await onRegistrado?.();
+  }
+
+  /** T F.5 — al borde solo van el pago y el motivo: el monto lo lee el servidor (R70). */
+  async function anular(
+    pago: PagoRegistradoDTO,
+    motivo: string,
+  ): Promise<AnularPagoResult> {
+    return anularPagoAction({ pagoId: pago.id, motivo });
+  }
+
+  async function trasAnular(resultado: PagoAnuladoOk) {
+    if (resultado.status === "ok") {
+      // R71: el pendiente vuelve a lo que era antes del pago. Lo dice el servidor.
+      toast.success(PAGO_MENSAJERO_TEXTO.anulado(resultado.restante));
+    } else {
+      toast.info(PAGO_MENSAJERO_TEXTO.yaAnulado);
+    }
+    await trasRegistrar();
   }
 
   return (
@@ -114,12 +145,16 @@ export function PagoMensajeroSeccion({
       )}
 
       {/* R49 — los comprobantes de este cierre, incluidos los anulados (R74). Se muestran
-          también cuando ya no queda pendiente: es justo entonces cuando explican por qué. */}
+          también cuando ya no queda pendiente: es justo entonces cuando explican por qué.
+          T F.5 — y con el control de anular, que existe precisamente cuando ya se pagó. */}
       <PagosRegistradosTabla
         pagos={data ?? []}
         beneficiario={mensajeroNombre}
         isLoading={isLoading}
         error={error ? PAGOS_REGISTRADOS_TEXTO.error : null}
+        puedeAnular={puedeAnular}
+        onAnular={anular}
+        onAnulado={trasAnular}
       />
 
       {/* El diálogo solo se monta si hay algo que pagar: sin pendiente no hay nada que abrir. */}

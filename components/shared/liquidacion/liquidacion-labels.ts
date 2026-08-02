@@ -59,6 +59,13 @@ export const PAGOS_REGISTRADOS_COLUMNAS = {
   estado: "Estado",
 } as const;
 
+/**
+ * T F.5 — la columna del control de anular. Vive APARTE de las de arriba a propósito: solo
+ * existe para quien puede anular (R4/R81) y **no** se descarga (un archivo no tiene botones),
+ * así que las columnas de pantalla y las del archivo siguen siendo las mismas ocho.
+ */
+export const PAGOS_REGISTRADOS_COLUMNA_ACCIONES = "Acciones";
+
 /** Columnas que SOLO existen en el archivo: el detalle de la anulación, desplegado (R74). */
 export const PAGOS_REGISTRADOS_COLUMNAS_ANULACION = {
   anuladoPor: "Anulado por",
@@ -75,6 +82,56 @@ export const PAGOS_REGISTRADOS_TEXTO = {
   /** Resumen de la anulación que acompaña al comprobante anulado (R74). */
   anuladoPor: (nombre: string, cuando: string) => `Anulado por ${nombre} el ${cuando}`,
   motivo: (motivo: string) => `Motivo: ${motivo}`,
+  /**
+   * T F.5 — nombre accesible del control de anular de UNA fila. Lleva el monto y el día
+   * porque puede haber varios pagos en la tabla y varias tablas en la pantalla: cinco botones
+   * llamados «Anular» no le dirían a un lector de pantalla cuál es cuál. No lleva ningún
+   * identificador interno (R56).
+   */
+  anularPago: (monto: string, fechaPago: string) =>
+    `Anular el pago de ${monto} del ${fechaPago}`,
+} as const;
+
+/**
+ * T F.5 (design §6, §10.1) — textos del diálogo de ANULACIÓN. Molde: el sub-modal de rechazo
+ * de cierre (feature 38/R11), que también exige un motivo escrito antes de confirmar.
+ *
+ * Lenguaje: **anular no borra**. El pago sigue a la vista con su motivo y el dinero vuelve al
+ * saldo por un movimiento nuevo. Nada de vocabulario contable interno en pantalla.
+ */
+export const ANULAR_PAGO_TEXTO = {
+  /** Etiqueta del control de la fila. */
+  abrir: "Anular",
+  titulo: (beneficiario: string) => `Anular el pago a ${beneficiario}`,
+  descripcion:
+    "El pago no se borra: queda a la vista, marcado y con el motivo, y el dinero vuelve al saldo con un movimiento nuevo. Si hace falta, después se puede registrar el pago correcto.",
+  /** Recuerda QUÉ pago se está anulando: con varios en la tabla, es la última comprobación. */
+  resumen: (monto: string, fechaPago: string, metodo: string) =>
+    `Pago de ${monto} del ${fechaPago}, en ${metodo}.`,
+  confirmar: "Anular pago",
+  cancelar: "Cancelar",
+  motivo: "Motivo de la anulación",
+  motivoAyuda: "Obligatorio. Se guarda junto al pago y lo verá quien revise el comprobante.",
+} as const;
+
+/** Mensaje de error del único campo del formulario de anulación (R72). */
+export const ANULAR_PAGO_ERROR = {
+  motivo: "El motivo de la anulación es obligatorio.",
+} as const;
+
+/**
+ * Mensajes de la RESPUESTA del servidor, uno por estado de `AnularPagoResult`. Fuera del
+ * componente para que el `switch` que los usa sea exhaustivo: un estado nuevo en el contrato
+ * rompe el build en vez de caer en un `default` mudo.
+ */
+export const ANULAR_PAGO_RESPUESTA = {
+  ok: "Pago anulado.",
+  yaAnulado: "Este pago ya estaba anulado: se conservó la anulación original.",
+  noEncontrado: "No se encontró el pago. Vuelve a abrir la pantalla e inténtalo de nuevo.",
+  forbidden: "No tienes permiso para anular pagos.",
+  unauthenticated: "Tu sesión expiró. Inicia sesión de nuevo.",
+  validacion: "La petición no es válida. Vuelve a abrir la pantalla e inténtalo de nuevo.",
+  fallo: "No se pudo anular el pago. Vuelve a intentarlo.",
 } as const;
 
 /** Textos del diálogo de registro de pago. */

@@ -56,6 +56,9 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
 vi.mock("@/lib/actions/liquidacion", () => ({
   registrarPagoMensajeroAction: vi.fn(),
   listarPagosDeCierreAction: vi.fn(),
+  // T F.5: la sección la importa para el control de anular de la lista de comprobantes.
+  // Sin declararla aquí, el módulo mockeado no la exporta y el import revienta.
+  anularPagoAction: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({

@@ -28,7 +28,11 @@ import type {
   SaldoTiendaResumenDTO,
   WalletTiendaMovimientoDTO,
 } from "@/lib/types/wallet-tienda";
-import type { PagoRegistradoDTO, RegistrarPagoResult } from "@/lib/types/liquidacion";
+import type {
+  AnularPagoResult,
+  PagoRegistradoDTO,
+  RegistrarPagoResult,
+} from "@/lib/types/liquidacion";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import {
   LLAMADAS_PROHIBIDAS_EN_DINERO,
@@ -51,9 +55,11 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
 
 const registrarPagoMock = vi.fn();
 const listarPagosMock = vi.fn();
+const anularPagoMock = vi.fn();
 vi.mock("@/lib/actions/liquidacion", () => ({
   registrarPagoTiendaAction: (...a: unknown[]) => registrarPagoMock(...a),
   listarPagosDeTiendaAction: (...a: unknown[]) => listarPagosMock(...a),
+  anularPagoAction: (...a: unknown[]) => anularPagoMock(...a),
 }));
 
 class NotFoundError extends Error {
@@ -208,6 +214,22 @@ const PAGO_OK: RegistrarPagoResult = {
   restante: "5000.00",
 };
 
+/** El MISMO comprobante, ya anulado: anular no borra nada (R74). */
+const COMPROBANTE_ANULADO: PagoRegistradoDTO = {
+  ...COMPROBANTE,
+  anulacion: {
+    motivo: "Se tecleó el monto de otra tienda",
+    anuladoPorNombre: "Ana Maestra",
+    anuladoAt: "2026-08-05T09:30:00.000Z",
+  },
+};
+
+const ANULACION_OK: AnularPagoResult = {
+  status: "ok",
+  pago: COMPROBANTE_ANULADO,
+  restante: "9000.00",
+};
+
 // --- Montaje -------------------------------------------------------------
 
 function envolver(nodo: ReactNode) {
@@ -257,6 +279,20 @@ function confirmarPago(dialogo: HTMLElement) {
   fireEvent.click(within(dialogo).getByRole("button", { name: "Registrar pago" }));
 }
 
+/** T F.5 — abre el diálogo de anulación del primer comprobante vigente de un desglose. */
+async function abrirAnulacion(region: HTMLElement) {
+  fireEvent.click(within(region).getAllByRole("button", { name: /^Anular el pago/ })[0]);
+  return screen.findByRole("dialog");
+}
+
+/** Escribe el motivo y confirma la anulación. Sin motivo el confirmar está deshabilitado. */
+function confirmarAnulacion(dialogo: HTMLElement, motivo = "Monto equivocado") {
+  fireEvent.change(within(dialogo).getByLabelText(/^Motivo de la anulación/), {
+    target: { value: motivo },
+  });
+  fireEvent.click(within(dialogo).getByRole("button", { name: "Anular pago" }));
+}
+
 /** Los cuatro bloques de importe de la cabecera del desglose, en orden de pantalla. */
 function importesDeCabecera(region: HTMLElement): HTMLElement[] {
   return Array.from(region.firstElementChild!.children) as HTMLElement[];
@@ -281,6 +317,7 @@ beforeEach(() => {
   listarDesgloseCompletoMock.mockResolvedValue({ status: "ok", items: [], total: 0 });
   listarPagosMock.mockResolvedValue({ status: "ok", pagos: [] });
   registrarPagoMock.mockResolvedValue(PAGO_OK);
+  anularPagoMock.mockResolvedValue(ANULACION_OK);
 });
 
 afterEach(() => {
@@ -547,6 +584,189 @@ describe("R50 — los comprobantes viven dentro del desglose de su tienda", () =
     );
     // La cabecera del desglose sigue mostrando sus cifras.
     expect(cifraDe(importesDeCabecera(region)[3])).toBe("₡9000.00");
+  });
+});
+
+// =========================================================================
+// T F.5 — ANULAR un pago desde el desglose de su tienda
+// =========================================================================
+
+describe("R4/R81 — anular también es un permiso, y por partida doble", () => {
+  it("sin permiso no hay control de anular (ni lista donde ponerlo)", async () => {
+    listarPagosMock.mockResolvedValue({ status: "ok", pagos: [COMPROBANTE] });
+    renderTabla([NORTE], false);
+    const region = await desplegar("Tienda Norte");
+    await waitFor(() => expect(lecturasDe("t1")).toBe(1));
+
+    expect(
+      within(region).queryByRole("button", { name: /anular/i }),
+    ).not.toBeInTheDocument();
+    expect(listarPagosMock).not.toHaveBeenCalled();
+  });
+
+  it("la otra mitad: la acción responde `forbidden` y la pantalla lo dice", async () => {
+    // El control está a la vista —el permiso viajó— y el servidor sigue negando. Ocultar el
+    // botón nunca fue el control de acceso: es solo su mitad visible.
+    listarPagosMock.mockResolvedValue({ status: "ok", pagos: [COMPROBANTE] });
+    anularPagoMock.mockResolvedValue({ status: "forbidden" });
+    renderTabla([NORTE]);
+    const region = await desplegar("Tienda Norte");
+    await within(region).findByRole("table", { name: "Pagos registrados de Tienda Norte" });
+
+    const dialogo = await abrirAnulacion(region);
+    confirmarAnulacion(dialogo);
+
+    await waitFor(() => expect(anularPagoMock).toHaveBeenCalledTimes(1));
+    expect(
+      await within(dialogo).findByText("No tienes permiso para anular pagos."),
+    ).toBeInTheDocument();
+    // Nada se refrescó: no hubo anulación.
+    expect(lecturasDe("t1")).toBe(1);
+  });
+
+  it("sin motivo no se envía nada (R72)", async () => {
+    listarPagosMock.mockResolvedValue({ status: "ok", pagos: [COMPROBANTE] });
+    renderTabla([NORTE]);
+    const region = await desplegar("Tienda Norte");
+    await within(region).findByRole("table", { name: "Pagos registrados de Tienda Norte" });
+
+    const dialogo = await abrirAnulacion(region);
+    const confirmar = within(dialogo).getByRole("button", { name: "Anular pago" });
+    expect(confirmar).toBeDisabled();
+    fireEvent.click(confirmar);
+
+    expect(anularPagoMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("T F.5 — la anulación pide el pago y el motivo, y refresca SOLO su tienda", () => {
+  it("manda el `pagoId` de esa fila y el motivo, sin ningún monto (R70/R76)", async () => {
+    listarPagosMock.mockResolvedValue({ status: "ok", pagos: [COMPROBANTE] });
+    renderTabla([NORTE]);
+    const region = await desplegar("Tienda Norte");
+    await within(region).findByRole("table", { name: "Pagos registrados de Tienda Norte" });
+
+    const dialogo = await abrirAnulacion(region);
+    confirmarAnulacion(dialogo, "Se tecleó el monto de otra tienda");
+
+    await waitFor(() => expect(anularPagoMock).toHaveBeenCalledTimes(1));
+    expect(anularPagoMock).toHaveBeenCalledWith({
+      pagoId: COMPROBANTE.id,
+      motivo: "Se tecleó el monto de otra tienda",
+    });
+  });
+
+  it("R33: con dos desgloses abiertos, anular en uno NO vuelve a consultar el otro", async () => {
+    // El mismo criterio de T D.3 y por el mismo motivo: un `mutate()` sin argumentos pasaría
+    // un test de una sola tienda y aquí cae.
+    listarPagosMock.mockResolvedValue({ status: "ok", pagos: [COMPROBANTE] });
+    renderTabla([NORTE, ESTE]);
+    const regionNorte = await desplegar("Tienda Norte");
+    await desplegar("Tienda Este");
+    await waitFor(() => expect(lecturasDe("t1")).toBe(1));
+    await waitFor(() => expect(lecturasDe("t2")).toBe(1));
+    const pagosEsteAntes = listarPagosMock.mock.calls.filter(
+      ([i]) => i.tiendaId === "t2",
+    ).length;
+
+    const dialogo = await abrirAnulacion(regionNorte);
+    confirmarAnulacion(dialogo);
+
+    // Las DOS claves de Tienda Norte se releen: el desglose (el saldo cambió) y su lista.
+    await waitFor(() => expect(lecturasDe("t1")).toBe(2));
+    await waitFor(() =>
+      expect(listarPagosMock.mock.calls.filter(([i]) => i.tiendaId === "t1").length).toBe(2),
+    );
+    // Y ninguna de la otra tienda.
+    expect(lecturasDe("t2")).toBe(1);
+    expect(listarPagosMock.mock.calls.filter(([i]) => i.tiendaId === "t2").length).toBe(
+      pagosEsteAntes,
+    );
+    // Tampoco se recarga la tabla de saldos.
+    expect(listarSaldosPaginaMock.mock.calls.length).toBe(1);
+  });
+
+  it("R74: tras anular, el comprobante sigue entero y marcado en la lista", async () => {
+    listarPagosMock.mockResolvedValue({ status: "ok", pagos: [COMPROBANTE] });
+    renderTabla([NORTE]);
+    const region = await desplegar("Tienda Norte");
+    const tablaPagos = await within(region).findByRole("table", {
+      name: "Pagos registrados de Tienda Norte",
+    });
+
+    listarPagosMock.mockResolvedValue({ status: "ok", pagos: [COMPROBANTE_ANULADO] });
+    const dialogo = await abrirAnulacion(region);
+    confirmarAnulacion(dialogo);
+
+    await within(tablaPagos).findByText("Anulado");
+    const fila = within(tablaPagos).getByText("2026-07-30").closest("tr") as HTMLElement;
+    // Todos sus datos siguen ahí…
+    expect(within(fila).getByText("₡4000.00")).toBeInTheDocument();
+    expect(within(fila).getByText("Ana Maestra")).toBeInTheDocument();
+    // …y encima, quién, cuándo y por qué.
+    expect(
+      within(fila).getByText("Anulado por Ana Maestra el 2026-08-05"),
+    ).toBeInTheDocument();
+    expect(
+      within(fila).getByText("Motivo: Se tecleó el monto de otra tienda"),
+    ).toBeInTheDocument();
+    // Y ya no se ofrece anularlo otra vez (R82).
+    expect(within(fila).queryByRole("button", { name: /anular/i })).not.toBeInTheDocument();
+  });
+
+  it("R71/R14: el saldo que devuelve el servidor se pinta TAL CUAL, aunque sea NEGATIVO", async () => {
+    // Una tienda con saldo en contra vuelve a un saldo en contra al anular su pago. El
+    // servidor devuelve `-15000.00` y eso es lo correcto: no se recorta a cero, no se le
+    // quita el signo y no se recalcula nada en el navegador.
+    listarPagosMock.mockResolvedValue({ status: "ok", pagos: [COMPROBANTE] });
+    anularPagoMock.mockResolvedValue({
+      status: "ok",
+      pago: COMPROBANTE_ANULADO,
+      restante: "-15000.00",
+    });
+    renderTabla([SUR]);
+    const region = await desplegar("Tienda Sur");
+    await within(region).findByRole("table", { name: "Pagos registrados de Tienda Sur" });
+
+    const dialogo = await abrirAnulacion(region);
+    confirmarAnulacion(dialogo);
+
+    expect(
+      (
+        await screen.findAllByText(
+          "Pago anulado. El saldo de la tienda quedó en ₡-15000.00.",
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+});
+
+// =========================================================================
+// T F.6 — la limitación N1, declarada en pantalla
+// =========================================================================
+
+describe("N1 — el desglose dice que los importes brutos incluyen lo anulado", () => {
+  it("el aviso está junto a la cabecera, nombra las cifras altas y señala el saldo", async () => {
+    renderTabla([NORTE]);
+    const region = await desplegar("Tienda Norte");
+
+    const aviso = within(region).getByRole("note");
+    // Las dos cifras que quedan infladas, con los MISMOS rótulos que pinta la cabecera…
+    expect(aviso).toHaveTextContent("«Pagado a la tienda»");
+    expect(aviso).toHaveTextContent("«A favor de la tienda»");
+    expect(aviso).toHaveTextContent("los pagos que se anularon");
+    // …y cuál es la que hay que mirar.
+    expect(aviso).toHaveTextContent("«Saldo a favor» ya tiene todo eso descontado");
+  });
+
+  it("habla claro: sin siglas y sin vocabulario contable interno", () => {
+    // Regla de estilo del proyecto: la pantalla usa el idioma del maestro, no el nuestro.
+    const codigo = codigoSinComentarios(
+      "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
+    );
+    for (const jerga of [/contraasiento/i, /neteo/i, /netear/i, /\bSLA\b/, /débito/i]) {
+      expect(codigo, `el texto usa jerga: ${jerga}`).not.toMatch(jerga);
+    }
   });
 });
 

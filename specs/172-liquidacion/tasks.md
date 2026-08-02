@@ -517,7 +517,16 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** sin sesión → `unauthenticated` antes del servicio; motivo en blanco →
   `validation_error` por campo.
 
-### [ ] T F.5 — Frontend de la anulación
+### [x] T F.5 — Frontend de la anulación
+- **HECHA el 2026-08-02.** `components/shared/liquidacion/AnularPagoDialog.tsx` (molde del
+  sub-modal de rechazo, motivo obligatorio por **dos** barreras) + el control dentro de
+  `PagosRegistradosTabla`, **opt-in por `puedeAnular` (default `false`, falla cerrado) y solo en
+  pagos vigentes** (R82). Cableado en las **dos** pantallas: `/wallet/tiendas` (refresco dirigido
+  a las dos claves de ESA tienda, el mismo mecanismo de T D.3) y `/cierres-admin` (la lista del
+  cierre + relectura del pendiente en el servidor). El `restante` se pinta **tal cual, también
+  negativo** (`₡-15000.00`). **Cuatro pruebas por mutación** ejecutadas (refresco global,
+  permiso ignorado, control en un pago anulado, y las dos barreras del motivo por separado);
+  salidas en `progress/impl_172-liquidacion.md`.
 - `AnularPagoDialog.tsx` (motivo obligatorio, molde del sub-modal de rechazo de cierre) + el
   control dentro de `PagosRegistradosTabla`, visible solo para quien puede anular y solo en pagos
   vigentes. Tras anular, el mismo refresco dirigido de T D.3.
@@ -528,7 +537,12 @@ queda el registro de cierre y lo que cada una desencadenó.
   sigue mostrando **todos** sus datos más quién, cuándo y por qué se anuló; un rol sin permiso no
   ve el control **y** la acción le responde `forbidden`.
 
-### [ ] T F.6 [P] — Declarar la limitación de los importes brutos (N1)
+### [x] T F.6 [P] — Declarar la limitación de los importes brutos (N1)
+- **HECHA el 2026-08-02. N1 se cierra por su default («no se netea; se declara en pantalla»).**
+  El aviso vive junto a la cabecera del desglose de la tienda —entra por el hueco `acciones`,
+  que se renderiza justo debajo de los cuatro importes, así que `DesgloseMovimientosTienda`
+  sigue sin tocarse (R34)—, con `role="note"` y compuesto con los MISMOS rótulos que pinta la
+  cabecera. Texto literal y constancia del default en `progress/impl_172-liquidacion.md`.
 - Texto en pantalla (junto a la cabecera del desglose) que explique que los importes brutos
   incluyen pagos anulados y su reverso, y que **el saldo es el número correcto**.
 - **Depende de:** T F.5 · **Cubre:** — (cierra N1 con su default)

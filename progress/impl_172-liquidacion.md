@@ -1711,3 +1711,241 @@ que R84 existe para impedir.
 5. **T F.5 y T F.6 siguen abiertas** (frontend), y con ellas el default de N1. **Preview sigue
    sin verificar** (hueco de T A.0), pendiente antes de mergear el PR.
 
+
+---
+
+## TANDA F (frontend) — T F.5 y T F.6 · **COMPLETA** (2026-08-02) · TANDA F COMPLETA
+
+> El frontend de la anulación. El backend (T F.1–T F.4) estaba entero y probado y **no se tocó
+> ni una línea**: esta entrega solo lo enchufa a las dos pantallas y cierra N1 con su default.
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `components/shared/liquidacion/AnularPagoDialog.tsx` | El diálogo de anulación, compartido por las dos pantallas. Molde: el sub-modal de rechazo de cierre (38/R11) |
+| `tests/components/AnularPagoDialog.test.tsx` | **18 casos** |
+
+**Modificados**
+
+| Archivo | Qué |
+| --- | --- |
+| `components/shared/liquidacion/PagosRegistradosTabla.tsx` | Columna «Acciones» **opt-in** + el diálogo montado por fila |
+| `components/shared/liquidacion/liquidacion-labels.ts` | `ANULAR_PAGO_TEXTO` / `_ERROR` / `_RESPUESTA`, el nombre accesible del control y la columna |
+| `app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx` | Cableado de la anulación, refresco dirigido compartido con el pago, y **el aviso de N1** (T F.6) |
+| `app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx` | Pasa `puedeAnular` (una línea) |
+| `app/(app)/cierres-admin/_components/PagoMensajeroSeccion.tsx` | Cableado de la anulación + relectura del pendiente |
+| `app/(app)/cierres-admin/_components/pago-mensajero-labels.ts` | Los dos textos de la respuesta |
+| `app/(app)/cierres-admin/_components/CierresAdminModule.tsx` | Pasa `puedeAnular` (una línea) |
+| `tests/components/PagosRegistradosTabla.test.tsx` | 20 → **29 casos** |
+| `tests/integration/wallet-tiendas-pago.test.tsx` | 23 → **32 casos** |
+| `tests/components/CierresAdminPagoMensajero.test.tsx` | **una línea**: `anularPagoAction: vi.fn()` en el mock del módulo de acciones |
+| `specs/172-liquidacion/tasks.md` | T F.5 y T F.6 marcadas `[x]` |
+
+**Tests editados: dos, los dos declarados.** (1) En `PagosRegistradosTabla.test.tsx`, el caso
+«esta tanda MUESTRA la anulación, pero no ofrece anular (eso es la Tanda F)» — su premisa deja
+de ser cierta con esta task, que es el único motivo por el que se toca. Se reescribió para medir
+lo que ahora vale: **sin permiso** no hay control, y el anulado sigue marcado. **Ninguna otra
+aserción de ese archivo se tocó.** (2) En `CierresAdminPagoMensajero.test.tsx`, añadir el export
+que faltaba en el mock: `PagoMensajeroSeccion` importa ahora `anularPagoAction` y, sin
+declararlo, Vitest revienta al importar el módulo doblado. **Cero aserciones tocadas ahí.**
+
+### T F.6 — el aviso de N1. **N1 QUEDA CERRADA POR SU DEFAULT.**
+
+`requirements.md § N1` propone dos salidas —netear los brutos (dos valores de enum nuevos, con
+la cascada de `down.sql` de este repo, o reescribir la derivación de la 171) o **no netear y
+declarar la limitación en pantalla**— y deja la segunda como default. **Se aplica el default:
+no se netea nada.** Ni `CUBETA_POR_CATEGORIA` ni el enum se tocan; lo que se añade es el aviso.
+
+**Texto literal, tal y como se renderiza:**
+
+> «Pagado a la tienda» sigue contando los pagos que se anularon, y «A favor de la tienda» suma
+> la devolución de cada uno, así que esos dos importes quedan más altos de lo que se movió de
+> verdad. «Saldo a favor» ya tiene todo eso descontado: ese es el número correcto.
+
+Cuatro decisiones sobre ese párrafo:
+
+1. **Se compone con los rótulos REALES de la cabecera** (`DESGLOSE_TIENDA_LABEL.pagado`,
+   `.aFavor`, `.saldo`), no con copias escritas a mano: el día que alguien renombre un importe,
+   el aviso lo sigue en vez de quedarse hablando de una cifra que ya no se llama así.
+2. **Va donde se leen las cifras que afecta**: entra por el hueco `acciones`, que
+   `DesgloseMovimientosTienda` renderiza **justo debajo de los cuatro importes**. Así el aviso
+   queda junto a la cabecera **sin editar ese archivo** (R34 sigue en pie por no tocarlo).
+3. **`role="note"`**, que es lo que un lector de pantalla anuncia como aclaración del contenido
+   —y lo que permite localizarlo en el test sin depender de su texto exacto.
+4. **Sin jerga.** Hay un test que barre el archivo y rechaza «contraasiento», «neteo»,
+   «netear», «SLA» y «débito»: ese es vocabulario nuestro, no del maestro.
+
+Lo que el aviso NO dice, a propósito: no menciona la categoría del movimiento ni el nombre de
+la tabla. Quien lee esa pantalla decide cuánto pagar; lo único que necesita saber es que dos
+cifras están infladas y cuál es la que manda.
+
+### Mapa `R<n> → test` de estas dos tasks
+
+| R | Test | Qué afirma |
+| --- | --- | --- |
+| **R4** | `wallet-tiendas-pago.test.tsx` › «sin permiso no hay control de anular (ni lista donde ponerlo)» | sin `puedeRegistrarPago` no se monta el bloque: no hay botón **y** no se pide la lista de comprobantes |
+| **R4** | `PagosRegistradosTabla.test.tsx` › «FALLA CERRADO: sin declarar el permiso no hay ni columna ni botón» (**mutación 2**) | el default de `puedeAnular` es `false`; un montaje despistado no ofrece anular a nadie |
+| **R4** | idem › «con permiso pero sin acción que llamar tampoco se ofrece el control» | las dos condiciones son independientes: permiso **y** acción |
+| **R81** (2.ª mitad) | `wallet-tiendas-pago.test.tsx` › «la otra mitad: la acción responde `forbidden` y la pantalla lo dice» · `PagosRegistradosTabla.test.tsx` › «un rechazo del servidor deja el diálogo abierto y lo dice» | con el control A LA VISTA, el servidor niega y el aviso se pinta. Ocultar el botón no es control de acceso |
+| **R81** (1.ª mitad) | `wallet-tiendas-pago.test.tsx` › «las dos mitades leen el MISMO predicado que el servicio (`esAccesoTotal`)» (de T D.3, sin editar) | quien no ve el control es exactamente quien recibiría la negativa: pagar y anular los deciden los mismos roles |
+| **R72** | `AnularPagoDialog.test.tsx` › «nace con el confirmar deshabilitado…» · «un motivo de SOLO ESPACIOS tampoco lo habilita» · «**SEGUNDA BARRERA**: pulsar con el motivo en blanco no manda ninguna petición» (**mutaciones 4b y 4c**) | las **dos** barreras, medidas por separado; y `wallet-tiendas-pago.test.tsx` › «sin motivo no se envía nada» en la pantalla |
+| R72 | `AnularPagoDialog.test.tsx` › «el campo se anuncia como obligatorio y su error se asocia al control» | `aria-required`, `aria-invalid` y el `aria-describedby` que apunta al `role="alert"` |
+| **R74** | `PagosRegistradosTabla.test.tsx` › «con la misma lista y el mismo permiso, solo el vigente tiene botón» · `wallet-tiendas-pago.test.tsx` › «tras anular, el comprobante sigue entero y marcado en la lista» | el pago anulado conserva monto, método, quién y cuándo, **y además** el actor, el día y el motivo de la anulación. Anular no borra |
+| **R82** | idem (**mutación 3**) | un pago ya anulado **no ofrece el control**: no se anula una anulación |
+| R70/R76 | `AnularPagoDialog.test.tsx` › «la anulación se pide con UN solo dato: el motivo» · «no ofrece ningún campo de monto» · `wallet-tiendas-pago.test.tsx` › «manda el `pagoId` de esa fila y el motivo, sin ningún monto» | el payload tiene **dos** claves y ninguna es un importe; no hay entrada para una anulación parcial |
+| **R33** | `wallet-tiendas-pago.test.tsx` › «R33: con dos desgloses abiertos, anular en uno NO vuelve a consultar el otro» (**mutación 1**) | el mismo refresco dirigido de T D.3: las **dos** claves de ESA tienda, ninguna de la otra, y la tabla de saldos sin recargar |
+| **R71/R14** | idem › «el saldo que devuelve el servidor se pinta TAL CUAL, aunque sea NEGATIVO» | `restante: "-15000.00"` sale como `₡-15000.00`: no se recorta a cero, no se le quita el signo y no se recalcula nada |
+| R75 | `AnularPagoDialog.test.tsx` › «`ya_anulado`: también cierra — el pago está como se quería» | el segundo intento deja el pago en el estado que se pedía y se avisa sin tratarlo como error |
+| R14 | `AnularPagoDialog.test.tsx` › bloque money-safe (+ el monto máximo de la columna) y los barridos ya existentes sobre la tabla, el cableado de la tienda y los 6 archivos de la Tanda E | cero `Number(`, `parseFloat(`, `parseInt(` y `.toFixed(` en código |
+| R56 | `PagosRegistradosTabla.test.tsx` › «el `id` del pago viaja en el DTO pero NO se pinta» (de T D.2, sin editar) | el `id` entra en el payload de la anulación y sigue sin aparecer en pantalla ni en el archivo |
+
+### Verificación ejecutada — **el gate completo es del LEADER**
+
+Por indicación explícita del leader **no se corrió la suite completa**.
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: verde)
+
+$ pnpm lint
+✖ 27 problems (0 errors, 27 warnings)     # los 27 preexistentes del baseline, ninguno mío
+$ pnpm exec eslint <los 8 archivos de código + los 4 de test>
+(sin salida: limpio)
+
+$ pnpm exec vitest run  tests/components/AnularPagoDialog.test.tsx
+                        tests/components/PagosRegistradosTabla.test.tsx
+                        tests/components/RegistrarPagoDialog.test.tsx
+                        tests/integration/wallet-tiendas-pago.test.tsx
+                        tests/components/CierresAdminPagoMensajero.test.tsx
+                        tests/unit/descarga/pagos-registrados-descarga-columnas.test.ts
+ Test Files  6 passed (6)
+      Tests  175 passed (175)
+
+$ pnpm exec vitest run  tests/integration/wallet-tiendas-desglose.test.tsx      # la 171
+                        tests/integration/wallet-tiendas-page.test.tsx          # la 171
+                        tests/components/CierresAdminModule.test.tsx            # la 38
+                        tests/unit/descarga                                     # las guardias
+ Test Files  15 passed (15)
+      Tests  161 passed (161)
+```
+
+**Delta: +1 archivo, +36 tests** (18 del diálogo + 9 en la tabla + 9 en la pantalla de tiendas).
+**R34 sigue en pie:** los dos archivos de la 171 pasan **sin editarlos**, aunque esta task toca
+`SaldosTiendasTable`; y las tres guardias de `tests/unit/descarga` (censo, contadores y columnas
+sensibles) siguen verdes **sin cambios**, porque la columna «Acciones» es de pantalla y **no**
+entra en la descarga.
+
+### LAS PRUEBAS POR MUTACIÓN — cuatro, con su salida real
+
+Copia previa de los tres archivos de código en el scratchpad; al final se restauraron y el
+`diff` quedó **idéntico** en los tres.
+
+**Mutación 1 — REFRESCO GLOBAL en vez de dirigido** (`await mutate(() => true)`), la que la
+Tanda D ya había cazado y que la anulación podía reintroducir por su cuenta:
+
+```
+ × con dos desgloses abiertos, pagar en uno NO vuelve a consultar el otro
+ × tampoco vuelve a leer la lista de comprobantes de la otra tienda
+ × no se recarga la página: la tabla de saldos no se vuelve a pedir por el pago
+ × R33: con dos desgloses abiertos, anular en uno NO vuelve a consultar el otro
+      Tests  4 failed | 28 passed (32)
+```
+
+El cuarto es el nuevo: pagar y anular comparten el mismo `refrescarEstaTienda`, y el test de la
+anulación cae por sí solo.
+
+**Mutación 2 — LA TABLA IGNORA EL PERMISO** (`const anular = onAnular`, sin mirar `puedeAnular`):
+
+```
+ × FALLA CERRADO: sin declarar el permiso no hay ni columna ni botón
+      Tests  1 failed | 60 passed (61)
+```
+
+Cae uno, y es el que toca: en `/wallet/tiendas` el bloque **ni se monta** sin permiso, así que
+esa pantalla no puede medir esta mitad — la mide el test del componente, que es donde vive el
+default.
+
+**Mutación 3 — SE OFRECE ANULAR UN PAGO YA ANULADO** (`false ? null : (<Button …>)`), que es
+literalmente el agujero que R82 existe para cerrar:
+
+```
+ × con la misma lista y el mismo permiso, solo el vigente tiene botón
+ × R74: tras anular, el comprobante sigue entero y marcado en la lista
+      Tests  2 failed | 59 passed (61)
+```
+
+**Mutación 4 — el motivo, en DOS pasos, porque son DOS barreras.**
+
+*4b — se quita SOLO el `confirmDisabled`* (el guard de `confirmar()` sigue vivo):
+
+```
+ × nace con el confirmar deshabilitado y el motivo en blanco
+ × un motivo de SOLO ESPACIOS tampoco lo habilita: no es un motivo
+      Tests  2 failed | 16 passed (18)
+```
+
+*4c — se quitan LAS DOS*:
+
+```
+ × nace con el confirmar deshabilitado y el motivo en blanco
+ × un motivo de SOLO ESPACIOS tampoco lo habilita: no es un motivo
+ × SEGUNDA BARRERA: pulsar con el motivo en blanco no manda ninguna petición
+ × sin motivo no se envía nada (R72)                    <- el de la PANTALLA
+      Tests  4 failed | 46 passed (50)
+```
+
+La diferencia entre 4b y 4c es el experimento: con la primera barrera fuera **no sale ninguna
+petición igualmente**, y solo al quitar también el guard el motivo en blanco llega al servidor.
+El test de la segunda barrera se separó del de la primera justo para poder medir esto; juntos
+en un mismo `it` habrían caído los dos por el mismo motivo y el experimento no habría dicho
+nada.
+
+### Hallazgos y desviaciones
+
+1. **La anulación se cablea TAMBIÉN en `/cierres-admin`, no solo en la tienda.** T F.5 nombra
+   dos archivos de test, los dos de la tienda, pero el control vive en `PagosRegistradosTabla`,
+   que está montada en las dos pantallas, y R74/R81 no distinguen beneficiario: un pago a un
+   mensajero se puede teclear mal igual que uno a una tienda. Ahí el refresco dirigido son la
+   lista de comprobantes de ESE cierre más la **relectura del detalle en el servidor** (el
+   pendiente sube al anular, R71, y no se recalcula en el cliente).
+
+2. **`puedeAnular` se pasa aunque el montaje ya esté gateado, y es deliberado.** En las dos
+   pantallas el bloque solo se monta con permiso, así que la prop parece redundante. No lo es:
+   el default de la tabla es `false`, y deducir el permiso de «alguien me montó» es exactamente
+   la clase de suposición que deja de valer el día que otro consumidor la monte sin pensar. El
+   permiso viaja como dato; la mutación 2 mide que se lee.
+
+3. **El aviso de N1 solo lo ve quien puede pagar.** Entra por el hueco `acciones`, que
+   `SaldosTiendasTable` solo rellena con permiso. En esa pantalla es indistinto —`page.tsx`
+   hace `notFound()` para quien no tiene acceso total, así que no existe un visitante sin
+   permiso—, pero queda escrito: si algún día la pantalla se abriera a otro rol, el aviso se
+   quedaría fuera y habría que sacarlo del bloque de acciones (o pedirle a la 171 un hueco
+   propio en la cabecera, que hoy no tiene y que no se le inventa aquí).
+
+4. **La misma limitación existe en el libro del MENSAJERO y no se declara.** El par
+   `liquidacion` + `ajuste_devengo` infla «total devengado» y «total pagado» de `/mis-pagos` con
+   la misma mecánica. `design.md §6.4` y N1 hablan **solo** de la cabecera del desglose de la
+   tienda, y T F.6 pide **ese** texto: se hace lo que dice el spec y se anota el vecino en vez
+   de ampliarlo por cuenta propia. Decisión de una línea si se quiere cerrar en la Tanda G.
+
+5. **El diálogo se MONTA por pago y se desmonta al cerrarse**, en vez de vivir siempre con un
+   `pago` opcional. Es lo que garantiza que el motivo empiece en blanco en cada anulación: hay
+   un test que abre uno, escribe medio motivo, cancela, abre el de OTRO pago y comprueba que el
+   campo está vacío y que el resumen habla del segundo. Arrastrar el texto habría guardado, en
+   el peor caso, una explicación que nadie escribió para ese pago.
+
+6. **`ya_anulado` cierra el diálogo, no lo trata como error.** El estado final es el que se
+   pedía (el pago está anulado) y se avisa con un toast informativo. La alternativa —dejar el
+   diálogo abierto con un mensaje rojo— invitaría a reintentar algo que ya está hecho.
+
+7. **La columna «Acciones» no entra en la descarga.** Un archivo no lleva botones: las columnas
+   descargables siguen siendo las ocho de T D.2, y por eso las tres guardias de
+   `tests/unit/descarga` pasan sin tocarse. El censo de tablas (R57) tampoco cambia: sigue
+   siendo **una** `<DataTable>` en `components/shared/`, montada en dos sitios — eso lo cuenta
+   T H.1.
+
+8. **Preview sigue sin verificar** (hueco de T A.0), pendiente antes de mergear el PR.

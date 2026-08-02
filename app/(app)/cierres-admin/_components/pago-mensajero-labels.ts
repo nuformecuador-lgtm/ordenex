@@ -48,4 +48,12 @@ export const PAGO_MENSAJERO_TEXTO = {
     "El cierre quedó aprobado. El pago no se registró: podés registrarlo después desde el detalle del cierre.",
   /** Mismo caso, pero pagando desde el detalle de un cierre ya aprobado (R19). */
   pagoNoRegistrado: "No se registró el pago. Revisá el aviso del formulario e intentá de nuevo.",
+  /**
+   * T F.5 — confirmación de la anulación con el pendiente que devolvió el SERVIDOR (R71: es
+   * exactamente el que había antes de ese pago). Se pinta tal cual, sin recalcular nada.
+   */
+  anulado: (pendiente: string) =>
+    `Pago anulado. ${PENDIENTE_LIQUIDAR_COL}: ${money(pendiente)}.`,
+  /** R75: el segundo intento no anula nada nuevo; se conserva la anulación original. */
+  yaAnulado: "Este pago ya estaba anulado.",
 } as const;

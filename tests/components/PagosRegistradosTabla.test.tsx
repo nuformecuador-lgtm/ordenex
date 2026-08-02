@@ -191,11 +191,179 @@ describe("R74 — un pago anulado se ve COMPLETO y marcado", () => {
     expect(within(filaDe("2026-07-28")).getByText("Anulado")).toBeInTheDocument();
   });
 
-  it("esta tanda MUESTRA la anulación, pero no ofrece anular (eso es la Tanda F)", () => {
+  it("sin permiso, la tabla MUESTRA la anulación y no ofrece anular (R4/R81)", () => {
+    // T F.5 actualizó este caso: la Tanda D fijaba que el control «todavía» no existía; ahora
+    // existe, pero **solo con permiso**. Lo que se mide sigue siendo lo mismo por el lado que
+    // importa: el default es no ofrecerlo. Ver también el bloque de T F.5, más abajo.
     montar([VIGENTE, ANULADO]);
     expect(
       within(tabla()).queryByRole("button", { name: /anular/i }),
     ).not.toBeInTheDocument();
+    expect(within(filaDe("2026-07-28")).getByText("Anulado")).toBeInTheDocument();
+  });
+});
+
+// =========================================================================
+// T F.5 — el control de ANULAR
+// =========================================================================
+
+describe("R4/R81 — el control de anular solo existe para quien puede anular", () => {
+  it("con `puedeAnular` aparece la columna y su botón en el pago vigente", () => {
+    montar([VIGENTE], { puedeAnular: true, onAnular: vi.fn() });
+
+    expect(
+      within(tabla())
+        .getAllByRole("columnheader")
+        .map((th) => th.textContent),
+    ).toEqual([
+      "Fecha del pago",
+      "Monto",
+      "Método",
+      "Referencia",
+      "Nota",
+      "Registró",
+      "Registrado el",
+      "Estado",
+      "Acciones",
+    ]);
+    expect(
+      within(filaDe("2026-07-30")).getByRole("button", { name: /^Anular el pago/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("FALLA CERRADO: sin declarar el permiso no hay ni columna ni botón", () => {
+    // La prop es opcional a propósito y su default es `false`. Un montaje que se olvide de
+    // decidir el permiso no ofrece anular a nadie, en vez de ofrecérselo a todos.
+    montar([VIGENTE], { onAnular: vi.fn() });
+    expect(
+      within(tabla()).queryByRole("columnheader", { name: "Acciones" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(tabla()).queryByRole("button", { name: /anular/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("con permiso pero sin acción que llamar tampoco se ofrece el control", () => {
+    montar([VIGENTE], { puedeAnular: true });
+    expect(
+      within(tabla()).queryByRole("button", { name: /anular/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("cada botón dice de QUÉ pago es: dos filas, dos nombres accesibles", () => {
+    montar([VIGENTE, { ...VIGENTE, id: "otro", monto: "10.00", fechaPago: "2026-07-29" }], {
+      puedeAnular: true,
+      onAnular: vi.fn(),
+    });
+    expect(
+      screen.getByRole("button", { name: "Anular el pago de ₡4000.10 del 2026-07-30" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Anular el pago de ₡10.00 del 2026-07-29" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("R82 — un pago ya anulado NO ofrece el control", () => {
+  it("con la misma lista y el mismo permiso, solo el vigente tiene botón", () => {
+    montar([VIGENTE, ANULADO], { puedeAnular: true, onAnular: vi.fn() });
+
+    expect(
+      within(filaDe("2026-07-30")).getByRole("button", { name: /^Anular el pago/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(filaDe("2026-07-28")).queryByRole("button", { name: /anular/i }),
+    ).not.toBeInTheDocument();
+    // Las dos mitades: el anulado sigue enseñando su marca y su porqué (R74).
+    expect(within(filaDe("2026-07-28")).getByText("Anulado")).toBeInTheDocument();
+    expect(
+      within(filaDe("2026-07-28")).getByText("Motivo: Se tecleó el monto de otra tienda"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("T F.5 — el diálogo se abre sobre SU pago y avisa a quien montó la tabla", () => {
+  const OK = {
+    status: "ok" as const,
+    pago: { ...VIGENTE, anulacion: ANULADO.anulacion },
+    restante: "9000.00",
+  };
+
+  async function anularLaPrimeraFila(anular: ReturnType<typeof vi.fn>, anulado?: () => void) {
+    const user = userEvent.setup();
+    montar([VIGENTE, ANULADO], {
+      puedeAnular: true,
+      onAnular: anular,
+      ...(anulado ? { onAnulado: anulado } : {}),
+    });
+
+    await user.click(
+      within(filaDe("2026-07-30")).getByRole("button", { name: /^Anular el pago/ }),
+    );
+    const dialogo = await screen.findByRole("dialog");
+    await user.type(within(dialogo).getByLabelText(/^Motivo de la anulación/), "Me equivoqué");
+    await user.click(within(dialogo).getByRole("button", { name: "Anular pago" }));
+    return dialogo;
+  }
+
+  it("manda el pago de ESA fila y el motivo, y nada más", async () => {
+    const anular = vi.fn().mockResolvedValue(OK);
+    await anularLaPrimeraFila(anular);
+
+    await waitFor(() => expect(anular).toHaveBeenCalledTimes(1));
+    expect(anular).toHaveBeenCalledWith(VIGENTE, "Me equivoqué");
+  });
+
+  it("tras anular, el diálogo se cierra y se avisa con el resultado del servidor", async () => {
+    const anular = vi.fn().mockResolvedValue(OK);
+    const anulado = vi.fn();
+    await anularLaPrimeraFila(anular, anulado);
+
+    await waitFor(() => expect(anulado).toHaveBeenCalledWith(OK));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("un rechazo del servidor deja el diálogo abierto y lo dice (la otra mitad de R81)", async () => {
+    // Ocultar el botón no es control de acceso: aquí el control está a la vista y el servidor
+    // sigue negando. Las dos mitades tienen que existir.
+    const anular = vi.fn().mockResolvedValue({ status: "forbidden" });
+    const anulado = vi.fn();
+    const dialogo = await anularLaPrimeraFila(anular, anulado);
+
+    expect(
+      await within(dialogo).findByText("No tienes permiso para anular pagos."),
+    ).toBeInTheDocument();
+    expect(anulado).not.toHaveBeenCalled();
+  });
+
+  it("el diálogo de una fila no arrastra el motivo escrito en otra", async () => {
+    const user = userEvent.setup();
+    const anular = vi.fn().mockResolvedValue(OK);
+    montar([VIGENTE, { ...VIGENTE, id: "otro", monto: "10.00", fechaPago: "2026-07-29" }], {
+      puedeAnular: true,
+      onAnular: anular,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Anular el pago de ₡4000.10 del 2026-07-30" }),
+    );
+    const primero = await screen.findByRole("dialog");
+    await user.type(
+      within(primero).getByLabelText(/^Motivo de la anulación/),
+      "borrador a medias",
+    );
+    await user.click(within(primero).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await user.click(
+      screen.getByRole("button", { name: "Anular el pago de ₡10.00 del 2026-07-29" }),
+    );
+    const segundo = await screen.findByRole("dialog");
+    expect(
+      (within(segundo).getByLabelText(/^Motivo de la anulación/) as HTMLTextAreaElement).value,
+    ).toBe("");
+    // Y habla del otro pago, no del primero.
+    expect(within(segundo).getByText(/₡10\.00/)).toBeInTheDocument();
   });
 });
 

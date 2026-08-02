@@ -758,13 +758,15 @@ export function CierresAdminModule({
 
             {/* ---------- Feature 172 (T E.2, R19/R27/R28/R49): pago al mensajero ----------
                 El SEGUNDO camino del pago: un cierre aprobado se puede liquidar en cualquier
-                momento posterior desde su propio detalle. Tras registrar, el pendiente se
-                vuelve a LEER del servidor (`abrirDetalle`); no se descuenta en el cliente. */}
+                momento posterior desde su propio detalle. Tras registrar —o anular (T F.5)—
+                el pendiente se vuelve a LEER del servidor (`abrirDetalle`); no se recalcula
+                en el cliente. `puedeAnular` sale del MISMO permiso que pagar (R81). */}
             {ofrecerPagoEnDetalle && cierreAbierto ? (
               <PagoMensajeroSeccion
                 cierreId={cierreAbierto.cierreId}
                 mensajeroNombre={cierreAbierto.mensajeroNombre}
                 pendiente={cierreAbierto.pendientePagoMensajero}
+                puedeAnular={puedeRegistrarPago}
                 onRegistrado={async () => {
                   await abrirDetalle(cierreAbierto.cierreId);
                   router.refresh();
