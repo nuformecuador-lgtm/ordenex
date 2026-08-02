@@ -39,7 +39,10 @@ export type RecibirLoteActionInput = z.infer<typeof recibirLoteSchema>;
  * **La lista blanca es la defensa de R44, y por eso esta escrita en tres capas:**
  *  - `.strict()` — un `zonaId`/`usuarioId` colado muere aqui con `validation_error` en vez de
  *    viajar hasta un servicio que hoy lo ignora y mañana podria no ignorarlo. El alcance sale
- *    SIEMPRE del actor de la sesion, nunca de la peticion.
+ *    SIEMPRE del actor de la sesion, nunca de la peticion. MEDIDO: `.extend()` HEREDA el
+ *    `.strict()` de `paginaInputSchema`, asi que esta llamada es redundante hoy; se deja
+ *    escrita porque la barrera es de este listado y no debe depender de que el schema base
+ *    nunca se afloje.
  *  - `z.enum(ESTADOS_BODEGA_SATELITE)` — el filtro de estado solo admite los cinco estados de
  *    ESTA pantalla. Sin el, un `estados: ["entregada"]` seria una entrada valida cuyo unico
  *    freno estaria en el servicio.
