@@ -328,3 +328,123 @@ se comportaron como la bitacora describe.
 Lo que falta es el papel: el mapa que R44 exige por escrito y las casillas de tasks.md. Es
 barato de arreglar y no admite excepcion — el mapa es justo lo que impide que la 125 y la 126
 hereden como "medido" algo que no lo esta.
+
+---
+
+# SEGUNDA PASADA — cierre de B1 y B2 (commit 7f343984)
+
+> Acotada al diff b4df65fd..7f343984: `progress/impl_124.md` (+110), tasks.md, design.md
+> seccion 5, feature_list.json y esta acta. **Ni una linea de produccion ni de tests.**
+> Verificado con git diff --stat.
+> **Veredicto final: APROBADO CON MENORES.**
+
+## 9.1 B1 — la seccion 7 existe y dice la verdad
+
+No se acepto de palabra. Comprobado:
+
+- **La particion cuadra y es completa.** Extraida la tabla por script: **49 filas, R1 a R49,
+  ninguna repetida, ninguna ausente.** Clases: 35 A puras mas R47 marcada "A / B" (36 en A, como
+  declara la cabecera), 8 B, 4 C, 1 D.
+- **Muestra abierta test a test** —elegida por donde saldria mas barato colar un mapeo flojo:
+  filas con archivo:linea exacto y afirmacion fuerte—. Ninguna resulto falsa:
+
+| fila | lo que la seccion 7 afirma | lo que hay en el archivo |
+|---|---|---|
+| R25 | el GROUP BY crudo devuelve mensajero_id null con n = 1 | `analytics-daily-job.test.ts:207` — literal, con queryRaw crudo sobre la tabla |
+| R35 | compara fila a fila, updated_at incluido, antes y despues | `:170` — siembra D-1, D, D+1, agrega las dos vecinas, corre D y hace toEqual de las lecturas completas |
+| R9 | UTC, CR, Tokio y Kiritimati | `rollup-dia.test.ts:66` — los cuatro husos, con Set de tamano 1. La seccion 7 es **mas** precisa que el nombre del test |
+| R37 | el mensaje es exactamente "rollup analitica FECHA: fallo en la etapa gestiones" | `rollup-service.test.ts:882` — toBe de esa cadena exacta |
+| R38 | seis etapas parametrizadas mas la de escritura | `:844` — array de seis pares, mas el caso de escritura |
+| R21 | un not.toMatch sobre el fuente | `:998` — not.toMatch de AVG, ::float, ::numeric, porcentaje y promedio. Clase C correcta |
+
+- **Las tres filas senaladas por el coordinador, comprobadas una a una:**
+  - **R31 — la confesion es exacta.** `rollup-service.test.ts:1004` es una regex del ON CONFLICT,
+    y el grep de "solap|concurren|Promise.all" en las dos suites no devuelve **nada**: el
+    solapamiento concurrente no lo mide ningun caso. Clase **C** bien puesta.
+  - **R20 — la confesion se queda corta, y es el unico reparo real de esta pasada.**
+    `analytics-daily-job.test.ts:990` **si** mide: fuerza segCicloN = 0 con acum = 90, captura el
+    conname del error (analytics_daily_ciclo_coherente) y comprueba que no quedo fila. Pero
+    `rollup-service.test.ts:562` siembra **solo** un cubo de ordenesCreadas, sin un solo ciclo, de
+    modo que la asercion "segCicloN mayor que 0 o segCicloAcum igual a 0" es **vacuamente cierta**:
+    no discrimina, no es "mas debil" como dice la fila. La clase **A** sigue siendo correcta —el
+    CHECK real la sostiene—, pero la palabra deberia ser **vacuo**. Es M-9.
+  - **R47 — la marca "A / B" esta bien puesta.** El caso `:789` cierra el resumen con Object.keys
+    ordenado y `:804` comprueba filasRetiradas = 1 cuando un cubo desaparece: comportamiento
+    ejecutado. La mitad (b), constante unica, solo puede medirse escaneando el arbol. Es la unica
+    fila que straddlea dos clases, asi que la cabecera **no deberia decir "disjuntos"** (M-10).
+
+- **La seccion 7.2 no inventa lineas.** Las once referencias de la deuda de la 123 se cruzaron
+  contra el indice real de casos del archivo: 207, 542, 617, 602 + 980, 458, 227, 271, 145, 666,
+  170 y 319. **Las once existen y dicen lo que la tabla dice.** Coincide con la comprobacion
+  independiente de la seccion 3 de esta acta: **11 medidos, 1 texto**.
+
+## 9.2 B2 — las 46 tareas marcadas, y no en falso
+
+0 pendientes / 46 hechas. Lo que convierte el marcado en creible es que **tres** llevan su
+salvedad escrita al lado en vez de un tick liso: T2.7 (la desviacion 3.1), T5.1 (M-2 sigue vivo) y
+T8.4 (procedencia de la evidencia). Muestra comprobada contra el artefacto:
+
+- **T4.1 / T8.2** — analitica_rollup_diario es el **7.o valor** del enum job_tipo en la base
+  local, en ultimo lugar; round-trip documentado.
+- **T5.4** — rollup-guards.test.ts corre **21 casos**, los que la bitacora declara.
+- **T6.x** — las **29** de integracion, verdes contra Postgres.
+- **T8.3** — la medicion de volumen la reprodujo el reviewer (22 filas, ~200-900 ms).
+- **T8.4** — corrido por el reviewer en las dos pasadas.
+
+Un nit factual: la nota de T8.4 dice "106 carpetas en db/migrations/". Son **105** (104 del
+baseline mas la de esta feature). El hecho que importa —**ninguna sin down.sql**— es correcto,
+recontado. Es M-11.
+
+## 9.3 T8.4 — decision del reviewer: queda marcada
+
+El criterio de la propia tarea no es verde absoluto, sino "termina en verde, **o** su rojo esta
+nombrado y demostrado heredado de dev", en linea con design.md seccion 14 (delta 0 medido en la
+rama). Corri ./init.sh **yo mismo**: typecheck 0, lint 0 errores / 18 warnings, suite 732/8967, y
+el unico rojo determinista es WalletPropsDescarga.test.tsx, que **tambien cae en dev** y ya estaba
+en el baseline; el segundo rojo de mi corrida fue un flake que pasa aislado (39/39). El chequeo
+del paso 6 se reprodujo a mano: **ninguna migracion sin down.sql**.
+
+Dejarla sin marcar significaria que **ninguna feature puede cerrar mientras dev cargue un rojo
+ajeno**, que es exactamente el fallo que el criterio de delta 0 existe para evitar. Se marca, con
+dos condiciones que ya se cumplen: (1) la nota dice **explicitamente** que la implementacion no
+registro la corrida y que la evidencia es de terceros — eso es honestidad, no maquillaje; (2) el
+rojo esta nombrado y demostrado ajeno por medicion propia del reviewer, no citado.
+
+## 9.4 Las dos acciones del leader, verificadas
+
+- **design.md seccion 5 corregido.** La prescripcion pasa a ON CONFLICT con las seis columnas del
+  grano, con la desviacion explicada **en el spec** y no solo en la bitacora. Es la correccion
+  correcta y por el motivo correcto: la **125 reusa este agregador**. Confirmado contra el catalogo
+  local que analytics_daily_grano_key no tiene fila en pg_constraint y que la lista de seis
+  columnas resuelve a ese mismo indice unico.
+- **Propagacion de las dos contradicciones.** Las fichas **125**, **126** y **128** llevan ya el
+  bloque "AVISO DIRIGIDO DE LA 124"; la 128 no tenia status_note y ahora lo tiene. Las tres nombran
+  la reproducibilidad parcial; la 126 nombra ademas el embudo B2. feature_list.json sigue siendo
+  JSON valido (172 fichas) y tests/unit/guards/no-embalaje.test.ts, el unico test que lo lee, sigue
+  verde. **M-4 cerrado.**
+
+## 9.5 Re-verificacion de estado tras el commit
+
+Suites afectadas relanzadas: **15 archivos, 349 tests, todo verde**. analytics_daily sigue en
+**0 filas**. Arbol sin cambios sin commitear salvo esta acta.
+
+## 9.6 Menores vivos (deuda declarada, ninguno bloqueante)
+
+Siguen: **M-1** (cinco entradas inertes en el allowlist de frontera), **M-2** (el toEqual de los
+tres @@index de la 123 sigue caducando el archivo), **M-3** (guards de texto que no discriminan
+por sitio), **M-5** (la exclusion silenciosa se le esconde tambien a la reconciliacion), **M-6**
+(R31 sin caso de solapamiento), **M-7**, **M-8**. **M-4 cerrado.** Nuevos, los tres de esta
+pasada: **M-9** (R20: el caso en memoria es vacuo, no "mas debil"), **M-10** (la cabecera de la
+seccion 7 dice "disjuntos" cuando R47 straddlea A y B, y deja D = 1 cuando R44 ya esta cerrado por
+la propia seccion), **M-11** (105 carpetas de migracion, no 106).
+
+Los tres nuevos son de **redaccion de la bitacora**, no de codigo ni de cobertura. No justifican
+otra vuelta: se corrigen cuando se toque el archivo.
+
+## 9.7 Veredicto final
+
+**APROBADO CON MENORES.** B1 y B2 cerrados con artefactos que resisten la comprobacion: la
+seccion 7 no es un indice de complacencia —confiesa sus cuatro filas de clase C, la mitad no
+medida de R31 y la debilidad de R20— y las 46 tareas marcadas llevan salvedad donde la hay. La
+implementacion ya estaba probada por medicion en la primera pasada y **no se toco**. Los diez
+menores vivos son deuda declarada, escrita, y ninguno afecta al comportamiento del job.
