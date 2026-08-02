@@ -417,11 +417,11 @@ function textoDelResumen(r: ResumenBackfill): string[] {
 /* -------------------------------------------------------------------------- */
 
 async function main(): Promise<void> {
-  try {
-    process.loadEnvFile();
-  } catch {
-    // sin .env: se usan las variables ya presentes en process.env
-  }
+  // Sin `try/catch`: un `.env` que existe y no se puede leer tiene que ser RUIDOSO, y un
+  // `catch` vacio —aunque lleve un comentario dentro— es justo lo que el guardia de esta
+  // feature prohibe. Si no hay `.env`, se usan las variables ya presentes en `process.env`,
+  // que es como se corre esto contra produccion (D8).
+  if (fs.existsSync(".env")) process.loadEnvFile();
 
   const prisma = getPrismaClient();
   try {
