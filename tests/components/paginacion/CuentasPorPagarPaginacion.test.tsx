@@ -40,14 +40,14 @@ import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 const { paginadoMock, conjuntoMock, desgloseMock } = vi.hoisted(() => ({
   /** La página que la tabla pinta (T L.1): filtra y recorta como el servidor. */
   paginadoMock: vi.fn(),
-  /** El listado SIN recorte, de donde sale el archivo (R52). */
+  /** El CONJUNTO sin recorte, con la búsqueda ya aplicada, de donde sale el archivo (R52). */
   conjuntoMock: vi.fn(),
   /** El desglose por cierre de UN mensajero, que se pide al expandir su fila (R50). */
   desgloseMock: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
-  listarCuentasPorPagarAction: (...a: unknown[]) => conjuntoMock(...a),
+  listarCuentasPorPagarCompletoAction: (...a: unknown[]) => conjuntoMock(...a),
   listarCuentasPorPagarPaginadoAction: (...a: unknown[]) => paginadoMock(...a),
   listarPagosDeMensajeroAction: (...a: unknown[]) => desgloseMock(...a),
   listarPagosDeMensajeroCompletoAction: vi.fn(),
@@ -171,9 +171,17 @@ function servirPaginas() {
   });
 }
 
-/** Doble del listado SIN recorte: las 60, como las devuelve `listarCuentasPorPagar()`. */
+/**
+ * Doble del CONJUNTO sin recorte (T M.1, cierre de Q-L2): `listarCuentasPorPagarCompleto`
+ * devuelve las filas que casan la búsqueda —el filtro es del SERVIDOR, igual que en la página—
+ * y ya no las 60 para que el navegador descarte las que sobran. Se reusa `filtrarComoElServidor`
+ * a propósito: si el archivo y la tabla salieran de dos filtros distintos, aquí no se vería.
+ */
 function servirConjunto() {
-  conjuntoMock.mockResolvedValue({ status: "ok", mensajeros: CONJUNTO });
+  conjuntoMock.mockImplementation(async (input: { busqueda?: string } = {}) => {
+    const items = filtrarComoElServidor(input?.busqueda);
+    return { status: "ok", items, total: items.length };
+  });
 }
 
 /**

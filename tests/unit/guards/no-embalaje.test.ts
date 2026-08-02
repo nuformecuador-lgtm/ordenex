@@ -86,12 +86,12 @@ const WHITELIST_FILES = new Set([
   // prosa sobre la herramienta, no una reintroduccion del value. Estuvo rojo dias porque cada
   // feature que lo encontraba lo declaraba deuda ajena y seguia: nadie lo daba de alta.
   "specs/135-analitica-catalogo-kpis-rangos/tasks.md",
-  // Feature 122: MISMO caso que el de la 135, y con la misma ironia. `tasks.md:243` cuenta en
-  // la bitacora que `./init.sh` cayo por ESTE guard y lo nombra por su ruta de archivo; esa
-  // frase es lo que lo pone rojo. Es prosa sobre la herramienta, no una reintroduccion del
-  // value 'embalaje'. Se da de alta aqui en vez de reescribir la bitacora porque una bitacora
-  // no se edita para calmar un guard, y porque el aviso de arriba dice que el modo de fallo
-  // real es que cada feature lo declare deuda ajena y siga. Alta del 2026-08-01.
+  // Feature 122: MISMO caso, y por el MISMO motivo que el de arriba —tanto que su `tasks.md:243`
+  // narra en la bitacora que `./init.sh` cae por este guard y, al escribir su nombre, se
+  // convierte en la causa de que siga cayendo. Es prosa sobre la herramienta, no una
+  // reintroduccion del value 'embalaje'. Se da de alta aqui, en la tanda M de la 170, porque
+  // dejaba el gate del repo ENTERO rojo y la regla es que quien lo encuentra lo da de alta en
+  // vez de declararlo deuda ajena y seguir. Alta por archivo, no por carpeta.
   "specs/122-analitica-alcance-por-rol/tasks.md",
 ]);
 

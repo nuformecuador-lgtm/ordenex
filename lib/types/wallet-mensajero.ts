@@ -218,6 +218,34 @@ export type ListarCuentasPorPagarPaginadoResult = ListarPaginadoResult<
   | { status: "unauthenticated" }
 >;
 
+/**
+ * Feature 170 — FASE 2 (T M.1, cierre de Q-L2) — el mismo listado SIN recorte por pagina, para
+ * la descarga. Se DERIVA del schema de la pagina quitando `page`/`pageSize`, igual que hicieron
+ * los seis `…CompletoSchema` de la FASE 1: asi los dos caminos no pueden entender cosas
+ * distintas por «busqueda», que es lo unico que decide si el archivo sale entero o filtrado
+ * (R10/R45).
+ *
+ * `.strict()` se reescribe aunque `.omit()` lo herede, por el mismo motivo que en el schema de
+ * la pagina: la barrera de alcance es de ESTE listado y no debe depender de que el schema base
+ * nunca se afloje (R18).
+ */
+export const listarCuentasPorPagarCompletoSchema = listarCuentasPorPagarPaginadoSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarCuentasPorPagarCompletoInput = z.infer<
+  typeof listarCuentasPorPagarCompletoSchema
+>;
+
+/**
+ * El dataset completo tal como lo recibe el cliente. Union de error ANCHO (`ActionError`, el
+ * del contrato de T0.1) y no el estrecho de la pagina: quien lo consume es
+ * `filasDesdeResultado`, el adaptador comun de la descarga, que redacta el mensaje de CUALQUIER
+ * error de borde en un solo sitio (R36). `limite_excedido` lleva solo conteos (R27).
+ */
+export type ListarCuentasPorPagarCompletoResult =
+  ListarCompletoResult<CuentaPorPagarResumenDTO>;
+
 // Resultados del modo completo en el BORDE (T C.2). `limite_excedido` lleva SOLO conteos
 // (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Los dos ledgers proyectan el
 // mismo DTO; se nombran aparte porque son dos superficies con alcances distintos.

@@ -164,3 +164,60 @@ describe("consultas del listado paginado de cuentas por pagar (T L.1)", () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 });
+
+// Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el CONJUNTO completo, el que alimenta la
+// descarga. Entra en ESTE archivo y no solo en el de servicio por el mismo motivo que todo lo de
+// arriba: el doble del repositorio no ve la traduccion a consultas, y aqui el riesgo es doble —
+// si la agregacion del archivo llevara `where` o `take`, el `xlsx` declararia una deuda mas
+// pequena que la real y el total del listado no lo delataria, porque salen de dos sitios.
+describe("consultas del conjunto completo de cuentas por pagar (T M.1, Q-L2)", () => {
+  it("la agregación del archivo es la MISMA que la de la página: sin where, take ni skip (R49)", async () => {
+    const { repo, groupBy, findMany } = prismaFalso();
+
+    await repo.listarCuentasPorPagarCompleto({ busqueda: "ana" });
+
+    expect(groupBy).toHaveBeenCalledTimes(1);
+    expect(groupBy.mock.calls[0]![0]!).toEqual({
+      by: ["mensajeroId", "tipo"],
+      _sum: { monto: true },
+    });
+    // Los nombres, de TODO el conjunto (mismo motivo que en la pagina: la busqueda es por nombre).
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany.mock.calls[0]![0]!.take).toBeUndefined();
+  });
+
+  it("descargar cuesta las MISMAS dos consultas que leer la página (R30, R54)", async () => {
+    const archivo = prismaFalso();
+    await archivo.repo.listarCuentasPorPagarCompleto({ busqueda: "mensajer" });
+
+    const pagina = prismaFalso();
+    await pagina.repo.listarCuentasPorPagarPaginado({ busqueda: "mensajer" }, RANGO);
+
+    expect(archivo.groupBy).toHaveBeenCalledTimes(1);
+    expect(archivo.findMany).toHaveBeenCalledTimes(1);
+    expect(archivo.groupBy.mock.calls).toEqual(pagina.groupBy.mock.calls);
+    expect(archivo.findMany.mock.calls).toEqual(pagina.findMany.mock.calls);
+  });
+
+  it("la página es un prefijo EXACTO del conjunto, para el mismo texto (R11, R52)", async () => {
+    // Es la propiedad que hace que la fila 26 esté en la página 2 Y en el archivo. Se afirma
+    // recorriendo el conjunto por páginas y comparándolo con la lectura sin recorte: si el orden
+    // o el filtro divergieran entre los dos caminos, esta igualdad se rompería.
+    for (const busqueda of [undefined, "mensajer", "a", "zzz"]) {
+      const completo = await prismaFalso().repo.listarCuentasPorPagarCompleto({ busqueda });
+
+      const porPaginas: string[] = [];
+      for (let skip = 0; skip < 10; skip += 2) {
+        const p = await prismaFalso().repo.listarCuentasPorPagarPaginado({ busqueda }, { skip, take: 2 });
+        expect(p.total, `«${busqueda}»: el total es el del conjunto`).toBe(completo.length);
+        porPaginas.push(...p.items.map((r) => r.mensajeroId));
+      }
+
+      expect(porPaginas, `«${busqueda}»`).toEqual(completo.map((r) => r.mensajeroId));
+    }
+
+    // Anti-vacuidad: al menos uno de los textos de arriba deja filas, y otro no deja ninguna.
+    expect((await prismaFalso().repo.listarCuentasPorPagarCompleto({})).length).toBe(4);
+    expect((await prismaFalso().repo.listarCuentasPorPagarCompleto({ busqueda: "zzz" })).length).toBe(0);
+  });
+});
