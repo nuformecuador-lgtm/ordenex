@@ -8,13 +8,63 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🏁 CIERRE DE JORNADA 2026-08-02 — **EMPIEZA A LEER POR AQUÍ**
+## 🔨 2026-08-02 (tarde) — **172 EN CURSO** · **EMPIEZA A LEER POR AQUÍ**
+
+**La 172 arrancó. Ficha en `in_progress`, rama `feature/172-liquidacion`, PR #259.** La bitácora
+viva de la implementación es **`progress/impl_172-liquidacion.md`**; aquí solo va lo que decide
+qué hacer a continuación.
+
+### ✅ T0.9 resuelta (era lo único abierto de la Tanda 0): **la 172 arranca YA, sin esperar**
+
+No hay colisión con la 170 fase 2: **la 170 y la 171 están las dos en `done`** y sus 6 PRs
+(#248, #249, #250, #253, #255, #256) están en `dev`, así que nada sigue en vuelo sobre
+`app/(app)/wallet/tiendas/**` ni `app/(app)/cierres-admin/**`. Zona `fullstack` en **0
+`in_progress`** antes de arrancar. **Tanda 0 cerrada por completo.**
+
+### ✅ T A.0 — producción MEDIDA y limpia; **preview NO, y es lo único que hay que cerrar antes de mergear**
+
+Medido el 2026-08-02 por el MCP de Supabase contra producción (`scfnwxqbsgkzwsdntdvd`):
+**39 + 7 = 46 filas** en los dos libros, **CERO incoherentes** con el CHECK heredado. Y —lo que
+nadie había comprobado— los CHECK son **exhaustivos** sobre los enums reales: **10/10** categorías
+del ledger de tienda y **5/5** del libro del mensajero, ni una de más. La migración puede ir sin
+`NOT VALID`, como decía el diseño.
+
+> ⚠️ **PENDIENTE HUMANO, y bloquea el MERGE (no el código):** la base de **preview no se pudo
+> verificar**. El MCP está fijado por `.mcp.json` al `project_ref` de **producción** y preview tiene
+> base propia desde el 2026-07-27; su ref no es descubrible desde la sesión (el MCP de Supabase no
+> expone `list_projects`, `get_project` de Vercel no devuelve env vars, no hay CLI de Vercel, y el
+> ref no está escrito en ningún archivo del repo). **Riesgo real y acotado:** producción está a
+> salvo; lo que puede pasar es que el build del PR salga rojo y deje una fila fallida en el
+> `_prisma_migrations` de preview, que **bloquea los despliegues de preview siguientes** hasta
+> repararla a mano. La consulta exacta que hay que correr está en `impl_172-liquidacion.md`.
+
+### 📦 Avance
+
+| Tanda | Estado |
+| --- | --- |
+| **0** — puerta | ✅ cerrada (T0.9 incluida) |
+| **A** — base de datos, integridad y piezas puras | ✅ **completa**, commit `240c4f6b` |
+| **B** — registrar un pago (servicio, candado, idempotencia, borde) | 🔨 en curso |
+| C · D · E · F · G · H | pendientes |
+
+**Suite tras la Tanda A: 775 archivos / 9340 tests, 0 fallos** (baseline al arrancar: 772 / 9257).
+`./init.sh` en `== init OK ==`. Nada pusheado todavía.
+
+**Hallazgo de la Tanda A que sobrevive a la feature:** `esFechaFutura`
+(`lib/types/gestion-orden.ts:102-106`) afirma en su comentario que `new Date("2026-02-31…")` da
+`Invalid Date`. **Es falso en V8**: rueda al 3 de marzo, y solo el *mes* fuera de rango da
+`Invalid Date`. O sea que hoy **`2026-02-31` se acepta como fecha de reprogramación y se guarda
+como 3 de marzo**. Es de la 36/73, no de esta feature, y **no se tocó**. Necesita dueño.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-02 (mañana) — release, 170 cerrada y spec de la 172
 
 **Registro con CERO features `in_progress`.** Se desplegó producción, se saneó el backlog de PRs, se
 cerró la **feature 170 entera** (fases 1 y 2) y se dejó la **172 en `spec_ready` con su puerta
 CERRADA**.
 
-### 🚀 LO PRIMERO AL RETOMAR: implementar la 172
+### ✅ ~~LO PRIMERO AL RETOMAR: implementar la 172~~ — **EN CURSO desde la tarde del 2026-08-02** (ver el bloque de arriba)
 
 **No hay puerta pendiente. El spec está aprobado y se puede escribir código directamente.**
 
