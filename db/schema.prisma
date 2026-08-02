@@ -1503,6 +1503,7 @@ enum JobTipo {
   webhook_estado // feature 99: entrega firmada del cambio de estado de UNA orden a su integrador (payload { ordenId, estatusDestinoId, ocurridoAt })
   whatsapp_template_sync // integracion WhatsApp: reintenta contra Meta una op de plantilla (create/update/delete) que fallo en linea (payload { plantillaId, operacion })
   whatsapp_chat_envio // feature 109/D1: reintenta el envio saliente de un mensaje de chat que devolvio `transitorio` (payload { mensajeChatId })
+  analitica_rollup_diario // feature 124/D4: agrega el rollup diario de la fecha CR que acaba de cerrar (D-1); RECURRENTE a las 00:30 CR, payload vacio {}
 
   @@map("job_tipo")
 }

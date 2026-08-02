@@ -130,15 +130,57 @@ export class RollupAnaliticaRepository {
 }
 `;
 
+/**
+ * Feature 124 — la UNICA exencion del censo, NOMINAL y de un solo archivo.
+ *
+ * `AnaliticaRollupRepository` es el ESCRITOR del rollup diario, no un consumidor: lo invoca un
+ * job programado que corre con service role, sin sesion de usuario y sin rol que resolver, y
+ * su trabajo es escribir TODAS las filas de TODAS las zonas de la fecha. Recibir un
+ * `ConsultaAnalitica` y recortarse por alcance seria exactamente el bug: el rollup quedaria
+ * agregado a medias y las consultas de la 126 leerian numeros mutilados sin que nada fallara.
+ * Cae en el censo porque importa `@/lib/analytics/rollup-dia` (contexto de analitica) y lee
+ * `analytics_daily` con `$queryRaw` — las dos cosas, ciertas y legitimas.
+ *
+ * POR QUE UNA EXENCION NOMINAL Y NO AFLOJAR `violacionDeAlcanceObligatorio`: cualquier regla
+ * general que dejase pasar a este archivo (por ejemplo «los `$queryRaw` sobre `analytics_daily`
+ * no cuentan», o «los archivos con `Rollup` en el nombre no cuentan») amnistiaria tambien a
+ * `FIXTURE_INFRACTOR_RAW`, que lee la MISMA tabla con la MISMA tecnica y debe seguir cayendo.
+ * Se perderia la cobertura que la 122 monto para la 126/127. Una lista de un elemento, en
+ * cambio, no tapa a nadie mas: un repositorio de analitica NUEVO sigue saliendo rojo.
+ */
+const EXENTOS_POR_SER_ESCRITORES = ["lib/repositories/AnaliticaRollupRepository.ts"];
+
 describe("R18 · censo real sobre repositorios, servicios y acciones", () => {
   it("ningun archivo de lib/{repositories,services,actions} consulta analitica sin el tipo opaco", () => {
     const infractores = CAPAS.flatMap((capa) => archivosDeCodigo(path.join(REPO_ROOT, "lib", capa)))
+      .filter((archivo) => !EXENTOS_POR_SER_ESCRITORES.includes(relativa(archivo)))
       .map((archivo) =>
         violacionDeAlcanceObligatorio(relativa(archivo), fs.readFileSync(archivo, "utf8")),
       )
       .filter((v): v is string => v !== null);
 
     expect(infractores).toEqual([]);
+  });
+
+  it("la exencion del escritor no queda colgada: el archivo existe y sigue siendo necesaria", () => {
+    // Direccion 1 — si el escritor se borra o se renombra, la exencion se queda autorizando una
+    // ruta imaginaria y, peor, el archivo NUEVO entra al censo sin que nadie lo haya pensado.
+    for (const rel of EXENTOS_POR_SER_ESCRITORES) {
+      const absoluta = path.join(REPO_ROOT, rel);
+      expect(
+        fs.existsSync(absoluta),
+        `${rel} esta exento del censo de R18 pero no existe: retira la entrada o corrige la ruta`,
+      ).toBe(true);
+
+      // Direccion 2 — la exencion tiene que estar SOPORTANDO PESO. Si algun dia este archivo
+      // deja de disparar el detector (porque pasa a recibir `ConsultaAnalitica`, o porque deja
+      // de consultar la tabla), la entrada sobra y hay que quitarla: una exencion inerte es un
+      // permiso latente que nadie recuerda revisar.
+      expect(
+        violacionDeAlcanceObligatorio(rel, fs.readFileSync(absoluta, "utf8")),
+        `${rel} ya no dispara el detector: la exencion sobra, retirala del censo`,
+      ).not.toBeNull();
+    }
   });
 
   it("el censo mira archivos de verdad en las tres capas (no pasa por vacio por ruta mal calculada)", () => {

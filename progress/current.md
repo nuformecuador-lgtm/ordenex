@@ -155,6 +155,51 @@ automezclaron limpios. Ver el bloque de cierre de jornada, arriba.
 
 ---
 
+## 🔵 EN VUELO — feature 124 · PR #260 abierto, esperando merge
+
+`feature/124-analitica-job-agregacion-diaria` → `dev`. Worktree en `arc/ordenex-wt-124`.
+Estado en `feature_list.json`: **`in_progress`** — pasa a `done` **cuando el PR se mergee**, no antes.
+
+El job que puebla `analytics_daily` a las **00:30 CR** sobre el día cerrado **D−1**. Puerta T0 cerrada
+por el humano con **D1=A2** (congela solo el estatus), **D2=B2** (vivas + las que cerraron ese día),
+**D3+D8** (solo D−1, nada de intradía) y **D7** (las `deleted_at` se excluyen de todo).
+
+**49 requisitos mapeados** en `progress/impl_124.md` §7, con la honestidad declarada: 36 medidos por
+aserción discriminante, 8 por barrido del árbol, **4 solo por regex de texto** (R2, R21, R31, R48).
+Exigir el mapa destapó tres defectos que el implementer no había reportado (R31 a medias, R20 mapeado
+a un test vacuo, R24 medido por el caso de datos y no por el guardia). Los tres, corregidos.
+
+**Colisiones con la 122 resueltas sin aflojar ningún guardia**: R42 despioja comentarios en vez de
+allowlistear un archivo ajeno; R18 exime **nominalmente** al escritor sin tocar su detector ni sus
+fixtures. Verificadas por mutación ejecutada.
+
+| Medida | Resultado |
+| --- | --- |
+| Suite | **778 archivos, 0 rojos reales** |
+| typecheck / lint | 0 errores / 0 errores + 27 warnings **de `dev`** → delta 0 |
+
+**Cómo se llegó a ese 0, porque la corrida completa NO dice eso.** Salió **degradada** por saturación:
+reportó **769** archivos —ocho menos que la corrida previa— con **9 *unhandled errors*** de workers
+que ni arrancaron, y 2 rojos que eran **timeouts a 20 s**, no aserciones. Los **11 archivos** implicados
+(los 9 caídos + los 2 expirados) se repitieron con `--maxWorkers=2`: **11/11, 243 tests, 0 rojos**.
+767 + 11 = **778**, todos verdes.
+
+Es justo el modo de fallo de «Vitest degradado reporta de menos»: sin comparar el **total de archivos**
+contra la corrida anterior, una suite que se saltó ocho archivos enteros parece sana. Y el rojo de
+`no-embalaje` había **cambiado de naturaleza** entre corridas —primero determinista por
+`specs/122/tasks.md:243`, que `dev` ya arregló en `3d69c910`, luego un simple timeout—, así que era
+fácil darlo por el mismo de antes.
+
+### ⚠️ Defecto ajeno confirmado y deliberadamente NO tocado
+
+`whereRollup()` en `lib/analytics/alcance-columnas.ts` (feature **122**, ya mergeada) recorta
+`analytics_daily` por **`mensajeroAsignadoId`** — esa es la columna de `orden`; en el rollup se llama
+**`mensajeroId`**. El retorno está tipado `Record<string, string>`, así que **el compilador no lo ve**:
+el recorte por mensajero fallaría en silencio. Confirmado contra `db/schema.prisma` y **dirigido a la
+126** en su `status_note`, que es quien lo estrellaría. No se arregla desde este PR.
+
+---
+
 ## 🏁 CIERRE DE JORNADA 2026-07-31
 
 Todo lo trabajado ese día está **mergeado en `dev`** —y desde el 2026-08-01, **en producción**.

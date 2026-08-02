@@ -33,6 +33,11 @@ import {
 } from "@/lib/services/jobs/webhook-estado-handler";
 import { crearWhatsappTemplateSyncHandler } from "@/lib/services/jobs/whatsapp-template-sync-handler";
 import { crearWhatsappChatEnvioHandler } from "@/lib/services/jobs/whatsapp-chat-envio-handler";
+import {
+  buildAnaliticaRollupService,
+  crearAnaliticaRollupDiarioHandler,
+  recurrenciaAnaliticaRollupDiario,
+} from "@/lib/services/jobs/analitica-rollup-diario-handler";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -83,17 +88,34 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
   // `buildRecurrencias()`. Las deps (config de WhatsApp) se cargan perezosamente en el
   // handler: un env ausente falla ESTE job (recuperable), no el drenado de los demas tipos.
   handlers.set("whatsapp_chat_envio", crearWhatsappChatEnvioHandler());
+  // Feature 124 (D4->C1, R36): agrega en el rollup diario la fecha CR que acaba de cerrar.
+  // A DIFERENCIA de geocodificacion / optimizacion / webhook / whatsapp, este tipo SI se
+  // registra en `buildRecurrencias()`: no lo dispara ningun evento del dominio —nadie "crea"
+  // un dia—, lo dispara el RELOJ, una vez por dia CR. Sin recurrencia la cola se vaciaria
+  // tras la primera corrida y el rollup dejaria de escribirse en silencio, que es el modo de
+  // fallo mas caro de esta feature: la tabla no se rompe, simplemente deja de crecer.
+  handlers.set(
+    "analitica_rollup_diario",
+    crearAnaliticaRollupDiarioHandler(buildAnaliticaRollupService(now), now),
+  );
   return handlers;
 }
 
 /**
- * Registro de recurrencia por tipo. Solo `liberar_reprogramadas` es recurrente: la
- * geocodificacion se encola por EVENTO y NO debe re-agendarse (R32). Exportada por el
- * mismo motivo que `buildHandlers`.
+ * Registro de recurrencia por tipo. Recurrentes son los tipos que dispara el RELOJ:
+ * `liberar_reprogramadas` (00:00 CR) y, desde la 124, `analitica_rollup_diario` (00:30 CR).
+ * La geocodificacion, la optimizacion de ruta, el webhook de estado y los dos de WhatsApp se
+ * encolan por EVENTO y NO deben re-agendarse (R32/R21). Exportada por el mismo motivo que
+ * `buildHandlers`.
  */
 export function buildRecurrencias(): Map<JobTipo, RecurrenciaSpec> {
   const recurrencias = new Map<JobTipo, RecurrenciaSpec>();
   recurrencias.set("liberar_reprogramadas", recurrenciaLiberarReprogramadas);
+  // Feature 124 (D4->C1, R36): el rollup diario es RECURRENTE porque nada en el dominio lo
+  // dispara —el hecho de que un dia cierre no genera ningun evento—. Cada corrida re-agenda
+  // la siguiente a las 00:30 CR con el `dedupe_key` de la fecha que agregara, asi que la
+  // cola se auto-perpetua y un fallo terminal de una ocurrencia no detiene la serie.
+  recurrencias.set("analitica_rollup_diario", recurrenciaAnaliticaRollupDiario);
   return recurrencias;
 }
 

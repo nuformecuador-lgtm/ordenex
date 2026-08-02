@@ -618,52 +618,174 @@ function ddlDerivadoDelDatamodel(): string {
   return diffCache.salida;
 }
 
-/**
- * Nombres de indice / PK / FK que un DDL crea SOBRE `analytics_daily`.
- * Los CHECK quedan fuera por diseno (Prisma no los expresa); ver la cabecera del bloque.
- */
-function objetosDeAnalyticsDaily(ddl: string): string[] {
+// -------------------------------------------------------------------------------------------
+// FEATURE 124 / T5.1 (D6-E1, R40/R41) — EL CONJUNTO DE REFERENCIA YA NO ES UN SOLO `.sql`
+// -------------------------------------------------------------------------------------------
+// Este bloque nacio comparando el diff de Prisma contra el TEXTO de `migration.sql` de la 123 y
+// con un `expect(...).toBe(9)` literal. Los dos son bombas de relojeria: el dia en que una
+// migracion legitima toque `analytics_daily` (un indice nuevo, un FK que se retira), el guardia
+// se pone ROJO SIN QUE EXISTA DRIFT, y la salida rapida a ese rojo es editar un `migration.sql`
+// YA APLICADO, que rompe el checksum de `_prisma_migrations` en todos los entornos donde corrio.
+//
+// El conjunto de referencia pasa a ser el EFECTO NETO de todas las migraciones que operan sobre
+// la tabla:
+//
+//     referencia = U (objetos creados por Mi) - (objetos eliminados o renombrados por Mj, j > i)
+//
+//   - Descubrimiento POR CONTENIDO (`migration.sql` que menciona la tabla), nunca por una lista
+//     a mano: una lista a mano vuelve a caducar en la siguiente feature.
+//   - Orden de aplicacion = orden de nombre de carpeta, que es el que usa Prisma.
+//   - Se reconocen `CREATE [UNIQUE] INDEX`, `CONSTRAINT ... PRIMARY KEY|FOREIGN KEY`,
+//     `DROP INDEX`, `DROP CONSTRAINT` y `ALTER INDEX ... RENAME TO`.
+//   - El `toBe(9)` se sustituye por una red anti-vacio NO NUMERICA (R41): si el conjunto sale
+//     vacio, el test falla por «el guardia no mide nada». Nunca vuelve a haber una cifra que
+//     alguien tenga que subir a mano.
+//
+// Verificado por mutacion doble (T5.1): con una migracion de prueba que crea un indice sobre la
+// tabla, (a) declarada tambien en `db/schema.prisma` -> VERDE (con el conjunto viejo habria sido
+// rojo sin drift: ese es justo el defecto que se arregla); (b) sin declararla -> ROJO.
+
+/** Nombres de indice / PK / FK que UNA sentencia crea sobre `analytics_daily`. */
+function objetosCreadosPor(sentencia: string): string[] {
+  if (!/\banalytics_daily\b/.test(sentencia)) return [];
   const nombres: string[] = [];
-  for (const sentencia of ddl.replace(/^\s*--.*$/gm, "").split(";")) {
-    if (!sentencia.includes('"analytics_daily"')) continue;
-    for (const m of sentencia.matchAll(/CREATE (?:UNIQUE )?INDEX "([a-z_0-9]+)"/g)) {
-      nombres.push(m[1]);
+  for (const m of sentencia.matchAll(
+    /CREATE (?:UNIQUE )?INDEX (?:CONCURRENTLY )?(?:IF NOT EXISTS )?"([a-z_0-9]+)"/g,
+  )) {
+    nombres.push(m[1]);
+  }
+  for (const m of sentencia.matchAll(
+    /CONSTRAINT "([a-z_0-9]+)"\s*\n?\s*(?:PRIMARY KEY|FOREIGN KEY)/g,
+  )) {
+    nombres.push(m[1]);
+  }
+  return nombres;
+}
+
+/**
+ * Aplica el efecto NETO de un `.sql` sobre el conjunto acumulado. Las bajas (`DROP INDEX`,
+ * `DROP CONSTRAINT`) y los renombres (`ALTER INDEX ... RENAME TO`) se evaluan SIN exigir que la
+ * sentencia nombre la tabla —un `DROP INDEX "x"` no la nombra— pero solo surten efecto si el
+ * objeto esta en el conjunto, que por construccion solo contiene objetos de `analytics_daily`.
+ */
+function aplicarEfectoNeto(objetos: Set<string>, sql: string): void {
+  for (const sentencia of sql.replace(/^\s*--.*$/gm, "").split(";")) {
+    for (const m of sentencia.matchAll(
+      /ALTER INDEX (?:IF EXISTS )?"?([a-z_0-9]+)"?\s+RENAME TO\s+"?([a-z_0-9]+)"?/gi,
+    )) {
+      if (objetos.delete(m[1])) objetos.add(m[2]);
     }
     for (const m of sentencia.matchAll(
-      /CONSTRAINT "([a-z_0-9]+)"\s*\n?\s*(?:PRIMARY KEY|FOREIGN KEY)/g,
+      /DROP INDEX (?:CONCURRENTLY )?(?:IF EXISTS )?"?([a-z_0-9]+)"?/gi,
     )) {
-      nombres.push(m[1]);
+      objetos.delete(m[1]);
     }
+    for (const m of sentencia.matchAll(/DROP CONSTRAINT (?:IF EXISTS )?"?([a-z_0-9]+)"?/gi)) {
+      objetos.delete(m[1]);
+    }
+    for (const nombre of objetosCreadosPor(sentencia)) objetos.add(nombre);
   }
+}
+
+/** Carpetas de `db/migrations/` cuyo `migration.sql` opera sobre la tabla, en orden de nombre. */
+function migracionesQueTocanLaTabla(): readonly { carpeta: string; sql: string }[] {
+  return fs
+    .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort()
+    .map((carpeta) => ({
+      carpeta,
+      ruta: path.join(MIGRATIONS_DIR, carpeta, "migration.sql"),
+    }))
+    .filter(({ ruta }) => fs.existsSync(ruta))
+    .map(({ carpeta, ruta }) => ({ carpeta, sql: fs.readFileSync(ruta, "utf8") }))
+    .filter(({ sql }) => /\banalytics_daily\b/.test(sql));
+}
+
+/** El conjunto de referencia: union neta de TODAS las migraciones que tocan la tabla. */
+function objetosDeReferencia(): string[] {
+  const objetos = new Set<string>();
+  for (const { sql } of migracionesQueTocanLaTabla()) aplicarEfectoNeto(objetos, sql);
+  return [...objetos].sort();
+}
+
+/** Nombres de indice / PK / FK que un DDL suelto (el diff de Prisma) crea sobre la tabla. */
+function objetosDeAnalyticsDaily(ddl: string): string[] {
+  const nombres = ddl
+    .replace(/^\s*--.*$/gm, "")
+    .split(";")
+    .flatMap(objetosCreadosPor);
   return [...new Set(nombres)].sort();
 }
 
-describe("R14/R39 — el datamodel y la migracion no se separan (guardia de drift)", () => {
+describe("R14/R39 + R40/R41 — el datamodel y las migraciones no se separan (guardia de drift)", () => {
+  it("descubre por contenido las migraciones que tocan la tabla (nunca por lista a mano)", () => {
+    const carpetas = migracionesQueTocanLaTabla().map((m) => m.carpeta);
+    expect(
+      carpetas,
+      "ninguna migracion de db/migrations/ menciona analytics_daily: el descubrimiento por " +
+        "contenido esta roto y el guardia no mide nada",
+    ).not.toEqual([]);
+    // La 123 es la que la crea; a partir de aqui, cualquier otra se suma sola.
+    expect(carpetas).toContain("20260731120000_analytics_daily");
+    expect(carpetas).toEqual([...carpetas].sort());
+  });
+
   it(
-    "Prisma deriva del datamodel EXACTAMENTE los mismos indices/PK/FK que crea migration.sql",
+    "Prisma deriva del datamodel EXACTAMENTE los mismos indices/PK/FK que la union neta de las migraciones",
     () => {
       const derivados = objetosDeAnalyticsDaily(ddlDerivadoDelDatamodel());
-      const enLaMigracion = objetosDeAnalyticsDaily(upSql);
+      const enLasMigraciones = objetosDeReferencia();
 
-      // Red de seguridad: si la extraccion se rompiera, ambos saldrian vacios y el test
-      // pasaria por vacio en lugar de por igualdad.
+      // R41 — red anti-vacio NO NUMERICA: si la extraccion se rompiera, ambos lados saldrian
+      // vacios y el test pasaria por vacio en lugar de por igualdad. No hay ninguna cifra
+      // esperada: el numero se DERIVA del conjunto de referencia.
       expect(
-        enLaMigracion.length,
-        "la extraccion no encontro ningun objeto en migration.sql: el guardia no mide nada",
-      ).toBe(9); // pkey + grano_key + 3 idx + 4 fkey
-      expect(derivados.length, "el diff de Prisma no menciona analytics_daily").toBeGreaterThan(0);
+        enLasMigraciones,
+        "la extraccion no encontro ningun objeto en las migraciones de analytics_daily: " +
+          "el guardia no mide nada",
+      ).not.toEqual([]);
+      expect(derivados, "el diff de Prisma no menciona analytics_daily").not.toEqual([]);
 
       expect(
         derivados,
-        "el datamodel y la migracion se han separado: `prisma migrate dev` emitiria DROP/RENAME " +
-          "de indices sobre analytics_daily. Faltan en el datamodel: " +
-          JSON.stringify(enLaMigracion.filter((n) => !derivados.includes(n))) +
+        "el datamodel y las migraciones se han separado: `prisma migrate dev` emitiria " +
+          "DROP/RENAME de indices sobre analytics_daily. Faltan en el datamodel: " +
+          JSON.stringify(enLasMigraciones.filter((n) => !derivados.includes(n))) +
           "; sobran en el datamodel: " +
-          JSON.stringify(derivados.filter((n) => !enLaMigracion.includes(n))),
-      ).toEqual(enLaMigracion);
+          JSON.stringify(derivados.filter((n) => !enLasMigraciones.includes(n))),
+      ).toEqual(enLasMigraciones);
     },
     180_000,
   );
+
+  it("el efecto NETO descuenta bajas y renombres posteriores (no es una simple union)", () => {
+    // Se ejercita el acumulador con SQL sintetico: si alguien sustituyera el efecto neto por una
+    // union ingenua, una migracion futura que retire un indice dejaria el guardia rojo para
+    // siempre sin que exista drift. Aqui se fija que eso NO puede pasar.
+    const objetos = new Set<string>();
+    aplicarEfectoNeto(
+      objetos,
+      'CREATE INDEX "analytics_daily_a_idx" ON "analytics_daily"("zona_id");\n' +
+        'CREATE INDEX "analytics_daily_b_idx" ON "analytics_daily"("tienda_id");\n' +
+        'ALTER TABLE "analytics_daily" ADD CONSTRAINT "analytics_daily_c_fkey"\n' +
+        '  FOREIGN KEY ("zona_id") REFERENCES "zona"("id");',
+    );
+    expect([...objetos].sort()).toEqual([
+      "analytics_daily_a_idx",
+      "analytics_daily_b_idx",
+      "analytics_daily_c_fkey",
+    ]);
+
+    aplicarEfectoNeto(
+      objetos,
+      'DROP INDEX "analytics_daily_a_idx";\n' +
+        'ALTER INDEX "analytics_daily_b_idx" RENAME TO "analytics_daily_b2_idx";\n' +
+        'ALTER TABLE "analytics_daily" DROP CONSTRAINT "analytics_daily_c_fkey";',
+    );
+    expect([...objetos].sort()).toEqual(["analytics_daily_b2_idx"]);
+  });
 
   it(
     "el unico del grano esta entre lo que Prisma deriva, y sobre las mismas seis columnas",
