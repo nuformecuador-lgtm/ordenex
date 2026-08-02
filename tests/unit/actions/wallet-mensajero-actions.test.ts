@@ -3,6 +3,7 @@ import {
   verMiCuentaPorPagarAction,
   listarMisPagosAction,
   listarCuentasPorPagarAction,
+  listarCuentasPorPagarCompletoAction,
   listarCuentasPorPagarPaginadoAction,
   listarPagosDeMensajeroAction,
 } from "@/lib/actions/wallet-mensajero";
@@ -63,6 +64,13 @@ function fakeService(overrides: Partial<IWalletMensajeroService> = {}): IWalletM
       items: [],
       page: 1,
       pageSize: 25,
+      total: 0,
+    })),
+    // Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el hermano SIN recorte del anterior, el
+    // que alimenta la descarga. Sus casos de borde estan mas abajo, en su propio describe.
+    listarCuentasPorPagarCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
       total: 0,
     })),
     ...overrides,
@@ -241,6 +249,87 @@ describe("listarCuentasPorPagarPaginadoAction (T L.1)", () => {
       expect(r.status, JSON.stringify(malo)).toBe("validation_error");
       expect(service.listarCuentasPorPagarPaginado).not.toHaveBeenCalled();
     }
+  });
+});
+
+// Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el BORDE del modo SIN paginación, el que
+// alimenta la descarga (R52). Es el hermano del de arriba y su lista blanca es más estrecha:
+// `page`/`pageSize` NO son claves válidas aquí, porque pedir «la página del dataset completo»
+// no significa nada y aceptarlas dejaría la puerta abierta a que un día recortaran el archivo.
+describe("listarCuentasPorPagarCompletoAction (T M.1, Q-L2)", () => {
+  it("input vacío vale: es el conjunto entero, sin búsqueda (R52)", async () => {
+    const service = fakeService();
+    const r = await listarCuentasPorPagarCompletoAction(undefined, {
+      service,
+      getActor: async () => MAESTRO,
+    });
+
+    expect(r.status).toBe("ok");
+    expect(service.listarCuentasPorPagarCompleto).toHaveBeenCalledWith({}, MAESTRO);
+  });
+
+  it("la búsqueda vigente llega al service TAL CUAL (R10/R45)", async () => {
+    const service = fakeService();
+    // El MISMO texto sin normalizar que recibe el listado paginado: si el borde de la descarga
+    // lo recortara y el de la página no, el archivo y la tabla mirarían conjuntos distintos.
+    await listarCuentasPorPagarCompletoAction(
+      { busqueda: "  Ana MENSAJERA " },
+      { service, getActor: async () => MAESTRO },
+    );
+
+    expect(service.listarCuentasPorPagarCompleto).toHaveBeenCalledWith(
+      { busqueda: "  Ana MENSAJERA " },
+      MAESTRO,
+    );
+  });
+
+  it("page/pageSize NO pertenecen a la lista blanca del dataset completo (R18)", async () => {
+    for (const colada of [{ page: 2 }, { pageSize: 10 }, { mensajeroId: "m1" }, { rol: "maestro" }]) {
+      const service = fakeService();
+      const r = await listarCuentasPorPagarCompletoAction(colada, {
+        service,
+        getActor: async () => MAESTRO,
+      });
+
+      expect(r.status, JSON.stringify(colada)).toBe("validation_error");
+      expect(service.listarCuentasPorPagarCompleto, JSON.stringify(colada)).not.toHaveBeenCalled();
+    }
+  });
+
+  it("sin sesión -> unauthenticated, sin tocar el service ni devolver filas (R16)", async () => {
+    const service = fakeService();
+    const r = await listarCuentasPorPagarCompletoAction({}, { service, getActor: async () => null });
+
+    expect(r).toEqual({ status: "unauthenticated" });
+    expect(r).not.toHaveProperty("items");
+    expect(service.listarCuentasPorPagarCompleto).not.toHaveBeenCalled();
+  });
+
+  it("forbidden y limite_excedido pasan tal cual, y ninguno viaja con filas (R17/R27)", async () => {
+    const prohibido = fakeService({
+      listarCuentasPorPagarCompleto: vi.fn(async () => ({ status: "forbidden" as const })),
+    });
+    const r1 = await listarCuentasPorPagarCompletoAction({}, {
+      service: prohibido,
+      getActor: async () => MENSAJERO,
+    });
+    expect(r1).toEqual({ status: "forbidden" });
+    expect(r1).not.toHaveProperty("items");
+
+    const excedido = fakeService({
+      listarCuentasPorPagarCompleto: vi.fn(async () => ({
+        status: "limite_excedido" as const,
+        total: 5001,
+        limite: 5000,
+      })),
+    });
+    const r2 = await listarCuentasPorPagarCompletoAction({}, {
+      service: excedido,
+      getActor: async () => MAESTRO,
+    });
+    // R27: SOLO conteos —el total encontrado y el tope— y ni una fila.
+    expect(r2).toEqual({ status: "limite_excedido", total: 5001, limite: 5000 });
+    expect(r2).not.toHaveProperty("items");
   });
 });
 

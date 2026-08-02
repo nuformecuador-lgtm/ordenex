@@ -2,6 +2,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CuentaPorPagarDTO,
   CuentaPorPagarResumenDTO,
+  ListarCuentasPorPagarCompletoInput,
   ListarCuentasPorPagarPaginadoInput,
   ListarMisPagosCompletoInput,
   ListarPagosDeMensajeroCompletoInput,
@@ -54,6 +55,21 @@ export type ListarCuentasPorPagarPaginadoServiceResult =
   ListarPaginadoServiceResult<CuentaPorPagarResumenDTO>;
 
 /**
+ * Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el MISMO listado del maestro sin recorte por
+ * pagina, para la descarga (R52).
+ *
+ * Es el hermano de la pagina, el par `listar` / `listarCompleto` que T H.2 dejo escrito como
+ * las DOS lecturas de un mismo listado. Sin el, la pantalla paginada tenia que releer el
+ * listado ENTERO sin busqueda y volver a filtrarlo en el navegador: el conjunto completo
+ * cruzaba igual y el criterio de busqueda vivia escrito dos veces, en dos capas.
+ *
+ * `limite_excedido` se decide AQUI (R29): el tope es del servidor, y devolver el conjunto
+ * entero para que el cliente lo cuente es exactamente lo que R29 prohibe.
+ */
+export type ListarCuentasPorPagarCompletoServiceResult =
+  ListarCompletoServiceResult<CuentaPorPagarResumenDTO>;
+
+/**
  * Feature 170 (T C.1) — los pagos PROPIOS del mensajero, sin recorte por pagina.
  *
  * El otro punto caliente de R14/R15 (junto al ledger de la tienda): el conjunto lo define
@@ -100,6 +116,15 @@ export interface IWalletMensajeroService {
     input: ListarCuentasPorPagarPaginadoInput,
     actor: Actor,
   ): Promise<ListarCuentasPorPagarPaginadoServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el MISMO listado sin recorte por pagina,
+   * para la descarga. Mismo guard (`esAccesoTotal`), MISMA busqueda que la pantalla tiene
+   * puesta y el tope de filas aplicado en el SERVIDOR (R26/R27/R29).
+   */
+  listarCuentasPorPagarCompleto(
+    input: ListarCuentasPorPagarCompletoInput,
+    actor: Actor,
+  ): Promise<ListarCuentasPorPagarCompletoServiceResult>;
   /**
    * R18/R22: solo maestro; DESGLOSE por cierre de UN mensajero ARBITRARIO (paginado, mas reciente
    * primero) con filtros server-side por fecha/cierre. El saldo (cuenta por pagar) refleja el
