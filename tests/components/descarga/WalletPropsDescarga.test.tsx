@@ -48,6 +48,9 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
   listarCuentasPorPagarAction: vi.fn(),
   listarCuentasPorPagarPaginadoAction: vi.fn(),
+  // Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el conjunto para el archivo lo devuelve YA
+  // filtrado el servidor; la pantalla dejo de releer el listado entero y filtrarlo aqui.
+  listarCuentasPorPagarCompletoAction: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -83,7 +86,7 @@ import {
   listarPlantillasPaginadoAction,
 } from "@/lib/actions/gasto-fijo-plantilla";
 import {
-  listarCuentasPorPagarAction,
+  listarCuentasPorPagarCompletoAction,
   listarCuentasPorPagarPaginadoAction,
 } from "@/lib/actions/wallet-mensajero";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
@@ -219,9 +222,12 @@ function montarCuentas(
       };
     },
   );
-  vi.mocked(listarCuentasPorPagarAction).mockResolvedValue({
-    status: "ok",
-    mensajeros: completo,
+  // T M.1 (Q-L2): el archivo sale de una accion PROPIA que aplica la busqueda en el servidor.
+  vi.mocked(listarCuentasPorPagarCompletoAction).mockImplementation(async (input: unknown) => {
+    const q = ((input as { busqueda?: string })?.busqueda ?? "").trim().toLowerCase();
+    const items =
+      q === "" ? completo : completo.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+    return { status: "ok", items, total: items.length };
   });
   return envolver(
     <CuentasPorPagarTable
@@ -345,18 +351,36 @@ describe("Dinero por props · descarga", () => {
     // «la que NO pagina no relee» —ya no queda ninguna de las tres sin paginar—. Las tablas
     // de Familia B pura que siguen sin paginar (ranking, gestiones del cierre) no son de
     // este archivo y conservan sus propios tests.
+    //
+    // Feature 170 — FASE 2 (T M.1, cierre de Q-L2): las tres siguen sin proyectar la página,
+    // pero ya no lo hacen todas igual. «Cuentas por pagar» estrena un `listarCompleto` propio y
+    // usa el adaptador de FAMILIA A (`filasDesdeResultado`), que además trae el tope desde el
+    // servidor; las otras dos siguen releyendo su listado sin recorte con
+    // `filasDelConjuntoCompleto`, que es la deuda que Q-I5 dejó abierta. Lo que se exige aquí es
+    // la propiedad —el archivo NO sale del array de la página— y cada tabla declara con cuál de
+    // los dos adaptadores la cumple, para que ese reparto no cambie sin que nadie lo note.
     const raiz = path.resolve(__dirname, "../../..");
     const modulos = [
-      "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
-      "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
-      "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+      {
+        ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
+        adaptador: /filasDelConjuntoCompleto\(/,
+        nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
+      },
+      {
+        ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
+        adaptador: /filasDelConjuntoCompleto\(/,
+        nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
+      },
+      {
+        ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+        adaptador: /filasDesdeResultado\(/,
+        nota: "T M.1: listarCuentasPorPagarCompleto, con la búsqueda y el tope en el servidor",
+      },
     ];
 
-    for (const ruta of modulos) {
+    for (const { ruta, adaptador, nota } of modulos) {
       const fuente = sinComentarios(readFileSync(path.join(raiz, ruta), "utf8"));
-      expect(fuente, `${ruta}: la descarga debe releer el conjunto completo`).toMatch(
-        /filasDelConjuntoCompleto\(/,
-      );
+      expect(fuente, `${ruta}: ${nota}`).toMatch(adaptador);
       expect(fuente, `${ruta}: no puede proyectar el array visible`).not.toMatch(
         /filasLocales\(/,
       );

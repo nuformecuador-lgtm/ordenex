@@ -33,7 +33,7 @@ const { paginadoMock, conjuntoMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
-  listarCuentasPorPagarAction: (...a: unknown[]) => conjuntoMock(...a),
+  listarCuentasPorPagarCompletoAction: (...a: unknown[]) => conjuntoMock(...a),
   listarCuentasPorPagarPaginadoAction: (...a: unknown[]) => paginadoMock(...a),
   listarPagosDeMensajeroAction: vi.fn(),
   listarPagosDeMensajeroCompletoAction: vi.fn(),
@@ -59,7 +59,13 @@ function renderTabla(mensajeros: CuentaPorPagarResumenDTO[]) {
       return { status: "ok", page: 1, pageSize: 25, items: filtrados, total: filtrados.length };
     },
   );
-  conjuntoMock.mockResolvedValue({ status: "ok", mensajeros });
+  // T M.1 (Q-L2): el conjunto para el archivo llega YA filtrado por el servidor.
+  conjuntoMock.mockImplementation(async (input: { busqueda?: string } | undefined = {}) => {
+    const q = (input?.busqueda ?? "").trim().toLowerCase();
+    const items =
+      q === "" ? mensajeros : mensajeros.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+    return { status: "ok", items, total: items.length };
+  });
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <ToastProvider>

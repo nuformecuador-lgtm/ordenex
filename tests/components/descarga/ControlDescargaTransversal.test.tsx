@@ -66,7 +66,7 @@ vi.mock("@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero", () =
 const listarCuentasPaginadoMock = vi.fn();
 const listarCuentasMock = vi.fn();
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
-  listarCuentasPorPagarAction: (...a: unknown[]) => listarCuentasMock(...a),
+  listarCuentasPorPagarCompletoAction: (...a: unknown[]) => listarCuentasMock(...a),
   listarCuentasPorPagarPaginadoAction: (...a: unknown[]) => listarCuentasPaginadoMock(...a),
 }));
 
@@ -341,7 +341,13 @@ beforeEach(() => {
         : MENSAJEROS.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
     return { status: "ok", items, page: 1, pageSize: 25, total: items.length };
   });
-  listarCuentasMock.mockResolvedValue({ status: "ok", mensajeros: MENSAJEROS });
+  // T M.1 (Q-L2): el conjunto del archivo llega YA filtrado por el servidor.
+  listarCuentasMock.mockImplementation(async (input: { busqueda?: string } = {}) => {
+    const q = (input?.busqueda ?? "").trim().toLowerCase();
+    const items =
+      q === "" ? MENSAJEROS : MENSAJEROS.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+    return { status: "ok", items, total: items.length };
+  });
   buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
 });
 

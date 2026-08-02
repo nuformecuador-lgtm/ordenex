@@ -108,6 +108,19 @@ export interface IPagoMensajeroMovimientoRepository {
     filtro: CuentasPorPagarFiltro,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CuentaPorPagarAgregadoRow>>;
+  /**
+   * Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el CONJUNTO que casa la busqueda, entero,
+   * ordenado igual que la pagina y SIN recorte. Es lo que la descarga necesita (R52).
+   *
+   * Es el hermano de `listarCuentasPorPagarPaginado` y comparte con el la MISMA linea de
+   * filtrado y orden: la pagina es literalmente un `slice` de lo que devuelve este metodo. Por
+   * eso existe como metodo y no como «lo mismo con `take` grande» — que la fila 26 salga en la
+   * pagina 2 y en el archivo es una consecuencia de que solo haya UNA lista, no de que dos
+   * escrituras coincidan.
+   */
+  listarCuentasPorPagarCompleto(
+    filtro: CuentasPorPagarFiltro,
+  ): Promise<CuentaPorPagarAgregadoRow[]>;
   /** R18: nombre de UN mensajero (vista del maestro: desglose por cierre de un mensajero arbitrario). null si no existe. */
   obtenerNombreMensajero(mensajeroId: string): Promise<string | null>;
 }
