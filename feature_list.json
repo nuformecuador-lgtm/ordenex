@@ -1457,7 +1457,7 @@
       "name": "analitica: servicios financieros",
       "spec_path": "specs/127-analitica-financiera-servicios",
       "description": "Backend. Repositorios + servicios + Server Actions. COD recaudado por metodo (efectivo/SINPE/transferencia), ingresos Ordenex (flete, comision COD, IVAs), cuentas por pagar a tiendas y mensajeros, conciliacion de cierres. Fuente EXCLUSIVA: ledgers append-only (wallet_movimiento, wallet_tienda_movimiento, pago_mensajero_movimiento) y snapshots de cierre (cierre_dia/cierre_bodega, total_*). NO recalcula dinero desde ordenes. Alcance por rol (121). Depende de 121.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "high",
       "zone": "backend",
