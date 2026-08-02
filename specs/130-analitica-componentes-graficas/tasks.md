@@ -338,7 +338,7 @@ paquete de analítica.
   árbol, no cites uno heredado.
   **Depende de:** T8.1.
 
-- [ ] **T8.3 — Marcar todas las tasks `[x]`, entrada en `progress/history.md`, feature a
+- [x] **T8.3 — ✅ **CERRADA POR EL LEADER (2026-08-01)**, tras el veredicto: `progress/review_130.md` persistido y ficha a `done`. — Marcar todas las tasks `[x]`, entrada en `progress/history.md`, feature a
   `done` sólo tras `progress/review_130.md` con veredicto OK** (`CHECKPOINTS.md:43-46`).
   **Hecho:** los tres artefactos existen.
   **CORREGIDO 2026-08-01 (menor m5 de la review).** Esta task estuvo marcada `[x]` afirmando que
