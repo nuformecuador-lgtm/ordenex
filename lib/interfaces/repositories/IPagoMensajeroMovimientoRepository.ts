@@ -5,6 +5,7 @@ import type {
   PagoMensajeroMovimientoCategoria,
 } from "@/lib/types/wallet-mensajero";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 44 (design §2.1) — contrato del repositorio del LIBRO del pago por mensajero. Solo
 // queries Prisma; sin logica de negocio. Money-safe: montos entran/salen como STRING. El acotado
@@ -66,6 +67,19 @@ export interface CuentaPorPagarAgregadoRow {
   pagado: string;
 }
 
+/**
+ * Feature 170 — FASE 2 (T L.1, R45) — el UNICO filtro de este listado: la busqueda por nombre
+ * de mensajero que hasta hoy resolvia el navegador. Es texto en crudo (sin normalizar): quien
+ * normaliza es `lib/utils/cuentas-por-pagar-listado.ts`, para que el criterio viva en un solo
+ * sitio. Ausente o vacio = sin filtro.
+ *
+ * NO lleva `mensajeroId` ni ninguna otra clave de alcance: este listado es «todos los
+ * mensajeros» y su alcance lo decide el ROL del actor, nunca un dato de la peticion.
+ */
+export interface CuentasPorPagarFiltro {
+  busqueda?: string;
+}
+
 export interface IPagoMensajeroMovimientoRepository {
   /**
    * R6/R12: inserta las filas de forma IDEMPOTENTE en la transaccion `tx`. Usa
@@ -80,6 +94,33 @@ export interface IPagoMensajeroMovimientoRepository {
   agregarCuentaPorPagar(mensajeroId: string, filtros: CuentaPorPagarFiltros): Promise<CuentaPorPagarAgregado>;
   /** R18: una fila por mensajero (con nombre) con sus totales devengado/pagado, para el maestro. */
   listarCuentasPorPagarTodos(): Promise<CuentaPorPagarAgregadoRow[]>;
+  /**
+   * Feature 170 — FASE 2 (T L.1, R40/R41/R45/R51): las MISMAS filas, con la busqueda por
+   * nombre aplicada, ordenadas y recortadas a una pagina, mas el TOTAL del conjunto filtrado.
+   *
+   * Reusa la agregacion de `listarCuentasPorPagarTodos` en vez de agregar por su cuenta, y eso
+   * es deliberado (precedente: `listarSaldosTiendasPaginado`, T I.1): cada fila es la suma de
+   * TODO el libro de ese mensajero, asi que no hay nada que empujar al `LIMIT` sin cambiar el
+   * dinero que la fila declara. El total sale de esa misma agregacion: no hay consulta de
+   * conteo que pueda mirar otro conjunto (R41).
+   */
+  listarCuentasPorPagarPaginado(
+    filtro: CuentasPorPagarFiltro,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CuentaPorPagarAgregadoRow>>;
+  /**
+   * Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el CONJUNTO que casa la busqueda, entero,
+   * ordenado igual que la pagina y SIN recorte. Es lo que la descarga necesita (R52).
+   *
+   * Es el hermano de `listarCuentasPorPagarPaginado` y comparte con el la MISMA linea de
+   * filtrado y orden: la pagina es literalmente un `slice` de lo que devuelve este metodo. Por
+   * eso existe como metodo y no como «lo mismo con `take` grande» — que la fila 26 salga en la
+   * pagina 2 y en el archivo es una consecuencia de que solo haya UNA lista, no de que dos
+   * escrituras coincidan.
+   */
+  listarCuentasPorPagarCompleto(
+    filtro: CuentasPorPagarFiltro,
+  ): Promise<CuentaPorPagarAgregadoRow[]>;
   /** R18: nombre de UN mensajero (vista del maestro: desglose por cierre de un mensajero arbitrario). null si no existe. */
   obtenerNombreMensajero(mensajeroId: string): Promise<string | null>;
 }

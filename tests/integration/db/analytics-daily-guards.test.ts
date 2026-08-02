@@ -63,17 +63,28 @@ function leer(rel: string): string {
  *   snapshot (`fuente: { tipo: "rollup", tablas: ["analytics_daily"] }`). Es una
  *   declaracion, no un acceso: el caso de abajo comprueba que TODA ocurrencia en ese
  *   archivo esta dentro de un `tablas: [...]` y que no hay ni una consulta.
- * - `lib/analytics/alcance-columnas.ts`: la unica ocurrencia es PROSA — el JSDoc de
- *   `whereRollup` explica a que rollup pertenece el fragmento de `where` que devuelve.
- *   No hay literal en codigo ejecutable: el caso de abajo comprueba que al quitar los
- *   comentarios no queda ni una ocurrencia.
+ * - `lib/analytics/alcance-columnas.ts`: el adaptador `whereRollup` de la 122. Ver abajo.
  *
- * `tasks.md` T7.1 solo cita `types.ts`; `metrics.ts` se admite aqui porque su referencia
- * es anterior a esta feature (135, ya mergeada) y es declarativa. `alcance-columnas.ts`
- * llega DESPUES (feature 122, mergeada tras la 123) y se admite con el mismo criterio,
- * mas debil todavia: es un comentario. Ninguna de las tres relaja la propiedad DURA de
- * R44 — "nadie la lee ni la escribe" —, que la sigue midiendo el caso de `ACCESOS` sobre
- * TODOS los archivos, sin allowlist. Queda anotado.
+ * `tasks.md` T7.1 solo cita `types.ts`; los otros dos se admiten aqui porque su referencia
+ * es anterior a esta feature y es declarativa. Queda anotado.
+ *
+ * SOBRE `alcance-columnas.ts` (alta del 2026-08-01, chore de arnes, ni 122 ni 123
+ * culpables): la 122 entro en `dev` antes que la 123 y este guard nacio con una lista de
+ * dos. Al convivir se puso rojo por UNA ocurrencia del literal, y esta dentro de un
+ * comentario JSDoc que explica por que `whereRollup` devuelve `Record<string, string>` en
+ * vez de `Prisma.AnalyticsDailyWhereInput`. Se admite porque:
+ *   1. R44 prohibe "job, cron, servicio, repositorio, Server Action ni ruta que la lea o
+ *      la escriba". `whereRollup` no es ninguno: es una funcion pura que mapea
+ *      `AlcanceDatos` a un objeto plano, no importa el cliente Prisma, no toca la DB y en
+ *      produccion no la llama nadie todavia (sus unicos llamadores son tests de la 122).
+ *   2. R23 de la 122 —spec aprobada y ya en `dev`— EXIGE literalmente un adaptador de
+ *      alcance "para `orden`, `gestion_orden` y `analytics_daily`". Borrar la referencia
+ *      para calmar este guard romperia esa trazabilidad. El que se pasa de largo es el
+ *      proxy (nombrar), no la propiedad (acceder): R44 se sigue cumpliendo entero.
+ * La excepcion es NOMINAL, no un ensanchamiento del patron: esta lista NO exime del caso
+ * de accesos (`ACCESOS` recorre TODOS los archivos, sin lista blanca), y el caso de abajo
+ * fija que en este archivo toda ocurrencia vive en un comentario. Si alguien escribe ahi
+ * una linea ejecutable que nombre la tabla, se pone rojo igual.
  */
 const ARCHIVOS_QUE_PUEDEN_NOMBRARLA = [
   "lib/analytics/types.ts",
@@ -136,13 +147,28 @@ describe("R44 — la tabla nace sin consumidores: frontera con la 124/125/126", 
     expect(types).toMatch(/type TablaRollup = "analytics_daily"/);
   });
 
-  it("en `alcance-columnas.ts` (122) el literal vive SOLO en el JSDoc de `whereRollup`", () => {
+  it("en el adaptador de la 122 el literal vive en un COMENTARIO, no en codigo ejecutable", () => {
+    // La contrapartida de admitir el archivo entero en la lista blanca: aqui se fija QUE
+    // se admitio. `whereRollup` (R23 de la 122) construye un fragmento de `where`; su
+    // unica mencion a la tabla explica por que NO se tipa contra el modelo. Si esa
+    // mencion baja alguna vez a una linea ejecutable —un `const TABLA = "analytics_daily"`
+    // que arme una consulta dinamica, por ejemplo—, este caso se pone rojo aunque el
+    // archivo siga en la lista.
     const fuente = leer("lib/analytics/alcance-columnas.ts");
-    expect(fuente).toMatch(/analytics_daily/);
-    // Sin comentarios de bloque ni de linea no debe quedar ni una ocurrencia: la
-    // referencia es documentacion, no codigo.
-    const sinComentarios = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-    expect(sinComentarios.match(/analytics_daily|analyticsDaily/g) ?? []).toEqual([]);
+    const lineas = fuente.split("\n").filter((l) => /analytics_daily|analyticsDaily/.test(l));
+    expect(
+      lineas.length,
+      "el archivo dejo de nombrar la tabla: saca la excepcion de la lista",
+    ).toBeGreaterThan(0);
+    for (const linea of lineas) {
+      expect(linea.trim(), `linea ejecutable que nombra la tabla: ${linea.trim()}`).toMatch(
+        /^(\/\/|\*|\/\*)/,
+      );
+    }
+    // Y no ejecuta NADA contra la base: ni SQL crudo ni cliente Prisma en tiempo de
+    // ejecucion (`import type` desaparece en compilacion).
+    expect(fuente).not.toMatch(/\$queryRaw|\$executeRaw|getPrismaClient/);
+    expect(fuente).toMatch(/import type \{ Prisma \}/);
   });
 
   it("la feature no anade repositorio, servicio ni interfaz de la tabla", () => {

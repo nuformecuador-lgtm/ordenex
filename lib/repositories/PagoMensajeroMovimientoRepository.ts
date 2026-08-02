@@ -4,12 +4,18 @@ import type {
   CuentaPorPagarAgregado,
   CuentaPorPagarAgregadoRow,
   CuentaPorPagarFiltros,
+  CuentasPorPagarFiltro,
   IPagoMensajeroMovimientoRepository,
   ListarPorMensajeroFiltros,
   ListarPorMensajeroPage,
   PagoMensajeroTxClient,
 } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import {
+  filtrarPorBusquedaMensajero,
+  ordenarCuentasPorPagar,
+} from "@/lib/utils/cuentas-por-pagar-listado";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletTiendaMovimientoRepository).
 type PagoMensajeroPrismaClient = Pick<PrismaClient, "pagoMensajeroMovimiento" | "usuario">;
@@ -160,6 +166,56 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
         pagado: acc.pagado.toFixed(2),
       };
     });
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T L.1, R40/R41/R45/R51) — la misma vista del maestro, con la
+   * busqueda por nombre resuelta en el servidor, ordenada y recortada a una pagina.
+   *
+   * **No corta en la base, y es deliberado** (precedente exacto: `listarSaldosTiendasPaginado`,
+   * T I.1 §6.6). Cada fila es la agregacion de TODO el libro de ese mensajero: no hay nada que
+   * empujar al `LIMIT` sin cambiar el dinero que la fila declara. Ademas el filtro es por
+   * NOMBRE, que vive en `usuario` y no en el libro que se agrega, asi que un `WHERE` sobre la
+   * agregacion no lo expresaria sin una segunda lectura de `usuario` cuyo `ILIKE` casaria un
+   * conjunto distinto del que casa hoy el navegador (`%` y `_` son comodines en SQL y no en
+   * `String.includes`) — que es justo lo que R45 prohibe.
+   *
+   * Consecuencias, las tres medidas: R44 se cumple por construccion (es literalmente el mismo
+   * conjunto que `listarCuentasPorPagarTodos`), R54 en su forma fuerte (cero consultas nuevas,
+   * ni la del conteo) y lo que baja no es el coste en Postgres sino lo que cruza a la pantalla,
+   * que es de lo que habla el Anexo III para este listado.
+   */
+  async listarCuentasPorPagarPaginado(
+    filtro: CuentasPorPagarFiltro,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CuentaPorPagarAgregadoRow>> {
+    const conjunto = await this.listarCuentasPorPagarCompleto(filtro);
+    return {
+      items: conjunto.slice(rango.skip, rango.skip + rango.take),
+      total: conjunto.length, // R41: el total del CONJUNTO FILTRADO, no el de la pagina
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T M.1, cierre de Q-L2) — el CONJUNTO filtrado y ordenado, entero.
+   *
+   * Es la lista de la que el metodo de arriba saca su `slice`, extraida para que la DESCARGA
+   * pueda pedirla sin releer el listado sin busqueda y filtrar despues en el navegador (lo que
+   * hacia T L.2). Con esto la busqueda deja de tener dos implementaciones vivas —la del
+   * servidor y la del cliente— y R45 pasa a cumplirse por construccion tambien en el archivo.
+   *
+   * Sigue SIN cortar en la base, por el mismo motivo que el metodo paginado: cada fila es la
+   * agregacion de todo el libro de ese mensajero y el nombre por el que se busca vive en
+   * `usuario`, no en el libro que se agrega.
+   */
+  async listarCuentasPorPagarCompleto(
+    filtro: CuentasPorPagarFiltro,
+  ): Promise<CuentaPorPagarAgregadoRow[]> {
+    return ordenarCuentasPorPagar(
+      // R45: la busqueda ANTES del recorte. Al reves, buscaria dentro de la pagina — que es
+      // exactamente la regresion que esta tanda existe para evitar.
+      filtrarPorBusquedaMensajero(await this.listarCuentasPorPagarTodos(), filtro.busqueda),
+    );
   }
 
   /** R18: nombre de UN mensajero para la vista del maestro (desglose por cierre); null si no existe. */

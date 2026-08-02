@@ -12,7 +12,8 @@
 // La verificación va en dos planos deliberadamente distintos:
 //
 //  (a) CONDUCTA, sobre las TRES formas de cableado que existen en el rollout —Familia A con
-//      filtros, Familia A sin filtros y Familia B con filtro de cliente—, montando
+//      filtros, Familia A sin filtros y Familia B paginada con búsqueda de servidor (T L.2;
+//      antes de la FASE 2 esta tercera era «Familia B con filtro de cliente»)—, montando
 //      componentes reales de producción. Una por forma: si las tres coinciden, la propiedad
 //      es del control compartido y no de una pantalla.
 //  (b) BARRIDO ESTÁTICO sobre TODO el árbol, que es lo que extiende esas cinco propiedades
@@ -58,6 +59,15 @@ vi.mock("@/lib/actions/usuarios", () => ({
 // que aquí se juzga es la tabla que lo contiene.
 vi.mock("@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero", () => ({
   DesglosePagosMensajero: () => <div data-testid="desglose-stub" />,
+}));
+
+// Feature 170 — FASE 2 (T L.2): las cuentas por pagar pintan la página que les da el servidor
+// y buscan por nombre en él; el archivo sigue saliendo del conjunto completo.
+const listarCuentasPaginadoMock = vi.fn();
+const listarCuentasMock = vi.fn();
+vi.mock("@/lib/actions/wallet-mensajero", () => ({
+  listarCuentasPorPagarCompletoAction: (...a: unknown[]) => listarCuentasMock(...a),
+  listarCuentasPorPagarPaginadoAction: (...a: unknown[]) => listarCuentasPaginadoMock(...a),
 }));
 
 vi.mock("@/components/shared/descargar-blob", () => ({ descargarBlob: vi.fn() }));
@@ -210,9 +220,18 @@ const FORMAS = [
     filasEsperadas: USUARIOS_TODOS.length,
   },
   {
-    forma: "Familia B con filtro de cliente",
+    // Feature 170 — FASE 2 (T L.2): esta forma era «Familia B con filtro de cliente». Sigue
+    // siendo Familia B —el archivo se proyecta en el navegador con `filasLocales`, no hay
+    // modo completo en el servidor— pero su búsqueda y su página las resuelve ya el servidor,
+    // que es lo que la distingue de las dos de arriba: el conjunto del archivo se RELEE.
+    forma: "Familia B paginada, con búsqueda de servidor",
     titulo: "Cuentas por pagar a mensajeros",
-    montar: () => envolver(<CuentasPorPagarTable mensajeros={MENSAJEROS} />),
+    montar: () =>
+      envolver(
+        <CuentasPorPagarTable
+          initialData={{ items: MENSAJEROS, total: MENSAJEROS.length, pageSize: 25 }}
+        />,
+      ),
     preparar: async (user: ReturnType<typeof userEvent.setup>) => {
       await user.type(screen.getByRole("searchbox"), "Beto");
       const tabla = screen.getByRole("table", {
@@ -311,6 +330,23 @@ beforeEach(() => {
     status: "ok",
     items: USUARIOS_TODOS,
     total: USUARIOS_TODOS.length,
+  });
+  // T L.2: la página FILTRA de verdad (la búsqueda es de servidor) y el conjunto entrega las
+  // dos filas de las que sale el archivo.
+  listarCuentasPaginadoMock.mockImplementation(async (input: { busqueda?: string } = {}) => {
+    const q = (input.busqueda ?? "").trim().toLowerCase();
+    const items =
+      q === ""
+        ? MENSAJEROS
+        : MENSAJEROS.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+    return { status: "ok", items, page: 1, pageSize: 25, total: items.length };
+  });
+  // T M.1 (Q-L2): el conjunto del archivo llega YA filtrado por el servidor.
+  listarCuentasMock.mockImplementation(async (input: { busqueda?: string } = {}) => {
+    const q = (input?.busqueda ?? "").trim().toLowerCase();
+    const items =
+      q === "" ? MENSAJEROS : MENSAJEROS.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+    return { status: "ok", items, total: items.length };
   });
   buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
 });
@@ -442,6 +478,7 @@ describe("Control de descarga · consistencia transversal", () => {
       const antes = fotoDeLaPantalla(caso.titulo);
       const consultasListado = listarOrdenesMock.mock.calls.length;
       const consultasUsuarios = listarUsuariosMock.mock.calls.length;
+      const consultasCuentas = listarCuentasPaginadoMock.mock.calls.length;
 
       await user.click(screen.getByRole("button", { name: `Descargar ${caso.titulo}` }));
       await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
@@ -449,6 +486,9 @@ describe("Control de descarga · consistencia transversal", () => {
       expect(fotoDeLaPantalla(caso.titulo), caso.forma).toEqual(antes);
       expect(listarOrdenesMock.mock.calls.length, caso.forma).toBe(consultasListado);
       expect(listarUsuariosMock.mock.calls.length, caso.forma).toBe(consultasUsuarios);
+      // T L.2: descargar RELEE el conjunto, pero no vuelve a pedir la página que se está
+      // viendo —eso movería la tabla bajo los pies del usuario mientras se arma el archivo—.
+      expect(listarCuentasPaginadoMock.mock.calls.length, caso.forma).toBe(consultasCuentas);
 
       cleanup();
       vi.clearAllMocks();

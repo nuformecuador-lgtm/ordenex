@@ -274,6 +274,8 @@ function aprobar(db: Db, cierreId: string) {
       listarPorMensajero: vi.fn(),
       agregarCuentaPorPagar: vi.fn(),
       listarCuentasPorPagarTodos: vi.fn(),
+      listarCuentasPorPagarPaginado: vi.fn(),
+      listarCuentasPorPagarCompleto: vi.fn(),
       obtenerNombreMensajero: vi.fn(),
     },
     { construirMovimientosDePago: vi.fn(async () => ({ libro: [], egresoCaja: [] })) },

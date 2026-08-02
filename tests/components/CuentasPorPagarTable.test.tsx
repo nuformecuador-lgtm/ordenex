@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, within, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import type { DesglosePagosMensajeroProps } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
 // Feature 44 (T14) — tabla-resumen de cuentas por pagar, ahora sobre `DataTable` (columnas +
 // `renderExpanded`). Se stubbea el DESGLOSE por cierre (SWR + Server Action) para aislar el
@@ -21,6 +23,22 @@ vi.mock(
   }),
 );
 
+// Feature 170 — FASE 2 (T L.2): la tabla pinta la PÁGINA que le da el servidor y la búsqueda
+// por nombre la resuelve él. El doble de la Server Action FILTRA de verdad (con el mismo
+// criterio que `lib/utils/cuentas-por-pagar-listado.ts` describe: subcadena, sin distinguir
+// mayúsculas), para que un cableado que ignorase la búsqueda no pasara por aquí.
+const { paginadoMock, conjuntoMock } = vi.hoisted(() => ({
+  paginadoMock: vi.fn(),
+  conjuntoMock: vi.fn(),
+}));
+
+vi.mock("@/lib/actions/wallet-mensajero", () => ({
+  listarCuentasPorPagarCompletoAction: (...a: unknown[]) => conjuntoMock(...a),
+  listarCuentasPorPagarPaginadoAction: (...a: unknown[]) => paginadoMock(...a),
+  listarPagosDeMensajeroAction: vi.fn(),
+  listarPagosDeMensajeroCompletoAction: vi.fn(),
+}));
+
 import { ToastProvider } from "@/providers/ToastProvider";
 import { CuentasPorPagarTable } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
 
@@ -31,10 +49,29 @@ import { CuentasPorPagarTable } from "@/app/(app)/wallet/mensajeros/_components/
  * del ARNÉS: ninguna aserción se toca.
  */
 function renderTabla(mensajeros: CuentaPorPagarResumenDTO[]) {
+  paginadoMock.mockImplementation(
+    async (input: { busqueda?: string } | undefined = {}) => {
+      const q = (input.busqueda ?? "").trim().toLowerCase();
+      const filtrados =
+        q === ""
+          ? mensajeros
+          : mensajeros.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+      return { status: "ok", page: 1, pageSize: 25, items: filtrados, total: filtrados.length };
+    },
+  );
+  // T M.1 (Q-L2): el conjunto para el archivo llega YA filtrado por el servidor.
+  conjuntoMock.mockImplementation(async (input: { busqueda?: string } | undefined = {}) => {
+    const q = (input?.busqueda ?? "").trim().toLowerCase();
+    const items =
+      q === "" ? mensajeros : mensajeros.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+    return { status: "ok", items, total: items.length };
+  });
   return render(
-    <ToastProvider>
-      <CuentasPorPagarTable mensajeros={mensajeros} />
-    </ToastProvider>,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <ToastProvider>
+        <CuentasPorPagarTable initialData={paginaInicial(mensajeros)} />
+      </ToastProvider>
+    </SWRConfig>,
   );
 }
 
@@ -60,6 +97,10 @@ const MENSAJEROS: CuentaPorPagarResumenDTO[] = [
 function tabla() {
   return screen.getByRole("table", { name: "Cuentas por pagar a mensajeros" });
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 afterEach(() => {
   cleanup();
@@ -108,7 +149,7 @@ describe("CuentasPorPagarTable — columnas y datos (R18/R21)", () => {
   });
 });
 
-describe("CuentasPorPagarTable — filtro por nombre (client-side)", () => {
+describe("CuentasPorPagarTable — búsqueda por nombre (servidor, T L.2)", () => {
   it("filtra la lista por nombre de mensajero sin tocar montos", async () => {
     const user = userEvent.setup();
     renderTabla(MENSAJEROS);
@@ -118,8 +159,34 @@ describe("CuentasPorPagarTable — filtro por nombre (client-side)", () => {
       "Ana",
     );
 
+    // Feature 170 — FASE 2 (T L.2, R45): el texto se resuelve en el SERVIDOR, así que la
+    // tabla ya no cambia en la misma tecla; lo que se afirma —qué queda a la vista— es
+    // exactamente lo de antes.
+    await waitFor(() =>
+      expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument(),
+    );
     expect(within(tabla()).getByText("Ana Mensajera")).toBeInTheDocument();
-    expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument();
+  });
+
+  it("el texto viaja TAL CUAL al servidor y una ráfaga de teclas es UNA sola lectura", async () => {
+    // Dos cosas en un caso, porque son la misma decisión:
+    //  (a) la búsqueda se manda sin recortar ni pasar a minúsculas (quien normaliza es
+    //      `lib/utils/cuentas-por-pagar-listado.ts`, en un solo sitio: T L.1 §9.1);
+    //  (b) escribir tres letras NO son tres lecturas. Cada lectura de este listado agrega el
+    //      libro entero de cada mensajero, así que la espera del filtro no es cosmética.
+    const user = userEvent.setup();
+    renderTabla(MENSAJEROS);
+
+    await user.type(screen.getByPlaceholderText("Buscar por nombre"), "Ana");
+    await waitFor(() =>
+      expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument(),
+    );
+
+    const conBusqueda = paginadoMock.mock.calls
+      .map(([input]) => input as { busqueda?: string })
+      .filter((input) => (input?.busqueda ?? "") !== "");
+    expect(conBusqueda).toHaveLength(1);
+    expect(conBusqueda[0].busqueda).toBe("Ana");
   });
 });
 

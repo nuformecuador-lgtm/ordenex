@@ -104,7 +104,7 @@ describe("wallet idempotencia (R6/R13)", () => {
       { construirMovimientosPorTienda: vi.fn().mockResolvedValue([]) },
       // Feature 44: dobles no-op del libro del pago por mensajero (feed devuelve libro/egreso
       // vacios; el pago por mensajero tiene su propio test de idempotencia).
-      { crearMovimientos: vi.fn().mockResolvedValue(0), listarPorMensajero: vi.fn(), agregarCuentaPorPagar: vi.fn(), listarCuentasPorPagarTodos: vi.fn(), obtenerNombreMensajero: vi.fn() },
+      { crearMovimientos: vi.fn().mockResolvedValue(0), listarPorMensajero: vi.fn(), agregarCuentaPorPagar: vi.fn(), listarCuentasPorPagarTodos: vi.fn(), listarCuentasPorPagarPaginado: vi.fn(), listarCuentasPorPagarCompleto: vi.fn(), obtenerNombreMensajero: vi.fn() },
       { construirMovimientosDePago: vi.fn().mockResolvedValue({ libro: [], egresoCaja: [] }) },
       // Feature 158/T1.14: doble del feed del egreso de indemnizacion. Este caso cubre la
       // idempotencia de los conceptos de INGRESO; la del egreso de indemnizacion tiene su

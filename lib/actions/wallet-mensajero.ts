@@ -13,10 +13,14 @@ import type {
   VerMiCuentaPorPagarServiceResult,
 } from "@/lib/interfaces/services/IWalletMensajeroService";
 import {
+  listarCuentasPorPagarCompletoSchema,
+  listarCuentasPorPagarPaginadoSchema,
   listarMisPagosCompletoSchema,
   listarPagosDeMensajeroCompletoSchema,
   listarPagosDeMensajeroSchema,
   listarPagosMensajeroSchema,
+  type ListarCuentasPorPagarCompletoResult,
+  type ListarCuentasPorPagarPaginadoResult,
   type ListarMisPagosCompletoResult,
   type ListarPagosDeMensajeroCompletoResult,
 } from "@/lib/types/wallet-mensajero";
@@ -139,6 +143,51 @@ export async function listarCuentasPorPagarAction(
     return service.listarCuentasPorPagar(actor);
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T L.1, R40/R41/R45): las MISMAS cuentas por pagar, en paginas y con la
+ * busqueda por nombre resuelta en el servidor.
+ *
+ * `input ?? {}` para que la pagina 1 con los defaults del dominio sea una llamada sin
+ * argumentos: es lo que el Server Component necesita pre-cargar. El schema es `.strict()`, asi
+ * que una clave de ALCANCE colada muere aqui con `validation_error` sin llegar al service.
+ */
+export async function listarCuentasPorPagarPaginadoAction(
+  input: unknown,
+  deps: WalletMensajeroDeps = {},
+): Promise<ListarCuentasPorPagarPaginadoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = listarCuentasPorPagarPaginadoSchema.parse(input ?? {});
+    const service = deps.service ?? buildService();
+    return service.listarCuentasPorPagarPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T M.1, cierre de Q-L2) — las MISMAS cuentas por pagar SIN recorte por
+ * pagina, para la descarga (R52).
+ *
+ * Calcado del borde de su pagina: mismo actor, mismo servicio y el mismo schema menos
+ * `page`/`pageSize`. La busqueda vigente viaja tal cual y el conjunto vuelve YA filtrado: la
+ * pantalla deja de releer el listado entero para volver a filtrarlo en el navegador, que es lo
+ * que Q-L2 dejo escrito.
+ */
+export async function listarCuentasPorPagarCompletoAction(
+  input: unknown,
+  deps: WalletMensajeroDeps = {},
+): Promise<ListarCuentasPorPagarCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
+    const data = listarCuentasPorPagarCompletoSchema.parse(input ?? {}); // R18
+    const service = deps.service ?? buildService();
+    return service.listarCuentasPorPagarCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
 }
 
 /**

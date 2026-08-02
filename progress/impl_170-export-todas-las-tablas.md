@@ -1246,3 +1246,115 @@ Los +24 cuadran uno a uno: 5 (Ranking) + 7 (transversal) + 2 (volumen) + 3 (roll
 3. **La deuda D5.2 sigue abierta** y es de backend (una línea).
 4. **`descargaConfig.MAX_FILAS` se lee en servidor y en cliente** (B11.4): si alguien bajara el
    tope por entorno, el servidor sería el estricto — falla cerrado, nunca entrega de más.
+
+---
+
+# FASE 2 — CIERRE (tandas H–M, T M.2)
+
+> Escrito por la **tanda M** (2026-08-01), que cierra la FASE 2. El detalle de cada tanda vive en
+> `progress/impl_170-fase2-tanda-{h,i,j,k,l,m}.md`; aquí queda lo que `CHECKPOINTS.md` exige de
+> este archivo: la trazabilidad `R<n> → test` **completa**, el censo final y la medición de
+> volumen.
+
+## F2.1 — Trazabilidad `R1 → R54`, completa y sin huecos
+
+Una fila por requisito, con el test o los tests **ancla**. Cuando un requisito está afirmado en
+decenas de casos (los siete listados × cuatro afirmaciones de la tanda I, p. ej.), la fila nombra
+el patrón y el archivo; la enumeración exhaustiva vive en la bitácora de su tanda.
+
+Prefijos: `cd/` = `tests/components/descarga/` · `desc/` = `tests/unit/descarga/` ·
+`svc/` = `tests/unit/services/` · `act/` = `tests/unit/actions/` ·
+`rep/` = `tests/unit/repositories/` · `pag/` = `tests/components/paginacion/` ·
+`int/` = `tests/integration/`.
+
+### PARTE 1 — Descarga a Excel (R1–R39) · **39 de 39 cubiertos**
+
+| R | Test ancla |
+| --- | --- |
+| R1 | un «ofrece su control» por tabla en los 7 archivos de `cd/` + `desc/cobertura-tablas.guardia` :: estado declarado == código, instancia a instancia |
+| R2 | `desc/cobertura-tablas.guardia` :: las tablas declaradas fuera de alcance no montan control · `cd/RankingDescarga` :: la tabla de premios NO ofrece control · `cd/rollout-parcial` :: una tabla REAL excluida sigue sin control |
+| R3 | `cd/OrdenesApartadoDescarga` · `cd/ConfiguracionDescarga` · `cd/WalletDescarga` :: «sigue comportándose igual» · `cd/rollout-parcial` :: sin `descarga` el DOM es idéntico |
+| R4 | `desc/cobertura-tablas.guardia` :: toda tabla del árbol o declara descarga o figura como exclusión justificada (verificado con una tabla nueva sin registrar) |
+| R5 | los 6 `desc/*-descarga-columnas.test.ts` :: declara sus columnas ENUMERADAS, en el orden de la pantalla · `cd/RankingDescarga` :: las columnas del archivo son las DECLARADAS |
+| R6 | `desc/{usuarios,plantillas,api-keys}-descarga-columnas` :: un campo nuevo del DTO no aparece hasta declararlo |
+| R7 | los 6 archivos de columnas :: emite valores CRUDOS · `cd/WalletPropsDescarga` :: los montos viajan TAL CUAL · `cd/RankingDescarga` :: porcentaje y conteo sin «%» ni «/» |
+| R8 | `desc/usuarios-…` :: rol y estado como ETIQUETA LEGIBLE (ídem plantillas, API keys, 4 ledgers) · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: estados, causas y destinos |
+| R9 | los 7 `svc/*-descarga` :: todas las filas del dataset, sin recorte por página · `cd/OrdenesApartadoDescarga` · `cd/ConfiguracionDescarga` · `cd/WalletDescarga` |
+| R10 | `cd/OrdenesApartadoDescarga` :: el estado del apartado como filtro vigente · `cd/SateliteDescarga` :: estado, cantón y distrito · `cd/WalletDescarga` :: fechas · `svc/wallet-cuentas-paginado` :: **la búsqueda vigente acota el archivo igual que acota la tabla** (T M.1) |
+| R11 | `tests/unit/components/descarga-resultado` :: mismo orden, las dos familias · los 7 servicios :: mismo criterio que el listado · `rep/cuentas-por-pagar-paginado-where` :: **la página es un prefijo EXACTO del conjunto** (T M.1) |
+| R12 | `cd/ConfiguracionDescarga` · `cd/OrdenesApartadoDescarga` · `cd/IncidentesDescarga` · `int/descarga-170-volumen` :: `ordenes-2026-07-31.xlsx` |
+| R13 | los 7 archivos de `cd/` :: el nombre accesible de cada control identifica SU tabla · `cd/CierresDescarga` :: `<Resultado> · <mensajero>` |
+| R14 | `svc/wallet-tienda-descarga` · `svc/wallet-mis-pagos-descarga` · `svc/wallet-desglose-mensajero-descarga` · `cd/SateliteDescarga` · `cd/CierresDescarga` · `cd/IncidentesDescarga` |
+| R15 | `svc/wallet-tienda-descarga` :: un `tiendaId` inyectado NO amplía el alcance · `svc/wallet-mis-pagos-descarga` :: ídem con `mensajeroId` — **ambos verificados por MUTACIÓN** |
+| R16 | las 8 de `act/*-descarga-action` :: unauthenticated y ninguna fila sin sesión (+ `act/wallet-mensajero-actions` :: el modo completo de cuentas por pagar, T M.1) |
+| R17 | los 8 servicios :: forbidden y ninguna fila a todo rol ajeno, con el repositorio SIN invocar, + CONTRAPRUEBA con el rol autorizado |
+| R18 | las 8 actions :: validation_error con una clave fuera de la lista blanca, y también con `page`/`pageSize` (T M.1 lo añade para cuentas por pagar) |
+| R19 | `svc/plantilla-descarga` :: excluye las borradas igual que el listado · `svc/usuario-descarga` y `svc/api-key-descarga` :: el conjunto == la concatenación de las páginas |
+| R20 | verificado LISTADO POR LISTADO: `cd/SateliteDescarga` · `cd/CierresDescarga` · `cd/IncidentesDescarga` · los 4 servicios de dinero |
+| R21 | `desc/columnas-sensibles.guardia` :: ninguna declaración contiene credencial, token ni secreto · `svc/api-key-descarga` :: ninguna fila lleva el hash |
+| R22 | `desc/columnas-sensibles.guardia` :: ninguna fila emite ruta de almacenamiento ni URL firmada · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: sobre las celdas REALES |
+| R23 | `desc/columnas-sensibles.guardia` :: ninguna celda con forma de uuid · los 6 archivos de columnas · `cd/RankingDescarga` |
+| R24 | `desc/usuarios-…` y `desc/plantillas-descarga-columnas` :: no emite campos que el listado no muestra · los 4 ledgers · `cd/RankingDescarga` :: el `premio` no sale |
+| R25 | `desc/columnas-sensibles.guardia` :: la guardia cubre TODAS las declaraciones del árbol (convención de nombre + barrido de disco + prohibición de declararlas fuera de esa convención) |
+| R26 | `descarga-resultado` :: `filasLocales` rechaza por encima del tope · `cd/WalletPropsDescarga` y `cd/RankingDescarga` · `int/descarga-170-volumen` :: con N+1 no hay archivo · `cd/ControlDescargaTransversal` :: ninguna de las 25 se salta el tope · `svc/wallet-cuentas-paginado` :: **el tope del modo completo, medido en 5000/5001** (T M.1) |
+| R27 | los 8 servicios :: `limite_excedido` con total y límite y sin filas · las 8 actions :: lo propagan · `int/descarga-170-volumen` :: el mismo texto por las DOS puertas |
+| R28 | los 8 servicios :: o todas las filas o el error · `int/descarga-dataset-roundtrip` (60) e `int/descarga-170-volumen` (5000 releídas del binario) |
+| R29 | los 7 servicios de FASE 1 :: nunca más de `N+1` filas · `svc/wallet-cuentas-paginado` :: por encima del tope **no se transporta ni una fila** (T M.1) |
+| R30 | `cd/SateliteDescarga` y `cd/WalletPropsDescarga` :: no relee del servidor (estático) · `pag/paginacion-transversal` :: **los 3 del Anexo IV proyectan el array que ya tienen** (T M.1) · `rep/cuentas-por-pagar-paginado-where` :: descargar cuesta las MISMAS dos consultas que leer la página |
+| R31 | `descarga-resultado` :: el resultado vacío se devuelve tal cual para que el control avise sin archivo · `tests/components/DescargarDataset` (151) · `svc/wallet-cuentas-paginado` :: archivo vacío y total 0, no un error |
+| R32 | `cd/OrdenesApartadoDescarga` · `cd/WalletDescarga` · `cd/WalletPropsDescarga` :: la acción del modo completo no se llama hasta que alguien pulsa · `cd/rollout-parcial` :: sin la prop no se carga ni el generador |
+| R33 | `cd/ControlDescargaTransversal` :: el contenido lo produce la función común (identidad del buffer en las 3 formas) + barrido estático |
+| R34 | `cd/ControlDescargaTransversal` :: xlsx y ninguna elección de formato + barrido estático |
+| R35 | `cd/ControlDescargaTransversal` :: mientras descarga, el control lo indica y no admite una segunda ejecución |
+| R36 | `descarga-resultado` :: traduce cualquier error de acción a un mensaje accionable sin datos personales |
+| R37 | `cd/CierresDescarga` :: descargar no cambia la fila expandida ni el modal · `cd/ControlDescargaTransversal` :: no altera página, búsqueda ni filas visibles |
+| R38 | `cd/ControlDescargaTransversal` :: el archivo nace y muere en el navegador (fetch espiado + entrega local) + barrido estático |
+| R39 | `cd/rollout-parcial` ×3 :: sin la prop no hay control y el DOM es idéntico · no se carga el generador · una tabla REAL excluida sigue igual |
+
+### PARTE 2 — Paginación server-side (R40–R54) · **15 de 15 cubiertos**
+
+| R | Test ancla |
+| --- | --- |
+| R40 | `tests/unit/config/paginacion-dominios.test.ts` :: cada dominio declara default y máximo y el default no supera al máximo (T H.1) · los 13 `svc/*-paginado.test.ts` :: «devuelve la página pedida y el total del conjunto» · «acota el tamaño de página al máximo configurado» |
+| R41 | `desc/contrato-paginado.test.ts` :: todo listado paginado devuelve el total junto a la página (conducta ×4) · «ningún resultado del repo declara la página sin declarar el total» (forma, estático) · los 13 servicios :: el total es el del CONJUNTO, nunca `items.length` |
+| R42 | `desc/contadores-cabecera.guardia.test.ts` ×5 :: ninguna pantalla paginada deriva su contador de un `.length`, el registro no se despega del código, y las cuatro colas + satélite + cuentas muestran el `total` del servidor · `pag/ColasPaginacion` :: el contador en la ÚLTIMA página (10 de 60) · `pag/SatelitePaginacion` · `pag/CuentasPorPagarPaginacion` |
+| R43 | `pag/BajoRiesgoPaginacion` :: cada listado navega entre páginas y el control tiene nombre accesible (los 7) · `pag/ColasPaginacion` (las 4, nombres distintos entre sí) · `pag/SatelitePaginacion` · `pag/CuentasPorPagarPaginacion` (los DOS controles conviven) · `pag/paginacion-transversal` :: **el censo de las 13 constantes `PAGINACION_…_LABEL`, en los dos sentidos** |
+| R44 | los 13 `svc/*-paginado.test.ts` :: «el conjunto paginado y el dataset completo coinciden para el mismo actor» + su CONTRAPRUEBA por rol y por zona · los 4 `rep/*-where.test.ts` :: el acotamiento en el **WHERE** (los tests de servicio usan dobles y no lo ven) · `pag/*` ×4 :: las mismas filas que antes en el PRIMER pintado, sin `await` |
+| R45 | `svc/recepcion-satelite-paginado` :: el mismo conjunto que el filtro de cliente en las **64 combinaciones** · `svc/wallet-cuentas-paginado` :: la **batería de 25 textos** contra la búsqueda de cliente copiada literal, en la página **y en el modo completo** (T M.1) · `pag/CuentasPorPagarPaginacion` :: la búsqueda mira el CONJUNTO y devuelve a la página 1 |
+| R46 | `tests/unit/actions/satelite-catalogos.test.ts` :: ofrece todas las opciones del conjunto del actor, no las de la página; y ninguna de zonas ajenas · `pag/SatelitePaginacion` :: la página trae un cantón y el desplegable los cuatro |
+| R47 | `pag/SatelitePaginacion` :: «seleccionar todo» marca las 25 de la página 2 y NINGUNA de la 1 |
+| R48 | `pag/SatelitePaginacion` ×2 :: las acciones de lote se deciden sobre lo SELECCIONADO (3 de 10) y «Enviar a central» no se ofrece aunque el conjunto tenga 10 en otra página |
+| R49 | `svc/cierre-bodega-consolidables-paginado` :: los cinco agregados sobre el conjunto COMPLETO, con página y conjunto de números distintos · `svc/wallet-cuentas-paginado` :: cada fila declara el libro ENTERO de su mensajero (suma `2410.75`, la página 1 estrictamente menor) · `rep/cuentas-por-pagar-paginado-where` :: la agregación del dinero NO lleva `where`, `take` ni `skip` |
+| R50 | `pag/ColasPaginacion` :: cambiar de página no altera los 5 totales, ni los avisos de bloqueo, ni el monto tecleado en un sub-modal abierto · `pag/CuentasPorPagarPaginacion` ×3 :: expandir el desglose en cualquier página, sin arrastre, sin tocar el buscador |
+| R51 | los 13 `svc/*-paginado.test.ts` :: «conserva el criterio de ordenación actual» (con **2 DESVIACIONES declaradas**: saldos de tiendas y cuentas por pagar, que no tenían ninguno) · `rep/satelite-paginado-where` :: el `ORDER BY` con `array_position` · `rep/cuentas-por-pagar-paginado-where` :: el orden no depende del que devuelva la base |
+| R52 | `pag/BajoRiesgoPaginacion` (7) · `pag/ColasPaginacion` (4, desde la página 2) · `pag/SatelitePaginacion` (2, con y sin filtros) · `pag/CuentasPorPagarPaginacion` (2, desde la página 3) · **`pag/paginacion-transversal` ×2 :: ninguno de los TRECE proyecta el array de la página (estático, con el adaptador declarado por listado) y descargar desde la última página entrega el conjunto (conducta)** |
+| R53 | **`pag/paginacion-transversal` ×4** :: el ranking entrega el conjunto y no ofrece navegación · la vista agrupada del mensajero entrega el grupo entero y su contador lo dice (con contraprueba de que la MISMA pantalla sí pagina su otra tabla) · las secciones del detalle del admin, y la sección vacía no se pinta · el censo del Anexo IV son TRES, con motivo, y su descarga no relee nada |
+| R54 | los 13 `svc/*-paginado.test.ts` :: «no ejecuta más consultas que el listado sin paginar, salvo el conteo» · los 4 `rep/*-where.test.ts` :: el número EXACTO de consultas (2 = página + conteo; 1 en los dos que agregan en memoria) · **`pag/paginacion-transversal` ×2 :: los TRECE declaran `fallbackData` (estático) y cada página cuesta UNA lectura, ni dos (conducta)** |
+
+**Requisitos sin test: NINGUNO (0 de 54).**
+
+**Un matiz MEDIDO, no maquillado (T M.1 §2.2):** R54 se cumple **listado a listado en el
+servidor** —una consulta con el conteo dentro, afirmado en los trece—, pero **no en el navegador**:
+SWR revalida al montar la página que el Server Component ya resolvió, así que cada pantalla hace
+hoy una lectura de cliente que antes de paginar no hacía. Queda declarado como **Q-M1** en
+`progress/impl_170-fase2-tanda-m.md`, con su salida propuesta y el motivo por el que no se aplicó
+en la tanda de cierre.
+
+## F2.2 — Censo final
+
+| Concepto | Nº |
+| --- | --- |
+| **Tablas DENTRO del export (Anexo I)** | **25** |
+| Tablas FUERA del export (Anexo II) | 6 |
+| **Listados PAGINADOS server-side (Anexo III)** | **13** |
+| **EXCLUSIONES de la paginación (Anexo IV)** | **3** |
+| Tablas censadas en el árbol | 31 (30 `<DataTable>` en 29 archivos + 1 `<table>` cruda) |
+| Contadores de cabecera `({X.length})` vivos | 2 (los del Anexo IV) |
+| Dominios con `DEFAULT_PAGE_SIZE`/`MAX_PAGE_SIZE` | 7 |
+| Listados con `listarCompleto` propio | 8 (7 de FASE 1 + cuentas por pagar, T M.1) |
+
+## F2.3 — Medición de volumen
+
+**5000 filas × 15 columnas** (órdenes, la tabla MÁS ANCHA del rollout) ⇒ **0,34 MB
+(359 311 bytes)**, generado y releído en ~1 s. Lo imprime `int/descarga-170-volumen.test.ts` para
+poder recomprobarlo en vez de creerlo. Muy lejos de obligar a bajar `N`.
