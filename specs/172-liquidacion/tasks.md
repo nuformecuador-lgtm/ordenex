@@ -83,7 +83,11 @@ queda el registro de cierre y lo que cada una desencadenó.
   añadir una restricción que valida filas existentes a una tabla que esta feature no escribe es
   riesgo de despliegue importado; queda anotado para la 173.
 
-### [ ] T0.9 — Calendario: colisión con la 170 fase 2 (decisión del LEADER, no del spec)
+### [x] T0.9 — Calendario: colisión con la 170 fase 2 (decisión del LEADER, no del spec)
+- **RESUELTA el 2026-08-02: NO hay colisión, la 172 arranca ya.** La 170 y la 171 están las dos
+  en `done` (las 6 tandas de la fase 2 mergeadas: PRs #248, #249, #250, #253, #255, #256), así que
+  nada sigue en vuelo sobre `app/(app)/wallet/tiendas/**` ni `app/(app)/cierres-admin/**`. Zona
+  `fullstack` con **0 `in_progress`**. Constancia en `progress/impl_172-liquidacion.md`.
 - Comprobar qué tandas de la 170 siguen en vuelo sobre `app/(app)/wallet/tiendas/**` y
   `app/(app)/cierres-admin/**` (`AGENTS.md § Paralelismo`: intersección de archivos en la misma
   zona `fullstack`).
@@ -94,7 +98,12 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA A — Base de datos, integridad y piezas puras
 
-### [ ] T A.0 — Verificar las bases ANTES de escribir la migración
+### [x] T A.0 — Verificar las bases ANTES de escribir la migración
+- **HECHA el 2026-08-02.** Producción (`scfnwxqbsgkzwsdntdvd`): **39 + 7 = 46 filas, CERO
+  incoherentes**; los CHECK cubren **10/10** y **5/5** valores de los enums reales. **Preview NO
+  verificada**: el MCP está fijado al ref de producción y el de preview no es descubrible desde
+  esta sesión — hueco declarado en `progress/impl_172-liquidacion.md`, **a resolver antes de
+  mergear el PR**, no antes de escribir el código. Evidencia y consulta pegadas allí.
 - Con el MCP de Supabase, en **producción y preview** (y en local con Prisma), comprobar que
   **ninguna** fila de `wallet_tienda_movimiento` ni de `pago_mensajero_movimiento` incumple el
   CHECK de `design.md §2.3`, y contar filas de las dos tablas.
@@ -106,7 +115,13 @@ queda el registro de cierre y lo que cada una desencadenó.
   `progress/impl_172-liquidacion.md`. Si aparece **una sola** fila incoherente, la tanda se
   detiene y vuelve a la puerta: no se «arregla» una fila de dinero sin decisión humana.
 
-### [ ] T A.1 — Modelo Prisma + migración `up`/`down`
+### [x] T A.1 — Modelo Prisma + migración `up`/`down`
+- **HECHA el 2026-08-02.** `db/schema.prisma`: `LiquidacionPago` + `LiquidacionAnulacion` + los 4
+  lados inversos en `Usuario` y 1 en `CierreDia`. `db/migrations/20260802120000_liquidacion_pago/`
+  con `migration.sql` (2 tablas, 3 CHECK del pago, 2 UNIQUE, 3 índices, 6 FK, RLS en ambas, y los
+  2 CHECK `tipo`↔`categoria` de los libros) y `down.sql` (DROP en orden inverso + los 2 DROP
+  CONSTRAINT). **Cero sentencias de tipos** ⇒ ningún `down.sql` previo tocado.
+  Round-trip up → down → up verde en local; `migrate status` limpio; `typecheck` verde.
 - `db/schema.prisma`: `LiquidacionPago` y `LiquidacionAnulacion` (§2.1, §2.2) + lados inversos en
   `Usuario` y `CierreDia`.
 - `migration.sql`: las 2 tablas con sus CHECK, los 2 `UNIQUE` (`clave_idempotencia`, `pago_id`),
@@ -116,7 +131,13 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** `pnpm run db:migrate` aplica en local; `pnpm run db:rollback` revierte; `prisma
   migrate status` limpio; `pnpm typecheck` verde con el cliente regenerado.
 
-### [ ] T A.2 — Test estático de la migración
+### [x] T A.2 — Test estático de la migración
+- **HECHA el 2026-08-02.** `tests/integration/db/liquidacion-migration.test.ts`: **11 casos, los
+  11 verdes**. Los dos CHECK no se comprueban por `toContain` del SQL literal: se **parsean** a
+  un mapa `tipo → categorías` y se comparan contra los valores REALES de los enums leídos de
+  `db/schema.prisma`. **Prueba por mutación ejecutada** (borrar la rama `credito` y borrar
+  `'ajuste_devengo'`): en los dos casos caen 2 tests; salida pegada en
+  `progress/impl_172-liquidacion.md`.
 - `tests/integration/db/liquidacion-migration.test.ts` (molde `wallet-tienda-migration.test.ts`,
   regex sobre el SQL, sin Postgres):
   - «crea la tabla del pago con monto DECIMAL(12,2) y sin updated_at/deleted_at»
@@ -133,7 +154,12 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Depende de:** T A.1 · **Cubre:** R58, R59, R60, R62, R63, R64, R75
 - **Hecho:** 11 tests verdes; borrar a mano una rama del CHECK hace fallar el test que la afirma.
 
-### [ ] T A.3 [P] — Tipos y schemas de borde
+### [x] T A.3 [P] — Tipos y schemas de borde
+- **HECHA el 2026-08-02.** `lib/types/liquidacion.ts` (DTOs de §3.2 + 3 schemas `.strict()`) y
+  `tests/unit/types/liquidacion-schemas.test.ts` (**57 tests verdes**). Todos los negativos de
+  «Hecho» cubiertos, cada uno afirmando **el campo** del error. Hallazgo: un día inexistente
+  (`2026-02-31`) **no** da `Invalid Date` en V8 (rueda al 3 de marzo), así que la validación de
+  fecha compara el ISO de vuelta; hay un test que lo fija.
 - `lib/types/liquidacion.ts`: los DTO de `design.md §3.2`, `montoPositivoSchema` reutilizado, tope
   por precisión de columna (molde `INDEMNIZACION_MONTO_MAX`), `z.enum(METODO_PAGO_SEED)`,
   `fechaPago` como `YYYY-MM-DD` no futura en hora de Costa Rica (`fechaCalendarioCR`),
@@ -145,7 +171,12 @@ queda el registro de cierre y lo que cada una desencadenó.
   de mañana, SINPE sin referencia, nota pasada de tope, motivo en blanco, clave desconocida,
   cualquier campo de archivo adjunto) devuelven `validation_error` **por campo**.
 
-### [ ] T A.4 [P] — Derivación pura del pendiente de un cierre
+### [x] T A.4 [P] — Derivación pura del pendiente de un cierre
+- **HECHA el 2026-08-02.** `lib/utils/pendiente-cierre.ts` (`derivarPendienteCierre`, pura, STRING
+  `toFixed(2)`) y `tests/unit/utils/pendiente-cierre.test.ts` (**15 tests verdes**): los 6 casos
+  de «Hecho» más las fronteras al céntimo y el barrido money-safe sobre el propio módulo. La
+  regla `min(P, E)` **no se reimplementa**: hay un test que compara la salida con
+  `calcularSplitPago(P, E).pendiente` sobre 6 pares.
 - `lib/utils/pendiente-cierre.ts`: `derivarPendienteCierre(P, E, pagadoVigente)` → STRING, con
   `Prisma.Decimal`, reutilizando `calcularSplitPago` (no reimplementando `min(P,E)`).
 - Test `tests/unit/utils/pendiente-cierre.test.ts`: `E=0` → pendiente `P`; `E≥P` → `0.00`; `P=0`
