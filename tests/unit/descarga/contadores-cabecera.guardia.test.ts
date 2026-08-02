@@ -152,6 +152,40 @@ const CONTADOR_SATELITE_POR_TOTAL = /\$\{\s*total\s*\}\s*(?:de\s*\$\{\s*totalSin
  */
 const CONTADOR_SATELITE_POR_ARRAY = /\$\{\s*(?:ordenes|items|filas|visibles)\.length\s*\}/;
 
+/**
+ * Feature 170 — FASE 2 (T L.2): «Cuentas por pagar a mensajeros», la segunda pantalla de
+ * riesgo ALTO del Anexo III.
+ *
+ * Entra aqui por el traspaso de T L.1 (§9, punto 3): esta pantalla NO tenia contador —no habia
+ * nada que registrar— y T L.2 le pone uno, porque al paginar y mudar la busqueda al servidor
+ * el maestro se queda sin forma de saber cuantos mensajeros hay ni cuantos encontro. Un
+ * contador nuevo es exactamente donde `items.length` se cuela sin que nada falle.
+ *
+ * El contador vive en el MISMO archivo que monta `<Pagination>`, asi que la guardia lo ve.
+ */
+const CONTADOR_CUENTAS = {
+  ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+  listado: "Cuentas por pagar a mensajeros",
+};
+
+/**
+ * Las DOS formas del contador, las dos con numeros del SERVIDOR: `total` es el del conjunto
+ * que responde a la busqueda vigente y `initialData.total` el del conjunto sin ella, que
+ * resolvio el Server Component. Se exigen las dos porque cada una gobierna una lectura
+ * distinta de la pantalla.
+ */
+const CONTADOR_CUENTAS_POR_TOTAL = [
+  /\$\{\s*total\s*\}\s*de\s*\$\{\s*initialData\.total\s*\}\s*mensajeros/,
+  /\$\{\s*total\s*\}\s*mensajeros/,
+];
+
+/**
+ * La forma PROHIBIDA, escrita en general y no por nombres: NINGUN texto interpolado de esa
+ * pantalla puede salir de la longitud de un array. Cubre `${items.length}`,
+ * `${data?.items.length}` y `${(data?.items ?? []).length}`, que son la misma mentira.
+ */
+const CONTADOR_POR_LENGTH_INTERPOLADO = /\$\{[^{}]*\.length\s*\}/;
+
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
     const completo = path.join(dir, entrada.name);
@@ -236,9 +270,10 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
     // T H.3 lo dejo en 17 y la tanda I lo llevo a 24; T J.2 suma los CUATRO modulos de las
     // colas de riesgo MEDIO, que montan su control en el propio archivo (Q-I6) justo para
     // que esta guardia los vea. T K.3 suma DOS: el modulo de la bodega satelite (monta el
-    // control) y su listado (monta el `<DataTable>` y lleva el contador).
+    // control) y su listado (monta el `<DataTable>` y lleva el contador). T L.2 suma la tabla
+    // de cuentas por pagar, que monta control, tabla y contador en el mismo archivo.
     expect(paginadas.size, "no se reconocio ninguna pantalla paginada").toBeGreaterThanOrEqual(
-      30,
+      31,
     );
 
     const excluidos = new Set(
@@ -335,6 +370,30 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
     expect(
       CONTADOR_SATELITE_POR_ARRAY.test(fuente),
       `${CONTADOR_SATELITE.listado}: su contador sale de las filas de la pagina (R42)`,
+    ).toBe(false);
+  });
+
+  it("el contador de las cuentas por pagar dice el total del servidor, y su pantalla se vigila", () => {
+    // Feature 170 — FASE 2 (T L.2). Las mismas tres afirmaciones del test de arriba, sobre la
+    // OTRA pantalla de riesgo alto. Aqui el contador es NUEVO —la pantalla no tenia ninguno—,
+    // que es justo cuando `items.length` entra sin que nadie lo mire: la tabla ya tiene el
+    // array delante y el total del servidor esta un campo mas alla.
+    const paginadas = pantallasPaginadas();
+    expect(
+      paginadas.has(CONTADOR_CUENTAS.ruta),
+      `${CONTADOR_CUENTAS.listado}: su pantalla no monta el control, la guardia deja de mirarla`,
+    ).toBe(true);
+
+    const fuente = readFileSync(path.join(RAIZ, CONTADOR_CUENTAS.ruta), "utf8");
+    for (const forma of CONTADOR_CUENTAS_POR_TOTAL) {
+      expect(
+        forma.test(fuente),
+        `${CONTADOR_CUENTAS.listado}: falta la forma ${forma} del contador (R42)`,
+      ).toBe(true);
+    }
+    expect(
+      CONTADOR_POR_LENGTH_INTERPOLADO.test(fuente),
+      `${CONTADOR_CUENTAS.listado}: un texto de la pantalla sale de la longitud de un array (R42)`,
     ).toBe(false);
   });
 });
