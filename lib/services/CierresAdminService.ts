@@ -19,6 +19,7 @@ import type {
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
   ListarHistoricoCierresAdminServiceResult,
+  ListarPendientesCierresAdminServiceResult,
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
 import { esColaCierreDia } from "@/lib/utils/colas-cierre";
@@ -166,6 +167,43 @@ export class CierresAdminService implements ICierresAdminService {
       page: input.page,
       pageSize: input.pageSize,
       total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54) — la COLA de pendientes de decision,
+   * paginada en servidor.
+   *
+   * Espejo exacto del metodo del historico: MISMO `resolveAlcance` (el rol y la zona salen del
+   * usuario, nunca de la peticion) y MISMO corte, que aqui es el `in` de
+   * `ESTADOS_COLA_CIERRE_DIA` donde alli era el `notIn`. R44 se cumple por construccion.
+   *
+   * R49: NO se agrega dinero aqui. Los montos que la pantalla muestra por esta cola son los
+   * SNAPSHOT de cada cierre, que viajan por fila tal cual (`toResumen` no recomputa nada); la
+   * pantalla no deriva de este array ningun total. Lo que el `total` de la respuesta alimenta
+   * es el CONTADOR de cabecera (R42), que es un conteo de filas, no dinero.
+   *
+   * `sinZona` -> pagina vacia sin consultar la base, igual que hoy: `listarCierresAdmin`
+   * devuelve `pendientes: []` para ese mismo actor.
+   */
+  async listarPendientesCierresAdminPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesCierresAdminServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R1
+    if (scope.status === "sinZona") {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
+    }
+
+    const { items, total } = await this.repo.findColaPaginada(scope.alcance, rangoDePagina(input));
+
+    return {
+      status: "ok",
+      items: items.map(toResumen), // R8/R9: mismo mapper que el listado sin paginar
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
     };
   }
 

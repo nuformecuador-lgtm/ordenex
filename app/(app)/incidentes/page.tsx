@@ -6,6 +6,7 @@ import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import {
   listarIncidentes,
   listarHistoricoIncidentesPaginado,
+  listarPendientesIncidentesPaginado,
 } from "@/lib/actions/incidentes";
 
 import { IncidentesAdminModule } from "./_components/IncidentesAdminModule";
@@ -31,14 +32,17 @@ export default async function IncidentesPage() {
     notFound(); // R48
   }
 
-  // Feature 170 — FASE 2 (T I.2, R40): el listado compuesto sigue trayendo la cola, el aviso
-  // de «sin zona» y el alcance; el HISTÓRICO llega como PÁGINA 1 y su total (R41), no como
-  // array entero. El input va vacío: los defaults los pone el schema del dominio.
-  const [result, historicoResult] = await Promise.all([
+  // Feature 170 — FASE 2 (T I.2/T J.2, R40): el listado compuesto sigue trayendo el aviso de
+  // «sin zona» y el alcance; las DOS tablas —la cola y el histórico— llegan como PÁGINA 1 con
+  // su total (R41), no como arrays enteros. El input va vacío: los defaults los pone el schema
+  // del dominio.
+  const [result, pendientesResult, historicoResult] = await Promise.all([
     listarIncidentes(),
+    listarPendientesIncidentesPaginado({}),
     listarHistoricoIncidentesPaginado({}),
   ]);
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
+  if (pendientesResult.status !== "ok") notFound(); // defensa en profundidad
   if (historicoResult.status !== "ok") notFound(); // defensa en profundidad
 
   return (
@@ -47,7 +51,11 @@ export default async function IncidentesPage() {
       description="Revisá los paquetes reportados como dañados, perdidos o robados y decidí si se indemnizan"
     >
       <IncidentesAdminModule
-        pendientes={result.pendientes}
+        pendientes={{
+          items: pendientesResult.items,
+          total: pendientesResult.total,
+          pageSize: pendientesResult.pageSize,
+        }}
         historico={{
           items: historicoResult.items,
           total: historicoResult.total,

@@ -55,6 +55,18 @@ export type ListarCierresAdminServiceResult =
 export type ListarHistoricoCierresAdminServiceResult =
   ListarPaginadoServiceResult<CierreAdminResumen>;
 
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42): UNA PAGINA de la COLA de pendientes de decision
+ * del alcance + el total del conjunto. Misma forma que el historico y por el mismo motivo: el
+ * contrato de T H.2 son cuatro campos y ni uno mas.
+ *
+ * De su `total` sale el CONTADOR DE CABECERA que hoy dice `({pendientes.length})`
+ * (`CierresAdminModule.tsx:442`). Es un conteo de filas, no dinero: los montos de esta pantalla
+ * viajan por FILA como snapshot y no se derivan de este array (R49).
+ */
+export type ListarPendientesCierresAdminServiceResult =
+  ListarPaginadoServiceResult<CierreAdminResumen>;
+
 // R6-R9/R13: detalle completo de UN cierre. Reusa CierreGrupos (grupos por
 // resultado) de la 37. `no_encontrada` = id inexistente o fuera de alcance (R13, no
 // se distingue). `forbidden` = rol invalido (R1).
@@ -139,6 +151,19 @@ export interface ICierresAdminService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarHistoricoCierresAdminServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): la COLA de pendientes de decision
+   * del alcance (`solicitado` + `vencido`), paginada en el servidor.
+   *
+   * MISMO `resolveAlcance` y MISMA constante de estados que la mitad del historico, con el
+   * corte invertido: R44 se cumple por construccion, y la union de las dos paginas sigue
+   * siendo exactamente lo que devuelve `listarCierresAdmin`. Rol invalido -> forbidden;
+   * `adminSatelite` sin zona -> pagina vacia sin tocar la base.
+   */
+  listarPendientesCierresAdminPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesCierresAdminServiceResult>;
   /**
    * R6-R9/R13/R16: detalle completo de un cierre del alcance (gestiones agrupadas
    * por resultado, evidencias firmadas). Solo lectura. Fuera de alcance ->

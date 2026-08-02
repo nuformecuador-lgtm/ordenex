@@ -5,7 +5,11 @@ import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
-import { verCierreDetalle, aprobarCierre } from "@/lib/actions/cierres-admin";
+import {
+  verCierreDetalle,
+  aprobarCierre,
+  listarPendientesCierresAdminPaginado,
+} from "@/lib/actions/cierres-admin";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
@@ -44,6 +48,10 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
     pageSize: 25,
     total: 0,
   })),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también. Se programa en
+  // `pulsarAprobar` con el mismo cierre que se le pasa por props: SWR revalida al montar y,
+  // sin el doble, la fila desde la que se abre el detalle desaparecería.
+  listarPendientesCierresAdminPaginado: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -184,10 +192,16 @@ const INC_2 = makeGestion({
 
 /** Abre el detalle del cierre `c1` y pulsa "Aprobar". */
 async function pulsarAprobar(user: ReturnType<typeof userEvent.setup>) {
+  const cola = paginaInicial([makeResumen({ cierreId: "c1" })]);
+  vi.mocked(listarPendientesCierresAdminPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...cola,
+  });
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <CierresAdminModule
-        pendientes={[makeResumen({ cierreId: "c1" })]}
+        pendientes={cola}
         historico={paginaInicial<CierreAdminResumen>([])}
         sinZona={false}
       />

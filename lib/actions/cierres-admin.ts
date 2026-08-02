@@ -23,8 +23,10 @@ import {
   rechazarCierreSchema,
   forzarSolicitudVencidoSchema,
   listarHistoricoCierresAdminSchema,
+  listarPendientesCierresAdminSchema,
   type ListarCierresAdminResult,
   type ListarHistoricoCierresAdminResult,
+  type ListarPendientesCierresAdminResult,
   type VerCierreDetalleResult,
   type AprobarCierreResult,
   type RechazarCierreResult,
@@ -133,6 +135,27 @@ export async function listarHistoricoCierresAdminPaginado(
     const data = listarHistoricoCierresAdminSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarHistoricoCierresAdminPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42/R44): UNA pagina de la COLA de pendientes de
+ * decision del alcance + el total, que es el que la cabecera de la pantalla mostrara.
+ *
+ * El alcance NO viaja en el input: lo resuelve el servicio desde el actor de la sesion, igual
+ * que en `listarCierresAdmin`.
+ */
+export async function listarPendientesCierresAdminPaginado(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<ListarPendientesCierresAdminResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el service
+    const data = listarPendientesCierresAdminSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPendientesCierresAdminPaginado(data, actor);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }

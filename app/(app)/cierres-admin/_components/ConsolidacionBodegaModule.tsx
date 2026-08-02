@@ -2,13 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
-import { filasLocales } from "@/components/shared/descarga-resultado";
+import { Pagination } from "@/components/shared/Pagination";
+import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
-import { solicitarCierreBodega } from "@/lib/actions/cierre-bodega";
+import { cierreConfig } from "@/lib/config/cierre";
+import {
+  solicitarCierreBodega,
+  listarConsolidacion,
+  listarConsolidablesPaginado,
+} from "@/lib/actions/cierre-bodega";
 import type { CierreBodegaResumenLite } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import {
@@ -31,6 +38,39 @@ import {
 
 /** Nombre visible de la tabla de consolidables: hoja, archivo y control (R12/R13). */
 const TITULO_DESCARGA_CONSOLIDABLES = "Cierres del día a consolidar";
+/** Nombre accesible del control (R43). Propio: la pantalla monta dos tablas paginadas. */
+export const PAGINACION_CONSOLIDABLES_LABEL =
+  "Paginación de los cierres del día a consolidar";
+const ERROR_CARGA_CONSOLIDABLES = "No se pudieron cargar los cierres a consolidar.";
+
+// R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla.
+// Es `cierreConfig` y no `cierreBodegaConfig` porque las filas de esta tabla son `cierre_dia`
+// (T J.1, decisión 9): con la config de bodega, ajustar el tamaño de página de los cierres de
+// bodega movería también el de una tabla de cierres del día.
+const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_SIZE);
+
+/**
+ * Feature 170 — FASE 2 (T J.2, R40/R41): la PÁGINA de los consolidables. `total` es el del
+ * CONJUNTO —de él sale el contador de cabecera (R42)— y nunca `items.length`.
+ */
+export interface ConsolidablesPagina {
+  items: CierreBodegaResumenLite[];
+  total: number;
+  pageSize: number;
+}
+
+/**
+ * Feature 170 — FASE 2 (T J.2): una página de consolidables. La zona NO viaja en el input: la
+ * resuelve el servicio desde la sesión, igual que el listado sin paginar (R44).
+ */
+async function leerConsolidables(
+  page: number,
+  pageSize: number,
+): Promise<ConsolidablesPagina> {
+  const res = await listarConsolidablesPaginado({ page, pageSize });
+  if (res.status !== "ok") throw new Error(res.status);
+  return { items: res.items, total: res.total, pageSize: res.pageSize };
+}
 
 // Feature 40 (T8) — módulo cliente del "Cierre de bodega" del adminSatelite (lado
 // SOLICITAR, espejo de la 37 un nivel arriba). Recibe del Server Component padre los
@@ -41,9 +81,23 @@ const TITULO_DESCARGA_CONSOLIDABLES = "Cierres del día a consolidar";
 // STRING; se renderizan con `money()` sin `parseFloat`/`Number`.
 
 export interface ConsolidacionBodegaModuleProps {
-  /** cierre_dia `aprobado` sin cierre de bodega de la zona (R5). */
-  consolidables: CierreBodegaResumenLite[];
-  /** Suma snapshot de los consolidables (R10). */
+  /**
+   * Feature 170 — FASE 2 (T J.2, R40/R41): PÁGINA 1 de los cierre_dia `aprobado` sin cierre
+   * de bodega de la zona (R5), ya resuelta server-side, más el `total` del conjunto.
+   */
+  consolidables: ConsolidablesPagina;
+  /**
+   * Suma snapshot de los consolidables (R10).
+   *
+   * Feature 170 — FASE 2 (T J.2, R49/R50): los CINCO agregados de dinero de esta pantalla
+   * siguen llegando por props, calculados sobre el CONJUNTO COMPLETO en `listarConsolidacion`.
+   * NO se derivan de la página, y no es disciplina: dos de ellos —`totalNetoAgregado` y
+   * `totalCentralDebeAgregado`— salen de repartir el efectivo entre los pagos INDIVIDUALES
+   * ordenados de menor a mayor, y eso no lo produce ni una página ni un `SUM`. Sobre la página
+   * visible la pantalla podría decir que la central no debe nada cuando debe 500, y sobre ese
+   * número se decide si se cierra la bodega. Como no dependen de la página, R50 sale gratis:
+   * cambiar de página no los toca.
+   */
   totalesAgregados: CierreTotales;
   /** Feature 39/R18: suma snapshot del pago a mensajeros (STRING), separado de los totales. */
   totalPagoMensajeroAgregado: string;
@@ -89,6 +143,28 @@ export function ConsolidacionBodegaModule({
 
   // Confirmación de "Solicitar cierre de bodega"; true = modal abierto.
   const [confirmar, setConfirmar] = useState(false);
+
+  // Feature 170 — FASE 2 (T J.2, R40/R42/R43): página visible de los consolidables. El control
+  // vive AQUÍ, junto al contador (decisión de Q-I6): así la guardia de T H.3 ve esta pantalla
+  // como paginada y vigila que el número salga del `total` del servidor.
+  //
+  // R49/R50: los cinco agregados de dinero NO se tocan. Siguen siendo las props que calculó
+  // `listarConsolidacion` sobre el conjunto completo; esta lectura solo recorta lo que la
+  // tabla PINTA.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(consolidables.pageSize);
+  const { data, error } = useSWR(
+    ["cierre-bodega:consolidables", page, pageSize],
+    () => leerConsolidables(page, pageSize),
+    {
+      fallbackData:
+        page === 1 && pageSize === consolidables.pageSize ? consolidables : undefined,
+    },
+  );
+  const pagina: ConsolidablesPagina = data ?? { items: [], total: 0, pageSize };
+  // R44: el esqueleto sólo cuando NO hay nada que pintar (`isLoading` de SWR sigue en `true`
+  // mientras revalida aunque haya `fallbackData`).
+  const cargando = data === undefined;
 
   /** R6-R10: crea la solicitud de cierre de bodega de la zona. */
   async function confirmarSolicitud() {
@@ -169,30 +245,61 @@ export function ConsolidacionBodegaModule({
             <h3 className="text-base font-semibold">
               Cierres del día a consolidar{" "}
               <span className="text-sm font-normal text-muted-foreground">
-                ({consolidables.length})
+                {/* R42: el TOTAL del conjunto que devuelve el servidor. Este contador va
+                    junto a los agregados de dinero de arriba: si contara la página, diría
+                    «(25)» al lado de un total calculado sobre 60 cierres. */}
+                ({pagina.total})
               </span>
             </h3>
             <div className="overflow-x-auto">
               <DataTable
                 columns={COLUMNAS_CONSOLIDABLES}
-                data={consolidables}
+                data={pagina.items}
                 rowKey="cierreDiaId"
                 ariaLabel="Cierres del día a consolidar"
                 emptyMessage="No hay cierres del día aprobados para consolidar."
+                isLoading={cargando}
+                error={error ? ERROR_CARGA_CONSOLIDABLES : null}
                 /**
-                 * Feature 170 (T E.3, R1/R11/R14/R20/R26/R30/R32) — FAMILIA B: el array de
-                 * props ES el conjunto entero de consolidables de SU zona (el servidor ya
-                 * lo acotó), así que el archivo se proyecta de lo que la tabla pinta, sin
-                 * releer ni ampliar alcance.
+                 * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue
+                 * siendo el CONJUNTO COMPLETO de consolidables de SU zona. Se relee con el
+                 * MISMO listado que la pantalla ya llamaba antes de paginar
+                 * (`listarConsolidacion`), que resuelve la zona desde la sesión: descargar no
+                 * amplía el alcance ni una fila (R14/R44). Es además el listado del que salen
+                 * los agregados de dinero, así que el archivo y los totales de la cabecera
+                 * hablan del mismo conjunto.
                  */
                 descarga={{
                   titulo: TITULO_DESCARGA_CONSOLIDABLES,
                   columnas: COLUMNAS_DESCARGA_CONSOLIDABLES,
                   obtenerFilas: () =>
-                    filasLocales(consolidables, filaDescargaConsolidable),
+                    filasDelConjuntoCompleto(
+                      listarConsolidacion().then((res) =>
+                        res.status === "ok"
+                          ? ({ status: "ok", items: res.consolidables } as const)
+                          : res,
+                      ),
+                      filaDescargaConsolidable,
+                    ),
                 }}
               />
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={pagina.total}
+              disabled={cargando}
+              showFirstLast
+              siblingCount={1}
+              ariaLabel={PAGINACION_CONSOLIDABLES_LABEL}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+            />
           </section>
 
           {/* ---------- Solicitar cierre de bodega (R6/R7) ---------- */}

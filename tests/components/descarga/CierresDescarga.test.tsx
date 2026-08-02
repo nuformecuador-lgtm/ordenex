@@ -40,6 +40,8 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   rechazarCierre: vi.fn(),
   listarCierresAdmin: vi.fn(),
   listarHistoricoCierresAdminPaginado: vi.fn(),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también llega paginada.
+  listarPendientesCierresAdminPaginado: vi.fn(),
   forzarSolicitudVencido: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierre-bodega", () => ({
@@ -51,6 +53,9 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   listarConsolidacion: vi.fn(),
   listarHistoricoCierresBodegaPaginado: vi.fn(),
   listarCierresBodegaSolicitadosPaginado: vi.fn(),
+  // Feature 170 — FASE 2 (T J.2): las dos COLAS de esta pantalla también llegan paginadas.
+  listarPendientesCierresBodegaPaginado: vi.fn(),
+  listarConsolidablesPaginado: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierre-dia", () => ({
   solicitarCierre: vi.fn(),
@@ -82,12 +87,18 @@ vi.mock("@/hooks/useToast", () => ({
   }),
 }));
 
-import { listarCierresAdmin, listarHistoricoCierresAdminPaginado } from "@/lib/actions/cierres-admin";
+import {
+  listarCierresAdmin,
+  listarHistoricoCierresAdminPaginado,
+  listarPendientesCierresAdminPaginado,
+} from "@/lib/actions/cierres-admin";
 import {
   listarCierresBodegaAdmin,
   listarConsolidacion,
   listarCierresBodegaSolicitadosPaginado,
+  listarConsolidablesPaginado,
   listarHistoricoCierresBodegaPaginado,
+  listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
 import { listarCierreDia, listarCierresPasadosPaginado } from "@/lib/actions/cierre-dia";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
@@ -302,6 +313,11 @@ function envolver(ui: ReactElement) {
 }
 
 function renderCierresAdmin() {
+  vi.mocked(listarPendientesCierresAdminPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...paginaInicial(PENDIENTES),
+  });
   vi.mocked(listarHistoricoCierresAdminPaginado).mockResolvedValue({
     status: "ok",
     page: 1,
@@ -315,7 +331,7 @@ function renderCierresAdmin() {
   });
   return envolver(
     <CierresAdminModule
-      pendientes={PENDIENTES}
+      pendientes={paginaInicial(PENDIENTES)}
       historico={paginaInicial(HISTORICO)}
       sinZona={false}
     />,
@@ -323,6 +339,11 @@ function renderCierresAdmin() {
 }
 
 function renderCierresBodega() {
+  vi.mocked(listarPendientesCierresBodegaPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...paginaInicial(BODEGA_PENDIENTES),
+  });
   vi.mocked(listarHistoricoCierresBodegaPaginado).mockResolvedValue({
     status: "ok",
     page: 1,
@@ -335,13 +356,18 @@ function renderCierresBodega() {
   });
   return envolver(
     <CierresBodegaAdminModule
-      pendientes={BODEGA_PENDIENTES}
+      pendientes={paginaInicial(BODEGA_PENDIENTES)}
       historico={paginaInicial(BODEGA_RESUELTOS)}
     />,
   );
 }
 
 function renderConsolidacion() {
+  vi.mocked(listarConsolidablesPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...paginaInicial(CONSOLIDABLES),
+  });
   vi.mocked(listarCierresBodegaSolicitadosPaginado).mockResolvedValue({
     status: "ok",
     page: 1,
@@ -362,7 +388,7 @@ function renderConsolidacion() {
   });
   return envolver(
     <ConsolidacionBodegaModule
-      consolidables={CONSOLIDABLES}
+      consolidables={paginaInicial(CONSOLIDABLES)}
       totalesAgregados={TOTALES}
       totalPagoMensajeroAgregado="200.20"
       totalIngresoBodegaRechazosAgregado="10.00"

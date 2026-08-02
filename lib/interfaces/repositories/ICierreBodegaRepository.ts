@@ -57,6 +57,19 @@ export interface ICierreBodegaRepository {
    */
   findCierresDiaConsolidables(zonaId: string): Promise<CierreDiaConsolidableRow[]>;
   /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): UNA PAGINA de los cierre_dia
+   * consolidables de la zona + el TOTAL del conjunto (el que la cabecera mostrara, R42).
+   *
+   * MISMO `where` que `findCierresDiaConsolidables` —los cuatro predicados salen de una sola
+   * funcion— y MISMO `orderBy solicitadoAt desc`. No devuelve totales de dinero: los agregados
+   * de esa pantalla se calculan sobre el conjunto COMPLETO en el servicio (R49), y dos de
+   * ellos dependen de los pagos INDIVIDUALES ordenados, que una pagina no contiene.
+   */
+  findCierresDiaConsolidablesPaginado(
+    zonaId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreDiaConsolidableRow>>;
+  /**
    * R6: cuenta los cierre_dia de la zona (`destino_tipo='bodega_satelite'`,
    * `destino_zona_id=zonaId`) aun en estado `solicitado` (pendientes de que el
    * adminSatelite los resuelva). Precondicion para poder cerrar la bodega.

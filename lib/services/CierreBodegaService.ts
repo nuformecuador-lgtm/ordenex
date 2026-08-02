@@ -6,6 +6,7 @@ import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService"
 import type {
   ICierreBodegaService,
   ListarCierresBodegaSolicitadosServiceResult,
+  ListarConsolidablesServiceResult,
   ListarConsolidacionServiceResult,
   SolicitarCierreBodegaServiceResult,
 } from "@/lib/interfaces/services/ICierreBodegaService";
@@ -170,6 +171,12 @@ export class CierreBodegaService implements ICierreBodegaService {
     ]);
 
     // R10: totales agregados exactos (suma con Prisma.Decimal de los snapshots).
+    //
+    // Feature 170 — FASE 2 (T J.1, R49): los cinco agregados de abajo se calculan sobre
+    // `consolidables`, que es el conjunto COMPLETO de la zona y sigue siendolo despues de
+    // paginar la tabla. `listarConsolidablesPaginado` recorta lo que la tabla PINTA; el dinero
+    // no se toca. Calcular cualquiera de estos cinco sobre una pagina no daria un numero
+    // aproximado: daria uno FALSO, y sobre el se decide si se cierra la bodega.
     const totalesAgregados = sumTotales(consolidables);
     // R18: total agregado del pago a mensajeros (suma snapshot, separada de totalesAgregados).
     const totalPagoMensajeroAgregado = sumPagoMensajero(consolidables);
@@ -252,6 +259,54 @@ export class CierreBodegaService implements ICierreBodegaService {
       page: input.page,
       pageSize: input.pageSize,
       total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54) — los cierre_dia CONSOLIDABLES de la
+   * zona, paginados en servidor.
+   *
+   * Mismo acotamiento que `listarConsolidacion`: guard de rol (R1) y zona resuelta con
+   * `findUsuarioZonaId` desde el USUARIO, jamas desde la peticion (R3/R4). Sin zona -> pagina
+   * vacia, no `forbidden`: el rol tiene acceso al modulo, lo que no tiene es alcance.
+   *
+   * **R49 — por que este metodo NO devuelve totales, que es LA decision de esta tanda.**
+   * Esta pantalla muestra cinco numeros de dinero agregados
+   * (`totalesAgregados`, `totalPagoMensajeroAgregado`, `totalIngresoBodegaRechazosAgregado`,
+   * `totalNetoAgregado`, `totalCentralDebeAgregado`) y los cinco los sigue calculando
+   * `listarConsolidacion` sobre el conjunto COMPLETO. Meterlos aqui seria invitar a
+   * calcularlos sobre `items`, y eso no es una molestia de UX: es un numero de dinero
+   * INCORRECTO en pantalla, sobre el que ademas se decide si se cierra la bodega.
+   *
+   * Y no es solo cuestion de disciplina: dos de esos cinco NO son una suma.
+   * `totalNetoAgregado` y `totalCentralDebeAgregado` salen de repartir el efectivo entre los
+   * pagos INDIVIDUALES de todos los mensajeros, ordenados de menor a mayor y pagados de forma
+   * atomica. Ese reparto necesita la lista entera: ni una pagina ni un `SUM` de la base pueden
+   * producirlo. Por eso el conjunto completo se sigue leyendo donde se calcula el dinero, y lo
+   * que se recorta es SOLO lo que la tabla pinta.
+   */
+  async listarConsolidablesPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarConsolidablesServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
+
+    const zonaId = await this.ordenRepo.findUsuarioZonaId(actor.usuarioId); // R3/R4
+    if (zonaId === null) {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 };
+    }
+
+    const { items, total } = await this.repo.findCierresDiaConsolidablesPaginado(
+      zonaId,
+      rangoDePagina(input),
+    );
+
+    return {
+      status: "ok",
+      items, // el repositorio ya devuelve el DTO de dominio (mismo que el listado sin paginar)
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41/R42: el total del CONJUNTO, nunca `items.length`
     };
   }
 

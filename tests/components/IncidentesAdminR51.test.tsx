@@ -15,6 +15,7 @@ import {
   aprobarIncidente,
   rechazarIncidente,
   retractarIncidente,
+  listarPendientesIncidentesPaginado,
 } from "@/lib/actions/incidentes";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
@@ -44,6 +45,10 @@ vi.mock("@/lib/actions/incidentes", () => ({
     pageSize: 25,
     total: 0,
   })),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también. Se programa en `abrir` con
+  // el mismo incidente que se le pasa por props: SWR revalida al montar y, sin el doble, la
+  // fila desde la que se abre el detalle desaparecería.
+  listarPendientesIncidentesPaginado: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -97,10 +102,16 @@ async function abrir(esPropio: boolean) {
   const user = userEvent.setup();
   const i = incidente(esPropio);
   verMock.mockResolvedValue({ status: "ok", incidente: i });
+  const cola = paginaInicial([i]);
+  vi.mocked(listarPendientesIncidentesPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...cola,
+  });
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <IncidentesAdminModule
-        pendientes={[i]}
+        pendientes={cola}
         historico={paginaInicial<IncidenteAdminDTO>([])}
         sinZona={false}
       />

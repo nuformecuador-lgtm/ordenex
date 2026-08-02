@@ -6,6 +6,7 @@ import { montoPositivoSchema } from "@/lib/types/wallet";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 import { incidentesConfig } from "@/lib/config/incidentes";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
+import { paginaInputSchema } from "@/lib/types/pagina-input";
 import type {
   AprobarIncidenteServiceResult,
   IncidenteAdminDTO,
@@ -109,19 +110,18 @@ export type RetractarIncidenteInput = z.infer<typeof retractarIncidenteSchema>;
  * muera en el BORDE con `validation_error`. Tamano de pagina desde `incidentesConfig`
  * (T H.1), recortado a `MAX_PAGE_SIZE`.
  */
-export const listarHistoricoIncidentesSchema = z
-  .object({
-    page: z.coerce.number().int().positive().default(1),
-    pageSize: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(incidentesConfig.DEFAULT_PAGE_SIZE)
-      .transform((n) => Math.min(n, incidentesConfig.MAX_PAGE_SIZE)),
-  })
-  .strict();
+export const listarHistoricoIncidentesSchema = paginaInputSchema(incidentesConfig);
 
 export type ListarHistoricoIncidentesInput = z.infer<typeof listarHistoricoIncidentesSchema>;
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40) — entrada de la COLA paginada de incidentes pendientes de
+ * decision. Misma forma que el historico y por el mismo motivo que en `cierres-admin.ts`: son
+ * dos listados que la pantalla pagina por separado y el nombre es lo que los distingue.
+ */
+export const listarPendientesIncidentesSchema = paginaInputSchema(incidentesConfig);
+
+export type ListarPendientesIncidentesInput = z.infer<typeof listarPendientesIncidentesSchema>;
 
 /** Errores de BORDE del listado (dominio + los dos que resuelve la Server Action). */
 export type IncidentesListadoError =
@@ -131,6 +131,13 @@ export type IncidentesListadoError =
 
 // Feature 170 (T I.1, R41): el contrato comun de listado paginado, aplicado al historico.
 export type ListarHistoricoIncidentesResult = ListarPaginadoResult<
+  IncidenteAdminDTO,
+  IncidentesListadoError
+>;
+
+// Feature 170 (T J.1, R41/R42): el mismo contrato, aplicado a la COLA de pendientes. Su `total`
+// sustituye al `({pendientes.length})` de la cabecera.
+export type ListarPendientesIncidentesResult = ListarPaginadoResult<
   IncidenteAdminDTO,
   IncidentesListadoError
 >;

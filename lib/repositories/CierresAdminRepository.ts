@@ -406,6 +406,41 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   }
 
   /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): una pagina de la COLA de pendientes de
+   * decision + el total.
+   *
+   * Es el COMPLEMENTO EXACTO de `findHistoricoPaginado`: mismo `alcanceWhere`, mismo orden y
+   * el MISMO `ESTADOS_COLA_CIERRE_DIA`, aqui con `in` (el espejo del `if` del servicio) y alli
+   * con `notIn` (el espejo del `else`). Que los dos lean la misma constante es lo que garantiza
+   * que ninguna fila pueda quedar en las dos listas ni caerse de las dos — y en esta cola
+   * «caerse» significa que un cierre `vencido` deja de verse, con la bodega de su mensajero
+   * bloqueada hasta que alguien lo note.
+   *
+   * El total es el que la cabecera de la pantalla mostrara (R42): es el del CONJUNTO de la
+   * cola, no el de la pagina, y sale del mismo `where` que las filas.
+   */
+  async findColaPaginada(
+    alcance: Alcance,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
+    const where = {
+      ...alcanceWhere(alcance), // R2/R13: el alcance, en el WHERE y nunca en memoria
+      estado: { in: [...ESTADOS_COLA_CIERRE_DIA] },
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreDia.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: CIERRE_RESUMEN_SELECT,
+      }),
+      this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO, no de la pagina
+    ]);
+    return { items: rows.map(toResumenRow), total };
+  }
+
+  /**
    * R6/R7/R9/R13: cierre (solo si casa el alcance) + sus gestiones. Feature 69/T18 (R15/R19):
    * el detalle se compone del SNAPSHOT + la gestion, en el MISMO DTO.
    */

@@ -9,14 +9,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
-import { filasLocales } from "@/components/shared/descarga-resultado";
+import { Pagination } from "@/components/shared/Pagination";
+import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
+import { cierreConfig } from "@/lib/config/cierre";
 import {
   verCierreDetalle,
   aprobarCierre,
   rechazarCierre,
   forzarSolicitudVencido,
+  listarCierresAdmin,
   listarHistoricoCierresAdminPaginado,
+  listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
@@ -64,9 +68,23 @@ import {
 // `parseFloat`/`Number`. Los helpers de detalle (money/columnas/etiquetas) viven en
 // `cierre-detalle-shared` (compartidos con los módulos de cierre de bodega, feat 40).
 
+/**
+ * Feature 170 — FASE 2 (T J.2, R40/R41): la PÁGINA de la cola de pendientes, tal como la
+ * devuelve el servidor. `total` es el del CONJUNTO —de él sale el contador de cabecera (R42)—
+ * y nunca `items.length`.
+ */
+export interface CierresAdminColaPagina {
+  items: CierreAdminResumen[];
+  total: number;
+  pageSize: number;
+}
+
 export interface CierresAdminModuleProps {
-  /** Cierres en estado `solicitado` del alcance del admin (cola de decisión, R4). */
-  pendientes: CierreAdminResumen[];
+  /**
+   * Feature 170 — FASE 2 (T J.2, R40/R41): PÁGINA 1 de los cierres `solicitado` del alcance
+   * (cola de decisión, R4), ya resuelta server-side, más el `total` del conjunto.
+   */
+  pendientes: CierresAdminColaPagina;
   /**
    * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 del histórico de resueltos (R5), ya
    * resuelta server-side, más el `total` del conjunto. Deja de ser el array entero: ese es
@@ -79,6 +97,14 @@ export interface CierresAdminModuleProps {
 
 /** Nombre visible de la cola: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA_PENDIENTES = "Cierres pendientes de decisión";
+/** Nombre accesible del control de la COLA (R43). La pantalla monta varias tablas paginadas. */
+export const PAGINACION_PENDIENTES_LABEL =
+  "Paginación de los cierres del día pendientes";
+const ERROR_CARGA_PENDIENTES = "No se pudieron cargar los cierres pendientes.";
+
+// R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla, y
+// las opciones nunca superan el máximo que el borde acepta.
+const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_SIZE);
 
 /**
  * Feature 170 — FASE 2 (T I.2, R40/R41): una página del histórico. El alcance NO viaja en el
@@ -90,6 +116,16 @@ async function leerHistorico(
   pageSize: number,
 ): Promise<CierresAdminHistoricoPagina> {
   const res = await listarHistoricoCierresAdminPaginado({ page, pageSize });
+  if (res.status !== "ok") throw new Error(res.status);
+  return { items: res.items, total: res.total, pageSize: res.pageSize };
+}
+
+/** Feature 170 — FASE 2 (T J.2): una página de la COLA, con el mismo criterio que el histórico. */
+async function leerPendientes(
+  page: number,
+  pageSize: number,
+): Promise<CierresAdminColaPagina> {
+  const res = await listarPendientesCierresAdminPaginado({ page, pageSize });
   if (res.status !== "ok") throw new Error(res.status);
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
@@ -194,6 +230,30 @@ export function CierresAdminModule({
   // haría que la página 1 —la que el Server Component ya resolvió— apareciera como esqueleto
   // antes de enseñar las filas que el usuario veía antes de paginar.
   const historicoCargando = historicoData === undefined;
+
+  // Feature 170 — FASE 2 (T J.2, R40/R42/R43): página visible de la COLA. Vive AQUÍ, en el
+  // módulo, y no en un componente hijo: es la decisión de Q-I6 que T I.2 dejó abierta y T J.1
+  // recomendó medida. Con el control en este archivo, la guardia de T H.3 ve la pantalla como
+  // paginada y se pone roja mientras el contador de abajo salga de un array; con el control en
+  // un hijo, la guardia deja de mirar hacia arriba y el contador podría quedarse mintiendo.
+  const [pendientesPage, setPendientesPage] = useState(1);
+  const [pendientesPageSize, setPendientesPageSize] = useState(pendientes.pageSize);
+  const { data: pendientesData, error: pendientesError } = useSWR(
+    ["cierres-admin:pendientes", pendientesPage, pendientesPageSize],
+    () => leerPendientes(pendientesPage, pendientesPageSize),
+    {
+      fallbackData:
+        pendientesPage === 1 && pendientesPageSize === pendientes.pageSize
+          ? pendientes
+          : undefined,
+    },
+  );
+  const colaPendientes: CierresAdminColaPagina = pendientesData ?? {
+    items: [],
+    total: 0,
+    pageSize: pendientesPageSize,
+  };
+  const pendientesCargando = pendientesData === undefined;
 
   // R3: adminSatelite sin zona → aviso accionable, sin tablas de acción.
   if (sinZona) {
@@ -439,22 +499,29 @@ export function CierresAdminModule({
         <h2 className="text-lg font-semibold">
           Pendientes de decisión{" "}
           <span className="text-sm font-normal text-muted-foreground">
-            ({pendientes.length})
+            {/* R42: el contador es el TOTAL del conjunto que devuelve el servidor. Con
+                `items.length` diría «(25)» habiendo 300 cierres esperando decisión, y no
+                fallaría nada: compilaría, renderizaría y mentiría. */}
+            ({colaPendientes.total})
           </span>
         </h2>
         <div className="overflow-x-auto">
           <DataTable
             columns={columnasPendientes(abrirDetalle, setDestrabar)}
-            data={pendientes}
+            data={colaPendientes.items}
             rowKey="cierreId"
             ariaLabel="Pendientes de decisión"
             emptyMessage="No hay cierres pendientes de decisión."
+            isLoading={pendientesCargando}
+            error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
             /**
-             * Feature 170 (T E.1, R1/R11/R14/R20/R26/R30/R32) — descarga de FAMILIA B: el
-             * array de props ES la cola entera (la página la pide sin paginar), así que el
-             * archivo se proyecta de lo que la tabla ya pinta y en el MISMO orden, sin
-             * releer nada. El alcance lo puso el servidor: un `adminSatelite` sólo recibe
-             * los cierres de su zona, y descargar no puede ampliar eso.
+             * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue siendo
+             * la COLA COMPLETA del alcance del actor. Se relee al pulsar el control, con el
+             * MISMO listado que la pantalla ya llamaba antes de paginar (`listarCierresAdmin`),
+             * que reparte cola e histórico con el mismo criterio y el mismo acotamiento por
+             * rol: un `adminSatelite` sigue descargando solo los cierres de su zona (R14/R44).
+             * Proyectar `colaPendientes.items` habría convertido «descargar la cola» en
+             * «descargar lo que se ve» sin que nada fallara.
              *
              * El título no repite el de la otra tabla: dos controles en la misma pantalla
              * necesitan nombres accesibles distintos (R13).
@@ -462,10 +529,34 @@ export function CierresAdminModule({
             descarga={{
               titulo: TITULO_DESCARGA_PENDIENTES,
               columnas: COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
-              obtenerFilas: () => filasLocales(pendientes, filaDescargaCierrePendiente),
+              obtenerFilas: () =>
+                filasDelConjuntoCompleto(
+                  listarCierresAdmin().then((res) =>
+                    res.status === "ok"
+                      ? ({ status: "ok", items: res.pendientes } as const)
+                      : res,
+                  ),
+                  filaDescargaCierrePendiente,
+                ),
             }}
           />
         </div>
+
+        <Pagination
+          page={pendientesPage}
+          pageSize={pendientesPageSize}
+          total={colaPendientes.total}
+          disabled={pendientesCargando}
+          showFirstLast
+          siblingCount={1}
+          ariaLabel={PAGINACION_PENDIENTES_LABEL}
+          onPageChange={setPendientesPage}
+          onPageSizeChange={(s) => {
+            setPendientesPageSize(s);
+            setPendientesPage(1);
+          }}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        />
       </section>
 
       {/* ---------- Histórico (solo lectura, R5) ----------
@@ -496,7 +587,10 @@ export function CierresAdminModule({
           detalle, que es el MISMO componente). Se elige así porque la frase que define esta
           sección es «los mismos cierres de arriba»: alimentarla del conjunto entero la
           convertiría en la única razón por la que el histórico completo seguiría cruzando a
-          la pantalla, que es justo lo que esta fase viene a quitar. */}
+          la pantalla, que es justo lo que esta fase viene a quitar.
+
+          T J.2 aplica la MISMA decisión a la cola, que ahora también es una página: las dos
+          tiras siguen siendo «los mismos cierres de arriba», cada una en su página. */}
       <section
         aria-label="Vista tipo factura"
         className="flex flex-col gap-4 border-t pt-6"
@@ -509,7 +603,7 @@ export function CierresAdminModule({
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
-          {[...pendientes, ...historicoPagina.items].map((c) => (
+          {[...colaPendientes.items, ...historicoPagina.items].map((c) => (
             <CierreFacturaResumen
               key={c.cierreId}
               cierre={c}
@@ -556,7 +650,7 @@ export function CierresAdminModule({
               }
             />
           ))}
-          {pendientes.length === 0 && historicoPagina.items.length === 0 ? (
+          {colaPendientes.items.length === 0 && historicoPagina.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No hay cierres para previsualizar.
             </p>

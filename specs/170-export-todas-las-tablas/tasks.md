@@ -552,14 +552,14 @@ producción sin esperar a la siguiente.
 
 ## Tanda J — Riesgo MEDIO: 4 colas con contador de cabecera
 
-### [ ] T J.1 — Backend: `listar` paginado de las 4 colas
+### [x] T J.1 — Backend: `listar` paginado de las 4 colas
 - Cierres del día pendientes · Cierres de bodega pendientes · Cierres del día a consolidar ·
   Incidentes pendientes. Mismo procedimiento que T I.1.
 - Test: mismos 4 casos de T I.1 por listado, más:
   - «los totales agregados de dinero siguen calculándose sobre el conjunto completo» (R49)
 - **Depende de:** T H.2 · **Cubre:** R40, R41, R44, R49, R51, R54 · **Hecho:** tests verdes.
 
-### [ ] T J.2 — Frontend: paginación + contador por `total`
+### [x] T J.2 — Frontend: paginación + contador por `total`
 - Sustituir `({array.length})` por el total del servidor en los 4 puntos verificados
   (`design.md §11.3`).
 - Test: `tests/components/paginacion/ColasPaginacion.test.tsx`
