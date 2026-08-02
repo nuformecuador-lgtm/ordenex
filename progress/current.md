@@ -175,13 +175,20 @@ fixtures. Verificadas por mutación ejecutada.
 
 | Medida | Resultado |
 | --- | --- |
-| Suite | 777 archivos / 9407 tests — **2 rojos, ambos de `dev`** |
+| Suite | **778 archivos, 0 rojos reales** |
 | typecheck / lint | 0 errores / 0 errores + 27 warnings **de `dev`** → delta 0 |
 
-Los dos rojos heredados: `no-embalaje` lo dispara `specs/122-analitica-alcance-por-rol/tasks.md:243`
-(presente tal cual en `origin/dev`; determinista, **no** el flake que decía la 122), y
-`wallet-tiendas-desglose` pasa **30/30 en aislado** — saturación. Por el segundo, `./init.sh` no llega
-a verde, y eso **también pasa en `dev`**.
+**Cómo se llegó a ese 0, porque la corrida completa NO dice eso.** Salió **degradada** por saturación:
+reportó **769** archivos —ocho menos que la corrida previa— con **9 *unhandled errors*** de workers
+que ni arrancaron, y 2 rojos que eran **timeouts a 20 s**, no aserciones. Los **11 archivos** implicados
+(los 9 caídos + los 2 expirados) se repitieron con `--maxWorkers=2`: **11/11, 243 tests, 0 rojos**.
+767 + 11 = **778**, todos verdes.
+
+Es justo el modo de fallo de «Vitest degradado reporta de menos»: sin comparar el **total de archivos**
+contra la corrida anterior, una suite que se saltó ocho archivos enteros parece sana. Y el rojo de
+`no-embalaje` había **cambiado de naturaleza** entre corridas —primero determinista por
+`specs/122/tasks.md:243`, que `dev` ya arregló en `3d69c910`, luego un simple timeout—, así que era
+fácil darlo por el mismo de antes.
 
 ### ⚠️ Defecto ajeno confirmado y deliberadamente NO tocado
 
