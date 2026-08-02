@@ -553,7 +553,15 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA G — Lo que ven los beneficiarios
 
-### [ ] T G.1 [P] — El mensajero ve su pago (verificación, sin cambios de código)
+### [x] T G.1 [P] — El mensajero ve su pago (verificación, sin cambios de código)
+- **HECHA el 2026-08-02. El criterio se cumple LITERAL: los 3 tests nuevos pasan con CERO
+  cambios en `app/(app)/mis-pagos/**`** (medido antes de tocar nada; `git diff` de ese
+  directorio vacío en ese momento). El bloque monta la página REAL y, con sus props, el módulo
+  REAL (`vi.importActual`), porque R54 promete lo que el mensajero **ve**, no lo que cruza la
+  frontera. **Dos mutaciones ejecutadas**: ocultar los movimientos de tipo `pago` tumba 3
+  tests; pintar `devengado` donde va la cuenta por pagar tumba 2. Único cambio al archivo:
+  `listarMisPagosCompletoAction: vi.fn()` en el doble de acciones (el módulo real la importa) —
+  cero aserciones existentes tocadas.
 - Test en `tests/integration/mis-pagos-page.test.tsx`: con un movimiento `liquidacion` sembrado,
   `/mis-pagos` lo muestra con su etiqueta y su cuenta por pagar baja; con su contraasiento
   sembrado, vuelve a subir.
@@ -561,7 +569,16 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** el test pasa **sin** tocar código de `/mis-pagos`. Si hiciera falta tocarlo, es un
   hallazgo y se declara.
 
-### [ ] T G.2 — La tienda distingue el pago del cargo `[P5]`
+### [x] T G.2 — La tienda distingue el pago del cargo `[P5]`
+- **HECHA el 2026-08-02.** La cabecera de `/mi-wallet` pasa de «Créditos / Débitos» a los TRES
+  importes (a tu favor / cargos de Ordenex / ya pagado), derivados **en el servidor** por
+  `derivarDesgloseTienda` + `CUBETA_POR_CATEGORIA` **importados**, no copiados. El criterio duro
+  se mide **por identidad** en `tests/unit/services/mi-wallet-desglose.test.ts`: un espía que
+  envuelve a la función real recibe **las dos** llamadas —la de la tienda y la del maestro— y
+  con **las mismas filas crudas**; una clasificación duplicada dejaría una sola. **Desviación
+  declarada:** hizo falta que `listarMisMovimientos` devolviera el desglose (contrato de
+  servicio, no solo presentación) — detalle y porqué en `progress/impl_172-liquidacion.md`.
+  **Tres mutaciones ejecutadas.**
 - `/mi-wallet`: cabecera de tres importes reutilizando `derivarDesgloseTienda` y
   `CUBETA_POR_CATEGORIA` **por importación**, sin duplicar la clasificación.
 - Test en `tests/integration/mi-wallet-page.test.tsx`.

@@ -1949,3 +1949,280 @@ nada.
    T H.1.
 
 8. **Preview sigue sin verificar** (hueco de T A.0), pendiente antes de mergear el PR.
+
+---
+
+## TANDA G — Lo que ven los beneficiarios · T G.1 y T G.2 · **COMPLETA** (2026-08-02)
+
+> Las dos pantallas del otro lado del mostrador: el mensajero en `/mis-pagos` y la tienda en
+> `/mi-wallet`. **El backend de la liquidación (Tandas A–F) no se tocó ni una línea.** Lo que sí
+> se tocó —y por qué— está declarado abajo como desviación 1.
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/unit/services/mi-wallet-desglose.test.ts` | **7 casos.** El criterio duro de T G.2: la clasificación medida **por identidad**, más el barrido de que la pantalla no clasifica |
+
+**Modificados**
+
+| Archivo | Qué |
+| --- | --- |
+| `app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx` | La cabecera pasa de 2 importes a **3** + el aviso de N1 |
+| `app/(app)/mi-wallet/_components/mi-wallet-labels.ts` | `DESGLOSE_MI_WALLET_LABEL` y `DESGLOSE_MI_WALLET_AVISO` |
+| `app/(app)/mi-wallet/_components/MiWalletModule.tsx` | Prop `desglose` + su estado, refrescado **con** el listado |
+| `app/(app)/mi-wallet/page.tsx` | Pasa `desglose={movimientosResult.data.desglose}` |
+| `app/(app)/mis-pagos/_components/CuentaPorPagarCard.tsx` | El aviso de N1 (decisión del leader, abajo) |
+| `app/(app)/mis-pagos/_components/mis-pagos-labels.ts` | `CUENTA_AVISO_BRUTOS` |
+| `lib/interfaces/services/IWalletTiendaService.ts` · `lib/services/WalletTiendaService.ts` | `listarMisMovimientos` devuelve también el `DesgloseTiendaDTO` (**desviación 1**) |
+| 5 archivos de test | ver «hallazgo 2», abajo |
+| `specs/172-liquidacion/tasks.md` | T G.1 y T G.2 marcadas `[x]` |
+
+### T G.1 — el criterio se cumple LITERAL: **el test pasa sin tocar `/mis-pagos`**
+
+Se escribió el bloque de R54 **primero**, con `app/(app)/mis-pagos/**` intacto, y salió verde:
+**8 tests (5 de la 44 + 3 nuevos)** con el `git diff` de ese directorio **vacío**. R54 se
+**verifica**, no se implementa, tal como anticipaba `design.md §10.3`: el libro ya se lista
+entero y la etiqueta de `liquidacion` ya existía (`mis-pagos-labels.ts:27`).
+
+El bloque monta la página REAL y, **con las props que ella produce**, el módulo REAL vía
+`vi.importActual` (el resto del archivo lo tiene doblado). No basta con leer las props: lo que
+R54 promete es que el mensajero **ve** el pago, y eso es una propiedad de lo pintado.
+
+El escenario es el que exige la task, al céntimo:
+
+| Libro sembrado | Devengado | Pagado | Cuenta por pagar |
+| --- | --- | --- | --- |
+| solo el cierre (`pago_devengado` 50 000) | 50 000,00 | 0,00 | **₡50000.00** |
+| + el pago (`pago`/`liquidacion` 20 000) | 50 000,00 | 20 000,00 | **₡30000.00** ← baja |
+| + su contraasiento (`devengo`/`ajuste_devengo` 20 000) | 70 000,00 | 20 000,00 | **₡50000.00** ← vuelve a subir |
+
+**PRUEBAS POR MUTACIÓN — dos, con su salida real.** Un test que pasa con la pantalla rota no
+prueba nada.
+
+```
+MUTACION 1: el desglose oculta los movimientos de tipo `pago`
+     × con un movimiento `liquidacion` sembrado lo muestra CON SU ETIQUETA y su cuenta por pagar BAJA
+     × con el CONTRAASIENTO sembrado, la cuenta por pagar vuelve a SUBIR y el reverso también se ve
+     × los dos movimientos del pago se distinguen por su CONCEPTO, no por una etiqueta fija
+ Tests  3 failed | 5 passed (8)
+
+MUTACION 2: la tarjeta pinta `devengado` donde va la cuenta por pagar
+     × con un movimiento `liquidacion` sembrado lo muestra CON SU ETIQUETA y su cuenta por pagar BAJA
+     × con el CONTRAASIENTO sembrado, la cuenta por pagar vuelve a SUBIR y el reverso también se ve
+ Tests  2 failed | 6 passed (8)
+```
+
+Restaurado desde copia: `git diff` de `app/(app)/mis-pagos` **vacío** y los 8 verdes otra vez.
+
+### T G.2 — la tienda distingue el pago del cargo, y es **la misma función** que la del maestro
+
+`/mi-wallet` mostraba «Créditos (COD)» y «Débitos». Desde la 172 el libro de la tienda tiene
+movimientos `pago_tienda`, que son **débitos igual que un flete**: con esa cabecera, el dinero
+que Ordenex le **entregó** aparecía sumado dentro de «Débitos». Con 50 000 recaudados, 1 200 de
+flete y un pago de 20 000, la tienda leería «me cobraron 21 200». Ahora lee tres cifras: a tu
+favor 50 000,00 · cargos de Ordenex 1 200,00 · ya pagado 20 000,00, y el saldo 28 800,00.
+
+**El criterio duro, medido POR IDENTIDAD y no por parecido.** En
+`tests/unit/services/mi-wallet-desglose.test.ts` se sustituye `derivarDesgloseTienda` por un
+**espía que envuelve a la función real**. Solo hay una instancia en el registro de módulos, así
+que si las dos superficies la llaman, el mismo espía acumula **las dos** llamadas — y con **el
+mismo objeto de filas** (`toBe`, no `toEqual`: ninguna de las dos pre-filtra ni reagrupa antes
+de clasificar, que sería otra forma de divergir sin duplicar la función).
+
+Se complementa con un barrido estructural sobre los tres archivos de la cabecera: **ninguno
+nombra una categoría del ledger en código** (los comentarios sí, y se descuentan) ni menciona
+`CUBETA_POR_CATEGORIA`, con contraprueba de que el barrido detecta una categoría colada.
+
+**PRUEBAS POR MUTACIÓN — tres, con su salida real.**
+
+```
+MUTACION A: «Cargos de Ordenex» vuelve a pintar el total de débitos (la cabecera vieja)
+     × con un pago sembrado, «Ya pagado» lo muestra y «Cargos de Ordenex» NO lo incluye
+     × los tres importes salen de la clasificación del servidor, no de una cuenta del cliente
+ Tests  2 failed | 9 passed (11)
+
+MUTACION B: `/mi-wallet` clasifica por su cuenta (DTO armado a mano desde credito/debito)
+     × las dos superficies pasan por el MISMO `derivarDesgloseTienda` (identidad, no parecido)
+     × sobre el MISMO libro, la tienda y el maestro leen importes idénticos
+ Tests  2 failed | 16 passed (18)
+
+MUTACION C: se quita el aviso de N1 de LAS DOS pantallas
+     × nombra las dos cifras infladas y dice cuál es la correcta            <- /mis-pagos
+     × el aviso habla en lenguaje claro: ni jerga contable ni siglas        <- /mis-pagos
+     × hay UN solo aviso, y está junto a los importes agregados             <- /mis-pagos
+     × declara que los importes brutos incluyen lo anulado                  <- /mi-wallet
+     × el aviso habla en lenguaje claro: ni jerga contable ni siglas        <- /mi-wallet
+ Tests  5 failed | 17 passed (22)
+```
+
+**Lo que la mutación B enseña, y hay que leerlo con cuidado:** el test de PANTALLA
+(`mi-wallet-page.test.tsx`) **no cae** con esa mutación, porque allí la Server Action va doblada
+y el fixture deriva el desglose con la función real. La divergencia servidor-adentro solo la
+caza el test de servicio. Es exactamente el motivo por el que el criterio duro pedía medir
+identidad y no coincidencia de cifras, y por el que ese archivo existe aparte.
+
+Los tres archivos se restauraron desde copia y el `diff` quedó **idéntico** en los tres.
+
+### LA ASIMETRÍA DE N1 — **RESUELTA: el aviso va TAMBIÉN en `/mis-pagos`. No hay asimetría.**
+
+La Tanda F dejó abierto (hallazgo 4 de su bitácora) que la misma inflación de N1 existe en el
+libro del mensajero y que el aviso solo se había puesto en el desglose de la tienda, porque eso
+es lo único que nombran N1 y `design.md §6.4`.
+
+**Regla aplicada (decisión del leader):** el aviso hace falta **donde se muestre un IMPORTE
+AGREGADO que incluya lo anulado**; **no** hace falta donde solo se listen movimientos, porque
+ahí el pago y su reverso se ven los dos y se explican solos.
+
+Se miró qué muestra realmente cada pantalla, y esto es lo que hay:
+
+| Pantalla | Qué muestra | ¿Agregado inflado? | Aviso |
+| --- | --- | --- | --- |
+| `/mis-pagos` — tarjeta «Cuenta por pagar» | **Devengado** (Σ tipo=`devengo`, incluye `ajuste_devengo`) y **Pagado** (Σ tipo=`pago`, incluye la `liquidacion` anulada) | **sí, los dos** | **SÍ, añadido** |
+| `/mis-pagos` — tabla del desglose | una fila por movimiento | no | **no**, y es correcto |
+| `/mi-wallet` — cabecera (T G.2) | **A tu favor** (incluye `ajuste_credito`) y **Ya pagado** (incluye el `pago_tienda` anulado) | **sí, los dos** | **SÍ, añadido** |
+| `/mi-wallet` — tabla del ledger | una fila por movimiento | no | **no**, y es correcto |
+| `/wallet/tiendas` — cabecera del desglose | los cuatro importes | sí | ya lo tenía (T F.6) |
+
+La agregación del mensajero está **verificada en el código, no supuesta**:
+`PagoMensajeroMovimientoRepository.agregarCuentaPorPagar` hace `groupBy(["tipo"])` **sin excluir
+nada** (`:162-174`), así que `ajuste_devengo` engorda «Devengado» y la `liquidacion` anulada
+sigue dentro de «Pagado». La resta —la cuenta por pagar— sale exacta. Es la misma mecánica que
+en la tienda, con otros nombres.
+
+**Conclusión: la asimetría que la Tanda F declaró queda CERRADA, no preservada.** Los dos avisos
+usan el mismo lenguaje que el de T F.6, se componen con los rótulos **reales** de su tarjeta
+(un renombrado los arrastra en vez de dejarlos hablando de una cifra que ya no existe), llevan
+`role="note"` y hay un test por pantalla que **rechaza** «contraasiento», «neteo», «netear»,
+«SLA» y los nombres de categoría. Nada de jerga en pantalla.
+
+Texto literal en `/mis-pagos`:
+
+> «Pagado» sigue contando los pagos que se anularon, y «Devengado» suma la devolución de cada
+> uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Cuenta por
+> pagar» ya tiene todo eso descontado: ese es el número correcto.
+
+Texto literal en `/mi-wallet`:
+
+> «Ya pagado» sigue contando los pagos que se anularon, y «A tu favor» suma la devolución de
+> cada uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Saldo a
+> favor» ya tiene todo eso descontado: ese es el número correcto.
+
+**Lo que queda abierto y NO se amplió por cuenta propia:** por la misma regla,
+`/wallet/mensajeros` (la vista del maestro: `CuentasPorPagarTable` y el desglose de un
+mensajero) muestra los mismos dos agregados inflados y **no** lleva aviso. Está fuera de
+T G.1/T G.2 —que nombran dos pantallas concretas— y ampliarlo aquí habría metido en la tanda
+una tercera superficie con sus suites. **Decisión de una línea si se quiere cerrar en la
+Tanda H**; queda escrito para que en la review no se lea como un olvido.
+
+### Mapa `R<n> → test`
+
+| R | Test | Qué afirma |
+| --- | --- | --- |
+| **R54** | `mis-pagos-page.test.tsx` › «con un movimiento `liquidacion` sembrado lo muestra CON SU ETIQUETA y su cuenta por pagar BAJA» (**mutaciones 1 y 2**) | la fila trae concepto «Liquidación», tipo «Pago», `₡20000.00` y el origen con la descripción del comprobante; la cuenta baja de `₡50000.00` a `₡30000.00` |
+| **R54** | idem › «con el CONTRAASIENTO sembrado, la cuenta por pagar vuelve a SUBIR y el reverso también se ve» | vuelve **exactamente** a `₡50000.00`; el pago sigue a la vista (anular no borra) y «Ajuste (devengo)» aparece a su lado |
+| R54 | idem › «los dos movimientos del pago se distinguen por su CONCEPTO, no por una etiqueta fija» | tres conceptos distintos en las tres filas; una etiqueta fija los pintaría iguales |
+| **R55** | `mi-wallet-page.test.tsx` › «con un pago sembrado, «Ya pagado» lo muestra y «Cargos de Ordenex» NO lo incluye» (**mutación A**) | `₡20000.00` en «ya pagado», `₡1200.00` en «cargos» — y la contraprueba explícita de que **no** son `₡21200.00` |
+| **R55** | idem › «la cabecera vieja ya NO existe: «Débitos» no es un rótulo de esta pantalla» | mientras existiera ese rótulo, el pago estaría contado dentro de él |
+| R55 | idem › «sin pagos, «Ya pagado» sale en cero de verdad» | un cero leído de la categoría real, no un importe escondido |
+| **R55** | idem › «los tres importes salen de la clasificación del servidor, no de una cuenta del cliente» (**mutación A**) | el fixture se deriva con la función REAL y la pantalla pinta esos STRING carácter por carácter; incluye un `ajuste_credito` (pago anulado) |
+| **R55 (criterio duro)** | `mi-wallet-desglose.test.ts` › «las dos superficies pasan por el MISMO `derivarDesgloseTienda` (identidad, no parecido)» (**mutación B**) | **dos** llamadas al **mismo** espía, con el **mismo** objeto de filas (`toBe`) |
+| R55 | idem › «sobre el MISMO libro, la tienda y el maestro leen importes idénticos» (**mutación B**) | `toEqual` entre las dos cabeceras + los valores exactos |
+| R55 | idem › «la tienda pide su desglose con SU tienda_id y los MISMOS filtros que su listado (R22)» | el acotado sale del ACTOR; la cabecera y la tabla hablan del mismo conjunto |
+| R55 | idem › «un rol que no es la tienda no llega ni a clasificar» | el guard va antes del repositorio: cero llamadas y cero clasificaciones |
+| R55 | idem › «ningún archivo de la cabecera decide en qué importe cae una categoría» + contraprueba | barrido sobre los 3 archivos de `/mi-wallet`: ni una categoría del ledger en código, ni `CUBETA_POR_CATEGORIA` |
+| R55 | idem › «los tres importes de la cabecera son EXHAUSTIVOS sobre el ledger» | las 10 categorías del SEED caen en exactamente esas tres cubetas |
+| N1 | `mis-pagos-page.test.tsx` › «nombra las dos cifras infladas y dice cuál es la correcta» (**mutación C**) | con un pago anulado: devengado `₡70000.00`, pagado `₡20000.00`, cuenta por pagar `₡50000.00` exacta, y el aviso las nombra |
+| N1 | idem › «hay UN solo aviso, y está junto a los importes agregados — no dentro de la tabla» | la asimetría *dentro* de la pantalla, afirmada: agregados sí, lista no |
+| N1 | `mi-wallet-page.test.tsx` › «declara que los importes brutos incluyen lo anulado, y cuál es el número correcto» (**mutación C**) | a tu favor `₡70000.00`, ya pagado `₡20000.00`, saldo `₡48800.00` exacto |
+| N1 | los dos › «el aviso habla en lenguaje claro: ni jerga contable ni siglas» | rechaza «contraasiento», «neteo», «netear», «SLA» y los nombres de categoría |
+| R14 | barrido manual sobre los **11** archivos nuevos/modificados | cero `Number(`, `parseFloat`, `parseInt(` y `.toFixed(` en **código**; las 7 apariciones están dentro de comentarios que declaran justamente que no se usan |
+| R34 | `wallet-tiendas-desglose.test.tsx` y `wallet-tiendas-page.test.tsx` verdes **sin editarlos** | siguen sin aparecer entre los modificados de la rama |
+
+### Verificación ejecutada
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: verde)
+
+$ pnpm lint
+✖ 27 problems (0 errors, 27 warnings)      # los 27 preexistentes del baseline, ninguno mío
+$ pnpm exec eslint <los 8 de código + los 5 de test>
+(sin salida: limpio)
+
+$ pnpm exec vitest run  mis-pagos-page + mi-wallet-page + mi-wallet-desglose
+                        + wallet-tiendas-desglose + wallet-tiendas-page + wallet-tiendas-pago
+ Test Files  6 passed (6)
+      Tests  99 passed (99)
+```
+
+Y, para medir el radio de la desviación 1 (un contrato de servicio que tocan la 43, la 170 y la
+171), se corrieron **los tres directorios de la suite por separado** en vez de la corrida única:
+
+```
+$ pnpm exec vitest run tests/unit          489 archivos / 6428 tests / 0 fallos
+$ pnpm exec vitest run tests/integration   152 archivos / 1682 tests / 0 fallos
+$ pnpm exec vitest run tests/components    149 archivos / 1732 tests / 0 fallos (2.ª corrida)
+```
+
+**Total 790 archivos / 9842 tests.** Contra el baseline de la tanda (789 / 9823): **+1 archivo,
++19 tests, cero regresiones.** Los 19 son 6 en `mis-pagos-page` + 6 en `mi-wallet-page` + 7 en
+el archivo nuevo. `./init.sh` y la corrida única siguen siendo del LEADER.
+
+> La primera corrida de `tests/components` salió con **1 rojo que no era contenido**:
+> `OrdenesModuleReuse`, uno de los tres archivos del flake móvil de contención de jsdom de esta
+> máquina, y ajeno por completo a esta tanda (no comparte un solo import con ella). Verde en la
+> corrida siguiente, 149/1732.
+
+### Hallazgos y desviaciones
+
+1. **DESVIACIÓN DECLARADA: T G.2 no se pudo hacer solo en la capa de presentación.** La cabecera
+   de tres importes necesita la agregación **por (tipo, categoría)** del ledger, y esa lectura no
+   estaba expuesta para la tienda: `verMiSaldoAction` devuelve Σ por **tipo**
+   (créditos/débitos), que es justamente la partición que mete el pago dentro de «débitos». Se
+   hizo el cambio **mínimo, aditivo y de solo lectura**: `listarMisMovimientos` añade una tercera
+   lectura (`agregarDesglosePorTienda`, la que ya existe desde la 171) y devuelve el
+   `DesgloseTiendaDTO`. Ni una escritura, ni un permiso nuevo, ni una consulta más en ningún otro
+   camino, y **cero líneas del backend de la liquidación (Tandas A–F)**.
+   Se eligió `listarMisMovimientos` y no `verMiSaldo` por dos razones: es la respuesta que ya
+   refresca la pantalla al filtrar, así que la cabecera cumple R22 (los importes son los del
+   conjunto filtrado) sin una cuarta lectura; y deja `verMiSaldo` intacta.
+   **El campo es REQUERIDO a propósito.** Opcional habría evitado tocar tres dobles de test, y
+   habría dejado que la cabecera se pintara con huecos el día que un consumidor se olvidara de
+   emitirlo: un hueco en una pantalla de dinero se lee como «no hay nada», no como «no lo sé».
+   `design.md §12` solo lista `app/(app)/mi-wallet/**` para P5 y no anticipa esta pieza — es un
+   hueco del diseño, no una ampliación de alcance.
+
+2. **Cinco archivos de test tocados, los cinco declarados, y NINGUNA aserción existente
+   cambiada.** Cuatro son **añadidos de fixture** forzados por el punto 1
+   (`mi-wallet-page.test.tsx`, `wallet-tienda-actions.test.ts`, `WalletDescarga.test.tsx`,
+   `wallet-tienda-descarga.test.ts`) y uno es el export que faltaba en un doble
+   (`mis-pagos-page.test.tsx`: `listarMisPagosCompletoAction`, que el módulo real importa). El de
+   `wallet-tienda-descarga.test.ts` **no lo detectó el typecheck**: su repositorio en memoria se
+   construye con `as unknown as IWalletTiendaMovimientoRepository`, así que el método nuevo
+   faltaba en tiempo de ejecución y 3 tests de la 170 se pusieron rojos hasta añadirlo. Es el
+   argumento vivo contra ese cast.
+
+3. **`/mi-wallet` estrena etiquetas propias en vez de reexportar las del maestro, y es
+   deliberado.** `DESGLOSE_TIENDA_LABEL` (171) habla de la tienda en tercera persona («A favor de
+   la tienda», «Pagado a la tienda») porque la lee quien paga; esta pantalla la lee la tienda
+   sobre su propio dinero y el resto de `/mi-wallet` ya le habla de vos. Lo que **no** se duplica
+   —y es lo único que importa que no se duplique— es la **clasificación**, que vive una sola vez
+   en el servidor y está medida por identidad. Nótese que la dependencia va en el sentido que ya
+   existía: `desglose-tienda-labels.ts` (171) reexporta **de** `/mi-wallet`, no al revés.
+
+4. **`saldo.creditos` y `saldo.debitos` dejan de pintarse en `/mi-wallet`, pero el DTO sigue
+   viajando.** El número grande («Saldo a favor») se sigue leyendo de `saldo`, así que
+   `verMiSaldoAction` no sobra ni queda ninguna prop muerta. Los dos campos siguen en el contrato
+   de la 43 porque otros consumidores los usan; simplemente esta cabecera ya no los enseña, que
+   es justo lo que R55 pedía.
+
+5. **Un pago anulado deja la cabecera de la tienda en 70 000 «a tu favor» y 20 000 «ya pagado»
+   con un saldo de 48 800.** No es un defecto nuevo: es N1 tal cual, y ahora está declarado en
+   las tres pantallas que lo enseñan. Netearlo sigue exigiendo dos valores de enum nuevos o
+   reescribir la derivación de la 171, y sigue estando fuera del alcance por su default.
+
+6. **Preview sigue sin verificar** (hueco de T A.0), pendiente antes de mergear el PR.
