@@ -342,6 +342,81 @@ suite) y R41 (comprobación de mutación del montaje del lienzo).
 ---
 
 ## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento — **EMPIEZA A LEER POR AQUÍ**
+## 🗓️ Sesión 2026-07-31 (tanda de analítica) — 122 y 130 con puerta F1.4 CERRADA — ~~EMPIEZA A LEER POR AQUÍ~~
+
+**Pedido del humano:** «arranca la 135» → «arranca con la 130» → «arranca la 122 en paralelo».
+
+### Estado de las tres
+
+- **135 → `done`.** PR #218 mergeado, verificado **por archivos** contra `origin/dev` (la lección
+  del #209): `lib/analytics/{types,metrics,ranges,filters}.ts` y las 3 aserciones nuevas de R22 en
+  `tests/unit/analytics/filters.test.ts` están en `dev`. Delta medido contra un baseline real
+  (segundo worktree sobre `origin/dev`): **cero regresiones**, +9 archivos / +180 tests.
+- **122 (backend) → `in_progress`, fase 1 completa.** 41 requisitos, trazabilidad 41/41.
+- **130 (frontend) → `in_progress`, fase 1 completa.** 41 requisitos, trazabilidad R1–R41.
+- Ambas ramas **sincronizadas con `origin/dev`** (merge limpio) y con commit local, **sin push**.
+  Ocupación tras el merge: `backend [122]` 1/2, `frontend [129, 130]` 2/2. Regla 1 respetada.
+
+### ⚠️ Lo que hay que saber antes de tocar nada
+
+- **La base ya NO está roja.** El chore `chore/saneamiento-deudas-arnes` (PR #232) dejó `dev` en
+  `== init OK ==`: 665 archivos / 8052 tests, **0 rojos**. Se acabó el argumento de «delta 0 contra
+  rojos ajenos» que arrastraba la 135: **estas dos features se miden contra CERO**. Y con eso queda
+  sin excusa la **T6.1 de la 135**, que sigue sin marcar.
+- **`tests/unit/analytics/frontera.guardia.test.ts` fue RETIRADO** por ese mismo chore (medía el
+  diff de la rama actual; uno de sus casos llegaba a prohibir crear páginas). La 122 lo citaba en
+  5 sitios, uno de ellos una task que habría pasado **en vacío pareciendo verde**. Corregido.
+  `modulo-puro.guardia.test.ts` sigue vivo y censa el **directorio** `lib/analytics` (`:199-207`),
+  no una lista fija, así que los módulos nuevos de la 122 quedan vigilados el día que existan.
+- **Hueco declarado, NO tapado:** la parte *de rama* del viejo R33 (que el diff no cree
+  migraciones, páginas ni componentes) **no la absorbe ningún guardia**. Se decidió no resucitar el
+  guardia borrado —un guardia que mide el diff caduca en el siguiente merge y da verdes vacíos, que
+  es justo por lo que lo retiraron— y degradar R33 a propiedad **verificada en el cierre a mano**
+  por el reviewer. Está escrito así en `requirements.md`, `design.md §8` y `tasks.md T5.5`.
+
+### 🚧 PENDIENTE HUMANO — bloquea el paso a fase 2
+
+1. **Q3 de la 122: se le describió la consecuencia AL REVÉS.** Al elegir
+   `orden.mensajero_asignado_id` se le dijo que «A sigue viendo la orden aunque ya no es suya y B no
+   la ve hasta gestionarla» — eso es lo que hace la **otra** columna. Con la elegida, al reasignar
+   A→B **B pasa a ver la orden entera, incluida la gestión de A, y A deja de verla**. La spec está
+   escrita según la **columna** elegida (coherente con el precedente de la 159,
+   `db/schema.prisma:478`) y la discrepancia queda como punto de vuelta en `requirements.md > D3` y
+   `tasks.md > T0.3`. **Si la eligió por la consecuencia y no por la columna, hay que girarla.**
+2. **`adminSatelite` + grano `mensajero`: nadie lo preguntó.** Se decidió que el `adminTienda` ve
+   mensajeros **seudonimizados** porque no es su empleador; al `adminSatelite` la spec le asignó
+   identidad **real** aplicando la misma razón al revés (sí opera a los mensajeros de su zona). Es
+   una **derivación del spec_author, no una decisión humana**, y está marcada como tal.
+3. **Aprobación del spec** de ambas para arrancar la fase 2.
+
+### Hallazgos verificados que no se tapan
+
+- **130 · H1:** esta feature **no tiene llamador en producción** hasta que aterrice la 131. El
+  propio shell de la 129 lo dice. No venderlo como «ya integrado».
+- **130 · H2:** el mensajero **sí** entra a `/analitica` (`ROLES_ANALITICA` lo incluye), luego
+  `recharts` **sí** llega a su móvil; R26/R27 solo garantizan que llegue diferido.
+- **130 · I11:** el stub de `ResizeObserver` (`tests/setup/jest-dom.ts:45-55`) tiene `observe(){}`
+  **vacío**, así que `ResponsiveContainer` renderiza vacío en vez de reventar: un
+  `querySelector("svg")` estaría **verde sin medir nada**. Por eso la única aserción sobre el lienzo
+  exige **mutación probada** (T4.5).
+- **130 · premisa falsa corregida:** se preguntó Q5 diciendo que `KpiValorAnimado` tenía test
+  propio. **No lo tiene** (`tests/**/*Kpi*` → 0 archivos); su única red es indirecta vía los tests
+  de sus dos consumidores. R37 crea el test que faltaba. Su copia en
+  `app/(app)/mis-asignaciones/_components/` es **solo un re-export**, no un duplicado: arreglar el
+  compartido cubre a los dos.
+- **130 · limitación preexistente (H3):** `loadMonedaConfig` lee `process.env` con clave dinámica,
+  así que en el navegador cae al default `es-CR`/`CRC`. **Ya afecta a cinco componentes
+  `"use client"` en producción**; la 130 no la introduce, alinea el KPI con sus vecinos.
+- **122 · un 403 de esta feature sería MUDO.** `normalizeError` devuelve temprano para cualquier
+  `AppError` (`lib/errors/normalize.ts:21`) y solo loguea en la rama del error desconocido, así que
+  un `ForbiddenError` bajo `withErrorHandler` no dejaría rastro. Por eso R40 exige llamada explícita
+  al logger y **su test espía el logger, no el status**. (`docs/conventions.md:22` no nombra ningún
+  canal; el real es `ErrorLogger`, `lib/errors/logger.ts:6-21`.)
+- **Método:** un hecho de inventario **solo vale si se reproduce con `git show origin/dev:<ruta>`**.
+  La primera redacción de la 130 dedujo un hallazgo falso midiendo respaldos en el scratchpad de
+  otra sesión. Que tres copias coincidan entre sí no las hace actuales — solo hermanas.
+
+## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento
 
 **Feature 167 (apartado propio de recolección) → `done`, PR #231 MERGEADO.** Nació de un reporte de
 uso —«no veo la forma de recolectar»— que resultó ser dos problemas: la base local del humano tenía 4

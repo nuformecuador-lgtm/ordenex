@@ -1,19 +1,28 @@
 // @vitest-environment jsdom
-// Feature 170 (T A.2) — descarga del listado de la bodega satélite. Cubre R1, R10, R14,
-// R20, R30 y R32.
+// Feature 170 (T A.2) — descarga del listado de la bodega satélite. Cubre R1, R10, R14 y R20.
 //
-// Es la primera tabla de FAMILIA B del rollout, y por eso importa más de lo que parece:
-// fija que la descarga NO relee del servidor y que parte del array YA FILTRADO. Si esto
-// sale torcido, las otras 15 tablas de familia B lo copian.
+// Era la primera tabla de FAMILIA B del rollout: el dataset entero llegaba por props y el
+// archivo se proyectaba del array que la tabla pintaba, sin releer nada.
+//
+// Feature 170 — FASE 2 (T K.3): esa pantalla PAGINA, así que «lo que la tabla pinta» es una
+// página y proyectarla degradaría la descarga a «descargá lo que se ve» (R52). El módulo
+// relee el conjunto completo al pulsar y le aplica los filtros vigentes; lo que este archivo
+// sigue fijando es lo de siempre —qué columnas salen, con qué valores crudos y respetando
+// los tres filtros—, ahora sobre el CONJUNTO. La no-degradación a la página la mide
+// `tests/components/paginacion/SatelitePaginacion.test.tsx`.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { readFileSync } from "node:fs";
-import path from "node:path";
+import { SWRConfig } from "swr";
 
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import {
+  PAGE_SIZE_SATELITE,
+  catalogoSatelite,
+  paginaBodega,
+} from "@/tests/fixtures/satelite-bodega";
 
 vi.mock("@/components/shared/descargar-blob", () => ({ descargarBlob: vi.fn() }));
 const descargarBlobMock = vi.mocked(descargarBlob);
@@ -39,7 +48,26 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
-import { SateliteOrdenesListado } from "@/app/(app)/recepcion-satelite/_components/SateliteOrdenesListado";
+// La cámara nunca se abre en estos tests; el mock evita cargar el módulo real.
+vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
+
+// Feature 170 — FASE 2 (T K.3): las DOS lecturas del listado. `paginado` es lo que la tabla
+// pinta (una página, ya filtrada por el servidor); `conjunto` es de donde sale el archivo.
+const { paginadoMock, conjuntoMock } = vi.hoisted(() => ({
+  paginadoMock: vi.fn(),
+  conjuntoMock: vi.fn(),
+}));
+vi.mock("@/lib/actions/recepcion-satelite", () => ({
+  recibirPorQr: vi.fn(),
+  recibirLote: vi.fn(),
+  asignarDesdeSatelite: vi.fn(),
+  listarRecepcionSatelite: (...a: unknown[]) => conjuntoMock(...a),
+  listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoMock(...a),
+}));
+vi.mock("@/lib/actions/envio-devolucion-central", () => ({ enviarACentral: vi.fn() }));
+vi.mock("@/lib/actions/resolver-novedad", () => ({ recuperarABodega: vi.fn() }));
+
+import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 
 const ZONA_ACTOR = "Limón";
 
@@ -66,21 +94,23 @@ function makeOrden(
 }
 
 /**
- * Lo que el servicio entrega por props: SOLO órdenes de la zona del actor (el service
- * las acota con `findRecepcionSateliteByZona`), en tres cantones/estados distintos.
+ * El CONJUNTO del actor: SOLO órdenes de su zona (el service las acota con
+ * `findRecepcionSateliteByZona`), en dos cantones y dos estados. En el orden del flujo de la
+ * bodega, que es el que impone el `ORDER BY` del listado (R51): primero las recibidas, luego
+ * las que están por devolver.
  */
 const ORDENES: RecepcionSateliteDTO[] = [
   makeOrden({ id: "o1", numRemision: "REM-001", cantonNombre: "Central", distritoNombre: "Limón" }),
   makeOrden({
     id: "o2",
     numRemision: "REM-002",
-    estatusValue: "por_devolver",
     cantonNombre: "Pococí",
     distritoNombre: "Guápiles",
   }),
   makeOrden({
     id: "o3",
     numRemision: "REM-003",
+    estatusValue: "por_devolver",
     cantonNombre: "Pococí",
     distritoNombre: "Guápiles",
     numGuia: null,
@@ -90,17 +120,65 @@ const ORDENES: RecepcionSateliteDTO[] = [
   }),
 ];
 
-function renderListado(ordenes: RecepcionSateliteDTO[] = ORDENES) {
+/**
+ * El filtro que resuelve el SERVIDOR (T K.1), reimplementado aquí a propósito: comparación
+ * por igualdad EXACTA del nombre, como el SQL, para que el doble no sea el mismo código que
+ * se está midiendo.
+ */
+function filtrarComoElServidor(
+  ordenes: RecepcionSateliteDTO[],
+  input: { estados?: string[]; cantones?: string[]; distritos?: string[] } = {},
+): RecepcionSateliteDTO[] {
+  return ordenes.filter((orden) => {
+    if (input.estados?.length && !input.estados.includes(orden.estatusValue)) return false;
+    if (input.cantones?.length && !input.cantones.includes(orden.cantonNombre)) return false;
+    if (input.distritos?.length) {
+      if (orden.distritoNombre === null) return false;
+      if (!input.distritos.includes(orden.distritoNombre)) return false;
+    }
+    return true;
+  });
+}
+
+function renderModulo(ordenes: RecepcionSateliteDTO[] = ORDENES) {
+  paginadoMock.mockImplementation(async (input = {}) => {
+    const filtradas = filtrarComoElServidor(ordenes, input);
+    return {
+      status: "ok",
+      items: filtradas,
+      page: 1,
+      pageSize: PAGE_SIZE_SATELITE,
+      total: filtradas.length,
+    };
+  });
+  // El conjunto tal como lo devuelve `listarRecepcionSatelite`: los cinco grupos por estado.
+  conjuntoMock.mockResolvedValue({
+    status: "ok",
+    porRecibir: [],
+    recibidas: ordenes.filter((o) => o.estatusValue === "en_bodega_satelite"),
+    asignadas: [],
+    porDevolver: ordenes.filter((o) => o.estatusValue === "por_devolver"),
+    enTransitoACentral: [],
+    devueltas: [],
+    zonaNombre: ZONA_ACTOR,
+    sinZona: false,
+  });
   return render(
-    <SateliteOrdenesListado
-      ordenes={ordenes}
-      zonaNombre={ZONA_ACTOR}
-      puedeAsignar
-      onAsignar={vi.fn()}
-      onEnviarACentral={vi.fn()}
-      onRecuperar={vi.fn()}
-      onDeshacerAsignacion={vi.fn()}
-    />,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <RecepcionSateliteModule
+        porRecibir={[]}
+        ordenesBodega={paginaBodega(ordenes)}
+        catalogoFiltros={catalogoSatelite(ordenes)}
+        zonaNombre={ZONA_ACTOR}
+        sinZona={false}
+        mensajeros={[]}
+        bloqueoBodega={{
+          bloqueada: false,
+          porMensajeros: false,
+          porCierreBodega: false,
+        }}
+      />
+    </SWRConfig>,
   );
 }
 
@@ -140,7 +218,7 @@ afterEach(() => {
 describe("Órdenes de la bodega satélite · descarga", () => {
   it("ofrece la descarga de las órdenes de la bodega", async () => {
     const user = userEvent.setup();
-    renderListado();
+    renderModulo();
 
     // R1: control presente, con nombre accesible que identifica el listado.
     expect(botonDescarga()).toBeInTheDocument();
@@ -151,7 +229,7 @@ describe("Órdenes de la bodega satélite · descarga", () => {
     expect(mime).toBe(XLSX_MIME);
     expect(nombreArchivo).toMatch(/^ordenes-de-la-bodega-\d{4}-\d{2}-\d{2}\.xlsx$/);
 
-    // Una fila por orden a la vista, en el mismo orden que la tabla.
+    // Una fila por orden del CONJUNTO, en el orden del flujo de la bodega (R51).
     const [columnas, filas, titulo] = buildXlsxRowsMock.mock.calls[0];
     expect(filas.map((f) => f.numRemision)).toEqual(["REM-001", "REM-002", "REM-003"]);
     expect(columnas.map((c) => c.header)).toContain("Nº Remisión");
@@ -166,7 +244,7 @@ describe("Órdenes de la bodega satélite · descarga", () => {
 
   it("respeta los filtros de estado, cantón y distrito aplicados", async () => {
     const user = userEvent.setup();
-    renderListado();
+    renderModulo();
 
     // Se filtra por cantón: la tabla se queda con dos filas…
     // La etiqueta del cantón desambigua con la provincia (feature 117).
@@ -188,38 +266,36 @@ describe("Órdenes de la bodega satélite · descarga", () => {
     await user.click(botonDescarga());
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(2));
     const [, filasEstado] = buildXlsxRowsMock.mock.calls[1];
-    expect(filasEstado.map((f) => f.numRemision)).toEqual(["REM-003"]);
+    expect(filasEstado.map((f) => f.numRemision)).toEqual(["REM-002"]);
   });
 
-  it("no ejecuta ninguna lectura adicional al servidor", () => {
-    // R30/R32: la descarga de Familia B se construye sobre el dataset que la pantalla YA
-    // tiene. Se comprueba de forma ESTÁTICA, que es donde la propiedad vive: el módulo no
-    // importa ninguna Server Action, así que no hay ninguna que pueda llamar —ni al
-    // pintar, ni al descargar—.
-    const raiz = path.resolve(__dirname, "../../..");
-    const fuente = readFileSync(
-      path.join(raiz, "app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx"),
-      "utf8",
-    );
-    const importes = [...fuente.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
+  it("descargar relee el CONJUNTO, no otra página del listado", async () => {
+    // Feature 170 — FASE 2 (T K.3, R52): esta tabla era de FAMILIA B —el dataset entero
+    // llegaba por props y el archivo no releía nada (R30/R32 de la FASE 1)—. Al paginar, esa
+    // vía deja de existir: lo que la pantalla tiene es UNA página. La descarga pasa a releer
+    // el listado COMPLETO, que es el que la pantalla llamaba antes de paginar y que el
+    // servidor acota igual por zona (R14/R44). Lo que NO puede hacer es pedir páginas: eso
+    // sería descargar por partes lo que ya se decidió entregar entero.
+    const user = userEvent.setup();
+    renderModulo();
 
-    expect(importes.length).toBeGreaterThan(0);
-    for (const especificador of importes) {
-      expect(especificador).not.toMatch(/^@\/lib\/(actions|services|repositories)\b/);
-    }
-    expect(fuente).not.toMatch(/\bfetch\s*\(/);
-    expect(fuente).not.toMatch(/\buseSWR\b/);
-    // El cableado de la descarga es el adaptador LOCAL, no el de Server Action.
-    expect(fuente).toMatch(/filasLocales\(/);
-    expect(fuente).not.toMatch(/filasDesdeResultado\(/);
+    await waitFor(() => expect(paginadoMock).toHaveBeenCalled());
+    const paginasAntes = paginadoMock.mock.calls.length;
+    expect(conjuntoMock).not.toHaveBeenCalled();
+
+    await user.click(botonDescarga());
+    await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
+
+    expect(conjuntoMock).toHaveBeenCalledTimes(1);
+    expect(paginadoMock.mock.calls.length).toBe(paginasAntes);
   });
 
   it("solo contiene órdenes de la zona del actor", async () => {
     const user = userEvent.setup();
     // El servicio ya acotó por zona (R14/R20): la pantalla NUNCA recibe una orden ajena.
     // Lo que este test fija es que la descarga no amplía ese alcance por su cuenta: el
-    // archivo es exactamente el conjunto recibido, fila a fila.
-    renderListado();
+    // archivo es exactamente el conjunto que devuelve el listado, fila a fila.
+    renderModulo();
 
     await user.click(botonDescarga());
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));

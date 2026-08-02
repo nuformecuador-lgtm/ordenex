@@ -20,7 +20,10 @@ import {
   recibirSchema,
   recibirLoteSchema,
   asignarSateliteSchema,
+  listarOrdenesBodegaPaginadoSchema,
   type ListarRecepcionSateliteResult,
+  type ListarOrdenesBodegaPaginadoResult,
+  type ObtenerCatalogoFiltrosSateliteResult,
   type RecibirResult,
   type RecibirLoteResult,
   type AsignarSateliteResult,
@@ -134,6 +137,53 @@ export async function listarRecepcionSatelite(
     return service.listar(actor);
   });
   // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
+  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T K.1, R40/R41/R44/R45/R51) — UNA pagina del listado «Órdenes de la
+ * bodega», con estado ∧ cantón ∧ distrito resueltos en el SERVIDOR.
+ *
+ * Sustituye, para esa tabla, al `listarRecepcionSatelite` que bajaba el conjunto entero. La
+ * pantalla sigue llamando a aquel para «Por recibir», `zonaNombre` y `sinZona`: esta acción no
+ * los duplica.
+ *
+ * `input` vacío (`{}`) es válido y es lo que pide la página 1: los defaults los pone el schema
+ * del dominio. Un filtro fuera de la lista blanca —o una clave de alcance colada— muere aquí
+ * con `validation_error`, sin llegar al servicio.
+ */
+export async function listarOrdenesBodegaPaginado(
+  input: unknown = {},
+  deps: RecepcionSateliteDeps = {},
+): Promise<ListarOrdenesBodegaPaginadoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R3: antes de tocar el service
+    const data = listarOrdenesBodegaPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarOrdenesBodegaPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T K.2, R44/R46) — catálogo de opciones de cantón y distrito del
+ * conjunto del actor, INDEPENDIENTE del recorte de página.
+ *
+ * Molde: `obtenerCatalogoFiltrosOrdenes` (feature 144). Lo invoca el Server Component al
+ * cargar la pantalla y el resultado baja por props: no hay endpoint nuevo ni una consulta por
+ * cada selección del usuario. Sin zod porque no recibe entrada — el único AppErrorShape
+ * posible es UNAUTHORIZED.
+ */
+export async function obtenerCatalogoFiltrosSatelite(
+  deps: RecepcionSateliteDeps = {},
+): Promise<ObtenerCatalogoFiltrosSateliteResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const service = deps.service ?? buildService();
+    return service.obtenerCatalogoFiltros(actor);
+  });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 

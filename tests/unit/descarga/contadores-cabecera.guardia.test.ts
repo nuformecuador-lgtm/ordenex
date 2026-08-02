@@ -125,6 +125,33 @@ const COLAS_TANDA_J: { ruta: string; listado: string }[] = [
 /** `({pagina.total})` — el contador de cabecera escrito como R42 lo exige. */
 const CONTADOR_POR_TOTAL = /\(\{\s*[^{}]*?\.total\s*\}\)/;
 
+/**
+ * Feature 170 — FASE 2 (T K.3): la bodega satelite, la pantalla de riesgo ALTO del Anexo III.
+ *
+ * Entra en esta guardia por el traspaso de T K.1/T K.2 (§9, punto 8): su contador NO tiene la
+ * forma `({X.length})` —es una plantilla, «X de Y órdenes», con DOS numeros— asi que ninguno
+ * de los tests de arriba lo miraba. El riesgo es el mismo que el de las colas: en cuanto la
+ * pantalla pagina, `${ordenes.length}` pasa a decir el tamano de la pagina y no falla en
+ * ninguna parte.
+ *
+ * `ruta` es donde vive el contador (el listado). Su pantalla se reconoce paginada porque el
+ * MODULO monta `<Pagination>` y lo importa — que es lo que Q-I6 dejo escrito.
+ */
+const CONTADOR_SATELITE = {
+  ruta: "app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx",
+  listado: "Ordenes de la bodega satelite",
+};
+
+/** El contador de la bodega, escrito como R42 lo exige: los dos numeros son del SERVIDOR. */
+const CONTADOR_SATELITE_POR_TOTAL = /\$\{\s*total\s*\}\s*(?:de\s*\$\{\s*totalSinFiltros\s*\})?\s*órdenes/;
+
+/**
+ * La forma PROHIBIDA en ese mismo contador: el numero sale del array que la tabla pinta. Se
+ * enumeran los nombres que ese array ha tenido y puede tener (`ordenes` es el actual;
+ * `visibles` era el de antes de T K.3, cuando el filtrado era de cliente).
+ */
+const CONTADOR_SATELITE_POR_ARRAY = /\$\{\s*(?:ordenes|items|filas|visibles)\.length\s*\}/;
+
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
     const completo = path.join(dir, entrada.name);
@@ -208,9 +235,10 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
     //
     // T H.3 lo dejo en 17 y la tanda I lo llevo a 24; T J.2 suma los CUATRO modulos de las
     // colas de riesgo MEDIO, que montan su control en el propio archivo (Q-I6) justo para
-    // que esta guardia los vea.
+    // que esta guardia los vea. T K.3 suma DOS: el modulo de la bodega satelite (monta el
+    // control) y su listado (monta el `<DataTable>` y lleva el contador).
     expect(paginadas.size, "no se reconocio ninguna pantalla paginada").toBeGreaterThanOrEqual(
-      28,
+      30,
     );
 
     const excluidos = new Set(
@@ -282,5 +310,31 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
         `${cola.listado}: su contador no sale del total del servidor (R42)`,
       ).toBe(true);
     }
+  });
+
+  it("el contador de la bodega satelite dice el total del servidor, y su pantalla se vigila", () => {
+    // Feature 170 — FASE 2 (T K.3). Tres afirmaciones, las mismas tres del test de arriba
+    // adaptadas a un contador que no tiene la forma `({X.length})`:
+    //
+    //  (a) el archivo del contador existe y su pantalla se reconoce PAGINADA (si el control
+    //      se moviera fuera del modulo, la guardia dejaria de mirar este archivo);
+    //  (b) el contador sale de un total del SERVIDOR;
+    //  (c) y NO de la longitud del array que la tabla pinta — que es la forma en que este
+    //      contador mentiria: «25 órdenes» con 300 en la bodega.
+    const paginadas = pantallasPaginadas();
+    expect(
+      paginadas.has(CONTADOR_SATELITE.ruta),
+      `${CONTADOR_SATELITE.listado}: su modulo no monta el control, la guardia deja de mirarlo (Q-I6)`,
+    ).toBe(true);
+
+    const fuente = readFileSync(path.join(RAIZ, CONTADOR_SATELITE.ruta), "utf8");
+    expect(
+      CONTADOR_SATELITE_POR_TOTAL.test(fuente),
+      `${CONTADOR_SATELITE.listado}: su contador no sale del total del servidor (R42)`,
+    ).toBe(true);
+    expect(
+      CONTADOR_SATELITE_POR_ARRAY.test(fuente),
+      `${CONTADOR_SATELITE.listado}: su contador sale de las filas de la pagina (R42)`,
+    ).toBe(false);
   });
 });
