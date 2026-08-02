@@ -16,6 +16,7 @@ import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 
 import { money } from "../../../mi-wallet/_components/mi-wallet-labels";
 import { DesgloseMovimientosTienda } from "./DesgloseMovimientosTienda";
+import { PagoTiendaAcciones } from "./PagoTiendaAcciones";
 import { DESGLOSE_TIENDA_NOMBRE } from "./desglose-tienda-labels";
 import {
   COLUMNAS_DESCARGA_SALDOS_TIENDAS,
@@ -96,6 +97,17 @@ export interface SaldosTiendasTableProps {
    * conjunto. Alimenta el `fallbackData` de SWR.
    */
   initialData: SaldosTiendasPagina;
+  /**
+   * Feature 172 (T D.3, R4): si el actor puede registrar pagos. Lo decide el SERVIDOR —la
+   * página lo resuelve con `esAccesoTotal`, el mismo predicado que el servicio usa para
+   * responder `forbidden`— y baja por props: el cliente no deduce permisos.
+   *
+   * **Por defecto `false`, y es deliberado.** Falla cerrado: quien monte esta tabla sin
+   * decidir el permiso no ofrece pagar. Es además lo que mantiene intactos los tests de la
+   * 171 (R34), que montan la tabla sin esta prop y afirman que la pantalla NO ofrece
+   * registrar ningún pago.
+   */
+  puedeRegistrarPago?: boolean;
 }
 
 async function leerPagina(
@@ -107,7 +119,10 @@ async function leerPagina(
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
 
-export function SaldosTiendasTable({ initialData }: SaldosTiendasTableProps) {
+export function SaldosTiendasTable({
+  initialData,
+  puedeRegistrarPago = false,
+}: SaldosTiendasTableProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
 
@@ -173,8 +188,19 @@ export function SaldosTiendasTable({ initialData }: SaldosTiendasTableProps) {
          * Lo demás de la tabla no se toca: mismas columnas, mismos datos, mismo estado
          * vacío y la MISMA descarga sobre las props (R6).
          */
+        /**
+         * Feature 172 (T D.3, R4/R29/R50) — el pago a la tienda entra por el hueco
+         * `acciones` que la 171 dejó preparado, así que `DesgloseMovimientosTienda` no se
+         * toca (R34). Sin permiso NO se pasa el nodo: la prop es opcional en el desglose y
+         * sin ella no se renderiza ni contenedor, así que quien no puede pagar ve
+         * exactamente la pantalla de la 171.
+         */
         renderExpanded={(t) => (
-          <DesgloseMovimientosTienda resumen={t} id={`desglose-tienda-${t.tiendaId}`} />
+          <DesgloseMovimientosTienda
+            resumen={t}
+            id={`desglose-tienda-${t.tiendaId}`}
+            acciones={puedeRegistrarPago ? <PagoTiendaAcciones resumen={t} /> : undefined}
+          />
         )}
         expandAriaLabel={(t) => DESGLOSE_TIENDA_NOMBRE.expandir(t.tiendaNombre)}
       />

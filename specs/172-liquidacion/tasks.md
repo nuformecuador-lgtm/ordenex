@@ -382,7 +382,11 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA D — Frontend: pagar a una tienda
 
-### [ ] T D.1 — Formulario de pago (compartido)
+### [x] T D.1 — Formulario de pago (compartido)
+- **HECHA el 2026-08-02.** El diálogo se estructura sobre una única «sesión» (clave + lo escrito
+  van juntos), sin `set-state-in-effect`. **Las dos direcciones del criterio, probadas por
+  mutación por el leader:** renovar la clave tras un fallo tumba 2 tests; conservarla tras un
+  registro exitoso tumba otros 2. Cero `Number`/`parseFloat` en código.
 - `components/shared/liquidacion/RegistrarPagoDialog.tsx`: monto (prefijado al disponible,
   editable a la baja), método, referencia, nota y fecha real (por defecto **hoy** en hora de
   Costa Rica, no futura). Genera la **clave de idempotencia al abrirse**, la conserva entre
@@ -393,7 +397,10 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** reenviar tras un error de red manda **la misma** clave; tras un registro exitoso la
   siguiente apertura manda una distinta; cero `Number`/`parseFloat` en el archivo.
 
-### [ ] T D.2 [P] — Tabla de comprobantes (compartida) + columnas de descarga
+### [x] T D.2 [P] — Tabla de comprobantes (compartida) + columnas de descarga
+- **HECHA el 2026-08-02.** Un pago anulado se muestra completo y marcado, y un test fija que esta
+  tanda **muestra** la anulación pero **no ofrece anular** (eso es T F.5). Ningún identificador
+  interno se pinta ni se descarga, con contraprueba de que el barrido detecta de verdad.
 - `PagosRegistradosTabla.tsx` (`<DataTable>`, descarga **Familia B** con `filasLocales`) y
   `pagos-registrados-descarga-columnas.ts` (fecha real, monto, método, referencia, nota, quién,
   registrado el, **estado y datos de anulación**). Sin ids.
@@ -403,7 +410,11 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** la guardia de columnas sensibles pasa sobre el módulo nuevo sin excepciones; un pago
   anulado se muestra **completo** y marcado.
 
-### [ ] T D.3 — Cablear en el desglose de la tienda
+### [x] T D.3 — Cablear en el desglose de la tienda
+- **HECHA el 2026-08-02.** Refresco dirigido probado **por mutación** (leader): cambiarlo por uno
+  global tumba 4 tests. Permisos por partida doble: sin permiso no se ve el control **y** la acción
+  responde `forbidden`, las dos mitades leyendo el mismo predicado que el servicio. **R34 en pie:
+  los dos archivos de test de la 171 pasan verdes y no están entre los modificados de la rama.**
 - `SaldosTiendasTable.tsx` pasa `acciones={…}` (la prop que la 171 dejó lista); el diálogo se abre
   desde ahí; tras registrar, `mutate(claveDesgloseTienda(tiendaId))` refresca **solo** esa tienda;
   la lista de comprobantes se monta dentro del desglose.

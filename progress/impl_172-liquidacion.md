@@ -1157,3 +1157,139 @@ la Tanda B 1/2 (punto 7) y la Tanda B 2/2 (punto 7). Se cierra aquí.
 
 9. **Preview sigue sin verificar** (hueco de T A.0). No lo resuelve esta tanda; sigue pendiente
    **antes de mergear el PR**.
+
+---
+
+## TANDA D — Frontend: pagar a una tienda · **COMPLETA** (2026-08-02)
+
+T D.1, T D.2 y T D.3 hechas. El código lo escribió el `frontend_dev`; **la verificación y las tres
+pruebas por mutación las corrió el LEADER**, porque el agente murió tres veces seguidas por cortes
+de stream de la API justo en la fase de verificación (no por fallos del trabajo: el árbol quedó
+completo y coherente en las tres caídas).
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `components/shared/liquidacion/RegistrarPagoDialog.tsx` | El formulario de pago, compartido con la Tanda E |
+| `components/shared/liquidacion/clave-idempotencia.ts` | Acuña la clave (uuid v4, `crypto.randomUUID` con fallback) |
+| `components/shared/liquidacion/PagosRegistradosTabla.tsx` | Lista de comprobantes (`<DataTable>`, descarga Familia B) |
+| `components/shared/liquidacion/pagos-registrados-descarga-columnas.ts` | Columnas de descarga |
+| `components/shared/liquidacion/liquidacion-labels.ts` | Etiquetas de pantalla |
+| `components/shared/monto-cliente.ts` | `montoValido` **promovido** desde `wallet-labels.ts` |
+| `app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx` | El cableado y el refresco dirigido |
+| `tests/fixtures/money-safe.ts` | Barrido reutilizable de `Number(`/`parseFloat` |
+| 4 archivos de test | ver el mapa de abajo |
+
+**Modificados:** `app/(app)/wallet/_components/wallet-labels.ts` (re-exporta lo promovido, para no
+romper a sus consumidores), `SaldosTiendasTable.tsx` (recibe `acciones`, la prop que la 171 dejó
+lista a propósito) y `app/(app)/wallet/tiendas/page.tsx`.
+
+> **`monto-cliente.ts` se PROMUEVE, no se copia.** El comparador ya vivía en `wallet-labels.ts`
+> (features 42/45/158) y con la 172 son cuatro las features que lo necesitan con la misma API, que
+> es el umbral de `docs/architecture.md`. Compara montos como **texto** —longitud de la parte
+> entera y luego lexicográfico—, nunca `Number`/`parseFloat`: un `DECIMAL(12,2)` de 11 dígitos no
+> cabe exacto en un `number`, así que comparar en coma flotante podría aceptar justo el valor que
+> se quiere rechazar. Una segunda copia habría sido una segunda oportunidad de equivocarse en
+> dinero.
+
+### Las tres pruebas por mutación — corridas por el leader, con su salida real
+
+Las tres propiedades que decidían la tanda son justo las que un test ingenuo deja pasar en verde.
+
+**1. La clave de idempotencia se CONSERVA tras un fallo** (mutación: renovarla en la rama de
+error). Es el fallo que paga dos veces: la petición pudo escribirse aunque la respuesta se
+perdiera.
+
+```
+MUTACION 1 aplicada: la clave se RENUEVA tras un fallo de red
+     × REINTENTO tras un error de red: se manda LA MISMA clave 83ms
+     × también conserva la clave si el diálogo se CIERRA y se vuelve a abrir tras fallar 119ms
+ Tests  2 failed | 42 passed (44)
+```
+
+**2. La clave se RENUEVA tras un registro exitoso** (mutación: no cerrar la sesión al registrar).
+Sin esto, dos pagos legítimos del mismo importe el mismo día se colapsarían en uno y el segundo
+desaparecería en silencio (R45).
+
+```
+MUTACION 2 aplicada: la clave SOBREVIVE a un registro exitoso
+     × tras un registro EXITOSO, la siguiente apertura manda una clave DISTINTA 102ms
+     × R47: `ya_registrado` se trata como registrado — se informa y la clave se renueva 81ms
+ Tests  2 failed | 42 passed (44)
+```
+
+> Las dos mutaciones son **direcciones opuestas del mismo eje** y hacen caer tests distintos. Es lo
+> que demuestra que la propiedad está medida por los dos lados y no por casualidad: un test que
+> solo mirase «hay una clave» pasaría las dos mutaciones.
+
+**3. El refresco es DIRIGIDO, no global** (mutación: `mutate(() => true)`).
+
+```
+MUTACION 3 aplicada: refresco global en vez de dirigido
+     × con dos desgloses abiertos, pagar en uno NO vuelve a consultar el otro
+     × tampoco vuelve a leer la lista de comprobantes de la otra tienda 1234ms
+     × no se recarga la página: la tabla de saldos no se vuelve a pedir por el pago 125ms
+     × tras registrar, la lista de ESA tienda se vuelve a pedir 1123ms
+ Tests  4 failed | 19 passed (23)
+```
+
+Los tres archivos se restauraron desde copia y el `diff` contra el respaldo quedó **idéntico**.
+
+### R34 — la 171 sigue en pie sin tocarla
+
+`wallet-tiendas-desglose.test.tsx` y `wallet-tiendas-page.test.tsx` pasan **verdes sin una sola
+edición**: no aparecen entre los archivos modificados de la rama. Es la prueba de que la 172
+**extiende** el contrato de la 171 en vez de cambiarlo.
+
+### Money-safe (R14)
+
+Barrido sobre los archivos nuevos de la tanda: las únicas apariciones de `Number(` y `parseFloat`
+están **dentro de comentarios** que declaran justamente que no se usan. Cero en código.
+
+### Mapa `R<n> → test`
+
+| R | Test |
+| --- | --- |
+| R4 | `wallet-tiendas-pago.test.tsx` › «sin permiso NO se renderiza el control de pagar ni la lista de comprobantes» · «el permiso FALLA CERRADO» |
+| R1 (2.ª mitad) | idem › «la otra mitad: la acción responde `forbidden` y la pantalla lo dice» · «las dos mitades leen el MISMO predicado que el servicio (`esAccesoTotal`)» |
+| R14 | `RegistrarPagoDialog.test.tsx` › bloque «money-safe: el dinero es TEXTO de punta a punta» (incluye el monto máximo de la columna sin notación científica) · `PagosRegistradosTabla.test.tsx` › «el monto se pinta TAL CUAL» · `pagos-registrados-descarga-columnas.test.ts` › «emite el monto TAL CUAL» |
+| R23 | `RegistrarPagoDialog.test.tsx` › «un monto MENOR se acepta y viaja tal cual: es el pago parcial» |
+| R30 | idem › «prefija el monto con el disponible que devolvió el servidor, TAL CUAL» |
+| R33 | `wallet-tiendas-pago.test.tsx` › bloque «el refresco es DIRIGIDO a la tienda que se pagó» (**mutación 3**) |
+| R34 | suite de la 171 verde **sin editarla** |
+| R43 | `RegistrarPagoDialog.test.tsx` › «se acuña AL ABRIRSE, una sola vez» · «REINTENTO tras un error de red: se manda LA MISMA clave» (**mutación 1**) |
+| R47 | idem › «tras un registro EXITOSO, la siguiente apertura manda una clave DISTINTA» · «`ya_registrado` se trata como registrado» (**mutación 2**) |
+| R49 | `PagosRegistradosTabla.test.tsx` › «pinta fecha real, monto, método, referencia, nota, quién e instante de registro» · `pagos-registrados-descarga-columnas.test.ts` › «declara sus columnas ENUMERADAS, en el orden de la pantalla» |
+| R50 | `wallet-tiendas-pago.test.tsx` › «los comprobantes viven dentro del desglose de su tienda» |
+| R51 | idem — el movimiento del pago se distingue por su concepto |
+| R53 | idem — «pagado» sube y el saldo baja en el mismo monto |
+| R56 | `PagosRegistradosTabla.test.tsx` › «el `id` del pago viaja en el DTO pero NO se pinta» · `pagos-registrados-descarga-columnas.test.ts` › «no expone NINGÚN identificador interno» + contraprueba del barrido |
+| R74 | `PagosRegistradosTabla.test.tsx` › «conserva TODOS sus datos originales y suma la marca, el actor, el día y el motivo» · «el estado distingue de verdad los dos casos (no es una etiqueta fija)» |
+
+> R74 se **muestra** aquí pero **no se ofrece anular**: hay un test que lo fija («esta tanda MUESTRA
+> la anulación, pero no ofrece anular»), para que la Tanda F no descubra tarde que el control ya
+> estaba a medias.
+
+### Verificación (corrida por el leader)
+
+| Comprobación | Resultado |
+| --- | --- |
+| `pnpm typecheck` | ✅ limpio |
+| `pnpm lint` | ✅ 0 errores, 27 warnings preexistentes |
+| Los 4 archivos nuevos + los 2 de la 171 | ✅ 6 archivos / 140 tests |
+| `pnpm exec vitest run` completo | ✅ **786 archivos / 9652 tests / 0 fallos** |
+| `./init.sh` | ✅ `== init OK ==` |
+
+Delta contra el baseline de la Tanda C (782 / 9550): **+4 archivos, +102 tests, cero regresiones**.
+
+> **La primera corrida del gate salió con 1 rojo y NO era contenido:** `CuentasPorPagarTable`, uno
+> de los tres archivos del flake móvil de contención de jsdom de esta máquina. Se aplicó el
+> protocolo en vez de creerse la etiqueta —**el archivo lo toca indirectamente la Tanda C, que
+> cambió `agregarCuentaPorPagar`**, así que no bastaba con llamarlo flake—: verde **3/3 en
+> aislado** y verde en la **corrida completa siguiente**. Además, lo único que la Tanda D toca de
+> su árbol de imports es `wallet-labels.ts`, y su diff es una **mudanza pura** (se borra la función
+> y se re-exporta la misma, promovida sin cambiarle una línea), así que no había cambio de
+> comportamiento que pudiera alcanzarla.
