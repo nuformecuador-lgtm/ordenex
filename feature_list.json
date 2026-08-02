@@ -1392,7 +1392,7 @@
       "name": "analitica: resolutor de alcance por rol",
       "spec_path": "specs/122-analitica-alcance-por-rol",
       "description": "Backend, sin DB. Deriva de la sesion el filtro de datos (maestro/admin = global; adminSatelite = su zona; adminTienda = su tienda; mensajero = solo propio) como WHERE reutilizable que TODO servicio de analitica aplica. Frontera de seguridad multi-tenant. Depende de 120.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
