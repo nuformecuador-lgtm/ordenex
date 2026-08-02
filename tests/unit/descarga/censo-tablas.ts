@@ -62,6 +62,18 @@ export interface TablaCensada {
    * (solo `fuera`). Obligatorio en ambos casos: una exclusión sin motivo es un olvido.
    */
   nota?: string;
+  /**
+   * Feature 172 (T H.1) — solo para las tablas que viven en un componente COMPARTIDO: las
+   * pantallas que la montan, declaradas una a una.
+   *
+   * Por qué hace falta un campo y no basta con la ruta del componente: el censo cuenta
+   * `<DataTable>` del código fuente, y un componente compartido es UNA instancia de fuente
+   * que el usuario ve como VARIAS tablas. Sin esta lista, montar la misma tabla en una
+   * tercera pantalla no dejaría rastro en ningún sitio. La guardia contrasta la lista
+   * contra el árbol en los dos sentidos: ni un montaje sin declarar, ni un declarado que ya
+   * no exista.
+   */
+  montajes?: string[];
 }
 
 export interface ArchivoCensado {
@@ -244,6 +256,45 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   {
     ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
     tablas: [{ nombre: "Saldos de tiendas", estado: "con_descarga" }],
+  },
+  // ───────────────────────────────────────────────────────────────────────────────────────
+  // Feature 172 (T H.1) — el árbol `components/`, que la guardia NO recorría hasta hoy.
+  // ───────────────────────────────────────────────────────────────────────────────────────
+  {
+    // HALLAZGO de T H.1, no una tabla de la 172: existe desde la feature 130 y el censo no
+    // podía verla porque el recorrido se paraba en `app/`. Se registra con su estado REAL.
+    //
+    // `fuera` con el mismo criterio ya ratificado para `ZonasModule`: es un componente del
+    // paquete de analítica SIN ningún consumidor montado en una página (`TablaResumen` solo
+    // aparece en sus propios tests y en `components/private/analytics/tipos.ts`). No se le
+    // cablea descarga aquí: eso sería tocar analítica, que la 172 declara fuera de alcance
+    // (R68). Lo que sí se cierra es el punto ciego: si mañana alguien la monta en una
+    // pantalla, el censo obliga a volver aquí y decidir.
+    ruta: "components/private/analytics/TablaResumen.tsx",
+    tablas: [
+      {
+        nombre: "Resumen de analítica (componente del paquete 130)",
+        estado: "fuera",
+        nota: "envoltorio reutilizable del paquete de analítica SIN consumidor montado en ninguna página (mismo criterio que ZonasModule); cablearlo sería tocar analítica, fuera del alcance de la 172 (R68)",
+      },
+    ],
+  },
+  {
+    // Feature 172 (T D.2/T H.1, R57) — la lista de COMPROBANTES de un beneficiario. Vive en
+    // `components/shared/` porque la montan DOS pantallas con el mismo contenido; por eso es
+    // UNA instancia de `<DataTable>` en el código y DOS tablas para quien las usa. Nace
+    // `con_descarga` (Familia B: proyecta el mismo array que pinta, `design.md §10.4`).
+    ruta: "components/shared/liquidacion/PagosRegistradosTabla.tsx",
+    tablas: [
+      {
+        nombre: "Pagos registrados (comprobantes de liquidación)",
+        estado: "con_descarga",
+        montajes: [
+          "app/(app)/cierres-admin/_components/PagoMensajeroSeccion.tsx",
+          "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
+        ],
+      },
+    ],
   },
 ];
 

@@ -590,21 +590,56 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA H — Guardias y cierre
 
-### [ ] T H.1 — Censo de tablas
+### [x] T H.1 — Censo de tablas
+- **HECHA el 2026-08-02.** El hallazgo de la Tanda E era mayor de lo que parecía: la guardia
+  recorría **solo `app/`**, así que la tabla de la 172 —que vive en `components/shared/` porque
+  la montan dos pantallas— **no existía para el censo**, y registrarla a secas rompía la guardia
+  por «registro caduco». El recorrido pasa a `["app","components"]` y aparecen **dos**
+  instancias: la de la 172 (`con_descarga`) y una **preexistente de la 130**
+  (`components/private/analytics/TablaResumen`), registrada `fuera` con el criterio ya
+  ratificado de `ZonasModule` (sin consumidor montado) y **sin tocar analítica** (R68).
+  En el código son **una** `<DataTable>` con **dos montajes**: se añade el campo `montajes` y un
+  **test nuevo** que los contrasta contra el árbol en los dos sentidos (mutación ejecutada).
+  Totales leídos del árbol: 29→**31** archivos, 30→**32** instancias, 25→**26** `con_descarga`,
+  6→**7** `fuera`, censo total 31→**33**. **La guardia se vio fallar en DOS etapas** antes de
+  tocarlos (salidas en `progress/impl_172-liquidacion.md`). Anotado: `contadores-cabecera.guardia`
+  tiene el mismo punto ciego y no se toca (es de la 170).
 - Registrar las **dos** instancias nuevas de `PagosRegistradosTabla` y actualizar los totales
   duros **leyéndolos del código en ese momento**, no de este documento.
 - **Depende de:** T D.3, T E.2 · **Cubre:** R57
 - **Hecho:** constancia en `progress/impl_172-liquidacion.md` de haber visto la guardia **fallar**
   antes de actualizar los totales.
 
-### [ ] T H.2 [P] — Barrido money-safe y de fuga de datos
+### [x] T H.2 [P] — Barrido money-safe y de fuga de datos
+- **HECHA el 2026-08-02.** `tests/unit/guards/liquidacion-money-safe.test.ts` (**7 casos**) sobre
+  los **41** archivos de código de la feature, con el censo explícito y una regla de cobertura
+  que impide que envejezca (todo `components/shared/liquidacion/**` y todo `lib/**/*iquidacion*`
+  entra o el test cae). `Number(`/`parseFloat(`/`parseInt(` prohibidos en todos; `.toFixed(` solo
+  en el cliente (en `lib/**` es `Decimal.toFixed(2)`, la serialización exacta — y se afirma
+  aparte que **siempre** lleva el `2`); y ningún archivo de cliente importa una biblioteca de
+  decimales. **Estado medido: cero conversiones.** R56 por dos vías: el DTO declara 9 campos y
+  solo `id` es identificador, y la proyección de descarga con **cuatro uuids** sembrados no
+  emite el del pago. **Tres mutaciones ejecutadas sobre archivos REALES** (un `Number(monto)` en
+  el cliente, un `.toFixed(` en el cliente y un `.toFixed()` sin escala en `lib/`), con su salida
+  pegada, más una contraprueba PERMANENTE dentro del test (caza la llamada, no caza la cita).
 - Test transversal: ningún archivo nuevo o modificado de la feature contiene `parseFloat`,
   `Number(` ni aritmética de montos en cliente; ningún DTO emite uuid salvo el `id` del pago, que
   no se pinta ni se descarga.
 - **Depende de:** T D.3, T E.3, T F.5 · **Cubre:** R14, R56
 - **Hecho:** el barrido pasa y falla si se introduce a mano un `Number(monto)`.
 
-### [ ] T H.3 — Verificación manual de la migración y de los CHECK
+### [x] T H.3 — Verificación manual de la migración y de los CHECK
+- **HECHA el 2026-08-02**, contra `ordenex @ localhost:5432`, con la salida real pegada en
+  `progress/impl_172-liquidacion.md`. **Round-trip `up` → `down` → `up`**: el down deja los
+  enums intactos (3 / 5 / 10 valores) y **cero filas reescritas** en los libros; `migrate status`
+  cierra en «Database schema is up to date!». **Después** del round-trip, **14 INSERT** a mano,
+  cada uno bajo su `SAVEPOINT` y todo revertido: `pago_tienda`+`credito` → `23514`
+  `wallet_tienda_movimiento_tipo_categoria_check`; `liquidacion`+`devengo` → `23514` en el libro
+  del mensajero; **dos anulaciones del mismo pago → `23505` `liquidacion_anulacion_pago_id_key`**,
+  con **una** anulación viva y el pago **intacto**; más los 3 CHECK del documento. **Tres
+  contrapruebas** (`pago_tienda`+`debito`, `ajuste_credito`+`credito`, `liquidacion`+`pago`)
+  demuestran que el CHECK no rechaza todo. RLS leída de la base: `relrowsecurity=true`,
+  `policies=0` en las dos tablas. Base idéntica antes y después.
 - Contra Postgres local, con evidencia pegada en `progress/impl_172-liquidacion.md`: round-trip
   up → down → up; intento de insertar a mano una fila incoherente (`pago_tienda` + `credito`) y su
   rechazo; intento de insertar dos anulaciones del mismo pago y su rechazo.
@@ -612,13 +647,45 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** salida real pegada. Es la única prueba de que los constraints **actúan** y no solo
   están escritos: los tests de migración del repo son estáticos.
 
-### [ ] T H.4 — Alcance: lo que NO se hizo
+### [x] T H.4 — Alcance: lo que NO se hizo
+- **HECHA el 2026-08-02.** Los tres no objetivos dejan de ser una revisión de diff —que caduca al
+  mergear— y pasan a `tests/unit/guards/liquidacion-alcance.test.ts` (**3 casos**): R66 (la
+  migración crea exactamente las 2 tablas, sin `ADD COLUMN` ni sentencias de tipos, y no nombra
+  corte/período/ciclo), R67 (`ESTADOS_CIERRE_BLOQUEANTES` **leída del código** = los tres de la
+  111, con `aprobado` fuera, y ningún archivo de la 172 la nombra) y R68/R62 (ningún archivo de
+  la feature nombra la caja ni importa analítica; el SQL sin comentarios no menciona
+  `wallet_movimiento`). **Dos mutaciones ejecutadas**, con su salida. Suites verdes **sin
+  editarlas**: 111 → 6 archivos / 263 tests; analítica → 33 / 504; vecinos del censo y de
+  `/wallet/mensajeros` → 30 / 207.
+- **DECISIÓN 1 del leader, APLICADA:** `/wallet/mensajeros` **sí** muestra agregados inflados
+  —`CuentasPorPagarTable` no lista movimientos, lista un agregado por mensajero— así que recibe
+  el aviso de N1 en sus **dos** superficies con importes (tabla y cabecera del desglose), con el
+  mismo lenguaje y compuesto con los rótulos reales de cada una. Test nuevo
+  `tests/components/WalletMensajerosAvisoBrutos.test.tsx` (**4 casos**) + mutación. La asimetría
+  que la Tanda G dejó abierta queda **CERRADA**.
+- **DECISIÓN 2 del leader, DECLARADA:** la descarga del histórico **NO** gana la columna
+  «pendiente de liquidar». Es **alcance deliberado**, no un olvido: tocaría el archivo de columnas
+  que fijó la 170 y sus tests, y ningún R lo pide (R26 habla del listado y del detalle, que ya lo
+  tienen).
 - Revisión del diff contra los no objetivos: sin ciclo de corte por tienda (R66), sin cambios en
   los estados que bloquean (R67), sin tocar caja ni analítica (R68).
 - **Depende de:** todas · **Cubre:** R66, R67, R68
 - **Hecho:** las suites de la 111 y de analítica siguen verdes **sin editarlas**.
 
-### [ ] T H.5 — Cierre
+### [x] T H.5 — Cierre
+- **HECHA el 2026-08-02.** `progress/impl_172-liquidacion.md` cierra con el mapa `R<n> → test`
+  **de los 85**, el delta por tanda (772/9257 → **793/9857** esperado; +21 archivos, +600 tests),
+  la constancia de los **siete** defaults (P2, P5, P6, P7, P8, N1, N2) con dónde se mide cada uno,
+  y el E2E **declarado INAPLICABLE** con la tabla de qué lo sustituye y **qué queda descubierto**.
+  **RECUENTO: 84 de 85 con test que existe, pasa y afirma el requisito.**
+  **Tres hallazgos declarados, no tapados:** (1) **R61 NO tiene test y su verificación está a
+  medias** — producción medida y limpia, **preview NO verificable desde esta sesión** (el MCP está
+  fijado al ref de producción); **es un hueco vivo que BLOQUEA EL MERGE, no el código**; (2) la
+  fila **R26** de la tabla de abajo apunta a `CierresAdminModule.test.tsx`, que **no se amplió y
+  no mide R26** — lo mide `CierresAdminPagoMensajero.test.tsx`; (3) la fila **R67** nombra dos
+  archivos (`reglas-bloqueos-cierre`, `cierre-vencido-modelo`) que **no existen** en `tests/`.
+  Los dos punteros están mal escritos en el spec, no son requisitos sin cubrir; la corrección de
+  la tabla es del leader/reviewer. **`./init.sh` y la suite completa: DEL LEADER.**
 - `./init.sh` verde; `progress/impl_172-liquidacion.md` con el mapa `R<n> → test` completo, el
   delta de archivos/tests contra el baseline, la constancia de los defaults aplicados (P2, P5, P6,
   P7, P8, N1, N2) y el resultado de T A.0 contra producción y preview.

@@ -2226,3 +2226,685 @@ el archivo nuevo. `./init.sh` y la corrida única siguen siendo del LEADER.
    reescribir la derivación de la 171, y sigue estando fuera del alcance por su default.
 
 6. **Preview sigue sin verificar** (hueco de T A.0), pendiente antes de mergear el PR.
+
+---
+
+## TANDA H — Guardias, censo y cierre · T H.1 a T H.5 · **COMPLETA** (2026-08-02) · **FEATURE COMPLETA**
+
+> La tanda de cierre. No añade capacidad: cierra el censo, convierte en aserciones tres
+> prohibiciones que hasta hoy solo estaban escritas, comprueba contra Postgres REAL que los
+> constraints actúan, y consolida la trazabilidad de los 85 requisitos **diciendo dónde no
+> llega**.
+>
+> **Baseline al inicio: 790 archivos / 9842 tests** (medido por la Tanda G en tres corridas por
+> directorio). **El gate completo es del LEADER**: aquí no se corrió la suite entera.
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/unit/guards/liquidacion-money-safe.test.ts` | **7 casos.** El barrido TRANSVERSAL de T H.2 (money-safe + fuga de datos) sobre los 41 archivos de código de la feature |
+| `tests/unit/guards/liquidacion-alcance.test.ts` | **3 casos.** Los no objetivos R66/R67/R68 de T H.4, medidos sobre el código en vez de «revisados en el diff» |
+| `tests/components/WalletMensajerosAvisoBrutos.test.tsx` | **4 casos.** El aviso de N1 en `/wallet/mensajeros` (decisión 1 del leader) |
+
+**Modificados**
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/unit/descarga/cobertura-tablas.guardia.test.ts` | T H.1: el recorrido pasa de `app/` a `app/` **+** `components/`; totales duros 29→31 archivos y 30→32 instancias; exclusiones 5→6 y censo total 31→33; **+1 test** (los montajes de una tabla compartida) |
+| `tests/unit/descarga/censo-tablas.ts` | T H.1: campo `montajes?` en `TablaCensada` y las **dos** entradas del árbol `components/` |
+| `app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts` | T H.4: `avisoImportesBrutos(...)` + `CUENTAS_AVISO_BRUTOS` + `DESGLOSE_AVISO_BRUTOS` |
+| `app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx` | T H.4: el aviso sobre la tabla (una línea de JSX + su import) |
+| `app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx` | T H.4: el aviso bajo los tres importes (una línea de JSX + su import) |
+| `specs/172-liquidacion/tasks.md` | T H.1–T H.5 marcadas `[x]` |
+
+**CERO tests ajenos editados.** Ni la suite de la 111, ni la de analítica, ni
+`CuentasPorPagarTable.test.tsx`, ni `wallet-mensajeros-page.test.tsx`, ni las de la 171 o la 38.
+El aviso de N1 se mide en un archivo nuevo justamente por eso.
+
+---
+
+### T H.1 — Censo de tablas · el hallazgo era más grande de lo que parecía
+
+**Lo que la Tanda E dejó anotado:** «la guardia recorre solo `app/` y la tabla vive en
+`components/shared/`, así que pasa verde sin cambios». Es cierto, y **por eso mismo no valía**:
+una guardia que no puede ver la tabla no la está vigilando. Con el recorrido viejo, R57 —«toda
+tabla nueva DEBE quedar registrada en el censo, con su estado real»— se habría dado por cumplido
+sin que nada lo sostuviera. Y registrarla a secas tampoco funcionaba: el registro se contrasta
+contra el árbol en los **dos** sentidos, así que una entrada de un archivo que la guardia no
+recorre falla por «registro caduco».
+
+**La reparación:** el recorrido pasa a `["app", "components"]`. Al abrirlo aparecieron **dos**
+instancias, no una:
+
+| Instancia hallada | De quién es | Estado registrado |
+| --- | --- | --- |
+| `components/shared/liquidacion/PagosRegistradosTabla.tsx` | **172** | `con_descarga` |
+| `components/private/analytics/TablaResumen.tsx` | **130 — PREEXISTENTE** | `fuera`, con motivo |
+
+`TablaResumen` es un **hallazgo, no una tabla de esta feature**: existe desde la 130 y el censo
+nunca la vio. Se registra `fuera` con el criterio **ya ratificado** para `ZonasModule` («el módulo
+no está montado en ninguna página»): es un envoltorio del paquete de analítica sin un solo
+consumidor en `app/`. **No se le cablea descarga**, porque eso sería tocar analítica y la 172 la
+declara fuera de alcance (R68). Lo que sí queda cerrado es el punto ciego.
+
+**«Las dos instancias nuevas» del enunciado eran, en el código, UNA.** `PagosRegistradosTabla` es
+**un** `<DataTable>` montado en **dos** pantallas. Los totales cuentan instancias de código, así
+que apuntar «2» habría sido un número falso; y contar «1» habría perdido la mitad que sí importa
+—que la misma tabla se ve en dos sitios—. Se registran las dos cosas: el campo **`montajes`**
+declara las pantallas una a una, y **un test nuevo** las contrasta contra el árbol en los dos
+sentidos (ni un montaje sin declarar, ni un declarado que ya no exista). El detector exige
+**importar Y renderizar**, para que ni un comentario cuente como montaje (`AnularPagoDialog` cita
+la tabla en su cabecera) ni un re-export lo haga.
+
+#### La guardia VISTA FALLAR, en dos etapas, ANTES de tocar los totales
+
+**Etapa 1 — abrir el recorrido, sin registrar nada.** Salida real:
+
+```
+ ❯ tests/unit/descarga/cobertura-tablas.guardia.test.ts (3 tests | 1 failed)
+     × toda tabla del árbol o declara descarga o figura como exclusión justificada
+
+AssertionError: hay tablas sin registrar en tests/unit/descarga/censo-tablas.ts:
+  expected [ …(2) ] to deeply equal []
++ [
++   "components/private/analytics/TablaResumen.tsx #1",
++   "components/shared/liquidacion/PagosRegistradosTabla.tsx #1",
++ ]
+      Tests  1 failed | 2 passed (3)
+```
+
+**Etapa 2 — registradas las dos, con los totales duros TODAVÍA en los números viejos.** Aquí es
+donde se leen del código los números que hay que poner:
+
+```
+ ❯ tests/unit/descarga/cobertura-tablas.guardia.test.ts (3 tests | 3 failed)
+     × toda tabla del árbol o declara descarga o figura como exclusión justificada
+     × las tablas declaradas fuera de alcance no montan control de descarga
+     × la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente
+
+AssertionError: expected 31 to be 29     # archivos con <DataTable>
+AssertionError: expected 6 to be 5       # instancias `fuera`
+AssertionError: expected [ … ] to have a length of 25 but got 26   # `con_descarga`
+      Tests  3 failed (3)
+```
+
+**Los totales salen de esos tres «recibido», no de ningún documento:** 29→**31** archivos,
+30→**32** instancias, 25→**26** `con_descarga`, 6→**7** `fuera`, censo total 31→**33** (32
+`<DataTable>` + 1 `<table>` cruda).
+
+#### Prueba por mutación del test nuevo
+
+Se borró **uno** de los dos montajes declarados:
+
+```
+ ❯ tests/unit/descarga/cobertura-tablas.guardia.test.ts (4 tests | 1 failed)
+     × una tabla compartida declara TODAS las pantallas que la montan
+
+AssertionError: components/shared/liquidacion/PagosRegistradosTabla.tsx ::
+  Pagos registrados (comprobantes de liquidación): un solo montaje: expected 1 to be greater than 1
+      Tests  1 failed | 3 passed (4)
+```
+
+Restaurado desde copia (`diff` limpio) y verde otra vez. **`tests/unit/descarga` entero: 12
+archivos / 92 tests, 0 fallos.**
+
+#### Lo que esta task NO arregló, y queda escrito
+
+`tests/unit/descarga/contadores-cabecera.guardia.test.ts` **tiene el mismo punto ciego**
+(`const ARBOL_UI = "app"`). No se toca aquí porque ninguna tabla de la 172 monta un contador
+`({x.length})` y abrir ese recorrido es una decisión de la 170, no de esta feature. **Hueco
+declarado, ajeno y sin consecuencia hoy.**
+
+---
+
+### T H.2 — Barrido transversal money-safe y de fuga de datos
+
+Cada tanda barrió **sus** archivos. Este barre la feature ENTERA, y existe por otro motivo: un
+barrido por tanda protege lo que esa tanda escribió, y basta con que la siguiente añada un
+archivo para que nadie lo mire. El censo de los **41 archivos de código** (no de test) va
+explícito en el test y se contrasta contra el disco, más una regla de cobertura que impide que
+envejezca: **todo** archivo de `components/shared/liquidacion/**` y **todo** `lib/**/*iquidacion*`
+tiene que estar en la lista o el test cae.
+
+**Qué prohíbe, y dónde — la distinción importa:**
+
+- `Number(`, `parseFloat(`, `parseInt(` → en **todos** los archivos. Un `DECIMAL(12,2)` de 11
+  dígitos no cabe exacto en un `number`: convertirlo es perder céntimos en cualquier lado.
+- `.toFixed(` → **solo en el cliente**. En `lib/**` es `Prisma.Decimal.toFixed(2)`, que es la
+  serialización exacta a STRING de escala 2 —el formato en el que el dinero cruza la frontera— y
+  prohibirla ahí no protegería nada: obligaría a escribirla de otra forma peor. **La contracara
+  se afirma aparte:** en el servidor, **todo** `toFixed` de la feature lleva el `2`.
+- **Aritmética de montos en el navegador**, que el barrido de llamadas no ve: ningún archivo de
+  cliente importa `@prisma/client` ni `decimal.js` ni construye un `Decimal`. Sin biblioteca de
+  decimales y sin conversión a número, en el cliente solo queda **pintar**.
+
+**Estado medido: cero `Number(`, cero `parseFloat(`, cero `parseInt(` en los 41 archivos.** Las
+13 apariciones de `.toFixed(` están todas en `lib/**` y todas son `.toFixed(2)` sobre un
+`Prisma.Decimal`.
+
+#### LA DEMOSTRACIÓN QUE PIDE EL CRITERIO — tres mutaciones sobre archivos REALES
+
+**Mutación 1 — se cuela un `Number(monto)` en un archivo real de cliente** (`const TOTAL_MAL =
+(monto: string) => Number(monto) * 2;` en `PagosRegistradosTabla.tsx`):
+
+```
+ ❯ tests/unit/guards/liquidacion-money-safe.test.ts (7 tests | 2 failed)
+     × ningún archivo de la feature convierte un monto a número
+     × CONTRAPRUEBA: el barrido caza un `Number(monto)` colado y no caza su cita
+
+AssertionError: conversión de dinero a número en la feature 172: expected [ Array(1) ] to deeply equal []
++ [
++   "components/shared/liquidacion/PagosRegistradosTabla.tsx: Number(",
++ ]
+      Tests  2 failed | 5 passed (7)
+```
+
+**Mutación 2 — un `.toFixed(` en el CLIENTE** (`PendienteLiquidarBadge.tsx`) y **mutación 3 — un
+`.toFixed()` sin escala en `lib/`** (`pendiente-cierre.ts`), aplicadas a la vez para ver que caen
+tests DISTINTOS:
+
+```
+ ❯ tests/unit/guards/liquidacion-money-safe.test.ts (7 tests | 2 failed)
+     × ningún archivo de la feature convierte un monto a número
+     × en el servidor, todo `toFixed` de la feature es de escala 2
+
++ [ "app/(app)/cierres-admin/_components/PendienteLiquidarBadge.tsx: .toFixed(" ]
++ [ "lib/utils/pendiente-cierre.ts: .toFixed()" ]
+      Tests  2 failed | 5 passed (7)
+```
+
+Los tres archivos se restauraron desde copia; `git diff` de `app/`, `lib/` y `components/` quedó
+**vacío** y los 7 tests volvieron a verde.
+
+**Contraprueba PERMANENTE, dentro del test.** Las mutaciones de arriba viven en esta bitácora; la
+propiedad «el barrido detecta de verdad» vive en el repo: un caso alimenta al detector con
+`Number(monto)` y `parseFloat(saldo)` (los caza, 2) y con una **cita** dentro de un comentario
+(no la caza, 0) —los docstrings de este árbol nombran a propósito lo prohibido, y un barrido
+literal fallaría por citarlo—, y además inyecta la llamada en memoria sobre un archivo real y
+comprueba que aparece donde antes no había nada.
+
+**La otra mitad, R56 — fuga de datos.** Dos aserciones:
+
+1. **Estructural sobre el módulo de tipos:** `PagoRegistradoDTO` declara **exactamente 9** campos
+   y el único que es un identificador es `id`; `AnulacionDTO` no tiene ninguno. Añadir
+   `mensajeroId` o `cierreId` al DTO —el error natural cuando una pantalla necesita «solo un id
+   más»— rompe el test.
+2. **Con VALORES, no con nombres:** se proyecta a fila de descarga un comprobante en el que `id`,
+   `referencia`, `nota` y `motivo` son **cuatro uuids distintos**, y se comprueba que el `id`
+   **no sobrevive**. Los otros tres sí salen —son texto que una persona escribió; si teclea ahí
+   un uuid, es su dato—, y la lista de los que salen se afirma exacta, así que el día que el `id`
+   se cuele en una columna la aserción cambia.
+
+Lo que **no** mide este archivo y hay que saber dónde está: «el `id` no se **pinta**» lo mide
+`tests/components/PagosRegistradosTabla.test.tsx`, y la lista negra de credenciales/URLs la mide
+la guardia transversal de la 170 (`columnas-sensibles.guardia`), que descubre el módulo de la 172
+sola, por convención de nombre.
+
+---
+
+### T H.3 — Los constraints ACTÚAN: verificación manual contra Postgres local
+
+Los tests de migración de este repo son **estáticos** (regex sobre el SQL). Esto es lo único que
+demuestra que la base **rechaza** de verdad. La Tanda A adelantó una parte; aquí se completa y se
+deja la salida real, **y en este orden**: primero el round-trip, y las inserciones **después**,
+para que lo que se prueba sea el esquema que dejó el segundo `up`.
+
+Base: **`ordenex` @ `localhost:5432`** (`npx prisma migrate status` la nombra sin exponer
+credencial).
+
+#### 1) Round-trip `up` → `down` → `up`
+
+```
+########## 1. ESTADO INICIAL (UP aplicada) ##########
+tablas nuevas: [ 'liquidacion_anulacion', 'liquidacion_pago' ]
+CHECK tipo<->categoria en los libros: [ 'pago_mensajero_movimiento_tipo_categoria_check',
+                                        'wallet_tienda_movimiento_tipo_categoria_check' ]
+enums (nº de valores): metodo_pago_value: 3 · pago_mensajero_movimiento_categoria: 5 ·
+                       wallet_tienda_movimiento_categoria: 10
+filas de los libros: { wtm: '0', pmm: '0' }
+_prisma_migrations: [ { migration_name: '20260802120000_liquidacion_pago', aplicada: true,
+                        rolled_back_at: null } ]
+
+########## 2. DOWN: pnpm run db:rollback ##########
+Aplicando rollback: 20260802120000_liquidacion_pago
+Script executed successfully.
+Script executed successfully.
+Rollback completado: 20260802120000_liquidacion_pago
+
+########## 3. ESTADO TRAS EL DOWN ##########
+tablas nuevas: []
+CHECK tipo<->categoria en los libros: []
+enums (nº de valores): 3 · 5 · 10                 <- INTACTOS (el down no toca tipos, R64)
+filas de los libros: { wtm: '0', pmm: '0' }       <- ADITIVA: no se reescribió ninguna (R64)
+_prisma_migrations: []
+
+########## 4. migrate status TRAS EL DOWN ##########
+105 migrations found in prisma/migrations
+Following migration have not yet been applied:
+20260802120000_liquidacion_pago
+
+########## 5. UP otra vez: prisma migrate deploy ##########
+Applying migration `20260802120000_liquidacion_pago`
+All migrations have been successfully applied.
+
+########## 6. ESTADO TRAS EL SEGUNDO UP ##########
+tablas nuevas: [ 'liquidacion_anulacion', 'liquidacion_pago' ]
+CHECK tipo<->categoria en los libros: [ los 2 ]
+enums (nº de valores): los mismos 3 · 5 · 10
+_prisma_migrations: [ aplicada: true, rolled_back_at: null ]
+
+########## 7. migrate status FINAL ##########
+Database schema is up to date!
+```
+
+#### 2) Las restricciones, leídas de la BASE (no del archivo)
+
+```
+liquidacion_pago_beneficiario_check   CHECK (((mensajero_id IS NULL) <> (tienda_id IS NULL)))
+liquidacion_pago_cierre_check         CHECK (((mensajero_id IS NULL) = (cierre_id IS NULL)))
+liquidacion_pago_monto_check          CHECK ((monto > (0)::numeric))
+pago_mensajero_movimiento_tipo_categoria_check
+  CHECK (((tipo = 'devengo' AND categoria = ANY (ARRAY['pago_devengado','ajuste_devengo']))
+       OR (tipo = 'pago'    AND categoria = ANY (ARRAY['pago_efectivo','liquidacion','ajuste_pago']))))
+wallet_tienda_movimiento_tipo_categoria_check
+  CHECK (((tipo = 'credito' AND categoria = ANY (ARRAY['cod_recaudado','ajuste_credito']))
+       OR (tipo = 'debito'  AND categoria = ANY (ARRAY['flete','flete_devolucion','comision_cod',
+             'iva_flete','iva_flete_devolucion','iva_comision_cod','pago_tienda','ajuste_debito']))))
+
+liquidacion_anulacion_pago_id_key        UNIQUE INDEX ON liquidacion_anulacion (pago_id)
+liquidacion_pago_clave_idempotencia_key  UNIQUE INDEX ON liquidacion_pago (clave_idempotencia)
+
+RLS: liquidacion_pago      relrowsecurity=true  policies=0
+     liquidacion_anulacion relrowsecurity=true  policies=0        <- R63, medido en la base
+```
+
+#### 3) Los INSERT: qué rechaza y qué acepta
+
+Cada intento bajo su propio `SAVEPOINT`, todo dentro de una transacción que termina en
+`ROLLBACK`. Salida real:
+
+```
+[1]  wallet_tienda_movimiento: pago_tienda + CREDITO    -> RECHAZADO  23514  wallet_tienda_movimiento_tipo_categoria_check
+[2]  CONTRAPRUEBA: pago_tienda + debito                 -> ACEPTADO
+[3]  wallet_tienda_movimiento: cod_recaudado + DEBITO   -> RECHAZADO  23514  wallet_tienda_movimiento_tipo_categoria_check
+[4]  wallet_tienda_movimiento: ajuste_credito + CREDITO -> ACEPTADO   (el contraasiento de la anulación)
+[5]  pago_mensajero_movimiento: liquidacion + DEVENGO   -> RECHAZADO  23514  pago_mensajero_movimiento_tipo_categoria_check
+[6]  CONTRAPRUEBA: liquidacion + PAGO                   -> ACEPTADO   (lo que la 172 emite)
+[7]  pago_mensajero_movimiento: ajuste_devengo + PAGO   -> RECHAZADO  23514  pago_mensajero_movimiento_tipo_categoria_check
+[8]  liquidacion_pago SIN beneficiario                  -> RECHAZADO  23514  liquidacion_pago_beneficiario_check
+[9]  liquidacion_pago con los DOS beneficiarios         -> RECHAZADO  23514  liquidacion_pago_beneficiario_check
+[10] liquidacion_pago a una TIENDA con cierre_id        -> RECHAZADO  23514  liquidacion_pago_cierre_check
+[11] liquidacion_pago con monto 0                       -> RECHAZADO  23514  liquidacion_pago_monto_check
+[12] liquidacion_pago VÁLIDO a una tienda               -> ACEPTADO
+[13] liquidacion_anulacion #1 de ese pago               -> ACEPTADO
+[14] liquidacion_anulacion #2 del MISMO pago            -> RECHAZADO  23505  liquidacion_anulacion_pago_id_key
+
+     anulaciones de ese pago tras el doble intento: { n: 1 }
+     el pago sigue INTACTO (anular no lo toca):
+       { monto: '15000.00', metodo: 'SINPE', referencia: 'REF-TH3', fecha_pago: '2026-08-02' }
+
+conteos DESPUÉS del ROLLBACK: { wtm: '0', pmm: '0', pagos: '0', anulaciones: '0' }
+la base quedó como estaba: SÍ
+```
+
+**Las contrapruebas [2], [4] y [6] son la mitad que suele faltar**: sin ellas, un CHECK que
+rechazara *todo* pasaría igual de bien. Y **[13]+[14] es R75 de punta a punta**: el segundo intento
+lo para la base, queda **una** anulación y la fila del pago no cambia (R69/R41: anular añade,
+nunca edita). **Ninguna fila quedó en la base**: los conteos de antes y después coinciden.
+
+---
+
+### T H.4 — Alcance: lo que NO se hizo, convertido en aserciones
+
+Una revisión de diff caduca el día que se mergea. Los tres no objetivos pasan a
+`tests/unit/guards/liquidacion-alcance.test.ts` (**3 casos**):
+
+| R | Afirmación ejecutable |
+| --- | --- |
+| **R66** | la migración crea **exactamente** `["liquidacion_pago","liquidacion_anulacion"]` y nada más; **ni un** `ADD COLUMN`, `CREATE TYPE` ni `ALTER TYPE`; el SQL no nombra «corte», «periodo», «período» ni «ciclo»; y el schema no declara ningún modelo de corte/período por tienda |
+| **R67** | `ESTADOS_CIERRE_BLOQUEANTES` se **lee de `OrdenRepository.ts`** y es exactamente `["solicitado","vencido","rechazado"]`, con `aprobado` **fuera**; y **ningún** archivo de la 172 nombra esa constante (no la lee, no la extiende, no la copia) |
+| **R68 / R40 / R62** | ningún archivo de la feature nombra `IWalletMovimientoRepository`, `WalletMovimientoRepository`, `walletMovimiento`, `wallet_movimiento`, `egreso_pago_tienda`, `egreso_pago_mensajero`, `reversarEgreso` ni `WalletEgresoService`, y ninguno importa `@/lib/analytics`; el SQL (sin comentarios) no menciona la caja y las tablas que reciben el CHECK son **exactamente** los dos libros |
+
+**Prueba por mutación — dos a la vez, para ver que caen tests distintos:**
+
+```
+MUTACIONES: `aprobado` pasa a bloquear (R67) + el servicio nombra `egreso_pago_tienda` (R68)
+
+ ❯ tests/unit/guards/liquidacion-alcance.test.ts (3 tests | 2 failed)
+     × R67: los estados que bloquean al mensajero siguen siendo exactamente los tres de la 111
+     × R68 / R40 / R62: ni la caja principal ni el catálogo de métricas entran en la feature
+
+AssertionError: expected [ 'solicitado', 'vencido', …(2) ] to deeply equal [ Array(3) ]
++   "aprobado",
+AssertionError: lib/services/LiquidacionService.ts nombra egreso_pago_tienda
+      Tests  2 failed | 1 passed (3)
+```
+
+Los dos archivos se restauraron desde copia (`diff` idéntico) y los 3 volvieron a verde.
+
+> El SQL se barre **sin comentarios**: la migración EXPLICA por qué no toca la caja, y un
+> `toContain` sobre el texto crudo confundiría la explicación con la sentencia. Es la misma
+> trampa que el barrido money-safe evita quitando los comentarios antes de mirar.
+
+#### Las suites que no se pueden editar, verdes SIN editarlas
+
+Ninguna aparece en el diff de la rama (comprobado con `git diff --name-only`, no de memoria):
+
+```
+$ pnpm exec vitest run  <la 111: orden-repository.bloqueo + OrdenesListadoBloqueoCierre
+                         + cierre-dia-repository + cierre-dia-service + cierre-dia-action
+                         + mis-asignaciones-service>
+ Test Files  6 passed (6)
+      Tests  263 passed (263)
+
+$ pnpm exec vitest run  tests/unit/analytics + los 4 analytics-* de unit/components
+                        + los 4 Analytics*.test.tsx + los 2 analytics-daily de integration/db
+ Test Files  33 passed (33)
+      Tests  504 passed (504)
+
+$ pnpm exec vitest run  CuentasPorPagarTable + wallet-mensajeros-page + tests/unit/descarga
+                        + tests/components/descarga + tests/components/paginacion
+ Test Files  30 passed (30)
+      Tests  207 passed (207)
+```
+
+Los dos últimos grupos importan especialmente porque esta task **sí toca** `/wallet/mensajeros`
+y el censo de descargas: las suites vecinas siguen verdes sin una sola edición.
+
+#### DECISIÓN 1 DEL LEADER — `/wallet/mensajeros` y el aviso de N1. **APLICADO.**
+
+La Tanda G dejó esta pantalla señalada como pendiente de la misma regla: **el aviso hace falta
+donde se muestre un IMPORTE AGREGADO que incluya lo anulado; no donde solo se listen
+movimientos.** Se miró qué muestra de verdad, en el código:
+
+| Superficie | Qué pinta | ¿Agregado inflado? | Aviso |
+| --- | --- | --- | --- |
+| `CuentasPorPagarTable` — columnas | «Devengado» y «Pagado» **por mensajero** (Σ por tipo) + «Cuenta por pagar» | **sí, las dos primeras** | **SÍ, añadido** |
+| `DesglosePagosMensajero` — cabecera | «Total devengado», «Total pagado», «Cuenta por pagar» | **sí, los dos primeros** | **SÍ, añadido** |
+| `DesglosePagosMensajero` — tabla | una fila por movimiento | no | **no**, y es correcto |
+
+**No es una tabla de movimientos:** cada fila de `CuentasPorPagarTable` es un **agregado por
+mensajero**, así que no le aplica la exención de la regla. La inflación está verificada en el
+código, no supuesta: `PagoMensajeroMovimientoRepository.agregarCuentaPorPagar` hace
+`groupBy(["tipo"])` **sin excluir nada**, de modo que el `ajuste_devengo` del reverso engorda lo
+devengado y la `liquidacion` anulada sigue dentro de lo pagado. **La resta —la cuenta por pagar—
+sale exacta**, y eso es justo lo que el aviso dice.
+
+**Por qué son DOS avisos y no uno:** cada uno se compone con los rótulos **reales de su
+superficie**, que son distintos («Pagado» vs «Total pagado»). Un solo aviso hablaría de una cifra
+con un nombre que en la otra tabla no existe. El texto lo genera **una** función
+(`avisoImportesBrutos`), así que el lenguaje es literalmente el mismo que el de T F.6 / T G.2 y un
+renombrado de columna lo arrastra en vez de dejarlo hablando de algo que ya no se llama así.
+
+Texto en la tabla de cuentas:
+
+> «Pagado» sigue contando los pagos que se anularon, y «Devengado» suma la devolución de cada
+> uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Cuenta por
+> pagar» ya tiene todo eso descontado: ese es el número correcto.
+
+Texto en la cabecera del desglose: el mismo, con «Total pagado» y «Total devengado».
+
+**Por qué `SaldosTiendasTable` NO lo lleva y esto no es una asimetría:** esa tabla pinta **solo el
+saldo**, que es el número correcto. Donde la 171 sí enseña brutos —la cabecera del desglose— el
+aviso está desde T F.6.
+
+`tests/components/WalletMensajerosAvisoBrutos.test.tsx` (**4 casos**) lo mide: los rótulos exactos
+en cada superficie, que el aviso **no** está dentro de ninguna `<table>`, que vive en la misma
+región que los tres importes, y que no usa jerga («contraasiento», «neteo», «netear», «SLA», ni
+nombres de categoría). **Mutación ejecutada** — se quitan los dos avisos:
+
+```
+ ❯ tests/components/WalletMensajerosAvisoBrutos.test.tsx (4 tests | 4 failed)
+     × la TABLA de cuentas declara que «Devengado» y «Pagado» incluyen lo anulado
+     × la CABECERA del desglose lleva el mismo aviso con SUS rótulos
+     × el aviso va junto a los importes agregados, NUNCA dentro de la tabla de movimientos
+     × los dos avisos hablan en lenguaje claro: ni jerga contable ni siglas
+
+TestingLibraryElementError: Unable to find an accessible element with the role "note"
+```
+
+Restaurados desde copia, `diff` idéntico, los 4 verdes. **Con esto, N1 queda declarada en las
+CUATRO pantallas que enseñan un agregado inflado** (`/wallet/tiendas`, `/mis-pagos`, `/mi-wallet`
+y `/wallet/mensajeros`) y en ninguna que solo liste movimientos. **La asimetría que la Tanda F
+abrió y la G acotó queda CERRADA.**
+
+#### DECISIÓN 2 DEL LEADER — la descarga del histórico NO gana la columna «pendiente de liquidar»
+
+La Tanda E lo propuso (hallazgo 7 de su bitácora). **El leader lo descarta, y es ALCANCE
+DELIBERADO, no un olvido:** tocaría el archivo de columnas que fijó la 170 y sus tests, y
+**ningún R lo pide**. R26 habla de mostrarlo «en el listado de cierres y en el detalle», que es
+donde está (T E.3 y T E.2). Añadido de fondo: el pendiente es un derivado que cambia con cada
+pago, mientras que el archivo del histórico documenta el cierre; meterlo dentro haría que dos
+descargas del mismo día dijeran cosas distintas sin que el cierre hubiera cambiado.
+
+---
+
+### T H.5 — CIERRE
+
+#### El mapa `R<n> → test` COMPLETO — los 85
+
+Cada fila es un test que **existe, pasa y afirma el requisito**. Las excepciones van marcadas y
+explicadas debajo de la tabla; **no hay ninguna escondida**.
+
+| R | Test que lo mide | |
+| --- | --- | --- |
+| R1 | `unit/services/liquidacion-service.test.ts` — los 4 roles sin acceso total → `forbidden` con el log de llamadas VACÍO; + `integration/wallet-tiendas-pago.test.tsx` (2.ª mitad: la acción responde `forbidden`) | ✅ |
+| R2 | `unit/services/liquidacion-service.test.ts` — `adminTienda` pidiendo SU PROPIA tienda → `forbidden` | ✅ |
+| R3 | `unit/actions/liquidacion-action.test.ts` — sin sesión → `unauthenticated` sin llamar al servicio, en las **5** acciones, y **con la petición rota también** | ✅ |
+| R4 | `integration/wallet-tiendas-pago.test.tsx` + `components/PagosRegistradosTabla.test.tsx` — sin permiso no hay control de pagar ni de anular (default `false`, falla cerrado) | ✅ |
+| R5 | `unit/services/liquidacion-service.test.ts` — el rol se evalúa antes de mirar el beneficiario; el del mensajero sale del CIERRE, no de la petición | ✅ |
+| R6 | `components/CierresAdminPagoMensajero.test.tsx` (mutación A) + `unit/services/liquidacion-service.test.ts` — `adminSatelite` aprueba sin oferta y recibe `forbidden` al llamar directo | ✅ |
+| R7 | `unit/repositories/liquidacion-pago-repository.test.ts` — las **10** columnas exactas del `data` | ✅ |
+| R8 | `unit/types/liquidacion-schemas.test.ts` — los 3 métodos del SEED; `tarjeta`/`sinpe`/`""` → error en `metodo` | ✅ |
+| R9 | `unit/repositories/liquidacion-pago-repository.test.ts` — fecha real e instante conviven y difieren | ✅ |
+| R10 | `unit/types/liquidacion-schemas.test.ts` — mañana rechazado; 20:00 CR sigue siendo hoy; día y mes inexistentes | ✅ |
+| R11 | idem — 12 negativos (0, negativo, 3 decimales, coma, miles, 11 dígitos, científica…) + frontera exacta | ✅ |
+| R12 | idem — SINPE/transferencia sin referencia → error en `referencia`; efectivo sin ella, válido | ✅ |
+| R13 | idem — frontera exacta de `LIQUIDACION_NOTA_MAX`; un carácter más → error en `nota` | ✅ |
+| R14 | `unit/guards/liquidacion-money-safe.test.ts` (**T H.2**, transversal) + `components/RegistrarPagoDialog.test.tsx` + `unit/actions/liquidacion-action.test.ts` (un `monto` numérico muere en el borde) | ✅ |
+| R15 | `unit/types/liquidacion-schemas.test.ts` — 5 claves de adjunto rechazadas por `.strict()`, en los 3 schemas | ✅ |
+| R16 | `components/CierresAdminPagoMensajero.test.tsx` — tras aprobar con pendiente > 0 se ofrece el pago, prefijado con el pendiente del SERVIDOR | ✅ |
+| R17 | idem (mutación C) — «Ahora no» y los **3** caminos de fallo dejan el cierre aprobado, y el mensaje lo dice | ✅ |
+| R18 | idem + `unit/services/cierres-admin-pendiente.test.ts` — el payload de aprobar es el MISMO de la 38; declinar no deja rastro | ✅ |
+| R19 | `components/CierresAdminPagoMensajero.test.tsx` — el detalle de un cierre aprobado ofrece registrar en cualquier momento posterior | ✅ |
+| R20 | `unit/services/liquidacion-service.test.ts` — `solicitado`/`vencido`/`rechazado` → `cierre_no_aprobado` sin escribir; la guardia se lee DENTRO de la transacción | ✅ |
+| R21 | idem + `unit/actions/liquidacion-action.test.ts` — el documento sale con `cierreId`; sin cierre no pasa el borde. Reforzado por `liquidacion_pago_cierre_check` (T H.3 [10]) | ✅ |
+| R22 | `unit/utils/pendiente-cierre.test.ts` + `unit/services/cierres-admin-pendiente.test.ts` — `min(P,E)` comparada con `calcularSplitPago`; exacta al céntimo | ✅ |
+| R23 | `unit/services/liquidacion-service.test.ts` + `components/RegistrarPagoDialog.test.tsx` — parcial aceptado, prefijado y editable a la baja | ✅ |
+| R24 | `unit/services/liquidacion-service.test.ts` — el pendiente baja EXACTAMENTE en el monto (50 000 − 10 000 − 15 000 = `"25000.00"`) | ✅ |
+| R25 | idem — `50000.01` sobre 50 000 → `excede { disponible }` sin escribir; la frontera exacta sí entra | ✅ |
+| R26 | **`components/CierresAdminPagoMensajero.test.tsx`** (mutación D) — columna + insignia, los TRES estados distinguibles; y el detalle | ⚠️ el spec apunta a otro archivo (abajo) |
+| R27 | idem (mutación B) + `unit/services/cierres-admin-pendiente.test.ts` — `"0.00"` no es `null`; sin botón y con texto | ✅ |
+| R28 | `unit/services/cierres-admin-pendiente.test.ts` + `components/CierresAdminPagoMensajero.test.tsx` (mutación E) — los 4 estados; en los no aprobados ni se muestra ni se pide | ✅ |
+| R29 | `unit/services/liquidacion-service.test.ts` — pago a tienda sin cierre, contra el saldo acumulado sin filtros | ✅ |
+| R30 | `components/RegistrarPagoDialog.test.tsx` — monto prefijado con el disponible TAL CUAL y editable a la baja | ✅ |
+| R31 | `unit/services/liquidacion-service.test.ts` — `60000.01` sobre 60 000 → `excede` sin escribir | ✅ |
+| R32 | idem — saldo `0.00` y saldo NEGATIVO → `sin_saldo`, sin escribir | ✅ |
+| R33 | `integration/wallet-tiendas-pago.test.tsx` (mutación 3 de T D.3 y mutación 1 de T F.5) — refresco DIRIGIDO, al pagar y al anular | ✅ |
+| R34 | `integration/wallet-tiendas-desglose.test.tsx` y `wallet-tiendas-page.test.tsx` (171) **verdes sin editarlos**; no aparecen en el diff de la rama | ✅ |
+| R35 | `unit/services/liquidacion-service.test.ts` — `pago`/`liquidacion` en el libro del mensajero y CERO filas en el de la tienda | ✅ |
+| R36 | idem — `debito`/`pago_tienda` por el monto registrado | ✅ |
+| R37 | idem + `unit/repositories/libros-fecha-movimiento.test.ts` — medianoche UTC de la fecha REAL, no la de registro | ✅ |
+| R38 | `unit/services/liquidacion-service.test.ts` — `origenTipo`/`origenId` apuntan al pago creado | ✅ |
+| R39 | idem + `unit/services/liquidacion-anulacion.test.ts` — mismo `tx`; si el movimiento falla, no hay commit | ✅ |
+| R40 | idem — 7 espías de `walletMovimiento` con CERO llamadas, al pagar y al anular; + contraprueba estructural, ahora también en `unit/guards/liquidacion-alcance.test.ts` | ✅ |
+| R41 | idem — cero `update`/`delete`/`upsert` sobre el pago y los dos libros; confirmado en la base (T H.3: tras anular, la fila del pago está intacta) | ✅ |
+| R42 | idem, **tres vías** (espías del `tx`, doble del repositorio, ausencia estructural); en integración `cierre_dia.update` LANZA | ✅ |
+| R43 | `integration/db/liquidacion-idempotencia.test.ts` (mutación 1 de T B.6) — misma clave dos veces → un pago, el MISMO comprobante | ✅ |
+| R44 | idem — el INSERT se INTENTA y lo rechaza la restricción antes de releer | ✅ |
+| R45 | idem — mismo beneficiario/monto/método/fecha con dos claves → dos pagos | ✅ |
+| R46 | idem (mutaciones 1-3 de T B.4) — dos de 60 000 contra 100 000: uno entra, el otro `excede` | ✅ |
+| R47 | idem + `components/RegistrarPagoDialog.test.tsx` (mutación 2 de T D.1) — `ya_registrado` con el comprobante real | ✅ |
+| R48 | `integration/db/liquidacion-idempotencia.test.ts` (mutación 2 de T B.6) — reintentar la aprobación: `count = 0` | ✅ |
+| R49 | `components/PagosRegistradosTabla.test.tsx` + `CierresAdminPagoMensajero.test.tsx` — los 7 datos del comprobante | ✅ |
+| R50 | `integration/wallet-tiendas-pago.test.tsx` + `unit/services/liquidacion-service.test.ts` — la lista, en el desglose de SU tienda | ✅ |
+| R51 | `integration/wallet-tiendas-pago.test.tsx` — «el movimiento del pago aparece con su concepto propio, distinguible» | ✅ |
+| R52 | `unit/repositories/pago-mensajero-filtro-cierre.test.ts` (mutaciones 1 y 2 de T C.3) — **las dos mitades**, sobre un motor que EVALÚA el `where` | ✅ |
+| R53 | `integration/wallet-tiendas-pago.test.tsx` — «pagado» sube y el saldo baja en el MISMO monto, sin recargar | ✅ |
+| R54 | `integration/mis-pagos-page.test.tsx` (mutaciones 1 y 2 de T G.1) — el mensajero ve el pago y su reverso, en la página REAL | ✅ |
+| R55 | `unit/services/mi-wallet-desglose.test.ts` (mutación B: identidad, no parecido) + `integration/mi-wallet-page.test.tsx` (mutación A) | ✅ |
+| R56 | `unit/guards/liquidacion-money-safe.test.ts` (**T H.2**: DTO de 9 claves + proyección con sonda de uuids) + `unit/descarga/pagos-registrados-descarga-columnas.test.ts` + `columnas-sensibles.guardia` | ✅ |
+| R57 | `unit/descarga/cobertura-tablas.guardia.test.ts` (**T H.1**) — la tabla registrada con sus dos montajes y los totales del árbol | ✅ **desde esta tanda** |
+| R58 | `integration/db/liquidacion-migration.test.ts` (mutaciones 1 y 2 de T A.2) **+ T H.3 [1][3]: rechazo REAL `23514`** | ✅ |
+| R59 | idem **+ T H.3 [5][7]** | ✅ |
+| R60 | `integration/db/liquidacion-migration.test.ts` — sin `NOT` ni `<>`; un concepto futuro no casa ninguna rama; los 4 cruces prohibidos. **T H.3 [1][3][5][7]** lo confirma en la base | ✅ |
+| **R61** | **— NO HAY TEST.** Evidencia de T A.0: producción medida y limpia; **preview NO verificada** | ❌ **HUECO — bloquea el MERGE** |
+| R62 | `integration/db/liquidacion-migration.test.ts` + `unit/guards/liquidacion-alcance.test.ts` (**T H.4**) — la caja no recibe el CHECK, ni en el up ni en el down | ✅ |
+| R63 | `integration/db/liquidacion-migration.test.ts` **+ T H.3: `relrowsecurity=true`, `policies=0`** leído de la base | ✅ |
+| R64 | `integration/db/liquidacion-migration.test.ts` **+ el round-trip de T H.3**, con los enums intactos y cero filas reescritas | ✅ |
+| R65 | `unit/actions/liquidacion-action.test.ts` — la lista EXACTA de exportaciones (5) + patrón que rechaza `editar/actualizar/modificar/corregir/update/patch` | ✅ |
+| **R66** | `unit/guards/liquidacion-alcance.test.ts` (**T H.4**) — la migración crea exactamente 2 tablas, sin `ADD COLUMN`/`CREATE TYPE`, y no nombra corte/período/ciclo | ✅ **desde esta tanda** |
+| **R67** | `unit/guards/liquidacion-alcance.test.ts` (**T H.4**, mutación ejecutada) + la suite de la 111 verde sin editar | ✅ **desde esta tanda** |
+| **R68** | `unit/guards/liquidacion-alcance.test.ts` (**T H.4**, mutación ejecutada) + R40 por el lado del código + la suite de analítica verde sin editar | ✅ **desde esta tanda** |
+| R69 | `unit/services/liquidacion-anulacion.test.ts` — contraasiento del signo opuesto, mismo monto, en el libro correcto; ni un borrado | ✅ |
+| R70 | idem (mutación 1 de T F: **el criterio duro**) — un monto colado (`999999.99` y `0.01`) se IGNORA, en los dos libros | ✅ |
+| R71 | idem — el saldo vuelve al valor EXACTO previo, también cuando era negativo | ✅ |
+| R72 | `unit/types/liquidacion-schemas.test.ts` + `components/AnularPagoDialog.test.tsx` (mutaciones 4b y 4c: **las dos barreras, por separado**) | ✅ |
+| R73 | `unit/repositories/liquidacion-pago-repository.test.ts` («escribe las TRES columnas… y devuelve quién y cuándo») + `unit/services/liquidacion-anulacion.test.ts` («quién anula sale de la SESIÓN») | ✅ |
+| R74 | `components/PagosRegistradosTabla.test.tsx` (mutación 3 de T F.5) + `unit/services/liquidacion-service.test.ts` — el anulado sale ENTERO y marcado | ✅ |
+| R75 | `unit/repositories/liquidacion-pago-repository.test.ts` + `integration/db/liquidacion-idempotencia.test.ts` + `liquidacion-migration.test.ts` **+ T H.3 [13][14]: `23505` REAL** | ✅ |
+| R76 | `unit/services/liquidacion-anulacion.test.ts` + `components/AnularPagoDialog.test.tsx` — la petición tiene DOS campos y ninguno es un monto | ✅ |
+| R77 | `unit/services/liquidacion-anulacion.test.ts` (mutación 2 de T F) — el reverso se fecha el día de la ANULACIÓN, en calendario de CR | ✅ |
+| R78 | `integration/db/liquidacion-idempotencia.test.ts` — la fila del pago queda intacta campo a campo; el pago nuevo entra con la MISMA referencia y fecha | ✅ |
+| R79 | idem — la cadena entera: pagar → anular → el pendiente vuelve → registrar de nuevo con clave nueva → `ok` | ✅ |
+| R80 | `unit/repositories/liquidacion-pago-repository.test.ts` + `unit/utils/pendiente-cierre.test.ts` + integración con el repositorio REAL | ✅ |
+| R81 | `unit/services/liquidacion-anulacion.test.ts` — los 4 roles sin acceso → `forbidden` con el log VACÍO (el pago ni se lee); + las dos mitades en pantalla | ✅ |
+| R82 | idem (mutación 3 de T F.5) — el prototipo del servicio es una lista cerrada de 11 métodos; un pago anulado no ofrece el control | ✅ |
+| R83 | `integration/db/liquidacion-idempotencia.test.ts` (mutación 3 de T B.4) — el candado va ANTES de leer el disponible | ✅ |
+| R84 | `unit/services/liquidacion-anulacion.test.ts` + integración (mutación 3a de T F) — anular toma EL MISMO candado que su pago | ✅ |
+| R85 | idem (mutación 3b) — **una** sola adquisición por operación, también en los caminos que rechazan | ✅ |
+
+**RECUENTO: 84 de los 85 tienen un test que existe, pasa y afirma el requisito. Uno no: R61.**
+
+##### Los tres hallazgos de la trazabilidad, sin suavizar
+
+1. **R61 — el único requisito SIN test, y el que bloquea el merge.** Dice: «la restricción NO DEBE
+   poder añadirse si algún dato existente la incumple, **y su aplicación DEBE verificarse contra
+   cada base antes de desplegar**». La primera mitad es una propiedad de Postgres y está
+   **demostrada** (los `ADD CONSTRAINT` van sin `NOT VALID`, y T H.3 enseña la base rechazando
+   filas incoherentes). La segunda mitad es un ACTO, no un test, y **está a medias**: **producción
+   medida y limpia (39 + 7 filas, cero incoherentes; enums cubiertos 10/10 y 5/5), preview NO
+   VERIFICABLE desde esta sesión** porque el MCP de Supabase está fijado por `.mcp.json` al
+   `project_ref` de producción y el de preview no es descubrible desde aquí (el MCP no expone
+   `list_projects`, el de Vercel no devuelve variables de entorno, no hay CLI de Vercel y el ref no
+   está escrito en ningún archivo del repo). **Es un hueco vivo que BLOQUEA EL MERGE, no el
+   código.** Lo que falta: el `project_ref` de preview y autorización para apuntar ahí el MCP, o
+   correr la consulta de T A.0 desde el SQL editor de ese proyecto. Riesgo si se ignora: el build
+   del PR sale rojo **y** deja una fila fallida en el `_prisma_migrations` de preview, que bloquea
+   los despliegues de preview siguientes hasta repararla a mano. Producción no corre riesgo.
+2. **R26 — el test es real, el puntero del spec no.** La tabla de trazabilidad de `tasks.md` dice
+   `tests/components/CierresAdminModule.test.tsx (ampliado)`; ese archivo **no se amplió** (era
+   condición de «Hecho» de T E.3 dejarlo intacto) y **no contiene ni una aserción de R26**
+   —comprobado: cero apariciones de «R26» y de «pendiente de liquidar»—. R26 se mide, y bien, en
+   `CierresAdminPagoMensajero.test.tsx`, con su mutación D. **El requisito está cubierto; la línea
+   del spec apunta a un archivo equivocado.** No se ha tocado `tasks.md § Trazabilidad` porque es
+   el spec aprobado: la corrección es del leader/reviewer.
+3. **R67 — los nombres del spec no existen.** La misma tabla lo mapea a «suite de la 111
+   (`reglas-bloqueos-cierre`, `cierre-vencido-modelo`)»: **ninguno de esos dos archivos existe** en
+   `tests/`. Los reales son `tests/unit/repositories/orden-repository.bloqueo.test.ts` y los del
+   modelo del cierre vencido (`cierre-dia-repository`, `cierre-dia-service`, `cierre-dia-action`,
+   `mis-asignaciones-service`, `OrdenesListadoBloqueoCierre`), todos verdes y sin editar; y desde
+   esta tanda hay además una aserción directa en `unit/guards/liquidacion-alcance.test.ts`.
+   **Cubierto, con el puntero mal escrito.**
+
+##### Deuda menor heredada (no es un hueco de trazabilidad)
+
+`tests/unit/descarga/contadores-cabecera.guardia.test.ts` recorre solo `app/`, el mismo punto
+ciego que T H.1 arregló en el censo. No afecta a la 172 —ninguna de sus tablas monta un contador
+`({x.length})`— y abrir ese recorrido es una decisión de la 170.
+
+#### Los defaults aplicados — constancia
+
+| Pregunta | Resolución | Fija | Constancia |
+| --- | --- | --- | --- |
+| **P2** — ¿la 172 escribe en la caja principal? | **Default: NO**, ni al pagar ni al anular | R40, R68 | Espías con cero llamadas en `liquidacion-service` y `liquidacion-anulacion`; **contraprueba estructural** en `unit/guards/liquidacion-alcance.test.ts` (T H.4): el código de la feature ni siquiera nombra la caja |
+| **P5** — ¿`/mi-wallet` separa «pagado» de «cargos»? | **Default: SÍ** | R55 | Cabecera de 3 importes, clasificación medida **por identidad** con la de la 171 (`mi-wallet-desglose.test.ts`, mutación B) |
+| **P6** — ¿referencia obligatoria en SINPE/transferencia? | **Default: SÍ; opcional en efectivo** | R12 | `liquidacion-schemas.test.ts`, error **en el campo `referencia`** |
+| **P7** — ¿comprobante como adjunto? | **Default: NO, solo texto** | R15 | 5 claves de adjunto rechazadas por `.strict()` en los 3 schemas; sin storage, sin firma y sin permiso nuevo |
+| **P8** — ¿el CHECK va también a `wallet_movimiento`? | **Default: NO** | R62 | `liquidacion-migration.test.ts` + T H.4: el SQL **sin comentarios** no menciona la caja, y las tablas alteradas son exactamente los dos libros |
+| **N1** — el par pago+anulación infla los brutos | **Default: no se netea; se declara en pantalla** | — | Aviso en las **cuatro** superficies con agregado inflado: `/wallet/tiendas` (T F.6), `/mis-pagos` y `/mi-wallet` (T G.2) y **`/wallet/mensajeros` (T H.4)**. Ninguna tabla de movimientos lo lleva, y hay un test que lo afirma |
+| **N2** — ¿ventana temporal para anular? | **Default: sin ventana** | — | `liquidacion-anulacion.test.ts` recorre los tres estados no aprobados del cierre y espera `ok`: anular corrige un pago que ya ocurrió, y que el cierre haya cambiado después no puede dejarlo sin reverso posible. Un pago de hace seis meses es anulable; lo que hace visible una anulación tardía es la trazabilidad (quién, cuándo y por qué), no una prohibición |
+
+#### E2E — **DECLARADO INAPLICABLE**
+
+`CHECKPOINTS.md` pide «al menos un test E2E (Playwright)» para flujos críticos, y esta feature es
+literalmente un flujo de pagos. **No se escribe ninguno, por decisión explícita del humano: «no
+más e2e, pruebas básicas nada más»** (`design.md §13`). No se tapa: se declara **cómo se cubre el
+riesgo por otra vía** y qué queda descubierto.
+
+| Lo que un E2E daría | Con qué se sustituye | ¿Equivalente? |
+| --- | --- | --- |
+| La cadena de servidor completa bajo concurrencia real | **T B.4 y T B.6**: servicio real + los **tres** repositorios reales + el SQL crudo real contra un store que implementa la semántica de `READ COMMITTED`, del `FOR UPDATE`, del `UNIQUE` y del índice único parcial. **9 mutaciones** ejecutadas entre las dos tasks | Casi. Lo único simulado es el motor |
+| Que las restricciones de datos existan y actúen | **T H.3**: Postgres REAL, 14 intentos, `23514` y `23505` con el nombre del constraint | **Sí — y un E2E no lo haría mejor** |
+| Que las pantallas ejerciten el camino | **T D.3, T E.1 y T F.5**: las tres pantallas montadas de verdad con las acciones dobladas; **12 mutaciones** entre las tres | Parcial |
+| **El pegamento**: navegador real → Server Action real → Postgres real | **NADA** | ❌ |
+
+**Lo que queda descubierto, dicho claro:** que la Server Action esté bien cableada a la página en
+tiempo de ejecución. Lo acotan tres cosas —el `typecheck` estricto sobre el `import` de la acción,
+que la 172 reutiliza el molde de `wallet-egresos.ts` sin inventarse cableado, y que las cinco
+acciones se ejercen desde tests de pantalla que importan **el módulo real** de acciones (doblado
+en su implementación, no en su firma)—, pero **no es equivalente a un E2E y no se presenta como
+tal**.
+
+#### Verificación ejecutada en esta tanda
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: verde)
+
+$ pnpm lint
+✖ 27 problems (0 errors, 27 warnings)       # los 27 preexistentes del baseline, ninguno mío
+$ pnpm exec eslint <los 3 test nuevos + los 5 archivos modificados>
+(sin salida: limpio)
+
+$ pnpm exec vitest run tests/integration/db          # T H.3 pide la carpeta entera
+ Test Files  85 passed (85)
+      Tests  1024 passed (1024)
+
+$ pnpm exec vitest run <los 24 archivos de test de la 172, guardias incluidas>
+ Test Files  24 passed (24)
+      Tests  613 passed (613)
+
+$ pnpm exec vitest run tests/unit/guards             # las guardias del repo, con las 2 nuevas
+ Test Files  14 passed (14)
+      Tests  100 passed (100)
+
+$ pnpm exec vitest run tests/unit/descarga           # el censo y sus vecinas
+ Test Files  12 passed (12)
+      Tests  92 passed (92)
+```
+
+Más las tres corridas de suites ajenas de T H.4 (111: 6 / 263 · analítica: 33 / 504 · vecinos del
+censo y de `/wallet/mensajeros`: 30 / 207), **todas verdes y ninguna editada**.
+
+**Delta contra el baseline de la Tanda H (790 archivos / 9842 tests): +3 archivos, +15 tests.**
+Los 15 son 7 (money-safe transversal) + 3 (alcance) + 4 (aviso de N1) + 1 (los montajes, en el
+censo). Esperado tras el gate del leader: **793 / 9857**.
+
+**`./init.sh` y la suite completa: DEL LEADER.** Aquí no se corrieron, por indicación explícita.
+
+#### Delta acumulado de la feature
+
+| Hito | Archivos | Tests |
+| --- | --- | --- |
+| Baseline previo a la 172 | 772 | 9257 |
+| Tanda A | 775 | 9340 |
+| Tanda B (1/2) | 779 | 9409 |
+| Tanda B (2/2) | 780 | 9487 |
+| Tanda C | 782 | 9550 |
+| Tanda D | 786 | 9652 |
+| Tandas E + F + G | 790 | 9842 |
+| **Tanda H (esperado)** | **793** | **9857** |
+
+**+21 archivos y +600 tests** sobre el baseline previo a la feature, sin una sola regresión
+declarada en ninguna tanda.
+
+#### Veredicto
+
+**La 172 queda COMPLETA en código y en trazabilidad: 84 de los 85 requisitos con un test que
+existe, pasa y afirma lo que dice. El que falta —R61— no es código sino un acto de verificación a
+medias (preview sin medir) que BLOQUEA EL MERGE, no la implementación.**
