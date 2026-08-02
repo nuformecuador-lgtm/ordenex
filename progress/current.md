@@ -8,7 +8,76 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🚀 RELEASE 2026-08-01 — `dev → prod` DESPLEGADA — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 JORNADA 2026-08-01/02 — **EMPIEZA A LEER POR AQUÍ**
+
+**Registro con CERO features `in_progress`.** Se desplegó producción, se saneó el backlog de PRs y se
+cerró la **feature 170 entera** (fases 1 y 2).
+
+### ✅ Entregado
+
+| | Qué | Estado |
+| --- | --- | --- |
+| **release** | `dev → prod` (PR #246) | **en producción**, migración del buscador aplicada y verificada |
+| **123** | rollup diario `analytics_daily` | `done` · PR #237 desatascado y mergeado |
+| **170** | Excel en 25 tablas + **paginación server-side de 13 listados** | `done` · fase 2 en 6 PRs (#248, #249, #250, #253, #255, #256) |
+| **chore** | 2 guards deterministas que bloqueaban `./init.sh` | PR #257 |
+
+**Suite final: 772 archivos / 9257 tests, 0 fallos.**
+
+### ⚠️ DECISIONES DEL HUMANO PENDIENTES — cambios VISIBLES ya desplegados en `dev`
+
+La 170 fase 2 cambió lo que se ve en pantalla. El humano aceptó **no verificar en pantalla** a cambio
+de que los PRs describieran el cambio de uso; están descritos, pero **falta su opinión**:
+
+1. **Orden alfabético nuevo** en «saldos de tiendas» y «cuentas por pagar». Hoy esos listados **no
+   tenían orden** —salía de un `groupBy` sin `orderBy`, o sea lo que le conviniera al planificador— y
+   sin orden total las páginas se solapan u omiten filas. Es la desviación mínima que hace correcta
+   la paginación, pero **cambia lo que el maestro ve**.
+2. **Bodega satélite:** «seleccionar todo» es **por página**, los botones de lote **desaparecen** sin
+   selección (antes salían en gris) y **lo marcado en otra página se conserva pero NO participa, sin
+   que nada avise** (Q-K7). Es lo que más puede confundir en uso real.
+
+### 🔎 El hallazgo que sobrevive a la feature
+
+En **cuatro tandas seguidas** (I, J, K, L) una mutación del `WHERE` **sobrevivió a los tests de
+servicio** —usan dobles y **no ven la traducción a SQL**— y solo la cazó el test de repositorio. Son
+7+ mutaciones medidas una a una. La respuesta del repo son los cuatro `*-where.test.ts`, y la regla:
+**probar el `WHERE` donde vive, no donde se invoca.**
+
+> **Y una lección de proceso que costó un rojo en `dev`:** al mergear el PR #237 se verificó por el
+> **estado del PR** en vez de por la suite. **El check de Vercel es un build y NO corre tests**, así
+> que un guard cruzado entre la 122 y la 123 entró rojo sin que nadie lo viera. Mismo patrón que el
+> incidente del PR #209.
+
+### ⏭️ Lo siguiente
+
+1. **172 — liquidación.** Es la que cierra el agujero de verdad: hoy **no existe forma de registrar
+   un pago**. Todas las decisiones están en su ficha. **Arranca por spec y tiene PUERTA DE APROBACIÓN
+   HUMANA antes de tocar código.** Condición heredada del review de la 171: **el CHECK de
+   `categoria`↔`tipo` debe ir en SU migración**, porque la liquidación será el segundo escritor del ledger.
+2. **173 — caja en modo tesorería.** Depende de la 172.
+3. **Deuda dirigida de la 170:** una **tanda N de backend** con los 8 `listarXCompleto` que faltan
+   (Q-I5+Q-K4+Q-K6), y la búsqueda de cuentas por pagar que **no ignora acentos** (Q-L4, defecto
+   **preexistente** que paginar hace más visible).
+4. **`dev` tiene la migración `analytics_daily` SIN aplicar en producción** (sí en preview). Ya está
+   confirmado que producción soporta `NULLS NOT DISTINCT` (**Postgres 17.6**), pero la próxima
+   release **deja de ser trivial**.
+5. **PR #254 abierto, de otra sesión.** La mitad ya entró por el #257; lo que sigue aportando en
+   exclusiva son **19 identificadores `T1.1None`** corruptos en el spec de la 122 (verificado: siguen
+   en `dev`). Comentado allí; la decisión es de su autor.
+
+> ⚠️ **Hay otra sesión viva en este repo** (PRs #251, #252, #254). Antes de tomar una rama o dar por
+> tuyo un arreglo, mirar si ya lo está haciendo alguien.
+
+### 🧪 Nota sobre el gate en esta máquina
+
+`pnpm test` tiene un **flake móvil de contención de jsdom**: corridas distintas tumban archivos
+distintos (`ControlDescargaTransversal`, `CuentasPorPagarTable`, `OrdenesModuleReuse`), **todos verdes
+en aislado**. Un rojo así **no es contenido**. Reejecutar el archivo solo antes de declararlo roto.
+
+---
+
+## 🚀 RELEASE 2026-08-01 — `dev → prod` DESPLEGADA
 
 **Hecho. Producción ya no está por detrás: `dev` y `prod` están al día (0 commits de diferencia).**
 PR **#246** (`dev → prod`), precedido del **#245** que cerró el bookkeeping de la jornada anterior.
@@ -35,13 +104,12 @@ del listado. Despliegue de producción `dpl_6yAcpx6NvF5otCBk5Xuy1Dzimh44` en **R
 > estaba instalada en ningún esquema, así que el único modo de fallo que la migración declara —la
 > extensión viviendo en otro esquema— no se materializó.
 
-### ⏭️ Lo siguiente, por orden
+### ✅ Lo que quedaba tras la release, ya saldado
 
-1. **170 FASE 2** y las features **172** / **173**, tal como quedaron especificadas más abajo.
-2. **PRs abiertos que NO entraron en esta release**, los dos del lote de analítica: **#241**
-   (`MERGEABLE`/`CLEAN`, renombre de `ROLES_ACCESO_ANALITICA`) y **#237**, que pasó a
-   **`CONFLICTING`/`DIRTY`** y necesita rebase — trae la migración `analytics_daily`, así que cuanto
-   más se rezague, peor el conflicto.
+Los dos PRs del lote de analítica que no entraron en ella: **#241** (renombre de
+`ROLES_ACCESO_ANALITICA`) mergeado, y **#237** (`analytics_daily`) desatascado y mergeado — su
+conflicto con 38 commits de `dev` era **solo de bitácora**: `schema.prisma` y `feature_list.json`
+automezclaron limpios. Ver el bloque de cierre de jornada, arriba.
 
 ---
 
