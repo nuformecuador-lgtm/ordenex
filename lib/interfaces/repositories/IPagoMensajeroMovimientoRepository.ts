@@ -25,6 +25,23 @@ export interface CrearPagoMensajeroInput {
   origenId: string | null;
   descripcion?: string | null;
   registradoPor?: string | null;
+  /**
+   * Feature 172 (T B.2, design §2.4, R37) — fecha del movimiento, OPCIONAL.
+   *
+   * La columna existe desde la 44 con `DEFAULT CURRENT_TIMESTAMP` y hasta hoy ningun
+   * escritor la exponia: el feed del cierre escribe con la hora real y le vale el default.
+   * La liquidacion necesita fechar el movimiento con la fecha REAL del pago —que puede ser
+   * de ayer— y no con el instante de registro.
+   *
+   * Es opcional A PROPOSITO y la implementacion la pasa SOLO si viene: quien no la manda
+   * sigue cayendo en el `DEFAULT` de la columna y su comportamiento no cambia ni un byte.
+   * La prueba de que es opcional de verdad es que los tests de los dos feeds del cierre
+   * siguen verdes sin editarlos.
+   *
+   * Convencion de la 172: MEDIANOCHE UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
+   * no 06:00Z, para que el pago entre por los dos bordes del filtro por rango del desglose.
+   */
+  fechaMovimiento?: Date;
 }
 
 // Filtros del listado del libro de UN mensajero (R20/R22). `cierreId` filtra por el origen

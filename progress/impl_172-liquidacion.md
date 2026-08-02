@@ -384,3 +384,253 @@ solo lo incoherente. Ninguna fila quedó en la base (todo en transacciones rever
 
 6. **Preview sigue sin verificar** (hueco de T A.0, arriba). No lo resuelve esta tanda; sigue
    pendiente **antes de mergear el PR**.
+
+---
+
+## TANDA B (primera mitad) — T B.1, T B.2, T B.3 y T B.4 · **HECHAS** (2026-08-02)
+
+> Cuatro tasks: el repositorio del documento, la fecha de movimiento en los dos libros, el acto
+> de pagar a una tienda y **el candado de serialización `[P1]`**. Quedan de la tanda T B.5
+> (mensajero), T B.6 (idempotencia) y T B.7 (Server Actions). **No se tocó UI, ni Server
+> Actions, ni nada de la anulación.**
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `lib/interfaces/repositories/ILiquidacionPagoRepository.ts` | Contrato del documento: `bloquearBeneficiario`, `crear`, `obtenerPorClave`, `obtenerPorId`, `sumarVigentesPorCierre`, `sumarVigentesPorTienda`, `listarPorCierre`, `listarPorTienda` |
+| `lib/repositories/LiquidacionPagoRepository.ts` | Implementación (solo Prisma), incluido el `SELECT … FOR UPDATE` de §4.2 |
+| `lib/interfaces/services/ILiquidacionService.ts` | `LiquidacionTx`, `LiquidacionTxRunner`, `RegistrarPagoServiceResult` y `registrarPagoTienda` |
+| `lib/services/LiquidacionService.ts` | Guardia de rol, candado, disponible, documento + movimiento en una transacción |
+| `lib/utils/descripcion-pago.ts` | `descripcionDePago(metodo, referencia)` y `medianocheUtcDelDia(fecha)`, puras |
+| `tests/unit/repositories/liquidacion-pago-repository.test.ts` | 20 casos |
+| `tests/unit/repositories/libros-fecha-movimiento.test.ts` | 6 casos (T B.2) |
+| `tests/unit/services/liquidacion-service.test.ts` | 33 casos |
+| `tests/integration/db/liquidacion-idempotencia.test.ts` | 10 casos (T B.4; T B.6 lo amplía) |
+
+**Modificados**
+
+| Archivo | Qué |
+| --- | --- |
+| `lib/interfaces/repositories/IWalletTiendaMovimientoRepository.ts` · `IPagoMensajeroMovimientoRepository.ts` | `fechaMovimiento?: Date` (aditivo) |
+| `lib/repositories/WalletTiendaMovimientoRepository.ts` · `PagoMensajeroMovimientoRepository.ts` | La emiten **solo si viene** |
+| `specs/172-liquidacion/tasks.md` | T B.1–T B.4 marcadas `[x]` |
+
+**Ningún test existente editado.** Es la condición de «Hecho» de T B.2 y se cumple literalmente:
+`tests/unit/repositories/libros-fecha-movimiento.test.ts` se creó como archivo nuevo justo para
+no tener que tocar los de los dos feeds del cierre.
+
+### Mapa `R<n> → test` de estas cuatro tasks
+
+| R | Test | Qué afirma |
+| --- | --- | --- |
+| R1 | `tests/unit/services/liquidacion-service.test.ts` | los 4 roles sin acceso total → `forbidden`, con el log de llamadas **vacío** (ni una lectura salió a la base) |
+| R2 | idem | **contraprueba**: `adminTienda` pidiendo **su propia** tienda (`usuarioId === tiendaId`) → `forbidden` |
+| R5 | idem | el rol se evalúa antes de mirar `input.tiendaId`; un `tiendaId` ajeno no amplía el alcance |
+| R6 | idem | **contraprueba**: `adminSatelite` → `forbidden` y **cero** transacciones abiertas |
+| R7 | `tests/unit/repositories/liquidacion-pago-repository.test.ts` | las **10** columnas exactas del `data` (ni una más, ni una menos); `monto` como `Prisma.Decimal`; sin `createdAt` del emisor |
+| R9 | idem | fecha real `2026-07-30` e instante `2026-08-02T15:04:05Z` conviven y difieren; y se conservan cuando coinciden |
+| R29 | `liquidacion-service.test.ts` | el pago a tienda va sin cierre (`cierreId: null`) y lee el saldo **sin filtros** (acumulado) |
+| R30 | idem | pago parcial de `0.01` sobre 100 000 → `ok` con `restante: "99999.99"` |
+| R31 | idem | `60000.01` sobre 60 000 → `excede { disponible: "60000.00" }` **sin escribir**; y la frontera exacta (`monto == disponible`) sí entra |
+| R32 | idem | saldo `0.00` y saldo **negativo** → `sin_saldo`, sin escribir |
+| R36 | idem | `tipo: debito`, `categoria: pago_tienda`, por el monto registrado |
+| R37 | idem + `libros-fecha-movimiento.test.ts` | `fechaMovimiento` = `2026-07-30T00:00:00.000Z` (medianoche UTC de la fecha REAL), no la de registro; y entra por los dos bordes del filtro por rango |
+| R38 | `liquidacion-service.test.ts` | `origenTipo: "pago_tienda"` y `origenId` = el id que devolvió `crear` |
+| R39 | idem + `liquidacion-idempotencia.test.ts` | candado, documento y movimiento reciben **el mismo objeto `tx`**; si el movimiento falla, el error sale de la transacción sin `commit`; y Σ documentos == Σ débitos del ledger |
+| R40 | `liquidacion-service.test.ts` | el doble de `tx` expone `walletMovimiento` con 7 métodos espiados: **cero llamadas**; + contraprueba estructural (el servicio no importa `IWalletMovimientoRepository` ni nombra `walletMovimiento` fuera de comentarios) |
+| R41 | idem | cero `update`/`updateMany`/`delete`/`deleteMany`/`upsert` sobre `liquidacion_pago` y los dos libros (y R42: cero sobre `cierre_dia`) |
+| R46 | `tests/integration/db/liquidacion-idempotencia.test.ts` | dos pagos de 60 000 **a la vez** contra 100 000 → uno `ok`, otro `excede` con `disponible: "40000.00"`; Σ pagada = 60 000; + variantes de 3 en carrera y de dos pagos que **sí** caben |
+| R80 | `liquidacion-pago-repository.test.ts` | las dos sumas llevan `anulacion: { is: null }` en el `where`; los **listados no lo llevan** (R74: el anulado se sigue viendo) |
+| R83 | `liquidacion-idempotencia.test.ts` | el log lo escribe el **store**, en el borde de la sentencia: `candado:usuario:t1` → `candado-tomado` → `leer-disponible` → … |
+| R85 | idem + `liquidacion-pago-repository.test.ts` | **una** adquisición por operación, también en los caminos que rechazan (y se suelta: la llamada siguiente no se cuelga); dos tiendas distintas no comparten candado |
+
+Adelantado sin ser de estas tasks (lo cerrarán T B.6/T B.7/T H.2): **R43/R44/R47** (la rama
+`ya_registrado`, la ausencia de consulta previa por clave), **R56** (el DTO emite 9 claves y
+ninguna es un id de persona ni la clave de idempotencia) y **R14** (todo monto STRING escala 2).
+
+### Verificación ejecutada
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: verde)
+
+$ pnpm run lint
+✖ 27 problems (0 errors, 27 warnings)      # los 27 preexistentes del baseline, intactos
+
+$ pnpm exec vitest run tests/integration/db
+ Test Files  85 passed (85)
+      Tests  995 passed (995)               # baseline 84/985 -> +1 archivo, +10 tests
+
+$ pnpm exec vitest run                      # SUITE COMPLETA, 1.a corrida
+ Test Files  1 failed | 778 passed (779)
+      Tests  1 failed | 9408 passed (9409)
+   Duration  214.70s
+   -> el unico fallo es `tests/components/CuentasPorPagarTable.test.tsx`, uno de los tres
+      archivos con contencion de jsdom conocida en esta maquina.
+
+$ pnpm exec vitest run tests/components/CuentasPorPagarTable.test.tsx   # en AISLADO
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+```
+
+La suite se corrio **dos veces**. La segunda, LIMPIA de punta a punta:
+
+```
+$ pnpm exec vitest run                      # SUITE COMPLETA, 2.a corrida
+ Test Files  779 passed (779)
+      Tests  9409 passed (9409)
+   Duration  216.50s
+```
+
+**Delta contra el baseline de la Tanda A (775 archivos / 9340 tests): +4 archivos, +69 tests.**
+Los 69 son 20 + 6 + 33 + 10. **Cero regresiones.**
+
+### T B.4 — PRUEBA POR MUTACIÓN DEL CANDADO (obligatoria)
+
+Un test de concurrencia que pasa sin candado no prueba nada. Se mutó **tres** veces y se
+comprobó qué cae. Salidas reales:
+
+**Mutación 1 — quitar la llamada a `bloquearBeneficiario` del servicio** (el candado deja de
+existir; el resto de la cadena intacta):
+
+```
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts (10 tests | 8 failed) 157ms
+     × el orden de las sentencias es candado -> lectura, no al reves
+     × el candado es sobre la fila de la TIENDA, que es lo que se consume
+     × un pago que entra toma EXACTAMENTE un candado
+     × tambien los caminos que RECHAZAN toman uno y solo uno (y lo sueltan)
+     × con un solo recurso bloqueado no existe orden de adquisicion que interbloquee
+     × con 100 000 disponibles, dos pagos de 60 000 a la vez: uno entra y el otro se rechaza
+     × la segunda transaccion ESPERA: su lectura ocurre despues del commit de la primera
+     × tres a la vez contra 100 000: entran los que caben y el resto se rechaza
+
+AssertionError: expected [ 'ok', 'ok' ] to deeply equal [ 'excede', 'ok' ]
+- Expected
++ Received
+  [
+-   "excede",
++   "ok",
+    "ok",
+  ]
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts:398:21
+
+AssertionError: expected false to be true // Object.is equality
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts:445:69
+   (new Prisma.Decimal(totalPagado(store)).lte("100000.00"))
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 2 passed (10)
+```
+
+Los **dos** pagos entran: se sacan **120 000** de una tienda que tenía **100 000**. Es
+exactamente el fallo que P1 existe para impedir.
+
+**Mutación 2 — dejar el candado del SERVICIO intacto y volver no-op el del STORE** (`adquirir`
+deja de esperar). Es la mutación que pide el spec al pie de la letra:
+
+```
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts (10 tests | 3 failed) 150ms
+     × con 100 000 disponibles, dos pagos de 60 000 a la vez: uno entra y el otro se rechaza
+     × la segunda transaccion ESPERA: su lectura ocurre despues del commit de la primera
+     × tres a la vez contra 100 000: entran los que caben y el resto se rechaza
+
+AssertionError: expected [ 'ok', 'ok' ] to deeply equal [ 'excede', 'ok' ]
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts:399:21
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 7 passed (10)
+```
+
+**Mutación 3 — mover el candado DESPUÉS de la lectura del disponible** (el error que el test de
+orden existe para cazar: un candado tomado tarde no serializa nada):
+
+```
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts (10 tests | 4 failed) 163ms
+     × el orden de las sentencias es candado -> lectura, no al reves
+     × con 100 000 disponibles, dos pagos de 60 000 a la vez: uno entra y el otro se rechaza
+     × la segunda transaccion ESPERA: su lectura ocurre despues del commit de la primera
+     × tres a la vez contra 100 000: entran los que caben y el resto se rechaza
+
+AssertionError: expected [ 'leer-disponible:t1', …(5) ] to deeply equal [ 'candado:usuario:t1', …(5) ]
+- Expected
++ Received
+  [
++   "leer-disponible:t1",
+    "candado:usuario:t1",
+    "candado-tomado:usuario:t1",
+-   "leer-disponible:t1",
+    "crear-documento:pago-1",
+    "crear-movimiento:1",
+    "commit",
+  ]
+```
+
+Tras cada mutación se restauró el archivo desde copia y los **10 tests volvieron a verde**.
+
+**Por qué el experimento vale, y el error que casi lo invalida.** El store no tiene una lista de
+a quién bloquear: detecta el candado leyendo `FOR UPDATE` en **la sentencia cruda que emite el
+repositorio real**. Si alguien quitara el `FOR UPDATE` del SQL, aquí no se tomaría ningún candado
+y el test caería igual. El resto de la cadena también es código real (servicio real, los dos
+repositorios reales).
+
+**Hallazgo del proceso, declarado porque es la trampa de este tipo de test:** la PRIMERA versión
+del store tomaba la instantánea de las filas **después** de ceder el turno, y con eso la mutación
+1 dejaba el test de carrera **en verde** (medido: 6 fallos, y el de la carrera no estaba entre
+ellos). El motivo es que en `READ COMMITTED` una sentencia fotografía los datos cuando
+**empieza**, no cuando responde. Se corrigió el store (foto al inicio, `tic()` después) y solo
+entonces la carrera empezó a discriminar. Queda un comentario grande en el archivo para que nadie
+lo «simplifique» de vuelta.
+
+### Hallazgos y desviaciones del diseño
+
+1. **La lectura del disponible se hace sobre el cliente propio del repositorio, no sobre el
+   `tx`.** Es lo que dice `design.md §3.3` (`repo.agregarSaldoPorTienda(tiendaId)`, sin `tx`) y
+   se ha respetado, pero conviene dejar escrito por qué **sigue siendo correcto** y qué cuesta:
+   el candado se toma primero y no se suelta hasta el commit, así que la lectura de la segunda
+   transacción ocurre necesariamente **después** del commit de la primera y ve sus filas. Lo que
+   sí tiene coste es que, mientras la transacción está abierta, esa lectura toma una **segunda
+   conexión** del pool. A este volumen es irrelevante; si algún día hubiera contención de pool,
+   la salida es añadir un `tx` opcional a `agregarSaldoPorTienda` — que hoy habría obligado a
+   tocar el contrato que usan la 43 y la 171, fuera del alcance de T B.2.
+
+2. **El choque de la clave de idempotencia sale de la transacción lanzando, y la relectura se
+   hace fuera.** El diseño dice «si conflicto → `ya_registrado` (relee por clave)» sin decir
+   dónde. Se relee **fuera** porque en Postgres un error de sentencia deja la transacción
+   abortada: cualquier `SELECT` posterior dentro de la misma transacción fallaría con «current
+   transaction is aborted». Hay un test que fija el orden de los pasos y demuestra que la
+   relectura ocurre tras salir.
+
+3. **`ILiquidacionPagoRepository` no declara todavía `anular`, y `ILiquidacionService` declara un
+   solo método.** El diseño §3.1 lista los contratos completos; declararlos ahora sin
+   implementación rompería `implements`. Los añaden T F.1 y T B.5/T C.1/T F.2, que es donde el
+   `tasks.md` los pone.
+
+4. **P2002 sin pista de constraint se trata como choque de clave.** `textoConstraintP2002`
+   devuelve `null` cuando el error no trae ni `meta.target` ni el mensaje del driver adapter.
+   `liquidacion_pago` solo tiene dos restricciones únicas —la PK sobre un uuid recién generado,
+   que no puede repetirse, y `clave_idempotencia`—, y equivocarse es benigno: el servicio relee
+   por la clave, no la encuentra y responde `no_encontrado`. Nunca un pago duplicado en silencio.
+   Hay un test por cada forma del error (nativa, adapter, otra constraint → se propaga).
+
+5. **`descripcionDePago` y `medianocheUtcDelDia` viven en `lib/utils/descripcion-pago.ts`.** El
+   diseño las nombra sin darles casa. No se importó `METODO_PAGO_LABEL` de
+   `app/(app)/mis-asignaciones/_components/`: es un módulo de pantalla y `lib/` no depende de
+   `app/`. El `Record` de etiquetas es exhaustivo sobre el enum, así que un valor nuevo rompe el
+   build en vez de emitir una descripción vacía en el libro.
+
+6. **`registrarPagoTienda` no devuelve `no_encontrado` para una tienda inexistente.** Una tienda
+   sin movimientos agrega `0/0` → saldo cero → `sin_saldo`, que es la respuesta correcta y no
+   filtra si el id existe o no. El contrato de §3.2 sí tiene la rama; la usará el camino del
+   mensajero (T B.5), donde el cierre sí se lee.
+
+7. **La `referencia` sigue sin tope de longitud** (hueco menor heredado de la Tanda A, punto 3 de
+   aquella bitácora). No se cerró aquí: sigue siendo una decisión de una línea que el spec no
+   toma.
+
+8. **Un flake conocido en la primera corrida de la suite completa.** `CuentasPorPagarTable` cayó
+   con contención de jsdom y salió **verde en aislado** (6/6). Es uno de los tres archivos
+   declarados como flake móvil de esta máquina; no lo toca esta tanda.

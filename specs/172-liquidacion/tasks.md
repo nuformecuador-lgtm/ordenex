@@ -188,7 +188,15 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA B — Registrar un pago
 
-### [ ] T B.1 — Repositorio del pago
+### [x] T B.1 — Repositorio del pago
+- **HECHA el 2026-08-02.** `lib/interfaces/repositories/ILiquidacionPagoRepository.ts` +
+  `lib/repositories/LiquidacionPagoRepository.ts` (8 métodos; `anular` queda para T F.1) y
+  `tests/unit/repositories/liquidacion-pago-repository.test.ts` (**20 tests verdes**). `crear`
+  traduce el P2002 de la clave en `{ status: "clave_repetida" }` **en las dos formas del error**
+  (nativa y driver adapter de Prisma 7, la cicatriz de `_shared/prisma-unique.ts`); un P2002 de
+  otra restricción se propaga. «Vigentes» vive en una sola constante (`VIGENTE`) usada por las
+  dos sumas, y hay un test que compara el `where` de las sumas con el de los listados —que sí
+  traen los anulados (R74).
 - `ILiquidacionPagoRepository` + implementación: `crear(tx, input)` (traduce el conflicto de
   `clave_idempotencia` en un resultado, no en una excepción que suba), `obtenerPorClave`,
   `obtenerPorId`, `sumarVigentesPorCierre(ids)`, `sumarVigentesPorTienda(id)`, `listarPorCierre`,
@@ -198,14 +206,28 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** `crear` escribe las 10 columnas del documento; las sumas excluyen anulados; los
   totales salen como STRING.
 
-### [ ] T B.2 [P] — Los libros aceptan fecha de movimiento
+### [x] T B.2 [P] — Los libros aceptan fecha de movimiento
+- **HECHA el 2026-08-02.** `fechaMovimiento?: Date` en los dos `Crear*Input` y en los dos
+  repositorios, emitida **solo si viene** (spread condicional: cuando no viene, la clave **no
+  existe** en el `data`, no vale `undefined`). Test nuevo
+  `tests/unit/repositories/libros-fecha-movimiento.test.ts` (**6 verdes**) en archivo NUEVO
+  justamente para no tocar ninguno de los existentes: los tests de los dos feeds del cierre
+  (`wallet-tienda-feed-service`, `wallet-mensajero-feed-service`,
+  `pago-mensajero-movimiento-repository`, `wallet-idempotencia`) siguen verdes **sin editarlos**.
 - Añadir `fechaMovimiento?: Date` a `CrearPagoMensajeroInput` y `CrearMovimientoTiendaInput`, y
   pasarlo solo si viene (`design.md §2.4`).
 - **Depende de:** T A.1 · **Cubre:** R37
 - **Hecho:** los tests existentes de los dos feeds del cierre siguen verdes **sin editarlos** —
   es la prueba de que el campo es opcional de verdad.
 
-### [ ] T B.3 — `LiquidacionService.registrarPagoTienda`
+### [x] T B.3 — `LiquidacionService.registrarPagoTienda`
+- **HECHA el 2026-08-02.** `lib/interfaces/services/ILiquidacionService.ts` +
+  `lib/services/LiquidacionService.ts` + `lib/utils/descripcion-pago.ts`
+  (`descripcionDePago` y `medianocheUtcDelDia`, puras). Test
+  `tests/unit/services/liquidacion-service.test.ts` (**33 verdes**) con las contrapruebas de rol
+  —`adminTienda` pidiendo **su propia** tienda y `adminSatelite` → `forbidden`, con el log de
+  llamadas **vacío**— y R40 medido con un doble de `tx` que expone `walletMovimiento` espiado:
+  cero llamadas. El servicio **no recibe** el repositorio de la caja (contraprueba estructural).
 - Guardia `esAccesoTotal` **antes** de tocar datos; saldo vía `agregarSaldoPorTienda` +
   `derivarSaldoTienda`; ramas `sin_saldo` / `excede`; escritura del documento y del débito
   `pago_tienda` en la **misma** transacción, con `origenTipo: "pago_tienda"`,
@@ -217,7 +239,17 @@ queda el registro de cierre y lo que cada una desencadenó.
   `adminSatelite` reciben `forbidden`; y un test afirma que el repositorio de la **caja
   principal** no recibe ni una llamada (R40).
 
-### [ ] T B.4 — El candado de serialización `[P1]`
+### [x] T B.4 — El candado de serialización `[P1]`
+- **HECHA el 2026-08-02.** `bloquearBeneficiario` en el repositorio (las dos ramas: `usuario`
+  para la tienda, `cierre_dia` para el mensajero) y llamada **antes** de leer el disponible.
+  `tests/integration/db/liquidacion-idempotencia.test.ts` (**10 verdes**) con un store que
+  implementa la semántica real del `FOR UPDATE` **leyéndolo de la sentencia cruda que emite el
+  repositorio**, más visibilidad transaccional (commit → release, en ese orden).
+  **Prueba por mutación ejecutada tres veces** (quitar el candado del servicio: 8 tests caen;
+  candado no-op en el store: 3 caen; candado **después** de la lectura: 4 caen). Salidas pegadas
+  en `progress/impl_172-liquidacion.md`. **Hallazgo del proceso:** la primera versión del store
+  fotografiaba las filas *después* de ceder el turno y el test de carrera pasaba SIN candado; se
+  corrigió a instantánea al inicio de la sentencia (`READ COMMITTED`) y ahí sí cae.
 - `bloquearBeneficiario(tx, …)` en el repositorio (`SELECT … FOR UPDATE`: fila de `cierre_dia`
   para el mensajero, fila de `usuario` para la tienda) y llamada **antes** de leer el disponible,
   **una sola** por operación.
