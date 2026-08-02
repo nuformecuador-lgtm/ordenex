@@ -570,7 +570,7 @@ producción sin esperar a la siguiente.
 
 ## Tanda K — Riesgo ALTO: bodega satélite (rol `adminSatelite`)
 
-### [ ] K.1 — Backend: filtros al servidor + `listar` paginado
+### [x] K.1 — Backend: filtros al servidor + `listar` paginado
 - Mover los tres filtros (estado ∧ cantón ∧ distrito) al servicio de recepción satélite, con
   lista blanca `.strict()`; paginar; conservar el acotamiento por zona del actor.
 - Test: `tests/unit/services/recepcion-satelite-paginado.test.ts`
@@ -580,15 +580,26 @@ producción sin esperar a la siguiente.
 - **Depende de:** T H.2 · **Cubre:** R40, R41, R44, R45, R51
 - **Hecho:** tests verdes; el conjunto filtrado se compara contra el resultado del filtro de
   cliente actual, caso a caso (es la red de seguridad del cambio).
+- **MEDIDO (2026-08-01):** los tres filtros se resuelven en el servidor y devuelven, para los
+  mismos valores, EXACTAMENTE el conjunto del filtro de cliente en las **64 combinaciones**
+  posibles. Detalle en `progress/impl_170-fase2-tanda-k.md`.
+  - **DESVIACIÓN declarada (R51):** el listado no tenía criterio de ordenación entre los cinco
+    grupos; conservarlo obligó a `Prisma.sql` con `array_position`, verificado a mano contra un
+    Postgres real (§4.1) y vigilado por unit test sobre el `Prisma.Sql`.
+  - **Verificado por MUTACIÓN (10), todas revertidas.** TRES del SQL pasaron los tests de
+    servicio —que usan dobles— y solo las detuvo `tests/unit/repositories/satelite-paginado-where.test.ts`.
 
-### [ ] K.2 — Backend: catálogos de cantón y distrito acotados por rol
+### [x] K.2 — Backend: catálogos de cantón y distrito acotados por rol
 - Acción de catálogos independiente del recorte de página, molde `lib/actions/filtros-ordenes.ts`.
 - Test: `tests/unit/actions/satelite-catalogos.test.ts`
   - «ofrece todas las opciones del conjunto del actor, no solo las de la página» (R46)
   - «no ofrece opciones de zonas ajenas al actor» (R44)
 - **Depende de:** K.1 · **Cubre:** R44, R46 · **Hecho:** tests verdes. **Ver Q5.**
+- **MEDIDO (2026-08-01):** Q5 resuelta como proponía la task: se reusa la vía de la feature 144
+  (`obtenerCatalogoFiltrosSatelite`, molde `lib/actions/filtros-ordenes.ts`). El catálogo sale
+  del CONJUNTO del actor y no de la página, y no ofrece opciones de zonas ajenas.
 
-### [ ] K.3 — Frontend: paginación, selección por página y acciones de lote
+### [x] K.3 — Frontend: paginación, selección por página y acciones de lote
 - Test: `tests/components/paginacion/SatelitePaginacion.test.tsx`
   - «navega entre páginas» (R43)
   - «seleccionar todo marca exactamente las filas de la página visible» (R47)
@@ -597,37 +608,91 @@ producción sin esperar a la siguiente.
   - «la descarga sigue entregando el dataset completo con los filtros vigentes» (R52)
 - **Depende de:** K.2 · **Cubre:** R43, R46, R47, R48, R52
 - **Hecho:** tests verdes. **Verificación en pantalla pendiente de Q4.**
+- **MEDIDO (2026-08-01):** «seleccionar todo» marca exactamente las filas visibles y lo dice en
+  su etiqueta; las cuatro acciones de lote se deciden sobre lo SELECCIONADO (página de 3, conjunto
+  de 5: marcar 3 de 10 mueve 3); los desplegables conservan los cuatro cantones del conjunto con
+  la página trayendo uno; la descarga entrega 60 filas con la tabla enseñando 5. **8 mutaciones**
+  en rojo, revertidas. **Q-K3 CERRADA** (la selección sobrevive al cambio de página pero no
+  participa; filtrar la limpia). Detalle en `progress/impl_170-fase2-tanda-k.md` §15-§21.
 
 ## Tanda L — Riesgo ALTO: cuentas por pagar (roles de acceso total)
 
-### [ ] L.1 — Backend: búsqueda por nombre al servidor + paginación
+### [x] L.1 — Backend: búsqueda por nombre al servidor + paginación
 - Test: `tests/unit/services/wallet-cuentas-paginado.test.ts`
   - «para el mismo texto devuelve el mismo conjunto que la búsqueda de cliente» (R45)
   - «devuelve la página y el total» (R40, R41) · «conserva el orden» (R51)
 - **Depende de:** T H.2 · **Cubre:** R40, R41, R45, R51 · **Hecho:** tests verdes.
+- **MEDIDO (2026-08-01):** R45 medido con una **batería de 25 textos** (vacío, espacios, acentos
+  en los dos sentidos, mayúsculas, comodines `%`/`_` de SQL, sin resultados) comparada uno a uno
+  contra la búsqueda de cliente COPIADA LITERAL del componente. Nace el **séptimo dominio de
+  configuración** (`wallet-mensajero`), que era la pregunta abierta que la tanda H dejó.
+  - **DESVIACIÓN declarada (R51):** este listado tampoco tenía criterio de ordenación (`groupBy`
+    sin `orderBy`); se ordena por nombre con `mensajeroId` de desempate, igual que «Saldos de
+    tiendas». Misma pregunta que Q-I2, ahora en una segunda pantalla.
+  - **NO corta en la base**, y es deliberado (§5): cada fila agrega el libro entero de ese
+    mensajero. R54 se cumple en su forma fuerte (cero consultas nuevas, ni la del conteo).
+  - **Verificado por MUTACIÓN (11), todas revertidas**; las del `WHERE` las detuvo
+    `tests/unit/repositories/cuentas-por-pagar-paginado-where.test.ts`, no las de servicio.
 
-### [ ] L.2 — Frontend: paginación + fila expandible
+### [x] L.2 — Frontend: paginación + fila expandible
 - Test: `tests/components/paginacion/CuentasPorPagarPaginacion.test.tsx`
   - «navega entre páginas» (R43)
   - «expandir el desglose funciona en cualquier página» (R50)
   - «la descarga sigue entregando el dataset completo» (R52)
 - **Depende de:** L.1 · **Cubre:** R43, R50, R52
 - **Hecho:** tests verdes. **Verificación en pantalla pendiente de Q4.**
+- **MEDIDO (2026-08-01):** 8 verdes. El contador dice 60 con 10 a la vista; la búsqueda viaja al
+  servidor cuando el usuario deja de escribir y devuelve la tabla a la página 1; expandir el
+  desglose en la página 3 abre el del mensajero de ESA fila. **10 mutaciones** en rojo; una pasó
+  VERDE porque el dato de prueba hacía vacío el caso, y esa corrección va commiteada aparte.
+  - **Q-L2 la cierra la tanda M**, no ésta: aquí la descarga aún releía el listado entero sin
+    búsqueda y volvía a filtrarlo en el navegador.
 
 ## Tanda M — Cierre de la FASE 2
 
-### [ ] M.1 — No-regresión transversal de la paginación
+### [x] M.1 — No-regresión transversal de la paginación
 - Test: `tests/components/paginacion/paginacion-transversal.test.tsx`
   - «los 3 listados del Anexo IV siguen entregándose completos, sin control de página» (R53)
   - «ningún listado paginado hace más consultas por render que antes, salvo el conteo» (R54)
   - «toda descarga de un listado paginado entrega el dataset completo» (R52)
 - **Depende de:** I, J, K, L · **Cubre:** R52, R53, R54 · **Hecho:** tests verdes.
+- **MEDIDO (2026-08-01):** 9 verdes. El archivo es un CENSO contrastado contra el árbol en los dos
+  sentidos —13 del Anexo III + 3 del Anexo IV—, anclado en `export const PAGINACION_…_LABEL`: hay
+  exactamente trece en `app/`, una por listado, y esa igualdad impide que un listado paginado nuevo
+  entre sin registrarse. Detalle en `progress/impl_170-fase2-tanda-m.md`.
+  - **R53** se afirma por conducta sobre los TRES, con 30 filas (> los 25 de `DEFAULT_PAGE_SIZE`
+    de los siete dominios): las 30 en pantalla, el contador por grupo diciendo 30 y ni un control
+    de navegación. Y con la contraprueba de que la MISMA pantalla sí pagina su otra tabla.
+  - **R54 se corrige con lo MEDIDO:** `fallbackData` compra el primer PINTADO, no evita la
+    revalidación. SWR vuelve a pedir la página 1 al montar, así que la PANTALLA cuesta hoy una
+    lectura de cliente que antes no costaba. R54 se cumple listado a listado en el SERVIDOR (una
+    consulta con el conteo dentro, tandas I/J/K/L), no en el navegador → **Q-M1**, declarada.
+  - **R52** se afirma en estático sobre los trece (`filasDelConjuntoCompleto` o
+    `filasDesdeResultado`, nunca `filasLocales` sobre la página) y por conducta sobre tres.
+  - **Verificado por MUTACIÓN (5), todas revertidas:** ranking recortado a 25 → rojo; `fallbackData`
+    fuera de saldos → 3 rojos; la descarga de cuentas proyectando la página → 2 rojos; un
+    `PAGINACION_…_LABEL` sin exportar → rojo; `filasDelConjuntoCompleto` → `filasLocales` en un
+    histórico → rojo.
 
-### [ ] M.2 — Verificación final y bitácora
+### [x] M.2 — Verificación final y bitácora
 - `./init.sh` verde, `pnpm typecheck` y `pnpm lint` sin deltas, suite completa sin regresiones.
 - Completar `progress/impl_170.md` con la tabla `R<n> → archivo::nombre del test`, el censo
   final (25 export / 13 paginados / 3 exclusiones del Anexo IV) y la medición de volumen.
 - **Depende de:** M.1 · **Cubre:** trazabilidad · **Hecho:** tabla completa sin huecos R1–R54.
+- **MEDIDO (2026-08-01):** bitácora de cierre en `progress/impl_170-fase2-tanda-m.md` con la tabla
+  R1–R54 completa, el censo final (**25 export / 13 paginados / 3 exclusiones del Anexo IV**) y la
+  medición de volumen (5000 × 15 = **0,34 MB**). `npx tsc --noEmit` 0; `npx eslint` 0 errores / 27
+  warnings (sin delta); suite **772 archivos / 9256 tests** (baseline `dev`: 771 / 9232 → **+1 y
+  +24**, que cuadran uno a uno) con **1 rojo AJENO y PREEXISTENTE** (`analytics-daily-guards`,
+  features 122/123). `./init.sh` NO llega a `== init OK ==` por él: está declarado como **Q-M2**
+  con su remedio exacto en la bitácora, §13. **Rojos nuevos de esta tanda: cero.**
+- **FIN DE FASE 2: la ampliación de alcance que el humano decidió en P6 queda entregada.** Los 13
+  listados del Anexo III paginan en el servidor, los 3 del Anexo IV siguen enteros con su motivo
+  escrito, y las 25 tablas del Anexo I siguen descargando el dataset completo.
+- **NO entra, y es deliberado:** los doce `listarXCompleto` que faltan (Q-I5/Q-K4), el recorte en
+  base de los dos listados que agregan en memoria (Q-I1/Q-L1) y la revalidación de entrada de SWR
+  (Q-M1). Los tres quedan dirigidos con destinatario y razón en
+  `progress/impl_170-fase2-tanda-m.md` §Preguntas abiertas.
 
 ---
 
