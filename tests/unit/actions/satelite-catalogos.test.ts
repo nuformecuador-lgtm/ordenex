@@ -12,6 +12,10 @@ import type {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
+import {
+  derivarCantones,
+  derivarDistritos,
+} from "@/lib/utils/filtro-canton-distrito";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import {
   CLAVE_CANTON,
@@ -177,9 +181,28 @@ function conjuntoDe(zonaId: string) {
   ).map((f) => f.row);
 }
 
-/** Las opciones que `construirFiltrosSatelite` produce hoy en el cliente, por clave. */
+/**
+ * Las opciones que la pantalla ofrece si su catalogo se derivara del conjunto ENTERO —que es
+ * lo que hacia antes de T K.2/T K.3—, por clave.
+ *
+ * T K.3 cambio el ORIGEN de `construirFiltrosSatelite`: ya no recibe ordenes (con la tabla
+ * paginada ese array seria la pagina visible), sino el catalogo. Aqui se le entrega el
+ * catalogo derivado del conjunto entero con las MISMAS funciones puras que el servidor usa,
+ * de modo que la comparacion de abajo sigue siendo la de siempre: el catalogo del servidor
+ * contra las opciones del conjunto completo, etiqueta a etiqueta y en el mismo orden.
+ */
 function opcionesDeLaPantalla(zonaId: string) {
-  const filtros = construirFiltrosSatelite(conjuntoDe(zonaId));
+  const conjunto = conjuntoDe(zonaId);
+  const cantones = derivarCantones(conjunto);
+  const filtros = construirFiltrosSatelite({
+    cantones,
+    distritos: cantones.flatMap((canton) =>
+      derivarDistritos(conjunto, canton.value).map((distrito) => ({
+        ...distrito,
+        parentValue: canton.value,
+      })),
+    ),
+  });
   const de = (clave: string) => filtros.find((f) => f.key === clave)!.options;
   return { cantones: de(CLAVE_CANTON), distritos: de(CLAVE_DISTRITO), estados: de(CLAVE_ESTADO) };
 }

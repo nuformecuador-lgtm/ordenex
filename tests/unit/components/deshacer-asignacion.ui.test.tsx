@@ -80,11 +80,15 @@ vi.mock("@/lib/actions/ordenes-guia", () => ({
 }));
 
 // --- Acciones que consume el módulo de la bodega satélite ---
+// Feature 170 — FASE 2 (T K.3): el listado pide su página al servidor; el doble devuelve las
+// órdenes que el caso monta, sin recortar (aquí no se pagina nada).
+const { paginadoBodegaMock } = vi.hoisted(() => ({ paginadoBodegaMock: vi.fn() }));
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
   recibirLote: vi.fn(),
+  listarOrdenesBodegaPaginado: (...args: unknown[]) => paginadoBodegaMock(...args),
 }));
 vi.mock("@/lib/actions/envio-devolucion-central", () => ({
   enviarACentral: vi.fn(),
@@ -97,6 +101,11 @@ vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 import { OrdenesListado } from "@/app/(app)/ordenes/_components/OrdenesListado";
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import { DeshacerAsignacionModal } from "@/app/(app)/ordenes/_components/DeshacerAsignacionModal";
+import {
+  PAGE_SIZE_SATELITE,
+  catalogoSatelite,
+  paginaBodega,
+} from "@/tests/fixtures/satelite-bodega";
 import {
   MOTIVO_INVALIDO,
   MOTIVO_MIN_LEN,
@@ -170,7 +179,16 @@ function renderConSwr(ui: ReactElement) {
 }
 
 function renderModulosSatelite(asignadas: RecepcionSateliteDTO[]) {
-  return render(
+  paginadoBodegaMock.mockResolvedValue({
+    status: "ok",
+    items: asignadas,
+    page: 1,
+    pageSize: PAGE_SIZE_SATELITE,
+    total: asignadas.length,
+  });
+  // Caché de SWR nueva por montaje: la clave de la página 1 es la misma en todos los casos,
+  // y sin esto el dato del anterior ganaría sobre el `fallbackData` del siguiente (T I.2).
+  return renderConSwr(
     <RecepcionSateliteModule
       porRecibir={[
         makeOrdenSatelite({
@@ -179,8 +197,8 @@ function renderModulosSatelite(asignadas: RecepcionSateliteDTO[]) {
           estatusValue: "en_ruta_bodega_satelite",
         }),
       ]}
-      recibidas={[]}
-      asignadas={asignadas}
+      ordenesBodega={paginaBodega(asignadas)}
+      catalogoFiltros={catalogoSatelite(asignadas)}
       zonaNombre="Limón"
       sinZona={false}
       mensajeros={[]}
@@ -326,13 +344,15 @@ describe("R35/R36 — módulo de la bodega satélite", () => {
     const seccion = screen.getByRole("region", { name: LISTADO_BODEGA });
     expect(within(seccion).getByText("SAT-s1")).toBeInTheDocument();
 
-    // Sin selección la acción está deshabilitada; con selección se habilita.
-    const boton = within(seccion).getByRole("button", { name: ACCION });
-    expect(boton).toBeDisabled();
+    // Feature 170 — FASE 2 (T K.3, R48): la acción se decide sobre lo SELECCIONADO, no sobre
+    // el contenido del listado. Sin nada marcado ya no se ofrece —no hay nada sobre lo que
+    // actuar—; antes se pintaba deshabilitada porque miraba el conjunto a la vista, y con la
+    // tabla paginada ese conjunto ya no es el del actor.
+    expect(within(seccion).queryByRole("button", { name: ACCION })).toBeNull();
     await user.click(
       within(seccion).getByRole("checkbox", { name: "Seleccionar SAT-s1" }),
     );
-    expect(boton).toBeEnabled();
+    expect(within(seccion).getByRole("button", { name: ACCION })).toBeEnabled();
   });
 
   it("R36: la sección 'Por recibir' (en_ruta_bodega_satelite) NO ofrece deshacer", () => {

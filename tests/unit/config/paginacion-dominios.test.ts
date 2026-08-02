@@ -185,6 +185,10 @@ const PANTALLAS_ANEXO_III = [
   "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
   "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
   "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
+  // Feature 170 — FASE 2 (T K.3): el control y el tamaño de página de la bodega satélite
+  // viven en el MÓDULO (el listado se quedó con la tabla y la selección), así que el literal
+  // se escribiría aquí. El listado sigue en la lista: es donde estaba antes de la tanda K.
+  "app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx",
 ];
 
 /**
