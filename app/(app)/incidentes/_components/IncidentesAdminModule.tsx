@@ -2,18 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { Pagination } from "@/components/shared/Pagination";
+import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
+import { incidentesConfig } from "@/lib/config/incidentes";
 import {
   aprobarIncidente,
   rechazarIncidente,
   retractarIncidente,
   verIncidente,
+  listarIncidentes,
+  listarPendientesIncidentesPaginado,
 } from "@/lib/actions/incidentes";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
@@ -30,6 +36,14 @@ import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/
 // puede volver a reportar; no bloquea a nadie).
 import { money, EstadoCierreBadge } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import {
+  IncidentesHistoricoTabla,
+  type IncidentesHistoricoPagina,
+} from "./IncidentesHistoricoTabla";
+import {
+  COLUMNAS_DESCARGA_INCIDENTES_PENDIENTES,
+  filaDescargaIncidentePendiente,
+} from "./incidentes-descarga-columnas";
 
 // Feature 158 (T2.8, R49/R50/R54 — camino del ADMIN) — cola de aprobación de incidentes.
 // ESPEJO de `CierresAdminModule` (38), que es la aplicación original del patrón que el humano
@@ -40,11 +54,28 @@ import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 // Los datos llegan por PROPS desde el Server Component padre, que ya resolvió permisos y
 // alcance (`docs/architecture.md`): este módulo no fetchea la lista.
 
+/**
+ * Feature 170 — FASE 2 (T J.2, R40/R41): la PÁGINA de la cola, tal como la devuelve el
+ * servidor. `total` es el del CONJUNTO —de él sale el contador de cabecera (R42)— y nunca
+ * `items.length`.
+ */
+export interface IncidentesColaPagina {
+  items: IncidenteAdminDTO[];
+  total: number;
+  pageSize: number;
+}
+
 export interface IncidentesAdminModuleProps {
-  /** Incidentes `solicitado` del alcance (cola de decisión, R49). */
-  pendientes: IncidenteAdminDTO[];
-  /** Incidentes ya resueltos (`aprobado`/`rechazado`) del alcance, solo lectura (R49). */
-  historico: IncidenteAdminDTO[];
+  /**
+   * Feature 170 — FASE 2 (T J.2, R40/R41): PÁGINA 1 de los incidentes `solicitado` del
+   * alcance (cola de decisión, R49), ya resuelta server-side, más el `total` del conjunto.
+   */
+  pendientes: IncidentesColaPagina;
+  /**
+   * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 del histórico de resueltos (R49), ya
+   * resuelta server-side, más el `total` del conjunto. Deja de ser el array entero.
+   */
+  historico: IncidentesHistoricoPagina;
   /** `true` si el `adminSatelite` no tiene zona asignada (patrón 38/R3). */
   sinZona: boolean;
 }
@@ -53,6 +84,14 @@ export interface IncidentesAdminModuleProps {
 
 export const TITULO_PENDIENTES = "Pendientes de decisión";
 export const TITULO_HISTORICO = "Histórico";
+/**
+ * Feature 170 (T E.6, R12/R13): nombres de las DESCARGAS. No se reusan `TITULO_PENDIENTES`
+ * ni `TITULO_HISTORICO` porque son los encabezados DENTRO de la pantalla de incidentes: un
+ * archivo llamado `historico-2026-07-31.xlsx` no diría de qué es, y el nombre accesible del
+ * control («Descargar Histórico») sería el mismo que el de la pantalla de cierres.
+ */
+export const TITULO_DESCARGA_PENDIENTES = "Incidentes pendientes";
+export const TITULO_DESCARGA_HISTORICO = "Incidentes resueltos";
 export const VACIO_PENDIENTES = "No hay incidentes pendientes de decisión.";
 export const VACIO_HISTORICO = "Aún no hay incidentes resueltos.";
 export const SIN_ZONA_AVISO = "No tenés una zona asignada; contactá a tu administrador.";
@@ -102,9 +141,32 @@ const SIN_EVIDENCIA = "Este incidente no tiene fotos disponibles.";
 export const INDEMNIZACION_PENDIENTE_NOTA =
   "Se captura al aprobar el incidente; todavía no se indemnizó.";
 
+/** Nombre accesible del control de la COLA (R43). Propio: la pantalla monta dos tablas. */
+export const PAGINACION_PENDIENTES_LABEL = "Paginación de los incidentes pendientes";
+export const ERROR_CARGA_PENDIENTES = "No se pudieron cargar los incidentes pendientes.";
+
+// R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla.
+const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
+  (s) => s <= incidentesConfig.MAX_PAGE_SIZE,
+);
+
 /** Identificación legible de la orden del incidente (misma forma que la cola de cierres). */
 function referencia(i: IncidenteAdminDTO): string {
   return `${i.numRemision} · ${i.destinatario}`;
+}
+
+/**
+ * Feature 170 — FASE 2 (T J.2, R40/R41): una página de la cola. El alcance NO viaja en el
+ * input —lo resuelve el servicio desde la sesión, por la zona de la ORDEN (R44)—; aquí solo
+ * van el número de página y el tamaño.
+ */
+async function leerPendientes(
+  page: number,
+  pageSize: number,
+): Promise<IncidentesColaPagina> {
+  const res = await listarPendientesIncidentesPaginado({ page, pageSize });
+  if (res.status !== "ok") throw new Error(res.status);
+  return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
 
 export function IncidentesAdminModule({
@@ -128,6 +190,34 @@ export function IncidentesAdminModule({
   const [montoError, setMontoError] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
   const [motivoError, setMotivoError] = useState<string | null>(null);
+
+  // Feature 170 — FASE 2 (T J.2, R40/R42/R43): página visible de la COLA. El control vive
+  // AQUÍ, en el módulo, junto al contador (decisión de Q-I6): así la guardia de T H.3 ve esta
+  // pantalla como paginada y vigila que el número salga del `total` del servidor.
+  //
+  // R50: el monto tecleado, el motivo y el incidente abierto viven en los `useState` de
+  // arriba, que esta lectura no toca; cambiar de página no los reinicia. El hook va ANTES del
+  // corte por `sinZona`: los hooks de React no admiten un retorno temprano por delante.
+  const [pendientesPage, setPendientesPage] = useState(1);
+  const [pendientesPageSize, setPendientesPageSize] = useState(pendientes.pageSize);
+  const { data: pendientesData, error: pendientesError } = useSWR(
+    ["incidentes:pendientes", pendientesPage, pendientesPageSize],
+    () => leerPendientes(pendientesPage, pendientesPageSize),
+    {
+      fallbackData:
+        pendientesPage === 1 && pendientesPageSize === pendientes.pageSize
+          ? pendientes
+          : undefined,
+    },
+  );
+  const colaPendientes: IncidentesColaPagina = pendientesData ?? {
+    items: [],
+    total: 0,
+    pageSize: pendientesPageSize,
+  };
+  // R44: el esqueleto sólo cuando NO hay nada que pintar (`isLoading` de SWR sigue en `true`
+  // mientras revalida aunque haya `fallbackData`).
+  const pendientesCargando = pendientesData === undefined;
 
   // R48 (patrón 38/R3): sin zona no hay alcance que resolver → aviso accionable, sin colas.
   if (sinZona) {
@@ -285,33 +375,72 @@ export function IncidentesAdminModule({
         <h2 className="text-lg font-semibold">
           {TITULO_PENDIENTES}{" "}
           <span className="text-sm font-normal text-muted-foreground">
-            ({pendientes.length})
+            {/* R42: el TOTAL del conjunto que devuelve el servidor, nunca el tamaño de la
+                página: cada fila de esta cola es un paquete esperando decisión de dinero. */}
+            ({colaPendientes.total})
           </span>
         </h2>
         <div className="overflow-x-auto">
           <DataTable
             columns={columnasPendientes(abrirDetalle)}
-            data={pendientes}
+            data={colaPendientes.items}
             rowKey="incidenteId"
             ariaLabel={TITULO_PENDIENTES}
             emptyMessage={VACIO_PENDIENTES}
+            isLoading={pendientesCargando}
+            error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
+            /**
+             * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue siendo la
+             * COLA COMPLETA. Se relee con el MISMO listado que la pantalla ya llamaba antes de
+             * paginar (`listarIncidentes`), que acota por la zona de la ORDEN para un
+             * `adminSatelite`: descargar no amplía el alcance (R14/R44).
+             *
+             * Las URL firmadas de las evidencias NO viajan al archivo (R22): esta tabla no
+             * las muestra y el módulo de columnas ni siquiera las lee.
+             */
+            descarga={{
+              titulo: TITULO_DESCARGA_PENDIENTES,
+              columnas: COLUMNAS_DESCARGA_INCIDENTES_PENDIENTES,
+              obtenerFilas: () =>
+                filasDelConjuntoCompleto(
+                  listarIncidentes().then((res) =>
+                    res.status === "ok"
+                      ? ({ status: "ok", items: res.pendientes } as const)
+                      : res,
+                  ),
+                  filaDescargaIncidentePendiente,
+                ),
+            }}
           />
         </div>
+
+        <Pagination
+          page={pendientesPage}
+          pageSize={pendientesPageSize}
+          total={colaPendientes.total}
+          disabled={pendientesCargando}
+          showFirstLast
+          siblingCount={1}
+          ariaLabel={PAGINACION_PENDIENTES_LABEL}
+          onPageChange={setPendientesPage}
+          onPageSizeChange={(s) => {
+            setPendientesPageSize(s);
+            setPendientesPage(1);
+          }}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        />
       </section>
 
-      {/* ---------- Histórico (solo lectura, R49) ---------- */}
-      <section aria-label={TITULO_HISTORICO} className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">{TITULO_HISTORICO}</h2>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasHistorico(abrirDetalle)}
-            data={historico}
-            rowKey="incidenteId"
-            ariaLabel={TITULO_HISTORICO}
-            emptyMessage={VACIO_HISTORICO}
-          />
-        </div>
-      </section>
+      {/* ---------- Histórico (solo lectura, R49) ----------
+          Feature 170 — FASE 2 (T I.2): la tabla, su control de paginación y su descarga viven
+          en su propio componente (ver la cabecera de `IncidentesHistoricoTabla`). */}
+      <IncidentesHistoricoTabla
+        initialData={historico}
+        titulo={TITULO_HISTORICO}
+        mensajeVacio={VACIO_HISTORICO}
+        tituloDescarga={TITULO_DESCARGA_HISTORICO}
+        onAbrir={abrirDetalle}
+      />
 
       {/* ---------- Detalle del incidente ---------- */}
       <Modal
@@ -620,50 +749,6 @@ function columnasPendientes(
           aria-label={`Ver o decidir el incidente de la orden ${i.numRemision}`}
         >
           Ver / decidir
-        </Button>
-      ),
-    },
-  ];
-}
-
-// --- Columnas del histórico (solo lectura, R49) ---
-function columnasHistorico(
-  abrir: (incidenteId: string) => void,
-): Column<IncidenteAdminDTO>[] {
-  return [
-    {
-      id: "estado",
-      value: "Estado",
-      render: (i) => <EstadoCierreBadge estado={i.estado} />,
-    },
-    { id: "numRemision", value: "Nº Remisión", render: (i) => i.numRemision },
-    { id: "destinatario", value: "Destinatario", render: (i) => i.destinatario },
-    { id: "causa", value: "Causa", render: (i) => CAUSA_INCIDENTE_LABEL[i.causa] },
-    // R55: el monto se renderiza TAL CUAL (STRING money-safe), sin `parseFloat` ni redondeo.
-    {
-      id: "indemnizacion",
-      value: "Indemnización",
-      render: (i) => money(i.indemnizacion),
-    },
-    { id: "resueltoPor", value: "Resuelto por", render: (i) => i.resueltoPorNombre ?? "—" },
-    {
-      id: "resueltoAt",
-      value: "Fecha resuelta",
-      render: (i) => i.resueltoAt?.slice(0, 10) ?? "—",
-    },
-    { id: "motivoRechazo", value: "Motivo", render: (i) => i.motivoRechazo ?? "—" },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (i) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => abrir(i.incidenteId)}
-          aria-label={`Ver el incidente de la orden ${i.numRemision}`}
-        >
-          Ver
         </Button>
       ),
     },

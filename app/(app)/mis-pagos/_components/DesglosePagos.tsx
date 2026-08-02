@@ -1,9 +1,14 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DescargaFilasResult,
+} from "@/components/shared/DataTable";
 import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
 
+import { COLUMNAS_DESCARGA_MIS_PAGOS } from "./mis-pagos-descarga-columnas";
 import {
   CATEGORIA_PAGO_LABEL,
   TIPO_PAGO_LABEL,
@@ -61,21 +66,46 @@ const COLUMNS: Column<PagoMensajeroMovimientoDTO>[] = [
   },
 ];
 
+/** Nombre visible del desglose: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA = "Desglose de pagos";
+
 export interface DesglosePagosProps {
   movimientos: PagoMensajeroMovimientoDTO[];
   isLoading?: boolean;
+  /**
+   * Feature 170 (T C.4, design §5) — obtiene las filas del libro de pagos COMPLETO del
+   * mensajero. Callback, no filtros: los filtros los conoce `MisPagosModule`, que cierra
+   * sobre ellos; esta tabla sigue sin fetchear. Ausente ⇒ sin control (R39).
+   */
+  obtenerFilasDescarga?: () => Promise<DescargaFilasResult>;
 }
 
-export function DesglosePagos({ movimientos, isLoading = false }: DesglosePagosProps) {
+export function DesglosePagos({
+  movimientos,
+  isLoading = false,
+  obtenerFilasDescarga,
+}: DesglosePagosProps) {
   return (
     <div className="overflow-x-auto">
       <DataTable
         columns={COLUMNS}
         data={movimientos}
         rowKey="id"
-        ariaLabel="Desglose de pagos"
+        ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
         emptyMessage="No hay pagos que coincidan con los filtros."
+        // Feature 170 (T C.4, R1/R9/R13/R14): el archivo son los pagos del PROPIO
+        // mensajero; el acotamiento por `mensajero_id` lo pone el servicio, que ignora
+        // cualquier `mensajeroId` del input.
+        descarga={
+          obtenerFilasDescarga
+            ? {
+                titulo: TITULO_DESCARGA,
+                columnas: COLUMNAS_DESCARGA_MIS_PAGOS,
+                obtenerFilas: obtenerFilasDescarga,
+              }
+            : undefined
+        }
       />
     </div>
   );

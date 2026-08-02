@@ -13,6 +13,7 @@ import type {
   IUsuarioService,
   ListarRolesServiceResult,
   ListarTiposIdentificacionServiceResult,
+  ListarUsuariosCompletoServiceResult,
   ListarUsuariosServiceResult,
   ObtenerUsuarioServiceResult,
 } from "@/lib/interfaces/services/IUsuarioService";
@@ -20,9 +21,11 @@ import type {
   ActualizarUsuarioInput,
   CambiarEstadoUsuarioInput,
   CrearUsuarioInput,
+  ListarUsuariosCompletoInput,
   ListarUsuariosInput,
 } from "@/lib/types/usuario";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import { descargaConfig } from "@/lib/config/descarga";
 import { hashPassword } from "@/lib/utils/password";
 import { generateStrongPassword } from "@/lib/utils/password-generator";
 
@@ -102,6 +105,47 @@ export class UsuarioService implements IUsuarioService {
     });
 
     return { status: "ok", items, page: input.page, pageSize: input.pageSize, total };
+  }
+
+  /**
+   * Feature 170 (T B.1, design §2.1) — el MISMO listado sin recorte por pagina, para la
+   * descarga del dataset completo.
+   *
+   * NO hay `construirWhere` que extraer aqui, y eso es un HALLAZGO, no un olvido:
+   * `listar` no construye ningun `where` (el repositorio lista TODOS los usuarios; el
+   * modulo entero es exclusivo de `maestro`, que no esta acotado a un subconjunto). El
+   * alcance por rol de este listado ES el guard `ALLOWED_ROLES`, y por eso este metodo
+   * usa literalmente el mismo, escrito ANTES de tocar la base (R17): un rol no autorizado
+   * recibe `forbidden` sin que se ejecute una sola consulta.
+   *
+   * La paridad con el listado (R9/R11/R19) se sostiene sobre llamar al MISMO
+   * `repo.list` con los MISMOS `sortBy`/`sortDir`: cualquier criterio que el repositorio
+   * aplique —hoy y manana— lo aplica identico en los dos caminos, porque es el mismo
+   * metodo. Solo cambian `skip` (0) y `take` (tope + 1).
+   */
+  async listarCompleto(
+    input: ListarUsuariosCompletoInput,
+    actor: Actor,
+  ): Promise<ListarUsuariosCompletoServiceResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R17
+
+    const limite = descargaConfig.MAX_FILAS;
+
+    // R29: `take: limite + 1` acota la MEMORIA por construccion — aunque hubiera 50 000
+    // usuarios, nunca se materializan mas de N+1. El `total` sigue siendo exacto porque
+    // el repositorio lo obtiene con un `count` independiente del `take`.
+    const { items, total } = await this.repo.list({
+      skip: 0,
+      take: limite + 1,
+      sortBy: input.sortBy, // R11: mismos defaults del schema (createdAt/desc)
+      sortDir: input.sortDir,
+    });
+
+    // R27/R28: por encima del tope no se entrega NADA. Nunca un dataset truncado en
+    // silencio: o van todas las filas, o va el error accionable con los conteos.
+    if (total > limite) return { status: "limite_excedido", total, limite };
+
+    return { status: "ok", items, total };
   }
 
   async obtener(id: string, actor: Actor): Promise<ObtenerUsuarioServiceResult> {

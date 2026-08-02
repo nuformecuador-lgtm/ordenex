@@ -4,6 +4,7 @@ import type {
   CierreBodegaResumen,
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 40 — contrato del servicio "Cierres de bodega" del maestro (aprobar /
 // rechazar). Espejo de ICierresAdminService (feature 38), aplicado a CierreBodega.
@@ -23,6 +24,21 @@ export type ListarCierresBodegaAdminServiceResult =
       historico: CierreBodegaResumen[]; // aprobado/rechazado (R15)
     }
   | { status: "forbidden" }; // rol != maestro (R2)
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41): UNA PAGINA del historico de cierres de bodega
+ * (los ya resueltos) + el total del conjunto. Contrato comun de T H.2, sin campos extra.
+ */
+export type ListarHistoricoCierresBodegaServiceResult =
+  ListarPaginadoServiceResult<CierreBodegaResumen>;
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42): UNA PAGINA de la COLA de cierres de bodega
+ * PENDIENTES + el total del conjunto. De ese total sale el contador de cabecera que hoy dice
+ * `({pendientes.length})` (`CierresBodegaAdminModule.tsx:220`).
+ */
+export type ListarPendientesCierresBodegaServiceResult =
+  ListarPaginadoServiceResult<CierreBodegaResumen>;
 
 // R2/R11-R13/R19: detalle agregado de UN cierre de bodega (por cada cierre_dia, su
 // detalle por resultado reuso 37 + totales). `no_encontrada` = id inexistente (R19).
@@ -66,6 +82,30 @@ export interface ICierresBodegaAdminService {
    * (R23). Rol != maestro -> forbidden.
    */
   listarCierresBodegaAdmin(actor: Actor): Promise<ListarCierresBodegaAdminServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): el HISTORICO (cierres de bodega ya
+   * resueltos), paginado en el servidor.
+   *
+   * MISMA guardia de rol que `listarCierresBodegaAdmin` (`esAccesoTotal`, R2) evaluada ANTES
+   * de tocar el repositorio, y MISMO corte cola/historico: paginar no puede ensanchar el
+   * alcance de nadie (R44). Rol distinto -> forbidden, sin filas y sin total.
+   */
+  listarHistoricoCierresBodegaPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresBodegaServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): la COLA de cierres de bodega
+   * PENDIENTES, paginada en el servidor.
+   *
+   * MISMA guardia de rol, evaluada ANTES del repositorio (la cabecera de un cierre de bodega
+   * es dinero agregado de una zona entera), y MISMA constante de estados que el historico con
+   * el corte invertido. Rol distinto de acceso total -> forbidden, sin filas y sin total.
+   */
+  listarPendientesCierresBodegaPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesCierresBodegaServiceResult>;
   /**
    * R2/R11-R13/R19: detalle agregado de un cierre de bodega (cada cierre_dia con sus
    * gestiones por resultado, evidencias firmadas). Solo lectura. Inexistente ->

@@ -2,10 +2,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
 // Feature 45 (T12, R22b/R24/R25/R26) — tests del panel CRUD de PLANTILLAS de gasto fijo.
 // Las actions se mockean (no se toca el backend real). Verifica: lista concepto/monto STRING/
@@ -15,10 +17,16 @@ import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 const crearMock = vi.fn();
 const actualizarMock = vi.fn();
 const setActivaMock = vi.fn();
+// Feature 170 - FASE 2 (T I.2): el panel pide su PAGINA al servidor (SWR revalida al montar)
+// y relee el conjunto completo al descargar. Las dos se programan en `renderPanel`.
+const listarPaginaMock = vi.fn();
+const listarCompletoMock = vi.fn();
 vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   crearPlantillaAction: (...a: unknown[]) => crearMock(...a),
   actualizarPlantillaAction: (...a: unknown[]) => actualizarMock(...a),
   setActivaPlantillaAction: (...a: unknown[]) => setActivaMock(...a),
+  listarPlantillasPaginadoAction: (...a: unknown[]) => listarPaginaMock(...a),
+  listarPlantillasAction: (...a: unknown[]) => listarCompletoMock(...a),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -55,6 +63,24 @@ function renderPanel(ui: ReactElement) {
   return render(<ToastProvider>{ui}</ToastProvider>);
 }
 
+/**
+ * Feature 170 - FASE 2 (T I.2): monta el panel con su PAGINA y deja las dos lecturas
+ * devolviendo el MISMO conjunto, para que la revalidacion de SWR no vacie la tabla.
+ */
+function montarPanel(plantillas: GastoFijoPlantillaDTO[]) {
+  listarPaginaMock.mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...paginaInicial(plantillas),
+  });
+  listarCompletoMock.mockResolvedValue({ status: "ok", plantillas });
+  return renderPanel(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <GastosFijosPlantillasPanel initialData={paginaInicial(plantillas)} />
+    </SWRConfig>,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -65,7 +91,7 @@ afterEach(() => {
 
 describe("GastosFijosPlantillasPanel — listado (R26)", () => {
   it("lista concepto, monto STRING y estado; muestra la nota del cron", () => {
-    renderPanel(<GastosFijosPlantillasPanel plantillas={[ACTIVA, INACTIVA]} />);
+    montarPanel([ACTIVA, INACTIVA]);
 
     expect(screen.getByText("Alquiler de bodega")).toBeInTheDocument();
     expect(screen.getByText("₡300.00")).toBeInTheDocument();
@@ -81,7 +107,7 @@ describe("GastosFijosPlantillasPanel — crear (R24)", () => {
   it("Nueva plantilla abre el diálogo y crea con concepto + monto", async () => {
     const user = userEvent.setup();
     crearMock.mockResolvedValue({ status: "ok", plantilla: { ...ACTIVA } });
-    renderPanel(<GastosFijosPlantillasPanel plantillas={[]} />);
+    montarPanel([]);
 
     await user.click(screen.getByRole("button", { name: "Nueva plantilla" }));
     const dialog = await screen.findByRole("dialog");
@@ -98,7 +124,7 @@ describe("GastosFijosPlantillasPanel — crear (R24)", () => {
 
   it("no crea si el concepto está vacío o el monto es inválido", async () => {
     const user = userEvent.setup();
-    renderPanel(<GastosFijosPlantillasPanel plantillas={[]} />);
+    montarPanel([]);
 
     await user.click(screen.getByRole("button", { name: "Nueva plantilla" }));
     const dialog = await screen.findByRole("dialog");
@@ -118,7 +144,7 @@ describe("GastosFijosPlantillasPanel — editar (R25)", () => {
   it("Editar prefila los campos y actualiza con el id de la plantilla", async () => {
     const user = userEvent.setup();
     actualizarMock.mockResolvedValue({ status: "ok", plantilla: { ...ACTIVA } });
-    renderPanel(<GastosFijosPlantillasPanel plantillas={[ACTIVA]} />);
+    montarPanel([ACTIVA]);
 
     const fila = screen.getByRole("row", { name: /Alquiler de bodega/ });
     await user.click(within(fila).getByRole("button", { name: "Editar" }));
@@ -146,7 +172,7 @@ describe("GastosFijosPlantillasPanel — activar/desactivar (R25)", () => {
   it("Desactivar una plantilla activa llama setActiva con activa=false", async () => {
     const user = userEvent.setup();
     setActivaMock.mockResolvedValue({ status: "ok", plantilla: { ...ACTIVA, activa: false } });
-    renderPanel(<GastosFijosPlantillasPanel plantillas={[ACTIVA]} />);
+    montarPanel([ACTIVA]);
 
     const fila = screen.getByRole("row", { name: /Alquiler de bodega/ });
     await user.click(within(fila).getByRole("button", { name: "Desactivar" }));
@@ -158,7 +184,7 @@ describe("GastosFijosPlantillasPanel — activar/desactivar (R25)", () => {
   it("Activar una plantilla inactiva llama setActiva con activa=true", async () => {
     const user = userEvent.setup();
     setActivaMock.mockResolvedValue({ status: "ok", plantilla: { ...INACTIVA, activa: true } });
-    renderPanel(<GastosFijosPlantillasPanel plantillas={[INACTIVA]} />);
+    montarPanel([INACTIVA]);
 
     const fila = screen.getByRole("row", { name: /Internet/ });
     await user.click(within(fila).getByRole("button", { name: "Activar" }));

@@ -18,6 +18,15 @@ vi.mock("@/lib/actions/cierre-dia", () => ({
   listarCierreDia: vi.fn(),
   estadoBloqueoMensajero: vi.fn(),
   solicitarCierre: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): la página pre-carga la PÁGINA 1 de «Cierres solicitados».
+  listarCierresPasadosPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
+  deshacerGestion: vi.fn(),
 }));
 
 class NotFoundError extends Error {

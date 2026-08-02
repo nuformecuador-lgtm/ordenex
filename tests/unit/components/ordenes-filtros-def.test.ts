@@ -48,9 +48,15 @@ function porClave(clave: string, incluirTienda = true) {
   return def;
 }
 
+// Los cuatro censos de este archivo enumeran la barra ENTERA para que ampliarla sea una
+// decision explicita. La feature 169 la amplia en UNA clave, el buscador `q`, y por
+// contrato va PRIMERO (R32): mantener los censos intactos exigiria que la barra mintiera
+// sobre lo que declara. Ningun otro caso de este archivo se toco.
+
 describe("construirFiltrosOrdenes — filtros declarados (R55)", () => {
-  it("R55: declara los filtros de catalogo, el de tiempo y el de reasignables", () => {
+  it("R55: declara el buscador, los filtros de catalogo, el de tiempo y el de reasignables", () => {
     expect(claves(true)).toEqual([
+      "q",
       "zona_id",
       "tienda_id",
       "provincia_id",
@@ -63,6 +69,7 @@ describe("construirFiltrosOrdenes — filtros declarados (R55)", () => {
 
   it("R62: sin el filtro de tienda cae SOLO esa clave (rol acotado a su propia tienda)", () => {
     expect(claves(false)).toEqual([
+      "q",
       "zona_id",
       "provincia_id",
       "canton_id",
@@ -175,7 +182,7 @@ describe("construirFiltrosOrdenes — catalogo vacio (R64)", () => {
       { zonas: [], tiendas: [], provincias: [], cantones: [], distritos: [] },
       { incluirTienda: true },
     );
-    expect(defs).toHaveLength(7);
+    expect(defs).toHaveLength(8);
     for (const def of defs.filter((d) => d.kind === "multi")) {
       expect(def.options).toEqual([]);
     }
@@ -200,6 +207,7 @@ describe("construirFiltrosOrdenes — filtro REASIGNABLES", () => {
       incluirReasignables: false,
     }).map((f) => f.key);
     expect(claves).toEqual([
+      "q",
       "zona_id",
       "provincia_id",
       "canton_id",

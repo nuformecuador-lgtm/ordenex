@@ -4,7 +4,12 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DataTableDescarga,
+} from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import {
   FilterComponent,
   type FilterSelection,
@@ -23,6 +28,10 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 import { ReportarIncidenteAccion } from "@/app/(app)/ordenes/_components/ReportarIncidenteAccion";
 import { puedeReportarIncidenteSatelite } from "./incidente-satelite";
 import { recibidasColumns } from "./recibidas-columns";
+import {
+  COLUMNAS_DESCARGA_SATELITE,
+  filaDescargaSatelite,
+} from "./satelite-descarga-columnas";
 import {
   CLAVE_CANTON,
   CLAVE_DISTRITO,
@@ -46,6 +55,13 @@ import {
 //
 // Todo el filtrado es de CLIENTE sobre las órdenes que ya llegan por props (el service ya
 // las acotó a la zona del actor); esta pantalla no consulta nada por su cuenta.
+
+/**
+ * Feature 170 (T A.2) — título del dataset: nombre de la hoja, base del nombre de archivo
+ * (`ordenes-de-la-bodega-YYYY-MM-DD.xlsx`, R12) y parte del nombre accesible del control
+ * (R13). Es el mismo encabezado que la pantalla muestra.
+ */
+const TITULO_DESCARGA = "Órdenes de la bodega";
 
 /** Estados sobre los que cada acción de lote es válida. */
 const ESTADO_ASIGNABLE = "en_bodega_satelite";
@@ -242,6 +258,23 @@ export function SateliteOrdenesListado({
     [seleccionados, zonaNombre, visibles, sinZona, onIncidenteReportado],
   );
 
+  /**
+   * Feature 170 (T A.2, R1/R10/R30/R32) — descarga de lo que la bodega tiene a la vista.
+   *
+   * Familia B: el dataset completo YA está en el cliente (el servicio lo entregó por
+   * props, acotado a la zona del actor), así que `obtenerFilas` NO llama a nada. Proyecta
+   * `filas`, que es EXACTAMENTE el array que el `DataTable` está pintando: ya pasado por
+   * los tres filtros de cliente (estado ∧ cantón ∧ distrito) y en el mismo orden. De ahí
+   * salen a la vez R10 (filtros vigentes) y R30/R32 (ni una lectura extra).
+   *
+   * Se construye EN EL RENDER: el closure lee las filas de ESTE render.
+   */
+  const descarga: DataTableDescarga = {
+    titulo: TITULO_DESCARGA,
+    columnas: COLUMNAS_DESCARGA_SATELITE,
+    obtenerFilas: () => filasLocales(filas, filaDescargaSatelite),
+  };
+
   return (
     <section aria-label="Órdenes de la bodega" className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold">Órdenes de la bodega</h2>
@@ -322,6 +355,7 @@ export function SateliteOrdenesListado({
         data={filas}
         rowKey="id"
         ariaLabel="Órdenes de la bodega"
+        descarga={descarga}
         rowClassName={resaltarFilaPrioridad}
         emptyMessage={
           ordenes.length === 0

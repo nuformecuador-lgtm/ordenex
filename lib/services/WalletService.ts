@@ -1,18 +1,24 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  BalanceFiltros,
   IWalletMovimientoRepository,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type {
   IWalletService,
+  ListarMovimientosCompletoServiceResult,
   ListarMovimientosServiceResult,
   RegistrarMovimientoManualServiceResult,
   VerBalanceServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
 import type {
+  ListarMovimientosCompletoInput,
   ListarMovimientosInput,
   RegistrarMovimientoManualInput,
+  WalletMovimientoCategoria,
+  WalletMovimientoTipo,
 } from "@/lib/types/wallet";
+import { descargaConfig } from "@/lib/config/descarga";
 import { derivarBalance } from "@/lib/utils/wallet-balance";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
@@ -33,6 +39,31 @@ export class WalletService implements IWalletService {
     private readonly writeClient: WalletTxClient,
   ) {}
 
+  /**
+   * Feature 170 (T C.1, design §2.1) — los filtros del libro, en UN solo sitio.
+   *
+   * Es el `construirWhere` de este servicio: los tres caminos que leen el libro (listado
+   * paginado, balance y descarga del dataset completo) traducen la entrada con este metodo,
+   * de modo que no puedan divergir. Antes estaba escrito inline tres veces; se extrae SIN
+   * cambio de comportamiento (las mismas cuatro claves, en el mismo orden).
+   *
+   * Lo que NO se copia es tan importante como lo que se copia: `page`/`pageSize` se quedan
+   * fuera a proposito, porque son del RECORTE, no del conjunto.
+   */
+  private construirFiltros(input: {
+    tipo?: WalletMovimientoTipo;
+    categoria?: WalletMovimientoCategoria;
+    desde?: Date;
+    hasta?: Date;
+  }): BalanceFiltros {
+    return {
+      tipo: input.tipo,
+      categoria: input.categoria,
+      desde: input.desde,
+      hasta: input.hasta,
+    };
+  }
+
   async listarMovimientos(
     input: ListarMovimientosInput,
     actor: Actor,
@@ -42,10 +73,7 @@ export class WalletService implements IWalletService {
     const { movimientos, total } = await this.repo.listar({
       page: input.page,
       pageSize: input.pageSize,
-      tipo: input.tipo,
-      categoria: input.categoria,
-      desde: input.desde,
-      hasta: input.hasta,
+      ...this.construirFiltros(input),
     });
     return {
       status: "ok",
@@ -53,17 +81,48 @@ export class WalletService implements IWalletService {
     };
   }
 
+  /**
+   * Feature 170 (T C.1) — el MISMO libro sin recorte por pagina, para la descarga.
+   *
+   * Alcance por rol: la caja principal es de los roles de ACCESO TOTAL, y el guard es
+   * literalmente el mismo `esAccesoTotal` que usa `listarMovimientos`, evaluado ANTES de
+   * tocar la base (R17). Aqui no hay acotamiento por dato propio que escribir al final del
+   * `where`: el conjunto es el mismo para maestro y admin, y nadie mas llega.
+   *
+   * Paridad con el listado (R14): los filtros salen de `construirFiltros`, el mismo metodo
+   * que usa la pantalla. Si manana el libro gana un filtro, lo ganan los dos a la vez.
+   */
+  async listarMovimientosCompleto(
+    input: ListarMovimientosCompletoInput,
+    actor: Actor,
+  ): Promise<ListarMovimientosCompletoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
+
+    const limite = descargaConfig.MAX_FILAS;
+
+    // R29: `pageSize: limite + 1` con `page: 1` es exactamente `skip 0, take N+1` en el
+    // repositorio. Acota la MEMORIA por construccion: aunque el libro tenga 50 000
+    // movimientos, nunca se materializan mas de N+1. El `total` sigue siendo exacto porque
+    // sale de un `count` independiente del `take`.
+    const { movimientos, total } = await this.repo.listar({
+      ...this.construirFiltros(input),
+      page: 1,
+      pageSize: limite + 1,
+    });
+
+    // R27/R28: por encima del tope no se entrega NADA. Nunca un archivo truncado en
+    // silencio: o van todos los movimientos, o va el error accionable con los conteos.
+    if (total > limite) return { status: "limite_excedido", total, limite };
+
+    return { status: "ok", items: movimientos, total };
+  }
+
   async verBalance(input: ListarMovimientosInput, actor: Actor): Promise<VerBalanceServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
 
     // R16: balance DERIVADO del conjunto filtrado (mismos filtros que el listado), nunca
     // de un saldo almacenado.
-    const { ingresos, egresos } = await this.repo.agregarBalance({
-      tipo: input.tipo,
-      categoria: input.categoria,
-      desde: input.desde,
-      hasta: input.hasta,
-    });
+    const { ingresos, egresos } = await this.repo.agregarBalance(this.construirFiltros(input));
     return { status: "ok", balance: derivarBalance(ingresos, egresos) };
   }
 

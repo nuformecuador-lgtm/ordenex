@@ -5,6 +5,7 @@ import type {
   WalletMovimientoCategoria as PrismaWalletMovimientoCategoria,
   WalletOrigenTipo as PrismaWalletOrigenTipo,
 } from "@prisma/client";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 
 // Feature 42 (design §1.1/§3) — fuente unica de verdad de tipos/categorias/origenes de
 // la wallet, respaldada por los enums Postgres nativos (patron METODO_PAGO_SEED). El
@@ -184,6 +185,22 @@ export const listarMovimientosSchema = z.object({
 });
 
 export type ListarMovimientosInput = z.infer<typeof listarMovimientosSchema>;
+
+// Feature 170 (T C.1) — entrada del modo SIN paginacion del LIBRO DE CAJA (descarga del
+// dataset completo). Derivada del schema del listado quitando `page`/`pageSize` (molde: la
+// 151 con `listarOrdenesCompletoSchema`), para que el modo completo no pueda aceptar una
+// entrada que el listado paginado rechazaria y para que ambos resuelvan los MISMOS filtros.
+// `.strict()`: una clave desconocida es `validation_error` sin devolver fila alguna (R18).
+export const listarMovimientosCompletoSchema = listarMovimientosSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarMovimientosCompletoInput = z.infer<typeof listarMovimientosCompletoSchema>;
+
+// Feature 170 (T C.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
+// SOLO conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Money-safe: los
+// montos siguen siendo STRING dentro del DTO.
+export type ListarMovimientosCompletoResult = ListarCompletoResult<WalletMovimientoDTO>;
 
 // ── Feature 45 — egresos administrativos (manual) + reversa ──
 

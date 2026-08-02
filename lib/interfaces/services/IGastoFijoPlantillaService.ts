@@ -5,6 +5,7 @@ import type {
   GastoFijoPlantillaDTO,
   SetActivaPlantillaInput,
 } from "@/lib/types/gasto-fijo-plantilla";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 45 (design §2.2b) — contrato del servicio de PLANTILLAS de gasto fijo (CRUD del
 // maestro). Rol autorizado: maestro (R17). Resultados de dominio (sin acoplar a HTTP). Sin
@@ -29,6 +30,13 @@ export type ListarPlantillasServiceResult =
   | { status: "ok"; plantillas: GastoFijoPlantillaDTO[] }
   | { status: "forbidden" };
 
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41): UNA PAGINA de las plantillas + el total del
+ * conjunto. Contrato comun de T H.2, sin campos extra.
+ */
+export type ListarPlantillasPaginadoServiceResult =
+  ListarPaginadoServiceResult<GastoFijoPlantillaDTO>;
+
 export interface IGastoFijoPlantillaService {
   /** R17/R24: solo maestro; crea una plantilla (activa=true). Forbidden sin efectos. */
   crearPlantilla(
@@ -47,4 +55,16 @@ export interface IGastoFijoPlantillaService {
   ): Promise<SetActivaPlantillaServiceResult>;
   /** R17/R26: solo maestro; lista todas las plantillas (activas e inactivas). */
   listarPlantillas(actor: Actor): Promise<ListarPlantillasServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): las plantillas, paginadas en el
+   * servidor.
+   *
+   * MISMA guardia de rol que `listarPlantillas` (`esAccesoTotal`, R17) evaluada ANTES de
+   * tocar el repositorio: paginar no puede ensanchar el alcance de nadie (R44). Cualquier otro
+   * rol -> forbidden, sin filas y sin total.
+   */
+  listarPlantillasPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPlantillasPaginadoServiceResult>;
 }

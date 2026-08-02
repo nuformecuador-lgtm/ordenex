@@ -25,6 +25,22 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   rechazarCierre: vi.fn(),
   // Feature 111/R16: válvula de escape consumida por el módulo hijo.
   forzarSolicitudVencido: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2 el histórico, T J.2 la cola): la página pre-carga la PÁGINA 1
+  // de las DOS tablas.
+  listarHistoricoCierresAdminPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
+  listarPendientesCierresAdminPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
 }));
 // Feature 40: la página, role-aware, pre-fetch los datos de cierre de bodega por rol
 // (adminSatelite → consolidación; maestro → cola/histórico). Se mockean para aislar
@@ -36,6 +52,36 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   verCierreBodegaDetalle: vi.fn(),
   aprobarCierreBodega: vi.fn(),
   rechazarCierreBodega: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): los dos históricos de bodega también llegan paginados.
+  listarHistoricoCierresBodegaPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
+  listarCierresBodegaSolicitadosPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
+  // Feature 170 — FASE 2 (T J.2): las dos COLAS de esta pantalla también llegan paginadas.
+  listarPendientesCierresBodegaPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
+  listarConsolidablesPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
 }));
 
 class NotFoundError extends Error {

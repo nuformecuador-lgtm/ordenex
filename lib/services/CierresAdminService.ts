@@ -18,8 +18,12 @@ import type {
   ICierresAdminService,
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
+  ListarHistoricoCierresAdminServiceResult,
+  ListarPendientesCierresAdminServiceResult,
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
+import { esColaCierreDia } from "@/lib/utils/colas-cierre";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
   gananciaOrdenex,
@@ -116,10 +120,91 @@ export class CierresAdminService implements ICierresAdminService {
     const historico: CierreAdminResumen[] = [];
     for (const row of rows) {
       const resumen = toResumen(row); // R8/R9: totales snapshot (string) sin recomputar
-      if (row.estado === "solicitado" || row.estado === "vencido") pendientes.push(resumen);
+      // Feature 170 (T I.1): el corte sale de `ESTADOS_COLA_CIERRE_DIA` y ya no de dos
+      // literales aqui. Es EL MISMO que el repositorio escribe como WHERE al paginar el
+      // historico (R44): dos escrituras del mismo criterio es como una fila se cae de una
+      // lista sin que nadie lo note.
+      if (esColaCierreDia(row.estado)) pendientes.push(resumen);
       else historico.push(resumen);
     }
     return { status: "ok", pendientes, historico, sinZona: false };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — el HISTORICO, paginado en servidor.
+   *
+   * No reimplementa nada del alcance: reusa `resolveAlcance`, que es el `construirWhere` de
+   * este servicio (el rol y la zona se resuelven server-side y NUNCA se aceptan del cliente).
+   * Por eso paginar no puede ampliar lo que ve nadie — R44 se cumple por construccion, no por
+   * vigilancia.
+   *
+   * `sinZona` -> pagina VACIA, no `forbidden`: el `adminSatelite` sin zona tiene acceso al
+   * modulo, lo que no tiene es alcance que consultar. Es lo mismo que devuelve hoy
+   * `listarCierresAdmin` (historico `[]`), asi que la pantalla no cambia de comportamiento.
+   * Y ni una consulta se ejecuta en ese caso.
+   *
+   * UNA sola llamada al repositorio, igual que el listado sin paginar (R54): el conteo que
+   * R41 exige viaja DENTRO de ella.
+   */
+  async listarHistoricoCierresAdminPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresAdminServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R1
+    if (scope.status === "sinZona") {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
+    }
+
+    const { items, total } = await this.repo.findHistoricoPaginado(
+      scope.alcance,
+      rangoDePagina(input),
+    );
+
+    return {
+      status: "ok",
+      items: items.map(toResumen), // R8/R9: mismo mapper que el listado sin paginar
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54) — la COLA de pendientes de decision,
+   * paginada en servidor.
+   *
+   * Espejo exacto del metodo del historico: MISMO `resolveAlcance` (el rol y la zona salen del
+   * usuario, nunca de la peticion) y MISMO corte, que aqui es el `in` de
+   * `ESTADOS_COLA_CIERRE_DIA` donde alli era el `notIn`. R44 se cumple por construccion.
+   *
+   * R49: NO se agrega dinero aqui. Los montos que la pantalla muestra por esta cola son los
+   * SNAPSHOT de cada cierre, que viajan por fila tal cual (`toResumen` no recomputa nada); la
+   * pantalla no deriva de este array ningun total. Lo que el `total` de la respuesta alimenta
+   * es el CONTADOR de cabecera (R42), que es un conteo de filas, no dinero.
+   *
+   * `sinZona` -> pagina vacia sin consultar la base, igual que hoy: `listarCierresAdmin`
+   * devuelve `pendientes: []` para ese mismo actor.
+   */
+  async listarPendientesCierresAdminPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesCierresAdminServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R1
+    if (scope.status === "sinZona") {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
+    }
+
+    const { items, total } = await this.repo.findColaPaginada(scope.alcance, rangoDePagina(input));
+
+    return {
+      status: "ok",
+      items: items.map(toResumen), // R8/R9: mismo mapper que el listado sin paginar
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
+    };
   }
 
   async verCierreDetalle(

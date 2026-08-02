@@ -4,9 +4,12 @@ import type {
   ActualizarUsuarioInput,
   CambiarEstadoUsuarioInput,
   CrearUsuarioInput,
+  ListarUsuariosCompletoInput,
   ListarUsuariosInput,
   UsuarioListItemDTO,
 } from "@/lib/types/usuario";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 25. Se reutiliza el `Actor` de IOrdenService (`{ usuarioId, rol }`),
 // resuelto desde la sesion (R1). Ningun result expone `passwordHash` (R12/R24).
@@ -20,9 +23,17 @@ export type CrearUsuarioServiceResult =
   | { status: "conflict"; campo: "email" | "cedula" } // R10/R11
   | { status: "forbidden" }; // R3/R4
 
-export type ListarUsuariosServiceResult =
-  | { status: "ok"; items: UsuarioListItemDTO[]; page: number; pageSize: number; total: number }
-  | { status: "forbidden" };
+// Feature 170 (T H.2): reexpresado sobre el contrato comun de listado paginado
+// (`lib/types/listado-paginado`). Misma forma, una sola definicion.
+export type ListarUsuariosServiceResult = ListarPaginadoServiceResult<UsuarioListItemDTO>;
+
+/**
+ * Feature 170 (T B.1) — lectura SIN paginacion para la descarga del dataset completo.
+ * Mismo servicio que `listar` para heredar su autorizacion (solo `maestro`), de modo que
+ * ni `limite_excedido` ni `forbidden` puedan viajar con filas (R17/R27).
+ */
+export type ListarUsuariosCompletoServiceResult =
+  ListarCompletoServiceResult<UsuarioListItemDTO>;
 
 export type ObtenerUsuarioServiceResult =
   | { status: "ok"; usuario: UsuarioPublico }
@@ -51,6 +62,15 @@ export type ListarRolesServiceResult =
 export interface IUsuarioService {
   crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult>;
   listar(input: ListarUsuariosInput, actor: Actor): Promise<ListarUsuariosServiceResult>;
+  /**
+   * Feature 170/R9: el MISMO listado sin recorte por pagina, para la descarga. Mismo
+   * guard de rol, misma consulta y mismo criterio de orden que `listar`; solo cambian el
+   * `skip` (0) y el `take` (tope + 1), y se anade el guard del tope (R27/R29).
+   */
+  listarCompleto(
+    input: ListarUsuariosCompletoInput,
+    actor: Actor,
+  ): Promise<ListarUsuariosCompletoServiceResult>;
   obtener(id: string, actor: Actor): Promise<ObtenerUsuarioServiceResult>;
   actualizar(
     id: string,

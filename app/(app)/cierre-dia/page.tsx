@@ -2,7 +2,11 @@ import { notFound } from "next/navigation";
 
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import { listarCierreDia, estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
+import {
+  listarCierreDia,
+  listarCierresPasadosPaginado,
+  estadoBloqueoMensajero,
+} from "@/lib/actions/cierre-dia";
 
 import { CierreDiaModule } from "./_components/CierreDiaModule";
 
@@ -18,8 +22,14 @@ export default async function CierreDiaPage() {
   const actor = await resolveActorFromSession();
   if (!actor || actor.rol !== "mensajero") notFound(); // R1
 
-  const result = await listarCierreDia();
+  // Feature 170 — FASE 2 (T I.2, R40): el listado compuesto sigue trayendo las gestiones del
+  // día, los totales y los gates; «Cierres solicitados» llega como PÁGINA 1 y su total (R41).
+  const [result, pasadosResult] = await Promise.all([
+    listarCierreDia(),
+    listarCierresPasadosPaginado({}),
+  ]);
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
+  if (pasadosResult.status !== "ok") notFound(); // defensa en profundidad
 
   // Feature 41 (R21): flag DERIVADO server-side de si el mensajero está bloqueado
   // (cierre `solicitado`/`vencido` pendiente) para recibir nuevas asignaciones. Se
@@ -39,7 +49,11 @@ export default async function CierreDiaPage() {
         totalPagoMensajero={result.totalPagoMensajero}
         puedesSolicitar={result.puedesSolicitar}
         motivoBloqueo={result.motivoBloqueo}
-        cierresPasados={result.cierresPasados}
+        cierresPasados={{
+          items: pasadosResult.items,
+          total: pasadosResult.total,
+          pageSize: pasadosResult.pageSize,
+        }}
         bloqueado={bloqueado}
         // Feature 111/R13: habilita el CTA diferenciado del cierre vencido (derivado
         // server-side de `cierresPasados`; `undefined` en cierres pre-migración → false).

@@ -5,11 +5,16 @@ import { Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import { cn } from "@/lib/utils";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
 import { CuentasPorPagarFiltros } from "./CuentasPorPagarFiltros";
 import { DesglosePagosMensajero } from "./DesglosePagosMensajero";
+import {
+  COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR,
+  filaDescargaCuentaPorPagar,
+} from "./cuentas-por-pagar-descarga-columnas";
 import {
   COLUMNAS_MAESTRO,
   CUENTA_COLOR,
@@ -30,6 +35,9 @@ import {
 export interface CuentasPorPagarTableProps {
   mensajeros: CuentaPorPagarResumenDTO[];
 }
+
+/** Nombre visible del listado: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA = "Cuentas por pagar a mensajeros";
 
 // Columnas de la tabla-resumen (R18). Money-safe (R21/R27): los montos se pintan TAL CUAL con
 // `money`, sin parseFloat/Number. El color/badge sale del signo ya calculado en el servidor.
@@ -87,7 +95,23 @@ export function CuentasPorPagarTable({ mensajeros }: CuentasPorPagarTableProps) 
         columns={COLUMNS}
         data={filtrados}
         rowKey="mensajeroId"
-        ariaLabel="Cuentas por pagar a mensajeros"
+        ariaLabel={TITULO_DESCARGA}
+        /**
+         * Feature 170 (T D.2, R1/R7/R10/R26/R30/R32) — descarga de FAMILIA B sobre
+         * `filtrados`, NO sobre `mensajeros`: el archivo tiene que traer exactamente lo que
+         * la búsqueda dejó a la vista. Descargar el conjunto sin filtrar sería entregar
+         * filas que el usuario no está viendo, que es la otra forma de mentir (la primera
+         * es truncar).
+         *
+         * Sin releer nada: el array de props ya es el dataset completo. Y el tope de
+         * `filasLocales` es el mismo de la Familia A: por encima, error accionable y ningún
+         * archivo.
+         */
+        descarga={{
+          titulo: TITULO_DESCARGA,
+          columnas: COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR,
+          obtenerFilas: () => filasLocales(filtrados, filaDescargaCuentaPorPagar),
+        }}
         emptyState={{
           icon: Users,
           title: "No hay cuentas por pagar",

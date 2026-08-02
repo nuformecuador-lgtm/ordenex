@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import {
   IncidentesAdminModule,
@@ -23,7 +24,10 @@ import {
   verIncidente,
   aprobarIncidente,
   rechazarIncidente,
+  listarHistoricoIncidentesPaginado,
+  listarPendientesIncidentesPaginado,
 } from "@/lib/actions/incidentes";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import { RECHAZADO_BLOQUEANTE_LABEL } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
@@ -47,6 +51,10 @@ vi.mock("@/lib/actions/incidentes", () => ({
   retractarIncidente: vi.fn(),
   listarIncidentes: vi.fn(),
   reportarIncidente: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
+  listarHistoricoIncidentesPaginado: vi.fn(),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también.
+  listarPendientesIncidentesPaginado: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -97,6 +105,12 @@ function makeIncidente(
   };
 }
 
+/**
+ * Feature 170 — FASE 2 (T I.2 el histórico, T J.2 la cola): las DOS tablas dejan de recibir un
+ * array y reciben la PÁGINA que pre-carga el Server Component. El helper sigue recibiendo los
+ * arrays para no reescribir cada caso, y ADEMÁS programa las dos Server Actions paginadas con
+ * esas mismas páginas (SWR revalida al montar).
+ */
 function montar(
   props: Partial<{
     pendientes: IncidenteAdminDTO[];
@@ -104,12 +118,26 @@ function montar(
     sinZona: boolean;
   }> = {},
 ) {
+  const cola = paginaInicial(props.pendientes ?? []);
+  const pagina = paginaInicial(props.historico ?? []);
+  vi.mocked(listarPendientesIncidentesPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...cola,
+  });
+  vi.mocked(listarHistoricoIncidentesPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...pagina,
+  });
   render(
-    <IncidentesAdminModule
-      pendientes={props.pendientes ?? []}
-      historico={props.historico ?? []}
-      sinZona={props.sinZona ?? false}
-    />,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <IncidentesAdminModule
+        pendientes={cola}
+        historico={pagina}
+        sinZona={props.sinZona ?? false}
+      />
+    </SWRConfig>,
   );
 }
 

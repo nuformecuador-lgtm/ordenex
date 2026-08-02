@@ -5,6 +5,7 @@ import type {
   CrearCierreBodegaInput,
   ICierreBodegaRepository,
 } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Estados/destino relevantes (fuente de verdad en lib/types/cierre.ts). El cierre de
 // bodega se crea SIEMPRE en `solicitado`; consolida SOLO cierre_dia `aprobado`.
@@ -87,6 +88,41 @@ export function toBodegaResumenRow(r: BodegaResumenRow): CierreBodegaResumenRow 
 }
 
 /**
+ * R3/R5 — el conjunto CONSOLIDABLE de una zona: los cuatro predicados que definen «cierre_dia
+ * que esta bodega puede cerrar hoy». Feature 170 (T J.1): estaba escrito a mano en
+ * `findCierresDiaConsolidables` y la version paginada habria sido la segunda copia.
+ *
+ * Extraerlo NO es higiene: de este mismo conjunto salen los totales AGREGADOS de la pantalla
+ * (`totalesAgregados`, `totalPagoMensajeroAgregado`, `totalNetoAgregado`, `totalCentralDebe`),
+ * que `CierreBodegaService` calcula sobre el conjunto COMPLETO (R49). Si la pagina filtrara
+ * con un predicado distinto —por ejemplo sin `cierreBodegaId: null`—, la tabla mostraria filas
+ * que el total no cuenta y el adminSatelite veria dos numeros de dinero que no cuadran entre
+ * si, sin nada que se lo diga.
+ */
+function consolidablesWhere(zonaId: string): Prisma.CierreDiaWhereInput {
+  return {
+    estado: ESTADO_APROBADO, // R5: solo aprobados aportan dinero cuadrado
+    destinoTipo: DESTINO_SATELITE, // R5: destino bodega satelite
+    destinoZonaId: zonaId, // R3/R5: acotado a SU zona (en el WHERE)
+    cierreBodegaId: null, // R5: aun no consolidados
+  };
+}
+
+type ConsolidableRow = Prisma.CierreDiaGetPayload<{ select: typeof CONSOLIDABLE_SELECT }>;
+
+/** Fila cruda de un cierre_dia consolidable -> DTO de dominio (money-safe STRING). */
+function toConsolidableRow(r: ConsolidableRow): CierreDiaConsolidableRow {
+  return {
+    cierreDiaId: r.id,
+    mensajeroId: r.mensajeroId,
+    mensajeroNombre: r.mensajero.nombre,
+    totales: totalesToString(r),
+    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R18: snapshot money-safe STRING
+    totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R17: snapshot money-safe STRING
+  };
+}
+
+/**
  * Feature 40 — repositorio del "Cierre de bodega" (lado adminSatelite). SOLO queries
  * Prisma. El alcance (zona/estado) va SIEMPRE en el WHERE (R3/R5/R6), nunca en memoria.
  * `crearCierreBodega` es transaccional (INSERT + link atomico, R9/R10) con guardia de
@@ -99,23 +135,44 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
   /** R5: cierre_dia aprobados de la zona, destino satelite, sin cierre de bodega. */
   async findCierresDiaConsolidables(zonaId: string): Promise<CierreDiaConsolidableRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
-      where: {
-        estado: ESTADO_APROBADO, // R5: solo aprobados aportan dinero cuadrado
-        destinoTipo: DESTINO_SATELITE, // R5: destino bodega satelite
-        destinoZonaId: zonaId, // R3/R5: acotado a SU zona (en el WHERE)
-        cierreBodegaId: null, // R5: aun no consolidados
-      },
+      where: consolidablesWhere(zonaId),
       orderBy: { solicitadoAt: "desc" },
       select: CONSOLIDABLE_SELECT,
     });
-    return rows.map((r) => ({
-      cierreDiaId: r.id,
-      mensajeroId: r.mensajeroId,
-      mensajeroNombre: r.mensajero.nombre,
-      totales: totalesToString(r),
-      totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R18: snapshot money-safe STRING
-      totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R17: snapshot money-safe STRING
-    }));
+    return rows.map(toConsolidableRow);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): una pagina de los cierre_dia
+   * CONSOLIDABLES de la zona + el total.
+   *
+   * MISMO `consolidablesWhere` y MISMO `orderBy solicitadoAt desc` que
+   * `findCierresDiaConsolidables` (R44/R51): la pagina es un recorte de aquel conjunto, no
+   * otra consulta parecida.
+   *
+   * **Este metodo NO calcula ni devuelve totales, y es deliberado (R49).** Los agregados de
+   * dinero de la pantalla se siguen calculando en `CierreBodegaService.listarConsolidacion`
+   * sobre el conjunto COMPLETO. Dos de ellos —`totalNetoAgregado` y `totalCentralDebe`— no son
+   * una suma: salen de repartir el efectivo entre los pagos individuales ORDENADOS de menor a
+   * mayor, asi que ni siquiera un `SUM` en la base los produciria. Una pagina no puede
+   * responderlos.
+   */
+  async findCierresDiaConsolidablesPaginado(
+    zonaId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreDiaConsolidableRow>> {
+    const where = consolidablesWhere(zonaId);
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreDia.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: CONSOLIDABLE_SELECT,
+      }),
+      this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toConsolidableRow), total };
   }
 
   /** R6: cierre_dia de la zona aun `solicitado` (sin resolver por el adminSatelite). */
@@ -181,5 +238,32 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
       select: BODEGA_RESUMEN_SELECT,
     });
     return rows.map(toBodegaResumenRow);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una pagina de los cierres de bodega de
+   * la zona + el total.
+   *
+   * El `where` con el acotamiento por zona se construye UNA vez y lo comparten `findMany` y
+   * `count`. Que el `zonaId` sea el MISMO objeto en las dos consultas no es cosmetico: es lo
+   * que impide que el total cuente los cierres de toda la operacion mientras la pagina muestra
+   * los de una bodega.
+   */
+  async findCierresBodegaByZonaPaginado(
+    zonaId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
+    const where = { zonaId }; // R3: el alcance por zona, en el WHERE y nunca en memoria
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreBodega.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: BODEGA_RESUMEN_SELECT,
+      }),
+      this.prisma.cierreBodega.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toBodegaResumenRow), total };
   }
 }

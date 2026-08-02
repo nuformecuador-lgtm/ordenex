@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Store } from "lucide-react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
+import { EscanerDesplegable } from "@/components/shared/EscanerDesplegable";
 import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
 import { BLOQUEO_AVISO } from "@/lib/constants/bloqueo-mensajero";
@@ -23,8 +24,13 @@ import { useRecolectarPorGuia } from "./useRecolectarPorGuia";
 //
 //   ANTES: sin lista no había apartado (`if (porRecolectar.length === 0) return null`), así
 //          que el bloque de escaneo desaparecía justo cuando el mensajero lo buscaba.
-//   AHORA: el ESCÁNER es el contenido principal y está SIEMPRE montado (R7); la lista es su
-//          contexto. Lo único que lo apaga es el bloqueo por cierre pendiente (R9).
+//   AHORA: el ESCÁNER es el contenido principal y su acceso está SIEMPRE ahí (R7); la lista
+//          es su contexto. Lo único que lo apaga es el bloqueo por cierre pendiente (R9).
+//
+// 2026-07-31 (decisión del humano): R7 cambia de FORMA, no de fondo. El escáner pasa de
+// estar "siempre montado" a estar "siempre accesible": vive tras `EscanerDesplegable`,
+// plegado de entrada como en toda la app. Nunca desaparece —el disparador no depende de la
+// lista— y a cambio la cámara deja de estar encendida detrás de la pantalla.
 //
 // Sigue siendo deliberadamente pobre comparado con el panel de gestión: aquí no hay entrega,
 // ni cobro, ni evidencia, ni causa de devolución, ni resultado que elegir (R22). Recolectar
@@ -169,24 +175,34 @@ export function RecoleccionModule({
           {BLOQUEO_AVISO}
         </p>
       ) : (
-        <EscanerGuiaCard
-          ariaLabel="Recolectar por número de guía o escaneo"
-          titulo="Recolectar en tienda"
-          descripcion="Escanea o ingresa el número de guía"
-          icono={Store}
-          onDecoded={onDecoded}
-          procesando={procesando}
-          mensajeErrorCamara="No se pudo abrir la cámara."
-          manual={{ onSubmit: onManual, submitLabel: "Confirmar recolección" }}
-          exito={
-            ultima === null ? undefined : (
-              <>
-                Guía <span className="font-semibold">{ultima}</span> recolectada
-                correctamente.
-              </>
-            )
-          }
-        />
+        /* R7 en su forma vigente (decisión del humano del 2026-07-31): el acceso al
+           escaneo está SIEMPRE —el disparador no depende de la lista, que era la causa
+           raíz—, pero la tarjeta vive plegada tras él, igual que en el resto de la app.
+           Lo que se gana: la cámara no queda encendida todo el rato que el mensajero
+           tiene la pantalla abierta, que es lo que pasaba con la tarjeta desnuda. */
+        <EscanerDesplegable
+          label="Recolectar en tienda"
+          labelAbierto="Ocultar escáner"
+        >
+          <EscanerGuiaCard
+            ariaLabel="Recolectar por número de guía o escaneo"
+            titulo="Recolectar en tienda"
+            descripcion="Escanea o ingresa el número de guía"
+            icono={Store}
+            onDecoded={onDecoded}
+            procesando={procesando}
+            mensajeErrorCamara="No se pudo abrir la cámara."
+            manual={{ onSubmit: onManual, submitLabel: "Confirmar recolección" }}
+            exito={
+              ultima === null ? undefined : (
+                <>
+                  Guía <span className="font-semibold">{ultima}</span> recolectada
+                  correctamente.
+                </>
+              )
+            }
+          />
+        </EscanerDesplegable>
       )}
 
       {/* R8: sin nada asignado se DICE, en vez de dejar una pantalla muda bajo el escáner. */}

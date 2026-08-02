@@ -95,13 +95,31 @@ describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
   });
 
   it("R5: las etiquetas de resultado de los dos detalles clasifican `incidente`", () => {
+    // Feature 170 (tanda E) — SE SIGUIÓ LA ETIQUETA A SU NUEVO SITIO, no se relajó el test.
+    //
+    // `RESULTADO_LABEL` estaba DUPLICADA palabra por palabra en los dos detalles; la 170 la
+    // promovió al módulo PURO `cierre-labels.ts` (los módulos de columnas de export no pueden
+    // importar React) y los dos `.tsx` la leen de ahí. La lista de archivos de este test
+    // apuntaba a las dos copias que ya no existen.
+    //
+    // La comprobación NO se debilita, se refuerza: ahora exige (a) que la ÚNICA declaración
+    // clasifique `incidente` y (b) que los dos detalles la USEN. Antes, un tercer detalle que
+    // olvidara la clave habría pasado inadvertido; ahora no hay dónde olvidarla.
+    const etiquetas = fs.readFileSync(
+      path.join(APP, "(app)", "cierres-admin", "_components", "cierre-labels.ts"),
+      "utf8",
+    );
+    expect(etiquetas, "cierre-labels.ts sin etiqueta de incidente").toMatch(
+      /incidente:\s*"Incidentes"/,
+    );
+
     for (const archivo of [
       path.join(APP, "(app)", "cierres-admin", "_components", "cierre-detalle-shared.tsx"),
       path.join(APP, "(app)", "cierre-dia", "_components", "CierreDiaModule.tsx"),
     ]) {
       const src = fs.readFileSync(archivo, "utf8");
-      expect(src, `${path.basename(archivo)} sin etiqueta de incidente`).toMatch(
-        /incidente:\s*"Incidentes"/,
+      expect(src, `${path.basename(archivo)} no lee RESULTADO_LABEL de cierre-labels`).toMatch(
+        /RESULTADO_LABEL/,
       );
       expect(src, `${path.basename(archivo)} sin texto de grupo vacio`).toMatch(
         /incidente:\s*"No hay incidentes\."/,
