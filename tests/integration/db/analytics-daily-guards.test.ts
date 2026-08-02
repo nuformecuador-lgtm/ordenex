@@ -130,6 +130,18 @@ function leerCodigo(rel: string): string {
  *   snapshot (`fuente: { tipo: "rollup", tablas: ["analytics_daily"] }`). Es una
  *   declaracion, no un acceso: el caso de abajo comprueba que TODA ocurrencia en ese
  *   archivo esta dentro de un `tablas: [...]` y que no hay ni una consulta.
+ *
+ * SIGUEN SIENDO DOS, Y NO TRES — resolucion del conflicto con el chore `65152f90` de `dev`
+ * (2026-08-02). Ese chore ataco esta MISMA colision dando de alta un tercer archivo,
+ * `lib/analytics/alcance-columnas.ts`, cuya unica mencion vive en el docblock de
+ * `whereRollup`. El diagnostico de aquel commit es correcto en todo salvo en el remedio: si
+ * la mencion es prosa, lo que sobra no es el archivo sino los COMENTARIOS, y por eso aqui se
+ * despiojan antes de buscar (ver `soloCodigo` arriba). La diferencia no es de estilo: el alta
+ * concede un permiso PERMANENTE sobre el archivo —el dia que alguien le anada una consulta de
+ * verdad, este caso ya no dira nada—, mientras que despiojar solo perdona lo que de veras es
+ * prosa y deja el allowlist restringido al escritor real. La contrapartida que aquel chore
+ * escribio NO se pierde: se conserva integra mas abajo, como caso independiente del
+ * allowlist, y ahora es mas fuerte porque no esta sosteniendo ninguna excepcion.
  */
 const EXCEPCIONES_CATALOGO = ["lib/analytics/types.ts", "lib/analytics/metrics.ts"];
 
@@ -566,6 +578,31 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
 
     const types = leer("lib/analytics/types.ts");
     expect(types).toMatch(/type TablaRollup = "analytics_daily"/);
+  });
+
+  it("en el adaptador de la 122 el literal vive en un COMENTARIO, no en codigo ejecutable", () => {
+    // CONSERVADO del chore `65152f90` de `dev`, que lo escribio como contrapartida de dar de
+    // alta el archivo en la lista blanca. Aqui el archivo NO esta en la lista —la 124 despioja
+    // comentarios en vez de allowlistear—, asi que este caso deja de ser la letra pequena de
+    // una excepcion y pasa a ser una afirmacion limpia sobre `alcance-columnas.ts`: su unica
+    // mencion a la tabla es prosa. Si esa mencion bajara alguna vez a una linea ejecutable —un
+    // `const TABLA = "analytics_daily"` que arme una consulta dinamica, por ejemplo—, se pone
+    // rojo por DOS vias: por este caso y por el del nombrado, que ya no lo perdonaria.
+    const fuente = leer("lib/analytics/alcance-columnas.ts");
+    const lineas = fuente.split("\n").filter((l) => /analytics_daily|analyticsDaily/.test(l));
+    expect(
+      lineas.length,
+      "el archivo dejo de nombrar la tabla: este caso sobra, retiralo",
+    ).toBeGreaterThan(0);
+    for (const linea of lineas) {
+      expect(linea.trim(), `linea ejecutable que nombra la tabla: ${linea.trim()}`).toMatch(
+        /^(\/\/|\*|\/\*)/,
+      );
+    }
+    // Y no ejecuta NADA contra la base: ni SQL crudo ni cliente Prisma en tiempo de
+    // ejecucion (`import type` desaparece en compilacion).
+    expect(fuente).not.toMatch(/\$queryRaw|\$executeRaw|getPrismaClient/);
+    expect(fuente).toMatch(/import type \{ Prisma \}/);
   });
 
   it("no hay repositorio, servicio ni interfaz con el nombre de la TABLA", () => {

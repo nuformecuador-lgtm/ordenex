@@ -10,7 +10,6 @@ import {
 } from "@/lib/actions/cierres-admin";
 import {
   listarConsolidacion,
-  listarCierresBodegaAdmin,
   listarCierresBodegaSolicitadosPaginado,
   listarConsolidablesPaginado,
   listarHistoricoCierresBodegaPaginado,
@@ -62,8 +61,10 @@ export default async function CierresAdminPage() {
   //
   // Feature 170 — FASE 2 (T I.2/T J.2): las tablas de las dos secciones llegan como página 1
   // («consolidables» y «solicitados» del satélite; «pendientes» y «resueltos» de la central).
-  // El compuesto SIGUE haciendo falta: de él salen los cinco agregados de dinero calculados
-  // sobre el conjunto completo (R49), el gate `puedesSolicitar`/`motivoBloqueo` y `sinZona`.
+  // El compuesto de la CONSOLIDACIÓN sigue haciendo falta, y es el aviso medido que la tanda J
+  // dejó escrito: de él salen los cinco agregados de dinero calculados sobre el conjunto
+  // COMPLETO (R49), el gate `puedesSolicitar`/`motivoBloqueo` y `sinZona`. Su array no puede
+  // desaparecer —el dinero se calcula sobre él— pero ya no cruza al cliente: se queda aquí.
   // Si un listado paginado no responde `ok`, la sección entera no se muestra, igual que ya
   // pasaba con su compuesto: la pantalla no se rompe y no expone nada.
   const [consolidacionResult, consolidablesResult, solicitadosResult] =
@@ -86,19 +87,22 @@ export default async function CierresAdminPage() {
         }
       : null;
 
-  const [bodegaResult, bodegaPendientesResult, resueltosResult] = esAccesoTotal(actor.rol)
+  // Feature 170 — FASE 2 (T M.1, cierre de Q-J1/Q-I4): el listado COMPUESTO de esta sección
+  // (`listarCierresBodegaAdmin`) sale del render. Sus dos arrays —cola e histórico— dejaron de
+  // tener lector de tabla en T I.2/T J.2, y su `status` no decidía nada que no decidiera ya el
+  // `esAccesoTotal` de esta misma línea, que es el MISMO guard que aplican los dos listados
+  // paginados. Traerlo era una lectura de TODOS los cierres de bodega por render cuyo único
+  // efecto era un `if` redundante. La acción sigue existiendo y sigue haciendo falta: es de
+  // donde el control de descarga saca el conjunto completo (R52), y sólo se ejecuta al pulsarlo.
+  const [bodegaPendientesResult, resueltosResult] = esAccesoTotal(actor.rol)
     ? await Promise.all([
-        listarCierresBodegaAdmin(),
         listarPendientesCierresBodegaPaginado({}),
         listarHistoricoCierresBodegaPaginado({}),
       ])
-    : [null, null, null];
+    : [null, null];
   const bodega =
-    bodegaResult &&
-    bodegaResult.status === "ok" &&
-    bodegaPendientesResult?.status === "ok" &&
-    resueltosResult?.status === "ok"
-      ? { ...bodegaResult, pendientesPagina: bodegaPendientesResult, resueltos: resueltosResult }
+    bodegaPendientesResult?.status === "ok" && resueltosResult?.status === "ok"
+      ? { pendientesPagina: bodegaPendientesResult, resueltos: resueltosResult }
       : null;
 
   return (

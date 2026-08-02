@@ -8,17 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { DEBOUNCE_MS_DEFAULT } from "@/components/shared/FilterComponent";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { walletMensajeroConfig } from "@/lib/config/wallet-mensajero";
 import {
-  listarCuentasPorPagarAction,
+  listarCuentasPorPagarCompletoAction,
   listarCuentasPorPagarPaginadoAction,
 } from "@/lib/actions/wallet-mensajero";
-import {
-  filtrarPorBusquedaMensajero,
-  normalizarBusquedaMensajero,
-  ordenarCuentasPorPagar,
-} from "@/lib/utils/cuentas-por-pagar-listado";
+import { normalizarBusquedaMensajero } from "@/lib/utils/cuentas-por-pagar-listado";
 import { cn } from "@/lib/utils";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
@@ -218,34 +214,26 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
         isLoading={cargando}
         error={error ? ERROR_CARGA : null}
         /**
-         * Feature 170 (T L.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-         * CONJUNTO COMPLETO. Se relee con el MISMO listado que la pantalla llamaba antes de
-         * paginar (`listarCuentasPorPagarAction`), que exige el mismo acceso total: descargar
-         * no amplía lo que el actor podía ver (R7/R44).
+         * Feature 170 (T L.2, R52 · T M.1, cierre de Q-L2) — la tabla pinta UNA página; el
+         * archivo sigue siendo el CONJUNTO COMPLETO, y desde T M.1 lo pide con la búsqueda YA
+         * aplicada en el servidor (`listarCuentasPorPagarCompletoAction`).
          *
-         * La búsqueda vigente se aplica con las funciones de `lib/utils/`, las MISMAS que usa
-         * el servidor para armar la página (T L.1). No se reescribe el filtro aquí a propósito:
-         * dos escrituras del mismo criterio en dos capas es exactamente como una fila acaba en
-         * la tabla y no en el archivo, o al revés (R11).
+         * Qué cambió y por qué importa: T L.2 releía el listado ENTERO sin búsqueda y volvía a
+         * filtrarlo aquí con las funciones de `lib/utils/`. Funcionaba —era el mismo criterio—
+         * pero dejaba el conjunto completo cruzando al cliente para descartar la mayor parte, y
+         * dejaba el filtro escrito dos veces, en dos capas. Ahora el servidor devuelve
+         * exactamente las filas del archivo, y el tope de 5000 lo decide él (R29): por encima no
+         * viaja ni una fila (R26/R27/R28).
          *
-         * `filasDelConjuntoCompleto` conserva el tope de 5000 de `filasLocales`: por encima
-         * devuelve un error accionable y NO produce archivo (R26/R28).
+         * Sigue exigiendo el mismo acceso total que la página: descargar no amplía lo que el
+         * actor podía ver (R14/R44).
          */
         descarga={{
           titulo: TITULO_DESCARGA,
           columnas: COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR,
           obtenerFilas: () =>
-            filasDelConjuntoCompleto(
-              listarCuentasPorPagarAction().then((res) =>
-                res.status === "ok"
-                  ? ({
-                      status: "ok",
-                      items: ordenarCuentasPorPagar(
-                        filtrarPorBusquedaMensajero(res.mensajeros, aplicada),
-                      ),
-                    } as const)
-                  : res,
-              ),
+            filasDesdeResultado(
+              listarCuentasPorPagarCompletoAction({ busqueda: aplicada }),
               filaDescargaCuentaPorPagar,
             ),
         }}

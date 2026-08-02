@@ -10,7 +10,10 @@ import type {
 } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
-import { listarCuentasPorPagarPaginadoSchema } from "@/lib/types/wallet-mensajero";
+import {
+  listarCuentasPorPagarCompletoSchema,
+  listarCuentasPorPagarPaginadoSchema,
+} from "@/lib/types/wallet-mensajero";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 170 — FASE 2, T L.1 (R40/R41/R45/R51) — «Cuentas por pagar a mensajeros» paginado.
@@ -97,11 +100,25 @@ function repoEnMemoria(filas: readonly CuentaPorPagarAgregadoRow[] = CONJUNTO) {
     return [...filas];
   });
 
+  // El `this` con el que corre el codigo de produccion: la agregacion inyectada mas el metodo
+  // del conjunto completo, que es de quien la pagina saca su `slice` (T M.1, cierre de Q-L2).
+  const contexto = { listarCuentasPorPagarTodos } as unknown as PagoMensajeroMovimientoRepository;
+
+  const listarCuentasPorPagarCompleto = vi.fn(async (filtro: CuentasPorPagarFiltro) => {
+    llamadas.push("listarCuentasPorPagarCompleto");
+    return PagoMensajeroMovimientoRepository.prototype.listarCuentasPorPagarCompleto.call(
+      contexto,
+      filtro,
+    );
+  });
+  (contexto as { listarCuentasPorPagarCompleto: unknown }).listarCuentasPorPagarCompleto =
+    listarCuentasPorPagarCompleto;
+
   const listarCuentasPorPagarPaginado = vi.fn(
     async (filtro: CuentasPorPagarFiltro, rango: RangoPagina) => {
       llamadas.push("listarCuentasPorPagarPaginado");
       return PagoMensajeroMovimientoRepository.prototype.listarCuentasPorPagarPaginado.call(
-        { listarCuentasPorPagarTodos } as unknown as PagoMensajeroMovimientoRepository,
+        contexto,
         filtro,
         rango,
       );
@@ -115,9 +132,10 @@ function repoEnMemoria(filas: readonly CuentaPorPagarAgregadoRow[] = CONJUNTO) {
     obtenerNombreMensajero: vi.fn(),
     listarCuentasPorPagarTodos,
     listarCuentasPorPagarPaginado,
+    listarCuentasPorPagarCompleto,
   } as unknown as IPagoMensajeroMovimientoRepository;
 
-  return { repo, llamadas, listarCuentasPorPagarPaginado };
+  return { repo, llamadas, listarCuentasPorPagarPaginado, listarCuentasPorPagarCompleto };
 }
 
 function servicio(repo: IPagoMensajeroMovimientoRepository) {
@@ -492,10 +510,19 @@ describe("WalletMensajeroService.listarCuentasPorPagarPaginado (T L.1)", () => {
     // UNA llamada al repositorio desde el servicio, y por dentro exactamente la MISMA
     // agregacion que el listado sin paginar. R54 en su forma fuerte: ni el conteo es una
     // consulta nueva, porque sale de esa agregacion.
+    //
+    // T M.1 (cierre de Q-L2) mete `listarCuentasPorPagarCompleto` en medio: es el metodo del
+    // que la pagina saca su `slice`, y NO es una consulta — la unica que toca la base sigue
+    // siendo `listarCuentasPorPagarTodos`, que aparece UNA vez.
     expect(paginado.llamadas).toEqual([
       "listarCuentasPorPagarPaginado",
+      "listarCuentasPorPagarCompleto",
       "listarCuentasPorPagarTodos",
     ]);
+    expect(
+      paginado.llamadas.filter((l) => l === "listarCuentasPorPagarTodos"),
+      "una sola lectura de la base, como el listado sin paginar",
+    ).toHaveLength(1);
   });
 
   it("un conjunto vacío devuelve página vacía y total 0, no un error (R41)", async () => {
@@ -506,5 +533,152 @@ describe("WalletMensajeroService.listarCuentasPorPagarPaginado (T L.1)", () => {
     if (r.status !== "ok") throw new Error("no ok");
     expect(r.items).toEqual([]);
     expect(r.total).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el modo SIN recorte, el de la DESCARGA.
+//
+// T L.2 dejo la descarga releyendo el listado ENTERO sin busqueda y volviendo a filtrarlo en el
+// navegador. Funcionaba —era el mismo criterio— pero dejaba DOS cosas escritas que esta feature
+// existe para evitar: el conjunto completo cruzando al cliente para descartar la mayor parte, y
+// la busqueda con dos implementaciones vivas en dos capas. Lo que estos casos afirman es que ya
+// no hay dos: el archivo sale de la MISMA lista de la que sale la pagina.
+// ---------------------------------------------------------------------------
+
+function inputCompleto(extra: Record<string, unknown> = {}) {
+  return listarCuentasPorPagarCompletoSchema.parse(extra);
+}
+
+describe("WalletMensajeroService.listarCuentasPorPagarCompleto (T M.1, Q-L2)", () => {
+  it("entrega el CONJUNTO entero, no la página, y en el mismo orden (R52, R11)", async () => {
+    const svc = servicio(repoEnMemoria().repo);
+
+    const pagina = await svc.listarCuentasPorPagarPaginado(input({ page: 1, pageSize: 5 }), MAESTRO);
+    const completo = await svc.listarCuentasPorPagarCompleto(inputCompleto(), MAESTRO);
+    if (pagina.status !== "ok" || completo.status !== "ok") throw new Error("no ok");
+
+    // La regresion que R52 prohibe: el archivo con las 5 filas que se ven de 12.
+    expect(pagina.items).toHaveLength(5);
+    expect(completo.items).toHaveLength(12);
+    expect(completo.total).toBe(12);
+
+    // R11: el MISMO orden que el listado. La pagina 1 es literalmente el prefijo del conjunto.
+    const recorrido = await recorrerPaginas(servicio(repoEnMemoria().repo), MAESTRO, {}, 5);
+    expect(completo.items.map((m) => m.mensajeroId)).toEqual(
+      recorrido.items.map((m) => m.mensajeroId),
+    );
+    expect(completo.items.slice(0, 5)).toEqual(pagina.items);
+  });
+
+  it("la búsqueda vigente acota el archivo igual que acota la tabla (R10, R45)", async () => {
+    // La bateria entera de R45, ahora sobre el archivo: el conjunto que descarga el maestro y el
+    // que le pinta la tabla no pueden salir de dos filtros distintos.
+    const sinPaginar = await servicio(repoEnMemoria().repo).listarCuentasPorPagar(MAESTRO);
+    if (sinPaginar.status !== "ok") throw new Error("no ok");
+
+    let conFilas = 0;
+    for (const caso of BATERIA) {
+      const svc = servicio(repoEnMemoria().repo);
+      const r = await svc.listarCuentasPorPagarCompleto(
+        inputCompleto({ busqueda: caso.texto }),
+        MAESTRO,
+      );
+      if (r.status !== "ok") throw new Error(`«${caso.texto}»: no ok`);
+
+      const deCliente = busquedaDeCliente(sinPaginar.mensajeros, caso.texto);
+      expect(claves(r.items), `«${caso.texto}» (${caso.nota})`).toEqual(claves(deCliente));
+      expect(r.total, `«${caso.texto}»: total`).toBe(deCliente.length);
+      if (r.items.length > 0) conFilas += 1;
+    }
+
+    // Anti-vacuidad: si el modo completo devolviera siempre vacio, el bucle habria comparado 25
+    // veces [] con [] sin quejarse.
+    expect(conFilas).toBe(22);
+  });
+
+  it("CONTRAPRUEBA: el archivo trae filas que la página visible NO contiene (R52)", async () => {
+    const svc = servicio(repoEnMemoria().repo);
+
+    // «Zulema Ovando» es la ultima del orden: con pageSize 3 no esta en la pagina 1.
+    const p1 = await svc.listarCuentasPorPagarPaginado(input({ page: 1, pageSize: 3 }), MAESTRO);
+    const completo = await svc.listarCuentasPorPagarCompleto(inputCompleto(), MAESTRO);
+    if (p1.status !== "ok" || completo.status !== "ok") throw new Error("no ok");
+
+    expect(p1.items.map((m) => m.mensajeroId)).not.toContain("m-07");
+    expect(completo.items.map((m) => m.mensajeroId)).toContain("m-07");
+    // Y el dinero del archivo es el del conjunto, no el de lo que se ve.
+    expect(sumaCuentaPorPagar(completo.items)).toBe("2410.75");
+    expect(sumaCuentaPorPagar(p1.items)).not.toBe("2410.75");
+  });
+
+  it("todo rol sin acceso total recibe forbidden, sin filas y sin tocar la base (R17, R44)", async () => {
+    for (const actor of ROLES_SIN_ACCESO) {
+      const { repo, llamadas } = repoEnMemoria();
+      const r = await servicio(repo).listarCuentasPorPagarCompleto(inputCompleto(), actor);
+
+      expect(r, `rol ${actor.rol}`).toEqual({ status: "forbidden" });
+      expect(r, `rol ${actor.rol}`).not.toHaveProperty("items");
+      expect(r, `rol ${actor.rol}`).not.toHaveProperty("total");
+      // El guard va ANTES del repositorio, igual que en la pagina: descargar no puede ser la
+      // puerta de atras por la que sale la cuenta por pagar de todos los mensajeros.
+      expect(llamadas, `rol ${actor.rol}`).toEqual([]);
+    }
+  });
+
+  it("por encima del tope NO produce filas: solo el total y el tope (R26, R27, R28)", async () => {
+    // 5001 filas: una mas que `descargaConfig.MAX_FILAS`. Se generan con nombres distintos para
+    // que el orden sea total y el conjunto no dependa del desempate.
+    const muchas: CuentaPorPagarAgregadoRow[] = Array.from({ length: 5001 }, (_, i) => ({
+      mensajeroId: `m-${String(i).padStart(5, "0")}`,
+      mensajeroNombre: `Mensajero ${String(i).padStart(5, "0")}`,
+      devengado: "10.00",
+      pagado: "0.00",
+    }));
+
+    const r = await servicio(repoEnMemoria(muchas).repo).listarCuentasPorPagarCompleto(
+      inputCompleto(),
+      MAESTRO,
+    );
+
+    expect(r).toEqual({ status: "limite_excedido", total: 5001, limite: 5000 });
+    expect(r).not.toHaveProperty("items"); // R28: nunca un dataset truncado
+
+    // Y justo POR DEBAJO del tope si sale entero: el limite es «mas de N», no «N o mas».
+    const enElBorde = await servicio(repoEnMemoria(muchas.slice(0, 5000)).repo)
+      .listarCuentasPorPagarCompleto(inputCompleto(), MAESTRO);
+    if (enElBorde.status !== "ok") throw new Error("no ok");
+    expect(enElBorde.items).toHaveLength(5000);
+
+    // El tope mira el conjunto FILTRADO, no el conjunto entero: con una busqueda que deja 1
+    // fila, el archivo sale aunque el conjunto sin filtrar supere el tope.
+    const filtrado = await servicio(repoEnMemoria(muchas).repo).listarCuentasPorPagarCompleto(
+      inputCompleto({ busqueda: "Mensajero 00042" }),
+      MAESTRO,
+    );
+    if (filtrado.status !== "ok") throw new Error("no ok");
+    expect(filtrado.items).toHaveLength(1);
+    expect(filtrado.total).toBe(1);
+  });
+
+  it("no ejecuta más consultas que el listado sin paginar (R30, R54)", async () => {
+    const { repo, llamadas } = repoEnMemoria();
+    await servicio(repo).listarCuentasPorPagarCompleto(inputCompleto({ busqueda: "ana" }), MAESTRO);
+
+    // Descargar cuesta lo mismo que leer el listado: UNA agregacion. Lo que la descarga NO hace
+    // es pedir ademas la pagina (que es lo que hacia T L.2 al releer y filtrar en el cliente).
+    expect(llamadas).toEqual(["listarCuentasPorPagarCompleto", "listarCuentasPorPagarTodos"]);
+  });
+
+  it("un conjunto vacío devuelve archivo vacío y total 0, no un error (R31)", async () => {
+    const r = await servicio(repoEnMemoria([]).repo).listarCuentasPorPagarCompleto(
+      inputCompleto(),
+      MAESTRO,
+    );
+    if (r.status !== "ok") throw new Error("no ok");
+    expect(r.items).toEqual([]);
+    expect(r.total).toBe(0);
+    // Quien avisa «no hay datos que descargar» sin producir archivo es el control (R31); el
+    // servicio devuelve el dataset vacio tal cual.
   });
 });

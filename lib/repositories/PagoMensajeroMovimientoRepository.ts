@@ -189,15 +189,33 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     filtro: CuentasPorPagarFiltro,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CuentaPorPagarAgregadoRow>> {
-    const conjunto = ordenarCuentasPorPagar(
-      // R45: la busqueda ANTES del recorte. Al reves, buscaria dentro de la pagina — que es
-      // exactamente la regresion que esta tanda existe para evitar.
-      filtrarPorBusquedaMensajero(await this.listarCuentasPorPagarTodos(), filtro.busqueda),
-    );
+    const conjunto = await this.listarCuentasPorPagarCompleto(filtro);
     return {
       items: conjunto.slice(rango.skip, rango.skip + rango.take),
       total: conjunto.length, // R41: el total del CONJUNTO FILTRADO, no el de la pagina
     };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T M.1, cierre de Q-L2) — el CONJUNTO filtrado y ordenado, entero.
+   *
+   * Es la lista de la que el metodo de arriba saca su `slice`, extraida para que la DESCARGA
+   * pueda pedirla sin releer el listado sin busqueda y filtrar despues en el navegador (lo que
+   * hacia T L.2). Con esto la busqueda deja de tener dos implementaciones vivas —la del
+   * servidor y la del cliente— y R45 pasa a cumplirse por construccion tambien en el archivo.
+   *
+   * Sigue SIN cortar en la base, por el mismo motivo que el metodo paginado: cada fila es la
+   * agregacion de todo el libro de ese mensajero y el nombre por el que se busca vive en
+   * `usuario`, no en el libro que se agrega.
+   */
+  async listarCuentasPorPagarCompleto(
+    filtro: CuentasPorPagarFiltro,
+  ): Promise<CuentaPorPagarAgregadoRow[]> {
+    return ordenarCuentasPorPagar(
+      // R45: la busqueda ANTES del recorte. Al reves, buscaria dentro de la pagina — que es
+      // exactamente la regresion que esta tanda existe para evitar.
+      filtrarPorBusquedaMensajero(await this.listarCuentasPorPagarTodos(), filtro.busqueda),
+    );
   }
 
   /** R18: nombre de UN mensajero para la vista del maestro (desglose por cierre); null si no existe. */
