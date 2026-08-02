@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { listarCuentasPorPagarAction } from "@/lib/actions/wallet-mensajero";
+import { listarCuentasPorPagarPaginadoAction } from "@/lib/actions/wallet-mensajero";
 
 import { CuentasPorPagarTable } from "./_components/CuentasPorPagarTable";
 
@@ -28,7 +28,10 @@ export default async function WalletMensajerosPage() {
     notFound(); // R19: rol no autorizado / sin sesion → sin exponer datos
   }
 
-  const cuentasResult = await listarCuentasPorPagarAction();
+  // Feature 170 — FASE 2 (T L.2, R40): PÁGINA 1 de las cuentas por pagar, no el conjunto
+  // entero. El input va vacío: los defaults de `page`/`pageSize` los pone el schema del
+  // dominio `wallet-mensajero`, y sin `busqueda` el listado sale completo, como hasta hoy.
+  const cuentasResult = await listarCuentasPorPagarPaginadoAction({});
 
   // Defensa en profundidad: si el service niega, no renderizamos la tabla.
   if (cuentasResult.status !== "ok") {
@@ -41,7 +44,13 @@ export default async function WalletMensajerosPage() {
       description="Lo devengado, lo ya pagado del efectivo y lo pendiente por mensajero"
     >
       <section aria-label="Cuentas por pagar a mensajeros" className="flex flex-col gap-4">
-        <CuentasPorPagarTable mensajeros={cuentasResult.mensajeros} />
+        <CuentasPorPagarTable
+          initialData={{
+            items: cuentasResult.items,
+            total: cuentasResult.total,
+            pageSize: cuentasResult.pageSize,
+          }}
+        />
       </section>
     </AppPage>
   );
