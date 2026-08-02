@@ -9,18 +9,27 @@ import type {
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
+  AnularPagoServiceResult,
   ILiquidacionService,
   ListarPagosServiceResult,
+  LiquidacionTx,
   LiquidacionTxRunner,
   RegistrarPagoServiceResult,
 } from "@/lib/interfaces/services/ILiquidacionService";
 import type {
+  AnulacionDTO,
+  AnularPagoInput,
   PagoRegistradoDTO,
   RegistrarPagoMensajeroInput,
   RegistrarPagoTiendaInput,
 } from "@/lib/types/liquidacion";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { descripcionDePago, medianocheUtcDelDia } from "@/lib/utils/descripcion-pago";
+import {
+  descripcionDeAnulacion,
+  descripcionDePago,
+  medianocheUtcDelDia,
+} from "@/lib/utils/descripcion-pago";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 
@@ -37,6 +46,19 @@ class ClaveRepetidaError extends Error {
   constructor() {
     super("liquidacion: clave de idempotencia ya usada");
     this.name = "ClaveRepetidaError";
+  }
+}
+
+/**
+ * T F.2/R75 — la hermana de la anterior para el `UNIQUE(pago_id)` de la anulacion, y existe por
+ * la misma razon tecnica: en Postgres un error de sentencia deja la transaccion ABORTADA, asi
+ * que no se puede releer el comprobante dentro de ella. Se lanza para salir y la relectura
+ * ocurre FUERA. Tampoco escapa nunca de `anularPago`.
+ */
+class YaAnuladoError extends Error {
+  constructor() {
+    super("liquidacion: el pago ya estaba anulado");
+    this.name = "YaAnuladoError";
   }
 }
 
@@ -63,6 +85,41 @@ export function aPagoRegistradoDTO(pago: LiquidacionPagoDTO): PagoRegistradoDTO 
 }
 
 /**
+ * T F.2 — el BENEFICIARIO de un pago, derivado de la fila y no de la peticion. La base garantiza
+ * el XOR (`liquidacion_pago_beneficiario_check`) y que el cierre acompaña al mensajero y solo a
+ * el (`liquidacion_pago_cierre_check`), asi que estas dos formas son las unicas posibles; `null`
+ * es el caso que la base ya impide y que aqui se responde sin inventar.
+ */
+type BeneficiarioDelPago =
+  | { tipo: "mensajero"; mensajeroId: string; cierreId: string }
+  | { tipo: "tienda"; tiendaId: string };
+
+function beneficiarioDelPago(pago: LiquidacionPagoDTO): BeneficiarioDelPago | null {
+  if (pago.mensajeroId !== null && pago.cierreId !== null) {
+    return { tipo: "mensajero", mensajeroId: pago.mensajeroId, cierreId: pago.cierreId };
+  }
+  if (pago.tiendaId !== null) return { tipo: "tienda", tiendaId: pago.tiendaId };
+  return null;
+}
+
+/**
+ * R84/§4.2 — EL MISMO bloqueo que tomaria su pago, derivado del propio beneficiario para que no
+ * puedan divergir: la fila del CIERRE si se pago a un mensajero, la del USUARIO si se pago a una
+ * tienda. Bloquear otra cosa «porque anular es casi solo leer» dejaria a una anulacion y a un
+ * registro simultaneos leyendo el mismo disponible, que es justo lo que R84 existe para impedir.
+ */
+function bloqueoDelBeneficiario(beneficiario: BeneficiarioDelPago): BeneficiarioBloqueo {
+  return beneficiario.tipo === "mensajero"
+    ? { tipo: "cierre", cierreId: beneficiario.cierreId }
+    : { tipo: "tienda", tiendaId: beneficiario.tiendaId };
+}
+
+/** R74 — el comprobante con su bloque de anulacion recien puesto, sin releerlo de la base. */
+function conAnulacion(pago: LiquidacionPagoDTO, anulacion: AnulacionDTO): PagoRegistradoDTO {
+  return { ...aPagoRegistradoDTO(pago), anulacion };
+}
+
+/**
  * Feature 172 — logica de negocio de la LIQUIDACION. No conoce HTTP ni Prisma: recibe los
  * repositorios y el ejecutor de transacciones por constructor.
  *
@@ -72,11 +129,20 @@ export function aPagoRegistradoDTO(pago: LiquidacionPagoDTO): PagoRegistradoDTO 
  * inyectada no hay forma de escribir alli aunque alguien lo intente.
  */
 export class LiquidacionService implements ILiquidacionService {
+  /**
+   * `ahora` es el RELOJ, y solo lo usa la anulacion: R77 exige fechar el contraasiento con el
+   * dia de la ANULACION —no con el del pago—, asi que hay que preguntar por «hoy». Se inyecta
+   * para poder fijarlo en los tests sin tocar el reloj global, y trae default porque un reloj
+   * que se olvida de cablear no puede degradar en silencio: `new Date()` es la respuesta
+   * correcta en produccion (a diferencia de un repositorio ausente, que si dejaria una deuda
+   * invisible — ver la Tanda C, hallazgo 1).
+   */
   constructor(
     private readonly pagoRepo: ILiquidacionPagoRepository,
     private readonly tiendaRepo: IWalletTiendaMovimientoRepository,
     private readonly mensajeroRepo: IPagoMensajeroMovimientoRepository,
     private readonly runTransaction: LiquidacionTxRunner,
+    private readonly ahora: () => Date = () => new Date(),
   ) {}
 
   /**
@@ -266,6 +332,83 @@ export class LiquidacionService implements ILiquidacionService {
   }
 
   /**
+   * T F.2 (R69-R71, R76, R77, R81, R82, R84) — ANULA un pago añadiendo su CONTRAASIENTO. El pago
+   * no se borra ni se edita: sigue en la tabla, en el libro y en la lista de comprobantes, ahora
+   * marcado con su motivo, su actor y su instante (R74).
+   *
+   * Los pasos, y por que estan en este orden:
+   *
+   *  1. ROL (R81), antes de leer nada. Los mismos que pagan: `maestro` y `admin`.
+   *  2. EL PAGO SE LEE SERVER-SIDE (R70). De aqui —y de ningun sitio mas— salen el monto del
+   *     reverso, el beneficiario y el libro en el que se escribe. La peticion solo trae el
+   *     `pagoId` y el motivo: si el cliente pudiera dictar el monto, anular seria una via para
+   *     escribir cualquier cifra en un libro de dinero. Se lee FUERA de la transaccion a
+   *     proposito: hace falta saber a quien se le pago para saber QUE fila bloquear, y la fila
+   *     del pago es INMUTABLE, asi que no puede quedarse obsoleta entre esta lectura y el
+   *     candado. Lo que si puede cambiar —la anulacion y el disponible— se lee y se escribe
+   *     dentro.
+   *  3. CANDADO (R84/R85): UNO, el mismo que tomaria su pago.
+   *  4. Disponible leido BAJO el candado (R83) y proyectado con el contraasiento ya aplicado:
+   *     es el valor EXACTO al que vuelve el beneficiario (R71).
+   *  5. Anulacion + contraasiento en la MISMA transaccion (R39): o quedan los dos, o ninguno.
+   *
+   * **Se anula ENTERO (R76)** —el monto es el del pago, no hay por donde pedir una parte— y
+   * **no hay forma de anular una anulacion (R82)**: el segundo intento choca con el
+   * `UNIQUE(pago_id)` y responde `ya_anulado`, y no existe ningun metodo que borre esa fila.
+   *
+   * La CAJA PRINCIPAL no recibe ni una llamada (R40, [P2]): si al pagar no se emitio egreso, al
+   * anular no hay nada que revertir. El servicio ni siquiera tiene ese repositorio inyectado.
+   */
+  async anularPago(input: AnularPagoInput, actor: Actor): Promise<AnularPagoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R81 — antes de leer nada
+
+    const pago = await this.pagoRepo.obtenerPorId(input.pagoId); // R70: SERVER-SIDE
+    if (pago === null) return { status: "no_encontrado" };
+
+    const beneficiario = beneficiarioDelPago(pago);
+    if (beneficiario === null) return { status: "no_encontrado" };
+
+    // R70/R76: el monto del contraasiento es el del PAGO, entero. Escala fijada una vez, igual
+    // que al registrar, para que documento y libro no puedan discrepar por un redondeo.
+    const monto = new Prisma.Decimal(pago.monto).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    const montoStr = monto.toFixed(2);
+    // R77: el contraasiento se fecha el dia de la ANULACION, no el del pago. El precedente es
+    // `reversarEgreso`, que no reabre fechas pasadas: entre el pago y su anulacion, un informe
+    // por rango vera el pago aplicado, que es la semantica contable habitual.
+    const fechaAnulacion = medianocheUtcDelDia(fechaCalendarioCR(this.ahora()));
+
+    try {
+      return await this.runTransaction(async (tx) => {
+        // R84/R85: UN solo candado, el mismo que tomaria su pago, ANTES de leer el disponible.
+        await this.pagoRepo.bloquearBeneficiario(tx, bloqueoDelBeneficiario(beneficiario));
+
+        const restante = await this.restanteTrasAnular(tx, beneficiario, monto);
+        if (restante === null) return { status: "no_encontrado" };
+
+        const anulada = await this.pagoRepo.anular(tx, {
+          pagoId: pago.id,
+          motivo: input.motivo,
+          anuladoPor: actor.usuarioId, // R73
+        });
+        // R75: sale de la transaccion (que revierte) y la relectura ocurre fuera.
+        if (anulada.status === "ya_anulado") throw new YaAnuladoError();
+
+        await this.escribirContraasiento(tx, beneficiario, {
+          pago,
+          monto: montoStr,
+          fechaMovimiento: fechaAnulacion,
+          registradoPor: actor.usuarioId,
+        });
+
+        return { status: "ok", pago: conAnulacion(pago, anulada.anulacion), restante };
+      });
+    } catch (error) {
+      if (error instanceof YaAnuladoError) return this.responderYaAnulado(pago.id);
+      throw error;
+    }
+  }
+
+  /**
    * R49/R56/R74 (T C.1) — los comprobantes de UN cierre.
    *
    * Tres decisiones, las tres deliberadas:
@@ -295,6 +438,119 @@ export class LiquidacionService implements ILiquidacionService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R2/R6
     const pagos = await this.pagoRepo.listarPorTienda(tiendaId);
     return { status: "ok", pagos: pagos.map(aPagoRegistradoDTO) };
+  }
+
+  /**
+   * T F.2/R71 — a cuanto vuelve el disponible del beneficiario UNA VEZ aplicado el
+   * contraasiento. Se lee bajo el candado (R83) y **no se estima**: se vuelve a pasar por la
+   * MISMA derivacion que usa el registro, con el efecto del reverso ya metido en la entrada.
+   *
+   *  - mensajero: el pago que se esta anulando todavia cuenta como vigente en la agregacion, asi
+   *    que se descuenta de ella y el pendiente se deriva con `derivarPendienteCierre`. Resultado:
+   *    exactamente el pendiente que habia ANTES de ese pago.
+   *  - tienda: el contraasiento es un CREDITO por el mismo monto, asi que el saldo se deriva de
+   *    los creditos del ledger MAS ese credito. Igual de exacto, y por la misma via.
+   *
+   * `null` = el cierre del pago ya no existe (imposible: la FK va `ON DELETE RESTRICT`); se
+   * responde `no_encontrado` en vez de inventar una cifra.
+   */
+  private async restanteTrasAnular(
+    tx: LiquidacionTx,
+    beneficiario: BeneficiarioDelPago,
+    monto: Prisma.Decimal,
+  ): Promise<string | null> {
+    if (beneficiario.tipo === "mensajero") {
+      const cierre = await this.pagoRepo.obtenerCierreParaPago(beneficiario.cierreId, tx);
+      if (cierre === null) return null;
+      const pagados = await this.pagoRepo.sumarVigentesPorCierre([cierre.id]);
+      const vigentes = new Prisma.Decimal(pagados[cierre.id] ?? "0.00").sub(monto);
+      return derivarPendienteCierre(
+        cierre.totalPagoMensajero,
+        cierre.totalEfectivo,
+        vigentes.lt(0) ? new Prisma.Decimal(0) : vigentes,
+      );
+    }
+
+    const agregado = await this.tiendaRepo.agregarSaldoPorTienda(beneficiario.tiendaId, {});
+    const creditos = new Prisma.Decimal(agregado.creditos).add(monto);
+    return derivarSaldoTienda(creditos, agregado.debitos).saldo;
+  }
+
+  /**
+   * T F.2/§6.2 (R69/R77) — EL CONTRAASIENTO: mismo monto, signo opuesto, mismo documento.
+   *
+   * | Pago original | Contraasiento | Efecto |
+   * | --- | --- | --- |
+   * | mensajero `pago`/`liquidacion` | `devengo`/`ajuste_devengo` | la cuenta por pagar vuelve a subir |
+   * | tienda `debito`/`pago_tienda` | `credito`/`ajuste_credito` | el saldo a favor vuelve a subir |
+   *
+   * Las dos categorias YA existian, reservadas para esto («correccion compensatoria inmutable»),
+   * y los dos CHECK de la migracion estan escritos para dejar pasar EXACTAMENTE estos dos pares:
+   * `ajuste_devengo` solo casa con `devengo` y `ajuste_credito` solo con `credito`. Elegir otro
+   * par no daria un saldo raro — daria un INSERT rechazado por la base, a proposito (R60).
+   *
+   * `origenTipo`/`origenId` son los DEL PAGO, no de la anulacion, y eso es lo que da idempotencia
+   * gratis: el indice unico parcial de cada libro es `(origen_tipo, origen_id, <beneficiario>,
+   * categoria)`, y el pago ya ocupo esa clave con OTRA categoria. Los dos caben y ninguno puede
+   * duplicarse. Ademas es lo que hace que el filtro por cierre del desglose (R52) traiga el
+   * contraasiento junto a su pago.
+   */
+  private async escribirContraasiento(
+    tx: LiquidacionTx,
+    beneficiario: BeneficiarioDelPago,
+    reverso: {
+      pago: LiquidacionPagoDTO;
+      monto: string;
+      fechaMovimiento: Date;
+      registradoPor: string;
+    },
+  ): Promise<void> {
+    const descripcion = descripcionDeAnulacion(reverso.pago.metodo, reverso.pago.referencia);
+
+    if (beneficiario.tipo === "mensajero") {
+      await this.mensajeroRepo.crearMovimientos(tx, [
+        {
+          mensajeroId: beneficiario.mensajeroId,
+          tipo: "devengo",
+          categoria: "ajuste_devengo",
+          monto: reverso.monto,
+          origenTipo: "pago_mensajero", // el del PAGO (R38)
+          origenId: reverso.pago.id,
+          descripcion,
+          registradoPor: reverso.registradoPor,
+          fechaMovimiento: reverso.fechaMovimiento, // R77: el dia de la ANULACION
+        },
+      ]);
+      return;
+    }
+
+    await this.tiendaRepo.crearMovimientos(tx, [
+      {
+        tiendaId: beneficiario.tiendaId,
+        tipo: "credito",
+        categoria: "ajuste_credito",
+        monto: reverso.monto,
+        origenTipo: "pago_tienda", // el del PAGO (R38)
+        origenId: reverso.pago.id,
+        descripcion,
+        registradoPor: reverso.registradoPor,
+        fechaMovimiento: reverso.fechaMovimiento, // R77
+      },
+    ]);
+  }
+
+  /**
+   * R75 — la respuesta del SEGUNDO intento: el comprobante ya anulado y cero filas nuevas.
+   *
+   * Se relee por id porque el bloque de anulacion que hay que devolver (motivo, actor, instante)
+   * lo escribio la otra llamada, no esta. `no_encontrado` cubre el caso imposible-en-teoria (un
+   * choque de unicidad sin anulacion que lo explique): mejor un estado explicito que un
+   * `ya_anulado` con el bloque vacio, que la pantalla pintaria como un pago vigente.
+   */
+  private async responderYaAnulado(pagoId: string): Promise<AnularPagoServiceResult> {
+    const pago = await this.pagoRepo.obtenerPorId(pagoId);
+    if (pago === null || pago.anulacion === null) return { status: "no_encontrado" };
+    return { status: "ya_anulado", pago: aPagoRegistradoDTO(pago) };
   }
 
   /**

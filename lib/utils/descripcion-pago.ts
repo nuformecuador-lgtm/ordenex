@@ -41,6 +41,26 @@ export function descripcionDePago(
 }
 
 /**
+ * Linea del libro para el CONTRAASIENTO de una anulacion (T F.2, design §6.2): la misma
+ * descripcion del pago, precedida de la palabra que dice que es su reverso —
+ * `"Anulación de pago · SINPE · 1234567"`.
+ *
+ * Se compone SOBRE `descripcionDePago` y no en paralelo: asi las dos lineas que cuelgan del
+ * mismo documento se leen seguidas en el libro y no hay dos formas de nombrar el mismo pago.
+ *
+ * **NO lleva el MOTIVO de la anulacion**, por el mismo criterio que la del pago no lleva la
+ * nota: es texto libre del usuario, puede ser largo y personal, y su sitio canonico es
+ * `liquidacion_anulacion.motivo`, que la lista de comprobantes ya muestra (R74). Tampoco lleva
+ * ningun identificador: el enlace al documento lo da `origen_tipo`/`origen_id` del movimiento.
+ */
+export function descripcionDeAnulacion(
+  metodo: MetodoLiquidacion,
+  referencia: string | null,
+): string {
+  return `Anulación de pago · ${descripcionDePago(metodo, referencia)}`;
+}
+
+/**
  * MEDIANOCHE UTC de una fecha calendario `YYYY-MM-DD` (design §2.4, R37).
  *
  * Trampa de fechas, resuelta y declarada en el diseño: el movimiento del pago NO se fecha con

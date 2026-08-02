@@ -484,7 +484,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 > Tanda añadida por la respuesta del humano a P4. Backend → frontend, como el resto.
 
-### [ ] T F.1 — Repositorio de la anulación
+### [x] T F.1 — Repositorio de la anulación
 - `anular(tx, { pagoId, motivo, anuladoPor })`: inserta en `liquidacion_anulacion` traduciendo el
   conflicto del `UNIQUE(pago_id)` en un resultado `ya_anulado`, nunca en una excepción que suba.
   Las sumas «vigentes» de T B.1 ya lo excluyen.
@@ -492,7 +492,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** el segundo intento devuelve `ya_anulado` sin insertar; la fila del pago **no se
   toca** (aserción explícita: cero `update` sobre `liquidacion_pago`).
 
-### [ ] T F.2 — `LiquidacionService.anularPago`
+### [x] T F.2 — `LiquidacionService.anularPago`
 - Guardia de rol (los mismos que pagan, R81); lee el pago **server-side** y toma **su mismo
   bloqueo** (§4.2, R84); inserta la anulación y el **contraasiento** en la misma transacción:
   `ajuste_devengo`/`devengo` para el mensajero, `ajuste_credito`/`credito` para la tienda, con
@@ -504,14 +504,14 @@ queda el registro de cierre y lo que cada una desencadenó.
   parcialmente (R76) ni para anular una anulación (R82); `adminSatelite` y `adminTienda` →
   `forbidden` (R81); la caja principal no recibe llamada (R40).
 
-### [ ] T F.3 — Volver a pagar lo anulado
+### [x] T F.3 — Volver a pagar lo anulado
 - Test de cadena: pagar → anular → el pendiente vuelve a su valor → registrar de nuevo con **clave
   nueva** y la **misma** referencia y fecha real → se acepta.
 - **Depende de:** T F.2 · **Cubre:** R78, R79, R80
 - **Hecho:** el segundo pago entra; reutilizar la clave del pago anulado devuelve
   `ya_registrado` y **no** crea nada (la clave no se libera al anular).
 
-### [ ] T F.4 — Server Action de anulación
+### [x] T F.4 — Server Action de anulación
 - Quinta acción en `lib/actions/liquidacion.ts`, mismo molde.
 - **Depende de:** T F.2 · **Cubre:** R3, R72
 - **Hecho:** sin sesión → `unauthenticated` antes del servicio; motivo en blanco →

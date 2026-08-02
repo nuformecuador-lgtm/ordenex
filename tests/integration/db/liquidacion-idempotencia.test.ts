@@ -69,6 +69,21 @@ type FilaMovimientoMensajero = {
   fechaMovimiento?: Date;
 };
 
+/**
+ * T F.3 — la fila de `liquidacion_anulacion`, con el `UNIQUE(pago_id)` que la hace irrepetible.
+ * Que el pago la lleve DENTRO no es una comodidad del store: es como Prisma devuelve la relacion
+ * (`include: { anulacion: … }`) y es lo que hace que «vigente» sea `anulacion IS NULL` de verdad,
+ * y no un flag que el test ponga a mano.
+ */
+type FilaAnulacion = {
+  id: string;
+  pagoId: string;
+  motivo: string;
+  anuladoPor: string;
+  createdAt: Date;
+  anulador: { nombre: string };
+};
+
 type FilaPago = {
   id: string;
   claveIdempotencia: string;
@@ -83,7 +98,7 @@ type FilaPago = {
   registradoPor: string;
   createdAt: Date;
   registrador: { nombre: string };
-  anulacion: null;
+  anulacion: FilaAnulacion | null;
 };
 
 /** La fila de `cierre_dia` que el pago al mensajero LEE y jamas escribe (R42). */
@@ -115,7 +130,8 @@ function cierreAprobado(over: Partial<FilaCierre> = {}): FilaCierre {
  *     repositorio: el store no tiene una lista de a quien bloquear.
  *  2. Visibilidad transaccional: lo escrito dentro de una transaccion solo se ve DESPUES del
  *     commit, y el candado se suelta DESPUES de publicar (commit -> release, ese orden).
- *  3. `UNIQUE(clave_idempotencia)` y el indice unico parcial de los libros.
+ *  3. `UNIQUE(clave_idempotencia)`, el `UNIQUE(pago_id)` de la anulacion (T F.3) y el indice
+ *     unico parcial de los libros.
  */
 function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierreAprobado()]) {
   const movimientos: FilaMovimiento[] = [
@@ -134,6 +150,7 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
   const clavesMovimiento = new Set<string>(["cierre_dia|c-previo|t1|cod_recaudado"]);
   const cierres: FilaCierre[] = cierresIniciales;
   const pagos: FilaPago[] = [];
+  const anulaciones: FilaAnulacion[] = [];
   const clavesIdempotencia = new Set<string>();
   const candados = new Map<string, Promise<void>>();
   const log: string[] = [];
@@ -207,6 +224,9 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
             (where.id !== undefined && p.id === where.id),
         );
         if (where.claveIdempotencia !== undefined) log.push("leer-por-clave");
+        // T F.3/R70: la lectura SERVER-SIDE del pago que se va a anular. Va aparte en el log
+        // porque es la que decide el monto del reverso y a quien se bloquea.
+        if (where.id !== undefined) log.push(`leer-por-id:${where.id}`);
         await tic();
         return fila ?? null;
       },
@@ -243,6 +263,42 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
         }));
         await tic();
         return resultado;
+      },
+      /** §5/R80 — `sumarVigentesPorTienda`, con el MISMO criterio de vigencia. */
+      aggregate: async ({
+        where,
+      }: {
+        where: { tiendaId?: string; anulacion?: { is: null } };
+      }) => {
+        if (where.tiendaId === undefined) {
+          throw new Error(`el store no soporta este aggregate: ${JSON.stringify({ where })}`);
+        }
+        log.push("leer-pagado-vigente-tienda");
+        const vigentes = pagos.filter(
+          (p) =>
+            p.tiendaId === where.tiendaId &&
+            (where.anulacion === undefined || p.anulacion === null),
+        );
+        const suma = vigentes.reduce((acc, p) => acc.add(p.monto), new Prisma.Decimal(0));
+        await tic();
+        return { _sum: { monto: suma } };
+      },
+      /**
+       * R49/R50/R74 — la LISTA de comprobantes, que a diferencia de las sumas NO filtra por
+       * vigencia: un pago anulado deja de descontar, pero no deja de verse.
+       */
+      findMany: async ({ where }: { where: { tiendaId?: string; cierreId?: string } }) => {
+        if (where.tiendaId === undefined && where.cierreId === undefined) {
+          throw new Error(`el store no soporta este findMany: ${JSON.stringify({ where })}`);
+        }
+        log.push("listar-comprobantes");
+        const filas = pagos.filter((p) =>
+          where.tiendaId !== undefined
+            ? p.tiendaId === where.tiendaId
+            : p.cierreId === where.cierreId,
+        );
+        await tic();
+        return filas;
       },
     },
     cierreDia: {
@@ -310,6 +366,46 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
           aplicarAlCommit.push(() => {
             pagos.push(fila);
             clavesIdempotencia.add(clave);
+          });
+          return fila;
+        },
+      },
+      /**
+       * T F.3/R75 — `liquidacion_anulacion` con su `UNIQUE(pago_id)`. La segunda anulacion del
+       * mismo pago NO es un no-op silencioso: la rechaza la RESTRICCION, igual que la clave de
+       * idempotencia rechaza el doble submit. Aqui tampoco hay `SELECT` previo que decida.
+       *
+       * `update`/`delete` no existen a proposito: si el dia de mañana alguien escribiera un
+       * «desanular» (R82), este store no sabria ejecutarlo y el test caeria con un TypeError en
+       * vez de dejarlo pasar.
+       */
+      liquidacionAnulacion: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          const pagoId = data.pagoId as string;
+          if (anulaciones.some((a) => a.pagoId === pagoId) || clavesPendientes.has(`anu|${pagoId}`)) {
+            log.push("choque-anulacion");
+            throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+              code: "P2002",
+              clientVersion: "7.0.0",
+              meta: { target: ["pago_id"] },
+            });
+          }
+          clavesPendientes.add(`anu|${pagoId}`);
+          const fila: FilaAnulacion = {
+            id: `anu-${anulaciones.length + 1}`,
+            pagoId,
+            motivo: data.motivo as string,
+            anuladoPor: data.anuladoPor as string,
+            createdAt: new Date("2026-08-05T20:31:00.000Z"),
+            anulador: { nombre: "Mario Maestro" },
+          };
+          log.push(`crear-anulacion:${pagoId}`);
+          aplicarAlCommit.push(() => {
+            anulaciones.push(fila);
+            // Es lo que hace que el pago deje de ser VIGENTE para las sumas de R80: no se toca
+            // ninguna columna del pago, aparece su fila de anulacion.
+            const pago = pagos.find((p) => p.id === pagoId);
+            if (pago !== undefined) pago.anulacion = fila;
           });
           return fila;
         },
@@ -404,16 +500,31 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
     }
   }
 
-  return { movimientos, movimientosMensajero, cierres, pagos, log, runTransaction, clienteLectura };
+  return {
+    movimientos,
+    movimientosMensajero,
+    cierres,
+    pagos,
+    anulaciones,
+    log,
+    runTransaction,
+    clienteLectura,
+  };
 }
 
-function buildService(store: ReturnType<typeof makeStore>) {
+/**
+ * `ahora` es el RELOJ, y solo lo usa la anulacion (R77: el contraasiento se fecha el dia en que
+ * se anula). Se fija para que la fecha del reverso sea comparable; los tests de registro no lo
+ * pasan y siguen igual.
+ */
+function buildService(store: ReturnType<typeof makeStore>, ahora?: () => Date) {
   const cliente = store.clienteLectura as unknown as PrismaClient;
   return new LiquidacionService(
     new LiquidacionPagoRepository(cliente),
     new WalletTiendaMovimientoRepository(cliente),
     new PagoMensajeroMovimientoRepository(cliente),
     store.runTransaction,
+    ahora,
   );
 }
 
@@ -1001,5 +1112,426 @@ describe("R46/R83/R85 [P1] — el candado del CIERRE serializa igual que el de l
     expect(store.movimientosMensajero).toHaveLength(0);
     // El candado si se tomo (va antes de la guardia) y se solto: no quedan transacciones vivas.
     expect(store.log.filter((l) => l.startsWith("candado:"))).toHaveLength(2);
+  });
+});
+
+// =============================================================================================
+// T F.3 — VOLVER A PAGAR LO ANULADO. R78, R79 y R80, con la cadena entera:
+//
+//     pagar -> anular -> el pendiente vuelve a su valor -> registrar de nuevo con CLAVE NUEVA
+//     y la MISMA referencia y fecha real -> se acepta.
+//
+// Aqui la cadena corre sobre el store, es decir: el servicio real, los TRES repositorios reales
+// y las restricciones de la base imitadas (el `UNIQUE(clave_idempotencia)`, el `UNIQUE(pago_id)`
+// de la anulacion, el indice unico parcial de cada libro y el `FOR UPDATE`). Lo que los tests de
+// servicio no pueden ver —que «vigente» sea de verdad `anulacion IS NULL` en el `where`, y que
+// la clave NO se libere al anular— solo es observable a este nivel.
+// =============================================================================================
+
+const CLAVE_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const REFERENCIA = "1234567";
+const MOTIVO = "Monto mal tecleado";
+
+/** 14:30 de Costa Rica del 5 de agosto: el dia CALENDARIO de la anulacion es el 2026-08-05. */
+const AHORA_ANULACION = () => new Date("2026-08-05T20:30:00.000Z");
+const DIA_DE_LA_ANULACION = "2026-08-05T00:00:00.000Z";
+
+/** Un pago a la tienda CON referencia y metodo electronico: R78 va justo sobre esos dos datos. */
+function pagoConReferencia(monto: string, clave: string): RegistrarPagoTiendaInput {
+  return { ...pago(monto, clave), metodo: "SINPE", referencia: REFERENCIA };
+}
+
+/** Lo mismo contra el cierre `c1`. */
+function pagoMensajeroConReferencia(monto: string, clave: string): RegistrarPagoMensajeroInput {
+  return { ...pagoMensajero(monto, clave), metodo: "SINPE", referencia: REFERENCIA };
+}
+
+/** Σ de una categoria concreta en cualquiera de los dos libros, como STRING money-safe. */
+function totalDeCategoria(
+  movs: Array<{ categoria: string; monto: Prisma.Decimal }>,
+  categoria: string,
+): string {
+  return movs
+    .filter((m) => m.categoria === categoria)
+    .reduce((acc, m) => acc.add(m.monto), new Prisma.Decimal(0))
+    .toFixed(2);
+}
+
+/** El id del pago que devolvio un registro correcto (y revienta si no salio bien). */
+function idDelPago(r: Awaited<ReturnType<LiquidacionService["registrarPagoTienda"]>>): string {
+  if (r.status !== "ok") throw new Error(`esperaba ok, llego ${r.status}`);
+  return r.pago.id;
+}
+
+describe("T F.3/R79/R80 — MENSAJERO: pagar, anular y volver a pagar lo mismo", () => {
+  it("LA CADENA: el pendiente vuelve a su valor y el pago nuevo entra con la misma referencia", async () => {
+    const store = makeStore("0.00"); // cierre c1: P = 50 000, E = 0 -> pendiente 50 000
+    const service = buildService(store, AHORA_ANULACION);
+
+    // 1) PAGAR 20 000 de los 50 000 pendientes.
+    const primero = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_A),
+      ACTOR,
+    );
+    expect(primero).toMatchObject({ status: "ok", restante: "30000.00" });
+    const pagoId = idDelPago(primero);
+
+    // 2) ANULAR: el monto vuelve a estar adeudado, ENTERO (R79).
+    const anulado = await service.anularPago({ pagoId, motivo: MOTIVO }, ACTOR);
+    expect(anulado).toMatchObject({ status: "ok", restante: "50000.00" });
+
+    // 3) El pendiente derivado por el camino de siempre dice lo mismo (R80): la suma de VIGENTES
+    //    excluye el anulado, y esa suma la calcula el repositorio REAL contra el store.
+    const repo = new LiquidacionPagoRepository(store.clienteLectura as unknown as PrismaClient);
+    expect(await repo.sumarVigentesPorCierre(["c1"])).toEqual({ c1: "0.00" });
+    const cierre = store.cierres[0];
+    expect(
+      derivarPendienteCierre(cierre.totalPagoMensajero, cierre.totalEfectivo, "0.00"),
+    ).toBe("50000.00");
+
+    // 4) REGISTRAR DE NUEVO con CLAVE NUEVA y la MISMA referencia y fecha real (R78).
+    const segundo = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_B),
+      ACTOR,
+    );
+    expect(segundo).toMatchObject({ status: "ok", restante: "30000.00" });
+    if (segundo.status !== "ok") return;
+    expect(segundo.pago.referencia).toBe(REFERENCIA);
+    expect(segundo.pago.fechaPago).toBe("2026-07-30"); // la misma fecha real, sin problema
+    expect(segundo.pago.id).not.toBe(pagoId); // es un pago NUEVO, no el resucitado
+
+    // El libro cuadra: dos pagos y un reverso -> neto 20 000, el del pago vigente.
+    expect(totalDeCategoria(store.movimientosMensajero, "liquidacion")).toBe("40000.00");
+    expect(totalDeCategoria(store.movimientosMensajero, "ajuste_devengo")).toBe("20000.00");
+    expect(store.pagos).toHaveLength(2);
+    expect(store.anulaciones).toHaveLength(1);
+  });
+
+  it("EL DETALLE: reutilizar la clave del pago ANULADO devuelve `ya_registrado` y no crea nada", async () => {
+    // La clave de idempotencia NO se libera al anular, y es lo correcto: el `UNIQUE` de la
+    // columna sigue ahi porque el pago sigue ahi. Volver a pagar exige una clave NUEVA (R79);
+    // reintentar con la vieja es el reintento de una peticion que ya se atendio.
+    const store = makeStore("0.00");
+    const service = buildService(store, AHORA_ANULACION);
+
+    const primero = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_A),
+      ACTOR,
+    );
+    const pagoId = idDelPago(primero);
+    await service.anularPago({ pagoId, motivo: MOTIVO }, ACTOR);
+    await service.registrarPagoMensajero(pagoMensajeroConReferencia("20000.00", CLAVE_B), ACTOR);
+
+    const filasAntes = store.pagos.length;
+    const movimientosAntes = store.movimientosMensajero.length;
+    const reintento = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_A),
+      ACTOR,
+    );
+
+    expect(reintento.status).toBe("ya_registrado");
+    if (reintento.status !== "ya_registrado") return;
+    // Devuelve el comprobante ANULADO, entero y marcado (R74): no lo resucita ni lo esconde.
+    expect(reintento.pago.id).toBe(pagoId);
+    expect(reintento.pago.monto).toBe("20000.00");
+    expect(reintento.pago.anulacion).toEqual({
+      motivo: MOTIVO,
+      anuladoPorNombre: "Mario Maestro",
+      anuladoAt: "2026-08-05T20:31:00.000Z",
+    });
+    // CERO filas nuevas: ni documento, ni movimiento, ni anulacion.
+    expect(store.pagos).toHaveLength(filasAntes);
+    expect(store.movimientosMensajero).toHaveLength(movimientosAntes);
+    expect(store.anulaciones).toHaveLength(1);
+    // Y el restante que informa es el REAL: el del pago vigente, no el del anulado.
+    expect(reintento.restante).toBe("30000.00");
+  });
+
+  it("R78: la fila del pago anulado queda INTACTA (monto, referencia, fecha real y actor)", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store, AHORA_ANULACION);
+
+    const primero = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_A),
+      ACTOR,
+    );
+    const pagoId = idDelPago(primero);
+    const antes = { ...store.pagos[0], monto: store.pagos[0].monto.toFixed(2) };
+
+    await service.anularPago({ pagoId, motivo: MOTIVO }, ACTOR);
+
+    const despues = { ...store.pagos[0], monto: store.pagos[0].monto.toFixed(2) };
+    // Lo UNICO que cambia es que ahora tiene su fila de anulacion colgando. Ni una columna del
+    // documento se toco: «anulado» se DERIVA de que exista esa fila (design §2.2).
+    expect({ ...despues, anulacion: null }).toEqual({ ...antes, anulacion: null });
+    expect(despues.anulacion).not.toBeNull();
+    expect(despues.referencia).toBe(REFERENCIA);
+    expect(despues.fechaPago.toISOString()).toBe("2026-07-30T00:00:00.000Z");
+  });
+
+  it("R77: el contraasiento se fecha el dia de la ANULACION, no el del pago", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store, AHORA_ANULACION);
+
+    const primero = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_A),
+      ACTOR,
+    );
+    await service.anularPago({ pagoId: idDelPago(primero), motivo: MOTIVO }, ACTOR);
+
+    const pagado = store.movimientosMensajero.find((m) => m.categoria === "liquidacion");
+    const reverso = store.movimientosMensajero.find((m) => m.categoria === "ajuste_devengo");
+    expect(pagado?.fechaMovimiento?.toISOString()).toBe("2026-07-30T00:00:00.000Z");
+    expect(reverso?.fechaMovimiento?.toISOString()).toBe(DIA_DE_LA_ANULACION);
+    // El reverso es del signo opuesto y cuelga del MISMO documento (R69/R38).
+    expect(reverso).toMatchObject({ tipo: "devengo", origenTipo: "pago_mensajero" });
+    expect(reverso?.origenId).toBe(pagado?.origenId);
+  });
+
+  it("el pago y su contraasiento CONVIVEN bajo el mismo `origen_id` (la categoria los separa)", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store, AHORA_ANULACION);
+
+    const primero = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_A),
+      ACTOR,
+    );
+    await service.anularPago({ pagoId: idDelPago(primero), motivo: MOTIVO }, ACTOR);
+
+    // El indice unico parcial es `(origen_tipo, origen_id, mensajero, categoria)`: los dos caben
+    // porque la categoria difiere, y ninguno de los dos puede duplicarse.
+    expect(store.movimientosMensajero).toHaveLength(2);
+    const claves = store.movimientosMensajero.map(
+      (m) => `${m.origenTipo}|${m.origenId}|${m.mensajeroId}|${m.categoria}`,
+    );
+    expect(new Set(claves).size).toBe(2);
+    expect(new Set(store.movimientosMensajero.map((m) => m.origenId)).size).toBe(1);
+  });
+
+  it("R75/R82: anular dos veces devuelve `ya_anulado` y no escribe un segundo reverso", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store, AHORA_ANULACION);
+
+    const primero = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_A),
+      ACTOR,
+    );
+    const pagoId = idDelPago(primero);
+
+    const a = await service.anularPago({ pagoId, motivo: MOTIVO }, ACTOR);
+    const b = await service.anularPago({ pagoId, motivo: "Otro motivo distinto" }, ACTOR);
+
+    expect(a.status).toBe("ok");
+    expect(b.status).toBe("ya_anulado");
+    // La barrera es la RESTRICCION: el INSERT se intenta las dos veces y lo rechaza el UNIQUE.
+    expect(store.log.filter((l) => l === "choque-anulacion")).toHaveLength(1);
+    expect(store.anulaciones).toHaveLength(1);
+    expect(store.anulaciones[0].motivo).toBe(MOTIVO); // el motivo de la PRIMERA
+    expect(totalDeCategoria(store.movimientosMensajero, "ajuste_devengo")).toBe("20000.00");
+    expect(store.movimientosMensajero).toHaveLength(2);
+  });
+
+  it("R84/R83: la anulacion toma el candado del CIERRE y lee el pendiente DESPUES", async () => {
+    // El `FOR UPDATE` es SQL crudo del repositorio REAL: el store lo detecta leyendo la
+    // sentencia, no tiene una lista de a quien bloquear. Si alguien lo quitara, no habria
+    // `candado:` en el log.
+    const store = makeStore("0.00");
+    const service = buildService(store, AHORA_ANULACION);
+    const primero = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("20000.00", CLAVE_A),
+      ACTOR,
+    );
+    const marca = store.log.length;
+
+    await service.anularPago({ pagoId: idDelPago(primero), motivo: MOTIVO }, ACTOR);
+
+    expect(store.log.slice(marca)).toEqual([
+      "leer-por-id:pago-1", // R70: el pago, SERVER-SIDE, antes de saber que bloquear
+      "candado:cierre_dia:c1", // R84: el MISMO candado que tomo su pago
+      "candado-tomado:cierre_dia:c1",
+      "leer-cierre:c1",
+      "leer-pagado-vigente", // R83: el disponible, BAJO el candado
+      "crear-anulacion:pago-1",
+      "crear-movimiento-mensajero:1",
+      "commit",
+    ]);
+    expect(store.log.slice(marca).filter((l) => l.startsWith("candado:"))).toHaveLength(1); // R85
+  });
+
+  it("R84 [P1]: una anulacion y un registro simultaneos NO leen el mismo disponible", async () => {
+    // Es literalmente para lo que existe R84. Se sale a la vez a anular un pago de 30 000 y a
+    // registrar uno de 10 000 contra el mismo cierre: pase quien pase primero, el ESTADO FINAL
+    // es el mismo, porque el segundo lee lo que el primero ya dejo escrito.
+    const store = makeStore("0.00");
+    const service = buildService(store, AHORA_ANULACION);
+    const previo = await service.registrarPagoMensajero(
+      pagoMensajeroConReferencia("30000.00", CLAVE_A),
+      ACTOR,
+    );
+    const pagoId = idDelPago(previo);
+    const marca = store.log.length;
+
+    const [anulacion, registro] = await Promise.all([
+      service.anularPago({ pagoId, motivo: MOTIVO }, ACTOR),
+      service.registrarPagoMensajero(pagoMensajeroConReferencia("10000.00", CLAVE_B), ACTOR),
+    ]);
+
+    // El tramo del log se fotografia AQUI, antes de que las comprobaciones de abajo añadan sus
+    // propias lecturas: lo que se mide es la carrera, no lo que el test hace despues.
+    const tramo = store.log.slice(marca);
+
+    expect(anulacion.status).toBe("ok");
+    expect(registro.status).toBe("ok");
+    // Estado final, independiente del orden: solo el pago de 10 000 sigue vigente.
+    const repo = new LiquidacionPagoRepository(store.clienteLectura as unknown as PrismaClient);
+    expect(await repo.sumarVigentesPorCierre(["c1"])).toEqual({ c1: "10000.00" });
+    const neto = new Prisma.Decimal(totalDeCategoria(store.movimientosMensajero, "liquidacion"))
+      .sub(totalDeCategoria(store.movimientosMensajero, "ajuste_devengo"))
+      .toFixed(2);
+    expect(neto).toBe("10000.00");
+
+    // Y la prueba de que se SERIALIZO: la segunda lectura del pendiente cae despues del commit
+    // de la primera operacion. Sin candado, las dos leerian antes de cualquier commit.
+    const commit = tramo.indexOf("commit");
+    const lecturas = tramo
+      .map((l, i) => ({ l, i }))
+      .filter(({ l }) => l === "leer-pagado-vigente")
+      .map(({ i }) => i);
+    expect(lecturas).toHaveLength(2);
+    expect(lecturas[0]).toBeLessThan(commit);
+    expect(lecturas[1]).toBeGreaterThan(commit);
+  });
+});
+
+describe("T F.3/R79/R80 — TIENDA: la misma cadena contra el saldo acumulado", () => {
+  it("LA CADENA: el saldo vuelve a 100 000 y el pago nuevo entra con la misma referencia", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store, AHORA_ANULACION);
+
+    const primero = await service.registrarPagoTienda(
+      pagoConReferencia("15000.00", CLAVE_A),
+      ACTOR,
+    );
+    expect(primero).toMatchObject({ status: "ok", restante: "85000.00" });
+    const pagoId = idDelPago(primero);
+
+    const anulado = await service.anularPago({ pagoId, motivo: MOTIVO }, ACTOR);
+    expect(anulado).toMatchObject({ status: "ok", restante: "100000.00" });
+
+    // El reverso es un CREDITO por el mismo monto, fechado el dia de la anulacion (R69/R77).
+    const reverso = store.movimientos.find((m) => m.categoria === "ajuste_credito");
+    expect(reverso).toMatchObject({ tipo: "credito", origenTipo: "pago_tienda", origenId: pagoId });
+    expect(reverso?.monto.toFixed(2)).toBe("15000.00");
+    expect(reverso?.fechaMovimiento?.toISOString()).toBe(DIA_DE_LA_ANULACION);
+
+    // Volver a pagar: clave NUEVA, misma referencia y misma fecha real (R78/R79).
+    const segundo = await service.registrarPagoTienda(
+      pagoConReferencia("15000.00", CLAVE_B),
+      ACTOR,
+    );
+    expect(segundo).toMatchObject({ status: "ok", restante: "85000.00" });
+    if (segundo.status !== "ok") return;
+    expect(segundo.pago.referencia).toBe(REFERENCIA);
+    expect(segundo.pago.fechaPago).toBe("2026-07-30");
+
+    // El saldo del ledger cuadra al centimo: 100 000 + 15 000 de reverso - 30 000 de dos pagos.
+    const saldo = store.movimientos
+      .reduce((acc, m) => (m.tipo === "credito" ? acc.add(m.monto) : acc.sub(m.monto)), new Prisma.Decimal(0))
+      .toFixed(2);
+    expect(saldo).toBe("85000.00");
+  });
+
+  it("EL DETALLE: reutilizar la clave del pago anulado devuelve `ya_registrado` y no crea nada", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store, AHORA_ANULACION);
+
+    const primero = await service.registrarPagoTienda(
+      pagoConReferencia("15000.00", CLAVE_A),
+      ACTOR,
+    );
+    const pagoId = idDelPago(primero);
+    await service.anularPago({ pagoId, motivo: MOTIVO }, ACTOR);
+
+    const reintento = await service.registrarPagoTienda(
+      pagoConReferencia("15000.00", CLAVE_A),
+      ACTOR,
+    );
+
+    expect(reintento.status).toBe("ya_registrado");
+    if (reintento.status !== "ya_registrado") return;
+    expect(reintento.pago.id).toBe(pagoId);
+    expect(reintento.pago.anulacion).not.toBeNull();
+    expect(store.pagos).toHaveLength(1); // ni un documento nuevo
+    expect(totalPagado(store)).toBe("15000.00"); // ni un debito nuevo
+    // El disponible que informa ya cuenta con el reverso aplicado (R71).
+    expect(reintento.restante).toBe("100000.00");
+  });
+
+  it("R80: el pago anulado deja de contar en la suma de vigentes de la TIENDA", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store, AHORA_ANULACION);
+    const repo = new LiquidacionPagoRepository(store.clienteLectura as unknown as PrismaClient);
+
+    const primero = await service.registrarPagoTienda(
+      pagoConReferencia("15000.00", CLAVE_A),
+      ACTOR,
+    );
+    await service.registrarPagoTienda(pagoConReferencia("25000.00", CLAVE_B), ACTOR);
+    // La suma cuenta los dos mientras los dos estan vigentes…
+    expect(await repo.sumarVigentesPorTienda("t1")).toBe("40000.00");
+
+    await service.anularPago({ pagoId: idDelPago(primero), motivo: MOTIVO }, ACTOR);
+
+    // …y deja de contar el anulado en cuanto existe su fila de anulacion. Sin tocar el pago.
+    expect(await repo.sumarVigentesPorTienda("t1")).toBe("25000.00");
+    expect(store.pagos).toHaveLength(2);
+    expect(store.pagos.filter((p) => p.anulacion !== null)).toHaveLength(1);
+  });
+
+  it("R74: la LISTA de comprobantes sigue trayendo el anulado, entero y marcado", async () => {
+    // La contracara de R80: las SUMAS excluyen los anulados, la LISTA no.
+    const store = makeStore("100000.00");
+    const service = buildService(store, AHORA_ANULACION);
+    const primero = await service.registrarPagoTienda(
+      pagoConReferencia("15000.00", CLAVE_A),
+      ACTOR,
+    );
+    await service.anularPago({ pagoId: idDelPago(primero), motivo: MOTIVO }, ACTOR);
+
+    const r = await service.listarPagosDeTienda("t1", ACTOR);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.pagos).toHaveLength(1);
+    expect(r.pagos[0]).toMatchObject({
+      monto: "15000.00",
+      metodo: "SINPE",
+      referencia: REFERENCIA,
+      fechaPago: "2026-07-30",
+    });
+    expect(r.pagos[0]!.anulacion).toEqual({
+      motivo: MOTIVO,
+      anuladoPorNombre: "Mario Maestro",
+      anuladoAt: "2026-08-05T20:31:00.000Z",
+    });
+  });
+
+  it("tres pagos, uno anulado: el saldo y las sumas cuadran al centimo", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store, AHORA_ANULACION);
+    const repo = new LiquidacionPagoRepository(store.clienteLectura as unknown as PrismaClient);
+
+    const a = await service.registrarPagoTienda(pagoConReferencia("15000.55", CLAVE_A), ACTOR);
+    await service.registrarPagoTienda(pagoConReferencia("25000.45", CLAVE_B), ACTOR);
+    await service.anularPago({ pagoId: idDelPago(a), motivo: MOTIVO }, ACTOR);
+    const ultimo = await service.registrarPagoTienda(pagoConReferencia("15000.55", CLAVE_C), ACTOR);
+
+    // 100 000 - 25 000,45 - 15 000,55 = 59 999,00 (el anulado no descuenta).
+    expect(ultimo).toMatchObject({ status: "ok", restante: "59999.00" });
+    expect(await repo.sumarVigentesPorTienda("t1")).toBe("40001.00");
+    const saldo = store.movimientos
+      .reduce((acc, m) => (m.tipo === "credito" ? acc.add(m.monto) : acc.sub(m.monto)), new Prisma.Decimal(0))
+      .toFixed(2);
+    expect(saldo).toBe("59999.00");
   });
 });

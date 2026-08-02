@@ -1,11 +1,14 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  LiquidacionAnulacionTxClient,
   LiquidacionCierreTxClient,
   LiquidacionPagoTxClient,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 import type { PagoMensajeroTxClient } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { WalletTiendaTxClient } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
+  AnularPagoInput,
+  AnularPagoResult,
   ListarPagosResult,
   RegistrarPagoMensajeroInput,
   RegistrarPagoResult,
@@ -20,12 +23,13 @@ import type {
 
 /**
  * Lo que la transaccion del pago necesita: el documento y su candado
- * (`LiquidacionPagoTxClient`), la LECTURA del cierre (`LiquidacionCierreTxClient`, R20: la
- * guardia se lee dentro de la transaccion) y el libro del beneficiario. Los dos libros van en
- * el tipo aunque cada operacion escriba en UNO: es el mismo `tx` de Prisma y el tipo describe
- * la transaccion, no la operacion.
+ * (`LiquidacionPagoTxClient`), la ANULACION (`LiquidacionAnulacionTxClient`, T F.1), la LECTURA
+ * del cierre (`LiquidacionCierreTxClient`, R20: la guardia se lee dentro de la transaccion) y
+ * el libro del beneficiario. Los dos libros van en el tipo aunque cada operacion escriba en
+ * UNO: es el mismo `tx` de Prisma y el tipo describe la transaccion, no la operacion.
  */
 export type LiquidacionTx = LiquidacionPagoTxClient &
+  LiquidacionAnulacionTxClient &
   LiquidacionCierreTxClient &
   WalletTiendaTxClient &
   PagoMensajeroTxClient;
@@ -60,6 +64,17 @@ export type ListarPagosServiceResult = Exclude<
   { status: "validation_error" } | { status: "unauthenticated" }
 >;
 
+/**
+ * T F.2 — resultado de DOMINIO de anular, con el mismo recorte que los dos de arriba. `ok`
+ * devuelve el comprobante YA marcado (R74) y lo que vuelve a estar disponible (R71/R79);
+ * `ya_anulado` devuelve el comprobante y **no** trae restante, porque esa segunda llamada no
+ * movio ni un centimo (R75).
+ */
+export type AnularPagoServiceResult = Exclude<
+  AnularPagoResult,
+  { status: "validation_error" } | { status: "unauthenticated" }
+>;
+
 export interface ILiquidacionService {
   /**
    * R21 — registra un pago a un MENSAJERO contra un cierre APROBADO concreto. Mismo esqueleto
@@ -88,6 +103,25 @@ export interface ILiquidacionService {
     input: RegistrarPagoTiendaInput,
     actor: Actor,
   ): Promise<RegistrarPagoServiceResult>;
+  /**
+   * T F.2 (R69-R71, R76, R77, R81, R82, R84) — ANULA un pago: añade el contraasiento del signo
+   * opuesto por el MISMO monto, jamas borra ni edita.
+   *
+   * Cuatro invariantes que este contrato ya impone por su forma:
+   *
+   *  - **El monto no se acepta de la peticion** (R70): `AnularPagoInput` es `{ pagoId, motivo }`
+   *    y nada mas. El importe del reverso sale del pago leido en el servidor. Si el cliente
+   *    pudiera dictarlo, anular seria una via para escribir cualquier cifra en el libro.
+   *  - **No se puede anular a medias** (R76): no hay campo por el que pedirlo.
+   *  - **No se puede anular una anulacion** (R82): no existe metodo para deshacerla. Si la
+   *    anulacion fue un error, la correccion es registrar el pago de nuevo (R79).
+   *  - **Mismo gate que pagar** ([P3]/R81): `maestro` y `admin`. Quien no puede mover el dinero
+   *    tampoco puede deshacer un movimiento.
+   *
+   * Toma EL MISMO bloqueo que tomaria su pago (R84/§4.2), uno solo (R85), para que una anulacion
+   * y un registro simultaneos no lean el mismo disponible.
+   */
+  anularPago(input: AnularPagoInput, actor: Actor): Promise<AnularPagoServiceResult>;
   /**
    * R49/R56/R74 — los comprobantes de UN cierre, anulados incluidos y marcados.
    *

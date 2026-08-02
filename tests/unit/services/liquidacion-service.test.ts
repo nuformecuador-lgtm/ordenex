@@ -147,6 +147,21 @@ function buildDobles(opciones: {
       log.push("crear:documento");
       return { status: "creado" as const, pago: pagoDTO() };
     }),
+    // T F.1: el contrato gana `anular`. Ningun test de ESTE archivo anula —la anulacion tiene el
+    // suyo, `liquidacion-anulacion.test.ts`—, pero el doble escribe en el log igualmente: los
+    // caminos de registro comparan el log ENTERO, asi que una llamada a `anular` colada en el
+    // registro rompería esas aserciones en vez de pasar inadvertida.
+    anular: vi.fn(async () => {
+      log.push("anular");
+      return {
+        status: "anulado" as const,
+        anulacion: {
+          motivo: "Monto mal tecleado",
+          anuladoPorNombre: "Mario Maestro",
+          anuladoAt: "2026-08-03T09:00:00.000Z",
+        },
+      };
+    }),
     // R20: si llega `tx`, la guardia se leyo DENTRO de la transaccion (y el `tx` visto lo
     // demuestra); sin `tx` es la relectura de la rama idempotente, que ocurre fuera.
     obtenerCierreParaPago: vi.fn(async (_id, t) => {

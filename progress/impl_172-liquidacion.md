@@ -1518,3 +1518,196 @@ leader.**
 
 8. **Preview sigue sin verificar** (hueco de T A.0). No lo resuelve esta tanda; sigue pendiente
    **antes de mergear el PR**.
+
+---
+
+## TANDA F (backend) — Anular un pago · T F.1, T F.2, T F.3 y T F.4 · **COMPLETA** (2026-08-02)
+
+> Tanda partida en dos: el **código de producción** de la anulación lo dejó escrito el agente
+> anterior (murió por un corte de la API antes de sus tests) y esta entrega lo **cierra con la
+> cobertura que faltaba**, sin reescribirlo. **T F.5 y T F.6 son de frontend y NO entran aquí.**
+>
+> Estado medido al empezar: `pnpm typecheck` verde y los 4 archivos de test de la 172 que ya
+> existían en verde (183 tests).
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/unit/services/liquidacion-anulacion.test.ts` | **65 casos** de T F.2: R70 (el monto colado se ignora), R69, R71, R77, R81, R84/R85, R76, R82, R40, R39 |
+
+**Modificados — tests**
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/integration/db/liquidacion-idempotencia.test.ts` | **26 → 39 casos.** El store gana `liquidacion_anulacion` con su `UNIQUE(pago_id)`, la relación `anulacion` en la fila del pago, `aggregate`/`findMany` de `liquidacionPago` y el reloj inyectable. Más la cadena de T F.3 (mensajero y tienda) |
+| `specs/172-liquidacion/tasks.md` | T F.1–T F.4 marcadas `[x]` |
+
+**Código de producción incluido en el commit** (escrito por el agente anterior, **no** reescrito):
+`LiquidacionService.anularPago` + `restanteTrasAnular` / `escribirContraasiento` /
+`beneficiarioDelPago` / `bloqueoDelBeneficiario` / `responderYaAnulado`,
+`LiquidacionPagoRepository.anular`, `descripcionDeAnulacion`, la 5.ª Server Action, los dos
+contratos y las ampliaciones ya hechas en `liquidacion-service.test.ts`,
+`liquidacion-pago-repository.test.ts` y `liquidacion-action.test.ts`.
+
+### Mapa `R<n> → test` de esta tanda
+
+| R | Test | Qué afirma |
+| --- | --- | --- |
+| **R70** | `liquidacion-anulacion.test.ts` | **el criterio duro de la tanda, medido colando un `monto` en la petición**: con `999999.99` y con `0.01`, el contraasiento sigue valiendo lo que valía el pago, en los **dos** libros; la cifra colada no aparece en nada de lo que el servicio manda hacer ni en lo que devuelve. Más el barrido ESTRUCTURAL: `anularPago` lee **exactamente** `input.pagoId` e `input.motivo`, y el único origen del importe es `Decimal(pago.monto)`. El beneficiario también sale del pago |
+| R69 | idem | mensajero → `devengo`/`ajuste_devengo`; tienda → `credito`/`ajuste_credito`; mismo monto, `origenTipo`/`origenId` **del pago**, un solo movimiento y **cero** en el otro libro; la descripción dice que es un reverso y **no** lleva el motivo ni ningún id; ni un `update`/`delete`/`upsert` sobre las cuatro tablas |
+| R71 | idem | tienda: 100 000 − 15 000 → anular → **100 000,00** exacto; al céntimo con `0.01` sobre cifras que un float redondearía mal; un saldo **en contra** vuelve a su negativo previo (no se recorta a cero). Mensajero: el pendiente vuelve a 50 000,00; con otro pago vigente en medio solo vuelve lo suyo; nunca supera lo que el cierre genera |
+| R76 | idem | la petición tiene **dos** campos y el repositorio recibe **tres**, ninguno un monto; un pago de `33333.33` se anula entero |
+| **R77** | idem + `liquidacion-idempotencia.test.ts` | el reverso se fecha el **día de la anulación** (2026-08-05) y **no** el del pago (2026-07-30), en los dos libros; el día es el **calendario de Costa Rica** (23:00 CR del 5 sigue siendo el 5, no el 6 de UTC); a **medianoche UTC** (§2.4); dos anulaciones en días distintos se fechan distinto; y R78: la fecha real del pago no cambia |
+| R81 | idem | los **4** roles sin acceso total → `forbidden` con el log **vacío**: el pago **ni siquiera se lee**. `adminSatelite` (que aprueba cierres) y `adminTienda` **de la tienda beneficiaria**, también. Contraprueba: `maestro`/`admin` sí pueden. R73: quién anula sale de la **sesión** |
+| R82 | idem + integración | el segundo intento devuelve `ya_anulado` con la anulación de la **primera** vez, **un** solo contraasiento y **sin** restante; el INSERT se intenta las dos veces (barrera de datos, no `if`); el prototipo del servicio es una **lista cerrada de 11 métodos** y ninguno se llama desanular/revertir/deshacer; en el servicio no existe ninguna sentencia de borrado |
+| **R84/R85** | idem + integración | **criterio duro medido, no declarado**: se **ejecuta** `registrarPagoMensajero`/`registrarPagoTienda` y se compara el objetivo del candado con el que toma la anulación — son idénticos. El objetivo se deriva del **pago leído**. Exactamente **una** adquisición, también en los caminos que no escriben. En integración, el `FOR UPDATE` es SQL **real** del repositorio: el log completo lo fija |
+| R40 | idem | los 7 espías de `walletMovimiento` sin una sola llamada, en los **dos** caminos; y la contraprueba estructural (ni `IWalletMovimientoRepository`, ni `walletMovimiento`, ni `egreso_pago_tienda`, ni `reversarEgreso` en la fuente) |
+| R39 | idem | las tres sentencias reciben **el mismo** `tx`; si el contraasiento falla no hay commit y el pago **sigue vigente** para quien lo relea (nunca marcado y descontado a la vez) |
+| **R78** | `liquidacion-idempotencia.test.ts` (T F.3) | la fila del pago anulado queda **intacta** campo a campo (lo único que cambia es que le cuelga su anulación); el pago nuevo entra con **la misma referencia y la misma fecha real** |
+| **R79** | idem | la cadena entera: pagar 20 000 → anular → pendiente **50 000,00** → registrar de nuevo con **clave nueva** → `ok`. Y en tienda: 100 000 → 85 000 → anular → 100 000 → volver a pagar → 85 000 |
+| **R80** | idem | la suma de vigentes la calcula el **repositorio real** contra el store: `sumarVigentesPorCierre` pasa a `0.00` y `sumarVigentesPorTienda` de `40000.00` a `25000.00` en cuanto existe la fila de anulación — sin tocar el pago. Contracara (R74): la **lista** sigue trayendo el anulado, entero y marcado |
+| R75 | idem | anular dos veces contra el `UNIQUE(pago_id)` del store: `ya_anulado`, **una** fila de anulación, **un** contraasiento, y el `choque-anulacion` en el log |
+
+**El detalle que se pidió medir:** reutilizar la **clave del pago anulado** devuelve
+`ya_registrado`, trae el comprobante **anulado** (no lo resucita) y deja **cero filas nuevas** —
+la clave **no se libera al anular**. Está en los dos caminos (mensajero y tienda).
+
+**Money-safe:** cero `Number(` y cero `parseFloat` en los dos archivos de test y en el servicio
+(hay un test que lo afirma leyendo la fuente); todo monto viaja como STRING de escala 2.
+
+### Verificación ejecutada
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: verde)
+
+$ pnpm run lint
+✖ 27 problems (0 errors, 27 warnings)      # los 27 preexistentes del baseline, intactos
+$ pnpm exec eslint tests/unit/services/liquidacion-anulacion.test.ts \
+                   tests/integration/db/liquidacion-idempotencia.test.ts
+(sin salida: limpio)
+
+$ pnpm exec vitest run tests/integration/db
+ Test Files  85 passed (85)
+      Tests  1024 passed (1024)            # 1011 de la Tanda C + los 13 de T F.3
+
+$ pnpm exec vitest run tests/unit/services/liquidacion-anulacion.test.ts \
+                      tests/unit/services/liquidacion-service.test.ts \
+                      tests/unit/repositories/liquidacion-pago-repository.test.ts \
+                      tests/unit/actions/liquidacion-action.test.ts
+ Test Files  4 passed (4)
+      Tests  222 passed (222)              # 157 que ya existían en esos 3 + 65 nuevos
+```
+
+**Delta: +1 archivo, +78 tests** (65 de `liquidacion-anulacion` + 13 de la cadena de T F.3, que
+lleva el archivo de integración de 26 a 39). **El gate completo (`./init.sh` y la suite entera)
+es del LEADER**: aquí no se corrió.
+
+### LAS PRUEBAS POR MUTACIÓN (obligatorias) — cuatro, con su salida real
+
+Se mutó `lib/services/LiquidacionService.ts` (copia previa en el scratchpad), se corrieron los
+**dos** archivos, y al final se restauró desde la copia con `diff` verde:
+`IDENTICO: sin diferencias con la copia`.
+
+**Mutación 1 — TOMAR EL MONTO DEL INPUT** (`Decimal((input as …).monto ?? pago.monto)`), que es
+literalmente el agujero que R70 existe para cerrar:
+
+```
+ ❯ tests/unit/services/liquidacion-anulacion.test.ts (65 tests | 4 failed)
+     × CRITERIO DURO: un monto ENORME colado en la peticion se IGNORA (tienda)
+     × CRITERIO DURO: tambien un monto MINUSCULO colado se ignora (tienda)
+     × CRITERIO DURO: lo mismo en el libro del MENSAJERO (es codigo distinto)
+     × ESTRUCTURAL: `anularPago` solo lee DOS campos de la peticion, y ninguno es un monto
+
+AssertionError: expected '999999.99' to be '15000.00' // Object.is equality
+AssertionError: expected '0.01' to be '15000.00'      // Object.is equality
+AssertionError: expected '999999.99' to be '20000.00' // Object.is equality
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 100 passed (104)
+```
+
+**Mutación 2 — FECHAR EL CONTRAASIENTO EL DÍA DEL PAGO**
+(`medianocheUtcDelDia(pago.fechaPago)`), la que reescribiría saldos históricos ya mirados:
+
+```
+ ❯ tests/unit/services/liquidacion-anulacion.test.ts (65 tests | 4 failed)
+     × TIENDA: el pago es del 30 de julio y el reverso se fecha el 5 de agosto
+     × MENSAJERO: mismo criterio en el otro libro
+     × el dia es el CALENDARIO DE COSTA RICA, no el de UTC (las 23:00 de CR siguen siendo hoy)
+     × el reloj es una DEPENDENCIA: dos anulaciones en dias distintos se fechan distinto
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts (39 tests | 2 failed)
+     × R77: el contraasiento se fecha el dia de la ANULACION, no el del pago
+     × LA CADENA: el saldo vuelve a 100 000 y el pago nuevo entra con la misma referencia
+
+AssertionError: expected '2026-07-30T00:00:00.000Z' to be '2026-08-05T00:00:00.000Z'
+      Tests  6 failed | 98 passed (104)
+```
+
+**Mutación 3a — BLOQUEAR OTRA COSA** (la fila `usuario` del mensajero en vez de la del cierre,
+que es el error plausible: «total, es su mensajero»):
+
+```
+ ❯ tests/unit/services/liquidacion-anulacion.test.ts (65 tests | 3 failed)
+     × CRITERIO DURO (mensajero): el objetivo es identico al que toma `registrarPagoMensajero`
+     × el objetivo se deriva del PAGO leido: otro cierre en la fila, otro candado
+     × R84/R83: el candado va ANTES de leer el pendiente del cierre (mensajero)
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts (39 tests | 2 failed)
+     × R84/R83: la anulacion toma el candado del CIERRE y lee el pendiente DESPUES
+     × R84 [P1]: una anulacion y un registro simultaneos NO leen el mismo disponible
+
+-   "candado:cierre_dia:c1"        +   "candado:usuario:m1"
+-   "candado-tomado:cierre_dia:c1" +   "candado-tomado:usuario:m1"
+AssertionError: expected 8 to be greater than 11   # la 2.ª lectura YA NO espera al commit
+      Tests  5 failed | 99 passed (104)
+```
+
+Lo que cae en el segundo archivo es lo que importa: con el candado en la fila equivocada, **la
+anulación y un registro simultáneos vuelven a leer el mismo disponible**, que es exactamente lo
+que R84 existe para impedir.
+
+**Mutación 3b — NO BLOQUEAR NADA** (se quita la línea del candado):
+
+```
+ ❯ tests/unit/services/liquidacion-anulacion.test.ts (65 tests | 10 failed)
+     × el disponible se lee BAJO el candado y DESPUES de tomarlo (R83)
+     × CRITERIO DURO (mensajero) / CRITERIO DURO (tienda): el objetivo es identico al del pago
+     × el objetivo se deriva del PAGO leido: otro cierre en la fila, otro candado
+     × R85: UNA sola adquisicion por operacion (tienda) / (mensajero)
+     × R85: tambien los caminos que NO escriben toman uno y solo uno
+     × R84/R83: el candado va ANTES de leer el pendiente del cierre (mensajero)
+     × el segundo intento INTENTA insertar: la barrera es la restriccion, no un `if` previo
+     × las tres sentencias reciben EL MISMO `tx`, en una sola transaccion
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts (39 tests | 2 failed)
+      Tests  12 failed | 92 passed (104)
+```
+
+### Hallazgos
+
+1. **Ningún defecto en el código de producción de la anulación.** Se escribieron los tests
+   contra el comportamiento exigido por `requirements.md` y `design.md §6`, no contra lo que el
+   código hace, y las cuatro mutaciones confirman que los tests miden de verdad. No hubo que
+   tocar ni una línea de `lib/`.
+
+2. **Anular NO exige que el cierre siga aprobado, y está probado a propósito.** La guardia de
+   R20 es del **registro**: anular corrige un pago que ya ocurrió, y que el cierre haya cambiado
+   de estado después no puede dejar ese pago sin reverso posible. Hay un test que recorre los
+   tres estados no aprobados y espera `ok`. Si algún día se quisiera lo contrario, ese test es el
+   sitio donde se decide.
+
+3. **El store de integración ganó `aggregate` y `findMany` de `liquidacionPago`**, que antes no
+   tenía. Son los que usan `sumarVigentesPorTienda` y `listarPorTienda`, y se añadieron con el
+   mismo criterio del resto del store: **revientan** ante un `where` que no entienden, para que
+   una mutación que use otra construcción falle en vez de pasar por «no casa nada».
+
+4. **`buildService` del store acepta ahora un reloj opcional.** Los tests de registro no lo pasan
+   y siguen exactamente igual (el default del servicio es `new Date()`); solo la anulación lo
+   necesita, porque R77 pregunta por «hoy».
+
+5. **T F.5 y T F.6 siguen abiertas** (frontend), y con ellas el default de N1. **Preview sigue
+   sin verificar** (hueco de T A.0), pendiente antes de mergear el PR.
+

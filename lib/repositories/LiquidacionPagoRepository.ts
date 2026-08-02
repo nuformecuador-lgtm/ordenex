@@ -1,10 +1,13 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
+  AnularLiquidacionPagoInput,
+  AnularLiquidacionPagoResult,
   BeneficiarioBloqueo,
   CierreParaPagoDTO,
   CrearLiquidacionPagoInput,
   CrearLiquidacionPagoResult,
   ILiquidacionPagoRepository,
+  LiquidacionAnulacionTxClient,
   LiquidacionCierreTxClient,
   LiquidacionPagoDTO,
   LiquidacionPagoTxClient,
@@ -78,6 +81,23 @@ function esChoqueDeClave(error: unknown): boolean {
   if (!esP2002(error)) return false;
   const texto = textoConstraintP2002(error);
   return texto === null || texto.includes("clave_idempotencia");
+}
+
+/**
+ * T F.1/R75 — ¿este P2002 es el del `UNIQUE(pago_id)` de `liquidacion_anulacion`?
+ *
+ * Mismo tratamiento que el choque de la clave, y por el mismo motivo: se disambigua con
+ * `textoConstraintP2002` para cubrir las dos formas del error (nativa y driver adapter). La
+ * unica sentencia que puede producir un P2002 aqui es el INSERT de la anulacion, y esa tabla
+ * solo tiene dos restricciones unicas —la PK sobre un uuid recien generado, imposible de
+ * repetir, y esta—, asi que un P2002 SIN pista tambien se lee como «ya anulado»: el servicio
+ * relee el pago y, si no encontrara la anulacion, responde `no_encontrado`. Nunca una segunda
+ * anulacion en silencio.
+ */
+function esChoqueDeAnulacion(error: unknown): boolean {
+  if (!esP2002(error)) return false;
+  const texto = textoConstraintP2002(error);
+  return texto === null || texto.includes("pago_id") || texto.includes("liquidacion_anulacion");
 }
 
 /**
@@ -181,6 +201,46 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
       totalPagoMensajero: row.totalPagoMensajero.toFixed(2),
       totalEfectivo: row.totalEfectivo.toFixed(2),
     };
+  }
+
+  /**
+   * T F.1 (R69/R73/R75) — inserta la ANULACION. Tres columnas y ni una mas: el `id` y el
+   * instante los pone la base (`created_at DEFAULT now()`, R73), igual que en el pago.
+   *
+   * **No hay ningun `update` sobre `liquidacion_pago` en este metodo, ni en toda la clase.** Es
+   * el corazon del modelo (design §2.2, alternativa H descartada): el pago es una fila INMUTABLE
+   * y «anulado» se DERIVA de que exista esta fila. Con una marca en el pago habria dos sitios
+   * —la marca y el contraasiento del libro— que podrian desincronizarse; asi no hay nada que
+   * sincronizar.
+   *
+   * El choque del `UNIQUE(pago_id)` sale como RESULTADO (`ya_anulado`), nunca como excepcion que
+   * suba: es el desenlace previsto del doble clic. Cualquier otro error se propaga.
+   */
+  async anular(
+    tx: LiquidacionAnulacionTxClient,
+    input: AnularLiquidacionPagoInput,
+  ): Promise<AnularLiquidacionPagoResult> {
+    try {
+      const row = await tx.liquidacionAnulacion.create({
+        data: {
+          pagoId: input.pagoId,
+          motivo: input.motivo,
+          anuladoPor: input.anuladoPor, // R73: QUIEN anulo
+        },
+        include: { anulador: { select: { nombre: true } } }, // R56: NOMBRE, no id
+      });
+      return {
+        status: "anulado",
+        anulacion: {
+          motivo: row.motivo,
+          anuladoPorNombre: row.anulador.nombre,
+          anuladoAt: row.createdAt.toISOString(), // R73: CUANDO se anulo
+        },
+      };
+    } catch (error) {
+      if (esChoqueDeAnulacion(error)) return { status: "ya_anulado" };
+      throw error;
+    }
   }
 
   /** §4.1: relectura idempotente por la clave del cliente. */

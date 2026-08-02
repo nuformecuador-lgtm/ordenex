@@ -21,6 +21,14 @@ export type LiquidacionPagoTxClient = Pick<PrismaClient, "liquidacionPago" | "$q
 export type LiquidacionCierreTxClient = Pick<PrismaClient, "cierreDia">;
 
 /**
+ * Cliente para escribir la ANULACION (T F.1). Va aparte del del documento por la misma razon
+ * que el del cierre: son dos tablas distintas y el tipo deja escrito que anular NO abre la
+ * puerta de `liquidacionPago`. Quien recibe este cliente puede insertar el contraasiento
+ * documental y nada mas — en particular, no puede tocar la fila del pago (R41/R74).
+ */
+export type LiquidacionAnulacionTxClient = Pick<PrismaClient, "liquidacionAnulacion">;
+
+/**
  * §4.2 [P1] — QUE fila se bloquea, y el grano difiere a proposito:
  *
  * - pago a un mensajero: la fila de `cierre_dia`. Lo que se consume es el pendiente de UN
@@ -108,6 +116,35 @@ export type CrearLiquidacionPagoResult =
   | { status: "creado"; pago: LiquidacionPagoDTO }
   | { status: "clave_repetida" };
 
+/**
+ * T F.1 (R73) — las TRES columnas de la anulacion que decide el emisor. El `id` y el instante
+ * los pone la base (`created_at DEFAULT now()`), igual que en el pago.
+ *
+ * **NO lleva monto** y no es un olvido: el del contraasiento se lee del pago original en el
+ * servidor (R70). Un `monto` aqui seria la puerta por la que el cliente dictaria cuanto se
+ * devuelve al libro, es decir, una via para escribir cualquier cifra.
+ *
+ * Tampoco lleva nada que permita anular a MEDIAS (R76): se anula el pago entero o no se anula.
+ */
+export interface AnularLiquidacionPagoInput {
+  pagoId: string;
+  motivo: string;
+  anuladoPor: string;
+}
+
+/**
+ * R75 — el segundo intento de anular el mismo pago es un RESULTADO, no una excepcion que suba:
+ * es un desenlace previsto (dos pestañas, doble clic, un reintento tras un timeout), no un
+ * fallo. Quien lo recibe responde `ya_anulado` con el comprobante ya anulado.
+ *
+ * La barrera es DE DATOS —el `UNIQUE(pago_id)` de `liquidacion_anulacion`—, no un `if` previo:
+ * no hay `SELECT` que decida si insertar, asi que no hay ventana TOCTOU entre comprobar y
+ * escribir. Es la misma forma que `CrearLiquidacionPagoResult` da a la clave de idempotencia.
+ */
+export type AnularLiquidacionPagoResult =
+  | { status: "anulado"; anulacion: AnulacionDTO }
+  | { status: "ya_anulado" };
+
 export interface ILiquidacionPagoRepository {
   /**
    * §4.2 (R83/R85) — `SELECT … FOR UPDATE` sobre la fila del beneficiario, DENTRO de `tx` y
@@ -139,6 +176,20 @@ export interface ILiquidacionPagoRepository {
     cierreId: string,
     tx?: LiquidacionCierreTxClient,
   ): Promise<CierreParaPagoDTO | null>;
+  /**
+   * T F.1 (R73/R75) — inserta la ANULACION en `tx`, traduciendo el choque del `UNIQUE(pago_id)`
+   * en `ya_anulado`. **Nunca lanza por ese motivo**: un segundo intento es un desenlace
+   * previsto, no un fallo. Cualquier otro error se propaga.
+   *
+   * ANULAR ES AÑADIR, JAMAS BORRAR NI EDITAR (R69/R41/R74): este metodo escribe UNA fila en
+   * `liquidacion_anulacion` y no toca `liquidacion_pago` — el pago sigue intacto y visible con
+   * todos sus datos. El estado «anulado» se DERIVA de que exista esta fila (design §2.2), asi
+   * que no hay ningun flag que pueda quedar desincronizado con el contraasiento del libro.
+   */
+  anular(
+    tx: LiquidacionAnulacionTxClient,
+    input: AnularLiquidacionPagoInput,
+  ): Promise<AnularLiquidacionPagoResult>;
   /** §4.1: relectura idempotente por la clave del cliente. `null` si esa clave no se uso. */
   obtenerPorClave(claveIdempotencia: string): Promise<LiquidacionPagoDTO | null>;
   /** R70: el pago leido SERVER-SIDE por su id (lo que necesita la anulacion). */

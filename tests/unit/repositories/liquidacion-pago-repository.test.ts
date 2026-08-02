@@ -1,12 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
+import fs from "fs";
+import path from "path";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
 import type { CrearLiquidacionPagoInput } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 
-// Feature 172 / T B.1 + T B.4 (mitad del repositorio) — tests unit del LiquidacionPagoRepository
-// (mockea Prisma, sin DB). Cubre R7 (las 10 columnas del documento), R9 (fecha real e instante
-// de registro conviven y difieren), R80 (las sumas excluyen los anulados) y la mitad de R83/R85
-// que solo se puede afirmar AQUI: el `SELECT … FOR UPDATE`.
+// Feature 172 / T B.1 + T B.4 + T F.1 (mitad del repositorio) — tests unit del
+// LiquidacionPagoRepository (mockea Prisma, sin DB). Cubre R7 (las 10 columnas del documento),
+// R9 (fecha real e instante de registro conviven y difieren), R80 (las sumas excluyen los
+// anulados), R73/R75 (la ANULACION: actor e instante persistidos; el segundo intento devuelve
+// `ya_anulado` SIN insertar y sin tocar la fila del pago) y la mitad de R83/R85 que solo se
+// puede afirmar AQUI: el `SELECT … FOR UPDATE`.
 //
 // Por que estas afirmaciones viven en el repositorio y no en el servicio: los tests de servicio
 // usan DOBLES y NO ven la traduccion a SQL. Una mutacion del `WHERE` —o quitar el `FOR UPDATE`—
@@ -57,6 +61,22 @@ function buildPrisma() {
       findMany: vi.fn(),
       groupBy: vi.fn(),
       aggregate: vi.fn(),
+      // T F.1: las ESCRITURAS del pago, espiadas. Existen en el doble para poder afirmar que
+      // anular no llama a NINGUNA (R41/R74: el pago es una fila inmutable).
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      upsert: vi.fn(),
+    },
+    // T F.1: la tabla de la anulacion. Mismo criterio: tambien con sus escrituras espiadas.
+    liquidacionAnulacion: {
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      upsert: vi.fn(),
     },
     // T B.5: el cierre se LEE (R20/R22) y jamas se escribe (R42). El doble expone tambien las
     // escrituras, espiadas, para poder afirmar que ninguna se usa.
@@ -450,6 +470,178 @@ describe("LiquidacionPagoRepository — relecturas por clave y por id (§4.1/R70
     expect(prisma.liquidacionPago.findUnique.mock.calls[0][0].where).toEqual({ id: "pago-1" });
     expect(pago?.monto).toBe("15000.00");
     expect(pago?.tiendaId).toBe("t1"); // el servicio necesita saber a QUIEN se le pago
+  });
+});
+
+// ── T F.1: la ANULACION (R73/R75). Anular es AÑADIR una fila, jamas tocar la del pago ──
+
+/**
+ * Mini-store del `UNIQUE(pago_id)` de `liquidacion_anulacion`. No es un mock que «devuelve lo
+ * que se le dice»: guarda las filas y RECHAZA la segunda del mismo pago, que es lo que hace
+ * observable el criterio de T F.1 — «el segundo intento devuelve `ya_anulado` **sin insertar**».
+ * Con un `mockRejectedValueOnce` no se podria contar cuantas filas quedaron.
+ */
+function storeDeAnulaciones(adapter = false) {
+  const filas: Array<Record<string, unknown>> = [];
+  const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+    if (filas.some((f) => f.pagoId === data.pagoId)) {
+      throw adapter
+        ? p2002Adapter("liquidacion_anulacion_pago_id_key")
+        : p2002Nativo(["pago_id"]);
+    }
+    const fila = {
+      id: `anu-${filas.length + 1}`,
+      ...data,
+      createdAt: new Date("2026-08-03T09:00:00.000Z"),
+      anulador: { nombre: "Mario Maestro" },
+    };
+    filas.push(fila);
+    return fila;
+  });
+  return { filas, create };
+}
+
+const ANULAR = { pagoId: "pago-1", motivo: "Monto mal tecleado", anuladoPor: "u-maestro" };
+
+describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
+  it("R73: escribe las TRES columnas de la anulacion y devuelve quien y cuando", async () => {
+    const prisma = buildPrisma();
+    const store = storeDeAnulaciones();
+    prisma.liquidacionAnulacion.create = store.create;
+    const repo = buildRepo(prisma);
+
+    const r = await repo.anular(
+      { liquidacionAnulacion: prisma.liquidacionAnulacion } as never,
+      ANULAR,
+    );
+
+    const arg = store.create.mock.calls[0][0] as { data: Record<string, unknown> };
+    // Las 3 que decide el emisor. El `id` y el instante los pone la base, igual que en el pago.
+    expect(Object.keys(arg.data).sort()).toEqual(["anuladoPor", "motivo", "pagoId"]);
+    expect(arg.data).toEqual({
+      pagoId: "pago-1",
+      motivo: "Monto mal tecleado",
+      anuladoPor: "u-maestro",
+    });
+    expect(arg.data).not.toHaveProperty("createdAt");
+    // R70/R76: no hay ninguna columna de MONTO en la anulacion. El del contraasiento sale del
+    // pago, en el servidor, y no hay por donde pedir una anulacion parcial.
+    expect(arg.data).not.toHaveProperty("monto");
+
+    expect(r).toEqual({
+      status: "anulado",
+      anulacion: {
+        motivo: "Monto mal tecleado",
+        anuladoPorNombre: "Mario Maestro", // R56: NOMBRE, no id
+        anuladoAt: "2026-08-03T09:00:00.000Z", // R73: el instante
+      },
+    });
+    expect(JSON.stringify(r)).not.toContain("u-maestro");
+  });
+
+  it("R75: el SEGUNDO intento devuelve `ya_anulado` y NO inserta nada", async () => {
+    const prisma = buildPrisma();
+    const store = storeDeAnulaciones();
+    prisma.liquidacionAnulacion.create = store.create;
+    const repo = buildRepo(prisma);
+    const tx = { liquidacionAnulacion: prisma.liquidacionAnulacion } as never;
+
+    const primera = await repo.anular(tx, ANULAR);
+    const segunda = await repo.anular(tx, { ...ANULAR, motivo: "Otro motivo, otro actor" });
+
+    expect(primera.status).toBe("anulado");
+    expect(segunda).toEqual({ status: "ya_anulado" }); // R75, y NO una excepcion que suba
+    // «Sin insertar», medido contando filas: queda UNA, la de la primera vez, con SU motivo.
+    expect(store.filas).toHaveLength(1);
+    expect(store.filas[0]).toMatchObject({ motivo: "Monto mal tecleado" });
+    // R44 (misma filosofia que la clave): el INSERT se INTENTA las dos veces; quien dice que no
+    // es la restriccion, no un `SELECT` previo del repositorio.
+    expect(store.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("R75: tambien bajo el driver adapter de Prisma 7, donde `meta.target` viene vacio", async () => {
+    // La cicatriz de `_shared/prisma-unique.ts`: leyendo solo `meta.target`, el segundo intento
+    // escalaria a un 500 en vez de responder `ya_anulado`.
+    const prisma = buildPrisma();
+    const store = storeDeAnulaciones(true);
+    prisma.liquidacionAnulacion.create = store.create;
+    const repo = buildRepo(prisma);
+    const tx = { liquidacionAnulacion: prisma.liquidacionAnulacion } as never;
+
+    await repo.anular(tx, ANULAR);
+    expect(await repo.anular(tx, ANULAR)).toEqual({ status: "ya_anulado" });
+    expect(store.filas).toHaveLength(1);
+  });
+
+  it("un P2002 de OTRA restriccion se propaga: no se disfraza de `ya_anulado`", async () => {
+    const prisma = buildPrisma();
+    prisma.liquidacionAnulacion.create.mockRejectedValue(
+      p2002Adapter("liquidacion_pago_clave_idempotencia_key"),
+    );
+    const repo = buildRepo(prisma);
+
+    await expect(
+      repo.anular({ liquidacionAnulacion: prisma.liquidacionAnulacion } as never, ANULAR),
+    ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+  });
+
+  it("un error que NO es P2002 se propaga tal cual", async () => {
+    const prisma = buildPrisma();
+    prisma.liquidacionAnulacion.create.mockRejectedValue(new Error("conexion caida"));
+    const repo = buildRepo(prisma);
+
+    await expect(
+      repo.anular({ liquidacionAnulacion: prisma.liquidacionAnulacion } as never, ANULAR),
+    ).rejects.toThrow("conexion caida");
+  });
+
+  it("R41/R74 — EL CRITERIO DURO: anular no toca la fila del pago (cero `update`)", async () => {
+    const prisma = buildPrisma();
+    const store = storeDeAnulaciones();
+    prisma.liquidacionAnulacion.create = store.create;
+    const repo = buildRepo(prisma);
+    const tx = {
+      liquidacionAnulacion: prisma.liquidacionAnulacion,
+      liquidacionPago: prisma.liquidacionPago,
+    } as never;
+
+    await repo.anular(tx, ANULAR);
+    await repo.anular(tx, ANULAR); // y tampoco en el camino que rechaza
+
+    for (const metodo of ["update", "updateMany", "delete", "deleteMany", "upsert", "create"] as const) {
+      expect(prisma.liquidacionPago[metodo], `liquidacionPago.${metodo}`).not.toHaveBeenCalled();
+    }
+    // Ni siquiera se LEE el pago desde aqui: el monto lo lee el servicio con `obtenerPorId`.
+    expect(prisma.liquidacionPago.findUnique).not.toHaveBeenCalled();
+    // Y la propia anulacion es append-only: solo `create`.
+    for (const metodo of ["update", "updateMany", "delete", "deleteMany", "upsert"] as const) {
+      expect(
+        prisma.liquidacionAnulacion[metodo],
+        `liquidacionAnulacion.${metodo}`,
+      ).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R41/R82 — contraprueba ESTRUCTURAL: en toda la clase no existe una escritura del pago", async () => {
+    // El test de arriba mide UNA llamada; este cierra el archivo entero, incluidos los caminos
+    // que ningun test recorra. Tambien fija R82: no hay ningun `delete` de una anulacion, asi
+    // que no existe forma de deshacerla.
+    const fuente = fs
+      .readFileSync(path.join(process.cwd(), "lib/repositories/LiquidacionPagoRepository.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    for (const escritura of ["update", "updateMany", "delete", "deleteMany", "upsert"]) {
+      expect(fuente, `liquidacionPago.${escritura}`).not.toContain(`liquidacionPago.${escritura}`);
+      expect(fuente, `liquidacionAnulacion.${escritura}`).not.toContain(
+        `liquidacionAnulacion.${escritura}`,
+      );
+    }
+    // Las dos unicas escrituras de toda la clase son los dos INSERT.
+    expect(fuente.match(/liquidacionPago\.create|liquidacionAnulacion\.create/g)).toEqual([
+      "liquidacionPago.create",
+      "liquidacionAnulacion.create",
+    ]);
   });
 });
 
