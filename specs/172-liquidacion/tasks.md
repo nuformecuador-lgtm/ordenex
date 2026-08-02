@@ -261,7 +261,17 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** **prueba por mutación obligatoria**: quitando el bloqueo del store, el test de
   carrera debe fallar. Un test de concurrencia que pasa sin candado no prueba nada.
 
-### [ ] T B.5 — `LiquidacionService.registrarPagoMensajero`
+### [x] T B.5 — `LiquidacionService.registrarPagoMensajero`
+- **HECHA el 2026-08-02.** `registrarPagoMensajero` en `LiquidacionService` (candado del
+  **cierre** → guardia de estado leída **dentro** de la transacción → pendiente derivado →
+  documento + movimiento `pago`/`liquidacion` con `origenTipo: "pago_mensajero"`). El
+  repositorio gana `obtenerCierreParaPago(cierreId, tx?)` —**solo lectura**, `select` de 5
+  columnas— y el servicio, un tercer repositorio por constructor
+  (`IPagoMensajeroMovimientoRepository`). El **beneficiario sale del cierre**, nunca de la
+  petición (R5). `tests/unit/services/liquidacion-service.test.ts` pasa de 33 a **67 casos**:
+  los tres estados no aprobados → `cierre_no_aprobado` sin escribir ni derivar el pendiente,
+  pago parcial con la cifra exacta al céntimo, y R42 medido por tres vías (espías del `tx`,
+  el doble del repositorio y la ausencia estructural de cualquier escritura sobre `cierreDia`).
 - Igual que T B.3, más: el cierre debe existir y estar `aprobado` (leído dentro de la
   transacción), el pendiente sale de `derivarPendienteCierre`, el bloqueo es el del **cierre**, y
   el movimiento es `pago`/`liquidacion` con `origenTipo: "pago_mensajero"`.
@@ -270,7 +280,15 @@ queda el registro de cierre y lo que cada una desencadenó.
   nada**; un pago parcial deja el resto pendiente con la cifra exacta; ningún snapshot del cierre
   se toca (R42, verificado sobre el doble del repositorio).
 
-### [ ] T B.6 — Idempotencia
+### [x] T B.6 — Idempotencia
+- **HECHA el 2026-08-02.** `tests/integration/db/liquidacion-idempotencia.test.ts` pasa de 10 a
+  **26 casos**, sobre el store **ya corregido** de T B.4 (instantánea al inicio de la sentencia),
+  ampliado con la semántica del `UNIQUE(clave_idempotencia)` y del índice único parcial de
+  **los dos** libros, más `cierre_dia` (que **revienta** si alguien intenta escribirlo, R42).
+  Los 5 casos de la lista, en los dos caminos. **Prueba por mutación ejecutada dos veces**:
+  apagar el `UNIQUE` del store hace caer **5** tests —el primero incluido, con los dos pagos
+  entrando (`crear-documento:pago-2`)— y apagar el índice único parcial del libro del mensajero
+  hace caer los **2** de R48. Salidas pegadas en `progress/impl_172-liquidacion.md`.
 - En `tests/integration/db/liquidacion-idempotencia.test.ts`, con un store en memoria que
   **simula la semántica real** del `UNIQUE` y del índice único parcial de los libros (molde
   `wallet-idempotencia.test.ts`):
@@ -283,7 +301,14 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** 5 tests verdes **y** demostración por mutación de que quitar el `UNIQUE` del store
   hace fallar el primero.
 
-### [ ] T B.7 — Server Actions de registro
+### [x] T B.7 — Server Actions de registro
+- **HECHA el 2026-08-02.** `lib/actions/liquidacion.ts` con las **dos** acciones de registro
+  (las otras tres del diseño son de T C.1 y T F.4), molde literal de `wallet-egresos.ts`.
+  `tests/unit/actions/liquidacion-action.test.ts` (**23 casos**): sin sesión →
+  `unauthenticated` sin tocar el servicio **y con la petición rota también** (el orden importa);
+  ZodError → `validation_error` **por campo**; un monto `number` muere en el borde; los estados
+  de dominio se devuelven tal cual; y R65 con **dos** aserciones —la lista EXACTA de
+  exportaciones y un patrón que rechaza `editar/actualizar/modificar/corregir/update/patch`—.
 - `lib/actions/liquidacion.ts` con el molde de `lib/actions/wallet-egresos.ts`
   (`resolveActorFromSession` → `UnauthenticatedError` **antes** del servicio → `schema.parse` →
   servicio bajo `withErrorHandler`). Mutaciones internas ⇒ Server Action, no Route Handler.

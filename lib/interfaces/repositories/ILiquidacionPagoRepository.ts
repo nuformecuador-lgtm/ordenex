@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { CierreEstado, PrismaClient } from "@prisma/client";
 import type { AnulacionDTO, MetodoLiquidacion } from "@/lib/types/liquidacion";
 
 // Feature 172 (design §3.1) — contrato del repositorio del DOCUMENTO del pago. Solo queries
@@ -11,6 +11,14 @@ import type { AnulacionDTO, MetodoLiquidacion } from "@/lib/types/liquidacion";
  * un `$transaction` interactivo como el `PrismaClient` completo.
  */
 export type LiquidacionPagoTxClient = Pick<PrismaClient, "liquidacionPago" | "$queryRaw">;
+
+/**
+ * Cliente para LEER el cierre. Va aparte del de arriba a proposito: `cierre_dia` es una tabla
+ * AJENA a esta feature y lo unico que se hace con ella es leer (R42 — ningun snapshot del
+ * cierre se toca). Tenerlo en un tipo propio deja escrito que el documento y el cierre son dos
+ * accesos distintos, y que el segundo es de solo lectura.
+ */
+export type LiquidacionCierreTxClient = Pick<PrismaClient, "cierreDia">;
 
 /**
  * §4.2 [P1] — QUE fila se bloquea, y el grano difiere a proposito:
@@ -72,6 +80,25 @@ export interface LiquidacionPagoDTO {
 }
 
 /**
+ * R20/R21/R22 — lo MINIMO del cierre que el pago al mensajero necesita, y nada mas:
+ *
+ * - `estado`: el pago solo entra si esta `aprobado` (R20). Se lee del cierre, no del input.
+ * - `mensajeroId`: el BENEFICIARIO sale de aqui, nunca de la peticion (R5/R21). El cliente
+ *   manda el cierre; a quien se le paga lo decide el servidor leyendo ese cierre.
+ * - `totalPagoMensajero` (P) y `totalEfectivo` (E): los dos SNAPSHOT del propio cierre, que es
+ *   de donde `derivarPendienteCierre` saca lo devengado sin tocar el libro (§5).
+ *
+ * Los dos montos salen como STRING de escala 2 (money-safe), igual que el resto del repo.
+ */
+export interface CierreParaPagoDTO {
+  id: string;
+  mensajeroId: string;
+  estado: CierreEstado;
+  totalPagoMensajero: string; // P — STRING 2 dec (snapshot de la 39)
+  totalEfectivo: string; // E — STRING 2 dec (snapshot de la 37)
+}
+
+/**
  * §4.1/R43/R44/R47 — el conflicto de `clave_idempotencia` es un RESULTADO, no una excepcion que
  * suba. La barrera es de datos (el `UNIQUE` de la columna): no hay `SELECT` previo que decida
  * si insertar, asi que no hay ventana TOCTOU. Quien recibe `clave_repetida` relee el pago por
@@ -94,6 +121,24 @@ export interface ILiquidacionPagoRepository {
     tx: LiquidacionPagoTxClient,
     input: CrearLiquidacionPagoInput,
   ): Promise<CrearLiquidacionPagoResult>;
+  /**
+   * R20/R21/R22 — lee el cierre contra el que se paga. `null` si no existe.
+   *
+   * **`tx` no es un adorno.** La guardia de R20 («el cierre esta aprobado») solo vale si se lee
+   * DENTRO de la misma transaccion y DESPUES del candado: leida fuera, un cierre podria cambiar
+   * de estado entre la comprobacion y la escritura del pago. Por eso el camino del registro
+   * pasa SIEMPRE el `tx`, y hay un test que afirma que es el mismo objeto que recibe el candado.
+   *
+   * Sin `tx` (cliente propio del repositorio) queda la relectura de la rama IDEMPOTENTE, que
+   * ocurre necesariamente fuera: en Postgres, el choque de la clave deja la transaccion
+   * abortada y ninguna sentencia posterior sobreviviria dentro de ella.
+   *
+   * SOLO LEE (R42): en este repositorio no existe ningun metodo que escriba en `cierre_dia`.
+   */
+  obtenerCierreParaPago(
+    cierreId: string,
+    tx?: LiquidacionCierreTxClient,
+  ): Promise<CierreParaPagoDTO | null>;
   /** §4.1: relectura idempotente por la clave del cliente. `null` si esa clave no se uso. */
   obtenerPorClave(claveIdempotencia: string): Promise<LiquidacionPagoDTO | null>;
   /** R70: el pago leido SERVER-SIDE por su id (lo que necesita la anulacion). */

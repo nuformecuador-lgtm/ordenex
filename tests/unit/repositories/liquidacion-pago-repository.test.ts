@@ -58,7 +58,29 @@ function buildPrisma() {
       groupBy: vi.fn(),
       aggregate: vi.fn(),
     },
+    // T B.5: el cierre se LEE (R20/R22) y jamas se escribe (R42). El doble expone tambien las
+    // escrituras, espiadas, para poder afirmar que ninguna se usa.
+    cierreDia: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+      upsert: vi.fn(),
+    },
     $queryRaw: vi.fn().mockResolvedValue([]),
+  };
+}
+
+/** La fila del cierre tal y como la devuelve Prisma: los dos totales como `Decimal`. */
+function cierreRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "c1",
+    mensajeroId: "m1",
+    estado: "aprobado",
+    totalPagoMensajero: new Prisma.Decimal("50000.00"),
+    totalEfectivo: new Prisma.Decimal("12345.6"), // escala 1 a proposito: se normaliza a 2
+    ...overrides,
   };
 }
 
@@ -428,5 +450,80 @@ describe("LiquidacionPagoRepository — relecturas por clave y por id (§4.1/R70
     expect(prisma.liquidacionPago.findUnique.mock.calls[0][0].where).toEqual({ id: "pago-1" });
     expect(pago?.monto).toBe("15000.00");
     expect(pago?.tiendaId).toBe("t1"); // el servicio necesita saber a QUIEN se le pago
+  });
+});
+
+// ── T B.5: la lectura del cierre contra el que se paga (R20/R21/R22/R42) ──
+
+describe("LiquidacionPagoRepository.obtenerCierreParaPago (R20/R22/R42)", () => {
+  it("lee SOLO las cinco columnas que el pago necesita y devuelve los montos como STRING", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findUnique.mockResolvedValue(cierreRow());
+    const repo = buildRepo(prisma);
+
+    const cierre = await repo.obtenerCierreParaPago("c1");
+
+    // `select` explicito: de una tabla que esta feature no gobierna no se trae nada de mas.
+    expect(prisma.cierreDia.findUnique.mock.calls[0][0]).toEqual({
+      where: { id: "c1" },
+      select: {
+        id: true,
+        mensajeroId: true,
+        estado: true,
+        totalPagoMensajero: true,
+        totalEfectivo: true,
+      },
+    });
+    expect(cierre).toEqual({
+      id: "c1",
+      mensajeroId: "m1",
+      estado: "aprobado",
+      totalPagoMensajero: "50000.00",
+      totalEfectivo: "12345.60", // Decimal -> STRING escala 2 (money-safe)
+    });
+  });
+
+  it("R20: con `tx` la guardia se lee EN LA TRANSACCION, no en el cliente propio", async () => {
+    const prisma = buildPrisma();
+    const tx = { cierreDia: { findUnique: vi.fn().mockResolvedValue(cierreRow()) } };
+    const repo = buildRepo(prisma);
+
+    await repo.obtenerCierreParaPago("c1", tx as never);
+
+    expect(tx.cierreDia.findUnique).toHaveBeenCalledTimes(1);
+    // Y el cliente propio NO se toca: leer fuera de la transaccion dejaria una ventana entre la
+    // comprobacion del estado y la escritura del pago.
+    expect(prisma.cierreDia.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("un cierre que no existe devuelve null (y no un objeto con ceros)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findUnique.mockResolvedValue(null);
+    const repo = buildRepo(prisma);
+
+    expect(await repo.obtenerCierreParaPago("no-existe")).toBeNull();
+  });
+
+  it("R42: leerlo no ESCRIBE nada en el cierre", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findUnique.mockResolvedValue(cierreRow());
+    const repo = buildRepo(prisma);
+
+    await repo.obtenerCierreParaPago("c1");
+
+    for (const metodo of ["update", "updateMany", "create", "delete", "upsert"] as const) {
+      expect(prisma.cierreDia[metodo], `cierreDia.${metodo}`).not.toHaveBeenCalled();
+    }
+  });
+
+  it("el estado llega tal cual: quien decide si `aprobado` deja pagar es el SERVICIO", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findUnique.mockResolvedValue(cierreRow({ estado: "rechazado" }));
+    const repo = buildRepo(prisma);
+
+    // El repositorio no filtra por estado ni lanza: solo trae la fila (sin logica de negocio).
+    const cierre = await repo.obtenerCierreParaPago("c1");
+    expect(cierre?.estado).toBe("rechazado");
+    expect(prisma.cierreDia.findUnique.mock.calls[0][0].where).toEqual({ id: "c1" });
   });
 });

@@ -1,16 +1,19 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   BeneficiarioBloqueo,
+  CierreParaPagoDTO,
   CrearLiquidacionPagoInput,
   CrearLiquidacionPagoResult,
   ILiquidacionPagoRepository,
+  LiquidacionCierreTxClient,
   LiquidacionPagoDTO,
   LiquidacionPagoTxClient,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 import { esP2002, textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletTiendaMovimientoRepository).
-type LiquidacionPrismaClient = Pick<PrismaClient, "liquidacionPago">;
+// `cierreDia` entra SOLO para leer (R42): ningun metodo de esta clase lo escribe.
+type LiquidacionPrismaClient = Pick<PrismaClient, "liquidacionPago" | "cierreDia">;
 
 /**
  * Lo que hace falta para componer el comprobante en UNA consulta: el NOMBRE de quien registro
@@ -145,6 +148,39 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
       if (esChoqueDeClave(error)) return { status: "clave_repetida" };
       throw error;
     }
+  }
+
+  /**
+   * R20/R21/R22 — el cierre contra el que se paga, leido en `tx` cuando lo hay (la guardia del
+   * registro) y en el cliente propio cuando no (la relectura idempotente).
+   *
+   * `select` explicito y minimo: de una tabla que esta feature NO gobierna se leen cuatro
+   * columnas y ni una mas. Los dos montos se emiten como STRING de escala 2 aqui mismo, para
+   * que ningun `Decimal` de Prisma escape del repositorio.
+   */
+  async obtenerCierreParaPago(
+    cierreId: string,
+    tx?: LiquidacionCierreTxClient,
+  ): Promise<CierreParaPagoDTO | null> {
+    const cliente = tx ?? this.prisma;
+    const row = await cliente.cierreDia.findUnique({
+      where: { id: cierreId },
+      select: {
+        id: true,
+        mensajeroId: true,
+        estado: true,
+        totalPagoMensajero: true,
+        totalEfectivo: true,
+      },
+    });
+    if (row === null) return null;
+    return {
+      id: row.id,
+      mensajeroId: row.mensajeroId,
+      estado: row.estado,
+      totalPagoMensajero: row.totalPagoMensajero.toFixed(2),
+      totalEfectivo: row.totalEfectivo.toFixed(2),
+    };
   }
 
   /** §4.1: relectura idempotente por la clave del cliente. */

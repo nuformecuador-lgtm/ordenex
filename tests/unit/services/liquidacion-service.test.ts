@@ -1,13 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { RolValue } from "@prisma/client";
+import { CierreEstado, RolValue } from "@prisma/client";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  CierreParaPagoDTO,
   ILiquidacionPagoRepository,
   LiquidacionPagoDTO,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type {
+  CrearPagoMensajeroInput,
+  IPagoMensajeroMovimientoRepository,
+} from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type {
   CrearMovimientoTiendaInput,
   IWalletTiendaMovimientoRepository,
@@ -16,11 +21,14 @@ import type {
   LiquidacionTx,
   LiquidacionTxRunner,
 } from "@/lib/interfaces/services/ILiquidacionService";
-import type { RegistrarPagoTiendaInput } from "@/lib/types/liquidacion";
+import type {
+  RegistrarPagoMensajeroInput,
+  RegistrarPagoTiendaInput,
+} from "@/lib/types/liquidacion";
 
-// Feature 172 / T B.3 — `LiquidacionService.registrarPagoTienda` (mitad TIENDA).
-// Cubre R1, R2, R5, R6, R29, R30, R31, R32, R36, R38, R39, R40, R41 (+ R37 en la fecha del
-// movimiento y R43/R47 en la rama idempotente).
+// Feature 172 / T B.3 (mitad TIENDA) + T B.5 (mitad MENSAJERO) — `LiquidacionService`.
+// Cubre R1, R2, R5, R6, R20, R21, R23, R24, R25, R29, R30, R31, R32, R35, R36, R38, R39, R40,
+// R41, R42 (+ R37 en la fecha del movimiento y R43/R47 en la rama idempotente).
 //
 // Money-safe: ni un `Number(` ni un `parseFloat` sobre un monto en todo el archivo; el ultimo
 // bloque afirma lo mismo del modulo del servicio.
@@ -37,6 +45,29 @@ const INPUT: RegistrarPagoTiendaInput = {
   nota: "Pago parcial de julio",
   fechaPago: "2026-07-30",
 };
+
+/** El mismo pago, pero contra el cierre `c1` de un mensajero (T B.5). */
+const INPUT_MENSAJERO: RegistrarPagoMensajeroInput = {
+  claveIdempotencia: "22222222-2222-4222-8222-222222222222",
+  cierreId: "c1",
+  monto: "15000.00",
+  metodo: "SINPE",
+  referencia: "1234567",
+  nota: "Pago parcial de julio",
+  fechaPago: "2026-07-30",
+};
+
+/** Cierre APROBADO con P = 50 000 y E = 0 -> pendiente generado por el cierre: 50 000. */
+function cierreDTO(over: Partial<CierreParaPagoDTO> = {}): CierreParaPagoDTO {
+  return {
+    id: "c1",
+    mensajeroId: "m1",
+    estado: CierreEstado.aprobado,
+    totalPagoMensajero: "50000.00",
+    totalEfectivo: "0.00",
+    ...over,
+  };
+}
 
 function pagoDTO(over: Partial<LiquidacionPagoDTO> = {}): LiquidacionPagoDTO {
   return {
@@ -85,13 +116,22 @@ function buildTx() {
 type Registro = string;
 
 /**
- * Los dos repositorios, dobles, compartiendo un LOG ORDENADO de lo que se les pide. El orden es
+ * Los tres repositorios, dobles, compartiendo un LOG ORDENADO de lo que se les pide. El orden es
  * lo que prueba R83 (el candado antes de la lectura) y el conteo lo que prueba R85.
+ *
+ * `cierre` y `pagadoVigente` alimentan el camino del MENSAJERO (T B.5): el cierre que devuelve
+ * la guardia de R20 y lo ya pagado contra el, que es lo que `derivarPendienteCierre` resta.
  */
-function buildDobles(opciones: { creditos: string; debitos: string }) {
+function buildDobles(opciones: {
+  creditos: string;
+  debitos: string;
+  cierre?: CierreParaPagoDTO | null;
+  pagadoVigente?: string;
+}) {
   const log: Registro[] = [];
   const tx = buildTx();
   const txsVistos: unknown[] = [];
+  const cierre = opciones.cierre === undefined ? cierreDTO() : opciones.cierre;
 
   const pagoRepo: ILiquidacionPagoRepository = {
     bloquearBeneficiario: vi.fn(async (t, objetivo) => {
@@ -105,12 +145,22 @@ function buildDobles(opciones: { creditos: string; debitos: string }) {
       log.push("crear:documento");
       return { status: "creado" as const, pago: pagoDTO() };
     }),
+    // R20: si llega `tx`, la guardia se leyo DENTRO de la transaccion (y el `tx` visto lo
+    // demuestra); sin `tx` es la relectura de la rama idempotente, que ocurre fuera.
+    obtenerCierreParaPago: vi.fn(async (_id, t) => {
+      if (t !== undefined) txsVistos.push(t);
+      log.push(t === undefined ? "leer:cierre:fuera-de-tx" : "leer:cierre");
+      return cierre;
+    }),
     obtenerPorClave: vi.fn(async () => {
       log.push("obtener:por-clave");
       return null;
     }),
     obtenerPorId: vi.fn(async () => null),
-    sumarVigentesPorCierre: vi.fn(async () => ({})),
+    sumarVigentesPorCierre: vi.fn(async (ids: string[]) => {
+      log.push("leer:pagado-vigente");
+      return Object.fromEntries(ids.map((id) => [id, opciones.pagadoVigente ?? "0.00"]));
+    }),
     sumarVigentesPorTienda: vi.fn(async () => "0.00"),
     listarPorCierre: vi.fn(async () => []),
     listarPorTienda: vi.fn(async () => []),
@@ -132,6 +182,20 @@ function buildDobles(opciones: { creditos: string; debitos: string }) {
     agregarDesglosePorTienda: vi.fn(),
   } as unknown as IWalletTiendaMovimientoRepository;
 
+  const mensajeroRepo: IPagoMensajeroMovimientoRepository = {
+    crearMovimientos: vi.fn(async (t) => {
+      txsVistos.push(t);
+      log.push("crear:movimiento");
+      return 1;
+    }),
+    listarPorMensajero: vi.fn(),
+    agregarCuentaPorPagar: vi.fn(),
+    listarCuentasPorPagarTodos: vi.fn(),
+    listarCuentasPorPagarPaginado: vi.fn(),
+    listarCuentasPorPagarCompleto: vi.fn(),
+    obtenerNombreMensajero: vi.fn(),
+  } as unknown as IPagoMensajeroMovimientoRepository;
+
   const llamadasTx = { n: 0 };
   const runTransaction: LiquidacionTxRunner = async (fn) => {
     llamadasTx.n += 1;
@@ -141,8 +205,8 @@ function buildDobles(opciones: { creditos: string; debitos: string }) {
     return r;
   };
 
-  const service = new LiquidacionService(pagoRepo, tiendaRepo, runTransaction);
-  return { service, pagoRepo, tiendaRepo, llamadasTx, log, tx, txsVistos };
+  const service = new LiquidacionService(pagoRepo, tiendaRepo, mensajeroRepo, runTransaction);
+  return { service, pagoRepo, tiendaRepo, mensajeroRepo, llamadasTx, log, tx, txsVistos };
 }
 
 /**
@@ -164,6 +228,20 @@ function movimientoEscrito(
 ): CrearMovimientoTiendaInput {
   const mock = tiendaRepo.crearMovimientos as unknown as { mock: { calls: unknown[][] } };
   return (mock.mock.calls[0][1] as CrearMovimientoTiendaInput[])[0];
+}
+
+/** El movimiento que el servicio mando escribir en el libro del mensajero (T B.5). */
+function movimientoDelMensajero(
+  mensajeroRepo: IPagoMensajeroMovimientoRepository,
+): CrearPagoMensajeroInput {
+  const mock = mensajeroRepo.crearMovimientos as unknown as { mock: { calls: unknown[][] } };
+  return (mock.mock.calls[0][1] as CrearPagoMensajeroInput[])[0];
+}
+
+/** El `data` con el que se escribio el DOCUMENTO, sea cual sea el beneficiario. */
+function documentoEscrito(pagoRepo: ILiquidacionPagoRepository): Record<string, unknown> {
+  const mock = pagoRepo.crear as unknown as { mock: { calls: unknown[][] } };
+  return mock.mock.calls[0][1] as Record<string, unknown>;
 }
 
 describe("R1/R2/R5/R6 — quien puede pagar, comprobado ANTES de tocar datos", () => {
@@ -540,11 +618,424 @@ describe("R56/R14 — lo que cruza la frontera", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// T B.5 — `registrarPagoMensajero`. Cubre R20, R21, R23, R24, R25, R35, R42 (+ R1/R5/R6 y
+// R39/R40/R41 por el segundo camino, que es codigo distinto y merece su propia contraprueba).
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+describe("R1/R6 — quien puede pagar a un mensajero (el segundo camino tiene su propio guard)", () => {
+  const sinAcceso: [string, RolValue][] = [
+    ["adminSatelite", RolValue.adminSatelite],
+    ["adminTienda", RolValue.adminTienda],
+    ["mensajero", RolValue.mensajero],
+    ["apiKey", RolValue.apiKey],
+  ];
+
+  for (const [nombre, rol] of sinAcceso) {
+    it(`R1: ${nombre} recibe forbidden y NO se abre ninguna transaccion`, async () => {
+      const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+      const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, { usuarioId: "u", rol });
+
+      expect(r).toEqual({ status: "forbidden" });
+      expect(d.log).toEqual([]); // R5: ni el cierre se llega a leer
+      expect(d.llamadasTx.n).toBe(0);
+      expect(d.pagoRepo.obtenerCierreParaPago).not.toHaveBeenCalled();
+    });
+  }
+
+  it("R6 (contraprueba): el `adminSatelite` APRUEBA cierres, pero pagarlos le responde forbidden", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+    const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, {
+      usuarioId: "u-sat",
+      rol: RolValue.adminSatelite,
+    });
+    expect(r).toEqual({ status: "forbidden" });
+    expect(d.llamadasTx.n).toBe(0);
+  });
+
+  it("maestro y admin si pueden (si no, la contraprueba de arriba no diria nada)", async () => {
+    for (const actor of [ACTOR_ADMIN, ACTOR_MAESTRO]) {
+      const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+      const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, actor);
+      expect(r.status).toBe("ok");
+    }
+  });
+});
+
+describe("R20 — el cierre debe existir y estar APROBADO, leido dentro de la transaccion", () => {
+  const noAprobados: [string, CierreEstado][] = [
+    ["solicitado", CierreEstado.solicitado],
+    ["vencido", CierreEstado.vencido],
+    ["rechazado", CierreEstado.rechazado],
+  ];
+
+  for (const [nombre, estado] of noAprobados) {
+    it(`un cierre ${nombre} -> cierre_no_aprobado, SIN escribir nada`, async () => {
+      const d = buildDobles({ creditos: "0.00", debitos: "0.00", cierre: cierreDTO({ estado }) });
+
+      const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+      expect(r).toEqual({ status: "cierre_no_aprobado" });
+      expect(d.pagoRepo.crear).not.toHaveBeenCalled();
+      expect(d.mensajeroRepo.crearMovimientos).not.toHaveBeenCalled();
+      expect(d.tiendaRepo.crearMovimientos).not.toHaveBeenCalled();
+      // Ni siquiera se llego a derivar el pendiente: el estado se comprueba antes.
+      expect(d.pagoRepo.sumarVigentesPorCierre).not.toHaveBeenCalled();
+    });
+  }
+
+  it("la guardia se lee DENTRO de la transaccion y DESPUES del candado (no antes, no fuera)", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(d.log).toEqual([
+      "tx:abrir",
+      "bloquear:cierre:c1",
+      "leer:cierre",
+      "leer:pagado-vigente",
+      "crear:documento",
+      "crear:movimiento",
+      "tx:commit",
+    ]);
+    // …y el `tx` con el que se leyo el cierre es EL MISMO del candado y de las escrituras.
+    expect(d.txsVistos).toHaveLength(4); // candado + cierre + documento + movimiento
+    expect(new Set(d.txsVistos).size).toBe(1);
+  });
+
+  it("un cierre que no existe -> `no_encontrado`, sin escribir nada", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", cierre: null });
+
+    const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(r).toEqual({ status: "no_encontrado" });
+    expect(d.pagoRepo.crear).not.toHaveBeenCalled();
+    expect(d.mensajeroRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+});
+
+describe("R21/R5 — el pago va atado al cierre, y el beneficiario sale del CIERRE", () => {
+  it("R21: el documento se escribe con su `cierreId` y SIN tienda", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    const doc = documentoEscrito(d.pagoRepo);
+    expect(doc.cierreId).toBe("c1");
+    expect(doc.tiendaId).toBeNull(); // el CHECK XOR de la base lo exige (§2.3)
+    expect(doc.registradoPor).toBe("u-admin");
+  });
+
+  it("R5: el `mensajeroId` sale del cierre LEIDO, no de la peticion", async () => {
+    // El cierre `c1` pertenece a `m-real`; el input no dice —ni puede decir— a quien se paga.
+    const d = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      cierre: cierreDTO({ mensajeroId: "m-real" }),
+    });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(documentoEscrito(d.pagoRepo).mensajeroId).toBe("m-real");
+    expect(movimientoDelMensajero(d.mensajeroRepo).mensajeroId).toBe("m-real");
+  });
+
+  it("el candado es el del CIERRE, no el del usuario (§4.2: ese es el grano de lo que se consume)", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(d.pagoRepo.bloquearBeneficiario).toHaveBeenCalledTimes(1); // R85
+    expect(d.log.filter((l) => l.startsWith("bloquear:"))).toEqual(["bloquear:cierre:c1"]);
+  });
+});
+
+describe("R22/R23/R24/R25 — el pendiente del cierre manda [P1]", () => {
+  it("R22: el pendiente se DERIVA de min(P, E) menos lo ya pagado VIGENTE", async () => {
+    // P = 50 000, E = 0 -> genera 50 000; ya pagados 10 000 -> pendiente 40 000.
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagadoVigente: "10000.00" });
+
+    const r = await d.service.registrarPagoMensajero(
+      { ...INPUT_MENSAJERO, monto: "40000.01" },
+      ACTOR_ADMIN,
+    );
+
+    expect(r).toEqual({ status: "excede", disponible: "40000.00" });
+    expect(d.pagoRepo.sumarVigentesPorCierre).toHaveBeenCalledWith(["c1"]);
+  });
+
+  it("R22: con E >= P el cierre no genera pendiente (el mensajero ya se pago del efectivo)", async () => {
+    const d = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      cierre: cierreDTO({ totalPagoMensajero: "50000.00", totalEfectivo: "80000.00" }),
+    });
+
+    const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(r).toEqual({ status: "sin_saldo" });
+    expect(d.pagoRepo.crear).not.toHaveBeenCalled();
+  });
+
+  it("R22: con E entre 0 y P, el pendiente es P - E (la regla min(P,E) de la 44, no una copia)", async () => {
+    const d = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      cierre: cierreDTO({ totalPagoMensajero: "50000.00", totalEfectivo: "20000.00" }),
+    });
+
+    const r = await d.service.registrarPagoMensajero(
+      { ...INPUT_MENSAJERO, monto: "30000.01" },
+      ACTOR_ADMIN,
+    );
+
+    expect(r).toEqual({ status: "excede", disponible: "30000.00" });
+  });
+
+  it("R23/R24: un pago PARCIAL entra y el resto SIGUE pendiente, al centimo", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagadoVigente: "10000.00" });
+
+    const r = await d.service.registrarPagoMensajero(
+      { ...INPUT_MENSAJERO, monto: "15000.00" },
+      ACTOR_ADMIN,
+    );
+
+    // 50 000 generados - 10 000 ya pagados - 15 000 de ahora = 25 000 pendientes.
+    expect(r).toMatchObject({ status: "ok", restante: "25000.00" });
+  });
+
+  it("R24: la resta es exacta al centimo (lo que un float redondearia mal)", async () => {
+    const d = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      cierre: cierreDTO({ totalPagoMensajero: "1000.00", totalEfectivo: "0.00" }),
+      pagadoVigente: "999.98",
+    });
+
+    const r = await d.service.registrarPagoMensajero(
+      { ...INPUT_MENSAJERO, monto: "0.01" },
+      ACTOR_ADMIN,
+    );
+
+    expect(r).toMatchObject({ status: "ok", restante: "0.01" });
+  });
+
+  it("R25 [P1]: un monto por encima del pendiente se RECHAZA sin escribir, e informa", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    const r = await d.service.registrarPagoMensajero(
+      { ...INPUT_MENSAJERO, monto: "50000.01" },
+      ACTOR_ADMIN,
+    );
+
+    expect(r).toEqual({ status: "excede", disponible: "50000.00" });
+    expect(d.pagoRepo.crear).not.toHaveBeenCalled();
+    expect(d.mensajeroRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("R25: la frontera exacta (monto == pendiente) SI entra y deja el cierre en cero", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    const r = await d.service.registrarPagoMensajero(
+      { ...INPUT_MENSAJERO, monto: "50000.00" },
+      ACTOR_ADMIN,
+    );
+
+    expect(r).toMatchObject({ status: "ok", restante: "0.00" });
+  });
+
+  it("R27: un cierre ya liquidado del todo no admite mas pagos", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagadoVigente: "50000.00" });
+
+    const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(r).toEqual({ status: "sin_saldo" });
+    expect(d.pagoRepo.crear).not.toHaveBeenCalled();
+  });
+});
+
+describe("R35/R37/R38 — el movimiento que nace del pago al mensajero", () => {
+  it("R35: `pago`/`liquidacion` por el monto registrado, en el libro del MENSAJERO", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(movimientoDelMensajero(d.mensajeroRepo)).toMatchObject({
+      mensajeroId: "m1",
+      tipo: "pago",
+      categoria: "liquidacion",
+      monto: "15000.00",
+    });
+    // …y NI UNA fila en el ledger de la tienda: cada pago escribe en UN libro.
+    expect(d.tiendaRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("R38: `origenTipo: pago_mensajero` y `origenId` = el documento recien creado", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    const mov = movimientoDelMensajero(d.mensajeroRepo);
+    expect(mov.origenTipo).toBe("pago_mensajero");
+    expect(mov.origenId).toBe("pago-1"); // el id que devolvio `crear`, no una constante
+    expect(mov.registradoPor).toBe("u-admin");
+  });
+
+  it("R37: se fecha con la fecha REAL del pago (medianoche UTC), no con la de registro", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(movimientoDelMensajero(d.mensajeroRepo).fechaMovimiento?.toISOString()).toBe(
+      "2026-07-30T00:00:00.000Z",
+    );
+    expect((documentoEscrito(d.pagoRepo).fechaPago as Date).toISOString()).toBe(
+      "2026-07-30T00:00:00.000Z",
+    );
+  });
+
+  it("la descripcion compone metodo y referencia, y NO lleva la nota ni ningun id", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    const mov = movimientoDelMensajero(d.mensajeroRepo);
+    expect(mov.descripcion).toBe("SINPE · 1234567");
+    expect(mov.descripcion).not.toContain("Pago parcial de julio");
+    expect(mov.descripcion).not.toContain("c1");
+  });
+});
+
+describe("R39/R40/R41/R42 — atomicidad, y donde NO se escribe (camino del mensajero)", () => {
+  it("R39: si el movimiento falla, el fallo sale de la transaccion (no hay commit parcial)", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+    (d.mensajeroRepo.crearMovimientos as unknown as { mockRejectedValue: (e: Error) => void })
+      .mockRejectedValue(new Error("libro caido"));
+
+    await expect(d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN)).rejects.toThrow(
+      "libro caido",
+    );
+
+    expect(d.log).toEqual([
+      "tx:abrir",
+      "bloquear:cierre:c1",
+      "leer:cierre",
+      "leer:pagado-vigente",
+      "crear:documento",
+    ]);
+  });
+
+  it("R40 [P2]: la CAJA PRINCIPAL no recibe ni una llamada al liquidar a un mensajero", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    for (const [metodo, espia] of Object.entries(d.tx.walletMovimiento)) {
+      expect(espia, `walletMovimiento.${metodo} fue llamado`).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R41: solo se AÑADEN filas — ningun update/delete en el camino del mensajero", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    for (const tabla of ["liquidacionPago", "walletTiendaMovimiento", "pagoMensajeroMovimiento"] as const) {
+      for (const metodo of ["update", "updateMany", "delete", "deleteMany", "upsert"] as const) {
+        expect(d.tx[tabla][metodo], `${tabla}.${metodo}`).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("R42: NINGUN snapshot del cierre se toca — el cierre solo se LEE", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    // (a) sobre el doble de la transaccion: ninguna escritura sobre `cierre_dia`.
+    for (const [metodo, espia] of Object.entries(d.tx.cierreDia)) {
+      expect(espia, `cierreDia.${metodo} fue llamado`).not.toHaveBeenCalled();
+    }
+    // (b) sobre el doble del REPOSITORIO: lo unico que se le pidio del cierre fue leerlo.
+    expect(d.pagoRepo.obtenerCierreParaPago).toHaveBeenCalledTimes(1);
+  });
+
+  it("R42: ni el repositorio tiene por donde escribir el cierre (contraprueba estructural)", async () => {
+    // El unico modulo que puede tocar `cierre_dia` en esta feature es el repositorio: si el
+    // servicio no lo hace pero el repositorio expusiera un `update`, R42 dependeria de que nadie
+    // lo llame. Aqui se afirma que ese metodo NO EXISTE.
+    const fuente = fs.readFileSync(
+      path.join(process.cwd(), "lib/repositories/LiquidacionPagoRepository.ts"),
+      "utf8",
+    );
+    const codigo = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    for (const escritura of ["update", "updateMany", "create", "delete", "deleteMany", "upsert"]) {
+      expect(codigo, `cierreDia.${escritura}`).not.toMatch(
+        new RegExp(`cierreDia\\.${escritura}\\b`),
+      );
+    }
+    // El servicio ni siquiera nombra el delegado: pasa por el repositorio.
+    expect(fuenteDelServicioSinComentarios().match(/cierreDia/g)).toBeNull();
+  });
+});
+
+describe("R43/R47 — la rama idempotente del camino del mensajero", () => {
+  it("devuelve `ya_registrado` con el restante recalculado sobre el CIERRE", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00", pagadoVigente: "15000.00" });
+    (d.pagoRepo.crear as unknown as { mockImplementation: (f: () => unknown) => void })
+      .mockImplementation(async () => {
+        d.log.push("crear:documento");
+        return { status: "clave_repetida" as const };
+      });
+    (d.pagoRepo.obtenerPorClave as unknown as { mockImplementation: (f: () => unknown) => void })
+      .mockImplementation(async () => {
+        d.log.push("obtener:por-clave");
+        return pagoDTO({ tiendaId: null, cierreId: "c1", mensajeroId: "m1" });
+      });
+
+    const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(r).toMatchObject({ status: "ya_registrado" });
+    if (r.status !== "ya_registrado") return;
+    expect(r.pago.id).toBe("pago-1");
+    // El pendiente ya refleja el pago (50 000 - 15 000), y se recalcula FUERA de la transaccion.
+    expect(r.restante).toBe("35000.00");
+    expect(d.mensajeroRepo.crearMovimientos).not.toHaveBeenCalled();
+    expect(d.log).toEqual([
+      "tx:abrir",
+      "bloquear:cierre:c1",
+      "leer:cierre",
+      "leer:pagado-vigente",
+      "crear:documento",
+      "obtener:por-clave",
+      "leer:cierre:fuera-de-tx",
+      "leer:pagado-vigente",
+    ]);
+  });
+
+  it("R44: en el camino feliz no hay consulta previa por clave", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    expect(d.pagoRepo.obtenerPorClave).not.toHaveBeenCalled();
+  });
+});
+
 describe("money-safe: el modulo no convierte dinero a numero", () => {
   it("`LiquidacionService.ts` no usa `Number(` ni `parseFloat` sobre montos", () => {
     const codigo = fuenteDelServicioSinComentarios();
     expect(codigo.match(/parseFloat/g)).toBeNull();
     expect(codigo.match(/\bNumber\(/g)).toBeNull();
     expect(codigo.match(/parseInt/g)).toBeNull();
+  });
+
+  it("R14: todo monto de la respuesta del pago al mensajero es STRING de escala 2", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+    const r = await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.pago.monto).toMatch(/^\d+\.\d{2}$/);
+    expect(r.restante).toMatch(/^\d+\.\d{2}$/);
   });
 });

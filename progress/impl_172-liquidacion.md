@@ -634,3 +634,215 @@ lo «simplifique» de vuelta.
 8. **Un flake conocido en la primera corrida de la suite completa.** `CuentasPorPagarTable` cayó
    con contención de jsdom y salió **verde en aislado** (6/6). Es uno de los tres archivos
    declarados como flake móvil de esta máquina; no lo toca esta tanda.
+
+---
+
+## TANDA B (segunda mitad) — T B.5, T B.6 y T B.7 · **HECHAS** (2026-08-02) · TANDA B COMPLETA
+
+> Tres tasks: el acto de pagar a un **mensajero**, la **idempotencia** con su prueba por
+> mutación, y las **Server Actions** de registro. **No se tocó UI** (Tandas D/E) **ni nada de la
+> anulación** (Tanda F): `anular` sigue sin declararse en el repositorio, que es T F.1.
+
+### Archivos
+
+**Nuevos**
+
+| Archivo | Qué |
+| --- | --- |
+| `lib/actions/liquidacion.ts` | Las **2** Server Actions de registro (`registrarPagoMensajeroAction`, `registrarPagoTiendaAction`). Las otras 3 del diseño son de T C.1 y T F.4 |
+| `tests/unit/actions/liquidacion-action.test.ts` | 23 casos |
+
+**Modificados**
+
+| Archivo | Qué |
+| --- | --- |
+| `lib/interfaces/repositories/ILiquidacionPagoRepository.ts` | `LiquidacionCierreTxClient`, `CierreParaPagoDTO` y `obtenerCierreParaPago(cierreId, tx?)` |
+| `lib/repositories/LiquidacionPagoRepository.ts` | Implementación de esa lectura (`select` de 5 columnas, montos STRING); el cliente propio gana `cierreDia` **solo para leer** |
+| `lib/interfaces/services/ILiquidacionService.ts` | `registrarPagoMensajero` en el contrato; `LiquidacionTx` gana el cliente del cierre |
+| `lib/services/LiquidacionService.ts` | `registrarPagoMensajero`, `pendienteDelCierre`, `restanteDe`; `responderYaRegistrado` pasa a recibir el beneficiario |
+| `tests/unit/services/liquidacion-service.test.ts` | 33 → **67** casos (la mitad mensajero) |
+| `tests/unit/repositories/liquidacion-pago-repository.test.ts` | 20 → **25** casos (la lectura del cierre) |
+| `tests/integration/db/liquidacion-idempotencia.test.ts` | 10 → **26** casos; el store gana `cierre_dia`, el libro del mensajero y el `UNIQUE` observable |
+| `specs/172-liquidacion/tasks.md` | T B.5–T B.7 marcadas `[x]` |
+
+**Ningún archivo de otra feature tocado.** Los dos libros, los feeds del cierre, la caja y la
+migración quedan exactamente como estaban.
+
+### Mapa `R<n> → test` de estas tres tasks
+
+| R | Test | Qué afirma |
+| --- | --- | --- |
+| R20 | `tests/unit/services/liquidacion-service.test.ts` | `solicitado`, `vencido` y `rechazado` → `cierre_no_aprobado` **sin escribir nada** y **sin derivar siquiera el pendiente**; + `liquidacion-idempotencia.test.ts`: dos intentos en carrera contra un cierre no aprobado dejan **cero** filas |
+| R20 | idem | la guardia se lee **dentro** de la transacción: el log es `bloquear → leer:cierre → leer:pagado` y el `tx` del cierre es **el mismo objeto** que el del candado y las escrituras |
+| R21 | idem | el documento sale con `cierreId` y `tiendaId: null`; un pago a mensajero **sin** cierre no pasa el borde (`liquidacion-action.test.ts`, error en el campo `cierreId`) |
+| R23 | idem | un monto menor que el pendiente entra y devuelve el resto |
+| R24 | idem | `restante` exacto al céntimo: 50 000 − 10 000 pagados − 15 000 = `"25000.00"`; y la frontera de 1 céntimo (`999.98` pagados, pago de `0.01` → `"0.01"`) |
+| R25 | idem | `50000.01` sobre un pendiente de 50 000 → `excede { disponible: "50000.00" }` sin escribir; la frontera exacta (monto == pendiente) sí entra y deja `"0.00"` |
+| R35 | idem | movimiento `pago`/`liquidacion` por el monto, en el libro del **mensajero**, y **cero** filas en el ledger de la tienda |
+| R42 | idem, **tres vías** | (a) los 7 espías de `tx.cierreDia` con cero llamadas; (b) al repositorio solo se le pide **leer** el cierre; (c) contraprueba estructural: `LiquidacionPagoRepository` no contiene `cierreDia.update/updateMany/create/delete/upsert` y el servicio no nombra el delegado. En el store de integración, `cierre_dia.update` **lanza**: el snapshot se compara campo a campo antes y después |
+| R43 | `tests/integration/db/liquidacion-idempotencia.test.ts` | la misma clave dos veces → **un** pago, el **mismo** comprobante (`toEqual`, campo a campo) y el saldo saldado **una** vez; en los **dos** caminos (tienda y mensajero) |
+| R44 | idem | en el camino feliz **no** hay lectura por clave; en el reintento el `INSERT` se **intenta** y lo rechaza la restricción (`choque-clave`, emitido por el store) **antes** de releer; el servicio pide crear las dos veces |
+| R45 | idem | mismo beneficiario, monto, método y fecha con **dos** claves → dos pagos, dos movimientos, dos `origen_id` distintos; en los dos caminos |
+| R47 | idem | el reintento devuelve `ya_registrado` con el comprobante real, aunque el reintento traiga otro monto |
+| R48 | idem | reintentar el feed del cierre con el repositorio **real** → `count = 0`, cero filas nuevas; y el movimiento de la liquidación **convive** con los del cierre (otro `origen_tipo`, 3 claves distintas). Además, el propio movimiento del pago es no-op al reescribirse |
+| R3 | `tests/unit/actions/liquidacion-action.test.ts` | sin sesión → `unauthenticated` **sin llamar al servicio**, en las dos acciones; y **con la petición rota también** gana `unauthenticated` (el orden de R3 es literal) |
+| R14 | idem | un `monto: 15000` numérico → `validation_error` en el campo `monto`, sin tocar el servicio; el string llega **intacto** al servicio; y la respuesta no contiene **ni un número suelto** al serializarla |
+| R65 | idem | la lista **exacta** de exportaciones del módulo (2), y un patrón que rechaza `editar/actualizar/modificar/corregir/update/patch`. No es un comentario: es una aserción |
+
+Reforzados de paso (ya tenían test en tandas previas, ahora también por el segundo camino):
+**R1/R5/R6** (los 4 roles sin acceso → `forbidden` con log vacío, `adminSatelite` incluido),
+**R22** (las tres formas de `min(P,E)`: `E=0`, `0<E<P`, `E≥P`), **R27** (cierre ya liquidado →
+`sin_saldo`), **R37/R38/R39/R40/R41**, **R46/R83/R85** (el candado del **cierre**: uno solo, antes
+de leer, y dos cierres distintos no se estorban), **R56** y **R12/R15/R29** en el borde.
+
+### Verificación ejecutada
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: verde)
+
+$ pnpm run lint
+✖ 27 problems (0 errors, 27 warnings)      # los 27 preexistentes del baseline, intactos
+
+$ pnpm exec vitest run tests/integration/db
+ Test Files  85 passed (85)
+      Tests  1011 passed (1011)             # 995 -> +16, todos de idempotencia
+
+$ pnpm exec vitest run                      # SUITE COMPLETA
+ Test Files  780 passed (780)
+      Tests  9487 passed (9487)
+   Duration  259.96s
+
+$ ./init.sh                                 # gate del arnes (typecheck + lint + suite + down.sql)
+✓ typecheck paso
+✓ lint paso
+ Test Files  780 passed (780)
+      Tests  9487 passed (9487)
+   Duration  228.99s
+✓ test paso
+✓ todas las migraciones tienen down.sql
+== init OK ==
+```
+
+La suite completa se corrió **dos veces** (directa y dentro de `./init.sh`), con el mismo
+resultado exacto: 780 / 9487 / 0 fallos. **Regla de cierre de Tanda B cumplida.**
+
+**Delta contra el baseline de la Tanda B 1/2 (779 archivos / 9409 tests): +1 archivo, +78 tests,
+0 fallos.** Los 78 son 34 (servicio) + 5 (repositorio) + 16 (idempotencia) + 23 (acciones).
+**Cero regresiones y CERO flakes**: los tres archivos con contención de jsdom conocida
+(`ControlDescargaTransversal`, `CuentasPorPagarTable`, `OrdenesModuleReuse`) salieron verdes sin
+reejecutar, así que no hizo falta una segunda corrida.
+
+### T B.6 — PRUEBA POR MUTACIÓN DE LA IDEMPOTENCIA (obligatoria)
+
+Un test de idempotencia que pasa sin la restricción no prueba nada. Se mutó **el store** —no el
+servicio— dos veces, porque el store es quien encarna la barrera de datos.
+
+**Mutación 1 — apagar el `UNIQUE(clave_idempotencia)`** (`if (false && (clavesIdempotencia.has…`):
+
+```
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts (26 tests | 5 failed) 765ms
+     × la misma clave dos veces: un pago, el MISMO comprobante y el saldo saldado una vez
+     × R43/R47 tambien en el camino del MENSAJERO (es codigo distinto, no una rama compartida)
+     × un reintento con la misma clave pero OTRO monto tampoco crea nada (la clave manda)
+     × en el reintento, la lectura por clave ocurre DESPUES del intento de insertar
+     × sin ese choque no habria idempotencia: el servicio no filtra claves en memoria
+
+AssertionError: expected 'ok' to be 'ya_registrado' // Object.is equality
+
+Expected: "ya_registrado"
+Received: "ok"
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts:673:28
+
+AssertionError: expected [ 'crear-documento:pago-1', …(1) ] to deeply equal [ 'crear-documento:pago-1', …(1) ]
+- Expected
++ Received
+  [
+    "crear-documento:pago-1",
+-   "choque-clave",
++   "crear-documento:pago-2",
+  ]
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts:766:22
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 21 passed (26)
+```
+
+El `crear-documento:**pago-2**` es el fallo en su forma más cruda: **el doble submit crea un
+segundo pago** y salda el saldo dos veces. Cae **el primer test**, que es lo que el criterio de
+«Hecho» exige, y con él los otros cuatro de la familia.
+
+**Mutación 2 — apagar el ÍNDICE ÚNICO PARCIAL del libro del mensajero** (la otra mitad de la
+idempotencia, la que hereda el movimiento por su `origen_id`):
+
+```
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts (26 tests | 2 failed) 895ms
+     × el feed del cierre es no-op al reintentarse, y el pago de la 172 CONVIVE con el
+     × y el propio movimiento del pago es idempotente por su `origen_id` (doble escritura = no-op)
+
+AssertionError: expected 2 to be +0 // Object.is equality
+- Expected
++ Received
+- 0
++ 2
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts:890:21   (segunda aprobacion del cierre)
+
+AssertionError: expected 1 to be +0 // Object.is equality
+ ❯ tests/integration/db/liquidacion-idempotencia.test.ts:925:16   (doble escritura del pago)
+```
+
+Tras cada mutación el archivo se restauró **desde copia** (`diff` limpio contra el respaldo) y los
+**26 tests volvieron a verde**.
+
+**Por qué el experimento vale.** El store se reutiliza tal cual salió corregido de T B.4 —foto de
+las filas **al inicio** de la sentencia, la semántica real de `READ COMMITTED`— y encima de esa
+base se añadieron las dos restricciones. La cadena es código real: servicio real, los **tres**
+repositorios reales y el SQL crudo real. Lo único simulado es la base.
+
+### Hallazgos y desviaciones del diseño
+
+1. **El diseño no dice CÓMO se lee el cierre, y hacía falta un método nuevo.** `design.md §3.1`
+   lista los métodos de `ILiquidacionPagoRepository` y ninguno lee `cierre_dia`, pero §3.3 exige
+   que el estado se compruebe **dentro de la transacción** y §5 necesita `P` y `E` del propio
+   cierre. Se añadió `obtenerCierreParaPago(cierreId, tx?)` **a ese mismo repositorio** en vez de
+   crear un par interfaz+clase nuevo: es el único módulo de la feature que ya tocaba `cierre_dia`
+   (el `SELECT … FOR UPDATE` del candado). Es de **solo lectura** y hay un test que afirma que en
+   toda la clase no existe ninguna escritura sobre ese delegado (R42).
+   **El `tx` es opcional a propósito, y es el punto delicado:** con `tx` es la guardia (bajo
+   candado, R20); sin `tx` es la relectura idempotente, que ocurre necesariamente **fuera** —en
+   Postgres el choque de la clave deja la transacción abortada—. Para que la opcionalidad no se
+   convierta en un descuido silencioso, un test fija que el registro pasa **siempre** el `tx` y
+   que es el **mismo objeto** que recibe el candado.
+
+2. **El constructor del servicio cambió de 3 a 4 dependencias** (`pagoRepo`, `tiendaRepo`,
+   **`mensajeroRepo`**, `runTransaction`). Obligó a tocar los dos archivos de test de la 172 que
+   lo instancian; no se editó **ninguna aserción existente** por ese motivo, solo la línea de
+   construcción y el doble del repositorio.
+
+3. **Pendiente 0 devuelve `sin_saldo`, no `excede { disponible: "0.00" }`.** El diseño describe
+   `registrarPagoMensajero` como «el mismo esqueleto» cambiando el paso (c), y en el camino de la
+   tienda ese paso es `disponible <= 0 → sin_saldo`. Se tradujo literalmente para que los dos
+   caminos tengan la misma forma; la alternativa (`excede` con cero) también encaja en R25 y se
+   descartó por simetría. La pantalla, además, ni siquiera ofrecerá el botón (R27): esta rama es
+   la red del servidor ante una carrera.
+
+4. **`no_encontrado` se estrena aquí**, tal como anticipó el punto 6 de la bitácora de la 1/2: un
+   `cierreId` que no existe no se puede confundir con «sin pendiente». También lo devuelve la rama
+   idempotente si el pago releído apunta a un cierre que ya no está.
+
+5. **El log del store gana `choque-clave`, y no es cosmético.** Sin él, «el INSERT se intentó y lo
+   rechazó la base» no era observable: el store lanzaba el `P2002` **antes** de registrar nada, así
+   que el test de R44 no podía distinguir un choque de un `SELECT` previo. Se emite **solo** en la
+   rama de rechazo, así que el log del camino feliz —y la aserción exacta de T B.4— no cambia.
+
+6. **`registrarPagoTienda` no se tocó** salvo por el argumento de `responderYaRegistrado`, que
+   ahora recibe el beneficiario en vez de un `tiendaId` suelto. Las 33 aserciones de T B.3 siguen
+   verdes sin editarse.
+
+7. **La `referencia` sigue sin tope de longitud.** Tercera tanda que lo hereda (Tanda A punto 3,
+   Tanda B 1/2 punto 7). Sigue siendo una decisión de una línea que el spec no toma; la Tanda D,
+   que construye el formulario, es el último sitio razonable para cerrarlo.
+
+8. **Preview sigue sin verificar** (hueco de T A.0). No lo resuelve esta tanda; sigue pendiente
+   **antes de mergear el PR**.

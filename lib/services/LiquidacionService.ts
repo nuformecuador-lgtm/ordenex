@@ -1,18 +1,26 @@
 import { Prisma } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  BeneficiarioBloqueo,
+  CierreParaPagoDTO,
   ILiquidacionPagoRepository,
   LiquidacionPagoDTO,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
   ILiquidacionService,
   LiquidacionTxRunner,
   RegistrarPagoServiceResult,
 } from "@/lib/interfaces/services/ILiquidacionService";
-import type { PagoRegistradoDTO, RegistrarPagoTiendaInput } from "@/lib/types/liquidacion";
+import type {
+  PagoRegistradoDTO,
+  RegistrarPagoMensajeroInput,
+  RegistrarPagoTiendaInput,
+} from "@/lib/types/liquidacion";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { descripcionDePago, medianocheUtcDelDia } from "@/lib/utils/descripcion-pago";
+import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 
 /**
@@ -66,8 +74,101 @@ export class LiquidacionService implements ILiquidacionService {
   constructor(
     private readonly pagoRepo: ILiquidacionPagoRepository,
     private readonly tiendaRepo: IWalletTiendaMovimientoRepository,
+    private readonly mensajeroRepo: IPagoMensajeroMovimientoRepository,
     private readonly runTransaction: LiquidacionTxRunner,
   ) {}
+
+  /**
+   * R21 — pago a un MENSAJERO, contra el pendiente de UN cierre aprobado. Es el mismo esqueleto
+   * de `registrarPagoTienda` —y esta escrito aparte, no factorizado, porque lo que cambia son
+   * justo los tres puntos donde una abstraccion prematura se equivocaria: contra que se compara
+   * el monto, en que libro se escribe y con que signo.
+   *
+   *  1. ROL (R1/R6), antes de tocar datos.
+   *  2. CANDADO del CIERRE (R83/R85), dentro de la transaccion y antes de leer el pendiente.
+   *  3. GUARDIA DEL CIERRE (R20), leida DENTRO de la transaccion y bajo el candado: existe y
+   *     esta `aprobado`. Los otros tres estados salen sin escribir nada.
+   *  4. Pendiente DERIVADO (§5): `calcularSplitPago(P, E).pendiente − Σ pagos vigentes`.
+   *  5. Documento + movimiento `pago`/`liquidacion`, en la MISMA transaccion (R39).
+   *
+   * El BENEFICIARIO (`mensajeroId`) se toma del CIERRE leido, nunca de la peticion (R5): el
+   * cliente elige contra que cierre paga, no a quien se le paga.
+   */
+  async registrarPagoMensajero(
+    input: RegistrarPagoMensajeroInput,
+    actor: Actor,
+  ): Promise<RegistrarPagoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R5/R6
+
+    const monto = new Prisma.Decimal(input.monto).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    const montoStr = monto.toFixed(2);
+
+    try {
+      return await this.runTransaction(async (tx) => {
+        // R83/R85: UN solo candado, sobre la fila del CIERRE (el grano exacto de lo que se
+        // consume), ANTES de leer el pendiente y ANTES de mirar el estado.
+        await this.pagoRepo.bloquearBeneficiario(tx, { tipo: "cierre", cierreId: input.cierreId });
+
+        // R20: la guardia se lee EN LA TRANSACCION. Fuera de ella, el cierre podria cambiar de
+        // estado entre la comprobacion y la escritura del pago.
+        const cierre = await this.pagoRepo.obtenerCierreParaPago(input.cierreId, tx);
+        if (cierre === null) return { status: "no_encontrado" };
+        if (cierre.estado !== "aprobado") return { status: "cierre_no_aprobado" };
+
+        // R22/R24/R80: pendiente = min(P, E) del cierre − Σ pagos VIGENTES contra el.
+        const pendiente = new Prisma.Decimal(await this.pendienteDelCierre(cierre));
+
+        if (pendiente.lte(0)) return { status: "sin_saldo" }; // R27 [P1]
+        if (monto.gt(pendiente)) {
+          // R25 [P1]: se rechaza y se informa de cuanto queda, sin escribir nada.
+          return { status: "excede", disponible: pendiente.toFixed(2) };
+        }
+
+        const creado = await this.pagoRepo.crear(tx, {
+          claveIdempotencia: input.claveIdempotencia,
+          mensajeroId: cierre.mensajeroId, // R5: el beneficiario sale del CIERRE
+          tiendaId: null,
+          cierreId: cierre.id, // R21: el pago al mensajero va SIEMPRE atado a un cierre
+          monto: montoStr,
+          metodo: input.metodo,
+          referencia: input.referencia ?? null,
+          nota: input.nota ?? null,
+          fechaPago: medianocheUtcDelDia(input.fechaPago),
+          registradoPor: actor.usuarioId,
+        });
+        if (creado.status === "clave_repetida") throw new ClaveRepetidaError();
+
+        // R35/R37/R38/R39: el movimiento del libro del mensajero nace del documento.
+        await this.mensajeroRepo.crearMovimientos(tx, [
+          {
+            mensajeroId: cierre.mensajeroId,
+            tipo: "pago",
+            categoria: "liquidacion",
+            monto: montoStr,
+            origenTipo: "pago_mensajero", // R38: enlaza el movimiento con su documento…
+            origenId: creado.pago.id, //      …y hereda la idempotencia del indice unico parcial
+            descripcion: descripcionDePago(input.metodo, input.referencia ?? null),
+            registradoPor: actor.usuarioId,
+            fechaMovimiento: medianocheUtcDelDia(input.fechaPago), // R37: la fecha REAL del pago
+          },
+        ]);
+
+        return {
+          status: "ok",
+          pago: aPagoRegistradoDTO(creado.pago),
+          restante: pendiente.sub(monto).toFixed(2), // R24: el resto sigue pendiente
+        };
+      });
+    } catch (error) {
+      if (error instanceof ClaveRepetidaError) {
+        return this.responderYaRegistrado(input.claveIdempotencia, {
+          tipo: "cierre",
+          cierreId: input.cierreId,
+        });
+      }
+      throw error;
+    }
+  }
 
   /**
    * R29 — pago a una TIENDA, contra su saldo acumulado. Los pasos, en el orden de `design.md
@@ -154,33 +255,74 @@ export class LiquidacionService implements ILiquidacionService {
       });
     } catch (error) {
       if (error instanceof ClaveRepetidaError) {
-        return this.responderYaRegistrado(input.claveIdempotencia, input.tiendaId);
+        return this.responderYaRegistrado(input.claveIdempotencia, {
+          tipo: "tienda",
+          tiendaId: input.tiendaId,
+        });
       }
       throw error;
     }
   }
 
   /**
+   * §5/R22/R24/R80 — lo que de ESE cierre sigue sin entregarse. La suma de pagos vigentes se
+   * lee con el cliente propio del repositorio (no con el `tx`), igual que el saldo de la
+   * tienda: el candado del cierre ya se tomo, asi que una segunda transaccion no puede leer
+   * esta cifra hasta que la primera confirme.
+   *
+   * `?? "0.00"`: el repositorio devuelve una entrada por cada id pedido, pero un doble podria
+   * no hacerlo; ante la duda, cero pagado — que es lo que hace que el tope de [P1] siga siendo
+   * el pendiente completo y nunca uno inventado.
+   */
+  private async pendienteDelCierre(cierre: CierreParaPagoDTO): Promise<string> {
+    const pagados = await this.pagoRepo.sumarVigentesPorCierre([cierre.id]);
+    return derivarPendienteCierre(
+      cierre.totalPagoMensajero,
+      cierre.totalEfectivo,
+      pagados[cierre.id] ?? "0.00",
+    );
+  }
+
+  /**
    * R43/R47 — la respuesta idempotente: el MISMO comprobante y cero filas nuevas.
    *
    * El restante se recalcula sobre el beneficiario DEL PAGO ENCONTRADO, no sobre el de la
-   * peticion: si alguien reusara una clave ya consumida apuntando a otra tienda, la cifra que
-   * devolvemos seguiria siendo la de la tienda a la que de verdad se pago.
+   * peticion: si alguien reusara una clave ya consumida apuntando a otro cierre o a otra
+   * tienda, la cifra que devolvemos seguiria siendo la de aquello a lo que de verdad se pago.
+   * El beneficiario de la peticion solo actua de respaldo.
    *
    * `no_encontrado` es el caso imposible-en-teoria (choque de clave sin fila que lo explique) y
    * se responde sin inventar: mejor un estado explicito que un `ok` que nadie puede auditar.
    */
   private async responderYaRegistrado(
     claveIdempotencia: string,
-    tiendaIdDeLaPeticion: string,
+    deLaPeticion: BeneficiarioBloqueo,
   ): Promise<RegistrarPagoServiceResult> {
     const pago = await this.pagoRepo.obtenerPorClave(claveIdempotencia);
     if (pago === null) return { status: "no_encontrado" };
 
-    const tiendaId = pago.tiendaId ?? tiendaIdDeLaPeticion;
-    const agregado = await this.tiendaRepo.agregarSaldoPorTienda(tiendaId, {});
-    const restante = derivarSaldoTienda(agregado.creditos, agregado.debitos).saldo;
+    const restante = await this.restanteDe(pago, deLaPeticion);
+    if (restante === null) return { status: "no_encontrado" };
 
     return { status: "ya_registrado", pago: aPagoRegistradoDTO(pago), restante };
+  }
+
+  /** Lo que queda disponible tras el pago ya registrado, segun contra que dinero fuera. */
+  private async restanteDe(
+    pago: LiquidacionPagoDTO,
+    deLaPeticion: BeneficiarioBloqueo,
+  ): Promise<string | null> {
+    const cierreId =
+      pago.cierreId ?? (deLaPeticion.tipo === "cierre" ? deLaPeticion.cierreId : null);
+    if (cierreId !== null) {
+      const cierre = await this.pagoRepo.obtenerCierreParaPago(cierreId);
+      return cierre === null ? null : this.pendienteDelCierre(cierre);
+    }
+
+    const tiendaId =
+      pago.tiendaId ?? (deLaPeticion.tipo === "tienda" ? deLaPeticion.tiendaId : null);
+    if (tiendaId === null) return null;
+    const agregado = await this.tiendaRepo.agregarSaldoPorTienda(tiendaId, {});
+    return derivarSaldoTienda(agregado.creditos, agregado.debitos).saldo;
   }
 }

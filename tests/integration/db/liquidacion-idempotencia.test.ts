@@ -1,13 +1,22 @@
 import { describe, it, expect } from "vitest";
 import { Prisma, RolValue, type PrismaClient } from "@prisma/client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
+import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { LiquidacionTx } from "@/lib/interfaces/services/ILiquidacionService";
-import type { RegistrarPagoTiendaInput } from "@/lib/types/liquidacion";
+import type { CrearPagoMensajeroInput } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
+import type {
+  RegistrarPagoMensajeroInput,
+  RegistrarPagoTiendaInput,
+} from "@/lib/types/liquidacion";
+import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 
 // Feature 172 / T B.4 — EL CANDADO DE SERIALIZACION [P1] (design §4.2). Cubre R46, R83 y R85.
+// Feature 172 / T B.6 — IDEMPOTENCIA (design §4.1). Cubre R43, R44, R45, R47 y R48, con el
+// mismo store: el `UNIQUE(clave_idempotencia)` y el indice unico parcial de los DOS libros son
+// parte de su semantica, no un `if` del test.
 //
 // Por que este archivo existe. El humano eligio RECHAZAR el pago que excede lo debido (P1), y
 // esa comprobacion solo vale si nadie puede leer el mismo disponible a la vez: con
@@ -48,6 +57,18 @@ type FilaMovimiento = {
   fechaMovimiento?: Date;
 };
 
+type FilaMovimientoMensajero = {
+  mensajeroId: string;
+  tipo: "devengo" | "pago";
+  categoria: string;
+  monto: Prisma.Decimal;
+  origenTipo: string;
+  origenId: string | null;
+  descripcion: string | null;
+  registradoPor: string | null;
+  fechaMovimiento?: Date;
+};
+
 type FilaPago = {
   id: string;
   claveIdempotencia: string;
@@ -65,6 +86,27 @@ type FilaPago = {
   anulacion: null;
 };
 
+/** La fila de `cierre_dia` que el pago al mensajero LEE y jamas escribe (R42). */
+type FilaCierre = {
+  id: string;
+  mensajeroId: string;
+  estado: "solicitado" | "aprobado" | "rechazado" | "vencido";
+  totalPagoMensajero: Prisma.Decimal;
+  totalEfectivo: Prisma.Decimal;
+};
+
+/** Cierre APROBADO con P = 50 000 y E = 0 -> pendiente de 50 000 antes de pagar nada. */
+function cierreAprobado(over: Partial<FilaCierre> = {}): FilaCierre {
+  return {
+    id: "c1",
+    mensajeroId: "m1",
+    estado: "aprobado",
+    totalPagoMensajero: new Prisma.Decimal("50000.00"),
+    totalEfectivo: new Prisma.Decimal("0.00"),
+    ...over,
+  };
+}
+
 /**
  * Store en memoria con la semantica REAL de tres cosas de la base:
  *
@@ -75,7 +117,7 @@ type FilaPago = {
  *     commit, y el candado se suelta DESPUES de publicar (commit -> release, ese orden).
  *  3. `UNIQUE(clave_idempotencia)` y el indice unico parcial de los libros.
  */
-function makeStore(saldoInicial: string) {
+function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierreAprobado()]) {
   const movimientos: FilaMovimiento[] = [
     {
       tiendaId: "t1",
@@ -88,7 +130,9 @@ function makeStore(saldoInicial: string) {
       registradoPor: null,
     },
   ];
+  const movimientosMensajero: FilaMovimientoMensajero[] = [];
   const clavesMovimiento = new Set<string>(["cierre_dia|c-previo|t1|cod_recaudado"]);
+  const cierres: FilaCierre[] = cierresIniciales;
   const pagos: FilaPago[] = [];
   const clavesIdempotencia = new Set<string>();
   const candados = new Map<string, Promise<void>>();
@@ -110,8 +154,13 @@ function makeStore(saldoInicial: string) {
     return liberar;
   }
 
+  // Los DOS indices unicos parciales, uno por libro: `(origen_tipo, origen_id, <beneficiario>,
+  // categoria) WHERE origen_id IS NOT NULL`. Que el beneficiario forme parte de la clave es lo
+  // que deja convivir al pago del cierre con la liquidacion, y a dos mensajeros entre si.
   const claveMov = (d: FilaMovimiento) =>
     `${d.origenTipo}|${d.origenId}|${d.tiendaId}|${d.categoria}`;
+  const claveMovMensajero = (d: FilaMovimientoMensajero) =>
+    `${d.origenTipo}|${d.origenId}|${d.mensajeroId}|${d.categoria}`;
 
   // Lecturas COMMITEADAS (el cliente propio del repositorio, fuera de la transaccion).
   const clienteLectura = {
@@ -157,6 +206,49 @@ function makeStore(saldoInicial: string) {
               p.claveIdempotencia === where.claveIdempotencia) ||
             (where.id !== undefined && p.id === where.id),
         );
+        if (where.claveIdempotencia !== undefined) log.push("leer-por-clave");
+        await tic();
+        return fila ?? null;
+      },
+      /**
+       * §5/R80 — `sumarVigentesPorCierre`. «Vigente» = SIN fila de anulacion, y aqui se aplica
+       * de verdad (el store guarda `anulacion`), no se da por bueno.
+       */
+      groupBy: async ({
+        by,
+        where,
+      }: {
+        by: string[];
+        where: { cierreId?: { in: string[] }; anulacion?: { is: null } };
+      }) => {
+        if (by.join() !== "cierreId" || where.cierreId === undefined) {
+          throw new Error(`el store no soporta este groupBy: ${JSON.stringify({ by })}`);
+        }
+        log.push("leer-pagado-vigente");
+        const ids = where.cierreId.in;
+        const vigentes = pagos.filter(
+          (p) =>
+            p.cierreId !== null &&
+            ids.includes(p.cierreId) &&
+            (where.anulacion === undefined || p.anulacion === null),
+        );
+        const porCierre = new Map<string, Prisma.Decimal>();
+        for (const p of vigentes) {
+          const acc = porCierre.get(p.cierreId as string) ?? new Prisma.Decimal(0);
+          porCierre.set(p.cierreId as string, acc.add(p.monto));
+        }
+        const resultado = [...porCierre].map(([cierreId, monto]) => ({
+          cierreId,
+          _sum: { monto },
+        }));
+        await tic();
+        return resultado;
+      },
+    },
+    cierreDia: {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        log.push(`leer-cierre-fuera-de-tx:${where.id}`);
+        const fila = cierres.find((c) => c.id === where.id);
         await tic();
         return fila ?? null;
       },
@@ -187,6 +279,10 @@ function makeStore(saldoInicial: string) {
           const clave = data.claveIdempotencia as string;
           if (clavesIdempotencia.has(clave) || clavesPendientes.has(clave)) {
             // UNIQUE(clave_idempotencia): la barrera es DE DATOS (R44), no un `if` previo.
+            // El log deja constancia de que el INSERT se INTENTO y lo rechazo la restriccion:
+            // es lo que distingue «idempotencia por constraint» de «idempotencia por consulta
+            // previa», y lo que la prueba por mutacion de T B.6 apaga.
+            log.push("choque-clave");
             throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
               code: "P2002",
               clientVersion: "7.0.0",
@@ -247,8 +343,53 @@ function makeStore(saldoInicial: string) {
         },
       },
       pagoMensajeroMovimiento: {
-        createMany: async () => {
-          throw new Error("el pago a una tienda NO debe tocar el libro del mensajero");
+        createMany: async ({
+          data,
+          skipDuplicates,
+        }: {
+          data: FilaMovimientoMensajero[];
+          skipDuplicates?: boolean;
+        }) => {
+          const aInsertar: FilaMovimientoMensajero[] = [];
+          for (const d of data) {
+            const k = claveMovMensajero(d);
+            if (d.origenId !== null && (clavesMovimiento.has(k) || clavesPendientes.has(k))) {
+              if (skipDuplicates) continue; // ON CONFLICT DO NOTHING
+              throw new Error(`unique violation ${k}`);
+            }
+            if (d.origenId !== null) clavesPendientes.add(k);
+            aInsertar.push(d);
+          }
+          log.push(`crear-movimiento-mensajero:${aInsertar.length}`);
+          aplicarAlCommit.push(() => {
+            for (const d of aInsertar) {
+              movimientosMensajero.push(d);
+              if (d.origenId !== null) clavesMovimiento.add(claveMovMensajero(d));
+            }
+          });
+          return { count: aInsertar.length };
+        },
+      },
+      /**
+       * R42 — el cierre se LEE dentro de la transaccion (la guardia de R20) y NUNCA se escribe.
+       * Las escrituras existen aqui a proposito, y REVIENTAN: si alguien tocara el snapshot del
+       * cierre desde esta feature, el test caeria con un mensaje que dice exactamente eso.
+       */
+      cierreDia: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          log.push(`leer-cierre:${where.id}`);
+          const fila = cierres.find((c) => c.id === where.id);
+          await tic();
+          return fila ?? null;
+        },
+        update: async () => {
+          throw new Error("R42: la liquidacion NO escribe en cierre_dia");
+        },
+        updateMany: async () => {
+          throw new Error("R42: la liquidacion NO escribe en cierre_dia");
+        },
+        delete: async () => {
+          throw new Error("R42: la liquidacion NO escribe en cierre_dia");
         },
       },
     };
@@ -263,21 +404,34 @@ function makeStore(saldoInicial: string) {
     }
   }
 
-  return { movimientos, pagos, log, runTransaction, clienteLectura };
+  return { movimientos, movimientosMensajero, cierres, pagos, log, runTransaction, clienteLectura };
 }
 
 function buildService(store: ReturnType<typeof makeStore>) {
-  const pagoRepo = new LiquidacionPagoRepository(store.clienteLectura as unknown as PrismaClient);
-  const tiendaRepo = new WalletTiendaMovimientoRepository(
-    store.clienteLectura as unknown as PrismaClient,
+  const cliente = store.clienteLectura as unknown as PrismaClient;
+  return new LiquidacionService(
+    new LiquidacionPagoRepository(cliente),
+    new WalletTiendaMovimientoRepository(cliente),
+    new PagoMensajeroMovimientoRepository(cliente),
+    store.runTransaction,
   );
-  return new LiquidacionService(pagoRepo, tiendaRepo, store.runTransaction);
 }
 
 function pago(monto: string, clave: string): RegistrarPagoTiendaInput {
   return {
     claveIdempotencia: clave,
     tiendaId: "t1",
+    monto,
+    metodo: "efectivo",
+    fechaPago: "2026-07-30",
+  };
+}
+
+/** El mismo pago, contra el cierre `c1` (T B.5). */
+function pagoMensajero(monto: string, clave: string): RegistrarPagoMensajeroInput {
+  return {
+    claveIdempotencia: clave,
+    cierreId: "c1",
     monto,
     metodo: "efectivo",
     fechaPago: "2026-07-30",
@@ -291,6 +445,14 @@ const CLAVE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 function totalPagado(store: ReturnType<typeof makeStore>): string {
   return store.movimientos
     .filter((m) => m.categoria === "pago_tienda")
+    .reduce((acc, m) => acc.add(m.monto), new Prisma.Decimal(0))
+    .toFixed(2);
+}
+
+/** Σ de los movimientos `liquidacion` que quedaron en el libro del mensajero. */
+function totalLiquidado(store: ReturnType<typeof makeStore>): string {
+  return store.movimientosMensajero
+    .filter((m) => m.categoria === "liquidacion")
     .reduce((acc, m) => acc.add(m.monto), new Prisma.Decimal(0))
     .toFixed(2);
 }
@@ -485,5 +647,359 @@ describe("el documento y el libro no divergen (§5, R39)", () => {
     const debitos = store.movimientos.filter((m) => m.categoria === "pago_tienda");
     expect(debitos.map((m) => m.origenId).sort()).toEqual(store.pagos.map((p) => p.id).sort());
     expect(debitos.every((m) => m.origenTipo === "pago_tienda")).toBe(true);
+  });
+});
+
+// =============================================================================================
+// T B.6 — IDEMPOTENCIA (design §4.1). R43, R44, R45, R47 y R48.
+//
+// La barrera que se prueba aqui NO es del servicio: es el `UNIQUE(clave_idempotencia)` del store
+// (que imita a la columna) y el indice unico parcial de los dos libros. Por eso el criterio de
+// «Hecho» de esta task exige la PRUEBA POR MUTACION: quitando el UNIQUE del store, el primer
+// test tiene que caer. Ejecutada; salida en `progress/impl_172-liquidacion.md`.
+// =============================================================================================
+
+describe("R43/R47 — la misma solicitud dos veces registra UN SOLO pago", () => {
+  it("la misma clave dos veces: un pago, el MISMO comprobante y el saldo saldado una vez", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store);
+
+    const primera = await service.registrarPagoTienda(pago("15000.00", CLAVE_A), ACTOR);
+    // El doble submit: mismisima peticion, misma clave (el cliente la genera al ABRIR el
+    // formulario y no la renueva hasta que un registro sale bien).
+    const segunda = await service.registrarPagoTienda(pago("15000.00", CLAVE_A), ACTOR);
+
+    expect(primera.status).toBe("ok");
+    expect(segunda.status).toBe("ya_registrado"); // R47: se informa, no se crea un segundo pago
+    if (primera.status !== "ok" || segunda.status !== "ya_registrado") return;
+
+    // R43: el MISMO comprobante, campo por campo (no «uno equivalente»).
+    expect(segunda.pago).toEqual(primera.pago);
+    // …y una sola fila en cada sitio: el saldo NO se salda dos veces.
+    expect(store.pagos).toHaveLength(1);
+    expect(totalPagado(store)).toBe("15000.00");
+    expect(store.movimientos.filter((m) => m.categoria === "pago_tienda")).toHaveLength(1);
+    // El restante que se devuelve es el real tras el pago, no el de antes.
+    expect(segunda.restante).toBe("85000.00");
+    // Y el pago a una tienda no toco el libro del mensajero.
+    expect(store.movimientosMensajero).toHaveLength(0);
+  });
+
+  it("R43/R47 tambien en el camino del MENSAJERO (es codigo distinto, no una rama compartida)", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store);
+
+    const primera = await service.registrarPagoMensajero(pagoMensajero("20000.00", CLAVE_A), ACTOR);
+    const segunda = await service.registrarPagoMensajero(pagoMensajero("20000.00", CLAVE_A), ACTOR);
+
+    expect(primera.status).toBe("ok");
+    expect(segunda.status).toBe("ya_registrado");
+    if (primera.status !== "ok" || segunda.status !== "ya_registrado") return;
+    expect(segunda.pago).toEqual(primera.pago);
+    expect(store.pagos).toHaveLength(1);
+    expect(totalLiquidado(store)).toBe("20000.00");
+    // El pendiente del cierre bajo UNA vez: 50 000 - 20 000.
+    expect(segunda.restante).toBe("30000.00");
+  });
+
+  it("un reintento con la misma clave pero OTRO monto tampoco crea nada (la clave manda)", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store);
+
+    await service.registrarPagoTienda(pago("15000.00", CLAVE_A), ACTOR);
+    // 20 000 cabe de sobra en los 85 000 que quedan, asi que el rechazo NO viene del tope:
+    // viene de la clave, que es lo que este caso mide.
+    const r = await service.registrarPagoTienda(pago("20000.00", CLAVE_A), ACTOR);
+
+    expect(r.status).toBe("ya_registrado");
+    if (r.status !== "ya_registrado") return;
+    // Devuelve el pago REAL (15 000), no lo que pedia el reintento.
+    expect(r.pago.monto).toBe("15000.00");
+    expect(store.pagos).toHaveLength(1);
+    expect(totalPagado(store)).toBe("15000.00");
+  });
+});
+
+describe("R44 — la barrera es la RESTRICCION de la base, no una comprobacion previa", () => {
+  it("en el camino feliz no se consulta por clave: se INSERTA y punto", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store);
+
+    await service.registrarPagoTienda(pago("15000.00", CLAVE_A), ACTOR);
+
+    // Si hubiera un check-then-insert, `leer-por-clave` estaria ANTES de `crear-documento`.
+    expect(store.log).not.toContain("leer-por-clave");
+    expect(store.log).toContain("crear-documento:pago-1");
+  });
+
+  it("en el reintento, la lectura por clave ocurre DESPUES del intento de insertar", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store);
+
+    await service.registrarPagoTienda(pago("15000.00", CLAVE_A), ACTOR);
+    const marca = store.log.length;
+    await service.registrarPagoTienda(pago("15000.00", CLAVE_A), ACTOR);
+
+    const segundoIntento = store.log.slice(marca);
+    // El INSERT se INTENTA y lo rechaza la RESTRICCION (`choque-clave` lo emite el store, o sea
+    // la base); solo entonces se relee el comprobante.
+    const iChoque = segundoIntento.indexOf("choque-clave");
+    const iLectura = segundoIntento.indexOf("leer-por-clave");
+    expect(iChoque).toBeGreaterThanOrEqual(0);
+    expect(iLectura).toBeGreaterThan(iChoque);
+    // Y no hubo commit del segundo intento: la transaccion murio con el choque.
+    expect(segundoIntento.filter((l) => l === "commit")).toHaveLength(0);
+  });
+
+  it("sin ese choque no habria idempotencia: el servicio no filtra claves en memoria", async () => {
+    // Contraprueba del anterior: la unica pieza que distingue «ya registrado» de «nuevo» es el
+    // error de la base. El servicio pide crear las DOS veces, y quien dice que no es el UNIQUE.
+    const store = makeStore("100000.00");
+    const service = buildService(store);
+
+    await service.registrarPagoTienda(pago("15000.00", CLAVE_A), ACTOR);
+    await service.registrarPagoTienda(pago("15000.00", CLAVE_A), ACTOR);
+
+    const intentos = store.log.filter(
+      (l) => l === "choque-clave" || l.startsWith("crear-documento"),
+    );
+    expect(intentos).toEqual(["crear-documento:pago-1", "choque-clave"]);
+  });
+});
+
+describe("R45 — dos pagos legitimos identicos son DOS pagos", () => {
+  it("mismo beneficiario, monto, metodo y fecha, con dos claves: entran los dos", async () => {
+    const store = makeStore("100000.00");
+    const service = buildService(store);
+
+    // Dos entregas de 5 000 en efectivo el mismo dia a la misma tienda. Dos aperturas del
+    // formulario -> dos claves. Una clave natural (beneficiario, monto, metodo, fecha) se habria
+    // tragado la segunda EN SILENCIO (alternativa C, descartada).
+    const a = await service.registrarPagoTienda(pago("5000.00", CLAVE_A), ACTOR);
+    const b = await service.registrarPagoTienda(pago("5000.00", CLAVE_B), ACTOR);
+
+    expect([a.status, b.status]).toEqual(["ok", "ok"]);
+    expect(store.pagos).toHaveLength(2);
+    expect(store.pagos[0].id).not.toBe(store.pagos[1].id);
+    expect(totalPagado(store)).toBe("10000.00");
+    // Y cada movimiento cuelga de SU documento: el indice unico parcial no los confunde.
+    const debitos = store.movimientos.filter((m) => m.categoria === "pago_tienda");
+    expect(debitos).toHaveLength(2);
+    expect(new Set(debitos.map((m) => m.origenId)).size).toBe(2);
+  });
+
+  it("lo mismo contra un cierre: dos pagos parciales identicos suman en el libro", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store);
+
+    const a = await service.registrarPagoMensajero(pagoMensajero("5000.00", CLAVE_A), ACTOR);
+    const b = await service.registrarPagoMensajero(pagoMensajero("5000.00", CLAVE_B), ACTOR);
+
+    expect([a.status, b.status]).toEqual(["ok", "ok"]);
+    expect(store.pagos).toHaveLength(2);
+    expect(totalLiquidado(store)).toBe("10000.00");
+    expect(store.movimientosMensajero.filter((m) => m.categoria === "liquidacion")).toHaveLength(2);
+  });
+});
+
+describe("el documento y el libro NO divergen (design §5)", () => {
+  it("Σ pagos vigentes del cierre == Σ movimientos `liquidacion`, y el pendiente cuadra", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store);
+
+    await service.registrarPagoMensajero(pagoMensajero("20000.00", CLAVE_A), ACTOR);
+    const ultima = await service.registrarPagoMensajero(pagoMensajero("15000.50", CLAVE_B), ACTOR);
+
+    const sumaDocumentos = store.pagos
+      .filter((p) => p.cierreId === "c1" && p.anulacion === null)
+      .reduce((acc, p) => acc.add(p.monto), new Prisma.Decimal(0))
+      .toFixed(2);
+    expect(sumaDocumentos).toBe("35000.50");
+    expect(totalLiquidado(store)).toBe("35000.50"); // el libro dice exactamente lo mismo
+
+    // …y el pendiente derivado del cierre coincide con lo que devolvio el servicio.
+    const cierre = store.cierres[0];
+    expect(
+      derivarPendienteCierre(cierre.totalPagoMensajero, cierre.totalEfectivo, sumaDocumentos),
+    ).toBe("14999.50");
+    expect(ultima).toMatchObject({ status: "ok", restante: "14999.50" });
+
+    // Cada movimiento apunta a SU documento (R38).
+    const liquidaciones = store.movimientosMensajero.filter((m) => m.categoria === "liquidacion");
+    expect(liquidaciones.map((m) => m.origenId).sort()).toEqual(
+      store.pagos.map((p) => p.id).sort(),
+    );
+    expect(liquidaciones.every((m) => m.origenTipo === "pago_mensajero")).toBe(true);
+    expect(liquidaciones.every((m) => m.tipo === "pago")).toBe(true);
+  });
+
+  it("R42: pagar NO toca el snapshot del cierre (ni P, ni E, ni el estado)", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store);
+    const antes = {
+      ...store.cierres[0],
+      totalPagoMensajero: store.cierres[0].totalPagoMensajero.toFixed(2),
+      totalEfectivo: store.cierres[0].totalEfectivo.toFixed(2),
+    };
+
+    await service.registrarPagoMensajero(pagoMensajero("20000.00", CLAVE_A), ACTOR);
+
+    // (El `tx` del store REVIENTA si alguien llama a update/updateMany/delete sobre cierre_dia:
+    //  esta comparacion es la segunda red, no la unica.)
+    expect(store.cierres).toHaveLength(1);
+    expect({
+      ...store.cierres[0],
+      totalPagoMensajero: store.cierres[0].totalPagoMensajero.toFixed(2),
+      totalEfectivo: store.cierres[0].totalEfectivo.toFixed(2),
+    }).toEqual(antes);
+  });
+});
+
+describe("R48 — reintentar la APROBACION de un cierre sigue sin duplicar movimientos", () => {
+  it("el feed del cierre es no-op al reintentarse, y el pago de la 172 CONVIVE con el", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store);
+    const libroRepo = new PagoMensajeroMovimientoRepository(
+      store.clienteLectura as unknown as PrismaClient,
+    );
+    // Las dos filas que el feed del cierre (feature 44) escribe al aprobar.
+    const delCierre: CrearPagoMensajeroInput[] = [
+      {
+        mensajeroId: "m1",
+        tipo: "devengo",
+        categoria: "pago_devengado",
+        monto: "50000.00",
+        origenTipo: "cierre_dia",
+        origenId: "c1",
+      },
+      {
+        mensajeroId: "m1",
+        tipo: "pago",
+        categoria: "pago_efectivo",
+        monto: "0.00",
+        origenTipo: "cierre_dia",
+        origenId: "c1",
+      },
+    ];
+
+    const primera = await store.runTransaction((tx) => libroRepo.crearMovimientos(tx, delCierre));
+    // La MISMA aprobacion, reintentada (el caso real: el admin le da dos veces, o hay un retry).
+    const segunda = await store.runTransaction((tx) => libroRepo.crearMovimientos(tx, delCierre));
+
+    expect(primera).toBe(2);
+    expect(segunda).toBe(0); // ON CONFLICT DO NOTHING: ni una fila nueva
+    expect(store.movimientosMensajero).toHaveLength(2);
+
+    // Y ahora la liquidacion: su movimiento tiene OTRO `origen_tipo`, asi que el indice unico
+    // parcial no lo confunde con los del cierre. Si compartieran clave, la 172 habria roto R48.
+    const r = await service.registrarPagoMensajero(pagoMensajero("20000.00", CLAVE_A), ACTOR);
+
+    expect(r.status).toBe("ok");
+    expect(store.movimientosMensajero).toHaveLength(3);
+    const claves = store.movimientosMensajero.map(
+      (m) => `${m.origenTipo}|${m.origenId}|${m.mensajeroId}|${m.categoria}`,
+    );
+    expect(new Set(claves).size).toBe(3);
+  });
+
+  it("y el propio movimiento del pago es idempotente por su `origen_id` (doble escritura = no-op)", async () => {
+    const store = makeStore("0.00");
+    const libroRepo = new PagoMensajeroMovimientoRepository(
+      store.clienteLectura as unknown as PrismaClient,
+    );
+    const dePago: CrearPagoMensajeroInput[] = [
+      {
+        mensajeroId: "m1",
+        tipo: "pago",
+        categoria: "liquidacion",
+        monto: "20000.00",
+        origenTipo: "pago_mensajero",
+        origenId: "pago-1",
+      },
+    ];
+
+    const n1 = await store.runTransaction((tx) => libroRepo.crearMovimientos(tx, dePago));
+    const n2 = await store.runTransaction((tx) => libroRepo.crearMovimientos(tx, dePago));
+
+    expect(n1).toBe(1);
+    expect(n2).toBe(0);
+    expect(totalLiquidado(store)).toBe("20000.00");
+  });
+});
+
+describe("R46/R83/R85 [P1] — el candado del CIERRE serializa igual que el de la tienda", () => {
+  it("el bloqueo es sobre `cierre_dia` y se toma ANTES de leer el pendiente", async () => {
+    const store = makeStore("0.00");
+    const service = buildService(store);
+
+    const r = await service.registrarPagoMensajero(pagoMensajero("20000.00", CLAVE_A), ACTOR);
+
+    expect(r.status).toBe("ok");
+    expect(store.log).toEqual([
+      "candado:cierre_dia:c1",
+      "candado-tomado:cierre_dia:c1",
+      "leer-cierre:c1",
+      "leer-pagado-vigente",
+      "crear-documento:pago-1",
+      "crear-movimiento-mensajero:1",
+      "commit",
+    ]);
+    expect(store.log.filter((l) => l.startsWith("candado:"))).toHaveLength(1); // R85
+  });
+
+  it("dos pagos simultaneos al MISMO cierre: entra uno y el otro se rechaza con lo que queda", async () => {
+    const store = makeStore("0.00"); // cierre con pendiente 50 000
+    const service = buildService(store);
+
+    const [a, b] = await Promise.all([
+      service.registrarPagoMensajero(pagoMensajero("30000.00", CLAVE_A), ACTOR),
+      service.registrarPagoMensajero(pagoMensajero("30000.00", CLAVE_B), ACTOR),
+    ]);
+
+    expect([a.status, b.status].sort()).toEqual(["excede", "ok"]);
+    const rechazado = a.status === "excede" ? a : b;
+    if (rechazado.status !== "excede") throw new Error("esperaba excede");
+    expect(rechazado.disponible).toBe("20000.00"); // 50 000 - 30 000 del que si entro
+    expect(totalLiquidado(store)).toBe("30000.00"); // entre los dos NO se pago de mas
+    expect(store.pagos).toHaveLength(1);
+  });
+
+  it("dos pagos a CIERRES distintos no se estorban (el grano es la fila del cierre)", async () => {
+    const store = makeStore("0.00", [
+      cierreAprobado(),
+      cierreAprobado({ id: "c2", mensajeroId: "m2" }),
+    ]);
+    const service = buildService(store);
+
+    const [a, b] = await Promise.all([
+      service.registrarPagoMensajero(pagoMensajero("30000.00", CLAVE_A), ACTOR),
+      service.registrarPagoMensajero(
+        { ...pagoMensajero("30000.00", CLAVE_B), cierreId: "c2" },
+        ACTOR,
+      ),
+    ]);
+
+    expect([a.status, b.status]).toEqual(["ok", "ok"]);
+    expect(store.log.filter((l) => l.startsWith("candado:")).sort()).toEqual([
+      "candado:cierre_dia:c1",
+      "candado:cierre_dia:c2",
+    ]);
+    expect(totalLiquidado(store)).toBe("60000.00");
+  });
+
+  it("R20: un cierre que no esta aprobado no escribe NADA, ni siquiera bajo carrera", async () => {
+    const store = makeStore("0.00", [cierreAprobado({ estado: "solicitado" })]);
+    const service = buildService(store);
+
+    const [a, b] = await Promise.all([
+      service.registrarPagoMensajero(pagoMensajero("10000.00", CLAVE_A), ACTOR),
+      service.registrarPagoMensajero(pagoMensajero("10000.00", CLAVE_B), ACTOR),
+    ]);
+
+    expect([a.status, b.status]).toEqual(["cierre_no_aprobado", "cierre_no_aprobado"]);
+    expect(store.pagos).toHaveLength(0);
+    expect(store.movimientosMensajero).toHaveLength(0);
+    // El candado si se tomo (va antes de la guardia) y se solto: no quedan transacciones vivas.
+    expect(store.log.filter((l) => l.startsWith("candado:"))).toHaveLength(2);
   });
 });

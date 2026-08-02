@@ -1,8 +1,15 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import type { LiquidacionPagoTxClient } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type {
+  LiquidacionCierreTxClient,
+  LiquidacionPagoTxClient,
+} from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 import type { PagoMensajeroTxClient } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { WalletTiendaTxClient } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
-import type { RegistrarPagoResult, RegistrarPagoTiendaInput } from "@/lib/types/liquidacion";
+import type {
+  RegistrarPagoMensajeroInput,
+  RegistrarPagoResult,
+  RegistrarPagoTiendaInput,
+} from "@/lib/types/liquidacion";
 
 // Feature 172 (design §3.1) — contrato del servicio de LIQUIDACION. Un solo servicio para los
 // tres actos (pagar a un mensajero, pagar a una tienda, anular), no tres: el 80 % —permisos,
@@ -12,11 +19,15 @@ import type { RegistrarPagoResult, RegistrarPagoTiendaInput } from "@/lib/types/
 
 /**
  * Lo que la transaccion del pago necesita: el documento y su candado
- * (`LiquidacionPagoTxClient`) y el libro del beneficiario. Los dos libros van en el tipo aunque
- * cada operacion escriba en UNO: es el mismo `tx` de Prisma y el tipo describe la transaccion,
- * no la operacion.
+ * (`LiquidacionPagoTxClient`), la LECTURA del cierre (`LiquidacionCierreTxClient`, R20: la
+ * guardia se lee dentro de la transaccion) y el libro del beneficiario. Los dos libros van en
+ * el tipo aunque cada operacion escriba en UNO: es el mismo `tx` de Prisma y el tipo describe
+ * la transaccion, no la operacion.
  */
-export type LiquidacionTx = LiquidacionPagoTxClient & WalletTiendaTxClient & PagoMensajeroTxClient;
+export type LiquidacionTx = LiquidacionPagoTxClient &
+  LiquidacionCierreTxClient &
+  WalletTiendaTxClient &
+  PagoMensajeroTxClient;
 
 /**
  * Ejecuta `fn` dentro de UNA transaccion y revierte si lanza (R39: o quedan el documento y su
@@ -40,6 +51,23 @@ export type RegistrarPagoServiceResult = Exclude<
 >;
 
 export interface ILiquidacionService {
+  /**
+   * R21 — registra un pago a un MENSAJERO contra un cierre APROBADO concreto. Mismo esqueleto
+   * que el de la tienda (guardia de rol, candado, disponible, documento + movimiento en una
+   * transaccion) con tres diferencias, y las tres importan:
+   *
+   *  - el candado es el del CIERRE, no el del usuario (§4.2): lo que se consume es el pendiente
+   *    de UN cierre, asi que dos pagos a cierres distintos del mismo mensajero no se estorban;
+   *  - hay una guardia previa: el cierre debe existir y estar `aprobado` (R20), leido DENTRO de
+   *    la transaccion; los otros tres estados (`solicitado`, `vencido`, `rechazado`) devuelven
+   *    `cierre_no_aprobado` sin escribir nada;
+   *  - el BENEFICIARIO sale del cierre, no de la peticion (R5): el cliente dice contra que
+   *    cierre paga; a quien se le paga lo decide el servidor.
+   */
+  registrarPagoMensajero(
+    input: RegistrarPagoMensajeroInput,
+    actor: Actor,
+  ): Promise<RegistrarPagoServiceResult>;
   /**
    * R29 — registra un pago a una TIENDA contra su saldo acumulado (sin cierre, decision 4 del
    * humano). Guardia de rol ANTES de tocar datos (R1/R2/R5/R6); disponible leido BAJO CANDADO
