@@ -2,6 +2,7 @@
 
 import CountUp from "react-countup";
 
+import { formatMonto, monedaConfig } from "@/lib/config/moneda";
 import { cn } from "@/lib/utils";
 import { toValidNumber } from "@/lib/utils/number";
 
@@ -10,12 +11,25 @@ import { toValidNumber } from "@/lib/utils/number";
 // siendo server-compatible y solo monta esta hoja. Nació en el portal del
 // mensajero (feature 61) y vive acá desde que también lo usan los cierres.
 
-// Símbolo del colón, igual que PriceLabel: se antepone SIEMPRE al valor.
-const SIMBOLO = "₡";
+// La moneda (símbolo, código y locale) NO se escribe aquí: se resuelve por
+// configuración en `lib/config/moneda.ts`, como pide `docs/architecture.md`
+// («sin hardcode de contexto»). Hasta la feature 130 este archivo tenía un
+// `const SIMBOLO = "₡"` y un `"es-CR"` incrustados, así que cambiar de país
+// obligaba a editar un componente compartido. El formato resultante pasa a ser
+// el de `Intl` con `style: "currency"` («₡3 500,00»), el mismo que ya usan los
+// otros cinco consumidores cliente de `formatMonto`.
+//
+// Lo que este arreglo NO resuelve, y es PREEXISTENTE (no lo introduce la 130):
+// `loadMonedaConfig` lee `process.env[name]` con clave dinámica, y Next solo
+// inlinea `NEXT_PUBLIC_*` con acceso estático, así que en el navegador la
+// configuración cae a su default `es-CR`/`CRC`. Ya les pasa a `EtiquetaGuia`,
+// `ChatConversacion`, `PosOrderCardDetalle`, `PosOrderCardMosaico` y
+// `SateliteOrderCard`; este KPI es el sexto, no el primero. Hacerla configurable
+// en cliente es una ficha propia sobre `lib/config/moneda.ts`.
 
 export interface KpiValorAnimadoProps {
   value?: string | number | null;
-  /** Formatea como precio (₡ + separadores de miles y hasta 2 decimales). */
+  /** Formatea como monto con la moneda configurada (`lib/config/moneda.ts`). */
   moneda?: boolean;
   className?: string;
 }
@@ -28,15 +42,13 @@ export function KpiValorAnimado({
   const amount = toValidNumber(value);
   const decimals = moneda ? 2 : 0;
 
-  // es-CR: separador de miles "." y decimal ",". minimumFractionDigits 0 para no
-  // forzar ",00" en enteros, igual que PriceLabel.
-  const formatear = (n: number) => {
-    const formatted = new Intl.NumberFormat("es-CR", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: decimals,
-    }).format(n);
-    return moneda ? `${SIMBOLO} ${formatted}` : formatted;
-  };
+  const formatear = (n: number) =>
+    moneda
+      ? formatMonto(n)
+      : new Intl.NumberFormat(monedaConfig.locale, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        }).format(n);
 
   return (
     <span className={cn("tabular-nums whitespace-nowrap", className)}>

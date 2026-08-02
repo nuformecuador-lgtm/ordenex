@@ -2447,3 +2447,40 @@ diagnosticó contra código muerto**, así que pide reevaluación antes de que a
 - **El worktree aislado se ganó el sueldo.** El checkout principal cambió de rama a mitad de
   la feature (otra sesión), justo lo que ya había matado tres agentes en la 122. Trabajar en
   `ordenex-wt-123` lo hizo irrelevante.
+
+## Feature 130 — analítica: componentes de gráficas (2026-08-01)
+
+- **Cinco piezas de presentación pura**, sin fetch, sin permisos y sin dominio: `KpiCard`,
+  `GraficaBarras`, `GraficaLineas`, `GraficaDonut` y `TablaResumen`, más los módulos puros de
+  color, formato y topes. 41 requisitos EARS trazados a test; **+9 archivos y +84 tests**.
+- **Se mergea SIN LLAMADOR y está dicho (H1).** El grafo es `AnaliticaShell` (existe) ← `131` (no
+  existe) ← `130`. Se comprobó midiendo, no afirmando: en un `next build` sin sonda, `recharts`
+  aparece en **0** chunks de cliente, precisamente porque nadie importa el paquete todavía.
+- **La cifra que le faltaba a D1, medida:** `recharts` pesa **388.810 bytes** y viaja en **un chunk
+  propio**. Ninguno de los **46** chunks de entrada de ruta lo contiene —ni el de la ruta que sí lo
+  usa, cuyo entry son 4.767 bytes y sólo lo *referencia*—. El mensajero **sí** entra a `/analitica`
+  (H2), así que la promesa honesta no es "no le llega" sino "le llega diferido y sólo ahí".
+- **La trampa que el design anticipó y que se respetó:** el stub global de `ResizeObserver` tiene
+  `observe(){}` vacío, así que `ResponsiveContainer` **renderiza vacío en vez de fallar** y
+  cualquier `querySelector("svg")` estaría verde midiendo nada. Todo el contenido se afirma sobre la
+  alternativa textual y sobre funciones puras; la única aserción sobre el lienzo se probó
+  **rompiéndola a propósito** y viéndola roja. El guard del paquete se probó igual, introduciendo
+  cada violación a mano.
+- **Excepción razonada viva:** Q1 (recharts directo, sin `components/ui/chart.tsx`) contradice
+  `docs/architecture.md:136` por decisión del humano. **R39 la convierte en guard:** si alguien trae
+  la primitiva de shadcn más adelante, el test avisa y obliga a reabrir la discusión en vez de dejar
+  dos fuentes de color conviviendo en silencio.
+- **Se arregló un compartido vivo con red (Q5).** `KpiValorAnimado` hardcodeaba `"₡"` y `"es-CR"`;
+  ahora sale de `lib/config/moneda.ts`. El string renderizado **cambia** («₡ 3.500» → «₡3 500,00») y
+  el componente **no tenía test propio**: se le escribió uno ANTES de tocarlo, contra el
+  comportamiento de entonces. Delta de suite **0**, sin retocar un solo test ajeno.
+- **Dos decisiones que el spec no fijaba, ahora escritas:** el `porcentaje` viaja como **fracción**
+  (0,842 = 84,2 %), coherente con la razón numerador/denominador de la 135 y con `Intl`; y en el
+  **donut** el techo de segmentos es `MAX_SERIES` (5), no 62, porque ahí el color distingue
+  porciones y 62 porciones con 5 colores es justo lo que Q3 descartó. **→ dueño de la 131.**
+- **El entorno costó más que la feature.** El worktree vive en una ruta de 143 caracteres y el
+  `package.json` del cliente Prisma queda en **266**, por encima del MAX_PATH de Windows: el
+  resolvedor de módulos de Node no lo lee, y **303 de 665 archivos de test fallaban al colectar**
+  dejando una suite que parecía casi verde con la mitad de los tests. Se resolvió acortando el
+  virtual store de pnpm. Mover el store fuera del proyecto **rompe la resolución de tipos** (~1.800
+  errores falsos): se probó y se descartó. Detalle en `impl_130.md §4`.
