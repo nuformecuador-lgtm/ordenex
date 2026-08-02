@@ -2,6 +2,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CuentaPorPagarDTO,
   CuentaPorPagarResumenDTO,
+  ListarCuentasPorPagarPaginadoInput,
   ListarMisPagosCompletoInput,
   ListarPagosDeMensajeroCompletoInput,
   ListarPagosDeMensajeroInput,
@@ -10,6 +11,7 @@ import type {
   PagoMensajeroMovimientoDTO,
 } from "@/lib/types/wallet-mensajero";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 44 (design §2.1) — contrato del servicio de lectura del LIBRO del pago por mensajero.
 // Roles: `mensajero` ve SU cuenta por pagar/movimientos (acotado a su usuarioId = mensajero_id,
@@ -40,6 +42,16 @@ export type ListarCuentasPorPagarServiceResult =
 export type ListarPagosDeMensajeroServiceResult =
   | { status: "ok"; data: ListarPagosDeMensajeroResult }
   | { status: "forbidden" };
+
+/**
+ * Feature 170 — FASE 2 (T L.1, R40/R41): la PAGINA del listado del maestro, con el total del
+ * conjunto que casa la busqueda. Contrato comun de T H.2, sin un solo campo extra.
+ *
+ * `forbidden` NUNCA viaja con filas ni con el total: un conteo de cuentas por pagar tambien es
+ * informacion del conjunto.
+ */
+export type ListarCuentasPorPagarPaginadoServiceResult =
+  ListarPaginadoServiceResult<CuentaPorPagarResumenDTO>;
 
 /**
  * Feature 170 (T C.1) — los pagos PROPIOS del mensajero, sin recorte por pagina.
@@ -79,6 +91,15 @@ export interface IWalletMensajeroService {
   ): Promise<ListarMisPagosCompletoServiceResult>;
   /** R18/R19: solo maestro; cuenta por pagar de TODOS los mensajeros (una fila por mensajero). */
   listarCuentasPorPagar(actor: Actor): Promise<ListarCuentasPorPagarServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T L.1, R40/R41/R45/R51): el MISMO listado, en paginas y con la
+   * busqueda por nombre resuelta en el SERVIDOR. Mismo guard (`esAccesoTotal`) y mismo
+   * conjunto: lo unico que cambia es que la pantalla deja de recibirlo entero.
+   */
+  listarCuentasPorPagarPaginado(
+    input: ListarCuentasPorPagarPaginadoInput,
+    actor: Actor,
+  ): Promise<ListarCuentasPorPagarPaginadoServiceResult>;
   /**
    * R18/R22: solo maestro; DESGLOSE por cierre de UN mensajero ARBITRARIO (paginado, mas reciente
    * primero) con filtros server-side por fecha/cierre. El saldo (cuenta por pagar) refleja el

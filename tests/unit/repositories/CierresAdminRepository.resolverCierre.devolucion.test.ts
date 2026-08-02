@@ -56,6 +56,7 @@ function buildWalletDeps() {
     listarPorMensajero: vi.fn(),
     agregarCuentaPorPagar: vi.fn(),
     listarCuentasPorPagarTodos: vi.fn(),
+    listarCuentasPorPagarPaginado: vi.fn(),
     obtenerNombreMensajero: vi.fn(),
   };
   const walletMensajeroFeedService: IWalletMensajeroFeedService = {
