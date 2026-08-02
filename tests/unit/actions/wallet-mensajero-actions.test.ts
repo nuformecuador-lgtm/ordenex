@@ -3,6 +3,7 @@ import {
   verMiCuentaPorPagarAction,
   listarMisPagosAction,
   listarCuentasPorPagarAction,
+  listarCuentasPorPagarPaginadoAction,
   listarPagosDeMensajeroAction,
 } from "@/lib/actions/wallet-mensajero";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -53,6 +54,15 @@ function fakeService(overrides: Partial<IWalletMensajeroService> = {}): IWalletM
     listarPagosDeMensajeroCompleto: vi.fn(async () => ({
       status: "ok" as const,
       items: [],
+      total: 0,
+    })),
+    // Feature 170 (T L.1): el listado paginado del maestro. Sus casos propios de borde estan
+    // mas abajo, en el describe de `listarCuentasPorPagarPaginadoAction`.
+    listarCuentasPorPagarPaginado: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
+      page: 1,
+      pageSize: 25,
       total: 0,
     })),
     ...overrides,
@@ -135,6 +145,102 @@ describe("listarCuentasPorPagarAction (R18/R19/R27)", () => {
     if (r.status !== "ok") throw new Error("ok");
     expect(typeof r.mensajeros[0].cuentaPorPagar).toBe("string");
     expect(typeof r.mensajeros[0].devengado).toBe("string");
+  });
+});
+
+// Feature 170 — FASE 2 (T L.1, R40/R41/R44/R45): el BORDE del listado paginado. Lo que aqui se
+// vigila es la lista blanca: el alcance de esta pantalla es «TODOS los mensajeros» y lo decide
+// el ROL del actor, asi que ninguna clave de la peticion puede tener nada que decir sobre el.
+describe("listarCuentasPorPagarPaginadoAction (T L.1)", () => {
+  it("input vacío vale: es lo que pide la página 1, con los defaults del dominio (R40)", async () => {
+    const service = fakeService();
+    const r = await listarCuentasPorPagarPaginadoAction(undefined, {
+      service,
+      getActor: async () => MAESTRO,
+    });
+
+    expect(r.status).toBe("ok");
+    expect(service.listarCuentasPorPagarPaginado).toHaveBeenCalledWith(
+      { page: 1, pageSize: 25 }, // walletMensajeroConfig, no un literal de la pantalla
+      MAESTRO,
+    );
+  });
+
+  it("un pageSize desmedido se RECORTA al máximo, no se rechaza (R40)", async () => {
+    const service = fakeService();
+    const r = await listarCuentasPorPagarPaginadoAction(
+      { page: 3, pageSize: 100000 },
+      { service, getActor: async () => MAESTRO },
+    );
+
+    expect(r.status).toBe("ok");
+    expect(service.listarCuentasPorPagarPaginado).toHaveBeenCalledWith(
+      { page: 3, pageSize: 100 },
+      MAESTRO,
+    );
+  });
+
+  it("la búsqueda por nombre llega al service TAL CUAL, sin recortar (R45)", async () => {
+    const service = fakeService();
+    // Espacios y mayusculas incluidos: normalizar es cosa del filtro, no del borde. Si el borde
+    // recortara, el borde y el filtro no entenderian lo mismo por «texto vacio», que es lo
+    // unico que decide si el listado sale entero o filtrado.
+    await listarCuentasPorPagarPaginadoAction(
+      { busqueda: "  Ana MENSAJERA " },
+      { service, getActor: async () => MAESTRO },
+    );
+
+    expect(service.listarCuentasPorPagarPaginado).toHaveBeenCalledWith(
+      { page: 1, pageSize: 25, busqueda: "  Ana MENSAJERA " },
+      MAESTRO,
+    );
+  });
+
+  it("una clave de ALCANCE colada muere en el borde, sin llegar al service (R44)", async () => {
+    for (const colada of [{ mensajeroId: "m1" }, { rol: "maestro" }, { usuarioId: "u-1" }]) {
+      const service = fakeService();
+      const r = await listarCuentasPorPagarPaginadoAction(
+        { page: 1, ...colada },
+        { service, getActor: async () => MAESTRO },
+      );
+
+      expect(r.status, JSON.stringify(colada)).toBe("validation_error");
+      expect(service.listarCuentasPorPagarPaginado, JSON.stringify(colada)).not.toHaveBeenCalled();
+    }
+  });
+
+  it("sin sesión -> unauthenticated, sin tocar el service (R44)", async () => {
+    const service = fakeService();
+    const r = await listarCuentasPorPagarPaginadoAction({}, { service, getActor: async () => null });
+
+    expect(r).toEqual({ status: "unauthenticated" });
+    expect(service.listarCuentasPorPagarPaginado).not.toHaveBeenCalled();
+  });
+
+  it("forbidden del service pasa tal cual, sin filas ni total (R44)", async () => {
+    const service = fakeService({
+      listarCuentasPorPagarPaginado: vi.fn(async () => ({ status: "forbidden" as const })),
+    });
+    const r = await listarCuentasPorPagarPaginadoAction({}, {
+      service,
+      getActor: async () => MENSAJERO,
+    });
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(r).not.toHaveProperty("items");
+    expect(r).not.toHaveProperty("total");
+  });
+
+  it("un page no positivo muere en el borde (R40)", async () => {
+    for (const malo of [{ page: 0 }, { page: -3 }, { pageSize: 0 }, { page: "abc" }]) {
+      const service = fakeService();
+      const r = await listarCuentasPorPagarPaginadoAction(malo, {
+        service,
+        getActor: async () => MAESTRO,
+      });
+      expect(r.status, JSON.stringify(malo)).toBe("validation_error");
+      expect(service.listarCuentasPorPagarPaginado).not.toHaveBeenCalled();
+    }
   });
 });
 

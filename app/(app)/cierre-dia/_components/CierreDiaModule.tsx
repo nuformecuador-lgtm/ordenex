@@ -2,14 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
+import { cierreConfig } from "@/lib/config/cierre";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
-import { deshacerGestion, solicitarCierre } from "@/lib/actions/cierre-dia";
+import {
+  deshacerGestion,
+  listarCierreDia,
+  listarCierresPasadosPaginado,
+  solicitarCierre,
+} from "@/lib/actions/cierre-dia";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -29,7 +37,10 @@ import {
   METODO_LABEL,
   RESULTADO_LABEL,
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
-import { filasLocales } from "@/components/shared/descarga-resultado";
+import {
+  filasLocales,
+  filasDelConjuntoCompleto,
+} from "@/components/shared/descarga-resultado";
 import {
   COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
   COLUMNAS_DESCARGA_DIA_DEVUELTAS,
@@ -52,6 +63,13 @@ import {
 // van por Server Action y refrescan la ruta para releer el estado del servidor. Los
 // montos llegan como STRING (money-safe): se renderizan tal cual, sin `parseFloat`/`Number`.
 
+/** Feature 170 — FASE 2 (T I.2): la página de «Cierres solicitados» tal como la da el servidor. */
+export interface CierresPasadosPagina {
+  items: CierrePasadoDTO[];
+  total: number;
+  pageSize: number;
+}
+
 export interface CierreDiaModuleProps {
   grupos: CierreGrupos;
   totales: CierreTotales;
@@ -59,7 +77,16 @@ export interface CierreDiaModuleProps {
   totalPagoMensajero: string;
   puedesSolicitar: boolean;
   motivoBloqueo: string | null;
-  cierresPasados: CierrePasadoDTO[];
+  /**
+   * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 de «Cierres solicitados» (R18), ya
+   * resuelta server-side, más el `total` del conjunto. Deja de ser el array entero.
+   *
+   * OJO: es la ÚNICA tabla de esta pantalla que pagina. Las secciones por resultado son del
+   * Anexo IV (vista agrupada de UNA jornada) y siguen recibiendo su grupo completo (R53); su
+   * contador por grupo, derivado de `filas.length`, sigue siendo correcto y está declarado
+   * como tal en la guardia de T H.3.
+   */
+  cierresPasados: CierresPasadosPagina;
   /**
    * Feature 41/R21: `true` si el mensajero está BLOQUEADO (tiene un cierre
    * `solicitado`/`vencido` pendiente). Derivado server-side y pasado por props; el
@@ -196,6 +223,26 @@ const DESCARGA_POR_RESULTADO: Record<
 
 /** Nombre visible del histórico: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA_PASADOS = "Cierres solicitados";
+/** Nombre accesible del control de paginación (R43). */
+export const PAGINACION_PASADOS_LABEL = "Paginación de los cierres solicitados";
+const ERROR_PASADOS = "No se pudieron cargar tus cierres solicitados.";
+
+// R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla.
+const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_SIZE);
+
+/**
+ * Feature 170 — FASE 2 (T I.2, R40/R41/R44): una página de los cierres solicitados POR ESTE
+ * mensajero. El `mensajero_id` no viaja en el input: lo pone el servidor desde la sesión, así
+ * que no hay parámetro por el que pedir el histórico de otro.
+ */
+async function leerCierresPasados(
+  page: number,
+  pageSize: number,
+): Promise<CierresPasadosPagina> {
+  const res = await listarCierresPasadosPaginado({ page, pageSize });
+  if (res.status !== "ok") throw new Error(res.status);
+  return { items: res.items, total: res.total, pageSize: res.pageSize };
+}
 
 /**
  * Prefija el símbolo de colón a un monto que YA viene como string (money-safe,
@@ -241,6 +288,28 @@ export function CierreDiaModule({
   // Feature 67: gestionId del deshacer EN VUELO; deshabilita el botón de ESA fila
   // (anti-doble-submit en la UI; el WHERE guardado del repo lo cubre igual).
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
+
+  // Feature 170 — FASE 2 (T I.2, R40/R43): página visible de «Cierres solicitados».
+  // `fallbackData` es la página que ya resolvió el Server Component: al entrar no hay segunda
+  // lectura y las filas son EXACTAMENTE las de antes (R44).
+  const [pasadosPage, setPasadosPage] = useState(1);
+  const [pasadosPageSize, setPasadosPageSize] = useState(cierresPasados.pageSize);
+  const { data: pasadosData, error: pasadosError } = useSWR(
+    ["cierre-dia:pasados", pasadosPage, pasadosPageSize],
+    () => leerCierresPasados(pasadosPage, pasadosPageSize),
+    {
+      fallbackData:
+        pasadosPage === 1 && pasadosPageSize === cierresPasados.pageSize
+          ? cierresPasados
+          : undefined,
+    },
+  );
+
+  // R44: el esqueleto de carga se muestra sólo cuando NO hay nada que pintar. `isLoading` de
+  // SWR sigue siendo `true` mientras revalida aunque haya `fallbackData`, y usarlo tal cual
+  // haría que la página 1 —la que el Server Component ya resolvió— apareciera como esqueleto
+  // antes de enseñar las filas que el usuario veía antes de paginar.
+  const pasadosCargando = pasadosData === undefined;
 
   /**
    * Feature 37 + 111/R13 + 109/R31: envía el cierre. Un mismo camino sirve para
@@ -475,20 +544,49 @@ export function CierreDiaModule({
         <div className="overflow-x-auto">
           <DataTable
             columns={COLUMNAS_PASADOS}
-            data={cierresPasados}
+            data={pasadosData?.items ?? []}
             rowKey="cierreId"
             ariaLabel={TITULO_DESCARGA_PASADOS}
             emptyMessage="Aún no has solicitado ningún cierre."
-            // Feature 170 (T E.4, R1/R11/R26/R30/R32): el histórico llega entero por props;
-            // el archivo lo proyecta tal cual, sin releer ni paginar.
+            isLoading={pasadosCargando}
+            error={pasadosError ? ERROR_PASADOS : null}
+            /**
+             * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
+             * CONJUNTO COMPLETO de ESTE mensajero. Se relee con el MISMO listado que la
+             * pantalla ya llamaba antes de paginar (`listarCierreDia`), que resuelve el
+             * mensajero desde la sesión: descargar no puede traer los cierres de otro (R44).
+             */
             descarga={{
               titulo: TITULO_DESCARGA_PASADOS,
               columnas: COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
               obtenerFilas: () =>
-                filasLocales(cierresPasados, filaDescargaDiaCierrePasado),
+                filasDelConjuntoCompleto(
+                  listarCierreDia().then((res) =>
+                    res.status === "ok"
+                      ? ({ status: "ok", items: res.cierresPasados } as const)
+                      : res,
+                  ),
+                  filaDescargaDiaCierrePasado,
+                ),
             }}
           />
         </div>
+
+        <Pagination
+          page={pasadosPage}
+          pageSize={pasadosPageSize}
+          total={pasadosData?.total ?? 0}
+          disabled={pasadosCargando}
+          showFirstLast
+          siblingCount={1}
+          ariaLabel={PAGINACION_PASADOS_LABEL}
+          onPageChange={setPasadosPage}
+          onPageSizeChange={(s) => {
+            setPasadosPageSize(s);
+            setPasadosPage(1);
+          }}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        />
       </section>
 
       {/* Confirmación de "Solicitar cierre". */}

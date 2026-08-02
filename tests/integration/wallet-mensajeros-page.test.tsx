@@ -37,9 +37,12 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
 
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
   listarCuentasPorPagarAction: vi.fn(),
+  // Feature 170 — FASE 2 (T L.2): la página pre-carga la PÁGINA 1, no el conjunto entero.
+  listarCuentasPorPagarPaginadoAction: vi.fn(),
   verMiCuentaPorPagarAction: vi.fn(),
   listarMisPagosAction: vi.fn(),
   listarPagosDeMensajeroAction: vi.fn(),
+  listarPagosDeMensajeroCompletoAction: vi.fn(),
 }));
 
 class NotFoundError extends Error {
@@ -66,17 +69,24 @@ vi.mock("@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable", () => 
 
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
-  listarCuentasPorPagarAction,
+  listarCuentasPorPagarPaginadoAction,
   listarPagosDeMensajeroAction,
 } from "@/lib/actions/wallet-mensajero";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
-const listarMock = vi.mocked(listarCuentasPorPagarAction);
+const listarMock = vi.mocked(listarCuentasPorPagarPaginadoAction);
 const desgloseMock = vi.mocked(listarPagosDeMensajeroAction);
 
+// Feature 170 — FASE 2 (T L.2): la PÁGINA 1 del listado. El `total` es el del CONJUNTO —30
+// mensajeros de los que la página trae dos—, para que un pre-fetch que bajara `items.length`
+// como total no pudiera pasar por aquí.
+const TOTAL_CONJUNTO = 30;
 const CUENTAS_OK = {
   status: "ok" as const,
-  mensajeros: [
+  page: 1,
+  pageSize: 25,
+  total: TOTAL_CONJUNTO,
+  items: [
     {
       mensajeroId: "u1",
       mensajeroNombre: "Ana Mensajera",
@@ -266,13 +276,35 @@ describe("WalletMensajerosPage — pre-fetch del maestro (R18/R21)", () => {
     // R21: los datos sensibles cruzan como props ya serializados (STRING), sin Decimal.
     expect(tableCalls).toHaveLength(1);
     const props = tableCalls[0];
-    expect(props.mensajeros).toHaveLength(2);
-    expect(typeof props.mensajeros[0].devengado).toBe("string");
-    expect(typeof props.mensajeros[0].pagado).toBe("string");
-    expect(typeof props.mensajeros[0].cuentaPorPagar).toBe("string");
-    expect(props.mensajeros[0].cuentaPorPagar).toBe("2000.00");
-    expect(props.mensajeros[1].cuentaPorPagar).toBe("0.00");
-    expect(props.mensajeros[1].signo).toBe("cero");
+    expect(props.initialData.items).toHaveLength(2);
+    expect(typeof props.initialData.items[0].devengado).toBe("string");
+    expect(typeof props.initialData.items[0].pagado).toBe("string");
+    expect(typeof props.initialData.items[0].cuentaPorPagar).toBe("string");
+    expect(props.initialData.items[0].cuentaPorPagar).toBe("2000.00");
+    expect(props.initialData.items[1].cuentaPorPagar).toBe("0.00");
+    expect(props.initialData.items[1].signo).toBe("cero");
+  });
+
+  it("pre-carga la PÁGINA 1 con el total del conjunto, no el listado entero (R40/R41)", async () => {
+    // Feature 170 — FASE 2 (T L.2). Dos cosas que el test de arriba no distingue:
+    //  (a) el Server Component pide el listado PAGINADO (input vacío = página 1 con los
+    //      defaults del dominio), no `listarCuentasPorPagarAction`, que traía las N filas;
+    //  (b) el `total` que baja por props es el del CONJUNTO (30) y no el de la página (2).
+    //      De él sale el «de Y» del contador (R42) y el número de páginas.
+    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
+    const { default: WalletMensajerosPage } = await import(
+      "@/app/(app)/wallet/mensajeros/page"
+    );
+
+    render(await WalletMensajerosPage());
+
+    expect(listarMock).toHaveBeenCalledTimes(1);
+    expect(listarMock).toHaveBeenCalledWith({});
+
+    const { initialData } = tableCalls[0];
+    expect(initialData.total).toBe(TOTAL_CONJUNTO);
+    expect(initialData.total).not.toBe(initialData.items.length);
+    expect(initialData.pageSize).toBe(25);
   });
 });
 

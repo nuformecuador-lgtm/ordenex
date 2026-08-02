@@ -5,7 +5,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarMovimientosAction, verBalanceAction } from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
-import { listarPlantillasAction } from "@/lib/actions/gasto-fijo-plantilla";
+import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
 
 import { WalletModule } from "./_components/WalletModule";
 
@@ -34,7 +34,9 @@ export default async function WalletPage() {
       listarMovimientosAction({}),
       verBalanceAction({}),
       verDesgloseEgresosAction({}),
-      listarPlantillasAction(),
+      // Feature 170 — FASE 2 (T I.2, R40): PÁGINA 1 de las plantillas, no el conjunto entero.
+      // El input va vacío: los defaults de `page`/`pageSize` los pone el schema del dominio.
+      listarPlantillasPaginadoAction({}),
     ]);
 
   // Defensa en profundidad: si algún service niega (forbidden/unauthenticated) o valida
@@ -60,7 +62,11 @@ export default async function WalletPage() {
         pageSize={movimientosResult.data.pageSize}
         balance={balanceResult.balance}
         desglose={desgloseResult.desglose}
-        plantillas={plantillasResult.plantillas}
+        plantillas={{
+          items: plantillasResult.items,
+          total: plantillasResult.total,
+          pageSize: plantillasResult.pageSize,
+        }}
       />
     </AppPage>
   );

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 import type { RolValue } from "@prisma/client";
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
@@ -12,6 +13,11 @@ import { ORIGENES_INCIDENTE_ADMIN } from "@/lib/services/IncidenteAdminService";
 import OrdenesPage from "@/app/(app)/ordenes/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import {
+  PAGE_SIZE_SATELITE,
+  catalogoSatelite,
+  paginaBodega,
+} from "@/tests/fixtures/satelite-bodega";
 
 // Feature 158 (T2.7 — extensión decidida por el HUMANO el 2026-07-30) — el reporte de
 // incidente en la superficie propia del `adminSatelite`, `/recepcion-satelite`.
@@ -28,11 +34,15 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 //     esta superficie);
 //   - que la acción sólo aparece donde el estado es un origen válido (R41);
 //   - que NO aparece sobre una orden de otra zona ni sin zona asignada (R48).
+// Feature 170 — FASE 2 (T K.3): el listado de la bodega pide su página al servidor. El doble
+// devuelve las órdenes del caso sin recortar: aquí no se pagina nada.
+const { paginadoBodegaMock } = vi.hoisted(() => ({ paginadoBodegaMock: vi.fn() }));
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
   recibirLote: vi.fn(),
+  listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoBodegaMock(...a),
 }));
 vi.mock("@/lib/actions/envio-devolucion-central", () => ({ enviarACentral: vi.fn() }));
 vi.mock("@/lib/actions/resolver-novedad", () => ({ recuperarABodega: vi.fn() }));
@@ -93,29 +103,65 @@ function makeOrden(
   };
 }
 
-function renderModule(
-  props?: Partial<Parameters<typeof RecepcionSateliteModule>[0]>,
-) {
+/**
+ * Feature 170 — FASE 2 (T K.3): el módulo ya no recibe los cinco arrays por estado, sino UNA
+ * PÁGINA del listado. Los casos siguen describiendo la bodega por GRUPOS —que es como se
+ * lee— y este andamiaje los concatena en el orden del flujo, igual que hacía el módulo, para
+ * armar la página, el catálogo y el doble de la Server Action.
+ */
+type GruposBodega = Partial<
+  Record<
+    | "porRecibir"
+    | "recibidas"
+    | "asignadas"
+    | "porDevolver"
+    | "enTransitoACentral"
+    | "devueltas",
+    RecepcionSateliteDTO[]
+  >
+>;
+type PropsModulo = Omit<
+  Partial<Parameters<typeof RecepcionSateliteModule>[0]>,
+  "porRecibir" | "ordenesBodega" | "catalogoFiltros"
+>;
+
+function renderModule(props?: GruposBodega & PropsModulo) {
+  const conjunto = [
+    ...(props?.recibidas ?? []),
+    ...(props?.asignadas ?? []),
+    ...(props?.porDevolver ?? []),
+    ...(props?.enTransitoACentral ?? []),
+    ...(props?.devueltas ?? []),
+  ];
+  paginadoBodegaMock.mockResolvedValue({
+    status: "ok",
+    items: conjunto,
+    page: 1,
+    pageSize: PAGE_SIZE_SATELITE,
+    total: conjunto.length,
+  });
+  // Caché de SWR NUEVA por montaje: la clave de la página 1 es la misma en todos los casos
+  // del archivo, así que sin esto el dato del caso anterior ganaría sobre el `fallbackData`
+  // del siguiente y la tabla pintaría las órdenes de otro test (medido en T I.2).
   render(
-    <RecepcionSateliteModule
-      porRecibir={props?.porRecibir ?? []}
-      recibidas={props?.recibidas ?? []}
-      porDevolver={props?.porDevolver ?? []}
-      enTransitoACentral={props?.enTransitoACentral ?? []}
-      devueltas={props?.devueltas ?? []}
-      asignadas={props?.asignadas ?? []}
-      zonaNombre={props?.zonaNombre ?? ZONA}
-      sinZona={props?.sinZona ?? false}
-      mensajeros={props?.mensajeros ?? []}
-      bloqueoBodega={
-        props?.bloqueoBodega ?? {
-          bloqueada: false,
-          porMensajeros: false,
-          porCierreBodega: false,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <RecepcionSateliteModule
+        porRecibir={props?.porRecibir ?? []}
+        ordenesBodega={paginaBodega(conjunto)}
+        catalogoFiltros={catalogoSatelite(conjunto)}
+        zonaNombre={props?.zonaNombre ?? ZONA}
+        sinZona={props?.sinZona ?? false}
+        mensajeros={props?.mensajeros ?? []}
+        bloqueoBodega={
+          props?.bloqueoBodega ?? {
+            bloqueada: false,
+            porMensajeros: false,
+            porCierreBodega: false,
+          }
         }
-      }
-      liberadasHoy={props?.liberadasHoy ?? []}
-    />,
+        liberadasHoy={props?.liberadasHoy ?? []}
+      />
+    </SWRConfig>,
   );
 }
 

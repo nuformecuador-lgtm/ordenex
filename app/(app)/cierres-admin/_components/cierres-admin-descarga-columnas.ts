@@ -21,15 +21,19 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
 
 import {
-  DESTINO_TIPO_LABEL,
+  destinoCierre,
   ESTADO_LABEL,
   INGRESO_BODEGA_RECHAZOS_COL,
   PAGO_MENSAJERO_COL,
 } from "./cierre-labels";
 
-/** Destino legible: tipo + zona, EXACTAMENTE como lo compone la columna de pantalla. */
+/**
+ * Destino legible: tipo + zona, EXACTAMENTE como lo compone la columna de pantalla — porque es
+ * LA MISMA función que usa la pantalla (feature 170, T I.2). Antes era una copia con el mismo
+ * texto; dos copias de un texto compartido es como el archivo y la tabla acaban divergiendo.
+ */
 function destino(cierre: CierreAdminResumen): string {
-  return `${DESTINO_TIPO_LABEL[cierre.destinoTipo] ?? cierre.destinoTipo} · ${cierre.destinoZonaNombre}`;
+  return destinoCierre(cierre);
 }
 
 /** Columnas de la COLA de pendientes de decisión, en el orden de la pantalla. */

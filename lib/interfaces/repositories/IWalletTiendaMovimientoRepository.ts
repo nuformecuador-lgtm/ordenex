@@ -5,6 +5,7 @@ import type {
   WalletTiendaMovimientoCategoria,
 } from "@/lib/types/wallet-tienda";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 43 (design §2.1) — contrato del repositorio del LEDGER por tienda. Solo queries
 // Prisma; sin logica de negocio. Money-safe: montos entran/salen como STRING. El acotado por
@@ -97,6 +98,20 @@ export interface IWalletTiendaMovimientoRepository {
   agregarSaldoPorTienda(tiendaId: string, filtros: SaldoTiendaFiltros): Promise<SaldoTiendaAgregado>;
   /** R20: una fila por tienda (con nombre) con sus totales credito/debito, para el maestro. */
   listarSaldosTodasTiendas(): Promise<SaldoTiendaAgregadoRow[]>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de los saldos por tienda +
+   * el TOTAL de tiendas con movimientos.
+   *
+   * Reusa la MISMA agregacion que `listarSaldosTodasTiendas` (el saldo de una tienda no se
+   * puede derivar de una pagina de movimientos: la agregacion es del conjunto por
+   * construccion), y por eso el recorte no anade NI UNA consulta — tampoco la del conteo. El
+   * orden es por NOMBRE de tienda (`tiendaId` como desempate): este listado no tenia criterio
+   * de ordenacion y sin un orden total la pagina 2 podria repetir u omitir filas. Ver la
+   * desviacion declarada en la impl del repositorio.
+   */
+  listarSaldosTiendasPaginado(
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<SaldoTiendaAgregadoRow>>;
   /**
    * Feature 171 (R22/R24/R34): Σ monto agrupado por (tipo, categoria) para UNA tienda +
    * filtros, con `tiendaId` SIEMPRE en el WHERE. UN solo `groupBy`, sea cual sea el tamaño de

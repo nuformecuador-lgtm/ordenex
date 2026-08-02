@@ -47,6 +47,22 @@ export const DESTINO_TIPO_LABEL: Record<CierreDestinoTipo, string> = {
   bodega_satelite: "Bodega satélite",
 };
 
+/**
+ * Feature 170 — FASE 2 (T I.2): destino LEGIBLE de un cierre (tipo + zona), la línea que
+ * pintan la columna «Destino» y la celda del archivo.
+ *
+ * Estaba escrita tres veces con el mismo texto: en `CierresAdminModule`, en
+ * `cierres-admin-descarga-columnas` y —al partir el histórico en su propio componente— habría
+ * llegado a cuatro. Sale aquí, junto al mapa del que depende, por el mismo motivo que salió
+ * `DESTINO_TIPO_LABEL`: que la pantalla y el archivo no puedan decir cosas distintas (R8).
+ */
+export function destinoCierre(cierre: {
+  destinoTipo: CierreDestinoTipo;
+  destinoZonaNombre: string;
+}): string {
+  return `${DESTINO_TIPO_LABEL[cierre.destinoTipo] ?? cierre.destinoTipo} · ${cierre.destinoZonaNombre}`;
+}
+
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_COL = "Pago mensajero";
 // --- Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready) ---

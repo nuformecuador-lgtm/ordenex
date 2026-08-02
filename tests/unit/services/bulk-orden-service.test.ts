@@ -75,6 +75,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
     findUsuarioVehiculoId: vi.fn().mockResolvedValue(null), // feature 39: exigido por IOrdenRepository
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
+    // Feature 170 (T K.1/T K.2): la pagina del listado satelite y el catalogo de sus filtros.
+    findRecepcionSatelitePaginada: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    findRecepcionSateliteGeoByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
     recibirEnBodegaCentral: vi.fn().mockResolvedValue(false),

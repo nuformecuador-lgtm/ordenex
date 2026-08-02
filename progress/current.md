@@ -266,6 +266,158 @@ consultas»).
 
 ## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento (histórico)
 
+## 🗓️ Sesión 2026-08-01 (tarde) — feature 130: RONDA 2, tres bloqueantes cerrados
+
+**El reviewer RECHAZÓ la primera entrega y tenía razón en los tres.** Todos del mismo tipo: **tests
+verdes que no medían el requisito**. Reproducidos uno a uno mutando el código antes de tocar nada,
+y cerrados con la salida real pegada en `impl_130.md §4-bis`.
+
+- **B1 (R13)** — se podía reintroducir `₡` hardcodeado y quedaban 42 verdes. **Causa raíz:** con la
+  config por defecto (`es-CR`/`CRC`), `formatMonto(3500)` y un `₡` a mano dan el **mismo string byte
+  a byte**; ninguna aserción sobre la salida por defecto puede separarlos.
+- **B2 (R20)** — igual con `"es-CR"` incrustado. La cláusula «sin literal de idioma» no la medía
+  nada, que es literalmente el punto de `CHECKPOINTS.md` sobre no hardcodear país/moneda.
+- **B3 (R33-bis)** — el más grave: neutralizar el recorte del donut no rompía ningún test. No era
+  cosmético: `paleta.ts` lanza para todo índice `>= 5` en **cualquier** `NODE_ENV`, así que un donut
+  de 6+ categorías (`ordenes_por_estado` tiene 19) **reventaría en el navegador también en
+  producción**.
+
+**Arreglo:** guard estático de literales sobre `components/private/analytics/**` (el mismo que ya
+protegía a `KpiValorAnimado`) + tests que recargan el módulo con `MONEDA_CURRENCY=USD` /
+`MONEDA_LOCALE=en-US`, con lo que los strings dejan de ser idénticos; y tests nombrados de las dos
+ramas de `NODE_ENV` para el donut.
+
+> **El humano RATIFICÓ la desviación del donut (2026-08-01):** 5 segmentos y conserva los
+> **PRIMEROS** (en una serie ordenada por magnitud son los que más pesan; quedarse los últimos
+> mostraría las 5 categorías más pequeñas escondiendo las dominantes). **Barras y líneas NO se
+> tocan:** siguen con 62 y los últimos. Escrito como **R33-bis** en `requirements.md`.
+
+**Menores atendidos:** m5 (T8.3 estaba marcada `[x]` afirmando que existía `review_130.md`, que **no
+existía** — bookkeeping autocumplido, desmarcada), la escala del `porcentaje` promovida a **R20-bis**
+y a `tasks.md > T0.1` donde la lee el dueño de la 131, m1 (R28 se cumple **por un default de
+recharts** que nadie fijó, con `^3.10.1`: riesgo declarado) y m2 (R25 marcado **⚠ parcial**, es
+inverificable hasta que exista la 131).
+
+**Sigue sin push y sin PR.** Commits nuevos: `07d8188b`.
+
+---
+
+## 🗓️ Sesión 2026-08-01 — feature 130 IMPLEMENTADA (pendiente de review) — ~~EMPIEZA A LEER POR AQUÍ~~
+
+**Feature 130 (analítica: componentes de gráficas) → implementada en la rama
+`feature/130-analitica-componentes-graficas`, en worktree aislado. SIN push y SIN PR: lo hace el
+humano/leader.** Cinco commits: `e6f4201b` (recharts), `6e4f84f2` (el paquete), `557f25af`
+(tests + guard), `3f60a21b` (test propio del Kpi), `a02a165b` (arreglo del compartido).
+
+Los 41 requisitos trazados a test en `progress/impl_130.md`, con los **tres que se verifican fuera
+de vitest** señalados y con su salida real pegada: R27 (bundle sobre `next build`), R36 (delta 0 de
+suite) y R41 (comprobación de mutación del montaje del lienzo).
+
+> **LO QUE NO SE TAPA, y hay que leer antes de la review:**
+> - **H1 — la 130 se mergea SIN LLAMADOR.** `AnaliticaShell` (existe) ← `131` (NO existe) ← `130`.
+>   No hay ni un `import` de estos componentes en producción hasta que aterrice la 131. Medido, no
+>   afirmado: sin sonda, `recharts` está en **0** chunks de cliente.
+> - **H2 — el mensajero SÍ entra a `/analitica`.** «Recharts no le llega al móvil» es falso. Lo
+>   garantizado y medido es que no le llega en `/mis-asignaciones` ni en el resto de la app, y que
+>   dentro de `/analitica` llega **diferido**: chunk propio de 388.810 bytes, fuera de los 46 chunks
+>   de entrada de ruta.
+> - **H3 — la moneda no configurable en cliente es PREEXISTENTE**, no la abre esta feature: cinco
+>   componentes `"use client"` ya consumen `formatMonto`; `KpiValorAnimado` es el sexto. Ficha
+>   propia sobre `lib/config/moneda.ts`, con seis consumidores a revisar. **No se abre desde aquí.**
+
+> **DOS DECISIONES PARA EL DUEÑO DE LA 131**, que el spec no fijaba y que ahora son contrato:
+> 1. el `porcentaje` viaja como **fracción** (0,842 = 84,2 %), no en puntos — pasa la razón cruda;
+> 2. en el **donut** el techo de segmentos es **5**, no 62. Y siguen en pie sus dos deberes de T0.1:
+>    agrupar en «otros» por encima de 5 series y agregar por semana/mes por encima de 62 puntos. El
+>    paquete no lo hace (R34) y **lanza** en desarrollo.
+
+> **AVISO DE ENTORNO, cuesta horas si se descubre solo.** El worktree está en una ruta de 143
+> caracteres y el `package.json` del cliente Prisma queda en **266**, por encima del MAX_PATH de
+> Windows. El resolvedor de módulos de Node no lo lee y **303 de 665 archivos de test fallan al
+> colectar**, dejando una suite que *parece* casi verde con 4.059 tests en vez de 8.052. Se arregla
+> con `pnpm install --force --config.virtual-store-dir-max-length=30`. **NO** muevas el virtual
+> store fuera del proyecto: rompe la resolución de tipos (~1.800 errores falsos). Y `recharts` sólo
+> se extrae entero con `--config.node-linker=hoisted`. Todo en `impl_130.md §4`.
+
+---
+
+## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento — **EMPIEZA A LEER POR AQUÍ**
+## 🗓️ Sesión 2026-07-31 (tanda de analítica) — 122 y 130 con puerta F1.4 CERRADA — ~~EMPIEZA A LEER POR AQUÍ~~
+
+**Pedido del humano:** «arranca la 135» → «arranca con la 130» → «arranca la 122 en paralelo».
+
+### Estado de las tres
+
+- **135 → `done`.** PR #218 mergeado, verificado **por archivos** contra `origin/dev` (la lección
+  del #209): `lib/analytics/{types,metrics,ranges,filters}.ts` y las 3 aserciones nuevas de R22 en
+  `tests/unit/analytics/filters.test.ts` están en `dev`. Delta medido contra un baseline real
+  (segundo worktree sobre `origin/dev`): **cero regresiones**, +9 archivos / +180 tests.
+- **122 (backend) → `in_progress`, fase 1 completa.** 41 requisitos, trazabilidad 41/41.
+- **130 (frontend) → `in_progress`, fase 1 completa.** 41 requisitos, trazabilidad R1–R41.
+- Ambas ramas **sincronizadas con `origin/dev`** (merge limpio) y con commit local, **sin push**.
+  Ocupación tras el merge: `backend [122]` 1/2, `frontend [129, 130]` 2/2. Regla 1 respetada.
+
+### ⚠️ Lo que hay que saber antes de tocar nada
+
+- **La base ya NO está roja.** El chore `chore/saneamiento-deudas-arnes` (PR #232) dejó `dev` en
+  `== init OK ==`: 665 archivos / 8052 tests, **0 rojos**. Se acabó el argumento de «delta 0 contra
+  rojos ajenos» que arrastraba la 135: **estas dos features se miden contra CERO**. Y con eso queda
+  sin excusa la **T6.1 de la 135**, que sigue sin marcar.
+- **`tests/unit/analytics/frontera.guardia.test.ts` fue RETIRADO** por ese mismo chore (medía el
+  diff de la rama actual; uno de sus casos llegaba a prohibir crear páginas). La 122 lo citaba en
+  5 sitios, uno de ellos una task que habría pasado **en vacío pareciendo verde**. Corregido.
+  `modulo-puro.guardia.test.ts` sigue vivo y censa el **directorio** `lib/analytics` (`:199-207`),
+  no una lista fija, así que los módulos nuevos de la 122 quedan vigilados el día que existan.
+- **Hueco declarado, NO tapado:** la parte *de rama* del viejo R33 (que el diff no cree
+  migraciones, páginas ni componentes) **no la absorbe ningún guardia**. Se decidió no resucitar el
+  guardia borrado —un guardia que mide el diff caduca en el siguiente merge y da verdes vacíos, que
+  es justo por lo que lo retiraron— y degradar R33 a propiedad **verificada en el cierre a mano**
+  por el reviewer. Está escrito así en `requirements.md`, `design.md §8` y `tasks.md T5.5`.
+
+### 🚧 PENDIENTE HUMANO — bloquea el paso a fase 2
+
+1. **Q3 de la 122: se le describió la consecuencia AL REVÉS.** Al elegir
+   `orden.mensajero_asignado_id` se le dijo que «A sigue viendo la orden aunque ya no es suya y B no
+   la ve hasta gestionarla» — eso es lo que hace la **otra** columna. Con la elegida, al reasignar
+   A→B **B pasa a ver la orden entera, incluida la gestión de A, y A deja de verla**. La spec está
+   escrita según la **columna** elegida (coherente con el precedente de la 159,
+   `db/schema.prisma:478`) y la discrepancia queda como punto de vuelta en `requirements.md > D3` y
+   `tasks.md > T0.3`. **Si la eligió por la consecuencia y no por la columna, hay que girarla.**
+2. **`adminSatelite` + grano `mensajero`: nadie lo preguntó.** Se decidió que el `adminTienda` ve
+   mensajeros **seudonimizados** porque no es su empleador; al `adminSatelite` la spec le asignó
+   identidad **real** aplicando la misma razón al revés (sí opera a los mensajeros de su zona). Es
+   una **derivación del spec_author, no una decisión humana**, y está marcada como tal.
+3. **Aprobación del spec** de ambas para arrancar la fase 2.
+
+### Hallazgos verificados que no se tapan
+
+- **130 · H1:** esta feature **no tiene llamador en producción** hasta que aterrice la 131. El
+  propio shell de la 129 lo dice. No venderlo como «ya integrado».
+- **130 · H2:** el mensajero **sí** entra a `/analitica` (`ROLES_ANALITICA` lo incluye), luego
+  `recharts` **sí** llega a su móvil; R26/R27 solo garantizan que llegue diferido.
+- **130 · I11:** el stub de `ResizeObserver` (`tests/setup/jest-dom.ts:45-55`) tiene `observe(){}`
+  **vacío**, así que `ResponsiveContainer` renderiza vacío en vez de reventar: un
+  `querySelector("svg")` estaría **verde sin medir nada**. Por eso la única aserción sobre el lienzo
+  exige **mutación probada** (T4.5).
+- **130 · premisa falsa corregida:** se preguntó Q5 diciendo que `KpiValorAnimado` tenía test
+  propio. **No lo tiene** (`tests/**/*Kpi*` → 0 archivos); su única red es indirecta vía los tests
+  de sus dos consumidores. R37 crea el test que faltaba. Su copia en
+  `app/(app)/mis-asignaciones/_components/` es **solo un re-export**, no un duplicado: arreglar el
+  compartido cubre a los dos.
+- **130 · limitación preexistente (H3):** `loadMonedaConfig` lee `process.env` con clave dinámica,
+  así que en el navegador cae al default `es-CR`/`CRC`. **Ya afecta a cinco componentes
+  `"use client"` en producción**; la 130 no la introduce, alinea el KPI con sus vecinos.
+- **122 · un 403 de esta feature sería MUDO.** `normalizeError` devuelve temprano para cualquier
+  `AppError` (`lib/errors/normalize.ts:21`) y solo loguea en la rama del error desconocido, así que
+  un `ForbiddenError` bajo `withErrorHandler` no dejaría rastro. Por eso R40 exige llamada explícita
+  al logger y **su test espía el logger, no el status**. (`docs/conventions.md:22` no nombra ningún
+  canal; el real es `ErrorLogger`, `lib/errors/logger.ts:6-21`.)
+- **Método:** un hecho de inventario **solo vale si se reproduce con `git show origin/dev:<ruta>`**.
+  La primera redacción de la 130 dedujo un hallazgo falso midiendo respaldos en el scratchpad de
+  otra sesión. Que tres copias coincidan entre sí no las hace actuales — solo hermanas.
+
+## 🗓️ Sesión 2026-07-31 — feature 167 CERRADA + chore de saneamiento
+
 **Feature 167 (apartado propio de recolección) → `done`, PR #231 MERGEADO.** Nació de un reporte de
 uso —«no veo la forma de recolectar»— que resultó ser dos problemas: la base local del humano tenía 4
 migraciones sin aplicar (sin `recolectando` no hay nada que recolectar) y la recolección vivía

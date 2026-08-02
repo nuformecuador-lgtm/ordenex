@@ -84,6 +84,8 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
       return id;
     }),
     findCierresByMensajero: vi.fn(async () => [...cierres]),
+    // Feature 170 (T I.1): version paginada del mismo listado (no la ejercita esta suite).
+    findCierresByMensajeroPaginado: vi.fn(async () => ({ items: [...cierres], total: cierres.length })),
   };
 }
 

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import {
@@ -9,7 +10,10 @@ import {
   aprobarCierre,
   rechazarCierre,
   forzarSolicitudVencido,
+  listarHistoricoCierresAdminPaginado,
+  listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
   CierreDetalleGestion,
@@ -29,6 +33,10 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   listarCierresAdmin: vi.fn(),
   // Feature 111/R16: válvula de escape (destrabar `vencido` abandonado).
   forzarSolicitudVencido: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
+  listarHistoricoCierresAdminPaginado: vi.fn(),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también.
+  listarPendientesCierresAdminPaginado: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -56,6 +64,8 @@ const verDetalleMock = vi.mocked(verCierreDetalle);
 const aprobarMock = vi.mocked(aprobarCierre);
 const rechazarMock = vi.mocked(rechazarCierre);
 const forzarMock = vi.mocked(forzarSolicitudVencido);
+const historicoPaginadoMock = vi.mocked(listarHistoricoCierresAdminPaginado);
+const pendientesPaginadoMock = vi.mocked(listarPendientesCierresAdminPaginado);
 
 const ZERO_TOTALES: CierreTotales = {
   efectivo: "0.00",
@@ -171,13 +181,30 @@ async function abrirFila(
   await user.click(within(scope).getByRole("button", { name: nombre }));
 }
 
-function renderModule(props?: Partial<Parameters<typeof CierresAdminModule>[0]>) {
+/**
+ * Feature 170 — FASE 2 (T I.2 el histórico, T J.2 la cola): las DOS tablas dejan de recibir un
+ * array y reciben la PÁGINA que pre-carga el Server Component. El helper sigue recibiendo los
+ * arrays para no reescribir cada caso, y ADEMÁS programa las dos Server Actions paginadas con
+ * esas mismas páginas: SWR revalida al montar, y sin los dobles las tablas se vaciarían a
+ * mitad del test.
+ */
+function renderModule(props?: {
+  pendientes?: CierreAdminResumen[];
+  historico?: CierreAdminResumen[];
+  sinZona?: boolean;
+}) {
+  const cola = paginaInicial(props?.pendientes ?? []);
+  const pagina = paginaInicial(props?.historico ?? []);
+  pendientesPaginadoMock.mockResolvedValue({ status: "ok", page: 1, ...cola });
+  historicoPaginadoMock.mockResolvedValue({ status: "ok", page: 1, ...pagina });
   render(
-    <CierresAdminModule
-      pendientes={props?.pendientes ?? []}
-      historico={props?.historico ?? []}
-      sinZona={props?.sinZona ?? false}
-    />,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <CierresAdminModule
+        pendientes={cola}
+        historico={pagina}
+        sinZona={props?.sinZona ?? false}
+      />
+    </SWRConfig>,
   );
 }
 

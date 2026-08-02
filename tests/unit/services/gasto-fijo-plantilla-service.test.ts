@@ -42,6 +42,8 @@ function buildRepo(overrides: Partial<IGastoFijoPlantillaRepository> = {}): IGas
     setActiva: vi.fn().mockResolvedValue(plantilla({ activa: false })),
     listar: vi.fn().mockResolvedValue([plantilla(), plantilla({ id: "p-2", activa: false })]),
     listarActivas: vi.fn().mockResolvedValue([plantilla()]),
+    // Feature 170 (T I.1): el listado paginado vive en su propia suite (*-paginado).
+    listarPaginado: vi.fn().mockResolvedValue({ items: [plantilla()], total: 1 }),
     obtenerPorId: vi.fn().mockResolvedValue(plantilla()),
     ...overrides,
   };

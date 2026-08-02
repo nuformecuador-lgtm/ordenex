@@ -12,7 +12,46 @@ import type {
   TarifaVigenteResuelta,
 } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+
+// Feature 170 (T I.1) — proyeccion y mapper del listado "Cierres solicitados" del mensajero
+// (R18). Se extraen de `findCierresByMensajero` para que la version PAGINADA lea exactamente
+// las mismas columnas y las serialice igual: dos copias divergen en cuanto una gane un campo.
+// Money-safe: los Decimal salen como STRING escala 2 (nunca number/parseFloat).
+const CIERRE_PASADO_SELECT = {
+  id: true,
+  estado: true,
+  destinoTipo: true,
+  destinoZonaId: true,
+  totalEfectivo: true,
+  totalSimpe: true,
+  totalTransferencia: true,
+  totalGeneral: true,
+  totalPagoMensajero: true, // feature 39/R13: total snapshot del pago al mensajero
+  totalIngresoBodegaRechazos: true, // feature 56/R12: total snapshot del ingreso de bodega por rechazos
+  solicitadoAt: true,
+} as const;
+
+type CierrePasadoRow = Prisma.CierreDiaGetPayload<{ select: typeof CIERRE_PASADO_SELECT }>;
+
+function toCierrePasadoDTO(r: CierrePasadoRow): CierrePasadoDTO {
+  return {
+    cierreId: r.id,
+    estado: r.estado,
+    destinoTipo: r.destinoTipo,
+    destinoZonaId: r.destinoZonaId,
+    totales: {
+      efectivo: r.totalEfectivo.toFixed(2),
+      simpe: r.totalSimpe.toFixed(2),
+      transferencia: r.totalTransferencia.toFixed(2),
+      general: r.totalGeneral.toFixed(2),
+    },
+    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R13: snapshot money-safe STRING
+    totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R12: idem
+    solicitadoAt: r.solicitadoAt.toISOString(),
+  };
+}
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
@@ -517,35 +556,39 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     const rows = await this.prisma.cierreDia.findMany({
       where: { mensajeroId },
       orderBy: { solicitadoAt: "desc" },
-      select: {
-        id: true,
-        estado: true,
-        destinoTipo: true,
-        destinoZonaId: true,
-        totalEfectivo: true,
-        totalSimpe: true,
-        totalTransferencia: true,
-        totalGeneral: true,
-        totalPagoMensajero: true, // feature 39/R13: total snapshot del pago al mensajero
-        totalIngresoBodegaRechazos: true, // feature 56/R12: total snapshot del ingreso de bodega por rechazos
-        solicitadoAt: true,
-      },
+      select: CIERRE_PASADO_SELECT,
     });
-    return rows.map((r) => ({
-      cierreId: r.id,
-      estado: r.estado,
-      destinoTipo: r.destinoTipo,
-      destinoZonaId: r.destinoZonaId,
-      totales: {
-        efectivo: r.totalEfectivo.toFixed(2),
-        simpe: r.totalSimpe.toFixed(2),
-        transferencia: r.totalTransferencia.toFixed(2),
-        general: r.totalGeneral.toFixed(2),
-      },
-      totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R13: snapshot money-safe STRING
-      totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R12: snapshot money-safe STRING
-      solicitadoAt: r.solicitadoAt.toISOString(),
-    }));
+    return rows.map(toCierrePasadoDTO);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una pagina de los cierres del mensajero
+   * + el total.
+   *
+   * Es `findCierresByMensajero` con el recorte `skip`/`take`, y comparte con el la proyeccion
+   * y el mapper (`CIERRE_PASADO_SELECT` / `toCierrePasadoDTO`): las dos lecturas del mismo
+   * listado no pueden devolver columnas distintas.
+   *
+   * `where { mensajeroId }` es el acotamiento por actor: lo escribe el servicio desde la
+   * sesion, jamas la peticion. Y es el MISMO objeto en `findMany` y en `count`, para que el
+   * total no pueda contar los cierres de todos los mensajeros.
+   */
+  async findCierresByMensajeroPaginado(
+    mensajeroId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierrePasadoDTO>> {
+    const where = { mensajeroId };
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreDia.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: CIERRE_PASADO_SELECT,
+      }),
+      this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toCierrePasadoDTO), total };
   }
 
   /**

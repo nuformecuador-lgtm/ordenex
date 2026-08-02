@@ -38,6 +38,8 @@ function buildWalletDeps() {
     listarPorTienda: vi.fn(),
     agregarSaldoPorTienda: vi.fn(),
     listarSaldosTodasTiendas: vi.fn(),
+    // Feature 170 (T I.1): saldos paginados; doble no-op, esta suite no los lee.
+    listarSaldosTiendasPaginado: vi.fn(),
     agregarDesglosePorTienda: vi.fn(), // feature 171: doble no-op, este test no lee el ledger
   };
   const walletTiendaFeedService: IWalletTiendaFeedService = {
@@ -50,6 +52,7 @@ function buildWalletDeps() {
     listarPorMensajero: vi.fn(),
     agregarCuentaPorPagar: vi.fn(),
     listarCuentasPorPagarTodos: vi.fn(),
+    listarCuentasPorPagarPaginado: vi.fn(),
     obtenerNombreMensajero: vi.fn(),
   };
   const walletMensajeroFeedService: IWalletMensajeroFeedService = {

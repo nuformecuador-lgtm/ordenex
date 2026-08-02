@@ -1,8 +1,13 @@
 import { z } from "zod";
 import type {
+  CatalogoFiltrosSateliteDTO,
   RecepcionSateliteDTO,
 } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { MensajeroLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
+import { paginaInputSchema } from "@/lib/types/pagina-input";
+import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
 
 // Feature 33 — validacion de borde (zod) de la recepcion por QR y tipos de
 // resultado expuestos por las Server Actions. El schema se usa en la action; los
@@ -26,7 +31,56 @@ export const recibirLoteSchema = z.object({
 });
 export type RecibirLoteActionInput = z.infer<typeof recibirLoteSchema>;
 
+/**
+ * Feature 170 — FASE 2 (T K.1, R40/R44/R45) — borde del listado «Órdenes de la bodega»
+ * paginado: `page`/`pageSize` (de `paginaInputSchema`, con el tamaño del dominio) mas los
+ * TRES filtros que hasta ahora vivian en el navegador.
+ *
+ * **La lista blanca es la defensa de R44, y por eso esta escrita en tres capas:**
+ *  - `.strict()` — un `zonaId`/`usuarioId` colado muere aqui con `validation_error` en vez de
+ *    viajar hasta un servicio que hoy lo ignora y mañana podria no ignorarlo. El alcance sale
+ *    SIEMPRE del actor de la sesion, nunca de la peticion. MEDIDO: `.extend()` HEREDA el
+ *    `.strict()` de `paginaInputSchema`, asi que esta llamada es redundante hoy; se deja
+ *    escrita porque la barrera es de este listado y no debe depender de que el schema base
+ *    nunca se afloje.
+ *  - `z.enum(ESTADOS_BODEGA_SATELITE)` — el filtro de estado solo admite los cinco estados de
+ *    ESTA pantalla. Sin el, un `estados: ["entregada"]` seria una entrada valida cuyo unico
+ *    freno estaria en el servicio.
+ *  - canton y distrito son NOMBRES, no ids: son exactamente los `value` que el catalogo de
+ *    T K.2 ofrece, que es lo que el filtro de cliente comparaba.
+ */
+export const listarOrdenesBodegaPaginadoSchema = paginaInputSchema(recepcionSateliteConfig)
+  .extend({
+    estados: z.array(z.enum(ESTADOS_BODEGA_SATELITE)).optional(),
+    cantones: z.array(z.string().trim().min(1)).optional(),
+    distritos: z.array(z.string().trim().min(1)).optional(),
+  })
+  .strict();
+
+export type ListarOrdenesBodegaPaginadoActionInput = z.infer<
+  typeof listarOrdenesBodegaPaginadoSchema
+>;
+
 // --- Resultados expuestos por las Server Actions (agregan `unauthenticated`) ---
+
+/**
+ * Feature 170 — FASE 2 (T K.1): la pagina tal como la recibe el cliente. Union de error
+ * ESTRECHO a proposito (el contrato de T H.2 lo admite como parametro): este listado no
+ * produce `not_found` ni `conflict`, y declararlos obligaria a la pantalla a manejar ramas
+ * que nunca llegan.
+ */
+export type ListarOrdenesBodegaPaginadoResult = ListarPaginadoResult<
+  RecepcionSateliteDTO,
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" }
+>;
+
+/** Feature 170 — FASE 2 (T K.2, R46): opciones de canton y distrito del conjunto del actor. */
+export type ObtenerCatalogoFiltrosSateliteResult =
+  | { status: "ok"; catalogo: CatalogoFiltrosSateliteDTO }
+  | { status: "forbidden" }
+  | { status: "unauthenticated" };
 
 export type ListarRecepcionSateliteResult =
   | {

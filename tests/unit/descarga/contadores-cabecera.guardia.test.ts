@@ -42,7 +42,15 @@ const CONTADOR_JSX = /\(\{\s*([^{}]*?)\.length\s*\}\)/g;
 type EstadoContador =
   /** Listado del Anexo IV: NO se pagina, y su contador por grupo seguira siendo correcto. */
   | "sin_paginar"
-  /** Cola del Anexo III: su pantalla aun no pagina; al paginarla, este contador DEBE morir. */
+  /**
+   * Cola del Anexo III: su pantalla aun no pagina; al paginarla, este contador DEBE morir.
+   *
+   * Feature 170 — FASE 2 (T J.2): hoy NO queda ninguno. Las cuatro colas de riesgo MEDIO
+   * pasaron a mostrar el `total` del servidor y sus entradas salieron del registro; el
+   * tercer test de abajo comprueba que asi sigue. El estado se conserva en el vocabulario
+   * porque es el que hay que usar si una tanda futura introduce una cola con contador antes
+   * de paginarla — declararlo es lo que obliga a decidir en vez de dejarlo pasar.
+   */
   | "pendiente";
 
 interface ContadorCensado {
@@ -58,9 +66,13 @@ interface ContadorCensado {
 }
 
 /**
- * Los SEIS contadores `({X.length})` del arbol, verificados contra el codigo. Cuatro son las
- * colas de riesgo MEDIO de `design.md §11.3` (la tabla de la tanda J) y dos son las vistas
- * agrupadas que el Anexo IV deja fuera de la paginacion.
+ * Los contadores `({X.length})` que quedan en el arbol, verificados contra el codigo.
+ *
+ * Eran SEIS cuando T H.3 escribio esta guardia: cuatro colas de riesgo MEDIO
+ * (`design.md §11.3`) y dos vistas agrupadas del Anexo IV. Feature 170 — FASE 2 (T J.2)
+ * pagino las cuatro colas y sus contadores pasaron a leer el `total` del servidor (R42), asi
+ * que **desaparecieron del arbol y de este registro**. Quedan los DOS del Anexo IV, que no se
+ * paginan a proposito y cuyo conteo por grupo sigue siendo correcto.
  */
 const CENSO_CONTADORES: ContadorCensado[] = [
   {
@@ -83,35 +95,96 @@ const CENSO_CONTADORES: ContadorCensado[] = [
       "Anexo IV: mismo problema agrupado, dentro de un MODAL de detalle de UN cierre. " +
       "Acotado por la jornada de UN mensajero.",
   },
+];
+
+/**
+ * Las cuatro colas de riesgo MEDIO, con el archivo donde vive su contador. Estaban en el
+ * registro de arriba como `pendiente` hasta T J.2; ahora que muestran el `total` del servidor
+ * la lista se conserva AQUI para que el tercer test pueda comprobar, una por una, que el
+ * contador no volvio a salir de un array y que la pantalla se reconoce como paginada.
+ */
+const COLAS_TANDA_J: { ruta: string; listado: string }[] = [
   {
     ruta: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
-    identificador: "pendientes",
     listado: "Cierres del dia pendientes de decision",
-    estado: "pendiente",
-    nota: "tanda J: pasa a mostrar el `total` del servidor (R42)",
   },
   {
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
-    identificador: "pendientes",
     listado: "Cierres de bodega pendientes",
-    estado: "pendiente",
-    nota: "tanda J: pasa a mostrar el `total` del servidor (R42)",
   },
   {
     ruta: "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx",
-    identificador: "consolidables",
     listado: "Cierres del dia a consolidar",
-    estado: "pendiente",
-    nota: "tanda J: pasa a mostrar el `total` del servidor (R42)",
   },
   {
     ruta: "app/(app)/incidentes/_components/IncidentesAdminModule.tsx",
-    identificador: "pendientes",
     listado: "Incidentes pendientes de decision",
-    estado: "pendiente",
-    nota: "tanda J: pasa a mostrar el `total` del servidor (R42)",
   },
 ];
+
+/** `({pagina.total})` — el contador de cabecera escrito como R42 lo exige. */
+const CONTADOR_POR_TOTAL = /\(\{\s*[^{}]*?\.total\s*\}\)/;
+
+/**
+ * Feature 170 — FASE 2 (T K.3): la bodega satelite, la pantalla de riesgo ALTO del Anexo III.
+ *
+ * Entra en esta guardia por el traspaso de T K.1/T K.2 (§9, punto 8): su contador NO tiene la
+ * forma `({X.length})` —es una plantilla, «X de Y órdenes», con DOS numeros— asi que ninguno
+ * de los tests de arriba lo miraba. El riesgo es el mismo que el de las colas: en cuanto la
+ * pantalla pagina, `${ordenes.length}` pasa a decir el tamano de la pagina y no falla en
+ * ninguna parte.
+ *
+ * `ruta` es donde vive el contador (el listado). Su pantalla se reconoce paginada porque el
+ * MODULO monta `<Pagination>` y lo importa — que es lo que Q-I6 dejo escrito.
+ */
+const CONTADOR_SATELITE = {
+  ruta: "app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx",
+  listado: "Ordenes de la bodega satelite",
+};
+
+/** El contador de la bodega, escrito como R42 lo exige: los dos numeros son del SERVIDOR. */
+const CONTADOR_SATELITE_POR_TOTAL = /\$\{\s*total\s*\}\s*(?:de\s*\$\{\s*totalSinFiltros\s*\})?\s*órdenes/;
+
+/**
+ * La forma PROHIBIDA en ese mismo contador: el numero sale del array que la tabla pinta. Se
+ * enumeran los nombres que ese array ha tenido y puede tener (`ordenes` es el actual;
+ * `visibles` era el de antes de T K.3, cuando el filtrado era de cliente).
+ */
+const CONTADOR_SATELITE_POR_ARRAY = /\$\{\s*(?:ordenes|items|filas|visibles)\.length\s*\}/;
+
+/**
+ * Feature 170 — FASE 2 (T L.2): «Cuentas por pagar a mensajeros», la segunda pantalla de
+ * riesgo ALTO del Anexo III.
+ *
+ * Entra aqui por el traspaso de T L.1 (§9, punto 3): esta pantalla NO tenia contador —no habia
+ * nada que registrar— y T L.2 le pone uno, porque al paginar y mudar la busqueda al servidor
+ * el maestro se queda sin forma de saber cuantos mensajeros hay ni cuantos encontro. Un
+ * contador nuevo es exactamente donde `items.length` se cuela sin que nada falle.
+ *
+ * El contador vive en el MISMO archivo que monta `<Pagination>`, asi que la guardia lo ve.
+ */
+const CONTADOR_CUENTAS = {
+  ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+  listado: "Cuentas por pagar a mensajeros",
+};
+
+/**
+ * Las DOS formas del contador, las dos con numeros del SERVIDOR: `total` es el del conjunto
+ * que responde a la busqueda vigente y `initialData.total` el del conjunto sin ella, que
+ * resolvio el Server Component. Se exigen las dos porque cada una gobierna una lectura
+ * distinta de la pantalla.
+ */
+const CONTADOR_CUENTAS_POR_TOTAL = [
+  /\$\{\s*total\s*\}\s*de\s*\$\{\s*initialData\.total\s*\}\s*mensajeros/,
+  /\$\{\s*total\s*\}\s*mensajeros/,
+];
+
+/**
+ * La forma PROHIBIDA, escrita en general y no por nombres: NINGUN texto interpolado de esa
+ * pantalla puede salir de la longitud de un array. Cubre `${items.length}`,
+ * `${data?.items.length}` y `${(data?.items ?? []).length}`, que son la misma mentira.
+ */
+const CONTADOR_POR_LENGTH_INTERPOLADO = /\$\{[^{}]*\.length\s*\}/;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -188,13 +261,19 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
   it("ninguna pantalla con listado paginado deriva su contador de la longitud del array", () => {
     const paginadas = pantallasPaginadas();
 
-    // Anti-vacuidad: hoy son 17 = 13 archivos que montan `<Pagination>` + 4 componentes de
-    // tabla que esos archivos importan (WalletLedger, GastosFijosPlantillasPanel,
-    // DesgloseTiendaLedger y DesglosePagos). Si el detector deja de reconocerlos, la guardia
-    // pasaria verde sin mirar nada; este numero lo impide y solo puede SUBIR conforme las
-    // tandas I-L paginen las 13 pantallas del Anexo III.
+    // Anti-vacuidad: hoy son 28 = 24 archivos que montan `<Pagination>` + 4 componentes de
+    // tabla que esos archivos importan (el control vive a menudo en el modulo y el
+    // `<DataTable>` en un hijo). Si el detector deja de reconocerlos, la guardia pasaria
+    // verde sin mirar nada; este numero lo impide y solo puede SUBIR conforme las tandas K-L
+    // paginen lo que queda del Anexo III.
+    //
+    // T H.3 lo dejo en 17 y la tanda I lo llevo a 24; T J.2 suma los CUATRO modulos de las
+    // colas de riesgo MEDIO, que montan su control en el propio archivo (Q-I6) justo para
+    // que esta guardia los vea. T K.3 suma DOS: el modulo de la bodega satelite (monta el
+    // control) y su listado (monta el `<DataTable>` y lleva el contador). T L.2 suma la tabla
+    // de cuentas por pagar, que monta control, tabla y contador en el mismo archivo.
     expect(paginadas.size, "no se reconocio ninguna pantalla paginada").toBeGreaterThanOrEqual(
-      17,
+      31,
     );
 
     const excluidos = new Set(
@@ -236,20 +315,85 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
       expect(censado.nota, `${claveDe(censado)}: sin motivo/tanda declarados`).not.toBe("");
     }
 
-    expect(enArbol).toHaveLength(6);
+    // Eran 6 hasta T J.2; las 4 colas de riesgo MEDIO dejaron de contar su array.
+    expect(enArbol).toHaveLength(2);
   });
 
-  it("las cuatro colas de la tanda J siguen contando el array, y por eso siguen pendientes", () => {
-    // La lista de trabajo de T J.2, tomada de `design.md §11.3`, verificada contra el codigo
-    // en el test anterior. Cuando la tanda J las cablee, estas cuatro entradas desaparecen
-    // del registro y el primer test pasa a vigilarlas de verdad.
+  it("las cuatro colas de la tanda J muestran el total del servidor, y su pantalla se vigila", () => {
+    // El cierre de la deuda que T H.3 dejo escrita. Tres afirmaciones, y ninguna sobra:
+    //
+    //  (a) ya no queda ningun contador `pendiente` en el registro — o sea, ninguna cola del
+    //      Anexo III sigue contando su array a la espera de una tanda futura;
+    //  (b) cada uno de los cuatro modulos es una PANTALLA PAGINADA a ojos de esta guardia.
+    //      Es la respuesta a Q-I6: la guardia mira del archivo que monta `<Pagination>` hacia
+    //      los componentes que importa, nunca hacia arriba. Con el control en un hijo, el
+    //      contador del padre quedaria fuera de su vista y podria volver a `.length` sin que
+    //      el primer test lo notara. Por eso el control de estas cuatro vive EN el modulo;
+    //  (c) y el contador de cada uno sale de un `.total`, no de un `.length` — el primer test
+    //      prohibe el patron viejo, este exige el nuevo.
+    expect(CENSO_CONTADORES.filter((c) => c.estado === "pendiente")).toEqual([]);
+
+    const paginadas = pantallasPaginadas();
+    for (const cola of COLAS_TANDA_J) {
+      expect(
+        paginadas.has(cola.ruta),
+        `${cola.listado}: su modulo no monta el control, la guardia deja de mirarlo (Q-I6)`,
+      ).toBe(true);
+      const fuente = readFileSync(path.join(RAIZ, cola.ruta), "utf8");
+      expect(
+        CONTADOR_POR_TOTAL.test(fuente),
+        `${cola.listado}: su contador no sale del total del servidor (R42)`,
+      ).toBe(true);
+    }
+  });
+
+  it("el contador de la bodega satelite dice el total del servidor, y su pantalla se vigila", () => {
+    // Feature 170 — FASE 2 (T K.3). Tres afirmaciones, las mismas tres del test de arriba
+    // adaptadas a un contador que no tiene la forma `({X.length})`:
+    //
+    //  (a) el archivo del contador existe y su pantalla se reconoce PAGINADA (si el control
+    //      se moviera fuera del modulo, la guardia dejaria de mirar este archivo);
+    //  (b) el contador sale de un total del SERVIDOR;
+    //  (c) y NO de la longitud del array que la tabla pinta — que es la forma en que este
+    //      contador mentiria: «25 órdenes» con 300 en la bodega.
+    const paginadas = pantallasPaginadas();
     expect(
-      CENSO_CONTADORES.filter((c) => c.estado === "pendiente").map((c) => c.listado),
-    ).toEqual([
-      "Cierres del dia pendientes de decision",
-      "Cierres de bodega pendientes",
-      "Cierres del dia a consolidar",
-      "Incidentes pendientes de decision",
-    ]);
+      paginadas.has(CONTADOR_SATELITE.ruta),
+      `${CONTADOR_SATELITE.listado}: su modulo no monta el control, la guardia deja de mirarlo (Q-I6)`,
+    ).toBe(true);
+
+    const fuente = readFileSync(path.join(RAIZ, CONTADOR_SATELITE.ruta), "utf8");
+    expect(
+      CONTADOR_SATELITE_POR_TOTAL.test(fuente),
+      `${CONTADOR_SATELITE.listado}: su contador no sale del total del servidor (R42)`,
+    ).toBe(true);
+    expect(
+      CONTADOR_SATELITE_POR_ARRAY.test(fuente),
+      `${CONTADOR_SATELITE.listado}: su contador sale de las filas de la pagina (R42)`,
+    ).toBe(false);
+  });
+
+  it("el contador de las cuentas por pagar dice el total del servidor, y su pantalla se vigila", () => {
+    // Feature 170 — FASE 2 (T L.2). Las mismas tres afirmaciones del test de arriba, sobre la
+    // OTRA pantalla de riesgo alto. Aqui el contador es NUEVO —la pantalla no tenia ninguno—,
+    // que es justo cuando `items.length` entra sin que nadie lo mire: la tabla ya tiene el
+    // array delante y el total del servidor esta un campo mas alla.
+    const paginadas = pantallasPaginadas();
+    expect(
+      paginadas.has(CONTADOR_CUENTAS.ruta),
+      `${CONTADOR_CUENTAS.listado}: su pantalla no monta el control, la guardia deja de mirarla`,
+    ).toBe(true);
+
+    const fuente = readFileSync(path.join(RAIZ, CONTADOR_CUENTAS.ruta), "utf8");
+    for (const forma of CONTADOR_CUENTAS_POR_TOTAL) {
+      expect(
+        forma.test(fuente),
+        `${CONTADOR_CUENTAS.listado}: falta la forma ${forma} del contador (R42)`,
+      ).toBe(true);
+    }
+    expect(
+      CONTADOR_POR_LENGTH_INTERPOLADO.test(fuente),
+      `${CONTADOR_CUENTAS.listado}: un texto de la pantalla sale de la longitud de un array (R42)`,
+    ).toBe(false);
   });
 });

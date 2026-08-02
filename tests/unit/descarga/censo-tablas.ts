@@ -34,6 +34,15 @@
 //     rollout: al cerrar la FASE 1 no debe quedar ninguno (T G.1/T G.2). Existe porque
 //     las tandas entregan por lotes y ninguna puede dejar la suite roja.
 //
+// Feature 170 — FASE 2 (T I.2): CUATRO tablas CAMBIAN DE ARCHIVO, ninguna nace ni muere. Los
+// históricos que pasan a paginación server-side se llevan su `<DataTable>`, su control y su
+// descarga a un componente propio, porque el módulo del que salen enseña además un contador
+// de cola (`({pendientes.length})`) que la tanda J todavía tiene que sustituir por el `total`
+// del servidor —y la guardia de T H.3 prohíbe, con razón, que ese contador conviva con un
+// control de paginación en el mismo archivo—. Totales VIGENTES: **31 tablas = 25 dentro de
+// alcance + 6 fuera**, con 30 instancias de `<DataTable>` en **29 archivos**. Las instancias
+// no se mueven; los archivos sí (25 → 29).
+//
 // Feature 170 (T G.1) — la FASE 1 está CERRADA: las 25 tablas del Anexo I descargan y no
 // queda ningún `pendiente`. El valor sigue existiendo en el tipo porque un rollout futuro
 // volverá a necesitarlo, pero `cobertura-tablas.guardia` («la FASE 1 del export queda
@@ -75,25 +84,35 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ],
   },
   {
+    // Feature 170 — FASE 2 (T I.2): el HISTÓRICO salió de `CierresAdminModule` a su propio
+    // archivo al pasar a paginado; el módulo conserva la cola. Ni una tabla nace ni muere:
+    // cambian de sitio, y por eso los TOTALES de instancias no se mueven.
+    ruta: "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
+    tablas: [{ nombre: "Cierres del día — histórico", estado: "con_descarga" }],
+  },
+  {
     ruta: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
     tablas: [
       { nombre: "Cierres del día pendientes de decisión", estado: "con_descarga" },
-      { nombre: "Cierres del día — histórico", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
-    tablas: [
-      { nombre: "Cierres de bodega pendientes", estado: "con_descarga" },
-      { nombre: "Cierres de bodega resueltos", estado: "con_descarga" },
-    ],
+    tablas: [{ nombre: "Cierres de bodega pendientes", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `CierresBodegaAdminModule` (mismo motivo).
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
+    tablas: [{ nombre: "Cierres de bodega resueltos", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `ConsolidacionBodegaModule` (mismo motivo).
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
+    tablas: [{ nombre: "Cierres de bodega solicitados", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx",
-    tablas: [
-      { nombre: "Cierres del día a consolidar", estado: "con_descarga" },
-      { nombre: "Cierres de bodega solicitados", estado: "con_descarga" },
-    ],
+    tablas: [{ nombre: "Cierres del día a consolidar", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx",
@@ -125,10 +144,12 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   },
   {
     ruta: "app/(app)/incidentes/_components/IncidentesAdminModule.tsx",
-    tablas: [
-      { nombre: "Incidentes pendientes de decisión", estado: "con_descarga" },
-      { nombre: "Incidentes — histórico", estado: "con_descarga" },
-    ],
+    tablas: [{ nombre: "Incidentes pendientes de decisión", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `IncidentesAdminModule` (mismo motivo).
+    ruta: "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
+    tablas: [{ nombre: "Incidentes — histórico", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",

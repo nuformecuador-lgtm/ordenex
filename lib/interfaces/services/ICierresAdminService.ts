@@ -1,5 +1,6 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type {
   CierreGrupos,
   CierreTotales,
@@ -41,6 +42,30 @@ export type ListarCierresAdminServiceResult =
       sinZona: boolean; // adminSatelite sin zona (R3)
     }
   | { status: "forbidden" }; // rol != maestro/adminSatelite (R1)
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41): UNA PAGINA del historico del alcance + el total del
+ * conjunto. Es el contrato comun de T H.2 aplicado a `CierreAdminResumen`, sin campos extra.
+ *
+ * `sinZona` NO viaja aqui, y es deliberado: el contrato paginado son cuatro campos y el aviso
+ * de «no tenes zona asignada» es de la PANTALLA, que lo sigue recibiendo por
+ * `listarCierresAdmin`. Un `adminSatelite` sin zona recibe una pagina vacia con `total: 0`,
+ * que es exactamente lo que veia antes (R44).
+ */
+export type ListarHistoricoCierresAdminServiceResult =
+  ListarPaginadoServiceResult<CierreAdminResumen>;
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42): UNA PAGINA de la COLA de pendientes de decision
+ * del alcance + el total del conjunto. Misma forma que el historico y por el mismo motivo: el
+ * contrato de T H.2 son cuatro campos y ni uno mas.
+ *
+ * De su `total` sale el CONTADOR DE CABECERA que hoy dice `({pendientes.length})`
+ * (`CierresAdminModule.tsx:442`). Es un conteo de filas, no dinero: los montos de esta pantalla
+ * viajan por FILA como snapshot y no se derivan de este array (R49).
+ */
+export type ListarPendientesCierresAdminServiceResult =
+  ListarPaginadoServiceResult<CierreAdminResumen>;
 
 // R6-R9/R13: detalle completo de UN cierre. Reusa CierreGrupos (grupos por
 // resultado) de la 37. `no_encontrada` = id inexistente o fuera de alcance (R13, no
@@ -112,6 +137,33 @@ export interface ICierresAdminService {
    * -> sinZona.
    */
   listarCierresAdmin(actor: Actor): Promise<ListarCierresAdminServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): el HISTORICO del alcance, paginado en
+   * el servidor.
+   *
+   * MISMO alcance que `listarCierresAdmin` (el `resolveAlcance` de rol+zona se reusa tal
+   * cual, no se reimplementa) y MISMO corte cola/historico (`ESTADOS_COLA_CIERRE_DIA`), de
+   * modo que paginar no pueda ensanchar lo que un actor ve: R44 se cumple por construccion.
+   * Rol invalido -> forbidden, sin filas y sin total. `adminSatelite` sin zona -> pagina
+   * vacia (no hay alcance que consultar), igual que hoy.
+   */
+  listarHistoricoCierresAdminPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresAdminServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): la COLA de pendientes de decision
+   * del alcance (`solicitado` + `vencido`), paginada en el servidor.
+   *
+   * MISMO `resolveAlcance` y MISMA constante de estados que la mitad del historico, con el
+   * corte invertido: R44 se cumple por construccion, y la union de las dos paginas sigue
+   * siendo exactamente lo que devuelve `listarCierresAdmin`. Rol invalido -> forbidden;
+   * `adminSatelite` sin zona -> pagina vacia sin tocar la base.
+   */
+  listarPendientesCierresAdminPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesCierresAdminServiceResult>;
   /**
    * R6-R9/R13/R16: detalle completo de un cierre del alcance (gestiones agrupadas
    * por resultado, evidencias firmadas). Solo lectura. Fuera de alcance ->
