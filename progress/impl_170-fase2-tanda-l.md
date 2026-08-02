@@ -1,12 +1,14 @@
-# impl — Feature 170, FASE 2, Tanda L (T L.1: cuentas por pagar a mensajeros)
+# impl — Feature 170, FASE 2, Tanda L (T L.1 y T L.2: cuentas por pagar a mensajeros)
 
-**Rama:** `feature/170-fase2-tanda-l` · **Fecha:** 2026-08-01 · **Rol:** `backend_dev`
-**Alcance:** SOLO T L.1 (servidor). **Cero UI**: no se toco `app/**` ni `components/**`; el
-cableado es T L.2 y lo hace otro agente.
+**Rama:** `feature/170-fase2-tanda-l` · **Fecha:** 2026-08-01
+**Roles:** `backend_dev` (§0-§14, T L.1) · `frontend_dev` (§15-§24, T L.2)
+**Alcance de T L.1:** SOLO servidor, cero UI. **Alcance de T L.2:** SOLO UI, cero
+`lib/services`, `lib/repositories` ni Server Actions.
 
-Todo lo que sigue esta MEDIDO. Las once mutaciones se ejecutaron y se revirtieron; una paso
-VERDE en los tests de servicio y solo la vio el test de repositorio — la CUARTA vez que este
-proyecto mide ese punto ciego.
+Todo lo que sigue esta MEDIDO. Las once mutaciones del backend y las diez del frontend se
+ejecutaron y se revirtieron; en el backend una paso VERDE en los tests de servicio y solo la
+vio el test de repositorio —la CUARTA vez que este proyecto mide ese punto ciego— y en el
+frontend otra paso VERDE porque el dato de prueba hacia vacio su caso (§18).
 
 ---
 
@@ -33,26 +35,35 @@ lo describa. Esto es lo que el `maestro`/`admin` hace HOY en `/wallet/mensajeros
 DESPUES. **La columna «DESPUES» describe el estado al que L.1 + L.2 llevan la pantalla**; lo que
 T L.1 commitea es la mitad de servidor, y lo que L.2 decida se anota en §9.
 
+**Tabla actualizada por T L.2**: la columna «DESPUES» ya no anticipa nada, describe lo que esta
+commiteado. Los tres puntos que T L.1 dejo abiertos —contador, descarga y espera de la
+busqueda— llevan ahora la decision tomada.
+
 | | ANTES (hoy en `dev`) | DESPUES (con L.1 + L.2) |
 | --- | --- | --- |
 | **Filas que recibe el navegador** | TODAS las cuentas por pagar, una por mensajero con movimientos | una pagina (25 por defecto, `WALLET_MENSAJERO_*_PAGE_SIZE`) |
 | **Buscar por nombre** | filtra el conjunto entero, **en el navegador** (`filtrados`, `CuentasPorPagarTable.tsx:84-88`) | filtra el conjunto entero, **en el servidor**; la pagina vuelve a la 1 y se recalcula |
+| **Cuando viaja lo escrito** | nunca: el filtro era local y respondia en la misma tecla | **cuando el usuario deja de escribir** (la misma espera que `FilterComponent` aplica a cualquier filtro). El campo sigue respondiendo al instante; lo que se aplaza es la consulta. Escribir «Ana» es UNA lectura, no tres |
 | **Que devuelve la busqueda** | subcadena, sin distinguir mayusculas, **sensible a acentos** («jose» NO encuentra a «José») | **exactamente lo mismo**, string a string: es lo que R45 exige y lo que 25 textos de test comparan contra el filtro de cliente copiado literal |
 | **Orden de las filas** | **ninguno declarado**: sale de un `groupBy` sin `orderBy`, o sea del planificador de Postgres | **alfabetico por nombre de mensajero**, con `mensajeroId` de desempate. DESVIACION declarada de R51, la misma que T I.1 declaro en «Saldos de tiendas» (§4) |
-| **Dinero de cada fila** | devengado / pagado / cuenta por pagar del LIBRO ENTERO de ese mensajero | **el mismo**: la agregacion es del libro entero y se hace ANTES de recortar (§5) |
-| **Recorrer la lista** | scroll continuo | **control de paginas** bajo la tabla (T L.2) |
-| **Expandir una fila** | abre `DesglosePagosMensajero`, que ya pagina por su cuenta | **igual**; L.2 debe comprobar que funciona tambien en la pagina 2 (R50) |
-| **Descargar** | el conjunto filtrado, ya en el cliente (`filasLocales(filtrados, …)`) | **el mismo conjunto filtrado**, releido y filtrado con las MISMAS funciones del servidor (§9) |
+| **Dinero de cada fila** | devengado / pagado / cuenta por pagar del LIBRO ENTERO de ese mensajero | **el mismo**: la agregacion es del libro entero y se hace ANTES de recortar (§5). La pantalla no suma ni deriva nada |
+| **Cuantos mensajeros hay** | **nadie lo decia**, pero se podian contar: estaban todas las filas a la vista | **contador de cabecera**: «N mensajeros», y con una busqueda puesta «X de N mensajeros». Los dos numeros son `total` del servidor; ninguno sale de las filas de la pagina (R42) |
+| **Recorrer la lista** | scroll continuo | **control de paginas** bajo la tabla, con primera/anterior/numeros/siguiente/ultima y selector de 10/25/50. Nombre accesible: «Paginación de las cuentas por pagar» |
+| **Expandir una fila** | abre `DesglosePagosMensajero`, que ya pagina por su cuenta | **igual**, y comprobado en la pagina 3: el panel que se abre es el de ESA fila y pide su desglose por `mensajeroId` (R50) |
+| **Una fila desplegada al paginar** | no existia | lo desplegado en otra pagina **no se pinta** mientras no este a la vista, y al volver sigue desplegado. Ningun desglose se abre solo |
+| **Descargar** | el conjunto filtrado, ya en el cliente (`filasLocales(filtrados, …)`) | **el mismo conjunto filtrado**: al pulsar se RELEE el listado completo y se le aplica la busqueda vigente con las MISMAS funciones del servidor (§19). Mismo archivo, mismas columnas, mismo tope de 5000 |
 
 **Lo que un operador notara el primer dia:** la tabla ya no es infinita y aparece un control de
-paginas; y **las filas salen en orden alfabetico**, que hasta hoy no estaban en ningun orden
-declarado. Buscar por nombre sigue funcionando igual —y a partir de ahora seguira funcionando
-con la tabla paginada, que es justo lo que se rompia si no se hacia esta tanda—.
+paginas y un contador; **las filas salen en orden alfabetico**, que hasta hoy no estaban en
+ningun orden declarado; y al buscar, la tabla tarda un instante en responder en vez de filtrar
+en la misma tecla. Buscar por nombre sigue encontrando lo mismo —y a partir de ahora seguira
+funcionando con la tabla paginada, que es justo lo que se rompia si no se hacia esta tanda—.
 
 **Lo que NO cambia:** quien ve la pantalla (`maestro`/`admin`, `notFound` para el resto), las
 cinco columnas, los montos (mismos strings, misma derivacion), el badge por signo, el desglose
-por cierre de cada fila, el `aria-label` de la tabla ni el del buscador, y el archivo de
-descarga (mismas columnas, mismo tope de 5000).
+por cierre de cada fila y sus filtros, el `aria-label` de la tabla, el del buscador y el de cada
+boton de expandir, el estado vacio y el archivo de descarga (mismas columnas, mismo tope de
+5000).
 
 ---
 
@@ -454,3 +465,346 @@ gana ademas el orden total que no tenia y el dominio de configuracion que le fal
 el registro de T H.1 pasa de 12 a 13 de 13. Once mutaciones lo confirmaron y una de ellas —la
 que recorta la agregacion del dinero— paso verde en los trece tests de servicio y solo la vio el
 test de consultas.
+
+---
+---
+
+# T L.2 — Frontend: paginacion, busqueda de servidor y fila expandible
+
+**Rol:** `frontend_dev` · **Fecha:** 2026-08-01 · **Alcance:** SOLO capa de presentacion.
+**Cero cambios** en `lib/services`, `lib/repositories` ni Server Actions (no hubo defecto que
+declarar: las dos acciones de T L.1 se cablearon tal cual).
+
+Baseline al empezar: `tsc` 0, `eslint` 0 errores / 27 warnings, suite 747 archivos / 8984
+tests, `git status` limpio.
+
+---
+
+## 15. Donde vive cada cosa, y por que NO se partio la pantalla
+
+La bodega satelite (T K.3) tuvo que mover la capa de datos al modulo padre. Aqui **todo se
+queda en `CuentasPorPagarTable.tsx`**, y es una decision, no inercia:
+
+1. **No hay `mutate` que delegar.** Esta pantalla no ejecuta ninguna accion: se lee y se
+   descarga. El motivo por el que la satelite necesitaba un padre —seis handlers que releen
+   tras mutar— aqui no existe.
+2. **La guardia de T H.3 mira del archivo que monta `<Pagination>` hacia los que importa,
+   nunca hacia arriba** (Q-I6). Con control, tabla y contador en el MISMO archivo, la guardia
+   los ve los tres sin depender de ningun import.
+3. **`CuentasPorPagarTable.tsx` ya estaba en `PANTALLAS_ANEXO_III`** (guardia de T H.1): es
+   donde el literal de `pageSize` se habria escrito, y donde la guardia lo vigila.
+
+El Server Component cambia una linea de fondo: pre-carga `listarCuentasPorPagarPaginadoAction({})`
+—la pagina 1 con los defaults del dominio— en vez del listado entero, y baja
+`{ items, total, pageSize }`. El `notFound` por rol y la defensa en profundidad no se tocan.
+
+---
+
+## 16. Los requisitos, uno a uno
+
+### R43 — control de navegacion
+
+`<Pagination>` bajo la tabla, con `showFirstLast`, `siblingCount={1}` y selector de tamaño
+`[10, 25, 50]` acotado por `MAX_PAGE_SIZE` (el literal NO se escribe: sale de
+`walletMensajeroConfig`). Nombre accesible propio, `PAGINACION_CUENTAS_LABEL` = «Paginación de
+las cuentas por pagar»: **esta pantalla tiene DOS controles de paginas a la vez** en cuanto se
+despliega una fila —el del listado y el del desglose de esa fila, «Paginación del desglose de
+X»—, asi que un `<nav>` llamado «Paginación» a secas no identificaria ninguno. El test los
+localiza por nombre y afirma que conviven.
+
+### R45 — la busqueda pasa al servidor, con dos decisiones propias
+
+El `<Input>` sigue siendo el mismo (mismo `aria-label`, mismo placeholder, misma etiqueta) y
+lo que cambia es a donde va lo escrito. Dos cosas que no se deducen del contrato:
+
+- **vuelve a la pagina 1.** Sin eso, escribir tres letras estando en la pagina 3 dejaria la
+  tabla vacia junto a un contador que dice que hay treinta resultados. Es lo que el traspaso de
+  T L.1 (§9.2) pedia y lo que hace `OrdenesModule`;
+- **espera a que el usuario deje de escribir.** El campo responde al instante (estado propio);
+  lo que se aplaza es la CONSULTA, con la misma espera que `FilterComponent` aplica a cualquier
+  filtro —se importa su constante, no se copia el numero—. No es cosmetica: cada lectura de
+  este listado **agrega el libro entero de cada mensajero** (T L.1 §5), asi que un nombre de
+  diez letras sin espera serian diez agregaciones completas del ledger. Hay test que lo mide:
+  escribir «Ana» es UNA lectura con `busqueda`, no tres.
+
+Lo que se compara para decidir si hay busqueda nueva es lo **normalizado**, con
+`normalizarBusquedaMensajero` —la MISMA funcion que usa el servidor para decidir que filas
+casan—: añadir un espacio al final de un termino ya aplicado no es una busqueda nueva y no debe
+costar una consulta ni mover la pagina. El texto que viaja, en cambio, va **TAL CUAL** (T L.1
+§9.1): normalizar en dos sitios es como la pantalla y el servidor acaban entendiendo cosas
+distintas por «texto vacio».
+
+### R42 — el contador que esta pantalla no tenia
+
+**Nace uno**, y es el unico añadido visible que no estaba en el encargo. El motivo: mientras el
+navegador recibia el conjunto entero, «cuantos mensajeros hay» se contaba mirando la tabla;
+paginando, esa cuenta desaparece —el `<Pagination>` dice «Página 1 de 3», no cuantas filas hay—
+y **buscar deja de decir cuanto encontro**. Sin filtro dice «60 mensajeros»; con busqueda
+puesta, «30 de 60 mensajeros». Los DOS numeros son del servidor: el primero es el `total` de la
+pagina vigente (que responde a la busqueda) y el segundo el `total` sin busqueda que resolvio
+el Server Component. **Ninguna segunda llamada**: los dos ya estaban en la respuesta.
+
+Sin filtro solo se muestra un numero, como en la satelite: «60 de 60 mensajeros» no dice nada
+que «60 mensajeros» no diga.
+
+La pantalla **entra en el registro de la guardia de T H.3** con las dos formas de su contador y
+con una prohibicion escrita en general —ningun texto interpolado de ese archivo puede salir de
+un `.length`—, que cubre las tres maneras de escribir la misma mentira (`items.length`,
+`data?.items.length` y `(data?.items ?? []).length`) de una vez.
+
+### R50 — la fila expandible, que es el punto delicado
+
+Se conserva tal cual (`rowKey="mensajeroId"`, `renderExpanded`, `expandAriaLabel`) y **eso es
+justo lo que habia que probar**: la fila que llega a `renderExpanded` es la de la pagina
+visible, y `DesglosePagosMensajero` pide SU desglose por `mensajeroId`. El test lo hace en la
+**pagina 3**, con el mensajero 51 —que debe ₡500.00—, y afirma tres cosas: que la region que se
+abre lleva SU nombre, que la Server Action del desglose se llamo con SU `mensajeroId` (y no con
+el de la fila que ocupaba esa posicion en la pagina 1) y que el dinero que enseña es el de su
+libro entero.
+
+R50 dice ademas que cambiar de pagina no altera «los totales agregados ni el estado de los
+formularios». Aqui el formulario es el buscador y los agregados son las celdas: hay un caso que
+pagina con una busqueda puesta y comprueba que el texto sigue escrito, que sigue aplicado y que
+los importes de la fila son los STRING del servidor.
+
+### R52 — la descarga sigue entregando el conjunto
+
+Se sigue la **recomendacion del traspaso (§9.4)**, sin desviarse: al pulsar el control se RELEE
+`listarCuentasPorPagarAction()` —el mismo listado que la pantalla llamaba antes de paginar,
+acotado server-side a los roles de acceso total: descargar no amplia el alcance ni una fila— y
+se le aplican **`filtrarPorBusquedaMensajero` y `ordenarCuentasPorPagar` de
+`lib/utils/cuentas-por-pagar-listado.ts`**, las MISMAS que el servidor usa para armar la
+pagina. No se reescribe el filtro en la pantalla a proposito: dos escrituras del mismo criterio
+en dos capas es exactamente como una fila acaba en la tabla y no en el archivo (R11). Todo eso
+alimenta `filasDelConjuntoCompleto` (T I.2), que conserva el tope de 5000 y su mensaje
+accionable.
+
+**Q-L2 sigue abierta y no se cierra aqui**: falta `listarCuentasPorPagarCompleto(busqueda)`, y
+crearlo es backend (§21).
+
+---
+
+## 17. Donde se prueba cada cosa
+
+| Archivo | Tests | Que prueba |
+| --- | --- | --- |
+| `tests/components/paginacion/CuentasPorPagarPaginacion.test.tsx` (NUEVO) | 8 | los tres casos que exige T L.2 + el primer pintado, el contador en la ultima pagina, la busqueda que vuelve a la pagina 1, el desglose que no se arrastra entre paginas y la descarga CON busqueda |
+| `tests/components/CuentasPorPagarTable.test.tsx` (+1, adaptado) | 6 | columnas, montos, expand y la busqueda —ahora de servidor—, mas que el texto viaja tal cual y una rafaga es UNA lectura |
+| `tests/components/descarga/WalletPropsDescarga.test.tsx` (adaptado) | 5 | el archivo de las tres tablas de dinero; el caso estatico pasa a exigir que las TRES relean |
+| `tests/components/descarga/ControlDescargaTransversal.test.tsx` (adaptado) | 7 | la tercera forma del rollout, ahora «Familia B paginada con busqueda de servidor»; descargar no vuelve a pedir la pagina |
+| `tests/integration/wallet-mensajeros-page.test.tsx` (+1) | 9 | el Server Component pre-carga la PAGINA 1 y baja el `total` del CONJUNTO (30), no el de la pagina (2) |
+| `tests/unit/descarga/contadores-cabecera.guardia.test.ts` (+1) | 5 | la guardia estatica de R42, ahora con esta pantalla dentro |
+
+**El doble de la Server Action FILTRA Y RECORTA de verdad**, y su filtro esta reimplementado en
+el test en vez de importar `filtrarPorBusquedaMensajero`: esa funcion es la que la PANTALLA usa
+para el archivo, asi que reusarla haria que el test midiera el codigo contra si mismo.
+
+**Los datos estan repartidos para que pagina, busqueda y conjunto sean TRES numeros distintos:**
+60 mensajeros, paginas de 25, y un apellido por mitad (30 y 30). Treinta es mas que una pagina
+y menos que el conjunto, asi que con una busqueda puesta el archivo solo puede tener 30 filas
+si de verdad relee y filtra: 25 seria la pagina y 60 el conjunto sin filtrar. **Esto no estaba
+bien a la primera** y lo dice la mutacion 10 (§18).
+
+---
+
+## 18. Las diez mutaciones, con su salida real
+
+**Todas revertidas** (`grep MUTACION app/` sin resultados; suite completa verde despues).
+
+| # | Mutacion | Resultado medido |
+| --- | --- | --- |
+| 1 | **R50 (la del encargo)**: `renderExpanded` resuelve el resumen contra `initialData.items` (la pagina 1) | **ROJO (2)**: `Unable to find role="region" and name "Desglose de Mensajero 51 Solís"` y el de la pagina 2 |
+| 2 | **R52 (la del encargo)**: `obtenerFilas` proyecta `data.items` — «descargá lo que ves» | **ROJO (2)**: `expected […(10)] to have a length of 60 but got 10` y `expected […(25)] to have a length of 30 but got 25` |
+| 3 | **R52 (b)**: se relee el conjunto pero se IGNORA la busqueda vigente | **ROJO (3)** en tres archivos: `to have a length of 20 but got 60` y los dos casos de la descarga con filtro |
+| 4 | **R45**: la busqueda no devuelve la tabla a la pagina 1 | **ROJO (1)**: `expected [] to deeply equal ['Mensajero 01 Rojas', …(19)]` — la tabla vacia con un contador que dice 30 |
+| 5 | **R45**: la busqueda se queda en el navegador, sobre la pagina visible | **ROJO (4)**: `expected ['Mensajero 21 Vega', …(4)] to deeply equal [… (19)]` — encuentra solo los que ya estaban a la vista |
+| 6 | **R42**: el contador sale de `data.items.length` | **ROJO (1)** de comportamiento (`60 mensajeros` → `10 mensajeros` en la ultima pagina) **y ROJO (1)** en la guardia estatica de T H.3 |
+| 7 | **R43**: se quita el `ariaLabel` del control | **ROJO (6)**: todos los casos que navegan dejan de encontrar el `<nav>` por nombre |
+| 8 | **R44**: se quita el `fallbackData` de SWR | **ROJO (6)**, empezando por `el usuario ve las mismas filas que antes en el PRIMER pintado` |
+| 9 | **La espera de la busqueda**: el texto viaja en cada tecla | **ROJO (1)**: `expected […(3)] to have a length of 1 but got 3` |
+| 10 | **R50**: cambiar de pagina limpia el buscador | **VERDE** la primera vez — ver abajo. Tras corregir el fixture: **ROJO (1)**, `expected '' to be 'Solís'` |
+
+Las dos que el encargo exigia son la **1** (expandir roto fuera de la pagina 1) y la **2**
+(descargar la pagina en vez del conjunto).
+
+**Sobre la 8**, que es el aviso medido de la tanda I: el test del primer pintado NO espera. Con
+`await`/`findBy*`, quitar el `fallbackData` pasaba VERDE —la pantalla enseñaba un esqueleto y
+las filas aparecian tras un viaje al servidor por un dato que ya venia en la respuesta— y aqui
+se comprueba que sigue sin colar.
+
+**Sobre la 10, que es el hallazgo de esta tanda.** Paso VERDE, y el fallo era del TEST: el caso
+buscaba un apellido de 20 filas con paginas de 25, asi que el conjunto filtrado cabia entero en
+una pagina, «Página siguiente» estaba deshabilitado y el test pulsaba un boton inerte antes de
+dar por buena la busqueda. Un caso que navega sin navegar afirma exactamente nada. Se rehizo el
+reparto de datos (30/30, §17) y la mutacion cayo; de paso, la **mutacion 2 pasa a caer tambien
+en el caso con busqueda**, que antes solo veia el de sin ella. Es el mismo genero de punto ciego
+que las tandas I-K midieron en los dobles del repositorio, pero en la capa de arriba: **el dato
+de prueba puede hacer vacio un caso sin que nada falle**.
+
+---
+
+## 19. Mapa `R<n> → archivo::test`
+
+Prefijos: `P/` = `tests/components/paginacion/CuentasPorPagarPaginacion.test.tsx`,
+`T/` = `tests/components/CuentasPorPagarTable.test.tsx`,
+`W/` = `tests/components/descarga/WalletPropsDescarga.test.tsx`,
+`X/` = `tests/components/descarga/ControlDescargaTransversal.test.tsx`,
+`I/` = `tests/integration/wallet-mensajeros-page.test.tsx`,
+`G/` = `tests/unit/descarga/contadores-cabecera.guardia.test.ts`.
+
+| R | Test |
+| --- | --- |
+| **R40** | `I/::pre-carga la PÁGINA 1 con el total del conjunto, no el listado entero (R40/R41)` |
+| **R41** | `I/::pre-carga la PÁGINA 1 con el total del conjunto…` — `total` 30 ≠ `items.length` 2 |
+| **R42** | `P/::navega entre páginas (R43)` — el contador dice 60 en la ULTIMA pagina, que trae 10 |
+| **R42** | `P/::la búsqueda mira el CONJUNTO y devuelve a la página 1 (R45)` — «30 de 60 mensajeros» |
+| **R42** | `G/::el contador de las cuentas por pagar dice el total del servidor, y su pantalla se vigila` |
+| **R43** | `P/::navega entre páginas (R43)` — `<nav>` por rol y nombre, siguiente/ultima/primera, y las filas CAMBIAN |
+| **R43** | `P/::expandir el desglose funciona en cualquier página (R50)` — los DOS controles de paginas conviven, cada uno con su nombre |
+| **R44** | `P/::el usuario ve las mismas filas que antes en el PRIMER pintado (R44)` — sin `await` |
+| **R45** | `P/::la búsqueda mira el CONJUNTO y devuelve a la página 1 (R45)` — se busca desde la pagina 3, donde no hay ni un «Rojas» |
+| **R45** | `T/::filtra la lista por nombre de mensajero sin tocar montos` |
+| **R45** | `T/::el texto viaja TAL CUAL al servidor y una ráfaga de teclas es UNA sola lectura` |
+| **R50** | `P/::expandir el desglose funciona en cualquier página (R50)` — pagina 3, el mensajero que debe ₡500.00 |
+| **R50** | `P/::expandir en la página 1 no arrastra el desglose a las demás (R50)` |
+| **R50** | `P/::cambiar de página no toca lo escrito en el buscador ni los importes de la fila (R50)` |
+| **R52** | `P/::la descarga sigue entregando el dataset completo (R52)` — desde la pagina 3: 60 filas, no las 10 que se ven |
+| **R52** | `P/::la descarga con búsqueda entrega el conjunto filtrado, no la página (R52)` — 30, ni 25 ni 60 |
+| **R52** | `W/::cuentas por pagar exporta solo lo que la búsqueda deja a la vista` |
+| **R52** | `W/::las tres paginan y NINGUNA proyecta la página: releen el conjunto completo` |
+| **R52** | `X/::descargar no altera la página, la búsqueda ni las filas visibles` — descargar NO vuelve a pedir la pagina |
+
+**R46/R47/R48 no aplican a esta pantalla**: no tiene desplegables derivados del conjunto ni
+seleccion de filas. **R40/R41/R51 los cubre T L.1** (§8) y no se declaran cubiertos aqui; lo que
+esta pantalla añade es que el contrato se cablea sin perder nada por el camino.
+
+---
+
+## 20. Decisiones de T L.2
+
+1. **La pantalla deja de recibir el conjunto entero por props.** La alternativa —seguir
+   recibiendolo «total, ya esta»— habria dejado R52 verde sin escribir una linea y convertido
+   la paginacion en maquillaje (T I.2 §14, mismo argumento).
+2. **Nace un contador de cabecera** (§16, R42). Es el unico añadido visible que no pedia el
+   encargo, y va con su motivo: paginar deja al maestro sin saber cuantos mensajeros hay ni
+   cuantos encontro su busqueda.
+3. **La espera antes de consultar se importa, no se escribe.** `DEBOUNCE_MS_DEFAULT` de
+   `FilterComponent` es la decision que la app ya tomo para «cuanto se espera antes de
+   consultar por un filtro»; un `500` suelto aqui seria un segundo numero que actualizar.
+4. **El buscador NO se deshabilita mientras carga.** Perder teclas de un nombre a medio
+   escribir es peor que esperar a que llegue la pagina. El `<Pagination>` si se deshabilita,
+   como en las tandas I y K.
+5. **El esqueleto se muestra solo si NO hay nada que pintar** (`data === undefined`), no
+   mientras SWR revalida con `fallbackData`. Arreglo de T I.2 heredado tal cual.
+6. **Un resultado que no sea `ok` se LANZA** en el fetcher: la tabla enseña «No se pudieron
+   cargar las cuentas por pagar.» en vez de una tabla vacia, que se leeria como «nadie debe
+   nada» — lo contrario de lo que pasa.
+7. **El estado vacio no se toca.** Una busqueda sin resultados enseña el mismo texto que hoy;
+   cambiarlo seria un cambio de UI que nadie pidio, en la tanda con menos margen para ellos.
+8. **La descarga reusa las funciones de `lib/utils/`** en vez de reimplementar el filtro
+   (§16, R52).
+9. **Cero cambios en `lib/`**, cero migraciones, cero RLS. `censo-tablas.ts` no se toca: la
+   tabla no se muda ni nace otra.
+
+---
+
+## 21. Preguntas abiertas de T L.2
+
+**Q-L2 — SIGUE ABIERTA, y ahora tiene codigo que la sostiene.** La descarga relee
+`listarCuentasPorPagarAction()` y filtra en memoria con las funciones del servidor. No es una
+regresion —es literalmente lo que la pantalla hacia—, pero **el conjunto entero vuelve a cruzar
+al cliente en ese momento**, solo que ahora unicamente al pulsar «Descargar» en vez de en cada
+render. Cerrarla es `listarCuentasPorPagarCompleto(busqueda)` en el backend (tanda M); con el,
+la pantalla dejaria de importar `filtrarPorBusquedaMensajero`.
+
+**Q-L5 — NUEVA: la espera de la busqueda es un comportamiento que el humano no ha visto.** Es
+la misma que la app aplica a cualquier filtro y esta medida (mutacion 9), pero es lo unico de
+esta tanda que el operador nota como «la pantalla tarda»: antes filtraba en la misma tecla.
+Bajarla o subirla es una linea; **no se toca sin que alguien lo use**, porque el precio de
+acortarla lo paga Postgres agregando el ledger entero una vez por tecla.
+
+**Q-L6 — NUEVA: `DESGLOSE_PAGE_SIZE = 20` sigue siendo un literal.** El traspaso (§9.6) lo
+dejaba como opcional para L.2 ahora que existe `walletMensajeroConfig`. **No se hizo**: ese
+tamaño es el del DESGLOSE de una fila, no el del listado del Anexo III, y colgarlo del mismo
+dominio ataria dos cosas que crecen por motivos distintos —exactamente el argumento con el que
+T L.1 rechazo colgar este listado de `wallet-tienda` (§2)—. Si se quiere config, es un dominio
+propio y es de la tanda M.
+
+**Q-L7 — NUEVA: el contador no dice «de cuantos» cuando no hay busqueda.** Con filtro dice «30
+de 60»; sin el, «60 mensajeros» a secas. Es deliberado (§16) y es lo que hace la satelite, pero
+si el humano prefiere ver siempre los dos numeros es un cambio de una linea.
+
+**Heredadas y NO resueltas aqui:** Q-L1 (el recorte fuera de la base), Q-L3 (el orden alfabetico
+como desviacion visible de R51), Q-L4 (la busqueda no ignora acentos —y con la tabla paginada
+la fila que no aparece puede estar en otra pagina, no mas abajo—), Q-I1, Q-I2, Q-I5, Q-J1, Q-J2,
+Q-J3, Q-J4, Q-K1, Q-K2, Q-K4, Q-K6, Q-K7 y la deuda **D5.2**.
+
+---
+
+## 22. Archivos de T L.2
+
+**Nuevos (1)**
+
+- `tests/components/paginacion/CuentasPorPagarPaginacion.test.tsx` (8 tests).
+
+**Modificados — produccion (2)**
+
+- `app/(app)/wallet/mensajeros/page.tsx` — pre-carga de la PAGINA 1 (`{}` = defaults del
+  dominio) y baja `{ items, total, pageSize }`.
+- `app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx` — SWR + busqueda de
+  servidor con su espera + `<Pagination>` + contador + descarga del conjunto releido.
+
+**Modificados — tests (5)**
+
+- `tests/components/CuentasPorPagarTable.test.tsx` — monta la tabla con su pagina; el caso del
+  filtro pasa a esperar al servidor y gana el de «tal cual + una sola lectura».
+- `tests/components/descarga/WalletPropsDescarga.test.tsx` — el caso estatico «la que NO pagina
+  no relee» desaparece (ya no queda ninguna de las tres) y las TRES exigen releer.
+- `tests/components/descarga/ControlDescargaTransversal.test.tsx` — la tercera forma se
+  redescribe y gana la afirmacion de que descargar no vuelve a pedir la pagina.
+- `tests/integration/wallet-mensajeros-page.test.tsx` — el pre-fetch es el paginado; +1 caso
+  que separa el `total` del conjunto del tamaño de la pagina.
+- `tests/unit/descarga/contadores-cabecera.guardia.test.ts` — +1 caso: esta pantalla, sus dos
+  formas de contador y la prohibicion general de interpolar un `.length`.
+
+**Cero cambios en `lib/`, cero migraciones, cero RLS, cero cambios de esquema.**
+
+---
+
+## 23. Puertas de T L.2 (medicion final, salida real)
+
+```
+$ npx tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ npx eslint
+✖ 27 problems (0 errors, 27 warnings)      (baseline de T L.1: 27 warnings — sin delta)
+
+$ npx vitest run
+ Test Files  748 passed (748)
+      Tests  8994 passed (8994)
+   Duration  218.72s
+
+$ ./init.sh
+✓ test paso
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+== init OK ==
+```
+
+Baseline de T L.1: 747 archivos / 8984 tests → **+1 archivo y +10 tests**. Suite completa en
+verde a la primera y sin flakes: el conocido `OrdenesModuleReuse` paso en las tres corridas.
+
+---
+
+## 24. Veredicto (T L.2)
+
+«Cuentas por pagar a mensajeros» pinta ahora la pagina que le da el servidor, con un control de
+navegacion propio y nombrado que convive con el del desglose sin confundirse, y un contador que
+dice el total del servidor —60 estando a la vista 10—; la busqueda por nombre viaja al servidor
+cuando el usuario deja de escribir, devuelve la tabla a la pagina 1 y encuentra las treinta
+filas del conjunto aunque en la pagina visible no hubiera ninguna; expandir el desglose en la
+pagina 3 abre el del mensajero de ESA fila y enseña los ₡500.00 de su libro entero; y la
+descarga sigue entregando 60 filas cuando la tabla muestra 10, o las 30 que la busqueda deja a
+la vista cuando la pagina enseña 25. Diez mutaciones lo confirmaron y se revirtieron; una paso
+VERDE porque el dato de prueba hacia vacio el caso, y esa correccion va commiteada aparte.
