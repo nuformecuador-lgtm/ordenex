@@ -728,7 +728,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R23 | `tests/unit/services/liquidacion-service.test.ts` + `RegistrarPagoDialog.test.tsx` — monto menor al pendiente aceptado y prefijado |
 | R24 | `tests/unit/services/liquidacion-service.test.ts` — el pendiente baja exactamente en el monto |
 | R25 | idem — monto > pendiente → `excede` con el disponible, sin escribir `[P1]` |
-| R26 | `tests/components/CierresAdminModule.test.tsx` (ampliado) — marca de pendiente de liquidar |
+| R26 | `tests/components/CierresAdminPagoMensajero.test.tsx` — marca de pendiente de liquidar ⚠️ **puntero corregido el 2026-08-02 (leader)**: el spec apuntaba a `CierresAdminModule.test.tsx`, que **no la mide** (0 apariciones de R26). El requisito sí está cubierto; el índice estaba mal |
 | R27 | `tests/components/CierresAdminPagoMensajero.test.tsx` — con pendiente 0 no hay botón |
 | R28 | `tests/unit/services/cierres-admin-pendiente.test.ts` — cierre no aprobado → `null` |
 | R29 | `tests/unit/services/liquidacion-service.test.ts` — pago a tienda sin cierre, contra saldo acumulado |
@@ -763,13 +763,13 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R58 | `tests/integration/db/liquidacion-migration.test.ts` + T H.3 (rechazo real de una fila incoherente) |
 | R59 | idem |
 | R60 | `tests/integration/db/liquidacion-migration.test.ts` — un concepto sin clasificar no casa ninguna rama |
-| R61 | evidencia de T A.0 en `progress/impl_172-liquidacion.md` (verificación previa contra producción y preview) |
+| R61 | **mitad 1 (SQL, CUBIERTA)**: `tests/integration/db/liquidacion-migration.test.ts` — «los dos CHECK VALIDAN las filas existentes: ninguno se añade con `NOT VALID`», con su caso de control del detector; verificado por mutación en los **dos** `ADD CONSTRAINT` (`NOT VALID` y `not   valid` en dos líneas) el 2026-08-02. · **mitad 2 (verificar cada base antes de desplegar): producción medida y limpia en T A.0 (evidencia en `progress/impl_172-liquidacion.md`); PREVIEW SIN MEDIR — ABIERTA, BLOQUEA EL MERGE.** No la puede cerrar ningún test del repo: es del humano (el MCP está fijado al `project_ref` de producción) |
 | R62 | `tests/integration/db/liquidacion-migration.test.ts` — la migración no toca `wallet_movimiento` `[P8]` |
 | R63 | idem — RLS sin políticas en las dos tablas nuevas |
 | R64 | idem — `down.sql` revierte tablas y CHECK, sin tocar enums; + round-trip de T H.3 |
 | R65 | `tests/unit/actions/liquidacion-action.test.ts` — no se exporta ninguna acción de editar un pago |
 | R66 | T H.4 — revisión de alcance: ninguna tabla, estado ni pantalla de «corte por tienda» en el diff |
-| R67 | suite de la 111 (`reglas-bloqueos-cierre`, `cierre-vencido-modelo`) sin editar |
+| R67 | `tests/unit/guards/liquidacion-alcance.test.ts` + la suite de la 111 sin editar ⚠️ **puntero corregido el 2026-08-02 (leader)**: los dos archivos que nombraba el spec (`reglas-bloqueos-cierre`, `cierre-vencido-modelo`) **no existen** en `tests/`; los reales son `orden-repository.bloqueo.test.ts` y los 5 del cierre vencido, y el guard de alcance lo afirma mejor que lo prometido |
 | R68 | suites de analítica y de la caja sin editar; R40 lo cubre por el lado del código |
 | R69 | `tests/unit/services/liquidacion-anulacion.test.ts` — contraasiento del signo opuesto, mismo monto, sin borrar ni editar |
 | R70 | idem — un monto colado en el input se ignora; el del contraasiento sale del pago |

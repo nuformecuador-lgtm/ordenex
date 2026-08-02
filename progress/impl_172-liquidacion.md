@@ -2908,3 +2908,131 @@ declarada en ninguna tanda.
 **La 172 queda COMPLETA en código y en trazabilidad: 84 de los 85 requisitos con un test que
 existe, pasa y afirma lo que dice. El que falta —R61— no es código sino un acto de verificación a
 medias (preview sin medir) que BLOQUEA EL MERGE, no la implementación.**
+
+---
+
+## Respuesta al review — BLOQUEANTE 1 (R61), mitad testeable (2026-08-02)
+
+Encargo estrecho del leader tras `progress/review_172-liquidacion.md`: cerrar la mitad de R61 que
+vive en el repo. **La otra mitad —medir la base de PREVIEW— sigue ABIERTA y bloquea el merge**; no
+es del implementer (el MCP está fijado al `project_ref` de producción) y aquí no se toca ni se da
+por cerrada.
+
+### Qué se añadió
+
+Un solo archivo tocado: `tests/integration/db/liquidacion-migration.test.ts` (**11 → 13 casos**).
+
+1. **`los dos CHECK VALIDAN las filas existentes: ninguno se anade con NOT VALID`** — el caso que
+   pedía el review. Recorre los **dos** `ADD CONSTRAINT ... CHECK` de los libros y afirma, sobre la
+   sentencia entera y con `/\bNOT\s+VALID\b/i`, que ninguno lleva `NOT VALID` (ni el rodeo
+   `VALIDATE CONSTRAINT`). Red secundaria: ni una aparición en **todo** el SQL ejecutable de la
+   migración, con los comentarios quitados a propósito (la cabecera nombra `NOT VALID` en prosa,
+   justo para explicar por qué no está).
+2. **`el detector de NOT VALID no se deja enganar por mayusculas, espacios ni saltos de linea`** —
+   control del detector: 6 variantes que Postgres acepta igual (`NOT VALID`, `not valid`,
+   `Not Valid`, `NOT   VALID`, `NOT\tVALID`, `NOT\nVALID`) deben detectarse, y 4 inocentes
+   (`IS NOT NULL`, `NOT VALIDO`, `'validado'`, un CHECK normal) **no**. Sin este control, un
+   `RE_NOT_VALID` roto dejaría el caso de arriba en verde para siempre.
+
+### Hallazgo al escribirlo: el parser del propio archivo tapaba la mutación
+
+`sentenciaDelCheck` recortaba la sentencia **hasta el primer `);`**. Esa regla da por hecho que la
+sentencia acaba donde acaba el paréntesis del CHECK — y `NOT VALID` va **después** de ese
+paréntesis. Consecuencias medidas, antes de arreglarlo:
+
+- `NOT VALID` en el CHECK de la **tienda**: el recorte se desbordaba hasta el `);` del CHECK del
+  mensajero, mezclaba las ramas de los dos libros y hacía caer 3 casos con mensajes que no nombran
+  la causa (`expected [ Array(4) ] to deeply equal [ 'credito', 'debito' ]`).
+- `NOT VALID` en el del **mensajero** (el último del fichero): no quedaba ningún `);` que
+  encontrar ⇒ `Error: El CHECK ... no termina` **al importar el módulo**, en el `ramasDelCheck` de
+  nivel superior ⇒ `Tests  no tests`. **Cero casos corridos.** El archivo entero moría antes de
+  llegar a la aserción nueva.
+
+Arreglado: la sentencia se recorta ahora **de `;` a `;`** sobre el SQL sin comentarios. El cambio
+solo puede **añadir** texto al trozo inspeccionado, nunca quitarlo, así que ninguna aserción
+preexistente se debilita: con el SQL real los 13 casos pasan igual.
+
+### La prueba por mutación (14.ª de la feature)
+
+Copia byte a byte antes de empezar (`md5 4f4087be3bf32133d256cbf711d1c637`). Dos formas distintas
+a propósito: la canónica y la que una regex ingenua dejaría pasar.
+
+**Mutación A — `NOT VALID` canónico en el CHECK del ledger de tienda:**
+
+```
+@@ -136 +136 @@ CHECK (
+-);
++) NOT VALID;
+```
+```
+ × ... > los dos CHECK VALIDAN las filas existentes: ninguno se anade con NOT VALID 2ms
+ ✓ ... > el detector de NOT VALID no se deja enganar por mayusculas, espacios ni saltos de linea 0ms
+AssertionError: expected true to be false // Object.is equality
+      Tests  2 failed | 11 passed (13)
+```
+(El segundo fallo es el caso de R60, que también lo ve; el diagnóstico correcto lo da el nuevo.)
+
+**Mutación B — minúsculas, espacios de sobra y salto de línea, en el CHECK del mensajero:**
+
+```
+@@ -146 +146,2 @@ CHECK (
+-);
++)
++not   valid;
+```
+```
+ × ... > los dos CHECK VALIDAN las filas existentes: ninguno se anade con NOT VALID 5ms
+ ✓ ... > el detector de NOT VALID no se deja enganar por mayusculas, espacios ni saltos de linea 0ms
+AssertionError: expected true to be false // Object.is equality
+      Tests  1 failed | 12 passed (13)
+```
+
+Ésta es la que importa: **`not   valid` en dos líneas**, exactamente lo que un `toContain("NOT
+VALID")` habría dejado pasar. Cae solo el caso nuevo; el control del detector aguanta en verde,
+que es lo que lo hace un control.
+
+**Restauración verificada** (no basta con «lo volví a poner»: la migración está aplicada en local
+y cambiarla de verdad rompería el checksum de `_prisma_migrations`):
+
+```
+--- diff contra la copia ---
+diff: sin diferencias
+--- md5 ---
+4f4087be3bf32133d256cbf711d1c637 *db/migrations/20260802120000_liquidacion_pago/migration.sql
+--- git diff db/ ---
+(vacio = intacto)
+```
+
+### Verificación
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: 0 errores)
+
+$ pnpm exec vitest run tests/integration/db
+ Test Files  85 passed (85)
+      Tests  1026 passed (1026)
+
+$ pnpm exec eslint tests/integration/db/liquidacion-migration.test.ts
+(sin salida: 0 errores, 0 warnings)
+```
+
+`./init.sh` y la suite completa: **del leader**, por indicación explícita.
+
+### Trazabilidad
+
+`specs/172-liquidacion/tasks.md § Trazabilidad`, fila **R61**, reescrita en dos mitades: la del
+SQL **cubierta** por este test (con la mutación fechada), la de **preview ABIERTA y bloqueando el
+merge**. Las filas R26 y R67 las corrigió el leader; no se tocaron.
+
+**Sigue abierto y NO lo cierra este trabajo:** correr contra la base de preview la consulta de
+incoherencias de T A.0 (pegada literal más arriba en esta misma bitácora) antes de mergear. En
+Vercel el build migra antes de compilar y los dos `ADD CONSTRAINT` validan las filas existentes —
+justo la propiedad que el test de arriba protege.
+
+#### Veredicto
+
+**Mitad testeable de R61 cerrada y demostrada por mutación en los dos `ADD CONSTRAINT`; de paso se
+arregló un parser del test que convertía esa misma mutación en un crash de importación sin
+diagnóstico. La verificación de preview sigue abierta y sigue bloqueando el merge.**

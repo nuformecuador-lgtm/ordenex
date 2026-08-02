@@ -8,9 +8,16 @@ import path from "path";
 // verificacion manual del implementer (T H.3), pegada en `progress/impl_172-liquidacion.md`.
 //
 // Cubre R58 (CHECK del ledger de tienda), R59 (CHECK del libro del mensajero), R60 (falla
-// cerrado: un concepto sin clasificar no casa ninguna rama), R62 (la caja principal NO recibe
-// el CHECK, [P8]), R63 (RLS sin policies en las dos tablas nuevas), R64 (down reversible en
-// orden inverso, sin tocar enums) y R75 (UNIQUE de `pago_id`: un pago se anula UNA vez).
+// cerrado: un concepto sin clasificar no casa ninguna rama), R61 (los dos CHECK VALIDAN las
+// filas existentes: ninguno lleva `NOT VALID` — ver nota abajo), R62 (la caja principal NO
+// recibe el CHECK, [P8]), R63 (RLS sin policies en las dos tablas nuevas), R64 (down reversible
+// en orden inverso, sin tocar enums) y R75 (UNIQUE de `pago_id`: un pago se anula UNA vez).
+//
+// R61 tiene DOS mitades y este archivo cubre UNA. La que vive en el repo —«la restriccion NO
+// DEBE poder anadirse si algun dato existente la incumple»— es una propiedad del SQL y se
+// afirma aqui. La otra —«su aplicacion DEBE verificarse contra CADA base antes de desplegar»—
+// esta hecha contra produccion (T A.0, evidencia en `progress/impl_172-liquidacion.md`) y
+// **ABIERTA contra preview**: ningun test del repo puede cerrarla.
 //
 // Los CHECK NO se comprueban por `toContain` de la cadena entera: se PARSEAN a un mapa
 // tipo -> categorias y se compara contra los valores REALES del enum en `db/schema.prisma`.
@@ -45,13 +52,36 @@ function valoresDelEnum(nombre: string): string[] {
     .filter((linea) => linea.length > 0 && !linea.startsWith("@@"));
 }
 
-/** El texto de la sentencia `ADD CONSTRAINT <nombre> CHECK (...)`, hasta su `);`. */
+/** El SQL sin comentarios: la prosa que EXPLICA `NOT VALID` no es `NOT VALID` ejecutable. */
+function sinComentarios(sql: string): string {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "");
+}
+
+/**
+ * `NOT VALID` tal y como Postgres lo acepta de verdad: sin distinguir mayusculas y con
+ * CUALQUIER espacio en medio, saltos de linea incluidos. Un `toContain("NOT VALID")` daria
+ * verde ante `not valid` o ante un `NOT\nVALID`, que es justo el caso a impedir.
+ */
+const RE_NOT_VALID = /\bNOT\s+VALID\b/i;
+
+/**
+ * La sentencia COMPLETA `ALTER TABLE ... ADD CONSTRAINT <nombre> CHECK (...);` — de `;` a `;`,
+ * sobre el SQL sin comentarios.
+ *
+ * Termina en el `;` de la SENTENCIA y no en el primer `);`, que es como se leia antes. La regla
+ * vieja daba por hecho que la sentencia acaba donde acaba el parentesis del CHECK, y eso es
+ * exactamente lo que `NOT VALID` rompe: va DESPUES de ese parentesis. Con la regla vieja,
+ * anadir `NOT VALID` al ULTIMO CHECK del fichero dejaba a este helper sin `);` que encontrar y
+ * reventaba el modulo al importarlo — CERO tests corridos y un mensaje que no nombra la causa.
+ * De `;` a `;` el SQL se sigue parseando y el fallo lo da el caso que toca decirlo.
+ */
 function sentenciaDelCheck(sql: string, constraint: string): string {
-  const inicio = sql.indexOf(`ADD CONSTRAINT "${constraint}"`);
-  if (inicio < 0) throw new Error(`La migracion no anade el CHECK ${constraint}`);
-  const fin = sql.indexOf(");", inicio);
-  if (fin < 0) throw new Error(`El CHECK ${constraint} no termina`);
-  return sql.slice(inicio, fin + 2);
+  const limpio = sinComentarios(sql);
+  const ancla = limpio.indexOf(`ADD CONSTRAINT "${constraint}"`);
+  if (ancla < 0) throw new Error(`La migracion no anade el CHECK ${constraint}`);
+  const fin = limpio.indexOf(";", ancla);
+  if (fin < 0) throw new Error(`La sentencia del CHECK ${constraint} no termina en ';'`);
+  return limpio.slice(limpio.lastIndexOf(";", ancla) + 1, fin + 1).trim();
 }
 
 /**
@@ -250,6 +280,83 @@ describe("UP — CHECK tipo <-> categoria de los dos libros (condicion heredada 
     // El signo contrario de cada ajuste NO vale en ese tipo.
     expect(aceptaElCheck(ramasTienda, "credito", "ajuste_debito")).toBe(false);
     expect(aceptaElCheck(ramasMensajero, "devengo", "ajuste_pago")).toBe(false);
+  });
+
+  it("los dos CHECK VALIDAN las filas existentes: ninguno se anade con NOT VALID", () => {
+    // R61 (primera mitad, la que vive en el repo). `ADD CONSTRAINT ... CHECK` recorre la tabla
+    // al aplicarse: si hubiera UNA fila incoherente, la migracion FALLA. Esa propiedad es lo
+    // que la feature compro con la verificacion previa contra produccion (T A.0) y es la razon
+    // de que el despliegue sea seguro, no un acto de fe.
+    //
+    // Con `NOT VALID`, la restriccion se anadiria aceptando el pasado incoherente: se quedaria
+    // el NOMBRE del CHECK y se perderia la PROPIEDAD, sin que nadie se entere. Es una linea
+    // que alguien puede anadir de buena fe «para que el deploy no falle», y es exactamente lo
+    // que R61 prohibe. Este caso es lo unico que hoy lo impide.
+    //
+    // NO se acepta tampoco el rodeo `NOT VALID` + `VALIDATE CONSTRAINT`: valida, si, pero es
+    // otra forma de migracion (la restriccion existe un rato sin validar) y cambiarla a eso
+    // debe VERSE. Quien la necesite tendra que tocar este test, que es el objetivo.
+    const librosConCheck: ReadonlyArray<readonly [string, string]> = [
+      [CHECK_TIENDA, "wallet_tienda_movimiento"],
+      [CHECK_MENSAJERO, "pago_mensajero_movimiento"],
+    ];
+    // La lista es EXHAUSTIVA sobre la migracion, no una eleccion de dos: si manana entrara un
+    // tercer libro con su CHECK, este caso se entera en vez de seguir mirando solo estos dos.
+    expect(
+      sinComentarios(upSql).match(/ADD CONSTRAINT "[a-z_]*_tipo_categoria_check"/g) ?? [],
+    ).toHaveLength(librosConCheck.length);
+
+    for (const [constraint, tabla] of librosConCheck) {
+      const sentencia = sentenciaDelCheck(upSql, constraint);
+      // Primero: que lo mirado sea la sentencia entera del libro que toca. Si el recorte se
+      // quedara corto, el `NOT VALID` podria caer fuera y el test daria un verde falso.
+      expect(sentencia.startsWith(`ALTER TABLE "${tabla}" ADD CONSTRAINT "${constraint}"`)).toBe(
+        true,
+      );
+      expect(sentencia.endsWith(";")).toBe(true);
+      expect(sentencia).toMatch(/\bCHECK\s*\(/i);
+      // Y el corazon del caso.
+      expect(RE_NOT_VALID.test(sentencia)).toBe(false);
+      expect(sentencia).not.toMatch(/\bVALIDATE\s+CONSTRAINT\b/i);
+    }
+
+    // Red secundaria: ni una aparicion en TODO el SQL EJECUTABLE de la migracion (comentarios
+    // fuera: la cabecera nombra `NOT VALID` en prosa, justo para explicar por que no esta).
+    expect(RE_NOT_VALID.test(sinComentarios(upSql))).toBe(false);
+  });
+
+  it("el detector de NOT VALID no se deja enganar por mayusculas, espacios ni saltos de linea", () => {
+    // Contraprueba del caso de arriba: sin esto, un `RE_NOT_VALID` roto lo dejaria en verde
+    // para siempre y nadie lo notaria. Cada variante es SQL que Postgres acepta igual.
+    const variantes = [
+      'ALTER TABLE "t" ADD CONSTRAINT "c" CHECK (x) NOT VALID;',
+      'ALTER TABLE "t" ADD CONSTRAINT "c" CHECK (x) not valid;',
+      'ALTER TABLE "t" ADD CONSTRAINT "c" CHECK (x) Not Valid;',
+      'ALTER TABLE "t" ADD CONSTRAINT "c" CHECK (x) NOT   VALID;',
+      'ALTER TABLE "t" ADD CONSTRAINT "c" CHECK (x) NOT\tVALID;',
+      'ALTER TABLE "t" ADD CONSTRAINT "c" CHECK (\n  x\n)\nNOT\nVALID;',
+    ];
+    for (const sql of variantes) {
+      expect(RE_NOT_VALID.test(sql)).toBe(true);
+    }
+    // Y no salta con lo que solo se le parece (si saltara, el test de arriba seria inutil por
+    // ruidoso y alguien acabaria relajandolo).
+    const inocentes = [
+      'ALTER TABLE "t" ADD CONSTRAINT "c" CHECK ("monto" > 0);',
+      '"categoria" IS NOT NULL',
+      "-- el estado NOT VALIDO no existe",
+      'CHECK ("tipo" = \'validado\')',
+    ];
+    for (const sql of inocentes) {
+      expect(RE_NOT_VALID.test(sql)).toBe(false);
+    }
+    // El recorte tambien se mide: la sentencia real llega hasta su `;`, no hasta el primer `)`
+    // interno (donde `NOT VALID` ya no se veria). Estas dos aserciones se cumplen HAYA O NO
+    // `NOT VALID`, a proposito: este caso es el control del detector y debe seguir en verde
+    // cuando el de arriba caiga, o no seria un control.
+    const sentencia = sentenciaDelCheck(upSql, CHECK_TIENDA);
+    expect(sentencia).toMatch(/;$/);
+    expect(sentencia).toContain("'ajuste_debito'"); // pasa de largo del primer `)` interno.
   });
 
   it("no anade la restriccion a la caja principal", () => {
