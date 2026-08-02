@@ -249,6 +249,15 @@ posteriores, ambos pasan. Son flakes por saturación, no regresiones.
 
 ## 4-bis. Ronda 2 — los tres bloqueantes del reviewer, cerrados con mutación (2026-08-01)
 
+> **Nota de higiene del historial, porque el diff no lo dice solo.** El commit `07d8188b` lleva un
+> mensaje centrado en B1/B2/B3, pero su diff arrastra **también** la enmienda **R33-bis** y el
+> requisito **R20-bis** en `requirements.md`, los avisos 3 y 4 de `tasks.md > T0.1` y la corrección
+> de **m5** (T8.3 desmarcada). Debería haber sido más de un commit
+> (`docs/conventions.md`: un commit por task lógica) y no lo fue. Se deja escrito aquí en vez de
+> reescribir la historia.
+
+
+
 El reviewer **rechazó** la primera entrega. Los tres bloqueantes eran del mismo tipo y el
 diagnóstico era correcto: **tests verdes que no medían el requisito**. Se reprodujeron uno a
 uno antes de tocar nada, y se cierran con la mutación pegada.
@@ -414,6 +423,34 @@ con su porqué, y comunicado al dueño de la 131 en `tasks.md > T0.1`.
 ## 6. Cierre — `./init.sh` y suite completa
 
 Medido en ESTE árbol, no heredado de ninguna bitácora.
+
+### Cierre de la RONDA 2 (2026-08-01, tras arreglar los tres bloqueantes)
+
+```
+✓ node v22.13.1
+✓ dependencias presentes
+✓ typecheck paso
+✓ lint paso
+ Test Files  674 passed (674)
+      Tests  8144 passed (8144)
+✓ test paso
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+EXIT=0
+```
+
+- **674 archivos** — el mismo total que en la ronda 1, así que **no hay archivos omitidos** por
+  *unhandled errors* de workers y el conteo es creíble.
+- **8144 tests**, `+8` sobre los 8136 de la ronda 1: exactamente los ocho añadidos para cerrar los
+  bloqueantes (3 de configuración de moneda/locale, 2 de guard estático, 3 del techo del donut).
+- `typecheck` **0 errores**, `lint` **0 errores**.
+
+Como en la ronda 1, la primera corrida trajo **un** rojo —`tests/integration/recuperar-contrasena-form.test.tsx`,
+el mismo archivo que ya flakeó al medir la base— y pasó en aislado (`7 passed`); no menciona ni
+`KpiValorAnimado` ni `private/analytics` (`grep -c` → 0). La segunda corrida, la de arriba, es verde
+entera con el mismo total de archivos.
+
+### Cierre de la RONDA 1 (antes de la review)
 
 `./init.sh` corre `typecheck`, `lint` y `test` (`docs/verification.md`). Se corrió **dos veces**, y
 se pegan las dos: la primera con 2 rojos y la segunda entera en verde, con **el mismo total de

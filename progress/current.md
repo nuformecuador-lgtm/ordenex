@@ -8,6 +8,42 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗓️ Sesión 2026-08-01 (tarde) — feature 130: RONDA 2, tres bloqueantes cerrados
+
+**El reviewer RECHAZÓ la primera entrega y tenía razón en los tres.** Todos del mismo tipo: **tests
+verdes que no medían el requisito**. Reproducidos uno a uno mutando el código antes de tocar nada,
+y cerrados con la salida real pegada en `impl_130.md §4-bis`.
+
+- **B1 (R13)** — se podía reintroducir `₡` hardcodeado y quedaban 42 verdes. **Causa raíz:** con la
+  config por defecto (`es-CR`/`CRC`), `formatMonto(3500)` y un `₡` a mano dan el **mismo string byte
+  a byte**; ninguna aserción sobre la salida por defecto puede separarlos.
+- **B2 (R20)** — igual con `"es-CR"` incrustado. La cláusula «sin literal de idioma» no la medía
+  nada, que es literalmente el punto de `CHECKPOINTS.md` sobre no hardcodear país/moneda.
+- **B3 (R33-bis)** — el más grave: neutralizar el recorte del donut no rompía ningún test. No era
+  cosmético: `paleta.ts` lanza para todo índice `>= 5` en **cualquier** `NODE_ENV`, así que un donut
+  de 6+ categorías (`ordenes_por_estado` tiene 19) **reventaría en el navegador también en
+  producción**.
+
+**Arreglo:** guard estático de literales sobre `components/private/analytics/**` (el mismo que ya
+protegía a `KpiValorAnimado`) + tests que recargan el módulo con `MONEDA_CURRENCY=USD` /
+`MONEDA_LOCALE=en-US`, con lo que los strings dejan de ser idénticos; y tests nombrados de las dos
+ramas de `NODE_ENV` para el donut.
+
+> **El humano RATIFICÓ la desviación del donut (2026-08-01):** 5 segmentos y conserva los
+> **PRIMEROS** (en una serie ordenada por magnitud son los que más pesan; quedarse los últimos
+> mostraría las 5 categorías más pequeñas escondiendo las dominantes). **Barras y líneas NO se
+> tocan:** siguen con 62 y los últimos. Escrito como **R33-bis** en `requirements.md`.
+
+**Menores atendidos:** m5 (T8.3 estaba marcada `[x]` afirmando que existía `review_130.md`, que **no
+existía** — bookkeeping autocumplido, desmarcada), la escala del `porcentaje` promovida a **R20-bis**
+y a `tasks.md > T0.1` donde la lee el dueño de la 131, m1 (R28 se cumple **por un default de
+recharts** que nadie fijó, con `^3.10.1`: riesgo declarado) y m2 (R25 marcado **⚠ parcial**, es
+inverificable hasta que exista la 131).
+
+**Sigue sin push y sin PR.** Commits nuevos: `07d8188b`.
+
+---
+
 ## 🗓️ Sesión 2026-08-01 — feature 130 IMPLEMENTADA (pendiente de review) — **EMPIEZA A LEER POR AQUÍ**
 
 **Feature 130 (analítica: componentes de gráficas) → implementada en la rama
