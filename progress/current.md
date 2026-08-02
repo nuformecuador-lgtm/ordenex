@@ -45,6 +45,44 @@ del listado. Despliegue de producción `dpl_6yAcpx6NvF5otCBk5Xuy1Dzimh44` en **R
 
 ---
 
+## 🔵 EN VUELO — feature 124 · PR #260 abierto, esperando merge
+
+`feature/124-analitica-job-agregacion-diaria` → `dev`. Worktree en `arc/ordenex-wt-124`.
+Estado en `feature_list.json`: **`in_progress`** — pasa a `done` **cuando el PR se mergee**, no antes.
+
+El job que puebla `analytics_daily` a las **00:30 CR** sobre el día cerrado **D−1**. Puerta T0 cerrada
+por el humano con **D1=A2** (congela solo el estatus), **D2=B2** (vivas + las que cerraron ese día),
+**D3+D8** (solo D−1, nada de intradía) y **D7** (las `deleted_at` se excluyen de todo).
+
+**49 requisitos mapeados** en `progress/impl_124.md` §7, con la honestidad declarada: 36 medidos por
+aserción discriminante, 8 por barrido del árbol, **4 solo por regex de texto** (R2, R21, R31, R48).
+Exigir el mapa destapó tres defectos que el implementer no había reportado (R31 a medias, R20 mapeado
+a un test vacuo, R24 medido por el caso de datos y no por el guardia). Los tres, corregidos.
+
+**Colisiones con la 122 resueltas sin aflojar ningún guardia**: R42 despioja comentarios en vez de
+allowlistear un archivo ajeno; R18 exime **nominalmente** al escritor sin tocar su detector ni sus
+fixtures. Verificadas por mutación ejecutada.
+
+| Medida | Resultado |
+| --- | --- |
+| Suite | 777 archivos / 9407 tests — **2 rojos, ambos de `dev`** |
+| typecheck / lint | 0 errores / 0 errores + 27 warnings **de `dev`** → delta 0 |
+
+Los dos rojos heredados: `no-embalaje` lo dispara `specs/122-analitica-alcance-por-rol/tasks.md:243`
+(presente tal cual en `origin/dev`; determinista, **no** el flake que decía la 122), y
+`wallet-tiendas-desglose` pasa **30/30 en aislado** — saturación. Por el segundo, `./init.sh` no llega
+a verde, y eso **también pasa en `dev`**.
+
+### ⚠️ Defecto ajeno confirmado y deliberadamente NO tocado
+
+`whereRollup()` en `lib/analytics/alcance-columnas.ts` (feature **122**, ya mergeada) recorta
+`analytics_daily` por **`mensajeroAsignadoId`** — esa es la columna de `orden`; en el rollup se llama
+**`mensajeroId`**. El retorno está tipado `Record<string, string>`, así que **el compilador no lo ve**:
+el recorte por mensajero fallaría en silencio. Confirmado contra `db/schema.prisma` y **dirigido a la
+126** en su `status_note`, que es quien lo estrellaría. No se arregla desde este PR.
+
+---
+
 ## 🏁 CIERRE DE JORNADA 2026-07-31
 
 Todo lo trabajado ese día está **mergeado en `dev`** —y desde el 2026-08-01, **en producción**.
