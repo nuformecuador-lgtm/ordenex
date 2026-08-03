@@ -29,8 +29,13 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
    No hagas circular el contenido completo por el chat.
 4. **Trazabilidad.** Cada requisito `R<n>` debe terminar mapeado a un test concreto.
    El reviewer rechaza si falta alguno.
-5. **Verificación ejecutable.** Nada se da por "hecho" sin que pasen `./init.sh` y
-   la suite de tests. "Compila" no es "funciona".
+5. **Verificación ejecutable, en dos niveles.** Nada se da por "hecho" sin que pase el gate.
+   Pero el gate tiene dos: **`./init.sh --rapido`** para cerrar una tanda (typecheck + lint +
+   los tests que el grafo relaciona con tu cambio + **todas** las guardias, ~1 min), y
+   **`./init.sh`** completo para cerrar la feature y **antes de cada PR, sin excepción**
+   (~5 min). Correr los 10.000 tests en cada tanda no es rigor, es una sala de espera; correr
+   solo los rápidos antes de un merge sí es un agujero. Detalle y límites en
+   `docs/verification.md`. "Compila" no es "funciona".
 6. **No inventes.** Si un dato no está en `docs/`, `specs/` o el código, es
    desconocido: pregunta o márcalo como abierto. No lo rellenes con supuestos.
 
