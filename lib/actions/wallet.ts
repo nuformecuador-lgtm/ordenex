@@ -16,7 +16,6 @@ import {
   listarMovimientosSchema,
   registrarMovimientoManualSchema,
   type ListarMovimientosCompletoResult,
-  type WalletBalanceDTO,
 } from "@/lib/types/wallet";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
@@ -35,12 +34,6 @@ export type ListarMovimientosActionResult =
 
 export type VerResumenCajaActionResult =
   | VerResumenCajaServiceResult
-  | { status: "unauthenticated" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
-
-export type VerBalanceActionResult =
-  | { status: "ok"; balance: WalletBalanceDTO }
-  | { status: "forbidden" }
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -137,34 +130,21 @@ export async function verResumenCajaAction(
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }
 
-/**
- * ⚠️ PUENTE TEMPORAL de la 173, y se declara como tal: **lo borra `T G.3`**.
- *
- * `WalletService.verBalance` ya no existe —lo sustituyo `verResumenCaja` (design §5.2)— pero la
- * pantalla `/wallet` sigue siendo la de la 42 hasta la Tanda G, que es la que renombra la
- * tarjeta y pinta las dos cifras. Esta accion mantiene esa pantalla viva **sin duplicar ninguna
- * derivacion**: es una PROYECCION de campos del DTO nuevo sobre la forma vieja, cero aritmetica.
- *
- * Y el numero no cambia, que es lo que hace seguro el puente: `enCaja` sobre un conjunto es,
- * numero por numero, lo que devolvia `derivarBalance(Σingresos, Σegresos)` sobre ese mismo
- * conjunto (design §1.3). Lo que la 173 parte en dos es el SIGNIFICADO, no este valor.
- */
-export async function verBalanceAction(
-  input: unknown,
-  deps: WalletDeps = {},
-): Promise<VerBalanceActionResult> {
-  const r = await verResumenCajaAction(input, deps);
-  if (r.status !== "ok") return r;
-  return {
-    status: "ok",
-    balance: {
-      ingresos: r.resumen.entradas,
-      egresos: r.resumen.salidas,
-      balance: r.resumen.enCaja,
-      signo: r.resumen.signoEnCaja,
-    },
-  };
-}
+// Feature 173 (T H.2/Tanda H) — el PUENTE `verBalanceAction` se RETIRA aqui.
+//
+// Existio entre la Tanda D y la Tanda G, y estaba declarado como puente desde el primer dia:
+// `WalletService.verBalance` desaparecio con `T D.2` (design §5.2, sustituido por
+// `verResumenCaja`), pero `/wallet` seguia siendo la pantalla de la 42 y la fase backend no
+// podia tocarla. El puente proyectaba los campos del DTO nuevo sobre la forma vieja
+// (`enCaja` -> `balance`), sin una sola operacion aritmetica propia.
+//
+// `T G.3` lo dejo SIN UN SOLO CONSUMIDOR (la pagina y el modulo pasaron a
+// `verResumenCajaAction`); su docstring decia «lo borra `T G.3`» y era falso —retirarlo es
+// tocar `lib/`, que es backend—. Lo borra esta tanda, que es la que puede.
+//
+// Con el se van `VerBalanceActionResult` y el import de `WalletBalanceDTO`, que no tenian otro
+// uso en este archivo. `WalletBalanceDTO` NO se borra del arbol: es el tipo de retorno de
+// `derivarBalance` (`lib/utils/wallet-balance.ts`), que R9 protege intacto.
 
 /** R15/R19: registra un movimiento manual de ajuste (solo maestro; monto>0, descripcion obligatoria). */
 export async function registrarMovimientoManualAction(

@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import {
   listarMovimientosAction,
   verResumenCajaAction,
-  verBalanceAction,
   registrarMovimientoManualAction,
 } from "@/lib/actions/wallet";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -12,9 +11,13 @@ import type { CajaResumenDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
 // Feature 42 (T10) — tests unit de las Server Actions de wallet (R19/R21/R25). Sin sesion
 // -> unauthenticated; rol no autorizado -> forbidden (el service lo decide); DTOs STRING.
 //
-// Feature 173 (T D.2, R64/R65): `verBalanceAction` deja de hablar con `verBalance` —que ya no
-// existe— y pasa a ser una PROYECCION de `verResumenCajaAction`, el borde nuevo. El cambio de
+// Feature 173 (T D.2, R64/R65): `verBalanceAction` dejo de hablar con `verBalance` —que ya no
+// existe— y paso a ser una PROYECCION de `verResumenCajaAction`, el borde nuevo. El cambio de
 // estas aserciones esta declarado en `design.md §11`.
+//
+// Feature 173 (Tanda H): ese puente se RETIRA. `T G.3` lo dejo sin un solo consumidor en `app/`
+// y esta tanda lo borra; los cuatro casos que lo median se sustituyen por UNO que afirma que la
+// forma vieja no puede volver.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
@@ -167,47 +170,25 @@ describe("verResumenCajaAction (R8/R64/R65)", () => {
   });
 });
 
-describe("verBalanceAction — PUENTE de la 173 hasta `T G.3`", () => {
-  it("sin sesion -> unauthenticated", async () => {
-    const service = fakeService();
-    const r = await verBalanceAction({}, { service, getActor: async () => null });
-    expect(r).toEqual({ status: "unauthenticated" });
-  });
+describe("el PUENTE `verBalanceAction` ya no existe (173, Tanda H)", () => {
+  it("el modulo de acciones de la wallet no exporta ninguna accion de «balance»", async () => {
+    // El puente vivio entre la Tanda D y la Tanda G, declarado como tal desde el primer dia:
+    // `T D.2` retiro `WalletService.verBalance` y `/wallet` todavia era la pantalla de la 42.
+    // `T G.3` lo dejo sin consumidores; la Tanda H lo retira. Este caso sustituye a los cuatro
+    // que median el puente: lo que se afirma ahora es que la forma vieja NO puede volver por la
+    // puerta de atras, ni con ese nombre ni con ningun otro.
+    const acciones = await import("@/lib/actions/wallet");
 
-  it("R19: rol no autorizado -> forbidden, sin balance", async () => {
-    const service = fakeService({
-      verResumenCaja: vi.fn(async () => ({ status: "forbidden" as const })),
-    });
-    const r = await verBalanceAction({}, { service, getActor: async () => OTRO });
-    expect(r).toEqual({ status: "forbidden" });
-  });
-
-  it("R25: maestro -> balance con montos STRING y signo", async () => {
-    const service = fakeService();
-    const r = await verBalanceAction({}, { service, getActor: async () => MAESTRO });
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("esperado ok");
-    expect(typeof r.balance.balance).toBe("string");
-    expect(r.balance.signo).toBe("positivo");
-  });
-
-  it("el puente es una PROYECCION del resumen, no una segunda derivacion", async () => {
-    // La unica razon de que `/wallet` siga en pie hasta la Tanda G. Lo que se afirma es que el
-    // numero que ve la pantalla vieja es EXACTAMENTE `enCaja` —el mismo que devolvia la 42—, y
-    // que en ningun caso es la GANANCIA: si alguien confundiera los campos al proyectar, la
-    // pantalla empezaria a mostrar la utilidad bajo el rotulo «Balance general».
-    const service = fakeService();
-    const puente = await verBalanceAction({}, { service, getActor: async () => MAESTRO });
-    const resumen = await verResumenCajaAction({}, { service, getActor: async () => MAESTRO });
-    if (puente.status !== "ok" || resumen.status !== "ok") throw new Error("esperado ok");
-
-    expect(puente.balance).toEqual({
-      ingresos: resumen.resumen.entradas,
-      egresos: resumen.resumen.salidas,
-      balance: resumen.resumen.enCaja,
-      signo: resumen.resumen.signoEnCaja,
-    });
-    expect(puente.balance.balance).not.toBe(resumen.resumen.ganancia);
+    expect(Object.keys(acciones).filter((k) => /balance/i.test(k))).toEqual([]);
+    // Control de no-vacuidad del `toEqual([])`: el modulo SI exporta acciones, y son las cuatro
+    // que quedan. Si el import fallara o devolviera un objeto vacio, el filtro de arriba pasaria
+    // sin haber mirado nada.
+    expect(Object.keys(acciones).sort()).toEqual([
+      "listarMovimientosAction",
+      "listarMovimientosCompletoAction",
+      "registrarMovimientoManualAction",
+      "verResumenCajaAction",
+    ]);
   });
 });
 
