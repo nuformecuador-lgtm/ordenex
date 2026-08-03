@@ -5,6 +5,8 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { ROLES_ACCESO_ANALITICA } from "@/lib/auth/menu-visibility";
 
 import { AnaliticaShell } from "./_components/AnaliticaShell";
+import { FiltrosOperativos } from "./_components/operativo/FiltrosOperativos";
+import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
 
 /**
  * Feature 129: ruta y shell del tablero de analítica. El rol se resuelve SOLO
@@ -19,11 +21,23 @@ import { AnaliticaShell } from "./_components/AnaliticaShell";
  * ninguna parte. La feature 133 amplía a esos tres roles tocando ESTA misma
  * constante (para no romper R10).
  *
- * El "prefetchea" de la ficha queda FUERA DE ALCANCE: hoy no hay ninguna
- * Server Action de analítica (126/127 siguen `pending`), así que no hay nada
- * que prefetchear sin inventar su contrato. El `async` de esta página ES el
- * punto de extensión: la 131 añade sus `await listar…()` entre el gate y el
- * `return`, y baja los resultados por las props del shell.
+ * Feature 131 (T6.1, D7): esta página NO prefetchea, a propósito. La prosa de
+ * `specs/129-…/design.md:143-145` anticipaba un `await listar…()` aquí, pero los
+ * dos guardias de esta misma ruta lo contradicen: `AnaliticaPage.test.tsx:102-104`
+ * exige `AnaliticaPage.length === 0`, y el censo sobre el código fuente de este
+ * archivo prohíbe que importe acciones, servicios o repositorios (R24 de la 129).
+ * **El guardia manda sobre la prosa del diseño**: un test es verificable y una
+ * frase de un `design.md` ajeno no. Los datos los pide el módulo de cliente por
+ * Server Action + SWR, que además es el patrón dominante del repo
+ * (`OrdenesModule`). Revivir el prefetch exige retirar esas dos aserciones en SU
+ * propio PR, no colarlo de lado.
+ *
+ * (Y sí: hasta este comentario tiene que evitar esos tres literales, porque el
+ * censo lee el archivo entero. No se relaja el guardia; se reescribe la frase.)
+ *
+ * Lo único que la 131 añade aquí son sus DOS slots (D5): `AnaliticaShell.tsx` no
+ * se toca, y el solape con la 132 —que añadirá `financiero={…}`— queda en la
+ * línea del `return`.
  */
 export default async function AnaliticaPage() {
   const actor = await resolveActorFromSession();
@@ -35,5 +49,7 @@ export default async function AnaliticaPage() {
     notFound();
   }
 
-  return <AnaliticaShell />;
+  return (
+    <AnaliticaShell filtros={<FiltrosOperativos />} operativo={<PanelesOperativos />} />
+  );
 }
