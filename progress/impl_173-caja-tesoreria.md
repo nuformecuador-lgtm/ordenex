@@ -1787,3 +1787,354 @@ Registrado también por el leader en la ficha de la **175** de `feature_list.jso
 - **`pnpm exec vitest run guard`** → `47 passed / 683 passed`.
 - **`pnpm exec vitest run tests/integration/db tests/integration/actions`** →
   `116 passed (116)` · `1443 passed (1443)`. **Cero rojos**: el único que había era `F.4`.
+
+---
+---
+
+# TANDA E — Los datos ya escritos `[P3]`
+
+> Misma rama `feature/173-caja-tesoreria`. Fase **backend**.
+> Alcance de esta entrada: **`T E.1`, `T E.2`, `T E.3`** — las tres **HECHAS**.
+
+## E1. Qué se hizo
+
+| Task | Estado | Nota |
+| --- | --- | --- |
+| `T E.1` — servicio de registro retroactivo | **HECHA** | **Reusa** los emisores de B y C. Su fuente no nombra ni una categoría ni un `origen_tipo` (§E4). |
+| `T E.2` — ejecutable con tres modos | **HECHA** | Sin flag **no escribe nada**; `--comprobar` nombra y sale != 0 mientras quede uno. |
+| `T E.3` — idempotencia contra Postgres | **HECHA** | Segunda pasada: **0** filas. Y sobre datos del **camino vivo**, tampoco duplica. |
+
+## E2. Archivos
+
+### Creados
+
+| Archivo | Task |
+| --- | --- |
+| `lib/interfaces/services/ICajaBackfillTesoreriaService.ts` | `T E.1` |
+| `lib/services/CajaBackfillTesoreriaService.ts` | `T E.1` |
+| `tests/unit/services/caja-backfill-tesoreria.test.ts` (41 tests) | `T E.1` |
+| `scripts/backfill-caja-tesoreria.ts` | `T E.2` |
+| `tests/unit/scripts/backfill-caja-tesoreria-cli.test.ts` (20 tests) | `T E.2` — declarado en §E8 |
+| `tests/integration/db/caja-backfill.test.ts` (5 tests) | `T E.3` |
+
+### Modificados
+
+| Archivo | Qué |
+| --- | --- |
+| `specs/173-caja-tesoreria/tasks.md` | `T E.1`/`T E.2`/`T E.3` marcadas + el archivo de test del CLI en la lista de `T E.2`. |
+
+**Ni una línea de código existente cambia.** El diff sobre `lib/`, `app/`, `scripts/` y `db/` del
+árbol previo está **vacío**: toda la tanda es aditiva y en archivos nuevos.
+
+### Lo que NO está en el diff (y es parte de la verificación)
+
+- `lib/services/CajaCodFeedService.ts` y `lib/services/CajaPagoTiendaFeedService.ts` — se **reusan
+  tal cual**. La Tanda E no los toca ni los envuelve: los llama.
+- `lib/interfaces/services/ICajaPagoTiendaFeedService.ts` — el puerto **sigue con dos métodos**.
+  Ver §E8: la alternativa «extraer los constructores de fila a un módulo compartido» habría
+  obligado a reescribir dos guardias (la de `T C.1` y la de la 172 recién afilada en §C13), y se
+  descartó por eso.
+- `lib/repositories/WalletMovimientoRepository.ts` — el único escritor, sin cambios.
+- `lib/services/WalletMensajeroFeedService.ts` — **R66 / `[P2]` = (a)**. El backfill **no genera
+  nada del lado mensajero**: ni el pago al mensajero, ni su anulación (§E5).
+- `db/` — la Tanda E no toca la base. No hay migración: lo que inserta son filas, no esquema.
+- `feature_list.json` — no se toca.
+
+## E3. `T E.1` — de dónde sale cada cosa
+
+`CajaBackfillTesoreriaService.ejecutar(modo)` hace cuatro cosas y ninguna más:
+
+1. **Cosecha** los tres orígenes de `design.md §6.1` y, por cada documento, le pide la fila **al
+   emisor del camino vivo**:
+   - cierre aprobado → `ICajaCodFeedService.construirIngresoCod` (Tanda B), que suma los créditos
+     `cod_recaudado` del **ledger** (no de las gestiones) y devuelve 0 o 1 fila;
+   - pago a tienda y anulación → `ICajaPagoTiendaFeedService` (Tanda C), el **mismo** puerto que
+     usa `LiquidacionService`.
+2. **Fecha** la única fila que el emisor vivo no fecha (§E6).
+3. **Descarta** lo que ya ocupa su clave `(origen_tipo, origen_id, categoria)`.
+4. **Solo en `aplicar`**, inserta con `crearMovimientos` → `createMany({ skipDuplicates: true })`.
+
+**Cómo obtiene las filas del puerto sin escribirlas** (`RecolectorDeFilasDeCaja`). El puerto de la
+Tanda C **escribe**: es lo que `design.md §4` exige para que la liquidación no tenga el
+repositorio. Pero `--simular` tiene que decir *de qué categoría* y *por qué monto* **sin tocar la
+base**. Se resuelve montando el puerto real sobre un `IWalletMovimientoRepository` que se queda
+las filas en memoria, inyectado por una **fábrica** (`crearPuertoDePago`). Así la simulación
+reporta, campo por campo, la fila que la liquidación escribiría — y hay un test que lo compara
+contra el puerto emitiendo por su cuenta.
+
+Los otros cuatro métodos del recolector **lanzan**. Un `[]` complaciente convertiría un error de
+cableado en un informe vacío que parece correcto.
+
+**Coste declarado:** N consultas indexadas (una por cierre aprobado) en vez de una agregación
+propia del ledger. Es deliberado: una agregación propia sería una **segunda fórmula** para el
+mismo dinero, que es justo lo que la Tanda B decidió no tener. Un script que se corre a mano una
+vez por entorno puede pagar ese coste; el libro de la caja no puede pagar dos fuentes.
+
+## E4. «No una copia paralela» — medido, no prometido
+
+El servicio **no nombra ni una de las 17 categorías de la caja ni ninguno de los 7 `origen_tipo`**.
+Dos tests lo barren sobre el código sin comentarios, leyendo los catálogos del SEED en runtime (no
+de una lista copiada a mano):
+
+```
+✓ su fuente no nombra NI UNA de las 17 categorias de la caja
+✓ ni ninguno de los 7 `origen_tipo`: la clave de idempotencia se LEE de la fila emitida
+✓ y tampoco compone las descripciones a mano: usa las dos funciones de la 172
+✓ las filas que propone son, campo por campo, las que emite el puerto de la Tanda C
+```
+
+Eso obligó a un cambio de diseño respecto al primer borrador: la caja se consulta **después** de
+tener las candidatas y con las claves que ellas traen (`origenTipo IN (...) AND origenId IN (...)`),
+en vez de con un `WHERE origen_tipo IN ('cierre_dia','pago_tienda')` escrito a mano. Sin eso, el
+backfill declaraba media clave de idempotencia por su cuenta. Y los rótulos del informe se llaman
+`pago_a_tienda` / `anulacion_de_pago_a_tienda` —no `pago_tienda`— precisamente para que ese barrido
+no pueda pasar por coincidencia de nombres.
+
+Las descripciones salen de `descripcionDePago` y `descripcionDeAnulacion` (172); el día de la
+anulación, de `medianocheUtcDelDia(fechaCalendarioCR(...))`, **las mismas dos funciones** que usa
+`LiquidacionService`. Lo único que cambia es de dónde sale el instante: allí del reloj, aquí del
+documento.
+
+## E5. `[P2]` = (a): el backfill no genera nada del lado mensajero
+
+Ni el diseño lo pide ni el código lo puede hacer:
+
+- `liquidacionPago.findMany({ where: { tiendaId: { not: null } } })` — los pagos a mensajero no se
+  examinan siquiera. Test: `examinados.pago_a_tienda` es **2** de 3 documentos.
+- `liquidacionAnulacion.findMany({ where: { pago: { tiendaId: { not: null } } } })` — ídem con las
+  anulaciones: **1** de 2.
+- El puerto de la Tanda C **no puede** emitir `egreso_pago_mensajero` (R23, ya medido en §C4/§C13),
+  así que aunque el WHERE fallara, la categoría no existiría por esa vía.
+- Un test afirma que ninguna fila del informe lleva `egreso_pago_mensajero` **ni** `ingreso_ajuste`.
+
+## E6. Las fechas — el punto peligroso de la tanda
+
+| Origen | Fecha | De dónde sale |
+| --- | --- | --- |
+| cierre aprobado | `MIN(fecha_movimiento)` de los movimientos de caja que ese cierre ya tiene | design §6.2 |
+| ídem, si no tiene ninguno | `cierre_dia.resuelto_at` | design §6.2 |
+| ídem, si tampoco | `cierre_dia.solicitado_at` | **añadido, declarado abajo** |
+| pago a tienda | `liquidacion_pago.fecha_pago` (`@db.Date` = medianoche UTC) | design §6.2 |
+| anulación | día **calendario de CR** de `liquidacion_anulacion.created_at` | design §6.2 |
+
+**El tercer escalón no está en el design y se declara aquí.** `resuelto_at` es NULLABLE en el
+esquema (`db/schema.prisma`), así que un cierre aprobado con `resuelto_at` NULL dejaría la fila sin
+fecha del origen — y «sin fecha» en `CrearMovimientoInput` significa `DEFAULT CURRENT_TIMESTAMP`,
+es decir, **exactamente el `now()` que R41 prohíbe**. `solicitado_at` es obligatorio y es del propio
+documento, así que la cadena nunca cae fuera del origen. Hay un test por cada escalón.
+
+La anulación usa el **día de CR**, no el UTC: su `created_at` de prueba es `2026-08-06T04:00Z`, que
+en Costa Rica son las 22:00 del **5**. Fecharla el 6 la sacaría de su propio día en cualquier
+informe por rango. Es la misma convención del camino vivo.
+
+## E7. `T H.3` mutación 3 (la obligatoria) — EJECUTADA, roja y revertida
+
+**Mutación:** en `CajaBackfillTesoreriaService.dePagosATienda`,
+`fechaMovimiento: pago.fechaPago` → `fechaMovimiento: this.deps.ahora()`.
+
+**Resultado: 5 tests rojos en 2 archivos**, uno de ellos **contra Postgres real**:
+
+```
+ ❯ tests/unit/services/caja-backfill-tesoreria.test.ts (41 tests | 4 failed)
+     × con el reloj en NAVIDAD, ni una sola fila lleva esa fecha
+     × pago a tienda: la `fecha_pago` del documento
+     × la fuente no construye ni una fecha, y el reloj se usa UNA sola vez
+     × las filas que propone son, campo por campo, las que emite el puerto de la Tanda C
+ ❯ tests/integration/db/caja-backfill.test.ts (5 tests | 1 failed)
+     × las TRES filas llegan a la tabla con su categoria, su monto y la fecha de su ORIGEN
+```
+
+El que lo mide de frente:
+
+```
+ FAIL  tests/unit/services/caja-backfill-tesoreria.test.ts >
+       R41 — ninguna fila se fecha con el reloj; todas con la coordenada de su origen >
+       con el reloj en NAVIDAD, ni una sola fila lleva esa fecha
+AssertionError: pago_a_tienda/pago-1: expected '2026-12-25T18:30:00.000Z'
+                                          not to be '2026-12-25T18:30:00.000Z'
+ ❯ tests/unit/services/caja-backfill-tesoreria.test.ts:474:72
+```
+
+Y el mismo defecto, **ya escrito en la tabla de Postgres**:
+
+```
+ FAIL  tests/integration/db/caja-backfill.test.ts > las TRES filas llegan a la tabla ...
+- Expected
++ Received
+      "categoria": "egreso_pago_tienda",
+-     "fecha": "2026-07-30T00:00:00.000Z",
++     "fecha": "2026-12-25T18:30:00.000Z",
+```
+
+Un pago de julio contabilizado en diciembre, en un libro inmutable: irreparable salvo por
+contraasiento. **Mutación revertida**; las dos suites vuelven a 46 verdes.
+
+**Por qué el reloj está cableado y no es código muerto.** `informe.instante` sí sale de
+`deps.ahora()`, y un test lo afirma. Sin eso, «no se fecha con el reloj» sería cierto por vacío y
+la mutación no tendría código vivo que mutar. Encima, un test estructural fija que la fuente **no
+contiene `new Date(` ni `Date.now(`** y que `ahora()` aparece **exactamente una vez**: las tres vías
+de meter el reloj en una fila caen.
+
+### Mutación 4 (extra) — el filtro de idempotencia deja de casar
+
+`.filter((f) => !ocupadas.has(claveDeOrigen(f.movimiento)))` → la clave nunca casa. Es la
+comprobación de que `T E.3` no pasa por vacío:
+
+```
+ ❯ tests/unit/services/caja-backfill-tesoreria.test.ts (41 tests | 6 failed)
+ ❯ tests/integration/db/caja-backfill.test.ts (5 tests | 2 failed)
+     × R39: dos ejecuciones seguidas — la SEGUNDA inserta 0 y ningun importe cambia
+     × R39 (el caso que importa): sobre datos que YA pasaron por el camino vivo, no duplica
+
+AssertionError: expected [ { ...(3) }, ...(2) ] to deeply equal []
++   { "documentoId": "93de593a-...", "movimiento": { "categoria": "ingreso_cod_recaudado",
++     "monto": "12801.00", "origenTipo": "cierre_dia", ... } }
+```
+
+Nótese que **la tabla no se duplicó** ni con esa mutación: el índice único parcial la contuvo. Es
+justo la propiedad que `T E.3` promete —la barrera es la base, no el `if`— y lo que cae es el
+CONTEO del informe, que es el daño real de ese defecto. **Mutación revertida.**
+
+## E8. Dos cosas declaradas, para que el review no tenga que deducirlas
+
+**(a) Un archivo de test más de los que `T E.2` listaba.** La task solo nombraba el script; la
+trazabilidad manda R40/R43/R44 al test del **servicio**, y ahí están. Pero «sin flag no escribe
+nada» y «no puede decir *al día* mientras quede uno» son propiedades **del CLI**, no del servicio:
+se miden en `tests/unit/scripts/backfill-caja-tesoreria-cli.test.ts`, con el molde de la 125
+(entorno inyectable, sin base y sin proceso hijo). `tasks.md` se actualizó para listarlo.
+
+**(b) `destinoLegible` se reescribe en vez de importarse de `scripts/backfill-analitica.ts`.** Son
+15 líneas sin lógica de dinero cuyo único fin es no imprimir la credencial. Importarlas de allí
+habría metido este script en el censo estructural de la **feature 125**
+(`tests/unit/analytics/backfill-guards.test.ts`, «el censo cubre todo lo que importa los modulos de
+la 125»), que exige listar a cada consumidor. Un backfill de otra feature no tiene por qué entrar en
+ese censo. Hay test de que no se filtra usuario ni contraseña, incluida una contraseña con `@`.
+
+**Lo que NO se hizo y por qué:** el camino DRY de verdad —extraer los dos constructores de fila del
+puerto a un módulo compartido y usarlo desde el puerto y desde el backfill— habría obligado a
+reescribir dos guardias que otra tanda acaba de afilar: la de `T C.1` («su fuente nombra DOS
+categorías») y la de la 172 (§C13, «filtrando las 17 categorías contra la fuente del puerto...»). Se
+descartó: el recolector consigue la misma propiedad —una sola declaración de la categoría— sin tocar
+nada de lo ya verificado.
+
+## E9. `T E.2` — los tres modos
+
+| Modo | Escribe | Código de salida | Qué dice |
+| --- | --- | --- | --- |
+| `--simular` (**defecto**) | **no** | 0 siempre | cuántas filas, de qué categoría, por qué monto |
+| `--aplicar` | sí | 0 | filas insertadas + «corre ahora `--comprobar`» |
+| `--comprobar` | **no** | **2** si queda uno, 0 si está al día | **nombra** cada documento pendiente |
+
+- **Sin flag no escribe nada**, medido contando con qué modo se invocó al servicio: `["simular"]`.
+- **Una errata (`--aplcar`) aborta**: `strict()` de zod. No se lee como «sin flag» y **no se crea el
+  servicio** (cero conexiones). Dos modos a la vez también abortan.
+- **R44 barrido sobre la salida entera**: con un pendiente, el texto —normal y de error, en
+  minúsculas— **no contiene «al dia» ni «al día»**, ni siquiera negado. Por eso la rama de
+  pendientes dice *«PENDIENTE: quedan N documentos...»* y la frase «AL DIA» se emite en **una sola
+  rama** del informe.
+- El eco imprime `host:puerto/base` **sin credencial**, y sin `DATABASE_URL` aborta antes de nada.
+
+## E10. `T E.3` — contra Postgres real
+
+Todo dentro de una transacción que **siempre se revierte** (patrón de la 169). La semilla —un cierre
+aprobado con contra-entrega de dos tiendas más un débito y un ajuste, un pago a tienda y su
+anulación— usa usuarios y zonas **ya existentes**; si la base no los tiene, la suite se salta.
+Medido en la base local: 6 usuarios, 13 zonas, y **0** cierres/pagos/movimientos previos, así que
+los conteos de esta suite son exactos, no aproximados. Un assert extra («las tres filas de esta
+prueba están en el plan») impide que la suite pase en vacío si la semilla no llegara a escribirse.
+
+- **R39, dos pasadas:** la primera inserta 3, la segunda **0**, y las filas leídas de la tabla son
+  **campo por campo idénticas** antes y después. Luego `--comprobar` dice **al día**.
+- **R39, el caso que importa:** se corre primero el **camino vivo** (`CajaCodFeedService` +
+  `WalletMovimientoRepository` para el cierre; el puerto real para el pago y su anulación) y
+  **encima** el backfill. Ni lo simula ni lo escribe: la tabla queda con sus **3** filas exactas.
+- **R42 contra el motor:** `count(wallet_movimiento)` antes y después de `simular` y `comprobar`:
+  **idéntico**. Y los dos **vieron** lo que falta (el informe nombra los documentos de la semilla).
+- **El `CHECK` de `T A.2`** acepta las tres filas: cada `categoria` empieza por su `tipo`. Si el
+  backfill emitiera una cruzada, el `aplicar` habría reventado con `23514`.
+- Las dos filas del pago —egreso y reverso— **comparten** `(origen_tipo, origen_id)`, conviven y su
+  neto sobre la caja es `0.00`.
+
+## E11. Trazabilidad `R<n>` → test
+
+| R | Test que lo verifica |
+| --- | --- |
+| R36 | `tests/unit/services/caja-backfill-tesoreria.test.ts` — «emite UN ingreso por cierre, con la SUMA EXACTA de sus creditos» (12801.00, con débito y ajuste del mismo cierre descartados), «un cierre SIN contra-entrega no emite fila, ni siquiera en 0.00», «un cierre que NO esta aprobado no se toca» + `tests/integration/db/caja-backfill.test.ts` (Postgres) |
+| R37 | idem — «emite UN egreso `egreso_pago_tienda` con el monto, el origen y la descripcion del documento» + «`[P2]` = (a): un pago a MENSAJERO no genera absolutamente nada» + la fila leída de la tabla en integración |
+| R38 | idem — «emite `ingreso_reverso_pago_tienda` —jamas `ingreso_ajuste`— por el monto del pago», «el egreso y su reverso COMPARTEN la clave de origen», «la anulacion de un pago a MENSAJERO tampoco genera nada» |
+| R39 | `tests/integration/db/caja-backfill.test.ts` — «dos ejecuciones seguidas: la SEGUNDA inserta 0 y ningun importe cambia» y **«sobre datos que YA pasaron por el camino vivo, no duplica»** + unidad: «con la caja ya completa, no queda ni una pendiente» |
+| R40 | `caja-backfill-tesoreria.test.ts` — «no llama al repositorio de la caja NI UNA vez, e informa 0 insertadas», «`comprobar` tampoco escribe», «dice cuantas filas, de que categoria y por que monto total», «lo que simula es lo que escribe» + `tests/unit/scripts/backfill-caja-tesoreria-cli.test.ts` — «sin argumentos, el servicio se invoca en modo `simular`» |
+| R41 | `caja-backfill-tesoreria.test.ts` — «con el reloj en NAVIDAD, ni una sola fila lleva esa fecha», «pero el reloj SI esta cableado», los **tres** escalones de la cadena del cierre, «pago a tienda: la `fecha_pago` del documento», «anulacion: el DIA CALENDARIO DE COSTA RICA», «la fuente no construye ni una fecha, y el reloj se usa UNA sola vez» + la mutación de §E7 |
+| R42 | idem — «en modo `simular`/`aplicar`/`comprobar`, cero `update`, `delete` y `upsert` en los CINCO delegados» (7 métodos × 5 delegados × 3 modos), «del repositorio de la caja solo usa `crearMovimientos`», «su fuente no nombra ninguna forma de modificar ni de borrar» + `caja-backfill.test.ts` — `count` idéntico contra Postgres |
+| R43 | `caja-backfill-tesoreria.test.ts` — «los cinco, con su documento y su origen, no solo un conteo» y «recorre los TRES origenes, diciendo cuantos documentos miro de cada uno» + `backfill-caja-tesoreria-cli.test.ts` — «cada pendiente sale con su origen, su id, su categoria, su monto y su fecha» |
+| R44 | `caja-backfill-tesoreria.test.ts` — «con cinco pendientes, `alDia` es false», «basta UNO —el mas pequeño de todos—», «con todo registrado, `alDia` es true» + `backfill-caja-tesoreria-cli.test.ts` — «la salida ENTERA no contiene esas palabras, ni siquiera negadas» y «sale con un codigo distinto de 0» |
+| R66 / `[P2]` | `caja-backfill-tesoreria.test.ts` — pago y anulación de mensajero fuera; ninguna fila lleva `egreso_pago_mensajero`; `WalletMensajeroFeedService` y su suite **fuera del diff** |
+
+## E12. Gate ejecutado
+
+> Gate **acotado**, el que ordenó el leader. La suite completa NO se corrió.
+
+**`pnpm typecheck`** → `tsc --noEmit`, sin salida, **exit 0**.
+
+**`pnpm lint`**
+
+```
+✖ 27 problems (0 errors, 27 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores** y **exactamente las 27 de la línea base** de las tandas A/B/C/D. Filtrando la salida
+por `backfill-caja`, `CajaBackfill` e `ICajaBackfill` → **cero coincidencias**.
+
+**`pnpm exec vitest related --run`** sobre los 6 archivos de la tanda
+
+```
+ Test Files  3 passed (3)
+      Tests  66 passed (66)
+   Duration  937ms
+```
+
+**`pnpm exec vitest run guard`** (obligatorio desde §C13)
+
+```
+ Test Files  47 passed (47)
+      Tests  683 passed (683)
+   Duration  3.90s
+```
+
+**683, idéntico a las tandas C, A.2 y D**: ninguna guardia ajena se movió. En particular el censo de
+escritores de `caja-173-alcance.guardia.test.ts` recorre **todo** `lib/` + `scripts/`, así que ya
+cubre los dos módulos nuevos sin editarlo: siguen siendo **un** escritor por libro ajeno.
+
+**`pnpm exec vitest run tests/integration/db tests/integration/actions`**
+
+```
+ Test Files  117 passed (117)
+      Tests  1448 passed (1448)
+   Duration  12.19s
+```
+
+Delta contra §H11 (116 archivos / 1443 tests): **+1 archivo y +5 tests**, que son exactamente los de
+`T E.3`. **Cero rojos ajenos**: nada de esta tanda tocó otra feature.
+
+**No corrido aquí:** `./init.sh --rapido` ni `./init.sh` completo. Los corre el leader.
+
+## E13. Lo que queda abierto (y no es de esta tanda)
+
+- **`T H.4`** — ejecutar `--simular` → revisión humana → `--aplicar` → `--comprobar` en **cada
+  entorno**, y leer por MCP las filas nuevas en producción. El ejecutable está; correrlo contra
+  entornos reales no es una decisión del backend. Recordatorio de `progress/medicion_TA0_173.md`:
+  **preview no es alcanzable por MCP**, así que allí `--comprobar` es la única evidencia posible.
+- **`T H.2`** — si amplía la lista explícita de módulos nuevos de la 173 en
+  `caja-173-alcance.guardia.test.ts`, los dos de esta tanda son
+  `lib/services/CajaBackfillTesoreriaService.ts` y `scripts/backfill-caja-tesoreria.ts`. El censo del
+  árbol ya los cubre; la lista explícita es redundancia barata.
+
+## E14. Veredicto de la Tanda E
+
+TANDA E entregada completa: el registro retroactivo **solo inserta** —cero `update`/`delete`/
+`upsert` medidos con espías sobre los cinco delegados y los tres modos—, **reusa** los emisores de
+las tandas B y C hasta el punto de que su fuente no nombra ni una categoría ni un `origen_tipo`,
+fecha cada fila con la coordenada de **su origen** —con la mutación obligatoria ejecutada, roja en 5
+tests y también **contra Postgres**— y es idempotente por índice: dos pasadas seguidas insertan
+**0** la segunda, y sobre datos que ya pasaron por el camino vivo tampoco duplica.

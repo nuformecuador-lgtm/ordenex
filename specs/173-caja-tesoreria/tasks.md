@@ -272,7 +272,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 
 # TANDA E — Los datos ya escritos `[P3]` · *backend*
 
-### [ ] T E.1 — Servicio de registro retroactivo
+### [x] T E.1 — Servicio de registro retroactivo
 - **Archivos:** `lib/interfaces/services/ICajaBackfillTesoreriaService.ts`,
   `lib/services/CajaBackfillTesoreriaService.ts`,
   `tests/unit/services/caja-backfill-tesoreria.test.ts` (NUEVOS).
@@ -281,14 +281,15 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 - **Hecho:** las fechas salen del **origen** y nunca de `now()` (test con un reloj fijo distinto de
   las fechas de los datos); ninguna fila existente se toca (`update`/`delete` con cero llamadas).
 
-### [ ] T E.2 — Ejecutable con tres modos
-- **Archivos:** `scripts/backfill-caja-tesoreria.ts` (NUEVO).
+### [x] T E.2 — Ejecutable con tres modos
+- **Archivos:** `scripts/backfill-caja-tesoreria.ts` (NUEVO),
+  `tests/unit/scripts/backfill-caja-tesoreria-cli.test.ts` (NUEVO, molde de la 125).
 - **Qué:** `--simular` (por defecto), `--aplicar`, `--comprobar`.
 - **Depende de:** T E.1 · **Cubre:** R40, R43, R44
 - **Hecho:** sin flag **no escribe nada**; `--comprobar` **nombra** los cierres, pagos y anulaciones
   sin movimiento de caja y no dice «al día» mientras quede uno.
 
-### [ ] T E.3 — Idempotencia real contra Postgres
+### [x] T E.3 — Idempotencia real contra Postgres
 - **Archivos:** `tests/integration/db/caja-backfill.test.ts` (NUEVO).
 - **Depende de:** T E.2 · **Cubre:** R39
 - **Hecho:** dos ejecuciones seguidas ⇒ la segunda inserta **0** filas y ningún importe cambia;
