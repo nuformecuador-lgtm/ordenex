@@ -299,28 +299,28 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 
 # TANDA F — Analítica `[P4]` · *backend*
 
-### [ ] T F.1 [P] — Guardia: las métricas de ingreso no se inflan
+### [x] T F.1 [P] — Guardia: las métricas de ingreso no se inflan
 - **Archivos:** `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` (NUEVO).
 - **Depende de:** T A.4 · **Cubre:** R51, R52
 - **Hecho:** ninguna de las tres métricas de ingreso declara una categoría de naturaleza
   «terceros»; `cod_recaudado` sigue con sus dos vistas y **no** gana la caja como tercera fuente. El
   guardia se lee del `Record` de naturaleza, no de una lista copiada a mano.
 
-### [ ] T F.2 — Catálogo: descripción de `egresos` + dos métricas nuevas
+### [x] T F.2 — Catálogo: descripción de `egresos` + dos métricas nuevas
 - **Archivos:** `lib/analytics/metrics.ts`, `lib/types/analitica-financiera.ts`.
 - **Depende de:** T F.1 · **Cubre:** R53, R54 (parte catálogo)
 - **Hecho:** `egresos` dice que incluye el dinero entregado a las tiendas; `dinero_en_caja` y
   `ganancia_ordenex` existen con `fuente: ledger / wallet_movimiento` y el alcance de las
   financieras; `IDS_FINANCIERAS_SERVIDAS` pasa a 10.
 
-### [ ] T F.3 — Servicio: las dos métricas nuevas reusan `derivarCaja`
+### [x] T F.3 — Servicio: las dos métricas nuevas reusan `derivarCaja`
 - **Archivos:** `lib/services/AnaliticaFinancieraService.ts`,
   `tests/unit/services/analitica-financiera-service.test.ts`.
 - **Depende de:** T F.2 · **Cubre:** R54, R55
 - **Hecho:** el manejador **no** reimplementa ninguna resta de dinero; el guardia de coherencia
   catálogo↔servicio sigue fallando por exceso **y** por defecto.
 
-### [ ] T F.4 [P] — La conciliación no se mueve
+### [x] T F.4 [P] — La conciliación no se mueve
 - **Archivos:** `tests/unit/services/analitica-financiera-conciliacion.test.ts` (+casos),
   `tests/unit/repositories/ingresos-analitica-repository.test.ts`.
 - **Depende de:** T F.2 · **Cubre:** R56, R57
