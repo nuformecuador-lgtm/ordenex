@@ -2484,3 +2484,42 @@ diagnosticó contra código muerto**, así que pide reevaluación antes de que a
   dejando una suite que parecía casi verde con la mitad de los tests. Se resolvió acortando el
   virtual store de pnpm. Mover el store fuera del proyecto **rompe la resolución de tipos** (~1.800
   errores falsos): se probó y se descartó. Detalle en `impl_130.md §4`.
+
+## Feature 125 — analítica: backfill histórico de `analytics_daily` · PR #264 (2026-08-02)
+
+Un CLI que recorre un rango de fechas y llama, una fecha cada vez, al agregador que entregó la 124.
+**34/34 requisitos** con test nombrado en verde. Suite final **783 archivos / 9535 tests / 0 rojos**;
+typecheck limpio; lint delta 0.
+
+- **Las mutaciones las aplicó el reviewer, no el implementer: 8 aplicadas, 8 muertas.** Cubren los
+  contratos que sostienen la feature —rango inclusivo, día CR en curso prohibido, orden cronológico,
+  todo-o-nada por fecha, código de salida ≠ 0 ante fallo, no-concurrencia, y ausencia de PII y de
+  credenciales en el eco—. Los 6 casos de integración corren contra Postgres de verdad, no saltados.
+- **La ventana ciega está medida, no declarada.** `orden_historial_estado` nace en la migración
+  `20260713120000` y la primera del repo es `20260708212416`: son **cinco días**. Por debajo de ese
+  horizonte toda medida sale a **cero filas** y la corrida **termina con éxito** —reconcilia 0 = 0, no
+  falla—. Se probó por los dos lados: el caso que da cero y su **gemelo**, la misma orden más una
+  transición, que sí produce filas. El cero no es un test hueco. Queda una **penumbra no medida**: las
+  órdenes que existían el 13/07 y no volvieron a transicionar nunca entran en ningún cubo, y eso no
+  caduca.
+- **La spec se contradecía a sí misma, y se descubrió al implementarla.** R33 sólo autorizaba tocar el
+  allowlist `AJENAS_A_R47`; R34 obligaba a editar **aserciones** de guardias ajenos. Eran
+  incompatibles. Y R34 tampoco tenía dato detrás: la corrida real midió 58 órdenes con un pico de 24
+  filas en una fecha, y fijar un umbral de producción con eso exige un multiplicador inventado, que D5
+  prohíbe. **El implementer paró en vez de rellenar el hueco y relajar un guardia a la vez.** Fue la
+  lectura correcta. → **R34 retirado a la ficha 174**, con su número reservado para no mover la
+  trazabilidad.
+- **Mutar barato reveló lo que leer no revelaba.** El reviewer no se limitó a inventariar los anclajes
+  de la cifra: los mutó. Salieron dos trampas que ningún documento recogía. (a) El literal `20_000` de
+  `rollup-service.test.ts:1047` es un anclaje **silencioso**: cambiando sólo el valor no se pone rojo,
+  deja de casar y queda como resto muerto rastreando el número viejo. (b) La cifra **no se puede
+  elegir libremente**: con el valor 7777 el caso R47(b) se puso rojo señalando un literal ajeno en
+  `lib/utils/whatsapp-telefono.ts`, porque recorre todo el árbol. Hay que comprobar colisiones antes
+  de fijar el número. Las dos viven ahora en la ficha 174.
+- **Un revert evitado en el bookkeeping.** `feature_list.json` salía de `e657f666`, anterior al merge
+  de la 124: el PR habría devuelto la 124 de `done` a `in_progress`. Es el riesgo estructural de
+  trabajar en un worktree mientras otra sesión mergea — el diff hay que leerlo contra `dev`, no contra
+  el punto de partida.
+- **La bitácora no se reescribe.** `impl_125.md` conserva su sección «T6 / R34 — PARADO» tal como se
+  escribió, con la fecha puesta, y gana una nota de cierre remitiendo a la 174. Un log corregido a
+  posteriori miente sobre lo que se sabía en cada momento.
