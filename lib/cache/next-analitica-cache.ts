@@ -25,6 +25,22 @@ import { cacheNula } from "@/lib/cache/cache-nula";
 import { conRegistroDeInvalidacion } from "@/lib/cache/registro-invalidacion";
 import type { IAnaliticaCache, OrigenInvalidacion } from "@/lib/interfaces/external/IAnaliticaCache";
 
+/**
+ * DATO DE INVENTARIO QUE `design.md §3` NO RECOGIA (verificado en el arbol de `C:/w128`, no
+ * heredado): en Next 16.2.10 `revalidateTag` tiene DOS parametros obligatorios,
+ * `revalidateTag(tag: string, profile: string | { expire?: number })`
+ * (`node_modules/next/dist/server/web/spec-extension/revalidate.d.ts:9`). La llamada de un
+ * solo argumento ni siquiera compila, y en ejecucion emite «"revalidateTag" without the second
+ * argument is now deprecated, add second argument of "max" or use "updateTag"»
+ * (`revalidate.js:41-44`).
+ *
+ * Se usa `"max"`, que es exactamente lo que ese mensaje indica como sustituto del
+ * comportamiento de un solo argumento. `updateTag` NO sirve aqui: lanza fuera de una Server
+ * Action y esta invalidacion la disparan handlers de job desde un route handler de cron
+ * (`revalidate.js:49-57`).
+ */
+const PERFIL_INVALIDACION = "max";
+
 export class NextAnaliticaCache implements IAnaliticaCache {
   /**
    * `revalidate` va SIEMPRE con el TTL de `lib/config/analitica-cache.ts` y NUNCA `false`
@@ -43,7 +59,7 @@ export class NextAnaliticaCache implements IAnaliticaCache {
 
   /** R11 — sin `try/catch`: lo que lance `revalidateTag` sube al llamador. */
   async invalidar(_origen: OrigenInvalidacion, tags: readonly string[]): Promise<void> {
-    for (const tag of tags) revalidateTag(tag);
+    for (const tag of tags) revalidateTag(tag, PERFIL_INVALIDACION);
   }
 }
 
