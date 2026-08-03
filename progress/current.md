@@ -8,6 +8,31 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 2026-08-03 — **127 servicios financieros → PR #269, esperando merge**
+
+Feature **127 → `done`**, PR **#269** hacia `dev` (rama `feature/127-analitica-financiera-servicios`,
+worktree `ordenex-wt-127`). Reviewer **APROBADO, 0 bloqueantes, 7 menores** (1–3 cerrados en el PR;
+4–7 en `progress/review_127.md`). Suite post-merge **821 archivos / 10411 tests, 0 rojos**. Cierre
+narrado en `progress/history.md`; bitácoras `impl_127.md`, `impl_127_C/D/E.md`.
+
+**Lo único que hay que saber antes de tocar nada relacionado:** esta feature modificó
+`lib/analytics/metrics.ts`, que es **el catálogo de la 135 y fuente única de trece features**. El
+diff son **exactamente tres cosas**, cada una con autorización humana fechada en
+`progress/decision_C2_127.md` — ⟨D8⟩ `egresos.estadoProduccion`, ⟨D10⟩ los tres ledgers en
+`conciliacion_cierres.fuente.tablas`, ⟨D11⟩ el comentario que ⟨D8⟩ dejó mintiendo. **Esa autorización
+no se hereda:** la siguiente feature que necesite ese archivo necesita la suya.
+
+**Aviso a la 132:** cinco de las ocho métricas sirven `filas: []` con sólo `total` pese a declarar
+`granos: ["fecha"]` — no hay serie temporal que pintar ahí (pregunta abierta 5 del spec).
+
+**Deuda que NO es de la 127 y sigue sin dueño:** C7 (`derivarCuentaPorPagar` de la feature 44 puede
+devolver monto negativo con `signo: "cero"`) y el defecto de `whereRollup`, dirigido a la **126**.
+
+**Nota de entorno:** la base local tiene aplicada `20260728120000_orden_historial_origen_deshacer_asignacion`,
+que **no existe en `prisma/migrations`**. Residuo de otra rama sobre la misma base, ajeno a la 127.
+
+---
+
 ## 🚀 2026-08-03 — **172 EN PRODUCCIÓN** · **EMPIEZA A LEER POR AQUÍ**
 
 **Ya existe forma de registrar un pago, y está desplegada.** Era el agujero de fondo del sistema:

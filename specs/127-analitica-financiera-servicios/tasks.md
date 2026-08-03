@@ -227,10 +227,14 @@ Depende de: E.
 - [x] **F.7** Mapa `R1..R43 → test` en `progress/impl_127.md`, con la salida real de la suite.
   *Hecho cuando:* no queda ningún `R` sin test, `./init.sh` termina en verde y la corrida reporta
   **≥ 778 archivos y 0 rojos** (baseline). → **R36**
-- [ ] **F.8** Sincronización con `dev` y PR hacia `dev`.
+- [x] **F.8** Sincronización con `dev` y PR hacia `dev`.
   *Hecho cuando:* `git merge origin/dev` resuelto —**mirando con cuidado `lib/analytics/metrics.ts`,
   que es archivo ajeno**—, suite verde tras el merge y PR abierto citando la autorización de D8.
   Conflictos ambiguos se preguntan al humano y se registran en `progress/current.md`.
+  *(2026-08-03 — merge `a2ea0381`, 119 archivos, sin conflictos; el diff de `metrics.ts` sigue siendo
+  las tres cosas de D8/D10/D11 y nada más. Suite post-merge **821 archivos / 10411 tests, 0 rojos**,
+  corrida dos veces: la segunda con la migración `20260802120000_liquidacion_pago` de la 172 ya
+  aplicada en la base local. PR **#269** hacia `dev`, con D8/D10/D11 y la fuga C8 en el cuerpo.)
 
 ---
 
