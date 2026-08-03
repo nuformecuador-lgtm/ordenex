@@ -459,9 +459,11 @@ const CATALOGO = [
     clase: "live",
     unidad: "moneda",
     unidadDeConteo: "moneda",
-    // `declarada`: la ficha de la 127 compromete ingresos, cuentas por pagar y
-    // conciliacion de cierres; los egresos NO aparecen ahi.
-    estadoProduccion: "declarada",
+    // `producida` desde ⟨D8⟩ (humano, 2026-08-02 — ver `progress/decision_C2_127.md`). La ficha
+    // original de la 127 comprometia ingresos, cuentas por pagar y conciliacion de cierres, y los
+    // egresos NO aparecian ahi: por eso esto decia `declarada`. El humano amplio el alcance y la
+    // 127 los sirve de verdad (Σ de las ocho categorias `egreso_*`, tarea D.5).
+    estadoProduccion: "producida",
     granos: ["fecha"],
     fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
     alcance: ALCANCE_FINANCIERA,
@@ -534,7 +536,19 @@ const CATALOGO = [
     unidadDeConteo: "moneda",
     estadoProduccion: "producida",
     granos: ["fecha"],
-    fuente: { tipo: "snapshot_cierre", tablas: ["cierre_dia", "cierre_bodega"] },
+    // ⟨D10⟩ humano, 2026-08-02 (`progress/decision_C2_127.md`): los TRES ledgers se declaran
+    // aqui ademas de los dos cierres, porque R23 de la 127 concilia el snapshot aprobado
+    // CONTRA el dinero realmente movido (`origen_tipo = cierre_dia`).
+    fuente: {
+      tipo: "snapshot_cierre",
+      tablas: [
+        "cierre_dia",
+        "cierre_bodega",
+        "wallet_movimiento",
+        "wallet_tienda_movimiento",
+        "pago_mensajero_movimiento",
+      ],
+    },
     alcance: ALCANCE_FINANCIERA,
     // `definicion` sin `categorias` A PROPOSITO: los cuatro estados de cierre viven en el
     // enum `CierreEstado`, que NO esta en la lista cerrada de vocabularios que R9 permite

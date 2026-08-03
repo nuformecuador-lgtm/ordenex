@@ -2588,3 +2588,46 @@ typecheck limpio; lint delta 0.
   escribió, con la fecha puesta, y gana una nota de cierre remitiendo a la 174. Un log corregido a
   posteriori miente sobre lo que se sabía en cada momento.
 
+## Feature 127 — analítica: servicios financieros · PR #269 (2026-08-03)
+
+Ocho métricas de dinero sobre `ConsultaAnalitica`: ingresos, recaudo COD por método, las dos de
+cuentas por pagar, egresos y conciliación de cierres. 43 requisitos, todos mapeados a test.
+Reviewer **APROBADO, 0 bloqueantes**. Suite post-merge **821 archivos / 10411 tests, 0 rojos**.
+
+- **Una contradicción del spec que sólo aparece al implementar (C2).** R4 exige que las tablas que
+  un repositorio consulta sean subconjunto de las que su métrica declara; R23 obliga a comparar el
+  snapshot de cierre aprobado **contra** el dinero realmente movido en los ledgers. Con el catálogo
+  vigente el repositorio de conciliación **no podía cumplir ambos**, y el guardia B.3 se ponía rojo
+  en cuanto se escribiera C.4 — que es exactamente lo que tenía que pasar. El humano amplió el
+  catálogo (⟨D10⟩) en vez de aflojar el guardia: aflojarlo lo volvía decorativo justo en la métrica
+  donde más importa. **El test que fijaba la contradicción no se borró: se dio vuelta**, y ahora
+  juzga contra un catálogo *hipotético* para no mutar el real dentro de un test.
+- **Tres cambios y ni uno más en archivo ajeno.** `lib/analytics/metrics.ts` es el catálogo de la 135,
+  fuente única de trece features. Cada toque lleva autorización humana fechada citada en el propio
+  código y en `progress/decision_C2_127.md`: ⟨D8⟩ `estadoProduccion`, ⟨D10⟩ `fuente.tablas`, ⟨D11⟩ el
+  comentario que ⟨D8⟩ dejó mintiendo. El diff completo se lee de un vistazo. **Un cambio en el
+  catálogo compartido sin la autorización a la vista es indistinguible de un retoque de paso.**
+- **Un alias de tipo escondió una fuga de identidad (C8).** `deConciliacion` devolvía `porEstado` tal
+  cual salía del repositorio; como `GrupoCierrePorEstado` es alias de `FilaConciliacion`, **compilaba
+  y parecía gratis** mientras filtraba al DTO campos que R14 no declara. Lo encontró el barrido que
+  serializa el DTO entero y busca identidades en la cadena: **una inspección campo por campo no lo
+  habría visto.** El arreglo es lista blanca explícita, deliberadamente sin spread.
+- **La cobertura de R14 se apoya en menos de lo que parece.** Cinco de las ocho métricas sirven
+  `filas: []` con sólo `total` pese a declarar `granos: ["fecha"]`, así que su barrido de identidad es
+  trivial: el peso real recae en las tres que sí traen filas — que es donde apareció C8. Queda como
+  pregunta abierta 5 del spec, y como aviso dirigido a la 132, que tampoco puede pintarles serie.
+- **El guardia que se afloja solo.** Al apretar los censos, el de *alcance* admitía igualdad exacta
+  (un brazo), pero el de *fuente* tiene dos —lista declarada **más** descubrimiento por import— y el
+  segundo es abierto por diseño. Igualdad exacta ahí habría creado una lista que se desactualiza sola
+  en cuanto la 132 importe algo, y que el siguiente aflojaría. Se exigió lo más fuerte que se
+  sostiene, incluyendo que el brazo de descubrimiento esté **vivo** y no sólo presente.
+- **Vitest no typechequea.** Un agente parado a mitad dejó un uso de `TablaDinero` sin importar: los
+  615 tests pasaban en verde y el rojo sólo existía en `tsc --noEmit`. Verde de suite no es verde.
+- **Una mutación que no llegó al disco parece un hueco del test.** El leader reportó que mutar el
+  umbral no ponía nada rojo; el comando `perl` nunca había escrito el archivo. Rehecha con
+  verificación previa de que la línea cambió: 3 rojos. **Confirmar que la mutación aterrizó antes de
+  creerle al verde** pasa a ser parte del método.
+- **La suite que creí cortada sí había corrido.** El archivo de salida tenía 208 bytes porque lo miré
+  a mitad de ejecución, no porque `migrate status` hubiera abortado la cadena. Leer un log en curso
+  como si fuera final es la misma familia de error que el conteo de rojos en una corrida degradada.
+
