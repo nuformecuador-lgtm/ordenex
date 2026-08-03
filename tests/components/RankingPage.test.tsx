@@ -117,8 +117,9 @@ describe("RankingPage — control de acceso por rol (R16/R17/R18)", () => {
     const page = await RankingPage();
     render(page);
 
+    // El ranking se presenta en el podio (`RankingPodio`), ya no en una tabla.
     expect(
-      screen.getByRole("table", { name: "Ranking diario de mensajeros" }),
+      screen.getByRole("list", { name: "Podio del ranking diario" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });

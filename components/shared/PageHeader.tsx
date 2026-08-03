@@ -12,6 +12,24 @@ interface PageHeaderProps {
 }
 
 /**
+ * Pedido humano: el encabezado se tiñe SEGÚN EL ROL de quien está dentro, con un tinte
+ * CLARO —lo justo para que se note de un vistazo en qué portal estás, sin tocar el
+ * contraste del título ni de los controles, que siguen en navy.
+ *
+ * El rol no se resuelve aquí (este componente es de presentación pura y lo usan páginas
+ * server y client): lo pone el layout del portal como `data-rol` sobre el contenedor
+ * `group/app`, y cada variante se elige por CSS. Un rol sin variante (o sin sesión) se
+ * queda con el fondo transparente de antes.
+ */
+const FONDO_POR_ROL = [
+  "group-data-[rol=maestro]/app:bg-navy/5",
+  "group-data-[rol=admin]/app:bg-brand/10",
+  "group-data-[rol=adminSatelite]/app:bg-info/10",
+  "group-data-[rol=adminTienda]/app:bg-warning/10",
+  "group-data-[rol=mensajero]/app:bg-success/10",
+].join(" ");
+
+/**
  * Encabezado de página estandarizado (fondo navy, texto blanco). Uso:
  * `<PageHeader title="..." description="..." actions={<Button />}>`.
  * Componente de presentación puro, server-compatible.
@@ -26,7 +44,7 @@ export function PageHeader({
   const today = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   return (
-    <header className="flex flex-row gap-3 px-5 py-4 text-navy border-b border-navy/20 justify-between">
+    <header className={`flex flex-row gap-3 px-5 py-4 text-navy border-b border-navy/20 justify-between ${FONDO_POR_ROL}`}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

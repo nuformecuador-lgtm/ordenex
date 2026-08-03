@@ -105,6 +105,16 @@ function montar(yaActiva: boolean, onGestionarPedido = vi.fn().mockResolvedValue
   return onGestionarPedido;
 }
 
+/**
+ * Rediseño ux: el gate de la guía arranca CERRADO dentro del panel; lo abre el CTA
+ * "Gestionar esta orden". Los casos que verifican la guía pasan por aquí primero.
+ */
+async function abrirGate(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    screen.getByRole("button", { name: "Gestionar esta orden" }),
+  );
+}
+
 /** Monta con el puntero fijado y abre la rama `incidente`. */
 async function abrirIncidente(user: ReturnType<typeof userEvent.setup>) {
   montar(true);
@@ -183,8 +193,10 @@ describe("R33 — la opción de incidente existe y está DIFERENCIADA de los 4 d
 
 describe("R12 — el gate de verificación de guía sigue siendo la puerta, también del incidente", () => {
   it("sin verificar la guía NO se ofrece ningún resultado, tampoco el incidente", async () => {
+    const user = userEvent.setup();
     montar(false);
-    // El panel arranca en el paso "detalle": sólo el gate.
+    // El panel arranca en el paso "detalle": sólo el gate (que además arranca cerrado).
+    await abrirGate(user);
     expect(
       await screen.findByRole("region", {
         name: "Verificar la guía del paquete antes de gestionar",
@@ -200,6 +212,7 @@ describe("R12 — el gate de verificación de guía sigue siendo la puerta, tamb
     const user = userEvent.setup();
     const onGestionarPedido = montar(false);
 
+    await abrirGate(user);
     fireEvent.change(screen.getByLabelText("Número de guía"), {
       target: { value: String(NUM_GUIA + 1) },
     });
@@ -214,6 +227,7 @@ describe("R12 — el gate de verificación de guía sigue siendo la puerta, tamb
     const user = userEvent.setup();
     const onGestionarPedido = montar(false);
 
+    await abrirGate(user);
     fireEvent.change(screen.getByLabelText("Número de guía"), {
       target: { value: String(NUM_GUIA) },
     });

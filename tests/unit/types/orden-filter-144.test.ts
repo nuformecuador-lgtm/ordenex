@@ -196,7 +196,10 @@ describe("sin regresion del contrato previo (R45)", () => {
       page: 1,
       pageSize: ordenesConfig.DEFAULT_PAGE_SIZE,
       sortBy: "created_at",
-      sortDir: "desc",
+      // Default cambiado a `asc` por pedido humano (ver `listarOrdenesSchema`): la orden
+      // mas antigua primero. Lo que R45 vigila es que sin `filter` el input parseado no
+      // gane ni pierda claves, no cual era la direccion de ayer.
+      sortDir: "asc",
     });
   });
 

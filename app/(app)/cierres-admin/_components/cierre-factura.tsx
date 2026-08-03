@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, MapPin, Store, Undo2, Warehouse } from "lucide-react";
+import {
+  Calendar,
+  ChevronDown,
+  MapPin,
+  Store,
+  Undo2,
+  User,
+  Warehouse,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +17,7 @@ import { Card } from "@/components/ui/card";
 import { KpiValorAnimado } from "@/components/shared/KpiValorAnimado";
 import { cn } from "@/lib/utils";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
+import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -64,7 +73,6 @@ import {
 const FACTURA_TITULO = "Cierre del día";
 const FACTURA_FOLIO_LABEL = "Comprobante";
 const FACTURA_MENSAJERO_LABEL = "Mensajero";
-const FACTURA_DESTINO_LABEL = "Destino";
 const FACTURA_SOLICITADO_LABEL = "Solicitado";
 const FACTURA_RESUELTO_LABEL = "Resuelto";
 // Conserva el nombre del panel al que reemplazó: es el que localizan los tests y el E2E.
@@ -74,15 +82,23 @@ const FACTURA_ORDENES_TITULO = "Órdenes del cierre";
 const FACTURA_TOTAL_GENERAL_LABEL = "Total general";
 const FACTURA_MOTIVO_RECHAZO_LABEL = "Motivo de rechazo";
 const FACTURA_ORDENES_KPI_LABEL = "Órdenes";
+// --- Rótulos de la tarjeta compacta del resumen ---
+const RESUMEN_TOTAL_LABEL = "Total";
+const RESUMEN_VER_DETALLES = "Ver detalles";
+const RESUMEN_OCULTAR_DETALLES = "Ocultar";
+const RESUMEN_METODOS_TITULO = "Desglose por método";
+const RESUMEN_AJUSTES_TITULO = "Ajustes";
+const RESUMEN_FECHAS_TITULO = "Fechas";
 
 const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
   bodega_central: "Bodega central",
   bodega_satelite: "Bodega satélite",
 };
 
-/** Destino legible de un cierre (tipo + zona). */
-function destino(c: CierreAdminResumen): string {
-  return `${DESTINO_LABEL[c.destinoTipo]} · ${c.destinoZonaNombre}`;
+/** Destino legible de un cierre (tipo + zona, si se conoce el nombre de la zona). */
+function destino(c: { destinoTipo: CierreDestinoTipo; destinoZonaNombre?: string }): string {
+  const tipo = DESTINO_LABEL[c.destinoTipo];
+  return c.destinoZonaNombre ? `${tipo} · ${c.destinoZonaNombre}` : tipo;
 }
 
 /** Folio corto y estable del comprobante: los últimos 8 del `cierreId`. */
@@ -98,21 +114,6 @@ function fecha(iso: string | null): string {
 /* ------------------------------------------------------------------ *
  * Piezas del comprobante
  * ------------------------------------------------------------------ */
-
-/** Bloque `etiqueta / valor` de la cabecera del comprobante. */
-function DatoCabecera({
-  label,
-  children,
-}: Readonly<{ label: string; children: ReactNode }>) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-sm font-medium text-navy">{children}</span>
-    </div>
-  );
-}
 
 /**
  * Renglón de la factura: concepto a la izquierda, monto a la derecha, alineados por
@@ -180,21 +181,6 @@ function BloqueRenglones({
   );
 }
 
-/** Total de cierre del comprobante, destacado sobre fondo de marca. */
-function TotalFactura({
-  label,
-  value,
-}: Readonly<{ label: string; value: string }>) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-navy px-4 py-3 text-white">
-      <span className="text-sm font-medium uppercase tracking-wider">
-        {label}
-      </span>
-      <span className="text-xl font-semibold tabular-nums">{value}</span>
-    </div>
-  );
-}
-
 /** KPI animado del comprobante (contador desde 0, igual que el portal del mensajero). */
 function KpiFactura({
   label,
@@ -244,47 +230,6 @@ function ParPagoIngreso({
   );
 }
 
-/** Cabecera común del comprobante: marca, folio, estado y las partes involucradas. */
-function CabeceraFactura({
-  cierre,
-  acciones,
-}: Readonly<{ cierre: CierreAdminResumen; acciones?: ReactNode }>) {
-  return (
-    <div className="flex flex-col gap-4 border-b border-border pb-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.2em] text-brand">
-            Ordenex
-          </span>
-          <h3 className="text-lg font-semibold text-navy">{FACTURA_TITULO}</h3>
-          <span className="font-mono text-xs text-muted-foreground">
-            {FACTURA_FOLIO_LABEL} #{folio(cierre.cierreId)}
-          </span>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <EstadoCierreBadge estado={cierre.estado} />
-          {acciones}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <DatoCabecera label={FACTURA_MENSAJERO_LABEL}>
-          {cierre.mensajeroNombre}
-        </DatoCabecera>
-        <DatoCabecera label={FACTURA_DESTINO_LABEL}>
-          {destino(cierre)}
-        </DatoCabecera>
-        <DatoCabecera label={FACTURA_SOLICITADO_LABEL}>
-          {fecha(cierre.solicitadoAt)}
-        </DatoCabecera>
-        <DatoCabecera label={FACTURA_RESUELTO_LABEL}>
-          {fecha(cierre.resueltoAt)}
-        </DatoCabecera>
-      </div>
-    </div>
-  );
-}
-
 /** Envoltorio del comprobante: card con la franja de marca arriba. */
 function HojaFactura({
   ariaLabel,
@@ -293,12 +238,20 @@ function HojaFactura({
   return (
     // gap-0/py-0: la card por defecto separa y acolcha sus hijos; acá la franja de
     // marca tiene que pegarse al borde superior y el padding lo pone el cuerpo.
+    //
+    // `shrink-0`: dentro del modal esta card es un flex item de un contenedor con
+    // `max-h`. Sin esto flexbox la ENCOGE para que quepa —y con varias hojas (el cierre
+    // de bodega pinta una por cada cierre_dia) cada una quedaba reducida a su encabezado
+    // y sus KPIs, sin barra propia que dejara ver el resto—. Con `shrink-0` cada hoja
+    // conserva su alto natural y quien scrollea es el contenedor del modal, que para eso
+    // tiene su `overflow-y-auto`. `overflow-hidden` (el de `Card`) conserva el recorte
+    // que redondea las esquinas. Fuera del modal no hay `max-h` y esto no cambia nada.
     <Card
       aria-label={ariaLabel}
       role="region"
-      className="gap-0 overflow-hidden py-0 shadow-sm"
+      className="shrink-0 gap-0 py-0 shadow-sm"
     >
-      <div aria-hidden="true" className="h-1.5 w-full bg-brand" />
+      <div aria-hidden="true" className="h-1.5 w-full shrink-0 bg-brand" />
       <div className="flex flex-col gap-5 p-5">{children}</div>
     </Card>
   );
@@ -308,74 +261,353 @@ function HojaFactura({
  * Resumen (cola + histórico) como comprobante
  * ------------------------------------------------------------------ */
 
+/**
+ * ¿El monto STRING es cero? Comparación TEXTUAL ("0", "0.00"), no aritmética: sirve para
+ * apagar visualmente un renglón sin romper el money-safe (nada de `Number`/`parseFloat`).
+ */
+function esMontoCero(monto: string): boolean {
+  return /^-?0(\.0+)?$/.test(monto.trim());
+}
+
+/** Renglón `concepto ..... monto` del desplegable compacto. El monto en cero va apagado. */
+function LineaMonto({
+  label,
+  monto,
+  ultima = false,
+}: Readonly<{ label: string; monto: string; ultima?: boolean }>) {
+  return (
+    <div
+      className={cn(
+        "flex justify-between gap-3 py-1 text-[13px]",
+        !ultima && "border-b border-dashed border-border",
+      )}
+    >
+      <span className="text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "tabular-nums",
+          esMontoCero(monto)
+            ? "text-muted-foreground"
+            : "font-medium text-navy",
+        )}
+      >
+        {money(monto)}
+      </span>
+    </div>
+  );
+}
+
+/** Rótulo de una columna del desplegable compacto. */
+function TituloColumna({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+/** Dato `rótulo / valor` de la columna de fechas. */
+function LineaFecha({
+  label,
+  value,
+  ultima = false,
+}: Readonly<{ label: string; value: string; ultima?: boolean }>) {
+  return (
+    <div
+      className={cn(
+        "flex justify-between gap-3 py-1 text-[13px]",
+        !ultima && "border-b border-dashed border-border",
+      )}
+    >
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-navy tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 export interface CierreFacturaResumenProps {
   cierre: CierreAdminResumen;
   /** Botonera de la fila equivalente en la tabla (Ver / decidir, Destrabar…). */
   acciones?: ReactNode;
+  /**
+   * Rótulo extra junto al estado. Lo usa el histórico para marcar que un `rechazado` es
+   * BLOQUEANTE hasta que el mensajero re-solicite (feature 109/R31): el badge de estado
+   * solo dice "Rechazado", que se lee como cerrado.
+   */
+  rotulo?: ReactNode;
 }
 
 /**
- * Un cierre de la cola o del histórico leído como comprobante: cabecera con las partes,
- * KPIs animados, el desglose del dinero recibido y el total. Mismos datos que la fila de
- * la tabla, sin nada derivado acá.
+ * Un cierre de la cola o del histórico leído como comprobante COMPACTO: una cabecera de
+ * dos líneas —marca, folio, estado, las partes y el total— y el desglose (métodos,
+ * ajustes, fechas) detrás de un desplegable. Mismos datos que la fila de la tabla, sin
+ * nada derivado acá: los montos llegan STRING y se muestran con `money()`.
+ *
+ * Lo que NO se esconde tras el desplegable, a propósito: la botonera `acciones` (es la
+ * decisión del cierre, no un detalle) y el motivo de rechazo (explica el estado). El
+ * toggle se renderiza UNA sola vez y se reordena por CSS: duplicarlo por breakpoint
+ * duplicaría también los nombres accesibles de los botones.
  */
 export function CierreFacturaResumen({
   cierre,
   acciones,
+  rotulo,
 }: Readonly<CierreFacturaResumenProps>) {
   return (
-    <HojaFactura
+    <HojaResumen
+      titulo={FACTURA_TITULO}
       ariaLabel={`Comprobante del cierre de ${cierre.mensajeroNombre}`}
-    >
-      <CabeceraFactura cierre={cierre} acciones={acciones} />
+      toggleSufijo={`del cierre de ${cierre.mensajeroNombre}`}
+      folio={folio(cierre.cierreId)}
+      estado={cierre.estado}
+      rotulo={rotulo}
+      acciones={acciones}
+      partes={[
+        { icon: <User size={14} aria-hidden="true" />, texto: cierre.mensajeroNombre },
+        { icon: <Warehouse size={14} aria-hidden="true" />, texto: destino(cierre) },
+        { icon: <Calendar size={14} aria-hidden="true" />, texto: fecha(cierre.solicitadoAt) },
+      ]}
+      totales={cierre.totales}
+      totalPagoMensajero={cierre.totalPagoMensajero}
+      totalIngresoBodegaRechazos={cierre.totalIngresoBodegaRechazos}
+      solicitadoAt={cierre.solicitadoAt}
+      resueltoAt={cierre.resueltoAt}
+      motivoRechazo={cierre.motivoRechazo}
+    />
+  );
+}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <KpiFactura
-          label={FACTURA_TOTAL_GENERAL_LABEL}
-          value={cierre.totales.general}
-          moneda
-        />
-        <KpiFactura
-          label={PAGO_MENSAJERO_LABEL}
-          value={cierre.totalPagoMensajero}
-          moneda
-        />
-        <KpiFactura
-          label={INGRESO_BODEGA_RECHAZOS_LABEL}
-          value={cierre.totalIngresoBodegaRechazos}
-          moneda
-        />
+/** Una parte involucrada en el cierre, tal como se lista en la segunda línea. */
+interface ParteComprobante {
+  icon: ReactNode;
+  texto: string;
+}
+
+interface HojaResumenProps {
+  titulo: string;
+  ariaLabel: string;
+  /** Cola del nombre accesible del toggle ("Ver detalles <sufijo>"). */
+  toggleSufijo: string;
+  folio: string;
+  estado: CierreAdminResumen["estado"];
+  rotulo?: ReactNode;
+  acciones?: ReactNode;
+  partes: ParteComprobante[];
+  totales: CierreAdminResumen["totales"];
+  totalPagoMensajero: string;
+  totalIngresoBodegaRechazos: string;
+  solicitadoAt: string;
+  resueltoAt: string | null;
+  motivoRechazo: string | null;
+  /** Datos propios del comprobante (p. ej. cuántos cierres del día consolida). */
+  extra?: ReactNode;
+}
+
+/**
+ * La hoja compacta en sí, sin saber de qué cierre habla. La comparten el comprobante de
+ * un cierre de MENSAJERO y el de un cierre de BODEGA: cambian las partes involucradas y
+ * el título, pero la estructura (marca, folio, estado, total, desplegable con métodos /
+ * ajustes / fechas) es la misma y no tiene por qué existir dos veces.
+ */
+function HojaResumen({
+  titulo,
+  ariaLabel,
+  toggleSufijo,
+  folio: numeroFolio,
+  estado,
+  rotulo,
+  acciones,
+  partes,
+  totales,
+  totalPagoMensajero,
+  totalIngresoBodegaRechazos,
+  solicitadoAt,
+  resueltoAt,
+  motivoRechazo,
+  extra,
+}: Readonly<HojaResumenProps>) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    // gap-0/py-0: el padding lo ponen la cabecera y el panel; la franja de marca es el
+    // borde superior de la card, así que no hay hueco que separar.
+    <Card
+      aria-label={ariaLabel}
+      role="region"
+      className="gap-0 overflow-hidden border-t-[3px] border-t-brand py-0 shadow-sm"
+    >
+      <div className="flex flex-col gap-2.5 px-4 py-3.5 md:gap-2 md:px-5">
+        {/* Línea 1: marca · título · folio · estado — y a la derecha acciones + toggle. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex flex-wrap items-center gap-2 md:gap-2.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand">
+              Ordenex
+            </span>
+            <span className="text-base font-semibold text-navy">{titulo}</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              #{numeroFolio}
+            </span>
+            <EstadoCierreBadge estado={estado} />
+            {rotulo}
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {acciones}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-expanded={open}
+              aria-label={`${
+                open ? RESUMEN_OCULTAR_DETALLES : RESUMEN_VER_DETALLES
+              } ${toggleSufijo}`}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? RESUMEN_OCULTAR_DETALLES : RESUMEN_VER_DETALLES}
+              <ChevronDown
+                size={15}
+                aria-hidden="true"
+                className={cn("transition-transform", open && "rotate-180")}
+              />
+            </Button>
+          </div>
+        </div>
+
+        {/* Línea 2: las partes involucradas — y el total del cierre. */}
+        <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between md:gap-4">
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12.5px] text-muted-foreground">
+            {partes.map((parte, i) => (
+              <span key={parte.texto} className="flex items-center gap-3.5">
+                {i > 0 ? (
+                  <span aria-hidden="true" className="hidden text-border md:inline">
+                    |
+                  </span>
+                ) : null}
+                <span className="flex items-center gap-1">
+                  {parte.icon}
+                  {parte.texto}
+                </span>
+              </span>
+            ))}
+          </div>
+
+          <div className="flex items-baseline gap-2 whitespace-nowrap md:justify-end">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground md:text-[11px]">
+              {RESUMEN_TOTAL_LABEL}
+            </span>
+            {/* Sin contador animado: esto es una FILA de la lista de cierres. Animar el
+                total en cada tarjeta pondría a correr un contador por cierre en pantalla,
+                y además el valor exacto (STRING) es lo que se compara con la tabla. */}
+            <span className="text-[20px] font-semibold text-navy tabular-nums md:text-[22px]">
+              {money(totales.general)}
+            </span>
+          </div>
+        </div>
+
+        {/* El motivo explica el estado: no se esconde tras el desplegable. */}
+        {motivoRechazo ? (
+          <p className="text-[12.5px] text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {FACTURA_MOTIVO_RECHAZO_LABEL}:{" "}
+            </span>
+            {motivoRechazo}
+          </p>
+        ) : null}
       </div>
 
-      <BloqueRenglones titulo={FACTURA_RECIBIDO_TITULO}>
-        <Renglon label="Efectivo" value={money(cierre.totales.efectivo)} />
-        <Renglon label="SINPE" value={money(cierre.totales.simpe)} />
-        <Renglon
-          label="Transferencia"
-          value={money(cierre.totales.transferencia)}
-        />
-      </BloqueRenglones>
+      {open ? (
+        <div className="border-t border-border bg-muted/50 px-4 py-4 md:px-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.2fr_1fr_1fr] md:gap-5">
+            <section aria-label={FACTURA_RECIBIDO_TITULO}>
+              <TituloColumna>{RESUMEN_METODOS_TITULO}</TituloColumna>
+              <LineaMonto label="Efectivo" monto={totales.efectivo} />
+              <LineaMonto label="SINPE" monto={totales.simpe} />
+              <LineaMonto
+                label="Transferencia"
+                monto={totales.transferencia}
+                ultima
+              />
+            </section>
 
-      {/* Pago al mensajero e ingreso de bodega: siempre en la misma línea. */}
-      <ParPagoIngreso
-        pagoMensajero={cierre.totalPagoMensajero}
-        ingresoBodegaRechazos={cierre.totalIngresoBodegaRechazos}
-      />
+            <section aria-label={RESUMEN_AJUSTES_TITULO}>
+              <TituloColumna>{RESUMEN_AJUSTES_TITULO}</TituloColumna>
+              <LineaMonto
+                label={PAGO_MENSAJERO_LABEL}
+                monto={totalPagoMensajero}
+              />
+              <LineaMonto
+                label={INGRESO_BODEGA_RECHAZOS_LABEL}
+                monto={totalIngresoBodegaRechazos}
+                ultima
+              />
+            </section>
 
-      <TotalFactura
-        label={FACTURA_TOTAL_GENERAL_LABEL}
-        value={money(cierre.totales.general)}
-      />
-
-      {cierre.motivoRechazo ? (
-        <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {FACTURA_MOTIVO_RECHAZO_LABEL}:{" "}
-          </span>
-          {cierre.motivoRechazo}
-        </p>
+            <section aria-label={RESUMEN_FECHAS_TITULO}>
+              <TituloColumna>{RESUMEN_FECHAS_TITULO}</TituloColumna>
+              <LineaFecha
+                label={FACTURA_SOLICITADO_LABEL}
+                value={fecha(solicitadoAt)}
+              />
+              <LineaFecha
+                label={FACTURA_RESUELTO_LABEL}
+                value={fecha(resueltoAt)}
+                ultima
+              />
+            </section>
+          </div>
+          {extra}
+        </div>
       ) : null}
-    </HojaFactura>
+    </Card>
+  );
+}
+
+// --- Rótulos propios del comprobante de bodega ---
+const BODEGA_TITULO = "Cierre de bodega";
+const BODEGA_CIERRES_LABEL = "Cierres del día consolidados";
+
+export interface CierreBodegaFacturaResumenProps {
+  cierre: CierreBodegaResumen;
+  acciones?: ReactNode;
+}
+
+/**
+ * El mismo comprobante compacto, para un cierre de BODEGA: las partes son la zona y quien
+ * lo solicitó (no un mensajero), y el desplegable añade cuántos cierres del día consolida.
+ * Los totales son los AGREGADOS snapshot, STRING como el resto.
+ */
+export function CierreBodegaFacturaResumen({
+  cierre,
+  acciones,
+}: Readonly<CierreBodegaFacturaResumenProps>) {
+  return (
+    <HojaResumen
+      titulo={BODEGA_TITULO}
+      ariaLabel={`Comprobante del cierre de bodega de ${cierre.zonaNombre}`}
+      toggleSufijo={`del cierre de bodega de ${cierre.zonaNombre}`}
+      folio={folio(cierre.cierreBodegaId)}
+      estado={cierre.estado}
+      acciones={acciones}
+      partes={[
+        { icon: <Warehouse size={14} aria-hidden="true" />, texto: cierre.zonaNombre },
+        { icon: <User size={14} aria-hidden="true" />, texto: cierre.solicitadoPorNombre },
+        { icon: <Calendar size={14} aria-hidden="true" />, texto: fecha(cierre.solicitadoAt) },
+      ]}
+      totales={cierre.totales}
+      totalPagoMensajero={cierre.totalPagoMensajero}
+      totalIngresoBodegaRechazos={cierre.totalIngresoBodegaRechazos}
+      solicitadoAt={cierre.solicitadoAt}
+      resueltoAt={cierre.resueltoAt}
+      motivoRechazo={cierre.motivoRechazo}
+      extra={
+        <p className="mt-3 border-t border-border pt-2 text-[13px] text-muted-foreground">
+          {BODEGA_CIERRES_LABEL}:{" "}
+          <b className="font-medium text-navy tabular-nums">
+            {cierre.cantidadCierres}
+          </b>
+        </p>
+      }
+    />
   );
 }
 
@@ -383,13 +615,59 @@ export function CierreFacturaResumen({
  * Detalle del cierre como comprobante
  * ------------------------------------------------------------------ */
 
+/**
+ * Cabecera que necesita el comprobante detallado. `CierreAdminResumen` la satisface tal cual;
+ * el mensajero la compone desde su `CierrePasadoDTO` (que no trae `mensajeroNombre` porque el
+ * cierre es suyo, ni el nombre de la zona destino).
+ */
+export interface CierreFacturaCabecera {
+  cierreId: string;
+  estado: CierreAdminResumen["estado"];
+  destinoTipo: CierreDestinoTipo;
+  destinoZonaNombre?: string;
+  totales: CierreAdminResumen["totales"];
+  totalPagoMensajero: string;
+  totalIngresoBodegaRechazos: string;
+  solicitadoAt: string;
+  resueltoAt: string | null;
+  motivoRechazo: string | null;
+  /** Solo en la vista de admin: de quién es el cierre. */
+  mensajeroNombre?: string;
+}
+
+/**
+ * Para quién se pinta el comprobante. `admin` (default) es la vista completa de las features
+ * 38/40. `mensajero` es la MISMA hoja recortada a lo que es suyo: se caen el ingreso de
+ * Ordenex, la liquidación, el pago a la tienda y el ingreso de bodega por rechazos —plata de
+ * la empresa, no del mensajero (design §7.2)—, y los renglones muestran lo recibido y su pago
+ * en vez de lo facturado.
+ */
+export type CierreFacturaAudiencia = "admin" | "mensajero";
+
+/**
+ * Cómo se llama ESE monto según quién lo lea: para la empresa es "Pago al mensajero" (un
+ * egreso); para el mensajero es su "Ganancia" —el mismo rótulo que usa el resto de su
+ * pantalla de cierre del día—.
+ */
+const GANANCIA_MENSAJERO_LABEL = "Ganancia";
+function etiquetaPago(esMensajero: boolean): string {
+  return esMensajero ? GANANCIA_MENSAJERO_LABEL : PAGO_MENSAJERO_LABEL;
+}
+
 export interface CierreFacturaDetalleProps {
-  cierre: CierreAdminResumen;
+  cierre: CierreFacturaCabecera;
   grupos: CierreGrupos;
-  totalesIngreso: TotalesIngresoOrdenex;
-  desgloseIngresoBodegaRechazos: { sla: string; manual: string; total: string };
-  ganancia: string;
-  pagoTienda: string;
+  /** Solo `admin`: en la vista del mensajero estos bloques no se pintan. */
+  totalesIngreso?: TotalesIngresoOrdenex;
+  /**
+   * `sla`/`manual` son el desglose por origen del cierre del mensajero. El cierre de
+   * BODEGA solo conserva el agregado, así que ahí llega el total solo y la sublínea de
+   * origen no se pinta.
+   */
+  desgloseIngresoBodegaRechazos?: { sla?: string; manual?: string; total: string };
+  ganancia?: string;
+  pagoTienda?: string;
+  audiencia?: CierreFacturaAudiencia;
   /** Abre el visor con la URL FIRMADA de la evidencia (nunca el storage_path). */
   onVerEvidencia?: (url: string) => void;
 }
@@ -548,9 +826,12 @@ function DatoFila({
  */
 function FilaGestion({
   g,
+  esMensajero = false,
   onVerEvidencia,
 }: Readonly<{
   g: CierreDetalleGestion;
+  /** Vista del mensajero: las dos cifras de la fila son lo RECIBIDO y SU pago. */
+  esMensajero?: boolean;
   onVerEvidencia?: (url: string) => void;
 }>) {
   const [open, setOpen] = useState(false);
@@ -581,10 +862,10 @@ function FilaGestion({
           </span>
         </span>
         <span className="text-right text-[13px] tabular-nums text-foreground">
-          {money(ing?.montoCobrar ?? null)}
+          {money(esMensajero ? g.montoRecibido : (ing?.montoCobrar ?? null))}
         </span>
         <span className="text-right text-[13px] font-medium tabular-nums text-success-strong">
-          {money(ing?.total ?? null)}
+          {money(esMensajero ? g.pagoMensajero : (ing?.total ?? null))}
         </span>
         <ChevronDown
           size={16}
@@ -634,7 +915,7 @@ function FilaGestion({
             {/* `renderPagoMensajero` y no `money()`: trae consigo el badge "Sin tarifa"
                 (56/R23) cuando el pago se resolvió sin tarifa vigente. */}
             <DatoFila
-              label={PAGO_MENSAJERO_LABEL}
+              label={etiquetaPago(esMensajero)}
               value={g.pagoMensajero === null ? null : renderPagoMensajero(g)}
             />
             <DatoFila
@@ -713,9 +994,12 @@ export function CierreFacturaDetalle({
   desgloseIngresoBodegaRechazos,
   ganancia,
   pagoTienda,
+  audiencia = "admin",
   onVerEvidencia,
 }: Readonly<CierreFacturaDetalleProps>) {
-  const gananciaNegativa = esMontoNegativo(ganancia);
+  // Vista del MENSAJERO: la misma hoja, sin la plata de la empresa (design §7.2).
+  const esMensajero = audiencia === "mensajero";
+  const gananciaNegativa = ganancia !== undefined && esMontoNegativo(ganancia);
   const ordenes = ORDEN_RESULTADOS.reduce(
     (total, resultado) => total + (grupos[resultado]?.length ?? 0),
     0,
@@ -728,7 +1012,11 @@ export function CierreFacturaDetalle({
 
   return (
     <HojaFactura
-      ariaLabel={`Comprobante detallado del cierre de ${cierre.mensajeroNombre}`}
+      ariaLabel={
+        cierre.mensajeroNombre
+          ? `Comprobante detallado del cierre de ${cierre.mensajeroNombre}`
+          : "Comprobante detallado de tu cierre"
+      }
     >
       {/* Encabezado: estado + de quién es el cierre y a qué bodega va. */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
@@ -741,8 +1029,10 @@ export function CierreFacturaDetalle({
           </span>
           <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
             <Warehouse size={15} aria-hidden="true" />
-            {destino(cierre)} · {FACTURA_MENSAJERO_LABEL}{" "}
-            {cierre.mensajeroNombre}
+            {destino(cierre)}
+            {cierre.mensajeroNombre
+              ? ` · ${FACTURA_MENSAJERO_LABEL} ${cierre.mensajeroNombre}`
+              : null}
           </span>
         </div>
         <div className="flex flex-col items-end gap-0.5 text-[11px] text-muted-foreground">
@@ -756,7 +1046,10 @@ export function CierreFacturaDetalle({
         </div>
       </div>
 
-      {/* Los dos totales de cabecera de la referencia. */}
+      {/* Los dos totales de cabecera de la referencia. Ambos son plata de la EMPRESA (lo que
+          se le paga a la tienda y lo que ingresa la bodega por rechazos): en la vista del
+          mensajero no se pintan. */}
+      {esMensajero || pagoTienda === undefined || !desgloseIngresoBodegaRechazos ? null : (
       <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr]">
         <TarjetaTotal
           tone="success"
@@ -772,7 +1065,10 @@ export function CierreFacturaDetalle({
           value={money(desgloseIngresoBodegaRechazos.total)}
           // Feature 102/R8: las dos sublíneas del desglose por origen, cada rótulo en su
           // propio elemento (el total NO se recomputa acá: `sla + manual === total`).
+          // Sin desglose por origen (cierre de bodega) la tarjeta se queda con el total.
           nota={
+            desgloseIngresoBodegaRechazos.sla === undefined ||
+            desgloseIngresoBodegaRechazos.manual === undefined ? null : (
             <span className="flex flex-wrap items-center gap-x-1">
               <span>{INGRESO_BODEGA_RECHAZOS_SLA_LABEL}</span>
               <b className="font-medium tabular-nums">
@@ -784,9 +1080,11 @@ export function CierreFacturaDetalle({
                 {money(desgloseIngresoBodegaRechazos.manual)}
               </b>
             </span>
+            )
           }
         />
       </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiFactura
@@ -794,13 +1092,15 @@ export function CierreFacturaDetalle({
           value={cierre.totales.general}
           moneda
         />
+        {esMensajero || !totalesIngreso ? null : (
+          <KpiFactura
+            label={INGRESO_TOTAL_LABEL}
+            value={totalesIngreso.total}
+            moneda
+          />
+        )}
         <KpiFactura
-          label={INGRESO_TOTAL_LABEL}
-          value={totalesIngreso.total}
-          moneda
-        />
-        <KpiFactura
-          label={PAGO_MENSAJERO_LABEL}
+          label={etiquetaPago(esMensajero)}
           value={cierre.totalPagoMensajero}
           moneda
         />
@@ -824,6 +1124,9 @@ export function CierreFacturaDetalle({
         />
       </BloqueRenglones>
 
+      {/* Ingreso de Ordenex y liquidación: facturación de la EMPRESA, fuera de la vista del
+          mensajero (design §7.2). */}
+      {esMensajero || !totalesIngreso ? null : (
       <BloqueRenglones titulo={INGRESO_PANEL_LABEL} ariaLabel={INGRESO_PANEL_LABEL}>
         <Renglon
           label={FLETE_CON_IVA_LABEL}
@@ -843,7 +1146,9 @@ export function CierreFacturaDetalle({
           emphasis
         />
       </BloqueRenglones>
+      )}
 
+      {esMensajero || !totalesIngreso ? null : (
       <BloqueRenglones
         titulo={FACTURA_LIQUIDACION_TITULO}
         ariaLabel={FACTURA_LIQUIDACION_TITULO}
@@ -867,13 +1172,25 @@ export function CierreFacturaDetalle({
           />
         ) : null}
       </BloqueRenglones>
+      )}
 
       {/* Pago al mensajero e ingreso de bodega: siempre en la misma línea (el desglose
-          por origen del ingreso ya vive en la tarjeta de cabecera). */}
-      <ParPagoIngreso
-        pagoMensajero={cierre.totalPagoMensajero}
-        ingresoBodegaRechazos={desgloseIngresoBodegaRechazos.total}
-      />
+          por origen del ingreso ya vive en la tarjeta de cabecera). En la vista del
+          mensajero solo queda SU pago: el ingreso de bodega no es suyo. */}
+      {esMensajero || !desgloseIngresoBodegaRechazos ? (
+        <BloqueRenglones titulo={etiquetaPago(esMensajero)}>
+          <Renglon
+            label={etiquetaPago(esMensajero)}
+            value={money(cierre.totalPagoMensajero)}
+            emphasis
+          />
+        </BloqueRenglones>
+      ) : (
+        <ParPagoIngreso
+          pagoMensajero={cierre.totalPagoMensajero}
+          ingresoBodegaRechazos={desgloseIngresoBodegaRechazos.total}
+        />
+      )}
 
       {/* Órdenes en pestañas por resultado, cada fila desplegable. */}
       <section aria-label={FACTURA_ORDENES_TITULO} className="flex flex-col">
@@ -895,8 +1212,12 @@ export function CierreFacturaDetalle({
           <div className="grid grid-cols-[40px_1.4fr_1fr_1fr_24px] gap-2 px-2 py-1 text-[11px] text-muted-foreground">
             <span>{FILA_GUIA_COL}</span>
             <span>{FILA_DESTINATARIO_COL}</span>
-            <span className="text-right">{FILA_COBRADO_COL}</span>
-            <span className="text-right">{INGRESO_TOTAL_LABEL}</span>
+            <span className="text-right">
+              {esMensajero ? FILA_RECIBIDO_LABEL : FILA_COBRADO_COL}
+            </span>
+            <span className="text-right">
+              {esMensajero ? GANANCIA_MENSAJERO_LABEL : INGRESO_TOTAL_LABEL}
+            </span>
             <span />
           </div>
           {filas.length === 0 ? (
@@ -908,6 +1229,7 @@ export function CierreFacturaDetalle({
               <FilaGestion
                 key={g.gestionId}
                 g={g}
+                esMensajero={esMensajero}
                 onVerEvidencia={onVerEvidencia}
               />
             ))

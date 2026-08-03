@@ -19,6 +19,7 @@ import type {
   ListarCierreDiaServiceResult,
   ListarCierresPasadosServiceResult,
   SolicitarCierreServiceResult,
+  VerCierrePasadoServiceResult,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { GestionResultado } from "@prisma/client";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
@@ -246,6 +247,59 @@ export class CierreDiaService implements ICierreDiaService {
       tieneVencido, // feature 111/R13
       tieneRechazado, // feature 109/R31
     };
+  }
+
+  /**
+   * Detalle de UN cierre PASADO del propio mensajero (solo lectura, pedido humano: "ver" un
+   * cierre anterior y no solo su fila de totales).
+   *
+   * Dos diferencias deliberadas con `listarCierreDia`:
+   *  - Los montos por gestion NO se re-derivan de la tarifa de hoy: se usa el SNAPSHOT
+   *    congelado al solicitar (por eso `toDetalleDTO` va SIN overrides). Un cierre ya
+   *    solicitado no puede cambiar de importe porque alguien edite una tarifa.
+   *  - El scope es del REPO (`id` + `mensajero_id` en el WHERE): un cierre ajeno o
+   *    inexistente cae en `no_encontrada` sin distinguirse.
+   */
+  async verCierrePasado(
+    cierreId: string,
+    actor: Actor,
+  ): Promise<VerCierrePasadoServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1/R2
+
+    const found = await this.repo.findCierrePropioConGestiones(cierreId, actor.usuarioId);
+    if (found === null) return { status: "no_encontrada" };
+
+    // R5: evidencias SOLO firmadas. Best-effort DELIBERADO (mismo criterio que el detalle del
+    // admin): si el storage no responde, el comprobante se sirve SIN sus fotos en vez de no
+    // servirse — es una vista de consulta, las fotos la ilustran.
+    const paths = found.gestiones
+      .map((g) => g.evidenciaStoragePath)
+      .filter((p): p is string => p !== null);
+    let urlByPath: Record<string, string> = {};
+    if (paths.length > 0) {
+      try {
+        urlByPath = await this.signedUrls.createSignedUrls(
+          paths,
+          cierreConfig.SIGNED_URL_TTL_SECONDS,
+        );
+      } catch {
+        urlByPath = {};
+      }
+    }
+
+    const grupos: CierreGrupos = {
+      entregada: [],
+      reprogramada: [],
+      devuelta: [],
+      rechazada: [],
+      incidente: [],
+    };
+    for (const g of found.gestiones) {
+      // Sin overrides de pago/ingreso: el DTO expone el snapshot leido de la gestion.
+      grupos[g.resultado].push(toDetalleDTO(g, urlByPath));
+    }
+
+    return { status: "ok", cierre: found.cierre, grupos };
   }
 
   /**

@@ -205,12 +205,13 @@ describe("OrdenService.listarCompleto — dataset sin paginacion", () => {
     expect(paramsCompleto.sortBy).toBe(paramsPaginado.sortBy);
     expect(paramsCompleto.sortDir).toBe(paramsPaginado.sortDir);
     expect(paramsCompleto.sortBy).toBe("created_at");
-    expect(paramsCompleto.sortDir).toBe("desc");
+    // Pedido humano: el criterio compartido pasó a ASC (lo más antiguo primero).
+    expect(paramsCompleto.sortDir).toBe("asc");
 
     expect(paginado.status).toBe("ok");
     expect(completo.status).toBe("ok");
     if (paginado.status !== "ok" || completo.status !== "ok") return;
-    expect(ids(completo.items)).toEqual(["nueva", "media", "vieja"]);
+    expect(ids(completo.items)).toEqual(["vieja", "media", "nueva"]);
     expect(ids(completo.items)).toEqual(ids(paginado.items));
   });
 

@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { MisAsignacionesModule } from "@/app/(app)/mis-asignaciones/_components/MisAsignacionesModule";
+import { RepartoModule } from "@/app/(app)/mis-asignaciones/_components/RepartoModule";
 import {
   recogerAsignaciones,
   escogerParaGestion,
@@ -21,11 +21,17 @@ import type {
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 
-// Feature 36 (T15-T17) / rediseño 63 (pedido humano) — módulo del mensajero. Se
-// mockean las Server Actions (recoger / escoger / gestionar / liberar), el toast
-// y el router (refresh) para afirmar la composición y los envíos sin DB ni
-// sesión. La sección "En reparto" ya NO usa modal: es un PANEL inline (region
-// "Detalle de la orden") con la PRIMERA orden en detalle por defecto.
+// Feature 36 (T15-T17) / rediseño 63 (pedido humano) — pantalla de REPARTO del mensajero.
+// Se mockean las Server Actions (escoger / gestionar / liberar), el toast y el router
+// (refresh) para afirmar la composición y los envíos sin DB ni sesión. "En reparto" ya NO
+// usa modal: es un PANEL inline (region "Detalle de la orden") con la PRIMERA orden en
+// detalle por defecto.
+//
+// 2026-07-31 (decisión del humano): este archivo era `MisAsignacionesModule.test.tsx` y
+// cubría los DOS apartados del portal. La mitad "Por recoger" (listado, banner, escáner e
+// input de guía) se mudó con su pantalla a `RecogerModule.test.tsx`; aquí queda lo que
+// vive en Reparto. `recogerAsignaciones` se sigue mockeando porque el mock del módulo de
+// actions es completo (si faltara, el import real arrastraría Prisma a jsdom).
 vi.mock("@/lib/actions/mis-asignaciones", () => ({
   recogerAsignaciones: vi.fn(),
   escogerParaGestion: vi.fn(),
@@ -138,7 +144,7 @@ function ordenCardsEnReparto(): string[] {
     name: "En reparto / por gestionar",
   });
   return within(region)
-    .getAllByRole("article", { name: /^Gestionar orden / })
+    .getAllByRole("article", { name: /^Orden / })
     .map((b) => b.getAttribute("aria-label") ?? "");
 }
 
@@ -178,10 +184,9 @@ const RUTA_VIGENTE: RutaResumenDTO = {
   paradasSinOptimizar: 0,
 };
 
-function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0]>) {
+function renderModule(props?: Partial<Parameters<typeof RepartoModule>[0]>) {
   return render(
-    <MisAsignacionesModule
-      porRecoger={props?.porRecoger ?? []}
+    <RepartoModule
       porGestionar={props?.porGestionar ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
@@ -196,28 +201,22 @@ function panelDetalle() {
 }
 
 /**
- * Despliega la tarjeta de recogida. Desde el 2026-07-31 (decisión del humano) vive plegada
- * tras su disparador: dentro vive `QrScanner`, y montada dejaba la cámara ENCENDIDA todo el
- * tiempo que el mensajero tuviera abierta la pantalla. Que el acceso siga existiendo es lo
- * que estos casos comprueban; que dentro haya un escáner que funciona lo fija
- * `RecogerPaqueteCard.test.tsx`.
+ * El acceso a la recogida por guía/escaneo (el disparador de la tarjeta plegada). Aquí solo
+ * se usa para comprobar su AUSENCIA: la recogida se mudó a `/mis-asignaciones/recoger` y
+ * esta pantalla no debe volver a montarla.
  */
-async function abrirRecogida(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "Recoger paquete" }));
-}
-
-/** El acceso a la recogida por guía/escaneo, plegado o no. */
 const accesoRecogida = () =>
   screen.queryByRole("button", { name: "Recoger paquete" });
 
 /**
- * Card de una remisión: el `<article>` de `PosOrderCard`. La card ya no tiene CTA
- * interno ("Gestionar orden" se eliminó, pedido humano): el `<article>` mismo es el
- * target de selección y lleva el `aria-label` "Gestionar orden <rem> · <dest>".
+ * Card de una remisión: el `<article>` de `PosOrderCard`, con `aria-label`
+ * "Orden <rem> · <dest>". Rama ux (pedido humano): la card ya NO selecciona al tocarla;
+ * llevar su orden al panel pasa por el botón "Gestionar" del pie y su confirmación
+ * (ver `gestionarDesdeCard`).
  */
 function cardDe(numRemision: string): HTMLElement {
   return screen.getByRole("article", {
-    name: new RegExp(`Gestionar orden ${numRemision}`),
+    name: new RegExp(`Orden ${numRemision}`),
   });
 }
 
@@ -265,6 +264,39 @@ async function elegirEnSelect(
 }
 
 /**
+ * Rediseño ux: el bloque de verificación de guía arranca CERRADO; lo abre el CTA
+ * "Gestionar esta orden" (fijo al pie del panel). Todo test que vaya al gate pasa por aquí.
+ * Devuelve el panel, ya con el gate montado.
+ */
+/**
+ * Lleva la orden de una card al panel de detalle por la vía nueva: botón "Gestionar" del
+ * pie de la card + confirmación en el modal ("puede cambiar tu ruta de reparto").
+ */
+async function gestionarDesdeCard(
+  user: ReturnType<typeof userEvent.setup>,
+  numRemision: string,
+) {
+  await user.click(
+    // El identificador de la card puede venir completo ("REM-G1 · Ana Pérez"); el botón se
+    // localiza por su prefijo, dentro de esa card.
+    within(cardDe(numRemision)).getByRole("button", {
+      name: /^Gestionar la orden /,
+    }),
+  );
+  await user.click(await screen.findByRole("button", { name: "Aceptar" }));
+}
+
+async function abrirGestion(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<HTMLElement> {
+  const panel = panelDetalle();
+  await user.click(
+    within(panel).getByRole("button", { name: "Gestionar esta orden" }),
+  );
+  return panel;
+}
+
+/**
  * Lleva una card al panel de detalle y avanza hasta los 4 botones de resultado:
  * (1) click en la card → panel; (2) feature 98: verifica la guía tecleando el
  * `numGuia` (default 1001, el de `makeAsignacion`) en el gate del panel de
@@ -277,8 +309,14 @@ async function iniciarGestion(
   user: ReturnType<typeof userEvent.setup>,
   { card, resultado, numGuia = 1001 }: { card: string; resultado?: string; numGuia?: number },
 ) {
-  await user.click(screen.getByRole("article", { name: `Gestionar orden ${card}` }));
-  const panel = panelDetalle();
+  // La orden que YA está en el panel tiene su botón "Gestionar" deshabilitado (no hay nada
+  // que llevar: es la que se está gestionando), así que solo se pasa por la card cuando hace
+  // falta cambiar de orden.
+  const boton = within(cardDe(card)).getByRole("button", {
+    name: /^Gestionar la orden /,
+  });
+  if (!(boton as HTMLButtonElement).disabled) await gestionarDesdeCard(user, card);
+  const panel = await abrirGestion(user);
   await user.type(within(panel).getByLabelText("Número de guía"), String(numGuia));
   await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
   if (resultado) {
@@ -303,169 +341,32 @@ afterEach(() => {
   cleanup();
 });
 
-describe("MisAsignacionesModule", () => {
-  it("R10: muestra DOS apartados separados 'Por recoger' y 'En reparto / por gestionar'", () => {
+describe("RepartoModule", () => {
+  // 2026-07-31 (decisión del humano) — CORTE: Reparto es UNA pantalla, no dos apartados.
+  // El caso que exigía "los DOS apartados" (R10) se invierte: la superficie de recogida se
+  // mudó a `/mis-asignaciones/recoger` y aquí no debe quedar ni rastro. Es una AUSENCIA, y
+  // las ausencias se rompen sin que nadie se entere: si un merge devuelve el listado o el
+  // escáner a esta pantalla, el escáner vuelve a quedar enterrado bajo el panel de gestión
+  // —exactamente el problema que el corte resolvió— y falla aquí, no en la calle.
+  it("Corte: Reparto monta SU apartado y ninguna superficie de recogida", () => {
     renderModule({
-      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-R1" })],
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
     expect(
-      screen.getByRole("region", { name: "Por recoger" }),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole("region", { name: "En reparto / por gestionar" }),
     ).toBeInTheDocument();
-  });
-
-  it("R11 / 63: muestra el detalle en 3 secciones (pedido, entrega, cobro con peso)", () => {
-    renderModule({
-      porRecoger: [
-        makeAsignacion({
-          id: "r1",
-          numGuia: 2002,
-          numRemision: "REM-DETALLE",
-          destinatario: "Beto Ruiz",
-          telefonoDest: "70001111",
-          direccion: "Av. Central 100",
-          producto: "Sobre",
-          peso: 1.5,
-          montoCobrar: 1250.5,
-          notas: "Llamar antes",
-          tiendaNombre: "Tienda Norte",
-          zonaNombre: "Cartago",
-          provinciaNombre: "Cartago",
-          cantonNombre: "Oreamuno",
-          distritoNombre: "San Rafael",
-        }),
-      ],
-    });
-
-    const region = screen.getByRole("region", { name: "Por recoger" });
-    // Rediseño POS: "Por recoger" usa la MISMA card que "En reparto", así que varios
-    // campos (destinatario, producto, cantón, monto) se repiten en la card y en el
-    // detalle. Las 3 secciones se comprueban DENTRO del desplegable del detalle.
-    const detalle = within(region)
-      .getByText("Ver detalle completo")
-      .closest("[data-slot='collapsible']") as HTMLElement;
-    // Sección 1 — Pedido: guía, nombre, teléfono, producto.
-    expect(within(detalle).getByText("2002")).toBeInTheDocument();
-    expect(within(detalle).getByText("Beto Ruiz")).toBeInTheDocument();
-    expect(within(detalle).getByText("70001111")).toBeInTheDocument();
-    expect(within(detalle).getByText("Sobre")).toBeInTheDocument();
-    // Sección 2 — Entrega: dirección + provincia/cantón/distrito + notas (SIN zona).
-    expect(within(detalle).getByText("Av. Central 100")).toBeInTheDocument();
-    expect(within(detalle).getByText("Cartago")).toBeInTheDocument();
-    expect(within(detalle).getByText("Oreamuno")).toBeInTheDocument();
-    expect(within(detalle).getByText("San Rafael")).toBeInTheDocument();
-    expect(within(detalle).getByText("Llamar antes")).toBeInTheDocument();
-    // Sección 3 — Cobro: valor a cobrar (colones) + peso en kg.
-    expect(within(detalle).getByText("₡1,250.50")).toBeInTheDocument();
-    expect(within(detalle).getByText("1.5 kg")).toBeInTheDocument();
-    // Ya NO se muestra la Tienda ni la ubicación con zona.
-    expect(within(region).queryByText("Tienda Norte")).toBeNull();
+    // Ni el listado, ni la tarjeta de recogida, ni su input.
+    expect(screen.queryByRole("region", { name: "Por recoger" })).toBeNull();
+    expect(accesoRecogida()).toBeNull();
     expect(
-      within(region).queryByText("Cartago · Cartago · Oreamuno · San Rafael"),
+      screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeNull();
-  });
-
-  it("Feature 63: 'Por recoger' muestra el banner con el contador de órdenes nuevas asignadas", () => {
-    renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-R1" }),
-        makeAsignacion({ id: "r2", numRemision: "REM-R2" }),
-      ],
-    });
-
-    const region = screen.getByRole("region", { name: "Por recoger" });
-    expect(
-      within(region).getByText("2 Órdenes nuevas asignadas"),
-    ).toBeInTheDocument();
-  });
-
-  // Feature 96: la recogida ya NO vive en la sección "Por recoger" (se quitaron los
-  // botones "Recoger" / "Recoger todas" y su modal). Queda como lista de SOLO-
-  // VISUALIZACIÓN; recoger es exclusivamente por el input de número de guía o el escáner.
-  it("Feature 96: 'Por recoger' es lista de SOLO-VISUALIZACIÓN (sin 'Recoger' / 'Recoger todas')", () => {
-    renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-R1" }),
-        makeAsignacion({ id: "r2", numRemision: "REM-R2" }),
-      ],
-    });
-
-    const region = screen.getByRole("region", { name: "Por recoger" });
-    // Ya no hay ninguna acción de recogida en esta sección.
-    expect(within(region).queryByRole("button", { name: "Recoger" })).toBeNull();
-    expect(
-      within(region).queryByRole("button", { name: "Recoger todas" }),
-    ).toBeNull();
-    // Rediseño POS: la card es la de "En reparto" pero SIN sus acciones de gestión ni de
-    // contacto. El único control que queda es el desplegable del detalle (revelar, no
-    // actuar), así que se comprueban por nombre en vez de "ningún botón".
-    expect(
-      within(region).queryByRole("article", { name: /Gestionar orden/ }),
-    ).toBeNull();
-    expect(within(region).queryByRole("link", { name: /Llamar a/ })).toBeNull();
-    expect(within(region).queryByRole("link", { name: /WhatsApp a/ })).toBeNull();
-    // Pero sigue LISTANDO las guías por recoger (el mensajero ve qué tiene pendiente).
-    expect(within(region).getByText(/REM-R1/)).toBeInTheDocument();
-    expect(within(region).getByText(/REM-R2/)).toBeInTheDocument();
-  });
-
-  it("Feature 96: la recogida se ofrece SOLO por input de número de guía y por escáner (sin modal)", async () => {
-    const user = userEvent.setup();
-    renderModule({ porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })] });
-
-    await abrirRecogida(user);
-    expect(
-      screen.getByRole("region", { name: "Recoger por número de guía o escaneo" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Escanear con cámara" }),
-    ).toBeInTheDocument();
-    // Ya no existe el modal de confirmación de recogida.
-    expect(
-      screen.queryByRole("dialog", { name: "Recoger órdenes" }),
-    ).toBeNull();
-  });
-
-  it("Feature 96: teclear una guía por recoger + confirmar recoge esa orden por su id y refresca", async () => {
-    const user = userEvent.setup();
-    recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r2"] });
-    renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numGuia: 1001 }),
-        makeAsignacion({ id: "r2", numGuia: 1002 }),
-      ],
-    });
-
-    await abrirRecogida(user);
-    const region = screen.getByRole("region", { name: "Recoger por número de guía o escaneo" });
-    await user.type(within(region).getByLabelText("Número de guía"), "1002");
-    await user.click(within(region).getByRole("button", { name: "Recoger" }));
-
-    await vi.waitFor(() =>
-      expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r2"] }),
-    );
-    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
-  });
-
-  it("Feature 96 (restricción 'asignada a mí'): una guía que NO está por recoger se rechaza sin llamar la action", async () => {
-    const user = userEvent.setup();
-    renderModule({
-      porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
-    });
-
-    await abrirRecogida(user);
-    const region = screen.getByRole("region", { name: "Recoger por número de guía o escaneo" });
-    await user.type(within(region).getByLabelText("Número de guía"), "9999");
-    await user.click(within(region).getByRole("button", { name: "Recoger" }));
-
-    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
-    expect(errorMock.mock.calls[0][0]).toMatch(/9999/);
-    expect(recogerMock).not.toHaveBeenCalled();
-    expect(refreshMock).not.toHaveBeenCalled();
+    // OJO: NO se afirma "ningún escáner en la pantalla". Reparto tiene el suyo, dentro del
+    // gate de verificación de guía del panel de gestión (`VerificarGuiaGate`, feature 98),
+    // y es legítimo: verifica la guía que se va a gestionar, no recoge nada. La ausencia
+    // que este caso protege es la de la superficie de RECOGIDA, identificada por su
+    // tarjeta y su disparador.
   });
 
   it("Sin órdenes en reparto: muestra el aviso y NO renderiza el panel de detalle", () => {
@@ -478,7 +379,8 @@ describe("MisAsignacionesModule", () => {
     ).toBeNull();
   });
 
-  it("Rediseño: cards en GRILLA y la PRIMERA orden en el PANEL de detalle por default", () => {
+  it("Rediseño: cards en GRILLA y la PRIMERA orden en el PANEL de detalle por default", async () => {
+    const user = userEvent.setup();
     renderModule({
       porGestionar: [
         makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
@@ -489,18 +391,23 @@ describe("MisAsignacionesModule", () => {
     const region = screen.getByRole("region", { name: "En reparto / por gestionar" });
     // Una card seleccionable por orden (button con aria-label descriptivo).
     expect(
-      within(region).getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      within(region).getByRole("article", { name: /Orden REM-G1/ }),
     ).toBeInTheDocument();
     expect(
-      within(region).getByRole("article", { name: /Gestionar orden REM-G2/ }),
+      within(region).getByRole("article", { name: /Orden REM-G2/ }),
     ).toBeInTheDocument();
     // El panel inline muestra por defecto la PRIMERA orden (sin fijar el puntero).
     expect(
       within(panelDetalle()).getByText("Uno"),
     ).toBeInTheDocument();
     expect(escogerMock).not.toHaveBeenCalled();
-    // Feature 98: el panel exige verificar la guía antes de gestionar → el gate
-    // (input "Número de guía" + botón "Gestionar") está montado en el detalle.
+    // Feature 98 + rediseño ux: el gate ya no está montado de entrada (la sección arranca
+    // cerrada), pero el panel sigue exigiéndolo antes de gestionar: al abrirla con
+    // "Gestionar esta orden" aparece el input "Número de guía" + el botón "Gestionar".
+    expect(
+      within(panelDetalle()).queryByLabelText("Número de guía"),
+    ).toBeNull();
+    await abrirGestion(user);
     expect(
       within(panelDetalle()).getByLabelText("Número de guía"),
     ).toBeInTheDocument();
@@ -509,7 +416,7 @@ describe("MisAsignacionesModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("Rediseño: seleccionar otra card la lleva al PANEL de detalle (sin fijar el puntero)", async () => {
+  it("Rediseño: 'Gestionar' en la card, tras CONFIRMAR, lleva la orden al PANEL de detalle", async () => {
     const user = userEvent.setup();
     renderModule({
       porGestionar: [
@@ -518,17 +425,66 @@ describe("MisAsignacionesModule", () => {
       ],
     });
 
-    // Por defecto la primera; al seleccionar la segunda, el panel la refleja.
+    // Por defecto la primera; al gestionar la segunda (con confirmación), el panel la refleja.
     expect(within(panelDetalle()).getByText("Uno")).toBeInTheDocument();
-    await user.click(screen.getByRole("article", { name: /Gestionar orden REM-G2/ }));
+    await gestionarDesdeCard(user, "REM-G2");
 
     expect(within(panelDetalle()).getByText("Dos")).toBeInTheDocument();
+    // Cambiar de orden en el panel NO fija el puntero 1-a-1: eso sigue siendo del gate.
     expect(escogerMock).not.toHaveBeenCalled();
   });
 
-  // Pedido humano (rama ux): la card ya no tiene CTA propio, se selecciona pulsando
-  // CUALQUIER parte de ella (y con Enter/Espacio desde el teclado).
-  it("Rediseño: el click en el CUERPO de la card también la lleva al PANEL de detalle", async () => {
+  it("Pedido humano: la orden que YA se está gestionando tiene 'Gestionar' DESHABILITADO", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Dos" }),
+      ],
+    });
+
+    const botonDe = (rem: string) =>
+      within(cardDe(rem)).getByRole("button", { name: /^Gestionar la orden / });
+
+    // Por defecto el panel muestra la primera: su botón no ofrece nada.
+    expect(botonDe("REM-G1")).toBeDisabled();
+    expect(botonDe("REM-G2")).toBeEnabled();
+
+    // Al llevar la segunda al panel, se invierte.
+    await gestionarDesdeCard(user, "REM-G2");
+    expect(within(panelDetalle()).getByText("Dos")).toBeInTheDocument();
+    expect(botonDe("REM-G2")).toBeDisabled();
+    expect(botonDe("REM-G1")).toBeEnabled();
+  });
+
+  it("Pedido humano: el modal AVISA de que la ruta puede cambiar y CANCELAR no toca el panel", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Dos" }),
+      ],
+    });
+
+    await user.click(
+      within(cardDe("REM-G2")).getByRole("button", {
+        name: "Gestionar la orden REM-G2",
+      }),
+    );
+    expect(
+      await screen.findByText(/ruta de reparto puede cambiar/i),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // Sin confirmación no pasa nada: el panel sigue en la primera orden.
+    expect(within(panelDetalle()).getByText("Uno")).toBeInTheDocument();
+    expect(within(panelDetalle()).queryByText("Dos")).toBeNull();
+  });
+
+  // Pedido humano (rama ux): tocar la card ya NO cambia el detalle mostrado; para eso está
+  // el botón "Gestionar" del pie, con su confirmación.
+  it("Rediseño: el click en el CUERPO de la card NO cambia el PANEL de detalle", async () => {
     const user = userEvent.setup();
     renderModule({
       porGestionar: [
@@ -541,7 +497,8 @@ describe("MisAsignacionesModule", () => {
     // Click en una zona NO interactiva de la segunda card (su cabecera).
     await user.click(within(cardDe("REM-G2")).getByText("REM-G2"));
 
-    expect(within(panelDetalle()).getByText("Dos")).toBeInTheDocument();
+    expect(within(panelDetalle()).getByText("Uno")).toBeInTheDocument();
+    expect(within(panelDetalle()).queryByText("Dos")).toBeNull();
     expect(escogerMock).not.toHaveBeenCalled();
   });
 
@@ -596,10 +553,10 @@ describe("MisAsignacionesModule", () => {
 
     // Modo foco: la grilla de cards no se renderiza (ni la activa ni las demás).
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.queryByRole("article", { name: /Orden REM-G1/ }),
     ).toBeNull();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.queryByRole("article", { name: /Orden REM-G2/ }),
     ).toBeNull();
     // El ocultamiento del spec 36 se eliminó: el texto no existe en ningún estado (R2).
     expect(screen.queryByText(/Termina la gestión en curso/)).toBeNull();
@@ -616,7 +573,7 @@ describe("MisAsignacionesModule", () => {
     });
 
     // Feature 98: el gate exige confirmar la guía del paquete antes de gestionar.
-    const panel = panelDetalle();
+    const panel = await abrirGestion(user);
     await user.type(within(panel).getByLabelText("Número de guía"), "1001");
     await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
 
@@ -640,7 +597,7 @@ describe("MisAsignacionesModule", () => {
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", numGuia: 1001 })],
     });
 
-    const panel = panelDetalle();
+    const panel = await abrirGestion(user);
     await user.type(within(panel).getByLabelText("Número de guía"), "9999");
     await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
 
@@ -663,7 +620,7 @@ describe("MisAsignacionesModule", () => {
     });
 
     // Feature 98: verifica con la guía correcta; el conflict lo devuelve escoger.
-    const panel = panelDetalle();
+    const panel = await abrirGestion(user);
     await user.type(within(panel).getByLabelText("Número de guía"), "1001");
     await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
 
@@ -971,7 +928,7 @@ describe("MisAsignacionesModule", () => {
     });
 
     // Feature 98: verifica la guía para fijar el puntero y revelar los 4 botones.
-    const panel = panelDetalle();
+    const panel = await abrirGestion(user);
     await user.type(within(panel).getByLabelText("Número de guía"), "1001");
     await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
     await screen.findByRole("button", { name: "Entregar" });
@@ -1146,7 +1103,7 @@ describe("MisAsignacionesModule", () => {
     expect(screen.getByTestId("ruta-mapa")).toBeInTheDocument();
     // g2 va en la lista (su card existe) pero NO entra al mapa (sin coords).
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.getByRole("article", { name: /Orden REM-G2/ }),
     ).toBeInTheDocument();
     const props = rutaMapaMock.mock.calls.at(-1)?.[0] as {
       paradas: { id: string }[];
@@ -1177,25 +1134,8 @@ describe("MisAsignacionesModule", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("R14: bloqueado desactiva/guarda los controles de recoger (input + escáner)", () => {
-    renderModule({
-      bloqueado: true,
-      porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
-    });
-
-    // Los controles de recogida no se renderizan; sí la lista de solo-visualización.
-    // Bloqueado no queda ni el ACCESO: sin disparador no hay forma de abrir la tarjeta.
-    expect(accesoRecogida()).toBeNull();
-    expect(
-      screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("region", { name: "Recoger por escaneo" }),
-    ).toBeNull();
-    expect(
-      screen.getByRole("region", { name: "Por recoger" }),
-    ).toBeInTheDocument();
-  });
+  // El caso gemelo —bloqueado oculta los controles de RECOGIDA— se mudó con su pantalla a
+  // `RecogerModule.test.tsx`: aquí ya no hay recogida que ocultar.
 
   it("R14: bloqueado deshabilita las cards de 'En reparto' y NO renderiza el panel de gestión (escoger/gestionar)", () => {
     renderModule({
@@ -1212,10 +1152,10 @@ describe("MisAsignacionesModule", () => {
       name: "En reparto / por gestionar",
     });
     expect(
-      within(region).getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      within(region).getByRole("article", { name: /Orden REM-G1/ }),
     ).not.toHaveAttribute("tabindex");
     expect(
-      within(region).getByRole("article", { name: /Gestionar orden REM-G2/ }),
+      within(region).getByRole("article", { name: /Orden REM-G2/ }),
     ).not.toHaveAttribute("tabindex");
     // El panel de detalle/gestión (escoger + gestionar) no se monta.
     expect(
@@ -1225,34 +1165,12 @@ describe("MisAsignacionesModule", () => {
 
   it("R14: sin bloqueo, los controles de gestión siguen operativos (el panel se monta)", () => {
     renderModule({
-      // Pedido humano: la card de recogida solo se pinta si HAY algo por recoger, así que
-      // el caso "sin bloqueo" necesita una orden en ese grupo para poder comprobarla.
-      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-R1" })],
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
     expect(
       screen.getByRole("region", { name: "Detalle de la orden" }),
     ).toBeInTheDocument();
-    // El acceso a la recogida está (la tarjeta se despliega desde ahí).
-    expect(accesoRecogida()).toBeInTheDocument();
-  });
-
-  // Pedido humano: sin NADA por recoger no hay guía que resolver, así que el input y el
-  // escáner de recogida no se muestran (la sección "Por recoger" sigue, con su vacío).
-  it("sin órdenes por recoger, la card de recogida no se muestra", () => {
-    renderModule({
-      porRecoger: [],
-      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
-    });
-
-    expect(accesoRecogida()).toBeNull();
-    expect(
-      screen.queryByRole("region", {
-        name: "Recoger por número de guía o escaneo",
-      }),
-    ).toBeNull();
-    expect(screen.getByText("No hay órdenes por recoger.")).toBeInTheDocument();
   });
 
   // ---------------- Feature 113: detalle inline en cada card + modo foco ----------------
@@ -1355,10 +1273,10 @@ describe("MisAsignacionesModule", () => {
 
     // La única superficie es el panel de la activa; no hay cards para escoger otra orden.
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.queryByRole("article", { name: /Orden REM-G1/ }),
     ).toBeNull();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.queryByRole("article", { name: /Orden REM-G2/ }),
     ).toBeNull();
     expect(escogerMock).not.toHaveBeenCalled();
   });
@@ -1371,7 +1289,7 @@ describe("MisAsignacionesModule", () => {
       ],
     });
 
-    const panel = panelDetalle();
+    const panel = await abrirGestion(user);
     await user.type(within(panel).getByLabelText("Número de guía"), "1001");
     await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
 
@@ -1416,21 +1334,10 @@ describe("MisAsignacionesModule", () => {
     ).toBeNull();
   });
 
-  it("R8: en foco se oculta la sección 'Por recoger' y sus controles de recogida", () => {
-    renderModule({
-      porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
-      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
-      ordenEnGestionId: "g1",
-    });
-
-    expect(screen.queryByRole("region", { name: "Por recoger" })).toBeNull();
-    expect(
-      screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("region", { name: "Recoger por escaneo" }),
-    ).toBeNull();
-  });
+  // R8 (ocultar "Por recoger" en foco) queda SIN OBJETO tras el corte del 2026-07-31: esa
+  // superficie ya no vive en esta pantalla, así que no hay nada que el foco deba ocultar.
+  // Lo que R8 protegía —que en foco no queden distracciones— lo cubren los casos de R6/R7
+  // (grilla y mapa ocultos) de arriba y el caso "Corte" del primer describe.
 
   it("R9: en foco (yaActiva) se ven los 4 botones de resultado y 'Cancelar gestión'", async () => {
     renderModule({
@@ -1457,14 +1364,12 @@ describe("MisAsignacionesModule", () => {
   });
 
   it("R10: al volver ordenEnGestionId a null se SALE del foco y se restaura la vista completa", () => {
-    const porRecoger = [makeAsignacion({ id: "r1", numGuia: 1001 })];
     const porGestionar = [
       makeAsignacion({ id: "g1", numRemision: "REM-G1", secuenciaRuta: 1 }),
       makeAsignacion({ id: "g2", numRemision: "REM-G2", secuenciaRuta: 2 }),
     ];
     const { rerender } = render(
-      <MisAsignacionesModule
-        porRecoger={porRecoger}
+      <RepartoModule
         porGestionar={porGestionar}
         ordenEnGestionId="g2"
         ruta={RUTA_VIGENTE}
@@ -1472,17 +1377,15 @@ describe("MisAsignacionesModule", () => {
       />,
     );
 
-    // En foco: grilla, mapa y "Por recoger" ocultos.
+    // En foco: grilla y mapa ocultos.
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.queryByRole("article", { name: /Orden REM-G1/ }),
     ).toBeNull();
-    expect(screen.queryByRole("region", { name: "Por recoger" })).toBeNull();
     expect(screen.queryByTestId("ruta-mapa")).toBeNull();
 
     // Puntero liberado (gestión finalizada/cancelada) → vuelve la vista completa.
     rerender(
-      <MisAsignacionesModule
-        porRecoger={porRecoger}
+      <RepartoModule
         porGestionar={porGestionar}
         ordenEnGestionId={null}
         ruta={RUTA_VIGENTE}
@@ -1491,13 +1394,10 @@ describe("MisAsignacionesModule", () => {
     );
 
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.getByRole("article", { name: /Orden REM-G1/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G2/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("region", { name: "Por recoger" }),
+      screen.getByRole("article", { name: /Orden REM-G2/ }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("ruta-mapa")).toBeInTheDocument();
   });
@@ -1533,10 +1433,10 @@ describe("MisAsignacionesModule", () => {
     );
     // NO hay foco: las cards siguen en la grilla (deshabilitadas) y NO se monta el panel.
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.getByRole("article", { name: /Orden REM-G1/ }),
     ).not.toHaveAttribute("tabindex");
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.getByRole("article", { name: /Orden REM-G2/ }),
     ).not.toHaveAttribute("tabindex");
     expect(
       screen.queryByRole("region", { name: "Detalle de la orden" }),
@@ -1550,19 +1450,19 @@ describe("MisAsignacionesModule", () => {
     return screen.getByRole("searchbox", { name: "Buscar guías" });
   }
 
-  it("114/R1: renderiza un campo de búsqueda de guías (searchbox) sobre ambos grupos", () => {
+  // 2026-07-31: el buscador ya no barre DOS grupos — Reparto filtra el suyo y "Por
+  // recoger" tiene el propio en su pantalla (`RecogerModule.test.tsx`). Lo que sigue
+  // vigente es el comportamiento del campo: filtrar, limpiar y distinguir "sin resultados"
+  // del vacío sin búsqueda.
+  it("114/R1: renderiza un campo de búsqueda de guías (searchbox) sobre el grupo en reparto", () => {
     renderModule({
-      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-R1" })],
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
     // Rol accesible (searchbox) + etiqueta accesible (label "Buscar guías").
     expect(buscador()).toBeInTheDocument();
     expect(screen.getByLabelText("Buscar guías")).toBeInTheDocument();
-    // Ambos grupos siguen presentes (el buscador va por encima, no los reemplaza).
-    expect(
-      screen.getByRole("region", { name: "Por recoger" }),
-    ).toBeInTheDocument();
+    // El grupo sigue presente (el buscador va por encima, no lo reemplaza).
     expect(
       screen.getByRole("region", { name: "En reparto / por gestionar" }),
     ).toBeInTheDocument();
@@ -1577,13 +1477,9 @@ describe("MisAsignacionesModule", () => {
     expect(screen.queryByRole("searchbox", { name: "Buscar guías" })).toBeNull();
   });
 
-  it("114/R2: teclear texto filtra AMBOS grupos por guía / remisión / destinatario", async () => {
+  it("114/R2: teclear texto filtra por guía / remisión / destinatario", async () => {
     const user = userEvent.setup();
     renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-RA", destinatario: "Ana" }),
-        makeAsignacion({ id: "r2", numRemision: "REM-RB", destinatario: "Beto" }),
-      ],
       porGestionar: [
         makeAsignacion({ id: "g1", numRemision: "REM-GA", destinatario: "Ana Torres" }),
         makeAsignacion({ id: "g2", numRemision: "REM-GB", destinatario: "Carlos" }),
@@ -1592,27 +1488,18 @@ describe("MisAsignacionesModule", () => {
 
     await user.type(buscador(), "ana");
 
-    // "Por recoger": queda r1 (destinatario Ana); se va r2.
-    const recoger = screen.getByRole("region", { name: "Por recoger" });
-    expect(within(recoger).getByText(/REM-RA/)).toBeInTheDocument();
-    expect(within(recoger).queryByText(/REM-RB/)).toBeNull();
-
     // "En reparto": queda g1 (Ana Torres); se va g2 (Carlos).
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-GA/ }),
+      screen.getByRole("article", { name: /Orden REM-GA/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-GB/ }),
+      screen.queryByRole("article", { name: /Orden REM-GB/ }),
     ).toBeNull();
   });
 
-  it("114/R5: limpiar la búsqueda restaura TODAS las guías de ambos grupos", async () => {
+  it("114/R5: limpiar la búsqueda restaura TODAS las guías del grupo", async () => {
     const user = userEvent.setup();
     renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-R1", destinatario: "Ana" }),
-        makeAsignacion({ id: "r2", numRemision: "REM-R2", destinatario: "Beto" }),
-      ],
       porGestionar: [
         makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Ana" }),
         makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Beto" }),
@@ -1622,32 +1509,26 @@ describe("MisAsignacionesModule", () => {
     const input = buscador();
     await user.type(input, "beto");
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.queryByRole("article", { name: /Orden REM-G1/ }),
     ).toBeNull();
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.getByRole("article", { name: /Orden REM-G2/ }),
     ).toBeInTheDocument();
 
     await user.clear(input);
 
-    // Sin búsqueda: reaparecen todas las guías de ambos grupos.
-    const recoger = screen.getByRole("region", { name: "Por recoger" });
-    expect(within(recoger).getByText(/REM-R1/)).toBeInTheDocument();
-    expect(within(recoger).getByText(/REM-R2/)).toBeInTheDocument();
+    // Sin búsqueda: reaparecen todas las guías del grupo.
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.getByRole("article", { name: /Orden REM-G1/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.getByRole("article", { name: /Orden REM-G2/ }),
     ).toBeInTheDocument();
   });
 
-  it("114/R6: sin coincidencias muestra 'sin resultados' por grupo, distinto del vacío sin búsqueda", async () => {
+  it("114/R6: sin coincidencias muestra 'sin resultados', distinto del vacío sin búsqueda", async () => {
     const user = userEvent.setup();
     renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-R1", destinatario: "Ana" }),
-      ],
       porGestionar: [
         makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Beto" }),
       ],
@@ -1655,13 +1536,6 @@ describe("MisAsignacionesModule", () => {
 
     await user.type(buscador(), "zzzinexistente");
 
-    const recoger = screen.getByRole("region", { name: "Por recoger" });
-    expect(
-      within(recoger).getByText(
-        "Ninguna guía por recoger coincide con la búsqueda.",
-      ),
-    ).toBeInTheDocument();
-
     const reparto = screen.getByRole("region", {
       name: "En reparto / por gestionar",
     });
@@ -1671,41 +1545,12 @@ describe("MisAsignacionesModule", () => {
       ),
     ).toBeInTheDocument();
 
-    // DISTINGUIBLE del vacío sin búsqueda: esos textos no aparecen.
-    expect(screen.queryByText("No hay órdenes por recoger.")).toBeNull();
+    // DISTINGUIBLE del vacío sin búsqueda: ese texto no aparece.
     expect(screen.queryByText("No hay órdenes en reparto.")).toBeNull();
   });
 
-  it("114/R7: el filtro aplica por grupo — una coincidencia de un grupo no cruza al otro", async () => {
-    const user = userEvent.setup();
-    renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-RECOGER", destinatario: "Ana" }),
-      ],
-      porGestionar: [
-        makeAsignacion({ id: "g1", numRemision: "REM-REPARTO", destinatario: "Ana" }),
-      ],
-    });
-
-    // "recoger" solo coincide con la remisión del grupo "Por recoger".
-    await user.type(buscador(), "recoger");
-
-    const recoger = screen.getByRole("region", { name: "Por recoger" });
-    const reparto = screen.getByRole("region", {
-      name: "En reparto / por gestionar",
-    });
-    // Aparece en su grupo...
-    expect(within(recoger).getByText(/REM-RECOGER/)).toBeInTheDocument();
-    // ...y NO cruza a "En reparto", que muestra su propio "sin resultados".
-    expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-REPARTO/ }),
-    ).toBeNull();
-    expect(
-      within(reparto).getByText(
-        "Ninguna guía en reparto coincide con la búsqueda.",
-      ),
-    ).toBeInTheDocument();
-  });
+  // 114/R7 ("una coincidencia de un grupo no cruza al otro") queda sin objeto: los dos
+  // grupos ya no comparten pantalla ni buscador, así que no hay cruce posible que probar.
 
   it("114/R8: filtrar excluye la parada de la grilla Y del mapa de ruta", async () => {
     const user = userEvent.setup();
@@ -1730,10 +1575,10 @@ describe("MisAsignacionesModule", () => {
 
     // La card de g2 sale de la grilla...
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-UNO/ }),
+      screen.getByRole("article", { name: /Orden REM-UNO/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-DOS/ }),
+      screen.queryByRole("article", { name: /Orden REM-DOS/ }),
     ).toBeNull();
 
     // ...y su parada NO llega al mapa: RutaMapa recibe SOLO g1 (coherencia R8).
@@ -1777,15 +1622,15 @@ describe("MisAsignacionesModule", () => {
 
     // g2 (en gestión) NO se oculta pese a no coincidir; g1 (coincide) también está.
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-DOS/ }),
+      screen.getByRole("article", { name: /Orden REM-DOS/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-UNO/ }),
+      screen.getByRole("article", { name: /Orden REM-UNO/ }),
     ).toBeInTheDocument();
     // Control: g3 (ni coincide ni está en gestión) SÍ se filtra → prueba que el filtro
     // actúa y que la permanencia de g2 se debe a la salvaguarda, no a falta de filtro.
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-TRES/ }),
+      screen.queryByRole("article", { name: /Orden REM-TRES/ }),
     ).toBeNull();
 
     // Y la parada de g2 sigue en el mapa junto a la de g1 (no la de g3).
@@ -1801,7 +1646,6 @@ describe("MisAsignacionesModule", () => {
 
   it("117/R1: renderiza los selects de Cantón y Distrito en el módulo del mensajero", () => {
     renderModule({
-      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-R1" })],
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
@@ -1942,10 +1786,10 @@ describe("MisAsignacionesModule", () => {
     await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
     await elegirEnSelect(user, "Filtrar por distrito", "Carmen");
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.getByRole("article", { name: /Orden REM-G1/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.queryByRole("article", { name: /Orden REM-G2/ }),
     ).toBeNull();
 
     // Cambiar de cantón resetea el distrito: vuelve el placeholder y el filtro de
@@ -1954,10 +1798,10 @@ describe("MisAsignacionesModule", () => {
     const distrito = screen.getByRole("combobox", { name: "Filtrar por distrito" });
     expect(within(distrito).getByText("Todos los distritos")).toBeInTheDocument();
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G3/ }),
+      screen.getByRole("article", { name: /Orden REM-G3/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.queryByRole("article", { name: /Orden REM-G1/ }),
     ).toBeNull();
   });
 
@@ -1998,11 +1842,11 @@ describe("MisAsignacionesModule", () => {
 
     // Solo g1 (Central/Carmen). g2 (otro distrito), g3 (distrito nulo) y g4 (otro cantón) fuera.
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.getByRole("article", { name: /Orden REM-G1/ }),
     ).toBeInTheDocument();
     for (const rem of ["REM-G2", "REM-G3", "REM-G4"]) {
       expect(
-        screen.queryByRole("article", { name: new RegExp(`Gestionar orden ${rem}`) }),
+        screen.queryByRole("article", { name: new RegExp(`Orden ${rem}`) }),
       ).toBeNull();
     }
   });
@@ -2030,17 +1874,17 @@ describe("MisAsignacionesModule", () => {
     await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
     await elegirEnSelect(user, "Filtrar por distrito", "Carmen");
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.queryByRole("article", { name: /Orden REM-G2/ }),
     ).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
 
     // Reaparecen todas; los selects vuelven a su placeholder y el distrito se deshabilita.
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.getByRole("article", { name: /Orden REM-G1/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.getByRole("article", { name: /Orden REM-G2/ }),
     ).toBeInTheDocument();
     const canton = screen.getByRole("combobox", { name: "Filtrar por cantón" });
     expect(within(canton).getByText("Todos los cantones")).toBeInTheDocument();
@@ -2071,16 +1915,16 @@ describe("MisAsignacionesModule", () => {
 
     await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.queryByRole("article", { name: /Orden REM-G2/ }),
     ).toBeNull();
 
     await elegirEnSelect(user, "Filtrar por cantón", "Todos los cantones");
 
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.getByRole("article", { name: /Orden REM-G1/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.getByRole("article", { name: /Orden REM-G2/ }),
     ).toBeInTheDocument();
   });
 
@@ -2154,13 +1998,13 @@ describe("MisAsignacionesModule", () => {
 
     // g1 coincide; g2 (en gestión) permanece pese a no coincidir; g3 (control) se va.
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-UNO/ }),
+      screen.getByRole("article", { name: /Orden REM-UNO/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-DOS/ }),
+      screen.getByRole("article", { name: /Orden REM-DOS/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-TRES/ }),
+      screen.queryByRole("article", { name: /Orden REM-TRES/ }),
     ).toBeNull();
 
     // El mapa refleja lo mismo: g1 + g2 (salvaguarda), no g3.
@@ -2170,52 +2014,18 @@ describe("MisAsignacionesModule", () => {
     expect(props.paradas.map((p) => p.id).sort()).toEqual(["g1", "g2"]);
   });
 
-  it("117/R11: filtro sin coincidencias muestra el mensaje 'coincide con el filtro' (distinto del vacío base)", async () => {
-    const user = userEvent.setup();
-    renderModule({
-      // Central sale de "Por recoger"; Escazú de "En reparto": así elegir un cantón
-      // vacía SIEMPRE el grupo contrario y se ve el mensaje de "sin coincidencias".
-      porRecoger: [
-        makeAsignacion({
-          id: "r1",
-          numRemision: "REM-R1",
-          cantonNombre: "Central",
-          distritoNombre: "Carmen",
-        }),
-      ],
-      porGestionar: [
-        makeAsignacion({
-          id: "g1",
-          numRemision: "REM-G1",
-          cantonNombre: "Escazú",
-          provinciaNombre: "San José",
-          distritoNombre: "San Rafael",
-        }),
-      ],
-    });
-
-    // Central ⇒ "En reparto" (solo Escazú) queda sin coincidencias.
-    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
-    const reparto = screen.getByRole("region", {
-      name: "En reparto / por gestionar",
-    });
-    expect(
-      within(reparto).getByText("Ninguna guía en reparto coincide con el filtro."),
-    ).toBeInTheDocument();
-    // Distinguible del vacío base y del "sin resultados" del buscador.
-    expect(screen.queryByText("No hay órdenes en reparto.")).toBeNull();
-    expect(
-      screen.queryByText("Ninguna guía en reparto coincide con la búsqueda."),
-    ).toBeNull();
-
-    // Escazú ⇒ "Por recoger" (solo Central) queda sin coincidencias.
-    await elegirEnSelect(user, "Filtrar por cantón", "Escazú (San José)");
-    const recoger = screen.getByRole("region", { name: "Por recoger" });
-    expect(
-      within(recoger).getByText("Ninguna guía por recoger coincide con el filtro."),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("No hay órdenes por recoger.")).toBeNull();
-  });
+  // 117/R11 (mensaje "Ninguna guía en reparto coincide con el filtro.") se RETIRÓ el
+  // 2026-07-31 junto con el estado que lo producía. R11 dependía de que las opciones de
+  // cantón/distrito salieran de la UNIÓN de los dos grupos: se podía elegir un cantón que
+  // solo existía en "Por recoger" y vaciar la lista de reparto. Con las opciones derivadas
+  // solo de `porGestionar` toda opción tiene una orden detrás, y el select suelta su
+  // selección en cuanto la opción desaparece de la lista, así que la lista vuelve entera.
+  // Se intentó cubrirlo por los dos caminos (elegir cantón; filtrar por distrito y perder
+  // esa orden en un refresh) y ninguno alcanza el estado: el mensaje era rama muerta.
+  //
+  // Lo que R11 protegía de verdad —que el vacío se EXPLIQUE en vez de aparecer pelado—
+  // sigue cubierto por 114/R6 (el "sin resultados" del buscador, arriba), que es el único
+  // vacío-con-causa que esta pantalla puede producir.
 
   it("117/R14: con filtro activo, panel de detalle y mapa reflejan el conjunto filtrado", async () => {
     const user = userEvent.setup();
@@ -2252,7 +2062,7 @@ describe("MisAsignacionesModule", () => {
       within(panelDetalle()).getByText("Dos"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.queryByRole("article", { name: /Orden REM-G1/ }),
     ).toBeNull();
 
     const props = rutaMapaMock.mock.calls.at(-1)?.[0] as {
@@ -2298,14 +2108,14 @@ describe("MisAsignacionesModule", () => {
     await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
 
     expect(
-      screen.getByRole("article", { name: /Gestionar orden REM-G1/ }),
+      screen.getByRole("article", { name: /Orden REM-G1/ }),
     ).toBeInTheDocument();
     // g2 cae por el buscador (Beto); g3 cae por el filtro (Escazú).
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G2/ }),
+      screen.queryByRole("article", { name: /Orden REM-G2/ }),
     ).toBeNull();
     expect(
-      screen.queryByRole("article", { name: /Gestionar orden REM-G3/ }),
+      screen.queryByRole("article", { name: /Orden REM-G3/ }),
     ).toBeNull();
   });
 });
@@ -2377,28 +2187,8 @@ describe("MisAsignaciones — intentos de entrega (feature 160)", () => {
     expect(valor?.textContent).toBe("4");
   });
 
-  it("R24: 'por recoger' (PorAceptarSection.renderDetalle) también muestra el dato", () => {
-    renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-R1", intentosEntrega: 1 }),
-      ],
-    });
-    const region = screen.getByRole("region", { name: "Por recoger" });
-    const etiqueta = within(region).getByText("Intentos");
-    expect(etiqueta.tagName).toBe("DT");
-    expect(etiqueta.parentElement?.querySelector("dd")?.textContent).toBe("1");
-  });
-
-  it("R24: 'por recoger' con 0 intentos también lo muestra", () => {
-    renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-R1", intentosEntrega: 0 }),
-      ],
-    });
-    const region = screen.getByRole("region", { name: "Por recoger" });
-    const etiqueta = within(region).getByText("Intentos");
-    expect(etiqueta.parentElement?.querySelector("dd")?.textContent).toBe("0");
-  });
+  // Los dos casos R24 ("por recoger" muestra el dato de intentos, incluido el 0) viven
+  // ahora en `RecogerModule.test.tsx`, con la pantalla que los monta.
 
   it("R32/D6: el dato NO vive en la fila de marcas informativas (que son badges)", () => {
     // Orden con AMBAS marcas: la fila de marcas existe y se puede identificar.
@@ -2476,15 +2266,13 @@ describe("MisAsignaciones — intentos de entrega (feature 160)", () => {
 // Este caso es la ausencia escrita como aserción; el guard estático
 // `tests/unit/guards/entregas-sin-recoleccion.test.ts` la protege del lado del fuente.
 // ---------------------------------------------------------------------------------------
-describe("MisAsignacionesModule — Entregas no monta ninguna superficie de recolección (feature 167)", () => {
+describe("RepartoModule — Entregas no monta ninguna superficie de recolección (feature 167)", () => {
   it("R33: ni región, ni escáner, ni aviso, ni conteo, ni enlace al apartado nuevo", () => {
     renderModule({
-      porRecoger: [makeAsignacion({ id: "p1", numRemision: "REM-P" })],
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
     });
 
-    // Los dos apartados de Entregas siguen ahí (R35: el flujo de gestión no cambia).
-    expect(screen.getByRole("region", { name: "Por recoger" })).toBeInTheDocument();
+    // El apartado de Reparto sigue ahí (R35: el flujo de gestión no cambia).
     expect(
       screen.getByRole("region", { name: "En reparto / por gestionar" }),
     ).toBeInTheDocument();
@@ -2510,7 +2298,7 @@ describe("MisAsignacionesModule — Entregas no monta ninguna superficie de reco
 
   it("R33: tampoco con el mensajero BLOQUEADO (donde el aviso podría colarse)", () => {
     renderModule({
-      porRecoger: [makeAsignacion({ id: "p1", numRemision: "REM-P" })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
       bloqueado: true,
     });
 

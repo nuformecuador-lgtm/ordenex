@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { NotaPrivadaMensajero } from "@/app/(app)/mis-asignaciones/_components/NotaPrivadaMensajero";
 import { GestionarOrdenPanel } from "@/app/(app)/mis-asignaciones/_components/GestionarOrdenPanel";
-import { MisAsignacionesModule } from "@/app/(app)/mis-asignaciones/_components/MisAsignacionesModule";
+import { RepartoModule } from "@/app/(app)/mis-asignaciones/_components/RepartoModule";
 import {
   guardarNotaPrivada,
   limpiarNotaPrivada,
@@ -25,7 +25,7 @@ vi.mock("@/lib/actions/notas-privadas-mensajero", () => ({
 }));
 
 // El panel/módulo arrastran otras Server Actions (`"use server"`) y el mapa Leaflet; se mockean
-// igual que en `MisAsignacionesModule.test.tsx` para poder montarlos en jsdom.
+// igual que en `RepartoModule.test.tsx` para poder montarlos en jsdom.
 vi.mock("@/lib/actions/mis-asignaciones", () => ({
   recogerAsignaciones: vi.fn(),
   escogerParaGestion: vi.fn().mockResolvedValue({ status: "ok", ordenId: "g1" }),
@@ -72,7 +72,7 @@ const limpiarMock = vi.mocked(limpiarNotaPrivada);
  */
 function cardDe(numRemision: string): HTMLElement {
   return screen.getByRole("article", {
-    name: new RegExp(`Gestionar orden ${numRemision}`),
+    name: new RegExp(`Orden ${numRemision}`),
   });
 }
 
@@ -134,11 +134,31 @@ describe("NotaPrivadaMensajero — editor (F1 / R11)", () => {
     expect(screen.getByRole("button", { name: "Limpiar" })).toBeEnabled();
   });
 
-  it("R11: con notaInicial=null muestra el editor VACÍO y Limpiar deshabilitado", () => {
+  it("R11: con notaInicial=null la sección arranca CERRADA y 'Agregar nota' la abre vacía", async () => {
+    // Rediseño ux (pedido humano): la nota es opcional, así que de entrada sólo se ve el
+    // botón; el editor aparece al pulsarlo.
+    const user = userEvent.setup();
     render(<NotaPrivadaMensajero ordenId="o1" notaInicial={null} />);
+
+    expect(screen.queryByRole("textbox", { name: "Mi nota" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Agregar nota" }));
 
     expect(screen.getByRole("textbox", { name: "Mi nota" })).toHaveValue("");
     expect(screen.getByRole("button", { name: "Limpiar" })).toBeDisabled();
+  });
+
+  it("con notaInicial la sección arranca ABIERTA y se puede volver a ocultar", async () => {
+    const user = userEvent.setup();
+    render(<NotaPrivadaMensajero ordenId="o1" notaInicial="Timbre azul" />);
+
+    expect(screen.getByRole("textbox", { name: "Mi nota" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Ocultar mi nota" }));
+
+    // El cierre va ANIMADO: el contenido se desmonta al terminar la salida, no en el click.
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "Mi nota" })).toBeNull(),
+    );
+    expect(screen.getByRole("button", { name: "Agregar nota" })).toBeInTheDocument();
   });
 });
 
@@ -148,6 +168,8 @@ describe("NotaPrivadaMensajero — persistencia server-driven (F1 / R14)", () =>
     guardarMock.mockResolvedValue({ status: "ok", nota: "Nota nueva" });
     render(<NotaPrivadaMensajero ordenId="o1" notaInicial={null} />);
 
+    // Sin nota previa la sección arranca cerrada: primero se abre con el botón.
+    await user.click(screen.getByRole("button", { name: "Agregar nota" }));
     await user.type(
       screen.getByRole("textbox", { name: "Mi nota" }),
       "Nota nueva",
@@ -295,8 +317,7 @@ describe("Indicador de nota privada en la card (F3 / R12)", () => {
     // `bloqueado` mantiene la VISTA COMPLETA con las cards (deshabilitadas, feature 113/R3) pero
     // SIN montar el panel de detalle: aísla el indicador de la card del editor del panel.
     render(
-      <MisAsignacionesModule
-        porRecoger={[]}
+      <RepartoModule
         porGestionar={[
           makeAsignacion({
             id: "g1",

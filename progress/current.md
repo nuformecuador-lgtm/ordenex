@@ -38,6 +38,76 @@ obliga a decidir qué pasa con las URLs que la 136 ya dejó guardadas.
 ---
 
 ## 2026-08-03 — **127 servicios financieros → PR #269, esperando merge**
+## 🏁 CIERRE DE JORNADA 2026-08-03 — **EMPIEZA A LEER POR AQUÍ**
+
+**Registro limpio: cero features `in_progress`, cero PRs abiertos, `dev` verde.**
+Medido con los dos PRs del día **ya dentro** —no por separado, que es el incidente del PR #237—:
+`./init.sh` → `== init OK ==`, **804 archivos / 10.162 tests, 0 fallos**.
+
+### ✅ Entregado hoy
+
+| | Qué | Estado |
+| --- | --- | --- |
+| **172** | liquidación: registrar y anular pagos a mensajeros y tiendas | `done` · **en producción** (PR #262 → dev, release #263 → prod) |
+| **fix** | la fecha de calendario inexistente, en **4 sitios** | PR #266 · en `dev` |
+| **arnés** | gate en dos niveles + arranque de tests 5× más barato | PR #267 · en `dev` |
+
+### 🚦 LO PRIMERO AL RETOMAR
+
+1. **Mirar la 172 en pantalla.** Es lo único que no se puede verificar con tests y **sigue sin
+   hacerse**. Cambia tres cosas que ve el maestro: la wallet de tiendas gana el botón de pagar y su
+   lista de comprobantes, aprobar un cierre **ofrece pagar** justo después, y `/mi-wallet` pasa de
+   «Créditos / Débitos» a **tres importes**.
+2. **`dev` está 19 commits por delante de `prod`, y esta vez el release es BARATO: cero migraciones
+   nuevas.** Solo código. Lleva el arreglo de la fecha y el arnés.
+
+### ⏳ Decisiones tuyas con default ya tomado (cambiarlas más tarde sale caro)
+
+- **N1** — el par pago + anulación deja los importes **brutos** inflados aunque **el saldo queda
+  exacto**. Se declaró en pantalla en las 4 superficies con agregado. Netearlo exigiría **2 valores
+  de enum nuevos** o reescribir la derivación de la 171.
+- **N2** — hoy un pago se puede anular **siempre**, sin ventana temporal.
+
+### ⏭️ Lo siguiente
+
+1. **173 — caja en modo tesorería.** Dependía de la 172; **ya está desbloqueada.**
+2. **Chore del flake de jsdom.** Es lo que obliga a re-correr la suite **entera** para distinguir un
+   flake de una regresión (en la 172 costó dos corridas, ~8 min). Se dejó sin hacer **a propósito**:
+   la vía es acotar los workers de jsdom, pero hay que **medirlo**, no adivinarlo.
+3. **Deuda dirigida de la 170:** los 8 `listarXCompleto` que faltan (Q-I5 + Q-K4 + Q-K6) y la
+   búsqueda de cuentas por pagar que **no ignora acentos** (Q-L4, defecto preexistente).
+4. **Aviso en bodega satélite** (Q-K7 de la 170): lo marcado en otra página se conserva pero **no
+   participa** en la acción de lote y nada lo advierte. Chore de frontend pequeño y **ya decidido**.
+5. **Higiene:** siguen ~33 worktrees de agentes en `.claude/worktrees/`, todo pusheado y mergeado.
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**Cinco veces apareció el mismo patrón: un test verde que no medía lo que decía.** Es el hallazgo
+del día, más que cualquier feature:
+
+- el store de concurrencia que dejaba pasar la ausencia de candado;
+- la respuesta P3 del humano afirmada **con una prop en vez del eslabón rol → prop** (poner ese
+  predicado en `true` no rompía **ninguno** de los 9.857 tests);
+- el parser del test de migración que **moría ante la mutación que existe para cazar** — corrían
+  cero casos y el error señalaba a otro sitio;
+- el caso «rechaza un día que no existe», verde por la comparación lexicográfica y no por la
+  validación;
+- el `"2026-13-45"` de `filters.test.ts`, que ya no discrimina lo que su nombre promete.
+
+**Los cinco los cazó una mutación, ninguno un test verde.** La regla que queda: si no has visto el
+test **fallar**, no sabes qué mide.
+
+> ⚠️ **Hay otra sesión viva en este repo**: acaba de mergear la **feature 125** (backfill histórico
+> de analítica). Antes de tomar una rama, mirar si ya lo está haciendo alguien.
+
+> 📌 **Escrito antes de mergear.** Después de este cierre entraron en `dev` la **127** (PR #269), la
+> **126** (PR #270) y un PR de **UX** (#271) de otra sesión — por eso «cero PRs abiertos» y la
+> distancia contra `prod` que se leen arriba ya no son la foto de ahora. Ese PR de UX **borró
+> `app/(app)/perfil/`**; comprobado que no deja enlaces vivos rotos (solo lo citan specs viejos).
+
+---
+
+## 2026-08-03 — **127 servicios financieros → PR #269, YA MERGEADO en `dev`**
 
 Feature **127 → `done`**, PR **#269** hacia `dev` (rama `feature/127-analitica-financiera-servicios`,
 worktree `ordenex-wt-127`). Reviewer **APROBADO, 0 bloqueantes, 7 menores** (1–3 cerrados en el PR;
@@ -62,8 +132,7 @@ que **no existe en `prisma/migrations`**. Residuo de otra rama sobre la misma ba
 
 ---
 
-## 🚀 2026-08-03 — **172 EN PRODUCCIÓN** · **EMPIEZA A LEER POR AQUÍ**
-## 🛠️ 2026-08-03 — **EL GATE YA NO SE CORRE ENTERO EN CADA TANDA** · **EMPIEZA A LEER POR AQUÍ**
+## 🛠️ 2026-08-03 — el gate ya no se corre entero en cada tanda
 
 Pedido del humano: *«el proceso del arnés está hecho para mejorar el trabajo, no para alargar las
 sesiones eternamente»*. Tenía razón y estaba medido: la 172 corrió la suite completa **9 veces**,
