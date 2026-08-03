@@ -4,7 +4,8 @@ Checklist de pasos discretos y verificables. `[P]` = paralelizable dentro de su 
 Cada task trae su criterio de "hecho" y los `R<n>` que cubre. Al final, el mapa de
 trazabilidad `R<n>→test` que el reviewer verifica (`docs/specs.md` §Trazabilidad).
 
-> **Puerta F1.4 CERRADA.** (a) precedencia fija **`num_guia` gana** (sin 409 de ambigüedad);
+> **Decisiones del humano del 2026-08-03** (la puerta F1.4 sigue abierta: falta la aprobación
+> del spec, y hasta que llegue no se escribe código). (a) precedencia fija **`num_guia` gana** (sin 409 de ambigüedad);
 > (b) `/generate` **solo `POST`**; (c) carga por **uuid** + publicar `cargaId` en
 > `CargaResponse`; (d) **sin** modo `force`. No se reabren.
 >
