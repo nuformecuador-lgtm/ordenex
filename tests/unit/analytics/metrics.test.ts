@@ -264,13 +264,84 @@ describe("R30 · cubo sin_asignar en el grano de mensajero", () => {
 });
 
 describe("R33 · metricas declaradas sin productor", () => {
-  it("admite metricas declaradas sin productor", () => {
+  // REEXPRESADO POR LA FICHA 175 (T5.3, R4; ⟨D11⟩ en `progress/decision_175.md`, 2026-08-03).
+  //
+  // Aqui se exigia `listarMetricas({ estadoProduccion: "declarada" }).length > 0`. ⟨D11⟩ paso
+  // `incidentes` y `sin_gestionar` a `producida` —las dos tienen productor de verdad— y el
+  // catalogo se quedo SIN NINGUNA metrica `declarada`. Un catalogo enteramente producido es
+  // el ESTADO BUENO, no un fallo, asi que el guard no se relaja: se reexpresa sobre lo que
+  // de verdad protegia, que es que el filtro PARTICIONE el catalogo. La verificabilidad del
+  // filtro no puede depender de que exista deuda.
+  it("admite metricas declaradas sin productor y el filtro particiona el catalogo", () => {
     for (const metrica of METRICAS) {
       expect(["producida", "declarada"], `metrica ${metrica.id}`).toContain(
         metrica.estadoProduccion,
       );
     }
-    expect(listarMetricas({ estadoProduccion: "declarada" }).length).toBeGreaterThan(0);
+
+    // MUTACION QUE ESTE CASO MATA: que `listarMetricas` ignore `estadoProduccion` (borrar la
+    // linea `if (filtro.estadoProduccion && ...) return false;` de `lib/analytics/metrics.ts`).
+    // Al devolver todo en las dos llamadas, la suma da el doble del catalogo.
+    const producidas = listarMetricas({ estadoProduccion: "producida" });
+    const declaradas = listarMetricas({ estadoProduccion: "declarada" });
+
+    expect(producidas.length + declaradas.length, "el filtro no particiona el catalogo").toBe(
+      METRICAS.length,
+    );
+    for (const metrica of producidas) expect(metrica.estadoProduccion, metrica.id).toBe("producida");
+    for (const metrica of declaradas) expect(metrica.estadoProduccion, metrica.id).toBe("declarada");
+    // Y los dos subconjuntos son DISJUNTOS: ninguna metrica cae en los dos lados.
+    const idsProducidas = new Set(producidas.map((m) => m.id));
+    for (const metrica of declaradas) {
+      expect(idsProducidas.has(metrica.id), `${metrica.id} cae en los dos subconjuntos`).toBe(
+        false,
+      );
+    }
+  });
+
+  it("separa los dos estados en un catalogo SINTETICO con metricas de ambos", () => {
+    // MUTACION QUE ESTE CASO MATA (aplicada, roja y revertida): que `listarMetricas` ignore
+    // `estadoProduccion` y devuelva todo.
+    //
+    // Por que sintetico: hoy el catalogo real no tiene ninguna `declarada` (⟨D11⟩), asi que
+    // un filtro roto devolveria "todas" justo donde se esperan "todas las producidas" y el
+    // sintoma solo se veria en el subconjunto vacio. Con metricas de los DOS estados el
+    // filtro tiene que separar de verdad.
+    //
+    // Como se monta sin tocar produccion: NO se cambia la firma publica de `listarMetricas`
+    // para admitir un catalogo inyectado (seria API nueva creada solo para el test). Se
+    // extiende TEMPORALMENTE el array del catalogo con dos entradas de mentira —clonadas de
+    // metricas reales, con otro id y `estadoProduccion: "declarada"`— y se restaura en el
+    // `finally`, dentro del mismo test sincrono.
+    const catalogoMutable = METRICAS as (typeof METRICAS)[number][];
+    const largoReal = catalogoMutable.length;
+    const sinteticas = [
+      { ...METRICAS[0], id: "sintetica_declarada_1", estadoProduccion: "declarada" as const },
+      { ...METRICAS[1], id: "sintetica_declarada_2", estadoProduccion: "declarada" as const },
+    ];
+
+    try {
+      catalogoMutable.push(...sinteticas);
+      expect(METRICAS.length).toBe(largoReal + 2);
+
+      const producidas = listarMetricas({ estadoProduccion: "producida" });
+      const declaradas = listarMetricas({ estadoProduccion: "declarada" });
+
+      expect(declaradas.map((m) => m.id)).toEqual([
+        "sintetica_declarada_1",
+        "sintetica_declarada_2",
+      ]);
+      expect(producidas.map((m) => m.id)).not.toContain("sintetica_declarada_1");
+      expect(producidas.map((m) => m.id)).not.toContain("sintetica_declarada_2");
+      expect(producidas.length).toBe(largoReal);
+      expect(producidas.length + declaradas.length).toBe(METRICAS.length);
+    } finally {
+      catalogoMutable.splice(largoReal, catalogoMutable.length - largoReal);
+    }
+
+    // El catalogo real queda como estaba: ningun otro caso hereda las entradas de mentira.
+    expect(METRICAS.length).toBe(largoReal);
+    expect(METRICAS.map((m) => m.id)).not.toContain("sintetica_declarada_1");
   });
 
   it("no compila un tercer estado de produccion", () => {
