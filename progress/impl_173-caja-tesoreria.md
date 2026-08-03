@@ -3417,3 +3417,110 @@ El bloqueante era real y ahora está medido: la frase de `egresos` que declara e
 2026-08-03 tiene un test que se pone rojo si desaparece, y la «descripción propia» de las dos
 métricas nuevas dejó de depender de que nadie las copiara. **Cero cambios de comportamiento: dos
 asteriscos en `lib/` y tres casos de test.**
+
+---
+---
+
+# J. Cascada de integración con `dev` — el tablero financiero de la 132 (2026-08-03)
+
+> Fase **frontend**. Alcance: **un solo archivo de test**. Cero código de producción.
+
+## J1. Qué pasó, y por qué no es un defecto de nadie
+
+Al mergear `origin/dev` (61 commits: 128/131/132/175/177) el typecheck se puso rojo en dos líneas:
+
+```
+tests/components/TableroFinanciero.test.tsx(92,7):  error TS2739: missing properties: dinero_en_caja, ganancia_ordenex
+tests/components/TableroFinanciero.test.tsx(110,7): error TS2739: missing properties: dinero_en_caja, ganancia_ordenex
+```
+
+**Las dos ramas están bien.** `dev` trajo la 132 con dos registros **totales** sobre
+`MetricaFinancieraId` (`ETIQUETAS` y `DTOS`) — y su propio comentario explica por qué:
+*«el día que la 127 sirva una novena métrica, este archivo deja de compilar en vez de seguir en
+verde sin cubrirla»*. Esta rama sirvió **la novena y la décima** (`dinero_en_caja`,
+`ganancia_ordenex`, ⟨P4⟩ humano de `progress/decision_F2_173.md`), así que
+`IDS_FINANCIERAS_SERVIDAS` pasó de 8 a 10 y el `Record` total dejó de serlo.
+
+Es decir: **el rojo es la guardia de la 132 haciendo exactamente su trabajo**, no una regresión. La
+alternativa —un `Partial<Record<...>>`— habría dejado el tablero sin cubrir las dos cifras nuevas y
+en verde.
+
+## J2. Qué se tocó
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/components/TableroFinanciero.test.tsx` | Las dos entradas nuevas en `ETIQUETAS` y en `DTOS`, y **tres anclas de conteo** puestas al día. |
+
+**Nada más.** Ni `lib/`, ni `metrics.ts`, ni el componente, ni `cargar.ts`, ni una aserción de
+comportamiento.
+
+Las dos fixtures usan el **mismo helper que sus vecinas** (`dtoKpi`) porque `deTesoreria`
+(`AnaliticaFinancieraService.ts:253-279`) las sirve con la misma forma que las cuatro de caja: una
+vista sola, `grano: "fecha"`, `sumableCon: []`, **sin filas** y `esAcumulado: false` —no son un saldo
+al corte—. Importes que continúan la serie de las vecinas (5000/4500 y 6000/5400), elegidos para no
+coincidir con ninguna cifra que el archivo ya afirma o prohíbe.
+
+## J3. El tablero las pinta SOLO: medido, no supuesto
+
+`TableroFinanciero.tsx` **no escribe la lista de ids** (R27): recorre los paneles que le da
+`cargar.ts` —que a su vez recorre `IDS_FINANCIERAS_SERVIDAS`— y elige el componente por la **forma**
+del DTO. Una vista sin filas cae en `PanelKpi`. Así que las dos métricas nuevas se pintan **sin
+tocar una línea del componente**, y lo que lo demuestra es que **tres anclas de conteo se pusieron
+rojas al añadir solo las fixtures**:
+
+| Caso | Antes | Al añadir las fixtures |
+| --- | --- | --- |
+| R13 · secciones del tablero | `toHaveLength(9)` | **11** |
+| R4 · con un panel denegado | `toHaveLength(8)` | **10** |
+| R18 · las no acumuladas | `toHaveLength(7)` | **9** |
+
+Once secciones = 9 + las dos nuevas, una vista cada una. Y el ancla que **no** se movió es la que lo
+confirma sin ambigüedad: `expect(nombres.sort()).toEqual(nombresEsperados(IDS_FINANCIERAS_SERVIDAS))`
+sigue en verde, o sea que los nombres accesibles renderizados son **exactamente** los once
+esperados, «Dinero en caja» y «Ganancia de Ordenex» incluidos. Es lo que pidió ⟨P4⟩: las dos cifras
+a la vista.
+
+Los tres números se actualizaron a 11/10/9. Siguen siendo **enteros escritos a mano** —que es lo que
+los hace útiles—: ninguno pasó a `toBeGreaterThan`. Lo que cambió es el mundo que cuentan.
+
+Gratis, además: `dinero_en_caja` y `ganancia_ordenex` entran en el caso de R18 «NO aparece *saldo al
+corte*», que ahora afirma sobre nueve secciones. Si alguien las marcara acumuladas, se pone rojo.
+
+## J4. Gate de esta entrada
+
+| Comando | Resultado |
+| --- | --- |
+| `pnpm typecheck` | **sin salida, exit 0** (era el que estaba rojo) |
+| `pnpm lint` | **0 errores**, 44 warnings preexistentes en tests ajenos; **ninguno** en el archivo tocado |
+| `pnpm exec vitest related --run tests/components/TableroFinanciero.test.tsx` | **1 archivo / 19 tests verdes** |
+| `pnpm exec vitest run guard` | **56/57 archivos, 792/793 verdes**; 1 rojo **ajeno** (§J5) |
+
+**No corrido aquí:** la suite completa ni `./init.sh` — los corre el leader.
+
+## J5. Rojo ajeno, NO tocado: `catalogo-produccion.guardia.test.ts`
+
+```
+FAIL tests/unit/analytics/catalogo-produccion.guardia.test.ts:365
+AssertionError: egresos cita la fecha 2026-08-03, que no aparece en progress/decision_C2_127.md
+```
+
+**Medido en árbol limpio** (con el cambio de §J2 en `git stash`): **falla igual**. No lo causa esta
+entrada.
+
+Es **otra cascada de la misma familia**, y esta sí cruza `lib/`. La guardia es de la **175**
+(`1e4e6d09`, llegó con el merge). Su regla: toda fecha escrita en el bloque de comentario de una
+métrica cuyo `estadoProduccion` cambió tiene que aparecer en el fichero de decisión que la guardia
+derivó de `progress/`. El bloque de `egresos` cita hoy **dos** decisiones legítimas —⟨D8⟩ de la 127
+(`decision_C2_127.md`, 2026-08-02, en el comentario de `estadoProduccion`) y ⟨P4⟩ de la 173
+(`decision_F2_173.md`, 2026-08-03, en el de `descripcion`)— y la guardia contrasta **todas** las
+fechas del bloque contra **una sola** de las dos.
+
+No se toca desde aquí, y a propósito: arreglarlo es o `lib/analytics/metrics.ts` —bajo autorización
+humana fechada, fuera del alcance de esta entrada— o la guardia de la 175. **Queda reportado al
+leader para que lo decida el humano.**
+
+## J6. Veredicto
+
+El typecheck volvió a verde tocando **un archivo de test y ninguna línea de producción**; el tablero
+pinta las dos métricas nuevas **solo**, y hay tres anclas de conteo que lo demuestran por haberse
+puesto rojas primero.
