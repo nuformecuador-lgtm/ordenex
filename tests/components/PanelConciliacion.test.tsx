@@ -99,6 +99,27 @@ describe("Feature 132 (R19) — cuadre correcto: conteos y cuadre, sin alarma", 
     expect(within(seccion).getAllByText(cifra(60.5, "moneda")).length).toBeGreaterThan(0);
   });
 
+  it("muestra los importes por metodo de CADA fila, no solo sus conteos", () => {
+    // R19 pide los conteos por (nivel, estado) CON SUS TOTALES. Sin esto, un panel
+    // que perdiera los cuatro importes de cada fila —y dejara solo la cantidad—
+    // seguiria en verde: el cuadre de abajo sale de otra parte del DTO.
+    render(<PanelConciliacion datos={datosDe(true, [])} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETA });
+
+    // Fila `cierre_dia · aprobado`: efectivo 1000,00 · SINPE 250,50 · general 1250,50.
+    expect(within(seccion).getByText(cifra(1000, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).getByText(cifra(250.5, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).getByText(cifra(1250.5, "moneda"))).toBeInTheDocument();
+
+    // Fila `cierre_bodega · solicitado`: efectivo 300,00 · transferencia 10,00 ·
+    // general 310,00. Las DOS filas quedan cubiertas: perder los importes de una
+    // sola tambien tiene que poner esto rojo.
+    expect(within(seccion).getByText(cifra(300, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).getByText(cifra(10, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).getByText(cifra(310, "moneda"))).toBeInTheDocument();
+  });
+
   it("no emite ninguna alerta cuando el cuadre es correcto", () => {
     render(<PanelConciliacion datos={datosDe(true, [])} />);
     expect(screen.queryByRole("alert")).toBeNull();

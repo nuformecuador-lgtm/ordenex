@@ -169,7 +169,19 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
           { cubo: CUBOS_TIENDA[0], importe: importe("55.00", "50.00") },
           { cubo: CUBOS_TIENDA[1], importe: importe("66.00", "60.00") },
         ],
-        total: importe("121.00", "110.00"),
+        // OJO: el total NO cuadra con la suma de las filas (55+66 = 121 bruto,
+        // 50+60 = 110 neto) Y ESO ES A PROPOSITO. NO LO "ARREGLES".
+        //
+        // Es fiel al dominio: `cuenta_por_pagar_tienda` es `esAcumulado: true`
+        // —un saldo AL CORTE— y el servicio de la 127 lo obtiene de una
+        // agregacion distinta de la que produce los cubos del rango, asi que no
+        // tiene por que coincidir con ellos.
+        //
+        // Y es lo que da mordida a R14: mientras el total del DTO coincidia con
+        // la suma de las filas, un componente que SUMARA las filas en vez de leer
+        // `vista.total` pintaba lo mismo y ningun test podia separarlos. Con los
+        // numeros descuadrados, derivar el total pone rojo el caso de R14.
+        total: importe("140.00", "128.00"),
       },
     ],
   },
@@ -411,8 +423,56 @@ describe("Feature 132 (R16) — bruto y neto, los dos y distinguibles", () => {
     const seccion = screen.getByRole("region", { name: ETIQUETAS.cuenta_por_pagar_tienda });
     expect(within(seccion).getByText("Total neto")).toBeInTheDocument();
     expect(within(seccion).getByText("Total bruto")).toBeInTheDocument();
-    expect(within(seccion).getByText(cifra(110, "moneda"))).toBeInTheDocument();
-    expect(within(seccion).getByText(cifra(121, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).getByText(cifra(128, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).getByText(cifra(140, "moneda"))).toBeInTheDocument();
+  });
+});
+
+describe("Feature 132 (R14) — el total pintado sale del DTO, nunca de sumar las filas", () => {
+  // Las tres vistas que llevan total al lado tienen fixtures cuyo total NO
+  // coincide con la suma de sus filas (ver el comentario de la fixture): asi, un
+  // componente que derivara la cifra pintaria un numero distinto del esperado.
+
+  it("la vista por metodo de pago muestra el neto del DTO y no la suma de sus metodos", () => {
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", {
+      name: nombresEsperados(["cod_recaudado"])[0] ?? "",
+    });
+
+    // 311,11 es el `total.neto` del DTO; 306,66 es lo que suman los tres metodos
+    // (101,11 + 102,22 + 103,33).
+    expect(within(seccion).getByText(cifra(311.11, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).queryByText(cifra(306.66, "moneda"))).toBeNull();
+    expect(document.body.textContent ?? "").not.toContain(cifra(306.66, "moneda"));
+  });
+
+  it("la vista por tienda muestra los totales del DTO y no la suma de sus seis cubos", () => {
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", {
+      name: nombresEsperados(["cod_recaudado"])[1] ?? "",
+    });
+
+    // Del DTO: 1206,00 bruto y 722,22 neto. Sumando los seis cubos saldria
+    // 201..206 = 1221,00 y 101..106 = 621,00.
+    expect(within(seccion).getByText(cifra(1206, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).getByText(cifra(722.22, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).queryByText(cifra(1221, "moneda"))).toBeNull();
+    expect(within(seccion).queryByText(cifra(621, "moneda"))).toBeNull();
+  });
+
+  it("el saldo al corte de la cuenta por pagar es el del DTO y no la suma de sus tiendas", () => {
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS.cuenta_por_pagar_tienda });
+
+    // Del DTO: 140,00 bruto y 128,00 neto. Sumando las dos filas saldria 121,00 y
+    // 110,00, que es lo que pintaria un total derivado.
+    expect(within(seccion).getByText(cifra(140, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).getByText(cifra(128, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).queryByText(cifra(121, "moneda"))).toBeNull();
+    expect(within(seccion).queryByText(cifra(110, "moneda"))).toBeNull();
   });
 });
 
