@@ -282,3 +282,258 @@ antiguas): **ninguna cae en un archivo de esta tanda** (comprobado filtrando la 
 TANDA A entregada menos `T A.2`: enum migrado con round-trip verde, derivación pura de las dos cifras
 con la mutación money-critical ejecutada y revertida, `derivarBalance` intacto y bajo guardia, y el
 `CHECK` deliberadamente sin escribir a la espera de `T A.0`.
+
+---
+---
+
+# TANDA B — El COD entra en la caja
+
+> Misma rama `feature/173-caja-tesoreria`. Fase **backend**.
+> Alcance de esta entrada: **`T B.1`, `T B.2`, `T B.3`, `T B.4`** — las cuatro **HECHAS**.
+
+## B1. Qué se hizo
+
+| Task | Estado | Nota |
+| --- | --- | --- |
+| `T B.1` — `CajaCodFeedService` | **HECHA** | Lee el **ledger**, no las gestiones. Contraprueba incluida. |
+| `T B.2` — enganche en la aprobación | **HECHA** | Cero dependencias nuevas en el constructor (§B4). Orden afirmado por test. |
+| `T B.3` — el cierre de bodega no toca la caja | **HECHA** | Cuarta afirmación, en la línea de las tres de 42/43/44. |
+| `T B.4` — idempotencia | **HECHA** | Contra **Postgres real**, no contra un doble. |
+
+## B2. Archivos
+
+### Creados
+
+| Archivo | Task |
+| --- | --- |
+| `lib/interfaces/services/ICajaCodFeedService.ts` | `T B.1` |
+| `lib/services/CajaCodFeedService.ts` | `T B.1` |
+| `tests/unit/services/caja-cod-feed-service.test.ts` | `T B.1` |
+| `tests/unit/repositories/cierres-admin-caja-cod.test.ts` | `T B.2` |
+| `tests/integration/db/caja-tesoreria-idempotencia.test.ts` | `T B.4` |
+
+### Modificados
+
+| Archivo | Qué | Task |
+| --- | --- | --- |
+| `lib/repositories/CierresAdminRepository.ts` | +45 líneas, **todas aditivas**: el import, la constante del feed y el bloque del COD tras el feed del ledger por tienda. | `T B.2` |
+| `tests/unit/services/cierres-bodega-admin-service.test.ts` | +1 caso (`feature 173/R16`). | `T B.3` |
+| `tests/unit/repositories/cierres-admin-repository.test.ts` | +1 línea en el doble de Prisma. Ver §B5. | cascada de `T B.2` |
+| `tests/unit/services/cierres-admin-service.test.ts` | +1 `findMany` en el doble de `walletTiendaMovimiento`. Ver §B5. | cascada de `T B.2` |
+| `tests/integration/db/cierre-detail-congelado.test.ts` | ídem. Ver §B5. | cascada de `T B.2` |
+
+`git diff --stat` de la tanda: **90 inserciones, 0 borrados**. No hay ni una línea eliminada en
+todo el diff de código y de tests.
+
+### Lo que NO está en el diff (y es parte de la verificación)
+
+- `lib/services/WalletMensajeroFeedService.ts` y `tests/unit/services/wallet-mensajero-feed-service.test.ts`
+  — **R66 / `[P2]` = (a)**. El `egreso_pago_mensajero = P` del feed de la 44 **no se tocó**: ni a
+  `min(P,E)`, ni movido a la liquidación, ni nada. Lo único que se hizo con él fue **medirlo**:
+  `cierres-admin-caja-cod.test.ts` fija que sigue llegando a la caja con su monto íntegro junto al
+  COD nuevo. El límite que eso deja («Dinero en caja» menor que el dinero real, en exactamente la
+  cuenta por pagar a mensajeros) está declarado en `design.md §3.4` y **sigue vivo a propósito**.
+- `lib/services/LiquidacionService.ts`, `lib/actions/liquidacion.ts` y las suites de liquidación —
+  son la Tanda C.
+- `lib/actions/cierres-admin.ts` — el composition root **no cambia** (§B4).
+- `lib/utils/caja-tesoreria.ts` — se **reusa**, no se reimplementa: nada de esta tanda deriva cifras.
+
+## B3. `T B.1` — por qué el feed lee el LEDGER
+
+`construirIngresoCod(cierreId, tx)` hace `findMany` sobre `wallet_tienda_movimiento` con las
+**cuatro** claves (`origen_tipo`, `origen_id`, `categoria = cod_recaudado`, `tipo = credito`),
+suma con `Prisma.Decimal` y devuelve **0 o 1** fila. Sin `fechaMovimiento` (R17). Sin
+`Number(`/`parseFloat(`/`parseInt(` (barrido sobre el módulo, ignorando comentarios).
+
+El tipo del cliente de transacción es `Pick<PrismaClient, "walletTiendaMovimiento">`: el feed **no
+puede** leer `gestion_orden` aunque alguien quisiera — lo impide el compilador antes que cualquier
+test. Encima de eso, la **contraprueba de R12 exigida por la task** está escrita y ejecutada: con
+el ledger diciendo `12801.00` y las gestiones diciendo `10000.00`, el movimiento sale por
+`12801.00` **y** `gestionOrden.findMany` acumula **cero llamadas**. Su espejo también: con el
+ledger vacío y las gestiones diciendo `5000.00`, no sale ninguna fila.
+
+El doble del ledger **honra el `where`** como lo haría Postgres (filtra de verdad). Con un doble
+complaciente, olvidar `categoria` o `tipo` en el WHERE seguiría verde y la caja se comería los
+débitos de flete e IVA — dinero que Ordenex ya contó como propio — inflando el contra-entrega.
+
+## B4. `T B.2` — cero dependencias nuevas en el constructor, y qué significa exactamente
+
+El feed va como **constante de módulo** (`const CAJA_COD_FEED = new CajaCodFeedService()`), no como
+octavo parámetro del constructor. Es lo que pide el design con esas palabras, y se puede hacer
+porque el servicio **no tiene estado ni dependencias propias**, y porque lo que sí hace falta para
+escribir —el repositorio de la caja de la 42— **ya estaba inyectado desde la feature 42**.
+
+La alternativa (inyectarlo) obligaba a tocar los **12 sitios** que construyen
+`CierresAdminRepository`, entre ellos `wallet-idempotencia.test.ts` (42) y
+`cierres-admin-indemnizacion.test.ts` (158), con un octavo argumento mecánico cada uno. El acuerdo
+está fijado por un test estructural: `expect(CierresAdminRepository.length).toBe(8)`.
+
+El **orden** respecto al feed del ledger por tienda se afirma **midiendo**, no comentando: el doble
+apunta en una traza cuándo se **escribe** el ledger y cuándo se **lee**, y el test exige
+`escribe < lee`. La mutación de §B7-2 lo confirma.
+
+Lo demás que fija esta suite: el ingreso es único y por la suma exacta; si la escritura en la caja
+falla, el `$transaction` del doble **revierte de verdad** y quedan el cierre en `solicitado`, el
+ledger vacío y la caja vacía (R15, medido, no deducido); rechazar no emite; un `count = 0` no emite.
+
+## B5. Tres dobles de Prisma que ganaron un `findMany` (declarado)
+
+Que el feed lea el ledger **de la base** tiene una consecuencia mecánica: los dobles de Prisma que
+aprueban un cierre con contra-entrega necesitan exponer `walletTiendaMovimiento.findMany`. Sin
+tocarlos, 6 tests de tres suites reventaban con `Cannot read properties of undefined (reading
+'findMany')` — **rojos míos**, no ajenos, y por eso se arreglan aquí:
+
+| Suite | Qué se añadió | Por qué es coherente |
+| --- | --- | --- |
+| `cierres-admin-repository.test.ts` | `findMany → []` | En esa suite el repositorio del ledger es un doble que **no escribe nada**: un ledger vacío es exactamente lo que corresponde. |
+| `cierres-admin-service.test.ts` | `findMany` que filtra `tiendaRows` | Ahí el ledger **sí** se escribe (repositorio real sobre el doble): el `findMany` lee del mismo array. |
+| `cierre-detail-congelado.test.ts` | `findMany` que filtra `movsTienda` | Ídem: el mismo libro que se escribe es el que se lee. |
+
+Son **tres líneas de doble**, sin una sola aserción existente modificada ni borrada. **No cambia
+ningún importe ni ninguna fórmula** —que es la sustancia de R68—; lo que cambia es que el doble ya
+no está incompleto. Se declara aquí para que el review no tenga que deducirlo del diff.
+
+La otra vía —que el feed **no** leyera la base— era peor: es literalmente romper R12.
+
+Para acotar el alcance de esa cascada, el enganche solo pregunta al ledger cuando el feed de la 43
+**acreditó** contra-entrega en esa misma aprobación. Esa guardia es la transcripción del
+antecedente de R13 («si un cierre no acredita contra-entrega alguno») y **no decide el monto**: el
+monto sale del ledger y solo del ledger. Hay un test que lo prueba con los dos números en
+desacuerdo —ledger `8000.00`, array del feed `5000.00`— y el que entra en la caja es **8000.00**.
+
+## B6. `T B.4` — la idempotencia, contra Postgres de verdad
+
+`tests/integration/db/caja-tesoreria-idempotencia.test.ts` corre contra el Postgres local dentro de
+una transacción que **siempre se revierte** (patrón de la 169). No hay ni una fila de dinero
+inventada al terminar, pase lo que pase.
+
+- **R14**: se siembra el ledger real (dos tiendas con COD, un débito de flete y un crédito de
+  `ajuste_credito`), el feed **real** lee, el repositorio **real** inserta, y se repite el ciclo
+  entero: `insertadas = 1` la primera vez y **`0` la segunda**, con **una** fila en la tabla y su
+  monto intacto (`12801.00`).
+- **R48**: el mismo `INSERT` **sin** `ON CONFLICT` **revienta**. Es la contraprueba de que la
+  barrera es el índice único parcial y no la buena voluntad del código: quitar `skipDuplicates` no
+  duplicaría, fallaría en alto.
+- **R13** contra la base: un cierre sin créditos devuelve `[]` y `crearMovimientos` inserta `0`.
+- Dos cierres distintos **no** se deduplican entre sí.
+- Dos guardias **estructurales**: `crearMovimientos` no hace check-then-insert (`findFirst` /
+  `findUnique` / `count` ⇒ cero coincidencias) y el bloque del enganche tampoco pregunta si el
+  contra-entrega ya existe. La idempotencia **no es un `if`**.
+
+De regalo, esta suite es la primera prueba **ejecutada** de que el valor de enum
+`ingreso_cod_recaudado` de `T A.1` está aplicado en una base real.
+
+## B7. Pruebas por mutación — EJECUTADAS y revertidas
+
+### Mutación 1 (money-critical, la exigida): el WHERE del feed pierde `categoria`
+
+`lib/services/CajaCodFeedService.ts`: se quita `categoria: "cod_recaudado"` del `findMany`. Es el
+fallo realista: la caja se traga **cualquier** crédito del cierre, no solo el contra-entrega.
+
+**Rojo en las tres suites, incluida la que corre contra Postgres:**
+
+```
+ ❯ tests/unit/services/caja-cod-feed-service.test.ts (14 tests | 3 failed)
+     × R11/R12: con DOS tiendas en el cierre, el monto es la suma EXACTA de sus dos creditos
+     × R11: el movimiento es un INGRESO de la categoria del contra-entrega, con el cierre como origen
+     × R12: el WHERE acota por cierre, categoria Y tipo — las cuatro claves, ninguna de mas
+ ❯ tests/unit/repositories/cierres-admin-caja-cod.test.ts (12 tests | 1 failed)
+     × R12/R15: el feed LEE el ledger DESPUES de que se escribe (orden medido, no comentado)
+ ❯ tests/integration/db/caja-tesoreria-idempotencia.test.ts (6 tests | 1 failed)
+     × R14/R48: aprobar DOS veces el mismo cierre inserta UNA fila de contra-entrega
+```
+
+El detalle que importa, **medido contra Postgres**:
+
+```
+ FAIL  tests/integration/db/caja-tesoreria-idempotencia.test.ts >
+       R14/R48: aprobar DOS veces el mismo cierre inserta UNA fila de contra-entrega
+AssertionError: expected '13800.00' to be '12801.00' // Object.is equality
+
+Expected: "12801.00"
+Received: "13800.00"
+
+ ❯ tests/integration/db/caja-tesoreria-idempotencia.test.ts:95:27
+```
+
+₡999 de un ajuste manual entrando en la caja como si fueran contra-entrega cobrado. **Mutación
+revertida**; las tres suites vuelven a 32 verdes.
+
+### Mutación 2: el feed del COD corre ANTES de escribir el ledger
+
+`lib/repositories/CierresAdminRepository.ts`: el bloque del COD se mueve **encima** de
+`walletTiendaMovimientoRepo.crearMovimientos`. Es exactamente el defecto que `T B.2` manda medir.
+
+```
+ ❯ tests/unit/repositories/cierres-admin-caja-cod.test.ts (12 tests | 4 failed)
+     × R11/R12: UN ingreso `ingreso_cod_recaudado` con la SUMA exacta de los creditos del cierre
+     × R12/R15: el feed LEE el ledger DESPUES de que se escribe (orden medido, no comentado)
+     × R15: si la escritura en la caja falla, la aprobacion ENTERA revierte
+     × el egreso `egreso_pago_mensajero` se sigue emitiendo tal cual, junto al COD
+
+AssertionError: expected [] to have a length of 1 but got +0
+ ❯ tests/unit/repositories/cierres-admin-caja-cod.test.ts:235:20
+```
+
+El ingreso desaparece entero: al leer, el ledger todavía estaba vacío. **Mutación revertida**; los
+12 vuelven a verde.
+
+## B8. Trazabilidad `R<n>` → test
+
+| R | Test que lo verifica |
+| --- | --- |
+| R11 | `tests/unit/services/caja-cod-feed-service.test.ts` — «el movimiento es un INGRESO de la categoria del contra-entrega, con el cierre como origen» + `tests/unit/repositories/cierres-admin-caja-cod.test.ts` — «UN ingreso `ingreso_cod_recaudado` con la SUMA exacta de los creditos del cierre» |
+| R12 | `caja-cod-feed-service.test.ts` — «con DOS tiendas … la suma EXACTA», «el WHERE acota por cierre, categoria Y tipo» y las **dos contrapruebas** («con el ledger y las gestiones DISCREPANTES, gana el ledger», «un ledger VACIO no se rescata con las gestiones») + `cierres-admin-caja-cod.test.ts` — «el monto sale del LEDGER, no del array que el feed de la 43 devolvió» |
+| R13 | `caja-cod-feed-service.test.ts` — «devuelve lista VACIA», «creditos que SUMAN 0.00 tampoco emiten fila» + `cierres-admin-caja-cod.test.ts` — «NI UNA fila de contra-entrega (ni en 0.00)» + `caja-tesoreria-idempotencia.test.ts` (contra Postgres) |
+| R14 | `tests/integration/db/caja-tesoreria-idempotencia.test.ts` — «aprobar DOS veces … inserta UNA fila» (Postgres real) + `cierres-admin-caja-cod.test.ts` — «aprobar DOS veces deja UNA sola fila, con su monto intacto» |
+| R15 | `cierres-admin-caja-cod.test.ts` — «todo dentro de UNA transaccion», «el feed LEE el ledger DESPUES de que se escribe» y «si la escritura en la caja falla, la aprobacion ENTERA revierte» (estado, ledger y caja revertidos) |
+| R16 | `tests/unit/services/cierres-bodega-admin-service.test.ts` — «feature 173/R16: aprobar un CierreBodega NO mete CONTRA-ENTREGA en la caja principal» |
+| R17 | `caja-cod-feed-service.test.ts` — «NO se pasa `fechaMovimiento`: la clave ni siquiera esta presente» |
+| R48 (parte cierre) | `caja-tesoreria-idempotencia.test.ts` — «el mismo insert sin `ON CONFLICT` revienta» + los dos guardias estructurales de que no hay check-then-insert |
+| R66 / `[P2]` | `cierres-admin-caja-cod.test.ts` — «el egreso `egreso_pago_mensajero` se sigue emitiendo tal cual, junto al COD»; y la suite de `WalletMensajeroFeedService` **fuera del diff** |
+
+## B9. Gate ejecutado
+
+> Gate **acotado**, el que ordenó el leader. La suite completa NO se corrió.
+
+**`pnpm typecheck`** → `tsc --noEmit`, sin salida, **exit 0**.
+
+**`pnpm lint`**
+
+```
+✖ 27 problems (0 errors, 27 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores**, y las 27 advertencias son **la misma línea base de la Tanda A** (`_args`/`_items` en
+suites antiguas): filtrando la salida por `caja-cod`, `CajaCod`, `cierres-admin-caja`,
+`caja-tesoreria-idempotencia`, `CierresAdminRepository` y `cierres-bodega-admin-service` → **cero
+coincidencias**.
+
+**`pnpm exec vitest related --run`** sobre los archivos tocados (código y tests)
+
+```
+ Test Files  26 passed (26)
+      Tests  418 passed (418)
+   Duration  17.51s
+```
+
+**`pnpm exec vitest run tests/integration/db`** (obligatorio: la tanda toca la base)
+
+```
+ Test Files  92 passed (92)
+      Tests  1118 passed (1118)
+   Duration  8.55s
+```
+
+Delta contra la Tanda A: **+1 archivo, +6 tests**, que es exactamente el archivo nuevo de `T B.4`.
+
+**No corrido aquí:** `./init.sh --rapido` ni `./init.sh` completo. Los corre el leader.
+
+## B10. Veredicto de la Tanda B
+
+TANDA B entregada completa: el contra-entrega entra en la caja leyendo el **ledger** —con la
+contraprueba de las gestiones discrepantes escrita y verde—, enganchado tras el feed de la 43 con
+el orden **medido** y sin una sola dependencia nueva en el constructor, idempotente **por índice
+contra Postgres real**, con el cierre de bodega y el pago al mensajero intactos y dos mutaciones
+money-critical ejecutadas, rojas y revertidas.

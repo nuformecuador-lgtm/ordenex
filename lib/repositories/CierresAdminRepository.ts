@@ -14,6 +14,8 @@ import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWallet
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import type { IWalletIndemnizacionFeedService } from "@/lib/interfaces/services/IWalletIndemnizacionFeedService";
+import type { ICajaCodFeedService } from "@/lib/interfaces/services/ICajaCodFeedService";
+import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type {
   IngresoOrdenexDTO,
@@ -40,6 +42,21 @@ const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado"];
 // mensajero ausente que dejaria su bodega bloqueada; guardada por estado. Solo cambia `estado`.
 const ESTADOS_REABRIBLES: CierreEstado[] = ["vencido", "rechazado"];
 const ESTADO_SOLICITADO: CierreEstado = "solicitado";
+
+/**
+ * Feature 173/T B.2 (design §3.1) — el feed que mete el CONTRA-ENTREGA en la caja principal.
+ *
+ * Va como constante del modulo y NO como dependencia del constructor, y es deliberado: el
+ * design lo pide con esas palabras («cero dependencias nuevas en ese constructor»). Puede
+ * hacerse porque este feed no tiene estado ni dependencias propias —`new CajaCodFeedService()`
+ * no recibe nada— y porque lo que SI hace falta para escribir en la caja, el repositorio de la
+ * 42, YA esta inyectado desde la feature 42.
+ *
+ * El efecto practico de no tocar el constructor es que ninguno de los 12 sitios que construyen
+ * este repositorio cambia: las suites de la 42, la 43, la 44 y la 158 se quedan fuera del diff
+ * (R68), en vez de ganar un octavo argumento mecanico cada una.
+ */
+const CAJA_COD_FEED: ICajaCodFeedService = new CajaCodFeedService();
 
 // Feature 42/T8: la resolucion del cierre ahora orquesta una transaccion (para alimentar
 // la wallet atomicamente al aprobar, R5/R7) -> el cliente necesita `$transaction`.
@@ -551,6 +568,34 @@ export class CierresAdminRepository implements ICierresAdminRepository {
           tx,
         );
         await this.walletTiendaMovimientoRepo.crearMovimientos(tx, movsTienda); // R6/R13: idempotente
+
+        // Feature 173/T B.2 (design §3.1, R11/R12/R15): TRAS acreditar el ledger por tienda, el
+        // CONTRA-ENTREGA entra en la CAJA PRINCIPAL, en la MISMA tx (todo-o-nada: si el insert
+        // falla, la aprobacion entera revierte y no queda un cierre aprobado sin su COD).
+        //
+        // El orden respecto a la linea de arriba NO es estetico y no se sostiene en este
+        // comentario: el feed LEE del ledger los creditos que `crearMovimientos` acaba de
+        // escribir (R12), asi que invertirlo dejaria la caja sin el ingreso.
+        // `cierres-admin-caja-cod.test.ts` lo afirma midiendo el orden real de las llamadas.
+        //
+        // La guardia es la transcripcion literal del antecedente de R13 —«si un cierre no
+        // acredita contra-entrega alguno»—: la acreditacion es exactamente el credito
+        // `cod_recaudado` que el feed de la 43 acaba de construir. Si no lo hay, no hay nada
+        // que leer ni que emitir. NO decide el MONTO (eso sale del ledger y solo del ledger):
+        // decide si hay algo que preguntar.
+        const acreditoCod = movsTienda.some(
+          (m) => m.tipo === "credito" && m.categoria === "cod_recaudado",
+        );
+        if (acreditoCod) {
+          const ingresoCod = await CAJA_COD_FEED.construirIngresoCod(cierreId, tx);
+          if (ingresoCod.length > 0) {
+            // R14/R48: idempotente por el indice unico parcial (origen_tipo, origen_id,
+            // categoria) de la 42. Re-aprobar NO emite un segundo ingreso, y la barrera es la
+            // base, no un `if` de aqui.
+            await this.walletMovimientoRepo.crearMovimientos(tx, ingresoCod);
+          }
+        }
+
         // Feature 44/T10 (R5/R7/R11/R12/R17): TRAS 42 y 43, alimenta el LIBRO del pago por
         // mensajero EN LA MISMA tx (todo-o-nada). El feed lee el cierre una vez y devuelve el
         // libro (devengo + pago) Y el egreso egreso_pago_mensajero=P para la caja 42 (Qa=SI).

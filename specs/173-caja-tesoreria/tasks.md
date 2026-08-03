@@ -163,7 +163,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 
 # TANDA B — El COD entra en la caja · *backend*
 
-### [ ] T B.1 — `CajaCodFeedService`
+### [x] T B.1 — `CajaCodFeedService`
 - **Archivos:** `lib/interfaces/services/ICajaCodFeedService.ts`,
   `lib/services/CajaCodFeedService.ts`, `tests/unit/services/caja-cod-feed-service.test.ts` (NUEVOS).
 - **Qué:** lee de `wallet_tienda_movimiento` los créditos `cod_recaudado` de **ese** cierre, suma,
@@ -174,7 +174,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   el feed leyera `gestion_orden.montoRecibido` en vez del ledger, un test con ledger y gestiones
   discrepantes lo detecta.
 
-### [ ] T B.2 — Enganche en la aprobación del cierre
+### [x] T B.2 — Enganche en la aprobación del cierre
 - **Archivos:** `lib/repositories/CierresAdminRepository.ts`,
   `tests/unit/repositories/cierres-admin-caja-cod.test.ts` (NUEVO).
 - **Qué:** llamada al feed **después** del feed del ledger por tienda, inserción con el repositorio
@@ -183,12 +183,12 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 - **Hecho:** si la inserción falla, la aprobación entera revierte (nada de cierre aprobado sin su
   COD); el orden respecto al feed de tienda está afirmado por un test, no por un comentario.
 
-### [ ] T B.3 [P] — El cierre de **bodega** sigue sin tocar la caja
+### [x] T B.3 [P] — El cierre de **bodega** sigue sin tocar la caja
 - **Archivos:** `tests/unit/services/cierres-bodega-admin-service.test.ts` (+1 afirmación).
 - **Depende de:** T B.2 · **Cubre:** R16
 - **Hecho:** cuarta afirmación en la línea de las tres que ya existen (42/43/44), ahora para el COD.
 
-### [ ] T B.4 — Idempotencia de la aprobación
+### [x] T B.4 — Idempotencia de la aprobación
 - **Archivos:** `tests/integration/db/caja-tesoreria-idempotencia.test.ts` (NUEVO).
 - **Depende de:** T B.2 · **Cubre:** R14, R48 (parte cierre)
 - **Hecho:** aprobar dos veces el mismo cierre inserta **una** fila de COD; el segundo intento es
