@@ -3615,3 +3615,49 @@ Las dos **revertidas con `git checkout --`**; `git diff` de `metrics.ts` contra 
 §J5 cerrado. El rojo era de la **guardia**, no del catálogo: una premisa implícita («una métrica, una
 decisión») que la 173 refutó con un caso legítimo. Generalizada al conjunto de decisiones citadas,
 con las dos mutaciones ejecutadas en rojo y revertidas, y **cero líneas de producción tocadas**.
+
+## J7. El segundo archivo de la misma cascada: el CARGADOR
+
+La cascada tenía **dos** archivos, no uno. El segundo —`tests/unit/analytics/tablero-financiero-cargar.test.ts`, la prueba de `cargar.ts`— solo apareció **con el gate completo**, y por una razón que conviene dejar escrita (§J8).
+
+Misma causa exacta: el cargador recorre `IDS_FINANCIERAS_SERVIDAS`, que pasó de 8 a 10. Tres casos con anclas de conteo escritas a mano:
+
+| Caso | Ancla | De → a |
+| --- | --- | --- |
+| R13, R27 · se piden EXACTAMENTE las N métricas | `toHaveBeenCalledTimes(8)` y `paneles` `toHaveLength(8)` | **8 → 10** |
+| R12 · las N consultas se emiten a la vez | `resolutores`, `idsPedidos` y el resuelto, `toHaveLength(8)` ×3 | **8 → 10** |
+| R12, R4, R23 · un fallo no arrastra a las demás | paneles `ok`, `toHaveLength(6)` | **6 → 8** (10 − 1 error − 1 denegado) |
+
+**Los tres eran conteos**: ninguno resultó ser otra cosa disfrazada. Y los tres se **midieron antes de escribir el número** —se dejó fallar, se leyó el recibido (`got 10`, `got 10`, `got 8`) y se puso ese entero a mano—. Ninguno pasó a `toBeGreaterThan` ni se derivó de `IDS_FINANCIERAS_SERVIDAS.length`: un conteo derivado se pondría verde solo el día que alguien añada una métrica sin querer, que es justo el día en que este archivo tiene que hablar. La única aserción que **sí** se compara contra la constante ya existía y siguió verde sola, sin tocarla — es la que dice *qué* ids se piden, no *cuántos*.
+
+También se actualizaron los **títulos** de los dos `describe` y los dos `it` que decían «ocho» y «seis», y las tres frases del comentario de cabecera. Un título que miente sobre el número es la misma clase de defecto que el número mal: se lee más que el código.
+
+**Ninguna aserción de comportamiento cambió**: ni el orden, ni la concurrencia (el caso de R12 sigue afirmando que las llamadas están emitidas *antes* de que se resuelva la primera), ni el aislamiento de cada fallo en SU panel, ni la ausencia de motivo en el `denegado`.
+
+## J8. La lección: `vitest related` no alcanza a esta familia
+
+`pnpm exec vitest related --run tests/components/TableroFinanciero.test.tsx` **no podía** seleccionar el archivo del cargador, y no es un fallo de la herramienta: `related` parte del **grafo de importaciones del diff**, y el diff de §J2 tocaba el test del *componente*. El test del *cargador* no importa ese archivo — importa `cargar.ts` y la constante. Dos archivos hermanos, cero aristas entre ellos.
+
+O sea: **un cambio en el catálogo (`IDS_FINANCIERAS_SERVIDAS`) irradia a todos sus consumidores, pero un cambio en UN TEST del catálogo no irradia a los tests HERMANOS.** Por eso el primer rojo lo cazó el typecheck (los `Record` totales) y el segundo no: las anclas de conteo del cargador son runtime puro, invisibles para `tsc`.
+
+Regla para la próxima: cuando cambie el número de métricas servidas, el gate rápido de esta familia **no** es `related`, es el barrido acotado
+
+```
+pnpm exec vitest run tests/unit/analytics tests/components
+```
+
+que es donde viven los dos archivos y sus vecinos (**244 archivos / 2851 tests, 134 s**). Es la diferencia entre «compila» y «funciona» que `CLAUDE.md §5` describe, medida en un caso concreto.
+
+## J9. Gate de §J7
+
+| Comando | Resultado |
+| --- | --- |
+| `pnpm typecheck` | **sin salida, exit 0** |
+| `pnpm lint` | **0 errores**, 44 warnings preexistentes en tests ajenos |
+| `pnpm exec vitest related --run tests/unit/analytics/tablero-financiero-cargar.test.ts` | **1 archivo / 6 tests verdes** (eran 3 rojos + 3 verdes) |
+| `pnpm exec vitest run guard` | **57 archivos / 793 tests, TODOS verdes** |
+| `pnpm exec vitest run tests/unit/analytics tests/components` | **244 archivos / 2851 tests, TODOS verdes** — no hay un tercer archivo |
+
+El rojo ajeno reportado en §J5 (`catalogo-produccion.guardia.test.ts`) **ya no está**: lo cerró
+`5e09dbe3`, que enseñó a la guardia de la 175 que una métrica puede acumular decisiones de varias
+features. Se comprueba aquí y se deja escrito para que §J5 no se lea como deuda abierta.
