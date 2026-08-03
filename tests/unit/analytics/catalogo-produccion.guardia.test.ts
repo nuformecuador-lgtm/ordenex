@@ -122,6 +122,21 @@ function camposLeidosEnCodigo(fuente: string): string[] {
   return CAMPOS_VIGILADOS.filter((campo) => new RegExp(`\\b${campo}\\b`).test(codigo));
 }
 
+/** Toda fecha ISO que aparece en un texto, en orden de aparicion. */
+function fechasDe(texto: string): string[] {
+  return texto.match(/\b20\d{2}-\d{2}-\d{2}\b/g) ?? [];
+}
+
+/**
+ * Los ficheros de decision de `progress/` que un texto CITA, sin repetir. Solo `decision*.md`:
+ * es el mismo universo que recorre `cambiosDecididosEnProgress()`, asi que citar una bitacora
+ * (`impl_*.md`) no cuenta como respaldo de una fecha.
+ */
+function decisionesCitadas(texto: string): string[] {
+  const nombres = [...texto.matchAll(/progress\/(decision[A-Za-z0-9_.-]*\.md)\b/g)].map((m) => m[1]);
+  return [...new Set(nombres)];
+}
+
 /* -------------------------------------------------------------------------- */
 /* R1 · `incidentes` tiene columna en el rollup, luego tiene productor         */
 /* -------------------------------------------------------------------------- */
@@ -330,7 +345,34 @@ describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
   // MUTACION QUE ESTE CASO MATA: borrar del comentario de `incidentes` (o de cualquier otra
   // entrada afectada) la cita a su fichero de decision — p. ej. quitar
   // `progress/decision_175.md` de `metrics.ts:226-229`. Tambien muere si la decision no
-  // lleva fecha, o si el fichero citado no existe.
+  // lleva fecha, si el fichero citado no existe, o si el bloque escribe una fecha que ningun
+  // documento citado respalda. Las tres, comprobadas de verdad: aplicadas, rojas, revertidas.
+  //
+  // ---------------------------------------------------------------------------------------
+  // POR QUE LA COMPROBACION (b) NO EXIGE UN SOLO FICHERO: UNA METRICA ACUMULA DECISIONES
+  // ---------------------------------------------------------------------------------------
+  // Nacida con la 175, esta guardia daba por supuesto «una metrica, una decision»: localizaba
+  // EL fichero del cambio de `estadoProduccion` y exigia que TODA fecha del bloque estuviera
+  // en EL. La 173 demostro que esa premisa es falsa. Una entrada del catalogo vive anos y
+  // acumula decisiones de features distintas; hoy `egresos` cita dos, ambas legitimas y ambas
+  // necesarias:
+  //   · ⟨D8⟩  de la 127 (2026-08-02, `progress/decision_C2_127.md`) ratifico su `estadoProduccion`;
+  //   · ⟨P4⟩  de la 173 (2026-08-03, `progress/decision_F2_173.md`) autorizo cambiar su DESCRIPCION,
+  //     porque desde esa feature la cifra incluye el dinero entregado a las tiendas.
+  // Con la premisa vieja, la fecha de ⟨P4⟩ era "una fecha que no aparece en decision_C2_127.md"
+  // y la guardia se ponia roja contra un catalogo correcto. Borrar la ⟨P4⟩ para apagarla habria
+  // sido mentir sobre por que la cifra de `egresos` crece.
+  //
+  // ESTO NO ES UN AFLOJAMIENTO, y la diferencia esta en que el respaldo sigue siendo OBLIGATORIO,
+  // solo que se busca en el conjunto de decisiones que el PROPIO BLOQUE cita en vez de en una
+  // sola fijada de antemano. El liston no baja en ningun frente:
+  //   · una fecha inventada no aparece en ninguna decision citada  -> sigue roja;
+  //   · citar un fichero que no existe para colar su fecha         -> roja (se comprueba que exista);
+  //   · citar un fichero real pero sin fecha                       -> roja (se comprueba que este fechado);
+  //   · citar la decision del cambio "de adorno", sin escribir ninguna de SUS fechas y colgando
+  //     todas las del bloque de otro documento                     -> roja (ultima asercion).
+  // El unico caso nuevo que pasa es el real: un bloque que cita dos decisiones fechadas y
+  // escribe la fecha de cada una. Las comprobaciones (a) y (c) no cambiaron.
   it("todo cambio de `estadoProduccion` cita una decision humana registrada en `progress/`", () => {
     const cambios = cambiosDecididosEnProgress();
 
@@ -340,6 +382,17 @@ describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
       toBeGreaterThanOrEqual(3);
     expect(new Set(cambios.map((c) => c.fichero)).size).toBeGreaterThanOrEqual(2);
 
+    // Autocomprobacion del lector de citas ANTES de usarlo: si devolviera [] por un cambio de
+    // formato del comentario, el bucle de abajo no comprobaria NINGUN fichero y (b) pasaria por
+    // ciega. Distingue ademas la decision de la bitacora, y no se traga un nombre inventado.
+    expect(decisionesCitadas("ver `progress/decision_C2_127.md`)")).toEqual(["decision_C2_127.md"]);
+    expect(decisionesCitadas("(`progress/decision_F2_173.md`): la DESCRIPCION cambia")).
+      toEqual(["decision_F2_173.md"]);
+    expect(decisionesCitadas("`progress/decision_175.md` y `progress/decision_175.md`")).
+      toEqual(["decision_175.md"]);
+    expect(decisionesCitadas("§H7 de `progress/impl_173-caja-tesoreria.md`")).toEqual([]);
+    expect(decisionesCitadas("sin ninguna cita")).toEqual([]);
+
     for (const cambio of cambios) {
       const ruta = path.join(DIR_PROGRESS, cambio.fichero);
       const decision = fs.readFileSync(ruta, "utf8");
@@ -348,22 +401,53 @@ describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
       const fecha = /\b20\d{2}-\d{2}-\d{2}\b/.exec(decision);
       expect(fecha, `progress/${cambio.fichero} no lleva fecha`).not.toBeNull();
 
-      // (b) la entrada del catalogo CITA ese fichero desde su propio comentario, y la fecha
-      // que escribe es una de las del fichero (no una inventada).
+      // (b) la entrada del catalogo CITA ese fichero desde su propio comentario, y toda fecha
+      // que escribe esta RESPALDADA por alguna de las decisiones que ella misma cita. Una
+      // metrica acumula decisiones de varias features (ver la nota de arriba: `egresos` cita
+      // ⟨D8⟩ de la 127 y ⟨P4⟩ de la 173), asi que el respaldo se busca en el conjunto citado y
+      // no en un unico fichero — pero cada miembro de ese conjunto tiene que existir y estar
+      // fechado, o citarlo no respaldaria nada.
       const bloque = bloqueDeEntrada(cambio.id);
       expect(
         bloque.includes(`progress/${cambio.fichero}`),
         `${cambio.id} cambio de estadoProduccion sin citar progress/${cambio.fichero}`,
       ).toBe(true);
-      const fechasDeLaDecision = new Set(decision.match(/\b20\d{2}-\d{2}-\d{2}\b/g) ?? []);
-      const fechasCitadas = bloque.match(/\b20\d{2}-\d{2}-\d{2}\b/g) ?? [];
+
+      const citadas = decisionesCitadas(bloque);
+      expect(citadas, `el bloque de ${cambio.id} no cita su propia decision`).
+        toContain(cambio.fichero);
+
+      const fechasRespaldadas = new Set<string>();
+      for (const nombre of citadas) {
+        const rutaCitada = path.join(DIR_PROGRESS, nombre);
+        expect(
+          fs.existsSync(rutaCitada),
+          `${cambio.id} cita progress/${nombre}, que no existe`,
+        ).toBe(true);
+        const suyas = fechasDe(fs.readFileSync(rutaCitada, "utf8"));
+        expect(suyas.length, `${cambio.id} cita progress/${nombre}, que no lleva fecha`).
+          toBeGreaterThan(0);
+        for (const f of suyas) fechasRespaldadas.add(f);
+      }
+
+      const fechasCitadas = fechasDe(bloque);
       expect(fechasCitadas.length, `${cambio.id} cita la decision sin fecha`).toBeGreaterThan(0);
       for (const citada of fechasCitadas) {
         expect(
-          fechasDeLaDecision.has(citada),
-          `${cambio.id} cita la fecha ${citada}, que no aparece en progress/${cambio.fichero}`,
+          fechasRespaldadas.has(citada),
+          `${cambio.id} cita la fecha ${citada}, que no aparece en ninguna de las decisiones ` +
+            `que el propio bloque cita (${citadas.join(", ")})`,
         ).toBe(true);
       }
+
+      // Y la decision DEL CAMBIO no se cita de adorno: al menos una de las fechas del bloque es
+      // suya. Sin esto bastaria nombrar el fichero sin su fecha y colgar todas las del bloque de
+      // cualquier otro documento, que es justo la firma que R14 exige.
+      const fechasDelCambio = new Set(fechasDe(decision));
+      expect(
+        fechasCitadas.some((f) => fechasDelCambio.has(f)),
+        `${cambio.id} cita progress/${cambio.fichero} sin escribir ninguna de sus fechas`,
+      ).toBe(true);
 
       // (c) y el estado que la decision ratifico es el que el catalogo tiene hoy.
       expect(getMetrica(cambio.id)!.estadoProduccion, cambio.id).toBe("producida");

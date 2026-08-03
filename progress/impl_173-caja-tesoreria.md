@@ -3519,8 +3519,99 @@ No se toca desde aquí, y a propósito: arreglarlo es o `lib/analytics/metrics.t
 humana fechada, fuera del alcance de esta entrada— o la guardia de la 175. **Queda reportado al
 leader para que lo decida el humano.**
 
+> **CERRADO en §J7** (2026-08-03, fase backend): el humano eligió la segunda vía —generalizar la
+> guardia, sin tocar `metrics.ts`—. El diagnóstico de arriba era correcto y ahí está la corrección.
+
 ## J6. Veredicto
 
 El typecheck volvió a verde tocando **un archivo de test y ninguna línea de producción**; el tablero
 pinta las dos métricas nuevas **solo**, y hay tres anclas de conteo que lo demuestran por haberse
 puesto rojas primero.
+
+## J7. Cierre de §J5 — la guardia de la 175 se **generaliza**, no se vacía (2026-08-03)
+
+> Fase **backend**. Alcance: **`tests/unit/analytics/catalogo-produccion.guardia.test.ts`, un solo
+> archivo**. `lib/analytics/metrics.ts` **NO se toca** (su diff está bajo `decision_F2_173.md` y ya
+> se verificó línea por línea); comprobado al cerrar con
+> `git diff origin/dev...HEAD -- lib/analytics/metrics.ts`.
+
+### La premisa vieja: «una métrica, una decisión»
+
+El caso R14 deriva de `progress/` qué métricas cambiaron de `estadoProduccion` y con qué fichero de
+decisión, y hace tres comprobaciones sobre cada una: **(a)** la decisión está fechada, **(b)** el
+bloque de comentario de la métrica cita ese fichero y sus fechas, **(c)** el estado que la decisión
+ratificó es el que el catálogo tiene hoy.
+
+La (b) daba por supuesto que **cada métrica tiene exactamente una decisión**: exigía que **toda**
+fecha escrita en el bloque estuviera en **EL** fichero del cambio de `estadoProduccion`. Ese
+supuesto nunca se escribió; se coló por ser cierto el día que la 175 nació, cuando cada entrada
+afectada tenía una sola.
+
+### Por qué es falsa, y quién lo demostró
+
+**Una entrada del catálogo vive años y acumula decisiones de features distintas.** `egresos` cita
+hoy dos, ambas legítimas, ambas necesarias y ninguna borrable:
+
+| Decisión | Feature | Fichero | Fecha | Qué autorizó |
+|---|---|---|---|---|
+| ⟨D8⟩ | 127 | `progress/decision_C2_127.md` | 2026-08-02 | su `estadoProduccion`: `declarada` → `producida` |
+| ⟨P4⟩ | 173 | `progress/decision_F2_173.md` | 2026-08-03 | su **descripción**: desde la 173 la cifra incluye el dinero entregado a las tiendas |
+
+Con la premisa vieja, la fecha de ⟨P4⟩ era «una fecha que no aparece en `decision_C2_127.md`» y la
+guardia se ponía roja **contra un catálogo correcto**. Borrar la ⟨P4⟩ para apagarla habría sido
+mentir sobre por qué el número de `egresos` crece — justo el modo de fallo que P4 existía para
+evitar.
+
+### La premisa nueva
+
+> Toda fecha escrita en el bloque debe estar respaldada por **alguna de las decisiones que el propio
+> bloque cita**; y **cada** fichero citado debe **existir** y **estar fechado**.
+
+Además, la decisión **del cambio de `estadoProduccion`** no puede citarse de adorno: al menos una de
+las fechas del bloque tiene que ser suya. **(a)** y **(c)** no se tocaron.
+
+### Por qué NO es un debilitamiento
+
+El respaldo documental sigue siendo **obligatorio**; lo único que cambia es **dónde se busca** —en
+el conjunto que el bloque declara, en vez de en uno solo fijado de antemano—. El listón no baja en
+ningún frente, y el conjunto no es libre: sus miembros tienen que ser ficheros reales y fechados.
+
+| Intento | Antes | Ahora |
+|---|---|---|
+| fecha inventada, sin documento que la respalde | roja | **roja** |
+| citar un fichero inexistente para colar su fecha | roja | **roja** (se comprueba que exista) |
+| citar un fichero real pero sin fecha | roja | **roja** (se comprueba que esté fechado) |
+| nombrar la decisión del cambio sin escribir ninguna de **sus** fechas | roja | **roja** (última aserción) |
+| bloque con dos decisiones fechadas y la fecha de cada una | **roja (falso positivo)** | verde |
+
+El **único** caso nuevo que pasa es el real. Y se añadió una **autocomprobación del lector de citas**
+antes de usarlo (mismo patrón que el detector de R13): si un cambio de formato del comentario lo
+dejara devolviendo `[]`, el bucle no comprobaría ningún fichero y (b) pasaría **por ciega**; las
+cinco aserciones de arranque lo impiden y distinguen `decision_*.md` de una bitácora `impl_*.md`.
+
+### Mutaciones — aplicadas, rojas, revertidas
+
+| # | Mutación en el bloque de `egresos` de `lib/analytics/metrics.ts` | Salida |
+|---|---|---|
+| 1 | fecha inventada `2026-01-01` | `AssertionError: egresos cita la fecha 2026-01-01, que no aparece en ninguna de las decisiones que el propio bloque cita (decision_F2_173.md, decision_C2_127.md)` |
+| 2 | cita a `progress/decision_X9_999.md` (inexistente) | `AssertionError: egresos cita progress/decision_X9_999.md, que no existe` |
+
+Las dos **revertidas con `git checkout --`**; `git diff` de `metrics.ts` contra `HEAD` quedó
+**vacío** y su diff contra `origin/dev` sigue siendo el autorizado (91 inserciones, 2 borrados).
+
+### Verificación
+
+| Comando | Resultado |
+|---|---|
+| `pnpm typecheck` | **verde**, sin salida |
+| `pnpm lint` | **0 errores**, 44 warnings preexistentes (`no-unused-vars`), **ninguno** en el archivo tocado |
+| `pnpm exec vitest run guard` | **57/57 archivos, 793/793 tests verdes** (antes: 56/57 y 792/793) |
+| `pnpm exec vitest related --run tests/unit/analytics/catalogo-produccion.guardia.test.ts` | **1 archivo / 5 tests verdes** |
+
+**No corrido aquí:** la suite completa ni `./init.sh` — los corre el leader.
+
+### Veredicto
+
+§J5 cerrado. El rojo era de la **guardia**, no del catálogo: una premisa implícita («una métrica, una
+decisión») que la 173 refutó con un caso legítimo. Generalizada al conjunto de decisiones citadas,
+con las dos mutaciones ejecutadas en rojo y revertidas, y **cero líneas de producción tocadas**.
