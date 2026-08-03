@@ -1,18 +1,28 @@
 import { describe, it, expect } from "vitest";
-import { execFileSync } from "node:child_process";
 import fs from "fs";
 import path from "path";
 
 // Feature 131 (T4.1, T4.2) — el guardia de frontera del tablero operativo.
 //
-// El archivo tiene DOS PARTES claramente separadas, siguiendo el patron que dejo
-// `tests/unit/analytics/operativa-frontera.guardia.test.ts` (126):
+// TODO lo que queda aqui censa EL ARBOL, no el diff: sobrevive al merge y sigue diciendo
+// la verdad cualquier dia. R1 (la analitica entra por la Server Action y por ninguna otra
+// puerta), R10 (el tablero no reimplementa alcance ni identidad) y R25 (el tablero
+// operativo no toca nada financiero, ni el catalogo de servidor). Sigue el patron de
+// `tests/unit/analytics/operativa-frontera.guardia.test.ts` (126).
 //
-//   1. PERMANENTE — censa EL ARBOL. Sobrevive al merge y sigue diciendo la verdad
-//      cualquier dia: R1 (la analitica entra por la Server Action y por ninguna otra
-//      puerta), R10 (el tablero no reimplementa alcance ni identidad) y R25 (el tablero
-//      operativo no toca nada financiero, ni el catalogo de servidor).
-//   2. BRANCH-SCOPED — mide el DIFF contra `origin/dev`, con su cabecera de caducidad.
+// HUBO un segundo bloque BRANCH-SCOPED (T4.2) que medía el diff contra `origin/dev`.
+// **Se retira en el PR de esta feature**, que es donde su propia cabecera de caducidad
+// decia que habia que decidirlo. El razonamiento, para que nadie lo reponga:
+//
+//   - De las cinco cosas que afirmaba, la unica que habla del CODIGO FINAL —que el
+//     tablero operativo no toca nada financiero— ya la cubre, y con mas fuerza, el censo
+//     permanente de R25: aquel mira el arbol entero y no solo lo que esta rama cambio.
+//   - Las otras cuatro eran propiedades del DIFF («esta rama no toca `AnaliticaShell.tsx`,
+//     ni `components/private/analytics/`, ni `lib/**`»). Tras el merge son **falsas por
+//     diseno**: la 132 TIENE que modificar `AnaliticaShell.tsx` para anadir su slot
+//     `financiero`. Mantenerlas solo puede producir rojos ajenos —o verdes vacios, cuando
+//     el diff contra `origin/dev` pase a estar vacio—, que es la leccion de
+//     `frontera.guardia.test.ts` (retirado por el chore del PR #232) y de la T13.1 de la 126.
 //
 // R1 y R10 se censan sobre `app/(app)/analitica/` ENTERA, no solo sobre el subarbol de la
 // 131: la puerta de datos y el recorte por rol son propiedades de la RUTA, y un archivo
@@ -179,78 +189,5 @@ describe("Feature 131 — el censo DISCRIMINA", () => {
     const valor = `import { Prisma } from "@prisma/client";`;
     expect(PUERTA_TRASERA.some((p) => p.test(soloTipo))).toBe(false);
     expect(PUERTA_TRASERA.some((p) => p.test(valor))).toBe(true);
-  });
-});
-
-/* ========================================================================== */
-/* PARTE BRANCH-SCOPED                                                        */
-/* ========================================================================== */
-
-/**
- * ⚠ ESTE BLOQUE CADUCA EN EL MERGE DE LA 131.
- *
- * Mide el DIFF de la rama contra `origin/dev`. En cuanto la 131 se mergea, `origin/dev`
- * pasa a contener estos mismos commits y el bloque deja de hablar de la 131: empieza a
- * juzgar CUALQUIER rama posterior, dando verdes vacios (diff vacio) o rojos ajenos
- * (cualquier feature que toque `lib/**` o el shell). Es la leccion de
- * `frontera.guardia.test.ts`, retirado por el chore del PR #232, y de la T13.1 de la 126.
- *
- * SU RETIRADA SE DECIDE EN EL PR DE ESTA FEATURE, NO DESPUES. Lo que SOBREVIVE es la parte
- * permanente de arriba, que censa el arbol y no el diff; este bloque no aporta nada que
- * aquella no siga afirmando sobre el codigo final.
- *
- * Lo que mide: que el diff de la rama no toca `AnaliticaShell.tsx` (D5: es lo unico que la
- * 132 necesita modificar de verdad), ni `components/private/analytics/` (paquete cerrado
- * de la 130), ni `lib/**` (backend: 126/127/128/135, y en particular
- * `lib/analytics/metrics.ts`, cuyas divergencias estan aplazadas a la ficha 175).
- */
-describe("Feature 131 (D5) — frontera del diff con la 132 [BLOQUE QUE CADUCA EN EL MERGE]", () => {
-  function diffContraDev(): string[] | null {
-    try {
-      const salida = execFileSync("git", ["diff", "--name-only", "origin/dev"], {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      return salida.split("\n").map((l) => l.trim()).filter((l) => l !== "");
-    } catch {
-      // Sin `origin/dev` a mano (clon superficial, CI sin fetch) no se puede medir un
-      // diff: se declara y no se finge un verde con otro significado.
-      return null;
-    }
-  }
-
-  const PROHIBIDOS: readonly RegExp[] = [
-    /^app\/\(app\)\/analitica\/_components\/AnaliticaShell\.tsx$/,
-    /^components\/private\/analytics\//,
-    /^lib\//,
-    /financiera/,
-  ];
-
-  it("el diff de la rama no toca el shell, ni el paquete de la 130, ni `lib/**`, ni nada de la 132", () => {
-    const cambiados = diffContraDev();
-    if (cambiados === null) {
-      expect(true, "no hay `origin/dev` para medir el diff").toBe(true);
-      return;
-    }
-    const malos = cambiados.filter((f) => PROHIBIDOS.some((p) => p.test(f)));
-    expect(
-      malos,
-      "D5: la 131 aterriza PRIMERO y cada feature vive en su subarbol. `AnaliticaShell.tsx` " +
-        "es lo unico que la 132 necesita modificar de verdad (anadir el slot `financiero`), y " +
-        "`lib/analytics/metrics.ts` esta aplazado a la ficha 175. Archivos fuera de frontera: " +
-        malos.join(", "),
-    ).toEqual([]);
-  });
-
-  it("y lo unico compartido que toca en `app/(app)/analitica/` es `page.tsx`", () => {
-    const cambiados = diffContraDev();
-    if (cambiados === null) return;
-    const compartidos = cambiados.filter(
-      (f) =>
-        f.startsWith("app/(app)/analitica/") &&
-        !f.startsWith("app/(app)/analitica/_components/operativo/"),
-    );
-    expect(compartidos.sort()).toEqual(["app/(app)/analitica/page.tsx"]);
   });
 });

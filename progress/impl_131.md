@@ -117,7 +117,14 @@ Archivo: `tests/components/TableroOperativoLatencia.test.tsx`.
 
 ## `pnpm typecheck`, `pnpm lint` y el build
 
-- **`pnpm typecheck`**: 0 errores.
+- **`pnpm typecheck`**: **0 errores, medido con el árbol limpio (sin `.next/`).** El matiz no
+  es cosmético: `tsconfig.json:29` incluye `.next/types/**/*.ts`, así que **si queda un
+  `.next/` de un build anterior, el typecheck arrastra 12 errores de handlers de `app/api`**
+  y `./init.sh` termina en rojo. Me pasó: corrí el build para T7.1/riesgo 2 y dejé `.next/`
+  en el worktree, de modo que durante un rato esta bitácora declaraba un verde que en ese
+  worktree no era cierto. Esos 12 errores son **ajenos** —el diff de esta rama no toca ni un
+  archivo de `app/api`— pero no son invisibles. `rm -rf .next` antes de medir, o medir en un
+  árbol que nunca haya construido.
 - **`pnpm lint`**: 0 errores, 27 warnings — **todos preexistentes** (`_args` sin usar en
   tests de repositorios y servicios ajenos). Ninguno cae en archivos de esta feature.
 - **`pnpm exec next build --webpack`** (nunca `pnpm build`, que encadena `migrate deploy`
@@ -200,7 +207,13 @@ que es la misma regla que gobierna la ventana ciega.
    cualquier rango; la restricción de R27 se aplica como superconjunto en vez de dejar una
    puerta abierta bajo el techo.
 
-4. **`agregacion.ts` no importa `lib/analytics/metrics`** para saber la unidad: la toma de
+4. **La clave SWR es `[prefijo, panel.id, desagregacion, filtro]`**, no
+   `[metricaId, desagregacion, filtro]` como decía T3.1. Consecuencia directa de la
+   desviación 1: un panel puede declarar varias métricas, así que la unidad de consulta es
+   el PANEL. Lo que T3.1 protegía —que el filtro esté en la clave— se conserva intacto, y su
+   mutación (sacar el filtro de la clave) sigue matando el caso de R12.
+
+5. **`agregacion.ts` no importa `lib/analytics/metrics`** para saber la unidad: la toma de
    `SerieOperativa.unidad`, que la respuesta ya trae. Es lo que permite que el subárbol
    entero cumpla R25 sin excepciones.
 
@@ -229,18 +242,34 @@ declaradas y heredadas a la ficha 175**. No se tocó una línea de ese archivo.
   `frontera.guardia.test.ts`, retirado por el chore del PR #232, y de la T13.1 de la 126) y
   qué sobrevive (la parte permanente).
 
-**Decisión que el PR debe tomar: RETIRAR el bloque branch-scoped al mergear.** No aporta
-nada que la parte permanente no siga afirmando sobre el código final, y a partir del merge
-solo puede mentir. Se anota aquí, como en la T13.1 de la 126, para que la retirada sea una
-decisión de este PR y no un descubrimiento de la siguiente feature.
+**RETIRADO EN ESTE PR (hecho, no recomendado).** El bloque branch-scoped se escribió con su
+cabecera de caducidad literal —que decía que su retirada se decidía en este PR— y la decisión
+tomada fue retirarlo. Ya no está en el archivo; en su lugar queda, en la cabecera del
+guardia, el razonamiento de por qué se fue, para que nadie lo reponga:
+
+- de las cinco cosas que afirmaba, la **única sobre el código final** —que el tablero
+  operativo no toca nada financiero— ya la cubre, **y con más fuerza**, el censo permanente
+  de R25: aquel mira el árbol entero, no solo lo que esta rama cambió;
+- las otras cuatro eran propiedades del **diff** («esta rama no toca `AnaliticaShell.tsx`,
+  ni `components/private/analytics/`, ni `lib/**`») y **tras el merge son falsas por
+  diseño**: la 132 *tiene* que modificar `AnaliticaShell.tsx` para añadir su slot
+  `financiero`. Mantenerlas solo podría producir rojos ajenos, o verdes vacíos cuando el
+  diff contra `origin/dev` pase a estar vacío.
+
+Verificado después de retirarlo: las mutaciones de **R1, R10 y R25 siguen muriendo** contra
+la parte permanente (1 failed cada una), así que la retirada no descubre ningún requisito.
+El guardia pasa de 9 casos a 7.
 
 ## T6.3 — el shell no se tocó
 
 `git diff --name-only origin/dev` no incluye `AnaliticaShell.tsx`, ni
 `components/private/analytics/`, ni `lib/`, ni `db/`. Lo único compartido bajo
-`app/(app)/analitica/` que aparece en el diff es **`page.tsx`**, y lo comprueba un caso del
-propio guardia. El solape con la 132 queda en la línea del `return`: la 132 añade
-`financiero={…}` a la misma llamada.
+`app/(app)/analitica/` que aparece en el diff es **`page.tsx`**. El solape con la 132 queda
+en la línea del `return`: la 132 añade `financiero={…}` a la misma llamada.
+
+*(Esto se comprobó ejecutando el comando, no por un test: el caso del guardia que lo medía
+era parte del bloque branch-scoped y se retiró con él, precisamente porque es una propiedad
+del diff y no del código final.)*
 
 ## Archivos
 
