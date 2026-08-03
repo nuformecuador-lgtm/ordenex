@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { codificarCubos, decodificarCubos } from "@/lib/analytics/cache-clave";
-import { cubo } from "./_fake-operativa";
+import { CachedAnaliticaOperativaRollupRepository } from "@/lib/repositories/CachedAnaliticaOperativaRollupRepository";
+import { cacheFalsa } from "./_cache-falsa";
+import { consultaDe, cubo, MAESTRO, rollupFalso } from "./_fake-operativa";
 import { DIMENSION_AGREGADA } from "@/lib/interfaces/repositories/IAnaliticaOperativaRollupRepository";
 
 // Feature 128 / T1.3 — R9. EL VIAJE POR JSON.
@@ -77,6 +79,25 @@ describe("R9 · sin codec, `JSON.stringify` del cubo lanza TypeError", () => {
     expect(() => JSON.stringify(crudo)).toThrow(TypeError);
     // Y con el codec, si.
     expect(() => JSON.stringify(codificarCubos(crudo))).not.toThrow();
+  });
+
+  it("el decorador SI mete el codec: sin el, la consulta entera falla", async () => {
+    // Esta es la asercion que muere si alguien quita `codificarCubos` del decorador y pasa el
+    // cubo directo al puerto. Sin ella, este archivo probaria que el codec FUNCIONA sin probar
+    // que se USA, que es la diferencia entre un requisito cubierto y uno que lo parece.
+    const repo = new CachedAnaliticaOperativaRollupRepository(
+      rollupFalso([cubo({ fecha: "2026-08-01", segCicloAcum: BigInt(4242), segCicloN: 2 })]),
+      cacheFalsa(),
+    );
+    const consulta = consultaDe("entregas", MAESTRO, { rango: "dia" });
+
+    const primera = await repo.agregarCubos(consulta, []);
+    const segunda = await repo.agregarCubos(consulta, []);
+
+    // Con el codec la escritura no lanza y el HIT devuelve un `bigint`.
+    expect(primera[0].segCicloAcum).toBe(BigInt(4242));
+    expect(typeof segunda[0].segCicloAcum).toBe("bigint");
+    expect(segunda[0].segCicloAcum).toBe(BigInt(4242));
   });
 
   it("codificar pero no rehidratar deja un `string`, con el que `tiempo_ciclo` CONCATENA", () => {
