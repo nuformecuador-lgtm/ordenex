@@ -174,7 +174,26 @@ const MODULOS_ESCRITOR = [
   "scripts/rollup-analitica-manual.ts",
 ];
 
-const ARCHIVOS_QUE_PUEDEN_NOMBRARLA = [...MODULOS_ESCRITOR, ...EXCEPCIONES_CATALOGO];
+/**
+ * Feature 126 (T3.3, R27) — EL LECTOR DECLARADO. Se abre la prohibicion para UN archivo y
+ * SOLO para leer; escribir sigue siendo rojo (R2 de la 126) y leer desde cualquier otro
+ * archivo del arbol —el servicio, la Server Action, un componente— tambien.
+ *
+ * POR QUE UNA ENTRADA NOMINAL Y NO UN DIRECTORIO: la prohibicion de R42 «es tuya de levantar,
+ * con su mutacion, no de aflojar de paso» (`design.md > D11` de la 126). Ampliar a
+ * `lib/repositories/` amnistiaria a cualquier repositorio futuro, y la 128 (cache) y la 134
+ * (CSV) van a querer leer el rollup: que tengan que pasar por aqui es el punto.
+ */
+const LECTOR_126 = "lib/repositories/AnaliticaOperativaRollupRepository.ts";
+
+/**
+ * Los DOS unicos metodos del lector de la 126 donde puede vivir una lectura, por NOMBRE. Son
+ * los dos de `IAnaliticaOperativaRollupRepository`: si manana ese archivo gana un tercer
+ * metodo que consulte la tabla, este guardia lo ve.
+ */
+const METODOS_LECTURA_126 = ["agregarCubos", "etiquetasDeEstatus"];
+
+const ARCHIVOS_QUE_PUEDEN_NOMBRARLA = [...MODULOS_ESCRITOR, ...EXCEPCIONES_CATALOGO, LECTOR_126];
 
 /** El UNICO archivo del arbol autorizado a ACCEDER a la tabla. */
 const REPOSITORIO_ESCRITOR = "lib/repositories/AnaliticaRollupRepository.ts";
@@ -330,7 +349,7 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
   it("un SOLO archivo puede ACCEDER a la tabla: el repositorio del escritor", () => {
     const accesos: string[] = [];
     for (const rel of ARCHIVOS_CODIGO) {
-      if (rel === REPOSITORIO_ESCRITOR) continue;
+      if (rel === REPOSITORIO_ESCRITOR || rel === LECTOR_126) continue;
       if (!MENCIONA_LA_TABLA.test(leer(rel))) continue; // todo ACCESO nombra la tabla
       const contenido = leerCodigo(rel);
       for (const patron of ACCESOS) {
@@ -345,34 +364,85 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
     ).toEqual([]);
   });
 
-  it("NADIE lee el rollup todavia, salvo la reconciliacion del propio job (R3/R34)", () => {
+  // Feature 126 / T3.3 (R27) — EL RE-ALCANCE. Antes: NADIE lee el rollup. Ahora: lo lee UN
+  // archivo —el lector declarado de la 126— y SOLO dentro de sus dos metodos, ademas de la
+  // reconciliacion del propio job. El resto del arbol sigue rojo, y por eso la mutacion de
+  // R27 (anadir un `prisma.analyticsDaily.findMany` en el servicio, en la accion o en un
+  // componente) pone rojo este caso.
+  //
+  // Lo que NO se hizo, a proposito: borrar el caso, ampliar la lista a `lib/repositories/` ni
+  // relajar los patrones de `LECTURAS`. La apertura es POR ARCHIVO Y POR NOMBRE DE METODO.
+  it("un solo archivo puede LEER la tabla: el lector declarado de la 126", () => {
     const lecturas: string[] = [];
     for (const rel of ARCHIVOS_CODIGO) {
       if (!MENCIONA_LA_TABLA.test(leer(rel))) continue; // toda LECTURA nombra la tabla
       const contenido = leerCodigo(rel);
       const patronesQueDisparan = LECTURAS.filter((p) => p.test(contenido));
       if (patronesQueDisparan.length === 0) continue;
-      if (rel !== REPOSITORIO_ESCRITOR) {
+
+      // Los DOS unicos archivos con permiso, cada uno con sus metodos permitidos por NOMBRE.
+      const permitidos =
+        rel === REPOSITORIO_ESCRITOR
+          ? [METODO_LECTURA]
+          : rel === LECTOR_126
+            ? METODOS_LECTURA_126
+            : null;
+      if (permitidos === null) {
         lecturas.push(`${rel} :: ${patronesQueDisparan.join(", ")}`);
         continue;
       }
-      // Dentro del repositorio: la lectura tiene que caer DENTRO del cuerpo del metodo de
-      // reconciliacion, no meramente en el mismo archivo.
-      const cuerpo = cuerpoDeMetodo(contenido, METODO_LECTURA);
-      if (cuerpo === null) {
-        lecturas.push(`${rel} :: lee el rollup pero no existe el metodo \`${METODO_LECTURA}\``);
+
+      // Con permiso de archivo NO basta: la lectura tiene que caer DENTRO del cuerpo de uno de
+      // sus metodos declarados, no meramente en el mismo archivo. Si no, el archivo se
+      // convierte en un saco donde cabe cualquier consulta con solo tener el metodo correcto
+      // en alguna parte.
+      const cuerpos = permitidos
+        .map((m) => cuerpoDeMetodo(contenido, m))
+        .filter((c): c is string => c !== null);
+      if (cuerpos.length === 0) {
+        lecturas.push(`${rel} :: lee el rollup pero no existe ninguno de sus metodos declarados`);
         continue;
       }
-      const fuera = contenido.split(cuerpo).join("\n/* cuerpo permitido */\n");
+      let fuera = contenido;
+      for (const cuerpo of cuerpos) fuera = fuera.split(cuerpo).join("\n/* cuerpo permitido */\n");
       for (const patron of patronesQueDisparan) {
-        if (patron.test(fuera)) lecturas.push(`${rel} :: lectura FUERA de ${METODO_LECTURA}`);
+        if (patron.test(fuera)) {
+          lecturas.push(`${rel} :: lectura FUERA de ${permitidos.join("/")}`);
+        }
       }
     }
     expect(
       lecturas,
-      "R3: la 124 no expone ninguna consulta del rollup. La unica lectura permitida es la " +
-        `reconciliacion de R34, dentro de \`${METODO_LECTURA}\`. Las consultas son 122/126/128.`,
+      "la 124 sigue sin exponer consultas del rollup y la 126 abre EXACTAMENTE una puerta: " +
+        `${LECTOR_126}, y dentro de el solo ${METODOS_LECTURA_126.join(" y ")}. La ` +
+        `reconciliacion del job sigue permitida en ${METODO_LECTURA}. Todo lo demas es rojo: ` +
+        "leer el rollup desde el servicio, desde la accion o desde un componente rompe R27.",
     ).toEqual([]);
+  });
+
+  it("el lector de la 126 existe y SOPORTA PESO: si dejara de leer, la apertura sobra", () => {
+    // Direccion 1 — una apertura que apunta a un archivo inexistente es un comodin silencioso.
+    expect(existe(LECTOR_126), `${LECTOR_126} esta autorizado a leer pero no existe`).toBe(true);
+    // Direccion 2 — y si algun dia dejara de leer la tabla, la entrada sobra y hay que
+    // retirarla: una excepcion inerte es un permiso latente que nadie recuerda revisar.
+    const contenido = leerCodigo(LECTOR_126);
+    expect(
+      LECTURAS.some((p) => p.test(contenido)),
+      `${LECTOR_126} ya no lee el rollup: retira la apertura de R27`,
+    ).toBe(true);
+    // Direccion 3 — y sus dos metodos declarados existen con cuerpo.
+    for (const metodo of METODOS_LECTURA_126) {
+      expect(cuerpoDeMetodo(contenido, metodo), `falta el metodo ${metodo}`).not.toBeNull();
+    }
+  });
+
+  it("el lector de la 126 NO escribe: la apertura es de lectura y solo de lectura", () => {
+    // R2 de la 126. Se afirma por separado del caso general de escritura para que el «no
+    // escribe» del lector tenga su propio nombre y no sea la mera ausencia de un rojo.
+    const contenido = leerCodigo(LECTOR_126);
+    for (const patron of ESCRITURAS) {
+      expect(patron.test(contenido), `${LECTOR_126} escribe el rollup: ${patron}`).toBe(false);
+    }
   });
 
   it("no hay un SEGUNDO escritor: la escritura vive en dos metodos del repositorio (R29/R30)", () => {

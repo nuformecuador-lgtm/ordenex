@@ -737,6 +737,14 @@ model GestionOrden {
   @@index([mensajeroId]) // R7
   @@index([cierreId]) // feature 37/R3: listar gestiones sin cierre (cierre_id IS NULL)
   @@index([anuladaPor]) // feature 67: FK del actor de la anulacion
+  // Feature 126/R25 (T0-Q1 = B): la ruta caliente INTRADIA (cubos del dia en curso, D6/D13)
+  // filtra por `created_at` SIN `orden_id` ni `mensajero_id` por delante, y ninguno de los
+  // cuatro indices de arriba la cubre. Se DECLARA aqui, y no solo en el `.sql`: si el
+  // datamodel no lo declara, el siguiente `prisma migrate dev` propone BORRARLO. Columna
+  // unica a proposito — `anulada_at` detras de un predicado de RANGO no filtraria, y el
+  // parcial `(created_at) WHERE anulada_at IS NULL` no es expresable en Prisma (misma
+  // limitacion que documenta el bloque de abajo).
+  @@index([createdAt], map: "gestion_orden_created_at_idx")
   // Feature 67 (F1.4-d): el indice PARCIAL de la ruta caliente
   // `(mensajero_id) WHERE cierre_id IS NULL AND anulada_at IS NULL` (/cierre-dia + corte
   // diario) NO se expresa aqui: Prisma no soporta indices parciales -> vive en el SQL de la
