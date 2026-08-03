@@ -8,6 +8,11 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import { listarPostulacionesPendientes } from "@/lib/actions/aprobacion-postulaciones";
+import {
+  SIDEBAR_ITEMS,
+  itemsVisibles,
+  primerDestino,
+} from "@/lib/auth/menu-visibility";
 import type { RolValue } from "@prisma/client";
 
 // Feature 23 — ramificación de app/(app)/page.tsx por rol. maestro/admin ven el
@@ -131,26 +136,42 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
     expect(listarPendientesMock).not.toHaveBeenCalled();
   });
 
-  it("R3: mensajero/adminSatelite/sin sesión conservan el placeholder Bienvenido", async () => {
-    const roles: (RolValue | null)[] = ["mensajero", "adminSatelite", null];
+  // Pedido humano: `/dashboard` dejó de ser una pantalla. Quien no tiene un dashboard
+  // propio aterriza en el PRIMER ítem de su sidebar; el placeholder solo queda para
+  // quien no tiene ningún ítem visible (sin sesión).
+  it("R3: mensajero/adminSatelite aterrizan en su primer ítem del sidebar", async () => {
+    const roles: RolValue[] = ["mensajero", "adminSatelite"];
 
     for (const rol of roles) {
-      resolveActorMock.mockResolvedValue(
-        rol ? { usuarioId: "u1", rol } : null,
-      );
+      const actor = { usuarioId: "u1", rol };
+      resolveActorMock.mockResolvedValue(actor);
       cookieGetMock.mockReturnValue(undefined);
 
-      const { default: Home } = await import("@/app/(app)/dashboard/page");
-      renderHome(await Home());
+      const esperado = primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor));
+      expect(esperado).not.toBeNull();
 
-      expect(screen.getByText("Bienvenido")).toBeInTheDocument();
-      expect(screen.queryByText("Panel maestro")).toBeNull();
-      expect(screen.queryByText("Panel de tienda")).toBeNull();
+      const { default: Home } = await import("@/app/(app)/dashboard/page");
+      // `redirect()` corta el render lanzando: no llega a pintarse ningún dashboard.
+      await expect(Home()).rejects.toMatchObject({
+        digest: expect.stringContaining(`;${esperado};`),
+      });
 
       cleanup();
       vi.clearAllMocks();
       resetActions();
     }
+  });
+
+  it("R3: sin sesión no hay a dónde ir y queda el placeholder Bienvenido", async () => {
+    resolveActorMock.mockResolvedValue(null);
+    cookieGetMock.mockReturnValue(undefined);
+
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
+    renderHome(await Home());
+
+    expect(screen.getByText("Bienvenido")).toBeInTheDocument();
+    expect(screen.queryByText("Panel maestro")).toBeNull();
+    expect(screen.queryByText("Panel de tienda")).toBeNull();
   });
 
   it("R4: el rol se resuelve server-side vía resolveActorFromSession", async () => {

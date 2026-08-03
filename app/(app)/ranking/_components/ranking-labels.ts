@@ -29,6 +29,23 @@ export const RANKING_COLUMNAS = {
   conteo: "Entregadas / asignadas",
 } as const;
 
+/** Iniciales para el avatar del podio: máx. 2 letras a partir del nombre. */
+export function iniciales(nombre: string): string {
+  const palabras = nombre.trim().split(/\s+/).filter(Boolean);
+  if (palabras.length === 0) return "?";
+  if (palabras.length === 1) return palabras[0].slice(0, 2).toUpperCase();
+  return (palabras[0][0] + palabras[1][0]).toUpperCase();
+}
+
+/** Ancho (0-100) de la barra de efectividad. SOLO presentacional: el porcentaje
+ * mostrado sigue siendo el STRING del servidor (R12), esto no lo reemplaza. */
+export function anchoBarra(pct: string | null): number {
+  if (pct === null) return 0;
+  const n = Number(pct);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
 /** Etiquetas de la sección de premios del podio (R8/R14). */
 export const PREMIOS_LABELS = {
   titulo: "Premios del podio",
@@ -54,6 +71,21 @@ export const PREMIOS_FEEDBACK = {
   invalid: "Monto inválido: número no negativo con hasta 2 decimales.",
   forbidden: "No tenés permiso para editar los premios.",
   unauthenticated: "Tu sesión expiró. Iniciá sesión de nuevo.",
+} as const;
+
+/** Etiquetas del podio visual (rediseño de la sección de ranking). */
+export const PODIO_LABELS = {
+  titulo: "Ranking de mensajeros",
+  descripcion: "Efectividad · entregadas / asignadas · hoy",
+  conteoSufijo: "entregas",
+  sinOcupante: "Sin ocupante",
+  lugar: (posicion: number) => `${posicion}º lugar`,
+  contador: (total: number) =>
+    total === 1 ? "1 mensajero" : `${total} mensajeros`,
+  listaAria: "Resto del ranking diario",
+  podioAria: "Podio del ranking diario",
+  vos: "Tú",
+  fueraDelTop: (limite: number) => `Tu posición, fuera del top ${limite}`,
 } as const;
 
 /** Textos del estado vacío / encabezados de la tabla del ranking. */

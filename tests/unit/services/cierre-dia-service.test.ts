@@ -73,6 +73,9 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     transicionarRechazadoASolicitado: vi.fn(async () => true),
     crearCierre: vi.fn(async () => "c1"),
     findCierresByMensajero: vi.fn(async () => []),
+    // Detalle de un cierre pasado: por defecto NINGUNO es del actor (-> no_encontrada);
+    // los casos que lo ejercen lo sobreescriben.
+    findCierrePropioConGestiones: vi.fn(async () => null),
     // Feature 170 (T I.1): el listado paginado vive en su propia suite (*-paginado).
     findCierresByMensajeroPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     // Feature 67: por defecto, una gestion `entregada` vigente del propio mensajero, sin
@@ -253,6 +256,89 @@ describe("listarCierreDia — evidencia firmada (R5)", () => {
     const { service } = newService({ repo, signedUrls });
     await service.listarCierreDia(MENSAJERO);
     expect(signedUrls.createSignedUrls).not.toHaveBeenCalled();
+  });
+});
+
+// Pedido humano: "ver" el detalle de un cierre YA solicitado desde el histórico.
+describe("verCierrePasado — detalle de un cierre propio (solo lectura)", () => {
+  const CIERRE_PASADO = {
+    cierreId: "c1",
+    estado: "aprobado" as const,
+    destinoTipo: "bodega_central" as const,
+    destinoZonaId: "z-central",
+    totales: { efectivo: "10.00", simpe: "0.00", transferencia: "0.00", general: "10.00" },
+    totalPagoMensajero: "5.00",
+    totalIngresoBodegaRechazos: "0.00",
+    solicitadoAt: "2026-07-12T10:00:00.000Z",
+    resueltoAt: "2026-07-13T09:00:00.000Z",
+    motivoRechazo: null,
+  };
+
+  it("rol != mensajero -> forbidden, sin tocar el repo", async () => {
+    const repo = fakeRepo();
+    const { service } = newService({ repo });
+    const r = await service.verCierrePasado("c1", OTRO_ROL);
+    expect(r.status).toBe("forbidden");
+    expect(repo.findCierrePropioConGestiones).not.toHaveBeenCalled();
+  });
+
+  it("cierre ajeno o inexistente -> no_encontrada (el scope va en el WHERE del repo)", async () => {
+    const repo = fakeRepo(); // el doble devuelve null por defecto
+    const { service } = newService({ repo });
+    const r = await service.verCierrePasado("c-ajeno", MENSAJERO);
+    expect(r.status).toBe("no_encontrada");
+    expect(repo.findCierrePropioConGestiones).toHaveBeenCalledWith("c-ajeno", "m1");
+  });
+
+  it("devuelve la cabecera + las gestiones agrupadas, con el pago SNAPSHOT (no re-derivado)", async () => {
+    const repo = fakeRepo({
+      findCierrePropioConGestiones: vi.fn(async () => ({
+        cierre: CIERRE_PASADO,
+        gestiones: [
+          // El snapshot congelado dice 4.00 aunque la tarifa de HOY pague 5.00 (TARIFA_DEFECTO):
+          // un cierre ya solicitado no cambia de importe porque alguien edite la tarifa.
+          pendiente({ gestionId: "g1", pagoMensajero: "4.00" }),
+          pendiente({ gestionId: "g2", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierrePasado("c1", MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.cierre).toEqual(CIERRE_PASADO);
+    expect(r.grupos.entregada).toHaveLength(1);
+    expect(r.grupos.rechazada).toHaveLength(1);
+    expect(r.grupos.entregada[0].pagoMensajero).toBe("4.00");
+    // Design §7.2: la indemnizacion no viaja a la vista del mensajero.
+    expect(r.grupos.entregada[0].indemnizacion).toBeNull();
+  });
+
+  it("firma las evidencias y, si el storage falla, sirve el detalle SIN ellas", async () => {
+    const gestiones = [pendiente({ gestionId: "g1", evidenciaStoragePath: "o1/foto.jpg" })];
+    const repo = fakeRepo({
+      findCierrePropioConGestiones: vi.fn(async () => ({ cierre: CIERRE_PASADO, gestiones })),
+    });
+
+    const okSigner = fakeSignedUrls();
+    const conFirma = await newService({ repo, signedUrls: okSigner }).service.verCierrePasado(
+      "c1",
+      MENSAJERO,
+    );
+    if (conFirma.status !== "ok") throw new Error("esperaba ok");
+    expect(conFirma.grupos.entregada[0].evidenciaUrl).toBe("https://signed/o1/foto.jpg");
+
+    const rotoSigner = fakeSignedUrls({
+      createSignedUrls: vi.fn(async () => {
+        throw new Error("storage caido");
+      }),
+    });
+    const sinFirma = await newService({ repo, signedUrls: rotoSigner }).service.verCierrePasado(
+      "c1",
+      MENSAJERO,
+    );
+    if (sinFirma.status !== "ok") throw new Error("esperaba ok pese al fallo de storage");
+    expect(sinFirma.grupos.entregada[0].evidenciaUrl).toBeNull();
   });
 });
 

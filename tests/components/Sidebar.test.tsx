@@ -83,10 +83,10 @@ describe("Sidebar", () => {
     });
     expect(nav).toBeInTheDocument();
 
-    // Perfil y Órdenes son enlaces directos.
-    const perfil = screen.getByRole("link", { name: "Perfil" });
+    // Ranking y Órdenes son enlaces directos (sin subítems).
+    const ranking = screen.getByRole("link", { name: "Ranking" });
     const ordenes = linkPorHref("/ordenes");
-    expect(perfil).toHaveAttribute("href", "/perfil");
+    expect(ranking).toHaveAttribute("href", "/ranking");
     expect(ordenes).toHaveAccessibleName("Órdenes");
 
     // Configuración tiene subítems: es un botón colapsable, no un enlace.
@@ -99,10 +99,10 @@ describe("Sidebar", () => {
     renderSidebar();
 
     const config = screen.getByRole("button", { name: /configuración/i });
-    const perfil = screen.getByRole("link", { name: "Perfil" });
+    const ranking = screen.getByRole("link", { name: "Ranking" });
     const ordenes = linkPorHref("/ordenes");
 
-    for (const el of [config, perfil, ordenes]) {
+    for (const el of [config, ranking, ordenes]) {
       expect(el.querySelector("svg")).not.toBeNull();
     }
   });
@@ -154,7 +154,7 @@ describe("Sidebar", () => {
     // Por `href`: "Órdenes" está duplicado como label al renderizar sin filtrar.
     const cases: Array<{ path: string; activeHref: string }> = [
       { path: "/ordenes", activeHref: "/ordenes" },
-      { path: "/perfil", activeHref: "/perfil" },
+      { path: "/ranking", activeHref: "/ranking" },
     ];
 
     for (const { path, activeHref } of cases) {
@@ -188,19 +188,19 @@ describe("Sidebar", () => {
   });
 
   it("renderiza solo los items recibidos por prop (filtrado por rol en el server)", () => {
-    // Set de prueba ya filtrado: solo Perfil (p.ej. rol adminSatelite).
+    // Set de prueba ya filtrado: un solo ítem (p.ej. el portal del adminSatelite).
     const items: readonly MenuItem[] = [
-      { label: "Perfil", href: "/perfil", iconKey: "user", roles: [] },
+      { label: "Órdenes", href: "/recepcion-satelite", iconKey: "package", roles: [] },
     ];
     renderSidebar(items);
 
-    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Órdenes" })).toHaveAttribute(
       "href",
-      "/perfil",
+      "/recepcion-satelite",
     );
     // Los items no incluidos en la prop no se renderizan.
     expect(screen.queryByRole("button", { name: /configuración/i })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Órdenes" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ranking" })).toBeNull();
   });
 
   it("resuelve el icono por iconKey en cada item recibido", () => {
@@ -408,8 +408,12 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     // `Store` de lucide marca su svg con esta clase; con `store: Truck` desaparece.
     expect(recoleccionClass).toMatch(/lucide-store/);
 
-    // Contra "Entregas" en particular (el caso concreto de la mutación).
-    const entregasSvg = linkPorHref("/mis-asignaciones").querySelector("svg");
+    // Contra "Entregas" en particular (el caso concreto de la mutación). Desde el
+    // 2026-07-31 "Entregas" tiene submenú, así que NO es un enlace: se renderiza como el
+    // disparador del desplegable (un `button`), y por ahí hay que buscar su icono.
+    const entregasSvg = screen
+      .getByRole("button", { name: "Entregas" })
+      .querySelector("svg");
     expect(entregasSvg).not.toBeNull();
     expect(entregasSvg!.getAttribute("class")).not.toBe(recoleccionClass);
 

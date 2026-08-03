@@ -15,44 +15,6 @@ import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaServic
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 
-// Feature 170 (T I.1) — proyeccion y mapper del listado "Cierres solicitados" del mensajero
-// (R18). Se extraen de `findCierresByMensajero` para que la version PAGINADA lea exactamente
-// las mismas columnas y las serialice igual: dos copias divergen en cuanto una gane un campo.
-// Money-safe: los Decimal salen como STRING escala 2 (nunca number/parseFloat).
-const CIERRE_PASADO_SELECT = {
-  id: true,
-  estado: true,
-  destinoTipo: true,
-  destinoZonaId: true,
-  totalEfectivo: true,
-  totalSimpe: true,
-  totalTransferencia: true,
-  totalGeneral: true,
-  totalPagoMensajero: true, // feature 39/R13: total snapshot del pago al mensajero
-  totalIngresoBodegaRechazos: true, // feature 56/R12: total snapshot del ingreso de bodega por rechazos
-  solicitadoAt: true,
-} as const;
-
-type CierrePasadoRow = Prisma.CierreDiaGetPayload<{ select: typeof CIERRE_PASADO_SELECT }>;
-
-function toCierrePasadoDTO(r: CierrePasadoRow): CierrePasadoDTO {
-  return {
-    cierreId: r.id,
-    estado: r.estado,
-    destinoTipo: r.destinoTipo,
-    destinoZonaId: r.destinoZonaId,
-    totales: {
-      efectivo: r.totalEfectivo.toFixed(2),
-      simpe: r.totalSimpe.toFixed(2),
-      transferencia: r.totalTransferencia.toFixed(2),
-      general: r.totalGeneral.toFixed(2),
-    },
-    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R13: snapshot money-safe STRING
-    totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R12: idem
-    solicitadoAt: r.solicitadoAt.toISOString(),
-  };
-}
-
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
 const ESTADO_SOLICITADO = "solicitado";
@@ -226,6 +188,59 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     // `null` por casualidad de que aqui las gestiones tengan `cierre_id IS NULL`: la columna
     // ni se pide en `WITH_DETALLE`, asi que no hay nada que filtrar aguas abajo.
     indemnizacion: null,
+  };
+}
+
+/**
+ * Proyeccion de la CABECERA de un cierre del mensajero (histórico R18 y detalle de "ver").
+ * Una sola definicion para las dos lecturas: los totales que se listan y los que se abren
+ * salen de las mismas columnas.
+ *
+ * Feature 170 (T I.1): la comparte ademas la version PAGINADA de `findCierresByMensajero`,
+ * que lee exactamente estas columnas y las serializa con este mismo mapper. Dos copias
+ * divergen en cuanto una gane un campo — que es justo lo que estuvo a punto de pasar aqui.
+ * Money-safe: los Decimal salen como STRING escala 2 (nunca number/parseFloat).
+ */
+const CIERRE_PASADO_SELECT = {
+  id: true,
+  estado: true,
+  destinoTipo: true,
+  destinoZonaId: true,
+  totalEfectivo: true,
+  totalSimpe: true,
+  totalTransferencia: true,
+  totalGeneral: true,
+  totalPagoMensajero: true, // feature 39/R13: total snapshot del pago al mensajero
+  totalIngresoBodegaRechazos: true, // feature 56/R12: total snapshot del ingreso de bodega por rechazos
+  solicitadoAt: true,
+  // Resolucion del cierre: el mensajero ve en SU histórico cuándo se resolvió y, si se
+  // rechazó, por qué (sin el motivo no sabe qué corregir).
+  resueltoAt: true,
+  motivoRechazo: true,
+} as const;
+
+type CierrePasadoSelectRow = Prisma.CierreDiaGetPayload<{
+  select: typeof CIERRE_PASADO_SELECT;
+}>;
+
+/** Mapper de la cabecera: Decimal -> STRING escala 2 (money-safe), fechas -> ISO. */
+function toCierrePasadoDTO(r: CierrePasadoSelectRow): CierrePasadoDTO {
+  return {
+    cierreId: r.id,
+    estado: r.estado,
+    destinoTipo: r.destinoTipo,
+    destinoZonaId: r.destinoZonaId,
+    totales: {
+      efectivo: r.totalEfectivo.toFixed(2),
+      simpe: r.totalSimpe.toFixed(2),
+      transferencia: r.totalTransferencia.toFixed(2),
+      general: r.totalGeneral.toFixed(2),
+    },
+    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R13: snapshot money-safe STRING
+    totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R12
+    solicitadoAt: r.solicitadoAt.toISOString(),
+    resueltoAt: r.resueltoAt ? r.resueltoAt.toISOString() : null,
+    motivoRechazo: r.motivoRechazo,
   };
 }
 
@@ -559,6 +574,37 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       select: CIERRE_PASADO_SELECT,
     });
     return rows.map(toCierrePasadoDTO);
+  }
+
+  /**
+   * Cierre PROPIO + sus gestiones, para el detalle de "ver" un cierre anterior. El scope
+   * (`id` + `mensajeroId`) va en el WHERE: un cierre ajeno devuelve `null` igual que uno
+   * inexistente. La cabecera reusa el MISMO select/mapper que el histórico, así las dos
+   * vistas no pueden divergir en los totales.
+   *
+   * Las gestiones salen de `WITH_DETALLE` (la proyección de la vista del MENSAJERO, que deja
+   * la indemnización fuera de la consulta a propósito, design §7.2). Los montos por gestión
+   * son los SNAPSHOT congelados al solicitar (`pago_mensajero` / `ingreso_bodega_rechazo`),
+   * que es justo lo que el service NO debe re-derivar en un cierre ya cerrado.
+   */
+  async findCierrePropioConGestiones(
+    cierreId: string,
+    mensajeroId: string,
+  ): Promise<{ cierre: CierrePasadoDTO; gestiones: CierreGestionPendienteRow[] } | null> {
+    const cierre = await this.prisma.cierreDia.findFirst({
+      where: { id: cierreId, mensajeroId }, // scope propio en el WHERE
+      select: CIERRE_PASADO_SELECT,
+    });
+    if (cierre === null) return null;
+
+    const rows = await this.prisma.gestionOrden.findMany({
+      // `anuladaAt: null` por coherencia con el resto del módulo: una gestión anulada no
+      // llega a vincularse a un cierre, pero el filtro deja la intención escrita.
+      where: { cierreId, anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      ...WITH_DETALLE,
+    });
+    return { cierre: toCierrePasadoDTO(cierre), gestiones: rows.map(toPendienteRow) };
   }
 
   /**

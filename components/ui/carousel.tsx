@@ -157,7 +157,10 @@ function CarouselContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       ref={carouselRef}
-      className="overflow-hidden"
+      // `p-px`: el viewport recorta a ras de su caja, así que el borde/ring de la
+      // tarjeta (p. ej. la seleccionada, `ring-1 ring-brand`) se comía contra los
+      // cuatro lados. Un píxel de aire lo deja verse entero sin mover el layout.
+      className="overflow-hidden p-px"
       data-slot="carousel-content"
     >
       <div

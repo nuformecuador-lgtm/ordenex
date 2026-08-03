@@ -137,17 +137,28 @@ export function EstadoHistoricoRotulo({ estado }: { estado: CierreEstado }) {
     return (
       <span className="inline-flex flex-col items-start gap-1">
         <span>{ESTADO_LABEL[estado]}</span>
-        <Badge
-          variant="destructive"
-          title={RECHAZADO_BLOQUEANTE_NOTA}
-          aria-label={RECHAZADO_BLOQUEANTE_NOTA}
-        >
-          {RECHAZADO_BLOQUEANTE_LABEL}
-        </Badge>
+        <RechazadoBloqueanteBadge />
       </span>
     );
   }
   return <>{ESTADO_LABEL[estado]}</>;
+}
+
+/**
+ * Solo el marcador de "bloqueante", sin repetir la etiqueta del estado. Es lo que usa el
+ * comprobante del histórico, donde el estado ya lo dice su propio badge: `EstadoHistoricoRotulo`
+ * entero pintaría "Rechazado" dos veces.
+ */
+export function RechazadoBloqueanteBadge() {
+  return (
+    <Badge
+      variant="destructive"
+      title={RECHAZADO_BLOQUEANTE_NOTA}
+      aria-label={RECHAZADO_BLOQUEANTE_NOTA}
+    >
+      {RECHAZADO_BLOQUEANTE_LABEL}
+    </Badge>
+  );
 }
 
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
