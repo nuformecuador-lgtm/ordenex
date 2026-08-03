@@ -1473,13 +1473,13 @@
       "name": "analitica: cache + invalidacion por tag",
       "spec_path": "specs/128-analitica-cache-invalidacion",
       "description": "Backend. cacheTag por dominio en las lecturas de 125/126 e invalidacion (revalidateTag) disparada por el job diario (123) y por la aprobacion de cierres. Evita GROUP BY por request sin servir cifras rancias. Depende de 126.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/128-analitica-cache-invalidacion",
       "depends_on": 127,
-      "status_note": "AVISO DIRIGIDO DE LA 124: el regalo que la 123 te hacia en su design.md seccion 6 -- 'lo calculado una vez sigue valiendo' -- NO esta pagado, y la 124 lo rebajo por escrito. El rollup de un dia pasado es reproducible SOLO en la dimension estatus_id, que la 124 congela derivandola de orden_historial_estado (D1=A2). Las otras tres coordenadas (zona_id, tienda_id, mensajero_id) se leen de la orden EN EL CORTE y cambian despues, asi que un recomputo posterior del mismo dia da otro numero. Y hay una CUARTA via, distinta en naturaleza: por D7 las ordenes con deleted_at quedan fuera de todo, asi que una orden borrada hoy DESAPARECE de un dia en que existio y conto -- no es una coordenada que cambia sino la pertenencia al conjunto de filas. Consecuencia para vos: la cache de un dia pasado es valida porque NADIE recomputa (R35 estricto, el job diario nunca toca el pasado), no porque el dato sea reproducible. En cuanto la 125 recompute un rango, tu invalidacion tiene que cubrirlo. Caracterizado por test en R49 de specs/124-analitica-job-agregacion-diaria/requirements.md; detalle en design.md seccion 6 (tabla de que se reproduce y que no) y seccion 13."
+      "status_note": "2026-08-03 SPEC ESCRITA y PUERTA T0 CERRADA con 5 respuestas del humano (D1-D5). 24 requisitos, cada uno con su mutacion. HALLAZGO QUE CAMBIA LA FICHA: cacheTag() NO es usable en este repo -- exige la config cacheComponents, que next.config.ts no activa; el titulo de la ficha describe una API bloqueada. D1 = unstable_cache({tags}) + revalidateTag sin tocar next.config.ts. D2 = NO se cachea el dominio financiera, con guardia que sobrevive al merge: los ledgers los escriben al menos WalletEgresoService, LiquidacionService, el cron de gastos fijos y las indemnizaciones, asi que cachear dinero con solo la aprobacion de cierres como invalidador seria servir cifras rancias en silencio -> ficha 179. D3 = un tag por dominio (Next limita a 128 tags por entrada y el filtro admite rangos de 366 dias: un tag por fecha es imposible y falla en silencio). D4 = TTL 3600 s provisional y NO medido, con censo acotado al ambito (el literal 3600 ya vive en cuatro sitios ajenos). D5 = kill-switch por variable de entorno, encendida por defecto. DOS BLOQUEADORES REALES resueltos en el diseno: el backfill NO puede llamar a revalidateTag (revienta fuera de un request, es un proceso tsx) y se resuelve encolando un job que drena el cron; y unstable_cache serializa con JSON.stringify mientras segCicloAcum es bigint, asi que cachear el cubo sin codec LANZA TypeError."
     },
     {
       "id": 129,
@@ -1512,12 +1512,13 @@
       "name": "analitica: tablero operativo",
       "spec_path": "specs/131-analitica-tablero-operativo",
       "description": "Frontend. Cablea las Server Actions de 125 a las graficas de 129 dentro de la ruta 128, con filtros (rango, zona, tienda, mensajero) y revalidacion. Depende de 125.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/131-analitica-tablero-operativo",
-      "depends_on": 126
+      "depends_on": 126,
+      "status_note": "2026-08-03 SPEC ESCRITA y PUERTA T0 CERRADA con 5 respuestas del humano (D1-D7 en requirements.md seccion 6). 27 requisitos, cada uno con la mutacion concreta que lo pone rojo. DECISIONES: D1 ventana ciega = aviso unico con recuento y extremos; D2 el dia parcial va EN la serie marcado con su corteAt y todo agregado que lo incluya se anuncia parcial; D3 por encima del techo de 62 puntos las tasas y los tiempos NO pintan serie NI cifra (media de medias esta prohibida) -> ficha 176; D4 N llamadas una por panel, coste NO medido y medirlo es parte de la entrega; D5 la 131 aterriza antes que la 132, cada una en su subarbol y sin tocar AnaliticaShell. D7: la expectativa de prefetch de specs/129/design.md:143-145 queda DELIBERADAMENTE sin cumplir porque su propio guardia (AnaliticaPage.length === 0 y la pagina no importa lib/actions) manda sobre la prosa del diseno."
     },
     {
       "id": 132,
@@ -2071,14 +2072,14 @@
       "id": 177,
       "name": "api - consulta de orden por guia o remision y generacion del PDF por orden y por carga",
       "description": "Backend, canal API key. (1) Ruta NUEVA de consulta por identificador libre: el `{id}` de la ruta se resuelve contra num_guia Y num_remision. El detalle actual `/api/ordenes/api-key/{numGuia}` (feature 106) se deja INTACTO: no se amplia un endpoint ya publicado a integradores. (2) La generacion del PDF NO viaja como query param `generatePdf`: es un segmento de ruta propio (`.../{id}/generate`), un endpoint dedicado que genera el PDF de ESA orden, deja la referencia guardada en la orden y responde con una URL firmada que vence en 5 minutos. Si el PDF ya existe se REUSA el objeto ya subido a storage y solo se vuelve a firmar; solo se genera cuando no existe. (3) Endpoint gemelo por carga: mismo contrato sobre el PDF CONSOLIDADO del lote, retorna el existente o lo genera si falta.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/177-api-consulta-orden-pdf",
       "depends_on": 136,
-      "status_note": "RENUMERADA de 175 a 177 el 2026-08-03: el id 175 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03. Decisiones YA tomadas por el humano en la peticion, no las re-abra el spec_author: ruta NUEVA en vez de ampliar `{numGuia}`; `generatePdf` deja de ser query param y pasa a ser el segmento `/generate`; TTL de la URL firmada = 5 min (mismo TTL que las evidencias de la 106). HALLAZGO que condiciona el diseno: la feature 136 guarda en `carga.download_url` (y `orden.download_url`) la URL FIRMADA, no el path -- ver EtiquetasDescargaService.ts:48 y EtiquetasLotePdfService.ts:78. Una URL firmada caduca, asi que 'reusar la url guardada' es IMPOSIBLE tal como esta persistido hoy: reusar solo puede significar reusar el OBJETO en storage y re-firmarlo en cada respuesta. El spec tiene que decidir si se persiste el storage_path (columna nueva o migracion de la existente) o si se acepta re-firmar a ciegas, y que pasa con las URLs ya guardadas por la 136. ABIERTO para la puerta: (a) desempate cuando el string casa con el num_guia de una orden y el num_remision de OTRA -- ambas son columnas distintas y no hay unicidad cruzada garantizada; (b) verbo HTTP de `/generate` (POST es lo honesto porque muta la orden, pero un integrador esperaria GET); (c) forma exacta de la ruta por carga y si el identificador de carga es el uuid o el `name` del lote; (d) si hace falta un modo forzar-regeneracion o el reuso es siempre. El owner sigue forzado al actor de la API key (R4 de la 106): un integrador no puede consultar ni generar el PDF de una orden ajena. Actualizar `lib/api/openapi-spec.ts`, que hoy publica solo 4 paths.",
-      "spec_path": null
+      "status_note": "PUERTA F1.4 CERRADA el 2026-08-03 con aprobacion explicita del humano: acepta la migracion, acepta que cargaId pase a ser contrato publico, acepta el riesgo (a) de la precedencia de num_guia y acepta el 409 cuando la orden no tiene guia imprimible. Precision suya sobre /generate: PRIORIDAD devolver el enlace; si no hay PDF, generarlo, actualizar el campo y devolver el enlace con vencimiento de 5 min. OJO, el testigo de existencia es la columna NUEVA download_storage_path, NO download_url: esta ultima guarda URLs firmadas YA CADUCADAS de la 136, asi que usarla como testigo devolveria enlaces muertos; las filas heredadas se tratan como sin PDF y se regeneran en la primera llamada. RENUMERADA de 175 a 177 el 2026-08-03: el id 175 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03. Decisiones YA tomadas por el humano en la peticion, no las re-abra el spec_author: ruta NUEVA en vez de ampliar `{numGuia}`; `generatePdf` deja de ser query param y pasa a ser el segmento `/generate`; TTL de la URL firmada = 5 min (mismo TTL que las evidencias de la 106). HALLAZGO que condiciona el diseno: la feature 136 guarda en `carga.download_url` (y `orden.download_url`) la URL FIRMADA, no el path -- ver EtiquetasDescargaService.ts:48 y EtiquetasLotePdfService.ts:78. Una URL firmada caduca, asi que 'reusar la url guardada' es IMPOSIBLE tal como esta persistido hoy: reusar solo puede significar reusar el OBJETO en storage y re-firmarlo en cada respuesta. El spec tiene que decidir si se persiste el storage_path (columna nueva o migracion de la existente) o si se acepta re-firmar a ciegas, y que pasa con las URLs ya guardadas por la 136. ABIERTO para la puerta: (a) desempate cuando el string casa con el num_guia de una orden y el num_remision de OTRA -- ambas son columnas distintas y no hay unicidad cruzada garantizada; (b) verbo HTTP de `/generate` (POST es lo honesto porque muta la orden, pero un integrador esperaria GET); (c) forma exacta de la ruta por carga y si el identificador de carga es el uuid o el `name` del lote; (d) si hace falta un modo forzar-regeneracion o el reuso es siempre. El owner sigue forzado al actor de la API key (R4 de la 106): un integrador no puede consultar ni generar el PDF de una orden ajena. Actualizar `lib/api/openapi-spec.ts`, que hoy publica solo 4 paths.",
+      "spec_path": "specs/177-api-consulta-orden-pdf"
     },
     {
       "id": 178,
@@ -2094,17 +2095,34 @@
       "spec_path": null
     },
     {
-      "id": 179,
-      "name": "analitica: etiquetas de tienda en los cubos por tienda",
-      "spec_path": null,
-      "description": "Backend + frontend. Los cubos por tienda de la analitica financiera (y los que vengan de la operativa) viajan con el `tiendaId` CRUDO, que en este esquema es una FK a `usuario`: las graficas por tienda pintan un identificador donde deberia ir un nombre. Resolver la etiqueta en la FUENTE (el DTO de los servicios de analitica) para que ninguna pantalla tenga que repetir la traduccion.",
+      "id": 176,
+      "name": "analitica: modo agregado de tasas y tiempos",
+      "spec_path": "specs/176-analitica-modo-agregado-tasas",
+      "description": "Backend. Extiende el contrato de lectura de la analitica operativa (126) con un modo AGREGADO por periodo para las metricas que NO son sumables: devuelve numerador y denominador (o los acumuladores seg_ciclo_acum/seg_ciclo_n) por cubo temporal, de modo que un consumidor pueda SUMAR ANTES DE DIVIDIR y presentar una tasa o un tiempo de ciclo correctos en rangos largos. Hoy el servicio solo devuelve el cociente ya dividido por dia, asi que el tablero (131) no puede agregar tasa_entrega, tasa_devolucion, tasa_rechazo, primer_intento_ok, tiempo_ciclo ni aging_por_estado sin caer en media de medias, y por decision D3 no pinta serie ni cifra por encima del techo de 62 puntos. Reusa ConsultaAnalitica y el alcance ya existentes; no anade metricas al catalogo.",
       "status": "pending",
       "sdd": true,
-      "complexity": "low",
-      "zone": "fullstack",
-      "branch": null,
-      "depends_on": 132,
-      "status_note": "Sale de la Q2 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). Se eligio (a) pintar el id crudo con la limitacion escrita EN PANTALLA, y NO (b) resolver los nombres en el Server Component de la 132 ni (c) ampliar el DTO de la 127. Motivos: (b) mete una consulta que el diseno de la 127 no previo y que habria que REPETIR en la 131 y en la 134 —tres copias de la misma traduccion—; (c) reabre una feature `done` y mergeada (PR #269) con su propia puerta y su reviewer. Al especificar: el sitio correcto es el DTO de los servicios de analitica, no cada pantalla, justamente para que la traduccion exista UNA vez. Ojo con el alcance por rol: la etiqueta no puede filtrar el nombre de una tienda que el actor no deberia ver (los guards de alcance de la 122/127 ya estan escritos y hay que respetarlos). Verificar tambien si la analitica OPERATIVA (126) tiene el mismo defecto antes de decidir la forma."
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/176-analitica-modo-agregado-tasas",
+      "depends_on": [
+        126
+      ],
+      "status_note": "Sale de la decision D3 de la 131 (specs/131-analitica-tablero-operativo/requirements.md seccion 6). Conviene programarla DESPUES de la 128 para no escribir la capa de lectura a la vez que la cache. Mientras no aterrice, R27 de la 131 muestra aviso y CERO cifras en esos paneles en rangos largos."
+    },
+    {
+      "id": 179,
+      "name": "analitica: cache financiera + invalidacion por ledger",
+      "spec_path": "specs/179-analitica-cache-financiera",
+      "description": "Backend. Extiende la cache por tag de la 128 al dominio financiera: envuelve las lecturas de AnaliticaFinancieraService con el tag analitica:financiera (ya declarado en ANALITICA_TAGS, feature 135) e invalida desde TODOS los escritores de los tres ledgers, no solo desde la aprobacion de cierres: WalletEgresoService, LiquidacionService, GeneracionGastosFijosService (cron de gastos fijos), el flujo de indemnizaciones de incidentes y aprobarCierre/aprobarCierreBodega. Retira el guardia R15 de la 128 en el MISMO PR que lo sustituye por la invalidacion real. Cada escritor necesita su test de cinco pasos: un escritor sin invalidar sirve dinero rancio en silencio, que es exactamente por lo que la 128 no lo hizo.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/179-analitica-cache-financiera",
+      "depends_on": [
+        128
+      ],
+      "status_note": "Sale de la decision D2 de la 128 (specs/128-analitica-cache-invalidacion/design.md seccion 14). Mientras no aterrice, R15 de la 128 PROHIBE con guardia cachear el dominio financiera. Renumerada de 177 a 179: otra sesion ocupo el 177 y el 178 en dev mientras esta rama estaba viva."
     },
     {
       "id": 180,
@@ -2118,6 +2136,19 @@
       "branch": null,
       "depends_on": 127,
       "status_note": "Sale de la Q3 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). El tablero financiero se entrega SIN grafica de lineas —tarjetas de KPI, donut de recaudo por metodo, barra por tienda y tablas— porque la alternativa era inventarse los puntos. Verificado en el codigo, no supuesto: `AnaliticaFinancieraService.ts:196-221,319-337` agrega la ventana entera. Cuando esta ficha entre, la linea se anade al tablero SIN rehacerlo: los componentes de grafica ya existen (130) y el hueco esta declarado en el design de la 132. NOTA para quien la especifique: comprobar antes si el rollup diario de la 123 ya guarda el grano por fecha que hace falta —si lo guarda, esto es exponerlo, no recalcularlo—."
+    },
+    {
+      "id": 181,
+      "name": "analitica: etiquetas de tienda en los cubos por tienda",
+      "spec_path": null,
+      "description": "Backend + frontend. Los cubos por tienda de la analitica financiera (y los que vengan de la operativa) viajan con el `tiendaId` CRUDO, que en este esquema es una FK a `usuario`: las graficas por tienda pintan un identificador donde deberia ir un nombre. Resolver la etiqueta en la FUENTE (el DTO de los servicios de analitica) para que ninguna pantalla tenga que repetir la traduccion.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 132,
+      "status_note": "Sale de la Q2 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). Se eligio (a) pintar el id crudo con la limitacion escrita EN PANTALLA, y NO (b) resolver los nombres en el Server Component de la 132 ni (c) ampliar el DTO de la 127. Motivos: (b) mete una consulta que el diseno de la 127 no previo y que habria que REPETIR en la 131 y en la 134 —tres copias de la misma traduccion—; (c) reabre una feature `done` y mergeada (PR #269) con su propia puerta y su reviewer. Al especificar: el sitio correcto es el DTO de los servicios de analitica, no cada pantalla, justamente para que la traduccion exista UNA vez. Ojo con el alcance por rol: la etiqueta no puede filtrar el nombre de una tienda que el actor no deberia ver (los guards de alcance de la 122/127 ya estan escritos y hay que respetarlos). Verificar tambien si la analitica OPERATIVA (126) tiene el mismo defecto antes de decidir la forma. Renumerada de 179 a 181: mientras esta rama estaba viva, la 128 dio de alta otra ficha con el 179 (analitica: cache financiera + invalidacion por ledger) y llego a dev primero."
     }
   ]
 }

@@ -101,6 +101,13 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     listByOwner: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     findDetalleByNumGuiaForOwner: vi.fn().mockResolvedValue(null),
     cancelarViaApi: vi.fn().mockResolvedValue({ status: "not_found" }),
+    // Feature 177: consulta por identificador libre + PDF de etiquetas, no ejercitada aqui.
+    findByGuiaORemisionForOwner: vi.fn().mockResolvedValue([]),
+    findDetalleByOrdenIdForOwner: vi.fn().mockResolvedValue(null),
+    findDownloadStoragePathByOrdenForOwner: vi.fn().mockResolvedValue(null),
+    setOrdenDownloadStoragePath: vi.fn(async () => {}),
+    findCargaConOrdenesForOwner: vi.fn().mockResolvedValue(null),
+    setCargaDownloadStoragePath: vi.fn(async () => {}),
     // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
     countRechazadasSlaByTienda: vi.fn().mockResolvedValue(0),
     findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),

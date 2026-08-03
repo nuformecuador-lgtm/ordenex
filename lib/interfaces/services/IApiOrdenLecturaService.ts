@@ -24,4 +24,10 @@ export interface IApiOrdenLecturaService {
    * `null` si no existe / borrada / de otro owner (el borde -> 404 uniforme, no filtra existencia).
    */
   detalle(actor: Actor, numGuia: number): Promise<ApiOrdenDetalleDTO | null>;
+  /**
+   * Feature 177 (R16/R17): MISMO detalle publico que `detalle`, resuelto por `orden.id` (la
+   * resolucion de `{id}` entrega un id y `num_guia` puede ser NULL). Owner forzado a
+   * `actor.usuarioId`. `null` si no existe / borrada / de otro owner (el borde -> 404 uniforme).
+   */
+  detallePorOrdenId(actor: Actor, ordenId: string): Promise<ApiOrdenDetalleDTO | null>;
 }

@@ -166,6 +166,15 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     listByOwner: vi.fn(async () => ({ items: [], total: 0 })),
     findDetalleByNumGuiaForOwner: vi.fn(async () => null),
     cancelarViaApi: vi.fn(async () => ({ status: "not_found" as const })),
+    // Feature 177: consulta por identificador libre + PDF de etiquetas, no ejercitada aqui.
+    findByGuiaORemisionForOwner: vi.fn(
+      async (): Promise<Array<{ id: string; numGuia: number | null; numRemision: string }>> => [],
+    ),
+    findDetalleByOrdenIdForOwner: vi.fn(async () => null),
+    findDownloadStoragePathByOrdenForOwner: vi.fn(async () => null),
+    setOrdenDownloadStoragePath: vi.fn(async () => {}),
+    findCargaConOrdenesForOwner: vi.fn(async () => null),
+    setCargaDownloadStoragePath: vi.fn(async () => {}),
     // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
     countRechazadasSlaByTienda: vi.fn(async () => 0),
     findRechazadasSlaByTienda: vi.fn(async () => []),

@@ -26,6 +26,12 @@ function clamp(value: number, min: number, max: number): number {
 export const MAX_SIGNED_URL_TTL_SECONDS = 86_400;
 
 /**
+ * Feature 177 (R24): TTL por defecto de las URL firmadas que entregan los endpoints
+ * `/generate` de la API de consulta. 5 min, igual que las evidencias de la 106.
+ */
+const DEFAULT_API_SIGNED_URL_TTL_SECONDS = 300;
+
+/**
  * Tope de etiquetas por PDF: default y techo duro.
  *
  * BLOQ-1 del review de la 136: el builder gasta tiempo y memoria LINEALES en el
@@ -54,6 +60,16 @@ export interface EtiquetasConfig {
    */
   SIGNED_URL_TTL_SECONDS: number;
   /**
+   * TTL (segundos) de la URL firmada que devuelven los endpoints `/generate` de la
+   * API de consulta por orden y por carga (feature 177, R24/R43). Default 300 (5 min),
+   * acotado a `MAX_SIGNED_URL_TTL_SECONDS`.
+   *
+   * Es una clave APARTE de `SIGNED_URL_TTL_SECONDS` a proposito: ese valor (3600)
+   * gobierna la URL que devuelve la carga por API de la 136/141 y bajarlo cambiaria
+   * ese contrato de contrabando.
+   */
+  API_SIGNED_URL_TTL_SECONDS: number;
+  /**
    * Tope de etiquetas admitidas en un mismo PDF. Por encima, la carga por API NO
    * intenta generarlo: responde 200 con `etiquetasPdf: { error }` (R12) y
    * conserva intactos los `num_guia`. Acotado a
@@ -67,6 +83,11 @@ export function loadEtiquetasConfig(): EtiquetasConfig {
     ETIQUETAS_BUCKET: process.env.ETIQUETAS_BUCKET?.trim() || "etiquetas-guia",
     SIGNED_URL_TTL_SECONDS: clamp(
       readPositiveInt("ETIQUETAS_SIGNED_URL_TTL_SECONDS", 3600),
+      1,
+      MAX_SIGNED_URL_TTL_SECONDS,
+    ),
+    API_SIGNED_URL_TTL_SECONDS: clamp(
+      readPositiveInt("ETIQUETAS_API_SIGNED_URL_TTL_SECONDS", DEFAULT_API_SIGNED_URL_TTL_SECONDS),
       1,
       MAX_SIGNED_URL_TTL_SECONDS,
     ),
