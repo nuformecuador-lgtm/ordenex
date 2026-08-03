@@ -132,7 +132,7 @@ tres archivos si alguna respuesta cambia el diseño.
 
 ## T5 — La página y la frontera RSC
 
-- [ ] **T5.1 — Cablear `page.tsx`.** Tras el gate existente (que **no se toca**): si
+- [x] **T5.1 — Cablear `page.tsx`.** Tras el gate existente (que **no se toca**): si
       `esAccesoTotal(actor.rol)`, `await cargarTableroFinanciero()` y pasar
       `financiero={<TableroFinanciero … />}` al shell. Si no, no pasar la prop.
       → **R1, R2, R3, R5, R8, R9**. Depende de: T1.1, T4.1, T4.3.
@@ -142,7 +142,7 @@ tres archivos si alguna respuesta cambia el diseño.
       palabra de la región. Diff de `lib/auth/menu-visibility.ts` y `lib/analytics/types.ts`:
       **vacío**.
 
-- [ ] **T5.2 — Guard estático de la feature.** `tests/unit/guards/tablero-financiero.guardia.test.ts`:
+- [x] **T5.2 — Guard estático de la feature.** `tests/unit/guards/tablero-financiero.guardia.test.ts`:
       (a) ningún archivo de servidor de la feature declara `"use client"`; (b) ninguno pasa
       `avisoRecorte` ni ninguna otra prop cuyo valor sea una función a un componente cliente;
       (c) ninguno escribe símbolo de moneda, ISO ni locale; (d) ninguno escribe
