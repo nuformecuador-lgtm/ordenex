@@ -55,7 +55,10 @@ const COMMIT_BASE_DE_LA_126 = "33279871";
 
 function diffDeLaFeature(): readonly string[] | null {
   try {
-    const salida = execFileSync("git", ["diff", "--name-only", `${COMMIT_BASE_DE_LA_126}...HEAD`], {
+    // `git diff <base>` (SIN `...HEAD`) y no `<base>...HEAD`: la forma con tres puntos compara
+    // COMMIT contra COMMIT e ignora el arbol de trabajo, asi que un archivo de la 127 editado y
+    // aun sin commitear pasaria invisible — justo el momento en que el aviso seria mas util.
+    const salida = execFileSync("git", ["diff", "--name-only", COMMIT_BASE_DE_LA_126], {
       cwd: REPO_ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
