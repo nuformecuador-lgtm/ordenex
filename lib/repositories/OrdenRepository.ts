@@ -89,6 +89,27 @@ const API_ORDEN_SELECT = {
   estatus: { select: { value: true } },
 } as const;
 
+// Feature 106 + 177 — `select` del DETALLE (campos publicos + evidencias de entrega/rechazo con
+// `evidencia_storage_path` no nulo). Se extrae a una constante para que la variante por
+// `num_guia` (106) y la variante por `id` (177) NO puedan divergir en su proyeccion (R16/R17):
+// `findDetalleByNumGuiaForOwner` sigue devolviendo exactamente lo mismo que antes.
+const API_ORDEN_DETALLE_SELECT = {
+  ...API_ORDEN_SELECT,
+  gestiones: {
+    where: {
+      resultado: { in: ["entregada", "rechazada"] }, // R15: solo entrega/rechazo
+      evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
+    },
+    select: {
+      resultado: true,
+      evidenciaStoragePath: true,
+      evidenciaContentType: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  },
+} satisfies Prisma.OrdenSelect;
+
 type ApiOrdenSelectRow = {
   numGuia: number | null;
   numRemision: string;
@@ -99,6 +120,15 @@ type ApiOrdenSelectRow = {
   montoCobrar: Prisma.Decimal | null;
   createdAt: Date;
   estatus: { value: string };
+};
+
+type ApiOrdenDetalleSelectRow = ApiOrdenSelectRow & {
+  gestiones: {
+    resultado: string;
+    evidenciaStoragePath: string | null;
+    evidenciaContentType: string | null;
+    createdAt: Date;
+  }[];
 };
 
 function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
@@ -112,6 +142,20 @@ function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
     direccion: r.direccion,
     montoCobrar: r.montoCobrar !== null ? r.montoCobrar.toNumber() : null,
     createdAt: r.createdAt,
+  };
+}
+
+/** Feature 106/R15/R18 + 177/R16: fila -> DTO de detalle. Compartido por ambas variantes. */
+function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow {
+  return {
+    ...toApiOrdenRow(row),
+    evidencias: row.gestiones.map((g) => ({
+      // `resultado` esta acotado por el WHERE a estos dos valores.
+      resultado: g.resultado as "entregada" | "rechazada",
+      // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
+      storagePath: g.evidenciaStoragePath!,
+      contentType: g.evidenciaContentType,
+    })),
   };
 }
 
@@ -1483,34 +1527,120 @@ export class OrdenRepository implements IOrdenRepository {
   ): Promise<ApiOrdenDetalleRow | null> {
     const row = await this.prisma.orden.findFirst({
       where: { numGuia, tiendaId: ownerId, deletedAt: null }, // R12/R14/R24: scope forzado
+      select: API_ORDEN_DETALLE_SELECT,
+    });
+    if (!row) return null;
+    return toApiOrdenDetalleRow(row);
+  }
+
+  // --- Feature 177: consulta por identificador libre + PDF de etiquetas por API key ---
+
+  /**
+   * Feature 177/R6-R12 (design §4.2): hasta DOS filas que casan por IGUALDAD EXACTA con el
+   * identificador dentro del scope del owner. `take: 2` no es una optimizacion caprichosa:
+   * `num_guia` y `num_remision` son `@unique` GLOBALES por separado (schema.prisma:480-481),
+   * asi que el maximo teorico es una fila por columna. Con `numGuia = null` (el `{id}` no era
+   * entero positivo) la condicion sobre `num_guia` NO se emite: el `OR` queda con una sola
+   * rama y la guia nunca casa (R8). Comparacion de igualdad, jamas `contains`/`mode` (R10).
+   * NO desempata: la precedencia de R14 vive en el service.
+   */
+  async findByGuiaORemisionForOwner(
+    identificador: { numGuia: number | null; numRemision: string },
+    ownerId: string,
+  ): Promise<Array<{ id: string; numGuia: number | null; numRemision: string }>> {
+    const or: Prisma.OrdenWhereInput[] = [{ numRemision: identificador.numRemision }];
+    if (identificador.numGuia !== null) or.unshift({ numGuia: identificador.numGuia });
+    return this.prisma.orden.findMany({
+      where: {
+        tiendaId: ownerId, // R7: owner FORZADO
+        deletedAt: null, // R12
+        OR: or,
+      },
+      select: { id: true, numGuia: true, numRemision: true },
+      take: 2,
+    });
+  }
+
+  /**
+   * Feature 177/R16/R17: mismo detalle que la 106 pero por `orden.id` (la resolucion de la 177
+   * devuelve el id porque `num_guia` puede ser NULL). Comparte `API_ORDEN_DETALLE_SELECT` con
+   * `findDetalleByNumGuiaForOwner`, que NO cambia. Scope forzado -> `null` para ajena/borrada.
+   */
+  async findDetalleByOrdenIdForOwner(
+    ordenId: string,
+    ownerId: string,
+  ): Promise<ApiOrdenDetalleRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { id: ordenId, tiendaId: ownerId, deletedAt: null },
+      select: API_ORDEN_DETALLE_SELECT,
+    });
+    if (!row) return null;
+    return toApiOrdenDetalleRow(row);
+  }
+
+  /**
+   * Feature 177/R20/R21/R38: referencia persistida del PDF individual. Solo lee
+   * `download_storage_path`; `download_url` no entra en la proyeccion, de modo que una fila
+   * heredada de la 136/141 (URL caducada, path NULL) devuelve `null` = "no hay PDF".
+   */
+  async findDownloadStoragePathByOrdenForOwner(
+    ordenId: string,
+    ownerId: string,
+  ): Promise<string | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { id: ordenId, tiendaId: ownerId, deletedAt: null },
+      select: { downloadStoragePath: true },
+    });
+    return row?.downloadStoragePath ?? null;
+  }
+
+  /**
+   * Feature 177/R20/R26: UPDATE de UNA sola columna. El `data` lleva exactamente una clave;
+   * `download_url` queda intacta (ni se lee ni se escribe en esta feature).
+   */
+  async setOrdenDownloadStoragePath(ordenId: string, path: string): Promise<void> {
+    await this.prisma.orden.update({
+      where: { id: ordenId },
+      data: { downloadStoragePath: path },
+    });
+  }
+
+  /**
+   * Feature 177/R29/R32: carga propia + ids de sus ordenes vivas del owner. La propiedad se
+   * exige en el WHERE (`usuario_carga = ownerId`), no despues de leer: una carga ajena o
+   * inexistente devuelve `null` por el mismo camino, sin filtrar existencia. Las ordenes del
+   * lote se acotan ademas por `tienda_id = ownerId` y `deleted_at IS NULL` (R32).
+   */
+  async findCargaConOrdenesForOwner(
+    cargaId: string,
+    ownerId: string,
+  ): Promise<{ downloadStoragePath: string | null; ordenIds: string[] } | null> {
+    const row = await this.prisma.carga.findFirst({
+      where: { id: cargaId, usuarioCarga: ownerId }, // R29: propiedad FORZADA
       select: {
-        ...API_ORDEN_SELECT,
-        gestiones: {
-          where: {
-            resultado: { in: ["entregada", "rechazada"] }, // R15: solo entrega/rechazo
-            evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
-          },
-          select: {
-            resultado: true,
-            evidenciaStoragePath: true,
-            evidenciaContentType: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: "asc" },
+        downloadStoragePath: true,
+        ordenes: {
+          where: { tiendaId: ownerId, deletedAt: null }, // R32
+          select: { id: true },
         },
       },
     });
     if (!row) return null;
     return {
-      ...toApiOrdenRow(row),
-      evidencias: row.gestiones.map((g) => ({
-        // `resultado` esta acotado por el WHERE a estos dos valores.
-        resultado: g.resultado as "entregada" | "rechazada",
-        // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
-        storagePath: g.evidenciaStoragePath!,
-        contentType: g.evidenciaContentType,
-      })),
+      downloadStoragePath: row.downloadStoragePath,
+      ordenIds: row.ordenes.map((o) => o.id),
     };
+  }
+
+  /**
+   * Feature 177/R30/R35: UPDATE de UNA sola columna de `carga`. `download_url` (feature 141)
+   * queda intacta.
+   */
+  async setCargaDownloadStoragePath(cargaId: string, path: string): Promise<void> {
+    await this.prisma.carga.update({
+      where: { id: cargaId },
+      data: { downloadStoragePath: path },
+    });
   }
 
   /**
