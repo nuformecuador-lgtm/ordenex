@@ -91,7 +91,7 @@ tres archivos si alguna respuesta cambia el diseño.
 
 ## T3 — Carga en el servidor
 
-- [ ] **T3.1 — `cargar.ts`.** `Promise.all` sobre `IDS_FINANCIERAS_SERVIDAS` invocando
+- [x] **T3.1 — `cargar.ts`.** `Promise.all` sobre `IDS_FINANCIERAS_SERVIDAS` invocando
       `consultarMetricaFinanciera(id, FILTRO_FINANCIERO_POR_DEFECTO)` **sin `deps`**. Normaliza a
       `PanelFinanciero` (`ok` / `error` / `denegado`). No captura y silencia: un `error` del borde
       se propaga como estado de panel, no como excepción.
@@ -105,7 +105,7 @@ tres archivos si alguna respuesta cambia el diseño.
 
 ## T4 — Los paneles
 
-- [ ] **T4.1 — `TableroFinanciero.tsx` (servidor).** Compone los 9 paneles de `design.md §5`
+- [x] **T4.1 — `TableroFinanciero.tsx` (servidor).** Compone los 9 paneles de `design.md §5`
       usando `KpiCard`, `GraficaDonut`, `GraficaBarras` y `TablaResumen`. Sin `"use client"`.
       **Nunca pasa `avisoRecorte`** (es una función y no cruza la frontera RSC). Los paneles
       `denegado` no se renderizan; los `error` se renderizan con la prop `error`.
@@ -115,13 +115,13 @@ tres archivos si alguna respuesta cambia el diseño.
       muestra ninguna cifra, y que las dos vistas de `cod_recaudado` viven en secciones distintas
       con nombres accesibles distintos y sin total conjunto.
 
-- [ ] **T4.2 — Etiqueta de "saldo al corte".** Los paneles cuyo DTO trae `esAcumulado: true`
+- [x] **T4.2 — Etiqueta de "saldo al corte".** Los paneles cuyo DTO trae `esAcumulado: true`
       (`cuenta_por_pagar_tienda`, `cuenta_por_pagar_mensajero`) muestran texto visible que declara
       que es saldo al corte y no flujo del período. Se lee del DTO, no de una lista escrita a mano.
       → **R18**. Depende de: T4.1.
       *Hecho:* test que afirma el texto en esas dos y su **ausencia** en las otras seis.
 
-- [ ] **T4.3 [P] — `PanelConciliacion.tsx`.** Conteos por `(nivel, estado)` con sus totales, más el
+- [x] **T4.3 [P] — `PanelConciliacion.tsx`.** Conteos por `(nivel, estado)` con sus totales, más el
       bloque de cuadre. SI `cuadra === false`, aviso visible con la cantidad de cierres
       descuadrados. No lanza nunca.
       → **R19**. Depende de: T3.1.
