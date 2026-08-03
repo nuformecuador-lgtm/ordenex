@@ -17,10 +17,10 @@ antes de creerse el conteo.
 
 ## TANDA 0 — Registro de la puerta (no bloquea; se hace al abrir la rama)
 
-- [ ] **T0.1** Copiar las nueve respuestas (fecha **2026-08-02**, autor: humano) a
+- [x] **T0.1** Copiar las nueve respuestas (fecha **2026-08-02**, autor: humano) a
   `progress/impl_127.md`, marcando **D7 como resuelta por implicación y reabrible**.
   *Hecho cuando:* el archivo existe y ningún requisito conserva una marca de decisión pendiente.
-- [ ] **T0.2** Registrar que esta feature **modifica un archivo ajeno**: `lib/analytics/metrics.ts`
+- [x] **T0.2** Registrar que esta feature **modifica un archivo ajeno**: `lib/analytics/metrics.ts`
   (catálogo de la 135), para pasar `egresos` a `estadoProduccion: "producida"`.
   *Hecho cuando:* está anotado como archivo ajeno tocado, **con la autorización humana del 2026-08-02
   citada** (D8 → (b)), en `progress/impl_127.md` y en el cuerpo del PR. No es un retoque de paso: el
@@ -32,20 +32,20 @@ antes de creerse el conteo.
 
 Depende de: T0.
 
-- [ ] **A.1** `lib/types/analitica-financiera.ts`: `ImporteAnalitico` (**`bruto` + `neto`**),
+- [x] **A.1** `lib/types/analitica-financiera.ts`: `ImporteAnalitico` (**`bruto` + `neto`**),
   `VistaFinanciera` (**`id`, `sumableCon`**), `ResultadoFinanciero` (**`esAcumulado`**),
   `ResultadoConciliacion` (**`fechadoPor` por fila**), `RespuestaFinanciera` (**sin
   `no_producida`**).
   *Hecho cuando:* `pnpm run typecheck` verde y **ningún** campo de importe es `number` (test de forma
   que recorre las claves del DTO de ejemplo y afirma `typeof === "string"`). → **R27, R37, R38, R39,
   R43**
-- [ ] **A.2 [P]** Las cuatro interfaces de repositorio en `lib/interfaces/repositories/`, todas con
+- [x] **A.2 [P]** Las cuatro interfaces de repositorio en `lib/interfaces/repositories/`, todas con
   firma `(consulta: ConsultaAnalitica)`.
   *Hecho cuando:* un test con `@ts-expect-error` confirma que **no** compilan llamadas con
   `AnaliticaFiltroInput`. → **R7**
-- [ ] **A.3 [P]** `lib/interfaces/services/IAnaliticaFinancieraService.ts`.
+- [x] **A.3 [P]** `lib/interfaces/services/IAnaliticaFinancieraService.ts`.
   *Hecho cuando:* typecheck verde y la interfaz no menciona Prisma, `Request` ni `cookies`. → **R30**
-- [ ] **A.4 [P]** `lib/config/analitica-financiera.ts` con el **umbral de descuadre** (D5), comentado
+- [x] **A.4 [P]** `lib/config/analitica-financiera.ts` con el **umbral de descuadre** (D5), comentado
   como **provisional y no medido** (patrón `lib/config/analitica-rollup.ts`).
   *Hecho cuando:* el número no aparece como literal en ningún servicio ni repositorio. → **R40**
 
@@ -56,23 +56,37 @@ Depende de: T0.
 Depende de: A. **Se escriben antes que los repositorios**: un guardia escrito después de la
 implementación tiende a describirla en vez de juzgarla.
 
-- [ ] **B.1** `tests/unit/analytics/financiera-fuente.guardia.test.ts`: censo sobre los archivos de
+- [x] **B.1** `tests/unit/analytics/financiera-fuente.guardia.test.ts`: censo sobre los archivos de
   la feature; falla si nombran una tabla fuera de `TablaDinero`, incluido dentro de `$queryRaw`.
   *Hecho cuando:* pasa con el fixture legítimo y **falla** con los dos infractores (uno Prisma, uno
   SQL crudo), y falla también si se le mete `analytics_daily`. → **R1, R2, R3, R33, R34**
-- [ ] **B.2 [P]** `tests/unit/analytics/financiera-alcance.guardia.test.ts`: recorre las ocho
+- [x] **B.2 [P]** `tests/unit/analytics/financiera-alcance.guardia.test.ts`: recorre las ocho
   financieras del catálogo y falla si alguna declara `acotado` para algún rol.
   *Hecho cuando:* mutar `ALCANCE_FINANCIERA.adminTienda` a `"acotado"` lo pone rojo, y revertir lo
   pone verde. → **R9, R35**
-- [ ] **B.3 [P]** Test de correspondencia fuente↔consulta: para cada métrica, las tablas que su
+- [x] **B.3 [P]** Test de correspondencia fuente↔consulta: para cada métrica, las tablas que su
   repositorio consulta ⊆ `metrica.fuente.tablas`.
   *Hecho cuando:* añadir `cierre_dia` al repositorio de `ingreso_flete` lo pone rojo. → **R4**
-- [ ] **B.4 [P]** Test de «no hay adaptador de dinero»: `lib/analytics/alcance-columnas.ts` sigue sin
+- [x] **B.4 [P]** Test de «no hay adaptador de dinero»: `lib/analytics/alcance-columnas.ts` sigue sin
   función para las cinco tablas (complementa `alcance-dinero.guardia.test.ts` de la 122).
   *Hecho cuando:* añadir `whereWalletTienda` lo pone rojo. → **R8**
-- [ ] **B.5 [P]** Test de coherencia catálogo↔producción: ninguna financiera queda `declarada`
+- [x] **B.5 [P]** Test de coherencia catálogo↔producción: ninguna financiera queda `declarada`
   mientras el servicio la produce, ni al revés.
   *Hecho cuando:* revertir `egresos` a `"declarada"` lo pone rojo. → **R41**
+
+> **Estado tras la sesión del 2026-08-02 (tandas 0, A y B hechas).** Los cinco guardias están
+> **verdes y con evidencia de mutación** (`progress/impl_127.md §Evidencia de mutación`); ninguno
+> queda rojo a propósito. B.4 vive dentro del archivo de B.2: son las dos mitades de la misma
+> equivalencia. B.5 está escrito en **dos fases** (supuesto S7): hoy exige que `egresos` siga
+> `declarada` porque el productor no existe, y en cuanto exista `AnaliticaFinancieraService.ts`
+> exige que no quede ninguna `declarada`.
+>
+> ⚠ **ANTES DE C.4: contradicción R4 ↔ R23, sin resolver.** `conciliacion_cierres` declara
+> `fuente.tablas = ["cierre_dia", "cierre_bodega"]`, pero R23 obliga a cruzar con los **ledgers**
+> por `origen_tipo = cierre_dia`. Las dos cosas no caben a la vez y el guardia B.3 **no tiene
+> exención**: se pondrá rojo al escribir C.4. Salidas: ampliar el catálogo de la 135 (decisión
+> humana fechada, como ⟨D8⟩) o acotar R23. Aflojar el guardia está descartado.
+> Detalle en `progress/impl_127.md §Contradicciones` (C2).
 
 ---
 
