@@ -3,7 +3,7 @@
  * pendiente (`solicitado` / `vencido`). Texto separado del componente (i18n-ready).
  *
  * Vive aquí, y no dentro de un módulo de página, porque desde la feature 167 lo necesitan DOS
- * portales del mensajero: "Entregas" (`MisAsignacionesModule`) y "Recolección"
+ * portales del mensajero: "Entregas" (`RepartoModule` / `RecogerModule`) y "Recolección"
  * (`RecoleccionModule`). Duplicarlo dejaría que divergieran en el mensaje que el humano ya
  * declaró como preciso —decir la causa REAL del rechazo y qué hacer para resolverlo (commit
  * `8428498a`)—, que es justo la clase de deriva silenciosa que un texto compartido impide.

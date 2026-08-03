@@ -1,6 +1,5 @@
 import type { RolValue } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import { ROLES_SEED } from "@/lib/types/roles";
 
 /**
  * Clave string del icono de un item. El icono real (componente de lucide) NO
@@ -87,7 +86,6 @@ export const ROLES_ACCESO_ANALITICA = ["maestro", "admin"] as const;
  * Los `roles` se derivan de la autorizacion que ya aplican los services:
  * - Órdenes: KNOWN_ROLES de OrdenService.
  * - Configuración: ALLOWED_ROLES de UsuarioService (solo maestro).
- * - Perfil: cualquier rol autenticado (ningun service lo restringe).
  */
 export const SIDEBAR_ITEMS: readonly MenuItem[] = [
   {
@@ -119,12 +117,30 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
   },
   {
     // Feature 61: portal del mensajero (KPIs + asignaciones por recoger/gestionar).
-    // Exclusivo del rol `mensajero`; la defensa real es el `notFound` de la página
-    // `/mis-asignaciones` (resuelve el rol server-side).
+    // Exclusivo del rol `mensajero`; la defensa real es el `notFound` de las páginas
+    // `/mis-asignaciones/*` (resuelven el rol server-side).
+    //
+    // 2026-07-31 (decisión del humano): el portal se PARTE en dos pantallas hermanas, cada
+    // una con su ruta y su subítem, porque son dos trabajos distintos del mismo turno:
+    // repartir en la calle (mapa, ruta, panel de gestión) y recoger en el punto de origen
+    // (escáner + listado). Antes convivían apiladas en una sola pantalla y el escáner
+    // quedaba enterrado bajo el panel de reparto. Reparto va PRIMERO: es donde el mensajero
+    // pasa el turno, y `/mis-asignaciones` redirige ahí (los enlaces viejos no se rompen).
+    //
+    // El `href` del padre NO navega —un ítem con `children` se renderiza como disparador
+    // del desplegable, no como enlace (ver `Sidebar.tsx`)—, pero se conserva porque
+    // identifica al ítem (clave de React y posición relativa a "Recolección").
+    //
+    // "Por recoger" y no "Recoger" a secas: el ítem hermano "Recolección" (167) es la
+    // recolección EN TIENDA, otro flujo. La etiqueta larga los mantiene distinguibles.
     label: "Entregas",
     href: "/mis-asignaciones",
     iconKey: "truck",
     roles: ["mensajero"],
+    children: [
+      { label: "Reparto", href: "/mis-asignaciones/reparto" },
+      { label: "Por recoger", href: "/mis-asignaciones/recoger" },
+    ],
   },
   {
     // Feature 167 (R4): apartado PROPIO de la recolección en tienda. Va justo debajo de
@@ -225,12 +241,8 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     iconKey: "shieldAlert",
     roles: ["maestro", "admin", "adminSatelite"],
   },
-  {
-    label: "Perfil",
-    href: "/perfil",
-    iconKey: "user",
-    roles: ROLES_SEED,
-  },
+  // "Perfil" SALE del menú para todos los roles (pedido humano) y su página se ELIMINÓ:
+  // era un placeholder sin contenido que solo ocupaba un sitio en la barra.
 ] as const;
 
 /**
@@ -250,4 +262,18 @@ export function itemsVisibles<T extends MenuItem>(
   actor: Actor | null,
 ): T[] {
   return items.filter((item) => puedeVer(item, actor));
+}
+
+/**
+ * Primer destino NAVEGABLE del menú de un actor: el `href` del primer item visible o, si ese
+ * item es un desplegable, el de su primer subitem (un padre con `children` no navega, ver
+ * `Sidebar.tsx`). `null` si el actor no ve ningún item.
+ *
+ * Lo consume `/dashboard` para los roles que NO tienen inicio propio: en vez de dejarlos en
+ * un "Bienvenido" vacío, entran directo a donde empieza su trabajo.
+ */
+export function primerDestino(items: readonly MenuItem[]): string | null {
+  const primero = items[0];
+  if (!primero) return null;
+  return primero.children?.[0]?.href ?? primero.href;
 }

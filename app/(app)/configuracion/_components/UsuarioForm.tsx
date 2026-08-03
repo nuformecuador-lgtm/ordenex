@@ -25,6 +25,13 @@ import {
 import { listarZonas } from "@/lib/actions/zonas";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
 
+/**
+ * Rol que este formulario NUNCA asigna: `apiKey` identifica la cuenta de máquina de una
+ * integración, que nace en Configuración > API con su key. Es el `value` del catálogo
+ * `rol`, no un id.
+ */
+const ROL_NO_ASIGNABLE = "apiKey";
+
 /** Modo de contraseña inicial (R30/R36). */
 type PasswordMode = "manual" | "generate";
 
@@ -108,9 +115,21 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
 
     // `value` = UUID del catálogo `rol` (lo que espera el backend en `rolId`);
     // `label` = nombre legible del rol (p. ej. "maestro").
+    //
+    // `apiKey` NO se ofrece: no es un rol de persona sino la cuenta de máquina que
+    // representa una integración, y se crea desde Configuración > API junto con su key.
+    // Si el usuario que se edita YA lo tiene, la opción se conserva —si no, el select
+    // aparecería vacío— pero deshabilitada, y el control entero se bloquea abajo.
     const rolOptions: SelectOption[] = useMemo(
-      () => (roles ?? []).map((r) => ({ value: r.id, label: r.value })),
-      [roles],
+      () =>
+        (roles ?? [])
+          .filter((r) => r.value !== ROL_NO_ASIGNABLE || r.id === form.rolId)
+          .map((r) => ({
+            value: r.id,
+            label: r.value,
+            disabled: r.value === ROL_NO_ASIGNABLE,
+          })),
+      [roles, form.rolId],
     );
 
     // Feature 24/R27: catálogo de zonas para el select (solo aplica a
@@ -139,6 +158,11 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
     // resto de roles el service la fuerza a null. Mismo patrón que `esAdminTienda`.
     const rolValue = (roles ?? []).find((r) => r.id === form.rolId)?.value;
     const esRolConZona = rolValue === "mensajero" || rolValue === "adminSatelite";
+
+    // Cuenta de integración: su rol no se toca desde aquí. Cambiarlo por accidente la
+    // convertiría en un usuario humano y dejaría su API key colgando de un rol que el
+    // backend no acepta como dueño.
+    const esRolApiKey = rolValue === ROL_NO_ASIGNABLE;
 
     function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
       setForm((prev) => ({ ...prev, [key]: value }));
@@ -343,6 +367,7 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
               aria-label="Rol"
               value={form.rolId}
               options={rolOptions}
+              disabled={esRolApiKey}
               onValueChange={(v) => setField("rolId", v)}
               aria-invalid={ariaInvalid}
               aria-describedby={ariaDescribedBy}

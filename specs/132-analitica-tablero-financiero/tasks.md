@@ -25,13 +25,13 @@ tres archivos si alguna respuesta cambia el diseño.
       → fija el valor de `rango.ts` (R26).
       *Revertir cuesta:* una constante y su test. Trivial.
 - [x] **T0.2 — Q2 (BLOQUEANTE). RESUELTA: (a) id crudo**, con la limitación escrita EN PANTALLA y
-      ficha aparte para los nombres (registrada como **178**). Motivo: (b) mete una consulta que
+      ficha aparte para los nombres (registrada como **179**). Motivo: (b) mete una consulta que
       el diseño de la 127 no previó y que habría que repetir en la 131 y en la 134; (c) reabre una
       feature `done` y mergeada.
       *Revertir a (b) cuesta:* una lectura en el Server Component y su task; la feature dejaría de
       ser sólo presentación → reevaluar alcance con el leader.
 - [x] **T0.3 — Q3 (BLOQUEANTE). RESUELTA: se acepta el tablero SIN gráfica de líneas**, y el
-      desglose por fecha se registra aparte (ficha **179**). Motivo: la 127 agrega la ventana
+      desglose por fecha se registra aparte (ficha **180**). Motivo: la 127 agrega la ventana
       entera y no publica filas por fecha; dibujar una línea exigiría inventarse los puntos.
       *Revertir cuesta:* la 132 se bloquea hasta ampliar la 127. **Es la única de las tres cuya
       reversión no es barata**, y por eso es la que más conviene ratificar pronto.

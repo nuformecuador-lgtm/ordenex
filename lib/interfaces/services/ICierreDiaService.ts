@@ -188,6 +188,13 @@ export interface CierrePasadoDTO {
   totalPagoMensajero: string; // feature 39/R13: total snapshot del pago al mensajero (STRING)
   totalIngresoBodegaRechazos: string; // feature 56/R12: total snapshot del ingreso de bodega por rechazos (STRING)
   solicitadoAt: string; // ISO
+  /**
+   * Fecha de resolucion (aprobado/rechazado) e ISO; `null` mientras siga abierto. Viajan al
+   * mensajero porque son SU cierre: sin el motivo, un `rechazado` en su histórico no le dice
+   * que tiene que corregir. Ambos son OPCIONALES en el tipo por retrocompat de los dobles.
+   */
+  resueltoAt?: string | null;
+  motivoRechazo?: string | null;
 }
 
 // R2-R11/R17/R18: detalle del dia + totales + gate de "Solicitar cierre" +
@@ -215,6 +222,26 @@ export type ListarCierreDiaServiceResult =
       tieneRechazado?: boolean;
     }
   | { status: "forbidden" };
+
+/**
+ * Detalle de UN cierre YA SOLICITADO del propio mensajero (pedido humano: poder "ver" un
+ * cierre anterior, no solo su fila de totales). Es SOLO LECTURA y estrictamente propio: el
+ * scope por `mensajero_id` va en el WHERE del repo, asi que un id ajeno o inexistente cae en
+ * `no_encontrada` sin distinguirse (mismo criterio que el detalle del admin, 38/R13).
+ *
+ * Muestra lo MISMO que la vista en vivo del dia —sus gestiones agrupadas por resultado y sus
+ * totales—, con dos diferencias: los montos salen del SNAPSHOT congelado al solicitar (no se
+ * re-derivan de la tarifa de hoy) y la indemnizacion sigue sin viajar (design §7.2: no es
+ * plata suya; la consulta ni la selecciona).
+ */
+export type VerCierrePasadoServiceResult =
+  | {
+      status: "ok";
+      cierre: CierrePasadoDTO;
+      grupos: CierreGrupos; // por resultado (mismo reuso que la vista en vivo)
+    }
+  | { status: "forbidden" } // rol != mensajero
+  | { status: "no_encontrada" }; // id inexistente o de otro mensajero (no se distinguen)
 
 /**
  * Feature 170 — FASE 2 (T I.1, R40/R41): UNA PAGINA de los cierres solicitados por el
@@ -267,6 +294,12 @@ export interface ICierreDiaService {
    * forbidden.
    */
   listarCierreDia(actor: Actor): Promise<ListarCierreDiaServiceResult>;
+  /**
+   * Detalle de UN cierre PASADO del propio mensajero (solo lectura). El scope por
+   * `mensajero_id` vive en el WHERE del repo: un cierre ajeno o inexistente ->
+   * `no_encontrada`, sin distinguirlos. Rol != mensajero -> `forbidden`.
+   */
+  verCierrePasado(cierreId: string, actor: Actor): Promise<VerCierrePasadoServiceResult>;
   /**
    * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): «Cierres solicitados» del mensajero
    * (R18), paginado en el servidor.

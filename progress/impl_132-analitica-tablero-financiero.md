@@ -16,8 +16,8 @@ T1.1, T1.2, T2.1–T2.3, T3.1, T4.1–T4.3, T5.1–T5.3 y T6.1. T6.2 (`./init.sh
 
 La puerta F1.4 estaba **cerrada por defecto declarado** (2026-08-03) y no se reabrió. Las tres
 decisiones que condicionaban el código se aplicaron tal cual: rango por defecto `mes`, `tiendaId`
-**crudo** con la limitación escrita en pantalla (los nombres son la ficha 178) y tablero **sin
-gráfica de líneas** (el desglose por fecha es la ficha 179).
+**crudo** con la limitación escrita en pantalla (los nombres son la ficha 179) y tablero **sin
+gráfica de líneas** (el desglose por fecha es la ficha 180).
 
 ## 1. Archivos
 
@@ -83,7 +83,7 @@ producción que lo tumbaría. Un test que no se pueda tumbar no es trazabilidad,
 | R21 | `tablero-financiero-adaptar.test.ts` :: «la suma de lo que se pinta es la suma de lo que se recibio» + «una cola entera sin dato produce una categoria ausente, no una que vale cero» | Truncar la cola con un `slice` en vez de agruparla |
 | R22 | `TableroFinanciero.test.tsx` :: «cada panel muestra las fechas calendario del propio DTO, sin recalcularlas»; `PanelConciliacion.test.tsx` :: «pinta el rango tal cual lo devuelve el DTO» | Recalcular el rango con `resolverRango` en la pantalla |
 | R23 | `tablero-financiero-cargar.test.ts` :: «el validation_error produce estado error con un mensaje construido con las claves»; `TableroFinanciero.test.tsx` :: «emite role=alert con el mensaje saneado del borde» + «no pinta cifras, ni ceros, ni el total de la metrica» | Devolver un panel `ok` con datos vacíos ante un `error` o un `validation_error` |
-| R24 | `tablero-financiero-adaptar.test.ts` :: «el cubo se copia tal cual, sin traducirlo ni acortarlo»; `TableroFinanciero.test.tsx` :: «la tabla muestra el identificador interno tal cual, sin resolver el nombre» + «la limitacion de los identificadores esta visible junto a los paneles por tienda» | Resolver el nombre de tienda con una consulta extra (es la ficha 178), u ocultar la limitación |
+| R24 | `tablero-financiero-adaptar.test.ts` :: «el cubo se copia tal cual, sin traducirlo ni acortarlo»; `TableroFinanciero.test.tsx` :: «la tabla muestra el identificador interno tal cual, sin resolver el nombre» + «la limitacion de los identificadores esta visible junto a los paneles por tienda» | Resolver el nombre de tienda con una consulta extra (es la ficha 179), u ocultar la limitación |
 | R25 | `tablero-financiero.guardia.test.ts` :: «ningun archivo escribe un simbolo de moneda, un codigo ISO ni un locale» + «los archivos que pintan importes formatean con la funcion del paquete» | Escribir un símbolo de colón, un ISO de moneda o un locale en cualquier archivo de la región |
 | R26 | `tablero-financiero-rango.test.ts` :: «el filtro por defecto pide la ventana movil de treinta dias» + «ningun otro archivo de la region financiera escribe un preset ni la clave rango» + «esta congelado» + «no depende del momento ni del entorno en que se importa» | Escribir un preset suelto en `cargar.ts`, o leer `searchParams` |
 | R27 | `tablero-financiero.guardia.test.ts` :: «ningun archivo declara el dominio del catalogo» + «ningun archivo escribe una lista de ids financieros a mano» + «alguien consume IDS_FINANCIERAS_SERVIDAS» | Filtrar el catálogo por dominio desde el tablero: el guard de fuente única censa ese patrón y esa llamada **coincide con él** |
@@ -227,9 +227,9 @@ detectó en rojo. Se **renombró la clave**; no se relajó el guard.
   el que `TablaResumen` sigue `fuera` en el censo de tablas (§4).
 - **Barra de filtros → feature 131.** Esta feature consume un rango por defecto (R26) y no pinta
   ningún control.
-- **Nombres legibles de tienda → ficha 178.** Se pinta el `tiendaId` crudo con la limitación
+- **Nombres legibles de tienda → ficha 179.** Se pinta el `tiendaId` crudo con la limitación
   **escrita en pantalla**, no escondida.
-- **Serie temporal / gráfica de líneas → ficha 179.** Cinco de las ocho métricas devuelven
+- **Serie temporal / gráfica de líneas → ficha 180.** Cinco de las ocho métricas devuelven
   `filas: []` porque la 127 agrega la ventana entera; dibujar una línea exigiría inventarse los
   puntos.
 - **E2E de Playwright → feature 133** (Q5), cuando el tablero tenga su forma definitiva por rol y
