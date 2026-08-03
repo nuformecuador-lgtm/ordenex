@@ -2462,10 +2462,16 @@ pantalla»*.
   `T D.2` tal cual.
 - `app/(app)/wallet/tiendas/**`, `app/(app)/wallet/mensajeros/**`, `app/(app)/mi-wallet/**`,
   `app/(app)/mis-pagos/**` — **R63**, medido en §G8.
-- `app/(app)/wallet/_components/WalletLedger.tsx`, `WalletFiltros.tsx` y
-  `wallet-ledger-descarga-columnas.ts` — **es el resultado de `T G.2`**: para que las dos
-  categorías nuevas salgan en el listado, en el filtro y en la descarga **no había que tocar
-  nada**. Que estos tres archivos estén fuera del diff es la prueba, no un descuido (§G5).
+- `app/(app)/wallet/_components/wallet-ledger-descarga-columnas.ts` — **es el resultado de
+  `T G.2`**: para que las dos categorías nuevas salgan en el listado, en el filtro y en la
+  descarga **no había que tocar nada**. Que este archivo esté fuera del diff es la prueba, no un
+  descuido (§G5).
+  > **Corrección (§G13).** Esta línea nombraba también `WalletLedger.tsx` y `WalletFiltros.tsx`,
+  > y dejó de ser cierta con el commit `63af4509`, posterior a esta entrada: los dos **sí** están
+  > en el diff, con **cero líneas de código** —solo comentarios: el filtro declara que su `Select`
+  > se puebla del SEED y el ledger deja de decir «balance» en un docstring—. La sustancia de `T G.2`
+  > no cambia: sigue sin haber una sola línea que **nombre** las categorías nuevas en esos dos
+  > archivos, que es lo que §G5 mide.
 - `lib/utils/wallet-balance.ts` y su suite — **R9**, intacto desde `T A.5`.
 
 ## G3. Una deuda que NO se cerró aquí, y por qué
@@ -2691,3 +2697,117 @@ advertencia de que **no** es la deuda con su porqué y su enlace, el rótulo con
 la bandera del **servidor** y la tarjeta no tiene forma de deducirla, `T G.2` se cierra **sin escribir
 una línea** con la prueba en runtime de que el filtro y la descarga leen del SEED, y `T G.4` se
 sostiene por ausencia: **ni un archivo** de tienda o de mensajero en el diff de la feature entera.
+
+---
+
+## G13. Cierre de la Tanda G — auditoría de `T G.3` y `T G.4` medida de nuevo
+
+> Entrada de un **agente de relevo**: el anterior cayó dos veces por cortes de stream. El encargo era
+> «rematar `T G.3`, que quedó a mitad del pre-fetch y de las aserciones R59/R62/R64, y hacer `T G.4`».
+> Lo primero fue **auditar el estado contra el código**, no contra esta bitácora.
+
+### G13.1 `T G.3` — estaba HECHA y verde; no se rehízo nada
+
+El corte de stream fue **después** de commitear. Los dos commits de código y test de la task
+(`81530bb9`, `491bf122`) están en la rama y el árbol compila. Los tres criterios de «Hecho» de
+`tasks.md`, comprobados uno a uno **donde se miden**, no en la bitácora:
+
+| Criterio de `T G.3` | Dónde está | Cómo se comprueba |
+| --- | --- | --- |
+| la descripción ya no dice «balance general» | `app/(app)/wallet/page.tsx:62` — *«Caja principal de Ordenex: libro de movimientos, dinero en caja y ganancia de Ordenex»* | `wallet-page.test.tsx` — «R59: la descripción ya no rotula ninguna cifra con la palabra que mentía»: con el módulo stubbeado, `document.body.textContent` **entero** no contiene `balance` |
+| el listado y la descarga incluyen los movimientos nuevos **sin cambiar columnas** | nada que tocar (§G5) | `WalletDescarga.test.tsx` — las **6** cabeceras del listado y las **5** claves de la hoja, con las dos categorías nuevas dentro y la contraprueba de que el valor del enum **no** se pinta |
+| un rol sin acceso total sigue viendo `notFound` | `page.tsx:29` (guardia **antes** del pre-fetch) | `wallet-page.test.tsx` — los tres roles → `NEXT_NOT_FOUND`, y **cero** llamadas a las **dos** lecturas |
+
+Barrido de la palabra sobre `app/(app)/wallet/**`: las únicas apariciones son el **nombre de un tipo**
+(`WalletBalanceSigno`, de `lib/types/wallet.ts`) y un comentario. **Ni una en pantalla**, que es lo que
+R59 pide. Renombrar el tipo es `lib/`, y no es de esta fase.
+
+### G13.2 Dos huecos reales que sí quedaban, y se cierran aquí
+
+1. **Un comentario que mentía** en `WalletModule.tsx`: decía que el módulo deja de hablar con el borde
+   viejo *«(que ya no existe: lo retiró esta task)»*. **Falso**: `verBalanceAction` sigue viva en
+   `lib/actions/wallet.ts:152` —§G3 la difiere a la Tanda H a propósito— y su propio docstring dice
+   «lo borra `T G.3`». Lo que `T G.3` hace es dejarla **sin un solo consumidor en `app/`**, verificado:
+   `verBalanceAction` solo aparece en `lib/actions/wallet.ts` y en su suite. El comentario corregido
+   dice eso. Es una línea, y evita que el agente de la Tanda H busque algo que sigue estando.
+2. **`tasks.md`**: `T G.1`–`T G.4` seguían en `[ ]` pese a estar hechas. Marcadas, con la nota de que
+   `T G.2` y `T G.4` se cierran **verificando**, no escribiendo.
+
+Y la corrección de §G2 sobre `WalletFiltros.tsx` / `WalletLedger.tsx`, que dejaron de estar fuera del
+diff con el commit `63af4509` (solo comentarios).
+
+### G13.3 `T G.4` — la medición, repetida y con control de no-vacuidad
+
+`git diff --name-only origin/dev...HEAD` ⇒ **90 archivos**. Filtrado por lo que R32/R35/R63 protegen
+(`wallet-tiendas`, `mi-wallet`, `mis-pagos`, `wallet/tiendas`, `wallet/mensajeros`, `wallet-mensajero`,
+`MiWallet`, `MisPagos`):
+
+```
+(sin salida)
+```
+
+**El control que faltaba:** una ausencia solo prueba algo si lo ausente **existe**. El mismo patrón
+contra `git ls-files` devuelve **47 archivos** vivos en el árbol —las 4 páginas (`/mi-wallet`,
+`/mis-pagos`, `/wallet/tiendas`, `/wallet/mensajeros`) con sus 24 componentes, 13 suites y
+`WalletMensajeroFeedService` incluido—. Es decir: hay 47 archivos que **podrían** haber caído en el
+diff y **ninguno** cayó. Sin este control, «sin salida» podría ser un `grep` mal escrito.
+
+Lo que **sí** aparece con `liquidacion` en el nombre, con el commit que lo trajo — **ninguno es de la
+Tanda G**:
+
+| Archivo | Commit | Qué |
+| --- | --- | --- |
+| `lib/services/LiquidacionService.ts`, `lib/actions/liquidacion.ts`, `lib/interfaces/services/ILiquidacionService.ts` | `86e44048` (Tanda C) | las **dos escrituras** de `T C.2`/`T C.3` — la feature entera existe para eso |
+| `tests/unit/services/liquidacion-service.test.ts` | `86e44048` | la aserción de R40 de la rama **tienda**, reescrita (§C3-1). La del **mensajero** sigue verbatim |
+| `tests/unit/services/liquidacion-anulacion.test.ts` | `86e44048` | ídem (§C3-2) |
+| `tests/unit/services/liquidacion-caja-puerto.test.ts` | `86e44048` | archivo **nuevo** de `T C.1`, no la edición de una suite ajena |
+| `tests/integration/db/liquidacion-idempotencia.test.ts` | `86e44048` | cascada mecánica de §C6, sin una sola aserción modificada |
+| `tests/unit/guards/liquidacion-alcance.test.ts` | `45d29291` | guardia de la 172 afilada tras mover la frontera de la caja (Tanda C) |
+
+Las **dos** aserciones de R40 que el `[P2]` autoriza son las de las dos primeras suites. Las otras tres
+entradas no son ediciones de aserciones ajenas: una es un archivo nuevo, otra es un doble incompleto y
+la última es una guardia con su hallazgo ya documentado. **La decisión `[P2]` —el pago al mensajero no
+entra en tesorería— se sostiene también en el frontend, y por la vía fuerte: por ausencia.**
+
+Y el diff de la **Tanda G entera** (`81530bb9~1..HEAD`, cinco commits) son **12 archivos**:
+
+```
+app/(app)/wallet/_components/CajaResumenCard.tsx
+app/(app)/wallet/_components/WalletBalanceCard.tsx      <- borrado del rename
+app/(app)/wallet/_components/WalletFiltros.tsx          <- solo comentarios
+app/(app)/wallet/_components/WalletLedger.tsx           <- solo comentarios
+app/(app)/wallet/_components/WalletModule.tsx
+app/(app)/wallet/_components/wallet-labels.ts
+app/(app)/wallet/page.tsx
+progress/impl_173-caja-tesoreria.md
+specs/173-caja-tesoreria/tasks.md
+tests/components/CajaResumenCard.test.tsx
+tests/components/descarga/WalletDescarga.test.tsx
+tests/integration/wallet-page.test.tsx
+```
+
+**Ni `lib/`, ni `db/`, ni `scripts/`, ni una acción de servidor.** Los diez de código y test son de
+`app/(app)/wallet/`; los otros dos son documentación.
+
+### G13.4 Gate de este cierre
+
+> Gate **acotado**, el que ordenó el leader. La suite completa **NO** se corrió.
+
+- **`pnpm typecheck`** → `tsc --noEmit`, sin salida, exit 0.
+- **`pnpm lint`** → `✖ 27 problems (0 errors, 27 warnings)`. La **misma** línea base de las tandas
+  A–G; filtrando por `WalletModule`, `wallet/page`, `CajaResumen`, `wallet-labels`, `WalletDescarga` y
+  `wallet-page` → **cero coincidencias**.
+- **`pnpm exec vitest run guard`** → `48 archivos / 701 tests` verdes. **Idéntico a las Tandas F y G**:
+  este cierre no añade ninguna guardia ni mueve ninguna ajena.
+- **`pnpm exec vitest related --run "app/(app)/wallet/_components/WalletModule.tsx"`** (el único
+  archivo de código que este cierre toca) → `2 archivos / 18 tests` verdes.
+- Los tres archivos de la tanda corridos también **en aislado**: `wallet-page` (9),
+  `WalletDescarga` (9) y `CajaResumenCard` (19), **37 verdes**, y los tres juntos: **37 verdes**.
+  **Sin flake de jsdom**: ninguno de los tres archivos con el rojo intermitente conocido apareció.
+
+### G13.5 Veredicto del cierre
+
+`T G.3` estaba entregada y verde —se **auditó**, no se rehízo—; los dos huecos que sí quedaban eran de
+declaración (un comentario que mandaba a la Tanda H a buscar algo que sigue existiendo, y cuatro
+casillas sin marcar) y están cerrados; `T G.4` se remide con el control que le faltaba: **47 archivos
+protegidos vivos en el árbol, cero en el diff de la feature**.
