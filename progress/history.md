@@ -2631,3 +2631,47 @@ Reviewer **APROBADO, 0 bloqueantes**. Suite post-merge **821 archivos / 10411 te
   a mitad de ejecución, no porque `migrate status` hubiera abortado la cadena. Leer un log en curso
   como si fuera final es la misma familia de error que el conteo de rojos en una corrida degradada.
 
+
+## Feature 126 — analítica: servicios operativos · PR pendiente (2026-08-03)
+
+Repositorios, servicios y Server Actions de la analítica operativa: volumen, embudo, tasas,
+primer intento, motivos de devolución, tiempos de ciclo y aging. Lee `analytics_daily` para los
+días cerrados y consulta `orden`/`gestion_orden` en vivo para el día en curso. 36 requisitos,
+36 cubiertos con test nombrado; 40 mutaciones del implementer y 27 más aplicadas por el
+reviewer, todas muertas. Reviewer: **aprobado con reservas, cero bloqueantes**.
+
+- **Un guardia se acota cuando su intención era más estrecha que su barrido; no se relaja.** D3
+  corrigió `whereRollup`, que devolvía `mensajeroAsignadoId` —la columna de `orden`— para recortar
+  `analytics_daily`, cuya columna es `mensajeroId`. El barrido de la 122 prohibía esa clave en
+  *todos* los fragmentos, pero su `describe` hablaba sólo de `gestion_orden`: había pescado
+  `whereRollup` de paso. Aquí «cambiar el código en vez del guardia» habría significado **conservar
+  el bug**. El acotamiento sólo es legítimo porque vino con la aserción **positiva** (debe nombrar
+  `mensajeroId`, no debe nombrar el otro) y con el motivo escrito dentro del test.
+- **El tipo laxo era el bug, no la clave equivocada.** El retorno estaba tipado
+  `Record<string, string>`, así que el compilador no podía ver la clave inexistente. Al tiparlo
+  `Prisma.AnalyticsDailyWhereInput`, la regresión pasa de ser un `where` silenciosamente vacío a un
+  **error de build**. La corrección deja de depender de que nadie la revierta.
+- **Una exención nominal puede ser más estricta que la regla que sustituye.** R19 obliga a importar
+  el planificador de la 125, y el censo de la 125 marcaba infractor a todo importador externo. En vez
+  de meter el servicio en `ARCHIVOS_125` —sometiéndolo a reglas ajenas— se añadió
+  `CONSUMIDORES_EXTERNOS` con **una** entrada y **dos casos nuevos que la sostienen**: cualquier otro
+  importador sigue siendo infractor, y el exento sólo puede importar el planificador puro.
+- **Un mapa `R→test` que apunta a un caso que no muere es cobertura aparente.** El reviewer encontró
+  dos entradas (R28, R34) que nombraban un caso hermano que seguía verde bajo la mutación. El
+  requisito estaba cubierto, pero por otro caso. Es el mismo **anclaje silencioso** que costó caro en
+  la 125: verificar el mapa ejecutando la mutación y leyendo **qué cae**, no cuál debería caer.
+- **Un `where` compuesto por spread deja que el filtro del cliente pise el recorte de alcance.** Era
+  una fuga entre alcances, no un detalle de estilo: lo cazaron sus propios tests y el arreglo (`AND`)
+  tiene seis casos de regresión.
+- **Un guardia que mide un diff de rama caduca al mergear, y hay que ejecutarlo.** El de frontera con
+  la 127 llevaba su propia sentencia en la cabecera —«si sigue aquí después del merge, es un olvido y
+  no una decisión»— y se retiró en este PR, conservando la mitad que afirma sobre el árbol y no sobre
+  el diff. Además usaba `git diff <base>...HEAD`, que compara commit contra commit y es **ciego al
+  árbol de trabajo**: un archivo ajeno editado y sin commitear pasaba invisible.
+- **Los acentos graves de un mensaje de commit son código.** Al commitear inline, `` `pnpm run
+  db:rollback` `` citado en prosa se expandió como **sustitución de comando** y el script se ejecutó
+  de verdad contra la base local: tiró el índice de la feature y borró su fila de
+  `_prisma_migrations`. Se restauró y se verificó. Efecto colateral útil —el `down.sql` quedó probado
+  **por ejecución** y revirtió exactamente su índice— pero la lección es la otra: **commitear siempre
+  con `-F` o heredoc citado**, nunca `-m` con prosa que cita comandos. Ningún gate lo detecta: `git
+  commit` «funciona» y el estrago queda incrustado en el mensaje.
