@@ -165,6 +165,18 @@ export default async function CierresAdminPage() {
           pageSize: historicoResult.pageSize,
         }}
         sinZona={result.sinZona}
+        /**
+         * Feature 172 (T E.1/T E.2, [P3]/R6) — el permiso de PAGAR se resuelve SOLO
+         * server-side y con el MISMO predicado (`esAccesoTotal`) que `LiquidacionService` usa
+         * para responder `forbidden`. Son las dos mitades del control de acceso: ocultar el
+         * botón no es una de ellas por sí solo, y la acción tampoco lo es sin la otra.
+         *
+         * Aquí sí hay un rol al que le da `false` y que igualmente ve la pantalla: el
+         * `adminSatelite`, que APRUEBA los cierres de su zona y NO mueve dinero (respuesta P3
+         * del humano: aprobar un cierre y mover dinero no son la misma responsabilidad). Para
+         * él, aprobar sigue funcionando exactamente como antes de esta feature.
+         */
+        puedeRegistrarPago={esAccesoTotal(actor.rol)}
       />
     </AppPage>
   );

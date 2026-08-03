@@ -20,9 +20,7 @@ import { recurrenciaAnaliticaRollupDiario } from "@/lib/services/jobs/analitica-
 // Feature 124 / T4.1 + T4.5 — la migracion del `job_tipo` nuevo y la siembra.
 //
 // Dos mitades deliberadamente distintas:
-//  - ESTATICA (sin Postgres): la FORMA del DDL, el `down.sql`, el datamodel y —lo importante—
-//    que la carpeta quede la ULTIMA por nombre segun el criterio EXACTO de
-//    `scripts/db-rollback.ts`, reproducido aqui y no aproximado con `ls | tail`.
+//  - ESTATICA (sin Postgres): la FORMA del DDL, el `down.sql` y el datamodel.
 //  - CONTRA LA BASE (se SALTA si no hay `DATABASE_URL`): que el valor exista de verdad en el
 //    enum y que dos siembras del mismo objetivo dejen UNA fila en `jobs` (R36).
 
@@ -32,11 +30,11 @@ const SUFIJO = "_job_tipo_analitica_rollup_diario";
 const VALOR = "analitica_rollup_diario";
 
 /**
- * La carpeta se localiza por SUFIJO, no por nombre completo (patron del test de la 123). Es
- * deliberado: si se buscara por el nombre exacto, renombrar la carpeta —la mutacion que hay que
- * observar— haria fallar la LECTURA del archivo con un ENOENT en el import, y un ENOENT no
- * demuestra nada sobre el criterio de orden. Buscando por sufijo, la mutacion cae exactamente
- * donde tiene que caer: en la asercion de «es la ultima por nombre».
+ * La carpeta se localiza por SUFIJO, no por nombre completo (patron del test de la 123). Sigue
+ * siendo lo correcto aunque la asercion de «es la ultima por nombre» ya no exista: el prefijo
+ * de timestamp no es informacion de esta feature, y buscar por nombre exacto ataria el archivo
+ * a un dato que puede cambiar, fallando con un ENOENT en el import —que no demuestra nada— en
+ * lugar de en una asercion.
  */
 function carpetaDeLaMigracion(): string {
   const nombre = fs
@@ -50,18 +48,9 @@ function carpetaDeLaMigracion(): string {
 
 const CARPETA = carpetaDeLaMigracion();
 
-/**
- * REPRODUCCION LITERAL del criterio de `scripts/db-rollback.ts`: `readdirSync` con
- * `withFileTypes`, filtrado a DIRECTORIOS, ordenado por `localeCompare` del nombre, y se toma
- * el ULTIMO. No es lo mismo que `ls | tail`: `ls` incluye `migration_lock.toml` (un archivo) y
- * ordena por la collation del shell. Si esas dos cosas divergen, `pnpm db:rollback` revierte
- * una migracion que no es la que uno cree, que es como se pierde una tabla.
- */
-function ultimaCarpetaDeMigracionSegunRollback(): string | null {
-  const entries = fs.readdirSync(MIGRATIONS_DIR, { withFileTypes: true });
-  const dirs = entries.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
-  return dirs.length === 0 ? null : dirs[dirs.length - 1].name;
-}
+// Aqui vivia `ultimaCarpetaDeMigracionSegunRollback()`, la reproduccion literal del criterio de
+// `scripts/db-rollback.ts`. Se va con la unica asercion que la usaba (ver mas abajo, en el
+// `describe` de T4.1); dejarla suelta solo deja codigo muerto.
 
 const dir = path.join(MIGRATIONS_DIR, CARPETA);
 const upSql = fs.readFileSync(path.join(dir, "migration.sql"), "utf8");
@@ -93,11 +82,17 @@ describe("T4.1 — la migracion del enum `job_tipo`", () => {
     expect(upDdl).not.toMatch(/CREATE TABLE|ALTER TABLE|INSERT INTO/i);
   });
 
-  it("la carpeta es la ULTIMA por nombre segun el criterio EXACTO de `db-rollback.ts`", () => {
-    // Si no lo fuera, `pnpm db:rollback` revertiria OTRA migracion —la que de verdad quede
-    // ultima— y el round-trip de T8.2 estaria midiendo algo que no es esta feature.
-    expect(ultimaCarpetaDeMigracionSegunRollback()).toBe(CARPETA);
-  });
+  // RETIRADA (2026-08-02): aqui vivia «la carpeta es la ULTIMA por nombre segun el criterio
+  // EXACTO de `db-rollback.ts`», que comparaba `CARPETA` contra el ultimo directorio de
+  // `db/migrations` ordenado por `localeCompare`. Era un guard DE UN SOLO USO: solo servia para
+  // garantizar que, en el momento de correr el round-trip de T8.2, `pnpm db:rollback` revirtiera
+  // ESTA migracion y no otra, de modo que la medicion fuera de esta feature. Ese round-trip ya
+  // ocurrio y su evidencia esta registrada en `progress/roundtrip_124_job_tipo.md` (UP → DOWN →
+  // UP contra `localhost:5432/ordenex`, con la comprobacion de «ultima por nombre» hecha y
+  // anotada en su §2). La propiedad que afirmaba es TEMPORAL: dejo de ser cierta en cuanto otra
+  // feature anadio una migracion posterior (la 172, `20260802120000_liquidacion_pago`), y
+  // mantenerla haria fallar a TODA feature futura que anada una migracion, sin decir nada sobre
+  // la correccion de la 124. Se retira; las demas aserciones de este archivo siguen en pie.
 
   it("la carpeta trae su `down.sql` (chequeo §6 de `init.sh`)", () => {
     expect(fs.existsSync(path.join(dir, "down.sql"))).toBe(true);

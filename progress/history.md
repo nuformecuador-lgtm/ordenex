@@ -2485,6 +2485,70 @@ diagnosticó contra código muerto**, así que pide reevaluación antes de que a
   virtual store de pnpm. Mover el store fuera del proyecto **rompe la resolución de tipos** (~1.800
   errores falsos): se probó y se descartó. Detalle en `impl_130.md §4`.
 
+## 2026-08-02 — 172 liquidación (pagar a mensajeros y a tiendas)
+- Cierra el agujero de fondo del sistema: hasta hoy **no existía forma de registrar un pago**, ni a
+  mensajeros ni a tiendas, así que los saldos solo crecían y nadie podía decir «ya pagué» (medido
+  en producción: 35 movimientos de caja y 6 cierres con **cero** pagos). El pago se modela como un
+  **documento propio e inmutable** (`liquidacion_pago`) del que nace exactamente un movimiento en
+  el libro del beneficiario; el saldo lo siguen derivando los libros. Al mensajero se le ofrece al
+  **aprobar su cierre** y queda atado a él; a la tienda, **contra su saldo acumulado** desde el
+  desglose que dejó la 171. **Anular es un contraasiento** (`liquidacion_anulacion`, `UNIQUE`
+  sobre `pago_id`): nunca se borra ni se edita, y «anulado» se **deriva** de que exista la fila.
+- Requisitos cubiertos: **R1–R85**, mapeados en `progress/impl_172-liquidacion.md`. **85 de 85 con
+  test en el repo; R61 queda ⚠ PARCIAL** (ver deuda). Entregada en **9 tandas / 15 commits**.
+  `./init.sh` verde: **793 archivos / 9862 tests, 0 fallos** (baseline al arrancar: 772 / 9257 ⇒
+  **+21 archivos, +600 tests, cero regresiones**). Review **aprobado en ronda 2**
+  (`progress/review_172-liquidacion.md`); la ronda 1 la rechazó con 2 bloqueantes, los dos **huecos
+  de verificación, no de código**: se cerraron sin tocar una línea de `lib/`, `app/`, `components/`
+  ni `db/`.
+- Decisiones del humano que mandan sobre el diseño: **P1** el pago que excede lo debido se
+  **rechaza**, lo que obliga a un candado (`SELECT … FOR UPDATE` antes de leer el disponible, uno
+  por operación); **P3** pagan `maestro` y `admin`, `adminSatelite` **no**, aunque sí apruebe
+  cierres —*aprobar un cierre y mover dinero no son la misma responsabilidad*—; **P4** la anulación
+  **entra** en la feature, contra el default propuesto, porque entregar un libro de dinero
+  incorregible era el riesgo más caro. **Aprobar y pagar son dos pasos**: por la feature 111 un
+  cierre sin resolver bloquea al mensajero, así que un fallo del pago **no puede tumbar la
+  aprobación**, y hay test de ello.
+- Decisiones del leader, no del spec: `referencia` gana tope de **60** (el diseño lo fijaba para
+  `nota` y callaba aquí; el número sale de `lib/types/api-key.ts`, el único campo de la misma
+  familia); el aviso de **N1** va **donde hay un importe agregado que incluye lo anulado**, no
+  donde solo se listan movimientos —aplicando esa regla resultaron **4 pantallas, no 1**—; la
+  descarga del histórico de cierres **no** gana columna; y tres punteros falsos de la tabla
+  `§ Trazabilidad` se corrigieron pese a estar el spec aprobado, porque «aprobado» protege el
+  contenido de los requisitos, no un índice factualmente falso.
+- **Lo que sostiene la feature son 13 pruebas por mutación**, y dos de ellas se ganaron el sueldo:
+  (1) el primer store de concurrencia tomaba la foto de las filas **después** de ceder el turno, y
+  con eso **quitar el candado dejaba el test de carrera en verde** —corregido a instantánea al
+  inicio de la sentencia, la semántica real de `READ COMMITTED`; sin candado caen 8 de 10 y se
+  pagan 120 000 de una tienda que debía 100 000—; (2) el parser del test de migración **se caía
+  ante la mutación que existe para cazar**: con `NOT VALID` en el último CHECK, el módulo reventaba
+  al importarse y corrían **cero casos**, así que la aserción nunca habría llegado a ejecutarse.
+  **Un guard cuyo propio parser muere ante la mutación es peor que no tenerlo.**
+- Verificado que los constraints **actúan** y no solo están escritos (los tests de migración de
+  este repo son estáticos): contra Postgres, `pago_tienda`+`credito` → **23514**,
+  `liquidacion`+`devengo` → **23514**, segunda anulación del mismo pago → **23505** con el pago
+  intacto, y **tres contrapruebas aceptadas** —la mitad que suele faltar: que el CHECK **no
+  rechaza de más**.
+- **DEUDA / condición de merge (no de código): la base de PREVIEW no se pudo verificar** — es la
+  mitad abierta de **R61**. Los dos `ADD CONSTRAINT … CHECK` heredados del review de la 171 validan
+  las filas existentes al aplicarse, y en Vercel el build migra antes de compilar. **Producción
+  está medida y limpia** (39 + 7 filas, cero incoherentes, y los CHECK cubren 10/10 y 5/5 valores
+  de los enums reales), pero el MCP está fijado al `project_ref` de producción y preview tiene base
+  propia. Riesgo acotado: build rojo en el PR y una fila fallida en el `_prisma_migrations` de
+  preview que bloquearía sus despliegues. **No se pushea hasta resolverlo**, porque pushear ES
+  aplicar la migración en preview. Consulta exacta en `progress/impl_172-liquidacion.md`.
+- Deuda declarada y aceptada: **N1** —el par pago + anulación deja los importes **brutos**
+  inflados aunque el saldo queda exacto— cerrada por su default (no netear, declararlo en pantalla
+  en las 4 superficies); **N2** sin ventana temporal para anular; **E2E declarado INAPLICABLE** por
+  decisión del humano, con la tabla de qué lo sustituye y qué queda descubierto en `design.md §13`.
+- Hallazgos ajenos destapados y **no tapados**: `esFechaFutura` (`lib/types/gestion-orden.ts:102`)
+  documenta que `new Date("2026-02-31…")` da `Invalid Date` y **es falso en V8** —rueda al 3 de
+  marzo—, así que hoy **`31/02` se acepta como fecha de reprogramación**; la guardia del censo de
+  tablas **solo recorría `app/`**, de modo que una tabla en `components/shared/` no existía para
+  ella, y al abrirla apareció una tabla **preexistente de la 130** sin registrar
+  (`contadores-cabecera.guardia.test.ts` tiene el mismo punto ciego y es de la 170); y un
+  `as unknown as <Interfaz>` en un test de la 170 **esconde el drift al typechecker**.
+
 ## Feature 125 — analítica: backfill histórico de `analytics_daily` · PR #264 (2026-08-02)
 
 Un CLI que recorre un rango de fechas y llama, una fecha cada vez, al agregador que entregó la 124.
@@ -2523,3 +2587,4 @@ typecheck limpio; lint delta 0.
 - **La bitácora no se reescribe.** `impl_125.md` conserva su sección «T6 / R34 — PARADO» tal como se
   escribió, con la fecha puesta, y gana una nota de cierre remitiendo a la 174. Un log corregido a
   posteriori miente sobre lo que se sabía en cada momento.
+

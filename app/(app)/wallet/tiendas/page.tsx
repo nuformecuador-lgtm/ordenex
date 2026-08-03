@@ -46,6 +46,18 @@ export default async function WalletTiendasPage() {
             total: tiendasResult.total,
             pageSize: tiendasResult.pageSize,
           }}
+          /**
+           * Feature 172 (T D.3, R4/R1) — el permiso de pagar se resuelve SOLO server-side y
+           * con el MISMO predicado (`esAccesoTotal`) que `LiquidacionService` usa para
+           * responder `forbidden`. Son las dos mitades del control de acceso: ocultar el
+           * botón no es una de ellas por sí solo, y la acción tampoco lo es sin la otra.
+           *
+           * Hoy la página ya hace `notFound` para cualquier rol sin acceso total, así que
+           * este valor es siempre `true` aquí. Se pasa igualmente y no se escribe `true`
+           * literal: el día que esta pantalla se abra a un rol que mira pero no paga, el
+           * botón desaparece solo.
+           */
+          puedeRegistrarPago={esAccesoTotal(actor.rol)}
         />
       </section>
     </AppPage>

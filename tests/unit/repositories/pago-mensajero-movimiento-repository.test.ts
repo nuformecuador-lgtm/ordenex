@@ -34,6 +34,15 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       groupBy: vi.fn(),
     },
     usuario: { findMany: vi.fn(), findUnique: vi.fn() },
+    // Feature 172 (T C.3, R52): filtrar por cierre lee primero los pagos de ese cierre. Aqui no
+    // hay ninguno; el archivo `pago-mensajero-filtro-cierre.test.ts` es el que prueba el filtro
+    // sobre datos sembrados y con las dos mitades.
+    liquidacionPago: {
+      findMany: vi.fn(async (args?: { where?: unknown; select?: unknown }) => {
+        void args; // el argumento se AFIRMA en el test del filtro por cierre
+        return [] as { id: string }[];
+      }),
+    },
     ...overrides,
   };
 }
@@ -92,10 +101,12 @@ describe("PagoMensajeroMovimientoRepository.listarPorMensajero (R20/R22)", () =>
     expect(typeof r.movimientos[0].monto).toBe("string");
   });
 
-  it("R22: cierreId -> origen_tipo=cierre_dia + origen_id; rango de fechas en el WHERE", async () => {
+  it("R22: cierreId -> los DOS origenes del cierre; rango de fechas en el WHERE", async () => {
     const prisma = buildPrisma();
     prisma.pagoMensajeroMovimiento.findMany.mockResolvedValue([]);
     prisma.pagoMensajeroMovimiento.count.mockResolvedValue(0);
+    // Feature 172 (T C.3, R52): el cierre `c1` tiene un pago registrado contra el.
+    prisma.liquidacionPago.findMany.mockResolvedValue([{ id: "pago-1" }]);
     const repo = new PagoMensajeroMovimientoRepository(prisma as unknown as PrismaClient);
 
     const desde = new Date("2026-07-01T00:00:00.000Z");
@@ -103,11 +114,21 @@ describe("PagoMensajeroMovimientoRepository.listarPorMensajero (R20/R22)", () =>
     await repo.listarPorMensajero({ mensajeroId: "m1", page: 1, pageSize: 20, cierreId: "c1", desde, hasta });
 
     const arg = prisma.pagoMensajeroMovimiento.findMany.mock.calls[0][0];
+    // Feature 172 (T C.3): «del cierre» son DOS origenes —lo que escribio el feed al aprobar y
+    // lo que nacio de un pago contra ese cierre (con sus contraasientos)—, en OR y compuestos
+    // por AND con el mensajero y el rango.
     expect(arg.where).toEqual({
       mensajeroId: "m1",
-      origenTipo: "cierre_dia",
-      origenId: "c1",
+      OR: [
+        { origenTipo: "cierre_dia", origenId: "c1" },
+        { origenTipo: "pago_mensajero", origenId: { in: ["pago-1"] } },
+      ],
       fechaMovimiento: { gte: desde, lte: hasta },
+    });
+    // Los ids de pago salen de una lectura ACOTADA por el cierre, no de toda la tabla.
+    expect(prisma.liquidacionPago.findMany.mock.calls[0][0]).toEqual({
+      where: { cierreId: "c1" },
+      select: { id: true },
     });
   });
 });

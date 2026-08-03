@@ -28,6 +28,7 @@ import {
 import {
   CATEGORIA_PAGO_LABEL,
   CUENTA_COLOR,
+  DESGLOSE_AVISO_BRUTOS,
   DESGLOSE_COLUMNAS,
   DESGLOSE_FILTRO_LABEL,
   DESGLOSE_LABEL,
@@ -243,6 +244,15 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
           </span>
         </div>
       </div>
+
+      {/*
+        Feature 172 (T H.4) — la limitación N1, junto a los dos importes AGREGADOS que afecta
+        y no dentro de la tabla de movimientos: allí el pago y su reverso se ven los dos y se
+        explican solos; aquí quedan sumados y nadie los podría distinguir.
+      */}
+      <p role="note" className="text-xs text-muted-foreground">
+        {DESGLOSE_AVISO_BRUTOS}
+      </p>
 
       {/* Filtros server-side por fecha/cierre (R22). */}
       <form

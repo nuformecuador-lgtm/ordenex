@@ -134,6 +134,7 @@ function cierreAdmin(
     totales: TOTALES,
     totalPagoMensajero: "100.10",
     totalIngresoBodegaRechazos: "5.00",
+    pendientePagoMensajero: null, // feature 172/T C.2: null = cierre no aprobado (R28)
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,

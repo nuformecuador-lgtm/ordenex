@@ -18,7 +18,12 @@ import {
 } from "@/lib/utils/cuentas-por-pagar-listado";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletTiendaMovimientoRepository).
-type PagoMensajeroPrismaClient = Pick<PrismaClient, "pagoMensajeroMovimiento" | "usuario">;
+// Feature 172 (T C.3): + `liquidacionPago`, SOLO para LEER los ids de pago de un cierre (§5).
+// Ningun metodo de esta clase lo escribe: el documento del pago lo escribe su propio repositorio.
+type PagoMensajeroPrismaClient = Pick<
+  PrismaClient,
+  "pagoMensajeroMovimiento" | "usuario" | "liquidacionPago"
+>;
 
 // Money-safe: Decimal -> STRING escala 2 (nunca number/parseFloat).
 type MovimientoRow = Prisma.PagoMensajeroMovimientoGetPayload<Record<string, never>>;
@@ -37,23 +42,6 @@ function toDTO(r: MovimientoRow): PagoMensajeroMovimientoDTO {
   };
 }
 
-// WHERE de los filtros opcionales del desglose (R22), SIN el acotado por mensajero (lo pone el
-// caller). `cierreId` filtra por el origen del cierre (origen_tipo=cierre_dia, origen_id=X).
-function buildFiltrosWhere(f: CuentaPorPagarFiltros): Prisma.PagoMensajeroMovimientoWhereInput {
-  const where: Prisma.PagoMensajeroMovimientoWhereInput = {};
-  if (f.cierreId !== undefined) {
-    where.origenTipo = "cierre_dia";
-    where.origenId = f.cierreId;
-  }
-  if (f.desde !== undefined || f.hasta !== undefined) {
-    where.fechaMovimiento = {
-      ...(f.desde !== undefined ? { gte: f.desde } : {}),
-      ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
-    };
-  }
-  return where;
-}
-
 /**
  * Feature 44 — repositorio del LIBRO de movimientos del pago por mensajero. SOLO queries Prisma.
  * Inserta idempotentemente (skipDuplicates -> ON CONFLICT DO NOTHING, R6/R12), lista paginado
@@ -62,6 +50,57 @@ function buildFiltrosWhere(f: CuentaPorPagarFiltros): Prisma.PagoMensajeroMovimi
  */
 export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimientoRepository {
   constructor(private readonly prisma: PagoMensajeroPrismaClient) {}
+
+  /**
+   * WHERE de los filtros opcionales del desglose (R22), SIN el acotado por mensajero (lo pone
+   * el caller).
+   *
+   * **Feature 172 (T C.3, R52, design §5) — el filtro por cierre son DOS orígenes, no uno.**
+   * Hasta la 172, «los movimientos de este cierre» era literalmente `origen_tipo = 'cierre_dia'
+   * AND origen_id = <cierre>`, porque el feed de la aprobacion era el unico que escribia en
+   * este libro. La liquidacion añade un segundo escritor cuyo origen es el **PAGO**
+   * (`origen_tipo = 'pago_mensajero'`, `origen_id = <pago>`), asi que con el filtro viejo el
+   * pago de un cierre quedaba FUERA de su propio cierre: la pantalla mostraria la deuda sin
+   * mostrar lo que ya se entrego contra ella.
+   *
+   * Se resuelve en dos pasos, como manda §5: (1) leer los ids de pago de ese cierre —0-3 filas,
+   * por el indice `cierre_id` de `liquidacion_pago`— y (2) un `OR` de las dos formas de
+   * pertenecer al cierre. El `OR` trae **tambien los contraasientos** de una anulacion, porque
+   * comparten `origen_id` con su pago (§6.2): por eso la rama del pago filtra por `origen_id`
+   * y no por categoria.
+   *
+   * Alternativa descartada (§11.G): añadir `cierre_id` a este libro. Exigiria backfillear filas
+   * de una tabla declarada inmutable y crearia una segunda forma de decir de donde viene un
+   * movimiento.
+   *
+   * El `OR` compone con el resto por AND (el `mensajeroId` del caller y el rango de fechas
+   * siguen a nivel raiz), asi que ni ensancha el alcance ni se salta el acotado por mensajero.
+   */
+  private async buildFiltrosWhere(
+    f: CuentaPorPagarFiltros,
+  ): Promise<Prisma.PagoMensajeroMovimientoWhereInput> {
+    const where: Prisma.PagoMensajeroMovimientoWhereInput = {};
+    if (f.cierreId !== undefined) {
+      const pagos = await this.prisma.liquidacionPago.findMany({
+        where: { cierreId: f.cierreId },
+        select: { id: true },
+      });
+      where.OR = [
+        // (a) lo que el feed escribio AL APROBAR el cierre.
+        { origenTipo: "cierre_dia", origenId: f.cierreId },
+        // (b) lo que nacio de un PAGO registrado contra ese cierre, y sus contraasientos.
+        // Sin pagos, `in: []` no casa nada: la rama existe pero no ensancha el resultado.
+        { origenTipo: "pago_mensajero", origenId: { in: pagos.map((p) => p.id) } },
+      ];
+    }
+    if (f.desde !== undefined || f.hasta !== undefined) {
+      where.fechaMovimiento = {
+        ...(f.desde !== undefined ? { gte: f.desde } : {}),
+        ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
+      };
+    }
+    return where;
+  }
 
   /** R6/R12: inserta en la tx `tx` con skipDuplicates (no TOCTOU); devuelve filas insertadas. */
   async crearMovimientos(
@@ -78,6 +117,11 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
       origenId: m.origenId,
       descripcion: m.descripcion ?? null,
       registradoPor: m.registradoPor ?? null,
+      // Feature 172 (T B.2, R37): la fecha del movimiento se pasa SOLO si viene. La clave
+      // no se emite cuando el caller no la manda —no se emite `undefined`, no se emite la
+      // clave— asi que el feed del cierre sigue cayendo en el `DEFAULT CURRENT_TIMESTAMP`
+      // de la columna exactamente como antes.
+      ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
     }));
     const res = await tx.pagoMensajeroMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -88,7 +132,7 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     // R20: el acotado por mensajero va SIEMPRE en el WHERE, nunca en memoria.
     const where: Prisma.PagoMensajeroMovimientoWhereInput = {
       mensajeroId: filtros.mensajeroId,
-      ...buildFiltrosWhere(filtros),
+      ...(await this.buildFiltrosWhere(filtros)),
     };
     const skip = (filtros.page - 1) * filtros.pageSize;
     const [rows, total] = await Promise.all([
@@ -110,7 +154,10 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
   ): Promise<CuentaPorPagarAgregado> {
     const where: Prisma.PagoMensajeroMovimientoWhereInput = {
       mensajeroId, // R20: acotado por mensajero en el WHERE
-      ...buildFiltrosWhere(filtros),
+      // Feature 172 (T C.3/R52): el MISMO where que el listado, incluido el `OR` del cierre.
+      // Si aqui se filtrara distinto, la cabecera del desglose diria una cifra y la tabla de
+      // debajo mostraria otra — el pago contado en una y no en la otra.
+      ...(await this.buildFiltrosWhere(filtros)),
     };
     const grupos = await this.prisma.pagoMensajeroMovimiento.groupBy({
       by: ["tipo"],
