@@ -64,15 +64,26 @@ export function whereGestionOrden(alcance: AlcanceDatos): Prisma.GestionOrdenWhe
 }
 
 /**
- * Fragmento de `where` para el rollup diario `analytics_daily`.
+ * Fragmento de `where` para el rollup diario (la tabla que agrega la feature 124).
  *
- * Devuelve un objeto plano y no `Prisma.AnalyticsDailyWhereInput` porque la tabla NO
- * EXISTE todavia: la crea la feature 123 y tipar contra un modelo inexistente no
- * compilaria. Las claves son las MISMAS que ya usa `orden` (camelCase de Prisma) para
- * que el dia que la 123 aterrice el cambio sea de tipo, no de vocabulario
- * (aviso dirigido en `design.md §7`).
+ * FEATURE 126 / D3 — CORRECCION DE UN DEFECTO CONFIRMADO, no un refactor de estilo.
+ *
+ * Cuando la 122 escribio esta funcion la tabla NO EXISTIA, asi que el retorno se tipo
+ * `Record<string, string>` y la clave del recorte por mensajero se escribio
+ * `mensajeroAsignadoId` — el nombre de la columna de `orden`. El rollup llama a esa
+ * columna `mensajeroId` (`db/schema.prisma`, con su indice
+ * `analytics_daily_mensajero_fecha_idx`), de modo que el fragmento producia un `where`
+ * con una clave INEXISTENTE. El tipo laxo impedia que el compilador lo viera.
+ *
+ * Ahora la tabla existe y el retorno se tipa contra el modelo REAL. Eso convierte la
+ * regresion en un error de BUILD: volver a escribir `mensajeroAsignadoId` aqui ya no
+ * compila. Corregirlo «por dentro» dejando el tipo laxo arreglaria el sintoma y dejaria
+ * intacto el mecanismo que lo produjo (alternativa 5 descartada en `design.md §7`).
+ *
+ * `import type { Prisma }` desaparece en compilacion: no exige `DATABASE_URL` ni arrastra
+ * runtime, exactamente igual que en `whereOrden` / `whereGestionOrden`.
  */
-export function whereRollup(alcance: AlcanceDatos): Record<string, string> {
+export function whereRollup(alcance: AlcanceDatos): Prisma.AnalyticsDailyWhereInput {
   switch (alcance.tipo) {
     case "global":
       return {};
@@ -80,7 +91,10 @@ export function whereRollup(alcance: AlcanceDatos): Record<string, string> {
       return { zonaId: alcance.zonaId };
     case "tienda":
       return { tiendaId: alcance.tiendaId };
+    // R22 — un unico id, jamas `{ in: [id, null] }`: el cubo sin asignar NO es «propio»
+    // de ningun mensajero (R28 de la 122), y anadirlo «para que le cuadre el total» seria
+    // una fuga de filas ajenas.
     case "mensajero":
-      return { mensajeroAsignadoId: alcance.mensajeroId };
+      return { mensajeroId: alcance.mensajeroId };
   }
 }
