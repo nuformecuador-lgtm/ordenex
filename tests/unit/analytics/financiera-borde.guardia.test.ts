@@ -297,11 +297,12 @@ describe("E.4 / R14 · ninguna respuesta financiera contiene un id de mensajero"
     });
   }
 
-  it("el barrido cubre EXACTAMENTE las ocho financieras", () => {
-    expect(IDS_FINANCIERAS_SERVIDAS).toHaveLength(8);
+  it("el barrido cubre EXACTAMENTE las diez financieras", () => {
+    // 8 de la 127 + `dinero_en_caja` y `ganancia_ordenex` (173, P4), que tambien cruzan el borde.
+    expect(IDS_FINANCIERAS_SERVIDAS).toHaveLength(10);
   });
 
-  it("no pasa por conjunto vacio: las ocho respuestas llevan dinero de verdad", async () => {
+  it("no pasa por conjunto vacio: las diez respuestas llevan dinero de verdad", async () => {
     for (const metricaId of IDS_FINANCIERAS_SERVIDAS) {
       const { respuesta } = await respuestaDe(metricaId);
       const serializada = JSON.stringify(respuesta);

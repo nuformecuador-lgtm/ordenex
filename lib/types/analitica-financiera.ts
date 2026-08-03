@@ -1,4 +1,5 @@
-// Feature 127 (T A.1) — CONTRATO DE SALIDA de las ocho metricas financieras.
+// Feature 127 (T A.1) — CONTRATO DE SALIDA de las metricas financieras (ocho al escribirse;
+// DIEZ desde la 173, que anadio `dinero_en_caja` y `ganancia_ordenex` — ver `IDS_FINANCIERAS_SERVIDAS`).
 //
 // Modulo de TIPOS: sin consultas, sin logica, sin Prisma en import de valor, sin HTTP.
 // Lo unico de runtime que exporta son tres registros declarativos (los ids servidos, los
@@ -175,7 +176,7 @@ interface CabeceraFinanciera {
   readonly esAcumulado: boolean;
 }
 
-/** Las siete metricas que producen importes por cubo. */
+/** Las metricas que producen importes por cubo: todas menos `conciliacion_cierres`. */
 export interface ResultadoFinancieroVistas extends CabeceraFinanciera {
   readonly tipo: "vistas";
   /** Una vista, salvo `cod_recaudado`, que trae dos no sumables entre si ⟨D6⟩. */
@@ -214,13 +215,17 @@ export type RespuestaFinanciera =
 /* -------------------------------------------------------------------------- */
 
 /**
- * Las ocho metricas de dominio `financiera` que esta feature sirve (R6).
+ * Las DIEZ metricas de dominio `financiera` que esta feature sirve (R6).
  *
  * Se declara como lista PROPIA y no derivada del catalogo a proposito: asi el guardia de
  * coherencia compara DOS fuentes independientes (esta lista contra
  * `listarMetricas({ dominio: "financiera" })`) en vez de comparar el catalogo consigo mismo.
  * Añadir una metrica financiera al catalogo sin productor, o servir aqui un id que el
  * catalogo no tiene, se pone rojo.
+ *
+ * Eran OCHO hasta la feature 173, que anadio las dos de la caja en modo tesoreria
+ * (`progress/decision_F2_173.md`, ⟨P4⟩ humano del 2026-08-03). Las dos las produce el mismo
+ * repositorio de la caja principal y el mismo manejador del servicio, con `derivarCaja`.
  */
 export const IDS_FINANCIERAS_SERVIDAS = [
   "cod_recaudado",
@@ -228,6 +233,8 @@ export const IDS_FINANCIERAS_SERVIDAS = [
   "ingreso_comision_cod",
   "ingreso_iva",
   "egresos",
+  "dinero_en_caja",
+  "ganancia_ordenex",
   "cuenta_por_pagar_tienda",
   "cuenta_por_pagar_mensajero",
   "conciliacion_cierres",

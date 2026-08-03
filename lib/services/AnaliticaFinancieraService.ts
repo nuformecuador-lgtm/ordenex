@@ -31,7 +31,9 @@ import {
   type ResultadoFinanciero,
   type VistaFinanciera,
 } from "@/lib/types/analitica-financiera";
+import type { CajaResumenDTO } from "@/lib/types/wallet";
 import { derivarBalance } from "@/lib/utils/wallet-balance";
+import { derivarCaja } from "@/lib/utils/caja-tesoreria";
 import { derivarCuentaPorPagar } from "@/lib/utils/cuenta-por-pagar";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 
@@ -42,9 +44,10 @@ import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 // alcance, parsear filtros y —sobre todo— reimplementar una resta de dinero.
 //
 // R20 / R27 — EL REUSO NO ES OPCIONAL, Y ES EL PUNTO MAS CARO DE LA FEATURE. El `neto` de las
-// dos cuentas por pagar y de las cuatro metricas de caja sale de `derivarSaldoTienda`,
-// `derivarCuentaPorPagar` y `derivarBalance`, que ya existen, ya son money-safe y ya tienen sus
-// tests. Escribir aqui `creditos.sub(debitos)` crearia una SEGUNDA definicion de "saldo" al lado
+// dos cuentas por pagar y de las SEIS metricas de caja sale de `derivarSaldoTienda`,
+// `derivarCuentaPorPagar`, `derivarBalance` y —desde la 173— `derivarCaja`, que ya existen, ya son
+// money-safe y ya tienen sus tests. Escribir aqui `creditos.sub(debitos)` crearia una SEGUNDA
+// definicion de "saldo" al lado
 // de la que la tienda ve en `/mi-wallet`, y las dos pueden divergir sin que nada falle: no da un
 // error, da una discusion. Toda la aritmetica que si vive aqui es SUMA de agregados —nunca la
 // resta con signo— y toda es `Prisma.Decimal`.
@@ -133,6 +136,12 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
       // ⟨D8(b)⟩ / R18 — `egresos` la produce ESTA feature, con el mismo repositorio y las OCHO
       // categorias `egreso_*` que el catalogo declara. No hay estado `no_producida`.
       egresos: caja,
+      // Feature 173 ⟨P4⟩ (`progress/decision_F2_173.md`) — las DOS cifras de la caja en modo
+      // tesoreria. Mismo repositorio y misma consulta; lo unico que cambia entre ellas es CUAL de
+      // las dos cifras que `derivarCaja` produce se publica como `neto`, y eso entra como
+      // selector explicito en vez de como un `if` por id dentro del manejador.
+      dinero_en_caja: (c) => this.deTesoreria(c, (r) => r.enCaja),
+      ganancia_ordenex: (c) => this.deTesoreria(c, (r) => r.ganancia),
       cod_recaudado: (c) => this.deRecaudo(c),
       cuenta_por_pagar_tienda: (c) => this.deSaldoDeTiendas(c),
       cuenta_por_pagar_mensajero: (c) => this.deCuentaDeMensajeros(c),
@@ -215,6 +224,55 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           sumableCon: [],
           filas: [],
           total: importe(sumar(filas.map((f) => f.suma)), balance.balance),
+        },
+      ],
+    };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* F.3 (173) — la caja en TESORERIA: `dinero_en_caja` y `ganancia_ordenex` */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Las dos cifras de la feature 173, sobre el MISMO material que `deCaja` y con el MISMO
+   * repositorio: `(categoria, tipo, suma)` de `wallet_movimiento` restringido a las categorias
+   * que cada metrica declara.
+   *
+   * AQUI NO SE RESTA NADA (R20, y `tasks.md` T F.3 lo exige por escrito). La particion por
+   * naturaleza y las restas con signo las hace `derivarCaja` (`lib/utils/caja-tesoreria.ts`),
+   * que es PURA, ya esta probada y a su vez reusa `derivarBalance`. Escribir aqui
+   * `ingresosPropios.sub(egresosPropios)` crearia una SEGUNDA definicion de «ganancia» al lado
+   * de la que la pantalla de la wallet muestra, y las dos podrian divergir sin que nada fallara.
+   * Lo unico que este metodo hace con el dinero es renombrar `suma` a `total` —el campo que
+   * `AgregadoCajaRow` usa— y elegir cual de las dos cifras derivadas publica como `neto`.
+   *
+   * El `bruto` es la Σ de todo lo agregado, sin signo, igual que en `deCaja` ⟨D1(c)⟩. Para
+   * `dinero_en_caja` las categorias son de los DOS prefijos, asi que el bruto (volumen movido) y
+   * el neto (lo que queda) son numeros distintos de verdad.
+   */
+  private async deTesoreria(
+    consulta: ConsultaAnalitica,
+    cifra: (resumen: CajaResumenDTO) => string,
+  ): Promise<ResultadoFinanciero> {
+    const filas: readonly AgregadoCategoriaCaja[] = await this.ingresos.sumarPorCategoria(consulta);
+    const resumen = derivarCaja(
+      filas.map((f) => ({ categoria: f.categoria, tipo: f.tipo, total: f.suma })),
+    );
+
+    return {
+      ...this.cabecera(consulta),
+      tipo: "vistas",
+      vistas: [
+        {
+          id: consulta.metrica.id,
+          grano: "fecha",
+          fuente: "wallet_movimiento",
+          // `[]` como todas: `dinero_en_caja` y `ganancia_ordenex` NO se suman entre si (la
+          // primera contiene dinero de terceros que la segunda excluye a proposito), ni con
+          // `egresos`, que es un subconjunto de las dos.
+          sumableCon: [],
+          filas: [],
+          total: importe(sumar(filas.map((f) => f.suma)), cifra(resumen)),
         },
       ],
     };

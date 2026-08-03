@@ -13,7 +13,9 @@ import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Feature 135 / T3.2 + T3.5 — invariantes ESTRUCTURALES del catalogo de KPIs.
 // Cada grupo lleva el `R<n>` que verifica. El catalogo es contrato (D1 «todas»,
-// 2026-07-30): 15 ids operativos + 8 financieros = 23 metricas.
+// 2026-07-30): 15 ids operativos + 8 financieros = 23 metricas. La feature 173 anadio
+// DOS financieras (`dinero_en_caja` y `ganancia_ordenex`) con autorizacion humana propia y
+// fechada: `progress/decision_F2_173.md` (P4), 2026-08-03. Total vigente: 15 + 10 = 25.
 //
 // Estos tests NO comprueban ningun calculo (la 135 declara, no computa): comprueban
 // que la declaracion es completa, cerrada y coherente consigo misma, que es
@@ -47,13 +49,15 @@ const METRICAS_POR_GESTION = [
 const TASAS = ["tasa_entrega", "tasa_devolucion", "tasa_rechazo"];
 
 describe("catalogo de metricas · tamano del contrato (D1)", () => {
-  it("declara exactamente las 23 metricas aprobadas", () => {
-    expect(METRICAS).toHaveLength(23);
+  it("declara exactamente las 25 metricas aprobadas", () => {
+    // 23 de la 135 (D1, 2026-07-30) + 2 de la 173 (P4, `progress/decision_F2_173.md`).
+    expect(METRICAS).toHaveLength(25);
   });
 
-  it("declara quince metricas operativas y ocho financieras", () => {
+  it("declara quince metricas operativas y diez financieras", () => {
+    // Las operativas NO se tocan: la 173 es una feature de dinero de punta a punta.
     expect(listarMetricas({ dominio: "operativa" })).toHaveLength(15);
-    expect(listarMetricas({ dominio: "financiera" })).toHaveLength(8);
+    expect(listarMetricas({ dominio: "financiera" })).toHaveLength(10);
   });
 });
 

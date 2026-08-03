@@ -4,6 +4,7 @@ import {
   VISTA_COD_RECAUDADO_POR_METODO,
   VISTA_COD_RECAUDADO_POR_TIENDA,
 } from "@/lib/types/analitica-financiera";
+import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
 import {
   NATURALEZA_POR_CATEGORIA,
   type NaturalezaMovimiento,
@@ -191,6 +192,63 @@ describe("R52 · cod_recaudado sigue con dos vistas y la caja NO es una tercera 
 });
 
 /* -------------------------------------------------------------------------- */
+/* T F.2 — las dos metricas nuevas declaran lo que el Record dice, no otra cosa */
+/* -------------------------------------------------------------------------- */
+
+describe("las listas de las dos metricas nuevas se comprueban contra el Record", () => {
+  it("`dinero_en_caja` declara LAS DIECISIETE categorias de la caja, sin faltar ninguna", () => {
+    // El catalogo es un modulo puro y no puede importar `NATURALEZA_POR_CATEGORIA` (arrastraria
+    // `Prisma` como valor), asi que su lista esta escrita a mano. Esto es lo que impide que las
+    // dos se separen: tres fuentes independientes —el catalogo, el `Record` y el SEED del enum—
+    // comparadas entre si. Si el enum gana una categoria, el `Record` no compila sin ella y este
+    // caso se pone rojo hasta que el catalogo tambien la tenga.
+    const declaradas = [...(getMetrica("dinero_en_caja")?.definicion.categorias ?? [])].sort();
+    expect(declaradas).toEqual(Object.keys(NATURALEZA_POR_CATEGORIA).sort());
+    expect(declaradas).toEqual([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort());
+    expect(declaradas).toHaveLength(17);
+  });
+
+  it("`ganancia_ordenex` declara EXACTAMENTE las de naturaleza propio, y ni una de terceros", () => {
+    const propiasDelRecord = Object.entries(NATURALEZA_POR_CATEGORIA)
+      .filter(([, n]) => n === "propio")
+      .map(([c]) => c)
+      .sort();
+    const declaradas = [...(getMetrica("ganancia_ordenex")?.definicion.categorias ?? [])].sort();
+
+    expect(declaradas).toEqual(propiasDelRecord);
+    expect(declaradas).toHaveLength(14);
+    // Dicho por el otro lado, que es el que rompe la cifra: el contra-entrega y su reverso no
+    // pueden entrar en la ganancia. Si entraran, anular un pago a una tienda subiria la ganancia
+    // de Ordenex — el fallo exacto que `design.md §10-C` descarto.
+    expect(categoriasDeTerceros(declaradas)).toEqual([]);
+    expect(declaradas).not.toContain("ingreso_cod_recaudado");
+    expect(declaradas).not.toContain("ingreso_reverso_pago_tienda");
+    expect(declaradas).not.toContain("egreso_pago_tienda");
+  });
+
+  it("la diferencia entre las dos listas son las TRES de terceros, ni una mas", () => {
+    const enCaja = getMetrica("dinero_en_caja")?.definicion.categorias ?? [];
+    const ganancia = new Set(getMetrica("ganancia_ordenex")?.definicion.categorias ?? []);
+    expect(enCaja.filter((c) => !ganancia.has(c)).sort()).toEqual([
+      "egreso_pago_tienda",
+      "ingreso_cod_recaudado",
+      "ingreso_reverso_pago_tienda",
+    ]);
+  });
+
+  it("las dos son financieras del catalogo, `live` y sobre el libro de la caja", () => {
+    for (const id of ["dinero_en_caja", "ganancia_ordenex"]) {
+      const metrica = getMetrica(id);
+      expect(metrica?.dominio, id).toBe("financiera");
+      expect(metrica?.clase, id).toBe("live");
+      expect(metrica?.unidad, id).toBe("moneda");
+      expect(metrica?.fuente.tipo, id).toBe("ledger");
+      expect([...(metrica?.fuente.tablas ?? [])], id).toEqual(["wallet_movimiento"]);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* El guardia mira el catalogo entero, no solo las cuatro que nombra           */
 /* -------------------------------------------------------------------------- */
 
@@ -201,7 +259,7 @@ describe("censo: toda financiera que lea la caja pasa por esta clasificacion", (
     // incompleto), y esto lo comprueba en RUNTIME, que es donde vive el catalogo.
     const sinClasificar: string[] = [];
     for (const metrica of listarMetricas({ dominio: "financiera" })) {
-      if (!metrica.fuente.tablas.includes("wallet_movimiento")) continue;
+      if (!(metrica.fuente.tablas as readonly string[]).includes("wallet_movimiento")) continue;
       for (const categoria of metrica.definicion.categorias ?? []) {
         if (naturalezaDe(categoria) === undefined) sinClasificar.push(`${metrica.id}: ${categoria}`);
       }
@@ -211,7 +269,7 @@ describe("censo: toda financiera que lea la caja pasa por esta clasificacion", (
 
   it("y ese censo no pasa por conjunto vacio: hay financieras que leen la caja", () => {
     const deLaCaja = listarMetricas({ dominio: "financiera" }).filter((m) =>
-      m.fuente.tablas.includes("wallet_movimiento"),
+      (m.fuente.tablas as readonly string[]).includes("wallet_movimiento"),
     );
     // Las cuatro de la 127 (tres ingresos + egresos) y `conciliacion_cierres`, que la declara
     // desde ⟨D10⟩. Si el catalogo perdiera una, el censo de arriba mediria menos sin avisar.
