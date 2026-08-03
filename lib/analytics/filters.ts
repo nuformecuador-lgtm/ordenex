@@ -1,7 +1,9 @@
 // Feature 135 (T5.1) — esquema zod de los filtros de analitica (design.md §5).
 //
-// R1 (modulo puro): este archivo importa EXCLUSIVAMENTE `zod` y `./types`. Sin
-// `'use server'`, sin `next/headers`, sin `@/lib/db`, sin repositorios ni
+// R1 (modulo puro): este archivo importa EXCLUSIVAMENTE `zod`, `./types` y
+// `@/lib/utils/fecha-cr` (que es a su vez puro: aritmetica de fecha sin
+// dependencias, la misma que ya reutilizan `ranges.ts` y `backfill-rango.ts`).
+// Sin `'use server'`, sin `next/headers`, sin `@/lib/db`, sin repositorios ni
 // servicios, sin `@prisma/client` y sin efectos al importarse: solo declaraciones
 // y funciones puras. Es el UNICO archivo de `lib/analytics/` que importa `zod`.
 //
@@ -14,6 +16,7 @@
 // fechas calendario `YYYY-MM-DD` y conflictos cerrados con `.refine`.
 
 import { z } from "zod";
+import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 import { RANGO_PRESETS, RANGO_TOPE_DIAS } from "./types";
 
 /* -------------------------------------------------------------------------- */
@@ -31,7 +34,18 @@ const idList = z.array(z.string().min(1, "Id vacio")).nonempty("La lista no pued
 // que emite `<input type="date">`); los bordes UTC los calcula `resolverRango`
 // server-side, en hora de Costa Rica. El regex esta anclado y es de ancho fijo a
 // proposito: `"2026-7-5"` se rechaza igual que `"2026-07-15T10:00:00Z"`.
-const fechaCalendario = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado YYYY-MM-DD");
+//
+// El regex mide la FORMA, no la EXISTENCIA, y no basta: `"2026-02-31"` la cumple
+// y `new Date("2026-02-31T00:00:00.000Z")` no es `Invalid Date` sino el 3 de
+// marzo (en V8 solo el MES fuera de rango invalida; el DIA desbordado RUEDA). Sin
+// esta comprobacion el par `2026-02-31..2026-03-05` pasaba entero: forma correcta,
+// orden lexicografico correcto, ventana de 3 dias bien dentro del tope — y la
+// analitica respondia por una ventana DESPLAZADA respecto de la que se pidio, sin
+// un solo error. El round-trip es la pieza unica de `@/lib/utils/fecha-cr`.
+const fechaCalendario = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado YYYY-MM-DD")
+  .refine(esFechaCalendarioValida, "La fecha no existe en el calendario");
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
 
@@ -41,9 +55,14 @@ const MS_POR_DIA = 24 * 60 * 60 * 1000;
  * calendario, no se fija ninguna frontera de dia de Costa Rica (eso es de
  * `ranges.ts`): no hay desfase propio que reimplementar (R14).
  *
- * Devuelve `NaN` si alguna fecha pasa el regex pero no existe en el calendario
- * (p. ej. `"2026-13-45"`), y el `.refine` del tope lo trata como rechazo: falla
- * cerrado en vez de dejar pasar una ventana de duracion desconocida.
+ * Devuelve `NaN` si alguna fecha no existe en el calendario (p. ej. `"2026-13-45"`),
+ * y el `.refine` del tope lo trata como rechazo: falla cerrado en vez de dejar pasar
+ * una ventana de duracion desconocida. Es DEFENSA EN PROFUNDIDAD y ya no la primera
+ * red: desde el arreglo del dia rodado, `fechaCalendario` rechaza esas fechas en el
+ * campo, antes de llegar aqui. Se conserva porque esta funcion es reutilizable y no
+ * debe depender de que su llamador haya validado, pero OJO al medir mutaciones: hoy
+ * mutar este `Number.isFinite` no tumba nada por si solo. El caso que SI discrimina
+ * la existencia de la fecha es el del campo (`R22`, en `filters.test.ts`).
  */
 function diasInclusive(desde: string, hasta: string): number {
   const a = Date.parse(`${desde}T00:00:00.000Z`);

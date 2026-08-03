@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { montoPositivoSchema } from "@/lib/types/wallet";
-import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { esFechaCalendarioValida, fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { gastoFijoConfig } from "@/lib/config/gasto-fijo";
 import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 
@@ -37,9 +37,18 @@ const periodicidadFields = {
   periodicidadCantidad: z.coerce.number().int().min(1, "La cantidad debe ser al menos 1.").default(1),
   // Default = hoy en hora CR (no `new Date()`: `fechaCalendarioCR` evita el off-by-one de UTC).
   // Se evalua por parseo, asi que no se congela al cargar el modulo.
+  //
+  // El regex mide la FORMA y `2026-02-31` la cumple, asi que NO basta: `fechaCobroAColumna`
+  // (`GastoFijoPlantillaRepository`) construye `new Date("2026-02-31T00:00:00.000Z")`, que en V8
+  // no es `Invalid Date` sino el **3 de marzo** —el dia desbordado RUEDA al mes siguiente; solo
+  // el MES fuera de rango invalida—, y esa fecha rodada se PERSISTE en la columna `@db.Date`.
+  // Aqui duele mas que en un filtro: `fechaCobro` es el ANCLA del ciclo, asi que el desvio no
+  // pasa una vez, se repite en cada cobro que deriva el cron. El round-trip lo cierra en el
+  // borde (`esFechaCalendarioValida`, pieza unica en `lib/utils/fecha-cr.ts`).
   fechaCobro: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha de cobro debe tener el formato YYYY-MM-DD.")
+    .refine(esFechaCalendarioValida, "La fecha de cobro no existe en el calendario.")
     .default(() => fechaCalendarioCR()),
 };
 

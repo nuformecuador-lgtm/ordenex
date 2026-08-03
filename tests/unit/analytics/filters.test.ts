@@ -167,9 +167,15 @@ describe("R22 — el cliente no manda instantes, epochs ni offsets", () => {
 
   it("rechaza la fecha que pasa el regex pero NO existe en el calendario, en hasta", () => {
     // `"2026-13-45"` tiene la forma \d{4}-\d{2}-\d{2}, asi que el regex la deja
-    // pasar; `Date.parse` da NaN. Lo para el `Number.isFinite` del cuarto refine.
-    // Va en `hasta` porque el mes 13 es lexicograficamente MAYOR que cualquier mes
-    // real, y con la fecha invalida en `desde` la cortaria antes el refine (3).
+    // pasar; `Date.parse` da NaN. Va en `hasta` porque el mes 13 es
+    // lexicograficamente MAYOR que cualquier mes real, y con la fecha invalida en
+    // `desde` la cortaria antes el refine (3).
+    //
+    // OJO, cambio de red: cuando se escribio este caso lo paraba el `Number.isFinite`
+    // del cuarto refine, y por eso decia discriminar ESA red. Ya no: desde el arreglo
+    // del dia rodado lo para antes el `.refine` de `fechaCalendario`, en el campo. El
+    // caso sigue afirmando lo correcto —esta fecha se rechaza— pero ya no discrimina
+    // el `NaN` del tope, que hoy es defensa en profundidad inalcanzable desde aqui.
     const res = analiticaFiltroSchema.safeParse({
       rango: "personalizado",
       desde: "2026-07-01",
@@ -179,14 +185,57 @@ describe("R22 — el cliente no manda instantes, epochs ni offsets", () => {
   });
 
   it("rechaza el par de fechas inexistentes en desde y hasta a la vez", () => {
-    // Mismo mecanismo por el lado de `desde`: el par es lexicograficamente valido
-    // (son iguales), pasa el refine (3) y la ventana queda con duracion NaN.
+    // Mismo caso por el lado de `desde`: el par es lexicograficamente valido (son
+    // iguales) y pasa el refine (3). Misma nota sobre la red que lo para hoy.
     const res = analiticaFiltroSchema.safeParse({
       rango: "personalizado",
       desde: "2026-13-45",
       hasta: "2026-13-45",
     });
     expect(res.success).toBe(false);
+  });
+
+  // El DIA rodado es otra cosa que el mes 13, y era el hueco de verdad. `"2026-13-45"`
+  // da `NaN` y lo paraba el tope; `"2026-02-31"` NO da `Invalid Date`: en V8 el dia
+  // desbordado RUEDA al 3 de marzo (solo el MES fuera de rango invalida). Pasaba el
+  // regex, pasaba el refine (3) —el orden lexicografico es correcto— y pasaba el tope
+  // —la ventana medida es real y pequena—, asi que la analitica respondia por un rango
+  // DESPLAZADO respecto del que el usuario pidio, sin un solo error.
+  it("V8 rueda el dia desbordado en vez de invalidarlo (el porque del caso de abajo)", () => {
+    expect(new Date("2026-02-31T00:00:00.000Z").toISOString().slice(0, 10)).toBe("2026-03-03");
+    expect(Number.isNaN(Date.parse("2026-13-45T00:00:00.000Z"))).toBe(true);
+  });
+
+  // Cada par se elige ESTRECHO a proposito: la fecha rodada deja una ventana de pocos
+  // dias, muy por debajo de `RANGO_TOPE_DIAS`, y en orden lexicografico correcto. Asi el
+  // unico motivo de rechazo posible es la existencia de la fecha. Con una ventana ancha
+  // (p. ej. `hasta: "2027-06-05"`) lo cortaria el tope y el caso pasaria en verde por el
+  // motivo equivocado.
+  it.each([
+    ["2026-02-31", "2026-03-05"], // rueda al 3 de marzo: ventana de 3 dias
+    ["2026-04-31", "2026-05-05"], // rueda al 1 de mayo: ventana de 5 dias
+    ["2027-02-29", "2027-03-05"], // rueda al 1 de marzo: ventana de 5 dias
+  ])("rechaza %s en desde, con una ventana que el tope NO habria parado", (desde, hasta) => {
+    const res = analiticaFiltroSchema.safeParse({ rango: "personalizado", desde, hasta });
+    expect(res.success).toBe(false);
+  });
+
+  it.each([
+    ["2026-01-05", "2026-02-31"],
+    ["2026-01-05", "2026-04-31"],
+    ["2027-01-05", "2027-02-29"],
+  ])("rechaza %s..%s: la fecha inexistente esta en hasta", (desde, hasta) => {
+    const res = analiticaFiltroSchema.safeParse({ rango: "personalizado", desde, hasta });
+    expect(res.success).toBe(false);
+  });
+
+  it("acepta el 29 de febrero de un ano BISIESTO (el contrapeso: no se rechaza por la fecha)", () => {
+    const res = analiticaFiltroSchema.safeParse({
+      rango: "personalizado",
+      desde: "2028-02-29",
+      hasta: "2028-03-05",
+    });
+    expect(res.success).toBe(true);
   });
 
   it("rechaza el ano expandido +002026-07-15 (lo para el regex, NO el tope)", () => {

@@ -7,6 +7,7 @@ import {
   ORDEN_FILTER_FIELDS,
 } from "@/lib/types/orden";
 import { ordenesConfig } from "@/lib/config/ordenes";
+import { inicioDelDiaCREnUtc } from "@/lib/utils/fecha-cr";
 
 // Feature 144/B1 (R30-R32, R38-R40, R43) — el borde del `filter` de `listarOrdenes`.
 //
@@ -154,6 +155,42 @@ describe("ordenFilterSchema — rango de fechas (R39/R43)", () => {
     expect(ordenFilterSchema.parse({ created_hasta: "2026-07-15" })).toEqual({
       created_hasta: "2026-07-15",
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // Regresion: fecha con forma correcta que NO EXISTE en el calendario
+  // -------------------------------------------------------------------------
+  // El regex mide la FORMA, y `"2026-02-31"` la cumple. Lo que no es cierto —y era la
+  // suposicion— es que el parseo la invalide: en V8 solo el MES fuera de rango da
+  // `Invalid Date`; el DIA desbordado RUEDA al mes siguiente. Aguas abajo,
+  // `inicioDelDiaCREnUtc("2026-02-31")` es el 3 de MARZO a las 06:00Z, asi que el
+  // listado se filtraba por una ventana DESPLAZADA respecto de la pedida, en silencio.
+
+  it("V8 rueda el dia desbordado en vez de invalidarlo (el porque de los casos de abajo)", () => {
+    expect(inicioDelDiaCREnUtc("2026-02-31").toISOString()).toBe("2026-03-03T06:00:00.000Z");
+    expect(inicioDelDiaCREnUtc("2026-04-31").toISOString()).toBe("2026-05-01T06:00:00.000Z");
+    expect(inicioDelDiaCREnUtc("2027-02-29").toISOString()).toBe("2027-03-01T06:00:00.000Z");
+  });
+
+  it.each(["2026-02-31", "2026-04-31", "2027-02-29"])(
+    "R39: rechaza %s en created_desde (dia inexistente, no solo mal formado)",
+    (fecha) => {
+      expect(ordenFilterSchema.safeParse({ created_desde: fecha }).success).toBe(false);
+    },
+  );
+
+  it.each(["2026-02-31", "2026-04-31", "2027-02-29"])(
+    "R39: rechaza %s en created_hasta",
+    (fecha) => {
+      expect(ordenFilterSchema.safeParse({ created_hasta: fecha }).success).toBe(false);
+    },
+  );
+
+  it("R39: acepta el 29 de febrero de un ano BISIESTO (el contrapeso del bloque)", () => {
+    // Sin esto, "rechazar todo 29 de febrero" dejaria los casos de arriba en verde.
+    expect(
+      ordenFilterSchema.parse({ created_desde: "2028-02-29", created_hasta: "2028-03-05" }),
+    ).toEqual({ created_desde: "2028-02-29", created_hasta: "2028-03-05" });
   });
 });
 

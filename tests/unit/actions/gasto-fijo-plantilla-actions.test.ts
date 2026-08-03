@@ -100,6 +100,82 @@ describe("crearPlantillaAction (R17/R18/R24)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Regresion: fecha de cobro INEXISTENTE (dia rodado)
+// ---------------------------------------------------------------------------
+// `fechaCobro` solo comprobaba el regex `^\d{4}-\d{2}-\d{2}$`, que mide la FORMA. Un dia
+// desbordado la cumple, y `new Date("2026-02-31T00:00:00.000Z")` NO es `Invalid Date`: en V8
+// RUEDA al 3 de marzo (solo el MES fuera de rango invalida). Asi que el "31 de febrero" pasaba
+// el borde, el repositorio lo convertia en Date con `fechaCobroAColumna` y se PERSISTIA como 3
+// de marzo en la columna `@db.Date`. Y `fechaCobro` es el ANCLA del ciclo: el desvio no ocurre
+// una vez, se repite en cada cobro que deriva el cron de la 45.
+//
+// Se prueba por la ACCION y no por el schema suelto porque lo que importa es que la fecha
+// rodada no llegue NUNCA al service (y de ahi al repositorio): la asercion de que el doble no
+// se llamo es la mitad del test.
+describe("fecha de cobro inexistente -> validation_error, sin tocar el service", () => {
+  it("V8 rueda el dia desbordado en vez de invalidarlo (el porque de este bloque)", () => {
+    expect(new Date("2026-02-31T00:00:00.000Z").toISOString().slice(0, 10)).toBe("2026-03-03");
+    expect(new Date("2026-04-31T00:00:00.000Z").toISOString().slice(0, 10)).toBe("2026-05-01");
+    expect(new Date("2027-02-29T00:00:00.000Z").toISOString().slice(0, 10)).toBe("2027-03-01");
+  });
+
+  it.each([
+    ["31 de febrero (rodaba a 2026-03-03)", "2026-02-31"],
+    ["31 de abril (rodaba a 2026-05-01)", "2026-04-31"],
+    ["29 de febrero de ano NO bisiesto (rodaba a 2027-03-01)", "2027-02-29"],
+  ])("crear con %s se rechaza en el borde", async (_caso, fechaCobro) => {
+    const service = fakeService();
+    const r = await crearPlantillaAction(
+      { concepto: "Alquiler", monto: "80000.00", fechaCobro },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.crearPlantilla).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["31 de febrero", "2026-02-31"],
+    ["31 de abril", "2026-04-31"],
+    ["29 de febrero de ano NO bisiesto", "2027-02-29"],
+  ])("actualizar con %s se rechaza en el borde", async (_caso, fechaCobro) => {
+    const service = fakeService();
+    const r = await actualizarPlantillaAction(
+      { id: UUID, concepto: "Alquiler", monto: "80000.00", fechaCobro },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.actualizarPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("el 29 de febrero de un ano BISIESTO se acepta y llega al service tal cual", async () => {
+    // Contrapeso: sin esto, "rechazar todo 29 de febrero" pasaria el bloque entero.
+    const service = fakeService();
+    const r = await crearPlantillaAction(
+      { concepto: "Alquiler", monto: "80000.00", fechaCobro: "2028-02-29" },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("ok");
+    expect(service.crearPlantilla).toHaveBeenCalledWith(
+      expect.objectContaining({ fechaCobro: "2028-02-29" }),
+      MAESTRO,
+    );
+  });
+
+  it("omitir fechaCobro sigue tomando el default (hoy en CR), que es una fecha valida", async () => {
+    // El `.refine` va ANTES del `.default()`: si lo rompiera, la entrada sin fecha —la que
+    // manda hoy la UI de la 85— dejaria de parsear.
+    const service = fakeService();
+    const r = await crearPlantillaAction(
+      { concepto: "Alquiler", monto: "80000.00" },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("ok");
+    const enviado = (service.crearPlantilla as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(enviado.fechaCobro).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
 describe("actualizarPlantillaAction (R18/R25)", () => {
   it("R18: sin sesion -> unauthenticated", async () => {
     const service = fakeService();

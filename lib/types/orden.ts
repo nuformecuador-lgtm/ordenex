@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ordenesConfig } from "@/lib/config/ordenes";
+import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type { TarifaDTO } from "@/lib/types/tarifa";
@@ -104,7 +105,17 @@ const idList = z.array(z.string().min(1)).nonempty();
 // Feature 144/R39: fecha CALENDARIO `YYYY-MM-DD` (lo que emite `<input type="date">`).
 // El cliente NUNCA manda instantes ni offsets: los bordes temporales se calculan
 // server-side (R43), en horario de Costa Rica (lib/utils/fecha-cr.ts).
-const fechaCalendario = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado YYYY-MM-DD");
+//
+// El regex mide la FORMA, no la EXISTENCIA: `"2026-02-31"` la cumple, y aguas abajo
+// `inicioDelDiaCREnUtc` la convierte en `2026-02-31T06:00:00.000Z`, que en V8 no es
+// `Invalid Date` sino el 3 de MARZO (solo el MES fuera de rango invalida; el DIA
+// desbordado RUEDA). El listado se filtraba entonces por una ventana DESPLAZADA
+// respecto de la pedida y sin ningun error visible. El round-trip es la pieza unica
+// de `lib/utils/fecha-cr.ts`, la misma que usan la reprogramacion y la liquidacion.
+const fechaCalendario = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado YYYY-MM-DD")
+  .refine(esFechaCalendarioValida, "La fecha no existe en el calendario");
 
 // Feature 144/R38: dominio CERRADO del atajo de antiguedad. Un solo valor (nunca
 // una lista): `["7d","30d"]` no tiene interpretacion util y seria ambiguo.
