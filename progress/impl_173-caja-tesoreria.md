@@ -973,3 +973,277 @@ no se vació al mover la frontera.
       Tests  479 passed (479)
    Duration  19.82s
 ```
+
+---
+---
+
+# TANDA A (cierre) — `T A.2`: el `CHECK` categoría↔tipo
+
+> Misma rama `feature/173-caja-tesoreria`. Fase **backend**.
+> Alcance de esta entrada: **`T A.2`** — **HECHA**. Con ella la **Tanda A queda cerrada entera**.
+
+## A2.1 Qué desbloqueó esto, y qué NO se volvió a decidir
+
+`T A.0` la corrió el **leader** el 2026-08-03 con autorización humana explícita:
+`progress/medicion_TA0_173.md`. **Producción: 35 filas, 8 categorías, CERO que violarían la
+restricción.** Por eso el `ADD CONSTRAINT` va **DIRECTO**, sin `NOT VALID` + `VALIDATE`. Esa
+decisión **no se volvió a medir ni a revisar aquí**: se ejecuta.
+
+**Preview sigue sin ser alcanzable por MCP** (quinta vía descartada en la medición). El riesgo
+residual está **declarado** en ese archivo, no asumido: producción está medida y da 0; lo que
+podría pasar es que preview tenga una fila incoherente que nadie ha visto y el build del PR salga
+rojo. No es un riesgo que esta task pueda cerrar desde el código.
+
+## A2.2 Archivos
+
+### Modificados
+
+| Archivo | Qué |
+| --- | --- |
+| `db/migrations/20260803120000_caja_tesoreria/migration.sql` | **+40 líneas, 0 borradas**: el `ADD CONSTRAINT` con la disyunción **literal** de `design.md §2.2` y su porqué. |
+| `db/migrations/20260803120000_caja_tesoreria/down.sql` | **+9 líneas**: el `DROP CONSTRAINT IF EXISTS` **al principio**, antes de los `DROP INDEX` (el encargo de §5). |
+| `tests/integration/db/caja-tesoreria-migration.test.ts` | **+13 tests** (6 estáticos del UP, 2 del DOWN, 5 **contra Postgres real**). |
+| `specs/173-caja-tesoreria/tasks.md` | `T A.2` marcada, y la nota de `T A.0` que dejó el leader. |
+
+### Lo que NO está en el diff
+
+- **Ninguna otra migración.** El `CHECK` vive en la carpeta de `T A.1`, como manda la task.
+- **Ningún `down.sql` previo** (R50) — sigue verde el assert que lo barre.
+- `db/schema.prisma` — Prisma **no modela** los `CHECK`; el de la 172 tampoco está ahí. La
+  restricción vive solo en el SQL, igual que sus dos hermanas.
+- Ni una línea de `lib/` ni de `app/`.
+
+## A2.3 La disyunción, literal — y qué significa «falla cerrado»
+
+Va **carácter por carácter** como `design.md §2.2`: dos ramas, `IN` de listas cerradas, **cero
+negaciones**. Las 17 combinaciones legítimas son las 17 categorías del catálogo, cada una con su
+único tipo válido: **9 en `ingreso`, 8 en `egreso`**.
+
+Falla cerrado significa esto, y se comprueba de dos maneras distintas: (a) la definición **no
+contiene** `NOT IN`, `<>` ni `!=` —ni en el `.sql` ni en lo que devuelve `pg_get_constraintdef`—,
+así que un valor futuro del enum que nadie clasifique **no casa ninguna rama** y el `INSERT` se
+rechaza; y (b) el conjunto de etiquetas que el `CHECK` nombra **leído del motor** se compara con
+`pg_enum` y tiene que ser el mismo: el día que alguien añada un valor al enum sin tocar este
+`CHECK`, esa aserción se pone roja **antes** de que su primera fila se cuele en la cubeta
+equivocada.
+
+Se comprueba además `convalidated = true` en el catálogo: es la prueba de que las filas
+existentes **sí** se revisaron al aplicarla, que es exactamente lo que `NOT VALID` habría evitado.
+
+## A2.4 El `down.sql`: por qué el `DROP CONSTRAINT` va PRIMERO
+
+El encargo de la Tanda A (§5) se cumple al pie de la letra, y no es cosmético: el `CHECK`
+**nombra los dos valores nuevos del enum**. Si se soltara después del `ALTER COLUMN … TYPE`, la
+restricción seguiría ligada al tipo que se está recreando y el rollback abortaría a medias. Va
+antes incluso que los dos `DROP INDEX`. Dos asserts lo fijan por **posición en el archivo**
+(`índice(DROP CONSTRAINT) < índice(DROP INDEX) < índice(cast)`), no por presencia.
+
+El `down` **no recrea** el `CHECK`: la caja llegó a esta carpeta **sin** restricción
+tipo↔categoría —la 172 la dejó fuera a propósito y lo dejó escrito—, así que recrearla dejaría la
+base en un estado que nunca existió.
+
+## A2.5 Los 13 tests, y por qué la mitad tiene que correr contra el motor
+
+Una regex sobre el `.sql` demuestra que la restricción está **escrita**. Solo Postgres demuestra
+que **rechaza** y —lo que pesa igual— que **no rechaza de más**: un `CHECK` demasiado estrecho
+tumbaría las escrituras de las tandas B, C y E, que ya están hechas.
+
+**Contra Postgres real** (5 tests, todos dentro de transacciones que **siempre** se revierten —
+incluidos los intentos que deben fallar: si alguien borrara el `CHECK`, esos `INSERT` tendrían
+éxito y no puede quedar ni una fila de dinero inventada en la base de desarrollo):
+
+1. `ingreso` + `egreso_pago_tienda` ⇒ **23514**. Es la alternativa (E) que `design.md §10`
+   descarta diciendo «el `CHECK` lo rechazaría»: aquí se comprueba que lo hace.
+2. `egreso` + `ingreso_cod_recaudado` ⇒ **23514**. El fallo que más daño haría: el contra-entrega
+   **restando** de la caja.
+3. Las **17 combinaciones invertidas**, una por una, todas rechazadas. Se acumulan y se afirman
+   juntas, para que el fallo nombre **todas** las que se colaron y no solo la primera.
+4. **Contraprueba**: las **17 legítimas** entran todas, y se releen de la tabla.
+5. El catálogo de Postgres: nombre de la restricción, `convalidated = true`, y las etiquetas que
+   nombra == `pg_enum`, sin negaciones.
+
+El **SQLSTATE se lee de `error.cause.code`, no del texto**: el mensaje viene en el idioma del
+servidor (esta base responde en español, «viola la restricción «check» …»), así que casar una
+frase sería casar una traducción. `23514` y el nombre de la restricción son iguales en cualquier
+locale.
+
+Las 17 combinaciones legítimas se declaran en el test **a mano**, en un `Record` **total** sobre
+`WalletMovimientoCategoria`. A propósito **no** se derivan del prefijo del nombre: si el test
+dedujera la clasificación de la misma convención de la que la dedujo quien escribió el SQL, los
+dos se equivocarían juntos y el test sería un espejo.
+
+## A2.6 Las DOS mutaciones — EJECUTADAS, rojas y revertidas
+
+Cada mutación se aplicó **de verdad a la base** (`db-rollback` → editar → `migrate deploy`), no
+solo al archivo.
+
+### Mutación 1 — borrar **una rama entera** del `CHECK` (la de `egreso`)
+
+**5 tests rojos**, en los dos niveles:
+
+```
+ ❯ tests/integration/db/caja-tesoreria-migration.test.ts (31 tests | 5 failed)
+     × R45: la rama `egreso` lista EXACTAMENTE las categorias de egreso del catalogo
+     × R46: FALLA CERRADO — el CHECK ENUMERA, no niega (nada de NOT IN / <> / !=)
+     × R46: las 17 categorias del catalogo estan en UNA sola rama — ninguna suelta, ninguna repetida
+     × R46: CONTRAPRUEBA — las 17 combinaciones LEGITIMAS entran todas
+     × R46: FALLA CERRADO — el catalogo de Postgres lista el CHECK y nombra las 17, ni una mas
+```
+
+El que lo mide **contra el motor**, no contra el archivo:
+
+```
+ FAIL  … > R46: FALLA CERRADO — el catalogo de Postgres lista el CHECK y nombra las 17, ni una mas
+AssertionError: expected [ 'ingreso_ajuste', …(8) ] to deeply equal [ 'egreso_ajuste', …(16) ]
+
+- Expected
++ Received
+
+@@ -1,14 +1,6 @@
+  [
+-   "egreso_ajuste",
+-   "egreso_gasto",
+-   "egreso_gasto_fijo",
+-   "egreso_gasto_variable",
+-   "egreso_indemnizacion",
+-   "egreso_pago_mensajero",
+-   "egreso_pago_tienda",
+-   "egreso_sueldo",
+    "ingreso_ajuste",
+```
+
+Y la contraprueba, reventando en el `createMany` de las 17 legítimas:
+
+```
+ FAIL  … > R46: CONTRAPRUEBA — las 17 combinaciones LEGITIMAS entran todas
+DriverAdapterError: el nuevo registro para la relación «wallet_movimiento» viola la restricción
+«check» «wallet_movimiento_tipo_categoria_check»
+```
+
+### Mutación 2 — **mover** `ingreso_cod_recaudado` a la rama `egreso` (mala clasificación)
+
+Más sutil que la anterior: el `CHECK` sigue teniendo sus dos ramas y sus 17 valores. **5 tests
+rojos**, y esta vez cae también el lado *positivo* —lo que el `CHECK` deja pasar y no debería—:
+
+```
+ ❯ tests/integration/db/caja-tesoreria-migration.test.ts (31 tests | 5 failed)
+     × R45: la rama `ingreso` lista EXACTAMENTE las categorias de ingreso del catalogo
+     × R45: la rama `egreso` lista EXACTAMENTE las categorias de egreso del catalogo
+     × R45: y al reves — un egreso con categoria de ingreso, tambien 23514
+     × R45: las 17 combinaciones INVERTIDAS son rechazadas, una por una
+     × R46: CONTRAPRUEBA — las 17 combinaciones LEGITIMAS entran todas
+
+ FAIL  … > R45: las 17 combinaciones INVERTIDAS son rechazadas, una por una
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- []
++ [
++   "egreso/ingreso_cod_recaudado -> ACEPTADA",
++ ]
+```
+
+**`ACEPTADA`** es la palabra que importa: con esa mutación, el contra-entrega recaudado podría
+entrar en el libro **como egreso** —restando de «Dinero en caja» el dinero que acaba de entrar—
+y ninguna de las dos cifras avisaría. Es exactamente el fallo silencioso que este `CHECK` existe
+para impedir.
+
+**Las dos mutaciones revertidas** (`migration.sql` restaurado, `git diff --stat` = *40
+insertions, 0 deletions*), base re-migrada, **31 verdes**.
+
+## A2.7 Round-trip `up → down → up` contra el Postgres local
+
+Base: `PostgreSQL "ordenex" @ localhost:5432`. La carpeta ya estaba aplicada de la Tanda A, así
+que **primero se revirtió** para no editar en sitio una migración ya registrada (la cicatriz
+«migración editada en sitio = drift»): así el `checksum` de `_prisma_migrations` corresponde
+siempre al `migration.sql` vigente.
+
+```
+$ npx tsx scripts/db-rollback.ts
+Aplicando rollback: 20260803120000_caja_tesoreria
+Script executed successfully.
+Script executed successfully.
+Rollback completado: 20260803120000_caja_tesoreria
+
+$ npx prisma migrate deploy
+The following migration(s) have been applied:
+migrations/
+  └─ 20260803120000_caja_tesoreria/
+    └─ migration.sql
+All migrations have been successfully applied.
+
+$ npx prisma migrate status
+108 migrations found in prisma/migrations
+Database schema is up to date!
+```
+
+Se hizo **cuatro veces** (round-trip inicial + una por mutación + la vuelta) y ninguna falló. Que
+el `down` no aborte es en sí la prueba de que el `DROP CONSTRAINT` va donde debe: con la
+restricción viva, el `ALTER COLUMN … TYPE` del enum no habría podido correr.
+
+**Dato ejecutado que vale la pena anotar:** `ALTER TYPE … ADD VALUE` y un `ADD CONSTRAINT` que
+**usa** esos valores conviven en el **mismo** `migration.sql` sin el error «unsafe use of new
+value». Se comprobó sobre una base donde los dos valores **no existían** (rollback previo), que
+es exactamente el camino que tomará producción.
+
+## A2.8 Trazabilidad `R<n>` → test
+
+| R | Test que lo verifica |
+| --- | --- |
+| R45 | `tests/integration/db/caja-tesoreria-migration.test.ts` — «un INSERT incoherente (ingreso con categoria de egreso) devuelve 23514», «y al reves», «las 17 combinaciones INVERTIDAS son rechazadas, una por una» (contra Postgres) + los 3 estáticos de las dos ramas y del `ADD CONSTRAINT` + «va DIRECTO — sin `NOT VALID`» |
+| R46 | idem — «CONTRAPRUEBA: las 17 combinaciones LEGITIMAS entran todas», «el catalogo de Postgres … nombra las 17, ni una mas» (etiquetas del `CHECK` == `pg_enum`, `convalidated = true`), «el CHECK ENUMERA, no niega» y «las 17 categorias … en UNA sola rama» |
+| R49 (ampliado) | idem — «suelta el CHECK, y lo hace ANTES que los DROP INDEX y que el cast» + «el down NO recrea el CHECK» |
+| R50 | idem — sin cambios: ningún `down.sql` previo entra en el diff |
+
+## A2.9 Gate ejecutado
+
+> Gate **acotado**, el que ordenó el leader. La suite completa NO se corrió.
+
+**`pnpm typecheck`** → `tsc --noEmit`, sin salida, **exit 0**.
+
+**`pnpm lint`**
+
+```
+✖ 27 problems (0 errors, 27 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores**, misma línea base de las tandas A/B/C.
+
+**`pnpm exec vitest run guard`** (obligatorio desde §C13)
+
+```
+ Test Files  47 passed (47)
+      Tests  683 passed (683)
+   Duration  5.20s
+```
+
+**683, idéntico a la Tanda C**: ninguna guardia ajena se movió.
+
+**`pnpm exec vitest related --run`** sobre los 3 archivos tocados
+
+```
+ Test Files  1 passed (1)
+      Tests  31 passed (31)
+   Duration  904ms
+```
+
+**`pnpm exec vitest run tests/integration/db`** (obligatorio: se toca una migración)
+
+```
+ Test Files  92 passed (92)
+      Tests  1135 passed (1135)
+   Duration  10.23s
+```
+
+Delta contra la Tanda C: **+13 tests**, exactamente los 13 de esta task. Ningún archivo nuevo.
+
+**No corrido aquí:** `./init.sh --rapido` ni `./init.sh` completo. Los corre el leader.
+
+## A2.10 Veredicto de `T A.2`
+
+`CHECK` categoría↔tipo puesto **directo** sobre la caja con la disyunción literal del design,
+ejercido contra Postgres real —**23514** en las 17 combinaciones incoherentes y las 17 legítimas
+entrando— con el `DROP CONSTRAINT` al principio del `down.sql` como se encargó, round-trip verde
+y **dos mutaciones ejecutadas**, una que borra una rama entera y otra que solo mueve una
+categoría de sitio: las dos ponen rojo el test que las afirma, incluida la que dejaría entrar el
+contra-entrega **como egreso**.

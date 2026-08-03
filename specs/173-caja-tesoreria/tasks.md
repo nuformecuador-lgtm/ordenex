@@ -102,7 +102,10 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 
 # TANDA A — Base de datos y derivación pura · *backend*
 
-### [ ] T A.0 — Medir la base ANTES de escribir la migración `[P5]`
+### [x] T A.0 — Medir la base ANTES de escribir la migración `[P5]` — **HECHA 2026-08-03**, ver `progress/medicion_TA0_173.md`
+> **Producción medida por MCP:** 35 filas, 8 categorías, **0 violarían el `CHECK`** ⇒ va **DIRECTO,
+> sin `NOT VALID`**. **Preview NO alcanzable** (quinta vía descartada: `list_branches` falla y
+> `get_project_url` confirma que el MCP apunta a producción). Riesgo residual **declarado**, no asumido.
 - **Qué:** por MCP de Supabase, contra **producción** y (si es alcanzable) **preview**: conteo de
   `wallet_movimiento` por `(tipo, categoria)` y búsqueda de filas incoherentes según la disyunción
   de `design.md §2.2`.
@@ -125,7 +128,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 - **Hecho:** test estático verde; `pnpm db:migrate` y `pnpm db:rollback` hacen el round-trip local
   sin error.
 
-### [ ] T A.2 — Migración: el `CHECK` categoría↔tipo de la caja `[P5]`
+### [x] T A.2 — Migración: el `CHECK` categoría↔tipo de la caja `[P5]`
 - **Archivos:** los de T A.1 (misma carpeta).
 - **Qué:** la disyunción de listas cerradas de `design.md §2.2`, que **falla cerrado**.
 - **Depende de:** T A.0, T A.1 · **Cubre:** R45, R46
