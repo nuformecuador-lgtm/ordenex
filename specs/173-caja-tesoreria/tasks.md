@@ -365,28 +365,40 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 
 # TANDA H — Guardias, censo y cierre
 
-### [ ] T H.1 [P] — Censo de tablas y descarga
-- **Archivos:** `tests/unit/descarga/censo-tablas.ts` si procede.
+### [x] T H.1 [P] — Censo de tablas y descarga — **VERIFICADA, cero líneas de código**
+- **Archivos:** `tests/unit/descarga/censo-tablas.ts` si procede. **No procedió.**
 - **Qué:** esta feature **no** añade ninguna instancia de `<DataTable>`; se confirma que el censo no
   cambia. Los totales duros **se leen en el momento**, no se copian de este documento.
 - **Depende de:** T G.3 · **Cubre:** —
-- **Hecho:** el guardia de cobertura de tablas sigue verde sin tocar el censo.
+- **Hecho:** el guardia de cobertura de tablas sigue verde sin tocar el censo. Medido: **0** líneas
+  `+` con `<DataTable` en el diff de la feature, `censo-tablas.ts` fuera del diff, y
+  `cobertura-tablas.guardia` verde con **32 instancias en 31 archivos** leídas del árbol.
 
-### [ ] T H.2 — Revisión de alcance
-- **Archivos:** `tests/unit/guards/caja-173-alcance.guardia.test.ts` (+casos).
-- **Depende de:** T G.4 · **Cubre:** R66, R67, R68
+### [x] T H.2 — Revisión de alcance
+- **Archivos:** `tests/unit/guards/caja-173-alcance.guardia.test.ts` (**+20 casos**: 8 → 28).
+- **Depende de:** T G.4 · **Cubre:** R66, R67, R68 (+ **R32, R35, R63**, ampliación declarada)
 - **Hecho:** el diff no contiene ninguna tabla, estado ni pantalla de arqueo/corte de caja; la suite
   de `WalletMensajeroFeedService` sigue **sin editar** `[P2]`; las fórmulas de flete, comisión, IVA y
   pago al mensajero no aparecen en el diff.
+- **Cómo, y por qué así:** el censo va sobre el **árbol** y no sobre `git diff` — un test que
+  preguntara por `origin/dev...HEAD` daría vacío, y verde, el día después del merge, para siempre.
+  La medición del diff (punto-en-el-tiempo) vive en `progress/impl_173-caja-tesoreria.md §H2.4` con
+  su control contra `git ls-files`. Y donde se puede, la ausencia se sustituye por una **medición**:
+  R66 y R68 no dicen «ese archivo no se tocó», ejecutan la fórmula y pinchan el importe.
+- **Ampliación declarada:** R32, R35 y R63 eran los **tres únicos** `R` de los 68 sin un caso que
+  corriera en el gate (su verificación era la medición de `T G.4`). Pasan a medirse aquí igual que
+  R68, con las funciones puras que producen esos números.
 
-### [ ] T H.3 — Pruebas por mutación de lo money-critical
+### [x] T H.3 — Pruebas por mutación de lo money-critical
 - **Archivos:** anotación en `progress/impl_173-caja-tesoreria.md`.
 - **Qué:** las tres mutaciones obligatorias, cada una debe poner rojo al menos un test:
   1. mover `ingreso_cod_recaudado` a naturaleza «propio»;
   2. cambiar el reverso de la anulación a `ingreso_ajuste`;
   3. fechar un movimiento retroactivo con `now()` en vez de con su origen.
 - **Depende de:** T E.3, T C.4 · **Cubre:** refuerza R2, R26, R41
-- **Hecho:** las tres medidas y anotadas con el test que se puso rojo en cada caso.
+- **Hecho:** las tres medidas y anotadas con el test que se puso rojo en cada caso. **Consolidadas
+  en `progress/impl_173-caja-tesoreria.md §H3`**, con la salida real pegada: 10 rojos (Tanda A, §4),
+  8 rojos en 4 archivos (Tanda C, §C7) y 5 rojos en 2 archivos (Tanda E, §E7).
 
 ### [ ] T H.4 — Ejecución y comprobación por entorno `[P3]`
 - **Qué:** `--simular` → revisión humana del informe → `--aplicar` → `--comprobar` en **cada**
@@ -404,6 +416,20 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 ---
 
 ## Trazabilidad — `R<n>` → test
+
+> **AUDITADA en `T H.2` (2026-08-03): los 68 tienen un caso ejecutable.** Cuatro filas se
+> **corrigen** aquí porque nombraban un archivo que nunca llegó a existir o una verificación que no
+> corre en el gate. La corrección no inventa cobertura: cita el caso que ya la da.
+>
+> - **R53, R57** — la Tanda F declaró la desviación en su bitácora (§F3, «Desviación declarada de
+>   `tasks.md`»): `metrics-descripciones.test.ts` e `ingresos-analitica-repository.test.ts` **no
+>   existen**; los casos viven en `metrics-caja-naturaleza.guardia.test.ts` + `metrics.test.ts` y en
+>   `financiera-ingresos-repo.test.ts`, que sí existen. Se corrigen las dos filas.
+> - **R32, R35, R63** — decían «suites de la 171/172 **sin editar**». Eso es cierto y lo midió
+>   `T G.4` (47 archivos protegidos vivos, cero en el diff), pero es una medición
+>   **punto-en-el-tiempo**: no corre en `./init.sh`. `T H.2` les añade un caso ejecutable que
+>   **mide el importe** en vez de afirmar la ausencia. Las filas conservan la medición y ganan el
+>   test.
 
 | R | Test |
 | --- | --- |
@@ -438,10 +464,10 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 | R29 | `liquidacion-anulacion.test.ts` — solo `createMany`; ningún `update`/`delete` |
 | R30 | `tests/unit/services/caja-cadena-pago-anulacion.test.ts` |
 | R31 | `tests/unit/guards/caja-173-alcance.guardia.test.ts` |
-| R32 | suites de la 171/172 **sin editar** (`wallet-tiendas-*`, `liquidacion-*`) |
+| R32 | `caja-173-alcance.guardia.test.ts` — «MEDIDO (R32): el saldo a favor de una tienda, con su desglose y su signo» y «la cuenta por pagar de un mensajero y el pendiente de UN cierre» (importes pinchados) + suites de la 171/172 **sin editar** (medición de `T G.4`) |
 | R33 | `tests/unit/repositories/wallet-movimiento-repository.test.ts` — cliente Prisma mínimo |
 | R34 | `tests/components/CajaResumenCard.test.tsx` — la advertencia y el enlace están |
-| R35 | suite de la 171 sin editar |
+| R35 | `caja-173-alcance.guardia.test.ts` — «R35: el saldo de la tienda se deriva del ledger por tienda y de ninguna otra fuente» (arity 2 + su fuente no nombra `walletMovimiento`/`derivarCaja`/`deTerceros`) + suite de la 171 sin editar |
 | R36 | `tests/unit/services/caja-backfill-tesoreria.test.ts` — cierres aprobados |
 | R37 | idem — pagos a tienda |
 | R38 | idem — anulaciones |
@@ -459,19 +485,19 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 | R50 | idem — ningún `down.sql` previo en el diff |
 | R51 | `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` |
 | R52 | idem — `cod_recaudado` sigue con dos vistas |
-| R53 | `tests/unit/analytics/metrics-descripciones.test.ts` |
+| R53 | `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` — «declara UNA sola categoria de terceros, y es el pago a la tienda» + `tests/unit/analytics/metrics.test.ts` (censo del catálogo) — **corregido**: `metrics-descripciones.test.ts` nunca existió (§F3) |
 | R54 | `tests/unit/services/analitica-financiera-service.test.ts` — las dos métricas nuevas |
 | R55 | guardia de coherencia catálogo↔servicio (existente), ampliado a 10 ids |
 | R56 | `tests/unit/services/analitica-financiera-conciliacion.test.ts` — con COD en caja, mismo cuadre |
-| R57 | `tests/unit/repositories/ingresos-analitica-repository.test.ts` |
+| R57 | `tests/unit/analytics/financiera-ingresos-repo.test.ts` — «la validacion sigue reventando si una de ellas declarara una categoria ajena» y «`ganancia_ordenex` no llega a ver el dinero de terceros: lo excluye ya el WHERE» — **corregido**: `ingresos-analitica-repository.test.ts` nunca existió (§F3) |
 | R58 | `tests/components/CajaResumenCard.test.tsx` — las dos, a la vez |
 | R59 | idem + `tests/integration/wallet-page.test.tsx` — «balance» no aparece |
 | R60 | `CajaResumenCard.test.tsx` — la nota de diferencia está y no usa siglas |
 | R61 | `CajaResumenCard.test.tsx` + `tests/components/descarga/WalletDescarga.test.tsx` |
 | R62 | `WalletDescarga.test.tsx` — mismas columnas, movimientos nuevos incluidos |
-| R63 | suites de `/wallet/tiendas`, `/mi-wallet` y `/mis-pagos` sin editar |
+| R63 | `caja-173-alcance.guardia.test.ts` — «R63: ninguna de las tres pantallas congeladas sabe nada de la caja en tesoreria» (los componentes de `/wallet/tiendas`, `/mi-wallet` y `/mis-pagos` no nombran `verResumenCajaAction`, `CajaResumenDTO`, `derivarCaja`, las dos categorías nuevas ni «Ganancia de Ordenex», con control de no-vacuidad) + esas suites sin editar |
 | R64 | `tests/unit/actions/wallet-actions.test.ts` — el DTO cruza como STRING |
 | R65 | `tests/integration/wallet-page.test.tsx` + `wallet-service.test.ts` — rol sin acceso ⇒ nada |
-| R66 | `tests/unit/services/wallet-mensajero-feed-service.test.ts` **sin editar** |
-| R67 | `caja-173-alcance.guardia.test.ts` — sin tablas/estados/pantallas de arqueo en el diff |
-| R68 | suites de 42/43/44 sin editar |
+| R66 | `caja-173-alcance.guardia.test.ts` — «MEDIDO: el egreso de la caja sigue siendo el COSTO TOTAL `P`, no `min(P, E)`» (con P=15 000 y E=9 000 **distintos**), «la fuente del feed no sabe nada de la 173» y «el egreso se emite en el CIERRE y no en la liquidacion» + `tests/unit/services/wallet-mensajero-feed-service.test.ts` **sin editar** |
+| R67 | `caja-173-alcance.guardia.test.ts` — censo de `arqueo`/`corte de caja`/`caja chica` sobre `lib`+`app`+`components`+`scripts`, sobre `db/schema.prisma` y sobre los segmentos de ruta; la migración de la 173 no crea ninguna tabla ni ningún tipo; **más un caso que obliga al censo a ENCONTRAR** (el corte diario de la 41) |
+| R68 | `caja-173-alcance.guardia.test.ts` — flete, IVA del flete, comisión COD, IVA de la comisión, flete de devolución, pago al mensajero y `min(P,E)`, **importe a importe**; los 9 módulos de fórmula vivos; y ningún módulo de la 173 nombra un insumo de esas fórmulas (con la lista **cerrada** contra el árbol) + suites de 42/43/44 sin editar |

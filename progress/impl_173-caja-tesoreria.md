@@ -2811,3 +2811,493 @@ tests/integration/wallet-page.test.tsx
 declaración (un comentario que mandaba a la Tanda H a buscar algo que sigue existiendo, y cuatro
 casillas sin marcar) y están cerrados; `T G.4` se remide con el control que le faltaba: **47 archivos
 protegidos vivos en el árbol, cero en el diff de la feature**.
+
+---
+---
+
+# TANDA H (parcial) — Guardias, censo, no-regresión y la deuda del puente
+
+> Misma rama `feature/173-caja-tesoreria`. Fase **backend**.
+> Alcance de esta entrada: **`T H.1`, `T H.2`, `T H.3`** y la **deuda asignada**
+> (retirar `verBalanceAction`). **`T H.4` y `T H.5` NO son de esta entrada**: la ejecución del
+> backfill por entorno y la lectura de producción por MCP las gestiona el leader con el humano, y el
+> `./init.sh` completo lo corre el leader. **Nada de esta entrada tocó producción ni corrió el script
+> con `--aplicar` contra ninguna base.**
+
+## H1. Qué se hizo
+
+| Task | Estado | Nota |
+| --- | --- | --- |
+| `T H.1` — censo de tablas y descarga | **HECHA — verificación pura, cero líneas** | La 173 no añade ni una instancia de `<DataTable>`. Totales leídos del árbol (§H1.1). |
+| `T H.2` — revisión de alcance | **HECHA** | `caja-173-alcance.guardia.test.ts`: **8 → 28 casos**. Tres mutaciones de comprobación (§H2.3). |
+| `T H.3` — mutaciones money-critical | **HECHA — consolidación** | Las tres ya estaban ejecutadas con su salida pegada; aquí se reúnen (§H3). |
+| **Deuda** — retirar `verBalanceAction` | **HECHA** | Con lo que quedaba huérfano por ella, y nada más (§H4). |
+| `T H.4` — ejecución por entorno | **NO ES DE ESTA ENTRADA** | Leader + humano. |
+| `T H.5` — `./init.sh` completo | **NO ES DE ESTA ENTRADA** | Lo corre el leader. |
+
+## H2. Archivos
+
+### Modificados
+
+| Archivo | Qué | Task |
+| --- | --- | --- |
+| `tests/unit/guards/caja-173-alcance.guardia.test.ts` | **+20 casos** (8 → 28), `+468 −2` líneas: R66, R67, R68 y la ampliación R32/R35/R63. | `T H.2` |
+| `lib/actions/wallet.ts` | `+15 −35`: fuera `verBalanceAction`, `VerBalanceActionResult` y el import de `WalletBalanceDTO`. Lo que entra es la nota de por qué existió el puente y quién lo retiró. | deuda |
+| `tests/unit/actions/wallet-actions.test.ts` | `+25 −44`: los **4** casos que medían el puente → **1** que afirma que la forma vieja no puede volver (18 → 15 tests). | deuda |
+| `app/(app)/wallet/_components/WalletModule.tsx` | `+3 −3`: **un comentario, cero líneas de código.** Ver §H4.3. | deuda |
+| `specs/173-caja-tesoreria/tasks.md` | `T H.1`–`T H.3` marcadas + **la tabla de trazabilidad auditada** (§H5). | — |
+
+### Lo que NO está en el diff (y es parte de la verificación)
+
+- `tests/unit/descarga/censo-tablas.ts` — **es el resultado de `T H.1`**: que esté fuera del diff
+  es la prueba, no un descuido (§H1.1).
+- `lib/services/WalletMensajeroFeedService.ts` y su suite — **R66 / `[P2]` = (a)**, ni una línea en
+  toda la feature.
+- Los **9 módulos de fórmula** de R68 (`ingreso-ordenex`, `pago-mensajero`, `cuenta-por-pagar`,
+  `ingreso-bodega`, `cierre-totales`, `mapeo-concepto-tienda`, `saldo-tienda`, `WalletTiendaFeed`,
+  `WalletMensajeroFeed`) y `pendiente-cierre`.
+- Las tres pantallas congeladas de R63 (`/wallet/tiendas`, `/mi-wallet`, `/mis-pagos`).
+- `lib/utils/wallet-balance.ts` y su suite — **R9**, intacto desde `T A.5`. `WalletBalanceDTO`
+  sobrevive **ahí**: es el retorno de `derivarBalance` (§H4.1).
+
+## H1.1 `T H.1` — el censo no cambia, y los números salen del árbol
+
+**Cero líneas escritas, y cero es lo correcto.** Los tres números se leen **en el momento**, no de
+este documento ni del spec de la 170:
+
+```
+$ git grep -o "<DataTable" -- 'app/**/*.tsx' 'components/**/*.tsx' | wc -l
+32
+$ git grep -l "<DataTable" -- 'app/**/*.tsx' 'components/**/*.tsx' | wc -l
+31
+$ git diff origin/dev...HEAD -- app components | grep -cE "^\+.*<DataTable"
+0
+$ git diff --name-only origin/dev...HEAD -- tests/unit/descarga/ | wc -l
+0
+```
+
+**32 instancias en 31 archivos**, y `CENSO_DATATABLE` tiene exactamente esas 31 entradas con esas 32
+tablas. La feature aporta **0** líneas `+` con `<DataTable`: la tarjeta de las dos cifras
+(`CajaResumenCard.tsx`) no contiene la cadena `DataTable` en ninguna forma.
+
+```
+$ pnpm exec vitest run tests/unit/descarga/cobertura-tablas.guardia.test.ts
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+```
+
+> Nota, dicha y no arreglada: los **comentarios de cabecera** de `censo-tablas.ts` siguen diciendo
+> «30 instancias en 29 archivos» (feature 170 — FASE 2) y «31 tablas = 25 + 6» (feature 171). Los
+> **datos** están bien —son 32/31, y la guardia los contrasta contra el árbol—; lo que está viejo es
+> la prosa. No se toca: reescribir un comentario de otra feature dentro de esta rama mete un archivo
+> ajeno en el diff de la 173 por un motivo que no es de la 173. Queda **declarado** para quien pase.
+
+## H2.1 `T H.2` — por qué el censo va sobre el ÁRBOL y no sobre `git diff`
+
+La task pide afirmar cosas «sobre el diff final». La tentación es escribir un test que llame a
+`git diff --name-only origin/dev...HEAD`. **No se hizo, y es deliberado:** ese diff se vacía en
+cuanto la rama se mergea, así que el test pasaría a estar verde **por vacío, para siempre**, justo a
+partir del momento en que empieza a hacer falta. Es una guardia que se apaga sola.
+
+Lo que se hizo es partir la afirmación en dos:
+
+1. **La propiedad duradera va al test**, expresada sobre el árbol vivo: censos, y donde se puede,
+   **mediciones**.
+2. **La medición del diff**, que es punto-en-el-tiempo, va aquí abajo (§H2.4) con su control contra
+   `git ls-files` — que es exactamente lo que hizo `T G.4`.
+
+Y el segundo criterio de diseño: **donde se puede, la ausencia se sustituye por una medición**. R66
+no dice «`WalletMensajeroFeedService.ts` no se editó», dice «el egreso de la caja sigue siendo
+`15000.00` y no `9000.00`», ejecutando el servicio. R68 no dice «`ingreso-ordenex.ts` no se editó»,
+dice «el IVA del flete sigue siendo `260.00`». Un hash del archivo se rompería con un comentario y
+sobreviviría a un cambio de constante; un importe pinchado hace exactamente lo contrario.
+
+## H2.2 Los 20 casos, y qué mide cada bloque
+
+**R66 `[P2]` = (a) — el pago al mensajero, igual que siempre (4 casos).**
+
+- **Control de no-vacuidad primero:** los dos archivos protegidos se leen y se comprueba que están
+  vivos y con contenido, y que la suite sigue siendo la suite de eso (nombra
+  `WalletMensajeroFeedService` y `egreso_pago_mensajero`).
+- **La medición:** con el servicio **real** y un `tx` que devuelve `P = 15000.00` y `E = 9000.00`
+  —**distintos a propósito**, que es lo que hace que la aserción distinga—, el egreso de la caja sale
+  por **`15000.00`**, con `origenTipo = cierre_dia` (el «cuándo» de R66: al aprobar el cierre) y el
+  libro por mensajero sigue con `pago_devengado = P` y `pago_efectivo = min(P,E)`.
+- La fuente del feed no nombra ninguna de las dos categorías nuevas, ni `derivarCaja`, ni el puerto
+  de la tienda; y **sigue llamando a `calcularSplitPago`**, la fuente única de `min(P,E)`.
+- El «cuándo», por el otro lado: `LiquidacionService` —que la 173 **sí** tocó, y al que le dio una
+  puerta a la caja— **no** nombra `egreso_pago_mensajero`. Con su control de no-vacuidad: ese mismo
+  archivo **sí** nombra `registrarPagoTienda`, así que el barrido está leyendo el archivo correcto.
+
+**R67 — ni arqueo, ni corte de caja, ni conciliación nueva (5 casos).**
+
+- Censo de `/\barqueo/i`, `corte de caja`, `caja chica`, `cierre de caja` y `conciliación de caja`
+  sobre **`lib` + `app` + `components` + `scripts`** enteros: **cero culpables**.
+- `corte` **a secas no entra en la lista**, y es una decisión: el repo tiene el **corte diario** de
+  la feature 41 (`CorteDiarioService`, `corte_sin_gestionar`), que es el cierre de la jornada del
+  mensajero y no tiene nada que ver con contar el dinero de la caja. Perseguir la palabra suelta
+  sería un falso positivo garantizado.
+- El esquema (`db/schema.prisma`): ni tabla, ni columna, ni valor de enum.
+- Las **rutas**: ningún segmento `page/layout/route` casa los patrones, con el control de que el
+  árbol **tiene** más de 20 rutas (si el filtro estuviera roto, el bucle no miraría nada).
+- La migración de la 173: **sin `CREATE TABLE` y sin `CREATE TYPE`**, con el control de que el
+  archivo **sí** trae sus dos `ADD VALUE IF NOT EXISTS` y su `ADD CONSTRAINT`.
+- Y un caso entero dedicado a obligar al censo a **ENCONTRAR**: el corte diario de la 41 aparece en
+  ≥1 fuente, y `db/schema.prisma` contiene `wallet_movimiento` e `ingreso_cod_recaudado`. Sin él,
+  las cinco negaciones de arriba podrían estar leyendo archivos vacíos.
+
+`tests/` queda **fuera** del censo a propósito, y por la misma razón por la que el barrido money-safe
+quita los comentarios: este archivo nombra «arqueo» en cada `it` para perseguirlo, y un censo que se
+leyera a sí mismo fallaría por **citar** lo que prohíbe. Además R67 habla de tablas, estados y
+pantallas: ninguna de las tres vive en `tests/`.
+
+**R68 — las fórmulas no se mueven (7 casos).**
+
+- **Control de no-vacuidad:** los **9** módulos de fórmula existen vivos y con contenido.
+- **Los importes, uno a uno**, ejecutando las funciones puras con una tarifa cuyos siete campos son
+  **distintos entre sí** (ningún par puede confundirse):
+
+  | Qué | Entrada | Importe pinchado |
+  | --- | --- | --- |
+  | flete (central ⇒ `valorFleteGam`, no `valorFlete`) | 2 000 / 2 500 | `2000.00` |
+  | IVA del flete | 13 % de 2 000 | `260.00` |
+  | comisión COD | 5 % de 20 000 | `1000.00` |
+  | IVA de la comisión | 10 % de la comisión | `100.00` |
+  | flete de devolución (no central) | 1 500 | `1500.00` |
+  | IVA del flete de devolución | 13 % de 1 500 | `195.00` |
+  | pago al mensajero, `entregada` | `cobroEntregado` 1 200 | `1200.00` |
+  | pago al mensajero, los otros tres resultados y `tarifa = null` | — | `0.00` |
+  | `min(P,E)` con **P > E** | 15 000 / 9 000 | `15000.00` / `9000.00` / `6000.00` |
+  | `min(P,E)` con **E > P** | 15 000 / 40 000 | `15000.00` / `15000.00` / `0.00` |
+
+  El `cobroRechazado` (600) es distinto del `cobroEntregado` (1 200) a propósito: pagarle al
+  mensajero el equivocado sería un rojo, no un empate.
+- Ninguno de los **8** módulos de la 173 nombra un insumo de esas fórmulas (14 tokens barridos sobre
+  el código sin comentarios): cero coincidencias.
+- **Y la lista se CIERRA contra el árbol:** toda fuente de `lib/` o `scripts/` que nombre una de las
+  dos categorías nuevas tiene que estar declarada como módulo de la 173 o como catálogo previo
+  (`lib/types/wallet.ts`, `lib/analytics/metrics.ts`). Sin esto la lista podría quedarse corta en
+  silencio; con esto, una feature futura que abra un quinto módulo de la caja **no puede** olvidarse
+  de añadirlo — el censo la nombra.
+
+**R32 / R35 / R63 — ampliación declarada (4 casos).** Ver §H5.2: eran los tres únicos `R` de los 68
+sin un caso que corriera en el gate.
+
+## H2.3 Tres mutaciones sobre la guardia nueva — ejecutadas y revertidas
+
+Una guardia que nunca se ha visto en rojo no es una guardia, es una decoración.
+
+**(a) El egreso del mensajero pasa a `min(P,E)`** — la opción `(b)` de `[P2]`, la que el humano
+descartó. `WalletMensajeroFeedService.ts`: `monto: split.devengado` → `monto: split.pagado`.
+
+```
+ ❯ tests/unit/guards/caja-173-alcance.guardia.test.ts (24 tests | 1 failed)
+     × MEDIDO: el egreso de la caja sigue siendo el COSTO TOTAL `P`, no `min(P, E)`
+AssertionError: expected '9000.00' to be '15000.00' // Object.is equality
+Expected: "15000.00"
+Received: "9000.00"
+```
+
+**(b) El IVA del flete se duplica.** `ingreso-ordenex.ts`: `new Prisma.Decimal(tarifa.ivaFlete)` →
+`.mul(2)`.
+
+```
+     × MEDIDO: flete, IVA del flete, comision COD e IVA de la comision, importe a importe
+AssertionError: expected '520.00' to be '260.00'
+     × MEDIDO: el flete de DEVOLUCION y su IVA, y que una devolucion NO cobra comision
+AssertionError: expected '390.00' to be '195.00'
+```
+
+**(c) Un «arqueo» colado en un módulo de la 173.** Un comentario al final de `caja-tesoreria.ts`.
+
+```
+     × ni una sola fuente del producto nombra un arqueo o un corte de caja
+AssertionError: expected [ 'lib/utils/caja-tesoreria.ts' ] to deeply equal []
+```
+
+**Las tres revertidas**, con `git diff --stat` vacío sobre los tres archivos después. Dos más, sobre
+los casos de R32/R63, en §H5.2.
+
+## H2.4 La medición del diff — punto-en-el-tiempo, con su control de no-vacuidad
+
+Esto **no** es el test: es la medición que el test no puede hacer sin apagarse sola tras el merge.
+Patrón de `T G.4` (§G13.3).
+
+`git diff --name-only origin/dev...HEAD` ⇒ **90 archivos**. Filtrado por **todo** lo que R32, R35,
+R63, R66 y R68 protegen (`wallet-tiendas`, `mi-wallet`, `mis-pagos`, `MiWallet`, `MisPagos`,
+`wallet/tiendas`, `wallet/mensajeros`, `wallet-mensajero`, `WalletMensajeroFeed`, `ingreso-ordenex`,
+`pago-mensajero`, `cuenta-por-pagar`, `ingreso-bodega`, `cierre-totales`, `mapeo-concepto-tienda`,
+`saldo-tienda`, `WalletTiendaFeed`, `pendiente-cierre`):
+
+```
+(sin salida)
+```
+
+**El control:** el mismo patrón contra `git ls-files` devuelve **88 archivos vivos** — 29 en `app/`
+(los componentes de las tres pantallas congeladas y de `/wallet/mensajeros`), **15 en `lib/`** (los
+módulos de fórmula y sus contratos), **27 suites en `tests/`**, más specs, progress y e2e. Es decir:
+**88 archivos que podían haber caído en el diff y ninguno cayó.** Sin este control, «sin salida»
+podría ser un `grep` mal escrito.
+
+Y el censo de arqueo sobre **todo** el árbol (excluyendo la propia guardia, que lo nombra para
+perseguirlo, y `progress`/`specs`, que lo nombran para declararlo):
+
+```
+$ git grep -nEi "arqueo|corte[_ -]?de[_ -]?caja|caja[_ -]?chica" -- . \
+    ':!tests/unit/guards/caja-173-alcance.guardia.test.ts' ':!progress' ':!specs'
+(sin salida)
+```
+
+## H3. `T H.3` — las TRES mutaciones money-critical, consolidadas
+
+Las tres estaban **ya ejecutadas**, cada una en su tanda y con la salida real pegada. Esta task las
+reúne; **no se repitieron** (repetirlas no añade información: añadiría una segunda oportunidad de
+copiar mal la salida). Lo que sí se verificó es que **los tests que se pusieron rojos siguen vivos
+en el árbol**, en las líneas que se citan.
+
+| # | Mutación | Rojo | Dónde está la salida | El test que lo mide |
+| --- | --- | --- | --- | --- |
+| **1** | `ingreso_cod_recaudado` de naturaleza «terceros» → **«propio»** (`lib/utils/caja-tesoreria.ts`) | **10 rojos** (1 archivo) | §4 (Tanda A) | `tests/unit/utils/caja-tesoreria.test.ts:138` — «R2/R5: el contra-entrega ENTRA en la caja y NO roza la ganancia» |
+| **2** | el reverso de la anulación → **`ingreso_ajuste`** (`lib/services/CajaPagoTiendaFeedService.ts`) | **8 rojos en 4 archivos** | §C7 (Tanda C) | `tests/unit/services/caja-cadena-pago-anulacion.test.ts:278` — «R30: las TRES cifras del recorrido, en colones» |
+| **3** | el movimiento retroactivo fechado con **`now()`** en vez de con su origen (`CajaBackfillTesoreriaService.dePagosATienda`) | **5 rojos en 2 archivos** | §E7 (Tanda E) | `tests/unit/services/caja-backfill-tesoreria.test.ts:467` — «con el reloj en NAVIDAD, ni una sola fila lleva esa fecha», y `tests/integration/db/caja-backfill.test.ts:193` **contra Postgres** |
+
+**El daño que cada una habría hecho, que es el punto de la task:**
+
+1. `AssertionError: expected '10500.00' to be '500.00'` — la utilidad de Ordenex inflada en ₡10 000
+   de dinero que es de una tienda. Es el error que la feature entera existe para impedir.
+2. `expected [ '1690.00', '1690.00', '16690.00' ] to deeply equal [ '1690.00', '1690.00', '1690.00' ]`
+   — **₡15 000 de ganancia inventada por anular un pago**: la utilidad sube exactamente lo que se le
+   devolvió a la tienda. Y el detalle que justifica que el enum ganara **dos** valores y no uno:
+   `enCaja` **no se movió** (`21690.00` en los dos casos), así que una aserción que solo mirase el
+   dinero en caja habría sobrevivido a la mutación.
+3. `"fecha": "2026-07-30..."` → `"fecha": "2026-12-25..."` — un pago de julio contabilizado en
+   diciembre, **ya escrito en la tabla de Postgres**, en un libro append-only: irreparable salvo por
+   contraasiento.
+
+**Verificación de que las tres siguen ancladas** (no de memoria):
+
+```
+$ grep -n "el contra-entrega ENTRA en la caja y NO roza la ganancia" tests/unit/utils/caja-tesoreria.test.ts
+138:  it("R2/R5: el contra-entrega ENTRA en la caja y NO roza la ganancia", () => {
+$ grep -n "las TRES cifras del recorrido" tests/unit/services/caja-cadena-pago-anulacion.test.ts
+278:  it("R30: las TRES cifras del recorrido, en colones", async () => {
+$ grep -n "con el reloj en NAVIDAD" tests/unit/services/caja-backfill-tesoreria.test.ts
+467:  it("con el reloj en NAVIDAD, ni una sola fila lleva esa fecha", async () => {
+$ grep -n "la fecha de su ORIGEN" tests/integration/db/caja-backfill.test.ts
+193:  it("las TRES filas llegan a la tabla con su categoria, su monto y la fecha de su ORIGEN", ...
+```
+
+Para el registro: la feature acumula **once** mutaciones ejecutadas y revertidas — las 3 obligatorias
+de `T H.3`, más las 2 de la Tanda B (§B7), las 2 de `T A.2` (§A2.6), las 4 de la Tanda D (§D7), la
+extra de la Tanda E (§E7-4), la de la Tanda F (§F4) y las 5 de esta entrada (§H2.3 y §H5.2). Ninguna
+sobrevivió.
+
+## H4. La deuda: `verBalanceAction` queda RETIRADA
+
+### H4.1 Qué se fue, y qué se comprobó antes de tocar nada
+
+El puente vivió entre la Tanda D y la Tanda G, **declarado como tal desde el primer día** (§D5):
+`T D.2` retiró `WalletService.verBalance` (design §5.2, sustituido por `verResumenCaja`) y `/wallet`
+seguía siendo la pantalla de la 42, que la fase backend no podía tocar. Proyectaba campos del DTO
+nuevo sobre la forma vieja (`enCaja` → `balance`), **sin una sola operación aritmética propia**.
+
+`T G.3` lo dejó **sin un solo consumidor en `app/`** (§G13.2, verificado allí). Se retira aquí, con
+lo que quedaba huérfano **por ella y solo por ella**:
+
+| Qué | Por qué se va |
+| --- | --- |
+| `verBalanceAction` | la deuda |
+| `VerBalanceActionResult` | sin otro uso: era su tipo de retorno |
+| el `import type { WalletBalanceDTO }` de `lib/actions/wallet.ts` | sin otro uso **en ese archivo** |
+| los **4** casos del `describe` del puente en `wallet-actions.test.ts` | median el puente |
+
+**Lo que NO se borró, comprobado antes de borrar nada:** `WalletBalanceDTO` sigue vivo en
+`lib/types/wallet.ts` porque es el tipo de retorno de `derivarBalance` (`lib/utils/wallet-balance.ts`),
+que **R9 protege intacto**. `WalletBalanceSigno` también, y lo consume `CajaResumenCard.tsx`. Nada más
+quedó sin consumidores: tras el borrado, `verBalanceAction` no aparece en el árbol más que en
+**comentarios** que explican que se fue.
+
+**Nada se rompió.** El typecheck pasó a la primera y `tests/unit/actions` quedó en 40 archivos / 514
+tests verdes.
+
+### H4.2 Los cuatro casos del puente → uno, y por qué no cero
+
+Borrar el `describe` entero habría sido lo cómodo, pero deja un agujero: la forma vieja podría volver
+mañana por la puerta de atrás. El caso que los sustituye afirma que **el módulo no exporta ninguna
+acción que case `/balance/i`**, con su **control de no-vacuidad** al lado: las cuatro acciones que sí
+quedan, nombradas una a una (`listarMovimientosAction`, `listarMovimientosCompletoAction`,
+`registrarMovimientoManualAction`, `verResumenCajaAction`). Si el import fallara o el módulo viniera
+vacío, el filtro pasaría sin haber mirado nada.
+
+### H4.3 El comentario vecino que iba a quedar mintiendo — declarado
+
+`WalletModule.tsx:44` decía: *«Ojo: `verBalanceAction` SIGUE existiendo en `lib/actions/wallet.ts`;
+… Retirarla es tocar backend y le toca a la Tanda H»*. Es exactamente el comentario que §G13.2 puso
+**para** que este agente no buscara algo que seguía estando; hoy sería falso al revés. Se corrige:
+**un comentario, cero líneas de código**, en un archivo que ya estaba en el diff de la feature.
+
+Es un archivo de `app/`, y esta fase es backend. Se declara aquí en vez de dejarlo pasar porque la
+alternativa —cerrar la tanda dejando en el árbol una afirmación falsa sobre el propio trabajo de la
+tanda— es peor, y es el mismo criterio que aplicó §G13.2 en sentido contrario.
+
+El docstring que decía «lo borra `T G.3`» era el de la propia acción, así que **se fue con ella**; en
+su sitio queda la nota de por qué existió el puente, por qué era seguro y quién lo retiró.
+
+## H5. La trazabilidad `R<n>` → test, AUDITADA
+
+### H5.1 Cómo se auditó (no leyendo la tabla)
+
+La tabla de `tasks.md` es una promesa; la auditoría se hizo **contra el árbol**. Dos barridos:
+
+1. **Existencia:** los **28** archivos de test que la tabla nombra, uno a uno. **Dos no existen**:
+   `tests/unit/analytics/metrics-descripciones.test.ts` (R53) y
+   `tests/unit/repositories/ingresos-analitica-repository.test.ts` (R57).
+2. **Cobertura:** sobre los archivos de test **del diff de la feature**, extraer todos los títulos de
+   `it`/`describe` que nombran un `R1`–`R68` y cruzarlos con los 68.
+
+Lo que salió del segundo barrido, antes de tocar nada:
+
+```
+R CON al menos un `it`/`describe` que lo NOMBRA: 67 de 68
+R SIN mencion literal en un titulo: 63
+```
+
+Y un aviso para quien repita esto: el barrido **cruza espacios de nombres**. `R32` y `R35` aparecían
+en archivos del diff (`liquidacion-service.test.ts`, `incidente-indemnizacion-migration.test.ts`),
+pero son **el R32 de la 172 y el R35 de la 158**, no los de la 173. Contarlos como cobertura habría
+dado un falso verde. Los tres huecos reales eran **R32, R35 y R63**.
+
+### H5.2 Los dos hallazgos, y qué se hizo con cada uno
+
+**(a) R53 y R57 nombraban archivos que nunca existieron.** No es un hueco de cobertura: la Tanda F ya
+lo había **declarado** en su bitácora (§F3, «Desviación declarada de `tasks.md`») y había puesto los
+casos donde correspondía. Comprobado en el árbol:
+
+- **R53** → `metrics-caja-naturaleza.guardia.test.ts:127` («declara UNA sola categoria de terceros, y
+  es el pago a la tienda») y `:134` + `metrics.test.ts`.
+- **R57** → `financiera-ingresos-repo.test.ts:219` y `:237`.
+
+Se **corrigen las dos filas** de la tabla. Corregir no es inventar: cita el caso que ya da la
+cobertura, con su línea.
+
+**(b) R32, R35 y R63 solo tenían una medición, no un test.** Sus filas decían «suites de la 171/172
+**sin editar**». Eso es cierto y `T G.4` lo midió bien (47 archivos protegidos vivos, cero en el
+diff), pero es **punto-en-el-tiempo**: `./init.sh` no lo ejecuta. Eran los **tres únicos** `R` de los
+68 sin un caso propio en el gate.
+
+Se cierran en la misma guardia, y **midiendo el importe** en vez de afirmando la ausencia:
+
+- **R32** — `derivarSaldoTienda` (20 000 − 3 390 = `16610.00`, **y** la tienda que DEBE:
+  `-1200.00`, con el negativo conservado y no recortado a cero), `derivarCuentaPorPagar`
+  (15 000 / 9 000 ⇒ `6000.00`) y `derivarPendienteCierre` (con 2 500 ya pagados ⇒ `3500.00`; anulado
+  ⇒ `6000.00`).
+- **R35** — `derivarSaldoTienda` tiene **arity 2**: solo admite los dos totales del ledger de la
+  tienda, así que no hay por dónde colarle una cifra de la caja sin cambiar la firma. Y su fuente no
+  nombra `walletMovimiento`, `derivarCaja`, `caja-tesoreria`, `deTerceros` ni `ingreso_cod_recaudado`
+  —con el control de no-vacuidad de que **sí** es el archivo que deriva el saldo—.
+- **R63** — los **18** componentes de las tres pantallas congeladas (7 + 6 + 5) no nombran
+  `verResumenCajaAction`, `CajaResumenDTO`, `CajaResumenCard`, `derivarCaja`, las dos categorías
+  nuevas ni «Ganancia de Ordenex». Con el control de `T G.4`: las tres carpetas tienen componentes
+  vivos (>3 cada una).
+
+**Dos mutaciones más, ejecutadas y revertidas**, para que estos cuatro casos no sean decoración:
+
+```
+# duplicar el saldo de la tienda (`cred.sub(deb)` -> `.mul(2)`)
+     × MEDIDO (R32): el saldo a favor de una tienda, con su desglose y su signo
+
+# colar «Ganancia de Ordenex» en app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx
+     × R63: ninguna de las tres pantallas congeladas sabe nada de la caja en tesoreria
+AssertionError: app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx nombra Ganancia de Ordenex
+```
+
+### H5.3 El resultado
+
+```
+R CON al menos un `it`/`describe` que lo NOMBRA: 68 de 68
+R SIN mencion literal en un titulo: (ninguno)
+```
+
+**Los 68 `R` tienen un caso ejecutable. Ninguno falta.** Las cuatro filas corregidas de `tasks.md`
+llevan la nota de por qué cambiaron.
+
+## H6. Gate ejecutado
+
+> Gate **acotado**, el que ordenó el leader. La suite completa **NO** se corrió: hoy ya ha matado a
+> dos agentes por corte de stream.
+
+**`pnpm typecheck`** → `tsc --noEmit`, sin salida, **exit 0**. Corrido tres veces (tras `T H.2`, tras
+retirar la acción y tras la ampliación R32/R35/R63).
+
+**`pnpm lint`**
+
+```
+✖ 27 problems (0 errors, 27 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores**, y las 27 advertencias son **la misma línea base de las tandas A–G** (`_args`/`_items`
+en suites antiguas). Ninguna cae en un archivo de esta entrada.
+
+**`pnpm exec vitest run guard`** (obligatorio, en cada paso)
+
+| Momento | Archivos / tests |
+| --- | --- |
+| al empezar (baseline heredado de la Tanda G) | 48 / **701** |
+| tras `T H.2` (R66/R67/R68) | 48 / **717** (+16) |
+| tras retirar `verBalanceAction` | 48 / **717** |
+| tras la ampliación R32/R35/R63 | 48 / **721** (+4) |
+
+**+20 tests, +0 archivos**: todo entra en la guardia que ya existía. Ni una guardia ajena se movió.
+
+**`pnpm exec vitest run tests/unit/actions`** (obligatorio al retirar la acción)
+
+```
+ Test Files  40 passed (40)
+      Tests  514 passed (514)
+```
+
+**`pnpm exec vitest related --run`**
+
+```
+# lib/actions/wallet.ts + WalletModule.tsx (los 2 archivos de codigo de la deuda)
+ Test Files  4 passed (4)
+      Tests  39 passed (39)
+
+# los 6 modulos de formula que la guardia nueva importa
+ Test Files  104 passed (104)
+      Tests  1812 passed (1812)
+```
+
+**`pnpm exec vitest run tests/unit/descarga/cobertura-tablas.guardia.test.ts`** (`T H.1`) → 1 / 4.
+
+**Cero rojos ajenos.** Ninguna suite de otra feature se puso en rojo por este trabajo, ni hubo que
+tocar ninguna: el único archivo ajeno a la 173 que aparece en el diff de esta entrada es
+`WalletModule.tsx`, y por un comentario (§H4.3).
+
+**No corrido aquí:** `./init.sh --rapido` ni `./init.sh` completo (los corre el leader, `T H.5`), ni
+el backfill contra ninguna base (`T H.4`, leader + humano).
+
+## H7. Lo que queda abierto de la Tanda H
+
+- **`T H.4`** — `--simular` → revisión humana → `--aplicar` → `--comprobar` en cada entorno, y la
+  lectura por MCP de las filas nuevas en producción. **No se tocó nada de esto.** Sigue vivo el
+  límite declarado en `T A.0`: **preview no es alcanzable por el MCP**, y en la 172 eso quedó como
+  bloqueante del merge.
+- **`T H.5`** — `./init.sh` completo, con el delta de tests explicado. El delta que aporta esta
+  entrada es **+20 tests en 0 archivos** (guardias) **−3 tests** en `wallet-actions.test.ts` (**18 →
+  15**: los 4 del puente pasan a 1), es decir **+17 netos, 0 archivos nuevos**.
+- **Deuda declarada, de otra feature:** los comentarios de cabecera de
+  `tests/unit/descarga/censo-tablas.ts` dicen «30 instancias en 29 archivos» y son **32 en 31**
+  (§H1.1). Los datos están bien; la prosa está vieja. No es de la 173.
+
+## H8. Veredicto de la Tanda H (parcial)
+
+`T H.1` se cierra **sin escribir una línea** y con los totales leídos del árbol (32 tablas en 31
+archivos, 0 añadidas); `T H.2` convierte tres afirmaciones de ausencia en **mediciones**
+—`egreso_pago_mensajero` sigue siendo P y no `min(P,E)`, el IVA del flete sigue siendo 260, cero
+arqueos en todo el producto— cada una con su control de no-vacuidad y las cinco verificadas por
+mutación; `T H.3` reúne las tres mutaciones money-critical con su salida real y sus tests todavía
+anclados; el puente `verBalanceAction` **queda retirado** sin dejar nada huérfano y sin romper nada;
+y la auditoría de trazabilidad destapó **cuatro filas falsas** en `tasks.md` y **tres `R` sin test
+ejecutable**, que ahora lo tienen: **68 de 68**.
