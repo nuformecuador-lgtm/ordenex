@@ -157,6 +157,12 @@ Toda la evidencia esta en **`progress/backfill_125.md`** y el reporte en
 
 ## T6 / R34 — PARADO, requiere decision humana
 
+> **CERRADO A POSTERIORI (2026-08-02).** El humano eligio la salida **(ii)**: R34 se retiro de la
+> 125 a la **ficha 174** (`specs/125-analitica-backfill-historico/RETIRADO-R34.md`). La cobertura
+> vigente de la 125 es **34/34**, no 34/35: lo que sigue debajo es la bitacora del momento en que
+> se paro, y se conserva sin reescribir. Donde diga «34 de 35» o «R34 NO cubierto», manda
+> `requirements.md`.
+
 **No se ha tocado `UMBRAL_AVISO_FILAS_CORRIDA`, y esto es deliberado.**
 
 R34 pide sustituirlo por «una cifra con procedencia documentada» en cuanto exista la medicion de

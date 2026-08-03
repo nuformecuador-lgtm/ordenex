@@ -204,3 +204,193 @@ dieron 0 filas con codigo de salida 0.
 Las 8 mutaciones se revirtieron una a una y se comprobo la limpieza despues de cada reversion. No
 ejecute ningun comando git destructivo, no toque ningun otro checkout y no edite codigo de la
 feature 124.
+
+---
+
+# RONDA 2 — 2026-08-02, tras la enmienda 383e9cb1
+
+**VEREDICTO: APROBADO. Cobertura 34/34.** El unico bloqueante de la ronda 1 (R34 sin test) esta
+cerrado por la via que recomende: **salida (ii), R34 retirado a la ficha 174**, decision humana.
+La enmienda es **100% bookkeeping**: `git show --stat 383e9cb1` = 6 archivos, todos spec, ficha,
+feature_list y mi propio informe. **Ni una linea de codigo ni de test.** Por eso no repito la suite
+completa ni las mutaciones de la ronda 1: no hay nada que hayan podido dejar de medir.
+
+## 1. Los anclajes, verificados por mi y ademas MEDIDOS
+
+Confirmo las cuatro ubicaciones y las tres coincidencias, una por una, leyendo el arbol:
+
+| # | Ubicacion | Contenido | Confirmado |
+|---|---|---|---|
+| 1 | `lib/config/analitica-rollup.ts:16` | la declaracion `UMBRAL_AVISO_FILAS_CORRIDA = 20000` mas su prosa, lineas 1-15 | si |
+| 2 | `tests/unit/analytics/rollup-service.test.ts:1047` | el literal `20_000` tecleado a mano dentro del RegExp | si |
+| 3 | `tests/unit/analytics/rollup-service.test.ts:1072` | `expect(config).toMatch(/PROVISIONAL Y NO MEDIDA/i);` | si |
+| 4 | `tests/unit/analytics/rollup-guards.test.ts` caso (a) | l.729 provisional; l.734 no medida; l.737 aviso / no es un limite / nada se rechaza | si, las tres |
+
+Tambien confirmo el descarte: `tests/unit/analytics/backfill-guards.test.ts:359` solo exige que la
+**declaracion exista**, no su valor ni su prosa. **No es anclaje.** Y `rollup-guards.test.ts:688-691`
+(`formasLiterales(20000)`) tampoco: es el autochequeo del analizador con un valor sintetico,
+independiente de la constante.
+
+**No me quede en leer: lo medi con dos mutaciones (aplicadas y revertidas; arbol limpio despues).**
+
+- **MutA, solo el valor** (20000 a 7777, y luego a 2400): rojo **unicamente**
+  `rollup-guards.test.ts (b)`. `rollup-service.test.ts:1047` **NO se pone rojo**.
+- **MutB, valor 2400 mas la prosa cambiada a "MEDIDA el 2026-08-02"**: **tres** aserciones rojas.
+  `rollup-guards (a)` por la coincidencia de "provisional"; `rollup-guards (b)` por allowlist muerto
+  ("google-route-optimization.ts figura como ocurrencia ajena... expected undefined to be 1"); y
+  `rollup-service.test.ts:1072` por `/PROVISIONAL Y NO MEDIDA/i`. La tercera coincidencia (l.737)
+  siguio verde porque conserve "es un aviso, no un limite": confirma el matiz del spec_author.
+
+## 2. Correcciones y hallazgos NUEVOS sobre el inventario de anclajes
+
+Ninguna linea esta mal. Tres precisiones que la ficha 174 deberia incorporar:
+
+- **HALLAZGO NUEVO (importante): el anclaje 2 no es del mismo tipo que los otros, es SILENCIOSO.**
+  Medido en MutA: cambiar el valor **no** pone rojo `rollup-service.test.ts:1047`. El `20_000`
+  tecleado simplemente deja de casar y queda como resto muerto que sigue rastreando el valor
+  **viejo** por todo `lib/`. Los anclajes 3 y 4 **te obligan** a mirarlos porque se ponen rojos; el
+  2 **no avisa**. Esa es la clase peligrosa, porque nadie esta forzado a arreglarla. La ficha 174 ya
+  manda corregirlo en su paso 4, pero conviene que diga **por que** es el mas facil de olvidar: hoy
+  lo presenta al mismo nivel que los demas.
+
+- **HALLAZGO NUEVO: la eleccion de la cifra medida esta restringida por literales AJENOS al rollup.**
+  En MutA con el valor 7777, `rollup-guards (b)` se puso rojo senalando `lib/utils/whatsapp-telefono.ts
+  (1x)`: el caso R47(b) recorre **todo** el arbol de codigo y cualquier archivo que contenga el numero
+  nuevo como literal desnudo lo dispara, aunque no tenga nada que ver con analitica. Es decir: **la 174
+  no podra elegir libremente el numero medido**; tendra que comprobar antes que no colisiona con ningun
+  literal del repo, o ampliar `AJENAS_A_R47`. Esto no esta escrito en ningun sitio.
+
+- **menor: quinto anclaje LATENTE, no listado.** `tests/unit/analytics/rollup-service.test.ts:830`
+  ("no avisa de volumen por debajo del umbral provisional") es un test de **comportamiento**: siembra
+  1 fila y exige que no haya avisos. Solo se pondria rojo si el umbral medido bajara a 1 o menos, cosa
+  implausible. No corrige el recuento de cuatro anclajes, pero la 174 deberia nombrarlo para no
+  descubrirlo por sorpresa.
+
+- **menor: dos granularidades de recuento conviven.** `design.md` seccion 4 dice "los TRES anclajes"
+  (agrupando las dos aserciones de rollup-guards en un mismo punto) y cierra bien con "tres archivos y
+  cuatro puntos de edicion"; `RETIRADO-R34.md` seccion 2 titula "los TRES anclajes" y su tabla enumera
+  cuatro filas; `feature_list.json` dice "CUATRO puntos en TRES archivos". Las tres descripciones son
+  compatibles y ninguna es falsa, pero el titular cambia entre documentos. Cosmetico.
+
+## 3. Huerfanos de R34
+
+Recorri `requirements.md`, `design.md`, `tasks.md`, `progress/impl_125.md` y `progress/backfill_125.md`.
+
+**No queda ninguna referencia viva a R34 como requisito exigible de la 125.** Todas las menciones
+supervivientes son (a) la propia entrada de retirada, (b) referencias historicas anotadas como tales,
+o (c) punteros a la ficha 174. En particular apruebo la decision de **no reescribir el texto de R33**
+pese a que sigue nombrando R34: R33 ya se verifico y se corrio con ese texto, y reescribir el
+enunciado de un requisito despues de medirlo rompe la trazabilidad; la nota de lectura historica
+(lineas 224-228) es la salida correcta.
+
+**Trazabilidad intacta:** la tabla R a test cambio **exactamente una fila** (`git diff ad8bbd4c
+383e9cb1`), la de R34. Las 34 filas restantes son las mismas que verifique en la ronda 1 y los
+numeros **no se movieron** (R34 queda reservado, sin renumerar). Cuento **34 filas de requisito
+vivas**. Cobertura **34/34**.
+
+### Dictamen sobre los dos textos desalineados: NINGUNO ES BLOQUEANTE
+
+1. **`progress/impl_125.md`, seccion "T6 / R34 - PARADO, requiere decision humana"** (referida desde
+   `backfill_125.md:122`). **No bloqueante.** Es una **bitacora**: registro historico de lo que el
+   implementer decidio en ese momento, y es **factualmente correcto**; dice "hoy" y enumera las tres
+   salidas como decision pendiente del leader, y la (ii) es la que se tomo. Reescribir un log despues
+   del hecho es peor que dejarlo.
+   *Pero* es el documento al que apunta CHECKPOINTS para el mapa R a test, y su cierre ("34 de 35",
+   fila "R34 | - | NO cubierto") **discrepa del denominador de `requirements.md` (34/34)**. Un lector
+   que aterrice ahi no tiene forma de saber cual es el vigente. **Recomiendo**, sin condicionar la
+   aprobacion, **una nota de cierre de dos lineas al frente de esa seccion**: "RESUELTO 2026-08-02,
+   decision humana: salida (ii); R34 retirado a la ficha 174; la cobertura de la 125 es 34/34". No
+   toca ni codigo ni tests y elimina la unica ambiguedad que queda en el expediente.
+
+2. **`lib/config/analitica-rollup.ts:6`** ("con esa medicion real la feature 125 fijara los umbrales
+   de verdad"; y lineas 10-12, "la 125 la sustituye por un numero con procedencia"). **No bloqueante,
+   y su sitio es la 174.** Razones, en orden de peso:
+   - Es **codigo de produccion de la 124**, y R33 prohibe a la 125 tocar ese archivo mas alla de
+     anadir su propia constante.
+   - Esa prosa vive **dentro de la ventana que el guardia ajeno (a) aserta**: el caso toma las lineas
+     anteriores a la declaracion filtradas a comentarios, o sea 1-15, la 6 incluida. Editarla es
+     entrar otra vez, en pequeno, en el conflicto R33/R34 que la retirada acaba de cerrar. Coste real,
+     beneficio de comportamiento cero.
+   - La ficha 174 **ya lo nombra explicitamente** en su description ("Arrastra ademas un texto
+     obsoleto: lib/config/analitica-rollup.ts:6..."), y es la ficha que va a reescribir ese bloque de
+     comentario de todas formas. Es su dueno natural.
+
+## 4. feature_list.json: no revierte trabajo ajeno
+
+Comparacion **semantica** (parseando el JSON, no por diff textual) de la rama contra `origin/dev`:
+
+```
+id 125 campo status:       DEV "pending"   ->  RAMA "in_progress"
+id 125 campo depends_on:   DEV 124         ->  RAMA [123, 124]
+id 125 campo status_note:  actualizada
+NUEVA EN RAMA: 174 - analitica: medir el umbral de aviso de filas por corrida
+total dev=172  rama=173
+```
+
+**Esos son TODOS los cambios semanticos.** La **ficha 124 es identica a `origin/dev`**: el revert que
+el archivo heredado de `e657f666` habria causado esta efectivamente corregido. Las fichas 130 y 134
+aparecen en el diff textual, pero es **solo reformateo** (status y status_note pasan de compartir
+linea a ir en lineas separadas); su contenido es identico al de `dev`. Ninguna otra ficha se mueve y
+ninguna se pierde: 172 pasa a 173, y la nueva es la 174.
+
+La description de la ficha 174 **describe los cuatro anclajes con exactitud**: rutas, lineas (1047,
+1072, 729, 734, 737) y la naturaleza de cada uno; dice que la tercera coincidencia debe **seguir**
+cumpliendose; descarta `backfill-guards.test.ts:359`; y, lo mas importante, **autoriza explicitamente
+editar aserciones de guardias ajenos**, que era la pieza que faltaba y la que hacia R34 incompatible
+con R33. Anadiria solo los dos hallazgos de la seccion 2 (anclaje 2 silencioso; la cifra medida no
+puede colisionar con literales ajenos del repo).
+
+*Sigue vigente el menor de la ronda 1:* la description de la ficha **125** no se toco y aun dice
+"reusando el MISMO agregador del job diario (123)" y "Depende de 123", pese a depends_on [123, 124].
+Cosmetico, y ya declarado en la propia spec.
+
+## 5. Guardias: reproducidos y ampliados
+
+Reproduje los cuatro del coordinador y llegue al **mismo numero exacto**:
+
+```
+tests/unit/guards/no-embalaje.test.ts
+tests/integration/db/analytics-daily-guards.test.ts
+tests/unit/analytics/rollup-guards.test.ts
+tests/unit/analytics/backfill-guards.test.ts
+->  Test Files 4 passed (4)  |  Tests 65 passed (65)
+```
+
+Y **amplie** por dos vias, para no fiarme de una lista dada:
+
+- Censo de tests que leen `specs/`, `progress/`, CHECKPOINTS, AGENTS.md o `feature_list.json`, que es
+  lo unico que la enmienda cambio. El unico que lee `feature_list.json` en todo el arbol es
+  `tests/unit/guards/no-embalaje.test.ts`, ya incluido.
+- Carpetas completas: **`tests/unit/guards` mas `tests/unit/analytics` = 40 archivos / 568 tests, todos
+  verdes**, incluidos `alcance-obligatorio.guardia`, `modulo-puro.guardia` y `rollup-service.test.ts`
+  (el de los anclajes 2 y 3).
+
+**No hay ningun guardia repo-wide que el coordinador se dejara.** El texto nuevo de la spec no dispara
+nada: los guardias censan app/, lib/, scripts/, components/, hooks/, providers/ y e2e/, y specs/ y
+progress/ estan fuera de su alcance por construccion.
+
+## 6. Por que NO repito la suite completa
+
+`git show --stat 383e9cb1` no toca ni un archivo `.ts`. El unico riesgo de un cambio solo-documental
+es que un guardia lea documentacion, y ese riesgo lo cerre en la seccion 5 por censo, no por
+suposicion. La medicion de la ronda 1 (**783 archivos / 9535 tests / 0 rojos**, typecheck limpio, lint
+27 warnings y 0 errores) sigue siendo valida sobre este arbol. Las 8 mutaciones de la ronda 1 tampoco
+se repiten, por lo mismo.
+
+## 7. Estado del arbol
+
+Las dos mutaciones de esta ronda (MutA y MutB sobre `lib/config/analitica-rollup.ts`) se revirtieron y
+`git status --short` quedo **vacio** antes de escribir este anexo. La unica modificacion que dejo en el
+arbol es **este mismo informe**, que es mi entregable: **ningun archivo de codigo ni de test esta
+modificado**. No ejecute ningun comando git destructivo ni toque otro checkout.
+
+## 8. Veredicto de la ronda 2
+
+**APROBADO. Cobertura 34/34. Sin bloqueantes.**
+
+Menores abiertos, ninguno condicion de merge:
+1. la nota de cierre recomendada en `progress/impl_125.md` (seccion 3);
+2. los dos hallazgos nuevos de la seccion 2, para la ficha 174;
+3. el quinto anclaje latente (`rollup-service.test.ts:830`);
+4. la description desactualizada de la ficha 125 en `feature_list.json`;
+5. la entrada pendiente en `progress/history.md`.
