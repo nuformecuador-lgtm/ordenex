@@ -3203,3 +3203,69 @@ demostrado por mutación: forzar el predicado a `true` tira el caso del `adminSa
 verde las contrapruebas. El comportamiento de la aplicación no se tocó —el permiso ya funcionaba—;
 lo que faltaba, y ya no falta, es que un cambio futuro se note. El guard de `/wallet/tiendas` se
 conserva como red preventiva, con su alcance real escrito al lado.**
+
+---
+
+## Anexo — Colisión con la feature 124 al integrar `origin/dev` (2026-08-02)
+
+**Hallazgo que sobrevive a esta feature.** Tras integrar `origin/dev` (entra la 124, analítica
+rollup), el gate cayó con **un solo test**, ajeno a la 172:
+
+```
+FAIL tests/integration/db/job-tipo-analitica-rollup-migration.test.ts
+  > T4.1 — la migracion del enum `job_tipo`
+  > la carpeta es la ULTIMA por nombre segun el criterio EXACTO de `db-rollback.ts`
+AssertionError: expected '20260802120000_liquidacion_pago' to be '20260801100000_job_tipo_analitica_rol…'
+```
+
+### Qué protegía
+
+La aserción reproducía literalmente el criterio de `scripts/db-rollback.ts` (`readdirSync` con
+`withFileTypes`, filtrado a directorios, `sort` por `localeCompare`, último elemento) y exigía que
+la carpeta de la 124 fuera esa última. Su fin era acotado: garantizar que, **en el momento de
+correr el round-trip de T8.2**, `pnpm db:rollback` revirtiera la migración de la 124 y no otra, de
+modo que la medición fuese de esa feature. Sin eso, el documento de evidencia habría medido el
+rollback de una migración distinta.
+
+### Por qué era una mina, no un guard
+
+Afirmaba una propiedad **temporal**: «ser la última migración del repo». Fue cierta mientras la 124
+lo fue, y dejó de serlo con la primera feature posterior que añadiera una migración. La 172
+(`20260802120000_liquidacion_pago`) fue la primera en pisarla, pero **cualquier** feature futura
+con migración habría fallado igual, sin que eso dijera nada sobre la corrección de la 124.
+
+### Cómo se resolvió
+
+- Retirada **solo** esa aserción, sustituida por un comentario en el mismo punto del archivo que
+  explica que era un guard **de un solo uso**, que el round-trip ya ocurrió y que su evidencia está
+  en `progress/roundtrip_124_job_tipo.md` (UP → DOWN → UP contra `localhost:5432/ordenex`, con la
+  comprobación de «última por nombre» hecha y anotada en su §2, incluida la mutación observada en
+  rojo).
+- Retirado con ella su único consumidor, el helper `ultimaCarpetaDeMigracionSegunRollback()`, que
+  de otro modo quedaba como código muerto (`@typescript-eslint/no-unused-vars`).
+- Ajustados los dos comentarios del archivo que describían la aserción retirada (la cabecera y el
+  docstring de `carpetaDeLaMigracion()`), para que no quedaran mintiendo.
+- **Intactas** las demás aserciones de la 124: forma del DDL, `ADD VALUE IF NOT EXISTS`, la
+  sentencia única (55P04), la existencia del `down.sql`, sus seis valores previos, el datamodel y
+  las tres que corren contra Postgres.
+- **No se renombró ninguna carpeta de migración** (ni la de la 124 ni la de la 172): el nombre es
+  parte del checksum de `_prisma_migrations` en las bases donde ya se aplicaron.
+
+`pnpm exec vitest run tests/integration/db` → **87 archivos, 1078 tests, todo en verde**. El
+archivo tocado pasa de 12 a 11 tests, los 11 en verde (los 3 contra Postgres corrieron, no se
+saltaron). `pnpm typecheck` sin salida.
+
+### Deuda anotada, no tocada
+
+1. **Misma enfermedad, en el mismo archivo:** el caso «T4.1 — el datamodel declara el valor › el
+   datamodel y el down.sql no divergen: los siete valores, ni uno mas» fija con `toEqual` la lista
+   **completa** del `enum JobTipo` de `db/schema.prisma`. Cualquier feature futura que añada un
+   valor a `job_tipo` la romperá. Aquí sí hay una razón para el dolor (obliga a revisar los
+   `down.sql` previos, ver la nota de memoria del proyecto), y el test hermano de la 123 resuelve
+   lo análogo de forma robusta calculando el enum desde la cadena de migraciones
+   (`enumJobTipoAntesDe`). Queda **señalada, sin tocar**.
+2. **Guard de repo que no se creó:** la propiedad «`pnpm db:rollback` revierte de verdad la última
+   migración» sigue sin estar medida en ningún sitio ahora que esta aserción se fue. No es de una
+   feature: es del script. Si se quiere, va como guard propio (p. ej. en `tests/unit/guards/`)
+   comparando el criterio de `db-rollback.ts` contra el estado real de `db/migrations`, sin
+   nombrar ninguna migración concreta. **Propuesto, no implementado.**
