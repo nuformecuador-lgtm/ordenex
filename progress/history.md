@@ -2588,3 +2588,90 @@ typecheck limpio; lint delta 0.
   escribió, con la fecha puesta, y gana una nota de cierre remitiendo a la 174. Un log corregido a
   posteriori miente sobre lo que se sabía en cada momento.
 
+## Feature 127 — analítica: servicios financieros · PR #269 (2026-08-03)
+
+Ocho métricas de dinero sobre `ConsultaAnalitica`: ingresos, recaudo COD por método, las dos de
+cuentas por pagar, egresos y conciliación de cierres. 43 requisitos, todos mapeados a test.
+Reviewer **APROBADO, 0 bloqueantes**. Suite post-merge **821 archivos / 10411 tests, 0 rojos**.
+
+- **Una contradicción del spec que sólo aparece al implementar (C2).** R4 exige que las tablas que
+  un repositorio consulta sean subconjunto de las que su métrica declara; R23 obliga a comparar el
+  snapshot de cierre aprobado **contra** el dinero realmente movido en los ledgers. Con el catálogo
+  vigente el repositorio de conciliación **no podía cumplir ambos**, y el guardia B.3 se ponía rojo
+  en cuanto se escribiera C.4 — que es exactamente lo que tenía que pasar. El humano amplió el
+  catálogo (⟨D10⟩) en vez de aflojar el guardia: aflojarlo lo volvía decorativo justo en la métrica
+  donde más importa. **El test que fijaba la contradicción no se borró: se dio vuelta**, y ahora
+  juzga contra un catálogo *hipotético* para no mutar el real dentro de un test.
+- **Tres cambios y ni uno más en archivo ajeno.** `lib/analytics/metrics.ts` es el catálogo de la 135,
+  fuente única de trece features. Cada toque lleva autorización humana fechada citada en el propio
+  código y en `progress/decision_C2_127.md`: ⟨D8⟩ `estadoProduccion`, ⟨D10⟩ `fuente.tablas`, ⟨D11⟩ el
+  comentario que ⟨D8⟩ dejó mintiendo. El diff completo se lee de un vistazo. **Un cambio en el
+  catálogo compartido sin la autorización a la vista es indistinguible de un retoque de paso.**
+- **Un alias de tipo escondió una fuga de identidad (C8).** `deConciliacion` devolvía `porEstado` tal
+  cual salía del repositorio; como `GrupoCierrePorEstado` es alias de `FilaConciliacion`, **compilaba
+  y parecía gratis** mientras filtraba al DTO campos que R14 no declara. Lo encontró el barrido que
+  serializa el DTO entero y busca identidades en la cadena: **una inspección campo por campo no lo
+  habría visto.** El arreglo es lista blanca explícita, deliberadamente sin spread.
+- **La cobertura de R14 se apoya en menos de lo que parece.** Cinco de las ocho métricas sirven
+  `filas: []` con sólo `total` pese a declarar `granos: ["fecha"]`, así que su barrido de identidad es
+  trivial: el peso real recae en las tres que sí traen filas — que es donde apareció C8. Queda como
+  pregunta abierta 5 del spec, y como aviso dirigido a la 132, que tampoco puede pintarles serie.
+- **El guardia que se afloja solo.** Al apretar los censos, el de *alcance* admitía igualdad exacta
+  (un brazo), pero el de *fuente* tiene dos —lista declarada **más** descubrimiento por import— y el
+  segundo es abierto por diseño. Igualdad exacta ahí habría creado una lista que se desactualiza sola
+  en cuanto la 132 importe algo, y que el siguiente aflojaría. Se exigió lo más fuerte que se
+  sostiene, incluyendo que el brazo de descubrimiento esté **vivo** y no sólo presente.
+- **Vitest no typechequea.** Un agente parado a mitad dejó un uso de `TablaDinero` sin importar: los
+  615 tests pasaban en verde y el rojo sólo existía en `tsc --noEmit`. Verde de suite no es verde.
+- **Una mutación que no llegó al disco parece un hueco del test.** El leader reportó que mutar el
+  umbral no ponía nada rojo; el comando `perl` nunca había escrito el archivo. Rehecha con
+  verificación previa de que la línea cambió: 3 rojos. **Confirmar que la mutación aterrizó antes de
+  creerle al verde** pasa a ser parte del método.
+- **La suite que creí cortada sí había corrido.** El archivo de salida tenía 208 bytes porque lo miré
+  a mitad de ejecución, no porque `migrate status` hubiera abortado la cadena. Leer un log en curso
+  como si fuera final es la misma familia de error que el conteo de rojos en una corrida degradada.
+
+
+## Feature 126 — analítica: servicios operativos · PR pendiente (2026-08-03)
+
+Repositorios, servicios y Server Actions de la analítica operativa: volumen, embudo, tasas,
+primer intento, motivos de devolución, tiempos de ciclo y aging. Lee `analytics_daily` para los
+días cerrados y consulta `orden`/`gestion_orden` en vivo para el día en curso. 36 requisitos,
+36 cubiertos con test nombrado; 40 mutaciones del implementer y 27 más aplicadas por el
+reviewer, todas muertas. Reviewer: **aprobado con reservas, cero bloqueantes**.
+
+- **Un guardia se acota cuando su intención era más estrecha que su barrido; no se relaja.** D3
+  corrigió `whereRollup`, que devolvía `mensajeroAsignadoId` —la columna de `orden`— para recortar
+  `analytics_daily`, cuya columna es `mensajeroId`. El barrido de la 122 prohibía esa clave en
+  *todos* los fragmentos, pero su `describe` hablaba sólo de `gestion_orden`: había pescado
+  `whereRollup` de paso. Aquí «cambiar el código en vez del guardia» habría significado **conservar
+  el bug**. El acotamiento sólo es legítimo porque vino con la aserción **positiva** (debe nombrar
+  `mensajeroId`, no debe nombrar el otro) y con el motivo escrito dentro del test.
+- **El tipo laxo era el bug, no la clave equivocada.** El retorno estaba tipado
+  `Record<string, string>`, así que el compilador no podía ver la clave inexistente. Al tiparlo
+  `Prisma.AnalyticsDailyWhereInput`, la regresión pasa de ser un `where` silenciosamente vacío a un
+  **error de build**. La corrección deja de depender de que nadie la revierta.
+- **Una exención nominal puede ser más estricta que la regla que sustituye.** R19 obliga a importar
+  el planificador de la 125, y el censo de la 125 marcaba infractor a todo importador externo. En vez
+  de meter el servicio en `ARCHIVOS_125` —sometiéndolo a reglas ajenas— se añadió
+  `CONSUMIDORES_EXTERNOS` con **una** entrada y **dos casos nuevos que la sostienen**: cualquier otro
+  importador sigue siendo infractor, y el exento sólo puede importar el planificador puro.
+- **Un mapa `R→test` que apunta a un caso que no muere es cobertura aparente.** El reviewer encontró
+  dos entradas (R28, R34) que nombraban un caso hermano que seguía verde bajo la mutación. El
+  requisito estaba cubierto, pero por otro caso. Es el mismo **anclaje silencioso** que costó caro en
+  la 125: verificar el mapa ejecutando la mutación y leyendo **qué cae**, no cuál debería caer.
+- **Un `where` compuesto por spread deja que el filtro del cliente pise el recorte de alcance.** Era
+  una fuga entre alcances, no un detalle de estilo: lo cazaron sus propios tests y el arreglo (`AND`)
+  tiene seis casos de regresión.
+- **Un guardia que mide un diff de rama caduca al mergear, y hay que ejecutarlo.** El de frontera con
+  la 127 llevaba su propia sentencia en la cabecera —«si sigue aquí después del merge, es un olvido y
+  no una decisión»— y se retiró en este PR, conservando la mitad que afirma sobre el árbol y no sobre
+  el diff. Además usaba `git diff <base>...HEAD`, que compara commit contra commit y es **ciego al
+  árbol de trabajo**: un archivo ajeno editado y sin commitear pasaba invisible.
+- **Los acentos graves de un mensaje de commit son código.** Al commitear inline, `` `pnpm run
+  db:rollback` `` citado en prosa se expandió como **sustitución de comando** y el script se ejecutó
+  de verdad contra la base local: tiró el índice de la feature y borró su fila de
+  `_prisma_migrations`. Se restauró y se verificó. Efecto colateral útil —el `down.sql` quedó probado
+  **por ejecución** y revirtió exactamente su índice— pero la lección es la otra: **commitear siempre
+  con `-F` o heredoc citado**, nunca `-m` con prosa que cita comandos. Ningún gate lo detecta: `git
+  commit` «funciona» y el estrago queda incrustado en el mensaje.

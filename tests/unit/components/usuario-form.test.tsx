@@ -563,3 +563,39 @@ describe("UsuarioForm — zona (feature 24/R27)", () => {
     await waitFor(() => expect(zonaTrigger).toHaveTextContent("Norte"));
   }, 15000);
 });
+
+// Pedido humano: `apiKey` no es un rol de persona (es la cuenta de máquina de una
+// integración, que nace en Configuración > API). Ni se ofrece en la lista ni se le
+// puede cambiar el rol a quien ya lo tiene.
+describe("UsuarioForm — el rol apiKey no se asigna a mano", () => {
+  const ROLES_CON_API = [
+    { id: "rol-maestro", value: "maestro" },
+    { id: "rol-mensajero", value: "mensajero" },
+    { id: "rol-apikey", value: "apiKey" },
+  ] as const;
+
+  const USUARIO_API: UsuarioPublico = { ...USUARIO, rolId: "rol-apikey" };
+
+  it("no ofrece apiKey entre las opciones al crear", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_CON_API] });
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    await waitFor(() => expect(listarRolesMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    const lista = await screen.findByRole("listbox");
+    expect(within(lista).getByRole("option", { name: "maestro" })).toBeInTheDocument();
+    expect(within(lista).queryByRole("option", { name: "apiKey" })).toBeNull();
+  }, 15000);
+
+  it("deshabilita el select de rol al editar un usuario que YA es apiKey", async () => {
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_CON_API] });
+    renderIsolated(<UsuarioForm mode="editar" usuario={USUARIO_API} />);
+
+    const rolTrigger = screen.getByRole("combobox", { name: "Rol" });
+    // Sigue mostrando cuál es su rol (si se hubiera filtrado, el trigger iría vacío)...
+    await waitFor(() => expect(rolTrigger).toHaveTextContent("apiKey"));
+    // ...pero no se puede cambiar.
+    expect(rolTrigger).toBeDisabled();
+  }, 15000);
+});

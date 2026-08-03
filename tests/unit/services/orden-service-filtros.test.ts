@@ -204,7 +204,11 @@ describe("sin regresion del contrato previo (R45)", () => {
     expect(list.mock.calls[0][0]).toEqual({
       where: {},
       sortBy: "created_at",
-      sortDir: "desc",
+      // El default paso de `desc` a `asc` por pedido humano (ver el porque en
+      // `listarOrdenesSchema`): lo que primero entro es lo primero que hay que trabajar.
+      // R45 sigue afirmando lo suyo —que sin `filter` el params no gana NADA— sobre el
+      // contrato vigente; fijar aqui el `desc` retirado solo vigilaba el pasado.
+      sortDir: "asc",
       skip: 0,
       take: ordenesConfig.DEFAULT_PAGE_SIZE,
     });

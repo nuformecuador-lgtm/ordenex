@@ -75,9 +75,6 @@ const PREMIOS: PremioRankingDTO[] = [
   { posicion: 3, monto: "1000", descripcion: "Consuelo" },
 ];
 
-function tablaRanking() {
-  return screen.getByRole("table", { name: "Ranking diario de mensajeros" });
-}
 function tablaPremios() {
   return screen.getByRole("table", { name: "Premios del podio" });
 }
@@ -91,30 +88,8 @@ afterEach(() => {
   cleanup();
 });
 
-describe("RankingModule — tabla del ranking (R13/R6)", () => {
-  it("R13: renderiza la tabla ordenada con posición, nombre, % del día y conteo crudo", () => {
-    render(<RankingModule ranking={RANKING} premios={PREMIOS} esEditable={false} />);
-
-    const filas = within(tablaRanking()).getAllByRole("row");
-    // 1 cabecera + 3 filas de datos, en el orden ya resuelto por el servidor.
-    expect(filas).toHaveLength(4);
-    expect(within(filas[1]).getByText("Ana")).toBeInTheDocument();
-    expect(within(filas[1]).getByText("100.0%")).toBeInTheDocument();
-    expect(within(filas[1]).getByText("5/5")).toBeInTheDocument();
-    expect(within(filas[2]).getByText("Beto")).toBeInTheDocument();
-    expect(within(filas[2]).getByText("80.0%")).toBeInTheDocument();
-  });
-
-  it("R6/R3: fila fuera de podio muestra conteo crudo 0/0 y % '—' (pct indefinido)", () => {
-    render(<RankingModule ranking={RANKING} premios={PREMIOS} esEditable={false} />);
-    const filaCaro = within(tablaRanking())
-      .getByText("Caro")
-      .closest("tr") as HTMLElement;
-    expect(within(filaCaro).getByText("0/0")).toBeInTheDocument();
-    // Caro está fuera del podio: posición '—' y % '—' (pct indefinido, R3).
-    expect(within(filaCaro).getAllByText("—")).toHaveLength(2);
-  });
-});
+// La presentación del ranking (R13/R6/R3) se mudó a `RankingPodio`: su cobertura vive
+// ahora en tests/components/RankingPodio.test.tsx. Aquí queda solo la tabla de premios.
 
 describe("RankingModule — premios ↔ ocupante del podio (R14/R15)", () => {
   it("R14: asocia el premio (monto + descripción) al mensajero elegible de esa posición", () => {

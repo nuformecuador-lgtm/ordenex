@@ -49,6 +49,24 @@ const MODULOS_125 = [
   "@/scripts/backfill-analitica",
 ];
 
+/**
+ * Feature 126 / R19 — CONSUMIDORES EXTERNOS LEGITIMOS del planificador de la 125.
+ *
+ * Estos archivos NO son de la feature 125 y no se someten a sus reglas estructurales: son
+ * consumidores. Estan aqui porque R19 de la **feature 126** les OBLIGA a reusar
+ * `HORIZONTE_HISTORIAL_CR` / `esNoComparable` en vez de declarar una segunda constante de
+ * horizonte —lo cual seria la clasica cifra duplicada que un dia diverge, y la 126 tiene su
+ * propio censo (`operativa-cobertura.test.ts`) exigiendo que la fecha literal aparezca en UN
+ * solo archivo del arbol: precisamente `lib/analytics/backfill-rango.ts`.
+ *
+ * Cuando la 125 escribio este caso no existia ningun consumidor fuera de la feature, asi que
+ * «consumidor = archivo de la feature» era cierto. Con la 126 deja de serlo. La excepcion se
+ * acota a lo minimo y va acompanada de DOS casos nuevos que la sostienen: uno prohibe que un
+ * consumidor externo importe el SERVICIO o el SCRIPT del backfill (no solo el planificador
+ * puro) y otro exige que cada entrada exista y siga importando la 125 de verdad.
+ */
+const CONSUMIDORES_EXTERNOS = ["lib/services/AnaliticaOperativaService.ts"];
+
 const DIRS_CODIGO = ["app", "lib", "scripts", "components", "hooks", "providers", "e2e"];
 const EXTENSIONES = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 
@@ -184,8 +202,46 @@ describe("el censo de la 125 mira archivos que existen y no se le escapa ninguno
       const codigo = soloCodigo(leer(rel));
       return MODULOS_125.some((m) => codigo.includes(`"${m}"`) || codigo.includes(`'${m}'`));
     });
-    const fuera = consumidores.filter((rel) => !ARCHIVOS_125.includes(rel));
+    const fuera = consumidores.filter(
+      (rel) => !ARCHIVOS_125.includes(rel) && !CONSUMIDORES_EXTERNOS.includes(rel),
+    );
     expect(fuera, "archivos que usan la 125 y el guardia no esta censando").toEqual([]);
+  });
+
+  // Feature 126 / R19 — LA CONTRAPARTIDA DE LA EXCEPCION DE ARRIBA, y es mas estricta que
+  // ella. Un consumidor externo puede importar el PLANIFICADOR PURO (el horizonte y su
+  // predicado, que es lo que R19 de la 126 le OBLIGA a reusar) y NADA MAS. Importar el
+  // SERVICIO o el SCRIPT del backfill desde una ruta por request seria meter un recomputo de
+  // fechas pasadas en el camino caliente, que es exactamente lo que R2 de la 125 prohibe.
+  it("un consumidor externo solo puede importar el planificador puro, nunca el servicio", () => {
+    const MODULOS_PROHIBIDOS_FUERA = MODULOS_125.filter((m) => !m.endsWith("/backfill-rango"));
+    const infractores: string[] = [];
+    for (const rel of CONSUMIDORES_EXTERNOS) {
+      const codigo = soloCodigo(leer(rel));
+      for (const m of MODULOS_PROHIBIDOS_FUERA) {
+        if (codigo.includes(`"${m}"`) || codigo.includes(`'${m}'`)) {
+          infractores.push(`${rel} :: importa ${m}`);
+        }
+      }
+    }
+    expect(
+      infractores,
+      "un consumidor externo de la 125 solo puede reusar `backfill-rango` (planificador PURO). " +
+        "El servicio y el script son el backfill, y el backfill no vive en una ruta por request.",
+    ).toEqual([]);
+  });
+
+  it("la excepcion SOPORTA PESO: cada consumidor externo existe y de verdad importa la 125", () => {
+    // Direccion 1 — una entrada que apunta a un archivo inexistente es un comodin silencioso.
+    // Direccion 2 — y una que ya no importe la 125 sobra: se retira, no se deja «por si acaso».
+    for (const rel of CONSUMIDORES_EXTERNOS) {
+      expect(existe(rel), `${rel} esta exento del censo de la 125 pero no existe`).toBe(true);
+      const codigo = soloCodigo(leer(rel));
+      expect(
+        MODULOS_125.some((m) => codigo.includes(`"${m}"`) || codigo.includes(`'${m}'`)),
+        `${rel} ya no importa la 125: retira la entrada de CONSUMIDORES_EXTERNOS`,
+      ).toBe(true);
+    }
   });
 });
 

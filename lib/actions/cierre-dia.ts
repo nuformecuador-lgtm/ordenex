@@ -16,10 +16,12 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import {
   deshacerGestionSchema,
   listarCierresPasadosSchema,
+  verCierrePasadoSchema,
   type DeshacerGestionResult,
   type ListarCierreDiaResult,
   type ListarCierresPasadosResult,
   type SolicitarCierreResult,
+  type VerCierrePasadoResult,
 } from "@/lib/types/cierre";
 import { notificarCierreDiaPorAprobarReal } from "@/lib/notificaciones/notificadores";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -134,6 +136,26 @@ export async function solicitarCierre(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
+/**
+ * Detalle de UN cierre PASADO del propio mensajero (solo lectura). Lectura interna del mismo
+ * proyecto -> Server Action, no Route API. `unauthenticated` (sin sesion) y `validation_error`
+ * (cierreId no-uuid) se resuelven en el borde; `forbidden` (rol) y `no_encontrada` (cierre
+ * ajeno o inexistente, sin distinguirse) los devuelve el service.
+ */
+export async function verCierrePasado(
+  input: unknown,
+  deps: CierreDiaDeps = {},
+): Promise<VerCierrePasadoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = verCierrePasadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.verCierrePasado(data.cierreId, actor);
+  });
+  return isAppErrorShape(r) ? toCierreDiaActionError(r) : r;
+}
+
 // Feature 67 — traduce el AppErrorShape que puede producir un borde CON zod de este archivo:
 // solo ZodError (VALIDATION_ERROR, R10) o falta de sesion (UNAUTHORIZED, R7).
 // `forbidden`/`conflict` los devuelve el service como resultado de dominio, por eso NO
@@ -141,7 +163,8 @@ export async function solicitarCierre(
 // `toMisAsignacionesActionError` (36).
 //
 // Feature 170 (T I.1): lo comparte el listado paginado, que valida su `page`/`pageSize` con
-// el mismo zod. Por eso se llama por el modulo y ya no por una de sus acciones.
+// el mismo zod. Y el detalle de un cierre pasado (`verCierrePasado`) produce exactamente los
+// mismos dos. Por eso se llama por el modulo y ya no por una de sus acciones.
 function toCierreDiaActionError(
   shape: AppErrorShape,
 ): { status: "validation_error"; fieldErrors: Record<string, string[]> } | { status: "unauthenticated" } {

@@ -46,6 +46,13 @@ export interface DateRangeFilterProps {
   className?: string;
   /** Mes inicial del calendario. Por defecto, el mes del extremo ya elegido o el actual. */
   defaultMonth?: Date;
+  /**
+   * Rango con el que ARRANCA el control (no controlado): la pantalla que lo monta ya
+   * tiene una selección por defecto —p. ej. los últimos 7 días— y el filtro debe
+   * mostrarla, no aparecer vacío mientras la lista sí está acotada. No emite al montar:
+   * quien fija el default ya lo tiene en su estado.
+   */
+  defaultRange?: { desde: string; hasta: string };
 }
 
 /** `YYYY-MM-DD` -> fecha LOCAL a medianoche (nunca `new Date(iso)`, que la lee como UTC). */
@@ -126,12 +133,13 @@ export function DateRangeFilter({
   placeholder = "Cualquier fecha",
   className,
   defaultMonth,
+  defaultRange,
 }: DateRangeFilterProps) {
   const idBase = useId();
   const idEtiquetaRango = `${idBase}-rango-label`;
 
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [desde, setDesde] = useState(defaultRange?.desde ?? "");
+  const [hasta, setHasta] = useState(defaultRange?.hasta ?? "");
 
   // Limpieza externa ("Limpiar todo"): se ajusta el estado DURANTE el render, sin
   // efecto ni emision propia (patron "ajustar estado durante el render").

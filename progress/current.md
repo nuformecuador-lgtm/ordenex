@@ -70,6 +70,36 @@ test **fallar**, no sabes qué mide.
 > ⚠️ **Hay otra sesión viva en este repo**: acaba de mergear la **feature 125** (backfill histórico
 > de analítica). Antes de tomar una rama, mirar si ya lo está haciendo alguien.
 
+> 📌 **Escrito antes de mergear.** Después de este cierre entraron en `dev` la **127** (PR #269), la
+> **126** (PR #270) y un PR de **UX** (#271) de otra sesión — por eso «cero PRs abiertos» y la
+> distancia contra `prod` que se leen arriba ya no son la foto de ahora. Ese PR de UX **borró
+> `app/(app)/perfil/`**; comprobado que no deja enlaces vivos rotos (solo lo citan specs viejos).
+
+---
+
+## 2026-08-03 — **127 servicios financieros → PR #269, YA MERGEADO en `dev`**
+
+Feature **127 → `done`**, PR **#269** hacia `dev` (rama `feature/127-analitica-financiera-servicios`,
+worktree `ordenex-wt-127`). Reviewer **APROBADO, 0 bloqueantes, 7 menores** (1–3 cerrados en el PR;
+4–7 en `progress/review_127.md`). Suite post-merge **821 archivos / 10411 tests, 0 rojos**. Cierre
+narrado en `progress/history.md`; bitácoras `impl_127.md`, `impl_127_C/D/E.md`.
+
+**Lo único que hay que saber antes de tocar nada relacionado:** esta feature modificó
+`lib/analytics/metrics.ts`, que es **el catálogo de la 135 y fuente única de trece features**. El
+diff son **exactamente tres cosas**, cada una con autorización humana fechada en
+`progress/decision_C2_127.md` — ⟨D8⟩ `egresos.estadoProduccion`, ⟨D10⟩ los tres ledgers en
+`conciliacion_cierres.fuente.tablas`, ⟨D11⟩ el comentario que ⟨D8⟩ dejó mintiendo. **Esa autorización
+no se hereda:** la siguiente feature que necesite ese archivo necesita la suya.
+
+**Aviso a la 132:** cinco de las ocho métricas sirven `filas: []` con sólo `total` pese a declarar
+`granos: ["fecha"]` — no hay serie temporal que pintar ahí (pregunta abierta 5 del spec).
+
+**Deuda que NO es de la 127 y sigue sin dueño:** C7 (`derivarCuentaPorPagar` de la feature 44 puede
+devolver monto negativo con `signo: "cero"`) y el defecto de `whereRollup`, dirigido a la **126**.
+
+**Nota de entorno:** la base local tiene aplicada `20260728120000_orden_historial_origen_deshacer_asignacion`,
+que **no existe en `prisma/migrations`**. Residuo de otra rama sobre la misma base, ajeno a la 127.
+
 ---
 
 ## 🛠️ 2026-08-03 — el gate ya no se corre entero en cada tanda

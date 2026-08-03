@@ -42,7 +42,14 @@ export default async function AppLayout({
         {/* `pb-12` (48px): aire al final de TODAS las páginas del portal. Sin él, el
             último elemento queda pegado al borde inferior y, en el módulo del mensajero,
             debajo del botón flotante del chat. */}
-        <SidebarInset className="overflow-x-clip pb-12">
+        {/* `data-rol` + `group/app`: el rol del actor viaja por CSS hasta el `PageHeader`,
+            que se tiñe con un color claro distinto por portal (pedido humano). Se pone aquí
+            porque es el único sitio que ya resuelve al actor; el header sigue siendo
+            presentación pura, usable desde páginas server y client. */}
+        <SidebarInset
+          data-rol={actor?.rol}
+          className="group/app overflow-x-clip pb-12"
+        >
           <SidebarTrigger className={"relative md:hidden"} />
           {children}
         </SidebarInset>

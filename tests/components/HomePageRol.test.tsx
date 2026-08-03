@@ -99,10 +99,15 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
     expect(resolveActorMock).toHaveBeenCalledTimes(1);
   });
 
-  it("R3: un rol distinto de adminTienda NO renderiza el dashboard de tienda, conserva el placeholder", async () => {
-    // Feature 23: maestro/admin ahora ven el dashboard maestro (cubierto en
-    // HomePageMaestro.test.tsx), por lo que ya no conservan el placeholder aquí.
-    // Los roles que siguen viendo "Bienvenido" son mensajero y adminSatelite.
+  it("R3: un rol distinto de adminTienda NO renderiza el dashboard de tienda — ahora ni llega a pintar", async () => {
+    // Feature 23: maestro/admin ven el dashboard maestro (cubierto en
+    // HomePageMaestro.test.tsx), así que ya no conservan el placeholder aquí.
+    //
+    // Y el "Bienvenido" que mensajero y adminSatelite conservaban TAMPOCO existe ya: por
+    // pedido humano esta home los manda al PRIMER ítem de su sidebar en vez de dejarlos en
+    // una pantalla vacía (ver el porqué en `app/(app)/dashboard/page.tsx`). R3 se cumple
+    // MÁS fuerte que antes —no es que no vean el panel de tienda: es que no ven nada,
+    // porque la home redirige antes de renderizar—, y eso es justo lo que se afirma.
     const otrosRoles: RolValue[] = [
       "mensajero",
       "adminSatelite",
@@ -119,11 +124,9 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
       });
 
       const { default: Home } = await import("@/app/(app)/dashboard/page");
-      const element = await Home();
-      renderHome(element);
-
-      expect(screen.queryByRole("heading", { name: "Panel de tienda" })).toBeNull();
-      expect(screen.getByText("Bienvenido")).toBeInTheDocument();
+      // `redirect()` de Next corta el render lanzando: la home nunca devuelve un árbol,
+      // así que no hay nada donde pudiera colarse el panel de tienda.
+      await expect(Home()).rejects.toThrow(/NEXT_REDIRECT/);
 
       cleanup();
       vi.clearAllMocks();
