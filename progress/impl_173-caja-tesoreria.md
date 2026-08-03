@@ -850,3 +850,126 @@ desde la liquidación; las cinco aserciones reescritas están enumeradas con su 
 dos del **mensajero siguen intactas y ahora no son vacías**, y la mutación money-critical del
 reverso a `ingreso_ajuste` se ejecutó, salió roja **midiendo ₡15 000 de ganancia inventada** y se
 revirtió.
+
+Addendum (§C13): la tanda dejó **una guardia ajena de la 172 en rojo** —`vitest related`
+no selecciona las guardias, porque recorren el árbol y no se importan—. Cerrada afilándola:
+de «la caja no entra» a «la caja entra por UNA puerta con DOS filas, y ninguna es la del
+mensajero», con las dos mutaciones de `[P2]` ejecutadas en rojo y revertidas.
+
+## C13. Un rojo AJENO que la Tanda C provocó, y cómo se cerró
+
+**El fallo.** `tests/unit/guards/liquidacion-alcance.test.ts` —guardia de la **172**, `T H.4`—
+quedó en rojo con el commit de la Tanda C:
+
+```
+FAIL tests/unit/guards/liquidacion-alcance.test.ts
+  > feature 172 — los no objetivos, verificados sobre el código
+  > "R68 / R40 / R62: ni la caja principal ni el catálogo de métricas entran en la feature"
+AssertionError: lib/actions/liquidacion.ts nombra WalletMovimientoRepository:
+  expected '"use server";\n\nimport { getPrismaCl…' not to contain 'WalletMovimientoRepository'
+```
+
+**Por qué se escapó del gate acotado, y la lección.** Se corrió `vitest related --run` sobre los
+archivos tocados, y **ninguna guardia la selecciona el grafo de imports**: recorren el árbol de
+archivos con `readFileSync`, no se importan entre sí. `related` no puede verlas. **Regla para las
+tandas siguientes de esta feature: cuando se toque algo que una guardia pueda vigilar, correr
+además `pnpm exec vitest run guard` (~5 s).** Se añade al gate acotado de esta feature.
+
+**Qué afirmaba antes.** Un solo bloque `(a)` con **ocho** nombres prohibidos en **todos** los
+archivos de la 172 —incluidos `IWalletMovimientoRepository`, `WalletMovimientoRepository` y
+`walletMovimiento`—. Su premisa era la de R40: emitir `egreso_pago_tienda` restaría de la caja «un
+dinero que nunca entró en ella».
+
+**Por qué la frontera se movió, y solo del lado tienda.**
+
+| Lado | Premisa de la 172 | Estado tras la 173 |
+| --- | --- | --- |
+| **Tienda** | «ese dinero nunca entró en la caja» | **Falsa**: la Tanda B mete el contra-entrega en la caja al aprobar el cierre. Entregarlo TIENE que restar (R18) |
+| **Mensajero** | la caja ya cargó `egreso_pago_mensajero = P` al aprobar | **Sigue viva**, y es decisión humana explícita (`[P2] = (a)`, 2026-08-03) |
+
+**Qué afirma ahora.** La guardia no se relaja: se **afila**. Pasa de «la caja no entra» a «la caja
+entra por **una** puerta, esa puerta emite **exactamente dos** filas, y ninguna es la del
+mensajero».
+
+1. La lista de prohibidos se parte en dos:
+   - `PROHIBIDO_EN_TODOS` (sin excepción, composition root incluido): **`egreso_pago_mensajero`**,
+     `egreso_pago_tienda`, `ingreso_reverso_pago_tienda`, `ingreso_ajuste`, `reversarEgreso`,
+     `WalletEgresoService`, `wallet_movimiento`. Las tres categorías de la tienda **siguen
+     prohibidas** en la liquidación por un motivo distinto y también deliberado: **las fija el
+     puerto, no quien lo llama** (R23). Verlas escritas ahí significaría que alguien recuperó la
+     capacidad de elegir categoría.
+   - `PROHIBIDO_FUERA_DEL_ROOT` (todos menos `lib/actions/liquidacion.ts`):
+     `IWalletMovimientoRepository`, `WalletMovimientoRepository`, `walletMovimiento`. Que el
+     **servicio** no pueda nombrarlos es lo que hace estrecho al puerto.
+2. **Un `it` nuevo** (`R23 [173]: la caja entra por UNA puerta, con DOS filas, y ninguna es la del
+   mensajero`) con el alcance cerrado, que es lo que sustituye a la mitad derogada de R40:
+   - `new WalletMovimientoRepository(` aparece **exactamente una vez** en todo el composition
+     root, y siempre envuelto en `new CajaPagoTiendaFeedService(...)`;
+   - filtrando las **17** categorías del catálogo de la caja contra la fuente del puerto, las
+     emitidas son **exactamente** `["egreso_pago_tienda", "ingreso_reverso_pago_tienda"]`;
+   - el puerto **no contiene** `egreso_pago_mensajero`;
+   - el puerto expone **dos** métodos públicos y ninguno más.
+3. El bloque `(c)` de R62 —la restricción tipo↔categoría no se le añade a `wallet_movimiento`— y
+   los `it` de R66 y R67 quedan **intactos**: la Tanda F aún no ha corrido y ese no-objetivo sigue
+   vivo hoy.
+
+### Mutaciones ejecutadas y revertidas (las DOS formas de romper `[P2]`)
+
+**Mutación A — ampliar el puerto con un tercer método que escriba `egreso_pago_mensajero`:**
+
+```
+ ❯ tests/unit/guards/liquidacion-alcance.test.ts (4 tests | 1 failed)
+     × R23 [173]: la caja entra por UNA puerta, con DOS filas, y ninguna es la del mensajero
+
+AssertionError: expected [ 'egreso_pago_mensajero', …(2) ] to deeply equal
+                         [ 'egreso_pago_tienda', …(1) ]
+
+- Expected
++ Received
+
+  [
++   "egreso_pago_mensajero",
+    "egreso_pago_tienda",
+    "ingreso_reverso_pago_tienda",
+  ]
+
+ ❯ tests/unit/guards/liquidacion-alcance.test.ts:251:29
+```
+
+**Mutación B — que el SERVICIO le pase esa categoría al puerto:**
+
+```
+ ❯ tests/unit/guards/liquidacion-alcance.test.ts (4 tests | 1 failed)
+     × R68 / R40 [P2] / R62: la caja entra SOLO por la puerta de la tienda, …
+
+AssertionError: lib/services/LiquidacionService.ts nombra egreso_pago_mensajero:
+  expected 'import { Prisma } from "@prisma/clien…' not to contain 'egreso_pago_mensajero'
+```
+
+Las dos **revertidas** (`git checkout` de los dos módulos, diff vacío). La guardia sigue midiendo:
+no se vació al mover la frontera.
+
+### Gate de este arreglo
+
+**`pnpm typecheck`** → sin salida, exit 0.
+
+**`pnpm lint`** → `✖ 27 problems (0 errors, 27 warnings)`; cero coincidencias filtrando por
+`liquidacion-alcance`.
+
+**`pnpm exec vitest run guard`** (obligatorio esta vez)
+
+```
+ Test Files  47 passed (47)
+      Tests  683 passed (683)
+   Duration  3.94s
+```
+
+682 antes (con 1 rojo) → **683 verdes**: el `+1` es el `it` nuevo del alcance cerrado.
+
+**`pnpm exec vitest related --run`** sobre la guardia y los tres módulos que vigila
+
+```
+ Test Files  20 passed (20)
+      Tests  479 passed (479)
+   Duration  19.82s
+```
