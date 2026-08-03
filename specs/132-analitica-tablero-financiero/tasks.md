@@ -156,7 +156,7 @@ tres archivos si alguna respuesta cambia el diseño.
 - [x] **T5.3 — Verificar el build de producción.** `pnpm exec next build`. **Nunca `pnpm build`**
       (encadena `migrate deploy` contra una base real).
       → **R11**. Depende de: T5.2.
-      *Hecho:* salida del build pegada en `progress/impl_132.md`, terminando sin error. Si falla
+      *Hecho:* salida del build pegada en `progress/impl_132-analitica-tablero-financiero.md`, terminando sin error. Si falla
       por Prisma en el bundle, el fallo es de la frontera RSC: se corrige moviendo el `"use client"`,
       no silenciando el build.
 
@@ -164,7 +164,7 @@ tres archivos si alguna respuesta cambia el diseño.
 
 ## T6 — Cierre
 
-- [ ] **T6.1 — Mapa de trazabilidad.** Tabla `R1..R28 → test` en `progress/impl_132.md`, con rutas
+- [x] **T6.1 — Mapa de trazabilidad.** Tabla `R1..R28 → test` en `progress/impl_132-analitica-tablero-financiero.md`, con rutas
       de archivo reales.
       → **R28**. Depende de: T5.3.
       *Hecho:* los 28 números presentes, sin saltos ni repetidos, y cada ruta citada existe en el
@@ -188,7 +188,7 @@ tres archivos si alguna respuesta cambia el diseño.
 
 **Crea:** `app/(app)/analitica/_components/financiero/{rango.ts,adaptar.ts,cargar.ts,TableroFinanciero.tsx,PanelConciliacion.tsx}`,
 `tests/unit/guards/tablero-financiero.guardia.test.ts`, tests unitarios de la feature,
-`progress/impl_132.md`.
+`progress/impl_132-analitica-tablero-financiero.md`.
 
 **No toca (y no debe):** `lib/analytics/**`, `lib/services/**`, `lib/repositories/**`,
 `lib/actions/**`, `lib/auth/**`, `components/private/analytics/**`, `feature_list.json`.

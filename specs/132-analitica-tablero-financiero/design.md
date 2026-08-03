@@ -221,7 +221,7 @@ build. De ahí R10 y R11, y se cubren con **dos redes distintas**:
   eso el tablero **nunca** pasa `avisoRecorte` y en su lugar garantiza por construcción que no hay
   recorte (R20).
 - **R11 — `pnpm exec next build`**, ejecutado a mano por el implementer y con la salida pegada en
-  `progress/impl_132.md`. **Nunca `pnpm build`**: ese script encadena `migrate deploy` contra una
+  `progress/impl_132-analitica-tablero-financiero.md`. **Nunca `pnpm build`**: ese script encadena `migrate deploy` contra una
   base real.
 
 ## 5. Inventario de paneles (uno por métrica, R13)
@@ -391,7 +391,7 @@ se desvía**, con el archivo y lo que ese guard afirma:
 | `analytics-paquete-guard.test.ts:216-235` | Si un test nuevo cuyo nombre contenga `analytics-`/`Analytics` consulta nodos de recharts (`querySelector("svg")`, clases `recharts-`) | Afirmar sobre la alternativa textual y los nombres accesibles, no sobre el SVG |
 | `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts:43-63` | Si se amplía `ROLES_ACCESO_ANALITICA` hasta igualar `ROLES_ANALITICA` | R5: esta feature no la toca. Ese ensanche es de la 133 |
 | `tests/unit/analytics/financiera-alcance.guardia.test.ts:35-64` | Si alguien "abriera" una financiera a `adminTienda` para que el tablero tenga versión de tienda | D7 lo prohíbe: no hay tablero financiero para tienda |
-| `tests/unit/analytics/financiera-trazabilidad.guardia.test.ts` | No aplica: vigila `progress/impl_127.md`. Su equivalente para esta feature es R28 sobre `progress/impl_132.md` | — |
+| `tests/unit/analytics/financiera-trazabilidad.guardia.test.ts` | No aplica: vigila `progress/impl_127.md`. Su equivalente para esta feature es R28 sobre `progress/impl_132-analitica-tablero-financiero.md` | — |
 | `tests/components/AnaliticaShell.test.tsx` y `AnaliticaPage.test.tsx` | Si las aserciones existentes cuentan regiones o comparan el árbol renderizado por igualdad | Se **amplían**, no se relajan: la región financiera es nueva y sólo para dos roles |
 
 Riesgos no cubiertos por ningún guard, declarados:
@@ -414,8 +414,8 @@ Riesgos no cubiertos por ningún guard, declarados:
 | R6, R7 | `tests/components/AnaliticaShell.test.tsx` ampliado: con prop y sin prop |
 | R9, R12, R13, R23 | Test del cargador con el Server Action mockeado: 8 llamadas, respuestas mixtas |
 | R10, R25, R27 | Guard estático nuevo, `tests/unit/guards/tablero-financiero.guardia.test.ts` |
-| R11 | `pnpm exec next build` a mano; salida en `progress/impl_132.md`. **Nunca `pnpm build`** |
+| R11 | `pnpm exec next build` a mano; salida en `progress/impl_132-analitica-tablero-financiero.md`. **Nunca `pnpm build`** |
 | R14–R22, R24 | Tests unitarios puros de `adaptar.ts` + tests de render de `TableroFinanciero` |
-| R28 | Mapa `R<n> → test` en `progress/impl_132.md` |
+| R28 | Mapa `R<n> → test` en `progress/impl_132-analitica-tablero-financiero.md` |
 
 Cierre: `./init.sh` completo antes del PR (`docs/verification.md:48-56`).

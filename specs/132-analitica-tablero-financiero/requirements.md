@@ -180,7 +180,7 @@ consumir `IDS_FINANCIERAS_SERVIDAS`, y ningún archivo nuevo bajo `app/`, `compo
 DEBE contener el literal `dominio: "financiera"`.
 
 **R28.** Cada requisito `R1..R28` DEBE tener al menos un test nombrado por el comportamiento que
-verifica, y el mapa `R<n> → test` DEBE quedar escrito en `progress/impl_132.md`.
+verifica, y el mapa `R<n> → test` DEBE quedar escrito en `progress/impl_132-analitica-tablero-financiero.md`.
 
 ---
 
@@ -191,7 +191,7 @@ verifica, y el mapa `R<n> → test` DEBE quedar escrito en `progress/impl_132.md
 - Tests unitarios puros para los adaptadores DTO→props y la agrupación de cola.
 - Un guard estático para R10, R25 y R27 (censo de archivos, no de intenciones).
 - **R11 no lo cubre ningún gate automático del repo**: se verifica ejecutando
-  `pnpm exec next build` y pegando la salida en `progress/impl_132.md`. **Nunca `pnpm build`**,
+  `pnpm exec next build` y pegando la salida en `progress/impl_132-analitica-tablero-financiero.md`. **Nunca `pnpm build`**,
   que encadena `migrate deploy` contra una base real.
 - Cierre con `./init.sh` completo antes del PR.
 
