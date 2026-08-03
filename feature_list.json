@@ -2057,7 +2057,7 @@
       "name": "analitica: corregir el catalogo de metricas (metrics.ts)",
       "spec_path": "specs/175-analitica-correccion-catalogo",
       "description": "Backend. Corregir TRES divergencias entre lib/analytics/metrics.ts y lo que el rollup y los servicios sirven de verdad. (1) 'incidentes' esta marcado estadoProduccion:'declarada' (metrics.ts:220) pero SI tiene columna en analytics_daily y es el cuarto termino del denominador de las tres tasas; la 133 usa estadoProduccion para decidir paneles, asi que puede OCULTAR ese panel por creerlo sin productor. (2) el catalogo define ordenes_por_estado con los 19 estados, mientras la columna real contiene el universo B2 de la 124 ('vivas + las que cerraron ese dia'). (3) 'sin_gestionar' figura como snapshot con fuente:rollup (metrics.ts:232-247) pero analytics_daily NO tiene esa columna (db/schema.prisma:1867-1876); la 126 la deriva del embudo con semantica 'sin gestionar HOY', y el catalogo debe decirlo. Se aplaza a ficha propia porque metrics.ts es archivo de la 127 y ambas estaban in_progress a la vez: es el conflicto que la regla 1 existe para evitar.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "small",
       "zone": "backend",

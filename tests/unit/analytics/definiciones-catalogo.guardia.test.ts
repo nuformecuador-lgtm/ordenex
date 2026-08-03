@@ -13,12 +13,14 @@ import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 //   - las categorias, contra los enums de `db/schema.prisma` (no contra el cliente
 //     generado, que puede estar desactualizado o sin generar).
 //
-// EL CATALOGO VIGENTE TIENE **19** VALUES, no 20: la feature 154 lo llevo a 20 y la
-// **155 RETIRO `en_fulfillment`**. Su migracion solo borra la fila si nadie la
-// referencia, asi que en una base con historial la fila SOBREVIVE huerfana e
-// inalcanzable desde el codigo. Por eso hay un caso explicito: un KPI de embudo puede
-// verla en un `GROUP BY estatus_id` real (problema de la 123/126), pero el catalogo de
-// la 135 NO puede citarla.
+// CUANTOS VALUES TIENE EL CATALOGO VIGENTE: lo dice `ORDER_STATUS_SEED`, no esta
+// cabecera. La cifra se ha movido dos veces (la 154 lo llevo a 20, la **155 RETIRO
+// `en_fulfillment`** dejandolo en 19, y la **157 anadio `recolectando`**), asi que aqui
+// no se escribe a mano: los casos la derivan del seed. La retirada de `en_fulfillment`
+// si deja rastro: su migracion solo borra la fila si nadie la referencia, asi que en una
+// base con historial la fila SOBREVIVE huerfana e inalcanzable desde el codigo. Por eso
+// hay un caso explicito: un KPI de embudo puede verla en un `GROUP BY estatus_id` real
+// (problema de la 123/126), pero el catalogo de la 135 NO puede citarla.
 //
 // R34: la zona que se atribuye es la CONGELADA en la orden (D9). El censo de la zona
 // del usuario en `lib/analytics/**` cierra la puerta a la otra interpretacion.
@@ -57,7 +59,7 @@ function archivosDeAnalytics(): string[] {
 }
 
 describe("R8 · los estados citados existen en el catalogo vigente", () => {
-  it("el catalogo de order_status tiene diecinueve values", () => {
+  it("el catalogo de order_status tiene veinte values desde la 157 (recolectando)", () => {
     expect(ORDER_STATUS_SEED).toHaveLength(20); // +1: feature 157 (recolectando)
   });
 
@@ -84,7 +86,7 @@ describe("R8 · los estados citados existen en el catalogo vigente", () => {
     }
   });
 
-  it("el embudo por estado enumera los diecinueve values vigentes", () => {
+  it("el embudo por estado enumera los veinte values vigentes", () => {
     const embudo = METRICAS.find((m) => m.id === "ordenes_por_estado");
     expect(embudo).toBeDefined();
     expect([...(embudo!.definicion.estados ?? [])]).toEqual([...ORDER_STATUS_SEED]);
