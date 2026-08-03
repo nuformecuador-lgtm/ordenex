@@ -8,34 +8,39 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 2026-08-03 — **177 arranca: API de consulta por guía/remisión + PDF bajo demanda** (fase 1, spec)
+## 2026-08-03 — **177 MERGEADA (PR #274)** · **arranca la 178: purga de los PDF de cargas**
 
-Feature **177** `pending` → spec en curso. Rama `feature/177-api-consulta-orden-pdf` desde `origin/dev`.
-Zona **backend**, complexity **medium**, `depends_on: 136` (**done**). Zona backend en **0 `in_progress`**
-al arrancar ⇒ sin validación de conflicto de archivos que hacer.
+**Feature 177 → `done`.** PR **#274** mergeado a `dev` (merge commit `893cf007`). Reviewer **APROBADO,
+0 bloqueantes**, con los **45/45** requisitos verificados abriendo el test citado uno a uno. Sus dos
+menores de código se cerraron en el propio PR. Gate: **856 archivos / 10.739 tests**, sin rojos reales
+(los dos rojos móviles —`LoginForm` y `ControlDescargaTransversal`— verdes en aislado y ajenos al diff).
+Baseline al arrancar: 845 / 10.605. Detalle en `impl_177.md`, `review_177.md` e `history.md`.
 
-**Baseline medido al arrancar** (no heredado de otra bitácora): `./init.sh` **verde**, `== init OK ==`,
-**845 archivos / 10.605 tests, 0 rojos**, sobre `ux` con `dev` recién mergeada.
+**Lo que la 177 deja vivo y hay que saber antes de tocar etiquetas:** el testigo de «el PDF existe» es
+la columna **`download_storage_path`**, NO `download_url`. La 136 guarda ahí una URL **ya firmada** que
+caduca; por eso se añadió la columna. Las filas heredadas se tratan como «sin PDF» y se regeneran.
 
-**Bookkeeping del arranque:** las fichas **177** y **178** nacieron en `ux` con los ids 175/176 y
-**chocaron con la 175 de `dev`** (analítica: catálogo de métricas), que conserva el id por tener ya rama
-y spec_path. Renumeradas conservando contenido, y **portadas a esta rama** porque `dev` todavía no las
-tiene (viven en `ux`, sin pushear).
+### 🔵 EN CURSO — feature 178, purga semanal de los PDF de cargas
 
-**Lo que la puerta F1.4 va a tener que decidir, y conviene saberlo antes de leer el spec:** la **136
-persiste en `download_url` una URL FIRMADA, no el path** (`EtiquetasDescargaService.ts:48`,
-`EtiquetasLotePdfService.ts:78`). Una URL firmada caduca, así que la decisión del humano —«reusa, la URL
-vence en 5 min»— **no se puede cumplir tal como está persistido hoy**: reusar solo puede significar
-reusar el OBJETO en storage y re-firmarlo. Persistir el `storage_path` puede arrastrar **migración** y
-obliga a decidir qué pasa con las URLs que la 136 ya dejó guardadas.
+Rama `feature/178-purga-pdf-cargas` desde `origin/dev`. Zona **backend**, complexity **medium**.
+Zona backend en **0 `in_progress`** al arrancar (la 131 es `frontend`, no compite).
 
-**Decisiones del humano ya tomadas** (no re-abrirlas en el spec): ruta NUEVA en vez de ampliar
-`{numGuia}`; la generación del PDF sale del query param y pasa a ser el segmento `/generate`; TTL 5 min;
-`{id}` resuelve contra `num_guia` **y** `num_remision`.
+**Decisiones del humano ya tomadas** (no reabrir en el spec): alcance = **consolidado + individuales**
+de la carga; retención configurable por **variable de entorno**, default **7 días**, mínimo 1, sin tope.
 
-**178 queda registrada pero NO arranca** (purga semanal de PDF; su nota apunta a esta feature).
+**⚠️ Obligación heredada de la 177:** la purga debe poner a NULL **también `download_storage_path`**
+(en `orden` y en `carga`), no solo `download_url`. Si no, `/generate` verá la referencia viva, se
+saltará la generación y **firmará un objeto ya borrado**: el integrador recibiría un 200 con una URL
+que da 404.
 
----
+**Puntos que el spec tendrá que decidir:** qué columna manda como fecha de corte (`carga.created_at`
+vs `carga.fecha_carga`, que hoy pueden divergir); que las órdenes con `carga_id` NULL quedan **fuera**
+de la purga por definición (su PDF no caducaría nunca); qué hacer si el borrado en storage falla a
+mitad; y si va sobre la cola de la 90 o como cron propio en `vercel.json`.
+
+**Deuda ajena que sigue sin dueño:** la migración fantasma `20260728120000_...`, registrada en la base
+local y **ausente del repo**, que impide correr `pnpm db:migrate` en esta máquina (se aplica con
+`prisma migrate deploy`, el mismo comando del build).
 
 ## 2026-08-03 — **127 servicios financieros → PR #269, esperando merge**
 ## 🏁 CIERRE DE JORNADA 2026-08-03 — **EMPIEZA A LEER POR AQUÍ**

@@ -2676,7 +2676,7 @@ reviewer, todas muertas. Reviewer: **aprobado con reservas, cero bloqueantes**.
   con `-F` o heredoc citado**, nunca `-m` con prosa que cita comandos. Ningún gate lo detecta: `git
   commit` «funciona» y el estrago queda incrustado en el mensaje.
 
-## Feature 177 — api: consulta por guía o remisión y PDF bajo demanda · PR pendiente (2026-08-03)
+## Feature 177 — api: consulta por guía o remisión y PDF bajo demanda · PR #274 (2026-08-03)
 
 Tres endpoints nuevos en el canal de API key: `GET /orden/{id}` (resuelve contra `num_guia` y
 `num_remision`), `POST /orden/{id}/generate` y `POST /carga/{cargaId}/generate`. Los dos `/generate`
