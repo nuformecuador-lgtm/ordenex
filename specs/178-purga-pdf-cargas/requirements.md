@@ -175,9 +175,11 @@ vida del bucket** (configuración de Supabase Storage, fuera de este repo) o un 
   vuelve a borrar objetos ni a escribir columnas.
 - **R21** — El sistema DEBE acotar el trabajo de una corrida a un **tope configurable de cargas**
   por ejecución.
-- **R22** — MIENTRAS queden cargas elegibles por encima de ese tope, el sistema DEBE terminar la
-  corrida **igualmente en éxito** y dejar constancia de que quedó trabajo pendiente, que retomará
-  la corrida siguiente.
+- **R22** — MIENTRAS queden cargas elegibles sin purgar al acabar la corrida, el sistema DEBE
+  terminar **igualmente en éxito** y dejar constancia de que quedó trabajo pendiente, que retomará
+  la corrida siguiente. La comprobación es «¿queda alguna candidata?», **no** «¿queda alguna más
+  allá del tope?»: lo ya purgado sale del criterio de candidatura, así que descontar el tope
+  ocultaría un lote entero de trabajo vivo (bloqueante del review, ronda 1).
 - **R23** — El sistema DEBE responder al disparador distinguiendo **corrida correcta** (`200` con
   el resumen) de **fallo** (código de error), para que el fallo sea observable sin una cola de
   jobs que lo registre.

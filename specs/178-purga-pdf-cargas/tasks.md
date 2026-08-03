@@ -66,8 +66,9 @@ Cada task trae su criterio de "hecho" y los `R<n>` que cubre. Al final, el mapa 
   el `where` usa **`createdAt`** (nunca `fechaCarga`) con comparación **inclusiva `<=`**; exige
   referencia viva (propia o vía `EXISTS` de órdenes); ordena **ASC**; respeta `limite`; y **no**
   filtra por `deleted_at` al recoger las órdenes del lote. [R5, R7, R8, R9]
-- [x] **T7 [P]** — `quedanCargasPurgables(corte, limite)`. **Hecho:** test unitario: `true`
-  cuando hay al menos una candidata más allá del tope, `false` cuando no. [R22]
+- [x] **T7 [P]** — `existeAlgunaCandidata(corte)`, SIN `skip`. **Hecho:** test unitario: `true`
+  cuando queda al menos una candidata, `false` cuando no; y el argumento a `findFirst` **no
+  lleva clave `skip`** (fijado como contrato tras el bloqueante del review). [R22]
 - [x] **T8** — `limpiarReferencias(cargaId)`: una transacción, `UPDATE orden` por `carga_id`
   (todas, incluidas las borradas) y `UPDATE carga` por `id`, poniendo a NULL **las cuatro**
   columnas. **Hecho:** test unitario que afirma que el `data` de ambos updates contiene
@@ -177,7 +178,7 @@ Cada task trae su criterio de "hecho" y los `R<n>` que cubre. Al final, el mapa 
 | R19 | recuperación en la corrida siguiente, sin reintentos | T12 | `remove` que lanza: no limpia, propaga, sin reintento |
 | R20 | idempotencia | T12, T16 | orden de operaciones; 2.ª corrida sin efectos |
 | R21 | tope configurable por corrida | T4, T17 | default/override; se procesan exactamente `tope` |
-| R22 | pendiente declarado, no encolado | T7, T17 | `quedanCargasPurgables`; `quedaPendiente: true` sin error |
+| R22 | pendiente declarado, no encolado | T7, T17 | `existeAlgunaCandidata` sin `skip`; caso AL LÍMITE 3 candidatas/tope 2 → `true` en `purga-pdf-queda-pendiente-r22.test.ts`; `quedaPendiente: true` sin error |
 | R23 | éxito vs fallo distinguibles | T18, T21 | `200` con resumen / respuesta de error sin PII |
 | R24 | conteos sin PII | T15, T18 | resumen solo numérico |
 | R25 | 401 sin efectos sin `CRON_SECRET` | T19 | tres casos de secreto, sin construir el service |

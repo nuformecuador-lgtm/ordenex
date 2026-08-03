@@ -28,10 +28,14 @@
 -- SIN `CONCURRENTLY`: Prisma corre cada migracion dentro de una transaccion y
 -- `CREATE INDEX CONCURRENTLY` no puede correr ahi (mismo motivo que las features 126 y 167).
 --
+-- `IF NOT EXISTS` en AMBAS sentencias para que la migracion sea idempotente: no crea nada mas,
+-- asi que volver a aplicarla sobre una base que ya tiene los indices no puede fallar (mismo
+-- criterio que `20260803090000_gestion_orden_idx_created_at`, y su espejo `IF EXISTS` en el DOWN).
+--
 -- Sin tablas nuevas => SIN RLS nueva. `carga` y `orden` conservan la que ya tenian.
-CREATE INDEX "carga_purga_pendiente_idx" ON "carga" ("created_at")
+CREATE INDEX IF NOT EXISTS "carga_purga_pendiente_idx" ON "carga" ("created_at")
   WHERE "download_storage_path" IS NOT NULL OR "download_url" IS NOT NULL;
 
-CREATE INDEX "orden_purga_pendiente_idx" ON "orden" ("carga_id")
+CREATE INDEX IF NOT EXISTS "orden_purga_pendiente_idx" ON "orden" ("carga_id")
   WHERE "carga_id" IS NOT NULL
     AND ("download_storage_path" IS NOT NULL OR "download_url" IS NOT NULL);

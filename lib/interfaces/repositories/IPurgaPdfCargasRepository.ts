@@ -32,11 +32,16 @@ export interface IPurgaPdfCargasRepository {
    */
   findCargasPurgables(corte: Date, limite: number): Promise<CargaPurgable[]>;
   /**
-   * R22: ¿queda al menos una candidata MAS ALLA de las `limite` que devolvio
-   * `findCargasPurgables` con el mismo corte? Permite que la corrida termine en exito
-   * declarando que quedo trabajo pendiente para la corrida del dia siguiente.
+   * R22: ¿EXISTE todavia alguna candidata con este corte? Se consulta DESPUES del bucle de purga,
+   * asi que la pregunta correcta es de mera EXISTENCIA, no "¿hay algo mas alla del tope?".
+   *
+   * NO lleva `limite` ni `skip` A PROPOSITO: saltarse las `limite` ya procesadas seria INCORRECTO
+   * porque esas cargas YA NO CASAN el predicado — `limpiarReferencias` acaba de poner sus cuatro
+   * columnas testigo a NULL, asi que salieron del `where` de candidatas (R8). Un `skip: limite`
+   * descontaria un SEGUNDO lote de candidatas todavia VIVAS y devolveria `false` con backlog
+   * pendiente para todo P con `limite < P <= 2*limite`. No reintroducir el `skip` "optimizando".
    */
-  quedanCargasPurgables(corte: Date, limite: number): Promise<boolean>;
+  existeAlgunaCandidata(corte: Date): Promise<boolean>;
   /**
    * R13/R14/R15/R9: en UNA transaccion, deja a NULL `download_url` y `download_storage_path` en
    * TODAS las ordenes de la carga (incluidas las borradas: sin `deleted_at` en el `where`, R9) y

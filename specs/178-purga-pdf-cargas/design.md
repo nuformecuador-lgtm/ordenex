@@ -177,8 +177,12 @@ export interface CargaPurgable {
 export interface IPurgaPdfCargasRepository {
   /** R5/R7/R8/R9: hasta `limite` cargas con `created_at <= corte` y referencia viva. */
   findCargasPurgables(corte: Date, limite: number): Promise<CargaPurgable[]>;
-  /** R22: ¿queda al menos una candidata más allá de las `limite` devueltas? */
-  quedanCargasPurgables(corte: Date, limite: number): Promise<boolean>;
+  /** R22: ¿queda AL MENOS UNA candidata? Sin `skip`, y el porqué importa: se llama DESPUÉS
+   *  del bucle, y `limpiarReferencias` deja a NULL justo las columnas que hacen candidata a
+   *  una carga, así que las ya purgadas NO casan el `where`. Un `skip: limite` se comería un
+   *  segundo lote de candidatas VIVAS y declararía `false` habiendo trabajo. Ese era el
+   *  bloqueante del review (ronda 1). */
+  existeAlgunaCandidata(corte: Date): Promise<boolean>;
   /** R13/R14/R15: NULL en las 4 columnas de la carga y de SUS órdenes, en UNA transacción. */
   limpiarReferencias(cargaId: string): Promise<{ ordenesActualizadas: number }>;
 }
@@ -248,7 +252,7 @@ Flujo:
      4a. paths = [cargaPath, ...ordenPaths] sin nulos
      4b. si paths.length > 0 → storage.remove(paths)      # R10/R11/R12
      4c. repo.limpiarReferencias(cargaId)                 # R13/R14/R15
-5. quedaPendiente = repo.quedanCargasPurgables(corte, tope)  # R22
+5. quedaPendiente = repo.existeAlgunaCandidata(corte)        # R22 (sin skip: ver §interfaz)
 6. devolver conteos agregados                             # R24
 ```
 

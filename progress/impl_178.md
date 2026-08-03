@@ -948,3 +948,288 @@ sesion: el checkout es compartido). El delta de rojos contra el baseline **medid
 pendiente de ese gate. Lo que si esta medido aqui: 65/65 tests nuevos verdes, typecheck limpio, lint
 sin errores, y las regresiones por grafo de imports listadas arriba.
 
+---
+
+# Ronda 2 — correccion del RECHAZO del reviewer (`progress/review_178.md`)
+
+Veredicto de entrada: **RECHAZADO**, 1 bloqueante (R22) + menores 1 y 2. Se corrigen los tres.
+Todo lo que el reviewer acepto expresamente queda **intacto**: `maxDuration = 60`, R17 indirecto en
+el service, `objetosBorrados` = rutas solicitadas, `parseInt` laxo heredado, y los huerfanos de la
+136/141 y las ordenes sin lote como fuera de alcance.
+
+## BLOQUEANTE R22 — CERRADO
+
+### El diagnostico, verificado de nuevo antes de tocar nada
+
+`whereCandidatas(corte)` exige **referencia viva**: `downloadStoragePath` o `downloadUrl` no nulos en
+la carga, **o** alguna de sus ordenes con una de las dos poblada (`ordenes.some`).
+`limpiarReferencias` deja las **cuatro** columnas testigo a NULL, en la carga y en todas sus ordenes,
+en una transaccion. Por tanto, en el instante en que el service pregunta —**despues** del bucle—
+ninguna de las `limite` cargas ya purgadas casa las tres ramas del `OR`: **salieron del predicado**.
+El `skip: limite` descontaba entonces un SEGUNDO lote de candidatas todavia vivas, y para todo
+backlog `tope < P <= 2*tope` respondia `false` con `P - tope` cargas sin purgar (default 200: mentia
+en cualquier backlog de 201 a 400). El analisis del reviewer se confirma punto por punto; la pregunta
+correcta post-purga es de **mera existencia**.
+
+### Cambio aplicado
+
+`quedanCargasPurgables(corte, limite)` -> **`existeAlgunaCandidata(corte: Date): Promise<boolean>`**.
+Se elimina el parametro `limite` entero (no se deja sin usar: seria un footgun y lint lo marcaria).
+
+```ts
+async existeAlgunaCandidata(corte: Date): Promise<boolean> {
+  const siguiente = await this.prisma.carga.findFirst({
+    where: whereCandidatas(corte),
+    take: 1,
+    select: { id: true },
+  });
+  return siguiente !== null;
+}
+```
+
+Tambien se retira el `orderBy`: para una pregunta de existencia da igual cual sea la fila, y ordenar
+solo da trabajo al planificador. El coste sigue sin depender del backlog (`take: 1` para en la
+primera fila), que era la razon original de no usar `count`.
+
+El **por que no hay `skip`** queda escrito como comentario de bloque en el repositorio y en el JSDoc
+de `IPurgaPdfCargasRepository`, con la consecuencia numerica explicita, para que nadie lo
+reintroduzca "optimizando". `lib/services/PurgaPdfCargasService.ts:85` pasa a
+`await this.repo.existeAlgunaCandidata(corte)`.
+
+Cero referencias al nombre viejo en codigo o tests (`grep -rn "quedanCargasPurgables"` sobre
+`*.ts`/`*.tsx` -> **sin coincidencias**; solo sobrevive en `specs/` y en la parte historica de estas
+bitacoras).
+
+### Tests que fijaban la semantica equivocada — rehechos
+
+- **Repositorio** (`tests/unit/repositories/purga-pdf-cargas-repository.test.ts`): el
+  `expect(arg.skip).toBe(200)` **deja de ser el contrato**. Ahora se exige que el argumento **no
+  lleve la clave `skip`**, mas `take: 1` y un `where` **identico al de la seleccion** (comparado
+  contra el argumento real de `findMany`, no contra un literal hardcodeado).
+- **Service** (`tests/unit/services/purga-pdf-cargas-service.test.ts`): el doble del repo
+  implementaba `candidatas(corte).length > limite`, que **reproducia fielmente la semantica mala** y
+  por construccion no podia detectarla. Ahora implementa la pregunta correcta
+  (`candidatas(corte).length > 0`) sobre el fixture **ya mutado**. El caso de R21/R22 pasa de
+  **5 candidatas con tope 2** (pasaba *por margen*, 3 > 2) a **3 con tope 2**, que es el caso que
+  discrimina: `cargasPurgadas === 2` y `quedaPendiente === true`. La asercion de "el tope se propaga
+  a la segunda consulta" desaparece (ya no hay segundo parametro) y se sustituye por "a
+  `existeAlgunaCandidata` solo le llega el corte"; la de que el tope **si** se propaga a
+  `findCargasPurgables` se conserva.
+
+### Test NUEVO: `tests/integration/purga-pdf-queda-pendiente-r22.test.ts`
+
+Un doble de repo a nivel de service puede reproducir *cualquier* semantica, asi que la garantia real
+se monta con **`PurgaPdfCargasService` REAL + `PurgaPdfCargasRepository` REAL** sobre un **doble de
+Prisma con estado mutable** (mismo patron que `tests/integration/purga-pdf-regenera-177.test.ts`).
+El doble aplica el `where` REAL, incluidas las tres ramas del `OR`, y **lanza** ante cualquier filtro
+que no sepa interpretar, para no volverse laxo si el repo cambia. 4 casos:
+
+| Caso | Esperado | Para que sirve |
+|---|---|---|
+| **3 candidatas / tope 2** | `cargasPurgadas 2`, `quedaPendiente true` | el caso AL LIMITE que el bug fallaba |
+| 4 candidatas / tope 2 | `2` purgadas, `true`, y quedan vivas exactamente `c1`/`c2` (ASC: se purgo lo mas viejo) | segundo punto de la franja `tope < P <= 2*tope` |
+| 2 candidatas / tope 2 | `quedaPendiente false` | **control**: prueba que no es un "devuelve `true` siempre" |
+| dos corridas seguidas | `true` y luego `false` | R20 + el backlog se termina de verdad |
+
+La candidata que **sobrevive al tope** esta viva **solo por su orden** (las dos columnas de la carga
+a NULL, `download_storage_path` poblado en una orden suya): asi el caso discriminante recorre la rama
+`ordenes.some`, que es la que mas facil se rompe. Hay ademas una carga joven de control para que el
+`false` no pueda salir por casualidad.
+
+### MUTACION EJECUTADA — el test nuevo se pone ROJO con el `skip` reintroducido
+
+Reintroducido temporalmente `existeAlgunaCandidata(corte, limite = 0)` con `skip: limite` y el
+service pasando `tope` (lo minimo para reproducir el bug original). Salida **literal**:
+
+```
+ ❯ tests/integration/purga-pdf-queda-pendiente-r22.test.ts (4 tests | 3 failed) 13ms
+     × R22 (AL LIMITE): 3 candidatas con tope 2 -> purga 2 y declara quedaPendiente true 8ms
+     × R22: 4 candidatas con tope 2 -> purga 2 y quedaPendiente true con 2 vivas 1ms
+     × R20/R22: la corrida siguiente termina el backlog y ya declara quedaPendiente false 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/purga-pdf-queda-pendiente-r22.test.ts > Feature 178 R22 — quedaPendiente con service + repositorio REALES sobre estado mutable > R22 (AL LIMITE): 3 candidatas con tope 2 -> purga 2 y declara quedaPendiente true
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/purga-pdf-queda-pendiente-r22.test.ts:279:36
+    277|
+    278|     expect(resumen.cargasPurgadas).toBe(2);
+    279|     expect(resumen.quedaPendiente).toBe(true);
+       |                                    ^
+    280|     // Y el pendiente es REAL: queda exactamente una candidata viva, l…
+    281|     // que ademas esta viva SOLO por su orden (rama `ordenes.some` del…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/integration/purga-pdf-queda-pendiente-r22.test.ts > Feature 178 R22 — quedaPendiente con service + repositorio REALES sobre estado mutable > R22: 4 candidatas con tope 2 -> purga 2 y quedaPendiente true con 2 vivas
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/purga-pdf-queda-pendiente-r22.test.ts:306:36
+    304|
+    305|     expect(resumen.cargasPurgadas).toBe(2);
+    306|     expect(resumen.quedaPendiente).toBe(true);
+       |                                    ^
+    307|     // ASC: se purgaron las dos mas viejas (c4, c3); quedan c2 y c1.
+    308|     expect(vivasCandidatas(estado).sort()).toEqual(["c1", "c2"]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/integration/purga-pdf-queda-pendiente-r22.test.ts > Feature 178 R22 — quedaPendiente con service + repositorio REALES sobre estado mutable > R20/R22: la corrida siguiente termina el backlog y ya declara quedaPendiente false
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/purga-pdf-queda-pendiente-r22.test.ts:315:36
+    313|
+    314|     const primera = await service.ejecutar(AHORA);
+    315|     expect(primera.quedaPendiente).toBe(true);
+       |                                    ^
+    316|
+    317|     const segunda = await service.ejecutar(AHORA);
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+```
+
+**El caso de control (2 candidatas / tope 2 -> `false`) sigue pasando con el bug puesto**, que es
+exactamente su funcion: demuestra que los otros tres rojos vienen de la semantica y no de un test que
+exija `true` a ciegas. El doble de Prisma honra `skip` **a proposito**, para que la mutacion falle
+por asercion y no por un error del doble.
+
+Restaurado el arreglo (verificado leyendo los ficheros, **sin git**) -> verde de nuevo.
+
+## menor 1 — migracion re-aplicable: CORREGIDO
+
+`db/migrations/20260803140000_purga_pdf_indices/` se alinea con el precedente
+`20260803090000_gestion_orden_idx_created_at`: **`CREATE INDEX IF NOT EXISTS`** en las dos sentencias
+del UP y **`DROP INDEX IF EXISTS`** en las dos del DOWN. No cambia nada mas: mismos nombres de
+indice, mismas tablas y columnas, mismas clausulas `WHERE` parciales, mismo orden inverso del DOWN.
+Importa mas de lo normal porque el round-trip contra Postgres **no se pudo medir** (drift ajeno,
+menor 4 del review, sigue pendiente del gate).
+
+`tests/integration/db/purga-pdf-indices-migration.test.ts`: las regex de forma se adaptan
+(`^CREATE INDEX IF NOT EXISTS "` / `^DROP INDEX IF EXISTS "`, y las capturas de nombre para el
+chequeo de orden inverso admiten el prefijo opcional). **Ninguna asercion se debilita** y se anaden
+**dos tests nuevos** que fijan la idempotencia como contrato:
+
+```ts
+it("los DOS CREATE llevan IF NOT EXISTS: re-aplicar la migracion no puede fallar", ...)
+it("los DOS DROP llevan IF EXISTS: el rollback se puede correr dos veces sin fallar", ...)
+```
+
+## menor 2 — guard de `crons` relajado: CORREGIDO
+
+El test que fijaba el **orden completo** del array `crons` de `vercel.json` por `toEqual` pasa a
+comprobar que **las cinco entradas previas siguen presentes, cada una con su `path` y su `schedule`
+exactos**, sin fijar posicion ni orden — mas que la entrada nueva no este duplicada. Sigue siendo
+discriminante (borrar una, duplicarla o cambiarle el `schedule` -> rojo) pero es inmune a una
+reordenacion legitima futura de un fichero que comparten 6 features (leccion "guard branch-scoped
+caduca al mergear"). Los otros tres tests de R18 (existencia, forma diaria de 5 campos, no colision
+de franja) quedan **intactos**: el reviewer los acepto. `vercel.json` **no se toco**.
+
+## Archivos tocados en la ronda 2
+
+Modificados:
+
+- `lib/interfaces/repositories/IPurgaPdfCargasRepository.ts`
+- `lib/repositories/PurgaPdfCargasRepository.ts`
+- `lib/services/PurgaPdfCargasService.ts`
+- `db/migrations/20260803140000_purga_pdf_indices/migration.sql`
+- `db/migrations/20260803140000_purga_pdf_indices/down.sql`
+- `tests/unit/repositories/purga-pdf-cargas-repository.test.ts`
+- `tests/unit/services/purga-pdf-cargas-service.test.ts`
+- `tests/integration/db/purga-pdf-indices-migration.test.ts`
+- `tests/integration/actions/purga-pdf-cargas-route.test.ts`
+
+Creado:
+
+- `tests/integration/purga-pdf-queda-pendiente-r22.test.ts`
+
+Sin cambios: `vercel.json`, `.env.example`, `app/api/cron/purga-pdf-cargas/route.ts`,
+`lib/config/purga-pdf.ts`, `lib/interfaces/services/IPurgaPdfCargasService.ts`, y **nada** de la
+feature 177. No se toco `feature_list.json`, `progress/current.md`, `progress/review_178.md` ni
+`specs/`.
+
+## Mapa `R22` -> test (actualizado)
+
+| R | Test |
+|---|---|
+| **R22** | `tests/integration/purga-pdf-queda-pendiente-r22.test.ts` — **4 casos con service + repositorio REALES** sobre doble de Prisma con estado mutable; el caso `3 candidatas / tope 2 -> quedaPendiente true` **se pone rojo con el `skip` reintroducido** (mutacion arriba). Apoyo: `tests/unit/repositories/purga-pdf-cargas-repository.test.ts` (`existeAlgunaCandidata` **sin** `skip`, `take: 1`, `where` compartido con la seleccion) y `tests/unit/services/purga-pdf-cargas-service.test.ts` (caso 3/2, y solo el corte viaja al metodo). |
+| R26 | `tests/integration/db/purga-pdf-indices-migration.test.ts` — **14** casos (los 12 previos + los 2 de idempotencia `IF NOT EXISTS` / `IF EXISTS`). Sigue **PARCIAL**: la mitad empirica (`db:migrate` / `db:rollback` contra Postgres) continua pendiente del gate por el drift ajeno. |
+| R18 | Los cuatro tests de `tests/integration/actions/purga-pdf-cargas-route.test.ts`; el cuarto ya no fija posiciones, solo presencia + `schedule` de las cinco previas. |
+
+## Salida de tests — ronda 2 (medida por el implementer, tras integrar AMBOS cambios)
+
+`pnpm typecheck`:
+
+```
+> ordenex@0.1.0 typecheck C:\Users\Cristian\Documents\trabajo\arc\ordenex
+> tsc --noEmit
+```
+
+(sin salida = **0 errores**)
+
+`pnpm lint`:
+
+```
+✖ 41 problems (0 errors, 41 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores**; los 41 warnings son el baseline preexistente y ninguno cae en archivos de la 178.
+
+`pnpm exec vitest related --run` sobre los seis modulos de produccion de la feature mas los dos
+tests que no cuelgan de un import (`purga-pdf-indices-migration`, `purga-pdf-queda-pendiente-r22`):
+
+```
+ RUN  v4.1.10 C:/Users/Cristian/Documents/trabajo/arc/ordenex
+
+ Test Files  7 passed (7)
+      Tests  71 passed (71)
+   Start at  18:15:13
+   Duration  1.46s (transform 217ms, setup 267ms, import 1.66s, tests 142ms, environment 1ms)
+```
+
+**71/71 verdes** (los 65 de la ronda 1, +4 del fichero nuevo de R22, +2 de idempotencia de la
+migracion). La suite completa y `./init.sh` **los sigue corriendo el leader**: el checkout es
+compartido.
+
+## Desalineaciones que quedan en `specs/` (NO tocadas: las aplica el leader)
+
+1. `specs/178-purga-pdf-cargas/design.md:181` — la interfaz declara
+   `quedanCargasPurgables(corte: Date, limite: number): Promise<boolean>`. Debe pasar a
+   `existeAlgunaCandidata(corte: Date): Promise<boolean>`.
+2. `specs/178-purga-pdf-cargas/design.md:251` — el paso 5 del pseudocodigo dice
+   `quedaPendiente = repo.quedanCargasPurgables(corte, tope)`. Debe ser
+   `quedaPendiente = repo.existeAlgunaCandidata(corte)`.
+3. `specs/178-purga-pdf-cargas/design.md` — donde §4.2 describa la semantica como "¿queda alguna
+   candidata **mas alla del tope**?" y justifique el `findFirst` + `skip: limite`, hay que
+   reformularlo: **la premisa del `skip` es falsa** porque las cargas ya purgadas pierden la
+   referencia viva y salen del `where`. La formulacion correcta, al ejecutarse DESPUES del bucle,
+   es "¿queda alguna candidata?". Conviene dejar escrito el por que, que es justo lo que induce a
+   reintroducir el `skip`.
+4. `specs/178-purga-pdf-cargas/requirements.md` — si el texto de R22 habla de "mas alla del tope",
+   mismo ajuste de redaccion.
+5. `specs/178-purga-pdf-cargas/tasks.md:69` (T7) y `:180` (fila R22 de la tabla de trazabilidad) —
+   nombran el metodo viejo; actualizar el nombre y anadir el test nuevo
+   `tests/integration/purga-pdf-queda-pendiente-r22.test.ts` a la columna de evidencia de R22.
+6. Menor, opcional: la fila R26 de `tasks.md` puede mencionar los dos tests de idempotencia nuevos.
+

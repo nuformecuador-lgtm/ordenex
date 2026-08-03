@@ -81,8 +81,10 @@ export class PurgaPdfCargasService implements IPurgaPdfCargasService {
     }
 
     // R22: se declara el pendiente en vez de encolar una continuacion; lo retoma la corrida del
-    // dia siguiente (orden `created_at` ASC: siempre lo mas viejo primero).
-    const quedaPendiente = await this.repo.quedanCargasPurgables(corte, tope);
+    // dia siguiente (orden `created_at` ASC: siempre lo mas viejo primero). La pregunta va DESPUES
+    // del bucle y es de mera EXISTENCIA: las cargas ya purgadas perdieron su referencia viva, asi
+    // que salieron del predicado de candidatas y NO hay que descontarlas con un `skip`/`tope`.
+    const quedaPendiente = await this.repo.existeAlgunaCandidata(corte);
 
     // R24: resumen SOLO numerico, sin PII ni rutas ni ids.
     return { cargasPurgadas, ordenesAfectadas, objetosBorrados, quedaPendiente };

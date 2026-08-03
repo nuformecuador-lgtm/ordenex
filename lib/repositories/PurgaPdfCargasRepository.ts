@@ -28,7 +28,7 @@ const REFERENCIA_VIVA: Prisma.CargaWhereInput["OR"] = [
 ];
 
 /**
- * R5/R7/R8 — `where` compartido por la seleccion y por la comprobacion de pendiente, para que no
+ * R5/R7/R8 — `where` compartido por la seleccion y por la comprobacion de existencia, para que no
  * puedan divergir. El corte va sobre `createdAt` (columna inmutable, decision (a)) con `lte`
  * (corte INCLUSIVO, decision (f)); NUNCA sobre `fechaCarga`, que el usuario podria fijar a mano.
  */
@@ -89,15 +89,23 @@ export class PurgaPdfCargasRepository implements IPurgaPdfCargasRepository {
   }
 
   /**
-   * R22: mismo `where` que la seleccion, saltando las `limite` ya devueltas y pidiendo UNA. Se
-   * usa `findFirst` con `skip` en vez de un `count` total porque el coste no depende del tamaño
-   * del backlog: en cuanto encuentra la fila `limite + 1` para.
+   * R22: mismo `where` que la seleccion, pidiendo UNA fila. Se llama DESPUES del bucle de purga,
+   * asi que la pregunta es de mera EXISTENCIA: ¿queda alguna candidata viva? Por eso NO hay
+   * `orderBy` (cual sea la fila da igual; ordenar solo costaria trabajo al planificador) y sobre
+   * todo NO hay `skip`.
+   *
+   * POR QUE NO HAY `skip: limite` (no lo reintroduzcas "optimizando"): las `limite` cargas que
+   * acaba de procesar el service YA NO CASAN este `where`. `limpiarReferencias` dejo a NULL las
+   * cuatro columnas testigo, asi que perdieron la referencia viva (R8) y salieron del predicado.
+   * Un `skip: limite` descontaria por tanto un SEGUNDO lote de candidatas TODAVIA VIVAS: con un
+   * backlog P tal que `limite < P <= 2*limite` devolveria `false` habiendo `P - limite` cargas sin
+   * purgar, y el pendiente nunca se declararia.
+   *
+   * El coste sigue sin depender del tamaño del backlog: `take: 1` para en la primera fila.
    */
-  async quedanCargasPurgables(corte: Date, limite: number): Promise<boolean> {
+  async existeAlgunaCandidata(corte: Date): Promise<boolean> {
     const siguiente = await this.prisma.carga.findFirst({
       where: whereCandidatas(corte),
-      orderBy: { createdAt: "asc" }, // mismo orden que la seleccion: "mas alla del tope"
-      skip: limite,
       take: 1,
       select: { id: true },
     });

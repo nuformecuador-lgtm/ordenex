@@ -131,28 +131,35 @@ describe("PurgaPdfCargasRepository.findCargasPurgables (T6)", () => {
   });
 });
 
-describe("PurgaPdfCargasRepository.quedanCargasPurgables (T7)", () => {
-  it("R22: devuelve true cuando existe una candidata mas alla del tope de la corrida", async () => {
+describe("PurgaPdfCargasRepository.existeAlgunaCandidata (T7)", () => {
+  it("R22: devuelve true cuando queda alguna candidata viva y consulta SIN skip", async () => {
     const prisma = buildPrisma();
     prisma.carga.findFirst.mockResolvedValue({ id: "c-201" });
 
-    await expect(repoWith(prisma).quedanCargasPurgables(CORTE, 200)).resolves.toBe(true);
+    await expect(repoWith(prisma).existeAlgunaCandidata(CORTE)).resolves.toBe(true);
 
     const arg = argDe(prisma.carga.findFirst);
-    expect(arg.skip).toBe(200); // salta exactamente las ya devueltas
+    // DISCRIMINANTE (el bug original): la pregunta va DESPUES de purgar, y las ya purgadas
+    // salieron del `where` al quedarse sin referencia viva. Un `skip` descontaria candidatas
+    // TODAVIA VIVAS y devolveria false con backlog pendiente.
+    expect(Object.keys(arg)).not.toContain("skip");
+    expect(arg.skip).toBeUndefined();
     expect(arg.take).toBe(1);
-    expect(arg.orderBy).toEqual({ createdAt: "asc" }); // mismo orden que la seleccion
     // Mismo predicado que `findCargasPurgables`: corte inclusivo sobre createdAt + referencia viva.
     const where = arg.where as Arg;
     expect(Object.keys(where.createdAt as Arg)).toEqual(["lte"]);
+    expect((where.createdAt as { lte: Date }).lte).toEqual(CORTE);
     expect((where.OR as Arg[])).toHaveLength(3);
+    // El `where` es LITERALMENTE el mismo objeto de predicado que el de la seleccion.
+    await repoWith(prisma).findCargasPurgables(CORTE, 200);
+    expect(where).toEqual(argDe(prisma.carga.findMany).where);
   });
 
-  it("R22: devuelve false cuando no queda ninguna candidata mas alla del tope", async () => {
+  it("R22: devuelve false cuando no queda ninguna candidata", async () => {
     const prisma = buildPrisma();
     prisma.carga.findFirst.mockResolvedValue(null);
 
-    await expect(repoWith(prisma).quedanCargasPurgables(CORTE, 200)).resolves.toBe(false);
+    await expect(repoWith(prisma).existeAlgunaCandidata(CORTE)).resolves.toBe(false);
   });
 });
 

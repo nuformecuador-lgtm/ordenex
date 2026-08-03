@@ -68,9 +68,10 @@ function fakeRepo(fixture: CargaFixture[], log: string[] = []): IPurgaPdfCargasR
             ordenPaths: [...fila.ordenPaths],
           })),
     ),
-    quedanCargasPurgables: vi.fn(
-      async (corte: Date, limite: number): Promise<boolean> => candidatas(corte).length > limite,
-    ),
+    // R22: EXISTENCIA sobre el estado ACTUAL del fixture (el service la llama DESPUES del bucle,
+    // cuando `limpiarReferencias` ya anulo las referencias de las purgadas). Nada de
+    // `length > limite`: eso descontaria candidatas todavia vivas.
+    existeAlgunaCandidata: vi.fn(async (corte: Date): Promise<boolean> => candidatas(corte).length > 0),
     limpiarReferencias: vi.fn(async (cargaId: string) => {
       log.push(`limpiar:${cargaId}`);
       const fila = fixture.find((f) => f.cargaId === cargaId);
@@ -175,7 +176,7 @@ describe("PurgaPdfCargasService", () => {
       findCargasPurgables: vi.fn(async () => [
         { cargaId: "c-sin-rutas", cargaPath: null, ordenPaths: [] },
       ]),
-      quedanCargasPurgables: vi.fn(async () => false),
+      existeAlgunaCandidata: vi.fn(async () => false),
       limpiarReferencias: vi.fn(async () => ({ ordenesActualizadas: 0 })),
     };
     const storage = fakeStorage();
@@ -302,7 +303,7 @@ describe("PurgaPdfCargasService", () => {
     expect(ordenesSinLote[0]?.path).toBe(RUTA_SIN_LOTE);
     expect(Object.keys(repo)).toEqual([
       "findCargasPurgables",
-      "quedanCargasPurgables",
+      "existeAlgunaCandidata",
       "limpiarReferencias",
     ]);
   });
@@ -375,9 +376,12 @@ describe("PurgaPdfCargasService", () => {
     expect(vi.mocked(repo.limpiarReferencias)).not.toHaveBeenCalled();
   });
 
-  it("R21/R22: con mas candidatas que el tope se procesan exactamente el tope y la corrida termina con quedaPendiente true", async () => {
+  // AL LIMITE a proposito: 3 candidatas con tope 2 deja EXACTAMENTE UNA sin purgar. Con mas
+  // margen (p. ej. 5 y tope 2) el caso pasaria incluso con la semantica erronea de descontar el
+  // tope una segunda vez.
+  it("R21/R22: con una candidata mas que el tope se procesan exactamente el tope y la corrida termina con quedaPendiente true", async () => {
     const TOPE = 2;
-    const fixture = [1, 2, 3, 4, 5].map((n) =>
+    const fixture = [1, 2, 3].map((n) =>
       carga({
         cargaId: `c${n}`,
         createdAt: new Date(NOW.getTime() - (30 + n) * DIA_MS),
@@ -397,8 +401,17 @@ describe("PurgaPdfCargasService", () => {
     expect(resultado.quedaPendiente).toBe(true);
     expect(vi.mocked(storage.remove)).toHaveBeenCalledTimes(TOPE);
     expect(vi.mocked(repo.limpiarReferencias)).toHaveBeenCalledTimes(TOPE);
-    // El tope viaja tal cual al repo, en las dos consultas.
+    // El tope viaja tal cual al repo en la SELECCION (R21)...
     expect(vi.mocked(repo.findCargasPurgables).mock.calls[0]?.[1]).toBe(TOPE);
-    expect(vi.mocked(repo.quedanCargasPurgables).mock.calls[0]?.[1]).toBe(TOPE);
+    // ...y NO a la comprobacion de pendiente: esa es de mera existencia, sin tope ni skip (R22).
+    expect(vi.mocked(repo.existeAlgunaCandidata).mock.calls[0]).toEqual([
+      new Date(NOW.getTime() - 7 * DIA_MS),
+    ]);
+    // ASC: se purgaron las dos mas viejas (c3, c2). La menos vieja sigue VIVA para manana.
+    expect(
+      vi.mocked(repo.limpiarReferencias).mock.calls.map(([cargaId]) => cargaId),
+    ).toEqual(["c3", "c2"]);
+    expect(fixture[0]?.cargaPath).toBe("u1/c1.pdf");
+    expect(fixture[0]?.ordenPaths).toEqual(["u1/c1-o1.pdf"]);
   });
 });

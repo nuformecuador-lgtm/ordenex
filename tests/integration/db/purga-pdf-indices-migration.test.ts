@@ -14,7 +14,11 @@ import path from "path";
 //   2. el UP no contiene NINGUN DDL sobre datos: ni `ALTER TABLE`, ni `UPDATE`, ni `DELETE`, ni
 //      `DROP`, ni `CREATE TABLE`;
 //   3. el DOWN suelta esos dos indices y SOLO esos, en ORDEN INVERSO al UP;
-//   4. la carpeta contiene los dos archivos y su timestamp alcanza al `db:rollback`.
+//   4. AMBAS sentencias del UP son idempotentes (`IF NOT EXISTS`) y AMBAS del DOWN tambien
+//      (`IF EXISTS`), igual que el precedente `20260803090000_gestion_orden_idx_created_at`: el
+//      round-trip contra Postgres no se pudo medir localmente, asi que una re-aplicacion o un
+//      doble rollback no pueden reventar;
+//   5. la carpeta contiene los dos archivos y su timestamp alcanza al `db:rollback`.
 //
 // Las aserciones de AUSENCIA miran el SQL EJECUTABLE, no los comentarios: el encabezado de esta
 // migracion explica en prosa por que NO usa `CONCURRENTLY` y por que un `migrate dev` futuro
@@ -76,7 +80,9 @@ describe("UP — solo los dos indices PARCIALES de la purga (R26)", () => {
   it(`crea ${IDX_CARGA} sobre carga("created_at") — la columna del corte, no fecha_carga`, () => {
     const stmt = upStmts.find((s) => s.includes(IDX_CARGA));
     expect(stmt, `no se encontro el CREATE INDEX de ${IDX_CARGA}`).toBeDefined();
-    expect(stmt!).toMatch(new RegExp(`^CREATE INDEX "${IDX_CARGA}" ON "carga" ?\\("created_at"\\)`));
+    expect(stmt!).toMatch(
+      new RegExp(`^CREATE INDEX IF NOT EXISTS "${IDX_CARGA}" ON "carga" ?\\("created_at"\\)`),
+    );
     // La ventana de retencion se mide sobre `created_at` (decision (a)); `fecha_carga` es otra
     // columna y ya tiene su propio indice: indexarla aqui no serviria al corte de R5.
     expect(stmt!).not.toMatch(/fecha_carga/);
@@ -85,7 +91,17 @@ describe("UP — solo los dos indices PARCIALES de la purga (R26)", () => {
   it(`crea ${IDX_ORDEN} sobre orden("carga_id")`, () => {
     const stmt = upStmts.find((s) => s.includes(IDX_ORDEN));
     expect(stmt, `no se encontro el CREATE INDEX de ${IDX_ORDEN}`).toBeDefined();
-    expect(stmt!).toMatch(new RegExp(`^CREATE INDEX "${IDX_ORDEN}" ON "orden" ?\\("carga_id"\\)`));
+    expect(stmt!).toMatch(
+      new RegExp(`^CREATE INDEX IF NOT EXISTS "${IDX_ORDEN}" ON "orden" ?\\("carga_id"\\)`),
+    );
+  });
+
+  it("los DOS CREATE llevan IF NOT EXISTS: re-aplicar la migracion no puede fallar", () => {
+    // El round-trip real contra Postgres no se pudo medir en local, asi que la idempotencia se
+    // fija aqui. Sin `IF NOT EXISTS`, un segundo `migrate deploy` sobre una base que ya tiene los
+    // indices aborta la transaccion entera.
+    expect(upStmts).toHaveLength(2);
+    for (const stmt of upStmts) expect(stmt).toMatch(/^CREATE INDEX IF NOT EXISTS "/);
   });
 
   it("los DOS son PARCIALES: cada uno lleva su WHERE de 'referencia viva'", () => {
@@ -134,13 +150,20 @@ describe("DOWN — suelta esos dos indices, en ORDEN INVERSO", () => {
   });
 
   it("primero el de orden y despues el de carga: el inverso exacto del UP", () => {
-    expect(downStmts[0]).toMatch(new RegExp(`^DROP INDEX "${IDX_ORDEN}"`));
-    expect(downStmts[1]).toMatch(new RegExp(`^DROP INDEX "${IDX_CARGA}"`));
+    expect(downStmts[0]).toMatch(new RegExp(`^DROP INDEX IF EXISTS "${IDX_ORDEN}"`));
+    expect(downStmts[1]).toMatch(new RegExp(`^DROP INDEX IF EXISTS "${IDX_CARGA}"`));
 
     // Y que ese orden sea REALMENTE el inverso del UP, no una coincidencia de literales.
-    const upNombres = upStmts.map((s) => s.match(/CREATE INDEX "([^"]+)"/)![1]);
-    const downNombres = downStmts.map((s) => s.match(/DROP INDEX "([^"]+)"/)![1]);
+    const upNombres = upStmts.map((s) => s.match(/CREATE INDEX (?:IF NOT EXISTS )?"([^"]+)"/)![1]);
+    const downNombres = downStmts.map((s) => s.match(/DROP INDEX (?:IF EXISTS )?"([^"]+)"/)![1]);
     expect(downNombres).toEqual([...upNombres].reverse());
+  });
+
+  it("los DOS DROP llevan IF EXISTS: el rollback se puede correr dos veces sin fallar", () => {
+    // Espejo del `IF NOT EXISTS` del UP. Sin esto, `pnpm db:rollback` repetido —o corrido sobre
+    // una base donde la migracion nunca llego a aplicarse— revienta.
+    expect(downStmts).toHaveLength(2);
+    for (const stmt of downStmts) expect(stmt).toMatch(/^DROP INDEX IF EXISTS "/);
   });
 
   it("hay un DROP INDEX por cada CREATE INDEX del UP, y ningun otro DDL", () => {

@@ -315,15 +315,27 @@ describe("R18 — el cron esta registrado en vercel.json a las 03:00 America/Cos
     );
   });
 
-  it("R18: la entrada nueva no altera ni reordena las cinco existentes", () => {
+  it("R18: la entrada nueva no borra ni altera el schedule de las cinco existentes", () => {
+    // A PROPOSITO sin fijar posiciones ni orden: `vercel.json` lo comparten seis features y
+    // cualquier reordenacion legitima futura pondria roja una asercion posicional sin que nada
+    // se hubiera roto. Lo que R18 necesita es que las cinco entradas previas SIGAN AHI y con su
+    // MISMA franja: si alguien borrara una o le cambiara el `schedule`, esto se pone rojo.
+    const PREVIAS: { path: string; schedule: string }[] = [
+      { path: "/api/cron/corte-diario", schedule: "0 6 * * *" },
+      { path: "/api/cron/generar-gastos-fijos", schedule: "0 6 * * *" },
+      { path: "/api/cron/procesar-jobs", schedule: "* * * * *" },
+      { path: "/api/cron/procesar-devueltas-sla", schedule: "0 * * * *" },
+      { path: "/api/cron/sync-plantillas-whatsapp", schedule: "0 3 * * *" },
+    ];
+
     const crons = leerCrons();
-    expect(crons.map((c) => c.path)).toEqual([
-      "/api/cron/corte-diario",
-      "/api/cron/generar-gastos-fijos",
-      "/api/cron/procesar-jobs",
-      "/api/cron/procesar-devueltas-sla",
-      "/api/cron/sync-plantillas-whatsapp",
-      RUTA,
-    ]);
+    for (const previa of PREVIAS) {
+      const encontradas = crons.filter((c) => c.path === previa.path);
+      expect(encontradas, `desaparecio el cron ${previa.path} de vercel.json`).toHaveLength(1);
+      expect(encontradas[0].schedule, `cambio el schedule de ${previa.path}`).toBe(previa.schedule);
+    }
+
+    // Y la entrada nueva convive con ellas sin duplicarse.
+    expect(crons.filter((c) => c.path === RUTA)).toHaveLength(1);
   });
 });
