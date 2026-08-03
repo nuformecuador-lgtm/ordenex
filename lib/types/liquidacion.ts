@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { MetodoPagoValue } from "@prisma/client";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 import { montoPositivoSchema } from "@/lib/types/wallet";
-import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { esFechaCalendarioValida, fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // Feature 172 (design §3.2) — contratos I/O de la LIQUIDACION en la frontera Server Action ->
 // cliente, y los schemas zod del BORDE. Money-critical: ningun `number` cruza la frontera
@@ -99,11 +99,14 @@ const montoLiquidacionSchema = montoPositivoSchema.refine((v) => {
  * cazarlo: al contrario de lo que se suele suponer, V8 **no** devuelve `Invalid Date` con el
  * dia desbordado —`new Date("2026-02-31T00:00:00.000Z")` es el 3 de marzo—, solo con el mes
  * (`2026-13-01`). Comprobado en este repo; hay un test que lo fija.
+ *
+ * El round-trip ya no se reescribe aqui: vive en `esFechaCalendarioValida` (`fecha-cr`), que es
+ * la MISMA pieza que usa la reprogramacion (`esFechaFutura`). Lo unico propio de esta funcion es
+ * la direccion de la comparacion —el pago no puede ser FUTURO, la reprogramacion no puede ser
+ * PASADA—, que es justo lo que no se debe compartir.
  */
 export function esFechaPagoValida(value: string, now: Date = new Date()): boolean {
-  const dia = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(dia.getTime())) return false;
-  if (dia.toISOString().slice(0, 10) !== value) return false;
+  if (!esFechaCalendarioValida(value)) return false;
   return value <= fechaCalendarioCR(now);
 }
 
