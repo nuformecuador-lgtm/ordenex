@@ -8,27 +8,43 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## ✅ 2026-08-02 (tarde) — **172 IMPLEMENTADA: las 9 tandas** · **EMPIEZA A LEER POR AQUÍ**
+## 🚀 2026-08-03 — **172 EN PRODUCCIÓN** · **EMPIEZA A LEER POR AQUÍ**
 
-**Ya existe forma de registrar un pago.** Era el agujero de fondo del sistema: hasta hoy los saldos
-solo crecían, ni a mensajeros ni a tiendas se les podía decir «ya pagué». Rama
-`feature/172-liquidacion`, PR #259, **11 commits, sin push**. La bitácora completa está en
-**`progress/impl_172-liquidacion.md`**; aquí solo va lo que decide qué hacer a continuación.
+**Ya existe forma de registrar un pago, y está desplegada.** Era el agujero de fondo del sistema:
+hasta ayer los saldos solo crecían y a nadie se le podía decir «ya pagué». **172 → `done`.**
+PR **#262** a `dev` y release **#263** a `prod`; `dev` y `prod` a **0 commits de diferencia**.
 
-**Review APROBADO en ronda 2** (`progress/review_172-liquidacion.md`). La ronda 1 rechazó con dos
-bloqueantes y **los dos eran huecos de verificación, no de código**: se cerraron sin tocar una
-línea de `lib/`, `app/`, `components/` ni `db/`. Trazabilidad final: **85 de 85 con test en el
-repo**, R61 ⚠ parcial. Entrada escrita en `progress/history.md`.
+Bitácora en `progress/impl_172-liquidacion.md`, review en `progress/review_172-liquidacion.md`,
+entrada de cierre en `progress/history.md`. **Review aprobado en ronda 2**; la ronda 1 rechazó con
+dos bloqueantes y **los dos eran huecos de verificación, no de código** —se cerraron sin tocar una
+línea de `lib/`, `app/`, `components/` ni `db/`—. Trazabilidad **85 de 85**.
 
-### 🚦 LO PRIMERO AL RETOMAR: **medir PREVIEW. Y hasta entonces, NO PUSHEAR.**
+### ✅ Producción verificada EN LA BASE, no deducida del PR
 
-Es la mitad abierta de **R61** y lo único que falta. **No es una formalidad: pushear ES aplicar la
-migración en preview**, porque el build migra antes de compilar y `MIGRATE_ON_PREVIEW` está activo
-en ese entorno. Los dos `ADD CONSTRAINT … CHECK` **validan las filas existentes al aplicarse**, así
-que si esa base tuviera una fila incoherente el build saldría rojo y dejaría una fila fallida en su
-`_prisma_migrations`, **bloqueando los despliegues de preview siguientes** hasta repararla a mano.
-Producción está medida y limpia, así que **producción no corre ese riesgo**. La consulta exacta
-está en `impl_172-liquidacion.md`.
+El release llevó **126 commits / 31 PRs** y aplicó **tres** migraciones. Comprobado después:
+
+| Comprobación | Resultado |
+| --- | --- |
+| Las 3 migraciones en `_prisma_migrations` | ✅ `finished_at` puesto, `rolled_back_at` **nulo**, 1 paso cada una |
+| Los 5 CHECK nuevos | ✅ **`convalidated = true`** — recorrieron las filas reales y **ninguna las incumplió** |
+| RLS en `liquidacion_pago`, `liquidacion_anulacion`, `analytics_daily` | ✅ activa y **sin políticas** (patrón solo-service-role) |
+| `UNIQUE` de `clave_idempotencia` y de `pago_id` | ✅ los dos existen |
+| Despliegue de producción | ✅ **READY** |
+| Errores de runtime tras desplegar | ✅ **ninguno** |
+
+> **R61 se cerró por la vía empírica, no por medición previa.** No se pudo medir la base de preview
+> —el MCP está fijado al `project_ref` de producción—, así que el hueco se cerró al **aplicarse**:
+> el build del PR #262 corrió la migración contra preview y el `ADD CONSTRAINT` validó sus filas sin
+> rechazar ninguna. El humano aceptó el riesgo a sabiendas, con el dato de que **preview y prod son
+> bases de prueba con datos desechables** hasta que la app esté terminada.
+
+### 👀 LO PRIMERO AL RETOMAR: **mirarlo en pantalla**
+
+Nada de esto se ha visto funcionando con una persona delante — la verificación es por suite, que es
+el trato aceptado desde la 170. Y la 172 **cambia lo que ve el maestro**: la wallet de tiendas gana
+el botón de pagar y la lista de comprobantes, la aprobación de un cierre ahora **ofrece pagar**, y
+`/mi-wallet` pasó de «Créditos / Débitos» a **tres importes**. Si algo se ve raro en producción,
+empezaría por ahí.
 
 ### 🧯 Lo que el review destapó y conviene no olvidar
 
