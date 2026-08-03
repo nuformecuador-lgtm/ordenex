@@ -57,3 +57,26 @@ la autorización fechada a la vista es indistinguible de un retoque de paso.
   declarados y que quitar uno pone rojo a B.3. Borrarlo sin más deja el hueco sin vigilancia.
 - El guardia sigue teniendo que morder: añadir al repositorio una tabla que la métrica no declara
   tiene que ponerse rojo igual que antes.
+
+---
+
+# Decisión ⟨D11⟩ — el comentario obsoleto de `egresos` (C6)
+
+**Fecha: 2026-08-02 · Autor: humano · Estado: CERRADA.**
+
+Al aplicar ⟨D8⟩, el comentario que está justo encima de `egresos.estadoProduccion` quedó
+obsoleto y **contradice a la línea de abajo**: sigue diciendo «`declarada`: la ficha de la 127
+compromete ingresos, cuentas por pagar y conciliación de cierres; los egresos NO aparecen ahí».
+El agente de la tanda D **no lo tocó, y obró bien**: la autorización acotaba el diff.
+
+**Decisión: se actualiza el comentario.** Un comentario que le miente al próximo que lea el
+catálogo de trece features es peor que un diff de tres líneas en vez de dos. El nuevo texto tiene
+que decir que la 127 **sí** produce egresos y citar ⟨D8⟩ (humano, 2026-08-02).
+
+Con esto, la autorización sobre `lib/analytics/metrics.ts` cubre **tres cosas** y ninguna más:
+⟨D8⟩ el `estadoProduccion` de `egresos`, ⟨D10⟩ las `fuente.tablas` de `conciliacion_cierres`, y
+⟨D11⟩ el comentario que ⟨D8⟩ dejó mintiendo. Sigue sin cubrir ninguna otra entrada, etiqueta,
+grano ni alcance. **Los tres viajan al cuerpo del PR.**
+
+*Aplicación: la hace el leader al terminar la TANDA E/F, para no cambiar un archivo ajeno
+mientras otro agente corre la suite sobre él.*
