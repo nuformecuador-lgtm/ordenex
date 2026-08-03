@@ -1,3 +1,8 @@
+import type {
+  PagoMensajeroMovimientoTipo,
+  WalletMovimientoTipo,
+  WalletTiendaMovimientoTipo,
+} from "@prisma/client";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { ClaveTotalCierre, FilaConciliacion } from "@/lib/types/analitica-financiera";
 
@@ -49,15 +54,32 @@ export type LedgerConciliable =
   | "pago_mensajero_movimiento";
 
 /**
- * Σ `monto` registrada en un ledger con origen en UN cierre concreto.
+ * El tipo de movimiento tal como lo declara CADA libro. Los tres son binarios y los tres dicen
+ * lo mismo con otras palabras: una direccion. No se normalizan a "mas/menos" aqui porque eso ya
+ * seria derivar (R30), y porque el vocabulario del esquema es el que hace auditable la cifra.
+ */
+export type TipoMovimientoLedger =
+  | WalletMovimientoTipo
+  | WalletTiendaMovimientoTipo
+  | PagoMensajeroMovimientoTipo;
+
+/**
+ * Σ `monto` registrada en un ledger con origen en UN cierre concreto, desglosada por `tipo`.
  *
- * Llega desglosada por libro y por cierre, sin fundir: contra que libro se concilia el
- * `total_general` snapshot es una decision del servicio, no del repositorio, y desglosada se
- * puede tomar; fundida, ya no.
+ * Llega desglosada por libro, por cierre y por direccion, sin fundir: contra que libro —y
+ * contra que lado de ese libro— se concilia el `total_general` snapshot es una decision del
+ * SERVICIO, no del repositorio. Desglosada se puede tomar; fundida, ya no.
+ *
+ * El desglose por `tipo` NO estaba en el contrato de la TANDA A y se añadio en C.4 (supuesto
+ * S15 de `progress/impl_127_D.md`): sin el, R23 es insatisfacible. Un cierre aprobado deja en
+ * `wallet_tienda_movimiento` el CREDITO del COD recaudado *y* los debitos de flete, comision e
+ * IVA; la Σ de todo eso no puede compararse con `total_general`, que solo mide el COD. Con el
+ * `tipo` a la vista, el servicio compara lo comparable.
  */
 export interface TotalLedgerPorOrigenCierre {
   readonly ledger: LedgerConciliable;
   readonly cierreId: string;
+  readonly tipo: TipoMovimientoLedger;
   readonly suma: string;
 }
 
@@ -84,7 +106,7 @@ export interface IConciliacionCierresAnaliticaRepository {
    * resolvio con la misma `ConsultaAnalitica`. Se pasa aparte porque es el resultado de la
    * consulta anterior, no una dimension de la peticion. Con la lista vacia devuelve `[]` y no
    * consulta (R10 en espiritu: sin ids que buscar no hay nada que preguntarle a la base).
-   * Orden estable por `(ledger, cierreId)` (R28).
+   * Orden estable por `(ledger, cierreId, tipo)` (R28).
    */
   sumarLedgerPorOrigenDeCierre(
     consulta: ConsultaAnalitica,

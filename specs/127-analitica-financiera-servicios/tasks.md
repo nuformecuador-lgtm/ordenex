@@ -81,12 +81,11 @@ implementación tiende a describirla en vez de juzgarla.
 > `declarada` porque el productor no existe, y en cuanto exista `AnaliticaFinancieraService.ts`
 > exige que no quede ninguna `declarada`.
 >
-> ⚠ **ANTES DE C.4: contradicción R4 ↔ R23, sin resolver.** `conciliacion_cierres` declara
-> `fuente.tablas = ["cierre_dia", "cierre_bodega"]`, pero R23 obliga a cruzar con los **ledgers**
-> por `origen_tipo = cierre_dia`. Las dos cosas no caben a la vez y el guardia B.3 **no tiene
-> exención**: se pondrá rojo al escribir C.4. Salidas: ampliar el catálogo de la 135 (decisión
-> humana fechada, como ⟨D8⟩) o acotar R23. Aflojar el guardia está descartado.
-> Detalle en `progress/impl_127.md §Contradicciones` (C2).
+> ✔ **CONTRADICCIÓN R4 ↔ R23 CERRADA — ⟨D10⟩, humano, 2026-08-02**
+> (`progress/decision_C2_127.md`): se amplió `conciliacion_cierres.fuente.tablas` con los tres
+> ledgers. B.3 queda verde **por construcción**, sin exención, y el test que fijaba la
+> contradicción se **dio vuelta** en vez de borrarse: ahora afirma que los tres ledgers están
+> declarados y que quitar uno pone rojo al guardia (mutación M35).
 
 ---
 
@@ -110,21 +109,19 @@ Depende de: A, B. Las cuatro van `[P]` entre sí: archivos disjuntos.
   tienda) con `fecha_movimiento < hasta`, **sin cota inferior**.
   *Hecho cuando:* el test con un devengo anterior al rango lo ve incluido en el saldo, y añadir
   `>= desde` lo pone rojo. → **R21**
-- [ ] **C.4 [P]** `ConciliacionCierresAnaliticaRepository`: `groupBy(estado)` sobre ambos cierres, con
+- [x] **C.4 [P]** `ConciliacionCierresAnaliticaRepository`: `groupBy(estado)` sobre ambos cierres, con
   **doble coordenada temporal** (aprobados por `resuelto_at`; resto por `solicitado_at`), + agregación
   de ledger por `origen_tipo = cierre_dia` y los `origen_id` aprobados del rango.
   *Hecho cuando:* el test con un ajuste manual dentro del rango **no** lo cuenta como descuadre; el
   test con un `cierre_bodega` que consolida tres `cierre_dia` no duplica el dinero; el test del cierre
   `solicitado` recibe `fechadoPor: "solicitado_at"`. → **R22, R23, R25, R39**
-- [~] **C.5** Verificación transversal: los cuatro repositorios no contienen derivación (`.sub(`,
+- [x] **C.5** Verificación transversal: los cuatro repositorios no contienen derivación (`.sub(`,
   `.add(` fuera de una agregación de Prisma) ni `try/catch` que devuelva ceros.
   *Hecho cuando:* revisión + test que fuerza el fallo de la base y observa que el error **se propaga**.
   → **R30, R32**
-  > **PARCIAL (2026-08-02).** Hecha para C.1/C.2/C.3 en
-  > `tests/unit/analytics/financiera-repositorios.guardia.test.ts`: censo de derivación/silencio +
-  > los **cinco** métodos comprobando que el error de base sube tal cual. El repositorio de C.4
-  > entra solo al censo cuando exista; hay que añadir sus métodos a la lista de propagación, que
-  > afirma `toHaveLength(5)` justamente para obligar a mirarla.
+  > **COMPLETA (2026-08-02, sesión D).** El censo exige ahora los **cuatro** repositorios (ya no
+  > "al menos tres") y la lista de propagación pasó de `toHaveLength(5)` a `toHaveLength(8)` con
+  > los tres métodos de la conciliación.
 
 > **Estado tras la sesión del 2026-08-02 (C.1, C.2, C.3 y media C.5).** Bitácora en
 > `progress/impl_127_C.md`: 8 archivos nuevos, 14 mutaciones con su rojo y su reversión byte a
@@ -143,38 +140,41 @@ Depende de: A, B. Las cuatro van `[P]` entre sí: archivos disjuntos.
 
 Depende de: C.
 
-- [ ] **D.1** `AnaliticaFinancieraService.consultar(consulta)`: valida dominio, despacha por
+- [x] **D.1** `AnaliticaFinancieraService.consultar(consulta)`: valida dominio, despacha por
   `metrica.id`, sin `default` permisivo.
   *Hecho cuando:* pedir `entregas` devuelve error explícito y el repositorio espiado **no** recibe
   ninguna llamada. → **R5, R10**
-- [ ] **D.2** Derivación money-safe **reutilizando** `derivarSaldoTienda`, `derivarCuentaPorPagar`,
+- [x] **D.2** Derivación money-safe **reutilizando** `derivarSaldoTienda`, `derivarCuentaPorPagar`,
   `derivarBalance`, que son las que producen el `neto` con signo.
   *Hecho cuando:* el test compara el resultado del servicio contra esas funciones para un caso de
   saldo **negativo** e incluye el `signo`. → **R20, R27, R37**
-- [ ] **D.3** Cobertura de las ocho métricas: ninguna de más, ninguna de menos.
+- [x] **D.3** Cobertura de las ocho métricas: ninguna de más, ninguna de menos.
   *Hecho cuando:* el test compara los ids servidos contra `listarMetricas({ dominio: "financiera" })`
   y falla por exceso y por defecto. → **R6**
-- [ ] **D.4** `esAcumulado` exacto (true solo en las dos cuentas por pagar), `sumableCon` y `moneda`
+- [x] **D.4** `esAcumulado` exacto (true solo en las dos cuentas por pagar), `sumableCon` y `moneda`
   (de `lib/config/moneda.ts`) poblados.
   *Hecho cuando:* el test recorre las ocho métricas y compara el mapa exacto de `esAcumulado`; el test
   de moneda no encuentra ningún símbolo literal en los archivos de la feature. → **R29, R43**
-- [ ] **D.5** `egresos` **producida**: Σ de las ocho categorías `egreso_*`.
+- [x] **D.5** `egresos` **producida**: Σ de las ocho categorías `egreso_*`.
   *Hecho cuando:* el test con una `egreso_indemnizacion` en el rango la ve sumada, y no existe ningún
   camino que devuelva `no_producida`. → **R18**
-- [ ] **D.6** ⟨D8⟩ **Cambio del catálogo ajeno, con permiso explícito:** en
+- [x] **D.6** ⟨D8⟩ **Cambio del catálogo ajeno, con permiso explícito:** en
   `lib/analytics/metrics.ts`, `egresos.estadoProduccion` pasa de `"declarada"` a `"producida"`.
   *Autorización:* humano, **2026-08-02**, D8 → (b). Es el catálogo de la 135, fuente única de trece
   features; **no se toca ninguna otra entrada**, ni etiqueta, ni grano, ni alcance.
   *Hecho cuando:* el diff sobre ese archivo es **exactamente una línea**, B.5 queda verde y la suite
   de la 135 (`tests/unit/analytics/metrics*.test.ts`) sigue en 0 rojos. → **R41**
-- [ ] **D.7** Conciliación: `cuadra` + `diferencia` + `cierresDescuadrados`, y **emisión por
+  > **HECHO (2026-08-02, sesión D).** Una línea, y solo esa. El diff completo de `metrics.ts`
+  > —las **dos** entradas que ⟨D8⟩ y ⟨D10⟩ autorizan y nada más— está pegado en
+  > `progress/impl_127_D.md`. Revertirlo pone rojo a B.5 (mutación M48).
+- [x] **D.7** Conciliación: `cuadra` + `diferencia` + `cierresDescuadrados`, y **emisión por
   `ErrorLogger`** al superar el umbral de `lib/config/analitica-financiera.ts`, **sin lanzar**.
   *Hecho cuando:* el test con datos descuadrados recibe el DTO **y** una llamada al logger espiado; el
   test bajo umbral recibe el DTO **sin** llamada. → **R23, R24, R40**
-- [ ] **D.8** Determinismo: `orderBy` estable en todo listado agregado; sin `Date.now()` interno.
+- [x] **D.8** Determinismo: `orderBy` estable en todo listado agregado; sin `Date.now()` interno.
   *Hecho cuando:* dos ejecuciones con la misma entrada producen la misma secuencia de filas, con más
   de una fila. → **R28**
-- [ ] **D.9** Inyección por interfaz: el servicio se construye con repositorios mock.
+- [x] **D.9** Inyección por interfaz: el servicio se construye con repositorios mock.
   *Hecho cuando:* toda la suite unitaria del servicio corre **sin** `DATABASE_URL`. → **R31**
 
 ---
@@ -243,3 +243,15 @@ T0 → A → B(5×[P]) → C(4×[P]) → D → E → F
 `B` antes que `C` es deliberado: los guardias tienen que existir mientras la implementación se
 escribe, no después, para que el primer intento de leer `orden` o `analytics_daily` se ponga rojo en
 el momento en que se teclea y no en la revisión.
+
+---
+
+> **Estado tras la sesión del 2026-08-02 (C.4, C.5 y TANDA D entera).** Bitácora en
+> `progress/impl_127_D.md`: 6 archivos nuevos, 5 modificados, **25 mutaciones (M27–M51)** con su
+> rojo y su reversión byte a byte, supuestos **S15–S18** y contradicciones **C6–C7**.
+> `tests/unit/analytics` pasa de 35/556 a **36 archivos / 580 tests**; `tests/unit/services` de
+> 125/2065 a **128 archivos / 2113 tests**. `tsc` y `eslint` en 0, los cinco guardias de la TANDA
+> B verdes y la suite de la 135 (2 archivos / 51 tests) en 0 rojos.
+>
+> Falta la **TANDA E** (borde: Server Action y los tres pasos) y la **TANDA F** (integración,
+> mapa `R1..R43` completo y PR).

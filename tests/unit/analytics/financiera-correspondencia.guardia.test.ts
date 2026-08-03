@@ -14,17 +14,15 @@ import { getMetrica, listarMetricas } from "@/lib/analytics/metrics";
 // El guardia lee los repositorios como TEXTO y extrae las tablas que consultan. Es grosero a
 // proposito: los tipos no pueden expresar "este metodo solo puede tocar estas dos tablas".
 //
-// ⚠ AVISO PARA LA TANDA C — CONTRADICCION ENTRE R4 Y R23, DETECTADA AL ESCRIBIR ESTE GUARDIA.
-// `conciliacion_cierres` declara `fuente.tablas = ["cierre_dia", "cierre_bodega"]`, pero R23
-// obliga a comparar los snapshots aprobados contra lo que los LEDGERS registraron con
-// `origen_tipo = cierre_dia`. Con el catalogo vigente, el repositorio de conciliacion no puede
-// cumplir R4 y R23 a la vez. Este guardia NO lleva exencion para ese caso: se pondra rojo el
-// dia que se implemente C.4, que es exactamente lo que tiene que pasar. La salida correcta es
-// una de estas dos, y ninguna se toma de paso:
-//   (a) ampliar `conciliacion_cierres.fuente.tablas` con los tres ledgers — es TOCAR EL
-//       CATALOGO de la 135, o sea decision humana fechada, como la de ⟨D8⟩; o
-//   (b) acotar R23 a comparar solo contra los cierres, renunciando al cruce con el ledger.
-// Aflojar el guardia para que pase es la tercera opcion, y es la unica que esta descartada.
+// ✔ LA CONTRADICCION R4 ↔ R23 (C2) ESTA CERRADA — ⟨D10⟩, humano, 2026-08-02.
+// `conciliacion_cierres` declaraba solo `["cierre_dia", "cierre_bodega"]` y R23 obliga a
+// comparar los snapshots aprobados contra lo que los LEDGERS registraron con
+// `origen_tipo = cierre_dia`: las dos cosas no cabian a la vez. El humano tomo la salida (a) y
+// amplio `fuente.tablas` con los tres ledgers (`progress/decision_C2_127.md`). O sea: este
+// guardia queda verde POR CONSTRUCCION, no por exencion — no lleva ninguna, y no la lleva a
+// proposito. Aflojarlo seguia siendo la unica salida descartada.
+// El caso que fijaba la contradiccion sigue abajo, DADO VUELTA: ahora afirma que los tres
+// ledgers estan declarados y que quitar uno vuelve a poner rojo al guardia.
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 
@@ -112,12 +110,23 @@ export function tablasConsultadas(fuente: string): readonly string[] {
   return [...new Set(encontradas)].sort();
 }
 
+/**
+ * Las tablas que el texto consulta y que NO estan en la lista declarada que se le pasa.
+ *
+ * Se separa de `tablasNoDeclaradas` para poder juzgar el mismo codigo contra un catalogo
+ * HIPOTETICO: asi el caso de ⟨D10⟩ puede afirmar "y si al catalogo le quitaran un ledger,
+ * esto se pondria rojo" sin mutar el catalogo real de la 135 dentro de un test.
+ */
+export function tablasFueraDe(declaradas: readonly string[], fuente: string): readonly string[] {
+  const permitidas = new Set<string>(declaradas);
+  return tablasConsultadas(fuente).filter((t) => !permitidas.has(t));
+}
+
 /** Devuelve las tablas que el repositorio consulta y la metrica NO declara. */
 export function tablasNoDeclaradas(metricaId: string, fuente: string): readonly string[] {
   const metrica = getMetrica(metricaId);
   if (!metrica) return [`(metrica desconocida: ${metricaId})`];
-  const declaradas = new Set<string>(metrica.fuente.tablas);
-  return tablasConsultadas(fuente).filter((t) => !declaradas.has(t));
+  return tablasFueraDe(metrica.fuente.tablas, fuente);
 }
 
 const ARCHIVOS = [...new Set(Object.values(REPOSITORIO_DE).map((s) => s.archivo))];
@@ -141,9 +150,8 @@ describe("R4 · lo que cada repositorio consulta cabe en lo que su metrica decla
     const infracciones: string[] = [];
     for (const [metricaId, servidor] of Object.entries(REPOSITORIO_DE)) {
       const abs = path.join(REPO_ROOT, servidor.archivo);
-      // Los repositorios que la TANDA C aun no escribio (C.4) no existen. El caso de abajo
-      // comprueba que este bucle no se queda mudo para siempre, y los fixtures comprueban que
-      // el detector discrimina hoy mismo.
+      // Los cuatro repositorios ya existen; el caso «los CUATRO repositorios existen» de abajo
+      // lo afirma, para que este `continue` no pueda dejar el bucle mudo sin que nadie lo vea.
       if (!fs.existsSync(abs)) continue;
       const archivo = fs.readFileSync(abs, "utf8");
       const trozo = servidor.metodo === undefined ? archivo : cuerpoDeMetodo(archivo, servidor.metodo);
@@ -181,12 +189,12 @@ describe("R4 · lo que cada repositorio consulta cabe en lo que su metrica decla
     expect(infracciones).toEqual([]);
   });
 
-  it("declara cuantos repositorios existen ya, para que el silencio de arriba sea visible", () => {
+  it("los CUATRO repositorios existen: el bucle de arriba no se salta ninguno", () => {
     const existentes = ARCHIVOS.filter((rel) => fs.existsSync(path.join(REPO_ROOT, rel)));
-    // No es un `expect` de valor fijo: es un ancla. Tres de los cuatro estan escritos (C.1-C.3);
-    // el cuarto (C.4) espera a que se resuelva la contradiccion R4 ↔ R23.
-    expect(existentes.length).toBeGreaterThanOrEqual(3);
-    expect(existentes.length).toBeLessThanOrEqual(4);
+    // Con C.4 escrito ya no hay ausencias legitimas: el ancla sube de ">= 3" a "los cuatro".
+    // Si alguien borrara un repositorio, el `continue` del caso (a) lo dejaria pasar en
+    // silencio; esta linea es la que lo impide.
+    expect([...existentes].sort()).toEqual([...ARCHIVOS].sort());
   });
 
   it("y el troceado por metodo mira metodos de verdad: los dos de las cuentas por pagar existen", () => {
@@ -252,16 +260,57 @@ describe("R4 · autocomprobacion del detector con fixtures", () => {
     expect(tablasConsultadas(conProsa)).toEqual(["wallet_movimiento"]);
   });
 
-  it("el ledger que R23 quiere cruzar NO cabe hoy en lo que conciliacion_cierres declara", () => {
-    // Este caso FIJA la contradiccion del encabezado en un test, para que no se descubra por
-    // sorpresa en la tanda C ni se resuelva aflojando el guardia sin que nadie se entere.
+  // ⟨D10⟩ — ESTE CASO ESTA DADO VUELTA, NO BORRADO (2026-08-02).
+  //
+  // La version de la TANDA B afirmaba lo contrario: «el ledger que R23 quiere cruzar NO cabe
+  // hoy en lo que `conciliacion_cierres` declara». Eso era verdad y fijaba la contradiccion C2
+  // en un test para que no se descubriera por sorpresa. Con ⟨D10⟩ ya no lo es: el humano amplio
+  // el catalogo. Borrar el caso dejaria el hueco sin vigilancia —nadie notaria que los tres
+  // ledgers se caen del catalogo—, asi que pasa a afirmar la otra mitad: que estan declarados,
+  // y que si a la declaracion le faltara UNO, el guardia se pondria rojo.
+  it("los tres ledgers que R23 cruza SI estan declarados por conciliacion_cierres (⟨D10⟩)", () => {
     const conciliacion = `
       export class ConciliacionCierresAnaliticaRepository {
         async a() { return this.prisma.cierreDia.groupBy({ by: ["estado"] }); }
         async b() { return this.prisma.cierreBodega.groupBy({ by: ["estado"] }); }
         async c() { return this.prisma.walletMovimiento.groupBy({ by: ["origenId"] }); }
+        async d() { return this.prisma.walletTiendaMovimiento.groupBy({ by: ["origenId"] }); }
+        async e() { return this.prisma.pagoMensajeroMovimiento.groupBy({ by: ["origenId"] }); }
       }
     `;
-    expect(tablasNoDeclaradas("conciliacion_cierres", conciliacion)).toEqual(["wallet_movimiento"]);
+
+    // (1) El catalogo declara EXACTAMENTE las cinco. Escrito a mano y no derivado del propio
+    //     catalogo: si alguien le quita un ledger, esta linea es la que grita.
+    expect([...(getMetrica("conciliacion_cierres")?.fuente.tablas ?? [])].sort()).toEqual([
+      "cierre_bodega",
+      "cierre_dia",
+      "pago_mensajero_movimiento",
+      "wallet_movimiento",
+      "wallet_tienda_movimiento",
+    ]);
+
+    // (2) Y por eso el repositorio que cruza los cinco ya no infringe R4.
+    expect(tablasNoDeclaradas("conciliacion_cierres", conciliacion)).toEqual([]);
+
+    // (3) Quitarle UNO a la declaracion vuelve a poner rojo al guardia: la correspondencia
+    //     sigue siendo una exigencia, no una amnistia para esta metrica.
+    const sinLaCaja = ["cierre_dia", "cierre_bodega", "wallet_tienda_movimiento", "pago_mensajero_movimiento"];
+    expect(tablasFueraDe(sinLaCaja, conciliacion)).toEqual(["wallet_movimiento"]);
+  });
+
+  it("y el guardia sigue mordiendo: una tabla que conciliacion_cierres NO declara la caza igual", () => {
+    // ⟨D10⟩ amplio la declaracion; no la abrio. `orden` no esta —ni puede estar, es `TablaDinero`
+    // el universo—, y `gestion_orden` tampoco: si el repositorio de la conciliacion bajara ahi,
+    // este caso lo ve.
+    const conElIntruso = `
+      export class ConciliacionCierresAnaliticaRepository {
+        async a() { return this.prisma.cierreDia.groupBy({ by: ["estado"] }); }
+        async b() { return this.prisma.walletMovimiento.groupBy({ by: ["origenId"] }); }
+      }
+    `;
+    // Contra la declaracion real: limpio.
+    expect(tablasNoDeclaradas("conciliacion_cierres", conElIntruso)).toEqual([]);
+    // Contra una declaracion que no incluyera la caja: infraccion.
+    expect(tablasFueraDe(["cierre_dia"], conElIntruso)).toEqual(["wallet_movimiento"]);
   });
 });

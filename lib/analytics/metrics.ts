@@ -461,7 +461,7 @@ const CATALOGO = [
     unidadDeConteo: "moneda",
     // `declarada`: la ficha de la 127 compromete ingresos, cuentas por pagar y
     // conciliacion de cierres; los egresos NO aparecen ahi.
-    estadoProduccion: "declarada",
+    estadoProduccion: "producida",
     granos: ["fecha"],
     fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
     alcance: ALCANCE_FINANCIERA,
@@ -534,7 +534,19 @@ const CATALOGO = [
     unidadDeConteo: "moneda",
     estadoProduccion: "producida",
     granos: ["fecha"],
-    fuente: { tipo: "snapshot_cierre", tablas: ["cierre_dia", "cierre_bodega"] },
+    // ⟨D10⟩ humano, 2026-08-02 (`progress/decision_C2_127.md`): los TRES ledgers se declaran
+    // aqui ademas de los dos cierres, porque R23 de la 127 concilia el snapshot aprobado
+    // CONTRA el dinero realmente movido (`origen_tipo = cierre_dia`).
+    fuente: {
+      tipo: "snapshot_cierre",
+      tablas: [
+        "cierre_dia",
+        "cierre_bodega",
+        "wallet_movimiento",
+        "wallet_tienda_movimiento",
+        "pago_mensajero_movimiento",
+      ],
+    },
     alcance: ALCANCE_FINANCIERA,
     // `definicion` sin `categorias` A PROPOSITO: los cuatro estados de cierre viven en el
     // enum `CierreEstado`, que NO esta en la lista cerrada de vocabularios que R9 permite

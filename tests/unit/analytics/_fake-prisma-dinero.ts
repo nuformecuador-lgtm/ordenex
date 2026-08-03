@@ -20,19 +20,36 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 //     se funden" (R19) sin depender de que los numeros salgan iguales por casualidad.
 //
 // El dinero entra como STRING y se guarda como `Prisma.Decimal`: ni un `number` en el camino.
+//
+// AMPLIADO EN C.4 (2026-08-02), no reemplazado: gana `cierre_bodega` como quinta tabla, el par
+// `origen_tipo`/`origen_id` en las tres filas de ledger y la operacion `findMany` con `select`.
+// Las tres cosas las pide la conciliacion y ninguna afloja lo de arriba: agrupar por una columna
+// que la fila no tiene ahora LANZA, y `findMany` devuelve las columnas de dinero como
+// `Prisma.Decimal`, que es lo que Prisma entrega de verdad.
 
 /* -------------------------------------------------------------------------- */
 /* Filas de las cuatro tablas que la TANDA C consulta                          */
 /* -------------------------------------------------------------------------- */
 
-export interface FilaCaja {
+/**
+ * El vinculo cierre ↔ ledger (`origen_tipo` / `origen_id`) es OPCIONAL en las tres filas de
+ * ledger: los tests de C.1-C.3 no lo necesitan y sembrarlo ahi solo añadiria ruido. Pero si un
+ * repositorio filtra por una columna que la fila no trae, `cumpleWhere` LANZA en vez de
+ * ignorarla — asi que el test de C.4 que no la siembre explota, que es lo que se quiere.
+ */
+interface Origen {
+  readonly origenTipo?: string;
+  readonly origenId?: string | null;
+}
+
+export interface FilaCaja extends Origen {
   readonly categoria: string;
   readonly tipo: string;
   readonly monto: string;
   readonly fechaMovimiento: Date;
 }
 
-export interface FilaLedgerTienda {
+export interface FilaLedgerTienda extends Origen {
   readonly tiendaId: string;
   readonly categoria: string;
   readonly tipo: string;
@@ -40,7 +57,7 @@ export interface FilaLedgerTienda {
   readonly fechaMovimiento: Date;
 }
 
-export interface FilaLedgerMensajero {
+export interface FilaLedgerMensajero extends Origen {
   readonly mensajeroId: string;
   readonly categoria: string;
   readonly tipo: string;
@@ -50,6 +67,12 @@ export interface FilaLedgerMensajero {
 
 export interface FilaCierreDia {
   readonly id: string;
+  /**
+   * OPCIONAL y sembrado a proposito en los tests de C.4: un `findMany` sin `select` se lo
+   * llevaria en la respuesta, y R14 prohibe que un id de mensajero salga de aqui. Si la columna
+   * no estuviera en el fixture, el test que lo vigila pasaria por vacio.
+   */
+  readonly mensajeroId?: string;
   readonly estado: string;
   readonly totalEfectivo: string;
   readonly totalSimpe: string;
@@ -59,16 +82,20 @@ export interface FilaCierreDia {
   readonly resueltoAt: Date | null;
 }
 
+/** Mismo snapshot que el cierre de dia; el nivel lo distingue la tabla, no la forma. */
+export type FilaCierreBodega = FilaCierreDia;
+
 export interface DatosDinero {
   readonly caja?: readonly FilaCaja[];
   readonly ledgerTienda?: readonly FilaLedgerTienda[];
   readonly ledgerMensajero?: readonly FilaLedgerMensajero[];
   readonly cierresDia?: readonly FilaCierreDia[];
+  readonly cierresBodega?: readonly FilaCierreBodega[];
 }
 
 export interface LlamadaFake {
   readonly modelo: string;
-  readonly operacion: "groupBy" | "aggregate";
+  readonly operacion: "groupBy" | "aggregate" | "findMany";
   readonly args: Record<string, unknown>;
 }
 
@@ -163,13 +190,14 @@ function camposSumados(args: Registro): readonly string[] {
     .map(([k]) => k);
 }
 
-function ordenar(grupos: Grupo[], orderBy: unknown): Grupo[] {
-  if (orderBy === undefined) return grupos;
+/** Ordena por `orderBy` mirando las claves de cada elemento a traves de `clave`. */
+function ordenarPor<T>(items: readonly T[], orderBy: unknown, clave: (x: T) => Registro): T[] {
+  if (orderBy === undefined) return [...items];
   const criterios = (Array.isArray(orderBy) ? orderBy : [orderBy]) as Registro[];
-  return [...grupos].sort((a, b) => {
+  return [...items].sort((a, b) => {
     for (const criterio of criterios) {
       for (const [campo, direccion] of Object.entries(criterio)) {
-        const signo = comparar(a.clave[campo], b.clave[campo]);
+        const signo = comparar(clave(a)[campo], clave(b)[campo]);
         if (signo !== 0) return direccion === "desc" ? -signo : signo;
       }
     }
@@ -185,7 +213,13 @@ function ejecutarGroupBy(filas: readonly Registro[], args: Registro): Registro[]
   const grupos = new Map<string, Grupo>();
   for (const fila of seleccionadas) {
     const clave: Registro = {};
-    for (const campo of by) clave[campo] = fila[campo];
+    for (const campo of by) {
+      // Agrupar por una columna que la fila no tiene daria un grupo `undefined` silencioso.
+      if (!(campo in fila)) {
+        throw new Error(`fake-prisma: no se puede agrupar por "${campo}": la fila no lo tiene`);
+      }
+      clave[campo] = fila[campo];
+    }
     const id = JSON.stringify(by.map((c) => fila[c]));
     let grupo = grupos.get(id);
     if (grupo === undefined) {
@@ -203,7 +237,7 @@ function ejecutarGroupBy(filas: readonly Registro[], args: Registro): Registro[]
   const enOrden =
     args.orderBy === undefined
       ? [...grupos.values()].reverse()
-      : ordenar([...grupos.values()], args.orderBy);
+      : ordenarPor([...grupos.values()], args.orderBy, (g) => g.clave);
 
   return enOrden.map((g) => {
     const salida: Registro = { ...g.clave, _count: { _all: g.cantidad } };
@@ -234,13 +268,69 @@ function ejecutarAggregate(filas: readonly Registro[], args: Registro): Registro
   return { _sum: sum, _count: seleccionadas.length };
 }
 
+/**
+ * Columnas que en el esquema son `Decimal(12,2)`. El fake las guarda como STRING (para que el
+ * fixture se lea) pero las DEVUELVE como `Prisma.Decimal`, que es lo que Prisma entrega de
+ * verdad. Si las devolviera como texto, un repositorio que llamase `.toFixed(2)` reventaria en
+ * el test y pasaria en produccion — o al reves, que es peor.
+ */
+const COLUMNAS_DINERO: ReadonlySet<string> = new Set([
+  "monto",
+  "totalEfectivo",
+  "totalSimpe",
+  "totalTransferencia",
+  "totalGeneral",
+]);
+
+function valorDeColumna(campo: string, valor: unknown): unknown {
+  return COLUMNAS_DINERO.has(campo) ? new Prisma.Decimal(String(valor)) : valor;
+}
+
+/**
+ * `findMany` con `where`, `select` y `orderBy`. Sin `select` devuelve la fila entera, igual que
+ * Prisma — y por eso un repositorio que se olvide del `select` se lleva TODAS las columnas
+ * sembradas, incluidas las que R14 prohibe publicar: el test lo puede ver.
+ */
+function ejecutarFindMany(filas: readonly Registro[], args: Registro): Registro[] {
+  const seleccionadas = filas.filter((f) => cumpleWhere(f, args.where));
+  // Sin `orderBy`, orden INVERSO al de insercion: la base no promete nada (R28).
+  const enOrden =
+    args.orderBy === undefined
+      ? [...seleccionadas].reverse()
+      : ordenarPor(seleccionadas, args.orderBy, (f) => f);
+
+  const select = args.select as Registro | undefined;
+  const campos =
+    select === undefined
+      ? null
+      : Object.entries(select)
+          .filter(([, v]) => v === true)
+          .map(([k]) => k);
+
+  return enOrden.map((fila) => {
+    const claves = campos ?? Object.keys(fila);
+    const salida: Registro = {};
+    for (const campo of claves) {
+      if (!(campo in fila)) {
+        throw new Error(`fake-prisma: la tabla no tiene la columna "${campo}" que se selecciona`);
+      }
+      salida[campo] = valorDeColumna(campo, fila[campo]);
+    }
+    return salida;
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* El cliente falso                                                            */
 /* -------------------------------------------------------------------------- */
 
 export type ClienteDinero = Pick<
   PrismaClient,
-  "walletMovimiento" | "walletTiendaMovimiento" | "pagoMensajeroMovimiento" | "cierreDia"
+  | "walletMovimiento"
+  | "walletTiendaMovimiento"
+  | "pagoMensajeroMovimiento"
+  | "cierreDia"
+  | "cierreBodega"
 >;
 
 export interface FakeDinero {
@@ -261,6 +351,10 @@ export function fakePrismaDinero(datos: DatosDinero): FakeDinero {
       llamadas.push({ modelo: nombre, operacion: "aggregate", args });
       return Promise.resolve(ejecutarAggregate(filas, args));
     },
+    findMany: (args: Registro) => {
+      llamadas.push({ modelo: nombre, operacion: "findMany", args });
+      return Promise.resolve(ejecutarFindMany(filas, args));
+    },
   });
 
   const filas = (xs: readonly object[] | undefined): readonly Registro[] =>
@@ -271,6 +365,7 @@ export function fakePrismaDinero(datos: DatosDinero): FakeDinero {
     walletTiendaMovimiento: modelo("walletTiendaMovimiento", filas(datos.ledgerTienda)),
     pagoMensajeroMovimiento: modelo("pagoMensajeroMovimiento", filas(datos.ledgerMensajero)),
     cierreDia: modelo("cierreDia", filas(datos.cierresDia)),
+    cierreBodega: modelo("cierreBodega", filas(datos.cierresBodega)),
   } as unknown as ClienteDinero;
 
   return { cliente, llamadas };
@@ -279,11 +374,12 @@ export function fakePrismaDinero(datos: DatosDinero): FakeDinero {
 /** Un cliente cuya base SIEMPRE falla: para comprobar que el error se propaga (R32). */
 export function fakePrismaQueFalla(error: Error): ClienteDinero {
   const revienta = () => Promise.reject(error);
-  const modelo = { groupBy: revienta, aggregate: revienta };
+  const modelo = { groupBy: revienta, aggregate: revienta, findMany: revienta };
   return {
     walletMovimiento: modelo,
     walletTiendaMovimiento: modelo,
     pagoMensajeroMovimiento: modelo,
     cierreDia: modelo,
+    cierreBodega: modelo,
   } as unknown as ClienteDinero;
 }

@@ -7,6 +7,7 @@ import type { ActorAnalitica } from "@/lib/analytics/alcance";
 import { IngresosAnaliticaRepository } from "@/lib/repositories/IngresosAnaliticaRepository";
 import { RecaudoAnaliticaRepository } from "@/lib/repositories/RecaudoAnaliticaRepository";
 import { CuentasPorPagarAnaliticaRepository } from "@/lib/repositories/CuentasPorPagarAnaliticaRepository";
+import { ConciliacionCierresAnaliticaRepository } from "@/lib/repositories/ConciliacionCierresAnaliticaRepository";
 import { fakePrismaQueFalla } from "./_fake-prisma-dinero";
 
 // Feature 127 / T C.5 — GUARDIA TRANSVERSAL DE LOS REPOSITORIOS: R30 y R32.
@@ -26,9 +27,9 @@ import { fakePrismaQueFalla } from "./_fake-prisma-dinero";
 // —el error de base se propaga— va debajo y cubre los CINCO metodos, uno a uno: un guardia de
 // texto no ve un `catch` escrito en un helper importado.
 //
-// La TANDA C esta a medias a proposito: `ConciliacionCierresAnaliticaRepository` (C.4) esta
-// bloqueado por la contradiccion R4 ↔ R23 (C2 en `progress/impl_127.md`). El censo mira los que
-// existen y exige que sean AL MENOS tres, para que no pueda quedarse mudo.
+// La TANDA C esta COMPLETA desde C.4 (⟨D10⟩ cerro la contradiccion R4 ↔ R23): el censo mira los
+// CUATRO repositorios y exige que esten los cuatro, para que no pueda quedarse mudo por una
+// ausencia que ya no es legitima. La lista de propagacion pasa de cinco metodos a OCHO.
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 
@@ -82,12 +83,9 @@ export function silenciaErrores(nombre: string, fuente: string): string | null {
 /* -------------------------------------------------------------------------- */
 
 describe("R30/R32 · censo sobre los repositorios de la 127", () => {
-  it("el censo mira archivos de verdad: los tres de las tareas C.1-C.3 existen", () => {
+  it("el censo mira archivos de verdad: los CUATRO de las tareas C.1-C.4 existen", () => {
     const hay = existentes();
-    expect(hay.length).toBeGreaterThanOrEqual(3);
-    expect(hay).toContain("lib/repositories/IngresosAnaliticaRepository.ts");
-    expect(hay).toContain("lib/repositories/RecaudoAnaliticaRepository.ts");
-    expect(hay).toContain("lib/repositories/CuentasPorPagarAnaliticaRepository.ts");
+    expect([...hay].sort()).toEqual([...REPOSITORIOS_DE_LA_127].sort());
     for (const rel of hay) {
       expect(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8").length, rel).toBeGreaterThan(500);
     }
@@ -211,10 +209,36 @@ describe("R32 · un fallo de la base se propaga; nunca se convierte en un cero",
           consultaDe("cuenta_por_pagar_mensajero"),
         ),
     },
+    {
+      nombre: "ConciliacionCierresAnaliticaRepository.contarCierresPorEstado",
+      ejecutar: () =>
+        new ConciliacionCierresAnaliticaRepository(cliente).contarCierresPorEstado(
+          consultaDe("conciliacion_cierres"),
+        ),
+    },
+    {
+      nombre: "ConciliacionCierresAnaliticaRepository.totalesDeCierresAprobados",
+      ejecutar: () =>
+        new ConciliacionCierresAnaliticaRepository(cliente).totalesDeCierresAprobados(
+          consultaDe("conciliacion_cierres"),
+        ),
+    },
+    {
+      nombre: "ConciliacionCierresAnaliticaRepository.sumarLedgerPorOrigenDeCierre",
+      ejecutar: () =>
+        // Con la lista VACIA el metodo no consulta y no puede fallar: se le pasan ids para que
+        // el error de base tenga por donde subir.
+        new ConciliacionCierresAnaliticaRepository(cliente).sumarLedgerPorOrigenDeCierre(
+          consultaDe("conciliacion_cierres"),
+          ["c1"],
+        ),
+    },
   ];
 
-  it("los cinco metodos publicos de la TANDA C estan cubiertos", () => {
-    expect(casos).toHaveLength(5);
+  it("los OCHO metodos publicos de la TANDA C estan cubiertos", () => {
+    // El numero es a proposito: cuando un repositorio gane un metodo, este caso obliga a mirar
+    // la lista en vez de dejarlo sin cubrir en silencio.
+    expect(casos).toHaveLength(8);
   });
 
   for (const caso of casos) {
