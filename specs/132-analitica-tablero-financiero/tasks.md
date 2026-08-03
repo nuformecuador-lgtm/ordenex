@@ -47,7 +47,7 @@ tres archivos si alguna respuesta cambia el diseño.
 
 ## T1 — Andamio del shell y de la región
 
-- [ ] **T1.1 — Ampliar `AnaliticaShell`.** Añadir `financiero?: ReactNode` a `AnaliticaShellProps`
+- [x] **T1.1 — Ampliar `AnaliticaShell`.** Añadir `financiero?: ReactNode` a `AnaliticaShellProps`
       y una `<section aria-label="Tablero financiero">` **debajo** de la región "Tablero operativo",
       en la misma pila vertical. Si la prop no llega, la sección **no se renderiza** (no hay
       `EmptyState`; ver `design.md §3.5`). No se reordena ni se modifica nada de lo existente.
@@ -55,7 +55,7 @@ tres archivos si alguna respuesta cambia el diseño.
       *Hecho:* `AnaliticaShell.test.tsx` ampliado con dos casos (con prop / sin prop) en verde, y
       los casos preexistentes de las otras dos regiones intactos.
 
-- [ ] **T1.2 [P] — `rango.ts`: la única constante de rango.** Un archivo, un objeto congelado
+- [x] **T1.2 [P] — `rango.ts`: la única constante de rango.** Un archivo, un objeto congelado
       `FILTRO_FINANCIERO_POR_DEFECTO` con el preset decidido en T0.1. Sin lectura de
       `searchParams`, sin `Date`, sin `process.env`.
       → **R26**. Depende de: T0.1.
@@ -66,13 +66,13 @@ tres archivos si alguna respuesta cambia el diseño.
 
 ## T2 — Adaptadores puros (el corazón testeable)
 
-- [ ] **T2.1 — `adaptar.ts`: `aNumero`.** `string` escala 2 → `number | null`. Devuelve `null` si
+- [x] **T2.1 — `adaptar.ts`: `aNumero`.** `string` escala 2 → `number | null`. Devuelve `null` si
       el resultado no es finito. No hace aritmética de dinero.
       → **R15**. Depende de: T0.
       *Hecho:* tests con `"0.00"`, `"-123.45"`, `"1234567.89"`, `""`, `"abc"`, `"NaN"`; el caso
       basura devuelve `null` y **no** `0`.
 
-- [ ] **T2.2 — `adaptar.ts`: `serieDeVista` y `filasDeVista`.** Traducen `VistaFinanciera` a
+- [x] **T2.2 — `adaptar.ts`: `serieDeVista` y `filasDeVista`.** Traducen `VistaFinanciera` a
       `SerieDato` / `FilaResumen[]`, exponiendo **bruto y neto** (dos columnas en la tabla; cifra +
       línea secundaria en el KPI). El `cubo` se copia tal cual, sin enriquecer.
       → **R14, R16, R24**. Depende de: T2.1.
@@ -80,7 +80,7 @@ tres archivos si alguna respuesta cambia el diseño.
       procede literalmente de un campo del DTO; test que afirma que no se llama a ninguna función de
       suma sobre importes del DTO.
 
-- [ ] **T2.3 — `adaptar.ts`: `agruparCola`.** Conserva las `tope - 1` primeras categorías y agrupa
+- [x] **T2.3 — `adaptar.ts`: `agruparCola`.** Conserva las `tope - 1` primeras categorías y agrupa
       el resto en una categoría única. El total se conserva.
       → **R20, R21**. Depende de: T2.1.
       *Hecho:* test con 12 cubos → 5 categorías, y `Σ resultado === Σ entrada`; test con 3 cubos →
