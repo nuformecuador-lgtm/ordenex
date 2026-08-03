@@ -3036,3 +3036,170 @@ justo la propiedad que el test de arriba protege.
 **Mitad testeable de R61 cerrada y demostrada por mutación en los dos `ADD CONSTRAINT`; de paso se
 arregló un parser del test que convertía esa misma mutación en un crash de importación sin
 diagnóstico. La verificación de preview sigue abierta y sigue bloqueando el merge.**
+
+---
+
+## Respuesta al review — BLOQUEANTE 2 (R6, el eslabón ROL → PROP) (2026-08-02)
+
+Encargo estrecho del leader tras `progress/review_172-liquidacion.md`: la respuesta P3 del humano
+—**pagan `maestro` y `admin`; `adminSatelite` NO, aunque sí apruebe cierres**— estaba afirmada
+contra una PROP (`puedeRegistrarPago: false`) y no contra el ROL. El eslabón que las une es una
+línea de `app/(app)/cierres-admin/page.tsx` y **ponerla en `true` no rompía ninguno de los 9857
+tests**.
+
+**Es un hueco de VERIFICACIÓN, no de comportamiento, y se comprobó que lo es**: el test nuevo pasó
+a la primera con el código tal cual, sin tocar ni una línea de `app/`. El permiso ya funcionaba; lo
+que faltaba era medirlo donde vive.
+
+### Qué se añadió
+
+Un solo archivo con casos nuevos: `tests/components/CierresAdminPage.test.tsx` (**7 → 10 casos**),
+que ya montaba la página REAL con `resolveActorFromSession` doblado y ya tenía un `adminSatelite`.
+
+1. **`adminSatelite: aprueba el cierre de su zona y NO se le ofrece pagar`** — monta
+   `CierresAdminPage()` con el rol de verdad, abre el detalle de un cierre `solicitado`, pulsa
+   «Aprobar» (el servidor devuelve `pendientePagoMensajero: "50000.00"`, o sea: hay dinero sobre la
+   mesa) y exige que el diálogo `Registrar pago a Ana Mensajera` **no exista** y que no se haya
+   llamado a `registrarPagoMensajeroAction`.
+2. **`CONTRAPRUEBA — maestro | admin: aprueba y SÍ recibe la oferta`** (`it.each`, 2 casos) — la
+   MISMA aprobación, el MISMO pendiente, el MISMO cierre: lo único que cambia es el rol, y el
+   diálogo aparece prefijado con `50000.00`. Sin esta mitad, borrar la prop entera (default
+   `false`) dejaría el caso 1 en verde para siempre.
+
+Las dos mitades del caso 1 se afirman juntas —que **apruebe** y que **no se le ofrezca**—, porque
+«no se le ofrece» sólo significa algo si el cierre quedó aprobado exactamente como antes de la 172:
+un `adminSatelite` que no pudiera aprobar pasaría igual de verde y sería una regresión de la 38.
+
+**El punto de espera es lo que hace válido el negativo.** Un `queryBy…toBeNull()` sobre una UI
+asíncrona puede estar midiendo «todavía no apareció». El helper no vuelve hasta que (a)
+`aprobarCierre` se llamó con `{ cierreId }`, (b) salió el toast «Cierre aprobado correctamente.»,
+(c) corrió `router.refresh()` —la rama de la oferta se evalúa en la línea siguiente— y (d) el modal
+de detalle ya se cerró, que ocurre en la MISMA tanda de estado en la que se plantearía la oferta.
+Cuando (d) se cumple, un diálogo de pago que tocara aparecer ya está en el DOM. La mutación de abajo
+lo confirma empíricamente: con el predicado abierto, el caso cae.
+
+Piezas de apoyo, todas ADITIVAS (ninguna aserción existente tocada):
+
+- `refresh` y los toasts pasan a dobles compartidos (`vi.hoisted`) en vez de uno nuevo por render:
+  sin poder esperarlos no hay punto de espera.
+- Doble de `@/lib/actions/liquidacion` (las tres exportaciones que cuelgan de esta pantalla):
+  ninguna llega al servidor y se puede afirmar que a un `adminSatelite` no se le llama ninguna.
+- Caché de SWR propia por render (`provider` nuevo + `dedupingInterval: 0`): la página no la aísla y
+  el resto del archivo comparte la global.
+
+### La prueba por mutación (15.ª de la feature) — es el punto entero de este bloqueante
+
+La mutación es exactamente la que el review señala como impune: forzar el predicado de la página.
+
+```diff
+--- a/app/(app)/cierres-admin/page.tsx
++++ b/app/(app)/cierres-admin/page.tsx
+@@ -178,3 +178,3 @@ export default async function CierresAdminPage() {
+          */
+-        puedeRegistrarPago={esAccesoTotal(actor.rol)}
++        puedeRegistrarPago={true}
+       />
+```
+
+**Antes de mutar** (código real, tests nuevos incluidos):
+
+```
+$ pnpm exec vitest run tests/components/CierresAdminPage.test.tsx
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+```
+
+**Con la mutación aplicada:**
+
+```
+$ pnpm exec vitest run tests/components/CierresAdminPage.test.tsx
+ ❯ tests/components/CierresAdminPage.test.tsx (10 tests | 1 failed) 1458ms
+ FAIL  tests/components/CierresAdminPage.test.tsx > CierresAdminPage — Feature 172 [P3]/R6: quién
+       recibe la oferta de pago sale del ROL > adminSatelite: aprueba el cierre de su zona y NO se
+       le ofrece pagar
+AssertionError: expected <div data-open id="_r_18_" …(8)>…(3)</div> to be null
+ ❯ tests/components/CierresAdminPage.test.tsx:393:66
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+```
+
+Cae **sólo** el caso del `adminSatelite`; las dos contrapruebas de `maestro`/`admin` siguen verdes,
+que es lo que las hace contrapruebas y no ruido. El elemento que el error imprime es el popup del
+diálogo de pago: la pantalla le está ofreciendo mover dinero a quien el humano decidió que no.
+
+**Restauración verificada** (no basta con «lo volví a poner»):
+
+```
+--- diff contra la copia ---
+diff: sin diferencias
+--- md5 ---
+763a3d6450a70e59a43d7e0eff40163d *app/(app)/cierres-admin/page.tsx
+--- git status de app/ ---
+(vacio = intacto)
+```
+
+### El guard inerte de `wallet-tiendas-pago.test.tsx:395-397` — qué se decidió
+
+El review tiene razón en el diagnóstico y conviene decirlo sin adornos: en `/wallet/tiendas` el
+valor de `puedeRegistrarPago` es **hoy siempre `true`**, porque el `notFound` de la página ya echó
+a todo rol sin acceso total (lo mide el test de justo debajo). Un `={true}` escrito a mano ahí no
+cambiaría **nada** de lo que el usuario ve. Esa aserción **no mide el eslabón rol → prop**: mide la
+FORMA de una línea que hoy es redundante.
+
+**Decisión: se conserva, y se le quita el disfraz.** El razonamiento:
+
+- **No es una aserción que no pueda fallar** —falla si alguien cambia la línea—, es una aserción
+  cuyo fallo hoy no tendría consecuencia de producto. Eso no la hace inútil: la hace **preventiva**.
+  El día que esta pantalla admita un rol sin acceso total (un `adminTienda` mirando el saldo de su
+  tienda es el candidato obvio), la línea deja de ser redundante **de golpe**, y un `true`
+  hardcodeado que hubiera entrado mientras tanto se convierte en un botón de pagar para quien no
+  puede pagar. Que falle ahora es barato; descubrirlo entonces, no.
+- **Borrarla** habría dejado esa página sin ninguna nota de por qué la línea tiene que seguir
+  derivada del rol, que es justo el conocimiento que el review echa en falta.
+- Lo que **no** vale es dejarla aparentando que protege el eslabón. Así que el comentario ahora dice
+  literalmente qué protege y qué no, y **apunta a dónde se mide de verdad**
+  (`tests/components/CierresAdminPage.test.tsx`), que es la pantalla donde un rol llega y no puede
+  pagar.
+
+Cambio: comentario reescrito dentro de ese caso. **Las dos aserciones (`toMatch` / `not.toMatch`) y
+el título del test quedan intactos**; no se debilitó ni se borró ninguna.
+
+**No se replicó el guard de fuente para `cierres-admin/page.tsx`**: sería la forma débil de lo que
+el test nuevo ya afirma por comportamiento, y un regex sobre el fuente pasa en verde ante cualquier
+reescritura equivalente (`actor.rol !== "adminSatelite"`, por ejemplo) mientras que el test de
+pantalla mide el resultado. Duplicarlo habría añadido mantenimiento sin añadir medición.
+
+### Verificación
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: 0 errores)
+
+$ pnpm exec eslint tests/components/CierresAdminPage.test.tsx tests/integration/wallet-tiendas-pago.test.tsx
+(sin salida: 0 errores, 0 warnings)
+
+$ pnpm exec vitest run tests/components/CierresAdminPage.test.tsx \
+    tests/components/CierresAdminPagoMensajero.test.tsx \
+    tests/components/CierresAdminModule.test.tsx \
+    tests/integration/wallet-tiendas-pago.test.tsx
+ Test Files  4 passed (4)
+      Tests  111 passed (111)      # 108 antes de esta respuesta: +3, todos nuevos
+```
+
+`./init.sh` y la suite completa: **del leader**, por indicación explícita.
+
+### Trazabilidad
+
+`specs/172-liquidacion/tasks.md § Trazabilidad`, fila **R6**, reescrita: ahora nombra primero
+`CierresAdminPage.test.tsx` (la pantalla, con el ROL), luego `CierresAdminPagoMensajero.test.tsx`
+(el módulo respeta su prop) y `liquidacion-service.test.ts` (la acción responde `forbidden`). Las
+filas R26, R61 y R67 no se tocaron.
+
+#### Veredicto
+
+**El eslabón rol → prop de `/cierres-admin` queda medido por comportamiento en la página real y
+demostrado por mutación: forzar el predicado a `true` tira el caso del `adminSatelite` y deja en
+verde las contrapruebas. El comportamiento de la aplicación no se tocó —el permiso ya funcionaba—;
+lo que faltaba, y ya no falta, es que un cambio futuro se note. El guard de `/wallet/tiendas` se
+conserva como red preventiva, con su alcance real escrito al lado.**

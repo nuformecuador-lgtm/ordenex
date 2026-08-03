@@ -392,6 +392,22 @@ describe("R4 + R1 — permisos por partida doble", () => {
     }
 
     // Y la página se lo pasa a la tabla derivado de ahí, no escrito a mano.
+    //
+    // QUÉ PROTEGE ESTO Y QUÉ NO (bloqueante 2 del review de la 172, dicho sin adornos):
+    // en ESTA pantalla el valor es HOY siempre `true`, porque el `notFound` de la página
+    // ya echó a todo rol sin acceso total (test de aquí abajo). Cambiar la línea por un
+    // `true` escrito a mano no cambiaría nada de lo que el usuario ve, así que esta
+    // aserción NO mide el eslabón rol → prop: mide la FORMA de una línea que hoy es
+    // redundante. Se conserva a propósito, y sólo por esto: el día que esta pantalla
+    // admita un rol sin acceso total —un `adminTienda` viendo el saldo de su tienda, por
+    // ejemplo— la línea deja de ser redundante de golpe, y un `true` hardcodeado que
+    // hubiera entrado mientras tanto se convertiría en un botón de pagar para quien no
+    // puede pagar. Que falle aquí es barato; descubrirlo entonces, no.
+    //
+    // El eslabón de verdad —un rol que SÍ llega a la pantalla y NO puede pagar— sólo
+    // existe en `/cierres-admin` (el `adminSatelite` que aprueba cierres y no mueve
+    // dinero, respuesta P3), y se mide por COMPORTAMIENTO, montando la página real con el
+    // rol real, en `tests/components/CierresAdminPage.test.tsx`.
     const fuente = codigoSinComentarios("app/(app)/wallet/tiendas/page.tsx");
     expect(fuente).toMatch(/puedeRegistrarPago=\{esAccesoTotal\(actor\.rol\)\}/);
     expect(fuente).not.toMatch(/puedeRegistrarPago=\{true\}/);
