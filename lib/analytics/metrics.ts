@@ -115,7 +115,7 @@ const CATALOGO = [
     id: "ordenes_por_estado",
     etiqueta: "Ordenes por estado",
     descripcion:
-      "Embudo: ORDENES agrupadas por su estado actual entre los 19 values vigentes del catalogo; no cuenta gestiones, asi que una gestion anulada no mueve esta cifra (solo la mueve el estado real de la orden).",
+      "Embudo: ORDENES agrupadas por su estatus al corte sobre el universo B2 de la 124 (las vivas al corte mas las que llegaron a un estado terminal ese mismo dia), cada orden en una sola fila; el rollup NO conserva el archivo historico de estados terminales, asi que el historico de terminales se sirve de las medidas de flujo (entregas, devoluciones, rechazos, incidentes) y no de este embudo; no cuenta gestiones, asi que una gestion anulada no mueve esta cifra (solo la mueve el estado real de la orden).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -124,7 +124,15 @@ const CATALOGO = [
     granos: ["fecha", "zona", "tienda", "mensajero", "estatus"],
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
-    definicion: { estados: ORDER_STATUS_SEED, sinAsignar: "incluir", atribucionZona: "orden" },
+    definicion: {
+      // R8/D4: `estados` sigue siendo ORDER_STATUS_SEED ENTERO. B2 acota la ventana
+      // TEMPORAL del stock, no el vocabulario: las ordenes que cerraron ese dia si estan
+      // en la columna, asi que recortar los terminales seria cambiar una mentira por otra.
+      estados: ORDER_STATUS_SEED,
+      universo: "b2_vivas_mas_cierres_del_dia",
+      sinAsignar: "incluir",
+      atribucionZona: "orden",
+    },
   },
   {
     id: "entregas",
@@ -234,7 +242,7 @@ const CATALOGO = [
     id: "sin_gestionar",
     etiqueta: "Sin gestionar",
     descripcion:
-      "ORDENES que el corte diario congelo en el estado sin_gestionar; cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
+      "ORDENES sin gestionar HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus sin_gestionar (no tiene columna propia en analytics_daily), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -247,7 +255,16 @@ const CATALOGO = [
     granos: ["fecha", "zona", "mensajero"],
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
-    definicion: { estados: ["sin_gestionar"], sinAsignar: "incluir", atribucionZona: "orden" },
+    definicion: {
+      estados: ["sin_gestionar"],
+      // D5/R12: `clase: "snapshot"` y `fuente: rollup` se CONSERVAN — si se sirve del rollup,
+      // de la columna `ordenes_estado_stock`; lo que faltaba no era la fuente, era decir que
+      // no tiene medida propia y que su semantica es la del dia.
+      universo: "b2_vivas_mas_cierres_del_dia",
+      derivadaDe: "ordenes_por_estado",
+      sinAsignar: "incluir",
+      atribucionZona: "orden",
+    },
   },
   {
     id: "tasa_entrega",
