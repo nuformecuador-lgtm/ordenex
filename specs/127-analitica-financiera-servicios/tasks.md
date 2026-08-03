@@ -94,19 +94,19 @@ implementación tiende a describirla en vez de juzgarla.
 
 Depende de: A, B. Las cuatro van `[P]` entre sí: archivos disjuntos.
 
-- [ ] **C.1 [P]** `IngresosAnaliticaRepository`: `groupBy(categoria)` + `_sum(monto)` sobre
+- [x] **C.1 [P]** `IngresosAnaliticaRepository`: `groupBy(categoria)` + `_sum(monto)` sobre
   `wallet_movimiento`, categorías **leídas del catálogo**, ventana `[desde, hasta)` por
   `fecha_movimiento`, devolviendo material para `bruto` **y** `neto` (agregado por `tipo`).
   *Hecho cuando:* el test con un `ingreso_ajuste` dentro del rango **no** lo ve en `ingreso_flete`, y
   el test que altera `definicion.categorias` en memoria **sí** ve cambiar la consulta. → **R16, R17,
   R26, R37**
-- [ ] **C.2 [P]** `RecaudoAnaliticaRepository`: **dos métodos separados** —
+- [x] **C.2 [P]** `RecaudoAnaliticaRepository`: **dos métodos separados** —
   `porMetodoDeCierresResueltos` (`cierre_dia` aprobados, `resuelto_at ∈ [desde,hasta)`) y
   `porTiendaDeLedger` (`wallet_tienda_movimiento`, categoría `cod_recaudado`).
   *Hecho cuando:* el test del mensajero con órdenes de dos tiendas comprueba que las dos vistas **no**
   se suman en el repositorio, y el test del cierre `solicitado` comprueba que **no** aporta importe.
   → **R19, R25, R26**
-- [ ] **C.3 [P]** `CuentasPorPagarAnaliticaRepository`: `groupBy` por tipo (y por tienda en el de
+- [x] **C.3 [P]** `CuentasPorPagarAnaliticaRepository`: `groupBy` por tipo (y por tienda en el de
   tienda) con `fecha_movimiento < hasta`, **sin cota inferior**.
   *Hecho cuando:* el test con un devengo anterior al rango lo ve incluido en el saldo, y añadir
   `>= desde` lo pone rojo. → **R21**
@@ -116,10 +116,26 @@ Depende de: A, B. Las cuatro van `[P]` entre sí: archivos disjuntos.
   *Hecho cuando:* el test con un ajuste manual dentro del rango **no** lo cuenta como descuadre; el
   test con un `cierre_bodega` que consolida tres `cierre_dia` no duplica el dinero; el test del cierre
   `solicitado` recibe `fechadoPor: "solicitado_at"`. → **R22, R23, R25, R39**
-- [ ] **C.5** Verificación transversal: los cuatro repositorios no contienen derivación (`.sub(`,
+- [~] **C.5** Verificación transversal: los cuatro repositorios no contienen derivación (`.sub(`,
   `.add(` fuera de una agregación de Prisma) ni `try/catch` que devuelva ceros.
   *Hecho cuando:* revisión + test que fuerza el fallo de la base y observa que el error **se propaga**.
   → **R30, R32**
+  > **PARCIAL (2026-08-02).** Hecha para C.1/C.2/C.3 en
+  > `tests/unit/analytics/financiera-repositorios.guardia.test.ts`: censo de derivación/silencio +
+  > los **cinco** métodos comprobando que el error de base sube tal cual. El repositorio de C.4
+  > entra solo al censo cuando exista; hay que añadir sus métodos a la lista de propagación, que
+  > afirma `toHaveLength(5)` justamente para obligar a mirarla.
+
+> **Estado tras la sesión del 2026-08-02 (C.1, C.2, C.3 y media C.5).** Bitácora en
+> `progress/impl_127_C.md`: 8 archivos nuevos, 14 mutaciones con su rojo y su reversión byte a
+> byte, supuestos **S10–S14** y contradicciones **C4–C5**. `tests/unit/analytics` pasa de 31/508 a
+> **35 archivos / 556 tests, 0 rojos**; `tsc` y `eslint` en 0.
+>
+> ⚠ **C4 — el guardia B.3 se modificó, y no para aflojarlo.** Mapear métrica → *archivo* era
+> insatisfacible para C.3: `design.md §3` pone las dos cuentas por pagar en UN repositorio y sus
+> métricas declaran fuentes disjuntas, así que cualquier implementación legal infringía a las dos.
+> El guardia ahora juzga **por método** (a) y, además, **por archivo contra la unión** (b). Las
+> mutaciones que antes lo ponían rojo lo siguen poniendo (M24/M25) y muerde en un caso nuevo (M26).
 
 ---
 

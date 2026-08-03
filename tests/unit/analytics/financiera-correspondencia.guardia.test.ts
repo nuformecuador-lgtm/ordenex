@@ -41,20 +41,63 @@ const OPERACIONES =
   "findMany|findFirst|findUnique|findFirstOrThrow|findUniqueOrThrow|count|aggregate|groupBy";
 
 /**
- * Que metrica sirve cada repositorio. Un repositorio puede servir varias metricas (el de la
- * caja principal sirve las cuatro de `wallet_movimiento`), y entonces sus tablas tienen que
- * caber en la declaracion de TODAS ellas.
+ * Que sirve cada metrica: el archivo y, cuando el archivo sirve varias metricas de fuentes
+ * DISTINTAS, el metodo concreto.
+ *
+ * ⚠ CAMBIO DE LA TANDA C, 2026-08-02 (contradiccion C4 de `progress/impl_127_C.md`). La version
+ * de la TANDA B mapeaba metrica -> ARCHIVO y comparaba las tablas de todo el archivo contra la
+ * declaracion de cada metrica. Eso es correcto mientras las metricas que comparten archivo
+ * comparten fuente (el de la caja principal sirve cuatro y todas declaran `wallet_movimiento`),
+ * pero es INSATISFACIBLE para `CuentasPorPagarAnaliticaRepository`, que `design.md §3` define
+ * como UN repositorio con las dos cuentas por pagar: una declara solo `wallet_tienda_movimiento`
+ * y la otra solo `pago_mensajero_movimiento`, asi que cualquier archivo que sirva a las dos
+ * infringe a las dos por construccion. El guardia se quedaba sin ninguna implementacion legal.
+ *
+ * La correccion SUBE la resolucion en vez de bajar la exigencia. Se comprueban DOS cosas:
+ *   (a) por METODO — lo que sirve a una metrica cabe en lo que esa metrica declara;
+ *   (b) por ARCHIVO — el archivo entero cabe en la UNION de lo que declaran las metricas que
+ *       sirve, para que una consulta escondida en un helper de modulo (fuera de todo metodo)
+ *       no se escape de (a).
+ * Para los archivos de una sola fuente las dos son la comprobacion de antes, palabra por
+ * palabra: la mutacion «añadir `cierre_dia` al repositorio de `ingreso_flete`» sigue roja, y la
+ * contradiccion R4 ↔ R23 de la conciliacion sigue fijada abajo.
  */
-const REPOSITORIO_DE: Readonly<Record<string, string>> = {
-  ingreso_flete: "lib/repositories/IngresosAnaliticaRepository.ts",
-  ingreso_comision_cod: "lib/repositories/IngresosAnaliticaRepository.ts",
-  ingreso_iva: "lib/repositories/IngresosAnaliticaRepository.ts",
-  egresos: "lib/repositories/IngresosAnaliticaRepository.ts",
-  cod_recaudado: "lib/repositories/RecaudoAnaliticaRepository.ts",
-  cuenta_por_pagar_tienda: "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
-  cuenta_por_pagar_mensajero: "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
-  conciliacion_cierres: "lib/repositories/ConciliacionCierresAnaliticaRepository.ts",
+interface Servidor {
+  readonly archivo: string;
+  /** `undefined` = todo el archivo sirve a esta metrica. */
+  readonly metodo?: string;
+}
+
+const REPOSITORIO_DE: Readonly<Record<string, Servidor>> = {
+  ingreso_flete: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
+  ingreso_comision_cod: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
+  ingreso_iva: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
+  egresos: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
+  cod_recaudado: { archivo: "lib/repositories/RecaudoAnaliticaRepository.ts" },
+  cuenta_por_pagar_tienda: {
+    archivo: "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
+    metodo: "saldoPorTiendaAlCorte",
+  },
+  cuenta_por_pagar_mensajero: {
+    archivo: "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
+    metodo: "cuentaPorPagarMensajerosAlCorte",
+  },
+  conciliacion_cierres: { archivo: "lib/repositories/ConciliacionCierresAnaliticaRepository.ts" },
 };
+
+/**
+ * El cuerpo de un metodo `async`, desde su firma hasta el siguiente metodo `async` de la clase
+ * (o el fin del archivo). Grosero a proposito, como el resto del guardia: basta para atribuir
+ * una consulta a la metrica que la pidio, y lo que se le escape lo caza la comprobacion (b).
+ * Si el metodo no aparece, devuelve `null` y el caso correspondiente falla en vez de callarse.
+ */
+export function cuerpoDeMetodo(fuente: string, metodo: string): string | null {
+  const inicio = fuente.search(new RegExp(`\\basync\\s+${metodo}\\s*\\(`));
+  if (inicio < 0) return null;
+  const resto = fuente.slice(inicio + metodo.length);
+  const siguiente = resto.search(/\basync\s+\w+\s*\(/);
+  return siguiente < 0 ? resto : resto.slice(0, siguiente);
+}
 
 function soloCodigo(fuente: string): string {
   return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
@@ -77,6 +120,8 @@ export function tablasNoDeclaradas(metricaId: string, fuente: string): readonly 
   return tablasConsultadas(fuente).filter((t) => !declaradas.has(t));
 }
 
+const ARCHIVOS = [...new Set(Object.values(REPOSITORIO_DE).map((s) => s.archivo))];
+
 describe("R4 · lo que cada repositorio consulta cabe en lo que su metrica declara", () => {
   it("el mapa cubre las ocho financieras, ni una de mas ni una de menos", () => {
     const delCatalogo = listarMetricas({ dominio: "financiera" }).map((m) => m.id).sort();
@@ -84,7 +129,7 @@ describe("R4 · lo que cada repositorio consulta cabe en lo que su metrica decla
   });
 
   it("los cuatro repositorios del mapa son los que design.md §3 declara", () => {
-    expect([...new Set(Object.values(REPOSITORIO_DE))].sort()).toEqual([
+    expect([...ARCHIVOS].sort()).toEqual([
       "lib/repositories/ConciliacionCierresAnaliticaRepository.ts",
       "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
       "lib/repositories/IngresosAnaliticaRepository.ts",
@@ -92,30 +137,71 @@ describe("R4 · lo que cada repositorio consulta cabe en lo que su metrica decla
     ]);
   });
 
-  it("ninguna metrica consulta una tabla que no declaro", () => {
+  it("(a) ninguna metrica consulta una tabla que no declaro", () => {
     const infracciones: string[] = [];
-    for (const [metricaId, rel] of Object.entries(REPOSITORIO_DE)) {
-      const abs = path.join(REPO_ROOT, rel);
-      // TANDA C aun no escrita: los repositorios no existen. El caso de abajo comprueba que
-      // este bucle no se queda mudo para siempre, y los fixtures comprueban que el detector
-      // discrimina hoy mismo.
+    for (const [metricaId, servidor] of Object.entries(REPOSITORIO_DE)) {
+      const abs = path.join(REPO_ROOT, servidor.archivo);
+      // Los repositorios que la TANDA C aun no escribio (C.4) no existen. El caso de abajo
+      // comprueba que este bucle no se queda mudo para siempre, y los fixtures comprueban que
+      // el detector discrimina hoy mismo.
       if (!fs.existsSync(abs)) continue;
-      const sobrantes = tablasNoDeclaradas(metricaId, fs.readFileSync(abs, "utf8"));
+      const archivo = fs.readFileSync(abs, "utf8");
+      const trozo = servidor.metodo === undefined ? archivo : cuerpoDeMetodo(archivo, servidor.metodo);
+      if (trozo === null) {
+        infracciones.push(`${metricaId}: ${servidor.archivo} no tiene el metodo ${servidor.metodo}`);
+        continue;
+      }
+      const sobrantes = tablasNoDeclaradas(metricaId, trozo);
       if (sobrantes.length > 0) {
-        infracciones.push(`${metricaId} (${rel}) consulta ${sobrantes.join(", ")} sin declararlo`);
+        infracciones.push(
+          `${metricaId} (${servidor.archivo}${servidor.metodo ? `#${servidor.metodo}` : ""}) consulta ${sobrantes.join(", ")} sin declararlo`,
+        );
+      }
+    }
+    expect(infracciones).toEqual([]);
+  });
+
+  it("(b) ningun archivo consulta una tabla que NINGUNA de sus metricas declara", () => {
+    const infracciones: string[] = [];
+    for (const archivo of ARCHIVOS) {
+      const abs = path.join(REPO_ROOT, archivo);
+      if (!fs.existsSync(abs)) continue;
+      const declaradas = new Set<string>(
+        Object.entries(REPOSITORIO_DE)
+          .filter(([, s]) => s.archivo === archivo)
+          .flatMap(([metricaId]) => [...(getMetrica(metricaId)?.fuente.tablas ?? [])]),
+      );
+      const sobrantes = tablasConsultadas(fs.readFileSync(abs, "utf8")).filter(
+        (t) => !declaradas.has(t),
+      );
+      if (sobrantes.length > 0) {
+        infracciones.push(`${archivo} consulta ${sobrantes.join(", ")}, que nadie declara ahi`);
       }
     }
     expect(infracciones).toEqual([]);
   });
 
   it("declara cuantos repositorios existen ya, para que el silencio de arriba sea visible", () => {
-    const existentes = [...new Set(Object.values(REPOSITORIO_DE))].filter((rel) =>
-      fs.existsSync(path.join(REPO_ROOT, rel)),
-    );
-    // No es un `expect` de valor fijo: es un ancla. Cuando la TANDA C escriba los cuatro
-    // repositorios, este numero sube solo y el censo de arriba empieza a morder.
-    expect(existentes.length).toBeGreaterThanOrEqual(0);
+    const existentes = ARCHIVOS.filter((rel) => fs.existsSync(path.join(REPO_ROOT, rel)));
+    // No es un `expect` de valor fijo: es un ancla. Tres de los cuatro estan escritos (C.1-C.3);
+    // el cuarto (C.4) espera a que se resuelva la contradiccion R4 ↔ R23.
+    expect(existentes.length).toBeGreaterThanOrEqual(3);
     expect(existentes.length).toBeLessThanOrEqual(4);
+  });
+
+  it("y el troceado por metodo mira metodos de verdad: los dos de las cuentas por pagar existen", () => {
+    const rel = "lib/repositories/CuentasPorPagarAnaliticaRepository.ts";
+    const archivo = fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
+    const tienda = cuerpoDeMetodo(archivo, "saldoPorTiendaAlCorte");
+    const mensajero = cuerpoDeMetodo(archivo, "cuentaPorPagarMensajerosAlCorte");
+
+    expect(tienda).not.toBeNull();
+    expect(mensajero).not.toBeNull();
+    // Cada trozo consulta SU tabla y solo la suya: si los dos metodos se fundieran, o si uno
+    // leyera el libro del otro, estas dos lineas se ponen rojas.
+    expect(tablasConsultadas(tienda ?? "")).toEqual(["wallet_tienda_movimiento"]);
+    expect(tablasConsultadas(mensajero ?? "")).toEqual(["pago_mensajero_movimiento"]);
+    expect(cuerpoDeMetodo(archivo, "metodoQueNoExiste")).toBeNull();
   });
 });
 
