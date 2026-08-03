@@ -26,6 +26,7 @@ import {
 } from "./cuentas-por-pagar-descarga-columnas";
 import {
   COLUMNAS_MAESTRO,
+  CUENTAS_AVISO_BRUTOS,
   CUENTA_COLOR,
   SIGNO_BADGE,
   money,
@@ -205,6 +206,15 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
             : `${total} mensajeros`}
         </p>
       </div>
+
+      {/*
+        Feature 172 (T H.4) — la limitación N1. Esta tabla no lista movimientos: cada fila es
+        un AGREGADO por mensajero, y dos de sus columnas («Devengado» y «Pagado») incluyen los
+        pagos anulados y su reverso. La tercera —«Cuenta por pagar»— es la resta, y sale exacta.
+      */}
+      <p role="note" className="text-xs text-muted-foreground">
+        {CUENTAS_AVISO_BRUTOS}
+      </p>
 
       <DataTable
         columns={COLUMNS}

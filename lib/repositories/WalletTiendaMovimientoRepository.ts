@@ -75,6 +75,11 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       origenId: m.origenId,
       descripcion: m.descripcion ?? null,
       registradoPor: m.registradoPor ?? null,
+      // Feature 172 (T B.2, R37): la fecha del movimiento se pasa SOLO si viene. La clave
+      // no se emite cuando el caller no la manda —no se emite `undefined`, no se emite la
+      // clave— asi que el feed del cierre sigue cayendo en el `DEFAULT CURRENT_TIMESTAMP`
+      // de la columna exactamente como antes.
+      ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
     }));
     const res = await tx.walletTiendaMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;

@@ -8,13 +8,159 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🏁 CIERRE DE JORNADA 2026-08-02 — **EMPIEZA A LEER POR AQUÍ**
+## ✅ 2026-08-02 (tarde) — **172 IMPLEMENTADA: las 9 tandas** · **EMPIEZA A LEER POR AQUÍ**
+
+**Ya existe forma de registrar un pago.** Era el agujero de fondo del sistema: hasta hoy los saldos
+solo crecían, ni a mensajeros ni a tiendas se les podía decir «ya pagué». Rama
+`feature/172-liquidacion`, PR #259, **11 commits, sin push**. La bitácora completa está en
+**`progress/impl_172-liquidacion.md`**; aquí solo va lo que decide qué hacer a continuación.
+
+**Review APROBADO en ronda 2** (`progress/review_172-liquidacion.md`). La ronda 1 rechazó con dos
+bloqueantes y **los dos eran huecos de verificación, no de código**: se cerraron sin tocar una
+línea de `lib/`, `app/`, `components/` ni `db/`. Trazabilidad final: **85 de 85 con test en el
+repo**, R61 ⚠ parcial. Entrada escrita en `progress/history.md`.
+
+### 🚦 LO PRIMERO AL RETOMAR: **medir PREVIEW. Y hasta entonces, NO PUSHEAR.**
+
+Es la mitad abierta de **R61** y lo único que falta. **No es una formalidad: pushear ES aplicar la
+migración en preview**, porque el build migra antes de compilar y `MIGRATE_ON_PREVIEW` está activo
+en ese entorno. Los dos `ADD CONSTRAINT … CHECK` **validan las filas existentes al aplicarse**, así
+que si esa base tuviera una fila incoherente el build saldría rojo y dejaría una fila fallida en su
+`_prisma_migrations`, **bloqueando los despliegues de preview siguientes** hasta repararla a mano.
+Producción está medida y limpia, así que **producción no corre ese riesgo**. La consulta exacta
+está en `impl_172-liquidacion.md`.
+
+### 🧯 Lo que el review destapó y conviene no olvidar
+
+Los dos bloqueantes fueron del mismo tipo —**tests que no medían lo que decían medir**— y el
+segundo es el que más enseña: la respuesta **P3** del humano (`adminSatelite` no paga) se afirmaba
+pasando una prop, **no ejercitando el eslabón rol → prop**, que es donde vive la decisión. Poner
+ese predicado en `true` **no rompía ninguno de los 9857 tests**. Y el guard correcto sí existía…
+en la otra página, donde un `notFound` previo lo hace **inerte**. *El guard estaba donde no puede
+fallar y faltaba donde se toma la decisión.*
+
+Al cerrar el primero apareció algo peor todavía: **el parser del propio test de migración se caía
+ante la mutación que ese test existe para cazar**. Con `NOT VALID` en el último CHECK, el módulo
+reventaba al importarse y corrían **cero casos** (`Tests no tests`) — la aserción nueva nunca
+habría llegado a ejecutarse, y el error apuntaba a otro sitio. **Un guard cuyo propio parser muere
+ante la mutación es peor que no tenerlo.**
+
+### ✅ T0.9 resuelta (era lo único abierto de la Tanda 0): **la 172 arranca YA, sin esperar**
+
+No hay colisión con la 170 fase 2: **la 170 y la 171 están las dos en `done`** y sus 6 PRs
+(#248, #249, #250, #253, #255, #256) están en `dev`, así que nada sigue en vuelo sobre
+`app/(app)/wallet/tiendas/**` ni `app/(app)/cierres-admin/**`. Zona `fullstack` en **0
+`in_progress`** antes de arrancar. **Tanda 0 cerrada por completo.**
+
+### ✅ T A.0 — producción MEDIDA y limpia; **preview NO, y es lo único que hay que cerrar antes de mergear**
+
+Medido el 2026-08-02 por el MCP de Supabase contra producción (`scfnwxqbsgkzwsdntdvd`):
+**39 + 7 = 46 filas** en los dos libros, **CERO incoherentes** con el CHECK heredado. Y —lo que
+nadie había comprobado— los CHECK son **exhaustivos** sobre los enums reales: **10/10** categorías
+del ledger de tienda y **5/5** del libro del mensajero, ni una de más. La migración puede ir sin
+`NOT VALID`, como decía el diseño.
+
+> ⚠️ **PENDIENTE HUMANO, y bloquea el MERGE (no el código):** la base de **preview no se pudo
+> verificar**. El MCP está fijado por `.mcp.json` al `project_ref` de **producción** y preview tiene
+> base propia desde el 2026-07-27; su ref no es descubrible desde la sesión (el MCP de Supabase no
+> expone `list_projects`, `get_project` de Vercel no devuelve env vars, no hay CLI de Vercel, y el
+> ref no está escrito en ningún archivo del repo). **Riesgo real y acotado:** producción está a
+> salvo; lo que puede pasar es que el build del PR salga rojo y deje una fila fallida en el
+> `_prisma_migrations` de preview, que **bloquea los despliegues de preview siguientes** hasta
+> repararla a mano. La consulta exacta que hay que correr está en `impl_172-liquidacion.md`.
+> **Para cerrarlo hace falta el `project_ref` de preview, o correr esa consulta en su SQL editor.**
+
+### ✅ T H.3 — los constraints ACTÚAN, no solo están escritos
+
+Verificado contra Postgres local, porque los tests de migración de este repo son **estáticos**
+(regex sobre el SQL) y un CHECK bien escrito que no se aplica no protege nada. Round-trip
+`up → down → up` verde con los enums intactos y cero filas reescritas; y 14 INSERT bajo savepoint:
+`pago_tienda`+`credito` → **rechazado 23514**, `liquidacion`+`devengo` → **rechazado 23514**,
+segunda anulación del mismo pago → **rechazado 23505** con el pago intacto. Tres contrapruebas
+aceptadas, que es la mitad que suele faltar: **el CHECK no rechaza de más**.
+
+### 📦 Las 9 tandas, entregadas
+
+| Tanda | Qué | Commit |
+| --- | --- | --- |
+| **0** | puerta cerrada (T0.9 resuelta por el leader) | `dd0902ee` |
+| **A** | migración: 2 tablas + los 2 CHECK heredados, tipos y derivación pura | `240c4f6b` |
+| **B** | registrar un pago: repositorio, candado, servicio, idempotencia, acciones | `bb0b4992` · `23b817c4` |
+| **C** | lecturas: pendiente por cierre, comprobantes, filtro por cierre | `0dc79605` |
+| **D** | frontend del pago a **tienda** | `b1b57835` |
+| **E** | frontend del pago a **mensajero** (toca la aprobación) | `1720d373` |
+| **F** | **anulación** por contraasiento, backend y frontend | `a7af2bb7` · `9de22953` |
+| **G** | lo que ven los beneficiarios (`/mis-pagos`, `/mi-wallet`) | `c5a62b35` |
+| **H** | guardias, censo, verificación real contra Postgres y cierre | `5d9f144` |
+
+**`./init.sh` → `== init OK ==` · 793 archivos / 9857 tests, 0 fallos.** Baseline al arrancar:
+772 / 9257 ⇒ **+21 archivos, +600 tests, cero regresiones**. **Review en curso; nada pusheado.**
+
+### 🧪 Lo que de verdad sostiene esta feature: **13 pruebas por mutación**
+
+No es adorno. En este repo ya hubo tests verdes que no medían el requisito, y aquí volvió a pasar
+**dentro del propio arnés de test**: el primer store en memoria de la Tanda B tomaba la foto de las
+filas **después** de ceder el turno, y con eso **quitar el candado dejaba el test de carrera en
+verde**. Corregido a instantánea al inicio de la sentencia (la semántica real de `READ COMMITTED`),
+desde ahí discrimina: sin candado caen 8 de 10 y se pagan 120 000 de una tienda con 100 000.
+
+Las que más valen, cada una con su salida pegada en la bitácora:
+
+- **el candado** (B): quitarlo → 8 de 10 caen; no-op → 3; movido tras la lectura → 4;
+- **la clave de idempotencia** (D), **las dos direcciones del mismo eje**: renovarla tras un fallo
+  tumba 2 tests, conservarla tras un éxito tumba otros 2;
+- **el refresco dirigido** (D): hacerlo global tumba 4;
+- **el monto de la anulación** (F): tomarlo del input en vez del pago tumba 4 — es la diferencia
+  entre anular y poder escribir cualquier cifra en el libro;
+- **el `WHERE` del filtro por cierre** (C): probado **en el repositorio, donde vive**, porque los
+  dobles del servicio no ven la traducción a SQL. Volver al filtro viejo tumba 7 de 12.
+
+### 🔎 Hallazgos que sobreviven a la feature (ninguno es suyo, ninguno se tapó)
+
+1. **`esFechaFutura` (`lib/types/gestion-orden.ts:102-106`) documenta algo falso.** Dice que
+   `new Date("2026-02-31…")` da `Invalid Date`; en V8 **rueda al 3 de marzo** (solo el *mes* fuera
+   de rango invalida). O sea que hoy **`31/02` se acepta como fecha de reprogramación y se guarda
+   como 3 de marzo**. Es de la 36/73. **No se tocó. Necesita dueño.**
+2. **La guardia del censo de tablas solo recorría `app/`.** Una tabla en `components/shared/` **no
+   existía para el censo**. Al abrir el recorrido apareció además una tabla **preexistente de la
+   130** (`TablaResumen`) que llevaba sin registrar. **`contadores-cabecera.guardia.test.ts` tiene
+   el mismo punto ciego y NO se tocó** (es de la 170): deuda ajena, ahora identificada.
+3. **Un `as unknown as <Interfaz>` en un test de la 170 esconde el drift al typechecker.**
+   `wallet-tienda-descarga.test.ts` pasó el typecheck y aun así **3 tests se pusieron rojos** al
+   ampliar la interfaz. El cast convierte un error de compilación en un rojo en tiempo de test.
+
+### 🗣️ Decisiones que tomó el LEADER durante la implementación (revisables, ninguna del spec)
+
+1. **T0.9 — la 172 arranca ya**, sin esperar a la 170. Comprobado, no supuesto.
+2. **`referencia` gana tope de 60 caracteres.** El diseño fijaba tope para `nota` y **callaba sobre
+   `referencia`**; llevaba tres tandas seguidas reportándose como hueco. El 60 sale de
+   `lib/types/api-key.ts:17`, el único campo del repo de la misma familia (identificador corto
+   tecleado por una persona contra columna `text`) — no es un número inventado.
+3. **El aviso de N1 va donde hay un IMPORTE AGREGADO que incluye lo anulado, no donde solo se
+   listan movimientos** (ahí el pago y su reverso se ven los dos y se explican solos). Aplicada la
+   regla, resultó que **`/mis-pagos` y `/wallet/mensajeros` también tienen agregados inflados**, así
+   que N1 queda declarada en **4 pantallas**, no en una.
+4. **La descarga del histórico de cierres NO gana la columna «pendiente de liquidar»**: tocaría el
+   archivo que fijó la 170 y sus tests, y ningún R lo pide. Alcance deliberado, no olvido.
+
+### ⏳ Esperando al humano (además del preview, que sí bloquea)
+
+- **N1 quedó cerrada por su default** —no netear y declararlo en pantalla— y ya está el texto en
+  las 4 superficies. Si prefiere netear, es ahora: exigiría 2 valores de enum nuevos o reescribir
+  la derivación de la 171.
+- **N2:** sin ventana temporal para anular (default tomado). Hoy un pago se puede anular siempre.
+- **Nadie ha visto estas pantallas en uso.** La feature entera está verificada por suite, no en
+  pantalla; el humano ya aceptó ese trato en la 170.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-02 (mañana) — release, 170 cerrada y spec de la 172
 
 **Registro con CERO features `in_progress`.** Se desplegó producción, se saneó el backlog de PRs, se
 cerró la **feature 170 entera** (fases 1 y 2) y se dejó la **172 en `spec_ready` con su puerta
 CERRADA**.
 
-### 🚀 LO PRIMERO AL RETOMAR: implementar la 172
+### ✅ ~~LO PRIMERO AL RETOMAR: implementar la 172~~ — **EN CURSO desde la tarde del 2026-08-02** (ver el bloque de arriba)
 
 **No hay puerta pendiente. El spec está aprobado y se puede escribir código directamente.**
 

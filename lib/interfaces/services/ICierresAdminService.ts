@@ -26,6 +26,21 @@ export interface CierreAdminResumen {
   totales: CierreTotales; // snapshot (money-safe string, R8/R9)
   totalPagoMensajero: string; // feature 39/R17: snapshot total del pago al mensajero (STRING), separado de `totales`
   totalIngresoBodegaRechazos: string; // feature 56/R16: snapshot total del ingreso de bodega por rechazos (STRING), separado de `totales` y del pago al mensajero
+  /**
+   * Feature 172 (T C.2, §5/R22/R26/R28) — lo que de ESTE cierre sigue sin entregarse al
+   * mensajero, DERIVADO en el servidor: `min(P, E)` menos los pagos VIGENTES registrados contra
+   * el (`derivarPendienteCierre`). STRING de escala 2, money-safe: la pantalla no hace
+   * aritmetica con dinero (R14), solo lo pinta.
+   *
+   * **`null` = el cierre NO esta aprobado** (R28). No es «cero» ni «no se sabe»: en un cierre
+   * `solicitado`, `vencido` o `rechazado` no hay nada que pagar todavia y la pantalla no debe
+   * mostrar ni ofrecer nada relativo al pago. Los dos valores se distinguen a proposito, porque
+   * `"0.00"` SI significa algo: aprobado y ya liquidado del todo (R27).
+   *
+   * Lo rellena el SERVICIO, no el repositorio ni `toResumen`: sale de una unica agregacion por
+   * pagina (`sumarVigentesPorCierre`), no de una consulta por fila.
+   */
+  pendientePagoMensajero: string | null;
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO; null si solicitado (F1.4-e)
   motivoRechazo: string | null; // solo rechazado (F1.4-e)
@@ -105,7 +120,24 @@ export interface IndemnizacionCapturadaInput {
 // EXACTAMENTE las gestiones `incidente` del cierre (falta alguna, sobra alguna, o alguna no es
 // un incidente de ese cierre). El cierre queda en `solicitado` y no se emite ningun movimiento.
 export type AprobarCierreServiceResult =
-  | { status: "ok"; cierreId: string; estado: "aprobado" }
+  | {
+      status: "ok";
+      cierreId: string;
+      estado: "aprobado";
+      /**
+       * Feature 172 (T C.2, §8/R16/R22) — el pendiente del cierre RECIEN aprobado, derivado en
+       * el servidor. Es lo que decide si tras aprobar se ofrece registrar el pago (R16) y con
+       * que monto se prefija el formulario (R23); la UI no lo calcula (R14).
+       *
+       * Aqui es `string` y no `string | null`: el cierre acaba de quedar `aprobado`, asi que la
+       * rama «no aprobado» de R28 no existe en este camino. `"0.00"` = no hay nada que ofrecer.
+       *
+       * **Aprobar y pagar siguen siendo dos escrituras distintas** (§8): este campo no
+       * compromete a nada. Si el pago no se registra, el cierre queda aprobado y la deuda,
+       * abierta y visible (R17/R18).
+       */
+      pendientePagoMensajero: string;
+    }
   | { status: "forbidden" } // rol invalido (R1)
   | { status: "no_encontrada" } // id inexistente / otra bodega-zona (R13)
   | { status: "conflict" } // ya no esta `solicitado` (R12)

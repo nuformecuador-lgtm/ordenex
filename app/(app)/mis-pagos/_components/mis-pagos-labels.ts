@@ -63,3 +63,22 @@ export const CUENTA_LABEL = {
   devengado: "Devengado",
   pagado: "Pagado",
 } as const;
+
+/**
+ * Feature 172 (T G.2) — la limitacion N1, tambien en el libro del MENSAJERO.
+ *
+ * La regla que decide donde hace falta este aviso es: **donde se muestre un importe AGREGADO
+ * que siga contando lo anulado**. Esta tarjeta muestra dos —«Devengado» (Σ de lo devengado,
+ * que incluye la devolucion de un pago anulado) y «Pagado» (Σ de lo entregado, que sigue
+ * contando el pago anulado)—, asi que aqui hace falta. En la TABLA de abajo no: alli el pago y
+ * su reverso se ven los dos, uno al lado del otro, y se explican solos.
+ *
+ * Mismo lenguaje que el aviso de la cabecera de la tienda (T F.6) y compuesto con los rotulos
+ * REALES de la tarjeta, para que un renombrado no lo deje hablando de una cifra que ya no
+ * existe. Sin jerga: ni «contraasiento», ni «neteo», ni siglas.
+ */
+export const CUENTA_AVISO_BRUTOS =
+  `«${CUENTA_LABEL.pagado}» sigue contando los pagos que se anularon, y ` +
+  `«${CUENTA_LABEL.devengado}» suma la devolución de cada uno, así que esos dos importes ` +
+  `quedan más altos de lo que se movió de verdad. «${CUENTA_LABEL.cuentaPorPagar}» ya tiene ` +
+  `todo eso descontado: ese es el número correcto.`;

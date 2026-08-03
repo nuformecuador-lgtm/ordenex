@@ -77,10 +77,15 @@ function repoEnMemoria(filas: FilaFake[]) {
     },
   );
   const agregarSaldoPorTienda = vi.fn(async () => ({ creditos: "0.00", debitos: "0.00" }));
+  // Feature 172 (T G.2, R55): el listado de `/mi-wallet` pide tambien el desglose por
+  // concepto, para que la tienda distinga el pago recibido de un cargo. Este archivo mide la
+  // DESCARGA (que no lleva cabecera), asi que el doble solo tiene que existir.
+  const agregarDesglosePorTienda = vi.fn(async () => []);
   return {
     repo: {
       listarPorTienda,
       agregarSaldoPorTienda,
+      agregarDesglosePorTienda,
     } as unknown as IWalletTiendaMovimientoRepository,
     listarPorTienda,
     agregarSaldoPorTienda,
