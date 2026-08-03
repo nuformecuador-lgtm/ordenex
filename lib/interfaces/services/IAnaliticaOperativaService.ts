@@ -1,4 +1,5 @@
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
+import type { DimensionAnalitica } from "@/lib/analytics/types";
 import type { SerieOperativa } from "@/lib/types/analitica-operativa";
 
 // Feature 126 (T1.4, design §D2) — contrato del servicio de analitica operativa.
@@ -39,6 +40,16 @@ export const ETAPAS_OPERATIVAS = [
 export type EtapaOperativa = (typeof ETAPAS_OPERATIVAS)[number];
 
 export interface IAnaliticaOperativaService {
-  /** Proyecta la metrica de `consulta` a su serie. Determinista con el reloj inyectado. */
-  consultar(consulta: ConsultaAnalitica): Promise<SerieOperativa>;
+  /**
+   * Proyecta la metrica de `consulta` a su serie. Determinista con el reloj inyectado.
+   *
+   * `desagregacion` es OPCIONAL y solo elige la dimension del desglose (la 131 la elegira en
+   * el tablero); sin ella se usa la del catalogo o ninguna. NO es un canal de alcance: el
+   * recorte de filas viaja entero dentro de `consulta`, y por eso R24 puede denegar el
+   * FILTRO por mensajero sin quitarle a nadie la VISTA desagregada por mensajero.
+   */
+  consultar(
+    consulta: ConsultaAnalitica,
+    desagregacion?: DimensionAnalitica,
+  ): Promise<SerieOperativa>;
 }

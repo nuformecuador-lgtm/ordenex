@@ -1,4 +1,5 @@
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
+import type { VentanaDia } from "@/lib/analytics/rollup-dia";
 import type { CuboRollup } from "@/lib/interfaces/repositories/IAnaliticaOperativaRollupRepository";
 
 // Feature 126 (T1.3, design §5.1) — contrato del lector de las TABLAS VIVAS.
@@ -69,11 +70,25 @@ export interface CubosDelDiaEnCurso {
 
 export interface IAnaliticaOperativaVivaRepository {
   /** R17 — `aging_por_estado` sobre `orden` + `orden_historial_estado`. Nunca el rollup. */
-  agingPorEstado(consulta: ConsultaAnalitica): Promise<readonly AgingPorEstadoFila[]>;
+  agingPorEstado(consulta: ConsultaAnalitica, corteAt: Date): Promise<readonly AgingPorEstadoFila[]>;
 
   /**
    * D6/D13 — cubos del dia en curso con las MISMAS definiciones de la 124 y el alcance
-   * empujado al `WHERE`. `corteAt` es la cota superior ESTRICTA de la ventana.
+   * empujado al `WHERE`.
+   *
+   * SEGUNDA DESVIACION DECLARADA respecto de `design.md §5.1`, que dibujaba
+   * `cubosDelDiaEnCurso(consulta, corteAt: Date)`. Se recibe la `VentanaDia` COMPLETA —el
+   * mismo tipo que consume el repositorio de la 124— y no solo el corte, por un motivo que
+   * R33 hace inevitable: derivar `desde` a partir de `corteAt` obligaria a hacer
+   * `fechaCalendarioCR(corteAt)` aqui dentro, y para una fecha YA CERRADA el corte es
+   * EXACTAMENTE la medianoche CR del dia siguiente, de modo que esa derivacion devolveria el
+   * dia equivocado y la equivalencia intradia↔rollup se probaria sobre otro dia. Con la
+   * ventana explicita, el test de R33 pasa `ventanaDelDia(fecha)` —lo mismo que recibe el
+   * job— y la comparacion es cubo a cubo sin ninguna aritmetica intermedia. `ventana.hasta`
+   * sigue siendo la cota superior ESTRICTA y el `corteAt` que viaja en la respuesta.
    */
-  cubosDelDiaEnCurso(consulta: ConsultaAnalitica, corteAt: Date): Promise<CubosDelDiaEnCurso>;
+  cubosDelDiaEnCurso(
+    consulta: ConsultaAnalitica,
+    ventana: VentanaDia,
+  ): Promise<CubosDelDiaEnCurso>;
 }

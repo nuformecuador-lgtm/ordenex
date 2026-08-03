@@ -16,6 +16,18 @@ import type { DimensionAnalitica } from "@/lib/analytics/types";
 // columnas propias y no promedios de promedios.
 
 /**
+ * Coordenada que NO estaba en el grano pedido y por tanto quedo AGREGADA.
+ *
+ * No es `null` a proposito: en `mensajeroId` el `null` ya significa «orden sin mensajero
+ * asignado» (cubo `MENSAJERO_SIN_ASIGNAR`, D10/R8) y reusarlo para «esta dimension no se
+ * pidio» fundiria dos hechos distintos en un mismo valor. Con un literal propio, el cubo
+ * sin asignar y el cubo agregado son distinguibles en la proyeccion y en los tests.
+ */
+export const DIMENSION_AGREGADA = "__agregada__" as const;
+
+export type DimensionAgregada = typeof DIMENSION_AGREGADA;
+
+/**
  * Un cubo del rollup ya agregado al grano pedido.
  *
  * `mensajeroId: string | null` NO es laxitud: el `NULL` del rollup significa «orden sin
@@ -28,15 +40,18 @@ import type { DimensionAnalitica } from "@/lib/analytics/types";
  * DESPUES de dividir (D5): la respuesta no puede llevar `BigInt` (R14/R30).
  */
 export interface CuboRollup {
-  /** `YYYY-MM-DD` calendario de Costa Rica. */
+  /** `YYYY-MM-DD` calendario de Costa Rica. SIEMPRE presente: `fecha` va en todo grano. */
   readonly fecha: string;
-  readonly zonaId: string;
-  readonly tiendaId: string;
-  /** `null` = cubo sin asignar (D10). NO se descarta y NO se renombra. */
-  readonly mensajeroId: string | null;
-  readonly estatusId: string;
-  /** `null` = sin causa tipificada (R15). */
-  readonly causaDevolucion: GestionCausaDevolucion | null;
+  readonly zonaId: string | DimensionAgregada;
+  readonly tiendaId: string | DimensionAgregada;
+  /**
+   * `null` = cubo sin asignar (D10). NO se descarta y NO se renombra.
+   * `DIMENSION_AGREGADA` = el grano pedido no incluia `mensajero`.
+   */
+  readonly mensajeroId: string | null | DimensionAgregada;
+  readonly estatusId: string | DimensionAgregada;
+  /** `null` = sin causa tipificada (R15). `DIMENSION_AGREGADA` = no estaba en el grano. */
+  readonly causaDevolucion: GestionCausaDevolucion | null | DimensionAgregada;
   readonly ordenesCreadas: number;
   /** STOCK al corte: NO se suma entre fechas (R12). */
   readonly ordenesEstadoStock: number;
@@ -54,10 +69,23 @@ export interface CuboRollup {
  * Etiqueta de un estatus resuelta CONTRA LA TABLA `order_status` (D8/R13), nunca contra un
  * `Record<OrderStatusValue, string>` hardcodeado sobre `ORDER_STATUS_SEED`.
  *
- * Motivo verificado: `en_fulfillment` no esta en el seed (la 155 lo retiro) pero su fila
- * sobrevive en `order_status` y 37 filas de `orden_historial_estado` la referencian. Como
- * el rollup congela el estatus DESDE EL HISTORIAL, ese id SALE en un `GROUP BY` real. Un
- * mapa cerrado produciria `undefined` o un `throw` en produccion y no en los tests.
+ * Motivo verificado: el estatus de fulfillment que la 155 retiro del seed ya NO esta en
+ * `ORDER_STATUS_SEED`, pero su fila sobrevive HUERFANA en `order_status` y 37 filas de
+ * `orden_historial_estado` la referencian (el `DELETE` de aquella migracion era condicional
+ * y quedo NO-OP). Como el rollup congela el estatus DESDE EL HISTORIAL, ese id SALE en un
+ * `GROUP BY` real. Un mapa cerrado produciria `undefined` o un `throw` en produccion y no en
+ * los tests. El literal NO se escribe aqui: lo prohibe el censo de la 153
+ * (`tests/unit/guards/censo-order-status-rename.test.ts`), y esquivarlo por concatenacion
+ * seria evadir el guard en vez de cumplirlo.
+ *
+ * DESVIACION DECLARADA respecto de `design.md §5.1`, que dibujaba `{ value; label }` como si
+ * las dos columnas existieran: `order_status` tiene `id` y `value` y NADA MAS
+ * (`db/schema.prisma:377-394`, verificado). No hay columna `label` en la tabla ni un mapa
+ * de etiquetas en `lib/`. Asi que la «etiqueta que le da la tabla» ES su `value`, y eso es
+ * justo lo que R13 necesita: para la fila huerfana la tabla sigue teniendo
+ * su `value`, mientras que `ORDER_STATUS_SEED` ya no lo tiene. `label` se conserva en el
+ * contrato —poblado con el `value`— para que la 131 tenga donde enchufar una traduccion sin
+ * cambiar esta firma; lo que NO se hace es inventar aqui un diccionario paralelo.
  */
 export interface EtiquetaEstatus {
   readonly value: string;
