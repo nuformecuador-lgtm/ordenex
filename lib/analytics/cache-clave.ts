@@ -31,7 +31,6 @@ import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { AlcanceDatos } from "@/lib/analytics/alcance";
 import { DIMENSIONES } from "@/lib/analytics/types";
 import type { DimensionAnalitica } from "@/lib/analytics/types";
-import type { CuboRollup } from "@/lib/interfaces/repositories/IAnaliticaOperativaRollupRepository";
 
 /* -------------------------------------------------------------------------- */
 /* 1. La clave                                                                 */
@@ -116,30 +115,4 @@ function granosNormalizados(granos: readonly DimensionAnalitica[]): readonly Dim
 function idsNormalizados(ids: readonly string[] | undefined): string {
   if (ids === undefined) return "*";
   return [...new Set(ids)].sort().join(SEP_LISTA);
-}
-
-/* -------------------------------------------------------------------------- */
-/* 2. El codec (R9)                                                            */
-/* -------------------------------------------------------------------------- */
-
-/**
- * El cubo tal y como sobrevive a `JSON.stringify` / `JSON.parse`.
- *
- * La UNICA diferencia con `CuboRollup` es `segCicloAcum: string` (decimal). Los dos `null` con
- * significado de dominio se conservan como `null` EXPLICITO:
- *   - `mensajeroId: null` = cubo sin asignar (D10/R8 de la 126);
- *   - `causaDevolucion: null` = devolucion sin causa tipificada (R15 de la 126).
- * Nunca `undefined` —que `JSON.stringify` BORRA de la salida— y nunca un centinela como
- * `"sin_asignar"`, que etiquetaria dos veces el cubo sin asignar.
- */
-export type CuboCodificado = Omit<CuboRollup, "segCicloAcum"> & { readonly segCicloAcum: string };
-
-/** Escritura: `bigint` -> `string` decimal. Todo lo demas viaja tal cual. */
-export function codificarCubos(cubos: readonly CuboRollup[]): readonly CuboCodificado[] {
-  return cubos.map((c) => ({ ...c, segCicloAcum: c.segCicloAcum.toString() }));
-}
-
-/** Lectura: `string` decimal -> `bigint`. Sin esto `tiempo_ciclo` CONCATENA en vez de sumar. */
-export function decodificarCubos(cubos: readonly CuboCodificado[]): readonly CuboRollup[] {
-  return cubos.map((c) => ({ ...c, segCicloAcum: BigInt(c.segCicloAcum) }));
 }

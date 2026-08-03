@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { codificarCubos, decodificarCubos } from "@/lib/analytics/cache-clave";
+import { codificarCubos, decodificarCubos } from "@/lib/cache/cache-codec";
 import { CachedAnaliticaOperativaRollupRepository } from "@/lib/repositories/CachedAnaliticaOperativaRollupRepository";
 import { cacheFalsa } from "./_cache-falsa";
 import { consultaDe, cubo, MAESTRO, rollupFalso } from "./_fake-operativa";

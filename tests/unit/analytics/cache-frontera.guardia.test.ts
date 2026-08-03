@@ -60,6 +60,30 @@ const MODIFICABLES = new Map<string, string>([
       "`job_tipo` tiene que existir tambien en el datamodel o Prisma y la base divergen. Mismo " +
       "alcance que la migracion de la 124 (un valor de enum, cero tablas).",
   ],
+  // Los TRES tests que afirman el conjunto EXACTO de handlers registrados. Su propio
+  // comentario dice «anadir o quitar un tipo sin actualizar este test falla ruidosamente»:
+  // anadir el tipo a la lista ES la actualizacion que ese guardia pide, no una relajacion. En
+  // los tres cambia UNA linea y ni una expectativa mas.
+  [
+    "tests/unit/api/procesar-jobs-registro.test.ts",
+    "conjunto exacto de handlers: se anade el tipo nuevo a la lista.",
+  ],
+  [
+    "tests/integration/api/procesar-jobs-geocodificacion.test.ts",
+    "conjunto exacto de handlers: se anade el tipo nuevo a la lista.",
+  ],
+  [
+    "tests/integration/api/procesar-jobs-webhook-estado.test.ts",
+    "conjunto exacto de handlers: se anade el tipo nuevo a la lista.",
+  ],
+  [
+    "tests/integration/db/job-tipo-analitica-rollup-migration.test.ts",
+    "afirmaba que el enum del datamodel tenia EXACTAMENTE siete valores con el de la 124 al " +
+      "final. Es una propiedad TEMPORAL —la misma clase que aquel archivo ya retiro con «la " +
+      "carpeta es la ultima por nombre»—: cualquier feature que anada un valor de enum la " +
+      "rompe sin decir nada sobre la 124. Se acota a `slice(0, 7)`, conservando intacto lo que " +
+      "SI es de la 124: los seis previos en orden y el suyo justo despues.",
+  ],
   [
     "feature_list.json",
     "bookkeeping del leader, no de esta feature. Entra en el diff porque el alta de la 128 se " +

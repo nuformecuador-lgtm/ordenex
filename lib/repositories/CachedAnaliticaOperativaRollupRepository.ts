@@ -25,7 +25,8 @@
 // a `JSON.stringify`/`JSON.parse`: volveria como `{}` y la dimension quedaria etiquetada con
 // ids crudos en vez de con el `value` del estatus.
 
-import { claveDeConsulta, codificarCubos, decodificarCubos } from "@/lib/analytics/cache-clave";
+import { claveDeConsulta } from "@/lib/analytics/cache-clave";
+import { codificarCubos, decodificarCubos } from "@/lib/cache/cache-codec";
 import { TAGS_OPERATIVA } from "@/lib/analytics/cache-tags";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import { analiticaCacheHabilitada } from "@/lib/config/analitica-cache";
