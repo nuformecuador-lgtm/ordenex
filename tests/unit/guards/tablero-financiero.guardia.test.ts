@@ -1,7 +1,15 @@
-// Feature 132 (T5.2) — GUARDIA ESTATICO del tablero financiero: R10, R25, R27.
+// Feature 132 (T5.2) — GUARDIA ESTATICO del tablero financiero: R3, R10, R25, R27.
 //
-// Censo de archivos, no de intenciones. Los tres fallos que este guardia vigila
+// Censo de archivos, no de intenciones. Los cuatro fallos que este guardia vigila
 // tienen en comun que NO los detecta ningun otro gate del repo:
+//
+//  - R3, quien ve la region financiera. El requisito NO es de comportamiento sino
+//    de FUENTE UNICA: el conjunto de roles debe derivarse de `esAccesoTotal` y del
+//    catalogo, no de una lista escrita de nuevo aqui. Mientras esa lista a mano
+//    COINCIDA con `esAccesoTotal` —y hoy coincide— ninguna asercion de salida
+//    puede separarlas: los dos codigos renderizan exactamente lo mismo para los
+//    seis roles. La violacion solo se ve mirando el fuente, y por eso la caza este
+//    censo y no un test de pagina.
 //
 //  - R10, la frontera RSC. Un `"use client"` en la pagina o en un componente de
 //    la region compila, pasa los tests de jsdom y REVIENTA `next build`, porque
@@ -23,7 +31,7 @@
 //    esta atada al catalogo por el guardia de correspondencia de la 127. Una
 //    lista de ids reescrita a mano en la pantalla se desincroniza en silencio.
 //
-// AUTOCOMPROBACION: los cuatro censos se ejercitan ademas contra texto sintetico
+// AUTOCOMPROBACION: los cinco censos se ejercitan ademas contra texto sintetico
 // que SI contiene el patron prohibido (deben detectarlo) y contra texto limpio
 // (no deben detectarlo). Sin eso, un censo roto —una ruta mal calculada, un
 // regex que dejo de casar— seguiria en verde para siempre por vacio. Es el mismo
@@ -32,6 +40,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+// Import de VALOR, no de tipo: el censo de R3 necesita los nombres de rol EN
+// RUNTIME y escribirlos aqui cometeria el mismo pecado que persigue. Es el mismo
+// import que hace `lib/auth/acceso-total.ts`, la fuente que el requisito defiende.
+import { RolValue } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import { IDS_FINANCIERAS_SERVIDAS } from "@/lib/types/analitica-financiera";
@@ -191,6 +203,32 @@ function listasDeIdsAMano(codigo: string): string[] {
   });
 }
 
+/**
+ * (e) R3 — una lista de roles escrita a mano.
+ *
+ * Misma forma que `listasDeIdsAMano`: se buscan los literales de array del fuente
+ * y se cuenta cuantos valores del dominio aparecen ENTRECOMILLADOS dentro del
+ * mismo bloque. Con dos o mas ya es una lista de roles, que es exactamente la
+ * forma en que se redefine "quien ve el dinero" sin darse cuenta. Un rol suelto
+ * (una comparacion, una clave) no cuenta.
+ *
+ * Los nombres de rol NO se escriben aqui: salen de `RolValue`, la misma fuente de
+ * la que sale `ROLES_ACCESO_TOTAL`. Un guardia que reescribiera la lista de roles
+ * cometeria el pecado que persigue y ademas quedaria ciego ante un rol nuevo.
+ */
+const ROLES_DEL_DOMINIO: readonly string[] = Object.values(RolValue);
+
+function listasDeRolesAMano(codigo: string): string[] {
+  const limpio = soloCodigo(codigo);
+  const arrays = limpio.match(/\[[^[\]]*\]/g) ?? [];
+  return arrays.filter((bloque) => {
+    const presentes = ROLES_DEL_DOMINIO.filter((rol) =>
+      new RegExp(`["'\`]${rol}["'\`]`).test(bloque),
+    );
+    return presentes.length >= 2;
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Contrapeso de cobertura                                                     */
 /* -------------------------------------------------------------------------- */
@@ -312,6 +350,31 @@ describe("R27 · la lista de metricas financieras tiene una sola fuente", () => 
 });
 
 /* -------------------------------------------------------------------------- */
+/* (e) — R3, quien ve la region financiera sale de una sola fuente             */
+/* -------------------------------------------------------------------------- */
+
+describe("R3 · el conjunto de roles que ve la region financiera tiene una sola fuente", () => {
+  it("la pagina decide con esAccesoTotal y no con una condicion propia", () => {
+    const pagina = CENSADOS.find(({ ruta }) => ruta === "app/(app)/analitica/page.tsx");
+    expect(pagina, "la pagina no esta en el censo").toBeDefined();
+    expect(
+      pagina?.codigo.includes("esAccesoTotal("),
+      "la pagina dejo de llamar a esAccesoTotal: el censo de listas a mano pasaria por vacio",
+    ).toBe(true);
+  });
+
+  it("ningun archivo escribe una lista de roles a mano", () => {
+    const infractores = CENSADOS.flatMap(({ ruta, codigo }) =>
+      listasDeRolesAMano(codigo).map((bloque) => `${ruta}: ${bloque.slice(0, 80)}`),
+    );
+    expect(
+      infractores,
+      "redefinen a mano quien ve el dinero, en vez de derivarlo de esAccesoTotal",
+    ).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* Autocomprobacion: cada censo, sobre texto prohibido y sobre texto limpio    */
 /* -------------------------------------------------------------------------- */
 
@@ -386,5 +449,34 @@ describe("autocomprobacion · el censo detecta lo que dice detectar", () => {
     expect(listasDeIdsAMano(`const ids = ["${primero}"];`)).toEqual([]);
     expect(listasDeIdsAMano("const ids = IDS_FINANCIERAS_SERVIDAS;")).toEqual([]);
     expect(listasDeIdsAMano(`// ["${primero}", "${segundo}"] escrito en un comentario`)).toEqual([]);
+  });
+
+  it("(e) detecta una lista de roles a mano y no un rol suelto ni el TIPO", () => {
+    // Los ejemplos se construyen A PARTIR de `RolValue`: si aqui se escribieran
+    // los nombres, el caso seguiria en verde el dia que un rol se renombre.
+    const [primero, segundo] = ROLES_DEL_DOMINIO;
+    expect(listasDeRolesAMano(`if (!["${primero}", "${segundo}"].includes(actor.rol)) {}`)).not.toEqual(
+      [],
+    );
+    expect(listasDeRolesAMano(`const roles = ['${primero}','${segundo}'] as const;`)).not.toEqual([]);
+    // Casos LIMPIOS: los que de verdad aparecen hoy en el arbol.
+    expect(listasDeRolesAMano(`if (actor.rol === "${primero}") return null;`)).toEqual([]);
+    expect(listasDeRolesAMano(`const roles = ["${primero}"];`)).toEqual([]);
+    expect(listasDeRolesAMano("const roles: readonly RolValue[] = ROLES_ACCESO_ANALITICA;")).toEqual(
+      [],
+    );
+    expect(listasDeRolesAMano("if (!esAccesoTotal(actor.rol)) return <AnaliticaShell />;")).toEqual(
+      [],
+    );
+    expect(
+      listasDeRolesAMano(`// es una tupla literal (readonly ["${primero}","${segundo}"])`),
+    ).toEqual([]);
+  });
+
+  it("(e) el dominio de roles se deriva de RolValue y cubre mas de un rol", () => {
+    // Contrapeso: con un dominio vacio o de un solo elemento, el censo de (e) no
+    // podria detectar nada y quedaria en verde para siempre.
+    expect(ROLES_DEL_DOMINIO.length).toBeGreaterThanOrEqual(2);
+    expect(ROLES_DEL_DOMINIO.every((rol) => rol.length > 0)).toBe(true);
   });
 });
