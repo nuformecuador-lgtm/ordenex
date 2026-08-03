@@ -184,7 +184,14 @@ function servicio(repo: ICierresAdminRepository, contarZona?: { n: number }) {
   const signedUrls = {
     createSignedUrls: vi.fn(async () => ({})),
   } as unknown as ISignedUrlProvider;
-  return new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls);
+  // Feature 172 (T C.2): la COLA son cierres no aprobados, asi que su pendiente es `null` y
+  // este doble no llega a devolver nada util. Existe porque el contrato lo exige.
+  return new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, {
+    sumarVigentesPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, "0.00"])),
+    ),
+    obtenerCierreParaPago: vi.fn(async () => null),
+  });
 }
 
 function input(extra: Record<string, unknown> = {}) {

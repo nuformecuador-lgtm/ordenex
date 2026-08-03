@@ -173,7 +173,14 @@ function servicio(repo: ICierresAdminRepository, contarZona?: { n: number }) {
     findEstatusIdByValue: vi.fn(async () => null),
   } as unknown as IOrdenRepository;
   const signedUrls = { createSignedUrls: vi.fn(async () => ({})) } as unknown as ISignedUrlProvider;
-  return new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls);
+  // Feature 172 (T C.2): sin pagos registrados. El conteo de llamadas de ESTE doble lo mide
+  // `cierres-admin-pendiente.test.ts`; aqui solo hace falta que exista.
+  return new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, {
+    sumarVigentesPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, "0.00"])),
+    ),
+    obtenerCierreParaPago: vi.fn(async () => null),
+  });
 }
 
 function input(extra: Record<string, unknown> = {}) {

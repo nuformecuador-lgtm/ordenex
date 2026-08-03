@@ -99,6 +99,9 @@ function makeResumen(over: Partial<CierreAdminResumen> & { cierreId: string }): 
     totales: ZERO_TOTALES,
     totalPagoMensajero: "0.00",
     totalIngresoBodegaRechazos: "0.00",
+    // Feature 172 (T C.2): el campo existe en el contrato; su valor solo importa en los tests
+    // de la 172 (`cierres-admin-pendiente.test.ts`). `null` = cierre no aprobado (R28).
+    pendientePagoMensajero: null,
     solicitadoAt: "2026-07-30T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
@@ -221,7 +224,12 @@ function tecleaMonto(gestionId: string, valor: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  aprobarMock.mockResolvedValue({ status: "ok", cierreId: "c1", estado: "aprobado" });
+  aprobarMock.mockResolvedValue({
+    status: "ok",
+    cierreId: "c1",
+    estado: "aprobado",
+    pendientePagoMensajero: "0.00", // feature 172 (T C.2): sin pendiente no hay oferta de pago
+  });
 });
 
 afterEach(() => {

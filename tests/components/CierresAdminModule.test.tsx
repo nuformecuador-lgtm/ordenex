@@ -87,6 +87,7 @@ function makeResumen(
     totales: ZERO_TOTALES,
     totalPagoMensajero: "0.00", // feature 39/R17
     totalIngresoBodegaRechazos: "0.00", // feature 56/R16
+    pendientePagoMensajero: null, // feature 172/T C.2: null = cierre no aprobado (R28)
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
@@ -848,6 +849,7 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierreId: "c1",
       estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 

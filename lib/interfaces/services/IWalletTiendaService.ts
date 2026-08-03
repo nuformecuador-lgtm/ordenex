@@ -1,5 +1,6 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  DesgloseTiendaDTO,
   ListarMovimientosDeTiendaCompletoInput,
   ListarMovimientosDeTiendaInput,
   ListarMovimientosDeTiendaResult,
@@ -23,6 +24,21 @@ export interface ListarMisMovimientosPayload {
   page: number;
   pageSize: number;
   saldo: SaldoTiendaDTO; // saldo del conjunto filtrado (R22)
+  /**
+   * Feature 172 (T G.2, R55) `[P5]` — los TRES importes de la cabecera de `/mi-wallet` (a
+   * favor / cargos / pagado) del MISMO conjunto filtrado.
+   *
+   * Es el mismo `DesgloseTiendaDTO` que devuelve `listarMovimientosDeTienda` al maestro, y
+   * sale de la MISMA funcion (`derivarDesgloseTienda`): la tienda y quien le paga tienen que
+   * leer la misma cifra del mismo libro. No es redundante con `saldo`: aquel parte de
+   * credito/debito y por eso mete el pago recibido dentro de «debitos», que es exactamente lo
+   * que R55 existe para impedir.
+   *
+   * REQUERIDO a proposito. Opcional dejaria que la cabecera se pintara con huecos el dia que
+   * un consumidor se olvidara de emitirlo, y un hueco en una pantalla de dinero se lee como
+   * «no hay nada», no como «no lo se».
+   */
+  desglose: DesgloseTiendaDTO;
 }
 
 export type VerMiSaldoServiceResult =

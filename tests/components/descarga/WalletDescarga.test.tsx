@@ -161,6 +161,15 @@ const SALDO_TIENDA = {
   saldo: "500.25",
   signo: "positivo" as const,
 };
+// Feature 172 (T G.2, R55): la cabecera de `/mi-wallet` pasa a tres importes. Este archivo
+// mide la DESCARGA, no la cabecera; el dato se anade para que el modulo monte.
+const DESGLOSE_TIENDA = {
+  aFavor: "500.25",
+  cargos: "0.00",
+  pagado: "0.00",
+  saldo: "500.25",
+  signo: "positivo" as const,
+};
 const CUENTA = {
   devengado: "300.50",
   pagado: "0.00",
@@ -206,6 +215,7 @@ function renderMiWallet() {
       page={1}
       pageSize={20}
       saldo={SALDO_TIENDA}
+      desglose={DESGLOSE_TIENDA}
     />,
   );
 }

@@ -83,7 +83,11 @@ queda el registro de cierre y lo que cada una desencadenó.
   añadir una restricción que valida filas existentes a una tabla que esta feature no escribe es
   riesgo de despliegue importado; queda anotado para la 173.
 
-### [ ] T0.9 — Calendario: colisión con la 170 fase 2 (decisión del LEADER, no del spec)
+### [x] T0.9 — Calendario: colisión con la 170 fase 2 (decisión del LEADER, no del spec)
+- **RESUELTA el 2026-08-02: NO hay colisión, la 172 arranca ya.** La 170 y la 171 están las dos
+  en `done` (las 6 tandas de la fase 2 mergeadas: PRs #248, #249, #250, #253, #255, #256), así que
+  nada sigue en vuelo sobre `app/(app)/wallet/tiendas/**` ni `app/(app)/cierres-admin/**`. Zona
+  `fullstack` con **0 `in_progress`**. Constancia en `progress/impl_172-liquidacion.md`.
 - Comprobar qué tandas de la 170 siguen en vuelo sobre `app/(app)/wallet/tiendas/**` y
   `app/(app)/cierres-admin/**` (`AGENTS.md § Paralelismo`: intersección de archivos en la misma
   zona `fullstack`).
@@ -94,7 +98,12 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA A — Base de datos, integridad y piezas puras
 
-### [ ] T A.0 — Verificar las bases ANTES de escribir la migración
+### [x] T A.0 — Verificar las bases ANTES de escribir la migración
+- **HECHA el 2026-08-02.** Producción (`scfnwxqbsgkzwsdntdvd`): **39 + 7 = 46 filas, CERO
+  incoherentes**; los CHECK cubren **10/10** y **5/5** valores de los enums reales. **Preview NO
+  verificada**: el MCP está fijado al ref de producción y el de preview no es descubrible desde
+  esta sesión — hueco declarado en `progress/impl_172-liquidacion.md`, **a resolver antes de
+  mergear el PR**, no antes de escribir el código. Evidencia y consulta pegadas allí.
 - Con el MCP de Supabase, en **producción y preview** (y en local con Prisma), comprobar que
   **ninguna** fila de `wallet_tienda_movimiento` ni de `pago_mensajero_movimiento` incumple el
   CHECK de `design.md §2.3`, y contar filas de las dos tablas.
@@ -106,7 +115,13 @@ queda el registro de cierre y lo que cada una desencadenó.
   `progress/impl_172-liquidacion.md`. Si aparece **una sola** fila incoherente, la tanda se
   detiene y vuelve a la puerta: no se «arregla» una fila de dinero sin decisión humana.
 
-### [ ] T A.1 — Modelo Prisma + migración `up`/`down`
+### [x] T A.1 — Modelo Prisma + migración `up`/`down`
+- **HECHA el 2026-08-02.** `db/schema.prisma`: `LiquidacionPago` + `LiquidacionAnulacion` + los 4
+  lados inversos en `Usuario` y 1 en `CierreDia`. `db/migrations/20260802120000_liquidacion_pago/`
+  con `migration.sql` (2 tablas, 3 CHECK del pago, 2 UNIQUE, 3 índices, 6 FK, RLS en ambas, y los
+  2 CHECK `tipo`↔`categoria` de los libros) y `down.sql` (DROP en orden inverso + los 2 DROP
+  CONSTRAINT). **Cero sentencias de tipos** ⇒ ningún `down.sql` previo tocado.
+  Round-trip up → down → up verde en local; `migrate status` limpio; `typecheck` verde.
 - `db/schema.prisma`: `LiquidacionPago` y `LiquidacionAnulacion` (§2.1, §2.2) + lados inversos en
   `Usuario` y `CierreDia`.
 - `migration.sql`: las 2 tablas con sus CHECK, los 2 `UNIQUE` (`clave_idempotencia`, `pago_id`),
@@ -116,7 +131,13 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** `pnpm run db:migrate` aplica en local; `pnpm run db:rollback` revierte; `prisma
   migrate status` limpio; `pnpm typecheck` verde con el cliente regenerado.
 
-### [ ] T A.2 — Test estático de la migración
+### [x] T A.2 — Test estático de la migración
+- **HECHA el 2026-08-02.** `tests/integration/db/liquidacion-migration.test.ts`: **11 casos, los
+  11 verdes**. Los dos CHECK no se comprueban por `toContain` del SQL literal: se **parsean** a
+  un mapa `tipo → categorías` y se comparan contra los valores REALES de los enums leídos de
+  `db/schema.prisma`. **Prueba por mutación ejecutada** (borrar la rama `credito` y borrar
+  `'ajuste_devengo'`): en los dos casos caen 2 tests; salida pegada en
+  `progress/impl_172-liquidacion.md`.
 - `tests/integration/db/liquidacion-migration.test.ts` (molde `wallet-tienda-migration.test.ts`,
   regex sobre el SQL, sin Postgres):
   - «crea la tabla del pago con monto DECIMAL(12,2) y sin updated_at/deleted_at»
@@ -133,7 +154,12 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Depende de:** T A.1 · **Cubre:** R58, R59, R60, R62, R63, R64, R75
 - **Hecho:** 11 tests verdes; borrar a mano una rama del CHECK hace fallar el test que la afirma.
 
-### [ ] T A.3 [P] — Tipos y schemas de borde
+### [x] T A.3 [P] — Tipos y schemas de borde
+- **HECHA el 2026-08-02.** `lib/types/liquidacion.ts` (DTOs de §3.2 + 3 schemas `.strict()`) y
+  `tests/unit/types/liquidacion-schemas.test.ts` (**57 tests verdes**). Todos los negativos de
+  «Hecho» cubiertos, cada uno afirmando **el campo** del error. Hallazgo: un día inexistente
+  (`2026-02-31`) **no** da `Invalid Date` en V8 (rueda al 3 de marzo), así que la validación de
+  fecha compara el ISO de vuelta; hay un test que lo fija.
 - `lib/types/liquidacion.ts`: los DTO de `design.md §3.2`, `montoPositivoSchema` reutilizado, tope
   por precisión de columna (molde `INDEMNIZACION_MONTO_MAX`), `z.enum(METODO_PAGO_SEED)`,
   `fechaPago` como `YYYY-MM-DD` no futura en hora de Costa Rica (`fechaCalendarioCR`),
@@ -145,7 +171,12 @@ queda el registro de cierre y lo que cada una desencadenó.
   de mañana, SINPE sin referencia, nota pasada de tope, motivo en blanco, clave desconocida,
   cualquier campo de archivo adjunto) devuelven `validation_error` **por campo**.
 
-### [ ] T A.4 [P] — Derivación pura del pendiente de un cierre
+### [x] T A.4 [P] — Derivación pura del pendiente de un cierre
+- **HECHA el 2026-08-02.** `lib/utils/pendiente-cierre.ts` (`derivarPendienteCierre`, pura, STRING
+  `toFixed(2)`) y `tests/unit/utils/pendiente-cierre.test.ts` (**15 tests verdes**): los 6 casos
+  de «Hecho» más las fronteras al céntimo y el barrido money-safe sobre el propio módulo. La
+  regla `min(P, E)` **no se reimplementa**: hay un test que compara la salida con
+  `calcularSplitPago(P, E).pendiente` sobre 6 pares.
 - `lib/utils/pendiente-cierre.ts`: `derivarPendienteCierre(P, E, pagadoVigente)` → STRING, con
   `Prisma.Decimal`, reutilizando `calcularSplitPago` (no reimplementando `min(P,E)`).
 - Test `tests/unit/utils/pendiente-cierre.test.ts`: `E=0` → pendiente `P`; `E≥P` → `0.00`; `P=0`
@@ -157,7 +188,15 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA B — Registrar un pago
 
-### [ ] T B.1 — Repositorio del pago
+### [x] T B.1 — Repositorio del pago
+- **HECHA el 2026-08-02.** `lib/interfaces/repositories/ILiquidacionPagoRepository.ts` +
+  `lib/repositories/LiquidacionPagoRepository.ts` (8 métodos; `anular` queda para T F.1) y
+  `tests/unit/repositories/liquidacion-pago-repository.test.ts` (**20 tests verdes**). `crear`
+  traduce el P2002 de la clave en `{ status: "clave_repetida" }` **en las dos formas del error**
+  (nativa y driver adapter de Prisma 7, la cicatriz de `_shared/prisma-unique.ts`); un P2002 de
+  otra restricción se propaga. «Vigentes» vive en una sola constante (`VIGENTE`) usada por las
+  dos sumas, y hay un test que compara el `where` de las sumas con el de los listados —que sí
+  traen los anulados (R74).
 - `ILiquidacionPagoRepository` + implementación: `crear(tx, input)` (traduce el conflicto de
   `clave_idempotencia` en un resultado, no en una excepción que suba), `obtenerPorClave`,
   `obtenerPorId`, `sumarVigentesPorCierre(ids)`, `sumarVigentesPorTienda(id)`, `listarPorCierre`,
@@ -167,14 +206,28 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** `crear` escribe las 10 columnas del documento; las sumas excluyen anulados; los
   totales salen como STRING.
 
-### [ ] T B.2 [P] — Los libros aceptan fecha de movimiento
+### [x] T B.2 [P] — Los libros aceptan fecha de movimiento
+- **HECHA el 2026-08-02.** `fechaMovimiento?: Date` en los dos `Crear*Input` y en los dos
+  repositorios, emitida **solo si viene** (spread condicional: cuando no viene, la clave **no
+  existe** en el `data`, no vale `undefined`). Test nuevo
+  `tests/unit/repositories/libros-fecha-movimiento.test.ts` (**6 verdes**) en archivo NUEVO
+  justamente para no tocar ninguno de los existentes: los tests de los dos feeds del cierre
+  (`wallet-tienda-feed-service`, `wallet-mensajero-feed-service`,
+  `pago-mensajero-movimiento-repository`, `wallet-idempotencia`) siguen verdes **sin editarlos**.
 - Añadir `fechaMovimiento?: Date` a `CrearPagoMensajeroInput` y `CrearMovimientoTiendaInput`, y
   pasarlo solo si viene (`design.md §2.4`).
 - **Depende de:** T A.1 · **Cubre:** R37
 - **Hecho:** los tests existentes de los dos feeds del cierre siguen verdes **sin editarlos** —
   es la prueba de que el campo es opcional de verdad.
 
-### [ ] T B.3 — `LiquidacionService.registrarPagoTienda`
+### [x] T B.3 — `LiquidacionService.registrarPagoTienda`
+- **HECHA el 2026-08-02.** `lib/interfaces/services/ILiquidacionService.ts` +
+  `lib/services/LiquidacionService.ts` + `lib/utils/descripcion-pago.ts`
+  (`descripcionDePago` y `medianocheUtcDelDia`, puras). Test
+  `tests/unit/services/liquidacion-service.test.ts` (**33 verdes**) con las contrapruebas de rol
+  —`adminTienda` pidiendo **su propia** tienda y `adminSatelite` → `forbidden`, con el log de
+  llamadas **vacío**— y R40 medido con un doble de `tx` que expone `walletMovimiento` espiado:
+  cero llamadas. El servicio **no recibe** el repositorio de la caja (contraprueba estructural).
 - Guardia `esAccesoTotal` **antes** de tocar datos; saldo vía `agregarSaldoPorTienda` +
   `derivarSaldoTienda`; ramas `sin_saldo` / `excede`; escritura del documento y del débito
   `pago_tienda` en la **misma** transacción, con `origenTipo: "pago_tienda"`,
@@ -186,7 +239,17 @@ queda el registro de cierre y lo que cada una desencadenó.
   `adminSatelite` reciben `forbidden`; y un test afirma que el repositorio de la **caja
   principal** no recibe ni una llamada (R40).
 
-### [ ] T B.4 — El candado de serialización `[P1]`
+### [x] T B.4 — El candado de serialización `[P1]`
+- **HECHA el 2026-08-02.** `bloquearBeneficiario` en el repositorio (las dos ramas: `usuario`
+  para la tienda, `cierre_dia` para el mensajero) y llamada **antes** de leer el disponible.
+  `tests/integration/db/liquidacion-idempotencia.test.ts` (**10 verdes**) con un store que
+  implementa la semántica real del `FOR UPDATE` **leyéndolo de la sentencia cruda que emite el
+  repositorio**, más visibilidad transaccional (commit → release, en ese orden).
+  **Prueba por mutación ejecutada tres veces** (quitar el candado del servicio: 8 tests caen;
+  candado no-op en el store: 3 caen; candado **después** de la lectura: 4 caen). Salidas pegadas
+  en `progress/impl_172-liquidacion.md`. **Hallazgo del proceso:** la primera versión del store
+  fotografiaba las filas *después* de ceder el turno y el test de carrera pasaba SIN candado; se
+  corrigió a instantánea al inicio de la sentencia (`READ COMMITTED`) y ahí sí cae.
 - `bloquearBeneficiario(tx, …)` en el repositorio (`SELECT … FOR UPDATE`: fila de `cierre_dia`
   para el mensajero, fila de `usuario` para la tienda) y llamada **antes** de leer el disponible,
   **una sola** por operación.
@@ -198,7 +261,17 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** **prueba por mutación obligatoria**: quitando el bloqueo del store, el test de
   carrera debe fallar. Un test de concurrencia que pasa sin candado no prueba nada.
 
-### [ ] T B.5 — `LiquidacionService.registrarPagoMensajero`
+### [x] T B.5 — `LiquidacionService.registrarPagoMensajero`
+- **HECHA el 2026-08-02.** `registrarPagoMensajero` en `LiquidacionService` (candado del
+  **cierre** → guardia de estado leída **dentro** de la transacción → pendiente derivado →
+  documento + movimiento `pago`/`liquidacion` con `origenTipo: "pago_mensajero"`). El
+  repositorio gana `obtenerCierreParaPago(cierreId, tx?)` —**solo lectura**, `select` de 5
+  columnas— y el servicio, un tercer repositorio por constructor
+  (`IPagoMensajeroMovimientoRepository`). El **beneficiario sale del cierre**, nunca de la
+  petición (R5). `tests/unit/services/liquidacion-service.test.ts` pasa de 33 a **67 casos**:
+  los tres estados no aprobados → `cierre_no_aprobado` sin escribir ni derivar el pendiente,
+  pago parcial con la cifra exacta al céntimo, y R42 medido por tres vías (espías del `tx`,
+  el doble del repositorio y la ausencia estructural de cualquier escritura sobre `cierreDia`).
 - Igual que T B.3, más: el cierre debe existir y estar `aprobado` (leído dentro de la
   transacción), el pendiente sale de `derivarPendienteCierre`, el bloqueo es el del **cierre**, y
   el movimiento es `pago`/`liquidacion` con `origenTipo: "pago_mensajero"`.
@@ -207,7 +280,15 @@ queda el registro de cierre y lo que cada una desencadenó.
   nada**; un pago parcial deja el resto pendiente con la cifra exacta; ningún snapshot del cierre
   se toca (R42, verificado sobre el doble del repositorio).
 
-### [ ] T B.6 — Idempotencia
+### [x] T B.6 — Idempotencia
+- **HECHA el 2026-08-02.** `tests/integration/db/liquidacion-idempotencia.test.ts` pasa de 10 a
+  **26 casos**, sobre el store **ya corregido** de T B.4 (instantánea al inicio de la sentencia),
+  ampliado con la semántica del `UNIQUE(clave_idempotencia)` y del índice único parcial de
+  **los dos** libros, más `cierre_dia` (que **revienta** si alguien intenta escribirlo, R42).
+  Los 5 casos de la lista, en los dos caminos. **Prueba por mutación ejecutada dos veces**:
+  apagar el `UNIQUE` del store hace caer **5** tests —el primero incluido, con los dos pagos
+  entrando (`crear-documento:pago-2`)— y apagar el índice único parcial del libro del mensajero
+  hace caer los **2** de R48. Salidas pegadas en `progress/impl_172-liquidacion.md`.
 - En `tests/integration/db/liquidacion-idempotencia.test.ts`, con un store en memoria que
   **simula la semántica real** del `UNIQUE` y del índice único parcial de los libros (molde
   `wallet-idempotencia.test.ts`):
@@ -220,7 +301,14 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** 5 tests verdes **y** demostración por mutación de que quitar el `UNIQUE` del store
   hace fallar el primero.
 
-### [ ] T B.7 — Server Actions de registro
+### [x] T B.7 — Server Actions de registro
+- **HECHA el 2026-08-02.** `lib/actions/liquidacion.ts` con las **dos** acciones de registro
+  (las otras tres del diseño son de T C.1 y T F.4), molde literal de `wallet-egresos.ts`.
+  `tests/unit/actions/liquidacion-action.test.ts` (**23 casos**): sin sesión →
+  `unauthenticated` sin tocar el servicio **y con la petición rota también** (el orden importa);
+  ZodError → `validation_error` **por campo**; un monto `number` muere en el borde; los estados
+  de dominio se devuelven tal cual; y R65 con **dos** aserciones —la lista EXACTA de
+  exportaciones y un patrón que rechaza `editar/actualizar/modificar/corregir/update/patch`—.
 - `lib/actions/liquidacion.ts` con el molde de `lib/actions/wallet-egresos.ts`
   (`resolveActorFromSession` → `UnauthenticatedError` **antes** del servicio → `schema.parse` →
   servicio bajo `withErrorHandler`). Mutaciones internas ⇒ Server Action, no Route Handler.
@@ -234,14 +322,34 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA C — Lecturas: pendiente, comprobantes y filtro
 
-### [ ] T C.1 [P] — Listas de comprobantes
+### [x] T C.1 [P] — Listas de comprobantes
+- **HECHA el 2026-08-02.** `listarPagosDeCierre` / `listarPagosDeTienda` en `LiquidacionService`
+  (mismo `esAccesoTotal` que registrar, **antes** de leer) + las **2 Server Actions** que
+  faltaban del diseño (quedan 4 de 5; la anulación es T F.4). `tests/unit/services/
+  liquidacion-service.test.ts` pasa de 67 a **82 casos** y `liquidacion-action.test.ts` de 23 a
+  **30**. El criterio duro se mide con un **barrido inverso**: todo uuid de la respuesta
+  serializada es el `id` de un pago (los ids de mensajero, tienda y cierre son uuids en el
+  fixture, justo para que el barrido pueda distinguirlos). Los **4 roles sin acceso** reciben
+  `forbidden` en los dos listados con el log de llamadas **vacío**, y `adminTienda` pidiendo
+  **su propia** tienda también.
 - `listarPagosDeCierre` / `listarPagosDeTienda` en el servicio (mismo gate de rol), devolviendo
   `PagoRegistradoDTO[]` con el **nombre** de quien registró y, si lo hay, el bloque de anulación.
 - **Depende de:** T B.1 · **Cubre:** R49, R50, R56, R74
 - **Hecho:** el DTO no contiene ningún uuid salvo el `id` del pago (que no se pinta ni se
   descarga); un rol sin acceso total → `forbidden`.
 
-### [ ] T C.2 — El pendiente viaja con el cierre
+### [x] T C.2 — El pendiente viaja con el cierre
+- **HECHA el 2026-08-02.** `CierreAdminResumen` gana `pendientePagoMensajero: string | null` y
+  `AprobarCierreServiceResult.ok`, `pendientePagoMensajero: string` (tras aprobar el cierre ES
+  aprobado, así que ahí no hay rama `null`). `CierresAdminService` recibe una **5.ª dependencia
+  de SOLO LECTURA** (`Pick<ILiquidacionPagoRepository, "sumarVigentesPorCierre" |
+  "obtenerCierreParaPago">`): esa pantalla puede derivar el pendiente y no puede escribir un
+  pago. `toResumen` sigue **sin recomputar dinero** —emite `null`— y la derivación vive en
+  `conPendiente`, con **una** `sumarVigentesPorCierre(ids de la página)` por listado.
+  `tests/unit/services/cierres-admin-pendiente.test.ts` (**24 casos**) lo mide **contando
+  llamadas** con páginas de 1, 5 y 50 filas: siempre 1. El detalle también trae el campo (R26
+  dice «en el listado **y** en el detalle»). Mutación comprobada: derivar por fila hace caer 5
+  tests, entre ellos el del coste (`got 5 times`).
 - `CierreAdminResumen` gana `pendientePagoMensajero: string | null` (`null` si no está aprobado) y
   `AprobarCierreServiceResult.ok` lo devuelve tras aprobar. Una sola llamada
   `sumarVigentesPorCierre(ids de la página)` por listado; `toResumen` sigue sin recomputar dinero.
@@ -251,7 +359,17 @@ queda el registro de cierre y lo que cada una desencadenó.
   `solicitado` lo devuelve `null`; el número de llamadas al repositorio por listado **no** crece
   con el tamaño de página.
 
-### [ ] T C.3 [P] — Filtrar el desglose del mensajero por cierre incluye sus pagos
+### [x] T C.3 [P] — Filtrar el desglose del mensajero por cierre incluye sus pagos
+- **HECHA el 2026-08-02.** `buildFiltrosWhere` pasa a método `async` del repositorio: lee los
+  ids de pago del cierre (`liquidacionPago.findMany`, acotado por `cierre_id`, `select: {id}`) y
+  emite el `OR` de §5. Lo consumen **el listado y la agregación**, para que la cabecera del
+  desglose y su tabla no cuenten cosas distintas. El test va **sobre el repositorio**
+  (`tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts`, **12 casos**) con un
+  mini-motor que EVALÚA el `where` contra filas sembradas —y que **lanza** ante cualquier
+  operador que no conozca, para que una mutación no pase por «no casa nada»—. Las **dos
+  mitades** afirmadas. **Prueba por mutación ejecutada dos veces**: volver al filtro viejo hace
+  caer **7** tests (la mitad 1 entre ellos) y un `OR` que se lo trae todo hace caer **5** (la
+  mitad 2 entre ellos). Salidas pegadas en `progress/impl_172-liquidacion.md`.
 - `PagoMensajeroMovimientoRepository`: el filtro `cierreId` pasa a `OR [ {cierre_dia, cierreId},
   {pago_mensajero, origenId ∈ pagos de ese cierre} ]` (`design.md §5`).
 - Test `tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts`.
@@ -264,7 +382,11 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA D — Frontend: pagar a una tienda
 
-### [ ] T D.1 — Formulario de pago (compartido)
+### [x] T D.1 — Formulario de pago (compartido)
+- **HECHA el 2026-08-02.** El diálogo se estructura sobre una única «sesión» (clave + lo escrito
+  van juntos), sin `set-state-in-effect`. **Las dos direcciones del criterio, probadas por
+  mutación por el leader:** renovar la clave tras un fallo tumba 2 tests; conservarla tras un
+  registro exitoso tumba otros 2. Cero `Number`/`parseFloat` en código.
 - `components/shared/liquidacion/RegistrarPagoDialog.tsx`: monto (prefijado al disponible,
   editable a la baja), método, referencia, nota y fecha real (por defecto **hoy** en hora de
   Costa Rica, no futura). Genera la **clave de idempotencia al abrirse**, la conserva entre
@@ -275,7 +397,10 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** reenviar tras un error de red manda **la misma** clave; tras un registro exitoso la
   siguiente apertura manda una distinta; cero `Number`/`parseFloat` en el archivo.
 
-### [ ] T D.2 [P] — Tabla de comprobantes (compartida) + columnas de descarga
+### [x] T D.2 [P] — Tabla de comprobantes (compartida) + columnas de descarga
+- **HECHA el 2026-08-02.** Un pago anulado se muestra completo y marcado, y un test fija que esta
+  tanda **muestra** la anulación pero **no ofrece anular** (eso es T F.5). Ningún identificador
+  interno se pinta ni se descarga, con contraprueba de que el barrido detecta de verdad.
 - `PagosRegistradosTabla.tsx` (`<DataTable>`, descarga **Familia B** con `filasLocales`) y
   `pagos-registrados-descarga-columnas.ts` (fecha real, monto, método, referencia, nota, quién,
   registrado el, **estado y datos de anulación**). Sin ids.
@@ -285,7 +410,11 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** la guardia de columnas sensibles pasa sobre el módulo nuevo sin excepciones; un pago
   anulado se muestra **completo** y marcado.
 
-### [ ] T D.3 — Cablear en el desglose de la tienda
+### [x] T D.3 — Cablear en el desglose de la tienda
+- **HECHA el 2026-08-02.** Refresco dirigido probado **por mutación** (leader): cambiarlo por uno
+  global tumba 4 tests. Permisos por partida doble: sin permiso no se ve el control **y** la acción
+  responde `forbidden`, las dos mitades leyendo el mismo predicado que el servicio. **R34 en pie:
+  los dos archivos de test de la 171 pasan verdes y no están entre los modificados de la rama.**
 - `SaldosTiendasTable.tsx` pasa `acciones={…}` (la prop que la 171 dejó lista); el diálogo se abre
   desde ahí; tras registrar, `mutate(claveDesgloseTienda(tiendaId))` refresca **solo** esa tienda;
   la lista de comprobantes se monta dentro del desglose.
@@ -300,7 +429,17 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA E — Frontend: pagar a un mensajero (toca la aprobación)
 
-### [ ] T E.1 — Se pregunta al aprobar
+### [x] T E.1 — Se pregunta al aprobar
+- **HECHA el 2026-08-02.** `CierresAdminModule` gana la prop **opcional** `puedeRegistrarPago`
+  (default `false`, falla cerrado; la página la resuelve con `esAccesoTotal`) y, tras
+  `aprobarCierre` con `ok`, ofrece el pago solo si `hayPendienteDeLiquidar(pendiente)` **y** el
+  actor puede pagar. La oferta se monta **fuera** del modal de detalle: cuando aparece, el cierre
+  ya está aprobado y su detalle cerrado. `RegistrarPagoMensajeroDialog` envuelve el diálogo
+  compartido de T D.1 (**sin editarlo**, salvo una prop opcional `cancelLabel` aprobada por el
+  leader) y traduce el fallo: avisa **y relanza**, para que la clave de idempotencia se conserve.
+  **Ninguna ruta de este bloque toca el cierre**: ni «Ahora no», ni un pago fallido.
+  `tests/components/CierresAdminPagoMensajero.test.tsx` (**37 casos**), con **5 mutaciones**
+  ejecutadas (permiso, pendiente 0, aviso de fallo, insignia, estado del cierre).
 - En `CierresAdminModule`: tras `aprobarCierre` con `ok`, si `pendientePagoMensajero > 0` **y** el
   actor puede pagar, se abre el mismo diálogo, prefijado con el pendiente. «Ahora no» cierra sin
   persistir nada.
@@ -311,13 +450,28 @@ queda el registro de cierre y lo que cada una desencadenó.
   pendiente 0 no abre el diálogo; **un `adminSatelite` aprueba sin que aparezca el diálogo**
   (R6); los tests de la 158 (sub-modal de indemnizaciones) siguen verdes sin editarlos.
 
-### [ ] T E.2 — Pagar después, desde el cierre aprobado
+### [x] T E.2 — Pagar después, desde el cierre aprobado
+- **HECHA el 2026-08-02.** `PagoMensajeroSeccion.tsx`: pendiente (pintado, nunca calculado),
+  lista de comprobantes por SWR (`clavePagosDeCierre`, refresco dirigido) y botón. La monta el
+  detalle **solo** si el cierre está `aprobado` y el actor puede pagar; en cualquier otro estado
+  ni se monta ni se pide la lista (R28, verificado contando llamadas). Tras registrar, el
+  pendiente se vuelve a **LEER** del servidor (`verCierreDetalle`), no se resta en el cliente.
+  **Desviación declarada:** con pendiente 0 la sección **sí** aparece, sin botón y con el texto
+  «ya está liquidado» — el bullet decía ocultarla entera, pero el «Hecho» pide «no hay botón» y
+  ocultarla escondería los comprobantes justo cuando existen (R49). Detalle en la bitácora.
 - Sección «Pago al mensajero» en el detalle de un cierre `aprobado`: pendiente, lista de
   comprobantes y botón de registrar. No aparece en cierres no aprobados ni con pendiente 0.
 - **Depende de:** T E.1, T D.2 · **Cubre:** R19, R27, R28, R49
 - **Hecho:** los cuatro estados de cierre se prueban; con pendiente 0 no hay botón.
 
-### [ ] T E.3 [P] — La deuda se ve sin abrir nada
+### [x] T E.3 [P] — La deuda se ve sin abrir nada
+- **HECHA el 2026-08-02.** Columna «Pendiente de liquidar» en el **histórico** —donde viven los
+  cierres aprobados; en la cola el pendiente es `null` por definición y la columna estaría vacía
+  siempre— con `PendienteLiquidarBadge`, compartida con el detalle para que la deuda se lea igual
+  en los dos sitios. **Tres estados distinguibles**: importe (aviso) / «Liquidado» (éxito) / «—».
+  El valor es el STRING del servidor pintado tal cual: **cero `Number`/`parseFloat`**, con
+  barrido sobre los 6 archivos de la tanda y su contraprueba. `CierresAdminModule.test.tsx` sigue
+  verde **sin editarlo**, así que R26 se mide en el archivo nuevo.
 - Columna «pendiente de liquidar» con su `Badge` en el listado de cierres, alimentada por
   `pendientePagoMensajero` (nunca calculada en el cliente).
 - **Depende de:** T C.2 · **Cubre:** R26
@@ -330,7 +484,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 > Tanda añadida por la respuesta del humano a P4. Backend → frontend, como el resto.
 
-### [ ] T F.1 — Repositorio de la anulación
+### [x] T F.1 — Repositorio de la anulación
 - `anular(tx, { pagoId, motivo, anuladoPor })`: inserta en `liquidacion_anulacion` traduciendo el
   conflicto del `UNIQUE(pago_id)` en un resultado `ya_anulado`, nunca en una excepción que suba.
   Las sumas «vigentes» de T B.1 ya lo excluyen.
@@ -338,7 +492,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** el segundo intento devuelve `ya_anulado` sin insertar; la fila del pago **no se
   toca** (aserción explícita: cero `update` sobre `liquidacion_pago`).
 
-### [ ] T F.2 — `LiquidacionService.anularPago`
+### [x] T F.2 — `LiquidacionService.anularPago`
 - Guardia de rol (los mismos que pagan, R81); lee el pago **server-side** y toma **su mismo
   bloqueo** (§4.2, R84); inserta la anulación y el **contraasiento** en la misma transacción:
   `ajuste_devengo`/`devengo` para el mensajero, `ajuste_credito`/`credito` para la tienda, con
@@ -350,20 +504,29 @@ queda el registro de cierre y lo que cada una desencadenó.
   parcialmente (R76) ni para anular una anulación (R82); `adminSatelite` y `adminTienda` →
   `forbidden` (R81); la caja principal no recibe llamada (R40).
 
-### [ ] T F.3 — Volver a pagar lo anulado
+### [x] T F.3 — Volver a pagar lo anulado
 - Test de cadena: pagar → anular → el pendiente vuelve a su valor → registrar de nuevo con **clave
   nueva** y la **misma** referencia y fecha real → se acepta.
 - **Depende de:** T F.2 · **Cubre:** R78, R79, R80
 - **Hecho:** el segundo pago entra; reutilizar la clave del pago anulado devuelve
   `ya_registrado` y **no** crea nada (la clave no se libera al anular).
 
-### [ ] T F.4 — Server Action de anulación
+### [x] T F.4 — Server Action de anulación
 - Quinta acción en `lib/actions/liquidacion.ts`, mismo molde.
 - **Depende de:** T F.2 · **Cubre:** R3, R72
 - **Hecho:** sin sesión → `unauthenticated` antes del servicio; motivo en blanco →
   `validation_error` por campo.
 
-### [ ] T F.5 — Frontend de la anulación
+### [x] T F.5 — Frontend de la anulación
+- **HECHA el 2026-08-02.** `components/shared/liquidacion/AnularPagoDialog.tsx` (molde del
+  sub-modal de rechazo, motivo obligatorio por **dos** barreras) + el control dentro de
+  `PagosRegistradosTabla`, **opt-in por `puedeAnular` (default `false`, falla cerrado) y solo en
+  pagos vigentes** (R82). Cableado en las **dos** pantallas: `/wallet/tiendas` (refresco dirigido
+  a las dos claves de ESA tienda, el mismo mecanismo de T D.3) y `/cierres-admin` (la lista del
+  cierre + relectura del pendiente en el servidor). El `restante` se pinta **tal cual, también
+  negativo** (`₡-15000.00`). **Cuatro pruebas por mutación** ejecutadas (refresco global,
+  permiso ignorado, control en un pago anulado, y las dos barreras del motivo por separado);
+  salidas en `progress/impl_172-liquidacion.md`.
 - `AnularPagoDialog.tsx` (motivo obligatorio, molde del sub-modal de rechazo de cierre) + el
   control dentro de `PagosRegistradosTabla`, visible solo para quien puede anular y solo en pagos
   vigentes. Tras anular, el mismo refresco dirigido de T D.3.
@@ -374,7 +537,12 @@ queda el registro de cierre y lo que cada una desencadenó.
   sigue mostrando **todos** sus datos más quién, cuándo y por qué se anuló; un rol sin permiso no
   ve el control **y** la acción le responde `forbidden`.
 
-### [ ] T F.6 [P] — Declarar la limitación de los importes brutos (N1)
+### [x] T F.6 [P] — Declarar la limitación de los importes brutos (N1)
+- **HECHA el 2026-08-02. N1 se cierra por su default («no se netea; se declara en pantalla»).**
+  El aviso vive junto a la cabecera del desglose de la tienda —entra por el hueco `acciones`,
+  que se renderiza justo debajo de los cuatro importes, así que `DesgloseMovimientosTienda`
+  sigue sin tocarse (R34)—, con `role="note"` y compuesto con los MISMOS rótulos que pinta la
+  cabecera. Texto literal y constancia del default en `progress/impl_172-liquidacion.md`.
 - Texto en pantalla (junto a la cabecera del desglose) que explique que los importes brutos
   incluyen pagos anulados y su reverso, y que **el saldo es el número correcto**.
 - **Depende de:** T F.5 · **Cubre:** — (cierra N1 con su default)
@@ -385,7 +553,15 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA G — Lo que ven los beneficiarios
 
-### [ ] T G.1 [P] — El mensajero ve su pago (verificación, sin cambios de código)
+### [x] T G.1 [P] — El mensajero ve su pago (verificación, sin cambios de código)
+- **HECHA el 2026-08-02. El criterio se cumple LITERAL: los 3 tests nuevos pasan con CERO
+  cambios en `app/(app)/mis-pagos/**`** (medido antes de tocar nada; `git diff` de ese
+  directorio vacío en ese momento). El bloque monta la página REAL y, con sus props, el módulo
+  REAL (`vi.importActual`), porque R54 promete lo que el mensajero **ve**, no lo que cruza la
+  frontera. **Dos mutaciones ejecutadas**: ocultar los movimientos de tipo `pago` tumba 3
+  tests; pintar `devengado` donde va la cuenta por pagar tumba 2. Único cambio al archivo:
+  `listarMisPagosCompletoAction: vi.fn()` en el doble de acciones (el módulo real la importa) —
+  cero aserciones existentes tocadas.
 - Test en `tests/integration/mis-pagos-page.test.tsx`: con un movimiento `liquidacion` sembrado,
   `/mis-pagos` lo muestra con su etiqueta y su cuenta por pagar baja; con su contraasiento
   sembrado, vuelve a subir.
@@ -393,7 +569,16 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** el test pasa **sin** tocar código de `/mis-pagos`. Si hiciera falta tocarlo, es un
   hallazgo y se declara.
 
-### [ ] T G.2 — La tienda distingue el pago del cargo `[P5]`
+### [x] T G.2 — La tienda distingue el pago del cargo `[P5]`
+- **HECHA el 2026-08-02.** La cabecera de `/mi-wallet` pasa de «Créditos / Débitos» a los TRES
+  importes (a tu favor / cargos de Ordenex / ya pagado), derivados **en el servidor** por
+  `derivarDesgloseTienda` + `CUBETA_POR_CATEGORIA` **importados**, no copiados. El criterio duro
+  se mide **por identidad** en `tests/unit/services/mi-wallet-desglose.test.ts`: un espía que
+  envuelve a la función real recibe **las dos** llamadas —la de la tienda y la del maestro— y
+  con **las mismas filas crudas**; una clasificación duplicada dejaría una sola. **Desviación
+  declarada:** hizo falta que `listarMisMovimientos` devolviera el desglose (contrato de
+  servicio, no solo presentación) — detalle y porqué en `progress/impl_172-liquidacion.md`.
+  **Tres mutaciones ejecutadas.**
 - `/mi-wallet`: cabecera de tres importes reutilizando `derivarDesgloseTienda` y
   `CUBETA_POR_CATEGORIA` **por importación**, sin duplicar la clasificación.
 - Test en `tests/integration/mi-wallet-page.test.tsx`.
@@ -405,21 +590,56 @@ queda el registro de cierre y lo que cada una desencadenó.
 
 # TANDA H — Guardias y cierre
 
-### [ ] T H.1 — Censo de tablas
+### [x] T H.1 — Censo de tablas
+- **HECHA el 2026-08-02.** El hallazgo de la Tanda E era mayor de lo que parecía: la guardia
+  recorría **solo `app/`**, así que la tabla de la 172 —que vive en `components/shared/` porque
+  la montan dos pantallas— **no existía para el censo**, y registrarla a secas rompía la guardia
+  por «registro caduco». El recorrido pasa a `["app","components"]` y aparecen **dos**
+  instancias: la de la 172 (`con_descarga`) y una **preexistente de la 130**
+  (`components/private/analytics/TablaResumen`), registrada `fuera` con el criterio ya
+  ratificado de `ZonasModule` (sin consumidor montado) y **sin tocar analítica** (R68).
+  En el código son **una** `<DataTable>` con **dos montajes**: se añade el campo `montajes` y un
+  **test nuevo** que los contrasta contra el árbol en los dos sentidos (mutación ejecutada).
+  Totales leídos del árbol: 29→**31** archivos, 30→**32** instancias, 25→**26** `con_descarga`,
+  6→**7** `fuera`, censo total 31→**33**. **La guardia se vio fallar en DOS etapas** antes de
+  tocarlos (salidas en `progress/impl_172-liquidacion.md`). Anotado: `contadores-cabecera.guardia`
+  tiene el mismo punto ciego y no se toca (es de la 170).
 - Registrar las **dos** instancias nuevas de `PagosRegistradosTabla` y actualizar los totales
   duros **leyéndolos del código en ese momento**, no de este documento.
 - **Depende de:** T D.3, T E.2 · **Cubre:** R57
 - **Hecho:** constancia en `progress/impl_172-liquidacion.md` de haber visto la guardia **fallar**
   antes de actualizar los totales.
 
-### [ ] T H.2 [P] — Barrido money-safe y de fuga de datos
+### [x] T H.2 [P] — Barrido money-safe y de fuga de datos
+- **HECHA el 2026-08-02.** `tests/unit/guards/liquidacion-money-safe.test.ts` (**7 casos**) sobre
+  los **41** archivos de código de la feature, con el censo explícito y una regla de cobertura
+  que impide que envejezca (todo `components/shared/liquidacion/**` y todo `lib/**/*iquidacion*`
+  entra o el test cae). `Number(`/`parseFloat(`/`parseInt(` prohibidos en todos; `.toFixed(` solo
+  en el cliente (en `lib/**` es `Decimal.toFixed(2)`, la serialización exacta — y se afirma
+  aparte que **siempre** lleva el `2`); y ningún archivo de cliente importa una biblioteca de
+  decimales. **Estado medido: cero conversiones.** R56 por dos vías: el DTO declara 9 campos y
+  solo `id` es identificador, y la proyección de descarga con **cuatro uuids** sembrados no
+  emite el del pago. **Tres mutaciones ejecutadas sobre archivos REALES** (un `Number(monto)` en
+  el cliente, un `.toFixed(` en el cliente y un `.toFixed()` sin escala en `lib/`), con su salida
+  pegada, más una contraprueba PERMANENTE dentro del test (caza la llamada, no caza la cita).
 - Test transversal: ningún archivo nuevo o modificado de la feature contiene `parseFloat`,
   `Number(` ni aritmética de montos en cliente; ningún DTO emite uuid salvo el `id` del pago, que
   no se pinta ni se descarga.
 - **Depende de:** T D.3, T E.3, T F.5 · **Cubre:** R14, R56
 - **Hecho:** el barrido pasa y falla si se introduce a mano un `Number(monto)`.
 
-### [ ] T H.3 — Verificación manual de la migración y de los CHECK
+### [x] T H.3 — Verificación manual de la migración y de los CHECK
+- **HECHA el 2026-08-02**, contra `ordenex @ localhost:5432`, con la salida real pegada en
+  `progress/impl_172-liquidacion.md`. **Round-trip `up` → `down` → `up`**: el down deja los
+  enums intactos (3 / 5 / 10 valores) y **cero filas reescritas** en los libros; `migrate status`
+  cierra en «Database schema is up to date!». **Después** del round-trip, **14 INSERT** a mano,
+  cada uno bajo su `SAVEPOINT` y todo revertido: `pago_tienda`+`credito` → `23514`
+  `wallet_tienda_movimiento_tipo_categoria_check`; `liquidacion`+`devengo` → `23514` en el libro
+  del mensajero; **dos anulaciones del mismo pago → `23505` `liquidacion_anulacion_pago_id_key`**,
+  con **una** anulación viva y el pago **intacto**; más los 3 CHECK del documento. **Tres
+  contrapruebas** (`pago_tienda`+`debito`, `ajuste_credito`+`credito`, `liquidacion`+`pago`)
+  demuestran que el CHECK no rechaza todo. RLS leída de la base: `relrowsecurity=true`,
+  `policies=0` en las dos tablas. Base idéntica antes y después.
 - Contra Postgres local, con evidencia pegada en `progress/impl_172-liquidacion.md`: round-trip
   up → down → up; intento de insertar a mano una fila incoherente (`pago_tienda` + `credito`) y su
   rechazo; intento de insertar dos anulaciones del mismo pago y su rechazo.
@@ -427,13 +647,54 @@ queda el registro de cierre y lo que cada una desencadenó.
 - **Hecho:** salida real pegada. Es la única prueba de que los constraints **actúan** y no solo
   están escritos: los tests de migración del repo son estáticos.
 
-### [ ] T H.4 — Alcance: lo que NO se hizo
+### [x] T H.4 — Alcance: lo que NO se hizo
+- **HECHA el 2026-08-02.** Los tres no objetivos dejan de ser una revisión de diff —que caduca al
+  mergear— y pasan a `tests/unit/guards/liquidacion-alcance.test.ts` (**3 casos**): R66 (la
+  migración crea exactamente las 2 tablas, sin `ADD COLUMN` ni sentencias de tipos, y no nombra
+  corte/período/ciclo), R67 (`ESTADOS_CIERRE_BLOQUEANTES` **leída del código** = los tres de la
+  111, con `aprobado` fuera, y ningún archivo de la 172 la nombra) y R68/R62 (ningún archivo de
+  la feature nombra la caja ni importa analítica; el SQL sin comentarios no menciona
+  `wallet_movimiento`). **Dos mutaciones ejecutadas**, con su salida. Suites verdes **sin
+  editarlas**: 111 → 6 archivos / 263 tests; analítica → 33 / 504; vecinos del censo y de
+  `/wallet/mensajeros` → 30 / 207.
+- **DECISIÓN 1 del leader, APLICADA:** `/wallet/mensajeros` **sí** muestra agregados inflados
+  —`CuentasPorPagarTable` no lista movimientos, lista un agregado por mensajero— así que recibe
+  el aviso de N1 en sus **dos** superficies con importes (tabla y cabecera del desglose), con el
+  mismo lenguaje y compuesto con los rótulos reales de cada una. Test nuevo
+  `tests/components/WalletMensajerosAvisoBrutos.test.tsx` (**4 casos**) + mutación. La asimetría
+  que la Tanda G dejó abierta queda **CERRADA**.
+- **DECISIÓN 2 del leader, DECLARADA:** la descarga del histórico **NO** gana la columna
+  «pendiente de liquidar». Es **alcance deliberado**, no un olvido: tocaría el archivo de columnas
+  que fijó la 170 y sus tests, y ningún R lo pide (R26 habla del listado y del detalle, que ya lo
+  tienen).
 - Revisión del diff contra los no objetivos: sin ciclo de corte por tienda (R66), sin cambios en
   los estados que bloquean (R67), sin tocar caja ni analítica (R68).
 - **Depende de:** todas · **Cubre:** R66, R67, R68
 - **Hecho:** las suites de la 111 y de analítica siguen verdes **sin editarlas**.
 
-### [ ] T H.5 — Cierre
+### [x] T H.5 — Cierre
+- **HECHA el 2026-08-02.** `progress/impl_172-liquidacion.md` cierra con el mapa `R<n> → test`
+  **de los 85**, el delta por tanda (772/9257 → **793/9857** esperado; +21 archivos, +600 tests),
+  la constancia de los **siete** defaults (P2, P5, P6, P7, P8, N1, N2) con dónde se mide cada uno,
+  y el E2E **declarado INAPLICABLE** con la tabla de qué lo sustituye y **qué queda descubierto**.
+  **RECUENTO tras la RONDA 2 del review (2026-08-02): 85 de 85 con test en el repo; R61 queda
+  ⚠ PARCIAL.** El registro original de esta task decía **84 de 85** y declaraba tres hallazgos;
+  los tres se cerraron después:
+  - **R61 — cerrada la mitad que vive en el repo, ABIERTA la que no.** El review señaló que R61
+    tenía una mitad testeable que nadie había escrito: que **ninguno** de los dos
+    `ADD CONSTRAINT … CHECK` lleve **`NOT VALID`**, porque añadirlo conservaría el nombre del CHECK
+    y **perdería la validación del pasado en silencio**. Ya está afirmado en
+    `liquidacion-migration.test.ts` (13 casos), con control del detector y probado por mutación en
+    sus dos formas. **La otra mitad —medir la base de PREVIEW— sigue ABIERTA y BLOQUEA EL MERGE**,
+    no el código: producción está medida y limpia; el MCP está fijado al ref de producción.
+  - **R26 y R67 — punteros corregidos por el leader** en la tabla de abajo. No eran requisitos sin
+    cubrir, era el índice el que estaba mal; se corrigen porque `CHECKPOINTS.md` obliga a mantener
+    ese mapa y el próximo revisor lo leería como cierto.
+  - **R6 — reubicada.** El review encontró que la respuesta P3 del humano se afirmaba en la
+    pantalla equivocada: `adminSatelite` se simulaba con una prop en vez de ejercitarse el eslabón
+    **rol → prop**, que es donde vive la decisión. Ahora se mide en `CierresAdminPage.test.tsx`
+    sobre la página real, y **forzar el predicado a `true` hace caer el test** (antes no rompía
+    ninguno de los 9857). **`./init.sh` y la suite completa: DEL LEADER.**
 - `./init.sh` verde; `progress/impl_172-liquidacion.md` con el mapa `R<n> → test` completo, el
   delta de archivos/tests contra el baseline, la constancia de los defaults aplicados (P2, P5, P6,
   P7, P8, N1, N2) y el resultado de T A.0 contra producción y preview.
@@ -456,7 +717,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R3 | `tests/unit/actions/liquidacion-action.test.ts` — sin sesión → `unauthenticated` sin llamar al servicio (registro y anulación) |
 | R4 | `tests/integration/wallet-tiendas-pago.test.tsx` — sin permiso no se renderizan los controles de pagar ni de anular |
 | R5 | `tests/unit/services/liquidacion-service.test.ts` — el rol se comprueba antes de leer el beneficiario del input |
-| R6 | `tests/components/CierresAdminPagoMensajero.test.tsx` + `liquidacion-service.test.ts` — `adminSatelite` aprueba sin oferta de pago y recibe `forbidden` al llamar directo |
+| R6 | **pantalla, CON EL ROL**: `tests/components/CierresAdminPage.test.tsx` — se monta la página real y un `adminSatelite` **aprueba** un cierre con pendiente > 0 **sin** recibir la oferta de pago; `maestro` y `admin` sí la reciben (contraprueba) · **el módulo respeta su prop**: `tests/components/CierresAdminPagoMensajero.test.tsx` · **la acción niega**: `liquidacion-service.test.ts` — `forbidden` al llamar directo ⚠️ **fila corregida el 2026-08-02 (bloqueante 2 del review)**: apuntaba sólo a `CierresAdminPagoMensajero.test.tsx`, donde el caso se simula con `puedeRegistrarPago: false` y **no aparece ningún `adminSatelite`**; el eslabón rol → prop (`puedeRegistrarPago={esAccesoTotal(actor.rol)}` en `app/(app)/cierres-admin/page.tsx`) no lo medía nadie. Ahora sí, y verificado por mutación (`={true}` ⇒ cae el caso del `adminSatelite`, siguen verdes las contrapruebas) |
 | R7 | `tests/unit/repositories/liquidacion-pago-repository.test.ts` — las 10 columnas del documento |
 | R8 | `tests/unit/types/liquidacion-schemas.test.ts` — método fuera del catálogo → `validation_error` |
 | R9 | `tests/unit/repositories/liquidacion-pago-repository.test.ts` — fecha real e instante de registro conviven y difieren |
@@ -476,7 +737,7 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R23 | `tests/unit/services/liquidacion-service.test.ts` + `RegistrarPagoDialog.test.tsx` — monto menor al pendiente aceptado y prefijado |
 | R24 | `tests/unit/services/liquidacion-service.test.ts` — el pendiente baja exactamente en el monto |
 | R25 | idem — monto > pendiente → `excede` con el disponible, sin escribir `[P1]` |
-| R26 | `tests/components/CierresAdminModule.test.tsx` (ampliado) — marca de pendiente de liquidar |
+| R26 | `tests/components/CierresAdminPagoMensajero.test.tsx` — marca de pendiente de liquidar ⚠️ **puntero corregido el 2026-08-02 (leader)**: el spec apuntaba a `CierresAdminModule.test.tsx`, que **no la mide** (0 apariciones de R26). El requisito sí está cubierto; el índice estaba mal |
 | R27 | `tests/components/CierresAdminPagoMensajero.test.tsx` — con pendiente 0 no hay botón |
 | R28 | `tests/unit/services/cierres-admin-pendiente.test.ts` — cierre no aprobado → `null` |
 | R29 | `tests/unit/services/liquidacion-service.test.ts` — pago a tienda sin cierre, contra saldo acumulado |
@@ -511,13 +772,13 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R58 | `tests/integration/db/liquidacion-migration.test.ts` + T H.3 (rechazo real de una fila incoherente) |
 | R59 | idem |
 | R60 | `tests/integration/db/liquidacion-migration.test.ts` — un concepto sin clasificar no casa ninguna rama |
-| R61 | evidencia de T A.0 en `progress/impl_172-liquidacion.md` (verificación previa contra producción y preview) |
+| R61 | **mitad 1 (SQL, CUBIERTA)**: `tests/integration/db/liquidacion-migration.test.ts` — «los dos CHECK VALIDAN las filas existentes: ninguno se añade con `NOT VALID`», con su caso de control del detector; verificado por mutación en los **dos** `ADD CONSTRAINT` (`NOT VALID` y `not   valid` en dos líneas) el 2026-08-02. · **mitad 2 (verificar cada base antes de desplegar): producción medida y limpia en T A.0 (evidencia en `progress/impl_172-liquidacion.md`); PREVIEW SIN MEDIR — ABIERTA, BLOQUEA EL MERGE.** No la puede cerrar ningún test del repo: es del humano (el MCP está fijado al `project_ref` de producción) |
 | R62 | `tests/integration/db/liquidacion-migration.test.ts` — la migración no toca `wallet_movimiento` `[P8]` |
 | R63 | idem — RLS sin políticas en las dos tablas nuevas |
 | R64 | idem — `down.sql` revierte tablas y CHECK, sin tocar enums; + round-trip de T H.3 |
 | R65 | `tests/unit/actions/liquidacion-action.test.ts` — no se exporta ninguna acción de editar un pago |
 | R66 | T H.4 — revisión de alcance: ninguna tabla, estado ni pantalla de «corte por tienda» en el diff |
-| R67 | suite de la 111 (`reglas-bloqueos-cierre`, `cierre-vencido-modelo`) sin editar |
+| R67 | `tests/unit/guards/liquidacion-alcance.test.ts` + la suite de la 111 sin editar ⚠️ **puntero corregido el 2026-08-02 (leader)**: los dos archivos que nombraba el spec (`reglas-bloqueos-cierre`, `cierre-vencido-modelo`) **no existen** en `tests/`; los reales son `orden-repository.bloqueo.test.ts` y los 5 del cierre vencido, y el guard de alcance lo afirma mejor que lo prometido |
 | R68 | suites de analítica y de la caja sin editar; R40 lo cubre por el lado del código |
 | R69 | `tests/unit/services/liquidacion-anulacion.test.ts` — contraasiento del signo opuesto, mismo monto, sin borrar ni editar |
 | R70 | idem — un monto colado en el input se ignora; el del contraasiento sale del pago |

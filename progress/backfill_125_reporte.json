@@ -1,0 +1,171 @@
+{
+  "rango": {
+    "desde": "2026-07-10",
+    "hasta": "2026-08-01"
+  },
+  "modo": "escritura",
+  "instante": "2026-08-02T15:51:31.991Z",
+  "entradas": [
+    {
+      "fecha": "2026-07-10",
+      "filasEscritas": 0,
+      "filasRetiradas": 0,
+      "ms": 205,
+      "clasificacion": "no_comparable"
+    },
+    {
+      "fecha": "2026-07-11",
+      "filasEscritas": 0,
+      "filasRetiradas": 0,
+      "ms": 15,
+      "clasificacion": "no_comparable"
+    },
+    {
+      "fecha": "2026-07-12",
+      "filasEscritas": 0,
+      "filasRetiradas": 0,
+      "ms": 12,
+      "clasificacion": "no_comparable"
+    },
+    {
+      "fecha": "2026-07-13",
+      "filasEscritas": 0,
+      "filasRetiradas": 0,
+      "ms": 11,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-14",
+      "filasEscritas": 0,
+      "filasRetiradas": 0,
+      "ms": 12,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-15",
+      "filasEscritas": 0,
+      "filasRetiradas": 0,
+      "ms": 11,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-16",
+      "filasEscritas": 0,
+      "filasRetiradas": 0,
+      "ms": 11,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-17",
+      "filasEscritas": 18,
+      "filasRetiradas": 0,
+      "ms": 98,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-18",
+      "filasEscritas": 11,
+      "filasRetiradas": 0,
+      "ms": 20,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-19",
+      "filasEscritas": 13,
+      "filasRetiradas": 0,
+      "ms": 22,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-20",
+      "filasEscritas": 14,
+      "filasRetiradas": 0,
+      "ms": 26,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-21",
+      "filasEscritas": 14,
+      "filasRetiradas": 0,
+      "ms": 19,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-22",
+      "filasEscritas": 13,
+      "filasRetiradas": 0,
+      "ms": 17,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-23",
+      "filasEscritas": 16,
+      "filasRetiradas": 0,
+      "ms": 19,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-24",
+      "filasEscritas": 16,
+      "filasRetiradas": 0,
+      "ms": 22,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-25",
+      "filasEscritas": 16,
+      "filasRetiradas": 0,
+      "ms": 20,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-26",
+      "filasEscritas": 16,
+      "filasRetiradas": 0,
+      "ms": 17,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-27",
+      "filasEscritas": 24,
+      "filasRetiradas": 0,
+      "ms": 26,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-28",
+      "filasEscritas": 19,
+      "filasRetiradas": 0,
+      "ms": 20,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-29",
+      "filasEscritas": 22,
+      "filasRetiradas": 0,
+      "ms": 20,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-30",
+      "filasEscritas": 22,
+      "filasRetiradas": 0,
+      "ms": 21,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-07-31",
+      "filasEscritas": 22,
+      "filasRetiradas": 0,
+      "ms": 25,
+      "clasificacion": "procesada"
+    },
+    {
+      "fecha": "2026-08-01",
+      "filasEscritas": 22,
+      "filasRetiradas": 0,
+      "ms": 27,
+      "clasificacion": "procesada"
+    }
+  ]
+}

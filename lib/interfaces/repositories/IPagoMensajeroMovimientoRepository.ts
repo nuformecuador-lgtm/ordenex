@@ -25,10 +25,34 @@ export interface CrearPagoMensajeroInput {
   origenId: string | null;
   descripcion?: string | null;
   registradoPor?: string | null;
+  /**
+   * Feature 172 (T B.2, design §2.4, R37) — fecha del movimiento, OPCIONAL.
+   *
+   * La columna existe desde la 44 con `DEFAULT CURRENT_TIMESTAMP` y hasta hoy ningun
+   * escritor la exponia: el feed del cierre escribe con la hora real y le vale el default.
+   * La liquidacion necesita fechar el movimiento con la fecha REAL del pago —que puede ser
+   * de ayer— y no con el instante de registro.
+   *
+   * Es opcional A PROPOSITO y la implementacion la pasa SOLO si viene: quien no la manda
+   * sigue cayendo en el `DEFAULT` de la columna y su comportamiento no cambia ni un byte.
+   * La prueba de que es opcional de verdad es que los tests de los dos feeds del cierre
+   * siguen verdes sin editarlos.
+   *
+   * Convencion de la 172: MEDIANOCHE UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
+   * no 06:00Z, para que el pago entre por los dos bordes del filtro por rango del desglose.
+   */
+  fechaMovimiento?: Date;
 }
 
-// Filtros del listado del libro de UN mensajero (R20/R22). `cierreId` filtra por el origen
-// (origen_tipo=cierre_dia, origen_id=cierreId). Rango de fechas sobre fecha_movimiento.
+/**
+ * Filtros del listado del libro de UN mensajero (R20/R22). Rango de fechas sobre
+ * `fecha_movimiento`.
+ *
+ * **`cierreId` = «todo lo que pertenece a ese cierre», y son DOS orígenes** desde la feature
+ * 172 (T C.3, R52): lo que el feed escribio al aprobarlo (`origen_tipo = cierre_dia`) **y** los
+ * pagos registrados contra el, con sus contraasientos (`origen_tipo = pago_mensajero`, cuyo
+ * `origen_id` es el PAGO, no el cierre). La traduccion a SQL vive en el repositorio.
+ */
 export interface ListarPorMensajeroFiltros {
   mensajeroId: string;
   page: number;
@@ -44,7 +68,8 @@ export interface ListarPorMensajeroPage {
 }
 
 // Filtros de la cuenta por pagar de UN mensajero (R14/R22): mismo conjunto que el listado, sin
-// paginacion.
+// paginacion — y con la MISMA lectura de `cierreId` (172/T C.3), para que la cabecera y la
+// tabla del desglose no puedan contar cosas distintas.
 export interface CuentaPorPagarFiltros {
   cierreId?: string;
   desde?: Date;

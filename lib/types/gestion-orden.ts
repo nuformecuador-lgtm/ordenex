@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
-import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { esFechaCalendarioValida, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
 import { ubicacionSchema } from "@/lib/types/ruta-mensajero";
@@ -98,10 +98,15 @@ export type LiberarActionInput = z.infer<typeof liberarSchema>;
  * la medianoche de CR el dia UTC ya es el siguiente, y comparar contra el rechazaba
  * mañana como si fuera hoy (off-by-one). Comparacion lexicografica: `YYYY-MM-DD` ordena
  * igual como texto que como fecha.
+ *
+ * Un dia INEXISTENTE (`2026-02-31`) tambien se rechaza (`esFechaCalendarioValida`).
  */
 export function esFechaFutura(value: string, now: Date = new Date()): boolean {
-  // Formato ISO estricto: un dia inexistente ("2026-02-31") da Invalid Date.
-  if (Number.isNaN(new Date(`${value}T00:00:00.000Z`).getTime())) return false;
+  // Un dia inexistente se caza con el ROUND-TRIP, NO con `Invalid Date`: en V8 solo el MES
+  // fuera de rango ("2026-13-01") invalida; el DIA desbordado RUEDA en silencio
+  // ("2026-02-31T00:00:00.000Z" es el 3 de marzo) y la comparacion de abajo lo daba por
+  // futuro. Se reprogramaba para un dia que el usuario nunca pidio.
+  if (!esFechaCalendarioValida(value)) return false;
   return value >= mananaCalendarioCR(now);
 }
 

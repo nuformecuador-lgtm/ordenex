@@ -140,6 +140,10 @@ model Usuario {
   incidentesResueltos                 OrdenIncidente[]          @relation("IncidenteResueltoPor") // feature 158/R52/R54: incidentes que este admin aprobo/rechazo
   analyticsDailyComoTienda            AnalyticsDaily[]          @relation("AnalyticsDailyTienda") // feature 123/R31: filas del rollup diario cuya TIENDA (de la orden) es este usuario
   analyticsDailyComoMensajero         AnalyticsDaily[]          @relation("AnalyticsDailyMensajero") // feature 123/R32: filas del rollup diario de este mensajero (el cubo sin_asignar NO cuelga de aqui: es NULL)
+  liquidacionPagosComoMensajero       LiquidacionPago[]         @relation("LiquidacionPagoMensajero") // feature 172/R21: pagos (liquidaciones) recibidos por ESTE mensajero
+  liquidacionPagosComoTienda          LiquidacionPago[]         @relation("LiquidacionPagoTienda") // feature 172/R29: pagos recibidos por ESTA tienda (contra su saldo acumulado)
+  liquidacionPagosRegistrados         LiquidacionPago[]         @relation("LiquidacionPagoRegistrador") // feature 172/R7: pagos que este usuario (maestro/admin) registro
+  liquidacionAnulacionesRealizadas    LiquidacionAnulacion[]    @relation("LiquidacionAnulacionActor") // feature 172/R73: anulaciones de pago que este usuario realizo
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -882,6 +886,7 @@ model CierreDia {
   cierreBodega       CierreBodega?  @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
   detalle            CierreDetail[] // feature 69/R1: snapshot congelado por orden de este cierre
+  liquidacionPagos   LiquidacionPago[] // feature 172/R21/R22: pagos al mensajero registrados CONTRA este cierre
 
   @@index([mensajeroId])
   @@index([destinoTipo, destinoZonaId]) // feature 38: filtra por rol+zona destino
@@ -1208,6 +1213,80 @@ model PagoMensajeroMovimiento {
   @@index([mensajeroId, fechaMovimiento]) // R26: saldo/listado por mensajero por fecha (desc)
   @@index([origenTipo, origenId]) // R26: movimientos de un origen (cierre)
   @@map("pago_mensajero_movimiento")
+}
+
+// Feature 172 (design §1/§2.1) — el PAGO como DOCUMENTO propio. Los dos libros
+// (wallet_tienda_movimiento / pago_mensajero_movimiento) siguen derivando el saldo; lo que
+// esta tabla anade es la pieza que no existia: monto, metodo, referencia, nota, fecha REAL,
+// actor e instante de REGISTRO (R7). De cada fila nace EXACTAMENTE un movimiento en el libro
+// del beneficiario, enlazado por `origen_tipo` = pago_tienda|pago_mensajero + `origen_id` =
+// este id (R38), que es lo que hereda gratis la idempotencia del indice unico parcial que los
+// dos libros ya tienen.
+//
+// Fila INMUTABLE, igual que los libros: SIN updatedAt/deletedAt. Anular NO la toca (§2.2/R41).
+//
+// Dos FK nullables + CHECK XOR en vez de un discriminador (§2.1): `mensajero_id` y `tienda_id`
+// apuntan las dos a `usuario`, asi que un `beneficiario_tipo` + id generico daria MENOS
+// integridad referencial y un enum nuevo que mantener. Precedente en el repo:
+// `notificacion_destinatario_xor`. Los 3 CHECK (beneficiario XOR, cierre sii mensajero,
+// monto > 0) van a mano en la migracion: Prisma no expresa CHECK.
+//
+// `metodo` REUTILIZA el enum `metodo_pago_value` de la 36: no se crea ningun tipo ni se anade
+// ningun valor a un enum existente, asi que NO hay que tocar ningun down.sql previo.
+//
+// `fecha_pago` es @db.Date (convencion del repo para fechas calendario: medianoche UTC del
+// dia) y `created_at` es el instante de registro. Existen siempre y pueden diferir (R9).
+//
+// RLS habilitada SIN policies (solo service role, patron wallet_tienda_movimiento /
+// pago_mensajero_movimiento / cierre_dia), R63.
+model LiquidacionPago {
+  id                String          @id @default(uuid())
+  claveIdempotencia String          @unique @map("clave_idempotencia") // §4.1: uuid del cliente; el UNIQUE es la barrera contra el doble pago (R44)
+  mensajeroId       String?         @map("mensajero_id") // FK -> usuario (rol mensajero); XOR con tienda_id
+  tiendaId          String?         @map("tienda_id") // FK -> usuario (rol adminTienda); XOR con mensajero_id
+  cierreId          String?         @map("cierre_id") // FK -> cierre_dia; NOT NULL sii el beneficiario es un mensajero (R21)
+  monto             Decimal         @db.Decimal(12, 2) // > 0 (CHECK); el signo lo da la categoria del movimiento
+  metodo            MetodoPagoValue // enum EXISTENTE de la feature 36 (R8)
+  referencia        String? // obligatoria si metodo != efectivo; se exige en el borde (R12)
+  nota              String?
+  fechaPago         DateTime        @map("fecha_pago") @db.Date // fecha REAL del pago (R9/R37)
+  registradoPor     String          @map("registrado_por") // FK -> usuario (actor); NOT NULL: un pago siempre lo registra alguien (R7)
+  createdAt         DateTime        @default(now()) @map("created_at") // instante de REGISTRO (R9)
+  // SIN updatedAt / deletedAt: fila INMUTABLE, igual que los libros. La anulacion NO la toca.
+
+  anulacion   LiquidacionAnulacion? // 0 o 1 (R75); su existencia ES el estado "anulado" (derivado, §2.2)
+  mensajero   Usuario?              @relation("LiquidacionPagoMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tienda      Usuario?              @relation("LiquidacionPagoTienda", fields: [tiendaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  cierre      CierreDia?            @relation(fields: [cierreId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  registrador Usuario               @relation("LiquidacionPagoRegistrador", fields: [registradoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([mensajeroId, fechaPago])
+  @@index([tiendaId, fechaPago])
+  @@index([cierreId]) // pendiente por cierre (§5) y lista de comprobantes del cierre
+  @@map("liquidacion_pago")
+}
+
+// Feature 172 (design §2.2, [P4]) — la ANULACION de un pago, como documento aparte. No son
+// columnas `anulado_at`/`anulado_por` en el pago (alternativa H, descartada): eso volveria
+// mutable el documento (contra R41) y dejaria el estado "anulado" en dos sitios —la marca y
+// el contraasiento— que pueden desincronizarse. Aqui el estado se DERIVA de que exista esta
+// fila, y no hay nada que sincronizar.
+//
+// El `@unique` de `pago_id` es la restriccion DE DATOS que exige R75: un segundo intento de
+// anular choca contra el indice, no contra un `if`. Fila tambien INMUTABLE: no se anula una
+// anulacion (R82). RLS habilitada sin policies (R63).
+model LiquidacionAnulacion {
+  id         String   @id @default(uuid())
+  pagoId     String   @unique @map("pago_id") // UNIQUE = un pago se anula UNA vez (R75)
+  motivo     String // no vacio; se exige en el borde (R72)
+  anuladoPor String   @map("anulado_por") // FK -> usuario (actor de la anulacion, R73)
+  createdAt  DateTime @default(now()) @map("created_at") // instante de la anulacion (R73)
+  // SIN updatedAt / deletedAt: tambien INMUTABLE. No se anula una anulacion (R82).
+
+  pago     LiquidacionPago @relation(fields: [pagoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  anulador Usuario         @relation("LiquidacionAnulacionActor", fields: [anuladoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@map("liquidacion_anulacion")
 }
 
 // Feature 84: unidad de la periodicidad de una plantilla de gasto fijo. Con `periodicidadCantidad`

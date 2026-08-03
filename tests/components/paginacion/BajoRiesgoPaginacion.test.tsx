@@ -201,6 +201,7 @@ function cierreAdmin(i: number): CierreAdminResumen {
     totales: TOTALES,
     totalPagoMensajero: "0.00",
     totalIngresoBodegaRechazos: "0.00",
+    pendientePagoMensajero: "0.00", // feature 172/T C.2: aprobado y sin nada que liquidar
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: "2026-07-12T10:00:00.000Z",
     motivoRechazo: null,

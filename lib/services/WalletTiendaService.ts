@@ -76,7 +76,12 @@ export class WalletTiendaService implements IWalletTiendaService {
     const filtros = this.construirFiltros(input);
 
     // R19/R22: acotado a SU tienda_id SIEMPRE en el WHERE (el repo lo aplica), filtros aparte.
-    const [{ movimientos, total }, saldoAgg] = await Promise.all([
+    //
+    // Feature 172 (T G.2, R55) — la tercera lectura es el DESGLOSE por concepto, y es la MISMA
+    // agregacion que alimenta la cabecera del maestro (`listarMovimientosDeTienda`, mas abajo),
+    // con los MISMOS filtros y el `tienda_id` del actor. Sin ella la tienda veria el pago que
+    // recibio sumado dentro de «debitos», indistinguible de un cargo de Ordenex.
+    const [{ movimientos, total }, saldoAgg, desgloseAgg] = await Promise.all([
       this.repo.listarPorTienda({
         page: input.page,
         pageSize: input.pageSize,
@@ -84,6 +89,7 @@ export class WalletTiendaService implements IWalletTiendaService {
         tiendaId: actor.usuarioId, // AL FINAL (feature 170/R15): nada lo puede pisar
       }),
       this.repo.agregarSaldoPorTienda(actor.usuarioId, filtros),
+      this.repo.agregarDesglosePorTienda(actor.usuarioId, filtros),
     ]);
 
     return {
@@ -95,6 +101,10 @@ export class WalletTiendaService implements IWalletTiendaService {
         pageSize: input.pageSize,
         // R22: el saldo refleja el conjunto FILTRADO (mismos filtros que el listado).
         saldo: derivarSaldoTienda(saldoAgg.creditos, saldoAgg.debitos),
+        // Feature 172 (R55): la clasificacion NO se reimplementa aqui. Es literalmente la
+        // funcion que usa el desglose del maestro; si divergieran, la tienda y quien le paga
+        // leerian dos cifras distintas del mismo libro.
+        desglose: derivarDesgloseTienda(desgloseAgg),
       },
     };
   }
