@@ -5,7 +5,15 @@
 > (`dd0902ee` … `5d9f1446`), el spec (`requirements` 85 R / `design` / `tasks` 9 tandas),
 > `progress/impl_172-liquidacion.md` y el contrato del arnés.
 >
-> **VEREDICTO: RECHAZADO.** Dos bloqueantes, los dos estrechos y baratos de cerrar.
+> **RONDA 1 (2026-08-02): RECHAZADO** — dos bloqueantes.
+> **RONDA 2 (2026-08-02): APROBADO — veredicto `OK`.** Los dos bloqueantes están
+> cerrados y verificados por mutación por este revisor. Ver **§11**, que es la parte
+> vigente de este documento; las secciones 1–10 se conservan como el registro de la
+> ronda 1 y **no** se reescriben.
+>
+> Registro de la ronda 1, sin retocar:
+>
+> **VEREDICTO (ronda 1): RECHAZADO.** Dos bloqueantes, los dos estrechos y baratos de cerrar.
 > El trabajo es, por lo demás, de calidad muy alta: ninguna regresión, ninguna aserción
 > ajena debilitada, y lo money-critical **aguanta mutaciones que este revisor introdujo por
 > su cuenta**. Los dos bloqueantes no ponen en duda el código: ponen en duda que un futuro
@@ -472,7 +480,7 @@ Para que el rechazo no se lea como un juicio sobre el trabajo:
 
 ---
 
-## VEREDICTO: **RECHAZADO**
+## VEREDICTO DE LA RONDA 1: **RECHAZADO** (superado — ver §11)
 
 Vuelve al implementer con **dos** bloqueantes, los dos acotados:
 
@@ -490,3 +498,183 @@ Cerrados esos dos, esta feature pasa. No hay ninguna otra objeción: `./init.sh`
 verificado, 85/85 requisitos con fila, cero regresiones, cero aserciones ajenas debilitadas,
 RLS y migración reversible en su sitio, capas separadas, y las tres respuestas del humano
 implementadas donde tenían que estarlo.
+
+---
+---
+
+# 11. RONDA 2 (2026-08-02) — verificación de los arreglos
+
+> Commits revisados: `4193e6f0` (bloqueante 1), `a651b562` (bloqueante 2), `dc13acfe`
+> (recuento y punteros). **Cero cambios en `lib/`, `app/`, `components/` y `db/`** en toda la
+> ronda: comprobado con `git diff --name-only 5d9f1446..HEAD` sobre esos cuatro árboles, vacío.
+> Los dos huecos eran de verificación, no de comportamiento, tal como decía la ronda 1.
+
+## 11.1 Gate, verificado por el revisor
+
+`./init.sh` corrido de nuevo de principio a fin: **`== init OK ==`, 793 archivos / 9862 tests,
+0 fallos** (lint 0 errores). El delta de +5 casos cuadra exactamente con lo entregado: +2 en
+`liquidacion-migration.test.ts` y +3 en `CierresAdminPage.test.tsx` (el `it.each` de
+`maestro`/`admin` cuenta como dos).
+
+## 11.2 Bloqueante 1 — R61, la mitad del `NOT VALID`. CERRADO.
+
+No me fié del resumen: **cuatro mutaciones propias**, sobre el SQL y sobre el test, restauradas
+y verificadas contra `HEAD` después de cada una.
+
+| # | Mutación | Resultado | Qué demuestra |
+| --- | --- | --- | --- |
+| A | ` NOT VALID` en el CHECK de **tienda** (no es el último) | **2 caen**, una es el caso nuevo | La forma canónica se detecta |
+| B | `not   valid` en el CHECK del **mensajero** (**es el último del fichero**) | **1 cae**, y corren los **13** casos | Detecta minúsculas y espacios múltiples, la forma que un `toContain("NOT VALID")` habría dejado pasar, **y el módulo ya no revienta** |
+| C | Degradar `RE_NOT_VALID` a una versión sin `/i` ni `\s+` | **1 cae**: el caso de control | El control del detector **no es decorado**: si el detector se rompe, se sabe |
+| D/E | Borrar la rama `credito` del CHECK de tienda; borrar `ajuste_devengo` del CHECK del mensajero | **2 caen** en cada caso, **las mismas que en la ronda 1** | **El cambio de parser NO debilitó ninguna aserción preexistente** |
+
+**Sobre la trampa del parser: la reproduje y es exactamente como se describe, ni más ni
+menos.** Reconstruí el estado peligroso, el test viejo (`git show 5d9f1446:…`) más `NOT VALID`
+en el ÚLTIMO CHECK, y vitest respondió:
+
+```
+Error: El CHECK pago_mensajero_movimiento_tipo_categoria_check no termina
+ Test Files  1 failed (1)
+      Tests  no tests
+```
+
+**`Tests  no tests`: cero casos ejecutados.** La aserción nueva no habría llegado a correr
+nunca, y el fallo habría salido con un mensaje que no nombra la causa. Es el hallazgo más
+valioso de la ronda: un test de guardia cuyo propio parser se cae ante la mutación que existe
+para cazar es **peor que no tener el test**, porque da sensación de cobertura y falla apuntando
+a otro sitio. Detectarlo exigía intentar la mutación en el sitio incómodo —el último CHECK— y
+no en el cómodo. Se hizo. El arreglo (recortar de `;` a `;` sobre el SQL sin comentarios) es el
+correcto: con él, la mutación B corre los 13 casos y falla el que toca.
+
+Comprobado además que la exhaustividad no envejece: el caso afirma que en la migración hay
+**exactamente 2** `ADD CONSTRAINT "*_tipo_categoria_check"`, así que un tercer libro no puede
+entrar sin pasar por aquí.
+
+**Lo que sigue abierto de R61, y está bien que lo esté:** la mitad de **preview**. Ningún test
+del repo puede cerrarla. Sigue siendo condición de merge, del humano, y la fila del spec ahora
+lo dice con esas palabras en vez de apuntar a una bitácora.
+
+## 11.3 Bloqueante 2 — P3 medida donde vive. CERRADO.
+
+Dos mutaciones propias sobre `app/(app)/cierres-admin/page.tsx`:
+
+| # | Mutación | Resultado |
+| --- | --- | --- |
+| F | `puedeRegistrarPago` forzado a **`true`** | **1 cae**: «adminSatelite: aprueba el cierre de su zona y NO se le ofrece pagar». Las dos contrapruebas siguen verdes |
+| G | `puedeRegistrarPago` forzado a **`false`** | **2 caen**: las contrapruebas de `maestro` y `admin`. El caso del satélite sigue verde |
+
+Las dos direcciones, y cada una tumba **solo** lo suyo. Antes de esta ronda, la mutación F no
+rompía ninguno de los 9857 tests.
+
+**El test mide lo que dice medir.** Lo verifiqué leyéndolo, no solo corriéndolo:
+
+- Monta la **página real** (`await CierresAdminPage()`), con `resolveActorFromSession`
+  devolviendo un `RolValue` de verdad. El rol entra por donde entra en producción.
+- Aprueba un cierre **de verdad** a través del módulo real y afirma las **dos** mitades de P3:
+  que el cierre **queda aprobado** (`aprobarCierre` llamado con el payload de la 38, más el
+  toast de éxito) **y** que no aparece la oferta. La primera mitad importa tanto como la
+  segunda: «no se le ofrece» solo significa algo si aprobar le sigue funcionando igual que
+  antes de la 172, que es la consecuencia en cadena de la feature 111.
+- **El punto de sincronización es correcto, y era la parte fácil de hacer mal.** Espera a que
+  el modal de detalle desaparezca antes de afirmar que no hay diálogo de pago. En el módulo,
+  `cerrarDetalle()` y `setOfertaPago()` son dos `setState` del **mismo manejador síncrono**, así
+  que React los agrupa en un único re-render: cuando el detalle ya no está en el DOM, la oferta
+  —si tocaba— ya está pintada. Sin ese anclaje, «no aparece» sería indistinguible de «todavía no
+  aparece» y el test daría verde con la página rota. Está razonado en el propio archivo.
+- Cierra la puerta por dos vías, no una: además del diálogo ausente, afirma que
+  `registrarPagoMensajeroAction` **no recibió ni una llamada**.
+- La contraprueba no se conforma con que el diálogo exista: comprueba que llega **prefijado con
+  el pendiente que devolvió el servidor** (`50000.00`), así que es la misma aprobación con el
+  mismo dinero y lo único que cambia es el rol.
+- El nombre accesible del diálogo sale del catálogo real (`REGISTRAR_PAGO_TEXTO.titulo`), no de
+  un literal copiado que se desincronizaría en silencio.
+
+**Sobre conservar el guard inerte de `wallet-tiendas-pago.test.tsx`: me vale, y prefiero cómo se
+resolvió a que se hubiera borrado.** El problema de la ronda 1 no era que ese guard existiera:
+era que **se leía como si midiera el eslabón rol → prop** y no lo medía, porque en esa pantalla
+el `notFound` previo hace que el valor sea siempre verdadero. Ahora el comentario dice sin
+adornos qué protege (la forma de una línea hoy redundante), qué **no** protege (el eslabón), por
+qué se conserva igualmente (el día que esa pantalla admita un rol que mira y no paga, la línea
+deja de ser redundante de golpe y un `true` colado se convierte en un botón de pagar para quien
+no puede) y **dónde se mide de verdad**. Un guard barato con su alcance declarado es un activo;
+el disfraz era el defecto, y el disfraz se quitó.
+
+## 11.4 Punteros y recuento. CERRADOS.
+
+- **R26** → `CierresAdminPagoMensajero.test.tsx`. Correcto.
+- **R67** → `tests/unit/guards/liquidacion-alcance.test.ts` más la suite de la 111. Correcto, y
+  verifiqué que `tests/unit/repositories/orden-repository.bloqueo.test.ts`, que la nota nueva
+  cita como el archivo real de la 111, **existe**.
+- **R61** reescrita en sus dos mitades, con la de preview marcada como abierta y bloqueante de
+  merge. **R6** reescrita en sus tres capas: pantalla con el rol, módulo con la prop, acción que
+  niega.
+- **El recuento de T H.5 ya no se contradice con su propia tabla**: pasa de «84 de 85» a «85 de
+  85 con test en el repo, R61 PARCIAL». Era importante: un registro que dice 84 junto a una
+  tabla de 85 filas obliga al siguiente lector a averiguar cuál falta.
+- Las tres filas corregidas llevan la marca de qué decían antes y por qué se cambiaron. Es lo
+  correcto en un spec con la puerta cerrada: no se borra el rastro, se anota la corrección.
+- Nota para el registro: mi informe de la ronda 1 sí escribía la ruta correcta
+  (`tests/unit/guards/liquidacion-alcance.test.ts`, línea 306 de este archivo); el `services/`
+  se me coló en el resumen de chat, no en el documento. Sin consecuencias: la fila quedó bien.
+
+## 11.5 No se coló nada por la puerta de atrás
+
+Comprobado sobre el rango `5d9f1446..HEAD`, no asumido:
+
+- **Cero líneas de aserción eliminadas** en los tests de la ronda (`expect`, `toEqual`,
+  `toBe`, `toMatch`, `toHaveBeen`, `it(`, `describe(`).
+- **Cero** `.skip` / `.only` / `.todo` añadidos.
+- **Cero cambios en código de producción** (`lib/`, `app/`, `components/`, `db/`).
+- El cambio de los dobles de `useRouter`/`useToast` a mocks compartidos con `vi.hoisted` en
+  `CierresAdminPage.test.tsx` no afecta a los 7 casos preexistentes: ninguno afirmaba sobre
+  ellos y `vi.clearAllMocks()` sigue en el `beforeEach`. El `vi.mock` nuevo de
+  `@/lib/actions/liquidacion` es necesario (el módulo real las importa) y es un refuerzo, no un
+  relajo: es lo que permite afirmar que al satélite no se le llama ninguna.
+- Tras mis **siete** mutaciones de esta ronda, `git diff HEAD` sale vacío y las 5 suites
+  tocadas vuelven a verde (131 casos).
+
+## 11.6 ¿Sube algún menor a bloqueante ahora que los dos grandes están cerrados?
+
+**No.** Los revisé uno a uno con ese criterio y ninguno cambia de categoría:
+
+- **menor 1** (un fallo derivando el pendiente hace que una aprobación commiteada parezca
+  fallida): sigue sin violar ningún `R`. R17 habla del **pago**, y la aprobación no se revierte
+  en ningún caso; el reintento devuelve `conflict`, que es una señal veraz. Es robustez, y
+  arreglarlo sin un requisito que lo pida sería el revisor legislando.
+- **menor 2** (segunda conexión del pool con el candado tomado): degrada a error de timeout,
+  nunca a un importe mal. Lo que lo mantiene menor es justo lo que hace que la feature sea
+  segura: el importe siempre se decide bajo el candado.
+- **menor 3** (el feed de la aprobación no toma el candado): explícitamente **fuera** del
+  alcance que el spec fijó, y tocar la transacción de aprobación es lo que las tandas evitaron
+  a propósito. Es material de la 173, no de esta.
+- **menor 4** (punteros): **cerrado en esta ronda**.
+- **menor 5** (doble `findMany` por vista) y **menor 6** (`progress/history.md`): triviales.
+  Confirmo que **la entrada de la 172 en `history.md` sigue faltando** y que
+  `CHECKPOINTS.md` la exige para pasar a `done`; es tarea de cierre del leader.
+
+Un apunte que quiero dejar dicho, porque va contra la tentación natural del rol: subir un menor
+a bloqueante *porque los bloqueantes ya se cerraron* sería mover la portería. Los tres primeros
+menores valían lo mismo en la ronda 1 que ahora, y en la ronda 1 no bloqueaban.
+
+---
+
+# VEREDICTO FINAL (ronda 2): **OK**
+
+Los dos bloqueantes están cerrados y **cada uno lo verifiqué por mutación yo mismo, en las dos
+direcciones**, no por el resumen. La feature cumple `CHECKPOINTS.md` con dos salvedades que **no
+son del implementer** y quedan explícitas:
+
+1. **Condición de merge, del humano: medir la base de PREVIEW** con la consulta de
+   incoherencias de T A.0 antes de mergear el PR. Es la mitad de R61 que ningún test del repo
+   puede cerrar, y los dos `ADD CONSTRAINT … CHECK` validan las filas existentes al aplicarse.
+   El riesgo residual es bajo —hoy el único emisor de esos libros es el feed de la aprobación,
+   con pares fijos— pero bajo no es medido.
+2. **Tarea de cierre, del leader: añadir la entrada de la 172 a `progress/history.md`.**
+
+Quedan vivos los menores 1, 2, 3 y 5, todos anotados arriba y ninguno bloqueante.
+
+Lo que se lleva esta feature, dicho para el registro: es **código money-critical que aguanta que
+lo ataquen**. Trece mutaciones del implementer más trece de este revisor entre las dos rondas, y
+en las dos rondas cayó lo que tenía que caer. La ronda 2 además destapó y arregló un test de
+guardia que se caía ante su propia mutación —cero casos ejecutados— y eso es exactamente la
+clase de verde vacío del que este repo tiene cicatriz. Se encontró antes de mergear.

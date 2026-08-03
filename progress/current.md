@@ -15,10 +15,35 @@ solo crecían, ni a mensajeros ni a tiendas se les podía decir «ya pagué». R
 `feature/172-liquidacion`, PR #259, **11 commits, sin push**. La bitácora completa está en
 **`progress/impl_172-liquidacion.md`**; aquí solo va lo que decide qué hacer a continuación.
 
-### 🚦 LO PRIMERO AL RETOMAR: **una sola cosa bloquea el merge, y no es código**
+**Review APROBADO en ronda 2** (`progress/review_172-liquidacion.md`). La ronda 1 rechazó con dos
+bloqueantes y **los dos eran huecos de verificación, no de código**: se cerraron sin tocar una
+línea de `lib/`, `app/`, `components/` ni `db/`. Trazabilidad final: **85 de 85 con test en el
+repo**, R61 ⚠ parcial. Entrada escrita en `progress/history.md`.
 
-**Hay que verificar la base de PREVIEW antes de mergear el PR.** Es el único requisito sin cerrar
-(**R61**, 84 de 85 trazados). El detalle está abajo y la consulta exacta, en la bitácora.
+### 🚦 LO PRIMERO AL RETOMAR: **medir PREVIEW. Y hasta entonces, NO PUSHEAR.**
+
+Es la mitad abierta de **R61** y lo único que falta. **No es una formalidad: pushear ES aplicar la
+migración en preview**, porque el build migra antes de compilar y `MIGRATE_ON_PREVIEW` está activo
+en ese entorno. Los dos `ADD CONSTRAINT … CHECK` **validan las filas existentes al aplicarse**, así
+que si esa base tuviera una fila incoherente el build saldría rojo y dejaría una fila fallida en su
+`_prisma_migrations`, **bloqueando los despliegues de preview siguientes** hasta repararla a mano.
+Producción está medida y limpia, así que **producción no corre ese riesgo**. La consulta exacta
+está en `impl_172-liquidacion.md`.
+
+### 🧯 Lo que el review destapó y conviene no olvidar
+
+Los dos bloqueantes fueron del mismo tipo —**tests que no medían lo que decían medir**— y el
+segundo es el que más enseña: la respuesta **P3** del humano (`adminSatelite` no paga) se afirmaba
+pasando una prop, **no ejercitando el eslabón rol → prop**, que es donde vive la decisión. Poner
+ese predicado en `true` **no rompía ninguno de los 9857 tests**. Y el guard correcto sí existía…
+en la otra página, donde un `notFound` previo lo hace **inerte**. *El guard estaba donde no puede
+fallar y faltaba donde se toma la decisión.*
+
+Al cerrar el primero apareció algo peor todavía: **el parser del propio test de migración se caía
+ante la mutación que ese test existe para cazar**. Con `NOT VALID` en el último CHECK, el módulo
+reventaba al importarse y corrían **cero casos** (`Tests no tests`) — la aserción nueva nunca
+habría llegado a ejecutarse, y el error apuntaba a otro sitio. **Un guard cuyo propio parser muere
+ante la mutación es peor que no tenerlo.**
 
 ### ✅ T0.9 resuelta (era lo único abierto de la Tanda 0): **la 172 arranca YA, sin esperar**
 
