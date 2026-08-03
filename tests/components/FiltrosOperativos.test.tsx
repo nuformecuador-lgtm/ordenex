@@ -7,6 +7,7 @@ import { SWRConfig } from "swr";
 
 import { FiltrosOperativos } from "@/app/(app)/analitica/_components/operativo/FiltrosOperativos";
 import { PanelesOperativos } from "@/app/(app)/analitica/_components/operativo/PanelesOperativos";
+import { TEXTO_FILTROS_DEGRADADOS } from "@/app/(app)/analitica/_components/operativo/textos";
 import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarUsuariosPorRol } from "@/lib/actions/usuarios-por-rol";
@@ -180,11 +181,16 @@ describe("Feature 131 (R22) — el catalogo de opciones falla en blando", () => 
     await waitFor(() => expect(accion.mock.calls.length).toBeGreaterThan(0));
     expect(await screen.findByRole("region", { name: "Ordenes creadas" })).toBeInTheDocument();
 
-    // Y el selector afectado esta APAGADO, no ausente ni mintiendo con una lista vacia.
+    // Y el selector afectado esta APAGADO, no ausente ni mintiendo con una lista vacia...
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
       expect(screen.getByRole("button", { name: /^Tienda:/ })).toBeDisabled();
     });
+
+    // ...y la pantalla DICE por que esta apagado. Sin esta frase, «el catalogo dijo que
+    // no» y «todavia no ha contestado» son el mismo control muerto y mudo: es lo unico
+    // que distingue el degradado de dejar que la excepcion suba y la absorba SWR.
+    expect(await screen.findByText(TEXTO_FILTROS_DEGRADADOS)).toBeInTheDocument();
     // El que SI contesto sigue usable: el degradado es por filtro, no por pantalla.
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^Mensajero:/ })).not.toBeDisabled(),
@@ -201,6 +207,7 @@ describe("Feature 131 (R22) — el catalogo de opciones falla en blando", () => 
       expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
       expect(screen.getByRole("button", { name: /^Mensajero:/ })).toBeDisabled();
     });
+    expect(await screen.findByText(TEXTO_FILTROS_DEGRADADOS)).toBeInTheDocument();
   });
 
   it("con el catalogo sano, las opciones salen de las acciones existentes del repo", async () => {
@@ -214,6 +221,8 @@ describe("Feature 131 (R22) — el catalogo de opciones falla en blando", () => 
     // Ningun catalogo propio: son las acciones que ya existian.
     expect(catalogo).toHaveBeenCalled();
     expect(mensajeros).toHaveBeenCalledWith("mensajero");
+    // Y con todo sano no se avisa de nada: el aviso habla de un fallo real, no de la carga.
+    expect(screen.queryByText(TEXTO_FILTROS_DEGRADADOS)).toBeNull();
   });
 });
 

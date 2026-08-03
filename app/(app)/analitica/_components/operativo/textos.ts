@@ -203,6 +203,14 @@ export const VACIO_PANEL = {
   descripcion: "Esta metrica no registro ningun movimiento con el filtro seleccionado.",
 } as const;
 
+/**
+ * R22 — el filtro apagado DICE por que lo esta. Un selector deshabilitado y mudo se lee
+ * como un control roto de la pantalla, no como un catalogo que no contesto.
+ */
+export const TEXTO_FILTROS_DEGRADADOS =
+  "Algun filtro no esta disponible ahora mismo porque su catalogo no respondio. " +
+  "El tablero sigue funcionando con los filtros restantes.";
+
 export const ETIQUETA_ACTUALIZAR = "Actualizar";
 
 export const DESCRIPCION_ACTUALIZAR =
