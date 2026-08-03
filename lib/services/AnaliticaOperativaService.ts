@@ -246,7 +246,10 @@ export class AnaliticaOperativaService implements IAnaliticaOperativaService {
     );
 
     const intradia = await this.cubosIntradia(consulta, granos);
-    const puntos = await this.proyectar(consulta, dimension, [...cubos], intradia.corteAt);
+    // `corteAt: undefined` para los cubos del ROLLUP: son dias CERRADOS y marcarlos
+    // `parcial` los volveria indistinguibles del dia abierto, que es justo lo que R18
+    // existe para impedir (solo que en la direccion contraria).
+    const puntos = await this.proyectar(consulta, dimension, [...cubos], undefined);
     if (intradia.cubos.length === 0) return puntos;
     const puntosDelDia = await this.proyectar(
       consulta,

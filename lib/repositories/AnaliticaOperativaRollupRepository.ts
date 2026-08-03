@@ -146,15 +146,26 @@ function columnasDelGrano(granos: readonly DimensionAnalitica[]): readonly Coord
   return (Object.keys(COORDENADAS) as Coordenada[]).filter((c) => pedidas.has(c));
 }
 
-/** El `where` completo: alcance + filtro ya recortado + rango por fechas calendario CR. */
+/**
+ * El `where` completo: alcance + filtro ya recortado + rango por fechas calendario CR.
+ *
+ * Las tres piezas se combinan con `AND` y NO con un spread de objeto. No es estilo: con un
+ * spread, dos piezas que nombren la MISMA columna se pisan —la ultima gana— y el recorte del
+ * alcance podria quedar sustituido por el filtro del cliente. Hoy eso seria inocuo porque la
+ * 122 ya interseco los dos (`recortarFiltro`), pero apoyarse en esa coincidencia es apoyarse
+ * en una feature ajena para sostener la frontera multi-tenant. Con `AND` las dos condiciones
+ * se cumplen a la vez y el orden deja de importar.
+ */
 function whereDeConsulta(consulta: ConsultaAnalitica): Prisma.AnalyticsDailyWhereInput {
   const { filtro, rango } = consulta;
   return {
-    ...whereRollup(consulta.alcance),
-    ...(filtro.zona_id ? { zonaId: { in: [...filtro.zona_id] } } : {}),
-    ...(filtro.tienda_id ? { tiendaId: { in: [...filtro.tienda_id] } } : {}),
-    ...(filtro.mensajero_id ? { mensajeroId: { in: [...filtro.mensajero_id] } } : {}),
-    fecha: { gte: fechaComoDate(rango.desdeFecha), lte: fechaComoDate(rango.hastaFecha) },
+    AND: [
+      whereRollup(consulta.alcance),
+      ...(filtro.zona_id ? [{ zonaId: { in: [...filtro.zona_id] } }] : []),
+      ...(filtro.tienda_id ? [{ tiendaId: { in: [...filtro.tienda_id] } }] : []),
+      ...(filtro.mensajero_id ? [{ mensajeroId: { in: [...filtro.mensajero_id] } }] : []),
+      { fecha: { gte: fechaComoDate(rango.desdeFecha), lte: fechaComoDate(rango.hastaFecha) } },
+    ],
   };
 }
 
