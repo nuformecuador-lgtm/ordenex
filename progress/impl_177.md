@@ -479,3 +479,95 @@ humano, no un descuido.
 - La feature 178 (purga) debe poner también `download_storage_path` a NULL al borrar el objeto; si
   no, `/generate` devolverá URLs firmadas de objetos inexistentes (nota ya declarada en
   `requirements.md`).
+
+---
+
+## Cierre de los dos hallazgos menores del review (`progress/review_177.md`)
+
+Pulido posterior a la aprobación del reviewer. Sin cambios de contrato, de spec ni de comportamiento
+observable.
+
+### M1 — fuera el fallback `?? resultados[0]` de `porOrden`
+
+`lib/services/ApiPdfEtiquetaService.ts`. La línea
+
+```ts
+const generado = resultados.find((r) => r.ordenId === ordenId) ?? resultados[0];
+```
+
+era una defensa que hacía lo contrario de defender: si el generador devolviera un resultado con un
+`ordenId` distinto del pedido, en vez de fallar se persistiría en el `download_storage_path` de ESTA
+orden el path del PDF de OTRA. Ahora no hay fallback: si ningún resultado casa exactamente con el
+`ordenId` pedido se devuelve `sin_etiqueta` (→ 409, el mismo estado que "no hay nada que generar"),
+y **nunca** se persiste ni se firma un path ajeno. El comentario del bloque lo declara.
+
+**Alcanzabilidad reverificada antes de tocar nada:** el caso sigue siendo **inalcanzable** por
+cualquier ruta real. `porOrden` invoca `generarYAlmacenarPorOrden([ordenId], actor)` con un único id,
+y `EtiquetasLotePdfService` (`:109-119`) deriva cada `ordenId` del DTO de la etiqueta generada a
+partir de esos mismos ids. Es endurecimiento, no la corrección de un bug vivo.
+
+Tests nuevos (2), ambos con el generador devolviendo un resultado de `ord-AJENA`:
+
+- `tests/unit/services/api-pdf-etiqueta-service.test.ts` › `DEFENSA: si el generador devuelve un
+  resultado de OTRA orden, nunca se persiste ese path (R25)` — afirma `{ status: "sin_etiqueta" }`,
+  `setOrdenDownloadStoragePath` en 0 y `createSignedUrl` en 0.
+- `tests/integration/api/ordenes-api-key-orden-generate.route.test.ts` › `DEFENSA (R25): si el
+  generador responde con otro ordenId, no hay 200 ni url y no se persiste nada` — afirma
+  `status !== 200`, 409 `CONFLICT`, cuerpo sin `url`, 0 persistencias y 0 firmas. El helper
+  `escenario` gana una opción `ordenIdAjeno?: string`; ningún test existente fue editado.
+
+**Mutación #28 (obligatoria):** reintroducido el `?? resultados[0]` → **solo esos 2 tests en rojo**:
+
+```
+AssertionError: expected 200 not to be 200
+AssertionError: expected { status: 'ok', …(3) } to deeply equal { status: 'sin_etiqueta' }
++   "url": "https://signed.test/tienda-77/recien-generado.pdf#300",
+```
+
+Esa `url` es precisamente el daño evitado: el PDF de `ord-AJENA` firmado y persistido en `ord-1`.
+Restaurado y re-verificado en verde.
+
+### M2 — TTL unificado en el composition root de la carga
+
+`app/api/ordenes/api-key/carga/[cargaId]/generate/route.ts`, `buildPdfService()`. Instanciaba
+`EtiquetasLotePdfService` con `SIGNED_URL_TTL_SECONDS` (3600, el de la UI de la 136) mientras su
+hermano de orden usaba `API_SIGNED_URL_TTL_SECONDS` (300): dos roots diciendo cosas distintas sobre
+lo mismo. Unificado a `API_SIGNED_URL_TTL_SECONDS`, con la misma forma que el root de orden (`ttl`
+local y una sola instancia de `SupabaseSignedUrlProvider` reusada) y un comentario de una línea que
+explica por qué ese TTL y no el otro.
+
+**Sin efecto observable:** `ApiPdfEtiquetaService` descarta la `signedUrl` que emite el generador y
+re-firma siempre con su propio TTL (desviación 2 de este documento). `handleCargaGenerateApi`,
+`CargaGenerateApiDeps`, `POST` y el zod quedan intactos.
+
+### Verificación de este cierre
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: 0 errores)
+
+$ pnpm lint
+✖ 41 problems (0 errors, 41 warnings)     # baseline intacto
+
+$ pnpm exec vitest run \
+    tests/unit/services/api-pdf-etiqueta-service.test.ts \
+    tests/unit/services/api-pdf-etiqueta-columna-intacta.test.ts \
+    tests/integration/api/ordenes-api-key-orden-generate.route.test.ts \
+    tests/integration/api/ordenes-api-key-carga-generate.route.test.ts
+
+ Test Files  4 passed (4)
+      Tests  45 passed (45)
+   Duration  1.64s
+```
+
+La suite completa y `./init.sh` los corre el leader (regla de la sesión). El mapa `R<n> → test` no
+cambia: los 2 tests nuevos refuerzan R25, que ya estaba mapeado.
+
+### Nota menor abierta
+
+En el test de integración, al inyectar `ordenIdAjeno` el contador de subidas **sí** se incrementa: el
+generador ya subió el objeto antes de que el service descarte el resultado. Es deliberado y refleja
+el comportamiento real; lo que el test fija es que no se persiste referencia ni se firma URL, no la
+ausencia de un objeto huérfano. Coherente con el criterio de R20/R26/R36 ya declarado (si el UPDATE
+falla queda un objeto huérfano, nunca una referencia rota) y con la purga de la feature 178.

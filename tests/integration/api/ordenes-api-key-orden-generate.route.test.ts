@@ -49,6 +49,8 @@ function escenario(opts: {
   filas?: Fila[];
   /** `false` = la orden no tiene etiqueta imprimible (generador devuelve []) -> 409 (R25). */
   imprimible?: boolean;
+  /** Defensa: el generador responde con un resultado cuyo `ordenId` NO es el pedido. */
+  ordenIdAjeno?: string;
 }) {
   const filas = opts.filas ?? [ORDEN_A];
   const paths = new Map<string, string>();
@@ -90,9 +92,9 @@ function escenario(opts: {
     generarYAlmacenarPorOrden: vi.fn(async (ordenIds: string[]) => {
       if (opts.imprimible === false) return []; // sin `num_guia`: nada imprimible (R25)
       subidas += 1;
-      return ordenIds.map((ordenId) => ({
-        ordenId,
-        path: `store-1/${ordenId}.pdf`,
+      return ordenIds.map((pedido) => ({
+        ordenId: opts.ordenIdAjeno ?? pedido,
+        path: `store-1/${pedido}.pdf`,
         signedUrl: "no-usar",
         expiraEnSegundos: TTL,
       }));
@@ -173,6 +175,18 @@ describe("POST /api/ordenes/api-key/orden/{id}/generate — PDF (R20/R21/R22/R27
     expect(await res.json()).toMatchObject({ status: "error", code: "CONFLICT" });
     expect(e.subidas()).toBe(0);
     expect(e.pdfRepo.setOrdenDownloadStoragePath).toHaveBeenCalledTimes(0);
+  });
+
+  it("DEFENSA (R25): si el generador responde con otro ordenId, no hay 200 ni url y no se persiste nada", async () => {
+    const e = escenario({ ordenIdAjeno: "orden-AJENA" });
+    const res = await handleGenerarPdfOrdenApi(req(SECRETO), "100234", e.deps);
+    expect(res.status).not.toBe(200);
+    expect(res.status).toBe(409); // mismo mapeo que `sin_etiqueta`
+    const json = await res.json();
+    expect(json).toMatchObject({ status: "error", code: "CONFLICT" });
+    expect(json.url).toBeUndefined();
+    expect(e.pdfRepo.setOrdenDownloadStoragePath).toHaveBeenCalledTimes(0);
+    expect(e.signedUrls.createSignedUrl).toHaveBeenCalledTimes(0);
   });
 
   it("R14 (DISCRIMINANTE): con la guia de A y la remision de B se genera el PDF de A", async () => {

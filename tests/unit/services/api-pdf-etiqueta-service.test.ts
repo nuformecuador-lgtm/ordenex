@@ -189,6 +189,20 @@ describe("ApiPdfEtiquetaService.porOrden", () => {
     expect(signedUrls.createSignedUrl).toHaveBeenCalledTimes(0);
   });
 
+  it("DEFENSA: si el generador devuelve un resultado de OTRA orden, nunca se persiste ese path (R25)", async () => {
+    const repo = fakeRepo({ ordenPath: null, ordenFila: filaOrden(null) });
+    // Resultado con un `ordenId` que NO es el pedido: no hay nada imprimible para esta orden.
+    const lotePdf = fakeLotePdf({ porOrden: [resultadoPorOrden("ord-AJENA", PATH_GENERADO)] });
+    const signedUrls = fakeSignedUrls();
+    const svc = new ApiPdfEtiquetaService(repo, lotePdf, signedUrls, TTL);
+
+    const res = await svc.porOrden(ACTOR, ORDEN_ID);
+
+    expect(res).toEqual({ status: "sin_etiqueta" });
+    expect(repo.setOrdenDownloadStoragePath).toHaveBeenCalledTimes(0);
+    expect(signedUrls.createSignedUrl).toHaveBeenCalledTimes(0);
+  });
+
   it("excede el tope: devuelve excede_tope y no persiste ni firma nada (R34)", async () => {
     const repo = fakeRepo({ ordenPath: null, ordenFila: filaOrden(null) });
     const lotePdf = fakeLotePdf({ porOrden: new EtiquetasLoteExcedeTopeError(9, 3) });

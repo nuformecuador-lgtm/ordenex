@@ -155,7 +155,7 @@ trazabilidad `R<n>→test` que el reviewer verifica (`docs/specs.md` §Trazabili
   conserva su valor previo (incluido `null`) y ninguna otra columna cambia (`estatus_id`,
   `num_guia`, `carga_id`, sin filas nuevas en el historial de estados). **Hecho:** verde.
   [R26, R35, R38]
-- [ ] **T23** — `./init.sh` + `pnpm typecheck` + `pnpm lint` + suite completa en verde;
+- [x] **T23** — `./init.sh` + `pnpm typecheck` + `pnpm lint` + suite completa en verde;
   `progress/impl_177.md` con el mapa `R→test` final y las decisiones (a)-(d) aplicadas.
 
 ---

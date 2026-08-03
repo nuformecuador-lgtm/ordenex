@@ -66,9 +66,10 @@ export class ApiPdfEtiquetaService implements IApiPdfEtiquetaService {
       if (err instanceof EtiquetasLoteExcedeTopeError) return { status: "excede_tope" };
       throw err;
     }
-    // Lista vacia = la orden no tiene etiqueta imprimible (sin `num_guia`): ni se subio nada
-    // ni se persiste referencia (R25).
-    const generado = resultados.find((r) => r.ordenId === ordenId) ?? resultados[0];
+    // Lista vacia O sin resultado para ESTE `ordenId` = nada imprimible (R25): ni se persiste
+    // referencia ni se firma URL. No hay fallback al primer resultado a proposito: persistir en
+    // esta orden el path del PDF de otra seria peor que fallar (fuga de datos entre ordenes).
+    const generado = resultados.find((r) => r.ordenId === ordenId);
     if (!generado) return { status: "sin_etiqueta" };
 
     // 4. Persistir DESPUES del upload y SOLO la ruta devuelta por el generador (R20/R26/R36):

@@ -52,21 +52,19 @@ export interface CargaGenerateApiDeps {
 function buildPdfService(): IApiPdfEtiquetaService {
   const prisma = getPrismaClient();
   const bucket = etiquetasConfig.ETIQUETAS_BUCKET;
+  // R24/R43: TTL de ESTE canal (300 s), no `SIGNED_URL_TTL_SECONDS` (3600 s, el de la UI de la
+  // 136): la URL que emite el generador se descarta porque `ApiPdfEtiquetaService` re-firma.
+  const ttl = etiquetasConfig.API_SIGNED_URL_TTL_SECONDS;
   const repo = new OrdenRepository(prisma);
+  const signedUrls = new SupabaseSignedUrlProvider(undefined, bucket);
   const lotePdf = new EtiquetasLotePdfService(
     new EtiquetaGuiaService(repo),
     new SupabaseFileStorage(undefined, bucket),
-    new SupabaseSignedUrlProvider(undefined, bucket),
-    etiquetasConfig.SIGNED_URL_TTL_SECONDS,
+    signedUrls,
+    ttl,
     etiquetasConfig.MAX_ETIQUETAS_POR_PDF,
   );
-  return new ApiPdfEtiquetaService(
-    repo,
-    lotePdf,
-    new SupabaseSignedUrlProvider(undefined, bucket),
-    // R24/R43: el TTL de este canal sale de configuracion (300 s por defecto), nunca hardcodeado.
-    etiquetasConfig.API_SIGNED_URL_TTL_SECONDS,
-  );
+  return new ApiPdfEtiquetaService(repo, lotePdf, signedUrls, ttl);
 }
 
 // Decision (c) de la puerta F1.4: el identificador de la carga es el uuid de `Carga.id`, el
