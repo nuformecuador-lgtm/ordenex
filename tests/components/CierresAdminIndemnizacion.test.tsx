@@ -2,9 +2,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
-import { verCierreDetalle, aprobarCierre } from "@/lib/actions/cierres-admin";
+import {
+  verCierreDetalle,
+  aprobarCierre,
+  listarPendientesCierresAdminPaginado,
+} from "@/lib/actions/cierres-admin";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
@@ -34,6 +40,18 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   rechazarCierre: vi.fn(),
   listarCierresAdmin: vi.fn(),
   forzarSolicitudVencido: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
+  listarHistoricoCierresAdminPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también. Se programa en
+  // `pulsarAprobar` con el mismo cierre que se le pasa por props: SWR revalida al montar y,
+  // sin el doble, la fila desde la que se abre el detalle desaparecería.
+  listarPendientesCierresAdminPaginado: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -81,6 +99,9 @@ function makeResumen(over: Partial<CierreAdminResumen> & { cierreId: string }): 
     totales: ZERO_TOTALES,
     totalPagoMensajero: "0.00",
     totalIngresoBodegaRechazos: "0.00",
+    // Feature 172 (T C.2): el campo existe en el contrato; su valor solo importa en los tests
+    // de la 172 (`cierres-admin-pendiente.test.ts`). `null` = cierre no aprobado (R28).
+    pendientePagoMensajero: null,
     solicitadoAt: "2026-07-30T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
@@ -174,7 +195,21 @@ const INC_2 = makeGestion({
 
 /** Abre el detalle del cierre `c1` y pulsa "Aprobar". */
 async function pulsarAprobar(user: ReturnType<typeof userEvent.setup>) {
-  render(<CierresAdminModule pendientes={[makeResumen({ cierreId: "c1" })]} historico={[]} sinZona={false} />);
+  const cola = paginaInicial([makeResumen({ cierreId: "c1" })]);
+  vi.mocked(listarPendientesCierresAdminPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...cola,
+  });
+  render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <CierresAdminModule
+        pendientes={cola}
+        historico={paginaInicial<CierreAdminResumen>([])}
+        sinZona={false}
+      />
+    </SWRConfig>,
+  );
   await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
   const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
   await user.click(within(dialog).getByRole("button", { name: "Aprobar" }));
@@ -189,7 +224,12 @@ function tecleaMonto(gestionId: string, valor: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  aprobarMock.mockResolvedValue({ status: "ok", cierreId: "c1", estado: "aprobado" });
+  aprobarMock.mockResolvedValue({
+    status: "ok",
+    cierreId: "c1",
+    estado: "aprobado",
+    pendientePagoMensajero: "0.00", // feature 172 (T C.2): sin pendiente no hay oferta de pago
+  });
 });
 
 afterEach(() => {

@@ -4,6 +4,7 @@ import type {
   ActualizarPlantillaServiceResult,
   CrearPlantillaServiceResult,
   IGastoFijoPlantillaService,
+  ListarPlantillasPaginadoServiceResult,
   ListarPlantillasServiceResult,
   SetActivaPlantillaServiceResult,
 } from "@/lib/interfaces/services/IGastoFijoPlantillaService";
@@ -13,6 +14,7 @@ import type {
   SetActivaPlantillaInput,
 } from "@/lib/types/gasto-fijo-plantilla";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 // Roles autorizados (R17): acceso total (maestro/admin, dueños de la caja central), espejo de
 // WalletService.
@@ -75,5 +77,29 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
     const plantillas = await this.repo.listar(); // R26 (activas e inactivas)
     return { status: "ok", plantillas };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — las plantillas, paginadas en servidor.
+   *
+   * El guard de rol va PRIMERO, antes de tocar el repositorio: es el MISMO `esAccesoTotal`
+   * (R17) que el listado sin paginar, asi que el conjunto visible es exactamente el mismo
+   * (R44). UNA sola llamada al repositorio (R54): el conteo viaja dentro de ella.
+   */
+  async listarPlantillasPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPlantillasPaginadoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
+
+    const { items, total } = await this.repo.listarPaginado(rangoDePagina(input));
+
+    return {
+      status: "ok",
+      items,
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
   }
 }

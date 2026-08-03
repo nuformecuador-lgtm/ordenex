@@ -53,7 +53,12 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
   constructor(
     // Interruptor Q3 (R28): unico punto de lectura. Default = singleton de config del modulo;
     // se inyecta para poder verificar ambos estados del flag en test sin manipular env.
-    private readonly config: WalletTiendaConfig = walletTiendaConfig,
+    //
+    // Feature 170 (T H.1): se depende del interruptor, NO del modulo de config entero. Cuando
+    // `WalletTiendaConfig` gano el tamano de pagina del listado de saldos (R40), pedir el
+    // objeto completo habria obligado a que cada doble de test declarase una paginacion que
+    // el feed del ledger no mira. `Pick` deja escrito de que depende de verdad.
+    private readonly config: Pick<WalletTiendaConfig, "TIENDA_DEBITA_FLETE_DEVOLUCION"> = walletTiendaConfig,
   ) {}
 
   async construirMovimientosPorTienda(

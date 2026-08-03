@@ -3,6 +3,19 @@
 > Cubre R1–R25 de `requirements.md`.
 > **Puerta T0 cerrada el 2026-07-30**: las decisiones D1–D8 de `requirements.md`
 > están aplicadas aquí. No queda ninguna pregunta abierta.
+>
+> **Nota posterior (2026-07-31) — renombre de `ROLES_ANALITICA`.** Este documento
+> (y `requirements.md` / `tasks.md`) llama `ROLES_ANALITICA` a la constante de
+> `lib/auth/menu-visibility.ts`. **En el código ya no se llama así: hoy es
+> `ROLES_ACCESO_ANALITICA`.** El texto de abajo se deja tal cual porque describe
+> lo que se diseñó y entregó entonces; sólo cambió el nombre, no el conjunto
+> (`["maestro","admin"]`) ni el diseño de una única constante leída por las dos
+> capas. El motivo: la feature 135 creó en `lib/analytics/types.ts` otra constante
+> llamada también `ROLES_ANALITICA` —los cinco roles con ALCANCE dentro de la
+> analítica—, y como las dos son tuplas de roles, confundirlas no rompía el
+> typecheck. Quien implemente la **133** debe editar `ROLES_ACCESO_ANALITICA`
+> (auth), no la del dominio, y respetar el guard
+> `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts`.
 
 ## 0. Modelo de datos
 

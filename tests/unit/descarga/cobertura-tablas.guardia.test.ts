@@ -22,7 +22,19 @@ import {
 } from "./censo-tablas";
 
 const RAIZ = path.resolve(__dirname, "../../..");
-const ARBOL_UI = "app";
+
+/**
+ * Feature 172 (T H.1) — los DOS árboles de UI, no solo `app/`.
+ *
+ * Hasta hoy la guardia recorría únicamente `app/`, y eso NO era una elección: era el punto
+ * ciego de que ninguna tabla hubiera nacido todavía fuera de ahí. La 172 monta la lista de
+ * comprobantes en DOS pantallas y por eso su `<DataTable>` vive en `components/shared/`:
+ * con el recorrido viejo, esa tabla no existía para el censo y R57 se habría dado por
+ * cumplido sin que nada lo vigilara. Al abrir el recorrido apareció además una tabla
+ * PREEXISTENTE que el censo nunca había visto (`components/private/analytics/TablaResumen`),
+ * declarada abajo con su estado real.
+ */
+const ARBOLES_UI = ["app", "components"] as const;
 
 /**
  * Totales del censo VIGENTE: 31 tablas = 30 instancias de `<DataTable>` (en 25 archivos)
@@ -41,8 +53,19 @@ const ARBOL_UI = "app";
  * (allí estaba el apartado de órdenes, aquí el desglose por tienda). Ver la cabecera de
  * `censo-tablas.ts`.
  */
-const TOTAL_ARCHIVOS_CON_DATATABLE = 25;
-const TOTAL_INSTANCIAS_DATATABLE = 30;
+// Feature 170 — FASE 2 (T I.2): 25 → 29 archivos, MISMAS 30 instancias. Cuatro históricos se
+// llevaron su `<DataTable>` a un componente propio al pasar a paginación server-side (ver la
+// cabecera de `censo-tablas.ts`). Que las instancias no se muevan es justo lo que dice que fue
+// una mudanza y no una tabla nueva ni una perdida por el camino.
+//
+// Feature 172 (T H.1): 29 → 31 archivos y 30 → 32 instancias, y NINGUNA de las dos de más es
+// una tabla que naciera hoy: son las dos que el recorrido viejo no veía por pararse en `app/`
+// (`components/shared/liquidacion/PagosRegistradosTabla` de esta feature y
+// `components/private/analytics/TablaResumen`, de la 130). Los números se leyeron del ÁRBOL
+// —la guardia se vio fallar con `31 recibido / 29 esperado` antes de tocarlos—, no de ningún
+// documento. Censo total: 33 tablas = 32 `<DataTable>` + 1 `<table>` cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 31;
+const TOTAL_INSTANCIAS_DATATABLE = 32;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -110,7 +133,7 @@ interface InstanciaEnArbol {
 }
 
 function instanciasDelArbol(): InstanciaEnArbol[] {
-  return listarTsx(path.join(RAIZ, ARBOL_UI))
+  return ARBOLES_UI.flatMap((arbol) => listarTsx(path.join(RAIZ, arbol)))
     .sort()
     .flatMap((archivo) =>
       etiquetasDataTable(readFileSync(archivo, "utf8")).map((etiqueta, indice) => ({
@@ -123,6 +146,29 @@ function instanciasDelArbol(): InstanciaEnArbol[] {
 
 function registroPorRuta(censo: ArchivoCensado[]): Map<string, ArchivoCensado> {
   return new Map(censo.map((entrada) => [entrada.ruta, entrada]));
+}
+
+/**
+ * Feature 172 (T H.1) — pantallas que MONTAN un componente de tabla compartido.
+ *
+ * Una tabla que vive en `components/` es UNA instancia de `<DataTable>` en el código y
+ * tantas tablas como pantallas la monten para quien las usa. Se exige lo mismo que para
+ * importar y para renderizar, porque solo con lo primero un comentario o un re-export
+ * contarían como montaje, y solo con lo segundo lo haría cualquier archivo que nombre el
+ * componente de pasada (`AnularPagoDialog` lo cita en su cabecera).
+ */
+function montajesEnElArbol(rutaComponente: string): string[] {
+  const nombre = path.basename(rutaComponente).replace(/\.tsx$/, "");
+  const especificador = `@/${rutaComponente.replace(/\.tsx$/, "")}`;
+  const jsx = new RegExp(`<${nombre}[\\s/>]`);
+  return ARBOLES_UI.flatMap((arbol) => listarTsx(path.join(RAIZ, arbol)))
+    .map(rutaRelativa)
+    .filter((ruta) => ruta !== rutaComponente)
+    .filter((ruta) => {
+      const fuente = readFileSync(path.join(RAIZ, ruta), "utf8");
+      return fuente.includes(`from "${especificador}"`) && jsx.test(fuente);
+    })
+    .sort();
 }
 
 describe("guardia de cobertura del censo de tablas", () => {
@@ -181,15 +227,19 @@ describe("guardia de cobertura del censo de tablas", () => {
   });
 
   it("las tablas declaradas fuera de alcance no montan control de descarga", () => {
-    // R2. Las seis exclusiones del Anexo II: cinco `<DataTable>` y la `<table>` cruda del
-    // podio. Ninguna puede acabar ofreciendo la descarga "de paso".
+    // R2. Las siete exclusiones vigentes: seis `<DataTable>` y la `<table>` cruda del podio.
+    // Ninguna puede acabar ofreciendo la descarga "de paso".
+    //
+    // Feature 172 (T H.1): la sexta `<DataTable>` excluida es `TablaResumen` (analítica),
+    // que el recorrido viejo no veía. No es una decisión de alcance nueva de la 172: es una
+    // tabla preexistente que pasa a estar vigilada.
     const instancias = instanciasDelArbol();
     const registro = registroPorRuta(CENSO_DATATABLE);
 
     const excluidas = instancias.filter(
       (inst) => registro.get(inst.ruta)?.tablas[inst.indice]?.estado === "fuera",
     );
-    expect(excluidas.length).toBe(5);
+    expect(excluidas.length).toBe(6);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -209,11 +259,11 @@ describe("guardia de cobertura del censo de tablas", () => {
       }
     }
 
-    // El censo total vigente: 30 instancias + 1 tabla cruda = 31 tablas.
+    // El censo total vigente: 32 instancias + 1 tabla cruda = 33 tablas (feature 172, T H.1).
     const totalCensado =
       CENSO_DATATABLE.reduce((n, e) => n + e.tablas.length, 0) +
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
-    expect(totalCensado).toBe(31);
+    expect(totalCensado).toBe(33);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -248,7 +298,47 @@ describe("guardia de cobertura del censo de tablas", () => {
     // exclusiones siguen siendo 6: ni el borrado ni la 171 cambiaron una sola decisión de
     // alcance — el borrado se llevó una tabla que descargaba y la 171 añade otra que
     // descarga.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(25);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(6);
+    //
+    // Feature 172 (T H.1): 25 → 26 y 6 → 7 al abrir el recorrido a `components/`. La de más
+    // dentro de alcance es la lista de comprobantes de la liquidación (nace `con_descarga`);
+    // la de más fuera es `TablaResumen`, preexistente y sin consumidor montado.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(26);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(7);
+  });
+
+  it("una tabla compartida declara TODAS las pantallas que la montan", () => {
+    // Feature 172 (T H.1, R57). El censo cuenta `<DataTable>` del código; una tabla que vive
+    // en `components/` la ven los usuarios tantas veces como pantallas la monten. Sin esta
+    // comprobación, montar la misma tabla en una tercera pantalla no dejaría rastro en
+    // ningún sitio: los totales no se moverían y el registro seguiría verde.
+    const compartidas = CENSO_DATATABLE.flatMap((entrada) =>
+      entrada.tablas
+        .filter((tabla) => tabla.montajes !== undefined)
+        .map((tabla) => ({ ruta: entrada.ruta, tabla })),
+    );
+    expect(compartidas.length, "ninguna tabla declara montajes").toBeGreaterThan(0);
+
+    for (const { ruta, tabla } of compartidas) {
+      const donde = `${ruta} :: ${tabla.nombre}`;
+      // Compartida quiere decir compartida: con un solo montaje, la tabla debería vivir en
+      // la pantalla que la usa y no en el árbol común.
+      expect(tabla.montajes!.length, `${donde}: un solo montaje`).toBeGreaterThan(1);
+      expect([...tabla.montajes!].sort(), `${donde}: montajes declarados`).toEqual(
+        montajesEnElArbol(ruta),
+      );
+    }
+
+    // Y al revés: una tabla de `components/` que gane un consumidor obliga a volver aquí.
+    // Es lo que hace que `TablaResumen` no pueda montarse en una pantalla en silencio.
+    const montadaSinDeclarar = CENSO_DATATABLE.filter((entrada) =>
+      entrada.ruta.startsWith("components/"),
+    ).flatMap((entrada) =>
+      entrada.tablas
+        .filter(
+          (tabla) => tabla.montajes === undefined && montajesEnElArbol(entrada.ruta).length > 0,
+        )
+        .map((tabla) => `${entrada.ruta} :: ${tabla.nombre}`),
+    );
+    expect(montadaSinDeclarar, "tabla compartida montada sin declarar sus pantallas").toEqual([]);
   });
 });

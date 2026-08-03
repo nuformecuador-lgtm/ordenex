@@ -2,6 +2,7 @@ import { z } from "zod";
 import { usuariosConfig } from "@/lib/config/usuarios";
 import { strongPasswordSchema } from "@/lib/types/password-policy";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type {
   RolItem,
   UsuarioListItem,
@@ -127,9 +128,12 @@ export type ActionError =
 export type CrearUsuarioResult =
   | { status: "ok"; usuario: UsuarioPublico; generatedPassword?: string } // R12/R33
   | ActionError;
-export type ListarUsuariosResult =
-  | { status: "ok"; items: UsuarioListItemDTO[]; page: number; pageSize: number; total: number }
-  | ActionError;
+// Feature 170 (T H.2): reexpresado sobre el contrato comun de listado paginado
+// (`lib/types/listado-paginado`). Misma forma publica, una sola definicion. El union de
+// error se pasa EXPLICITO: el `ActionError` de este modulo no es el de `lib/types/orden`
+// (aqui `conflict` lleva `campo: "email" | "cedula"`), y el contrato unifica la forma del
+// EXITO, no la de los errores de cada dominio.
+export type ListarUsuariosResult = ListarPaginadoResult<UsuarioListItemDTO, ActionError>;
 // Feature 170 (T B.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
 // SOLO conteos (sin PII) y NUNCA filas (R27); el resto de fallos son `ActionError` y
 // tampoco viajan con filas (R16/R17/R18).

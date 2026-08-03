@@ -28,6 +28,9 @@ const ESTATUS_IDS: Record<string, string | null> = {
 function fakeRepo(): ICierresAdminRepository {
   return {
     findCierresByAlcance: vi.fn(async () => []),
+    // Feature 170 (T I.1): doble no-op; esta suite solo aprueba cierres.
+    findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
+    findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
@@ -49,7 +52,14 @@ function newService(estatusIds: Record<string, string | null> = ESTATUS_IDS) {
     createSignedUrl: vi.fn(),
     createSignedUrls: vi.fn(async () => ({})),
   } as unknown as ISignedUrlProvider;
-  const service = new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls);
+  // Feature 172 (T C.2): lectura de los pagos registrados para derivar el pendiente. Aqui no
+  // hay ninguno; lo que esta suite mide es la config de la devolucion, no el dinero.
+  const service = new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, {
+    sumarVigentesPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, "0.00"])),
+    ),
+    obtenerCierreParaPago: vi.fn(async () => null),
+  });
   return { service, repo, ordenRepo };
 }
 
@@ -93,6 +103,11 @@ describe("CierresAdminService.aprobarCierre — config de devolucion de `rechaza
   it("la aprobacion sigue devolviendo ok/aprobado (la config no altera el resultado)", async () => {
     const { service } = newService();
     const r = await service.aprobarCierre("c1", MAESTRO);
-    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    expect(r).toEqual({
+      status: "ok",
+      cierreId: "c1",
+      estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
+    });
   });
 });

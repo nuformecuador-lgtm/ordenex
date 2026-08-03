@@ -360,7 +360,14 @@ function makeServices(db: Db) {
   } as unknown as ISignedUrlProvider;
 
   return {
-    cierres: new CierresAdminService(cierresRepo, zonaRepo, ordenRepo, signedUrls),
+    // Feature 172 (T C.2): + la lectura de los pagos registrados, para derivar el pendiente
+    // tras aprobar. Este flujo no registra ningun pago: sin cierre releible -> "0.00".
+    cierres: new CierresAdminService(cierresRepo, zonaRepo, ordenRepo, signedUrls, {
+      sumarVigentesPorCierre: vi.fn(async (ids: string[]) =>
+        Object.fromEntries(ids.map((id) => [id, "0.00"])),
+      ),
+      obtenerCierreParaPago: vi.fn(async () => null),
+    }),
     envioSatelite: new EnvioDevolucionCentralService(ordenRepo),
     recepcionCentral: new RecepcionBodegaCentralService(ordenRepo),
     envioTienda: new DevolucionOrigenService(ordenRepo),
@@ -389,6 +396,7 @@ async function recorrerRamaSatelite(db: Db, s: ReturnType<typeof makeServices>) 
     status: "ok",
     cierreId: "c1",
     estado: "aprobado",
+    pendientePagoMensajero: "0.00", // feature 172/T C.2
   });
   expect(await s.envioSatelite.enviarACentral("o-sat", ADMIN_SATELITE)).toEqual({ status: "ok" });
   expect(await s.recepcionCentral.recibirEnBodegaCentral(GUIA_SAT, ADMIN_CENTRAL)).toEqual({

@@ -34,6 +34,8 @@ function buildPlantillaRepo(activas: GastoFijoPlantillaDTO[]): IGastoFijoPlantil
     setActiva: vi.fn(),
     listar: vi.fn(),
     listarActivas: vi.fn().mockResolvedValue(activas),
+    // Feature 170 (T I.1): listado paginado; el cron no lo usa.
+    listarPaginado: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     obtenerPorId: vi.fn(),
   };
 }

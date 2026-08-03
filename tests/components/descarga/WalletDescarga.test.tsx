@@ -64,6 +64,14 @@ vi.mock("@/lib/actions/wallet-egresos", () => ({
 vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   listarPlantillasAction: vi.fn(async () => ({ status: "ok", plantillas: [] })),
   setActivaPlantillaAction: vi.fn(),
+  // Feature 170 - FASE 2 (T I.2): el panel de plantillas pide su pagina al servidor.
+  listarPlantillasPaginadoAction: vi.fn(async () => ({
+    status: "ok",
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -153,6 +161,15 @@ const SALDO_TIENDA = {
   saldo: "500.25",
   signo: "positivo" as const,
 };
+// Feature 172 (T G.2, R55): la cabecera de `/mi-wallet` pasa a tres importes. Este archivo
+// mide la DESCARGA, no la cabecera; el dato se anade para que el modulo monte.
+const DESGLOSE_TIENDA = {
+  aFavor: "500.25",
+  cargos: "0.00",
+  pagado: "0.00",
+  saldo: "500.25",
+  signo: "positivo" as const,
+};
 const CUENTA = {
   devengado: "300.50",
   pagado: "0.00",
@@ -185,7 +202,7 @@ function renderCaja() {
       pageSize={20}
       balance={BALANCE}
       desglose={DESGLOSE_EGRESOS}
-      plantillas={[]}
+      plantillas={{ items: [], total: 0, pageSize: 25 }}
     />,
   );
 }
@@ -198,6 +215,7 @@ function renderMiWallet() {
       page={1}
       pageSize={20}
       saldo={SALDO_TIENDA}
+      desglose={DESGLOSE_TIENDA}
     />,
   );
 }
@@ -420,9 +438,14 @@ describe("Ledgers de dinero · descarga", () => {
     }
 
     // Y el listado paginado del libro de caja sigue pidiendo lo mismo que antes al paginar.
+    // Feature 170 - FASE 2 (T I.2): la wallet monta ahora DOS controles de paginacion (el del
+    // libro y el del panel de plantillas de gasto fijo), asi que el del libro se localiza por
+    // el nombre accesible de SU navegacion. Que hagan falta dos nombres distintos es
+    // exactamente lo que R43 pide.
     const user = userEvent.setup();
     renderCaja();
-    await user.click(screen.getByRole("button", { name: "Página siguiente" }));
+    const navLibro = screen.getByRole("navigation", { name: "Paginación del libro" });
+    await user.click(within(navLibro).getByRole("button", { name: "Página siguiente" }));
     await waitFor(() => expect(listarMovimientosMock).toHaveBeenCalledTimes(1));
     expect(listarMovimientosMock.mock.calls[0][0]).toEqual({ page: 2, pageSize: 20 });
     expect(listarMovimientosCompletoMock).not.toHaveBeenCalled();

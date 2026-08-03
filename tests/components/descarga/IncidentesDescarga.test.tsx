@@ -8,12 +8,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
+import {
+  listarIncidentes,
+  listarHistoricoIncidentesPaginado,
+  listarPendientesIncidentesPaginado,
+} from "@/lib/actions/incidentes";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
 vi.mock("@/lib/actions/incidentes", () => ({
   aprobarIncidente: vi.fn(),
@@ -21,6 +28,10 @@ vi.mock("@/lib/actions/incidentes", () => ({
   retractarIncidente: vi.fn(),
   verIncidente: vi.fn(),
   listarIncidentes: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
+  listarHistoricoIncidentesPaginado: vi.fn(),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también.
+  listarPendientesIncidentesPaginado: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -100,19 +111,44 @@ const HISTORICO = [
 ];
 
 function envolver(ui: ReactElement) {
-  return render(<ToastProvider>{ui}</ToastProvider>);
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <ToastProvider>{ui}</ToastProvider>
+    </SWRConfig>,
+  );
 }
 
+/**
+ * Feature 170 — FASE 2 (T I.2 el histórico, T J.2 la cola): las DOS tablas se pintan desde su
+ * PÁGINA, y las dos descargas RELEEN el conjunto completo del servidor (R52). El helper
+ * programa las tres lecturas con los mismos datos: las dos páginas que se ven y el listado
+ * compuesto del que sale lo que se descarga.
+ */
 function renderIncidentes(
   pendientes = PENDIENTES,
   historico = HISTORICO,
+  historicoCompleto = historico,
 ) {
+  const cola = paginaInicial(pendientes);
+  const pagina = paginaInicial(historico, { total: historicoCompleto.length });
+  vi.mocked(listarPendientesIncidentesPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...cola,
+  });
+  vi.mocked(listarHistoricoIncidentesPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...pagina,
+  });
+  vi.mocked(listarIncidentes).mockResolvedValue({
+    status: "ok",
+    pendientes,
+    historico: historicoCompleto,
+    sinZona: false,
+  });
   return envolver(
-    <IncidentesAdminModule
-      pendientes={pendientes}
-      historico={historico}
-      sinZona={false}
-    />,
+    <IncidentesAdminModule pendientes={cola} historico={pagina} sinZona={false} />,
   );
 }
 
@@ -141,8 +177,9 @@ describe("Incidentes · descarga", () => {
   });
 
   it("cada archivo trae SU tabla entera, en el orden de la pantalla", async () => {
-    // R11/R30: Familia B — el array de props es el conjunto completo (la página no pagina),
-    // así que el archivo es exactamente lo que la tabla pinta, en el mismo orden.
+    // R11: el archivo trae la tabla ENTERA, en el orden de la pantalla. Feature 170 — FASE 2
+    // (T I.2/T J.2): las dos tablas paginan, así que el conjunto se RELEE del servidor
+    // (`listarIncidentes`) en vez de proyectarse de lo que se ve (R52).
     const user = userEvent.setup();
     renderIncidentes();
 
@@ -207,9 +244,9 @@ describe("Incidentes · descarga", () => {
   });
 
   it("el archivo del adminSatelite solo trae los incidentes de su alcance", async () => {
-    // R14/R20: el acotamiento por zona lo pone el SERVIDOR (la página del adminSatelite solo
-    // recibe los suyos). Lo que se fija aquí es que la descarga no lo amplía: el archivo es
-    // exactamente el conjunto recibido por props, ni una fila más.
+    // R14/R20: el acotamiento por zona lo pone el SERVIDOR (el listado del adminSatelite solo
+    // devuelve los suyos, esté paginado o no). Lo que se fija aquí es que la descarga no lo
+    // amplía: el archivo es exactamente el conjunto que el servidor devolvió, ni una fila más.
     const user = userEvent.setup();
     const soloSuZona = [incidente({ incidenteId: "iz", zonaNombre: "Limón" })];
     renderIncidentes(soloSuZona, []);

@@ -4,6 +4,9 @@ import type {
   PagoMensajeroMovimientoCategoria as PrismaPagoMensajeroMovimientoCategoria,
 } from "@prisma/client";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
+import { paginaInputSchema } from "@/lib/types/pagina-input";
+import { walletMensajeroConfig } from "@/lib/config/wallet-mensajero";
 
 // Feature 44 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del LIBRO del pago
 // POR MENSAJERO, respaldada por los enums Postgres nativos (patron lib/types/wallet-tienda.ts).
@@ -175,6 +178,73 @@ export const listarPagosDeMensajeroCompletoSchema = listarPagosDeMensajeroSchema
 export type ListarPagosDeMensajeroCompletoInput = z.infer<
   typeof listarPagosDeMensajeroCompletoSchema
 >;
+
+// ── Feature 170 — FASE 2 (T L.1) — «Cuentas por pagar a mensajeros» paginado ──
+
+/**
+ * Borde del listado del maestro: `page`/`pageSize` (de `paginaInputSchema`, con el tamano del
+ * dominio `wallet-mensajero`) mas la busqueda por nombre que hasta hoy vivia en el navegador.
+ *
+ * `.strict()` es la barrera de R44 en el borde y aqui pesa mas que en otros listados: el
+ * alcance de esta pantalla es «TODOS los mensajeros» y lo decide el ROL del actor. Un
+ * `mensajeroId` colado en el input muere aqui con `validation_error` en vez de llegar a un
+ * servicio que hoy lo ignora y manana podria no ignorarlo. (Medido: `.extend()` HEREDA el
+ * `.strict()` del schema base; se deja escrito porque la barrera es de este listado y no debe
+ * depender de que el schema base nunca se afloje.)
+ *
+ * `busqueda` es texto LIBRE y va sin `.trim()` ni `.min()`: quien lo normaliza es
+ * `lib/utils/cuentas-por-pagar-listado.ts`, que es tambien quien lo usa para filtrar. Recortar
+ * o rechazar aqui abriria la puerta a que el borde y el filtro no entendieran lo mismo por
+ * «texto vacio», que es lo unico que decide si el listado sale entero o filtrado.
+ */
+export const listarCuentasPorPagarPaginadoSchema = paginaInputSchema(walletMensajeroConfig)
+  .extend({
+    busqueda: z.string().optional(),
+  })
+  .strict();
+
+export type ListarCuentasPorPagarPaginadoInput = z.infer<
+  typeof listarCuentasPorPagarPaginadoSchema
+>;
+
+/**
+ * La pagina tal como la recibe el cliente. Union de error ESTRECHO a proposito (el contrato de
+ * T H.2 lo admite como parametro): este listado no produce `not_found` ni `conflict`.
+ */
+export type ListarCuentasPorPagarPaginadoResult = ListarPaginadoResult<
+  CuentaPorPagarResumenDTO,
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" }
+>;
+
+/**
+ * Feature 170 — FASE 2 (T M.1, cierre de Q-L2) — el mismo listado SIN recorte por pagina, para
+ * la descarga. Se DERIVA del schema de la pagina quitando `page`/`pageSize`, igual que hicieron
+ * los seis `…CompletoSchema` de la FASE 1: asi los dos caminos no pueden entender cosas
+ * distintas por «busqueda», que es lo unico que decide si el archivo sale entero o filtrado
+ * (R10/R45).
+ *
+ * `.strict()` se reescribe aunque `.omit()` lo herede, por el mismo motivo que en el schema de
+ * la pagina: la barrera de alcance es de ESTE listado y no debe depender de que el schema base
+ * nunca se afloje (R18).
+ */
+export const listarCuentasPorPagarCompletoSchema = listarCuentasPorPagarPaginadoSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarCuentasPorPagarCompletoInput = z.infer<
+  typeof listarCuentasPorPagarCompletoSchema
+>;
+
+/**
+ * El dataset completo tal como lo recibe el cliente. Union de error ANCHO (`ActionError`, el
+ * del contrato de T0.1) y no el estrecho de la pagina: quien lo consume es
+ * `filasDesdeResultado`, el adaptador comun de la descarga, que redacta el mensaje de CUALQUIER
+ * error de borde en un solo sitio (R36). `limite_excedido` lleva solo conteos (R27).
+ */
+export type ListarCuentasPorPagarCompletoResult =
+  ListarCompletoResult<CuentaPorPagarResumenDTO>;
 
 // Resultados del modo completo en el BORDE (T C.2). `limite_excedido` lleva SOLO conteos
 // (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Los dos ledgers proyectan el

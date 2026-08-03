@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { montoPositivoSchema } from "@/lib/types/wallet";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { gastoFijoConfig } from "@/lib/config/gasto-fijo";
 import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 
 // Feature 45 (design §1.2/§2.3) — tipos y schemas de borde de la PLANTILLA de gasto fijo
@@ -68,3 +69,25 @@ export const setActivaPlantillaSchema = z.object({
 });
 
 export type SetActivaPlantillaInput = z.infer<typeof setActivaPlantillaSchema>;
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40) — entrada del listado paginado de PLANTILLAS de gasto
+ * fijo. Sin filtros (design §11.3, riesgo BAJO) y sin alcance: quien lo ve son los roles de
+ * acceso total y lo decide el servicio. `.strict()` para que cualquier clave desconocida
+ * muera en el BORDE. Tamano de pagina desde `gastoFijoConfig` (T H.1).
+ */
+export const listarPlantillasGastoFijoPaginadoSchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(gastoFijoConfig.DEFAULT_PAGE_SIZE)
+      .transform((n) => Math.min(n, gastoFijoConfig.MAX_PAGE_SIZE)),
+  })
+  .strict();
+
+export type ListarPlantillasGastoFijoPaginadoInput = z.infer<
+  typeof listarPlantillasGastoFijoPaginadoSchema
+>;

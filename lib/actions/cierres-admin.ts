@@ -7,6 +7,7 @@ import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
+import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
@@ -22,7 +23,11 @@ import {
   aprobarCierreSchema,
   rechazarCierreSchema,
   forzarSolicitudVencidoSchema,
+  listarHistoricoCierresAdminSchema,
+  listarPendientesCierresAdminSchema,
   type ListarCierresAdminResult,
+  type ListarHistoricoCierresAdminResult,
+  type ListarPendientesCierresAdminResult,
   type VerCierreDetalleResult,
   type AprobarCierreResult,
   type RechazarCierreResult,
@@ -92,6 +97,11 @@ function buildService(): ICierresAdminService {
     new OrdenRepository(prisma),
     // Evidencias: mismo bucket privado de gestion_orden (feature 36).
     new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET),
+    // Feature 172/T C.2 (R22/R26/R28): SOLO LECTURA de los pagos ya registrados, para derivar
+    // el pendiente de cada cierre aprobado. El servicio solo recibe las dos lecturas que
+    // necesita (`Pick`), asi que esta pantalla no puede registrar ni anular un pago: aprobar y
+    // pagar son dos escrituras distintas (design §8).
+    new LiquidacionPagoRepository(prisma),
   );
 }
 
@@ -112,6 +122,48 @@ export async function listarCierresAdmin(
   });
   // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41/R44): UNA pagina del HISTORICO del alcance + el total.
+ *
+ * Lectura interna del mismo proyecto -> Server Action, como el resto de este archivo. El
+ * alcance NO viaja en el input: lo resuelve el servicio desde el actor de la sesion, igual
+ * que en `listarCierresAdmin`.
+ */
+export async function listarHistoricoCierresAdminPaginado(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<ListarHistoricoCierresAdminResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el service
+    const data = listarHistoricoCierresAdminSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarHistoricoCierresAdminPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40/R41/R42/R44): UNA pagina de la COLA de pendientes de
+ * decision del alcance + el total, que es el que la cabecera de la pantalla mostrara.
+ *
+ * El alcance NO viaja en el input: lo resuelve el servicio desde el actor de la sesion, igual
+ * que en `listarCierresAdmin`.
+ */
+export async function listarPendientesCierresAdminPaginado(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<ListarPendientesCierresAdminResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el service
+    const data = listarPendientesCierresAdminSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPendientesCierresAdminPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }
 
 /** R6-R9/R13: detalle de un cierre del alcance con evidencias firmadas. */

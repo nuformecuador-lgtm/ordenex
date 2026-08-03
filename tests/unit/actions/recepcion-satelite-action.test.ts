@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { listarRecepcionSatelite, recibirPorQr, recibirLote } from "@/lib/actions/recepcion-satelite";
+import {
+  listarRecepcionSatelite,
+  listarOrdenesBodegaPaginado,
+  recibirPorQr,
+  recibirLote,
+} from "@/lib/actions/recepcion-satelite";
 import type { IRecepcionSateliteService } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
@@ -24,6 +29,20 @@ function buildService(overrides: Partial<IRecepcionSateliteService> = {}): IRece
       estado: "en_bodega_satelite" as const,
     })),
     recibirLote: vi.fn(async () => ({ status: "ok" as const, recibidas: 0 })),
+    // Feature 170 (T K.1/T K.2): la pagina del listado de la bodega y el catalogo de sus
+    // filtros. Este archivo no los ejercita (viven en `satelite-catalogos.test.ts` y en el
+    // test de servicio); se declaran porque la interfaz los exige.
+    listarOrdenesBodegaPaginado: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+    })),
+    obtenerCatalogoFiltros: vi.fn(async () => ({
+      status: "ok" as const,
+      catalogo: { cantones: [], distritos: [] },
+    })),
     ...overrides,
   };
 }
@@ -161,6 +180,95 @@ describe("recibirLote — borde y delegacion (feature 63)", () => {
       const r = await recibirLote({ ordenIds: ["o1"] }, { service, getActor: actorAdmin });
       expect(r.status).toBe(dominio);
     }
+  });
+});
+
+// --- listarOrdenesBodegaPaginado: la lista blanca del borde (feature 170, T K.1/R44) ---
+
+describe("listarOrdenesBodegaPaginado — el borde (feature 170, T K.1)", () => {
+  it("sin actor -> unauthenticated, sin tocar el service", async () => {
+    const service = buildService();
+    const r = await listarOrdenesBodegaPaginado({}, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.listarOrdenesBodegaPaginado).not.toHaveBeenCalled();
+  });
+
+  it("input vacio vale: es lo que pide la pagina 1, con los defaults del dominio (R40)", async () => {
+    const service = buildService();
+    const r = await listarOrdenesBodegaPaginado({}, { service, getActor: actorAdmin });
+    expect(r.status).toBe("ok");
+    expect(service.listarOrdenesBodegaPaginado).toHaveBeenCalledWith(
+      { page: 1, pageSize: 25 }, // recepcionSateliteConfig.DEFAULT_PAGE_SIZE
+      ADMIN,
+    );
+  });
+
+  it("una clave de ALCANCE colada muere en el borde, sin llegar al service (R44)", async () => {
+    // El `.strict()` no es estetica: `zonaId` es justo la clave que convertiria este listado
+    // en una ventana a la bodega del vecino si algun dia el service dejara de ignorarla.
+    for (const colada of [{ zonaId: "z-b" }, { usuarioId: "u-sat-b" }, { mensajeroId: "m-1" }]) {
+      const service = buildService();
+      const r = await listarOrdenesBodegaPaginado(colada, { service, getActor: actorAdmin });
+      expect(r.status, JSON.stringify(colada)).toBe("validation_error");
+      expect(service.listarOrdenesBodegaPaginado).not.toHaveBeenCalled();
+    }
+  });
+
+  it("un estado fuera de los cinco del listado muere en el borde (R44)", async () => {
+    const service = buildService();
+    const r = await listarOrdenesBodegaPaginado(
+      { estados: ["entregada"] },
+      { service, getActor: actorAdmin },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.listarOrdenesBodegaPaginado).not.toHaveBeenCalled();
+  });
+
+  it("los tres filtros validos llegan al service tal cual (R45)", async () => {
+    const service = buildService();
+    await listarOrdenesBodegaPaginado(
+      {
+        page: 2,
+        pageSize: 10,
+        estados: ["devuelta", "por_recoger"],
+        cantones: ["Escazú"],
+        distritos: ["San Rafael", "San Antonio"],
+      },
+      { service, getActor: actorAdmin },
+    );
+    expect(service.listarOrdenesBodegaPaginado).toHaveBeenCalledWith(
+      {
+        page: 2,
+        pageSize: 10,
+        estados: ["devuelta", "por_recoger"],
+        cantones: ["Escazú"],
+        distritos: ["San Rafael", "San Antonio"],
+      },
+      ADMIN,
+    );
+  });
+
+  it("un pageSize desmedido se RECORTA al maximo, no se rechaza (R40)", async () => {
+    const service = buildService();
+    const r = await listarOrdenesBodegaPaginado(
+      { pageSize: 100000 },
+      { service, getActor: actorAdmin },
+    );
+    expect(r.status).toBe("ok");
+    expect(service.listarOrdenesBodegaPaginado).toHaveBeenCalledWith(
+      { page: 1, pageSize: 100 }, // recepcionSateliteConfig.MAX_PAGE_SIZE
+      ADMIN,
+    );
+  });
+
+  it("forbidden del service pasa tal cual, sin filas ni total (R44)", async () => {
+    const service = buildService({
+      listarOrdenesBodegaPaginado: vi.fn(async () => ({ status: "forbidden" as const })),
+    });
+    const r = await listarOrdenesBodegaPaginado({}, { service, getActor: actorAdmin });
+    expect(r).toEqual({ status: "forbidden" });
+    expect(r).not.toHaveProperty("items");
+    expect(r).not.toHaveProperty("total");
   });
 });
 

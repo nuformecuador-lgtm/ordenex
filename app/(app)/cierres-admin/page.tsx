@@ -3,10 +3,17 @@ import { notFound } from "next/navigation";
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { listarCierresAdmin } from "@/lib/actions/cierres-admin";
+import {
+  listarCierresAdmin,
+  listarHistoricoCierresAdminPaginado,
+  listarPendientesCierresAdminPaginado,
+} from "@/lib/actions/cierres-admin";
 import {
   listarConsolidacion,
-  listarCierresBodegaAdmin,
+  listarCierresBodegaSolicitadosPaginado,
+  listarConsolidablesPaginado,
+  listarHistoricoCierresBodegaPaginado,
+  listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
 
 import { CierresAdminModule } from "./_components/CierresAdminModule";
@@ -37,20 +44,66 @@ export default async function CierresAdminPage() {
   const result = await listarCierresAdmin();
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
+  // Feature 170 — FASE 2 (T I.2/T J.2, R40/R41): el listado compuesto sigue trayendo los
+  // totales y `sinZona`; las DOS tablas —la COLA de pendientes y el HISTÓRICO— llegan como
+  // PÁGINA 1 con su total, no como arrays enteros. El input va vacío: los defaults de
+  // `page`/`pageSize` los pone el schema del dominio.
+  const [pendientesResult, historicoResult] = await Promise.all([
+    listarPendientesCierresAdminPaginado({}),
+    listarHistoricoCierresAdminPaginado({}),
+  ]);
+  if (pendientesResult.status !== "ok") notFound(); // defensa en profundidad
+  if (historicoResult.status !== "ok") notFound(); // defensa en profundidad
+
   // Feature 40 — pre-fetch por rol de los datos sensibles del cierre de bodega.
   // adminSatelite: consolidación de SU zona (R1/R3). maestro/admin (acceso total,
   // feature 94): cola + histórico (R2).
-  const consolidacionResult =
-    actor.rol === "adminSatelite" ? await listarConsolidacion() : null;
+  //
+  // Feature 170 — FASE 2 (T I.2/T J.2): las tablas de las dos secciones llegan como página 1
+  // («consolidables» y «solicitados» del satélite; «pendientes» y «resueltos» de la central).
+  // El compuesto de la CONSOLIDACIÓN sigue haciendo falta, y es el aviso medido que la tanda J
+  // dejó escrito: de él salen los cinco agregados de dinero calculados sobre el conjunto
+  // COMPLETO (R49), el gate `puedesSolicitar`/`motivoBloqueo` y `sinZona`. Su array no puede
+  // desaparecer —el dinero se calcula sobre él— pero ya no cruza al cliente: se queda aquí.
+  // Si un listado paginado no responde `ok`, la sección entera no se muestra, igual que ya
+  // pasaba con su compuesto: la pantalla no se rompe y no expone nada.
+  const [consolidacionResult, consolidablesResult, solicitadosResult] =
+    actor.rol === "adminSatelite"
+      ? await Promise.all([
+          listarConsolidacion(),
+          listarConsolidablesPaginado({}),
+          listarCierresBodegaSolicitadosPaginado({}),
+        ])
+      : [null, null, null];
   const consolidacion =
-    consolidacionResult && consolidacionResult.status === "ok"
-      ? consolidacionResult
+    consolidacionResult &&
+    consolidacionResult.status === "ok" &&
+    consolidablesResult?.status === "ok" &&
+    solicitadosResult?.status === "ok"
+      ? {
+          ...consolidacionResult,
+          paginaConsolidables: consolidablesResult,
+          solicitados: solicitadosResult,
+        }
       : null;
 
-  const bodegaResult =
-    esAccesoTotal(actor.rol) ? await listarCierresBodegaAdmin() : null;
+  // Feature 170 — FASE 2 (T M.1, cierre de Q-J1/Q-I4): el listado COMPUESTO de esta sección
+  // (`listarCierresBodegaAdmin`) sale del render. Sus dos arrays —cola e histórico— dejaron de
+  // tener lector de tabla en T I.2/T J.2, y su `status` no decidía nada que no decidiera ya el
+  // `esAccesoTotal` de esta misma línea, que es el MISMO guard que aplican los dos listados
+  // paginados. Traerlo era una lectura de TODOS los cierres de bodega por render cuyo único
+  // efecto era un `if` redundante. La acción sigue existiendo y sigue haciendo falta: es de
+  // donde el control de descarga saca el conjunto completo (R52), y sólo se ejecuta al pulsarlo.
+  const [bodegaPendientesResult, resueltosResult] = esAccesoTotal(actor.rol)
+    ? await Promise.all([
+        listarPendientesCierresBodegaPaginado({}),
+        listarHistoricoCierresBodegaPaginado({}),
+      ])
+    : [null, null];
   const bodega =
-    bodegaResult && bodegaResult.status === "ok" ? bodegaResult : null;
+    bodegaPendientesResult?.status === "ok" && resueltosResult?.status === "ok"
+      ? { pendientesPagina: bodegaPendientesResult, resueltos: resueltosResult }
+      : null;
 
   return (
     <AppPage
@@ -60,7 +113,11 @@ export default async function CierresAdminPage() {
       {/* Feature 40 (adminSatelite): consolidación + solicitud de cierre de bodega. */}
       {consolidacion ? (
         <ConsolidacionBodegaModule
-          consolidables={consolidacion.consolidables}
+          consolidables={{
+            items: consolidacion.paginaConsolidables.items,
+            total: consolidacion.paginaConsolidables.total,
+            pageSize: consolidacion.paginaConsolidables.pageSize,
+          }}
           totalesAgregados={consolidacion.totalesAgregados}
           totalPagoMensajeroAgregado={consolidacion.totalPagoMensajeroAgregado}
           totalIngresoBodegaRechazosAgregado={
@@ -70,7 +127,11 @@ export default async function CierresAdminPage() {
           totalCentralDebeAgregado={consolidacion.totalCentralDebeAgregado}
           puedesSolicitar={consolidacion.puedesSolicitar}
           motivoBloqueo={consolidacion.motivoBloqueo}
-          cierresBodegaPasados={consolidacion.cierresBodegaPasados}
+          cierresBodegaPasados={{
+            items: consolidacion.solicitados.items,
+            total: consolidacion.solicitados.total,
+            pageSize: consolidacion.solicitados.pageSize,
+          }}
           sinZona={consolidacion.sinZona}
         />
       ) : null}
@@ -78,16 +139,44 @@ export default async function CierresAdminPage() {
       {/* Feature 40 (maestro): cola + histórico de cierres de bodega satélite. */}
       {bodega ? (
         <CierresBodegaAdminModule
-          pendientes={bodega.pendientes}
-          historico={bodega.historico}
+          pendientes={{
+            items: bodega.pendientesPagina.items,
+            total: bodega.pendientesPagina.total,
+            pageSize: bodega.pendientesPagina.pageSize,
+          }}
+          historico={{
+            items: bodega.resueltos.items,
+            total: bodega.resueltos.total,
+            pageSize: bodega.resueltos.pageSize,
+          }}
         />
       ) : null}
 
       {/* Feature 38: cierres del día de los mensajeros del alcance. */}
       <CierresAdminModule
-        pendientes={result.pendientes}
-        historico={result.historico}
+        pendientes={{
+          items: pendientesResult.items,
+          total: pendientesResult.total,
+          pageSize: pendientesResult.pageSize,
+        }}
+        historico={{
+          items: historicoResult.items,
+          total: historicoResult.total,
+          pageSize: historicoResult.pageSize,
+        }}
         sinZona={result.sinZona}
+        /**
+         * Feature 172 (T E.1/T E.2, [P3]/R6) — el permiso de PAGAR se resuelve SOLO
+         * server-side y con el MISMO predicado (`esAccesoTotal`) que `LiquidacionService` usa
+         * para responder `forbidden`. Son las dos mitades del control de acceso: ocultar el
+         * botón no es una de ellas por sí solo, y la acción tampoco lo es sin la otra.
+         *
+         * Aquí sí hay un rol al que le da `false` y que igualmente ve la pantalla: el
+         * `adminSatelite`, que APRUEBA los cierres de su zona y NO mueve dinero (respuesta P3
+         * del humano: aprobar un cierre y mover dinero no son la misma responsabilidad). Para
+         * él, aprobar sigue funcionando exactamente como antes de esta feature.
+         */
+        puedeRegistrarPago={esAccesoTotal(actor.rol)}
       />
     </AppPage>
   );

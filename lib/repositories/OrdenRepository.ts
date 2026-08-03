@@ -35,6 +35,7 @@ import {
   type OrdenTransicionRow,
   type OrderStatusLiteRow,
   type ProvinciaRow,
+  type RecepcionSateliteFiltro,
   type RecepcionSateliteRow,
   type RechazoSlaTiendaRow,
   type UpdateOrdenData,
@@ -46,6 +47,9 @@ import {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
+import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
+import type { ZonaDeOrden } from "@/lib/utils/filtro-canton-distrito";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 
@@ -538,6 +542,16 @@ const WITH_RECEPCION_SATELITE = {
 } as const;
 
 type OrdenRecepcionSateliteRow = Prisma.OrdenGetPayload<typeof WITH_RECEPCION_SATELITE>;
+
+/**
+ * Feature 170 — FASE 2 (T K.1): lo unico que devuelve la consulta que ORDENA y recorta. El
+ * `total` es el mismo numero en las N filas de la pagina (`COUNT(*) OVER ()`), no una columna
+ * por fila: se lee de la primera.
+ */
+interface PaginaSateliteIdRow {
+  id: string;
+  total: number;
+}
 
 // R6/R8/R9: serializa la fila a RecepcionSateliteRow. Resuelve los nombres
 // legibles, mapea Decimal montoCobrar -> number|null y deja distritoNombre null si
@@ -1982,6 +1996,142 @@ export class OrdenRepository implements IOrdenRepository {
       ...WITH_RECEPCION_SATELITE,
     });
     return rows.map(toRecepcionSateliteRow);
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T K.1, R40/R41/R44/R45/R51): una PAGINA del listado de la bodega
+   * satelite, con sus tres filtros aplicados al CONJUNTO y el total del conjunto.
+   *
+   * **Por que va en SQL crudo, y solo esta parte.** El orden que la pantalla enseña hoy es
+   * «primero el grupo, dentro del grupo prioridad y recencia»: no lo declara ningun `orderBy`,
+   * lo produce el modulo al CONCATENAR los cinco arrays en el orden de
+   * `ESTADOS_BODEGA_SATELITE`. Para conservarlo bajo paginacion (R51) el rango de grupo tiene
+   * que ir en el `ORDER BY` de la consulta que aplica el `LIMIT`, y Prisma no sabe ordenar por
+   * una secuencia arbitraria de valores de una relacion —solo asc/desc—. El escape es el mismo
+   * que ya usa `ChatConversacionRepository` cuando Prisma no puede normalizar en el WHERE:
+   * `Prisma.sql` parametrizado, sin una sola interpolacion de texto.
+   *
+   * **Se piden solo los `id`.** La proyeccion sigue siendo `WITH_RECEPCION_SATELITE` +
+   * `toRecepcionSateliteRow`, la MISMA del listado sin paginar: reescribirla a mano en SQL
+   * duplicaria quince columnas y sus conversiones (Decimal, nombres de relacion) para que
+   * divergieran a la primera.
+   *
+   * **El total viaja en la misma consulta** (`COUNT(*) OVER ()`). No es un ahorro: es que asi
+   * la pagina y el conteo NO PUEDEN mirar conjuntos distintos, que es la divergencia que R41
+   * y R44 prohiben. La unica rama con una consulta de conteo aparte es la pagina VACIA (mas
+   * alla del final), donde la ventana no devuelve ninguna fila de la que leer el total; ahi se
+   * reusa literalmente el mismo fragmento `FROM ... WHERE`.
+   */
+  async findRecepcionSatelitePaginada(
+    filtro: RecepcionSateliteFiltro,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<RecepcionSateliteRow>> {
+    const estatusValues = [...filtro.estatusValues];
+    // Sin estados no hay conjunto: el listado se define por ellos (espejo de la guarda de
+    // `findRecepcionSateliteByZona`). Se corta ANTES de consultar.
+    if (estatusValues.length === 0) return { items: [], total: 0 };
+
+    const cantonNombres = [...(filtro.cantonNombres ?? [])];
+    const distritoNombres = [...(filtro.distritoNombres ?? [])];
+
+    // Cada condicion va HERMANA de las demas (AND), igual que el filtro de cliente que
+    // sustituye. Las dos primeras son el ACOTAMIENTO y no dependen de ningun filtro: se
+    // emiten siempre.
+    const condiciones: Prisma.Sql[] = [
+      Prisma.sql`o."zona_id" = ${filtro.zonaId}`,
+      Prisma.sql`o."deleted_at" IS NULL`,
+      Prisma.sql`os."value" IN (${Prisma.join(estatusValues)})`,
+    ];
+    if (cantonNombres.length > 0) {
+      condiciones.push(Prisma.sql`c."nombre" IN (${Prisma.join(cantonNombres)})`);
+    }
+    if (distritoNombres.length > 0) {
+      // El JOIN de distrito es LEFT y `NULL IN (...)` no es cierto: una orden SIN distrito
+      // queda fuera bajo un filtro de distrito, que es exactamente lo que hace hoy el cliente.
+      condiciones.push(Prisma.sql`d."nombre" IN (${Prisma.join(distritoNombres)})`);
+    }
+
+    // UN solo fragmento para la pagina y para el conteo: no hay forma de que se separen.
+    const desde = Prisma.sql`
+      FROM "orden" o
+      JOIN "order_status" os ON os."id" = o."estatus_id"
+      JOIN "canton" c ON c."id" = o."canton_id"
+      LEFT JOIN "distrito" d ON d."id" = o."distrito_id"
+      WHERE ${Prisma.join(condiciones, " AND ")}
+    `;
+
+    const pagina = await this.prisma.$queryRaw<PaginaSateliteIdRow[]>(Prisma.sql`
+      SELECT o."id", (COUNT(*) OVER ())::int AS "total"
+      ${desde}
+      ORDER BY
+        array_position(ARRAY[${Prisma.join([...ESTADOS_BODEGA_SATELITE])}]::text[], os."value") ASC,
+        o."prioridad" DESC,
+        o."created_at" DESC,
+        o."id" ASC
+      LIMIT ${rango.take} OFFSET ${rango.skip}
+    `);
+
+    if (pagina.length === 0) {
+      const conteo = await this.prisma.$queryRaw<{ total: number }[]>(Prisma.sql`
+        SELECT (COUNT(*))::int AS "total"
+        ${desde}
+      `);
+      return { items: [], total: conteo[0]?.total ?? 0 };
+    }
+
+    const ids = pagina.map((fila) => fila.id);
+    // El acotamiento se REPITE aqui aunque los ids ya vengan de una consulta acotada: esta
+    // consulta es la que devuelve datos, y una lista de ids nunca debe ser su unica guarda.
+    const filas = await this.prisma.orden.findMany({
+      where: { id: { in: ids }, zonaId: filtro.zonaId, deletedAt: null },
+      ...WITH_RECEPCION_SATELITE,
+    });
+    const porId = new Map(filas.map((fila) => [fila.id, fila]));
+    // El orden lo manda la consulta que ordeno (`ids`), no el `findMany` de hidratacion.
+    const items = ids.flatMap((id) => {
+      const fila = porId.get(id);
+      return fila === undefined ? [] : [toRecepcionSateliteRow(fila)];
+    });
+    return { items, total: pagina[0]!.total };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T K.2, R44/R46): los pares canton/distrito DISTINTOS del conjunto
+   * del actor. Alimenta las opciones de los dos desplegables, que hasta ahora se derivaban
+   * del array entero que viajaba al navegador.
+   *
+   * `distinct` sobre las tres FKs y `select` de los tres nombres: es la lectura mas estrecha
+   * que puede producir las mismas opciones que `derivarCantones`/`derivarDistritos` producian
+   * sobre el dataset completo. El `orderBy` empieza por las mismas columnas del `distinct`
+   * para que el resultado sea estable entre llamadas.
+   */
+  async findRecepcionSateliteGeoByZona(
+    zonaId: string,
+    estatusValues: string[],
+  ): Promise<ZonaDeOrden[]> {
+    if (estatusValues.length === 0) return [];
+    const filas = await this.prisma.orden.findMany({
+      where: {
+        zonaId,
+        deletedAt: null,
+        estatus: { value: { in: estatusValues } },
+      },
+      select: {
+        provinciaId: true,
+        cantonId: true,
+        distritoId: true,
+        provincia: { select: { nombre: true } },
+        canton: { select: { nombre: true } },
+        distrito: { select: { nombre: true } },
+      },
+      distinct: ["provinciaId", "cantonId", "distritoId"],
+      orderBy: [{ provinciaId: "asc" }, { cantonId: "asc" }, { distritoId: "asc" }],
+    });
+    return filas.map((fila) => ({
+      provinciaNombre: fila.provincia.nombre,
+      cantonNombre: fila.canton.nombre,
+      distritoNombre: fila.distrito?.nombre ?? null,
+    }));
   }
 
   /**

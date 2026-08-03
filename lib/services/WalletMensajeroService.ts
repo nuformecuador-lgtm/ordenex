@@ -5,6 +5,8 @@ import type {
 } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type {
   IWalletMensajeroService,
+  ListarCuentasPorPagarCompletoServiceResult,
+  ListarCuentasPorPagarPaginadoServiceResult,
   ListarCuentasPorPagarServiceResult,
   ListarMisPagosCompletoServiceResult,
   ListarMisPagosServiceResult,
@@ -13,7 +15,12 @@ import type {
   VerMiCuentaPorPagarServiceResult,
 } from "@/lib/interfaces/services/IWalletMensajeroService";
 import type {
+  CuentaPorPagarAgregadoRow,
+} from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
+import type {
   CuentaPorPagarResumenDTO,
+  ListarCuentasPorPagarCompletoInput,
+  ListarCuentasPorPagarPaginadoInput,
   ListarMisPagosCompletoInput,
   ListarPagosDeMensajeroCompletoInput,
   ListarPagosDeMensajeroInput,
@@ -21,6 +28,7 @@ import type {
 } from "@/lib/types/wallet-mensajero";
 import { descargaConfig } from "@/lib/config/descarga";
 import { derivarCuentaPorPagar } from "@/lib/utils/cuenta-por-pagar";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R18/R19/R20). El `mensajero` ve SOLO lo suyo (acotado a su usuarioId =
@@ -142,22 +150,105 @@ export class WalletMensajeroService implements IWalletMensajeroService {
     return { status: "ok", items: movimientos, total };
   }
 
+  /**
+   * Feature 170 (T L.1) — la fila del listado del maestro, DERIVADA una sola vez.
+   *
+   * La escribian las dos lecturas de este listado (entera y paginada) y es dinero: la cuenta
+   * por pagar se DERIVA con `derivarCuentaPorPagar` (R14), nunca se lee de un saldo
+   * almacenado. Dos copias de esta proyeccion son dos oportunidades de que la pagina y el
+   * dataset completo declaren montos distintos para el mismo mensajero.
+   */
+  private aResumen(r: CuentaPorPagarAgregadoRow): CuentaPorPagarResumenDTO {
+    const c = derivarCuentaPorPagar(r.devengado, r.pagado);
+    return {
+      mensajeroId: r.mensajeroId,
+      mensajeroNombre: r.mensajeroNombre,
+      devengado: c.devengado,
+      pagado: c.pagado,
+      cuentaPorPagar: c.cuentaPorPagar,
+      signo: c.signo,
+    };
+  }
+
   async listarCuentasPorPagar(actor: Actor): Promise<ListarCuentasPorPagarServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
 
     const rows = await this.repo.listarCuentasPorPagarTodos();
-    const mensajeros: CuentaPorPagarResumenDTO[] = rows.map((r) => {
-      const c = derivarCuentaPorPagar(r.devengado, r.pagado);
-      return {
-        mensajeroId: r.mensajeroId,
-        mensajeroNombre: r.mensajeroNombre,
-        devengado: c.devengado,
-        pagado: c.pagado,
-        cuentaPorPagar: c.cuentaPorPagar,
-        signo: c.signo,
-      };
+    return { status: "ok", mensajeros: rows.map((r) => this.aResumen(r)) };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T L.1, R40/R41/R45/R51) — el MISMO listado del maestro, en paginas y
+   * con la busqueda por nombre resuelta en el SERVIDOR.
+   *
+   * El guard de rol va PRIMERO, antes de tocar el repositorio: si estuviera despues, la cuenta
+   * por pagar de TODOS los mensajeros ya habria salido de la base aunque la respuesta fuera un
+   * error. Es la misma decision, y por el mismo motivo, que en `listarSaldosTiendasPaginado`.
+   *
+   * `busqueda` es el UNICO dato de la peticion que llega al repositorio: nada del input toca
+   * el alcance, que lo fija el rol del actor (R44). El repositorio filtra ANTES de recortar y
+   * devuelve el total del conjunto filtrado, asi que la pagina y el total no pueden mirar
+   * conjuntos distintos (R41).
+   */
+  async listarCuentasPorPagarPaginado(
+    input: ListarCuentasPorPagarPaginadoInput,
+    actor: Actor,
+  ): Promise<ListarCuentasPorPagarPaginadoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19/R44
+
+    const { items, total } = await this.repo.listarCuentasPorPagarPaginado(
+      { busqueda: input.busqueda },
+      rangoDePagina(input),
+    );
+
+    return {
+      status: "ok",
+      items: items.map((r) => this.aResumen(r)),
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO filtrado, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T M.1, cierre de Q-L2) — el MISMO listado del maestro sin recorte por
+   * pagina, para la descarga (R52).
+   *
+   * Lo que cierra: hasta hoy la pantalla paginada descargaba releyendo `listarCuentasPorPagar()`
+   * —el listado ENTERO, sin busqueda— y volviendo a filtrarlo en el navegador. Funcionaba, pero
+   * dejaba dos cosas que esta feature existe para evitar: el conjunto entero cruzando al cliente
+   * en el momento de descargar, y el criterio de busqueda escrito dos veces, en dos capas (R45).
+   * Aqui la busqueda la resuelve el repositorio con la MISMA linea que arma la pagina, asi que
+   * la fila que la tabla enseña y la que el archivo trae no pueden discrepar (R11).
+   *
+   * El tope se evalua en el SERVIDOR (R29). Superarlo NO devuelve filas ni un dataset truncado:
+   * devuelve el total encontrado y el tope vigente para que el control redacte el aviso
+   * (R26/R27/R28). Aqui el conjunto se materializa entero antes de contarlo —es una agregacion
+   * de todo el libro por mensajero, T L.1 §5— asi que el `N + 1` de R29 no aplica a la base;
+   * lo que R29 gobierna en este listado es lo que se TRANSPORTA, y por encima del tope no se
+   * transporta ni una fila.
+   */
+  async listarCuentasPorPagarCompleto(
+    input: ListarCuentasPorPagarCompletoInput,
+    actor: Actor,
+  ): Promise<ListarCuentasPorPagarCompletoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17/R19: mismo gate que la pagina
+
+    const limite = descargaConfig.MAX_FILAS;
+    const conjunto = await this.repo.listarCuentasPorPagarCompleto({
+      busqueda: input.busqueda,
     });
-    return { status: "ok", mensajeros };
+
+    // R27/R28: o van TODAS las filas del conjunto filtrado, o va el error con los conteos.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return {
+      status: "ok",
+      items: conjunto.map((r) => this.aResumen(r)), // el MISMO mapper que la pagina (dinero)
+      total: conjunto.length,
+    };
   }
 
   async listarPagosDeMensajero(

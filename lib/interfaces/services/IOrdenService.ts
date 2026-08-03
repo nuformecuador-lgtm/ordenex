@@ -7,6 +7,7 @@ import type {
   OrdenDTO,
   OrdenListItemDTO,
 } from "@/lib/types/orden";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Actor autenticado que ejecuta la operacion. El rol se resuelve desde la sesion
 // (R19) y determina la autorizacion (matriz R20-R24).
@@ -36,9 +37,10 @@ export type ObtenerOrdenServiceResult =
   | { status: "forbidden" }
   | { status: "not_found" };
 
-export type ListarOrdenesServiceResult =
-  | { status: "ok"; items: OrdenListItemDTO[]; page: number; pageSize: number; total: number }
-  | { status: "forbidden" };
+// Feature 170 (T H.2): reexpresado sobre el contrato comun de listado paginado
+// (`lib/types/listado-paginado`). Es el MOLDE que copian los 13 listados del Anexo III
+// (design §11.4), asi que la forma vive en un solo sitio y no en catorce.
+export type ListarOrdenesServiceResult = ListarPaginadoServiceResult<OrdenListItemDTO>;
 
 /**
  * Feature 151 (design §4.1) — lectura SIN paginacion para la descarga del dataset

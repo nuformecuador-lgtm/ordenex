@@ -9,6 +9,7 @@ import type {
   ListarMisMovimientosServiceResult,
   ListarMovimientosDeTiendaCompletoServiceResult,
   ListarMovimientosDeTiendaServiceResult,
+  ListarSaldosTiendasPaginadoServiceResult,
   ListarSaldosTiendasServiceResult,
   VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
@@ -23,6 +24,7 @@ import { descargaConfig } from "@/lib/config/descarga";
 import { derivarDesgloseTienda } from "@/lib/utils/desglose-tienda";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 // Roles autorizados (R19/R20). El `adminTienda` ES la tienda: su usuarioId = tienda_id, y solo
 // ve lo suyo (acotado en el WHERE del repo). El acceso total (maestro/admin) ve el saldo de
@@ -74,7 +76,12 @@ export class WalletTiendaService implements IWalletTiendaService {
     const filtros = this.construirFiltros(input);
 
     // R19/R22: acotado a SU tienda_id SIEMPRE en el WHERE (el repo lo aplica), filtros aparte.
-    const [{ movimientos, total }, saldoAgg] = await Promise.all([
+    //
+    // Feature 172 (T G.2, R55) — la tercera lectura es el DESGLOSE por concepto, y es la MISMA
+    // agregacion que alimenta la cabecera del maestro (`listarMovimientosDeTienda`, mas abajo),
+    // con los MISMOS filtros y el `tienda_id` del actor. Sin ella la tienda veria el pago que
+    // recibio sumado dentro de «debitos», indistinguible de un cargo de Ordenex.
+    const [{ movimientos, total }, saldoAgg, desgloseAgg] = await Promise.all([
       this.repo.listarPorTienda({
         page: input.page,
         pageSize: input.pageSize,
@@ -82,6 +89,7 @@ export class WalletTiendaService implements IWalletTiendaService {
         tiendaId: actor.usuarioId, // AL FINAL (feature 170/R15): nada lo puede pisar
       }),
       this.repo.agregarSaldoPorTienda(actor.usuarioId, filtros),
+      this.repo.agregarDesglosePorTienda(actor.usuarioId, filtros),
     ]);
 
     return {
@@ -93,6 +101,10 @@ export class WalletTiendaService implements IWalletTiendaService {
         pageSize: input.pageSize,
         // R22: el saldo refleja el conjunto FILTRADO (mismos filtros que el listado).
         saldo: derivarSaldoTienda(saldoAgg.creditos, saldoAgg.debitos),
+        // Feature 172 (R55): la clasificacion NO se reimplementa aqui. Es literalmente la
+        // funcion que usa el desglose del maestro; si divergieran, la tienda y quien le paga
+        // leerian dos cifras distintas del mismo libro.
+        desglose: derivarDesgloseTienda(desgloseAgg),
       },
     };
   }
@@ -147,6 +159,43 @@ export class WalletTiendaService implements IWalletTiendaService {
       return { tiendaId: r.tiendaId, tiendaNombre: r.tiendaNombre, saldo: s.saldo, signo: s.signo };
     });
     return { status: "ok", tiendas };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — los saldos por tienda, paginados.
+   *
+   * El guard de rol va PRIMERO, antes de tocar el repositorio: si estuviera despues, el saldo
+   * de TODAS las tiendas ya habria salido de la base aunque la respuesta fuera un error. Es la
+   * misma decision, y por el mismo motivo, que en `listarMovimientosDeTienda`.
+   *
+   * UNA sola llamada al repositorio (R54), la misma que hace el listado sin paginar: el total
+   * sale de esa agregacion y no de un conteo aparte.
+   */
+  async listarSaldosTiendasPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarSaldosTiendasPaginadoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R20
+
+    const { items, total } = await this.repo.listarSaldosTiendasPaginado(rangoDePagina(input));
+
+    return {
+      status: "ok",
+      // R16: el saldo se DERIVA con el MISMO helper que el listado sin paginar; nunca se lee
+      // de un saldo almacenado ni se recalcula de otra forma aqui.
+      items: items.map((r) => {
+        const s = derivarSaldoTienda(r.creditos, r.debitos);
+        return {
+          tiendaId: r.tiendaId,
+          tiendaNombre: r.tiendaNombre,
+          saldo: s.saldo,
+          signo: s.signo,
+        };
+      }),
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
   }
 
   /**

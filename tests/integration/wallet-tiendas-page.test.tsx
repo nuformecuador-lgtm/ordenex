@@ -20,7 +20,10 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
 }));
 
 vi.mock("@/lib/actions/wallet-tienda", () => ({
+  // Feature 170 — FASE 2 (T I.2): la página pre-carga la PÁGINA 1 de los saldos. El listado
+  // sin paginar sigue existiendo: lo usa la DESCARGA de la tabla (R52).
   listarSaldosTiendasAction: vi.fn(),
+  listarSaldosTiendasPaginadoAction: vi.fn(),
   listarMovimientosDeTiendaAction: vi.fn(),
   listarMovimientosDeTiendaCompletoAction: vi.fn(),
 }));
@@ -56,16 +59,19 @@ vi.mock("@/app/(app)/wallet/tiendas/_components/SaldosTiendasTable", () => ({
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   listarMovimientosDeTiendaAction,
-  listarSaldosTiendasAction,
+  listarSaldosTiendasPaginadoAction,
 } from "@/lib/actions/wallet-tienda";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
-const saldosMock = vi.mocked(listarSaldosTiendasAction);
+const saldosMock = vi.mocked(listarSaldosTiendasPaginadoAction);
 const desgloseMock = vi.mocked(listarMovimientosDeTiendaAction);
 
 const SALDOS_OK = {
   status: "ok" as const,
-  tiendas: [
+  page: 1,
+  pageSize: 25,
+  total: 2,
+  items: [
     {
       tiendaId: "t1",
       tiendaNombre: "Tienda Norte",
@@ -158,13 +164,15 @@ describe("WalletTiendasPage — pre-fetch del acceso total (R6/R30)", () => {
 
     expect(tableCalls).toHaveLength(1);
     const props = tableCalls[0];
-    expect(props.tiendas).toHaveLength(2);
-    expect(typeof props.tiendas[0].saldo).toBe("string");
-    expect(props.tiendas[0].saldo).toBe("9000.00");
-    expect(props.tiendas[0].tiendaNombre).toBe("Tienda Norte");
+    // Feature 170 — FASE 2 (T I.2): la prop es la PÁGINA (`items` + `total`), no el array.
+    expect(props.initialData.items).toHaveLength(2);
+    expect(props.initialData.total).toBe(2);
+    expect(typeof props.initialData.items[0].saldo).toBe("string");
+    expect(props.initialData.items[0].saldo).toBe("9000.00");
+    expect(props.initialData.items[0].tiendaNombre).toBe("Tienda Norte");
     // Un saldo NEGATIVO (la tienda le debe a Ordenex) viaja con su signo y sin parsear.
-    expect(props.tiendas[1].saldo).toBe("-452.00");
-    expect(props.tiendas[1].signo).toBe("negativo");
+    expect(props.initialData.items[1].saldo).toBe("-452.00");
+    expect(props.initialData.items[1].signo).toBe("negativo");
   });
 
   it("R32: montar la página no dispara NINGUNA lectura de desglose, haya las tiendas que haya", async () => {

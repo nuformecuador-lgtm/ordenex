@@ -1,16 +1,21 @@
 // @vitest-environment jsdom
-// Feature 170 (Tanda D) — descarga de las tres tablas de dinero que reciben su dataset ENTERO
+// Feature 170 (Tanda D) — descarga de las tres tablas de dinero que recibían su dataset ENTERO
 // por props: saldos de tiendas, cuentas por pagar a mensajeros y plantillas de gasto fijo.
 // Cubre R1, R7, R10, R26, R30 y R32.
 //
-// Son FAMILIA B pura: el Server Component padre ya pidió el conjunto completo (ninguna de las
-// tres pagina), así que el archivo se proyecta de lo que la tabla está pintando. Los dos
-// riesgos que estos tests cierran son los propios de esa familia: (a) que alguna se ponga a
-// releer del servidor «por si acaso», y (b) que el tope de 5000 no se aplique aquí y se
-// entregue un archivo gigante —o peor, uno truncado en silencio—.
+// Eran FAMILIA B pura. Feature 170 — FASE 2: las tres paginan ya en el servidor (T I.2 las dos
+// primeras, T L.2 las cuentas por pagar), así que su archivo NO puede salir del array que la
+// tabla pinta —sería «descargar lo que se ve»— y se RELEE del conjunto completo al pulsar el
+// control (R52).
+//
+// Los riesgos que estos tests cierran: (a) que una descarga se quede en la página visible,
+// (b) que el archivo deje de respetar el filtro vigente y entregue filas que el usuario no
+// está viendo, y (c) que el tope de 5000 deje de aplicarse y se entregue un archivo gigante
+// —o peor, uno truncado en silencio—.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { ReactElement } from "react";
@@ -32,6 +37,20 @@ vi.mock("@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero", () =
 vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   setActivaPlantillaAction: vi.fn(),
   listarPlantillasAction: vi.fn(),
+  listarPlantillasPaginadoAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/wallet-tienda", () => ({
+  listarSaldosTiendasAction: vi.fn(),
+  listarSaldosTiendasPaginadoAction: vi.fn(),
+}));
+// Feature 170 — FASE 2 (T L.2): cuentas por pagar pasa a leer su página —y su conjunto para el
+// archivo— del servidor.
+vi.mock("@/lib/actions/wallet-mensajero", () => ({
+  listarCuentasPorPagarAction: vi.fn(),
+  listarCuentasPorPagarPaginadoAction: vi.fn(),
+  // Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el conjunto para el archivo lo devuelve YA
+  // filtrado el servidor; la pantalla dejo de releer el listado entero y filtrarlo aqui.
+  listarCuentasPorPagarCompletoAction: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -58,6 +77,19 @@ vi.mock("@/hooks/useToast", () => ({
   }),
 }));
 
+import {
+  listarSaldosTiendasAction,
+  listarSaldosTiendasPaginadoAction,
+} from "@/lib/actions/wallet-tienda";
+import {
+  listarPlantillasAction,
+  listarPlantillasPaginadoAction,
+} from "@/lib/actions/gasto-fijo-plantilla";
+import {
+  listarCuentasPorPagarCompletoAction,
+  listarCuentasPorPagarPaginadoAction,
+} from "@/lib/actions/wallet-mensajero";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { SaldosTiendasTable } from "@/app/(app)/wallet/tiendas/_components/SaldosTiendasTable";
 import { CuentasPorPagarTable } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
 import { GastosFijosPlantillasPanel } from "@/app/(app)/wallet/_components/GastosFijosPlantillasPanel";
@@ -106,7 +138,11 @@ function plantillaGasto(i: number, activa = true): GastoFijoPlantillaDTO {
 const PLANTILLAS = [plantillaGasto(1), plantillaGasto(2, false)];
 
 function envolver(ui: ReactElement) {
-  return render(<ToastProvider>{ui}</ToastProvider>);
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <ToastProvider>{ui}</ToastProvider>
+    </SWRConfig>,
+  );
 }
 
 /**
@@ -118,11 +154,93 @@ function sinComentarios(fuente: string): string {
   return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
+/**
+ * Feature 170 — FASE 2 (T I.2): monta la tabla de saldos con su PÁGINA y programa las dos
+ * lecturas —la de la página y la del conjunto completo que alimenta la descarga—.
+ */
+function montarSaldos(
+  visibles: SaldoTiendaResumenDTO[],
+  completo: SaldoTiendaResumenDTO[] = visibles,
+) {
+  vi.mocked(listarSaldosTiendasPaginadoAction).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...paginaInicial(visibles, { total: completo.length }),
+  });
+  vi.mocked(listarSaldosTiendasAction).mockResolvedValue({
+    status: "ok",
+    tiendas: completo,
+  });
+  return envolver(
+    <SaldosTiendasTable
+      initialData={paginaInicial(visibles, { total: completo.length })}
+    />,
+  );
+}
+
+/** Espejo del anterior para el panel de plantillas de gasto fijo. */
+function montarPlantillas(
+  visibles: GastoFijoPlantillaDTO[],
+  completo: GastoFijoPlantillaDTO[] = visibles,
+) {
+  vi.mocked(listarPlantillasPaginadoAction).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...paginaInicial(visibles, { total: completo.length }),
+  });
+  vi.mocked(listarPlantillasAction).mockResolvedValue({
+    status: "ok",
+    plantillas: completo,
+  });
+  return envolver(
+    <GastosFijosPlantillasPanel
+      initialData={paginaInicial(visibles, { total: completo.length })}
+    />,
+  );
+}
+
+/**
+ * Feature 170 — FASE 2 (T L.2): espejo de los dos anteriores para las cuentas por pagar. La
+ * búsqueda por nombre la resuelve el SERVIDOR, así que el doble de la página filtra de verdad
+ * y el del conjunto entrega las N filas de las que sale el archivo.
+ */
+function montarCuentas(
+  visibles: CuentaPorPagarResumenDTO[],
+  completo: CuentaPorPagarResumenDTO[] = visibles,
+) {
+  vi.mocked(listarCuentasPorPagarPaginadoAction).mockImplementation(
+    async (input: unknown) => {
+      const q = ((input as { busqueda?: string })?.busqueda ?? "").trim().toLowerCase();
+      const filtrados =
+        q === ""
+          ? visibles
+          : completo.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+      return {
+        status: "ok",
+        page: 1,
+        ...paginaInicial(filtrados, { total: q === "" ? completo.length : filtrados.length }),
+      };
+    },
+  );
+  // T M.1 (Q-L2): el archivo sale de una accion PROPIA que aplica la busqueda en el servidor.
+  vi.mocked(listarCuentasPorPagarCompletoAction).mockImplementation(async (input: unknown) => {
+    const q = ((input as { busqueda?: string })?.busqueda ?? "").trim().toLowerCase();
+    const items =
+      q === "" ? completo : completo.filter((m) => m.mensajeroNombre.toLowerCase().includes(q));
+    return { status: "ok", items, total: items.length };
+  });
+  return envolver(
+    <CuentasPorPagarTable
+      initialData={paginaInicial(visibles, { total: completo.length })}
+    />,
+  );
+}
+
 /** Las tres tablas: cómo se montan, cómo se llama su control y qué debe traer el archivo. */
 const TABLAS = [
   {
     titulo: "Saldos de tiendas",
-    montar: () => envolver(<SaldosTiendasTable tiendas={TIENDAS} />),
+    montar: () => montarSaldos(TIENDAS),
     filas: TIENDAS.length,
     // Money-safe: el saldo llega TAL CUAL, con céntimos y sin el símbolo de colón.
     clave: "saldo",
@@ -130,14 +248,14 @@ const TABLAS = [
   },
   {
     titulo: "Cuentas por pagar a mensajeros",
-    montar: () => envolver(<CuentasPorPagarTable mensajeros={MENSAJEROS} />),
+    montar: () => montarCuentas(MENSAJEROS),
     filas: MENSAJEROS.length,
     clave: "cuentaPorPagar",
     valor: MENSAJEROS[0].cuentaPorPagar,
   },
   {
     titulo: "Plantillas de gasto fijo",
-    montar: () => envolver(<GastosFijosPlantillasPanel plantillas={PLANTILLAS} />),
+    montar: () => montarPlantillas(PLANTILLAS),
     filas: PLANTILLAS.length,
     clave: "monto",
     valor: PLANTILLAS[0].monto,
@@ -199,11 +317,13 @@ describe("Dinero por props · descarga", () => {
   });
 
   it("cuentas por pagar exporta solo lo que la búsqueda deja a la vista", async () => {
-    // R10: el filtro de esta tabla es de CLIENTE, así que la descarga tiene que partir del
-    // array YA filtrado. Descargar el conjunto entero mientras la pantalla enseña una fila
-    // sería entregar datos que el usuario no está viendo.
+    // R10 + R52. El filtro de esta tabla era de CLIENTE y desde T L.2 lo resuelve el
+    // SERVIDOR; lo que el archivo tiene que traer no cambia: exactamente el conjunto que la
+    // búsqueda deja a la vista, ni una fila más. Descargar el conjunto SIN filtrar sería
+    // entregar datos que el usuario no está viendo, y descargar la página sería entregar
+    // menos de los que sí está viendo.
     const user = userEvent.setup();
-    envolver(<CuentasPorPagarTable mensajeros={MENSAJEROS} />);
+    montarCuentas(MENSAJEROS);
 
     await user.type(screen.getByRole("searchbox"), "Beto");
 
@@ -220,33 +340,53 @@ describe("Dinero por props · descarga", () => {
     expect(filas[0].mensajero).toBe("Beto Repartidor");
   });
 
-  it("ninguna de las tres relee del servidor para descargar", () => {
-    // R30/R32, comprobado de forma ESTÁTICA sobre los módulos, que es donde vive la
-    // propiedad: no importan Server Actions de LECTURA, no usan SWR ni `fetch`, y su
-    // cableado es el adaptador LOCAL (`filasLocales`), no el de Server Action.
+  it("las tres paginan y NINGUNA proyecta la página: releen el conjunto completo", () => {
+    // R52, de forma ESTÁTICA sobre los módulos, que es donde vive la propiedad. Donde la
+    // FASE 1 exigía `filasLocales(loQueSePinta)` —correcto mientras el array de props ERA el
+    // dataset—, ahora se PROHÍBE: esa misma llamada, con la tabla paginada, es literalmente
+    // «descargar lo que se ve», y sale un archivo de 25 filas de 300 sin fallar en ninguna
+    // parte. Se exige a cambio el adaptador que relee.
+    //
+    // Feature 170 — FASE 2 (T L.2): las cuentas por pagar entran aquí y desaparece el caso
+    // «la que NO pagina no relee» —ya no queda ninguna de las tres sin paginar—. Las tablas
+    // de Familia B pura que siguen sin paginar (ranking, gestiones del cierre) no son de
+    // este archivo y conservan sus propios tests.
+    //
+    // Feature 170 — FASE 2 (T M.1, cierre de Q-L2): las tres siguen sin proyectar la página,
+    // pero ya no lo hacen todas igual. «Cuentas por pagar» estrena un `listarCompleto` propio y
+    // usa el adaptador de FAMILIA A (`filasDesdeResultado`), que además trae el tope desde el
+    // servidor; las otras dos siguen releyendo su listado sin recorte con
+    // `filasDelConjuntoCompleto`, que es la deuda que Q-I5 dejó abierta. Lo que se exige aquí es
+    // la propiedad —el archivo NO sale del array de la página— y cada tabla declara con cuál de
+    // los dos adaptadores la cumple, para que ese reparto no cambie sin que nadie lo note.
     const raiz = path.resolve(__dirname, "../../..");
     const modulos = [
-      "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
-      "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
-      "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
+      {
+        ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
+        adaptador: /filasDelConjuntoCompleto\(/,
+        nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
+      },
+      {
+        ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
+        adaptador: /filasDelConjuntoCompleto\(/,
+        nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
+      },
+      {
+        ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+        adaptador: /filasDesdeResultado\(/,
+        nota: "T M.1: listarCuentasPorPagarCompleto, con la búsqueda y el tope en el servidor",
+      },
     ];
 
-    for (const ruta of modulos) {
+    for (const { ruta, adaptador, nota } of modulos) {
       const fuente = sinComentarios(readFileSync(path.join(raiz, ruta), "utf8"));
-      const importes = [...fuente.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-      expect(importes.length, ruta).toBeGreaterThan(0);
-      for (const especificador of importes) {
-        // El panel de gasto fijo ya tenía su MUTACIÓN de activar/desactivar (feature 45):
-        // lo que no puede aparecer es una LECTURA nueva para la descarga.
-        if (especificador === "@/lib/actions/gasto-fijo-plantilla") continue;
-        expect(especificador, `${ruta} importa ${especificador}`).not.toMatch(
-          /^@\/lib\/(actions|services|repositories)\b/,
-        );
-      }
-      expect(fuente, ruta).not.toMatch(/\buseSWR\b/);
-      expect(fuente, ruta).not.toMatch(/\bfetch\s*\(/);
-      expect(fuente, ruta).toMatch(/filasLocales\(/);
-      expect(fuente, ruta).not.toMatch(/filasDesdeResultado\(/);
+      expect(fuente, `${ruta}: ${nota}`).toMatch(adaptador);
+      expect(fuente, `${ruta}: no puede proyectar el array visible`).not.toMatch(
+        /filasLocales\(/,
+      );
+      // Y pagina de verdad: control de navegación + página pedida al servidor.
+      expect(fuente, `${ruta}: sin control de paginación`).toMatch(/<Pagination[\s/>]/);
+      expect(fuente, `${ruta}: sin lectura de la página`).toMatch(/\buseSWR\b/);
     }
   });
 
@@ -263,7 +403,9 @@ describe("Dinero por props · descarga", () => {
       signo: "positivo",
     }));
 
-    envolver(<SaldosTiendasTable tiendas={muchas} />);
+    // La página visible es pequeña; el CONJUNTO que releerá la descarga es el que se pasa
+    // del tope. Es el caso real: nadie ve 5001 filas, pero sí puede pedirlas en un archivo.
+    montarSaldos(muchas.slice(0, 25), muchas);
     await user.click(screen.getByRole("button", { name: "Descargar Saldos de tiendas" }));
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));

@@ -2,9 +2,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaModule";
-import { deshacerGestion, solicitarCierre } from "@/lib/actions/cierre-dia";
+import {
+  deshacerGestion,
+  listarCierresPasadosPaginado,
+  solicitarCierre,
+} from "@/lib/actions/cierre-dia";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -22,6 +28,8 @@ vi.mock("@/lib/actions/cierre-dia", () => ({
   // Feature 67 (T17/T18): la Server Action del deshacer también se mockea (contrato
   // cerrado por el backend: recibe un OBJETO `{ gestionId }`, no un string).
   deshacerGestion: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): «Cierres solicitados» llega paginado del servidor.
+  listarCierresPasadosPaginado: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -91,19 +99,36 @@ const ZERO_TOTALES: CierreTotales = {
   general: "0.00",
 };
 
-function renderModule(props?: Partial<Parameters<typeof CierreDiaModule>[0]>) {
+/**
+ * Feature 170 — FASE 2 (T I.2): `cierresPasados` ya no es un array, es la PÁGINA que pre-carga
+ * el Server Component. El helper sigue recibiendo el array para no reescribir cada caso, y
+ * ADEMÁS programa la Server Action paginada con esa misma página (SWR revalida al montar).
+ */
+function renderModule(
+  props?: Omit<Partial<Parameters<typeof CierreDiaModule>[0]>, "cierresPasados"> & {
+    cierresPasados?: CierrePasadoDTO[];
+  },
+) {
+  const pagina = paginaInicial(props?.cierresPasados ?? []);
+  vi.mocked(listarCierresPasadosPaginado).mockResolvedValue({
+    status: "ok",
+    page: 1,
+    ...pagina,
+  });
   render(
-    <CierreDiaModule
-      grupos={props?.grupos ?? emptyGrupos()}
-      totales={props?.totales ?? ZERO_TOTALES}
-      totalPagoMensajero={props?.totalPagoMensajero ?? "0.00"}
-      puedesSolicitar={props?.puedesSolicitar ?? true}
-      motivoBloqueo={props?.motivoBloqueo ?? null}
-      cierresPasados={props?.cierresPasados ?? []}
-      bloqueado={props?.bloqueado ?? false}
-      tieneVencido={props?.tieneVencido ?? false}
-      tieneRechazado={props?.tieneRechazado ?? false}
-    />,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <CierreDiaModule
+        grupos={props?.grupos ?? emptyGrupos()}
+        totales={props?.totales ?? ZERO_TOTALES}
+        totalPagoMensajero={props?.totalPagoMensajero ?? "0.00"}
+        puedesSolicitar={props?.puedesSolicitar ?? true}
+        motivoBloqueo={props?.motivoBloqueo ?? null}
+        cierresPasados={pagina}
+        bloqueado={props?.bloqueado ?? false}
+        tieneVencido={props?.tieneVencido ?? false}
+        tieneRechazado={props?.tieneRechazado ?? false}
+      />
+    </SWRConfig>,
   );
 }
 

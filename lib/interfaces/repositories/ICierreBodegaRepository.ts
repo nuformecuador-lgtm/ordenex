@@ -1,5 +1,6 @@
 import type { CierreEstado } from "@/lib/types/cierre";
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 40 — contrato del repositorio del "Cierre de bodega" (lado adminSatelite:
 // consolidar + solicitar). Solo queries Prisma; sin logica de negocio (esa vive en
@@ -56,6 +57,19 @@ export interface ICierreBodegaRepository {
    */
   findCierresDiaConsolidables(zonaId: string): Promise<CierreDiaConsolidableRow[]>;
   /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): UNA PAGINA de los cierre_dia
+   * consolidables de la zona + el TOTAL del conjunto (el que la cabecera mostrara, R42).
+   *
+   * MISMO `where` que `findCierresDiaConsolidables` —los cuatro predicados salen de una sola
+   * funcion— y MISMO `orderBy solicitadoAt desc`. No devuelve totales de dinero: los agregados
+   * de esa pantalla se calculan sobre el conjunto COMPLETO en el servicio (R49), y dos de
+   * ellos dependen de los pagos INDIVIDUALES ordenados, que una pagina no contiene.
+   */
+  findCierresDiaConsolidablesPaginado(
+    zonaId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreDiaConsolidableRow>>;
+  /**
    * R6: cuenta los cierre_dia de la zona (`destino_tipo='bodega_satelite'`,
    * `destino_zona_id=zonaId`) aun en estado `solicitado` (pendientes de que el
    * adminSatelite los resuelva). Precondicion para poder cerrar la bodega.
@@ -78,4 +92,20 @@ export interface ICierreBodegaRepository {
    * reciente primero, totales snapshot -> STRING, `cantidadCierres` = _count.
    */
   findCierresBodegaByZona(zonaId: string): Promise<CierreBodegaResumenRow[]>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de los cierres de bodega
+   * SOLICITADOS por la zona + el TOTAL del conjunto.
+   *
+   * Es `findCierresBodegaByZona` con el recorte `skip`/`take`: MISMO `where { zonaId }` (el
+   * acotamiento por zona, que es lo unico que separa a un adminSatelite del historico de otra
+   * bodega) y MISMO `orderBy solicitadoAt desc` (R51). NO filtra por estado: este listado
+   * muestra TODOS los cierres de bodega de la zona, resueltos o no, igual que hoy (R44).
+   *
+   * Pagina y total en la MISMA llamada: el `count` es la unica consulta que R54 permite
+   * anadir, y comparte el `where` con la pagina para que no puedan contar cosas distintas.
+   */
+  findCierresBodegaByZonaPaginado(
+    zonaId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
 }

@@ -2382,3 +2382,169 @@ cablearle la descarga: se le estaba dando una capacidad nueva a una tabla que **
 montaba**. Destapó dos cosas: **«Rutear a bodega satélite» lleva tiempo sin interfaz** (su backend
 sigue vivo y probado, el modal se conservó listo para remontar) y **la ficha de la feature 71 se
 diagnosticó contra código muerto**, así que pide reevaluación antes de que alguien la tome.
+
+## Feature 123 — la tabla rollup diaria `analytics_daily` (2026-07-31)
+
+- **Solo el DDL, y la tabla nace vacía a propósito.** `migration.sql` + `down.sql` + modelo
+  Prisma + tests. Cero filas escritas: el job que la puebla es la 124 y el backfill la 125.
+  Un guard verifica que no tiene consumidores (R44), así que la frontera con la 124 queda
+  medida en vez de prometida.
+- **El grano de la ficha estaba mal y el catálogo lo corrigió.** La ficha declaraba 5
+  columnas; son **6**. Faltaba `causa_devolucion`, que la métrica `motivos_devolucion` de la
+  135 necesita para existir —es `producida` con fuente rollup—, así que sin ella la tabla
+  nacía inservible para su única consumidora. En cambio `metodo_pago` se omite bien: su única
+  consumidora es `live`, que no se materializa. **Regla que sale de aquí: mandar el catálogo
+  filtrado por clase, nunca `DIMENSIONES` en bruto.**
+- **Tres promesas se volvieron estructura.** `primer_intento_ok <= entregas` como `CHECK` se
+  cumple fila a fila, luego la suma también: la tasa **no puede pasar de 1 en ninguna
+  agregación**, ni con un job mal escrito. Los otros dos impiden segundos acumulados con
+  denominador vacío y medidas negativas. El dilema del NULL de `mensajero_id` se resolvió con
+  `NULLS NOT DISTINCT` (PG ≥ 15; el motor local es **16.1**, medido con `version()`, no
+  inferido). Producción sin confirmar: riesgo de despliegue escrito, no enterrado.
+- **La no-aditividad del stock, impedida en tres capas** —el sufijo `_stock` en el nombre, un
+  `COMMENT ON COLUMN` con la frase literal, y un tripwire que rastrea `lib/` y `app/`—. Se
+  descartó sacarlo a otra tabla porque `TablaRollup` es un literal **cerrado** en el contrato
+  de la 135: habría obligado a modificar la dependencia y las otras diez features del clado.
+- **El bloqueante: el modelo iba a hacer que Prisma borrara el único del grano.** El
+  `schema.prisma` omitía el `@@unique`, así que para Prisma `analytics_daily_grano_key`
+  sobraba en la base. En cuanto la 124 corriera `pnpm db:migrate`, habría emitido un
+  `DROP INDEX` colado dentro de su cambio legítimo — y entonces pasa lo que describe la
+  cabecera de la propia migración: **el rollup se duplica sin un solo error**. Ninguno de los
+  tres tests lo veía, porque leen el `.sql` y el `.prisma`, **no la relación entre ambos**.
+  Agravante: la red protegía el bug, con un `not.toMatch(/@@unique/)`. El repo ya tenía el
+  caso resuelto y documentado en la migración de tarifas y nadie lo miró.
+- **Lo que de verdad faltaba no era el `@@unique`, sino el test que lo vigila.** Se añadió uno
+  que corre `migrate diff` y compara objeto a objeto contra el `.sql`, para que un drift
+  futuro salga rojo en su propio PR en vez de aparecer como un `DROP INDEX` escondido en el de
+  otra feature. Verificado por mutación en tres variantes; quitar el `map:` lo pone rojo y
+  revela que el nombre por defecto **se trunca a 63 caracteres**, o sea que el `map:` nunca
+  fue cosmético.
+- **Verificación medida por el leader, no copiada del agente:** typecheck 0, lint delta 0
+  (los 3 errores de React Compiler en `OrdenesModule.tsx` son heredados de `dev`), suite de
+  **664 archivos** con 1 rojo determinista ajeno (`no-embalaje`, que dispara por un texto en
+  los specs de la 135). Round-trip UP→DOWN→UP contra Postgres real con checksum sha256
+  idéntico. **45 R, 45 mapeados.** Reviewer: 1 bloqueante —cerrado— y 9 menores.
+- **Trazabilidad honesta, por insistencia del reviewer:** de los 45 R, **33 los mide una
+  aserción que discrimina y 12 solo una regex sobre el texto del SQL** (asseveran que existe
+  un `COMMENT`, no un comportamiento). Es aceptable en una feature de solo-DDL —no hay dato
+  con el que falsarlos— pero se separó en el mapa en vez de presentarlos con la misma tinta.
+  La deuda de verificación va dirigida a la 124.
+- **Una grieta declarada y otra que no lo estaba.** El spec admite que una gestión anulada
+  días después cambiaría un día ya cerrado y que el job **no** lo corrige (desvío por exceso,
+  corrección deliberada vía la 125). El reviewer encontró la hermana: las coordenadas
+  (`zona_id`, `tienda_id`, `mensajero_id`, `estatus_id`) se leen de la orden **en el corte** y
+  esos campos cambian después, así que **la 125 recomputando el día D no reproduce lo que la
+  124 escribió**, aunque R35 venda inmutabilidad. Dirigida a la 124/125 con la disyuntiva
+  explícita: congelar coordenadas o rebajar R35.
+- **Incidente de arnés — el guardia de frontera de la 135, resuelto dos veces en paralelo.**
+  Puso 4 rojos aquí. No era la 123 cruzando una frontera: era un guardia branch-scoped que
+  quedó commiteado en `dev` y pasó a juzgar el diff de toda rama posterior; estaba rojo **en
+  `dev` mismo** por diff vacío, y su propio mensaje lo delataba. Esta rama lo acotó con un
+  `skipIf`; otra sesión lo borró entero en `dev` (`8699443d`). El merge aceptó el borrado:
+  resucitarlo habría revertido en silencio una decisión ajena. **Lección: un guard que mide el
+  diff contra `dev` caduca en el instante en que se mergea, y hay que decidir su retirada en
+  el mismo PR que lo introduce.**
+- **El worktree aislado se ganó el sueldo.** El checkout principal cambió de rama a mitad de
+  la feature (otra sesión), justo lo que ya había matado tres agentes en la 122. Trabajar en
+  `ordenex-wt-123` lo hizo irrelevante.
+
+## Feature 130 — analítica: componentes de gráficas (2026-08-01)
+
+- **Cinco piezas de presentación pura**, sin fetch, sin permisos y sin dominio: `KpiCard`,
+  `GraficaBarras`, `GraficaLineas`, `GraficaDonut` y `TablaResumen`, más los módulos puros de
+  color, formato y topes. 41 requisitos EARS trazados a test; **+9 archivos y +84 tests**.
+- **Se mergea SIN LLAMADOR y está dicho (H1).** El grafo es `AnaliticaShell` (existe) ← `131` (no
+  existe) ← `130`. Se comprobó midiendo, no afirmando: en un `next build` sin sonda, `recharts`
+  aparece en **0** chunks de cliente, precisamente porque nadie importa el paquete todavía.
+- **La cifra que le faltaba a D1, medida:** `recharts` pesa **388.810 bytes** y viaja en **un chunk
+  propio**. Ninguno de los **46** chunks de entrada de ruta lo contiene —ni el de la ruta que sí lo
+  usa, cuyo entry son 4.767 bytes y sólo lo *referencia*—. El mensajero **sí** entra a `/analitica`
+  (H2), así que la promesa honesta no es "no le llega" sino "le llega diferido y sólo ahí".
+- **La trampa que el design anticipó y que se respetó:** el stub global de `ResizeObserver` tiene
+  `observe(){}` vacío, así que `ResponsiveContainer` **renderiza vacío en vez de fallar** y
+  cualquier `querySelector("svg")` estaría verde midiendo nada. Todo el contenido se afirma sobre la
+  alternativa textual y sobre funciones puras; la única aserción sobre el lienzo se probó
+  **rompiéndola a propósito** y viéndola roja. El guard del paquete se probó igual, introduciendo
+  cada violación a mano.
+- **Excepción razonada viva:** Q1 (recharts directo, sin `components/ui/chart.tsx`) contradice
+  `docs/architecture.md:136` por decisión del humano. **R39 la convierte en guard:** si alguien trae
+  la primitiva de shadcn más adelante, el test avisa y obliga a reabrir la discusión en vez de dejar
+  dos fuentes de color conviviendo en silencio.
+- **Se arregló un compartido vivo con red (Q5).** `KpiValorAnimado` hardcodeaba `"₡"` y `"es-CR"`;
+  ahora sale de `lib/config/moneda.ts`. El string renderizado **cambia** («₡ 3.500» → «₡3 500,00») y
+  el componente **no tenía test propio**: se le escribió uno ANTES de tocarlo, contra el
+  comportamiento de entonces. Delta de suite **0**, sin retocar un solo test ajeno.
+- **Dos decisiones que el spec no fijaba, ahora escritas:** el `porcentaje` viaja como **fracción**
+  (0,842 = 84,2 %), coherente con la razón numerador/denominador de la 135 y con `Intl`; y en el
+  **donut** el techo de segmentos es `MAX_SERIES` (5), no 62, porque ahí el color distingue
+  porciones y 62 porciones con 5 colores es justo lo que Q3 descartó. **→ dueño de la 131.**
+- **El entorno costó más que la feature.** El worktree vive en una ruta de 143 caracteres y el
+  `package.json` del cliente Prisma queda en **266**, por encima del MAX_PATH de Windows: el
+  resolvedor de módulos de Node no lo lee, y **303 de 665 archivos de test fallaban al colectar**
+  dejando una suite que parecía casi verde con la mitad de los tests. Se resolvió acortando el
+  virtual store de pnpm. Mover el store fuera del proyecto **rompe la resolución de tipos** (~1.800
+  errores falsos): se probó y se descartó. Detalle en `impl_130.md §4`.
+
+## 2026-08-02 — 172 liquidación (pagar a mensajeros y a tiendas)
+- Cierra el agujero de fondo del sistema: hasta hoy **no existía forma de registrar un pago**, ni a
+  mensajeros ni a tiendas, así que los saldos solo crecían y nadie podía decir «ya pagué» (medido
+  en producción: 35 movimientos de caja y 6 cierres con **cero** pagos). El pago se modela como un
+  **documento propio e inmutable** (`liquidacion_pago`) del que nace exactamente un movimiento en
+  el libro del beneficiario; el saldo lo siguen derivando los libros. Al mensajero se le ofrece al
+  **aprobar su cierre** y queda atado a él; a la tienda, **contra su saldo acumulado** desde el
+  desglose que dejó la 171. **Anular es un contraasiento** (`liquidacion_anulacion`, `UNIQUE`
+  sobre `pago_id`): nunca se borra ni se edita, y «anulado» se **deriva** de que exista la fila.
+- Requisitos cubiertos: **R1–R85**, mapeados en `progress/impl_172-liquidacion.md`. **85 de 85 con
+  test en el repo; R61 queda ⚠ PARCIAL** (ver deuda). Entregada en **9 tandas / 15 commits**.
+  `./init.sh` verde: **793 archivos / 9862 tests, 0 fallos** (baseline al arrancar: 772 / 9257 ⇒
+  **+21 archivos, +600 tests, cero regresiones**). Review **aprobado en ronda 2**
+  (`progress/review_172-liquidacion.md`); la ronda 1 la rechazó con 2 bloqueantes, los dos **huecos
+  de verificación, no de código**: se cerraron sin tocar una línea de `lib/`, `app/`, `components/`
+  ni `db/`.
+- Decisiones del humano que mandan sobre el diseño: **P1** el pago que excede lo debido se
+  **rechaza**, lo que obliga a un candado (`SELECT … FOR UPDATE` antes de leer el disponible, uno
+  por operación); **P3** pagan `maestro` y `admin`, `adminSatelite` **no**, aunque sí apruebe
+  cierres —*aprobar un cierre y mover dinero no son la misma responsabilidad*—; **P4** la anulación
+  **entra** en la feature, contra el default propuesto, porque entregar un libro de dinero
+  incorregible era el riesgo más caro. **Aprobar y pagar son dos pasos**: por la feature 111 un
+  cierre sin resolver bloquea al mensajero, así que un fallo del pago **no puede tumbar la
+  aprobación**, y hay test de ello.
+- Decisiones del leader, no del spec: `referencia` gana tope de **60** (el diseño lo fijaba para
+  `nota` y callaba aquí; el número sale de `lib/types/api-key.ts`, el único campo de la misma
+  familia); el aviso de **N1** va **donde hay un importe agregado que incluye lo anulado**, no
+  donde solo se listan movimientos —aplicando esa regla resultaron **4 pantallas, no 1**—; la
+  descarga del histórico de cierres **no** gana columna; y tres punteros falsos de la tabla
+  `§ Trazabilidad` se corrigieron pese a estar el spec aprobado, porque «aprobado» protege el
+  contenido de los requisitos, no un índice factualmente falso.
+- **Lo que sostiene la feature son 13 pruebas por mutación**, y dos de ellas se ganaron el sueldo:
+  (1) el primer store de concurrencia tomaba la foto de las filas **después** de ceder el turno, y
+  con eso **quitar el candado dejaba el test de carrera en verde** —corregido a instantánea al
+  inicio de la sentencia, la semántica real de `READ COMMITTED`; sin candado caen 8 de 10 y se
+  pagan 120 000 de una tienda que debía 100 000—; (2) el parser del test de migración **se caía
+  ante la mutación que existe para cazar**: con `NOT VALID` en el último CHECK, el módulo reventaba
+  al importarse y corrían **cero casos**, así que la aserción nunca habría llegado a ejecutarse.
+  **Un guard cuyo propio parser muere ante la mutación es peor que no tenerlo.**
+- Verificado que los constraints **actúan** y no solo están escritos (los tests de migración de
+  este repo son estáticos): contra Postgres, `pago_tienda`+`credito` → **23514**,
+  `liquidacion`+`devengo` → **23514**, segunda anulación del mismo pago → **23505** con el pago
+  intacto, y **tres contrapruebas aceptadas** —la mitad que suele faltar: que el CHECK **no
+  rechaza de más**.
+- **DEUDA / condición de merge (no de código): la base de PREVIEW no se pudo verificar** — es la
+  mitad abierta de **R61**. Los dos `ADD CONSTRAINT … CHECK` heredados del review de la 171 validan
+  las filas existentes al aplicarse, y en Vercel el build migra antes de compilar. **Producción
+  está medida y limpia** (39 + 7 filas, cero incoherentes, y los CHECK cubren 10/10 y 5/5 valores
+  de los enums reales), pero el MCP está fijado al `project_ref` de producción y preview tiene base
+  propia. Riesgo acotado: build rojo en el PR y una fila fallida en el `_prisma_migrations` de
+  preview que bloquearía sus despliegues. **No se pushea hasta resolverlo**, porque pushear ES
+  aplicar la migración en preview. Consulta exacta en `progress/impl_172-liquidacion.md`.
+- Deuda declarada y aceptada: **N1** —el par pago + anulación deja los importes **brutos**
+  inflados aunque el saldo queda exacto— cerrada por su default (no netear, declararlo en pantalla
+  en las 4 superficies); **N2** sin ventana temporal para anular; **E2E declarado INAPLICABLE** por
+  decisión del humano, con la tabla de qué lo sustituye y qué queda descubierto en `design.md §13`.
+- Hallazgos ajenos destapados y **no tapados**: `esFechaFutura` (`lib/types/gestion-orden.ts:102`)
+  documenta que `new Date("2026-02-31…")` da `Invalid Date` y **es falso en V8** —rueda al 3 de
+  marzo—, así que hoy **`31/02` se acepta como fecha de reprogramación**; la guardia del censo de
+  tablas **solo recorría `app/`**, de modo que una tabla en `components/shared/` no existía para
+  ella, y al abrirla apareció una tabla **preexistente de la 130** sin registrar
+  (`contadores-cabecera.guardia.test.ts` tiene el mismo punto ciego y es de la 170); y un
+  `as unknown as <Interfaz>` en un test de la 170 **esconde el drift al typechecker**.

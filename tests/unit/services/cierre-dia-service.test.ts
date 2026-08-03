@@ -73,6 +73,8 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     transicionarRechazadoASolicitado: vi.fn(async () => true),
     crearCierre: vi.fn(async () => "c1"),
     findCierresByMensajero: vi.fn(async () => []),
+    // Feature 170 (T I.1): el listado paginado vive en su propia suite (*-paginado).
+    findCierresByMensajeroPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     // Feature 67: por defecto, una gestion `entregada` vigente del propio mensajero, sin
     // cierre, que ES la mas reciente y cuya orden sigue en `entregada` -> deshacible (R1).
     findGestionParaDeshacer: vi.fn(async () => gestionDeshacer()),

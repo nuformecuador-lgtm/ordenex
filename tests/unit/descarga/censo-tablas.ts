@@ -34,6 +34,15 @@
 //     rollout: al cerrar la FASE 1 no debe quedar ninguno (T G.1/T G.2). Existe porque
 //     las tandas entregan por lotes y ninguna puede dejar la suite roja.
 //
+// Feature 170 — FASE 2 (T I.2): CUATRO tablas CAMBIAN DE ARCHIVO, ninguna nace ni muere. Los
+// históricos que pasan a paginación server-side se llevan su `<DataTable>`, su control y su
+// descarga a un componente propio, porque el módulo del que salen enseña además un contador
+// de cola (`({pendientes.length})`) que la tanda J todavía tiene que sustituir por el `total`
+// del servidor —y la guardia de T H.3 prohíbe, con razón, que ese contador conviva con un
+// control de paginación en el mismo archivo—. Totales VIGENTES: **31 tablas = 25 dentro de
+// alcance + 6 fuera**, con 30 instancias de `<DataTable>` en **29 archivos**. Las instancias
+// no se mueven; los archivos sí (25 → 29).
+//
 // Feature 170 (T G.1) — la FASE 1 está CERRADA: las 25 tablas del Anexo I descargan y no
 // queda ningún `pendiente`. El valor sigue existiendo en el tipo porque un rollout futuro
 // volverá a necesitarlo, pero `cobertura-tablas.guardia` («la FASE 1 del export queda
@@ -53,6 +62,18 @@ export interface TablaCensada {
    * (solo `fuera`). Obligatorio en ambos casos: una exclusión sin motivo es un olvido.
    */
   nota?: string;
+  /**
+   * Feature 172 (T H.1) — solo para las tablas que viven en un componente COMPARTIDO: las
+   * pantallas que la montan, declaradas una a una.
+   *
+   * Por qué hace falta un campo y no basta con la ruta del componente: el censo cuenta
+   * `<DataTable>` del código fuente, y un componente compartido es UNA instancia de fuente
+   * que el usuario ve como VARIAS tablas. Sin esta lista, montar la misma tabla en una
+   * tercera pantalla no dejaría rastro en ningún sitio. La guardia contrasta la lista
+   * contra el árbol en los dos sentidos: ni un montaje sin declarar, ni un declarado que ya
+   * no exista.
+   */
+  montajes?: string[];
 }
 
 export interface ArchivoCensado {
@@ -75,25 +96,35 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ],
   },
   {
+    // Feature 170 — FASE 2 (T I.2): el HISTÓRICO salió de `CierresAdminModule` a su propio
+    // archivo al pasar a paginado; el módulo conserva la cola. Ni una tabla nace ni muere:
+    // cambian de sitio, y por eso los TOTALES de instancias no se mueven.
+    ruta: "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
+    tablas: [{ nombre: "Cierres del día — histórico", estado: "con_descarga" }],
+  },
+  {
     ruta: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
     tablas: [
       { nombre: "Cierres del día pendientes de decisión", estado: "con_descarga" },
-      { nombre: "Cierres del día — histórico", estado: "con_descarga" },
     ],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
-    tablas: [
-      { nombre: "Cierres de bodega pendientes", estado: "con_descarga" },
-      { nombre: "Cierres de bodega resueltos", estado: "con_descarga" },
-    ],
+    tablas: [{ nombre: "Cierres de bodega pendientes", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `CierresBodegaAdminModule` (mismo motivo).
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
+    tablas: [{ nombre: "Cierres de bodega resueltos", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `ConsolidacionBodegaModule` (mismo motivo).
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
+    tablas: [{ nombre: "Cierres de bodega solicitados", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx",
-    tablas: [
-      { nombre: "Cierres del día a consolidar", estado: "con_descarga" },
-      { nombre: "Cierres de bodega solicitados", estado: "con_descarga" },
-    ],
+    tablas: [{ nombre: "Cierres del día a consolidar", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx",
@@ -125,10 +156,12 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   },
   {
     ruta: "app/(app)/incidentes/_components/IncidentesAdminModule.tsx",
-    tablas: [
-      { nombre: "Incidentes pendientes de decisión", estado: "con_descarga" },
-      { nombre: "Incidentes — histórico", estado: "con_descarga" },
-    ],
+    tablas: [{ nombre: "Incidentes pendientes de decisión", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `IncidentesAdminModule` (mismo motivo).
+    ruta: "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
+    tablas: [{ nombre: "Incidentes — histórico", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
@@ -223,6 +256,45 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   {
     ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
     tablas: [{ nombre: "Saldos de tiendas", estado: "con_descarga" }],
+  },
+  // ───────────────────────────────────────────────────────────────────────────────────────
+  // Feature 172 (T H.1) — el árbol `components/`, que la guardia NO recorría hasta hoy.
+  // ───────────────────────────────────────────────────────────────────────────────────────
+  {
+    // HALLAZGO de T H.1, no una tabla de la 172: existe desde la feature 130 y el censo no
+    // podía verla porque el recorrido se paraba en `app/`. Se registra con su estado REAL.
+    //
+    // `fuera` con el mismo criterio ya ratificado para `ZonasModule`: es un componente del
+    // paquete de analítica SIN ningún consumidor montado en una página (`TablaResumen` solo
+    // aparece en sus propios tests y en `components/private/analytics/tipos.ts`). No se le
+    // cablea descarga aquí: eso sería tocar analítica, que la 172 declara fuera de alcance
+    // (R68). Lo que sí se cierra es el punto ciego: si mañana alguien la monta en una
+    // pantalla, el censo obliga a volver aquí y decidir.
+    ruta: "components/private/analytics/TablaResumen.tsx",
+    tablas: [
+      {
+        nombre: "Resumen de analítica (componente del paquete 130)",
+        estado: "fuera",
+        nota: "envoltorio reutilizable del paquete de analítica SIN consumidor montado en ninguna página (mismo criterio que ZonasModule); cablearlo sería tocar analítica, fuera del alcance de la 172 (R68)",
+      },
+    ],
+  },
+  {
+    // Feature 172 (T D.2/T H.1, R57) — la lista de COMPROBANTES de un beneficiario. Vive en
+    // `components/shared/` porque la montan DOS pantallas con el mismo contenido; por eso es
+    // UNA instancia de `<DataTable>` en el código y DOS tablas para quien las usa. Nace
+    // `con_descarga` (Familia B: proyecta el mismo array que pinta, `design.md §10.4`).
+    ruta: "components/shared/liquidacion/PagosRegistradosTabla.tsx",
+    tablas: [
+      {
+        nombre: "Pagos registrados (comprobantes de liquidación)",
+        estado: "con_descarga",
+        montajes: [
+          "app/(app)/cierres-admin/_components/PagoMensajeroSeccion.tsx",
+          "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
+        ],
+      },
+    ],
   },
 ];
 

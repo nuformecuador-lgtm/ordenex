@@ -50,6 +50,9 @@ export default async function MiWalletPage() {
         page={movimientosResult.data.page}
         pageSize={movimientosResult.data.pageSize}
         saldo={saldoResult.saldo}
+        /* Feature 172 (T G.2, R55): los tres importes viajan CON el listado, del mismo
+           conjunto y con los mismos filtros; el cliente no los recalcula (R14). */
+        desglose={movimientosResult.data.desglose}
       />
     </AppPage>
   );

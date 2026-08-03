@@ -40,6 +40,7 @@ describe("R21 — registro en el drenador", () => {
     // Conjunto EXACTO: anadir o quitar un tipo sin actualizar este test falla ruidosamente.
     const handlers = buildHandlers(() => AHORA);
     expect([...handlers.keys()].sort()).toEqual([
+      "analitica_rollup_diario", // feature 124
       "geocodificacion",
       "liberar_reprogramadas",
       "optimizacion_ruta",
@@ -52,8 +53,27 @@ describe("R21 — registro en el drenador", () => {
   it("buildRecurrencias NO registra `optimizacion_ruta` (no es recurrente)", () => {
     const recurrencias = buildRecurrencias();
     expect(recurrencias.has("optimizacion_ruta")).toBe(false);
-    // Solo `liberar_reprogramadas` es recurrente, como antes de esta feature.
-    expect([...recurrencias.keys()]).toEqual(["liberar_reprogramadas"]);
+    // Recurrentes: los que dispara el RELOJ. `liberar_reprogramadas` (feature 90) y, desde la
+    // 124, `analitica_rollup_diario`. Conjunto EXACTO, por el mismo motivo que arriba.
+    expect([...recurrencias.keys()].sort()).toEqual([
+      "analitica_rollup_diario",
+      "liberar_reprogramadas",
+    ]);
+  });
+
+  it("R36 (124) — `analitica_rollup_diario` esta en AMBOS mapas y su recurrencia es a las 06:30 UTC", () => {
+    // El rollup diario NO lo dispara ningun evento del dominio: nadie "crea" un dia. Si solo
+    // estuviera en `buildHandlers`, la primera ocurrencia correria y la serie se acabaria ahi;
+    // la tabla no se romperia, simplemente dejaria de crecer, en silencio. De ahi que este
+    // test exija los DOS mapas y ademas mire lo que la recurrencia agenda.
+    expect(buildHandlers(() => AHORA).has("analitica_rollup_diario")).toBe(true);
+
+    const spec = buildRecurrencias().get("analitica_rollup_diario");
+    expect(spec).toBeDefined();
+    const { runAfter, dedupeKey } = spec!.siguiente(new Date("2026-08-02T06:30:00.000Z"));
+    expect(runAfter.toISOString()).toBe("2026-08-03T06:30:00.000Z");
+    // La clave es la fecha OBJETIVO (el dia que esa corrida agregara), no la de la corrida.
+    expect(dedupeKey).toBe("analitica_rollup_diario:2026-08-02");
   });
 
   it("construir los handlers NO lanza aunque falte la credencial del proveedor", () => {

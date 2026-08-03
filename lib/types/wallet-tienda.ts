@@ -4,6 +4,7 @@ import type {
   WalletTiendaMovimientoCategoria as PrismaWalletTiendaMovimientoCategoria,
 } from "@prisma/client";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 
 // Feature 43 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del ledger POR
 // TIENDA, respaldada por los enums Postgres nativos (patron lib/types/wallet.ts). El
@@ -109,6 +110,28 @@ export type ListarMovimientosTiendaResult = {
   page: number;
   pageSize: number;
 };
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40) — entrada del listado paginado de SALDOS DE TIENDAS.
+ *
+ * Sin filtros (design §11.3, riesgo BAJO) y sin alcance: quien lo ve son los roles de acceso
+ * total y lo decide el servicio. `.strict()` para que un `tiendaId` colado —la clave que
+ * convertiria un listado global en uno dirigido— muera en el BORDE. Tamano de pagina desde
+ * `walletTiendaConfig` (T H.1), recortado a `MAX_PAGE_SIZE`.
+ */
+export const listarSaldosTiendasPaginadoSchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(walletTiendaConfig.DEFAULT_PAGE_SIZE)
+      .transform((n) => Math.min(n, walletTiendaConfig.MAX_PAGE_SIZE)),
+  })
+  .strict();
+
+export type ListarSaldosTiendasPaginadoInput = z.infer<typeof listarSaldosTiendasPaginadoSchema>;
 
 // ── Schema zod de borde (R22) ──
 

@@ -41,6 +41,7 @@ describe("R26 — el drenador resuelve el handler de webhook_estado y no lo re-a
     expect(handlers.has("webhook_estado")).toBe(true);
     expect(handlers.get("webhook_estado")).toBeTypeOf("function");
     expect([...handlers.keys()].sort()).toEqual([
+      "analitica_rollup_diario", // feature 124
       "geocodificacion",
       "liberar_reprogramadas",
       "optimizacion_ruta",
@@ -53,7 +54,13 @@ describe("R26 — el drenador resuelve el handler de webhook_estado y no lo re-a
   it("buildRecurrencias NO registra webhook_estado (no es recurrente)", () => {
     const recurrencias = buildRecurrencias();
     expect(recurrencias.has("webhook_estado")).toBe(false);
-    expect([...recurrencias.keys()]).toEqual(["liberar_reprogramadas"]);
+    // Feature 124: el rollup diario entra al registro de recurrencias (00:30 CR). La lista
+    // sigue CERRADA y en orden de insercion: es lo que caza que un tipo por EVENTO se cuele
+    // aqui y se re-agende solo, y tambien que un refactor pierda uno por el camino.
+    expect([...recurrencias.keys()]).toEqual([
+      "liberar_reprogramadas",
+      "analitica_rollup_diario",
+    ]);
   });
 
   it("al drenar, el handler se ejecuta, el job se completa y NO se re-encola", async () => {

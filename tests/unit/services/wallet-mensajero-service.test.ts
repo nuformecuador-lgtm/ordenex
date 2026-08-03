@@ -22,6 +22,10 @@ function fakeRepo(overrides: Partial<IPagoMensajeroMovimientoRepository> = {}): 
     listarPorMensajero: vi.fn(async () => ({ movimientos: [], total: 0 })),
     agregarCuentaPorPagar: vi.fn(async () => ({ devengado: "0.00", pagado: "0.00" })),
     listarCuentasPorPagarTodos: vi.fn(async () => []),
+    // Feature 170 (T L.1): el doble declara la interfaz COMPLETA. El listado paginado lo
+    // ejercita `tests/unit/services/wallet-cuentas-paginado.test.ts`.
+    listarCuentasPorPagarPaginado: vi.fn(async () => ({ items: [], total: 0 })),
+    listarCuentasPorPagarCompleto: vi.fn(async () => []),
     obtenerNombreMensajero: vi.fn(async () => "Ana Mensajera"),
     ...overrides,
   };

@@ -1,8 +1,12 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { montoPositivoSchema } from "@/lib/types/wallet";
+import { cierreConfig } from "@/lib/config/cierre";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
+import { paginaInputSchema } from "@/lib/types/pagina-input";
 import type {
   ListarCierresAdminServiceResult,
+  CierreAdminResumen,
   CierreDetalleAdminServiceResult,
   AprobarCierreServiceResult,
   RechazarCierreServiceResult,
@@ -94,6 +98,61 @@ export const rechazarCierreSchema = z.object({
 
 export type CierreIdInput = z.infer<typeof cierreIdSchema>;
 export type RechazarCierreInput = z.infer<typeof rechazarCierreSchema>;
+
+/**
+ * Feature 170 — FASE 2 (T I.1, R40) — entrada del HISTORICO paginado de cierres del dia.
+ *
+ * `.strict()`: este listado NO tiene filtros (design §11.3, riesgo BAJO) y su alcance sale
+ * del ACTOR, nunca de la peticion. Con `.strict()`, un cliente que intente colar
+ * `destinoZonaId` recibe `validation_error` en el BORDE en vez de que la clave viaje hasta
+ * un servicio que —hoy— la ignoraria en silencio.
+ *
+ * El tamano de pagina sale de `cierreConfig` (T H.1) y se recorta a `MAX_PAGE_SIZE`: un
+ * `pageSize: 100000` no se rechaza, se acota (R40).
+ *
+ * Feature 170 (T J.1): el bloque zod —que estaba escrito aqui a mano— pasa a
+ * `paginaInputSchema`, donde se declara UNA vez para los siete listados sin filtros de estos
+ * tres modulos. El `.strict()` de arriba es exactamente lo que no puede olvidarse en una copia.
+ */
+export const listarHistoricoCierresAdminSchema = paginaInputSchema(cierreConfig);
+
+export type ListarHistoricoCierresAdminInput = z.infer<typeof listarHistoricoCierresAdminSchema>;
+
+/**
+ * Feature 170 — FASE 2 (T J.1, R40) — entrada de la COLA paginada de pendientes de decision.
+ *
+ * Se declara APARTE del historico aunque su forma sea identica: son dos listados distintos y
+ * la pantalla los pagina por separado (cada uno con su `page`). Compartir el schema obligaria
+ * a que compartieran tambien el nombre, y el nombre es lo unico que dice cual de las dos
+ * mitades se esta pidiendo.
+ */
+export const listarPendientesCierresAdminSchema = paginaInputSchema(cierreConfig);
+
+export type ListarPendientesCierresAdminInput = z.infer<typeof listarPendientesCierresAdminSchema>;
+
+/**
+ * Errores de BORDE de los listados de este modulo: los de dominio que decide el servicio
+ * (`forbidden`) mas los dos que decide la Server Action antes de llamarlo. Se declara aparte
+ * para poder pasarlo como parametro al contrato comun (T H.2): unificar la forma del EXITO no
+ * puede ensanchar los errores que esta pantalla tiene que manejar.
+ */
+export type CierresAdminListadoError =
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+// Feature 170 (T I.1, R41): el contrato comun de listado paginado, aplicado al historico.
+export type ListarHistoricoCierresAdminResult = ListarPaginadoResult<
+  CierreAdminResumen,
+  CierresAdminListadoError
+>;
+
+// Feature 170 (T J.1, R41/R42): el mismo contrato, aplicado a la COLA de pendientes. Su `total`
+// es el que sustituye al `({pendientes.length})` de la cabecera.
+export type ListarPendientesCierresAdminResult = ListarPaginadoResult<
+  CierreAdminResumen,
+  CierresAdminListadoError
+>;
 
 // Resultados de las Server Actions: resultado de dominio del service +
 // `unauthenticated` (sin sesion, lo resuelve el borde).

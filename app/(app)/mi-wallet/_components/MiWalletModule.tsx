@@ -9,7 +9,11 @@ import {
   listarMisMovimientosAction,
   listarMisMovimientosCompletoAction,
 } from "@/lib/actions/wallet-tienda";
-import type { SaldoTiendaDTO, WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
+import type {
+  DesgloseTiendaDTO,
+  SaldoTiendaDTO,
+  WalletTiendaMovimientoDTO,
+} from "@/lib/types/wallet-tienda";
 
 import { SaldoTiendaCard } from "./SaldoTiendaCard";
 import { DesgloseTiendaLedger } from "./DesgloseTiendaLedger";
@@ -34,6 +38,12 @@ export interface MiWalletModuleProps {
   page: number;
   pageSize: number;
   saldo: SaldoTiendaDTO;
+  /**
+   * Feature 172 (T G.2, R55) — los tres importes de la cabecera, ya clasificados y sumados en
+   * el servidor sobre el MISMO conjunto filtrado que el listado (R22 de la 43). Se recarga con
+   * los movimientos, no se recalcula aqui: en el cliente no se opera con dinero.
+   */
+  desglose: DesgloseTiendaDTO;
 }
 
 /** Construye el input de la action omitiendo los filtros vacios (cierre/concepto/fecha). */
@@ -71,6 +81,7 @@ export function MiWalletModule({
   page: initialPage,
   pageSize,
   saldo: initialSaldo,
+  desglose: initialDesglose,
 }: MiWalletModuleProps) {
   const toast = useToast();
 
@@ -78,6 +89,7 @@ export function MiWalletModule({
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(initialPage);
   const [saldo, setSaldo] = useState(initialSaldo);
+  const [desglose, setDesglose] = useState(initialDesglose);
   const [filtros, setFiltros] = useState<MiWalletFiltrosValue>(FILTROS_TIENDA_VACIOS);
   const [loading, setLoading] = useState(false);
 
@@ -108,6 +120,9 @@ export function MiWalletModule({
       setTotal(res.data.total);
       setPage(res.data.page);
       setSaldo(res.data.saldo);
+      // R55: los tres importes se refrescan CON el listado. Son cifras del mismo conjunto
+      // filtrado y se leen juntas; dejar una vieja seria mezclar dos conjuntos en pantalla.
+      setDesglose(res.data.desglose);
       setFiltros(next);
     } finally {
       setLoading(false);
@@ -129,7 +144,7 @@ export function MiWalletModule({
   return (
     <div className="flex flex-col gap-8">
       <div className="lg:max-w-md">
-        <SaldoTiendaCard saldo={saldo} />
+        <SaldoTiendaCard saldo={saldo} desglose={desglose} />
       </div>
 
       <section aria-label="Desglose de movimientos" className="flex flex-col gap-4">

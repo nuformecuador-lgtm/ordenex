@@ -6,8 +6,11 @@ import {
   listarRecepcionSatelite,
   listarMensajerosSatelite,
   estadoBloqueoBodegaSatelite,
+  listarOrdenesBodegaPaginado,
+  obtenerCatalogoFiltrosSatelite,
 } from "@/lib/actions/recepcion-satelite";
 import { listarLiberadasHoy } from "@/lib/actions/liberacion-reprogramada";
+import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
 
 import { RecepcionSateliteModule } from "./_components/RecepcionSateliteModule";
 
@@ -59,6 +62,35 @@ export default async function RecepcionSatelitePage() {
   const liberadasHoy =
     liberadasResult.status === "ok" ? liberadasResult.liberadas : [];
 
+  // Feature 170 — FASE 2 (T K.3, R40/R41): PÁGINA 1 del listado «Órdenes de la bodega»,
+  // sin filtros, resuelta server-side. Baja por props y alimenta el `fallbackData` de SWR:
+  // el usuario ve las mismas filas que antes en el primer pintado, sin esperar un viaje al
+  // servidor por un dato que ya viajó. Degradación suave a página vacía (el módulo enseña
+  // su estado vacío); el acceso ya lo decidió el `notFound` de arriba.
+  const paginaResult = await listarOrdenesBodegaPaginado({});
+  const ordenesBodega =
+    paginaResult.status === "ok"
+      ? {
+          items: paginaResult.items,
+          total: paginaResult.total,
+          pageSize: paginaResult.pageSize,
+        }
+      : {
+          items: [],
+          total: 0,
+          pageSize: recepcionSateliteConfig.DEFAULT_PAGE_SIZE,
+        };
+
+  // Feature 170 — FASE 2 (T K.2, R46): opciones de cantón y distrito del CONJUNTO del
+  // actor. Van por props (molde `obtenerCatalogoFiltrosOrdenes`, feature 144): no hay una
+  // consulta por cada selección del usuario, y los desplegables no se reducen a lo que
+  // trae la página visible.
+  const catalogoResult = await obtenerCatalogoFiltrosSatelite();
+  const catalogoFiltros =
+    catalogoResult.status === "ok"
+      ? catalogoResult.catalogo
+      : { cantones: [], distritos: [] };
+
   return (
     <AppPage
       title="Mis asignaciones"
@@ -66,13 +98,13 @@ export default async function RecepcionSatelitePage() {
     >
       <RecepcionSateliteModule
         porRecibir={result.porRecibir}
-        recibidas={result.recibidas}
-        porDevolver={result.porDevolver}
-        enTransitoACentral={result.enTransitoACentral}
-        devueltas={result.devueltas}
-        // Feature 149/T6.3 (R35): órdenes `por_recoger` de SU zona (acotadas server-side por
-        // `RecepcionSateliteService.listar`), sobre las que el módulo ofrece "Deshacer asignación".
-        asignadas={result.asignadas}
+        // Feature 170 — FASE 2 (T K.3): el listado de la bodega recibe UNA PÁGINA, no los
+        // cinco arrays por estado (`recibidas`, `asignadas`, `porDevolver`,
+        // `enTransitoACentral`, `devueltas`) que `listarRecepcionSatelite` sigue trayendo.
+        // Esos arrays ya no cruzan al cliente: quedan aquí, en el servidor, alimentando
+        // "Por recibir", el nombre de zona y `sinZona`.
+        ordenesBodega={ordenesBodega}
+        catalogoFiltros={catalogoFiltros}
         zonaNombre={result.zonaNombre}
         sinZona={result.sinZona}
         mensajeros={mensajeros}
