@@ -62,7 +62,7 @@ reporta.
 | `lib/interfaces/services/IAnaliticaBackfillService.ts` | Tipos de entrada (`OpcionesBackfill`), de salida (`ResumenBackfill`, `LineaFecha`, `ClasificacionFecha`) y el puerto de salida de progreso. | Patrón del repo: el contrato vive en `lib/interfaces/`. |
 | `lib/services/AnaliticaBackfillService.ts` | El iterador. Recibe `IAnaliticaRollupService`, reloj, `dormir` y salida de progreso por constructor. Sin Prisma. | Es orquestación de dominio; el guardia R18 de la 122 **no lo marca** (ver §4). |
 | `scripts/backfill-analitica.ts` | CLI: zod, eco, confirmación, construcción de dependencias reales (`buildAnaliticaRollupService`), escritura del reporte, `process.exit`. | Patrón de `scripts/rollup-analitica-manual.ts`: guardas antes de abrir base, auto-ejecución solo como entrypoint (líneas 90-99). |
-| `lib/config/analitica-rollup.ts` (**existente**, se amplía) | `FALLOS_CONSECUTIVOS_QUE_ABORTAN` y, tras R35, el umbral medido. | R47 de la 124 exige un único sitio para los números del job. Añadir aquí no rompe su guardia (§4). |
+| `lib/config/analitica-rollup.ts` (**existente**, se amplía) | `FALLOS_CONSECUTIVOS_QUE_ABORTAN`. ~~Y, tras R35, el umbral medido~~ → **retirado con R34 a la ficha 174** (enmienda 2026-08-02). | R47 de la 124 exige un único sitio para los números del job. Añadir aquí no rompe su guardia (§4). La 125 **solo suma** una constante; **no sustituye ni retoca** `UMBRAL_AVISO_FILAS_CORRIDA`. |
 
 Tests: `tests/unit/analytics/backfill-rango.test.ts`,
 `tests/unit/services/analitica-backfill-service.test.ts`,
@@ -91,6 +91,36 @@ Tests: `tests/unit/analytics/backfill-rango.test.ts`,
    ningún otro archivo una constante que case `(UMBRAL|LIMITE|MAX)…(FILAS|VOLUMEN|CUBOS)`
    (línea 812). De ahí el nombre `FALLOS_CONSECUTIVOS_QUE_ABORTAN` y de ahí que cualquier cifra de
    volumen de la 125 viva en `lib/config/analitica-rollup.ts`.
+
+   > **Enmienda 2026-08-02 — los TRES anclajes de `UMBRAL_AVISO_FILAS_CORRIDA` (verificados en este
+   > worktree, `C:/w125`).** El diseño original contaba **dos** puntos que habría que tocar para
+   > cambiar el valor; son **tres**, y esa es la razón de que R34 se haya ido a la ficha **174** en
+   > vez de resolverse aquí:
+   >
+   > 1. **La declaración.** `lib/config/analitica-rollup.ts:16` (`export const
+   >    UMBRAL_AVISO_FILAS_CORRIDA = 20000;`) y su comentario, **líneas 1-15**, que dice literalmente
+   >    «PROVISIONAL Y NO MEDIDA» (línea 8) y anuncia que «la feature 125 fijará los umbrales de
+   >    verdad» (línea 6).
+   > 2. **El guardia de cifra única.** `tests/unit/analytics/rollup-guards.test.ts`: el allowlist
+   >    `AJENAS_A_R47`, **líneas 681-684** (dos entradas de una ocurrencia cada una, admitidas solo si
+   >    la línea habla de `timeout`), **y además** la aserción del caso «(a) el comentario declara que
+   >    la cifra es PROVISIONAL y NO MEDIDA (D9)», **líneas 710-738**, que exige que la prosa case
+   >    `/provisional/i` **y** `/\bno\s+(?:est[aá]\s+|esta\s+)?medid[ao]\b/i`. Lo primero es un
+   >    allowlist (R33 lo autoriza); **lo segundo es una aserción de otra feature (R33 NO lo
+   >    autoriza)**.
+   > 3. **El test de servicio de la 124 — el anclaje que la spec no documentaba.**
+   >    `tests/unit/analytics/rollup-service.test.ts:1047` construye
+   >    `new RegExp(\`\\b${UMBRAL_AVISO_FILAS_CORRIDA}\\b|\\b20_000\\b\`)`: el `20_000` está
+   >    **tecleado a mano**, así que sobrevive al cambio de la constante y sigue buscando el valor
+   >    viejo por todo `lib/`. Y el mismo archivo ancla la prosa otra vez en la **línea 1072**
+   >    (`expect(config).toMatch(/PROVISIONAL Y NO MEDIDA/i)`), dentro del caso «la constante esta
+   >    declarada como provisional y no medida» (líneas 1070-1073).
+   >
+   > Es decir: **tres archivos y cuatro puntos de edición**, dos de ellos aserciones ajenas. Cambiar
+   > la cifra desde la 125 era más caro de lo que el diseño creía y, sobre todo, **prohibido por
+   > R33**. Nota aparte: `tests/unit/analytics/backfill-guards.test.ts:359` —guardia **propio** de la
+   > 125— solo comprueba que la **declaración exista** (`/export\s+const\s+UMBRAL_AVISO_FILAS_CORRIDA\b/`),
+   > no su valor ni su prosa, así que **no** se opone a un cambio futuro de la cifra.
 4. **135/R1 — pureza de `lib/analytics/`.** `backfill-rango.ts` no importa `db`, `repositories`,
    `services` ni `actions`, no lee `process.env`, no imprime al importarse y exporta algo.
 
@@ -215,6 +245,21 @@ fechas correctas.
 (`ResumenCorrida` no los lleva). Un mapa de seudónimos sería código muerto que aparenta una
 protección que no protege nada; D9 se cumple por R30 (ver L3).
 
+**A8 — Cumplir R34 aquí, ensanchando R33 para poder editar las aserciones ajenas.** *(Alternativa
+evaluada y descartada en la enmienda del 2026-08-02.)* Era la salida «obvia» al choque R33/R34:
+ampliar R33 de «puedo tocar el archivo de config y el allowlist» a «puedo tocar también las
+aserciones del guardia de la 124». **Descartada por dos razones independientes.** (a) *El permiso es
+desproporcionado*: R33 existe precisamente para que la 125 no pueda reescribir los tests que la
+vigilan; convertirlo en licencia para editar aserciones ajenas destruye la garantía completa, y las
+aserciones a tocar son **dos** en **dos archivos** distintos (§4, anclajes 2 y 3), no un retoque
+puntual. (b) *No hay nada que comprar con ese permiso*: la corrida real midió 58 órdenes con pico de
+**24 filas en una fecha** (`progress/backfill_125.md`, T7.5); pasar de ahí a un umbral de producción
+exige un multiplicador inventado, que **D5 prohíbe**. Habríamos abierto el guardia para escribir un
+número igual de infundado que el actual, y encima **sin** el comentario que hoy avisa de que no está
+medido. **Elegido en su lugar:** R33 intacto, R34 retirado a la ficha **174**, la cifra sigue
+declarándose provisional y no medida (L7 de `requirements.md`). Coste aceptado: la 125 no entrega el
+umbral que su propia D5 prometía «después de medir»; queda como deuda con dueño.
+
 **A7 — Lock compartido con el job diario de la 124.** **Descartada** por D3: prohibir el día en curso
 es más barato y no ata la 125 a infraestructura de coordinación que hoy no existe. Coste aceptado: el
 día de hoy no se puede corregir hasta mañana.
@@ -227,5 +272,10 @@ día de hoy no se puede corregir hasta mañana.
   cosmética.
 - **La penumbra posterior al horizonte no está medida**: órdenes preexistentes que nunca volvieron a
   transicionar siguen invisibles después del 2026-07-13. Esta feature no la mide y no la corrige.
-- **El umbral de volumen sigue siendo provisional hasta R35.** Cambiarlo pone rojo el allowlist
-  `AJENAS_A_R47` del guardia de cifra única; está previsto en T6 y no es un imprevisto.
+- ~~**El umbral de volumen sigue siendo provisional hasta R35.** Cambiarlo pone rojo el allowlist
+  `AJENAS_A_R47` del guardia de cifra única; está previsto en T6 y no es un imprevisto.~~
+  **Reescrito en la enmienda del 2026-08-02:** el umbral **sigue provisional al cerrar la 125 y no se
+  cambia** (R34 retirado a la ficha 174; ver L7 de `requirements.md` y A8 arriba). Y el riesgo estaba
+  **mal dimensionado**: cambiar la cifra no rompe solo el allowlist, rompe **tres anclajes en tres
+  archivos**, dos de ellos aserciones de guardias ajenos (§4). Era exactamente el imprevisto que la
+  línea decía que no era.

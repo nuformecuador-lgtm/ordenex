@@ -1,5 +1,16 @@
 # Feature 125 — analítica: backfill histórico de `analytics_daily` · requirements
 
+> **⚠️ ENMIENDA del 2026-08-02 (posterior al rechazo del reviewer): R34 se RETIRA de esta feature**
+> y pasa a ficha propia, la **174**. Motivo: **R33 y R34 eran mutuamente incompatibles tal como
+> estaban escritos**, y no existe el dato que R34 exige. El cuerpo completo de lo retirado —problema,
+> los **tres** anclajes de la cifra con ruta y línea, por qué no se puede medir en local, qué
+> autorización explícita necesitará la 174 y las alternativas descartadas— está en
+> [`RETIRADO-R34.md`](./RETIRADO-R34.md).
+>
+> **No se renumera nada.** R1–R33 y R35 conservan su número: la trazabilidad `R<n>` → test del
+> implementer y del reviewer depende de los números actuales. **La 125 cierra con 34/34 requisitos
+> vigentes** (los 35 originales menos R34).
+>
 > **Zona:** backend. **Puerta T0 CERRADA el 2026-08-02.** Esta spec es una **reescritura completa**
 > de la versión del 2026-08-01, que se escribió contra la 124 **planeada**. La 124 está
 > **entregada y mergeada** (PR #260) y su contrato manda. **No queda ninguna `⧗Q`**; lo que no se
@@ -208,12 +219,52 @@ al menos dos infractores), para no pasar por vacío.
 las constantes de R14, R20 y R34) y el allowlist de R47 del guardia
 `tests/unit/analytics/rollup-guards.test.ts`, y solo por lo que R34 obliga.
 
-**R34.** CUANDO exista la medición de la corrida real (R35), el sistema DEBE sustituir
-`UMBRAL_AVISO_FILAS_CORRIDA` por una cifra **con procedencia documentada**, manteniéndola en **una
-sola constante**, y DEBE dejar en verde el allowlist `AJENAS_A_R47` del guardia de cifra única, que
-hoy exime dos ocurrencias de `20_000` usadas como timeout en
-`lib/clients/google-route-optimization.ts` y `lib/config/route-optimization.ts` y que **caduca en
-cuanto el valor cambie**.
+> **R33 se conserva LITERALMENTE, sin retocar ni una palabra.** Es el requisito que se cumplió: la
+> 125 solo añadió constantes a `lib/config/analitica-rollup.ts` y no tocó ninguna aserción ajena.
+> Su texto sigue mencionando R34 porque así se escribió y así se verificó; la mención hay que leerla
+> como **histórica**. Al retirarse R34, la autorización que R33 concedía («y solo por lo que R34
+> obliga») **queda sin objeto dentro de esta feature**: el permiso de tocar el allowlist `AJENAS_A_R47`
+> **no se ejerce**. Cambiar R33 para borrar la mención habría alterado el enunciado contra el que ya
+> se corrieron los tests, y eso rompe la trazabilidad; retirar R34 no la rompe.
+
+**R34. — RETIRADA de la feature 125. Trasladada a la ficha 174.** *(Número reservado: NO se reasigna
+ni se reutiliza en esta spec.)*
+
+Texto original, conservado solo como registro de lo que se retira:
+
+> ~~CUANDO exista la medición de la corrida real (R35), el sistema DEBE sustituir
+> `UMBRAL_AVISO_FILAS_CORRIDA` por una cifra **con procedencia documentada**, manteniéndola en **una
+> sola constante**, y DEBE dejar en verde el allowlist `AJENAS_A_R47` del guardia de cifra única, que
+> hoy exime dos ocurrencias de `20_000` usadas como timeout en
+> `lib/clients/google-route-optimization.ts` y `lib/config/route-optimization.ts` y que **caduca en
+> cuanto el valor cambie**.~~
+
+**Por qué se retira** (tres motivos, cualquiera de ellos bastaba):
+
+1. **Contradicción interna de la spec.** R33 autoriza tocar exactamente dos cosas de la 124: el
+   archivo de configuración y el **allowlist** `AJENAS_A_R47`. Cumplir R34 exige además editar una
+   **aserción** de un guardia ajeno —`tests/unit/analytics/rollup-guards.test.ts`, caso «(a) el
+   comentario declara que la cifra es PROVISIONAL y NO MEDIDA (D9)», **líneas 710-738**, que exige
+   que la prosa previa a la declaración case `/provisional/i` **y** `/\bno\s+…medid[ao]\b/i`—, cosa
+   que R33 **no** autoriza. Los dos requisitos no pueden cumplirse a la vez.
+2. **El anclaje es TRIPLE, no doble.** La spec original solo contaba dos puntos (la constante y el
+   allowlist). Hay un tercero, verificado en este worktree:
+   `tests/unit/analytics/rollup-service.test.ts:1047` teclea el literal `20_000` **a mano** dentro de
+   la regex (`new RegExp(\`\\b${UMBRAL_AVISO_FILAS_CORRIDA}\\b|\\b20_000\\b\`)`), y ese mismo archivo
+   vuelve a anclar la prosa en la **línea 1072** (`expect(config).toMatch(/PROVISIONAL Y NO MEDIDA/i)`).
+   Ver el inventario completo en `RETIRADO-R34.md`.
+3. **No hay dato.** La corrida real de R35 midió **58 órdenes** en el rango, con un pico de **24 filas
+   en una sola fecha** (`progress/backfill_125.md`, T7.5, líneas 118-123). Convertir 24 en un umbral
+   de producción exige un multiplicador **inventado**, que es exactamente lo que **D5** prohíbe. R34
+   no se puede cumplir con integridad desde esta feature.
+
+**Efecto sobre la 125:** ninguno en el código entregado. R34 no llegó a implementarse (T6.1 y T6.2
+quedaron sin ejecutar, ver `tasks.md > T6`), `UMBRAL_AVISO_FILAS_CORRIDA` **se queda en 20000,
+provisional y no medida**, y los tres guardias siguen verdes sin tocar ninguna aserción ajena.
+
+**Efecto sobre la 174:** hereda el requisito entero **más** el tercer anclaje descubierto aquí, y
+tendrá que pedir autorización explícita para **editar aserciones de guardias ajenos** —no basta con
+tocar allowlists—. Todo el material está en `RETIRADO-R34.md`.
 
 **R35.** El sistema DEBE quedar cerrado solo con una **corrida real medida**: backfill sobre un
 rango real de la base local, `--verificar` a continuación contra el reporte de esa corrida, y la
@@ -266,10 +317,14 @@ Archivos de test previstos:
 | R31 | `S` › «el error registrado nombra la fecha» + `G` › «0 catch vacíos en los archivos de la 125» |
 | R32 | `G` › «el guardia detecta sus fixtures sintéticos: uno legítimo y dos infractores» |
 | R33 | `G` › «la 125 no toca los módulos del escritor de la 124 salvo lib/config/analitica-rollup.ts» |
-| R34 | `tests/unit/analytics/rollup-guards.test.ts` (existente) › «(b) la cifra no aparece en ningún otro archivo» y «el allowlist no tiene entradas muertas», reejecutados con el valor medido |
+| ~~R34~~ | **RETIRADO a la ficha 174.** No cuenta en la cobertura de la 125. Ver `RETIRADO-R34.md` |
 | R35 | `I` › «backfill de un rango real de la base local, seguido de --verificar, deja todas las fechas estables» + evidencia en `progress/backfill_125.md` |
 
-**Cobertura:** 35 requisitos, 35 con test nombrado. Ninguno sin test. **Reducción respecto de la
+**Cobertura tras la enmienda: 34 requisitos vigentes, 34 con test nombrado (34/34). Ninguno sin
+test.** R34 sale del denominador porque sale de la feature, no porque se dé por cubierto. El resto
+del párrafo se conserva como estaba escrito antes de la enmienda:
+
+**Cobertura (redacción original):** 35 requisitos, 35 con test nombrado. Ninguno sin test. **Reducción respecto de la
 versión anterior: de 45 a 35 (−22 %)**, y la reducción real de *alcance* es mayor que la de
 numeración: los 12 requisitos de agregador (R39–R45 y R35–R37 antiguos) desaparecen y en su lugar
 entran requisitos de **consumo, clasificación y observabilidad**, que son mucho más baratos.
@@ -327,6 +382,20 @@ humano y está en R27/R28: eco de la base y del rango, y reintroducción literal
 árbol a `5314a2a8`, pese a que su código está mergeado. Es bookkeeping pendiente del leader; esta
 spec no edita la ficha, y **manda el código verificado**, no la ficha.
 
+**L7 — `UMBRAL_AVISO_FILAS_CORRIDA` sigue siendo provisional y no medida al cerrar la 125.** *(Nueva,
+enmienda del 2026-08-02.)* La 125 prometía sustituirla (R34) y **no lo hace**: la corrida real no
+produjo un dato que autorice una cifra de producción (D5). La constante queda en `20000` con su
+comentario intacto y **los tres anclajes de la cifra siguen exactamente donde estaban**. Consecuencias
+aceptadas:
+- El aviso de volumen del job de la 124 sigue siendo decorativo: nada se rechaza ni se trunca por
+  superarlo, así que el riesgo operativo de dejarlo provisional es **un log poco informativo**, no un
+  comportamiento incorrecto.
+- Quien lea `lib/config/analitica-rollup.ts` verá que el comentario sigue remitiendo a «la feature
+  125» como quien fijará el número. **Eso ya no es cierto**: es la **174**. La 125 no corrige ese
+  comentario porque corregirlo es tocar el archivo por un motivo que R33 no autoriza y, sobre todo,
+  porque la redacción definitiva depende de la cifra que la 174 decida.
+- La deuda queda **nombrada y con dueño** (ficha 174), no diluida.
+
 ---
 
 ## Decisiones cerradas — puerta T0 · 2026-08-02
@@ -376,6 +445,12 @@ y la confirmación (R28). La 124 ya registra `filasEscritas` y `ms` por corrida 
 deja una primera medición local (~20 filas y ~1 s por fecha, **sin extrapolar a producción**): esa
 cifra se sustituye por la medida en R34/R35, no se adivina.
 *Propagación:* R16, R34, R35.
+*Enmienda 2026-08-02:* **D5 sigue vigente y es justo lo que respalda la retirada de R34.** La medición
+de R35 se hizo (58 órdenes, pico de 24 filas/fecha) y **no autoriza ningún umbral de producción**:
+llegar de 24 a una cifra de producción exige un multiplicador que nadie midió, o sea, adivinar. D5
+dice «medir primero, fijar el tope después»; lo medido **no alcanza** para fijar el tope, así que el
+tope no se fija en esta feature. La propagación de D5 hacia R34 se traslada a la **174**; hacia R16 y
+R35 se mantiene intacta.
 
 **D6 (⧗Q6 → retirada).** La 124 ya importa `lib/analytics/rollup-dia.ts` desde `interfaces` y
 `repositories` y resolvió por su cuenta la colisión con el guardia R18 de la 122 (exención nominal
@@ -449,3 +524,13 @@ local (drift de migraciones) descrito en el runbook.
    y **nunca nombró a la 124 ni a la 125**, que son las que chocaron primero.
 7. **La 124 admite recomputar «hoy» por invocación manual y la 125 no** → **Deliberado, no es un
    error**: son dos herramientas con dueños distintos del mismo día (D3).
+8. **R33 y R34 son mutuamente incompatibles** *(detectada por el reviewer, 2026-08-02; único
+   bloqueante del rechazo)*. R33 autoriza tocar el archivo de configuración y el **allowlist**
+   `AJENAS_A_R47`; R34 obliga además a editar una **aserción** de un guardia ajeno
+   (`rollup-guards.test.ts`, caso (a), líneas 710-738, que exige literalmente «PROVISIONAL» y «NO
+   MEDIDA»). No hay forma de cumplir los dos. → **Resuelta por decisión humana: R33 se queda tal cual
+   —es el que se cumplió— y R34 se RETIRA a la ficha 174.** Se descartó la salida contraria
+   (ensanchar R33 para autorizar aserciones ajenas) porque habría convertido un permiso quirúrgico y
+   auditable en una licencia genérica para editar los tests de otra feature, y porque el dato que
+   R34 necesita **tampoco existe** (D5): habría comprado el permiso para nada. Detalle en
+   `RETIRADO-R34.md`.

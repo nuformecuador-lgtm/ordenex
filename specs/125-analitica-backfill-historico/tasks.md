@@ -23,7 +23,10 @@ Resumen de lo que la puerta produjo en este archivo:
 - **D7**: no hay tareas de modo de borrado de rango.
 - **D5/D10**: T6 y T7 son obligatorias y son criterio de cierre.
 
-**Requisitos vigentes:** R1–R35 (35), todos con test nombrado en la tabla de trazabilidad.
+**Requisitos vigentes:** ~~R1–R35 (35)~~ → **R1–R33 y R35: 34 vigentes** tras la enmienda del
+2026-08-02, todos con test nombrado en la tabla de trazabilidad. **R34 está RETIRADO a la ficha 174**
+(ver `requirements.md > R34` y `RETIRADO-R34.md`); su bloque de tareas, **T6**, queda retirado con él.
+Los números de requisito y de tarea **no se reasignan**.
 
 ---
 
@@ -127,21 +130,33 @@ Depende de T3. **[P]** con T4.
 
 ---
 
-## T6 — Umbral de volumen con procedencia  ·  R34
+## ~~T6 — Umbral de volumen con procedencia · R34~~ → **RETIRADO A LA FICHA 174** (2026-08-02)
 
-Depende de T7.1–T7.3 (necesita la medición). No se hace antes: fijar el número sin dato es
-exactamente lo que D5 prohíbe.
+> **Estado: ni hecho ni pendiente de la 125. RETIRADO.** T6.1 y T6.2 implementaban **R34**, y R34 ya
+> no es de esta feature (`requirements.md > R34`, `RETIRADO-R34.md`). Ninguna de las dos se ejecutó,
+> y **no deben ejecutarse en la 125**: hacerlo violaría R33, que sigue vigente y sin retocar.
+> Ambas se trasladan íntegras a la ficha **174**, donde además hay un **tercer anclaje** que estas
+> tareas no contemplaban.
+>
+> No se renumeran las demás tareas: T7 y T8 conservan su número.
 
-- **T6.1** Sustituir `UMBRAL_AVISO_FILAS_CORRIDA` por la cifra **medida**, con comentario que diga de
-  qué corrida sale (rango, fecha de la medición, base) y que deje de decir «no medida».
-  **Hecho:** la constante sigue estando **una sola vez** en `lib/config/analitica-rollup.ts`.
-- **T6.2** Actualizar el allowlist `AJENAS_A_R47` de `tests/unit/analytics/rollup-guards.test.ts`:
-  hoy exime **una** ocurrencia de `20_000` en `lib/clients/google-route-optimization.ts` y **una** en
-  `lib/config/route-optimization.ts`, usadas como timeout. Al cambiar el valor del umbral esas
-  entradas **quedan muertas** y el propio guardia se pone rojo por su caso «el allowlist no puede
-  tener entradas muertas».
-  **Hecho:** `pnpm vitest run tests/unit/analytics/rollup-guards.test.ts` verde, y el caso (a) del
-  comentario provisional actualizado en coherencia con T6.1.
+- **~~T6.1~~ → 174.** Sustituir `UMBRAL_AVISO_FILAS_CORRIDA` por la cifra **medida**, con comentario
+  de procedencia y sin la frase «no medida».
+  **No ejecutada.** Bloqueada por dos vías a la vez: (a) no existe la medición que la habilita —la
+  corrida real de T7 dio 58 órdenes con pico de **24 filas/fecha** (`progress/backfill_125.md`,
+  T7.5), y extrapolar eso a producción es inventar, que **D5** prohíbe; (b) su criterio de «hecho»
+  («que deje de decir *no medida*») **es incompatible con R33**, porque la frase está exigida por una
+  aserción de un guardia ajeno.
+- **~~T6.2~~ → 174.** Actualizar el allowlist `AJENAS_A_R47` de
+  `tests/unit/analytics/rollup-guards.test.ts`.
+  **No ejecutada.** Y **estaba incompleta**: además del allowlist (líneas 681-684) hay que tocar la
+  aserción del caso (a) (**líneas 710-738**, exige «PROVISIONAL» y «NO MEDIDA») y **un tercer
+  archivo** que la 125 nunca documentó, `tests/unit/analytics/rollup-service.test.ts` (**línea 1047**,
+  literal `20_000` tecleado a mano; **línea 1072**, `/PROVISIONAL Y NO MEDIDA/i`). La ficha 174
+  hereda las cuatro ediciones, no dos.
+
+**Efecto en el resto del plan:** T7 **no** dependía de T6 (era al revés: T6 dependía de T7.1–T7.3),
+así que retirar T6 no desbloquea ni bloquea nada. T7 se ejecutó completa.
 
 ---
 
@@ -169,7 +184,8 @@ Depende de T1–T5. **Es la última y es obligatoria.**
   **Hecho:** todas las fechas `estable` o `no_comparable`; ninguna `cambiada`; código de salida 0.
 - **T7.5 — Evidencia.** `progress/backfill_125.md` con: rango, base (host/puerto/base, **sin
   credenciales**), fecha de la corrida, tabla de `filasEscritas`/`filasRetiradas`/`ms` por fecha,
-  totales, pico de filas de una sola fecha (que es lo que alimenta T6.1) y el resultado de T7.4.
+  totales, pico de filas de una sola fecha (~~que es lo que alimenta T6.1~~ → **que se entrega como
+  insumo a la ficha 174; T6 está retirado**) y el resultado de T7.4.
   **Hecho:** el reviewer puede reproducir los números desde el reporte JSON pegado.
 - **T7.6 — Runbook de producción** (en `progress/backfill_125.md`, no en el chat): variable
   `DATABASE_URL` exportada a mano, ensayo sin `--confirmar` **siempre primero**, lectura del eco antes
@@ -189,5 +205,8 @@ Depende de T1–T5. **Es la última y es obligatoria.**
 - **T8.2** `pnpm test` completo. Comparar el **número de archivos** de la corrida con el de la
   medición de baseline: una suite degradada por saturación omite archivos enteros y parece verde.
   Los rojos que no reproduzcan en aislado se declaran flakes, con la prueba en aislado pegada.
-- **T8.3** Mapa `R<n>` → test ejecutado y verde en `progress/impl_125.md`, con los 35 requisitos.
-  **Hecho:** ningún requisito sin test que lo mida.
+- **T8.3** Mapa `R<n>` → test ejecutado y verde en `progress/impl_125.md`, con los ~~35~~ **34**
+  requisitos vigentes (R1–R33 y R35; **R34 retirado a la ficha 174**, no se cuenta ni se reclama
+  cubierto).
+  **Hecho:** ningún requisito vigente sin test que lo mida, y la entrada de R34 en el mapa dice
+  «retirado», no «cubierto».
