@@ -252,6 +252,9 @@ describe("R29 · la moneda sale de lib/config/moneda.ts y nunca de un literal", 
       "lib/repositories/RecaudoAnaliticaRepository.ts",
       "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
       "lib/repositories/ConciliacionCierresAnaliticaRepository.ts",
+      // T E.1 — el borde entra al censo en cuanto existe: es el ultimo sitio por el que un
+      // codigo de moneda escrito a mano podria colarse al cliente.
+      "lib/actions/analitica-financiera.ts",
     ];
     // Sin `$`: en TypeScript es el prefijo de toda interpolacion. Lo que se persigue es el
     // simbolo y el codigo ISO escritos a mano, que es lo que R29 prohibe.
@@ -351,6 +354,9 @@ describe("R28 · misma entrada, misma salida, con mas de una fila", () => {
       "lib/repositories/RecaudoAnaliticaRepository.ts",
       "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
       "lib/repositories/ConciliacionCierresAnaliticaRepository.ts",
+      // T E.1 — el borde tambien: un `new Date()` aqui haria que el rango dependiera del
+      // reloj del servidor en vez de del `now` inyectable de `resolverRango` (R28).
+      "lib/actions/analitica-financiera.ts",
     ];
     const infractores = ARCHIVOS.filter((rel) => {
       const codigo = fs

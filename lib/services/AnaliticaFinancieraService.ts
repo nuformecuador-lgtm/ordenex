@@ -25,6 +25,7 @@ import {
   esMetricaAcumulada,
   VISTA_COD_RECAUDADO_POR_METODO,
   VISTA_COD_RECAUDADO_POR_TIENDA,
+  type FilaConciliacion,
   type FilaFinanciera,
   type ImporteAnalitico,
   type ResultadoFinanciero,
@@ -395,7 +396,7 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
       ...this.cabecera(consulta),
       tipo: "conciliacion",
       conciliacion: {
-        porEstado,
+        porEstado: porEstado.map(soloLoDeclarado),
         cuadre: {
           cuadra,
           totalSnapshot: totalSnapshot.toFixed(2),
@@ -406,6 +407,34 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
       },
     };
   }
+}
+
+/**
+ * R14 / T E.4 — PROYECCION EXPLICITA de una fila de conciliacion.
+ *
+ * `GrupoCierrePorEstado` es hoy un alias de `FilaConciliacion`, asi que devolver el array del
+ * repositorio tal cual COMPILA y parece gratis. No lo es: el DTO pasaria a ser el objeto que la
+ * capa de datos construyo, y cualquier columna de mas que ese objeto acabe llevando —un
+ * `select` que se amplia, un `groupBy` con una clave extra— cruzaria al cliente sin que nada
+ * fallara. El barrido de identidad de E.4 lo demostro: sembrando un `mensajeroId` en las filas
+ * del repositorio, la unica de las ocho metricas que lo dejaba salir era esta.
+ *
+ * Copiar los seis campos declarados es una lista blanca: lo que no esta escrito aqui no sale.
+ * Por eso se enumeran uno a uno y no hay `...grupo`.
+ */
+function soloLoDeclarado(grupo: FilaConciliacion): FilaConciliacion {
+  return {
+    nivel: grupo.nivel,
+    estado: grupo.estado,
+    cantidad: grupo.cantidad,
+    totales: {
+      efectivo: grupo.totales.efectivo,
+      simpe: grupo.totales.simpe,
+      transferencia: grupo.totales.transferencia,
+      general: grupo.totales.general,
+    },
+    fechadoPor: grupo.fechadoPor,
+  };
 }
 
 /** El lado del ledger que mide lo mismo que `total_general`: el credito del libro de tienda. */

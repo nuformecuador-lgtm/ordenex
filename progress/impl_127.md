@@ -225,6 +225,71 @@ S7) para que hoy afirme algo verdadero y siga mordiendo despues.
 
 ---
 
+## Mapa completo `R1..R43` → test (F.7)
+
+Cerrado el **2026-08-02** al terminar las tandas **E** y **F**. Une lo que las cuatro sesiones
+cubrieron; los mapas parciales de arriba y de `impl_127_C.md` / `impl_127_D.md` se conservan
+porque explican **por que** cada test mide lo que mide. Este es el que hay que leer para
+comprobar que no queda ningun requisito sin test.
+
+**Ningun `R` queda sin test.** El propio mapa esta vigilado por un guardia ejecutable
+(`financiera-trazabilidad.guardia.test.ts`): borrar una fila, saltarse un numero o apuntar a un
+archivo de test que no existe lo pone rojo.
+
+| R | Que exige | Test |
+|---|---|---|
+| R1 | Toda cifra sale de las cinco tablas del dinero | `tests/unit/analytics/financiera-fuente.guardia.test.ts` |
+| R2 | Nadie lee `analytics_daily` | `tests/unit/analytics/financiera-fuente.guardia.test.ts` |
+| R3 | Nadie lee `orden` / `gestion_orden` / `orden_historial_estado` | `tests/unit/analytics/financiera-fuente.guardia.test.ts` |
+| R4 | Lo consultado ⊆ lo declarado en el catalogo, por metrica y por archivo | `tests/unit/analytics/financiera-correspondencia.guardia.test.ts` |
+| R5 | Dominio invalido = error explicito, sin consultar | `tests/unit/services/analitica-financiera-service.test.ts` · `tests/unit/actions/analitica-financiera-action.test.ts` |
+| R6 | Las ocho financieras, ni una de mas ni una de menos | `tests/unit/services/analitica-financiera-service.test.ts` |
+| R7 | Toda firma publica recibe `ConsultaAnalitica` | `tests/unit/analytics/financiera-contratos.test.ts` |
+| R8 | Sin adaptador de alcance para las cinco tablas | `tests/unit/analytics/financiera-alcance.guardia.test.ts` |
+| R9 | Ninguna rama recorta dinero por el alcance del actor | `tests/unit/analytics/financiera-alcance.guardia.test.ts` |
+| R10 | Un `forbidden` no ejecuta ninguna consulta | `tests/unit/services/analitica-financiera-service.test.ts` · `tests/unit/actions/analitica-financiera-action.test.ts` |
+| R11 | El denegado se audita con llamada EXPLICITA, antes de responder | `tests/unit/actions/analitica-financiera-action.test.ts` |
+| R12 | 403 con cuerpo generico; nunca 200 con ceros | `tests/unit/analytics/financiera-borde.guardia.test.ts` · `tests/unit/actions/analitica-financiera-action.test.ts` |
+| R13 | 400 con `fieldErrors` y SIN auditar | `tests/unit/actions/analitica-financiera-action.test.ts` |
+| R14 | Ni un id de mensajero en ninguna respuesta (cadena serializada completa) | `tests/unit/analytics/financiera-borde.guardia.test.ts` · `tests/unit/analytics/financiera-cuentas-por-pagar-repo.test.ts` · `tests/unit/analytics/financiera-conciliacion-repo.test.ts` |
+| R15 | El actor sale solo de `resolveActorFromSession()` | `tests/unit/actions/analitica-financiera-action.test.ts` |
+| R16 | Σ de exactamente las categorias declaradas, ventana `[desde,hasta)` | `tests/unit/analytics/financiera-ingresos-repo.test.ts` |
+| R17 | Las categorias las manda el catalogo, no un array a mano | `tests/unit/analytics/financiera-ingresos-repo.test.ts` |
+| R18 | `egresos` producida, con las ocho `egreso_*` | `tests/unit/analytics/financiera-produccion.guardia.test.ts` · `tests/unit/services/analitica-financiera-service.test.ts` |
+| R19 | Las DOS vistas de `cod_recaudado`, cada una de su tabla | `tests/unit/analytics/financiera-recaudo-repo.test.ts` · `tests/integration/actions/analitica-financiera-action.test.ts` |
+| R20 | Reuso de las tres funciones money-safe, sin reescribir la resta | `tests/unit/services/analitica-financiera-derivacion.test.ts` |
+| R21 | Saldo AL CORTE: `< hasta`, sin cota inferior | `tests/unit/analytics/financiera-cuentas-por-pagar-repo.test.ts` · `tests/integration/actions/analitica-financiera-action.test.ts` |
+| R22 | Los dos niveles de cierre por separado, con conteo y `total_*` | `tests/unit/analytics/financiera-conciliacion-repo.test.ts` |
+| R23 | El cuadre cruza por `origen_tipo`/`origen_id`, no por ventana | `tests/unit/services/analitica-financiera-conciliacion.test.ts` · `tests/integration/actions/analitica-financiera-action.test.ts` |
+| R24 | El descuadre se emite; nunca se lanza | `tests/unit/services/analitica-financiera-conciliacion.test.ts` |
+| R25 | Los no resueltos no aportan dinero pero se ven | `tests/unit/analytics/financiera-recaudo-repo.test.ts` · `tests/integration/actions/analitica-financiera-action.test.ts` |
+| R26 | Doble coordenada temporal y frontera de dia CR | `tests/unit/analytics/financiera-ingresos-repo.test.ts` · `tests/integration/actions/analitica-financiera-action.test.ts` |
+| R27 | STRING escala 2 en toda frontera; aritmetica `Prisma.Decimal` | `tests/unit/analytics/financiera-contratos.test.ts` · `tests/unit/services/analitica-financiera-derivacion.test.ts` |
+| R28 | Determinismo: mismo dato, misma secuencia | `tests/unit/analytics/financiera-conciliacion-repo.test.ts` · `tests/unit/services/analitica-financiera-service.test.ts` |
+| R29 | La moneda sale de `lib/config/moneda.ts` | `tests/unit/services/analitica-financiera-service.test.ts` |
+| R30 | Repositorios sin derivacion; servicio sin Prisma ni HTTP | `tests/unit/analytics/financiera-repositorios.guardia.test.ts` · `tests/unit/analytics/financiera-contratos.test.ts` |
+| R31 | Inyeccion por interfaz: la suite del servicio corre sin base | `tests/unit/services/analitica-financiera-service.test.ts` |
+| R32 | Nada se silencia; el fallo sube con contexto y sin PII | `tests/unit/analytics/financiera-repositorios.guardia.test.ts` · `tests/unit/actions/analitica-financiera-action.test.ts` |
+| R33 | Guardia de fuente sobre el universo permitido, incluido `$queryRaw` | `tests/unit/analytics/financiera-fuente.guardia.test.ts` |
+| R34 | El guardia de R33 se autocomprueba con fixtures | `tests/unit/analytics/financiera-fuente.guardia.test.ts` |
+| R35 | El alcance del catalogo sigue siendo total/prohibido | `tests/unit/analytics/financiera-alcance.guardia.test.ts` |
+| R36 | Cada `R` tiene test y esta mapeado en este archivo | `tests/unit/analytics/financiera-trazabilidad.guardia.test.ts` |
+| R37 | `bruto` y `neto` en el mismo DTO; el neto por signo agregado | `tests/unit/services/analitica-financiera-derivacion.test.ts` · `tests/integration/actions/analitica-financiera-action.test.ts` |
+| R38 | Las dos vistas con ids distintos y `sumableCon` vacio | `tests/unit/analytics/financiera-contratos.test.ts` · `tests/integration/actions/analitica-financiera-action.test.ts` |
+| R39 | Cada fila de conciliacion declara su coordenada temporal | `tests/unit/analytics/financiera-conciliacion-repo.test.ts` · `tests/integration/actions/analitica-financiera-action.test.ts` |
+| R40 | El umbral vive en un solo archivo de `lib/config/` | `tests/unit/analytics/financiera-contratos.test.ts` · `tests/unit/services/analitica-financiera-conciliacion.test.ts` |
+| R41 | Catalogo y produccion no se desincronizan | `tests/unit/analytics/financiera-produccion.guardia.test.ts` |
+| R42 | El motivo no cruza al cliente; SI queda en el `ErrorLogger` | `tests/unit/analytics/financiera-borde.guardia.test.ts` |
+| R43 | `esAcumulado` exacto en las dos cuentas por pagar | `tests/unit/analytics/financiera-contratos.test.ts` · `tests/unit/services/analitica-financiera-service.test.ts` |
+
+**Sobre R36 y su test.** Podria haberse declarado "sin test posible" —es un requisito sobre el
+proceso, no sobre el codigo— y habria sido un hueco declarado. Pero R36 dice literalmente
+«mapeado en `progress/impl_127.md`», y eso **si** es comprobable: el guardia lee esta tabla,
+exige los 43 numeros sin saltos y comprueba que cada archivo de test citado existe de verdad.
+Un mapa que apunta a un test borrado es peor que no tener mapa.
+
+---
+
 ## Lo que NO se ha hecho (para el siguiente agente)
 
 Tandas **C, D, E y F** enteras. En particular:

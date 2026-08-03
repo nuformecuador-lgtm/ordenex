@@ -459,8 +459,10 @@ const CATALOGO = [
     clase: "live",
     unidad: "moneda",
     unidadDeConteo: "moneda",
-    // `declarada`: la ficha de la 127 compromete ingresos, cuentas por pagar y
-    // conciliacion de cierres; los egresos NO aparecen ahi.
+    // `producida` desde ⟨D8⟩ (humano, 2026-08-02 — ver `progress/decision_C2_127.md`). La ficha
+    // original de la 127 comprometia ingresos, cuentas por pagar y conciliacion de cierres, y los
+    // egresos NO aparecian ahi: por eso esto decia `declarada`. El humano amplio el alcance y la
+    // 127 los sirve de verdad (Σ de las ocho categorias `egreso_*`, tarea D.5).
     estadoProduccion: "producida",
     granos: ["fecha"],
     fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },

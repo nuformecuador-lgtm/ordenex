@@ -183,20 +183,20 @@ Depende de: C.
 
 Depende de: D.
 
-- [ ] **E.1** `lib/actions/analitica-financiera.ts` con `'use server'`, actor por
+- [x] **E.1** `lib/actions/analitica-financiera.ts` con `'use server'`, actor por
   `resolveActorFromSession()`, y el orden auditar → responder.
   *Hecho cuando:* el test con un `adminTienda` pidiendo `egresos` ve **una** llamada a
   `logger.logError` y estado `forbidden`. → **R11, R12, R15**
-- [ ] **E.2** Distinción 400 / 403: entrada malformada no audita.
+- [x] **E.2** Distinción 400 / 403: entrada malformada no audita.
   *Hecho cuando:* `{ rango: "no_valido" }` devuelve `validation_error` con `fieldErrors` y el logger
   espiado **no** recibe nada. → **R13**
-- [ ] **E.3** Cuerpo del 403 **genérico** (D9): `{ code: "FORBIDDEN" }`, sin motivo.
+- [x] **E.3** Cuerpo del 403 **genérico** (D9): `{ code: "FORBIDDEN" }`, sin motivo.
   *Hecho cuando:* el test afirma que la respuesta serializada **no** contiene ninguno de los siete
   literales de `MotivoDenegacion`, y que el registro del logger **sí** lo lleva. → **R12, R42**
-- [ ] **E.4** Barrido de identidad: ninguna respuesta financiera contiene un id de mensajero.
+- [x] **E.4** Barrido de identidad: ninguna respuesta financiera contiene un id de mensajero.
   *Hecho cuando:* el test recorre la **cadena serializada completa** (`JSON.stringify`) de las ocho
   métricas y no encuentra el uuid del mensajero sembrado. → **R14**
-- [ ] **E.5** Errores con contexto y sin PII.
+- [x] **E.5** Errores con contexto y sin PII.
   *Hecho cuando:* el test del fallo de repositorio ve el `metricaId` y el rango en el mensaje, y
   **no** ve ids de tienda, teléfonos ni correos. → **R32**
 
@@ -206,25 +206,25 @@ Depende de: D.
 
 Depende de: E.
 
-- [ ] **F.1** `tests/integration/actions/analitica-financiera-action.test.ts`: camino completo con
+- [x] **F.1** `tests/integration/actions/analitica-financiera-action.test.ts`: camino completo con
   base de test, por rol (`maestro` ok, `adminTienda` 403) y por métrica.
   *Hecho cuando:* pasa contra base de test, sin mocks de Prisma.
-- [ ] **F.2** Frontera horaria: un movimiento a las 22:00 CR y otro a las 00:30 CR caen en días
+- [x] **F.2** Frontera horaria: un movimiento a las 22:00 CR y otro a las 00:30 CR caen en días
   distintos según `[D 06:00Z, D+1 06:00Z)`.
   *Hecho cuando:* usar medianoche UTC en vez de `rango.desde` pone el test rojo. → **R26**
-- [ ] **F.3** Frontera de cierre (D2-b): un cierre **solicitado el lunes y aprobado el miércoles**
+- [x] **F.3** Frontera de cierre (D2-b): un cierre **solicitado el lunes y aprobado el miércoles**
   cuenta en el miércoles.
   *Hecho cuando:* fechar por `solicitado_at` pone el test rojo. → **R26**
-- [ ] **F.4** Anulación (D1-c): pago + contraasiento `ajuste_*` en el mismo rango.
+- [x] **F.4** Anulación (D1-c): pago + contraasiento `ajuste_*` en el mismo rango.
   *Hecho cuando:* `bruto` los cuenta ambos y `neto` los cancela, y el test lo afirma **por separado**.
   → **R37, R20**
-- [ ] **F.5** Cierre pendiente (D4-b): un cierre `solicitado` no aporta dinero pero aparece en la
+- [x] **F.5** Cierre pendiente (D4-b): un cierre `solicitado` no aporta dinero pero aparece en la
   conciliación con `fechadoPor: "solicitado_at"`; tras aprobarlo, aporta **una** vez.
   *Hecho cuando:* el test corre las dos fases y el importe no se duplica. → **R25, R39**
-- [ ] **F.6** No-sumabilidad (D6-a): las dos vistas de `cod_recaudado` llegan con ids distintos y
+- [x] **F.6** No-sumabilidad (D6-a): las dos vistas de `cod_recaudado` llegan con ids distintos y
   `sumableCon: []`.
   *Hecho cuando:* declarar una sumable con la otra pone el test rojo. → **R19, R38**
-- [ ] **F.7** Mapa `R1..R43 → test` en `progress/impl_127.md`, con la salida real de la suite.
+- [x] **F.7** Mapa `R1..R43 → test` en `progress/impl_127.md`, con la salida real de la suite.
   *Hecho cuando:* no queda ningún `R` sin test, `./init.sh` termina en verde y la corrida reporta
   **≥ 778 archivos y 0 rojos** (baseline). → **R36**
 - [ ] **F.8** Sincronización con `dev` y PR hacia `dev`.
@@ -255,3 +255,21 @@ el momento en que se teclea y no en la revisión.
 >
 > Falta la **TANDA E** (borde: Server Action y los tres pasos) y la **TANDA F** (integración,
 > mapa `R1..R43` completo y PR).
+
+---
+
+> **Estado tras la sesión del 2026-08-02 (TANDA E y F.1–F.7).** Bitácora en
+> `progress/impl_127_E.md`: 5 archivos nuevos, 3 modificados, **20 mutaciones (M52–M71)** con su
+> rojo y su reversión byte a byte, supuestos **S19–S23** y hallazgos **C8–C10**. `tsc` y `eslint`
+> en 0; suite completa **795 archivos / 9681 tests, 0 rojos** (referencia de la rama: 791) y
+> `./init.sh` en verde. El mapa completo `R1..R43 → test` está en `progress/impl_127.md`, lo
+> vigila un guardia ejecutable y **no queda ningún `R` sin test**, R36 incluido.
+>
+> ⚠ **C8 — E.4 encontró una fuga REAL y se arregló el código, no el test.** `deConciliacion`
+> devolvía `porEstado` tal cual llega del repositorio (`GrupoCierrePorEstado` es un alias de
+> `FilaConciliacion`), así que un `mensajeroId` sembrado en la fila **cruzaba al cliente**. Ahora
+> pasa por una proyección explícita de los seis campos declarados; la mutación **M58** prueba que
+> el barrido lo detecta. Era la única de las ocho métricas que filtraba.
+>
+> `lib/analytics/metrics.ts` **no se tocó en esta sesión**: no hizo falta un tercer cambio en el
+> catálogo. Falta solo **F.8**, que es del leader.
