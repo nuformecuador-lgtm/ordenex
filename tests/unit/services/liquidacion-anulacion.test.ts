@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { CierreEstado, RolValue } from "@prisma/client";
+import { CierreEstado, RolValue, type PrismaClient } from "@prisma/client";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -31,6 +33,13 @@ import type { AnularPagoInput } from "@/lib/types/liquidacion";
 // input**. Se mide COLANDO un monto distinto en la peticion y comprobando que se ignora; si el
 // cliente pudiera dictar el importe del reverso, anular seria una via para escribir cualquier
 // cifra en un libro de dinero. Ese test es el que la mutacion 1 de la bitacora apaga.
+//
+// ⚠️ **Feature 173 / T C.3 — CAMBIO DELIBERADO DE UNA ASERCION QUE ESTABA VERDE.** «Anular un
+// pago a una TIENDA no toca la caja» pasa a «la caja recibe EXACTAMENTE UN ingreso
+// `ingreso_reverso_pago_tienda`, por el mismo monto, con el mismo origen y fechado el DIA DE LA
+// ANULACION». Su premisa —«si al pagar no se emitio egreso, al anular no hay nada que
+// revertir»— dejo de ser cierta con T C.2. «Anular un pago a un MENSAJERO tampoco» **no se
+// toca** ([P2] = (a)) y gana una contraprueba nueva sobre el puerto.
 //
 // Money-safe: ni un `Number(` ni un `parseFloat` sobre un monto en todo el archivo.
 
@@ -101,11 +110,14 @@ function cierreDTO(over: Partial<CierreParaPagoDTO> = {}): CierreParaPagoDTO {
 /**
  * Doble de la TRANSACCION con la forma de un `tx` de Prisma. Igual que en
  * `liquidacion-service.test.ts`: expone los delegados de los dos libros, del documento, de la
- * ANULACION y —a proposito— el de la CAJA PRINCIPAL, todos espiados. R40 y R41 no se comprueban
- * leyendo el codigo: se comprueban contando llamadas sobre las puertas que el servicio TENDRIA
- * que abrir si escribiera donde no debe.
+ * ANULACION y el de la CAJA PRINCIPAL, todos espiados.
+ *
+ * **Feature 173 / T C.3:** `walletMovimiento.createMany` apunta en el LOG. En la rama del
+ * MENSAJERO su ausencia del log sigue siendo la prueba de que la caja no se toca; en la de la
+ * TIENDA su POSICION —dentro de la `tx` y despues del contraasiento del ledger— es la prueba de
+ * que el reverso es atomico con la anulacion.
  */
-function buildTx() {
+function buildTx(log: string[]) {
   const espia = () => ({
     create: vi.fn(),
     createMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -120,7 +132,13 @@ function buildTx() {
     liquidacionAnulacion: espia(),
     walletTiendaMovimiento: espia(),
     pagoMensajeroMovimiento: espia(),
-    walletMovimiento: espia(), // [P2]/R40: la caja principal. No debe recibir NI UNA llamada.
+    walletMovimiento: {
+      ...espia(),
+      createMany: vi.fn(async () => {
+        log.push("crear:caja");
+        return { count: 1 };
+      }),
+    },
     cierreDia: espia(), // R42: ningun snapshot del cierre se toca
     $queryRaw: vi.fn().mockResolvedValue([]),
   };
@@ -144,7 +162,7 @@ function buildDobles(opciones: {
   ahora?: Date;
 }) {
   const log: string[] = [];
-  const tx = buildTx();
+  const tx = buildTx(log);
   const txsVistos: unknown[] = [];
   const cierre = opciones.cierre === undefined ? cierreDTO() : opciones.cierre;
   const pago = opciones.pago === undefined ? pagoATienda() : opciones.pago;
@@ -251,14 +269,34 @@ function buildDobles(opciones: {
     }
   };
 
+  /**
+   * Feature 173 / T C.3 — el PUERTO de la caja, REAL y con sus dos metodos espiados. Real y no
+   * doble: lo que hay que medir es que la fila del reverso lleva
+   * `ingreso_reverso_pago_tienda`, y un doble mudo no diria nada de eso. El repositorio va sobre
+   * un cliente vacio porque `crearMovimientos` escribe siempre en el `tx` que recibe.
+   */
+  const caja = new CajaPagoTiendaFeedService(
+    new WalletMovimientoRepository({} as unknown as PrismaClient),
+  );
+  vi.spyOn(caja, "emitirEgresoDePago");
+  vi.spyOn(caja, "emitirReversoDeAnulacion");
+
   const service = new LiquidacionService(
     pagoRepo,
     tiendaRepo,
     mensajeroRepo,
     runTransaction,
+    caja,
     () => opciones.ahora ?? AHORA,
   );
-  return { service, pagoRepo, tiendaRepo, mensajeroRepo, llamadasTx, log, tx, txsVistos };
+  return { service, pagoRepo, tiendaRepo, mensajeroRepo, caja, llamadasTx, log, tx, txsVistos };
+}
+
+/** La fila que el servicio mando escribir en la CAJA PRINCIPAL (feature 173). */
+function filaDeCaja(tx: ReturnType<typeof buildTx>): Record<string, unknown> {
+  const mock = tx.walletMovimiento.createMany as unknown as { mock: { calls: unknown[][] } };
+  const arg = mock.mock.calls[0][0] as { data: Record<string, unknown>[] };
+  return arg.data[0];
 }
 
 /** La peticion de anular, que solo tiene DOS campos (R76: no hay por donde pedir una parte). */
@@ -722,6 +760,9 @@ describe("R71 — el disponible vuelve al valor exacto previo al pago", () => {
 
     await d.service.anularPago(anular(), ACTOR_ADMIN);
 
+    // ⚠️ Feature 173/T C.3: esta lista gana `"crear:caja"`. El reverso de la caja va en la MISMA
+    // transaccion que la anulacion y el contraasiento del ledger, y despues de los dos. Antes de
+    // la 173 la lista terminaba en `"crear:movimiento:tienda", "tx:commit"`.
     expect(d.log).toEqual([
       `leer:pago:${UUID_PAGO}`,
       "tx:abrir",
@@ -729,6 +770,7 @@ describe("R71 — el disponible vuelve al valor exacto previo al pago", () => {
       "leer:disponible",
       "anular",
       "crear:movimiento:tienda",
+      "crear:caja",
       "tx:commit",
     ]);
   });
@@ -1073,17 +1115,67 @@ describe("R82/R75 — no hay camino para anular una anulacion", () => {
 // R40 / R39 — donde NO se escribe, y la atomicidad
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
-describe("R40 [P2] — la CAJA PRINCIPAL no recibe ni una llamada al anular", () => {
-  it("anular un pago a una TIENDA no toca la caja", async () => {
+describe("R24-R27 [173] — la caja al anular: la TIENDA recupera su dinero, el MENSAJERO no se toca", () => {
+  // ─────────────────────────────────────────────────────────────────────────────────────────
+  // ⚠️ ASERCION REESCRITA (feature 173 / T C.3). Antes decia:
+  //
+  //     it("anular un pago a una TIENDA no toca la caja", …)
+  //       for (const [metodo, espia] of Object.entries(d.tx.walletMovimiento))
+  //         expect(espia).not.toHaveBeenCalled();
+  //
+  // Pasa de CERO llamadas a EXACTAMENTE UNA, con su categoria, su monto, su origen y su fecha.
+  // ─────────────────────────────────────────────────────────────────────────────────────────
+  it("R24/R25/R26: anular un pago a una TIENDA devuelve el dinero a la caja, EXACTAMENTE una vez", async () => {
     const d = buildDobles({ creditos: "100000.00", debitos: "15000.00" });
 
     await d.service.anularPago(anular(), ACTOR_ADMIN);
 
-    for (const [metodo, espia] of Object.entries(d.tx.walletMovimiento)) {
-      expect(espia, `walletMovimiento.${metodo} fue llamado`).not.toHaveBeenCalled();
+    expect(d.caja.emitirReversoDeAnulacion).toHaveBeenCalledTimes(1);
+    expect(d.caja.emitirEgresoDePago).not.toHaveBeenCalled();
+    expect(d.tx.walletMovimiento.createMany).toHaveBeenCalledTimes(1);
+
+    const fila = filaDeCaja(d.tx);
+    expect(fila.tipo).toBe("ingreso");
+    // R26 — la categoria es la CLAVE de la feature: `ingreso_ajuste` es de naturaleza PROPIA y
+    // haria que anular un pago SUBIERA la ganancia de Ordenex (design §10-C). Por eso el enum
+    // gano DOS valores y no uno. `caja-cadena-pago-anulacion.test.ts` mide el efecto en ₡.
+    expect(fila.categoria).toBe("ingreso_reverso_pago_tienda");
+    expect(fila.categoria).not.toBe("ingreso_ajuste");
+    expect((fila.monto as { toFixed: (n: number) => string }).toFixed(2)).toBe("15000.00");
+    // Mismo origen que el egreso del pago: comparten `(origen_tipo, origen_id)` y solo cambia la
+    // categoria, que es lo que deja convivir a los dos sin que ninguno pueda duplicarse.
+    expect(fila.origenTipo).toBe("pago_tienda");
+    expect(fila.origenId).toBe(UUID_PAGO);
+    expect(fila.registradoPor).toBe("u-admin");
+    expect(fila.descripcion).toBe("Anulación de pago · SINPE · 1234567");
+    // R25 — el dia de la ANULACION (05/08), no el del pago (30/07): seis dias de distancia.
+    expect((fila.fechaMovimiento as Date).toISOString()).toBe(DIA_DE_LA_ANULACION);
+    expect((fila.fechaMovimiento as Date).toISOString()).not.toContain(DIA_DEL_PAGO);
+  });
+
+  it("R29: el reverso es una fila NUEVA — ni un update ni un delete en el libro de la caja", async () => {
+    const d = buildDobles({ creditos: "100000.00", debitos: "15000.00" });
+
+    await d.service.anularPago(anular(), ACTOR_ADMIN);
+
+    for (const metodo of ["create", "update", "updateMany", "delete", "deleteMany", "upsert"] as const) {
+      expect(d.tx.walletMovimiento[metodo], `walletMovimiento.${metodo}`).not.toHaveBeenCalled();
     }
   });
 
+  it("R31 [173]: el reverso de la caja no añade nada a los otros dos libros", async () => {
+    const d = buildDobles({ creditos: "100000.00", debitos: "15000.00" });
+
+    await d.service.anularPago(anular(), ACTOR_ADMIN);
+
+    // El ledger de la tienda recibe su unico `ajuste_credito` (el de la 172) y el libro del
+    // mensajero, nada.
+    expect(d.tiendaRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+    expect(contraasientoDeTienda(d.tiendaRepo).categoria).toBe("ajuste_credito");
+    expect(d.mensajeroRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ Feature 173: esta asercion NO se toca. [P2] = (a).
   it("anular un pago a un MENSAJERO tampoco", async () => {
     const d = buildDobles({ pago: pagoAMensajero(), pagadoVigente: "15000.00" });
 
@@ -1094,13 +1186,25 @@ describe("R40 [P2] — la CAJA PRINCIPAL no recibe ni una llamada al anular", ()
     }
   });
 
-  it("R40: no hay por donde escribir en la caja aunque alguien lo intentara", async () => {
-    // Si al pagar no se emitio egreso, al anular no hay nada que revertir. El servicio ni
-    // siquiera tiene ese repositorio inyectado.
+  it("R27 [173/P2]: y el PUERTO de la caja tampoco recibe ninguna de sus dos llamadas", async () => {
+    const d = buildDobles({ pago: pagoAMensajero(), pagadoVigente: "15000.00" });
+
+    await d.service.anularPago(anular(), ACTOR_ADMIN);
+
+    expect(d.caja.emitirEgresoDePago).not.toHaveBeenCalled();
+    expect(d.caja.emitirReversoDeAnulacion).not.toHaveBeenCalled();
+    expect(d.log).not.toContain("crear:caja");
+  });
+
+  it("R23: no hay por donde escribir en la caja mas que las dos filas del puerto", async () => {
+    // Antes de la 173 esto decia «el servicio ni siquiera tiene ese repositorio inyectado».
+    // Sigue sin tenerlo: lo que tiene es un puerto de dos metodos que no admite categoria.
     const codigo = fuenteDelServicioSinComentarios();
     expect(codigo).not.toMatch(/IWalletMovimientoRepository/);
     expect(codigo.match(/walletMovimiento/g)).toBeNull();
     expect(codigo).not.toMatch(/egreso_pago_tienda/);
+    expect(codigo).not.toMatch(/ingreso_reverso_pago_tienda/);
+    expect(codigo).not.toMatch(/ingreso_ajuste/);
     expect(codigo).not.toMatch(/reversarEgreso/);
   });
 

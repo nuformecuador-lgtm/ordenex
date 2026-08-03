@@ -8,6 +8,7 @@ import type {
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type { ICajaPagoTiendaFeedService } from "@/lib/interfaces/services/ICajaPagoTiendaFeedService";
 import type {
   AnularPagoServiceResult,
   ILiquidacionService,
@@ -123,10 +124,18 @@ function conAnulacion(pago: LiquidacionPagoDTO, anulacion: AnulacionDTO): PagoRe
  * Feature 172 — logica de negocio de la LIQUIDACION. No conoce HTTP ni Prisma: recibe los
  * repositorios y el ejecutor de transacciones por constructor.
  *
- * NO recibe el repositorio de la CAJA PRINCIPAL, y es una decision, no un olvido ([P2]/R40):
- * al aprobar el cierre la caja ya cargo `egreso_pago_mensajero = P`, y emitir
- * `egreso_pago_tienda` restaria de la caja un dinero que nunca entro en ella. Sin la dependencia
- * inyectada no hay forma de escribir alli aunque alguien lo intente.
+ * **Feature 173 (design §4) — lo que cambio, con nombre y apellido.** La 172 escribio aqui que
+ * NO recibia el repositorio de la caja principal «porque emitir el egreso del pago a tienda
+ * restaria de la caja un dinero que nunca entro en ella». Esa premisa **cayo del lado de la
+ * TIENDA**: desde la Tanda B de la 173, aprobar un cierre mete el contra-entrega en la caja, asi
+ * que ese dinero SI esta ahi y entregarlo tiene que restar. Del lado del MENSAJERO la premisa
+ * sigue viva y no se toca ([P2] = (a), respuesta humana del 2026-08-03): la caja carga
+ * `egreso_pago_mensajero = P` al aprobar y la liquidacion al mensajero no la roza.
+ *
+ * Lo que se inyecta **no** es `IWalletMovimientoRepository` —sabe escribir cualquier categoria,
+ * incluida la del mensajero— sino un PUERTO ESTRECHO de dos metodos que no admite ni tipo ni
+ * categoria (R23): este servicio no puede EXPRESAR una escritura en la caja que no sea el egreso
+ * de un pago a tienda o su reverso. No es «no la llama»: es que no existe el metodo.
  */
 export class LiquidacionService implements ILiquidacionService {
   /**
@@ -142,6 +151,13 @@ export class LiquidacionService implements ILiquidacionService {
     private readonly tiendaRepo: IWalletTiendaMovimientoRepository,
     private readonly mensajeroRepo: IPagoMensajeroMovimientoRepository,
     private readonly runTransaction: LiquidacionTxRunner,
+    /**
+     * Feature 173 (R23) — el puerto de la caja. Va SIN valor por defecto a proposito: un
+     * puerto que se olvida de cablear y degrada en silencio dejaria pagos a tienda sin su
+     * egreso, que es exactamente la deuda invisible que el reloj de abajo explica como
+     * inaceptable. Si falta, no compila.
+     */
+    private readonly caja: ICajaPagoTiendaFeedService,
     private readonly ahora: () => Date = () => new Date(),
   ) {}
 
@@ -251,6 +267,9 @@ export class LiquidacionService implements ILiquidacionService {
    *     mismo saldo, las dos pasarian, y entre las dos se pagaria de mas.
    *  3. Disponible DERIVADO del ledger (nunca un saldo almacenado) y las dos ramas de rechazo.
    *  4. Documento + movimiento, en la MISMA transaccion (R39).
+   *  5. **Feature 173 (R18/R19/R20):** y el egreso de la CAJA PRINCIPAL, en esa misma
+   *     transaccion y por el mismo `montoStr`. Es la tercera escritura, no un efecto aparte:
+   *     si falla, no queda el pago.
    */
   async registrarPagoTienda(
     input: RegistrarPagoTiendaInput,
@@ -314,6 +333,20 @@ export class LiquidacionService implements ILiquidacionService {
           },
         ]);
 
+        // Feature 173 (R18/R19/R20) — TERCERA escritura, misma transaccion: el dinero SALE de
+        // la caja principal. Va DESPUES del ledger a proposito, para que el libro de la tienda
+        // siga siendo el primero en cuadrar; y con el MISMO `montoStr` ya redondeado, de modo
+        // que documento, ledger y caja no puedan discrepar por un centimo.
+        //
+        // Ni el tipo ni la categoria se nombran aqui: los fija el puerto (R23).
+        await this.caja.emitirEgresoDePago(tx, {
+          pagoId: creado.pago.id,
+          monto: montoStr,
+          descripcion: descripcionDePago(input.metodo, input.referencia ?? null),
+          registradoPor: actor.usuarioId,
+          fechaMovimiento: medianocheUtcDelDia(input.fechaPago), // R20: la fecha REAL del pago
+        });
+
         return {
           status: "ok",
           pago: aPagoRegistradoDTO(creado.pago),
@@ -356,8 +389,13 @@ export class LiquidacionService implements ILiquidacionService {
    * **no hay forma de anular una anulacion (R82)**: el segundo intento choca con el
    * `UNIQUE(pago_id)` y responde `ya_anulado`, y no existe ningun metodo que borre esa fila.
    *
-   * La CAJA PRINCIPAL no recibe ni una llamada (R40, [P2]): si al pagar no se emitio egreso, al
-   * anular no hay nada que revertir. El servicio ni siquiera tiene ese repositorio inyectado.
+   * **Feature 173 (R24-R27), y sustituye a lo que aqui decia la 172.** La 172 escribio «la caja
+   * principal no recibe ni una llamada (R40): si al pagar no se emitio egreso, al anular no hay
+   * nada que revertir». Ahora al pagar a una TIENDA si se emite egreso, asi que al anular si hay
+   * que devolverlo: el contraasiento del ledger va acompañado de un `ingreso` de la caja por el
+   * mismo monto, fechado el DIA DE LA ANULACION (R25) y de naturaleza TERCEROS, de modo que
+   * anular no sube la ganancia de Ordenex ni un centimo (R26). La rama del MENSAJERO sigue sin
+   * tocar la caja, exactamente igual que antes (R27, [P2]).
    */
   async anularPago(input: AnularPagoInput, actor: Actor): Promise<AnularPagoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R81 — antes de leer nada
@@ -537,6 +575,20 @@ export class LiquidacionService implements ILiquidacionService {
         fechaMovimiento: reverso.fechaMovimiento, // R77
       },
     ]);
+
+    // Feature 173 (R24/R25/R26/R29) — y el dinero VUELVE a la caja principal, en la misma
+    // transaccion y por el mismo monto. Es una fila NUEVA: nada se borra ni se edita.
+    //
+    // Solo en esta rama: si el `if` de arriba se llevo el caso del mensajero con su `return`,
+    // aqui abajo ya no hay forma de llegar con un pago a mensajero. Que la categoria del reverso
+    // no sea `ingreso_ajuste` —que subiria la ganancia— lo garantiza el puerto, no este metodo.
+    await this.caja.emitirReversoDeAnulacion(tx, {
+      pagoId: reverso.pago.id,
+      monto: reverso.monto,
+      descripcion,
+      registradoPor: reverso.registradoPor,
+      fechaMovimiento: reverso.fechaMovimiento, // R25: el dia de la ANULACION
+    });
   }
 
   /**

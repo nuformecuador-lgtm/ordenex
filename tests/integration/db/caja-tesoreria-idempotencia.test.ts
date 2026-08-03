@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
+import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
 
 /**
@@ -177,6 +178,150 @@ describeSiHayBase("173/T B.4 — idempotencia del contra-entrega contra Postgres
 
     expect(filas).toHaveLength(2);
     expect(filas.map((f) => f.monto.toFixed(2)).sort()).toEqual(["100.00", "200.00"]);
+  });
+});
+
+describeSiHayBase("173/T C.4 — idempotencia del PAGO A TIENDA y de su ANULACION", () => {
+  let prisma: PrismaClient;
+
+  beforeAll(() => {
+    prisma = crearPrismaDeTest();
+  });
+
+  afterAll(async () => {
+    await prisma?.$disconnect();
+  });
+
+  /**
+   * El PUERTO real sobre el repositorio real. Es el mismo objeto que la liquidacion usa en
+   * produccion, asi que lo que aqui se comprueba contra Postgres son las dos filas de verdad —
+   * con sus categorias de verdad—, no una copia escrita en el test.
+   */
+  const puerto = new CajaPagoTiendaFeedService(
+    new WalletMovimientoRepository({} as unknown as PrismaClient),
+  );
+
+  const FECHA_PAGO = new Date("2026-07-30T00:00:00.000Z");
+  const FECHA_ANULACION = new Date("2026-08-05T00:00:00.000Z");
+
+  it("R21: emitir DOS veces el egreso del mismo pago inserta UNA fila (misma clave de origen)", async () => {
+    const resultado = await enTransaccionRevertida(prisma, async (tx) => {
+      const pagoId = randomUUID();
+      const mov = {
+        pagoId,
+        monto: "15000.00",
+        descripcion: "SINPE · 1234567",
+        registradoPor: null as unknown as string, // sin FK a usuario: esta suite no siembra actores
+        fechaMovimiento: FECHA_PAGO,
+      };
+      const primera = await puerto.emitirEgresoDePago(tx, mov);
+      const segunda = await puerto.emitirEgresoDePago(tx, mov); // reintento / doble submit
+      const filas = await tx.walletMovimiento.findMany({
+        where: { origenTipo: "pago_tienda", origenId: pagoId },
+        select: { tipo: true, categoria: true, monto: true, fechaMovimiento: true },
+      });
+      return { primera, segunda, filas };
+    });
+
+    expect(resultado.primera).toBe(1);
+    expect(resultado.segunda).toBe(0); // no-op a nivel de BASE, sin error
+    expect(resultado.filas).toHaveLength(1);
+    expect(resultado.filas[0].categoria).toBe("egreso_pago_tienda");
+    expect(resultado.filas[0].tipo).toBe("egreso");
+    expect(resultado.filas[0].monto.toFixed(2)).toBe("15000.00");
+    // R20 contra Postgres: la fecha REAL del pago llega a la columna. Es la primera prueba
+    // ejecutada de que el `fechaMovimiento?` opcional de `T A.3` no se pierde por el camino.
+    expect(resultado.filas[0].fechaMovimiento.toISOString()).toBe("2026-07-30T00:00:00.000Z");
+  });
+
+  it("R28: anular dos veces tampoco duplica el reverso", async () => {
+    const resultado = await enTransaccionRevertida(prisma, async (tx) => {
+      const pagoId = randomUUID();
+      const mov = {
+        pagoId,
+        monto: "15000.00",
+        descripcion: "Anulación de pago · SINPE · 1234567",
+        registradoPor: null as unknown as string,
+        fechaMovimiento: FECHA_ANULACION,
+      };
+      const primera = await puerto.emitirReversoDeAnulacion(tx, mov);
+      const segunda = await puerto.emitirReversoDeAnulacion(tx, mov);
+      const filas = await tx.walletMovimiento.findMany({
+        where: { origenTipo: "pago_tienda", origenId: pagoId },
+        select: { tipo: true, categoria: true, monto: true, fechaMovimiento: true },
+      });
+      return { primera, segunda, filas };
+    });
+
+    expect(resultado.primera).toBe(1);
+    expect(resultado.segunda).toBe(0);
+    expect(resultado.filas).toHaveLength(1);
+    // De paso, la primera prueba EJECUTADA de que el valor de enum `ingreso_reverso_pago_tienda`
+    // de `T A.1` esta aplicado en una base real.
+    expect(resultado.filas[0].categoria).toBe("ingreso_reverso_pago_tienda");
+    expect(resultado.filas[0].tipo).toBe("ingreso");
+    // R25: el dia de la ANULACION, no el del pago.
+    expect(resultado.filas[0].fechaMovimiento.toISOString()).toBe("2026-08-05T00:00:00.000Z");
+  });
+
+  it("R28/R48: el egreso y su reverso COMPARTEN origen y conviven — la categoria los distingue", async () => {
+    const resultado = await enTransaccionRevertida(prisma, async (tx) => {
+      const pagoId = randomUUID();
+      const base = {
+        pagoId,
+        monto: "15000.00",
+        descripcion: null,
+        registradoPor: null as unknown as string,
+      };
+      await puerto.emitirEgresoDePago(tx, { ...base, fechaMovimiento: FECHA_PAGO });
+      await puerto.emitirReversoDeAnulacion(tx, { ...base, fechaMovimiento: FECHA_ANULACION });
+      // …y los dos reintentos, que no deben añadir nada.
+      await puerto.emitirEgresoDePago(tx, { ...base, fechaMovimiento: FECHA_PAGO });
+      await puerto.emitirReversoDeAnulacion(tx, { ...base, fechaMovimiento: FECHA_ANULACION });
+
+      return tx.walletMovimiento.findMany({
+        where: { origenTipo: "pago_tienda", origenId: pagoId },
+        orderBy: { fechaMovimiento: "asc" },
+        select: { tipo: true, categoria: true, monto: true },
+      });
+    });
+
+    // DOS filas: el indice unico parcial es `(origen_tipo, origen_id, categoria)`, asi que la
+    // pareja cabe entera y ninguna de las dos puede repetirse (design §2.5). Y el dinero neto de
+    // ese pago sobre la caja es CERO, que es exactamente lo que R30 promete.
+    expect(resultado).toHaveLength(2);
+    expect(resultado.map((f) => f.categoria)).toEqual([
+      "egreso_pago_tienda",
+      "ingreso_reverso_pago_tienda",
+    ]);
+    expect(resultado.map((f) => f.tipo)).toEqual(["egreso", "ingreso"]);
+    const neto = resultado.reduce(
+      (acc, f) => (f.tipo === "ingreso" ? acc.plus(f.monto) : acc.minus(f.monto)),
+      new Prisma.Decimal(0),
+    );
+    expect(neto.toFixed(2)).toBe("0.00");
+  });
+
+  it("dos PAGOS distintos no se deduplican entre si", async () => {
+    const filas = await enTransaccionRevertida(prisma, async (tx) => {
+      const a = randomUUID();
+      const b = randomUUID();
+      const base = {
+        monto: "15000.00",
+        descripcion: null,
+        registradoPor: null as unknown as string,
+        fechaMovimiento: FECHA_PAGO,
+      };
+      await puerto.emitirEgresoDePago(tx, { ...base, pagoId: a });
+      await puerto.emitirEgresoDePago(tx, { ...base, pagoId: b, monto: "20.50" });
+      return tx.walletMovimiento.findMany({
+        where: { origenTipo: "pago_tienda", origenId: { in: [a, b] } },
+        select: { monto: true },
+      });
+    });
+
+    expect(filas).toHaveLength(2);
+    expect(filas.map((f) => f.monto.toFixed(2)).sort()).toEqual(["15000.00", "20.50"]);
   });
 });
 

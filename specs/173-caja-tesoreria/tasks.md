@@ -198,7 +198,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 
 # TANDA C — El dinero sale y vuelve · *backend*
 
-### [ ] T C.1 — El puerto estrecho de la caja para la liquidación
+### [x] T C.1 — El puerto estrecho de la caja para la liquidación
 - **Archivos:** `lib/interfaces/services/ICajaPagoTiendaFeedService.ts`,
   `lib/services/CajaPagoTiendaFeedService.ts`,
   `tests/unit/services/liquidacion-caja-puerto.test.ts` (NUEVOS).
@@ -208,7 +208,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 - **Hecho:** test **estructural**: `LiquidacionService` **no** recibe `IWalletMovimientoRepository`, y
   el puerto no expone ningún método capaz de escribir `egreso_pago_mensajero`.
 
-### [ ] T C.2 — El egreso del pago a tienda
+### [x] T C.2 — El egreso del pago a tienda
 - **Archivos:** `lib/services/LiquidacionService.ts`, `lib/actions/liquidacion.ts`,
   `tests/unit/services/liquidacion-service.test.ts` (aserciones de R40 **reescritas**).
 - **Qué:** tercera escritura dentro de la misma `runTransaction`, con el **mismo** `montoStr` y la
@@ -219,7 +219,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   rama **mensajero** siguen en cero y **no se tocan**. La task lo declara en el commit para que el
   review no lo lea como regresión encubierta.
 
-### [ ] T C.3 — El reverso de la anulación
+### [x] T C.3 — El reverso de la anulación
 - **Archivos:** `lib/services/LiquidacionService.ts` (`escribirContraasiento`, rama tienda),
   `tests/unit/services/liquidacion-anulacion.test.ts` (aserciones de R40 **reescritas**).
 - **Depende de:** T C.2 · **Cubre:** R24, R25, R26, R27, R29
@@ -227,7 +227,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   obligatoria**: cambiarlo a `ingreso_ajuste` pone rojo un test que mide la **ganancia**, no solo la
   categoría. Rama mensajero: cero llamadas.
 
-### [ ] T C.4 — La cadena completa y la idempotencia del pago
+### [x] T C.4 — La cadena completa y la idempotencia del pago
 - **Archivos:** `tests/unit/services/caja-cadena-pago-anulacion.test.ts` (NUEVO),
   `tests/integration/db/caja-tesoreria-idempotencia.test.ts` (+casos).
 - **Depende de:** T C.3 · **Cubre:** R21, R28, R30, R48 (parte pago/anulación)
@@ -235,7 +235,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   **ganancia** idéntica en los tres momentos; misma clave de idempotencia dos veces ⇒ un solo egreso;
   anular dos veces ⇒ un solo reverso.
 
-### [ ] T C.5 [P] — Guardia: los otros dos libros no ganan filas
+### [x] T C.5 [P] — Guardia: los otros dos libros no ganan filas
 - **Archivos:** `tests/unit/guards/caja-173-alcance.guardia.test.ts` (NUEVO).
 - **Depende de:** T C.3 · **Cubre:** R31, R33
 - **Hecho:** ninguna escritura nueva en `wallet_tienda_movimiento` ni en `pago_mensajero_movimiento`;

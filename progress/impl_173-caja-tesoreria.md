@@ -537,3 +537,316 @@ contraprueba de las gestiones discrepantes escrita y verde—, enganchado tras e
 el orden **medido** y sin una sola dependencia nueva en el constructor, idempotente **por índice
 contra Postgres real**, con el cierre de bodega y el pago al mensajero intactos y dos mutaciones
 money-critical ejecutadas, rojas y revertidas.
+
+---
+---
+
+# TANDA C — El dinero sale y vuelve
+
+> Misma rama `feature/173-caja-tesoreria`. Fase **backend**.
+> Alcance de esta entrada: **`T C.1`, `T C.2`, `T C.3`, `T C.4`, `T C.5`** — las cinco **HECHAS**.
+
+## C1. Qué se hizo
+
+| Task | Estado | Nota |
+| --- | --- | --- |
+| `T C.1` — el puerto estrecho | **HECHA** | Dos métodos y ninguno más. Test estructural + de intento (§C4). |
+| `T C.2` — el egreso del pago a tienda | **HECHA** | Tercera escritura de la **misma** `runTransaction`, mismo `montoStr`, fecha real del pago. |
+| `T C.3` — el reverso de la anulación | **HECHA** | `ingreso_reverso_pago_tienda`. **Mutación obligatoria ejecutada** (§C7). |
+| `T C.4` — la cadena y la idempotencia | **HECHA** | Las dos cifras medidas en ₡ en los tres momentos + Postgres real. |
+| `T C.5` — guardia de alcance | **HECHA** | Censo de escritores de los otros dos libros: siguen siendo **uno cada uno**. |
+
+## C2. Archivos
+
+### Creados
+
+| Archivo | Task |
+| --- | --- |
+| `lib/interfaces/services/ICajaPagoTiendaFeedService.ts` | `T C.1` |
+| `lib/services/CajaPagoTiendaFeedService.ts` | `T C.1` |
+| `tests/unit/services/liquidacion-caja-puerto.test.ts` | `T C.1` |
+| `tests/unit/services/caja-cadena-pago-anulacion.test.ts` | `T C.4` |
+| `tests/unit/guards/caja-173-alcance.guardia.test.ts` | `T C.5` |
+
+### Modificados
+
+| Archivo | Qué | Task |
+| --- | --- | --- |
+| `lib/services/LiquidacionService.ts` | El puerto en el constructor (5.º parámetro, **sin default**) y **dos escrituras**: una en `registrarPagoTienda`, otra en la rama `tienda` de `escribirContraasiento`. Los dos docstrings que citaban R40, reescritos. | `T C.2`, `T C.3` |
+| `lib/interfaces/services/ILiquidacionService.ts` | `LiquidacionTx` gana `CajaPagoTiendaTxClient`. | `T C.2` |
+| `lib/actions/liquidacion.ts` | El composition root construye `new CajaPagoTiendaFeedService(new WalletMovimientoRepository(prisma))`. | `T C.2` |
+| `tests/unit/services/liquidacion-service.test.ts` | Aserciones de R40 **reescritas** (§C3) + cableado del puerto. | `T C.2` |
+| `tests/unit/services/liquidacion-anulacion.test.ts` | Ídem (§C3). | `T C.3` |
+| `tests/integration/db/caja-tesoreria-idempotencia.test.ts` | **+4 casos** contra Postgres real. | `T C.4` |
+| `tests/integration/db/liquidacion-idempotencia.test.ts` | Cascada mecánica: el store gana el delegado `walletMovimiento`. Ver §C6. | `T C.2` |
+
+### Lo que NO está en el diff (y es parte de la verificación)
+
+- `lib/services/WalletMensajeroFeedService.ts` y `tests/unit/services/wallet-mensajero-feed-service.test.ts`
+  — **R66 / `[P2]` = (a)**. Ni una línea.
+- `lib/repositories/WalletMovimientoRepository.ts` — el repositorio de la caja **no cambia**: el
+  puerto lo usa tal cual, con el `fechaMovimiento?` que ya dejó `T A.3`.
+- `lib/utils/caja-tesoreria.ts` — se **reusa**; nada de esta tanda deriva cifras por su cuenta.
+- Las suites de la 171 (`wallet-tiendas-*`, `mi-wallet-*`, `mis-pagos-*`) y el resto de las de la
+  172.
+
+## C3. ⚠️ Las aserciones REESCRITAS, una a una
+
+Cinco cambios sobre tests que estaban **verdes**. Ninguno borra una comprobación: dos la
+**invierten** porque su premisa cayó, dos la **amplían** y una **añade un paso al log**.
+
+| # | Archivo | ANTES | DESPUÉS | Por qué |
+| --- | --- | --- | --- | --- |
+| 1 | `liquidacion-service.test.ts` | `it("R40 [P2]: la CAJA PRINCIPAL no recibe ni una llamada")` → bucle sobre los 7 métodos de `tx.walletMovimiento`, **todos** `not.toHaveBeenCalled()` | `it("R18/R20 [173]: la CAJA PRINCIPAL recibe EXACTAMENTE UNA escritura…")` → `emitirEgresoDePago` **1 vez**, `createMany` **1 vez**, y la fila con `tipo: egreso`, `categoria: egreso_pago_tienda`, `monto 15000.00`, `origen (pago_tienda, pago-1)`, `registradoPor u-admin`, `fechaMovimiento 2026-07-30T00:00:00.000Z`, y el `tx` **idéntico** al de la transacción | La premisa de R40 («restaría un dinero que nunca entró») cayó del lado de la tienda con la Tanda B |
+| 2 | `liquidacion-anulacion.test.ts` | `it("anular un pago a una TIENDA no toca la caja")` → mismo bucle, todo en cero | `it("R24/R25/R26: anular un pago a una TIENDA devuelve el dinero a la caja, EXACTAMENTE una vez")` → `emitirReversoDeAnulacion` **1 vez**, fila con `tipo: ingreso`, `categoria: ingreso_reverso_pago_tienda` (**y `not.toBe("ingreso_ajuste")`**), `monto 15000.00`, mismo `origen (pago_tienda, …)`, `fechaMovimiento` = **día de la anulación** | Ídem: si al pagar sí se emite egreso, al anular sí hay que devolverlo |
+| 3 | `liquidacion-service.test.ts` | `it("R40: el servicio ni siquiera tiene por donde escribir en la caja")` → 3 asserts (`IWalletMovimientoRepository`, `walletMovimiento`, `egreso_pago_tienda`) | `it("R23: el servicio no puede EXPRESAR ninguna otra escritura en la caja")` → **los mismos 3 más 5**: `egreso_pago_mensajero`, `ingreso_reverso_pago_tienda`, `ingreso_ajuste`, el puerto entra como `import type`, y `not.toMatch(/new CajaPagoTiendaFeedService/)` | **Amplía**, no relaja: la garantía baja de «no tiene la puerta» a «la puerta solo abre a dos sitios» y hay que pagar la diferencia |
+| 4 | `liquidacion-anulacion.test.ts` | `it("R40: no hay por donde escribir en la caja aunque alguien lo intentara")` → 4 asserts | `it("R23: no hay por donde escribir en la caja más que las dos filas del puerto")` → **los mismos 4 más 2** (`ingreso_reverso_pago_tienda`, `ingreso_ajuste`) | Ídem |
+| 5 | ambos | Log del camino feliz de **tienda**: `[… "crear:movimiento", "tx:commit"]` (registro) y `[… "crear:movimiento:tienda", "tx:commit"]` (anulación) | Los mismos **más `"crear:caja"`** antes de `"tx:commit"` | R19: la escritura de la caja va **dentro** de la transacción y **después** del ledger. El log es lo que lo mide |
+
+**Lo que NO se tocó, y es la mitad del encargo:**
+
+- `it("R40 [P2]: la CAJA PRINCIPAL no recibe ni una llamada al liquidar a un mensajero")` —
+  `liquidacion-service.test.ts:1110`, **verbatim**.
+- `it("anular un pago a un MENSAJERO tampoco")` — `liquidacion-anulacion.test.ts:1179`,
+  **verbatim**.
+
+Las dos siguen verdes, y ahora **no de forma vacía**: el puerto que se les inyecta es el REAL, así
+que si alguien lo llamara desde la rama del mensajero escribiría de verdad y las dos caerían. Se
+les añadieron **dos `it` nuevos** al lado (`R22` y `R27`), que afirman cero llamadas **al puerto**
+—la tercera comprobación que `design.md §4` exige como compensación—.
+
+## C4. `T C.1` — por qué el puerto ESCRIBE, y no solo construye
+
+`design.md §4` esboza el puerto con dos métodos que **devuelven** `CrearMovimientoInput`. Se
+implementó con dos métodos que **escriben** (`emitirEgresoDePago`, `emitirReversoDeAnulacion`), y
+la razón está en el propio §4: un constructor de filas no persiste, así que alguien tiene que
+insertarlas — y el único candidato sería `IWalletMovimientoRepository` **inyectado en
+`LiquidacionService`**, que es exactamente lo que el mismo párrafo prohíbe («inyectarlo cambiaría
+una imposibilidad estructural por una promesa de buena conducta»). Con el puerto escribiendo, el
+repositorio queda **encapsulado dentro del puerto** y las tres comprobaciones de §4 se cumplen tal
+cual están escritas. Se declara aquí porque es la única desviación de la letra del design.
+
+Lo que mide `liquidacion-caja-puerto.test.ts` (12 tests):
+
+- `LiquidacionService.length === 5` — cuatro dependencias de la 172 más el puerto; un sexto
+  repositorio cambiaría ese número antes de que ningún test de comportamiento se enterara.
+- La fuente del servicio **no nombra ninguna de las 17 categorías** del catálogo (barrido sobre
+  `NATURALEZA_POR_CATEGORIA`, no sobre una lista copiada a mano).
+- `Object.getOwnPropertyNames(CajaPagoTiendaFeedService.prototype)` === los dos métodos, y el
+  contrato declara **esas dos firmas y ninguna más**.
+- `MovimientoDeCajaDePagoTienda` **no tiene** `tipo`, `categoria` ni `origenTipo`.
+- **Se intenta de verdad:** se cuela `{ tipo: "ingreso", categoria: "egreso_pago_mensajero",
+  origenTipo: "pago_mensajero" }` en la petición de los dos métodos y las filas emitidas siguen
+  siendo `egreso/egreso_pago_tienda` e `ingreso/ingreso_reverso_pago_tienda`.
+- Las dos categorías que el puerto puede emitir son, leyendo el `Record` de naturaleza,
+  **`terceros`**: por construcción nada de lo que este puerto escriba mueve la ganancia.
+- El composition root: `new CajaPagoTiendaFeedService(new WalletMovimientoRepository(prisma))`, y
+  `new WalletMovimientoRepository(` aparece **exactamente una vez** en `buildService` — no hay una
+  segunda instancia suelta que pudiera acabar en el constructor del servicio.
+
+## C5. `T C.2` / `T C.3` — dónde va cada escritura
+
+- **Pago:** dentro de la misma `runTransaction`, **después** del débito del ledger, con el
+  **mismo `montoStr`** ya redondeado (medido: entrada `"15000.5"` ⇒ documento, ledger y caja los
+  tres `"15000.50"`) y `fechaMovimiento = medianocheUtcDelDia(input.fechaPago)`.
+- **Anulación:** en `escribirContraasiento`, **solo** en la rama `tienda` —la del mensajero sale
+  antes con su `return`—, con `fechaMovimiento = fechaAnulacion` (05/08, seis días después del
+  pago) y el **mismo** `(origen_tipo, origen_id)` que el egreso.
+- **R19 medido, no deducido:** con `tx.walletMovimiento.createMany` rechazando, el log queda en
+  `["tx:abrir","bloquear:tienda:t1","leer:disponible","crear:documento","crear:movimiento"]` y
+  **no llega a `tx:commit`**: si la caja falla, no queda el pago.
+
+## C6. Una cascada mecánica, declarada
+
+`tests/integration/db/liquidacion-idempotencia.test.ts` (suite de la 172) gana el delegado
+`walletMovimiento` en su store en memoria y el puerto real en su `buildService`. Sin eso, el
+camino de la tienda reventaba con `undefined.createMany`. El delegado modela el índice único
+parcial y la visibilidad diferida al commit igual que sus dos hermanos, y **a propósito no escribe
+en el `log`**: las aserciones de ese archivo comparan el log entero y son de la 172. **Ni una
+aserción existente modificada**; el diff es de 64 líneas, todas aditivas.
+
+## C7. `T C.3` — la mutación obligatoria, EJECUTADA
+
+**Mutación:** en `lib/services/CajaPagoTiendaFeedService.ts`,
+`categoria: "ingreso_reverso_pago_tienda"` → `"ingreso_ajuste"` en `emitirReversoDeAnulacion`.
+Es la alternativa **C** que `design.md §10` descarta.
+
+**Resultado: 8 tests rojos en 4 archivos.** El que importa —el que mide **la ganancia**, no la
+categoría— es este:
+
+```
+ FAIL  tests/unit/services/caja-cadena-pago-anulacion.test.ts >
+       R30 — pagar y anular deja el dinero en caja donde estaba y la ganancia intacta >
+       R30: las TRES cifras del recorrido, en colones
+AssertionError: expected [ '1690.00', '1690.00', '16690.00' ] to deeply equal
+                         [ '1690.00', '1690.00', '1690.00' ]
+
+- Expected
++ Received
+
+  [
+    "1690.00",
+    "1690.00",
+-   "1690.00",
++   "16690.00",
+  ]
+
+ ❯ tests/unit/services/caja-cadena-pago-anulacion.test.ts:307:71
+```
+
+**₡15 000 de ganancia inventada** por anular un pago: la utilidad de Ordenex sube exactamente lo
+que se le devolvió a una tienda. Es el motivo entero de que el enum ganara **dos** valores y no
+uno. `enCaja` **no** se movió (`21690.00` en los dos casos): por eso una aserción que solo mirase
+el dinero en caja habría sobrevivido a la mutación.
+
+El resto del rojo (los que miden la **categoría**, no el efecto):
+
+```
+ ❯ tests/unit/services/caja-cadena-pago-anulacion.test.ts (8 tests | 3 failed)
+     × R30: las TRES cifras del recorrido, en colones
+     × R24/R25: las dos filas del pago conviven en la caja, con su categoria y su fecha
+     × R28: anular dos veces deja UN solo reverso, y la caja no sube dos veces
+ ❯ tests/unit/services/liquidacion-anulacion.test.ts (1 failed)
+     × R24/R25/R26: anular un pago a una TIENDA devuelve el dinero a la caja, EXACTAMENTE una vez
+ ❯ tests/unit/services/liquidacion-caja-puerto.test.ts (2 failed)
+     × su fuente nombra DOS categorias, y ninguna es la del mensajero
+     × el `tipo` y la `categoria` son literales del puerto: colarlos en la peticion no sirve
+ ❯ tests/integration/db/caja-tesoreria-idempotencia.test.ts (2 failed)
+     × R28: anular dos veces tampoco duplica el reverso
+     × R28/R48: el egreso y su reverso COMPARTEN origen y conviven
+```
+
+**Mutación revertida**; los 4 archivos vuelven a **98 verdes**.
+
+> Nota para `T H.3`: ésta es la **segunda** de las tres mutaciones obligatorias. La primera está
+> en §4 (Tanda A). La tercera (fechar un retroactivo con `now()`) es de la Tanda E.
+
+## C8. `T C.4` — la cadena, en colones
+
+`caja-cadena-pago-anulacion.test.ts` monta un store con los **tres** índices únicos reales
+(`UNIQUE(clave_idempotencia)`, `UNIQUE(pago_id)` y el parcial de la caja) y visibilidad diferida
+al commit, con el **servicio real, el puerto real y el repositorio real**. Semilla del libro:
+contra-entrega ₡20 000, flete ₡3 000, IVA ₡390, sueldo ₡500, pago a mensajero ₡1 200.
+
+| Momento | `enCaja` | `ganancia` |
+| --- | --- | --- |
+| antes del pago | `21690.00` | `1690.00` |
+| tras pagar ₡15 000 a la tienda | `6690.00` | `1690.00` |
+| tras anular ese pago | `21690.00` | `1690.00` |
+
+Las dos cifras son **distintas** en la semilla a propósito: con un libro sin dinero de terceros, un
+reverso mal clasificado podría pasar inadvertido. Además: `deTerceros` también vuelve a su sitio, y
+las dos filas del pago conviven con sus categorías en ese orden.
+
+**Idempotencia (R21/R28/R48)**, medida sobre los índices y no sobre un `if`:
+
+- mismo `claveIdempotencia` dos veces ⇒ `ya_registrado`, **un** `egreso_pago_tienda`, `enCaja`
+  baja **una** vez;
+- anular dos veces ⇒ `ya_anulado`, **un** `ingreso_reverso_pago_tienda`, `enCaja` vuelve a
+  `21690.00`;
+- contraprueba: **dos pagos distintos** a la misma tienda **sí** mueven el dinero dos veces
+  (`-8310.00`) — el índice no deduplica de más;
+- llamar al puerto otra vez con el mismo pago devuelve **0** insertadas, sin error.
+
+**Contra Postgres real** (`caja-tesoreria-idempotencia.test.ts`, +4 casos, todo dentro de una
+transacción que siempre revierte):
+
+- emitir el egreso dos veces ⇒ `1` y `0` insertadas, **una** fila, monto intacto y
+  `fecha_movimiento = 2026-07-30T00:00:00.000Z` — **primera prueba ejecutada de que el
+  `fechaMovimiento?` opcional de `T A.3` llega de verdad a la columna** (R20);
+- el reverso dos veces ⇒ ídem, con `fecha_movimiento = 2026-08-05` (R25) — y **primera prueba
+  ejecutada de que el valor de enum `ingreso_reverso_pago_tienda` de `T A.1` está aplicado en una
+  base real**;
+- egreso + reverso bajo el **mismo** `(pago_tienda, pagoId)` ⇒ **2** filas y neto `0.00`;
+- dos pagos distintos ⇒ 2 filas.
+
+## C9. `T C.5` — la guardia de alcance
+
+`caja-173-alcance.guardia.test.ts` (8 tests) hace un **censo del árbol** (`lib/` + `scripts/`,
+recursivo, sobre el código sin comentarios) buscando las 7 formas de escribir de Prisma:
+
+- `wallet_tienda_movimiento` → **un** escritor: `WalletTiendaMovimientoRepository.ts`.
+- `pago_mensajero_movimiento` → **un** escritor: `PagoMensajeroMovimientoRepository.ts`.
+- Los tres módulos nuevos de la 173 no escriben en ninguno de los dos; `CajaCodFeedService` toca
+  el ledger **solo** con `findMany` (medido: la lista de usos es exactamente `["findMany"]`).
+
+Y R33, en las dos direcciones:
+
+- **Compilando**: se construye `new WalletMovimientoRepository({ walletMovimiento })` con un
+  objeto de **una sola tabla**. Que la línea compile ES la prueba de que el repositorio no puede
+  pedir nada más; si necesitara otro libro, caería `tsc` antes que el test.
+- **Leyendo**: su fuente declara `Pick<PrismaClient, "walletMovimiento">` y no nombra
+  `walletTiendaMovimiento`, `pagoMensajeroMovimiento`, `gestionOrden` ni `cierreDia`.
+- `caja-tesoreria.ts` sigue sin nombrar `PrismaClient`, `Repository`, `findMany`, `groupBy` ni
+  `await`.
+- El `tx` del puerto es también un `Pick` de una sola tabla.
+
+## C10. Trazabilidad `R<n>` → test
+
+| R | Test que lo verifica |
+| --- | --- |
+| R18 | `liquidacion-service.test.ts` — «la CAJA PRINCIPAL recibe EXACTAMENTE UNA escritura, y es el egreso del pago» + «el monto de la caja es EL MISMO string del documento y del ledger» |
+| R19 | idem — «si la CAJA falla, la transacción no llega a commit» + el log de «documento y movimiento reciben EL MISMO `tx`» con `"crear:caja"` dentro de la transacción |
+| R20 | idem — `fechaMovimiento = 2026-07-30T00:00:00.000Z` + `caja-tesoreria-idempotencia.test.ts` (contra Postgres) |
+| R21 | `caja-cadena-pago-anulacion.test.ts` — «reintentar el pago con la MISMA clave deja UN solo egreso» + `caja-tesoreria-idempotencia.test.ts` — «emitir DOS veces el egreso del mismo pago inserta UNA fila» |
+| R22 | `liquidacion-service.test.ts` — «R40 [P2]…» (**sin editar**) + «R22 [173/P2]: y el PUERTO de la caja tampoco recibe ninguna de sus dos llamadas» |
+| R23 | `liquidacion-caja-puerto.test.ts` (12 tests: arity, censo de categorías, dos métodos, el intento de colar categoría/tipo, el `Pick` de una tabla y el composition root) |
+| R24 | `liquidacion-anulacion.test.ts` — «anular un pago a una TIENDA devuelve el dinero a la caja, EXACTAMENTE una vez» |
+| R25 | idem — `fechaMovimiento` = día de la anulación (05/08) y **no** el del pago (30/07) + `caja-tesoreria-idempotencia.test.ts` |
+| R26 | `caja-cadena-pago-anulacion.test.ts` — «las TRES cifras del recorrido» (la mutación de §C7) + «si el reverso fuera de naturaleza PROPIA, la ganancia subiría ₡15 000» |
+| R27 | `liquidacion-anulacion.test.ts` — «anular un pago a un MENSAJERO tampoco» (**sin editar**) + «R27 [173/P2]: y el PUERTO tampoco» |
+| R28 | `caja-cadena-pago-anulacion.test.ts` — «anular dos veces deja UN solo reverso» + `caja-tesoreria-idempotencia.test.ts` — «anular dos veces tampoco duplica el reverso» (Postgres) |
+| R29 | `liquidacion-anulacion.test.ts` — «el reverso es una fila NUEVA — ni un update ni un delete en el libro de la caja» (los 6 métodos de escritura, en cero) |
+| R30 | `caja-cadena-pago-anulacion.test.ts` — la tabla de §C8: `enCaja` vuelve al importe exacto y `ganancia` idéntica en los tres momentos |
+| R31 | `caja-173-alcance.guardia.test.ts` — el censo de escritores + `liquidacion-service.test.ts` y `liquidacion-anulacion.test.ts` («el egreso/reverso de la caja no añade nada a los otros dos libros») + `caja-cadena-pago-anulacion.test.ts` — el ledger recibe exactamente `["pago_tienda", "ajuste_credito"]` |
+| R33 | `caja-173-alcance.guardia.test.ts` — cliente Prisma mínimo, comprobado **compilando** y leyendo |
+| R48 (parte pago/anulación) | `caja-tesoreria-idempotencia.test.ts` — el egreso y su reverso comparten origen y conviven; y `caja-cadena-pago-anulacion.test.ts` — la contraprueba de que no deduplica de más |
+
+## C11. Gate ejecutado
+
+> Gate **acotado**, el que ordenó el leader. La suite completa NO se corrió.
+
+**`pnpm typecheck`** → `tsc --noEmit`, sin salida, **exit 0**.
+
+**`pnpm lint`**
+
+```
+✖ 27 problems (0 errors, 27 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores**, y las 27 advertencias son la **misma línea base** de las Tandas A y B (`_args`/
+`_items` en suites antiguas). Filtrando la salida por `caja-173`, `caja-cadena`,
+`liquidacion-caja`, `CajaPagoTienda`, `ICajaPagoTienda`, `liquidacion-service`,
+`liquidacion-anulacion`, `liquidacion-idempotencia`, `actions/liquidacion`, `LiquidacionService` e
+`ILiquidacionService` → **cero coincidencias**.
+
+**`pnpm exec vitest related --run`** sobre los 12 archivos tocados (código y tests)
+
+```
+ Test Files  20 passed (20)
+      Tests  483 passed (483)
+   Duration  19.65s
+```
+
+**`pnpm exec vitest run tests/integration/db`**
+
+```
+ Test Files  92 passed (92)
+      Tests  1122 passed (1122)
+   Duration  8.02s
+```
+
+Delta contra la Tanda B: **+4 tests**, exactamente los 4 casos nuevos de `T C.4`. Ningún archivo
+nuevo en `tests/integration/db`.
+
+**No corrido aquí:** `./init.sh --rapido` ni `./init.sh` completo. Los corre el leader.
+
+## C12. Veredicto de la Tanda C
+
+TANDA C entregada completa: el pago a la tienda **sale** de la caja y su anulación la **devuelve**,
+por un puerto de dos métodos que hace **imposible** —no prohibido— escribir `egreso_pago_mensajero`
+desde la liquidación; las cinco aserciones reescritas están enumeradas con su antes y después, las
+dos del **mensajero siguen intactas y ahora no son vacías**, y la mutación money-critical del
+reverso a `ingreso_ajuste` se ejecutó, salió roja **midiendo ₡15 000 de ganancia inventada** y se
+revirtió.
