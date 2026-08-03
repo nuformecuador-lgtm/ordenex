@@ -62,7 +62,7 @@ producción que lo tumbaría. Un test que no se pueda tumbar no es trazabilidad,
 |---|---|---|
 | R1 | `AnaliticaPage.test.tsx` :: «Feature 132 (R1) — los roles con acceso total ven la región financiera» (it.each maestro/admin) | Dejar de pasar la prop `financiero` en `page.tsx` |
 | R2 | `AnaliticaPage.test.tsx` :: «para un rol sin acceso no queda RASTRO de la región financiera» | Renderizar la región (o su vacío) antes del `notFound()` |
-| R3 | `AnaliticaPage.test.tsx` :: «el conjunto de roles que ve la región coincide exactamente con los que esAccesoTotal acepta» | Sustituir `esAccesoTotal(actor.rol)` por una lista de roles escrita a mano |
+| R3 | **`tablero-financiero.guardia.test.ts`** :: «la pagina decide con esAccesoTotal» + «ningun archivo escribe una lista de roles a mano». El caso de comportamiento de `AnaliticaPage.test.tsx` («el conjunto de roles que ve la región coincide exactamente con los que esAccesoTotal acepta») acompaña pero **NO discrimina** | Sustituir `esAccesoTotal(actor.rol)` por `["maestro","admin"].includes(...)` — **2 rojos, medido** (§8) |
 | R4 | `TableroFinanciero.test.tsx` :: «no aparece por ninguna de sus etiquetas ni deja hueco» + «no muestra ningun motivo de denegacion» | Renderizar el panel `denegado` en cero, vacío o con motivo |
 | R5 | `AnaliticaPage.test.tsx` :: «ROLES_ACCESO_ANALITICA sigue siendo exactamente maestro y admin» / «ROLES_ANALITICA sigue siendo los cinco lectores, sin apiKey» / «subconjunto ESTRICTO» | Añadir un rol a `ROLES_ACCESO_ANALITICA` (lo que hará la 133) |
 | R6 | `AnaliticaShell.test.tsx` :: «expone TRES regiones y la tercera se llama Tablero financiero» + «el contenido financiero se pinta DENTRO de su región y no en las otras dos» | Poner la región encima de la operativa, fuera de la pila, o sin `aria-label` |
@@ -73,12 +73,12 @@ producción que lo tumbaría. Un test que no se pueda tumbar no es trazabilidad,
 | R11 | **`pnpm exec next build`** (§3.1). Ningún gate automático del repo lo corre | `"use client"` en `page.tsx`: compila los tests y revienta el build arrastrando Prisma al bundle |
 | R12 | `tablero-financiero-cargar.test.ts` :: «las ocho llamadas ya se emitieron antes de que se resuelva la primera» + «con un error y un denegado, las otras seis llegan ok» | Cambiar el `Promise.all` por un bucle con `await` dentro |
 | R13 | `tablero-financiero-cargar.test.ts` :: «invoca el borde una vez por metrica servida y ninguna vez de mas»; `TableroFinanciero.test.tsx` :: «las secciones del tablero son exactamente las de IDS_FINANCIERAS_SERVIDAS» | Escribir la lista de ids a mano, u omitir/añadir un panel |
-| R14 | `tablero-financiero-adaptar.test.ts` :: «cada punto lleva el valor del campo pedido de su propia fila» + «hay una fila por fila del DTO y las dos cifras son las del contrato»; `TableroFinanciero.test.tsx` :: «el panel de tabla muestra el total del DTO en sus dos formas» | Pasar la prop `totales` de `TablaResumen` (suma derivada por el paquete), o promediar/derivar cualquier importe |
+| R14 | `tablero-financiero-adaptar.test.ts` :: «cada punto lleva el valor del campo pedido de su propia fila» + «hay una fila por fila del DTO y las dos cifras son las del contrato»; `TableroFinanciero.test.tsx` :: el `describe` de R14 (por método / por tienda / cuenta por pagar) + «el panel de tabla muestra el total del DTO en sus dos formas» | **Dos mutaciones distintas, las dos medidas:** pasar la prop `totales` de `TablaResumen` (**rojo**, M1 del reviewer) **y** derivar el total sumando `vista.filas` (**4 rojos** tras el arreglo; **sobrevivía** antes, §8) |
 | R15 | `tablero-financiero-adaptar.test.ts` :: «una cadena vacia no vale cero», «una cadena de solo espacios tampoco vale cero», «un texto que no es un numero se marca como ausente», «el literal NaN se marca como ausente» — los cuatro con `.not.toBe(0)` explícito | Sustituir el `null` de `aNumero` por `0` |
 | R16 | `tablero-financiero-adaptar.test.ts` :: «el bruto y el neto producen series distintas e identificables» + «las dos columnas de importe se declaran una sola vez»; `TableroFinanciero.test.tsx` :: «el panel de KPI muestra el neto como cifra y el bruto etiquetado aparte» | Pintar solo el neto (escondería el volumen) o solo el bruto (mentiría en cuanto hubiera una anulación) |
 | R17 | `TableroFinanciero.test.tsx` :: «viven en secciones distintas con nombres accesibles distintos» + «no existe ninguna cifra que sea la suma de los dos totales» | Fundir las dos vistas de `cod_recaudado` en una serie, o mostrar su total conjunto |
 | R18 | `TableroFinanciero.test.tsx` :: «aparece en las DOS metricas cuyo DTO trae esAcumulado true» + «NO aparece en las otras seis» | Leer el saldo al corte de una lista de ids escrita a mano en vez de `datos.esAcumulado` |
-| R19 | `PanelConciliacion.test.tsx` :: «muestra un aviso con role=alert que incluye CUANTOS cierres estan descuadrados» + «el resto de la tabla y el cuadre se renderizan IGUALMENTE» + «no lanza con la lista de descuadrados vacia» | Silenciar el aviso, omitir la cantidad, o apagar el panel al detectar un descuadre |
+| R19 | `PanelConciliacion.test.tsx` :: «muestra un aviso con role=alert que incluye CUANTOS cierres estan descuadrados» + «el resto de la tabla y el cuadre se renderizan IGUALMENTE» + «no lanza con la lista de descuadrados vacia» + «muestra los importes por metodo de CADA fila, no solo sus conteos» | Silenciar el aviso, omitir la cantidad, apagar el panel al detectar un descuadre, o **anular los totales de fila** (`valores[clave] = null`): **1 rojo** tras el arreglo; **sobrevivía** antes (§8) |
 | R20 | `tablero-financiero-adaptar.test.ts` :: «doce cubos con techo cinco quedan en cinco categorias» + «doce cubos agrupados al tope del paquete pasan por prepararSeries sin lanzar» + el contrapeso «los mismos doce cubos SIN agrupar desbordan el techo de segmentos del donut» | Quitar la llamada a `agruparCola` en el panel por tienda |
 | R21 | `tablero-financiero-adaptar.test.ts` :: «la suma de lo que se pinta es la suma de lo que se recibio» + «una cola entera sin dato produce una categoria ausente, no una que vale cero» | Truncar la cola con un `slice` en vez de agruparla |
 | R22 | `TableroFinanciero.test.tsx` :: «cada panel muestra las fechas calendario del propio DTO, sin recalcularlas»; `PanelConciliacion.test.tsx` :: «pinta el rango tal cual lo devuelve el DTO» | Recalcular el rango con `resolverRango` en la pantalla |
@@ -248,4 +248,85 @@ detectó en rojo. Se **renombró la clave**; no se relajó el guard.
 - Las seis respuestas de la puerta F1.4 siguen **PENDIENTES DE RATIFICACIÓN**. La única cuya
   reversión no es barata es **Q3** (sin gráfica de líneas): revertirla bloquea la 132 hasta ampliar
   la 127.
+
+---
+
+# 8. Segunda vuelta — respuesta al RECHAZO del reviewer
+
+`progress/review_132-analitica-tablero-financiero.md`, veredicto **RECHAZADO**: 1 bloqueante y 5
+menores. El reviewer lanzó **31 mutaciones propias**; **28 pusieron rojo** y **3 sobrevivieron**.
+Ninguna era un defecto funcional —el código cumplía los 28 requisitos— sino **huecos en la red de
+tests**. **No se tocó una sola línea de producción para cerrarlos** (`git diff` de `app/` contra el
+HEAD anterior: vacío).
+
+## 8.1 Las tres mutaciones supervivientes, ahora muertas
+
+Cada una la **verifiqué yo mismo**, no me fié del subagente: apliqué la mutación sobre el fuente de
+producción, corrí los tests, comprobé el rojo, revertí y comprobé que la producción quedaba sin
+residuo (`git diff -- app/` vacío).
+
+| Mutación | Antes | Ahora | Qué la mata |
+|---|---|---|---|
+| **M27 (R3)** — `esAccesoTotal(actor.rol)` → `["maestro","admin"].includes(...)` | **51/51 VERDE** (sobrevivía) | **2 ROJOS** | El quinto censo del guard |
+| **M2 (R14)** — el total se **deriva** sumando `vista.filas` en vez de leer `vista.total` | verde (sobrevivía) | **4 ROJOS** | El `describe` de R14 + la fixture descuadrada |
+| **M30 (R19)** — `valores[clave] = null`: se anulan los totales de fila | **6/6 VERDE** (sobrevivía) | **1 ROJO** | La aserción sobre los importes de las dos filas |
+
+## 8.2 El bloqueante (R3) y por qué mi mapa mentía
+
+R3 no es un requisito de **comportamiento** sino de **fuente única**: exige que los roles se
+deriven de `esAccesoTotal` y **no de una lista escrita de nuevo**. El test que yo había mapeado
+compara comportamiento, y `esAccesoTotal` y la lista a mano **coinciden hoy** — así que no podía
+distinguirlos. **Sólo un censo del fuente puede.**
+
+Y mi bitácora **declaraba esa mutación como letal cuando no lo era**. Eso es peor que el hueco: R28
+convierte este mapa en entregable, y un mapa que afirma una red que no existe hace que el siguiente
+lector deje de comprobar. La fila R3 del §2 está corregida, y también la de R14, que mezclaba una
+mutación letal (la prop `totales`) con otra que sobrevivía (derivar el total). **Las tres filas
+ahora dicen lo que está medido.**
+
+El censo nuevo (quinto del guard) deriva el dominio de roles de `Object.values(RolValue)`: un guard
+que reescribiera la lista de roles cometería exactamente el pecado que persigue.
+
+## 8.3 Los 5 menores
+
+| # | Hallazgo | Estado |
+|---|---|---|
+| menor-1 | R14: total derivado en el componente sobrevive | **CERRADO** (§8.1) |
+| menor-2 | R19: los totales por `(nivel, estado)` sobreviven | **CERRADO** (§8.1) |
+| menor-3 | La tercera columna del mapa es inexacta en R3 y R14 | **CERRADO**: las dos filas corregidas contra lo medido |
+| menor-4 | `design.md` §5 desalineado: sigue pidiendo la prop `totales` | **CERRADO**: nueva §5.1 del design, que **no borra** la tabla equivocada sino que la corrige y explica por qué, con aviso explícito a la 131 y la 134 |
+| menor-5 | Bookkeeping: `history.md`, `feature_list.json`, T6.2/T6.3 | **NO es mío**: el propio reviewer lo marca como del **leader**. Declarado, no cerrado |
+
+## 8.4 Sobre la fixture que hacía sobrevivir a M2
+
+El hueco de R14 no era del código: era de la **fixture**. En `cuenta_por_pagar_tienda` la suma de
+las filas coincidía exactamente con el total del DTO (121/110), de modo que sumar y leer daban lo
+mismo y ninguna aserción podía separarlos. Se **descuadró a propósito**, y en el test queda escrito
+**por qué no se debe "arreglar"**: es una métrica `esAcumulado: true` —un saldo al corte que sale de
+una agregación distinta de la de los cubos— así que **no tiene por qué cuadrar** con las filas del
+rango. Un futuro lector que "corrija" esos números reabre el hueco.
+
+## 8.5 Gates de la segunda vuelta
+
+| Gate | Resultado |
+|---|---|
+| `pnpm typecheck` | **0 errores** |
+| `pnpm lint` | **0 errores**, 27 warnings preexistentes ajenos |
+| `pnpm exec next build` | **verde**: `✓ Compiled successfully in 39.7s`, `Finished TypeScript in 45s`, `/analitica` dinámica |
+| Suite completa | `Test Files 3 failed \| 839 passed \| 8 skipped (850)` · `Tests 6 failed \| 10518 passed \| 130 skipped (10654)` |
+| Perímetro de la feature | **10 archivos / 131 tests, 0 rojos** |
+
+**850 archivos** (el total esperado) y **cero bloques `Unhandled Error`**: la suite arrancó entera.
+Los tests subieron de 10 646 a **10 654** — los ocho que añade esta segunda vuelta.
+
+Los **6 rojos son ajenos**, y los dos que no conocía los comprobé **en aislado** antes de darlos por
+tales:
+
+| Rojo | Qué es | Prueba |
+|---|---|---|
+| `tests/integration/db/analytics-daily-migration.test.ts` (3) | Falta de `.env` en el worktree | Ya medido: 62/62 con `DATABASE_URL`. **No se creó ningún `.env`** |
+| `tests/components/LoginForm.test.tsx` + `tests/integration/recuperar-contrasena-form.test.tsx` (3) | **Flakes por saturación** | **33/33 verde en aislado**. Cambian de archivo entre corridas: en corridas anteriores fueron `filter-component` y `recuperar-contrasena`; el reviewer tampoco reprodujo el mío |
+
+Ningún rojo es atribuible a la feature, y **ninguno de los tres arreglos de esta vuelta tocó
+producción**.
 
