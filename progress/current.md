@@ -8,6 +8,35 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 2026-08-03 — **177 arranca: API de consulta por guía/remisión + PDF bajo demanda** (fase 1, spec)
+
+Feature **177** `pending` → spec en curso. Rama `feature/177-api-consulta-orden-pdf` desde `origin/dev`.
+Zona **backend**, complexity **medium**, `depends_on: 136` (**done**). Zona backend en **0 `in_progress`**
+al arrancar ⇒ sin validación de conflicto de archivos que hacer.
+
+**Baseline medido al arrancar** (no heredado de otra bitácora): `./init.sh` **verde**, `== init OK ==`,
+**845 archivos / 10.605 tests, 0 rojos**, sobre `ux` con `dev` recién mergeada.
+
+**Bookkeeping del arranque:** las fichas **177** y **178** nacieron en `ux` con los ids 175/176 y
+**chocaron con la 175 de `dev`** (analítica: catálogo de métricas), que conserva el id por tener ya rama
+y spec_path. Renumeradas conservando contenido, y **portadas a esta rama** porque `dev` todavía no las
+tiene (viven en `ux`, sin pushear).
+
+**Lo que la puerta F1.4 va a tener que decidir, y conviene saberlo antes de leer el spec:** la **136
+persiste en `download_url` una URL FIRMADA, no el path** (`EtiquetasDescargaService.ts:48`,
+`EtiquetasLotePdfService.ts:78`). Una URL firmada caduca, así que la decisión del humano —«reusa, la URL
+vence en 5 min»— **no se puede cumplir tal como está persistido hoy**: reusar solo puede significar
+reusar el OBJETO en storage y re-firmarlo. Persistir el `storage_path` puede arrastrar **migración** y
+obliga a decidir qué pasa con las URLs que la 136 ya dejó guardadas.
+
+**Decisiones del humano ya tomadas** (no re-abrirlas en el spec): ruta NUEVA en vez de ampliar
+`{numGuia}`; la generación del PDF sale del query param y pasa a ser el segmento `/generate`; TTL 5 min;
+`{id}` resuelve contra `num_guia` **y** `num_remision`.
+
+**178 queda registrada pero NO arranca** (purga semanal de PDF; su nota apunta a esta feature).
+
+---
+
 ## 2026-08-03 — **127 servicios financieros → PR #269, esperando merge**
 
 Feature **127 → `done`**, PR **#269** hacia `dev` (rama `feature/127-analitica-financiera-servicios`,
