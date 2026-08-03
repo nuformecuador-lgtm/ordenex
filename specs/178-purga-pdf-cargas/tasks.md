@@ -24,7 +24,7 @@ Cada task trae su criterio de "hecho" y los `R<n>` que cubre. Al final, el mapa 
 
 ## Bloque 0 — Reconocimiento (bloqueante, primero)
 
-- [ ] **T1** — Verificar contra el código (no contra este spec) y anotar con `archivo:línea` en
+- [x] **T1** — Verificar contra el código (no contra este spec) y anotar con `archivo:línea` en
   `progress/impl_178.md`: (i) `Carga.createdAt` existe y **no** está indexado; (ii)
   `IFileStorage.remove` sigue existiendo y `SupabaseFileStorage.remove` sigue descartando el
   error del SDK; (iii) `ApiPdfEtiquetaService` sigue decidiendo por `download_storage_path`;
@@ -34,41 +34,41 @@ Cada task trae su criterio de "hecho" y los `R<n>` que cubre. Al final, el mapa 
 
 ## Bloque A — Migración de índices (depende de T1; commit propio)
 
-- [ ] **T2** — Crear `db/migrations/<ts>_purga_pdf_indices/` con `migration.sql` (los dos
+- [x] **T2** — Crear `db/migrations/<ts>_purga_pdf_indices/` con `migration.sql` (los dos
   `CREATE INDEX` **parciales**: `carga_purga_pendiente_idx` sobre `created_at` y
   `orden_purga_pendiente_idx` sobre `carga_id`) y `down.sql` (los dos `DROP INDEX` en orden
   inverso). **Hecho:** test estático de migración (patrón
   `tests/integration/db/*-migration.test.ts`) que afirma que el UP **solo** crea índices —cero
   DDL sobre datos, ningún `ALTER TABLE`— y que el DOWN los suelta; `pnpm db:migrate` aplica y
   `pnpm db:rollback` revierte sin error. [R26]
-- [ ] **T3** — Medir el drift: `pnpm db:migrate:create` sobre una base con T2 aplicada.
+- [x] **T3** — Medir el drift: `pnpm db:migrate:create` sobre una base con T2 aplicada.
   **Hecho:** si la migración propuesta viene vacía, se descarta; si propone `DROP INDEX` de los
   parciales (Prisma no los expresa), se documenta en el encabezado de `migration.sql` y en
   `progress/impl_178.md`. **Nunca** se resuelve borrando el índice.
 
 ## Bloque B — Configuración (independiente de A; `[P]`)
 
-- [ ] **T4 [P]** — `lib/config/purga-pdf.ts` con `loadPurgaPdfConfig()` y un
+- [x] **T4 [P]** — `lib/config/purga-pdf.ts` con `loadPurgaPdfConfig()` y un
   `readNonNegativeInt` local (el `readPositiveInt` de `jobs.ts`/`etiquetas.ts` **rechaza el 0** y
   contradiría R3): `PURGA_PDF_RETENCION_DIAS` (default 7, mínimo 0, **sin clamp superior**) y
   `PURGA_PDF_MAX_CARGAS_POR_CORRIDA` (default 200). **Sin** singleton exportado.
   **Hecho:** test unitario: ausente→7, `""`→7, `"abc"`→7, `"-1"`→7, **`"0"`→0**, `"1"`→1,
   `"36500"`→36500 (no se acota), tope default 200 y override; más un test que afirma que el
   módulo **no** exporta una constante ya resuelta al importar. [R1, R2, R3, R21]
-- [ ] **T5 [P]** — Documentar las dos env en `.env.example` junto al bloque 136/177, indicando
+- [x] **T5 [P]** — Documentar las dos env en `.env.example` junto al bloque 136/177, indicando
   que `0` es válido y qué implica. **Hecho:** las dos claves presentes con default y significado,
   sin valor asignado.
 
 ## Bloque C — Repositorio (depende de A)
 
-- [ ] **T6** — `IPurgaPdfCargasRepository` + `PurgaPdfCargasRepository` con
+- [x] **T6** — `IPurgaPdfCargasRepository` + `PurgaPdfCargasRepository` con
   `findCargasPurgables(corte, limite)`. **Hecho:** test unitario con Prisma mockeado que afirma:
   el `where` usa **`createdAt`** (nunca `fechaCarga`) con comparación **inclusiva `<=`**; exige
   referencia viva (propia o vía `EXISTS` de órdenes); ordena **ASC**; respeta `limite`; y **no**
   filtra por `deleted_at` al recoger las órdenes del lote. [R5, R7, R8, R9]
-- [ ] **T7 [P]** — `quedanCargasPurgables(corte, limite)`. **Hecho:** test unitario: `true`
+- [x] **T7 [P]** — `quedanCargasPurgables(corte, limite)`. **Hecho:** test unitario: `true`
   cuando hay al menos una candidata más allá del tope, `false` cuando no. [R22]
-- [ ] **T8** — `limpiarReferencias(cargaId)`: una transacción, `UPDATE orden` por `carga_id`
+- [x] **T8** — `limpiarReferencias(cargaId)`: una transacción, `UPDATE orden` por `carga_id`
   (todas, incluidas las borradas) y `UPDATE carga` por `id`, poniendo a NULL **las cuatro**
   columnas. **Hecho:** test unitario que afirma que el `data` de ambos updates contiene
   **exactamente** `downloadUrl: null` y `downloadStoragePath: null` (ninguna otra clave), que no
@@ -77,53 +77,53 @@ Cada task trae su criterio de "hecho" y los `R<n>` que cubre. Al final, el mapa 
 
 ## Bloque D — Servicio (depende de B y C)
 
-- [ ] **T9** — `IPurgaPdfCargasService` + `PurgaPdfCargasService.ejecutar(now)` con el flujo de
+- [x] **T9** — `IPurgaPdfCargasService` + `PurgaPdfCargasService.ejecutar(now)` con el flujo de
   `design.md` §4.3, dependencias por constructor. **Hecho:** test unitario con repo y storage
   dobles: el corte es `now − N días` y la config se lee **en cada llamada** (dos llamadas con
   config distinta ⇒ dos cortes distintos). [R4, R5]
-- [ ] **T10 [P]** — Caso `N = 0`. **Hecho:** test que afirma que con retención 0 el corte es
+- [x] **T10 [P]** — Caso `N = 0`. **Hecho:** test que afirma que con retención 0 el corte es
   `now` y una carga creada esa misma mañana **entra** en la selección (consecuencia declarada en
   `requirements.md`). [R3, R5]
-- [ ] **T11** — Borrado en Storage: una sola llamada a `remove` por carga con
+- [x] **T11** — Borrado en Storage: una sola llamada a `remove` por carga con
   `[cargaPath, ...ordenPaths]` sin nulos. **Hecho:** test unitario que afirma que las rutas
   enviadas incluyen la del consolidado **y** las de todas las órdenes del lote, y que con cero
   rutas **no se llama** a `remove`. [R10, R12]
-- [ ] **T12** — Orden de operaciones y política de fallo (decisión (b)): `remove` **antes** de
+- [x] **T12** — Orden de operaciones y política de fallo (decisión (b)): `remove` **antes** de
   `limpiarReferencias`; tras un `remove` que no lanza, se limpia **siempre**; si `remove` lanza,
   esa carga **no** se limpia, el error se propaga y **no hay reintento interno**. **Hecho:** test
   unitario que fija el orden de llamadas y ambos caminos, y que verifica que no existe ningún
   bucle/espera de reintento. [R20, R19]
-- [ ] **T13 [P]** — Respeto de la ventana de retención con corte inclusivo. **Hecho:** test con
+- [x] **T13 [P]** — Respeto de la ventana de retención con corte inclusivo. **Hecho:** test con
   fixture de tres cargas (N−1 días, **exactamente N días**, N+1 días): entran la de N y la de
   N+1; la de N−1 **no**. [R6, R5]
-- [ ] **T14 [P]** — Órdenes sin lote. **Hecho:** test que afirma que ninguna consulta ni ningún
+- [x] **T14 [P]** — Órdenes sin lote. **Hecho:** test que afirma que ninguna consulta ni ningún
   `remove` alcanza a una orden con `carga_id` NULL y `download_storage_path` poblado. [R17]
-- [ ] **T15 [P]** — Conteos agregados y `quedaPendiente`. **Hecho:** test unitario que verifica
+- [x] **T15 [P]** — Conteos agregados y `quedaPendiente`. **Hecho:** test unitario que verifica
   `cargasPurgadas`/`ordenesAfectadas`/`objetosBorrados`/`quedaPendiente`, y que lo que se loguea
   **solo contiene números** (ni rutas, ni `carga_id`, ni ids de usuario). [R24]
-- [ ] **T16** — Idempotencia. **Hecho:** test que ejecuta dos veces sobre el mismo repo doble: la
+- [x] **T16** — Idempotencia. **Hecho:** test que ejecuta dos veces sobre el mismo repo doble: la
   segunda corrida no encuentra candidatas, no llama a `remove` y no escribe columnas. [R20, R8]
-- [ ] **T17** — Tope por corrida y pendiente. **Hecho:** test con más candidatas que el tope: se
+- [x] **T17** — Tope por corrida y pendiente. **Hecho:** test con más candidatas que el tope: se
   procesan exactamente `PURGA_PDF_MAX_CARGAS_POR_CORRIDA`, la corrida termina **sin error** y
   devuelve `quedaPendiente: true`. [R21, R22]
 
 ## Bloque E — Cron propio (depende de D)
 
-- [ ] **T18** — `app/api/cron/purga-pdf-cargas/route.ts`, clon estructural de
+- [x] **T18** — `app/api/cron/purga-pdf-cargas/route.ts`, clon estructural de
   `procesar-devueltas-sla/route.ts`: `handlePurgaPdfCargas(req, deps)` con `getSecret`/`service`/
   `now` inyectables, `GET` como único verbo exportado, `withErrorHandler` +
   `appErrorToResponse`, `maxDuration` declarado. **Hecho:** test de integración del handler con
   service doble: `200` con el resumen agregado. [R23, R24]
-- [ ] **T19** — Autorización. **Hecho:** test que afirma `401` **sin construir el service ni
+- [x] **T19** — Autorización. **Hecho:** test que afirma `401` **sin construir el service ni
   tocar Storage** en los tres casos: sin header, con token incorrecto y con `CRON_SECRET` no
   configurado en el entorno. [R25]
-- [ ] **T20** — Composition root con el **bucket de etiquetas**:
+- [x] **T20** — Composition root con el **bucket de etiquetas**:
   `new SupabaseFileStorage(undefined, etiquetasConfig.ETIQUETAS_BUCKET)`. **Hecho:** test que
   afirma que el storage se construye con `ETIQUETAS_BUCKET` y **no** con el default de
   postulaciones. [R11]
-- [ ] **T21** — Fallo observable. **Hecho:** test con un service que lanza: la respuesta **no** es
+- [x] **T21** — Fallo observable. **Hecho:** test con un service que lanza: la respuesta **no** es
   `200`, el cuerpo no filtra el secreto ni PII, y el error queda registrado. [R23]
-- [ ] **T22** — `vercel.json`: sexta entrada
+- [x] **T22** — `vercel.json`: sexta entrada
   `{ "path": "/api/cron/purga-pdf-cargas", "schedule": "0 9 * * *" }` (= 03:00 CR, UTC−6 fijo).
   **Hecho:** test estático que afirma que la entrada existe con ese `path` y ese `schedule`, que
   el `schedule` es **diario** y que no colisiona con las horas de `corte-diario` /
@@ -131,21 +131,21 @@ Cada task trae su criterio de "hecho" y los `R<n>` que cubre. Al final, el mapa 
 
 ## Bloque F — Integración con la feature 177 (el requisito caro; depende de E)
 
-- [ ] **T23** — Test de integración **de extremo a extremo del estado de datos**: partir de una
+- [x] **T23** — Test de integración **de extremo a extremo del estado de datos**: partir de una
   carga con `download_storage_path` poblado en la carga y en sus órdenes, ejecutar la purga y
   después invocar `POST /api/ordenes/api-key/carga/{cargaId}/generate` y
   `POST /api/ordenes/api-key/orden/{id}/generate`. **Hecho:** ambas respuestas son `200` con
   `generado: true`, se invocó al generador de PDF, y la URL devuelta corresponde a un objeto
   **subido en esa llamada** (no a la ruta purgada). Si este test no existe, la feature está
   incompleta aunque todo lo demás pase. [R16]
-- [ ] **T24 [P]** — Control discriminante del anterior: **antes** de la purga, `/generate`
+- [x] **T24 [P]** — Control discriminante del anterior: **antes** de la purga, `/generate`
   devuelve `generado: false` (reuso). Sin él, T23 pasaría aunque la purga no hiciera nada. [R16]
 
 ## Bloque G — Cierre
 
-- [ ] **T25** — `pnpm typecheck` y la suite completa en verde respecto del baseline **medido** de
+- [x] **T25** — `pnpm typecheck` y la suite completa en verde respecto del baseline **medido** de
   `dev` (medirlo, no citarlo). **Hecho:** delta 0 rojos.
-- [ ] **T26** — Mapa `R<n>→test` completo en `progress/impl_178.md`, con los riesgos declarados
+- [x] **T26** — Mapa `R<n>→test` completo en `progress/impl_178.md`, con los riesgos declarados
   copiados: huérfanos de la 136/141 inalcanzables, órdenes con `carga_id` NULL fuera,
   `objetosBorrados` = "solicitados" y no "confirmados", y ausencia de reintentos/dead-letter por
   no usar la cola. **Hecho:** los 26 requisitos con un test nombrado cada uno.
