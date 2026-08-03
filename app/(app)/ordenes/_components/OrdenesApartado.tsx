@@ -271,6 +271,10 @@ export function OrdenesApartado({
           setPage(1);
         }}
         pageSizeOptions={PAGE_SIZE_OPTIONS}
+        // La revisión del maestro apila VARIOS apartados en una misma pantalla: si cada
+        // uno pegara su barra al borde inferior, se amontonarían todas ahí y no se sabría
+        // cuál pagina qué. Cada apartado se queda con su pie.
+        sticky={false}
       />
     </section>
   );

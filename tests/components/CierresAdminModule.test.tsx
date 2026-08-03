@@ -18,6 +18,7 @@ import type {
   CierreResultado,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
+import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // Feature 38 (T13) — módulo cliente de "Cierres del día" del admin. Se mockean las
 // Server Actions (ver detalle / aprobar / rechazar), el toast y el router (refresh)
@@ -57,6 +58,12 @@ const aprobarMock = vi.mocked(aprobarCierre);
 const rechazarMock = vi.mocked(rechazarCierre);
 const forzarMock = vi.mocked(forzarSolicitudVencido);
 
+// La lista arranca acotada a los ÚLTIMOS 7 DÍAS (filtro por fecha del cierre): un
+// fixture con fecha fija quedaría fuera del rango en cuanto pasara una semana y las
+// tarjetas no se pintarían. `HOY_CR` es la fecha calendario de Costa Rica de hoy.
+const HOY_CR = ultimosNDiasCalendarioCR(1).hasta;
+const SOLICITADO_AT = `${HOY_CR}T10:00:00.000Z`;
+
 const ZERO_TOTALES: CierreTotales = {
   efectivo: "0.00",
   simpe: "0.00",
@@ -77,7 +84,7 @@ function makeResumen(
     totales: ZERO_TOTALES,
     totalPagoMensajero: "0.00", // feature 39/R17
     totalIngresoBodegaRechazos: "0.00", // feature 56/R16
-    solicitadoAt: "2026-07-11T10:00:00.000Z",
+    solicitadoAt: SOLICITADO_AT,
     resueltoAt: null,
     motivoRechazo: null,
     ...over,
@@ -215,7 +222,7 @@ describe("CierresAdminModule", () => {
 
     const region = screen.getByRole("region", { name: "Pendientes de decisión" });
     expect(within(region).getByText("Carlos Vega")).toBeInTheDocument();
-    expect(within(region).getByText("2026-07-11")).toBeInTheDocument();
+    expect(within(region).getByText(HOY_CR)).toBeInTheDocument();
     expect(
       within(region).getByText("Bodega central · GAM"),
     ).toBeInTheDocument();
@@ -225,7 +232,8 @@ describe("CierresAdminModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("R5: el histórico lista cierres resueltos con estado, fecha resuelta y motivo (solo lectura)", () => {
+  it("R5: el histórico lista cierres resueltos con estado, fecha resuelta y motivo (solo lectura)", async () => {
+    const user = userEvent.setup();
     renderModule({
       historico: [
         makeResumen({
@@ -241,10 +249,15 @@ describe("CierresAdminModule", () => {
     const region = screen.getByRole("region", { name: "Histórico" });
     expect(within(region).getByText("Rechazado")).toBeInTheDocument();
     expect(within(region).getByText("Diana Mora")).toBeInTheDocument();
-    expect(within(region).getByText("2026-07-12")).toBeInTheDocument();
     expect(within(region).getByText("Faltan evidencias")).toBeInTheDocument();
     // Solo lectura: el botón del histórico es "Ver", sin acciones de decisión.
     expect(within(region).getByRole("button", { name: "Ver" })).toBeInTheDocument();
+
+    // La fecha en que se resolvió vive en el desplegable del comprobante.
+    await user.click(
+      within(region).getByRole("button", { name: /Ver detalles del cierre/ }),
+    );
+    expect(within(region).getByText("2026-07-12")).toBeInTheDocument();
   });
 
   it("R8/R9: al abrir el detalle muestra los totales snapshot como string (sin reparsear)", async () => {

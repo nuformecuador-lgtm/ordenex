@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
-import { DataTable, type Column } from "@/components/shared/DataTable";
 import { useToast } from "@/hooks/useToast";
 import {
   verCierreBodegaDetalle,
@@ -18,11 +17,7 @@ import type {
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
 import {
-  money,
   ESTADO_LABEL,
-  PAGO_MENSAJERO_COL,
-  INGRESO_BODEGA_RECHAZOS_COL,
-  DetalleSecciones,
   PagoMensajeroTotal,
   IngresoBodegaRechazosTotal,
   TotalesIngresoPanel,
@@ -32,11 +27,23 @@ import {
   GANANCIA_LABEL,
   PAGO_TIENDA_LABEL,
   PAGO_TIENDA_NOTA,
-  GANANCIA_NOTA,
   GANANCIA_NOTA_BODEGA,
   TotalesPanel,
   VisorEvidencia,
 } from "./cierre-detalle-shared";
+import {
+  CierreBodegaFacturaResumen,
+  CierreFacturaDetalle,
+} from "./cierre-factura";
+import {
+  BarraFiltrosCierres,
+  RANGO_INICIAL,
+  SIN_RESULTADOS_FILTRO,
+  coincide,
+  enRangoFecha,
+  opcionesDe,
+  type RangoFechas,
+} from "./cierres-filtros";
 
 // Feature 40 (T8) — módulo cliente de "Cierres de bodega satélite" del maestro (lado
 // APROBAR/RECHAZAR, espejo de la 38 aplicado a CierreBodega). Recibe del Server
@@ -82,6 +89,11 @@ export function CierresBodegaAdminModule({
   // Motivo del rechazo (obligatorio, R17) + su error de validación.
   const [motivo, setMotivo] = useState("");
   const [motivoError, setMotivoError] = useState<string | null>(null);
+  // Filtros de las listas (cliente): rango de fechas —últimos 7 días de arranque—, zona
+  // y estado. Vacío = todos.
+  const [rango, setRango] = useState<RangoFechas>(RANGO_INICIAL);
+  const [zonasFiltro, setZonasFiltro] = useState<string[]>([]);
+  const [estadosFiltro, setEstadosFiltro] = useState<string[]>([]);
 
   /** R11-R13: abre el detalle agregado (pide totales + gestiones + evidencias firmadas). */
   async function abrirDetalle(cierreBodegaId: string) {
@@ -188,12 +200,42 @@ export function CierresBodegaAdminModule({
   const cierreAbierto = detalle?.cierre ?? null;
   const esPendiente = cierreAbierto?.estado === "solicitado";
 
+  // Los filtros acotan AMBAS listas: son las dos caras de la misma bodega, y tener que
+  // repetir zona y estado en cada sección para mirar una zona sería trabajo de más.
+  const enFiltro = (c: CierreBodegaResumen) =>
+    enRangoFecha(c.solicitadoAt, rango) &&
+    coincide(c.zonaNombre, zonasFiltro) &&
+    coincide(ESTADO_LABEL[c.estado], estadosFiltro);
+  const pendientesVisibles = pendientes.filter(enFiltro);
+  const historicoVisible = historico.filter(enFiltro);
+
+  const todos = [...pendientes, ...historico];
+  const filtros = [
+    {
+      key: "zona",
+      label: "Zona",
+      options: opcionesDe(todos.map((c) => c.zonaNombre)),
+      value: zonasFiltro,
+      onChange: setZonasFiltro,
+    },
+    {
+      key: "estado",
+      label: "Estado",
+      options: opcionesDe(todos.map((c) => ESTADO_LABEL[c.estado])),
+      value: estadosFiltro,
+      onChange: setEstadosFiltro,
+    },
+  ];
+
   return (
     <section
       aria-label="Cierres de bodega satélite"
       className="flex flex-col gap-8"
     >
       <h2 className="text-lg font-semibold">Cierres de bodega satélite</h2>
+
+      {/* ---------- Filtros (fecha del cierre + zona + estado) ---------- */}
+      <BarraFiltrosCierres onRangoChange={setRango} multis={filtros} />
 
       {/* ---------- Cola de pendientes (R15) ---------- */}
       <section
@@ -203,17 +245,33 @@ export function CierresBodegaAdminModule({
         <h3 className="text-base font-semibold">
           Cierres de bodega pendientes{" "}
           <span className="text-sm font-normal text-muted-foreground">
-            ({pendientes.length})
+            ({pendientesVisibles.length})
           </span>
         </h3>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasPendientes(abrirDetalle)}
-            data={pendientes}
-            rowKey="cierreBodegaId"
-            ariaLabel="Cierres de bodega pendientes"
-            emptyMessage="No hay cierres de bodega pendientes de decisión."
-          />
+        {/* Cada cierre de bodega se lee como COMPROBANTE, igual que los del mensajero. */}
+        <div className="grid gap-4 xl:grid-cols-2">
+          {pendientesVisibles.map((c) => (
+            <CierreBodegaFacturaResumen
+              key={c.cierreBodegaId}
+              cierre={c}
+              acciones={
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => abrirDetalle(c.cierreBodegaId)}
+                >
+                  Ver / decidir
+                </Button>
+              }
+            />
+          ))}
+          {pendientesVisibles.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {pendientes.length === 0
+                ? "No hay cierres de bodega pendientes de decisión."
+                : SIN_RESULTADOS_FILTRO}
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -223,14 +281,30 @@ export function CierresBodegaAdminModule({
         className="flex flex-col gap-3"
       >
         <h3 className="text-base font-semibold">Cierres de bodega resueltos</h3>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasHistorico(abrirDetalle)}
-            data={historico}
-            rowKey="cierreBodegaId"
-            ariaLabel="Cierres de bodega resueltos"
-            emptyMessage="Aún no hay cierres de bodega resueltos."
-          />
+        <div className="grid gap-4 xl:grid-cols-2">
+          {historicoVisible.map((c) => (
+            <CierreBodegaFacturaResumen
+              key={c.cierreBodegaId}
+              cierre={c}
+              acciones={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => abrirDetalle(c.cierreBodegaId)}
+                >
+                  Ver
+                </Button>
+              }
+            />
+          ))}
+          {historicoVisible.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {historico.length === 0
+                ? "Aún no hay cierres de bodega resueltos."
+                : SIN_RESULTADOS_FILTRO}
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -313,61 +387,44 @@ export function CierresBodegaAdminModule({
               </p>
             ) : null}
 
-            {/* Sub-detalle por cada cierre_dia incluido (R11): mensajero + totales +
-                4 secciones por resultado con evidencia firmada (R12). */}
+            {/* Sub-detalle por cada cierre_dia incluido (R11): EL MISMO comprobante que el
+                maestro ya lee en la cola y el histórico de cierres de mensajero
+                (`CierreFacturaDetalle`). Reemplaza a la pila de paneles sueltos + las 4
+                tablas por resultado sin perder ningún dato: totales snapshot, ingreso de
+                Ordenex, liquidación y gestiones con evidencia firmada (R12) viven todos
+                ahí dentro. La cabecera de cada hoja se compone con lo que es del cierre
+                de bodega (estado, zona destino, fechas) y lo que es del cierre_dia
+                (mensajero, totales). */}
             {detalle.cierres.map((cierreDia) => (
-              <section
+              <CierreFacturaDetalle
                 key={cierreDia.cierreDiaId}
-                aria-label={`Cierre del día · ${cierreDia.mensajeroNombre}`}
-                className="flex flex-col gap-4 rounded-lg border border-border p-4"
-              >
-                <h3 className="text-base font-semibold">
-                  {cierreDia.mensajeroNombre}
-                </h3>
-                <TotalesPanel
-                  totales={cierreDia.totales}
-                  ariaLabel={`Totales · ${cierreDia.mensajeroNombre}`}
-                  title="Totales del cierre del día"
-                />
-                {/* Primero los ingresos de ESTE cierre_dia; después lo que se le paga. */}
-                <TotalesIngresoPanel
-                  totales={cierreDia.totalesIngreso}
-                  ariaLabel={`Ingreso de Ordenex · ${cierreDia.mensajeroNombre}`}
-                />
-                <MontoDerivadoCard
-                  value={cierreDia.totalesIngreso.total}
-                  label={INGRESO_BRUTO_LABEL}
-                  nota={INGRESO_BRUTO_NOTA}
-                  ariaLabel={`Ingreso bruto · ${cierreDia.mensajeroNombre}`}
-                />
-                {/* Feature 39/R20: pago snapshot a este mensajero, separado del dinero recibido. */}
-                <PagoMensajeroTotal
-                  value={cierreDia.totalPagoMensajero}
-                  ariaLabel={`Pago al mensajero · ${cierreDia.mensajeroNombre}`}
-                />
-                <MontoDerivadoCard
-                  value={cierreDia.ganancia}
-                  label={GANANCIA_LABEL}
-                  nota={GANANCIA_NOTA}
-                  ariaLabel={`Ganancia · ${cierreDia.mensajeroNombre}`}
-                />
-                {/* Feature 56/R19: ingreso de bodega por rechazos de este cierre_dia, separado. */}
-                <IngresoBodegaRechazosTotal
-                  value={cierreDia.totalIngresoBodegaRechazos}
-                  ariaLabel={`Ingreso de bodega por rechazos · ${cierreDia.mensajeroNombre}`}
-                />
-                {/* Cierra el sub-detalle: lo que se le paga a la tienda por este cierre_dia. */}
-                <MontoDerivadoCard
-                  value={cierreDia.pagoTienda}
-                  label={PAGO_TIENDA_LABEL}
-                  nota={PAGO_TIENDA_NOTA}
-                  ariaLabel={`Pago a tienda · ${cierreDia.mensajeroNombre}`}
-                />
-                <DetalleSecciones
-                  grupos={cierreDia.grupos}
-                  onVerEvidencia={setEvidencia}
-                />
-              </section>
+                cierre={{
+                  cierreId: cierreDia.cierreDiaId,
+                  estado: detalle.cierre.estado,
+                  destinoTipo: "bodega_satelite",
+                  destinoZonaNombre: detalle.cierre.zonaNombre,
+                  totales: cierreDia.totales,
+                  totalPagoMensajero: cierreDia.totalPagoMensajero,
+                  totalIngresoBodegaRechazos:
+                    cierreDia.totalIngresoBodegaRechazos,
+                  solicitadoAt: detalle.cierre.solicitadoAt,
+                  resueltoAt: detalle.cierre.resueltoAt,
+                  // El motivo es del cierre de BODEGA, no de cada cierre_dia: ya se
+                  // muestra una sola vez arriba, repetirlo en cada hoja sería ruido.
+                  motivoRechazo: null,
+                  mensajeroNombre: cierreDia.mensajeroNombre,
+                }}
+                grupos={cierreDia.grupos}
+                totalesIngreso={cierreDia.totalesIngreso}
+                // El snapshot de bodega guarda el agregado por cierre_dia, no el desglose
+                // SLA/manual: la tarjeta se queda con el total.
+                desgloseIngresoBodegaRechazos={{
+                  total: cierreDia.totalIngresoBodegaRechazos,
+                }}
+                ganancia={cierreDia.ganancia}
+                pagoTienda={cierreDia.pagoTienda}
+                onVerEvidencia={setEvidencia}
+              />
             ))}
 
             {/* Acciones: solo en un cierre de bodega PENDIENTE (`solicitado`). */}
@@ -447,110 +504,4 @@ export function CierresBodegaAdminModule({
       <VisorEvidencia url={evidencia} onClose={() => setEvidencia(null)} />
     </section>
   );
-}
-
-// --- Columnas de la cola de pendientes (R15) ---
-function columnasPendientes(
-  abrir: (cierreBodegaId: string) => void,
-): Column<CierreBodegaResumen>[] {
-  return [
-    { id: "zona", value: "Zona", render: (c) => c.zonaNombre },
-    {
-      id: "solicitadoPor",
-      value: "Solicitó",
-      render: (c) => c.solicitadoPorNombre,
-    },
-    {
-      id: "solicitadoAt",
-      value: "Fecha",
-      render: (c) => c.solicitadoAt.slice(0, 10),
-    },
-    {
-      id: "cantidadCierres",
-      value: "Cierres del día",
-      render: (c) => String(c.cantidadCierres),
-    },
-    {
-      id: "general",
-      value: "Total general",
-      render: (c) => money(c.totales.general),
-    },
-    {
-      id: "pagoMensajero",
-      value: PAGO_MENSAJERO_COL,
-      render: (c) => money(c.totalPagoMensajero),
-    },
-    {
-      id: "ingresoBodegaRechazos",
-      value: INGRESO_BODEGA_RECHAZOS_COL,
-      render: (c) => money(c.totalIngresoBodegaRechazos),
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (c) => (
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => abrir(c.cierreBodegaId)}
-        >
-          Ver / decidir
-        </Button>
-      ),
-    },
-  ];
-}
-
-// --- Columnas del histórico (solo lectura, R15) ---
-function columnasHistorico(
-  abrir: (cierreBodegaId: string) => void,
-): Column<CierreBodegaResumen>[] {
-  return [
-    { id: "estado", value: "Estado", render: (c) => ESTADO_LABEL[c.estado] },
-    { id: "zona", value: "Zona", render: (c) => c.zonaNombre },
-    {
-      id: "solicitadoPor",
-      value: "Solicitó",
-      render: (c) => c.solicitadoPorNombre,
-    },
-    {
-      id: "resueltoAt",
-      value: "Fecha resuelta",
-      render: (c) => c.resueltoAt?.slice(0, 10) ?? "—",
-    },
-    {
-      id: "general",
-      value: "Total general",
-      render: (c) => money(c.totales.general),
-    },
-    {
-      id: "pagoMensajero",
-      value: PAGO_MENSAJERO_COL,
-      render: (c) => money(c.totalPagoMensajero),
-    },
-    {
-      id: "ingresoBodegaRechazos",
-      value: INGRESO_BODEGA_RECHAZOS_COL,
-      render: (c) => money(c.totalIngresoBodegaRechazos),
-    },
-    {
-      id: "motivoRechazo",
-      value: "Motivo",
-      render: (c) => c.motivoRechazo ?? "—",
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (c) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => abrir(c.cierreBodegaId)}
-        >
-          Ver
-        </Button>
-      ),
-    },
-  ];
 }

@@ -9,7 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { useToast } from "@/hooks/useToast";
-import { deshacerGestion, solicitarCierre } from "@/lib/actions/cierre-dia";
+import {
+  deshacerGestion,
+  solicitarCierre,
+  verCierrePasado,
+} from "@/lib/actions/cierre-dia";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -21,6 +25,9 @@ import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 // Feature 158 (T2.3): la columna de la causa es la MISMA que la del detalle del admin — se
 // reusa en vez de reescribirla, para que las dos pantallas no puedan divergir en la etiqueta.
 import { COLUMNA_CAUSA_INCIDENTE } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
+// Pedido humano: el detalle de un cierre pasado se lee con el MISMO comprobante del admin
+// (feature 38/40), en su variante `mensajero`. Una sola hoja para las dos pantallas.
+import { CierreFacturaDetalle } from "@/app/(app)/cierres-admin/_components/cierre-factura";
 
 // Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
 // del Server Component padre los grupos ya resueltos (por resultado), los totales
@@ -87,6 +94,16 @@ const RECHAZADO_CONFIRM_TITULO = "Solicitar aprobación del cierre rechazado";
 const RECHAZADO_CONFIRM_DETALLE =
   "Se enviará de nuevo tu cierre rechazado a tu bodega para aprobación. No se recalculan los montos ya registrados.";
 const RECHAZADO_OK = "Cierre rechazado enviado a aprobación.";
+
+// Pedido humano: "ver" el detalle de un cierre YA solicitado (textos separados, i18n-ready).
+const VER_DETALLE_COL = "Detalle";
+const VER_DETALLE_LABEL = "Ver";
+const DETALLE_TITULO = "Detalle del cierre";
+const DETALLE_CARGANDO = "Cargando el detalle…";
+const DETALLE_ERROR = "No se pudo cargar el detalle de este cierre.";
+const DETALLE_NO_ENCONTRADA = "Este cierre ya no está disponible.";
+const DETALLE_NOTA =
+  "Los montos son los que quedaron congelados al solicitar el cierre.";
 
 /** Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready). */
 const PAGO_MENSAJERO_LABEL = "Ganancia";
@@ -198,6 +215,34 @@ export function CierreDiaModule({
   // Feature 67: gestionId del deshacer EN VUELO; deshabilita el botón de ESA fila
   // (anti-doble-submit en la UI; el WHERE guardado del repo lo cubre igual).
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
+  // Pedido humano: cierre pasado ABIERTO en el visor de detalle; null = modal cerrado. El
+  // detalle se pide bajo demanda (no viaja en las props de la página: son N cierres).
+  const [cierreAbierto, setCierreAbierto] = useState<CierrePasadoDTO | null>(null);
+  const [detalleGrupos, setDetalleGrupos] = useState<CierreGrupos | null>(null);
+  const [detalleError, setDetalleError] = useState<string | null>(null);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
+
+  /** Abre el visor de un cierre pasado y carga su detalle (solo lectura). */
+  async function abrirDetalle(cierre: CierrePasadoDTO) {
+    setCierreAbierto(cierre);
+    setDetalleGrupos(null);
+    setDetalleError(null);
+    setCargandoDetalle(true);
+    try {
+      const result = await verCierrePasado({ cierreId: cierre.cierreId });
+      if (result.status === "ok") {
+        setDetalleGrupos(result.grupos);
+        return;
+      }
+      // `no_encontrada` = el cierre ya no existe o no es suyo (no se distinguen, igual que
+      // en el servidor); el resto son fallos de borde y comparten mensaje accionable.
+      setDetalleError(
+        result.status === "no_encontrada" ? DETALLE_NO_ENCONTRADA : DETALLE_ERROR,
+      );
+    } finally {
+      setCargandoDetalle(false);
+    }
+  }
 
   /**
    * Feature 37 + 111/R13 + 109/R31: envía el cierre. Un mismo camino sirve para
@@ -419,7 +464,7 @@ export function CierreDiaModule({
         <h2 className="text-lg font-semibold">Cierres solicitados</h2>
         <div className="overflow-x-auto">
           <DataTable
-            columns={COLUMNAS_PASADOS}
+            columns={columnasPasados(abrirDetalle)}
             data={cierresPasados}
             rowKey="cierreId"
             ariaLabel="Cierres solicitados"
@@ -480,6 +525,67 @@ export function CierreDiaModule({
         onConfirm={confirmarDeshacer}
         closeOnConfirm={false}
       />
+
+      {/* Pedido humano: visor SOLO LECTURA del detalle de un cierre pasado. Mismas secciones
+          por resultado que la vista del día, sin la columna de acciones: un cierre ya
+          solicitado no se deshace desde aquí. */}
+      <Modal
+        open={cierreAbierto !== null}
+        onOpenChange={(next) => {
+          if (!next) setCierreAbierto(null);
+        }}
+        title={DETALLE_TITULO}
+        description={
+          cierreAbierto
+            ? `${ESTADO_LABEL[cierreAbierto.estado]} · ${cierreAbierto.solicitadoAt.slice(0, 10)} · ${DESTINO_LABEL[cierreAbierto.destinoTipo]}`
+            : undefined
+        }
+        confirmLabel="Cerrar"
+        hideCancel
+        onConfirm={() => setCierreAbierto(null)}
+      >
+        {cierreAbierto ? (
+          <div className="flex flex-col gap-4">
+            {cargandoDetalle ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {DETALLE_CARGANDO}
+              </p>
+            ) : null}
+            {detalleError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {detalleError}
+              </p>
+            ) : null}
+            {detalleGrupos ? (
+              <>
+                {/* MISMO comprobante que usa el admin (`CierreFacturaDetalle`), en su
+                    variante `mensajero`: sin el ingreso de Ordenex ni la liquidación (no es
+                    plata suya, design §7.2) y con lo recibido + su pago en los renglones. */}
+                <CierreFacturaDetalle
+                  audiencia="mensajero"
+                  cierre={{
+                    cierreId: cierreAbierto.cierreId,
+                    estado: cierreAbierto.estado,
+                    destinoTipo: cierreAbierto.destinoTipo,
+                    totales: cierreAbierto.totales,
+                    totalPagoMensajero: cierreAbierto.totalPagoMensajero,
+                    totalIngresoBodegaRechazos:
+                      cierreAbierto.totalIngresoBodegaRechazos,
+                    solicitadoAt: cierreAbierto.solicitadoAt,
+                    resueltoAt: cierreAbierto.resueltoAt ?? null,
+                    motivoRechazo: cierreAbierto.motivoRechazo ?? null,
+                  }}
+                  grupos={detalleGrupos}
+                  onVerEvidencia={setEvidencia}
+                />
+                <p role="note" className="text-xs text-muted-foreground">
+                  {DETALLE_NOTA}
+                </p>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
 
       {/* Visor de evidencia (URL firmada, R5). */}
       <Modal
@@ -693,6 +799,35 @@ function columnaEvidencia(
 }
 
 // --- Columnas del histórico de cierres (R18) ---
+/**
+ * Pedido humano: el histórico ya no es solo una fila de totales — cada cierre se puede ABRIR
+ * y ver su detalle (las mismas gestiones agrupadas por resultado que se veían el día que se
+ * solicitó, con los montos ya congelados). La columna se construye con el handler inyectado,
+ * como las de evidencia/deshacer de las tablas del día.
+ */
+function columnasPasados(
+  verDetalle: (cierre: CierrePasadoDTO) => void,
+): Column<CierrePasadoDTO>[] {
+  return [
+    ...COLUMNAS_PASADOS,
+    {
+      id: "detalle",
+      value: VER_DETALLE_COL,
+      render: (c) => (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={`${VER_DETALLE_LABEL} del cierre del ${c.solicitadoAt.slice(0, 10)}`}
+          onClick={() => verDetalle(c)}
+        >
+          {VER_DETALLE_LABEL}
+        </Button>
+      ),
+    },
+  ];
+}
+
 const COLUMNAS_PASADOS: Column<CierrePasadoDTO>[] = [
   {
     id: "estado",

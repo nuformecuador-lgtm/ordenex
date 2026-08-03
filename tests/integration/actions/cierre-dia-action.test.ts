@@ -54,6 +54,8 @@ const GESTION_DESHACIBLE: GestionDeshacerRow = {
 function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
   let pendientes = [...seed];
   const cierres: CierrePasadoDTO[] = [];
+  // Gestiones que quedaron VINCULADAS a cada cierre (lo que ve el detalle de "ver").
+  const gestionesPorCierre = new Map<string, CierreGestionPendienteRow[]>();
   return {
     findGestionesPendientes: vi.fn(async () => [...pendientes]),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
@@ -80,10 +82,18 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
         totalIngresoBodegaRechazos: input.totalIngresoBodegaRechazos, // feature 56/R12: snapshot
         solicitadoAt: "2026-07-12T10:00:00.000Z",
       });
+      gestionesPorCierre.set(id, [...pendientes]);
       pendientes = []; // R13: consume las gestiones pendientes (cierre_id seteado)
       return id;
     }),
     findCierresByMensajero: vi.fn(async () => [...cierres]),
+    // Detalle de un cierre PROPIO: el scope por mensajero vive en el WHERE del repo real;
+    // aquí el doble solo resuelve por id (todos los cierres de este repo son del actor).
+    findCierrePropioConGestiones: vi.fn(async (cierreId: string) => {
+      const cierre = cierres.find((c) => c.cierreId === cierreId);
+      if (!cierre) return null;
+      return { cierre, gestiones: gestionesPorCierre.get(cierreId) ?? [] };
+    }),
   };
 }
 

@@ -149,7 +149,11 @@ export const listarOrdenesSchema = z.object({
   estatusId: z.string().min(1).optional(),
   filter: ordenFilterSchema.optional(),
   sortBy: z.enum(SORT_FIELDS).default("created_at"),
-  sortDir: z.enum(SORT_DIRS).default("desc"),
+  // Pedido humano: el listado va de la orden MÁS ANTIGUA a la más nueva (`created_at asc`).
+  // Lo que primero entró es lo primero que hay que trabajar; con `desc` las órdenes viejas
+  // se hundían al final de la paginación. Es el DEFAULT: quien pase `sortDir` explícito
+  // (la API de lectura tiene el suyo) no cambia.
+  sortDir: z.enum(SORT_DIRS).default("asc"),
 });
 export type ListarOrdenesInput = z.infer<typeof listarOrdenesSchema>;
 

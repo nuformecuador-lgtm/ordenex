@@ -194,22 +194,36 @@ export function OrdenesModule({
 }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
-  const [seleccionIds, setSeleccionIds] = useState<Set<string>>(new Set());
+  /**
+   * Selección ACUMULADA entre páginas (pedido humano): si marcas 2 en la página 1 y una
+   * más en la 2, la barra de acciones dice 3, no 1.
+   *
+   * Es un `Map id -> fila` y no un `Set` de ids porque las acciones reciben las FILAS
+   * (`acciones(seleccionadas)`), y las de páginas que ya no están montadas no se pueden
+   * recuperar de `items`. Se guarda la fila tal como estaba al marcarla; la selección se
+   * limpia al cambiar de filtro y con "Limpiar".
+   */
+  const [seleccion, setSeleccion] = useState<ReadonlyMap<string, OrdenListItemDTO>>(
+    new Map(),
+  );
+  const seleccionIds = useMemo(() => new Set(seleccion.keys()), [seleccion]);
 
-  function toggleSeleccion(id: string, checked: boolean) {
-    setSeleccionIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
+  function toggleSeleccion(row: OrdenListItemDTO, checked: boolean) {
+    setSeleccion((prev) => {
+      const next = new Map(prev);
+      if (checked) next.set(row.id, row);
+      else next.delete(row.id);
       return next;
     });
   }
 
-  function toggleTodos(ids: string[], checked: boolean) {
-    setSeleccionIds((prev) => {
-      const next = new Set(prev);
-      if (checked) ids.forEach((id) => next.add(id));
-      else ids.forEach((id) => next.delete(id));
+  function toggleTodos(filas: OrdenListItemDTO[], checked: boolean) {
+    setSeleccion((prev) => {
+      const next = new Map(prev);
+      for (const row of filas) {
+        if (checked) next.set(row.id, row);
+        else next.delete(row.id);
+      }
       return next;
     });
   }
@@ -233,7 +247,7 @@ export function OrdenesModule({
   if (filterKey !== filterKeyPrevio) {
     setFilterKeyPrevio(filterKey);
     setPage(1);
-    setSeleccionIds(new Set());
+    setSeleccion(new Map());
   }
 
   // Identidad estable de la página: `data?.items ?? []` fabrica un array NUEVO en cada
@@ -264,14 +278,22 @@ export function OrdenesModule({
             // Cabecera = checkbox "seleccionar todo" sobre las filas SELECCIONABLES de la
             // página (excluye las bloqueadas por `bloqueoSeleccion`, que no se pueden marcar).
             renderHeader: () => {
-              const ids = items
-                .filter((row) => (bloqueoSeleccion?.(row) ?? null) === null)
-                .map((row) => row.id);
+              const filas = items.filter(
+                (row) => (bloqueoSeleccion?.(row) ?? null) === null,
+              );
               return (
                 <SelectAllCheckbox
-                  selectableIds={ids}
+                  selectableIds={filas.map((row) => row.id)}
                   selectedIds={seleccionIds}
-                  onToggleAll={(checked) => toggleTodos(ids, checked)}
+                  // Asimétrico A PROPÓSITO (pedido humano): marcar "todas" solo puede
+                  // añadir las filas de ESTA página (de las otras no se tienen los
+                  // datos), pero DESMARCAR limpia la selección ENTERA — incluidas las
+                  // marcadas en otras páginas. Si no, quedaban marcas invisibles
+                  // contando en la barra de acciones y no había forma de quitarlas
+                  // salvo volver página por página.
+                  onToggleAll={(checked) =>
+                    checked ? toggleTodos(filas, true) : setSeleccion(new Map())
+                  }
                   ariaLabel="Seleccionar todas las órdenes"
                 />
               );
@@ -286,7 +308,7 @@ export function OrdenesModule({
                   checked={seleccionIds.has(row.id)}
                   disabled={motivo !== null}
                   onCheckedChange={(checked) =>
-                    toggleSeleccion(row.id, checked === true)
+                    toggleSeleccion(row, checked === true)
                   }
                   aria-label={
                     motivo
@@ -338,9 +360,18 @@ export function OrdenesModule({
     resaltarPrioridad,
   ]);
 
-  // Snapshot de las filas marcadas PRESENTES en la página actual (la selección se
-  // acota a lo visible, como en la vista de revisión previa).
-  const seleccionadas = items.filter((item) => seleccionIds.has(item.id));
+  /**
+   * Filas marcadas, de TODAS las páginas recorridas (pedido humano). Las de la página
+   * actual se toman de `items` —así reflejan el dato recién refrescado por SWR— y a ellas
+   * se suman las que se marcaron en otras páginas, tal como estaban al marcarlas.
+   */
+  const seleccionadas = useMemo<OrdenListItemDTO[]>(() => {
+    const enPagina = new Set(items.map((item) => item.id));
+    return [
+      ...items.filter((item) => seleccion.has(item.id)),
+      ...[...seleccion.values()].filter((row) => !enPagina.has(row.id)),
+    ];
+  }, [items, seleccion]);
 
   /**
    * Motivos por los que NINGUNA fila de la página se puede marcar. El tooltip del
@@ -453,7 +484,7 @@ export function OrdenesModule({
             size="sm"
             variant="ghost"
             className="ml-auto"
-            onClick={() => setSeleccionIds(new Set())}
+            onClick={() => setSeleccion(new Map())}
           >
             Limpiar
           </Button>
@@ -475,6 +506,8 @@ export function OrdenesModule({
           description: "Cuando lleguen órdenes, aparecerán aquí.",
         }}
       />
+      {/* La barra flota sobre el borde inferior mientras su sitio real queda fuera de
+          pantalla: eso lo hace `Pagination` por sí sola, igual que en el resto de tablas. */}
       <Pagination
         page={page}
         pageSize={pageSize}

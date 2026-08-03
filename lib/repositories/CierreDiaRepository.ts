@@ -191,6 +191,54 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
 }
 
 /**
+ * Proyeccion de la CABECERA de un cierre del mensajero (histórico R18 y detalle de "ver").
+ * Una sola definicion para las dos lecturas: los totales que se listan y los que se abren
+ * salen de las mismas columnas.
+ */
+const CIERRE_PASADO_SELECT = {
+  id: true,
+  estado: true,
+  destinoTipo: true,
+  destinoZonaId: true,
+  totalEfectivo: true,
+  totalSimpe: true,
+  totalTransferencia: true,
+  totalGeneral: true,
+  totalPagoMensajero: true, // feature 39/R13: total snapshot del pago al mensajero
+  totalIngresoBodegaRechazos: true, // feature 56/R12: total snapshot del ingreso de bodega por rechazos
+  solicitadoAt: true,
+  // Resolucion del cierre: el mensajero ve en SU histórico cuándo se resolvió y, si se
+  // rechazó, por qué (sin el motivo no sabe qué corregir).
+  resueltoAt: true,
+  motivoRechazo: true,
+} as const;
+
+type CierrePasadoSelectRow = Prisma.CierreDiaGetPayload<{
+  select: typeof CIERRE_PASADO_SELECT;
+}>;
+
+/** Mapper de la cabecera: Decimal -> STRING escala 2 (money-safe), fechas -> ISO. */
+function toCierrePasadoDTO(r: CierrePasadoSelectRow): CierrePasadoDTO {
+  return {
+    cierreId: r.id,
+    estado: r.estado,
+    destinoTipo: r.destinoTipo,
+    destinoZonaId: r.destinoZonaId,
+    totales: {
+      efectivo: r.totalEfectivo.toFixed(2),
+      simpe: r.totalSimpe.toFixed(2),
+      transferencia: r.totalTransferencia.toFixed(2),
+      general: r.totalGeneral.toFixed(2),
+    },
+    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R13: snapshot money-safe STRING
+    totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R12
+    solicitadoAt: r.solicitadoAt.toISOString(),
+    resueltoAt: r.resueltoAt ? r.resueltoAt.toISOString() : null,
+    motivoRechazo: r.motivoRechazo,
+  };
+}
+
+/**
  * Feature 37 — repositorio del cierre del dia. SOLO queries Prisma (sin logica de
  * negocio: los estados "pendientes" los decide el service y se pasan por parametro;
  * los totales snapshot llegan ya calculados como STRING). `crearCierre` es
@@ -517,35 +565,40 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     const rows = await this.prisma.cierreDia.findMany({
       where: { mensajeroId },
       orderBy: { solicitadoAt: "desc" },
-      select: {
-        id: true,
-        estado: true,
-        destinoTipo: true,
-        destinoZonaId: true,
-        totalEfectivo: true,
-        totalSimpe: true,
-        totalTransferencia: true,
-        totalGeneral: true,
-        totalPagoMensajero: true, // feature 39/R13: total snapshot del pago al mensajero
-        totalIngresoBodegaRechazos: true, // feature 56/R12: total snapshot del ingreso de bodega por rechazos
-        solicitadoAt: true,
-      },
+      select: CIERRE_PASADO_SELECT,
     });
-    return rows.map((r) => ({
-      cierreId: r.id,
-      estado: r.estado,
-      destinoTipo: r.destinoTipo,
-      destinoZonaId: r.destinoZonaId,
-      totales: {
-        efectivo: r.totalEfectivo.toFixed(2),
-        simpe: r.totalSimpe.toFixed(2),
-        transferencia: r.totalTransferencia.toFixed(2),
-        general: r.totalGeneral.toFixed(2),
-      },
-      totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R13: snapshot money-safe STRING
-      totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R12: snapshot money-safe STRING
-      solicitadoAt: r.solicitadoAt.toISOString(),
-    }));
+    return rows.map(toCierrePasadoDTO);
+  }
+
+  /**
+   * Cierre PROPIO + sus gestiones, para el detalle de "ver" un cierre anterior. El scope
+   * (`id` + `mensajeroId`) va en el WHERE: un cierre ajeno devuelve `null` igual que uno
+   * inexistente. La cabecera reusa el MISMO select/mapper que el histórico, así las dos
+   * vistas no pueden divergir en los totales.
+   *
+   * Las gestiones salen de `WITH_DETALLE` (la proyección de la vista del MENSAJERO, que deja
+   * la indemnización fuera de la consulta a propósito, design §7.2). Los montos por gestión
+   * son los SNAPSHOT congelados al solicitar (`pago_mensajero` / `ingreso_bodega_rechazo`),
+   * que es justo lo que el service NO debe re-derivar en un cierre ya cerrado.
+   */
+  async findCierrePropioConGestiones(
+    cierreId: string,
+    mensajeroId: string,
+  ): Promise<{ cierre: CierrePasadoDTO; gestiones: CierreGestionPendienteRow[] } | null> {
+    const cierre = await this.prisma.cierreDia.findFirst({
+      where: { id: cierreId, mensajeroId }, // scope propio en el WHERE
+      select: CIERRE_PASADO_SELECT,
+    });
+    if (cierre === null) return null;
+
+    const rows = await this.prisma.gestionOrden.findMany({
+      // `anuladaAt: null` por coherencia con el resto del módulo: una gestión anulada no
+      // llega a vincularse a un cierre, pero el filtro deja la intención escrita.
+      where: { cierreId, anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      ...WITH_DETALLE,
+    });
+    return { cierre: toCierrePasadoDTO(cierre), gestiones: rows.map(toPendienteRow) };
   }
 
   /**

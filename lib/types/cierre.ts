@@ -4,6 +4,7 @@ import type {
   DeshacerGestionServiceResult,
   ListarCierreDiaServiceResult,
   SolicitarCierreServiceResult,
+  VerCierrePasadoServiceResult,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
 // Feature 37 (R13/R18, decision F1.4-d): fuente unica de verdad de los estados del
@@ -60,3 +61,20 @@ export const deshacerGestionSchema = z.object({
 // Feature 67 — resultado de la Server Action: el resultado de dominio del service + los dos
 // estados que resuelve el borde (`validation_error` de zod R10, `unauthenticated` sin sesion R7).
 export type DeshacerGestionResult = DeshacerGestionServiceResult | { status: "unauthenticated" };
+
+// Validacion de BORDE del detalle de un cierre pasado: el input del cliente es el
+// `cierre_dia.id` (uuid); un valor mal formado -> ZodError -> validation_error ANTES de
+// llegar al service. Mismo patron que `deshacerGestionSchema`.
+export const verCierrePasadoSchema = z.object({
+  cierreId: z.string().uuid(),
+});
+
+/**
+ * Resultado de la Server Action del detalle de un cierre pasado: el resultado de dominio del
+ * service + los dos estados que resuelve el borde (`validation_error` de zod, `unauthenticated`
+ * sin sesion).
+ */
+export type VerCierrePasadoResult =
+  | VerCierrePasadoServiceResult
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };

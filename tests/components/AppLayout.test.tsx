@@ -51,7 +51,7 @@ async function renderLayout(children: ReactNode) {
 
 describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
   it("monta el sidebar con los ítems visibles del actor y los children (R14)", async () => {
-    // Actor maestro: ve los 3 ítems (Configuración, Perfil, Órdenes).
+    // Actor maestro: ve sus ítems (Configuración, Órdenes, Ranking…).
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
 
     await renderLayout(
@@ -66,7 +66,7 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     expect(
       screen.getByRole("button", { name: /configuración/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Perfil" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ranking" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Órdenes" })).toBeInTheDocument();
     // ...junto con los children del layout.
     expect(screen.getByTestId("page-children")).toBeInTheDocument();
@@ -82,7 +82,6 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
 
     await renderLayout(<div>Contenido</div>);
 
-    expect(screen.getByRole("link", { name: "Perfil" })).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /configuración/i }),
     ).toBeNull();

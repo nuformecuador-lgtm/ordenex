@@ -8,6 +8,7 @@ import { verCierreDetalle, aprobarCierre } from "@/lib/actions/cierres-admin";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
+import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -81,7 +82,9 @@ function makeResumen(over: Partial<CierreAdminResumen> & { cierreId: string }): 
     totales: ZERO_TOTALES,
     totalPagoMensajero: "0.00",
     totalIngresoBodegaRechazos: "0.00",
-    solicitadoAt: "2026-07-30T10:00:00.000Z",
+    // Dentro del rango por defecto de la lista (últimos 7 días); si fuera fija, la
+    // tarjeta dejaría de pintarse en cuanto pasara una semana.
+    solicitadoAt: `${ultimosNDiasCalendarioCR(1).hasta}T10:00:00.000Z`,
     resueltoAt: null,
     motivoRechazo: null,
     ...over,

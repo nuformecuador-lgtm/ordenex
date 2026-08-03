@@ -15,9 +15,11 @@ import type { ICierreDiaService } from "@/lib/interfaces/services/ICierreDiaServ
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import {
   deshacerGestionSchema,
+  verCierrePasadoSchema,
   type DeshacerGestionResult,
   type ListarCierreDiaResult,
   type SolicitarCierreResult,
+  type VerCierrePasadoResult,
 } from "@/lib/types/cierre";
 import { notificarCierreDiaPorAprobarReal } from "@/lib/notificaciones/notificadores";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -113,8 +115,29 @@ export async function solicitarCierre(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
+/**
+ * Detalle de UN cierre PASADO del propio mensajero (solo lectura). Lectura interna del mismo
+ * proyecto -> Server Action, no Route API. `unauthenticated` (sin sesion) y `validation_error`
+ * (cierreId no-uuid) se resuelven en el borde; `forbidden` (rol) y `no_encontrada` (cierre
+ * ajeno o inexistente, sin distinguirse) los devuelve el service.
+ */
+export async function verCierrePasado(
+  input: unknown,
+  deps: CierreDiaDeps = {},
+): Promise<VerCierrePasadoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = verCierrePasadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.verCierrePasado(data.cierreId, actor);
+  });
+  return isAppErrorShape(r) ? toDeshacerGestionActionError(r) : r;
+}
+
 // Feature 67 — traduce el AppErrorShape que puede producir ESTE borde: solo ZodError
-// (VALIDATION_ERROR, R10) o falta de sesion (UNAUTHORIZED, R7). `forbidden`/`conflict` los
+// (VALIDATION_ERROR, R10) o falta de sesion (UNAUTHORIZED, R7). Lo comparte `verCierrePasado`,
+// cuyo borde puede producir exactamente los mismos dos. `forbidden`/`conflict` los
 // devuelve el service como resultado de dominio, por eso NO aparecen aqui. Espejo EXACTO de
 // `toDevolucionOrigenActionError` (48) / `toMisAsignacionesActionError` (36).
 function toDeshacerGestionActionError(

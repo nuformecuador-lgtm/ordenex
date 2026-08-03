@@ -215,6 +215,20 @@ export interface ICierreDiaRepository {
   /** R18: cierres del mensajero (mas reciente primero) con estado + totales. */
   findCierresByMensajero(mensajeroId: string): Promise<CierrePasadoDTO[]>;
   /**
+   * Cierre PROPIO del mensajero (cabecera + sus gestiones vinculadas), para el detalle de
+   * "ver" un cierre anterior. El scope va en el WHERE (`id` + `mensajero_id`): un cierre de
+   * otro mensajero devuelve `null` igual que uno inexistente, sin distinguirse.
+   *
+   * Usa la MISMA proyeccion que la vista en vivo (`WITH_DETALLE`), que deja la indemnizacion
+   * FUERA de la consulta a proposito (design §7.2). Los montos que si viajan (pago al
+   * mensajero, ingreso de bodega) son los SNAPSHOT congelados en la gestion al solicitar el
+   * cierre, no valores re-derivados de la tarifa de hoy.
+   */
+  findCierrePropioConGestiones(
+    cierreId: string,
+    mensajeroId: string,
+  ): Promise<{ cierre: CierrePasadoDTO; gestiones: CierreGestionPendienteRow[] } | null>;
+  /**
    * Feature 67 — lee la gestion candidata a deshacerse + el estado real de su orden. Devuelve
    * la fila SIN juzgarla (las guardias de R2/R3/R5/R6/R9 viven en el service); `null` si la
    * gestion no existe. Solo query.

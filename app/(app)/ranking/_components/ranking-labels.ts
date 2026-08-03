@@ -76,7 +76,7 @@ export const PODIO_LABELS = {
     total === 1 ? "1 mensajero" : `${total} mensajeros`,
   listaAria: "Resto del ranking diario",
   podioAria: "Podio del ranking diario",
-  vos: "Vos",
+  vos: "Tú",
   fueraDelTop: (limite: number) => `Tu posición, fuera del top ${limite}`,
 } as const;
 

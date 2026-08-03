@@ -55,10 +55,13 @@ export function PosOrderCardMosaico({
       onClick={onClick}
       onKeyDown={onKeyDown}
       tabIndex={seleccionable ? 0 : undefined}
+      // Sin selección por toque (rama ux: en reparto se gestiona desde el botón del pie) la
+      // card sigue necesitando NOMBRE: es la etiqueta con la que se la anuncia y se la
+      // localiza, aunque no sea un target.
       aria-label={
         onGestionar
           ? `Gestionar orden ${orden.numRemision} · ${orden.destinatario}`
-          : undefined
+          : `Orden ${orden.numRemision} · ${orden.destinatario}`
       }
       className={`flex flex-col gap-2.5 rounded-xl border bg-card p-3 shadow-sm transition-all ${
         esDetalle ? "border-brand ring-1 ring-brand" : "border-border"

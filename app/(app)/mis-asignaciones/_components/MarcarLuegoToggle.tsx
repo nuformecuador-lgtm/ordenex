@@ -1,7 +1,7 @@
 "use client";
 
 // Feature 115 (T8 / R5/R6) — control de la card para marcar/quitar una orden como
-// "gestionar más tarde". Vive dentro de `MisAsignacionesModule`, que solo se monta desde
+// "gestionar más tarde". Vive dentro de `RepartoModule`, que solo se monta desde
 // una página que ya hace `notFound()` para roles ≠ `mensajero`; la Server Action
 // `marcarGestionarLuego` revalida rol/propiedad (`forbidden`/`not_found`) como defensa en
 // profundidad. Es una MUTACIÓN interna del mismo proyecto → Server Action, no Route API.

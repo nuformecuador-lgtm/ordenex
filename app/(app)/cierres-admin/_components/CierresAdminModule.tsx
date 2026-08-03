@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
-import { DataTable, type Column } from "@/components/shared/DataTable";
 import { useToast } from "@/hooks/useToast";
 import {
   verCierreDetalle,
@@ -33,12 +32,18 @@ import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 // causa: no puede ser un slug crudo ni, peor, no estar.
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import {
-  money,
-  EstadoCierreBadge,
-  EstadoHistoricoRotulo,
-  PAGO_MENSAJERO_COL,
-  INGRESO_BODEGA_RECHAZOS_COL,
+  ESTADO_LABEL,
+  RechazadoBloqueanteBadge,
 } from "./cierre-detalle-shared";
+import {
+  BarraFiltrosCierres,
+  RANGO_INICIAL,
+  SIN_RESULTADOS_FILTRO,
+  coincide,
+  enRangoFecha,
+  opcionesDe,
+  type RangoFechas,
+} from "./cierres-filtros";
 import {
   CierreFacturaResumen,
   CierreFacturaDetalle,
@@ -96,6 +101,11 @@ function destino(c: CierreAdminResumen): string {
   return `${DESTINO_LABEL[c.destinoTipo]} · ${c.destinoZonaNombre}`;
 }
 
+/** Estado de un cierre tal como se ofrece en el filtro (el rótulo ES el valor). */
+function estadoLabel(c: CierreAdminResumen): string {
+  return ESTADO_LABEL[c.estado];
+}
+
 /** Detalle abierto: la cabecera del cierre + sus gestiones agrupadas por resultado. */
 interface DetalleAbierto {
   cierre: CierreAdminResumen;
@@ -122,6 +132,14 @@ export function CierresAdminModule({
   const router = useRouter();
   const toast = useToast();
 
+  // Rango de fechas activo (arranca en los últimos 7 días; ver `RANGO_INICIAL`).
+  const [rango, setRango] = useState<RangoFechas>(RANGO_INICIAL);
+  // Filtros propios del HISTÓRICO: crece sin techo, así que es el que necesita acotarse
+  // por quién cerró, en qué estado quedó y a qué bodega fue. Vacío = todos.
+  const [mensajerosFiltro, setMensajerosFiltro] = useState<string[]>([]);
+  const [estadosFiltro, setEstadosFiltro] = useState<string[]>([]);
+  const [zonasFiltro, setZonasFiltro] = useState<string[]>([]);
+
   // Detalle del cierre abierto (null = modal cerrado).
   const [detalle, setDetalle] = useState<DetalleAbierto | null>(null);
   // Evidencia (URL firmada, R7) en el visor; null = cerrado.
@@ -144,6 +162,50 @@ export function CierresAdminModule({
   // Errores por gestión que devuelve el SERVIDOR (`fieldErrors` con clave = gestionId,
   // `CierresAdminService.validarCoberturaIndemnizaciones`). Se pintan por fila.
   const [montoErrores, setMontoErrores] = useState<Record<string, string>>({});
+
+  // Antes del corte por `sinZona`: los hooks se llaman siempre, en el mismo orden.
+  const pendientesVisibles = useMemo(
+    () => pendientes.filter((c) => enRangoFecha(c.solicitadoAt, rango)),
+    [pendientes, rango],
+  );
+  const historicoVisible = useMemo(
+    () =>
+      historico.filter(
+        (c) =>
+          enRangoFecha(c.solicitadoAt, rango) &&
+          coincide(c.mensajeroNombre, mensajerosFiltro) &&
+          coincide(estadoLabel(c), estadosFiltro) &&
+          coincide(c.destinoZonaNombre, zonasFiltro),
+      ),
+    [historico, rango, mensajerosFiltro, estadosFiltro, zonasFiltro],
+  );
+  // Opciones de los filtros del histórico: salen de los propios cierres que llegaron.
+  const filtrosHistorico = useMemo(
+    () => [
+      {
+        key: "mensajero",
+        label: "Mensajero",
+        options: opcionesDe(historico.map((c) => c.mensajeroNombre)),
+        value: mensajerosFiltro,
+        onChange: setMensajerosFiltro,
+      },
+      {
+        key: "estado",
+        label: "Estado",
+        options: opcionesDe(historico.map(estadoLabel)),
+        value: estadosFiltro,
+        onChange: setEstadosFiltro,
+      },
+      {
+        key: "zona",
+        label: "Zona destino",
+        options: opcionesDe(historico.map((c) => c.destinoZonaNombre)),
+        value: zonasFiltro,
+        onChange: setZonasFiltro,
+      },
+    ],
+    [historico, mensajerosFiltro, estadosFiltro, zonasFiltro],
+  );
 
   // R3: adminSatelite sin zona → aviso accionable, sin tablas de acción.
   if (sinZona) {
@@ -381,6 +443,13 @@ export function CierresAdminModule({
 
   return (
     <div className="flex flex-col gap-8">
+      {/* ---------- Filtro por fecha del cierre ----------
+          Acota AMBAS listas por la fecha en que se solicitó el cierre (la del día que
+          cierra), en fecha calendario de Costa Rica. Arranca en los últimos 7 días: el
+          histórico crece sin techo y sin acotar la pantalla abría con meses de cierres.
+          Limpiar el rango devuelve todo lo que trajo el servidor. */}
+      <BarraFiltrosCierres onRangoChange={setRango} />
+
       {/* ---------- Pendientes de decisión (R4) ---------- */}
       <section
         aria-label="Pendientes de decisión"
@@ -389,65 +458,27 @@ export function CierresAdminModule({
         <h2 className="text-lg font-semibold">
           Pendientes de decisión{" "}
           <span className="text-sm font-normal text-muted-foreground">
-            ({pendientes.length})
+            ({pendientesVisibles.length})
           </span>
         </h2>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasPendientes(abrirDetalle, setDestrabar)}
-            data={pendientes}
-            rowKey="cierreId"
-            ariaLabel="Pendientes de decisión"
-            emptyMessage="No hay cierres pendientes de decisión."
-          />
-        </div>
-      </section>
-
-      {/* ---------- Histórico (solo lectura, R5) ---------- */}
-      <section aria-label="Histórico" className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Histórico</h2>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasHistorico(abrirDetalle)}
-            data={historico}
-            rowKey="cierreId"
-            ariaLabel="Histórico"
-            emptyMessage="Aún no hay cierres resueltos."
-          />
-        </div>
-      </section>
-
-      {/* ---------- Vista tipo factura (previsualización de UX) ----------
-          Lectura alternativa de LOS MISMOS cierres que las dos tablas de arriba, como
-          comprobante. Va DEBAJO y a propósito no reemplaza nada: es para comparar las
-          dos lecturas antes de decidir cuál se queda. */}
-      <section
-        aria-label="Vista tipo factura"
-        className="flex flex-col gap-4 border-t pt-6"
-      >
-        <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-semibold">Vista tipo factura</h2>
-          <p className="text-sm text-muted-foreground">
-            Previsualización: los mismos cierres de arriba leídos como comprobante.
-          </p>
-        </div>
-
+        {/* Cada cierre se lee como COMPROBANTE (la misma hoja que el detalle, compacta)
+            en vez de como fila de tabla: el estado, las partes y el total se leen de
+            corrido y el desglose por método vive detrás del desplegable de la tarjeta. */}
         <div className="grid gap-4 xl:grid-cols-2">
-          {[...pendientes, ...historico].map((c) => (
+          {pendientesVisibles.map((c) => (
             <CierreFacturaResumen
               key={c.cierreId}
               cierre={c}
               acciones={
-                // Los nombres accesibles llevan el sufijo de la vista: los botones de
-                // la tabla ya se llaman "Ver / decidir" / "Destrabar cierre vencido",
-                // y duplicarlos haría ambigua la localización por nombre.
+                // Feature 111/R15/R16: un `solicitado` se resuelve por la vía normal
+                // ("Ver / decidir" abre el detalle con aprobar/rechazar). Un `vencido`
+                // NO; solo sus tarjetas ofrecen la acción DIFERENCIADA de excepción.
                 c.estado === "vencido" ? (
                   <div className="flex flex-wrap justify-end gap-2">
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      aria-label={`Ver el comprobante del cierre de ${c.mensajeroNombre}`}
                       onClick={() => abrirDetalle(c.cierreId)}
                     >
                       Ver
@@ -457,7 +488,7 @@ export function CierresAdminModule({
                       size="sm"
                       variant="destructive"
                       onClick={() => setDestrabar(c)}
-                      aria-label={`Destrabar desde el comprobante el cierre vencido abandonado de ${c.mensajeroNombre}`}
+                      aria-label={`Destrabar cierre vencido abandonado de ${c.mensajeroNombre}`}
                     >
                       Destrabar cierre vencido
                     </Button>
@@ -466,23 +497,58 @@ export function CierresAdminModule({
                   <Button
                     type="button"
                     size="sm"
-                    variant={c.estado === "solicitado" ? "default" : "outline"}
-                    aria-label={
-                      c.estado === "solicitado"
-                        ? `Ver / decidir desde el comprobante el cierre de ${c.mensajeroNombre}`
-                        : `Ver el comprobante del cierre de ${c.mensajeroNombre}`
-                    }
                     onClick={() => abrirDetalle(c.cierreId)}
                   >
-                    {c.estado === "solicitado" ? "Ver / decidir" : "Ver"}
+                    Ver / decidir
                   </Button>
                 )
               }
             />
           ))}
-          {pendientes.length === 0 && historico.length === 0 ? (
+          {pendientesVisibles.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No hay cierres para previsualizar.
+              {pendientes.length === 0
+                ? "No hay cierres pendientes de decisión."
+                : SIN_RESULTADOS_FILTRO}
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      {/* ---------- Histórico (solo lectura, R5) ---------- */}
+      <section aria-label="Histórico" className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Histórico</h2>
+        {/* El histórico es la lista que crece sin techo: además de la fecha se acota por
+            mensajero, estado y bodega destino. Las opciones salen de los cierres que ya
+            llegaron, así que nunca ofrecen algo que no esté en la lista. */}
+        <BarraFiltrosCierres multis={filtrosHistorico} />
+        <div className="grid gap-4 xl:grid-cols-2">
+          {historicoVisible.map((c) => (
+            <CierreFacturaResumen
+              key={c.cierreId}
+              cierre={c}
+              // Feature 109/R31: el `rechazado` sigue marcado como BLOQUEANTE hasta la
+              // re-solicitud; el badge de estado por sí solo se lee como cerrado.
+              rotulo={
+                c.estado === "rechazado" ? <RechazadoBloqueanteBadge /> : null
+              }
+              acciones={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => abrirDetalle(c.cierreId)}
+                >
+                  Ver
+                </Button>
+              }
+            />
+          ))}
+          {historicoVisible.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {historico.length === 0
+                ? "Aún no hay cierres resueltos."
+                : SIN_RESULTADOS_FILTRO}
             </p>
           ) : null}
         </div>
@@ -729,131 +795,4 @@ export function CierresAdminModule({
       </Modal>
     </div>
   );
-}
-
-// --- Columnas de la cola de pendientes (R4) ---
-function columnasPendientes(
-  abrir: (cierreId: string) => void,
-  pedirDestrabar: (c: CierreAdminResumen) => void,
-): Column<CierreAdminResumen>[] {
-  return [
-    // Feature 41 (R20): estado diferenciado (`solicitado` vs `vencido`) en la cola.
-    {
-      id: "estado",
-      value: "Estado",
-      render: (c) => <EstadoCierreBadge estado={c.estado} />,
-    },
-    { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
-    {
-      id: "fecha",
-      value: "Fecha",
-      render: (c) => c.solicitadoAt.slice(0, 10),
-    },
-    { id: "destino", value: "Destino", render: (c) => destino(c) },
-    {
-      id: "general",
-      value: "Total general",
-      render: (c) => money(c.totales.general),
-    },
-    {
-      id: "pagoMensajero",
-      value: PAGO_MENSAJERO_COL,
-      render: (c) => money(c.totalPagoMensajero),
-    },
-    {
-      id: "ingresoBodegaRechazos",
-      value: INGRESO_BODEGA_RECHAZOS_COL,
-      render: (c) => money(c.totalIngresoBodegaRechazos),
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      // Feature 111/R15/R16: un `solicitado` es resoluble por la vía normal ("Ver /
-      // decidir" abre el detalle con aprobar/rechazar). Un `vencido` NO es resoluble por
-      // esa vía; se ofrece SOLO en sus filas la acción DIFERENCIADA de excepción
-      // "Destrabar cierre vencido" (con confirmación), separada de aprobar/rechazar.
-      render: (c) =>
-        c.estado === "vencido" ? (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => abrir(c.cierreId)}
-            >
-              Ver
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              onClick={() => pedirDestrabar(c)}
-              aria-label={`Destrabar cierre vencido abandonado de ${c.mensajeroNombre}`}
-            >
-              Destrabar cierre vencido
-            </Button>
-          </div>
-        ) : (
-          <Button type="button" size="sm" onClick={() => abrir(c.cierreId)}>
-            Ver / decidir
-          </Button>
-        ),
-    },
-  ];
-}
-
-// --- Columnas del histórico (solo lectura, R5) ---
-function columnasHistorico(
-  abrir: (cierreId: string) => void,
-): Column<CierreAdminResumen>[] {
-  return [
-    // Feature 109/R31: un `rechazado` del histórico se rotula "bloqueante hasta
-    // re-solicitud" (no "resuelto/cerrado"); el resto conserva su etiqueta.
-    {
-      id: "estado",
-      value: "Estado",
-      render: (c) => <EstadoHistoricoRotulo estado={c.estado} />,
-    },
-    { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
-    {
-      id: "resueltoAt",
-      value: "Fecha resuelta",
-      render: (c) => c.resueltoAt?.slice(0, 10) ?? "—",
-    },
-    { id: "destino", value: "Destino", render: (c) => destino(c) },
-    {
-      id: "general",
-      value: "Total general",
-      render: (c) => money(c.totales.general),
-    },
-    {
-      id: "pagoMensajero",
-      value: PAGO_MENSAJERO_COL,
-      render: (c) => money(c.totalPagoMensajero),
-    },
-    {
-      id: "ingresoBodegaRechazos",
-      value: INGRESO_BODEGA_RECHAZOS_COL,
-      render: (c) => money(c.totalIngresoBodegaRechazos),
-    },
-    {
-      id: "motivoRechazo",
-      value: "Motivo",
-      render: (c) => c.motivoRechazo ?? "—",
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (c) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => abrir(c.cierreId)}
-        >
-          Ver
-        </Button>
-      ),
-    },
-  ];
 }

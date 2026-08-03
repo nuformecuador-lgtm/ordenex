@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { UserPlus } from "lucide-react";
 import useSWR from "swr";
 
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Modal } from "@/components/shared/Modal";
 import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
@@ -145,9 +147,12 @@ export function PostulacionesPendientesPanel() {
           No se pudieron cargar las postulaciones
         </p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No hay postulaciones pendientes
-        </p>
+        <EmptyState
+          icon={UserPlus}
+          title="No hay postulaciones pendientes"
+          description="Cuando un mensajero se postule desde la app, su solicitud aparecerá aquí para aprobarla o rechazarla."
+          className="rounded-xl border border-dashed border-border bg-muted/30 py-20"
+        />
       ) : (
         <>
           <ul className="flex flex-col gap-4">

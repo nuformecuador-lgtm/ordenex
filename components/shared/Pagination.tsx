@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { cn } from "@/lib/utils";
 
 /**
@@ -52,6 +54,24 @@ export interface PaginationProps {
   ariaLabel?: string;
   /** Etiquetas/aria-labels personalizables (i18n) (R16, R17). */
   labels?: PaginationLabels;
+  /**
+   * Clases extra del `<nav>`, para que el consumidor ajuste su COLOCACIÓN (alineado,
+   * alto) sin envolver el control en otra caja. Se fusionan con `cn`, así que pueden
+   * sobreescribir las de por defecto (p. ej. `justify-center`).
+   */
+  className?: string;
+  /**
+   * Mientras su sitio natural (al pie de la lista) cae por debajo del viewport, la barra
+   * se pega al borde inferior de la pantalla; al alcanzarlo con el scroll se queda ahí.
+   * Es el comportamiento por defecto de TODAS las tablas; `false` la deja en flujo normal
+   * (útil cuando va dentro de un diálogo o de una caja con scroll propio).
+   */
+  sticky?: boolean;
+  /**
+   * Clases extra del contenedor pegajoso (solo con `sticky`). Sirve sobre todo para
+   * ajustar el margen negativo que anula el `gap` del contenedor padre.
+   */
+  contenedorClassName?: string;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -128,7 +148,28 @@ export function Pagination({
   siblingCount,
   ariaLabel = "Paginación",
   labels,
+  className,
+  sticky = true,
+  contenedorClassName,
 }: PaginationProps) {
+  // ¿La barra está FLOTANDO sobre la lista (pegada al borde inferior) o ya llegó a su sitio
+  // al pie? Solo cambia la sombra. Se deduce de un centinela de 1px que va justo debajo de
+  // ella: si no está en pantalla, la barra flota. Sin listeners de scroll (un
+  // IntersectionObserver no se dispara en cada píxel) y sin medir alturas a mano.
+  const [pegada, setPegada] = useState(false);
+  const centinelaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const centinela = centinelaRef.current;
+    // Sin soporte (jsdom, navegador viejo) la barra se queda sin sombra: es decoración.
+    if (!centinela || typeof IntersectionObserver === "undefined") return;
+    const observador = new IntersectionObserver(
+      ([entrada]) => setPegada(!entrada.isIntersecting),
+      { threshold: 1 },
+    );
+    observador.observe(centinela);
+    return () => observador.disconnect();
+  }, []);
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize)); // R3, R13
   const safePage = clamp(page, 1, totalPages); // R9
   const emptyDataset = total === 0; // R13
@@ -171,10 +212,16 @@ export function Pagination({
     ? buildPageItems(safePage, totalPages, siblingCount)
     : [];
 
-  return (
+  const nav = (
     <nav
       aria-label={ariaLabel}
-      className="flex flex-wrap items-center gap-2 py-2"
+      className={cn(
+        "flex flex-wrap items-center gap-2 py-2",
+        // Pegada al borde inferior la barra es un elemento de navegación flotante: más
+        // alta y centrada para que se lea como tal y no como el pie de la tabla.
+        sticky && "justify-center gap-3 py-4",
+        className,
+      )}
     >
       <span aria-live="polite" className="text-sm text-muted-foreground">
         {statusText}
@@ -272,5 +319,50 @@ export function Pagination({
         </select>
       ) : null}
     </nav>
+  );
+
+  if (!sticky) return nav;
+
+  return (
+    <>
+      {/* `position: sticky` con `bottom: 0`: la barra se queda DONDE ESTABA (al pie de la
+          lista), pero mientras su sitio natural cae por debajo del viewport flota sobre el
+          borde inferior de la pantalla — así se pagina sin bajar hasta el final de una
+          tabla larga—. Sin JS ni listeners de scroll.
+
+          Fondo semitransparente + `backdrop-blur`: mientras flota, las filas pasan por
+          debajo; sin él se leerían encima, y con el desenfoque se intuye que hay contenido
+          detrás en vez de parecer un corte opaco. Los ancestros no pueden recortarla:
+          `SidebarInset` usa `overflow-x-clip` (no `hidden`) justo para no crear un
+          contenedor de scroll.
+
+          `-mt-4`: anula el `gap-4` del contenedor padre SOLO en esta junta, así la barra
+          queda pegada a la tabla (gap 0) sin tocar la separación del resto de bloques. */}
+      <div
+        className={cn(
+          "sticky bottom-0 z-10 -mt-4 bg-background/70 backdrop-blur-md",
+          contenedorClassName,
+        )}
+      >
+        {/* Sombra SOLO mientras flota, y SOLO hacia arriba. No es un `box-shadow`: ese se
+            desborda también por los lados y se veía asomar en los costados de la barra.
+            Es una franja propia justo ENCIMA (`bottom-full`) y del MISMO ancho
+            (`inset-x-0`), que se difumina hacia arriba: no hay nada que pueda salirse por
+            los flancos. Sin bordes: la separación la da la franja. */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-full h-6 bg-gradient-to-t from-navy/10 to-transparent transition-opacity",
+            pegada ? "opacity-100" : "opacity-0",
+          )}
+        />
+        {nav}
+      </div>
+      {/* Centinela del "¿sigue pegada?": va JUSTO debajo de la barra, en flujo normal. Si
+          no se ve, es que la barra está flotando sobre el contenido; en cuanto entra en
+          pantalla, la barra ya alcanzó su sitio. CSS no sabe distinguir esos dos estados
+          (`:stuck` no existe), así que se observa este 1px en vez de escuchar el scroll. */}
+      <div ref={centinelaRef} aria-hidden="true" className="h-px w-full" />
+    </>
   );
 }

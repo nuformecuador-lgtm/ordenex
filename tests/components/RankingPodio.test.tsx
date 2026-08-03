@@ -151,7 +151,7 @@ describe("RankingPodio — recorte al top y fila propia del mensajero", () => {
   it("realza la fila propia cuando SÍ entra en el top, sin duplicarla", () => {
     render(<RankingPodio ranking={MUCHOS} mensajeroPropioId="m5" limite={10} />);
     expect(screen.getAllByText("Mensajero 5")).toHaveLength(1);
-    expect(screen.getAllByText("Vos")).toHaveLength(1);
+    expect(screen.getAllByText("Tú")).toHaveLength(1);
     expect(screen.queryByText(/fuera del top/)).toBeNull();
   });
 
@@ -164,12 +164,12 @@ describe("RankingPodio — recorte al top y fila propia del mensajero", () => {
     expect(within(propia).getByText("18")).toBeInTheDocument();
     expect(within(propia).getByText("82/100 entregas")).toBeInTheDocument();
     expect(within(propia).getByText("82.0%")).toBeInTheDocument();
-    expect(within(propia).getByText("Vos")).toBeInTheDocument();
+    expect(within(propia).getByText("Tú")).toBeInTheDocument();
   });
 
   it("no ancla nada para maestro/admin (sin fila propia)", () => {
     render(<RankingPodio ranking={MUCHOS} mensajeroPropioId={null} limite={null} />);
     expect(screen.queryByText(/fuera del top/)).toBeNull();
-    expect(screen.queryByText("Vos")).toBeNull();
+    expect(screen.queryByText("Tú")).toBeNull();
   });
 });
