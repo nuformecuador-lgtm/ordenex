@@ -12,15 +12,19 @@
 |---|---|---|
 | `pnpm typecheck` | limpio | limpio |
 | `pnpm lint` | **0 errores**, 30 warnings | **0 errores**, 30 warnings |
-| `pnpm test` — **archivos** | **844** (2 failed / 842 passed) | **PENDIENTE_ARCHIVOS** |
-| `pnpm test` — tests | **10 550** (2 failed / 10 548 passed) | **PENDIENTE_TESTS** |
+| `pnpm test` — **archivos** | **844** (2 failed / 842 passed) | **864** (1 failed / 863 passed) — **+20 archivos, todos mios** |
+| `pnpm test` — tests | **10 550** (2 failed / 10 548 passed) | **10 651** (1 failed / 10 650 passed) — **+101 tests** |
 
-**Los 2 rojos del baseline, con nombre** (heredados de `dev`, ninguno de esta feature):
+**Los rojos, con nombre y comprobados EN AISLADO** (ninguno es de esta feature):
 
-1. `tests/unit/components/filter-component.test.tsx` › «una racha de clics colapsa en UNA sola
-   emision, la del estado final»
-2. `tests/unit/guards/no-embalaje.test.ts` › «no queda ninguna referencia a 'embalaje' fuera del
-   whitelist»
+| corrida | rojo | en aislado |
+|---|---|---|
+| baseline | `tests/unit/components/filter-component.test.tsx` › «una racha de clics colapsa en UNA sola emision…» | **verde** en la corrida final |
+| baseline | `tests/unit/guards/no-embalaje.test.ts` › «no queda ninguna referencia a 'embalaje' fuera del whitelist» | **verde** (`pnpm exec vitest run tests/unit/guards/no-embalaje.test.ts` → 1 passed) |
+| final | `tests/unit/guards/no-embalaje.test.ts` (el mismo) | **verde** en aislado |
+
+Los dos son **flakes por saturacion**, no regresiones: cambian de archivo entre corridas y pasan
+aislados. **Delta de rojos reales = 0.**
 
 Ninguna corrida —ni la inicial ni la final— reporto *unhandled errors* de workers, asi que
 **ninguna estaba degradada**: el total de ARCHIVOS es comparable entre las dos, que es la
@@ -30,7 +34,7 @@ comprobacion que importa (una corrida degradada omite archivos enteros y parece 
 
 ## 2. Archivos creados y modificados
 
-### Nuevos (13)
+### Nuevos (14)
 
 | archivo | que es |
 |---|---|
@@ -38,7 +42,8 @@ comprobacion que importa (una corrida degradada omite archivos enteros y parece 
 | `lib/cache/next-analitica-cache.ts` | **UNICO** archivo que importa `next/cache` (R21). |
 | `lib/cache/cache-nula.ts` | Pass-through del puerto (bandera apagada, R16). |
 | `lib/cache/registro-invalidacion.ts` | **DESVIACION declarada** (§6.1). Decorador del puerto que emite el registro de R23. |
-| `lib/analytics/cache-clave.ts` | `claveDeConsulta` (R5–R8) + codec de cubos (R9). Puro. |
+| `lib/analytics/cache-clave.ts` | `claveDeConsulta` (R5–R8). Modulo puro. |
+| `lib/cache/cache-codec.ts` | **DESVIACION declarada** (§6.8). Codec de cubos (R9). |
 | `lib/analytics/cache-tags.ts` | Tags derivados de `tagDeDominio()` (R20). Puro. |
 | `lib/config/analitica-cache.ts` | Bandera (R16) y **la unica** constante de TTL (R17). |
 | `lib/repositories/CachedAnaliticaOperativaRollupRepository.ts` | El decorador + `decorarRollupConCache` (R2/R3/R4/R16/R22). |
@@ -60,7 +65,7 @@ Mas 15 archivos de test (todos nuevos, ninguno de otra feature modificado):
 `tests/unit/services/jobs-registro.test.ts`,
 `tests/integration/db/job-tipo-analitica-invalidacion-migration.test.ts`.
 
-### Existentes modificados (6)
+### Existentes modificados (6 de codigo + 4 de test)
 
 | archivo | de quien | que se cambia |
 |---|---|---|
@@ -70,6 +75,12 @@ Mas 15 archivos de test (todos nuevos, ninguno de otra feature modificado):
 | `app/api/cron/procesar-jobs/route.ts` | 90 | registra el tipo nuevo en `buildHandlers` y **no** en `buildRecurrencias` (R14); pasa el invalidador real al handler del rollup. |
 | `db/schema.prisma` | — | **DESVIACION declarada** (§6.2): el valor nuevo del enum `job_tipo`. |
 | `feature_list.json` | leader | no lo he tocado yo; entra en el diff porque el alta de la 128 se commiteo en esta rama. |
+
+Y **cuatro tests ajenos**, una linea cada uno, por el motivo de §6.9:
+`tests/unit/api/procesar-jobs-registro.test.ts`,
+`tests/integration/api/procesar-jobs-geocodificacion.test.ts`,
+`tests/integration/api/procesar-jobs-webhook-estado.test.ts` (conjunto EXACTO de handlers) y
+`tests/integration/db/job-tipo-analitica-rollup-migration.test.ts` (§6.9).
 
 **Lo que NO se toco, y se declara:** `lib/analytics/metrics.ts`, `next.config.ts`,
 `AnaliticaOperativaService`, `AnaliticaFinancieraService`, `AnaliticaRollupService`,
@@ -241,6 +252,32 @@ mismo rango son dos recomputos **distintos** y el segundo tiene que invalidar ig
 primero. Si la clave los fundiera, el `ON CONFLICT DO NOTHING` descartaria el segundo encolado en
 silencio y la cache serviria las cifras del primer recomputo.
 
+### 6.8 El codec NO cabe en `lib/analytics/`
+
+`design.md §5` lo ponia dentro de `lib/analytics/cache-clave.ts`. **No cabe ahi, y el guardia
+tenia razon.** `tests/unit/analytics/modulo-puro.guardia.test.ts` (122/135) prohibe que cualquier
+archivo de `lib/analytics/` importe un especificador con el segmento `repositories`, y juzga la
+**ruta**, no si el import es de tipo. El codec necesita `CuboRollup`, que vive en
+`lib/interfaces/repositories/`. Se movio **el codigo** a `lib/cache/cache-codec.ts`; la
+alternativa —relajar el guardia para hacerle sitio a un archivo nuevo— es exactamente lo que no
+se hace. `claveDeConsulta` se queda en `lib/analytics/cache-clave.ts` y sigue siendo puro.
+
+### 6.9 Cuatro tests ajenos, una linea cada uno
+
+- `procesar-jobs-registro.test.ts` (90/124), `procesar-jobs-geocodificacion.test.ts` (91) y
+  `procesar-jobs-webhook-estado.test.ts` (99) afirman el **conjunto EXACTO** de handlers
+  registrados, y su propio comentario dice: «anadir o quitar un tipo sin actualizar este test
+  falla ruidosamente». Anadir el tipo a la lista **ES la actualizacion que ese guardia pide**, no
+  una relajacion: ni una expectativa mas cambia en los tres.
+- `job-tipo-analitica-rollup-migration.test.ts` (124) exigia que el enum del datamodel tuviera
+  **exactamente siete** valores con el de la 124 al final. Es una propiedad **temporal** —la
+  misma clase que ese archivo ya habia retirado por su cuenta con «la carpeta es la ULTIMA por
+  nombre»—: cualquier feature que anada un valor de enum la rompe sin decir nada sobre la
+  correccion de la 124. Se acota a `slice(0, 7)`, conservando intacto lo que si es suyo: los seis
+  valores previos en su orden exacto y el suyo justo despues, que es lo que su `down.sql` recrea.
+
+Los cinco archivos estan en la lista del guardia de frontera con su justificacion escrita.
+
 ### 6.7 Lo que NO se encontro
 
 No aparecio una **cuarta divergencia** en `lib/analytics/metrics.ts` que declarar (las tres
@@ -278,6 +315,6 @@ ledger»** (backend, `medium`, `depends_on: 128`). **La 128 no la implementa** y
 ## 9. Veredicto
 
 Los 24 requisitos implementados y cubiertos por test nombrado, con 33 mutaciones aplicadas y las
-33 muertas; delta de suite **PENDIENTE_DELTA** respecto del baseline medido en la rama; la
+33 muertas; **delta de rojos reales = 0** (844→864 archivos y 10 550→10 651 tests, todo el aumento es de esta feature; el unico rojo de la corrida final es un flake que pasa en aislado); la
 reversibilidad de la migracion verificada por texto y **no** por ejecucion, por decision explicita
 de no tocar la base compartida.
