@@ -1,0 +1,317 @@
+// Feature 170 (T0.5) — REGISTRO DEL CENSO de tablas de la aplicación.
+//
+// Es la lista declarada contra la que se contrasta el árbol (`cobertura-tablas.guardia`).
+// No es documentación: si no coincide con el código, el test falla. Su razón de ser es que
+// una tabla nueva NO pueda nacer sin que alguien decida —y deje escrito— si se descarga o
+// por qué no (R4), y que una tabla declarada fuera de alcance no monte control (R2).
+//
+// El censo original está en `specs/170-export-todas-las-tablas/design.md §1` y en los
+// Anexos I y II de `requirements.md`: 31 tablas = 25 dentro de alcance + 6 fuera. De las
+// 31, 30 eran instancias de `<DataTable>` y 1 es una `<table>` HTML cruda (los premios del
+// podio del ranking), que por eso se registra aparte.
+//
+// DIVERGENCIA DELIBERADA con ese spec (chore «borrar la vista legacy del listado de
+// órdenes», 2026-07-31): quedaron **30 tablas = 24 dentro de alcance + 6 fuera**, con 29
+// instancias de `<DataTable>` en 24 archivos. Se borró `OrdenesApartado.tsx` («Apartado de
+// órdenes por estado», nº 2 del Anexo I), cuyo ÚNICO consumidor de producción era
+// `OrdenesRevisionMaestro.tsx`, la vista legacy que ninguna página montaba. El spec 170 NO
+// se reescribe: era cierto cuando se aprobó, y falsearlo borraría el motivo por el que los
+// números bajaron. La capacidad no se pierde: `/ordenes` filtra por estado con
+// `OrdenesListado`/`OrdenesModule` («Órdenes (listado principal)», nº 1), que sí descarga.
+//
+// Feature 171 (T2.6, R42) — SUMA de una tabla: el desglose del dinero de UNA tienda
+// (`DesgloseMovimientosTienda.tsx`), que se despliega desde cada fila de «Saldos de
+// tiendas». Nace `con_descarga`, que es lo que la guardia obliga a decidir: es un libro de
+// dinero paginado en el servidor, la Familia A canónica de la 170, y declararla `fuera`
+// habría exigido un motivo que no existe. Totales VIGENTES: **31 tablas = 25 dentro de
+// alcance + 6 fuera**, con 30 instancias de `<DataTable>` en 25 archivos. Se incrementa
+// desde los números REALES de arriba (24/29/24/30), no desde los del spec original, que ya
+// estaban obsoletos cuando se escribió esta feature.
+//
+// Estados posibles de una tabla dentro de alcance:
+//   - `con_descarga`: ya declara la prop `descarga` del `DataTable`.
+//   - `pendiente`: dentro de alcance, la cablea la tanda indicada. Estado TRANSITORIO del
+//     rollout: al cerrar la FASE 1 no debe quedar ninguno (T G.1/T G.2). Existe porque
+//     las tandas entregan por lotes y ninguna puede dejar la suite roja.
+//
+// Feature 170 — FASE 2 (T I.2): CUATRO tablas CAMBIAN DE ARCHIVO, ninguna nace ni muere. Los
+// históricos que pasan a paginación server-side se llevan su `<DataTable>`, su control y su
+// descarga a un componente propio, porque el módulo del que salen enseña además un contador
+// de cola (`({pendientes.length})`) que la tanda J todavía tiene que sustituir por el `total`
+// del servidor —y la guardia de T H.3 prohíbe, con razón, que ese contador conviva con un
+// control de paginación en el mismo archivo—. Totales VIGENTES: **31 tablas = 25 dentro de
+// alcance + 6 fuera**, con 30 instancias de `<DataTable>` en **29 archivos**. Las instancias
+// no se mueven; los archivos sí (25 → 29).
+//
+// Feature 170 (T G.1) — la FASE 1 está CERRADA: las 25 tablas del Anexo I descargan y no
+// queda ningún `pendiente`. El valor sigue existiendo en el tipo porque un rollout futuro
+// volverá a necesitarlo, pero `cobertura-tablas.guardia` («la FASE 1 del export queda
+// cerrada…») FALLA si alguien lo reintroduce sin reabrir la fase: la fase no puede darse
+// por terminada con tablas a medias, y una tabla a medias no puede colarse como terminada.
+
+/** Estado de una tabla censada respecto de la descarga. */
+export type EstadoDescarga = "con_descarga" | "pendiente" | "fuera";
+
+export interface TablaCensada {
+  /** Nombre con el que la conoce el usuario (el del Anexo I / II). */
+  nombre: string;
+  /** Estado declarado. */
+  estado: EstadoDescarga;
+  /**
+   * Tanda de `tasks.md` que la cablea (solo `pendiente`), o el motivo de la exclusión
+   * (solo `fuera`). Obligatorio en ambos casos: una exclusión sin motivo es un olvido.
+   */
+  nota?: string;
+  /**
+   * Feature 172 (T H.1) — solo para las tablas que viven en un componente COMPARTIDO: las
+   * pantallas que la montan, declaradas una a una.
+   *
+   * Por qué hace falta un campo y no basta con la ruta del componente: el censo cuenta
+   * `<DataTable>` del código fuente, y un componente compartido es UNA instancia de fuente
+   * que el usuario ve como VARIAS tablas. Sin esta lista, montar la misma tabla en una
+   * tercera pantalla no dejaría rastro en ningún sitio. La guardia contrasta la lista
+   * contra el árbol en los dos sentidos: ni un montaje sin declarar, ni un declarado que ya
+   * no exista.
+   */
+  montajes?: string[];
+}
+
+export interface ArchivoCensado {
+  /** Ruta relativa a la raíz del repo, con separador `/`. */
+  ruta: string;
+  /** Una entrada por instancia de `<DataTable>` del archivo, en orden de aparición. */
+  tablas: TablaCensada[];
+}
+
+/**
+ * Las 30 instancias de `<DataTable>` del árbol (25 archivos), en el orden en que aparecen
+ * en cada archivo. Verificado contra el código, no de memoria.
+ */
+export const CENSO_DATATABLE: ArchivoCensado[] = [
+  {
+    ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx",
+    tablas: [
+      { nombre: "Gestiones del cierre del día por resultado", estado: "con_descarga" },
+      { nombre: "Cierres solicitados (mensajero)", estado: "con_descarga" },
+    ],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): el HISTÓRICO salió de `CierresAdminModule` a su propio
+    // archivo al pasar a paginado; el módulo conserva la cola. Ni una tabla nace ni muere:
+    // cambian de sitio, y por eso los TOTALES de instancias no se mueven.
+    ruta: "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
+    tablas: [{ nombre: "Cierres del día — histórico", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
+    tablas: [
+      { nombre: "Cierres del día pendientes de decisión", estado: "con_descarga" },
+    ],
+  },
+  {
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
+    tablas: [{ nombre: "Cierres de bodega pendientes", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `CierresBodegaAdminModule` (mismo motivo).
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
+    tablas: [{ nombre: "Cierres de bodega resueltos", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `ConsolidacionBodegaModule` (mismo motivo).
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
+    tablas: [{ nombre: "Cierres de bodega solicitados", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx",
+    tablas: [{ nombre: "Cierres del día a consolidar", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx",
+    tablas: [
+      { nombre: "Gestiones de un cierre por resultado (detalle)", estado: "con_descarga" },
+    ],
+  },
+  {
+    ruta: "app/(app)/configuracion/_components/UsuariosModule.tsx",
+    tablas: [{ nombre: "Usuarios", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/configuracion/_components/ZonasModule.tsx",
+    tablas: [
+      {
+        nombre: "Zonas (configuración)",
+        estado: "fuera",
+        nota: "el módulo NO está montado en ninguna página (P4 ratificada): ConfiguracionPage solo renderiza UsuariosModule",
+      },
+    ],
+  },
+  {
+    ruta: "app/(app)/configuracion/api/_components/ApiKeysModule.tsx",
+    tablas: [{ nombre: "API keys", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/configuracion/plantillas/_components/PlantillasModule.tsx",
+    tablas: [{ nombre: "Plantillas de mensaje", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/incidentes/_components/IncidentesAdminModule.tsx",
+    tablas: [{ nombre: "Incidentes pendientes de decisión", estado: "con_descarga" }],
+  },
+  {
+    // Feature 170 — FASE 2 (T I.2): salió de `IncidentesAdminModule` (mismo motivo).
+    ruta: "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
+    tablas: [{ nombre: "Incidentes — histórico", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
+    tablas: [
+      { nombre: "Desglose de movimientos de la tienda", estado: "con_descarga" },
+    ],
+  },
+  {
+    ruta: "app/(app)/mis-pagos/_components/DesglosePagos.tsx",
+    tablas: [{ nombre: "Desglose de pagos del mensajero", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/ordenes/_components/GenerarGuiaModal.tsx",
+    tablas: [
+      {
+        nombre: "Órdenes por numerar (modal «Generar guía»)",
+        estado: "fuera",
+        nota: "confirmación efímera de una selección en memoria; el mismo modal ya entrega el manifiesto xlsx del lote (feature 148)",
+      },
+    ],
+  },
+  {
+    ruta: "app/(app)/ordenes/_components/OrdenesCargaResumen.tsx",
+    tablas: [
+      {
+        nombre: "Resumen de carga masiva",
+        estado: "fuera",
+        nota: "ya ofrece el manifiesto xlsx del lote (feature 148, P3 ratificada)",
+      },
+    ],
+  },
+  {
+    ruta: "app/(app)/ordenes/_components/OrdenesConErrorTabla.tsx",
+    tablas: [
+      {
+        nombre: "Órdenes con error (previsualización)",
+        estado: "fuera",
+        nota: "ya tiene su propia descarga xlsx de filas con error (feature 143, P3 ratificada)",
+      },
+    ],
+  },
+  {
+    ruta: "app/(app)/ordenes/_components/OrdenesExistentesTabla.tsx",
+    tablas: [
+      {
+        nombre: "Órdenes ya existentes (previsualización)",
+        estado: "fuera",
+        nota: "paso de un asistente sobre un archivo aún no cometido (P3 ratificada)",
+      },
+    ],
+  },
+  {
+    ruta: "app/(app)/ordenes/_components/OrdenesModule.tsx",
+    tablas: [{ nombre: "Órdenes (listado principal)", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/ranking/_components/RankingModule.tsx",
+    tablas: [{ nombre: "Ranking del día", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx",
+    tablas: [{ nombre: "Órdenes de la bodega satélite", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
+    tablas: [{ nombre: "Plantillas de gasto fijo", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/wallet/_components/WalletLedger.tsx",
+    tablas: [
+      { nombre: "Libro de movimientos de la caja principal", estado: "con_descarga" },
+    ],
+  },
+  {
+    ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+    tablas: [{ nombre: "Cuentas por pagar a mensajeros", estado: "con_descarga" }],
+  },
+  {
+    ruta: "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
+    tablas: [
+      { nombre: "Desglose de pagos por cierre de un mensajero", estado: "con_descarga" },
+    ],
+  },
+  {
+    // Feature 171 (T2.6): el desplegable del dinero de UNA tienda. Va antes que
+    // `SaldosTiendasTable` porque la guardia recorre el árbol en orden alfabético.
+    ruta: "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
+    tablas: [
+      { nombre: "Desglose de movimientos de una tienda", estado: "con_descarga" },
+    ],
+  },
+  {
+    ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
+    tablas: [{ nombre: "Saldos de tiendas", estado: "con_descarga" }],
+  },
+  // ───────────────────────────────────────────────────────────────────────────────────────
+  // Feature 172 (T H.1) — el árbol `components/`, que la guardia NO recorría hasta hoy.
+  // ───────────────────────────────────────────────────────────────────────────────────────
+  {
+    // HALLAZGO de T H.1, no una tabla de la 172: existe desde la feature 130 y el censo no
+    // podía verla porque el recorrido se paraba en `app/`. Se registra con su estado REAL.
+    //
+    // `fuera` con el mismo criterio ya ratificado para `ZonasModule`: es un componente del
+    // paquete de analítica SIN ningún consumidor montado en una página (`TablaResumen` solo
+    // aparece en sus propios tests y en `components/private/analytics/tipos.ts`). No se le
+    // cablea descarga aquí: eso sería tocar analítica, que la 172 declara fuera de alcance
+    // (R68). Lo que sí se cierra es el punto ciego: si mañana alguien la monta en una
+    // pantalla, el censo obliga a volver aquí y decidir.
+    ruta: "components/private/analytics/TablaResumen.tsx",
+    tablas: [
+      {
+        nombre: "Resumen de analítica (componente del paquete 130)",
+        estado: "fuera",
+        nota: "envoltorio reutilizable del paquete de analítica SIN consumidor montado en ninguna página (mismo criterio que ZonasModule); cablearlo sería tocar analítica, fuera del alcance de la 172 (R68)",
+      },
+    ],
+  },
+  {
+    // Feature 172 (T D.2/T H.1, R57) — la lista de COMPROBANTES de un beneficiario. Vive en
+    // `components/shared/` porque la montan DOS pantallas con el mismo contenido; por eso es
+    // UNA instancia de `<DataTable>` en el código y DOS tablas para quien las usa. Nace
+    // `con_descarga` (Familia B: proyecta el mismo array que pinta, `design.md §10.4`).
+    ruta: "components/shared/liquidacion/PagosRegistradosTabla.tsx",
+    tablas: [
+      {
+        nombre: "Pagos registrados (comprobantes de liquidación)",
+        estado: "con_descarga",
+        montajes: [
+          "app/(app)/cierres-admin/_components/PagoMensajeroSeccion.tsx",
+          "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
+        ],
+      },
+    ],
+  },
+];
+
+/**
+ * Tablas del árbol que NO son un `<DataTable>` (`<table>` HTML cruda). Se registran para
+ * que el censo cuadre con el del spec (31 = 30 + 1) y para dejar constancia de la
+ * decisión; la guardia comprueba que el archivo existe y que sigue sin montar descarga.
+ */
+export const CENSO_TABLAS_CRUDAS: ArchivoCensado[] = [
+  {
+    ruta: "app/(app)/ranking/_components/RankingModule.tsx",
+    tablas: [
+      {
+        nombre: "Premios del podio (ranking)",
+        estado: "fuera",
+        nota: "<table> HTML cruda de 3 filas de configuración con montos editables; es configuración, no un listado de datos (P1 ratificada)",
+      },
+    ],
+  },
+];

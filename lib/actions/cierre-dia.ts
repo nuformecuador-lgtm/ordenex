@@ -15,9 +15,11 @@ import type { ICierreDiaService } from "@/lib/interfaces/services/ICierreDiaServ
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import {
   deshacerGestionSchema,
+  listarCierresPasadosSchema,
   verCierrePasadoSchema,
   type DeshacerGestionResult,
   type ListarCierreDiaResult,
+  type ListarCierresPasadosResult,
   type SolicitarCierreResult,
   type VerCierrePasadoResult,
 } from "@/lib/types/cierre";
@@ -102,6 +104,25 @@ export async function listarCierreDia(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41/R44): UNA pagina de «Cierres solicitados» del
+ * mensajero + el total. El `mensajero_id` no viaja en el input: lo pone el servicio desde el
+ * actor de la sesion, igual que en `listarCierreDia`.
+ */
+export async function listarCierresPasadosPaginado(
+  input: unknown,
+  deps: CierreDiaDeps = {},
+): Promise<ListarCierresPasadosResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = listarCierresPasadosSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarCierresPasadosPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierreDiaActionError(r) : r;
+}
+
 /** R10-R16: crea la solicitud de cierre del dia del mensajero. */
 export async function solicitarCierre(
   deps: CierreDiaDeps = {},
@@ -132,15 +153,19 @@ export async function verCierrePasado(
     const service = deps.service ?? buildService();
     return service.verCierrePasado(data.cierreId, actor);
   });
-  return isAppErrorShape(r) ? toDeshacerGestionActionError(r) : r;
+  return isAppErrorShape(r) ? toCierreDiaActionError(r) : r;
 }
 
-// Feature 67 — traduce el AppErrorShape que puede producir ESTE borde: solo ZodError
-// (VALIDATION_ERROR, R10) o falta de sesion (UNAUTHORIZED, R7). Lo comparte `verCierrePasado`,
-// cuyo borde puede producir exactamente los mismos dos. `forbidden`/`conflict` los
-// devuelve el service como resultado de dominio, por eso NO aparecen aqui. Espejo EXACTO de
-// `toDevolucionOrigenActionError` (48) / `toMisAsignacionesActionError` (36).
-function toDeshacerGestionActionError(
+// Feature 67 — traduce el AppErrorShape que puede producir un borde CON zod de este archivo:
+// solo ZodError (VALIDATION_ERROR, R10) o falta de sesion (UNAUTHORIZED, R7).
+// `forbidden`/`conflict` los devuelve el service como resultado de dominio, por eso NO
+// aparecen aqui. Espejo EXACTO de `toDevolucionOrigenActionError` (48) /
+// `toMisAsignacionesActionError` (36).
+//
+// Feature 170 (T I.1): lo comparte el listado paginado, que valida su `page`/`pageSize` con
+// el mismo zod. Y el detalle de un cierre pasado (`verCierrePasado`) produce exactamente los
+// mismos dos. Por eso se llama por el modulo y ya no por una de sus acciones.
+function toCierreDiaActionError(
   shape: AppErrorShape,
 ): { status: "validation_error"; fieldErrors: Record<string, string[]> } | { status: "unauthenticated" } {
   switch (shape.code) {
@@ -174,5 +199,5 @@ export async function deshacerGestion(
     const service = deps.service ?? buildService();
     return service.deshacerGestion(data.gestionId, actor);
   });
-  return isAppErrorShape(r) ? toDeshacerGestionActionError(r) : r;
+  return isAppErrorShape(r) ? toCierreDiaActionError(r) : r;
 }

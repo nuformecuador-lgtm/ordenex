@@ -6,6 +6,7 @@ import type {
   CierreAdminResumenRow,
   ICierresAdminRepository,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
+import type { ILiquidacionPagoRepository } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -18,8 +19,13 @@ import type {
   ICierresAdminService,
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
+  ListarHistoricoCierresAdminServiceResult,
+  ListarPendientesCierresAdminServiceResult,
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
+import { esColaCierreDia } from "@/lib/utils/colas-cierre";
+import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
   gananciaOrdenex,
@@ -60,6 +66,16 @@ const ESTADO_POR_DEVOLVER_A_TIENDA = "por_devolver_a_tienda";
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 109 (T3.1): + `findEstatusIdByValue` para resolver los estatus destino de la liberacion.
 type OrdenRepo = Pick<IOrdenRepository, "findUsuarioZonaId" | "findEstatusIdByValue">;
+/**
+ * Feature 172 (T C.2) — de todo el repositorio de la liquidacion, este servicio consume DOS
+ * metodos, y los dos son de LECTURA. El `Pick` no es cosmetico: deja escrito —y hace que el
+ * typecheck lo imponga— que la pantalla de cierres puede DERIVAR el pendiente y no puede
+ * registrar, anular ni tocar un solo pago. Aprobar y pagar son dos escrituras distintas (§8).
+ */
+type LiquidacionLecturaRepo = Pick<
+  ILiquidacionPagoRepository,
+  "sumarVigentesPorCierre" | "obtenerCierreParaPago"
+>;
 
 // Resultado interno de resolver el alcance del actor (R2/R3).
 type AlcanceResult =
@@ -79,6 +95,11 @@ export class CierresAdminService implements ICierresAdminService {
     private readonly zonaRepo: ZonaRepo,
     private readonly ordenRepo: OrdenRepo,
     private readonly signedUrls: ISignedUrlProvider,
+    // Feature 172 (T C.2): SOLO LECTURA de los pagos ya registrados, para derivar el pendiente
+    // de cada cierre aprobado (R22/R26/R28). Es una dependencia OBLIGATORIA a proposito: si
+    // fuera opcional, olvidar cablearla dejaria todos los pendientes en silencio a `null` —una
+    // deuda invisible— en vez de romper el build.
+    private readonly liquidacionRepo: LiquidacionLecturaRepo,
   ) {}
 
   // R1/R2/R3: resuelve el alcance server-side por rol+zona. Acceso total (maestro/admin) ve
@@ -112,14 +133,104 @@ export class CierresAdminService implements ICierresAdminService {
     // (`solicitado` y `vencido`) van a la cola de pendientes; los resueltos
     // (`aprobado`/`rechazado`) al historico. El `vencido` viaja con su `estado` en el
     // resumen, para que el frontend lo etiquete diferenciado dentro de la cola (R20).
+    // Feature 172 (T C.2): UNA sola agregacion para las DOS listas, no una por lista y menos
+    // una por fila. Los cierres de la cola no aportan ningun id (no estan aprobados, R28).
+    const resumenes = await this.conPendiente(rows);
+
     const pendientes: CierreAdminResumen[] = [];
     const historico: CierreAdminResumen[] = [];
-    for (const row of rows) {
-      const resumen = toResumen(row); // R8/R9: totales snapshot (string) sin recomputar
-      if (row.estado === "solicitado" || row.estado === "vencido") pendientes.push(resumen);
+    for (const resumen of resumenes) {
+      // Feature 170 (T I.1): el corte sale de `ESTADOS_COLA_CIERRE_DIA` y ya no de dos
+      // literales aqui. Es EL MISMO que el repositorio escribe como WHERE al paginar el
+      // historico (R44): dos escrituras del mismo criterio es como una fila se cae de una
+      // lista sin que nadie lo note.
+      if (esColaCierreDia(resumen.estado)) pendientes.push(resumen);
       else historico.push(resumen);
     }
     return { status: "ok", pendientes, historico, sinZona: false };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — el HISTORICO, paginado en servidor.
+   *
+   * No reimplementa nada del alcance: reusa `resolveAlcance`, que es el `construirWhere` de
+   * este servicio (el rol y la zona se resuelven server-side y NUNCA se aceptan del cliente).
+   * Por eso paginar no puede ampliar lo que ve nadie — R44 se cumple por construccion, no por
+   * vigilancia.
+   *
+   * `sinZona` -> pagina VACIA, no `forbidden`: el `adminSatelite` sin zona tiene acceso al
+   * modulo, lo que no tiene es alcance que consultar. Es lo mismo que devuelve hoy
+   * `listarCierresAdmin` (historico `[]`), asi que la pantalla no cambia de comportamiento.
+   * Y ni una consulta se ejecuta en ese caso.
+   *
+   * UNA sola llamada al repositorio, igual que el listado sin paginar (R54): el conteo que
+   * R41 exige viaja DENTRO de ella.
+   */
+  async listarHistoricoCierresAdminPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresAdminServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R1
+    if (scope.status === "sinZona") {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
+    }
+
+    const { items, total } = await this.repo.findHistoricoPaginado(
+      scope.alcance,
+      rangoDePagina(input),
+    );
+
+    return {
+      status: "ok",
+      // R8/R9: mismo mapper que el listado sin paginar. Feature 172 (T C.2): + el pendiente,
+      // con UNA sola agregacion para toda la pagina (el numero de consultas no crece con
+      // `pageSize`, que es la misma propiedad que R54 exige del resto de este listado).
+      items: await this.conPendiente(items),
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54) — la COLA de pendientes de decision,
+   * paginada en servidor.
+   *
+   * Espejo exacto del metodo del historico: MISMO `resolveAlcance` (el rol y la zona salen del
+   * usuario, nunca de la peticion) y MISMO corte, que aqui es el `in` de
+   * `ESTADOS_COLA_CIERRE_DIA` donde alli era el `notIn`. R44 se cumple por construccion.
+   *
+   * R49: NO se agrega dinero aqui. Los montos que la pantalla muestra por esta cola son los
+   * SNAPSHOT de cada cierre, que viajan por fila tal cual (`toResumen` no recomputa nada); la
+   * pantalla no deriva de este array ningun total. Lo que el `total` de la respuesta alimenta
+   * es el CONTADOR de cabecera (R42), que es un conteo de filas, no dinero.
+   *
+   * `sinZona` -> pagina vacia sin consultar la base, igual que hoy: `listarCierresAdmin`
+   * devuelve `pendientes: []` para ese mismo actor.
+   */
+  async listarPendientesCierresAdminPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarPendientesCierresAdminServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R1
+    if (scope.status === "sinZona") {
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
+    }
+
+    const { items, total } = await this.repo.findColaPaginada(scope.alcance, rangoDePagina(input));
+
+    return {
+      status: "ok",
+      // R8/R9: mismo mapper que el listado sin paginar. Feature 172 (T C.2): el campo viaja
+      // tambien aqui —siempre `null`, porque la cola son cierres NO aprobados (R28)— para que
+      // las tres listas tengan la MISMA forma y la pantalla no tenga dos contratos.
+      items: await this.conPendiente(items),
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
+    };
   }
 
   async verCierreDetalle(
@@ -178,7 +289,9 @@ export class CierresAdminService implements ICierresAdminService {
 
     // Ganancia DERIVADA: el ingreso bruto MENOS lo que se le debe al mensajero. El pago sale
     // del snapshot del cierre (no se recomputa, R4); el ingreso, del desglose por orden.
-    const resumen = toResumen(found.cierre);
+    // Feature 172 (T C.2/R26): el detalle tambien trae el pendiente —R26 lo pide «en el listado
+    // de cierres Y en el detalle de ese cierre»—, por el mismo camino y con una sola agregacion.
+    const [resumen] = await this.conPendiente([found.cierre]);
     const ganancia = gananciaOrdenex(totalesIngreso.total, resumen.totalPagoMensajero);
 
     // Pago a la tienda DERIVADO: lo RECIBIDO (total general) menos lo que Ordenex le factura
@@ -286,9 +399,82 @@ export class CierresAdminService implements ICierresAdminService {
       // GUARDADOS por `(cierreId, resultado)` y emite el egreso en la MISMA tx.
       indemnizaciones,
     });
-    if (res === "updated") return { status: "ok", cierreId, estado: "aprobado" };
+    if (res === "updated") {
+      // Feature 172 (T C.2, §8/R16): el pendiente se deriva DESPUES de que la aprobacion haya
+      // confirmado, nunca dentro de su transaccion. Un fallo aqui no puede revertir la
+      // aprobacion —que es justo lo que el humano descarto (decision 3, alternativa A)—.
+      return {
+        status: "ok",
+        cierreId,
+        estado: "aprobado",
+        pendientePagoMensajero: await this.pendienteTrasAprobar(cierreId),
+      };
+    }
     if (res === "conflict") return { status: "conflict" }; // R12
     return { status: "no_encontrada" }; // fuera_de_alcance (R13)
+  }
+
+  /**
+   * Feature 172 (T C.2, §5/R22/R26/R28) — rellena `pendientePagoMensajero` de un conjunto de
+   * filas con **UNA sola consulta**, sea la pagina de 1 fila o de 100.
+   *
+   * Tres propiedades, y las tres son el motivo de que esta funcion exista:
+   *
+   *  1. **Una llamada por listado, no una por fila.** `sumarVigentesPorCierre` recibe los ids de
+   *     la pagina y devuelve un mapa. El numero de consultas NO crece con `pageSize` — la misma
+   *     propiedad que la 170 exige (R54) del resto de esta pantalla, y se verifica CONTANDO
+   *     llamadas, no leyendo este comentario.
+   *  2. **Solo los APROBADOS entran en la consulta** (R28): un cierre en la cola no tiene nada
+   *     que pagar y su pendiente es `null`, que no es lo mismo que `"0.00"` (R27).
+   *  3. **`toResumen` sigue sin recomputar dinero.** El mapper emite `null` y punto; la
+   *     derivacion vive aqui, en `derivarPendienteCierre`, que es la fuente unica de la regla
+   *     (§5) y reusa a su vez `calcularSplitPago` de la 44. Los snapshots `P` y `E` se LEEN de
+   *     la fila (`totalPagoMensajero`, `totales.efectivo`); no se recalculan.
+   */
+  private async conPendiente(rows: CierreAdminResumenRow[]): Promise<CierreAdminResumen[]> {
+    const resumenes = rows.map(toResumen); // R8/R9: snapshots tal cual, sin recomputar
+    const idsAprobados = resumenes
+      .filter((r) => r.estado === "aprobado")
+      .map((r) => r.cierreId);
+
+    // UNA sola llamada, siempre: tambien con la lista vacia, para que el conteo de consultas de
+    // este listado sea el mismo se pinte lo que se pinte.
+    const pagados = await this.liquidacionRepo.sumarVigentesPorCierre(idsAprobados);
+
+    return resumenes.map((r) =>
+      r.estado === "aprobado"
+        ? {
+            ...r,
+            pendientePagoMensajero: derivarPendienteCierre(
+              r.totalPagoMensajero, // P — snapshot de la 39
+              r.totales.efectivo, // E — snapshot de la 37
+              pagados[r.cierreId] ?? "0.00", // Σ pagos VIGENTES del cierre (R80)
+            ),
+          }
+        : r, // R28: no aprobado -> `null` (lo que ya puso `toResumen`)
+    );
+  }
+
+  /**
+   * Feature 172 (T C.2, §8) — el pendiente del cierre RECIEN aprobado.
+   *
+   * Va por `obtenerCierreParaPago` y no por `findCierreByIdEnAlcance` porque lo que hace falta
+   * son cuatro columnas del cierre (`P`, `E`, estado, id) y aquel arrastra todas las gestiones
+   * del cierre con su detalle. Es una lectura, no una escritura: la aprobacion ya confirmo.
+   *
+   * `"0.00"` si el cierre no se puede releer —imposible en el camino real, porque acabamos de
+   * actualizarlo— y es la respuesta segura: no ofrece pagar una cifra que nadie ha derivado. El
+   * pendiente real seguira apareciendo en el listado, que lo recalcula cada vez que alguien mira.
+   */
+  private async pendienteTrasAprobar(cierreId: string): Promise<string> {
+    const cierre = await this.liquidacionRepo.obtenerCierreParaPago(cierreId);
+    if (cierre === null) return "0.00";
+    const pagados = await this.liquidacionRepo.sumarVigentesPorCierre([cierreId]);
+    return derivarPendienteCierre(
+      cierre.totalPagoMensajero,
+      cierre.totalEfectivo,
+      pagados[cierreId] ?? "0.00",
+    );
   }
 
   /**
@@ -397,6 +583,10 @@ function toResumen(row: CierreAdminResumenRow): CierreAdminResumen {
     totales: row.totales,
     totalPagoMensajero: row.totalPagoMensajero, // R17: snapshot, sin recomputar
     totalIngresoBodegaRechazos: row.totalIngresoBodegaRechazos, // feature 56/R16: snapshot, sin recomputar
+    // Feature 172 (T C.2): el mapper NO deriva dinero. Emite `null` —el valor de un cierre no
+    // aprobado (R28)— y el servicio lo rellena en `conPendiente` para los aprobados, con UNA
+    // agregacion por pagina. Si la derivacion viviera aqui, seria una consulta por fila.
+    pendientePagoMensajero: null,
     solicitadoAt: row.solicitadoAt,
     resueltoAt: row.resueltoAt,
     motivoRechazo: row.motivoRechazo,

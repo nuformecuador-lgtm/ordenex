@@ -56,17 +56,26 @@ export interface MenuItem {
 }
 
 /**
- * Feature 129: único punto de verdad de quién accede a analítica. Lo usan TANTO
- * el `roles` del ítem de menú de "Analítica" (abajo) COMO el gate `notFound()`
- * de `app/(app)/analitica/page.tsx`, para que las dos capas no puedan divergir
+ * Feature 129: único punto de verdad de quién ACCEDE a analítica (quién ve la
+ * entrada y quién no recibe un 404). Lo usan TANTO el `roles` del ítem de menú
+ * de "Analítica" (abajo) COMO el gate `notFound()` de
+ * `app/(app)/analitica/page.tsx`, para que las dos capas no puedan divergir
  * (R10).
+ *
+ * OJO CON EL NOMBRE: esta constante se llamaba `ROLES_ANALITICA` y colisionaba
+ * conceptualmente con la `ROLES_ANALITICA` de `lib/analytics/types.ts` (feature
+ * 135), que son los CINCO roles con ALCANCE DENTRO de la analítica. Dos tuplas
+ * de roles con el mismo nombre y significados distintos: importar la que no era
+ * no rompía el typecheck, sólo abría o cerraba la puerta equivocada. De ahí el
+ * prefijo `ACCESO`. La relación entre las dos la vigila
+ * `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts`.
  *
  * NO se usa `esAccesoTotal` (`lib/auth/acceso-total.ts`): ese helper significa
  * "acceso total de gestión", un concepto distinto que hoy coincide con este y
  * que la feature 133 va a separar. Tampoco se usa `ROLES_SEED`: incluye
  * `apiKey` (`lib/types/roles.ts`), que es una cuenta de máquina y no navega.
  */
-export const ROLES_ANALITICA = ["maestro", "admin"] as const;
+export const ROLES_ACCESO_ANALITICA = ["maestro", "admin"] as const;
 
 /**
  * Fuente de verdad del menu. Vive en este modulo server-safe (NO en el
@@ -93,12 +102,12 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     // Feature 129: tablero de analítica (ruta/shell). SOLO `maestro`/`admin`: hasta
     // la 131 no hay métrica y dar la entrada a mensajero/adminTienda/adminSatelite
     // sería publicar un control que no lleva a ninguna parte. La feature 133 amplía
-    // a los tres roles restantes tocando TAMBIÉN `ROLES_ANALITICA`. Este ítem solo
-    // decide qué se MUESTRA; la defensa real es el `notFound()` de la página.
+    // a los tres roles restantes tocando TAMBIÉN `ROLES_ACCESO_ANALITICA`. Este ítem
+    // solo decide qué se MUESTRA; la defensa real es el `notFound()` de la página.
     label: "Analítica",
     href: "/analitica",
     iconKey: "chartColumn",
-    roles: ROLES_ANALITICA,
+    roles: ROLES_ACCESO_ANALITICA,
   },
   {
     label: "Órdenes",

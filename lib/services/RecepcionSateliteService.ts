@@ -4,12 +4,24 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   IRecepcionSateliteService,
+  ListarOrdenesBodegaPaginadoInput,
+  ListarOrdenesBodegaPaginadoServiceResult,
   ListarRecepcionSateliteServiceResult,
+  ObtenerCatalogoFiltrosSateliteServiceResult,
   RecepcionSateliteDTO,
   RecibirLoteInput,
   RecibirLoteServiceResult,
   RecibirServiceResult,
 } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import {
+  ESTADOS_BODEGA_SATELITE,
+  estadosDelListado,
+} from "@/lib/utils/estados-bodega-satelite";
+import {
+  derivarCantones,
+  derivarDistritos,
+} from "@/lib/utils/filtro-canton-distrito";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 // Estado de ORIGEN de la recepcion (feature 30) y destino tras recibir (esta
 // feature). Un solo estado de destino; el nombre de zona se deriva de orden.zonaId
@@ -48,6 +60,9 @@ type RecepcionSateliteRepo = Pick<
   IOrdenRepository,
   | "findUsuarioZonaId"
   | "findRecepcionSateliteByZona"
+  // Feature 170 — FASE 2 (T K.1/T K.2): la pagina del listado y el catalogo de sus filtros.
+  | "findRecepcionSatelitePaginada"
+  | "findRecepcionSateliteGeoByZona"
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recibirEnSatelite"
@@ -139,6 +154,102 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       asignadas,
       zonaNombre,
       sinZona: false,
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T K.1, R40/R41/R44/R45/R51) — la pagina del listado «Órdenes de la
+   * bodega», con los TRES filtros resueltos aqui y no en el navegador.
+   *
+   * **Que cambia de verdad.** Hasta hoy la pantalla recibia el conjunto entero de la zona y
+   * cruzaba estado ∧ canton ∧ distrito con `Array.filter`. Bajo paginacion ese filtro solo
+   * veria la pagina: el usuario creeria estar filtrando su bodega y estaria filtrando 25
+   * filas. Por eso el cruce se muda aqui, DELANTE del recorte, y el `total` que sale es el del
+   * conjunto filtrado (R41) — el numero que la pantalla necesita para paginar y contar.
+   *
+   * **Que NO cambia.** El acotamiento: guard de rol (R3/R17) antes de tocar nada y zona
+   * resuelta desde `usuario.zona_id` (R4). Los filtros solo pueden ESTRECHAR ese conjunto:
+   * `estadosDelListado` interseca contra la lista blanca de los cinco estados, asi que ni un
+   * `estados` inventado ni un canton de otra provincia amplian el alcance (R44). Sin zona no
+   * se consulta la base: pagina vacia.
+   */
+  async listarOrdenesBodegaPaginado(
+    input: ListarOrdenesBodegaPaginadoInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesBodegaPaginadoServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R3/R17
+
+    const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
+    if (zonaId === null) {
+      // R5: el rol tiene acceso al modulo, lo que no tiene es alcance. Sin una consulta.
+      return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 };
+    }
+
+    const { items: rows, total } = await this.repo.findRecepcionSatelitePaginada(
+      {
+        zonaId,
+        estatusValues: estadosDelListado(input.estados),
+        cantonNombres: input.cantones,
+        distritoNombres: input.distritos,
+      },
+      rangoDePagina(input),
+    );
+
+    // Feature 160 (R12/R13/R15): UN SOLO lote, ahora con los ids de la PAGINA. Sin filas -> 0
+    // consultas. El criterio de intentos es el mismo que el del listado sin paginar.
+    const intentos = await this.historial.contarIntentosEnLote(rows.map((r) => r.id));
+
+    return {
+      status: "ok",
+      items: rows.map((row) => ({
+        ...toDTO(row),
+        intentosEntrega: intentos.get(row.id) ?? 0, // R14/R19: el `0` SIEMPRE se expone
+      })),
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO filtrado, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T K.2, R44/R46) — las opciones de canton y distrito del CONJUNTO
+   * del actor, independientes del recorte de pagina.
+   *
+   * Hoy esas opciones se derivan del array que la pantalla ya tiene cargado
+   * (`construirFiltrosSatelite(ordenes)`). Con una pagina, derivarlas de `items` reduciria el
+   * desplegable a los cantones de las 25 filas visibles: el usuario perderia opciones sin
+   * enterarse y, peor, creeria que su bodega no tiene ordenes en el canton que busca.
+   *
+   * Se reusan `derivarCantones`/`derivarDistritos` —las MISMAS funciones que la pantalla usa—
+   * sobre los pares distintos del conjunto: mismas etiquetas, mismo desempate de homonimos,
+   * mismo orden alfabetico. Acotado por rol y zona igual que el listado (R44).
+   */
+  async obtenerCatalogoFiltros(
+    actor: Actor,
+  ): Promise<ObtenerCatalogoFiltrosSateliteServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R3/R17
+
+    const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
+    if (zonaId === null) return { status: "ok", catalogo: { cantones: [], distritos: [] } };
+
+    // El catalogo se deriva SIEMPRE de los cinco estados del listado: si se derivara de la
+    // seleccion vigente, elegir un estado borraria cantones del desplegable.
+    const geo = await this.repo.findRecepcionSateliteGeoByZona(zonaId, [
+      ...ESTADOS_BODEGA_SATELITE,
+    ]);
+
+    const cantones = derivarCantones(geo);
+    return {
+      status: "ok",
+      catalogo: {
+        cantones,
+        distritos: cantones.flatMap((canton) =>
+          derivarDistritos(geo, canton.value).map((distrito) => ({
+            ...distrito,
+            parentValue: canton.value,
+          })),
+        ),
+      },
     };
   }
 

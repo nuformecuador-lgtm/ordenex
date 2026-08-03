@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CrearMovimientoTiendaInput,
+  DesgloseTiendaAgregadoRow,
   IWalletTiendaMovimientoRepository,
   ListarPorTiendaFiltros,
   ListarPorTiendaPage,
@@ -10,6 +11,7 @@ import type {
   WalletTiendaTxClient,
 } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletMovimientoRepository).
 type WalletTiendaPrismaClient = Pick<PrismaClient, "walletTiendaMovimiento" | "usuario">;
@@ -73,6 +75,11 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       origenId: m.origenId,
       descripcion: m.descripcion ?? null,
       registradoPor: m.registradoPor ?? null,
+      // Feature 172 (T B.2, R37): la fecha del movimiento se pasa SOLO si viene. La clave
+      // no se emite cuando el caller no la manda —no se emite `undefined`, no se emite la
+      // clave— asi que el feed del cierre sigue cayendo en el `DEFAULT CURRENT_TIMESTAMP`
+      // de la columna exactamente como antes.
+      ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
     }));
     const res = await tx.walletTiendaMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -122,6 +129,35 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
     return { creditos: creditos.toFixed(2), debitos: debitos.toFixed(2) };
   }
 
+  /**
+   * Feature 171 (R22/R24/R34) — Σ monto por (tipo, categoria) para UNA tienda + filtros.
+   *
+   * UNA sola sentencia, siempre: el desglose de la cabecera no crece con el tamaño de pagina
+   * ni con el numero de tiendas listadas. `tiendaId` va en el WHERE, no en memoria — es el
+   * unico acotado que impide que la cabecera de una tienda sume el dinero de otra.
+   *
+   * No clasifica ni resta: eso es negocio y vive en `derivarDesgloseTienda`. Salida STRING.
+   */
+  async agregarDesglosePorTienda(
+    tiendaId: string,
+    filtros: SaldoTiendaFiltros,
+  ): Promise<DesgloseTiendaAgregadoRow[]> {
+    const where: Prisma.WalletTiendaMovimientoWhereInput = {
+      tiendaId, // R24: acotado por tienda en el WHERE
+      ...buildFiltrosWhere(filtros),
+    };
+    const grupos = await this.prisma.walletTiendaMovimiento.groupBy({
+      by: ["tipo", "categoria"],
+      where,
+      _sum: { monto: true },
+    });
+    return grupos.map((g) => ({
+      tipo: g.tipo,
+      categoria: g.categoria,
+      total: new Prisma.Decimal(g._sum.monto ?? 0).toFixed(2), // money-safe
+    }));
+  }
+
   /** R20: una fila por tienda (con nombre) + totales credito/debito, para la vista del maestro. */
   async listarSaldosTodasTiendas(): Promise<SaldoTiendaAgregadoRow[]> {
     const grupos = await this.prisma.walletTiendaMovimiento.groupBy({
@@ -158,5 +194,44 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
         debitos: acc.debitos.toFixed(2),
       };
     });
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una PAGINA de los saldos por tienda +
+   * el total de tiendas con movimientos.
+   *
+   * Este listado es el UNICO de los siete que no es un `findMany` sobre una tabla: cada fila
+   * es una AGREGACION de todo el ledger de esa tienda. El saldo de una tienda no se puede
+   * calcular a partir de una pagina de movimientos, asi que la agregacion es del conjunto
+   * completo POR CONSTRUCCION y no hay nada que empujar al `LIMIT`. Por eso el recorte se hace
+   * sobre `listarSaldosTodasTiendas`, reusando la MISMA agregacion, con tres consecuencias
+   * medibles:
+   *
+   *  - R44 se cumple por construccion: es literalmente el mismo conjunto de filas.
+   *  - R54 se cumple en su forma FUERTE: cero consultas nuevas — ni siquiera la del conteo,
+   *    que sale de la longitud del mismo resultado.
+   *  - El coste en base NO baja. Lo que baja es lo que cruza a la pantalla, que es de lo que
+   *    habla el Anexo III para este listado («crece con el numero de tiendas», design §11.3).
+   *
+   * ORDEN (R51): por NOMBRE de tienda. Hoy este listado NO tiene criterio de ordenacion —
+   * `groupBy` devuelve las filas en el orden que le conviene al planificador, que Postgres no
+   * garantiza estable entre llamadas. Sin un orden TOTAL, la pagina 2 podria repetir u omitir
+   * tiendas de la pagina 1. Se elige el nombre porque es el identificador de negocio de la
+   * fila (la 170 ya dejo el `tienda_id` fuera del archivo de descarga por lo mismo) y el
+   * `tiendaId` desempata para que el orden sea total. Queda declarado como DESVIACION en
+   * `progress/impl_170-fase2-tanda-i.md`: R51 no tenia aqui criterio que conservar.
+   */
+  async listarSaldosTiendasPaginado(
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<SaldoTiendaAgregadoRow>> {
+    const filas = await this.listarSaldosTodasTiendas();
+    const ordenadas = [...filas].sort(
+      (a, b) =>
+        a.tiendaNombre.localeCompare(b.tiendaNombre) || a.tiendaId.localeCompare(b.tiendaId),
+    );
+    return {
+      items: ordenadas.slice(rango.skip, rango.skip + rango.take),
+      total: ordenadas.length, // R41: el total del CONJUNTO, no el de la pagina
+    };
   }
 }

@@ -6,7 +6,7 @@ import {
 } from "@/lib/actions/wallet-tienda";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletTiendaService } from "@/lib/interfaces/services/IWalletTiendaService";
-import type { SaldoTiendaDTO } from "@/lib/types/wallet-tienda";
+import type { DesgloseTiendaDTO, SaldoTiendaDTO } from "@/lib/types/wallet-tienda";
 
 // Feature 43 (T13) — tests unit de las Server Actions del ledger por tienda (R19/R20/R21/R27).
 // Sin sesion -> unauthenticated; rol no autorizado -> forbidden (el service decide); input
@@ -16,17 +16,75 @@ const TIENDA: Actor = { usuarioId: "t1", rol: "adminTienda" };
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 
 const SALDO: SaldoTiendaDTO = { creditos: "10000.00", debitos: "1500.00", saldo: "8500.00", signo: "positivo" };
+// Feature 172 (T G.2, R55): `listarMisMovimientos` devuelve tambien los TRES importes de la
+// cabecera de `/mi-wallet`. Aqui solo hace falta que el doble cumpla el contrato; lo que la
+// cabecera hace con ellos lo mide `tests/integration/mi-wallet-page.test.tsx`.
+const DESGLOSE: DesgloseTiendaDTO = {
+  aFavor: "10000.00",
+  cargos: "1500.00",
+  pagado: "0.00",
+  saldo: "8500.00",
+  signo: "positivo",
+};
 
 function fakeService(overrides: Partial<IWalletTiendaService> = {}): IWalletTiendaService {
   return {
     verMiSaldo: vi.fn(async () => ({ status: "ok" as const, saldo: SALDO })),
     listarMisMovimientos: vi.fn(async () => ({
       status: "ok" as const,
-      data: { movimientos: [], total: 0, page: 1, pageSize: 20, saldo: SALDO },
+      data: {
+        movimientos: [],
+        total: 0,
+        page: 1,
+        pageSize: 20,
+        saldo: SALDO,
+        desglose: DESGLOSE,
+      },
+    })),
+    // Feature 170 (T C.1): el doble implementa la interfaz COMPLETA. El modo sin
+    // paginacion lo ejercita `wallet-tienda-descarga-action.test.ts`.
+    listarMisMovimientosCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
+      total: 0,
     })),
     listarSaldosTiendas: vi.fn(async () => ({
       status: "ok" as const,
       tiendas: [{ tiendaId: "t1", tiendaNombre: "Tienda Uno", saldo: "8500.00", signo: "positivo" as const }],
+    })),
+    // Feature 170 (T I.1): el doble sigue implementando la interfaz COMPLETA.
+    listarSaldosTiendasPaginado: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [
+        { tiendaId: "t1", tiendaNombre: "Tienda Uno", saldo: "8500.00", signo: "positivo" as const },
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+    })),
+    // Feature 171: el doble sigue implementando la interfaz COMPLETA. El desglose de una
+    // tienda elegida lo ejercita `wallet-tienda-desglose-action.test.ts`.
+    listarMovimientosDeTienda: vi.fn(async () => ({
+      status: "ok" as const,
+      data: {
+        tiendaId: "t1",
+        movimientos: [],
+        total: 0,
+        page: 1,
+        pageSize: 20,
+        desglose: {
+          aFavor: "0.00",
+          cargos: "0.00",
+          pagado: "0.00",
+          saldo: "0.00",
+          signo: "cero" as const,
+        },
+      },
+    })),
+    listarMovimientosDeTiendaCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
+      total: 0,
     })),
     ...overrides,
   };

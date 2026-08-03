@@ -2,15 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { MetodoPagoValue } from "@prisma/client";
+import useSWR from "swr";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
+import { cierreConfig } from "@/lib/config/cierre";
+import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import {
   deshacerGestion,
+  listarCierreDia,
+  listarCierresPasadosPaginado,
   solicitarCierre,
   verCierrePasado,
 } from "@/lib/actions/cierre-dia";
@@ -21,13 +26,39 @@ import type {
   CierrePasadoDTO,
   CierreResultado,
 } from "@/lib/interfaces/services/ICierreDiaService";
-import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+import type { CierreDestinoTipo } from "@/lib/types/cierre";
 // Feature 158 (T2.3): la columna de la causa es la MISMA que la del detalle del admin — se
 // reusa en vez de reescribirla, para que las dos pantallas no puedan divergir en la etiqueta.
 import { COLUMNA_CAUSA_INCIDENTE } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 // Pedido humano: el detalle de un cierre pasado se lee con el MISMO comprobante del admin
 // (feature 38/40), en su variante `mensajero`. Una sola hoja para las dos pantallas.
 import { CierreFacturaDetalle } from "@/app/(app)/cierres-admin/_components/cierre-factura";
+// Feature 170 (T E.4): las etiquetas compartidas salen del módulo PURO (sin React) para que
+// el archivo de la descarga y esta pantalla no puedan decir cosas distintas (R8).
+import {
+  DESTINO_TIPO_LABEL,
+  ESTADO_LABEL,
+  METODO_LABEL,
+  RESULTADO_LABEL,
+} from "@/app/(app)/cierres-admin/_components/cierre-labels";
+import {
+  filasLocales,
+  filasDelConjuntoCompleto,
+} from "@/components/shared/descarga-resultado";
+import {
+  COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
+  COLUMNAS_DESCARGA_DIA_DEVUELTAS,
+  COLUMNAS_DESCARGA_DIA_ENTREGADAS,
+  COLUMNAS_DESCARGA_DIA_INCIDENTES,
+  COLUMNAS_DESCARGA_DIA_RECHAZADAS,
+  COLUMNAS_DESCARGA_DIA_REPROGRAMADAS,
+  filaDescargaDiaCierrePasado,
+  filaDescargaDiaDevuelta,
+  filaDescargaDiaEntregada,
+  filaDescargaDiaIncidente,
+  filaDescargaDiaRechazada,
+  filaDescargaDiaReprogramada,
+} from "./cierre-dia-descarga-columnas";
 
 // Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
 // del Server Component padre los grupos ya resueltos (por resultado), los totales
@@ -36,6 +67,13 @@ import { CierreFacturaDetalle } from "@/app/(app)/cierres-admin/_components/cier
 // van por Server Action y refrescan la ruta para releer el estado del servidor. Los
 // montos llegan como STRING (money-safe): se renderizan tal cual, sin `parseFloat`/`Number`.
 
+/** Feature 170 — FASE 2 (T I.2): la página de «Cierres solicitados» tal como la da el servidor. */
+export interface CierresPasadosPagina {
+  items: CierrePasadoDTO[];
+  total: number;
+  pageSize: number;
+}
+
 export interface CierreDiaModuleProps {
   grupos: CierreGrupos;
   totales: CierreTotales;
@@ -43,7 +81,16 @@ export interface CierreDiaModuleProps {
   totalPagoMensajero: string;
   puedesSolicitar: boolean;
   motivoBloqueo: string | null;
-  cierresPasados: CierrePasadoDTO[];
+  /**
+   * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 de «Cierres solicitados» (R18), ya
+   * resuelta server-side, más el `total` del conjunto. Deja de ser el array entero.
+   *
+   * OJO: es la ÚNICA tabla de esta pantalla que pagina. Las secciones por resultado son del
+   * Anexo IV (vista agrupada de UNA jornada) y siguen recibiendo su grupo completo (R53); su
+   * contador por grupo, derivado de `filas.length`, sigue siendo correcto y está declarado
+   * como tal en la guardia de T H.3.
+   */
+  cierresPasados: CierresPasadosPagina;
   /**
    * Feature 41/R21: `true` si el mensajero está BLOQUEADO (tiene un cierre
    * `solicitado`/`vencido` pendiente). Derivado server-side y pasado por props; el
@@ -124,13 +171,11 @@ function deshacerAriaLabel(g: CierreDetalleGestion): string {
 }
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
-const RESULTADO_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregadas",
-  reprogramada: "Reprogramadas",
-  devuelta: "Devueltas",
-  rechazada: "Rechazadas",
-  incidente: "Incidentes", // feature 158/R18
-};
+//
+// Feature 170 (T E.4): `RESULTADO_LABEL`, `METODO_LABEL`, `ESTADO_LABEL` y `DESTINO_LABEL`
+// estaban DUPLICADAS palabra por palabra aquí y en `cierre-detalle-shared`. Ahora las dos
+// pantallas —y el archivo de la descarga, que no puede importar React— leen del módulo PURO
+// `cierre-labels`. Ni un texto cambió; lo que cambia es que ya no pueden divergir (R8).
 
 const RESULTADO_VACIO: Record<CierreResultado, string> = {
   entregada: "No hay entregas.",
@@ -140,23 +185,7 @@ const RESULTADO_VACIO: Record<CierreResultado, string> = {
   incidente: "No hay incidentes.", // feature 158/R18
 };
 
-const METODO_LABEL: Record<MetodoPagoValue, string> = {
-  efectivo: "Efectivo",
-  SINPE: "SINPE",
-  transferencia: "Transferencia",
-};
-
-const ESTADO_LABEL: Record<CierreEstado, string> = {
-  solicitado: "Solicitado",
-  aprobado: "Aprobado",
-  rechazado: "Rechazado",
-  vencido: "Vencido", // feature 41: etiqueta minima; el aviso de bloqueo (R21) lo hace frontend_dev
-};
-
-const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
-  bodega_central: "Bodega central",
-  bodega_satelite: "Bodega satélite",
-};
+const DESTINO_LABEL: Record<CierreDestinoTipo, string> = DESTINO_TIPO_LABEL;
 
 /**
  * Orden fijo de las secciones (R3). Feature 158/R18: los `incidente` son un grupo PROPIO y
@@ -170,6 +199,64 @@ const ORDEN_RESULTADOS: CierreResultado[] = [
   "rechazada",
   "incidente",
 ];
+
+/**
+ * Feature 170 (T E.4) — columnas y proyección de export POR RESULTADO, en el mismo orden de
+ * las secciones. UNA DESCARGA POR SECCIÓN (decisión del humano, P2 ratificada): cada
+ * resultado enseña columnas distintas, así que un archivo único sería media hoja vacía.
+ *
+ * El mapa vive aquí y no en el módulo de columnas porque un `Record` exportado desde un
+ * `*-descarga-columnas.ts` se le escaparía a la guardia de datos sensibles, que solo
+ * reconoce arrays de columnas y funciones de proyección.
+ */
+const DESCARGA_POR_RESULTADO: Record<
+  CierreResultado,
+  { columnas: DescargaColumna[]; fila: (g: CierreDetalleGestion) => DescargaFila }
+> = {
+  entregada: {
+    columnas: COLUMNAS_DESCARGA_DIA_ENTREGADAS,
+    fila: filaDescargaDiaEntregada,
+  },
+  reprogramada: {
+    columnas: COLUMNAS_DESCARGA_DIA_REPROGRAMADAS,
+    fila: filaDescargaDiaReprogramada,
+  },
+  devuelta: {
+    columnas: COLUMNAS_DESCARGA_DIA_DEVUELTAS,
+    fila: filaDescargaDiaDevuelta,
+  },
+  rechazada: {
+    columnas: COLUMNAS_DESCARGA_DIA_RECHAZADAS,
+    fila: filaDescargaDiaRechazada,
+  },
+  incidente: {
+    columnas: COLUMNAS_DESCARGA_DIA_INCIDENTES,
+    fila: filaDescargaDiaIncidente,
+  },
+};
+
+/** Nombre visible del histórico: hoja, base del archivo y nombre del control (R12/R13). */
+const TITULO_DESCARGA_PASADOS = "Cierres solicitados";
+/** Nombre accesible del control de paginación (R43). */
+export const PAGINACION_PASADOS_LABEL = "Paginación de los cierres solicitados";
+const ERROR_PASADOS = "No se pudieron cargar tus cierres solicitados.";
+
+// R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla.
+const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_SIZE);
+
+/**
+ * Feature 170 — FASE 2 (T I.2, R40/R41/R44): una página de los cierres solicitados POR ESTE
+ * mensajero. El `mensajero_id` no viaja en el input: lo pone el servidor desde la sesión, así
+ * que no hay parámetro por el que pedir el histórico de otro.
+ */
+async function leerCierresPasados(
+  page: number,
+  pageSize: number,
+): Promise<CierresPasadosPagina> {
+  const res = await listarCierresPasadosPaginado({ page, pageSize });
+  if (res.status !== "ok") throw new Error(res.status);
+  return { items: res.items, total: res.total, pageSize: res.pageSize };
+}
 
 /**
  * Prefija el símbolo de colón a un monto que YA viene como string (money-safe,
@@ -243,6 +330,28 @@ export function CierreDiaModule({
       setCargandoDetalle(false);
     }
   }
+
+  // Feature 170 — FASE 2 (T I.2, R40/R43): página visible de «Cierres solicitados».
+  // `fallbackData` es la página que ya resolvió el Server Component: al entrar no hay segunda
+  // lectura y las filas son EXACTAMENTE las de antes (R44).
+  const [pasadosPage, setPasadosPage] = useState(1);
+  const [pasadosPageSize, setPasadosPageSize] = useState(cierresPasados.pageSize);
+  const { data: pasadosData, error: pasadosError } = useSWR(
+    ["cierre-dia:pasados", pasadosPage, pasadosPageSize],
+    () => leerCierresPasados(pasadosPage, pasadosPageSize),
+    {
+      fallbackData:
+        pasadosPage === 1 && pasadosPageSize === cierresPasados.pageSize
+          ? cierresPasados
+          : undefined,
+    },
+  );
+
+  // R44: el esqueleto de carga se muestra sólo cuando NO hay nada que pintar. `isLoading` de
+  // SWR sigue siendo `true` mientras revalida aunque haya `fallbackData`, y usarlo tal cual
+  // haría que la página 1 —la que el Server Component ya resolvió— apareciera como esqueleto
+  // antes de enseñar las filas que el usuario veía antes de paginar.
+  const pasadosCargando = pasadosData === undefined;
 
   /**
    * Feature 37 + 111/R13 + 109/R31: envía el cierre. Un mismo camino sirve para
@@ -427,6 +536,18 @@ export function CierreDiaModule({
                 rowKey="gestionId"
                 ariaLabel={RESULTADO_LABEL[resultado]}
                 emptyMessage={RESULTADO_VACIO[resultado]}
+                /**
+                 * Feature 170 (T E.4, R1/R8/R11/R22/R26/R30/R37) — una descarga POR SECCIÓN.
+                 * Familia B: `filas` es el grupo completo que ya llegó por props, así que el
+                 * archivo sale de lo que la tabla pinta, en su mismo orden y sin releer.
+                 * La URL firmada de la evidencia no viaja: la columna es un «Sí/No» (R22).
+                 */
+                descarga={{
+                  titulo: RESULTADO_LABEL[resultado],
+                  columnas: DESCARGA_POR_RESULTADO[resultado].columnas,
+                  obtenerFilas: () =>
+                    filasLocales(filas, DESCARGA_POR_RESULTADO[resultado].fila),
+                }}
               />
             </div>
           </section>
@@ -465,12 +586,49 @@ export function CierreDiaModule({
         <div className="overflow-x-auto">
           <DataTable
             columns={columnasPasados(abrirDetalle)}
-            data={cierresPasados}
+            data={pasadosData?.items ?? []}
             rowKey="cierreId"
-            ariaLabel="Cierres solicitados"
+            ariaLabel={TITULO_DESCARGA_PASADOS}
             emptyMessage="Aún no has solicitado ningún cierre."
+            isLoading={pasadosCargando}
+            error={pasadosError ? ERROR_PASADOS : null}
+            /**
+             * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
+             * CONJUNTO COMPLETO de ESTE mensajero. Se relee con el MISMO listado que la
+             * pantalla ya llamaba antes de paginar (`listarCierreDia`), que resuelve el
+             * mensajero desde la sesión: descargar no puede traer los cierres de otro (R44).
+             */
+            descarga={{
+              titulo: TITULO_DESCARGA_PASADOS,
+              columnas: COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
+              obtenerFilas: () =>
+                filasDelConjuntoCompleto(
+                  listarCierreDia().then((res) =>
+                    res.status === "ok"
+                      ? ({ status: "ok", items: res.cierresPasados } as const)
+                      : res,
+                  ),
+                  filaDescargaDiaCierrePasado,
+                ),
+            }}
           />
         </div>
+
+        <Pagination
+          page={pasadosPage}
+          pageSize={pasadosPageSize}
+          total={pasadosData?.total ?? 0}
+          disabled={pasadosCargando}
+          showFirstLast
+          siblingCount={1}
+          ariaLabel={PAGINACION_PASADOS_LABEL}
+          onPageChange={setPasadosPage}
+          onPageSizeChange={(s) => {
+            setPasadosPageSize(s);
+            setPasadosPage(1);
+          }}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        />
       </section>
 
       {/* Confirmación de "Solicitar cierre". */}

@@ -4,7 +4,11 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DescargaFilasResult,
+} from "@/components/shared/DataTable";
 import {
   FilterComponent,
   type FilterSelection,
@@ -14,8 +18,10 @@ import {
   resaltarFilaPrioridad,
 } from "@/components/shared/PrioridadResalte";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
-import { normalizeName } from "@/lib/utils/normalize";
-import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type {
+  CatalogoFiltrosSateliteDTO,
+  RecepcionSateliteDTO,
+} from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Feature 158 (T2.7, decisión del humano del 2026-07-30): el reporte de incidente también
 // vive en la bodega satélite. Se IMPORTA el mismo disparador y el mismo modal de `/ordenes`;
@@ -23,12 +29,12 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 import { ReportarIncidenteAccion } from "@/app/(app)/ordenes/_components/ReportarIncidenteAccion";
 import { puedeReportarIncidenteSatelite } from "./incidente-satelite";
 import { recibidasColumns } from "./recibidas-columns";
+import { COLUMNAS_DESCARGA_SATELITE } from "./satelite-descarga-columnas";
 import {
-  CLAVE_CANTON,
-  CLAVE_DISTRITO,
-  CLAVE_ESTADO,
   construirFiltrosSatelite,
   etiquetaEstado,
+  seleccionAFiltroSatelite,
+  type FiltroBodegaSatelite,
 } from "./satelite-ordenes-filtros";
 
 // Pedido humano: la bodega satélite deja de tener una sección (y una tabla) por estado y
@@ -44,8 +50,20 @@ import {
 //     ninguna: son transiciones distintas.
 //   - "Por recibir" NO entra aquí: se acepta por escáner/lote y vive en su propia sección.
 //
-// Todo el filtrado es de CLIENTE sobre las órdenes que ya llegan por props (el service ya
-// las acotó a la zona del actor); esta pantalla no consulta nada por su cuenta.
+// Feature 170 — FASE 2 (T K.3): la tabla pinta UNA PÁGINA que resuelve el servidor. Este
+// componente ya NO consulta ni recorta nada: recibe la página, el total del conjunto y el
+// catálogo de opciones, y EMITE los filtros elegidos (`onFiltroChange`) para que el módulo
+// —que es quien tiene los datos— pida la página que toca. Lo que sí decide aquí es lo que
+// es suyo: qué filas están marcadas y qué acción de lote se ofrece sobre ellas (R47/R48).
+
+/**
+ * Feature 170 (T A.2) — título del dataset: encabezado de la sección, nombre accesible de
+ * la tabla, nombre de la hoja y base del nombre de archivo
+ * (`ordenes-de-la-bodega-YYYY-MM-DD.xlsx`, R12), y parte del nombre accesible del control
+ * de descarga (R13). Se EXPORTA porque desde T K.3 la descarga la arma el módulo —es quien
+ * conoce el origen del conjunto completo— y las dos partes tienen que decir lo mismo.
+ */
+export const TITULO_BODEGA = "Órdenes de la bodega";
 
 /** Estados sobre los que cada acción de lote es válida. */
 const ESTADO_ASIGNABLE = "en_bodega_satelite";
@@ -55,8 +73,43 @@ const ESTADO_POR_DEVOLVER = "por_devolver";
 const ESTADO_DEVUELTA = "devuelta";
 
 export interface SateliteOrdenesListadoProps {
-  /** Órdenes de los cuatro grupos, ya unidas por el módulo. */
+  /**
+   * Feature 170 — FASE 2 (T K.3, R40): la PÁGINA visible que devolvió el servidor, ya
+   * filtrada y ordenada por él. NO es el conjunto: para hablar del conjunto están `total`
+   * y `totalSinFiltros`.
+   */
   ordenes: RecepcionSateliteDTO[];
+  /**
+   * R41/R42: total de órdenes que corresponden a los filtros vigentes y al alcance del
+   * actor, tal como lo devolvió el servidor. NUNCA `ordenes.length`.
+   */
+  total: number;
+  /**
+   * R42: total del conjunto del actor SIN filtros (la página 1 que pre-cargó el Server
+   * Component). Es el «de Y» del contador; también viene del servidor.
+   */
+  totalSinFiltros: number;
+  /**
+   * T K.2 (R46): opciones de cantón y distrito del CONJUNTO del actor, independientes de
+   * la página visible. Alimentan los dos desplegables.
+   */
+  catalogo: CatalogoFiltrosSateliteDTO;
+  /** Emite los tres filtros elegidos; el módulo pide con ellos la página al servidor (R45). */
+  onFiltroChange: (filtro: FiltroBodegaSatelite) => void;
+  /**
+   * R52 — filas del CONJUNTO COMPLETO con los filtros vigentes, para el archivo.
+   *
+   * Es un CALLBACK, no unos filtros: esta tabla pinta la página que le llega por props y no
+   * conoce el origen del conjunto ni los filtros vigentes; quien los conoce es
+   * `RecepcionSateliteModule`, que cierra sobre ellos. Mismo patrón que `WalletLedger` /
+   * `DesglosePagos` (T C.4), y lo que manda el design §5: nunca los filtros a la tabla. Las
+   * COLUMNAS del archivo las declara esta tabla, que es la que sabe qué enseña.
+   */
+  obtenerFilasDescarga: () => Promise<DescargaFilasResult>;
+  /** `true` mientras no hay ninguna página que pintar (primer viaje al servidor). */
+  cargando?: boolean;
+  /** Mensaje de error de la carga de la página, ya redactado; `null` si no lo hay. */
+  errorCarga?: string | null;
   /** Zona del actor, para el estado legible de la columna. */
   zonaNombre: string | null;
   /** `false` con la bodega bloqueada: no se puede asignar (defensa suave). */
@@ -88,6 +141,13 @@ export interface SateliteOrdenesListadoProps {
 
 export function SateliteOrdenesListado({
   ordenes,
+  total,
+  totalSinFiltros,
+  catalogo,
+  onFiltroChange,
+  obtenerFilasDescarga,
+  cargando = false,
+  errorCarga = null,
   zonaNombre,
   puedeAsignar,
   onAsignar,
@@ -102,40 +162,24 @@ export function SateliteOrdenesListado({
   const [seleccion, setSeleccion] = useState<FilterSelection>({});
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
 
-  // Opciones derivadas del conjunto COMPLETO cargado: elegir un cantón no debe borrar
-  // los demás del desplegable.
-  const filtros = useMemo(() => construirFiltrosSatelite(ordenes), [ordenes]);
+  // R46: las opciones salen del CATÁLOGO del conjunto, no de la página visible. Elegir un
+  // cantón tampoco borra los demás del desplegable: el catálogo no depende de la selección.
+  const filtros = useMemo(() => construirFiltrosSatelite(catalogo), [catalogo]);
 
-  // Filtro compuesto en AND: estado ∧ cantón ∧ distrito. Una lista vacía en cualquiera de
-  // los tres desplegables significa "todos" (no filtra). Las tres selecciones se leen
-  // DENTRO del memo: hacerlo fuera con `?? []` crearía un array nuevo en cada render y el
-  // memo no memoizaría nada.
-  const visibles = useMemo(() => {
-    const estadosElegidos = seleccion[CLAVE_ESTADO] ?? [];
-    const cantonesElegidos = seleccion[CLAVE_CANTON] ?? [];
-    const distritosElegidos = seleccion[CLAVE_DISTRITO] ?? [];
-    const cantones = new Set(cantonesElegidos.map(normalizeName));
-    const distritos = new Set(distritosElegidos.map(normalizeName));
-    return ordenes.filter((orden) => {
-      if (
-        estadosElegidos.length > 0 &&
-        !estadosElegidos.includes(orden.estatusValue)
-      ) {
-        return false;
-      }
-      if (
-        cantones.size > 0 &&
-        !cantones.has(normalizeName(orden.cantonNombre))
-      ) {
-        return false;
-      }
-      if (distritos.size > 0) {
-        if (orden.distritoNombre === null) return false;
-        if (!distritos.has(normalizeName(orden.distritoNombre))) return false;
-      }
-      return true;
-    });
-  }, [ordenes, seleccion]);
+  /** `true` si hay algún filtro marcado (cambia el contador y el mensaje de vacío). */
+  const hayFiltros = Object.values(seleccion).some((valores) => valores.length > 0);
+
+  /**
+   * Filtrar cambia el CONJUNTO, así que la página que se está viendo puede no existir en el
+   * nuevo resultado y las filas marcadas pueden desaparecer de la vista. Se emite el filtro
+   * (el módulo vuelve a la página 1) y se limpia la selección: actuar sobre una fila que ya
+   * no se ve es actuar a ciegas. Mismo criterio que `OrdenesModule` (feature 144).
+   */
+  function cambiarFiltros(nueva: FilterSelection) {
+    setSeleccion(nueva);
+    setSeleccionados(new Set());
+    onFiltroChange(seleccionAFiltroSatelite(nueva));
+  }
 
   function toggleUno(id: string, checked: boolean) {
     setSeleccionados((prev) => {
@@ -157,11 +201,17 @@ export function SateliteOrdenesListado({
     });
   }
 
-  // Seleccionadas REALES: las que siguen visibles tras filtrar. Filtrar no debe dejar
-  // seleccionada a una orden que ya no se ve (se actuaría a ciegas sobre ella).
+  /**
+   * R47 — Seleccionadas REALES: las de la PÁGINA VISIBLE que están marcadas.
+   *
+   * Antes esto se leía contra el conjunto entero, porque el conjunto entero era lo que se
+   * pintaba. Con la tabla paginada, la selección se acota a la página: lo marcado en otra
+   * página no se pierde (se recupera al volver), pero NO entra en ninguna acción de lote —
+   * actuar sobre una fila que no se está viendo es actuar a ciegas—. Molde: `OrdenesModule`.
+   */
   const seleccionadas = useMemo(
-    () => visibles.filter((orden) => seleccionados.has(orden.id)),
-    [visibles, seleccionados],
+    () => ordenes.filter((orden) => seleccionados.has(orden.id)),
+    [ordenes, seleccionados],
   );
 
   // La acción disponible sale del estado COMÚN de lo seleccionado: con una selección
@@ -173,24 +223,32 @@ export function SateliteOrdenesListado({
     estadosSeleccionados.size === 1 ? [...estadosSeleccionados][0] : null;
   const haySeleccion = seleccionadas.length > 0;
 
-  /** `true` si hay al menos una orden de ese estado a la vista (tras filtrar). */
+  /**
+   * R48 — `true` si hay al menos una orden de ese estado ENTRE LAS SELECCIONADAS.
+   *
+   * Antes miraba el conjunto a la vista, que era todo el conjunto del actor. Con la tabla
+   * paginada eso se rompe en los dos sentidos: un botón dejaría de ofrecerse por estar sus
+   * órdenes en otra página, y —lo grave— una acción de lote decidida sobre el contenido del
+   * listado puede acabar moviendo paquetes que el usuario no eligió. La decisión se toma
+   * sobre lo SELECCIONADO, que es también lo que la acción recibe.
+   */
   function hayEstado(estado: string): boolean {
-    return visibles.some((orden) => orden.estatusValue === estado);
+    return seleccionadas.some((orden) => orden.estatusValue === estado);
   }
 
-  // Feature 101 (R8/R10): el resalte por SLA solo aplica a las órdenes que ESPERAN
-  // reasignación en la bodega (`en_bodega_satelite`). Al juntar los cuatro estados en una
-  // tabla, una devuelta con `prioridad=true` heredada del DTO habría empezado a resaltar;
+  // Feature 101 (R8/R10): el resalte por plazo de reasignación solo aplica a las órdenes que
+  // ESPERAN reasignación en la bodega (`en_bodega_satelite`). Al juntar los cinco estados en
+  // una tabla, una devuelta con `prioridad=true` heredada del DTO habría empezado a resaltar;
   // se neutraliza el flag para el resto de estados, que es lo que ya hacía tener una tabla
   // por grupo. No se toca el DTO original: la copia es solo para pintar.
   const filas = useMemo(
     () =>
-      visibles.map((orden) =>
+      ordenes.map((orden) =>
         orden.estatusValue === ESTADO_ASIGNABLE || !orden.prioridad
           ? orden
           : { ...orden, prioridad: false },
       ),
-    [visibles],
+    [ordenes],
   );
 
   const columnas = useMemo<Column<RecepcionSateliteDTO>[]>(
@@ -198,14 +256,15 @@ export function SateliteOrdenesListado({
       {
         id: "seleccionar",
         value: "Seleccionar",
+        // R47: "seleccionar todo" marca EXACTAMENTE las filas de la página visible.
         renderHeader: () => {
-          const ids = visibles.map((orden) => orden.id);
+          const ids = ordenes.map((orden) => orden.id);
           return (
             <SelectAllCheckbox
               selectableIds={ids}
               selectedIds={seleccionados}
               onToggleAll={(checked) => toggleTodos(ids, checked)}
-              ariaLabel="Seleccionar todas las órdenes"
+              ariaLabel="Seleccionar todas las órdenes de esta página"
             />
           );
         },
@@ -239,16 +298,16 @@ export function SateliteOrdenesListado({
         ),
       },
     ],
-    [seleccionados, zonaNombre, visibles, sinZona, onIncidenteReportado],
+    [seleccionados, zonaNombre, ordenes, sinZona, onIncidenteReportado],
   );
 
   return (
-    <section aria-label="Órdenes de la bodega" className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">Órdenes de la bodega</h2>
+    <section aria-label={TITULO_BODEGA} className="flex flex-col gap-3">
+      <h2 className="text-lg font-semibold">{TITULO_BODEGA}</h2>
 
       <FilterComponent
         filters={filtros}
-        onChange={setSeleccion}
+        onChange={cambiarFiltros}
         showClearAll
         debounceMs={0}
       />
@@ -258,17 +317,23 @@ export function SateliteOrdenesListado({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p role="status" className="text-sm text-muted-foreground">
           {haySeleccion
-            ? `${seleccionadas.length} seleccionada(s)${
+            ? `${seleccionadas.length} seleccionada(s) en esta página${
                 estadoUnico === null
                   ? " · estados mezclados"
                   : ` · ${etiquetaEstado(estadoUnico)}`
               }`
-            : `${visibles.length} de ${ordenes.length} órdenes`}
+            : /* R42: los DOS números son totales del servidor. El de la izquierda responde
+                 a los filtros vigentes; el de la derecha es el conjunto del actor. Ninguno
+                 sale de las filas de la página, que es lo que R42 prohíbe. */
+              hayFiltros
+              ? `${total} de ${totalSinFiltros} órdenes`
+              : `${total} órdenes`}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Cada acción se OFRECE si hay órdenes de su estado a la vista (así el operador
-              ve qué puede hacer aquí) y se HABILITA solo cuando lo seleccionado es todo de
-              ese estado: son transiciones distintas y no se mezclan en un mismo lote. */}
+          {/* R48: cada acción se ofrece si hay órdenes de su estado SELECCIONADAS, y se
+              habilita solo cuando lo seleccionado es todo de ese estado: son transiciones
+              distintas y no se mezclan en un mismo lote. Sin nada marcado no se ofrece
+              ninguna —no hay nada sobre lo que actuar—. */}
           {hayEstado(ESTADO_ASIGNABLE) ? (
             <Button
               type="button"
@@ -321,12 +386,21 @@ export function SateliteOrdenesListado({
         columns={columnas}
         data={filas}
         rowKey="id"
-        ariaLabel="Órdenes de la bodega"
+        ariaLabel={TITULO_BODEGA}
+        // R52: el control descarga el CONJUNTO con los filtros vigentes; el callback lo baja
+        // el módulo. Las columnas del archivo las declara esta tabla (T A.2).
+        descarga={{
+          titulo: TITULO_BODEGA,
+          columnas: COLUMNAS_DESCARGA_SATELITE,
+          obtenerFilas: obtenerFilasDescarga,
+        }}
+        isLoading={cargando}
+        error={errorCarga}
         rowClassName={resaltarFilaPrioridad}
         emptyMessage={
-          ordenes.length === 0
-            ? "No hay órdenes en la bodega."
-            : "Ninguna orden coincide con los filtros."
+          hayFiltros
+            ? "Ninguna orden coincide con los filtros."
+            : "No hay órdenes en la bodega."
         }
       />
     </section>

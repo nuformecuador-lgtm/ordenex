@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { CierreEstado } from "@/lib/types/cierre";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 158 (T1.26/T1.27, camino del ADMIN) — contrato del repositorio de `orden_incidente`.
 // Solo queries Prisma; sin logica de negocio (rol, R51 y la derivacion del destino de la
@@ -139,6 +140,30 @@ export interface IIncidenteAdminRepository {
    * colas (`solicitado` vs. resueltos), igual que `CierresAdminService`.
    */
   findByAlcance(alcance: AlcanceIncidente): Promise<IncidenteAdminRow[]>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA del HISTORICO del alcance
+   * (los incidentes ya resueltos) + el TOTAL del conjunto.
+   *
+   * Es `findByAlcance` con dos anadidos: `estado NOT IN <cola>` —el espejo del `else` con que
+   * el servicio parte hoy las dos colas (R44)— y el recorte `skip`/`take`. Mismo alcance por
+   * zona de la ORDEN y mismo `orderBy createdAt desc` (R51). El `count` comparte el `where`
+   * con la pagina: es la unica consulta que R54 permite anadir y no puede contar otra cosa.
+   */
+  findHistoricoPaginado(
+    alcance: AlcanceIncidente,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<IncidenteAdminRow>>;
+  /**
+   * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): UNA PAGINA de la COLA de incidentes
+   * PENDIENTES de decision del alcance + el TOTAL del conjunto (el de la cabecera, R42).
+   *
+   * COMPLEMENTO EXACTO de `findHistoricoPaginado`: mismo alcance por zona de la ORDEN, mismo
+   * orden y la MISMA constante de estados, con `in` en vez de `notIn`.
+   */
+  findColaPaginada(
+    alcance: AlcanceIncidente,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<IncidenteAdminRow>>;
   /** R48/R49 — un incidente SOLO si su orden casa el alcance en el WHERE; si no, `null`. */
   findByIdEnAlcance(
     incidenteId: string,

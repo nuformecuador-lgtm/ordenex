@@ -5,6 +5,18 @@
 > Zona: frontend. Complejidad: low. `depends_on: null`.
 > Esta bitácora la escribe el IMPLEMENTER. **No es una auto-aprobación**: el
 > veredicto lo da el reviewer.
+>
+> **Nota posterior (2026-07-31).** Todo lo que sigue —incluida la nota de traspaso
+> a la 133 del final— nombra `ROLES_ANALITICA` a la constante de
+> `lib/auth/menu-visibility.ts`. **Se renombró después a `ROLES_ACCESO_ANALITICA`**
+> porque la feature 135 creó una homónima en `lib/analytics/types.ts` (los cinco
+> roles con ALCANCE dentro de la analítica) y, siendo ambas tuplas de roles,
+> importar la que no era no rompía el typecheck. La bitácora NO se reescribe: es el
+> registro de lo que se hizo entonces. Para la 133, la instrucción sigue siendo
+> «ampliar es editar UNA sola constante», y esa constante hoy se llama
+> `ROLES_ACCESO_ANALITICA`; además existe el guard
+> `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts`, que impide que ese
+> conjunto salga del de dominio o se iguale a él.
 
 ## 1. Alcance ejecutado
 

@@ -19,6 +19,22 @@ vi.mock("@/lib/actions/incidentes", () => ({
   rechazarIncidente: vi.fn(),
   retractarIncidente: vi.fn(),
   reportarIncidente: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2 el histórico, T J.2 la cola): la página pre-carga la PÁGINA 1
+  // de las DOS tablas.
+  listarHistoricoIncidentesPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
+  listarPendientesIncidentesPaginado: vi.fn(async () => ({
+    status: "ok" as const,
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  })),
 }));
 
 class NotFoundError extends Error {

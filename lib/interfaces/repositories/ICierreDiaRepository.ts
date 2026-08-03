@@ -6,6 +6,7 @@ import type {
   CierreTotales,
   IngresoOrdenexDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 37 — contrato del repositorio del cierre del dia. Solo queries Prisma;
 // sin logica de negocio (esa vive en CierreDiaService). Money-safe: los Decimal se
@@ -228,6 +229,18 @@ export interface ICierreDiaRepository {
     cierreId: string,
     mensajeroId: string,
   ): Promise<{ cierre: CierrePasadoDTO; gestiones: CierreGestionPendienteRow[] } | null>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de los cierres del
+   * mensajero + el TOTAL del conjunto.
+   *
+   * Es `findCierresByMensajero` con el recorte `skip`/`take`, compartiendo proyeccion, mapper
+   * y `orderBy solicitadoAt desc` (R51). El `where { mensajeroId }` es el acotamiento por
+   * actor y va tambien en el `count`: pagina y total cuentan el MISMO conjunto (R41/R44).
+   */
+  findCierresByMensajeroPaginado(
+    mensajeroId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierrePasadoDTO>>;
   /**
    * Feature 67 — lee la gestion candidata a deshacerse + el estado real de su orden. Devuelve
    * la fila SIN juzgarla (las guardias de R2/R3/R5/R6/R9 viven en el service); `null` si la

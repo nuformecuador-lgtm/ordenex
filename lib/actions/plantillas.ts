@@ -5,6 +5,7 @@ import {
   actualizarPlantillaSchema,
   cambiarEstadoPlantillaSchema,
   crearPlantillaSchema,
+  listarPlantillasCompletoSchema,
   listarPlantillasSchema,
   previewPlantillaSchema,
   type ActionError,
@@ -12,6 +13,7 @@ import {
   type CambiarEstadoPlantillaResult,
   type CrearPlantillaResult,
   type EliminarPlantillaResult,
+  type ListarPlantillasCompletoResult,
   type ListarPlantillasResult,
   type ObtenerPlantillaResult,
   type PreviewPlantillaResult,
@@ -111,6 +113,26 @@ export async function listarPlantillas(
     const data = listarPlantillasSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
     const service = deps.plantillaService ?? buildPlantillaService();
     return service.listar(data, actor);
+  });
+  return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
+}
+
+/**
+ * Feature 170 (T B.2, design §4) — dataset COMPLETO del listado de plantillas, sin
+ * paginacion, para la descarga. Calcado de `listarPlantillas`: mismo borde, mismo actor,
+ * mismo schema (menos `page`/`pageSize`) y el MISMO servicio. Ninguna rama devuelve filas
+ * junto a un error (R16/R17/R18).
+ */
+export async function listarPlantillasCompleto(
+  input: unknown,
+  deps: PlantillaActionDeps = {},
+): Promise<ListarPlantillasCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
+    const data = listarPlantillasCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
+    const service = deps.plantillaService ?? buildPlantillaService();
+    return service.listarCompleto(data, actor);
   });
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }

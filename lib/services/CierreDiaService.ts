@@ -17,10 +17,12 @@ import type {
   DeshacerGestionServiceResult,
   ICierreDiaService,
   ListarCierreDiaServiceResult,
+  ListarCierresPasadosServiceResult,
   SolicitarCierreServiceResult,
   VerCierrePasadoServiceResult,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { GestionResultado } from "@prisma/client";
+import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import {
   computeTotales,
@@ -298,6 +300,38 @@ export class CierreDiaService implements ICierreDiaService {
     }
 
     return { status: "ok", cierre: found.cierre, grupos };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54) — «Cierres solicitados» del mensajero,
+   * paginado en servidor.
+   *
+   * El acotamiento por actor es el de `listarCierreDia` y no admite variantes: el rol tiene
+   * que ser `mensajero` y el `mensajero_id` del WHERE es `actor.usuarioId`. No hay un
+   * parametro por el que pedir el historico de otro mensajero, y por eso paginar no puede
+   * ampliar el alcance de nadie (R44).
+   *
+   * UNA sola llamada al repositorio (R54), frente a las cuatro que `listarCierreDia` hace
+   * para pintar la pantalla entera: el conteo de R41 viaja dentro de ella.
+   */
+  async listarCierresPasadosPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarCierresPasadosServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1/R2
+
+    const { items, total } = await this.repo.findCierresByMensajeroPaginado(
+      actor.usuarioId, // el acotamiento por actor: sale de la sesion, nunca de la peticion
+      rangoDePagina(input),
+    );
+
+    return {
+      status: "ok",
+      items,
+      page: input.page,
+      pageSize: input.pageSize,
+      total, // R41: el total del CONJUNTO, nunca `items.length`
+    };
   }
 
   async solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult> {

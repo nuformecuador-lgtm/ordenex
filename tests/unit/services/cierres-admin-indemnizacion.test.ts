@@ -23,6 +23,9 @@ const G2 = "g-incidente-2";
 function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdminRepository {
   return {
     findCierresByAlcance: vi.fn(async () => []),
+    // Feature 170 (T I.1): el historico paginado. Doble no-op: esta suite no lo ejercita.
+    findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
+    findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
@@ -43,7 +46,14 @@ function newService(repo: ICierresAdminRepository, zonaDelSatelite: string | nul
     createSignedUrl: vi.fn(),
     createSignedUrls: vi.fn(async () => ({})),
   } as unknown as ISignedUrlProvider;
-  return new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls);
+  // Feature 172 (T C.2): el pendiente del cierre recien aprobado. Esta suite no lo mide (vive
+  // en `cierres-admin-pendiente.test.ts`): sin cierre releible, el servicio devuelve "0.00".
+  return new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, {
+    sumarVigentesPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, "0.00"])),
+    ),
+    obtenerCierreParaPago: vi.fn(async () => null),
+  });
 }
 
 function resolverCall(repo: ICierresAdminRepository) {
@@ -55,7 +65,12 @@ describe("R36 — un cierre SIN incidentes se aprueba exactamente como hoy", () 
     const repo = fakeRepo();
     const r = await newService(repo).aprobarCierre("c1", MAESTRO);
 
-    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    expect(r).toEqual({
+      status: "ok",
+      cierreId: "c1",
+      estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
+    });
     expect(repo.resolverCierre).toHaveBeenCalledTimes(1);
     expect(resolverCall(repo).indemnizaciones).toEqual([]);
   });
@@ -156,7 +171,12 @@ describe("R19/R22 — con cobertura EXACTA la aprobacion procede", () => {
       { gestionId: G2, monto: "300.25" },
     ]);
 
-    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    expect(r).toEqual({
+      status: "ok",
+      cierreId: "c1",
+      estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
+    });
     const call = resolverCall(repo);
     expect(call.nuevoEstado).toBe("aprobado");
     // R24: STRING de extremo a extremo — el service NO convierte a number ni redondea.

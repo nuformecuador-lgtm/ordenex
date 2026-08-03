@@ -5,6 +5,7 @@ import type {
   WalletTiendaMovimientoCategoria,
 } from "@/lib/types/wallet-tienda";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 43 (design §2.1) — contrato del repositorio del LEDGER por tienda. Solo queries
 // Prisma; sin logica de negocio. Money-safe: montos entran/salen como STRING. El acotado por
@@ -24,6 +25,23 @@ export interface CrearMovimientoTiendaInput {
   origenId: string | null;
   descripcion?: string | null;
   registradoPor?: string | null;
+  /**
+   * Feature 172 (T B.2, design §2.4, R37) — fecha del movimiento, OPCIONAL.
+   *
+   * La columna existe desde la 43 con `DEFAULT CURRENT_TIMESTAMP` y hasta hoy ningun
+   * escritor la exponia: el feed del cierre escribe con la hora real y le vale el default.
+   * La liquidacion necesita fechar el movimiento con la fecha REAL del pago —que puede ser
+   * de ayer— y no con el instante de registro.
+   *
+   * Es opcional A PROPOSITO y la implementacion la pasa SOLO si viene: quien no la manda
+   * sigue cayendo en el `DEFAULT` de la columna y su comportamiento no cambia ni un byte.
+   * La prueba de que es opcional de verdad es que los tests de los dos feeds del cierre
+   * siguen verdes sin editarlos.
+   *
+   * Convencion de la 172: MEDIANOCHE UTC del dia de `fecha_pago` (`medianocheUtcDelDia`),
+   * no 06:00Z, para que el pago entre por los dos bordes del filtro por rango del desglose.
+   */
+  fechaMovimiento?: Date;
 }
 
 // Filtros del listado del ledger de UNA tienda (R19/R22). `cierreId` filtra por el origen
@@ -67,6 +85,22 @@ export interface SaldoTiendaAgregadoRow {
   debitos: string;
 }
 
+/**
+ * Feature 171 (design §4.2) — una fila por par (tipo, categoria) con su Σ monto, para UNA
+ * tienda y unos filtros. Es el material CRUDO del desglose: el repositorio no clasifica ni
+ * resta, solo agrega. Quien decide en que cubeta cae cada categoria es `derivarDesgloseTienda`
+ * (`lib/utils/desglose-tienda.ts`), donde la clasificacion esta declarada y es exhaustiva.
+ *
+ * `tipo` viaja aunque la cubeta se decida por `categoria`: es lo que permite comprobar contra
+ * la OTRA derivacion del mismo ledger (`derivarSaldoTienda`, que parte de credito/debito) que
+ * ambas cuadran sobre el mismo conjunto (R11). Money-safe: `total` STRING escala 2.
+ */
+export interface DesgloseTiendaAgregadoRow {
+  tipo: WalletTiendaMovimientoTipo;
+  categoria: WalletTiendaMovimientoCategoria;
+  total: string;
+}
+
 export interface IWalletTiendaMovimientoRepository {
   /**
    * R6/R13: inserta las filas de forma IDEMPOTENTE en la transaccion `tx`. Usa
@@ -81,4 +115,27 @@ export interface IWalletTiendaMovimientoRepository {
   agregarSaldoPorTienda(tiendaId: string, filtros: SaldoTiendaFiltros): Promise<SaldoTiendaAgregado>;
   /** R20: una fila por tienda (con nombre) con sus totales credito/debito, para el maestro. */
   listarSaldosTodasTiendas(): Promise<SaldoTiendaAgregadoRow[]>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de los saldos por tienda +
+   * el TOTAL de tiendas con movimientos.
+   *
+   * Reusa la MISMA agregacion que `listarSaldosTodasTiendas` (el saldo de una tienda no se
+   * puede derivar de una pagina de movimientos: la agregacion es del conjunto por
+   * construccion), y por eso el recorte no anade NI UNA consulta — tampoco la del conteo. El
+   * orden es por NOMBRE de tienda (`tiendaId` como desempate): este listado no tenia criterio
+   * de ordenacion y sin un orden total la pagina 2 podria repetir u omitir filas. Ver la
+   * desviacion declarada en la impl del repositorio.
+   */
+  listarSaldosTiendasPaginado(
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<SaldoTiendaAgregadoRow>>;
+  /**
+   * Feature 171 (R22/R24/R34): Σ monto agrupado por (tipo, categoria) para UNA tienda +
+   * filtros, con `tiendaId` SIEMPRE en el WHERE. UN solo `groupBy`, sea cual sea el tamaño de
+   * pagina o el numero de tiendas listadas. Salida STRING (money-safe).
+   */
+  agregarDesglosePorTienda(
+    tiendaId: string,
+    filtros: SaldoTiendaFiltros,
+  ): Promise<DesgloseTiendaAgregadoRow[]>;
 }

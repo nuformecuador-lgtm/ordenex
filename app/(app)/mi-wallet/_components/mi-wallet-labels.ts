@@ -14,6 +14,50 @@ export function money(value: string | null): string {
   return value === null ? "—" : `₡${value}`;
 }
 
+/**
+ * Feature 172 (T G.2, R55) `[P5]` — los TRES importes de la cabecera de `/mi-wallet`, mas el
+ * saldo, en el orden de la formula: `saldo = a tu favor − cargos − ya pagado`.
+ *
+ * Por que son etiquetas PROPIAS y no un re-export de `DESGLOSE_TIENDA_LABEL` (la cabecera del
+ * maestro, `/wallet/tiendas`): aquella habla de la tienda en tercera persona («A favor de la
+ * tienda», «Pagado a la tienda») porque la lee quien paga. Esta pantalla la lee la tienda
+ * sobre SU propio dinero, y el resto de `/mi-wallet` ya le habla de vos. Lo que NO se duplica
+ * —y es lo unico que importa que no se duplique— es la CLASIFICACION: en que cubeta cae cada
+ * concepto lo decide `CUBETA_POR_CATEGORIA` en el servidor, una sola vez, para las dos
+ * pantallas.
+ *
+ * «Ya pagado» esta separado de «Cargos de Ordenex» a proposito: los dos son debitos del libro,
+ * pero uno es lo que te cobraron y el otro lo que ya te entregaron. Plegados en un solo
+ * importe, la tienda veria el dinero que recibio contado como un cargo mas.
+ */
+export const DESGLOSE_MI_WALLET_LABEL = {
+  aFavor: "A tu favor",
+  aFavorHint: "COD recaudado y ajustes",
+  cargos: "Cargos de Ordenex",
+  cargosHint: "Fletes, comisión e IVA",
+  pagado: "Ya pagado",
+  pagadoHint: "Lo que Ordenex ya te entregó",
+  saldo: "Saldo a favor",
+} as const;
+
+/**
+ * Feature 172 (T G.2) — la limitacion N1, declarada donde se leen las cifras que afecta.
+ *
+ * MISMA regla y MISMO lenguaje que el aviso de T F.6 en la cabecera del maestro: hace falta
+ * donde se muestra un importe AGREGADO que sigue contando lo anulado. Aqui hacen falta dos —
+ * «Ya pagado» conserva el pago anulado y «A tu favor» suma su devolucion— y el saldo, que es
+ * la resta de los tres, sale exacto.
+ *
+ * Se compone con los rotulos REALES de la cabecera: el dia que alguien renombre un importe, el
+ * aviso lo sigue en vez de hablar de una cifra que ya no se llama asi. Sin jerga: ni
+ * «contraasiento», ni «neteo», ni siglas.
+ */
+export const DESGLOSE_MI_WALLET_AVISO =
+  `«${DESGLOSE_MI_WALLET_LABEL.pagado}» sigue contando los pagos que se anularon, y ` +
+  `«${DESGLOSE_MI_WALLET_LABEL.aFavor}» suma la devolución de cada uno, así que esos dos ` +
+  `importes quedan más altos de lo que se movió de verdad. «${DESGLOSE_MI_WALLET_LABEL.saldo}» ` +
+  `ya tiene todo eso descontado: ese es el número correcto.`;
+
 /** Etiqueta legible del tipo de movimiento (credito a favor / debito). */
 export const TIPO_TIENDA_LABEL: Record<WalletTiendaMovimientoTipo, string> = {
   credito: "Crédito",

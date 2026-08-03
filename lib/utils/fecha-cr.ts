@@ -40,6 +40,30 @@ export function fechaCalendarioCR(now: Date = new Date()): string {
   return `${anio}-${mes}-${dia}`;
 }
 
+/**
+ * `true` si `value` es una fecha CALENDARIO `YYYY-MM-DD` que EXISTE de verdad.
+ *
+ * Hace falta el ROUND-TRIP —parsear y comprobar que el instante vuelve a emitir EXACTAMENTE la
+ * misma cadena— porque ninguna de las dos comprobaciones "obvias" caza un dia inexistente:
+ *
+ * - El regex `^\d{4}-\d{2}-\d{2}$` mide la FORMA, y `2026-02-31` la cumple.
+ * - `Number.isNaN(new Date(...).getTime())` NO basta: al contrario de lo que se suele suponer,
+ *   V8 devuelve `Invalid Date` solo cuando el MES esta fuera de rango (`2026-13-01`). Un DIA
+ *   desbordado RUEDA en silencio al mes siguiente: `new Date("2026-02-31T00:00:00.000Z")` es el
+ *   **3 de marzo**. Y una fecha rodada es peor que una rechazada: el usuario pide un dia y el
+ *   sistema le guarda otro sin avisar.
+ *
+ * Es la unica pieza de esta comprobacion en el arbol: la usan `esFechaFutura` (reprogramacion,
+ * features 36/73/100) y `esFechaPagoValida` (liquidacion, feature 172). `backfill-rango.ts`
+ * hace el mismo viaje por su cuenta pero contra el calendario de CR (06:00Z), que es otra
+ * convencion y por eso no se colapsa con esta.
+ */
+export function esFechaCalendarioValida(value: string): boolean {
+  const dia = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(dia.getTime())) return false;
+  return dia.toISOString().slice(0, 10) === value;
+}
+
 /** Milisegundos de un dia; CR no tiene horario de verano, asi que sumar 24h == +1 dia. */
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 

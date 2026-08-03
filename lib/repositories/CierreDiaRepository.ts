@@ -12,6 +12,7 @@ import type {
   TarifaVigenteResuelta,
 } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
@@ -194,6 +195,11 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
  * Proyeccion de la CABECERA de un cierre del mensajero (histórico R18 y detalle de "ver").
  * Una sola definicion para las dos lecturas: los totales que se listan y los que se abren
  * salen de las mismas columnas.
+ *
+ * Feature 170 (T I.1): la comparte ademas la version PAGINADA de `findCierresByMensajero`,
+ * que lee exactamente estas columnas y las serializa con este mismo mapper. Dos copias
+ * divergen en cuanto una gane un campo — que es justo lo que estuvo a punto de pasar aqui.
+ * Money-safe: los Decimal salen como STRING escala 2 (nunca number/parseFloat).
  */
 const CIERRE_PASADO_SELECT = {
   id: true,
@@ -599,6 +605,36 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       ...WITH_DETALLE,
     });
     return { cierre: toCierrePasadoDTO(cierre), gestiones: rows.map(toPendienteRow) };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): una pagina de los cierres del mensajero
+   * + el total.
+   *
+   * Es `findCierresByMensajero` con el recorte `skip`/`take`, y comparte con el la proyeccion
+   * y el mapper (`CIERRE_PASADO_SELECT` / `toCierrePasadoDTO`): las dos lecturas del mismo
+   * listado no pueden devolver columnas distintas.
+   *
+   * `where { mensajeroId }` es el acotamiento por actor: lo escribe el servicio desde la
+   * sesion, jamas la peticion. Y es el MISMO objeto en `findMany` y en `count`, para que el
+   * total no pueda contar los cierres de todos los mensajeros.
+   */
+  async findCierresByMensajeroPaginado(
+    mensajeroId: string,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CierrePasadoDTO>> {
+    const where = { mensajeroId };
+    const [rows, total] = await Promise.all([
+      this.prisma.cierreDia.findMany({
+        where,
+        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        skip: rango.skip,
+        take: rango.take,
+        select: CIERRE_PASADO_SELECT,
+      }),
+      this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO
+    ]);
+    return { items: rows.map(toCierrePasadoDTO), total };
   }
 
   /**

@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pagination } from "@/components/shared/Pagination";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
-import { listarMisPagosAction } from "@/lib/actions/wallet-mensajero";
+import {
+  listarMisPagosAction,
+  listarMisPagosCompletoAction,
+} from "@/lib/actions/wallet-mensajero";
 import type {
   CuentaPorPagarDTO,
   PagoMensajeroMovimientoDTO,
@@ -15,6 +19,7 @@ import type {
 
 import { CuentaPorPagarCard } from "./CuentaPorPagarCard";
 import { DesglosePagos } from "./DesglosePagos";
+import { filaDescargaMiPago } from "./mis-pagos-descarga-columnas";
 
 // Feature 44 (T15, R20/R21/R22) — modulo cliente de la vista propia del MENSAJERO. Recibe
 // TODO por props desde el Server Component padre (que ya valido rol `mensajero` y pre-fetch,
@@ -48,6 +53,19 @@ function buildInput(
   pageSize: number,
 ): Record<string, unknown> {
   const input: Record<string, unknown> = { page, pageSize };
+  if (filtros.cierreId) input.cierreId = filtros.cierreId;
+  if (filtros.desde) input.desde = filtros.desde;
+  if (filtros.hasta) input.hasta = filtros.hasta;
+  return input;
+}
+
+/**
+ * Feature 170 (T C.4, R10/R18) — input del modo COMPLETO: los MISMOS filtros vigentes, SIN
+ * `page`/`pageSize` (el schema es `.strict()` y los rechaza). El acotamiento al mensajero
+ * NO viaja en el input y no tiene por qué: lo escribe el servicio con el id del actor.
+ */
+function buildInputCompleto(filtros: FiltrosPagos): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
   if (filtros.cierreId) input.cierreId = filtros.cierreId;
   if (filtros.desde) input.desde = filtros.desde;
   if (filtros.hasta) input.hasta = filtros.hasta;
@@ -190,7 +208,18 @@ export function MisPagosModule({
           </div>
         </form>
 
-        <DesglosePagos movimientos={movimientos} isLoading={loading} />
+        {/* Feature 170 (T C.4, R9/R10): el archivo trae TODOS los pagos del mensajero con
+            los filtros vigentes, no la página. Callback construido en el render. */}
+        <DesglosePagos
+          movimientos={movimientos}
+          isLoading={loading}
+          obtenerFilasDescarga={() =>
+            filasDesdeResultado(
+              listarMisPagosCompletoAction(buildInputCompleto(filtros)),
+              filaDescargaMiPago,
+            )
+          }
+        />
 
         <Pagination
           page={page}

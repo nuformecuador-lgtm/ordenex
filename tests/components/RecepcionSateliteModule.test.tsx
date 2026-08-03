@@ -2,8 +2,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
+import {
+  PAGE_SIZE_SATELITE,
+  catalogoSatelite,
+  paginaBodega,
+} from "@/tests/fixtures/satelite-bodega";
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
 import { recibirLote } from "@/lib/actions/recepcion-satelite";
@@ -14,11 +20,16 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 // recepción, el toast, el router (refresh) y la lib de cámara (sin hardware en CI).
 // Feature 63: se mockea también `recibirLote` (recepción en lote "Aceptar todas"/
 // "Aceptar") que consume la sección compartida "Por recibir".
+// Feature 170 — FASE 2 (T K.3): el listado de la bodega pide su página al servidor. El doble
+// devuelve las órdenes que el caso monta, sin recortar: aquí no se pagina nada (eso lo mide
+// `tests/components/paginacion/SatelitePaginacion.test.tsx`).
+const { paginadoBodegaMock } = vi.hoisted(() => ({ paginadoBodegaMock: vi.fn() }));
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
   recibirLote: vi.fn(),
+  listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoBodegaMock(...a),
 }));
 
 const recibirLoteMock = vi.mocked(recibirLote);
@@ -91,28 +102,65 @@ function makeOrden(
   };
 }
 
-function renderModule(
-  props?: Partial<Parameters<typeof RecepcionSateliteModule>[0]>,
-) {
+/**
+ * Feature 170 — FASE 2 (T K.3): el módulo ya no recibe los cinco arrays por estado, sino UNA
+ * PÁGINA del listado. Los casos siguen describiendo la bodega por GRUPOS —que es como se
+ * lee— y este andamiaje los concatena en el orden del flujo, igual que hacía el módulo, para
+ * armar la página, el catálogo y el doble de la Server Action.
+ */
+type GruposBodega = Partial<
+  Record<
+    | "porRecibir"
+    | "recibidas"
+    | "asignadas"
+    | "porDevolver"
+    | "enTransitoACentral"
+    | "devueltas",
+    RecepcionSateliteDTO[]
+  >
+>;
+type PropsModulo = Omit<
+  Partial<Parameters<typeof RecepcionSateliteModule>[0]>,
+  "porRecibir" | "ordenesBodega" | "catalogoFiltros"
+>;
+
+function renderModule(props?: GruposBodega & PropsModulo) {
+  const conjunto = [
+    ...(props?.recibidas ?? []),
+    ...(props?.asignadas ?? []),
+    ...(props?.porDevolver ?? []),
+    ...(props?.enTransitoACentral ?? []),
+    ...(props?.devueltas ?? []),
+  ];
+  paginadoBodegaMock.mockResolvedValue({
+    status: "ok",
+    items: conjunto,
+    page: 1,
+    pageSize: PAGE_SIZE_SATELITE,
+    total: conjunto.length,
+  });
+  // Caché de SWR NUEVA por montaje: la clave de la página 1 es la misma en todos los casos
+  // del archivo, así que sin esto el dato del caso anterior ganaría sobre el `fallbackData`
+  // del siguiente y la tabla pintaría las órdenes de otro test (medido en T I.2).
   render(
-    <RecepcionSateliteModule
-      porRecibir={props?.porRecibir ?? []}
-      recibidas={props?.recibidas ?? []}
-      porDevolver={props?.porDevolver ?? []}
-      enTransitoACentral={props?.enTransitoACentral ?? []}
-      devueltas={props?.devueltas ?? []}
-      zonaNombre={props?.zonaNombre ?? "Limón"}
-      sinZona={props?.sinZona ?? false}
-      mensajeros={props?.mensajeros ?? [{ id: "m1", nombre: "Ana Mensajera" }]}
-      bloqueoBodega={
-        props?.bloqueoBodega ?? {
-          bloqueada: false,
-          porMensajeros: false,
-          porCierreBodega: false,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <RecepcionSateliteModule
+        porRecibir={props?.porRecibir ?? []}
+        ordenesBodega={paginaBodega(conjunto)}
+        catalogoFiltros={catalogoSatelite(conjunto)}
+        zonaNombre={props?.zonaNombre ?? "Limón"}
+        sinZona={props?.sinZona ?? false}
+        mensajeros={props?.mensajeros ?? [{ id: "m1", nombre: "Ana Mensajera" }]}
+        bloqueoBodega={
+          props?.bloqueoBodega ?? {
+            bloqueada: false,
+            porMensajeros: false,
+            porCierreBodega: false,
+          }
         }
-      }
-      liberadasHoy={props?.liberadasHoy ?? []}
-    />,
+        liberadasHoy={props?.liberadasHoy ?? []}
+      />
+    </SWRConfig>,
   );
 }
 
@@ -286,16 +334,17 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const region = screen.getByRole("region", { name: LISTADO });
-    const asignar = within(region).getByRole("button", { name: "Asignar" });
-    // Sin selección, la acción está deshabilitada.
-    expect(asignar).toBeDisabled();
+    // Feature 170 — FASE 2 (T K.3, R48): la acción se decide sobre lo SELECCIONADO. Sin nada
+    // marcado no se ofrece; antes se pintaba deshabilitada porque miraba el contenido del
+    // listado, que era todo el conjunto del actor y con la tabla paginada ya no lo es.
+    expect(within(region).queryByRole("button", { name: "Asignar" })).toBeNull();
 
     const checkbox = within(region).getByRole("checkbox", {
       name: "Seleccionar REM-B1",
     });
     await user.click(checkbox);
 
-    expect(asignar).toBeEnabled();
+    expect(within(region).getByRole("button", { name: "Asignar" })).toBeEnabled();
   });
 
   it("Pedido humano: 'Recibidas' se renderiza como TABLA (DataTable) con sus columnas y una fila por orden", () => {
@@ -361,7 +410,7 @@ describe("RecepcionSateliteModule", () => {
     // La cabecera de la columna de selección es un checkbox "seleccionar todo".
     expect(
       within(tabla).getByRole("checkbox", {
-        name: "Seleccionar todas las órdenes",
+        name: "Seleccionar todas las órdenes de esta página",
       }),
     ).toBeInTheDocument();
   });
@@ -388,7 +437,7 @@ describe("RecepcionSateliteModule", () => {
 
     const tabla = screen.getByRole("table", { name: LISTADO });
     const seleccionarTodo = within(tabla).getByRole("checkbox", {
-      name: "Seleccionar todas las órdenes",
+      name: "Seleccionar todas las órdenes de esta página",
     });
     const fila1 = within(tabla).getByRole("checkbox", { name: "Seleccionar REM-B1" });
     const fila2 = within(tabla).getByRole("checkbox", { name: "Seleccionar REM-B2" });
@@ -448,12 +497,13 @@ describe("RecepcionSateliteModule", () => {
 
     const region = screen.getByRole("region", { name: LISTADO });
     const tabla = within(region).getByRole("table", { name: LISTADO });
-    const asignar = within(region).getByRole("button", { name: "Asignar" });
-    expect(asignar).toBeDisabled();
+    // R48: sin selección no hay acción de lote que ofrecer.
+    expect(within(region).queryByRole("button", { name: "Asignar" })).toBeNull();
 
     await user.click(
       within(tabla).getByRole("checkbox", { name: "Seleccionar REM-B1" }),
     );
+    const asignar = within(region).getByRole("button", { name: "Asignar" });
     expect(asignar).toBeEnabled();
 
     // Abre el modal de asignación (feature 34) con la orden seleccionada.
@@ -515,7 +565,8 @@ describe("RecepcionSateliteModule", () => {
     expect(within(region).getByRole("button", { name: "Asignar" })).toBeDisabled();
   });
 
-  it("R22: bodega bloqueada por CIERRE DE BODEGA (ii) muestra el aviso de esa causa", () => {
+  it("R22: bodega bloqueada por CIERRE DE BODEGA (ii) muestra el aviso de esa causa", async () => {
+    const user = userEvent.setup();
     renderModule({
       recibidas: [
         makeOrden({
@@ -536,6 +587,10 @@ describe("RecepcionSateliteModule", () => {
     const region = screen.getByRole("region", { name: LISTADO });
     expect(alerta).toHaveTextContent(/cierre de bodega hacia la central está pendiente de aprobación/i);
     expect(alerta).not.toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
+    // R48: la acción se ofrece al marcar, y el bloqueo la deja deshabilitada.
+    await user.click(
+      within(region).getByRole("checkbox", { name: "Seleccionar REM-B1" }),
+    );
     expect(within(region).getByRole("button", { name: "Asignar" })).toBeDisabled();
   });
 
@@ -583,7 +638,8 @@ describe("RecepcionSateliteModule", () => {
 
   // ---------- Feature 139 (T3.3) — "Por devolver" por lote a bodega central ----------
 
-  it("R13/R21: 'Por devolver' es una TABLA seleccionable de las órdenes por_devolver + botón 'Enviar a central'", () => {
+  it("R13/R21: 'Por devolver' es una TABLA seleccionable de las órdenes por_devolver + botón 'Enviar a central'", async () => {
+    const user = userEvent.setup();
     renderModule({
       porDevolver: [
         makeOrden({
@@ -600,16 +656,18 @@ describe("RecepcionSateliteModule", () => {
     const tabla = within(region).getByRole("table", { name: LISTADO });
     expect(within(tabla).getByText("REM-PORDEV")).toBeInTheDocument();
     expect(within(tabla).getAllByText(/Caro Díaz/).length).toBeGreaterThan(0);
-    // Checkbox de selección por fila + botón de acción por lote.
-    expect(
-      within(tabla).getByRole("checkbox", { name: "Seleccionar REM-PORDEV" }),
-    ).toBeInTheDocument();
+    // Checkbox de selección por fila + botón de acción por lote sobre lo marcado (R48).
+    const checkbox = within(tabla).getByRole("checkbox", {
+      name: "Seleccionar REM-PORDEV",
+    });
+    expect(checkbox).toBeInTheDocument();
+    await user.click(checkbox);
     expect(
       within(region).getByRole("button", { name: "Enviar a central" }),
     ).toBeInTheDocument();
   });
 
-  it("R13: sin selección 'Enviar a central' está deshabilitado; al seleccionar se habilita", async () => {
+  it("R13/R48: sin selección 'Enviar a central' no se ofrece; al seleccionar aparece habilitado", async () => {
     const user = userEvent.setup();
     renderModule({
       porDevolver: [
@@ -622,13 +680,19 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const region = screen.getByRole("region", { name: LISTADO });
-    const enviar = within(region).getByRole("button", { name: "Enviar a central" });
-    expect(enviar).toBeDisabled();
+    // Feature 170 — FASE 2 (T K.3, R48): la decisión se toma sobre lo SELECCIONADO. Sin nada
+    // marcado no hay lote, así que no hay botón; antes se pintaba deshabilitado mirando el
+    // contenido del listado.
+    expect(
+      within(region).queryByRole("button", { name: "Enviar a central" }),
+    ).toBeNull();
 
     await user.click(
       within(region).getByRole("checkbox", { name: "Seleccionar REM-PORDEV" }),
     );
-    expect(enviar).toBeEnabled();
+    expect(
+      within(region).getByRole("button", { name: "Enviar a central" }),
+    ).toBeEnabled();
   });
 
   it("R13: 'Enviar a central' dispara enviarACentral por cada seleccionada y en éxito refresca", async () => {
@@ -645,7 +709,7 @@ describe("RecepcionSateliteModule", () => {
     // Selecciona todas con el checkbox de cabecera.
     await user.click(
       within(region).getByRole("checkbox", {
-        name: "Seleccionar todas las órdenes",
+        name: "Seleccionar todas las órdenes de esta página",
       }),
     );
     await user.click(
@@ -732,7 +796,8 @@ describe("RecepcionSateliteModule", () => {
 
   // ---------- Feature 100 (T4.1) — recuperar a bodega (devueltas) ----------
 
-  it("R12: 'Devueltas' lista las órdenes devuelta de la zona con su botón 'Recuperar'", () => {
+  it("R12: 'Devueltas' lista las órdenes devuelta de la zona con su botón 'Recuperar'", async () => {
+    const user = userEvent.setup();
     renderModule({
       devueltas: [
         makeOrden({
@@ -747,6 +812,10 @@ describe("RecepcionSateliteModule", () => {
     const region = screen.getByRole("region", { name: LISTADO });
     expect(within(region).getAllByText(/REM-DEVUELTA/).length).toBeGreaterThan(0);
     expect(within(region).getAllByText(/Caro Díaz/).length).toBeGreaterThan(0);
+    // R48: la acción aparece al marcar la fila, no por estar la orden en el listado.
+    await user.click(
+      within(region).getByRole("checkbox", { name: "Seleccionar REM-DEVUELTA" }),
+    );
     expect(
       within(region).getByRole("button", { name: "Recuperar" }),
     ).toBeInTheDocument();

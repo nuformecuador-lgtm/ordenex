@@ -4,15 +4,26 @@ import type {
   CuentaPorPagarAgregado,
   CuentaPorPagarAgregadoRow,
   CuentaPorPagarFiltros,
+  CuentasPorPagarFiltro,
   IPagoMensajeroMovimientoRepository,
   ListarPorMensajeroFiltros,
   ListarPorMensajeroPage,
   PagoMensajeroTxClient,
 } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import {
+  filtrarPorBusquedaMensajero,
+  ordenarCuentasPorPagar,
+} from "@/lib/utils/cuentas-por-pagar-listado";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletTiendaMovimientoRepository).
-type PagoMensajeroPrismaClient = Pick<PrismaClient, "pagoMensajeroMovimiento" | "usuario">;
+// Feature 172 (T C.3): + `liquidacionPago`, SOLO para LEER los ids de pago de un cierre (§5).
+// Ningun metodo de esta clase lo escribe: el documento del pago lo escribe su propio repositorio.
+type PagoMensajeroPrismaClient = Pick<
+  PrismaClient,
+  "pagoMensajeroMovimiento" | "usuario" | "liquidacionPago"
+>;
 
 // Money-safe: Decimal -> STRING escala 2 (nunca number/parseFloat).
 type MovimientoRow = Prisma.PagoMensajeroMovimientoGetPayload<Record<string, never>>;
@@ -31,23 +42,6 @@ function toDTO(r: MovimientoRow): PagoMensajeroMovimientoDTO {
   };
 }
 
-// WHERE de los filtros opcionales del desglose (R22), SIN el acotado por mensajero (lo pone el
-// caller). `cierreId` filtra por el origen del cierre (origen_tipo=cierre_dia, origen_id=X).
-function buildFiltrosWhere(f: CuentaPorPagarFiltros): Prisma.PagoMensajeroMovimientoWhereInput {
-  const where: Prisma.PagoMensajeroMovimientoWhereInput = {};
-  if (f.cierreId !== undefined) {
-    where.origenTipo = "cierre_dia";
-    where.origenId = f.cierreId;
-  }
-  if (f.desde !== undefined || f.hasta !== undefined) {
-    where.fechaMovimiento = {
-      ...(f.desde !== undefined ? { gte: f.desde } : {}),
-      ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
-    };
-  }
-  return where;
-}
-
 /**
  * Feature 44 — repositorio del LIBRO de movimientos del pago por mensajero. SOLO queries Prisma.
  * Inserta idempotentemente (skipDuplicates -> ON CONFLICT DO NOTHING, R6/R12), lista paginado
@@ -56,6 +50,57 @@ function buildFiltrosWhere(f: CuentaPorPagarFiltros): Prisma.PagoMensajeroMovimi
  */
 export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimientoRepository {
   constructor(private readonly prisma: PagoMensajeroPrismaClient) {}
+
+  /**
+   * WHERE de los filtros opcionales del desglose (R22), SIN el acotado por mensajero (lo pone
+   * el caller).
+   *
+   * **Feature 172 (T C.3, R52, design §5) — el filtro por cierre son DOS orígenes, no uno.**
+   * Hasta la 172, «los movimientos de este cierre» era literalmente `origen_tipo = 'cierre_dia'
+   * AND origen_id = <cierre>`, porque el feed de la aprobacion era el unico que escribia en
+   * este libro. La liquidacion añade un segundo escritor cuyo origen es el **PAGO**
+   * (`origen_tipo = 'pago_mensajero'`, `origen_id = <pago>`), asi que con el filtro viejo el
+   * pago de un cierre quedaba FUERA de su propio cierre: la pantalla mostraria la deuda sin
+   * mostrar lo que ya se entrego contra ella.
+   *
+   * Se resuelve en dos pasos, como manda §5: (1) leer los ids de pago de ese cierre —0-3 filas,
+   * por el indice `cierre_id` de `liquidacion_pago`— y (2) un `OR` de las dos formas de
+   * pertenecer al cierre. El `OR` trae **tambien los contraasientos** de una anulacion, porque
+   * comparten `origen_id` con su pago (§6.2): por eso la rama del pago filtra por `origen_id`
+   * y no por categoria.
+   *
+   * Alternativa descartada (§11.G): añadir `cierre_id` a este libro. Exigiria backfillear filas
+   * de una tabla declarada inmutable y crearia una segunda forma de decir de donde viene un
+   * movimiento.
+   *
+   * El `OR` compone con el resto por AND (el `mensajeroId` del caller y el rango de fechas
+   * siguen a nivel raiz), asi que ni ensancha el alcance ni se salta el acotado por mensajero.
+   */
+  private async buildFiltrosWhere(
+    f: CuentaPorPagarFiltros,
+  ): Promise<Prisma.PagoMensajeroMovimientoWhereInput> {
+    const where: Prisma.PagoMensajeroMovimientoWhereInput = {};
+    if (f.cierreId !== undefined) {
+      const pagos = await this.prisma.liquidacionPago.findMany({
+        where: { cierreId: f.cierreId },
+        select: { id: true },
+      });
+      where.OR = [
+        // (a) lo que el feed escribio AL APROBAR el cierre.
+        { origenTipo: "cierre_dia", origenId: f.cierreId },
+        // (b) lo que nacio de un PAGO registrado contra ese cierre, y sus contraasientos.
+        // Sin pagos, `in: []` no casa nada: la rama existe pero no ensancha el resultado.
+        { origenTipo: "pago_mensajero", origenId: { in: pagos.map((p) => p.id) } },
+      ];
+    }
+    if (f.desde !== undefined || f.hasta !== undefined) {
+      where.fechaMovimiento = {
+        ...(f.desde !== undefined ? { gte: f.desde } : {}),
+        ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
+      };
+    }
+    return where;
+  }
 
   /** R6/R12: inserta en la tx `tx` con skipDuplicates (no TOCTOU); devuelve filas insertadas. */
   async crearMovimientos(
@@ -72,6 +117,11 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
       origenId: m.origenId,
       descripcion: m.descripcion ?? null,
       registradoPor: m.registradoPor ?? null,
+      // Feature 172 (T B.2, R37): la fecha del movimiento se pasa SOLO si viene. La clave
+      // no se emite cuando el caller no la manda —no se emite `undefined`, no se emite la
+      // clave— asi que el feed del cierre sigue cayendo en el `DEFAULT CURRENT_TIMESTAMP`
+      // de la columna exactamente como antes.
+      ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
     }));
     const res = await tx.pagoMensajeroMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -82,7 +132,7 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     // R20: el acotado por mensajero va SIEMPRE en el WHERE, nunca en memoria.
     const where: Prisma.PagoMensajeroMovimientoWhereInput = {
       mensajeroId: filtros.mensajeroId,
-      ...buildFiltrosWhere(filtros),
+      ...(await this.buildFiltrosWhere(filtros)),
     };
     const skip = (filtros.page - 1) * filtros.pageSize;
     const [rows, total] = await Promise.all([
@@ -104,7 +154,10 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
   ): Promise<CuentaPorPagarAgregado> {
     const where: Prisma.PagoMensajeroMovimientoWhereInput = {
       mensajeroId, // R20: acotado por mensajero en el WHERE
-      ...buildFiltrosWhere(filtros),
+      // Feature 172 (T C.3/R52): el MISMO where que el listado, incluido el `OR` del cierre.
+      // Si aqui se filtrara distinto, la cabecera del desglose diria una cifra y la tabla de
+      // debajo mostraria otra — el pago contado en una y no en la otra.
+      ...(await this.buildFiltrosWhere(filtros)),
     };
     const grupos = await this.prisma.pagoMensajeroMovimiento.groupBy({
       by: ["tipo"],
@@ -160,6 +213,56 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
         pagado: acc.pagado.toFixed(2),
       };
     });
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T L.1, R40/R41/R45/R51) — la misma vista del maestro, con la
+   * busqueda por nombre resuelta en el servidor, ordenada y recortada a una pagina.
+   *
+   * **No corta en la base, y es deliberado** (precedente exacto: `listarSaldosTiendasPaginado`,
+   * T I.1 §6.6). Cada fila es la agregacion de TODO el libro de ese mensajero: no hay nada que
+   * empujar al `LIMIT` sin cambiar el dinero que la fila declara. Ademas el filtro es por
+   * NOMBRE, que vive en `usuario` y no en el libro que se agrega, asi que un `WHERE` sobre la
+   * agregacion no lo expresaria sin una segunda lectura de `usuario` cuyo `ILIKE` casaria un
+   * conjunto distinto del que casa hoy el navegador (`%` y `_` son comodines en SQL y no en
+   * `String.includes`) — que es justo lo que R45 prohibe.
+   *
+   * Consecuencias, las tres medidas: R44 se cumple por construccion (es literalmente el mismo
+   * conjunto que `listarCuentasPorPagarTodos`), R54 en su forma fuerte (cero consultas nuevas,
+   * ni la del conteo) y lo que baja no es el coste en Postgres sino lo que cruza a la pantalla,
+   * que es de lo que habla el Anexo III para este listado.
+   */
+  async listarCuentasPorPagarPaginado(
+    filtro: CuentasPorPagarFiltro,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<CuentaPorPagarAgregadoRow>> {
+    const conjunto = await this.listarCuentasPorPagarCompleto(filtro);
+    return {
+      items: conjunto.slice(rango.skip, rango.skip + rango.take),
+      total: conjunto.length, // R41: el total del CONJUNTO FILTRADO, no el de la pagina
+    };
+  }
+
+  /**
+   * Feature 170 — FASE 2 (T M.1, cierre de Q-L2) — el CONJUNTO filtrado y ordenado, entero.
+   *
+   * Es la lista de la que el metodo de arriba saca su `slice`, extraida para que la DESCARGA
+   * pueda pedirla sin releer el listado sin busqueda y filtrar despues en el navegador (lo que
+   * hacia T L.2). Con esto la busqueda deja de tener dos implementaciones vivas —la del
+   * servidor y la del cliente— y R45 pasa a cumplirse por construccion tambien en el archivo.
+   *
+   * Sigue SIN cortar en la base, por el mismo motivo que el metodo paginado: cada fila es la
+   * agregacion de todo el libro de ese mensajero y el nombre por el que se busca vive en
+   * `usuario`, no en el libro que se agrega.
+   */
+  async listarCuentasPorPagarCompleto(
+    filtro: CuentasPorPagarFiltro,
+  ): Promise<CuentaPorPagarAgregadoRow[]> {
+    return ordenarCuentasPorPagar(
+      // R45: la busqueda ANTES del recorte. Al reves, buscaria dentro de la pagina — que es
+      // exactamente la regresion que esta tanda existe para evitar.
+      filtrarPorBusquedaMensajero(await this.listarCuentasPorPagarTodos(), filtro.busqueda),
+    );
   }
 
   /** R18: nombre de UN mensajero para la vista del maestro (desglose por cierre); null si no existe. */

@@ -3,6 +3,8 @@ import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
+import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import type { ZonaDeOrden } from "@/lib/utils/filtro-canton-distrito";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -91,6 +93,47 @@ export interface ListOrdenesWhere {
    * que exigirla dejaba fuera a las ordenes que nunca tuvieron mensajero.
    */
   reasignables?: true;
+  /**
+   * Feature 169 (design §4.2) — TERMINO de busqueda YA NORMALIZADO por el service
+   * (minusculas, sin los acentos del mapa, espacios colapsados). Es un TERMINO, nunca un
+   * patron: los comodines y su escape son dialecto de la capa de datos y se aplican en el
+   * repositorio (R7). Se resuelve contra la columna generada `busqueda_texto`, que solo
+   * contiene los cuatro campos buscables — por construccion no puede coincidir con la
+   * direccion, el producto, las notas ni el nombre de la tienda (R2).
+   *
+   * Es una clave HERMANA de las demas => AND con todo lo que haya (R14/R21). Meterla
+   * dentro de un `OR` con cualquier otra cosa abriria una fuga: el acotamiento por rol
+   * dejaria de acotar.
+   */
+  busqueda?: string;
+  /**
+   * Feature 169 (M1 del review) — la MISMA busqueda, en su forma SOLO DIGITOS, cuando el
+   * termino tecleado trae separadores (`8888-0000` -> `88880000`). Solo se escribe si esa
+   * forma DIFIERE de `busqueda`; con un termino ya limpio no existe y el `where` es el de
+   * siempre.
+   *
+   * Por que hacen falta las dos: la columna generada indexa el telefono en sus dos formas,
+   * pero la REMISION va tal cual. Buscando SOLO los digitos, `2026-0912` no encuentra
+   * `REM-2026-0912` (falso negativo silencioso: el dato existe y la busqueda calla);
+   * buscando SOLO el texto tecleado, `8888-0000` no encuentra un telefono guardado sin
+   * guiones (R13). Se buscan las dos y se unen.
+   *
+   * El repositorio las resuelve con un `OR` que vive DENTRO de la dimension de busqueda:
+   * las dos ramas comparan la MISMA columna (`busqueda_texto`) y el `OR` entero sigue
+   * siendo una clave hermana => AND con el acotamiento por rol. Un `OR` que mezclara el
+   * termino con cualquier OTRA cosa seguiria siendo un rechazo automatico (design §7).
+   */
+  busquedaDigitos?: string;
+  /**
+   * Feature 169 (design §5) — RUTA RAPIDA: igualdad contra `num_guia`, que ya tiene indice
+   * unico (`orden_num_guia_key`). Es el caso mas frecuente en operacion (el operador tiene
+   * la guia delante) y cuesta una busqueda por indice unico, sin tocar el trigram.
+   *
+   * NO es terminal: si la consulta con esta clave devuelve `total === 0`, el service
+   * reintenta con `busqueda` (R10), porque "los ultimos digitos del telefono" tambien es
+   * un termino de solo digitos. El disparador es el TOTAL, nunca `items.length`.
+   */
+  numGuia?: number;
 }
 
 export interface ListOrdenesParams {
@@ -405,6 +448,29 @@ export interface RecepcionSateliteRow {
   // service, siempre presente: el `select` de WITH_RECEPCION_SATELITE lo pide explicito).
   // Alimenta el sort prioridad-first del grupo "Recibidas" (R7) y el resalte (R8).
   prioridad: boolean;
+}
+
+/**
+ * Feature 170 — FASE 2 (T K.1, R44/R45) — el conjunto del listado «Órdenes de la bodega»
+ * cuando el recorte lo hace la BASE.
+ *
+ * `zonaId` es el ACOTAMIENTO y no es opcional: sale del `usuario.zona_id` del actor, jamas
+ * de la peticion. Los otros tres campos son los TRES filtros que hasta ahora resolvia el
+ * navegador (`SateliteOrdenesListado`, `visibles`), en el mismo AND y con la misma semantica:
+ * una lista VACIA no filtra, dos listas distintas se cruzan.
+ */
+export interface RecepcionSateliteFiltro {
+  /** Zona del `adminSatelite`. Se impone SIEMPRE (R44). */
+  zonaId: string;
+  /** Lista blanca de estados ya intersecada por el servicio; vacia -> pagina vacia. */
+  estatusValues: readonly string[];
+  /** Nombres de canton elegidos; vacio/ausente = todos los cantones. */
+  cantonNombres?: readonly string[];
+  /**
+   * Nombres de distrito elegidos; vacio/ausente = todos. Con distritos elegidos, una orden
+   * SIN distrito queda fuera — igual que hoy en el cliente (`distritoNombre === null`).
+   */
+  distritoNombres?: readonly string[];
 }
 
 // Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite.
@@ -870,6 +936,38 @@ export interface IOrdenRepository {
     zonaId: string,
     estatusValues: string[],
   ): Promise<RecepcionSateliteRow[]>;
+  /**
+   * Feature 170 — FASE 2 (T K.1, R40/R41/R44/R45/R51): UNA pagina del listado «Órdenes de la
+   * bodega» mas el TOTAL del conjunto que casa el filtro, resueltos los dos en la base.
+   *
+   * Es el hermano paginado de `findRecepcionSateliteByZona`, con dos diferencias que no son
+   * de forma:
+   *
+   *  - **los tres filtros del cliente viajan en `filtro`** (estado ∧ canton ∧ distrito) y se
+   *    aplican al CONJUNTO, no a la pagina;
+   *  - **el orden lleva el rango de GRUPO por delante** (`ESTADOS_BODEGA_SATELITE`), que es
+   *    lo que hoy produce la concatenacion de los cinco arrays en el modulo. Sin el, las
+   *    filas cambiarian de pagina respecto a lo que la pantalla enseña hoy (R51).
+   *
+   * `total` cuenta el conjunto entero, nunca la pagina (R41). Solo query.
+   */
+  findRecepcionSatelitePaginada(
+    filtro: RecepcionSateliteFiltro,
+    rango: RangoPagina,
+  ): Promise<PaginaRepositorio<RecepcionSateliteRow>>;
+  /**
+   * Feature 170 — FASE 2 (T K.2, R44/R46): los pares canton/distrito DISTINTOS del conjunto
+   * del actor (su zona + los estados del listado), para las OPCIONES de los desplegables.
+   *
+   * Se lee el conjunto COMPLETO a proposito: R46 exige que las opciones sigan siendo las de
+   * todas las filas del actor y no las de la pagina visible. Se piden solo los tres nombres
+   * de geografia —lo unico que el desplegable necesita— y filas repetidas se descartan en la
+   * base. Solo query.
+   */
+  findRecepcionSateliteGeoByZona(
+    zonaId: string,
+    estatusValues: string[],
+  ): Promise<ZonaDeOrden[]>;
   /**
    * Feature 33/R11/R18: transicion atomica y concurrencia-segura de UNA orden a
    * `en_bodega_satelite`. UPDATE guardado por estado de ORIGEN (solo si sigue en

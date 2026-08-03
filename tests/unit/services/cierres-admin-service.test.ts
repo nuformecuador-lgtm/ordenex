@@ -87,6 +87,9 @@ type Repo = ICierresAdminRepository;
 function fakeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     findCierresByAlcance: vi.fn(async () => [] as CierreAdminResumenRow[]),
+    // Feature 170 (T I.1): el historico paginado vive en su propia suite (*-paginado).
+    findHistoricoPaginado: vi.fn(async () => ({ items: [] as CierreAdminResumenRow[], total: 0 })),
+    findColaPaginada: vi.fn(async () => ({ items: [] as CierreAdminResumenRow[], total: 0 })),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     // Feature 111/R16: válvula de escape (default = updated).
@@ -136,13 +139,23 @@ function newService(
     findEstatusIdByValue: vi.fn(async (v: string) => estatusIds[v] ?? null),
   } as unknown as Pick<IOrdenRepository, "findUsuarioZonaId" | "findEstatusIdByValue">;
   const signedUrls = opts.signedUrls ?? fakeSignedUrls();
+  // Feature 172 (T C.2): lectura de los pagos ya registrados para derivar el pendiente de los
+  // cierres APROBADOS. Este doble no tiene ninguno; la derivacion con dinero de verdad se mide
+  // en `tests/unit/services/cierres-admin-pendiente.test.ts`.
+  const liquidacionRepo = {
+    sumarVigentesPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, "0.00"])),
+    ),
+    obtenerCierreParaPago: vi.fn(async () => null),
+  };
   const service = new CierresAdminService(
     repo,
     zonaRepo as IZonaRepository,
     ordenRepo as IOrdenRepository,
     signedUrls,
+    liquidacionRepo,
   );
-  return { service, repo, zonaRepo, ordenRepo, signedUrls };
+  return { service, repo, zonaRepo, ordenRepo, signedUrls, liquidacionRepo };
 }
 
 // --- resolveAlcance / autorizacion (R1/R2/R3) ---
@@ -173,7 +186,12 @@ describe("CierresAdminService — autorizacion y alcance (R1/R2/R3)", () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service } = newService({ repo });
     const rAprobar = await service.aprobarCierre("c1", ADMIN);
-    expect(rAprobar).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    expect(rAprobar).toEqual({
+      status: "ok",
+      cierreId: "c1",
+      estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
+    });
     const rRechazar = await service.rechazarCierre("c1", "motivo", ADMIN);
     expect(rRechazar).toEqual({ status: "ok", cierreId: "c1", estado: "rechazado" });
     const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -657,7 +675,12 @@ describe("CierresAdminService.aprobarCierre (R10/R12/R13)", () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service } = newService({ repo });
     const r = await service.aprobarCierre("c1", MAESTRO);
-    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    expect(r).toEqual({
+      status: "ok",
+      cierreId: "c1",
+      estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
+    });
     const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg).toMatchObject({
       cierreId: "c1",
@@ -877,7 +900,12 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
 
     const r = await service.aprobarCierre("c1", MAESTRO);
 
-    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    expect(r).toEqual({
+      status: "ok",
+      cierreId: "c1",
+      estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
+    });
     // t1 (entregada): credito cod_recaudado + debitos flete/iva_flete/comision/iva_comision.
     const t1 = tiendaRows.filter((m) => m.tiendaId === "t1");
     const t1cats = t1.map((m) => m.categoria);
@@ -969,7 +997,12 @@ describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (f
 
     const r = await service.aprobarCierre("c1", MAESTRO);
 
-    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    expect(r).toEqual({
+      status: "ok",
+      cierreId: "c1",
+      estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
+    });
     // Libro del pago por mensajero (via el repo real): devengo=1000, pago=300.
     const byCat = Object.fromEntries(mensajeroRows.map((m) => [m.categoria, m]));
     expect((byCat.pago_devengado.monto as Prisma.Decimal).toFixed(2)).toBe("1000.00");

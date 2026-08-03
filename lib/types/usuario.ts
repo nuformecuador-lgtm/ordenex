@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { usuariosConfig } from "@/lib/config/usuarios";
 import { strongPasswordSchema } from "@/lib/types/password-policy";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type {
   RolItem,
   UsuarioListItem,
@@ -96,6 +98,21 @@ export const listarUsuariosSchema = z.object({
 });
 export type ListarUsuariosInput = z.infer<typeof listarUsuariosSchema>;
 
+// Feature 170 (T B.1) — entrada del modo SIN paginacion (descarga del dataset completo).
+// Se DERIVA del schema del listado quitando `page`/`pageSize`, igual que hizo la 151 con
+// `listarOrdenesCompletoSchema`: reusarlo es lo que garantiza que el modo completo no
+// acepte una entrada que el listado paginado rechazaria, y que `sortBy`/`sortDir`
+// conserven sus MISMOS defaults (createdAt/desc) — sin eso, el archivo saldria en un
+// orden distinto del de la pantalla (R11).
+//
+// `.strict()` se anade AQUI y no en el schema del listado (que no lo tiene y cuyo
+// contrato no toca esta feature): una clave desconocida en la peticion del dataset
+// completo es `validation_error` sin devolver fila alguna (R18).
+export const listarUsuariosCompletoSchema = listarUsuariosSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+export type ListarUsuariosCompletoInput = z.infer<typeof listarUsuariosCompletoSchema>;
+
 // R14: DTO de fila del listado; se alinea al item del repositorio (nunca hash).
 export type UsuarioListItemDTO = UsuarioListItem;
 
@@ -111,9 +128,16 @@ export type ActionError =
 export type CrearUsuarioResult =
   | { status: "ok"; usuario: UsuarioPublico; generatedPassword?: string } // R12/R33
   | ActionError;
-export type ListarUsuariosResult =
-  | { status: "ok"; items: UsuarioListItemDTO[]; page: number; pageSize: number; total: number }
-  | ActionError;
+// Feature 170 (T H.2): reexpresado sobre el contrato comun de listado paginado
+// (`lib/types/listado-paginado`). Misma forma publica, una sola definicion. El union de
+// error se pasa EXPLICITO: el `ActionError` de este modulo no es el de `lib/types/orden`
+// (aqui `conflict` lleva `campo: "email" | "cedula"`), y el contrato unifica la forma del
+// EXITO, no la de los errores de cada dominio.
+export type ListarUsuariosResult = ListarPaginadoResult<UsuarioListItemDTO, ActionError>;
+// Feature 170 (T B.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
+// SOLO conteos (sin PII) y NUNCA filas (R27); el resto de fallos son `ActionError` y
+// tampoco viajan con filas (R16/R17/R18).
+export type ListarUsuariosCompletoResult = ListarCompletoResult<UsuarioListItemDTO>;
 export type ObtenerUsuarioResult = { status: "ok"; usuario: UsuarioPublico } | ActionError;
 export type ActualizarUsuarioResult = { status: "ok"; usuario: UsuarioPublico } | ActionError;
 export type CambiarEstadoUsuarioResult = { status: "ok"; usuario: UsuarioPublico } | ActionError;

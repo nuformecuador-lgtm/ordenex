@@ -8,16 +8,22 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/ui/button";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { plantillasConfig } from "@/lib/config/plantillas";
 import {
   cambiarEstadoPlantilla,
   eliminarPlantilla,
   listarPlantillas,
+  listarPlantillasCompleto,
 } from "@/lib/actions/plantillas";
 import type { PlantillaListItemDTO } from "@/lib/types/plantilla-mensaje";
 
 import { buildPlantillasColumns } from "./plantillas-columns";
+import {
+  COLUMNAS_DESCARGA_PLANTILLAS,
+  filaDescargaPlantilla,
+} from "./plantillas-descarga-columnas";
 import {
   CrearPlantillaForm,
   type CrearPlantillaFormHandle,
@@ -32,6 +38,9 @@ import { SincronizarPlantillasButton } from "./SincronizarPlantillasButton";
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
   (s) => s <= plantillasConfig.MAX_PAGE_SIZE,
 );
+
+/** R12/R13: nombre visible del listado; da nombre a la hoja, al archivo y al control. */
+const TITULO_DESCARGA = "Plantillas de mensaje";
 
 export interface PlantillasPageData {
   items: PlantillaListItemDTO[];
@@ -170,6 +179,21 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         data={data?.items ?? []}
         rowKey="id"
         ariaLabel="Plantillas de mensaje"
+        /**
+         * Feature 170 (T B.4, R1/R9/R12/R13) — descarga del listado COMPLETO. Familia A:
+         * lo que la tabla pinta es una página, así que las filas del archivo las trae la
+         * Server Action del modo completo (mismo servicio, mismo guard de `maestro`, mismo
+         * tope y la MISMA exclusión de plantillas borradas, que vive en el repositorio).
+         *
+         * El input va VACÍO: el schema es `.strict()` y sin `page`/`pageSize`, que en el
+         * modo completo no significan nada (mandarlos daría `validation_error`).
+         */
+        descarga={{
+          titulo: TITULO_DESCARGA,
+          columnas: COLUMNAS_DESCARGA_PLANTILLAS,
+          obtenerFilas: () =>
+            filasDesdeResultado(listarPlantillasCompleto({}), filaDescargaPlantilla),
+        }}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las plantillas" : null}
         emptyState={{

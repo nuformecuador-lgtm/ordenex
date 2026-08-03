@@ -1,0 +1,1360 @@
+# Feature 170 — descarga a Excel en todas las tablas · bitácora de implementación
+
+> Alcance de ESTA entrega: **FASE 1, Tanda 0 (T0.1–T0.5) y Tanda A (T A.1, T A.2)**.
+> Las tandas B–G y toda la FASE 2 (paginación) son de otros encargos y NO se tocaron.
+> Rama: `feature/170-export-todas-las-tablas`, partiendo de `origin/dev` con la 169 ya
+> mergeada (PR #239).
+
+## 0. Punto de partida
+
+La rama del spec (`origin/feature/170-…` @ `dfe68673`) se integró con `origin/dev`
+(@ `75ba1f83`, que ya trae la 169). **Un conflicto**, en `feature_list.json`, resuelto
+conservando los dos lados:
+
+- ficha **169** (de `dev`) y ficha **170** (de la rama del spec) conviven como fichas
+  separadas; sin ids duplicados (169 fichas, 0 duplicados, JSON válido).
+- ficha **145**: `depends_on` se queda en **169** (la decisión más reciente, de `dev`) y su
+  `status_note` funde las dos: la que explica el cambio de dependencia y la que declara que
+  el export salió de esa ficha a la 170.
+
+### Baseline MEDIDO antes de tocar nada (worktree ya integrado)
+
+| Puerta | Resultado |
+| --- | --- |
+| `pnpm run typecheck` | **0 errores** |
+| `pnpm run lint` | **0 errores**, 20 warnings (todos `no-unused-vars` con prefijo `_`, preexistentes) |
+| `pnpm test` | **677 archivos** (673 passed + 4 skipped) · **8339 tests**: 8265 passed, 74 skipped, **0 fallos** |
+
+> Nota de entorno: el worktree no tiene `.env`, así que `prisma generate` se corrió con un
+> `DATABASE_URL` de marcador (el generate no conecta). Sin eso, `typecheck` sale con ~200
+> errores falsos por cliente Prisma ausente.
+
+## 1. Archivos
+
+### Nuevos
+
+| Archivo | Qué es |
+| --- | --- |
+| `lib/types/descarga-listado.ts` | `ListarCompletoResult<T>` — el union del modo «dataset completo», generalizado (T0.1). |
+| `components/shared/descarga-resultado.ts` | `filasDesdeResultado` (Familia A), `filasLocales` (Familia B), `mensajeLimite`, `SUFIJO_REINTENTO` (T0.2). |
+| `app/(app)/recepcion-satelite/_components/satelite-descarga-columnas.ts` | Columnas + proyección de export de la bodega satélite (T A.2). |
+| `tests/unit/components/descarga-resultado.test.ts` | 9 tests de los adaptadores (T0.2). |
+| `tests/unit/descarga/columnas-sensibles.guardia.test.ts` | Guardia de datos sensibles (T0.4). |
+| `tests/unit/descarga/censo-tablas.ts` | Registro del censo: 31 tablas (30 `<DataTable>` + 1 `<table>` cruda) (T0.5). |
+| `tests/unit/descarga/cobertura-tablas.guardia.test.ts` | Guardia de cobertura del censo (T0.5). |
+| `tests/components/descarga/OrdenesApartadoDescarga.test.tsx` | 5 tests del apartado por estado (T A.1). |
+| `tests/components/descarga/SateliteDescarga.test.tsx` | 4 tests de la bodega satélite (T A.2). |
+
+### Modificados
+
+| Archivo | Cambio |
+| --- | --- |
+| `lib/types/orden.ts` | `ListarOrdenesCompletoResult` pasa a ser `ListarCompletoResult<OrdenListItemDTO>`. **La forma pública no cambia**: mismo union, mismos nombres de campo (T0.1). |
+| `app/(app)/ordenes/_components/OrdenesModule.tsx` | El bloque inline de traducción del resultado se sustituye por `filasDesdeResultado`; `mensajeLimite`/`SUFIJO_REINTENTO` salen de aquí (T0.3). |
+| `app/(app)/ordenes/_components/OrdenesApartado.tsx` | Prop `descarga` con `listarOrdenesCompleto({ estatusId })` (T A.1). |
+| `app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx` | Prop `descarga` con `filasLocales` sobre el array ya filtrado (T A.2). |
+| `tests/components/OrdenesApartado.test.tsx` | **Solo el arnés**: el `render` se envuelve en `ToastProvider`. Ver §2.7. |
+| `specs/170-export-todas-las-tablas/tasks.md` | `[x]` en T0.1–T0.5, T A.1, T A.2 + lo medido. |
+| `feature_list.json` | Ficha 170 → `in_progress`; conflicto del merge resuelto. |
+
+**Cero backend.** Ni servicios, ni repositorios, ni acciones, ni migraciones: la Tanda A no
+estrena una sola línea de servidor, tal como declara el design (§8, tanda A: «backend
+cero»). El apartado reusa `listarOrdenesCompleto` porque su schema ya admite `estatusId`;
+la bodega satélite no lee nada (Familia B).
+
+## 2. Decisiones tomadas al implementar
+
+1. **Los textos se promovieron sin editarse.** `mensajeLimite` y `SUFIJO_REINTENTO` viajaron
+   palabra por palabra desde `OrdenesModule`. Un test los fija literalmente, así que
+   reescribirlos «de paso» ahora falla en un sitio y no en 25 pantallas.
+2. **`filasLocales` es `async` aunque no espere nada.** `obtenerFilas` devuelve una promesa
+   (contrato de la 151, que no se toca); así el cableado de Familia B es la misma línea que
+   el de Familia A.
+3. **El tope de Familia B sale de `descargaConfig.MAX_FILAS`, no de un literal.** En el
+   navegador `DESCARGA_MAX_FILAS` no está definido (Next solo expone `NEXT_PUBLIC_*`), así
+   que rige el default de 5000; leerlo de la config evita un segundo número que mantener.
+4. **El apartado no ofrece el control mientras no tenga `estatusId`.** Sin él, la acción
+   iría con filtro vacío y traería TODAS las órdenes, no las del apartado (R10). Hay un
+   test para eso.
+5. **El Estado del archivo de la bodega satélite va sin el sufijo « de \<zona\>»** que la
+   tabla compone: la zona ya viaja en su columna, y repetirla convierte un dato en dos. La
+   etiqueta sigue siendo legible (R8).
+6. **`tests/components/OrdenesApartado.test.tsx` (feature 49) necesitó `ToastProvider`.**
+   Es el único test existente que hubo que tocar, y hay que decirlo claro:
+   - **Qué pasó:** montar el control de descarga (T A.1) hace que el apartado use
+     `useToast`; ese archivo renderizaba el componente sin proveedor y los 6 tests
+     reventaron con «useToast debe usarse dentro de un ToastProvider».
+   - **Por qué NO es un defecto de producción:** `app/(app)/layout.tsx` envuelve en
+     `ToastProvider` todas las pantallas del grupo `(app)`, que es donde vive el apartado.
+     El precedente es idéntico: `OrdenesDescarga.test.tsx` (151) ya envuelve por lo mismo.
+   - **Qué se cambió:** SOLO el `render` del helper `renderApartado`. Ni una aserción de la
+     feature 49; los 6 tests siguen verdes tal cual estaban escritos.
+   - **Qué NO se tocó:** `tests/components/OrdenesDescarga.test.tsx` sigue intacto
+     (`git status` limpio) y verde tras el refactor T0.3, que era la condición de esa task.
+7. **La guardia del censo admite un estado `pendiente`** con la tanda que cablea cada tabla.
+   Es TRANSITORIO: al cerrar la fase 1 no puede quedar ninguno. La alternativa (exigir las
+   25 ya) dejaría la suite roja durante todo el rollout, que es justo lo que las tandas
+   evitan.
+
+## 3. Las dos guardias: evidencia de que fallan cuando deben
+
+Una guardia que nunca se ha visto en rojo no es una guardia. Las tres fugas se
+introdujeron a mano, se midió el fallo y **se revirtieron** (`git status` limpio en esos
+archivos).
+
+### T0.4 — datos sensibles (`tests/unit/descarga/columnas-sensibles.guardia.test.ts`)
+
+| Fuga introducida | Resultado |
+| --- | --- |
+| Columna `{ clave: "passwordHash", encabezado: "Hash de contraseña" }` en `COLUMNAS_DESCARGA_ORDENES` | ✗ `ninguna declaración de columnas contiene claves de credencial, token o secreto` — «`app/(app)/ordenes/_components/ordenes-descarga-columnas.ts :: COLUMNAS_DESCARGA_ORDENES :: passwordHash`» |
+| Celda `interno: orden.id` en `filaDescargaOrden` | ✗ `ninguna fila de export emite un identificador interno con forma de uuid` — «`… :: filaDescargaOrden :: interno lee id`». La SONDA dice qué campo se leyó, sin fixture. |
+| Celda con URL firmada de Storage (`https://…/storage/v1/evidencias/f.jpg?token=abc`) | ✗ `ninguna fila de export emite una ruta de almacenamiento ni una URL firmada` |
+
+Cómo cubre «TODAS las declaraciones del árbol» (R25), sin lista fija:
+`import.meta.glob` descubre los `*-descarga-columnas.ts`; un escaneo del sistema de
+archivos comprueba que lo cargado == lo que hay en disco; y un tercer barrido exige que
+**ningún** archivo de `app/`, `components/` o `lib/` declare `DescargaColumna[]` fuera de
+esa convención de nombre (si no, bastaría con nombrar el módulo de otra forma para
+esquivar la guardia).
+
+### T0.5 — cobertura del censo (`tests/unit/descarga/cobertura-tablas.guardia.test.ts`)
+
+| Fuga introducida | Resultado |
+| --- | --- |
+| Componente nuevo `TablaDemoGuardia.tsx` con un `<DataTable>` sin registrar | ✗ `toda tabla del árbol o declara descarga o figura como exclusión justificada` — «hay tablas sin registrar en tests/unit/descarga/censo-tablas.ts: `["app/(app)/ranking/_components/TablaDemoGuardia.tsx #1"]`» |
+| (medido de paso, antes de cablear la Tanda A) tabla declarada `con_descarga` que no la monta | ✗ el mismo test: «`OrdenesApartado.tsx #1 (Apartado de órdenes por estado): estado declarado "con_descarga"`» |
+
+La guardia parsea la etiqueta `<DataTable …>` **instancia a instancia** (respetando
+genéricos `<DataTable<Foo>`, llaves anidadas y cadenas), no por archivo: por eso un módulo
+con dos tablas de las que solo una declara descarga se juzga por separado. Y contrasta en
+los dos sentidos: sobra en el registro lo que ya no existe en el árbol.
+
+## 4. Censo verificado contra el código (no de memoria)
+
+25 archivos · **30 instancias** de `<DataTable>` + 1 `<table>` cruda (premios del podio) =
+**31 tablas**, idéntico al `design.md §1`. De ellas:
+
+- **con descarga hoy: 3** — órdenes (151), apartado por estado (T A.1), bodega satélite (T A.2).
+- **pendientes: 22**, cada una con su tanda declarada en `censo-tablas.ts`.
+- **fuera: 6** (5 `<DataTable>` + el podio), cada una con su motivo del Anexo II.
+
+## 5. Trazabilidad R → test (solo lo cubierto por esta entrega)
+
+| R | Test |
+| --- | --- |
+| R1 | `tests/components/descarga/OrdenesApartadoDescarga.test.tsx` :: ofrece la descarga del dataset completo del apartado · `SateliteDescarga.test.tsx` :: ofrece la descarga de las órdenes de la bodega |
+| R2 | `tests/unit/descarga/cobertura-tablas.guardia.test.ts` :: las tablas declaradas fuera de alcance no montan control de descarga |
+| R3 | `OrdenesApartadoDescarga.test.tsx` :: el listado paginado sigue comportándose igual |
+| R4 | `cobertura-tablas.guardia.test.ts` :: toda tabla del árbol o declara descarga o figura como exclusión justificada |
+| R9 | `OrdenesApartadoDescarga.test.tsx` :: el archivo contiene una fila por orden del apartado, no solo la página visible |
+| R10 | `OrdenesApartadoDescarga.test.tsx` :: envía el estado del apartado como filtro vigente · `SateliteDescarga.test.tsx` :: respeta los filtros de estado, cantón y distrito aplicados |
+| R11 | `tests/unit/components/descarga-resultado.test.ts` :: traduce el resultado ok a filas proyectadas, en el mismo orden (+ el equivalente de `filasLocales`) |
+| R14 | `SateliteDescarga.test.tsx` :: solo contiene órdenes de la zona del actor |
+| R20 | `SateliteDescarga.test.tsx` :: solo contiene órdenes de la zona del actor (acotamiento verificado en ESTA tabla, no en el mecanismo) |
+| R21 | `columnas-sensibles.guardia.test.ts` :: ninguna declaración de columnas contiene claves de credencial, token o secreto |
+| R22 | `columnas-sensibles.guardia.test.ts` :: ninguna fila de export emite una ruta de almacenamiento ni una URL firmada |
+| R23 | `columnas-sensibles.guardia.test.ts` :: ninguna fila de export emite un identificador interno con forma de uuid |
+| R25 | `columnas-sensibles.guardia.test.ts` :: la guardia cubre TODAS las declaraciones del árbol, no una lista fija |
+| R26 | `descarga-resultado.test.ts` :: filasLocales rechaza y no produce archivo cuando el array supera el tope |
+| R27 | `descarga-resultado.test.ts` :: traduce limite_excedido a un error accionable con total y tope, sin filas |
+| R28 | `descarga-resultado.test.ts` :: filasLocales no trunca: o devuelve todas las filas o el error |
+| R30 | `SateliteDescarga.test.tsx` :: no ejecuta ninguna lectura adicional al servidor |
+| R31 | `descarga-resultado.test.ts` :: devuelve el resultado vacío tal cual para que el control avise sin archivo (en las dos familias) |
+| R32 | `SateliteDescarga.test.tsx` :: no ejecuta ninguna lectura adicional al servidor · `OrdenesApartadoDescarga.test.tsx` :: el listado paginado sigue comportándose igual |
+| R36 | `descarga-resultado.test.ts` :: traduce cualquier error de acción a un mensaje accionable sin datos personales |
+
+R5–R8, R12, R13, R15–R19, R24, R29, R33–R35, R37–R39 quedan para las tandas B–G, como
+declara la tabla de trazabilidad del `tasks.md`. (R7/R24 se ejercitan de paso en
+`SateliteDescarga.test.tsx`, pero su cobertura formal es de la tanda B.)
+
+## 6. Puertas (medición final)
+
+| Puerta | Baseline | Después |
+| --- | --- | --- |
+| `pnpm run typecheck` | 0 errores | **0 errores** |
+| `pnpm run lint` | 0 errores / 20 warnings | **0 errores / 20 warnings** (los mismos) |
+| `pnpm test` | 681 archivos (677 passed + 4 skipped) · 8339 tests: 8265 passed / 74 skipped / **0 fallos** | **686 archivos** (682 passed + 4 skipped) · **8363 tests: 8289 passed / 74 skipped / 0 fallos** — +5 archivos y +24 tests, **0 rotos nuevos** |
+| `./init.sh` | `== init OK ==` | `== init OK ==` |
+
+## 7. Hallazgo para el leader (no se actuó)
+
+`OrdenesApartado` solo lo monta `OrdenesRevisionMaestro`, y **ese módulo no lo monta
+ninguna página**: el propio `OrdenesListado.tsx:373` lo llama «la vista legacy». Es el mismo
+patrón por el que el Anexo II dejó fuera el módulo de zonas (P4). No se cambió el alcance
+—el Anexo I lo lista como tabla #2 dentro de alcance y el cableado costó una prop—, pero si
+el humano quiere ser coherente con la exclusión de zonas, esta tabla es candidata a salir.
+Queda anotado, no decidido.
+
+---
+
+# TANDAS B y C — parte de SERVIDOR (2026-07-31)
+
+> Segunda entrega sobre la misma rama. **No reescribe nada de lo anterior**: T0.\* y la tanda
+> A siguen tal cual las dejó el agente previo. Aquí van T B.1, T B.2, T B.3, T C.1, T C.2 y
+> T C.3, es decir **la parte de servidor y los contratos de columnas** de las dos tandas.
+>
+> **T B.4 y T C.4 (el cableado de la UI) NO son de esta entrega.** Los contratos quedan
+> listos para que `frontend_dev` solo tenga que pasar la prop `descarga`; el §7 de este
+> bloque dice exactamente qué símbolos usar en cada módulo. Por eso el registro del censo
+> (`tests/unit/descarga/censo-tablas.ts`) sigue marcando esas 7 tablas como `pendiente`:
+> cambiar su estado antes de que monten el control haría fallar la guardia de cobertura, que
+> contrasta el estado declarado contra el código instancia a instancia.
+
+## B0. Baseline medido AL EMPEZAR (2026-07-31, tras `git merge origin/dev`)
+
+Medido, no heredado. El worktree venía sin `node_modules` ni `.env`; se instaló con
+`pnpm install --frozen-lockfile` y se corrió `prisma generate` con un `DATABASE_URL` de
+marcador (generate no conecta), que es lo que evita los ~200 errores falsos de typecheck que
+avisaba el agente anterior.
+
+| Puerta | Baseline |
+| --- | --- |
+| `pnpm run typecheck` | 0 errores |
+| `pnpm run lint` | 0 errores / 20 warnings |
+| `pnpm test` | 686 archivos (682 passed + 4 skipped) · 8363 tests: 8289 passed / 74 skipped / **0 fallos** |
+| `./init.sh` | `== init OK ==` |
+
+Coincide exactamente con el número que traía el encargo. El merge de `origin/dev` dio un
+conflicto en `feature_list.json` (la 169 se cerró con `merged_pr: 239` y entraron las fichas
+171-173); resuelto conservando ambos lados, **172 features y cero ids duplicados**.
+
+## B1. Qué se entrega, tabla a tabla
+
+**7 `listarCompleto` nuevos** (los 7 que el `design.md §2.1` declaraba; el octavo, el
+apartado de órdenes, no necesitaba backend y lo cerró la tanda A):
+
+| # | Tabla | Servicio · método | Alcance por rol | Cómo se acota |
+| --- | --- | --- | --- | --- |
+| 1 | Usuarios | `UsuarioService.listarCompleto` | solo `maestro` | guard `ALLOWED_ROLES` |
+| 2 | Plantillas de mensaje | `PlantillaMensajeService.listarCompleto` | solo `maestro` | guard `ALLOWED_ROLES` |
+| 3 | API keys | `ApiKeyService.listarCompleto` | solo `maestro` | guard `ALLOWED_ROLES` |
+| 4 | Libro de caja | `WalletService.listarMovimientosCompleto` | acceso total | guard `esAccesoTotal` |
+| 5 | Desglose de UN mensajero | `WalletMensajeroService.listarPagosDeMensajeroCompleto` | acceso total | guard `esAccesoTotal`; el `mensajeroId` viene del input |
+| 6 | Mis pagos (mensajero) | `WalletMensajeroService.listarMisPagosCompleto` | solo `mensajero` | **dato del actor**: `mensajero_id = actor.usuarioId`, escrito AL FINAL |
+| 7 | Mi wallet (tienda) | `WalletTiendaService.listarMisMovimientosCompleto` | solo `adminTienda` | **dato del actor**: `tienda_id = actor.usuarioId`, escrito AL FINAL |
+
+**7 Server Actions** (`listarUsuariosCompleto`, `listarPlantillasCompleto`,
+`listarApiKeysCompleto`, `listarMovimientosCompletoAction`,
+`listarPagosDeMensajeroCompletoAction`, `listarMisPagosCompletoAction`,
+`listarMisMovimientosCompletoAction`), todas calcadas de `listarOrdenesCompleto`.
+
+**7 módulos de columnas de export**, uno por tabla.
+
+## B2. El punto que más se vigiló: el alcance por rol
+
+Dos formas distintas, y no se tratan igual porque no fallan igual.
+
+**(a) Acotadas por ROL (5 de 7).** El conjunto es el mismo para todo el que entra; quien no
+entra no ve nada. El guard es literalmente el MISMO objeto/función que usa `listar`
+(`ALLOWED_ROLES`, `esAccesoTotal`) — no una copia — y se evalúa ANTES de tocar la base.
+
+Cómo se verificó: un test que recorre TODOS los roles sin acceso y exige `forbidden`, sin
+`items`, **y con el doble del repositorio sin invocar** (si el guard estuviera después de la
+consulta, el dato ya habría salido de la base aunque no se devolviera). Más su
+**CONTRAPRUEBA**: los roles que sí entran reciben filas no vacías. Sin ese segundo lado, un
+servicio roto que no devolviera nada a nadie pasaría el primero.
+
+**(b) Acotadas por un DATO DEL ACTOR (2 de 7): «mis pagos» y «mi wallet».** Aquí un fallo no
+recorta el archivo: lo llena de dinero ajeno. Tres cierres independientes:
+
+1. El acotamiento se escribe **AL FINAL** del objeto que va al repositorio, después del
+   spread de filtros — mismo recurso que `OrdenService.construirWhere` con `adminTienda`.
+2. `construirFiltros` lee claves **explícitas**, así que ninguna clave desconocida del input
+   llega nunca al repositorio.
+3. El schema del borde. En la tienda, `.strict()` convierte un `tiendaId` inyectado en
+   `validation_error` sin llegar al servicio. En «mis pagos» **NO** se rechaza el
+   `mensajeroId` —el schema del listado lo admite y quitarlo rompería la paridad: la descarga
+   rechazaría una petición que el listado acepta—, y quien lo ignora es el servicio.
+
+Cómo se verificó, en tres capas:
+
+- **Fuga en las dos direcciones, con ambos lados NO vacíos.** Dos tiendas (y dos mensajeros)
+  con movimientos propios: A recibe exactamente los suyos, B exactamente los suyos, y los
+  conjuntos son disjuntos. Un servicio que devolviera vacío no pasaría.
+- **Filtro inyectado.** Con `tiendaId`/`mensajeroId` ajenos en el input, el conjunto sigue
+  siendo el del actor y el repositorio recibe el id del actor.
+- **MUTACIÓN, ejecutada de verdad.** Se sustituyó `tiendaId: actor.usuarioId` por
+  `input.tiendaId ?? actor.usuarioId` (y su gemelo en mensajero): falla **exactamente** el
+  test de fuga (R15) y ningún otro. Revertido, suite verde otra vez. Es la prueba de que el
+  test cazaría la regresión y no está pasando por casualidad.
+
+Y un cuarto caso, propio del desglose de mensajero: **un `mensajero` no puede pedir por esa
+vía el desglose de un compañero** (`forbidden`, sin consulta). Es lo único que separa esa
+superficie de la propia, y por eso tiene test explícito.
+
+## B3. Paridad con el listado (que el archivo no mienta)
+
+- **Wallet (3 servicios):** se extrajo `construirFiltros(input)` privado —éste SÍ existía
+  inline, repetido— y lo comparten el listado paginado, el balance/saldo y la descarga. Los
+  filtros no pueden divergir porque son el mismo código. El test lo comprueba dos veces: que
+  el CONJUNTO devuelto coincide con el del listado para los mismos filtros, y que el objeto
+  que llega al repositorio es idéntico salvo el recorte de página.
+- **Configuración (3 servicios):** **no había `construirWhere` que extraer**, y se declara
+  como hallazgo. `listar` no arma ningún predicado: el `where` (incluida la exclusión de
+  plantillas borradas) vive entero dentro de `repo.list`. La paridad se consigue llamando al
+  MISMO método con los MISMOS `sortBy`/`sortDir`: si mañana el repositorio cambia lo que
+  excluye, cambian los dos caminos porque son el mismo camino.
+- **R19 «excluye borradas»:** real en plantillas (`deletedAt: null`, test con una borrada que
+  no sale). En usuarios y API keys **no hay borrado lógico** —un usuario `inactivo` y una key
+  `inactiva` SIGUEN listándose—, así que lo que se prueba es la paridad exacta: el conjunto
+  completo == la concatenación de las páginas del listado, sin una fila de más ni de menos.
+
+## B4. El tope, sin truncados silenciosos
+
+Los 7 usan el tope ÚNICO de `descargaConfig.MAX_FILAS` (5000, feature 151). No se inventó
+ninguno por tabla ni se añadió un helper: se sigue el molde de `OrdenService.listarCompleto`
+tal cual, y la garantía la dan los tests **por servicio**, que es la mitigación que el
+`design.md §6` eligió.
+
+Por servicio hay tres tests: `limite_excedido` con `total` y `limite` **y sin `items`**;
+`take = N + 1` con `skip = 0` (nunca se materializan más de N+1 filas aunque el total sean
+50 000); y el de frontera — justo en el tope entrega TODAS las filas, un paso por encima no
+entrega NINGUNA. En los ledgers, `page: 1` + `pageSize: N+1` es exactamente `skip 0, take
+N+1` en el repositorio (verificado leyendo los tres repos: ninguno recorta el `pageSize`).
+
+## B5. Datos sensibles: lo que se decidió NO exportar
+
+| Tabla | Fuera del archivo, y por qué |
+| --- | --- |
+| Usuarios | `passwordHash` (ni está en el DTO; la guardia lo revalida sobre la fila), `id`, `createdAt` (el DTO lo trae, la tabla NO lo muestra → R24) |
+| Plantillas | `id`, `templateId` (identificador de Meta, interno de la integración), `variables`, `createdAt` |
+| API keys | el secreto en claro (no existe en este camino: viaja una vez y no vuelve a leerse), `keyHash`, el secreto de webhook (no vive en la fila: la columna «Webhook» es un botón que lee bajo demanda), `id`, `usuarioId` |
+| Los 4 ledgers | `id`, `origenId`, `registradoPor`, `tiendaId`/`mensajeroId` (además son el mismo valor en todo el archivo: identifican al archivo, no a la fila) |
+
+Sale el identificador de NEGOCIO, nunca el interno: `identificador` y `keyPrefix` en API keys
+(el prefijo no es secreto por construcción, 81/R17, y es lo que ya se ve en pantalla).
+
+**Money-safe.** El monto de los cuatro ledgers viaja como el STRING que devuelve el servidor,
+TAL CUAL: sin `parseFloat`/`Number` y sin el símbolo de colón (que además rompería la celda
+como número). El test lo demuestra con `"1000.10"`, que un `Number` intermedio devolvería
+como `"1000.1"`: los céntimos.
+
+La guardia `columnas-sensibles` de T0.4 recogió los 7 módulos nuevos por convención de nombre
+y pasa sin tocarla, que era la prueba de que la guardia sirve para tablas futuras.
+
+## B6. Piezas compartidas nuevas (y por qué existen)
+
+| Pieza | Por qué |
+| --- | --- |
+| `ListarCompletoServiceResult<T>` en `lib/types/descarga-listado.ts` | Hermano de servicio del tipo de borde de T0.1: sin `unauthenticated` ni `validation_error` (los decide el borde) pero con `forbidden`, que es de dominio. Existe por el mismo motivo que su hermano: seis servicios lo habrían escrito seis veces, con matices. |
+| `lib/utils/fecha-dia-iso.ts` | Los 4 ledgers exponen `fechaMovimiento` como STRING ISO y las 4 tablas lo pintan con `.slice(0,10)`. Además llamar a un MÉTODO sobre un campo revienta la sonda de la guardia T0.4, así que el helper coacciona con `String(...)` y usa una expresión regular: sobrevive a la sonda **y conserva su rastro**, que es lo que permite a la guardia decir de qué campo salió cada celda. |
+| `usuario-estado-label.ts`, `plantilla-estado-label.ts`, `api-key-estado-label.ts` | Las etiquetas de estado vivían dentro de los `*-columns.tsx`, que importan `Badge`/`Button`. PROMOVIDAS sin editar ni un texto para que el módulo de export sea PURO. Misma operación que ya se hizo con `ROL_LABELS`. Que archivo y pantalla lean de aquí es lo que hace cierto R8. |
+
+## B7. Contratos listos para `frontend_dev` (T B.4 y T C.4)
+
+Todo lo que hace falta para cablear cada tabla. El patrón es el del `design.md §5`, en el
+render (no en un `useMemo`), para que el closure lea los filtros de ESE render.
+
+| Tabla | Acción | Columnas | Proyección |
+| --- | --- | --- | --- |
+| Usuarios | `listarUsuariosCompleto` (`lib/actions/usuarios`) | `COLUMNAS_DESCARGA_USUARIOS` | `filaDescargaUsuario` |
+| Plantillas de mensaje | `listarPlantillasCompleto` (`lib/actions/plantillas`) | `COLUMNAS_DESCARGA_PLANTILLAS` | `filaDescargaPlantilla` |
+| API keys | `listarApiKeysCompleto` (`lib/actions/api-keys`) | `COLUMNAS_DESCARGA_API_KEYS` | `filaDescargaApiKey` |
+| Libro de caja | `listarMovimientosCompletoAction` (`lib/actions/wallet`) | `COLUMNAS_DESCARGA_WALLET_CAJA` | `filaDescargaMovimientoCaja` |
+| Desglose de un mensajero | `listarPagosDeMensajeroCompletoAction` (`lib/actions/wallet-mensajero`) | `COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO` | `filaDescargaDesgloseMensajero` |
+| Mis pagos | `listarMisPagosCompletoAction` (`lib/actions/wallet-mensajero`) | `COLUMNAS_DESCARGA_MIS_PAGOS` | `filaDescargaMiPago` |
+| Mi wallet (tienda) | `listarMisMovimientosCompletoAction` (`lib/actions/wallet-tienda`) | `COLUMNAS_DESCARGA_MI_WALLET` | `filaDescargaMiWallet` |
+
+Tres avisos para quien cablee:
+
+1. Los `*CompletoSchema` son **`.strict()` y sin `page`/`pageSize`**. Pasar los filtros
+   vigentes con `page` dentro devuelve `validation_error`: hay que quitarlos.
+2. `DesglosePagosMensajero`, `WalletLedger`, `DesglosePagos` y `DesgloseTiendaLedger`
+   reciben sus datos por props y **no deben pasar a fetchear**: si hace falta, se baja un
+   callback desde el módulo padre, nunca los filtros a la tabla (`design.md §5`).
+3. Al montar el control, cada una de esas 7 tablas pasa de `pendiente` a `con_descarga` en
+   `tests/unit/descarga/censo-tablas.ts`, o la guardia de cobertura falla.
+
+## B8. Mapa `R<n> → test` de esta entrega
+
+| R | Test |
+| --- | --- |
+| R5 | `{usuarios,plantillas,api-keys,wallet-caja,wallet-tienda,wallet-mensajero}-descarga-columnas.test.ts` :: declara sus columnas ENUMERADAS, en el orden de la pantalla |
+| R6 | `usuarios-descarga-columnas.test.ts` · `plantillas-…` · `api-keys-…` :: un campo nuevo del DTO no aparece en el archivo hasta declararlo |
+| R7 | los 6 archivos de columnas :: emite valores CRUDOS… · en los 4 ledgers, «emite el monto TAL CUAL, sin recalcularlo ni adornarlo» |
+| R8 | `usuarios-…` :: emite el rol y el estado como ETIQUETA LEGIBLE · idem en plantillas, API keys y los 4 ledgers («emite tipo y categoría/concepto como ETIQUETA LEGIBLE») |
+| R9 | `{usuario,plantilla,api-key}-descarga.test.ts` :: devuelve todas las filas del dataset, sin recorte por página · `wallet-{caja,tienda,mis-pagos,desglose-mensajero}-descarga.test.ts` :: idem |
+| R11 | los 7 servicios :: «pide al repositorio el mismo criterio de orden que el listado paginado» / «mantiene el orden más reciente primero, igual que el listado» (+ `usuario-descarga` :: respeta el criterio de orden elegido) |
+| R14 | `wallet-tienda-descarga.test.ts` :: el archivo de la tienda A no trae ni una fila de la tienda B, y viceversa · `wallet-mis-pagos-descarga.test.ts` :: idem con dos mensajeros · `wallet-desglose-mensajero-descarga.test.ts` :: el desglose de un mensajero no trae ni una fila de otro **y** un mensajero NO puede pedir por esta vía el desglose de nadie · `wallet-tienda-descarga-action.test.ts` :: un tiendaId inyectado es validation_error y NO llega al servicio · los 4 servicios de dinero :: aplica EXACTAMENTE los mismos filtros que el listado |
+| R15 | `wallet-tienda-descarga.test.ts` :: un tiendaId inyectado en el input NO amplía el alcance · `wallet-mis-pagos-descarga.test.ts` :: un mensajeroId inyectado en el input NO amplía el alcance — **ambos verificados por mutación** |
+| R16 | `{usuarios,plantillas,api-keys}-descarga-action.test.ts` y `wallet-{caja,tienda,mensajero}-descarga-action.test.ts` :: devuelve unauthenticated y ninguna fila cuando no hay sesión |
+| R17 | los 7 servicios :: devuelve forbidden y ninguna fila a todo rol que no sea X (recorriendo TODOS los roles ajenos, con el repositorio sin invocar) + **CONTRAPRUEBA**: el rol autorizado SÍ recibe las filas · y en las 7 actions :: propaga forbidden sin filas |
+| R18 | las 7 actions :: devuelve validation_error … con una clave fuera de la lista blanca · y «rechaza también page/pageSize: el modo completo NO pagina» |
+| R19 | `plantilla-descarga.test.ts` :: excluye las plantillas borradas igual que el listado · `usuario-descarga.test.ts` y `api-key-descarga.test.ts` :: entrega EXACTAMENTE el mismo conjunto que el listado recorriendo sus páginas |
+| R21 | `api-key-descarga.test.ts` :: ninguna fila del dataset completo lleva el hash ni el secreto de la key · `api-keys-descarga-columnas.test.ts` :: NUNCA emite el hash, la clave en claro ni el secreto de webhook |
+| R23 | los 6 archivos de columnas :: no expone identificadores internos (+ ninguna celda con forma de uuid) |
+| R24 | `usuarios-…` y `plantillas-descarga-columnas.test.ts` :: no emite campos que el listado no muestra en pantalla · los 4 ledgers :: compone el origen igual que la tabla / emite la fecha como día calendario, igual que la tabla |
+| R27 | los 7 servicios :: devuelve limite_excedido con total y límite, y sin filas… · las 7 actions :: propaga limite_excedido con total y límite tal como lo devuelve el servicio |
+| R28 | los 7 servicios :: no devuelve un dataset truncado: o entrega todas las filas o el error de tope · `plantillas-descarga-columnas.test.ts` :: emite el cuerpo COMPLETO, sin el truncado de pantalla |
+| R29 | los 7 servicios :: nunca pide al repositorio más de N+1 filas |
+| R32 | `wallet-tienda-descarga.test.ts` :: no ejecuta la consulta del saldo agregado · `wallet-mis-pagos-…` :: no ejecuta la consulta de la cuenta por pagar · `wallet-desglose-mensajero-…` :: no relee el nombre del mensajero ni su cuenta por pagar |
+
+R1, R3, R10, R12, R13 y R33–R39 son de las tandas de CABLEADO (T B.4 / T C.4) y de la G, y no
+se tocan aquí: sin el control montado no hay nada que afirmar sobre ellos.
+
+## B9. Archivos de esta entrega
+
+**Creados (18)**
+
+- `app/(app)/configuracion/_components/usuario-estado-label.ts`
+- `app/(app)/configuracion/_components/usuarios-descarga-columnas.ts`
+- `app/(app)/configuracion/plantillas/_components/plantilla-estado-label.ts`
+- `app/(app)/configuracion/plantillas/_components/plantillas-descarga-columnas.ts`
+- `app/(app)/configuracion/api/_components/api-key-estado-label.ts`
+- `app/(app)/configuracion/api/_components/api-keys-descarga-columnas.ts`
+- `app/(app)/wallet/_components/wallet-ledger-descarga-columnas.ts`
+- `app/(app)/wallet/mensajeros/_components/desglose-mensajero-descarga-columnas.ts`
+- `app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas.ts`
+- `app/(app)/mis-pagos/_components/mis-pagos-descarga-columnas.ts`
+- `lib/utils/fecha-dia-iso.ts`
+- `tests/unit/services/{usuario,plantilla,api-key}-descarga.test.ts`
+- `tests/unit/services/wallet-{caja,tienda,mis-pagos,desglose-mensajero}-descarga.test.ts`
+- `tests/unit/actions/{usuarios,plantillas,api-keys}-descarga-action.test.ts`
+- `tests/unit/actions/wallet-{caja,tienda,mensajero}-descarga-action.test.ts`
+- `tests/unit/descarga/{usuarios,plantillas,api-keys}-descarga-columnas.test.ts`
+- `tests/unit/descarga/wallet-{caja,tienda,mensajero}-descarga-columnas.test.ts`
+
+**Modificados**
+
+- Tipos: `lib/types/descarga-listado.ts` (+`ListarCompletoServiceResult`),
+  `lib/types/{usuario,plantilla-mensaje,api-key,wallet,wallet-tienda,wallet-mensajero}.ts`
+  (schemas `*Completo` + resultados de borde).
+- Interfaces: `lib/interfaces/services/{IUsuarioService,IPlantillaMensajeService,IApiKeyService,IWalletService,IWalletTiendaService,IWalletMensajeroService}.ts`.
+- Servicios: `lib/services/{UsuarioService,PlantillaMensajeService,ApiKeyService,WalletService,WalletTiendaService,WalletMensajeroService}.ts`.
+- Actions: `lib/actions/{usuarios,plantillas,api-keys,wallet,wallet-tienda,wallet-mensajero}.ts`.
+- UI (solo la promoción de etiquetas, sin cambio de render):
+  `app/(app)/configuracion/_components/usuarios-columns.tsx`,
+  `app/(app)/configuracion/plantillas/_components/plantillas-columns.tsx`,
+  `app/(app)/configuracion/api/_components/api-keys-columns.tsx`.
+- Dobles de test existentes (solo arnés, ninguna aserción):
+  `tests/unit/actions/{usuarios,api-keys,api-keys-listar,wallet-actions,wallet-tienda-actions,wallet-mensajero-actions}.test.ts`,
+  `tests/unit/plantillas/plantillas-actions.test.ts`.
+- `specs/170-export-todas-las-tablas/tasks.md` (T B.1-B.3 y T C.1-C.3 marcadas, con lo medido).
+- `feature_list.json` (resolución del conflicto del merge).
+
+**Sin modelo de datos.** Cero migraciones, cero `down.sql`, cero cambios de RLS: no hay
+superficie de lectura nueva — cada dataset completo es el mismo conjunto de filas que el
+actor ya podía leer paginado. Lo confirma `./init.sh` («todas las migraciones tienen
+down.sql»).
+
+## B10. Puertas (medición final de esta entrega)
+
+Salida real, no prometida.
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ pnpm run lint
+✖ 20 problems (0 errors, 20 warnings)
+=== lint exit: 0 ===
+
+$ pnpm test
+ Test Files  701 passed | 4 skipped (705)
+      Tests  8447 passed | 74 skipped (8521)
+   Duration  216.99s
+
+$ ./init.sh
+✓ lint paso
+✓ test paso
+✓ todas las migraciones tienen down.sql
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+```
+
+| Puerta | Baseline (B0) | Después |
+| --- | --- | --- |
+| `pnpm run typecheck` | 0 errores | **0 errores** |
+| `pnpm run lint` | 0 errores / 20 warnings | **0 errores / 20 warnings** (los mismos 20; los 16 que introdujeron los tests nuevos se eliminaron sustituyendo el destructuring-para-descartar por un helper) |
+| `pnpm test` | 686 archivos · 8363 tests: 8289 passed / 74 skipped / 0 fallos | **705 archivos** (701 passed + 4 skipped) · **8521 tests: 8447 passed / 74 skipped / 0 fallos** — +19 archivos, +158 tests, **0 rotos nuevos** |
+| `./init.sh` | `== init OK ==` | `== init OK ==` |
+
+## B11. Hallazgos y deuda declarada (no se actuó)
+
+1. **`ListarOrdenesCompletoServiceResult` sigue escrito a mano.** El union genérico de
+   servicio (`ListarCompletoServiceResult<T>`) lo usan los 6 servicios nuevos, pero el de
+   órdenes —que es de la 151— se dejó como estaba: reexpresarlo es una línea sin cambio de
+   comportamiento, pero es de la tanda 0 y ya estaba entregada. Candidato a unificar en la G.
+2. **«canal» de plantillas no existe.** Si el humano lo quiere en el archivo, primero hay que
+   decidir de dónde sale (hoy la única superficie es WhatsApp y sería un literal constante).
+3. **`createdAt` de plantillas fuera por R24.** Si se quiere la fecha en el archivo, la salida
+   coherente es añadir la columna a la TABLA primero, no colarla solo en el export.
+4. **`descargaConfig.MAX_FILAS` se lee en el servidor**, donde `DESCARGA_MAX_FILAS` sí puede
+   estar definida. En el navegador rige el default de 5000 (Next solo expone `NEXT_PUBLIC_*`).
+   Si alguien bajara el tope por entorno, servidor y cliente podrían discrepar: el servidor
+   sería el estricto, así que falla cerrado y nunca entrega de más. Anotado, no decidido; es
+   herencia de la 151, no de esta tanda.
+
+---
+
+# TANDAS B.4, C.4, D y E — la UI de 21 tablas (2026-07-31)
+
+> Tercera entrega sobre la misma rama. **No reescribe nada de lo anterior**: T0.*, la tanda A y
+> el servidor de B y C siguen tal cual los dejaron las entregas previas. Aquí van **T B.4,
+> T C.4, toda la tanda D y toda la tanda E**: el cableado de UI de **21 tablas**.
+>
+> Fuera de esta entrega, por encargo: la tanda **F** (ranking) y la **G** (cierre de fase).
+
+## C0. Baseline medido AL EMPEZAR (2026-07-31)
+
+Medido, no heredado. El worktree venía sin `node_modules` ni `.env`: se instaló con
+`pnpm install --frozen-lockfile` y se corrió `prisma generate` con un `DATABASE_URL` de marcador
+(el generate no conecta), que es lo que evita los ~200 errores falsos de typecheck.
+
+| Puerta | Baseline |
+| --- | --- |
+| `pnpm run typecheck` | 0 errores |
+| `pnpm run lint` | 0 errores / 20 warnings |
+| `pnpm test` | **705 archivos** (701 passed + 4 skipped) · **8521 tests**: 8447 passed / 74 skipped / **0 fallos** |
+| `./init.sh` | `== init OK ==` |
+
+Coincide exactamente con lo que declaraba el encargo. **La rama ya venía integrada con
+`origin/dev`** (lo hizo la entrega anterior): `git merge origin/dev` dijo «Already up to date»,
+así que no hubo conflicto que resolver en `feature_list.json`; el de la 169/170 sigue tal cual lo
+dejó la fase previa (172 fichas, cero ids duplicados).
+
+> Nota de worktree: la rama `feature/170-export-todas-las-tablas` estaba tomada por otro
+> worktree, así que se trabajó en una rama local partiendo del MISMO commit (`6ccc3cbf`) y se
+> empuja a la rama de la feature. El contenido es el mismo; solo cambia el nombre local.
+
+## C1. Qué queda descargando, tabla a tabla
+
+**21 tablas nuevas.** Con las 3 de las tandas 0/A, quedan **24 de las 25 dentro de alcance**; la
+25.ª es el ranking (tanda F).
+
+| Tanda | Tabla(s) | Familia | Cómo obtiene las filas |
+| --- | --- | --- | --- |
+| B.4 | Usuarios | A | `listarUsuariosCompleto({})` |
+| B.4 | Plantillas de mensaje | A | `listarPlantillasCompleto({})` |
+| B.4 | API keys | A | `listarApiKeysCompleto({})` |
+| C.4 | Libro de caja | A | `listarMovimientosCompletoAction(filtros)` — callback del módulo |
+| C.4 | Mi wallet (tienda) | A | `listarMisMovimientosCompletoAction(filtros)` — callback |
+| C.4 | Mis pagos (mensajero) | A | `listarMisPagosCompletoAction(filtros)` — callback |
+| C.4 | Desglose de un mensajero | A | `listarPagosDeMensajeroCompletoAction(...)`, en sitio |
+| D.1 | Saldos de tiendas | B | `filasLocales(tiendas, ...)` |
+| D.2 | Cuentas por pagar | B | `filasLocales(filtrados, ...)` — el array YA filtrado |
+| D.3 | Plantillas de gasto fijo | B | `filasLocales(plantillas, ...)` |
+| E.1 | Cierres del día: pendientes · histórico | B | `filasLocales(...)` |
+| E.2 | Cierres de bodega: pendientes · resueltos | B | ídem |
+| E.3 | Consolidación: consolidables · solicitados | B | ídem |
+| E.4 | Cierre del día del mensajero: secciones por resultado · histórico | B | ídem |
+| E.5 | Gestiones del detalle compartido: secciones por resultado | B | ídem |
+| E.6 | Incidentes: pendientes · histórico | B | ídem |
+
+En `tests/unit/descarga/censo-tablas.ts` esas 21 pasaron de `pendiente` a `con_descarga`.
+**Queda UNA `pendiente`: el ranking del día (tanda F.1).**
+
+## C2. Familia A: por qué tres ledgers reciben un CALLBACK
+
+Los tres listados de configuración son directos: la config se construye EN EL RENDER y el input
+va **vacío**, porque el schema del modo completo es `.strict()` y sin `page`/`pageSize` —
+mandarlos devuelve `validation_error` en vez de un archivo — y `sortBy`/`sortDir` caen en el
+MISMO default que usa el listado, así que el archivo sale en el orden de pantalla.
+
+Los ledgers son el caso interesante. `WalletLedger`, `DesgloseTiendaLedger` y `DesglosePagos`
+**reciben la página por props y no conocen los filtros vigentes**; quien los conoce es su módulo
+padre. La salida es la del `design.md §5` —«si eso obliga a bajar un callback desde el módulo
+padre, se baja el callback; nunca los filtros a la tabla»—: cada uno gana una prop
+`obtenerFilasDescarga`, y **el título y las columnas del archivo los sigue declarando la tabla**,
+que es la que sabe qué enseña. Los tres siguen sin importar una sola Server Action de LECTURA, y
+hay un test ESTÁTICO que lo comprueba sobre los tres módulos (no un espía, que solo cubriría el
+camino que el test recorra).
+
+El cuarto, `DesglosePagosMensajero`, declara su `descarga` en sitio, y no es una excepción al
+principio: ese componente **ya fetcheaba** (SWR sobre `listarPagosDeMensajeroAction`) porque ya
+conocía su `mensajeroId` y sus filtros — es quien los usa para el listado paginado. Bajarle un
+callback habría sido indirección sin dueño nuevo.
+
+Un input de modo completo **no se deriva del de paginación con un `delete`**: cada módulo tiene
+su `buildInputCompleto` separado que sencillamente no pone `page`/`pageSize`. Un `delete` que
+alguien olvide mantener es exactamente cómo se cuela una clave en un schema `.strict()`.
+
+## C3. Familia B: el array que se exporta, y el tope
+
+Las 14 tablas de Familia B proyectan el MISMO array que la tabla pinta. Dos puntos donde eso
+significa algo:
+
+1. **Cuentas por pagar exporta `filtrados`, no `mensajeros`.** Su búsqueda es de cliente;
+   descargar el conjunto sin filtrar entregaría filas que el usuario no está viendo, que es la
+   otra forma de mentir (la primera es truncar). Hay un test que busca «Beto» y exige que el
+   archivo traiga UNA fila.
+2. **El tope de 5000 se aplica igual.** `filasLocales` devuelve un error accionable con total y
+   tope y **no produce archivo**. Se ejercita de verdad en `WalletPropsDescarga.test.tsx` con
+   5001 saldos.
+
+**Dónde NO se re-probó el tope, y por qué:** en la tanda E. Montar 5001 cierres en jsdom hace que
+esas pantallas rendericen además 5001 tarjetas de la «vista tipo factura»; el test tarda minutos
+(se midió: no terminaba en 5) y no afirma nada que no esté ya afirmado — el tope vive en el
+helper compartido, con tests unitarios en T0.2 y de componente en la tanda D. Queda escrito en el
+propio archivo de test, no solo aquí.
+
+## C4. Las columnas: lo que NO se exporta
+
+| Tabla | Fuera del archivo, y por qué |
+| --- | --- |
+| Saldos de tiendas | `tiendaId` (uuid). El identificador de negocio de la fila es el NOMBRE |
+| Cuentas por pagar | `mensajeroId` (uuid) |
+| Gasto fijo | `id` y **todo el ciclo** (`periodicidadUnidad`, `periodicidadCantidad`, `fechaCobro`, `createdAt`, `updatedAt`): el DTO los trae, la TABLA no los muestra (R24) |
+| Cierres (6 tablas) | `cierreId`, `cierreBodegaId`, `cierreDiaId`, `mensajeroId`, `zonaId`, `solicitadoPorId` (uuid) |
+| Gestiones (detalle y día) | `gestionId`, `ordenId` y —lo importante— **`evidenciaUrl`** |
+| Incidentes | `incidenteId`, `ordenId` y **`evidenciaUrls`** |
+
+**R22 es el riesgo propio de esta tanda.** Estas pantallas son las únicas del rollout cuyo dato de
+origen trae **URL FIRMADAS** de evidencia. Un `xlsx` con una dentro, reenviado por correo, es
+acceso a la foto sin sesión. En el archivo va **«Tiene evidencia: Sí/No»** y nunca el enlace. Y no
+se confía solo en la guardia estática: hay un test que descarga las secciones que TIENEN
+evidencia y revisa CADA celda del resultado real contra `http(s)://`, contra rutas de almacén y
+contra `token=`.
+
+**Money-safe en las 21.** Todo monto viaja como el STRING que devolvió el servidor, tal cual: sin
+`parseFloat`/`Number` (un `Decimal(12,2)` no cabe exacto en un `number`) y sin el símbolo de colón
+de `money`, que es presentación y convertiría una celda numérica en texto que la hoja no puede
+sumar. Los tests lo comprueban con montos acabados en `.10`, que un `Number` intermedio devolvería
+como `.1`: los céntimos.
+
+**Un `null` es celda VACÍA, no un "—".** El guion es presentación; en una hoja se leería como un
+valor. Y una `indemnizacion` nula NO es cero: es «todavía no se capturó» (o «no se indemnizó»),
+así que la celda queda vacía — un 0 afirmaría un monto que nadie decidió.
+
+## C5. Etiquetas promovidas (y una duplicación que desaparece)
+
+Mismo procedimiento que la tanda B con `usuario-estado-label`: el módulo de columnas debe ser
+PURO (design §3), así que el texto que comparten pantalla y archivo se promueve sin editarlo.
+
+| Módulo nuevo (puro) | De dónde salió |
+| --- | --- |
+| `app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label.ts` | del `SIGNO_BADGE` de `SaldosTiendasTable` (que además lleva la `variant` del badge) |
+| `app/(app)/wallet/_components/gasto-fijo-estado-label.ts` | del `Badge` inline de `GastosFijosPlantillasPanel` |
+| `app/(app)/cierres-admin/_components/cierre-labels.ts` | de `cierre-detalle-shared.tsx`, que importa `Card`/`Badge`/`Modal`/`DataTable` |
+
+El tercero es el que más rinde: `RESULTADO_LABEL`, `METODO_LABEL`, `ESTADO_LABEL` y la tabla del
+destino estaban **duplicadas palabra por palabra** en `cierre-detalle-shared` y en
+`CierreDiaModule`. Ahora las dos pantallas y los dos módulos de export leen del mismo sitio, y
+`cierre-detalle-shared` las **RE-EXPORTA**, así que ninguno de sus consumidores cambia una línea.
+Que archivo y pantalla digan lo mismo (R8/R24) pasa a ser cierto por construcción, no por
+coincidencia entre dos literales.
+
+Las cuentas por pagar no necesitaron promoción: `wallet-mensajeros-labels.ts` ya era puro, y el
+módulo de export lee de ahí sus encabezados y su etiqueta de estado.
+
+## C6. Dos decisiones de a11y que cambian el nombre del archivo
+
+`titulo` es a la vez el nombre de la hoja, la base del nombre de archivo (R12) y parte del nombre
+accesible del control (R13). Eso obliga a que sea **único en la pantalla**:
+
+1. **El desglose de un mensajero lleva su nombre** (`Desglose de Ana Mensajera`). La tabla de
+   cuentas por pagar admite varias filas expandidas A LA VEZ; tres botones llamados «Descargar
+   Desglose por cierre» no dirían de quién es cada archivo.
+2. **`DetalleSecciones` gana una prop `contexto`.** El detalle de un cierre de BODEGA monta las
+   mismas secciones una vez POR mensajero incluido; sin contexto habría tres «Descargar
+   Entregadas» en el mismo modal. Con él, el control se llama `Entregadas · <mensajero>` y el
+   archivo sale como `entregadas-<mensajero>-<fecha>.xlsx`.
+
+También por R13, en incidentes los controles NO se llaman como los encabezados de la pantalla
+(«Pendientes de decisión» / «Histórico»): un archivo `historico-<fecha>.xlsx` no diría de qué es.
+Se llaman «Incidentes pendientes» e «Incidentes resueltos».
+
+**Límite conocido de `titulo` (anotado, no decidido):** `exceljs` TRUNCA a 31 caracteres el nombre
+de la hoja (con un `console.warn`) y LANZA si lleva `* ? : \ / [ ]`. Con nombres de persona
+largos, el título compuesto puede pasar de 31: el archivo se genera igual y su NOMBRE conserva el
+slug completo; solo la pestaña sale recortada. Y si un nombre trajera uno de esos caracteres,
+`construirDescarga` lanza y el control avisa con un toast — falla cerrado, sin archivo a medias.
+Ver C13.1.
+
+## C7. Una descarga POR SECCIÓN en el detalle del cierre (P2 ratificada)
+
+Decisión del humano, ya cerrada: **no hay un archivo único del cierre**. Cada sección por
+resultado tiene su botón y su juego de columnas, porque las secciones no enseñan lo mismo — una
+entrega lleva método de pago y comisión; una reprogramación, la fecha nueva; un rechazo, el origen
+y el ingreso de bodega; un incidente, la causa y la indemnización. Fundirlas daría una hoja llena
+de celdas vacías que nadie sabría leer.
+
+**Son CINCO secciones, no cuatro.** El spec decía «hasta cuatro (entregadas / reprogramadas /
+devueltas / rechazadas)» porque se escribió antes de que la 158 añadiera el grupo `incidente`, que
+hoy es un resultado más del mismo `ORDEN_RESULTADOS`. Se cablearon las cinco: dejar una fuera
+habría sido dejar sin descarga justo la sección con el dinero de la indemnización.
+
+**Y el mensajero exporta MENOS que el admin, a propósito.** `CierreDiaModule` y `DetalleSecciones`
+proyectan el MISMO DTO pero declaran módulos de columnas DISTINTOS: la pantalla del mensajero no
+muestra el ingreso de Ordenex (flete, comisión, IVA, total) ni el monto de la indemnización — es
+dinero que no es suyo (158, design §7.2). Exportar ahí lo que ve el admin sería publicar por el
+archivo lo que la pantalla oculta, que es exactamente lo que R24 prohíbe.
+
+## C8. El mapa resultado→columnas vive en el `.tsx`, no en el módulo de columnas
+
+Detalle pequeño con motivo grande: la guardia de datos sensibles (T0.4) solo reconoce, dentro de
+un `*-descarga-columnas.ts`, los **arrays de columnas** y las **funciones de proyección**. Un
+`Record<CierreResultado, {columnas, fila}>` exportado desde ahí no sería ni una cosa ni la otra:
+**se le escaparía a la guardia entera**. Por eso los módulos exportan las cinco declaraciones
+sueltas —vigiladas una a una— y el mapa que elige cuál toca vive en el componente.
+
+## C9. Tests existentes tocados: el arnés, y UNA guardia que se siguió a su nuevo sitio
+
+**(a) Arnés, sin tocar una sola aserción.** Tres suites reventaron con «useToast debe usarse
+dentro de un ToastProvider» al montar el control. Es el precedente exacto de T A.1 y se trató
+igual — envolver el `render`:
+
+| Suite | Qué se cambió |
+| --- | --- |
+| `tests/components/CuentasPorPagarTable.test.tsx` (44) | los 5 `render` pasan por un helper que envuelve en `ToastProvider` |
+| `tests/components/CierreDetalleIncidente.test.tsx` (158) | ídem, 9 `render` |
+| `tests/integration/wallet-mensajeros-page.test.tsx` (44) | el helper `renderDesglose` se envuelve |
+
+En producción no cambia nada: `app/(app)/layout.tsx` ya envuelve en `ToastProvider` todo el grupo
+`(app)`, que es donde viven las tres pantallas.
+
+**(b) Una guardia de la 158 que apuntaba a un archivo que ya no tiene la etiqueta, y se dice
+claro.** `tests/unit/guards/incidente-exhaustividad.test.ts` exigía el literal
+`incidente: "Incidentes"` DENTRO de `cierre-detalle-shared.tsx` y de `CierreDiaModule.tsx`. Al
+promover `RESULTADO_LABEL` a `cierre-labels.ts` (C5), esas dos copias dejaron de existir y la
+guardia se puso roja.
+
+- **No se relajó ni se borró**: se SIGUIÓ la etiqueta a su nuevo sitio. Ahora exige (a) que la
+  ÚNICA declaración clasifique `incidente` y (b) que los dos detalles la USEN.
+- **Queda más fuerte, no más débil:** antes bastaba con que cada copia tuviera la clave; un tercer
+  detalle que la olvidara habría pasado inadvertido. Ahora no hay dónde olvidarla.
+- **VERIFICADO POR MUTACIÓN:** quitando `incidente: "Incidentes"` de `cierre-labels.ts` la guardia
+  falla («cierre-labels.ts sin etiqueta de incidente») y ningún otro test se mueve. Revertido.
+
+## C10. Mapa `R<n> → test` de esta entrega
+
+| R | Test |
+| --- | --- |
+| R1 | `ConfiguracionDescarga` :: los tres ofrecen su control con nombre accesible · `WalletDescarga` :: cada ledger ofrece su control… · `WalletPropsDescarga` :: las tres ofrecen su control… · `CierresDescarga` :: cada tabla de cierres ofrece su control… · `IncidentesDescarga` :: las dos tablas ofrecen su control… |
+| R3 | `ConfiguracionDescarga` :: los tres listados siguen comportándose igual… · `WalletDescarga` :: los cuatro ledgers siguen comportándose igual… |
+| R7 | `WalletPropsDescarga` :: los montos viajan TAL CUAL, sin recalcularlos ni adornarlos · `WalletDescarga` :: el archivo trae el ledger ENTERO (comprueba el monto STRING sin `₡`) |
+| R8 | `CierresDescarga` :: estados, causas y destinos salen como etiqueta legible… · `IncidentesDescarga` :: estados y causas salen como etiqueta legible… |
+| R9 | `ConfiguracionDescarga` :: el archivo trae TODAS las filas, no solo la página visible · `WalletDescarga` :: el archivo trae el ledger ENTERO, no la página pintada |
+| R10 | `WalletDescarga` :: usa los filtros de fecha vigentes y no manda paginación · `WalletPropsDescarga` :: cuentas por pagar exporta solo lo que la búsqueda deja a la vista |
+| R11 | `CierresDescarga` :: el archivo trae las filas de SU tabla, en el orden de la pantalla · `IncidentesDescarga` :: cada archivo trae SU tabla entera, en el orden de la pantalla |
+| R12 | `ConfiguracionDescarga` :: el nombre del archivo identifica el listado y la fecha · `IncidentesDescarga` :: (`incidentes-pendientes-YYYY-MM-DD.xlsx`) |
+| R13 | los cinco archivos :: el nombre accesible de cada control identifica SU tabla |
+| R14/R20 | `CierresDescarga` :: el archivo del adminSatelite solo trae los cierres de su zona · `IncidentesDescarga` :: el archivo del adminSatelite solo trae los incidentes de su alcance |
+| R18 | `ConfiguracionDescarga` y `WalletDescarga` :: ninguna clave de paginación viaja en el input del modo completo |
+| R22 | `CierresDescarga` :: ninguna URL firmada ni ruta de almacenamiento llega al archivo · `IncidentesDescarga` :: ídem |
+| R26/R27/R28 | `ConfiguracionDescarga` :: con el tope superado no se produce archivo… · `WalletPropsDescarga` :: por encima del tope rechaza con un error accionable y NO produce archivo |
+| R30/R32 | `WalletDescarga` :: los componentes de presentación no pasan a fetchear (estático) · `WalletPropsDescarga` :: ninguna de las tres relee del servidor (estático) · ambos :: la acción del modo completo no se llama hasta que alguien pulsa |
+| R37 | `CierresDescarga` :: descargar no cambia la fila expandida ni el modal abierto |
+| R2/R4 | `cobertura-tablas.guardia` (T0.5) con 21 tablas más declaradas `con_descarga`: contrasta lo declarado contra el código instancia a instancia, EN LOS DOS SENTIDOS |
+| R21/R23/R25 | `columnas-sensibles.guardia` (T0.4) recogió los **10 módulos de columnas nuevos** por convención de nombre, sin tocar la guardia |
+
+## C11. Archivos de esta entrega
+
+**Creados (16)**
+
+- Columnas de export (8): `app/(app)/wallet/tiendas/_components/saldos-tiendas-descarga-columnas.ts`,
+  `app/(app)/wallet/mensajeros/_components/cuentas-por-pagar-descarga-columnas.ts`,
+  `app/(app)/wallet/_components/gastos-fijos-descarga-columnas.ts`,
+  `app/(app)/cierres-admin/_components/cierres-admin-descarga-columnas.ts`,
+  `app/(app)/cierres-admin/_components/cierres-bodega-descarga-columnas.ts`,
+  `app/(app)/cierres-admin/_components/cierre-gestiones-descarga-columnas.ts`,
+  `app/(app)/cierre-dia/_components/cierre-dia-descarga-columnas.ts`,
+  `app/(app)/incidentes/_components/incidentes-descarga-columnas.ts`.
+- Etiquetas promovidas, puras (3): `app/(app)/cierres-admin/_components/cierre-labels.ts`,
+  `app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label.ts`,
+  `app/(app)/wallet/_components/gasto-fijo-estado-label.ts`.
+- Tests (5): `tests/components/descarga/{ConfiguracionDescarga,WalletDescarga,WalletPropsDescarga,CierresDescarga,IncidentesDescarga}.test.tsx`.
+
+**Modificados**
+
+- UI cableada (19): `UsuariosModule`, `PlantillasModule`, `ApiKeysModule`, `WalletModule`,
+  `WalletLedger`, `MiWalletModule`, `DesgloseTiendaLedger`, `MisPagosModule`, `DesglosePagos`,
+  `DesglosePagosMensajero`, `SaldosTiendasTable`, `CuentasPorPagarTable`,
+  `GastosFijosPlantillasPanel`, `CierresAdminModule`, `CierresBodegaAdminModule`,
+  `ConsolidacionBodegaModule`, `cierre-detalle-shared`, `CierreDiaModule`,
+  `IncidentesAdminModule`.
+- Censo: `tests/unit/descarga/censo-tablas.ts` (21 tablas de `pendiente` a `con_descarga`).
+- Tests existentes: los tres del arnés (C9.a) y `tests/unit/guards/incidente-exhaustividad.test.ts`
+  (C9.b, guardia seguida a su nuevo sitio y verificada por mutación).
+- `specs/170-export-todas-las-tablas/tasks.md` (T B.4, T C.4, T D.*, T E.* marcadas, con lo medido
+  y las divergencias declaradas).
+
+**Cero backend.** Ni servicios, ni repositorios, ni acciones, ni migraciones: las cuatro tandas son
+de presentación. Las 7 acciones del modo completo que se consumen aquí las entregó la fase previa.
+
+## C12. Puertas (medición final de esta entrega)
+
+Salida real, no prometida.
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ pnpm run lint
+✖ 20 problems (0 errors, 20 warnings)
+=== lint exit: 0 ===
+
+$ pnpm test
+ Test Files  706 passed | 4 skipped (710)
+      Tests  8473 passed | 74 skipped (8547)
+   Duration  218.98s
+
+$ ./init.sh
+✓ lint paso
+✓ test paso
+✓ todas las migraciones tienen down.sql
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+```
+
+| Puerta | Baseline (C0) | Después |
+| --- | --- | --- |
+| `pnpm run typecheck` | 0 errores | **0 errores** |
+| `pnpm run lint` | 0 errores / 20 warnings | **0 errores / 20 warnings** (los mismos) |
+| `pnpm test` | 705 archivos · 8521 tests: 8447 passed / 74 skipped / 0 fallos | **710 archivos** (706 passed + 4 skipped) · **8547 tests: 8473 passed / 74 skipped / 0 fallos** — +5 archivos, +26 tests, **0 rotos nuevos** |
+| `./init.sh` | `== init OK ==` | `== init OK ==` |
+
+## C13. Hallazgos y deuda declarada (no se actuó)
+
+1. **Nombre de hoja > 31 caracteres.** `exceljs` trunca la pestaña (con `console.warn`) cuando el
+   título compuesto se pasa; afecta a `Desglose de <mensajero>` y a `<Resultado> · <mensajero>`
+   con nombres largos. El archivo se genera correcto y su NOMBRE conserva el slug entero: solo la
+   pestaña sale recortada. Si se quiere cerrar del todo, la salida limpia es que
+   `DescargarDatasetButton` acepte un nombre de hoja distinto del título —lo que SÍ tocaría el
+   contrato de la 151— o que `construirDescarga` recorte con criterio. Candidato a la G.
+2. **El histórico de cierres exporta «Rechazado» sin el marcador «Bloqueante hasta
+   re-solicitud».** No se pierde información: el marcador se DERIVA del propio estado (todo
+   rechazado lo lleva), así que la columna ya lo dice. Anotado por si el humano prefiere el texto
+   completo en el archivo.
+3. **`DetalleSecciones` hoy solo lo monta `CierresBodegaAdminModule`.** `CierresAdminModule` pasó a
+   `CierreFacturaDetalle` (que no usa `DataTable`), así que la descarga por sección solo se ve en
+   el detalle de un cierre de BODEGA. La tabla sigue censada y cableada porque el módulo existe y
+   se usa; si mañana la vista factura reemplaza también esa, la guardia del censo lo dirá.
+4. **La tanda F (ranking) es la ÚNICA `pendiente` del censo.** Al cerrarla, el censo queda sin
+   ningún `pendiente` y la fase 1 puede cerrarse (T G.1/T G.2).
+
+---
+
+# TANDAS F y G — la última tabla y el CIERRE DE LA FASE 1 (2026-07-31)
+
+> Cuarta y última entrega de la FASE 1 sobre la misma rama. **No reescribe nada de lo
+> anterior**: T0.\*, A, B, C, D y E siguen tal cual las dejaron las entregas previas. Aquí van
+> **T F.1** (el ranking del día, la 25.ª tabla) y **toda la tanda G** (el cierre de fase).
+>
+> Con esto **la FASE 1 queda entregada**: las 25 tablas del Anexo I descargan a Excel. La
+> **FASE 2 (paginación server-side, tandas H–M) NO entra**, por decisión del humano (Q3).
+
+## D0. Baseline medido AL EMPEZAR (2026-07-31)
+
+Medido, no heredado. El worktree venía sin `node_modules` ni `.env`: se instaló con
+`pnpm install --frozen-lockfile` y se corrió `prisma generate` con un `DATABASE_URL` de
+marcador (el generate no conecta), que es lo que evita los ~200 errores falsos de typecheck.
+
+| Puerta | Baseline |
+| --- | --- |
+| `pnpm run typecheck` | 0 errores |
+| `pnpm run lint` | 0 errores / 20 warnings |
+| `pnpm test` | **710 archivos** (706 passed + 4 skipped) · **8547 tests**: 8473 passed / 74 skipped / **0 fallos** |
+| `./init.sh` | `== init OK ==` |
+
+Coincide EXACTAMENTE con lo que declaraba el encargo. `git merge origin/dev` fue no-op: la
+rama ya lo traía integrado de la entrega anterior (`origin/dev` es ancestro de
+`origin/feature/170-…`), así que no hubo conflicto que resolver ni `feature_list.json` que
+tocar.
+
+> Nota de worktree: la rama `feature/170-export-todas-las-tablas` estaba tomada por otro
+> worktree, así que se trabajó en una rama local partiendo del MISMO commit (`8ff4edb8`) y se
+> empuja a la rama de la feature. El contenido es el mismo; solo cambia el nombre local.
+
+## D1. Tanda F — el ranking del día
+
+**La trampa de esta tanda no era la tabla: era la PANTALLA.** `/ranking` monta dos:
+
+| Tabla | Qué es | Decisión |
+| --- | --- | --- |
+| **Ranking del día** (`<DataTable>`) | listado de mensajeros ordenado por % de entregas | **dentro** de alcance (Anexo I #25) — cableada aquí |
+| **Premios del podio** (`<table>` cruda) | 3 filas de configuración con montos EDITABLES | **fuera** (P1 ratificada) — sigue sin control |
+
+Hay un test explícito para la segunda mitad: en esa pantalla existe **UN** control de descarga,
+no dos, y no cuelga de la tarjeta de premios. Es la comprobación que importa cuando las dos
+tablas comparten pantalla — «existe el del ranking» no descarta «y además el del podio»— y se
+hace con `esEditable`, que es cuando el podio pinta más controles.
+
+Es **FAMILIA B**, y no por descuido: el ranking está en el Anexo IV (no se paginará ni en la
+fase 2), porque la POSICIÓN y los ocupantes del podio se derivan del conjunto completo. El
+array de props ES el dataset, así que `filasLocales` sobre él, sin releer nada del servidor.
+
+### Las columnas: dos decisiones de contenido
+
+| # | Decisión | Por qué |
+| --- | --- | --- |
+| 1 | El conteo crudo se parte en **dos** columnas (`Entregadas`, `Asignadas`) | La tabla pinta una celda `5/5`. Ese `/` es glue de PRESENTACIÓN: en una hoja, `5/5` no se puede sumar ni promediar, y algún Excel lo interpreta como fecha. R7 pide valores crudos. No se añade información: se le quita el adorno a la que ya está en pantalla. |
+| 2 | El porcentaje viaja como el **STRING** del servidor, **sin `%`** | Mismo criterio money-safe del resto del rollout: un `Number` intermedio convierte `"100.0"` en `100` y `"80.0"` en `80` (se pierde el decimal), y el símbolo convierte una celda numérica en texto. La unidad la da el encabezado, que es literalmente el de la pantalla («% del día»). |
+
+**Lo que NO sale:** `mensajeroId` (uuid interno, R23) y **`premio`**. El `premio` sí está en el
+`RankingRowDTO`, pero quien lo muestra es la OTRA tarjeta —la del podio, fuera de alcance—, no
+esta tabla: exportarlo aquí sería publicar por el archivo un dato que esta tabla no enseña
+(R24) y colar por la puerta de atrás la tabla que el humano dejó fuera.
+
+**Un `null` es celda VACÍA, no el «—» de la pantalla:** la fila fuera del podio no tiene
+posición ni porcentaje. El guion es presentación y en una hoja se leería como un valor; un 0
+afirmaría un porcentaje que nadie calculó.
+
+**Un solo literal para el título.** `TITULO_DESCARGA = "Ranking del día"` da a la vez el
+encabezado de la tarjeta, el nombre de la hoja, la base del nombre de archivo (R12) y el nombre
+accesible del control (R13). Antes el encabezado era un literal suelto en el JSX; ahora no hay
+dos sitios que puedan decir cosas distintas.
+
+## D2. El censo, cerrado
+
+`tests/unit/descarga/censo-tablas.ts`: el ranking pasa de `pendiente` a `con_descarga` y **no
+queda ningún `pendiente`**.
+
+| Estado | Nº | Qué es |
+| --- | --- | --- |
+| `con_descarga` | **25** | el Anexo I completo |
+| `fuera` | **6** | el Anexo II (5 `<DataTable>` + la `<table>` cruda del podio) |
+| `pendiente` | **0** | — |
+
+Y no se declara: **se exige**. `cobertura-tablas.guardia` gana un test —«la FASE 1 del export
+queda cerrada: ninguna tabla del censo sigue pendiente»— que falla si alguien reintroduce un
+`pendiente`, y que además fija los dos totales (25 / 6) para que no se pueda cablear una
+exclusión ni sacar de alcance una tabla que sí debe descargar.
+
+**Por qué hacía falta un test nuevo y no bastaba con los que ya había — VERIFICADO POR
+MUTACIÓN:** se dejó la tabla del ranking A MEDIAS (censo en `pendiente` **y** sin la prop, que
+es el estado coherente de una tanda sin hacer). Los tests previos siguen **VERDES** —el censo
+coincide con el árbol, porque los dos dicen «no cableada»— y **solo falla el nuevo**:
+
+```
+AssertionError: la FASE 1 del export no puede cerrarse con tablas pendientes de cablear
+- Expected  []
++ Received  ["app/(app)/ranking/_components/RankingModule.tsx :: Ranking del día (tanda F.1)"]
+```
+
+Revertido; suite verde otra vez. Sin ese test, «FASE 1 terminada» sería una afirmación de una
+bitácora y no una propiedad del repo.
+
+El valor `pendiente` se conserva en el tipo `EstadoDescarga`: un rollout futuro volverá a
+necesitar el andamio. Lo que ya no se puede es cerrar una fase con él puesto.
+
+## D3. Tanda G — qué añade, y por qué no es papeleo
+
+Las tandas A–F contestan, tabla a tabla, «¿ésta descarga LO SUYO?». La G contesta otra pregunta
+que ninguna de ellas cubre: **¿las 25 se comportan IGUAL?** Tras seis tandas escritas en días
+distintos, la deriva plausible no es que una tabla no descargue —eso lo caza la guardia del
+censo— sino que una descargue DIFERENTE.
+
+### T G.1 — `ControlDescargaTransversal.test.tsx` (7 tests)
+
+En dos planos deliberadamente distintos.
+
+**(a) CONDUCTA**, sobre las TRES formas de cableado que existen, con componentes REALES:
+
+| Forma | Componente | Estado en que llega a la descarga |
+| --- | --- | --- |
+| A con filtros | `OrdenesApartado` | en la **página 2** |
+| A sin filtros | `UsuariosModule` | listado cargado |
+| B con filtro de cliente | `CuentasPorPagarTable` | con la búsqueda **«Beto»** aplicada |
+
+Que lleguen en un estado NO inicial es parte del test: con la pantalla recién montada,
+«descargar no altera la página ni la selección» no afirmaría nada.
+
+- **R34** — las tres producen `xlsx`, su disparador no anuncia menú (`aria-haspopup` ausente) y
+  tras pulsar no aparece ningún `role="menu"`. Descarga directa, sin elección (P7).
+- **R33** — el codificador (`buildXlsxRows`) se mockea con un buffer DISTINTO por caso y se
+  exige que el que llega a `descargarBlob` sea **ese mismo objeto**: demuestra el recorrido
+  `obtenerFilas → construirDescarga → buildXlsxRows → descargarBlob` entero, sin ramas propias.
+  `construirDescarga` corre REAL, así que el MIME y el nombre son los de producción.
+- **R35** — el punto de espera se pone en el CODIFICADOR, no en la acción: así vale igual para
+  Familia A (que espera al servidor) y para Familia B (que resuelve en memoria y sería
+  imposible de pillar «en vuelo»). En curso: `aria-busy="true"` y botón deshabilitado; un
+  segundo click no arranca una segunda descarga; al terminar, el control vuelve.
+- **R37** — se compara una FOTO de la pantalla (texto de la tabla, nº de filas, valor de la
+  búsqueda, paginación) antes y después, y se exige que el listado paginado no se vuelva a
+  consultar.
+- **R38** — con las Server Actions mockeadas, cualquier `fetch` durante el ciclo sería una
+  subida: se espía el global y se exige cero llamadas.
+
+**(b) BARRIDO ESTÁTICO** sobre todo `app/`, que es lo que extiende esas propiedades de 3 tablas
+a las 25 y a las futuras — un test de conducta solo cubre lo que monta:
+
+- ningún módulo declara `formatos` (R34), importa un generador de binario (R33) ni usa
+  `FormData`/`sendBeacon`/`localStorage` (R38);
+- **toda** descarga pasa por uno de los dos adaptadores comunes y **nadie** arma un
+  `DescargaFilasResult` a mano — ver D5.3;
+- los **3** componentes que reciben `obtenerFilas` por prop no son un agujero: se sigue la prop
+  hasta el módulo padre y se exige que allí también haya un adaptador común.
+
+### T G.2 — volumen (`descarga-170-volumen.test.ts`) y rollout parcial
+
+**Peso medido del archivo del tope**, sobre la tabla MÁS ANCHA del rollout (órdenes, 15
+columnas; se contaron las de los 18 módulos de columnas del árbol para elegirla):
+
+```
+[T G.2] xlsx de 5000 filas × 15 columnas: 0.34 MB (359311 bytes)
+```
+
+Generado y releído con `exceljs` en ~1 s. **Muy lejos** del techo que obligaría a bajar `N` (el
+test lo fija en 20 MB y falla si se acerca). El número lo imprime el propio test, para poder
+recomprobarlo en vez de creerlo.
+
+Además: las cabeceras releídas del binario son EXACTAMENTE las declaradas, la hoja tiene `N+1`
+filas, y la PRIMERA y la ÚLTIMA sobreviven en su posición (un recorte se habría comido justo la
+última).
+
+**R26/R27 por las DOS puertas del tope**, que son las dos familias: `filasLocales` (el array del
+cliente) y `filasDesdeResultado` con `limite_excedido` (el tope que aplica el servicio)
+devuelven **literalmente el mismo texto** y ninguna fila. Que coincidan es lo que hace que las
+25 tablas digan lo mismo ante el mismo problema.
+
+**R39 sigue vivo aunque la fase esté cerrada**, y por eso el test no es ceremonial: las 6
+exclusiones del Anexo II nunca tendrán la prop, la FASE 2 volverá a tocar estas pantallas una a
+una, y cualquier tabla futura nace sin ella. `rollout-parcial.test.tsx` compara el HTML de la
+tabla con y sin `descarga` (idéntico salvo el control), comprueba que sin la prop no se carga
+el generador ni se entrega archivo, y lo repite sobre una tabla REAL excluida
+(`OrdenesConErrorTabla`, feature 143).
+
+## D4. Mapa `R<n> → test` de la FASE 1 COMPLETA
+
+Los 39 requisitos de la PARTE 1. Abreviaturas: `svc` = `tests/unit/services/`,
+`act` = `tests/unit/actions/`, `desc` = `tests/unit/descarga/`,
+`cd` = `tests/components/descarga/`. En **negrita**, lo que aporta esta entrega.
+
+| R | Test |
+| --- | --- |
+| R1 | un «ofrece su control» por tabla: `cd/OrdenesApartadoDescarga` · `cd/SateliteDescarga` · `cd/ConfiguracionDescarga` :: los tres ofrecen su control con nombre accesible · `cd/WalletDescarga` :: cada ledger ofrece su control · `cd/WalletPropsDescarga` :: las tres ofrecen su control · `cd/CierresDescarga` :: cada tabla de cierres ofrece su control · `cd/IncidentesDescarga` :: las dos tablas ofrecen su control · **`cd/RankingDescarga` :: el ranking ofrece su control y el archivo trae una fila por mensajero** · **cobertura sistemática**: `desc/cobertura-tablas.guardia` :: estado declarado == código, instancia a instancia |
+| R2 | `desc/cobertura-tablas.guardia` :: las tablas declaradas fuera de alcance no montan control · **`cd/RankingDescarga` :: la tabla de premios del podio NO ofrece control de descarga** · **`cd/rollout-parcial` :: una tabla REAL declarada fuera sigue sin control y sin cambios** |
+| R3 | `cd/OrdenesApartadoDescarga` :: el listado paginado sigue comportándose igual · `cd/ConfiguracionDescarga` :: los tres listados siguen comportándose igual · `cd/WalletDescarga` :: los cuatro ledgers siguen comportándose igual · **`cd/rollout-parcial` :: sin `descarga` la tabla es idéntica** |
+| R4 | `desc/cobertura-tablas.guardia` :: toda tabla del árbol o declara descarga o figura como exclusión justificada (verificado con una tabla nueva sin registrar) |
+| R5 | los 6 archivos de `desc/*-descarga-columnas.test.ts` :: declara sus columnas ENUMERADAS, en el orden de la pantalla · **`cd/RankingDescarga` :: las columnas del archivo son las DECLARADAS, en su orden** |
+| R6 | `desc/usuarios-descarga-columnas` · `desc/plantillas-…` · `desc/api-keys-…` :: un campo nuevo del DTO no aparece en el archivo hasta declararlo |
+| R7 | los 6 archivos de columnas :: emite valores CRUDOS · `cd/WalletPropsDescarga` :: los montos viajan TAL CUAL · **`cd/RankingDescarga` :: porcentaje y conteo viajan TAL CUAL, sin el «%» ni el «/» de la pantalla** |
+| R8 | `desc/usuarios-…` :: rol y estado como ETIQUETA LEGIBLE (ídem plantillas, API keys y los 4 ledgers) · `cd/CierresDescarga` :: estados, causas y destinos como etiqueta legible · `cd/IncidentesDescarga` :: ídem |
+| R9 | `svc/{usuario,plantilla,api-key}-descarga` y `svc/wallet-{caja,tienda,mis-pagos,desglose-mensajero}-descarga` :: devuelve todas las filas del dataset, sin recorte por página · `cd/OrdenesApartadoDescarga` :: una fila por orden del apartado, no solo la página visible · `cd/ConfiguracionDescarga` :: el archivo trae TODAS las filas · `cd/WalletDescarga` :: el ledger ENTERO |
+| R10 | `cd/OrdenesApartadoDescarga` :: envía el estado del apartado como filtro vigente · `cd/SateliteDescarga` :: respeta los filtros de estado, cantón y distrito · `cd/WalletDescarga` :: usa los filtros de fecha vigentes · `cd/WalletPropsDescarga` :: cuentas por pagar exporta solo lo que la búsqueda deja a la vista |
+| R11 | `tests/unit/components/descarga-resultado` :: traduce a filas EN EL MISMO ORDEN (las dos familias) · los 7 servicios :: mismo criterio de orden que el listado · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: en el orden de la pantalla · **`cd/RankingDescarga` :: respeta el orden del ranking** (contrastado contra los nombres que la pantalla pinta) |
+| R12 | `cd/ConfiguracionDescarga` :: el nombre del archivo identifica el listado y la fecha · `cd/OrdenesApartadoDescarga` (`en-bodega-central-YYYY-MM-DD.xlsx`) · `cd/IncidentesDescarga` · **`tests/integration/descarga-170-volumen` :: `ordenes-2026-07-31.xlsx`** |
+| R13 | los siete archivos de `cd/` :: el nombre accesible de cada control identifica SU tabla · `cd/CierresDescarga` :: `<Resultado> · <mensajero>` en el detalle de bodega |
+| R14 | `svc/wallet-tienda-descarga` :: el archivo de la tienda A no trae ni una fila de la B, y viceversa · `svc/wallet-mis-pagos-descarga` :: ídem con dos mensajeros · `svc/wallet-desglose-mensajero-descarga` :: un mensajero NO puede pedir el desglose de otro · `cd/SateliteDescarga` :: solo órdenes de la zona del actor · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: solo lo del alcance del adminSatelite |
+| R15 | `svc/wallet-tienda-descarga` :: un `tiendaId` inyectado NO amplía el alcance · `svc/wallet-mis-pagos-descarga` :: ídem con `mensajeroId` — **ambos verificados por MUTACIÓN** |
+| R16 | las 7 de `act/*-descarga-action` :: devuelve unauthenticated y ninguna fila cuando no hay sesión |
+| R17 | los 7 servicios :: forbidden y ninguna fila a todo rol ajeno, con el repositorio SIN invocar, + CONTRAPRUEBA con el rol autorizado · las 7 actions :: propaga forbidden sin filas |
+| R18 | las 7 actions :: validation_error con una clave fuera de la lista blanca, y también con `page`/`pageSize` · `cd/ConfiguracionDescarga` y `cd/WalletDescarga` :: ninguna clave de paginación viaja en el input |
+| R19 | `svc/plantilla-descarga` :: excluye las plantillas borradas igual que el listado · `svc/usuario-descarga` y `svc/api-key-descarga` :: el conjunto completo == la concatenación de las páginas |
+| R20 | verificado LISTADO POR LISTADO, no en el mecanismo: `cd/SateliteDescarga` · `cd/CierresDescarga` · `cd/IncidentesDescarga` · los 4 servicios de dinero |
+| R21 | `desc/columnas-sensibles.guardia` :: ninguna declaración contiene claves de credencial, token o secreto · `svc/api-key-descarga` :: ninguna fila lleva el hash ni el secreto de la key |
+| R22 | `desc/columnas-sensibles.guardia` :: ninguna fila emite ruta de almacenamiento ni URL firmada · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: sobre las celdas REALES generadas |
+| R23 | `desc/columnas-sensibles.guardia` :: ninguna fila emite un identificador interno con forma de uuid · los 6 archivos de columnas :: no expone identificadores internos · **`cd/RankingDescarga` :: no exporta ni el id ni el premio** |
+| R24 | `desc/usuarios-…` y `desc/plantillas-descarga-columnas` :: no emite campos que el listado no muestra · los 4 ledgers :: la fecha como día calendario, igual que la tabla · **`cd/RankingDescarga` :: el `premio` que el DTO trae NO sale, porque lo muestra la otra tarjeta** |
+| R25 | `desc/columnas-sensibles.guardia` :: la guardia cubre TODAS las declaraciones del árbol, no una lista fija (convención de nombre + barrido del disco + prohibición de declararlas fuera de esa convención) |
+| R26 | `tests/unit/components/descarga-resultado` :: `filasLocales` rechaza y no produce archivo cuando el array supera el tope · `cd/WalletPropsDescarga` y **`cd/RankingDescarga`** :: por encima del tope, error accionable y NINGÚN archivo · **`tests/integration/descarga-170-volumen` :: con N+1 filas no se produce archivo** · **`cd/ControlDescargaTransversal` :: ninguna tabla se salta el tope (las 25, estático)** |
+| R27 | los 7 servicios :: limite_excedido con total y límite, sin filas · las 7 actions :: lo propagan · `descarga-resultado` :: lo traduce a un error accionable · **`descarga-170-volumen` :: el mensaje trae total y tope por las DOS puertas, con el mismo texto** |
+| R28 | los 7 servicios :: o entrega todas las filas o el error de tope · `descarga-resultado` :: `filasLocales` no trunca · `tests/integration/descarga-dataset-roundtrip` (60 filas) y **`descarga-170-volumen` (5000 filas releídas del binario)** |
+| R29 | los 7 servicios :: nunca pide al repositorio más de `N+1` filas (`take = N+1`, `skip = 0`) |
+| R30 | `cd/SateliteDescarga` :: no ejecuta ninguna lectura adicional al servidor (estático) · `cd/WalletPropsDescarga` :: ninguna de las tres relee del servidor (estático) |
+| R31 | `tests/unit/components/descarga-resultado` :: devuelve el resultado vacío tal cual para que el control avise sin archivo (las dos familias) · `tests/components/DescargarDataset` (151) :: sin filas no se produce archivo y se avisa |
+| R32 | `cd/OrdenesApartadoDescarga` :: la acción del modo completo no se llama hasta que alguien pulsa · `cd/WalletDescarga` y `cd/WalletPropsDescarga` :: ídem · **`cd/rollout-parcial` :: sin la prop no se carga ni el generador** |
+| R33 | **`cd/ControlDescargaTransversal` :: el contenido lo produce la función común, no cada listado** (identidad del buffer en las 3 formas) **+ barrido estático: ningún módulo importa un generador de binario** |
+| R34 | **`cd/ControlDescargaTransversal` :: las tres formas generan xlsx y ninguna ofrece elección de formato** + barrido estático: nadie declara `formatos` |
+| R35 | **`cd/ControlDescargaTransversal` :: mientras descarga, el control lo indica y no admite una segunda ejecución** |
+| R36 | `tests/unit/components/descarga-resultado` :: traduce cualquier error de acción a un mensaje accionable sin datos personales |
+| R37 | `cd/CierresDescarga` :: descargar no cambia la fila expandida ni el modal abierto · **`cd/ControlDescargaTransversal` :: descargar no altera la página, la búsqueda ni las filas visibles** |
+| R38 | **`cd/ControlDescargaTransversal` :: el archivo nace y muere en el navegador** (fetch espiado + entrega local) + barrido estático |
+| R39 | **`cd/rollout-parcial` ×3** :: sin la prop no hay control y el DOM es idéntico · no se carga el generador ni se entrega archivo · una tabla REAL excluida sigue igual |
+
+**Requisitos de la FASE 1 sin test: NINGUNO (0 de 39).**
+
+R40–R54 son de la **PARTE 2 (paginación)** y siguen **sin cubrir a propósito**: son las tandas
+H–M, que no entran en esta entrega.
+
+## D5. Las tres deudas: dos cerradas, una declarada
+
+Se miraron una a una. No se cerraron las tres por inercia.
+
+### D5.1 — `exceljs` trunca el nombre de la pestaña a 31 caracteres · **CERRADA**
+
+**Qué era.** Con títulos compuestos con datos (`Desglose de <mensajero>`,
+`<Resultado> · <mensajero>`), `exceljs` avisa por consola y trunca la pestaña. Y —esto no
+estaba en la deuda con la gravedad que tiene— **LANZA** si el nombre lleva `* ? : \ / [ ]` o
+empieza/termina en comilla simple, con lo que la descarga acaba en un toast genérico y
+**ningún archivo**. Verificado leyendo `exceljs/lib/doc/worksheet.js` (v4.4.0), no de memoria.
+
+**Cómo se cerró, y por qué así.** La salida que tocaba EL CONTRATO de la 151 (un nombre de hoja
+distinto del título en `DataTableDescarga`) sigue descartada. Se tomó la otra que la propia
+deuda apuntaba: **`construirDescarga` recorta con criterio**. Un `nombreHoja()` en
+`lib/utils/descarga-dataset.ts` sustituye los caracteres que hacen lanzar, quita las comillas
+de los extremos, cae a `Datos` si no queda nada utilizable (o si el nombre es `History`,
+reservado por Excel) y recorta a 31 **marcando el recorte con «…»**.
+
+- **El contrato de la 151 no se toca:** `DataTableDescarga` queda igual. Ninguna de las 25
+  tablas cambia una línea.
+- **El `titulo` no se toca:** sigue siendo el nombre accesible del control y la base del nombre
+  de archivo, que es donde el usuario reconoce lo que descargó. Solo se sanea la PESTAÑA, que es
+  un detalle del `xlsx` que esa función ya poseía (igual que ya poseía el slug del archivo).
+- **No se retrocede al espacio anterior** al recortar: sacrificaría hasta una palabra entera de
+  un nombre propio por estética en una etiqueta, y como cada archivo lleva UNA hoja, no hay dos
+  pestañas que distinguir.
+- **6 tests nuevos** en `tests/unit/utils/descarga-dataset.test.ts` (**añadidos**; ni una
+  aserción de la 151 tocada, porque para títulos cortos y limpios `nombreHoja` es la
+  identidad), incluido el caso que antes reventaba: un título con `/` ahora **produce archivo**.
+
+### D5.2 — `ListarOrdenesCompletoServiceResult` escrito a mano · **DECLARADA, no cerrada**
+
+Es un cambio de una línea y aun así **no se hace aquí**, por dos razones:
+
+1. **No es capa de presentación.** Vive en `lib/interfaces/services/IOrdenService.ts` — la
+   interfaz de un servicio, y esta entrega es de frontend. El hermano de BORDE
+   (`ListarOrdenesCompletoResult`), que es el que consume el cliente, ya quedó unificado como
+   `ListarCompletoResult<OrdenListItemDTO>` en la tanda 0.
+2. **No cubre ningún riesgo vivo.** El union de servicio de órdenes lo lee UN consumidor
+   (`OrdenService`), y TypeScript es estructural: no hay divergencia posible que un test pueda
+   cazar ni que un usuario pueda notar. Es cosmética de tipos.
+
+Queda para quien toque ese servicio (probablemente la FASE 2, que lo modifica de todos modos).
+
+### D5.3 — El tope no se re-probó en la tanda E · **CERRADA, por otra vía**
+
+**Por qué no se repitió lo que se intentó.** Montar 5001 cierres en jsdom hace que esas
+pantallas rendericen además 5001 tarjetas de la vista tipo factura: el test no terminaba.
+Repetirlo en 6 pantallas es caro y, además, solo probaría **esas** 6.
+
+**Lo que se hizo en su lugar**, en `cd/ControlDescargaTransversal` («ninguna tabla se salta el
+tope: el resultado lo arman los dos adaptadores comunes»): una comprobación ESTÁTICA de que
+**toda** tabla del árbol obtiene sus filas por uno de los dos adaptadores comunes —los dos
+únicos sitios donde vive el tope— y de que **ningún** módulo arma un `DescargaFilasResult` a
+mano (`{ status: "ok", filas: … }`), que es la única forma de saltárselo. Incluye los 3
+componentes que reciben `obtenerFilas` por prop, siguiendo la prop hasta el módulo padre.
+
+Es mejor que el test que sustituye, y no solo más barato:
+
+| | 5001 filas por pantalla | la guardia estática |
+| --- | --- | --- |
+| Cobertura | las 6 pantallas de la tanda E | **las 25 y las futuras** |
+| Coste | minutos (no terminaba) | **milisegundos** |
+| Qué caza | que ESA pantalla aplique el tope | que **ninguna** pueda esquivarlo |
+
+**VERIFICADA POR MUTACIÓN.** Se introdujo la fuga exacta que vigila —sustituir en el ranking
+`filasLocales(ranking, filaDescargaRanking)` por un
+`async () => ({ status: "ok", filas: ranking.map(filaDescargaRanking) })`, que es como se
+saltaría el tope alguien con prisa— y la guardia se puso roja diciendo dónde:
+
+```
+AssertionError: app/(app)/ranking/_components/RankingModule.tsx: su descarga no pasa por
+un adaptador común: expected false to be true
+```
+
+Ningún otro test se movió (los de conducta del ranking siguen verdes: con 3 filas, saltarse el
+tope no se nota — que es justo el punto). Revertido.
+
+Y no sustituye a los tests de conducta: el tope se sigue ejercitando de verdad con 5001 filas
+en `cd/WalletPropsDescarga` (tanda D), en `cd/RankingDescarga` (tanda F) y contra el binario en
+`descarga-170-volumen` (T G.2).
+
+## D6. Tests existentes tocados
+
+**Uno, y solo se le AÑADIÓ:** `tests/unit/utils/descarga-dataset.test.ts` gana un `describe` de
+6 tests para `nombreHoja` y un símbolo más en su import. **Ninguna aserción de la 151 se cambió
+ni se relajó**: sus 9 tests siguen escritos igual y verdes, porque el saneado es la identidad
+para sus títulos («Órdenes», «Órdenes en bodega»).
+
+`tests/components/RankingModule.test.tsx` (feature 76) **NO necesitó cambios** —ya mockeaba
+`useToast`, que es lo que había roto tres suites en las tandas anteriores— y sus 11 tests
+siguen verdes con el control montado.
+
+## D7. Archivos de esta entrega
+
+**Creados (5)**
+
+- `app/(app)/ranking/_components/ranking-descarga-columnas.ts` — columnas y proyección del ranking (T F.1).
+- `tests/components/descarga/RankingDescarga.test.tsx` — 5 tests (T F.1).
+- `tests/components/descarga/ControlDescargaTransversal.test.tsx` — 7 tests (T G.1).
+- `tests/integration/descarga-170-volumen.test.ts` — 2 tests (T G.2).
+- `tests/components/descarga/rollout-parcial.test.tsx` — 3 tests (T G.2).
+
+**Modificados (6)**
+
+- `app/(app)/ranking/_components/RankingModule.tsx` — prop `descarga` en la tabla del ranking + `TITULO_DESCARGA` único. La `<table>` de premios, intacta.
+- `lib/utils/descarga-dataset.ts` — `nombreHoja()` y su uso al nombrar la hoja (D5.1).
+- `tests/unit/descarga/censo-tablas.ts` — ranking a `con_descarga`; cero `pendiente`.
+- `tests/unit/descarga/cobertura-tablas.guardia.test.ts` — test de cierre de fase (+1).
+- `tests/unit/utils/descarga-dataset.test.ts` — 6 tests añadidos (D6).
+- `specs/170-export-todas-las-tablas/tasks.md` — T F.1, T G.1 y T G.2 marcadas, con lo medido.
+
+**Cero backend.** Ni servicios, ni repositorios, ni acciones, ni migraciones, ni RLS: las dos
+tandas son de presentación. `lib/utils/descarga-dataset.ts` es una utilidad de presentación sin
+dominio (no importa `lib/services`, `lib/actions` ni Prisma; su propio test lo vigila).
+
+## D8. Puertas (medición final)
+
+Salida real, no prometida.
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+=== typecheck exit: 0 ===
+
+$ pnpm run lint
+✖ 20 problems (0 errors, 20 warnings)
+=== lint exit: 0 ===
+
+$ pnpm test
+ Test Files  710 passed | 4 skipped (714)
+      Tests  8497 passed | 74 skipped (8571)
+   Duration  344.19s
+
+$ ./init.sh
+✓ lint paso
+ Test Files  710 passed | 4 skipped (714)
+      Tests  8497 passed | 74 skipped (8571)
+✓ test paso
+✓ todas las migraciones tienen down.sql
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+```
+
+| Puerta | Baseline (D0) | Después |
+| --- | --- | --- |
+| `pnpm run typecheck` | 0 errores | **0 errores** |
+| `pnpm run lint` | 0 errores / 20 warnings | **0 errores / 20 warnings** (los mismos) |
+| `pnpm test` | 710 archivos (706 passed + 4 skipped) · 8547 tests: 8473 passed / 74 skipped / 0 fallos | **714 archivos** (710 passed + 4 skipped) · **8571 tests: 8497 passed / 74 skipped / 0 fallos** — +4 archivos, +24 tests, **0 rotos nuevos** |
+| `./init.sh` | `== init OK ==` | `== init OK ==` |
+
+Los +24 cuadran uno a uno: 5 (Ranking) + 7 (transversal) + 2 (volumen) + 3 (rollout parcial) +
+1 (cierre del censo) + 6 (`nombreHoja`).
+
+## D9. Para el PR — qué NO entra en esta fase
+
+1. **La FASE 2 entera (paginación server-side, tandas H–M, R40–R54).** Decisión del humano en
+   Q3: primero el Excel, después la paginación. Las **13** tablas del Anexo III siguen
+   recibiendo su dataset entero por props, con el riesgo que eso ya tenía ANTES de esta feature
+   —no se agrava (R30)— y con el tope de 5000 como red. Las **3** del Anexo IV (ranking y las
+   dos vistas agrupadas de gestiones) se propone no paginarlas nunca; **Q1 sigue abierta**.
+2. **Búsqueda y filtros NUEVOS** en esas tablas: son la feature 145. Esta feature solo usa los
+   filtros que cada tabla YA tenía.
+3. **Descargas asíncronas** por encima del tope, **selección de columnas por el usuario** y
+   **formatos distintos de `xlsx`** (P7): fuera de alcance explícito.
+4. **Q4** (revisión en pantalla de bodega satélite y cuentas por pagar) y **Q5** (catálogos de la
+   bodega satélite) son preguntas de la fase 2.
+
+## D10. Lo que el leader debe llevarse al cierre
+
+1. **`OrdenesApartado` está cableada pero NADIE la monta.** Solo la usa
+   `OrdenesRevisionMaestro`, y ese módulo no lo monta ninguna página: el propio
+   `OrdenesListado.tsx:373` lo llama «la vista legacy». Es el mismo patrón por el que el Anexo
+   II dejó fuera el módulo de zonas (P4). **No se tocó** —el encargo la dejó explícitamente
+   pendiente de decisión del humano— y sigue en el censo como `con_descarga`, así que el test
+   de cierre de fase cuadra con ella DENTRO. Si el humano decide sacarla por coherencia con la
+   exclusión de zonas, el cambio es: quitar la prop, pasarla a `fuera` con su motivo y bajar el
+   total del Anexo I de 25 a 24 en la guardia. Tres líneas, ninguna sorpresa.
+2. **`DetalleSecciones` solo lo monta `CierresBodegaAdminModule`** (C13.3): la descarga por
+   sección solo se ve en el detalle de un cierre de BODEGA, porque `CierresAdminModule` pasó a
+   `CierreFacturaDetalle`, que no usa `DataTable`. Censada y cableada porque el módulo existe y
+   se usa.
+3. **La deuda D5.2 sigue abierta** y es de backend (una línea).
+4. **`descargaConfig.MAX_FILAS` se lee en servidor y en cliente** (B11.4): si alguien bajara el
+   tope por entorno, el servidor sería el estricto — falla cerrado, nunca entrega de más.
+
+---
+
+# FASE 2 — CIERRE (tandas H–M, T M.2)
+
+> Escrito por la **tanda M** (2026-08-01), que cierra la FASE 2. El detalle de cada tanda vive en
+> `progress/impl_170-fase2-tanda-{h,i,j,k,l,m}.md`; aquí queda lo que `CHECKPOINTS.md` exige de
+> este archivo: la trazabilidad `R<n> → test` **completa**, el censo final y la medición de
+> volumen.
+
+## F2.1 — Trazabilidad `R1 → R54`, completa y sin huecos
+
+Una fila por requisito, con el test o los tests **ancla**. Cuando un requisito está afirmado en
+decenas de casos (los siete listados × cuatro afirmaciones de la tanda I, p. ej.), la fila nombra
+el patrón y el archivo; la enumeración exhaustiva vive en la bitácora de su tanda.
+
+Prefijos: `cd/` = `tests/components/descarga/` · `desc/` = `tests/unit/descarga/` ·
+`svc/` = `tests/unit/services/` · `act/` = `tests/unit/actions/` ·
+`rep/` = `tests/unit/repositories/` · `pag/` = `tests/components/paginacion/` ·
+`int/` = `tests/integration/`.
+
+### PARTE 1 — Descarga a Excel (R1–R39) · **39 de 39 cubiertos**
+
+| R | Test ancla |
+| --- | --- |
+| R1 | un «ofrece su control» por tabla en los 7 archivos de `cd/` + `desc/cobertura-tablas.guardia` :: estado declarado == código, instancia a instancia |
+| R2 | `desc/cobertura-tablas.guardia` :: las tablas declaradas fuera de alcance no montan control · `cd/RankingDescarga` :: la tabla de premios NO ofrece control · `cd/rollout-parcial` :: una tabla REAL excluida sigue sin control |
+| R3 | `cd/OrdenesApartadoDescarga` · `cd/ConfiguracionDescarga` · `cd/WalletDescarga` :: «sigue comportándose igual» · `cd/rollout-parcial` :: sin `descarga` el DOM es idéntico |
+| R4 | `desc/cobertura-tablas.guardia` :: toda tabla del árbol o declara descarga o figura como exclusión justificada (verificado con una tabla nueva sin registrar) |
+| R5 | los 6 `desc/*-descarga-columnas.test.ts` :: declara sus columnas ENUMERADAS, en el orden de la pantalla · `cd/RankingDescarga` :: las columnas del archivo son las DECLARADAS |
+| R6 | `desc/{usuarios,plantillas,api-keys}-descarga-columnas` :: un campo nuevo del DTO no aparece hasta declararlo |
+| R7 | los 6 archivos de columnas :: emite valores CRUDOS · `cd/WalletPropsDescarga` :: los montos viajan TAL CUAL · `cd/RankingDescarga` :: porcentaje y conteo sin «%» ni «/» |
+| R8 | `desc/usuarios-…` :: rol y estado como ETIQUETA LEGIBLE (ídem plantillas, API keys, 4 ledgers) · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: estados, causas y destinos |
+| R9 | los 7 `svc/*-descarga` :: todas las filas del dataset, sin recorte por página · `cd/OrdenesApartadoDescarga` · `cd/ConfiguracionDescarga` · `cd/WalletDescarga` |
+| R10 | `cd/OrdenesApartadoDescarga` :: el estado del apartado como filtro vigente · `cd/SateliteDescarga` :: estado, cantón y distrito · `cd/WalletDescarga` :: fechas · `svc/wallet-cuentas-paginado` :: **la búsqueda vigente acota el archivo igual que acota la tabla** (T M.1) |
+| R11 | `tests/unit/components/descarga-resultado` :: mismo orden, las dos familias · los 7 servicios :: mismo criterio que el listado · `rep/cuentas-por-pagar-paginado-where` :: **la página es un prefijo EXACTO del conjunto** (T M.1) |
+| R12 | `cd/ConfiguracionDescarga` · `cd/OrdenesApartadoDescarga` · `cd/IncidentesDescarga` · `int/descarga-170-volumen` :: `ordenes-2026-07-31.xlsx` |
+| R13 | los 7 archivos de `cd/` :: el nombre accesible de cada control identifica SU tabla · `cd/CierresDescarga` :: `<Resultado> · <mensajero>` |
+| R14 | `svc/wallet-tienda-descarga` · `svc/wallet-mis-pagos-descarga` · `svc/wallet-desglose-mensajero-descarga` · `cd/SateliteDescarga` · `cd/CierresDescarga` · `cd/IncidentesDescarga` |
+| R15 | `svc/wallet-tienda-descarga` :: un `tiendaId` inyectado NO amplía el alcance · `svc/wallet-mis-pagos-descarga` :: ídem con `mensajeroId` — **ambos verificados por MUTACIÓN** |
+| R16 | las 8 de `act/*-descarga-action` :: unauthenticated y ninguna fila sin sesión (+ `act/wallet-mensajero-actions` :: el modo completo de cuentas por pagar, T M.1) |
+| R17 | los 8 servicios :: forbidden y ninguna fila a todo rol ajeno, con el repositorio SIN invocar, + CONTRAPRUEBA con el rol autorizado |
+| R18 | las 8 actions :: validation_error con una clave fuera de la lista blanca, y también con `page`/`pageSize` (T M.1 lo añade para cuentas por pagar) |
+| R19 | `svc/plantilla-descarga` :: excluye las borradas igual que el listado · `svc/usuario-descarga` y `svc/api-key-descarga` :: el conjunto == la concatenación de las páginas |
+| R20 | verificado LISTADO POR LISTADO: `cd/SateliteDescarga` · `cd/CierresDescarga` · `cd/IncidentesDescarga` · los 4 servicios de dinero |
+| R21 | `desc/columnas-sensibles.guardia` :: ninguna declaración contiene credencial, token ni secreto · `svc/api-key-descarga` :: ninguna fila lleva el hash |
+| R22 | `desc/columnas-sensibles.guardia` :: ninguna fila emite ruta de almacenamiento ni URL firmada · `cd/CierresDescarga` e `cd/IncidentesDescarga` :: sobre las celdas REALES |
+| R23 | `desc/columnas-sensibles.guardia` :: ninguna celda con forma de uuid · los 6 archivos de columnas · `cd/RankingDescarga` |
+| R24 | `desc/usuarios-…` y `desc/plantillas-descarga-columnas` :: no emite campos que el listado no muestra · los 4 ledgers · `cd/RankingDescarga` :: el `premio` no sale |
+| R25 | `desc/columnas-sensibles.guardia` :: la guardia cubre TODAS las declaraciones del árbol (convención de nombre + barrido de disco + prohibición de declararlas fuera de esa convención) |
+| R26 | `descarga-resultado` :: `filasLocales` rechaza por encima del tope · `cd/WalletPropsDescarga` y `cd/RankingDescarga` · `int/descarga-170-volumen` :: con N+1 no hay archivo · `cd/ControlDescargaTransversal` :: ninguna de las 25 se salta el tope · `svc/wallet-cuentas-paginado` :: **el tope del modo completo, medido en 5000/5001** (T M.1) |
+| R27 | los 8 servicios :: `limite_excedido` con total y límite y sin filas · las 8 actions :: lo propagan · `int/descarga-170-volumen` :: el mismo texto por las DOS puertas |
+| R28 | los 8 servicios :: o todas las filas o el error · `int/descarga-dataset-roundtrip` (60) e `int/descarga-170-volumen` (5000 releídas del binario) |
+| R29 | los 7 servicios de FASE 1 :: nunca más de `N+1` filas · `svc/wallet-cuentas-paginado` :: por encima del tope **no se transporta ni una fila** (T M.1) |
+| R30 | `cd/SateliteDescarga` y `cd/WalletPropsDescarga` :: no relee del servidor (estático) · `pag/paginacion-transversal` :: **los 3 del Anexo IV proyectan el array que ya tienen** (T M.1) · `rep/cuentas-por-pagar-paginado-where` :: descargar cuesta las MISMAS dos consultas que leer la página |
+| R31 | `descarga-resultado` :: el resultado vacío se devuelve tal cual para que el control avise sin archivo · `tests/components/DescargarDataset` (151) · `svc/wallet-cuentas-paginado` :: archivo vacío y total 0, no un error |
+| R32 | `cd/OrdenesApartadoDescarga` · `cd/WalletDescarga` · `cd/WalletPropsDescarga` :: la acción del modo completo no se llama hasta que alguien pulsa · `cd/rollout-parcial` :: sin la prop no se carga ni el generador |
+| R33 | `cd/ControlDescargaTransversal` :: el contenido lo produce la función común (identidad del buffer en las 3 formas) + barrido estático |
+| R34 | `cd/ControlDescargaTransversal` :: xlsx y ninguna elección de formato + barrido estático |
+| R35 | `cd/ControlDescargaTransversal` :: mientras descarga, el control lo indica y no admite una segunda ejecución |
+| R36 | `descarga-resultado` :: traduce cualquier error de acción a un mensaje accionable sin datos personales |
+| R37 | `cd/CierresDescarga` :: descargar no cambia la fila expandida ni el modal · `cd/ControlDescargaTransversal` :: no altera página, búsqueda ni filas visibles |
+| R38 | `cd/ControlDescargaTransversal` :: el archivo nace y muere en el navegador (fetch espiado + entrega local) + barrido estático |
+| R39 | `cd/rollout-parcial` ×3 :: sin la prop no hay control y el DOM es idéntico · no se carga el generador · una tabla REAL excluida sigue igual |
+
+### PARTE 2 — Paginación server-side (R40–R54) · **15 de 15 cubiertos**
+
+| R | Test ancla |
+| --- | --- |
+| R40 | `tests/unit/config/paginacion-dominios.test.ts` :: cada dominio declara default y máximo y el default no supera al máximo (T H.1) · los 13 `svc/*-paginado.test.ts` :: «devuelve la página pedida y el total del conjunto» · «acota el tamaño de página al máximo configurado» |
+| R41 | `desc/contrato-paginado.test.ts` :: todo listado paginado devuelve el total junto a la página (conducta ×4) · «ningún resultado del repo declara la página sin declarar el total» (forma, estático) · los 13 servicios :: el total es el del CONJUNTO, nunca `items.length` |
+| R42 | `desc/contadores-cabecera.guardia.test.ts` ×5 :: ninguna pantalla paginada deriva su contador de un `.length`, el registro no se despega del código, y las cuatro colas + satélite + cuentas muestran el `total` del servidor · `pag/ColasPaginacion` :: el contador en la ÚLTIMA página (10 de 60) · `pag/SatelitePaginacion` · `pag/CuentasPorPagarPaginacion` |
+| R43 | `pag/BajoRiesgoPaginacion` :: cada listado navega entre páginas y el control tiene nombre accesible (los 7) · `pag/ColasPaginacion` (las 4, nombres distintos entre sí) · `pag/SatelitePaginacion` · `pag/CuentasPorPagarPaginacion` (los DOS controles conviven) · `pag/paginacion-transversal` :: **el censo de las 13 constantes `PAGINACION_…_LABEL`, en los dos sentidos** |
+| R44 | los 13 `svc/*-paginado.test.ts` :: «el conjunto paginado y el dataset completo coinciden para el mismo actor» + su CONTRAPRUEBA por rol y por zona · los 4 `rep/*-where.test.ts` :: el acotamiento en el **WHERE** (los tests de servicio usan dobles y no lo ven) · `pag/*` ×4 :: las mismas filas que antes en el PRIMER pintado, sin `await` |
+| R45 | `svc/recepcion-satelite-paginado` :: el mismo conjunto que el filtro de cliente en las **64 combinaciones** · `svc/wallet-cuentas-paginado` :: la **batería de 25 textos** contra la búsqueda de cliente copiada literal, en la página **y en el modo completo** (T M.1) · `pag/CuentasPorPagarPaginacion` :: la búsqueda mira el CONJUNTO y devuelve a la página 1 |
+| R46 | `tests/unit/actions/satelite-catalogos.test.ts` :: ofrece todas las opciones del conjunto del actor, no las de la página; y ninguna de zonas ajenas · `pag/SatelitePaginacion` :: la página trae un cantón y el desplegable los cuatro |
+| R47 | `pag/SatelitePaginacion` :: «seleccionar todo» marca las 25 de la página 2 y NINGUNA de la 1 |
+| R48 | `pag/SatelitePaginacion` ×2 :: las acciones de lote se deciden sobre lo SELECCIONADO (3 de 10) y «Enviar a central» no se ofrece aunque el conjunto tenga 10 en otra página |
+| R49 | `svc/cierre-bodega-consolidables-paginado` :: los cinco agregados sobre el conjunto COMPLETO, con página y conjunto de números distintos · `svc/wallet-cuentas-paginado` :: cada fila declara el libro ENTERO de su mensajero (suma `2410.75`, la página 1 estrictamente menor) · `rep/cuentas-por-pagar-paginado-where` :: la agregación del dinero NO lleva `where`, `take` ni `skip` |
+| R50 | `pag/ColasPaginacion` :: cambiar de página no altera los 5 totales, ni los avisos de bloqueo, ni el monto tecleado en un sub-modal abierto · `pag/CuentasPorPagarPaginacion` ×3 :: expandir el desglose en cualquier página, sin arrastre, sin tocar el buscador |
+| R51 | los 13 `svc/*-paginado.test.ts` :: «conserva el criterio de ordenación actual» (con **2 DESVIACIONES declaradas**: saldos de tiendas y cuentas por pagar, que no tenían ninguno) · `rep/satelite-paginado-where` :: el `ORDER BY` con `array_position` · `rep/cuentas-por-pagar-paginado-where` :: el orden no depende del que devuelva la base |
+| R52 | `pag/BajoRiesgoPaginacion` (7) · `pag/ColasPaginacion` (4, desde la página 2) · `pag/SatelitePaginacion` (2, con y sin filtros) · `pag/CuentasPorPagarPaginacion` (2, desde la página 3) · **`pag/paginacion-transversal` ×2 :: ninguno de los TRECE proyecta el array de la página (estático, con el adaptador declarado por listado) y descargar desde la última página entrega el conjunto (conducta)** |
+| R53 | **`pag/paginacion-transversal` ×4** :: el ranking entrega el conjunto y no ofrece navegación · la vista agrupada del mensajero entrega el grupo entero y su contador lo dice (con contraprueba de que la MISMA pantalla sí pagina su otra tabla) · las secciones del detalle del admin, y la sección vacía no se pinta · el censo del Anexo IV son TRES, con motivo, y su descarga no relee nada |
+| R54 | los 13 `svc/*-paginado.test.ts` :: «no ejecuta más consultas que el listado sin paginar, salvo el conteo» · los 4 `rep/*-where.test.ts` :: el número EXACTO de consultas (2 = página + conteo; 1 en los dos que agregan en memoria) · **`pag/paginacion-transversal` ×2 :: los TRECE declaran `fallbackData` (estático) y cada página cuesta UNA lectura, ni dos (conducta)** |
+
+**Requisitos sin test: NINGUNO (0 de 54).**
+
+**Un matiz MEDIDO, no maquillado (T M.1 §2.2):** R54 se cumple **listado a listado en el
+servidor** —una consulta con el conteo dentro, afirmado en los trece—, pero **no en el navegador**:
+SWR revalida al montar la página que el Server Component ya resolvió, así que cada pantalla hace
+hoy una lectura de cliente que antes de paginar no hacía. Queda declarado como **Q-M1** en
+`progress/impl_170-fase2-tanda-m.md`, con su salida propuesta y el motivo por el que no se aplicó
+en la tanda de cierre.
+
+## F2.2 — Censo final
+
+| Concepto | Nº |
+| --- | --- |
+| **Tablas DENTRO del export (Anexo I)** | **25** |
+| Tablas FUERA del export (Anexo II) | 6 |
+| **Listados PAGINADOS server-side (Anexo III)** | **13** |
+| **EXCLUSIONES de la paginación (Anexo IV)** | **3** |
+| Tablas censadas en el árbol | 31 (30 `<DataTable>` en 29 archivos + 1 `<table>` cruda) |
+| Contadores de cabecera `({X.length})` vivos | 2 (los del Anexo IV) |
+| Dominios con `DEFAULT_PAGE_SIZE`/`MAX_PAGE_SIZE` | 7 |
+| Listados con `listarCompleto` propio | 8 (7 de FASE 1 + cuentas por pagar, T M.1) |
+
+## F2.3 — Medición de volumen
+
+**5000 filas × 15 columnas** (órdenes, la tabla MÁS ANCHA del rollout) ⇒ **0,34 MB
+(359 311 bytes)**, generado y releído en ~1 s. Lo imprime `int/descarga-170-volumen.test.ts` para
+poder recomprobarlo en vez de creerlo. Muy lejos de obligar a bajar `N`.

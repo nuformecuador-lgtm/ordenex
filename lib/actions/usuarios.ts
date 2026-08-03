@@ -5,6 +5,7 @@ import {
   actualizarUsuarioSchema,
   cambiarEstadoUsuarioSchema,
   crearUsuarioSchema,
+  listarUsuariosCompletoSchema,
   listarUsuariosSchema,
   type ActionError,
   type ActualizarUsuarioResult,
@@ -12,6 +13,7 @@ import {
   type CrearUsuarioResult,
   type ListarRolesResult,
   type ListarTiposIdentificacionResult,
+  type ListarUsuariosCompletoResult,
   type ListarUsuariosResult,
   type ObtenerUsuarioResult,
 } from "@/lib/types/usuario";
@@ -81,6 +83,26 @@ export async function listarUsuarios(
     const data = listarUsuariosSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
     const service = deps.usuarioService ?? buildUsuarioService();
     return service.listar(data, actor);
+  });
+  return isAppErrorShape(r) ? toUsuarioActionError(r) : r;
+}
+
+/**
+ * Feature 170 (T B.2, design §4) — dataset COMPLETO del listado de usuarios, sin
+ * paginacion, para la descarga. Calcado de `listarUsuarios` a proposito: mismo borde,
+ * mismo actor, mismo schema (menos `page`/`pageSize`) y el MISMO servicio, que es quien
+ * autoriza y aplica el tope. Ninguna rama devuelve filas junto a un error (R16/R17/R18).
+ */
+export async function listarUsuariosCompleto(
+  input: unknown,
+  deps: UsuarioActionDeps = {},
+): Promise<ListarUsuariosCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
+    const data = listarUsuariosCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
+    const service = deps.usuarioService ?? buildUsuarioService();
+    return service.listarCompleto(data, actor);
   });
   return isAppErrorShape(r) ? toUsuarioActionError(r) : r;
 }

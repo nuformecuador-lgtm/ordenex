@@ -5,7 +5,7 @@ import {
   itemsVisibles,
   primerDestino,
   SIDEBAR_ITEMS,
-  ROLES_ANALITICA,
+  ROLES_ACCESO_ANALITICA,
   type MenuItem,
 } from "@/lib/auth/menu-visibility";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -386,22 +386,26 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
   // autorización (el ítem del menú y el guard de la página) deben declarar
   // EXACTAMENTE el mismo conjunto de roles. Se compara por CONJUNTO (inclusión
   // mutua), no por identidad de referencia (`toBe`): un test que solo comprobara
-  // `analitica.roles === ROLES_ANALITICA` pasaría igual aunque alguien copiara los
-  // valores a mano en el ítem y luego cambiara sólo uno de los dos sitios — el
+  // `analitica.roles === ROLES_ACCESO_ANALITICA` pasaría igual aunque alguien copiara
+  // los valores a mano en el ítem y luego cambiara sólo uno de los dos sitios — el
   // bug exacto que R10 existe para atrapar. La feature 133 ("recortes por rol")
   // debe tocar los DOS sitios (`lib/auth/menu-visibility.ts`: el `roles` del ítem,
-  // Y `ROLES_ANALITICA`, que también usa el guard de `app/(app)/analitica/page.tsx`)
-  // o este test se pone rojo.
-  it("R10: el 'roles' del ítem de analítica es el mismo CONJUNTO que ROLES_ANALITICA (usada por el guard de la página)", () => {
+  // Y `ROLES_ACCESO_ANALITICA`, que también usa el guard de
+  // `app/(app)/analitica/page.tsx`) o este test se pone rojo.
+  //
+  // `ROLES_ACCESO_ANALITICA` se llamaba `ROLES_ANALITICA` hasta el rename de
+  // 2026-07-31: colisionaba con la homónima de `lib/analytics/types.ts` (el
+  // ALCANCE dentro de la analítica, cinco roles), que es otra cosa.
+  it("R10: el 'roles' del ítem de analítica es el mismo CONJUNTO que ROLES_ACCESO_ANALITICA (usada por el guard de la página)", () => {
     const rolesItem = [...analitica.roles].sort();
-    const rolesGuard = [...ROLES_ANALITICA].sort();
+    const rolesGuard = [...ROLES_ACCESO_ANALITICA].sort();
     expect(rolesItem).toEqual(rolesGuard);
     // Inclusión mutua explícita, además de la igualdad de arrays ordenados.
-    for (const rol of ROLES_ANALITICA) {
+    for (const rol of ROLES_ACCESO_ANALITICA) {
       expect(analitica.roles).toContain(rol);
     }
     for (const rol of analitica.roles) {
-      expect(ROLES_ANALITICA).toContain(rol);
+      expect(ROLES_ACCESO_ANALITICA).toContain(rol);
     }
   });
 });

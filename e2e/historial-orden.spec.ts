@@ -20,10 +20,13 @@ import { test, expect, type Page } from "@playwright/test";
  *
  * SUPERFICIE (verificada en el código, feature 49 T6.2):
  *  - El listado PLANO de `/ordenes` (`OrdenesModule` con `mostrarHistorial`) se
- *    muestra a los roles NO maestro/admin (adminTienda, mensajero, adminSatélite);
- *    maestro/admin ven la vista de revisión por apartados (`OrdenesRevisionMaestro`),
- *    SIN este botón. Por eso el usuario semilla es un `adminTienda` (ve TODAS las
- *    órdenes de su tienda en cualquier estado, R27) y NO un maestro.
+ *    muestra a los roles que no usan el filtro por estado (mensajero, adminSatélite);
+ *    maestro, admin y adminTienda ven `OrdenesListado`, que también monta el botón.
+ *    (Hasta el 2026-07-31 este comentario decía que maestro/admin veían la vista de
+ *    revisión por apartados `OrdenesRevisionMaestro` SIN el botón: esa vista ya no la
+ *    montaba ninguna página y se borró.) El usuario semilla sigue siendo un
+ *    `adminTienda` porque ve TODAS las órdenes de su tienda en cualquier estado (R27),
+ *    que es lo que esta prueba necesita.
  *  - Cada fila añade un botón `aria-label="Ver historial de la orden <remisión>"`
  *    (HistorialOrdenSheet) que abre un Sheet (role="dialog") titulado
  *    "Historial de la orden <remisión>", cuyo cuerpo es una

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  esFechaCalendarioValida,
   fechaCalendarioCR,
   mananaCalendarioCR,
   ultimosNDiasCalendarioCR,
@@ -60,6 +61,31 @@ describe("mananaCalendarioCR", () => {
       "2026-08-01",
     );
   });
+});
+
+// La pieza COMPARTIDA del round-trip, probada a su nivel y no solo a través de sus dos
+// llamadores (`esFechaFutura` de la reprogramación y `esFechaPagoValida` de la liquidación).
+describe("esFechaCalendarioValida", () => {
+  it.each(["2026-02-31", "2026-04-31", "2026-02-30", "2027-02-29"])(
+    "rechaza %s: el día desbordado RUEDA en V8, no da Invalid Date",
+    (fecha) => {
+      expect(esFechaCalendarioValida(fecha)).toBe(false);
+    },
+  );
+
+  it.each(["2026-13-01", "2026-00-10", "20260715", "2026-7-15", "ayer", ""])(
+    "rechaza %s por forma o por mes fuera de rango",
+    (fecha) => {
+      expect(esFechaCalendarioValida(fecha)).toBe(false);
+    },
+  );
+
+  it.each(["2026-02-28", "2028-02-29", "2026-04-30", "2026-12-31", "2026-01-01"])(
+    "acepta %s",
+    (fecha) => {
+      expect(esFechaCalendarioValida(fecha)).toBe(true);
+    },
+  );
 });
 
 describe("ultimosNDiasCalendarioCR", () => {

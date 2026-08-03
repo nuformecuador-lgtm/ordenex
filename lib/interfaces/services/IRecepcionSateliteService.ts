@@ -1,4 +1,6 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
+import type { OpcionFiltro } from "@/lib/utils/filtro-canton-distrito";
 
 // Feature 33 — contrato del servicio de la bodega satelite: listar "Mis
 // asignaciones" del adminSatelite (dos grupos: por recibir / recibidas) y recibir
@@ -82,6 +84,52 @@ export type ListarRecepcionSateliteServiceResult =
     }
   | { status: "forbidden" };
 
+/**
+ * Feature 170 — FASE 2 (T K.1, R40/R44/R45) — entrada del listado «Órdenes de la bodega»
+ * paginado. `page`/`pageSize` llegan YA validados y acotados por el schema del borde.
+ *
+ * Los tres filtros son los MISMOS que hasta ahora resolvia el navegador, con su misma
+ * semantica: lista ausente o vacia = «todos», y los tres se cruzan en AND. Aqui NO hay —ni
+ * puede haber— una clave de alcance (`zonaId`): la zona sale del actor, siempre.
+ */
+export interface ListarOrdenesBodegaPaginadoInput {
+  page: number;
+  pageSize: number;
+  /** `estatus.value` elegidos; se intersecan con la lista blanca de los cinco (R44). */
+  estados?: string[];
+  /** Nombres de canton elegidos (los `value` que ofrece el catalogo de T K.2). */
+  cantones?: string[];
+  /** Nombres de distrito elegidos. Una orden sin distrito queda fuera bajo este filtro. */
+  distritos?: string[];
+}
+
+/**
+ * Feature 170 — FASE 2 (T K.1) — la pagina del listado. Contrato COMUN de T H.2, sin un solo
+ * campo extra: `zonaNombre` y `sinZona` siguen saliendo de `listar()`, que la pantalla
+ * tambien llama (y que ademas le da «Por recibir»).
+ */
+export type ListarOrdenesBodegaPaginadoServiceResult =
+  ListarPaginadoServiceResult<RecepcionSateliteDTO>;
+
+/**
+ * Feature 170 — FASE 2 (T K.2, R46) — opciones de los desplegables de canton y distrito,
+ * derivadas del CONJUNTO del actor y no de la pagina visible.
+ *
+ * Es la misma forma que `construirFiltrosSatelite` produce hoy en el cliente —incluido el
+ * `parentValue` que encadena distrito con su canton—, para que la pantalla solo cambie de
+ * ORIGEN y no de contrato.
+ */
+export interface CatalogoFiltrosSateliteDTO {
+  cantones: OpcionFiltro[];
+  /** `parentValue` = `value` del canton al que pertenece el distrito. */
+  distritos: (OpcionFiltro & { parentValue: string })[];
+}
+
+/** R44/R46: rol ajeno -> `forbidden` sin catalogo; sin zona -> catalogo vacio. */
+export type ObtenerCatalogoFiltrosSateliteServiceResult =
+  | { status: "ok"; catalogo: CatalogoFiltrosSateliteDTO }
+  | { status: "forbidden" };
+
 // R11-R18: maquina de resultados de la recepcion por QR (design §2.3). Todos los
 // rechazos son SIN efectos en datos; `ok` transiciona a en_bodega_satelite.
 // `estado_invalido` reporta el estado actual (R13). `validation_error` cubre el
@@ -125,6 +173,27 @@ export interface IRecepcionSateliteService {
    * adminSatelite -> forbidden; sin zona -> listas vacias + sinZona.
    */
   listar(actor: Actor): Promise<ListarRecepcionSateliteServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T K.1, R40/R41/R44/R45/R51): UNA pagina del listado «Órdenes de la
+   * bodega» (los cinco estados que hoy concatena el modulo), con los TRES filtros —estado ∧
+   * canton ∧ distrito— resueltos en el SERVIDOR y el total del conjunto.
+   *
+   * Mismo acotamiento que `listar`: rol `adminSatelite` (R3/R17) y zona resuelta desde el
+   * USUARIO (R4). Sin zona -> pagina vacia, no `forbidden`: el rol tiene acceso al modulo, lo
+   * que no tiene es alcance. Filtrar NUNCA amplia ese acotamiento.
+   */
+  listarOrdenesBodegaPaginado(
+    input: ListarOrdenesBodegaPaginadoInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesBodegaPaginadoServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T K.2, R44/R46): opciones de canton y distrito del CONJUNTO del
+   * actor, independientes del recorte de pagina. Mismo guard de rol y misma zona que
+   * `listar`; sin zona -> catalogo vacio.
+   */
+  obtenerCatalogoFiltros(
+    actor: Actor,
+  ): Promise<ObtenerCatalogoFiltrosSateliteServiceResult>;
   /**
    * R11-R18: recibe una orden por su `num_guia` (lo que codifica el QR:
    * `/paquete/<numGuia>`). Transiciona a en_bodega_satelite solo si sigue en

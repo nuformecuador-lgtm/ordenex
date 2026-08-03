@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SWRConfig } from "swr";
 
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import {
@@ -9,7 +10,10 @@ import {
   aprobarCierre,
   rechazarCierre,
   forzarSolicitudVencido,
+  listarHistoricoCierresAdminPaginado,
+  listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
   CierreDetalleGestion,
@@ -18,7 +22,6 @@ import type {
   CierreResultado,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
-import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // Feature 38 (T13) — módulo cliente de "Cierres del día" del admin. Se mockean las
 // Server Actions (ver detalle / aprobar / rechazar), el toast y el router (refresh)
@@ -30,6 +33,10 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   listarCierresAdmin: vi.fn(),
   // Feature 111/R16: válvula de escape (destrabar `vencido` abandonado).
   forzarSolicitudVencido: vi.fn(),
+  // Feature 170 — FASE 2 (T I.2): el histórico llega paginado del servidor.
+  listarHistoricoCierresAdminPaginado: vi.fn(),
+  // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también.
+  listarPendientesCierresAdminPaginado: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -57,12 +64,8 @@ const verDetalleMock = vi.mocked(verCierreDetalle);
 const aprobarMock = vi.mocked(aprobarCierre);
 const rechazarMock = vi.mocked(rechazarCierre);
 const forzarMock = vi.mocked(forzarSolicitudVencido);
-
-// La lista arranca acotada a los ÚLTIMOS 7 DÍAS (filtro por fecha del cierre): un
-// fixture con fecha fija quedaría fuera del rango en cuanto pasara una semana y las
-// tarjetas no se pintarían. `HOY_CR` es la fecha calendario de Costa Rica de hoy.
-const HOY_CR = ultimosNDiasCalendarioCR(1).hasta;
-const SOLICITADO_AT = `${HOY_CR}T10:00:00.000Z`;
+const historicoPaginadoMock = vi.mocked(listarHistoricoCierresAdminPaginado);
+const pendientesPaginadoMock = vi.mocked(listarPendientesCierresAdminPaginado);
 
 const ZERO_TOTALES: CierreTotales = {
   efectivo: "0.00",
@@ -84,7 +87,8 @@ function makeResumen(
     totales: ZERO_TOTALES,
     totalPagoMensajero: "0.00", // feature 39/R17
     totalIngresoBodegaRechazos: "0.00", // feature 56/R16
-    solicitadoAt: SOLICITADO_AT,
+    pendientePagoMensajero: null, // feature 172/T C.2: null = cierre no aprobado (R28)
+    solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
     ...over,
@@ -178,13 +182,30 @@ async function abrirFila(
   await user.click(within(scope).getByRole("button", { name: nombre }));
 }
 
-function renderModule(props?: Partial<Parameters<typeof CierresAdminModule>[0]>) {
+/**
+ * Feature 170 — FASE 2 (T I.2 el histórico, T J.2 la cola): las DOS tablas dejan de recibir un
+ * array y reciben la PÁGINA que pre-carga el Server Component. El helper sigue recibiendo los
+ * arrays para no reescribir cada caso, y ADEMÁS programa las dos Server Actions paginadas con
+ * esas mismas páginas: SWR revalida al montar, y sin los dobles las tablas se vaciarían a
+ * mitad del test.
+ */
+function renderModule(props?: {
+  pendientes?: CierreAdminResumen[];
+  historico?: CierreAdminResumen[];
+  sinZona?: boolean;
+}) {
+  const cola = paginaInicial(props?.pendientes ?? []);
+  const pagina = paginaInicial(props?.historico ?? []);
+  pendientesPaginadoMock.mockResolvedValue({ status: "ok", page: 1, ...cola });
+  historicoPaginadoMock.mockResolvedValue({ status: "ok", page: 1, ...pagina });
   render(
-    <CierresAdminModule
-      pendientes={props?.pendientes ?? []}
-      historico={props?.historico ?? []}
-      sinZona={props?.sinZona ?? false}
-    />,
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <CierresAdminModule
+        pendientes={cola}
+        historico={pagina}
+        sinZona={props?.sinZona ?? false}
+      />
+    </SWRConfig>,
   );
 }
 
@@ -222,7 +243,7 @@ describe("CierresAdminModule", () => {
 
     const region = screen.getByRole("region", { name: "Pendientes de decisión" });
     expect(within(region).getByText("Carlos Vega")).toBeInTheDocument();
-    expect(within(region).getByText(HOY_CR)).toBeInTheDocument();
+    expect(within(region).getByText("2026-07-11")).toBeInTheDocument();
     expect(
       within(region).getByText("Bodega central · GAM"),
     ).toBeInTheDocument();
@@ -232,8 +253,7 @@ describe("CierresAdminModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("R5: el histórico lista cierres resueltos con estado, fecha resuelta y motivo (solo lectura)", async () => {
-    const user = userEvent.setup();
+  it("R5: el histórico lista cierres resueltos con estado, fecha resuelta y motivo (solo lectura)", () => {
     renderModule({
       historico: [
         makeResumen({
@@ -249,15 +269,10 @@ describe("CierresAdminModule", () => {
     const region = screen.getByRole("region", { name: "Histórico" });
     expect(within(region).getByText("Rechazado")).toBeInTheDocument();
     expect(within(region).getByText("Diana Mora")).toBeInTheDocument();
+    expect(within(region).getByText("2026-07-12")).toBeInTheDocument();
     expect(within(region).getByText("Faltan evidencias")).toBeInTheDocument();
     // Solo lectura: el botón del histórico es "Ver", sin acciones de decisión.
     expect(within(region).getByRole("button", { name: "Ver" })).toBeInTheDocument();
-
-    // La fecha en que se resolvió vive en el desplegable del comprobante.
-    await user.click(
-      within(region).getByRole("button", { name: /Ver detalles del cierre/ }),
-    );
-    expect(within(region).getByText("2026-07-12")).toBeInTheDocument();
   });
 
   it("R8/R9: al abrir el detalle muestra los totales snapshot como string (sin reparsear)", async () => {
@@ -834,6 +849,7 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierreId: "c1",
       estado: "aprobado",
+      pendientePagoMensajero: "0.00", // feature 172/T C.2
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 

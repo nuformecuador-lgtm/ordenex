@@ -21,6 +21,14 @@ export function conteoCrudo(entregadasHoy: number, asignadasHoy: number): string
   return `${entregadasHoy}/${asignadasHoy}`;
 }
 
+/** Etiquetas de las columnas de la tabla del ranking (R13). */
+export const RANKING_COLUMNAS = {
+  posicion: "Posición",
+  mensajero: "Mensajero",
+  porcentaje: "% del día",
+  conteo: "Entregadas / asignadas",
+} as const;
+
 /** Iniciales para el avatar del podio: máx. 2 letras a partir del nombre. */
 export function iniciales(nombre: string): string {
   const palabras = nombre.trim().split(/\s+/).filter(Boolean);
@@ -82,6 +90,7 @@ export const PODIO_LABELS = {
 
 /** Textos del estado vacío / encabezados de la tabla del ranking. */
 export const RANKING_LABELS = {
+  tablaAria: "Ranking diario de mensajeros",
   premiosAria: "Premios del podio",
   vacio: "Todavía no hay mensajeros para mostrar hoy.",
 } as const;

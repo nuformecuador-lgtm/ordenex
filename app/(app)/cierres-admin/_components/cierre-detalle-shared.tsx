@@ -1,14 +1,15 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { MetodoPagoValue } from "@prisma/client";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { filasLocales } from "@/components/shared/descarga-resultado";
 import { cn } from "@/lib/utils";
+import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -24,6 +25,35 @@ import type { CierreEstado } from "@/lib/types/cierre";
 // importa `estatus-label` de `app/(app)/ordenes/_components/`. El value crudo del enum
 // (`danado`) no se pinta nunca.
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
+import {
+  RESULTADO_LABEL,
+  METODO_LABEL,
+  ESTADO_LABEL,
+  PAGO_MENSAJERO_COL,
+  INGRESO_BODEGA_RECHAZOS_COL,
+  RECHAZO_ORIGEN_COL,
+  RECHAZO_SLA_BADGE_LABEL,
+  RECHAZO_MANUAL_BADGE_LABEL,
+  MONTO_COBRAR_COL,
+  FLETE_CON_IVA_LABEL,
+  COMISION_CON_IVA_LABEL,
+  FLETE_DEV_CON_IVA_LABEL,
+  INGRESO_TOTAL_COL,
+  CAUSA_INCIDENTE_COL,
+  INDEMNIZACION_COL,
+} from "./cierre-labels";
+import {
+  COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
+  COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
+  COLUMNAS_DESCARGA_GESTIONES_INCIDENTES,
+  COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
+  COLUMNAS_DESCARGA_GESTIONES_REPROGRAMADAS,
+  filaDescargaGestionDevuelta,
+  filaDescargaGestionEntregada,
+  filaDescargaGestionIncidente,
+  filaDescargaGestionRechazada,
+  filaDescargaGestionReprogramada,
+} from "./cierre-gestiones-descarga-columnas";
 
 // Feature 40 (T8) — helpers y componentes compartidos del detalle de cierre entre
 // el módulo de cierres de mensajero (feature 38, `CierresAdminModule`) y los nuevos
@@ -33,12 +63,27 @@ import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/
 // con evidencia firmada (R12) y el visor de evidencia. Sin lógica de dominio propia.
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
-export const RESULTADO_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregadas",
-  reprogramada: "Reprogramadas",
-  devuelta: "Devueltas",
-  rechazada: "Rechazadas",
-  incidente: "Incidentes", // feature 158/R18
+//
+// Feature 170 (tanda E): las que también necesita el archivo de la descarga viven ahora en
+// `cierre-labels.ts` (módulo PURO, sin React) y se RE-EXPORTAN desde aquí, sin cambiar ni un
+// texto: los consumidores que ya las importaban de este archivo siguen igual, y el módulo de
+// columnas de export puede leerlas sin arrastrar `Card`/`Badge`/`DataTable`.
+export {
+  RESULTADO_LABEL,
+  METODO_LABEL,
+  ESTADO_LABEL,
+  PAGO_MENSAJERO_COL,
+  INGRESO_BODEGA_RECHAZOS_COL,
+  RECHAZO_ORIGEN_COL,
+  RECHAZO_SLA_BADGE_LABEL,
+  RECHAZO_MANUAL_BADGE_LABEL,
+  MONTO_COBRAR_COL,
+  FLETE_CON_IVA_LABEL,
+  COMISION_CON_IVA_LABEL,
+  FLETE_DEV_CON_IVA_LABEL,
+  INGRESO_TOTAL_COL,
+  CAUSA_INCIDENTE_COL,
+  INDEMNIZACION_COL,
 };
 
 export const RESULTADO_VACIO: Record<CierreResultado, string> = {
@@ -47,19 +92,6 @@ export const RESULTADO_VACIO: Record<CierreResultado, string> = {
   devuelta: "No hay devoluciones.",
   rechazada: "No hay rechazos.",
   incidente: "No hay incidentes.", // feature 158/R18
-};
-
-export const METODO_LABEL: Record<MetodoPagoValue, string> = {
-  efectivo: "Efectivo",
-  SINPE: "SINPE",
-  transferencia: "Transferencia",
-};
-
-export const ESTADO_LABEL: Record<CierreEstado, string> = {
-  solicitado: "Solicitado",
-  aprobado: "Aprobado",
-  rechazado: "Rechazado",
-  vencido: "Vencido", // feature 41: etiqueta minima; el tratamiento diferenciado (R20) lo hace frontend_dev
 };
 
 // Feature 41 (R20): variante de badge por estado para diferenciar VISUALMENTE el
@@ -131,10 +163,8 @@ export function RechazadoBloqueanteBadge() {
 
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
-export const PAGO_MENSAJERO_COL = "Pago mensajero";
 // --- Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready) ---
 export const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por rechazos";
-export const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
 // --- Feature 102 (R8): subtotales del ingreso de bodega por rechazos, particionado por ORIGEN.
 // El total combinado sigue siendo el de la 56 (`INGRESO_BODEGA_RECHAZOS_LABEL`); estos dos son
 // las sublíneas del desglose (SLA del cron 99 vs manual del mensajero). Texto i18n-ready. ---
@@ -143,11 +173,8 @@ export const INGRESO_BODEGA_RECHAZOS_MANUAL_LABEL = "Manual (mensajero)";
 // --- Feature 102 (R9): marca por fila del ORIGEN de un rechazo, para que cada ingreso de bodega
 // sea auditable. `SLA` = escalado por el cron de vencimiento (99); `Manual` = rechazo del
 // mensajero. Texto i18n-ready + nota accesible (`title`/`aria-label`). ---
-export const RECHAZO_ORIGEN_COL = "Origen";
-export const RECHAZO_SLA_BADGE_LABEL = "Automático";
 export const RECHAZO_SLA_BADGE_NOTA =
   "Rechazo automático por vencerse el plazo de la devolución (no lo hizo el mensajero).";
-export const RECHAZO_MANUAL_BADGE_LABEL = "Manual";
 export const RECHAZO_MANUAL_BADGE_NOTA =
   "Rechazo registrado manualmente por el mensajero.";
 // --- Neto DERIVADO (total general - lo pagado a mensajeros): texto separado, i18n-ready ---
@@ -158,13 +185,9 @@ export const CENTRAL_DEBE_NOTA =
   "El efectivo no alcanzó para pagarle a todos los mensajeros (el pago no puede ser parcial).";
 // --- Desglose del ingreso de Ordenex por orden (texto separado, i18n-ready) ---
 export const MONTO_COBRAR_LABEL = "Monto a cobrar";
-export const MONTO_COBRAR_COL = "A cobrar";
 export const INGRESO_TOTAL_LABEL = "Total Ordenex";
 export const INGRESO_PANEL_LABEL = "Ingreso de Ordenex";
 // Conceptos AGRUPADOS (cada uno con su IVA incluido): así se leen en tablas y paneles.
-export const FLETE_CON_IVA_LABEL = "Flete + IVA";
-export const COMISION_CON_IVA_LABEL = "Comisión + IVA";
-export const FLETE_DEV_CON_IVA_LABEL = "Flete devolución + IVA";
 // --- Bruto y ganancia del cierre (texto separado, i18n-ready) ---
 export const INGRESO_BRUTO_LABEL = "Ingreso bruto";
 export const INGRESO_BRUTO_NOTA =
@@ -178,7 +201,6 @@ export const PAGO_TIENDA_NOTA =
   "Total general menos flete + IVA y comisión + IVA. No descuenta el flete de devolución: una devolución no cobra COD.";
 export const GANANCIA_NOTA = "Ingreso bruto menos el pago al mensajero.";
 export const GANANCIA_NOTA_BODEGA = "Ingreso bruto menos el pago a los mensajeros.";
-export const INGRESO_TOTAL_COL = "Total Ordenex";
 export const DESGLOSE_TITULO = "Desglose de ingreso";
 export const TARIFA_TITULO = "Tarifa aplicada";
 export const TARIFA_NOTA = "Congelada al solicitar el cierre";
@@ -187,8 +209,6 @@ export const SIN_COMISION_NOTA = "Esta orden no cobra comisión COD.";
 export const SIN_TARIFA_CONGELADA_NOTA =
   "La tienda no tenía tarifa vigente al solicitar el cierre: no se derivó ningún ingreso para esta orden.";
 // --- Feature 158 (R34/R9/R19): columnas propias del grupo `incidente` (texto i18n-ready) ---
-export const CAUSA_INCIDENTE_COL = "Causa";
-export const INDEMNIZACION_COL = "Indemnización";
 /**
  * `indemnizacion === null` en un incidente NO es «cero»: es «todavía no se capturó». El monto
  * lo pone el admin AL APROBAR (R19), así que hasta entonces la celda muestra "—" con esta nota
@@ -946,6 +966,39 @@ export function TotalesIngresoPanel({
 }
 
 /**
+ * Feature 170 (T E.5) — columnas y proyección de export POR RESULTADO. Vive aquí y no en el
+ * módulo de columnas porque un `Record` exportado desde un `*-descarga-columnas.ts` se le
+ * escaparía a la guardia de datos sensibles, que solo reconoce arrays de columnas y
+ * funciones de proyección. Allí están las cinco declaraciones sueltas —vigiladas una a una—
+ * y aquí, el mapa que elige cuál toca.
+ */
+const DESCARGA_POR_RESULTADO: Record<
+  CierreResultado,
+  { columnas: DescargaColumna[]; fila: (g: CierreDetalleGestion) => DescargaFila }
+> = {
+  entregada: {
+    columnas: COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
+    fila: filaDescargaGestionEntregada,
+  },
+  reprogramada: {
+    columnas: COLUMNAS_DESCARGA_GESTIONES_REPROGRAMADAS,
+    fila: filaDescargaGestionReprogramada,
+  },
+  devuelta: {
+    columnas: COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
+    fila: filaDescargaGestionDevuelta,
+  },
+  rechazada: {
+    columnas: COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
+    fila: filaDescargaGestionRechazada,
+  },
+  incidente: {
+    columnas: COLUMNAS_DESCARGA_GESTIONES_INCIDENTES,
+    fila: filaDescargaGestionIncidente,
+  },
+};
+
+/**
  * Las 4 secciones por resultado de un cierre (reuso del render de la 37/38, R11):
  * entregadas / reprogramadas / devueltas / rechazadas, cada una como `region`
  * accesible. La evidencia (R12) se abre por `onVerEvidencia` con la URL firmada.
@@ -953,9 +1006,20 @@ export function TotalesIngresoPanel({
 export function DetalleSecciones({
   grupos,
   onVerEvidencia,
+  contexto,
 }: {
   grupos: CierreGrupos;
   onVerEvidencia: (url: string) => void;
+  /**
+   * Feature 170 (T E.5): de QUIÉN son estas secciones (hoy, el nombre del mensajero del
+   * `cierre_dia`). Se anexa al nombre de la descarga.
+   *
+   * No es cosmética: el detalle de un cierre de BODEGA monta estas secciones una vez POR
+   * mensajero incluido, así que sin el contexto habría tres botones llamados «Descargar
+   * Entregadas» en el mismo modal y ninguno diría de quién (R13). También hace que el
+   * archivo se llame `entregadas-<mensajero>-<fecha>.xlsx` en vez de `entregadas-…`.
+   */
+  contexto?: string;
 }) {
   return (
     <>
@@ -963,6 +1027,10 @@ export function DetalleSecciones({
         const filas = grupos[resultado] ?? [];
         // Pedido: no mostrar las secciones sin registros (p. ej. reprogramadas con 0).
         if (filas.length === 0) return null;
+        const descarga = DESCARGA_POR_RESULTADO[resultado];
+        const tituloDescarga = contexto
+          ? `${RESULTADO_LABEL[resultado]} · ${contexto}`
+          : RESULTADO_LABEL[resultado];
         return (
           <section
             key={resultado}
@@ -982,6 +1050,24 @@ export function DetalleSecciones({
                 rowKey="gestionId"
                 ariaLabel={RESULTADO_LABEL[resultado]}
                 emptyMessage={RESULTADO_VACIO[resultado]}
+                /**
+                 * Feature 170 (T E.5, R1/R8/R11/R22/R26/R30/R37) — UNA DESCARGA POR SECCIÓN
+                 * (decisión del humano, P2 ratificada): cada resultado tiene sus columnas y
+                 * su botón, y no hay un archivo único del cierre.
+                 *
+                 * Familia B: `filas` es el grupo COMPLETO que ya llegó con el detalle, así
+                 * que el archivo sale de lo que la tabla pinta, en su mismo orden y sin
+                 * releer. Descargar no toca el estado del modal ni la fila desplegada (R37):
+                 * el control vive fuera del `<table>` y no llama a ningún setter.
+                 *
+                 * La URL FIRMADA de la evidencia NO viaja al archivo: la columna
+                 * correspondiente es un «Sí/No» (R22).
+                 */
+                descarga={{
+                  titulo: tituloDescarga,
+                  columnas: descarga.columnas,
+                  obtenerFilas: () => filasLocales(filas, descarga.fila),
+                }}
                 // Solo el detalle de admin trae `ingresoOrdenex`. Sin él se devuelve `null`
                 // (y no un componente que renderiza vacío): así la tabla no pinta el botón
                 // de desplegar sobre una fila que no tiene nada que mostrar.

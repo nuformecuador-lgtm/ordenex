@@ -2,11 +2,17 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CuentaPorPagarDTO,
   CuentaPorPagarResumenDTO,
+  ListarCuentasPorPagarCompletoInput,
+  ListarCuentasPorPagarPaginadoInput,
+  ListarMisPagosCompletoInput,
+  ListarPagosDeMensajeroCompletoInput,
   ListarPagosDeMensajeroInput,
   ListarPagosDeMensajeroResult,
   ListarPagosMensajeroInput,
   PagoMensajeroMovimientoDTO,
 } from "@/lib/types/wallet-mensajero";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 44 (design §2.1) — contrato del servicio de lectura del LIBRO del pago por mensajero.
 // Roles: `mensajero` ve SU cuenta por pagar/movimientos (acotado a su usuarioId = mensajero_id,
@@ -38,6 +44,50 @@ export type ListarPagosDeMensajeroServiceResult =
   | { status: "ok"; data: ListarPagosDeMensajeroResult }
   | { status: "forbidden" };
 
+/**
+ * Feature 170 — FASE 2 (T L.1, R40/R41): la PAGINA del listado del maestro, con el total del
+ * conjunto que casa la busqueda. Contrato comun de T H.2, sin un solo campo extra.
+ *
+ * `forbidden` NUNCA viaja con filas ni con el total: un conteo de cuentas por pagar tambien es
+ * informacion del conjunto.
+ */
+export type ListarCuentasPorPagarPaginadoServiceResult =
+  ListarPaginadoServiceResult<CuentaPorPagarResumenDTO>;
+
+/**
+ * Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el MISMO listado del maestro sin recorte por
+ * pagina, para la descarga (R52).
+ *
+ * Es el hermano de la pagina, el par `listar` / `listarCompleto` que T H.2 dejo escrito como
+ * las DOS lecturas de un mismo listado. Sin el, la pantalla paginada tenia que releer el
+ * listado ENTERO sin busqueda y volver a filtrarlo en el navegador: el conjunto completo
+ * cruzaba igual y el criterio de busqueda vivia escrito dos veces, en dos capas.
+ *
+ * `limite_excedido` se decide AQUI (R29): el tope es del servidor, y devolver el conjunto
+ * entero para que el cliente lo cuente es exactamente lo que R29 prohibe.
+ */
+export type ListarCuentasPorPagarCompletoServiceResult =
+  ListarCompletoServiceResult<CuentaPorPagarResumenDTO>;
+
+/**
+ * Feature 170 (T C.1) — los pagos PROPIOS del mensajero, sin recorte por pagina.
+ *
+ * El otro punto caliente de R14/R15 (junto al ledger de la tienda): el conjunto lo define
+ * `mensajero_id = actor.usuarioId`, un DATO del actor. Un fallo aqui entrega en un `xlsx`
+ * los pagos de otro mensajero. Ni `forbidden` ni `limite_excedido` viajan con filas.
+ */
+export type ListarMisPagosCompletoServiceResult =
+  ListarCompletoServiceResult<PagoMensajeroMovimientoDTO>;
+
+/**
+ * Feature 170 (T C.1) — el desglose de UN mensajero elegido, sin recorte por pagina. A
+ * diferencia del anterior, el `mensajeroId` viene del INPUT: es la vista de los roles de
+ * acceso total, que no estan acotados a si mismos. El guard `esAccesoTotal` es lo unico que
+ * separa las dos superficies, y por eso es el mismo que el del listado.
+ */
+export type ListarPagosDeMensajeroCompletoServiceResult =
+  ListarCompletoServiceResult<PagoMensajeroMovimientoDTO>;
+
 export interface IWalletMensajeroService {
   /** R16/R20: solo mensajero; cuenta por pagar total DERIVADA, acotada a su mensajero_id. */
   verMiCuentaPorPagar(actor: Actor): Promise<VerMiCuentaPorPagarServiceResult>;
@@ -46,8 +96,35 @@ export interface IWalletMensajeroService {
     input: ListarPagosMensajeroInput,
     actor: Actor,
   ): Promise<ListarMisPagosServiceResult>;
+  /**
+   * Feature 170/R9/R14/R15: los MISMOS pagos propios sin recorte por pagina, para la
+   * descarga. Mismo guard (`mensajero`), los MISMOS filtros que la pantalla y el acotado a
+   * `mensajero_id = actor.usuarioId` escrito AL FINAL, con `take: tope + 1` (R27/R29).
+   */
+  listarMisPagosCompleto(
+    input: ListarMisPagosCompletoInput,
+    actor: Actor,
+  ): Promise<ListarMisPagosCompletoServiceResult>;
   /** R18/R19: solo maestro; cuenta por pagar de TODOS los mensajeros (una fila por mensajero). */
   listarCuentasPorPagar(actor: Actor): Promise<ListarCuentasPorPagarServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T L.1, R40/R41/R45/R51): el MISMO listado, en paginas y con la
+   * busqueda por nombre resuelta en el SERVIDOR. Mismo guard (`esAccesoTotal`) y mismo
+   * conjunto: lo unico que cambia es que la pantalla deja de recibirlo entero.
+   */
+  listarCuentasPorPagarPaginado(
+    input: ListarCuentasPorPagarPaginadoInput,
+    actor: Actor,
+  ): Promise<ListarCuentasPorPagarPaginadoServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T M.1, cierre de Q-L2): el MISMO listado sin recorte por pagina,
+   * para la descarga. Mismo guard (`esAccesoTotal`), MISMA busqueda que la pantalla tiene
+   * puesta y el tope de filas aplicado en el SERVIDOR (R26/R27/R29).
+   */
+  listarCuentasPorPagarCompleto(
+    input: ListarCuentasPorPagarCompletoInput,
+    actor: Actor,
+  ): Promise<ListarCuentasPorPagarCompletoServiceResult>;
   /**
    * R18/R22: solo maestro; DESGLOSE por cierre de UN mensajero ARBITRARIO (paginado, mas reciente
    * primero) con filtros server-side por fecha/cierre. El saldo (cuenta por pagar) refleja el
@@ -58,4 +135,13 @@ export interface IWalletMensajeroService {
     input: ListarPagosDeMensajeroInput,
     actor: Actor,
   ): Promise<ListarPagosDeMensajeroServiceResult>;
+  /**
+   * Feature 170/R9: el MISMO desglose de UN mensajero sin recorte por pagina, para la
+   * descarga. Mismo guard (`esAccesoTotal`) y los MISMOS filtros que la pantalla, con
+   * `take: tope + 1` y el guard del tope (R27/R29).
+   */
+  listarPagosDeMensajeroCompleto(
+    input: ListarPagosDeMensajeroCompletoInput,
+    actor: Actor,
+  ): Promise<ListarPagosDeMensajeroCompletoServiceResult>;
 }

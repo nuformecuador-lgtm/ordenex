@@ -7,19 +7,15 @@ import { Button } from "@/components/ui/button";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
 import type { UsuarioListItemDTO } from "@/lib/types/usuario";
 
+import { ESTADO_LABELS } from "./usuario-estado-label";
+
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
-// Etiquetas de rol centralizadas en `lib/auth/rol-label`; se reexportan aquí para
-// no romper a los consumidores existentes de este módulo. Las de estado siguen
-// locales a esta superficie.
-export { ROL_LABELS };
-
-export const ESTADO_LABELS: Record<EstadoUsuario, string> = {
-  pendiente: "Pendiente",
-  activo: "Activo",
-  inactivo: "Inactivo",
-  bloqueado: "Bloqueado",
-};
+// Etiquetas de rol centralizadas en `lib/auth/rol-label` y, desde la feature 170 (T B.3),
+// las de estado en `./usuario-estado-label` (módulo PURO, para que las columnas de export
+// puedan leerlas sin arrastrar React). Ambas se reexportan aquí para no romper a los
+// consumidores existentes de este módulo.
+export { ROL_LABELS, ESTADO_LABELS };
 
 /** Estado del usuario -> variante semántica de la primitiva `Badge` (sin hex). */
 const ESTADO_VARIANT: Record<EstadoUsuario, BadgeVariant> = {

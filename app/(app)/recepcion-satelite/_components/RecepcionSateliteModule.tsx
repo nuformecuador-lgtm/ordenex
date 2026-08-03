@@ -1,18 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
+import { Pagination } from "@/components/shared/Pagination";
+import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
-import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
+import type {
+  CatalogoFiltrosSateliteDTO,
+  RecepcionSateliteDTO,
+} from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
-import { recibirLote } from "@/lib/actions/recepcion-satelite";
+import {
+  listarOrdenesBodegaPaginado,
+  listarRecepcionSatelite,
+  recibirLote,
+} from "@/lib/actions/recepcion-satelite";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
@@ -23,6 +34,13 @@ import { SateliteOrderCard } from "./SateliteOrderCard";
 import { SateliteOrdenesListado } from "./SateliteOrdenesListado";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
 import { DeshacerAsignacionSateliteModal } from "./DeshacerAsignacionSateliteModal";
+import { filaDescargaSatelite } from "./satelite-descarga-columnas";
+import {
+  FILTRO_SATELITE_VACIO,
+  filtrarOrdenesSatelite,
+  serializarFiltroSatelite,
+  type FiltroBodegaSatelite,
+} from "./satelite-ordenes-filtros";
 import {
   BODEGA_BLOQUEADA_TITULO,
   BODEGA_CIERRES_ABIERTOS_DETALLE,
@@ -31,47 +49,100 @@ import {
   type BodegaBloqueoCausa,
 } from "./asignacion-satelite-bloqueo";
 
-// Feature 33 (T12, R6/R7/R8/R9): módulo de la bodega satélite. Recibe los DOS
-// grupos ya resueltos por el Server Component padre (datos sensibles por props,
-// sin fetch de cliente) y el nombre de la zona / `sinZona`. La ÚNICA acción del
-// módulo es la recepción por escaneo (R7: "Por recibir" NO expone asignar ni
-// gestionar). Tras cada recepción exitosa se refresca la ruta para releer el
-// estado del servidor.
+// Feature 33 (T12, R6/R7/R8/R9): módulo de la bodega satélite. Recibe de su Server
+// Component padre lo que la pantalla necesita ya acotado a la zona del actor (datos
+// sensibles por props, sin resolver permisos en el cliente) y el nombre de la zona /
+// `sinZona`. Tras cada acción exitosa se relee el estado del servidor.
+//
+// Feature 170 — FASE 2 (T K.3, R40-R43/R52): el listado «Órdenes de la bodega» deja de
+// recibir el conjunto entero por props y pasa a pintar UNA PÁGINA que resuelve el servidor
+// (T K.1). Aquí vive la capa de datos de ese listado —los tres filtros vigentes, la página
+// pedida, SWR y la descarga del conjunto completo—; `SateliteOrdenesListado` se queda con
+// lo suyo: qué filas están marcadas y qué acción de lote se ofrece sobre ellas.
+//
+// El control de paginación se monta EN ESTE archivo a propósito (precedente de T J.2): la
+// guardia de contadores de cabecera (T H.3) mira del archivo que monta `<Pagination>` hacia
+// los componentes que importa, nunca hacia arriba.
+
+/** Nombre accesible del control de navegación entre páginas (R43). */
+export const PAGINACION_BODEGA_LABEL = "Paginación de las órdenes de la bodega";
+
+/** Mensaje de fallo de la lectura de la página, ya redactado para la tabla. */
+const ERROR_CARGA = "No se pudieron cargar las órdenes de la bodega.";
+
+// R40: el tamaño de página sale de la config del dominio (T H.1), nunca de un literal.
+const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
+  (s) => s <= recepcionSateliteConfig.MAX_PAGE_SIZE,
+);
+
+/** Feature 170 — FASE 2 (T K.3): la página del listado tal como la devuelve el servidor. */
+export interface OrdenesBodegaPagina {
+  items: RecepcionSateliteDTO[];
+  total: number;
+  pageSize: number;
+}
+
+/**
+ * Lee una página del listado. Un resultado que no sea `ok` se lanza para que SWR lo trate
+ * como error (la tabla enseña el aviso) en vez de pintar una página vacía que se leería
+ * como «no hay órdenes».
+ */
+async function leerPagina(
+  filtro: FiltroBodegaSatelite,
+  page: number,
+  pageSize: number,
+): Promise<OrdenesBodegaPagina> {
+  const res = await listarOrdenesBodegaPaginado({ ...filtro, page, pageSize });
+  if (res.status !== "ok") throw new Error(res.status);
+  return { items: res.items, total: res.total, pageSize: res.pageSize };
+}
+
+/**
+ * Feature 170 — FASE 2 (T K.3, R52 / Q-K4) — el CONJUNTO COMPLETO con los filtros vigentes,
+ * para la descarga.
+ *
+ * Relee el MISMO listado que la pantalla llamaba antes de paginar
+ * (`listarRecepcionSatelite`, acotado server-side a la zona del actor: descargar no amplía
+ * el alcance ni una fila) y aplica los tres filtros en memoria, porque ninguna acción
+ * devuelve hoy «el conjunto filtrado». Es exactamente lo que la pantalla hacía antes, así
+ * que no es una regresión; la deuda queda declarada para la tanda M (Q-K4).
+ *
+ * Los cinco grupos se concatenan en el ORDEN DEL FLUJO de la bodega, el mismo que impone el
+ * `ORDER BY` del listado paginado (R51): el archivo se lee como la pantalla.
+ */
+async function conjuntoFiltrado(filtro: FiltroBodegaSatelite) {
+  const res = await listarRecepcionSatelite();
+  if (res.status !== "ok") return res;
+  const conjunto = [
+    ...res.recibidas,
+    ...res.asignadas,
+    ...res.porDevolver,
+    ...res.enTransitoACentral,
+    ...res.devueltas,
+  ];
+  return { status: "ok" as const, items: filtrarOrdenesSatelite(conjunto, filtro) };
+}
 
 export interface RecepcionSateliteModuleProps {
   /** Órdenes en `en_ruta_bodega_satelite` de la zona del adminSatelite. */
   porRecibir: RecepcionSateliteDTO[];
-  /** Órdenes ya en `en_bodega_satelite` de la zona (base de la feature 34). */
-  recibidas: RecepcionSateliteDTO[];
   /**
-   * Feature 139/T3.3 (R13/R21): órdenes en `por_devolver` de la zona del adminSatelite,
-   * elegibles para la acción POR LOTE "Enviar a central" (transición
-   * `por_devolver → devolviendo_a_bodega_central`). REEMPLAZA el viejo scope `rechazada`
-   * (feature 48): la rechazada sale de ese estado solo al aprobar el cierre, que la deja
-   * en `por_devolver`. Acotadas server-side por zona; vacío = sin órdenes por devolver.
+   * Feature 170 — FASE 2 (T K.3, R40/R41): PÁGINA 1 del listado «Órdenes de la bodega»
+   * —los cinco estados que el adminSatelite gestiona— resuelta server-side y SIN filtros,
+   * más el `total` del conjunto. Alimenta el `fallbackData` de SWR y el «de Y» del
+   * contador de cabecera (R42).
+   *
+   * REEMPLAZA a los cinco arrays por estado (`recibidas`, `asignadas`, `porDevolver`,
+   * `enTransitoACentral`, `devueltas`) que este módulo concatenaba: con la tabla paginada
+   * seguir recibiéndolos habría dejado el conjunto entero cruzando a la pantalla en cada
+   * render, que es justo lo que la FASE 2 viene a quitar.
    */
-  porDevolver?: RecepcionSateliteDTO[];
+  ordenesBodega: OrdenesBodegaPagina;
   /**
-   * Feature 139/T3.3 (R21): órdenes en `devolviendo_a_bodega_central` de la zona,
-   * INFORMATIVAS (ya enviadas y en tránsito a la central; la recepción la hace la central
-   * por QR, no el satélite). Acotadas server-side por zona; solo lectura, sin acción.
+   * Feature 170 — FASE 2 (T K.2, R46): opciones de cantón y distrito del CONJUNTO del
+   * actor, resueltas por su propia acción. No dependen de la página visible.
    */
-  enTransitoACentral?: RecepcionSateliteDTO[];
-  /**
-   * Feature 100/T4.1 (R12): órdenes en `devuelta` (novedad) de la zona del
-   * adminSatelite, elegibles para "Recuperar a bodega" (transición
-   * `devuelta → en_bodega_satelite`). Acotadas server-side por zona; vacío = sin
-   * órdenes por recuperar.
-   */
-  devueltas?: RecepcionSateliteDTO[];
-  /**
-   * Feature 149/T6.4 (R35): órdenes en `por_recoger` de la zona del adminSatelite —ya
-   * asignadas a un mensajero que AÚN no las recogió—, elegibles para la acción POR LOTE
-   * "Deshacer asignación" (`por_recoger → en_bodega_satelite`). Acotadas server-side por
-   * zona; vacío = sin órdenes asignadas pendientes de recogida. El caso (b)
-   * (`en_ruta_bodega_satelite`, sección "Por recibir") NO ofrece esta acción (R36).
-   */
-  asignadas?: RecepcionSateliteDTO[];
+  catalogoFiltros: CatalogoFiltrosSateliteDTO;
   /** Nombre de la zona del adminSatelite (para el display, R9); `null` si no tiene. */
   zonaNombre: string | null;
   /** `true` si el adminSatelite no tiene zona asignada (R5). */
@@ -115,11 +186,8 @@ function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): 
 
 export function RecepcionSateliteModule({
   porRecibir,
-  recibidas,
-  porDevolver = [],
-  enTransitoACentral = [],
-  devueltas = [],
-  asignadas = [],
+  ordenesBodega,
+  catalogoFiltros,
   zonaNombre,
   sinZona,
   mensajeros,
@@ -151,21 +219,54 @@ export function RecepcionSateliteModule({
   // que recibir y el actor tiene zona; el separador del listado depende de lo mismo.
   const mostrarPorRecibir = !sinZona && porRecibir.length > 0;
 
-  // Feature 139/T3.3 + pedido humano: las listas por estado se presentan en un solo
-  // listado filtrable. El orden de concatenación es el del flujo de la bodega, y es el que
-  // ve quien no toca los filtros. Feature 149/T6.4 (R35): `asignadas` (`por_recoger`) entra
-  // como un grupo MÁS de ese listado —justo después de "Recibidas", que es de donde salen—
-  // en vez de tener sección y tabla propias: el rediseño ux fundió las secciones.
-  const ordenesBodega = useMemo<RecepcionSateliteDTO[]>(
-    () => [
-      ...recibidas,
-      ...asignadas,
-      ...porDevolver,
-      ...enTransitoACentral,
-      ...devueltas,
-    ],
-    [recibidas, asignadas, porDevolver, enTransitoACentral, devueltas],
+  // ---------- Feature 170 — FASE 2 (T K.3): la capa de datos del listado ----------
+  // Los tres filtros VIGENTES (los emite la barra del listado), la página pedida y su
+  // tamaño. Filtrar cambia el conjunto, así que vuelve a la página 1: la que se estaba
+  // viendo puede no existir en el nuevo resultado.
+  const [filtro, setFiltro] = useState<FiltroBodegaSatelite>({});
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(ordenesBodega.pageSize);
+
+  // R45/R61: la clave de SWR lleva el filtro serializado a un ESCALAR estable, para que la
+  // caché sea por combinación de filtros y dos selecciones equivalentes no refetcheen.
+  const filtroKey = serializarFiltroSatelite(filtro);
+  const { data, error, mutate } = useSWR(
+    ["satelite:bodega", filtroKey, page, pageSize],
+    () => leerPagina(filtro, page, pageSize),
+    {
+      // Lo que el Server Component ya resolvió: página 1, sin filtros, tamaño de origen.
+      fallbackData:
+        page === 1 &&
+        pageSize === ordenesBodega.pageSize &&
+        filtroKey === FILTRO_SATELITE_VACIO
+          ? ordenesBodega
+          : undefined,
+    },
   );
+
+  // El esqueleto de carga se muestra sólo cuando NO hay nada que pintar. `isLoading` de SWR
+  // sigue siendo `true` mientras revalida aunque haya `fallbackData`, y usarlo tal cual haría
+  // que la página 1 —la que el servidor ya resolvió— apareciera como esqueleto antes de
+  // enseñar las filas que el usuario veía antes de paginar (T I.2).
+  const cargando = data === undefined;
+
+  function cambiarFiltro(nuevo: FiltroBodegaSatelite) {
+    setFiltro(nuevo);
+    setPage(1);
+  }
+
+  /**
+   * Relee el estado del servidor tras una acción.
+   *
+   * `router.refresh()` sigue siendo necesario: vuelve a resolver el Server Component, que es
+   * quien trae "Por recibir", el bloqueo de la bodega, las liberadas de hoy y el total del
+   * conjunto. Pero YA NO BASTA para la tabla: sus filas las tiene SWR, y sin `mutate()` una
+   * orden recién enviada a central seguiría en el listado hasta recargar la página.
+   */
+  async function releerBodega() {
+    router.refresh();
+    await mutate();
+  }
 
   // Feature 63: recepción EN LOTE ("Aceptar todas" / "Aceptar" por-orden), análoga
   // al "Recoger" del mensajero. Cablea la Server Action `recibirLote`; tras éxito
@@ -175,7 +276,7 @@ export function RecepcionSateliteModule({
     const result = await recibirLote({ ordenIds });
     if (result.status === "ok") {
       toast.success(`${result.recibidas} orden(es) recibida(s).`);
-      router.refresh();
+      await releerBodega();
       return;
     }
     toast.error(
@@ -213,7 +314,7 @@ export function RecepcionSateliteModule({
       toast.success(`${recuperadas} orden(es) recuperada(s) a bodega.`);
     }
     if (errores.length > 0) toast.error(errores[0]);
-    router.refresh();
+    await releerBodega();
   }
 
   /**
@@ -228,13 +329,13 @@ export function RecepcionSateliteModule({
    * orden pasa a `incidente` y desaparece del listado.
    */
   function handleIncidenteReportado() {
-    router.refresh();
+    void releerBodega();
   }
 
   function handleSuccess() {
     setOrdenesAAsignar([]);
     setModalOpen(false);
-    router.refresh(); // relee el estado del servidor (patrón feature 33)
+    void releerBodega(); // relee el estado del servidor (patrón feature 33)
   }
 
   /**
@@ -253,7 +354,7 @@ export function RecepcionSateliteModule({
   function handleDeshacerSuccess() {
     setOrdenesADeshacer([]);
     setDeshacerOpen(false);
-    router.refresh();
+    void releerBodega();
   }
 
   // ---------- Feature 139/T3.3 (R13/R21) — envío por lote a bodega central ----------
@@ -285,7 +386,7 @@ export function RecepcionSateliteModule({
       toast.success(`${enviadas} orden(es) enviada(s) a bodega central.`);
     }
     if (errores.length > 0) toast.error(errores[0]);
-    router.refresh();
+    await releerBodega();
   }
 
   return (
@@ -309,7 +410,7 @@ export function RecepcionSateliteModule({
         <>
           {/* Recepción por guía: MISMA tarjeta que la recogida del mensajero
               (`EscanerGuiaCard`), con los dos caminos — cámara y número tecleado. */}
-          <EscanerRecepcion onRecibida={() => router.refresh()} />
+          <EscanerRecepcion onRecibida={() => void releerBodega()} />
           {/* Feature 63: REUTILIZA la sección compartida "por aceptar" del mensajero:
               banner con contador de nuevas + "Aceptar todas" (lote -> recibirLote con
               todos los ids) + "Aceptar" por-orden (recibirLote con uno). Sin zona no se
@@ -399,7 +500,31 @@ export function RecepcionSateliteModule({
         </div>
 
         <SateliteOrdenesListado
-          ordenes={ordenesBodega}
+          ordenes={data?.items ?? []}
+          total={data?.total ?? 0}
+          // R42: el «de Y» del contador es el total del conjunto SIN filtros que resolvió el
+          // Server Component. Nunca sale de las filas de la página.
+          totalSinFiltros={ordenesBodega.total}
+          catalogo={catalogoFiltros}
+          onFiltroChange={cambiarFiltro}
+          cargando={cargando}
+          errorCarga={error ? ERROR_CARGA : null}
+          /**
+           * Feature 170 (T K.3, R52) — la tabla pinta UNA página; el archivo sigue siendo el
+           * CONJUNTO COMPLETO con los filtros vigentes. El callback se construye EN EL
+           * RENDER, no en un memo: el closure lee el `filtro` de ESTE render, así que la
+           * descarga refleja los filtros aplicados en el momento de pulsar (R10/R33).
+           *
+           * Baja como callback y no como filtros (design §5, patrón `WalletModule`): la
+           * tabla no conoce —ni debe conocer— de dónde sale el conjunto.
+           *
+           * `filasDelConjuntoCompleto` conserva el tope de 5000 de `filasLocales`: por encima
+           * devuelve un error accionable y NO produce archivo, nunca un xlsx al que le faltan
+           * filas sin avisar (R26/R28).
+           */
+          obtenerFilasDescarga={() =>
+            filasDelConjuntoCompleto(conjuntoFiltrado(filtro), filaDescargaSatelite)
+          }
           zonaNombre={zonaNombre}
           puedeAsignar={!bloqueoBodega.bloqueada}
           onAsignar={abrirAsignacion}
@@ -414,6 +539,23 @@ export function RecepcionSateliteModule({
           // disponibilidad del incidente (R48); las demás acciones ya llegan decididas.
           sinZona={sinZona}
           onIncidenteReportado={handleIncidenteReportado}
+        />
+
+        {/* R43: control de navegación entre páginas, con nombre accesible propio. */}
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={data?.total ?? 0}
+          disabled={cargando}
+          showFirstLast
+          siblingCount={1}
+          ariaLabel={PAGINACION_BODEGA_LABEL}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setPage(1);
+          }}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
         />
       </section>
 

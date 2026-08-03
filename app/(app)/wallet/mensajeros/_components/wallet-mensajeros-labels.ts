@@ -55,6 +55,50 @@ export const DESGLOSE_LABEL = {
   cuentaPorPagarHint: "Lo pendiente de pagar al mensajero",
 } as const;
 
+/** El aviso de la CABECERA del desglose, con sus tres rótulos (feature 172, T H.4). */
+export const DESGLOSE_AVISO_BRUTOS = avisoImportesBrutos({
+  pagado: DESGLOSE_LABEL.pagado,
+  devengado: DESGLOSE_LABEL.devengado,
+  correcto: DESGLOSE_LABEL.cuentaPorPagar,
+});
+
+/**
+ * Feature 172 (T H.4) — el AVISO de la limitación N1, compuesto con los rótulos REALES de la
+ * superficie que lo muestra.
+ *
+ * Por qué esta pantalla lo necesita y `SaldosTiendasTable` no: la tabla de tiendas solo pinta
+ * el SALDO, que es el número correcto; esta pinta «devengado» y «pagado», que son sumas
+ * BRUTAS del libro. `PagoMensajeroMovimientoRepository.agregarCuentaPorPagar` agrupa por
+ * `tipo` SIN excluir nada, así que el `ajuste_devengo` del reverso engorda lo devengado y la
+ * `liquidacion` anulada sigue dentro de lo pagado. La RESTA —la cuenta por pagar— sale exacta.
+ *
+ * Regla aplicada (decisión del leader): el aviso hace falta donde se muestre un IMPORTE
+ * AGREGADO que incluya lo anulado; no donde solo se listen movimientos. Aquí lo llevan las
+ * DOS superficies con agregados —la tabla de cuentas y la cabecera del desglose— y NO la
+ * tabla de movimientos del desglose, donde el pago y su reverso se ven los dos.
+ *
+ * Sin jerga: ni «contraasiento», ni «neteo», ni siglas.
+ */
+export function avisoImportesBrutos(rotulos: {
+  pagado: string;
+  devengado: string;
+  correcto: string;
+}): string {
+  return (
+    `«${rotulos.pagado}» sigue contando los pagos que se anularon, y «${rotulos.devengado}» ` +
+    `suma la devolución de cada uno, así que esos dos importes quedan más altos de lo que se ` +
+    `movió de verdad. «${rotulos.correcto}» ya tiene todo eso descontado: ese es el número ` +
+    `correcto.`
+  );
+}
+
+/** El aviso de la TABLA de cuentas por pagar, con sus cabeceras. */
+export const CUENTAS_AVISO_BRUTOS = avisoImportesBrutos({
+  pagado: COLUMNAS_MAESTRO.pagado,
+  devengado: COLUMNAS_MAESTRO.devengado,
+  correcto: COLUMNAS_MAESTRO.cuentaPorPagar,
+});
+
 // ── Desglose POR CIERRE del maestro (R18/R22) ──
 
 /** Etiqueta legible del tipo de movimiento (devengo = lo devengado / pago = lo entregado). */

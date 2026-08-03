@@ -5,17 +5,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PlantillaListItemDTO } from "@/lib/types/plantilla-mensaje";
 
+import { ESTADO_PLANTILLA_LABEL } from "./plantilla-estado-label";
+
 // Longitud máxima del cuerpo mostrado en la celda antes de truncar (R6). El cuerpo
 // completo se ve/edita en el formulario; la tabla solo da una vista de una línea.
 const CUERPO_MAX = 80;
 
-/** Etiqueta legible del estado (listo para i18n vía diccionario). */
-const ESTADO_LABEL: Record<PlantillaEstado, string> = {
-  activo: "Activo",
-  inactivo: "Inactivo",
-  pending: "Pendiente",
-  refused: "Rechazado",
-};
+/**
+ * Etiqueta legible del estado (listo para i18n vía diccionario). Feature 170 (T B.3): vive
+ * en `./plantilla-estado-label` (módulo PURO) para que las columnas de export la lean sin
+ * arrastrar React; aquí solo se le da el nombre local de siempre.
+ */
+const ESTADO_LABEL = ESTADO_PLANTILLA_LABEL;
 
 /** Variante del `Badge` por estado. Solo lectura: el front no activa/rechaza. */
 const ESTADO_VARIANT: Record<

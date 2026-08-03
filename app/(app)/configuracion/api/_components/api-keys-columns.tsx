@@ -7,17 +7,19 @@ import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 
 import { ApiKeyAccionCell } from "./ApiKeyAccionCell";
 import { WebhookAccionCell } from "./WebhookAccionCell";
+import { ESTADO_API_KEY_LABEL } from "./api-key-estado-label";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
 // Placeholder para valores ausentes.
 const SIN_DATO = "—";
 
-/** Etiqueta legible del estado propio de la key (no solo color, R accesibilidad). */
-const ESTADO_LABELS: Record<EstadoApiKey, string> = {
-  activa: "Activa",
-  inactiva: "Inactiva",
-};
+/**
+ * Etiqueta legible del estado propio de la key (no solo color, R accesibilidad). Feature
+ * 170 (T B.3): vive en `./api-key-estado-label` (módulo PURO) para que las columnas de
+ * export la lean sin arrastrar React; aquí solo se le da el nombre local de siempre.
+ */
+const ESTADO_LABELS = ESTADO_API_KEY_LABEL;
 
 /** Estado de la key -> variante semántica de la primitiva `Badge` (sin hex). */
 const ESTADO_VARIANT: Record<EstadoApiKey, BadgeVariant> = {

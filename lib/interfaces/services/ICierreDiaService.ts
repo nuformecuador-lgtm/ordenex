@@ -2,6 +2,7 @@ import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
+import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 37 — contrato del servicio del "Cierre del dia" del mensajero. Logica de
 // negocio pura (sin HTTP ni Prisma); el borde (Server Action) la traduce a
@@ -242,6 +243,16 @@ export type VerCierrePasadoServiceResult =
   | { status: "forbidden" } // rol != mensajero
   | { status: "no_encontrada" }; // id inexistente o de otro mensajero (no se distinguen)
 
+/**
+ * Feature 170 — FASE 2 (T I.1, R40/R41): UNA PAGINA de los cierres solicitados por el
+ * mensajero + el total del conjunto. Contrato comun de T H.2, sin campos extra.
+ *
+ * `tieneVencido`/`tieneRechazado` NO viajan aqui a proposito: son avisos de la PANTALLA
+ * derivados del historico COMPLETO, y siguen llegando por `listarCierreDia`. Derivarlos de
+ * una pagina los volveria falsos en cuanto el cierre vencido cayera en la pagina 2 (R50).
+ */
+export type ListarCierresPasadosServiceResult = ListarPaginadoServiceResult<CierrePasadoDTO>;
+
 // R10-R16: solicitud de cierre. Sin input de negocio (el actor y sus gestiones lo
 // determinan todo). `conflict` cubre R10 (pendientes) / R11 (vacio) / R12
 // (duplicado); `validation_error` cubre R16 (sin zona).
@@ -289,6 +300,19 @@ export interface ICierreDiaService {
    * `no_encontrada`, sin distinguirlos. Rol != mensajero -> `forbidden`.
    */
   verCierrePasado(cierreId: string, actor: Actor): Promise<VerCierrePasadoServiceResult>;
+  /**
+   * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): «Cierres solicitados» del mensajero
+   * (R18), paginado en el servidor.
+   *
+   * MISMO acotamiento por actor que `listarCierreDia`: rol `mensajero` y `actor.usuarioId`
+   * como `mensajero_id` del WHERE (nunca un id de la peticion). Un mensajero no puede pedir
+   * la pagina 1 del historico de otro: no hay parametro por el que pedirlo. R44 se cumple por
+   * construccion. Cualquier otro rol -> forbidden, sin filas y sin total.
+   */
+  listarCierresPasadosPaginado(
+    input: { page: number; pageSize: number },
+    actor: Actor,
+  ): Promise<ListarCierresPasadosServiceResult>;
   /**
    * R10-R16: crea la solicitud de cierre (`solicitado`) agrupando TODAS las
    * gestiones pendientes del mensajero, con destino derivado por zona (R15) y
