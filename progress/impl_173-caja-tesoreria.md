@@ -2409,3 +2409,285 @@ mutándolo, el manejador nuevo no reimplementa ni una resta (estructural **y** n
 el guardia de coherencia sigue mordiendo por exceso **y** por defecto —medido con las dos
 mutaciones— y la conciliación de la 127 da **exactamente** el mismo cuadre con COD en la caja,
 incluso cuando ese COD vale justo el dinero que falta.
+
+---
+---
+
+# TANDA G — Frontend
+
+> Misma rama `feature/173-caja-tesoreria`. Fase **frontend**.
+> Alcance de esta entrada: **`T G.1`, `T G.2`, `T G.3`, `T G.4`** — las cuatro **HECHAS**.
+
+## G1. Qué se hizo
+
+| Task | Estado | Nota |
+| --- | --- | --- |
+| `T G.1` — la tarjeta de las dos cifras | **HECHA** | Las dos **a la vez**, sin pestañas ni desplegables; medido, no supuesto (§G4). |
+| `T G.2` — etiquetas de las categorías nuevas | **HECHA — VERIFICADA, no implementada** | El filtro y la descarga las recogen **solas** desde el SEED. Cero líneas de código nuevas (§G5). |
+| `T G.3` — página y módulo | **HECHA** | La palabra desaparece de los tres sitios: rótulo, descripción y nombre accesible (§G6). |
+| `T G.4` — las pantallas de tienda y mensajero NO cambian | **HECHA — verificación pura** | Cero archivos. La medición, en §G8. |
+
+## G2. Archivos
+
+### Creados
+
+| Archivo | Task |
+| --- | --- |
+| `tests/components/CajaResumenCard.test.tsx` (19 casos) | `T G.1` |
+
+### Renombrados
+
+| Antes | Ahora | Task |
+| --- | --- | --- |
+| `app/(app)/wallet/_components/WalletBalanceCard.tsx` | `app/(app)/wallet/_components/CajaResumenCard.tsx` | `T G.1` |
+
+El renombrado va con `git mv` (el diff lo registra como `R`), y es del encargo, no cosmético
+(`design.md §8`): *«mientras el archivo se llame «balance», alguien volverá a poner esa palabra en
+pantalla»*.
+
+### Modificados
+
+| Archivo | Qué | Task |
+| --- | --- | --- |
+| `app/(app)/wallet/_components/wallet-labels.ts` | `CAJA_RESUMEN_LABEL`, `CAJA_TIENDAS_HREF` y los **tres** textos largos (nota de diferencia, advertencia de la tercera línea, aviso del periodo). Ninguna línea de `CATEGORIA_LABEL` ni de `CATEGORIA_OPTIONS`. | `T G.1` |
+| `app/(app)/wallet/_components/WalletModule.tsx` | Prop `balance` → `resumen` (el DTO entero), la lectura de la cabecera pasa al borde de las dos cifras, la tarjeta nueva y el nombre accesible de la sección. | `T G.3` |
+| `app/(app)/wallet/page.tsx` | Pre-fetch con `verResumenCajaAction` y **descripción nueva**. | `T G.3` |
+| `tests/integration/wallet-page.test.tsx` | Ver §G6. | `T G.3` |
+| `tests/components/descarga/WalletDescarga.test.tsx` | Ver §G5 y §G7. | `T G.2`, `T G.3` |
+
+### Lo que NO está en el diff (y es parte de la verificación)
+
+- **`lib/`, `db/` y `scripts/`, enteros.** Esta fase es frontend: no toca ni un servicio, ni un
+  repositorio, ni una acción de servidor. El borde que consume (`verResumenCajaAction`) lo dejó
+  `T D.2` tal cual.
+- `app/(app)/wallet/tiendas/**`, `app/(app)/wallet/mensajeros/**`, `app/(app)/mi-wallet/**`,
+  `app/(app)/mis-pagos/**` — **R63**, medido en §G8.
+- `app/(app)/wallet/_components/WalletLedger.tsx`, `WalletFiltros.tsx` y
+  `wallet-ledger-descarga-columnas.ts` — **es el resultado de `T G.2`**: para que las dos
+  categorías nuevas salgan en el listado, en el filtro y en la descarga **no había que tocar
+  nada**. Que estos tres archivos estén fuera del diff es la prueba, no un descuido (§G5).
+- `lib/utils/wallet-balance.ts` y su suite — **R9**, intacto desde `T A.5`.
+
+## G3. Una deuda que NO se cerró aquí, y por qué
+
+`verBalanceAction` (`lib/actions/wallet.ts:152`) sigue viva. `T G.3` la deja **sin ningún consumidor
+en `app/`** —la página y el módulo ya hablan con `verResumenCajaAction`—, pero retirarla es tocar
+`lib/`, que es backend y no es de esta fase. **Queda para la Tanda H**, con su suite
+(`tests/unit/actions/wallet-actions.test.ts`, el `describe` del puente), que también se va con ella.
+Decisión del leader, tomada durante esta tanda.
+
+## G4. `T G.1` — qué se mide de la tarjeta, y por qué eso
+
+El componente recibe `CajaResumenDTO` entero y pinta **nueve importes** sin tocar ninguno. Lo que la
+suite fija (19 casos) va más allá de «los textos están»:
+
+- **R58, las dos a la vez.** No basta con que las dos cifras existan en el DOM: se afirma que **no
+  hay** ni `tab`, ni `tablist`, ni `button`, ni `<details>` en toda la tarjeta, y que ninguno de los
+  dos bloques cuelga de un `hidden`/`aria-hidden`. Si una de las dos viviera detrás de un clic,
+  habría un instante —el de la pantalla recién cargada— en el que solo se ve una, que es exactamente
+  el error que la feature existe para impedir.
+- **R1, y que no se confundan.** Cada cifra vive en su propia `region` con su nombre, y se afirma
+  que `₡2000.00` **no** está dentro del bloque de «Dinero en caja» ni `₡12000.00` dentro del de
+  «Ganancia de Ordenex». El conjunto de prueba tiene las dos cifras **distintas** a propósito
+  (12 000 ≠ 2 000): con un resumen sin dinero de terceros, media suite pasaría por casualidad.
+- Y los desgloses también son distintos: «Entró» (15 000) **no** es «Ingresos de Ordenex» (5 000).
+  Una tarjeta que pintara el mismo par de importes debajo de las dos cifras cae ahí.
+- **R59.** La palabra no aparece en el texto **ni** en ningún `aria-label`/`title`/`alt` de lo
+  pintado. Para quien usa lector de pantalla, el árbol de accesibilidad **es** la pantalla; dejarla
+  escondida ahí sería cumplir el requisito de boca.
+- **R60.** La nota de diferencia nombra **las dos** cifras con sus nombres, dice qué las separa
+  («contra-entrega») y pasa dos filtros: **cero siglas** (ninguna secuencia de dos o más mayúsculas)
+  y cero jerga de una lista de diez palabras (`balance`, `contraasiento`, `neteo`, `netear`,
+  `devengo`, `tesorería`, `SLA`, `wallet_movimiento`, `ingreso_`, `egreso_`). El último filtro se
+  aplica además a **la tarjeta entera**.
+- **R34, la tercera línea `[P6]`.** Se mide la advertencia por lo que tiene que transmitir, no por
+  su redacción: dice «no es lo que se les debe», dice **«es más»** y nombra el flete y la comisión —
+  el *porqué* de que sea mayor—. El enlace apunta a `/wallet/tiendas` y su texto se explica solo.
+  Y una aserción que parece rara y no lo es: **«deuda» aparece exactamente UNA vez** dentro del
+  bloque, la de la advertencia que manda a la otra pantalla. El rótulo dice lo que la cifra **es**
+  («cobrado y aún no entregado»), nunca lo que no es.
+- **`[P7]`, el rótulo condicional.** Los dos sentidos: con la bandera en `false` la región se llama
+  «Dinero en caja» y **no existe** la del periodo; con `true`, al revés. El **número no cambia**
+  (`₡12000.00` en los dos) y la ganancia **no** cambia de nombre. Además, la bandera **viene del
+  DTO**: la fuente del componente no declara `useState`, `useEffect`, `useSearchParams`, `filtros`,
+  `window.location` ni `document`, así que no **puede** deducir en el cliente si hay filtros puestos.
+- **R64, money-safe.** Un importe de once dígitos (`12345678901.99`) y uno de céntimos (`1000.10`)
+  se pintan exactos; el barrido del código descarta las cuatro llamadas prohibidas, `@prisma/client`,
+  `decimal.js` y cualquier mención a `derivarCaja`/`derivarBalance`. Sin biblioteca de decimales y
+  sin conversión a número, en el navegador solo queda pintar.
+
+**Los textos van en `wallet-labels.ts`**, no dentro del componente (docs/conventions: textos de UI
+fuera del componente, i18n-ready). Y los tres textos largos se **componen** con los rótulos reales
+—el molde que la 172 dejó en `mi-wallet-labels.ts`—, así que renombrar una cifra arrastra su nota en
+vez de dejarla hablando de un rótulo que ya no existe.
+
+## G5. `T G.2` — VERIFICADA: cero líneas, y la prueba de que cero era lo correcto
+
+La task pedía **verificar**, no implementar, y el resultado es que **no había nada que implementar**:
+
+- `CATEGORIA_LABEL` ganó sus dos claves en la **Tanda A** por la cascada de compilación (§3b): es un
+  `Record` completo y sin ellas `pnpm typecheck` no pasa.
+- `CATEGORIA_OPTIONS` se arma mapeando `WALLET_MOVIMIENTO_CATEGORIA_SEED` desde la **feature 42**,
+  así que el `Select` del filtro las recogió **solo**.
+- `filaDescargaMovimientoCaja` usa `CATEGORIA_LABEL` desde la **feature 170**, así que la descarga
+  también.
+
+Lo que se **añade** es la medición, en `WalletDescarga.test.tsx`, escrita para que siga valiendo
+cuando llegue la categoría 18: la lista de valores del `Select` tiene que ser **exactamente**
+`["", ...WALLET_MOVIMIENTO_CATEGORIA_SEED]`, igualdad en los dos sentidos y **en orden**, contra el
+SEED leído en **runtime**. El día que alguien sustituya el mapeo por una lista literal, el filtro se
+quedaría mudo ante la siguiente categoría y **nadie se enteraría hasta que faltara una en pantalla**.
+Encima de eso: cada una de las **17** categorías del catálogo tiene etiqueta, ninguna etiqueta es su
+propio valor de enum y ninguna lleva guion bajo (R61).
+
+**Hallazgo: ninguno.** Las dos superficies recogen las categorías nuevas solas, como el design
+anticipaba.
+
+## G6. `T G.3` — la palabra desaparece de los TRES sitios
+
+`design.md §8` y R59 hablan de la tarjeta y de la descripción. Hay un tercero que no está escrito y
+sí cuenta:
+
+1. **El rótulo de la tarjeta** — `T G.1`.
+2. **La descripción de la página** — *«Caja principal de Ordenex: libro de movimientos, dinero en
+   caja y ganancia de Ordenex»*. Se mide **donde se pinta**: en `wallet-page.test.tsx` el módulo va
+   stubbeado, así que lo único que queda en el documento es el título y la descripción, y la
+   aserción es sobre el texto del documento entero.
+3. **El nombre accesible de la sección del módulo** (`aria-label`), que era «Balance y acciones» y
+   pasa a «Resumen de la caja y acciones». No es visible, pero está en el árbol de accesibilidad —y
+   ahí una palabra que miente miente igual.
+
+Lo demás de `T G.3`, medido en `wallet-page.test.tsx`:
+
+- **R65 en las dos direcciones.** Un rol sin acceso total sigue viendo `notFound` **y no dispara ni
+  una** de las dos lecturas (el guardia está antes del pre-fetch, no después). Y un caso nuevo: si
+  el **resumen** responde `forbidden`, la página tampoco se pinta a medias — el módulo recibe **cero**
+  llamadas. Es la mitad de la defensa en profundidad que la 42 tenía escrita para la action vieja y
+  que había que rehacer para la nueva.
+- **R64.** El DTO se barre **entero** con `Object.entries` —no tres campos elegidos a mano—: todo es
+  STRING salvo `periodoFiltrado`, que es el único booleano y no es dinero. Y `enCaja ≠ ganancia`, así
+  que la pantalla no recibe la misma cifra repetida dos veces.
+- **R62.** El movimiento de `ingreso_cod_recaudado` llega al listado con **exactamente las mismas
+  claves** que uno de flete: ni un campo de más, ni una forma distinta.
+
+## G7. R62 en las tres superficies, no solo en la que se ve
+
+`WalletDescarga.test.tsx` mide las tres, con las dos categorías nuevas dentro del conjunto:
+
+| Superficie | Qué se afirma |
+| --- | --- |
+| **Listado** | Las **seis** cabeceras de siempre (`Fecha, Tipo, Categoría, Monto, Origen, Acciones`), y cada categoría nueva pintada con su nombre legible — con la contraprueba de que el valor del enum **no** aparece en la tabla. |
+| **Fila de descarga** | Las **cinco** claves declaradas en `COLUMNAS_DESCARGA_WALLET_CAJA`, ni una de más por ser una categoría nueva, y el monto como el STRING del servidor (`7001.10`, con sus céntimos). |
+| **Hoja del archivo** | Las mismas columnas **en el mismo orden**, y las tres filas con sus etiquetas en su sitio. |
+
+## G8. `T G.4` — la verificación, con la medición pegada
+
+**Cero archivos tocados.** `git diff --name-only origin/dev...HEAD` sobre la rama **entera** (las
+siete tandas), filtrado por lo que R32/R35/R63 protegen (`wallet-tiendas`, `mi-wallet`, `mis-pagos`,
+`wallet/tiendas`, `wallet/mensajeros`, `wallet-mensajero`): **sin salida**.
+
+**Ni un archivo** de `/wallet/tiendas`, `/wallet/mensajeros`, `/mi-wallet` ni `/mis-pagos` —ni de
+código ni de test— en el diff de la feature. R32, R35 y R63 se sostienen por **ausencia**, que es la
+forma fuerte de sostenerlos.
+
+Las suites de liquidación que **sí** aparecen, una a una, todas de tandas anteriores y todas ya
+declaradas en esta bitácora:
+
+| Archivo | Quién y por qué |
+| --- | --- |
+| `tests/unit/services/liquidacion-service.test.ts` | `T C.2` — la aserción de R40 de la rama **tienda**, reescrita (§C3-1). La del **mensajero** sigue verbatim. |
+| `tests/unit/services/liquidacion-anulacion.test.ts` | `T C.3` — ídem (§C3-2). |
+| `tests/unit/services/liquidacion-caja-puerto.test.ts` | `T C.1` — archivo **nuevo**, no una edición. |
+| `tests/integration/db/liquidacion-idempotencia.test.ts` | `T C.2` — cascada mecánica declarada en §C6, sin una sola aserción modificada. |
+| `tests/unit/guards/liquidacion-alcance.test.ts` | Tanda C — guardia de la 172 (`T H.4`), con su hallazgo documentado en esta misma bitácora. |
+
+Y el diff de **esta** tanda (sus tres commits), para que se vea que no tocó ninguna de ellas:
+
+```
+app/(app)/wallet/_components/CajaResumenCard.tsx
+app/(app)/wallet/_components/WalletBalanceCard.tsx      <- borrado del rename
+app/(app)/wallet/_components/WalletModule.tsx
+app/(app)/wallet/_components/wallet-labels.ts
+app/(app)/wallet/page.tsx
+tests/components/CajaResumenCard.test.tsx
+tests/components/descarga/WalletDescarga.test.tsx
+tests/integration/wallet-page.test.tsx
+```
+
+**Ocho archivos, todos de `app/` o de sus tests.** Ni `lib/`, ni `db/`, ni `scripts/`.
+
+## G9. Trazabilidad `R<n>` → test
+
+| R | Test que lo verifica |
+| --- | --- |
+| R1 (parte UI) | `tests/components/CajaResumenCard.test.tsx` — «las DOS cifras se ven a la vez, cada una con su nombre y su importe» (12 000 ≠ 2 000, y cada una **fuera** del bloque de la otra) |
+| R34 | idem — «muestra el dinero de las tiendas y AVISA de que no es lo que se les debe» («es más», flete, comisión), «lleva al sitio donde la deuda de verdad SÍ está» (`href="/wallet/tiendas"`) y «la tercera línea NO se presenta como la deuda» (el rótulo no dice «deuda»; la única mención está en el aviso que remite a la otra pantalla) |
+| R58 | `CajaResumenCard.test.tsx` — «a la VEZ significa sin abrir nada»: cero `tab`/`tablist`/`button`/`<details>` y ninguno de los dos bloques bajo `hidden`/`aria-hidden` |
+| R59 | `CajaResumenCard.test.tsx` — «no aparece en ningún rótulo, importe ni nombre accesible» (texto + `aria-label`/`title`/`alt`) y «tampoco con los filtros puestos» + `tests/integration/wallet-page.test.tsx` — «la descripción ya no rotula ninguna cifra con la palabra que mentía» y «nombra las dos cifras con los mismos nombres que la tarjeta» |
+| R60 | `CajaResumenCard.test.tsx` — «explica en qué se diferencian, nombrando LAS DOS cifras», «en español llano — sin siglas y sin jerga de contador» y «la pantalla entera habla el mismo idioma» |
+| R61 | `tests/components/descarga/WalletDescarga.test.tsx` — «el filtro se puebla del SEED, no de una lista escrita a mano» (igualdad con `["", ...SEED]` en orden, las 17 con etiqueta) y «la descarga las recoge sola» + `CajaResumenCard.test.tsx` — «nombra ese dinero con las MISMAS palabras que el libro» |
+| R62 | `WalletDescarga.test.tsx` — «el listado los pinta como a los demás, sin cambiar las columnas» (las 6 cabeceras) y «el archivo también los trae» (las 5 claves, el mismo orden) + `wallet-page.test.tsx` — «los movimientos de las categorías NUEVAS llegan al listado como los demás» (mismas claves) |
+| R64 (parte cliente) | `CajaResumenCard.test.tsx` — «pinta los importes TAL CUAL, con sus céntimos» y «la tarjeta no tiene forma de operar con dinero» + `wallet-page.test.tsx` — el barrido del DTO entero |
+| R65 | `wallet-page.test.tsx` — «roles sin acceso total NO ven la wallet (notFound), sin pre-fetch de datos» (cero llamadas a las **dos** lecturas) y «si el RESUMEN niega, tampoco se pinta el libro» |
+| `[P7]` | `CajaResumenCard.test.tsx` — los dos sentidos del rótulo, «cambia el NOMBRE, no el número», el aviso que solo aparece filtrando y «la bandera viene del DTO — la tarjeta no la deduce de nada del cliente» |
+| R32, R35, R63 | `T G.4` — §G8: **ausencia** medida sobre el diff de la rama entera |
+
+## G10. Gate ejecutado
+
+> Gate **acotado**, el que ordenó el leader. La suite completa **NO** se corrió.
+
+**`pnpm typecheck`** → `tsc --noEmit`, sin salida, **exit 0**.
+
+**`pnpm lint`**
+
+```
+✖ 27 problems (0 errors, 27 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores y exactamente las 27 de la línea base** de las tandas A–F. Filtrando la salida por
+`CajaResumen`, `WalletModule`, `wallet-labels`, `wallet/page`, `wallet-page` y `WalletDescarga` →
+**cero coincidencias**: ninguna de las 27 cae en un archivo de esta tanda.
+
+**`pnpm exec vitest run guard`** (obligatorio)
+
+```
+ Test Files  48 passed (48)
+      Tests  701 passed (701)
+   Duration  3.98s
+```
+
+**48/701, idéntico a la Tanda F.** Esta tanda no añade ninguna guardia y **no movió ninguna ajena**
+—en particular, el censo de tablas sigue en su sitio: la 173 no añade ni un `<DataTable>`—.
+
+**`pnpm exec vitest related --run`** sobre los **7** archivos tocados (4 de código, 3 de test)
+
+```
+ Test Files  26 passed (26)
+      Tests  302 passed (302)
+   Duration  24.17s
+```
+
+**Sin flake de jsdom**: los tres archivos de componente de esta tanda corrieron también en aislado
+(19, 9 y 9 casos) y dentro del `related`, siempre verdes. Ninguno de los tres archivos con el rojo
+intermitente conocido (`ControlDescargaTransversal`, `CuentasPorPagarTable`, `OrdenesModuleReuse`)
+apareció en rojo.
+
+**No corrido aquí:** `./init.sh --rapido` ni `./init.sh` completo. Los corre el leader.
+
+## G11. Lo que queda abierto (y no es de esta tanda)
+
+- **`verBalanceAction`** — §G3. Sin consumidores en `app/`; la retira la Tanda H junto con el
+  `describe` de su puente.
+- **`T H.1`** (censo de tablas) queda ya medido de refilón: la 173 no añade ninguna instancia de
+  `<DataTable>` y `vitest run guard` sigue en 48/701.
+
+## G12. Veredicto de la Tanda G
+
+TANDA G entregada completa: las dos cifras se ven **a la vez** —y está medido como ausencia de
+pestaña, de desplegable y de botón, no como presencia de dos textos—, la palabra que mentía
+desaparece de los **tres** sitios (rótulo, descripción y nombre accesible), la tercera línea lleva su
+advertencia de que **no** es la deuda con su porqué y su enlace, el rótulo condicional se decide con
+la bandera del **servidor** y la tarjeta no tiene forma de deducirla, `T G.2` se cierra **sin escribir
+una línea** con la prueba en runtime de que el filtro y la descarga leen del SEED, y `T G.4` se
+sostiene por ausencia: **ni un archivo** de tienda o de mensajero en el diff de la feature entera.
