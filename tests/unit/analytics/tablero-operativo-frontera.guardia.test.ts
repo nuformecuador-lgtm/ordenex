@@ -89,10 +89,29 @@ const PUERTA_TRASERA: readonly RegExp[] = [
 const ALCANCE_E_IDENTIDAD: readonly RegExp[] = [
   /from\s+["']@\/lib\/analytics\/alcance/,
   /from\s+["']@\/lib\/analytics\/identidad["']/,
-  /\besAccesoTotal\b/,
   /\bresolverAlcance\b/,
   /\bseudonimizar\w*/,
 ];
+
+/**
+ * R10, segundo tramo — ACOTADO al subarbol de la 131, y no a toda la ruta. Decidido al
+ * mergear la 132 (tablero financiero), que se puso roja aqui.
+ *
+ * Lo que R10 teme, y sigue prohibido en TODA la ruta, esta en la lista de arriba: importar
+ * los modulos de alcance o identidad, `resolverAlcance`, `seudonimizar`. Son recortes de
+ * DATOS en el cliente, y solo pueden esconder lo que el servidor concedio o intentar
+ * deshacer una seudonimizacion.
+ *
+ * `esAccesoTotal` es otra cosa y por eso baja de tramo. En `app/(app)/analitica/page.tsx`
+ * —archivo de la 129, compartido por la 131 y la 132— la 132 lo usa para decidir si
+ * PIDE los datos del dinero: un gate de servidor ESTRICTAMENTE MAS FUERTE que no pedir
+ * nada, aplicado antes de consultar, no un recorte posterior de filas concedidas. Barrer
+ * la ruta entera con este patron acusaba a la 132 de un pecado que no comete.
+ *
+ * Dentro del subarbol operativo sigue prohibido: ahi no hay ninguna region que gatear por
+ * rol, y usarlo solo podria significar re-recortar lo que el servidor ya recorto.
+ */
+const ACCESO_TOTAL: readonly RegExp[] = [/\besAccesoTotal\b/];
 
 /** R25 — nada financiero, y nada del catalogo de SERVIDOR, en el subarbol del tablero. */
 const FINANCIERO_Y_CATALOGO: readonly RegExp[] = [
@@ -139,6 +158,39 @@ describe("Feature 131 (R10) — el tablero no reimplementa alcance ni identidad"
         "servidor SI concedio, o (b) intentar deshacer una seudonimizacion. Archivos: " +
         malos.join(", "),
     ).toEqual([]);
+  });
+
+  it("y en el SUBARBOL operativo tampoco se gatea por rol con `esAccesoTotal`", () => {
+    // Segundo tramo, acotado (ver el comentario de ACCESO_TOTAL). Dentro del subarbol de
+    // la 131 no hay ninguna region que gatear por rol, asi que usarlo aqui solo podria
+    // significar re-recortar lo que el servidor ya recorto.
+    const malos = infractores(DIR_OPERATIVO, ACCESO_TOTAL);
+    expect(
+      malos,
+      "el subarbol operativo no decide por rol: eso ya ocurrio en el borde. Archivos: " +
+        malos.join(", "),
+    ).toEqual([]);
+  });
+
+  it("el acotamiento NO abre un hueco: el tramo ancho sigue vivo en la ruta entera", () => {
+    // Sin este caso, acotar `esAccesoTotal` podria confundirse con haber aflojado R10
+    // entero. Se comprueba sobre codigo SINTETICO —nada se escribe en el arbol— que un
+    // recorte de datos en cualquier archivo de la ruta seguiria siendo infractor.
+    for (const codigo of [
+      'import { whereOrden } from "@/lib/analytics/alcance-columnas";',
+      'import { seudonimizarMensajero } from "@/lib/analytics/identidad";',
+      "const filas = resolverAlcance(actor, crudas);",
+      "const visibles = filas.map(seudonimizarMensajero);",
+    ]) {
+      expect(
+        ALCANCE_E_IDENTIDAD.some((p) => p.test(codigo)),
+        codigo,
+      ).toBe(true);
+    }
+    // Y el patron acotado sigue detectando de verdad, no es una lista muerta.
+    expect(ACCESO_TOTAL.some((p) => p.test("if (!esAccesoTotal(actor.rol)) return null;"))).toBe(
+      true,
+    );
   });
 });
 

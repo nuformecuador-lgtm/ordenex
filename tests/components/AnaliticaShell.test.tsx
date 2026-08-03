@@ -150,6 +150,84 @@ describe("Feature 129 (R22) — sin contenido, estado vacío y CERO cifras/métr
   });
 });
 
+describe("Feature 132 (R7) — sin contenido financiero la región no existe", () => {
+  // Los dos casos de la 129 de arriba ("EXACTAMENTE dos regiones" y "no existe
+  // ninguna región financiera") siguen siendo la red principal de R7 y NO se
+  // relajan: la 132 los conserva tal cual y añade este, que es el mismo hecho
+  // pero con las otras dos props ya enchufadas — el caso realista de la 131,
+  // donde un shell "lleno" podría hacer aparecer la región financiera por
+  // arrastre.
+  it("con filtros y operativo enchufados pero sin financiero, sigue sin haber región financiera", () => {
+    render(
+      <AnaliticaShell
+        filtros={<span>contenido de filtros</span>}
+        operativo={<span>contenido operativo</span>}
+      />,
+    );
+
+    expect(screen.queryByRole("region", { name: /financ/i })).toBeNull();
+    expect(screen.getAllByRole("region")).toHaveLength(2);
+  });
+});
+
+describe("Feature 132 (R6) — con contenido, la región financiera se apila debajo de la operativa", () => {
+  it("expone TRES regiones y la tercera se llama 'Tablero financiero'", () => {
+    render(<AnaliticaShell financiero={<span>panel financiero de prueba</span>} />);
+
+    const regiones = screen.getAllByRole("region");
+    expect(regiones).toHaveLength(3);
+    expect(regiones[0]).toHaveAccessibleName("Filtros");
+    expect(regiones[1]).toHaveAccessibleName("Tablero operativo");
+    expect(regiones[2]).toHaveAccessibleName("Tablero financiero");
+  });
+
+  it("el contenido financiero se pinta DENTRO de su región y no en las otras dos", () => {
+    render(
+      <AnaliticaShell
+        filtros={<span>contenido de filtros</span>}
+        operativo={<span>contenido operativo</span>}
+        financiero={<span>panel financiero de prueba</span>}
+      />,
+    );
+
+    const regionFiltros = screen.getByRole("region", { name: "Filtros" });
+    const regionOperativo = screen.getByRole("region", {
+      name: "Tablero operativo",
+    });
+    const regionFinanciero = screen.getByRole("region", {
+      name: "Tablero financiero",
+    });
+
+    expect(
+      within(regionFinanciero).getByText("panel financiero de prueba"),
+    ).toBeInTheDocument();
+    expect(
+      within(regionFiltros).queryByText("panel financiero de prueba"),
+    ).toBeNull();
+    expect(
+      within(regionOperativo).queryByText("panel financiero de prueba"),
+    ).toBeNull();
+  });
+
+  // R8 (parcial): la 132 sólo AÑADE. Recibir contenido financiero no puede
+  // alterar lo que las otras dos regiones hacían sin él — que es mostrar su
+  // estado vacío de "entrega posterior".
+  it("las regiones 'Filtros' y 'Tablero operativo' conservan su estado vacío cuando sólo llega financiero", () => {
+    render(<AnaliticaShell financiero={<span>panel financiero de prueba</span>} />);
+
+    const regionFiltros = screen.getByRole("region", { name: "Filtros" });
+    const regionOperativo = screen.getByRole("region", {
+      name: "Tablero operativo",
+    });
+    expect(
+      within(regionFiltros).getByText(/entrega posterior/i),
+    ).toBeInTheDocument();
+    expect(
+      within(regionOperativo).getByText(/entrega posterior/i),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Feature 129 (R23) — el shell no fetchea", () => {
   it("no llama a fetch al renderizar sin datos", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
