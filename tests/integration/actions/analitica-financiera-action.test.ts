@@ -261,18 +261,20 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
   /* F.1 — camino completo, por rol y por metrica                            */
   /* ---------------------------------------------------------------------- */
 
-  it("F.1 · un maestro recibe `ok` en las OCHO metricas, contra la base real", async () => {
+  it("F.1 · un maestro recibe `ok` en las DIEZ metricas, contra la base real", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       const estados: Record<string, string> = {};
       for (const metricaId of IDS_FINANCIERAS_SERVIDAS) {
         estados[metricaId] = (await consultarDia(tx, metricaId, DIA_A)).status;
       }
       expect(estados).toEqual(Object.fromEntries(IDS_FINANCIERAS_SERVIDAS.map((m) => [m, "ok"])));
-      expect(Object.keys(estados)).toHaveLength(8);
+      // 8 de la 127 + `dinero_en_caja` y `ganancia_ordenex` (173, P4): las dos tambien
+      // responden contra Postgres de verdad, no solo contra dobles.
+      expect(Object.keys(estados)).toHaveLength(10);
     });
   });
 
-  it("F.1 · un adminTienda recibe 403 generico en las OCHO, y queda auditado", async () => {
+  it("F.1 · un adminTienda recibe 403 generico en las DIEZ, y queda auditado", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       const registros: unknown[] = [];
       const logger: ErrorLogger = { logError: (e) => registros.push(e) };
@@ -286,7 +288,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
         expect(respuesta, metricaId).toEqual({ status: "forbidden", code: "FORBIDDEN" });
       }
 
-      expect(registros).toHaveLength(8);
+      expect(registros).toHaveLength(10);
       expect(registros.every((r) => (r as { motivo: string }).motivo === "metrica_prohibida")).toBe(
         true,
       );
