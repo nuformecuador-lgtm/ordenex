@@ -48,6 +48,7 @@ describe("R32 — el drenador resuelve el handler de geocodificacion y no lo re-
     // enumera el conjunto EXACTO de tipos registrados. Asi, anadir un tipo sin actualizar
     // este test falla ruidosamente, y quitar uno por accidente tambien.
     expect([...handlers.keys()].sort()).toEqual([
+      "analitica_rollup_diario", // feature 124
       "geocodificacion",
       "liberar_reprogramadas",
       "optimizacion_ruta",
@@ -61,7 +62,10 @@ describe("R32 — el drenador resuelve el handler de geocodificacion y no lo re-
     const recurrencias = buildRecurrencias();
     expect(recurrencias.has("geocodificacion")).toBe(false);
     expect(recurrencias.has("liberar_reprogramadas")).toBe(true);
-    expect(recurrencias.size).toBe(1);
+    // Feature 124: el rollup diario es el SEGUNDO tipo recurrente (00:30 CR). El conteo sigue
+    // siendo cerrado a proposito: es lo unico que caza que un tipo por EVENTO se cuele aqui.
+    expect(recurrencias.has("analitica_rollup_diario")).toBe(true);
+    expect(recurrencias.size).toBe(2);
   });
 
   it("al drenar, el handler se ejecuta, el job se completa y NO se re-encola", async () => {

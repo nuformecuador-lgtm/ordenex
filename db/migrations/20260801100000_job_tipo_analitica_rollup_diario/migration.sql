@@ -1,0 +1,12 @@
+-- Feature 124 (D4->C1, design §8): anade el 7.º valor al enum `job_tipo` —
+-- `analitica_rollup_diario`, el job RECURRENTE que agrega en `analytics_daily` la fecha
+-- calendario de Costa Rica que acaba de cerrar (D-1), una vez al dia a las 00:30 CR
+-- (06:30 UTC).
+--
+-- POR QUE ESTA MIGRACION VA SOLA: Postgres NO permite USAR un valor de enum en la misma
+-- transaccion que lo anadio (error 55P04). Prisma Migrate corre cada migration.sql en una
+-- transaccion. Mismo criterio que 20260721120000_job_tipo_webhook_estado (feature 99) y
+-- 20260723120000_job_tipo_whatsapp_template_sync.
+--
+-- Aditiva: no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'analitica_rollup_diario';

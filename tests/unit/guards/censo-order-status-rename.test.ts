@@ -104,6 +104,17 @@ const ALLOWLIST = new Set([
   // cite. La alternativa —construir el literal por concatenacion para esquivar este censo—
   // se descarto a proposito: seria evadir el guard, no cumplirlo.
   "definiciones-catalogo.guardia.test.ts",
+  // Feature 124 (R45) — la contraparte EJECUTABLE del caso anterior. Donde
+  // `definiciones-catalogo.guardia.test.ts` censa que ninguna metrica CITE el value retirado,
+  // este test comprueba contra Postgres real que el rollup diario lo TOLERA: siembra una
+  // transicion de historial hacia la fila huerfana y exige que la orden no se descarte y que
+  // la corrida no falle. La fila existe de verdad en la base —el `DELETE` condicional de la
+  // migracion de la 155 quedo NO-OP porque `orden_historial_estado` la referencia (verificado:
+  // 37 filas en la base local, 0 en `orden`)—, asi que puede aparecer en un `GROUP BY
+  // estatus_id` real. Para sembrar ese caso hay que nombrar el value: es un dato de entrada,
+  // no nomenclatura viva. Si algun dia la fila desaparece del catalogo, el caso deja de tener
+  // sentido y esta entrada se retira con el.
+  "analytics-daily-job.test.ts",
 ]);
 
 // Feature 153 (R17) — censo de la ETIQUETA antigua. Se busca el literal EXACTO entre
