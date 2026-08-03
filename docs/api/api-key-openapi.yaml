@@ -103,6 +103,7 @@ paths:
                 resumen:
                   summary: "Una creada, una con error"
                   value:
+                    cargaId: "9c2b7f10-5d3a-4e21-9a4b-77c8e0f1a2b3"
                     total: 2
                     creadas: 1
                     duplicadas: 0
@@ -294,6 +295,158 @@ paths:
                     numGuia: 100234
                     estadoAnterior: en_ruta_bodega_central
                     estado: devolviendo_a_tienda
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  "/api/ordenes/api-key/orden/{id}":
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: "Identificador de la orden: su `num_guia` o su `num_remision`. Si el valor casa con la guía de una orden y con la remisión de otra, gana la de la guía."
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    get:
+      tags:
+        - Órdenes
+      summary: Detalle de una orden propia por guía o remisión
+      operationId: detalleOrdenPorIdentificador
+      description: |-
+        Mismo detalle que `GET /api/ordenes/api-key/{numGuia}` (idéntico schema `OrdenDetalle`),
+        pero aceptando como identificador el `num_guia` **o** el `num_remision` de la orden.
+        Resolución: si el identificador es un entero positivo se busca primero por `num_guia`;
+        si no hay coincidencia, se busca por `num_remision`. Nunca responde 409 por ambigüedad.
+
+        Una orden inexistente, borrada o de otro dueño devuelve el mismo 404.
+      responses:
+        "200":
+          description: Detalle de la orden.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdenDetalle"
+              examples:
+                detalle:
+                  summary: Orden resuelta por su número de remisión
+                  value:
+                    numGuia: 100234
+                    numRemision: "REM-0001"
+                    estado: entregada
+                    destinatario: Juan Pérez
+                    telefonoDest: "88887777"
+                    producto: Camiseta talla M
+                    direccion: "Av. Central, 200m norte del parque"
+                    montoCobrar: 25.9
+                    createdAt: "2026-07-22T14:03:11.000Z"
+                    evidencias:
+                      - resultado: entregada
+                        contentType: image/jpeg
+                        url: "https://<proyecto>.supabase.co/storage/v1/object/sign/gestion-evidencias/..."
+                        expiraEnSegundos: 300
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  "/api/ordenes/api-key/orden/{id}/generate":
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: "Identificador de la orden: su `num_guia` o su `num_remision` (misma resolución que el endpoint de detalle)."
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    post:
+      tags:
+        - Órdenes
+      summary: PDF de etiqueta de una orden propia
+      operationId: generarPdfOrden
+      description: |-
+        Devuelve una URL firmada de corta duración con el PDF de la etiqueta de la orden.
+        La primera llamada construye el PDF y lo almacena (`generado: true`); las siguientes
+        reutilizan el mismo documento y solo lo vuelven a firmar (`generado: false`), por lo
+        que la `url` cambia en cada llamada aunque el PDF sea el mismo.
+
+        Solo responde a `POST`. Una orden sin guía imprimible devuelve 409.
+      responses:
+        "200":
+          description: URL firmada del PDF de la etiqueta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PdfGenerateResponse"
+              examples:
+                primeraLlamada:
+                  summary: "Primera llamada: el PDF se construye"
+                  value:
+                    url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/..."
+                    expiraEnSegundos: 300
+                    generado: true
+                reuso:
+                  summary: "Llamada posterior: solo se vuelve a firmar"
+                  value:
+                    url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/..."
+                    expiraEnSegundos: 300
+                    generado: false
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  "/api/ordenes/api-key/carga/{cargaId}/generate":
+    parameters:
+      - name: cargaId
+        in: path
+        required: true
+        description: "Id del lote, tal como lo devuelve `cargaId` en la respuesta de `POST /api/ordenes/api-key/carga`."
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Órdenes
+      summary: PDF consolidado de etiquetas de un lote propio
+      operationId: generarPdfCarga
+      description: |-
+        Misma forma de respuesta que el PDF por orden, sobre el consolidado de todas las
+        etiquetas imprimibles del lote (solo órdenes propias y vivas). La primera llamada lo
+        construye (`generado: true`); las siguientes solo vuelven a firmar (`generado: false`).
+
+        Solo responde a `POST`. Un lote inexistente o de otro dueño devuelve el mismo 404; un
+        lote sin etiquetas imprimibles, o que excede el tope de etiquetas por PDF, devuelve 409.
+      responses:
+        "200":
+          description: URL firmada del PDF consolidado del lote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PdfGenerateResponse"
+              examples:
+                consolidado:
+                  summary: Consolidado del lote recién construido
+                  value:
+                    url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/..."
+                    expiraEnSegundos: 300
+                    generado: true
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -597,6 +750,12 @@ components:
         - filas
         - ordenes
       properties:
+        cargaId:
+          type:
+            - string
+            - "null"
+          format: uuid
+          description: "Id del lote creado, para pedir después el PDF consolidado. `null` si el lote no creó ninguna orden."
         total:
           type: integer
           description: Filas recibidas.
@@ -643,6 +802,24 @@ components:
         estado:
           type: string
           const: devolviendo_a_tienda
+    PdfGenerateResponse:
+      type: object
+      description: "URL firmada de corta duración con el PDF de etiqueta (de una orden o de un lote). La URL se firma en cada llamada: nunca es una URL persistida."
+      required:
+        - url
+        - expiraEnSegundos
+        - generado
+      properties:
+        url:
+          type: string
+          format: uri
+          description: URL firmada del PDF.
+        expiraEnSegundos:
+          type: integer
+          description: "TTL de la URL firmada en segundos (300 por defecto)."
+        generado:
+          type: boolean
+          description: "`true` si el PDF se construyó en esta llamada; `false` si se reutilizó el ya almacenado y solo se volvió a firmar."
   responses:
     Unauthorized:
       description: "API key ausente, mal formada o desconocida."

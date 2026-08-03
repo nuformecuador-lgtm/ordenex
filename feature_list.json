@@ -1512,12 +1512,13 @@
       "name": "analitica: tablero operativo",
       "spec_path": "specs/131-analitica-tablero-operativo",
       "description": "Frontend. Cablea las Server Actions de 125 a las graficas de 129 dentro de la ruta 128, con filtros (rango, zona, tienda, mensajero) y revalidacion. Depende de 125.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/131-analitica-tablero-operativo",
-      "depends_on": 126
+      "depends_on": 126,
+      "status_note": "2026-08-03 SPEC ESCRITA y PUERTA T0 CERRADA con 5 respuestas del humano (D1-D7 en requirements.md seccion 6). 27 requisitos, cada uno con la mutacion concreta que lo pone rojo. DECISIONES: D1 ventana ciega = aviso unico con recuento y extremos; D2 el dia parcial va EN la serie marcado con su corteAt y todo agregado que lo incluya se anuncia parcial; D3 por encima del techo de 62 puntos las tasas y los tiempos NO pintan serie NI cifra (media de medias esta prohibida) -> ficha 176; D4 N llamadas una por panel, coste NO medido y medirlo es parte de la entrega; D5 la 131 aterriza antes que la 132, cada una en su subarbol y sin tocar AnaliticaShell. D7: la expectativa de prefetch de specs/129/design.md:143-145 queda DELIBERADAMENTE sin cumplir porque su propio guardia (AnaliticaPage.length === 0 y la pagina no importa lib/actions) manda sobre la prosa del diseno."
     },
     {
       "id": 132,
@@ -2071,14 +2072,14 @@
       "id": 177,
       "name": "api - consulta de orden por guia o remision y generacion del PDF por orden y por carga",
       "description": "Backend, canal API key. (1) Ruta NUEVA de consulta por identificador libre: el `{id}` de la ruta se resuelve contra num_guia Y num_remision. El detalle actual `/api/ordenes/api-key/{numGuia}` (feature 106) se deja INTACTO: no se amplia un endpoint ya publicado a integradores. (2) La generacion del PDF NO viaja como query param `generatePdf`: es un segmento de ruta propio (`.../{id}/generate`), un endpoint dedicado que genera el PDF de ESA orden, deja la referencia guardada en la orden y responde con una URL firmada que vence en 5 minutos. Si el PDF ya existe se REUSA el objeto ya subido a storage y solo se vuelve a firmar; solo se genera cuando no existe. (3) Endpoint gemelo por carga: mismo contrato sobre el PDF CONSOLIDADO del lote, retorna el existente o lo genera si falta.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/177-api-consulta-orden-pdf",
       "depends_on": 136,
-      "status_note": "RENUMERADA de 175 a 177 el 2026-08-03: el id 175 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03. Decisiones YA tomadas por el humano en la peticion, no las re-abra el spec_author: ruta NUEVA en vez de ampliar `{numGuia}`; `generatePdf` deja de ser query param y pasa a ser el segmento `/generate`; TTL de la URL firmada = 5 min (mismo TTL que las evidencias de la 106). HALLAZGO que condiciona el diseno: la feature 136 guarda en `carga.download_url` (y `orden.download_url`) la URL FIRMADA, no el path -- ver EtiquetasDescargaService.ts:48 y EtiquetasLotePdfService.ts:78. Una URL firmada caduca, asi que 'reusar la url guardada' es IMPOSIBLE tal como esta persistido hoy: reusar solo puede significar reusar el OBJETO en storage y re-firmarlo en cada respuesta. El spec tiene que decidir si se persiste el storage_path (columna nueva o migracion de la existente) o si se acepta re-firmar a ciegas, y que pasa con las URLs ya guardadas por la 136. ABIERTO para la puerta: (a) desempate cuando el string casa con el num_guia de una orden y el num_remision de OTRA -- ambas son columnas distintas y no hay unicidad cruzada garantizada; (b) verbo HTTP de `/generate` (POST es lo honesto porque muta la orden, pero un integrador esperaria GET); (c) forma exacta de la ruta por carga y si el identificador de carga es el uuid o el `name` del lote; (d) si hace falta un modo forzar-regeneracion o el reuso es siempre. El owner sigue forzado al actor de la API key (R4 de la 106): un integrador no puede consultar ni generar el PDF de una orden ajena. Actualizar `lib/api/openapi-spec.ts`, que hoy publica solo 4 paths.",
-      "spec_path": null
+      "status_note": "PUERTA F1.4 CERRADA el 2026-08-03 con aprobacion explicita del humano: acepta la migracion, acepta que cargaId pase a ser contrato publico, acepta el riesgo (a) de la precedencia de num_guia y acepta el 409 cuando la orden no tiene guia imprimible. Precision suya sobre /generate: PRIORIDAD devolver el enlace; si no hay PDF, generarlo, actualizar el campo y devolver el enlace con vencimiento de 5 min. OJO, el testigo de existencia es la columna NUEVA download_storage_path, NO download_url: esta ultima guarda URLs firmadas YA CADUCADAS de la 136, asi que usarla como testigo devolveria enlaces muertos; las filas heredadas se tratan como sin PDF y se regeneran en la primera llamada. RENUMERADA de 175 a 177 el 2026-08-03: el id 175 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03. Decisiones YA tomadas por el humano en la peticion, no las re-abra el spec_author: ruta NUEVA en vez de ampliar `{numGuia}`; `generatePdf` deja de ser query param y pasa a ser el segmento `/generate`; TTL de la URL firmada = 5 min (mismo TTL que las evidencias de la 106). HALLAZGO que condiciona el diseno: la feature 136 guarda en `carga.download_url` (y `orden.download_url`) la URL FIRMADA, no el path -- ver EtiquetasDescargaService.ts:48 y EtiquetasLotePdfService.ts:78. Una URL firmada caduca, asi que 'reusar la url guardada' es IMPOSIBLE tal como esta persistido hoy: reusar solo puede significar reusar el OBJETO en storage y re-firmarlo en cada respuesta. El spec tiene que decidir si se persiste el storage_path (columna nueva o migracion de la existente) o si se acepta re-firmar a ciegas, y que pasa con las URLs ya guardadas por la 136. ABIERTO para la puerta: (a) desempate cuando el string casa con el num_guia de una orden y el num_remision de OTRA -- ambas son columnas distintas y no hay unicidad cruzada garantizada; (b) verbo HTTP de `/generate` (POST es lo honesto porque muta la orden, pero un integrador esperaria GET); (c) forma exacta de la ruta por carga y si el identificador de carga es el uuid o el `name` del lote; (d) si hace falta un modo forzar-regeneracion o el reuso es siempre. El owner sigue forzado al actor de la API key (R4 de la 106): un integrador no puede consultar ni generar el PDF de una orden ajena. Actualizar `lib/api/openapi-spec.ts`, que hoy publica solo 4 paths.",
+      "spec_path": "specs/177-api-consulta-orden-pdf"
     },
     {
       "id": 178,
@@ -2092,6 +2093,21 @@
       "depends_on": 136,
       "status_note": "RENUMERADA de 176 a 178 el 2026-08-03: el id 176 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03, junto con la 177. Decisiones YA tomadas por el humano: alcance = consolidado + individuales de la carga; retencion configurable por VARIABLE DE ENTORNO (no UI, no query param), default 7 dias, validacion >= 1. ABIERTO para la puerta: (a) que columna manda como fecha de corte, `carga.created_at` o `carga.fecha_carga` -- son dos columnas distintas del modelo Carga y hoy pueden divergir; (b) las ordenes con `carga_id` NULL (alta manual, no nacen de un lote) quedan FUERA de esta purga por definicion, o sea que su PDF no caduca nunca: hay que decirlo explicito o abrir ticket aparte; (c) idempotencia y borrado parcial -- si el borrado en storage falla a mitad, decidir si se limpia igual la columna (el enlace ya no sirve) o se reintenta; (d) si se monta como job recurrente sobre la cola de la feature 90 (patron de liberar-reprogramadas) o como cron propio en vercel.json protegido por CRON_SECRET; el humano no lo fijo. INTERACCION con la 177: despues de la purga, `/generate` tiene que volver a generar el PDF sin error -- una carga purgada no es una carga rota. Conviene especificarla DESPUES de la 177 o al menos leer su design.",
       "spec_path": null
+    },
+    {
+      "id": 176,
+      "name": "analitica: modo agregado de tasas y tiempos",
+      "spec_path": "specs/176-analitica-modo-agregado-tasas",
+      "description": "Backend. Extiende el contrato de lectura de la analitica operativa (126) con un modo AGREGADO por periodo para las metricas que NO son sumables: devuelve numerador y denominador (o los acumuladores seg_ciclo_acum/seg_ciclo_n) por cubo temporal, de modo que un consumidor pueda SUMAR ANTES DE DIVIDIR y presentar una tasa o un tiempo de ciclo correctos en rangos largos. Hoy el servicio solo devuelve el cociente ya dividido por dia, asi que el tablero (131) no puede agregar tasa_entrega, tasa_devolucion, tasa_rechazo, primer_intento_ok, tiempo_ciclo ni aging_por_estado sin caer en media de medias, y por decision D3 no pinta serie ni cifra por encima del techo de 62 puntos. Reusa ConsultaAnalitica y el alcance ya existentes; no anade metricas al catalogo.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/176-analitica-modo-agregado-tasas",
+      "depends_on": [
+        126
+      ],
+      "status_note": "Sale de la decision D3 de la 131 (specs/131-analitica-tablero-operativo/requirements.md seccion 6). Conviene programarla DESPUES de la 128 para no escribir la capa de lectura a la vez que la cache. Mientras no aterrice, R27 de la 131 muestra aviso y CERO cifras en esos paneles en rangos largos."
     },
     {
       "id": 179,

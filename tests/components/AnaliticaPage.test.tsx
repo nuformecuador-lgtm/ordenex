@@ -8,6 +8,7 @@ import type { RolValue } from "@prisma/client";
 
 import AnaliticaPage from "@/app/(app)/analitica/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { ROLES_ACCESO_ANALITICA } from "@/lib/auth/menu-visibility";
 
 // Feature 129 (R1-R6, R24) — la PÁGINA de analítica resuelve el rol SOLO
 // server-side. La entrada del menú decide qué se MUESTRA; ESTA es la defensa real.
@@ -25,7 +26,11 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new NotFoundError();
   },
-  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+  // Feature 131 (T6.2): el árbol de cliente que la 131 enchufa en los dos slots lee el
+  // filtro de la URL (design §4.2). Es un mock del NAVEGADOR, no de una capa de datos.
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/analitica",
 }));
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
@@ -36,6 +41,21 @@ vi.mock("@/hooks/useToast", () => ({
     show: vi.fn(),
     dismiss: vi.fn(),
   }),
+}));
+
+// Feature 131 (T6.2) — los mocks del nuevo árbol de CLIENTE. Ojo con lo que esto NO
+// significa: la PÁGINA sigue sin importar `lib/actions` (R24 de la 129, comprobado sobre
+// el código fuente más abajo). Quien invoca estas acciones son `FiltrosOperativos` y
+// `PanelesOperativos`, que son componentes de cliente con su propio SWR; mockearlas aquí
+// es lo que evita que jsdom intente arrancar Prisma al montarlos.
+vi.mock("@/lib/actions/analitica-operativa", () => ({
+  consultarAnaliticaOperativa: vi.fn(async () => ({ status: "forbidden" as const })),
+}));
+vi.mock("@/lib/actions/filtros-ordenes", () => ({
+  obtenerCatalogoFiltrosOrdenes: vi.fn(async () => ({ status: "forbidden" as const })),
+}));
+vi.mock("@/lib/actions/usuarios-por-rol", () => ({
+  listarUsuariosPorRol: vi.fn(async () => ({ status: "forbidden" as const })),
 }));
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
@@ -154,5 +174,30 @@ describe("Feature 129 (R24) — la página no invoca acciones/servicios/reposito
     expect(fuente).not.toContain("lib/actions");
     expect(fuente).not.toContain("lib/services");
     expect(fuente).not.toContain("lib/repositories");
+  });
+});
+
+describe("Feature 131 (T6.2, R26) — los dos slots ya están cableados", () => {
+  it("las dos regiones ya NO muestran el placeholder «llega en una entrega posterior»", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+    await renderPage();
+
+    // El shell pinta ese `EmptyState` cuando su slot llega vacío
+    // (`AnaliticaShell.tsx:48-63`). Verlo ahora sería una mentira en pantalla: los
+    // controles y los paneles ya existen.
+    expect(screen.queryByText(/llega en una entrega posterior/)).toBeNull();
+    expect(
+      screen.getByRole("region", { name: "Filtros" }).textContent ?? "",
+    ).not.toContain("entrega posterior");
+    expect(
+      screen.getByRole("region", { name: "Tablero operativo" }).textContent ?? "",
+    ).not.toContain("entrega posterior");
+  });
+
+  it("R26 — el gate de la ruta sigue siendo `maestro`/`admin` y la página sigue sin parámetros", () => {
+    // Ampliar `ROLES_ACCESO_ANALITICA` es de la 133, no de esta feature; y darle un
+    // parámetro a la página es lo que D7 decidió NO hacer.
+    expect([...ROLES_ACCESO_ANALITICA]).toEqual(["maestro", "admin"]);
+    expect(AnaliticaPage.length).toBe(0);
   });
 });

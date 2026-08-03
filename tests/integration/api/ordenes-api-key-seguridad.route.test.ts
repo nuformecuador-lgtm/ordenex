@@ -27,6 +27,7 @@ function lecturaQueRevienta(): IApiOrdenLecturaService {
   return {
     listar: vi.fn().mockRejectedValue(new Error("fallo interno de base de datos")),
     detalle: vi.fn().mockRejectedValue(new Error("fallo interno de base de datos")),
+    detallePorOrdenId: vi.fn().mockRejectedValue(new Error("fallo interno de base de datos")),
   };
 }
 function cancelacionQueRevienta(): IApiOrdenCancelacionService {
