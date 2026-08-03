@@ -1697,3 +1697,93 @@ honesto mientras la decisión esté abierta.
 - **`pnpm exec vitest run guard`** → `47 passed / 683 passed`.
 - **`pnpm exec vitest run tests/integration/db tests/integration/actions`** →
   `1 failed | 115 passed (116)` · `1 failed | 1442 passed (1443)`. **El único rojo es `F.4`.**
+
+## H9. CIERRE — decisión humana: **opción (A)**, 2026-08-03
+
+> El humano eligió **(A)**: reescribir `F.4` para que mida lo que **sí** es cierto bajo el `CHECK`.
+> **No** se relajó el `CHECK` y **no** se tocó `lib/analytics/metrics.ts` — `egresos` **no** gana
+> `ingreso_ajuste` en esta feature: eso es `[P4]` y es de la 175 (§H10).
+>
+> Nota de proceso que merece quedar: la medición de §H3 **corrigió el diagnóstico del leader**, que
+> daba por hecho un filtro por `tipo` cuando el repositorio filtra por `categoria`. Pararse costó
+> una corrida de tests y evitó un arreglo que habría dejado `F.4` midiendo lo mismo que su hermano.
+
+### Qué quedó escrito
+
+`tests/integration/actions/analitica-financiera-action.test.ts` — el par de `F.4`, reescrito. La
+cabecera del bloque explica **por qué el neto ya no puede ser 0**, para que dentro de seis meses
+nadie lo lea como un número tuneado para pasar: con el `CHECK`, una métrica de lista homogénea de
+prefijo contiene un solo `tipo`, luego `neto = ±bruto`.
+
+| Caso | Semilla (toda **legal**) | Mide |
+| --- | --- | --- |
+| **`F.4(a)`** · bruto 800, neto **−800** | `egreso_gasto` 400 + `egreso_sueldo` 400, las dos de tipo `egreso` | Que el bruto **agrega las dos filas sin signo** y que el neto es ese importe **con el signo cambiado**. Además, sin depender de los literales: `neto ≠ bruto`, el neto empieza por `-` y el bruto no. |
+| **`F.4(b)`** · bruto 400, neto **−400** | `egreso_gasto` 400 + su contraasiento **REAL** `ingreso_ajuste`/`ingreso` 400 | Que el contraasiento **NO entra en `egresos`**: la métrica publica la salida bruta aunque el gasto se haya revertido. Se comprueba con un `count` que las **dos** filas están en el libro, para que el caso no pueda confundirse con una semilla que no llegó a escribirse. |
+
+`F.4(b)` es el que hereda el papel del hermano («el caso de arriba mide algo») y además **deja
+medido el hecho que la 175 tiene que decidir**.
+
+### Los dos casos SIGUEN DISCRIMINANDO — dos mutaciones, ejecutadas
+
+**Mutación 1 — el `neto` copia el `bruto`** (`AnaliticaFinancieraService.deCaja` deja de aplicar el
+signo). **Los dos rojos**: el par mide el signo, no un literal.
+
+```
+ × F.4(a) · dos egresos en el mismo rango: bruto 800, neto -800 (el neto lleva SIGNO)
+   → expected '800.00' to be '-800.00'
+ × F.4(b) · el contraasiento REAL de un gasto NO entra en `egresos`: sigue en bruto 400, neto -400
+   → expected '400.00' to be '-400.00'
+      Tests  2 failed | 11 passed (13)
+```
+
+**Mutación 2 — el repositorio deja de filtrar por las categorías DECLARADAS por la métrica**
+(`IngresosAnaliticaRepository`: `categoria IN (las declaradas)` → `IN (el enum entero)`). Aquí está
+la prueba de que **no son el mismo test dos veces**:
+
+```
+ ✓ F.4(a) · dos egresos en el mismo rango: bruto 800, neto -800 (el neto lleva SIGNO)
+ × F.4(b) · el contraasiento REAL de un gasto NO entra en `egresos`: sigue en bruto 400, neto -400
+   → expected '800.00' to be '400.00'
+      Tests  2 failed | 11 passed (13)
+```
+
+`F.4(a)` **verde**, `F.4(b)` **rojo**: `(b)` caza un defecto que `(a)` no puede ver. (El segundo
+rojo de esa corrida es `F.1`, que vigila lo mismo para `ingreso_flete` — sano: el filtrado por
+catálogo tiene dos guardianes, no uno.)
+
+**Las dos mutaciones revertidas**; el par vuelve a verde y el archivo entero a **13/13**.
+
+## H10. ENCARGO PARA LA 175 — explícito, con ruta y línea
+
+Lo que la 173 **deja sin tocar a propósito**, porque arreglarlo hoy sería adivinar una decisión que
+no es suya:
+
+| Ruta y línea | Qué afirma hoy | Por qué no se toca |
+| --- | --- | --- |
+| `tests/unit/analytics/financiera-ingresos-repo.test.ts:124` | Siembra un doble en memoria con `{ categoria: "egreso_ajuste", tipo: "ingreso" }` para probar que el material del bruto y del neto llega desglosado por `tipo`. | **Verde** (doble en memoria: no pasa por el `CHECK`), pero afirma con un dato que **la base ya no acepta**. Si la 175 mete `ingreso_ajuste` en las categorías de `egresos`, el arreglo es uno; si retira la distinción bruto/neto, es otro. |
+| `tests/unit/services/analitica-financiera-derivacion.test.ts:177` | Siembra `{ categoria: "ingreso_flete", tipo: "egreso" }` para probar que el par pago+contraasiento se cancela en el neto de `ingreso_flete`. | Ídem. Y aquí es **más agudo**: `ingreso_flete` declara dos categorías, las dos `ingreso_*`, así que esa cancelación no es alcanzable ni cambiando el catálogo de `egresos`. |
+
+**La pregunta de fondo, que es la que hay que responder antes de tocar esos dos archivos:**
+
+> ¿La distinción **`bruto` / `neto`** significa algo para las cuatro métricas que leen
+> `wallet_movimiento`? Hoy no: con listas homogéneas de prefijo, `neto` es siempre `±bruto`, así
+> que `neto` no aporta información sobre `bruto` — solo repite el signo que la métrica ya declara
+> por su nombre.
+>
+> Dos salidas, y son excluyentes:
+>
+> - **(i)** Que `egresos` declare también `ingreso_ajuste` (y, por simetría, las tres de ingreso
+>   declaren `egreso_ajuste`). Recupera la cancelación… **cambiando el número de métricas de dinero
+>   YA PUBLICADAS**, que es exactamente lo que `[P4]` de la 173 quiso evitar.
+> - **(ii)** Que esas cuatro métricas declaren **solo `bruto`** y se retire `neto`. Es honesto —
+>   deja de publicar un número que no dice nada nuevo— pero toca el contrato de salida de la 127.
+
+Registrado también por el leader en la ficha de la **175** de `feature_list.json`.
+
+## H11. Gate tras el cierre
+
+- **`pnpm typecheck`** → exit 0.
+- **`pnpm lint`** → `✖ 27 problems (0 errors, 27 warnings)` (línea base, intacta).
+- **`pnpm exec vitest run guard`** → `47 passed / 683 passed`.
+- **`pnpm exec vitest run tests/integration/db tests/integration/actions`** →
+  `116 passed (116)` · `1443 passed (1443)`. **Cero rojos**: el único que había era `F.4`.
