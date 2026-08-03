@@ -45,16 +45,21 @@ PR:** `./init.sh` completo, sin excepción.
 
 ---
 
-# TANDA 0 — Puerta de aprobación humana
+# TANDA 0 — Puerta de aprobación humana ✅ CERRADA (2026-08-03)
 
 Las siete preguntas viven en `requirements.md § Preguntas al humano`, con opciones, default y
 consecuencias. Aquí queda qué desencadena cada respuesta.
 
-### [ ] T0.1 — P1: los nombres en pantalla
+> **RESPUESTA DEL HUMANO, 2026-08-03: las SIETE con su default.** P1=(a), **P2=(a)**, P3=(a),
+> P4=(a), P5=(a), P6=(a), P7=(a). Alcance resultante: **no** entra la tanda `C-bis`, la Tanda E
+> se hace **como está descrita**, la Tanda F va **completa dentro de la 173** (frontera con la
+> 175 declarada), y `T A.0` + `T A.2` son **obligatorias**.
+
+### [x] T0.1 — P1: los nombres en pantalla — **(a)**: «Dinero en caja» / «Ganancia de Ordenex»
 - **Desencadena:** los textos de `T G.1` y `T G.3`. Nada más.
 - **Hecho:** respuesta escrita en `requirements.md`; los rótulos exactos citados en `T G.1`.
 
-### [ ] T0.2 — P2: ¿el pago al mensajero pasa a tesorería?
+### [x] T0.2 — P2: ¿el pago al mensajero pasa a tesorería? — **(a) NO TOCARLO**
 - **Si (a) —default—:** nada cambia; `T H.2` verifica que la suite del feed del mensajero sigue
   **sin editar**.
 - **Si (b):** entra una **tanda nueva** (`C-bis`): tercer valor de enum, cambio de
@@ -63,7 +68,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   feature.**
 - **Hecho:** respuesta escrita; si es (b), `C-bis` creada con sus `R` propios antes de tocar código.
 
-### [ ] T0.3 — P3: ¿registro retroactivo?
+### [x] T0.3 — P3: ¿registro retroactivo? — **(a)**: sí, ejecutable idempotente con simulación previa
 - **Si (a) —default—:** la Tanda E se hace como está descrita.
 - **Si (b):** la Tanda E desaparece y su contenido se mueve a la migración de `T A.1`, con un
   `down.sql` que **borraría filas de dinero** (contradice el modelo append-only: hay que decirlo en
@@ -71,24 +76,24 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 - **Si (c):** la Tanda E desaparece y `T G.1` gana la fecha de corte visible en pantalla.
 - **Hecho:** respuesta escrita; tanda E confirmada, movida o eliminada.
 
-### [ ] T0.4 — P4: ¿la analítica gana las dos cifras? ¿173 o 175?
+### [x] T0.4 — P4: ¿la analítica gana las dos cifras? ¿173 o 175? — **(a)**: Tanda F completa, en la **173**
 - **Si (a) —default—:** Tanda F completa.
 - **Si (b):** Tanda F se reduce al **guardia** de que las tres métricas de ingreso no se inflan, y se
   anota en `feature_list.json` que `egresos` cambió de número sin descripción nueva.
 - **Si (c):** hay que decidir ids nuevos y avisar a las pantallas 132/134.
 - **Hecho:** respuesta escrita; alcance de la Tanda F fijado y frontera con la 175 declarada.
 
-### [ ] T0.5 — P5: ¿entra el `CHECK` categoría↔tipo?
+### [x] T0.5 — P5: ¿entra el `CHECK` categoría↔tipo? — **(a) SÍ**: `T A.0` y `T A.2` obligatorias
 - **Si (a) —default—:** `T A.0` y `T A.2` son obligatorias.
 - **Si (b):** `T A.2` desaparece y se anota la deuda; la clasificación por naturaleza queda sin red
   de base de datos.
 - **Hecho:** respuesta escrita.
 
-### [ ] T0.6 — P6: ¿tercera línea de dinero de terceros?
+### [x] T0.6 — P6: ¿tercera línea de dinero de terceros? — **(a) SÍ**, con la advertencia obligatoria
 - **Desencadena:** un bloque de `T G.1` y el campo `deTerceros` del DTO de `T D.2`.
 - **Hecho:** respuesta escrita.
 
-### [ ] T0.7 — P7: ¿el «dinero en caja» filtrado sigue llamándose así?
+### [x] T0.7 — P7: ¿el «dinero en caja» filtrado sigue llamándose así? — **(a)**: rótulo condicional al filtrar
 - **Desencadena:** el rótulo condicional de `T G.1` y el campo `periodoFiltrado` del DTO, o su
   eliminación.
 - **Hecho:** respuesta escrita.
