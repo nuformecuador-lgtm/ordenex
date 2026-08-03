@@ -234,7 +234,7 @@ build. De ahí R10 y R11, y se cubren con **dos redes distintas**:
 | 4 | `egresos` | `KpiCard` | ídem |
 | 5 | `cod_recaudado` (vista **por método**) | `GraficaDonut` | ≤ 3 segmentos (`efectivo`/`simpe`/`transferencia`), muy por debajo de `MAX_SERIES` |
 | 6 | `cod_recaudado` (vista **por tienda**) | `GraficaBarras` (top 5 + cola agrupada) **y** `TablaResumen` con todas las filas | panel propio, **nunca** sumado con el 5 (R17) |
-| 7 | `cuenta_por_pagar_tienda` | `TablaResumen` (columnas `bruto` y `neto`, fila de totales) + etiqueta «saldo al corte» (R18) | |
+| 7 | `cuenta_por_pagar_tienda` | `TablaResumen` (columnas `bruto` y `neto`) + el `total` del DTO al lado + etiqueta «saldo al corte» (R18) | |
 | 8 | `cuenta_por_pagar_mensajero` | `KpiCard` + etiqueta «saldo al corte» (R18) | sin cubos: el catálogo no declara grano `mensajero` |
 | 9 | `conciliacion_cierres` | `TablaResumen` (por `nivel`+`estado`, columna `cantidad` con unidad `conteo` y las cuatro de moneda) + bloque de cuadre | aviso visible si `cuadra === false` (R19) |
 
@@ -242,6 +242,31 @@ Son **9 paneles para 8 métricas** porque `cod_recaudado` trae dos vistas que **
 (`sumableCon: []`, `AnaliticaFinancieraService.ts:228-232`): ponerlas en el mismo gráfico contaría
 el mismo colón dos veces. Cada panel lleva su título con la `etiqueta` del DTO (que viene del
 catálogo, `AnaliticaFinancieraService.ts:174`) y el rango efectivo del propio DTO (R22).
+
+### 5.1 CORRECCIÓN (2026-08-03): la prop `totales` de `TablaResumen` NO se usa
+
+**Este diseño se equivocaba y aquí queda dicho, no borrado.** Los paneles 6, 7 y 9 de la tabla de
+arriba pedían la **«fila de totales»** de `TablaResumen`. **Esa instrucción era incorrecta y no debe
+seguirse:** pasar la prop `totales` hace que el paquete **calcule** la fila con `totalizar`
+(`components/private/analytics/TablaResumen.tsx:44-54`), es decir **una suma derivada en coma
+flotante**, y **R14 prohíbe** pintar cualquier cifra que no venga literal del DTO.
+
+No es una objeción teórica: está **medido en las dos direcciones**. El implementer se desvió del
+diseño en este punto (desviación D1 de su bitácora) y el reviewer lo verificó con una mutación
+propia (M1): **activar la prop `totales` pone rojo un test**. La desviación era correcta; el
+defecto era del diseño.
+
+Hay además un segundo motivo, independiente de la letra de R14: esa suma **discreparía del
+`total` que el servicio ya calculó en `Prisma.Decimal`** aguas arriba, y entonces la misma tabla
+mostraría **dos verdades distintas del mismo dinero**.
+
+**Lo que se hace en su lugar**, y lo que debe hacer todo consumidor futuro (131, 134): pintar el
+**`vista.total` del propio DTO** junto a la tabla, con su `bruto` y su `neto` etiquetados. El total
+ya viaja en el DTO (`VistaFinanciera.total`, `lib/types/analitica-financiera.ts:98`): no hay que
+recalcularlo, sólo leerlo.
+
+> **Aviso a la 131 y a la 134:** si al leer la tabla de §5 os tienta activar `totales`, no lo
+> hagáis. Es el error que esta sección corrige.
 
 ## 6. Contratos internos
 
