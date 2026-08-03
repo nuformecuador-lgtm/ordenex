@@ -86,7 +86,7 @@ describe("R8 · los estados citados existen en el catalogo vigente", () => {
     }
   });
 
-  it("el embudo por estado enumera los diecinueve values vigentes", () => {
+  it("el embudo por estado enumera los veinte values vigentes", () => {
     const embudo = METRICAS.find((m) => m.id === "ordenes_por_estado");
     expect(embudo).toBeDefined();
     expect([...(embudo!.definicion.estados ?? [])]).toEqual([...ORDER_STATUS_SEED]);
