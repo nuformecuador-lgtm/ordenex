@@ -197,10 +197,21 @@ verifica, y el mapa `R<n> → test` DEBE quedar escrito en `progress/impl_132.md
 
 ---
 
-## Preguntas abiertas (puerta F1.4)
+## Preguntas abiertas (puerta F1.4) — **CERRADA el 2026-08-03**
 
-> Ninguna de estas se responde con una suposición. Las **bloqueantes** impiden empezar a
-> implementar; las demás tienen una recomendación que se aplicará si nadie la objeta.
+> **CÓMO SE CERRÓ.** El humano ordenó continuar sin responderlas una a una («continua, vuelve y
+> pregunta»), así que **las seis se toman con la recomendación que ya estaba escrita aquí** —no
+> con un criterio inventado después— y quedan **PENDIENTES DE RATIFICACIÓN**. El detalle de cada
+> decisión, con lo que cuesta revertirla, está en `tasks.md > T0`. Resumen:
+>
+> - **Q1 → `mes`.** Trivial de revertir (una constante y su test).
+> - **Q2 → (a) id crudo**, con la limitación en pantalla. Ficha **178** para los nombres.
+> - **Q3 → se acepta sin gráfica de líneas.** Ficha **179** para el desglose por fecha.
+>   **Es la única cuya reversión NO es barata**: bloquearía la 132 hasta ampliar la 127.
+> - **Q4/Q5/Q6 → sin objeción**, se aplican tal cual estaban escritas.
+>
+> Se deja el texto original íntegro debajo: es el razonamiento que sostiene cada respuesta, y
+> borrarlo dejaría las decisiones sin su porqué.
 
 **Q1 — BLOQUEANTE. ¿Cuál es el rango por defecto del tablero financiero mientras no exista la
 barra de filtros de la 131?** Los presets disponibles son `dia`, `semana` (desde el lunes), `mes`

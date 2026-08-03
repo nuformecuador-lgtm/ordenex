@@ -15,20 +15,33 @@
 Espejo de `requirements.md > Preguntas abiertas`. El humano responde; el spec_author actualiza los
 tres archivos si alguna respuesta cambia el diseño.
 
-- [ ] **T0.1 — Q1 (BLOQUEANTE).** Rango por defecto del tablero: `dia` / `semana` / `mes`.
-      Recomendación: `mes`. → fija el valor de `rango.ts` (R26).
-      *Hecho:* respuesta escrita en `progress/current.md` y reflejada en `design.md §6.1`.
-- [ ] **T0.2 — Q2 (BLOQUEANTE).** Categoría de los cubos por tienda: id crudo (a) / resolver
-      nombres aquí (b) / pedírselo a la 127 (c). Recomendación: (a).
-      *Hecho:* respuesta escrita; si es (b), esta feature gana una task nueva y deja de ser sólo
-      presentación (habría que reevaluar el alcance con el leader).
-- [ ] **T0.3 — Q3 (BLOQUEANTE).** Se acepta que no haya gráfica de líneas porque la 127 no publica
-      filas por fecha. Recomendación: aceptar y abrir ficha aparte.
-      *Hecho:* respuesta escrita; si se rechaza, la feature se **bloquea** a la espera de una ficha
-      backend nueva (la 127 está `done`).
-- [ ] **T0.4 — Q4, Q5, Q6 (no bloqueantes).** Si no hay objeción en la puerta, se aplican las
-      recomendaciones tal cual están escritas.
-      *Hecho:* anotado «sin objeción» o la decisión contraria, con fecha.
+> **PUERTA CERRADA POR DEFECTO DECLARADO — 2026-08-03.** El humano ordenó continuar sin
+> responderlas una a una («continua, vuelve y pregunta»). Las seis se toman con **la
+> recomendación que ya estaba escrita en el spec**, no con un criterio nuevo, y quedan
+> **PENDIENTES DE RATIFICACIÓN**. Debajo, lo que cuesta revertir cada una.
+
+- [x] **T0.1 — Q1 (BLOQUEANTE). RESUELTA: `mes`** (ventana móvil de 30 días). Motivo: un tablero
+      financiero abierto en `dia` a las 08:00 sale casi todo en cero y se lee como avería.
+      → fija el valor de `rango.ts` (R26).
+      *Revertir cuesta:* una constante y su test. Trivial.
+- [x] **T0.2 — Q2 (BLOQUEANTE). RESUELTA: (a) id crudo**, con la limitación escrita EN PANTALLA y
+      ficha aparte para los nombres (registrada como **178**). Motivo: (b) mete una consulta que
+      el diseño de la 127 no previó y que habría que repetir en la 131 y en la 134; (c) reabre una
+      feature `done` y mergeada.
+      *Revertir a (b) cuesta:* una lectura en el Server Component y su task; la feature dejaría de
+      ser sólo presentación → reevaluar alcance con el leader.
+- [x] **T0.3 — Q3 (BLOQUEANTE). RESUELTA: se acepta el tablero SIN gráfica de líneas**, y el
+      desglose por fecha se registra aparte (ficha **179**). Motivo: la 127 agrega la ventana
+      entera y no publica filas por fecha; dibujar una línea exigiría inventarse los puntos.
+      *Revertir cuesta:* la 132 se bloquea hasta ampliar la 127. **Es la única de las tres cuya
+      reversión no es barata**, y por eso es la que más conviene ratificar pronto.
+- [x] **T0.4 — Q4, Q5, Q6 (no bloqueantes). SIN OBJECIÓN**, se aplican las recomendaciones
+      (2026-08-03): **Q4** la región financiera NO se renderiza si no hay contenido —se sigue el
+      razonamiento del punto de extensión de la 129, no su instrucción, porque se contradicen
+      entre sí—; **Q5** sin E2E en esta feature, el gate se cubre con los tests de página por rol
+      (R1, R2) y el E2E se hace una sola vez en la 133; **Q6** el aviso de descuadre (R19) se
+      muestra a los DOS roles, porque `maestro` y `admin` son equivalentes en todo el repo y
+      partirlos aquí crearía una tercera categoría de rol.
 
 ---
 

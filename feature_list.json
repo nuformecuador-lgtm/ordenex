@@ -1524,7 +1524,7 @@
       "name": "analitica: tablero financiero",
       "spec_path": "specs/132-analitica-tablero-financiero",
       "description": "Frontend. Cablea 126 a las graficas de 129 en la ruta 128; datos sensibles pre-fetch en Server Component y pasados por props (patron private/). Depende de 126.",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
@@ -2066,6 +2066,32 @@
         127
       ],
       "status_note": "2026-08-02 DADA DE ALTA al cerrar la puerta T0 de la 126 (respuesta Q3=(C) del humano: ficha propia despues, divergencia declarada ya). NO arrancar hasta que la 126 Y la 127 esten mergeadas: tocar metrics.ts antes obliga a rebasar a una de las dos. Las divergencias (1) y (2) las encontro el spec_author de la 126 leyendo el codigo; la (3) aparecio al cerrar T0, porque la instruccion del leader pedia escribir la semantica de sin_gestionar 'en el contrato Y en el catalogo' y el catalogo estaba fuera de la frontera de la 126."
+    },
+    {
+      "id": 178,
+      "name": "analitica: etiquetas de tienda en los cubos por tienda",
+      "spec_path": null,
+      "description": "Backend + frontend. Los cubos por tienda de la analitica financiera (y los que vengan de la operativa) viajan con el `tiendaId` CRUDO, que en este esquema es una FK a `usuario`: las graficas por tienda pintan un identificador donde deberia ir un nombre. Resolver la etiqueta en la FUENTE (el DTO de los servicios de analitica) para que ninguna pantalla tenga que repetir la traduccion.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 132,
+      "status_note": "Sale de la Q2 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). Se eligio (a) pintar el id crudo con la limitacion escrita EN PANTALLA, y NO (b) resolver los nombres en el Server Component de la 132 ni (c) ampliar el DTO de la 127. Motivos: (b) mete una consulta que el diseno de la 127 no previo y que habria que REPETIR en la 131 y en la 134 —tres copias de la misma traduccion—; (c) reabre una feature `done` y mergeada (PR #269) con su propia puerta y su reviewer. Al especificar: el sitio correcto es el DTO de los servicios de analitica, no cada pantalla, justamente para que la traduccion exista UNA vez. Ojo con el alcance por rol: la etiqueta no puede filtrar el nombre de una tienda que el actor no deberia ver (los guards de alcance de la 122/127 ya estan escritos y hay que respetarlos). Verificar tambien si la analitica OPERATIVA (126) tiene el mismo defecto antes de decidir la forma."
+    },
+    {
+      "id": 179,
+      "name": "analitica financiera: desglose por fecha para las series temporales",
+      "spec_path": null,
+      "description": "Backend. `AnaliticaFinancieraService` agrega la ventana ENTERA y no publica filas por fecha para las cuatro metricas de caja ni para la cuenta por pagar de mensajeros, asi que hoy NO existe serie temporal que dibujar. Publicar el desglose por fecha para que el tablero financiero pueda tener grafica de lineas.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 127,
+      "status_note": "Sale de la Q3 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). El tablero financiero se entrega SIN grafica de lineas —tarjetas de KPI, donut de recaudo por metodo, barra por tienda y tablas— porque la alternativa era inventarse los puntos. Verificado en el codigo, no supuesto: `AnaliticaFinancieraService.ts:196-221,319-337` agrega la ventana entera. Cuando esta ficha entre, la linea se anade al tablero SIN rehacerlo: los componentes de grafica ya existen (130) y el hueco esta declarado en el design de la 132. NOTA para quien la especifique: comprobar antes si el rollup diario de la 123 ya guarda el grano por fecha que hace falta —si lo guarda, esto es exponerlo, no recalcularlo—."
     }
   ]
 }
