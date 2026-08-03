@@ -677,15 +677,24 @@ queda el registro de cierre y lo que cada una desencadenó.
   **de los 85**, el delta por tanda (772/9257 → **793/9857** esperado; +21 archivos, +600 tests),
   la constancia de los **siete** defaults (P2, P5, P6, P7, P8, N1, N2) con dónde se mide cada uno,
   y el E2E **declarado INAPLICABLE** con la tabla de qué lo sustituye y **qué queda descubierto**.
-  **RECUENTO: 84 de 85 con test que existe, pasa y afirma el requisito.**
-  **Tres hallazgos declarados, no tapados:** (1) **R61 NO tiene test y su verificación está a
-  medias** — producción medida y limpia, **preview NO verificable desde esta sesión** (el MCP está
-  fijado al ref de producción); **es un hueco vivo que BLOQUEA EL MERGE, no el código**; (2) la
-  fila **R26** de la tabla de abajo apunta a `CierresAdminModule.test.tsx`, que **no se amplió y
-  no mide R26** — lo mide `CierresAdminPagoMensajero.test.tsx`; (3) la fila **R67** nombra dos
-  archivos (`reglas-bloqueos-cierre`, `cierre-vencido-modelo`) que **no existen** en `tests/`.
-  Los dos punteros están mal escritos en el spec, no son requisitos sin cubrir; la corrección de
-  la tabla es del leader/reviewer. **`./init.sh` y la suite completa: DEL LEADER.**
+  **RECUENTO tras la RONDA 2 del review (2026-08-02): 85 de 85 con test en el repo; R61 queda
+  ⚠ PARCIAL.** El registro original de esta task decía **84 de 85** y declaraba tres hallazgos;
+  los tres se cerraron después:
+  - **R61 — cerrada la mitad que vive en el repo, ABIERTA la que no.** El review señaló que R61
+    tenía una mitad testeable que nadie había escrito: que **ninguno** de los dos
+    `ADD CONSTRAINT … CHECK` lleve **`NOT VALID`**, porque añadirlo conservaría el nombre del CHECK
+    y **perdería la validación del pasado en silencio**. Ya está afirmado en
+    `liquidacion-migration.test.ts` (13 casos), con control del detector y probado por mutación en
+    sus dos formas. **La otra mitad —medir la base de PREVIEW— sigue ABIERTA y BLOQUEA EL MERGE**,
+    no el código: producción está medida y limpia; el MCP está fijado al ref de producción.
+  - **R26 y R67 — punteros corregidos por el leader** en la tabla de abajo. No eran requisitos sin
+    cubrir, era el índice el que estaba mal; se corrigen porque `CHECKPOINTS.md` obliga a mantener
+    ese mapa y el próximo revisor lo leería como cierto.
+  - **R6 — reubicada.** El review encontró que la respuesta P3 del humano se afirmaba en la
+    pantalla equivocada: `adminSatelite` se simulaba con una prop en vez de ejercitarse el eslabón
+    **rol → prop**, que es donde vive la decisión. Ahora se mide en `CierresAdminPage.test.tsx`
+    sobre la página real, y **forzar el predicado a `true` hace caer el test** (antes no rompía
+    ninguno de los 9857). **`./init.sh` y la suite completa: DEL LEADER.**
 - `./init.sh` verde; `progress/impl_172-liquidacion.md` con el mapa `R<n> → test` completo, el
   delta de archivos/tests contra el baseline, la constancia de los defaults aplicados (P2, P5, P6,
   P7, P8, N1, N2) y el resultado de T A.0 contra producción y preview.
