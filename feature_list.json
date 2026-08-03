@@ -2086,14 +2086,14 @@
       "id": 178,
       "name": "job semanal de purga de los PDF de cargas antiguas (retencion en dias parametrizable)",
       "description": "Backend. Job recurrente que agrupa por `carga_id` y, para cada carga con mas de N dias desde su creacion, borra del storage el PDF CONSOLIDADO del lote y tambien los PDF INDIVIDUALES de todas las ordenes de esa carga, dejando a NULL `carga.download_url` y `orden.download_url` de las filas afectadas. N son dias, sale de variable de entorno con default 7, minimo 1 y sin tope superior. Objetivo: que el storage no crezca sin freno con etiquetas que ya nadie descarga.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/178-purga-pdf-cargas",
       "depends_on": 136,
       "status_note": "OBLIGACION HEREDADA DE LA 177 (mergeada el 2026-08-03, PR #274): la purga debe poner a NULL tambien la columna NUEVA download_storage_path (en orden Y en carga), no solo download_url. Si no, /generate de la 177 vera la referencia viva, se saltara la generacion y firmara un objeto YA BORRADO: el integrador recibiria un 200 con una URL que da 404. Ese testigo es justo el que la 177 eligio para decidir si el PDF existe. RENUMERADA de 176 a 178 el 2026-08-03: el id 176 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03, junto con la 177. Decisiones YA tomadas por el humano: alcance = consolidado + individuales de la carga; retencion configurable por VARIABLE DE ENTORNO (no UI, no query param), default 7 dias, validacion >= 1. ABIERTO para la puerta: (a) que columna manda como fecha de corte, `carga.created_at` o `carga.fecha_carga` -- son dos columnas distintas del modelo Carga y hoy pueden divergir; (b) las ordenes con `carga_id` NULL (alta manual, no nacen de un lote) quedan FUERA de esta purga por definicion, o sea que su PDF no caduca nunca: hay que decirlo explicito o abrir ticket aparte; (c) idempotencia y borrado parcial -- si el borrado en storage falla a mitad, decidir si se limpia igual la columna (el enlace ya no sirve) o se reintenta; (d) si se monta como job recurrente sobre la cola de la feature 90 (patron de liberar-reprogramadas) o como cron propio en vercel.json protegido por CRON_SECRET; el humano no lo fijo. INTERACCION con la 177: despues de la purga, `/generate` tiene que volver a generar el PDF sin error -- una carga purgada no es una carga rota. Conviene especificarla DESPUES de la 177 o al menos leer su design.",
-      "spec_path": null
+      "spec_path": "specs/178-purga-pdf-cargas"
     },
     {
       "id": 176,
