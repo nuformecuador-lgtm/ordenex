@@ -351,6 +351,18 @@ resto, saturación que no reproduce. **Delta de rojos: 0.**
 (comprobado filtrando por `analitica-operativa`, `operativa-`, `_fake-operativa` y `oraculo`:
 cero coincidencias). Todos son `no-unused-vars` preexistentes en tests ajenos.
 
+```
+$ ./init.sh
+✓ typecheck paso
+✓ lint paso
+ Test Files  828 passed (828)
+      Tests  10281 passed (10281)
+✓ test paso
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+== init OK ==
+```
+
 **No se corrió `pnpm build`**: encadena `migrate deploy` contra una base real
 (memoria del proyecto y nota de T13.3).
 
