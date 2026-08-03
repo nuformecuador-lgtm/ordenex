@@ -332,7 +332,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 
 # TANDA G — Frontend
 
-### [ ] T G.1 — La tarjeta de las dos cifras
+### [x] T G.1 — La tarjeta de las dos cifras
 - **Archivos:** `app/(app)/wallet/_components/CajaResumenCard.tsx` (renombra
   `WalletBalanceCard.tsx`), `tests/components/CajaResumenCard.test.tsx` (NUEVO).
 - **Qué:** los dos bloques con sus nombres `[P1]`, la nota de diferencia, la tercera línea con su
@@ -341,13 +341,13 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 - **Hecho:** las dos cifras se ven **a la vez**; la palabra «balance» no aparece; la tercera línea
   lleva su advertencia de que **no** es la deuda con las tiendas y el enlace a `/wallet/tiendas`.
 
-### [ ] T G.2 [P] — Etiquetas de las categorías nuevas
+### [x] T G.2 [P] — Etiquetas de las categorías nuevas — **VERIFICADA, cero líneas de código**
 - **Archivos:** `app/(app)/wallet/_components/wallet-labels.ts`.
 - **Depende de:** T A.3 · **Cubre:** R61
 - **Hecho:** el build no compilaba sin las dos claves (el `Record` es completo); el filtro y la
   descarga las recogen **solas** desde el SEED — se **verifica**, no se implementa.
 
-### [ ] T G.3 — Página y módulo
+### [x] T G.3 — Página y módulo
 - **Archivos:** `app/(app)/wallet/page.tsx`, `app/(app)/wallet/_components/WalletModule.tsx`,
   `tests/integration/wallet-page.test.tsx`, `tests/components/descarga/WalletDescarga.test.tsx`.
 - **Depende de:** T G.1, T G.2 · **Cubre:** R59 (descripción), R62, R64, R65
@@ -355,7 +355,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   incluyen los movimientos nuevos sin cambiar columnas; un rol sin acceso total sigue viendo
   `notFound`.
 
-### [ ] T G.4 [P] — Las pantallas de tienda y mensajero NO cambian
+### [x] T G.4 [P] — Las pantallas de tienda y mensajero NO cambian — **verificación pura, cero archivos**
 - **Archivos:** ninguno. Suites de la 171/172 **sin editar**.
 - **Depende de:** T G.3 · **Cubre:** R32, R35, R63
 - **Hecho:** `wallet-tiendas-*`, `mi-wallet-*`, `mis-pagos-*` y las suites de liquidación no aparecen

@@ -41,9 +41,11 @@ import {
 // vista sin recarga manual (R23). Money-safe: los montos viajan y se renderizan como STRING.
 //
 // Feature 173 (T G.3, R58/R59) — la cabecera pasa de UNA cifra a las DOS de `verResumenCaja`,
-// y el módulo deja de hablar con el borde viejo (que ya no existe: lo retiró esta task). El
-// DTO viaja entero hasta la tarjeta —incluida la bandera `periodoFiltrado` del rótulo
-// condicional `[P7]`—, así que aquí no se decide ningún rótulo ni se toca ningún importe.
+// y el módulo deja de hablar con el borde viejo. Ojo: `verBalanceAction` SIGUE existiendo en
+// `lib/actions/wallet.ts`; lo que esta task hace es dejarla **sin un solo consumidor en `app/`**.
+// Retirarla es tocar backend y le toca a la Tanda H. El DTO viaja entero hasta la tarjeta
+// —incluida la bandera `periodoFiltrado` del rótulo condicional `[P7]`—, así que aquí no se
+// decide ningún rótulo ni se toca ningún importe.
 
 export interface WalletModuleProps {
   movimientos: WalletMovimientoDTO[];
