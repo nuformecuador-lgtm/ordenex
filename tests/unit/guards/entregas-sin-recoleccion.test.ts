@@ -16,10 +16,22 @@ import path from "path";
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 
-/** Ambito del corte limpio: los tres archivos de Entregas que montaban la recoleccion. */
+/**
+ * Ambito del corte limpio: los archivos de Entregas que montaban la recoleccion.
+ *
+ * 2026-07-31: Entregas se partio en dos pantallas hermanas y `MisAsignacionesModule.tsx`
+ * dejo de existir — su mitad de reparto es `RepartoModule.tsx` y la de recogida
+ * `RecogerModule.tsx`, cada una con su `page.tsx`. El guard sigue a los archivos (lo dice
+ * su propio caso "si se renombran, se actualiza aqui"): si el ambito no creciera con la
+ * particion, la mitad nueva quedaria SIN vigilar y seria justo por donde volveria a
+ * colarse la recoleccion en tienda.
+ */
 const ARCHIVOS = [
-  "app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx",
+  "app/(app)/mis-asignaciones/_components/RepartoModule.tsx",
+  "app/(app)/mis-asignaciones/_components/RecogerModule.tsx",
   "app/(app)/mis-asignaciones/page.tsx",
+  "app/(app)/mis-asignaciones/reparto/page.tsx",
+  "app/(app)/mis-asignaciones/recoger/page.tsx",
   "lib/services/MisAsignacionesService.ts",
 ] as const;
 

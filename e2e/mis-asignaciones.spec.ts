@@ -58,8 +58,22 @@ async function loginMensajero(page: Page) {
   await page.waitForURL("/", { timeout: 5000 });
 }
 
-/** Picks up the first order under "Por recoger" (por_recoger → en_reparto). */
+/**
+ * Picks up the first order under "Por recoger" (por_recoger → en_reparto).
+ *
+ * 2026-07-31: "Por recoger" moved to its own route, so this helper navigates there and the
+ * caller is expected to go back to /mis-asignaciones/reparto afterwards.
+ *
+ * PRE-EXISTING DRIFT (not introduced by the route split): the interactions below still
+ * assume the per-row "Recoger" button and the "Recoger órdenes" confirmation modal, both
+ * removed by feature 96 (pick-up is now the guide input or the scanner), and
+ * `abrirGestionPrimeraOrden` still assumes the "Gestionar orden" dialog that feature 113
+ * replaced with an inline panel. This spec needs a seeded DB and is not part of the unit
+ * gate, so it was already red before this change; it is left as-is rather than rewritten
+ * blind.
+ */
 async function recogerPrimeraOrden(page: Page) {
+  await page.goto("/mis-asignaciones/recoger");
   const porRecoger = page.getByRole("region", { name: "Por recoger" });
   await expect(porRecoger).toBeVisible();
 
@@ -99,7 +113,7 @@ async function elegirEnSelect(
 test.describe("Mis asignaciones — recaudo E2E flow", () => {
   test.beforeEach(async ({ page }) => {
     await loginMensajero(page);
-    await page.goto("/mis-asignaciones");
+    await page.goto("/mis-asignaciones/reparto");
   });
 
   test.describe("(a) Happy path: entrega (recaudo cobrado)", () => {

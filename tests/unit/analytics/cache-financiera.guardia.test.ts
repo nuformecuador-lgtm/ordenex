@@ -24,7 +24,7 @@ import path from "path";
 // nada se rompe, el numero se queda quieto y no hay senal. Un tablero financiero que miente
 // sin avisar es peor que uno lento.
 //
-// ─── ESTO ES LA FICHA 177, NO UN APENDICE DE LA 128 ────────────────────────────────────────
+// ─── ESTO ES LA FICHA 179, NO UN APENDICE DE LA 128 ────────────────────────────────────────
 // Engancharlos es OTRA FEATURE, propuesta en `specs/128-analitica-cache-invalidacion/design.md
 // §14`: «analitica: cache financiera + invalidacion por ledger», backend, `depends_on: 128`.
 // Cada uno de los cinco escritores necesita su propio test de cinco pasos —consultar, mover

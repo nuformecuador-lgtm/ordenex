@@ -1479,7 +1479,7 @@
       "zone": "backend",
       "branch": "feature/128-analitica-cache-invalidacion",
       "depends_on": 127,
-      "status_note": "2026-08-03 SPEC ESCRITA y PUERTA T0 CERRADA con 5 respuestas del humano (D1-D5). 24 requisitos, cada uno con su mutacion. HALLAZGO QUE CAMBIA LA FICHA: cacheTag() NO es usable en este repo -- exige la config cacheComponents, que next.config.ts no activa; el titulo de la ficha describe una API bloqueada. D1 = unstable_cache({tags}) + revalidateTag sin tocar next.config.ts. D2 = NO se cachea el dominio financiera, con guardia que sobrevive al merge: los ledgers los escriben al menos WalletEgresoService, LiquidacionService, el cron de gastos fijos y las indemnizaciones, asi que cachear dinero con solo la aprobacion de cierres como invalidador seria servir cifras rancias en silencio -> ficha 177. D3 = un tag por dominio (Next limita a 128 tags por entrada y el filtro admite rangos de 366 dias: un tag por fecha es imposible y falla en silencio). D4 = TTL 3600 s provisional y NO medido, con censo acotado al ambito (el literal 3600 ya vive en cuatro sitios ajenos). D5 = kill-switch por variable de entorno, encendida por defecto. DOS BLOQUEADORES REALES resueltos en el diseno: el backfill NO puede llamar a revalidateTag (revienta fuera de un request, es un proceso tsx) y se resuelve encolando un job que drena el cron; y unstable_cache serializa con JSON.stringify mientras segCicloAcum es bigint, asi que cachear el cubo sin codec LANZA TypeError."
+      "status_note": "2026-08-03 SPEC ESCRITA y PUERTA T0 CERRADA con 5 respuestas del humano (D1-D5). 24 requisitos, cada uno con su mutacion. HALLAZGO QUE CAMBIA LA FICHA: cacheTag() NO es usable en este repo -- exige la config cacheComponents, que next.config.ts no activa; el titulo de la ficha describe una API bloqueada. D1 = unstable_cache({tags}) + revalidateTag sin tocar next.config.ts. D2 = NO se cachea el dominio financiera, con guardia que sobrevive al merge: los ledgers los escriben al menos WalletEgresoService, LiquidacionService, el cron de gastos fijos y las indemnizaciones, asi que cachear dinero con solo la aprobacion de cierres como invalidador seria servir cifras rancias en silencio -> ficha 179. D3 = un tag por dominio (Next limita a 128 tags por entrada y el filtro admite rangos de 366 dias: un tag por fecha es imposible y falla en silencio). D4 = TTL 3600 s provisional y NO medido, con censo acotado al ambito (el literal 3600 ya vive en cuatro sitios ajenos). D5 = kill-switch por variable de entorno, encendida por defecto. DOS BLOQUEADORES REALES resueltos en el diseno: el backfill NO puede llamar a revalidateTag (revienta fuera de un request, es un proceso tsx) y se resuelve encolando un job que drena el cron; y unstable_cache serializa con JSON.stringify mientras segCicloAcum es bigint, asi que cachear el cubo sin codec LANZA TypeError."
     },
     {
       "id": 129,
@@ -2069,18 +2069,44 @@
     },
     {
       "id": 177,
+      "name": "api - consulta de orden por guia o remision y generacion del PDF por orden y por carga",
+      "description": "Backend, canal API key. (1) Ruta NUEVA de consulta por identificador libre: el `{id}` de la ruta se resuelve contra num_guia Y num_remision. El detalle actual `/api/ordenes/api-key/{numGuia}` (feature 106) se deja INTACTO: no se amplia un endpoint ya publicado a integradores. (2) La generacion del PDF NO viaja como query param `generatePdf`: es un segmento de ruta propio (`.../{id}/generate`), un endpoint dedicado que genera el PDF de ESA orden, deja la referencia guardada en la orden y responde con una URL firmada que vence en 5 minutos. Si el PDF ya existe se REUSA el objeto ya subido a storage y solo se vuelve a firmar; solo se genera cuando no existe. (3) Endpoint gemelo por carga: mismo contrato sobre el PDF CONSOLIDADO del lote, retorna el existente o lo genera si falta.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 136,
+      "status_note": "RENUMERADA de 175 a 177 el 2026-08-03: el id 175 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03. Decisiones YA tomadas por el humano en la peticion, no las re-abra el spec_author: ruta NUEVA en vez de ampliar `{numGuia}`; `generatePdf` deja de ser query param y pasa a ser el segmento `/generate`; TTL de la URL firmada = 5 min (mismo TTL que las evidencias de la 106). HALLAZGO que condiciona el diseno: la feature 136 guarda en `carga.download_url` (y `orden.download_url`) la URL FIRMADA, no el path -- ver EtiquetasDescargaService.ts:48 y EtiquetasLotePdfService.ts:78. Una URL firmada caduca, asi que 'reusar la url guardada' es IMPOSIBLE tal como esta persistido hoy: reusar solo puede significar reusar el OBJETO en storage y re-firmarlo en cada respuesta. El spec tiene que decidir si se persiste el storage_path (columna nueva o migracion de la existente) o si se acepta re-firmar a ciegas, y que pasa con las URLs ya guardadas por la 136. ABIERTO para la puerta: (a) desempate cuando el string casa con el num_guia de una orden y el num_remision de OTRA -- ambas son columnas distintas y no hay unicidad cruzada garantizada; (b) verbo HTTP de `/generate` (POST es lo honesto porque muta la orden, pero un integrador esperaria GET); (c) forma exacta de la ruta por carga y si el identificador de carga es el uuid o el `name` del lote; (d) si hace falta un modo forzar-regeneracion o el reuso es siempre. El owner sigue forzado al actor de la API key (R4 de la 106): un integrador no puede consultar ni generar el PDF de una orden ajena. Actualizar `lib/api/openapi-spec.ts`, que hoy publica solo 4 paths.",
+      "spec_path": null
+    },
+    {
+      "id": 178,
+      "name": "job semanal de purga de los PDF de cargas antiguas (retencion en dias parametrizable)",
+      "description": "Backend. Job recurrente que agrupa por `carga_id` y, para cada carga con mas de N dias desde su creacion, borra del storage el PDF CONSOLIDADO del lote y tambien los PDF INDIVIDUALES de todas las ordenes de esa carga, dejando a NULL `carga.download_url` y `orden.download_url` de las filas afectadas. N son dias, sale de variable de entorno con default 7, minimo 1 y sin tope superior. Objetivo: que el storage no crezca sin freno con etiquetas que ya nadie descarga.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 136,
+      "status_note": "RENUMERADA de 176 a 178 el 2026-08-03: el id 176 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03, junto con la 177. Decisiones YA tomadas por el humano: alcance = consolidado + individuales de la carga; retencion configurable por VARIABLE DE ENTORNO (no UI, no query param), default 7 dias, validacion >= 1. ABIERTO para la puerta: (a) que columna manda como fecha de corte, `carga.created_at` o `carga.fecha_carga` -- son dos columnas distintas del modelo Carga y hoy pueden divergir; (b) las ordenes con `carga_id` NULL (alta manual, no nacen de un lote) quedan FUERA de esta purga por definicion, o sea que su PDF no caduca nunca: hay que decirlo explicito o abrir ticket aparte; (c) idempotencia y borrado parcial -- si el borrado en storage falla a mitad, decidir si se limpia igual la columna (el enlace ya no sirve) o se reintenta; (d) si se monta como job recurrente sobre la cola de la feature 90 (patron de liberar-reprogramadas) o como cron propio en vercel.json protegido por CRON_SECRET; el humano no lo fijo. INTERACCION con la 177: despues de la purga, `/generate` tiene que volver a generar el PDF sin error -- una carga purgada no es una carga rota. Conviene especificarla DESPUES de la 177 o al menos leer su design.",
+      "spec_path": null
+    },
+    {
+      "id": 179,
       "name": "analitica: cache financiera + invalidacion por ledger",
-      "spec_path": "specs/177-analitica-cache-financiera",
+      "spec_path": "specs/179-analitica-cache-financiera",
       "description": "Backend. Extiende la cache por tag de la 128 al dominio financiera: envuelve las lecturas de AnaliticaFinancieraService con el tag analitica:financiera (ya declarado en ANALITICA_TAGS, feature 135) e invalida desde TODOS los escritores de los tres ledgers, no solo desde la aprobacion de cierres: WalletEgresoService, LiquidacionService, GeneracionGastosFijosService (cron de gastos fijos), el flujo de indemnizaciones de incidentes y aprobarCierre/aprobarCierreBodega. Retira el guardia R15 de la 128 en el MISMO PR que lo sustituye por la invalidacion real. Cada escritor necesita su test de cinco pasos: un escritor sin invalidar sirve dinero rancio en silencio, que es exactamente por lo que la 128 no lo hizo.",
       "status": "pending",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
-      "branch": "feature/177-analitica-cache-financiera",
+      "branch": "feature/179-analitica-cache-financiera",
       "depends_on": [
         128
       ],
-      "status_note": "Sale de la decision D2 de la 128 (specs/128-analitica-cache-invalidacion/design.md seccion 14). Mientras no aterrice, R15 de la 128 PROHIBE con guardia cachear el dominio financiera."
+      "status_note": "Sale de la decision D2 de la 128 (specs/128-analitica-cache-invalidacion/design.md seccion 14). Mientras no aterrice, R15 de la 128 PROHIBE con guardia cachear el dominio financiera. Renumerada de 177 a 179: otra sesion ocupo el 177 y el 178 en dev mientras esta rama estaba viva."
     }
   ]
 }

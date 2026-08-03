@@ -1,7 +1,7 @@
 "use client";
 
 // Feature 97 (R25/R31/R32/R34) — botón de sincronización MANUAL de la ruta del mensajero.
-// Vive dentro de `MisAsignacionesModule`, que solo se monta desde una página que ya hace
+// Vive dentro de `RepartoModule`, que solo se monta desde una página que ya hace
 // `notFound()` para roles ≠ `mensajero`; la Server Action `sincronizarRuta` vuelve a
 // comprobar el rol (`forbidden`) como defensa en profundidad (R33).
 import { useRef, useState } from "react";

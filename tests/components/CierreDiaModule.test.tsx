@@ -9,6 +9,7 @@ import {
   deshacerGestion,
   listarCierresPasadosPaginado,
   solicitarCierre,
+  verCierrePasado,
 } from "@/lib/actions/cierre-dia";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import type {
@@ -28,6 +29,8 @@ vi.mock("@/lib/actions/cierre-dia", () => ({
   // Feature 67 (T17/T18): la Server Action del deshacer también se mockea (contrato
   // cerrado por el backend: recibe un OBJETO `{ gestionId }`, no un string).
   deshacerGestion: vi.fn(),
+  // Pedido humano: detalle de un cierre pasado (se pide bajo demanda al abrir el visor).
+  verCierrePasado: vi.fn(),
   // Feature 170 — FASE 2 (T I.2): «Cierres solicitados» llega paginado del servidor.
   listarCierresPasadosPaginado: vi.fn(),
 }));
@@ -55,6 +58,26 @@ vi.mock("next/navigation", () => ({
 
 const solicitarMock = vi.mocked(solicitarCierre);
 const deshacerMock = vi.mocked(deshacerGestion);
+const verCierrePasadoMock = vi.mocked(verCierrePasado);
+
+/** Cierre del histórico usado por los casos del visor de detalle. */
+const CIERRE_PASADO: CierrePasadoDTO = {
+  cierreId: "c1",
+  estado: "aprobado",
+  destinoTipo: "bodega_central",
+  destinoZonaId: "z1",
+  totales: {
+    efectivo: "300.00",
+    simpe: "0.00",
+    transferencia: "0.00",
+    general: "300.00",
+  },
+  totalPagoMensajero: "45.00",
+  totalIngresoBodegaRechazos: "0.00",
+  solicitadoAt: "2026-07-11T10:00:00.000Z",
+  resueltoAt: "2026-07-12T09:00:00.000Z",
+  motivoRechazo: null,
+};
 
 function makeGestion(
   over: Partial<CierreDetalleGestion> & { gestionId: string; resultado: CierreResultado },
@@ -405,6 +428,62 @@ describe("CierreDiaModule", () => {
     // renderiza `totalIngresoBodegaRechazos`); ese desglose vive en bodega/admin.
     expect(within(region).queryByText("₡2100.00")).not.toBeInTheDocument();
     expect(within(region).getByText("2026-07-11")).toBeInTheDocument();
+  });
+
+  // Pedido humano: cada cierre del histórico se puede ABRIR y ver su detalle, con el MISMO
+  // comprobante del admin en variante `mensajero`.
+  it("el histórico ofrece 'Ver' y abre el comprobante del cierre con sus órdenes", async () => {
+    const user = userEvent.setup();
+    verCierrePasadoMock.mockResolvedValue({
+      status: "ok",
+      cierre: CIERRE_PASADO,
+      grupos: {
+        ...emptyGrupos(),
+        entregada: [
+          makeGestion({
+            gestionId: "g1",
+            resultado: "entregada",
+            destinatario: "Ana Pérez",
+            montoRecibido: "300.00",
+            metodoPago: "efectivo",
+            pagoMensajero: "45.00",
+          }),
+        ],
+      },
+    });
+    renderModule({ cierresPasados: [CIERRE_PASADO] });
+
+    const region = screen.getByRole("region", { name: "Cierres solicitados" });
+    await user.click(within(region).getByRole("button", { name: /^Ver del cierre/ }));
+
+    await vi.waitFor(() =>
+      expect(verCierrePasadoMock).toHaveBeenCalledWith({ cierreId: "c1" }),
+    );
+    // El comprobante se pinta con la orden del cierre y el pago rotulado como GANANCIA
+    // (para el mensajero ese monto es su ganancia, no "pago al mensajero").
+    const comprobante = await screen.findByRole("region", {
+      name: "Comprobante detallado de tu cierre",
+    });
+    expect(within(comprobante).getByText("Ana Pérez")).toBeInTheDocument();
+    expect(within(comprobante).getAllByText("Ganancia").length).toBeGreaterThan(0);
+    // Plata de la EMPRESA: no aparece en la vista del mensajero (design §7.2).
+    expect(within(comprobante).queryByText("Pago al mensajero")).toBeNull();
+    expect(within(comprobante).queryByText("Liquidación")).toBeNull();
+  });
+
+  it("si el cierre ya no está disponible, el comprobante avisa y no se pinta", async () => {
+    const user = userEvent.setup();
+    verCierrePasadoMock.mockResolvedValue({ status: "no_encontrada" });
+    renderModule({ cierresPasados: [CIERRE_PASADO] });
+
+    await user.click(screen.getByRole("button", { name: /^Ver del cierre/ }));
+
+    expect(
+      await screen.findByText("Este cierre ya no está disponible."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Comprobante detallado de tu cierre" }),
+    ).toBeNull();
   });
 
   it("R18: sin cierres pasados muestra el estado vacío del histórico", () => {

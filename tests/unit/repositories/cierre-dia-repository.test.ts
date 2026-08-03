@@ -1045,6 +1045,10 @@ describe("CierreDiaRepository.findCierresByMensajero (R18)", () => {
         totalPagoMensajero: new Prisma.Decimal("7.5"), // feature 39/R13: snapshot del pago
         totalIngresoBodegaRechazos: new Prisma.Decimal("3"), // feature 56/R12: snapshot del ingreso
         solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
+        // Resolucion del cierre: viaja al histórico del mensajero (un `rechazado` sin motivo
+        // no le dice qué corregir). Aquí sigue abierto -> ambos nulos.
+        resueltoAt: null,
+        motivoRechazo: null,
       },
     ]);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
@@ -1062,6 +1066,8 @@ describe("CierreDiaRepository.findCierresByMensajero (R18)", () => {
       totalPagoMensajero: "7.50", // feature 39/R13: snapshot money-safe STRING
       totalIngresoBodegaRechazos: "3.00", // feature 56/R12: snapshot money-safe STRING
       solicitadoAt: "2026-07-12T10:00:00.000Z",
+      resueltoAt: null,
+      motivoRechazo: null,
     });
   });
 });

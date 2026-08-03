@@ -8,7 +8,7 @@
 // Server Component padre: el DTO ya trae `notaPrivada` filtrada por el actor autenticado.
 import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { StickyNote } from "lucide-react";
+import { ChevronUp, Plus, StickyNote } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,8 +18,14 @@ import {
   limpiarNotaPrivada,
 } from "@/lib/actions/notas-privadas-mensajero";
 
+import { useSeccionColapsable } from "./useSeccionColapsable";
+
 // Textos separados (i18n-ready), lenguaje claro. "Mi nota" la diferencia de "Notas" (tienda).
 const ETIQUETA = "Mi nota";
+// Pedido humano (ux): la nota es OPCIONAL, así que de entrada solo se ofrece el botón que
+// abre la sección; el editor no ocupa sitio en el detalle mientras no haga falta.
+const ABRIR = "Agregar nota";
+const CERRAR = "Ocultar mi nota";
 const AYUDA =
   "Solo tú puedes ver esta nota; no la ven la tienda ni otros mensajeros.";
 const PLACEHOLDER = "Escribe una nota para ti sobre esta entrega…";
@@ -48,6 +54,10 @@ export function NotaPrivadaMensajero({
   const textareaId = useId();
   const ayudaId = useId();
   const [valor, setValor] = useState<string>(notaInicial ?? "");
+  // Sección CERRADA por defecto (pedido humano), con animación de apertura y cierre. Con
+  // nota ya escrita arranca ABIERTA: si no, el mensajero tendría que abrir a ciegas para
+  // enterarse de lo que él mismo anotó.
+  const seccion = useSeccionColapsable(notaInicial !== null && notaInicial !== "");
   const [procesando, setProcesando] = useState(false);
   // Cerrojo SÍNCRONO anti-doble-click: `disabled` solo engancha tras el re-render; el ref
   // descarta el segundo click YA en el primero (mismo patrón que `MarcarLuegoToggle`).
@@ -108,16 +118,43 @@ export function NotaPrivadaMensajero({
     }
   }
 
+  // Cerrada: solo el botón que la abre (borde punteado = "hay algo opcional aquí dentro",
+  // el mismo lenguaje visual que el bloque de incidente del panel).
+  if (!seccion.montada) {
+    return (
+      <button
+        type="button"
+        onClick={seccion.abrir}
+        aria-expanded={false}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground transition-colors hover:border-brand/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      >
+        <Plus className="size-4 text-brand" aria-hidden="true" />
+        {ABRIR}
+      </button>
+    );
+  }
+
   return (
     // Rediseño ux: MISMA caja que las secciones del detalle (card `rounded-2xl` sobre
     // `bg-card`), para que "Mi nota" no cante como un bloque aparte entre Pedido/Entrega/
     // Cobro. `bg-card` (no `bg-white`) para que siga el tema claro/oscuro.
-    <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
+    <div
+      className={`flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 ${seccion.clase}`}
+    >
       <div className="flex items-center gap-2">
         <StickyNote className="size-4 text-brand" aria-hidden="true" />
-        <label htmlFor={textareaId} className="text-sm font-semibold">
+        <label htmlFor={textareaId} className="flex-1 text-sm font-semibold">
           {ETIQUETA}
         </label>
+        <button
+          type="button"
+          onClick={seccion.cerrar}
+          aria-expanded
+          aria-label={CERRAR}
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          <ChevronUp className="size-4" aria-hidden="true" />
+        </button>
       </div>
       <p id={ayudaId} className="text-xs text-muted-foreground">
         {AYUDA}
