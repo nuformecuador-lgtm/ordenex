@@ -14,8 +14,17 @@ import { consultaDe, cubo, MAESTRO, rollupFalso, servicioCon } from "./_fake-ope
 // un error. El `toEqual` de dos objetos ya distingue `30n` de `"30"`, pero `tiempo_ciclo` lo
 // hace VISIBLE: es el numero que un humano leeria mal.
 
+/**
+ * ⚠ DOS CUBOS EN LA MISMA FECHA, Y NO ES DECORACION. Con un cubo por fecha, el acumulador del
+ * servicio (`AnaliticaOperativaService.acumular`) no llega a SUMAR nada, y entonces un
+ * `segCicloAcum` que volviera como `string` daria exactamente el mismo numero: `BigInt(0) +
+ * "7200"` NO lanza en JS —concatena, `"07200"`— y `Number("07200") / 4` vuelve a ser 1800. La
+ * mutacion pasaria inadvertida. Con dos cubos en la misma fecha, la concatenacion se hace
+ * visible: `"0" + "7200" + "1800"` = `"072001800"`, que es un ciclo medio absurdo.
+ */
 const CUBOS = [
   cubo({ fecha: "2026-08-01", entregas: 4, segCicloAcum: BigInt(7200), segCicloN: 4 }),
+  cubo({ fecha: "2026-08-01", entregas: 1, segCicloAcum: BigInt(1800), segCicloN: 1 }),
   cubo({ fecha: "2026-08-02", entregas: 6, segCicloAcum: BigInt(10800), segCicloN: 6 }),
 ];
 
@@ -39,10 +48,9 @@ describe("R1 · la serie servida desde cache es igual, campo a campo, a la servi
     expect(conCachePrimera).toEqual(sinCache);
     expect(conCacheHit).toEqual(sinCache);
 
-    // Y la cifra, explicita: 18000 s / 10 gestiones = 1800 s de ciclo medio. Si el `bigint`
-    // volviera como `string`, la suma concatenaria ("7200"+"10800") y esto seria absurdo.
-    const puntos = conCacheHit.puntos;
-    expect(puntos.every((p) => p.valor === null || Number.isFinite(p.valor))).toBe(true);
+    // Y la cifra, explicita: el 2026-08-01 son (7200 + 1800) s en 5 gestiones = 1800 s de
+    // ciclo medio. Si el `bigint` volviera como `string`, la suma CONCATENA y sale 14 400 360.
+    expect(conCacheHit.puntos.map((p) => p.valor)).toEqual([1800, 1800]);
     expect(JSON.stringify(conCacheHit)).toBe(JSON.stringify(sinCache));
   });
 
