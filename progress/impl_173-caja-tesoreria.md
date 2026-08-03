@@ -3301,3 +3301,119 @@ mutación; `T H.3` reúne las tres mutaciones money-critical con su salida real 
 anclados; el puente `verBalanceAction` **queda retirado** sin dejar nada huérfano y sin romper nada;
 y la auditoría de trazabilidad destapó **cuatro filas falsas** en `tasks.md` y **tres `R` sin test
 ejecutable**, que ahora lo tienen: **68 de 68**.
+
+---
+
+# I. Cierre del BLOQUEANTE 1 del review (2026-08-03)
+
+> Entrada corta y de un solo objetivo: `progress/review_173-caja-tesoreria.md` rechazó la feature con
+> **un** bloqueante —**R53 sin ningún test que lo verifique**— más seis menores. Aquí se cierran el
+> bloqueante y los menores **1** y **6**. **No se tocó `lib/`** salvo los dos asteriscos del menor 6.
+
+## I1. El hueco, dicho sin adornos
+
+R53 (`requirements.md:263-264`) pide que la **descripción** de `egresos` diga que desde esta feature
+incluye el dinero entregado a las tiendas. La fila de trazabilidad citaba dos tests y **ninguno leía
+`.descripcion` de `egresos`**:
+
+- `metrics-caja-naturaleza.guardia.test.ts:127` medía `definicion.categorias` (`egreso_pago_tienda`
+  ya estaba declarada **antes** de la 173: la lista no cambió, cambió el número);
+- `metrics.test.ts:348` exige que **toda** descripción cite las gestiones anuladas, y el texto
+  pre-173 termina en esa misma coletilla, así que la pasaba igual de bien que el nuevo.
+
+Consecuencia medible: **borrar la frase dejaba la suite entera en verde**. La única mitigación del
+modo de fallo que ⟨P4⟩ existía para evitar —que `egresos` cambie de número sin cambiar de `id`— vivía
+en la memoria de quien revisara el PR.
+
+## I2. Qué se añadió
+
+`tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` — un `describe` nuevo (`:179`) con
+**tres** casos, pegado al bloque «egresos: gana el pago a tienda por diseno, y nada mas»:
+
+| Caso | Línea | Qué mide |
+| --- | --- | --- |
+| `R53 · la de egresos dice que DESDE LA 173 incluye el dinero entregado a las tiendas` | `:180` | Lee `getMetrica("egresos").descripcion` y exige **las tres piezas por separado** (qué entra: `/dinero entregado a las tiendas/`; desde cuándo y por qué feature: `/(desde\|a partir de)[^.]*\b173\b/`; dicho como inclusión: `/incluye/`), más que lo que ya decía siga en pie. |
+| `y la asercion discrimina: el texto pre-173 NO la pasa, aunque ya nombraba «tienda»` | `:204` | El texto pre-173 **literal** vive en el archivo como fixture (`DESCRIPCION_EGRESOS_PRE_173`) y el mismo predicado lo **rechaza** — con el texto nuevo aceptado como contraprueba. Deja escrito además, en ejecución, **por qué el censo de `metrics.test.ts` no protegía R53**: el texto viejo también cita las gestiones anuladas. |
+| `R54 · dinero_en_caja y ganancia_ordenex tienen descripcion PROPIA, no prestada` | `:220` | La mitad de R54 que nadie afirmaba: las dos descripciones son **distintas entre sí** y de las **23** restantes del catálogo (con control de no-vacuidad), y cada una declara lo suyo — una **incluye** el contra-entrega, la otra lo **deja fuera**, y ninguna dice lo de la otra. |
+
+Se escribió el predicado `declaraElCambioDe173()` como **función**, no como tres `expect` sueltos,
+precisamente para poder aplicárselo al texto viejo en el segundo caso. Sin eso, un `toMatch(/tienda/)`
+habría dado verde: el texto pre-173 **ya** decía «pagos a tienda y mensajero».
+
+## I3. MUTACIÓN OBLIGATORIA — ejecutada y revertida
+
+**Mutación:** `lib/analytics/metrics.ts:463-464` revertido al texto **pre-173** (el que borra el diff
+de la feature), dejando todo lo demás igual. Se corrieron el guardia **y** `metrics.test.ts` juntos,
+para medir a la vez si el censo viejo lo notaba.
+
+```
+$ pnpm exec vitest run tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts tests/unit/analytics/metrics.test.ts
+
+ FAIL  tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts > R53/R54 · lo que las
+ descripciones del catalogo declaran de la caja en tesoreria > R53 · la de `egresos` dice que
+ DESDE LA 173 incluye el dinero entregado a las tiendas
+ AssertionError: no nombra el dinero entregado a las tiendas: expected 'salidas de la caja
+ principal (pagos a t…' to match /dinero entregado a las tiendas/
+ ❯ tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts:190:62
+
+ FAIL  tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts > R53/R54 · ... > y la
+ asercion discrimina: el texto pre-173 NO la pasa, aunque ya nombraba «tienda»
+ AssertionError: expected false to be true // Object.is equality
+ ❯ tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts:210:76
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 58 passed (60)
+```
+
+Dos lecturas, las dos importan:
+
+1. **El caso nuevo se pone rojo.** El bloqueante queda cerrado por medición, no por promesa.
+2. **`metrics.test.ts` sigue en verde con la mutación puesta** (`1 passed` de los dos archivos). Es
+   la confirmación ejecutable de lo que dijo el reviewer: el censo de descripciones que ya existía
+   **nunca** protegió R53.
+
+**Mutación revertida.** El diff de `lib/analytics/metrics.ts` contra `origin/dev` vuelve a tener
+exactamente **dos** líneas borradas —el banner `8 FINANCIERAS` y la descripción de `egresos`—
+comprobado con `git diff <merge-base> -- lib/analytics/metrics.ts | grep '^-'`.
+
+## I4. Menores cerrados aquí
+
+- **menor 1** — `T H.5` marcada `[x]` en `specs/173-caja-tesoreria/tasks.md:411`. El gate completo se
+  corrió dos veces (leader y reviewer) con los mismos totales: 859 archivos / 10.905 tests.
+- **menor 6** — `lib/analytics/metrics.ts:6` recupera los `**` alrededor del conteo viejo
+  (`= **15 ids operativos + 8 financieros = 23**`). Es la **única** línea de `lib/` que se tocó en
+  esta entrada, y el diff de la feature vuelve a ser **exactamente** los tres puntos que autoriza
+  `progress/decision_F2_173.md:50-54`.
+
+Los menores 2, 3, 4 y 5 **no** se tocan: 2 es post-deploy declarado, 3 y 4 son del leader y 5 es una
+nota de dónde vive ahora la garantía de `[P2]`.
+
+## I5. Trazabilidad actualizada
+
+- **R53** (`tasks.md:494`, era `:488` antes de la nota nueva) — deja de citar el caso de
+  `definicion.categorias` y apunta a `metrics-caja-naturaleza.guardia.test.ts:180`, con su
+  autocomprobación de `:204` y la mutación.
+- **R54** (`tasks.md:495`) — conserva `analitica-financiera-service.test.ts` (id propio, servidas) y
+  **gana** `:220` para la «descripción propia», que era la mitad sin verificar.
+- La nota de cabecera de la tabla suma la corrección posterior al review, para que quede escrito que
+  la auditoría de `T H.2` corrigió la fila **sin** cerrar el hueco.
+
+## I6. Gate de esta entrada
+
+| Comando | Resultado |
+| --- | --- |
+| `pnpm typecheck` | `tsc --noEmit`, **sin salida, exit 0** |
+| `pnpm lint` | **0 errores**, 27 warnings preexistentes (`_args`, `_zonaId`… en tests ajenos), exit 0 |
+| `pnpm exec vitest run guard` | **48 archivos / 724 tests, todos verdes** (4,19 s) |
+| `pnpm exec vitest related --run lib/analytics/metrics.ts tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` | **53 archivos / 624 tests, todos verdes** (4,68 s) |
+| `metrics-caja-naturaleza.guardia.test.ts` aislado | **19/19** (eran 16: **+3**) |
+
+**No corrido aquí:** la suite completa ni `./init.sh` — los corre el leader. Delta de tests de esta
+entrada: **+3 tests, 0 archivos nuevos**.
+
+## I7. Veredicto
+
+El bloqueante era real y ahora está medido: la frase de `egresos` que declara el salto del
+2026-08-03 tiene un test que se pone rojo si desaparece, y la «descripción propia» de las dos
+métricas nuevas dejó de depender de que nadie las copiara. **Cero cambios de comportamiento: dos
+asteriscos en `lib/` y tres casos de test.**

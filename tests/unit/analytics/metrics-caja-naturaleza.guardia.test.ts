@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getMetrica, listarMetricas } from "@/lib/analytics/metrics";
+import { METRICAS, getMetrica, listarMetricas } from "@/lib/analytics/metrics";
 import {
   VISTA_COD_RECAUDADO_POR_METODO,
   VISTA_COD_RECAUDADO_POR_TIENDA,
@@ -141,6 +141,108 @@ describe("egresos: gana el pago a tienda por diseno, y nada mas", () => {
     expect(categorias.every((c) => c.startsWith("egreso_"))).toBe(true);
     expect(categorias).not.toContain("ingreso_reverso_pago_tienda");
     expect(categorias).not.toContain("ingreso_ajuste");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* R53 / R54 — LO QUE LAS DESCRIPCIONES DECLARAN (no lo que declaran las       */
+/* categorias: eso es el bloque de arriba y NO es lo que estos dos R piden)    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * La `descripcion` de `egresos` TAL Y COMO ESTABA ANTES DE LA 173, copiada literal de
+ * `git diff origin/dev...HEAD -- lib/analytics/metrics.ts`. Vive aqui como fixture y no como
+ * recuerdo: es el texto contra el que se demuestra que la asercion de R53 discrimina. Si alguien
+ * revierte la descripcion a este texto, el primer caso de abajo se pone rojo — y el segundo
+ * explica por que ninguno de los guardias que ya existian lo habria notado.
+ */
+const DESCRIPCION_EGRESOS_PRE_173 =
+  "Salidas de la caja principal (pagos a tienda y mensajero, sueldos, gastos fijos y variables, " +
+  "indemnizaciones y ajustes) segun el libro append-only de la wallet; se lee del ledger, no de " +
+  "ordenes, y las gestiones anuladas no generan movimiento que contar.";
+
+/**
+ * Lo que R53 exige DE UN TEXTO: que nombre el dinero entregado a las tiendas, desde cuando y por
+ * que feature, y que lo diga como una INCLUSION nueva en la cifra. Se escribe como predicado, y
+ * no como tres `expect` sueltos, para poder aplicarselo tambien al texto pre-173 y demostrar en
+ * el propio archivo que separa los dos casos.
+ */
+function declaraElCambioDe173(descripcion: string): boolean {
+  const d = descripcion.toLowerCase();
+  return (
+    /dinero entregado a las tiendas/.test(d) && // QUE entra en la cifra
+    /(desde|a partir de)[^.]*\b173\b/.test(d) && // DESDE CUANDO, y por que feature
+    /incluye/.test(d) // dicho como inclusion, no como un aviso vago
+  );
+}
+
+describe("R53/R54 · lo que las descripciones del catalogo declaran de la caja en tesoreria", () => {
+  it("R53 · la de `egresos` dice que DESDE LA 173 incluye el dinero entregado a las tiendas", () => {
+    // R53 (`requirements.md:263-264`) habla de la DESCRIPCION, no de `definicion.categorias`:
+    // `egreso_pago_tienda` ya estaba declarada antes de la 173, y la cifra no la contenia porque
+    // ninguna via la emitia. Lo que cambia el 2026-08-03 es el NUMERO, no la lista — y esta frase
+    // es la unica mitigacion de ese salto donde lo lee quien mira la cifra (⟨P4⟩ del humano,
+    // `progress/decision_F2_173.md:26-28`).
+    const descripcion = getMetrica("egresos")?.descripcion ?? "";
+    const d = descripcion.toLowerCase();
+
+    // Las tres piezas por separado, para que el rojo diga CUAL falta y no solo que algo falta.
+    expect(d, "no nombra el dinero entregado a las tiendas").toMatch(
+      /dinero entregado a las tiendas/,
+    );
+    expect(d, "no dice desde cuando ni por que feature").toMatch(/(desde|a partir de)[^.]*\b173\b/);
+    expect(d, "no lo declara como una inclusion en la cifra").toMatch(/incluye/);
+    expect(declaraElCambioDe173(descripcion), "la descripcion de `egresos` no cumple R53").toBe(
+      true,
+    );
+
+    // Y el resto de la frase sigue en pie: la advertencia no sustituyo a lo que ya decia.
+    expect(d).toContain("salidas de la caja principal");
+    expect(d).toMatch(/gestion(es)? anulada/);
+  });
+
+  it("y la asercion discrimina: el texto pre-173 NO la pasa, aunque ya nombraba «tienda»", () => {
+    // AUTOCOMPROBACION. Sin esto, `toMatch(/tienda/)` habria bastado para dar verde: el texto
+    // viejo ya decia «pagos a tienda y mensajero» en su enumeracion. La diferencia entre los dos
+    // textos no es que uno nombre a las tiendas: es que uno declara el CAMBIO de significado.
+    expect(DESCRIPCION_EGRESOS_PRE_173.toLowerCase()).toContain("pagos a tienda");
+    expect(declaraElCambioDe173(DESCRIPCION_EGRESOS_PRE_173)).toBe(false);
+    expect(declaraElCambioDe173(getMetrica("egresos")?.descripcion ?? "")).toBe(true);
+
+    // POR QUE ESTE CASO TIENE QUE EXISTIR: el unico guardia que hasta ahora miraba TODAS las
+    // descripciones (`tests/unit/analytics/metrics.test.ts`, «cita las gestiones anuladas en la
+    // descripcion de toda metrica») lo pasa el texto viejo igual de bien que el nuevo, porque
+    // ambos terminan en la misma coletilla. Es decir: R53 podia revertirse con la suite entera en
+    // verde. Se comprueba aqui, sobre el texto viejo, en vez de confiarlo a la lectura del PR.
+    expect(DESCRIPCION_EGRESOS_PRE_173.toLowerCase()).toMatch(/gestion(es)? anulada|anulada_at/);
+  });
+
+  it("R54 · `dinero_en_caja` y `ganancia_ordenex` tienen descripcion PROPIA, no prestada", () => {
+    // La otra mitad de R54 («id propio y descripcion propia»): el id ya lo fija el catalogo, pero
+    // nada afirmaba que las descripciones fueran distintas ENTRE SI y del resto. Dos metricas que
+    // existen precisamente para no confundirse pueden acabar contando lo mismo con dos nombres.
+    const enCaja = getMetrica("dinero_en_caja")?.descripcion ?? "";
+    const ganancia = getMetrica("ganancia_ordenex")?.descripcion ?? "";
+
+    expect(enCaja.length).toBeGreaterThan(80);
+    expect(ganancia.length).toBeGreaterThan(80);
+    expect(enCaja).not.toBe(ganancia);
+
+    // Distintas tambien de las de TODAS las demas del catalogo: una descripcion copiada seria un
+    // id propio con el significado de otra cifra.
+    const ajenas = METRICAS.filter(
+      (m) => m.id !== "dinero_en_caja" && m.id !== "ganancia_ordenex",
+    ).map((m) => m.descripcion);
+    expect(ajenas.length, "el censo mira un catalogo poblado").toBeGreaterThanOrEqual(23);
+    expect(ajenas).not.toContain(enCaja);
+    expect(ajenas).not.toContain(ganancia);
+
+    // Y cada una dice LO SUYO, que es lo que las hace dos y no una: la de tesoreria INCLUYE el
+    // dinero de terceros; la de resultado lo DEJA FUERA. Invertirlo pondria esto rojo.
+    expect(enCaja.toLowerCase()).toMatch(/incluye el contra-entrega/);
+    expect(ganancia.toLowerCase()).toMatch(/dejando fuera el dinero de terceros/);
+    expect(enCaja.toLowerCase()).not.toMatch(/dejando fuera el dinero de terceros/);
+    expect(ganancia.toLowerCase()).not.toMatch(/incluye el contra-entrega/);
   });
 });
 

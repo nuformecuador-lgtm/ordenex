@@ -3,7 +3,7 @@
 // `METRICAS` de aqui.
 //
 // El contenido NO es opinion del implementer: es `design.md §3.3`, aprobado ENTERO por
-// el humano el 2026-07-30 (D1 «todas») = 15 ids operativos + 8 financieros = 23.
+// el humano el 2026-07-30 (D1 «todas») = **15 ids operativos + 8 financieros = 23**.
 // Anadir o quitar una metrica exige una decision humana nueva y fechada.
 // ⟨P4⟩ humano, 2026-08-03 (`progress/decision_F2_173.md`): +2 financieras (`dinero_en_caja`
 // y `ganancia_ordenex`) = **15 operativos + 10 financieros = 25**.

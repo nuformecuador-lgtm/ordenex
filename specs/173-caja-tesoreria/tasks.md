@@ -408,7 +408,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   en `progress/`, **no deducidas del PR**. Si preview no es alcanzable, queda declarado como
   bloqueante del merge, igual que en la 172.
 
-### [ ] T H.5 — Gate completo
+### [x] T H.5 — Gate completo
 - **Qué:** `./init.sh` completo, con baseline de archivos/tests medido **al inicio** de la feature.
 - **Depende de:** todas · **Cubre:** —
 - **Hecho:** verde, sin regresiones respecto al baseline, y el delta de tests explicado.
@@ -425,6 +425,12 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 >   `tasks.md`»): `metrics-descripciones.test.ts` e `ingresos-analitica-repository.test.ts` **no
 >   existen**; los casos viven en `metrics-caja-naturaleza.guardia.test.ts` + `metrics.test.ts` y en
 >   `financiera-ingresos-repo.test.ts`, que sí existen. Se corrigen las dos filas.
+> - **R53 (corrección posterior al review, 2026-08-03)** — la fila que dejó `T H.2` citaba un
+>   archivo que **sí** existe, pero un caso que mide `definicion.categorias`; R53 habla de la
+>   **descripción**, y el texto pre-173 pasaba el único censo de descripciones que había
+>   (`metrics.test.ts`, «cita las gestiones anuladas»). Era un hueco real: revertir la descripción
+>   dejaba la suite entera en verde. La fila apunta ahora al caso nuevo, con la mutación medida.
+>   Al hacerlo se cubrió también la mitad no verificada de **R54** («descripción propia»).
 > - **R32, R35, R63** — decían «suites de la 171/172 **sin editar**». Eso es cierto y lo midió
 >   `T G.4` (47 archivos protegidos vivos, cero en el diff), pero es una medición
 >   **punto-en-el-tiempo**: no corre en `./init.sh`. `T H.2` les añade un caso ejecutable que
@@ -485,8 +491,8 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 | R50 | idem — ningún `down.sql` previo en el diff |
 | R51 | `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` |
 | R52 | idem — `cod_recaudado` sigue con dos vistas |
-| R53 | `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` — «declara UNA sola categoria de terceros, y es el pago a la tienda» + `tests/unit/analytics/metrics.test.ts` (censo del catálogo) — **corregido**: `metrics-descripciones.test.ts` nunca existió (§F3) |
-| R54 | `tests/unit/services/analitica-financiera-service.test.ts` — las dos métricas nuevas |
+| R53 | `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts:180` — «R53 · la de `egresos` dice que DESDE LA 173 incluye el dinero entregado a las tiendas»: lee `getMetrica("egresos").descripcion` y exige las tres piezas (el dinero entregado a las tiendas, desde cuándo y por qué feature, y dicho como inclusión), con la autocomprobación de `:204` que aplica el mismo predicado al texto **pre-173 literal** y lo rechaza. **Mutación ejecutada** (revertir `metrics.ts:463-464` ⇒ 2 rojos; ver `progress/impl_173-caja-tesoreria.md §I`) — **corregido 2 veces**: `metrics-descripciones.test.ts` nunca existió (§F3), y la cita de la auditoría `T H.2` medía `definicion.categorias`, que R53 no menciona (BLOQUEANTE 1 del review) |
+| R54 | `tests/unit/services/analitica-financiera-service.test.ts` — las dos métricas nuevas (id propio, servidas) + `metrics-caja-naturaleza.guardia.test.ts:220` — «R54 · `dinero_en_caja` y `ganancia_ordenex` tienen descripcion PROPIA, no prestada»: distintas entre sí y de las **23** restantes del catálogo, y cada una declara lo suyo (una incluye el contra-entrega, la otra lo deja fuera) |
 | R55 | guardia de coherencia catálogo↔servicio (existente), ampliado a 10 ids |
 | R56 | `tests/unit/services/analitica-financiera-conciliacion.test.ts` — con COD en caja, mismo cuadre |
 | R57 | `tests/unit/analytics/financiera-ingresos-repo.test.ts` — «la validacion sigue reventando si una de ellas declarara una categoria ajena» y «`ganancia_ordenex` no llega a ver el dinero de terceros: lo excluye ya el WHERE» — **corregido**: `ingresos-analitica-repository.test.ts` nunca existió (§F3) |
