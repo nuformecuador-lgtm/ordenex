@@ -11,7 +11,10 @@ import type {
   EtiquetaEstatus,
   IAnaliticaOperativaRollupRepository,
 } from "@/lib/interfaces/repositories/IAnaliticaOperativaRollupRepository";
-import type { IAnaliticaOperativaVivaRepository } from "@/lib/interfaces/repositories/IAnaliticaOperativaVivaRepository";
+import type {
+  CubosDelDiaEnCurso,
+  IAnaliticaOperativaVivaRepository,
+} from "@/lib/interfaces/repositories/IAnaliticaOperativaVivaRepository";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import {
   AnaliticaOperativaError,
@@ -291,30 +294,14 @@ export class AnaliticaOperativaService implements IAnaliticaOperativaService {
    */
   private async completarPrimerIntento(
     consulta: ConsultaAnalitica,
-    crudos: { cubos: readonly CuboRollup[]; entregasVigentes: readonly { ordenId: string; zonaId: string; tiendaId: string; mensajeroId: string; estatusId: string }[] },
+    crudos: CubosDelDiaEnCurso,
   ): Promise<readonly CuboRollup[]> {
     if (crudos.entregasVigentes.length === 0) return crudos.cubos;
     const ordenIds = [...new Set(crudos.entregasVigentes.map((e) => e.ordenId))];
     const intentos = await this.enEtapa(consulta, "primer_intento", () =>
       this.intentos.contarIntentosEnLote(ordenIds),
     );
-    // R14 de la 160: las ordenes sin intentos NO vienen en el Map; el `?? 0` es del llamador.
-    const primeras = crudos.entregasVigentes.filter((e) => (intentos.get(e.ordenId) ?? 0) === 0);
-    if (primeras.length === 0) return crudos.cubos;
-
-    const porClave = new Map<string, number>();
-    for (const e of primeras) {
-      const k = [e.zonaId, e.tiendaId, e.mensajeroId, e.estatusId].join("\u001f");
-      porClave.set(k, (porClave.get(k) ?? 0) + 1);
-    }
-    return crudos.cubos.map((c) => {
-      const k = [c.zonaId, c.tiendaId, c.mensajeroId ?? "", c.estatusId].join("\u001f");
-      const n = porClave.get(k);
-      // La coordenada de `primer_intento_ok` es la de su ENTREGA, y las entregas viven en el
-      // cubo de causa nula: solo ahi se suma (misma regla que la 124).
-      if (n === undefined || c.causaDevolucion !== null) return c;
-      return { ...c, primerIntentoOk: c.primerIntentoOk + n };
-    });
+    return completarPrimerIntentoEnCubos(crudos, intentos);
   }
 
   /** Funde los cubos en puntos de serie y aplica la formula de la metrica. */
@@ -555,4 +542,36 @@ function fechasDelRango(consulta: ConsultaAnalitica): readonly string[] {
     if (fechas.length > 400) break;
   }
   return fechas;
+}
+
+/**
+ * R17 de la 124, aplicado al intradia — reparte `primer_intento_ok` sobre los cubos.
+ *
+ * Se exporta (y no vive inline en el servicio) porque el test de equivalencia de **R33** tiene
+ * que ejecutar EXACTAMENTE este reparto para comparar contra las filas que escribio el job. Si
+ * el test lo reimplementara, R33 compararia dos implementaciones distintas de la 126 en vez de
+ * comparar la 126 contra la 124, que es lo unico que contiene la duplicacion de D13.
+ *
+ * `intentos` viene del punto UNICO del repo (feature 160): aqui no se decide que es un
+ * «intento». R14 de aquella feature: las ordenes sin intentos NO vienen en el `Map`.
+ */
+export function completarPrimerIntentoEnCubos(
+  crudos: CubosDelDiaEnCurso,
+  intentos: ReadonlyMap<string, number>,
+): readonly CuboRollup[] {
+  const primeras = crudos.entregasVigentes.filter((e) => (intentos.get(e.ordenId) ?? 0) === 0);
+  if (primeras.length === 0) return crudos.cubos;
+
+  const porClave = new Map<string, number>();
+  for (const e of primeras) {
+    const k = [e.zonaId, e.tiendaId, e.mensajeroId, e.estatusId].join("");
+    porClave.set(k, (porClave.get(k) ?? 0) + 1);
+  }
+  return crudos.cubos.map((c) => {
+    // La coordenada de `primer_intento_ok` es la de su ENTREGA, y las entregas viven en el
+    // cubo de causa nula: solo ahi se suma (misma regla que la 124).
+    if (c.causaDevolucion !== null) return c;
+    const n = porClave.get([c.zonaId, c.tiendaId, c.mensajeroId ?? "", c.estatusId].join(""));
+    return n === undefined ? c : { ...c, primerIntentoOk: c.primerIntentoOk + n };
+  });
 }
