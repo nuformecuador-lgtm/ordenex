@@ -2066,6 +2066,32 @@
         127
       ],
       "status_note": "2026-08-02 DADA DE ALTA al cerrar la puerta T0 de la 126 (respuesta Q3=(C) del humano: ficha propia despues, divergencia declarada ya). NO arrancar hasta que la 126 Y la 127 esten mergeadas: tocar metrics.ts antes obliga a rebasar a una de las dos. Las divergencias (1) y (2) las encontro el spec_author de la 126 leyendo el codigo; la (3) aparecio al cerrar T0, porque la instruccion del leader pedia escribir la semantica de sin_gestionar 'en el contrato Y en el catalogo' y el catalogo estaba fuera de la frontera de la 126."
+    },
+    {
+      "id": 177,
+      "name": "api - consulta de orden por guia o remision y generacion del PDF por orden y por carga",
+      "description": "Backend, canal API key. (1) Ruta NUEVA de consulta por identificador libre: el `{id}` de la ruta se resuelve contra num_guia Y num_remision. El detalle actual `/api/ordenes/api-key/{numGuia}` (feature 106) se deja INTACTO: no se amplia un endpoint ya publicado a integradores. (2) La generacion del PDF NO viaja como query param `generatePdf`: es un segmento de ruta propio (`.../{id}/generate`), un endpoint dedicado que genera el PDF de ESA orden, deja la referencia guardada en la orden y responde con una URL firmada que vence en 5 minutos. Si el PDF ya existe se REUSA el objeto ya subido a storage y solo se vuelve a firmar; solo se genera cuando no existe. (3) Endpoint gemelo por carga: mismo contrato sobre el PDF CONSOLIDADO del lote, retorna el existente o lo genera si falta.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 136,
+      "status_note": "RENUMERADA de 175 a 177 el 2026-08-03: el id 175 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03. Decisiones YA tomadas por el humano en la peticion, no las re-abra el spec_author: ruta NUEVA en vez de ampliar `{numGuia}`; `generatePdf` deja de ser query param y pasa a ser el segmento `/generate`; TTL de la URL firmada = 5 min (mismo TTL que las evidencias de la 106). HALLAZGO que condiciona el diseno: la feature 136 guarda en `carga.download_url` (y `orden.download_url`) la URL FIRMADA, no el path -- ver EtiquetasDescargaService.ts:48 y EtiquetasLotePdfService.ts:78. Una URL firmada caduca, asi que 'reusar la url guardada' es IMPOSIBLE tal como esta persistido hoy: reusar solo puede significar reusar el OBJETO en storage y re-firmarlo en cada respuesta. El spec tiene que decidir si se persiste el storage_path (columna nueva o migracion de la existente) o si se acepta re-firmar a ciegas, y que pasa con las URLs ya guardadas por la 136. ABIERTO para la puerta: (a) desempate cuando el string casa con el num_guia de una orden y el num_remision de OTRA -- ambas son columnas distintas y no hay unicidad cruzada garantizada; (b) verbo HTTP de `/generate` (POST es lo honesto porque muta la orden, pero un integrador esperaria GET); (c) forma exacta de la ruta por carga y si el identificador de carga es el uuid o el `name` del lote; (d) si hace falta un modo forzar-regeneracion o el reuso es siempre. El owner sigue forzado al actor de la API key (R4 de la 106): un integrador no puede consultar ni generar el PDF de una orden ajena. Actualizar `lib/api/openapi-spec.ts`, que hoy publica solo 4 paths.",
+      "spec_path": null
+    },
+    {
+      "id": 178,
+      "name": "job semanal de purga de los PDF de cargas antiguas (retencion en dias parametrizable)",
+      "description": "Backend. Job recurrente que agrupa por `carga_id` y, para cada carga con mas de N dias desde su creacion, borra del storage el PDF CONSOLIDADO del lote y tambien los PDF INDIVIDUALES de todas las ordenes de esa carga, dejando a NULL `carga.download_url` y `orden.download_url` de las filas afectadas. N son dias, sale de variable de entorno con default 7, minimo 1 y sin tope superior. Objetivo: que el storage no crezca sin freno con etiquetas que ya nadie descarga.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 136,
+      "status_note": "RENUMERADA de 176 a 178 el 2026-08-03: el id 176 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03, junto con la 177. Decisiones YA tomadas por el humano: alcance = consolidado + individuales de la carga; retencion configurable por VARIABLE DE ENTORNO (no UI, no query param), default 7 dias, validacion >= 1. ABIERTO para la puerta: (a) que columna manda como fecha de corte, `carga.created_at` o `carga.fecha_carga` -- son dos columnas distintas del modelo Carga y hoy pueden divergir; (b) las ordenes con `carga_id` NULL (alta manual, no nacen de un lote) quedan FUERA de esta purga por definicion, o sea que su PDF no caduca nunca: hay que decirlo explicito o abrir ticket aparte; (c) idempotencia y borrado parcial -- si el borrado en storage falla a mitad, decidir si se limpia igual la columna (el enlace ya no sirve) o se reintenta; (d) si se monta como job recurrente sobre la cola de la feature 90 (patron de liberar-reprogramadas) o como cron propio en vercel.json protegido por CRON_SECRET; el humano no lo fijo. INTERACCION con la 177: despues de la purga, `/generate` tiene que volver a generar el PDF sin error -- una carga purgada no es una carga rota. Conviene especificarla DESPUES de la 177 o al menos leer su design.",
+      "spec_path": null
     }
   ]
 }

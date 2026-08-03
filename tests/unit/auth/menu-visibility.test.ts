@@ -3,6 +3,7 @@ import type { RolValue } from "@prisma/client";
 import {
   puedeVer,
   itemsVisibles,
+  primerDestino,
   SIDEBAR_ITEMS,
   ROLES_ACCESO_ANALITICA,
   type MenuItem,
@@ -22,7 +23,6 @@ const inicio = byLabel("Inicio");
 const ordenes = byLabel("Órdenes");
 const entregas = byLabel("Entregas");
 const config = byLabel("Configuración");
-const perfil = byLabel("Perfil");
 const cierreDia = byLabel("Cierre del día");
 const cierresAdmin = byLabel("Cierres del día");
 const novedades = byLabel("Novedades");
@@ -42,7 +42,6 @@ describe("puedeVer", () => {
   it("muestra el item cuando el rol del actor está autorizado", () => {
     expect(puedeVer(config, actor("maestro"))).toBe(true);
     expect(puedeVer(ordenes, actor("adminTienda"))).toBe(true);
-    expect(puedeVer(perfil, actor("adminSatelite"))).toBe(true);
     expect(puedeVer(cierreDia, actor("mensajero"))).toBe(true);
     // Feature 61: "Entregas" (portal del mensajero) es exclusivo del mensajero.
     expect(puedeVer(entregas, actor("mensajero"))).toBe(true);
@@ -113,7 +112,6 @@ describe("puedeVer", () => {
 
   it("oculta todo cuando no hay actor (sesión ausente o inválida)", () => {
     expect(puedeVer(config, null)).toBe(false);
-    expect(puedeVer(perfil, null)).toBe(false);
     expect(puedeVer(ordenes, null)).toBe(false);
     expect(puedeVer(novedades, null)).toBe(false);
     expect(puedeVer(wallet, null)).toBe(false);
@@ -121,7 +119,7 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve Inicio, Analítica, Órdenes, Wallet, Configuración, Cierres del día, Incidentes y Perfil en orden real", () => {
+  it("maestro ve Inicio, Analítica, Órdenes, Wallet, Configuración, Cierres del día e Incidentes en orden real", () => {
     // Feature 42: "Wallet" (caja principal, solo maestro) va antes de "Configuración".
     // Feature 92: "Inicio" (acceso a /dashboard) va PRIMERO en SIDEBAR_ITEMS.
     // Feature 129 (R16/R17, D7): "Analítica" entra en SEGUNDA posición, justo tras
@@ -139,11 +137,10 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Configuración",
       "Cierres del día",
       "Incidentes",
-      "Perfil",
     ]);
   });
 
-  it("admin ve Inicio, Analítica, Órdenes, Ranking, Wallet, Cierres del día y Perfil, NO Configuración (paridad con maestro salvo Configuración)", () => {
+  it("admin ve Inicio, Analítica, Órdenes, Ranking, Wallet y Cierres del día, NO Configuración (paridad con maestro salvo Configuración)", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("admin")));
     // Feature 94 (paridad adm↔maestro): el admin ve Ranking, Wallet y Cierres del día
     // igual que el maestro; solo Configuración sigue siendo maestro-only.
@@ -157,21 +154,20 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Wallet",
       "Cierres del día",
       "Incidentes", // feature 158 (Q-I)
-      "Perfil",
     ]);
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Órdenes + Novedades + Perfil, NO Configuración ni Incidentes", () => {
+  it("adminTienda ve Órdenes + Novedades, NO Configuración ni Incidentes", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
-    expect(visibles).toEqual(["Órdenes", "Novedades", "Perfil"]);
+    expect(visibles).toEqual(["Órdenes", "Novedades"]);
     expect(visibles).not.toContain("Incidentes"); // feature 158 (R48)
     expect(visibles).not.toContain("Configuración");
     // "Ranking" es solo del maestro.
     expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Entregas + Recolección + Ranking + Cierre del día + Perfil, NO Órdenes, Novedades ni Configuración", () => {
+  it("mensajero ve Entregas + Recolección + Ranking + Cierre del día, NO Órdenes, Novedades ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
@@ -186,7 +182,6 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Recolección",
       "Ranking",
       "Cierre del día",
-      "Perfil",
     ]);
     expect(visibles).not.toContain("Órdenes");
     expect(visibles).not.toContain("Novedades");
@@ -196,16 +191,56 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Incidentes");
   });
 
-  it("adminSatelite ve Órdenes + Cierres del día + Incidentes + Perfil", () => {
+  it("adminSatelite ve Órdenes + Cierres del día + Incidentes", () => {
     // Feature 158 (R48): el adminSatelite SÍ resuelve incidentes, acotado a su zona por el
     // service; por eso gana el ítem. Su "Órdenes" apunta a /recepcion-satelite.
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Órdenes", "Cierres del día", "Incidentes", "Perfil"],
+      ["Órdenes", "Cierres del día", "Incidentes"],
     );
   });
 
   it("sin actor no ve ningún ítem", () => {
     expect(itemsVisibles(SIDEBAR_ITEMS, null)).toEqual([]);
+  });
+
+  it("«Perfil» ya no es un ítem del menú para NINGÚN rol (su ruta tampoco existe)", () => {
+    expect(SIDEBAR_ITEMS.some((i) => i.label === "Perfil")).toBe(false);
+    for (const rol of [
+      "maestro",
+      "admin",
+      "adminTienda",
+      "adminSatelite",
+      "mensajero",
+    ] as const) {
+      expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor(rol)))).not.toContain(
+        "Perfil",
+      );
+    }
+  });
+});
+
+// Aterrizaje de `/dashboard` para los roles sin inicio propio (pedido humano): el primer
+// ítem de SU sidebar, no un "Bienvenido" vacío.
+describe("primerDestino (aterrizaje de /dashboard)", () => {
+  const destinoDe = (rol: RolValue) =>
+    primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor(rol)));
+
+  it("el mensajero aterriza en el primer SUBÍTEM de Entregas (el padre no navega)", () => {
+    expect(destinoDe("mensajero")).toBe("/mis-asignaciones/reparto");
+  });
+
+  it("el adminSatelite aterriza en su portal de órdenes", () => {
+    expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite");
+  });
+
+  it("maestro y admin conservan su Inicio (/dashboard), así que no hay redirección circular", () => {
+    expect(destinoDe("maestro")).toBe("/dashboard");
+    expect(destinoDe("admin")).toBe("/dashboard");
+  });
+
+  it("sin ítems visibles no hay destino", () => {
+    expect(primerDestino([])).toBeNull();
+    expect(primerDestino(itemsVisibles(SIDEBAR_ITEMS, null))).toBeNull();
   });
 
   it("conserva los children del ítem padre visible (Configuración → Usuarios/Tarifas/API/Plantillas)", () => {
@@ -242,6 +277,33 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
         .find((c) => c.href === "/configuracion/plantillas");
       expect(plantillas).toBeUndefined();
     }
+  });
+
+  // 2026-07-31 (decisión del humano): el portal del mensajero se partió en dos pantallas
+  // hermanas y "Entregas" pasó a ser un ítem con submenú. El ORDEN importa y es parte de
+  // la decisión: Reparto primero, porque es donde el mensajero pasa el turno.
+  it("Entregas declara el submenú Reparto (primero) + Por recoger", () => {
+    expect(entregas.children?.map((c) => [c.label, c.href])).toEqual([
+      ["Reparto", "/mis-asignaciones/reparto"],
+      ["Por recoger", "/mis-asignaciones/recoger"],
+    ]);
+  });
+
+  it("los subítems de Entregas heredan la visibilidad del padre (solo mensajero)", () => {
+    // Un subítem solo es alcanzable si su padre lo es: si "Entregas" se ocultara para un
+    // rol, las dos pantallas del mensajero quedarían fuera de su menú.
+    for (const rol of ["maestro", "admin", "adminTienda", "adminSatelite"] as const) {
+      const alcanzables = itemsVisibles(SIDEBAR_ITEMS, actor(rol))
+        .flatMap((i) => i.children ?? [])
+        .map((c) => c.href);
+      expect(alcanzables).not.toContain("/mis-asignaciones/reparto");
+      expect(alcanzables).not.toContain("/mis-asignaciones/recoger");
+    }
+    const delMensajero = itemsVisibles(SIDEBAR_ITEMS, actor("mensajero"))
+      .flatMap((i) => i.children ?? [])
+      .map((c) => c.href);
+    expect(delMensajero).toContain("/mis-asignaciones/reparto");
+    expect(delMensajero).toContain("/mis-asignaciones/recoger");
   });
 
   it("Órdenes ya no tiene submenú (el listado vive en el ítem padre)", () => {

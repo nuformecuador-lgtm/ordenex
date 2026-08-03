@@ -3,7 +3,6 @@
 import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,15 +21,12 @@ import type {
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { normalizeName } from "@/lib/utils/normalize";
 
-import {
-  coincideBusqueda,
-  filtrarAsignaciones,
-} from "./mis-asignaciones-buscador";
+import { coincideBusqueda } from "./mis-asignaciones-buscador";
 import { FiltroCantonDistrito } from "./FiltroCantonDistrito";
 import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
-import { RecogerPaqueteCard } from "./RecogerPaqueteCard";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
+import { GestionarOrdenCardButton } from "./GestionarOrdenCardButton";
 import { ChatFlotante } from "./chat-demo/ChatFlotante";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
 import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
@@ -40,33 +36,32 @@ import { CarruselCards } from "@/components/shared/CarruselCards";
 
 import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
 import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
+import { useSeccionColapsable } from "./useSeccionColapsable";
 import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 
-// Feature 36 (T15-T17) / rediseño 63 (pedido humano): módulo del mensajero.
-// Recibe los DOS grupos ya resueltos por el Server Component padre (datos
-// sensibles por props, sin fetch de cliente) y el puntero de bloqueo
-// `ordenEnGestionId` (backend, robusto a recarga). Las mutaciones van por Server
-// Action (recoger / escoger / gestionar / liberar) y refrescan la ruta
-// (router.refresh) para releer el estado del servidor.
+// Feature 36 (T15-T17) / rediseño 63 (pedido humano): pantalla de REPARTO del mensajero.
+// Recibe el grupo ya resuelto por el Server Component padre (datos sensibles por props,
+// sin fetch de cliente) y el puntero de bloqueo `ordenEnGestionId` (backend, robusto a
+// recarga). Las mutaciones van por Server Action (escoger / gestionar / liberar) y
+// refrescan la ruta (router.refresh) para releer el estado del servidor.
+//
+// 2026-07-31 (decisión del humano) — CORTE: este módulo era `MisAsignacionesModule` y
+// montaba TAMBIÉN el apartado "Por recoger" (escáner + listado). Ahora esa mitad vive en
+// su propia pantalla (`/mis-asignaciones/recoger`, `RecogerModule`) con su subítem de
+// menú: el escáner quedaba enterrado bajo el panel de gestión y el mensajero no lo veía.
+// Consecuencia buscada del corte: el MODO FOCO ya no necesita ocultar "Por recoger"
+// (feature 113/R8) — no está en esta pantalla; sigue ocultando la grilla y el mapa.
 //
 // UX "En reparto" (feature 113): cada card muestra el detalle COMPLETO inline
 // (Pedido/Entrega/Cobro, vía `AsignacionDetalle`), no una vista compacta. Cuando el
 // puntero 1-a-1 (`ordenEnGestionId`) queda fijado y el mensajero NO está bloqueado, la
 // vista entra en MODO FOCO y colapsa a SOLO el panel de la orden activa: se ocultan la
-// grilla de cards, el mapa/ruta y la sección "Por recoger" para gestionar sin
-// distracciones. Al liberar/finalizar la gestión el puntero vuelve a `null`
-// (router.refresh) y se restaura la vista completa. El bloqueo 1-a-1 (R19/R20) sigue
-// siendo una restricción de ACCIÓN (no se puede escoger otra orden), no de visibilidad.
+// grilla de cards y el mapa/ruta para gestionar sin distracciones. Al liberar/finalizar la
+// gestión el puntero vuelve a `null` (router.refresh) y se restaura la vista completa. El
+// bloqueo 1-a-1 (R19/R20) sigue siendo una restricción de ACCIÓN (no se puede escoger otra
+// orden), no de visibilidad.
 
-export interface MisAsignacionesModuleProps {
-  /** Órdenes en `por_recoger`. */
-  porRecoger: MiAsignacionDTO[];
-  // Feature 167 (R33) — CORTE LIMPIO: aquí NO hay ningún grupo de recolección en tienda.
-  // La 157 lo había montado como tercer apartado de este módulo y el mensajero no lo
-  // encontraba; desde la 167 vive en su página propia (`/recoleccion`), con su ítem de menú.
-  // Este módulo no monta lista, ni escáner, ni aviso, ni conteo, ni enlace a esa página: la
-  // pista permanente es el ítem del menú (decisión del humano, 2026-07-31). El guard
-  // `tests/unit/guards/entregas-sin-recoleccion.test.ts` impide que vuelva a colarse.
+export interface RepartoModuleProps {
   /** Órdenes en `en_reparto` (por gestionar), YA ordenadas por la ruta (R28). */
   porGestionar: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
@@ -76,7 +71,7 @@ export interface MisAsignacionesModuleProps {
   /**
    * Feature 111/R12/R14: `true` si el mensajero está BLOQUEADO (cierre pendiente).
    * El bloqueo es TOTAL: se muestra el aviso y se desactivan/guardan los controles de
-   * recoger, escoger y gestionar. Defensa SUAVE; el backend (R1/R4) es la defensa real.
+   * escoger y gestionar. Defensa SUAVE; el backend (R1/R4) es la defensa real.
    */
   bloqueado: boolean;
 }
@@ -88,24 +83,27 @@ const BUSCADOR_REGION = "Buscar guías asignadas";
 const BUSCADOR_LABEL = "Buscar guías";
 const BUSCADOR_PLACEHOLDER =
   "Filtra por número de guía, remisión, teléfono o nombre";
-// R6: mensajes de "sin resultados", distintos del vacío sin búsqueda; contienen la
-// frase «coincide con la búsqueda» para ser reconocibles.
-const SIN_RESULTADOS_RECOGER = "Ninguna guía por recoger coincide con la búsqueda.";
+// R6: mensaje de "sin resultados", distinto del vacío sin búsqueda; contiene la
+// frase «coincide con la búsqueda» para ser reconocible.
 const SIN_RESULTADOS_REPARTO = "Ninguna guía en reparto coincide con la búsqueda.";
 
-// Feature 117/R11: mensajes de "sin coincidencias con el filtro" (cantón/distrito),
-// distintos del vacío base ("No hay órdenes…") y del "sin resultados" del buscador (114).
-// Contienen la frase «coincide con el filtro» para ser reconocibles.
-const SIN_COINCIDENCIAS_RECOGER = "Ninguna guía por recoger coincide con el filtro.";
-const SIN_COINCIDENCIAS_REPARTO = "Ninguna guía en reparto coincide con el filtro.";
+// 2026-07-31 — RETIRADO: el mensaje de feature 117/R11 ("Ninguna guía en reparto coincide
+// con el filtro."). R11 nació cuando las OPCIONES de cantón/distrito se derivaban de la
+// UNIÓN de los dos grupos del portal: elegir un cantón que solo existía en "Por recoger"
+// vaciaba la lista de reparto, y el mensaje explicaba por qué. Tras el corte las opciones
+// salen SOLO de `porGestionar`, así que toda opción ofrecida tiene al menos una orden
+// detrás y el estado dejó de ser alcanzable — comprobado por dos caminos (elegir cantón, y
+// filtrar por distrito y perder esa orden en un refresh: el select suelta su selección
+// cuando la opción desaparece, y la lista vuelve entera). Dejarlo escrito sería una rama
+// que ningún test puede cubrir y que se leería como cubierta. Si algún día las opciones
+// vuelven a derivarse de un conjunto mayor que la lista, hay que reponerlo CON su caso.
 
-export function MisAsignacionesModule({
-  porRecoger,
+export function RepartoModule({
   porGestionar,
   ordenEnGestionId,
   ruta,
   bloqueado,
-}: MisAsignacionesModuleProps) {
+}: RepartoModuleProps) {
   const router = useRouter();
   const toast = useToast();
 
@@ -116,7 +114,9 @@ export function MisAsignacionesModule({
   const [ubicacionActual, setUbicacionActual] = useState<RutaMapaOrigen | null>(
     null,
   );
-  const [mostrarMapa, setMostrarMapa] = useState(true);
+  // Mapa de ruta como ACORDEÓN: abierto de entrada, se pliega y despliega con animación
+  // desde un control que no se mueve de su sitio (ver el bloque del mapa, más abajo).
+  const mapa = useSeccionColapsable(true);
 
   // Rediseño ux: apertura del CHAT (el modal del botón flotante). Vive aquí porque tiene
   // DOS disparadores: el propio botón flotante y la acción "Mensaje" del panel de detalle.
@@ -143,25 +143,14 @@ export function MisAsignacionesModule({
   const buscando = query.trim() !== "";
 
   // Feature 117: filtro por cantón/distrito (100% cliente, R12). Las OPCIONES se derivan
-  // de la UNIÓN de ambos grupos SIN filtrar (R13: el conjunto COMPLETO cargado, para que
-  // la selección actual no borre otras opciones de cantón disponibles). Se compone en AND
-  // con el buscador (114) sobre las MISMAS listas visibles (ver `porRecogerFiltrado` /
-  // `porGestionarFiltrado`); la orden en gestión nunca se oculta (salvaguarda R10/R14).
-  const unionAsignaciones = useMemo<MiAsignacionDTO[]>(
-    () => [...porRecoger, ...porGestionar],
-    [porRecoger, porGestionar],
-  );
-  const filtro = useFiltroCantonDistrito(unionAsignaciones);
+  // del grupo SIN filtrar (R13: el conjunto COMPLETO cargado, para que la selección actual
+  // no borre otras opciones de cantón disponibles). Tras el corte de 2026-07-31 ese
+  // conjunto es SOLO `porGestionar`: las órdenes por recoger ya no están en esta pantalla,
+  // así que ofrecer sus cantones aquí daría opciones que no filtran nada. Se compone en AND
+  // con el buscador (114) sobre la MISMA lista visible; la orden en gestión nunca se oculta
+  // (salvaguarda R10/R14).
+  const filtro = useFiltroCantonDistrito(porGestionar);
   const aplicarFiltroZona = filtro.aplicar;
-
-  // Feature 114/R2/R7 + 117/R6: "Por recoger" = buscador(texto) ∧ filtro(cantón/distrito),
-  // compuestos en AND sobre la misma lista. Query vacío y filtro vacío ⇒ lista intacta
-  // (R5/R7). Independiente de "En reparto" (no comparte salvaguarda: la orden en gestión
-  // solo existe en reparto).
-  const porRecogerFiltrado = useMemo<MiAsignacionDTO[]>(
-    () => aplicarFiltroZona(filtrarAsignaciones(porRecoger, query)),
-    [porRecoger, query, aplicarFiltroZona],
-  );
 
   // Feature 114/R8+R9 + 117/R6/R14: "En reparto" filtrado, ÚNICA fuente para grilla, mapa
   // y panel de detalle (coherencia lista↔mapa↔panel, gate F1.4). Composición EN AND:
@@ -330,13 +319,13 @@ export function MisAsignacionesModule({
    * detalle oculto" que introducía el spec 36 (eliminado).
    *
    * Rediseño POS (rama ux): las dos vistas comparten interfaz de props con la card completa
-   * (`PosOrderCardMosaico`, que "Por recoger" también usa). Conserva las señales
-   * del módulo (parada/ruta, "gestionar más tarde", nota privada, intentos) y el gate de
-   * selección: pulsar la card fija esta orden en el panel de gestión de arriba (R19/R20),
-   * donde vive el detalle completo. Pedido humano: el toggle "gestionar más tarde" va DENTRO
-   * de la card (slot `acciones`, al pie), no como hermano suelto debajo. La card es un
-   * `<article>`, no un botón, así que alojar controles es HTML válido y el gate de selección
-   * los ignora (no seleccionan de rebote).
+   * (`PosOrderCardMosaico`, que "Por recoger" también usa en su propia pantalla). Conserva
+   * las señales del módulo (parada/ruta, "gestionar más tarde", nota privada, intentos) y el
+   * gate de selección: pulsar la card fija esta orden en el panel de gestión de arriba
+   * (R19/R20), donde vive el detalle completo. Pedido humano: el toggle "gestionar más tarde"
+   * va DENTRO de la card (slot `acciones`, al pie), no como hermano suelto debajo. La card es
+   * un `<article>`, no un botón, así que alojar controles es HTML válido y el gate de
+   * selección los ignora (no seleccionan de rebote).
    */
   function renderCardEnReparto(orden: MiAsignacionDTO, vista: VistaCards) {
     const CardVista =
@@ -348,15 +337,35 @@ export function MisAsignacionesModule({
         esActiva={ordenEnGestionId === orden.id}
         esDetalle={detalleOrden?.id === orden.id}
         bloqueado={bloqueado}
-        onGestionar={() => seleccionar(orden)}
+        // Pedido humano (ux): la card ya NO selecciona al tocarla. Cambiar la orden del panel
+        // pasa por el botón "Gestionar" del pie, que además pide confirmación.
         acciones={
-          // Feature 115/R5/R6: puramente informativo (no cambia estado ni ruta), así que
-          // sigue disponible aunque la card esté deshabilitada por el cierre pendiente.
-          <MarcarLuegoToggle
-            ordenId={orden.id}
-            marcada={orden.marcarLuego ?? false}
-            numRemision={orden.numRemision}
-          />
+          <div className="flex items-center justify-between gap-2">
+            {/* Feature 115/R5/R6: puramente informativo (no cambia estado ni ruta), así que
+                sigue disponible aunque la card esté deshabilitada por el cierre pendiente. */}
+            <MarcarLuegoToggle
+              ordenId={orden.id}
+              marcada={orden.marcarLuego ?? false}
+              numRemision={orden.numRemision}
+            />
+            {/* En el EXTREMO opuesto, misma línea. Deshabilitado con el mensajero bloqueado
+                (feature 111/R14) y mientras HAYA una gestión activa (R19/R20): ni las otras
+                órdenes —el puntero 1-a-1 no deja cambiar de orden— ni la que se está
+                gestionando, que ya está abierta en el panel y no hay nada que "gestionar"
+                de nuevo desde su card. */}
+            <GestionarOrdenCardButton
+              numRemision={orden.numRemision}
+              disabled={
+                bloqueado ||
+                ordenEnGestionId !== null ||
+                // La que YA está en el panel: es la que se está gestionando ahora mismo, así
+                // que su botón no ofrece nada (llevaría al panel donde ya está) y confirmar
+                // un aviso de "esto puede cambiar tu ruta" que no cambia nada engaña.
+                detalleOrden?.id === orden.id
+              }
+              onConfirmar={() => seleccionar(orden)}
+            />
+          </div>
         }
       />
     );
@@ -381,10 +390,10 @@ export function MisAsignacionesModule({
         /* ---------- MODO FOCO (feature 113/R5–R9) ---------- */
         /* Vista sin distracciones para gestionar la orden activa en la calle: SOLO el
            panel (que ya incluye el detalle completo + el flujo de 4 resultados y
-           "Cancelar gestión"). Se omiten la grilla de cards (R6), el mapa/ruta y
-           "Sincronizar ruta" (R7) y la sección "Por recoger" (R8). Arranca en `yaActiva`
-           (el puntero 1-a-1 ya está fijado). Al liberar/finalizar la gestión el puntero
-           vuelve a `null` y la vista completa se restaura sola (R10). */
+           "Cancelar gestión"). Se omiten la grilla de cards (R6) y el mapa/ruta con
+           "Sincronizar ruta" (R7). Arranca en `yaActiva` (el puntero 1-a-1 ya está
+           fijado). Al liberar/finalizar la gestión el puntero vuelve a `null` y la vista
+           completa se restaura sola (R10). */
         <GestionarOrdenPanel
           key={detalleOrden.id}
           orden={detalleOrden}
@@ -399,11 +408,11 @@ export function MisAsignacionesModule({
         /* ---------- VISTA COMPLETA (fuera de foco) ---------- */
         <>
           {/* ---------- Feature 117: filtro por cantón y distrito (solo vista de lista) ----------
-              Se compone en AND con el buscador sobre AMBOS grupos. Las opciones se derivan del
-              conjunto completo cargado (R13); elegir cantón resetea el distrito (R5) y el
-              distrito va deshabilitado sin cantón (R3). En modo foco no se renderiza (no hay
-              cards que filtrar). Puro filtro de cliente, así que permanece aunque el mensajero
-              esté bloqueado (la lista sigue como solo-visualización). */}
+              Se compone en AND con el buscador. Las opciones se derivan del conjunto completo
+              cargado (R13); elegir cantón resetea el distrito (R5) y el distrito va
+              deshabilitado sin cantón (R3). En modo foco no se renderiza (no hay cards que
+              filtrar). Puro filtro de cliente, así que permanece aunque el mensajero esté
+              bloqueado (la lista sigue como solo-visualización). */}
           <FiltroCantonDistrito
             canton={filtro.canton}
             distrito={filtro.distrito}
@@ -415,58 +424,7 @@ export function MisAsignacionesModule({
             onLimpiar={filtro.limpiar}
           />
 
-          {/* ---------- Apartado: Por recoger (por_recoger) ---------- */}
-          {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
-              contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
-              `recogerAsignaciones`, directo al confirmar (sin modal):
-                (1) input de número de guía tecleado + Enter/botón;
-                (2) escáner de cámara (QR de la etiqueta -> num_guia).
-              Feature 111/R14: BLOQUEADO oculta ambos controles de recogida (defensa suave;
-              la lista de "Por recoger" sigue visible, solo-visualización).
-              Pedido humano: sin NADA por recoger la card tampoco se muestra — no hay guía
-              que resolver, así que el input y el escáner solo estorbarían. Se mira
-              `porRecoger` COMPLETO, no el filtrado: el buscador/filtro de la lista no debe
-              quitarle al mensajero la forma de recoger lo que sigue pendiente. */}
-          {bloqueado || porRecoger.length === 0 ? null : (
-            <RecogerPaqueteCard
-              porRecoger={porRecoger}
-              onRecogida={() => router.refresh()}
-            />
-          )}
-
-          {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por
-              aceptar" con `mostrarAcciones={false}` (ya no hay botones "Recoger todas" /
-              "Recoger"). El mensajero sigue viendo qué guías tiene por recoger; la acción
-              vive en el input y el escáner de arriba.
-              Rediseño POS (rama ux): las cards son las MISMAS que "En reparto"
-              (`PosOrderCardMosaico`, misma grilla y mismo lenguaje visual), pero sin selección
-              (`onGestionar` ausente): aquí no hay nada que gestionar. También se omiten
-              las señales de ruta (`mostrarRuta={false}`): estas órdenes todavía no están
-              en la ruta. */}
-          <PorAceptarSection
-            titulo="Por recoger"
-            nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
-            ordenes={porRecogerFiltrado}
-            mostrarAcciones={false}
-            vacio={
-              buscando
-                ? SIN_RESULTADOS_RECOGER
-                : filtro.hayFiltro
-                  ? SIN_COINCIDENCIAS_RECOGER
-                  : "No hay órdenes por recoger."
-            }
-            listClassName="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            renderItem={(orden) => (
-              <PosOrderCardMosaico
-                orden={orden}
-                total={porRecogerFiltrado.length}
-                estado="Por recoger"
-                mostrarRuta={false}
-              />
-            )}
-          />
-
-          {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}          
+          {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
           {/* Feature 113/R1: cada card en grilla (1/2/3 col) muestra el detalle COMPLETO
               inline (`AsignacionDetalle`). Seleccionar una la lleva también al panel de
               gestión grande de abajo (donde vive el gate "Gestionar pedido"). El bloqueo
@@ -498,7 +456,12 @@ export function MisAsignacionesModule({
 
             {/* R28/mapa: recorrido optimizado sobre OpenStreetMap. Solo si hay paradas
                 con coordenadas; las paradas sin coords van igual en la lista de abajo. */}
-            {paradasMapa.length > 0 && mostrarMapa ? (
+            {/* Acordeón (pedido humano): la CABECERA con el título y el botón está SIEMPRE
+                en el mismo sitio —abierto y cerrado—; lo único que aparece y desaparece es
+                el cuerpo del mapa, con animación en los dos sentidos. Antes el control
+                saltaba de sitio al cerrarlo (dentro de la cabecera para ocultar, suelto
+                debajo para mostrar) y había que buscarlo. */}
+            {paradasMapa.length > 0 ? (
               <div
                 aria-label="Mapa de ruta"
                 role="group"
@@ -512,30 +475,24 @@ export function MisAsignacionesModule({
                     type="button"
                     variant="ghost"
                     size="xs"
-                    onClick={() => setMostrarMapa(false)}
+                    aria-expanded={mapa.abierta}
+                    onClick={mapa.abierta ? mapa.cerrar : mapa.abrir}
                   >
-                    Ocultar mapa
+                    {mapa.abierta ? "Ocultar mapa" : "Mostrar mapa"}
                   </Button>
                 </div>
-                {origenAproximado ? (
-                  <p className="text-xs text-muted-foreground">
-                    El punto de partida es aproximado (no se usó tu ubicación GPS
-                    reciente).
-                  </p>
+                {mapa.montada ? (
+                  <div className={`flex flex-col gap-2 ${mapa.clase}`}>
+                    {origenAproximado ? (
+                      <p className="text-xs text-muted-foreground">
+                        El punto de partida es aproximado (no se usó tu ubicación
+                        GPS reciente).
+                      </p>
+                    ) : null}
+                    <RutaMapa paradas={paradasMapa} origen={ubicacionActual} />
+                  </div>
                 ) : null}
-                <RutaMapa paradas={paradasMapa} origen={ubicacionActual} />
               </div>
-            ) : null}
-            {paradasMapa.length > 0 && !mostrarMapa ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="w-fit"
-                onClick={() => setMostrarMapa(true)}
-              >
-                Mostrar mapa de ruta
-              </Button>
             ) : null}
             {/* Panel de detalle grande e inline (gate "Gestionar pedido"): muestra la
                 orden seleccionada o la primera. Fuera de foco el puntero está en `null`,
@@ -558,11 +515,10 @@ export function MisAsignacionesModule({
             ) : null}
 
             {/* ---------- Feature 114: buscador de guías (solo en vista de lista) ----------
-              Filtra AMBOS grupos por número de guía, remisión, teléfono o nombre del
-              destinatario (parcial,
-              insensible a mayúsculas/acentos). En modo foco no se renderiza: no hay cards
-              que filtrar. Es un filtro puro de cliente, así que permanece visible aunque el
-              mensajero esté bloqueado (la lista sigue como solo-visualización). */}
+              Filtra por número de guía, remisión, teléfono o nombre del destinatario
+              (parcial, insensible a mayúsculas/acentos). En modo foco no se renderiza: no
+              hay cards que filtrar. Es un filtro puro de cliente, así que permanece visible
+              aunque el mensajero esté bloqueado (la lista sigue como solo-visualización). */}
             {/* Buscador y conmutador de vista comparten fila: son los dos controles de la
                 lista. En pantallas angostas se apilan (`flex-col`) para que el input no se
                 estruje; desde `sm` van en la MISMA línea, el input ocupando el espacio libre
@@ -593,11 +549,7 @@ export function MisAsignacionesModule({
             </div>
             {porGestionarFiltrado.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {buscando
-                  ? SIN_RESULTADOS_REPARTO
-                  : filtro.hayFiltro
-                    ? SIN_COINCIDENCIAS_REPARTO
-                    : "No hay órdenes en reparto."}
+                {buscando ? SIN_RESULTADOS_REPARTO : "No hay órdenes en reparto."}
               </p>
             ) : vistaCards === "mosaico" ? (
               /* Pedido humano: en MOSAICO las cards van en carrusel (`CarruselCards`,
@@ -637,10 +589,11 @@ export function MisAsignacionesModule({
           lista) porque el mensajero puede necesitar escribir en cualquier momento.
           Contactos = SOLO las órdenes EN REPARTO (`porGestionar`, sin filtrar: el chat es
           una capa aparte del buscador/filtro de la lista); las de "Por recoger" no tienen
-          gestión que conversar. La marcada "en gestión" es la que el módulo tiene en
-          DETALLE, y es por donde entra al abrirse. El hilo y las plantillas son los MISMOS
-          que consume `ChatWhatsappPanel` dentro del panel del detalle (feature 120/87):
-          los dos conviven y muestran la misma conversación. */}
+          gestión que conversar — por eso el chat vive aquí y no en su pantalla. La marcada
+          "en gestión" es la que el módulo tiene en DETALLE, y es por donde entra al abrirse.
+          El hilo y las plantillas son los MISMOS que consume `ChatWhatsappPanel` dentro del
+          panel del detalle (feature 120/87): los dos conviven y muestran la misma
+          conversación. */}
       <ChatFlotante
         ordenes={porGestionar}
         ordenEnDetalleId={detalleOrden?.id ?? null}
