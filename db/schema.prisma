@@ -1051,6 +1051,11 @@ enum WalletMovimientoCategoria {
   egreso_gasto_fijo // feature 45: gasto fijo (lo EMITE el cron mensual, no el form manual)
   egreso_gasto_variable // feature 45: gasto variable (registro manual)
   egreso_indemnizacion // feature 158/R2: indemnizacion por incidente (la EMITE la aprobacion del cierre)
+  // Feature 173 (design §2.1) — los DOS conceptos de TESORERIA: dinero de TERCEROS que solo
+  // PASA por la caja. Su naturaleza la declara `NATURALEZA_POR_CATEGORIA`
+  // (lib/utils/caja-tesoreria.ts), no una columna: la clasificacion es de la CATEGORIA.
+  ingreso_cod_recaudado // R11: el contra-entrega recaudado ENTRA al aprobar el cierre del dia
+  ingreso_reverso_pago_tienda // R24: la anulacion de un pago a tienda DEVUELVE el dinero a la caja
 
   @@map("wallet_movimiento_categoria")
 }

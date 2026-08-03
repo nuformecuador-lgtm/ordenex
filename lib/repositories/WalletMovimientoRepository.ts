@@ -65,6 +65,10 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       origenId: m.origenId,
       descripcion: m.descripcion ?? null,
       registradoPor: m.registradoPor ?? null,
+      // Feature 173 (design §2.3, R20/R25): la clave SOLO viaja si el llamador la trae. Se
+      // omite —en vez de mandar `undefined`— para que quien no la pasa siga cayendo en el
+      // `DEFAULT CURRENT_TIMESTAMP` de la columna, exactamente como hasta hoy.
+      ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
     }));
     const res = await tx.walletMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;

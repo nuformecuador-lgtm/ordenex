@@ -80,6 +80,44 @@ describe("crearMovimientos (R2/R6/R13/R14)", () => {
     });
   });
 
+  // Feature 173 (T A.3, design §2.3) — la fecha REAL del hecho, opcional.
+  it("R20/R25: cuando el llamador NO pasa fechaMovimiento, la clave NO viaja (la base pone CURRENT_TIMESTAMP)", async () => {
+    // Es la mitad que hace la ampliacion de coste CERO: los cinco escritores existentes no
+    // la pasan y tienen que seguir cayendo en el DEFAULT de la columna. Si la clave viajara
+    // como `undefined`, seguiria funcionando; si viajara como `null`, la insercion fallaria.
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.createMany.mockResolvedValue({ count: 1 });
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.crearMovimientos(prisma as never, [
+      { tipo: "ingreso", categoria: "ingreso_flete", monto: "1.00", origenTipo: "cierre_dia", origenId: "c1" },
+    ]);
+
+    const arg = prisma.walletMovimiento.createMany.mock.calls[0][0];
+    expect(Object.keys(arg.data[0])).not.toContain("fechaMovimiento");
+  });
+
+  it("R20/R25: cuando el llamador SI pasa fechaMovimiento, viaja tal cual a la insercion", async () => {
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.createMany.mockResolvedValue({ count: 1 });
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const fechaDelPago = new Date("2026-07-14T06:00:00.000Z");
+    await repo.crearMovimientos(prisma as never, [
+      {
+        tipo: "egreso",
+        categoria: "egreso_pago_tienda",
+        monto: "4000.00",
+        origenTipo: "pago_tienda",
+        origenId: "p1",
+        fechaMovimiento: fechaDelPago,
+      },
+    ]);
+
+    const arg = prisma.walletMovimiento.createMany.mock.calls[0][0];
+    expect(arg.data[0].fechaMovimiento).toEqual(fechaDelPago);
+  });
+
   it("R6: lista vacia -> no llama createMany, devuelve 0", async () => {
     const prisma = buildPrisma();
     const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);

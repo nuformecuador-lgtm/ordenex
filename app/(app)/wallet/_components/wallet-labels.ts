@@ -44,6 +44,11 @@ export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
   egreso_gasto_fijo: "Gasto fijo",
   egreso_gasto_variable: "Gasto variable",
   egreso_indemnizacion: "Indemnización por incidente", // feature 158/R31
+  // Feature 173 (R61, design §8) — las dos categorías de TESORERÍA. `CATEGORIA_LABEL` es un
+  // `Record` completo: sin estas dos claves el build NO compila, que es exactamente la red que
+  // obliga a bautizar cada concepto nuevo en vez de dejarlo caer con su nombre técnico.
+  ingreso_cod_recaudado: "Contra-entrega cobrado",
+  ingreso_reverso_pago_tienda: "Pago a tienda anulado",
 };
 
 /** Etiqueta legible del origen de un movimiento. */

@@ -22,6 +22,16 @@ export interface CrearMovimientoInput {
   origenId: string | null;
   descripcion?: string | null;
   registradoPor?: string | null;
+  /**
+   * Feature 173 (design §2.3, R20/R25): fecha REAL del hecho que el movimiento representa —la
+   * del pago a la tienda, la del dia de la anulacion—, no el instante en que se registra.
+   *
+   * OPCIONAL a proposito, y es lo que hace que la ampliacion sea de coste CERO: ausente ⇒ la
+   * columna `fecha_movimiento` cae en su `DEFAULT CURRENT_TIMESTAMP` y NINGUNO de los cinco
+   * escritores existentes cambia de comportamiento. Es lo mismo que la 172 hizo con los otros
+   * dos libros.
+   */
+  fechaMovimiento?: Date;
 }
 
 // Filtros del listado del libro (R20). Rango de fechas sobre fecha_movimiento.

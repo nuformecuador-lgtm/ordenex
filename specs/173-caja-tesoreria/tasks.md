@@ -114,7 +114,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   `NOT VALID` + `VALIDATE` (`design.md §13.1`). Si preview no es alcanzable por MCP, queda
   **declarado** en el archivo, no asumido.
 
-### [ ] T A.1 — Migración: dos valores de enum
+### [x] T A.1 — Migración: dos valores de enum
 - **Archivos:** `db/migrations/<ts>_caja_tesoreria/migration.sql`, `.../down.sql`,
   `db/schema.prisma`.
 - **Qué:** `ALTER TYPE … ADD VALUE IF NOT EXISTS` para `ingreso_cod_recaudado` y
@@ -133,14 +133,14 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   `23514` **y** contrapruebas de que las 17 combinaciones legítimas pasan. Borrar a mano una rama del
   `CHECK` hace fallar el test que la afirma.
 
-### [ ] T A.3 [P] — Tipos, SEED y contrato de escritura
+### [x] T A.3 [P] — Tipos, SEED y contrato de escritura
 - **Archivos:** `lib/types/wallet.ts` (SEED + `CajaResumenDTO` + `AgregadoCajaRow`),
   `lib/interfaces/repositories/IWalletMovimientoRepository.ts` (`fechaMovimiento?` opcional).
 - **Depende de:** T A.1 · **Cubre:** prepara R7, R20, R25
 - **Hecho:** typecheck verde (el `_EnsureCategoriaExhaustive` obliga a los dos valores nuevos);
   ningún escritor existente cambia de comportamiento por el campo opcional.
 
-### [ ] T A.4 — `NATURALEZA_POR_CATEGORIA` + `derivarCaja` (pura)
+### [x] T A.4 — `NATURALEZA_POR_CATEGORIA` + `derivarCaja` (pura)
 - **Archivos:** `lib/utils/caja-tesoreria.ts` (NUEVO),
   `tests/unit/utils/caja-tesoreria.test.ts` (NUEVO).
 - **Qué:** el `Record` **total** y la derivación de las dos cifras. `Prisma.Decimal` dentro, STRING
@@ -151,7 +151,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
   devuelve las dos cifras iguales; **mutación obligatoria**: mover `ingreso_cod_recaudado` a
   «propio» pone rojo al menos un test.
 
-### [ ] T A.5 [P] — Guardia: `derivarBalance` intacto
+### [x] T A.5 [P] — Guardia: `derivarBalance` intacto
 - **Archivos:** `tests/unit/utils/wallet-balance.test.ts` (**sin editar**),
   `tests/unit/guards/caja-derivaciones.guardia.test.ts` (NUEVO).
 - **Qué:** afirmar que `derivarBalance` conserva firma y salida, y que `derivarCaja` **no** lo
