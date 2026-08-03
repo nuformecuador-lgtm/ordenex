@@ -267,3 +267,141 @@ correrlo donde lo haya (comprobado: con `DATABASE_URL` el archivo que falla da 6
 3. Recomendado: corregir `design.md` seccion 5 (menor-4).
 4. Leader: T6.2 (`./init.sh` completo donde haya `.env`), T6.3 (merge y PR), entrada en
    `progress/history.md` y estado en `feature_list.json`.
+
+---
+---
+
+# RONDA 2 — re-revisión de `e08fb8e1` (4 commits sobre `a02941ff`)
+
+> La ronda 1 queda **íntegra arriba**: es el rastro de qué se rechazó y por qué. Lo de abajo
+> es lo que **volví a medir yo** sobre el HEAD nuevo, sin fiarme de la bitácora.
+
+## VEREDICTO RONDA 2: **APROBADO-CON-NOTAS** — 0 bloqueantes, 1 menor
+
+- **`R` verificados hasta un test no vacuo: 28 de 28** (era 27/28).
+- **Mutaciones de esta ronda: 7 lanzadas / 7 discriminaron / 0 supervivientes.**
+- El bloqueante y los 4 menores que dependían del implementer están **cerrados y
+  comprobados**. menor-5 (bookkeeping) sigue abierto y es **del leader**, no cuenta contra el
+  implementer.
+- Nace **un menor nuevo** (menor-6), sobre el porqué escrito en la fixture de R14, no sobre
+  la red.
+
+## 1. Lo que NO se movió (comprobado)
+
+`git diff a02941ff..HEAD -- app/ components/ lib/` da **0 archivos**. Los 4 commits tocan solo
+`tests/`, `design.md` y las dos bitácoras. No hay forma de que un hueco se haya cerrado
+cambiando el comportamiento: **la producción es byte a byte la que ya revisé**.
+
+Corolario que uso para no repetir un gate caro: el **`pnpm exec next build`** que corrí en la
+ronda 1 sobre `a02941ff` (verde, `/analitica` dinámica, y **rojo de verdad** al inyectar
+`"use client"`) sigue siendo válido, porque sus entradas (`app/`, `components/`, `lib/`) no
+han cambiado ni un byte. **R11 sigue verificado.**
+
+## 2. Mutaciones de la ronda 2 (mías, no las suyas)
+
+| # | R | Mutación | Resultado |
+|---|---|---|---|
+| R2-M1 | R3 | `esAccesoTotal(actor.rol)` a una lista de roles a mano (la que sobrevivía 51/51 en la ronda 1) | **2 ROJOS**: «la pagina decide con esAccesoTotal...» y «ningun archivo escribe una lista de roles a mano» |
+| R2-M2 | R3 | esquivar el censo de listas con dos comparaciones sueltas (**sin array**) | **1 ROJO**: cae la primera red aunque la segunda no vea el patrón |
+| R2-M3 | R3 | la lista de roles escrita en **otro** archivo de la región, dejando la página intacta | **1 ROJO**: cae la segunda red |
+| R2-M4 | R14 | el total se **deriva** sumando `vista.filas` (la superviviente M2 de la ronda 1) | **4 ROJOS** |
+| R2-M5 | R19 | anular los totales de fila (la superviviente M30) | **1 ROJO** |
+| R2-M6 | R19 | anular los importes de **una sola** fila (`cierre_bodega`) | **1 ROJO**: las dos filas están cubiertas, no solo la primera |
+| R2-M7 | R14 | derivación **parcial**: solo el panel de tabla deriva su total | **3 ROJOS** |
+
+**7 lanzadas, 7 discriminaron, 0 supervivientes.** Cada mutación se revirtió y comprobé
+`git status --porcelain` vacío después de cada una.
+
+R2-M2 y R2-M3 son mías y no estaban en su informe: existen para responder si el arreglo tapa
+la mutación concreta que yo lancé o cubre el requisito. Cubre el requisito: el censo tiene
+**dos redes complementarias** -«la página llama a `esAccesoTotal(`» y «ningún archivo escribe
+una lista de roles»- y cada una caza lo que a la otra se le escapa.
+
+## 3. El guard nuevo no comete el pecado que persigue
+
+Comprobado leyendo `tests/unit/guards/tablero-financiero.guardia.test.ts`: el dominio sale de
+`Object.values(RolValue)` importado **como valor** de `@prisma/client`; **no hay ni un nombre
+de rol escrito a mano**, tampoco en la autocomprobación, que construye sus ejemplos a partir
+de `ROLES_DEL_DOMINIO`. Y lleva su propio contrapeso (dominio con dos o más roles, todos no
+vacíos) para que un dominio vacío no lo deje verde por vacío. Es la misma forma que
+`listasDeIdsAMano`, que ya estaba probada. **Correcto.**
+
+## 4. El arreglo de R14, con lupa (lo que se pidió juzgar)
+
+**La red es legítima y muerde**: R2-M4 (4 rojos) y R2-M7 (derivación parcial, 3 rojos) lo
+demuestran, y el `describe` de R14 cubre **las tres** vistas que pintan total, no solo la que
+falló. Además R14 conserva la kill independiente de la ronda 1 (M1, la prop `totales`), así
+que no depende de una sola pata.
+
+**Pero el porqué escrito en la fixture es inexacto** -> **menor-6**. El comentario afirma que
+en `cuenta_por_pagar_tienda` el total «no tiene por qué coincidir» con la suma de las filas
+porque «el servicio lo obtiene de una agregación distinta». **Lo verifiqué en el servicio y no
+es así:** `AnaliticaFinancieraService.deSaldoDeTiendas` construye filas y total **del mismo
+array** (`saldoPorTiendaAlCorte`): el `bruto` del total es la suma de las filas y el `neto`
+sale de `derivarSaldoTienda(credito, debito)`, que es una resta **sin recorte**
+(`lib/utils/saldo-tienda.ts:11-31`) y por tanto **lineal**. En producción esos totales
+**coinciden** con la suma de las filas, en las dos formas. La fixture está descuadrada **a
+propósito y con razón** -es lo que da mordida al test-, pero su justificación de dominio es
+falsa, y ese comentario existe precisamente para frenar a quien intente arreglarla: un
+mantenedor que compruebe el servicio verá que la afirmación no se sostiene y puede cuadrarla,
+reabriendo el hueco que esta ronda cerró.
+
+*Cómo cerrarlo (barato, sin tocar producción):* reescribir ese comentario como lo que es -dato
+sintético deliberadamente descuadrado para que derivar el total pinte un número distinto, que
+NO representa una salida real del servicio, que sí cuadra- o, mejor, añadir al guard estático
+un censo de aritmética sobre importes en los componentes de la región (`reduce` o `+` sobre
+`importe`/`total`), que no depende de ninguna fixture. En `cod_recaudado` la mordida ya es
+independiente de esto, porque el DTO de esa fixture discrepa desde el principio.
+
+## 5. Bitácora y `design.md`
+
+- **Mapa R-test-mutación**: las filas **R3, R14 y R19** dicen ahora lo que está medido.
+  R3 marca explícitamente que el caso de comportamiento de `AnaliticaPage.test.tsx`
+  «**acompaña pero NO discrimina**» y remite al guard; R14 separa las **dos** mutaciones (la
+  letal desde el principio y la que sobrevivía); R19 añade la anulación de los totales de
+  fila. Muestreé el resto de la columna y sigue coincidiendo con lo que medí en la ronda 1.
+  Además la seccion 8.2 reconoce por escrito que el mapa anterior «declaraba esa mutación como
+  letal cuando no lo era». **Cerrado.**
+- **`design.md` seccion 5 más la 5.1 nueva**: la fila 7 de la tabla ya no pide «fila de
+  totales» y la 5.1 explica, sin borrar el error, que la prop `totales` hace que el paquete
+  **calcule** la fila con `totalizar` y que **eso viola R14**, con el aviso explícito **a la
+  131 y a la 134** de que no la reintroduzcan. Queda claro. (Detalle sin consecuencia: la 5.1
+  dice que «los paneles 6, 7 y 9 la pedían» cuando en la tabla original solo el 7 la nombraba;
+  el aviso es correcto igualmente y prohibirla en los tres es lo que hay que hacer.)
+
+## 6. Gates de la ronda 2 (medidos por mí, en este HEAD)
+
+| Gate | Resultado |
+|---|---|
+| `pnpm run typecheck` | **0 errores** (exit 0) |
+| `pnpm run lint` | **0 errores**, 27 warnings preexistentes y ajenos |
+| Suite completa | `Test Files 1 failed, 841 passed, 8 skipped (850)` y `Tests 3 failed, 10521 passed, 130 skipped (10654)`, 303s |
+| Perímetro de la feature | **10 archivos / 131 tests, 0 rojos** |
+| `pnpm exec next build` | **no re-ejecutado**: entradas idénticas a `a02941ff`, que compilé verde en la ronda 1 (ver seccion 1) |
+
+**850 archivos** -el recuento no bajó- y **cero `Unhandled Error`**: la suite arrancó entera.
+Los tests suben de 10 646 a **10 654**, los ocho nuevos de esta vuelta. Mis únicos 3 rojos son
+los de `analytics-daily-migration` por falta de `.env` (ya medidos: 62/62 con `DATABASE_URL`;
+no creé ninguno). **Los 3 flakes que el implementer reporta (`LoginForm`,
+`recuperar-contrasena-form`) no se reprodujeron en mi corrida**, lo que confirma que son
+saturación y no regresión.
+
+## 7. Estado de los hallazgos
+
+| # | Hallazgo | Estado (verificado por mí) |
+|---|---|---|
+| BLOQUEANTE-1 | R3 sin red | **CERRADO**: 2 rojos y dos redes complementarias (R2-M1/M2/M3) |
+| menor-1 | R14: total derivado sobrevive | **CERRADO**: 4 rojos, y 3 en derivación parcial |
+| menor-2 | R19: totales de fila sobreviven | **CERRADO**: 1 rojo, y también con una sola fila anulada |
+| menor-3 | Mapa de la bitácora inexacto | **CERRADO** |
+| menor-4 | `design.md` seccion 5 desalineado | **CERRADO** (nueva 5.1) |
+| menor-5 | Bookkeeping (`history.md`, `feature_list.json`, T6.2/T6.3) | **ABIERTO, del LEADER**, no del implementer |
+| **menor-6** | El porqué escrito en la fixture de R14 no es cierto en el servicio | **NUEVO, abierto**. No bloquea: la red muerde igual |
+
+## 8. Qué queda
+
+1. **Nada bloqueante.** La feature puede ir a PR.
+2. menor-6: reescribir el comentario de la fixture (o añadir el censo de aritmética), en esta
+   feature o como deuda anotada. No toca producción.
+3. Leader: T6.2 (`./init.sh` completo donde haya `.env` o `DATABASE_URL`), T6.3 (merge y PR),
+   entrada en `progress/history.md` y estado en `feature_list.json`.

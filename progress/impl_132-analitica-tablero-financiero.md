@@ -301,10 +301,11 @@ que reescribiera la lista de roles cometería exactamente el pecado que persigue
 
 El hueco de R14 no era del código: era de la **fixture**. En `cuenta_por_pagar_tienda` la suma de
 las filas coincidía exactamente con el total del DTO (121/110), de modo que sumar y leer daban lo
-mismo y ninguna aserción podía separarlos. Se **descuadró a propósito**, y en el test queda escrito
-**por qué no se debe "arreglar"**: es una métrica `esAcumulado: true` —un saldo al corte que sale de
-una agregación distinta de la de los cubos— así que **no tiene por qué cuadrar** con las filas del
-rango. Un futuro lector que "corrija" esos números reabre el hueco.
+mismo y ninguna aserción podía separarlos. Se **descuadró a propósito**.
+
+> **CORREGIDO en la ronda 3 (menor-6).** La primera versión de este párrafo —y del comentario de la
+> fixture— justificaba el descuadre diciendo que «es fiel al dominio: `esAcumulado: true` sale de
+> una agregación distinta y no tiene por qué cuadrar». **Eso era falso**, y está corregido en §9.
 
 ## 8.5 Gates de la segunda vuelta
 
@@ -329,4 +330,60 @@ tales:
 
 Ningún rojo es atribuible a la feature, y **ninguno de los tres arreglos de esta vuelta tocó
 producción**.
+
+---
+
+# 9. Ronda 3 — menor-6: el porqué de la fixture de R14 era falso
+
+Ronda 2 quedó **APROBADA-CON-NOTAS** (0 bloqueantes, 28/28, 7 mutaciones nuevas y las 7
+discriminaron), con **un menor nuevo**. Este.
+
+## 9.1 Qué estaba mal
+
+Al descuadrar la fixture de `cuenta_por_pagar_tienda` para dar mordida a R14 escribí, como
+justificación, que el total «no tiene por qué coincidir» con la suma de las filas porque la métrica
+es `esAcumulado: true` y saldría de «una agregación distinta». **Eso es falso, y lo verifiqué yo
+mismo antes de corregirlo** en vez de fiarme del reviewer:
+
+- `AnaliticaFinancieraService.ts:284-310` (`deSaldoDeTiendas`) saca **las filas y el total del mismo
+  array** (`filas`): las filas agrupando por cubo, el total sobre el array entero.
+- El neto lo produce `derivarSaldoTienda` (`lib/utils/saldo-tienda.ts:11-31`), que es una **resta sin
+  recorte ni tope**, y por tanto **aditiva**: `Σ(créditos − débitos por tienda) = Σcréditos − Σdébitos`.
+- Luego el total **coincide con la suma de las filas por construcción**, y `esAcumulado` no cambia
+  nada de eso: cambia el **rango** que se agrega, no la relación entre los cubos y su total.
+
+**Y es más amplio de lo que el hallazgo decía:** al comprobarlo vi que las **dos vistas de
+`cod_recaudado`** (`:233-276`) se construyen igual —mismo array para filas y total— así que las
+**tres** fixtures que descuadré son artificiales, no sólo la de la cuenta por pagar. El comentario
+nuevo lo dice de las tres.
+
+## 9.2 Por qué importaba corregirlo, si la red muerde igual
+
+Porque la única función de ese comentario es **frenar a quien quiera cuadrar los números**. Un
+mantenedor que dude va a ir al servicio a comprobarlo, va a ver que el motivo **no se sostiene**, y
+entonces «arreglará» la fixture — reabriendo exactamente el hueco que el comentario existía para
+evitar. **Un comentario que se cae al primer intento de comprobarlo es peor que ninguno**: gasta la
+confianza del lector y encima le da la razón para deshacer el arreglo.
+
+## 9.3 Qué dice ahora
+
+Que el descuadre es **artificial y deliberado**, que en producción **sí cuadra y por construcción**
+(con archivo y línea, para que el lector no tenga que fiarse), y cuál es el motivo real: **con los
+números cuadrados el test no puede distinguir «leo `vista.total`» de «lo calculo sumando las filas»**,
+porque pintan el mismo número — y esa distinción es justo lo que R14 exige, ya que **R14 habla de DE
+DÓNDE sale la cifra, no de si dos cifras resultan iguales**. Cierra diciendo que quien venga de leer
+el servicio tiene razón sobre producción y que es irrelevante en una fixture, cuyo trabajo es
+**discriminar, no parecerse**. Y que cuadrarla deja R14 sin red.
+
+## 9.4 Alcance del cambio
+
+**Sólo comentarios.** No se tocó el dato de la fixture, ni una aserción, ni una línea de producción:
+
+| Comprobación | Resultado |
+|---|---|
+| `git diff` contra `app/`, `components/`, `lib/` | **0 archivos** |
+| Perímetro de la feature | **10 archivos / 131 tests, 0 rojos** |
+
+La contraprueba de que la red sigue mordiendo es que **el dato no cambió**: las mutaciones medidas
+en §8.1 siguen siendo válidas tal cual, porque lo único que se editó es el texto que las explica.
 

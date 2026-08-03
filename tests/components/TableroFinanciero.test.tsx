@@ -172,15 +172,30 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         // OJO: el total NO cuadra con la suma de las filas (55+66 = 121 bruto,
         // 50+60 = 110 neto) Y ESO ES A PROPOSITO. NO LO "ARREGLES".
         //
-        // Es fiel al dominio: `cuenta_por_pagar_tienda` es `esAcumulado: true`
-        // —un saldo AL CORTE— y el servicio de la 127 lo obtiene de una
-        // agregacion distinta de la que produce los cubos del rango, asi que no
-        // tiene por que coincidir con ellos.
+        // EL DESCUADRE ES ARTIFICIAL, no realista. En produccion el total SI
+        // coincide con la suma de las filas, y coincide POR CONSTRUCCION:
+        // `deSaldoDeTiendas` saca las filas y el total del MISMO array
+        // (`AnaliticaFinancieraService.ts:284-310`), y el neto lo produce
+        // `derivarSaldoTienda`, que es una resta sin recorte ni tope
+        // (`lib/utils/saldo-tienda.ts:11-31`) y por tanto aditiva:
+        // Σ(creditos−debitos por tienda) = Σcreditos − Σdebitos. Lo mismo vale
+        // para las dos vistas de `cod_recaudado` (`:233-276`). Que la metrica sea
+        // `esAcumulado: true` NO cambia nada de esto: cambia el rango que se
+        // agrega, no la relacion entre los cubos y su total.
         //
-        // Y es lo que da mordida a R14: mientras el total del DTO coincidia con
-        // la suma de las filas, un componente que SUMARA las filas en vez de leer
-        // `vista.total` pintaba lo mismo y ningun test podia separarlos. Con los
-        // numeros descuadrados, derivar el total pone rojo el caso de R14.
+        // Entonces, ¿por que se descuadra? Porque es la UNICA forma de que el
+        // test discrimine. Mientras el total del DTO coincida con la suma de las
+        // filas, «leo `vista.total`» y «lo calculo sumando las filas» pintan el
+        // MISMO numero, y ninguna asercion puede separarlos —justamente la
+        // distincion que R14 exige, porque R14 habla de DE DONDE sale la cifra,
+        // no de si dos cifras resultan iguales—. Medido: con los numeros
+        // cuadrados, derivar el total dejaba el perimetro entero en verde
+        // (mutacion M2 del reviewer); con estos, pone rojo el caso de R14.
+        //
+        // Asi que si vienes de leer el servicio y concluyes que estos numeros
+        // "deberian" cuadrar: tienes razon sobre PRODUCCION y es irrelevante
+        // AQUI. Esto es una fixture y su trabajo es distinguir, no parecerse.
+        // Cuadrarla deja R14 sin red.
         total: importe("140.00", "128.00"),
       },
     ],
