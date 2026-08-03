@@ -1,0 +1,13 @@
+-- DOWN de la feature 126 (T7.2, R25): revierte EXACTAMENTE lo que hace `migration.sql` — un
+-- solo indice, ni una sentencia mas.
+--
+-- `IF EXISTS` para que el rollback sea idempotente (se puede correr dos veces sin fallar),
+-- igual que el `IF NOT EXISTS` del UP.
+--
+-- Sin perdida de datos: un indice es una estructura derivada. Ni una fila de `gestion_orden`
+-- se toca, y las consultas intradia de la 126 siguen devolviendo EXACTAMENTE lo mismo — solo
+-- que por seq scan, que es justo el escenario que R25 existe para impedir.
+--
+-- NO hay valor de enum nuevo en esta migracion, asi que NO hay que tocar los `down.sql`
+-- previos (la trampa que dejo escrita la 154 aplica solo a los `ADD VALUE`).
+DROP INDEX IF EXISTS "gestion_orden_created_at_idx";

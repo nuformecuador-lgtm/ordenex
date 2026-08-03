@@ -84,7 +84,29 @@ function consultaTablaDeAnalitica(codigo: string): string | null {
   return null;
 }
 
+/**
+ * Feature 126 / T11.1 (R28) — EL FORJADOR. Deuda (a) del review de la 122 del 2026-08-01.
+ *
+ * Hasta aqui `recibeConsultaPreparada` era `test(/\bConsultaAnalitica\b/)`: un censo POR
+ * NOMBRE. Y un archivo que FORJA el tipo —`{ filtro, alcance } as unknown as
+ * ConsultaAnalitica`— menciona la palabra, asi que pasaba el censo mientras se saltaba
+ * entera la garantia que el tipo opaco existe para dar.
+ *
+ * No es un caso hipotetico: la marca `unique symbol` de `consulta.ts` impide construir el
+ * valor a mano, pero NO impide un `as unknown as`, que es la salida que alguien encuentra a
+ * los cinco minutos de pelearse con el compilador. El tipo cubre el 90%; esto es parte del
+ * 10% que queda, igual que el `$queryRaw`.
+ *
+ * QUE CUENTA COMO FORJAR: cualquier asercion de tipo hacia `ConsultaAnalitica`, con o sin el
+ * `unknown` intermedio. Lo que NO cuenta es RECIBIRLO en una firma o importarlo como tipo,
+ * que es el uso legitimo y el unico que deja el recorte intacto.
+ */
+const FORJA_LA_CONSULTA = /\bas\s+(?:unknown\s+as\s+)?ConsultaAnalitica\b/;
+
 function recibeConsultaPreparada(codigo: string): boolean {
+  // Forjarla NO es recibirla: si el archivo la fabrica con un cast, el censo no lo perdona
+  // aunque la palabra aparezca por todas partes.
+  if (FORJA_LA_CONSULTA.test(codigo)) return false;
   return /\bConsultaAnalitica\b/.test(codigo);
 }
 
@@ -116,6 +138,22 @@ import type { AnaliticaFiltroInput } from "@/lib/analytics/filters";
 export class EntregasAnaliticaRepository {
   async contar(filtro: AnaliticaFiltroInput) {
     return this.prisma.orden.count({ where: { zonaId: filtro.zona_id?.[0] } });
+  }
+}
+`;
+
+/**
+ * Feature 126 / R28 — EL FORJADOR. Consulta la tabla, menciona `ConsultaAnalitica` por todas
+ * partes... y la FABRICA con un cast en vez de recibirla. Con el censo por nombre pasaba.
+ */
+const FIXTURE_FORJADOR = `
+import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
+import type { AnaliticaFiltroInput } from "@/lib/analytics/filters";
+import type { AlcanceDatos } from "@/lib/analytics/alcance";
+export class OperativaAnaliticaRepository {
+  async contar(filtro: AnaliticaFiltroInput, alcance: AlcanceDatos) {
+    const c = { filtro, alcance } as unknown as ConsultaAnalitica;
+    return this.prisma.orden.count({ where: { zonaId: c.filtro.zona_id?.[0] } });
   }
 }
 `;
@@ -215,6 +253,33 @@ describe("R18 · autocomprobacion con fixtures sinteticos (126/127 aun no existe
       }
     `;
     expect(violacionDeAlcanceObligatorio("ajeno.ts", ajeno)).toBeNull();
+  });
+
+  it("un cast a ConsultaAnalitica no cuenta como recibirla", () => {
+    // R28 / deuda (a) de la 122. El fixture consulta `orden` en contexto de analitica y
+    // menciona `ConsultaAnalitica` tres veces, pero la FORJA: el recorte no viene de la 122,
+    // viene de un filtro suelto que el propio repositorio recompone.
+    const v = violacionDeAlcanceObligatorio("forjador.ts", FIXTURE_FORJADOR);
+    expect(v, "un cast a ConsultaAnalitica paso el censo").not.toBeNull();
+    expect(v).toContain("orden");
+  });
+
+  it("y tampoco el cast directo, sin el `unknown` intermedio", () => {
+    const directo = FIXTURE_FORJADOR.replace(
+      "as unknown as ConsultaAnalitica",
+      "as ConsultaAnalitica",
+    );
+    expect(violacionDeAlcanceObligatorio("forjador-directo.ts", directo)).not.toBeNull();
+  });
+
+  it("el detector del forjador DISCRIMINA: recibirla en la firma sigue siendo legitimo", () => {
+    // La direccion que importa para no convertir el guardia en ruido: el consumidor legitimo
+    // NOMBRA el tipo en su firma y no lo forja en ningun sitio.
+    expect(violacionDeAlcanceObligatorio("legitimo.ts", FIXTURE_LEGITIMO)).toBeNull();
+    // Y un archivo que la recibe Y ADEMAS la forja en otra parte sigue siendo infractor: basta
+    // un cast para que el recorte deje de estar garantizado.
+    const mixto = FIXTURE_LEGITIMO + "\nconst otra = {} as ConsultaAnalitica;\n";
+    expect(violacionDeAlcanceObligatorio("mixto.ts", mixto)).not.toBeNull();
   });
 
   it("no se deja enganar por una mencion de ConsultaAnalitica en un comentario", () => {
