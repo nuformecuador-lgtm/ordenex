@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { GeneracionGastosFijosService } from "@/lib/services/GeneracionGastosFijosService";
-import { derivarBalance } from "@/lib/utils/wallet-balance";
+import { derivarCaja } from "@/lib/utils/caja-tesoreria";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IGastoFijoPlantillaRepository } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
@@ -41,14 +41,22 @@ function makeWalletStore() {
         return { count };
       },
     ),
+    // Feature 173 (T D.1): groupBy(categoria, tipo) con _sum.monto — la superficie que usa
+    // `agregarPorCategoriaYTipo`. Antes agrupaba solo por `tipo`; sin la categoria en el
+    // `by` no se puede decir de QUIEN es el dinero, que es lo que la 173 necesita saber.
     groupBy: vi.fn(async ({ by }: { by: string[] }) => {
-      if (by[0] !== "tipo") throw new Error("solo se prueba groupBy por tipo");
+      if (by.join(",") !== "categoria,tipo") {
+        throw new Error("solo se prueba groupBy(categoria, tipo)");
+      }
       const acc = new Map<string, Prisma.Decimal>();
       for (const r of rows) {
-        const prev = acc.get(r.tipo) ?? new Prisma.Decimal(0);
-        acc.set(r.tipo, prev.add(r.monto));
+        const k = `${r.categoria}|${r.tipo}`;
+        acc.set(k, (acc.get(k) ?? new Prisma.Decimal(0)).add(r.monto));
       }
-      return [...acc.entries()].map(([tipo, monto]) => ({ tipo, _sum: { monto } }));
+      return [...acc.entries()].map(([k, monto]) => {
+        const [categoria, tipo] = k.split("|");
+        return { categoria, tipo, _sum: { monto } };
+      });
     }),
   };
   return { rows, walletMovimiento };
@@ -114,16 +122,18 @@ describe("cron gastos fijos — idempotencia por periodo (R28/R31)", () => {
       egresosGenerados: 2,
     });
     expect(store.rows).toHaveLength(2);
-    const balance1 = derivarBalance(...(Object.values(await repo.agregarBalance({})) as [string, string]));
-    expect(balance1.egresos).toBe("105000.00");
-    expect(balance1.balance).toBe("-105000.00");
+    // Feature 173 (T D.1): mismo numero, otro camino — el agregado viene por (categoria, tipo)
+    // y la derivacion la hace `derivarCaja`.
+    const caja1 = derivarCaja(await repo.agregarPorCategoriaYTipo({}));
+    expect(caja1.salidas).toBe("105000.00");
+    expect(caja1.enCaja).toBe("-105000.00");
 
     // Segunda corrida del MISMO periodo: no-op (ON CONFLICT DO NOTHING).
     const segunda = await svc.ejecutarGeneracion(JULIO);
     expect(segunda.egresosGenerados).toBe(0); // R28: nada nuevo
     expect(store.rows).toHaveLength(2); // sigue habiendo 2 filas, no 4
-    const balance2 = derivarBalance(...(Object.values(await repo.agregarBalance({})) as [string, string]));
-    expect(balance2.balance).toBe(balance1.balance); // R31: balance sin cambio en la reejecucion
+    const caja2 = derivarCaja(await repo.agregarPorCategoriaYTipo({}));
+    expect(caja2.enCaja).toBe(caja1.enCaja); // R31: sin cambio en la reejecucion
   });
 
   it("R28: dos periodos DISTINTOS generan dos egresos por plantilla (uno por mes)", async () => {
@@ -158,7 +168,7 @@ describe("cron gastos fijos — idempotencia por periodo (R28/R31)", () => {
       },
     ]);
     expect(n).toBe(1); // no colisiona con el egreso del cron
-    const balance = derivarBalance(...(Object.values(await repo.agregarBalance({})) as [string, string]));
-    expect(balance.balance).toBe("0.00"); // egreso + reverso = net cero
+    const caja = derivarCaja(await repo.agregarPorCategoriaYTipo({}));
+    expect(caja.enCaja).toBe("0.00"); // egreso + reverso = net cero
   });
 });

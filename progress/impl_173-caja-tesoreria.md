@@ -1247,3 +1247,310 @@ entrando— con el `DROP CONSTRAINT` al principio del `down.sql` como se encarg�
 y **dos mutaciones ejecutadas**, una que borra una rama entera y otra que solo mueve una
 categoría de sitio: las dos ponen rojo el test que las afirma, incluida la que dejaría entrar el
 contra-entrega **como egreso**.
+
+---
+---
+
+# TANDA D — Leer la caja
+
+> Misma rama `feature/173-caja-tesoreria`. Fase **backend**.
+> Alcance de esta entrada: **`T D.1` y `T D.2`** — las dos **HECHAS**.
+
+## D1. Qué se hizo
+
+| Task | Estado | Nota |
+| --- | --- | --- |
+| `T D.1` — repositorio: agregación por categoría y tipo | **HECHA** | El agregado por `tipo` a secas **eliminado**: cero referencias en el árbol (§D3). |
+| `T D.2` — servicio y borde: `verResumenCaja` | **HECHA** | Guardia **antes** de la base con contraprueba de cero llamadas; montos STRING; filtros del listado por el **mismo** método. |
+
+## D2. Archivos
+
+### Modificados — código
+
+| Archivo | Qué | Task |
+| --- | --- | --- |
+| `lib/interfaces/repositories/IWalletMovimientoRepository.ts` | `agregarPorCategoriaYTipo` **entra**, el agregado por `tipo` y su `BalanceAgregado` **salen**. | `T D.1` |
+| `lib/repositories/WalletMovimientoRepository.ts` | `groupBy(["categoria","tipo"])` + `SUM(monto)` con el **mismo** `buildWhere` del listado; STRING escala 2. | `T D.1` |
+| `lib/interfaces/services/IWalletService.ts` | `verBalance`/`VerBalanceServiceResult` → `verResumenCaja`/`VerResumenCajaServiceResult` (`CajaResumenDTO`). | `T D.2` |
+| `lib/services/WalletService.ts` | `verResumenCaja` + el helper `hayFiltros`. Importa `derivarCaja` en vez de `derivarBalance`. | `T D.2` |
+| `lib/actions/wallet.ts` | `verResumenCajaAction` (borde nuevo) + `verBalanceAction` convertida en **puente temporal** (§D5). | `T D.2` |
+
+`lib/types/wallet.ts` **no se tocó**: `AgregadoCajaRow` y `CajaResumenDTO` ya estaban, los dejó
+`T A.3`. Esta tanda los **usa**, que es para lo que se escribieron.
+
+### Modificados — tests
+
+| Archivo | Qué |
+| --- | --- |
+| `tests/unit/repositories/wallet-movimiento-repository.test.ts` | El `describe` del agregado viejo **sustituido** por el nuevo (6 casos) + el de R47. |
+| `tests/unit/services/wallet-service.test.ts` | `verBalance` → `verResumenCaja`: 8 casos donde había 3. |
+| `tests/unit/actions/wallet-actions.test.ts` | `verResumenCajaAction` (5 casos) + los 3 del puente, reescritos, + 1 que lo fija como proyección. |
+| `tests/integration/db/wallet-egreso.test.ts` · `tests/integration/db/generacion-gastos-fijos.test.ts` | Cascada real (§D4): el doble de `groupBy` pasa a `(categoria, tipo)` y las cifras se derivan con `derivarCaja`. **Mismos números.** |
+| 8 dobles de repositorio (`cierres-admin-repository`, `CierresAdminRepository.resolverCierre.devolucion`, `incidente-admin-repository`, `devolucion-rechazadas-flow`, `generacion-gastos-fijos-service`, `liquidacion-caja-puerto`, `wallet-egreso-service`, `wallet-indemnizacion-no-reversable`) | **Una línea cada uno**: el método del contrato que cambió de nombre. Cero aserciones tocadas. |
+
+### Lo que NO está en el diff (y es parte de la verificación)
+
+- **`app/`, entero.** Ni la página, ni `WalletModule`, ni `WalletBalanceCard`. La Tanda G es la
+  que renombra la tarjeta y pinta las dos cifras; el puente de §D5 existe justamente para no
+  invadirla.
+- `lib/utils/caja-tesoreria.ts` y `lib/utils/wallet-balance.ts` — se **reusan**. Esta tanda no
+  deriva ni una resta por su cuenta (R9 intacto: `derivarBalance` sigue con su consumidor vivo
+  en la analítica, y su suite sigue **sin editar**).
+- Las suites de la 171/172 de tienda y mensajero.
+- `db/` — la Tanda D no toca la base.
+
+## D3. `T D.1` — cero referencias, comprobado antes de borrar
+
+El agregado viejo agrupaba **solo por `tipo`**. No es que fuera feo: **no puede** dar las dos
+cifras, porque la naturaleza del dinero (propio / de terceros) es de la **categoría**. Con
+`groupBy(["tipo"])` «dinero en caja» y «ganancia de Ordenex» serían el mismo número para siempre.
+
+Se comprobó que no quedaba **ningún** consumidor antes de borrarlo, y se comprueba después:
+
+```
+$ git grep -n "agregarBalance" -- lib app scripts tests
+(sin salida)
+```
+
+Hubo **11** referencias que hubo que resolver primero: 1 en el servicio (la sustituye
+`verResumenCaja`), 2 en suites de integración que lo usaban **de verdad** (§D4) y 8 dobles de
+repositorio que solo lo declaraban para satisfacer la interfaz. El nombre tampoco sobrevive en
+comentarios de `lib/`: donde hacía falta explicar la sustitución, se describe («el agregado por
+`tipo` a secas que traía la 42») sin nombrarlo, para que el grep de arriba signifique lo que
+dice.
+
+**El repositorio sigue sin `update` ni `delete`** (R47), y ahora se afirma sobre la **lista
+completa y cerrada** de sus cinco métodos en vez de con cuatro `toBeUndefined()`: así caen igual
+un `actualizarMonto` futuro —que no se llamaría «update»— y el método viejo si alguien lo
+resucitara.
+
+## D4. Dos cascadas reales, declaradas
+
+`wallet-egreso.test.ts` (feature 45) y `generacion-gastos-fijos.test.ts` (feature 45/84) **usaban
+el agregado viejo para medir dinero**, no solo para rellenar un doble. Sus tiendas en memoria
+tenían un `groupBy` que **rechazaba** cualquier `by` que no fuera `["tipo"]`.
+
+Los dos ahora agrupan por `(categoria, tipo)` y derivan con `derivarCaja`. **Ni un número
+cambia**: `enCaja` sobre un conjunto es, número por número, lo que esas suites medían como
+«balance» (design §1.3). Lo que cambia es el camino:
+
+| Antes | Ahora |
+| --- | --- |
+| `derivarBalance(...await repo.agregarBalance({}))` → `.balance` | `derivarCaja(await repo.agregarPorCategoriaYTipo({}))` → `.enCaja` |
+| `.egresos` | `.salidas` |
+| `.signo` | `.signoEnCaja` |
+
+Y el doble sigue siendo **exigente**, que es lo que lo hace valer: si el repositorio dejara de
+pedir la categoría en el `by`, el doble lanza en vez de devolver algo plausible.
+
+## D5. El puente `verBalanceAction`, y por qué existe
+
+`WalletService.verBalance` **desaparece** — es lo que dice el design (§5.2: «se sustituye por
+`verResumenCaja`»). Pero `/wallet` sigue siendo la pantalla de la 42 hasta `T G.3`, y esta fase
+es **backend**: tocar la página, el módulo y la tarjeta sería hacer la Tanda G a destiempo y
+reescribir sus tests dos veces.
+
+Así que `verBalanceAction` sobrevive **en el borde** convertida en una **proyección de campos**
+del DTO nuevo sobre la forma vieja. Cero aritmética, cero segunda derivación:
+
+```
+balance = { ingresos: resumen.entradas, egresos: resumen.salidas,
+            balance:  resumen.enCaja,   signo:   resumen.signoEnCaja }
+```
+
+Es seguro precisamente porque **el número no cambia**: `enCaja` sobre un conjunto es lo que
+devolvía `derivarBalance(Σingresos, Σegresos)` sobre ese mismo conjunto. Lo que la 173 parte en
+dos es el **significado**, no este valor.
+
+Un test lo fija en las dos direcciones: que el puente sea campo por campo el resumen, y que
+`puente.balance.balance` **no** sea `resumen.ganancia` — si alguien confundiera los campos al
+proyectar, la pantalla vieja empezaría a mostrar la **utilidad** bajo el rótulo «Balance
+general», que es exactamente el error que motiva la feature.
+
+**Está marcado en el código como puente y con quién lo borra (`T G.3`).** No es deuda encubierta:
+es el precio de que el árbol compile entre dos tandas de una feature fullstack.
+
+## D6. `T D.2` — las tres exigencias, medidas
+
+**(1) El guardia ANTES de la base (R65).** La contraprueba que pide la task, con los **cinco**
+métodos del repositorio en cero —no solo el que usa este camino—, y `forbidden` viajando solo
+(`Object.keys(r) === ["status"]`). Medido, no comentado: la mutación A de §D7 lo confirma.
+
+**(2) Los mismos filtros, por el mismo método (R8).** No se afirma que «use `construirFiltros`»
+leyendo el código: se comparan **llamada contra llamada** sobre la misma entrada. Las claves con
+que se llamó a `listar` son las del resumen **más** `page`/`pageSize`, y cada valor común
+coincide uno a uno. `page`/`pageSize` se quedan fuera a propósito: son del **recorte**, no del
+conjunto.
+
+**(3) Montos STRING, cero `number` (R64).** Se barre el DTO **entero** con `Object.entries`, no
+tres campos elegidos a mano: cualquier importe futuro que alguien añada como `number` cae ahí.
+Cada uno casa `/^-?\d+\.\d{2}$/` —escala 2 también en el cero—, y `periodoFiltrado` es el único
+no-STRING y no es dinero.
+
+**`[P7]` = (a), resuelto como bandera y no como texto.** `periodoFiltrado` se calcula sobre los
+filtros **ya construidos**, así que no puede desalinearse del conjunto que de verdad se agregó, y
+el día que el libro gane un filtro lo ve solo. Se comprueba que **cada uno** de los cuatro filtros
+la enciende y que **paginar no la enciende**. Y un test afirma que **ningún valor del DTO es
+prosa**: o es un importe, o es un signo, o es el booleano. El servidor da el **hecho**; el rótulo
+(«Dinero en caja» ↔ «Movimiento neto del periodo») lo elige `T G.1`.
+
+El conjunto de prueba tiene dinero de las **dos** naturalezas a propósito
+(`ingreso_cod_recaudado` ₡5 000 junto a flete ₡1 000 y gasto ₡300): `enCaja = 5700.00` y
+`ganancia = 700.00`. Con un conjunto solo-propio las dos cifras coincidirían y ninguna aserción
+distinguiría una derivación correcta de una que ignora la naturaleza.
+
+## D7. Cuatro mutaciones — EJECUTADAS, rojas y revertidas
+
+### Mutación A — el guardia de rol se evalúa DESPUÉS de leer la base
+
+```
+ ❯ tests/unit/services/wallet-service.test.ts (15 tests | 1 failed)
+     × R65: rol no autorizado -> forbidden, y CERO llamadas al repositorio
+
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+Number of calls: 1
+```
+
+El resultado seguía siendo `forbidden` —un test que solo mirara el `status` habría pasado en
+verde— pero las cifras de la caja ya se habían leído para tirarlas.
+
+### Mutación B — `periodoFiltrado` fijado a `false`
+
+```
+ ❯ tests/unit/services/wallet-service.test.ts (15 tests | 2 failed)
+     × [P7]: sin filtros `periodoFiltrado` es false; con CUALQUIERA de los cuatro, true
+     × [P7]: el servidor NO pinta texto — el DTO lleva el HECHO, no el rotulo
+
+AssertionError: expected false to be true
+ ❯ tests/unit/services/wallet-service.test.ts:234  expect(await bandera({ tipo: "egreso" })).toBe(true);
+```
+
+Es la mutación que deja la pantalla mintiendo con un número correcto: «Dinero en caja» sobre un
+periodo filtrado, que **no** es el dinero que hay.
+
+### Mutación C — el resumen se construye sus PROPIOS filtros y pierde `categoria`
+
+```
+ ❯ tests/unit/services/wallet-service.test.ts (15 tests | 2 failed)
+     × R8: los filtros del resumen son LOS MISMOS del listado, resueltos por el mismo metodo
+     × [P7]: sin filtros `periodoFiltrado` es false; con CUALQUIERA de los cuatro, true
+
+AssertionError: expected { tipo: 'ingreso', …(2) } to deeply equal { tipo: 'ingreso', …(3) }
+
+- Expected
++ Received
+
+  {
+-   "categoria": "ingreso_cod_recaudado",
+    "desde": 2026-07-01T00:00:00.000Z,
+    "hasta": 2026-07-31T00:00:00.000Z,
+    "tipo": "ingreso",
+  }
+```
+
+La cabecera sumando un conjunto y el listado enseñando otro. Cae **también** `[P7]`, porque la
+bandera se deriva de esos mismos filtros: el descuadre se propaga solo.
+
+### Mutación D — el agregado IGNORA los filtros (`where: {}`)
+
+La cicatriz «probar el `WHERE` donde vive»: los tests de servicio usan dobles y **no ven el SQL**,
+así que esta mutación los pasa todos en verde. Quien la caza es el test del repositorio.
+
+```
+ ❯ tests/unit/repositories/wallet-movimiento-repository.test.ts (14 tests | 1 failed)
+     × R8: groupBy por (categoria, tipo) con SUM(monto) y los MISMOS filtros del listado
+
+AssertionError: expected {} to deeply equal { tipo: 'ingreso', …(2) }
+
+- Expected
++ Received
+
+- {
+-   "categoria": "ingreso_flete",
+-   "fechaMovimiento": { "gte": …, "lte": … },
+-   "tipo": "ingreso",
+- }
++ {}
+```
+
+**Las cuatro revertidas** (`git diff --stat lib/` vuelve a sus 5 archivos y 157/44 líneas), suites
+en verde.
+
+## D8. Trazabilidad `R<n>` → test
+
+| R | Test que lo verifica |
+| --- | --- |
+| R8 (parte datos) | `tests/unit/repositories/wallet-movimiento-repository.test.ts` — «groupBy por (categoria, tipo) con SUM(monto) y los MISMOS filtros del listado» (el `by`, el `where` completo y el `_sum`) + «sin filtros -> WHERE vacio» |
+| R8 (servicio) | `tests/unit/services/wallet-service.test.ts` — «los filtros del resumen son LOS MISMOS del listado, resueltos por el mismo metodo» (comparación llamada-contra-llamada) + `tests/unit/actions/wallet-actions.test.ts` — «usa el MISMO schema del listado» |
+| R47 | `wallet-movimiento-repository.test.ts` — «la superficie del repositorio son CINCO metodos — ni update, ni delete, ni el viejo» + `wallet-service.test.ts` — «el servicio NO expone update ni delete» |
+| R64 | `wallet-service.test.ts` — «TODOS los importes cruzan como STRING» (barrido del DTO entero) + `wallet-actions.test.ts` — «el DTO cruza con los NUEVE importes como STRING» |
+| R65 | `wallet-service.test.ts` — «rol no autorizado -> forbidden, y CERO llamadas al repositorio» (los 5 métodos) + `wallet-actions.test.ts` — «forbidden, y NI UNA cifra en la respuesta» y «sin sesion -> unauthenticated, sin tocar el service» |
+| R1/R4/R5 (parte lectura) | `wallet-service.test.ts` — «maestro -> las DOS cifras, distintas, derivadas del conjunto agregado» (`enCaja` 5700.00 ≠ `ganancia` 700.00, `deTerceros` 5000.00) |
+| `[P7]` | `wallet-service.test.ts` — «sin filtros false; con CUALQUIERA de los cuatro, true» (y paginar **no** la enciende) + «el servidor NO pinta texto» + `wallet-actions.test.ts` — «viaja tal cual desde el service» |
+
+## D9. Gate ejecutado
+
+> Gate **acotado**, el que ordenó el leader. La suite completa NO se corrió.
+
+**`pnpm typecheck`** → `tsc --noEmit`, sin salida, **exit 0**.
+
+**`pnpm lint`**
+
+```
+✖ 27 problems (0 errors, 27 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores y exactamente las 27 de la línea base.** Una versión anterior de esta tanda las dejó
+en 29 (dos `_p`/`_ps` sin usar por un rest-destructuring); se reescribió esa aserción —comparando
+conjuntos de claves, que además es más fuerte— y volvieron a 27. La línea base no se toca ni
+por dos.
+
+**`pnpm exec vitest run guard`** (obligatorio desde §C13)
+
+```
+ Test Files  47 passed (47)
+      Tests  683 passed (683)
+   Duration  3.92s
+```
+
+**683, idéntico a las Tandas C y A.2**: ninguna guardia ajena se movió. Es la comprobación que la
+§C13 exige y que `vitest related` no puede hacer.
+
+**`pnpm exec vitest related --run`** sobre los **18** archivos tocados
+
+```
+ Test Files  80 passed (80)
+      Tests  1262 passed (1262)
+   Duration  76.10s
+```
+
+**`pnpm exec vitest run tests/integration/db`**
+
+```
+ Test Files  92 passed (92)
+      Tests  1135 passed (1135)
+   Duration  8.75s
+```
+
+Igual que tras `T A.2`: la Tanda D **no añade ni quita** tests de integración de base, solo
+cambia por dónde pasan dos de ellos.
+
+**Delta de tests de las tres suites de la tanda** (medido con `git stash`, no deducido):
+
+```
+antes:  32 tests (3 archivos)
+ahora:  47 tests (3 archivos)   → +15
+```
+
+**No corrido aquí:** `./init.sh --rapido` ni `./init.sh` completo. Los corre el leader.
+
+## D10. Veredicto de la Tanda D
+
+TANDA D entregada completa: la caja se lee por `groupBy(categoria, tipo)` con **los mismos
+filtros del listado y el mismo método que los construye**, el agregado por `tipo` a secas
+desapareció del árbol con sus 11 referencias resueltas una a una, y `verResumenCaja` entrega las
+dos cifras **como STRING** con el guardia de rol evaluado **antes** de tocar la base —contraprueba
+de cero llamadas a los cinco métodos del repositorio—. `[P7]` viaja como **hecho** y no como
+texto. Cuatro mutaciones ejecutadas y revertidas, incluida la del `WHERE`, que ningún test de
+servicio podía cazar y por eso vive en el test del repositorio.

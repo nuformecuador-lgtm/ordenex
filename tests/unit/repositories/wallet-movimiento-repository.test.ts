@@ -197,31 +197,102 @@ describe("listar (R20/R24)", () => {
   });
 });
 
-describe("agregarBalance (R16)", () => {
-  it("SUM por tipo -> ingresos/egresos STRING; aplica filtros en el WHERE", async () => {
+// ── Feature 173 (T D.1, R8 parte datos / R47) — agregado por (categoria, tipo) ──
+//
+// Reemplaza al describe del agregado por `tipo` a secas que traia la 42. No es un refactor de
+// estilo: con la caja en modo tesoreria la naturaleza del dinero (propio / de terceros) es de
+// la CATEGORIA, asi que un agregado sin categoria NO PUEDE dar las dos cifras. El metodo viejo
+// se elimino en esta misma tanda al quedarse sin consumidores (conventions: nada de codigo
+// muerto), y por eso este bloque lo SUSTITUYE en vez de convivir con el.
+
+describe("agregarPorCategoriaYTipo (R8/R47)", () => {
+  it("R8: groupBy por (categoria, tipo) con SUM(monto) y los MISMOS filtros del listado", async () => {
     const prisma = buildPrisma();
     prisma.walletMovimiento.groupBy.mockResolvedValue([
-      { tipo: "ingreso", _sum: { monto: new Prisma.Decimal("1500.50") } },
-      { tipo: "egreso", _sum: { monto: new Prisma.Decimal("300.25") } },
+      { categoria: "ingreso_flete", tipo: "ingreso", _sum: { monto: new Prisma.Decimal("1500.50") } },
+      { categoria: "egreso_gasto", tipo: "egreso", _sum: { monto: new Prisma.Decimal("300.25") } },
     ]);
     const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
 
-    const r = await repo.agregarBalance({ categoria: "ingreso_flete" });
+    const desde = new Date("2026-07-01T00:00:00.000Z");
+    const hasta = new Date("2026-07-31T00:00:00.000Z");
+    const r = await repo.agregarPorCategoriaYTipo({ tipo: "ingreso", categoria: "ingreso_flete", desde, hasta });
 
     const arg = prisma.walletMovimiento.groupBy.mock.calls[0][0];
-    expect(arg.by).toEqual(["tipo"]);
-    expect(arg.where).toEqual({ categoria: "ingreso_flete" });
-    expect(r).toEqual({ ingresos: "1500.50", egresos: "300.25" });
-    expect(typeof r.ingresos).toBe("string");
+    // La CATEGORIA en el `by` es lo que hace derivable la particion por naturaleza: sin ella,
+    // «dinero en caja» y «ganancia de Ordenex» serian el mismo numero para siempre.
+    expect(arg.by).toEqual(["categoria", "tipo"]);
+    // El MISMO `where` que construye `listar` (mismo `buildWhere`): la cabecera y su propio
+    // listado no pueden dejar de cuadrar.
+    expect(arg.where).toEqual({
+      tipo: "ingreso",
+      categoria: "ingreso_flete",
+      fechaMovimiento: { gte: desde, lte: hasta },
+    });
+    expect(arg._sum).toEqual({ monto: true });
+    expect(r).toEqual([
+      { categoria: "ingreso_flete", tipo: "ingreso", total: "1500.50" },
+      { categoria: "egreso_gasto", tipo: "egreso", total: "300.25" },
+    ]);
   });
 
-  it("sin egresos aun -> egresos 0.00 (balance parcial, A3)", async () => {
+  it("R8: los totales salen como STRING escala 2 — ni un `number` cruza la frontera", async () => {
     const prisma = buildPrisma();
     prisma.walletMovimiento.groupBy.mockResolvedValue([
-      { tipo: "ingreso", _sum: { monto: new Prisma.Decimal("800") } },
+      { categoria: "ingreso_cod_recaudado", tipo: "ingreso", _sum: { monto: new Prisma.Decimal("800") } },
+      // 0.1 + 0.2 en coma flotante da 0.30000000000000004; con Decimal, "0.30".
+      { categoria: "egreso_gasto", tipo: "egreso", _sum: { monto: new Prisma.Decimal("0.1").add("0.2") } },
     ]);
     const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
-    const r = await repo.agregarBalance({});
-    expect(r).toEqual({ ingresos: "800.00", egresos: "0.00" });
+
+    const r = await repo.agregarPorCategoriaYTipo({});
+
+    expect(r.map((f) => f.total)).toEqual(["800.00", "0.30"]);
+    for (const fila of r) expect(typeof fila.total).toBe("string");
+  });
+
+  it("un grupo sin suma (SUM NULL) vale 0.00, no revienta ni devuelve null", async () => {
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.groupBy.mockResolvedValue([
+      { categoria: "ingreso_ajuste", tipo: "ingreso", _sum: { monto: null } },
+    ]);
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+    expect(await repo.agregarPorCategoriaYTipo({})).toEqual([
+      { categoria: "ingreso_ajuste", tipo: "ingreso", total: "0.00" },
+    ]);
+  });
+
+  it("libro vacio -> lista vacia (y `derivarCaja` sabra que eso son dos ceros)", async () => {
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.groupBy.mockResolvedValue([]);
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+    expect(await repo.agregarPorCategoriaYTipo({})).toEqual([]);
+  });
+
+  it("sin filtros -> WHERE vacio (el conjunto es el libro entero)", async () => {
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.groupBy.mockResolvedValue([]);
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+    await repo.agregarPorCategoriaYTipo({});
+    expect(prisma.walletMovimiento.groupBy.mock.calls[0][0].where).toEqual({});
+  });
+
+  it("R47: la superficie del repositorio son CINCO metodos — ni update, ni delete, ni el viejo", () => {
+    const metodos = Object.getOwnPropertyNames(WalletMovimientoRepository.prototype)
+      .filter((m) => m !== "constructor")
+      .sort();
+
+    // El libro es APPEND-ONLY: una correccion es un movimiento compensatorio, no una edicion.
+    // Se afirma sobre la lista COMPLETA y CERRADA, no con cuatro `toBeUndefined()`: asi caen
+    // igual un `actualizarMonto` futuro (que no se llama «update») y el agregado por `tipo` a
+    // secas si alguien lo resucitara.
+    expect(metodos).toEqual([
+      "agregarPorCategoria",
+      "agregarPorCategoriaYTipo",
+      "crearMovimientos",
+      "listar",
+      "obtenerPorId",
+    ]);
+    expect(metodos.some((m) => /update|delete|actualizar|eliminar|borrar/i.test(m))).toBe(false);
   });
 });

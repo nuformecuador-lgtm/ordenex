@@ -48,7 +48,7 @@ function repoEspia() {
       return movs.length;
     }),
     listar: vi.fn(),
-    agregarBalance: vi.fn(),
+    agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
   } as unknown as IWalletMovimientoRepository;

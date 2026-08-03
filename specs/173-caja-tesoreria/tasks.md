@@ -249,7 +249,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 
 # TANDA D — Leer la caja · *backend* · (paralelizable con C)
 
-### [ ] T D.1 — Repositorio: agregación por categoría y tipo
+### [x] T D.1 — Repositorio: agregación por categoría y tipo
 - **Archivos:** `lib/interfaces/repositories/IWalletMovimientoRepository.ts`,
   `lib/repositories/WalletMovimientoRepository.ts`,
   `tests/unit/repositories/wallet-movimiento-repository.test.ts`.
@@ -259,7 +259,7 @@ consecuencias. Aquí queda qué desencadena cada respuesta.
 - **Hecho:** cero referencias a `agregarBalance` en el árbol; el repositorio sigue sin exponer
   `update` ni `delete`.
 
-### [ ] T D.2 — Servicio y borde: `verResumenCaja`
+### [x] T D.2 — Servicio y borde: `verResumenCaja`
 - **Archivos:** `lib/interfaces/services/IWalletService.ts`, `lib/services/WalletService.ts`,
   `lib/actions/wallet.ts`, `lib/types/wallet.ts` (DTO),
   `tests/unit/services/wallet-service.test.ts`, `tests/unit/actions/wallet-actions.test.ts`.
