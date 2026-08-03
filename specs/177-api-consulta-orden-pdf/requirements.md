@@ -8,10 +8,14 @@ CÓMO vive en `design.md`.
 Tres endpoints NUEVOS bajo el prefijo `/api/ordenes/api-key/`:
 
 1. **Consulta** del detalle de UNA orden propia por un identificador libre, resuelto contra
-   `num_guia` **y** `num_remision`.
-2. **Generación/obtención** del PDF de etiqueta de ESA orden (segmento propio `/generate`),
+   `num_guia` **y** `num_remision`, con precedencia de `num_guia`.
+2. **Generación/obtención** del PDF de etiqueta de ESA orden (`POST .../{id}/generate`),
    con reuso del objeto ya subido a Storage y URL firmada de 5 minutos.
-3. **Gemelo por carga**: mismo contrato sobre el PDF **consolidado** del lote.
+3. **Gemelo por carga**: mismo contrato sobre el PDF **consolidado** del lote, identificado por
+   el uuid de la carga.
+
+Entra además en el alcance publicar `cargaId` en el `CargaResponse` del OpenAPI (R45), porque
+la ruta del punto 3 lo exige y hoy el contrato no lo documenta.
 
 **Fuera de alcance (declarado):** modificar el endpoint publicado `/api/ordenes/api-key/{numGuia}`
 (feature 106); purgar PDFs antiguos (feature 178); rate-limiting; descarga proxy del binario;
@@ -19,18 +23,47 @@ UI; cambiar cómo la feature 141 persiste hoy `download_url` en la carga por API
 
 ## Decisiones YA TOMADAS por el humano (no se reabren)
 
+Previas al spec:
+
 - Ruta **NUEVA**; `/api/ordenes/api-key/{numGuia}` (feature 106) queda **INTACTO**.
 - `generatePdf` deja de ser query param: es el **segmento de ruta** `/generate`.
 - **TTL** de la URL firmada = **5 minutos**.
 - **Reuso**, no regeneración incondicional.
 
+**Decisiones del humano del 2026-08-03** — las cuatro preguntas del spec quedaron resueltas y ya
+NO hay preguntas abiertas. Ojo: eso NO es la puerta F1.4. La aprobación del spec sigue
+**pendiente**; hasta que llegue, no se escribe código:
+
+- **(a) Desempate guía-vs-remisión: gana `num_guia`.** Precedencia fija: primero se busca por
+  `num_guia`; SOLO si no hay coincidencia se prueba `num_remision`. **No** se responde 409.
+  Ver el §Riesgo declarado (a) más abajo.
+- **(b) Verbo de `/generate`: solo `POST`.** Sin `GET`, ni siquiera adicional.
+- **(c) Ruta por carga por uuid:** `POST /api/ordenes/api-key/carga/{cargaId}/generate`.
+  Publicar `cargaId` en el schema `CargaResponse` del OpenAPI **entra en el alcance** de esta
+  feature.
+- **(d) Sin modo forzar-regeneración:** el reuso es siempre; no existe flag `force`.
+
+## Riesgo declarado (a) — precedencia de `num_guia`
+
+**Verificado:** `num_guia` y `num_remision` son `@unique` cada una por separado
+(`db/schema.prisma:480-481`) y **no existe restricción cruzada** entre ellas. Con la
+precedencia decidida, una orden propia cuyo `num_remision` coincide con el `num_guia` de OTRA
+orden propia **queda inalcanzable por esa ruta**: toda petición con ese identificador devuelve
+siempre la orden de la guía, y el integrador **no recibe ninguna señal** de que existía una
+segunda coincidencia. Consecuencia práctica: `/generate` sobre ese identificador produce el PDF
+de la orden de la guía, nunca el de la orden de la remisión. Riesgo asumido conscientemente por
+el humano; la salida para el integrador es el endpoint de la 106, que es inequívocamente por
+guía, o consultar por un identificador no ambiguo. Queda fijado por R14/R15, con un test
+**discriminante** (ambas columnas casan a la vez y se comprueba CUÁL orden vuelve).
+
 ## Terreno verificado contra el código (no supuesto)
 
 - `db/schema.prisma:480-481` — `Orden.numGuia Int? @unique @map("num_guia")` y
   `Orden.numRemision String @unique @map("num_remision")`. **Ambas son UNIQUE globales por
-  separado; NO existe unicidad cruzada entre ellas** (habilita la pregunta abierta (a)).
+  separado; NO existe unicidad cruzada entre ellas** (origen del riesgo declarado (a)).
 - `db/schema.prisma:597` — `Carga @@unique([usuarioCarga, name])`: el `name` del lote es único
-  **por usuario, no globalmente**; `Carga.id` es el uuid (habilita la pregunta abierta (c)).
+  **por usuario, no globalmente**, y además es nullable; por eso el identificador de carga es
+  el uuid `Carga.id` (decisión (c)), que ya viaja en la respuesta de la carga por API key.
 - `db/schema.prisma:516` y `:589` — `orden.download_url` / `carga.download_url` guardan la
   **URL FIRMADA** (`EtiquetasDescargaService.ts:48` y `EtiquetasLotePdfService.ts:78`), que
   caduca. **Ninguna de las dos columnas tiene lector en `app/` ni en `lib/` hoy: son
@@ -101,13 +134,16 @@ está borrada (`deleted_at IS NOT NULL`), ENTONCES el sistema DEBE responder EXA
 ENTONCES el sistema DEBE responder `422 VALIDATION_ERROR` con detalle por campo y SIN consultar
 la base de datos.
 
-**R14.** *(Sujeto a la pregunta abierta (a); ver §Preguntas abiertas.)* SI `{id}` coincide a la
-vez con el `num_guia` de una orden propia y con el `num_remision` de OTRA orden propia distinta,
-ENTONCES el sistema DEBE responder `409 CONFLICT` y NO DEBE devolver ni operar sobre ninguna de
-las dos.
+**R14.** SI `{id}` coincide con el `num_guia` de una orden propia, ENTONCES el sistema DEBE
+resolver a ESA orden, INCLUSO cuando exista otra orden propia distinta cuyo `num_remision`
+también coincida con `{id}`: la coincidencia por `num_guia` tiene precedencia absoluta, la
+coincidencia por `num_remision` se descarta, y la respuesta NO lleva ninguna señal de que
+existía una segunda coincidencia (decisión (a); ver §Riesgo declarado (a)).
 
-**R15.** SI `{id}` coincide con el `num_guia` y el `num_remision` de la MISMA orden, ENTONCES el
-sistema DEBE tratarlo como una única coincidencia y responder normalmente (no es ambigüedad).
+**R15.** SI ninguna orden propia tiene ese `num_guia` —porque `{id}` no es entero positivo o
+porque ninguna guía coincide—, ENTONCES el sistema DEBE resolver `{id}` contra `num_remision`.
+Por R14 y R15 la resolución produce siempre a lo sumo UNA orden, de modo que el sistema NO DEBE
+responder nunca `409 CONFLICT` por coincidencia múltiple entre columnas.
 
 ---
 
@@ -130,7 +166,8 @@ mensajero).
 ## Bloque D — Generación/obtención del PDF por ORDEN (endpoint 2, `/generate`)
 
 **R19.** El endpoint `/generate` por orden DEBE resolver `{id}` con las MISMAS reglas del
-Bloque B (R6-R15), incluidos los mismos `404`, `422` y el mismo tratamiento de la ambigüedad.
+Bloque B (R6-R15), incluidos los mismos `404`, los mismos `422` y la MISMA precedencia de
+`num_guia` sobre `num_remision`.
 
 **R20.** CUANDO se invoca `/generate` sobre una orden propia que NO tiene registrada una
 referencia persistente a su PDF, el sistema DEBE generar el PDF de la etiqueta de ESA orden,
@@ -240,79 +277,27 @@ de entorno con default 300 s y cota superior), NUNCA hardcodeado en el servicio 
 
 ---
 
-## Preguntas abiertas (puerta F1.4)
+**R44.** Los dos endpoints `/generate` (por orden y por carga) DEBEN responder ÚNICAMENTE al
+verbo `POST` (decisión (b)); una petición `GET`, `PUT`, `PATCH` o `DELETE` a esas rutas NO DEBE
+generar, reutilizar ni firmar ningún PDF.
 
-Cada una con la recomendación por defecto del spec_author y su consecuencia. **Ninguna está
-resuelta**: si el humano no responde, se implementa la recomendación y así queda documentado.
+**R45.** El schema `CargaResponse` publicado en `lib/api/openapi-spec.ts` y en
+`docs/api/api-key-openapi.yaml` DEBE incluir el campo `cargaId` que la carga por API key ya
+devuelve, para que el integrador sepa de dónde obtiene el `{cargaId}` que exige el endpoint por
+carga (decisión (c)).
 
-### (a) Desempate cuando `{id}` casa con el `num_guia` de una orden y el `num_remision` de OTRA
+---
 
-**Dato verificado:** en `db/schema.prisma:480-481` `num_guia` es `@unique` (nullable) y
-`num_remision` es `@unique`; cada una es única por separado, pero **no hay ninguna restricción
-cruzada**. Nada impide que exista la orden A con `num_guia = 100234` y la orden B con
-`num_remision = "100234"`, ambas del mismo owner. Con el filtro por owner + `deleted_at IS NULL`
-el número máximo de coincidencias es **2** (una por columna), nunca más.
+## Notas declaradas (no son preguntas)
 
-- **Recomendación:** `409 CONFLICT` con mensaje de ambigüedad, sin devolver ninguna (R14).
-- **Consecuencia si se acepta:** el integrador nunca recibe una orden equivocada. El caso solo
-  puede darse DENTRO de su propio catálogo (el scope ya está acotado a su owner), es decir
-  cuando él mismo usa remisiones numéricas que chocan con sus propias guías; en ese caso el 409
-  le dice la verdad y tiene la salida del endpoint de la 106, que es inequívocamente por guía.
-- **Alternativa:** precedencia `num_guia` > `num_remision` (o al revés) resolviendo en silencio.
-  **Consecuencia:** el 100 % de las llamadas resuelve, pero en el caso ambiguo devuelve
-  *silenciosamente* una orden que puede no ser la buscada — y `/generate` generaría el PDF de la
-  orden equivocada, que es un error caro e invisible.
+**Acoplamiento con la feature 178.** La feature 178 (purga semanal) declara hoy que deja a NULL
+`carga.download_url` y `orden.download_url`. Con esta feature el "existe el PDF" pasa a leerse
+de la **referencia nueva** (R37): si la 178 no la pone también a NULL al borrar el objeto,
+`/generate` devolverá URLs firmadas de objetos ya inexistentes. Se declara aquí para que entre
+en el spec de la 178.
 
-### (b) Verbo HTTP de `/generate`
-
-- **Recomendación:** `POST`. Muta la orden/carga (crea el objeto en Storage y escribe la
-  referencia), no es seguro ni idempotente en el sentido de GET, y ningún proxy/CDN debe poder
-  cachearlo ni pre-fetchearlo.
-- **Consecuencia si se acepta:** honestidad semántica; coste: un integrador que quiera "abrir el
-  PDF" no puede pegar la URL en el navegador ni en un `<a href>`, necesita cliente HTTP.
-- **Alternativa:** `GET` (lo que un integrador esperaría). **Consecuencia:** cualquier crawler,
-  prefetch de navegador o reintento automático dispararía una generación de PDF; con el reuso de
-  R21 el coste es acotado (solo la primera llamada genera), pero sigue siendo un `GET` que
-  escribe en la base.
-- **Tercera vía si se quiere lo mejor de ambas:** aceptar `POST` **y** `GET` en el mismo handler.
-  Cuesta un test más y no rompe nada; dígalo y lo especifico.
-
-### (c) Forma exacta de la ruta por carga e identificador del lote
-
-**Dato verificado:** `Carga` tiene `@@unique([usuarioCarga, name])` (`schema.prisma:597`) — el
-`name` es único **por usuario, NO globalmente**, y además es **nullable** (`name String?`,
-`:588`: "NULL = sin nombre"). El `cargaId` (uuid) ya viaja hoy en la respuesta de la carga por
-API key (`app/api/ordenes/api-key/carga/route.ts:303` lo usa desde `summary.cargaId`, y el
-handler devuelve `...summary`), así que **el integrador ya tiene el uuid en la mano**.
-
-- **Recomendación:** `POST /api/ordenes/api-key/carga/{cargaId}/generate`, con `{cargaId}` = el
-  **uuid** de la carga, validado como uuid en el borde.
-- **Consecuencia si se acepta:** identificador no ambiguo y ya conocido por el integrador; a
-  cambio hay que documentar `cargaId` en el `CargaResponse` del OpenAPI, que **hoy no lo publica**
-  (deuda preexistente detectada: `openapi-spec.ts` describe `CargaResponse` sin `cargaId`).
-- **Alternativa:** identificar por `name`. **Consecuencia:** el `name` es opcional (una carga sin
-  nombre sería inalcanzable) y solo único por usuario, así que la ruta necesitaría además el
-  scope del owner para no ser ambigua; funciona, pero deja lotes sin nombre fuera del endpoint.
-- **Sub-pregunta:** ¿confirma la forma `/api/ordenes/api-key/carga/{cargaId}/generate`? Nótese
-  que `POST /api/ordenes/api-key/carga` ya existe (creación del lote): el endpoint nuevo cuelga
-  del mismo segmento sin colisionar.
-
-### (d) ¿Hace falta un modo forzar-regeneración?
-
-- **Recomendación:** **no** en esta feature; el reuso es siempre (R21/R31). El PDF de etiqueta se
-  deriva de datos que no cambian tras la asignación de guía, así que regenerar produciría un PDF
-  idéntico y un objeto huérfano más en el bucket.
-- **Consecuencia si se acepta:** si alguna vez el layout de la etiqueta cambia (p. ej. la feature
-  150 cambió el tamaño de hoja), los lotes ya generados conservan el layout viejo y **no hay
-  forma de refrescarlos por API**; habría que borrar la referencia a mano en base.
-- **Alternativa:** aceptar `?force=true`. **Consecuencia:** una palanca que multiplica objetos en
-  el bucket y hay que gobernar (la feature 178 purgará, pero solo lo referenciado por las
-  columnas; los huérfanos sobrevivirían). Si se acepta, hay que decidir si el objeto anterior se
-  borra (`IFileStorage.remove`) y si eso entra en esta feature.
-
-### (e) Nota, no pregunta: acoplamiento con la feature 178
-
-La feature 178 (purga semanal) declara hoy que deja a NULL `carga.download_url` y
-`orden.download_url`. Con esta feature el "existe el PDF" pasa a leerse de la **referencia
-nueva** (R37): si la 178 no la pone también a NULL al borrar el objeto, `/generate` devolverá
-URLs firmadas de objetos ya inexistentes. Se declara aquí para que quede en el spec de la 178.
+**Sin refresco de layout (decisión (d)).** Al no existir modo forzar-regeneración, un cambio
+futuro del layout de la etiqueta (como el que hizo la feature 150 con el tamaño de hoja) NO es
+refrescable por API: los PDFs ya generados conservan el layout viejo indefinidamente. La única
+salida es purgar el objeto y su referencia (feature 178) para que la siguiente llamada
+regenere. Consecuencia asumida.
