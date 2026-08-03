@@ -9,6 +9,8 @@ import type { DimensionAnalitica } from "@/lib/analytics/types";
 import { defaultLogger, type ErrorLogger } from "@/lib/errors/logger";
 import { AnaliticaOperativaRollupRepository } from "@/lib/repositories/AnaliticaOperativaRollupRepository";
 import { AnaliticaOperativaVivaRepository } from "@/lib/repositories/AnaliticaOperativaVivaRepository";
+import { decorarRollupConCache } from "@/lib/repositories/CachedAnaliticaOperativaRollupRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { AnaliticaOperativaService } from "@/lib/services/AnaliticaOperativaService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
@@ -59,10 +61,26 @@ export interface AnaliticaOperativaDeps {
   readonly now?: () => Date;
 }
 
+/**
+ * Feature 128 (T4.2) — UNICO cambio de este archivo: el cableado del decorador de cache.
+ *
+ * `consultarAnaliticaOperativa` no cambia de firma ni de tipo de retorno (R18: la 131 y la 132
+ * la consumen), y las cifras son identicas (R1). Lo unico que cambia es DE DONDE salen los
+ * cubos de dias cerrados.
+ *
+ * ⚠ EL REPOSITORIO VIVO NO SE DECORA, Y ESO ES EL REQUISITO R3. El punto del dia en curso —el
+ * que la 126 marca `parcial: true` con su `corteAt`— se sirve desde
+ * `AnaliticaOperativaVivaRepository`, que lee las tablas VIVAS (`orden`, `gestion_orden`,
+ * `orden_historial_estado`) y aqui pasa DESNUDO. El dia en curso no queda fuera de la cache
+ * por una politica que alguien pueda olvidar: no hay camino por el que pueda entrar.
+ */
 function construirServicio(now: () => Date): IAnaliticaOperativaService {
   const prisma = getPrismaClient();
   return new AnaliticaOperativaService(
-    new AnaliticaOperativaRollupRepository(prisma),
+    decorarRollupConCache(
+      new AnaliticaOperativaRollupRepository(prisma),
+      crearAnaliticaCacheDeNext(),
+    ),
     new AnaliticaOperativaVivaRepository(prisma),
     // Punto UNICO de «intentos» del repo (feature 160). No se reimplementa el criterio.
     new OrdenHistorialService(new OrdenRepository(prisma), new OrdenHistorialRepository(prisma)),

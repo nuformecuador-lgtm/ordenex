@@ -1473,13 +1473,13 @@
       "name": "analitica: cache + invalidacion por tag",
       "spec_path": "specs/128-analitica-cache-invalidacion",
       "description": "Backend. cacheTag por dominio en las lecturas de 125/126 e invalidacion (revalidateTag) disparada por el job diario (123) y por la aprobacion de cierres. Evita GROUP BY por request sin servir cifras rancias. Depende de 126.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/128-analitica-cache-invalidacion",
       "depends_on": 127,
-      "status_note": "AVISO DIRIGIDO DE LA 124: el regalo que la 123 te hacia en su design.md seccion 6 -- 'lo calculado una vez sigue valiendo' -- NO esta pagado, y la 124 lo rebajo por escrito. El rollup de un dia pasado es reproducible SOLO en la dimension estatus_id, que la 124 congela derivandola de orden_historial_estado (D1=A2). Las otras tres coordenadas (zona_id, tienda_id, mensajero_id) se leen de la orden EN EL CORTE y cambian despues, asi que un recomputo posterior del mismo dia da otro numero. Y hay una CUARTA via, distinta en naturaleza: por D7 las ordenes con deleted_at quedan fuera de todo, asi que una orden borrada hoy DESAPARECE de un dia en que existio y conto -- no es una coordenada que cambia sino la pertenencia al conjunto de filas. Consecuencia para vos: la cache de un dia pasado es valida porque NADIE recomputa (R35 estricto, el job diario nunca toca el pasado), no porque el dato sea reproducible. En cuanto la 125 recompute un rango, tu invalidacion tiene que cubrirlo. Caracterizado por test en R49 de specs/124-analitica-job-agregacion-diaria/requirements.md; detalle en design.md seccion 6 (tabla de que se reproduce y que no) y seccion 13."
+      "status_note": "2026-08-03 SPEC ESCRITA y PUERTA T0 CERRADA con 5 respuestas del humano (D1-D5). 24 requisitos, cada uno con su mutacion. HALLAZGO QUE CAMBIA LA FICHA: cacheTag() NO es usable en este repo -- exige la config cacheComponents, que next.config.ts no activa; el titulo de la ficha describe una API bloqueada. D1 = unstable_cache({tags}) + revalidateTag sin tocar next.config.ts. D2 = NO se cachea el dominio financiera, con guardia que sobrevive al merge: los ledgers los escriben al menos WalletEgresoService, LiquidacionService, el cron de gastos fijos y las indemnizaciones, asi que cachear dinero con solo la aprobacion de cierres como invalidador seria servir cifras rancias en silencio -> ficha 179. D3 = un tag por dominio (Next limita a 128 tags por entrada y el filtro admite rangos de 366 dias: un tag por fecha es imposible y falla en silencio). D4 = TTL 3600 s provisional y NO medido, con censo acotado al ambito (el literal 3600 ya vive en cuatro sitios ajenos). D5 = kill-switch por variable de entorno, encendida por defecto. DOS BLOQUEADORES REALES resueltos en el diseno: el backfill NO puede llamar a revalidateTag (revienta fuera de un request, es un proceso tsx) y se resuelve encolando un job que drena el cron; y unstable_cache serializa con JSON.stringify mientras segCicloAcum es bigint, asi que cachear el cubo sin codec LANZA TypeError."
     },
     {
       "id": 129,
@@ -2108,6 +2108,21 @@
         126
       ],
       "status_note": "Sale de la decision D3 de la 131 (specs/131-analitica-tablero-operativo/requirements.md seccion 6). Conviene programarla DESPUES de la 128 para no escribir la capa de lectura a la vez que la cache. Mientras no aterrice, R27 de la 131 muestra aviso y CERO cifras en esos paneles en rangos largos."
+    },
+    {
+      "id": 179,
+      "name": "analitica: cache financiera + invalidacion por ledger",
+      "spec_path": "specs/179-analitica-cache-financiera",
+      "description": "Backend. Extiende la cache por tag de la 128 al dominio financiera: envuelve las lecturas de AnaliticaFinancieraService con el tag analitica:financiera (ya declarado en ANALITICA_TAGS, feature 135) e invalida desde TODOS los escritores de los tres ledgers, no solo desde la aprobacion de cierres: WalletEgresoService, LiquidacionService, GeneracionGastosFijosService (cron de gastos fijos), el flujo de indemnizaciones de incidentes y aprobarCierre/aprobarCierreBodega. Retira el guardia R15 de la 128 en el MISMO PR que lo sustituye por la invalidacion real. Cada escritor necesita su test de cinco pasos: un escritor sin invalidar sirve dinero rancio en silencio, que es exactamente por lo que la 128 no lo hizo.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/179-analitica-cache-financiera",
+      "depends_on": [
+        128
+      ],
+      "status_note": "Sale de la decision D2 de la 128 (specs/128-analitica-cache-invalidacion/design.md seccion 14). Mientras no aterrice, R15 de la 128 PROHIBE con guardia cachear el dominio financiera. Renumerada de 177 a 179: otra sesion ocupo el 177 y el 178 en dev mientras esta rama estaba viva."
     }
   ]
 }

@@ -13,6 +13,12 @@ import type {
 } from "@/lib/interfaces/services/IAnaliticaBackfillService";
 import { AnaliticaBackfillService } from "@/lib/services/AnaliticaBackfillService";
 import { buildAnaliticaRollupService } from "@/lib/services/jobs/analitica-rollup-diario-handler";
+import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
+import { JobRepository } from "@/lib/repositories/JobRepository";
+import {
+  dedupeKeyInvalidacion,
+  payloadInvalidacion,
+} from "@/lib/services/jobs/analitica-invalidacion-encolado";
 
 // Feature 125 (design §7, T3) — BACKFILL HISTORICO, script one-shot.
 //
@@ -55,6 +61,28 @@ export interface EntornoCli {
   /** Perezoso A PROPOSITO: mientras no se llame, no se abre ninguna conexion. */
   readonly crearRollup: () => IAnaliticaRollupService;
   readonly dormir: (ms: number) => Promise<void>;
+  /**
+   * Feature 128 (R12/R13) — la cola de jobs, para ENCOLAR la invalidacion de la cache de
+   * analitica cuando la corrida ESCRIBIO.
+   *
+   * ⚠ POR QUE UN JOB Y NO UNA LLAMADA DIRECTA: `revalidateTag` LANZA fuera de un request de
+   * Next («Invariant: static generation store missing»,
+   * `node_modules/next/dist/server/web/spec-extension/revalidate.js:104-107`) y esto es un
+   * proceso `tsx`. El drenador de `app/api/cron/procesar-jobs` corre cada minuto, asi que la
+   * invalidacion llega en menos de un minuto, dentro de un request, con reintentos, backoff y
+   * dead-letter gratis.
+   *
+   * ⚠ POR QUE ESTO NO ES UNA NOTA AL PIE. La cache de un dia pasado es valida porque NADIE
+   * recomputa, no porque el dato sea reproducible: `zona_id`, `tienda_id` y `mensajero_id` se
+   * leen de la orden en el corte y cambian despues, y una orden con `deleted_at` desaparece de
+   * un dia en que existio y conto (`specs/124/design.md §13`, R49 + D7). En cuanto ESTE script
+   * recomputa un rango, la cifra cacheada queda vieja y **nada falla**: el numero se queda
+   * quieto. Por eso el backfill es un invalidador de primera clase.
+   *
+   * Perezoso y OPCIONAL: los tests de CLI de la 125 no lo pasan y no deben hacerlo. Su
+   * ausencia en una corrida con escritura se AVISA por `errores` (nunca en silencio).
+   */
+  readonly crearJobs?: () => IJobRepository;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -270,8 +298,63 @@ export async function ejecutarBackfillCli(entorno: EntornoCli): Promise<number> 
     escribirReporte(entorno, args.reporte, plan, modo, entradas);
     entorno.salida(`Reporte de corrida escrito en ${args.reporte}`);
   }
+
+  // R12/R13 (feature 128) — la invalidacion se encola SOLO si la corrida ESCRIBIO. Aqui ya se
+  // sabe: sin `--confirmar` la funcion salio arriba, y `procesadas > 0` dice que al menos una
+  // fecha reescribio el rollup. Con fechas fallidas TAMBIEN se encola: las procesadas ya
+  // reescribieron el rollup y sus cifras cacheadas ya estan viejas.
+  await encolarInvalidacionSiEscribio(entorno, plan, resumen);
+
   for (const linea of textoDelResumen(resumen)) entorno.salida(linea);
   return resumen.codigoSalida;
+}
+
+/**
+ * R12/R13 — encola UN job de invalidacion de cache si la corrida escribio; ninguno si no.
+ *
+ * `--verificar` tambien escribe (lo dice el eco, R26 de la 125): recomputa cada fecha con el
+ * agregador de la 124, que es la unica forma de saber si lo escrito sigue siendo lo que la
+ * fuente viva produce. Asi que el criterio NO es el modo, es `procesadas > 0`.
+ *
+ * Un fallo del encolado NO tumba la corrida: el backfill ya escribio y su codigo de salida
+ * tiene que seguir hablando del backfill. Pero se AVISA por `errores`, ruidosamente: una
+ * invalidacion que no llega deja el tablero sirviendo cifras viejas hasta que expire el TTL, y
+ * ese es justo el fallo que no se ve.
+ */
+async function encolarInvalidacionSiEscribio(
+  entorno: EntornoCli,
+  plan: PlanBackfill,
+  resumen: ResumenBackfill,
+): Promise<void> {
+  if (resumen.procesadas === 0) return;
+
+  if (entorno.crearJobs === undefined) {
+    entorno.errores(
+      "AVISO: la corrida escribio pero no hay cola de jobs configurada, asi que NO se ha " +
+        "encolado la invalidacion de la cache de analitica. El tablero puede seguir sirviendo " +
+        "las cifras ANTERIORES al recomputo hasta que expire el TTL.",
+    );
+    return;
+  }
+
+  const instante = entorno.ahora();
+  try {
+    await entorno.crearJobs().enqueue(
+      "analitica_invalidacion_cache",
+      payloadInvalidacion(plan.desde, plan.hasta),
+      { dedupeKey: dedupeKeyInvalidacion(plan.desde, plan.hasta, instante) },
+    );
+    entorno.salida(
+      "Invalidacion de la cache de analitica ENCOLADA: el drenador de jobs (cron cada minuto) " +
+        "la aplicara. Hasta entonces el tablero puede servir las cifras anteriores.",
+    );
+  } catch (error) {
+    entorno.errores(
+      "AVISO: no se pudo encolar la invalidacion de la cache de analitica " +
+        `(${error instanceof Error ? error.name : "error"}). El recomputo SI se escribio; lo ` +
+        "que puede quedar viejo es lo que sirve el tablero hasta que expire el TTL.",
+    );
+  }
 }
 
 /** R27 — las siete cosas que el operador tiene que poder leer ANTES de confirmar. */
@@ -435,6 +518,9 @@ async function main(): Promise<void> {
       escribirArchivo: (ruta, contenido) => fs.writeFileSync(ruta, contenido, "utf8"),
       crearRollup: () => buildAnaliticaRollupService(() => new Date()),
       dormir: (ms) => new Promise((resolver) => setTimeout(resolver, ms)),
+      // R12 — el enganche real de la invalidacion. Perezoso: si la corrida no escribe, este
+      // repositorio no se construye y no se toca la cola.
+      crearJobs: () => new JobRepository(prisma),
     });
     process.exitCode = codigo;
   } finally {
