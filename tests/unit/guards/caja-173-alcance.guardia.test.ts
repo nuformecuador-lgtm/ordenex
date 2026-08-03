@@ -7,7 +7,9 @@ import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedSe
 import type { WalletMensajeroFeedTxClient } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { pagoPorResultado } from "@/lib/utils/pago-mensajero";
-import { calcularSplitPago } from "@/lib/utils/cuenta-por-pagar";
+import { calcularSplitPago, derivarCuentaPorPagar } from "@/lib/utils/cuenta-por-pagar";
+import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
+import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import { codigoSinComentarios } from "../../fixtures/money-safe";
 
 /**
@@ -508,5 +510,104 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     const declarados = new Set([...MODULOS_DE_LA_173, ...CATALOGOS_PREEXISTENTES]);
     const sinDeclarar = conCategoriasNuevas.filter((ruta) => !declarados.has(ruta));
     expect(sinDeclarar).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// R32, R35 y R63 — el dinero de las TIENDAS y de los MENSAJEROS no se entera de la 173.
+//
+// AMPLIACION DECLARADA de `T H.2`. La trazabilidad mandaba estos tres a «suites de la 171/172
+// SIN EDITAR», y `T G.4` lo verifico midiendo el diff: 47 archivos protegidos vivos en el
+// arbol, cero en el diff. Esa medicion es correcta y es punto-en-el-tiempo: **no corre en el
+// gate**. Eran los tres unicos `R` de los 68 sin un caso ejecutable propio.
+//
+// Aqui pasan a medirse igual que R68: no «ese archivo no se toco», sino «este importe sigue
+// siendo este», ejecutando las funciones puras que producen los tres numeros.
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** Las tres pantallas que R63 congela, por su carpeta de componentes. */
+const PANTALLAS_CONGELADAS = [
+  "app/(app)/wallet/tiendas/_components",
+  "app/(app)/mi-wallet/_components",
+  "app/(app)/mis-pagos/_components",
+];
+
+describe("R32/R35/R63 — el saldo de la tienda y el pendiente del mensajero no se mueven", () => {
+  it("MEDIDO (R32): el saldo a favor de una tienda, con su desglose y su signo", () => {
+    // Creditos 20 000 (contra-entrega) contra debitos 3 390 (flete + IVA): saldo 16 610.
+    expect(derivarSaldoTienda("20000.00", "3390.00")).toEqual({
+      creditos: "20000.00",
+      debitos: "3390.00",
+      saldo: "16610.00",
+      signo: "positivo",
+    });
+    // Y el caso que la 173 podria haber roto sin que nadie mirara: una tienda que DEBE. El
+    // saldo negativo se conserva tal cual, no se recorta a cero.
+    expect(derivarSaldoTienda("0.00", "1200.00")).toEqual({
+      creditos: "0.00",
+      debitos: "1200.00",
+      saldo: "-1200.00",
+      signo: "negativo",
+    });
+  });
+
+  it("MEDIDO (R32): la cuenta por pagar de un mensajero y el pendiente de UN cierre", () => {
+    expect(derivarCuentaPorPagar("15000.00", "9000.00")).toEqual({
+      devengado: "15000.00",
+      pagado: "9000.00",
+      cuentaPorPagar: "6000.00",
+      signo: "positivo",
+    });
+    // El pendiente de un cierre: `min(P,E)` menos lo ya entregado por liquidacion (172).
+    // P=15 000, E=9 000 -> el cierre genero 6 000; con 2 500 ya pagados quedan 3 500.
+    expect(derivarPendienteCierre("15000.00", "9000.00", "2500.00")).toBe("3500.00");
+    // Anular ese pago (pagadoVigente vuelve a 0) devuelve el pendiente entero.
+    expect(derivarPendienteCierre("15000.00", "9000.00", "0.00")).toBe("6000.00");
+  });
+
+  it("R35: el saldo de la tienda se deriva del ledger por tienda y de ninguna otra fuente", () => {
+    const saldo = codigoSinComentarios("lib/utils/saldo-tienda.ts");
+    // La firma solo admite los dos totales del ledger de la tienda: no hay por donde colarle
+    // una cifra de la caja. Si alguien intentara «mejorar» el saldo con `deTerceros`, tendria
+    // que cambiar la firma, y eso cae aqui.
+    expect(derivarSaldoTienda.length).toBe(2);
+    for (const ajeno of [
+      "walletMovimiento",
+      "derivarCaja",
+      "caja-tesoreria",
+      "deTerceros",
+      "ingreso_cod_recaudado",
+    ]) {
+      expect(saldo, `saldo-tienda.ts nombra ${ajeno}`).not.toContain(ajeno);
+    }
+    // Control de no-vacuidad del `not`: el archivo SI es el que deriva el saldo.
+    expect(saldo).toContain("derivarSaldoTienda");
+  });
+
+  it("R63: ninguna de las tres pantallas congeladas sabe nada de la caja en tesoreria", () => {
+    const componentes = PANTALLAS_CONGELADAS.flatMap((carpeta) => fuentesDe(carpeta));
+
+    // CONTROL DE NO-VACUIDAD, el de `T G.4`: una ausencia solo prueba algo si lo ausente
+    // existe. Las tres carpetas tienen componentes vivos; si una ruta estuviera mal escrita,
+    // `fuentesDe` reventaria y si el filtro fallara, el bucle de abajo no miraria nada.
+    expect(componentes.length).toBeGreaterThan(12);
+    for (const carpeta of PANTALLAS_CONGELADAS) {
+      expect(fuentesDe(carpeta).length, `${carpeta} no tiene componentes`).toBeGreaterThan(3);
+    }
+
+    for (const ruta of componentes) {
+      const codigo = codigoSinComentarios(ruta);
+      for (const ajeno of [
+        "verResumenCajaAction",
+        "CajaResumenDTO",
+        "CajaResumenCard",
+        "derivarCaja",
+        "ingreso_cod_recaudado",
+        "ingreso_reverso_pago_tienda",
+        "Ganancia de Ordenex",
+      ]) {
+        expect(codigo, `${ruta} nombra ${ajeno}`).not.toContain(ajeno);
+      }
+    }
   });
 });
