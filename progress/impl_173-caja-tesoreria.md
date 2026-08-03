@@ -1554,3 +1554,146 @@ dos cifras **como STRING** con el guardia de rol evaluado **antes** de tocar la 
 de cero llamadas a los cinco métodos del repositorio—. `[P7]` viaja como **hecho** y no como
 texto. Cuatro mutaciones ejecutadas y revertidas, incluida la del `WHERE`, que ningún test de
 servicio podía cazar y por eso vive en el test del repositorio.
+
+---
+---
+
+# HALLAZGO — el `CHECK` de la 173 cazó un test de la 127 que sembraba una fila imposible
+
+> Descubierto al correr el gate completo tras `T A.2`. **No es un fallo de la 173 y no se cierra
+> con un arreglo de dato: queda ABIERTO a decisión humana.** Se documenta aquí porque el hallazgo
+> sobrevive a esta feature.
+>
+> Estado del gate: **1 rojo de 1917 tests**, `tests/integration/actions/analitica-financiera-action.test.ts`
+> → `F.4 · pago + contraasiento ajuste en el mismo rango: bruto 800, neto 0`.
+
+## H1. Qué pasó
+
+`F.4` siembra en `wallet_movimiento`, contra Postgres real:
+
+```js
+{ categoria: "egreso_gasto",  tipo: "egreso",  monto: "400.00", fecha: CR_MEDIODIA_DIA_A }
+{ categoria: "egreso_ajuste", tipo: "ingreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A }
+```
+
+La segunda es una categoría `egreso_*` con tipo `ingreso`. El `CHECK` de `T A.2` la rechaza:
+
+```
+DriverAdapterError: el nuevo registro para la relación «wallet_movimiento» viola la restricción
+«check» «wallet_movimiento_tipo_categoria_check»
+```
+
+## H2. El `CHECK` tiene razón: la aplicación NO puede producir esa fila
+
+Verificado en los tres sitios que escriben ajustes en la caja, más la medición de producción:
+
+| Dónde | Qué hace |
+| --- | --- |
+| `app/(app)/wallet/_components/RegistrarMovimientoManualDialog.tsx:30` | `categoriaDe(tipo)` **deriva** la categoría del tipo: `ingreso→ingreso_ajuste`, `egreso→egreso_ajuste`. No los cruza. |
+| `lib/types/wallet.ts` (`registrarMovimientoManualSchema`) | Un `.refine` de zod **en el borde** rechaza cualquier par que no sea `ingreso↔ingreso_ajuste` o `egreso↔egreso_ajuste`. |
+| `lib/services/WalletEgresoService.ts:93-99` | Revertir un gasto emite `tipo: "ingreso", categoria: "ingreso_ajuste"` — **no** un `egreso_ajuste` de tipo invertido. |
+| `progress/medicion_TA0_173.md` | Producción: **0 filas incoherentes de 35**. |
+
+O sea: el contraasiento real de un `egreso_gasto` es un **`ingreso_ajuste` con tipo `ingreso`**.
+La 127 lo modeló como «misma categoría, tipo invertido», que no es el patrón de este repo.
+
+## H3. Por qué NO basta con arreglar el dato — MEDIDO, no deducido
+
+Se aplicó el patrón real al `seed` de `F.4` y se corrió:
+
+```
+ ❯ tests/integration/actions/analitica-financiera-action.test.ts (13 tests | 1 failed)
+     × F.4 · pago + contraasiento ajuste en el mismo rango: bruto 800, neto 0
+
+AssertionError: expected '400.00' to be '800.00'
+```
+
+**Los números SÍ se mueven**, así que la instrucción era pararse. El motivo:
+
+- La métrica bajo prueba es `egresos`, y `lib/analytics/metrics.ts:471-479` declara **exactamente
+  las ocho categorías `egreso_*`**.
+- `IngresosAnaliticaRepository` filtra `categoria IN (las declaradas)` y usa `tipo` **solo** como
+  clave de agrupación, nunca como filtro.
+- Por tanto un `ingreso_ajuste` es **invisible** para `egresos`: bruto `400.00`, neto `-400.00`
+  — es decir, `F.4` pasaría a ser idéntico a su propia contraprueba.
+
+**La medición revertida**; el archivo de la 127 está exactamente como estaba.
+
+## H4. El alcance real: no es una fila mala, es una propiedad que dejó de ser alcanzable
+
+Censo de las `definicion.categorias` de las métricas del catálogo, leído del código:
+
+```
+ingreso_flete                prefijos=['ingreso']  n=2
+ingreso_comision_cod         prefijos=['ingreso']  n=1
+ingreso_iva                  prefijos=['ingreso']  n=3
+egresos                      prefijos=['egreso']   n=8
+```
+
+Las **cuatro** métricas que leen `wallet_movimiento` declaran listas **homogéneas de prefijo**.
+Con el `CHECK`, toda fila de una categoría `egreso_*` tiene tipo `egreso` y viceversa, luego:
+
+> **Ninguna métrica de la caja puede contener las dos naturalezas de `tipo` a la vez, y por tanto
+> `neto` es SIEMPRE `±bruto`.**
+
+Eso no lo causó el `CHECK`: ya era cierto en producción por las tres barreras de §H2. El `CHECK`
+solo convirtió «imposible por convención» en «imposible por restricción», y al hacerlo dejó
+visible que **la distinción bruto/neto de la 127 para la caja principal no es alcanzable con datos
+legales**. Es un hallazgo sobre la 127, no un daño de la 173.
+
+## H5. Los otros sitios con el mismo patrón irreal — los TRES, dichos
+
+Barrido del árbol (`tests/`, `lib/`, `app/`, `scripts/`) buscando pares `(categoria, tipo)`
+literales cruzados sobre el catálogo de la caja:
+
+| Sitio | ¿Bloquea? | Qué es |
+| --- | --- | --- |
+| `tests/integration/actions/analitica-financiera-action.test.ts:408` | **SÍ — el rojo** | Inserta contra Postgres real. |
+| `tests/unit/analytics/financiera-ingresos-repo.test.ts:124` | No | Siembra un **doble en memoria** con `{egreso_ajuste, ingreso}` para el mismo fin (bruto/neto desglosado por tipo). Verde, pero modela lo mismo que la base ya no admite. |
+| `tests/unit/services/analitica-financiera-derivacion.test.ts:177` | No | `{ingreso_flete, egreso}` sobre un doble, para probar que el par pago+contraasiento se cancela en el neto. Mismo caso, métrica de un solo prefijo. |
+| `tests/unit/services/liquidacion-caja-puerto.test.ts:184` | No | **Deliberado y correcto, es de la 173**: cuela `{tipo:"ingreso", categoria:"egreso_pago_mensajero"}` en la petición del puerto para demostrar que el puerto lo **ignora**. Nunca se persiste. **No se toca.** |
+
+Los tres primeros son **el mismo hallazgo**: existen para probar `neto ≠ bruto`, que es justo lo
+que §H4 dice que ya no puede ocurrir. Arreglarlos por separado sería tapar tres síntomas de una
+decisión.
+
+## H6. La contraprueba de `F.4` sigue discriminando — COMPROBADO por mutación
+
+Lo exige el encargo, así que se midió en vez de afirmarlo. Mutación en
+`AnaliticaFinancieraService.deCaja`: que el `neto` **copie el bruto** en vez de aplicar el signo.
+
+```
+ ❯ tests/integration/actions/analitica-financiera-action.test.ts (13 tests | 2 failed)
+     × F.4 · pago + contraasiento ajuste en el mismo rango: bruto 800, neto 0
+     × F.4 · sin el contraasiento, el neto NO es cero: el caso de arriba mide algo
+
+AssertionError: expected '400.00' to be '-400.00'
+```
+
+La contraprueba **se pone roja** con esa mutación: sigue midiendo que el neto lleva signo y no es
+una copia del bruto. No queda vacua. **Mutación revertida.**
+
+## H7. Las salidas posibles, con su consecuencia — la decisión NO es del backend
+
+- **(A) Reescribir `F.4` para que mida lo que ahora es cierto**: dos egresos ⇒ bruto `800.00`,
+  neto `-800.00`, y la comprobación «el neto no copia el bruto» se sostiene por el **signo**.
+  *Consecuencia:* la 127 deja de afirmar la cancelación en la caja — una afirmación que ya no
+  puede ser verdad. Es el cambio más pequeño y el más honesto, pero **cambia lo que la 127 dice**.
+- **(B) Meter `ingreso_ajuste` en `definicion.categorias` de `egresos`.** Con eso, `F.4` con el
+  patrón real vuelve a dar `800/0` sin tocar el `CHECK`. *Consecuencia:* cambia **el número de una
+  métrica de dinero publicada** y toca el catálogo — territorio de `[P4]` y de la 175.
+- **(C) Relajar el `CHECK`.** *Descartada*: `[P5] = (a)` es decisión humana ya tomada, el `CHECK`
+  tiene razón y quitarle una rama es exactamente la mutación que §A2.6 demostró peligrosa.
+- **(D) `it.skip` con el motivo.** Deja el gate verde y la deuda visible, pero un `skip` en un test
+  de dinero es lo que este repo no hace.
+
+**No se aplicó ninguna.** El árbol queda con `F.4` en rojo y todo lo demás verde, que es el estado
+honesto mientras la decisión esté abierta.
+
+## H8. Gate en este punto
+
+- **`pnpm typecheck`** → exit 0.
+- **`pnpm lint`** → `✖ 27 problems (0 errors, 27 warnings)` (línea base).
+- **`pnpm exec vitest run guard`** → `47 passed / 683 passed`.
+- **`pnpm exec vitest run tests/integration/db tests/integration/actions`** →
+  `1 failed | 115 passed (116)` · `1 failed | 1442 passed (1443)`. **El único rojo es `F.4`.**
