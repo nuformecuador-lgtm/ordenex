@@ -4,19 +4,28 @@ Checklist de pasos discretos y verificables. `[P]` = paralelizable dentro de su 
 Cada task trae su criterio de "hecho" y los `R<n>` que cubre. Al final, el mapa de
 trazabilidad `R<n>→test` que el reviewer verifica (`docs/specs.md` §Trazabilidad).
 
-> **Bloqueo de puerta:** T0 no arranca hasta que la puerta F1.4 responda (a), (b), (c) y (d)
-> de `requirements.md`. Si el humano no responde, se implementan las recomendaciones por
-> defecto (409 en ambigüedad, `POST`, uuid de carga, sin `force`) y T1 lo deja escrito.
+> **Puerta F1.4 CERRADA.** (a) precedencia fija **`num_guia` gana** (sin 409 de ambigüedad);
+> (b) `/generate` **solo `POST`**; (c) carga por **uuid** + publicar `cargaId` en
+> `CargaResponse`; (d) **sin** modo `force`. No se reabren.
+>
+> **Cambios respecto de la versión anterior de este spec:** **ningún requisito murió**;
+> **R14 y R15 cambiaron de contenido** (de "409 por ambigüedad" a "precedencia de `num_guia`" y
+> "fallback a `num_remision`") y **nacieron dos: R44** (solo `POST`) y **R45** (`cargaId` en
+> `CargaResponse`). Total: **45 requisitos**. En tasks: T10/T13/T14 pasan a exigir el test
+> **discriminante** de precedencia, T14/T15 cubren además R44, y **T18 deja de ser condicional**
+> (era "si (c) se cierra por uuid") para cubrir R45.
 
 ---
 
 ## Bloque 0 — Reconocimiento (bloqueante, primero)
 
-- [ ] **T1** — Registrar en `progress/impl_177.md` las decisiones de la puerta F1.4 tal como
-  llegaron (a/b/c/d) y confirmar contra el código: (i) `num_guia`/`num_remision` siguen siendo
-  `@unique` por separado y sin unicidad cruzada; (ii) `download_url` sigue sin lectores;
-  (iii) `SELF_AUTH_ROUTES` sigue conteniendo `/api/ordenes/api-key`.
-  **Hecho:** los tres puntos citados con archivo:línea en `progress/impl_177.md`.
+- [ ] **T1** — Registrar en `progress/impl_177.md` las decisiones cerradas de la puerta F1.4
+  (a: gana `num_guia`; b: solo `POST`; c: uuid + `cargaId` publicado; d: sin `force`) y
+  confirmar contra el código: (i) `num_guia`/`num_remision` siguen siendo `@unique` por separado
+  y sin unicidad cruzada; (ii) `download_url` sigue sin lectores; (iii) `SELF_AUTH_ROUTES` sigue
+  conteniendo `/api/ordenes/api-key`; (iv) **el tipo real de `summary.cargaId`** (¿puede ser
+  `null` en la vía por API key?), que fija cómo se declara en el schema `CargaResponse` (R45).
+  **Hecho:** los cuatro puntos citados con archivo:línea en `progress/impl_177.md`.
 - [ ] **T2 [P]** — Verificar en un scratch que Next.js acepta el árbol de rutas propuesto
   (`orden/[id]` como hermano estático de `[numGuia]`, y `carga/[cargaId]/generate` junto a
   `carga/route.ts`). **Hecho:** `pnpm exec next build` (o `next dev` arrancando) sin el error
@@ -67,10 +76,15 @@ trazabilidad `R<n>→test` que el reviewer verifica (`docs/specs.md` §Trazabili
 ## Bloque D — Services (depende de C)
 
 - [ ] **T10** — `IApiOrdenResolucionService` + `ApiOrdenResolucionService.resolver(actor, id)`:
-  normaliza el identificador (trim), calcula el candidato entero, llama al repo y traduce
-  0 → `not_found`, 1 → `ok`, 2 → `ambiguo`; 2 filas que son la MISMA orden → `ok`.
-  **Hecho:** tests con repo fake: guía, remisión, no numérico (no consulta guía), 0 filas,
-  2 filas distintas → `ambiguo`, misma orden por ambas columnas → `ok`. [R6, R8, R9, R14, R15]
+  normaliza el identificador (trim), calcula el candidato entero, llama al repo y aplica la
+  **precedencia fija** (`num_guia` primero, `num_remision` como fallback), devolviendo también
+  `via`. Sin estado `ambiguo` y sin 409.
+  **Hecho:** tests con repo fake: (1) resuelve por guía (`via: "num_guia"`); (2) resuelve por
+  remisión (`via: "num_remision"`); (3) identificador no numérico no consulta guía; (4) 0 filas
+  → `not_found`; (5) **test DISCRIMINANTE de R14**: el repo devuelve DOS filas —orden A con
+  `num_guia = 100234` y orden B con `num_remision = "100234"`— y el service devuelve **la orden
+  A**, con `via: "num_guia"`, y NO la B (se afirma el `id` devuelto, no solo que hay respuesta);
+  (6) el service nunca produce `409`/`conflict` en ninguna rama. [R6, R8, R9, R14, R15]
 - [ ] **T11** — `IApiPdfEtiquetaService` + `ApiPdfEtiquetaService` con `porOrden` y `porCarga`,
   inyectando repo, `IEtiquetasLotePdfService`, `ISignedUrlProvider` y el TTL de T5. Lógica:
   path presente → solo `createSignedUrl` (`generado: false`); ausente → generar + persistir
@@ -90,18 +104,24 @@ trazabilidad `R<n>→test` que el reviewer verifica (`docs/specs.md` §Trazabili
   `extraerBearer`, `buildAutenticar`, `deps` inyectables, `withErrorHandler`,
   `appErrorToResponse`. zod `min(1).max(128)` sobre `{id}`.
   **Hecho:** test de integración del handler (sin DB): 401 sin/mal Bearer, 403 usuario/key no
-  activos, 200 por guía, 200 por remisión, 404 inexistente, 404 ajena (idéntica), 409 ambigua,
-  422 vacío/excedido, y respuesta SIN `storagePath`/bucket/ids internos/PII.
-  [R1, R2, R3, R11, R12, R13, R14, R16, R18, R42]
-- [ ] **T14** — `app/api/ordenes/api-key/orden/[id]/generate/route.ts` (`POST`, o lo que decida
-  (b)). **Hecho:** test de integración: 200 `generado:true` la 1ª vez, 200 `generado:false` la
-  2ª con la MISMA orden y URL distinta (re-firmada), 404 ajena, 409 sin guía, 401/403/422;
-  y que el handler responde al verbo decidido y NO al otro. [R19, R20, R21, R22, R27]
-- [ ] **T15** — `app/api/ordenes/api-key/carga/[cargaId]/generate/route.ts`. zod uuid.
+  activos, 200 por guía, 200 por remisión, 404 inexistente, 404 ajena (idéntica), 422
+  vacío/excedido, respuesta SIN `storagePath`/bucket/ids internos/PII, y el **caso
+  discriminante de R14 extremo a extremo**: con las dos órdenes colisionadas el `200` devuelve
+  la de la guía; ningún caso responde `409`.
+  [R1, R2, R3, R11, R12, R13, R14, R15, R16, R18, R42]
+- [ ] **T14** — `app/api/ordenes/api-key/orden/[id]/generate/route.ts` exportando **solo
+  `POST`**. **Hecho:** test de integración: 200 `generado:true` la 1ª vez, 200 `generado:false`
+  la 2ª con la MISMA orden y URL distinta (re-firmada), 404 ajena, 409 sin guía, 401/403/422;
+  el caso discriminante de R14 (con ambas coincidencias se genera el PDF de la orden de la
+  GUÍA, verificado por el `ordenId` pasado al generador); y que el módulo **no exporta `GET`**
+  (una petición `GET` no ejecuta el handler). [R19, R20, R21, R22, R27, R44]
+- [ ] **T15** — `app/api/ordenes/api-key/carga/[cargaId]/generate/route.ts` exportando **solo
+  `POST`**, zod uuid sobre `{cargaId}`.
   **Hecho:** test de integración: 200 `generado:true` / `generado:false`, 404 ajena, 404
-  inexistente, 409 sin etiquetas, 409 excede tope, 422 uuid inválido, 401/403.
+  inexistente, 409 sin etiquetas, 409 excede tope, 422 uuid inválido (y 422 con un id que no es
+  uuid, p. ej. el `name` del lote), 401/403, y que el módulo **no exporta `GET`**.
   Confirma que `POST /api/ordenes/api-key/carga` (feature 88) sigue respondiendo igual.
-  [R28, R29, R30, R31, R33, R34]
+  [R28, R29, R30, R31, R33, R34, R44]
 
 ## Bloque F — Contrato publicado (depende de E)
 
@@ -111,9 +131,12 @@ trazabilidad `R<n>→test` que el reviewer verifica (`docs/specs.md` §Trazabili
   sigue verde SIN modificarlo (en particular `enumsTs` sigue en 4). [R41]
 - [ ] **T17** — Espejar los 3 paths en `docs/api/api-key-openapi.yaml`.
   **Hecho:** el guard de espejo del `.yaml` verde. [R41]
-- [ ] **T18 [P]** — Si (c) se cierra por uuid: publicar `cargaId` en el schema `CargaResponse`
-  del OpenAPI y del `.yaml` (deuda declarada en `design.md` §7). **Hecho:** el integrador puede
-  leer del contrato de dónde sale el `{cargaId}` que la ruta exige. [R41]
+- [ ] **T18 [P]** — Publicar `cargaId` en el schema `CargaResponse` del OpenAPI **y** del
+  `.yaml`, con el tipo que T1 haya confirmado (`string`/`["string","null"]`, `format: uuid`), y
+  añadirlo al ejemplo publicado de la respuesta de carga. **Hecho:** test de contrato nuevo que
+  afirma (a) `CargaResponse.properties.cargaId` existe en el objeto TS, (b) el `.yaml` lo
+  declara igual, (c) el ejemplo de `POST /api/ordenes/api-key/carga` lo muestra; y los guards
+  de contrato existentes siguen verdes. [R45]
 
 ## Bloque G — Verificación transversal
 
@@ -153,12 +176,12 @@ trazabilidad `R<n>→test` que el reviewer verifica (`docs/specs.md` §Trazabili
 | R11 | 404 sin coincidencia | T6 + T13: "404 cuando ninguna orden propia coincide" |
 | R12 | 404 ajena/borrada (idéntico) | T6 + T12 + T13: "404 idéntico para orden ajena y borrada" |
 | R13 | 422 id vacío o excedido, sin consultar | T13: "422 con {id} vacío o de más de 128 chars, sin tocar la DB" |
-| R14 | 409 ambigüedad guía/remisión **[(a)]** | T10 + T13: "409 cuando el id casa con la guía de una y la remisión de otra" |
-| R15 | Misma orden por ambas columnas → ok | T10: "no es ambigüedad si ambas coincidencias son la misma orden" |
+| R14 | Precedencia: gana `num_guia` (test discriminante) | T10 + T13 + T14: "con la guía de A y la remisión de B casando a la vez, devuelve A y no B" |
+| R15 | Fallback a `num_remision`; nunca 409 por ambigüedad | T10 + T13: "resuelve por remisión cuando ninguna guía coincide" + "ninguna rama responde 409" |
 | R16 | Detalle con la forma de la 106 | T7 repo + T13: "devuelve el mismo DTO de detalle, evidencias firmadas y [] sin evidencias" |
 | R17 | La 106 queda intacta | T21: "los endpoints de la 106 conservan ruta, verbo y contrato" |
 | R18 | Sin path/bucket/ids/PII | T13: "la respuesta no expone storagePath, bucket ni datos del mensajero" |
-| R19 | /generate resuelve igual que la consulta | T14: "/generate aplica las mismas reglas de resolución y los mismos 404/409/422" |
+| R19 | /generate resuelve igual que la consulta | T14: "/generate aplica las mismas reglas de resolución, la misma precedencia y los mismos 404/422" |
 | R20 | Genera y persiste la RUTA (no la URL) | T11 + T14: "genera, sube y persiste el path devuelto por el generador" |
 | R21 | Reuso: no genera ni sube | T11 + T14: "con path persistido no llama a generar ni a upload" |
 | R22 | 200 con URL nueva + TTL + generado | T11 + T14 + T15: "responde url, expiraEnSegundos y generado true/false" |
@@ -180,6 +203,8 @@ trazabilidad `R<n>→test` que el reviewer verifica (`docs/specs.md` §Trazabili
 | R38 | Filas heredadas de la 136/141 → regenera | T8 + T11 + T22: "fila con download_url y path NULL genera y no altera download_url" |
 | R39 | Migración aditiva con down.sql | T4: "db:migrate aplica los 2 ADD COLUMN y db:rollback los revierte" |
 | R40 | Rutas nuevas bajo SELF_AUTH_ROUTE | T19: "las 3 rutas nuevas no se redirigen a /login sin cookie" |
-| R41 | OpenAPI 7 paths + yaml espejo | T16 + T17 (+T18): "el spec publica los 3 endpoints y el yaml sigue siendo espejo" |
+| R41 | OpenAPI 7 paths + yaml espejo | T16 + T17: "el spec publica los 3 endpoints y el yaml sigue siendo espejo" |
 | R42 | Shape uniforme de error, sin códigos nuevos | T13/T14/T15: "todo error responde status/code/message con códigos existentes" |
 | R43 | TTL por configuración | T5: "el TTL sale de env con default 300 y clamp" |
+| R44 | `/generate` solo responde a POST | T14 + T15: "el módulo de ruta no exporta GET; una petición GET no genera nada" |
+| R45 | `cargaId` publicado en `CargaResponse` | T18: "CargaResponse declara cargaId en el objeto TS, en el .yaml y en el ejemplo" |

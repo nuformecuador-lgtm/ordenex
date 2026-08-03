@@ -1,8 +1,13 @@
 # Feature 177 — Design
 
 Decisiones técnicas ANTES de escribir código. Los requisitos viven en `requirements.md`;
-aquí va el CÓMO. Las decisiones sujetas a la puerta F1.4 están marcadas
-**[PENDIENTE (x)]** y se indica qué cambia si el humano decide otra cosa.
+aquí va el CÓMO.
+
+> **Puerta F1.4 CERRADA.** (a) precedencia fija **`num_guia` gana** sobre `num_remision`, sin
+> 409 de ambigüedad; (b) `/generate` responde **solo `POST`**; (c) ruta por carga
+> `POST /api/ordenes/api-key/carga/{cargaId}/generate` con **uuid**, y publicar `cargaId` en el
+> `CargaResponse` del OpenAPI entra en el alcance; (d) **sin** modo forzar-regeneración.
+> Nada de esto se reabre.
 
 ---
 
@@ -23,12 +28,15 @@ propuestas cumplen, así que **no se toca `middleware.ts`** (R40).
 | # | Método | Ruta | Archivo |
 |---|---|---|---|
 | 1 | `GET` | `/api/ordenes/api-key/orden/{id}` | `app/api/ordenes/api-key/orden/[id]/route.ts` |
-| 2 | `POST` **[PENDIENTE (b)]** | `/api/ordenes/api-key/orden/{id}/generate` | `app/api/ordenes/api-key/orden/[id]/generate/route.ts` |
-| 3 | `POST` **[PENDIENTE (b)]** | `/api/ordenes/api-key/carga/{cargaId}/generate` **[PENDIENTE (c)]** | `app/api/ordenes/api-key/carga/[cargaId]/generate/route.ts` |
+| 2 | `POST` | `/api/ordenes/api-key/orden/{id}/generate` | `app/api/ordenes/api-key/orden/[id]/generate/route.ts` |
+| 3 | `POST` | `/api/ordenes/api-key/carga/{cargaId}/generate` | `app/api/ordenes/api-key/carga/[cargaId]/generate/route.ts` |
 
 `POST /api/ordenes/api-key/carga` (feature 88) sigue existiendo y no colisiona: es otro path.
-Si (b) se resuelve como `GET`, solo cambia el nombre del export del handler; si se resuelve
-como "ambos", se exportan `GET` y `POST` apuntando a la misma función interna.
+
+Los dos handlers de `/generate` exportan **solo `POST`** (decisión (b), R44): no se exporta
+`GET` ni ningún otro verbo, de modo que Next responde `405` a los demás. Razón: `/generate`
+escribe en la base y crea un objeto en Storage; un `GET` sería pre-fetcheable por navegadores,
+crawlers y proxies, y cualquier reintento automático dispararía la generación.
 
 ---
 
@@ -153,6 +161,17 @@ para no cometer.
 ya publicado a integradores; una remisión numérica cambiaría el significado de una llamada
 existente sin cambio de versión.
 
+### Alternativas descartadas EN la puerta F1.4 (decisión del humano)
+
+- **`409 CONFLICT` ante coincidencia cruzada guía/remisión** (era la recomendación del
+  spec_author). **Descartada:** el humano prefiere que el 100 % de las llamadas resuelva.
+  Coste asumido y declarado: la orden alcanzable solo por su remisión colisionada queda
+  invisible por esta ruta, en silencio (§4.2 y `requirements.md` §Riesgo declarado (a)).
+- **`GET` en `/generate`, solo o junto a `POST`.** **Descartada:** solo `POST` (§1).
+- **Identificar la carga por su `name`.** **Descartada:** `name` es nullable y único solo por
+  usuario (`schema.prisma:588,597`); el uuid ya lo tiene el integrador.
+- **Modo `force` de regeneración.** **Descartada:** ver §7bis.
+
 ---
 
 ## 4. Capas (Controller → Service → Repository)
@@ -162,7 +181,7 @@ app/api/ordenes/api-key/orden/[id]/route.ts                 ← Controller (cons
 app/api/ordenes/api-key/orden/[id]/generate/route.ts        ← Controller (PDF orden)
 app/api/ordenes/api-key/carga/[cargaId]/generate/route.ts   ← Controller (PDF carga)
    ↓
-lib/services/ApiOrdenResolucionService.ts   ← resuelve {id} → orden propia | not_found | ambiguo
+lib/services/ApiOrdenResolucionService.ts   ← resuelve {id} → orden propia (guía > remisión) | not_found
 lib/services/ApiPdfEtiquetaService.ts       ← reuso-o-genera + firma (orden y carga)
    ↓
 lib/repositories/OrdenRepository.ts (métodos nuevos)
@@ -174,13 +193,17 @@ lib/repositories/OrdenRepository.ts (métodos nuevos)
 `lib/interfaces/services/IApiOrdenResolucionService.ts`
 ```ts
 export type ResolverOrdenResult =
-  | { status: "ok"; orden: { id: string; numGuia: number | null } }
-  | { status: "not_found" }
-  | { status: "ambiguo" };   // [PENDIENTE (a)]
+  | { status: "ok"; orden: { id: string; numGuia: number | null }; via: "num_guia" | "num_remision" }
+  | { status: "not_found" };
 
 export interface IApiOrdenResolucionService {
   resolver(actor: Actor, identificador: string): Promise<ResolverOrdenResult>;
 }
+```
+
+`via` no viaja a la respuesta HTTP (el contrato publicado no lo incluye): existe para que el
+test discriminante de la precedencia (R14) pueda afirmar POR QUÉ columna resolvió, además de
+qué orden devolvió. **No hay `ambiguo`**: la decisión (a) lo eliminó del dominio.
 ```
 
 `lib/interfaces/services/IApiPdfEtiquetaService.ts`
@@ -200,7 +223,8 @@ export interface IApiPdfEtiquetaService {
 ### 4.2 Métodos nuevos de repositorio (`IOrdenRepository`)
 
 ```ts
-/** R6-R12: hasta DOS filas (una por columna), scope forzado por owner y no borradas. */
+/** R6-R12: hasta DOS filas (una por columna), scope forzado por owner y no borradas.
+ *  Devuelve AMBAS coincidencias (no desempata): la precedencia de R14 la aplica el service. */
 findByGuiaORemisionForOwner(
   identificador: { numGuia: number | null; numRemision: string },
   ownerId: string,
@@ -234,9 +258,29 @@ LIMIT 2;
 ```
 
 `LIMIT 2` no es una optimización caprichosa: dado que ambas columnas son `@unique` globales
-(`schema.prisma:480-481`), el resultado tiene **como máximo 2 filas**; 2 filas ⇒ ambigüedad
-(R14), 1 fila ⇒ resolución, 0 ⇒ 404. Cuando `{id}` no es entero positivo, `$numGuiaOrNull` es
-`NULL` y la comparación de guía nunca casa (R8).
+(`schema.prisma:480-481`), el resultado tiene **como máximo 2 filas** (una por columna). Cuando
+`{id}` no es entero positivo, `$numGuiaOrNull` es `NULL` y la comparación de guía nunca casa (R8).
+
+**Desempate en el service (decisión (a), R14/R15):** sobre esas 0-2 filas,
+`ApiOrdenResolucionService` aplica precedencia fija:
+
+```
+1. si alguna fila tiene num_guia === candidatoEntero  → esa fila (via: "num_guia")
+2. si no, si alguna fila tiene num_remision === {id}  → esa fila (via: "num_remision")
+3. si no hay filas                                    → not_found
+```
+
+Nunca devuelve `409`. Se prefiere resolver en el service, con las dos filas a la vista, antes
+que hacerlo en SQL con `ORDER BY (num_guia = $g) DESC LIMIT 1`: la precedencia es una regla de
+negocio (la decidió el humano y es la que un test debe poder fijar de forma discriminante), no
+un detalle de ordenación de una query, y `docs/architecture.md` exige que la lógica de negocio
+viva en el service. El coste es traer una fila de más en un caso raro.
+
+**Riesgo declarado que esto introduce (aceptado):** la orden cuyo `num_remision` coincide con
+el `num_guia` de otra orden propia queda **inalcanzable por esta ruta**, y el integrador no
+recibe ninguna señal. Ver `requirements.md` §Riesgo declarado (a). Deliberadamente **no** se
+añade un campo de aviso a la respuesta: cambiaría el contrato publicado por una situación que
+el humano decidió tratar como silenciosa.
 
 ### 4.3 Reuso del generador de PDF (feature 136)
 
@@ -300,7 +344,8 @@ producido por `ApiOrdenLecturaService.detalle`). Se reutiliza el DTO y el schema
 }
 ```
 
-Errores: `401`, `403`, `404`, `409` (ambigüedad, **[PENDIENTE (a)]**), `422`.
+Errores: `401`, `403`, `404`, `422`. **No hay `409` en este endpoint:** con la precedencia de
+(a) la resolución nunca es ambigua.
 
 **Implementación de la lectura:** una vez resuelto `{id}` a una orden propia, el detalle lo
 produce el `ApiOrdenLecturaService` ya existente. Como su `detalle(actor, numGuia)` opera por
@@ -311,7 +356,9 @@ devuelve el `orden.id` y se añade al repositorio la variante por id
 
 ### 5.2 `POST /api/ordenes/api-key/orden/{id}/generate`
 
-Entrada: path `{id}` (mismas reglas). Sin cuerpo (un cuerpo presente se ignora).
+Entrada: path `{id}` (mismas reglas). Sin cuerpo (un cuerpo presente se ignora). **Solo `POST`**
+(R44): el archivo de ruta exporta únicamente `POST`, así que Next responde `405` a `GET` y al
+resto de verbos sin ejecutar nada.
 
 Salida `200`:
 ```json
@@ -323,14 +370,21 @@ Salida `200`:
 `generado: true` ⇒ el PDF se construyó y subió en esta llamada; `false` ⇒ se reusó el objeto ya
 existente y solo se re-firmó (R22). Es el testigo observable del reuso.
 
-Errores: `401`, `403`, `404` (inexistente/ajena/borrada), `409` (ambigüedad **[PENDIENTE (a)]** /
-sin etiqueta imprimible), `422`, `500`.
+Errores: `401`, `403`, `404` (inexistente/ajena/borrada), `409` (**solo** por orden sin etiqueta
+imprimible), `422`, `405` (verbo distinto de `POST`), `500`.
 
-### 5.3 `POST /api/ordenes/api-key/carga/{cargaId}/generate` **[PENDIENTE (c)]**
+### 5.3 `POST /api/ordenes/api-key/carga/{cargaId}/generate`
 
-Entrada: path `{cargaId}`, zod `z.string().uuid()` → `422` si no es uuid.
+Entrada: path `{cargaId}` = **uuid** de `Carga.id` (decisión (c)), zod `z.string().uuid()` →
+`422` si no es uuid. **Solo `POST`** (R44).
 Salida: **idéntica** a §5.2 (R28). Errores: `401`, `403`, `404`, `409` (sin etiquetas /
-excede tope), `422`, `500`.
+excede tope), `422`, `405`, `500`.
+
+De dónde saca el integrador ese uuid: de `cargaId` en la respuesta de
+`POST /api/ordenes/api-key/carga`, que el handler ya devuelve (`carga/route.ts:367` propaga
+`...summary`, y `summary.cargaId` se usa en la línea 303) pero que **el OpenAPI no publica**.
+Por eso R45 mete la publicación de `cargaId` en `CargaResponse` dentro del alcance: sin ella el
+contrato exigiría un identificador que el propio contrato no dice de dónde sale.
 
 ### 5.4 Errores
 
@@ -345,7 +399,8 @@ Sin códigos nuevos. La key nunca entra al cuerpo ni a los logs (R5).
 ```
 1. extraerBearer(req) → autenticar()          # 401 / 403           (R1-R3)
 2. zod sobre el path param                     # 422                (R13)
-3. resolver el recurso con owner forzado       # 404 / 409-ambiguo  (R6-R15, R29)
+3. resolver el recurso con owner forzado       # 404                (R6-R15, R29)
+   (orden: precedencia num_guia > num_remision, nunca 409)
 4. leer download_storage_path del recurso
    4a. NO NULL  → createSignedUrl(path, 300)   → { generado: false } (R21/R31)
    4b. NULL     → generar + upload + persistir path
@@ -381,10 +436,30 @@ el bucket. Queda declarado, no oculto. El requisito R27 se verifica sobre llamad
   (la respuesta de `/generate` no lleva `estado`, y `OrdenDetalle` se reutiliza por `$ref`, sin
   duplicar el enum). Si el reuso por `$ref` no bastara, hay que actualizar el guard con
   justificación explícita, no relajarlo.
-- **Deuda detectada, no arreglada de contrabando:** `CargaResponse` del OpenAPI **no publica
-  `cargaId`**, aunque el handler sí lo devuelve (`carga/route.ts:367` propaga `...summary`).
-  Si (c) se resuelve por uuid, publicarlo pasa a ser parte de esta feature; se anota en la
-  pregunta abierta (c) para que la decisión sea consciente.
+- **`cargaId` en `CargaResponse` (R45, decisión (c)):** se añade al schema `CargaResponse` del
+  objeto TS y del `.yaml`, más el campo en el ejemplo publicado. **Tipo a confirmar contra el
+  código en T1**: el lote puede no producir carga (`createOrdenesConGuia` devuelve
+  `cargaId: string | null`), así que el schema debe declararlo `["string","null"]` con
+  `format: "uuid"` salvo que la implementación demuestre que en la vía por API key nunca es
+  `null`; no se declara `required` con un tipo que la respuesta pueda contradecir. Es una
+  ampliación **aditiva** del contrato: ningún integrador existente se rompe por recibir una
+  clave más. No se bumpea `info.version` (misma política que las features 135/153).
+
+---
+
+## 7bis. Consecuencia asumida de (d): sin refresco de layout
+
+No existe `?force=true` ni ningún otro modo de forzar la regeneración: si hay
+`download_storage_path`, se re-firma y punto. Consecuencia **asumida por el humano**: cuando el
+layout de la etiqueta cambie —como ya pasó con la feature 150 y el tamaño de hoja— los PDFs ya
+generados conservarán el layout viejo **indefinidamente**, y no hay forma de refrescarlos por
+API. La única salida es que el objeto y su referencia desaparezcan (feature 178, purga) para que
+la siguiente llamada regenere. Un despliegue que cambie el layout y quiera propagarlo tendrá que
+apoyarse en esa purga, no en este endpoint.
+
+A cambio se evita: multiplicar objetos en el bucket con cada llamada, tener que decidir si se
+borra el objeto anterior (`IFileStorage.remove`) y gobernar los huérfanos que la 178 no
+alcanzaría por no estar referenciados.
 
 ---
 
