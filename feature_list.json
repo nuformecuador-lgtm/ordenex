@@ -1524,7 +1524,7 @@
       "name": "analitica: tablero financiero",
       "spec_path": "specs/132-analitica-tablero-financiero",
       "description": "Frontend. Cablea 126 a las graficas de 129 en la ruta 128; datos sensibles pre-fetch en Server Component y pasados por props (patron private/). Depende de 126.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
