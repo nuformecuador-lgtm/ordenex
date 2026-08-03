@@ -111,7 +111,7 @@ el artefacto fechado que `metrics.ts:5-7` exige para tocar el catálogo.
 
 ## T6 — Cierre
 
-- [ ] **T6.1** `progress/impl_175.md` con archivos tocados, mapa `R1..R14 → test` y salida real de
+- [x] **T6.1** `progress/impl_175-analitica-correccion-catalogo.md` con archivos tocados, mapa `R1..R14 → test` y salida real de
       los tests.
       *Hecho cuando:* los **14** requisitos tienen test nombrado (trazabilidad bloqueante,
       `docs/verification.md`).
