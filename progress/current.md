@@ -8,7 +8,92 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 2026-08-03 — **127 servicios financieros → PR #269, esperando merge**
+
+Feature **127 → `done`**, PR **#269** hacia `dev` (rama `feature/127-analitica-financiera-servicios`,
+worktree `ordenex-wt-127`). Reviewer **APROBADO, 0 bloqueantes, 7 menores** (1–3 cerrados en el PR;
+4–7 en `progress/review_127.md`). Suite post-merge **821 archivos / 10411 tests, 0 rojos**. Cierre
+narrado en `progress/history.md`; bitácoras `impl_127.md`, `impl_127_C/D/E.md`.
+
+**Lo único que hay que saber antes de tocar nada relacionado:** esta feature modificó
+`lib/analytics/metrics.ts`, que es **el catálogo de la 135 y fuente única de trece features**. El
+diff son **exactamente tres cosas**, cada una con autorización humana fechada en
+`progress/decision_C2_127.md` — ⟨D8⟩ `egresos.estadoProduccion`, ⟨D10⟩ los tres ledgers en
+`conciliacion_cierres.fuente.tablas`, ⟨D11⟩ el comentario que ⟨D8⟩ dejó mintiendo. **Esa autorización
+no se hereda:** la siguiente feature que necesite ese archivo necesita la suya.
+
+**Aviso a la 132:** cinco de las ocho métricas sirven `filas: []` con sólo `total` pese a declarar
+`granos: ["fecha"]` — no hay serie temporal que pintar ahí (pregunta abierta 5 del spec).
+
+**Deuda que NO es de la 127 y sigue sin dueño:** C7 (`derivarCuentaPorPagar` de la feature 44 puede
+devolver monto negativo con `signo: "cero"`) y el defecto de `whereRollup`, dirigido a la **126**.
+
+**Nota de entorno:** la base local tiene aplicada `20260728120000_orden_historial_origen_deshacer_asignacion`,
+que **no existe en `prisma/migrations`**. Residuo de otra rama sobre la misma base, ajeno a la 127.
+
+---
+
 ## 🚀 2026-08-03 — **172 EN PRODUCCIÓN** · **EMPIEZA A LEER POR AQUÍ**
+## 🛠️ 2026-08-03 — **EL GATE YA NO SE CORRE ENTERO EN CADA TANDA** · **EMPIEZA A LEER POR AQUÍ**
+
+Pedido del humano: *«el proceso del arnés está hecho para mejorar el trabajo, no para alargar las
+sesiones eternamente»*. Tenía razón y estaba medido: la 172 corrió la suite completa **9 veces**,
+~35 minutos de reloj **solo esperando**.
+
+### Lo que cambia
+
+```bash
+./init.sh --rapido   # CERRAR UNA TANDA — ~58 s
+./init.sh            # CERRAR LA FEATURE y ANTES DE CADA PR — ~4 min 23 s
+```
+
+`--rapido` corre typecheck + lint + **los tests que el grafo de imports relaciona con tu diff**
+(`vitest --changed origin/dev`) + **todas las guardias**. Medido en este repo:
+
+| Qué corres | Archivos | Tests | Tiempo |
+| --- | --- | --- | --- |
+| suite entera | 804 | 10.139 | 235 s |
+| relacionados con un servicio | 16 | 437 | 21 s |
+| relacionados con un util muy importado | 155 | 2.577 | 103 s |
+| **`./init.sh --rapido` entero** | — | — | **58 s** |
+
+> **Las guardias van SIEMPRE y no es un adorno.** No importan lo que vigilan: recorren el **árbol
+> de archivos** (censo de tablas, columnas sensibles, módulos puros), así que **ningún grafo de
+> imports las selecciona** — serían justo lo que se pierde. Cuestan ~8 s y se eligen por patrón
+> (`vitest run guard`), no por lista: una guardia nueva entra sola. Esto no es hipotético: la
+> guardia del censo de tablas de la Tanda H de la 172 no la habría seleccionado ningún grafo.
+
+### El arranque costaba 5× más que ejecutar los tests
+
+**617 de los 804 archivos corren en `node`** y ninguno usa los matchers de DOM, pero los 804
+importaban `@testing-library/jest-dom/vitest`. Ahora el import es **condicional al entorno**.
+Medido sobre 130 archivos de servicio:
+
+```
+antes:  14,35 s   (setup 51,19 s de CPU)
+ahora:  10,69 s   (setup  4,10 s)        <- mismos 2.270 tests en verde
+```
+
+### Los subagentes ya no corren la suite completa (`AGENTS.md`)
+
+**Cinco subagentes murieron por cortes de stream** en la sesión de la 172, y los cinco cayeron en
+la fase de verificación larga: 4 minutos sin emitir nada bastan para romper el stream, y
+reanudarlos cuesta replicar 250k+ tokens. En cuanto se les dijo «corre solo tus archivos, el gate
+lo corro yo», dejaron de caerse. Además **un subagente no tiene contexto para juzgar un rojo
+ajeno**: no sabe si `CuentasPorPagarTable` es el flake conocido o una regresión suya.
+
+### ⏭️ Lo que queda de esto, y NO lo hice a propósito
+
+**El flake móvil de jsdom sigue vivo y merece su propio chore con medición.** Hoy obliga a
+re-correr la suite **entera** para distinguir flake de regresión: en la 172 costó dos corridas
+completas (~8 min) decidir que `CuentasPorPagarTable` no era una regresión de la Tanda C. El
+`testTimeout` ya se subió a 20 s por esto — es un síntoma tratado, no la causa. Acotar los workers
+de jsdom (`poolOptions`) es la vía, pero hay que **medirlo**, no adivinarlo, y por eso no entra
+aquí.
+
+---
+
+## 🚀 2026-08-03 — **172 EN PRODUCCIÓN**
 
 **Ya existe forma de registrar un pago, y está desplegada.** Era el agujero de fondo del sistema:
 hasta ayer los saldos solo crecían y a nadie se le podía decir «ya pagué». **172 → `done`.**

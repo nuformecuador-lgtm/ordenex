@@ -8,7 +8,26 @@ fail() { echo "${RED}✗ $1${NC}"; exit 1; }
 ok()   { echo "${GREEN}✓ $1${NC}"; }
 warn() { echo "${YELLOW}! $1${NC}"; }
 
-echo "== Arnes SDD :: init =="
+# MODO DEL GATE (2026-08-03). `--rapido` existe porque la suite completa son ~10.000 tests y
+# ~4 minutos: correrla al cerrar CADA tanda convertia el arnes en una sala de espera (9 tandas
+# de una feature = ~35 min de reloj solo esperando). En modo rapido se corre lo que el GRAFO DE
+# IMPORTS relaciona con lo que has tocado, MAS todas las guardias.
+#
+# Las guardias van SIEMPRE y no es un adorno: recorren el arbol de archivos (censo de tablas,
+# barridos de columnas sensibles, modulos puros) en vez de importar lo que vigilan, asi que
+# NINGUN grafo de imports las selecciona. Son justo las que se perderian. Cuestan ~8s.
+#
+# `--rapido` NO sustituye al gate completo: es para cerrar tandas. Antes de abrir un PR se corre
+# `./init.sh` a secas. La leccion de los PRs #209 y #237 de este repo sigue en pie -se mergeo
+# mirando el estado del PR, que es un build y NO corre tests, y entro un guard rojo en `dev`-.
+MODO="completo"
+if [ "${1:-}" = "--rapido" ]; then
+  MODO="rapido"
+elif [ -n "${1:-}" ]; then
+  echo "uso: ./init.sh [--rapido]"; exit 2
+fi
+
+echo "== Arnes SDD :: init (modo: $MODO) =="
 
 # 1. Herramientas base
 command -v node >/dev/null 2>&1 || fail "node no esta instalado"
@@ -98,7 +117,13 @@ run_if() {
 if [ -f package.json ]; then
   run_if typecheck
   run_if lint
-  run_if test
+  if [ "$MODO" = "rapido" ]; then
+    run_if test:rapido
+    warn "modo rapido: solo los tests relacionados con tus cambios + las guardias."
+    warn "Antes de abrir el PR corre './init.sh' sin flags."
+  else
+    run_if test
+  fi
 fi
 
 # 6. Migraciones: verificar que toda migracion tenga down.sql
