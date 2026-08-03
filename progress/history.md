@@ -2675,3 +2675,30 @@ reviewer, todas muertas. Reviewer: **aprobado con reservas, cero bloqueantes**.
   **por ejecución** y revirtió exactamente su índice— pero la lección es la otra: **commitear siempre
   con `-F` o heredoc citado**, nunca `-m` con prosa que cita comandos. Ningún gate lo detecta: `git
   commit` «funciona» y el estrago queda incrustado en el mensaje.
+
+## Feature 177 — api: consulta por guía o remisión y PDF bajo demanda · PR pendiente (2026-08-03)
+
+Tres endpoints nuevos en el canal de API key: `GET /orden/{id}` (resuelve contra `num_guia` y
+`num_remision`), `POST /orden/{id}/generate` y `POST /carga/{cargaId}/generate`. Los dos `/generate`
+priorizan devolver el enlace y solo generan cuando no hay PDF. 45 requisitos, 45 con test nombrado;
+27 mutaciones del implementer, todas muertas. Reviewer: **aprobado, cero bloqueantes**, con los 45
+verificados abriendo el test citado uno a uno.
+
+- **Una URL firmada persistida no es una referencia, es un enlace muerto con fecha.** La 136 guardaba
+  en `download_url` la URL ya firmada, no el path. Eso hacía literalmente imposible la instrucción del
+  humano —«reusa el PDF, con vencimiento de 5 min»—: lo persistido caduca. La salida fue una columna
+  aparte, `download_storage_path`, y la regla de que el testigo de existencia es **la referencia,
+  nunca la URL**. Las filas heredadas se tratan como «sin PDF» y se regeneran en la primera llamada.
+  El defecto no se descubrió leyendo el requisito, sino comprobando **cómo estaba persistido** antes
+  de aceptarlo.
+- **La forma de la ruta la decidió el framework, no el gusto.** Next.js no admite `[id]` como hermano
+  de `[numGuia]`, así que el segmento estático `orden/` es obligatorio. Se verificó con un build
+  **antes** de escribir los handlers: descubrirlo después habría costado rehacer tres.
+- **Un `?? resultados[0]` es una defensa que hace lo contrario de defender.** El fallback habría
+  persistido el path de OTRA orden si el generador devolviera un `ordenId` distinto del pedido: en vez
+  de fallar, guarda el dato equivocado en la columna. Inalcanzable hoy, retirado igual.
+- **Un subagente puede mover el HEAD del checkout compartido, y `git commit` no avisa.** El
+  `spec_author` —sin worktree— hizo `git checkout ux` a mitad de su trabajo, y los dos commits del
+  spec que el leader hizo después aterrizaron en la rama equivocada. Se rescataron con `cherry-pick`.
+  La señal está en el prefijo `[rama hash]` de la salida de `git commit`, que es fácil no mirar; la
+  regla es verificar la rama **antes de cada commit que siga a un subagente**, no solo al arrancar.

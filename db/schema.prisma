@@ -514,6 +514,12 @@ model Orden {
   // R48); NULL en modo `consolidate`, en la via sesion (R40) y sin etiqueta imprimible (R49).
   cargaId                String?   @map("carga_id")
   downloadUrl            String?   @map("download_url")
+  // Feature 177 (R36/R37, design §2.2): RUTA del objeto dentro del bucket de etiquetas del
+  // PDF individual de esta orden. Columna APARTE de `downloadUrl` a proposito: aquella
+  // guarda una URL FIRMADA que caduca, asi que no sirve para saber si el PDF existe.
+  // NOT NULL <=> el PDF existe en Storage => solo re-firmar; NULL => generar y subir.
+  // `downloadUrl` no se lee ni se escribe en esta feature (R26/R38).
+  downloadStoragePath    String?   @map("download_storage_path")
   /// Feature 169 (design §2.5) — columna GENERADA ALWAYS ... STORED en la base: concatena
   /// los cuatro campos buscables ya normalizados (guia, remision, telefono con y sin
   /// separadores, destinatario). NUNCA se escribe desde la aplicacion — Postgres rechaza
@@ -587,6 +593,9 @@ model Carga {
   usuarioCarga String   @map("usuario_carga") // FK -> usuario: quien realizo la carga (R2)
   name         String? // R8: nombre OPCIONAL del lote definido por el usuario; NULL = sin nombre
   downloadUrl  String?  @map("download_url") // R47: URL del PDF CONSOLIDADO del lote (modo consolidate); NULL en la via sesion (R40)
+  // Feature 177 (R36/R37, design §2.2): RUTA del objeto del PDF CONSOLIDADO del lote en el
+  // bucket de etiquetas. Misma semantica que en `Orden`: NOT NULL <=> existe => re-firmar.
+  downloadStoragePath String? @map("download_storage_path")
   totalFiles   Int      @default(0) @map("total_files") // R7/R29/R32: tamano TOTAL del lote, nunca el del chunk/batch
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -1596,6 +1605,7 @@ enum JobTipo {
   whatsapp_template_sync // integracion WhatsApp: reintenta contra Meta una op de plantilla (create/update/delete) que fallo en linea (payload { plantillaId, operacion })
   whatsapp_chat_envio // feature 109/D1: reintenta el envio saliente de un mensaje de chat que devolvio `transitorio` (payload { mensajeChatId })
   analitica_rollup_diario // feature 124/D4: agrega el rollup diario de la fecha CR que acaba de cerrar (D-1); RECURRENTE a las 00:30 CR, payload vacio {}
+  analitica_invalidacion_cache // feature 128/D3: invalida por tag la cache de la analitica operativa tras un recomputo del backfill (125); PUNTUAL, encolado por el script, payload { desde, hasta }
 
   @@map("job_tipo")
 }

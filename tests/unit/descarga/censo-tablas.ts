@@ -270,12 +270,26 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     // cablea descarga aquí: eso sería tocar analítica, que la 172 declara fuera de alcance
     // (R68). Lo que sí se cierra es el punto ciego: si mañana alguien la monta en una
     // pantalla, el censo obliga a volver aquí y decidir.
+    //
+    // ── Feature 132 (2026-08-03): ESE MAÑANA LLEGÓ. ──────────────────────────────────────
+    // El tablero financiero de `/analitica` es su PRIMER consumidor, en dos componentes de
+    // servidor, y la guardia se puso roja tal como la 172 prometió. Se vuelve aquí y se
+    // decide: SIGUE `fuera`, pero por un motivo DISTINTO. Ya no es «no la monta nadie»
+    // —eso dejó de ser cierto—, sino que la descarga de la analítica es la feature **134**
+    // (export CSV), declarada explícitamente fuera del alcance de la 132
+    // (`specs/132-analitica-tablero-financiero/requirements.md §1`: «Export CSV → feature
+    // 134. Aquí no hay descarga, ni botón, ni serializador»). Cablearla desde la 132
+    // duplicaría el trabajo de la 134 en el mismo archivo.
     ruta: "components/private/analytics/TablaResumen.tsx",
     tablas: [
       {
         nombre: "Resumen de analítica (componente del paquete 130)",
         estado: "fuera",
-        nota: "envoltorio reutilizable del paquete de analítica SIN consumidor montado en ninguna página (mismo criterio que ZonasModule); cablearlo sería tocar analítica, fuera del alcance de la 172 (R68)",
+        nota: "la descarga de analítica es la feature 134 (export CSV), declarada fuera del alcance de la 132, que es quien la monta por primera vez; el criterio de la 172 (sin consumidor montado) dejó de aplicar",
+        montajes: [
+          "app/(app)/analitica/_components/financiero/PanelConciliacion.tsx",
+          "app/(app)/analitica/_components/financiero/TableroFinanciero.tsx",
+        ],
       },
     ],
   },

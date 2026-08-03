@@ -512,10 +512,14 @@ job. **Producción no se toca ni para leer**, en ningún paso, ni siquiera para 
   `devoluciones`, `rechazos`, `incidentes`), que sí son aditivas. Para los tres estatus terminales
   la columna parece sumable por fecha: **no se suma** (R43 sigue vigente sobre la columna entera).
   Y de D3: **el día en curso no tiene rollup**; lo sirve la 126 en vivo.
-- **→ 135 (catálogo), de D2→B2.** La 124 se aparta de la lectura literal de
-  `ordenes_por_estado.definicion.estados = ORDER_STATUS_SEED`. O el catálogo acota esa definición, o
-  queda declarada la divergencia. Es una discrepancia **de contrato**, no de implementación, y por
-  eso se avisa en vez de resolverse aquí.
+- **→ 135 (catálogo), de D2→B2. CERRADO por la 175 (2026-08-03).** La 124 se aparta de la lectura
+  literal de `ordenes_por_estado.definicion.estados = ORDER_STATUS_SEED`. O el catálogo acota esa
+  definición, o queda declarada la divergencia. Es una discrepancia **de contrato**, no de
+  implementación, y por eso se avisa en vez de resolverse aquí.
+  **Resolución:** la 175 tomó la primera vía y acotó el **universo temporal**, no el vocabulario:
+  `ordenes_por_estado.definicion.universo = "b2_vivas_mas_cierres_del_dia"` y `estados` sigue siendo
+  `ORDER_STATUS_SEED` a propósito (recortar los terminales habría sido falso: B2 sí incluye los que
+  cerraron ese día). Lo vigila `tests/unit/analytics/catalogo-universo.guardia.test.ts`.
 - **→ 122 (alcance por rol).** Sin cambios: el recorte por zona sigue aplicándose sobre
   `orden.zona_id` (D9 de la 135), que es exactamente lo que el rollup escribe (R22).
 

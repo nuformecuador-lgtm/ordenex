@@ -594,6 +594,61 @@ export interface IOrdenRepository {
    * `[]` si no hay. LEE `gestion_orden`, nunca escribe.
    */
   findDetalleByNumGuiaForOwner(numGuia: number, ownerId: string): Promise<ApiOrdenDetalleRow | null>;
+
+  // --- Feature 177: consulta por identificador libre + PDF de etiquetas por API key ---
+
+  /**
+   * Feature 177/R6-R12: hasta DOS filas (como maximo una por columna, dado que `num_guia` y
+   * `num_remision` son `@unique` GLOBALES por separado) que casan por IGUALDAD EXACTA con el
+   * identificador, con el scope FORZADO en el WHERE (`tienda_id = ownerId` +
+   * `deleted_at IS NULL`). `identificador.numGuia` es `null` cuando `{id}` no es un entero
+   * positivo: en ese caso la condicion sobre `num_guia` NO se emite y la resolucion cae solo
+   * en `num_remision` (R8). NUNCA usa `contains`/`startsWith`/`mode` (R10).
+   *
+   * Devuelve AMBAS coincidencias sin desempatar: la precedencia de R14 (`num_guia` gana) es
+   * una regla de NEGOCIO y vive en `ApiOrdenResolucionService`, no en esta query
+   * (`docs/architecture.md` §Capas, design §4.2).
+   */
+  findByGuiaORemisionForOwner(
+    identificador: { numGuia: number | null; numRemision: string },
+    ownerId: string,
+  ): Promise<Array<{ id: string; numGuia: number | null; numRemision: string }>>;
+  /**
+   * Feature 177/R16/R17: MISMO detalle y MISMA proyeccion que
+   * `findDetalleByNumGuiaForOwner`, pero resuelto por `orden.id` (una orden puede tener
+   * `num_guia` NULL, asi que la resolucion de la 177 devuelve el id). `null` si no existe,
+   * esta borrada o es de otro owner. El metodo de la 106 NO cambia de firma ni de resultado.
+   */
+  findDetalleByOrdenIdForOwner(ordenId: string, ownerId: string): Promise<ApiOrdenDetalleRow | null>;
+  /**
+   * Feature 177/R20/R21/R37/R38: lee la referencia persistida del PDF individual
+   * (`orden.download_storage_path`) de una orden del owner. `null` = no hay PDF que reusar,
+   * incluidas las filas heredadas de la 136/141 que tienen `download_url` poblada y esta
+   * columna a NULL (R38). NUNCA lee `download_url`.
+   */
+  findDownloadStoragePathByOrdenForOwner(ordenId: string, ownerId: string): Promise<string | null>;
+  /**
+   * Feature 177/R20/R26: escribe SOLO `orden.download_storage_path`. El `data` del UPDATE
+   * lleva UNA sola clave: no toca `download_url`, `estatus_id`, `num_guia`, `carga_id` ni
+   * ninguna otra columna, y no escribe historial.
+   */
+  setOrdenDownloadStoragePath(ordenId: string, path: string): Promise<void>;
+  /**
+   * Feature 177/R29/R32: carga propia (`usuario_carga = ownerId`) con la referencia
+   * persistida de su PDF consolidado y los ids de sus ordenes VIVAS del owner
+   * (`tienda_id = ownerId` + `deleted_at IS NULL`). `null` si la carga no existe o es de
+   * otro usuario (el service lo traduce a un 404 identico: no filtra existencia).
+   */
+  findCargaConOrdenesForOwner(
+    cargaId: string,
+    ownerId: string,
+  ): Promise<{ downloadStoragePath: string | null; ordenIds: string[] } | null>;
+  /**
+   * Feature 177/R30/R35: escribe SOLO `carga.download_storage_path`. El `data` del UPDATE
+   * lleva UNA sola clave: no toca `download_url` ni ninguna otra columna de `carga`.
+   */
+  setCargaDownloadStoragePath(cargaId: string, path: string): Promise<void>;
+
   /**
    * Feature 106/R19-R26: cancela UNA orden del owner en una sola transaccion (R25). Pre-lee la
    * orden por `num_guia` DENTRO de la tx exigiendo `tienda_id = ownerId` y `deleted_at IS NULL`

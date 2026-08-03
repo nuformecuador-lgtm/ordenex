@@ -215,3 +215,40 @@ describe("middleware — /paquete/[numGuia]", () => {
     expect(con.headers.get("location")).toBeNull();
   });
 });
+
+// --- Feature 177 (R40): los 3 endpoints nuevos cuelgan de `/api/ordenes/api-key` ---
+//
+// El valor de este bloque NO es probar de nuevo `matches()`, sino fijar que la FORMA
+// concreta de las tres rutas nuevas (segmento estatico `orden/`, sufijo `/generate`,
+// `cargaId` uuid) cae bajo el prefijo `/api/ordenes/api-key` de `SELF_AUTH_ROUTES`.
+// Es decir: la 177 NO necesita tocar `middleware.ts`. Si alguien reubicara los
+// handlers fuera del prefijo (o recortara la lista), estos casos se ponen rojos.
+describe("middleware — rutas de la feature 177 bajo SELF_AUTH_ROUTE (R40)", () => {
+  it.each([
+    "/api/ordenes/api-key/orden/ABC-123",
+    "/api/ordenes/api-key/orden/ABC-123/generate",
+    "/api/ordenes/api-key/carga/3f1c2a4e-0000-4000-8000-000000000000/generate",
+  ])(
+    "R40: %s sin cookie de sesion NO recibe 307 a /login (su Bearer lo valida el handler)",
+    async (ruta) => {
+      const res = await middleware(buildRequest(ruta));
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("location")).toBeNull();
+      // Ni siquiera se consulta la DB de sesiones: el guard de cookie no aplica aqui.
+      expect(isSessionActive).not.toHaveBeenCalled();
+    },
+  );
+
+  // CONTROL NEGATIVO: sin este caso el bloque anterior pasaria incluso si el
+  // middleware dejara pasar cualquier cosa. Un pathname vecino que NO cuelga del
+  // prefijo debe seguir guardado por sesion.
+  it("R40 (control): /api/ordenes/orden/ABC-123 (fuera del prefijo api-key) sigue siendo privada y redirige a /login", async () => {
+    const res = await middleware(buildRequest("/api/ordenes/orden/ABC-123"));
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location") as string).pathname).toBe(
+      "/login",
+    );
+  });
+});

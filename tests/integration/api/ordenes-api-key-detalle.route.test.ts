@@ -32,7 +32,11 @@ function okDetalle(overrides: Partial<ApiOrdenDetalleDTO> = {}): ApiOrdenDetalle
 }
 
 function fakeService(detalle: ApiOrdenDetalleDTO | null): IApiOrdenLecturaService {
-  return { listar: vi.fn(), detalle: vi.fn().mockResolvedValue(detalle) };
+  return {
+    listar: vi.fn(),
+    detalle: vi.fn().mockResolvedValue(detalle),
+    detallePorOrdenId: vi.fn(), // feature 177: metodo hermano, no usado por este endpoint
+  };
 }
 
 function deps(auth: ApiKeyAuthResult, service: IApiOrdenLecturaService): DetalleApiDeps {

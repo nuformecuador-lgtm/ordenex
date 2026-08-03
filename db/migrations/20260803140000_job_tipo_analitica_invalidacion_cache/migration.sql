@@ -1,0 +1,18 @@
+-- Feature 128 (design §7.1/§9): anade el 8.º valor al enum `job_tipo` —
+-- `analitica_invalidacion_cache`, el job PUNTUAL que invalida la cache por tag del dominio
+-- `analitica:operativa` despues de que el backfill historico de la 125 recompute un rango.
+--
+-- POR QUE EXISTE ESTE JOB Y NO UNA LLAMADA DIRECTA: `revalidateTag` LANZA fuera de un request
+-- de Next («Invariant: static generation store missing»,
+-- node_modules/next/dist/server/web/spec-extension/revalidate.js:104-107) y el backfill es un
+-- proceso `tsx`. El script encola; el cron `app/api/cron/procesar-jobs` —que corre cada
+-- minuto— drena e invalida dentro de un request, con reintentos, backoff y dead-letter gratis.
+--
+-- POR QUE ESTA MIGRACION VA SOLA: Postgres NO permite USAR un valor de enum en la misma
+-- transaccion que lo anadio (error 55P04). Prisma Migrate corre cada migration.sql en una
+-- transaccion. Mismo criterio que 20260801100000_job_tipo_analitica_rollup_diario (feature
+-- 124), 20260721120000_job_tipo_webhook_estado (feature 99) y
+-- 20260723120000_job_tipo_whatsapp_template_sync.
+--
+-- Aditiva: no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'analitica_invalidacion_cache';
