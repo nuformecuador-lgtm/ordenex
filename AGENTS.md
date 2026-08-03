@@ -166,6 +166,27 @@ Feature con `depends_on` no arranca hasta que su dependencia este `done`.
 12. (F2.6) Añade un resumen a `progress/history.md` (append-only) y limpia la
     feature de `progress/current.md`.
 
+## Regla del gate: quien corre que (2026-08-03)
+
+**Ningun subagente corre la suite completa.** Ni `frontend_dev`, ni `backend_dev`, ni el
+`reviewer`. El reparto es:
+
+| Quien | Que corre |
+| --- | --- |
+| `frontend_dev` / `backend_dev` | `pnpm typecheck`, `pnpm lint`, y **solo** sus archivos nuevos + los que su cambio pueda romper (`pnpm exec vitest related --run <archivos>`) |
+| `reviewer` | lo que necesite para verificar sus hallazgos, incluida la suite si sospecha una regresion |
+| **leader** | `./init.sh --rapido` al cerrar cada tanda · `./init.sh` **completo** al cerrar la feature y antes del PR |
+
+**Por que, y no es teorico.** En la sesion del 2026-08-02 (feature 172) **cinco subagentes
+murieron por cortes de stream de la API**, y los cinco cayeron en la fase de verificacion larga:
+una corrida de ~4 minutos sin emitir nada es tiempo suficiente para que el stream se rompa.
+Reanudarlos cuesta replicar 250k+ tokens de contexto y a veces vuelve a caer en el mismo punto.
+En cuanto se les dijo *«corre solo tus archivos, el gate lo corro yo»*, dejaron de caerse.
+
+Ademas el subagente **no tiene el contexto para juzgar un rojo ajeno**: no sabe si un fallo en
+`CuentasPorPagarTable` es el flake conocido de jsdom de esta maquina o una regresion suya. El
+leader si. Un rojo mal diagnosticado por un subagente cuesta mas que la corrida que se ahorro.
+
 ## Regla anti telefono-descompuesto
 
 Los subagentes **no** devuelven todo su trabajo por el chat. Escriben en disco y

@@ -1,10 +1,23 @@
-// Registra los matchers de @testing-library/jest-dom (toBeInTheDocument,
-// toHaveAttribute, etc.) para todos los archivos de test. Es un no-op
-// inocuo en los tests que corren en entorno "node" (backend), y necesario
-// para los tests de componente que corren en "jsdom".
+// Registra los matchers de @testing-library/jest-dom (toBeInTheDocument, toHaveAttribute, etc.)
+// para los tests de componente, que corren en "jsdom".
 import { vi } from "vitest";
 
-import "@testing-library/jest-dom/vitest";
+// El import va CONDICIONADO al entorno, y no por elegancia: era gratis en correccion y caro en
+// tiempo. `@testing-library/jest-dom/vitest` arrastra los matchers de DOM y se cargaba en los
+// 804 archivos, pero **617 corren en entorno `node`** (backend) y ninguno los usa: alli era un
+// no-op que igualmente habia que importar, resolver y evaluar en cada worker.
+//
+// Medido el 2026-08-03 sobre `tests/unit/services` (130 archivos, 2.270 tests, todos node):
+//
+//     CON el import incondicional:  14,35 s  (setup 51,19 s de CPU acumulada)
+//     SIN el import:                10,94 s  (setup 0 ms)   <- mismos 2.270 en verde
+//
+// O sea: el ARRANQUE costaba 5x mas que ejecutar los tests. Con `await import` dinamico el
+// coste se paga solo en los 187 archivos que declaran `// @vitest-environment jsdom`, que son
+// los unicos que tienen `window` y los unicos que usan los matchers.
+if (typeof window !== "undefined") {
+  await import("@testing-library/jest-dom/vitest");
+}
 
 // `react-countup` anima el valor DESDE 0 (`start={0}` explícito en `KpiValorAnimado`), asi
 // que en el primer render un KPI vale "0" y solo llega a su valor real cuando la animacion
