@@ -215,9 +215,11 @@ const CATALOGO = [
     clase: "snapshot",
     unidad: "conteo",
     unidadDeConteo: "gestion",
-    // `declarada`: ni la ficha de la 126 ni las medidas del rollup de la 123 la
-    // comprometen (el resultado `incidente` llego con la 154/158, despues del lote).
-    estadoProduccion: "declarada",
+    // `producida` desde ⟨D11⟩ (humano, 2026-08-03 — ver `progress/decision_175.md`). Decia
+    // `declarada` afirmando que el rollup no la compromete, y es falso: `analytics_daily` tiene
+    // su columna real `incidentes` (`db/schema.prisma:1891`, «4.o termino de
+    // DENOMINADOR_GESTIONES (R18)»), asi que la 126 ya divide entre ella en las tres tasas.
+    estadoProduccion: "producida",
     granos: ["fecha", "zona", "tienda", "mensajero"],
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
@@ -237,9 +239,11 @@ const CATALOGO = [
     clase: "snapshot",
     unidad: "conteo",
     unidadDeConteo: "orden",
-    // `declarada`: la ficha de la 126 no la nombra y no es una medida del rollup de la
-    // 123; el estado si aparece dentro del embudo `ordenes_por_estado`.
-    estadoProduccion: "declarada",
+    // `producida` desde ⟨D11⟩ (humano, 2026-08-03 — ver `progress/decision_175.md`). Decia
+    // `declarada` porque la ficha de la 126 no la nombra, pero la 126 SI la sirve: la deriva del
+    // embudo, proyectando la medida `ordenes_estado_stock` sobre este estatus
+    // (`lib/services/AnaliticaOperativaService.ts:88,316-318,348-362`).
+    estadoProduccion: "producida",
     granos: ["fecha", "zona", "mensajero"],
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
