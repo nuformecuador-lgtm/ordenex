@@ -2138,3 +2138,274 @@ las tandas B y C hasta el punto de que su fuente no nombra ni una categoría ni 
 fecha cada fila con la coordenada de **su origen** —con la mutación obligatoria ejecutada, roja en 5
 tests y también **contra Postgres**— y es idempotente por índice: dos pasadas seguidas insertan
 **0** la segunda, y sobre datos que ya pasaron por el camino vivo tampoco duplica.
+
+---
+
+# TANDA F — Analítica `[P4]`
+
+> Tasks cubiertas: **`T F.1`, `T F.2`, `T F.3`, `T F.4`**. Cubre **R51–R57**.
+> Zona: backend. Rama: `feature/173-caja-tesoreria`.
+
+## F1. Qué se hizo, en una frase
+
+La analítica financiera pasa de ocho métricas a **diez**: la de salidas de la caja **declara** que
+desde esta feature incluye el dinero entregado a las tiendas, y nacen **`dinero_en_caja`** y
+**`ganancia_ordenex`**, servidas por el mismo repositorio y derivadas con `derivarCaja` — sin una
+sola resta nueva.
+
+## F2. La autorización para tocar `lib/analytics/metrics.ts`
+
+`lib/analytics/metrics.ts` es el catálogo de la 135 y **fuente única de trece features**. La 127
+dejó la norma escrita: cada cambio necesita **autorización humana fechada, y no se hereda**. La de
+esta feature es **`progress/decision_F2_173.md`** (⟨P4⟩, humano, 2026-08-03) y autoriza
+**exactamente tres cosas**. El diff sobre ese archivo son **cuatro hunks y tres líneas borradas**:
+
+| Hunk | Qué | ¿Autorizado? |
+| --- | --- | --- |
+| `@@ -3,8 +3,10` | el conteo del encabezado: `23` → `15 + 10 = 25`, citando la decisión | consecuencia directa de (2) y (3): dejarlo en 23 sería mentira en el propio archivo |
+| `@@ -382,7 +384,7` | el rótulo de sección `8 FINANCIERAS` → `10 FINANCIERAS` | idem |
+| `@@ -453,8 +455,13` | **la `descripcion` de `egresos`** + comentario que cita la decisión | **(1)**, R53 |
+| `@@ -480,6 +487,88` | **`dinero_en_caja` y `ganancia_ordenex`**, insertadas tras `egresos` | **(2)** y **(3)**, R54 |
+
+Las **tres únicas líneas borradas** del archivo son esas dos de conteo y la descripción vieja de
+`egresos`. **`id` y `etiqueta` de `egresos` no se tocan** (no aparecen en el diff).
+
+**Lo que la autorización excluye y este diff NO hace** —comprobado, no prometido, por el caso
+«y NO gana el reverso de la anulación ni ningún ingreso» de la guardia nueva—:
+
+- **no** se añade `ingreso_ajuste` (ni ningún ingreso) a `definicion.categorias` de `egresos`: eso
+  cambiaría el número de una métrica de dinero **ya publicada** y está dirigido a la **175**
+  (§H7/§H10 de este mismo archivo);
+- **no** se parte `egresos` en dos ids (opción (c) de P4, que el humano no eligió);
+- **no** se toca ninguna métrica de la 126 ni las tres divergencias que la 175 ya tiene dirigidas.
+
+## F3. Archivos
+
+### Creados
+- `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` — la guardia de `T F.1` (16 casos).
+
+### Modificados (código)
+- `lib/analytics/metrics.ts` — los tres puntos de la autorización, y nada más.
+- `lib/types/analitica-financiera.ts` — `IDS_FINANCIERAS_SERVIDAS` pasa a **10**; dos comentarios de
+  cabecera que decían «ocho» y «siete» dejan de mentir.
+- `lib/services/AnaliticaFinancieraService.ts` — dos entradas de despacho + el manejador
+  `deTesoreria`, que **reusa `derivarCaja`**.
+
+### Modificados (tests que cambian a propósito)
+- `tests/unit/services/analitica-financiera-service.test.ts` — `+11` casos (R54, R55) y el mapa de
+  `esAcumulado` con las dos nuevas.
+- `tests/unit/services/analitica-financiera-conciliacion.test.ts` — `+4` casos de `T F.4` (R56).
+- `tests/unit/analytics/financiera-ingresos-repo.test.ts` — `+4` casos de `T F.4` (R57).
+- **Censo de conteo, 13 archivos**: `metrics.test.ts`, `metrics-dinero.guardia`, `alcance.test.ts`,
+  `alcance-matriz`, `alcance-dinero.guardia`, `alcance-fuente-unica.guardia`, `aislamiento.guardia`,
+  `financiera-alcance.guardia`, `financiera-borde.guardia`, `financiera-contratos`,
+  `financiera-correspondencia.guardia`, `financiera-produccion.guardia` y
+  `tests/integration/actions/analitica-financiera-action.test.ts`. **23 → 25** métricas y **8 → 10**
+  financieras; `115 → 125`, `46 → 50`, `24 → 30`, `460 → 500` casos barridos.
+
+> Sobre el censo: son **anclas de conteo escritas a mano a propósito** (es lo que las hace útiles),
+> no aserciones que se hayan debilitado. Cada una queda con el número nuevo **y** con la referencia
+> a la decisión, para que el siguiente que las lea sepa por qué cambiaron. Ninguna pasó de un
+> `toBe(n)` a un `toBeGreaterThan`.
+
+### Desviación declarada de `tasks.md`
+`T F.4` nombra `tests/unit/repositories/ingresos-analitica-repository.test.ts`. **Ese archivo no
+existe**: la suite real del repositorio de la caja es
+`tests/unit/analytics/financiera-ingresos-repo.test.ts` (127 / T C.1). Los casos de R57 se añaden
+**ahí**, junto a los que ya vigilan lo mismo, en vez de crear un archivo nuevo con la mitad del
+material duplicado. Igual con `metrics-descripciones.test.ts` de la trazabilidad de R53: la
+descripción se afirma en la guardia nueva y en `metrics.test.ts`, que ya existen.
+
+## F4. `T F.1` — la guardia se lee del `Record`, no de una lista copiada
+
+Lo que **no** se hizo: escribir en el test una lista `CATEGORIAS_PROHIBIDAS = [...]`. Con esa copia,
+el día que el enum gane una cuarta categoría de terceros el archivo seguiría verde **sin haberla
+mirado nunca**. La clasificación se lee de `NATURALEZA_POR_CATEGORIA` (`T A.4`), que es un `Record`
+**total** sobre el union: quien añade la categoría **tiene** que decidir de quién es ese dinero o no
+compila.
+
+Que se lee de ahí **está medido, no afirmado**: el caso «el guardia lee el Record de verdad» muta
+`NATURALEZA_POR_CATEGORIA.ingreso_flete` a `"terceros"` en memoria y comprueba que la métrica pasa a
+salir señalada, restaurándolo en el `finally`. Con la lista copiada, ese caso seguiría dando `[]`.
+
+**Mutación ejecutada (1 de 3 de esta tanda).** Añadir `ingreso_cod_recaudado` a
+`definicion.categorias` de `ingreso_flete` en el catálogo:
+
+```
+ × ninguna de las tres declara una categoria de naturaleza terceros
+ × y siguen declarando exactamente las categorias con las que la 127 las publico
+ × el guardia lee el Record de verdad: moverle una categoria lo pone rojo
+      Tests  3 failed | 9 passed (12)
+```
+
+Revertida.
+
+**R52 — `cod_recaudado` no gana la caja como tercera fuente**, y se afirma por los dos lados: en el
+catálogo (sus cuatro categorías siguen siendo las de otros vocabularios —el `Record` de la caja no
+conoce ninguna—, y `fuente.tablas` sigue teniendo **dos** tablas, sin `wallet_movimiento`) y **en
+ejecución**: se siembra `ingreso_cod_recaudado: 9999.00` **en la caja** y se comprueba que la
+consulta de `cod_recaudado` produce sus dos vistas **sin llamar ni una vez** al repositorio de la
+caja y sin que ese 9999.00 aparezca en el DTO.
+
+## F5. `T F.3` — el manejador no reimplementa ninguna resta
+
+`deTesoreria` hace tres cosas y ninguna es aritmética de dinero con signo:
+
+1. pide al repositorio **el mismo** agregado `(categoria, tipo, suma)` que ya usaban las cuatro
+   métricas de la 127;
+2. renombra `suma` a `total` (el campo que `AgregadoCajaRow` declara) y llama a **`derivarCaja`**;
+3. publica como `neto` **una** de las dos cifras derivadas, elegida por un **selector explícito por
+   métrica** en el despacho (`(r) => r.enCaja` / `(r) => r.ganancia`), no por un `if` sobre el id.
+
+La partición por naturaleza y las tres restas con signo viven en `lib/utils/caja-tesoreria.ts`, que
+a su vez reusa `derivarBalance` (R9/R20). Hay un caso **estructural** que lo fija, acotado al cuerpo
+del método —el archivo entero sí tiene una resta legítima, la del cuadre de la conciliación—: exige
+`derivarCaja(` y prohíbe `.sub(`, `.minus(`, `new Prisma.Decimal` y `derivarBalance(` dentro de
+`deTesoreria`.
+
+**Y se mide con números, no solo con estructura.** Sobre un libro con las tres clases de dinero a la
+vez (1000 flete + 130 IVA − 400 sueldo + 5000 COD − 3000 pago a tienda + 200 reverso):
+
+| | `bruto` | `neto` |
+| --- | --- | --- |
+| `dinero_en_caja` | 9730.00 | **2930.00** |
+| `ganancia_ordenex` | 9730.00 | **730.00** |
+
+Un manejador que reusara `derivarBalance` como `deCaja` devolvería **2930.00 también para la
+ganancia**. Y quitar del libro las tres filas de terceros **no mueve** la ganancia (730.00 en los dos
+casos) pero **sí** mueve la caja: si las dos se movieran igual, serían la misma cifra.
+
+### El guardia de coherencia catálogo ↔ servicio sigue fallando por los DOS lados
+
+`tasks.md` lo pide con las dos mutaciones, y se corrieron **las dos** (2 y 3 de 3 de la tanda):
+
+| Mutación en `AnaliticaFinancieraService.ts` | Resultado |
+| --- | --- |
+| **por defecto** — se borra `ganancia_ordenex` del despacho | `× falla por DEFECTO: no queda ninguna financiera del catalogo sin despachar` + 11 rojos más |
+| **por exceso** — se añade `margen_bruto: (c) => this.deRecaudo(c)` | `× falla por EXCESO: el servicio no inventa ningun id que el catalogo no tenga` + 14 rojos más |
+
+Las dos revertidas. Además se añadió un caso que ejercita **las dos direcciones con los ids reales**
+del servicio (quitar uno / añadir uno inventado) en vez de con arrays de mentira, y otro que
+comprueba que las dos métricas nuevas están en **las tres fuentes independientes**: catálogo,
+`idsServidos` del servicio y `IDS_FINANCIERAS_SERVIDAS`.
+
+## F6. `T F.4` — la no-regresión más importante de la tanda
+
+Desde la Tanda B, aprobar un cierre del día escribe **también** en la caja (`ingreso_cod_recaudado`,
+`origen_tipo = cierre_dia`). `sumarLedgerPorOrigenDeCierre` agrupa los **tres** libros por origen, así
+que esas filas **empiezan a aparecer** en la entrada de la conciliación sin que nadie las pida. Si el
+cuadre las sumara, la 127 declararía un descuadre **permanente sobre datos correctos** — y un aviso
+que suena siempre es un aviso que alguien apaga.
+
+El fixture **no es casual**: cada fila de caja vale **exactamente** lo que su cierre acreditó (500 y
+200), y en el escenario descuadrado la fila de caja vale **justo los 50 que faltan**. Se compara el
+objeto `cuadre` **entero** con `toEqual` contra el de sin ellas, en los dos escenarios:
+
+- cuadrado + COD en caja → idéntico, `totalLedger` sigue en `700.00`, `cuadra: true`;
+- descuadrado + COD en caja que tapa el hueco → idéntico, `cuadra: false`, `diferencia: "50.00"`,
+  `cierresDescuadrados: ["c2"]`, **una** llamada al logger.
+
+**Mutación ejecutada (extra).** Relajar `esCreditoDeTienda` a `tipo === "credito" || tipo ===
+"ingreso"` (o sea: que el cuadre sume la caja):
+
+```
+ × R56 · el cuadre con COD en la caja es IDENTICO al de sin ellas, campo por campo
+ × R56 · y el descuadre real NO se tapa aunque la caja tenga justo el dinero que falta
+ (+ 8 rojos de R23/R24 de la 127)
+      Tests  10 failed
+```
+
+Revertida.
+
+**Lado repositorio (R57):** `ganancia_ordenex` **ni siquiera le pide a la base** las tres categorías
+de terceros —se comprueba el `where.categoria.in`, que trae **14**—, así que la protección es doble
+y cada mitad se mide donde vive: el `WHERE` en el repositorio y la partición por naturaleza en el
+servicio. Y la validación ruidosa sigue mordiendo: con `dinero_en_caja` mutada en memoria para
+declarar `cod_recaudado` (categoría del ledger de **tienda**), la consulta **lanza**
+`…categorias que la caja principal no tiene: cod_recaudado`.
+
+## F7. Trazabilidad `R<n>` → test
+
+| R | Test que lo verifica |
+| --- | --- |
+| R51 | `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts` — «ninguna de las tres declara una categoria de naturaleza terceros», «y siguen declarando exactamente las categorias con las que la 127 las publico», «el guardia lee el Record de verdad» (mutación) + `analitica-financiera-service.test.ts` — «R51 en el servicio: anadir contra-entrega NO mueve la ganancia y SI mueve la caja» |
+| R52 | idem — «no declara ninguna categoria de la caja principal», «sus fuentes declaradas siguen siendo dos, y `wallet_movimiento` no esta», «y en ejecucion produce DOS vistas sin preguntarle nada al libro de la caja» (con 9999.00 sembrado en la caja) |
+| R53 | `metrics-caja-naturaleza.guardia.test.ts` — «declara UNA sola categoria de terceros, y es el pago a la tienda» y «y NO gana el reverso de la anulacion ni ningun ingreso» + `tests/unit/analytics/metrics.test.ts` (censo del catálogo) |
+| R54 | `tests/unit/services/analitica-financiera-service.test.ts` — «`dinero_en_caja` es entradas − salidas…» (2930.00), «`ganancia_ordenex` deja fuera el dinero de terceros: 730, no 2930», «las dos cifras son DISTINTAS sobre el mismo libro», «un libro sin dinero de terceros hace coincidir las dos», «el manejador REUSA `derivarCaja`…» + `metrics-caja-naturaleza.guardia.test.ts` — las tres listas contra el `Record` |
+| R55 | `analitica-financiera-service.test.ts` — «falla por DEFECTO», «falla por EXCESO», «con los ids REALES: quitar uno se detecta, y anadir uno inventado tambien», «las dos metricas nuevas estan en las TRES fuentes independientes» + `financiera-produccion.guardia.test.ts` y `financiera-correspondencia.guardia.test.ts` |
+| R56 | `tests/unit/services/analitica-financiera-conciliacion.test.ts` — «el cuadre con COD en la caja es IDENTICO al de sin ellas, campo por campo», «y el descuadre real NO se tapa aunque la caja tenga justo el dinero que falta», «los fixtures no son inocuos…» |
+| R57 | `tests/unit/analytics/financiera-ingresos-repo.test.ts` — «y la validacion sigue reventando si una de ellas declarara una categoria ajena», «`ganancia_ordenex` no llega a ver el dinero de terceros: lo excluye ya el WHERE» |
+
+## F8. Gate ejecutado
+
+> Gate **acotado**, el que ordenó el leader. La suite completa NO se corrió.
+
+**`pnpm typecheck`** → `tsc --noEmit`, sin salida, **exit 0**.
+
+**`pnpm lint`**
+
+```
+✖ 27 problems (0 errors, 27 warnings)
+```
+
+**0 errores.** Las 27 advertencias son las mismas de las tandas anteriores (`_args`, `_zonaId`… en
+suites ajenas): **ninguna** cae en un archivo de esta tanda — comprobado filtrando la salida por los
+archivos tocados, cero coincidencias.
+
+**`pnpm exec vitest related --run`** sobre los ocho archivos de la tanda
+
+```
+ Test Files  53 passed (53)
+      Tests  621 passed (621)
+   Duration  4.70s
+```
+
+**`pnpm exec vitest run guard`**
+
+```
+ Test Files  48 passed (48)
+      Tests  701 passed (701)
+   Duration  3.93s
+```
+
+Delta contra la Tanda E (**683**): **+18**, y los dos sumandos están explicados — **+16** de la
+guardia nueva y **+2** de `financiera-borde.guardia.test.ts`, que genera **un caso por métrica
+servida** recorriendo `IDS_FINANCIERAS_SERVIDAS` (8 → 10). **Cero rojos ajenos.**
+
+**`pnpm exec vitest run tests/integration/db tests/integration/actions`**
+
+```
+ Test Files  117 passed (117)
+      Tests  1448 passed (1448)
+   Duration  26.93s
+```
+
+**Idéntico a la Tanda E** (117 / 1448): esta tanda no añade ningún test de integración, solo corrige
+dos conteos dentro de uno existente. Que ese archivo pase importa: las dos métricas nuevas responden
+`ok` a un maestro **contra Postgres real**, y `403` genérico auditado a un `adminTienda`.
+
+**Barrido extra** (no exigido, para ver el efecto del cambio de catálogo en las dos zonas que más lo
+consumen): `pnpm exec vitest run tests/unit/analytics tests/unit/services` → **199 archivos / 3224
+tests, todo verde**.
+
+**No corrido aquí:** `./init.sh --rapido` ni `./init.sh` completo. Los corre el leader.
+
+## F9. Lo que queda abierto (y no es de esta tanda)
+
+- **La 175** sigue siendo la dueña de las tres divergencias ya dirigidas, y ahora también del
+  hallazgo `neto`/`bruto` de §H7/§H10. **Nada de eso se tocó aquí**, y la guardia nueva lo fija con
+  una aserción explícita (`egresos` sin `ingreso_ajuste` ni `ingreso_reverso_pago_tienda`) para que
+  no se cuele «de paso» en un futuro diff.
+- **`T G.1`/`T G.3`** consumen `verResumenCaja` (Tanda D), no estas dos métricas: el tablero de la
+  analítica (`AnaliticaShell`) **está vacío** porque la 131 no está hecha. Las dos métricas nuevas
+  quedan servidas y sin pantalla, y eso es lo que `design.md §7` declara.
+
+## F10. Veredicto de la Tanda F
+
+TANDA F entregada completa: el catálogo cambia **exactamente** en los tres puntos que
+`progress/decision_F2_173.md` autoriza —cuatro hunks, tres líneas borradas, `id` y `etiqueta` de
+`egresos` intactos—, la guardia de R51/R52 se lee del `Record` de naturaleza y lo demuestra
+mutándolo, el manejador nuevo no reimplementa ni una resta (estructural **y** numérico: 730 ≠ 2930),
+el guardia de coherencia sigue mordiendo por exceso **y** por defecto —medido con las dos
+mutaciones— y la conciliación de la 127 da **exactamente** el mismo cuadre con COD en la caja,
+incluso cuando ese COD vale justo el dinero que falta.
