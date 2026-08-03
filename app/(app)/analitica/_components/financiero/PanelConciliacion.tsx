@@ -42,7 +42,11 @@ const TEXTOS = {
   detalle: "Detalle por nivel y estado",
   cantidad: "Cierres",
   efectivo: "Efectivo",
-  simpe: "SIMPE",
+  // "SINPE" con N: es la grafia canonica del repo (`lib/types/metodo-pago.ts:14`,
+  // `lib/analytics/metrics.ts:404`). La grafia con M es el literal historico que la
+  // feature 118 renombro y que `tests/unit/guards/censo-simpe.test.ts` prohibe en
+  // todo el arbol. La CLAVE del DTO si va en minusculas (`ClaveTotalCierre`).
+  simpe: "SINPE",
   transferencia: "Transferencia",
   general: "General",
   totalSnapshot: "Total declarado en los cierres",

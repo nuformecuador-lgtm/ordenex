@@ -153,7 +153,7 @@ tres archivos si alguna respuesta cambia el diseño.
       *Hecho:* guard en verde y sus cuatro autocomprobaciones fallando cuando se les inyecta el
       patrón prohibido.
 
-- [ ] **T5.3 — Verificar el build de producción.** `pnpm exec next build`. **Nunca `pnpm build`**
+- [x] **T5.3 — Verificar el build de producción.** `pnpm exec next build`. **Nunca `pnpm build`**
       (encadena `migrate deploy` contra una base real).
       → **R11**. Depende de: T5.2.
       *Hecho:* salida del build pegada en `progress/impl_132.md`, terminando sin error. Si falla
