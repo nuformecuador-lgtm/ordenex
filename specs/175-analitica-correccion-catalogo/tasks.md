@@ -8,29 +8,30 @@
 
 ## T0 — Puerta de preguntas abiertas (BLOQUEA EL ARRANQUE)
 
-Espejo de `requirements.md §3`. **Q1 y Q2 bloquean**; el resto tiene default aplicable.
+Espejo de `requirements.md §3`. **PUERTA CERRADA el 2026-08-03**: el humano ratificó las siete con
+la recomendación escrita. **La decisión de Q1/Q2 vive en `progress/decision_175.md`** ⟨D11⟩, que es
+el artefacto fechado que `metrics.ts:5-7` exige para tocar el catálogo.
 
-- [ ] **T0.1 (BLOQUEANTE, Q1)** Ratificación humana de `incidentes` → `producida`, como decisión
-      **fechada** (precedente ⟨D8⟩ de la 127).
-      *Recomendación:* ratificar al aprobar la spec.
-      *Hecho cuando:* existe `progress/decision_175.md` con fecha, decisión y motivo.
-- [ ] **T0.2 (BLOQUEANTE, Q2)** ¿`sin_gestionar` pasa también a `producida`?
-      *Recomendación:* **sí**; implica reexpresar `metrics.test.ts:273`.
-      *Hecho cuando:* la respuesta está escrita en `progress/decision_175.md` y R3/R4 quedan
-      activados o retirados en consecuencia.
-- [ ] **T0.3 [P] (Q3)** ¿Se puede tocar `lib/analytics/types.ts` con dos campos opcionales?
-      *Default si no hay respuesta:* **sí** (aditivo). Si es «no», se aplica el plan B de
-      `design.md §7 · Alternativa 1` y se rebaja la fuerza de R5/R9.
-      *Hecho cuando:* la decisión está registrada.
-- [ ] **T0.4 [P] (Q4)** Coordinación con la sesión de la **131** sobre
-      `tablero-catalogo-paneles.test.ts:43-44`.
-      *Default:* lo actualiza la 175 en su PR y se avisa a la 131.
-      *Hecho cuando:* hay aviso escrito en `progress/current.md > Conflictos pendientes` o la
-      confirmación de que la 131 ya está mergeada.
-- [ ] **T0.5 [P] (Q5, Q6, Q7)** Nombres de los campos nuevos, absorción de la divergencia 4 y título
-      del caso `definiciones-catalogo.guardia.test.ts:60-62`.
-      *Default:* aceptar las tres recomendaciones.
-      *Hecho cuando:* registradas.
+- [x] **T0.1 (BLOQUEANTE, Q1) RATIFICADA: `incidentes` → `producida`.** Decisión humana fechada del
+      2026-08-03, en `progress/decision_175.md` ⟨D11⟩, con su motivo objetivo: tiene columna real en
+      `analytics_daily` y es el 4.º término de `DENOMINADOR_GESTIONES`.
+- [x] **T0.2 (BLOQUEANTE, Q2) RATIFICADA: `sin_gestionar` → `producida` también.** Es el mismo
+      defecto: la 126 la sirve derivándola del embudo. Consecuencia **aceptada y medida antes de
+      decidir**: el catálogo se queda sin ninguna `declarada` y `metrics.test.ts:273` se pone rojo.
+      **No se relaja ese guard** — se reexpresa sobre catálogo sintético (R4), porque lo que protege
+      es que el filtro PARTICIONE, no que existan métricas sin productor.
+- [x] **T0.3 [P] (Q3) SÍ**: se añaden los dos campos **opcionales** a `DefinicionMetrica`. Es aditivo
+      y de dominio cerrado. El plan B de `design.md §7 · Alternativa 1` queda descartado.
+- [x] **T0.4 [P] (Q4) Lo actualiza la 175 en su propio PR**, y **reexpresándolo**: el caso debe
+      seguir matando la mutación del `filter(estadoProduccion === "producida")` **sin afirmar el
+      valor concreto** del campo (espíritu de R21 de la 131). **Verificado por el leader: el código
+      de la 131 YA ESTÁ EN `dev`** —el registro dice `in_progress` por bookkeeping pendiente, no por
+      trabajo en vuelo—, así que el guard vive en la troncal y esta feature lo encuentra ahí.
+      **Avisar igualmente a la sesión de la 131 antes de mergear.**
+- [x] **T0.5 [P] (Q5, Q6, Q7) Aceptadas las tres**: nombres y dominios de los campos nuevos; la
+      divergencia 4 (el literal «19 values» cuando el seed tiene 20 desde la 157) entra AQUÍ por
+      vivir dentro del mismo string que ya se reescribe; y se corrige el título de
+      `definiciones-catalogo.guardia.test.ts:60-62`, que dice «diecinueve» mientras afirma 20.
 
 ## T1 — Base de tipos (R5, R9, R11)
 
