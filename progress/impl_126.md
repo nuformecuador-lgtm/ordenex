@@ -314,6 +314,51 @@ arrancó cuando ya estaban en el árbol los contratos y la corrección D3 (prime
   archivos nuevos por escribir el value retirado de `order_status`. Se corrigió **mi código**,
   no el guardia.
 
-### Final
+### Final (2026-08-03, sobre `cdf29898`)
 
-Ver §10 (rellenado tras la última corrida).
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida: limpio)
+
+$ pnpm lint
+✖ 27 problems (0 errors, 27 warnings)
+
+$ pnpm test
+ Test Files  828 passed (828)
+      Tests  10281 passed (10281)
+   Duration  272.05s
+```
+
+### Delta
+
+| | Baseline (degradada) | Final |
+|---|---|---|
+| Archivos | 802 | **828** |
+| Tests | 10018 | **10281** |
+| Rojos | 6 archivos / 7 tests | **0** |
+| «Unhandled errors» de workers | 2 | **0** |
+
+Lectura honesta del delta, siguiendo el aviso del proyecto de **comparar ARCHIVOS y no tests**:
+la corrida final tiene **26 archivos más** que la de baseline. Veinticuatro son los de esta
+feature; los dos restantes son precisamente `MisAsignacionesModule.test.tsx` y
+`CierresAdminModule.test.tsx`, cuyos workers **no arrancaron** en la corrida de baseline y sí en
+la final. Es decir: la baseline estaba **degradada** y reportaba de menos, y los 7 rojos que
+mostraba eran (a) uno mío y real, corregido cambiando mi código —el censo de la 153—, y (b) el
+resto, saturación que no reproduce. **Delta de rojos: 0.**
+
+`pnpm lint`: 27 warnings, 0 errores. **Ninguno de los 27 está en un archivo de la 126**
+(comprobado filtrando por `analitica-operativa`, `operativa-`, `_fake-operativa` y `oraculo`:
+cero coincidencias). Todos son `no-unused-vars` preexistentes en tests ajenos.
+
+**No se corrió `pnpm build`**: encadena `migrate deploy` contra una base real
+(memoria del proyecto y nota de T13.3).
+
+---
+
+## 10. Veredicto
+
+**Los 36 requisitos quedan cubiertos con test nombrado y las 40 mutaciones del spec mueren; la
+suite completa queda verde (828 archivos / 10281 tests) sin degradación y con delta 0 de rojos,
+y el riesgo de `design.md §8` no se materializó: T7 está entregado y el intradía sigue siendo
+viable.**
