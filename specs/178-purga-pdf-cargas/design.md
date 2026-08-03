@@ -3,7 +3,7 @@
 Decisiones técnicas ANTES de escribir código. Los requisitos viven en `requirements.md`; aquí
 va el CÓMO.
 
-> **Decisiones del humano del 2026-08-03** (la puerta F1.4 sigue ABIERTA: falta su aprobación del spec; hasta que llegue no se escribe código). (a) fecha de corte **`carga.created_at`** (+ su índice, en alcance);
+> **Puerta F1.4 CERRADA el 2026-08-03** con aprobación explícita del humano. (a) fecha de corte **`carga.created_at`** (+ su índice, en alcance);
 > (b) fallo parcial: **se limpian las columnas igual**, best-effort, **sin reintentos internos**;
 > (c) **cron propio en `vercel.json`**, NO la cola de la feature 90; (d) órdenes con `carga_id`
 > NULL **fuera**; (e) cadencia **DIARIA** a las **03:00 CR**; (f) `N` **≥ 0**, default 7, sin tope,
