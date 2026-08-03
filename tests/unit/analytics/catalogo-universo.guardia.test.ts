@@ -17,8 +17,9 @@ import { NOTA_SIN_GESTIONAR } from "@/lib/types/analitica-operativa";
 //      acumulada.
 //
 // POR QUE EL CASO DE R7 PROHIBE CONTAR EN VEZ DE ACTUALIZAR EL NUMERO: la descripcion del embudo
-// decia «los 19 values»; el seed se ha movido dos veces (la 155 retiro `en_fulfillment` y lo dejo
-// en 19, la 157 anadio `recolectando` y lo subio a 20) y se volvera a mover. Un guard que exija
+// decia «los 19 values»; el seed se ha movido dos veces (la 155 retiro un value —no se nombra
+// aqui: hay un censo que prohibe citarlo— y lo dejo en 19, la 157 anadio `recolectando` y lo
+// subio a 20) y se volvera a mover. Un guard que exija
 // «20» solo compra tiempo hasta el proximo cambio de seed y ademas obliga a editar prosa en cada
 // feature de estados. La correccion DURADERA es que ninguna descripcion cite un conteo de estados:
 // el numero vive en `ORDER_STATUS_SEED` y en ningun otro sitio.
@@ -363,6 +364,26 @@ describe("R11 · analytics_daily no tiene columna sin_gestionar y el catalogo no
         `metrica ${metrica.id}: se declara derivada de ${metrica.definicion.derivadaDe} pero ` +
           "analytics_daily YA tiene su columna; actualiza el catalogo",
       ).toBe(false);
+    }
+  });
+
+  // MUTACION QUE LO MATA: quitar de la descripcion de `sin_gestionar` el inciso «no tiene medida
+  // ni columna propia en el rollup diario». MEDIDA: rojo.
+  //
+  // OJO al vocabulario: la descripcion NO puede nombrar la tabla por su nombre —el censo de
+  // `analytics-daily-guards.test.ts` exige que en `metrics.ts` ese literal aparezca SOLO como
+  // declaracion de fuente (`tablas: [...]`)—, asi que la nocion se dice como «el rollup diario».
+  // Este caso la exige con ese vocabulario para que la prosa no la pierda en silencio.
+  it("toda metrica derivada dice en su descripcion que no tiene medida propia en el rollup", () => {
+    const derivadas = metricasDerivadas();
+    expect(derivadas.length, "ninguna metrica derivada: el caso seria vacuo").toBeGreaterThan(0);
+    for (const metrica of derivadas) {
+      const descripcion = normalizar(metrica.descripcion);
+      expect(
+        /\bno tiene\b[^.;)]*\bpropia\b[^.;)]*\brollup\b/.test(descripcion),
+        `metrica ${metrica.id}: se declara derivada pero su descripcion no dice que NO tiene ` +
+          "medida ni columna propia en el rollup diario",
+      ).toBe(true);
     }
   });
 

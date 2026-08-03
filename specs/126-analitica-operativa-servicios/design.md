@@ -462,6 +462,18 @@ internas van por Server Actions).
 
 ## 9. Divergencias del catálogo heredadas a la ficha 175
 
+> **CERRADAS por la 175 el 2026-08-03.** Las tres se corrigieron en
+> `lib/analytics/metrics.ts` y quedaron con guardia anti-regresión:
+> 1 → `incidentes.estadoProduccion = "producida"` (decisión humana fechada ⟨D11⟩,
+> `progress/decision_175.md`), vigilada por `tests/unit/analytics/catalogo-produccion.guardia.test.ts`;
+> 2 → `ordenes_por_estado.definicion.universo = "b2_vivas_mas_cierres_del_dia"` y descripción
+> reescrita, vigiladas por `tests/unit/analytics/catalogo-universo.guardia.test.ts`;
+> 3 → `sin_gestionar` gana `derivadaDe: "ordenes_por_estado"` + `universo`, pasa a `"producida"`
+> (⟨D11⟩) y su descripción dice «HOY», vigilado por las dos guardias.
+> El riesgo dimensionado hacia la **133** (ocultar un KPI vivo) queda **neutralizado** para estas
+> dos métricas. La lección se mantiene: `estadoProduccion` dice si hay productor, **no** si el panel
+> se pinta.
+
 T0-Q3 = (C): la 126 **no toca** `lib/analytics/metrics.ts`. Estas tres quedan vivas mientras
 tanto, y se repiten en `progress/impl_126.md`:
 
