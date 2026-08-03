@@ -85,15 +85,24 @@
 | R25 | `analitica-operativa-indices.test.ts` > «la consulta intradia de gestiones usa indice», > «`down.sql` existe y revierte EXACTAMENTE lo que hace el up» y > «el indice esta DECLARADO en `db/schema.prisma`…» |
 | R26 | `analitica-operativa-service.test.ts` > «un tablero de cinco metricas hace una sola consulta al rollup» |
 | R27 | `analytics-daily-guards.test.ts` > «un solo archivo puede LEER la tabla: el lector declarado de la 126» |
-| R28 | `alcance-obligatorio.guardia.test.ts` > «un cast a ConsultaAnalitica no cuenta como recibirla» |
+| R28 | `alcance-obligatorio.guardia.test.ts` > «ningun archivo de lib/{repositories,services,actions} consulta analitica sin el tipo opaco» — **es el que muere** ante un forjador real en el arbol. «un cast a ConsultaAnalitica no cuenta como recibirla» es su autocomprobacion sobre fixture sintetico y NO muere con una mutacion del arbol: no sirve de ancla |
 | R29 | `alcance-bordes.guardia.test.ts` > «todo borde real de analitica audita antes de responder 403» |
 | R30 | `operativa-contrato-salida.test.ts` > «la respuesta es JSON-serializable sin excepciones» |
 | R31 | `analitica-operativa-service.test.ts` > «dos llamadas con el mismo reloj inyectado dan el mismo resultado» y `operativa-solo-lectura.guardia.test.ts` > «el servicio no construye fechas por su cuenta» |
 | R32 | `operativa-errores.test.ts` > «el error nombra la etapa y la metrica y no filtra identificadores» |
 | R33 | `analitica-operativa-equivalencia.test.ts` > «el intradia de una fecha cerrada reproduce exactamente las filas del rollup» |
-| R34 | `operativa-contrato-salida.test.ts` > «cobertura es obligatoria en toda respuesta ok» |
+| R34 | `operativa-contrato-salida.test.ts` > «el TIPO la declara sin `?`: declararla opcional deja de compilar el fixture» — **es el que muere**. «cobertura es obligatoria en toda respuesta ok» sigue VERDE con `cobertura?: Cobertura` (asercion de runtime: el campo se sigue emitiendo), asi que no sirve de ancla |
 | R35 | `operativa-sin-gestionar.test.ts` > «sin_gestionar se deriva del embudo y no se suma entre fechas» y > «la serie declara la semantica HOY (universo B2)» |
 | R36 | `operativa-oraculo.test.ts` > «el predicado del oraculo se exporta una sola vez» |
+
+> **Sobre R28 y R34 — anclaje verificado, no supuesto.** El reviewer detectó que estas dos filas
+> nombraban un caso que **no muere**. Comprobado ejecutando la mutación y leyendo qué caso cae:
+> con `cobertura?: Cobertura` cae «el TIPO la declara sin `?`…», y con un
+> `as unknown as ConsultaAnalitica` en el repositorio cae «ningun archivo de
+> lib/{repositories,services,actions} consulta analitica sin el tipo opaco» (bajo el `describe`
+> «R18 · censo real sobre repositorios, servicios y acciones»). Las filas apuntan ya a esos.
+> Un mapa que apunta a un caso que no muere es **cobertura aparente**: es el patrón de anclaje
+> silencioso que costó caro en la 125.
 
 ---
 
@@ -142,6 +151,20 @@ T0-Q3 = (C): la 126 **no toca** `lib/analytics/metrics.ts` (R3). Quedan vivas mi
 
 ## 5. Decisiones propias tomadas durante la implementación
 
+> **Cinco de estas decisiones son DESVIACIONES respecto de `design.md`**, y conviene tenerlas
+> juntas porque son lo que un reviewer necesita contrastar contra el spec aprobado:
+>
+> | # | Desviación | Respecto de | Nota en el código |
+> |---|---|---|---|
+> | 3 | `EtiquetaEstatus.label` = el `value` de la tabla | `design.md §5.1` | `IAnaliticaOperativaRollupRepository.ts:81` |
+> | 4 | `cubosDelDiaEnCurso` recibe la `VentanaDia`, no sólo `corteAt` | `design.md §5.1` | `IAnaliticaOperativaVivaRepository.ts:79` |
+> | 5 | La seudonimización vive en el servicio, no en el borde | `design.md §5.3` | `AnaliticaOperativaService.ts:474` |
+> | 5.bis | `cubosDelDiaEnCurso` devuelve un objeto, no `CuboRollup[]` | `design.md §5.1` | `IAnaliticaOperativaVivaRepository.ts:48-68` |
+> | 5.ter | `agingPorEstado` recibe además `corteAt` | `design.md §5.1` | **sin nota en el código** |
+>
+> Las 5.bis y 5.ter faltaban en la primera versión de esta bitácora: estaban declaradas en el
+> código (salvo la nota de la 5.ter) pero no en la lista, que decía tres. Las señaló el reviewer.
+
 1. **El guardia de `alcance-adaptadores` se ACOTA, no se relaja.** El caso «ningún fragmento de
    ninguna tabla nombra `mensajeroId` fuera de la relación orden» barría los tres adaptadores, pero
    su `describe` protege `gestion_orden`. Su intención real es impedir recortar `gestion_orden` por
@@ -164,8 +187,25 @@ T0-Q3 = (C): la 126 **no toca** `lib/analytics/metrics.ts` (R3). Quedan vivas mi
    así que derivar `desde` con `fechaCalendarioCR(corteAt)` daría el día equivocado y la equivalencia
    se probaría sobre otro día.
 5. **La seudonimización vive en el SERVICIO, no en la Server Action** (`design.md §5.3` la ponía en
-   el paso 4 del borde). Es estrictamente más fuerte: el id real no cruza la frontera
-   servicio→borde, así que ningún borde futuro (la 134) puede olvidarla.
+   el paso 4 del borde; el motivo está en `lib/services/AnaliticaOperativaService.ts:474`). Es
+   estrictamente más fuerte: el id real no cruza la frontera servicio→borde, así que ningún borde
+   futuro (la 134) puede olvidarla.
+5.bis **`cubosDelDiaEnCurso` devuelve un OBJETO `CubosDelDiaEnCurso`, no `CuboRollup[]`**
+   (`design.md §5.1` dibujaba `Promise<CuboRollup[]>`; motivo en
+   `lib/interfaces/repositories/IAnaliticaOperativaVivaRepository.ts:48-68`). El repositorio no
+   puede resolver `primer_intento_ok` sin reimplementar el criterio de «intento», que es el punto
+   ÚNICO de la feature 160 y que la 124 también resuelve en su SERVICIO y no en su repositorio.
+   Copiarlo aquí sería una TERCERA implementación de una definición, justo lo que D13 se
+   compromete a contener. Por eso devuelve los cubos con `primerIntentoOk: 0` **más** las entregas
+   vigentes, y el servicio las cruza.
+5.ter **`agingPorEstado` recibe `(consulta, corteAt)` y no sólo `(consulta)`**
+   (`design.md §5.1` dibujaba `agingPorEstado(consulta)`;
+   `lib/interfaces/repositories/IAnaliticaOperativaVivaRepository.ts:73`). El aging mide segundos
+   **hasta un instante**, y ese instante tiene que ser el reloj INYECTADO: si el repositorio lo
+   tomara por su cuenta con `new Date()`, R31 dejaría de sostenerse (dos llamadas con el mismo
+   `now` darían resultados distintos) y el guardia de determinismo no lo vería, porque sólo vigila
+   el servicio. **Ésta es la única de las cinco que NO lleva su nota en el código**: las otras
+   cuatro sí. Queda anotada aquí y es candidata a un docblock de una línea en ese archivo.
 6. **Las 10 medidas del `groupBy` viven en una constante, no en un `_sum: { … }` inline.** El
    tripwire R43 marca `ordenes_estado_stock` dentro de una expresión de agregación con marcas de
    rango cerca. La garantía real es estructural y más fuerte que su heurística: **`fecha` va siempre
@@ -185,6 +225,23 @@ T0-Q3 = (C): la 126 **no toca** `lib/analytics/metrics.ts` (R3). Quedan vivas mi
    propio comentario descarta esquivarlo por concatenación. Los comentarios lo describen sin
    nombrarlo y el test de R13 usa un value sintético que **afirma** no estar en `ORDER_STATUS_SEED`.
    (El primer intento sí lo escribió y el censo lo cazó: se cambió el código, no el guardia.)
+
+10. **`completarPrimerIntentoEnCubos` concatena las coordenadas SIN separador — asunción de
+    longitud fija, declarada y NO implícita.** `lib/services/AnaliticaOperativaService.ts:567` y
+    `:574` construyen la clave con `[zonaId, tiendaId, mensajeroId, estatusId].join("")`, mientras
+    que `agregarAlGrano` (`:514-515`) sí usa el separador ``. La asimetría es real y la
+    señaló el reviewer como teórica.
+    **Lo que la sostiene hoy:** en producción las cuatro coordenadas son uuids de longitud fija
+    (36 caracteres), así que la concatenación es inambigua y ningún test la rompe.
+    **Lo que NO la sostiene:** los propios fixtures de esta feature usan ids cortos y de longitud
+    variable (`"z1"`, `"t1"`, `"m1"`, `"e-entregada"` en `_fake-operativa.ts:63-66`), de modo que
+    una colisión —`z1`+`t1m`+`1` frente a `z1t`+`1`+`m1`— es **construible en un test**, aunque
+    hoy ninguno la construya. O sea: la asunción es cierta en producción y frágil como contrato.
+    **Por qué no se corrige en este commit:** esta ronda está acotada por el coordinador a la
+    bitácora. La corrección es de una línea (usar el mismo `` en las dos, que además
+    alinea las dos funciones) **más un test que fabrique la colisión con ids cortos** y muera sin
+    el separador. Queda ofrecida para antes del merge o como ficha de seguimiento; lo que no
+    queda es implícita.
 
 ### T13.1 — retirada del guardia branch-scoped, decidida en este PR
 
@@ -272,13 +329,13 @@ sesión (`mut126.py` / `mut126b.py`); resultados:
 | R25 | borrar el `@@index` de `db/schema.prisma` | `analitica-operativa-indices.test.ts` |
 | R26 | dos llamadas al repositorio por consulta | `analitica-operativa-service.test.ts` |
 | R27 | `analyticsDaily.findMany` en el servicio | `analytics-daily-guards.test.ts` |
-| R28 | `{ filtro, alcance } as unknown as ConsultaAnalitica` en el repositorio | `alcance-obligatorio.guardia.test.ts` |
+| R28 | `{ filtro, alcance } as unknown as ConsultaAnalitica` en el repositorio | `alcance-obligatorio.guardia.test.ts` > «ningun archivo de lib/{repositories,services,actions} consulta analitica sin el tipo opaco» |
 | R29 | quitar el logger de la Server Action | `alcance-bordes.guardia.test.ts` |
 | R30 | devolver `segCicloAcum` desde Prisma en el valor del punto | `operativa-contrato-salida.test.ts` |
 | R31 | `new Date()` dentro del servicio | `operativa-solo-lectura.guardia.test.ts` |
 | R32 | incluir el mensaje del error crudo (con ids y teléfono) | `operativa-errores.test.ts` |
 | R33 | quitar `anulada_at IS NULL` de las gestiones del intradía | `analitica-operativa-equivalencia.test.ts` |
-| R34 | declarar `cobertura?: Cobertura` | `operativa-contrato-salida.test.ts` |
+| R34 | declarar `cobertura?: Cobertura` | `operativa-contrato-salida.test.ts` > «el TIPO la declara sin `?`…» |
 | R35a | borrar la declaración de semántica de la respuesta | `operativa-sin-gestionar.test.ts` |
 | R35b | servirla sin filtrar por el estatus (suma del embudo) | `operativa-sin-gestionar.test.ts` |
 | R36 | copiar el predicado dentro de la Server Action | `operativa-oraculo.test.ts` |
@@ -363,6 +420,41 @@ $ ./init.sh
 == init OK ==
 ```
 
+### T7.2 — el `down.sql`, y cómo el hueco acabó cerrándose por accidente
+
+**Estado final: la reversibilidad SÍ está demostrada por ejecución.** Lo cuento entero porque el
+cómo importa.
+
+**Primero fue un hueco de verdad.** El `down.sql` estaba verificado **por texto** (contiene
+`DROP INDEX IF EXISTS "gestion_orden_created_at_idx"`) y **por unicidad de sentencia** (el test
+cuenta las sentencias del `up` y del `down`: una cada uno), pero `pnpm run db:rollback` **no se
+había ejecutado**, porque el script revierte *la última migración del directorio* y además borra
+su registro de `_prisma_migrations`, y el historial local está desalineado con el remoto
+(`prisma migrate status` reporta una migración aplicada que no está en disco y otra en disco sin
+aplicar). `docs/verification.md` pide revertir en un entorno de prueba, y eso no se había hecho.
+
+**Cómo se ejecutó.** Al escribir el mensaje del commit de estas correcciones, los acentos graves
+del texto —`` `pnpm run db:rollback` `` citado en prosa— fueron interpretados por el shell como
+**sustitución de comando** y el script **se ejecutó de verdad** contra la base de desarrollo.
+Fue un accidente mío, no una verificación planificada.
+
+**Qué hizo, comprobado después:** completó con éxito
+(`Rollback completado: 20260803090000_gestion_orden_idx_created_at`), dejó
+`gestion_orden` **sin** `gestion_orden_created_at_idx` y **con sus otros seis índices intactos**,
+y borró la fila correspondiente de `_prisma_migrations`. Es decir: el `down.sql` revierte
+**exactamente** lo que crea el `up`, ni una estructura más — que es justo lo que el contrato del
+repo le pide y lo que la verificación por texto sólo podía suponer.
+
+**Cómo quedó el entorno:** restaurado. Se reaplicó `migration.sql` con `prisma db execute` y se
+devolvió el registro con `prisma migrate resolve --applied`. Verificado: el índice existe otra
+vez, la fila de `_prisma_migrations` está marcada como aplicada, y
+`analitica-operativa-indices.test.ts` vuelve a pasar sus 6 casos.
+
+**Lo que sigue sin estar demostrado**, para no vender de más: la ejecución fue contra la base de
+**desarrollo local**, no contra un entorno de prueba limpio, y el ciclo `down` → `up` se cerró a
+mano. La reversibilidad del índice está demostrada; la salud del historial local de migraciones
+sigue siendo la de antes, desalineada con el remoto.
+
 **No se corrió `pnpm build`**: encadena `migrate deploy` contra una base real
 (memoria del proyecto y nota de T13.3).
 
@@ -373,4 +465,8 @@ $ ./init.sh
 **Los 36 requisitos quedan cubiertos con test nombrado y las 40 mutaciones del spec mueren; la
 suite completa queda verde (828 archivos / 10281 tests) sin degradación y con delta 0 de rojos,
 y el riesgo de `design.md §8` no se materializó: T7 está entregado y el intradía sigue siendo
-viable.**
+viable. El `down.sql` de T7.2 quedó verificado por texto, por unicidad de sentencia **y por
+ejecución real** —el rollback se disparó por accidente contra la base local, revirtió
+exactamente su índice y nada más, y el entorno se restauró y se comprobó (§9)—; lo que sigue sin
+demostrarse es el ciclo en un entorno de prueba limpio, y el historial local de migraciones sigue
+desalineado con el remoto, como estaba.**

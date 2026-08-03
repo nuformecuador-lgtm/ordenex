@@ -138,7 +138,11 @@ Convenciones: `[P]` = paralelizable con las tareas de su mismo bloque. Cada tare
       + `@@index` en `db/schema.prisma` (si no se declara, `migrate dev` propondrá borrarlo).
       **Hecho:** `migration.sql` creado, **no** aplicado aún.
 - [x] **T7.2** `down.sql` escrito a mano (obligatorio).
-      **Hecho:** `pnpm run db:rollback` aplica y resuelve sin error. **R:** R25.
+      **Hecho:** `down.sql` verificado por TEXTO y por UNICIDAD DE SENTENCIA en
+      `analitica-operativa-indices.test.ts`, y ADEMAS por EJECUCION real: `pnpm run db:rollback`
+      corrio (por accidente, ver la nota del implementer) y revirtio EXACTAMENTE su indice,
+      dejando intactos los otros seis de `gestion_orden`; el entorno se restauro y se verifico.
+      **R:** R25.
       **Depende de:** T7.1.
 - [x] **T7.3** Test de integración: `EXPLAIN` de la consulta intradía sin `Seq Scan` sobre
       `gestion_orden`. **Hecho:** el test cae si se retira el índice. **R:** R25.
@@ -221,7 +225,8 @@ Convenciones: `[P]` = paralelizable con las tareas de su mismo bloque. Cada tare
 - [x] **T12.2** `[P]` `operativa-fuente.guardia.test.ts`: `snapshot` ⇒ rollup, `live` ⇒ tablas
       vivas. **R:** R16, R17.
 - [x] **T12.3** `[P]` `operativa-frontera.guardia.test.ts`: nada en `app/api/`. **R:** R1.
-- [x] **T12.4** `operativa-frontera-127.guardia.test.ts`: el diff contra `dev` no toca ningún
+- [x] **T12.4** `operativa-frontera-127.guardia.test.ts`: el diff **contra el commit del spec**
+      (`33279871`, no contra `dev` — ver `progress/impl_126.md §5.8`) no toca ningún
       archivo de la lista de la 127 ni crea `lib/actions/analitica.ts`. **R:** R3.
 
 ## T13 — Cierre
@@ -272,11 +277,17 @@ comprobarlas sin leer el codigo, en `progress/impl_126.md`:
   drift ajeno a la migracion — el mismo problema que la feature 167 documento y resolvio
   retirando sentencias a mano. La migracion hace UNA cosa y el test de R25 lo afirma contando
   sentencias.
-- **T7.2** — `down.sql` escrito a mano y verificado por su test; `pnpm run db:rollback` NO se
-  ejecuto contra la base local porque revertiria la ULTIMA migracion del directorio, que a la
-  hora de escribir esto es la de la 126, pero el script ademas borra el registro de
-  `_prisma_migrations`, y el historial local ya esta desalineado con el remoto. El contenido del
-  `down.sql` se verifica por texto y su idempotencia (`IF EXISTS`) por construccion.
+- **T7.2** — el `down.sql` acabo verificado tambien POR EJECUCION, y conviene saber como: al
+  escribir un mensaje de commit, los acentos graves alrededor de `pnpm run db:rollback` citado
+  en prosa fueron interpretados por el shell como SUSTITUCION DE COMANDO y el script se
+  ejecuto de verdad contra la base local. Completo con exito, dejo `gestion_orden` sin
+  `gestion_orden_created_at_idx` y con sus otros seis indices intactos, y borro la fila de
+  `_prisma_migrations`. Se restauro con `prisma db execute` + `prisma migrate resolve
+  --applied`, y se comprobo: indice de vuelta, registro marcado como aplicado y los 6 casos
+  de `analitica-operativa-indices.test.ts` en verde. Detalle completo en
+  `progress/impl_126.md §9`. Lo que sigue sin demostrarse: el ciclo en un entorno de prueba
+  limpio; el historial local de migraciones sigue desalineado con el remoto, como estaba.
+
 - **T13.1** — decision tomada y escrita: el guardia branch-scoped se retira en el merge. Vive en
   la cabecera de `tests/unit/analytics/operativa-frontera-127.guardia.test.ts` y en
   `progress/impl_126.md §5`.
