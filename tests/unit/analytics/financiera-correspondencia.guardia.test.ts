@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 import { getMetrica, listarMetricas } from "@/lib/analytics/metrics";
+import type { TablaDinero } from "@/lib/analytics/types";
 
 // Feature 127 / T B.3 — GUARDIA DE CORRESPONDENCIA FUENTE ↔ CONSULTA: R4.
 //
@@ -34,6 +35,19 @@ const MODELO_A_TABLA: Readonly<Record<string, string>> = {
   cierreDia: "cierre_dia",
   cierreBodega: "cierre_bodega",
 };
+
+/**
+ * Las mismas cinco, escritas a mano y tipadas: el universo que este guardia PUEDE ver. El
+ * `satisfies` impide ampliarlo con una tabla que no sea de dinero, y el caso del final compara
+ * esta lista contra los valores de `MODELO_A_TABLA` para que las dos no se separen en silencio.
+ */
+const TABLAS_DEL_DINERO = [
+  "wallet_movimiento",
+  "wallet_tienda_movimiento",
+  "pago_mensajero_movimiento",
+  "cierre_dia",
+  "cierre_bodega",
+] as const satisfies readonly TablaDinero[];
 
 const OPERACIONES =
   "findMany|findFirst|findUnique|findFirstOrThrow|findUniqueOrThrow|count|aggregate|groupBy";
@@ -298,19 +312,44 @@ describe("R4 · autocomprobacion del detector con fixtures", () => {
     expect(tablasFueraDe(sinLaCaja, conciliacion)).toEqual(["wallet_movimiento"]);
   });
 
-  it("y el guardia sigue mordiendo: una tabla que conciliacion_cierres NO declara la caza igual", () => {
-    // ⟨D10⟩ amplio la declaracion; no la abrio. `orden` no esta —ni puede estar, es `TablaDinero`
-    // el universo—, y `gestion_orden` tampoco: si el repositorio de la conciliacion bajara ahi,
-    // este caso lo ve.
+  // ⚠ TITULO CORREGIDO (menor 2 del review, 2026-08-02). Se llamaba «una tabla que
+  // conciliacion_cierres NO declara la caza igual» y el fixture no ejercitaba ninguna tabla FUERA
+  // del universo: prometia una vigilancia que este guardia no puede dar. Ahora el fixture SI baja
+  // a `orden` y a `gestion_orden`, y el caso dice las dos verdades —lo que este guardia caza y lo
+  // que delega— en vez de insinuar que caza las dos.
+  it("dentro de su universo muerde; fuera de el no puede, y por eso `orden` la caza financiera-fuente", () => {
     const conElIntruso = `
       export class ConciliacionCierresAnaliticaRepository {
         async a() { return this.prisma.cierreDia.groupBy({ by: ["estado"] }); }
         async b() { return this.prisma.walletMovimiento.groupBy({ by: ["origenId"] }); }
+        async c() { return this.prisma.orden.aggregate({ _sum: { montoCobrar: true } }); }
+        async d() { return this.prisma.$queryRaw\`SELECT SUM(monto) FROM gestion_orden\`; }
       }
     `;
-    // Contra la declaracion real: limpio.
+
+    // (1) Lo que este guardia SI hace: correspondencia DENTRO del universo. Contra la declaracion
+    //     real de ⟨D10⟩ el fixture esta limpio, y contra una que no incluyera la caja, en
+    //     infraccion. Esa es la mordida, y sigue viva.
     expect(tablasNoDeclaradas("conciliacion_cierres", conElIntruso)).toEqual([]);
-    // Contra una declaracion que no incluyera la caja: infraccion.
     expect(tablasFueraDe(["cierre_dia"], conElIntruso)).toEqual(["wallet_movimiento"]);
+
+    // (2) Lo que este guardia NO puede hacer, dicho en una asercion y no en un comentario: su
+    //     universo es `MODELO_A_TABLA`, las cinco `TablaDinero`, asi que `orden` y `gestion_orden`
+    //     le son INVISIBLES por construccion —no aparecen ni con la declaracion mas estrecha—.
+    //     Si alguien ampliara este universo, esta linea obliga a decirlo aqui.
+    expect(Object.values(MODELO_A_TABLA).sort()).toEqual([...TABLAS_DEL_DINERO].sort());
+    expect(tablasConsultadas(conElIntruso)).toEqual(["cierre_dia", "wallet_movimiento"]);
+    expect(tablasFueraDe([], conElIntruso)).not.toContain("orden");
+
+    // (3) Y quien SI las caza existe y sigue nombrandolas: el guardia de fuente (R1/R2/R3/R33).
+    //     Se comprueba por texto y no importandolo, porque importar otro archivo de test
+    //     arrastraria su suite entera dentro de esta.
+    const fuente = fs.readFileSync(
+      path.join(__dirname, "financiera-fuente.guardia.test.ts"),
+      "utf8",
+    );
+    expect(fuente).toContain("export function fuenteProhibida");
+    expect(fuente).toContain("FIXTURE_INFRACTOR_ORDEN");
+    expect(fuente).toContain("gestion_orden");
   });
 });

@@ -187,10 +187,17 @@ describe("R9 · ninguna cifra financiera se recorta por zona, tienda ni mensajer
     expect(infractores).toEqual([]);
   });
 
-  it("el censo mira archivos de verdad: no pasa por conjunto vacio", () => {
+  it("el censo mira los TRECE archivos declarados, todos: no pasa por conjunto vacio ni recortado", () => {
+    // Cierre del menor 1 del review (2026-08-02). El ancla era `>= 3` mas un `toContain`: se
+    // podian borrar diez de los trece modulos y este censo seguia verde juzgando tres. Aqui el
+    // censo tiene UN solo brazo —la lista declarada, sin descubrimiento por import— asi que la
+    // igualdad exacta si se sostiene y no hay nada que mantener a mano de mas: la lista ya
+    // estaba escrita, lo unico que cambia es que ahora se exige entera.
     const censados = archivosDeLaFeature();
-    expect(censados.length).toBeGreaterThanOrEqual(3);
-    expect(censados).toContain("lib/interfaces/repositories/ICuentasPorPagarAnaliticaRepository.ts");
+    expect([...censados].sort()).toEqual([...ARCHIVOS_DECLARADOS].sort());
+    for (const rel of censados) {
+      expect(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8").length, rel).toBeGreaterThan(0);
+    }
   });
 
   it("autocomprobacion: detecta el recorte por tienda que R9 declara como mutacion", () => {

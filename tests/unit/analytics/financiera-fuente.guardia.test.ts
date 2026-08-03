@@ -181,12 +181,21 @@ function archivosDeCodigo(raiz: string): string[] {
 
 const relativa = (abs: string) => path.relative(REPO_ROOT, abs).split(path.sep).join("/");
 
-function archivosDeLaFeature(): readonly string[] {
-  const declarados = ARCHIVOS_DECLARADOS.filter((rel) => fs.existsSync(path.join(REPO_ROOT, rel)));
-  const descubiertos = archivosDeCodigo(path.join(REPO_ROOT, "lib"))
+/** Los declarados que existen HOY en el arbol. */
+function declaradosExistentes(): readonly string[] {
+  return ARCHIVOS_DECLARADOS.filter((rel) => fs.existsSync(path.join(REPO_ROOT, rel)));
+}
+
+/** Los que entran al censo por el brazo de descubrimiento, sin mirar la lista declarada. */
+function descubiertosPorImport(): readonly string[] {
+  return archivosDeCodigo(path.join(REPO_ROOT, "lib"))
     .map(relativa)
-    .filter((rel) => HUELLA_DE_LA_FEATURE.test(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8")));
-  return [...new Set([...declarados, ...descubiertos])].sort();
+    .filter((rel) => HUELLA_DE_LA_FEATURE.test(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8")))
+    .sort();
+}
+
+function archivosDeLaFeature(): readonly string[] {
+  return [...new Set([...declaradosExistentes(), ...descubiertosPorImport()])].sort();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -202,14 +211,43 @@ describe("R1/R2/R3/R33 · censo de fuente sobre los archivos de la 127", () => {
     expect(infractores).toEqual([]);
   });
 
-  it("el censo encuentra archivos de verdad: no pasa por conjunto vacio", () => {
+  it("el censo mira los TRECE modulos declarados, todos: no pasa por conjunto vacio ni recortado", () => {
+    // ⚠ POR QUE NO HAY UNA IGUALDAD EXACTA CONTRA UNA LISTA DE TRECE (cierre del menor 1 del
+    // review, 2026-08-02). El censo tiene DOS brazos: la lista declarada y el descubrimiento por
+    // import. El segundo es abierto por diseño —en cuanto la 132 o la 134 escriban un modulo que
+    // importe algo de la 127, entrara solo—, asi que un `toEqual([...trece])` sobre el censo
+    // ENTERO seria una lista que se desactualiza sola y que el siguiente empujaria hacia abajo.
+    // Lo que si se puede exigir, y es estrictamente mas fuerte que el `>= 3` de antes, son las
+    // tres igualdades de abajo: ninguna de ellas sobrevive a que se borre un archivo del censo.
     const censados = archivosDeLaFeature();
-    // Los tres modulos de la TANDA A ya existen; si esta lista quedara vacia (ruta mal
-    // calculada, feature renombrada), el caso de arriba pasaria sin mirar nada.
-    expect(censados.length).toBeGreaterThanOrEqual(3);
-    expect(censados).toContain("lib/types/analitica-financiera.ts");
-    expect(censados).toContain("lib/config/analitica-financiera.ts");
-    expect(censados).toContain("lib/interfaces/services/IAnaliticaFinancieraService.ts");
+    const declarados = declaradosExistentes();
+    const descubiertos = descubiertosPorImport();
+
+    // (1) IGUALDAD EXACTA sobre la lista declarada: los TRECE existen, ni uno menos. Antes se
+    //     podian borrar diez y el ancla `>= 3` seguia verde.
+    expect([...declarados].sort()).toEqual([...ARCHIVOS_DECLARADOS].sort());
+
+    // (2) Y los trece estan DENTRO del censo. El censo puede tener mas (brazo de import), nunca
+    //     menos: la diferencia en el sentido que importa es vacia.
+    expect(ARCHIVOS_DECLARADOS.filter((rel) => !censados.includes(rel))).toEqual([]);
+
+    // (3) El brazo de descubrimiento esta VIVO, no solo presente. Si la huella dejara de casar
+    //     (feature renombrada, regex rota), el censo se reduciria en silencio a la lista de
+    //     arriba y nadie se enteraria; estos seis lo impiden. No se exige igualdad exacta aqui
+    //     por lo dicho al principio: el conjunto descubierto crece con las features vecinas.
+    expect(
+      [
+        "lib/repositories/IngresosAnaliticaRepository.ts",
+        "lib/repositories/RecaudoAnaliticaRepository.ts",
+        "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
+        "lib/repositories/ConciliacionCierresAnaliticaRepository.ts",
+        "lib/services/AnaliticaFinancieraService.ts",
+        "lib/actions/analitica-financiera.ts",
+      ].filter((rel) => !descubiertos.includes(rel)),
+    ).toEqual([]);
+
+    // (4) Y cada archivo censado se lee de verdad: nada entra al censo como ruta fantasma.
+    expect(censados).not.toEqual([]);
     for (const rel of censados) {
       expect(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8").length, rel).toBeGreaterThan(0);
     }

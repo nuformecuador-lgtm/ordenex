@@ -415,7 +415,7 @@ como serie acumulativa y sumar el mismo dinero N veces.
 
 ---
 
-## Preguntas abiertas (revisadas tras la puerta T0; las cuatro siguen vivas)
+## Preguntas abiertas (revisadas tras la puerta T0; las cuatro primeras siguen vivas)
 
 1. **¿Existe un caso real de `cierre_bodega` con `total_*` distintos de la suma de sus `cierre_dia`?**
    Si nunca puede pasar por construcción, la conciliación de nivel bodega es redundante y R22 se
@@ -433,3 +433,18 @@ como serie acumulativa y sumar el mismo dinero N veces.
    feature agrega sin `LIMIT` por definición. Nadie ha medido el ledger a un año. **D3 la agrava un
    poco**: el saldo al corte ignora `desde`, así que escanea **todo** el libro hasta `hasta`, no solo
    la ventana. ¿Se mide antes de exponerlo, o se acepta y se observa con la 128?
+5. **Cinco de las ocho métricas se sirven sin desglose por día, pese a declarar `granos: ["fecha"]`.**
+   *(Añadida al IMPLEMENTAR, 2026-08-02 — era el supuesto **S16** de `progress/impl_127_D.md`, y sube
+   aquí por el menor 3 del review: una limitación de este tamaño no puede vivir solo en una bitácora.)*
+   `ingreso_flete`, `ingreso_comision_cod`, `ingreso_iva`, `egresos` y las dos cuentas por pagar llegan
+   con `filas: []` y solo `total`, porque `DimensionAnalitica` no tiene «categoría» y el repositorio
+   agrega la ventana entera de una vez. **No viola ningún requisito** —ninguno exige el corte— pero
+   tiene dos consecuencias que el siguiente que lea esto necesita ver:
+   - **La 132 no podrá pintar serie temporal de esas cinco.** Si el tablero las quiere como línea y no
+     como número único, hay que rediseñar C.1 y C.3 para agrupar por día. Eso **no** está en el
+     `design.md` actual y no se hizo de paso.
+   - **El barrido de identidad de E.4 es trivial para esas cinco**, porque un DTO sin filas casi no
+     tiene por dónde filtrar un id. La cobertura real de R14 se apoya en las tres que **sí** traen
+     filas (`cod_recaudado` en sus dos vistas y `conciliacion_cierres`) — que es, no por casualidad,
+     donde apareció la fuga C8. Si alguna de esas cinco gana filas, **su barrido deja de ser trivial y
+     hay que volver a mirarlo**.

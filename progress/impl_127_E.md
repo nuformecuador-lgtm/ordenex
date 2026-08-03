@@ -293,3 +293,63 @@ tampoco se movio.
 - **C6 sigue abierta** (de la sesion D): el comentario que hay encima de `estadoProduccion` en
   `egresos` quedo desactualizado y no se corrigio a proposito, porque la autorizacion acota el
   diff de `metrics.ts` a dos cosas. Pendiente de una linea de visto bueno humano.
+
+---
+
+## Cierre de los menores del review (2026-08-02, leader)
+
+El agente que arrancó esto **fue detenido por el humano a mitad**: dejó M-1 y M-2 escritos y
+correctos, pero sin la bitácora, sin M-3, y con un `tsc` **rojo** (usaba `TablaDinero` sin
+importarlo — vitest no typechequea, así que los tests pasaban igual y el rojo solo se veía en
+`tsc --noEmit`). El leader cerró las tres cosas.
+
+### M-1 · Anclas flojas (menor 1)
+
+`financiera-fuente.guardia.test.ts` y `financiera-alcance.guardia.test.ts` estaban en `>= 3` con
+trece archivos en el censo: se podían borrar diez y seguían verdes.
+
+- **Alcance**: censo de **un solo brazo** (la lista declarada), así que admite **igualdad exacta**
+  y ahora la exige. No hay nada que mantener a mano de más: la lista ya estaba escrita.
+- **Fuente**: censo de **dos brazos** —lista declarada **+ descubrimiento por import**—. El
+  segundo es abierto por diseño (cuando la 132 o la 134 importen algo de la 127, entrarán solas),
+  así que una igualdad exacta contra el censo entero sería una lista que se desactualiza sola y
+  que el siguiente aflojaría. Se exige lo más fuerte que **sí** se sostiene: igualdad exacta sobre
+  la lista declarada, inclusión de los trece en el censo, y que el brazo de descubrimiento esté
+  **vivo** (los seis módulos que tiene que encontrar solo). Ninguna de las tres sobrevive a que se
+  borre un archivo.
+
+### M-2 · Título que prometía más que su fixture (menor 2)
+
+El caso decía «una tabla que `conciliacion_cierres` NO declara la caza igual» y su fixture no
+bajaba a ninguna tabla fuera del universo. Ahora el fixture **sí** baja a `orden` y a
+`gestion_orden`, y el caso afirma **las dos** verdades en aserciones, no en comentarios: lo que
+este guardia caza (correspondencia dentro de las cinco `TablaDinero`) y lo que **no puede** cazar
+—le son invisibles por construcción—, más que quien sí las caza (`financiera-fuente`) existe y
+sigue nombrándolas.
+
+### M-3 · S16 sube al spec (menor 3)
+
+Pasó de `impl_127_D.md` a **pregunta abierta 5** de `requirements.md`, con sus dos consecuencias
+escritas: la **132** no podrá pintar serie temporal de esas cinco métricas, y el barrido de
+identidad de E.4 es **trivial** para ellas — la cobertura real de R14 se apoya en las tres que sí
+traen filas, que es justo donde apareció la fuga C8. Es documentación: **no se cambió el
+comportamiento**, porque servir el corte por día exige rediseñar C.1/C.3 y eso no está autorizado.
+
+### Mutación
+
+| # | Mutación | Resultado |
+|---|---|---|
+| M72 | se esconde `lib/config/analitica-financiera.ts`, un archivo del censo declarado | **2 rojos**, uno por guardia apretado · restaurado y verificado con `cmp` |
+
+Con el ancla anterior (`>= 3` + `toContain`) esta mutación **pasaba verde en los dos**. Es la
+prueba de que el aprieto no es cosmético.
+
+### Medido
+
+```
+pnpm exec tsc --noEmit                        exit=0  (sin salida)
+pnpm exec eslint <los tres guardias>          exit=0
+pnpm exec vitest run tests/unit/analytics tests/unit/services --maxWorkers=2
+  Test Files  166 passed (166)
+       Tests  2728 passed (2728)
+```
