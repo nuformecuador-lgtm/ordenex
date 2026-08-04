@@ -1551,13 +1551,15 @@
       "name": "analitica: export CSV",
       "spec_path": "specs/134-analitica-export-csv",
       "description": "Fullstack. Export CSV de cualquier vista de analitica: Server Action/route con gating por rol que exporta el dataset filtrado respetando el alcance (121); reusa el patron de export existente. Depende de 126.",
-      "status": "pending",
-      "status_note": "AVISO DIRIGIDO POR LA 122 (specs/122-analitica-alcance-por-rol/design.md 7): el export es el consumidor MAS PELIGROSO, porque una fila filtrada se descarga en un archivo. Debe construir su dataset por el MISMO punto de entrada, no reconstruir el filtro. Y el CSV de un adminTienda con grano mensajero va SEUDONIMIZADO (D5/R39): una columna mensajero_id en un archivo descargable es la fuga mas dificil de retirar. Los tres pasos del borde (auditar -> 403 -> seudonimizar) los exigen R40, R41 y R39.",
+      "status": "in_progress",
+      "status_note": "2026-08-04 SPEC ESCRITA y PUERTA T0 CERRADA con 6 respuestas (D1-D6). 21 requisitos, cada uno con su mutacion. HALLAZGO QUE ENCOGE LA FEATURE: no necesita codigo de servidor. La seudonimizacion ocurre en AnaliticaOperativaService, no en el borde, y su propio comentario nombra a la 134 -- 'ningun borde futuro (la 134, por ejemplo) puede olvidarla' --, asi que el uuid real NUNCA cruza al navegador; y el borde de la 126 ya audita el denegado. Los tres pasos (auditar, 403, seudonimizar) se HEREDAN: lo verificable aqui es que no se abra un camino que los evite. D1 solo operativa, la financiera FUERA POR DECISION -> ficha 184. D2 se reusa consultarAnaliticaOperativa y el archivo se arma en el navegador: dos guardias vivos prohiben un handler de app/api para analitica (operativa-frontera.guardia.test.ts:44 y tablero-operativo-frontera.guardia.test.ts:136). D3 la ventana ciega y el dia parcial viajan como COLUMNAS POR FILA: la fila es lo unico de un fichero plano que sobrevive a filtrar, ordenar y copiar. D4 sin cabecera de metadatos: escribir el tiendaId/zonaId del actor como 'alcance' meteria en un archivo que circula justo el identificador que R8/R9 quieren fuera. D5 no se toca el dialecto (25 tablas dependen) y se ofrece tambien XLSX: coma + decimales con punto + UTF-8 SIN BOM abre en UNA sola columna y rompe tildes en Windows es-EC. D6 un archivo por panel. CORRECCIONES DE FICHA aplicadas por el leader: zone fullstack -> frontend (cero archivos en lib/, cero endpoints, cero migraciones), depends_on 127 -> 126, y la descripcion cita '(121)' donde el punto de entrada real es de la 122.",
       "sdd": true,
       "complexity": "medium",
-      "zone": "fullstack",
+      "zone": "frontend",
       "branch": "feature/134-analitica-export-csv",
-      "depends_on": 127
+      "depends_on": [
+        126
+      ]
     },
     {
       "id": 137,
@@ -2180,6 +2182,22 @@
       "branch": null,
       "depends_on": 175,
       "status_note": "DECISION HUMANA TOMADA EL 2026-08-04, no la reabra el spec_author: de las dos salidas que planteaba la 175 se eligio RETIRAR LA DISTINCION, y NO que 'egresos' gane ingreso_ajuste en definicion.categorias. Motivo: esa segunda opcion cambia el numero de una metrica de dinero YA PUBLICADA, que es justo lo que la P4 de la 173 quiso evitar; retirar un campo que era redundante por construccion no mueve ninguna cifra. || DADA DE ALTA el 2026-08-04 al cerrar la 175: es su CUARTA divergencia, movida aqui intacta en vez de quedar huerfana (la nota de la 175 exigia cerrarla o moverla). La dirigio a la 175 la feature 173. || POR QUE NO ES UN ONE-LINER, medido antes de dar de alta la ficha: `neto` esta en lib/types/analitica-financiera.ts, lib/services/AnaliticaFinancieraService.ts (11 ocurrencias, incluida la eleccion de cual de las dos cifras de derivarCaja se publica como neto), los dos repos (IIngresosAnaliticaRepository, IRecaudoAnaliticaRepository + sus implementaciones, donde el desglose por tipo existe PARA el neto), el TableroFinanciero de la 132 —que lo pinta como KPI principal con el bruto de linea secundaria (R14/R16) y dibuja DOS series con el— y app/(app)/analitica/_components/financiero/adaptar.ts (CampoImporte = 'bruto'|'neto'). Al especificar hay que decidir que pasa con R14 y R16 de la 132, que son requisitos VIVOS de una feature done y mergeada. || DOS DOBLES EN MEMORIA ESPERANDO A ESTA FICHA, verdes hoy solo porque no pasan por el CHECK de la base: tests/unit/analytics/financiera-ingresos-repo.test.ts:124 (fila cruzada: categoria egreso_ajuste + tipo ingreso) y tests/unit/services/analitica-financiera-derivacion.test.ts:177. La 173 los dejo sin tocar A PROPOSITO porque su arreglo dependia de esta decision. Su unico rojo propio ya lo reescribio: tests/integration/actions/analitica-financiera-action.test.ts F.4 (bruto 800 / neto -800). || RENUMERADA DE 182 A 183 el 2026-08-04, en el mismo dia en que se dio de alta: mientras esta rama estaba viva, la sesion de la 176 mergeo a dev (PR #285) otra ficha con el id 182 ('analitica: cablear el modo agregado al tablero operativo'), que YA traia rama y spec_path. Mismo criterio que la 165, la 168, la 177, la 178 y la 181: la ficha que ya tiene rama conserva el id y la otra toma el primer id libre CONSERVANDO su contenido. Si alguna nota vieja habla de 'la ficha 182' a proposito del neto/bruto, se refiere a ESTA."
+    },
+    {
+      "id": 184,
+      "name": "analitica financiera: export de la serie",
+      "spec_path": "specs/184-analitica-financiera-export",
+      "description": "Frontend. Export CSV/XLSX de las metricas financieras por el MISMO borde (consultarMetricaFinanciera), reusando el patron de descarga 151/148 y con las mismas garantias que la 134: puerta unica -- el dataset se construye por el mismo punto de entrada que la pantalla, nunca reconstruyendo el filtro --, denegado auditado antes del 403, y SIN cabecera de metadatos con el alcance del actor (escribir su tiendaId o zonaId en un archivo que circula es justo el identificador que hay que mantener fuera). Requiere que AnaliticaFinancieraService publique una forma de serie estable.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/184-analitica-financiera-export",
+      "depends_on": [
+        180,
+        183
+      ],
+      "status_note": "Sale de la decision D1 de la 134: la analitica financiera queda fuera de aquel export POR DECISION, no por olvido. NO adelantarla: RespuestaFinanciera no expone hoy una serie que proyectar a filas (la publica la 180) y la 183 cambia QUE SIGNIFICAN las cifras de caja. Exportar antes es escribir dos veces la proyeccion, y la segunda con prisa -- que en un export es como se cuela una columna que no debia salir."
     }
   ]
 }
