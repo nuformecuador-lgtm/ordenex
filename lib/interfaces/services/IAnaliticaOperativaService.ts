@@ -1,6 +1,10 @@
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { DimensionAnalitica } from "@/lib/analytics/types";
-import type { SerieOperativa } from "@/lib/types/analitica-operativa";
+import type {
+  AgregadoOperativo,
+  GranoAgregado,
+  SerieOperativa,
+} from "@/lib/types/analitica-operativa";
 
 // Feature 126 (T1.4, design §D2) — contrato del servicio de analitica operativa.
 //
@@ -52,4 +56,29 @@ export interface IAnaliticaOperativaService {
     consulta: ConsultaAnalitica,
     desagregacion?: DimensionAnalitica,
   ): Promise<SerieOperativa>;
+
+  /**
+   * Feature 176 (D1) — LECTURA AGREGADA. Devuelve, por cubo temporal, el numerador y el
+   * denominador ANTES de dividir, y el valor dividido UNA sola vez.
+   *
+   * No sustituye a `consultar` ni cambia su firma: son dos modos de lectura sobre los
+   * MISMOS cubos del rollup, pedidos al MISMO metodo del repositorio con los MISMOS
+   * granos. Esa identidad es lo que hace ESTRUCTURALMENTE cierto R8 (sobre un unico dia
+   * cerrado los dos caminos coinciden) en vez de una coincidencia que haya que vigilar.
+   *
+   * Sigue sin haber canal de alcance: el recorte viaja entero dentro de `consulta`, igual
+   * que en `consultar` (R13). `OpcionesAgregado` NO lleva filtro, ni rango, ni alcance.
+   */
+  consultarAgregado(
+    consulta: ConsultaAnalitica,
+    opciones?: OpcionesAgregado,
+  ): Promise<AgregadoOperativo>;
+}
+
+/** Lo unico que el modo agregado admite ADEMAS de la consulta. Ni filtro, ni alcance. */
+export interface OpcionesAgregado {
+  /** R19/D6 — default `"periodo"`. */
+  readonly grano?: GranoAgregado;
+  /** Misma semantica que en `consultar`: elige el desglose, no el recorte. */
+  readonly desagregacion?: DimensionAnalitica;
 }

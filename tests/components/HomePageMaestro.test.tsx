@@ -4,6 +4,12 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
+// Import estático (no `await import()` dentro de cada `it`) para que la carga
+// del árbol de la página no cuente contra `testTimeout`. Los `vi.mock` de abajo
+// son *hoisted* por Vitest; además la página lee los mocks en tiempo de llamada
+// a `Home()`, no de importación, y sin `resetModules` los `await import()`
+// repetidos ya devolvían el mismo módulo cacheado: la semántica no cambia.
+import Home from "@/app/(app)/dashboard/page";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarOrdenes } from "@/lib/actions/ordenes";
@@ -100,8 +106,6 @@ afterEach(() => {
 describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () => {
   it("R1: rol maestro renderiza el dashboard maestro con el panel de postulaciones", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -114,8 +118,6 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
 
   it("R1: rol admin también renderiza el dashboard maestro", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "admin" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -125,8 +127,6 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
 
   it("R2: rol adminTienda conserva el Panel de tienda (feature 26 intacta)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -149,8 +149,6 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
 
       const esperado = primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor));
       expect(esperado).not.toBeNull();
-
-      const { default: Home } = await import("@/app/(app)/dashboard/page");
       // `redirect()` corta el render lanzando: no llega a pintarse ningún dashboard.
       await expect(Home()).rejects.toMatchObject({
         digest: expect.stringContaining(`;${esperado};`),
@@ -165,8 +163,6 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
   it("R3: sin sesión no hay a dónde ir y queda el placeholder Bienvenido", async () => {
     resolveActorMock.mockResolvedValue(null);
     cookieGetMock.mockReturnValue(undefined);
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(screen.getByText("Bienvenido")).toBeInTheDocument();
@@ -176,8 +172,6 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
 
   it("R4: el rol se resuelve server-side vía resolveActorFromSession", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     await Home();
 
     expect(resolveActorMock).toHaveBeenCalledTimes(1);

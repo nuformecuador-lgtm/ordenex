@@ -11,6 +11,13 @@
 //
 // Modulo PURO (`lib/utils/`): sin Prisma, sin React, sin Next. Hermano de
 // `lib/utils/colas-cierre.ts` (T I.1) y `lib/utils/estados-bodega-satelite.ts` (T K.1).
+//
+// ACTUALIZACION (chore de la deuda de la 170, Q-L4): la busqueda pasa a IGNORAR LOS ACENTOS.
+// Es una decision del LEADER, declarada en `progress/chore_deuda_170.md`, y se implementa AQUI
+// —el unico sitio donde el criterio esta escrito— para que la pagina y la descarga no puedan
+// discrepar. Ya no reproduce el filtro de cliente de T L.1, que era accent-sensible; ese filtro
+// dejo de existir cuando T M.1 llevo la descarga al servidor. La desviacion respecto de la letra
+// de R45 esta medida caso a caso en `tests/unit/services/wallet-cuentas-paginado.test.ts`.
 
 /** Lo minimo que una fila necesita para filtrarse y ordenarse: el nombre y su desempate. */
 export interface FilaCuentaPorPagar {
@@ -19,25 +26,58 @@ export interface FilaCuentaPorPagar {
 }
 
 /**
- * El texto de busqueda, normalizado EXACTAMENTE como lo hacia el navegador: `trim()` +
- * `toLowerCase()`. Un texto vacio (o de solo espacios) significa «sin filtro».
+ * Plegado de acentos: descompone cada letra en NFD y descarta las marcas diacriticas
+ * combinantes, asi que `á`/`Á`/`ä` caen todas en `a` y `ñ` en `n`.
  *
- * Se conserva `toLowerCase()` a secas, SIN quitar acentos, porque asi se comporta la pantalla
- * hoy: buscar «jose» no encuentra a «José». Volverlo insensible a acentos seria una mejora
- * defendible, pero seria un CAMBIO de comportamiento y R45 pide lo contrario — el mismo
- * conjunto que producia el filtro de cliente.
+ * Por que ESTA forma y no una de las otras dos que ya viven en el repo:
+ *
+ *  - NO se reusa `normalizarTerminoBusqueda` (`lib/utils/busqueda-orden.ts`, feature 169): aquel
+ *    es el ESPEJO en TypeScript de un `translate()` con un mapa explicito de 48 caracteres,
+ *    escrito asi porque su contraparte la calcula POSTGRES en una columna generada e indexada.
+ *    Aqui no hay columna, ni indice, ni SQL: el filtro corre entero en Node (§ el comentario de
+ *    `filtrarPorBusquedaMensajero`). Copiar la restriccion de un espejo que no existe seria
+ *    plegar MENOS caracteres sin ganar nada a cambio.
+ *  - NO se reusa `normalizeName` (`lib/utils/normalize.ts`): pliega los acentos igual, pero
+ *    ademas recorta y COLAPSA LOS ESPACIOS INTERIORES. Eso es un segundo cambio de
+ *    comportamiento —«del  carmen» pasaria a casar «del carmen»— que nadie ha pedido. El
+ *    cambio decidido es el de los acentos y solo ese.
+ */
+function plegarAcentos(texto: string): string {
+  return texto.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
+
+/**
+ * El texto de busqueda, normalizado: `trim()` + plegado de acentos + `toLowerCase()`. Un texto
+ * vacio (o de solo espacios) significa «sin filtro».
+ *
+ * **La busqueda IGNORA LOS ACENTOS, y es una decision del LEADER tomada en el chore de la deuda
+ * de la 170** (`progress/chore_deuda_170.md`), no una consecuencia de esta implementacion.
+ *
+ * Lo que habia antes, y por que se cambia: T L.1 conservo `toLowerCase()` a secas porque R45 le
+ * pedia el MISMO conjunto que producia el filtro de cliente, y aquel no plegaba acentos. El
+ * efecto es que hoy el resultado depende de como se teclee el nombre: buscar «Ramirez» no
+ * encuentra a «Ramírez» y buscar «jose» no encuentra a «José Pérez». En español eso es un
+ * defecto, no una propiedad: quien busca no sabe con que acentos esta escrito el registro.
+ *
+ * Que NO cambia, y por eso el cambio es acotado: el recorte de extremos, el `includes` (subcadena
+ * en cualquier posicion), los espacios interiores y el trato de `%` y `_` como TEXTO. Sigue sin
+ * haber comodines.
  */
 export function normalizarBusquedaMensajero(texto: string | undefined): string {
-  return (texto ?? "").trim().toLowerCase();
+  return plegarAcentos((texto ?? "").trim()).toLowerCase();
 }
 
 /**
  * Casa un nombre contra un texto YA normalizado. Subcadena en cualquier posicion
  * (`includes`), no prefijo: buscar «mensajera» encuentra a «Ana Mensajera».
+ *
+ * El nombre se pliega con la MISMA funcion que el texto tecleado. Que las dos caras usen el
+ * mismo plegado no es estetica: si solo se plegara una, «Ramírez» dejaria de encontrarse a si
+ * mismo — el fallo clasico de una busqueda insensible a acentos mal cableada.
  */
 export function coincideBusquedaMensajero(nombre: string, busquedaNormalizada: string): boolean {
   if (busquedaNormalizada === "") return true;
-  return nombre.toLowerCase().includes(busquedaNormalizada);
+  return plegarAcentos(nombre).toLowerCase().includes(busquedaNormalizada);
 }
 
 /** Aplica la busqueda por nombre a un conjunto de filas. Sin texto, devuelve el conjunto. */

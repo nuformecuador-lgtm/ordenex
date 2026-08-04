@@ -1,15 +1,23 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   listarMovimientosAction,
-  verBalanceAction,
+  verResumenCajaAction,
   registrarMovimientoManualAction,
 } from "@/lib/actions/wallet";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletService } from "@/lib/interfaces/services/IWalletService";
-import type { WalletMovimientoDTO } from "@/lib/types/wallet";
+import type { CajaResumenDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
 
 // Feature 42 (T10) — tests unit de las Server Actions de wallet (R19/R21/R25). Sin sesion
 // -> unauthenticated; rol no autorizado -> forbidden (el service lo decide); DTOs STRING.
+//
+// Feature 173 (T D.2, R64/R65): `verBalanceAction` dejo de hablar con `verBalance` —que ya no
+// existe— y paso a ser una PROYECCION de `verResumenCajaAction`, el borde nuevo. El cambio de
+// estas aserciones esta declarado en `design.md §11`.
+//
+// Feature 173 (Tanda H): ese puente se RETIRA. `T G.3` lo dejo sin un solo consumidor en `app/`
+// y esta tanda lo borra; los cuatro casos que lo median se sustituyen por UNO que afirma que la
+// forma vieja no puede volver.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
@@ -28,6 +36,24 @@ function mov(): WalletMovimientoDTO {
   };
 }
 
+/**
+ * Feature 173 — un resumen con dinero de las DOS naturalezas: `enCaja` (5700) y `ganancia`
+ * (700) son DISTINTOS a proposito, para que ninguna asercion de este archivo pueda pasar por
+ * casualidad confundiendo una cifra con la otra.
+ */
+const RESUMEN: CajaResumenDTO = {
+  entradas: "6000.00",
+  salidas: "300.00",
+  enCaja: "5700.00",
+  signoEnCaja: "positivo",
+  ingresosPropios: "1000.00",
+  egresosPropios: "300.00",
+  ganancia: "700.00",
+  signoGanancia: "positivo",
+  deTerceros: "5000.00",
+  periodoFiltrado: false,
+};
+
 function fakeService(overrides: Partial<IWalletService> = {}): IWalletService {
   return {
     listarMovimientos: vi.fn(async () => ({
@@ -41,10 +67,7 @@ function fakeService(overrides: Partial<IWalletService> = {}): IWalletService {
       items: [mov()],
       total: 1,
     })),
-    verBalance: vi.fn(async () => ({
-      status: "ok" as const,
-      balance: { ingresos: "1000.00", egresos: "300.00", balance: "700.00", signo: "positivo" as const },
-    })),
+    verResumenCaja: vi.fn(async () => ({ status: "ok" as const, resumen: RESUMEN })),
     registrarMovimientoManual: vi.fn(async () => ({ status: "ok" as const, movimiento: mov() })),
     ...overrides,
   };
@@ -83,26 +106,89 @@ describe("listarMovimientosAction (R19/R25)", () => {
   });
 });
 
-describe("verBalanceAction (R19/R21/R25)", () => {
-  it("sin sesion -> unauthenticated", async () => {
+describe("verResumenCajaAction (R8/R64/R65)", () => {
+  it("sin sesion -> unauthenticated, sin tocar el service", async () => {
     const service = fakeService();
-    const r = await verBalanceAction({}, { service, getActor: async () => null });
+    const r = await verResumenCajaAction({}, { service, getActor: async () => null });
     expect(r).toEqual({ status: "unauthenticated" });
+    expect(service.verResumenCaja).not.toHaveBeenCalled();
   });
 
-  it("R19: rol no autorizado -> forbidden, sin balance", async () => {
-    const service = fakeService({ verBalance: vi.fn(async () => ({ status: "forbidden" as const })) });
-    const r = await verBalanceAction({}, { service, getActor: async () => OTRO });
+  it("R65: rol no autorizado -> forbidden, y NI UNA cifra en la respuesta", async () => {
+    const service = fakeService({
+      verResumenCaja: vi.fn(async () => ({ status: "forbidden" as const })),
+    });
+    const r = await verResumenCajaAction({}, { service, getActor: async () => OTRO });
     expect(r).toEqual({ status: "forbidden" });
+    expect(Object.keys(r)).toEqual(["status"]);
   });
 
-  it("R25: maestro -> balance con montos STRING y signo", async () => {
+  it("R64: maestro -> el DTO cruza con los NUEVE importes como STRING", async () => {
     const service = fakeService();
-    const r = await verBalanceAction({}, { service, getActor: async () => MAESTRO });
+    const r = await verResumenCajaAction({}, { service, getActor: async () => MAESTRO });
+
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
-    expect(typeof r.balance.balance).toBe("string");
-    expect(r.balance.signo).toBe("positivo");
+    // Se barre el DTO ENTERO, no tres campos elegidos a mano: cualquier importe futuro que
+    // alguien añada como `number` cae aqui. `periodoFiltrado` es el unico booleano y no es
+    // dinero.
+    for (const [clave, valor] of Object.entries(r.resumen)) {
+      if (clave === "periodoFiltrado") {
+        expect(typeof valor).toBe("boolean");
+        continue;
+      }
+      expect(typeof valor).toBe("string");
+    }
+    expect(r.resumen.enCaja).toBe("5700.00");
+    expect(r.resumen.ganancia).toBe("700.00");
+    expect(r.resumen.signoEnCaja).toBe("positivo");
+  });
+
+  it("R8: usa el MISMO schema del listado — un filtro invalido es validation_error, sin tocar el service", async () => {
+    const service = fakeService();
+    const r = await verResumenCajaAction(
+      { page: 1, pageSize: 9999 },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.verResumenCaja).not.toHaveBeenCalled();
+  });
+
+  it("[P7]: `periodoFiltrado` viaja tal cual desde el service; el borde no lo decide", async () => {
+    const service = fakeService({
+      verResumenCaja: vi.fn(async () => ({
+        status: "ok" as const,
+        resumen: { ...RESUMEN, periodoFiltrado: true },
+      })),
+    });
+    const r = await verResumenCajaAction(
+      { tipo: "ingreso" },
+      { service, getActor: async () => MAESTRO },
+    );
+    if (r.status !== "ok") throw new Error("esperado ok");
+    expect(r.resumen.periodoFiltrado).toBe(true);
+  });
+});
+
+describe("el PUENTE `verBalanceAction` ya no existe (173, Tanda H)", () => {
+  it("el modulo de acciones de la wallet no exporta ninguna accion de «balance»", async () => {
+    // El puente vivio entre la Tanda D y la Tanda G, declarado como tal desde el primer dia:
+    // `T D.2` retiro `WalletService.verBalance` y `/wallet` todavia era la pantalla de la 42.
+    // `T G.3` lo dejo sin consumidores; la Tanda H lo retira. Este caso sustituye a los cuatro
+    // que median el puente: lo que se afirma ahora es que la forma vieja NO puede volver por la
+    // puerta de atras, ni con ese nombre ni con ningun otro.
+    const acciones = await import("@/lib/actions/wallet");
+
+    expect(Object.keys(acciones).filter((k) => /balance/i.test(k))).toEqual([]);
+    // Control de no-vacuidad del `toEqual([])`: el modulo SI exporta acciones, y son las cuatro
+    // que quedan. Si el import fallara o devolviera un objeto vacio, el filtro de arriba pasaria
+    // sin haber mirado nada.
+    expect(Object.keys(acciones).sort()).toEqual([
+      "listarMovimientosAction",
+      "listarMovimientosCompletoAction",
+      "registrarMovimientoManualAction",
+      "verResumenCajaAction",
+    ]);
   });
 });
 

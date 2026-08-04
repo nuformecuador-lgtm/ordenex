@@ -26,8 +26,13 @@ import type { RangoPagina } from "@/lib/utils/rango-pagina";
 //
 // De ahi que el caso central no sea un caso feliz sino una BATERIA de 25 textos (vacio, solo
 // espacios, ausente, parcial, acentos en los dos sentidos, mayusculas, espacios sobrantes,
-// comodines de SQL y sin resultados) comparada, uno a uno, contra la busqueda de cliente
-// COPIADA LITERAL del componente.
+// comodines de SQL y sin resultados), con el conjunto esperado escrito A MANO caso a caso.
+//
+// ACTUALIZADO por el chore de la deuda de la 170 (Q-L4): la busqueda pasa a IGNORAR LOS ACENTOS,
+// por decision del LEADER declarada en `progress/chore_deuda_170.md`. Ocho de los 25 textos
+// cambian de conjunto y los otros 17 no; el delta esta escrito a mano en `extraPorAcentos` y se
+// contrasta contra la busqueda accent-sensible que T L.1 copio del navegador, que se conserva
+// como linea base historica. Asi el cambio queda MEDIDO en vez de reescrito para pasar.
 //
 // El acotamiento es por ROL y es de los duros: `mensajero` no entra ni pidiendo lo suyo (su
 // superficie es `listarMisPagos`, acotada por el actor). Este listado es la cuenta por pagar de
@@ -67,11 +72,13 @@ const CONJUNTO: CuentaPorPagarAgregadoRow[] = [
 ];
 
 /**
- * COPIADO LITERAL de `app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx` (:84-88,
- * el `useMemo` de `filtrados`). Se copia y no se importa porque vive dentro de un componente y
- * no hay nada que importar; se copia LITERAL, y no «equivalente», porque R45 dice que el
- * conjunto tiene que ser el MISMO y la unica forma honesta de medirlo es contra el codigo que
- * hoy corre en el navegador.
+ * La busqueda que corria en el NAVEGADOR antes de esta feature: copiada literal del `useMemo`
+ * de `filtrados` de `CuentasPorPagarTable.tsx` (:84-88) tal como estaba en T L.1.
+ *
+ * Ya no es «lo que hace la pantalla»: T M.1 (Q-L2) llevo la descarga al servidor y el
+ * componente dejo de filtrar. Se CONSERVA aqui como LINEA BASE historica, que es lo que
+ * convierte el cambio de acentos de este chore (Q-L4) en un delta medido —fila a fila, en
+ * `extraPorAcentos`— en vez de en un test reescrito para que pase.
  */
 function busquedaDeCliente(
   mensajeros: CuentaPorPagarResumenDTO[],
@@ -182,79 +189,190 @@ function sumaCuentaPorPagar(filas: readonly CuentaPorPagarResumenDTO[]): string 
 
 /**
  * Los 25 textos de la bateria. La columna `esperados` esta escrita A MANO contra el fixture: si
- * saliera de cualquiera de las dos implementaciones, un cambio de semantica (p. ej. volver la
- * busqueda insensible a acentos, o dejar que `%` sea comodin) pasaria verde en las dos.
+ * saliera de cualquiera de las dos implementaciones, un cambio de semantica (p. ej. dejar que `%`
+ * sea comodin, o colapsar los espacios interiores) pasaria verde en las dos.
+ *
+ * ACTUALIZADA por el chore de la deuda de la 170 (Q-L4): la busqueda pasa a IGNORAR LOS ACENTOS.
+ * Es una decision del LEADER, declarada en `progress/chore_deuda_170.md`, y es una DESVIACION
+ * consciente de la letra de R45 —que pedia reproducir el conjunto del filtro de cliente, y aquel
+ * era accent-sensible—. Aquella equivalencia dejo de tener contraparte viva cuando T M.1 (Q-L2)
+ * llevo la descarga al servidor: hoy no queda ningun filtro de nombre en el navegador.
+ *
+ * `extraPorAcentos` es la otra mitad del cambio, y por eso esta escrita a mano fila a fila: las
+ * filas que este listado devuelve AHORA y no devolvia antes. Ocho de los 25 textos cambian; los
+ * otros 17 tienen que seguir devolviendo exactamente lo mismo, y esa es la parte que impide que
+ * «ignorar acentos» se lleve por delante los comodines, los espacios interiores o la caja.
  */
-const BATERIA: { texto: string; esperados: string[]; nota: string }[] = [
-  { texto: "", esperados: [], nota: "vacio: sin filtro (los 12)" },
-  { texto: "   ", esperados: [], nota: "solo espacios: se recorta a vacio, sin filtro" },
-  { texto: "ana", esperados: ["m-01", "m-02", "m-11"], nota: "parcial en minusculas" },
-  { texto: "ANA", esperados: ["m-01", "m-02", "m-11"], nota: "mayusculas: mismo conjunto" },
-  { texto: "AnA", esperados: ["m-01", "m-02", "m-11"], nota: "mezcla de caja" },
-  { texto: "  ana  ", esperados: ["m-01", "m-02", "m-11"], nota: "espacios alrededor: se recortan" },
-  { texto: "mensajer", esperados: ["m-01", "m-12"], nota: "subcadena que no es prefijo" },
-  { texto: "jose", esperados: ["m-05"], nota: "SIN acento: NO alcanza a «josé pérez»" },
-  { texto: "josé", esperados: ["m-03"], nota: "CON acento: NO alcanza a «JOSE RAMIREZ»" },
-  { texto: "JOSÉ", esperados: ["m-03"], nota: "acento + mayusculas" },
-  { texto: "perez", esperados: [], nota: "sin acento: cero resultados, no «casi»" },
-  { texto: "pérez", esperados: ["m-03"], nota: "con acento" },
-  { texto: "ó", esperados: ["m-02", "m-09"], nota: "una vocal acentuada suelta" },
-  { texto: "Ó", esperados: ["m-02", "m-09"], nota: "la misma, en mayuscula" },
+const BATERIA: {
+  texto: string;
+  esperados: string[];
+  /** Ids que la busqueda ANTERIOR (accent-sensible) no devolvia para este texto. */
+  extraPorAcentos: string[];
+  nota: string;
+}[] = [
+  { texto: "", esperados: [], extraPorAcentos: [], nota: "vacio: sin filtro (los 12)" },
+  { texto: "   ", esperados: [], extraPorAcentos: [], nota: "solo espacios: se recorta a vacio, sin filtro" },
+  { texto: "ana", esperados: ["m-01", "m-02", "m-11"], extraPorAcentos: [], nota: "parcial en minusculas" },
+  { texto: "ANA", esperados: ["m-01", "m-02", "m-11"], extraPorAcentos: [], nota: "mayusculas: mismo conjunto" },
+  { texto: "AnA", esperados: ["m-01", "m-02", "m-11"], extraPorAcentos: [], nota: "mezcla de caja" },
+  { texto: "  ana  ", esperados: ["m-01", "m-02", "m-11"], extraPorAcentos: [], nota: "espacios alrededor: se recortan" },
+  { texto: "mensajer", esperados: ["m-01", "m-12"], extraPorAcentos: [], nota: "subcadena que no es prefijo" },
+  {
+    texto: "jose",
+    esperados: ["m-03", "m-05"],
+    extraPorAcentos: ["m-03"],
+    nota: "SIN acento: AHORA alcanza tambien a «josé pérez» (Q-L4)",
+  },
+  {
+    texto: "josé",
+    esperados: ["m-03", "m-05"],
+    extraPorAcentos: ["m-05"],
+    nota: "CON acento: AHORA alcanza tambien a «JOSE RAMIREZ» (Q-L4)",
+  },
+  {
+    texto: "JOSÉ",
+    esperados: ["m-03", "m-05"],
+    extraPorAcentos: ["m-05"],
+    nota: "acento + mayusculas: el mismo par",
+  },
+  {
+    texto: "perez",
+    esperados: ["m-03"],
+    extraPorAcentos: ["m-03"],
+    nota: "sin acento: ya NO son cero resultados (Q-L4, el caso del LEADER)",
+  },
+  { texto: "pérez", esperados: ["m-03"], extraPorAcentos: [], nota: "con acento: el mismo de antes" },
+  {
+    texto: "ó",
+    esperados: ["m-02", "m-03", "m-05", "m-07", "m-09", "m-11", "m-12", "m-13"],
+    extraPorAcentos: ["m-03", "m-05", "m-07", "m-11", "m-12", "m-13"],
+    nota: "una vocal acentuada suelta: ahora es la misma busqueda que «o»",
+  },
+  {
+    texto: "Ó",
+    esperados: ["m-02", "m-03", "m-05", "m-07", "m-09", "m-11", "m-12", "m-13"],
+    extraPorAcentos: ["m-03", "m-05", "m-07", "m-11", "m-12", "m-13"],
+    nota: "la misma, en mayuscula",
+  },
   {
     texto: "o",
-    // Las dos de «ó» (m-02 «lópez», m-09 «Núñez»/«Óscar») NO estan: la vocal sin acento no las
-    // alcanza, y ese es el punto.
-    esperados: ["m-03", "m-05", "m-07", "m-11", "m-12", "m-13"],
-    nota: "la vocal SIN acento no casa las acentuadas",
+    // Las dos de «ó» (m-02 «lópez», m-09 «Óscar»/«Núñez») ENTRAN ahora: la vocal sin acento
+    // alcanza a las acentuadas, que es exactamente lo que el LEADER decidio.
+    esperados: ["m-02", "m-03", "m-05", "m-07", "m-09", "m-11", "m-12", "m-13"],
+    extraPorAcentos: ["m-02", "m-09"],
+    nota: "la vocal SIN acento ahora SI casa las acentuadas (Q-L4)",
   },
-  { texto: "ñ", esperados: ["m-09"], nota: "ene" },
-  { texto: "repetida", esperados: ["m-04", "m-06"], nota: "dos homonimos exactos" },
-  { texto: "REPETIDA", esperados: ["m-04", "m-06"], nota: "los mismos dos" },
-  { texto: "%", esperados: [], nota: "comodin de SQL tratado como TEXTO: cero, no todos" },
-  { texto: "a_m", esperados: ["m-11"], nota: "el `_` de SQL es texto: solo «Ana_María»" },
-  { texto: "_", esperados: ["m-11"], nota: "un `_` suelto: una fila, no doce" },
-  { texto: "bruno", esperados: ["m-13"], nota: "nombre con espacios al principio y al final" },
-  { texto: "del carmen", esperados: ["m-08"], nota: "espacio INTERIOR: no se recorta" },
-  { texto: "z", esperados: ["m-02", "m-03", "m-05", "m-07", "m-09", "m-13"], nota: "una letra: media tabla" },
-  { texto: "zzz", esperados: [], nota: "sin resultados" },
+  {
+    texto: "ñ",
+    // La contrapartida honesta de plegar: «ñ» deja de ser una letra propia. Es el precio de que
+    // «nunez» encuentre a «Núñez», y en una busqueda por subcadena de UNA letra el ruido ya
+    // existia («o», «z»). Se declara en vez de esconderse.
+    esperados: ["m-01", "m-02", "m-07", "m-08", "m-09", "m-11", "m-12", "m-13"],
+    extraPorAcentos: ["m-01", "m-02", "m-07", "m-08", "m-11", "m-12", "m-13"],
+    nota: "la ene con virgulilla se pliega a «n» (Q-L4): el precio declarado",
+  },
+  { texto: "repetida", esperados: ["m-04", "m-06"], extraPorAcentos: [], nota: "dos homonimos exactos" },
+  { texto: "REPETIDA", esperados: ["m-04", "m-06"], extraPorAcentos: [], nota: "los mismos dos" },
+  { texto: "%", esperados: [], extraPorAcentos: [], nota: "comodin de SQL tratado como TEXTO: cero, no todos" },
+  { texto: "a_m", esperados: ["m-11"], extraPorAcentos: [], nota: "el `_` de SQL es texto: solo «Ana_María»" },
+  { texto: "_", esperados: ["m-11"], extraPorAcentos: [], nota: "un `_` suelto: una fila, no doce" },
+  { texto: "bruno", esperados: ["m-13"], extraPorAcentos: [], nota: "nombre con espacios al principio y al final" },
+  { texto: "del carmen", esperados: ["m-08"], extraPorAcentos: [], nota: "espacio INTERIOR: no se recorta" },
+  {
+    texto: "z",
+    esperados: ["m-02", "m-03", "m-05", "m-07", "m-09", "m-13"],
+    extraPorAcentos: [],
+    nota: "una letra: media tabla",
+  },
+  { texto: "zzz", esperados: [], extraPorAcentos: [], nota: "sin resultados" },
 ];
 
+/** Los ids que un caso espera, resolviendo el «sin filtro» a los doce del fixture. */
+function idsEsperados(caso: (typeof BATERIA)[number]): string[] {
+  if (caso.esperados.length === 0 && caso.nota.includes("sin filtro")) {
+    return CONJUNTO.map((m) => m.mensajeroId).sort();
+  }
+  return [...caso.esperados].sort();
+}
+
+/**
+ * Contrasta el conjunto del servidor con el de la busqueda ANTERIOR (accent-sensible, copiada
+ * literal del componente de T L.1) y exige DOS cosas a la vez:
+ *
+ *  1. que el servidor nunca PIERDA una fila que antes salia —plegar solo puede añadir, porque el
+ *     plegado es caracter a caracter y conserva la relacion de subcadena—; y
+ *  2. que lo que añade sea EXACTAMENTE lo declarado a mano en `extraPorAcentos`.
+ *
+ * Sin (2), «ignorar acentos» podria haberse implementado colapsando espacios o volviendo `%` un
+ * comodin y el bucle habria pasado verde igual.
+ */
+function afirmarDeltaDeAcentos(
+  caso: (typeof BATERIA)[number],
+  idsServidor: readonly string[],
+  deCliente: readonly CuentaPorPagarResumenDTO[],
+): void {
+  const antes = deCliente.map((m) => m.mensajeroId).sort();
+  const ahora = [...idsServidor].sort();
+
+  for (const id of antes) {
+    expect(ahora, `«${caso.texto}» (${caso.nota}): plegar acentos PERDIO la fila ${id}`).toContain(id);
+  }
+  expect(
+    ahora.filter((id) => !antes.includes(id)),
+    `«${caso.texto}» (${caso.nota}): las filas nuevas no son las declaradas`,
+  ).toEqual([...caso.extraPorAcentos].sort());
+}
+
 describe("WalletMensajeroService.listarCuentasPorPagarPaginado (T L.1)", () => {
-  it("para el mismo texto devuelve el mismo conjunto que la búsqueda de cliente (R45)", async () => {
-    // El conjunto que la pantalla tiene HOY en el navegador: el listado sin paginar.
+  it("para el mismo texto devuelve el conjunto declarado, y el delta por acentos es el medido (R45, Q-L4)", async () => {
+    // El conjunto entero, sin filtro, del que salen los montos de cada fila.
     const sinPaginar = await servicio(repoEnMemoria().repo).listarCuentasPorPagar(MAESTRO);
     if (sinPaginar.status !== "ok") throw new Error("no ok");
     expect(sinPaginar.mensajeros).toHaveLength(12);
 
     let conFilas = 0;
+    let casosQueCambian = 0;
     for (const caso of BATERIA) {
       const svc = servicio(repoEnMemoria().repo);
       // pageSize 5 sobre 12 filas: todo texto poco selectivo cruza varias paginas.
       const recorrido = await recorrerPaginas(svc, MAESTRO, { busqueda: caso.texto }, 5);
-      const deCliente = busquedaDeCliente(sinPaginar.mensajeros, caso.texto);
+      const esperados = idsEsperados(caso);
 
-      // (1) El MISMO conjunto, fila a fila y monto a monto.
-      expect(claves(recorrido.items), `«${caso.texto}» (${caso.nota})`).toEqual(claves(deCliente));
-      // (2) Y el mismo tamano declarado: el total del servidor es el del conjunto filtrado.
-      expect(recorrido.total, `«${caso.texto}»: total`).toBe(deCliente.length);
-
-      // (3) Anti-vacuidad por caso: los esperados estan escritos A MANO en la bateria.
-      const esperados =
-        caso.esperados.length === 0 && caso.nota.includes("sin filtro")
-          ? CONJUNTO.map((m) => m.mensajeroId).sort()
-          : [...caso.esperados].sort();
+      // (1) El conjunto declarado A MANO, fila a fila y monto a monto. Los montos entran en la
+      //     comparacion (via `claves`) porque paginar y filtrar no pueden cambiar el dinero.
+      const esperadasConMontos = sinPaginar.mensajeros.filter((m) =>
+        esperados.includes(m.mensajeroId),
+      );
+      expect(claves(recorrido.items), `«${caso.texto}» (${caso.nota})`).toEqual(
+        claves(esperadasConMontos),
+      );
+      // (2) Y el tamano declarado: el total del servidor es el del conjunto filtrado.
+      expect(recorrido.total, `«${caso.texto}»: total`).toBe(esperados.length);
       expect(
         recorrido.items.map((m) => m.mensajeroId).sort(),
         `«${caso.texto}» (${caso.nota}): ids esperados a mano`,
       ).toEqual(esperados);
 
+      // (3) El DELTA respecto de la busqueda accent-sensible de T L.1: ni una fila perdida, y
+      //     las añadidas son exactamente las declaradas. Es lo que hace que la decision del
+      //     LEADER quede medida caso a caso en vez de borrada del test.
+      afirmarDeltaDeAcentos(
+        caso,
+        recorrido.items.map((m) => m.mensajeroId),
+        busquedaDeCliente(sinPaginar.mensajeros, caso.texto),
+      );
+
       if (recorrido.items.length > 0) conFilas += 1;
+      if (caso.extraPorAcentos.length > 0) casosQueCambian += 1;
     }
 
     // (4) Anti-vacuidad global: si el filtro de servidor devolviera siempre vacio, el bucle
-    // habria comparado 25 veces [] con [] sin quejarse.
-    expect(conFilas).toBe(22);
+    //     habria comparado 25 veces [] con [] sin quejarse.
+    expect(conFilas).toBe(23);
     expect(BATERIA).toHaveLength(25);
+    // (5) Anti-vacuidad del delta: si `extraPorAcentos` estuviera vacio en los 25, (3) seria una
+    //     tautologia y el cambio de este chore no estaria probado en ninguna parte.
+    expect(casosQueCambian).toBe(8);
   });
 
   it("CONTRAPRUEBA de R45: la búsqueda mira el CONJUNTO, no la página visible", async () => {
@@ -586,15 +704,26 @@ describe("WalletMensajeroService.listarCuentasPorPagarCompleto (T M.1, Q-L2)", (
       );
       if (r.status !== "ok") throw new Error(`«${caso.texto}»: no ok`);
 
-      const deCliente = busquedaDeCliente(sinPaginar.mensajeros, caso.texto);
-      expect(claves(r.items), `«${caso.texto}» (${caso.nota})`).toEqual(claves(deCliente));
-      expect(r.total, `«${caso.texto}»: total`).toBe(deCliente.length);
+      const esperados = idsEsperados(caso);
+      const esperadasConMontos = sinPaginar.mensajeros.filter((m) =>
+        esperados.includes(m.mensajeroId),
+      );
+      expect(claves(r.items), `«${caso.texto}» (${caso.nota})`).toEqual(claves(esperadasConMontos));
+      expect(r.total, `«${caso.texto}»: total`).toBe(esperados.length);
+      // Q-L4: el archivo pliega los acentos EXACTAMENTE igual que la tabla. Si el plegado se
+      // hubiera escrito en un solo camino, la fila que el maestro ve y la que descarga
+      // discreparian justo en los nombres acentuados — que son la mitad del padron.
+      afirmarDeltaDeAcentos(
+        caso,
+        r.items.map((m) => m.mensajeroId),
+        busquedaDeCliente(sinPaginar.mensajeros, caso.texto),
+      );
       if (r.items.length > 0) conFilas += 1;
     }
 
     // Anti-vacuidad: si el modo completo devolviera siempre vacio, el bucle habria comparado 25
     // veces [] con [] sin quejarse.
-    expect(conFilas).toBe(22);
+    expect(conFilas).toBe(23);
   });
 
   it("CONTRAPRUEBA: el archivo trae filas que la página visible NO contiene (R52)", async () => {

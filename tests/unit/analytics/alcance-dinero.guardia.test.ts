@@ -60,8 +60,9 @@ describe("R25 · no hay adaptador de alcance para las tablas de dinero", () => {
 });
 
 describe("R25 · ninguna metrica financiera declara alcance acotado", () => {
-  it("las 8 financieras solo declaran total o prohibido", () => {
-    expect(FINANCIERAS.length).toBe(8);
+  it("las 10 financieras solo declaran total o prohibido", () => {
+    // 8 de la 135 + `dinero_en_caja` y `ganancia_ordenex` de la 173 (P4).
+    expect(FINANCIERAS.length).toBe(10);
     for (const metrica of FINANCIERAS) {
       for (const rol of ROLES_ANALITICA) {
         expect(["total", "prohibido"], `${metrica.id}/${rol}`).toContain(metrica.alcance[rol]);

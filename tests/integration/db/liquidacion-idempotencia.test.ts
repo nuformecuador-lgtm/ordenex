@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import { Prisma, RolValue, type PrismaClient } from "@prisma/client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { LiquidacionTx } from "@/lib/interfaces/services/ILiquidacionService";
@@ -60,6 +62,25 @@ type FilaMovimiento = {
 type FilaMovimientoMensajero = {
   mensajeroId: string;
   tipo: "devengo" | "pago";
+  categoria: string;
+  monto: Prisma.Decimal;
+  origenTipo: string;
+  origenId: string | null;
+  descripcion: string | null;
+  registradoPor: string | null;
+  fechaMovimiento?: Date;
+};
+
+/**
+ * Feature 173 / T C.2 — la fila del libro de la CAJA PRINCIPAL. El store la gana porque desde la
+ * 173 el pago a una tienda escribe TRES veces en la misma transaccion (documento, ledger y caja);
+ * sin este delegado, el camino de la tienda reventaria aqui con `undefined.createMany`.
+ *
+ * Su indice unico parcial es `(origen_tipo, origen_id, categoria)` —SIN beneficiario, porque la
+ * caja no tiene—, y es lo que deja convivir al egreso del pago con el ingreso de su reverso.
+ */
+type FilaMovimientoCaja = {
+  tipo: "ingreso" | "egreso";
   categoria: string;
   monto: Prisma.Decimal;
   origenTipo: string;
@@ -147,6 +168,7 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
     },
   ];
   const movimientosMensajero: FilaMovimientoMensajero[] = [];
+  const movimientosCaja: FilaMovimientoCaja[] = []; // feature 173/T C.2
   const clavesMovimiento = new Set<string>(["cierre_dia|c-previo|t1|cod_recaudado"]);
   const cierres: FilaCierre[] = cierresIniciales;
   const pagos: FilaPago[] = [];
@@ -178,6 +200,9 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
     `${d.origenTipo}|${d.origenId}|${d.tiendaId}|${d.categoria}`;
   const claveMovMensajero = (d: FilaMovimientoMensajero) =>
     `${d.origenTipo}|${d.origenId}|${d.mensajeroId}|${d.categoria}`;
+  // Feature 173: el de la caja, que no tiene beneficiario (design §2.5).
+  const claveMovCaja = (d: FilaMovimientoCaja) =>
+    `caja|${d.origenTipo}|${d.origenId}|${d.categoria}`;
 
   // Lecturas COMMITEADAS (el cliente propio del repositorio, fuera de la transaccion).
   const clienteLectura = {
@@ -467,6 +492,40 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
         },
       },
       /**
+       * Feature 173 / T C.2 — el libro de la CAJA PRINCIPAL, con la misma semantica de indice
+       * unico parcial y de visibilidad diferida al commit que los otros dos. **No escribe en el
+       * `log`** a proposito: las aserciones de este archivo son de la 172 y comparan el log
+       * entero; el delegado se añade para que el camino no reviente, no para cambiar lo que la
+       * 172 mide. Lo que la caja hace de verdad se mide en las suites de la 173.
+       */
+      walletMovimiento: {
+        createMany: async ({
+          data,
+          skipDuplicates,
+        }: {
+          data: FilaMovimientoCaja[];
+          skipDuplicates?: boolean;
+        }) => {
+          const aInsertar: FilaMovimientoCaja[] = [];
+          for (const d of data) {
+            const k = claveMovCaja(d);
+            if (d.origenId !== null && (clavesMovimiento.has(k) || clavesPendientes.has(k))) {
+              if (skipDuplicates) continue; // ON CONFLICT DO NOTHING
+              throw new Error(`unique violation ${k}`);
+            }
+            if (d.origenId !== null) clavesPendientes.add(k);
+            aInsertar.push(d);
+          }
+          aplicarAlCommit.push(() => {
+            for (const d of aInsertar) {
+              movimientosCaja.push(d);
+              if (d.origenId !== null) clavesMovimiento.add(claveMovCaja(d));
+            }
+          });
+          return { count: aInsertar.length };
+        },
+      },
+      /**
        * R42 — el cierre se LEE dentro de la transaccion (la guardia de R20) y NUNCA se escribe.
        * Las escrituras existen aqui a proposito, y REVIENTAN: si alguien tocara el snapshot del
        * cierre desde esta feature, el test caeria con un mensaje que dice exactamente eso.
@@ -503,6 +562,7 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
   return {
     movimientos,
     movimientosMensajero,
+    movimientosCaja, // feature 173/T C.2
     cierres,
     pagos,
     anulaciones,
@@ -524,6 +584,10 @@ function buildService(store: ReturnType<typeof makeStore>, ahora?: () => Date) {
     new WalletTiendaMovimientoRepository(cliente),
     new PagoMensajeroMovimientoRepository(cliente),
     store.runTransaction,
+    // Feature 173/T C.2: el puerto REAL sobre el repositorio REAL de la caja. Cablearlo aqui con
+    // un doble inerte dejaria este store —el unico que modela candados y visibilidad— sin ver la
+    // tercera escritura del pago a tienda.
+    new CajaPagoTiendaFeedService(new WalletMovimientoRepository(cliente)),
     ahora,
   );
 }

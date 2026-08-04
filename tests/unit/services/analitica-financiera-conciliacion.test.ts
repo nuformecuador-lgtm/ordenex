@@ -66,6 +66,45 @@ const LEDGER_DESCUADRADO: readonly TotalLedgerPorOrigenCierre[] = LEDGER_CUADRAD
   f.cierreId === "c2" && f.tipo === "credito" ? { ...f, suma: "150.00" } : f,
 );
 
+/* -------------------------------------------------------------------------- */
+/* Feature 173 (T F.4) — el COD en la caja NO puede mover este cuadre          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Desde la 173, aprobar un cierre del dia escribe TAMBIEN en `wallet_movimiento`: un ingreso
+ * `ingreso_cod_recaudado` con `origen_tipo = cierre_dia` y el `origen_id` de ese cierre. Como
+ * `sumarLedgerPorOrigenDeCierre` agrupa los TRES libros por origen, esas filas EMPIEZAN A
+ * APARECER en la entrada de la conciliacion sin que nadie las pida.
+ *
+ * Aqui esta el riesgo real de la tanda, y por eso los importes no son casuales: cada fila de
+ * caja vale EXACTAMENTE lo que su cierre acredito (500 y 200). Si alguien "simplificara" el
+ * cuadre a sumar los tres libros —o los dos tipos de ingreso—, el `totalLedger` se duplicaria a
+ * 1400 y la conciliacion de la 127 empezaria a declarar un descuadre permanente sobre datos
+ * correctos. Un aviso que suena siempre es un aviso que alguien apaga.
+ */
+const COD_EN_CAJA: readonly TotalLedgerPorOrigenCierre[] = [
+  { ledger: "wallet_movimiento", cierreId: "c1", tipo: "ingreso", suma: "500.00" },
+  { ledger: "wallet_movimiento", cierreId: "c2", tipo: "ingreso", suma: "200.00" },
+];
+
+/** El ledger que cuadra, ahora CON las filas de contra-entrega en la caja. */
+const LEDGER_CUADRADO_CON_COD: readonly TotalLedgerPorOrigenCierre[] = [
+  ...LEDGER_CUADRADO,
+  ...COD_EN_CAJA,
+];
+
+/**
+ * El descuadrado + una fila de caja que vale EXACTAMENTE los 50 que faltan.
+ *
+ * Es la trampa a proposito: si la caja entrara en el cuadre, este descuadre desapareceria y el
+ * test se pondria rojo por el lado que importa —el que esconde un problema real—, no por el que
+ * grita de mas.
+ */
+const LEDGER_DESCUADRADO_CON_COD: readonly TotalLedgerPorOrigenCierre[] = [
+  ...LEDGER_DESCUADRADO,
+  { ledger: "wallet_movimiento", cierreId: "c2", tipo: "ingreso", suma: "50.00" },
+];
+
 function conciliar(
   ledger: readonly TotalLedgerPorOrigenCierre[],
   umbral?: string,
@@ -170,6 +209,58 @@ describe("R23 · el cuadre compara el snapshot aprobado contra el credito de ESO
 
     expect(conciliacion.cuadre.cierresDescuadrados.length).toBeGreaterThan(0);
     expect(JSON.stringify(conciliacion)).not.toContain(MENSAJERO);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* R56 (173 / T F.4) — con COD en la caja, el cuadre da EXACTAMENTE lo mismo   */
+/* -------------------------------------------------------------------------- */
+
+describe("R56 · las filas de contra-entrega en la caja no mueven la conciliacion", () => {
+  it("el cuadre con COD en la caja es IDENTICO al de sin ellas, campo por campo", async () => {
+    const sinCod = await cuadreDe(conciliar(LEDGER_CUADRADO));
+    const conCod = await cuadreDe(conciliar(LEDGER_CUADRADO_CON_COD));
+
+    // `toEqual` sobre el objeto entero, no sobre un campo: si la caja entrara por cualquier via
+    // —el total, la lista de descuadrados o el booleano—, esta linea lo dice.
+    expect(conCod.cuadre).toEqual(sinCod.cuadre);
+    expect(conCod.cuadre.totalLedger).toBe("700.00");
+    expect(conCod.cuadre.cuadra).toBe(true);
+    // Y los conteos por estado tampoco: salen de otra consulta, que no toca ledgers.
+    expect(conCod.porEstado).toEqual(sinCod.porEstado);
+  });
+
+  it("y el descuadre real NO se tapa aunque la caja tenga justo el dinero que falta", async () => {
+    const armadoSinCod = conciliar(LEDGER_DESCUADRADO);
+    const armadoConCod = conciliar(LEDGER_DESCUADRADO_CON_COD);
+    const sinCod = await cuadreDe(armadoSinCod);
+    const conCod = await cuadreDe(armadoConCod);
+
+    expect(conCod.cuadre).toEqual(sinCod.cuadre);
+    expect(conCod.cuadre.cuadra).toBe(false);
+    expect(conCod.cuadre.diferencia).toBe("50.00");
+    expect(conCod.cuadre.cierresDescuadrados).toEqual(["c2"]);
+    // El aviso sigue saliendo UNA vez: la caja no lo silencia ni lo duplica.
+    expect(armadoConCod.logger.logError).toHaveBeenCalledTimes(1);
+  });
+
+  it("los fixtures no son inocuos: las filas de caja existen, son del mismo origen y suman", () => {
+    expect(COD_EN_CAJA).toHaveLength(2);
+    expect(COD_EN_CAJA.every((f) => f.ledger === "wallet_movimiento")).toBe(true);
+    // Mismos `cierreId` que los cierres aprobados: no se ignoran "por ser de otro cierre".
+    expect(COD_EN_CAJA.map((f) => f.cierreId).sort()).toEqual(SNAPSHOTS.map((s) => s.cierreId));
+    // Y valen exactamente lo mismo que el snapshot: sumarlas daria 1400 en vez de 700.
+    expect(COD_EN_CAJA.map((f) => f.suma)).toEqual(SNAPSHOTS.map((s) => s.totalGeneral));
+    expect(LEDGER_CUADRADO_CON_COD.length).toBe(LEDGER_CUADRADO.length + 2);
+  });
+
+  it("autocomprobacion: sumar la caja SI cambiaria la cifra — por eso el filtro es el guardia", () => {
+    // El fallo contra el que defiende esto, escrito: el `esCreditoDeTienda` del servicio
+    // relajado a "cualquier ingreso". Con este fixture, el total pasaria de 700 a 1400.
+    const comoSiSumaraLaCaja = LEDGER_CUADRADO_CON_COD.filter(
+      (f) => f.tipo === "credito" || f.tipo === "ingreso",
+    ).reduce((acc, f) => acc + Number(f.suma), 0);
+    expect(comoSiSumaraLaCaja).toBeCloseTo(1460, 2); // 700 + 700 de caja + 60 del ingreso viejo
   });
 });
 

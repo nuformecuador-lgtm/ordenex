@@ -231,7 +231,7 @@ describe("R39 · cada fila de conciliacion declara con que fecha entro", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("R43 · el saldo al corte esta marcado y el flujo del periodo no", () => {
-  it("el mapa de las ocho financieras es exactamente el esperado", () => {
+  it("el mapa de las diez financieras es exactamente el esperado", () => {
     // El esperado se escribe A MANO: si se derivara del mismo registro que se juzga, el test
     // seria una tautologia y renombrar una cuenta por pagar seguiria pareciendo correcto.
     const esperado: Record<string, boolean> = {
@@ -240,13 +240,17 @@ describe("R43 · el saldo al corte esta marcado y el flujo del periodo no", () =
       ingreso_comision_cod: false,
       ingreso_iva: false,
       egresos: false,
+      // Feature 173 (P4): las dos son FLUJO del periodo, no saldo al corte. `dinero_en_caja`
+      // suena a saldo y no lo es: agrega la ventana [desde, hasta) como las demas.
+      dinero_en_caja: false,
+      ganancia_ordenex: false,
       cuenta_por_pagar_tienda: true,
       cuenta_por_pagar_mensajero: true,
       conciliacion_cierres: false,
     };
 
     const financieras = listarMetricas({ dominio: "financiera" });
-    expect(financieras.length).toBe(8);
+    expect(financieras.length).toBe(10);
     const obtenido = Object.fromEntries(financieras.map((m) => [m.id, esMetricaAcumulada(m.id)]));
     expect(obtenido).toEqual(esperado);
   });
@@ -387,7 +391,7 @@ describe("D8 · no existe un estado para una financiera declarada sin productor"
     expect(invalido.status).toBe("no_producida");
   });
 
-  it("el registro de ids servidos cubre las ocho financieras del catalogo", () => {
+  it("el registro de ids servidos cubre las diez financieras del catalogo", () => {
     const delCatalogo = listarMetricas({ dominio: "financiera" }).map((m) => m.id).sort();
     expect([...IDS_FINANCIERAS_SERVIDAS].sort()).toEqual(delCatalogo);
   });

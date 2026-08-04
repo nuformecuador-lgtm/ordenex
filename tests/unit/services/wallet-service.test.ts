@@ -5,10 +5,15 @@ import type {
   IWalletMovimientoRepository,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
-import type { WalletMovimientoDTO } from "@/lib/types/wallet";
+import type { AgregadoCajaRow, WalletMovimientoDTO } from "@/lib/types/wallet";
 
 // Feature 42 — tests unit del WalletService (R1/R3/R15/R16/R19/R20/R25). Guardia de rol
 // maestro; manual inmutable (no update/delete); DTOs con montos STRING.
+//
+// Feature 173 (T D.2, R8/R64/R65): `verBalance` —una sola cifra rotulada «balance»— pasa a
+// `verResumenCaja`, con las DOS cifras. El cambio de estas aserciones es DELIBERADO y esta
+// declarado en `design.md §11`; ninguna comprobacion se pierde: las tres del guardia de rol y
+// la del conjunto filtrado siguen, y se les suman las de la particion por naturaleza.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: paridad con maestro
@@ -29,11 +34,26 @@ function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO 
   };
 }
 
+/**
+ * Feature 173 (T D.2) — el agregado que devuelve el doble tiene dinero de las DOS naturalezas
+ * a proposito: contra-entrega recaudado (de TERCEROS) junto a flete y gasto (de Ordenex). Con
+ * un conjunto solo-propio las dos cifras coincidirian y el test no distinguiria una derivacion
+ * correcta de una que ignora la naturaleza.
+ *
+ *   entradas = 1000 + 5000 = 6000.00 ; salidas = 300.00  ⇒ enCaja   = 5700.00
+ *   propios  = 1000        − 300     ⇒ ganancia = 700.00 (los ₡5000 son de las tiendas)
+ */
+const AGREGADO: AgregadoCajaRow[] = [
+  { categoria: "ingreso_flete", tipo: "ingreso", total: "1000.00" },
+  { categoria: "ingreso_cod_recaudado", tipo: "ingreso", total: "5000.00" },
+  { categoria: "egreso_gasto", tipo: "egreso", total: "300.00" },
+];
+
 function buildRepo(): IWalletMovimientoRepository {
   return {
     crearMovimientos: vi.fn().mockResolvedValue(1),
     listar: vi.fn().mockResolvedValue({ movimientos: [mov()], total: 1 }),
-    agregarBalance: vi.fn().mockResolvedValue({ ingresos: "1000.00", egresos: "300.00" }),
+    agregarPorCategoriaYTipo: vi.fn().mockResolvedValue(AGREGADO),
     obtenerPorId: vi.fn().mockResolvedValue(null),
     agregarPorCategoria: vi
       .fn()
@@ -84,36 +104,178 @@ describe("WalletService.listarMovimientos (R19/R20)", () => {
   });
 });
 
-describe("WalletService.verBalance (R16/R19)", () => {
-  it("R19: rol no autorizado -> forbidden, sin exponer balance", async () => {
+describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
+  it("R65: rol no autorizado -> forbidden, y CERO llamadas al repositorio", async () => {
+    // La contraprueba literal que pide la task: el guardia se evalua ANTES de tocar la base.
+    // No es estilo — un `forbidden` decidido despues del `groupBy` ya habria LEIDO las cifras
+    // de la caja para tirarlas a la basura. Se miden los CINCO metodos, no solo el que usa
+    // este camino: ninguno puede haberse rozado.
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient);
-    const r = await svc.verBalance({ page: 1, pageSize: 20 }, OTRO);
+
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, OTRO);
+
     expect(r).toEqual({ status: "forbidden" });
-    expect(repo.agregarBalance).not.toHaveBeenCalled();
+    expect(repo.agregarPorCategoriaYTipo).not.toHaveBeenCalled();
+    expect(repo.listar).not.toHaveBeenCalled();
+    expect(repo.agregarPorCategoria).not.toHaveBeenCalled();
+    expect(repo.obtenerPorId).not.toHaveBeenCalled();
+    expect(repo.crearMovimientos).not.toHaveBeenCalled();
+    // …y `forbidden` viaja SOLO: ni una cifra colgando de la respuesta.
+    expect(Object.keys(r)).toEqual(["status"]);
   });
 
-  it("feature 94: admin -> balance derivado (paridad con maestro)", async () => {
+  it("feature 94: admin -> ok (paridad con maestro)", async () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient);
-    const r = await svc.verBalance({ page: 1, pageSize: 20 }, ADMIN);
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, ADMIN);
     expect(r.status).toBe("ok");
-    expect(repo.agregarBalance).toHaveBeenCalled();
+    expect(repo.agregarPorCategoriaYTipo).toHaveBeenCalled();
   });
 
-  it("R16: maestro -> balance derivado (STRING+signo) del conjunto filtrado", async () => {
+  it("R1/R4/R5: maestro -> las DOS cifras, distintas, derivadas del conjunto agregado", async () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient);
-    const r = await svc.verBalance({ page: 1, pageSize: 20 }, MAESTRO);
+
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
+
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
-    expect(r.balance).toEqual({
-      ingresos: "1000.00",
-      egresos: "300.00",
-      balance: "700.00",
-      signo: "positivo",
+    expect(r.resumen).toEqual({
+      entradas: "6000.00",
+      salidas: "300.00",
+      enCaja: "5700.00",
+      signoEnCaja: "positivo",
+      ingresosPropios: "1000.00",
+      egresosPropios: "300.00",
+      ganancia: "700.00",
+      signoGanancia: "positivo",
+      deTerceros: "5000.00",
+      periodoFiltrado: false,
     });
-    expect(typeof r.balance.balance).toBe("string");
+    // Lo que la feature existe para conseguir: los ₡5000 de contra-entrega estan en la caja y
+    // NO estan en la ganancia. Si `verResumenCaja` ignorara la naturaleza, serian iguales.
+    expect(r.resumen.enCaja).not.toBe(r.resumen.ganancia);
+  });
+
+  it("R64: TODOS los importes cruzan como STRING — cero `number` en el DTO", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
+    if (r.status !== "ok") throw new Error("esperado ok");
+
+    const importes = [
+      r.resumen.entradas,
+      r.resumen.salidas,
+      r.resumen.enCaja,
+      r.resumen.ingresosPropios,
+      r.resumen.egresosPropios,
+      r.resumen.ganancia,
+      r.resumen.deTerceros,
+    ];
+    for (const v of importes) {
+      expect(typeof v).toBe("string");
+      expect(v).toMatch(/^-?\d+\.\d{2}$/); // escala 2 SIEMPRE, tambien en el cero
+    }
+    expect(typeof r.resumen.periodoFiltrado).toBe("boolean"); // el unico no-STRING, y no es dinero
+  });
+
+  it("R8: los filtros del resumen son LOS MISMOS del listado, resueltos por el mismo metodo", async () => {
+    // Se compara llamada contra llamada, sobre la misma entrada: si alguien copiara la
+    // construccion de filtros en vez de reusar `construirFiltros`, los dos objetos dejarian de
+    // ser iguales y la cabecera podria dejar de cuadrar con su propio listado.
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+    const desde = new Date("2026-07-01T00:00:00.000Z");
+    const hasta = new Date("2026-07-31T00:00:00.000Z");
+    const input = {
+      page: 3,
+      pageSize: 10,
+      tipo: "ingreso" as const,
+      categoria: "ingreso_cod_recaudado" as const,
+      desde,
+      hasta,
+    };
+
+    await svc.listarMovimientos(input, MAESTRO);
+    await svc.verResumenCaja(input, MAESTRO);
+
+    const delListado = (repo.listar as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    const delResumen = (repo.agregarPorCategoriaYTipo as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as Record<string, unknown>;
+
+    expect(delResumen).toEqual({ tipo: "ingreso", categoria: "ingreso_cod_recaudado", desde, hasta });
+    // Identicos salvo el RECORTE, que es del listado y no del conjunto: las claves del listado
+    // son las del resumen MAS `page`/`pageSize`, y cada valor comun coincide uno a uno.
+    expect(Object.keys(delListado).sort()).toEqual(
+      [...Object.keys(delResumen), "page", "pageSize"].sort(),
+    );
+    for (const clave of Object.keys(delResumen)) {
+      expect(delListado[clave]).toEqual(delResumen[clave]);
+    }
+  });
+
+  it("[P7]: sin filtros `periodoFiltrado` es false; con CUALQUIERA de los cuatro, true", async () => {
+    const svc = () => new WalletService(buildRepo(), writeClient);
+    const bandera = async (extra: Record<string, unknown>) => {
+      const r = await svc().verResumenCaja({ page: 1, pageSize: 20, ...extra }, MAESTRO);
+      if (r.status !== "ok") throw new Error("esperado ok");
+      return r.resumen.periodoFiltrado;
+    };
+
+    // `page`/`pageSize` NO son filtros: recortan la pagina, no el conjunto. Paginar no puede
+    // cambiar el rotulo de la cifra.
+    expect(await bandera({})).toBe(false);
+    expect(await bandera({ page: 7, pageSize: 100 })).toBe(false);
+
+    expect(await bandera({ tipo: "egreso" })).toBe(true);
+    expect(await bandera({ categoria: "egreso_pago_tienda" })).toBe(true);
+    expect(await bandera({ desde: new Date("2026-07-01T00:00:00.000Z") })).toBe(true);
+    expect(await bandera({ hasta: new Date("2026-07-31T00:00:00.000Z") })).toBe(true);
+  });
+
+  it("[P7]: el servidor NO pinta texto — el DTO lleva el HECHO, no el rotulo", async () => {
+    // R60/R58 son de la pantalla (T G.1). Aqui lo unico que se comprueba es que el servidor no
+    // se mete a redactar: ningun campo del DTO es una frase.
+    const svc = new WalletService(buildRepo(), writeClient);
+    const r = await svc.verResumenCaja(
+      { page: 1, pageSize: 20, tipo: "ingreso" },
+      MAESTRO,
+    );
+    if (r.status !== "ok") throw new Error("esperado ok");
+
+    expect(r.resumen.periodoFiltrado).toBe(true);
+    // Ningun VALOR del DTO es prosa: o es un importe, o es un signo, o es el booleano. Se mide
+    // sobre los valores y no sobre el JSON entero a proposito —las CLAVES si pueden llamarse
+    // `ganancia`, faltaria mas—. Lo que no puede aparecer es una frase que la pantalla deba
+    // limitarse a repetir: eso convertiria al servidor en el que redacta, y el rotulo
+    // condicional de [P7] dejaria de ser una decision de la UI.
+    for (const [clave, valor] of Object.entries(r.resumen)) {
+      if (clave === "periodoFiltrado") continue;
+      if (clave.startsWith("signo")) {
+        expect(["positivo", "negativo", "cero"]).toContain(valor);
+        continue;
+      }
+      expect(valor).toMatch(/^-?\d+\.\d{2}$/);
+    }
+  });
+
+  it("libro vacio -> las dos cifras en 0.00 y signo `cero` (nunca `null` ni cadena vacia)", async () => {
+    const repo = buildRepo();
+    (repo.agregarPorCategoriaYTipo as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
+    if (r.status !== "ok") throw new Error("esperado ok");
+
+    expect(r.resumen.enCaja).toBe("0.00");
+    expect(r.resumen.ganancia).toBe("0.00");
+    expect(r.resumen.signoEnCaja).toBe("cero");
+    expect(r.resumen.signoGanancia).toBe("cero");
+    expect(r.resumen.deTerceros).toBe("0.00");
   });
 });
 
@@ -165,7 +327,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     });
   });
 
-  it("R3: el servicio NO expone update ni delete (solo listar/verBalance/registrarManual)", () => {
+  it("R3: el servicio NO expone update ni delete (solo listar/verResumenCaja/registrarManual)", () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient);
     expect((svc as unknown as Record<string, unknown>).actualizar).toBeUndefined();

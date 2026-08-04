@@ -2,7 +2,7 @@ import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import { esNoComparable } from "@/lib/analytics/backfill-rango";
 import { seudonimizarMensajeros } from "@/lib/analytics/identidad";
 import { MENSAJERO_SIN_ASIGNAR } from "@/lib/analytics/types";
-import type { DimensionAnalitica } from "@/lib/analytics/types";
+import type { DimensionAnalitica, RangoResuelto } from "@/lib/analytics/types";
 import { fechaCalendarioCR, inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
 import type { VentanaDia } from "@/lib/analytics/rollup-dia";
 import { DIMENSION_AGREGADA } from "@/lib/interfaces/repositories/IAnaliticaOperativaRollupRepository";
@@ -12,6 +12,7 @@ import type {
   IAnaliticaOperativaRollupRepository,
 } from "@/lib/interfaces/repositories/IAnaliticaOperativaRollupRepository";
 import type {
+  AgingPorEstadoFila,
   CubosDelDiaEnCurso,
   IAnaliticaOperativaVivaRepository,
 } from "@/lib/interfaces/repositories/IAnaliticaOperativaVivaRepository";
@@ -20,11 +21,17 @@ import {
   AnaliticaOperativaError,
   type EtapaOperativa,
   type IAnaliticaOperativaService,
+  type OpcionesAgregado,
 } from "@/lib/interfaces/services/IAnaliticaOperativaService";
 import {
+  ERROR_UNIDAD_NO_AGREGABLE,
   NOTA_SIN_GESTIONAR,
   PENUMBRA,
+  esUnidadAgregable,
+  type AgregadoOperativo,
   type Cobertura,
+  type CuboAgregado,
+  type GranoAgregado,
   type PuntoSerie,
   type SerieOperativa,
 } from "@/lib/types/analitica-operativa";
@@ -38,6 +45,15 @@ import {
 // D5 — SUMAR ANTES DE DIVIDIR, SIEMPRE. Las tasas suman numerador y denominador sobre los
 // cubos del recorte y dividen AL FINAL; `tiempo_ciclo` suma `seg_ciclo_acum` y `seg_ciclo_n`
 // y divide al final. Nunca media de medias, nunca una tasa materializada.
+//
+// Feature 176 — LA MISMA REGLA, UN NIVEL MAS ARRIBA. El parrafo de encima describe la suma
+// de los cubos DENTRO DE UN DIA, porque el grano de salida de `consultar` es el punto
+// diario. No dice nada del cruce ENTRE dias, y ahi estaba el hueco: sumar despues esos
+// cocientes diarios es media de medias, que pondera igual un dia de 1 gestion y un dia de
+// 1.000. `consultarAgregado` EXTIENDE la regla —no la revoca— quitando `cubo.fecha` de la
+// clave de agrupacion y poniendo en su lugar el CUBO TEMPORAL (todo el periodo, o la semana
+// ISO). La division sigue ocurriendo una sola vez, en `razon()`, y ahora ademas viajan el
+// numerador y el denominador para que el consumidor no tenga que recomponerlos.
 //
 // R30/R14 — NADA de `BigInt` sale de aqui: `JSON.stringify(BigInt)` lanza `TypeError`. El
 // `bigint` muere en la division.
@@ -186,6 +202,150 @@ export class AnaliticaOperativaService implements IAnaliticaOperativaService {
       cobertura,
       ...(metrica.id === "sin_gestionar" ? { nota: NOTA_SIN_GESTIONAR } : {}),
     };
+  }
+
+  /**
+   * Feature 176 (R1) — LA LECTURA AGREGADA. Un cubo por periodo o por semana ISO, con el
+   * numerador y el denominador ANTES de dividir.
+   *
+   * Pide los cubos al MISMO metodo del repositorio (`agregarCubos`) con los MISMOS granos
+   * que `consultar` y reusa `cobertura()`, `cubosIntradia()` y `razon()`. No hay una
+   * segunda formula ni una segunda entrada a `analytics_daily`: la unica diferencia con la
+   * serie es la CLAVE DE AGRUPACION. Eso es lo que hace estructuralmente cierto R8.
+   */
+  async consultarAgregado(
+    consulta: ConsultaAnalitica,
+    opciones: OpcionesAgregado = {},
+  ): Promise<AgregadoOperativo> {
+    const metrica = consulta.metrica;
+    // R12 — RECHAZO TEMPRANO, antes de tocar nada. El borde ya responde `validation_error`
+    // por este mismo motivo; aqui se falla RUIDOSAMENTE por si algun dia se llama al
+    // servicio por otra puerta. Agregar un STOCK entre fechas daria una respuesta con forma
+    // correcta y significado inventado, que es peor que un error.
+    if (!esUnidadAgregable(metrica.unidad)) {
+      throw new Error(`analitica operativa agregada ("${metrica.id}"): ${ERROR_UNIDAD_NO_AGREGABLE}`);
+    }
+
+    const grano = opciones.grano ?? "periodo";
+    const cobertura = this.cobertura(consulta);
+    const cubos =
+      metrica.clase === "live"
+        ? await this.cubosVivosAgregados(consulta, opciones.desagregacion)
+        : await this.cubosDeRollupAgregados(
+            consulta,
+            grano,
+            opciones.desagregacion ?? DESAGREGACION_POR_DEFECTO[metrica.id],
+          );
+
+    return {
+      metricaId: metrica.id,
+      unidad: metrica.unidad,
+      unidadDeConteo: metrica.unidadDeConteo,
+      grano,
+      rango: consulta.rango,
+      cubos,
+      // R9 — el bloque de cobertura tambien viaja en el agregado: agregar sobre dias sin
+      // dato y no decirlo es la misma mentira, solo que sumada.
+      cobertura,
+    };
+  }
+
+  /**
+   * R2/R3/R6/R7/R10 — las cinco metricas de rollup, cubeteadas por `grano`.
+   *
+   * Los cubos del rollup (dias CERRADOS) y los del intradia (el dia EN CURSO, D4) caen en
+   * el MISMO grupo y se suman antes de dividir; el grupo que recibio algo del intradia
+   * hereda la marca `parcial` y el `corteAt`.
+   */
+  private async cubosDeRollupAgregados(
+    consulta: ConsultaAnalitica,
+    grano: GranoAgregado,
+    dimension: DimensionAnalitica | undefined,
+  ): Promise<readonly CuboAgregado[]> {
+    const granos = dimension ? [dimension] : [];
+    const cubos = await this.enEtapa(consulta, "cubos_rollup", () =>
+      this.rollup.agregarCubos(consulta, granos),
+    );
+    const intradia = await this.cubosIntradia(consulta, granos);
+
+    const grupos = new Map<string, GrupoAgregado>();
+    fundirEnGrupos(grupos, cubos, consulta.rango, grano, dimension, undefined);
+    fundirEnGrupos(grupos, intradia.cubos, consulta.rango, grano, dimension, intradia.corteAt);
+
+    const etiquetas = await this.etiquetasSiHaceFalta(consulta, dimension, [...grupos.values()]);
+    const salida = [...grupos.values()].map((g) => ({
+      fecha: g.fecha,
+      desdeFecha: g.desdeFecha,
+      hastaFecha: g.hastaFecha,
+      ...(dimension ? { dimension: this.etiquetar(dimension, g.clave, etiquetas) } : {}),
+      ...componentesYValor(consulta.metrica.id, g.medidas),
+      // R10 — el cubo que contiene el dia en curso viaja MARCADO. Uno de solo dias cerrados
+      // no lleva la marca: si la llevara, los dos serian indistinguibles.
+      ...(g.corteAt ? { parcial: true as const, corteAt: g.corteAt.toISOString() } : {}),
+    }));
+
+    // R15 — la seudonimizacion ocurre AQUI, antes de que el agregado exista como objeto de
+    // respuesta. El modo agregado no puede ser una puerta trasera a los ids reales.
+    return dimension === "mensajero"
+      ? seudonimizarCubos(salida, consulta.politicaIdentidad)
+      : salida;
+  }
+
+  /**
+   * R11/D3 — `aging_por_estado`: CUBO UNICO AL CORTE, no serie temporal.
+   *
+   * Es la unica metrica `clase: "live"` del catalogo y es un STOCK INSTANTANEO: «el aging
+   * medio de agosto» no significa nada, asi que no se agrega sobre el TIEMPO sino sobre la
+   * DIMENSION, fundiendo los estatus al corte. Lo que le faltaba no era el rango largo —su
+   * serie siempre tuvo una sola fecha— sino la cifra total, en TODO rango.
+   *
+   * `AgingPorEstadoFila` solo lleva tres coordenadas (`estatusId`, `zonaId`, `tiendaId`):
+   * pedir un desglose por mensajero o por causa no inventa una coordenada, funde todo en el
+   * cubo unico.
+   */
+  private async cubosVivosAgregados(
+    consulta: ConsultaAnalitica,
+    desagregacion: DimensionAnalitica | undefined,
+  ): Promise<readonly CuboAgregado[]> {
+    const corteAt = this.deps.now();
+    const filas = await this.enEtapa(consulta, "aging", () =>
+      this.viva.agingPorEstado(consulta, corteAt),
+    );
+    const dimension =
+      desagregacion && DIMENSIONES_DE_AGING.has(desagregacion) ? desagregacion : undefined;
+
+    const porClave = new Map<string, { acum: bigint; n: number }>();
+    for (const f of filas) {
+      const clave = claveDeAging(f, dimension);
+      const actual = porClave.get(clave) ?? { acum: BigInt(0), n: 0 };
+      // D5 — sumar antes de dividir, tambien aqui: `Σ segEnEstadoAcum / Σ ordenes`.
+      porClave.set(clave, { acum: actual.acum + f.segEnEstadoAcum, n: actual.n + f.ordenes });
+    }
+
+    const etiquetas =
+      dimension === "estatus"
+        ? await this.enEtapa(consulta, "etiquetas_estatus", () =>
+            this.rollup.etiquetasDeEstatus([...porClave.keys()]),
+          )
+        : new Map<string, EtiquetaEstatus>();
+
+    // Su unica fecha es la del corte, y el cubo es SIEMPRE parcial: una foto del ahora
+    // nunca es un dia cerrado.
+    const fecha = fechaCalendarioCR(corteAt);
+    return [...porClave.entries()]
+      .map(([clave, { acum, n }]) => ({
+        fecha,
+        desdeFecha: fecha,
+        hastaFecha: fecha,
+        ...(dimension ? { dimension: this.etiquetar(dimension, clave, etiquetas) } : {}),
+        // R5 — el `bigint` muere aqui, una sola vez, al construir el cubo de salida.
+        numerador: Number(acum),
+        denominador: n,
+        valor: razon(Number(acum), n),
+        parcial: true as const,
+        corteAt: corteAt.toISOString(),
+      }))
+      .sort(ordenarCubosPorDimension);
   }
 
   /**
@@ -433,6 +593,185 @@ export class AnaliticaOperativaService implements IAnaliticaOperativaService {
 
 function denominadorDeGestiones(m: Medidas): number {
   return DENOMINADOR_GESTIONES.reduce((acc, id) => acc + Number(m[id]), 0);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Feature 176 — el cubeteo temporal del modo agregado                         */
+/* -------------------------------------------------------------------------- */
+
+/** Un cubo temporal en construccion: sus medidas fundidas y su marca de parcialidad. */
+interface GrupoAgregado {
+  fecha: string;
+  desdeFecha: string;
+  hastaFecha: string;
+  clave: string;
+  medidas: Medidas;
+  /** R10 — presente si ALGUN dia componente vino del intradia; es el corte MAYOR. */
+  corteAt: Date | undefined;
+}
+
+/** Las tres coordenadas que `AgingPorEstadoFila` lleva de verdad (R11). */
+const DIMENSIONES_DE_AGING: ReadonlySet<DimensionAnalitica> = new Set<DimensionAnalitica>([
+  "estatus",
+  "zona",
+  "tienda",
+]);
+
+function claveDeAging(fila: AgingPorEstadoFila, dimension: DimensionAnalitica | undefined): string {
+  switch (dimension) {
+    case "estatus":
+      return fila.estatusId;
+    case "zona":
+      return fila.zonaId;
+    case "tienda":
+      return fila.tiendaId;
+    default:
+      // Sin desglose: TODAS las filas caen en el cubo unico al corte.
+      return DIMENSION_AGREGADA;
+  }
+}
+
+/**
+ * R2 — EL PASO QUE CORRIGE LA ARITMETICA. La clave de agrupacion deja de llevar
+ * `cubo.fecha` y pasa a llevar el CUBO TEMPORAL: todos los dias del periodo (o de la
+ * semana) acumulan en las MISMAS `Medidas`, y la division llega despues, una sola vez.
+ *
+ * Aqui no se mira ni un `valor` diario: si esta funcion recibiera puntos ya divididos,
+ * cualquier cosa que hiciera con ellos seria media de medias.
+ */
+function fundirEnGrupos(
+  grupos: Map<string, GrupoAgregado>,
+  cubos: readonly CuboRollup[],
+  rango: RangoResuelto,
+  grano: GranoAgregado,
+  dimension: DimensionAnalitica | undefined,
+  corteAt: Date | undefined,
+): void {
+  for (const cubo of cubos) {
+    const ventana = ventanaDelCubo(cubo.fecha, grano, rango);
+    const clave = valorDeDimension(cubo, dimension);
+    const k = `${ventana.fecha}${clave}`;
+    let grupo = grupos.get(k);
+    if (grupo === undefined) {
+      grupo = { ...ventana, clave, medidas: medidasVacias(), corteAt: undefined };
+      grupos.set(k, grupo);
+    }
+    acumular(grupo.medidas, cubo);
+    if (corteAt !== undefined && (grupo.corteAt === undefined || corteAt > grupo.corteAt)) {
+      grupo.corteAt = corteAt;
+    }
+  }
+}
+
+/**
+ * R19/D6 — la ventana del cubo al que pertenece `fecha`.
+ *
+ * `periodo`: un unico cubo con los extremos del rango. `semana`: la semana ISO anclada en
+ * su LUNES, con los extremos RECORTADOS al rango (una semana a medias no puede anunciar
+ * dias que la consulta no pidio).
+ */
+function ventanaDelCubo(
+  fecha: string,
+  grano: GranoAgregado,
+  rango: RangoResuelto,
+): { fecha: string; desdeFecha: string; hastaFecha: string } {
+  if (grano === "periodo") {
+    return { fecha: rango.desdeFecha, desdeFecha: rango.desdeFecha, hastaFecha: rango.hastaFecha };
+  }
+  const lunes = lunesDeLaSemanaCR(fecha);
+  const domingo = sumarDiasCalendarioCR(lunes, 6);
+  return {
+    fecha: lunes,
+    desdeFecha: lunes < rango.desdeFecha ? rango.desdeFecha : lunes,
+    hastaFecha: domingo > rango.hastaFecha ? rango.hastaFecha : domingo,
+  };
+}
+
+/**
+ * Duracion de un dia DERIVADA de los propios helpers, como en `lib/analytics/ranges.ts`:
+ * este archivo no declara ninguna constante temporal propia y CR no tiene horario de verano.
+ */
+const FECHA_ANCLA = "2000-01-01";
+const UN_DIA_MS =
+  inicioDelDiaSiguienteCREnUtc(FECHA_ANCLA).getTime() - inicioDelDiaCREnUtc(FECHA_ANCLA).getTime();
+
+function sumarDiasCalendarioCR(fecha: string, dias: number): string {
+  return fechaCalendarioCR(new Date(inicioDelDiaCREnUtc(fecha).getTime() + dias * UN_DIA_MS));
+}
+
+/**
+ * R19 — el LUNES de la semana CR de `fecha`, con la MISMA convencion que el preset `semana`
+ * de `lib/analytics/ranges.ts` (que no la exporta).
+ *
+ * `inicioDelDiaCREnUtc` da `...T06:00:00.000Z`, que cae en la misma fecha en UTC, asi que
+ * `getUTCDay()` (0 = domingo) es el dia de la semana de la fecha CR sin depender del huso
+ * del proceso; `(dow + 6) % 7` son los dias a retroceder hasta el lunes.
+ *
+ * DEUDA DECLARADA (`design.md §6.1`): esta es la SEGUNDA definicion de «lunes» del repo —la
+ * otra es `lunesDeLaSemana` en `app/(app)/analitica/_components/operativo/agregacion.ts`, de
+ * la 131, que `lib/` no puede importar—. La contiene `agregado-semana.test.ts`, que compara
+ * contra el preset, y la salda la ficha frontend de D5 borrando aquella copia.
+ */
+function lunesDeLaSemanaCR(fecha: string): string {
+  const diaDeLaSemana = inicioDelDiaCREnUtc(fecha).getUTCDay();
+  return sumarDiasCalendarioCR(fecha, -((diaDeLaSemana + 6) % 7));
+}
+
+/**
+ * R1/R3/R6/R7 — los COMPONENTES de cada metrica y su division, en el mismo sitio y con las
+ * mismas constantes que `valorDe`. No hay formula nueva: `tasa_*` divide entre GESTIONES
+ * (`entregas+devoluciones+rechazos+incidentes`, jamas `ordenesCreadas`), `primer_intento_ok`
+ * divide entre ENTREGAS, y `tiempo_ciclo` es `Σ segCicloAcum / Σ segCicloN`.
+ *
+ * R4 — con denominador 0 el valor es `null` y los dos componentes viajan en 0 y PRESENTES:
+ * `denominador === 0` es una afirmacion sobre la operacion («no hubo gestiones»), no una
+ * ausencia de informacion. `valor: 0` sigue prohibido.
+ */
+function componentesYValor(
+  metricaId: string,
+  m: Medidas,
+): { numerador: number; denominador: number; valor: number | null } {
+  const { numerador, denominador } = componentesDe(metricaId, m);
+  return { numerador, denominador, valor: razon(numerador, denominador) };
+}
+
+function componentesDe(
+  metricaId: string,
+  m: Medidas,
+): { numerador: number; denominador: number } {
+  switch (metricaId) {
+    case "tasa_entrega":
+      return { numerador: m.entregas, denominador: denominadorDeGestiones(m) };
+    case "tasa_devolucion":
+      return { numerador: m.devoluciones, denominador: denominadorDeGestiones(m) };
+    case "tasa_rechazo":
+      return { numerador: m.rechazos, denominador: denominadorDeGestiones(m) };
+    case "primer_intento_ok":
+      return { numerador: m.primerIntentoOk, denominador: m.entregas };
+    // R5 — el `bigint` muere AQUI, al construir el cubo de salida, y no antes: sumarlo como
+    // `number` perderia precision en rangos largos.
+    case "tiempo_ciclo":
+      return { numerador: Number(m.segCicloAcum), denominador: m.segCicloN };
+    default:
+      // Inalcanzable: `consultarAgregado` ya rechazo toda unidad que no sea `porcentaje` ni
+      // `segundos` (R12). Se falla ruidosamente en vez de devolver ceros plausibles.
+      throw new Error(`analitica operativa agregada: metrica sin componentes "${metricaId}"`);
+  }
+}
+
+/** R15 — el gemelo de `seudonimizarPuntos` para los cubos agregados. Mismo helper de la 122. */
+function seudonimizarCubos(
+  cubos: readonly CuboAgregado[],
+  politica: "real" | "seudonima",
+): readonly CuboAgregado[] {
+  if (politica === "real") return cubos;
+  const filas = cubos.map((c) => ({ cubo: c, mensajeroId: c.dimension ?? MENSAJERO_SIN_ASIGNAR }));
+  return seudonimizarMensajeros(filas, politica).map((f) => ({ ...f.cubo, dimension: f.mensajero }));
+}
+
+/** Orden estable por dimension: el resultado no depende del orden de la base. */
+function ordenarCubosPorDimension(a: CuboAgregado, b: CuboAgregado): number {
+  return (a.dimension ?? "").localeCompare(b.dimension ?? "");
 }
 
 function etiquetaDeEstatus(

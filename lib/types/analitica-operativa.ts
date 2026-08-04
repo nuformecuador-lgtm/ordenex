@@ -125,3 +125,84 @@ export type ResultadoOperativo =
   | { readonly status: "validation_error"; readonly fieldErrors: Record<string, string[]> }
   | { readonly status: "forbidden" }
   | { readonly status: "unauthenticated" };
+
+/* -------------------------------------------------------------------------- */
+/* Feature 176 — MODO AGREGADO (design §3). ADITIVO: nada de arriba cambia.    */
+/* -------------------------------------------------------------------------- */
+
+// Por que existe este bloque, en una frase: la serie de la 126 divide POR DIA, y sumar
+// despues esos cocientes es media de medias — que pondera igual un dia de 1 gestion y un
+// dia de 1.000. El modo agregado devuelve los COMPONENTES antes de dividir, para que la
+// division ocurra una sola vez sobre todo el cubo temporal.
+//
+// D1 — se anade JUNTO a `PuntoSerie`/`SerieOperativa`, sin tocarlos: la 131 y la 132 los
+// consumen en produccion. Un campo `agregado?` dentro de la serie habria cambiado el
+// payload de dos consumidores vivos y obligado a calcular el agregado incluso cuando solo
+// se quiere la serie.
+
+/** Cubo temporal del modo agregado: los componentes ANTES de dividir. */
+export interface CuboAgregado {
+  /**
+   * Ancla del cubo, `YYYY-MM-DD` CR: `desdeFecha` del rango con grano `periodo`, el lunes
+   * ISO con grano `semana`, la fecha del corte en `aging_por_estado`.
+   */
+  readonly fecha: string;
+  /** Extremos INCLUSIVOS del cubo, `YYYY-MM-DD` CR. Con grano `periodo`, los del rango. */
+  readonly desdeFecha: string;
+  readonly hastaFecha: string;
+  /** Dimension del desglose, YA seudonimizada si la politica lo exige (R15). */
+  readonly dimension?: string;
+  /** R1/R5 — SIEMPRE `number`, nunca `bigint`, nunca ausente. */
+  readonly numerador: number;
+  readonly denominador: number;
+  /**
+   * R4 — `numerador / denominador`, o `null` si `denominador === 0`. NUNCA `0` para decir
+   * «no se sabe»: una tasa de cero es un dato real, y falso. Con el denominador a la vista
+   * el consumidor SI distingue «no hubo gestiones» de «no hay dato», cosa que con el `null`
+   * a secas de la 126 era el mismo pixel (D2).
+   */
+  readonly valor: number | null;
+  /** R10/D4 — el cubo contiene el dia en curso. */
+  readonly parcial?: true;
+  /** ISO del corte usado. Solo con `parcial: true`. */
+  readonly corteAt?: string;
+}
+
+/** R19/D6 — los DOS granos: todo el rango de una pieza, o un cubo por semana ISO. */
+export type GranoAgregado = "periodo" | "semana";
+
+export interface AgregadoOperativo {
+  readonly metricaId: string;
+  /** R12 — solo `porcentaje` o `segundos`. Un `conteo` no llega hasta aqui. */
+  readonly unidad: MetricaUnidad;
+  readonly unidadDeConteo: UnidadDeConteo;
+  readonly grano: GranoAgregado;
+  readonly rango: RangoResuelto;
+  readonly cubos: readonly CuboAgregado[];
+  /** R9 — OBLIGATORIO. Nunca `cobertura?`. Mismo tipo y mismo calculo que la 126. */
+  readonly cobertura: Cobertura;
+}
+
+export type ResultadoAgregado =
+  | { readonly status: "ok"; readonly datos: AgregadoOperativo }
+  | { readonly status: "validation_error"; readonly fieldErrors: Record<string, string[]> }
+  | { readonly status: "forbidden" }
+  | { readonly status: "unauthenticated" };
+
+/**
+ * R12 — las unidades que el modo agregado admite, declaradas UNA vez.
+ *
+ * El modo agregado existe para lo que NO es sumable. Servir aqui una metrica de `conteo`
+ * —`ordenes_por_estado`, por ejemplo— sumaria un STOCK entre fechas, que R12 de la 126 y
+ * el comentario de `db/schema.prisma:1886` prohiben expresamente: `analytics_daily` no
+ * tiene forma de decir que esa columna no se suma.
+ */
+export const UNIDADES_AGREGABLES: readonly MetricaUnidad[] = ["porcentaje", "segundos"];
+
+/** El mensaje del `validation_error` de R12. Se escribe una vez, y el borde lo reusa. */
+export const ERROR_UNIDAD_NO_AGREGABLE =
+  "el modo agregado solo aplica a metricas de porcentaje o segundos";
+
+export function esUnidadAgregable(unidad: MetricaUnidad): boolean {
+  return UNIDADES_AGREGABLES.includes(unidad);
+}
