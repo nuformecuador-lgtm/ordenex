@@ -2773,3 +2773,52 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
 - **Colisión de nombres de migración entre sesiones paralelas**: `20260803120000_caja_tesoreria` y
   `20260803120000_download_storage_path` comparten timestamp. Hoy es inocuo; el día que dos sesiones
   toquen la misma tabla, el orden dejaría de ser indiferente **y nadie lo notaría hasta el despliegue**.
+
+## 2026-08-04 — 175 · analítica: corregir el catálogo de métricas (`metrics.ts`)
+
+- PR **#277** (mergeado el 2026-08-03). Cierra **tres** divergencias entre `lib/analytics/metrics.ts`
+  y lo que el rollup y los servicios sirven de verdad: (1) `incidentes` estaba marcada
+  `estadoProduccion: 'declarada'` pese a tener columna en `analytics_daily` y ser el cuarto término
+  del denominador de las tres tasas —la 133 decide paneles con ese campo, así que habría **ocultado**
+  el panel por creerlo sin productor—; (2) `ordenes_por_estado` decía «los 19 estados» mientras la
+  columna real contiene el universo B2 de la 124 («vivas + las que cerraron ese día»); (3)
+  `sin_gestionar` figuraba como `snapshot`/`fuente: rollup` sin columna que la respalde: la 126 la
+  deriva del embudo con semántica «sin gestionar HOY», y ahora el catálogo lo dice.
+- Reviewer **APROBADO-CON-NOTAS**: 0 bloqueantes, 5 menores.
+- **La cuarta divergencia NO se cerró aquí: se movió intacta a la ficha 183**, con la decisión humana
+  del 2026-08-04 ya dentro (retirar la distinción `neto`/`bruto` de las cuatro métricas de caja; NO
+  darle `ingreso_ajuste` a `egresos`, que movería una cifra de dinero ya publicada). La ficha exigía
+  cerrarla *o* moverla; se movió. No queda huérfana.
+- Deuda de conocimiento que dejó su guardia: `catalogo-produccion` asumía «una métrica, una decisión»,
+  premisa que `egresos` rompe al tener dos legítimas; se generalizó a «cada fecha respaldada por
+  **alguna** decisión citada». Y su R14 solo ve los cambios que **ya tienen** fichero de decisión: un
+  `estadoProduccion` cambiado sin fichero no produce par y R14 no lo mira —muere igual, pero por otros
+  guards, cobertura **incidental**—.
+
+## 2026-08-04 — 178 · job diario de purga de los PDF de cargas antiguas
+
+- PR **#284** (merge `e4cf28ad`). Cron **diario** a las 03:00 CR (09:00 UTC, Costa Rica es UTC−6 fijo)
+  protegido por `CRON_SECRET` —cron propio en `vercel.json`, no la cola de la 90: el humano eligió lo
+  contrario a la recomendación del spec—. Corte **inclusivo** sobre `carga.created_at` (inmutable, a
+  diferencia de `fecha_carga`, que es backdateable), retención por env con default 7 y mínimo 0.
+  Borra el PDF consolidado del lote **y** los individuales de sus órdenes.
+- «Semanal» nunca fue la cadencia: era el **default de la retención (N=7)**. Por eso cambió el `name`.
+- Requisitos cubiertos: **26/26 R**. Reviewer **RECHAZADO en ronda 1, APROBADO en ronda 2**.
+- El bloqueante enseña un patrón que en este repo ya es recurrente: `quedaPendiente` decía `false`
+  habiendo trabajo, porque la comprobación se saltaba las `tope` filas ya devueltas **y lo purgado
+  deja de casar el `where`** (la purga borra justo las columnas que hacen candidata a una carga). Con
+  el default de 200, cualquier backlog de **201–400 mentía**. **Lo tapaban dos tests verdes**: el de
+  service usaba 5/2 y pasaba *por margen* con su doble replicando la semántica mala, y el de
+  repositorio afirmaba `expect(arg.skip).toBe(200)` **como si fuera el contrato**.
+- R16, con test de control no vacuo: la purga anula `download_storage_path` **además de**
+  `download_url`. Si se dejara viva, `/generate` de la 177 se saltaría la generación y **firmaría un
+  objeto ya borrado** → 200 con URL que da 404.
+- Fuera de alcance **declarado**: las órdenes con `carga_id` NULL (su PDF no caduca nunca) y los PDF
+  de las features 136/141, **inalcanzables** porque de ellos solo se guardó la URL firmada, nunca la
+  ruta —esto **corrige un supuesto erróneo del `design.md` de la 177**, que daba por hecho que la 178
+  barrería sus huérfanos—. Harían falta reglas de ciclo de vida del bucket: ticket aparte.
+- **DEUDA DE ENTORNO SIN DUEÑO** (ajena y preexistente): el drift de la base local —migración fantasma
+  `20260728120000_*` presente en la base y ausente del repo, más un checksum modificado en
+  `20260714123909_*`— hace fallar `pnpm db:migrate`, así que el round-trip `migrate`/`rollback` de
+  esta migración **queda sin medir**; se aplica con `prisma migrate deploy`, el mismo comando del
+  build.

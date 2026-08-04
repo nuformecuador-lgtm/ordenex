@@ -124,6 +124,16 @@ el artefacto fechado que `metrics.ts:5-7` exige para tocar el catálogo.
       (`tests/unit/analytics/operativa-*.test.ts` y `analitica-operativa-service.test.ts`) **sin
       tocarlos** y comprobar que pasan sin modificación.
       *Hecho cuando:* cero ediciones en tests de la 126 y todos verdes.
-- [ ] **T6.4** Gate del leader: `./init.sh` completo antes del PR, y aviso a la sesión de la **131**
+- [x] **T6.4** Gate del leader: `./init.sh` completo antes del PR, y aviso a la sesión de la **131**
       (T0.4) antes de mergear.
       *Hecho cuando:* verde y aviso enviado.
+      **Cerrada el 2026-08-04, y honestamente:** el PR **#277** ya se mergeó el 2026-08-03 en otra
+      sesión; el gate completo previo a ese merge **no está registrado en `progress/impl_175`**, que
+      solo documenta gates parciales (98 archivos / 1056 tests en `tests/unit/analytics`,
+      `tests/unit/guards` y `analytics-daily-guards`, todos verdes) más una corrida completa
+      **anterior** al fix de §5. Lo que sí se puede afirmar: `dev` quedó verde con la 175 dentro, y
+      el cierre de jornada del 2026-08-03 midió **906 archivos / 11.359 tests, 0 fallos**. El **aviso
+      a la 131 es moot**: esa feature ya estaba `done` y mergeada cuando esto se cerró, así que no
+      hay sesión viva a la que avisar. La reexpresión de
+      `tests/unit/analytics/tablero-catalogo-paneles.test.ts` (fichero suyo) viajó en el #277 y el
+      reviewer confirmó que **respeta y refuerza** su R21.
