@@ -8,27 +8,432 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## ✅ 2026-08-02 (tarde) — **172 IMPLEMENTADA: las 9 tandas** · **EMPIEZA A LEER POR AQUÍ**
 
-**Ya existe forma de registrar un pago.** Era el agujero de fondo del sistema: hasta hoy los saldos
-solo crecían, ni a mensajeros ni a tiendas se les podía decir «ya pagué». Rama
-`feature/172-liquidacion`, PR #259, **11 commits, sin push**. La bitácora completa está en
-**`progress/impl_172-liquidacion.md`**; aquí solo va lo que decide qué hacer a continuación.
+## 2026-08-04 — **175 y 178 cerradas** · **alta de la 183** · **EN CURSO: spec de la 180**
 
-**Review APROBADO en ronda 2** (`progress/review_172-liquidacion.md`). La ronda 1 rechazó con dos
-bloqueantes y **los dos eran huecos de verificación, no de código**: se cerraron sin tocar una
-línea de `lib/`, `app/`, `components/` ni `db/`. Trazabilidad final: **85 de 85 con test en el
-repo**, R61 ⚠ parcial. Entrada escrita en `progress/history.md`.
+### ✅ Cerradas hoy — las dos ya estaban en `dev`, lo que faltaba era el bookkeeping
 
-### 🚦 LO PRIMERO AL RETOMAR: **medir PREVIEW. Y hasta entonces, NO PUSHEAR.**
+| | PR | Estado |
+|---|---|---|
+| **175** analítica: corregir el catálogo de métricas | **#277** (03-ago) | `done` |
+| **178** purga diaria de los PDF de cargas | **#284** (`e4cf28ad`) | `done` |
 
-Es la mitad abierta de **R61** y lo único que falta. **No es una formalidad: pushear ES aplicar la
-migración en preview**, porque el build migra antes de compilar y `MIGRATE_ON_PREVIEW` está activo
-en ese entorno. Los dos `ADD CONSTRAINT … CHECK` **validan las filas existentes al aplicarse**, así
-que si esa base tuviera una fila incoherente el build saldría rojo y dejaría una fila fallida en su
-`_prisma_migrations`, **bloqueando los despliegues de preview siguientes** hasta repararla a mano.
-Producción está medida y limpia, así que **producción no corre ese riesgo**. La consulta exacta
-está en `impl_172-liquidacion.md`.
+Ninguna de las dos esperaba un PR: ambas estaban **mergeadas** y la bitácora anterior lo decía mal.
+El detalle de cada una vive ya en `progress/history.md`; aquí solo queda lo que **condiciona trabajo
+futuro**.
+
+**La 175 no cerró su cuarta divergencia: la movió.** Su nota exigía «cerrarla o moverla a una ficha
+propia»; se movió, intacta, a la **ficha 183** recién dada de alta (nació como 182 y se renumeró: ver abajo). **Decisión humana del 2026-08-04,
+ya tomada, que el spec_author de la 183 no debe reabrir:** las cuatro métricas de caja
+(`ingreso_flete`, `ingreso_comision_cod`, `ingreso_iva`, `egresos`) **retiran la distinción
+`neto`/`bruto`** y se quedan solo con el bruto. **NO** se le da `ingreso_ajuste` a `egresos`: eso
+movería una cifra de dinero ya publicada, justo lo que la P4 de la 173 quiso evitar.
+**Ojo al alcance de la 183:** el `neto` **no desaparece del sistema** —en la vista B (ledger de tienda)
+y en `derivarBalance` (R20 de la 127) el signo significa algo real y se conserva—. Es «retirar donde es
+degenerado», no «retirar el campo». Medido antes de dar el alta: toca el DTO, el servicio (11
+ocurrencias), los dos repos, el `TableroFinanciero` de la 132 —que pinta el `neto` como KPI principal
+con el bruto de línea secundaria, **R14/R16 de una feature `done`**— y `adaptar.ts`. Más **dos dobles
+en memoria que la 173 dejó sin tocar a propósito** esperando esta decisión:
+`tests/unit/analytics/financiera-ingresos-repo.test.ts:124` (fila cruzada `egreso_ajuste` + tipo
+`ingreso`) y `tests/unit/services/analitica-financiera-derivacion.test.ts:177`, verdes hoy **solo
+porque no pasan por el `CHECK`** de la base.
+
+**Lo que la 177 dejó vivo y sigue vigente:** el testigo de «el PDF existe» es la columna
+**`download_storage_path`**, NO `download_url` —esta última guarda URLs firmadas ya caducadas de la
+136—. La purga de la 178 anula **las dos**; si dejara viva la primera, `/generate` se saltaría la
+generación y **firmaría un objeto ya borrado** (200 con URL que da 404).
+
+**⚠️ Deuda de entorno SIN DUEÑO, ajena y preexistente:** el drift de la base local (migración fantasma
+`20260728120000_...` presente en la base y ausente del repo, más un checksum modificado en
+`20260714123909_...`) hace fallar `pnpm db:migrate`. Por eso el round-trip `migrate`/`rollback` de la
+migración de la 178 **quedó sin medir**; se aplica con `prisma migrate deploy`, el mismo comando del
+build. **Sigue sin dueño.**
+
+### 🟡 SPEC ESCRITO, PUERTA CERRADA — feature **180**, desglose por fecha de la analítica financiera
+
+`AnaliticaFinancieraService` agrega la ventana **entera** y publica `filas: []` en las vistas de grano
+`fecha`: **hoy no existe serie temporal que dibujar** en el tablero financiero.
+
+Spec en `specs/180-analitica-financiera-serie-temporal/` — **32 R, 22 tareas**. Tres hallazgos que
+**corrigen la ficha**, todos verificados contra el código, no supuestos:
+
+1. Las métricas de caja son **SEIS**, no cuatro: la 173 añadió `dinero_en_caja` y `ganancia_ordenex`,
+   que salen del mismo repositorio y del mismo material.
+2. La NOTA de la ficha («comprobar si el rollup de la 123 ya guarda el grano por fecha») queda
+   **cerrada en negativo**: `analytics_daily` no tiene **ninguna** columna de dinero *y* la 127 tiene
+   **prohibido** leerla por guardia (`financiera-fuente.guardia.test.ts`). Esto es **producir** el
+   desglose desde los ledgers, no exponerlo — bastante más caro de lo que la ficha suponía.
+3. `cuenta_por_pagar_mensajero` es **saldo al corte** (su repo agrega sin cota inferior), así que su
+   serie es un **acumulado corrido** que necesita el saldo anterior al rango, no un `groupBy` por día.
+
+**Puerta humana del 2026-08-04, cuatro bloqueantes respondidos:**
+
+| | Decisión |
+|---|---|
+| **Q1** alcance | Las **SIETE** métricas sin cubo (las 6 de caja + `cuenta_por_pagar_mensajero`), no las 5 literales de la ficha ni las 9 de tipo `vistas`. |
+| **Q3** techo | Por encima de 62 puntos el **servidor agrega en cubos semanales** y lo declara en el DTO. El comentario de `topes.ts` justifica el 62 como «53 semanas ya agregadas + margen»: el número se eligió suponiendo esta agregación. |
+| **Q4** frontend | **Solo backend.** El cableado de la gráfica va en ficha aparte; el tablero es propiedad de una feature `done` con guardia de censo. |
+| **Q5** orden | **La 183 aterriza primero**, y la 180 nace publicando solo los campos que sobreviven. Evita tocar el mismo DTO dos veces con dos puertas y dos revisiones. |
+
+**Q2** (marcar el cubo en curso como parcial) y **Q6** (SQL crudo acotado en un repositorio de dinero)
+siguen **sin responder**: no son bloqueantes, pero Q6 condiciona `design.md` §5 y R23/R25.
+
+### ⚠️ DRIFT DE SESIONES PARALELAS medido hoy — léelo antes de tocar la 180
+
+Mientras esta tanda estaba viva, **otra sesión hizo dos cosas en este mismo checkout**:
+
+1. **Movió el `HEAD`** de `chore/cierre-175-178` de vuelta a `ux` entre mi `switch` y mi `commit`, así
+   que el commit de bookkeeping aterrizó en `ux` y el `push` subió la rama chore vacía. Se rescató por
+   `cherry-pick` sobre un worktree limpio; **el commit sigue también en `ux`**, sin pushear.
+2. **Mergeó la feature 176 a `dev` (PR #285)** — y con ella dio de alta una ficha **182**
+   («cablear el modo agregado al tablero operativo»), que colisionó con la 182 que yo acababa de dar de
+   alta. Por la convención del repo (la ficha con rama conserva el id) **la mía se renumeró a 183**.
+
+**Consecuencia para la 180 que NO se puede ignorar:** su spec se escribió contra un `dev` **sin la
+176**, pidiéndole al spec_author que se alineara con un contrato de cubo temporal entonces hipotético.
+Ese contrato **ya existe y está mergeado** (`consultarAgregadoOperativo`, cubos semanales, cubo
+`periodo`). Antes de implementar, el design de la 180 tiene que **releerse contra la 176 real** y
+declarar si su forma de cubo coincide; si no coinciden, tendremos dos contratos temporales
+incompatibles en el mismo módulo, que es exactamente lo que se quiso evitar. **Nadie lo ha hecho aún.**
+
+**Zonas:** `backend` con la 176 aún marcada `in_progress` en `feature_list.json` **pese a estar
+mergeada** (bookkeeping de esa sesión, no lo toco). La 180 sigue `pending` a la espera del repaso
+contra la 176 y de la 183, que va delante.
+
+
+## 🏁 CIERRE DE JORNADA 2026-08-03 (tarde) — **EMPIEZA A LEER POR AQUÍ**
+
+**Cero PRs abiertos. `dev` VERDE con los cuatro PRs del lote YA DENTRO** —no por separado, que es el
+incidente del #237—: `./init.sh` → `== init OK ==`, **906 archivos / 11.359 tests, 0 fallos**.
+
+### ✅ Entregado esta tarde
+
+| | Qué | PR |
+| --- | --- | --- |
+| **173** | la caja distingue **«Dinero en caja»** de **«Ganancia de Ordenex»**; la palabra «balance» desaparece | #278 + #279 |
+| **arnés** | el flake de jsdom: **eran TRES mecanismos**, y acotar workers no arreglaba ninguno | #280 |
+| **170** | la búsqueda de cuentas por pagar **ignora acentos** + el tercer mecanismo del flake | #281 |
+| **170** | aviso de **selección en otras páginas** en bodega satélite (Q-K7) | #282 |
+
+### 🚦 LO PRIMERO AL RETOMAR
+
+1. **RELEASE `dev → prod`: son 166 commits y llevan MIGRACIONES** (el `CHECK` categoría↔tipo de la
+   173 y sus dos valores de enum, entre otras). **Mergear a `prod` ES aplicar.** Producción se midió
+   antes de escribir ese `CHECK` —35 filas, 0 lo violarían— **pero eso fue antes de estas 166**:
+   **rehacer el pre-vuelo**, no reutilizarlo. Es lo que salvó la release del 2026-08-01.
+2. **Después del release, y solo después: el BACKFILL de la 173** (`T H.4`). Los dos valores nuevos
+   del enum **no existen en producción** hasta desplegar. Medido: **5 cierres con ₡203.055,90** de
+   contra-entrega esperando; 0 pagos a tienda, 0 anulaciones. Orden: `--simular` → **revisión humana
+   del informe** → `--aplicar` → `--comprobar` → lectura por MCP. Sin flag **no escribe nada**.
+3. **VER LA 172 Y LA 173 EN PANTALLA.** Lleva dos jornadas pendiente y es lo único que ninguna suite
+   sustituye. La 173 volvió a tocar esas mismas pantallas.
+
+### ⏳ Sin dueño, y conviene que lo tengan
+
+- **La 175 sigue `in_progress` A PROPÓSITO, aunque su PR #277 esté mergeado.** Entregó **tres** de sus
+  cuatro divergencias; la **cuarta** —el `neto` de las métricas de caja nunca puede diferir del
+  `bruto`— sigue abierta, **verificado contra el código el 2026-08-03**. Si alguien la pasa a `done`
+  por inercia, el hallazgo se queda huérfano. Detalle en su `status_note`.
+- **Los 12 listados de la deuda de la 170 NO son un chore: son una tanda fullstack** del tamaño de la
+  I. El «8» de la nota vieja contaba **dominios**, no listados, y **los 12 exigen tocar `app/**`**
+  (el adaptador de descarga vive en el componente), así que entregar solo los métodos dejaría **12
+  Server Actions muertas**. Inventario listado a listado y prioridad por coste medido en
+  `progress/chore_deuda_170.md`. **Borrador de ficha propuesto, NO registrado.**
+- **La selección de bodega satélite nunca se poda.** Preexistente e **invisible hasta hoy**; el aviso
+  nuevo la hace contable, así que el número puede inflarse si una orden marcada sale del listado
+  (p. ej. al reportarle un incidente). Podarla necesita al **servidor**: encaja con la tanda de los 12.
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**El flake de jsdom no era un mecanismo, eran TRES** — y la vía que se daba por buena, acotar los
+workers, **no arreglaba ninguno**: medido, **−3%** en el test lento y **+11%** en la suite entera.
+
+| | Mecanismo | Se manifiesta como |
+| --- | --- | --- |
+| 1 | `await import()` **dentro del test** mete la carga del árbol bajo `testTimeout` | timeout a 20 s |
+| 2 | `waitFor` sobre una **ausencia** + aserción **síncrona** de presencia | elemento no encontrado |
+| 3 | **snapshot del DOM tomado antes de que la carga asiente** | dos fotos que difieren |
+
+Eso explica por qué subir el `testTimeout` a 20 s lo hizo más raro sin matarlo: trataba el (1) y no
+tocaba los otros dos, que **no dependen del tiempo sino del orden**. Y la frase que resume el día:
+**un ancla que el estado transitorio también cumple no es un ancla** —durante la carga, `getAllByRole
+("row")` daba 2, el mismo número que el estado asentado—.
+
+> ⚠️ **Los tres aparecieron UNO POR SUITE COMPLETA, cada uno cuando el anterior dejó de taparlo.** Una
+> corrida verde no cierra esto. El detector escrito cubre el (2), **NO el (3)** —medido: 0 antes y 0
+> después—; la mitigación del (3) es una guardia en ejecución, no un barrido. Población en riesgo: 42
+> capturas de DOM.
+
+**Y cinco veces más el patrón del año, en la 173:** la guardia de la 172 rota al hacer entrar la caja
+(afilada, no vaciada); un test de la 127 que insertaba **una fila que la app no puede producir**;
+cuatro filas de trazabilidad falsas, **dos apuntando a archivos que nunca existieron**; **R53 sin
+ningún test** —borrar la descripción de `egresos` dejaba la suite entera en verde—; y que **contar
+`R\d+` en títulos cruza espacios de nombres**, lo que daba un tranquilizador **falso 68/68**.
+
+---
+
+## 💰 2026-08-03 — **173 `done`: la caja ya distingue el dinero de la ganancia** · PR #278 MERGEADO
+
+**Las 9 tandas hechas, review APROBADO en ronda 2, `./init.sh` completo VERDE con los 61 commits de
+`dev` dentro: 904 archivos / 11.337 tests, 0 fallos.** Relato completo en `progress/history.md`.
+
+> ⚠️ **NO está en producción todavía, y el backfill DEPENDE de que llegue** (ver punto 2 de abajo).
+
+**Qué cambia para el maestro:** la caja deja de tener un solo número. Ahora muestra **«Dinero en
+caja»** (todo lo que entra y sale, incluido el contra-entrega cobrado a nombre de las tiendas) y
+**«Ganancia de Ordenex»** (el número que hasta hoy se llamaba «Balance general»). **La palabra
+«balance» desaparece de la pantalla**, porque era la que mentía.
+
+### Las 7 respuestas del humano, todas con su default
+
+P1=(a) … P7=(a). La cara era **P2: el pago al mensajero NO pasa a tesorería**, así que la caja queda
+mixta y «Dinero en caja» se queda corto **exactamente** en la cuenta por pagar a mensajeros —cifra
+que el sistema ya publica—. Se equivoca **por lo bajo**, nunca dice que hay más dinero del que hay.
+
+### ⏭️ LO PRIMERO AL RETOMAR
+
+1. **RELEASE `dev → prod`, y ya no es barato: `dev` está 153 commits por delante.** Lleva las
+   features 126, 127, 128, 131, 132, 173, 175 y 177, y **varias migraciones** —entre ellas el `CHECK`
+   categoría↔tipo de la 173 y los dos valores de enum—. **Mergear a `prod` ES aplicar.** Producción se
+   midió antes del `CHECK` (35 filas, 0 lo violarían), pero **eso fue antes de estas 153**: conviene
+   rehacer el pre-vuelo, como se hizo en la release del 2026-08-01 en vez de reutilizar el del día
+   anterior.
+2. **`T H.4` es POST-DEPLOY y no es un olvido:** los dos valores nuevos del enum **no existen en
+   producción** hasta que la migración se aplique al desplegar, así que el backfill **no se puede
+   correr antes**. Medido en producción: **5 cierres con ₡203.055,90** de contra-entrega esperando su
+   registro retroactivo; 0 pagos a tienda y 0 anulaciones. El orden es: merge → release → `--simular`
+   → revisión humana → `--aplicar` → `--comprobar` → lectura por MCP.
+3. **Preview sigue sin ser alcanzable** (quinta vía descartada: `list_branches` falla y
+   `get_project_url` devuelve el ref de producción). Riesgo residual **declarado** en
+   `progress/medicion_TA0_173.md`, igual que en la 172.
+
+### 🔎 Lo que sobrevive a esta feature
+
+**El `CHECK` categoría↔tipo destapó que el «neto» de las métricas de caja NUNCA puede diferir del
+«bruto».** Las cuatro métricas que leen `wallet_movimiento` declaran listas homogéneas de prefijo, así
+que cada una solo puede contener un `tipo`. **No lo rompió la 173**: ya era cierto en producción por
+las tres barreras de la app; el `CHECK` solo lo hizo visible. **Dirigido a la 175 y AÚN ABIERTO tras
+mergear su PR #277** — ver su `status_note`.
+
+**Y cinco veces más apareció el patrón del año: un test verde que no medía lo que decía.**
+
+- la **guardia de la 172** que decía «la caja no entra en la feature», rota al hacerla entrar —afilada,
+  no vaciada—;
+- un test de la **127** que insertaba una fila **que la aplicación no puede producir** (`egreso_ajuste`
+  con tipo `ingreso`);
+- **cuatro filas falsas de trazabilidad**, dos apuntando a archivos **que nunca existieron**;
+- **R53 sin ningún test**: borrar la descripción de `egresos` dejaba la suite **entera** en verde. Lo
+  cazó el reviewer, y el arreglo trae el texto viejo como fixture para que el caso no pueda engañarse;
+- **contar `R\d+` en títulos CRUZA espacios de nombres** (el R32 de la 172 y el R35 de la 158 salen en
+  este diff): daba un falso 68/68.
+
+### 🧩 Tres cascadas del merge con `dev`, ninguna es defecto de nadie
+
+`dev` trajo 61 commits (128/131/132/175/177). Chocaron: **cliente Prisma stale + 2 migraciones sin
+aplicar en local**; el **componente** del tablero financiero (8→10 métricas); y su **cargador**, que
+`vitest related` **no puede seleccionar** —es hermano sin arista del anterior—. Además la guardia
+`catalogo-produccion` de la 175 asumía **«una métrica, una decisión»**, premisa que `egresos` rompe al
+tener dos legítimas: generalizada a «cada fecha respaldada por **alguna** decisión citada», con dos
+mutaciones que la prueban.
+
+> ⚠️ **Colisión de nombres de migración entre sesiones:** `20260803120000_caja_tesoreria` (esta rama) y
+> `20260803120000_download_storage_path` (de `dev`) comparten timestamp. Hoy da igual —tocan tablas
+> distintas y Prisma desempata por nombre—, pero si dos sesiones tocaran la misma tabla el orden
+> dejaría de ser indiferente y **nadie lo notaría hasta el despliegue**.
+
+---
+
+## 2026-08-03 — **127 servicios financieros → PR #269, esperando merge**
+## 🏁 CIERRE DE JORNADA 2026-08-03 — **EMPIEZA A LEER POR AQUÍ**
+
+**Registro limpio: cero features `in_progress`, cero PRs abiertos, `dev` verde.**
+Medido con los dos PRs del día **ya dentro** —no por separado, que es el incidente del PR #237—:
+`./init.sh` → `== init OK ==`, **804 archivos / 10.162 tests, 0 fallos**.
+
+### ✅ Entregado hoy
+
+| | Qué | Estado |
+| --- | --- | --- |
+| **172** | liquidación: registrar y anular pagos a mensajeros y tiendas | `done` · **en producción** (PR #262 → dev, release #263 → prod) |
+| **fix** | la fecha de calendario inexistente, en **4 sitios** | PR #266 · en `dev` |
+| **arnés** | gate en dos niveles + arranque de tests 5× más barato | PR #267 · en `dev` |
+
+### 🚦 LO PRIMERO AL RETOMAR
+
+1. **Mirar la 172 en pantalla.** Es lo único que no se puede verificar con tests y **sigue sin
+   hacerse**. Cambia tres cosas que ve el maestro: la wallet de tiendas gana el botón de pagar y su
+   lista de comprobantes, aprobar un cierre **ofrece pagar** justo después, y `/mi-wallet` pasa de
+   «Créditos / Débitos» a **tres importes**.
+2. **`dev` está 19 commits por delante de `prod`, y esta vez el release es BARATO: cero migraciones
+   nuevas.** Solo código. Lleva el arreglo de la fecha y el arnés.
+
+### ⏳ Decisiones tuyas con default ya tomado (cambiarlas más tarde sale caro)
+
+- **N1** — el par pago + anulación deja los importes **brutos** inflados aunque **el saldo queda
+  exacto**. Se declaró en pantalla en las 4 superficies con agregado. Netearlo exigiría **2 valores
+  de enum nuevos** o reescribir la derivación de la 171.
+- **N2** — hoy un pago se puede anular **siempre**, sin ventana temporal.
+
+### ⏭️ Lo siguiente
+
+1. **173 — caja en modo tesorería.** Dependía de la 172; **ya está desbloqueada.**
+2. **Chore del flake de jsdom.** Es lo que obliga a re-correr la suite **entera** para distinguir un
+   flake de una regresión (en la 172 costó dos corridas, ~8 min). Se dejó sin hacer **a propósito**:
+   la vía es acotar los workers de jsdom, pero hay que **medirlo**, no adivinarlo.
+3. **Deuda dirigida de la 170:** los 8 `listarXCompleto` que faltan (Q-I5 + Q-K4 + Q-K6) y la
+   búsqueda de cuentas por pagar que **no ignora acentos** (Q-L4, defecto preexistente).
+4. **Aviso en bodega satélite** (Q-K7 de la 170): lo marcado en otra página se conserva pero **no
+   participa** en la acción de lote y nada lo advierte. Chore de frontend pequeño y **ya decidido**.
+5. **Higiene:** siguen ~33 worktrees de agentes en `.claude/worktrees/`, todo pusheado y mergeado.
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**Cinco veces apareció el mismo patrón: un test verde que no medía lo que decía.** Es el hallazgo
+del día, más que cualquier feature:
+
+- el store de concurrencia que dejaba pasar la ausencia de candado;
+- la respuesta P3 del humano afirmada **con una prop en vez del eslabón rol → prop** (poner ese
+  predicado en `true` no rompía **ninguno** de los 9.857 tests);
+- el parser del test de migración que **moría ante la mutación que existe para cazar** — corrían
+  cero casos y el error señalaba a otro sitio;
+- el caso «rechaza un día que no existe», verde por la comparación lexicográfica y no por la
+  validación;
+- el `"2026-13-45"` de `filters.test.ts`, que ya no discrimina lo que su nombre promete.
+
+**Los cinco los cazó una mutación, ninguno un test verde.** La regla que queda: si no has visto el
+test **fallar**, no sabes qué mide.
+
+> ⚠️ **Hay otra sesión viva en este repo**: acaba de mergear la **feature 125** (backfill histórico
+> de analítica). Antes de tomar una rama, mirar si ya lo está haciendo alguien.
+
+> 📌 **Escrito antes de mergear.** Después de este cierre entraron en `dev` la **127** (PR #269), la
+> **126** (PR #270) y un PR de **UX** (#271) de otra sesión — por eso «cero PRs abiertos» y la
+> distancia contra `prod` que se leen arriba ya no son la foto de ahora. Ese PR de UX **borró
+> `app/(app)/perfil/`**; comprobado que no deja enlaces vivos rotos (solo lo citan specs viejos).
+
+---
+
+## 2026-08-03 — **127 servicios financieros → PR #269, YA MERGEADO en `dev`**
+
+Feature **127 → `done`**, PR **#269** hacia `dev` (rama `feature/127-analitica-financiera-servicios`,
+worktree `ordenex-wt-127`). Reviewer **APROBADO, 0 bloqueantes, 7 menores** (1–3 cerrados en el PR;
+4–7 en `progress/review_127.md`). Suite post-merge **821 archivos / 10411 tests, 0 rojos**. Cierre
+narrado en `progress/history.md`; bitácoras `impl_127.md`, `impl_127_C/D/E.md`.
+
+**Lo único que hay que saber antes de tocar nada relacionado:** esta feature modificó
+`lib/analytics/metrics.ts`, que es **el catálogo de la 135 y fuente única de trece features**. El
+diff son **exactamente tres cosas**, cada una con autorización humana fechada en
+`progress/decision_C2_127.md` — ⟨D8⟩ `egresos.estadoProduccion`, ⟨D10⟩ los tres ledgers en
+`conciliacion_cierres.fuente.tablas`, ⟨D11⟩ el comentario que ⟨D8⟩ dejó mintiendo. **Esa autorización
+no se hereda:** la siguiente feature que necesite ese archivo necesita la suya.
+
+**Aviso a la 132:** cinco de las ocho métricas sirven `filas: []` con sólo `total` pese a declarar
+`granos: ["fecha"]` — no hay serie temporal que pintar ahí (pregunta abierta 5 del spec).
+
+**Deuda que NO es de la 127 y sigue sin dueño:** C7 (`derivarCuentaPorPagar` de la feature 44 puede
+devolver monto negativo con `signo: "cero"`) y el defecto de `whereRollup`, dirigido a la **126**.
+
+**Nota de entorno:** la base local tiene aplicada `20260728120000_orden_historial_origen_deshacer_asignacion`,
+que **no existe en `prisma/migrations`**. Residuo de otra rama sobre la misma base, ajeno a la 127.
+
+---
+
+## 🛠️ 2026-08-03 — el gate ya no se corre entero en cada tanda
+
+Pedido del humano: *«el proceso del arnés está hecho para mejorar el trabajo, no para alargar las
+sesiones eternamente»*. Tenía razón y estaba medido: la 172 corrió la suite completa **9 veces**,
+~35 minutos de reloj **solo esperando**.
+
+### Lo que cambia
+
+```bash
+./init.sh --rapido   # CERRAR UNA TANDA — ~58 s
+./init.sh            # CERRAR LA FEATURE y ANTES DE CADA PR — ~4 min 23 s
+```
+
+`--rapido` corre typecheck + lint + **los tests que el grafo de imports relaciona con tu diff**
+(`vitest --changed origin/dev`) + **todas las guardias**. Medido en este repo:
+
+| Qué corres | Archivos | Tests | Tiempo |
+| --- | --- | --- | --- |
+| suite entera | 804 | 10.139 | 235 s |
+| relacionados con un servicio | 16 | 437 | 21 s |
+| relacionados con un util muy importado | 155 | 2.577 | 103 s |
+| **`./init.sh --rapido` entero** | — | — | **58 s** |
+
+> **Las guardias van SIEMPRE y no es un adorno.** No importan lo que vigilan: recorren el **árbol
+> de archivos** (censo de tablas, columnas sensibles, módulos puros), así que **ningún grafo de
+> imports las selecciona** — serían justo lo que se pierde. Cuestan ~8 s y se eligen por patrón
+> (`vitest run guard`), no por lista: una guardia nueva entra sola. Esto no es hipotético: la
+> guardia del censo de tablas de la Tanda H de la 172 no la habría seleccionado ningún grafo.
+
+### El arranque costaba 5× más que ejecutar los tests
+
+**617 de los 804 archivos corren en `node`** y ninguno usa los matchers de DOM, pero los 804
+importaban `@testing-library/jest-dom/vitest`. Ahora el import es **condicional al entorno**.
+Medido sobre 130 archivos de servicio:
+
+```
+antes:  14,35 s   (setup 51,19 s de CPU)
+ahora:  10,69 s   (setup  4,10 s)        <- mismos 2.270 tests en verde
+```
+
+### Los subagentes ya no corren la suite completa (`AGENTS.md`)
+
+**Cinco subagentes murieron por cortes de stream** en la sesión de la 172, y los cinco cayeron en
+la fase de verificación larga: 4 minutos sin emitir nada bastan para romper el stream, y
+reanudarlos cuesta replicar 250k+ tokens. En cuanto se les dijo «corre solo tus archivos, el gate
+lo corro yo», dejaron de caerse. Además **un subagente no tiene contexto para juzgar un rojo
+ajeno**: no sabe si `CuentasPorPagarTable` es el flake conocido o una regresión suya.
+
+### ⏭️ Lo que queda de esto, y NO lo hice a propósito
+
+**El flake móvil de jsdom sigue vivo y merece su propio chore con medición.** Hoy obliga a
+re-correr la suite **entera** para distinguir flake de regresión: en la 172 costó dos corridas
+completas (~8 min) decidir que `CuentasPorPagarTable` no era una regresión de la Tanda C. El
+`testTimeout` ya se subió a 20 s por esto — es un síntoma tratado, no la causa. Acotar los workers
+de jsdom (`poolOptions`) es la vía, pero hay que **medirlo**, no adivinarlo, y por eso no entra
+aquí.
+
+---
+
+## 🚀 2026-08-03 — **172 EN PRODUCCIÓN**
+
+**Ya existe forma de registrar un pago, y está desplegada.** Era el agujero de fondo del sistema:
+hasta ayer los saldos solo crecían y a nadie se le podía decir «ya pagué». **172 → `done`.**
+PR **#262** a `dev` y release **#263** a `prod`; `dev` y `prod` a **0 commits de diferencia**.
+
+Bitácora en `progress/impl_172-liquidacion.md`, review en `progress/review_172-liquidacion.md`,
+entrada de cierre en `progress/history.md`. **Review aprobado en ronda 2**; la ronda 1 rechazó con
+dos bloqueantes y **los dos eran huecos de verificación, no de código** —se cerraron sin tocar una
+línea de `lib/`, `app/`, `components/` ni `db/`—. Trazabilidad **85 de 85**.
+
+### ✅ Producción verificada EN LA BASE, no deducida del PR
+
+El release llevó **126 commits / 31 PRs** y aplicó **tres** migraciones. Comprobado después:
+
+| Comprobación | Resultado |
+| --- | --- |
+| Las 3 migraciones en `_prisma_migrations` | ✅ `finished_at` puesto, `rolled_back_at` **nulo**, 1 paso cada una |
+| Los 5 CHECK nuevos | ✅ **`convalidated = true`** — recorrieron las filas reales y **ninguna las incumplió** |
+| RLS en `liquidacion_pago`, `liquidacion_anulacion`, `analytics_daily` | ✅ activa y **sin políticas** (patrón solo-service-role) |
+| `UNIQUE` de `clave_idempotencia` y de `pago_id` | ✅ los dos existen |
+| Despliegue de producción | ✅ **READY** |
+| Errores de runtime tras desplegar | ✅ **ninguno** |
+
+> **R61 se cerró por la vía empírica, no por medición previa.** No se pudo medir la base de preview
+> —el MCP está fijado al `project_ref` de producción—, así que el hueco se cerró al **aplicarse**:
+> el build del PR #262 corrió la migración contra preview y el `ADD CONSTRAINT` validó sus filas sin
+> rechazar ninguna. El humano aceptó el riesgo a sabiendas, con el dato de que **preview y prod son
+> bases de prueba con datos desechables** hasta que la app esté terminada.
+
+### 👀 LO PRIMERO AL RETOMAR: **mirarlo en pantalla**
+
+Nada de esto se ha visto funcionando con una persona delante — la verificación es por suite, que es
+el trato aceptado desde la 170. Y la 172 **cambia lo que ve el maestro**: la wallet de tiendas gana
+el botón de pagar y la lista de comprobantes, la aprobación de un cierre ahora **ofrece pagar**, y
+`/mi-wallet` pasó de «Créditos / Débitos» a **tres importes**. Si algo se ve raro en producción,
+empezaría por ahí.
 
 ### 🧯 Lo que el review destapó y conviene no olvidar
 

@@ -66,10 +66,10 @@ function rolesTotalesDe(metrica: Metrica): string[] {
 }
 
 describe("R3 · el conjunto de roles totales sale de esAccesoTotal, no de una lista propia", () => {
-  it("para las 23 metricas, {rol : alcance[rol]==='total'} es exactamente ROLES_ACCESO_TOTAL", () => {
+  it("para las 25 metricas, {rol : alcance[rol]==='total'} es exactamente ROLES_ACCESO_TOTAL", () => {
     const esperado = [...ROLES_ACCESO_TOTAL].sort();
     expect(esperado).toEqual(["admin", "maestro"]);
-    expect(METRICAS.length).toBe(23);
+    expect(METRICAS.length).toBe(25); // 23 de la 135 + 2 financieras de la 173 (P4)
 
     for (const metrica of METRICAS) {
       expect(rolesTotalesDe(metrica).sort(), metrica.id).toEqual(esperado);

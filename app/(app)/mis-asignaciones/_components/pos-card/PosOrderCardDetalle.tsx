@@ -51,10 +51,12 @@ export function PosOrderCardDetalle({
       onClick={onClick}
       onKeyDown={onKeyDown}
       tabIndex={seleccionable ? 0 : undefined}
+      // Mismo criterio que en la vista mosaico: la card conserva su nombre accesible aunque
+      // ya no seleccione al tocarla (rama ux).
       aria-label={
         onGestionar
           ? `Gestionar orden ${orden.numRemision} · ${orden.destinatario}`
-          : undefined
+          : `Orden ${orden.numRemision} · ${orden.destinatario}`
       }
       className={`flex flex-col gap-2 rounded-xl border bg-card p-2.5 shadow-sm transition-all ${
         esDetalle ? "border-brand ring-1 ring-brand" : "border-border"

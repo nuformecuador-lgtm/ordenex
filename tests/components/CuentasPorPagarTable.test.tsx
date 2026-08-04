@@ -162,10 +162,15 @@ describe("CuentasPorPagarTable — búsqueda por nombre (servidor, T L.2)", () =
     // Feature 170 — FASE 2 (T L.2, R45): el texto se resuelve en el SERVIDOR, así que la
     // tabla ya no cambia en la misma tecla; lo que se afirma —qué queda a la vista— es
     // exactamente lo de antes.
-    await waitFor(() =>
-      expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument(),
-    );
-    expect(within(tabla()).getByText("Ana Mensajera")).toBeInTheDocument();
+    // Las DOS condiciones van dentro del MISMO `waitFor`, con la presencia primero:
+    // esperar solo la AUSENCIA de Beto no garantiza la PRESENCIA de Ana. Con la
+    // búsqueda resuelta en el servidor existe un instante (tabla vacía / en carga) en
+    // el que Beto ya no está y Ana aún no ha llegado; un `getByText` síncrono justo
+    // después se satisfacía ahí y fallaba. Se afirma exactamente lo mismo que antes.
+    await waitFor(() => {
+      expect(within(tabla()).getByText("Ana Mensajera")).toBeInTheDocument();
+      expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument();
+    });
   });
 
   it("el texto viaja TAL CUAL al servidor y una ráfaga de teclas es UNA sola lectura", async () => {
@@ -178,9 +183,14 @@ describe("CuentasPorPagarTable — búsqueda por nombre (servidor, T L.2)", () =
     renderTabla(MENSAJEROS);
 
     await user.type(screen.getByPlaceholderText("Buscar por nombre"), "Ana");
-    await waitFor(() =>
-      expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument(),
-    );
+    // Mismo criterio que el caso anterior: se ancla a que la página filtrada YA llegó
+    // (Ana presente Y Beto ausente), no solo a que Beto desapareció. El anclaje más
+    // fuerte no cambia lo que se mide abajo: sigue exigiendo UNA sola lectura con
+    // búsqueda (el debounce coalesce la ráfaga) y que el texto viaje sin normalizar.
+    await waitFor(() => {
+      expect(within(tabla()).getByText("Ana Mensajera")).toBeInTheDocument();
+      expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument();
+    });
 
     const conBusqueda = paginadoMock.mock.calls
       .map(([input]) => input as { busqueda?: string })

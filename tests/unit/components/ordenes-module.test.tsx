@@ -179,6 +179,98 @@ describe("OrdenesModule — bloqueoSeleccion por fila", () => {
     ).toBeInTheDocument();
   });
 
+  // Pedido humano: la selección se ACUMULA entre páginas. Antes el contador solo veía las
+  // filas marcadas de la página visible, así que al cambiar de página "perdía" las otras.
+  it("la selección se conserva al cambiar de página y el contador las SUMA", async () => {
+    const user = userEvent.setup();
+    // Dos páginas: el `total` (30 > pageSize 25) es lo que habilita "Página siguiente";
+    // qué filas trae cada página lo decide el mock (una por página, para leerlo fácil).
+    listarOrdenesMock.mockImplementation(async (input: { page: number }) => ({
+      status: "ok",
+      items: [
+        input.page === 1
+          ? makeOrden("p1", 7001, { zonaEsGam: true })
+          : makeOrden("p2", 7002, { zonaEsGam: true }),
+      ],
+      page: input.page,
+      pageSize: 25,
+      total: 30,
+    }));
+
+    renderModule(
+      <OrdenesModule filter={{ status_id: "est-rechazada" }} selectable acciones={acciones} />,
+    );
+
+    await screen.findByText("7001");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-p1" }),
+    );
+    await screen.findByText(/1 seleccionada/);
+
+    // Página 2: la de la página 1 sigue contando, y al marcar la nueva van 2.
+    await user.click(screen.getByRole("button", { name: "Página siguiente" }));
+    await screen.findByText("7002");
+    expect(screen.getByText(/1 seleccionada/)).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-p2" }),
+    );
+    expect(await screen.findByText(/2 seleccionadas/)).toBeInTheDocument();
+
+    // Y al volver, la de la página 1 sigue marcada (no se perdió el check).
+    await user.click(screen.getByRole("button", { name: "Página anterior" }));
+    await screen.findByText("7001");
+    expect(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-p1" }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText(/2 seleccionadas/)).toBeInTheDocument();
+  });
+
+  // Pedido humano: la cabecera "seleccionar todas" es asimétrica — marcar añade lo de esta
+  // página; DESMARCAR limpia la selección entera, también lo de otras páginas.
+  it("desmarcar 'todas' limpia la selección de TODAS las páginas", async () => {
+    const user = userEvent.setup();
+    listarOrdenesMock.mockImplementation(async (input: { page: number }) => ({
+      status: "ok",
+      items: [
+        input.page === 1
+          ? makeOrden("p1", 8001, { zonaEsGam: true })
+          : makeOrden("p2", 8002, { zonaEsGam: true }),
+      ],
+      page: input.page,
+      pageSize: 25,
+      total: 30,
+    }));
+
+    renderModule(
+      <OrdenesModule filter={{ status_id: "est-rechazada" }} selectable acciones={acciones} />,
+    );
+
+    // Una marcada en la página 1 y otra en la 2.
+    await screen.findByText("8001");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-p1" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Página siguiente" }));
+    await screen.findByText("8002");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-p2" }),
+    );
+    expect(await screen.findByText(/2 seleccionadas/)).toBeInTheDocument();
+
+    // Desmarcar la cabecera desde la página 2 se lleva TAMBIÉN la de la página 1.
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar todas las órdenes" }),
+    );
+    await waitFor(() => expect(screen.queryByText(/seleccionada/)).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Página anterior" }));
+    await screen.findByText("8001");
+    expect(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-p1" }),
+    ).toHaveAttribute("aria-checked", "false");
+  });
+
   it("sin `bloqueoSeleccion` todas las filas son seleccionables (sin regresión)", async () => {
     renderModule(
       <OrdenesModule

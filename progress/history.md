@@ -2548,3 +2548,277 @@ diagnosticó contra código muerto**, así que pide reevaluación antes de que a
   ella, y al abrirla apareció una tabla **preexistente de la 130** sin registrar
   (`contadores-cabecera.guardia.test.ts` tiene el mismo punto ciego y es de la 170); y un
   `as unknown as <Interfaz>` en un test de la 170 **esconde el drift al typechecker**.
+
+## Feature 125 — analítica: backfill histórico de `analytics_daily` · PR #264 (2026-08-02)
+
+Un CLI que recorre un rango de fechas y llama, una fecha cada vez, al agregador que entregó la 124.
+**34/34 requisitos** con test nombrado en verde. Suite final **783 archivos / 9535 tests / 0 rojos**;
+typecheck limpio; lint delta 0.
+
+- **Las mutaciones las aplicó el reviewer, no el implementer: 8 aplicadas, 8 muertas.** Cubren los
+  contratos que sostienen la feature —rango inclusivo, día CR en curso prohibido, orden cronológico,
+  todo-o-nada por fecha, código de salida ≠ 0 ante fallo, no-concurrencia, y ausencia de PII y de
+  credenciales en el eco—. Los 6 casos de integración corren contra Postgres de verdad, no saltados.
+- **La ventana ciega está medida, no declarada.** `orden_historial_estado` nace en la migración
+  `20260713120000` y la primera del repo es `20260708212416`: son **cinco días**. Por debajo de ese
+  horizonte toda medida sale a **cero filas** y la corrida **termina con éxito** —reconcilia 0 = 0, no
+  falla—. Se probó por los dos lados: el caso que da cero y su **gemelo**, la misma orden más una
+  transición, que sí produce filas. El cero no es un test hueco. Queda una **penumbra no medida**: las
+  órdenes que existían el 13/07 y no volvieron a transicionar nunca entran en ningún cubo, y eso no
+  caduca.
+- **La spec se contradecía a sí misma, y se descubrió al implementarla.** R33 sólo autorizaba tocar el
+  allowlist `AJENAS_A_R47`; R34 obligaba a editar **aserciones** de guardias ajenos. Eran
+  incompatibles. Y R34 tampoco tenía dato detrás: la corrida real midió 58 órdenes con un pico de 24
+  filas en una fecha, y fijar un umbral de producción con eso exige un multiplicador inventado, que D5
+  prohíbe. **El implementer paró en vez de rellenar el hueco y relajar un guardia a la vez.** Fue la
+  lectura correcta. → **R34 retirado a la ficha 174**, con su número reservado para no mover la
+  trazabilidad.
+- **Mutar barato reveló lo que leer no revelaba.** El reviewer no se limitó a inventariar los anclajes
+  de la cifra: los mutó. Salieron dos trampas que ningún documento recogía. (a) El literal `20_000` de
+  `rollup-service.test.ts:1047` es un anclaje **silencioso**: cambiando sólo el valor no se pone rojo,
+  deja de casar y queda como resto muerto rastreando el número viejo. (b) La cifra **no se puede
+  elegir libremente**: con el valor 7777 el caso R47(b) se puso rojo señalando un literal ajeno en
+  `lib/utils/whatsapp-telefono.ts`, porque recorre todo el árbol. Hay que comprobar colisiones antes
+  de fijar el número. Las dos viven ahora en la ficha 174.
+- **Un revert evitado en el bookkeeping.** `feature_list.json` salía de `e657f666`, anterior al merge
+  de la 124: el PR habría devuelto la 124 de `done` a `in_progress`. Es el riesgo estructural de
+  trabajar en un worktree mientras otra sesión mergea — el diff hay que leerlo contra `dev`, no contra
+  el punto de partida.
+- **La bitácora no se reescribe.** `impl_125.md` conserva su sección «T6 / R34 — PARADO» tal como se
+  escribió, con la fecha puesta, y gana una nota de cierre remitiendo a la 174. Un log corregido a
+  posteriori miente sobre lo que se sabía en cada momento.
+
+## Feature 127 — analítica: servicios financieros · PR #269 (2026-08-03)
+
+Ocho métricas de dinero sobre `ConsultaAnalitica`: ingresos, recaudo COD por método, las dos de
+cuentas por pagar, egresos y conciliación de cierres. 43 requisitos, todos mapeados a test.
+Reviewer **APROBADO, 0 bloqueantes**. Suite post-merge **821 archivos / 10411 tests, 0 rojos**.
+
+- **Una contradicción del spec que sólo aparece al implementar (C2).** R4 exige que las tablas que
+  un repositorio consulta sean subconjunto de las que su métrica declara; R23 obliga a comparar el
+  snapshot de cierre aprobado **contra** el dinero realmente movido en los ledgers. Con el catálogo
+  vigente el repositorio de conciliación **no podía cumplir ambos**, y el guardia B.3 se ponía rojo
+  en cuanto se escribiera C.4 — que es exactamente lo que tenía que pasar. El humano amplió el
+  catálogo (⟨D10⟩) en vez de aflojar el guardia: aflojarlo lo volvía decorativo justo en la métrica
+  donde más importa. **El test que fijaba la contradicción no se borró: se dio vuelta**, y ahora
+  juzga contra un catálogo *hipotético* para no mutar el real dentro de un test.
+- **Tres cambios y ni uno más en archivo ajeno.** `lib/analytics/metrics.ts` es el catálogo de la 135,
+  fuente única de trece features. Cada toque lleva autorización humana fechada citada en el propio
+  código y en `progress/decision_C2_127.md`: ⟨D8⟩ `estadoProduccion`, ⟨D10⟩ `fuente.tablas`, ⟨D11⟩ el
+  comentario que ⟨D8⟩ dejó mintiendo. El diff completo se lee de un vistazo. **Un cambio en el
+  catálogo compartido sin la autorización a la vista es indistinguible de un retoque de paso.**
+- **Un alias de tipo escondió una fuga de identidad (C8).** `deConciliacion` devolvía `porEstado` tal
+  cual salía del repositorio; como `GrupoCierrePorEstado` es alias de `FilaConciliacion`, **compilaba
+  y parecía gratis** mientras filtraba al DTO campos que R14 no declara. Lo encontró el barrido que
+  serializa el DTO entero y busca identidades en la cadena: **una inspección campo por campo no lo
+  habría visto.** El arreglo es lista blanca explícita, deliberadamente sin spread.
+- **La cobertura de R14 se apoya en menos de lo que parece.** Cinco de las ocho métricas sirven
+  `filas: []` con sólo `total` pese a declarar `granos: ["fecha"]`, así que su barrido de identidad es
+  trivial: el peso real recae en las tres que sí traen filas — que es donde apareció C8. Queda como
+  pregunta abierta 5 del spec, y como aviso dirigido a la 132, que tampoco puede pintarles serie.
+- **El guardia que se afloja solo.** Al apretar los censos, el de *alcance* admitía igualdad exacta
+  (un brazo), pero el de *fuente* tiene dos —lista declarada **más** descubrimiento por import— y el
+  segundo es abierto por diseño. Igualdad exacta ahí habría creado una lista que se desactualiza sola
+  en cuanto la 132 importe algo, y que el siguiente aflojaría. Se exigió lo más fuerte que se
+  sostiene, incluyendo que el brazo de descubrimiento esté **vivo** y no sólo presente.
+- **Vitest no typechequea.** Un agente parado a mitad dejó un uso de `TablaDinero` sin importar: los
+  615 tests pasaban en verde y el rojo sólo existía en `tsc --noEmit`. Verde de suite no es verde.
+- **Una mutación que no llegó al disco parece un hueco del test.** El leader reportó que mutar el
+  umbral no ponía nada rojo; el comando `perl` nunca había escrito el archivo. Rehecha con
+  verificación previa de que la línea cambió: 3 rojos. **Confirmar que la mutación aterrizó antes de
+  creerle al verde** pasa a ser parte del método.
+- **La suite que creí cortada sí había corrido.** El archivo de salida tenía 208 bytes porque lo miré
+  a mitad de ejecución, no porque `migrate status` hubiera abortado la cadena. Leer un log en curso
+  como si fuera final es la misma familia de error que el conteo de rojos en una corrida degradada.
+
+
+## Feature 126 — analítica: servicios operativos · PR pendiente (2026-08-03)
+
+Repositorios, servicios y Server Actions de la analítica operativa: volumen, embudo, tasas,
+primer intento, motivos de devolución, tiempos de ciclo y aging. Lee `analytics_daily` para los
+días cerrados y consulta `orden`/`gestion_orden` en vivo para el día en curso. 36 requisitos,
+36 cubiertos con test nombrado; 40 mutaciones del implementer y 27 más aplicadas por el
+reviewer, todas muertas. Reviewer: **aprobado con reservas, cero bloqueantes**.
+
+- **Un guardia se acota cuando su intención era más estrecha que su barrido; no se relaja.** D3
+  corrigió `whereRollup`, que devolvía `mensajeroAsignadoId` —la columna de `orden`— para recortar
+  `analytics_daily`, cuya columna es `mensajeroId`. El barrido de la 122 prohibía esa clave en
+  *todos* los fragmentos, pero su `describe` hablaba sólo de `gestion_orden`: había pescado
+  `whereRollup` de paso. Aquí «cambiar el código en vez del guardia» habría significado **conservar
+  el bug**. El acotamiento sólo es legítimo porque vino con la aserción **positiva** (debe nombrar
+  `mensajeroId`, no debe nombrar el otro) y con el motivo escrito dentro del test.
+- **El tipo laxo era el bug, no la clave equivocada.** El retorno estaba tipado
+  `Record<string, string>`, así que el compilador no podía ver la clave inexistente. Al tiparlo
+  `Prisma.AnalyticsDailyWhereInput`, la regresión pasa de ser un `where` silenciosamente vacío a un
+  **error de build**. La corrección deja de depender de que nadie la revierta.
+- **Una exención nominal puede ser más estricta que la regla que sustituye.** R19 obliga a importar
+  el planificador de la 125, y el censo de la 125 marcaba infractor a todo importador externo. En vez
+  de meter el servicio en `ARCHIVOS_125` —sometiéndolo a reglas ajenas— se añadió
+  `CONSUMIDORES_EXTERNOS` con **una** entrada y **dos casos nuevos que la sostienen**: cualquier otro
+  importador sigue siendo infractor, y el exento sólo puede importar el planificador puro.
+- **Un mapa `R→test` que apunta a un caso que no muere es cobertura aparente.** El reviewer encontró
+  dos entradas (R28, R34) que nombraban un caso hermano que seguía verde bajo la mutación. El
+  requisito estaba cubierto, pero por otro caso. Es el mismo **anclaje silencioso** que costó caro en
+  la 125: verificar el mapa ejecutando la mutación y leyendo **qué cae**, no cuál debería caer.
+- **Un `where` compuesto por spread deja que el filtro del cliente pise el recorte de alcance.** Era
+  una fuga entre alcances, no un detalle de estilo: lo cazaron sus propios tests y el arreglo (`AND`)
+  tiene seis casos de regresión.
+- **Un guardia que mide un diff de rama caduca al mergear, y hay que ejecutarlo.** El de frontera con
+  la 127 llevaba su propia sentencia en la cabecera —«si sigue aquí después del merge, es un olvido y
+  no una decisión»— y se retiró en este PR, conservando la mitad que afirma sobre el árbol y no sobre
+  el diff. Además usaba `git diff <base>...HEAD`, que compara commit contra commit y es **ciego al
+  árbol de trabajo**: un archivo ajeno editado y sin commitear pasaba invisible.
+- **Los acentos graves de un mensaje de commit son código.** Al commitear inline, `` `pnpm run
+  db:rollback` `` citado en prosa se expandió como **sustitución de comando** y el script se ejecutó
+  de verdad contra la base local: tiró el índice de la feature y borró su fila de
+  `_prisma_migrations`. Se restauró y se verificó. Efecto colateral útil —el `down.sql` quedó probado
+  **por ejecución** y revirtió exactamente su índice— pero la lección es la otra: **commitear siempre
+  con `-F` o heredoc citado**, nunca `-m` con prosa que cita comandos. Ningún gate lo detecta: `git
+  commit` «funciona» y el estrago queda incrustado en el mensaje.
+
+## Feature 177 — api: consulta por guía o remisión y PDF bajo demanda · PR #274 (2026-08-03)
+
+Tres endpoints nuevos en el canal de API key: `GET /orden/{id}` (resuelve contra `num_guia` y
+`num_remision`), `POST /orden/{id}/generate` y `POST /carga/{cargaId}/generate`. Los dos `/generate`
+priorizan devolver el enlace y solo generan cuando no hay PDF. 45 requisitos, 45 con test nombrado;
+27 mutaciones del implementer, todas muertas. Reviewer: **aprobado, cero bloqueantes**, con los 45
+verificados abriendo el test citado uno a uno.
+
+- **Una URL firmada persistida no es una referencia, es un enlace muerto con fecha.** La 136 guardaba
+  en `download_url` la URL ya firmada, no el path. Eso hacía literalmente imposible la instrucción del
+  humano —«reusa el PDF, con vencimiento de 5 min»—: lo persistido caduca. La salida fue una columna
+  aparte, `download_storage_path`, y la regla de que el testigo de existencia es **la referencia,
+  nunca la URL**. Las filas heredadas se tratan como «sin PDF» y se regeneran en la primera llamada.
+  El defecto no se descubrió leyendo el requisito, sino comprobando **cómo estaba persistido** antes
+  de aceptarlo.
+- **La forma de la ruta la decidió el framework, no el gusto.** Next.js no admite `[id]` como hermano
+  de `[numGuia]`, así que el segmento estático `orden/` es obligatorio. Se verificó con un build
+  **antes** de escribir los handlers: descubrirlo después habría costado rehacer tres.
+- **Un `?? resultados[0]` es una defensa que hace lo contrario de defender.** El fallback habría
+  persistido el path de OTRA orden si el generador devolviera un `ordenId` distinto del pedido: en vez
+  de fallar, guarda el dato equivocado en la columna. Inalcanzable hoy, retirado igual.
+- **Un subagente puede mover el HEAD del checkout compartido, y `git commit` no avisa.** El
+  `spec_author` —sin worktree— hizo `git checkout ux` a mitad de su trabajo, y los dos commits del
+  spec que el leader hizo después aterrizaron en la rama equivocada. Se rescataron con `cherry-pick`.
+  La señal está en el prefijo `[rama hash]` de la salida de `git commit`, que es fácil no mirar; la
+  regla es verificar la rama **antes de cada commit que siga a un subagente**, no solo al arrancar.
+
+---
+
+## 2026-08-03 — Feature 173: la caja principal en modo tesorería · PR #278
+
+**El agujero que cierra:** la caja tenía **un solo número**, y ese número dejó de significar una sola
+cosa el día que la 172 metió dinero de terceros en juego. Ahora hay dos: **«Dinero en caja»**
+(tesorería, incluido el contra-entrega cobrado a nombre de las tiendas) y **«Ganancia de Ordenex»**
+(el resultado, que es el número que hasta hoy se llamaba «Balance general»). **La palabra «balance»
+desaparece de la pantalla.**
+
+`./init.sh` completo **VERDE con los 61 commits de `dev` dentro** —no por separado, que es el
+incidente del PR #237—: **904 archivos / 11.337 tests, 0 fallos**. Baseline al arrancar: 845 / 10.605.
+Guardias: 683 → **793**. Review **APROBADO en ronda 2**, trazabilidad **68 de 68**.
+
+### La decisión que más manda, y su límite declarado
+
+**P2 = (a): el pago al mensajero NO pasa a tesorería.** La caja queda mixta —tesorería para el COD y
+las tiendas, devengo para los mensajeros— y «Dinero en caja» se queda corto **exactamente** en la
+cuenta por pagar a mensajeros, cifra que el sistema ya publica. **Se equivoca por lo bajo: nunca dice
+que hay más dinero del que hay.**
+
+Ese límite no lo sostiene un comentario: lo sostiene un **puerto de dos métodos**
+(`ICajaPagoTiendaFeedService`) que no admite ni tipo ni categoría, así que la liquidación **no puede
+expresar** una escritura que no sea el egreso del pago a tienda o su reverso. Matiz honesto, que el
+reviewer dejó escrito: el objeto de transacción sí expone `walletMovimiento`, así que la garantía
+última son **cuatro guardias ejecutables**, no el compilador. *El día que alguien «simplifique» una de
+las cuatro, la decisión más cara de la feature se queda sin red.*
+
+### Lo que el `CHECK` destapó y NO es de esta feature
+
+**El «neto» de las métricas de caja nunca puede diferir del «bruto».** Las cuatro que leen
+`wallet_movimiento` declaran listas homogéneas de prefijo, así que cada una solo contiene un `tipo`.
+Ya era cierto en producción por las tres barreras de la app; el `CHECK` solo lo hizo **visible**,
+porque hasta entonces los tests lo tapaban con datos imposibles. Dirigido a la **175** — y **seguía
+abierto** tras mergearse su PR #277, verificado contra el código.
+
+### Cinco veces más el patrón del año: un test verde que no medía lo que decía
+
+- la **guardia de la 172** («la caja no entra en la feature»), rota al hacerla entrar — **afilada, no
+  vaciada**, y con la mutación probada por sus **dos** vías;
+- un test de la **127** que insertaba una fila **que la aplicación no puede producir**
+  (`egreso_ajuste` con tipo `ingreso`), y que al corregirse destapó el hallazgo del neto/bruto;
+- **cuatro filas falsas de trazabilidad**, dos apuntando a archivos **que nunca existieron**;
+- **R53 sin ningún test**: borrar la descripción de `egresos` —lo único que declara que esa métrica
+  cambia de número— dejaba la suite **entera** en verde. Y el defecto **sobrevivió a su propia
+  auditoría**: la Tanda H corrigió esa fila y la sustituyó por otra cita que tampoco verificaba;
+- **contar `R\d+` en títulos CRUZA espacios de nombres** (el R32 de la 172 y el R35 de la 158 salen en
+  este diff): daba un tranquilizador **falso 68/68**.
+
+El arreglo de R53 es el que mejor resume la lección: **metió el texto viejo en el archivo como
+fixture** y exigió que el mismo predicado lo rechace, porque el texto viejo ya decía «pagos a tienda»
+y un `toMatch(/tienda/)` habría dado verde. *Un test que no puede engañarse a sí mismo.*
+
+### Tres cascadas del merge con `dev`, ninguna defecto de nadie
+
+Cliente **Prisma stale** + 2 migraciones sin aplicar en local; el **componente** del tablero
+financiero (8→10 métricas); y su **cargador**, que `vitest related` **no puede seleccionar** porque es
+hermano sin arista del anterior. Además la guardia `catalogo-produccion` de la 175 asumía **«una
+métrica, una decisión»** — premisa que `egresos` rompe al tener dos legítimas; generalizada a «cada
+fecha respaldada por **alguna** decisión citada», con dos mutaciones que la prueban.
+
+### Lo que queda vivo
+
+- **`T H.4` es POST-DEPLOY**: los valores nuevos del enum no existen en producción hasta el release.
+  Medido: **5 cierres con ₡203.055,90** esperando registro retroactivo.
+- **Preview sigue sin ser medible** por MCP (quinta vía descartada). Producción **sí** se midió antes
+  del `CHECK`: 35 filas, 0 lo violarían.
+- **Colisión de nombres de migración entre sesiones paralelas**: `20260803120000_caja_tesoreria` y
+  `20260803120000_download_storage_path` comparten timestamp. Hoy es inocuo; el día que dos sesiones
+  toquen la misma tabla, el orden dejaría de ser indiferente **y nadie lo notaría hasta el despliegue**.
+
+## 2026-08-04 — 175 · analítica: corregir el catálogo de métricas (`metrics.ts`)
+
+- PR **#277** (mergeado el 2026-08-03). Cierra **tres** divergencias entre `lib/analytics/metrics.ts`
+  y lo que el rollup y los servicios sirven de verdad: (1) `incidentes` estaba marcada
+  `estadoProduccion: 'declarada'` pese a tener columna en `analytics_daily` y ser el cuarto término
+  del denominador de las tres tasas —la 133 decide paneles con ese campo, así que habría **ocultado**
+  el panel por creerlo sin productor—; (2) `ordenes_por_estado` decía «los 19 estados» mientras la
+  columna real contiene el universo B2 de la 124 («vivas + las que cerraron ese día»); (3)
+  `sin_gestionar` figuraba como `snapshot`/`fuente: rollup` sin columna que la respalde: la 126 la
+  deriva del embudo con semántica «sin gestionar HOY», y ahora el catálogo lo dice.
+- Reviewer **APROBADO-CON-NOTAS**: 0 bloqueantes, 5 menores.
+- **La cuarta divergencia NO se cerró aquí: se movió intacta a la ficha 183**, con la decisión humana
+  del 2026-08-04 ya dentro (retirar la distinción `neto`/`bruto` de las cuatro métricas de caja; NO
+  darle `ingreso_ajuste` a `egresos`, que movería una cifra de dinero ya publicada). La ficha exigía
+  cerrarla *o* moverla; se movió. No queda huérfana.
+- Deuda de conocimiento que dejó su guardia: `catalogo-produccion` asumía «una métrica, una decisión»,
+  premisa que `egresos` rompe al tener dos legítimas; se generalizó a «cada fecha respaldada por
+  **alguna** decisión citada». Y su R14 solo ve los cambios que **ya tienen** fichero de decisión: un
+  `estadoProduccion` cambiado sin fichero no produce par y R14 no lo mira —muere igual, pero por otros
+  guards, cobertura **incidental**—.
+
+## 2026-08-04 — 178 · job diario de purga de los PDF de cargas antiguas
+
+- PR **#284** (merge `e4cf28ad`). Cron **diario** a las 03:00 CR (09:00 UTC, Costa Rica es UTC−6 fijo)
+  protegido por `CRON_SECRET` —cron propio en `vercel.json`, no la cola de la 90: el humano eligió lo
+  contrario a la recomendación del spec—. Corte **inclusivo** sobre `carga.created_at` (inmutable, a
+  diferencia de `fecha_carga`, que es backdateable), retención por env con default 7 y mínimo 0.
+  Borra el PDF consolidado del lote **y** los individuales de sus órdenes.
+- «Semanal» nunca fue la cadencia: era el **default de la retención (N=7)**. Por eso cambió el `name`.
+- Requisitos cubiertos: **26/26 R**. Reviewer **RECHAZADO en ronda 1, APROBADO en ronda 2**.
+- El bloqueante enseña un patrón que en este repo ya es recurrente: `quedaPendiente` decía `false`
+  habiendo trabajo, porque la comprobación se saltaba las `tope` filas ya devueltas **y lo purgado
+  deja de casar el `where`** (la purga borra justo las columnas que hacen candidata a una carga). Con
+  el default de 200, cualquier backlog de **201–400 mentía**. **Lo tapaban dos tests verdes**: el de
+  service usaba 5/2 y pasaba *por margen* con su doble replicando la semántica mala, y el de
+  repositorio afirmaba `expect(arg.skip).toBe(200)` **como si fuera el contrato**.
+- R16, con test de control no vacuo: la purga anula `download_storage_path` **además de**
+  `download_url`. Si se dejara viva, `/generate` de la 177 se saltaría la generación y **firmaría un
+  objeto ya borrado** → 200 con URL que da 404.
+- Fuera de alcance **declarado**: las órdenes con `carga_id` NULL (su PDF no caduca nunca) y los PDF
+  de las features 136/141, **inalcanzables** porque de ellos solo se guardó la URL firmada, nunca la
+  ruta —esto **corrige un supuesto erróneo del `design.md` de la 177**, que daba por hecho que la 178
+  barrería sus huérfanos—. Harían falta reglas de ciclo de vida del bucket: ticket aparte.
+- **DEUDA DE ENTORNO SIN DUEÑO** (ajena y preexistente): el drift de la base local —migración fantasma
+  `20260728120000_*` presente en la base y ausente del repo, más un checksum modificado en
+  `20260714123909_*`— hace fallar `pnpm db:migrate`, así que el round-trip `migrate`/`rollback` de
+  esta migración **queda sin medir**; se aplica con `prisma migrate deploy`, el mismo comando del
+  build.

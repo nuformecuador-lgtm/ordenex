@@ -4,10 +4,21 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
+// Import estático (no `await import()` dentro de cada `it`) para que la carga
+// del árbol de la página no cuente contra `testTimeout`. Los `vi.mock` de abajo
+// son *hoisted* por Vitest; además la página lee los mocks en tiempo de llamada
+// a `Home()`, no de importación, y sin `resetModules` los `await import()`
+// repetidos ya devolvían el mismo módulo cacheado: la semántica no cambia.
+import Home from "@/app/(app)/dashboard/page";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import { listarPostulacionesPendientes } from "@/lib/actions/aprobacion-postulaciones";
+import {
+  SIDEBAR_ITEMS,
+  itemsVisibles,
+  primerDestino,
+} from "@/lib/auth/menu-visibility";
 import type { RolValue } from "@prisma/client";
 
 // Feature 23 — ramificación de app/(app)/page.tsx por rol. maestro/admin ven el
@@ -95,8 +106,6 @@ afterEach(() => {
 describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () => {
   it("R1: rol maestro renderiza el dashboard maestro con el panel de postulaciones", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -109,8 +118,6 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
 
   it("R1: rol admin también renderiza el dashboard maestro", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "admin" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -120,8 +127,6 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
 
   it("R2: rol adminTienda conserva el Panel de tienda (feature 26 intacta)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -131,21 +136,23 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
     expect(listarPendientesMock).not.toHaveBeenCalled();
   });
 
-  it("R3: mensajero/adminSatelite/sin sesión conservan el placeholder Bienvenido", async () => {
-    const roles: (RolValue | null)[] = ["mensajero", "adminSatelite", null];
+  // Pedido humano: `/dashboard` dejó de ser una pantalla. Quien no tiene un dashboard
+  // propio aterriza en el PRIMER ítem de su sidebar; el placeholder solo queda para
+  // quien no tiene ningún ítem visible (sin sesión).
+  it("R3: mensajero/adminSatelite aterrizan en su primer ítem del sidebar", async () => {
+    const roles: RolValue[] = ["mensajero", "adminSatelite"];
 
     for (const rol of roles) {
-      resolveActorMock.mockResolvedValue(
-        rol ? { usuarioId: "u1", rol } : null,
-      );
+      const actor = { usuarioId: "u1", rol };
+      resolveActorMock.mockResolvedValue(actor);
       cookieGetMock.mockReturnValue(undefined);
 
-      const { default: Home } = await import("@/app/(app)/dashboard/page");
-      renderHome(await Home());
-
-      expect(screen.getByText("Bienvenido")).toBeInTheDocument();
-      expect(screen.queryByText("Panel maestro")).toBeNull();
-      expect(screen.queryByText("Panel de tienda")).toBeNull();
+      const esperado = primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor));
+      expect(esperado).not.toBeNull();
+      // `redirect()` corta el render lanzando: no llega a pintarse ningún dashboard.
+      await expect(Home()).rejects.toMatchObject({
+        digest: expect.stringContaining(`;${esperado};`),
+      });
 
       cleanup();
       vi.clearAllMocks();
@@ -153,10 +160,18 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
     }
   });
 
+  it("R3: sin sesión no hay a dónde ir y queda el placeholder Bienvenido", async () => {
+    resolveActorMock.mockResolvedValue(null);
+    cookieGetMock.mockReturnValue(undefined);
+    renderHome(await Home());
+
+    expect(screen.getByText("Bienvenido")).toBeInTheDocument();
+    expect(screen.queryByText("Panel maestro")).toBeNull();
+    expect(screen.queryByText("Panel de tienda")).toBeNull();
+  });
+
   it("R4: el rol se resuelve server-side vía resolveActorFromSession", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     await Home();
 
     expect(resolveActorMock).toHaveBeenCalledTimes(1);

@@ -841,6 +841,13 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
           tiendaRows.push(...data);
           return { count: data.length };
         }),
+        // Feature 173/T B.2: el feed del contra-entrega LEE del ledger lo que el feed de la 43
+        // acaba de escribir. El doble filtra por el `where` recibido, como Postgres.
+        findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+          tiendaRows
+            .filter((m) => Object.entries(where).every(([k, v]) => m[k] === v))
+            .map((m) => ({ monto: m.monto })),
+        ),
       },
       pagoMensajeroMovimiento: {
         createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {

@@ -48,6 +48,7 @@ describe("R32 — el drenador resuelve el handler de geocodificacion y no lo re-
     // enumera el conjunto EXACTO de tipos registrados. Asi, anadir un tipo sin actualizar
     // este test falla ruidosamente, y quitar uno por accidente tambien.
     expect([...handlers.keys()].sort()).toEqual([
+      "analitica_invalidacion_cache", // feature 128: PUNTUAL, no va en buildRecurrencias
       "analitica_rollup_diario", // feature 124
       "geocodificacion",
       "liberar_reprogramadas",

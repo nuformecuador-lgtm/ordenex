@@ -6,6 +6,10 @@ import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { obtenerRankingAction } from "@/lib/actions/ranking";
 
 import { RankingModule } from "./_components/RankingModule";
+import { RankingPodio } from "./_components/RankingPodio";
+
+/** Cuántos mensajeros ve el propio mensajero en el podio rediseñado, PODIO INCLUIDO. */
+const LIMITE_RANKING_MENSAJERO = 10;
 
 /**
  * Feature 76 (T8, R12/R16/R17/R18) — página `/ranking`: ranking DIARIO de mensajeros +
@@ -36,11 +40,24 @@ export default async function RankingPage() {
       title="Ranking"
       description="Ranking diario de mensajeros por entregas exitosas y premios del podio"
     >
-      <RankingModule
-        ranking={result.data.ranking}
-        premios={result.data.premios}
-        esEditable={result.data.esEditable}
-      />
+      <div className="flex flex-col gap-8">
+        {/* Rediseño en evaluación: podio visual + lista. Solo-lectura.
+            Al mensajero se le recorta al top 10 (podio incluido) y, si quedó fuera, su
+            fila real se ancla al final. Maestro/admin ven la lista completa: la necesitan
+            para operar, y no tienen fila propia que anclar. */}
+        <RankingPodio
+          ranking={result.data.ranking}
+          mensajeroPropioId={actor.rol === "mensajero" ? actor.usuarioId : null}
+          limite={actor.rol === "mensajero" ? LIMITE_RANKING_MENSAJERO : null}
+        />
+
+        {/* Versión anterior, debajo para comparar. Sigue siendo la que EDITA los premios. */}
+        <RankingModule
+          ranking={result.data.ranking}
+          premios={result.data.premios}
+          esEditable={result.data.esEditable}
+        />
+      </div>
     </AppPage>
   );
 }

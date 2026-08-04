@@ -37,27 +37,44 @@ function valoresDelEnum(sql: string, tipo: string): string[] {
   return [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 
+/**
+ * Los 15 valores del enum en el PUNTO-EN-EL-TIEMPO de esta migracion (feature 158), literales.
+ *
+ * Van a mano y NO derivados de `WALLET_MOVIMIENTO_CATEGORIA_SEED` en vivo: el SEED crece con
+ * cada feature —la 173 le anadio `ingreso_cod_recaudado` e `ingreso_reverso_pago_tienda`— y
+ * una expectativa que lo lee en vivo convierte esta suite en un rojo AJENO cada vez que
+ * alguien amplia el catalogo. Un test de migracion mide lo que SU migracion dejo, no el
+ * tamano vigente del catalogo. Mismo criterio que `wallet-egreso-migration.test.ts`, que fija
+ * sus 12 valores a mano.
+ */
+const CATEGORIAS_TRAS_LA_158 = [
+  "ingreso_flete",
+  "ingreso_flete_devolucion",
+  "ingreso_comision_cod",
+  "ingreso_iva_flete",
+  "ingreso_iva_flete_devolucion",
+  "ingreso_iva_comision_cod",
+  "ingreso_ajuste",
+  "egreso_pago_tienda",
+  "egreso_pago_mensajero",
+  "egreso_gasto",
+  "egreso_sueldo",
+  "egreso_ajuste",
+  "egreso_gasto_fijo",
+  "egreso_gasto_variable",
+  "egreso_indemnizacion",
+] as const;
+
 describe("R3 — los SEED tipados incluyen los valores nuevos", () => {
   it("R2/R3: WALLET_MOVIMIENTO_CATEGORIA_SEED contiene egreso_indemnizacion y conserva las 14 previas", () => {
     expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toContain("egreso_indemnizacion");
-    expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toHaveLength(15);
+    // Los 15 del punto-en-el-tiempo de la 158 siguen ahi, en ese orden y al principio: lo que
+    // vino despues se ANADIO, no reordeno ni retiro nada (que es lo que R2 protege).
+    expect(WALLET_MOVIMIENTO_CATEGORIA_SEED.slice(0, CATEGORIAS_TRAS_LA_158.length)).toEqual([
+      ...CATEGORIAS_TRAS_LA_158,
+    ]);
     // R2: ninguna de las 14 previas se retiro ni se renombro.
-    for (const previa of [
-      "ingreso_flete",
-      "ingreso_flete_devolucion",
-      "ingreso_comision_cod",
-      "ingreso_iva_flete",
-      "ingreso_iva_flete_devolucion",
-      "ingreso_iva_comision_cod",
-      "ingreso_ajuste",
-      "egreso_pago_tienda",
-      "egreso_pago_mensajero",
-      "egreso_gasto",
-      "egreso_sueldo",
-      "egreso_ajuste",
-      "egreso_gasto_fijo",
-      "egreso_gasto_variable",
-    ]) {
+    for (const previa of CATEGORIAS_TRAS_LA_158.filter((c) => c !== "egreso_indemnizacion")) {
       expect(WALLET_MOVIMIENTO_CATEGORIA_SEED).toContain(previa);
     }
   });
@@ -145,11 +162,9 @@ describe("DOWN — recrea los dos enums sin los valores nuevos (R4)", () => {
     const valores = valoresDelEnum(downSql, "wallet_movimiento_categoria");
     expect(valores).not.toContain("egreso_indemnizacion");
     expect(valores).toHaveLength(14);
-    // Q-F: el down de la 45 (12 valores) NO se reescribe; el que cuadra con el SEED VIGENTE
-    // menos el valor que esta migracion anade es ESTE.
-    expect(valores).toEqual(
-      WALLET_MOVIMIENTO_CATEGORIA_SEED.filter((c) => c !== "egreso_indemnizacion"),
-    );
+    // Q-F: el down de la 45 (12 valores) NO se reescribe; el que cuadra con el catalogo del
+    // punto-en-el-tiempo de la 158 menos el valor que esta migracion anade es ESTE.
+    expect(valores).toEqual(CATEGORIAS_TRAS_LA_158.filter((c) => c !== "egreso_indemnizacion"));
     expect(downSql).toMatch(
       /ALTER TABLE "wallet_movimiento" ALTER COLUMN "categoria"\s+TYPE "wallet_movimiento_categoria" USING/,
     );

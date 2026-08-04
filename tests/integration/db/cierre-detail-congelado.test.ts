@@ -215,6 +215,18 @@ function makeDb() {
         for (const d of data) movsTienda.push({ ...d, id: `wt${++seq}` });
         return { count: data.length };
       }),
+      // Feature 173/T B.2: al aprobar, el feed del contra-entrega LEE del ledger lo que la
+      // linea de arriba acaba de escribir. El doble honra el `where` como lo haria Postgres,
+      // para que siga siendo el MISMO libro el que se escribe y el que se lee.
+      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+        movsTienda
+          .filter((m) =>
+            Object.entries(where).every(
+              ([k, v]) => (m as unknown as Record<string, unknown>)[k] === v,
+            ),
+          )
+          .map((m) => ({ monto: new Prisma.Decimal(m.monto) })),
+      ),
     },
   };
 

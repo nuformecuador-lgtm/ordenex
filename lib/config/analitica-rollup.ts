@@ -16,6 +16,22 @@
 export const UMBRAL_AVISO_FILAS_CORRIDA = 20000;
 
 /**
+ * Feature 125 (R14, design §5) — fallos CONSECUTIVOS que abortan una pasada del backfill.
+ *
+ * NO es una cifra de volumen: no limita filas, ni cubos, ni dias por invocacion (D5 prohibe fijar
+ * un tope de dias sin medicion, y esta entrega no lo trae). Es el corte que separa «un dia raro»
+ * de «el entorno esta roto»: si la base se cae o la `DATABASE_URL` es la equivocada, un backfill
+ * de 200 dias recorreria las 200 fechas fallando 200 veces. Tres fallos seguidos ya no son una
+ * casualidad. Vive aqui, y no en el servicio, porque R47 de la 124 quiere UN solo sitio donde
+ * tocar los numeros del job de analitica.
+ *
+ * Los fallos NO consecutivos no cortan nada a proposito (R13): la unidad de atomicidad es la
+ * fecha, la transaccion de la 124 deja la fecha fallida exactamente como estaba, y abortar el
+ * rango entero por una fecha enferma castiga a las sanas.
+ */
+export const FALLOS_CONSECUTIVOS_QUE_ABORTAN = 3;
+
+/**
  * Tiempo maximo de la transaccion unica de la corrida (D9: una fecha, sin lotes). NO es una
  * cifra de volumen: es el limite de la transaccion interactiva de Prisma, cuyo default (5 s)
  * esta pensado para una mutacion de una request, no para una agregacion diaria. Vive en este

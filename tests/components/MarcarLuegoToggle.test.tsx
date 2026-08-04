@@ -4,7 +4,7 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { MarcarLuegoToggle } from "@/app/(app)/mis-asignaciones/_components/MarcarLuegoToggle";
-import { MisAsignacionesModule } from "@/app/(app)/mis-asignaciones/_components/MisAsignacionesModule";
+import { RepartoModule } from "@/app/(app)/mis-asignaciones/_components/RepartoModule";
 import { marcarGestionarLuego } from "@/lib/actions/orden-mensajero-meta";
 import type {
   MiAsignacionDTO,
@@ -19,7 +19,7 @@ vi.mock("@/lib/actions/orden-mensajero-meta", () => ({
 }));
 
 // El módulo (para R18/R19) arrastra otras Server Actions y el mapa Leaflet: se mockean igual
-// que en `MisAsignacionesModule.test.tsx` para poder montarlo en jsdom.
+// que en `RepartoModule.test.tsx` para poder montarlo en jsdom.
 vi.mock("@/lib/actions/mis-asignaciones", () => ({
   recogerAsignaciones: vi.fn(),
   escogerParaGestion: vi.fn().mockResolvedValue({ status: "ok", ordenId: "g1" }),
@@ -99,8 +99,7 @@ const RUTA_VIGENTE: RutaResumenDTO = {
 
 function renderModule(porGestionar: MiAsignacionDTO[]) {
   render(
-    <MisAsignacionesModule
-      porRecoger={[]}
+    <RepartoModule
       porGestionar={porGestionar}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
@@ -115,7 +114,7 @@ function renderModule(porGestionar: MiAsignacionDTO[]) {
  */
 function cardDe(numRemision: string): HTMLElement {
   return screen.getByRole("article", {
-    name: new RegExp(`Gestionar orden ${numRemision}`),
+    name: new RegExp(`Orden ${numRemision}`),
   });
 }
 
@@ -304,14 +303,14 @@ describe("MarcarLuegoToggle (feature 115 / T8)", () => {
     ]);
 
     const cards = screen
-      .getAllByRole("article", { name: /Gestionar orden REM-G/ })
+      .getAllByRole("article", { name: /Orden REM-G/ })
       .map((b) => b.getAttribute("aria-label"));
 
     // Presentación: la marcada (g1) baja al final; g2 y g3 conservan su orden de ruta.
     expect(cards).toEqual([
-      "Gestionar orden REM-G2 · Ana Pérez",
-      "Gestionar orden REM-G3 · Ana Pérez",
-      "Gestionar orden REM-G1 · Ana Pérez",
+      "Orden REM-G2 · Ana Pérez",
+      "Orden REM-G3 · Ana Pérez",
+      "Orden REM-G1 · Ana Pérez",
     ]);
 
     // R16/R19: la secuencia de ruta NO se altera — g1 baja al final en la PRESENTACIÓN,
@@ -328,11 +327,11 @@ describe("MarcarLuegoToggle (feature 115 / T8)", () => {
     ]);
 
     const cards = screen
-      .getAllByRole("article", { name: /Gestionar orden REM-G/ })
+      .getAllByRole("article", { name: /Orden REM-G/ })
       .map((b) => b.getAttribute("aria-label"));
     expect(cards).toEqual([
-      "Gestionar orden REM-G1 · Ana Pérez",
-      "Gestionar orden REM-G2 · Ana Pérez",
+      "Orden REM-G1 · Ana Pérez",
+      "Orden REM-G2 · Ana Pérez",
     ]);
   });
 });

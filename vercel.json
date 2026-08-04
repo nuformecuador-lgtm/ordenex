@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/sync-plantillas-whatsapp",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/purga-pdf-cargas",
+      "schedule": "0 9 * * *"
     }
   ]
 }

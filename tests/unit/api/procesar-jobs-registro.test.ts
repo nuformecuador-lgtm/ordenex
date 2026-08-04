@@ -40,6 +40,7 @@ describe("R21 — registro en el drenador", () => {
     // Conjunto EXACTO: anadir o quitar un tipo sin actualizar este test falla ruidosamente.
     const handlers = buildHandlers(() => AHORA);
     expect([...handlers.keys()].sort()).toEqual([
+      "analitica_invalidacion_cache", // feature 128: PUNTUAL, no va en buildRecurrencias
       "analitica_rollup_diario", // feature 124
       "geocodificacion",
       "liberar_reprogramadas",

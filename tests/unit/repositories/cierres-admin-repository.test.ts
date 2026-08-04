@@ -25,7 +25,7 @@ function buildWalletDeps() {
   const walletMovimientoRepo: IWalletMovimientoRepository = {
     crearMovimientos: vi.fn().mockResolvedValue(0),
     listar: vi.fn(),
-    agregarBalance: vi.fn(),
+    agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
   };
@@ -129,6 +129,12 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     gestionOrden: { findMany: vi.fn() },
     // Feature 69/T18 (R15): el detalle de un cierre YA CREADO sale del SNAPSHOT.
     cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
+    // Feature 173/T B.2: al aprobar, el feed del contra-entrega LEE el ledger por tienda para
+    // saber cuanto se le acredito a las tiendas en ESE cierre. En esta suite el repositorio
+    // del ledger es un doble que no escribe nada, asi que el ledger esta VACIO — y devolver
+    // vacio es lo coherente con el resto del doble, no un atajo: sin creditos no hay
+    // contra-entrega que meter en la caja (R13).
+    walletTiendaMovimiento: { findMany: vi.fn().mockResolvedValue([]) },
     ...overrides,
   };
 }

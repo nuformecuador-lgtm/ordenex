@@ -100,7 +100,7 @@ describe("listarOrdenesCompleto (borde)", () => {
     expect(data).toEqual({
       filter: { zona_id: ["z1"] },
       sortBy: "created_at",
-      sortDir: "desc",
+      sortDir: "asc", // pedido humano: lo más antiguo primero, igual que el listado
     });
     expect(data).not.toHaveProperty("page");
     expect(data).not.toHaveProperty("pageSize");

@@ -4,6 +4,12 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
+// Import estático (no `await import()` dentro de cada `it`) para que la carga
+// del árbol de la página no cuente contra `testTimeout`. Los `vi.mock` de abajo
+// son *hoisted* por Vitest; además la página lee los mocks en tiempo de llamada
+// a `Home()`, no de importación, y sin `resetModules` los `await import()`
+// repetidos ya devolvían el mismo módulo cacheado: la semántica no cambia.
+import Home from "@/app/(app)/dashboard/page";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarOrdenes } from "@/lib/actions/ordenes";
@@ -78,8 +84,6 @@ afterEach(() => {
 describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
   it("R1: rol adminTienda con sesión válida renderiza el dashboard del admin de tienda", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     const element = await Home();
     renderHome(element);
 
@@ -92,17 +96,20 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
 
   it("R5: el rol se resuelve server-side invocando resolveActorFromSession (sin hook de cliente)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     await Home();
 
     expect(resolveActorMock).toHaveBeenCalledTimes(1);
   });
 
-  it("R3: un rol distinto de adminTienda NO renderiza el dashboard de tienda, conserva el placeholder", async () => {
-    // Feature 23: maestro/admin ahora ven el dashboard maestro (cubierto en
-    // HomePageMaestro.test.tsx), por lo que ya no conservan el placeholder aquí.
-    // Los roles que siguen viendo "Bienvenido" son mensajero y adminSatelite.
+  it("R3: un rol distinto de adminTienda NO renderiza el dashboard de tienda — ahora ni llega a pintar", async () => {
+    // Feature 23: maestro/admin ven el dashboard maestro (cubierto en
+    // HomePageMaestro.test.tsx), así que ya no conservan el placeholder aquí.
+    //
+    // Y el "Bienvenido" que mensajero y adminSatelite conservaban TAMPOCO existe ya: por
+    // pedido humano esta home los manda al PRIMER ítem de su sidebar en vez de dejarlos en
+    // una pantalla vacía (ver el porqué en `app/(app)/dashboard/page.tsx`). R3 se cumple
+    // MÁS fuerte que antes —no es que no vean el panel de tienda: es que no ven nada,
+    // porque la home redirige antes de renderizar—, y eso es justo lo que se afirma.
     const otrosRoles: RolValue[] = [
       "mensajero",
       "adminSatelite",
@@ -117,13 +124,9 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
         expiresAt: new Date(Date.now() + 60_000),
         createdAt: new Date(),
       });
-
-      const { default: Home } = await import("@/app/(app)/dashboard/page");
-      const element = await Home();
-      renderHome(element);
-
-      expect(screen.queryByRole("heading", { name: "Panel de tienda" })).toBeNull();
-      expect(screen.getByText("Bienvenido")).toBeInTheDocument();
+      // `redirect()` de Next corta el render lanzando: la home nunca devuelve un árbol,
+      // así que no hay nada donde pudiera colarse el panel de tienda.
+      await expect(Home()).rejects.toThrow(/NEXT_REDIRECT/);
 
       cleanup();
       vi.clearAllMocks();
@@ -140,8 +143,6 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
   it("R4: sin sesión válida (actor null) NO renderiza el dashboard", async () => {
     resolveActorMock.mockResolvedValue(null);
     cookieGetMock.mockReturnValue(undefined);
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     const element = await Home();
     renderHome(element);
 

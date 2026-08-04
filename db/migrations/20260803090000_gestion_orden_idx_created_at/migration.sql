@@ -1,0 +1,34 @@
+-- Feature 126 (T7.1, R25 — T0-Q1 = B del 2026-08-02) — INDICE de la ruta caliente INTRADIA.
+--
+-- POR QUE HACE FALTA, con el hecho verificado delante: `gestion_orden` tiene hoy CUATRO
+-- indices y ninguno por `created_at` (`db/schema.prisma`: `ordenId`, `mensajeroId`,
+-- `cierreId`, `anuladaPor`, mas el parcial `(mensajero_id) WHERE cierre_id IS NULL AND
+-- anulada_at IS NULL` que vive en el SQL de `*_gestion_orden_anulacion`). La consulta que la
+-- 126 estrena —los cubos del DIA EN CURSO, D6/D13— filtra por
+-- `g.created_at >= :desde AND g.created_at < :corte`, sin `orden_id` ni `mensajero_id` por
+-- delante. Sin este indice es un seq scan sobre una tabla que crece con CADA gestion de CADA
+-- orden del sistema, y a diferencia del job nocturno de la 124 —que corre una vez al dia y
+-- tolera el escaneo— esta consulta va POR REQUEST, en el tablero que el jefe de operacion
+-- deja abierto.
+--
+-- La decision del humano (Q1 = B) hace este indice ALCANCE FIRME, no una optimizacion: el
+-- riesgo declarado en `design.md §8` dice literalmente que si este indice se cae del alcance,
+-- el intradia deja de ser viable y hay que volver a la opcion A de Q1.
+--
+-- COLUMNA UNICA `(created_at)`, y no `(created_at, anulada_at)`: `created_at` entra con un
+-- predicado de RANGO, y en un btree toda columna colocada DESPUES de un rango deja de servir
+-- para el filtrado (solo se lee como filtro residual). El recorte util de verdad seria un
+-- indice PARCIAL `(created_at) WHERE anulada_at IS NULL`, y ese no se puede declarar: Prisma
+-- no soporta indices parciales, y R25 exige que el indice este DECLARADO EN `db/schema.prisma`
+-- —si no lo esta, el siguiente `prisma migrate dev` propone borrarlo—. Entre «parcial y
+-- huerfano del datamodel» y «completo y declarado», R25 manda lo segundo.
+--
+-- SIN `CONCURRENTLY`: Prisma corre cada migracion dentro de una transaccion y
+-- `CREATE INDEX CONCURRENTLY` no puede correr ahi (mismo motivo que la feature 167).
+--
+-- `IF NOT EXISTS` para que sea idempotente: esta migracion no crea nada mas y volver a
+-- aplicarla no puede fallar.
+--
+-- Solo indice: sin tablas nuevas, sin columnas nuevas => SIN RLS nueva. `gestion_orden`
+-- conserva la que ya tenia.
+CREATE INDEX IF NOT EXISTS "gestion_orden_created_at_idx" ON "gestion_orden"("created_at");
