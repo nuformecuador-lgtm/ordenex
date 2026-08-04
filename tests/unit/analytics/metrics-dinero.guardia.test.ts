@@ -59,7 +59,8 @@ const FINANCIERAS = METRICAS.filter((m) => m.dominio === "financiera");
 
 describe("R6 · frontera del dinero: fuentes", () => {
   it("declara metricas financieras en el catalogo", () => {
-    expect(FINANCIERAS.length).toBe(8);
+    // 8 de la 135 + las dos de la caja en modo tesoreria de la 173 (P4).
+    expect(FINANCIERAS.length).toBe(10);
   });
 
   it("toda metrica financiera cita solo ledgers append-only y snapshots de cierre", () => {

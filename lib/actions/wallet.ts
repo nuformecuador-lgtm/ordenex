@@ -9,7 +9,7 @@ import type {
   IWalletService,
   ListarMovimientosServiceResult,
   RegistrarMovimientoManualServiceResult,
-  VerBalanceServiceResult,
+  VerResumenCajaServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
 import {
   listarMovimientosCompletoSchema,
@@ -32,8 +32,8 @@ export type ListarMovimientosActionResult =
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
-export type VerBalanceActionResult =
-  | VerBalanceServiceResult
+export type VerResumenCajaActionResult =
+  | VerResumenCajaServiceResult
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -107,20 +107,44 @@ export async function listarMovimientosCompletoAction(
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }
 
-/** R16/R19/R25: balance derivado (STRING+signo) del conjunto filtrado (solo maestro). */
-export async function verBalanceAction(
+/**
+ * Feature 173 (T D.2 — R8/R64/R65): las DOS cifras de la caja para el conjunto filtrado.
+ *
+ * Mismo borde que `listarMovimientosAction` y **el mismo schema**: los filtros del resumen no
+ * pueden ser otros que los del listado, ni siquiera por accidente de validacion. El servicio es
+ * quien autoriza (R65) y quien deriva; aqui no se toca ni un monto. Money-safe: el DTO cruza la
+ * frontera con todos los importes como STRING (R64) — el navegador nunca ve un `Prisma.Decimal`
+ * ni recalcula dinero.
+ */
+export async function verResumenCajaAction(
   input: unknown,
   deps: WalletDeps = {},
-): Promise<VerBalanceActionResult> {
+): Promise<VerResumenCajaActionResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError();
     const data = listarMovimientosSchema.parse(input); // mismos filtros que el listado
     const service = deps.service ?? buildService();
-    return service.verBalance(data, actor);
+    return service.verResumenCaja(data, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }
+
+// Feature 173 (T H.2/Tanda H) — el PUENTE `verBalanceAction` se RETIRA aqui.
+//
+// Existio entre la Tanda D y la Tanda G, y estaba declarado como puente desde el primer dia:
+// `WalletService.verBalance` desaparecio con `T D.2` (design §5.2, sustituido por
+// `verResumenCaja`), pero `/wallet` seguia siendo la pantalla de la 42 y la fase backend no
+// podia tocarla. El puente proyectaba los campos del DTO nuevo sobre la forma vieja
+// (`enCaja` -> `balance`), sin una sola operacion aritmetica propia.
+//
+// `T G.3` lo dejo SIN UN SOLO CONSUMIDOR (la pagina y el modulo pasaron a
+// `verResumenCajaAction`); su docstring decia «lo borra `T G.3`» y era falso —retirarlo es
+// tocar `lib/`, que es backend—. Lo borra esta tanda, que es la que puede.
+//
+// Con el se van `VerBalanceActionResult` y el import de `WalletBalanceDTO`, que no tenian otro
+// uso en este archivo. `WalletBalanceDTO` NO se borra del arbol: es el tipo de retorno de
+// `derivarBalance` (`lib/utils/wallet-balance.ts`), que R9 protege intacto.
 
 /** R15/R19: registra un movimiento manual de ajuste (solo maestro; monto>0, descripcion obligatoria). */
 export async function registrarMovimientoManualAction(

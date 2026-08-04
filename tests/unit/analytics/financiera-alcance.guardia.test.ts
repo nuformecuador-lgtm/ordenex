@@ -44,7 +44,7 @@ describe("R35 · las ocho financieras siguen siendo total/prohibido, sin medias 
       mensajero: "prohibido",
     };
 
-    expect(FINANCIERAS.length).toBe(8);
+    expect(FINANCIERAS.length).toBe(10); // +2 de la 173 (P4): el dinero nuevo tampoco se recorta
     for (const metrica of FINANCIERAS) {
       expect({ ...metrica.alcance }, metrica.id).toEqual(esperado);
     }

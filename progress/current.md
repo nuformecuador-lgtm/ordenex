@@ -8,6 +8,70 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 💰 2026-08-03 — **173 LISTA PARA PR: la caja ya distingue el dinero de la ganancia**
+
+**Las 9 tandas hechas, review APROBADO en ronda 2, `./init.sh` completo VERDE con los 61 commits de
+`dev` dentro: 904 archivos / 11.337 tests, 0 fallos.** Rama `feature/173-caja-tesoreria`.
+
+**Qué cambia para el maestro:** la caja deja de tener un solo número. Ahora muestra **«Dinero en
+caja»** (todo lo que entra y sale, incluido el contra-entrega cobrado a nombre de las tiendas) y
+**«Ganancia de Ordenex»** (el número que hasta hoy se llamaba «Balance general»). **La palabra
+«balance» desaparece de la pantalla**, porque era la que mentía.
+
+### Las 7 respuestas del humano, todas con su default
+
+P1=(a) … P7=(a). La cara era **P2: el pago al mensajero NO pasa a tesorería**, así que la caja queda
+mixta y «Dinero en caja» se queda corto **exactamente** en la cuenta por pagar a mensajeros —cifra
+que el sistema ya publica—. Se equivoca **por lo bajo**, nunca dice que hay más dinero del que hay.
+
+### ⏭️ LO PRIMERO AL RETOMAR
+
+1. **Abrir/mergear el PR.** El gate completo está verde **con `dev` dentro**, no por separado.
+2. **`T H.4` es POST-DEPLOY y no es un olvido:** los dos valores nuevos del enum **no existen en
+   producción** hasta que la migración se aplique al desplegar, así que el backfill **no se puede
+   correr antes**. Medido en producción: **5 cierres con ₡203.055,90** de contra-entrega esperando su
+   registro retroactivo; 0 pagos a tienda y 0 anulaciones. El orden es: merge → release → `--simular`
+   → revisión humana → `--aplicar` → `--comprobar` → lectura por MCP.
+3. **Preview sigue sin ser alcanzable** (quinta vía descartada: `list_branches` falla y
+   `get_project_url` devuelve el ref de producción). Riesgo residual **declarado** en
+   `progress/medicion_TA0_173.md`, igual que en la 172.
+
+### 🔎 Lo que sobrevive a esta feature
+
+**El `CHECK` categoría↔tipo destapó que el «neto» de las métricas de caja NUNCA puede diferir del
+«bruto».** Las cuatro métricas que leen `wallet_movimiento` declaran listas homogéneas de prefijo, así
+que cada una solo puede contener un `tipo`. **No lo rompió la 173**: ya era cierto en producción por
+las tres barreras de la app; el `CHECK` solo lo hizo visible. **Dirigido a la 175 y AÚN ABIERTO tras
+mergear su PR #277** — ver su `status_note`.
+
+**Y cinco veces más apareció el patrón del año: un test verde que no medía lo que decía.**
+
+- la **guardia de la 172** que decía «la caja no entra en la feature», rota al hacerla entrar —afilada,
+  no vaciada—;
+- un test de la **127** que insertaba una fila **que la aplicación no puede producir** (`egreso_ajuste`
+  con tipo `ingreso`);
+- **cuatro filas falsas de trazabilidad**, dos apuntando a archivos **que nunca existieron**;
+- **R53 sin ningún test**: borrar la descripción de `egresos` dejaba la suite **entera** en verde. Lo
+  cazó el reviewer, y el arreglo trae el texto viejo como fixture para que el caso no pueda engañarse;
+- **contar `R\d+` en títulos CRUZA espacios de nombres** (el R32 de la 172 y el R35 de la 158 salen en
+  este diff): daba un falso 68/68.
+
+### 🧩 Tres cascadas del merge con `dev`, ninguna es defecto de nadie
+
+`dev` trajo 61 commits (128/131/132/175/177). Chocaron: **cliente Prisma stale + 2 migraciones sin
+aplicar en local**; el **componente** del tablero financiero (8→10 métricas); y su **cargador**, que
+`vitest related` **no puede seleccionar** —es hermano sin arista del anterior—. Además la guardia
+`catalogo-produccion` de la 175 asumía **«una métrica, una decisión»**, premisa que `egresos` rompe al
+tener dos legítimas: generalizada a «cada fecha respaldada por **alguna** decisión citada», con dos
+mutaciones que la prueban.
+
+> ⚠️ **Colisión de nombres de migración entre sesiones:** `20260803120000_caja_tesoreria` (esta rama) y
+> `20260803120000_download_storage_path` (de `dev`) comparten timestamp. Hoy da igual —tocan tablas
+> distintas y Prisma desempata por nombre—, pero si dos sesiones tocaran la misma tabla el orden
+> dejaría de ser indiferente y **nadie lo notaría hasta el despliegue**.
+
+---
+
 ## 2026-08-03 — **177 arranca: API de consulta por guía/remisión + PDF bajo demanda** (fase 1, spec)
 
 Feature **177** `pending` → spec en curso. Rama `feature/177-api-consulta-orden-pdf` desde `origin/dev`.

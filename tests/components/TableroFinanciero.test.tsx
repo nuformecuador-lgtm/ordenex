@@ -94,6 +94,10 @@ const ETIQUETAS: Readonly<Record<MetricaFinancieraId, string>> = {
   ingreso_comision_cod: "Comisión por COD",
   ingreso_iva: "IVA facturado",
   egresos: "Egresos del período",
+  // Feature 173 ⟨P4⟩ — las dos de la caja en modo tesoreria. Las etiquetas son las
+  // del catalogo (`lib/analytics/metrics.ts`), como las otras ocho.
+  dinero_en_caja: "Dinero en caja",
+  ganancia_ordenex: "Ganancia de Ordenex",
   cod_recaudado: "Recaudo COD",
   cuenta_por_pagar_tienda: "Cuenta por pagar a tiendas",
   cuenta_por_pagar_mensajero: "Devengado de mensajeros",
@@ -106,6 +110,9 @@ const ETIQUETAS: Readonly<Record<MetricaFinancieraId, string>> = {
  * Que el registro sea exhaustivo sobre `MetricaFinancieraId` no es cosmetica: el
  * dia que la 127 sirva una novena metrica, este archivo deja de compilar en vez
  * de seguir en verde sin cubrirla.
+ *
+ * Y es exactamente lo que paso: la 173 ⟨P4⟩ sirvio la novena y la decima
+ * (`dinero_en_caja`, `ganancia_ordenex`) y el typecheck lo caza aqui (TS2739).
  */
 const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
   ingreso_flete: dtoKpi("ingreso_flete", ETIQUETAS.ingreso_flete, importe("1000.00", "900.00")),
@@ -116,6 +123,17 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
   ),
   ingreso_iva: dtoKpi("ingreso_iva", ETIQUETAS.ingreso_iva, importe("3000.00", "2700.00")),
   egresos: dtoKpi("egresos", ETIQUETAS.egresos, importe("4000.00", "3600.00")),
+  // Feature 173 ⟨P4⟩ — `deTesoreria` las sirve con la MISMA forma que las cuatro de
+  // arriba: una vista sola, `grano: "fecha"`, `sumableCon: []`, SIN filas (el
+  // repositorio agrega la ventana entera) y `esAcumulado: false` — no son un saldo
+  // al corte, son el movimiento del rango. Por eso van con el mismo helper que sus
+  // vecinas y con importes que continuan su serie.
+  dinero_en_caja: dtoKpi("dinero_en_caja", ETIQUETAS.dinero_en_caja, importe("5000.00", "4500.00")),
+  ganancia_ordenex: dtoKpi(
+    "ganancia_ordenex",
+    ETIQUETAS.ganancia_ordenex,
+    importe("6000.00", "5400.00"),
+  ),
   cod_recaudado: {
     tipo: "vistas",
     metricaId: "cod_recaudado",
@@ -249,7 +267,7 @@ function panelesCon(id: MetricaFinancieraId, reemplazo: PanelFinanciero): readon
   return panelesOk().map((panel) => (panel.id === id ? reemplazo : panel));
 }
 
-/** Nombres accesibles esperados: uno por VISTA (9 para 8 metricas). */
+/** Nombres accesibles esperados: uno por VISTA (11 para 10 metricas desde la 173). */
 function nombresEsperados(ids: readonly MetricaFinancieraId[]): string[] {
   return ids.flatMap((id) => {
     const dto = DTOS[id];
@@ -277,12 +295,15 @@ function nombreDe(region: HTMLElement): string {
 afterEach(cleanup);
 
 describe("Feature 132 (R13) — un panel por metrica servida, y ninguno de mas", () => {
-  it("las secciones del tablero son exactamente las de IDS_FINANCIERAS_SERVIDAS (9 vistas para 8 metricas)", () => {
+  it("las secciones del tablero son exactamente las de IDS_FINANCIERAS_SERVIDAS (11 vistas para 10 metricas)", () => {
     render(<TableroFinanciero paneles={panelesOk()} />);
 
     const nombres = seccionesDePanel().map(nombreDe);
     expect(nombres.sort()).toEqual(nombresEsperados(IDS_FINANCIERAS_SERVIDAS).sort());
-    expect(nombres).toHaveLength(9);
+    // 9 hasta la 173, que anadio `dinero_en_caja` y `ganancia_ordenex`: una vista
+    // cada una. El ancla sigue siendo un numero ESCRITO A MANO (que es lo que la
+    // hace util) y no un `toBeGreaterThan`; lo que cambia es el mundo que cuenta.
+    expect(nombres).toHaveLength(11);
   });
 
   it("cada metrica servida tiene su seccion, encontrada por la etiqueta del DTO", () => {
@@ -306,8 +327,8 @@ describe("Feature 132 (R4) — el panel denegado NO se renderiza", () => {
     expect(screen.queryByText(ETIQUETAS[DENEGADA])).toBeNull();
     // Ni el id de la metrica: pintarlo anunciaria que el panel existe.
     expect(document.body.textContent ?? "").not.toContain(DENEGADA);
-    // Ocho secciones en vez de nueve: no queda un hueco vacio en su lugar.
-    expect(seccionesDePanel()).toHaveLength(8);
+    // DIEZ secciones en vez de once: no queda un hueco vacio en su lugar.
+    expect(seccionesDePanel()).toHaveLength(10);
   });
 
   it("no muestra ningun motivo de denegacion", () => {
@@ -404,7 +425,7 @@ describe("Feature 132 (R18) — 'saldo al corte' solo donde el DTO lo declara", 
     }
   });
 
-  it("NO aparece en las otras seis", () => {
+  it("NO aparece en las otras ocho, incluidas las dos de tesoreria de la 173", () => {
     render(<TableroFinanciero paneles={panelesOk()} />);
 
     const nombresAcumulados = ACUMULADAS.map((id) => ETIQUETAS[id]);
@@ -412,7 +433,7 @@ describe("Feature 132 (R18) — 'saldo al corte' solo donde el DTO lo declara", 
       (region) => !nombresAcumulados.includes(nombreDe(region)),
     );
 
-    expect(otras).toHaveLength(7); // 9 vistas - 2 acumuladas
+    expect(otras).toHaveLength(9); // 11 vistas - 2 acumuladas
     for (const region of otras) {
       expect(region.textContent ?? "").not.toMatch(/saldo al corte/i);
     }

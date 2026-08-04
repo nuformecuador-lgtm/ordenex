@@ -40,7 +40,7 @@ function buildRepo(original: WalletMovimientoDTO | null): IWalletMovimientoRepos
   return {
     crearMovimientos: vi.fn(async () => 1),
     listar: vi.fn(async () => ({ movimientos: [], total: 0 })),
-    agregarBalance: vi.fn(async () => ({ ingresos: "0.00", egresos: "0.00" })),
+    agregarPorCategoriaYTipo: vi.fn(async () => []),
     obtenerPorId: vi.fn(async () => original),
     agregarPorCategoria: vi.fn(async () => ({
       gastoFijo: "0.00",

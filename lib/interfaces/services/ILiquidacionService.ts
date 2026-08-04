@@ -6,6 +6,7 @@ import type {
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 import type { PagoMensajeroTxClient } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { WalletTiendaTxClient } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type { CajaPagoTiendaTxClient } from "@/lib/interfaces/services/ICajaPagoTiendaFeedService";
 import type {
   AnularPagoInput,
   AnularPagoResult,
@@ -27,12 +28,21 @@ import type {
  * del cierre (`LiquidacionCierreTxClient`, R20: la guardia se lee dentro de la transaccion) y
  * el libro del beneficiario. Los dos libros van en el tipo aunque cada operacion escriba en
  * UNO: es el mismo `tx` de Prisma y el tipo describe la transaccion, no la operacion.
+ *
+ * **Feature 173 (design §4): + `CajaPagoTiendaTxClient`.** El egreso del pago a tienda y su
+ * reverso van en ESTA misma transaccion (R19), asi que el `tx` tiene que llevar tambien el
+ * libro de la caja. Lo escribe el PUERTO ESTRECHO (`ICajaPagoTiendaFeedService`), nunca el
+ * servicio: `LiquidacionService` no nombra `walletMovimiento` ni una sola vez, y hay dos tests
+ * estructurales —uno en cada suite de liquidacion— que lo miden sobre su fuente. Esa es la
+ * compensacion explicita del escalon que la 173 baja: de «no tiene la puerta» a «la puerta solo
+ * abre a dos sitios».
  */
 export type LiquidacionTx = LiquidacionPagoTxClient &
   LiquidacionAnulacionTxClient &
   LiquidacionCierreTxClient &
   WalletTiendaTxClient &
-  PagoMensajeroTxClient;
+  PagoMensajeroTxClient &
+  CajaPagoTiendaTxClient;
 
 /**
  * Ejecuta `fn` dentro de UNA transaccion y revierte si lanza (R39: o quedan el documento y su
@@ -96,8 +106,13 @@ export interface ILiquidacionService {
   /**
    * R29 — registra un pago a una TIENDA contra su saldo acumulado (sin cierre, decision 4 del
    * humano). Guardia de rol ANTES de tocar datos (R1/R2/R5/R6); disponible leido BAJO CANDADO
-   * (R83); documento y movimiento del libro en la MISMA transaccion (R39); ni una fila en la
-   * caja principal (R40, [P2]).
+   * (R83); documento y movimiento del libro en la MISMA transaccion (R39).
+   *
+   * **Feature 173 (R18/R19/R20): + una TERCERA escritura en esa misma transaccion**, el egreso
+   * `egreso_pago_tienda` de la caja principal, emitido por el puerto estrecho. Sustituye a la
+   * mitad-tienda de R40 de la 172 («ni una fila en la caja»), que ya no aplica: el
+   * contra-entrega entra en la caja al aprobar el cierre, asi que ese dinero SI esta ahi. La
+   * mitad-mensajero de R40 sigue intacta ([P2] = (a)).
    */
   registrarPagoTienda(
     input: RegistrarPagoTiendaInput,

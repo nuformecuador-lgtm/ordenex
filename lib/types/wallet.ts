@@ -43,6 +43,11 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   // Feature 158 (R2/R3): indemnizacion por incidente. La EMITE la aprobacion del cierre del
   // dia (nunca el formulario manual de la 45, que solo admite gasto_variable/sueldo).
   "egreso_indemnizacion",
+  // Feature 173 (R49, design §2.1): los DOS conceptos de TESORERIA. Dinero de TERCEROS que
+  // solo PASA por la caja; su naturaleza la declara `NATURALEZA_POR_CATEGORIA`
+  // (lib/utils/caja-tesoreria.ts), que es un `Record` TOTAL sobre este union.
+  "ingreso_cod_recaudado", // R11: entra al aprobar el cierre del dia
+  "ingreso_reverso_pago_tienda", // R24/R26: vuelve al anular un pago a tienda (NUNCA ingreso_ajuste)
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -119,6 +124,41 @@ export type ListarMovimientosResult = {
   total: number;
   page: number;
   pageSize: number;
+};
+
+// ── Feature 173 — la caja en modo TESORERIA: DOS cifras, un solo libro ──
+
+// design §5.1 — fila del agregado `groupBy(categoria, tipo) + SUM(monto)` del libro de la
+// caja, con los MISMOS filtros del listado (R8). Es la ENTRADA de `derivarCaja`: la
+// derivacion es PURA (R10) y no conoce ni el repositorio ni la base.
+export interface AgregadoCajaRow {
+  categoria: WalletMovimientoCategoria;
+  tipo: WalletMovimientoTipo;
+  total: string; // STRING escala 2 (money-safe)
+}
+
+// design §5.2 — las DOS cifras que sustituyen al «Balance general», ya derivadas en el
+// SERVIDOR (R64: el navegador no recalcula dinero). Montos SIEMPRE STRING escala 2 (R7).
+//
+//  - `enCaja`   = entradas - salidas, sin distinguir de quien es el dinero (R4).
+//  - `ganancia` = ingresos propios - egresos propios (R5). Es, numero por numero, lo que hoy
+//                 se rotula «Balance general»: no cambia de valor, cambia de nombre.
+//  - `deTerceros` [P6] = la diferencia entre ambas. NO es la deuda con las tiendas (R34): es
+//                 MAYOR, porque de ese dinero Ordenex aun descuenta flete, comision e IVA.
+export type CajaResumenDTO = {
+  entradas: string;
+  salidas: string;
+  enCaja: string;
+  signoEnCaja: WalletBalanceSigno;
+  ingresosPropios: string;
+  egresosPropios: string;
+  ganancia: string;
+  signoGanancia: WalletBalanceSigno;
+  deTerceros: string;
+  // [P7]: con filtros puestos, «Dinero en caja» ya no es el dinero que hay sino el neto del
+  // periodo. El numero NO cambia; lo que cambia es el rotulo, y esta bandera es lo unico que
+  // la pantalla necesita para no mentir.
+  periodoFiltrado: boolean;
 };
 
 // Feature 45 (R11) — desglose de egresos administrativos por tipo para el conjunto
