@@ -299,3 +299,188 @@ cubierta por el test de integracion de R16. `vitest run --changed origin/dev` ->
 Corregir **solo el BLOQUEANTE 1**: calculo de `quedaPendiente`, test discriminante con
 `tope + 1` candidatas, asercion `skip` del test de repositorio y paso 5 de `design.md`. Los
 menores 1 y 2 son mejoras recomendadas en el mismo viaje; el resto son notas o deuda declarada.
+
+---
+
+# Ronda 2 — verificacion del cierre del BLOQUEANTE 1 (R22)
+
+Alcance ACOTADO por el leader: **no** se rehace el review completo (los 26 R quedaron verificados
+uno a uno en la ronda 1, que se conserva intacta arriba). Esta ronda solo responde a: ¿quedo el
+bloqueante REALMENTE cerrado, y puede `quedaPendiente` mentir por otra via?
+
+Revisor: solo lectura salvo dos **mutaciones temporales** (declaradas abajo), ambas restauradas y
+verificadas con `git status --porcelain` VACIO. Ningun comando git de escritura.
+
+## VEREDICTO RONDA 2: **APROBADO** — el bloqueante esta cerrado
+
+---
+
+## 1. Mutacion reproducida por el revisor (la prueba que importa)
+
+**Mutacion A — reintroducir el `skip` en el repositorio REAL.**
+En `lib/repositories/PurgaPdfCargasRepository.ts:existeAlgunaCandidata` se inserto `skip: 2`
+(el tope que usan los fixtures; en el bug original el valor era el `limite` del lote, aqui = 2:
+mismo comportamiento observable). Resultado sobre los dos ficheros afectados:
+
+```
+x R22 (AL LIMITE): 3 candidatas con tope 2 -> ... AssertionError: expected false to be true
+x R22: 4 candidatas con tope 2 -> ...            AssertionError: expected false to be true
+x R20/R22: la corrida siguiente ...              AssertionError: expected false to be true
+x (repo) R22: ... consulta SIN skip   AssertionError: expected [ where, skip, take, select ] to not include skip
+Test Files 2 failed (2) - Tests 4 failed | 12 passed (16)
+```
+
+**Confirmado punto por punto lo que reporto el implementer:**
+- 3 de los 4 casos de `tests/integration/purga-pdf-queda-pendiente-r22.test.ts` se ponen ROJOS.
+- El **caso de control (2 candidatas / tope 2 -> `false`) sigue VERDE** bajo la mutacion. Esto es
+  lo que demuestra que los rojos vienen de la SEMANTICA y no de un test que exija `true` a ciegas:
+  un test que solo pidiese `quedaPendiente === true` habria puesto tambien rojo el control.
+- Los fallos son **AssertionError limpios**, no errores del doble de Prisma: el doble honra `skip`
+  a proposito (comentado en su cabecera), asi que la mutacion falla por donde debe.
+- El test de repositorio tambien discrimina: la asercion de que no existe la clave `skip` se rompe.
+
+**Mutacion B — la semantica erronea en el doble del test de service.**
+En `tests/unit/services/purga-pdf-cargas-service.test.ts` se cambio el doble
+`existeAlgunaCandidata: candidatas(corte).length > 0` por `> 2` (emulando el descuento del tope):
+
+```
+x R21/R22: con una candidata mas que el tope ... AssertionError: expected false to be true
+Test Files 1 failed (1) - Tests 1 failed | 11 passed (12)
+```
+
+Es decir: el test de service, ahora con **3 candidatas / tope 2** (antes 5/2, que pasaba por
+margen), **ya discrimina**. Ademas fija que a la comprobacion no le llega el tope: la asercion
+sobre `mock.calls[0]` exige un unico argumento, el corte.
+
+**Restauracion:** ambos ficheros repuestos desde copia en el scratchpad.
+`git status --porcelain` -> vacio; `git diff --stat` -> vacio. **El arbol quedo limpio.**
+
+**Baseline verde tras restaurar** (solo los 4 ficheros de la feature, no la suite completa):
+`purga-pdf-queda-pendiente-r22` + `purga-pdf-cargas-repository` + `purga-pdf-cargas-service` +
+`purga-pdf-cargas-route` -> **4 archivos / 44 tests, 0 rojos.**
+
+## 2. Bordes: cubiertos y midiendo
+
+| Borde | Donde | Veredicto |
+|---|---|---|
+| 0 candidatas | service (R8/R20, segunda corrida: resumen `toEqual` con `quedaPendiente:false`) y repositorio (`findFirst` -> `null` -> `false`) | cubierto |
+| exactamente `tope` (2/2) | integracion, caso de control: purga 2, `false`, y las vivas restantes se calculan del estado, no se hardcodean | cubierto y **es el que sostiene la discriminacion** |
+| `tope + 1` (3/2) | integracion (caso central) + service (R21/R22) | cubierto, rojo bajo mutacion |
+| `2 * tope` (4/2) | integracion | cubierto, rojo bajo mutacion |
+| backlog drenado en 2 corridas | integracion (R20/R22): la 2a corrida purga 1 y ya declara `false` | cubierto |
+
+La carga "joven" del fixture es control del corte: si la purga la contase, incluso el caso "no
+queda nada" saldria `true`. Y la candidata que sobra esta viva **solo por su orden**, asi que el
+`true` depende de la rama `ordenes.some` del predicado, no de las columnas de la carga.
+
+## 3. Puede `quedaPendiente` mentir por OTRA via? — analisis de los caminos de fallo
+
+Se recorrieron los caminos uno a uno sobre el codigo (service, repositorio y route):
+
+- **`limpiarReferencias` lanza a mitad del bucle** -> el service **no captura**: la excepcion sube
+  a `withErrorHandler` en la ruta y sale por `appErrorToResponse` (>= 500) **sin cuerpo de
+  resumen** (`route.ts:91-105`). No existe camino donde una corrida abortada publique un
+  `quedaPendiente`. Ademas `limpiarReferencias` es UNA transaccion por carga: la que falla no queda
+  a medias ni pierde su referencia viva, asi que sigue siendo candidata manana. **Honesto.**
+- **`storage.remove` lanza** -> identico: se propaga antes de limpiar y la carga conserva su ruta.
+  **Honesto** (ya medido en R19).
+- **`storage.remove` falla en SILENCIO** (best-effort: `SupabaseFileStorage` descarta el `{error}`
+  del SDK, decision del humano) -> las referencias se limpian igual y la carga sale del predicado:
+  `quedaPendiente` puede ser `false` con el objeto **todavia en el bucket**. Es honesto respecto de
+  lo que la bandera significa (queda alguna CARGA candidata?), pero no cubre huerfanos de Storage.
+  Ya declarado en la ronda 1 (menor 6) y en el JSDoc/spec. **No es una via de mentira nueva**; se
+  reitera como menor porque es el unico hueco real: nadie debe leer `quedaPendiente:false` como
+  "el bucket quedo limpio".
+- **Una candidata que no se purga por otro motivo** -> no existe: el bucle no tiene `continue` ni
+  `try/catch`; procesa las N filas devueltas o revienta. Y la comprobacion final usa **el mismo
+  helper `whereCandidatas(corte)` y el mismo `corte`** que la seleccion (calculado una sola vez),
+  asi que seleccion y comprobacion no pueden divergir en el predicado.
+- **Carrera con la feature 177** (regeneracion entre las dos consultas) -> el sesgo es hacia
+  `true`, no hacia `false`: si la 177 repuebla las columnas de una carga vieja, la comprobacion la
+  ve y declara pendiente. Conservador y correcto; el falso negativo no ocurre por esta via.
+- **Carga borrada concurrentemente** -> `carga.update` por `id` lanza P2025 -> error propagado,
+  sin resumen. **Honesto.**
+- **`take: 1` sin `orderBy`** -> irrelevante: la pregunta es existencial, no posicional.
+
+**Conclusion: no se encontro ninguna otra via por la que `quedaPendiente` pueda reportar `false`
+habiendo cargas candidatas.** El unico silencio restante es el de los objetos de Storage, ya
+declarado y fuera del alcance de la bandera.
+
+## 4. Los dos tests que TAPABAN el bug: ahora discriminan
+
+- `tests/unit/services/purga-pdf-cargas-service.test.ts` — pasa de **5/2** (verde por margen) a
+  **3/2 AL LIMITE**, con el comentario explicando por que el margen no valia. El doble del repo
+  paso de reproducir la semantica erronea (`length > limite`) a la correcta (`length > 0` sobre el
+  fixture MUTADO por `limpiarReferencias`). **Verificado con la mutacion B: rojo.**
+- `tests/unit/repositories/purga-pdf-cargas-repository.test.ts` — pasa de fijar el bug
+  (`skip === 200`) a **prohibirlo**: la clave `skip` no puede existir en los argumentos, `take`
+  vale 1, y el `where` es **identico por `toEqual` al de `findCargasPurgables`**. **Verificado con
+  la mutacion A: rojo.**
+- Anadido: `tests/integration/purga-pdf-queda-pendiente-r22.test.ts`, service REAL + repositorio
+  REAL sobre un doble de Prisma que **interpreta** el `where` (incluida `ordenes.some`) y **lanza**
+  ante cualquier filtro o columna que no conozca. Es el nivel correcto: a nivel de service el
+  repositorio es un doble y puede reproducir cualquier semantica, incluida la equivocada.
+
+## 5. Menores 1 y 2 de la ronda 1: **cerrados**
+
+- **menor 1 (migracion re-aplicable): CERRADO.**
+  `20260803140000_purga_pdf_indices/migration.sql` -> `CREATE INDEX IF NOT EXISTS` en **las dos**
+  sentencias; `down.sql` -> `DROP INDEX IF EXISTS` en **las dos**, en orden inverso. Alineado con
+  el precedente `20260803090000_gestion_orden_idx_created_at`, y el porque queda escrito en el
+  encabezado de ambos ficheros. El test estatico de R26 sigue verde con la nueva forma.
+- **menor 2 (guard de ORDEN de `crons`): CERRADO.**
+  El test de R18 ya **no** fija el array completo por `toEqual`: recorre una lista `PREVIAS` con
+  las cinco entradas y afirma, para cada una, **presencia unica + `schedule` exacto**, con mensaje
+  de fallo que nombra el cron; mas "la entrada nueva no se duplica". Sin posiciones: una
+  reordenacion legitima futura de un fichero compartido por seis features ya no lo pone rojo, pero
+  borrar una entrada o cambiarle la franja si. Los otros tres tests de R18 (existencia, forma
+  diaria, no colision de franja con el control `otrosDiarios.length > 0`) se conservan.
+
+## 6. Spec vs codigo: alineados, sin rastro del metodo viejo
+
+- `design.md:180-185` — la interfaz declara `existeAlgunaCandidata(corte: Date): Promise<boolean>`
+  con el porque del "sin `skip`". Coincide **literal** con
+  `lib/interfaces/repositories/IPurgaPdfCargasRepository.ts:44` y con la implementacion.
+- `design.md:255` — paso 5 = `quedaPendiente = repo.existeAlgunaCandidata(corte)` con la nota
+  "(sin skip: ver seccion interfaz)". Coincide con `PurgaPdfCargasService.ts:87`.
+- `requirements.md:178-182` — el texto de R22 incorpora la regla: la comprobacion es "queda alguna
+  candidata?", **no** "queda alguna mas alla del tope?".
+- `tasks.md:69` (T7) y `tasks.md:181` (fila R22) citan el metodo nuevo y el caso AL LIMITE 3/2.
+- **Grep sobre todo el repo:** `quedanCargasPurgables` no aparece en **ningun** fichero de codigo,
+  test ni spec. Solo sobrevive en `progress/impl_178.md` y en el texto de la ronda 1 de este mismo
+  review, que es donde debe estar (historico).
+
+## 7. Hallazgos nuevos de la ronda 2
+
+- `menor 9` — `quedaPendiente:false` no dice nada sobre objetos huerfanos en Storage cuando
+  `remove` falla en silencio (best-effort aceptado): la bandera solo habla de cargas candidatas.
+  Implicito en el menor 6; se explicita para que nadie lo lea como "bucket limpio".
+- `menor 10` — el fichero de integracion no tiene un fixture que ARRANQUE con 0 candidatas (solo
+  llega a 0 tras purgar). El borde esta medido en el test de service y en el de repositorio, asi
+  que la cobertura es suficiente; se anota por completitud.
+- `menor 11` — con la 177 activa, una carga vieja cuyo PDF se regenera vuelve a ser candidata y
+  puede mantener `quedaPendiente` en `true` de forma sostenida. Es el comportamiento correcto
+  (habra trabajo la corrida siguiente), pero conviene saberlo antes de colgar una alerta de la
+  bandera.
+
+Ninguno es bloqueante.
+
+## 8. Lo que esta ronda NO revisa (aceptado en la ronda 1, por instruccion del leader)
+
+`maxDuration = 60` (menor 3); R17 indirecto en el service (menor 5); `objetosBorrados` = rutas
+solicitadas (menor 6); `parseInt` laxo heredado (menor 7); huerfanos 136/141 y ordenes sin lote
+(menor 8). **R26 sigue SIN MEDIR en su mitad empirica** (`db:migrate` / `db:rollback`) por el drift
+AJENO y PREEXISTENTE de la base local (migracion fantasma `20260728120000_...` + checksum de
+`20260714123909_...`): se mantiene **declarado como deuda** (menor 4); no se intento arreglarlo ni
+resetear la base. Suite completa: la corrio el leader tras el arreglo (870 archivos / 10883 tests,
+0 rojos); no se repite aqui.
+
+---
+
+## VEREDICTO FINAL RONDA 2: **APROBADO**
+
+El BLOQUEANTE 1 (R22) esta **realmente cerrado**, no solo declarado: la mutacion que lo reintroduce
+pone rojos 3 de los 4 casos del test nuevo **dejando verde el caso de control**, y ademas rompe el
+test de repositorio. Los dos tests que antes lo tapaban ahora discriminan. Menores 1 y 2 cerrados.
+Spec y codigo dicen lo mismo y no queda ninguna referencia al metodo viejo. Sin bloqueantes nuevos.
+Deuda declarada que sobrevive al merge: la mitad empirica de R26 (menor 4).
