@@ -97,16 +97,6 @@ async function leerPagina(
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
 
-/**
- * Feature 184 — Tanda A (T A.5) — identidad ESTABLE de «todavía no hay página».
- *
- * El listado dispara la poda de la selección cuando cambia la PÁGINA que recibe. Un `[]`
- * escrito en el JSX sería un array nuevo en cada render del módulo —abrir un modal, escribir
- * en el escáner— y cada uno se leería como una página nueva: comprobaciones de vigencia que
- * nadie pidió (R24/R28). Con la constante, mientras no hay página la identidad no cambia.
- */
-const SIN_FILAS: RecepcionSateliteDTO[] = [];
-
 export interface RecepcionSateliteModuleProps {
   /** Órdenes en `en_ruta_bodega_satelite` de la zona del adminSatelite. */
   porRecibir: RecepcionSateliteDTO[];
@@ -503,7 +493,11 @@ export function RecepcionSateliteModule({
         </div>
 
         <SateliteOrdenesListado
-          ordenes={data?.items ?? SIN_FILAS}
+          // T A.5: el listado dispara la poda cuando cambia la IDENTIDAD de este array. `[]`
+          // es un array nuevo en cada render, pero sólo se usa mientras `data` no ha llegado
+          // —o sea, exactamente cuando `cargando` es `true`—, y con la carga en vuelo el
+          // listado no comprueba nada. El guard que sostiene R24/R28 es ese, no esta línea.
+          ordenes={data?.items ?? []}
           total={data?.total ?? 0}
           // R42: el «de Y» del contador es el total del conjunto SIN filtros que resolvió el
           // Server Component. Nunca sale de las filas de la página.
