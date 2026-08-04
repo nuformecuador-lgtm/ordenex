@@ -261,18 +261,20 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
   /* F.1 — camino completo, por rol y por metrica                            */
   /* ---------------------------------------------------------------------- */
 
-  it("F.1 · un maestro recibe `ok` en las OCHO metricas, contra la base real", async () => {
+  it("F.1 · un maestro recibe `ok` en las DIEZ metricas, contra la base real", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       const estados: Record<string, string> = {};
       for (const metricaId of IDS_FINANCIERAS_SERVIDAS) {
         estados[metricaId] = (await consultarDia(tx, metricaId, DIA_A)).status;
       }
       expect(estados).toEqual(Object.fromEntries(IDS_FINANCIERAS_SERVIDAS.map((m) => [m, "ok"])));
-      expect(Object.keys(estados)).toHaveLength(8);
+      // 8 de la 127 + `dinero_en_caja` y `ganancia_ordenex` (173, P4): las dos tambien
+      // responden contra Postgres de verdad, no solo contra dobles.
+      expect(Object.keys(estados)).toHaveLength(10);
     });
   });
 
-  it("F.1 · un adminTienda recibe 403 generico en las OCHO, y queda auditado", async () => {
+  it("F.1 · un adminTienda recibe 403 generico en las DIEZ, y queda auditado", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       const registros: unknown[] = [];
       const logger: ErrorLogger = { logError: (e) => registros.push(e) };
@@ -286,7 +288,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
         expect(respuesta, metricaId).toEqual({ status: "forbidden", code: "FORBIDDEN" });
       }
 
-      expect(registros).toHaveLength(8);
+      expect(registros).toHaveLength(10);
       expect(registros.every((r) => (r as { motivo: string }).motivo === "metrica_prohibida")).toBe(
         true,
       );
@@ -395,33 +397,75 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
   });
 
   /* ---------------------------------------------------------------------- */
-  /* F.4 — la anulacion ⟨D1(c)⟩: bruto los ve, neto los cancela              */
+  /* F.4 — bruto y neto ⟨D1(c)⟩: el bruto suma magnitudes, el neto lleva SIGNO */
   /* ---------------------------------------------------------------------- */
+  //
+  // ⚠️ REESCRITO el 2026-08-03 (decision humana, opcion (A) — ver
+  // `progress/impl_173-caja-tesoreria.md § HALLAZGO`). Antes este par afirmaba «bruto 800, neto
+  // 0» sembrando un `egreso_ajuste` con tipo `ingreso`. Esa fila NO PUEDE EXISTIR:
+  //
+  //   1. La aplicacion nunca la emite —el dialogo manual DERIVA la categoria del tipo, el
+  //      `.refine` de zod la rechaza en el borde y `WalletEgresoService` revierte un gasto con
+  //      `ingreso_ajuste`, no con un `egreso_ajuste` de tipo invertido—.
+  //   2. Desde la feature 173 la BASE tampoco la acepta: el CHECK
+  //      `wallet_movimiento_tipo_categoria_check` la rechaza con 23514.
+  //
+  // Y la consecuencia va mas alla de una fila: las CUATRO metricas que leen `wallet_movimiento`
+  // declaran listas HOMOGENEAS DE PREFIJO (`egresos` = las ocho `egreso_*`), y el repositorio
+  // filtra por CATEGORIA —el `tipo` es solo clave de agrupacion—. Luego un conjunto legal de una
+  // de esas metricas contiene un solo `tipo`, y por tanto:
+  //
+  //      neto = ±bruto SIEMPRE.  El neto 0 no es alcanzable con datos legales.
+  //
+  // Estos numeros no estan tuneados para pasar: son los unicos que la base admite. Lo que el par
+  // mide ahora es lo que SI queda en pie, y son dos cosas distintas (por eso siguen siendo dos):
+  // (a) que el bruto agrega y que el neto lleva el signo contrario; (b) que el contraasiento REAL
+  // de un gasto NO entra en la metrica `egresos`.
+  //
+  // La pregunta de fondo —si `bruto`/`neto` significan algo para las metricas de caja, o si esas
+  // cuatro deberian declarar solo `bruto`— queda de encargo para la 175. NO se toca aqui el
+  // catalogo de `metrics.ts` ([P4]).
 
-  it("F.4 · pago + contraasiento ajuste en el mismo rango: bruto 800, neto 0", async () => {
+  it("F.4(a) · dos egresos en el mismo rango: bruto 800, neto -800 (el neto lleva SIGNO)", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       await sembrarCaja(tx, [
-        // El pago: sale dinero de la caja.
+        // Dos salidas de la caja, de dos categorias que `egresos` SI declara.
         { categoria: "egreso_gasto", tipo: "egreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
-        // El contraasiento que lo anula: el mismo dinero vuelve, con categoria `egreso_ajuste`.
-        // El libro no tiene puntero del ajuste al original ⟨D1⟩: el neto sale del SIGNO.
-        { categoria: "egreso_ajuste", tipo: "ingreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
+        { categoria: "egreso_sueldo", tipo: "egreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
       ]);
 
       const vista = vistasDe(await consultarDia(tx, "egresos", DIA_A))[0];
 
-      // Las dos afirmaciones, POR SEPARADO (es lo que pide F.4): el bruto los cuenta a los dos...
+      // Las dos afirmaciones, POR SEPARADO (es lo que pedia F.4): el bruto cuenta las dos filas
+      // sin signo...
       expect(vista.total.bruto).toBe("800.00");
-      // ...y el neto los cancela. Si el neto copiara el bruto, esto seria 800.00.
-      expect(vista.total.neto).toBe("0.00");
+      // ...y el neto es `Σ ingreso − Σ egreso`, o sea el MISMO importe con el signo cambiado.
+      // Si el neto copiara el bruto —la mutacion que ⟨D1(c)⟩ nombra— esto seria "800.00".
+      expect(vista.total.neto).toBe("-800.00");
+      // Dicho sin depender de los literales: nunca son el mismo numero, y difieren en el signo.
+      expect(vista.total.neto).not.toBe(vista.total.bruto);
+      expect(vista.total.neto.startsWith("-")).toBe(true);
+      expect(vista.total.bruto.startsWith("-")).toBe(false);
     });
   });
 
-  it("F.4 · sin el contraasiento, el neto NO es cero: el caso de arriba mide algo", async () => {
+  it("F.4(b) · el contraasiento REAL de un gasto NO entra en `egresos`: sigue en bruto 400, neto -400", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       await sembrarCaja(tx, [
+        // El gasto: sale dinero de la caja.
         { categoria: "egreso_gasto", tipo: "egreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
+        // Su contraasiento, TAL Y COMO LO EMITE `WalletEgresoService`: el mismo dinero vuelve
+        // como `ingreso_ajuste` de tipo `ingreso`. Es legal para el CHECK... y `egresos` no lo
+        // declara, asi que la metrica NO lo ve.
+        { categoria: "ingreso_ajuste", tipo: "ingreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
       ]);
+
+      // Que la fila esta EN EL LIBRO se comprueba, para que el caso no se pueda confundir con una
+      // semilla que no llego a escribirse: son dos filas en la caja, y la metrica solo ve una.
+      const enElLibro = await tx.walletMovimiento.count({
+        where: { fechaMovimiento: CR_MEDIODIA_DIA_A },
+      });
+      expect(enElLibro).toBe(2);
 
       const vista = vistasDe(await consultarDia(tx, "egresos", DIA_A))[0];
       expect(vista.total.bruto).toBe("400.00");

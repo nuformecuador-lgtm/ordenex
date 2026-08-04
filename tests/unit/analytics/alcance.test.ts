@@ -37,9 +37,9 @@ const MOTIVOS: readonly MotivoDenegacion[] = [
 ];
 
 describe("R1 · el resolutor es total y devuelve un resultado discriminado", () => {
-  it("devuelve ok o denegado para las 5 x 23 combinaciones de rol y metrica", () => {
+  it("devuelve ok o denegado para las 5 x 25 combinaciones de rol y metrica", () => {
     expect(ROLES_ANALITICA.length).toBe(5);
-    expect(METRICAS.length).toBe(23);
+    expect(METRICAS.length).toBe(25); // 23 de la 135 + 2 financieras de la 173 (P4)
 
     let casos = 0;
     for (const rol of ROLES_ANALITICA) {
@@ -49,7 +49,7 @@ describe("R1 · el resolutor es total y devuelve un resultado discriminado", () 
         casos++;
       }
     }
-    expect(casos).toBe(115);
+    expect(casos).toBe(125);
   });
 
   it("no lanza con entradas basura: null, undefined, objeto vacio, rol numerico", () => {
@@ -92,8 +92,8 @@ describe("R2 · alcance total del catalogo => alcance global", () => {
         comprobados++;
       }
     }
-    // 2 roles de acceso total x 23 metricas.
-    expect(comprobados).toBe(46);
+    // 2 roles de acceso total x 25 metricas.
+    expect(comprobados).toBe(50);
   });
 });
 
@@ -154,8 +154,8 @@ describe("R7 · mensajero + metrica acotada => alcance de mensajero = su propio 
 });
 
 describe("R9 · metrica prohibida => denegado, ni siquiera recortada", () => {
-  it("las 8 financieras x los 3 roles sin dinero dan 24 denegados por metrica_prohibida", () => {
-    expect(FINANCIERAS.length).toBe(8);
+  it("las 10 financieras x los 3 roles sin dinero dan 30 denegados por metrica_prohibida", () => {
+    expect(FINANCIERAS.length).toBe(10);
     const sinDinero: RolAnalitica[] = ["adminSatelite", "adminTienda", "mensajero"];
 
     let casos = 0;
@@ -168,7 +168,7 @@ describe("R9 · metrica prohibida => denegado, ni siquiera recortada", () => {
         casos++;
       }
     }
-    expect(casos).toBe(24);
+    expect(casos).toBe(30);
   });
 });
 
@@ -192,7 +192,7 @@ describe("R10 · sin sesion => denegado/sin_sesion", () => {
 });
 
 describe("R11 · apiKey NUNCA consume analitica (D9)", () => {
-  it("rol apiKey da rol_sin_analitica en las 23 metricas", () => {
+  it("rol apiKey da rol_sin_analitica en las 25 metricas", () => {
     const integrador: ActorAnalitica = { usuarioId: "u-api", rol: "apiKey" };
     for (const metrica of METRICAS) {
       expect(resolverAlcance(integrador, metrica.id), metrica.id).toEqual({

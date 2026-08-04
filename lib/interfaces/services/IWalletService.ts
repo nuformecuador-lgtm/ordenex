@@ -1,6 +1,6 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
-  WalletBalanceDTO,
+  CajaResumenDTO,
   WalletMovimientoDTO,
   ListarMovimientosCompletoInput,
   ListarMovimientosInput,
@@ -34,8 +34,15 @@ export type ListarMovimientosServiceResult =
 export type ListarMovimientosCompletoServiceResult =
   ListarCompletoServiceResult<WalletMovimientoDTO>;
 
-export type VerBalanceServiceResult =
-  | { status: "ok"; balance: WalletBalanceDTO }
+/**
+ * Feature 173 (T D.2, design §5.2) — las DOS cifras de la caja, ya derivadas en el SERVIDOR.
+ *
+ * SUSTITUYE a `VerBalanceServiceResult`, que llevaba una sola cifra (`WalletBalanceDTO`) y por
+ * eso no podia distinguir el dinero de Ordenex del que solo pasa por la caja. `forbidden` no
+ * viaja con cifra alguna (R65).
+ */
+export type VerResumenCajaServiceResult =
+  | { status: "ok"; resumen: CajaResumenDTO }
   | { status: "forbidden" };
 
 export type RegistrarMovimientoManualServiceResult =
@@ -55,8 +62,18 @@ export interface IWalletService {
     input: ListarMovimientosCompletoInput,
     actor: Actor,
   ): Promise<ListarMovimientosCompletoServiceResult>;
-  /** R16/R19: solo maestro; balance derivado (STRING+signo) del conjunto filtrado. */
-  verBalance(input: ListarMovimientosInput, actor: Actor): Promise<VerBalanceServiceResult>;
+  /**
+   * Feature 173 (T D.2 — R8/R64/R65): las DOS cifras de la caja («dinero en caja» y «ganancia
+   * de Ordenex») derivadas del conjunto filtrado, nunca de un saldo almacenado.
+   *
+   * Mismo guardia de rol que el listado (`esAccesoTotal`), evaluado ANTES de tocar la base
+   * (R65), y los MISMOS filtros que el listado, resueltos por el mismo metodo privado (R8).
+   * Montos SIEMPRE STRING (R64).
+   */
+  verResumenCaja(
+    input: ListarMovimientosInput,
+    actor: Actor,
+  ): Promise<VerResumenCajaServiceResult>;
   /** R15/R19: solo maestro; registra un movimiento manual de AJUSTE (inmutable, R3). */
   registrarMovimientoManual(
     input: RegistrarMovimientoManualInput,

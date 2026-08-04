@@ -8,7 +8,7 @@ import type { ActorAnalitica, AlcanceDatos } from "@/lib/analytics/alcance";
 // Feature 122 / T5.4 — R22: MATRIZ EXHAUSTIVA.
 //
 // Sin RLS debajo, esta capa es la unica que separa inquilinos. Por eso R22 no se conforma
-// con casos de ejemplo: recorre las 5 x 23 combinaciones de rol y metrica por las CUATRO
+// con casos de ejemplo: recorre las 5 x 25 combinaciones de rol y metrica por las CUATRO
 // formas de filtro (sin filtro, propio, ajeno, mixto) y afirma, sobre un universo
 // sintetico de filas, que el conjunto ALCANZABLE es siempre un SUBCONJUNTO del alcance
 // resuelto. 460 casos, ninguno sin asercion.
@@ -89,7 +89,7 @@ function alcanzables(filtro: DimensionesFiltro): FilaOrden[] {
 }
 
 describe("R22 · toda combinacion de rol, metrica y filtro produce un subconjunto del alcance", () => {
-  it("las 5 x 23 x 4 combinaciones quedan afirmadas, sin ninguna fila fuera del alcance", () => {
+  it("las 5 x 25 x 4 combinaciones quedan afirmadas, sin ninguna fila fuera del alcance", () => {
     let casos = 0;
     let conFilas = 0;
 
@@ -122,7 +122,7 @@ describe("R22 · toda combinacion de rol, metrica y filtro produce un subconjunt
       }
     }
 
-    expect(casos).toBe(460);
+    expect(casos).toBe(500); // 5 roles x 25 metricas x 4 adaptadores
     // Contrapeso: si el recorte dejara SIEMPRE cero filas, el subconjunto seria trivial y
     // el test pasaria por vacio.
     expect(conFilas).toBeGreaterThan(0);

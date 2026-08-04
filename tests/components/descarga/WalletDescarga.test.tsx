@@ -30,11 +30,12 @@ import type {
 
 const listarMovimientosMock = vi.fn();
 const listarMovimientosCompletoMock = vi.fn();
-const verBalanceMock = vi.fn();
+const verResumenCajaMock = vi.fn();
 vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosAction: (...a: unknown[]) => listarMovimientosMock(...a),
   listarMovimientosCompletoAction: (...a: unknown[]) => listarMovimientosCompletoMock(...a),
-  verBalanceAction: (...a: unknown[]) => verBalanceMock(...a),
+  // Feature 173 (T G.3): la cabecera del libro de caja la sirve el borde de las DOS cifras.
+  verResumenCajaAction: (...a: unknown[]) => verResumenCajaMock(...a),
 }));
 
 const listarMisMovimientosMock = vi.fn();
@@ -101,6 +102,16 @@ import { WalletModule } from "@/app/(app)/wallet/_components/WalletModule";
 import { MiWalletModule } from "@/app/(app)/mi-wallet/_components/MiWalletModule";
 import { MisPagosModule } from "@/app/(app)/mis-pagos/_components/MisPagosModule";
 import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
+// Feature 173 (T G.2/T G.3, R61/R62) — el filtro y la descarga del libro de caja.
+import {
+  CATEGORIA_LABEL,
+  CATEGORIA_OPTIONS,
+} from "@/app/(app)/wallet/_components/wallet-labels";
+import {
+  COLUMNAS_DESCARGA_WALLET_CAJA,
+  filaDescargaMovimientoCaja,
+} from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
 
 // --- Datos ---------------------------------------------------------------
 
@@ -153,7 +164,20 @@ const TIENDA_TODOS = Array.from({ length: 4 }, (_, i) => movimientoTienda(i + 1)
 const PAGOS_PAGINA = [pagoMensajero(1)];
 const PAGOS_TODOS = Array.from({ length: 4 }, (_, i) => pagoMensajero(i + 1));
 
-const BALANCE = { ingresos: "1.00", egresos: "0.00", balance: "1.00", signo: "positivo" as const };
+// Feature 173 (T G.3): la cabecera del libro de caja pasa a las DOS cifras. Este archivo mide
+// la DESCARGA y el FILTRO, no la cabecera; el dato se adapta para que el módulo monte.
+const RESUMEN = {
+  entradas: "1.00",
+  salidas: "0.00",
+  enCaja: "1.00",
+  signoEnCaja: "positivo" as const,
+  ingresosPropios: "1.00",
+  egresosPropios: "0.00",
+  ganancia: "1.00",
+  signoGanancia: "positivo" as const,
+  deTerceros: "0.00",
+  periodoFiltrado: false,
+};
 const DESGLOSE_EGRESOS = {} as never;
 const SALDO_TIENDA = {
   creditos: "500.25",
@@ -193,14 +217,14 @@ function envolver(ui: ReactElement) {
   );
 }
 
-function renderCaja() {
+function renderCaja(movimientos: WalletMovimientoDTO[] = CAJA_PAGINA) {
   return envolver(
     <WalletModule
-      movimientos={CAJA_PAGINA}
+      movimientos={movimientos}
       total={80}
       page={1}
       pageSize={20}
-      balance={BALANCE}
+      resumen={RESUMEN}
       desglose={DESGLOSE_EGRESOS}
       plantillas={{ items: [], total: 0, pageSize: 25 }}
     />,
@@ -280,7 +304,7 @@ function cebarDobles() {
     status: "ok",
     data: { movimientos: CAJA_PAGINA, total: 80, page: 1 },
   });
-  verBalanceMock.mockResolvedValue({ status: "ok", balance: BALANCE });
+  verResumenCajaMock.mockResolvedValue({ status: "ok", resumen: RESUMEN });
   listarMisMovimientosMock.mockResolvedValue({
     status: "ok",
     data: { movimientos: TIENDA_PAGINA, total: 60, page: 1, saldo: SALDO_TIENDA },
@@ -449,5 +473,130 @@ describe("Ledgers de dinero · descarga", () => {
     await waitFor(() => expect(listarMovimientosMock).toHaveBeenCalledTimes(1));
     expect(listarMovimientosMock.mock.calls[0][0]).toEqual({ page: 2, pageSize: 20 });
     expect(listarMovimientosCompletoMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Feature 173 · las categorías de tesorería en el libro (T G.2 / T G.3) ───
+
+/** Los dos conceptos que la 173 mete en el libro de la caja. */
+const CATEGORIAS_173 = ["ingreso_cod_recaudado", "ingreso_reverso_pago_tienda"] as const;
+
+/** Un movimiento del libro con una de las categorías nuevas. */
+function movimientoNuevo(
+  categoria: (typeof CATEGORIAS_173)[number],
+  i: number,
+): WalletMovimientoDTO {
+  return {
+    id: `n-${i}`,
+    tipo: "ingreso",
+    categoria,
+    monto: `${7000 + i}.10`,
+    origenTipo: categoria === "ingreso_cod_recaudado" ? "cierre_dia" : "pago_tienda",
+    origenId: `o-n-${i}`,
+    descripcion: null,
+    registradoPor: null,
+    fechaMovimiento: `2026-08-0${i}T14:00:00.000Z`,
+  };
+}
+
+const CAJA_CON_NUEVOS = [
+  movimientoCaja(1),
+  movimientoNuevo("ingreso_cod_recaudado", 1),
+  movimientoNuevo("ingreso_reverso_pago_tienda", 2),
+];
+
+describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
+  it("T G.2 (R61): el filtro se puebla del SEED, no de una lista escrita a mano", () => {
+    // Esto es una VERIFICACIÓN, no una implementación: el `Select` de categoría ya se armaba
+    // del SEED desde la 42, así que las dos categorías nuevas entraron solas al añadirlas al
+    // catálogo. Lo que se afirma es justo eso —que sigue siendo así— porque el día que
+    // alguien sustituya el `map` por una lista literal, el filtro se quedará mudo ante la
+    // siguiente categoría y nadie se enterará hasta que falte una.
+    const valores = CATEGORIA_OPTIONS.map((o) => o.value);
+    expect(valores).toEqual(["", ...WALLET_MOVIMIENTO_CATEGORIA_SEED]);
+
+    for (const categoria of CATEGORIAS_173) {
+      const opcion = CATEGORIA_OPTIONS.find((o) => o.value === categoria);
+      expect(opcion, `el filtro no ofrece ${categoria}`).toBeDefined();
+      // Y con nombre de persona, no con el valor del enum (R61).
+      expect(opcion?.label).toBe(CATEGORIA_LABEL[categoria]);
+      expect(opcion?.label).not.toBe(categoria);
+      expect(opcion?.label).not.toMatch(/_/);
+    }
+
+    // Ninguna categoría del catálogo se queda sin etiqueta legible: el barrido es sobre el
+    // SEED en RUNTIME, no sobre las dos que esta feature añadió.
+    for (const categoria of WALLET_MOVIMIENTO_CATEGORIA_SEED) {
+      const opcion = CATEGORIA_OPTIONS.find((o) => o.value === categoria);
+      expect(opcion?.label, `sin etiqueta: ${categoria}`).toBeTruthy();
+      expect(opcion?.label).not.toBe(categoria);
+    }
+  });
+
+  it("T G.2 (R61/R62): la descarga las recoge sola, con las MISMAS columnas", () => {
+    // La descarga usa `CATEGORIA_LABEL` para esa columna, así que tampoco hubo que tocarla.
+    // Se comprueban las dos mitades: que la etiqueta sale, y que la fila sigue teniendo
+    // exactamente las cinco columnas declaradas — ni una de más por ser una categoría nueva.
+    for (const categoria of CATEGORIAS_173) {
+      const fila = filaDescargaMovimientoCaja(movimientoNuevo(categoria, 1));
+      expect(fila.categoria).toBe(CATEGORIA_LABEL[categoria]);
+      expect(fila.categoria).not.toBe(categoria);
+      expect(Object.keys(fila).sort()).toEqual(
+        COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave).sort(),
+      );
+      // Money-safe: el monto sale como el STRING del servidor, con sus céntimos.
+      expect(fila.monto).toBe("7001.10");
+    }
+  });
+
+  it("R62: el listado los pinta como a los demás, sin cambiar las columnas", async () => {
+    renderCaja(CAJA_CON_NUEVOS);
+
+    const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
+    await waitFor(() =>
+      expect(within(tabla).getAllByRole("row")).toHaveLength(CAJA_CON_NUEVOS.length + 1),
+    );
+
+    // Las mismas seis columnas de siempre: las categorías nuevas no añaden ni quitan ninguna.
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "Fecha",
+      "Tipo",
+      "Categoría",
+      "Monto",
+      "Origen",
+      "Acciones",
+    ]);
+
+    // Y cada una con su nombre legible (R61), no con el valor del enum.
+    for (const categoria of CATEGORIAS_173) {
+      expect(within(tabla).getByText(CATEGORIA_LABEL[categoria])).toBeInTheDocument();
+      expect(within(tabla).queryByText(categoria)).toBeNull();
+    }
+  });
+
+  it("R62: y el archivo también los trae, por el mismo camino que el resto", async () => {
+    const user = userEvent.setup();
+    listarMovimientosCompletoMock.mockResolvedValue({
+      status: "ok",
+      items: CAJA_CON_NUEVOS,
+      total: CAJA_CON_NUEVOS.length,
+    });
+    renderCaja(CAJA_CON_NUEVOS);
+
+    await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
+    await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
+
+    const [columnas, filas] = buildXlsxRowsMock.mock.calls[0];
+    // Las MISMAS columnas declaradas, en el mismo orden: la hoja no cambia de forma por
+    // llevar dentro un contra-entrega o un pago anulado.
+    expect(columnas.map((c) => c.key)).toEqual(
+      COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave),
+    );
+    expect(filas).toHaveLength(CAJA_CON_NUEVOS.length);
+    expect(filas.map((f) => f.categoria)).toEqual([
+      CATEGORIA_LABEL.ingreso_flete,
+      CATEGORIA_LABEL.ingreso_cod_recaudado,
+      CATEGORIA_LABEL.ingreso_reverso_pago_tienda,
+    ]);
   });
 });

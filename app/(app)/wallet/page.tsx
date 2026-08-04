@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { listarMovimientosAction, verBalanceAction } from "@/lib/actions/wallet";
+import { listarMovimientosAction, verResumenCajaAction } from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
 
@@ -14,9 +14,13 @@ import { WalletModule } from "./_components/WalletModule";
  * Server Component role-aware. El rol se resuelve SOLO server-side vía
  * `resolveActorFromSession` (patrón cierres-admin): cualquier rol distinto de `maestro`
  * (o sin sesión) NO ve la wallet (`notFound`, R19 — forbidden sin exponer datos). Los
- * datos sensibles (libro + balance) se pre-obtienen server-side y se pasan YA
+ * datos sensibles (libro + cifras de la caja) se pre-obtienen server-side y se pasan YA
  * serializados (STRING) por props al módulo cliente (R21): el cliente nunca recibe
  * `Prisma.Decimal`. Si una action no responde `ok` → `notFound` (defensa en profundidad).
+ *
+ * Feature 173 (T G.3, R59/R64/R65) — el pre-fetch pasa a `verResumenCajaAction`, que entrega
+ * las DOS cifras. El guardia de rol de esta página no se toca: sigue siendo el mismo, y sigue
+ * siendo lo que impide que un rol sin acceso total vea ninguna de las dos (R65).
  */
 export default async function WalletPage() {
   const actor = await resolveActorFromSession();
@@ -27,12 +31,12 @@ export default async function WalletPage() {
   }
 
   // Pre-fetch server-side con los filtros por defecto (page 1, sin filtros). Feature 45:
-  // además del libro + balance, se pre-obtienen el desglose de egresos administrativos y las
-  // plantillas de gasto fijo (datos sensibles → props, nunca fetch cliente).
-  const [movimientosResult, balanceResult, desgloseResult, plantillasResult] =
+  // además del libro + las cifras, se pre-obtienen el desglose de egresos administrativos y
+  // las plantillas de gasto fijo (datos sensibles → props, nunca fetch cliente).
+  const [movimientosResult, resumenResult, desgloseResult, plantillasResult] =
     await Promise.all([
       listarMovimientosAction({}),
-      verBalanceAction({}),
+      verResumenCajaAction({}),
       verDesgloseEgresosAction({}),
       // Feature 170 — FASE 2 (T I.2, R40): PÁGINA 1 de las plantillas, no el conjunto entero.
       // El input va vacío: los defaults de `page`/`pageSize` los pone el schema del dominio.
@@ -43,7 +47,7 @@ export default async function WalletPage() {
   // mal, no renderizamos el módulo (no expone nada).
   if (
     movimientosResult.status !== "ok" ||
-    balanceResult.status !== "ok" ||
+    resumenResult.status !== "ok" ||
     desgloseResult.status !== "ok" ||
     plantillasResult.status !== "ok"
   ) {
@@ -53,14 +57,16 @@ export default async function WalletPage() {
   return (
     <AppPage
       title="Wallet"
-      description="Caja principal de Ordenex: libro de movimientos y balance general"
+      // R59: la descripción tampoco puede rotular ninguna cifra con la palabra que mentía.
+      // Nombra las DOS que la pantalla enseña, con los mismos nombres que la tarjeta.
+      description="Caja principal de Ordenex: libro de movimientos, dinero en caja y ganancia de Ordenex"
     >
       <WalletModule
         movimientos={movimientosResult.data.movimientos}
         total={movimientosResult.data.total}
         page={movimientosResult.data.page}
         pageSize={movimientosResult.data.pageSize}
-        balance={balanceResult.balance}
+        resumen={resumenResult.resumen}
         desglose={desgloseResult.desglose}
         plantillas={{
           items: plantillasResult.items,

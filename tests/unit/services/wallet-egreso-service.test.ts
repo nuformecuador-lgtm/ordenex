@@ -35,7 +35,7 @@ function buildRepo(overrides: Partial<IWalletMovimientoRepository> = {}): IWalle
   return {
     crearMovimientos: vi.fn().mockResolvedValue(1),
     listar: vi.fn().mockResolvedValue({ movimientos: [mov()], total: 1 }),
-    agregarBalance: vi.fn().mockResolvedValue({ ingresos: "0.00", egresos: "0.00" }),
+    agregarPorCategoriaYTipo: vi.fn().mockResolvedValue([]),
     obtenerPorId: vi.fn().mockResolvedValue(null),
     agregarPorCategoria: vi
       .fn()

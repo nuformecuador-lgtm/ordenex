@@ -163,6 +163,10 @@ export interface DefinicionMetrica<TMetricaId extends string = string> {
   readonly sinAsignar?: "incluir";
   /** D9/R34 — que zona atribuye toda metrica con grano `zona`. Solo hay un valor legal. */
   readonly atribucionZona?: "orden";
+  /** 175 — universo temporal de la medida del rollup que la encarna (B2 de la 124: vivas al corte + las que llegaron a terminal ese dia). */
+  readonly universo?: "b2_vivas_mas_cierres_del_dia";
+  /** 175 — la metrica NO tiene medida propia en analytics_daily: se proyecta de esta otra. */
+  readonly derivadaDe?: TMetricaId;
 }
 
 /**

@@ -9,6 +9,11 @@ export interface AnaliticaShellProps {
   filtros?: ReactNode;
   /** Paneles del tablero operativo. Los enchufa la 131. */
   operativo?: ReactNode;
+  /**
+   * Paneles del tablero financiero. Los enchufa la 132 SOLO para los roles que
+   * satisfacen `esAccesoTotal(rol)`. Si no llega, la región no existe (R7).
+   */
+  financiero?: ReactNode;
 }
 
 /**
@@ -24,20 +29,30 @@ export interface AnaliticaShellProps {
  * - La 133 recorta por rol pasando `undefined` (o directamente omitiendo la
  *   prop) en los casos donde ese rol no debe ver el panel.
  *
- * Región "financiero" (D6): NO se declara aquí a propósito. El punto de
- * extensión para la feature 132 son estos TRES pasos mecánicos, y solo esos:
- *   1) añadir `financiero?: ReactNode` a `AnaliticaShellProps`;
- *   2) añadir una `<section aria-label="Tablero financiero">` debajo de la
- *      región operativa, en la misma pila vertical;
- *   3) su placeholder `EmptyState` a juego con los de abajo.
- * No se deja hoy una prop muerta ni una región vacía "por si acaso": en un
- * portal donde el dinero es sensible, una región financiera visible y vacía es
- * peor que no tenerla — sugiere una cifra que no existe y expone una sección
- * de plata a roles que ni siquiera deberían saber que existe el panel.
+ * Región "financiero" (D6): la declara la feature 132, siguiendo el punto de
+ * extensión que la 129 dejó escrito aquí. De sus TRES pasos mecánicos se
+ * aplican los dos primeros —la prop `financiero?: ReactNode` y la
+ * `<section aria-label="Tablero financiero">` debajo de la región operativa,
+ * en la misma pila vertical— y se DESVÍA del tercero.
+ *
+ * DESVIACIÓN DECLARADA del paso (3) «su placeholder `EmptyState` a juego con
+ * los de abajo»: no hay placeholder. Si la prop no llega, la región no se
+ * renderiza en absoluto. El motivo es el razonamiento que el propio comentario
+ * de la 129 escribió dos líneas más abajo y que contradice a su paso (3): «en
+ * un portal donde el dinero es sensible, una región financiera visible y vacía
+ * es peor que no tenerla — sugiere una cifra que no existe y expone una sección
+ * de plata a roles que ni siquiera deberían saber que existe el panel». Es
+ * además lo que exigen R2 y R7 de la 132: los roles sin `esAccesoTotal(rol)` no
+ * deben ver ni la región, ni su encabezado, ni un estado vacío en su lugar, y
+ * derivarlo de la ausencia de contenido evita depender de que cada llamador se
+ * acuerde de omitir la prop. Las regiones "Filtros" y "Tablero operativo"
+ * conservan su `EmptyState`: ahí el vacío anuncia una entrega pendiente, no
+ * dinero oculto.
  */
 export function AnaliticaShell({
   filtros,
   operativo,
+  financiero,
 }: Readonly<AnaliticaShellProps>) {
   return (
     <AppPage
@@ -62,6 +77,14 @@ export function AnaliticaShell({
           />
         )}
       </section>
+      {financiero ? (
+        <section
+          aria-label="Tablero financiero"
+          className="flex flex-col gap-4"
+        >
+          {financiero}
+        </section>
+      ) : null}
     </AppPage>
   );
 }

@@ -1473,13 +1473,13 @@
       "name": "analitica: cache + invalidacion por tag",
       "spec_path": "specs/128-analitica-cache-invalidacion",
       "description": "Backend. cacheTag por dominio en las lecturas de 125/126 e invalidacion (revalidateTag) disparada por el job diario (123) y por la aprobacion de cierres. Evita GROUP BY por request sin servir cifras rancias. Depende de 126.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
       "branch": "feature/128-analitica-cache-invalidacion",
       "depends_on": 127,
-      "status_note": "AVISO DIRIGIDO DE LA 124: el regalo que la 123 te hacia en su design.md seccion 6 -- 'lo calculado una vez sigue valiendo' -- NO esta pagado, y la 124 lo rebajo por escrito. El rollup de un dia pasado es reproducible SOLO en la dimension estatus_id, que la 124 congela derivandola de orden_historial_estado (D1=A2). Las otras tres coordenadas (zona_id, tienda_id, mensajero_id) se leen de la orden EN EL CORTE y cambian despues, asi que un recomputo posterior del mismo dia da otro numero. Y hay una CUARTA via, distinta en naturaleza: por D7 las ordenes con deleted_at quedan fuera de todo, asi que una orden borrada hoy DESAPARECE de un dia en que existio y conto -- no es una coordenada que cambia sino la pertenencia al conjunto de filas. Consecuencia para vos: la cache de un dia pasado es valida porque NADIE recomputa (R35 estricto, el job diario nunca toca el pasado), no porque el dato sea reproducible. En cuanto la 125 recompute un rango, tu invalidacion tiene que cubrirlo. Caracterizado por test en R49 de specs/124-analitica-job-agregacion-diaria/requirements.md; detalle en design.md seccion 6 (tabla de que se reproduce y que no) y seccion 13."
+      "status_note": "2026-08-03 DONE — mergeada en dev (PR #273). 24/24 requisitos con test nombrado; 33 mutaciones del implementer + 15 del reviewer, todas muertas. cacheTag() NO es usable en este repo (exige la config cacheComponents): se implemento con unstable_cache + revalidateTag. El dominio financiera NO se cachea, prohibido por guardia que sobrevive al merge -> ficha 179. El dia en curso queda fuera POR CONSTRUCCION (el decorador es del repositorio de rollup, el vivo no se decora). TTL 3600 s provisional y no medido. down.sql verificado por texto, NO por ejecucion."
     },
     {
       "id": 129,
@@ -1512,25 +1512,26 @@
       "name": "analitica: tablero operativo",
       "spec_path": "specs/131-analitica-tablero-operativo",
       "description": "Frontend. Cablea las Server Actions de 125 a las graficas de 129 dentro de la ruta 128, con filtros (rango, zona, tienda, mensajero) y revalidacion. Depende de 125.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/131-analitica-tablero-operativo",
-      "depends_on": 126
+      "depends_on": 126,
+      "status_note": "2026-08-03 DONE — mergeada en dev (PR #272). 27/27 requisitos; 28 mutaciones del implementer + 15 del reviewer, todas muertas. D3: por encima de 62 puntos las tasas y los tiempos no pintan serie NI cifra (media de medias prohibida) -> ficha 176. Cae el panel motivos_devolucion por el techo de 6 paneles y la obligacion de mostrar incidentes y sin_gestionar. D7: la pagina NO prefetchea, contra la prosa de la 129 y a favor de su guardia. Latencia medida: 9 invocaciones con dispersion 0 ms."
     },
     {
       "id": 132,
       "name": "analitica: tablero financiero",
       "spec_path": "specs/132-analitica-tablero-financiero",
       "description": "Frontend. Cablea 126 a las graficas de 129 en la ruta 128; datos sensibles pre-fetch en Server Component y pasados por props (patron private/). Depende de 126.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/132-analitica-tablero-financiero",
       "depends_on": 127,
-      "status_note": "HEREDA de la 135 (D7). El tablero financiero es de DOS ROLES: exactamente los que esAccesoTotal(rol) acepta. No disenes un tablero financiero 'para tienda'. Aviso dirigido en specs/135-analitica-catalogo-kpis-rangos/design.md seccion 6.1."
+      "status_note": "2026-08-03 DONE — mergeada en dev (PR #275). Al mergear surgieron dos choques con la 131, resueltos por el leader: (1) page.tsx, solape semantico de los tres slots — los operativos van siempre, el financiero solo para esAccesoTotal, con el pre-fetch del dinero dentro de esa guarda; (2) el guardia R10 de la 131 barria toda la ruta buscando esAccesoTotal y se ACOTO al subarbol operativo, conservando en la ruta entera la prohibicion de recortar datos (alcance, identidad, resolverAlcance, seudonimizar) y anadiendo dos casos que sostienen el acotamiento. Su ficha 179 se renumero a 181 por choque con la 179 de la 128."
     },
     {
       "id": 133,
@@ -2029,14 +2030,14 @@
       "id": 173,
       "name": "caja principal en modo tesoreria",
       "description": "Que la caja refleje todo el dinero que entra y sale, no solo la ganancia.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "depends_on": 172,
-      "branch": null,
-      "spec_path": null,
-      "status_note": "DECISION DEL HUMANO (2026-07-31). Hoy la caja principal modela RESULTADO: solo emite los conceptos que Ordenex gana (flete, comision COD, IVAs) y sus egresos. El COD -el dinero total de la orden- SI se registra, pero como credito 'cod_recaudado' en el ledger POR TIENDA, porque no es ingreso de Ordenex sino dinero que se le debe a la tienda. El humano quiere ver el flujo completo: el COD entra como ingreso de caja y sale al pagarle a la tienda. AL ESPECIFICAR HAY QUE RESOLVER LO QUE ESTO ROMPE: el balance dejara de ser \"lo que gane\", asi que saldo de caja y ganancia tienen que quedar SEPARADOS y nombrados, o el numero se leera como utilidad y no lo sera. Afecta a derivarBalance, a la vista de wallet y al catalogo de metricas financieras de analitica (127/135), que hoy suman las categorias de ingreso como resultado. Depende de la 172 porque el pago a tienda es la mitad del flujo que esto debe reflejar."
+      "branch": "feature/173-caja-tesoreria",
+      "spec_path": "specs/173-caja-tesoreria",
+      "status_note": "2026-08-03 DONE, PR #278 mergeado a dev. Gate completo VERDE con los 61 commits de dev dentro: 904 archivos / 11.337 tests, 0 fallos. Review APROBADO en ronda 2 (la 1 rechazo por R53 sin ningun test: borrar la descripcion de 'egresos' dejaba la suite entera en verde). Trazabilidad 68/68. || FALTA Y ES POST-DEPLOY, NO UN OLVIDO: T H.4, el registro retroactivo. Los dos valores nuevos del enum NO existen en produccion hasta que la migracion se aplique al desplegar, asi que el backfill no puede correrse antes del release. Medido en produccion el 2026-08-03: 5 cierres con 203055.90 de contra-entrega esperando, 0 pagos a tienda, 0 anulaciones. Orden: release -> --simular -> revision humana del informe -> --aplicar -> --comprobar -> lectura por MCP. El ejecutable es scripts/backfill-caja-tesoreria.ts y sin flag NO escribe. || RIESGO DECLARADO: preview no es medible por MCP (quinta via descartada); produccion SI se midio antes del CHECK (35 filas, 0 lo violarian). || 2026-08-03 PUERTA CERRADA POR EL HUMANO: las SIETE preguntas con su DEFAULT (P1=a .. P7=a). Alcance resultante: NO entra la tanda C-bis (P2=a: el pago al mensajero sigue en devengo, la caja queda mixta y 'Dinero en caja' se queda corto exactamente en la cuenta por pagar a mensajeros, cifra que el sistema ya publica); la Tanda E (registro retroactivo) se hace como esta descrita; la Tanda F va COMPLETA dentro de la 173 con la frontera con la 175 declarada; T A.0 y T A.2 son obligatorias. Spec: 68 R en EARS, 9 tandas. Verificado por el leader contra el codigo: la migracion de la 172 deja anotado el CHECK categoria<->tipo PARA esta feature (migration.sql:123-126), la feature 175 existe y esta pending (frontera de P4), y NINGUN down.sql previo hay que reescribir (cada uno congela el estado anterior a SU migracion y su test fija el conteo literal). || DECISION DEL HUMANO (2026-07-31). Hoy la caja principal modela RESULTADO: solo emite los conceptos que Ordenex gana (flete, comision COD, IVAs) y sus egresos. El COD -el dinero total de la orden- SI se registra, pero como credito 'cod_recaudado' en el ledger POR TIENDA, porque no es ingreso de Ordenex sino dinero que se le debe a la tienda. El humano quiere ver el flujo completo: el COD entra como ingreso de caja y sale al pagarle a la tienda. AL ESPECIFICAR HAY QUE RESOLVER LO QUE ESTO ROMPE: el balance dejara de ser \"lo que gane\", asi que saldo de caja y ganancia tienen que quedar SEPARADOS y nombrados, o el numero se leera como utilidad y no lo sera. Afecta a derivarBalance, a la vista de wallet y al catalogo de metricas financieras de analitica (127/135), que hoy suman las categorias de ingreso como resultado. Depende de la 172 porque el pago a tienda es la mitad del flujo que esto debe reflejar."
     },
     {
       "id": 174,
@@ -2056,7 +2057,7 @@
       "name": "analitica: corregir el catalogo de metricas (metrics.ts)",
       "spec_path": "specs/175-analitica-correccion-catalogo",
       "description": "Backend. Corregir TRES divergencias entre lib/analytics/metrics.ts y lo que el rollup y los servicios sirven de verdad. (1) 'incidentes' esta marcado estadoProduccion:'declarada' (metrics.ts:220) pero SI tiene columna en analytics_daily y es el cuarto termino del denominador de las tres tasas; la 133 usa estadoProduccion para decidir paneles, asi que puede OCULTAR ese panel por creerlo sin productor. (2) el catalogo define ordenes_por_estado con los 19 estados, mientras la columna real contiene el universo B2 de la 124 ('vivas + las que cerraron ese dia'). (3) 'sin_gestionar' figura como snapshot con fuente:rollup (metrics.ts:232-247) pero analytics_daily NO tiene esa columna (db/schema.prisma:1867-1876); la 126 la deriva del embudo con semantica 'sin gestionar HOY', y el catalogo debe decirlo. Se aplaza a ficha propia porque metrics.ts es archivo de la 127 y ambas estaban in_progress a la vez: es el conflicto que la regla 1 existe para evitar.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "small",
       "zone": "backend",
@@ -2065,33 +2066,90 @@
         126,
         127
       ],
-      "status_note": "2026-08-02 DADA DE ALTA al cerrar la puerta T0 de la 126 (respuesta Q3=(C) del humano: ficha propia despues, divergencia declarada ya). NO arrancar hasta que la 126 Y la 127 esten mergeadas: tocar metrics.ts antes obliga a rebasar a una de las dos. Las divergencias (1) y (2) las encontro el spec_author de la 126 leyendo el codigo; la (3) aparecio al cerrar T0, porque la instruccion del leader pedia escribir la semantica de sin_gestionar 'en el contrato Y en el catalogo' y el catalogo estaba fuera de la frontera de la 126."
+      "status_note": "OJO: SIGUE 'in_progress' A PROPOSITO AUNQUE SU PR #277 YA ESTE MERGEADO. No es un descuido del bookkeeping: entrego TRES de sus CUATRO divergencias y la cuarta sigue viva. NO la pases a 'done' sin cerrarla o sin moverla a una ficha propia, o el hallazgo se queda huerfano. || 2026-08-03 (tarde) SIGUE ABIERTA TRAS MERGEAR EL PR #277, verificado contra el codigo por el leader de la 173: 'egresos' NO gano ingreso_ajuste, 'neto' SIGUE en lib/types/analitica-financiera.ts, y tests/unit/analytics/financiera-ingresos-repo.test.ts:124 SIGUE con la fila cruzada (categoria egreso_ajuste + tipo ingreso), verde solo porque usa dobles en memoria que no pasan por el CHECK. Es decir: el PR de la 175 cerro sus TRES divergencias originales y esta CUARTA quedo sin abordar. Si la ficha pasa a done sin tocarla, el hallazgo se queda sin dueño. || 2026-08-03 CUARTA DIVERGENCIA, dirigida aqui por la 173 con decision humana (opcion A): el 'neto' de las metricas de caja NUNCA puede diferir del 'bruto'. Las CUATRO metricas que leen wallet_movimiento (ingreso_flete, ingreso_comision_cod, ingreso_iva, egresos) declaran listas HOMOGENEAS de prefijo, y con el CHECK categoria<->tipo que introduce la 173 cada metrica solo puede contener un 'tipo', luego neto = +-bruto siempre. NO lo rompio la 173: ya era cierto en produccion por las tres barreras de la app (el dialogo manual deriva la categoria del tipo, el .refine de zod la rechaza en el borde, y WalletEgresoService revierte con ingreso_ajuste); el CHECK solo lo hizo VISIBLE. La 173 reescribio su unico rojo (tests/integration/actions/analitica-financiera-action.test.ts F.4, ahora bruto 800 / neto -800) y DEJO SIN TOCAR dos dobles en memoria que siguen afirmando con datos que la base ya no acepta, porque su arreglo depende de lo que se decida AQUI: tests/unit/analytics/financiera-ingresos-repo.test.ts:124 y tests/unit/services/analitica-financiera-derivacion.test.ts:177. LA PREGUNTA DE FONDO: o 'egresos' gana ingreso_ajuste en definicion.categorias -que cambia el numero de una metrica de dinero YA PUBLICADA, lo que la P4 de la 173 quiso evitar- o esas cuatro metricas deberian declarar solo 'bruto' y retirar la distincion. || 2026-08-02 DADA DE ALTA al cerrar la puerta T0 de la 126 (respuesta Q3=(C) del humano: ficha propia despues, divergencia declarada ya). NO arrancar hasta que la 126 Y la 127 esten mergeadas: tocar metrics.ts antes obliga a rebasar a una de las dos. Las divergencias (1) y (2) las encontro el spec_author de la 126 leyendo el codigo; la (3) aparecio al cerrar T0, porque la instruccion del leader pedia escribir la semantica de sin_gestionar 'en el contrato Y en el catalogo' y el catalogo estaba fuera de la frontera de la 126."
     },
     {
       "id": 177,
       "name": "api - consulta de orden por guia o remision y generacion del PDF por orden y por carga",
       "description": "Backend, canal API key. (1) Ruta NUEVA de consulta por identificador libre: el `{id}` de la ruta se resuelve contra num_guia Y num_remision. El detalle actual `/api/ordenes/api-key/{numGuia}` (feature 106) se deja INTACTO: no se amplia un endpoint ya publicado a integradores. (2) La generacion del PDF NO viaja como query param `generatePdf`: es un segmento de ruta propio (`.../{id}/generate`), un endpoint dedicado que genera el PDF de ESA orden, deja la referencia guardada en la orden y responde con una URL firmada que vence en 5 minutos. Si el PDF ya existe se REUSA el objeto ya subido a storage y solo se vuelve a firmar; solo se genera cuando no existe. (3) Endpoint gemelo por carga: mismo contrato sobre el PDF CONSOLIDADO del lote, retorna el existente o lo genera si falta.",
-      "status": "spec_ready",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/177-api-consulta-orden-pdf",
+      "merged_pr": 274,
       "depends_on": 136,
-      "status_note": "RENUMERADA de 175 a 177 el 2026-08-03: el id 175 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03. Decisiones YA tomadas por el humano en la peticion, no las re-abra el spec_author: ruta NUEVA en vez de ampliar `{numGuia}`; `generatePdf` deja de ser query param y pasa a ser el segmento `/generate`; TTL de la URL firmada = 5 min (mismo TTL que las evidencias de la 106). HALLAZGO que condiciona el diseno: la feature 136 guarda en `carga.download_url` (y `orden.download_url`) la URL FIRMADA, no el path -- ver EtiquetasDescargaService.ts:48 y EtiquetasLotePdfService.ts:78. Una URL firmada caduca, asi que 'reusar la url guardada' es IMPOSIBLE tal como esta persistido hoy: reusar solo puede significar reusar el OBJETO en storage y re-firmarlo en cada respuesta. El spec tiene que decidir si se persiste el storage_path (columna nueva o migracion de la existente) o si se acepta re-firmar a ciegas, y que pasa con las URLs ya guardadas por la 136. ABIERTO para la puerta: (a) desempate cuando el string casa con el num_guia de una orden y el num_remision de OTRA -- ambas son columnas distintas y no hay unicidad cruzada garantizada; (b) verbo HTTP de `/generate` (POST es lo honesto porque muta la orden, pero un integrador esperaria GET); (c) forma exacta de la ruta por carga y si el identificador de carga es el uuid o el `name` del lote; (d) si hace falta un modo forzar-regeneracion o el reuso es siempre. El owner sigue forzado al actor de la API key (R4 de la 106): un integrador no puede consultar ni generar el PDF de una orden ajena. Actualizar `lib/api/openapi-spec.ts`, que hoy publica solo 4 paths.",
+      "status_note": "DONE 2026-08-03: PR #274 mergeado a dev (merge commit 893cf007). Reviewer APROBADO, 0 bloqueantes, 45/45 R verificados abriendo el test citado uno a uno; sus 2 menores de codigo se cerraron en el propio PR (fuera el fallback ?? resultados[0], que habria persistido el path del PDF de OTRA orden; TTL unificado en el composition root de carga). Gate 856 archivos / 10739 tests, sin rojos reales: los 2 rojos moviles (LoginForm, ControlDescargaTransversal) dieron verde en aislado y son ajenos al diff. Baseline al arrancar: 845 / 10605. PUERTA F1.4 CERRADA el 2026-08-03 con aprobacion explicita del humano: acepta la migracion, acepta que cargaId pase a ser contrato publico, acepta el riesgo (a) de la precedencia de num_guia y acepta el 409 cuando la orden no tiene guia imprimible. Precision suya sobre /generate: PRIORIDAD devolver el enlace; si no hay PDF, generarlo, actualizar el campo y devolver el enlace con vencimiento de 5 min. OJO, el testigo de existencia es la columna NUEVA download_storage_path, NO download_url: esta ultima guarda URLs firmadas YA CADUCADAS de la 136, asi que usarla como testigo devolveria enlaces muertos; las filas heredadas se tratan como sin PDF y se regeneran en la primera llamada. RENUMERADA de 175 a 177 el 2026-08-03: el id 175 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03. Decisiones YA tomadas por el humano en la peticion, no las re-abra el spec_author: ruta NUEVA en vez de ampliar `{numGuia}`; `generatePdf` deja de ser query param y pasa a ser el segmento `/generate`; TTL de la URL firmada = 5 min (mismo TTL que las evidencias de la 106). HALLAZGO que condiciona el diseno: la feature 136 guarda en `carga.download_url` (y `orden.download_url`) la URL FIRMADA, no el path -- ver EtiquetasDescargaService.ts:48 y EtiquetasLotePdfService.ts:78. Una URL firmada caduca, asi que 'reusar la url guardada' es IMPOSIBLE tal como esta persistido hoy: reusar solo puede significar reusar el OBJETO en storage y re-firmarlo en cada respuesta. El spec tiene que decidir si se persiste el storage_path (columna nueva o migracion de la existente) o si se acepta re-firmar a ciegas, y que pasa con las URLs ya guardadas por la 136. ABIERTO para la puerta: (a) desempate cuando el string casa con el num_guia de una orden y el num_remision de OTRA -- ambas son columnas distintas y no hay unicidad cruzada garantizada; (b) verbo HTTP de `/generate` (POST es lo honesto porque muta la orden, pero un integrador esperaria GET); (c) forma exacta de la ruta por carga y si el identificador de carga es el uuid o el `name` del lote; (d) si hace falta un modo forzar-regeneracion o el reuso es siempre. El owner sigue forzado al actor de la API key (R4 de la 106): un integrador no puede consultar ni generar el PDF de una orden ajena. Actualizar `lib/api/openapi-spec.ts`, que hoy publica solo 4 paths.",
       "spec_path": "specs/177-api-consulta-orden-pdf"
     },
     {
       "id": 178,
-      "name": "job semanal de purga de los PDF de cargas antiguas (retencion en dias parametrizable)",
+      "name": "job diario de purga de los PDF de cargas antiguas (retencion en dias parametrizable, default 7)",
       "description": "Backend. Job recurrente que agrupa por `carga_id` y, para cada carga con mas de N dias desde su creacion, borra del storage el PDF CONSOLIDADO del lote y tambien los PDF INDIVIDUALES de todas las ordenes de esa carga, dejando a NULL `carga.download_url` y `orden.download_url` de las filas afectadas. N son dias, sale de variable de entorno con default 7, minimo 1 y sin tope superior. Objetivo: que el storage no crezca sin freno con etiquetas que ya nadie descarga.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/178-purga-pdf-cargas",
+      "depends_on": 136,
+      "status_note": "PUERTA F1.4 CERRADA el 2026-08-03 con APROBACION EXPLICITA del humano (acepta la migracion del indice, el borrado best-effort e irreversible en el bucket, el minimo N=0 y que los PDF viejos de la 136/141 queden fuera del alcance). Decisiones del humano: (a) fecha de corte = created_at (inmutable; fecha_carga es backdateable), lo que obliga a indice nuevo; (b) fallo parcial = limpiar igual las columnas, best-effort, SIN reintentos internos: la recuperacion es la corrida del dia siguiente; (c) CRON PROPIO en vercel.json protegido por CRON_SECRET, NO la cola de la 90 -- eligio lo contrario a la recomendacion del spec; (d) ordenes con carga_id NULL quedan FUERA, con ticket aparte. Y DOS CAMBIOS DE FONDO respecto del registro inicial: la cadencia pasa a ser DIARIA (lo 'semanal' es solo el default N=7, por eso el name cambio) y la retencion admite N >= 0 con corte INCLUSIVO -- se purga lo creado hace N o mas dias; con N=0 se purgan las cargas del dia mismo, consecuencia declarada y no irreversible porque /generate de la 177 regenera. Hora: 03:00 CR. LIMITACION HEREDADA descubierta al especificar: el design de la 177 daba por hecho que esta feature barreria sus huerfanos de la 136/141, y NO PUEDE -- de aquellos objetos solo se guardo la URL firmada, nunca la ruta, y remove necesita la ruta; harian falta reglas de ciclo de vida del bucket, ticket aparte. OBLIGACION HEREDADA DE LA 177 (mergeada el 2026-08-03, PR #274): la purga debe poner a NULL tambien la columna NUEVA download_storage_path (en orden Y en carga), no solo download_url. Si no, /generate de la 177 vera la referencia viva, se saltara la generacion y firmara un objeto YA BORRADO: el integrador recibiria un 200 con una URL que da 404. Ese testigo es justo el que la 177 eligio para decidir si el PDF existe. RENUMERADA de 176 a 178 el 2026-08-03: el id 176 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03, junto con la 177. Decisiones YA tomadas por el humano: alcance = consolidado + individuales de la carga; retencion configurable por VARIABLE DE ENTORNO (no UI, no query param), default 7 dias, validacion >= 1. ABIERTO para la puerta: (a) que columna manda como fecha de corte, `carga.created_at` o `carga.fecha_carga` -- son dos columnas distintas del modelo Carga y hoy pueden divergir; (b) las ordenes con `carga_id` NULL (alta manual, no nacen de un lote) quedan FUERA de esta purga por definicion, o sea que su PDF no caduca nunca: hay que decirlo explicito o abrir ticket aparte; (c) idempotencia y borrado parcial -- si el borrado en storage falla a mitad, decidir si se limpia igual la columna (el enlace ya no sirve) o se reintenta; (d) si se monta como job recurrente sobre la cola de la feature 90 (patron de liberar-reprogramadas) o como cron propio en vercel.json protegido por CRON_SECRET; el humano no lo fijo. INTERACCION con la 177: despues de la purga, `/generate` tiene que volver a generar el PDF sin error -- una carga purgada no es una carga rota. Conviene especificarla DESPUES de la 177 o al menos leer su design.",
+      "spec_path": "specs/178-purga-pdf-cargas"
+    },
+    {
+      "id": 176,
+      "name": "analitica: modo agregado de tasas y tiempos",
+      "spec_path": "specs/176-analitica-modo-agregado-tasas",
+      "description": "Backend. Extiende el contrato de lectura de la analitica operativa (126) con un modo AGREGADO por periodo para las metricas que NO son sumables: devuelve numerador y denominador (o los acumuladores seg_ciclo_acum/seg_ciclo_n) por cubo temporal, de modo que un consumidor pueda SUMAR ANTES DE DIVIDIR y presentar una tasa o un tiempo de ciclo correctos en rangos largos. Hoy el servicio solo devuelve el cociente ya dividido por dia, asi que el tablero (131) no puede agregar tasa_entrega, tasa_devolucion, tasa_rechazo, primer_intento_ok, tiempo_ciclo ni aging_por_estado sin caer en media de medias, y por decision D3 no pinta serie ni cifra por encima del techo de 62 puntos. Reusa ConsultaAnalitica y el alcance ya existentes; no anade metricas al catalogo.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/176-analitica-modo-agregado-tasas",
+      "depends_on": [
+        126
+      ],
+      "status_note": "Sale de la decision D3 de la 131 (specs/131-analitica-tablero-operativo/requirements.md seccion 6). Conviene programarla DESPUES de la 128 para no escribir la capa de lectura a la vez que la cache. Mientras no aterrice, R27 de la 131 muestra aviso y CERO cifras en esos paneles en rangos largos."
+    },
+    {
+      "id": 179,
+      "name": "analitica: cache financiera + invalidacion por ledger",
+      "spec_path": "specs/179-analitica-cache-financiera",
+      "description": "Backend. Extiende la cache por tag de la 128 al dominio financiera: envuelve las lecturas de AnaliticaFinancieraService con el tag analitica:financiera (ya declarado en ANALITICA_TAGS, feature 135) e invalida desde TODOS los escritores de los tres ledgers, no solo desde la aprobacion de cierres: WalletEgresoService, LiquidacionService, GeneracionGastosFijosService (cron de gastos fijos), el flujo de indemnizaciones de incidentes y aprobarCierre/aprobarCierreBodega. Retira el guardia R15 de la 128 en el MISMO PR que lo sustituye por la invalidacion real. Cada escritor necesita su test de cinco pasos: un escritor sin invalidar sirve dinero rancio en silencio, que es exactamente por lo que la 128 no lo hizo.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/179-analitica-cache-financiera",
+      "depends_on": [
+        128
+      ],
+      "status_note": "Sale de la decision D2 de la 128 (specs/128-analitica-cache-invalidacion/design.md seccion 14). Mientras no aterrice, R15 de la 128 PROHIBE con guardia cachear el dominio financiera. Renumerada de 177 a 179: otra sesion ocupo el 177 y el 178 en dev mientras esta rama estaba viva."
+    },
+    {
+      "id": 180,
+      "name": "analitica financiera: desglose por fecha para las series temporales",
+      "spec_path": null,
+      "description": "Backend. `AnaliticaFinancieraService` agrega la ventana ENTERA y no publica filas por fecha para las cuatro metricas de caja ni para la cuenta por pagar de mensajeros, asi que hoy NO existe serie temporal que dibujar. Publicar el desglose por fecha para que el tablero financiero pueda tener grafica de lineas.",
       "status": "pending",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
       "branch": null,
-      "depends_on": 136,
-      "status_note": "RENUMERADA de 176 a 178 el 2026-08-03: el id 176 choco con una ficha que ya venia en dev (175, analitica: corregir el catalogo de metricas), dada de alta el 2026-08-02 al cerrar la puerta T0 de la 126. Mismo criterio que la 168 y la 165: la ficha que YA tiene rama y spec_path conserva el id, y esta toma el primer id libre CONSERVANDO su contenido. Pedida por el humano el 2026-08-03, junto con la 177. Decisiones YA tomadas por el humano: alcance = consolidado + individuales de la carga; retencion configurable por VARIABLE DE ENTORNO (no UI, no query param), default 7 dias, validacion >= 1. ABIERTO para la puerta: (a) que columna manda como fecha de corte, `carga.created_at` o `carga.fecha_carga` -- son dos columnas distintas del modelo Carga y hoy pueden divergir; (b) las ordenes con `carga_id` NULL (alta manual, no nacen de un lote) quedan FUERA de esta purga por definicion, o sea que su PDF no caduca nunca: hay que decirlo explicito o abrir ticket aparte; (c) idempotencia y borrado parcial -- si el borrado en storage falla a mitad, decidir si se limpia igual la columna (el enlace ya no sirve) o se reintenta; (d) si se monta como job recurrente sobre la cola de la feature 90 (patron de liberar-reprogramadas) o como cron propio en vercel.json protegido por CRON_SECRET; el humano no lo fijo. INTERACCION con la 177: despues de la purga, `/generate` tiene que volver a generar el PDF sin error -- una carga purgada no es una carga rota. Conviene especificarla DESPUES de la 177 o al menos leer su design.",
-      "spec_path": null
+      "depends_on": 127,
+      "status_note": "Sale de la Q3 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). El tablero financiero se entrega SIN grafica de lineas —tarjetas de KPI, donut de recaudo por metodo, barra por tienda y tablas— porque la alternativa era inventarse los puntos. Verificado en el codigo, no supuesto: `AnaliticaFinancieraService.ts:196-221,319-337` agrega la ventana entera. Cuando esta ficha entre, la linea se anade al tablero SIN rehacerlo: los componentes de grafica ya existen (130) y el hueco esta declarado en el design de la 132. NOTA para quien la especifique: comprobar antes si el rollup diario de la 123 ya guarda el grano por fecha que hace falta —si lo guarda, esto es exponerlo, no recalcularlo—."
+    },
+    {
+      "id": 181,
+      "name": "analitica: etiquetas de tienda en los cubos por tienda",
+      "spec_path": null,
+      "description": "Backend + frontend. Los cubos por tienda de la analitica financiera (y los que vengan de la operativa) viajan con el `tiendaId` CRUDO, que en este esquema es una FK a `usuario`: las graficas por tienda pintan un identificador donde deberia ir un nombre. Resolver la etiqueta en la FUENTE (el DTO de los servicios de analitica) para que ninguna pantalla tenga que repetir la traduccion.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 132,
+      "status_note": "Sale de la Q2 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). Se eligio (a) pintar el id crudo con la limitacion escrita EN PANTALLA, y NO (b) resolver los nombres en el Server Component de la 132 ni (c) ampliar el DTO de la 127. Motivos: (b) mete una consulta que el diseno de la 127 no previo y que habria que REPETIR en la 131 y en la 134 —tres copias de la misma traduccion—; (c) reabre una feature `done` y mergeada (PR #269) con su propia puerta y su reviewer. Al especificar: el sitio correcto es el DTO de los servicios de analitica, no cada pantalla, justamente para que la traduccion exista UNA vez. Ojo con el alcance por rol: la etiqueta no puede filtrar el nombre de una tienda que el actor no deberia ver (los guards de alcance de la 122/127 ya estan escritos y hay que respetarlos). Verificar tambien si la analitica OPERATIVA (126) tiene el mismo defecto antes de decidir la forma. Renumerada de 179 a 181: mientras esta rama estaba viva, la 128 dio de alta otra ficha con el 179 (analitica: cache financiera + invalidacion por ledger) y llego a dev primero."
     }
   ]
 }

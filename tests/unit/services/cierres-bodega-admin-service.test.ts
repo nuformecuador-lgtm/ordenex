@@ -598,4 +598,24 @@ describe("CierresBodegaAdminService — R11: aprobar bodega NO genera ingresos d
     expect((service as unknown as Record<string, unknown>).pagoMensajeroMovimientoRepo).toBeUndefined();
     expect((repo as unknown as Record<string, unknown>).construirMovimientosDePago).toBeUndefined();
   });
+
+  it("feature 173/R16: aprobar un CierreBodega NO mete CONTRA-ENTREGA en la caja principal", async () => {
+    // Cuarta afirmacion de la misma linea que las tres de arriba (42/43/44), ahora para el
+    // contra-entrega. El COD entra en la caja EXCLUSIVAMENTE al aprobar un CierreDia (misma tx
+    // que 42/43/44), leyendo del ledger por tienda. El cierre de BODEGA agrega cierres del dia
+    // YA aprobados —y por tanto YA contados—: si tambien emitiera, el mismo contra-entrega
+    // entraria dos veces en la caja y «Dinero en caja» diria el doble de lo que hay.
+    const resolver = vi.fn(async () => "updated" as const);
+    const repo = fakeRepo({ resolverCierreBodega: resolver });
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierreBodega("cb1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(resolver).toHaveBeenCalledTimes(1);
+    // Ni el feed del COD, ni el repositorio de la caja, ni el del ledger del que leeria.
+    expect((service as unknown as Record<string, unknown>).cajaCodFeedService).toBeUndefined();
+    expect((repo as unknown as Record<string, unknown>).construirIngresoCod).toBeUndefined();
+    expect((repo as unknown as Record<string, unknown>).crearMovimientos).toBeUndefined();
+  });
 });

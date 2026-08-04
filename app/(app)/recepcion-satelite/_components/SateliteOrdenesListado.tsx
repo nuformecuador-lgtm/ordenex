@@ -214,6 +214,18 @@ export function SateliteOrdenesListado({
     [ordenes, seleccionados],
   );
 
+  /**
+   * Q-K7 (deuda de la 170 · FASE 2, T K.3) — marcadas FUERA de la página visible.
+   *
+   * Es la diferencia entre lo que el usuario ha marcado (`seleccionados`, que sobrevive al
+   * cambio de página) y lo que de verdad entra en la acción de lote (`seleccionadas`, sólo
+   * las de la página que se está viendo). Hasta ahora esa diferencia existía y NADA la
+   * decía: se marcaba en la página 1, se pasaba a la 2 y las marcas seguían ahí, invisibles
+   * y sin participar. Se cuenta a partir de los DOS conjuntos que ya gobiernan la selección
+   * —no se cambia ni la selección ni la acción, esto es sólo un aviso—.
+   */
+  const marcadasFuera = seleccionados.size - seleccionadas.length;
+
   // La acción disponible sale del estado COMÚN de lo seleccionado: con una selección
   // mixta no hay transición única que ofrecer.
   const estadosSeleccionados = new Set(
@@ -328,6 +340,22 @@ export function SateliteOrdenesListado({
               hayFiltros
               ? `${total} de ${totalSinFiltros} órdenes`
               : `${total} órdenes`}
+          {/* Q-K7 — el aviso de lo marcado en OTRAS páginas.
+              Va aquí dentro y en letra menor A PROPÓSITO: la barra ya dice dos cosas (el
+              contador/la selección a la izquierda y, si los estados están mezclados, el
+              motivo por el que no hay acción a la derecha), y un tercer mensaje al mismo
+              nivel estorbaría más de lo que ayuda. Es una coletilla SUBORDINADA a la línea
+              de la selección, que es de lo que habla.
+              Y sólo aparece cuando hay algo que avisar: si todo lo marcado está a la vista
+              no se pinta nada. El número es el de FUERA de la página, no el total marcado:
+              decir el total convertiría el aviso en mentira en cuanto se marca una fila de
+              la página actual. */}
+          {marcadasFuera > 0 ? (
+            <span className="mt-0.5 block text-xs">
+              Tienes {marcadasFuera} orden(es) marcadas en otras páginas que no
+              entran en esta acción.
+            </span>
+          ) : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {/* R48: cada acción se ofrece si hay órdenes de su estado SELECCIONADAS, y se
