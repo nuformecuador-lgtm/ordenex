@@ -8,10 +8,12 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 💰 2026-08-03 — **173 LISTA PARA PR: la caja ya distingue el dinero de la ganancia**
+## 💰 2026-08-03 — **173 `done`: la caja ya distingue el dinero de la ganancia** · PR #278 MERGEADO
 
 **Las 9 tandas hechas, review APROBADO en ronda 2, `./init.sh` completo VERDE con los 61 commits de
-`dev` dentro: 904 archivos / 11.337 tests, 0 fallos.** Rama `feature/173-caja-tesoreria`.
+`dev` dentro: 904 archivos / 11.337 tests, 0 fallos.** Relato completo en `progress/history.md`.
+
+> ⚠️ **NO está en producción todavía, y el backfill DEPENDE de que llegue** (ver punto 2 de abajo).
 
 **Qué cambia para el maestro:** la caja deja de tener un solo número. Ahora muestra **«Dinero en
 caja»** (todo lo que entra y sale, incluido el contra-entrega cobrado a nombre de las tiendas) y
@@ -26,7 +28,12 @@ que el sistema ya publica—. Se equivoca **por lo bajo**, nunca dice que hay m�
 
 ### ⏭️ LO PRIMERO AL RETOMAR
 
-1. **Abrir/mergear el PR.** El gate completo está verde **con `dev` dentro**, no por separado.
+1. **RELEASE `dev → prod`, y ya no es barato: `dev` está 153 commits por delante.** Lleva las
+   features 126, 127, 128, 131, 132, 173, 175 y 177, y **varias migraciones** —entre ellas el `CHECK`
+   categoría↔tipo de la 173 y los dos valores de enum—. **Mergear a `prod` ES aplicar.** Producción se
+   midió antes del `CHECK` (35 filas, 0 lo violarían), pero **eso fue antes de estas 153**: conviene
+   rehacer el pre-vuelo, como se hizo en la release del 2026-08-01 en vez de reutilizar el del día
+   anterior.
 2. **`T H.4` es POST-DEPLOY y no es un olvido:** los dos valores nuevos del enum **no existen en
    producción** hasta que la migración se aplique al desplegar, así que el backfill **no se puede
    correr antes**. Medido en producción: **5 cierres con ₡203.055,90** de contra-entrega esperando su
