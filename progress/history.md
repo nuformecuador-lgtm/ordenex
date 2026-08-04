@@ -2702,3 +2702,37 @@ verificados abriendo el test citado uno a uno.
   spec que el leader hizo después aterrizaron en la rama equivocada. Se rescataron con `cherry-pick`.
   La señal está en el prefijo `[rama hash]` de la salida de `git commit`, que es fácil no mirar; la
   regla es verificar la rama **antes de cada commit que siga a un subagente**, no solo al arrancar.
+
+## 175 — el catálogo de métricas dejaba de decir la verdad (2026-08-03, PR #277)
+
+Corrección de contrato, no de funcionalidad: `lib/analytics/metrics.ts` describía tres métricas de
+forma que no coincidía con lo que el rollup y los servicios ya servían. **Ninguna cifra cambió** —
+verificado por el reviewer, no afirmado: los tests de la 126 y la 127 pasan verdes **sin haber sido
+tocados**. 14 requisitos, 14 con test no vacuo; 21 mutaciones del reviewer, las 21 discriminaron.
+
+- **Una etiqueta de metadatos puede apagar una pantalla.** `incidentes` estaba marcada `declarada`
+  («sin productor») pese a tener columna real en `analytics_daily` y ser el 4.º término del
+  denominador de las tres tasas. Como la 133 elige qué paneles pinta leyendo ese campo, el catálogo
+  habría **ocultado un panel con datos**. El defecto no estaba en ninguna consulta ni en ningún
+  cálculo: estaba en una palabra.
+- **La regla escrita en un comentario no es una regla.** La cabecera de `metrics.ts` exigía desde la
+  135 «una decisión humana nueva y fechada» para tocar el catálogo, y nada lo comprobaba. Ahora R14
+  lo verifica: deriva los pares (métrica, decisión) recorriendo `progress/`, exige fecha, exige que
+  el catálogo cite el fichero, que la fecha citada exista de verdad en él y que el estado actual sea
+  el ratificado. Cubre también el precedente ⟨D10⟩ de la 127, que llevaba meses sin red.
+- **Quedarse sin ninguna métrica `declarada` puso rojo un guard, y era el guard el que estaba mal
+  planteado.** Afirmaba `length > 0` sobre ese filtro. Lo que protege de verdad es que el filtro
+  **particione**, no que existan métricas sin productor: un catálogo enteramente producido es el
+  estado bueno. Se reexpresó sobre catálogo sintético en vez de relajarlo.
+- **Reexpresar un guard ajeno puede reforzarlo.** El caso de la 131 afirmaba literalmente que estas
+  dos métricas eran `declarada` — o sea que dependía del valor que esta feature corrige, y era
+  insostenible por construcción. Reescrito para matar la mutación **sin afirmar ningún valor**, el
+  reviewer comprobó que ahora muerde por sí solo y no de rebote.
+- **Tercera vez en el mismo día que la suite completa caza lo que `vitest related` no puede ver.**
+  Dos censos de árbol se pusieron rojos por texto propio: el literal `analytics_daily` colado en una
+  `descripcion` y un value retirado de `order_status` citado en un comentario. Se corrigió el texto
+  propio, sin relajar la regla ajena ni añadirse a una allowlist.
+- **El implementer declaró un hueco en vez de taparlo**: no midió el baseline de la suite en `dev`
+  porque el primer intento corrió sin `node_modules`. Lo escribió como *no medido* y el reviewer lo
+  juzgó suficiente para esta superficie, cerrándolo con un barrido dirigido propio (52 archivos /
+  678 tests) sobre todo test que lee ficheros y cita analítica u `order_status`.
