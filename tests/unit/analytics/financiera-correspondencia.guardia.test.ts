@@ -85,6 +85,10 @@ const REPOSITORIO_DE: Readonly<Record<string, Servidor>> = {
   ingreso_comision_cod: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
   ingreso_iva: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
   egresos: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
+  // Feature 173 (P4): las dos cifras de la caja salen del MISMO repositorio y de la MISMA
+  // tabla que las cuatro de la 127; lo unico propio de cada una es que categorias declara.
+  dinero_en_caja: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
+  ganancia_ordenex: { archivo: "lib/repositories/IngresosAnaliticaRepository.ts" },
   cod_recaudado: { archivo: "lib/repositories/RecaudoAnaliticaRepository.ts" },
   cuenta_por_pagar_tienda: {
     archivo: "lib/repositories/CuentasPorPagarAnaliticaRepository.ts",
@@ -146,7 +150,7 @@ export function tablasNoDeclaradas(metricaId: string, fuente: string): readonly 
 const ARCHIVOS = [...new Set(Object.values(REPOSITORIO_DE).map((s) => s.archivo))];
 
 describe("R4 · lo que cada repositorio consulta cabe en lo que su metrica declara", () => {
-  it("el mapa cubre las ocho financieras, ni una de mas ni una de menos", () => {
+  it("el mapa cubre las diez financieras, ni una de mas ni una de menos", () => {
     const delCatalogo = listarMetricas({ dominio: "financiera" }).map((m) => m.id).sort();
     expect(Object.keys(REPOSITORIO_DE).sort()).toEqual(delCatalogo);
   });

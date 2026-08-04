@@ -1,6 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
-  BalanceAgregado,
   BalanceFiltros,
   CrearMovimientoInput,
   DesgloseEgresosAgregado,
@@ -9,7 +8,7 @@ import type {
   ListarMovimientosPage,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
-import type { WalletMovimientoDTO } from "@/lib/types/wallet";
+import type { AgregadoCajaRow, WalletMovimientoDTO } from "@/lib/types/wallet";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron CierresAdminRepository).
 type WalletPrismaClient = Pick<PrismaClient, "walletMovimiento">;
@@ -49,7 +48,11 @@ function buildWhere(f: BalanceFiltros): Prisma.WalletMovimientoWhereInput {
 /**
  * Feature 42 — repositorio del LIBRO de movimientos de la wallet. SOLO queries Prisma.
  * Inserta idempotentemente (skipDuplicates -> ON CONFLICT DO NOTHING, R6/R13), lista
- * paginado por fecha desc con filtros en el WHERE (R20/R24) y agrega el balance (R16).
+ * paginado por fecha desc con filtros en el WHERE (R20/R24) y agrega por (categoria, tipo)
+ * con esos mismos filtros (feature 173/R8).
+ *
+ * INMUTABLE (R3/R47): no expone `update` ni `delete`, y con la 173 sigue sin exponerlos —
+ * una correccion es un movimiento compensatorio, no una edicion.
  */
 export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   constructor(private readonly prisma: WalletPrismaClient) {}
@@ -65,6 +68,10 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       origenId: m.origenId,
       descripcion: m.descripcion ?? null,
       registradoPor: m.registradoPor ?? null,
+      // Feature 173 (design §2.3, R20/R25): la clave SOLO viaja si el llamador la trae. Se
+      // omite —en vez de mandar `undefined`— para que quien no la pasa siga cayendo en el
+      // `DEFAULT CURRENT_TIMESTAMP` de la columna, exactamente como hasta hoy.
+      ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
     }));
     const res = await tx.walletMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -86,22 +93,25 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
     return { movimientos: rows.map(toDTO), total };
   }
 
-  /** R16: SUM(monto) por tipo con los mismos filtros. Salida STRING (money-safe). */
-  async agregarBalance(filtros: BalanceFiltros): Promise<BalanceAgregado> {
+  /**
+   * Feature 173 (T D.1, R8/R47): `groupBy(categoria, tipo)` + `SUM(monto)` con los MISMOS
+   * filtros del listado. Salida STRING escala 2 (money-safe: `Prisma.Decimal` dentro, `number`
+   * en ninguna parte).
+   *
+   * Solo agrega. Ni particiona por naturaleza ni resta: eso es de `derivarCaja`, que es pura.
+   */
+  async agregarPorCategoriaYTipo(filtros: BalanceFiltros): Promise<readonly AgregadoCajaRow[]> {
     const where = buildWhere(filtros);
     const grupos = await this.prisma.walletMovimiento.groupBy({
-      by: ["tipo"],
+      by: ["categoria", "tipo"],
       where,
       _sum: { monto: true },
     });
-    let ingresos = new Prisma.Decimal(0);
-    let egresos = new Prisma.Decimal(0);
-    for (const g of grupos) {
-      const suma = g._sum.monto ?? new Prisma.Decimal(0);
-      if (g.tipo === "ingreso") ingresos = new Prisma.Decimal(suma);
-      else egresos = new Prisma.Decimal(suma);
-    }
-    return { ingresos: ingresos.toFixed(2), egresos: egresos.toFixed(2) };
+    return grupos.map((g) => ({
+      categoria: g.categoria,
+      tipo: g.tipo,
+      total: (g._sum.monto ?? new Prisma.Decimal(0)).toFixed(2),
+    }));
   }
 
   /** Feature 45 (R13): lee un movimiento por id (para la reversa). null si no existe. */

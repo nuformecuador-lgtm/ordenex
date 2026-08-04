@@ -3,7 +3,9 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -67,9 +69,16 @@ function toLiquidacionActionError(
 }
 
 /**
- * Cablea el servicio con los tres repositorios y el ejecutor de transacciones. El runner es
- * `prisma.$transaction` interactivo: es lo que hace que documento y movimiento sean atomicos
- * (R39). **No se le inyecta el repositorio de la caja principal** ([P2]/R40).
+ * Cablea el servicio con los tres repositorios, el ejecutor de transacciones y —desde la feature
+ * 173 (design §4)— el PUERTO ESTRECHO de la caja principal. El runner es `prisma.$transaction`
+ * interactivo: es lo que hace que documento, movimiento del ledger y egreso de la caja sean
+ * atomicos (R39/R19).
+ *
+ * **Sigue sin inyectarse `IWalletMovimientoRepository` al servicio**, y ese es el punto: el
+ * repositorio queda encapsulado DENTRO de `CajaPagoTiendaFeedService`, que solo sabe emitir dos
+ * filas —el egreso del pago a tienda y su reverso—. La liquidacion al MENSAJERO sigue sin tocar
+ * la caja ([P2] = (a), R22/R27), y ahora no por ausencia de repositorio sino porque el puerto no
+ * tiene ningun metodo que pueda escribir `egreso_pago_mensajero` (R23).
  */
 function buildService(): ILiquidacionService {
   const prisma = getPrismaClient();
@@ -78,6 +87,7 @@ function buildService(): ILiquidacionService {
     new WalletTiendaMovimientoRepository(prisma),
     new PagoMensajeroMovimientoRepository(prisma),
     (fn) => prisma.$transaction((tx) => fn(tx)),
+    new CajaPagoTiendaFeedService(new WalletMovimientoRepository(prisma)),
   );
 }
 

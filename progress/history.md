@@ -2676,7 +2676,7 @@ reviewer, todas muertas. Reviewer: **aprobado con reservas, cero bloqueantes**.
   con `-F` o heredoc citado**, nunca `-m` con prosa que cita comandos. Ningún gate lo detecta: `git
   commit` «funciona» y el estrago queda incrustado en el mensaje.
 
-## Feature 177 — api: consulta por guía o remisión y PDF bajo demanda · PR pendiente (2026-08-03)
+## Feature 177 — api: consulta por guía o remisión y PDF bajo demanda · PR #274 (2026-08-03)
 
 Tres endpoints nuevos en el canal de API key: `GET /orden/{id}` (resuelve contra `num_guia` y
 `num_remision`), `POST /orden/{id}/generate` y `POST /carga/{cargaId}/generate`. Los dos `/generate`
@@ -2702,3 +2702,74 @@ verificados abriendo el test citado uno a uno.
   spec que el leader hizo después aterrizaron en la rama equivocada. Se rescataron con `cherry-pick`.
   La señal está en el prefijo `[rama hash]` de la salida de `git commit`, que es fácil no mirar; la
   regla es verificar la rama **antes de cada commit que siga a un subagente**, no solo al arrancar.
+
+---
+
+## 2026-08-03 — Feature 173: la caja principal en modo tesorería · PR #278
+
+**El agujero que cierra:** la caja tenía **un solo número**, y ese número dejó de significar una sola
+cosa el día que la 172 metió dinero de terceros en juego. Ahora hay dos: **«Dinero en caja»**
+(tesorería, incluido el contra-entrega cobrado a nombre de las tiendas) y **«Ganancia de Ordenex»**
+(el resultado, que es el número que hasta hoy se llamaba «Balance general»). **La palabra «balance»
+desaparece de la pantalla.**
+
+`./init.sh` completo **VERDE con los 61 commits de `dev` dentro** —no por separado, que es el
+incidente del PR #237—: **904 archivos / 11.337 tests, 0 fallos**. Baseline al arrancar: 845 / 10.605.
+Guardias: 683 → **793**. Review **APROBADO en ronda 2**, trazabilidad **68 de 68**.
+
+### La decisión que más manda, y su límite declarado
+
+**P2 = (a): el pago al mensajero NO pasa a tesorería.** La caja queda mixta —tesorería para el COD y
+las tiendas, devengo para los mensajeros— y «Dinero en caja» se queda corto **exactamente** en la
+cuenta por pagar a mensajeros, cifra que el sistema ya publica. **Se equivoca por lo bajo: nunca dice
+que hay más dinero del que hay.**
+
+Ese límite no lo sostiene un comentario: lo sostiene un **puerto de dos métodos**
+(`ICajaPagoTiendaFeedService`) que no admite ni tipo ni categoría, así que la liquidación **no puede
+expresar** una escritura que no sea el egreso del pago a tienda o su reverso. Matiz honesto, que el
+reviewer dejó escrito: el objeto de transacción sí expone `walletMovimiento`, así que la garantía
+última son **cuatro guardias ejecutables**, no el compilador. *El día que alguien «simplifique» una de
+las cuatro, la decisión más cara de la feature se queda sin red.*
+
+### Lo que el `CHECK` destapó y NO es de esta feature
+
+**El «neto» de las métricas de caja nunca puede diferir del «bruto».** Las cuatro que leen
+`wallet_movimiento` declaran listas homogéneas de prefijo, así que cada una solo contiene un `tipo`.
+Ya era cierto en producción por las tres barreras de la app; el `CHECK` solo lo hizo **visible**,
+porque hasta entonces los tests lo tapaban con datos imposibles. Dirigido a la **175** — y **seguía
+abierto** tras mergearse su PR #277, verificado contra el código.
+
+### Cinco veces más el patrón del año: un test verde que no medía lo que decía
+
+- la **guardia de la 172** («la caja no entra en la feature»), rota al hacerla entrar — **afilada, no
+  vaciada**, y con la mutación probada por sus **dos** vías;
+- un test de la **127** que insertaba una fila **que la aplicación no puede producir**
+  (`egreso_ajuste` con tipo `ingreso`), y que al corregirse destapó el hallazgo del neto/bruto;
+- **cuatro filas falsas de trazabilidad**, dos apuntando a archivos **que nunca existieron**;
+- **R53 sin ningún test**: borrar la descripción de `egresos` —lo único que declara que esa métrica
+  cambia de número— dejaba la suite **entera** en verde. Y el defecto **sobrevivió a su propia
+  auditoría**: la Tanda H corrigió esa fila y la sustituyó por otra cita que tampoco verificaba;
+- **contar `R\d+` en títulos CRUZA espacios de nombres** (el R32 de la 172 y el R35 de la 158 salen en
+  este diff): daba un tranquilizador **falso 68/68**.
+
+El arreglo de R53 es el que mejor resume la lección: **metió el texto viejo en el archivo como
+fixture** y exigió que el mismo predicado lo rechace, porque el texto viejo ya decía «pagos a tienda»
+y un `toMatch(/tienda/)` habría dado verde. *Un test que no puede engañarse a sí mismo.*
+
+### Tres cascadas del merge con `dev`, ninguna defecto de nadie
+
+Cliente **Prisma stale** + 2 migraciones sin aplicar en local; el **componente** del tablero
+financiero (8→10 métricas); y su **cargador**, que `vitest related` **no puede seleccionar** porque es
+hermano sin arista del anterior. Además la guardia `catalogo-produccion` de la 175 asumía **«una
+métrica, una decisión»** — premisa que `egresos` rompe al tener dos legítimas; generalizada a «cada
+fecha respaldada por **alguna** decisión citada», con dos mutaciones que la prueban.
+
+### Lo que queda vivo
+
+- **`T H.4` es POST-DEPLOY**: los valores nuevos del enum no existen en producción hasta el release.
+  Medido: **5 cierres con ₡203.055,90** esperando registro retroactivo.
+- **Preview sigue sin ser medible** por MCP (quinta vía descartada). Producción **sí** se midió antes
+  del `CHECK`: 35 filas, 0 lo violarían.
+- **Colisión de nombres de migración entre sesiones paralelas**: `20260803120000_caja_tesoreria` y
+  `20260803120000_download_storage_path` comparten timestamp. Hoy es inocuo; el día que dos sesiones
+  toquen la misma tabla, el orden dejaría de ser indiferente **y nadie lo notaría hasta el despliegue**.

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 
@@ -28,25 +28,27 @@ const RUTA_CATALOGO = path.join(
 );
 
 describe("Feature 131 (R21) — el tablero no decide sus paneles por `estadoProduccion`", () => {
-  it("el tablero declara panel para `incidentes` y `sin_gestionar` pese a estar marcadas `declarada`", () => {
-    // D6 — ESTE es el caso que la mutacion tiene que matar, y por eso NOMBRA las dos
-    // metricas en vez de contar paneles.
+  // REEXPRESADO POR LA FICHA 175 (T5.1, Q4/⟨D11⟩ de `progress/decision_175.md`, 2026-08-03).
+  //
+  // Este bloque afirmaba el VALOR concreto del campo: que `incidentes` y `sin_gestionar`
+  // eran `estadoProduccion: "declarada"`. Ese valor era la mentira que la 175 corrige (las
+  // dos SI tienen productor: columna en el rollup la primera, derivada del embudo la
+  // segunda), asi que el caso quedaba rojo por diseno. Lo que R21 protege NO es ese valor:
+  // es que `catalogo-paneles.ts` **no decida los paneles filtrando por `estadoProduccion`**
+  // —un campo que dice si hay productor, no si el panel se pinta—. Por eso ahora la
+  // independencia se comprueba sin nombrar ningun valor del catalogo real.
+  it("el tablero declara panel para `incidentes` y `sin_gestionar`, que la 126 sirve", () => {
+    // D6 — direccion 1: las dos metricas que motivaron la regla siguen llegando a pantalla.
+    // `incidentes` tiene columna en el rollup y es el cuarto termino del denominador de las
+    // tres tasas; `sin_gestionar` se deriva del embudo. Este caso NO mira `estadoProduccion`
+    // (eso es la direccion 2, el caso de abajo): solo exige presencia.
     //
-    // Las dos estan marcadas `estadoProduccion: "declarada"` en el catalogo
-    // (`lib/analytics/metrics.ts`) pero la 126 SI las sirve con datos reales:
-    // `incidentes` tiene columna en el rollup y es el cuarto termino del denominador de
-    // las tres tasas; `sin_gestionar` se deriva del embudo (divergencias 1 y 3 heredadas
-    // a la ficha 175). Un `filter(estadoProduccion === "producida")` las borraria de la
-    // pantalla sin excepcion, sin log y sin hueco visible.
+    // MUTACION QUE ESTE CASO MATA: quitar `incidentes` del panel de gestiones o borrar el
+    // panel `sin-gestionar` de `PANELES_OPERATIVOS`.
     const metricas = metricasDelTablero();
 
-    expect(getMetrica("incidentes")?.estadoProduccion).toBe("declarada");
-    expect(getMetrica("sin_gestionar")?.estadoProduccion).toBe("declarada");
-
-    expect(metricas, "`incidentes` esta marcada `declarada` pero la 126 la sirve").toContain(
-      "incidentes",
-    );
-    expect(metricas, "`sin_gestionar` esta marcada `declarada` pero la 126 la sirve").toContain(
+    expect(metricas, "`incidentes` la sirve la 126 y no tiene panel").toContain("incidentes");
+    expect(metricas, "`sin_gestionar` la sirve la 126 y no tiene panel").toContain(
       "sin_gestionar",
     );
 
@@ -56,6 +58,73 @@ describe("Feature 131 (R21) — el tablero no decide sus paneles por `estadoProd
       const panel = PANELES_OPERATIVOS.find((p) => p.metricas.some((m) => m.metricaId === id));
       expect(panel, `ninguna region del tablero pinta \`${id}\``).toBeDefined();
       expect(panel?.titulo.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("la lista de paneles no cambia si el catalogo marca TODO `declarada`", async () => {
+    // D6 — direccion 2, la que mata la mutacion, y AHORA SIN AFIRMAR NINGUN VALOR REAL:
+    // se re-importa `catalogo-paneles` con el catalogo MOCKEADO de forma que todas las
+    // metricas figuren `estadoProduccion: "declarada"`, y se exige que la lista de paneles
+    // salga identica a la real. Si el modulo derivase o filtrase por ese campo, con este
+    // catalogo de mentira se quedaria vacio (o distinto) y el caso muere.
+    //
+    // MUTACION QUE ESTE CASO MATA (aplicada, roja y revertida): en `catalogo-paneles.ts`,
+    //   export function metricasDelTablero() {
+    //     return [...new Set(PANELES_OPERATIVOS
+    //       .filter((p) => p.metricas.every(
+    //         (m) => getMetrica(m.metricaId)?.estadoProduccion === "producida"))
+    //       .flatMap((p) => p.metricas.map((m) => m.metricaId)))];
+    //   }
+    // (o su variante derivada: `listarMetricas({ estadoProduccion: "producida" }).map(m => m.id)`).
+    // Con el catalogo real —hoy entero `producida`— ese filtro no se notaria; con este, si.
+    const esperado = metricasDelTablero();
+    const panelesEsperados = PANELES_OPERATIVOS.map((p) => p.id);
+
+    vi.resetModules();
+    vi.doMock("@/lib/analytics/metrics", async () => {
+      const real = await vi.importActual<typeof import("@/lib/analytics/metrics")>(
+        "@/lib/analytics/metrics",
+      );
+      const enmascarar = <T extends { estadoProduccion: string }>(m: T): T => ({
+        ...m,
+        estadoProduccion: "declarada",
+      });
+      return {
+        ...real,
+        METRICAS: real.METRICAS.map(enmascarar),
+        getMetrica: (id: string) => {
+          const m = real.getMetrica(id);
+          return m ? enmascarar(m) : undefined;
+        },
+        listarMetricas: (filtro?: Parameters<typeof real.listarMetricas>[0]) => {
+          const { estadoProduccion, ...resto } = filtro ?? {};
+          const base = real.listarMetricas(resto).map(enmascarar);
+          return estadoProduccion === "producida" ? [] : base;
+        },
+      };
+    });
+
+    try {
+      // Autocomprobacion del montaje: si el mock no se aplicara, todo lo de abajo pasaria
+      // por vacio y el caso seria un adorno.
+      const catalogoMockeado = await import("@/lib/analytics/metrics");
+      expect(catalogoMockeado.getMetrica("incidentes")?.estadoProduccion).toBe("declarada");
+      expect(catalogoMockeado.listarMetricas({ estadoProduccion: "producida" })).toEqual([]);
+
+      const bajoMock = await import(
+        "@/app/(app)/analitica/_components/operativo/catalogo-paneles"
+      );
+      expect(
+        bajoMock.metricasDelTablero(),
+        "la lista de metricas del tablero depende de `estadoProduccion`",
+      ).toEqual(esperado);
+      expect(
+        bajoMock.PANELES_OPERATIVOS.map((p) => p.id),
+        "la lista de paneles depende de `estadoProduccion`",
+      ).toEqual(panelesEsperados);
+    } finally {
+      vi.doUnmock("@/lib/analytics/metrics");
+      vi.resetModules();
     }
   });
 

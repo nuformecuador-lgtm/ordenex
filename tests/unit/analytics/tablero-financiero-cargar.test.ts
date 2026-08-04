@@ -11,9 +11,15 @@ import {
 // Feature 132 (T3.1) — el cargador del tablero financiero.
 //
 // Lo que se verifica aqui es lo que ninguna pantalla puede comprobar por si sola:
-// que se piden LAS OCHO metricas del contrato (ni una escrita a mano), que se
-// piden A LA VEZ, que el fallo de una no arrastra a las otras siete y que ninguna
+// que se piden LAS DIEZ metricas del contrato (ni una escrita a mano), que se
+// piden A LA VEZ, que el fallo de una no arrastra a las otras nueve y que ninguna
 // respuesta que NO trajo dato acaba pintandose como un cero.
+//
+// Eran OCHO hasta la feature 173 ⟨P4⟩ (`progress/decision_F2_173.md`), que anadio
+// `dinero_en_caja` y `ganancia_ordenex` a `IDS_FINANCIERAS_SERVIDAS`. Los enteros
+// de este archivo se actualizaron a mano DESPUES de medirlos: siguen siendo anclas
+// escritas, no conteos derivados de la constante — un conteo derivado pasaria en
+// verde el dia que alguien anada una metrica sin querer.
 //
 // El Server Action se mockea entero: importarlo de verdad arrastraria Prisma y la
 // sesion, que no son el sujeto de esta prueba.
@@ -60,22 +66,23 @@ beforeEach(() => {
   consultar.mockReset();
 });
 
-describe("R13, R27 · se piden EXACTAMENTE las ocho metricas del contrato", () => {
+describe("R13, R27 · se piden EXACTAMENTE las diez metricas del contrato", () => {
   it("invoca el borde una vez por metrica servida y ninguna vez de mas", async () => {
     consultar.mockImplementation((metricaId) => Promise.resolve(respuestaOk(metricaId)));
 
     const paneles = await cargarTableroFinanciero();
 
     expect(consultar).toHaveBeenCalledTimes(IDS_FINANCIERAS_SERVIDAS.length);
-    expect(consultar).toHaveBeenCalledTimes(8);
-    expect(paneles).toHaveLength(8);
+    expect(consultar).toHaveBeenCalledTimes(10);
+    expect(paneles).toHaveLength(10);
   });
 
   it("los ids invocados son los de IDS_FINANCIERAS_SERVIDAS, comparados contra la constante", async () => {
     // Se compara contra la CONSTANTE IMPORTADA y no contra una lista escrita
     // aqui: una lista repetida en el test convertiria este archivo en la segunda
-    // fuente de verdad que R27 prohibe, y el dia que la 127 sirva una novena
-    // metrica esta prueba seguiria pasando en verde sin cubrirla.
+    // fuente de verdad que R27 prohibe, y el dia que se sirva una metrica mas esta
+    // prueba seguiria pasando en verde sin cubrirla. Ya paso: la 173 sirvio la
+    // novena y la decima y este caso las cubrio SOLO, sin tocar una linea.
     consultar.mockImplementation((metricaId) => Promise.resolve(respuestaOk(metricaId)));
 
     await cargarTableroFinanciero();
@@ -103,8 +110,8 @@ describe("R9 · el filtro por defecto viaja tal cual y `deps` NO se pasa", () =>
   });
 });
 
-describe("R12 · las ocho consultas se emiten a la vez, no en fila", () => {
-  it("las ocho llamadas ya se emitieron antes de que se resuelva la primera", async () => {
+describe("R12 · las diez consultas se emiten a la vez, no en fila", () => {
+  it("las diez llamadas ya se emitieron antes de que se resuelva la primera", async () => {
     const resolutores: Array<(respuesta: RespuestaFinanciera) => void> = [];
     const idsPedidos: string[] = [];
     consultar.mockImplementation((metricaId) => {
@@ -116,18 +123,18 @@ describe("R12 · las ocho consultas se emiten a la vez, no en fila", () => {
 
     const pendiente = cargarTableroFinanciero();
 
-    // Ni una sola respuesta ha llegado todavia y, aun asi, las ocho consultas ya
+    // Ni una sola respuesta ha llegado todavia y, aun asi, las diez consultas ya
     // estan emitidas. Con un `for … await` aqui habria UNA.
-    expect(resolutores).toHaveLength(8);
-    expect(idsPedidos).toHaveLength(8);
+    expect(resolutores).toHaveLength(10);
+    expect(idsPedidos).toHaveLength(10);
 
     resolutores.forEach((resolver, indice) => resolver(respuestaOk(idsPedidos[indice] ?? "")));
-    await expect(pendiente).resolves.toHaveLength(8);
+    await expect(pendiente).resolves.toHaveLength(10);
   });
 });
 
 describe("R12, R4, R23 · una respuesta que falla no arrastra a las demas", () => {
-  it("con un error y un denegado, las otras seis llegan ok y cada fallo queda en SU panel", async () => {
+  it("con un error y un denegado, las otras ocho llegan ok y cada fallo queda en SU panel", async () => {
     const idError = IDS_FINANCIERAS_SERVIDAS[0];
     const idDenegado = IDS_FINANCIERAS_SERVIDAS[1];
 
@@ -143,7 +150,8 @@ describe("R12, R4, R23 · una respuesta que falla no arrastra a las demas", () =
 
     const paneles = await cargarTableroFinanciero();
 
-    expect(paneles.filter((panel) => panel.estado === "ok")).toHaveLength(6);
+    // 10 servidas − 1 error − 1 denegado.
+    expect(paneles.filter((panel) => panel.estado === "ok")).toHaveLength(8);
 
     const fallido = paneles.find((panel) => panel.id === idError);
     expect(fallido).toEqual({

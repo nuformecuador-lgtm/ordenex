@@ -268,10 +268,14 @@ describe("NotificationsBell — descartar (R46)", () => {
     );
 
     await waitFor(() => expect(descartarMock).toHaveBeenCalledWith("a"));
-    await waitFor(() =>
-      expect(screen.queryByText("Primera.")).not.toBeInTheDocument(),
-    );
-    expect(screen.getByText("Segunda.")).toBeInTheDocument();
+    // Las dos condiciones en el MISMO `waitFor`, presencia primero: la lista se
+    // recarga del servidor, así que hay un instante en que "Primera." ya no está y
+    // la página nueva (con "Segunda.") aún no ha llegado. Anclar solo a la ausencia
+    // se satisfacía ahí y el `getByText` síncrono fallaba. Se afirma lo mismo.
+    await waitFor(() => {
+      expect(screen.getByText("Segunda.")).toBeInTheDocument();
+      expect(screen.queryByText("Primera.")).not.toBeInTheDocument();
+    });
   });
 });
 

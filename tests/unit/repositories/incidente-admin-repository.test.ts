@@ -136,7 +136,7 @@ function buildRepo(cliente: ReturnType<typeof buildPrisma>["cliente"]) {
       return movs.length;
     }),
     listar: vi.fn(),
-    agregarBalance: vi.fn(),
+    agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
   };

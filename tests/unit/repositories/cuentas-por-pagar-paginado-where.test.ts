@@ -221,3 +221,69 @@ describe("consultas del conjunto completo de cuentas por pagar (T M.1, Q-L2)", (
     expect((await prismaFalso().repo.listarCuentasPorPagarCompleto({ busqueda: "zzz" })).length).toBe(0);
   });
 });
+
+// Chore de la deuda de la 170 (Q-L4): la busqueda IGNORA LOS ACENTOS. Decision del LEADER,
+// declarada en `progress/chore_deuda_170.md`.
+//
+// Por que los casos entran TAMBIEN aqui y no solo en el test del modulo puro: porque este archivo
+// corre el codigo de PRODUCCION del repositorio contra un delegado Prisma falso, asi que es el
+// unico sitio donde se ve que el plegado se aplica en las DOS lecturas del listado —la pagina y
+// el conjunto de la descarga— y que sigue sin generar consulta ninguna. Si alguien «optimizara»
+// el filtro empujandolo a un `where` con `contains`, este archivo se pondria rojo por dos vias:
+// el conjunto cambiaria y la afirmacion de «sin where» tambien. Es la regla del repo: probar el
+// filtro donde vive, no donde se invoca.
+describe("la búsqueda ignora los acentos, en las DOS lecturas (Q-L4)", () => {
+  // El fixture ya trae dos nombres acentuados: «José Pérez» (m-d) y «Bruno Díaz» (m-b).
+  const CASOS: { texto: string; esperados: string[]; nota: string }[] = [
+    { texto: "jose", esperados: ["m-d"], nota: "sin acento encuentra «José»" },
+    { texto: "josé", esperados: ["m-d"], nota: "con acento, el mismo" },
+    { texto: "perez", esperados: ["m-d"], nota: "sin acento encuentra «Pérez»" },
+    { texto: "pérez", esperados: ["m-d"], nota: "con acento, el mismo" },
+    { texto: "PÉREZ", esperados: ["m-d"], nota: "acento + mayúsculas" },
+    { texto: "diaz", esperados: ["m-b"], nota: "sin acento encuentra «Díaz»" },
+    { texto: "díaz", esperados: ["m-b"], nota: "con acento, el mismo" },
+    { texto: "zzz", esperados: [], nota: "anti-vacuidad: sin resultados sigue siendo vacío" },
+  ];
+
+  it("la PÁGINA aplica el plegado, y el total es el del conjunto plegado", async () => {
+    for (const caso of CASOS) {
+      const { repo } = prismaFalso();
+      const pagina = await repo.listarCuentasPorPagarPaginado(
+        { busqueda: caso.texto },
+        { skip: 0, take: 25 },
+      );
+      expect(pagina.items.map((r) => r.mensajeroId), `«${caso.texto}» (${caso.nota})`).toEqual(
+        caso.esperados,
+      );
+      expect(pagina.total, `«${caso.texto}»: total`).toBe(caso.esperados.length);
+    }
+  });
+
+  it("el CONJUNTO de la descarga aplica exactamente el mismo plegado que la página", async () => {
+    // R11/R52: la fila que la tabla enseña y la que el archivo trae no pueden discrepar. Si el
+    // plegado se hubiera escrito en el método paginado y no en el compartido, esto lo delata.
+    for (const caso of CASOS) {
+      const completo = await prismaFalso().repo.listarCuentasPorPagarCompleto({
+        busqueda: caso.texto,
+      });
+      expect(completo.map((r) => r.mensajeroId), `«${caso.texto}» (${caso.nota})`).toEqual(
+        caso.esperados,
+      );
+    }
+  });
+
+  it("plegar NO añade consultas: siguen siendo las mismas dos (R54)", async () => {
+    const { repo, groupBy, findMany } = prismaFalso();
+    await repo.listarCuentasPorPagarCompleto({ busqueda: "perez" });
+
+    expect(groupBy).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    // Y la agregación sigue sin `where`: el plegado vive en Node, no en un `contains` de SQL
+    // —que es lo que haría que un índice entrara en juego—. Aquí no hay índice que degradar
+    // porque no hay predicado en la base.
+    expect(groupBy.mock.calls[0]![0]!.where).toBeUndefined();
+    expect(findMany.mock.calls[0]![0]!.where).toEqual({
+      id: { in: ["m-c", "m-a", "m-d", "m-b"] },
+    });
+  });
+});
