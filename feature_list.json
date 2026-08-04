@@ -1538,7 +1538,7 @@
       "name": "analitica: recortes por rol",
       "spec_path": "specs/133-analitica-recortes-por-rol",
       "description": "Frontend. Define que PANELES ve cada rol sobre los tableros 130/131 (adminTienda = su tienda; adminSatelite = su zona; mensajero = su productividad). El recorte de DATOS ya lo garantiza 121; esta feature recorta la presentacion. Depende de 131.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
