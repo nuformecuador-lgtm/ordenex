@@ -571,9 +571,12 @@ describe("Feature 183 (R19) — un panel sin neto pinta el bruto y NADA en el lu
     render(<TableroFinanciero paneles={[panelDeTablaSinNeto()]} />);
 
     const seccion = screen.getByRole("region", { name: ETIQUETAS.cod_recaudado });
-    expect(within(seccion).getByRole("columnheader", { name: "Bruto" })).toBeInTheDocument();
-    expect(within(seccion).queryByRole("columnheader", { name: "Neto" })).toBeNull();
+    // El marcador PRIMERO: es la afirmación de R19 y la que tiene que fallar antes que
+    // ninguna otra si la columna volviera. Las seis filas de la fixture producirían seis
+    // celdas con el marcador en cuanto la columna del neto exista.
     expect(within(seccion).queryAllByRole("cell", { name: MARCADOR_AUSENTE })).toHaveLength(0);
+    expect(within(seccion).queryByRole("columnheader", { name: "Neto" })).toBeNull();
+    expect(within(seccion).getByRole("columnheader", { name: "Bruto" })).toBeInTheDocument();
   });
 });
 
