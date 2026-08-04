@@ -192,13 +192,13 @@
   **Hecho:** 27 de 27 filas, cada archivo citado existe, y ninguna fila cita un caso que no
   verifica su requisito. (R27)
 
-- [ ] **T17. Gate completo y PR.** Depende de T15, T16
+- [x] **T17. Gate completo y PR.** Depende de T15, T16
   `./init.sh` completo verde. El cuerpo del PR lleva **§2 y §4 de `progress/decision_183.md`**
   (qué autoriza y qué no) y el resumen del inventario de rojos dados vuelta.
   **Hecho:** PR abierto con esos párrafos a la vista; `spec_path`, `branch` y `status` de la ficha
   183 actualizados por el leader.
 
-- [ ] **T18. Medición post-merge de la cifra.** Depende de T17
+- [x] **T18. Medición post-merge de la cifra.** Depende de T17
   Por MCP contra **producción**, de solo lectura: agregado de `wallet_movimiento` por categoría y
   tipo, y confirmar que `egresos` sigue valiendo ₡22.042,40 de bruto (o explicar la diferencia con
   las filas que la produjeron). Dejar constancia en `progress/impl_183.md`.

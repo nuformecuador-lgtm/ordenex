@@ -9,7 +9,40 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚀 2026-08-04 — **RELEASE EN PRODUCCIÓN + BACKFILL DE LA 173 SALDADO** — **EMPIEZA A LEER POR AQUÍ**
+## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo — **EMPIEZA A LEER POR AQUÍ**
+
+**183 `done`.** PR **#288** → `dev`, release **#289** → `prod` (**cero migraciones**), despliegue
+**READY**, sin errores de runtime nuevos. `dev` y `prod` a **0 commits**. Review **APROBADO en ronda
+2**; los dos bloqueantes de la ronda 1 eran de rastro y se cerraron **sin tocar código**.
+
+### 🎯 La medición post-merge (`T18`) encontró algo que ningún test podía dar
+
+Mientras se implementaba la feature, **alguien usó la app en producción** —lo que llevábamos tres
+jornadas pidiendo— y registró, a las 18:12, una **indemnización de ₡9.999.999.999,99**; un minuto
+después la revirtió con un ajuste manual («devolcuion»). Sin querer, **eso es exactamente el caso que
+la 183 existe para arreglar**:
+
+| Cifra de `egresos` | Valor |
+| --- | --- |
+| **Lo que mostraría SIN la 183** (solo las ocho `egreso_*`) | **₡10.000.054.062,39** — para siempre, aunque ya esté revertido |
+| **Neto, CON la 183** (nueve categorías) | **₡54.062,40** — lo que salió de verdad |
+| Bruto (volumen movido, P1 = (a)) | ₡20.000.054.062,38 |
+
+**La reversión existía en el libro desde el minuto siguiente y la cifra la ignoraba.** Es el defecto
+que ⟨D12⟩ nombró en abstracto, ocurrido de verdad en producción horas después de decidirlo.
+
+> ⚠️ **Y deja una pregunta abierta que NO es de esta feature:** la app aceptó una indemnización de
+> **diez mil millones de colones** (`origen_tipo: orden_incidente`, emitida por el camino automático,
+> `registrado_por` nulo). Puede ser un monto de prueba puesto a propósito —es exactamente el máximo de
+> `numeric(12,2)`—, pero **si no hay tope superior en el monto de una indemnización, eso es un agujero
+> real** y no tiene dueño. Verificar antes de que la app deje de ser una base de pruebas.
+
+**También quedó confirmado que el camino vivo de la 173 funciona en producción:** el cierre aprobado
+de las 19:21 emitió **solo** su `ingreso_cod_recaudado` (₡45,90) automáticamente, sin backfill.
+
+---
+
+## 🚀 2026-08-04 — **RELEASE EN PRODUCCIÓN + BACKFILL DE LA 173 SALDADO**
 
 **Lo que llevaba dos jornadas bloqueando todo está hecho y verificado en la base, no deducido del PR.**
 
