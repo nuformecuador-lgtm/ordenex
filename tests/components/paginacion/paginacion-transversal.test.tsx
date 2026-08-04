@@ -290,6 +290,35 @@ const ANEXO_III: ListadoPaginado[] = [
   },
 ];
 
+/**
+ * Feature 184 (T0.1) — los listados que TODAVÍA obtienen el archivo releyendo su listado sin
+ * recorte, DECLARADOS POR NOMBRE y en el orden del Anexo III.
+ *
+ * Sustituye a las dos afirmaciones agregadas que había aquí (la lista de los `completo` y un
+ * `toHaveLength(12)`). Aquellas eran un número y un nombre escritos a mano sobre un reparto que
+ * cambia doce veces durante la feature 184: a mitad de la entrega el número miente, y con
+ * `.skip` no diría nada. Esta lista se edita UNA vez por tanda, en el MISMO commit que la
+ * pantalla, y no puede desviarse del campo `adaptador` —que a su vez se contrasta contra el
+ * árbol en los dos sentidos, arriba y abajo—.
+ *
+ * Cuando quede VACÍA, los trece obtienen su archivo de una lectura dedicada y la deuda de
+ * Q-I5/Q-K4 está cerrada.
+ */
+const PENDIENTES_184: readonly string[] = [
+  "Cierres solicitados por el mensajero",
+  "Cierres del día — histórico",
+  "Cierres del día pendientes de decisión",
+  "Cierres de bodega pendientes",
+  "Cierres de bodega resueltos",
+  "Cierres de bodega solicitados",
+  "Cierres del día a consolidar",
+  "Incidentes pendientes de decisión",
+  "Incidentes — histórico",
+  "Órdenes de la bodega satélite",
+  "Plantillas de gasto fijo",
+  "Saldos de tiendas",
+];
+
 interface ListadoSinPaginar {
   /** Nombre del Anexo IV. */
   listado: string;
@@ -890,12 +919,24 @@ describe("T M.1 · R52 — toda descarga de un listado paginado entrega el datas
       conjunto: /filasDelConjuntoCompleto\(/,
       completo: /filasDesdeResultado\(/,
     };
+    // Feature 184 (T0.2) — la MITAD NEGATIVA, que hasta hoy faltaba: el adaptador que un
+    // listado declara NO es «el que además usa», es el ÚNICO que usa. Sin esto, una pantalla
+    // migrada a medias —que llame a los dos— pasaría verde con cualquiera de las dos
+    // declaraciones, y el censo dejaría de decir cuánta deuda queda.
+    const CONTRARIO: Record<AdaptadorDescarga, AdaptadorDescarga> = {
+      conjunto: "completo",
+      completo: "conjunto",
+    };
 
     for (const { listado, ruta, adaptador } of ANEXO_III) {
       const fuente = fuenteDe(ruta);
       expect(fuente, `${listado}: su descarga no va al servidor por el conjunto (R52)`).toMatch(
         ADAPTADOR[adaptador],
       );
+      expect(
+        fuente,
+        `${listado}: se declara «${adaptador}» pero también llama al adaptador «${CONTRARIO[adaptador]}»`,
+      ).not.toMatch(ADAPTADOR[CONTRARIO[adaptador]]);
 
       if (!CONVIVEN_ANEXO_III_Y_IV.has(ruta)) {
         expect(
@@ -905,12 +946,13 @@ describe("T M.1 · R52 — toda descarga de un listado paginado entrega el datas
       }
     }
 
-    // Anti-vacuidad del reparto: hoy son doce que releen y UNO con `listarCompleto` propio. Si
-    // una tanda futura cierra Q-I5, este número sube y hay que venir a decirlo.
-    expect(ANEXO_III.filter((l) => l.adaptador === "completo").map((l) => l.listado)).toEqual([
-      "Cuentas por pagar a mensajeros",
-    ]);
-    expect(ANEXO_III.filter((l) => l.adaptador === "conjunto")).toHaveLength(12);
+    // Feature 184 (T0.1/R30) — el reparto, declarado POR NOMBRE y no por un número escrito a
+    // mano: los que siguen releyendo son EXACTAMENTE los de `PENDIENTES_184`, en su orden. Cada
+    // tanda borra sus líneas de esa lista en el mismo commit en que cambia su pantalla; si se
+    // borra la línea sin migrar la pantalla (o al revés), este caso se pone rojo.
+    expect(ANEXO_III.filter((l) => l.adaptador === "conjunto").map((l) => l.listado)).toEqual(
+      PENDIENTES_184,
+    );
   });
 
   it("descargar desde la ÚLTIMA página entrega el conjunto, no lo que se ve", async () => {

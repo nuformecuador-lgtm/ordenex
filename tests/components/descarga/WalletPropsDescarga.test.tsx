@@ -370,28 +370,42 @@ describe("Dinero por props · descarga", () => {
     // `filasDelConjuntoCompleto`, que es la deuda que Q-I5 dejó abierta. Lo que se exige aquí es
     // la propiedad —el archivo NO sale del array de la página— y cada tabla declara con cuál de
     // los dos adaptadores la cumple, para que ese reparto no cambie sin que nadie lo note.
+    //
+    // Feature 184 (T0.2): cada módulo declara su adaptador por NOMBRE y se comprueba la mitad
+    // NEGATIVA además de la positiva —el declarado es el ÚNICO que usa—. Sin ella, una pantalla
+    // que llamara a los dos (una migración a medias) pasaría verde con cualquiera de las dos
+    // declaraciones, que es justo lo que este censo existe para impedir.
     const raiz = path.resolve(__dirname, "../../..");
-    const modulos = [
+    const ADAPTADOR = {
+      conjunto: /filasDelConjuntoCompleto\(/,
+      completo: /filasDesdeResultado\(/,
+    } as const;
+    const CONTRARIO = { conjunto: "completo", completo: "conjunto" } as const;
+    const modulos: { ruta: string; adaptador: keyof typeof ADAPTADOR; nota: string }[] = [
       {
         ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
-        adaptador: /filasDelConjuntoCompleto\(/,
+        adaptador: "conjunto",
         nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
       },
       {
         ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
-        adaptador: /filasDelConjuntoCompleto\(/,
+        adaptador: "conjunto",
         nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
       },
       {
         ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
-        adaptador: /filasDesdeResultado\(/,
+        adaptador: "completo",
         nota: "T M.1: listarCuentasPorPagarCompleto, con la búsqueda y el tope en el servidor",
       },
     ];
 
     for (const { ruta, adaptador, nota } of modulos) {
       const fuente = sinComentarios(readFileSync(path.join(raiz, ruta), "utf8"));
-      expect(fuente, `${ruta}: ${nota}`).toMatch(adaptador);
+      expect(fuente, `${ruta}: ${nota}`).toMatch(ADAPTADOR[adaptador]);
+      expect(
+        fuente,
+        `${ruta}: se declara «${adaptador}» pero también llama al adaptador «${CONTRARIO[adaptador]}»`,
+      ).not.toMatch(ADAPTADOR[CONTRARIO[adaptador]]);
       expect(fuente, `${ruta}: no puede proyectar el array visible`).not.toMatch(
         /filasLocales\(/,
       );
