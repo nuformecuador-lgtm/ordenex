@@ -2,6 +2,18 @@
 
 Rama: `chore/flake-jsdom-medido` (desde `origin/dev`).
 
+> **El flake de esta máquina tiene DOS mecanismos distintos, no uno.** Es la
+> conclusión central de este chore y la razón de que ningún ajuste global (ni
+> workers, ni `testTimeout`) lo eliminara nunca del todo.
+>
+> | | Mecanismo | Se manifiesta como | ¿Lo arregla subir `testTimeout`/acotar workers? |
+> | --- | --- | --- | --- |
+> | **(1)** | `await import()` dentro del `it` mete la carga del árbol de módulos bajo `testTimeout` | **timeout** | Lo hace más raro, no lo elimina |
+> | **(2)** | `waitFor` sobre una **ausencia** seguido de una aserción **síncrona** de **presencia** | **elemento no encontrado** | **No. En absoluto** |
+>
+> Esto explica por qué subir el `testTimeout` a 20 s en su día hizo el flake más
+> raro pero no lo eliminó: solo tocaba el mecanismo (1).
+
 ## 1. La hipótesis vieja, y por qué se descartó
 
 El chore original suponía que el flake venía de **contención entre workers** y que
@@ -79,23 +91,125 @@ Tres condiciones verificadas antes de tocar nada:
    `Home()`, no en tiempo de importación (nada depende de mocks en el ámbito de
    módulo). Lo mismo para `app/(app)/ordenes/page.tsx`.
 
-## 4. Descartados a propósito
+## 4. Descartados para el mecanismo (1)
 
 - **`CuentasPorPagarTable.test.tsx`** — uno de los dos del flake histórico, pero
-  **no tiene el patrón**: cero `import()` dinámicos. Nada que subir.
+  **no tiene el patrón (1)**: cero `import()` dinámicos. Nada que subir.
+  → Resultó tener el mecanismo **(2)**. Ver §5.
 - **`ControlDescargaTransversal.test.tsx`** — el otro del flake histórico. Su
   único `import(` está en **posición de tipo**
   (`importOriginal<typeof import("@/lib/utils/xlsx-template")>()`), no es una
   importación dinámica en runtime. Nada que subir.
 
-Que estos dos no tengan el patrón significa que **su flake histórico tiene otra
-causa**, todavía sin diagnosticar (ver abiertos).
+Que estos dos no tuvieran el patrón (1) fue la pista de que había un segundo
+mecanismo. Lo confirmó la suite completa: **903 de 904 archivos verdes, y el
+único rojo fue `CuentasPorPagarTable`**.
 
-## 5. Qué queda abierto
+## 5. Mecanismo (2): esperar una ausencia no garantiza una presencia
 
-- **El flake de `CuentasPorPagarTable` y `ControlDescargaTransversal` sigue sin
-  causa conocida.** Este chore no los toca porque la causa medida aquí no
-  aplica a ellos. Si reaparecen, hay que medirlos por separado.
+El fallo observado **no era un timeout**:
+
+```
+FAIL  CuentasPorPagarTable — búsqueda por nombre (servidor, T L.2)
+      > filtra la lista por nombre de mensajero sin tocar montos
+TestingLibraryElementError: Unable to find an element with the text: Ana Mensajera
+```
+
+La tabla se renderizaba entera (el `<table>` sale completo en el error, con su
+cabecera). Lo que faltaba era **la fila**. El código era:
+
+```js
+await waitFor(() =>
+  expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument(),
+);
+expect(within(tabla()).getByText("Ana Mensajera")).toBeInTheDocument();  // ← SÍNCRONO
+```
+
+Es una **carrera**: el `waitFor` espera a que *desaparezca* Beto y justo después
+se exige *sin esperar* que *esté* Ana. Con la búsqueda resuelta **en el servidor**
+(T L.2 de la 170) existe un instante —tabla vacía o en carga— en el que Beto ya
+no está y Ana todavía no ha llegado. El `waitFor` se satisface ahí y el
+`getByText` falla.
+
+**La regla:** esperar la ausencia de A no garantiza la presencia de B. Las dos
+condiciones van dentro del **mismo** `waitFor`, con la **presencia primero** (es
+la condición fuerte, la que ancla a que la página nueva ya llegó):
+
+```js
+await waitFor(() => {
+  expect(within(tabla()).getByText("Ana Mensajera")).toBeInTheDocument();
+  expect(within(tabla()).queryByText("Beto Repartidor")).not.toBeInTheDocument();
+});
+```
+
+### Barrido del patrón en todo el repo
+
+Se escaneó con un detector propio (`await waitFor(...)` cuyo cuerpo solo afirma
+una ausencia, seguido de una aserción síncrona de presencia en el mismo bloque).
+Validado contra el árbol pre-arreglo: **5 sitios sobre 454 `await waitFor(`**.
+
+| Sitio | ¿Carga asíncrona? | Acción |
+| --- | --- | --- |
+| `CuentasPorPagarTable.test.tsx:165` | sí (página del servidor) | **arreglado** — era el rojo real |
+| `NotificationsBell.test.tsx:271` | sí (lista revalidada tras descartar) | **arreglado** |
+| `PlantillasModule.test.tsx:112` | sí (revalidación SWR tras eliminar) | **arreglado** |
+| `PostulacionesPendientesPanel.test.tsx:187` | sí (panel revalida el listado) | **arreglado** |
+| `Modal.test.tsx:390` | **no** | **NO se toca** (ver abajo) |
+
+Tras el arreglo el detector baja de 5 a 1, y el único restante es el de `Modal`.
+
+**Por qué `Modal.test.tsx:390` se deja como está:** no hay recarga asíncrona. El
+`role="status"` es el indicador de ocupado del propio modal, que desaparece
+cuando la promesa rechazada se asienta; el `dialog` no se recarga de ningún
+servidor. Es más: que el diálogo **siga ahí** es justo lo que el caso mide (R22,
+"no cierra el modal al rechazar"), así que la aserción síncrona es la correcta y
+meterla en un `waitFor` la debilitaría. No hay ventana de carrera.
+
+**Un matiz honesto:** también se endureció el ancla del segundo caso de
+`CuentasPorPagarTable` (línea ~181, «el texto viaja TAL CUAL al servidor…»). Ese
+**no** tenía la forma exacta del defecto —lo que le sigue es una aserción sobre
+`paginadoMock.mock.calls`, no sobre el DOM— y por eso el detector no lo marca.
+Se cambió por coherencia y como defensa en profundidad, no porque estuviera roto.
+
+### Que siga midiendo lo mismo (prueba por mutación)
+
+Se mutó el doble de la Server Action para que la búsqueda **devuelva la lista
+entera** (el filtro deja de aplicarse):
+
+```js
+const filtrados = mensajeros; // MUTACIÓN: el filtro NO se aplica
+```
+
+Resultado — el test se pone **rojo**, así que sigue midiendo que el filtro filtra:
+
+```
+× filtra la lista por nombre de mensajero sin tocar montos 1121ms
+× el texto viaja TAL CUAL al servidor y una ráfaga de teclas es UNA sola lectura 1119ms
+Tests  2 failed | 4 passed (6)
+
+Error: expect(element).not.toBeInTheDocument()
+       expected document not to contain element, found <span ...
+```
+
+Mutación **revertida**.
+
+### Estabilidad
+
+`CuentasPorPagarTable.test.tsx` en solitario, 5 corridas seguidas: **5/5 en
+verde**, 6 tests cada una, fase `tests` entre 1.45 s y 1.50 s (dispersión ~3%).
+
+## 6. Qué queda abierto
+
+- **`ControlDescargaTransversal` sigue SIN diagnosticar.** No tiene el mecanismo
+  (1) (su `import(` es de tipo) **ni el (2)** (se revisó: su único
+  `not.toBeInTheDocument` está en la forma *inversa* —espera una presencia
+  (`descargarBlobMock` llamado) y luego afirma una ausencia síncrona—, que no
+  produce intermitencia sino, como mucho, una aserción débil). Si reaparece hay
+  que medirlo por separado: es un tercer mecanismo, todavía desconocido.
+- **El detector del patrón (2) es heurístico**, no un análisis semántico: mira el
+  cuerpo textual del `waitFor` y las sentencias síncronas siguientes hasta el
+  primer `await`. Puede haber variantes que no cubra (p. ej. la espera repartida
+  entre helpers, o `findBy*` mezclado). No es una garantía de ausencia.
 - **Quedan ~36 archivos con `await import()` sin tocar**, deliberadamente: solo
   se intervinieron los que superaban 2,5 s en la fase `tests`. En
   `tests/components` los restantes son `LandingPage` (5), `LoginPage` (3),
@@ -109,12 +223,27 @@ causa**, todavía sin diagnosticar (ver abiertos).
   aislado. La hipótesis es que con la fase `tests` en decenas de ms el margen es
   amplísimo, pero la confirmación es empírica: que el flake no reaparezca.
 
-## 6. Verificación
+## 7. Verificación
 
 - `pnpm typecheck` — limpio.
 - `pnpm lint` — 0 errores (44 warnings preexistentes, **ninguno** en los archivos
   tocados).
 - `pnpm exec vitest run tests/components tests/integration` — **323 archivos,
-  3742 tests, todos en verde** (152 s).
+  3742 tests, todos en verde** (169 s).
+- `CuentasPorPagarTable.test.tsx` en solitario **×5** — 5/5 verde.
+- Prueba por **mutación** del filtro — rojo como debe, revertida (§5).
 
 Suite completa: **no ejecutada aquí**; el gate lo corre el leader.
+
+## 8. Qué llevarse de aquí
+
+Tres cosas que costaron medición y conviene no volver a pagar:
+
+1. **Acotar workers no arregla flake de jsdom** en esta máquina: −3% en el test
+   lento y +11% en la suite. Medido dos veces. No reintentar.
+2. **Subir `testTimeout` tampoco**: solo enmascara el mecanismo (1) y es ciego al
+   (2). Que un flake se vuelva "más raro" al subir el timeout NO confirma que la
+   causa sea la lentitud.
+3. **En tests de listas que recargan del servidor, la presencia y la ausencia van
+   en el mismo `waitFor`, presencia primero.** Es el invariante que evita el
+   mecanismo (2).
