@@ -41,6 +41,14 @@ const SERVICIO_MUDO: IAnaliticaOperativaService = {
   async consultar() {
     throw new Error("el servicio NO debe ejecutarse: la decision es del borde");
   },
+  // Feature 176 — la interfaz gano `consultarAgregado`, y el modo agregado recorre el MISMO
+  // oraculo. Este doble tambien lo declara mudo, con el mismo mensaje: llegar aqui por la
+  // puerta del agregado significaria exactamente lo mismo que llegar por la otra —que el
+  // borde no decidio—, y hay que oirlo. Un metodo ausente devolveria `undefined` en silencio
+  // y convertiria ese fallo futuro en un pase. Patron de `operativa-oraculo.test.ts:31-35`.
+  async consultarAgregado() {
+    throw new Error("el servicio NO debe ejecutarse: la decision es del borde");
+  },
 };
 
 function loggerMudo(): ErrorLogger {
@@ -114,6 +122,13 @@ describe("Feature 133 (R27) — ocultar el selector no cambia la respuesta del b
         return (await servicioCon(rollupFalso([cubo({ fecha: "2026-08-01" })])).consultar(
           consultaDe("entregas", MAESTRO),
         )) as never;
+      },
+      // Feature 176 — la interfaz gano `consultarAgregado`; este caso no lo ejercita (mide el
+      // camino de `consultar`). Falla ruidosamente en vez de callar: si alguien reencamina
+      // este caso por el agregado, tiene que enterarse aqui y no por un `llego` que se queda
+      // en `false` sin explicacion. Patron de `operativa-oraculo.test.ts:82-85`.
+      async consultarAgregado() {
+        throw new Error("este doble no sirve el modo agregado");
       },
     };
     const r = await consultarAnaliticaOperativa(

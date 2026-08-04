@@ -274,3 +274,73 @@ Queda diferido igual que los otros 17 specs de `e2e/`.
 T8.3 (`./init.sh` completo, medido en esta rama) y T8.4 (PR hacia `dev`).
 
 **El implementer no se autoaprueba.** El reviewer decide.
+
+---
+
+## 8. Integración con `dev` tras la aprobación (2026-08-04)
+
+El reviewer aprobó la feature (0 bloqueantes, 29/29 R). Al sincronizar con `dev`, que había
+avanzado **73 commits**, el merge (`0967439b`) dejó **2 errores de typecheck** en un archivo
+de esta feature:
+
+```
+tests/unit/analytics/presentacion-oraculo-frontera.test.ts(40,7):  error TS2741
+tests/unit/analytics/presentacion-oraculo-frontera.test.ts(111,11): error TS2741
+Property 'consultarAgregado' is missing in type '{ consultar(): Promise<never>; }'
+but required in type 'IAnaliticaOperativaService'.
+```
+
+**Causa: trabajo ajeno que llegó después.** La feature **176** («modo agregado de tasas y
+tiempos») se mergeó a `dev` mientras se implementaba esta y añadió `consultarAgregado` a
+`IAnaliticaOperativaService` (`lib/interfaces/services/IAnaliticaOperativaService.ts:72`).
+Los dos dobles de este archivo sólo implementaban `consultar`. **No es un defecto de la 133
+ni un fallo del review**: el archivo era correcto contra la interfaz vigente cuando se
+escribió.
+
+**Arreglo: se sigue el patrón que la propia 176 dejó** en `tests/unit/analytics/operativa-oraculo.test.ts`
+(líneas 31-35 y 82-85), que resolvió el mismo caso en el archivo hermano. No hay helper de
+dobles compartido: los dos son literales inline, así que se replica la forma, no se inventa
+otra.
+
+- **`SERVICIO_MUDO`** gana `consultarAgregado` que **lanza con el mismo mensaje** que
+  `consultar` («el servicio NO debe ejecutarse: la decision es del borde»). El modo agregado
+  recorre el **mismo** oráculo, así que llegar por esa puerta significa exactamente lo mismo:
+  que el borde no decidió.
+- **El doble del caso «la decisión depende del ACTOR»** gana `consultarAgregado` que lanza
+  «este doble no sirve el modo agregado». Ese caso mide el camino de `consultar`.
+
+**Los dos fallan ruidosamente a propósito.** Un método ausente devolvería `undefined` en
+silencio y convertiría un fallo futuro en un pase — que es justo lo que este archivo existe
+para impedir.
+
+**No se relajó nada**: sin `as any`, sin `as unknown as`, y **sin tocar la interfaz**, que es
+de la 176.
+
+### Verificación del arreglo, medida
+
+```
+pnpm typecheck                                                  ->  0 errores (eran 2)
+pnpm lint                                                       ->  0 errores, 44 warnings (= baseline)
+pnpm exec vitest related --run presentacion-oraculo-frontera    ->  1 file / 10 tests, verde
+presentacion-oraculo-frontera + operativa-oraculo (el de la 176) ->  2 files / 19 tests, verde
+```
+
+**El test sigue mordiendo.** Se reaplicó la mutación ya documentada para este archivo
+—`sondeaIdentidadDeMensajero` pasa a `return false`, es decir el borde deja de decidir— y dio
+**los mismos 2 rojos que antes del merge**:
+
+```
+× con el selector oculto, el `mensajero_id` inyectado por la URL sigue siendo cosa del borde
+× y la respuesta es la MISMA por las dos vias: URL o argumento de la Server Action
+Error: el servicio NO debe ejecutarse: la decision es del borde
+ Tests  2 failed | 8 passed (10)
+```
+
+Revertida; `git diff` sobre producción queda **vacío**. El doble completado no dejó un test
+verde que ya no prueba nada.
+
+**Nota de entorno, para el siguiente que pase por aquí:** este worktree **no tiene `.env`** y
+no se le creó ninguno. Sin él, `pnpm db:generate` falla y el cliente Prisma rancio produce
+errores de typecheck **falsos** (los enums nuevos de tesorería que trajo `dev`, p. ej.
+`WalletMovimientoCategoria`). Se regenera pasando `DATABASE_URL` **inline**, sin escribirla en
+disco. Si aparecen esos errores, es el entorno, no el código.
