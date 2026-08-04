@@ -2180,6 +2180,21 @@
       "branch": "feature/183-neto-bruto-caja",
       "depends_on": 175,
       "status_note": "DONE 2026-08-04. PR #288 -> dev, release #289 -> prod (cero migraciones). Review APROBADO en ronda 2; los 2 bloqueantes de la ronda 1 eran de rastro y se cerraron sin tocar codigo. Gate verde sobre el arbol mergeado: 926 archivos / 11.528 tests (+43, cero regresiones). 35 mutaciones, 35 muertas. || DECISION D12 (progress/decision_183.md) SUSTITUYO a la nota de alta: NO se retiro el neto en las cuatro. Se retiro en TRES y egresos GANO ingreso_ajuste, porque anular un egreso no lo descontaba nunca de la cifra. El motivo de la nota vieja se midio contra produccion y era falso: cero filas ingreso_ajuste. || DEUDA VIVA, declarada y sin dueno: dos guardias afirman cobertura que no tienen. listasDeIdsAMano (tablero-financiero.guardia.test.ts:202) solo marca arrays con >=2 ids, asi que una decision por id suelta pasa verde; y la guardia de R12 solo mata su mutacion si la fecha huerfana permanece. Ninguna se ensancho: son de features done. Detalle en progress/impl_183.md."
+    },
+    {
+      "id": 184,
+      "name": "deuda 170: cerrar los 12 listados con descarga completa + poda de seleccion satelite",
+      "spec_path": "specs/184-deuda-170-listados-completos",
+      "description": "Fullstack. Los 12 listados cuya descarga a Excel todavia relee el conjunto completo pasan a servirse desde el servidor, y la seleccion de bodega satelite se poda contra el conjunto filtrado vigente. Absorbe Q-K6 (rama B) y el punto 4 del backlog.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "large",
+      "zone": "fullstack",
+      "branch": "feature/184-deuda-170-listados",
+      "depends_on": [
+        170
+      ],
+      "status_note": "PUERTA CERRADA 2026-08-04. Q-K6 = RAMA B (listarRecepcionSatelite deja de devolver los cinco grupos) y va DENTRO de esta feature: medido que solo tiene 2 consumidores de produccion y esta feature borra uno, asi que el temor heredado de «cambia superficies que consumen otras pantallas» era una suposicion, no una medicion. Q3 = sin aviso al podar. Cerradas por el leader: Q2 cota en lib/config (500), Q4 /ordenes FUERA (alli ya hay decision humana previa: desmarcar limpia la seleccion entera), Q5 orden de tasks.md. || Q-M1 NO entra, con motivo medido en el spec. Correccion al inventario: los censos que declaran adaptador por listado son DOS, no uno."
     }
   ]
 }
