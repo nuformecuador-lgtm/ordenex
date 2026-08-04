@@ -238,7 +238,7 @@ Ni 0 ni todas. Los 9, arreglados en este chore sin cambiar lo que miden:
 | `WalletPropsDescarga.test.tsx:331` | ancla **positiva**: Beto presente, Ana ausente, sin carga |
 | `ColasPaginacion.test.tsx:528` | + ausencia de `role="status"` |
 | `SatelitePaginacion.test.tsx:566` y `:568` | + ausencia de `role="status"` |
-| `PagosRegistradosTabla.test.tsx:442` | ancla al botón pulsable de nuevo |
+| `PagosRegistradosTabla.test.tsx:442` | ancla a la entrega del blob (ver §3.bis: el primer intento fue malo) |
 
 Dos merecen explicación. **`WalletPropsDescarga:331` era el mismo caso histórico**: búsqueda
 resuelta en el servidor y `toHaveLength(1 + 1)`, o sea el número exacto que la tabla en carga
@@ -288,6 +288,88 @@ await waitFor(() => {
 Guardia **verde** (7 passed) y el archivo **verde** (4 passed): no es texto que engañe al
 censo, es un ancla legítima. Revertida.
 
+## 3.bis. La única de las nueve que falló en el gate, y por qué
+
+El leader integró la rama y `./init.sh` dio **931 de 932 archivos verdes**. El único rojo fue
+**mío**: `PagosRegistradosTabla.test.tsx`, la novena ancla.
+
+```
+FAIL tests/components/PagosRegistradosTabla.test.tsx
+  > descarga SIN releer del servidor: proyecta el mismo array que pinta
+Error: expect(element).toBeEnabled()
+Received element is not enabled:
+  <button aria-busy="true" ... data-disabled="" disabled="" ... />
+```
+
+**2 de 2 corridas de la suite completa, verde siempre en aislado.** No es flake: es
+determinista bajo contención, y el diagnóstico del leader era correcto. `toBeEnabled()` espera
+a que **termine la generación real del XLSX**, y `waitFor` tiene un presupuesto propio de
+**1000 ms** (el suyo, no el `testTimeout` de 20 s del repo). El cambio de ancla no rompió el
+test: lo hizo medir, y al medir destapó que ese trabajo no cabe en ese presupuesto.
+
+### Por qué SOLO ésta de las nueve — la causa es de archivo, no de ancla
+
+| Archivo | ¿aísla `buildXlsxRows` (exceljs) y `descargarBlob`? | Sujeto de mi ancla |
+| --- | --- | --- |
+| `SateliteDescarga` | **sí** (`:27`, `:30`) | carga de la tabla |
+| `WalletDescarga` | **sí** (`:81`, `:84`) | carga de la tabla |
+| `WalletPropsDescarga` | **sí** (`:59`, `:62`) | carga de la tabla (contenido) |
+| `ColasPaginacion` | **sí** (`:121`, `:124`) | carga de la tabla |
+| `SatelitePaginacion` | **sí** (`:76`, `:79`) | carga de la tabla |
+| `PagosRegistradosTabla` | **NO** | **generación real del archivo** |
+
+`PagosRegistradosTabla` era el único de los seis que ejecutaba exceljs de verdad. Y las otras
+ocho anclas no esperan trabajo nuevo: el `queryByRole("status")` que añadí se resuelve con la
+**misma** carga mockeada de la que ya dependía el conteo de filas que estaba allí antes — no
+introduje ningún sujeto de CPU. **No hay más bombas de relojería**; había una, y era ésta.
+
+Coste medido del codificador real, en aislado y con la máquina libre: la fase `tests` del
+archivo pasa de **2,87 s a 2,42 s** al aislarlo (Δ ≈ **450 ms** en un solo caso). Un trabajo de
+~450 ms contra un presupuesto de 1000 ms deja un margen de 2×, que la contención se come
+entera. De ahí que falle **siempre** en la suite y **nunca** en aislado.
+
+### Qué elegí, y por qué no las otras dos
+
+**Opción 3 + 1: aislar el codificador binario y anclar a la entrega del blob.**
+
+```js
+await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+```
+
+- **No es la opción 2 (timeout propio).** Con el codificador aislado no hay trabajo real que
+  esperar, así que subir el presupuesto sería pagar por algo que no hace falta que ocurra. El
+  caso mide *qué array se proyecta*, no cuánto tarda exceljs en comprimirlo.
+- **Es lo que el repo ya hace en los otros cinco archivos de descarga**, con esas palabras:
+  «se aísla SOLO el codificador binario (exceljs); `construirDescarga` corre REAL». La
+  proyección —lo único que este caso juzga— sigue siendo la de producción.
+- **Se ancla al ÚLTIMO paso, no al primero.** `descargarBlob` corre después de
+  `buildXlsxRows`, así que cuando el ancla se cumple la proyección ya está hecha y leerla a
+  continuación no es una carrera. Anclar a `buildXlsxRows` y afirmar la entrega acto seguido
+  habría sido el **segundo** mecanismo del flake con otro disfraz, dentro del chore que existe
+  para quitarlo.
+- **De paso, el caso pasa a comprobar lo que su título promete**: «el mismo array que pinta»
+  no se verificaba —solo se miraba que no hubiera `fetch`—. Ahora se afirma que las filas
+  proyectadas son los DOS comprobantes, en el orden de pantalla y con el monto STRING intacto.
+
+### Medición bajo carga, que es la única que vale aquí
+
+Medido con `pnpm exec vitest run tests/components tests/unit` (**757 archivos, 9630 tests**) en
+este worktree:
+
+| Corrida | Versión | Resultado |
+| --- | --- | --- |
+| control | la que falló el gate (`toBeEnabled`, sin aislar) | **1 failed** / 756 passed — mismo test, misma aserción, `221,95 s` |
+| 1 | arreglada | **757 passed · 9630 tests** — `217,50 s` |
+| 2 | arreglada | **757 passed · 9630 tests** — `231,11 s` |
+
+La corrida de control importa tanto como las verdes: **reproduje el fallo del gate en mi
+máquina** antes de dar el arreglo por bueno. Dos pasadas verdes y no una, por la lección del
+chore anterior: una suite verde de una sola pasada no cierra un flake.
+
+`pnpm exec vitest run guard` tras el cambio: **60 archivos / 823 tests verdes**. El nuevo ancla
+es de mock, que el censo del ancla declara explícitamente fuera de su alcance (su sujeto es la
+llamada, no la pantalla), así que no lo marca ni debe.
+
 ### El parser, antes que nada
 
 El extractor equilibra paréntesis en vez de casarlos con un regex (un `\(([^)]*)\)` se corta en
@@ -318,6 +400,11 @@ Todo desde `R:\...\.claude\worktrees\agent-a4d288a030151dde4` (worktree propio, 
 `pnpm install` y `prisma generate` propios).
 
 ```
+$ pnpm exec vitest run tests/components tests/unit      # x2, tras el arreglo de §3.bis
+ Test Files  757 passed (757)
+      Tests  9630 passed (9630)
+   Duration  217.50s / 231.11s
+
 $ pnpm exec vitest run guard
  Test Files  60 passed (60)
       Tests  823 passed (823)
@@ -362,3 +449,10 @@ modificar; los tres commits tocan solo `tests/**`).
 4. **La frontera de un censo se escribe con vocabularios disjuntos, no con listas.** El tablero
    puede decidir por el id de *vista* y no por el de *métrica*: exigir el literal completo entre
    comillas separa los dos sin una sola excepción escrita a mano.
+5. **`waitFor` tiene su propio presupuesto de 1000 ms, y no es el `testTimeout`.** Un ancla
+   correcta puede seguir siendo mala si su señal incluye trabajo de CPU: ~450 ms de exceljs
+   contra 1000 ms es margen 2×, y la contención se lo come **siempre**. Al arreglar un ancla
+   falsa, mirar no solo si la nueva señal es inequívoca sino **cuánto cuesta producirla**.
+6. **Verde en aislado no dice nada de un fallo que solo aparece bajo carga.** El control —correr
+   la versión rota bajo la misma carga y verla caer— vale tanto como las dos corridas verdes:
+   sin él no se sabe si el arreglo arregló o si la máquina tuvo un buen día.
