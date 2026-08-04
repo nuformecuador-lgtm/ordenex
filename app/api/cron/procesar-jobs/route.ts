@@ -38,6 +38,8 @@ import {
   crearAnaliticaRollupDiarioHandler,
   recurrenciaAnaliticaRollupDiario,
 } from "@/lib/services/jobs/analitica-rollup-diario-handler";
+import { crearAnaliticaInvalidacionCacheHandler } from "@/lib/services/jobs/analitica-invalidacion-cache-handler";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -96,7 +98,24 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
   // fallo mas caro de esta feature: la tabla no se rompe, simplemente deja de crecer.
   handlers.set(
     "analitica_rollup_diario",
-    crearAnaliticaRollupDiarioHandler(buildAnaliticaRollupService(now), now),
+    // Feature 128 (R10): el 4.º argumento es el invalidador de la cache por tag. Su default es
+    // una cache NULA para que los tests de la 124 no arrastren el runtime de Next, asi que
+    // pasarlo aqui NO es opcional: sin el, el rollup se reescribiria y el tablero seguiria
+    // sirviendo las cifras de ayer hasta que expirase el TTL, sin que nada fallara.
+    crearAnaliticaRollupDiarioHandler(
+      buildAnaliticaRollupService(now),
+      now,
+      undefined,
+      crearAnaliticaCacheDeNext(),
+    ),
+  );
+  // Feature 128 (R14): invalidacion de la cache de analitica tras un recomputo del backfill
+  // (125). A DIFERENCIA de `analitica_rollup_diario`, este tipo NO se registra en
+  // `buildRecurrencias()`: es PUNTUAL, lo encola el script del backfill cuando una corrida
+  // ESCRIBIO. Re-agendarlo vaciaria la cache operativa cada minuto.
+  handlers.set(
+    "analitica_invalidacion_cache",
+    crearAnaliticaInvalidacionCacheHandler(crearAnaliticaCacheDeNext()),
   );
   return handlers;
 }

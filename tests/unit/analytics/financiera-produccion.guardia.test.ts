@@ -74,8 +74,9 @@ describe("R41 · el catalogo y la produccion real no se desincronizan", () => {
     ).toEqual([]);
   });
 
-  it("el registro de ids servidos coincide con las ocho financieras del catalogo", () => {
+  it("el registro de ids servidos coincide con las diez financieras del catalogo", () => {
     // Dos fuentes independientes: la lista que la 127 declara servir y el catalogo de la 135.
+    // Diez desde la 173 (P4, `progress/decision_F2_173.md`).
     const delCatalogo = listarMetricas({ dominio: "financiera" }).map((m) => m.id).sort();
     expect([...IDS_FINANCIERAS_SERVIDAS].sort()).toEqual(delCatalogo);
   });

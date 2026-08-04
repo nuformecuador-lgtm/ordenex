@@ -11,8 +11,12 @@ import { CATEGORIA_OPTIONS, TIPO_OPTIONS } from "./wallet-labels";
 
 // Feature 42 (T12, R20) — filtros del libro: tipo, categoría (poblada desde el SEED) y
 // rango de fechas (desde/hasta). Mantiene un BORRADOR local; al pulsar "Aplicar" emite
-// los filtros al módulo, que recarga libro + balance por Server Action (el balance
-// mostrado refleja el conjunto filtrado, R20). "Limpiar" resetea a sin filtros.
+// los filtros al módulo, que recarga libro + cifras de la caja por Server Action (la
+// cabecera refleja el conjunto filtrado, R20). "Limpiar" resetea a sin filtros.
+//
+// Feature 173 (T G.2, R61): este `Select` de categoría se puebla del SEED desde la 42, así
+// que las dos categorías de tesorería entraron SOLAS. No hay una línea que las nombre aquí
+// —y no debe haberla—: lo que hay es un test que afirma que la lista sigue siendo el SEED.
 
 export interface WalletFiltrosValue {
   tipo: string;

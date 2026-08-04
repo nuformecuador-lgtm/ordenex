@@ -44,7 +44,67 @@ export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
   egreso_gasto_fijo: "Gasto fijo",
   egreso_gasto_variable: "Gasto variable",
   egreso_indemnizacion: "Indemnización por incidente", // feature 158/R31
+  // Feature 173 (R61, design §8) — las dos categorías de TESORERÍA. `CATEGORIA_LABEL` es un
+  // `Record` completo: sin estas dos claves el build NO compila, que es exactamente la red que
+  // obliga a bautizar cada concepto nuevo en vez de dejarlo caer con su nombre técnico.
+  ingreso_cod_recaudado: "Contra-entrega cobrado",
+  ingreso_reverso_pago_tienda: "Pago a tienda anulado",
 };
+
+// ── Feature 173 (T G.1/T G.2, design §8) — las DOS cifras de la caja ──
+
+/**
+ * Rotulos de la tarjeta de la caja `[P1]`. Van aqui y no dentro del componente por la misma
+ * regla que el resto del archivo (docs/conventions: textos de UI fuera del componente), y
+ * porque los dos avisos de abajo se COMPONEN con ellos: el dia que alguien renombre una cifra,
+ * el aviso la sigue en vez de quedarse hablando de un rotulo que ya no existe.
+ *
+ * `enCajaPeriodo` es el rotulo condicional `[P7]`: con filtros puestos, «Dinero en caja» ya no
+ * es el dinero que hay sino el neto del periodo. El NUMERO no cambia; cambia el nombre. Y el
+ * hecho de que haya filtros lo dice el SERVIDOR (`CajaResumenDTO.periodoFiltrado`), no una
+ * deduccion del cliente sobre el estado de los `Select`.
+ */
+export const CAJA_RESUMEN_LABEL = {
+  enCaja: "Dinero en caja",
+  enCajaPeriodo: "Movimiento neto del periodo",
+  enCajaPista: "Todo lo que entró y salió, incluido el dinero de las tiendas",
+  entradas: "Entró",
+  salidas: "Salió",
+  ganancia: "Ganancia de Ordenex",
+  gananciaPista: "Lo que Ordenex gana menos lo que gasta",
+  ingresosPropios: "Ingresos de Ordenex",
+  egresosPropios: "Gastos de Ordenex",
+  deTerceros: "Contra-entrega cobrado y aún no entregado a las tiendas",
+  deTercerosEnlace: "Ver la deuda de cada tienda",
+} as const;
+
+/** Pantalla donde SI vive la deuda con cada tienda, derivada del ledger por tienda (R35). */
+export const CAJA_TIENDAS_HREF = "/wallet/tiendas";
+
+/**
+ * R60 — en que se diferencian las dos cifras, en espanol llano y SIN siglas. Se compone con
+ * los dos rotulos reales para que no puedan desalinearse.
+ */
+export const CAJA_RESUMEN_NOTA_DIFERENCIA =
+  `«${CAJA_RESUMEN_LABEL.enCaja}» incluye el contra-entrega que se cobró a nombre de las ` +
+  `tiendas, que no es de Ordenex y hay que entregarlo. «${CAJA_RESUMEN_LABEL.ganancia}» no lo ` +
+  `incluye: es solo lo que Ordenex gana menos lo que gasta.`;
+
+/**
+ * R34 / `[P6]` — la advertencia OBLIGATORIA de la tercera linea. Esa cifra es MAYOR que la
+ * deuda con las tiendas, porque de ese dinero Ordenex todavia descuenta el flete, la comision
+ * y el impuesto. Decir «lo que se les debe» aqui seria inventar una segunda respuesta a una
+ * pregunta que ya tiene la suya en `/wallet/tiendas`.
+ */
+export const CAJA_RESUMEN_AVISO_TERCEROS =
+  "No es lo que se les debe a las tiendas: es más, porque de este dinero Ordenex todavía " +
+  "descuenta el flete, la comisión y el impuesto. La deuda exacta de cada tienda está en " +
+  "Wallet → Tiendas.";
+
+/** `[P7]` — por que la cifra grande cambia de nombre cuando hay filtros puestos. */
+export const CAJA_RESUMEN_AVISO_PERIODO =
+  `Con filtros puestos esta cifra no es el dinero que hay hoy en la caja: es lo que entró ` +
+  `menos lo que salió en el periodo que elegiste.`;
 
 /** Etiqueta legible del origen de un movimiento. */
 export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {

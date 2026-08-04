@@ -1060,6 +1060,11 @@ enum WalletMovimientoCategoria {
   egreso_gasto_fijo // feature 45: gasto fijo (lo EMITE el cron mensual, no el form manual)
   egreso_gasto_variable // feature 45: gasto variable (registro manual)
   egreso_indemnizacion // feature 158/R2: indemnizacion por incidente (la EMITE la aprobacion del cierre)
+  // Feature 173 (design §2.1) — los DOS conceptos de TESORERIA: dinero de TERCEROS que solo
+  // PASA por la caja. Su naturaleza la declara `NATURALEZA_POR_CATEGORIA`
+  // (lib/utils/caja-tesoreria.ts), no una columna: la clasificacion es de la CATEGORIA.
+  ingreso_cod_recaudado // R11: el contra-entrega recaudado ENTRA al aprobar el cierre del dia
+  ingreso_reverso_pago_tienda // R24: la anulacion de un pago a tienda DEVUELVE el dinero a la caja
 
   @@map("wallet_movimiento_categoria")
 }
@@ -1600,6 +1605,7 @@ enum JobTipo {
   whatsapp_template_sync // integracion WhatsApp: reintenta contra Meta una op de plantilla (create/update/delete) que fallo en linea (payload { plantillaId, operacion })
   whatsapp_chat_envio // feature 109/D1: reintenta el envio saliente de un mensaje de chat que devolvio `transitorio` (payload { mensajeChatId })
   analitica_rollup_diario // feature 124/D4: agrega el rollup diario de la fecha CR que acaba de cerrar (D-1); RECURRENTE a las 00:30 CR, payload vacio {}
+  analitica_invalidacion_cache // feature 128/D3: invalida por tag la cache de la analitica operativa tras un recomputo del backfill (125); PUNTUAL, encolado por el script, payload { desde, hasta }
 
   @@map("job_tipo")
 }

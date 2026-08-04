@@ -8,39 +8,189 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 2026-08-03 — **177 MERGEADA (PR #274)** · **arranca la 178: purga de los PDF de cargas**
 
-**Feature 177 → `done`.** PR **#274** mergeado a `dev` (merge commit `893cf007`). Reviewer **APROBADO,
-0 bloqueantes**, con los **45/45** requisitos verificados abriendo el test citado uno a uno. Sus dos
-menores de código se cerraron en el propio PR. Gate: **856 archivos / 10.739 tests**, sin rojos reales
-(los dos rojos móviles —`LoginForm` y `ControlDescargaTransversal`— verdes en aislado y ajenos al diff).
-Baseline al arrancar: 845 / 10.605. Detalle en `impl_177.md`, `review_177.md` e `history.md`.
+## 2026-08-04 — **177 en `dev` (PR #274)** · **178 lista, esperando PR**
+
+**Feature 177 → `done`**, PR **#274** mergeado (`893cf007`). Reviewer aprobado, 0 bloqueantes, 45/45 R
+verificados uno a uno.
 
 **Lo que la 177 deja vivo y hay que saber antes de tocar etiquetas:** el testigo de «el PDF existe» es
 la columna **`download_storage_path`**, NO `download_url`. La 136 guarda ahí una URL **ya firmada** que
 caduca; por eso se añadió la columna. Las filas heredadas se tratan como «sin PDF» y se regeneran.
 
-### 🔵 EN CURSO — feature 178, purga semanal de los PDF de cargas
+### 🔵 EN CURSO — feature 178, purga **DIARIA** de los PDF de cargas · rama lista, falta el PR
 
-Rama `feature/178-purga-pdf-cargas` desde `origin/dev`. Zona **backend**, complexity **medium**.
-Zona backend en **0 `in_progress`** al arrancar (la 131 es `frontend`, no compite).
+Rama `feature/178-purga-pdf-cargas`. **Ojo al nombre:** la cadencia es **diaria**; lo «semanal» del
+título original era el **default de la retención (N=7)**, no la frecuencia. Cron a las **03:00 CR**
+(09:00 UTC; Costa Rica es UTC−6 fijo, sin DST), protegido por `CRON_SECRET`. Corte **inclusivo** sobre
+`carga.created_at` —inmutable, a diferencia de `fecha_carga`, que es backdateable—. Retención por env,
+default 7, **mínimo 0**, sin tope.
 
-**Decisiones del humano ya tomadas** (no reabrir en el spec): alcance = **consolidado + individuales**
-de la carga; retención configurable por **variable de entorno**, default **7 días**, mínimo 1, sin tope.
+**Reviewer: RECHAZADO en ronda 1, APROBADO en ronda 2.** 26/26 R. El bloqueante enseña algo que en este
+repo ya es patrón: `quedaPendiente` decía `false` habiendo trabajo, porque la comprobación se saltaba
+las `tope` filas ya devueltas **y lo purgado deja de casar el `where`** (la purga borra justo las
+columnas que hacen candidata a una carga). Con el default de 200, cualquier backlog de 201–400 mentía.
+**Lo tapaban dos tests verdes:** el de service usaba 5/2 y pasaba *por margen* con su doble replicando
+la semántica mala, y el de repositorio afirmaba `expect(arg.skip).toBe(200)` **como si fuera el
+contrato**. El reviewer reprodujo la mutación en ronda 2: 3 de 4 rojos con el caso de control verde.
 
-**⚠️ Obligación heredada de la 177:** la purga debe poner a NULL **también `download_storage_path`**
-(en `orden` y en `carga`), no solo `download_url`. Si no, `/generate` verá la referencia viva, se
-saltará la generación y **firmará un objeto ya borrado**: el integrador recibiría un 200 con una URL
-que da 404.
+**Lo que NO puede olvidarse si se toca esta feature:** la purga anula `download_storage_path` **además
+de** `download_url`. Si se deja viva, `/generate` de la 177 se salta la generación y **firma un objeto
+ya borrado** → 200 con URL que da 404. Es R16, con test de control no vacuo.
 
-**Puntos que el spec tendrá que decidir:** qué columna manda como fecha de corte (`carga.created_at`
-vs `carga.fecha_carga`, que hoy pueden divergir); que las órdenes con `carga_id` NULL quedan **fuera**
-de la purga por definición (su PDF no caducaría nunca); qué hacer si el borrado en storage falla a
-mitad; y si va sobre la cola de la 90 o como cron propio en `vercel.json`.
+**Fuera de alcance, declarado (no olvidado):** las órdenes con `carga_id` NULL —su PDF no caduca
+nunca— y los PDF de las features 136/141, **inalcanzables** porque de ellos solo se guardó la URL
+firmada, nunca la ruta. Esto **corrige un supuesto erróneo del `design.md` de la 177**, que daba por
+hecho que la 178 barrería sus huérfanos. Harían falta reglas de ciclo de vida del bucket: ticket aparte.
 
-**Deuda ajena que sigue sin dueño:** la migración fantasma `20260728120000_...`, registrada en la base
-local y **ausente del repo**, que impide correr `pnpm db:migrate` en esta máquina (se aplica con
-`prisma migrate deploy`, el mismo comando del build).
+**⚠️ Deuda de entorno que impide cerrar la mitad empírica de R26:** el drift **ajeno y preexistente**
+de la base local (migración fantasma `20260728120000_...` presente en la base y ausente del repo, más
+un checksum modificado en `20260714123909_...`) hace fallar `pnpm db:migrate`, así que el round-trip
+`migrate`/`rollback` de esta migración **queda sin medir**; se aplica con `prisma migrate deploy`, el
+mismo comando del build. **Sigue sin dueño.**
+
+
+## 🏁 CIERRE DE JORNADA 2026-08-03 (tarde) — **EMPIEZA A LEER POR AQUÍ**
+
+**Cero PRs abiertos. `dev` VERDE con los cuatro PRs del lote YA DENTRO** —no por separado, que es el
+incidente del #237—: `./init.sh` → `== init OK ==`, **906 archivos / 11.359 tests, 0 fallos**.
+
+### ✅ Entregado esta tarde
+
+| | Qué | PR |
+| --- | --- | --- |
+| **173** | la caja distingue **«Dinero en caja»** de **«Ganancia de Ordenex»**; la palabra «balance» desaparece | #278 + #279 |
+| **arnés** | el flake de jsdom: **eran TRES mecanismos**, y acotar workers no arreglaba ninguno | #280 |
+| **170** | la búsqueda de cuentas por pagar **ignora acentos** + el tercer mecanismo del flake | #281 |
+| **170** | aviso de **selección en otras páginas** en bodega satélite (Q-K7) | #282 |
+
+### 🚦 LO PRIMERO AL RETOMAR
+
+1. **RELEASE `dev → prod`: son 166 commits y llevan MIGRACIONES** (el `CHECK` categoría↔tipo de la
+   173 y sus dos valores de enum, entre otras). **Mergear a `prod` ES aplicar.** Producción se midió
+   antes de escribir ese `CHECK` —35 filas, 0 lo violarían— **pero eso fue antes de estas 166**:
+   **rehacer el pre-vuelo**, no reutilizarlo. Es lo que salvó la release del 2026-08-01.
+2. **Después del release, y solo después: el BACKFILL de la 173** (`T H.4`). Los dos valores nuevos
+   del enum **no existen en producción** hasta desplegar. Medido: **5 cierres con ₡203.055,90** de
+   contra-entrega esperando; 0 pagos a tienda, 0 anulaciones. Orden: `--simular` → **revisión humana
+   del informe** → `--aplicar` → `--comprobar` → lectura por MCP. Sin flag **no escribe nada**.
+3. **VER LA 172 Y LA 173 EN PANTALLA.** Lleva dos jornadas pendiente y es lo único que ninguna suite
+   sustituye. La 173 volvió a tocar esas mismas pantallas.
+
+### ⏳ Sin dueño, y conviene que lo tengan
+
+- **La 175 sigue `in_progress` A PROPÓSITO, aunque su PR #277 esté mergeado.** Entregó **tres** de sus
+  cuatro divergencias; la **cuarta** —el `neto` de las métricas de caja nunca puede diferir del
+  `bruto`— sigue abierta, **verificado contra el código el 2026-08-03**. Si alguien la pasa a `done`
+  por inercia, el hallazgo se queda huérfano. Detalle en su `status_note`.
+- **Los 12 listados de la deuda de la 170 NO son un chore: son una tanda fullstack** del tamaño de la
+  I. El «8» de la nota vieja contaba **dominios**, no listados, y **los 12 exigen tocar `app/**`**
+  (el adaptador de descarga vive en el componente), así que entregar solo los métodos dejaría **12
+  Server Actions muertas**. Inventario listado a listado y prioridad por coste medido en
+  `progress/chore_deuda_170.md`. **Borrador de ficha propuesto, NO registrado.**
+- **La selección de bodega satélite nunca se poda.** Preexistente e **invisible hasta hoy**; el aviso
+  nuevo la hace contable, así que el número puede inflarse si una orden marcada sale del listado
+  (p. ej. al reportarle un incidente). Podarla necesita al **servidor**: encaja con la tanda de los 12.
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**El flake de jsdom no era un mecanismo, eran TRES** — y la vía que se daba por buena, acotar los
+workers, **no arreglaba ninguno**: medido, **−3%** en el test lento y **+11%** en la suite entera.
+
+| | Mecanismo | Se manifiesta como |
+| --- | --- | --- |
+| 1 | `await import()` **dentro del test** mete la carga del árbol bajo `testTimeout` | timeout a 20 s |
+| 2 | `waitFor` sobre una **ausencia** + aserción **síncrona** de presencia | elemento no encontrado |
+| 3 | **snapshot del DOM tomado antes de que la carga asiente** | dos fotos que difieren |
+
+Eso explica por qué subir el `testTimeout` a 20 s lo hizo más raro sin matarlo: trataba el (1) y no
+tocaba los otros dos, que **no dependen del tiempo sino del orden**. Y la frase que resume el día:
+**un ancla que el estado transitorio también cumple no es un ancla** —durante la carga, `getAllByRole
+("row")` daba 2, el mismo número que el estado asentado—.
+
+> ⚠️ **Los tres aparecieron UNO POR SUITE COMPLETA, cada uno cuando el anterior dejó de taparlo.** Una
+> corrida verde no cierra esto. El detector escrito cubre el (2), **NO el (3)** —medido: 0 antes y 0
+> después—; la mitigación del (3) es una guardia en ejecución, no un barrido. Población en riesgo: 42
+> capturas de DOM.
+
+**Y cinco veces más el patrón del año, en la 173:** la guardia de la 172 rota al hacer entrar la caja
+(afilada, no vaciada); un test de la 127 que insertaba **una fila que la app no puede producir**;
+cuatro filas de trazabilidad falsas, **dos apuntando a archivos que nunca existieron**; **R53 sin
+ningún test** —borrar la descripción de `egresos` dejaba la suite entera en verde—; y que **contar
+`R\d+` en títulos cruza espacios de nombres**, lo que daba un tranquilizador **falso 68/68**.
+
+---
+
+## 💰 2026-08-03 — **173 `done`: la caja ya distingue el dinero de la ganancia** · PR #278 MERGEADO
+
+**Las 9 tandas hechas, review APROBADO en ronda 2, `./init.sh` completo VERDE con los 61 commits de
+`dev` dentro: 904 archivos / 11.337 tests, 0 fallos.** Relato completo en `progress/history.md`.
+
+> ⚠️ **NO está en producción todavía, y el backfill DEPENDE de que llegue** (ver punto 2 de abajo).
+
+**Qué cambia para el maestro:** la caja deja de tener un solo número. Ahora muestra **«Dinero en
+caja»** (todo lo que entra y sale, incluido el contra-entrega cobrado a nombre de las tiendas) y
+**«Ganancia de Ordenex»** (el número que hasta hoy se llamaba «Balance general»). **La palabra
+«balance» desaparece de la pantalla**, porque era la que mentía.
+
+### Las 7 respuestas del humano, todas con su default
+
+P1=(a) … P7=(a). La cara era **P2: el pago al mensajero NO pasa a tesorería**, así que la caja queda
+mixta y «Dinero en caja» se queda corto **exactamente** en la cuenta por pagar a mensajeros —cifra
+que el sistema ya publica—. Se equivoca **por lo bajo**, nunca dice que hay más dinero del que hay.
+
+### ⏭️ LO PRIMERO AL RETOMAR
+
+1. **RELEASE `dev → prod`, y ya no es barato: `dev` está 153 commits por delante.** Lleva las
+   features 126, 127, 128, 131, 132, 173, 175 y 177, y **varias migraciones** —entre ellas el `CHECK`
+   categoría↔tipo de la 173 y los dos valores de enum—. **Mergear a `prod` ES aplicar.** Producción se
+   midió antes del `CHECK` (35 filas, 0 lo violarían), pero **eso fue antes de estas 153**: conviene
+   rehacer el pre-vuelo, como se hizo en la release del 2026-08-01 en vez de reutilizar el del día
+   anterior.
+2. **`T H.4` es POST-DEPLOY y no es un olvido:** los dos valores nuevos del enum **no existen en
+   producción** hasta que la migración se aplique al desplegar, así que el backfill **no se puede
+   correr antes**. Medido en producción: **5 cierres con ₡203.055,90** de contra-entrega esperando su
+   registro retroactivo; 0 pagos a tienda y 0 anulaciones. El orden es: merge → release → `--simular`
+   → revisión humana → `--aplicar` → `--comprobar` → lectura por MCP.
+3. **Preview sigue sin ser alcanzable** (quinta vía descartada: `list_branches` falla y
+   `get_project_url` devuelve el ref de producción). Riesgo residual **declarado** en
+   `progress/medicion_TA0_173.md`, igual que en la 172.
+
+### 🔎 Lo que sobrevive a esta feature
+
+**El `CHECK` categoría↔tipo destapó que el «neto» de las métricas de caja NUNCA puede diferir del
+«bruto».** Las cuatro métricas que leen `wallet_movimiento` declaran listas homogéneas de prefijo, así
+que cada una solo puede contener un `tipo`. **No lo rompió la 173**: ya era cierto en producción por
+las tres barreras de la app; el `CHECK` solo lo hizo visible. **Dirigido a la 175 y AÚN ABIERTO tras
+mergear su PR #277** — ver su `status_note`.
+
+**Y cinco veces más apareció el patrón del año: un test verde que no medía lo que decía.**
+
+- la **guardia de la 172** que decía «la caja no entra en la feature», rota al hacerla entrar —afilada,
+  no vaciada—;
+- un test de la **127** que insertaba una fila **que la aplicación no puede producir** (`egreso_ajuste`
+  con tipo `ingreso`);
+- **cuatro filas falsas de trazabilidad**, dos apuntando a archivos **que nunca existieron**;
+- **R53 sin ningún test**: borrar la descripción de `egresos` dejaba la suite **entera** en verde. Lo
+  cazó el reviewer, y el arreglo trae el texto viejo como fixture para que el caso no pueda engañarse;
+- **contar `R\d+` en títulos CRUZA espacios de nombres** (el R32 de la 172 y el R35 de la 158 salen en
+  este diff): daba un falso 68/68.
+
+### 🧩 Tres cascadas del merge con `dev`, ninguna es defecto de nadie
+
+`dev` trajo 61 commits (128/131/132/175/177). Chocaron: **cliente Prisma stale + 2 migraciones sin
+aplicar en local**; el **componente** del tablero financiero (8→10 métricas); y su **cargador**, que
+`vitest related` **no puede seleccionar** —es hermano sin arista del anterior—. Además la guardia
+`catalogo-produccion` de la 175 asumía **«una métrica, una decisión»**, premisa que `egresos` rompe al
+tener dos legítimas: generalizada a «cada fecha respaldada por **alguna** decisión citada», con dos
+mutaciones que la prueban.
+
+> ⚠️ **Colisión de nombres de migración entre sesiones:** `20260803120000_caja_tesoreria` (esta rama) y
+> `20260803120000_download_storage_path` (de `dev`) comparten timestamp. Hoy da igual —tocan tablas
+> distintas y Prisma desempata por nombre—, pero si dos sesiones tocaran la misma tabla el orden
+> dejaría de ser indiferente y **nadie lo notaría hasta el despliegue**.
+
+---
 
 ## 2026-08-03 — **127 servicios financieros → PR #269, esperando merge**
 ## 🏁 CIERRE DE JORNADA 2026-08-03 — **EMPIEZA A LEER POR AQUÍ**

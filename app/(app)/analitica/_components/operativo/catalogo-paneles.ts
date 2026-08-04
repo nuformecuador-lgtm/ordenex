@@ -3,16 +3,24 @@
 // R21 / D6 — LA LISTA NO SE DERIVA DE `listarMetricas()` Y NO CONSULTA
 // `estadoProduccion`. NI AQUI NI EN NINGUN CONSUMIDOR. Motivo verificado, no estilistico:
 //
-//   `incidentes` (`lib/analytics/metrics.ts:220`) y `sin_gestionar` (`:242`) estan
-//   marcadas `estadoProduccion: "declarada"` en el catalogo, PERO la 126 SI las sirve con
-//   datos reales: `incidentes` tiene columna en el rollup y es el cuarto termino del
-//   denominador de las tres tasas, y `sin_gestionar` se deriva del embudo
-//   (`specs/126-…/design.md:468-480`; divergencias 1 y 3, heredadas a la ficha 175).
+//   `estadoProduccion` dice si una metrica TIENE PRODUCTOR (si alguien escribe su dato),
+//   NO si su panel se pinta. Son dos preguntas distintas y usar la primera para responder
+//   la segunda borra KPI vivos de la pantalla sin que nada falle: sin excepcion, sin log,
+//   sin test rojo y sin hueco visible.
 //
-//   Un tablero que hiciera `…filter(p => getMetrica(p.metricaId).estadoProduccion ===
-//   "producida")` borraria DOS KPI VIVOS de la pantalla sin que nada fallase: sin
-//   excepcion, sin log, sin test rojo y sin hueco visible. Por eso el test de R21 NOMBRA
-//   las dos metricas y afirma su presencia, en vez de contar paneles.
+//   Historia que lo demuestra: `incidentes` y `sin_gestionar` estuvieron marcadas
+//   `estadoProduccion: "declarada"` mientras la 126 YA las servia con datos reales
+//   (`incidentes` tiene columna en el rollup y es el cuarto termino del denominador de las
+//   tres tasas; `sin_gestionar` se deriva del embudo — `specs/126-…/design.md:468-480`,
+//   divergencias 1 y 3). Un `…filter(p => getMetrica(p.metricaId).estadoProduccion ===
+//   "producida")` las habria borrado del tablero. La ficha 175 corrigio esa mentira: hoy
+//   las dos son `producida` (decision humana fechada ⟨D11⟩, `progress/decision_175.md`,
+//   2026-08-03) y el catalogo no tiene ninguna metrica `declarada`.
+//
+//   Que la mentira concreta este corregida NO devuelve la licencia de filtrar por el
+//   campo: la regla sigue siendo la misma, y la siguiente metrica marcada sin productor
+//   volveria a desaparecer en silencio. Por eso esta lista es DECLARATIVA y el test de R21
+//   comprueba que no cambia aunque el catalogo marque otra cosa, sin afirmar ningun valor.
 //
 // R25 — este archivo NO importa `lib/analytics/metrics`. El catalogo real es dato de
 // SERVIDOR (23 metricas con su alcance por rol, su fuente y sus nombres de tabla) y
@@ -43,8 +51,9 @@ export interface PanelTablero {
 }
 
 /**
- * Paneles v1. La composicion concreta es cosmetica (`design.md §6.1`) salvo por R21: las
- * dos metricas `declarada` que la 126 sirve TIENEN que estar.
+ * Paneles v1. La composicion concreta es cosmetica (`design.md §6.1`) salvo por R21:
+ * `incidentes` y `sin_gestionar` —las dos que el catalogo dio por «sin productor» mientras
+ * la 126 ya las servia— TIENEN que estar.
  *
  * Desviacion declarada respecto a `design.md §6.1`: el panel de gestiones incluye
  * `incidentes` —es el cuarto termino del denominador de las tasas, asi que ahi es donde
@@ -73,7 +82,7 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
       { metricaId: "entregas", etiqueta: "Entregas" },
       { metricaId: "devoluciones", etiqueta: "Devoluciones" },
       { metricaId: "rechazos", etiqueta: "Rechazos" },
-      // R21/D6 — `declarada` en el catalogo, SERVIDA por la 126. No se filtra.
+      // R21/D6 — SERVIDA por la 126 (y antes dada por «sin productor»). No se filtra.
       { metricaId: "incidentes", etiqueta: "Incidentes" },
     ],
   },
@@ -81,7 +90,7 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
     id: "sin-gestionar",
     titulo: "Ordenes sin gestionar",
     grafica: "lineas",
-    // R21/D6 — `declarada` en el catalogo, DERIVADA del embudo por la 126. No se filtra.
+    // R21/D6 — DERIVADA del embudo por la 126 (y antes dada por «sin productor»). No se filtra.
     metricas: [{ metricaId: "sin_gestionar", etiqueta: "Sin gestionar" }],
   },
   {

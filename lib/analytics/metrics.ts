@@ -5,6 +5,8 @@
 // El contenido NO es opinion del implementer: es `design.md §3.3`, aprobado ENTERO por
 // el humano el 2026-07-30 (D1 «todas») = **15 ids operativos + 8 financieros = 23**.
 // Anadir o quitar una metrica exige una decision humana nueva y fechada.
+// ⟨P4⟩ humano, 2026-08-03 (`progress/decision_F2_173.md`): +2 financieras (`dinero_en_caja`
+// y `ganancia_ordenex`) = **15 operativos + 10 financieros = 25**.
 //
 // R1 (modulo puro): este archivo no importa `@/lib/db`, ni repositorios, ni servicios,
 // ni `next/headers`, ni `@prisma/client` como valor, ni ejecuta efectos al importarse.
@@ -115,7 +117,7 @@ const CATALOGO = [
     id: "ordenes_por_estado",
     etiqueta: "Ordenes por estado",
     descripcion:
-      "Embudo: ORDENES agrupadas por su estado actual entre los 19 values vigentes del catalogo; no cuenta gestiones, asi que una gestion anulada no mueve esta cifra (solo la mueve el estado real de la orden).",
+      "Embudo: ORDENES agrupadas por su estatus al corte sobre el universo B2 de la 124 (las vivas al corte mas las que llegaron a un estado terminal ese mismo dia), cada orden en una sola fila; el rollup NO conserva el archivo historico de estados terminales, asi que el historico de terminales se sirve de las medidas de flujo (entregas, devoluciones, rechazos, incidentes) y no de este embudo; no cuenta gestiones, asi que una gestion anulada no mueve esta cifra (solo la mueve el estado real de la orden).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -124,7 +126,15 @@ const CATALOGO = [
     granos: ["fecha", "zona", "tienda", "mensajero", "estatus"],
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
-    definicion: { estados: ORDER_STATUS_SEED, sinAsignar: "incluir", atribucionZona: "orden" },
+    definicion: {
+      // R8/D4: `estados` sigue siendo ORDER_STATUS_SEED ENTERO. B2 acota la ventana
+      // TEMPORAL del stock, no el vocabulario: las ordenes que cerraron ese dia si estan
+      // en la columna, asi que recortar los terminales seria cambiar una mentira por otra.
+      estados: ORDER_STATUS_SEED,
+      universo: "b2_vivas_mas_cierres_del_dia",
+      sinAsignar: "incluir",
+      atribucionZona: "orden",
+    },
   },
   {
     id: "entregas",
@@ -215,9 +225,11 @@ const CATALOGO = [
     clase: "snapshot",
     unidad: "conteo",
     unidadDeConteo: "gestion",
-    // `declarada`: ni la ficha de la 126 ni las medidas del rollup de la 123 la
-    // comprometen (el resultado `incidente` llego con la 154/158, despues del lote).
-    estadoProduccion: "declarada",
+    // `producida` desde ⟨D11⟩ (humano, 2026-08-03 — ver `progress/decision_175.md`). Decia
+    // `declarada` afirmando que el rollup no la compromete, y es falso: `analytics_daily` tiene
+    // su columna real `incidentes` (`db/schema.prisma:1891`, «4.o termino de
+    // DENOMINADOR_GESTIONES (R18)»), asi que la 126 ya divide entre ella en las tres tasas.
+    estadoProduccion: "producida",
     granos: ["fecha", "zona", "tienda", "mensajero"],
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
@@ -232,18 +244,29 @@ const CATALOGO = [
     id: "sin_gestionar",
     etiqueta: "Sin gestionar",
     descripcion:
-      "ORDENES que el corte diario congelo en el estado sin_gestionar; cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
+      "ORDENES sin gestionar HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus sin_gestionar (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
     unidadDeConteo: "orden",
-    // `declarada`: la ficha de la 126 no la nombra y no es una medida del rollup de la
-    // 123; el estado si aparece dentro del embudo `ordenes_por_estado`.
-    estadoProduccion: "declarada",
+    // `producida` desde ⟨D11⟩ (humano, 2026-08-03 — ver `progress/decision_175.md`). Decia
+    // `declarada` porque la ficha de la 126 no la nombra, pero la 126 SI la sirve: la deriva del
+    // embudo, proyectando la medida `ordenes_estado_stock` sobre este estatus
+    // (`lib/services/AnaliticaOperativaService.ts:88,316-318,348-362`).
+    estadoProduccion: "producida",
     granos: ["fecha", "zona", "mensajero"],
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
-    definicion: { estados: ["sin_gestionar"], sinAsignar: "incluir", atribucionZona: "orden" },
+    definicion: {
+      estados: ["sin_gestionar"],
+      // D5/R12: `clase: "snapshot"` y `fuente: rollup` se CONSERVAN — si se sirve del rollup,
+      // de la columna `ordenes_estado_stock`; lo que faltaba no era la fuente, era decir que
+      // no tiene medida propia y que su semantica es la del dia.
+      universo: "b2_vivas_mas_cierres_del_dia",
+      derivadaDe: "ordenes_por_estado",
+      sinAsignar: "incluir",
+      atribucionZona: "orden",
+    },
   },
   {
     id: "tasa_entrega",
@@ -382,7 +405,7 @@ const CATALOGO = [
     definicion: { estados: ORDER_STATUS_SEED, atribucionZona: "orden" },
   },
 
-  /* ---------------------------- 8 FINANCIERAS ---------------------------- */
+  /* --------------------------- 10 FINANCIERAS ---------------------------- */
   // R6: fuente EXCLUSIVA ledgers append-only + snapshots de cierre. Ninguna cita
   // `orden`, `gestion_orden`, `orden_historial_estado` ni `analytics_daily`: el dinero
   // NUNCA se recalcula desde ordenes (consigna de la 127). Por eso ninguna es `snapshot`
@@ -453,8 +476,13 @@ const CATALOGO = [
   {
     id: "egresos",
     etiqueta: "Egresos",
+    // ⟨P4⟩ humano, 2026-08-03 (`progress/decision_F2_173.md`): la DESCRIPCION cambia; el `id` y
+    // la `etiqueta`, no. Hasta la 173 `egreso_pago_tienda` estaba declarada aqui pero NINGUNA via
+    // la emitia, asi que esta cifra no la contenia nunca. Desde la 173 si, y su numero crece sin
+    // que nada mas cambie: quien compare mes contra mes veria un salto que no es un salto. Por eso
+    // se declara en el propio catalogo, que es donde lo lee quien mira la cifra.
     descripcion:
-      "Salidas de la caja principal (pagos a tienda y mensajero, sueldos, gastos fijos y variables, indemnizaciones y ajustes) segun el libro append-only de la wallet; se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "Salidas de la caja principal (pagos a tienda y mensajero, sueldos, gastos fijos y variables, indemnizaciones y ajustes) segun el libro append-only de la wallet; DESDE LA FEATURE 173 incluye el dinero ENTREGADO A LAS TIENDAS, que antes ninguna via emitia, asi que su cifra crece a partir de esa fecha sin que su id ni su nombre cambien y no es comparable con la de antes. Se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -470,6 +498,88 @@ const CATALOGO = [
     definicion: {
       categorias: [
         "egreso_pago_tienda",
+        "egreso_pago_mensajero",
+        "egreso_gasto",
+        "egreso_sueldo",
+        "egreso_ajuste",
+        "egreso_gasto_fijo",
+        "egreso_gasto_variable",
+        "egreso_indemnizacion",
+      ],
+    },
+  },
+  // ⟨P4⟩ humano, 2026-08-03 (`progress/decision_F2_173.md`) — LAS DOS METRICAS NUEVAS.
+  //
+  // Nacen juntas porque su valor esta en la DIFERENCIA. Mientras la caja solo contuvo dinero de
+  // Ordenex, «entradas − salidas» era la ganancia y una sola cifra bastaba. Desde la 173 la caja
+  // registra tambien el contra-entrega cobrado a nombre de las tiendas, que solo PASA por ella:
+  // el mismo numero paso a significar dos cosas. Servir una sola —cualquiera de las dos— es lo
+  // que la feature existe para impedir.
+  //
+  // Las categorias van ESCRITAS, no derivadas de `NATURALEZA_POR_CATEGORIA`: este modulo es puro
+  // (R1) y no puede importar `lib/utils/caja-tesoreria.ts`, que trae `Prisma` como valor. Que las
+  // dos listas correspondan con el `Record` lo comprueba en RUNTIME
+  // `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts`, no la buena memoria de nadie.
+  {
+    id: "dinero_en_caja",
+    etiqueta: "Dinero en caja",
+    descripcion:
+      "TESORERIA: todo lo que entro menos todo lo que salio de la caja principal, sin distinguir de quien es el dinero — incluye el contra-entrega cobrado a nombre de las tiendas y aun no entregado. NO es lo que Ordenex gano (eso es ganancia_ordenex) ni lo que les debe a las tiendas (es MAYOR: de ese dinero Ordenex aun descuenta flete, comision e IVA). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+    dominio: "financiera",
+    clase: "live",
+    unidad: "moneda",
+    unidadDeConteo: "moneda",
+    estadoProduccion: "producida",
+    granos: ["fecha"],
+    fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
+    alcance: ALCANCE_FINANCIERA,
+    definicion: {
+      // LAS DIECISIETE de `WALLET_MOVIMIENTO_CATEGORIA_SEED`: la caja entera, propio y ajeno.
+      categorias: [
+        "ingreso_flete",
+        "ingreso_flete_devolucion",
+        "ingreso_comision_cod",
+        "ingreso_iva_flete",
+        "ingreso_iva_flete_devolucion",
+        "ingreso_iva_comision_cod",
+        "ingreso_ajuste",
+        "ingreso_cod_recaudado",
+        "ingreso_reverso_pago_tienda",
+        "egreso_pago_tienda",
+        "egreso_pago_mensajero",
+        "egreso_gasto",
+        "egreso_sueldo",
+        "egreso_ajuste",
+        "egreso_gasto_fijo",
+        "egreso_gasto_variable",
+        "egreso_indemnizacion",
+      ],
+    },
+  },
+  {
+    id: "ganancia_ordenex",
+    etiqueta: "Ganancia de Ordenex",
+    descripcion:
+      "RESULTADO: ingresos propios de Ordenex menos sus egresos propios, dejando fuera el dinero de terceros que solo pasa por la caja (el contra-entrega y su devolucion a la tienda). Es, numero por numero, lo que `derivarBalance` devolvia sobre el libro entero antes de la 173: no cambia de valor, cambia de nombre. Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+    dominio: "financiera",
+    clase: "live",
+    unidad: "moneda",
+    unidadDeConteo: "moneda",
+    estadoProduccion: "producida",
+    granos: ["fecha"],
+    fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
+    alcance: ALCANCE_FINANCIERA,
+    definicion: {
+      // LAS CATORCE de naturaleza «propio»: las diecisiete menos `egreso_pago_tienda`,
+      // `ingreso_cod_recaudado` y `ingreso_reverso_pago_tienda`.
+      categorias: [
+        "ingreso_flete",
+        "ingreso_flete_devolucion",
+        "ingreso_comision_cod",
+        "ingreso_iva_flete",
+        "ingreso_iva_flete_devolucion",
+        "ingreso_iva_comision_cod",
+        "ingreso_ajuste",
         "egreso_pago_mensajero",
         "egreso_gasto",
         "egreso_sueldo",

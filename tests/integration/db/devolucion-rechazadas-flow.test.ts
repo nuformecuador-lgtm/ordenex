@@ -300,7 +300,7 @@ function walletDobles() {
   const walletMovimientoRepo = {
     crearMovimientos: vi.fn().mockResolvedValue(0),
     listar: vi.fn(),
-    agregarBalance: vi.fn(),
+    agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
   } as unknown as IWalletMovimientoRepository;

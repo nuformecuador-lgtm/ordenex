@@ -140,7 +140,7 @@ describe("R28 · el mensajero no alcanza ordenes que no le estan asignadas", () 
 });
 
 describe("R29 · ningun rol acotado alcanza el dinero, ni agregado ni en cero", () => {
-  it("los 3 roles x las 8 financieras se deniegan antes de producir ningun where", () => {
+  it("los 3 roles x las 10 financieras se deniegan antes de producir ningun where", () => {
     let casos = 0;
     for (const actor of [SATELITE, TIENDA, MENSAJERO_A]) {
       for (const metrica of FINANCIERAS) {
@@ -154,6 +154,6 @@ describe("R29 · ningun rol acotado alcanza el dinero, ni agregado ni en cero", 
         casos++;
       }
     }
-    expect(casos).toBe(24);
+    expect(casos).toBe(30); // 3 roles x 10 financieras (8 de la 135 + 2 de la 173)
   });
 });

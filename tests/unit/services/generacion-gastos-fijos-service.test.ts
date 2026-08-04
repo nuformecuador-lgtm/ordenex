@@ -44,7 +44,7 @@ function buildMovimientoRepo(count: number): IWalletMovimientoRepository {
   return {
     crearMovimientos: vi.fn().mockResolvedValue(count),
     listar: vi.fn(),
-    agregarBalance: vi.fn(),
+    agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
   };

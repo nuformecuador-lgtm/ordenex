@@ -9,7 +9,7 @@ import type {
   ListarMovimientosCompletoServiceResult,
   ListarMovimientosServiceResult,
   RegistrarMovimientoManualServiceResult,
-  VerBalanceServiceResult,
+  VerResumenCajaServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
 import type {
   ListarMovimientosCompletoInput,
@@ -19,11 +19,23 @@ import type {
   WalletMovimientoTipo,
 } from "@/lib/types/wallet";
 import { descargaConfig } from "@/lib/config/descarga";
-import { derivarBalance } from "@/lib/utils/wallet-balance";
+import { derivarCaja } from "@/lib/utils/caja-tesoreria";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
-// Roles autorizados (R19): acceso total (maestro/admin, dueños de la caja central). Cualquier
-// otro rol -> forbidden SIN exponer movimientos ni balance.
+// Roles autorizados (R19/R65): acceso total (maestro/admin, dueños de la caja central).
+// Cualquier otro rol -> forbidden SIN exponer movimientos ni cifras.
+
+/**
+ * Feature 173 (T D.2, [P7] = (a)) — ¿la consulta lleva algún filtro puesto?
+ *
+ * Se calcula sobre los filtros YA construidos, no sobre la entrada cruda: el dia que el libro
+ * gane un filtro, esta funcion lo ve sola. Nada de dinero depende de esto —el numero es el
+ * mismo con filtros y sin ellos—; lo que depende es el ROTULO, y de eso decide la pantalla
+ * (T G.1). El servidor solo dice el hecho.
+ */
+function hayFiltros(filtros: BalanceFiltros): boolean {
+  return Object.values(filtros).some((v) => v !== undefined);
+}
 
 /**
  * Feature 42 — logica de negocio de la wallet (libro + balance + manual). No conoce HTTP
@@ -117,13 +129,40 @@ export class WalletService implements IWalletService {
     return { status: "ok", items: movimientos, total };
   }
 
-  async verBalance(input: ListarMovimientosInput, actor: Actor): Promise<VerBalanceServiceResult> {
-    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
+  /**
+   * Feature 173 (T D.2, design §5.2 — R8/R64/R65) — las DOS cifras de la caja.
+   *
+   * Sustituye a `verBalance`, que devolvia una sola cifra rotulada «balance». Mientras la caja
+   * solo contuviera dinero DE ORDENEX ese numero era la ganancia; desde que entra el
+   * contra-entrega —dinero de las tiendas que solo PASA por la caja— deja de significar una
+   * sola cosa.
+   *
+   * Tres cosas que la task exige y que aqui se ven en el orden en que ocurren:
+   *
+   *  1. **El guardia va ANTES de tocar la base** (R65). No es estilo: un `forbidden` que se
+   *     evaluara despues del `groupBy` ya habria leido las cifras de la caja para tirarlas.
+   *  2. **Los filtros son los MISMOS del listado y los resuelve el MISMO metodo** (R8):
+   *     `construirFiltros`, el que ya usan `listarMovimientos` y la descarga. Una copia aqui
+   *     permitiria que la cabecera y su propio listado dejaran de cuadrar.
+   *  3. **`periodoFiltrado` [P7] se deriva de ESOS filtros**, no de la entrada cruda: asi la
+   *     bandera no puede desalinearse del conjunto que de verdad se agrego. El servidor NO
+   *     pinta texto — solo dice si hay filtros puestos; el rotulo lo elige la pantalla.
+   *
+   * El servicio no resta nada: agrega con el repositorio y deriva con `derivarCaja`, que es
+   * pura y ya esta probada. Money-safe: STRING de punta a punta (R64).
+   */
+  async verResumenCaja(
+    input: ListarMovimientosInput,
+    actor: Actor,
+  ): Promise<VerResumenCajaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R65: ANTES de la base
 
-    // R16: balance DERIVADO del conjunto filtrado (mismos filtros que el listado), nunca
-    // de un saldo almacenado.
-    const { ingresos, egresos } = await this.repo.agregarBalance(this.construirFiltros(input));
-    return { status: "ok", balance: derivarBalance(ingresos, egresos) };
+    const filtros = this.construirFiltros(input);
+    const filas = await this.repo.agregarPorCategoriaYTipo(filtros);
+    return {
+      status: "ok",
+      resumen: derivarCaja(filas, { periodoFiltrado: hayFiltros(filtros) }),
+    };
   }
 
   async registrarMovimientoManual(

@@ -55,7 +55,7 @@ const TITULO_DESCARGA = "Libro de movimientos";
 export interface WalletLedgerProps {
   movimientos: WalletMovimientoDTO[];
   isLoading?: boolean;
-  /** Callback tras reversar con éxito (para que el módulo recargue libro + balance + desglose). */
+  /** Callback tras reversar con éxito (para que el módulo recargue libro + cifras + desglose). */
   onReversado?: () => void;
   /**
    * Feature 170 (T C.4, design §5) — obtiene las filas del libro COMPLETO para la descarga.

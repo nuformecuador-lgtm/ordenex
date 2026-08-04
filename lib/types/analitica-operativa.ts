@@ -68,9 +68,13 @@ export interface Cobertura {
  * las que llegaron a terminal ese dia— y NO «sin gestionar acumuladas». Leida como
  * acumulada es un numero muy distinto y nada en el nombre de la metrica impide esa lectura.
  *
- * FRONTERA: esta declaracion deberia estar TAMBIEN en `lib/analytics/metrics.ts`, que es
- * archivo de la 127. Queda anotada para la **ficha 175** (`design.md §9`), no se escribe
- * alli desde aqui (R3).
+ * FRONTERA — RESUELTA por la **175** (2026-08-03). Esta declaracion tenia que estar TAMBIEN
+ * en `lib/analytics/metrics.ts`, y ya lo esta: la entrada `sin_gestionar` del catalogo declara
+ * `universo: "b2_vivas_mas_cierres_del_dia"`, `derivadaDe: "ordenes_por_estado"` y una
+ * descripcion que dice «HOY» y no «acumuladas». `metrics.ts` NO importa esta constante a
+ * proposito (`modulo-puro.guardia.test.ts` prohibe que `lib/analytics/**` dependa de este
+ * modulo): la coherencia entre los dos textos se ata POR TEST, en
+ * `tests/unit/analytics/catalogo-universo.guardia.test.ts` (R10 de la 175), que importa ambos.
  */
 export const NOTA_SIN_GESTIONAR = "sin_gestionar_es_del_dia_universo_b2" as const;
 

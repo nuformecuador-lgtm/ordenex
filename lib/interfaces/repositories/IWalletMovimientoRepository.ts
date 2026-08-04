@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type {
+  AgregadoCajaRow,
   WalletMovimientoDTO,
   WalletMovimientoTipo,
   WalletMovimientoCategoria,
@@ -22,6 +23,16 @@ export interface CrearMovimientoInput {
   origenId: string | null;
   descripcion?: string | null;
   registradoPor?: string | null;
+  /**
+   * Feature 173 (design §2.3, R20/R25): fecha REAL del hecho que el movimiento representa —la
+   * del pago a la tienda, la del dia de la anulacion—, no el instante en que se registra.
+   *
+   * OPCIONAL a proposito, y es lo que hace que la ampliacion sea de coste CERO: ausente ⇒ la
+   * columna `fecha_movimiento` cae en su `DEFAULT CURRENT_TIMESTAMP` y NINGUNO de los cinco
+   * escritores existentes cambia de comportamiento. Es lo mismo que la 172 hizo con los otros
+   * dos libros.
+   */
+  fechaMovimiento?: Date;
 }
 
 // Filtros del listado del libro (R20). Rango de fechas sobre fecha_movimiento.
@@ -39,18 +50,12 @@ export interface ListarMovimientosPage {
   total: number;
 }
 
-// Filtros del balance (R16/R20): mismo conjunto que el listado, sin paginacion.
+// Filtros del conjunto agregado (R16/R20/R8): mismo conjunto que el listado, sin paginacion.
 export interface BalanceFiltros {
   tipo?: WalletMovimientoTipo;
   categoria?: WalletMovimientoCategoria;
   desde?: Date;
   hasta?: Date;
-}
-
-// Totales agregados del balance, ya como STRING (money-safe).
-export interface BalanceAgregado {
-  ingresos: string;
-  egresos: string;
 }
 
 // Feature 45 (R11) — desglose de egresos por tipo, ya como STRING (money-safe). Deriva de un
@@ -74,8 +79,20 @@ export interface IWalletMovimientoRepository {
   crearMovimientos(tx: WalletTxClient, movs: CrearMovimientoInput[]): Promise<number>;
   /** R20/R24: pagina el libro (orderBy fecha_movimiento desc) con filtros en el WHERE. */
   listar(filtros: ListarMovimientosFiltros): Promise<ListarMovimientosPage>;
-  /** R16: SUM(monto) FILTER por ingreso/egreso con los mismos filtros. STRING (money-safe). */
-  agregarBalance(filtros: BalanceFiltros): Promise<BalanceAgregado>;
+  /**
+   * Feature 173 (T D.1, design §5.1 — R8 parte datos, R47): `groupBy(categoria, tipo)` +
+   * `SUM(monto)` sobre EXACTAMENTE los mismos filtros del listado. Salida STRING escala 2.
+   *
+   * SUSTITUYE al agregado por `tipo` a secas que traia la 42, que no podia decir de QUIEN es
+   * el dinero. Con la caja en modo tesoreria eso ya no alcanza: la naturaleza (propio / de
+   * terceros) es de la CATEGORIA, asi que sin la categoria en el `groupBy` las dos cifras de
+   * `derivarCaja` no se pueden derivar. Los dos NO coexisten: el viejo se elimino en esta
+   * misma tanda al quedarse sin consumidores (conventions: nada de codigo muerto).
+   *
+   * El repositorio se queda en su sitio: agrega y devuelve filas. La particion por naturaleza
+   * y las dos restas las hace `derivarCaja`, que es PURA y no conoce la base (R10).
+   */
+  agregarPorCategoriaYTipo(filtros: BalanceFiltros): Promise<readonly AgregadoCajaRow[]>;
   /**
    * Feature 45 (R13): lee un movimiento por id para la reversa (monto server-side; evita
    * que el cliente falsee el monto). null si no existe.

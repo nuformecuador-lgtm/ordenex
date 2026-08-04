@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { CierreEstado, RolValue } from "@prisma/client";
+import { CierreEstado, RolValue, type PrismaClient } from "@prisma/client";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -29,6 +31,17 @@ import type {
 // Feature 172 / T B.3 (mitad TIENDA) + T B.5 (mitad MENSAJERO) — `LiquidacionService`.
 // Cubre R1, R2, R5, R6, R20, R21, R23, R24, R25, R29, R30, R31, R32, R35, R36, R38, R39, R40,
 // R41, R42 (+ R37 en la fecha del movimiento y R43/R47 en la rama idempotente).
+//
+// ⚠️ **Feature 173 / T C.2 — CAMBIO DELIBERADO DE ASERCIONES QUE ESTABAN VERDES.** R40 de la 172
+// decia «la caja principal no recibe ni una llamada, ni al pagar ni al anular». Su premisa era
+// que el egreso del pago a tienda restaria de la caja un dinero que nunca entro en ella. Desde
+// la Tanda B de la 173 ese dinero SI entra (el contra-entrega se acredita a la caja al aprobar
+// el cierre), asi que la mitad-TIENDA de R40 queda superada y se REESCRIBE aqui: de «cero
+// llamadas» a «EXACTAMENTE UNA, con esta categoria, este monto, este origen y esta fecha».
+//
+// La mitad-MENSAJERO de R40 **no se toca** ([P2] = (a), respuesta humana del 2026-08-03): sigue
+// en cero llamadas, y ademas gana una contraprueba nueva sobre el puerto. Las dos aserciones
+// reescritas estan enumeradas una a una en `progress/impl_173-caja-tesoreria.md`.
 //
 // Money-safe: ni un `Number(` ni un `parseFloat` sobre un monto en todo el archivo; el ultimo
 // bloque afirma lo mismo del modulo del servicio.
@@ -89,11 +102,17 @@ function pagoDTO(over: Partial<LiquidacionPagoDTO> = {}): LiquidacionPagoDTO {
 
 /**
  * Doble de la TRANSACCION con la forma de un `tx` de Prisma: expone los delegados de los dos
- * libros, del documento y —a proposito— el de la CAJA PRINCIPAL, con todos sus metodos
- * espiados. Asi, R40 y R41 no se comprueban leyendo el codigo: se comprueban contando llamadas
+ * libros, del documento y el de la CAJA PRINCIPAL, con todos sus metodos espiados. Asi, R41 y la
+ * mitad-mensajero de R40 no se comprueban leyendo el codigo: se comprueban contando llamadas
  * sobre las puertas que el servicio TENDRIA que abrir si escribiera donde no debe.
+ *
+ * **Feature 173 / T C.2:** el delegado de la caja deja de ser una puerta que debe seguir cerrada
+ * en el camino de la TIENDA y pasa a ser la tercera escritura de la transaccion. `createMany`
+ * apunta en el LOG cuando ocurre, para que su posicion —dentro de la `tx` y DESPUES del ledger—
+ * sea medible y no una promesa (R19). Los otros seis metodos siguen espiados y siguen debiendo
+ * quedarse a cero: el reverso de una anulacion es una fila NUEVA, nunca un `update` (R29).
  */
-function buildTx() {
+function buildTx(log: string[]) {
   const espia = () => ({
     create: vi.fn(),
     createMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -107,7 +126,13 @@ function buildTx() {
     liquidacionPago: espia(),
     walletTiendaMovimiento: espia(),
     pagoMensajeroMovimiento: espia(),
-    walletMovimiento: espia(), // [P2]/R40: la caja principal. No debe recibir NI UNA llamada.
+    walletMovimiento: {
+      ...espia(),
+      createMany: vi.fn(async () => {
+        log.push("crear:caja");
+        return { count: 1 };
+      }),
+    },
     cierreDia: espia(), // R42: ningun snapshot del cierre se toca
     $queryRaw: vi.fn().mockResolvedValue([]),
   };
@@ -131,7 +156,7 @@ function buildDobles(opciones: {
   pagos?: LiquidacionPagoDTO[];
 }) {
   const log: Registro[] = [];
-  const tx = buildTx();
+  const tx = buildTx(log);
   const txsVistos: unknown[] = [];
   const cierre = opciones.cierre === undefined ? cierreDTO() : opciones.cierre;
 
@@ -228,8 +253,38 @@ function buildDobles(opciones: {
     return r;
   };
 
-  const service = new LiquidacionService(pagoRepo, tiendaRepo, mensajeroRepo, runTransaction);
-  return { service, pagoRepo, tiendaRepo, mensajeroRepo, llamadasTx, log, tx, txsVistos };
+  /**
+   * Feature 173 / T C.2 — el PUERTO de la caja, REAL, con sus dos metodos espiados (llaman al
+   * original). Real y no doble a proposito: un doble mudo dejaria sin medir lo unico que importa
+   * aqui —que la fila que llega a la caja lleva la categoria, el tipo, el origen y la fecha
+   * correctos—, y hay una suite entera (`liquidacion-caja-puerto.test.ts`) para afirmar que esos
+   * cuatro campos NO los elige quien llama.
+   *
+   * El repositorio va sobre un cliente vacio a proposito: `crearMovimientos` escribe siempre en
+   * el `tx` que se le pasa y jamas en el cliente propio. Si algun dia dejara de ser cierto, este
+   * doble reventaria en vez de escribir en una base de mentira.
+   */
+  const caja = new CajaPagoTiendaFeedService(
+    new WalletMovimientoRepository({} as unknown as PrismaClient),
+  );
+  vi.spyOn(caja, "emitirEgresoDePago");
+  vi.spyOn(caja, "emitirReversoDeAnulacion");
+
+  const service = new LiquidacionService(
+    pagoRepo,
+    tiendaRepo,
+    mensajeroRepo,
+    runTransaction,
+    caja,
+  );
+  return { service, pagoRepo, tiendaRepo, mensajeroRepo, caja, llamadasTx, log, tx, txsVistos };
+}
+
+/** La fila que el servicio mando escribir en la CAJA PRINCIPAL (feature 173). */
+function filaDeCaja(tx: ReturnType<typeof buildTx>): Record<string, unknown> {
+  const mock = tx.walletMovimiento.createMany as unknown as { mock: { calls: unknown[][] } };
+  const arg = mock.mock.calls[0][0] as { data: Record<string, unknown>[] };
+  return arg.data[0];
 }
 
 /**
@@ -482,12 +537,16 @@ describe("R39/R40/R41 — atomicidad, y donde NO se escribe", () => {
     expect(d.llamadasTx.n).toBe(1);
     expect(d.txsVistos).toHaveLength(3); // candado + documento + movimiento
     expect(new Set(d.txsVistos).size).toBe(1); // …y los tres son el MISMO objeto
+    // ⚠️ Feature 173/T C.2: esta lista gana `"crear:caja"`. El egreso de la caja es la TERCERA
+    // escritura de la MISMA transaccion (R19) y va DESPUES del ledger de la tienda; el log es lo
+    // que lo mide. Antes de la 173 la lista terminaba en `"crear:movimiento", "tx:commit"`.
     expect(d.log).toEqual([
       "tx:abrir",
       "bloquear:tienda:t1",
       "leer:disponible",
       "crear:documento",
       "crear:movimiento",
+      "crear:caja",
       "tx:commit",
     ]);
   });
@@ -508,23 +567,95 @@ describe("R39/R40/R41 — atomicidad, y donde NO se escribe", () => {
     ]);
   });
 
-  it("R40 [P2]: la CAJA PRINCIPAL no recibe ni una llamada", async () => {
+  // ───────────────────────────────────────────────────────────────────────────────────────────
+  // ⚠️ ASERCION REESCRITA (feature 173 / T C.2). Antes decia:
+  //
+  //     it("R40 [P2]: la CAJA PRINCIPAL no recibe ni una llamada", …)
+  //       for (const [metodo, espia] of Object.entries(d.tx.walletMovimiento))
+  //         expect(espia).not.toHaveBeenCalled();
+  //
+  // Su premisa (172/design §4) era que emitir el egreso restaria de la caja «un dinero que nunca
+  // entro en ella». Desde la Tanda B de la 173 ese dinero entra, asi que la aserción pasa de
+  // CERO llamadas a EXACTAMENTE UNA, y con los cuatro campos fijados. No se borra: se reescribe.
+  // ───────────────────────────────────────────────────────────────────────────────────────────
+  it("R18/R20 [173]: la CAJA PRINCIPAL recibe EXACTAMENTE UNA escritura, y es el egreso del pago", async () => {
     const d = buildDobles({ creditos: "100000.00", debitos: "0.00" });
 
     await d.service.registrarPagoTienda(INPUT, ACTOR_ADMIN);
 
-    for (const [metodo, espia] of Object.entries(d.tx.walletMovimiento)) {
-      expect(espia, `walletMovimiento.${metodo} fue llamado`).not.toHaveBeenCalled();
-    }
+    // UNA llamada al puerto, y una sola sentencia en la caja.
+    expect(d.caja.emitirEgresoDePago).toHaveBeenCalledTimes(1);
+    expect(d.caja.emitirReversoDeAnulacion).not.toHaveBeenCalled();
+    expect(d.tx.walletMovimiento.createMany).toHaveBeenCalledTimes(1);
+
+    // R18: egreso de la categoria del pago a tienda (naturaleza TERCEROS: no toca la ganancia).
+    // R20: fechado el dia REAL del pago, no el de registro.
+    const fila = filaDeCaja(d.tx);
+    expect(fila.tipo).toBe("egreso");
+    expect(fila.categoria).toBe("egreso_pago_tienda");
+    expect((fila.monto as { toFixed: (n: number) => string }).toFixed(2)).toBe("15000.00");
+    expect(fila.origenTipo).toBe("pago_tienda");
+    expect(fila.origenId).toBe("pago-1"); // el id que devolvio `crear`, no una constante
+    expect(fila.registradoPor).toBe("u-admin");
+    expect(fila.descripcion).toBe("SINPE · 1234567");
+    expect((fila.fechaMovimiento as Date).toISOString()).toBe("2026-07-30T00:00:00.000Z");
+
+    // R19: la escritura va en LA MISMA transaccion — el puerto recibe el mismo objeto `tx`.
+    const llamada = (d.caja.emitirEgresoDePago as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0];
+    expect(llamada[0]).toBe(d.tx);
   });
 
-  it("R40: el servicio ni siquiera tiene por donde escribir en la caja", async () => {
-    // La contraprueba estructural del test de arriba: no hay repositorio de la caja inyectado,
-    // asi que no existe camino para emitir un egreso de caja aunque alguien lo intentara.
+  it("R18: el monto de la caja es EL MISMO string del documento y del ledger (un solo redondeo)", async () => {
+    const d = buildDobles({ creditos: "100000.00", debitos: "0.00" });
+
+    await d.service.registrarPagoTienda({ ...INPUT, monto: "15000.5" }, ACTOR_ADMIN);
+
+    // Si la caja re-redondeara por su cuenta, documento, ledger y caja podrian discrepar por un
+    // centimo y ningun cuadre lo explicaria.
+    expect(documentoEscrito(d.pagoRepo).monto).toBe("15000.50");
+    expect(movimientoEscrito(d.tiendaRepo).monto).toBe("15000.50");
+    expect((filaDeCaja(d.tx).monto as { toFixed: (n: number) => string }).toFixed(2)).toBe(
+      "15000.50",
+    );
+  });
+
+  it("R19: si la CAJA falla, la transaccion no llega a commit — no queda el pago", async () => {
+    const d = buildDobles({ creditos: "100000.00", debitos: "0.00" });
+    (
+      d.tx.walletMovimiento.createMany as unknown as { mockRejectedValue: (e: Error) => void }
+    ).mockRejectedValue(new Error("caja caida"));
+
+    await expect(d.service.registrarPagoTienda(INPUT, ACTOR_ADMIN)).rejects.toThrow("caja caida");
+
+    // El fallo SALE de la transaccion: quien la ejecuta revierte, y el documento y el debito del
+    // ledger se van con ella. Un pago cobrado sin su salida de caja seria peor que no pagarlo.
+    expect(d.log).toEqual([
+      "tx:abrir",
+      "bloquear:tienda:t1",
+      "leer:disponible",
+      "crear:documento",
+      "crear:movimiento",
+    ]);
+    expect(d.log).not.toContain("tx:commit");
+  });
+
+  it("R23: el servicio no puede EXPRESAR ninguna otra escritura en la caja", async () => {
+    // La contraprueba estructural de los tests de arriba. Antes de la 173 decia «no hay
+    // repositorio inyectado»; ahora dice algo mas fino y mas util: hay un PUERTO de dos metodos,
+    // el servicio no nombra el delegado de la caja ni ninguna categoria, y por tanto lo unico
+    // que puede escribir alli es lo que el puerto sabe emitir.
     const codigo = fuenteDelServicioSinComentarios();
     expect(codigo).not.toMatch(/IWalletMovimientoRepository/);
     expect(codigo.match(/walletMovimiento/g)).toBeNull();
     expect(codigo).not.toMatch(/egreso_pago_tienda/);
+    // Y las tres categorias que la 173 pone en juego tampoco: las fija el puerto, no el que llama.
+    expect(codigo).not.toMatch(/egreso_pago_mensajero/);
+    expect(codigo).not.toMatch(/ingreso_reverso_pago_tienda/);
+    expect(codigo).not.toMatch(/ingreso_ajuste/);
+    // El puerto entra como TIPO, nunca como implementacion concreta.
+    expect(codigo).toMatch(/import type \{ ICajaPagoTiendaFeedService \}/);
+    expect(codigo).not.toMatch(/CajaPagoTiendaFeedService\s*\(/);
   });
 
   it("R41: solo se AÑADEN filas — ningun update/delete sobre libros ni sobre el pago", async () => {
@@ -537,6 +668,30 @@ describe("R39/R40/R41 — atomicidad, y donde NO se escribe", () => {
         expect(d.tx[tabla][metodo], `${tabla}.${metodo}`).not.toHaveBeenCalled();
       }
     }
+  });
+
+  it("R29 [173]: en la CAJA tampoco — la unica sentencia que se usa alli es `createMany`", async () => {
+    const d = buildDobles({ creditos: "100000.00", debitos: "0.00" });
+
+    await d.service.registrarPagoTienda(INPUT, ACTOR_ADMIN);
+
+    // El libro de la caja es append-only igual que los otros dos: la 173 le añade una fila, no
+    // le enseña a modificar ninguna.
+    for (const metodo of ["create", "update", "updateMany", "delete", "deleteMany", "upsert"] as const) {
+      expect(d.tx.walletMovimiento[metodo], `walletMovimiento.${metodo}`).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R31 [173]: el egreso de la caja NO añade ni una fila a los otros dos libros", async () => {
+    const d = buildDobles({ creditos: "100000.00", debitos: "0.00" });
+
+    await d.service.registrarPagoTienda(INPUT, ACTOR_ADMIN);
+
+    // El ledger de la tienda sigue recibiendo UNA sola escritura (su debito de la 172) y el
+    // libro del mensajero, ninguna. Si el egreso de la caja se hubiera colado por el ledger, el
+    // saldo a favor de la tienda bajaria dos veces.
+    expect(d.tiendaRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+    expect(d.mensajeroRepo.crearMovimientos).not.toHaveBeenCalled();
   });
 
   it("R42: ningun snapshot del cierre se escribe en el camino de la tienda", async () => {
@@ -949,6 +1104,9 @@ describe("R39/R40/R41/R42 — atomicidad, y donde NO se escribe (camino del mens
     ]);
   });
 
+  // ⚠️ Feature 173: esta asercion NO se toca. [P2] = (a) — la caja carga
+  // `egreso_pago_mensajero = P` al APROBAR el cierre, asi que pagarle al mensajero no puede
+  // volver a restar. Si un dia se pone roja, es que se rompio P2, no que haga falta ajustarla.
   it("R40 [P2]: la CAJA PRINCIPAL no recibe ni una llamada al liquidar a un mensajero", async () => {
     const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
 
@@ -957,6 +1115,21 @@ describe("R39/R40/R41/R42 — atomicidad, y donde NO se escribe (camino del mens
     for (const [metodo, espia] of Object.entries(d.tx.walletMovimiento)) {
       expect(espia, `walletMovimiento.${metodo} fue llamado`).not.toHaveBeenCalled();
     }
+  });
+
+  it("R22 [173/P2]: y el PUERTO de la caja tampoco recibe ninguna de sus dos llamadas", async () => {
+    const d = buildDobles({ creditos: "0.00", debitos: "0.00" });
+
+    await d.service.registrarPagoMensajero(INPUT_MENSAJERO, ACTOR_ADMIN);
+
+    // Contraprueba nueva, no sustituta: la de arriba mide el DELEGADO de Prisma, esta mide el
+    // unico camino por el que este servicio puede llegar a el. El puerto es REAL, asi que si se
+    // le llamara escribiria de verdad y las dos aserciones caerian juntas.
+    expect(d.caja.emitirEgresoDePago).not.toHaveBeenCalled();
+    expect(d.caja.emitirReversoDeAnulacion).not.toHaveBeenCalled();
+    // Y el libro del mensajero sigue recibiendo su unica escritura, con su monto integro.
+    expect(d.mensajeroRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+    expect(movimientoDelMensajero(d.mensajeroRepo).monto).toBe("15000.00");
   });
 
   it("R41: solo se AÑADEN filas — ningun update/delete en el camino del mensajero", async () => {

@@ -105,14 +105,14 @@ describe("R5/R10 · una metrica que no es financiera no se sirve y no consulta n
 });
 
 /* -------------------------------------------------------------------------- */
-/* D.3 / R6 — las OCHO, ni una de mas ni una de menos                          */
+/* D.3 / R6 — las DIEZ, ni una de mas ni una de menos                          */
 /* -------------------------------------------------------------------------- */
 
 const IDS_DEL_CATALOGO = listarMetricas({ dominio: "financiera" })
   .map((m) => m.id)
   .sort();
 
-describe("R6 · el servicio sirve exactamente las ocho financieras del catalogo", () => {
+describe("R6 · el servicio sirve exactamente las diez financieras del catalogo", () => {
   it("falla por DEFECTO: no queda ninguna financiera del catalogo sin despachar", () => {
     const { servicio } = armarServicio();
     const servidas = new Set(servicio.idsServidos);
@@ -143,7 +143,7 @@ describe("R6 · el servicio sirve exactamente las ocho financieras del catalogo"
     expect(servidasFalsas.filter((id) => !catalogoFalso.includes(id))).toEqual(["margen_bruto"]);
   });
 
-  it("las ocho responden `ok` de verdad, no solo figuran en una lista", async () => {
+  it("las diez responden `ok` de verdad, no solo figuran en una lista", async () => {
     const { servicio } = armarServicio();
     for (const id of IDS_DEL_CATALOGO) {
       const r = await servicio.consultar(consultaDe(id));
@@ -163,7 +163,7 @@ function importesDe(datos: ResultadoFinanciero): readonly { moneda: string }[] {
 }
 
 describe("R43 · esAcumulado es true EXACTAMENTE en las dos cuentas por pagar", () => {
-  it("el mapa de las ocho es el esperado, escrito a mano", async () => {
+  it("el mapa de las diez es el esperado, escrito a mano", async () => {
     const { servicio } = armarServicio();
     const esperado: Readonly<Record<string, boolean>> = {
       cod_recaudado: false,
@@ -171,6 +171,9 @@ describe("R43 · esAcumulado es true EXACTAMENTE en las dos cuentas por pagar", 
       ingreso_comision_cod: false,
       ingreso_iva: false,
       egresos: false,
+      // Feature 173 (P4): flujo del periodo, no saldo al corte, las dos.
+      dinero_en_caja: false,
+      ganancia_ordenex: false,
       cuenta_por_pagar_tienda: true,
       cuenta_por_pagar_mensajero: true,
       conciliacion_cierres: false,
@@ -181,7 +184,7 @@ describe("R43 · esAcumulado es true EXACTAMENTE en las dos cuentas por pagar", 
       if (r.status !== "ok") throw new Error(`${id} no devolvio ok`);
       expect(r.datos.esAcumulado, id).toBe(esperado[id]);
     }
-    // Y el esperado cubre las ocho: si el catalogo ganara una, este mapa se quedaria corto.
+    // Y el esperado cubre las diez: si el catalogo ganara una, este mapa se quedaria corto.
     expect(Object.keys(esperado).sort()).toEqual(IDS_DEL_CATALOGO);
     expect(Object.entries(esperado).filter(([, v]) => v).map(([k]) => k).sort()).toEqual(
       [...IDS_FINANCIERAS_ACUMULADAS].sort(),
@@ -366,5 +369,167 @@ describe("R28 · misma entrada, misma salida, con mas de una fila", () => {
       return /Date\.now\s*\(|Math\.random\s*\(|new Date\s*\(\s*\)/.test(codigo);
     });
     expect(infractores).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* F.3 (173) / R54 — las dos metricas nuevas, con `derivarCaja` y sin restas   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * UN libro con las tres cosas a la vez: dinero propio que entra, dinero propio que sale y
+ * dinero de TERCEROS en las dos direcciones. Los importes estan elegidos para que las dos
+ * cifras salgan distintas y distintas del bruto: si alguien intercambiara los dos selectores
+ * del despacho, o publicara el bruto por el neto, cada numero de abajo lo dice.
+ *
+ *   bruto    = 1000 + 130 + 400 + 5000 + 3000 + 200 = 9730.00  (volumen movido, sin signo)
+ *   enCaja   = (1000 + 130 + 5000 + 200) − (400 + 3000)        = 2930.00
+ *   ganancia = (1000 + 130) − 400                              =  730.00
+ *
+ * OJO CON EL DOBLE: `armarServicio` devuelve estas filas para CUALQUIER metrica, porque no
+ * filtra por categoria — eso lo hace el repositorio de verdad con lo que el catalogo declara
+ * (`financiera-ingresos-repo.test.ts` lo mide). Aqui eso es una ventaja: obliga a que la
+ * separacion la haga la NATURALEZA dentro de `derivarCaja`. Un manejador que reusara
+ * `derivarBalance` como `deCaja` devolveria 2930.00 tambien para la ganancia.
+ */
+const LIBRO_MIXTO = [
+  { categoria: "ingreso_flete", tipo: "ingreso", suma: "1000.00" },
+  { categoria: "ingreso_iva_flete", tipo: "ingreso", suma: "130.00" },
+  { categoria: "egreso_sueldo", tipo: "egreso", suma: "400.00" },
+  { categoria: "ingreso_cod_recaudado", tipo: "ingreso", suma: "5000.00" },
+  { categoria: "egreso_pago_tienda", tipo: "egreso", suma: "3000.00" },
+  { categoria: "ingreso_reverso_pago_tienda", tipo: "ingreso", suma: "200.00" },
+] as const;
+
+/** Lo mismo SIN las tres filas de terceros: el mismo dinero de Ordenex, nada mas. */
+const LIBRO_SOLO_PROPIO = LIBRO_MIXTO.filter(
+  (f) =>
+    f.categoria !== "ingreso_cod_recaudado" &&
+    f.categoria !== "egreso_pago_tienda" &&
+    f.categoria !== "ingreso_reverso_pago_tienda",
+);
+
+async function totalDe(metricaId: string, caja: readonly (typeof LIBRO_MIXTO)[number][]) {
+  const { servicio } = armarServicio({ caja: [...caja] });
+  const r = await servicio.consultar(consultaDe(metricaId));
+  if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error(`${metricaId} no dio vistas`);
+  return r.datos.vistas[0];
+}
+
+describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma dos veces", () => {
+  it("`dinero_en_caja` es entradas − salidas, con el dinero de terceros dentro", async () => {
+    const vista = await totalDe("dinero_en_caja", LIBRO_MIXTO);
+
+    expect(vista.total.neto).toBe("2930.00");
+    expect(vista.total.bruto).toBe("9730.00");
+    expect(vista.id).toBe("dinero_en_caja");
+    expect(vista.fuente).toBe("wallet_movimiento");
+    expect(vista.grano).toBe("fecha");
+    // No suma con nada: contiene dinero que `ganancia_ordenex` excluye a proposito.
+    expect(vista.sumableCon).toEqual([]);
+    expect(vista.filas).toEqual([]);
+  });
+
+  it("`ganancia_ordenex` deja fuera el dinero de terceros: 730, no 2930", async () => {
+    const vista = await totalDe("ganancia_ordenex", LIBRO_MIXTO);
+
+    expect(vista.total.neto).toBe("730.00");
+    // El bruto es el de lo agregado, igual que en las demas metricas de caja ⟨D1(c)⟩.
+    expect(vista.total.bruto).toBe("9730.00");
+    expect(vista.id).toBe("ganancia_ordenex");
+  });
+
+  it("las dos cifras son DISTINTAS sobre el mismo libro, y esa diferencia es el punto", async () => {
+    const enCaja = await totalDe("dinero_en_caja", LIBRO_MIXTO);
+    const ganancia = await totalDe("ganancia_ordenex", LIBRO_MIXTO);
+
+    expect(enCaja.total.neto).not.toBe(ganancia.total.neto);
+    // 2930 − 730 = 2200 = el contra-entrega que aun no se ha entregado (5000 − 3000 + 200).
+    expect(
+      Number(enCaja.total.neto) - Number(ganancia.total.neto),
+      "solo para leer el descuadre: la aritmetica de dinero vive en Prisma.Decimal",
+    ).toBeCloseTo(2200, 2);
+  });
+
+  it("R51 en el servicio: anadir contra-entrega NO mueve la ganancia y SI mueve la caja", async () => {
+    const gananciaSinTerceros = await totalDe("ganancia_ordenex", LIBRO_SOLO_PROPIO);
+    const gananciaConTerceros = await totalDe("ganancia_ordenex", LIBRO_MIXTO);
+    const cajaSinTerceros = await totalDe("dinero_en_caja", LIBRO_SOLO_PROPIO);
+    const cajaConTerceros = await totalDe("dinero_en_caja", LIBRO_MIXTO);
+
+    expect(gananciaConTerceros.total.neto).toBe(gananciaSinTerceros.total.neto);
+    expect(gananciaConTerceros.total.neto).toBe("730.00");
+    // Y la otra no es insensible: si las dos se movieran igual, serian la misma cifra.
+    expect(cajaConTerceros.total.neto).not.toBe(cajaSinTerceros.total.neto);
+    expect(cajaSinTerceros.total.neto).toBe("730.00");
+  });
+
+  it("un libro sin dinero de terceros hace coincidir las dos, y eso es correcto (R6)", async () => {
+    const enCaja = await totalDe("dinero_en_caja", LIBRO_SOLO_PROPIO);
+    const ganancia = await totalDe("ganancia_ordenex", LIBRO_SOLO_PROPIO);
+
+    expect(enCaja.total.neto).toBe(ganancia.total.neto);
+  });
+
+  it("las dos consultan el libro de la caja UNA vez y ningun otro repositorio", async () => {
+    for (const id of ["dinero_en_caja", "ganancia_ordenex"]) {
+      const { servicio, ingresos, consultasHechas } = armarServicio({ caja: [...LIBRO_MIXTO] });
+      await servicio.consultar(consultaDe(id));
+
+      expect(ingresos.sumarPorCategoria, id).toHaveBeenCalledTimes(1);
+      expect(consultasHechas(), id).toBe(1);
+    }
+  });
+
+  it("el manejador REUSA `derivarCaja` y no reimplementa ninguna resta de dinero", () => {
+    // Estructural, y acotado al metodo: el archivo entero SI tiene una resta legitima
+    // (`totalSnapshot.sub(totalLedger)`, del cuadre de la conciliacion), asi que mirar el
+    // archivo completo no probaria nada de este manejador.
+    const codigo = fs.readFileSync(path.join(REPO_ROOT, SERVICIO), "utf8");
+    const inicio = codigo.indexOf("private async deTesoreria(");
+    expect(inicio, "el manejador de las dos metricas nuevas no existe").toBeGreaterThan(0);
+    const cuerpo = soloCodigo(codigo.slice(inicio)).split(/\n  private async /)[0];
+
+    expect(cuerpo).toContain("derivarCaja(");
+    // Ninguna resta ni suma con signo escrita a mano: la particion y las tres restas viven en
+    // `lib/utils/caja-tesoreria.ts`, que a su vez reusa `derivarBalance` (R9/R20).
+    expect(cuerpo).not.toMatch(/\.\s*(sub|minus)\s*\(/);
+    expect(cuerpo).not.toMatch(/new Prisma\.Decimal/);
+    expect(cuerpo).not.toContain("derivarBalance(");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* R55 — el guardia catalogo ↔ servicio sigue mordiendo por los DOS lados      */
+/* -------------------------------------------------------------------------- */
+
+describe("R55 · la coherencia catalogo ↔ servicio falla por exceso Y por defecto", () => {
+  it("con los ids REALES: quitar uno se detecta, y anadir uno inventado tambien", () => {
+    const { servicio } = armarServicio();
+    const servidos = [...servicio.idsServidos];
+    const catalogo = new Set(IDS_DEL_CATALOGO);
+
+    // (1) POR DEFECTO — el servicio deja de despachar `ganancia_ordenex`.
+    const sinUna = servidos.filter((id) => id !== "ganancia_ordenex");
+    expect(sinUna).toHaveLength(servidos.length - 1);
+    expect(IDS_DEL_CATALOGO.filter((id) => !new Set(sinUna).has(id))).toEqual(["ganancia_ordenex"]);
+
+    // (2) POR EXCESO — el servicio despacha un id que el catalogo no tiene.
+    const conUnaDeMas = [...servidos, "margen_bruto"];
+    expect(conUnaDeMas.filter((id) => !catalogo.has(id))).toEqual(["margen_bruto"]);
+
+    // (3) Y sin mutar, las dos direcciones dan vacio: el detector no grita siempre.
+    expect(IDS_DEL_CATALOGO.filter((id) => !new Set(servidos).has(id))).toEqual([]);
+    expect(servidos.filter((id) => !catalogo.has(id))).toEqual([]);
+  });
+
+  it("las dos metricas nuevas estan en las TRES fuentes independientes", () => {
+    const { servicio } = armarServicio();
+    for (const id of ["dinero_en_caja", "ganancia_ordenex"]) {
+      expect(IDS_DEL_CATALOGO, `catalogo: ${id}`).toContain(id);
+      expect(servicio.idsServidos, `servicio: ${id}`).toContain(id);
+      expect([...IDS_FINANCIERAS_SERVIDAS] as string[], `contrato: ${id}`).toContain(id);
+    }
+    expect(IDS_FINANCIERAS_SERVIDAS).toHaveLength(10);
   });
 });

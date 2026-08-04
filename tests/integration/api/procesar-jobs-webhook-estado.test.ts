@@ -41,6 +41,7 @@ describe("R26 — el drenador resuelve el handler de webhook_estado y no lo re-a
     expect(handlers.has("webhook_estado")).toBe(true);
     expect(handlers.get("webhook_estado")).toBeTypeOf("function");
     expect([...handlers.keys()].sort()).toEqual([
+      "analitica_invalidacion_cache", // feature 128: PUNTUAL, no va en buildRecurrencias
       "analitica_rollup_diario", // feature 124
       "geocodificacion",
       "liberar_reprogramadas",

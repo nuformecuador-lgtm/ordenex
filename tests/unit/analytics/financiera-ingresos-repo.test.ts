@@ -181,6 +181,92 @@ describe("R17 · las categorias salen del catalogo, no de un array escrito en el
 });
 
 /* -------------------------------------------------------------------------- */
+/* Feature 173 (T F.4) — las dos metricas de la caja, con este mismo repositorio */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Un libro con las tres clases de dinero a la vez. Va en su PROPIO fixture y no dentro de
+ * `LIBRO`: aquel tiene aserciones exactas sobre `egresos`, y meterle un `egreso_pago_tienda`
+ * las cambiaria sin que este bloque tuviera nada que ver.
+ */
+const LIBRO_TESORERIA: readonly FilaCaja[] = [
+  { categoria: "ingreso_flete", tipo: "ingreso", monto: "1000.00", fechaMovimiento: new Date("2026-08-02T12:00:00.000Z") },
+  { categoria: "egreso_sueldo", tipo: "egreso", monto: "400.00", fechaMovimiento: new Date("2026-08-02T12:00:00.000Z") },
+  // Dinero de TERCEROS: entra al aprobar el cierre y sale al pagarle a la tienda.
+  { categoria: "ingreso_cod_recaudado", tipo: "ingreso", monto: "5000.00", fechaMovimiento: new Date("2026-08-02T13:00:00.000Z") },
+  { categoria: "egreso_pago_tienda", tipo: "egreso", monto: "3000.00", fechaMovimiento: new Date("2026-08-02T14:00:00.000Z") },
+  { categoria: "ingreso_reverso_pago_tienda", tipo: "ingreso", monto: "200.00", fechaMovimiento: new Date("2026-08-02T15:00:00.000Z") },
+  // Fuera de la ventana: la metrica nueva no se salta el rango por ser nueva.
+  { categoria: "ingreso_cod_recaudado", tipo: "ingreso", monto: "999.00", fechaMovimiento: new Date("2026-08-01T12:00:00.000Z") },
+];
+
+describe("R57 · las dos metricas de la 173 salen de este repositorio, con sus categorias", () => {
+  it("`dinero_en_caja` ve el dinero de terceros ademas del propio, y respeta la ventana", async () => {
+    const { repo } = repositorio(LIBRO_TESORERIA);
+    const filas = await repo.sumarPorCategoria(consultaDe("dinero_en_caja"));
+
+    expect(filas).toEqual([
+      { categoria: "egreso_pago_tienda", tipo: "egreso", suma: "3000.00" },
+      { categoria: "egreso_sueldo", tipo: "egreso", suma: "400.00" },
+      { categoria: "ingreso_cod_recaudado", tipo: "ingreso", suma: "5000.00" },
+      { categoria: "ingreso_flete", tipo: "ingreso", suma: "1000.00" },
+      { categoria: "ingreso_reverso_pago_tienda", tipo: "ingreso", suma: "200.00" },
+    ]);
+    // Los 999.00 del dia anterior NO estan: la ventana sigue mandando.
+    expect(filas.map((f) => f.suma)).not.toContain("5999.00");
+  });
+
+  it("`ganancia_ordenex` no llega a ver el dinero de terceros: lo excluye ya el WHERE", async () => {
+    const { repo, fake } = repositorio(LIBRO_TESORERIA);
+    const filas = await repo.sumarPorCategoria(consultaDe("ganancia_ordenex"));
+
+    expect(filas).toEqual([
+      { categoria: "egreso_sueldo", tipo: "egreso", suma: "400.00" },
+      { categoria: "ingreso_flete", tipo: "ingreso", suma: "1000.00" },
+    ]);
+    // Y las tres categorias de terceros ni siquiera se le piden a la base (R17: manda el
+    // catalogo). La proteccion es doble —aqui el `where`, y en el servicio `derivarCaja`—, y
+    // esta es la que se mide donde vive: en el WHERE.
+    const where = fake.llamadas[0].args.where as { categoria: { in: string[] } };
+    expect(where.categoria.in).not.toContain("ingreso_cod_recaudado");
+    expect(where.categoria.in).not.toContain("egreso_pago_tienda");
+    expect(where.categoria.in).not.toContain("ingreso_reverso_pago_tienda");
+    expect(where.categoria.in).toHaveLength(14);
+  });
+
+  it("y la validacion sigue reventando si una de ellas declarara una categoria ajena", async () => {
+    // R57 — la misma comprobacion que protege a las cuatro de la 127, ejercida sobre una de las
+    // nuevas: `cod_recaudado` es del ledger de TIENDA, no de la caja. Servirla filtrando lo que
+    // no encaje daria una cifra corta sin que nada fallara.
+    const metrica = getMetrica("dinero_en_caja");
+    if (metrica === undefined) throw new Error("el catalogo perdio dinero_en_caja");
+    const definicion = metrica.definicion as { categorias?: readonly string[] };
+    const original = definicion.categorias;
+
+    const { repo } = repositorio(LIBRO_TESORERIA);
+    try {
+      definicion.categorias = [...(original ?? []), "cod_recaudado"];
+      await expect(repo.sumarPorCategoria(consultaDe("dinero_en_caja"))).rejects.toThrow(
+        /categorias que la caja principal no tiene: cod_recaudado/,
+      );
+    } finally {
+      definicion.categorias = original;
+    }
+
+    // El catalogo queda como estaba y la consulta vuelve a servirse.
+    expect(getMetrica("dinero_en_caja")?.definicion.categorias).toEqual(original);
+    expect((await repo.sumarPorCategoria(consultaDe("dinero_en_caja"))).length).toBe(5);
+  });
+
+  it("el fixture de tesoreria no es inocuo: lleva las tres categorias de terceros", () => {
+    const categorias = new Set(LIBRO_TESORERIA.map((f) => f.categoria));
+    expect(categorias.has("ingreso_cod_recaudado")).toBe(true);
+    expect(categorias.has("egreso_pago_tienda")).toBe(true);
+    expect(categorias.has("ingreso_reverso_pago_tienda")).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* R28 — orden estable                                                         */
 /* -------------------------------------------------------------------------- */
 

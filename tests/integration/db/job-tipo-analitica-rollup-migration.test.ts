@@ -137,14 +137,21 @@ describe("T4.1 — el datamodel declara el valor", () => {
     expect(bloque![0]).toMatch(new RegExp(`^\\s*${VALOR}\\s*//`, "m"));
   });
 
-  it("el datamodel y el `down.sql` no divergen: los siete valores, ni uno mas", () => {
+  it("el datamodel y el `down.sql` no divergen: los seis previos y luego el de la 124", () => {
+    // ACTUALIZADO POR LA FEATURE 128 (2026-08-03). La asercion original exigia que el enum del
+    // datamodel tuviera EXACTAMENTE siete valores, con el de la 124 como ULTIMO. Esa propiedad
+    // es TEMPORAL —igual que la de «la carpeta es la ULTIMA por nombre», retirada mas arriba
+    // por este mismo motivo—: deja de ser cierta en cuanto otra feature anade un valor al enum,
+    // y mantenerla haria fallar a TODA feature futura que lo haga, sin decir nada sobre la
+    // correccion de la 124. Lo que SI es de la 124 se conserva intacto: los seis valores
+    // previos en su orden exacto y el suyo JUSTO DESPUES, que es lo que su `down.sql` recrea.
     const bloque = /enum JobTipo \{([\s\S]*?)\n\}/.exec(schemaPrisma)![1];
     const valores = bloque
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("@@"))
       .map((l) => l.split(/\s|\/\//)[0]);
-    expect(valores).toEqual([
+    expect(valores.slice(0, 7)).toEqual([
       "liberar_reprogramadas",
       "geocodificacion",
       "optimizacion_ruta",
