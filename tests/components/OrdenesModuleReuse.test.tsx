@@ -5,6 +5,13 @@ import type { Column } from "@/components/shared/DataTable";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { ordenesColumnsAdminTienda } from "@/app/(app)/_components/ordenes-columns-admin-tienda";
+// Los módulos bajo prueba se importan estáticamente (no con `await import()`
+// dentro del `it`) para que su carga/transformación NO cuente contra
+// `testTimeout`: era la causa medida del flake de esta suite. Los `vi.mock` de
+// abajo son *hoisted* por Vitest, así que se aplican igual antes de estas
+// importaciones.
+import OrdenesPage from "@/app/(app)/ordenes/page";
+import { AdminTiendaDashboard } from "@/app/(app)/_components/AdminTiendaDashboard";
 
 /**
  * Reuso estructural (feature 26, R10): tanto `/ordenes` como el dashboard del
@@ -48,7 +55,6 @@ afterEach(() => {
 
 describe("Reuso de OrdenesModule (R10)", () => {
   it("/ordenes monta OrdenesModule sin columnas custom (variante por defecto)", async () => {
-    const { default: OrdenesPage } = await import("@/app/(app)/ordenes/page");
     render(await OrdenesPage());
 
     expect(screen.getByTestId("ordenes-module-stub")).toBeInTheDocument();
@@ -57,9 +63,6 @@ describe("Reuso de OrdenesModule (R10)", () => {
   });
 
   it("el dashboard del adminTienda monta el MISMO OrdenesModule con las columnas sin 'Tienda'", async () => {
-    const { AdminTiendaDashboard } = await import(
-      "@/app/(app)/_components/AdminTiendaDashboard"
-    );
     render(AdminTiendaDashboard());
 
     expect(screen.getByTestId("ordenes-module-stub")).toBeInTheDocument();

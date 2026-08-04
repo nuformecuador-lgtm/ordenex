@@ -2,6 +2,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+// Import estático (no `await import()` dentro del `it`) para que la carga del
+// árbol de la página no cuente contra `testTimeout`. Los `vi.mock` de abajo son
+// *hoisted* por Vitest, y la página lee los mocks en tiempo de llamada a
+// `Home()`, no de importación: la semántica no cambia.
+import Home from "@/app/(app)/dashboard/page";
+
 // Feature 57 (R14): el control de logout ("Salir") vive en el topbar del
 // PageHeader compartido, que la home usa vía su placeholder. La home ya NO
 // renderiza un botón de logout ad-hoc propio: el único control lo aporta el
@@ -23,8 +29,6 @@ beforeEach(() => {
 
 describe("app/(app)/page.tsx — sin botón de logout ad-hoc propio (feature 57, R14)", () => {
   it("la home muestra el placeholder y el único logout es el del PageHeader (sin botón ad-hoc)", async () => {
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
-
     const element = await Home();
     render(element);
 
