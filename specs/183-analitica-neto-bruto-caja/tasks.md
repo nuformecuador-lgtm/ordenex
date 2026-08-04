@@ -172,12 +172,18 @@
 ## Bloque F — Rastro y cierre. Depende de T14
 
 - [x] **T15. Notas de corrección en los specs ajenos (si P4 = sí).** [P]
-  Nota fechada (2026-08-04) al margen de **R18 y R37** en
-  `specs/127-analitica-financiera-servicios/requirements.md` y de **R14 y R16** en
+  Nota fechada (2026-08-04) al margen de **R16, R18 y R37** en
+  `specs/127-analitica-financiera-servicios/requirements.md` y de **R16** en
   `specs/132-analitica-tablero-financiero/requirements.md`, citando ⟨D12⟩ y esta feature. **No se
   reescribe el texto original.** Precedente: `specs/160-badge-intentos-entrega/tasks.md:300-302`.
   **Hecho:** las cuatro notas existen y dicen exactamente qué queda acotado y qué sigue intacto.
   (R26)
+
+  > ⚠️ **Corregido tras el review (B1).** Esta task decía «R18 y R37 en la 127 y **R14 y R16** en la
+  > 132». **R14 de la 132 no lleva nota y no debe llevarla** —R26 lo declara *intacto*—, y en cambio
+  > faltaba **R16 de la 127**, que es el requisito vivo que esta feature deroga más de frente. El
+  > número «cuatro» coincidía por casualidad. Si esto no se corrige, dentro de seis meses alguien
+  > sale a buscar una nota que no existe ni debe existir.
 
 - [x] **T16. `progress/impl_183.md` con el mapa R→test.** [P con T15]
   Una fila por cada `R1`–`R27`, con archivo **y nombre del caso**, construida **leyendo el caso**.

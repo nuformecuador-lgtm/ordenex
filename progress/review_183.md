@@ -9,7 +9,11 @@
 
 ## Veredicto
 
-**RECHAZADO** — 2 bloqueantes, 7 menores.
+> **RONDA 2 (2026-08-04): APROBADO.** Los dos bloqueantes están cerrados y verificados.
+> El detalle de la verificación de cierre está en **§10**, al final. Lo de abajo es el
+> registro de la ronda 1 y se conserva íntegro: es la evidencia de qué se comprobó y por qué.
+
+### Ronda 1 — RECHAZADO, 2 bloqueantes, 7 menores
 
 Los dos bloqueantes son **de rastro documental, no de código**: el código, los tests y las
 mediciones son sólidos y no hace falta tocar `lib/`, `app/` ni `tests/`. Con las dos correcciones
@@ -386,3 +390,98 @@ sobrevivir a esta feature: convierten en rojo con nombre lo que un `as` habría 
 
 Nada de esto toca `lib/`, `app/` ni `tests/`. Vuelve al implementer, o al leader si prefiere
 cerrarlo él: es rastro documental, no código.
+
+> **Cerrado en la ronda 2** (commit `aff3a3db`), los dos y sin tocar código. Ver §10.
+> Los checkboxes de §6 —`tasks.md` y `history.md`— también quedaron cerrados ahí.
+
+---
+
+## 10. Ronda 2 — verificación del cierre · **APROBADO**
+
+**Commit revisado:** `aff3a3db` «fix(183): cierra los dos bloqueantes del review (ronda 1)»,
+diff `0dfefb95..aff3a3db`.
+
+**Lo primero que comprobé, porque es la afirmación más fácil de dar por buena:** que no se tocó
+código. `git diff --name-only 0dfefb95..HEAD -- lib/ app/ components/ db/ prisma/ tests/ hooks/
+middleware.ts` devuelve **vacío**. Los seis archivos del commit son `progress/history.md`,
+`progress/impl_183.md`, `progress/review_183.md`, `specs/127-*/requirements.md`,
+`specs/183-*/requirements.md` y `specs/183-*/tasks.md`. Es exactamente lo que la ronda 1 pedía y
+nada más.
+
+### B1 — CERRADO
+
+`specs/127-analitica-financiera-servicios/requirements.md:249-261`. Verificado punto por punto:
+
+- **El texto original de R16 está intacto.** El diff de ese archivo son **13 líneas, todas
+  añadidas, cero eliminadas**. Releí `:242-248`: la Σ, la ventana `[rango.desde, rango.hasta)` y
+  su *Mutación* están palabra por palabra como estaban.
+- **La nota va DESPUÉS del requisito y de su mutación**, como bloque de cita, con el mismo formato
+  📌 de las tres anteriores. Lleva la fecha **2026-08-04** y cita **⟨D12⟩** y
+  `progress/decision_183.md`.
+- **Dice lo que tiene que decir y acota solo lo que cambió:** «en sus dos campos `bruto` y `neto`»
+  deja de aplicar a esas tres, y «todo lo demás de R16 sigue vigente palabra por palabra». Eso es
+  acotar, no derogar.
+- **La tabla de R26 del propio spec está corregida:** `specs/183-*/requirements.md:233` añade la
+  fila de R16 de la 127, con la confesión de que el spec no lo había visto. Sin esa fila, el
+  siguiente que leyera R26 volvería a contar tres notas donde hay cuatro.
+- **La fila R26 del mapa R→test también** (`progress/impl_183.md:57`): ahora dice
+  «(**R16**, R18, R37)» y «cuatro notas».
+
+La regla que se deja escrita en `impl_183.md` y en `history.md` —buscar los requisitos vivos
+**por el texto del contrato que cambia**, no por el spec que cita tu archivo— es el subproducto
+que más vale de esta feature. R18 y R37 se encontraron mirando quién nombra `metrics.ts` y
+`egresos`; R16 se escapó porque no nombra ninguno de los dos: nombra el contrato de salida.
+
+### B2 — CERRADO
+
+`specs/183-analitica-neto-bruto-caja/tasks.md`: **17 marcadas `[x]`, 2 sin marcar**. Las dos que
+quedan son exactamente las que deben quedar: **T17** (línea 189, gate completo y PR) y **T18**
+(línea 195, medición post-merge por MCP). No hay ninguna marcada en falso: contrasté T15 y T16
+contra el diff antes de aceptarlas.
+
+### Menores: estado
+
+| | Estado en ronda 2 |
+|---|---|
+| **M1** (R12: la guardia solo mata si la fecha huérfana permanece) | **Declarado como límite** en `impl_183.md`, tabla «Límites declarados, no tapados». Correcto: no se da por cubierto |
+| **M2** (R22: la mutación del spec no la caza el guardia) | **Declarado**, misma tabla |
+| **M3** (T15 pedía cuatro notas) | Resuelto en el fondo. **Queda un nit de forma**, abajo |
+| **M4** (no-regresión contra Postgres solo para `ingreso_flete`) | **Declarado**, misma tabla |
+| **M5** (`history.md`) | **Cerrado.** Entrada del 2026-08-04 añadida, con la regla de B1 y las dos deudas de guardia nombradas con archivo y línea |
+| **M6** (evidencia del gate) | **Cerrado**, y bien: se escribe que la primera corrida se lanzó con el árbol aún en movimiento y **por eso se repitió** sobre árbol quieto. Baseline **remedido** sobre `64957dca` (925/11.485) en vez de heredar el 906/11.359 de una bitácora vieja. Eso es exactamente lo que «no inventes» significa |
+| **M7** (§2 y §4 de ⟨D12⟩ al cuerpo del PR) | Sigue abierto por diseño: se cumple al abrir el PR (T17) |
+
+### Nit residual (no bloqueante, ni siquiera menor formal)
+
+`specs/183-analitica-neto-bruto-caja/tasks.md:175-179` — el **cuerpo** de T15 sigue diciendo «al
+margen de **R18 y R37** en `specs/127-*` y de **R14 y R16** en `specs/132-*`», y su «Hecho» dice
+«las cuatro notas existen». Ahora hay cuatro, pero **no son esas cuatro**: son R16, R18 y R37 de
+la 127, más R16 de la 132. R14 de la 132 sigue sin nota, y bien —R26 lo declara intacto—. El
+número coincide por casualidad. Vale la pena un renglón cuando se cierre T17, para que nadie
+lea T15 dentro de seis meses y salga a buscar una nota en R14 de la 132 que no existe ni debe.
+
+### Lo que NO repetí, y por qué
+
+La ronda 2 no toca código ni tests, así que no rehíce typecheck, lint, la suite unitaria ni la
+integración: seguirían midiendo lo mismo que verifiqué en §1. **Sí volví a correr lo único que el
+cambio podía mover**, porque hay guardias que leen el árbol de archivos y no el grafo de imports:
+
+- Censé qué tests leen `specs/`, `progress/` o `feature_list.json` desde disco (11 archivos).
+- `pnpm exec vitest run guard` sobre `aff3a3db`: **59 archivos · 812 casos, verdes.**
+- `tests/unit/analytics/financiera-trazabilidad.guardia.test.ts` lee `progress/impl_127.md`, que
+  no se tocó; `catalogo-produccion.guardia.test.ts` solo lee `progress/decision*.md`, y
+  `review_183.md` no encaja en ese patrón. Ningún guardia queda ciego por lo añadido.
+
+### Condición de merge, ya prevista por el propio plan
+
+La evidencia de gate escrita en `impl_183.md` (926 archivos / 11.528 tests, 0 fallos) se midió
+sobre **`0dfefb95`**, no sobre `aff3a3db`. El delta es markdown y he comprobado a mano que las
+guardias que leen disco siguen verdes, así que el riesgo es nulo — pero **T17 exige el gate
+completo sobre el árbol que se mergea, y esa corrida es la que vale**. Está en marcha. No es una
+condición que yo añada: es la task que queda abierta.
+
+### Veredicto de la ronda 2
+
+**APROBADO.** Cero bloqueantes. Los dos de la ronda 1 están cerrados, verificados en el diff y sin
+una línea de código tocada. Quedan T17 y T18 abiertas por diseño, tres límites declarados como
+límites y no como cobertura, y un nit de redacción en T15 que se arregla al pasar por ahí.
