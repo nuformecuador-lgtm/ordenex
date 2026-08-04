@@ -2,7 +2,7 @@
 
 Rama: `chore/flake-jsdom-medido` (desde `origin/dev`).
 
-> **El flake de esta máquina tiene DOS mecanismos distintos, no uno.** Es la
+> **El flake de esta máquina tiene TRES mecanismos distintos, no uno.** Es la
 > conclusión central de este chore y la razón de que ningún ajuste global (ni
 > workers, ni `testTimeout`) lo eliminara nunca del todo.
 >
@@ -10,9 +10,14 @@ Rama: `chore/flake-jsdom-medido` (desde `origin/dev`).
 > | --- | --- | --- | --- |
 > | **(1)** | `await import()` dentro del `it` mete la carga del árbol de módulos bajo `testTimeout` | **timeout** | Lo hace más raro, no lo elimina |
 > | **(2)** | `waitFor` sobre una **ausencia** seguido de una aserción **síncrona** de **presencia** | **elemento no encontrado** | **No. En absoluto** |
+> | **(3)** | **foto del DOM tomada antes de que la carga asiente**, comparada después | **diff con «Cargando» en un lado** | **No. En absoluto** |
 >
 > Esto explica por qué subir el `testTimeout` a 20 s en su día hizo el flake más
 > raro pero no lo eliminó: solo tocaba el mecanismo (1).
+>
+> **(2) y (3) son familia** —los dos son carreras con carga asíncrona— pero de
+> forma distinta, y por eso el detector del (2) **no** ve al (3): busca otra forma
+> sintáctica. Cada uno se encontró cuando el anterior dejó de tapar la suite.
 
 ## 1. La hipótesis vieja, y por qué se descartó
 
@@ -198,18 +203,117 @@ Mutación **revertida**.
 `CuentasPorPagarTable.test.tsx` en solitario, 5 corridas seguidas: **5/5 en
 verde**, 6 tests cada una, fase `tests` entre 1.45 s y 1.50 s (dispersión ~3%).
 
-## 6. Qué queda abierto
+## 6. Mecanismo (3): fotografiar la pantalla antes de que la carga asiente
 
-- **`ControlDescargaTransversal` sigue SIN diagnosticar.** No tiene el mecanismo
-  (1) (su `import(` es de tipo) **ni el (2)** (se revisó: su único
-  `not.toBeInTheDocument` está en la forma *inversa* —espera una presencia
-  (`descargarBlobMock` llamado) y luego afirma una ausencia síncrona—, que no
-  produce intermitencia sino, como mucho, una aserción débil). Si reaparece hay
-  que medirlo por separado: es un tercer mecanismo, todavía desconocido.
+**`ControlDescargaTransversal` DEJA DE ESTAR SIN DIAGNOSTICAR.** Falló en una
+suite completa y su causa es un tercer mecanismo:
+
+```
+FAIL tests/components/descarga/ControlDescargaTransversal.test.tsx:486
+  > descargar no altera la página, la búsqueda ni las filas visibles
+AssertionError: Familia B paginada, con búsqueda de servidor: expected {…} to deeply equal {…}
+
+  { "busqueda": "Beto", "filas": 2, "paginacion": "Página 1 de 1…",
+-   "tabla": "…EstadoCargando",
++   "tabla": "…EstadoBeto Repartidor₡4000.10₡4000.10₡0.00Al día",
+  }
+```
+
+El test toma una **foto de la pantalla ANTES** de descargar y la compara
+**después**. La foto «antes» se tomó con la tabla todavía en **«Cargando»**: los
+datos llegaron entre las dos fotos. **Lo que alteró la pantalla no fue la
+descarga, fue la carga inicial sin terminar.**
+
+### Por qué el ancla anterior era ambigua (la parte no obvia)
+
+La preparación de la Familia B esperaba así:
+
+```js
+await waitFor(() => expect(within(tabla).getAllByRole("row")).toHaveLength(2));
+```
+
+El estado de carga del `DataTable` pinta un `<tr>` con `role="status"`
+(«Cargando», sr-only) **más** filas skeleton `aria-hidden`. Como las skeleton
+**no** cuentan como `row`, durante la carga `getAllByRole("row")` devuelve
+`header + status = 2`… **exactamente el mismo número que el estado ya asentado**
+(`header + la fila real`). El ancla no distinguía «cargando» de «listo».
+
+Es la misma lección del mecanismo (2) en otra forma: **un ancla que el estado
+transitorio también satisface no es un ancla.**
+
+### El arreglo
+
+Un helper `esperarTablaAsentada(titulo, { presente, ausente })` con criterio
+**positivo**, aplicado en las **tres** familias (no solo en la B, que fue la que
+falló):
+
+| Familia | Ancla anterior | Por qué era insuficiente |
+| --- | --- | --- |
+| A con filtros (`Órdenes`) | `waitFor(mock llamado 2 veces)` | que la consulta **salga** no es que la página **llegue** |
+| A sin filtros (`Usuarios`) | `findByText("Usuario 1")` | no excluía una revalidación en vuelo |
+| B paginada (`Cuentas por pagar`) | `rows === 2` | la carga también da 2 filas |
+
+**Un intento fallido que conviene recordar:** el primer criterio fue solo
+«`Beto Repartidor` presente + sin carga», y puso **5 tests en rojo**. Motivo:
+`initialData` ya contiene a Beto, así que esa condición es cierta **antes de que
+el filtro se aplique**. Lo que distingue al estado filtrado es que **Ana se fue**.
+De ahí el parámetro `ausente`. Es el mismo error que se estaba arreglando, dado
+la vuelta: anclar a algo que el estado equivocado también cumple.
+
+### Guardia estructural
+
+`fotoDeLaPantalla` ahora **se niega a fotografiar una tabla en carga**:
+
+```js
+expect(
+  within(tabla).queryByRole("status"),
+  `${titulo}: se fotografió la pantalla con una carga en vuelo`,
+).not.toBeInTheDocument();
+```
+
+Convierte este fallo de «diff intermitente y lejos de su causa» en un error
+inmediato que **se explica solo**. Límite honesto: solo puede saltar cuando la
+carrera se materializa; no la previene.
+
+### Que siga midiendo lo mismo (dos mutaciones)
+
+R37 existe para probar que **descargar no altera la pantalla**. Se mutó la
+producción (`CuentasPorPagarTable`) para que la descarga SÍ la altere:
+
+1. `setBusqueda("")` + `setPage(1)` dentro de `obtenerFilas` → rojo:
+   `- "busqueda": "Beto"` / `+ "busqueda": ""`.
+2. `setAplicada("")` (desaplica el filtro) → rojo, y esta vez en las **filas**:
+   `- "filas": 2` / `+ "filas": 3`, con el `tabla` mostrando otra vez a Ana.
+
+La segunda importa especialmente: prueba que el arreglo **no** volvió insensible
+la comparación del contenido de la tabla, que es justo lo que se tocó. Ambas
+**revertidas**; `git diff app/` limpio.
+
+### Estabilidad
+
+`ControlDescargaTransversal.test.tsx` en solitario, **5 corridas: 5/5 verde**
+(7 tests cada una, fase `tests` 5.36–5.62 s).
+
+## 7. Qué queda abierto
+
+- **La tercera forma NO es detectable con heurística, y está medido.** Se escribió
+  un detector (capturas de estado del DOM ancladas solo a un mock) y se validó
+  contra el árbol pre-arreglo: **devuelve 0 antes y después**, o sea **sensibilidad
+  cero al defecto real**. La razón: la espera insuficiente estaba **dentro de
+  `caso.preparar(...)`**, a un nivel de indirección de la foto; saber si un helper
+  arbitrario deja la UI asentada es una propiedad **semántica**, no sintáctica.
+  Población en riesgo medida, para dimensionar: **42 capturas de estado del DOM**
+  en `tests/`. La mitigación real es la **guardia en tiempo de ejecución**, no un
+  detector estático.
 - **El detector del patrón (2) es heurístico**, no un análisis semántico: mira el
   cuerpo textual del `waitFor` y las sentencias síncronas siguientes hasta el
   primer `await`. Puede haber variantes que no cubra (p. ej. la espera repartida
   entre helpers, o `findBy*` mezclado). No es una garantía de ausencia.
+- **Los arreglos del mecanismo (2) NO están en `chore/deuda-170-listados`.** Viven
+  en `chore/flake-jsdom-medido` (commit `bb296907`). Medido en esta rama: el
+  detector del (2) sigue dando **5 sitios**, y una de tres corridas del barrido
+  `tests/components tests/integration` falló 1 archivo (las otras dos: 323/323).
+  Mientras esa rama no aterrice, ésta seguirá flakeando por el mecanismo (2).
 - **Quedan ~36 archivos con `await import()` sin tocar**, deliberadamente: solo
   se intervinieron los que superaban 2,5 s en la fase `tests`. En
   `tests/components` los restantes son `LandingPage` (5), `LoginPage` (3),
@@ -223,27 +327,50 @@ verde**, 6 tests cada una, fase `tests` entre 1.45 s y 1.50 s (dispersión ~3%).
   aislado. La hipótesis es que con la fase `tests` en decenas de ms el margen es
   amplísimo, pero la confirmación es empírica: que el flake no reaparezca.
 
-## 7. Verificación
+## 8. Verificación
+
+Mecanismos (1) y (2), en `chore/flake-jsdom-medido`:
+
+- `pnpm typecheck` limpio · `pnpm lint` 0 errores · `tests/components
+  tests/integration` **323 archivos / 3742 tests verdes** · `CuentasPorPagarTable`
+  ×5 en verde · mutación del filtro roja como debe, revertida.
+
+Mecanismo (3), en `chore/deuda-170-listados`:
 
 - `pnpm typecheck` — limpio.
-- `pnpm lint` — 0 errores (44 warnings preexistentes, **ninguno** en los archivos
-  tocados).
+- `pnpm lint` — 0 errores (44 warnings preexistentes, ninguno en lo tocado).
 - `pnpm exec vitest run tests/components tests/integration` — **323 archivos,
-  3742 tests, todos en verde** (169 s).
-- `CuentasPorPagarTable.test.tsx` en solitario **×5** — 5/5 verde.
-- Prueba por **mutación** del filtro — rojo como debe, revertida (§5).
+  3742 tests verdes**… en 2 de 3 corridas. La otra falló 1 archivo, por el
+  mecanismo (2), que **no está arreglado en esta rama** (ver §7).
+- `ControlDescargaTransversal.test.tsx` en solitario **×5** — 5/5 verde.
+- **Dos mutaciones** de producción, rojas como deben y revertidas (§6).
 
 Suite completa: **no ejecutada aquí**; el gate lo corre el leader.
 
-## 8. Qué llevarse de aquí
+## 9. Qué llevarse de aquí
 
-Tres cosas que costaron medición y conviene no volver a pagar:
+Cuatro cosas que costaron medición y conviene no volver a pagar:
 
 1. **Acotar workers no arregla flake de jsdom** en esta máquina: −3% en el test
    lento y +11% en la suite. Medido dos veces. No reintentar.
-2. **Subir `testTimeout` tampoco**: solo enmascara el mecanismo (1) y es ciego al
-   (2). Que un flake se vuelva "más raro" al subir el timeout NO confirma que la
-   causa sea la lentitud.
-3. **En tests de listas que recargan del servidor, la presencia y la ausencia van
-   en el mismo `waitFor`, presencia primero.** Es el invariante que evita el
-   mecanismo (2).
+2. **Subir `testTimeout` tampoco**: solo enmascara el mecanismo (1) y es ciego a
+   (2) y (3). Que un flake se vuelva "más raro" al subir el timeout NO confirma
+   que la causa sea la lentitud.
+3. **Un ancla que el estado transitorio también satisface no es un ancla.** Es el
+   invariante común a (2) y (3): la presencia y la ausencia van en el mismo
+   `waitFor`, presencia primero; y «la consulta salió» (un mock llamado) no es
+   «la pantalla llegó».
+4. **Contra estas carreras vale más una guardia en tiempo de ejecución que un
+   detector estático.** El detector del (2) funcionó porque su forma es
+   sintáctica; el del (3) se midió con **sensibilidad cero** porque la suya es
+   semántica. Cuando la propiedad es «¿está la UI asentada?», hay que preguntarlo
+   en ejecución.
+
+## 10. Cómo se encontró cada uno (para la próxima)
+
+Ninguno de los tres apareció mirando código: **cada uno se destapó cuando el
+anterior dejó de tapar la suite**. El (1) salió de medir la hipótesis vieja y
+verla caer; el (2) apareció en la primera suite completa tras arreglar el (1);
+el (3), en la primera suite completa tras arreglar el (2). El corolario práctico
+es que **una suite completa verde de una sola pasada no cierra un flake**: hace
+falta repetirla.

@@ -198,6 +198,9 @@ const FORMAS = [
       await screen.findByText("Destinatario 1");
       await user.click(screen.getByRole("button", { name: "Página siguiente" }));
       await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalledTimes(2));
+      // Que la consulta haya SALIDO no es que la página haya LLEGADO: sin esto la
+      // pantalla se fotografiaba con la página 2 todavía en carga.
+      await esperarTablaAsentada("Órdenes", { presente: "Destinatario 1" });
     },
     filasEsperadas: ORDENES_TODAS.length,
   },
@@ -215,7 +218,7 @@ const FORMAS = [
         />,
       ),
     preparar: async () => {
-      await screen.findByText("Usuario 1");
+      await esperarTablaAsentada("Usuarios", { presente: "Usuario 1" });
     },
     filasEsperadas: USUARIOS_TODOS.length,
   },
@@ -234,19 +237,61 @@ const FORMAS = [
       ),
     preparar: async (user: ReturnType<typeof userEvent.setup>) => {
       await user.type(screen.getByRole("searchbox"), "Beto");
-      const tabla = screen.getByRole("table", {
-        name: "Cuentas por pagar a mensajeros",
+      // Anclar solo al nº de filas era ambiguo: en carga la tabla también tiene 2
+      // (header + la fila `role="status"`). Se ancla a que la fila BUSCADA esté pintada.
+      const tabla = await esperarTablaAsentada("Cuentas por pagar a mensajeros", {
+        presente: "Beto Repartidor",
+        ausente: "Ana Mensajera",
       });
-      await waitFor(() => expect(within(tabla).getAllByRole("row")).toHaveLength(2));
+      expect(within(tabla).getAllByRole("row")).toHaveLength(2);
     },
     filasEsperadas: 1,
   },
 ] as const;
 
+/**
+ * Espera a que la tabla haya ASENTADO antes de fotografiarla.
+ *
+ * El estado de carga del `DataTable` pinta un `<tr>` con `role="status"` («Cargando») MÁS
+ * filas skeleton `aria-hidden`. Como las skeleton no cuentan como `row`, durante la carga
+ * `getAllByRole("row")` devuelve header + status = 2, EXACTAMENTE el mismo número que el
+ * estado ya asentado (header + la fila real). Anclar la preparación a un número de filas
+ * se satisfacía por tanto a media carga, y la foto «antes» salía con «Cargando».
+ *
+ * El criterio es POSITIVO —que la fila esperada ya esté pintada— y además exige que no
+ * quede ninguna carga en vuelo que pueda repintar entre las dos fotos.
+ */
+async function esperarTablaAsentada(
+  titulo: string,
+  { presente, ausente }: { presente: string; ausente?: string },
+) {
+  const tabla = screen.getByRole("table", { name: titulo });
+  await waitFor(() => {
+    // Presencia primero: es la condición fuerte.
+    expect(within(tabla).getByText(presente)).toBeInTheDocument();
+    // Cuando la preparación FILTRA, la presencia sola no basta: la fila buscada ya estaba
+    // en `initialData` antes de filtrar, así que «está Beto» es cierto ANTES de que el
+    // filtro se aplique. Lo que distingue al estado filtrado es que la otra fila se fue.
+    if (ausente !== undefined) {
+      expect(within(tabla).queryByText(ausente)).not.toBeInTheDocument();
+    }
+    // Y que no quede carga en vuelo que pueda repintar entre las dos fotos.
+    expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
+  });
+  return tabla;
+}
+
 /** Estado VISIBLE de la pantalla: lo que R37 promete no tocar. */
 function fotoDeLaPantalla(titulo: string) {
   const tabla = screen.getByRole("table", { name: titulo });
   const busqueda = screen.queryByRole("searchbox") as HTMLInputElement | null;
+  // Guardia: fotografiar una tabla en carga es comparar contra un estado transitorio, y el
+  // fallo sale intermitente y lejos de su causa. Si esto salta, lo que falta es asentar la
+  // pantalla ANTES (ver `esperarTablaAsentada`), no relajar la comparación.
+  expect(
+    within(tabla).queryByRole("status"),
+    `${titulo}: se fotografió la pantalla con una carga en vuelo`,
+  ).not.toBeInTheDocument();
   return {
     tabla: tabla.textContent,
     filas: within(tabla).getAllByRole("row").length,
