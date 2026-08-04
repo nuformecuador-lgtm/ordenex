@@ -438,10 +438,17 @@ describe("descarga — Familia B, sobre lo que ya está en el cliente", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     montar([VIGENTE, ANULADO]);
 
-    await user.click(screen.getByRole("button", { name: `Descargar ${TITULO}` }));
-    await waitFor(() =>
-      expect(screen.queryAllByText(/No hay datos que descargar/)).toHaveLength(0),
-    );
+    const boton = screen.getByRole("button", { name: `Descargar ${TITULO}` });
+    await user.click(boton);
+    // Contar cuántos avisos NO hay es un ancla que el estado transitorio también cumple: cero
+    // avisos es cierto también ANTES de que la descarga empiece, así que esa espera no esperaba
+    // nada. La señal POSITIVA de que terminó es el botón: el control lo deshabilita mientras
+    // genera (`DescargarDatasetButton`, `disabled={generando}`) y lo devuelve al pulsable al
+    // resolver. El aviso de vacío se sigue exigiendo ausente, ahora ya con la descarga hecha.
+    await waitFor(() => {
+      expect(boton).toBeEnabled();
+      expect(screen.queryByText(/No hay datos que descargar/)).not.toBeInTheDocument();
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });

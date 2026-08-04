@@ -376,9 +376,13 @@ describe("Ledgers de dinero · descarga", () => {
         name: `Descargar ${ledger.titulo}`,
       });
       const tabla = screen.getByRole("table", { name: ledger.tabla });
-      await waitFor(() =>
-        expect(within(tabla).getAllByRole("row")).toHaveLength(ledger.pagina.length + 1),
-      );
+      // El conteo solo no distingue la tabla asentada de la que está cargando: el `DataTable`
+      // pinta en carga un `<tr>` con `role="status"` y filas skeleton `aria-hidden` que no
+      // cuentan como `row`, así que el número puede cuadrar a media carga.
+      await waitFor(() => {
+        expect(within(tabla).getAllByRole("row")).toHaveLength(ledger.pagina.length + 1);
+        expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
+      });
 
       await user.click(boton);
       await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
@@ -553,9 +557,10 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     renderCaja(CAJA_CON_NUEVOS);
 
     const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
-    await waitFor(() =>
-      expect(within(tabla).getAllByRole("row")).toHaveLength(CAJA_CON_NUEVOS.length + 1),
-    );
+    await waitFor(() => {
+      expect(within(tabla).getAllByRole("row")).toHaveLength(CAJA_CON_NUEVOS.length + 1);
+      expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
+    });
 
     // Las mismas seis columnas de siempre: las categorías nuevas no añaden ni quitan ninguna.
     expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
