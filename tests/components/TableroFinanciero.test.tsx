@@ -12,8 +12,14 @@ import {
   type ImporteAnalitico,
   type MetricaFinancieraId,
   type ResultadoFinanciero,
+  type ResultadoFinancieroVistas,
   type VistaFinanciera,
 } from "@/lib/types/analitica-financiera";
+import {
+  importeConNeto,
+  importeSoloBruto,
+  sinNeto,
+} from "@/tests/fixtures/importe-analitico";
 
 // Feature 132 (T4.1, T4.2) — los paneles del tablero financiero.
 //
@@ -22,6 +28,14 @@ import {
 // una asercion sobre el lienzo pasaria monte el componente su grafica o no
 // (cobertura cero con luz verde). Los lienzos se sustituyen por dobles LOCALES,
 // como ya hace `tests/components/AnalyticsGraficas.test.tsx`.
+//
+// Feature 183 ⟨D12⟩ (humano, 2026-08-04, `progress/decision_183.md`) — las fixtures
+// llevan ahora la FORMA del importe, y no todas la misma: `ingreso_flete`,
+// `ingreso_comision_cod` e `ingreso_iva` publican `solo_bruto` y las otras siete
+// `bruto_y_neto`, exactamente como el servicio (lo fija
+// `tests/unit/analytics/financiera-forma-importe.guardia.test.ts`). Esa asimetria NO es
+// un detalle de fixture: es lo que hace que los casos de R19 y de R20 midan cosas
+// distintas sobre el MISMO tablero.
 
 vi.mock("@/components/private/analytics/lienzo/BarrasLienzo", () => ({
   default: () => <div data-testid="lienzo-barras" />,
@@ -54,12 +68,13 @@ function cifra(valor: number, unidad: "moneda" | "conteo"): string {
   return formatearValor(valor, unidad).replace(/\s+/g, " ");
 }
 
-function importe(bruto: string, neto: string): ImporteAnalitico {
-  // La `moneda` del DTO no la lee nadie: el formato lo resuelve el paquete de la
-  // 130 desde `lib/config/moneda.ts` (R25). Se rellena con un marcador para que
-  // un panel que la leyera pintara basura visible en vez de acertar por azar.
-  return { bruto, neto, moneda: "moneda-que-nadie-lee" };
-}
+// Los dos constructores de importe salen del helper compartido
+// (`tests/fixtures/importe-analitico.ts`) y se escriben EN CADA SITIO, sin alias: cual
+// forma lleva cada metrica es lo que estos casos miden, y esconderlo tras un constructor
+// neutro dejaria la asimetria invisible en la revision. La `moneda` del DTO no la lee
+// nadie —el formato lo resuelve el paquete de la 130 desde `lib/config/moneda.ts`
+// (R25)— y el helper la rellena con un marcador para que un panel que la leyera pintara
+// basura visible en vez de acertar por azar.
 
 function vistaSinFilas(id: string, total: ImporteAnalitico): VistaFinanciera {
   return {
@@ -115,24 +130,33 @@ const ETIQUETAS: Readonly<Record<MetricaFinancieraId, string>> = {
  * (`dinero_en_caja`, `ganancia_ordenex`) y el typecheck lo caza aqui (TS2739).
  */
 const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
-  ingreso_flete: dtoKpi("ingreso_flete", ETIQUETAS.ingreso_flete, importe("1000.00", "900.00")),
+  // Feature 183 ⟨D12⟩ — LAS TRES de lista homogenea de prefijo publican `solo_bruto`.
+  // Antes de la 183 esta fixture les daba un neto distinto del bruto (900 / 1800 / 2700),
+  // que era una combinacion IMPOSIBLE: con el CHECK categoria↔tipo de la 173 su
+  // `Σ egreso` es cero, luego su neto solo podia valer `+bruto`. La fixture no se
+  // "arregla" igualando las cifras: se le retira el campo, que es lo que el contrato
+  // hizo.
+  ingreso_flete: dtoKpi("ingreso_flete", ETIQUETAS.ingreso_flete, importeSoloBruto("1000.00")),
   ingreso_comision_cod: dtoKpi(
     "ingreso_comision_cod",
     ETIQUETAS.ingreso_comision_cod,
-    importe("2000.00", "1800.00"),
+    importeSoloBruto("2000.00"),
   ),
-  ingreso_iva: dtoKpi("ingreso_iva", ETIQUETAS.ingreso_iva, importe("3000.00", "2700.00")),
-  egresos: dtoKpi("egresos", ETIQUETAS.egresos, importe("4000.00", "3600.00")),
+  ingreso_iva: dtoKpi("ingreso_iva", ETIQUETAS.ingreso_iva, importeSoloBruto("3000.00")),
+  // `egresos` CONSERVA el neto ⟨D12⟩ y lo publica NEGATIVO (P3, humana 2026-08-04: una
+  // salida de caja se publica con su signo). El neto no es `−bruto` a proposito: con las
+  // dos cifras ligadas, un panel que pintara la misma dos veces pasaria igual.
+  egresos: dtoKpi("egresos", ETIQUETAS.egresos, importeConNeto("4000.00", "-3600.00")),
   // Feature 173 ⟨P4⟩ — `deTesoreria` las sirve con la MISMA forma que las cuatro de
   // arriba: una vista sola, `grano: "fecha"`, `sumableCon: []`, SIN filas (el
   // repositorio agrega la ventana entera) y `esAcumulado: false` — no son un saldo
   // al corte, son el movimiento del rango. Por eso van con el mismo helper que sus
   // vecinas y con importes que continuan su serie.
-  dinero_en_caja: dtoKpi("dinero_en_caja", ETIQUETAS.dinero_en_caja, importe("5000.00", "4500.00")),
+  dinero_en_caja: dtoKpi("dinero_en_caja", ETIQUETAS.dinero_en_caja, importeConNeto("5000.00", "4500.00")),
   ganancia_ordenex: dtoKpi(
     "ganancia_ordenex",
     ETIQUETAS.ganancia_ordenex,
-    importe("6000.00", "5400.00"),
+    importeConNeto("6000.00", "5400.00"),
   ),
   cod_recaudado: {
     tipo: "vistas",
@@ -148,11 +172,11 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         fuente: "cierre_dia",
         sumableCon: [],
         filas: [
-          { cubo: "efectivo", importe: importe("111.11", "101.11") },
-          { cubo: "simpe", importe: importe("122.22", "102.22") },
-          { cubo: "transferencia", importe: importe("133.33", "103.33") },
+          { cubo: "efectivo", importe: importeConNeto("111.11", "101.11") },
+          { cubo: "simpe", importe: importeConNeto("122.22", "102.22") },
+          { cubo: "transferencia", importe: importeConNeto("133.33", "103.33") },
         ],
-        total: importe("366.66", "311.11"),
+        total: importeConNeto("366.66", "311.11"),
       },
       {
         id: VISTA_COD_RECAUDADO_POR_TIENDA,
@@ -164,9 +188,9 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         // filas es parte de la prueba.
         filas: CUBOS_TIENDA.map((cubo, indice) => ({
           cubo,
-          importe: importe(`${201 + indice}.00`, `${101 + indice}.00`),
+          importe: importeConNeto(`${201 + indice}.00`, `${101 + indice}.00`),
         })),
-        total: importe("1206.00", "722.22"),
+        total: importeConNeto("1206.00", "722.22"),
       },
     ],
   },
@@ -184,8 +208,8 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         fuente: "wallet_tienda_movimiento",
         sumableCon: [],
         filas: [
-          { cubo: CUBOS_TIENDA[0], importe: importe("55.00", "50.00") },
-          { cubo: CUBOS_TIENDA[1], importe: importe("66.00", "60.00") },
+          { cubo: CUBOS_TIENDA[0], importe: importeConNeto("55.00", "50.00") },
+          { cubo: CUBOS_TIENDA[1], importe: importeConNeto("66.00", "60.00") },
         ],
         // OJO: el total NO cuadra con la suma de las filas (55+66 = 121 bruto,
         // 50+60 = 110 neto) Y ESO ES A PROPOSITO. NO LO "ARREGLES".
@@ -214,14 +238,14 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         // "deberian" cuadrar: tienes razon sobre PRODUCCION y es irrelevante
         // AQUI. Esto es una fixture y su trabajo es distinguir, no parecerse.
         // Cuadrarla deja R14 sin red.
-        total: importe("140.00", "128.00"),
+        total: importeConNeto("140.00", "128.00"),
       },
     ],
   },
   cuenta_por_pagar_mensajero: dtoKpi(
     "cuenta_por_pagar_mensajero",
     ETIQUETAS.cuenta_por_pagar_mensajero,
-    importe("88.00", "80.00"),
+    importeConNeto("88.00", "80.00"),
     true,
   ),
   conciliacion_cierres: {
@@ -440,17 +464,33 @@ describe("Feature 132 (R18) — 'saldo al corte' solo donde el DTO lo declara", 
   });
 });
 
-describe("Feature 132 (R16) — bruto y neto, los dos y distinguibles", () => {
+describe("Feature 132 (R16) / 183 (R20) — donde el DTO trae los DOS, se muestran los dos y distinguibles", () => {
+  // R16 de la 132 queda REINTERPRETADO por ⟨D12⟩, no derogado: cada panel muestra todos
+  // los importes que su DTO trae, y donde trae los dos siguen los dos. Por eso este
+  // bloque se traslada de `ingreso_flete` —que desde la 183 publica `solo_bruto` y con
+  // el que la aserción ya no tendría material— a `egresos`, que CONSERVA el neto. La
+  // aserción no se borra ni se relaja: se muda a donde el requisito sigue aplicando.
   it("el panel de KPI muestra el neto como cifra y el bruto etiquetado aparte", () => {
     render(<TableroFinanciero paneles={panelesOk()} />);
 
-    const seccion = screen.getByRole("region", { name: ETIQUETAS.ingreso_flete });
-    const neto = cifra(900, "moneda");
-    const bruto = cifra(1000, "moneda");
+    const seccion = screen.getByRole("region", { name: ETIQUETAS.egresos });
+    const neto = cifra(-3600, "moneda");
+    const bruto = cifra(4000, "moneda");
 
     expect(neto).not.toBe(bruto);
     expect(within(seccion).getByText(neto)).toBeInTheDocument();
     expect(within(seccion).getByText(`Bruto: ${bruto}`)).toBeInTheDocument();
+  });
+
+  it("el neto de `egresos` conserva su signo negativo (P3, humana 2026-08-04)", () => {
+    // El KPI pinta `−3.600,00` bajo el título «Egresos». Se lee dos veces, y aun así se
+    // conserva tal cual: cambiar la presentación del signo tocaría `formatearValor`, que
+    // es del paquete compartido de la 130 y no está en ⟨D12⟩.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS.egresos });
+    expect(within(seccion).getByText(cifra(-3600, "moneda"))).toBeInTheDocument();
+    expect(within(seccion).queryByText(cifra(3600, "moneda"))).toBeNull();
   });
 
   it("el panel de tabla muestra el total del DTO en sus dos formas", () => {
@@ -461,6 +501,179 @@ describe("Feature 132 (R16) — bruto y neto, los dos y distinguibles", () => {
     expect(within(seccion).getByText("Total bruto")).toBeInTheDocument();
     expect(within(seccion).getByText(cifra(128, "moneda"))).toBeInTheDocument();
     expect(within(seccion).getByText(cifra(140, "moneda"))).toBeInTheDocument();
+  });
+
+  it("la tabla de una vista CON neto conserva sus dos columnas de importe", () => {
+    // Contrapeso del caso de R19 de más abajo: sin esto, un tablero que unificara TODOS
+    // los paneles en «solo bruto» pasaría aquel en verde y perdería el neto en silencio.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS.cuenta_por_pagar_tienda });
+    expect(within(seccion).getByRole("columnheader", { name: "Neto" })).toBeInTheDocument();
+    expect(within(seccion).getByRole("columnheader", { name: "Bruto" })).toBeInTheDocument();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Feature 183 — donde NO hay neto no se pinta nada en su lugar                */
+/* -------------------------------------------------------------------------- */
+
+/** Las tres métricas que ⟨D12⟩ dejó sin neto, con el bruto que la fixture les da. */
+const SIN_NETO: [MetricaFinancieraId, number][] = [
+  ["ingreso_flete", 1000],
+  ["ingreso_comision_cod", 2000],
+  ["ingreso_iva", 3000],
+];
+
+/** El marcador de dato ausente REAL del paquete, no un guion escrito aquí. */
+const MARCADOR_AUSENTE = formatearValor(null, "moneda");
+
+describe("Feature 183 (R19) — un panel sin neto pinta el bruto y NADA en el lugar del neto", () => {
+  it.each(SIN_NETO)(
+    "`%s` pinta su bruto como cifra del KPI, con la etiqueta «Bruto» (P2)",
+    (id, bruto) => {
+      render(<TableroFinanciero paneles={panelesOk()} />);
+
+      const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+      // La etiqueta existe: sin ella el KPI perdería su nombre accesible, que es lo que
+      // P2 descartó explícitamente.
+      expect(within(seccion).getByText("Bruto")).toBeInTheDocument();
+      expect(within(seccion).getByText(cifra(bruto, "moneda"))).toBeInTheDocument();
+    },
+  );
+
+  it.each(SIN_NETO)("`%s` no muestra la etiqueta «Neto» ni una línea secundaria", (id, bruto) => {
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+    expect(within(seccion).queryByText("Neto")).toBeNull();
+    expect(within(seccion).queryByText("Total neto")).toBeNull();
+    expect(seccion.textContent ?? "").not.toMatch(/neto/i);
+    // Y tampoco la línea secundaria del bruto: con una sola cifra sobraría (P2).
+    expect(within(seccion).queryByText(`Bruto: ${cifra(bruto, "moneda")}`)).toBeNull();
+  });
+
+  it.each(SIN_NETO)("`%s` no pinta el marcador de dato ausente en el lugar del neto", (id) => {
+    // ES LA COLISIÓN QUE HAY QUE EVITAR: en la 132 ese marcador significa «no se sabe»
+    // (R15) y aquí la verdad es «no aplica». `queryByText` compara el texto COMPLETO del
+    // elemento, así que el guion de las fechas del rango («2026-07-05 — 2026-08-03») no
+    // lo dispara: solo lo haría una celda o una cifra que valiera exactamente eso.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+    expect(within(seccion).queryByText(MARCADOR_AUSENTE)).toBeNull();
+    expect(within(seccion).queryAllByText(MARCADOR_AUSENTE)).toHaveLength(0);
+  });
+
+  it("una tabla de una vista sin neto no declara la columna del neto", () => {
+    // El otro sitio donde el ausente aparecería solo: `TablaResumen` pinta el marcador en
+    // toda celda cuya clave no encuentra (`TablaResumen.tsx:73`). La columna no existe.
+    render(<TableroFinanciero paneles={[panelDeTablaSinNeto()]} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS.cod_recaudado });
+    expect(within(seccion).getByRole("columnheader", { name: "Bruto" })).toBeInTheDocument();
+    expect(within(seccion).queryByRole("columnheader", { name: "Neto" })).toBeNull();
+    expect(within(seccion).queryAllByRole("cell", { name: MARCADOR_AUSENTE })).toHaveLength(0);
+  });
+});
+
+/**
+ * El panel de la vista por tienda de `cod_recaudado`, con la distinción RETIRADA.
+ *
+ * Es la MISMA vista de la fixture de arriba —mismo id, mismo grano, mismos brutos— y lo
+ * único que cambia es la `forma`. Por eso sirve para R21 y para R22 a la vez: si el
+ * tablero decidiera por una lista de ids escrita en el componente, las dos versiones se
+ * comportarían igual.
+ */
+function panelDeTablaSinNeto(): PanelFinanciero {
+  const original = DTOS.cod_recaudado as ResultadoFinancieroVistas;
+  const porTienda = original.vistas[1]!;
+  return {
+    estado: "ok",
+    id: "cod_recaudado",
+    datos: {
+      ...original,
+      vistas: [
+        {
+          ...porTienda,
+          filas: porTienda.filas.map((fila) => ({ ...fila, importe: sinNeto(fila.importe) })),
+          total: sinNeto(porTienda.total),
+        },
+      ],
+    },
+  };
+}
+
+/** Los `<li>` de la alternativa textual de una gráfica, que nombran serie y categoría. */
+function entradasDeGrafica(nombreSeccion: string, nombreGrafica: string): string[] {
+  const seccion = screen.getByRole("region", { name: nombreSeccion });
+  const lista = within(seccion).getByRole("list", { name: nombreGrafica });
+  return within(lista)
+    .getAllByRole("listitem")
+    .map((item) => item.textContent ?? "");
+}
+
+describe("Feature 183 (R21) — una vista sin neto emite UNA sola serie", () => {
+  const TITULO_TIENDA = `${ETIQUETAS.cod_recaudado} · Comparativa por categoría`;
+
+  it("con neto, la gráfica comparativa recibe DOS series: la del bruto y la del neto", () => {
+    // El lado que hay que conservar: la serie doble sigue existiendo donde hay material.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const nombre = nombresEsperados(["cod_recaudado"])[1] ?? "";
+    const entradas = entradasDeGrafica(nombre, `${nombre} · Comparativa por categoría`);
+
+    expect(entradas.filter((texto) => texto.startsWith("bruto, "))).toHaveLength(5);
+    expect(entradas.filter((texto) => texto.startsWith("neto, "))).toHaveLength(5);
+    // 6 cubos con MAX_SERIES = 5: la cola se agrupa, y son 5 puntos por serie.
+    expect(entradas).toHaveLength(10);
+  });
+
+  it("sin neto, la MISMA gráfica recibe UNA: ninguna entrada de la serie del neto", () => {
+    render(<TableroFinanciero paneles={[panelDeTablaSinNeto()]} />);
+
+    const entradas = entradasDeGrafica(ETIQUETAS.cod_recaudado, TITULO_TIENDA);
+
+    expect(entradas.filter((texto) => texto.startsWith("neto, "))).toHaveLength(0);
+    expect(entradas.filter((texto) => texto.startsWith("bruto, "))).toHaveLength(5);
+    // La mitad de entradas que el caso anterior: el techo `MAX_SERIES` no se consume al
+    // doble por una serie que sería copia de la otra.
+    expect(entradas).toHaveLength(5);
+  });
+});
+
+describe("Feature 183 (R22) — lo que pinta el tablero lo decide la FORMA del DTO", () => {
+  it("la misma vista, con y sin neto, produce dos pantallas distintas", () => {
+    // Las dos fixtures comparten id de métrica, id de vista, grano y brutos. Un tablero
+    // que decidiera por una lista de ids escrita a mano no podría distinguirlas.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+    const conNeto = screen.getByRole("region", {
+      name: nombresEsperados(["cod_recaudado"])[1] ?? "",
+    }).textContent;
+    cleanup();
+
+    render(<TableroFinanciero paneles={[panelDeTablaSinNeto()]} />);
+    const sinNetoTexto = screen.getByRole("region", { name: ETIQUETAS.cod_recaudado })
+      .textContent;
+
+    expect(conNeto).not.toBe(sinNetoTexto);
+    expect(conNeto ?? "").toMatch(/neto/i);
+    expect(sinNetoTexto ?? "").not.toMatch(/neto/i);
+  });
+
+  it("las tres métricas sin neto y las siete con neto conviven en el MISMO tablero", () => {
+    // La prueba de que no hay un interruptor global: el mismo render pinta paneles de las
+    // dos clases, y cada uno según lo que su propio DTO trae.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    for (const [id] of SIN_NETO) {
+      const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+      expect(seccion.textContent ?? "").not.toMatch(/neto/i);
+    }
+    for (const id of ["egresos", "dinero_en_caja", "ganancia_ordenex"] as const) {
+      const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+      expect(seccion.textContent ?? "").toMatch(/neto/i);
+    }
   });
 });
 

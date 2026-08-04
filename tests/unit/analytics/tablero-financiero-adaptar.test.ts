@@ -9,11 +9,21 @@ import {
 import type { VistaFinanciera } from "@/lib/types/analitica-financiera";
 import {
   COLUMNAS_IMPORTE,
+  COLUMNAS_IMPORTE_SOLO_BRUTO,
+  ImporteSinNetoError,
   aNumero,
   agruparCola,
+  columnasDeVista,
+  esVistaConNeto,
   filasDeVista,
   serieDeVista,
+  type VistaConNeto,
 } from "@/app/(app)/analitica/_components/financiero/adaptar";
+import {
+  importeConNeto,
+  importeSoloBruto,
+  sinNeto,
+} from "@/tests/fixtures/importe-analitico";
 
 // Feature 132 (T2.1, T2.2, T2.3) — los adaptadores puros del tablero financiero.
 //
@@ -22,36 +32,54 @@ import {
 //   1. convertir un importe ilegible en `0` (R15),
 //   2. pintar una cifra que no esta literalmente en el DTO (R14, R16, R24),
 //   3. recortar categorias perdiendo parte del total (R20, R21).
+//
+// Feature 183 ⟨D12⟩ (humano, 2026-08-04) anade un CUARTO, que es de la misma familia:
+//   4. rellenar la ausencia del `neto` con algo —`null`, `0`, "" o el propio bruto—
+//      donde el importe no lo publica (R19, R21, R22, R23 de la 183). El ausente de la
+//      132 significa «no se sabe» (R15); «no aplica» es otra cosa y no se pinta igual.
 
 const ETIQUETA_COLA = "Resto";
 
 /** Un id opaco de tienda, tal como lo entrega el servicio: sin nombre legible. */
 const CUBO_OPACO = "clx8s7q0000tienda";
 
-function importe(bruto: string, neto: string) {
-  // La `moneda` viaja en el DTO pero NINGUN adaptador la lee: el formato lo
-  // resuelve el paquete de la 130 a partir de `lib/config/moneda.ts` (R25). Se
-  // rellena con un marcador precisamente para que un adaptador que la leyera
-  // pintara basura visible en vez de acertar por casualidad.
-  return { bruto, neto, moneda: "moneda-que-nadie-lee" } as const;
-}
-
-function vistaDeEjemplo(): VistaFinanciera {
+/**
+ * La vista se tipa como `VistaConNeto` y no como `VistaFinanciera` a proposito: es lo
+ * que permite pedirle la serie del `"neto"` sin estrechar, y a la vez lo que hace que
+ * la version `solo_bruto` de mas abajo NO pueda pedirla (R2/R21 de la 183).
+ */
+function vistaDeEjemplo(): VistaConNeto {
   return {
     id: "cod_recaudado__por_tienda",
     grano: "tienda",
     fuente: "wallet_tienda_movimiento",
     sumableCon: [],
     filas: [
-      { cubo: CUBO_OPACO, importe: importe("1234567.89", "1200000.00") },
-      { cubo: "clx8s7q0001tienda", importe: importe("500.25", "-123.45") },
-      { cubo: "clx8s7q0002tienda", importe: importe("0.00", "0.00") },
+      { cubo: CUBO_OPACO, importe: importeConNeto("1234567.89", "1200000.00") },
+      { cubo: "clx8s7q0001tienda", importe: importeConNeto("500.25", "-123.45") },
+      { cubo: "clx8s7q0002tienda", importe: importeConNeto("0.00", "0.00") },
     ],
-    total: importe("1235068.14", "1199876.55"),
+    total: importeConNeto("1235068.14", "1199876.55"),
   };
 }
 
-function vistaConCubos(cantidad: number): VistaFinanciera {
+/**
+ * LA MISMA vista, con la distincion retirada: mismo id, mismo grano, mismos brutos.
+ *
+ * Que las dos se construyan de la de arriba es el punto: lo unico que cambia entre
+ * ellas es la FORMA del DTO, asi que cualquier diferencia de comportamiento del
+ * adaptador solo puede venir de la forma y nunca del id de la metrica (R22).
+ */
+function vistaDeEjemploSoloBruto(): VistaFinanciera {
+  const conNeto = vistaDeEjemplo();
+  return {
+    ...conNeto,
+    filas: conNeto.filas.map((fila) => ({ ...fila, importe: sinNeto(fila.importe) })),
+    total: sinNeto(conNeto.total),
+  };
+}
+
+function vistaConCubos(cantidad: number): VistaConNeto {
   return {
     id: "cod_recaudado__por_tienda",
     grano: "tienda",
@@ -59,9 +87,9 @@ function vistaConCubos(cantidad: number): VistaFinanciera {
     sumableCon: [],
     filas: Array.from({ length: cantidad }, (_, indice) => ({
       cubo: `${CUBO_OPACO}${indice}`,
-      importe: importe(`${(indice + 1) * 100}.00`, `${(indice + 1) * 90}.00`),
+      importe: importeConNeto(`${(indice + 1) * 100}.00`, `${(indice + 1) * 90}.00`),
     })),
-    total: importe("0.00", "0.00"),
+    total: importeConNeto("0.00", "0.00"),
   };
 }
 
@@ -144,9 +172,9 @@ describe("R14, R16, R24 · la serie de una vista pinta los importes del DTO sin 
     const vista: VistaFinanciera = {
       ...vistaDeEjemplo(),
       filas: [
-        { cubo: CUBO_OPACO, importe: importe("10.00", "10.00") },
-        { cubo: "roto", importe: importe("", "no-es-un-numero") },
-        { cubo: "clx8s7q0002tienda", importe: importe("30.00", "30.00") },
+        { cubo: CUBO_OPACO, importe: importeConNeto("10.00", "10.00") },
+        { cubo: "roto", importe: importeConNeto("", "no-es-un-numero") },
+        { cubo: "clx8s7q0002tienda", importe: importeConNeto("30.00", "30.00") },
       ],
     };
     const serie = serieDeVista(vista, "bruto");
@@ -182,13 +210,132 @@ describe("R14, R16, R24 · las filas de la tabla llevan bruto y neto de la misma
   it("una fila con importe ilegible queda ausente en sus dos columnas y no en cero", () => {
     const vista: VistaFinanciera = {
       ...vistaDeEjemplo(),
-      filas: [{ cubo: CUBO_OPACO, importe: importe("abc", "") }],
+      filas: [{ cubo: CUBO_OPACO, importe: importeConNeto("abc", "") }],
     };
     const [fila] = filasDeVista(vista);
 
     expect(fila?.valores.bruto).toBeNull();
     expect(fila?.valores.neto).toBeNull();
     expect(fila?.valores.bruto).not.toBe(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Feature 183 · una vista SIN neto: la ausencia no se rellena con nada        */
+/* -------------------------------------------------------------------------- */
+
+describe("R23/183 · el adaptador no convierte la ausencia del neto en null, 0, '' ni en el bruto", () => {
+  it("la fila adaptada de una vista `solo_bruto` NO tiene la clave `neto`, de ninguna manera", () => {
+    const vista = vistaDeEjemploSoloBruto();
+    const filas = filasDeVista(vista);
+
+    expect(filas).toHaveLength(vista.filas.length);
+    filas.forEach((fila, indice) => {
+      const origen = vista.filas[indice]!;
+      // La clave no existe: `in` distingue «ausente» de «presente con valor nulo»,
+      // que es justo lo que un `neto: null` haria indistinguible.
+      expect(Object.keys(fila.valores)).toEqual(["bruto"]);
+      expect("neto" in fila.valores).toBe(false);
+      expect(fila.valores.bruto).toBe(Number(origen.importe.bruto));
+    });
+  });
+
+  it("y no la tiene ni en `null`, ni en `0`, ni en cadena vacia, ni copiada del bruto", () => {
+    // Las cuatro formas de la mutacion que R23 nombra, comprobadas una a una sobre el
+    // MISMO objeto: si alguna se colara, `neto` valdria algo y no `undefined`.
+    const [fila] = filasDeVista(vistaDeEjemploSoloBruto());
+    const valores: Readonly<Record<string, number | null>> = fila?.valores ?? {};
+
+    expect(valores.neto).toBeUndefined();
+    expect(valores.neto).not.toBeNull();
+    expect(valores.neto).not.toBe(0);
+    expect(valores.neto as unknown).not.toBe("");
+    expect(valores.neto).not.toBe(valores.bruto);
+  });
+
+  it("la vista CON neto sigue escribiendo las dos claves: la retirada no se generalizo (R20)", () => {
+    // Contrapeso del caso de arriba: sin esto, un adaptador que dejara de escribir el
+    // `neto` SIEMPRE pasaria los tres casos anteriores en verde.
+    const [fila] = filasDeVista(vistaDeEjemplo());
+    expect(Object.keys(fila?.valores ?? {})).toEqual(["bruto", "neto"]);
+    expect(fila?.valores.neto).toBe(1200000);
+  });
+});
+
+describe("R19/183 · donde no hay neto no hay columna, y por tanto no hay marcador de ausente", () => {
+  it("una vista `solo_bruto` declara UNA columna y una `bruto_y_neto` declara DOS", () => {
+    expect(columnasDeVista(vistaDeEjemploSoloBruto()).map((c) => c.id)).toEqual(["bruto"]);
+    expect(columnasDeVista(vistaDeEjemplo()).map((c) => c.id)).toEqual(["bruto", "neto"]);
+  });
+
+  it("las dos vistas tienen el MISMO id: lo que decide es la forma del DTO y no la metrica (R22)", () => {
+    // Las dos fixtures salen de la misma vista y solo se diferencian en `forma`. Un
+    // adaptador que decidiera por una lista de ids escrita a mano daria la misma
+    // respuesta para las dos.
+    expect(vistaDeEjemploSoloBruto().id).toBe(vistaDeEjemplo().id);
+    expect(columnasDeVista(vistaDeEjemploSoloBruto())).not.toEqual(
+      columnasDeVista(vistaDeEjemplo()),
+    );
+  });
+
+  it("la columna del bruto es EL MISMO objeto en los dos juegos: se declara una sola vez", () => {
+    // Dos declaraciones separadas acabarian con etiquetas o unidades distintas para la
+    // misma cifra, que es lo que la declaracion unica de la 132 evitaba.
+    expect(COLUMNAS_IMPORTE_SOLO_BRUTO).toHaveLength(1);
+    expect(COLUMNAS_IMPORTE_SOLO_BRUTO[0]).toBe(COLUMNAS_IMPORTE[0]);
+  });
+
+  it("la tabla de una vista sin neto no puede pintar el ausente: no hay celda donde pintarlo", () => {
+    // Es la colision que R19 evita. `TablaResumen` pinta el marcador de dato ausente en
+    // toda celda cuya clave no encuentra (`TablaResumen.tsx:73`); si la columna del neto
+    // existiera, cada fila de estas mostraria ese marcador, que en la 132 significa «no
+    // se sabe» (R15) y aqui la verdad es «no aplica».
+    const vista = vistaDeEjemploSoloBruto();
+    const columnas = columnasDeVista(vista);
+    const filas = filasDeVista(vista);
+
+    for (const fila of filas) {
+      for (const columna of columnas) {
+        expect(fila.valores[columna.id]).not.toBeUndefined();
+      }
+    }
+  });
+});
+
+describe("R21/183 · una vista sin neto no puede emitir la serie del neto", () => {
+  it("la serie del bruto se emite igual, con los mismos valores que la vista con neto", () => {
+    const serie = serieDeVista(vistaDeEjemploSoloBruto(), "bruto");
+    expect(serie.puntos.map((punto) => punto.valor)).toEqual(
+      serieDeVista(vistaDeEjemplo(), "bruto").puntos.map((punto) => punto.valor),
+    );
+    expect(serie.etiqueta).toBe("bruto");
+  });
+
+  it("pedirle el neto FALLA con nombre en vez de devolver el ausente o el bruto", () => {
+    // El `as` es lo unico que permite escribir esta llamada: las sobrecargas de
+    // `serieDeVista` la rechazan en compilacion, que es la defensa de verdad. Lo que
+    // este caso fija es que si alguien la fuerza (un `as`, un DTO por JSON), el
+    // adaptador NO inventa: ni `null`, ni `0`, ni el bruto disfrazado de neto.
+    const forzada = vistaDeEjemploSoloBruto() as VistaConNeto;
+    expect(() => serieDeVista(forzada, "neto")).toThrow(ImporteSinNetoError);
+    expect(() => serieDeVista(forzada, "neto")).toThrow(CUBO_OPACO);
+  });
+
+  it("`esVistaConNeto` responde por la forma del total Y de las filas, no por el id", () => {
+    expect(esVistaConNeto(vistaDeEjemplo())).toBe(true);
+    expect(esVistaConNeto(vistaDeEjemploSoloBruto())).toBe(false);
+
+    // Una vista MEZCLADA (que R18 de la 183 prohibe) no cuenta como vista con neto: si
+    // se mirara solo el total, esa fila entraria en la serie del neto y reventaria.
+    const mezclada: VistaFinanciera = {
+      ...vistaDeEjemplo(),
+      filas: [
+        { cubo: CUBO_OPACO, importe: importeConNeto("10.00", "10.00") },
+        { cubo: "sin-neto", importe: importeSoloBruto("30.00") },
+      ],
+    };
+    expect(mezclada.total.forma).toBe("bruto_y_neto");
+    expect(esVistaConNeto(mezclada)).toBe(false);
   });
 });
 
