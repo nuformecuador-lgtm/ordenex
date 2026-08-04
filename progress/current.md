@@ -8,6 +8,48 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+
+## 2026-08-04 — **177 en `dev` (PR #274)** · **178 lista, esperando PR**
+
+**Feature 177 → `done`**, PR **#274** mergeado (`893cf007`). Reviewer aprobado, 0 bloqueantes, 45/45 R
+verificados uno a uno.
+
+**Lo que la 177 deja vivo y hay que saber antes de tocar etiquetas:** el testigo de «el PDF existe» es
+la columna **`download_storage_path`**, NO `download_url`. La 136 guarda ahí una URL **ya firmada** que
+caduca; por eso se añadió la columna. Las filas heredadas se tratan como «sin PDF» y se regeneran.
+
+### 🔵 EN CURSO — feature 178, purga **DIARIA** de los PDF de cargas · rama lista, falta el PR
+
+Rama `feature/178-purga-pdf-cargas`. **Ojo al nombre:** la cadencia es **diaria**; lo «semanal» del
+título original era el **default de la retención (N=7)**, no la frecuencia. Cron a las **03:00 CR**
+(09:00 UTC; Costa Rica es UTC−6 fijo, sin DST), protegido por `CRON_SECRET`. Corte **inclusivo** sobre
+`carga.created_at` —inmutable, a diferencia de `fecha_carga`, que es backdateable—. Retención por env,
+default 7, **mínimo 0**, sin tope.
+
+**Reviewer: RECHAZADO en ronda 1, APROBADO en ronda 2.** 26/26 R. El bloqueante enseña algo que en este
+repo ya es patrón: `quedaPendiente` decía `false` habiendo trabajo, porque la comprobación se saltaba
+las `tope` filas ya devueltas **y lo purgado deja de casar el `where`** (la purga borra justo las
+columnas que hacen candidata a una carga). Con el default de 200, cualquier backlog de 201–400 mentía.
+**Lo tapaban dos tests verdes:** el de service usaba 5/2 y pasaba *por margen* con su doble replicando
+la semántica mala, y el de repositorio afirmaba `expect(arg.skip).toBe(200)` **como si fuera el
+contrato**. El reviewer reprodujo la mutación en ronda 2: 3 de 4 rojos con el caso de control verde.
+
+**Lo que NO puede olvidarse si se toca esta feature:** la purga anula `download_storage_path` **además
+de** `download_url`. Si se deja viva, `/generate` de la 177 se salta la generación y **firma un objeto
+ya borrado** → 200 con URL que da 404. Es R16, con test de control no vacuo.
+
+**Fuera de alcance, declarado (no olvidado):** las órdenes con `carga_id` NULL —su PDF no caduca
+nunca— y los PDF de las features 136/141, **inalcanzables** porque de ellos solo se guardó la URL
+firmada, nunca la ruta. Esto **corrige un supuesto erróneo del `design.md` de la 177**, que daba por
+hecho que la 178 barrería sus huérfanos. Harían falta reglas de ciclo de vida del bucket: ticket aparte.
+
+**⚠️ Deuda de entorno que impide cerrar la mitad empírica de R26:** el drift **ajeno y preexistente**
+de la base local (migración fantasma `20260728120000_...` presente en la base y ausente del repo, más
+un checksum modificado en `20260714123909_...`) hace fallar `pnpm db:migrate`, así que el round-trip
+`migrate`/`rollback` de esta migración **queda sin medir**; se aplica con `prisma migrate deploy`, el
+mismo comando del build. **Sigue sin dueño.**
+
+
 ## 🏁 CIERRE DE JORNADA 2026-08-03 (tarde) — **EMPIEZA A LEER POR AQUÍ**
 
 **Cero PRs abiertos. `dev` VERDE con los cuatro PRs del lote YA DENTRO** —no por separado, que es el
@@ -147,35 +189,6 @@ mutaciones que la prueban.
 > `20260803120000_download_storage_path` (de `dev`) comparten timestamp. Hoy da igual —tocan tablas
 > distintas y Prisma desempata por nombre—, pero si dos sesiones tocaran la misma tabla el orden
 > dejaría de ser indiferente y **nadie lo notaría hasta el despliegue**.
-
----
-
-## 2026-08-03 — **177 arranca: API de consulta por guía/remisión + PDF bajo demanda** (fase 1, spec)
-
-Feature **177** `pending` → spec en curso. Rama `feature/177-api-consulta-orden-pdf` desde `origin/dev`.
-Zona **backend**, complexity **medium**, `depends_on: 136` (**done**). Zona backend en **0 `in_progress`**
-al arrancar ⇒ sin validación de conflicto de archivos que hacer.
-
-**Baseline medido al arrancar** (no heredado de otra bitácora): `./init.sh` **verde**, `== init OK ==`,
-**845 archivos / 10.605 tests, 0 rojos**, sobre `ux` con `dev` recién mergeada.
-
-**Bookkeeping del arranque:** las fichas **177** y **178** nacieron en `ux` con los ids 175/176 y
-**chocaron con la 175 de `dev`** (analítica: catálogo de métricas), que conserva el id por tener ya rama
-y spec_path. Renumeradas conservando contenido, y **portadas a esta rama** porque `dev` todavía no las
-tiene (viven en `ux`, sin pushear).
-
-**Lo que la puerta F1.4 va a tener que decidir, y conviene saberlo antes de leer el spec:** la **136
-persiste en `download_url` una URL FIRMADA, no el path** (`EtiquetasDescargaService.ts:48`,
-`EtiquetasLotePdfService.ts:78`). Una URL firmada caduca, así que la decisión del humano —«reusa, la URL
-vence en 5 min»— **no se puede cumplir tal como está persistido hoy**: reusar solo puede significar
-reusar el OBJETO en storage y re-firmarlo. Persistir el `storage_path` puede arrastrar **migración** y
-obliga a decidir qué pasa con las URLs que la 136 ya dejó guardadas.
-
-**Decisiones del humano ya tomadas** (no re-abrirlas en el spec): ruta NUEVA en vez de ampliar
-`{numGuia}`; la generación del PDF sale del query param y pasa a ser el segmento `/generate`; TTL 5 min;
-`{id}` resuelve contra `num_guia` **y** `num_remision`.
-
-**178 queda registrada pero NO arranca** (purga semanal de PDF; su nota apunta a esta feature).
 
 ---
 
