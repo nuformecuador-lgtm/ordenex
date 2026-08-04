@@ -8,6 +8,77 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🏁 CIERRE DE JORNADA 2026-08-03 (tarde) — **EMPIEZA A LEER POR AQUÍ**
+
+**Cero PRs abiertos. `dev` VERDE con los cuatro PRs del lote YA DENTRO** —no por separado, que es el
+incidente del #237—: `./init.sh` → `== init OK ==`, **906 archivos / 11.359 tests, 0 fallos**.
+
+### ✅ Entregado esta tarde
+
+| | Qué | PR |
+| --- | --- | --- |
+| **173** | la caja distingue **«Dinero en caja»** de **«Ganancia de Ordenex»**; la palabra «balance» desaparece | #278 + #279 |
+| **arnés** | el flake de jsdom: **eran TRES mecanismos**, y acotar workers no arreglaba ninguno | #280 |
+| **170** | la búsqueda de cuentas por pagar **ignora acentos** + el tercer mecanismo del flake | #281 |
+| **170** | aviso de **selección en otras páginas** en bodega satélite (Q-K7) | #282 |
+
+### 🚦 LO PRIMERO AL RETOMAR
+
+1. **RELEASE `dev → prod`: son 166 commits y llevan MIGRACIONES** (el `CHECK` categoría↔tipo de la
+   173 y sus dos valores de enum, entre otras). **Mergear a `prod` ES aplicar.** Producción se midió
+   antes de escribir ese `CHECK` —35 filas, 0 lo violarían— **pero eso fue antes de estas 166**:
+   **rehacer el pre-vuelo**, no reutilizarlo. Es lo que salvó la release del 2026-08-01.
+2. **Después del release, y solo después: el BACKFILL de la 173** (`T H.4`). Los dos valores nuevos
+   del enum **no existen en producción** hasta desplegar. Medido: **5 cierres con ₡203.055,90** de
+   contra-entrega esperando; 0 pagos a tienda, 0 anulaciones. Orden: `--simular` → **revisión humana
+   del informe** → `--aplicar` → `--comprobar` → lectura por MCP. Sin flag **no escribe nada**.
+3. **VER LA 172 Y LA 173 EN PANTALLA.** Lleva dos jornadas pendiente y es lo único que ninguna suite
+   sustituye. La 173 volvió a tocar esas mismas pantallas.
+
+### ⏳ Sin dueño, y conviene que lo tengan
+
+- **La 175 sigue `in_progress` A PROPÓSITO, aunque su PR #277 esté mergeado.** Entregó **tres** de sus
+  cuatro divergencias; la **cuarta** —el `neto` de las métricas de caja nunca puede diferir del
+  `bruto`— sigue abierta, **verificado contra el código el 2026-08-03**. Si alguien la pasa a `done`
+  por inercia, el hallazgo se queda huérfano. Detalle en su `status_note`.
+- **Los 12 listados de la deuda de la 170 NO son un chore: son una tanda fullstack** del tamaño de la
+  I. El «8» de la nota vieja contaba **dominios**, no listados, y **los 12 exigen tocar `app/**`**
+  (el adaptador de descarga vive en el componente), así que entregar solo los métodos dejaría **12
+  Server Actions muertas**. Inventario listado a listado y prioridad por coste medido en
+  `progress/chore_deuda_170.md`. **Borrador de ficha propuesto, NO registrado.**
+- **La selección de bodega satélite nunca se poda.** Preexistente e **invisible hasta hoy**; el aviso
+  nuevo la hace contable, así que el número puede inflarse si una orden marcada sale del listado
+  (p. ej. al reportarle un incidente). Podarla necesita al **servidor**: encaja con la tanda de los 12.
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**El flake de jsdom no era un mecanismo, eran TRES** — y la vía que se daba por buena, acotar los
+workers, **no arreglaba ninguno**: medido, **−3%** en el test lento y **+11%** en la suite entera.
+
+| | Mecanismo | Se manifiesta como |
+| --- | --- | --- |
+| 1 | `await import()` **dentro del test** mete la carga del árbol bajo `testTimeout` | timeout a 20 s |
+| 2 | `waitFor` sobre una **ausencia** + aserción **síncrona** de presencia | elemento no encontrado |
+| 3 | **snapshot del DOM tomado antes de que la carga asiente** | dos fotos que difieren |
+
+Eso explica por qué subir el `testTimeout` a 20 s lo hizo más raro sin matarlo: trataba el (1) y no
+tocaba los otros dos, que **no dependen del tiempo sino del orden**. Y la frase que resume el día:
+**un ancla que el estado transitorio también cumple no es un ancla** —durante la carga, `getAllByRole
+("row")` daba 2, el mismo número que el estado asentado—.
+
+> ⚠️ **Los tres aparecieron UNO POR SUITE COMPLETA, cada uno cuando el anterior dejó de taparlo.** Una
+> corrida verde no cierra esto. El detector escrito cubre el (2), **NO el (3)** —medido: 0 antes y 0
+> después—; la mitigación del (3) es una guardia en ejecución, no un barrido. Población en riesgo: 42
+> capturas de DOM.
+
+**Y cinco veces más el patrón del año, en la 173:** la guardia de la 172 rota al hacer entrar la caja
+(afilada, no vaciada); un test de la 127 que insertaba **una fila que la app no puede producir**;
+cuatro filas de trazabilidad falsas, **dos apuntando a archivos que nunca existieron**; **R53 sin
+ningún test** —borrar la descripción de `egresos` dejaba la suite entera en verde—; y que **contar
+`R\d+` en títulos cruza espacios de nombres**, lo que daba un tranquilizador **falso 68/68**.
+
+---
+
 ## 💰 2026-08-03 — **173 `done`: la caja ya distingue el dinero de la ganancia** · PR #278 MERGEADO
 
 **Las 9 tandas hechas, review APROBADO en ronda 2, `./init.sh` completo VERDE con los 61 commits de
