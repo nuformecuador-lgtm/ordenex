@@ -511,6 +511,76 @@ describe("Feature 133 (R25) — el rotulo es una frase sobre el alcance, no un d
 });
 
 /* ========================================================================== */
+/* Feature 133 (T6.4) — R22: `forbidden` NO ES «SIN DATOS», tampoco para los  */
+/*                      tres roles que esta feature deja entrar               */
+/* ========================================================================== */
+
+// El comportamiento ya existia (H20, `PanelOperativo.tsx:12-16, 99-120`: cinco estados
+// distintos) y la 131 lo cubrio para el tablero sin recorte. Lo que esta feature anade son
+// TRES ROLES NUEVOS que antes ni llegaban a la pagina —los que reciben `notFound()` hoy— y
+// que ademas son los unicos cuyo alcance es acotado: son justo aquellos a los que el borde
+// SI les puede responder `forbidden` en un panel concreto. R22 obliga a conservarlo para
+// ellos, asi que se comprueba con su prop `alcance` puesta.
+//
+// Por que importa el matiz: para un rol acotado, «no puedes ver esta metrica» y «esta
+// metrica no registro movimiento en tu tienda» son conclusiones OPUESTAS sobre su
+// operacion, y el segundo pixel invita a actuar sobre un problema de negocio que no existe.
+//
+// El caso fuerte es el ultimo: un panel denegado y otro REALMENTE VACIO a la vez, en la
+// misma pantalla, con dos pixeles distintos. Sin el, la mutacion «mapear `forbidden` al
+// estado vacio» pasaria desapercibida en cuanto el vacio dejara de mirarse.
+
+describe("Feature 133 (R22) — un denegado no se pinta como «sin datos» para ningun rol acotado", () => {
+  const ACOTADOS = [
+    { rol: "adminTienda", alcance: "tienda" },
+    { rol: "adminSatelite", alcance: "zona" },
+    { rol: "mensajero", alcance: "mensajero" },
+  ] as const;
+
+  for (const { rol, alcance } of ACOTADOS) {
+    it(`${rol} (alcance "${alcance}"): el panel denegado dice PROHIBIDO, sin cifras ni estado vacio`, async () => {
+      accion.mockImplementation(async ({ metricaId }) =>
+        metricaId === "tasa_entrega" ? { status: "forbidden" } : porDefecto(metricaId),
+      );
+      renderConAlcance(alcance);
+
+      const panel = await panelEstable(TITULO_TASA, TEXTO_PROHIBIDO);
+      expect(within(panel).getByRole("alert")).toHaveTextContent(TEXTO_PROHIBIDO);
+      // Ni el vacio de la grafica, ni un cero, ni ninguna otra cifra: el vacio habla de la
+      // METRICA SIN DATOS EN EL RANGO y aqui el problema no es de datos.
+      expect(within(panel).queryByText(VACIO_PANEL.titulo)).toBeNull();
+      expect(within(panel).queryByText(VACIO_PANEL.descripcion)).toBeNull();
+      expect(panel.textContent ?? "").not.toMatch(/\d/);
+      // Y el resto del tablero sigue vivo: el denegado es POR METRICA.
+      expect(screen.getByRole("region", { name: TITULO_CREADAS })).toBeInTheDocument();
+    });
+  }
+
+  it("denegado y vacio conviven en la misma pantalla siendo DOS pixeles distintos", async () => {
+    // `tasa_entrega` -> denegada por el borde. `ordenes_creadas` -> respuesta `ok` de
+    // verdad, con serie SIN puntos: la metrica no registro movimiento. Las dos cosas a la
+    // vez, para un rol acotado.
+    accion.mockImplementation(async ({ metricaId }) => {
+      if (metricaId === "tasa_entrega") return { status: "forbidden" };
+      if (metricaId === "ordenes_creadas") return serieOk(metricaId, []);
+      return porDefecto(metricaId);
+    });
+    renderConAlcance("tienda");
+
+    const denegado = await panelEstable(TITULO_TASA, TEXTO_PROHIBIDO);
+    const vacio = screen.getByRole("region", { name: TITULO_CREADAS });
+
+    // El vacio existe DE VERDAD en esta pantalla: si dejara de existir, este caso se
+    // quedaria comparando el denegado contra nada.
+    expect(await within(vacio).findByText(VACIO_PANEL.titulo)).toBeInTheDocument();
+    // Y no se parecen en nada.
+    expect(within(denegado).queryByText(VACIO_PANEL.titulo)).toBeNull();
+    expect(within(vacio).queryByText(TEXTO_PROHIBIDO)).toBeNull();
+    expect(TEXTO_PROHIBIDO).not.toContain(VACIO_PANEL.titulo);
+  });
+});
+
+/* ========================================================================== */
 /* Feature 133 (T4.6) — R12 / R13: censo sobre los archivos de la ruta        */
 /* ========================================================================== */
 
