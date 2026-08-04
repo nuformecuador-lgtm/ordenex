@@ -109,6 +109,14 @@ los aplica `DescargarDatasetButton`, no la proyeccion). Queda anotado aqui, como
 
 ## 4. Mutaciones: 21 aplicadas, 21 muertas
 
+> **REVERIFICACION EN CURSO tras el refactor `8f485b03`** (que extrajo las columnas y la
+> proyeccion de una fila a `analitica-operativa-descarga-columnas.ts`). La tabla de abajo es la
+> de ANTES del refactor y varios de sus anclajes ya no viven donde dice. La tabla buena, medida
+> contra la disposicion de HOY, se esta escribiendo en §4bis. **No creerse esta hasta que §4bis
+> este completa.**
+
+
+
 Procedimiento para cada una: aplicar la mutacion → **comprobar con `grep` que aterrizo en
 disco** → correr el caso NOMBRADO → comprobar el rojo → revertir. Ninguna mutacion quedo
 commiteada; `git status` limpio y `git diff --stat` vacio despues de cada una.
@@ -147,6 +155,27 @@ Dos apuntes de honestidad sobre COMO mueren:
 - **R9** se mata con una mutacion propia (`mensajero_ref`) y no reusando la de R8: la de R8
   tambien lo pone rojo, pero eso probaria R8 dos veces. La columna `mensajero_ref` es el mapa
   de vuelta que R9 prohibe, y cae por la comprobacion de cabecera palabra a palabra.
+
+
+### 4bis. Reverificacion contra la disposicion de HOY (post-refactor)
+
+Procedimiento por mutacion: aplicar -> **`grep` que aterrizo en disco** -> correr el CASO
+NOMBRADO -> comprobar el rojo -> revertir y comprobar `git status` limpio.
+
+| R | Archivo mutado HOY | Mutacion | Aterrizo (grep) | Caso nombrado | Resultado |
+| --- | --- | --- | --- | --- | --- |
+| R1 | `export-operativo.ts` | importa `AnaliticaOperativaService` | linea 17 | `el subarbol de export no importa servicio, repositorio, Prisma ni el catalogo de servidor` | **MUERTA** |
+| R2 | `ExportarOperativoPanel.tsx` | `const raw = { rango: filtro.rango }` en vez de `aRaw` | linea 101 | `el raw que envia el export es identico al que envia el panel para el mismo filtro` | **MUERTA** |
+| R3 | `app/api/analitica/export/route.ts` (nace) | ruta de api que sirve el export | el archivo existe | `ninguna ruta de app/api sirve el export de analitica` | **MUERTA** |
+| R4 | `lib/actions/analitica-operativa.ts` | el modulo `"use server"` invoca `construirDescarga` | lineas 3-4 | `ningun modulo "use server" invoca construirDescarga` | **MUERTA** |
+| R5 | `ExportarOperativoPanel.tsx` | el `forbidden` se traduce a `{ status: "ok", filas: [] }` | linea 121 | `un forbidden no produce archivo y su mensaje no es el de sin datos` | **MUERTA** |
+| R6 | `ExportarOperativoPanel.tsx` | corte previo que evita la accion (`metricaId === "egresos"`) | linea 102 | `el intento de descarga denegado deja rastro en el logger antes de responder` | **MUERTA** |
+| R16 | `ExportarOperativoPanel.tsx` | `.slice(0, 5000)` antes del tope | linea 153 | `superar el tope no produce archivo truncado sino el mensaje accionable` | **MUERTA** (timeout de `waitFor`) |
+| R17 | `ExportarOperativoPanel.tsx` | sin puntos se emite igualmente una fila | linea 154 | `sin puntos no se genera archivo y se avisa sin datos` | **MUERTA** (timeout de `waitFor`) |
+| R19 | `app/(app)/analitica/_components/operativo/generador-propio.ts` (nace) | `buildCsvRowsAnalitica` propio en el subarbol | el archivo existe | `el export vive en su subarbol y reusa el patron 151 sin reimplementarlo` | **MUERTA** |
+| R21 | `ExportarOperativoPanel.tsx` | `FORMATOS_EXPORT_OPERATIVO = ["csv"]` | linea 58 | `el control ofrece CSV y XLSX y no declara un dialecto propio` | **MUERTA** |
+
+**PENDIENTES de reverificar:** R7, R8, R9, R10, R11, R12, R13, R14, R15, R18, R20.
 
 ### 4.1 T3.1 — la task BLINDADA: salida de la mutacion
 
