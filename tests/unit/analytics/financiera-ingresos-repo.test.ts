@@ -105,29 +105,68 @@ describe("R16 · la caja principal agrega solo lo que la metrica declara y solo 
     ]);
   });
 
-  it("`egresos` ve sus ocho categorias, incluida la indemnizacion (R18, material)", async () => {
-    const { repo } = repositorio();
+  // ⚠️ DADO VUELTA por la feature 183 (R25). Este caso afirmaba «`egresos` ve sus OCHO
+  // categorias». Desde ⟨D12⟩ (humano, 2026-08-04, `progress/decision_183.md`) son NUEVE: las
+  // ocho `egreso_*` mas `ingreso_ajuste`, el reverso que emite la anulacion de un egreso. Por
+  // eso el `ingreso_ajuste` de 999.99 que `LIBRO` siembra —y que sigue SIN entrar en
+  // `ingreso_flete`— ahora SI entra aqui.
+  it("`egresos` ve sus NUEVE categorias, y el WHERE emitido las lleva (R5/183)", async () => {
+    const { repo, fake } = repositorio();
     const filas = await repo.sumarPorCategoria(consultaDe("egresos"));
 
     expect(filas).toEqual([
       { categoria: "egreso_ajuste", tipo: "egreso", suma: "100.00" },
       { categoria: "egreso_indemnizacion", tipo: "egreso", suma: "300.00" },
+      // La NOVENA, la que la 183 anadio: sin ella esta fila no estaria y anular un egreso no se
+      // descontaria nunca de la cifra.
+      { categoria: "ingreso_ajuste", tipo: "ingreso", suma: "999.99" },
     ]);
     expect(filas.map((f) => f.categoria)).toContain("egreso_indemnizacion");
+
+    // R5 — AQUI ES DONDE SE MIDE EL SQL. Un doble de servicio devuelve las filas que le pidan y
+    // no ve la traduccion a `where`: la lista de categorias es justo lo que la 183 cambia, asi
+    // que se inspecciona la consulta emitida y se afirman las nueve, en su orden del catalogo.
+    const where = fake.llamadas[0].args.where as { categoria: { in: string[] } };
+    expect(where.categoria.in).toEqual([
+      "egreso_pago_tienda",
+      "egreso_pago_mensajero",
+      "egreso_gasto",
+      "egreso_sueldo",
+      "egreso_ajuste",
+      "egreso_gasto_fijo",
+      "egreso_gasto_variable",
+      "egreso_indemnizacion",
+      "ingreso_ajuste",
+    ]);
+    expect(where.categoria.in).toHaveLength(9);
+    // Y lo que NO lleva: meter el reverso del pago a tienda cambiaria lo que la cifra significa.
+    expect(where.categoria.in).not.toContain("ingreso_reverso_pago_tienda");
+    expect(where.categoria.in).not.toContain("ingreso_cod_recaudado");
   });
 
   it("el material del bruto y del neto llega desglosado por tipo (R37)", async () => {
-    // Un ingreso y su contraasiento de egreso en la MISMA categoria: el repositorio no los
-    // cancela (eso es del servicio), los devuelve como dos filas con su `tipo`.
+    // ⚠️ REEXPRESADO por la feature 183 (R24). Antes este caso sembraba un `egreso_ajuste` con
+    // `tipo: ingreso`: una fila que el CHECK `wallet_movimiento_tipo_categoria_check` de la 173
+    // RECHAZA con 23514 y que la aplicacion nunca emite. Un doble que afirma sobre un estado
+    // imposible es un verde que no mide nada.
+    //
+    // El par REAL es el que `WalletEgresoService` escribe al anular un egreso: la fila del gasto
+    // (`egreso_gasto`, tipo `egreso`) y su reverso (`ingreso_ajuste`, tipo `ingreso`). Las dos
+    // son legales para el CHECK y las dos las declara `egresos` desde ⟨D12⟩. El repositorio no
+    // las cancela (eso es del servicio): las devuelve como dos filas con su `tipo`.
     const { repo } = repositorio([
-      { categoria: "egreso_ajuste", tipo: "egreso", monto: "400.00", fechaMovimiento: new Date("2026-08-02T09:00:00.000Z") },
-      { categoria: "egreso_ajuste", tipo: "ingreso", monto: "400.00", fechaMovimiento: new Date("2026-08-02T10:00:00.000Z") },
+      { categoria: "egreso_gasto", tipo: "egreso", monto: "400.00", fechaMovimiento: new Date("2026-08-02T09:00:00.000Z") },
+      { categoria: "ingreso_ajuste", tipo: "ingreso", monto: "400.00", fechaMovimiento: new Date("2026-08-02T10:00:00.000Z") },
     ]);
     const filas = await repo.sumarPorCategoria(consultaDe("egresos"));
 
     expect(filas).toHaveLength(2);
     expect(new Set(filas.map((f) => f.tipo))).toEqual(new Set(["ingreso", "egreso"]));
     expect(filas.every((f) => f.suma === "400.00")).toBe(true);
+    // Cada `tipo` viene de la categoria que le corresponde: si el fixture volviera a cruzarlos,
+    // esto lo dice.
+    expect(filas.find((f) => f.tipo === "egreso")?.categoria).toBe("egreso_gasto");
+    expect(filas.find((f) => f.tipo === "ingreso")?.categoria).toBe("ingreso_ajuste");
   });
 });
 
@@ -301,6 +340,8 @@ describe("los tests de arriba no pasan por conjunto vacio", () => {
   it("y la consulta que las excluye devuelve filas, no una lista vacia", async () => {
     const { repo } = repositorio();
     expect((await repo.sumarPorCategoria(consultaDe("ingreso_flete"))).length).toBe(2);
-    expect((await repo.sumarPorCategoria(consultaDe("egresos"))).length).toBe(2);
+    // TRES desde la 183: las dos de `egreso_*` mas el `ingreso_ajuste` del fixture, que esa
+    // metrica ahora si declara. `ingreso_flete` sigue sin verlo, que es lo que R16 protege.
+    expect((await repo.sumarPorCategoria(consultaDe("egresos"))).length).toBe(3);
   });
 });

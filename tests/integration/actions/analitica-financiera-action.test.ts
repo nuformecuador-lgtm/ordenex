@@ -13,6 +13,9 @@ import {
   IDS_FINANCIERAS_SERVIDAS,
   VISTA_COD_RECAUDADO_POR_METODO,
   VISTA_COD_RECAUDADO_POR_TIENDA,
+  type ImporteAnalitico,
+  type ImporteConNeto,
+  type ImporteSoloBruto,
   type RespuestaFinanciera,
   type ResultadoFinanciero,
 } from "@/lib/types/analitica-financiera";
@@ -141,6 +144,25 @@ function conciliacionDe(respuesta: RespuestaFinanciera) {
   const datos = datosDe(respuesta);
   if (datos.tipo !== "conciliacion") throw new Error(`se esperaba conciliacion`);
   return datos.conciliacion;
+}
+
+/**
+ * Feature 183 ⟨D12⟩ — `ImporteAnalitico` es una union discriminada por `forma` y `.neto` no se
+ * lee sin estrechar. Estos dos helpers AFIRMAN la forma antes de devolver: un `as` la apagaria,
+ * y lo que aqui se mide contra Postgres es precisamente que cada metrica publica la suya.
+ */
+function conNeto(importe: ImporteAnalitico, contexto: string): ImporteConNeto {
+  if (importe.forma !== "bruto_y_neto") {
+    throw new Error(`${contexto}: se esperaba forma "bruto_y_neto" y llego "${importe.forma}"`);
+  }
+  return importe;
+}
+
+function soloBruto(importe: ImporteAnalitico, contexto: string): ImporteSoloBruto {
+  if (importe.forma !== "solo_bruto") {
+    throw new Error(`${contexto}: se esperaba forma "solo_bruto" y llego "${importe.forma}"`);
+  }
+  return importe;
 }
 
 /* --------------------------------- semillas -------------------------------- */
@@ -313,8 +335,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
       ]);
 
       const vista = vistasDe(await consultarDia(tx, "ingreso_flete", DIA_A))[0];
-      expect(vista.total.bruto).toBe("1500.00");
-      expect(vista.total.neto).toBe("1500.00");
+      // ⚠️ DADO VUELTA por la 183 (R25): esto afirmaba ademas `neto === "1500.00"`, que era el
+      // bruto copiado. ⟨D12⟩ retiro esa copia; lo que se afirma ahora es la FORMA —que la clave
+      // no esta— ademas de la cifra, que no cambia.
+      expect(soloBruto(vista.total, "ingreso_flete / total").bruto).toBe("1500.00");
+      expect(JSON.stringify(vista.total)).not.toContain("neto");
     });
   });
 
@@ -410,21 +435,35 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
   //   2. Desde la feature 173 la BASE tampoco la acepta: el CHECK
   //      `wallet_movimiento_tipo_categoria_check` la rechaza con 23514.
   //
-  // Y la consecuencia va mas alla de una fila: las CUATRO metricas que leen `wallet_movimiento`
-  // declaran listas HOMOGENEAS DE PREFIJO (`egresos` = las ocho `egreso_*`), y el repositorio
-  // filtra por CATEGORIA —el `tipo` es solo clave de agrupacion—. Luego un conjunto legal de una
-  // de esas metricas contiene un solo `tipo`, y por tanto:
+  // Los dos hechos de arriba SIGUEN SIENDO CIERTOS. Lo que ya no lo es es la conclusion que se
+  // saco de ellos, y se corrige aqui en vez de borrarla:
   //
-  //      neto = ±bruto SIEMPRE.  El neto 0 no es alcanzable con datos legales.
+  // ⚠️⚠️ CORREGIDO el 2026-08-04 por ⟨D12⟩ (humano, `progress/decision_183.md`, feature 183).
+  // Aquella nota terminaba diciendo, con estas palabras:
   //
-  // Estos numeros no estan tuneados para pasar: son los unicos que la base admite. Lo que el par
-  // mide ahora es lo que SI queda en pie, y son dos cosas distintas (por eso siguen siendo dos):
-  // (a) que el bruto agrega y que el neto lleva el signo contrario; (b) que el contraasiento REAL
-  // de un gasto NO entra en la metrica `egresos`.
+  //      «neto = ±bruto SIEMPRE.  El neto 0 no es alcanzable con datos legales.»
   //
-  // La pregunta de fondo —si `bruto`/`neto` significan algo para las metricas de caja, o si esas
-  // cuatro deberian declarar solo `bruto`— queda de encargo para la 175. NO se toca aqui el
-  // catalogo de `metrics.ts` ([P4]).
+  // La primera mitad valia porque las CUATRO metricas de caja declaraban listas HOMOGENEAS DE
+  // PREFIJO y el repositorio filtra por CATEGORIA (el `tipo` es solo clave de agrupacion), asi
+  // que un conjunto legal contenia un solo `tipo`. La segunda mitad era una consecuencia de esa
+  // premisa, no una ley: bastaba con que la premisa dejara de valer para UNA metrica.
+  //
+  // Es exactamente lo que ⟨D12⟩ hizo. `egresos` gana `ingreso_ajuste` en `definicion.categorias`
+  // —el reverso que `WalletEgresoService` emite al anular un egreso— porque sin el, ANULAR UN
+  // EGRESO NO SE DESCONTABA NUNCA DE LA CIFRA. Su lista deja de ser homogenea y, por tanto:
+  //
+  //      EL NETO 0 SI ES ALCANZABLE, y con datos que la base acepta: el par REAL de una
+  //      anulacion —una fila `egreso_*` de tipo `egreso` y su reverso `ingreso_ajuste` de tipo
+  //      `ingreso`—. Es lo que mide F.4(b), y por eso ese caso paso de «NO entra» a «entra».
+  //
+  // Para las TRES metricas `ingreso_*` la premisa sigue intacta, y por eso ⟨D12⟩ les retiro el
+  // `neto` en vez de conservarlo: `Σ egreso = 0` siempre y el campo no informaba de nada. Ya no
+  // publican `neto`, asi que aqui no hay ningun neto suyo que afirmar (ver F.1, mas arriba).
+  //
+  // Lo que este par mide ahora son tres cosas, y por eso son TRES casos:
+  // (a) que el bruto agrega sin signo y que el neto de `egresos` lo lleva contrario;
+  // (b) que el contraasiento REAL de un gasto SI entra en `egresos`: bruto 800, neto 0.00;
+  // (c) que sobre el censo real de produccion —sin ninguna anulacion— la cifra NO SE MUEVE.
 
   it("F.4(a) · dos egresos en el mismo rango: bruto 800, neto -800 (el neto lleva SIGNO)", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
@@ -434,42 +473,122 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
         { categoria: "egreso_sueldo", tipo: "egreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
       ]);
 
-      const vista = vistasDe(await consultarDia(tx, "egresos", DIA_A))[0];
+      const total = conNeto(vistasDe(await consultarDia(tx, "egresos", DIA_A))[0].total, "egresos");
 
       // Las dos afirmaciones, POR SEPARADO (es lo que pedia F.4): el bruto cuenta las dos filas
       // sin signo...
-      expect(vista.total.bruto).toBe("800.00");
+      expect(total.bruto).toBe("800.00");
       // ...y el neto es `Σ ingreso − Σ egreso`, o sea el MISMO importe con el signo cambiado.
       // Si el neto copiara el bruto —la mutacion que ⟨D1(c)⟩ nombra— esto seria "800.00".
-      expect(vista.total.neto).toBe("-800.00");
+      expect(total.neto).toBe("-800.00");
       // Dicho sin depender de los literales: nunca son el mismo numero, y difieren en el signo.
-      expect(vista.total.neto).not.toBe(vista.total.bruto);
-      expect(vista.total.neto.startsWith("-")).toBe(true);
-      expect(vista.total.bruto.startsWith("-")).toBe(false);
+      expect(total.neto).not.toBe(total.bruto);
+      expect(total.neto.startsWith("-")).toBe(true);
+      expect(total.bruto.startsWith("-")).toBe(false);
     });
   });
 
-  it("F.4(b) · el contraasiento REAL de un gasto NO entra en `egresos`: sigue en bruto 400, neto -400", async () => {
+  it("F.4(b) · el contraasiento REAL de un gasto SI entra en `egresos`: bruto 800, neto 0.00", async () => {
+    // ⚠️ DADO VUELTA por ⟨D12⟩ (2026-08-04). Hasta la 183 este caso afirmaba «bruto 400,
+    // neto -400» y se titulaba «NO entra»: `egresos` declaraba solo las ocho `egreso_*` y el
+    // reverso quedaba fuera, asi que anular un gasto no lo descontaba de la cifra. R25 obliga a
+    // darlo vuelta y no a borrarlo, porque el hueco que vigila —que el reverso llegue o no
+    // llegue a la metrica— es el mismo; lo que cambia es cual de las dos respuestas es correcta.
     await enTransaccionRevertida(prisma, async (tx) => {
       await sembrarCaja(tx, [
         // El gasto: sale dinero de la caja.
         { categoria: "egreso_gasto", tipo: "egreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
         // Su contraasiento, TAL Y COMO LO EMITE `WalletEgresoService`: el mismo dinero vuelve
-        // como `ingreso_ajuste` de tipo `ingreso`. Es legal para el CHECK... y `egresos` no lo
-        // declara, asi que la metrica NO lo ve.
+        // como `ingreso_ajuste` de tipo `ingreso`. Es legal para el CHECK, y desde la 183
+        // `egresos` SI lo declara.
         { categoria: "ingreso_ajuste", tipo: "ingreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
       ]);
 
-      // Que la fila esta EN EL LIBRO se comprueba, para que el caso no se pueda confundir con una
-      // semilla que no llego a escribirse: son dos filas en la caja, y la metrica solo ve una.
-      const enElLibro = await tx.walletMovimiento.count({
-        where: { fechaMovimiento: CR_MEDIODIA_DIA_A },
-      });
-      expect(enElLibro).toBe(2);
+      // Que las DOS filas estan EN EL LIBRO se comprueba, para que el caso no se pueda confundir
+      // con una semilla que no llego a escribirse.
+      // Se ordena EN JS: `ORDER BY categoria` sobre un enum de Postgres ordena por el orden de
+      // declaracion del enum, no alfabeticamente, y aqui lo unico que interesa es el contenido.
+      const enElLibro = (
+        await tx.walletMovimiento.findMany({
+          where: { fechaMovimiento: CR_MEDIODIA_DIA_A },
+          select: { categoria: true, tipo: true },
+        })
+      ).sort((a, b) => a.categoria.localeCompare(b.categoria));
+      expect(enElLibro).toEqual([
+        { categoria: "egreso_gasto", tipo: "egreso" },
+        { categoria: "ingreso_ajuste", tipo: "ingreso" },
+      ]);
 
-      const vista = vistasDe(await consultarDia(tx, "egresos", DIA_A))[0];
-      expect(vista.total.bruto).toBe("400.00");
-      expect(vista.total.neto).toBe("-400.00");
+      const total = conNeto(vistasDe(await consultarDia(tx, "egresos", DIA_A))[0].total, "egresos");
+      // El BRUTO cuenta los dos movimientos: es volumen movido ⟨D1(c)⟩, y por eso SUBE al anular
+      // (P1 de la 183, ratificada; la descripcion del catalogo lo declara).
+      expect(total.bruto).toBe("800.00");
+      // Y el NETO es lo que de verdad salio de caja: cero. Con la definicion de OCHO categorias
+      // —la mutacion que R7 nombra— esto seria bruto "400.00" / neto "-400.00".
+      expect(total.neto).toBe("0.00");
+    });
+  });
+
+  it("F.4(b bis) · la fila con la que los dobles viejos afirmaban es 23514 en la base (R24)", async () => {
+    // POR QUE ESTE CASO EXISTE. Hasta la 183, dos dobles en memoria median la cancelacion con
+    // filas CRUZADAS —`egreso_ajuste` con `tipo: ingreso` y `ingreso_flete` con `tipo: egreso`—
+    // y estaban verdes porque un objeto en memoria no pasa por el CHECK. R24 obliga a
+    // reexpresarlos con el par real, y este caso es la evidencia de que la premisa es cierta
+    // CONTRA POSTGRES y no de memoria: la fila que aquellos dobles usaban NO SE PUEDE INSERTAR.
+    //
+    // Va en su propia transaccion revertida a proposito: el rechazo aborta la transaccion, asi
+    // que no puede compartirla con ninguna asercion posterior.
+    await enTransaccionRevertida(prisma, async (tx) => {
+      await expect(
+        sembrarCaja(tx, [
+          { categoria: "egreso_ajuste", tipo: "ingreso", monto: "400.00", fecha: CR_MEDIODIA_DIA_A },
+        ]),
+        "la base acepto una fila que el CHECK categoria↔tipo de la 173 tenia que rechazar",
+      ).rejects.toThrow();
+    });
+  });
+
+  it("F.4(c) · el censo REAL de produccion (sin anulaciones) no mueve la cifra: 22042.40", async () => {
+    // R9 — LA NO-REGRESION, MEDIDA CONTRA POSTGRES Y NO CON DOBLES. Los dobles de servicio no
+    // ven el `where.categoria.in`, que es justo lo que la 183 cambia.
+    //
+    // El censo es el que ⟨D12⟩ §3 midio por MCP contra produccion el 2026-08-04, antes de
+    // decidir: 4 filas `egreso_pago_mensajero` = 22.000,00 y 1 `egreso_indemnizacion` = 42,40,
+    // con CERO filas `ingreso_ajuste` y cero `egreso_ajuste`. Sobre ese material la definicion
+    // de nueve categorias tiene que dar EXACTAMENTE lo mismo que la de ocho.
+    //
+    // MUTACION QUE ESTE CASO MATA: meter `ingreso_ajuste` restando en el bruto, o invertir el
+    // orden de la resta del neto. Las dos mueven una cifra que sobre este censo no puede
+    // moverse. (Y quitar `ingreso_ajuste` del catalogo NO lo mata: eso es el punto — F.4(b) se
+    // pone rojo y este sigue verde, que es la demostracion de que el cambio no toca lo viejo.)
+    await enTransaccionRevertida(prisma, async (tx) => {
+      await sembrarCaja(tx, [
+        { categoria: "egreso_pago_mensajero", tipo: "egreso", monto: "5000.00", fecha: CR_MEDIODIA_DIA_A },
+        { categoria: "egreso_pago_mensajero", tipo: "egreso", monto: "6000.00", fecha: CR_MEDIODIA_DIA_A },
+        { categoria: "egreso_pago_mensajero", tipo: "egreso", monto: "7000.00", fecha: CR_MEDIODIA_DIA_A },
+        { categoria: "egreso_pago_mensajero", tipo: "egreso", monto: "4000.00", fecha: CR_MEDIODIA_DIA_A },
+        { categoria: "egreso_indemnizacion", tipo: "egreso", monto: "42.40", fecha: CR_MEDIODIA_DIA_A },
+      ]);
+
+      // El censo es el que se dice que es: cinco filas, ninguna de ajuste en ninguna direccion.
+      const enElLibro = await tx.walletMovimiento.groupBy({
+        by: ["categoria"],
+        where: { fechaMovimiento: CR_MEDIODIA_DIA_A },
+        _count: { _all: true },
+      });
+      // Ordenado EN JS por el mismo motivo que en F.4(b): el enum de Postgres no ordena alfa.
+      const censo = enElLibro
+        .map((g) => [g.categoria, g._count._all] as const)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map((par) => [...par]);
+      expect(censo).toEqual([
+        ["egreso_indemnizacion", 1],
+        ["egreso_pago_mensajero", 4],
+      ]);
+
+      const total = conNeto(vistasDe(await consultarDia(tx, "egresos", DIA_A))[0].total, "egresos");
+      expect(total.bruto).toBe("22042.40");
+      expect(total.neto).toBe("-22042.40");
     });
   });
 
@@ -618,7 +737,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
   it("R21 · la cuenta por pagar es un saldo AL CORTE: incluye lo anterior al rango", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       const netoDe = async (fecha: string) =>
-        vistasDe(await consultarDia(tx, "cuenta_por_pagar_tienda", fecha))[0].total.neto;
+        conNeto(
+          vistasDe(await consultarDia(tx, "cuenta_por_pagar_tienda", fecha))[0].total,
+          "cuenta_por_pagar_tienda",
+        ).neto;
 
       const antes = await netoDe(DIA_B);
 
