@@ -12,20 +12,27 @@
 
 ## T0 — Puerta F1.4 (espejo de `requirements.md §5`)
 
-- [ ] **T0.1 — Q1 · BLOQUEANTE.** ¿Entran los tres roles y se **funden** las dos constantes de
-      rol? *Recomendación:* sí a los tres; `ROLES_ACCESO_ANALITICA` **deriva** de
-      `ROLES_ANALITICA` y el caso (b) del guard de no-convergencia se **reexpresa** (nunca se
-      borra).
-      **Hecho:** respuesta escrita en `progress/current.md` y en el `status_note` de la ficha.
-- [ ] **T0.2 — Q2 · BLOQUEANTE.** ¿`mensajero` y `adminSatelite` conservan su aterrizaje
-      post-login o pasan a aterrizar en `/analitica`? *Recomendación:* conservarlo (R5), marcando
-      el ítem como no elegible como destino inicial.
-      **Hecho:** respuesta escrita; si es «conservar», T5 entra en el alcance.
-- [ ] **T0.3 — Q3, Q4, Q5, Q6, Q7 · no bloqueantes.** Se cierran con la recomendación escrita
-      salvo objeción: ocultar la faceta fijada (Q3); no ofrecer selectores sin catálogo
-      autorizado (Q4); rótulo por tipo de alcance sin identificadores (Q5); E2E de 3 roles nuevos
-      + `maestro` (Q6); registrar ya la ficha del oráculo (Q7 — la registra el **leader**).
-      **Hecho:** las cinco anotadas como aplicadas o corregidas.
+> **PUERTA CERRADA el 2026-08-04.** El humano respondió las dos bloqueantes con la recomendación
+> escrita y no objetó las cinco restantes.
+
+- [x] **T0.1 — Q1 · BLOQUEANTE. RESUELTA: SÍ a los tres roles, y las constantes se FUNDEN
+      DERIVANDO.** `ROLES_ACCESO_ANALITICA` pasa a derivarse de `ROLES_ANALITICA` (una sola
+      declaración), y el caso (b) del guard de no-convergencia se **REEXPRESA** para vigilar que la
+      derivación siga existiendo —que nadie vuelva a escribir la lista a mano—, **nunca se borra ni
+      se relaja**. El propio guard trae esa salida escrita en sus líneas 34-38. El caso (a)
+      —acceso ⊆ dominio— se conserva intacto.
+- [x] **T0.2 — Q2 · BLOQUEANTE. RESUELTA: `mensajero` y `adminSatelite` CONSERVAN su aterrizaje
+      actual** (R5). Un tablero de indicadores no es donde empieza el turno de nadie: `/analitica`
+      se excluye del cálculo de `primerDestino` y **T5 entra en el alcance**.
+      **Por qué importa más de lo que parece:** este cambio habría sido **silencioso**. El test que
+      cubre el aterrizaje deriva el valor esperado de la misma función que juzga, así que no se
+      habría puesto rojo y el desvío se habría descubierto por una llamada de un mensajero. El test
+      nuevo debe enumerar los cinco roles y afirmar su destino **por valor**, no por derivación.
+- [x] **T0.3 — Q3 a Q7 · no bloqueantes. SIN OBJECIÓN**, se aplican las recomendaciones: ocultar la
+      faceta que el alcance ya fija (Q3); no ofrecer selectores cuyo catálogo responde `forbidden`,
+      para no dejar controles muertos (Q4); rótulo por tipo de alcance, sin identificadores (Q5);
+      E2E de los 3 roles nuevos + `maestro` (Q6); y la ficha del oráculo **ya registrada por el
+      leader como la 182** (Q7).
 
 ---
 

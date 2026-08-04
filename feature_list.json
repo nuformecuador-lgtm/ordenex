@@ -1538,7 +1538,7 @@
       "name": "analitica: recortes por rol",
       "spec_path": "specs/133-analitica-recortes-por-rol",
       "description": "Frontend. Define que PANELES ve cada rol sobre los tableros 130/131 (adminTienda = su tienda; adminSatelite = su zona; mensajero = su productividad). El recorte de DATOS ya lo garantiza 121; esta feature recorta la presentacion. Depende de 131.",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
@@ -2150,6 +2150,19 @@
       "branch": null,
       "depends_on": 132,
       "status_note": "Sale de la Q2 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). Se eligio (a) pintar el id crudo con la limitacion escrita EN PANTALLA, y NO (b) resolver los nombres en el Server Component de la 132 ni (c) ampliar el DTO de la 127. Motivos: (b) mete una consulta que el diseno de la 127 no previo y que habria que REPETIR en la 131 y en la 134 —tres copias de la misma traduccion—; (c) reabre una feature `done` y mergeada (PR #269) con su propia puerta y su reviewer. Al especificar: el sitio correcto es el DTO de los servicios de analitica, no cada pantalla, justamente para que la traduccion exista UNA vez. Ojo con el alcance por rol: la etiqueta no puede filtrar el nombre de una tienda que el actor no deberia ver (los guards de alcance de la 122/127 ya estan escritos y hay que respetarlos). Verificar tambien si la analitica OPERATIVA (126) tiene el mismo defecto antes de decidir la forma. Renumerada de 179 a 181: mientras esta rama estaba viva, la 128 dio de alta otra ficha con el 179 (analitica: cache financiera + invalidacion por ledger) y llego a dev primero."
+    },
+    {
+      "id": 182,
+      "name": "analitica: cerrar el oraculo de conteo del filtro mensajero (R39 de la 122)",
+      "spec_path": null,
+      "description": "Backend. Un actor con politica de identidad SEUDONIMA (adminTienda + grano mensajero) puede confirmar por el CONTEO si un mensajero concreto trabajo para el, enviando su uuid en `mensajero_id`: `recortarFiltro` solo interseca la dimension del alcance, asi que el filtro pasa y el conteo devuelto responde la pregunta. Enfoque candidato: para ese actor, `mensajero_id` en el filtro se RECHAZA con `filtro_fuera_de_alcance` (403) en vez de intersecarse -- un id que no puede nombrar tampoco puede preguntar por el. Alternativa a evaluar: ruido o umbral minimo de celda.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 122,
+      "status_note": "Hallazgo M-4 de progress/review_122.md (2026-08-01), que quedo ABIERTO con riesgo declarado BAJO (exige conocer un uuid v4 de antemano). La 133 lo evaluo en su puerta y decidio NO cerrarlo alli, por escrito y con razon: es un problema de DATOS y la 133 es frontend; cerrarlo con la UI seria exactamente lo que el design.md 7 de la 122 avisa de no hacer -- 'un panel que no se pinta NO es un dato que no se filtra'. || LO QUE LA 133 SI APORTA, y que NO debe confundirse con un cierre: (i) R15, a adminTienda no se le ofrece el selector 'Mensajero'; (ii) R27, que PROHIBE presentar esa ocultacion como cierre del hallazgo. Ocultar el control quita la comodidad, no el canal: el filtro viaja por la URL y por el argumento de la Server Action. || DATO QUE AGRAVA, verificado por el spec_author de la 133 en el codigo: UsuariosPorRolService.ts:15,24 sirve a adminTienda el nombre real MAS el uuid del mensajero, lo que contradice de frente la seudonimizacion que R38/R39 de la 122 pretenden. Quien especifique esto debe mirar esa fuente antes de disenar el rechazo del filtro."
     }
   ]
 }
