@@ -597,6 +597,71 @@ interface PaginaSateliteIdRow {
   total: number;
 }
 
+/**
+ * Feature 184 — Tanda A (T A.1, R16) — el CRITERIO del listado de la bodega satelite, declarado
+ * UNA sola vez.
+ *
+ * Lo consumen las TRES consultas del dominio —la pagina, el conjunto completo de la descarga y
+ * la comprobacion de vigencia de la seleccion— y por eso vive fuera de las tres. Escribirlo dos
+ * veces es lo que R16 prohibe, y no por estilo: si el `WHERE` de la pagina y el del conjunto se
+ * despegaran, la pantalla y el archivo mostrarian filas distintas para el mismo filtro y no
+ * fallaria nada.
+ *
+ * Cada condicion va HERMANA de las demas (AND), igual que el filtro de cliente que sustituyo.
+ * Las tres primeras son el ACOTAMIENTO y no dependen de ningun filtro: se emiten SIEMPRE.
+ */
+function condicionesSatelite(filtro: RecepcionSateliteFiltro): Prisma.Sql[] {
+  const condiciones: Prisma.Sql[] = [
+    Prisma.sql`o."zona_id" = ${filtro.zonaId}`,
+    Prisma.sql`o."deleted_at" IS NULL`,
+    Prisma.sql`os."value" IN (${Prisma.join([...filtro.estatusValues])})`,
+  ];
+  const cantonNombres = [...(filtro.cantonNombres ?? [])];
+  if (cantonNombres.length > 0) {
+    condiciones.push(Prisma.sql`c."nombre" IN (${Prisma.join(cantonNombres)})`);
+  }
+  const distritoNombres = [...(filtro.distritoNombres ?? [])];
+  if (distritoNombres.length > 0) {
+    // El JOIN de distrito es LEFT y `NULL IN (...)` no es cierto: una orden SIN distrito
+    // queda fuera bajo un filtro de distrito, que es exactamente lo que hace hoy el cliente.
+    condiciones.push(Prisma.sql`d."nombre" IN (${Prisma.join(distritoNombres)})`);
+  }
+  return condiciones;
+}
+
+/**
+ * Feature 184 (T A.1) — el `FROM ... WHERE` del listado, con los JOINs que las condiciones
+ * necesitan. UN solo fragmento: la pagina, su conteo, el conjunto de la descarga y la vigencia
+ * no tienen forma de mirar conjuntos distintos.
+ */
+function desdeSatelite(condiciones: Prisma.Sql[]): Prisma.Sql {
+  return Prisma.sql`
+      FROM "orden" o
+      JOIN "order_status" os ON os."id" = o."estatus_id"
+      JOIN "canton" c ON c."id" = o."canton_id"
+      LEFT JOIN "distrito" d ON d."id" = o."distrito_id"
+      WHERE ${Prisma.join(condiciones, " AND ")}
+    `;
+}
+
+/**
+ * Feature 184 (T A.1, R16/R51) — el ORDEN del listado: rango de GRUPO primero
+ * (`ESTADOS_BODEGA_SATELITE`, la secuencia canonica COMPLETA aunque el filtro deje un solo
+ * estado), luego prioridad, recencia y el `id` como desempate estable.
+ *
+ * Lo comparten la pagina y el conjunto de la descarga: si divergieran, la fila N del archivo
+ * dejaria de ser la fila N de la pantalla sin que nada fallara.
+ */
+function ordenBodegaSatelite(): Prisma.Sql {
+  return Prisma.sql`
+      ORDER BY
+        array_position(ARRAY[${Prisma.join([...ESTADOS_BODEGA_SATELITE])}]::text[], os."value") ASC,
+        o."prioridad" DESC,
+        o."created_at" DESC,
+        o."id" ASC
+    `;
+}
+
 // R6/R8/R9: serializa la fila a RecepcionSateliteRow. Resuelve los nombres
 // legibles, mapea Decimal montoCobrar -> number|null y deja distritoNombre null si
 // la orden no tiene distrito. NO expone deletedAt.
@@ -2156,48 +2221,18 @@ export class OrdenRepository implements IOrdenRepository {
     filtro: RecepcionSateliteFiltro,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<RecepcionSateliteRow>> {
-    const estatusValues = [...filtro.estatusValues];
     // Sin estados no hay conjunto: el listado se define por ellos (espejo de la guarda de
     // `findRecepcionSateliteByZona`). Se corta ANTES de consultar.
-    if (estatusValues.length === 0) return { items: [], total: 0 };
+    if (filtro.estatusValues.length === 0) return { items: [], total: 0 };
 
-    const cantonNombres = [...(filtro.cantonNombres ?? [])];
-    const distritoNombres = [...(filtro.distritoNombres ?? [])];
-
-    // Cada condicion va HERMANA de las demas (AND), igual que el filtro de cliente que
-    // sustituye. Las dos primeras son el ACOTAMIENTO y no dependen de ningun filtro: se
-    // emiten siempre.
-    const condiciones: Prisma.Sql[] = [
-      Prisma.sql`o."zona_id" = ${filtro.zonaId}`,
-      Prisma.sql`o."deleted_at" IS NULL`,
-      Prisma.sql`os."value" IN (${Prisma.join(estatusValues)})`,
-    ];
-    if (cantonNombres.length > 0) {
-      condiciones.push(Prisma.sql`c."nombre" IN (${Prisma.join(cantonNombres)})`);
-    }
-    if (distritoNombres.length > 0) {
-      // El JOIN de distrito es LEFT y `NULL IN (...)` no es cierto: una orden SIN distrito
-      // queda fuera bajo un filtro de distrito, que es exactamente lo que hace hoy el cliente.
-      condiciones.push(Prisma.sql`d."nombre" IN (${Prisma.join(distritoNombres)})`);
-    }
-
-    // UN solo fragmento para la pagina y para el conteo: no hay forma de que se separen.
-    const desde = Prisma.sql`
-      FROM "orden" o
-      JOIN "order_status" os ON os."id" = o."estatus_id"
-      JOIN "canton" c ON c."id" = o."canton_id"
-      LEFT JOIN "distrito" d ON d."id" = o."distrito_id"
-      WHERE ${Prisma.join(condiciones, " AND ")}
-    `;
+    // Feature 184 (T A.1): el criterio y el orden salen de los helpers compartidos; el `LIMIT`
+    // y el `COUNT(*) OVER ()` son lo UNICO propio de la pagina.
+    const desde = desdeSatelite(condicionesSatelite(filtro));
 
     const pagina = await this.prisma.$queryRaw<PaginaSateliteIdRow[]>(Prisma.sql`
       SELECT o."id", (COUNT(*) OVER ())::int AS "total"
       ${desde}
-      ORDER BY
-        array_position(ARRAY[${Prisma.join([...ESTADOS_BODEGA_SATELITE])}]::text[], os."value") ASC,
-        o."prioridad" DESC,
-        o."created_at" DESC,
-        o."id" ASC
+      ${ordenBodegaSatelite()}
       LIMIT ${rango.take} OFFSET ${rango.skip}
     `);
 
@@ -2209,20 +2244,104 @@ export class OrdenRepository implements IOrdenRepository {
       return { items: [], total: conteo[0]?.total ?? 0 };
     }
 
-    const ids = pagina.map((fila) => fila.id);
-    // El acotamiento se REPITE aqui aunque los ids ya vengan de una consulta acotada: esta
-    // consulta es la que devuelve datos, y una lista de ids nunca debe ser su unica guarda.
+    const items = await this.hidratarSatelite(
+      pagina.map((fila) => fila.id),
+      filtro.zonaId,
+    );
+    return { items, total: pagina[0]!.total };
+  }
+
+  /**
+   * Feature 184 — Tanda A (T A.1, R1/R2/R15/R16) — el CONJUNTO FILTRADO ENTERO del listado
+   * «Órdenes de la bodega», sin recorte de pagina, para producir el archivo.
+   *
+   * Es el hermano sin `LIMIT`/`OFFSET` de `findRecepcionSatelitePaginada`, y lo es
+   * LITERALMENTE: comparten `condicionesSatelite` y `ordenBodegaSatelite`, asi que la fila N
+   * del archivo es la fila N que la pantalla enseñaria al pasar paginas (R5/R16). Lo unico que
+   * esta consulta no lleva es el recorte —y el `COUNT(*) OVER ()`, que aqui sobra: el total es
+   * el tamaño de lo que devuelve—.
+   *
+   * Sustituye a `conjuntoFiltrado()`, que releia los CINCO grupos de la zona entera y volvia a
+   * cruzar estado ∧ canton ∧ distrito en el navegador: el mismo criterio escrito dos veces, en
+   * dos capas y en dos lenguajes (Q-K4).
+   *
+   * **Dos consultas**, las mismas que la pagina: la que ordena y la que hidrata. La proyeccion
+   * sigue siendo `WITH_RECEPCION_SATELITE` por el mismo motivo que alli —reescribir quince
+   * columnas en SQL crudo es garantizar que diverjan—. El tope de filas NO se evalua aqui: es
+   * una regla de negocio y vive en el servicio (R6).
+   */
+  async findRecepcionSateliteCompleta(
+    filtro: RecepcionSateliteFiltro,
+  ): Promise<RecepcionSateliteRow[]> {
+    if (filtro.estatusValues.length === 0) return [];
+
+    const conjunto = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT o."id"
+      ${desdeSatelite(condicionesSatelite(filtro))}
+      ${ordenBodegaSatelite()}
+    `);
+    if (conjunto.length === 0) return [];
+
+    return this.hidratarSatelite(
+      conjunto.map((fila) => fila.id),
+      filtro.zonaId,
+    );
+  }
+
+  /**
+   * Feature 184 — Tanda A (T A.2, R19/R21) — cuales de `ids` siguen perteneciendo al conjunto
+   * filtrado. Alimenta la PODA de la seleccion de la bodega satelite: una orden marcada que
+   * salio del listado (un incidente, un movimiento de otro operador) deja de estar marcada.
+   *
+   * Devuelve los VIGENTES, nunca los caducados: asi una respuesta vacia por error jamas puede
+   * leerse como «desmarca todo».
+   *
+   * **El `IN` de ids NO es la guarda.** El acotamiento (`zona` ∧ no borrada ∧ estados del
+   * listado ∧ los filtros vigentes) se repite entero en el `WHERE` aunque los ids vengan del
+   * cliente: sin el, un actor podria preguntar por identificadores de otra zona y la respuesta
+   * —el propio hecho de que un id vuelva— le confirmaria que existen (R21).
+   *
+   * **Una sola consulta y una sola columna** (`SELECT o."id"`): es una pregunta de pertenencia,
+   * no una lectura del listado. Sin ids no consulta (R23 tambien en el servidor).
+   */
+  async findIdsVigentesEnBodega(
+    filtro: RecepcionSateliteFiltro,
+    ids: readonly string[],
+  ): Promise<string[]> {
+    if (ids.length === 0) return [];
+    if (filtro.estatusValues.length === 0) return [];
+
+    const condiciones = condicionesSatelite(filtro);
+    condiciones.push(Prisma.sql`o."id" IN (${Prisma.join([...ids])})`);
+
+    const filas = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT o."id"
+      ${desdeSatelite(condiciones)}
+    `);
+    return filas.map((fila) => fila.id);
+  }
+
+  /**
+   * Feature 184 (T A.1) — hidrata los ids que la consulta ordenada devolvio, CONSERVANDO ese
+   * orden (el `findMany` no lo garantiza) y repitiendo el acotamiento por zona: esta es la
+   * consulta que devuelve datos, y una lista de ids nunca debe ser su unica guarda.
+   *
+   * Lo comparten la pagina y el conjunto de la descarga: dos copias de esto son dos formas de
+   * proyectar la misma fila, que es como se producen dos archivos distintos del mismo listado.
+   */
+  private async hidratarSatelite(
+    ids: string[],
+    zonaId: string,
+  ): Promise<RecepcionSateliteRow[]> {
     const filas = await this.prisma.orden.findMany({
-      where: { id: { in: ids }, zonaId: filtro.zonaId, deletedAt: null },
+      where: { id: { in: ids }, zonaId, deletedAt: null },
       ...WITH_RECEPCION_SATELITE,
     });
     const porId = new Map(filas.map((fila) => [fila.id, fila]));
-    // El orden lo manda la consulta que ordeno (`ids`), no el `findMany` de hidratacion.
-    const items = ids.flatMap((id) => {
+    return ids.flatMap((id) => {
       const fila = porId.get(id);
       return fila === undefined ? [] : [toRecepcionSateliteRow(fila)];
     });
-    return { items, total: pagina[0]!.total };
   }
 
   /**

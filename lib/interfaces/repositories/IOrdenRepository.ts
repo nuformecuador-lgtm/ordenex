@@ -1011,6 +1011,38 @@ export interface IOrdenRepository {
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<RecepcionSateliteRow>>;
   /**
+   * Feature 184 — Tanda A (T A.1, R1/R2/R15/R16): el CONJUNTO FILTRADO ENTERO del mismo
+   * listado, sin recorte, para producir el archivo de la descarga.
+   *
+   * Comparte con `findRecepcionSatelitePaginada` el criterio y el orden —los dos salen del
+   * mismo fragmento SQL, no de dos declaraciones parecidas—, asi que la fila N del archivo es
+   * la fila N que la pantalla enseña paginando (R5/R16). Lo unico que NO lleva es
+   * `LIMIT`/`OFFSET`.
+   *
+   * El tope de filas es una regla de NEGOCIO y no se evalua aqui (R6: lo aplica el servicio).
+   * Vacio si `estatusValues` esta vacio. Solo query.
+   */
+  findRecepcionSateliteCompleta(
+    filtro: RecepcionSateliteFiltro,
+  ): Promise<RecepcionSateliteRow[]>;
+  /**
+   * Feature 184 — Tanda A (T A.2, R19/R21): cuales de `ids` siguen perteneciendo al conjunto
+   * filtrado. Es la comprobacion con la que la pantalla PODA su seleccion cuando una orden
+   * marcada deja de estar en el listado.
+   *
+   * Devuelve los VIGENTES (subconjunto de `ids`), nunca los caducados: una respuesta vacia por
+   * error no puede leerse como «desmarca todo». El acotamiento del listado —zona, no borradas,
+   * estados y filtros vigentes— se repite ENTERO en el `WHERE`: el `IN` de ids no es la guarda,
+   * porque los ids los propone el cliente (R21).
+   *
+   * Una sola consulta de UNA columna. Vacio —y sin consultar— si `ids` o `estatusValues` estan
+   * vacios. Solo query.
+   */
+  findIdsVigentesEnBodega(
+    filtro: RecepcionSateliteFiltro,
+    ids: readonly string[],
+  ): Promise<string[]>;
+  /**
    * Feature 170 — FASE 2 (T K.2, R44/R46): los pares canton/distrito DISTINTOS del conjunto
    * del actor (su zona + los estados del listado), para las OPCIONES de los desplegables.
    *
