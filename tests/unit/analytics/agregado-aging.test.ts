@@ -20,9 +20,13 @@ const FILAS_DESIGUALES = [
   { estatusId: "e-dos", zonaId: "z1", tiendaId: "t1", ordenes: 9, segEnEstadoAcum: BigInt(100) },
 ];
 
+// Los `value` salen de `ORDER_STATUS_SEED` VIGENTE (`lib/types/order-status.ts:54-79`), no
+// de la nomenclatura anterior: el censo de la 153
+// (`tests/unit/guards/censo-order-status-rename.test.ts`) prohibe nombrar los 7 values
+// retirados fuera de su allowlist, y este fixture no tiene ningun motivo para necesitarlos.
 const ETIQUETAS: ReadonlyMap<string, EtiquetaEstatus> = new Map([
-  ["e-uno", { value: "en_ruta", label: "en_ruta" }],
-  ["e-dos", { value: "en_bodega", label: "en_bodega" }],
+  ["e-uno", { value: "en_reparto", label: "en_reparto" }],
+  ["e-dos", { value: "en_bodega_central", label: "en_bodega_central" }],
 ]);
 
 describe("R11 · aging_por_estado agrega la dimension, no el tiempo", () => {
@@ -63,8 +67,8 @@ describe("R11 · aging_por_estado agrega la dimension, no el tiempo", () => {
     expect(agregado.cubos).toHaveLength(2);
     const porEstatus = new Map(agregado.cubos.map((c) => [c.dimension, c]));
     // La etiqueta sale de la TABLA, no de un mapa hardcodeado.
-    expect(porEstatus.get("en_ruta")?.valor).toBeCloseTo(1000, 10);
-    expect(porEstatus.get("en_bodega")?.valor).toBeCloseTo(100 / 9, 10);
+    expect(porEstatus.get("en_reparto")?.valor).toBeCloseTo(1000, 10);
+    expect(porEstatus.get("en_bodega_central")?.valor).toBeCloseTo(100 / 9, 10);
     for (const c of agregado.cubos) {
       expect(c.parcial).toBe(true);
       expect(c.corteAt).toBe(AHORA.toISOString());
