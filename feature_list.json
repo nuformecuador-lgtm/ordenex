@@ -2156,13 +2156,13 @@
       "name": "analitica: cerrar el oraculo de conteo del filtro mensajero (R39 de la 122)",
       "spec_path": null,
       "description": "Backend. Un actor con politica de identidad SEUDONIMA (adminTienda + grano mensajero) puede confirmar por el CONTEO si un mensajero concreto trabajo para el, enviando su uuid en `mensajero_id`: `recortarFiltro` solo interseca la dimension del alcance, asi que el filtro pasa y el conteo devuelto responde la pregunta. Enfoque candidato: para ese actor, `mensajero_id` en el filtro se RECHAZA con `filtro_fuera_de_alcance` (403) en vez de intersecarse -- un id que no puede nombrar tampoco puede preguntar por el. Alternativa a evaluar: ruido o umbral minimo de celda.",
-      "status": "pending",
+      "status": "cancelled",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
       "branch": null,
       "depends_on": 122,
-      "status_note": "Hallazgo M-4 de progress/review_122.md (2026-08-01), que quedo ABIERTO con riesgo declarado BAJO (exige conocer un uuid v4 de antemano). La 133 lo evaluo en su puerta y decidio NO cerrarlo alli, por escrito y con razon: es un problema de DATOS y la 133 es frontend; cerrarlo con la UI seria exactamente lo que el design.md 7 de la 122 avisa de no hacer -- 'un panel que no se pinta NO es un dato que no se filtra'. || LO QUE LA 133 SI APORTA, y que NO debe confundirse con un cierre: (i) R15, a adminTienda no se le ofrece el selector 'Mensajero'; (ii) R27, que PROHIBE presentar esa ocultacion como cierre del hallazgo. Ocultar el control quita la comodidad, no el canal: el filtro viaja por la URL y por el argumento de la Server Action. || DATO QUE AGRAVA, verificado por el spec_author de la 133 en el codigo: UsuariosPorRolService.ts:15,24 sirve a adminTienda el nombre real MAS el uuid del mensajero, lo que contradice de frente la seudonimizacion que R38/R39 de la 122 pretenden. Quien especifique esto debe mirar esa fuente antes de disenar el rechazo del filtro."
+      "status_note": "CANCELADA el 2026-08-04, SIN implementar: el hallazgo YA ESTABA CERRADO por la feature 126 y nadie lo sabia. Verificado en el codigo por el leader, no deducido: lib/actions/analitica-operativa.ts:117-128 invoca sondeaIdentidadDeMensajero (helper unico en lib/analytics/oraculo-mensajero.ts) y responde forbidden + auditoria con motivo filtro_fuera_de_alcance -- que es EXACTAMENTE el enfoque candidato que esta ficha proponia. Su test tests/unit/analytics/operativa-oraculo.test.ts cubre el caso del adminTienda y ademas mata la mutacion fina (responder forbidden pero quitarle de paso la desagregacion seudonima que D5 de la 122 le concedio). El dominio financiero no necesita guard equivalente: para adminTienda es PROHIBIDO entero, asi que no hay consulta desde la que sondear. || POR QUE SE REGISTRO IGUAL: el review de la 122 (2026-08-01) dejo M-4 abierto, y ni ese review ni el spec_author de la 133 sabian que la 126 lo cerraria despues. La leccion no es del registro sino del metodo: una deuda heredada se comprueba EN EL CODIGO antes de convertirla en ficha, porque entre que se anota y que se lee puede haberla saldado otra feature."
     }
   ]
 }

@@ -231,6 +231,29 @@ su línea y el motivo.
 
 ## 4. Deuda heredada: el oráculo residual contra R39 de la 122
 
+> ### ⚠️ CORRECCIÓN DEL LEADER (2026-08-04) — LEER ANTES QUE EL RESTO DE LA SECCIÓN
+>
+> **M-4 ya NO está abierto: lo cerró la feature 126, y ni el review de la 122 ni esta spec lo
+> sabían.** Verificado en el código, no deducido: `lib/actions/analitica-operativa.ts:117-128`
+> invoca `sondeaIdentidadDeMensajero` —helper único en `lib/analytics/oraculo-mensajero.ts`— y
+> responde `forbidden` con auditoría y motivo `filtro_fuera_de_alcance`. Es **exactamente** el
+> enfoque candidato que esta sección proponía. Su test
+> `tests/unit/analytics/operativa-oraculo.test.ts` cubre el caso del `adminTienda` y además mata la
+> mutación fina (responder `forbidden` pero quitarle de paso la desagregación seudónima que D5 de la
+> 122 le concedió). El dominio financiero no necesita guard equivalente: para `adminTienda` es
+> **prohibido entero**, así que no hay consulta desde la que sondear.
+>
+> **Consecuencia:** la ficha propuesta al final de esta sección se registró como **182** y quedó
+> **CANCELADA sin implementar**. **R15 y R27 siguen siendo válidos y no cambian**: ocultarle el
+> selector sigue siendo correcto, y seguir prohibiendo que esa ocultación se presente como cierre
+> también — lo que cierra el agujero es el guard del borde, no la UI.
+>
+> **La lección no es del registro, es del método:** una deuda heredada se comprueba **en el código**
+> antes de convertirla en ficha. Entre que se anota y que se lee, puede haberla saldado otra feature.
+>
+> El texto original se conserva íntegro debajo: era cierto cuando se escribió, y es el razonamiento
+> que sostiene R15 y R27.
+
 `progress/review_122.md` (2026-08-01), hallazgo **M-4**, **ABIERTO**:
 
 > `recortarFiltro` solo interseca la dimensión del alcance; un `adminTienda` puede enviar
