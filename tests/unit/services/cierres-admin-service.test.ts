@@ -96,7 +96,7 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
     // Feature 158/R19: por defecto el cierre NO tiene incidentes -> cobertura vacia, camino
     // de la 38 intacto (R36). Los casos de la 158 lo sobreescriben.
-    findGestionesIncidenteDelCierre: vi.fn(async () => [] as string[]),
+    findGestionesIncidenteDelCierre: vi.fn(async () => []),
     ...overrides,
   };
 }

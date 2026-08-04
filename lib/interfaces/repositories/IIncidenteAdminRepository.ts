@@ -104,6 +104,15 @@ export interface IncidenteAdminRow {
   motivo: string;
   estado: CierreEstado;
   indemnizacion: string | null; // STRING 2 dec; null hasta aprobar (R50)
+  /**
+   * Fix «tope de negocio de la indemnizacion» (2026-08-04) — `orden.monto_cobrar` de la orden
+   * incidentada: el TOPE DE NEGOCIO del monto que el aprobador puede capturar (R50).
+   *
+   * Vive en la FILA DEL REPO y NO en `IncidenteAdminDTO`: es un dato para DECIDIR en el
+   * servidor, no para pintar. Money-safe: STRING escala 2; `null` = la orden no declara valor
+   * a cobrar (que hace el tope con ese caso lo decide `lib/utils/tope-indemnizacion.ts`).
+   */
+  ordenMontoCobrar: string | null;
   reportadoPor: string;
   reportadoPorNombre: string;
   resueltoPor: string | null;

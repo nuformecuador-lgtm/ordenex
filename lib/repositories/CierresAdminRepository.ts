@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   Alcance,
   CierreAdminResumenRow,
+  GestionIncidenteDelCierre,
   ICierresAdminRepository,
   ResolverCierreInput,
   ResolverCierreResult,
@@ -365,19 +366,31 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   ) {}
 
   /**
-   * Feature 158 (T1.12, R19/R21/R25): ids de las gestiones `incidente` del cierre, con el
-   * ALCANCE en el WHERE (via la relacion `cierre`), nunca filtrado en memoria. Fuera de
-   * alcance -> [] (no se distingue de "el cierre no tiene incidentes": R25 no revela nada).
+   * Feature 158 (T1.12, R19/R21/R25): las gestiones `incidente` del cierre, con el ALCANCE en el
+   * WHERE (via la relacion `cierre`), nunca filtrado en memoria. Fuera de alcance -> [] (no se
+   * distingue de "el cierre no tiene incidentes": R25 no revela nada).
+   *
+   * Fix «tope de negocio» (2026-08-04): el `select` gana `orden.montoCobrar`, el valor de la
+   * orden, que es el tope de NEGOCIO del monto de indemnizacion. Es una COLUMNA MAS en la MISMA
+   * consulta —mismo WHERE, mismo alcance, ninguna query extra—: el tope no puede costar un
+   * round-trip por gestion. Money-safe: sale ya como STRING escala 2 (`null` si la orden no
+   * declara valor).
    */
-  async findGestionesIncidenteDelCierre(cierreId: string, alcance: Alcance): Promise<string[]> {
+  async findGestionesIncidenteDelCierre(
+    cierreId: string,
+    alcance: Alcance,
+  ): Promise<GestionIncidenteDelCierre[]> {
     const rows = await this.prisma.gestionOrden.findMany({
       // MISMO predicado que la escritura del monto y que el feed: `(cierreId, incidente)`. Que
       // los tres coincidan es lo que impide que el service exija un monto para una gestion que
       // el feed luego no sumaria.
       where: { cierreId, resultado: "incidente", cierre: alcanceWhere(alcance) },
-      select: { id: true },
+      select: { id: true, orden: { select: { montoCobrar: true } } },
     });
-    return rows.map((r) => r.id);
+    return rows.map((r) => ({
+      gestionId: r.id,
+      ordenMontoCobrar: decimalToString(r.orden.montoCobrar),
+    }));
   }
 
   /** R2/R4/R5/R8/R9: cierres del alcance, mas reciente primero, totales -> string. */
