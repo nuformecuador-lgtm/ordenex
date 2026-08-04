@@ -230,6 +230,7 @@ feature cambia, en el spec de cada feature afectada y citando ⟨D12⟩:
 
 | Feature | Requisito | Qué le pasa |
 |---|---|---|
+| 127 | **R16** («…**en sus dos campos `bruto` y `neto`**», nombrando las tres de Q1 una por una) | **Acotado**: las tres publican solo `bruto`. El resto de R16 —la Σ de *exactamente* las categorías declaradas y la ventana `[desde, hasta)`— sigue vigente. ⚠️ **Añadido el 2026-08-04 tras el review (B1): este spec no lo había visto**, siendo el requisito vivo más directamente derogado. |
 | 127 | **R18** («la Σ de las **ocho** categorías `egreso_*`») | **Acotado**: pasan a ser nueve, ocho `egreso_*` más `ingreso_ajuste`. El resto de R18 (no existe `no_producida`) sigue intacto. |
 | 127 | **R37** («toda métrica de ledger devuelve **dos** importes») | **Acotado**: sigue valiendo para toda métrica cuyo neto no sea redundante por construcción; deja de aplicar a las tres de Q1. |
 | 132 | **R14** (ninguna cifra derivada) | **Intacto**. Sigue valiendo palabra por palabra. |

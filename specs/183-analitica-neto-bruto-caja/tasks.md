@@ -10,7 +10,7 @@
 
 ## Bloque 0 — Puerta (bloquea todo)
 
-- [ ] **T0. Leer la decisión y confirmar el encuadre.**
+- [x] **T0. Leer la decisión y confirmar el encuadre.**
   Leer `progress/decision_183.md` entero. Confirmar que la `status_note` de la ficha 183 en
   `feature_list.json` («retirar en las CUATRO») **está superada** y no se sigue.
   Confirmar respuestas a **P1–P4** de `requirements.md` (la puerta humana las contesta antes de
@@ -22,7 +22,7 @@
 
 ## Bloque A — El contrato (backend). Depende de T0
 
-- [ ] **T1. `ImporteAnalitico` pasa a unión discriminada por `forma`.**
+- [x] **T1. `ImporteAnalitico` pasa a unión discriminada por `forma`.**
   En `lib/types/analitica-financiera.ts`: `ImporteConNeto` (`forma: "bruto_y_neto"`, bruto, neto,
   moneda) + `ImporteSoloBruto` (`forma: "solo_bruto"`, bruto, moneda) + el alias unión. Actualizar
   el bloque de cabecera ⟨D1⟩/R37 (`:15-17`) y el comentario del tipo (`:45-53`) para que declaren
@@ -32,7 +32,7 @@
   lista de trabajo de T5–T6 y del bloque E) y `lib/types/analitica-financiera.ts` no importa nada
   nuevo. (R1, R2, R14, R15)
 
-- [ ] **T2. Test de forma del contrato.** [P]
+- [x] **T2. Test de forma del contrato.** [P]
   En `tests/unit/analytics/financiera-contratos.test.ts`: dar vuelta el bloque R37
   (`:160-176`) — `ImporteConNeto` sigue exigiendo los dos campos y **`ImporteSoloBruto` no admite
   `neto`**, con `@ts-expect-error`. Añadir el caso de que la unión discrimina (un `switch` sobre
@@ -44,7 +44,7 @@
 
 ## Bloque B — El catálogo (backend). Depende de T1
 
-- [ ] **T3. `egresos` gana `ingreso_ajuste` y su descripción.**
+- [x] **T3. `egresos` gana `ingreso_ajuste` y su descripción.**
   En `lib/analytics/metrics.ts`, entrada `egresos` (`:476-510`) y **solo** ahí:
   (a) `definicion.categorias` 8 → 9, añadiendo `ingreso_ajuste` al final sin reordenar las ocho;
   (b) la `descripcion` con el texto de `design.md §4`;
@@ -55,7 +55,7 @@
   cuatro cosas; `pnpm exec vitest run guard` verde salvo los rojos por diseño de T4.
   (R5, R10, R11, R12, R4)
 
-- [ ] **T4. Dar vuelta las cuatro aserciones de «ocho categorías» + el fixture de descripción.**
+- [x] **T4. Dar vuelta las cuatro aserciones de «ocho categorías» + el fixture de descripción.**
   - `tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts:134-144` → nueve, y sigue **sin**
     `ingreso_reverso_pago_tienda`; `tercerosDeclaradasPor("egresos")` sigue `["egreso_pago_tienda"]`.
   - `tests/unit/analytics/financiera-produccion.guardia.test.ts:84-91` → nueve, conservando el
@@ -67,7 +67,7 @@
   **Hecho:** los cuatro archivos verdes; al revertir a mano la descripción al texto pre-183, el
   caso nuevo se pone rojo (comprobado: aplicado, rojo, revertido). (R5, R11, R25)
 
-- [ ] **T5. Guardia de catálogo↔decisión.** [P con T4]
+- [x] **T5. Guardia de catálogo↔decisión.** [P con T4]
   Correr `tests/unit/analytics/catalogo-produccion.guardia.test.ts` y verificar que sigue verde
   **por construcción**: el bloque de `egresos` cita ahora tres decisiones (⟨D8⟩, ⟨P4⟩, ⟨D12⟩) y
   cada fecha escrita está respaldada por el documento que el propio bloque cita.
@@ -78,7 +78,7 @@
 
 ## Bloque C — El servicio (backend). Depende de T1 y T3
 
-- [ ] **T6. `deCaja` recibe la forma; el despacho la elige.**
+- [x] **T6. `deCaja` recibe la forma; el despacho la elige.**
   En `lib/services/AnaliticaFinancieraService.ts`: partir `importe()` (`:83-89`) en
   `importeConNeto` / `importeSoloBruto` (siguen siendo los únicos que escriben `moneda`);
   `deCaja(consulta, forma)`; el mapa de despacho (`:131-149`) elige por métrica con un selector
@@ -88,7 +88,7 @@
   **Hecho:** `pnpm exec vitest related --run lib/services/AnaliticaFinancieraService.ts` verde
   salvo lo que T7 reescribe; ni una resta de dinero escrita en el servicio. (R1, R3, R6, R8)
 
-- [ ] **T7. Reexpresar los dobles imposibles con el par real.**
+- [x] **T7. Reexpresar los dobles imposibles con el par real.**
   - `tests/unit/services/analitica-financiera-derivacion.test.ts:170-187`: el caso «el par se
     cancela en el neto y se ve en el bruto» pasa a `egresos` con `egreso_gasto`/`egreso` +
     `ingreso_ajuste`/`ingreso` → `neto "0.00"`, `bruto "800.00"`.
@@ -99,7 +99,7 @@
   **Hecho:** ninguna fixture de estos archivos contiene una combinación categoría↔tipo que el
   `CHECK` de la 173 rechace; los casos pasan. (R1, R7, R8, R24)
 
-- [ ] **T8. El repositorio: el `WHERE` lleva las nueve.** [P con T7]
+- [x] **T8. El repositorio: el `WHERE` lleva las nueve.** [P con T7]
   En `tests/unit/analytics/financiera-ingresos-repo.test.ts`: `:108-117` pasa a las nueve **y**
   afirma sobre `fake.llamadas[0].args.where.categoria.in` (el doble de servicio no ve el SQL);
   `:119-131` sustituye la fila cruzada por el par real. `lib/repositories/IngresosAnaliticaRepository.ts`
@@ -108,7 +108,7 @@
   **Hecho:** el test que altera `definicion.categorias` en memoria (`:139-164`) sigue verde — la
   lista sigue viniendo del catálogo. (R5, R17, R24)
 
-- [ ] **T9. La cifra no se mueve: integración contra Postgres.** Depende de T6
+- [x] **T9. La cifra no se mueve: integración contra Postgres.** Depende de T6
   En `tests/integration/actions/analitica-financiera-action.test.ts`:
   (a) **dar vuelta F.4(b)** (`:452-474`): el contraasiento real **entra** → `bruto "800.00"`,
       `neto "0.00"`, con las dos filas comprobadas en el libro;
@@ -121,7 +121,7 @@
   pone rojo y (c) sigue verde — que es la demostración de que el cambio no mueve la cifra vieja.
   (R7, R9, R25)
 
-- [ ] **T10. Guardia de forma por vista.** [P con T9]
+- [x] **T10. Guardia de forma por vista.** [P con T9]
   Caso nuevo (junto a los guardias financieros) que recorre las **diez** métricas servidas con el
   doble, y afirma: las tres de Q1 → `solo_bruto`; las otras siete → `bruto_y_neto`; y que en cada
   vista **el total y todas sus filas comparten forma**.
@@ -131,7 +131,7 @@
 
 ## Bloque D — Cierre de backend
 
-- [ ] **T11. Gate de backend.** Depende de T2–T10
+- [x] **T11. Gate de backend.** Depende de T2–T10
   `./init.sh --rapido` verde. Barrido de prosa: ninguna cabecera de `lib/**` sigue afirmando «las
   ocho categorías `egreso_*`» ni «los dos importes de las cuatro métricas de caja».
   **Hecho:** verde y el barrido en cero.
@@ -140,7 +140,7 @@
 
 ## Bloque E — Frontend. Depende de T11 y de las respuestas a P1–P3
 
-- [ ] **T12. `adaptar.ts`.**
+- [x] **T12. `adaptar.ts`.**
   `filasDeVista` escribe la clave `neto` **solo** si la vista es `bruto_y_neto` (nunca `null`,
   nunca `0`, nunca derivado del bruto); nace `COLUMNAS_IMPORTE_SOLO_BRUTO` y
   `columnasDeVista(vista)`; `serieDeVista` se estrecha por forma. Sigue sin sumar, restar ni
@@ -148,7 +148,7 @@
   **Hecho:** `pnpm exec vitest related --run app/(app)/analitica/_components/financiero/adaptar.ts`
   verde; el módulo sigue siendo puro (sin React, sin I/O). (R19, R21, R22, R23)
 
-- [ ] **T13. `TableroFinanciero.tsx`.** Depende de T12
+- [x] **T13. `TableroFinanciero.tsx`.** Depende de T12
   `TotalDelDto` y `PanelKpi` ramifican por `total.forma`: con neto, exactamente como hoy; sin
   neto, KPI = bruto con la etiqueta de P2 y **sin** línea secundaria ni marcador de ausente.
   `ContenidoDeVista` emite **una** serie donde no hay neto y dos donde sí. Ningún id de métrica
@@ -156,7 +156,7 @@
   **Hecho:** `tests/unit/guards/tablero-financiero.guardia.test.ts` verde (no detecta ids
   financieros ni props-función nuevas). (R19, R20, R21, R22)
 
-- [ ] **T14. Tests de tablero y adaptador.** Depende de T13
+- [x] **T14. Tests de tablero y adaptador.** Depende de T13
   - `tests/components/TableroFinanciero.test.tsx:443-454`: R16/132 se reexpresa sobre una métrica
     **con** neto; caso nuevo para R19 sobre una **sin** neto que comprueba que **no** aparece la
     etiqueta «Neto» ni el marcador de dato ausente en esa sección.
@@ -171,7 +171,7 @@
 
 ## Bloque F — Rastro y cierre. Depende de T14
 
-- [ ] **T15. Notas de corrección en los specs ajenos (si P4 = sí).** [P]
+- [x] **T15. Notas de corrección en los specs ajenos (si P4 = sí).** [P]
   Nota fechada (2026-08-04) al margen de **R18 y R37** en
   `specs/127-analitica-financiera-servicios/requirements.md` y de **R14 y R16** en
   `specs/132-analitica-tablero-financiero/requirements.md`, citando ⟨D12⟩ y esta feature. **No se
@@ -179,7 +179,7 @@
   **Hecho:** las cuatro notas existen y dicen exactamente qué queda acotado y qué sigue intacto.
   (R26)
 
-- [ ] **T16. `progress/impl_183.md` con el mapa R→test.** [P con T15]
+- [x] **T16. `progress/impl_183.md` con el mapa R→test.** [P con T15]
   Una fila por cada `R1`–`R27`, con archivo **y nombre del caso**, construida **leyendo el caso**.
   Prohibido contar `R\d+` en títulos (cruza espacios de nombres; falso 68/68 documentado).
   Registrar además la salida real de los tests y las mutaciones aplicadas-rojas-revertidas.

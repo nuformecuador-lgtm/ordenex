@@ -247,6 +247,19 @@ categorías que la métrica declara en `definicion.categorias`, con `fecha_movim
 *Mutación:* incluir `ingreso_ajuste` en `ingreso_flete` → el test con un movimiento de ajuste en el
 rango ve el `bruto` inflado.
 
+> 📌 **ACOTADO el 2026-08-04 por la feature 183** (decisión ⟨D12⟩, `progress/decision_183.md`).
+> **«En sus dos campos `bruto` y `neto`» ya no aplica a estas tres métricas: publican solo `bruto`.**
+> Sus listas son homogéneas de prefijo `ingreso_*` y, con el `CHECK` categoría↔tipo de la 173, cada
+> categoría admite un solo `tipo`: el `neto` era `+bruto` **siempre**. Todo lo demás de R16 sigue
+> vigente palabra por palabra —la Σ de **exactamente** las categorías declaradas, la ventana
+> `[desde, hasta)` y su mutación—, y el texto de arriba se conserva como estaba.
+>
+> ⚠️ **Este es el requisito vivo que la 183 derogó más de frente** —nombra las tres métricas una por
+> una— **y su propio spec no lo vio**: no aparece en `requirements.md` de la 183, ni en la tabla de
+> requisitos vivos de su `design.md`, ni en ⟨D12⟩. Lo cazó el reviewer (B1 de
+> `progress/review_183.md`). Buscar los requisitos vivos afectados **leyendo el spec que los cita** no
+> basta: hay que buscarlos por el **texto del contrato** que cambia.
+
 **R17.** El sistema DEBE tomar la lista de categorías de cada métrica **del catálogo**
 (`metrica.definicion.categorias`) y **NO DEBE** repetirla escrita a mano en el repositorio ni en el
 servicio.

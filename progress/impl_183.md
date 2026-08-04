@@ -54,7 +54,7 @@ repo (`progress/review_173-caja-tesoreria.md:117-120`).
 | **R23** | `tablero-financiero-adaptar.test.ts` | el adaptador no convierte la ausencia en `null`, `0` ni cadena vacía, ni la deriva del bruto |
 | **R24** | `financiera-ingresos-repo` + `analitica-financiera-derivacion` + integración F.4(b bis) | los dos dobles imposibles reexpresados con el par real, y la premisa medida: la fila vieja es **23514** en la base |
 | **R25** | *evidencia de diff, más los casos citados* | siete aserciones **dadas vuelta, no borradas**, incluido el comentario de la integración que afirmaba que el neto 0 no era alcanzable |
-| **R26** | `specs/127-*/requirements.md` (R18, R37) y `specs/132-*/requirements.md` (R16) | notas fechadas al margen, citando ⟨D12⟩, **sin reescribir el texto original** (precedente: T22 de la 160 sobre la 148) |
+| **R26** | `specs/127-*/requirements.md` (**R16**, R18, R37) y `specs/132-*/requirements.md` (R16) | **cuatro** notas fechadas al margen, citando ⟨D12⟩, **sin reescribir el texto original** (precedente: T22 de la 160 sobre la 148). La de **R16 de la 127 se añadió tras el review**: ver B1 abajo |
 | **R27** | *este documento* | mapa construido leyendo cada caso |
 
 ## Mutaciones: 35 ejecutadas, 35 mataron su test
@@ -88,3 +88,47 @@ del guardia declara que una comparación suelta no cuenta
 
 No se ensanchó el guardia: es de una feature `done` y estaba fuera del encargo. **Queda como deuda
 identificada**, no como cobertura supuesta.
+
+## Review (ronda 1): RECHAZADO, 2 bloqueantes — los dos CERRADOS
+
+Detalle en `progress/review_183.md`. **Los dos bloqueantes eran de rastro, no de código:** se
+cerraron sin tocar una línea de `lib/`, `app/`, `components/` ni `db/`.
+
+**B1 — y es el hallazgo que más enseña de esta feature.** `specs/127-*/requirements.md:242-247`
+(**R16 de la 127**) exige que `ingreso_flete`, `ingreso_comision_cod` e `ingreso_iva` se devuelvan
+«**en sus dos campos `bruto` y `neto`**». Es el requisito vivo **más directamente derogado** por la
+183 —nombra las tres métricas de Q1 una por una— y **ni el spec, ni ⟨D12⟩, ni las dos bitácoras lo
+miraron**: la tabla de requisitos vivos listaba R18 y R37 de la 127 y R14/R16 de la 132, pero no ese.
+
+> **La regla que queda:** buscar los requisitos vivos afectados **leyendo el spec que cita tu
+> archivo** no basta. R18 y R37 se encontraron así, y por eso R16 se escapó: no habla de `metrics.ts`
+> ni de `egresos`, habla del **contrato de salida**. Hay que buscarlos por el **texto del contrato que
+> cambia**, no por el módulo que tocas.
+
+**B2** — las 19 tasks de `tasks.md` seguían en `- [ ]`, contra `CHECKPOINTS.md:9`. T0–T16 marcadas;
+T17 (gate y PR) y T18 (medición post-merge) quedan abiertas a propósito.
+
+## Evidencia del gate (M6 del review)
+
+`./init.sh` completo, **dos veces**. La primera corrida (11:48:50) se lanzó mientras aún se editaban
+specs y bitácoras, así que **no medía el árbol que se iba a mergear**; se repitió con el árbol
+commiteado y quieto (`git status` limpio, HEAD `0dfefb95`):
+
+```
+Test Files  926 passed (926)
+     Tests  11528 passed (11528)
+  Duration  240.96s
+== init OK ==
+```
+
+**Baseline al arrancar la feature: 925 archivos / 11.485 tests** (medido sobre `64957dca`, no
+heredado de la bitácora anterior, que decía 906/11.359 y ya estaba vieja) ⇒ **+1 archivo, +43 tests,
+cero regresiones.** Las dos corridas dan el mismo número.
+
+## Límites declarados, no tapados
+
+| | Qué | Por qué se deja |
+| --- | --- | --- |
+| **M1** | La guardia de R12 solo mata la mutación si la **fecha huérfana permanece**: borrar cita y fecha a la vez la deja verde | límite de un guardia de otra feature; ensancharlo excede el alcance |
+| **M2** | R22: la mutación del spec no la caza el guardia (ver arriba) | lo cubren los seis casos de comportamiento |
+| **M4** | La no-regresión numérica **contra Postgres** se mide para `ingreso_flete`, no para las tres de Q1 | las otras dos se cubren por unitario; el caso de integración es el que fija la cifra real |
