@@ -184,10 +184,14 @@ describe("PostulacionesPendientesPanel (feature 23)", () => {
 
     // R17: toast de éxito y la fila desaparece tras el refresco.
     await waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(screen.queryByTestId("postulacion-u1")).toBeNull(),
-    );
-    expect(screen.getByTestId("postulacion-u2")).toBeInTheDocument();
+    // Las dos condiciones en el MISMO `waitFor`, presencia primero: el panel
+    // revalida el listado entero, así que hay un instante en que u1 ya no está y la
+    // lista nueva (con u2) aún no se ha pintado. Anclar solo a la ausencia se
+    // satisfacía ahí y el `getByTestId` síncrono fallaba. Se afirma lo mismo.
+    await waitFor(() => {
+      expect(screen.getByTestId("postulacion-u2")).toBeInTheDocument();
+      expect(screen.queryByTestId("postulacion-u1")).toBeNull();
+    });
   });
 
   it("R15: rechazar confirmado invoca rechazarPostulacion con el usuarioId", async () => {

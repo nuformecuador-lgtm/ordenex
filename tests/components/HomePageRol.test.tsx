@@ -4,6 +4,12 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
+// Import estático (no `await import()` dentro de cada `it`) para que la carga
+// del árbol de la página no cuente contra `testTimeout`. Los `vi.mock` de abajo
+// son *hoisted* por Vitest; además la página lee los mocks en tiempo de llamada
+// a `Home()`, no de importación, y sin `resetModules` los `await import()`
+// repetidos ya devolvían el mismo módulo cacheado: la semántica no cambia.
+import Home from "@/app/(app)/dashboard/page";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarOrdenes } from "@/lib/actions/ordenes";
@@ -78,8 +84,6 @@ afterEach(() => {
 describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
   it("R1: rol adminTienda con sesión válida renderiza el dashboard del admin de tienda", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     const element = await Home();
     renderHome(element);
 
@@ -92,8 +96,6 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
 
   it("R5: el rol se resuelve server-side invocando resolveActorFromSession (sin hook de cliente)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     await Home();
 
     expect(resolveActorMock).toHaveBeenCalledTimes(1);
@@ -122,8 +124,6 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
         expiresAt: new Date(Date.now() + 60_000),
         createdAt: new Date(),
       });
-
-      const { default: Home } = await import("@/app/(app)/dashboard/page");
       // `redirect()` de Next corta el render lanzando: la home nunca devuelve un árbol,
       // así que no hay nada donde pudiera colarse el panel de tienda.
       await expect(Home()).rejects.toThrow(/NEXT_REDIRECT/);
@@ -143,8 +143,6 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
   it("R4: sin sesión válida (actor null) NO renderiza el dashboard", async () => {
     resolveActorMock.mockResolvedValue(null);
     cookieGetMock.mockReturnValue(undefined);
-
-    const { default: Home } = await import("@/app/(app)/dashboard/page");
     const element = await Home();
     renderHome(element);
 
