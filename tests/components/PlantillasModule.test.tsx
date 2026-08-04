@@ -109,10 +109,14 @@ describe("PlantillasModule — eliminar (R27/R28)", () => {
 
     // Éxito → toast + el listado revalidado ya no contiene la fila.
     expect(await screen.findByText("Plantilla eliminada.")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.queryByText("bienvenida")).toBeNull(),
-    );
-    expect(screen.getByText("No hay plantillas")).toBeInTheDocument();
+    // Las dos condiciones en el MISMO `waitFor`, presencia primero: durante la
+    // revalidación hay un instante en que la fila ya no está y el estado vacío
+    // todavía no se ha pintado. Anclar solo a la ausencia se satisfacía ahí y el
+    // `getByText` síncrono fallaba. Se afirma lo mismo que antes.
+    await waitFor(() => {
+      expect(screen.getByText("No hay plantillas")).toBeInTheDocument();
+      expect(screen.queryByText("bienvenida")).toBeNull();
+    });
   });
 
   it("not_found: informa que la plantilla ya no existe y refresca igualmente", async () => {
