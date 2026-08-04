@@ -202,6 +202,40 @@ describe("R17 · las categorias salen del catalogo, no de un array escrito en el
     expect(await repo.sumarPorCategoria(consultaDe("ingreso_flete"))).toEqual(antes);
   });
 
+  it("y lo mismo sobre `egresos`, que es LA definicion que la 183 cambio (R17/183)", async () => {
+    // POR QUE ESTE CASO NACE AQUI. El de arriba solo altera `ingreso_flete`, asi que clavar en
+    // el repositorio las NUEVE categorias de `egresos` —con un `if (metrica.id === "egresos")`—
+    // lo dejaba verde: medido, la mutacion sobrevivia. Un guardia que no cubre la metrica que
+    // la feature toca no es un guardia. Se afirma sobre el `where` EMITIDO ademas de sobre el
+    // resultado, que es donde vive la traduccion a SQL.
+    const metrica = getMetrica("egresos");
+    if (metrica === undefined) throw new Error("el catalogo perdio egresos");
+    const definicion = metrica.definicion as { categorias?: readonly string[] };
+    const original = definicion.categorias;
+
+    const { repo, fake } = repositorio();
+    try {
+      definicion.categorias = ["egreso_indemnizacion"];
+      const filas = await repo.sumarPorCategoria(consultaDe("egresos"));
+
+      // Con la lista clavada en el repositorio, el `where` seguiria llevando las nueve y las
+      // filas seguirian siendo tres.
+      const where = fake.llamadas[fake.llamadas.length - 1].args.where as {
+        categoria: { in: string[] };
+      };
+      expect(where.categoria.in).toEqual(["egreso_indemnizacion"]);
+      expect(filas).toEqual([
+        { categoria: "egreso_indemnizacion", tipo: "egreso", suma: "300.00" },
+      ]);
+    } finally {
+      definicion.categorias = original;
+    }
+
+    // El catalogo queda como estaba: este test no puede contaminar a los demas.
+    expect(getMetrica("egresos")?.definicion.categorias).toEqual(original);
+    expect((await repo.sumarPorCategoria(consultaDe("egresos"))).length).toBe(3);
+  });
+
   it("una metrica que declara categorias ajenas a la caja NO se sirve en silencio", async () => {
     // `cod_recaudado` declara `efectivo`/`SINPE`/`transferencia`, que no son de esta tabla.
     // Servirla filtrando lo que no encaje devolveria una cifra corta sin que nada fallara.
