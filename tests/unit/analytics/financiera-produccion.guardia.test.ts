@@ -81,13 +81,22 @@ describe("R41 · el catalogo y la produccion real no se desincronizan", () => {
     expect([...IDS_FINANCIERAS_SERVIDAS].sort()).toEqual(delCatalogo);
   });
 
-  it("`egresos` sigue declarando sus OCHO categorias egreso_*, que son las que habra que sumar", () => {
+  it("`egresos` sigue declarando las NUEVE categorias que esa cifra tiene que sumar", () => {
     // R18: si alguien recorta la definicion del catalogo, la suma de la 127 encoge sin que
-    // nadie toque la 127. La cifra se quedaria corta y seguiria pareciendo correcta.
+    // nadie toque la 127. La cifra se quedaria corta y seguiria pareciendo correcta. ESE es el
+    // lado que este caso protege, y no cambia con la 183.
+    //
+    // ⚠️ DADO VUELTA (R25 de la 183): eran OCHO, todas `egreso_*`, hasta ⟨D12⟩ (humano,
+    // 2026-08-04, `progress/decision_183.md`). Desde entonces son NUEVE: las mismas ocho, sin
+    // quitar ninguna, mas `ingreso_ajuste` —el reverso que emite la anulacion de un egreso—.
+    // Sin el, anular un egreso no se descontaba nunca de la cifra.
     const egresos = listarMetricas({ dominio: "financiera" }).find((m) => m.id === "egresos");
     const categorias = egresos?.definicion.categorias ?? [];
-    expect(categorias).toHaveLength(8);
-    expect(categorias.every((c) => c.startsWith("egreso_"))).toBe(true);
+    expect(categorias).toHaveLength(9);
+    // Las ocho historicas siguen enteras: sustituir una por la nueva encogeria la cifra igual
+    // que recortarla, que es justo lo que este caso existe para impedir.
+    expect(categorias.filter((c) => c.startsWith("egreso_"))).toHaveLength(8);
+    expect(categorias.filter((c) => !c.startsWith("egreso_"))).toEqual(["ingreso_ajuste"]);
   });
 
   it("autocomprobacion: el detector de fase distingue las dos situaciones", () => {
