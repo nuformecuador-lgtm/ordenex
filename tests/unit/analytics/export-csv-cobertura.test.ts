@@ -4,9 +4,9 @@ import {
   COBERTURA_COMPLETO,
   COBERTURA_NO_COMPARABLE,
   COBERTURA_PARCIAL,
-  COLUMNAS_EXPORT_OPERATIVO,
-  filasDeSerie,
-} from "@/app/(app)/analitica/_components/operativo/export-operativo";
+  COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
+} from "@/app/(app)/analitica/_components/operativo/analitica-operativa-descarga-columnas";
+import { filasDeSerie } from "@/app/(app)/analitica/_components/operativo/export-operativo";
 import { PENUMBRA, type SerieOperativa } from "@/lib/types/analitica-operativa";
 import { construirDescarga } from "@/lib/utils/descarga-dataset";
 
@@ -54,7 +54,7 @@ async function tabla(): Promise<{ cabecera: string[]; filas: Map<string, string[
   const archivo = await construirDescarga({
     tipo: "csv",
     titulo: "Ordenes creadas",
-    columnas: COLUMNAS_EXPORT_OPERATIVO,
+    columnas: COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
     filas: filasDeSerie(FUENTES),
   });
   const [cab, ...datos] = String(archivo.contenido).split("\r\n");

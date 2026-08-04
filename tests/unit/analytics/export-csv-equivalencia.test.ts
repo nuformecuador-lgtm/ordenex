@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 
 import { prepararPanel } from "@/app/(app)/analitica/_components/operativo/agregacion";
 import {
-  COLUMNAS_EXPORT_OPERATIVO,
-  filasDeSerie,
-} from "@/app/(app)/analitica/_components/operativo/export-operativo";
+  COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
+} from "@/app/(app)/analitica/_components/operativo/analitica-operativa-descarga-columnas";
+import { filasDeSerie } from "@/app/(app)/analitica/_components/operativo/export-operativo";
 import { categoriaDePunto } from "@/app/(app)/analitica/_components/operativo/textos";
 import { PENUMBRA, type SerieOperativa } from "@/lib/types/analitica-operativa";
 import { construirDescarga } from "@/lib/utils/descarga-dataset";
@@ -75,7 +75,7 @@ describe("Feature 134 (R10) — el archivo trae exactamente lo que pinta el pane
     const archivo = await construirDescarga({
       tipo: "csv",
       titulo: "Resultado de las gestiones",
-      columnas: COLUMNAS_EXPORT_OPERATIVO,
+      columnas: COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
       filas,
     });
     const [cabecera, ...datos] = String(archivo.contenido).split("\r\n");

@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 
 import {
-  COLUMNAS_EXPORT_OPERATIVO,
   COBERTURA_COMPLETO,
   COBERTURA_NO_COMPARABLE,
   COBERTURA_PARCIAL,
-  filasDeSerie,
-} from "@/app/(app)/analitica/_components/operativo/export-operativo";
+  COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
+} from "@/app/(app)/analitica/_components/operativo/analitica-operativa-descarga-columnas";
+import { filasDeSerie } from "@/app/(app)/analitica/_components/operativo/export-operativo";
 import { PENUMBRA, type SerieOperativa } from "@/lib/types/analitica-operativa";
 import { construirDescarga, nombreArchivoDescarga } from "@/lib/utils/descarga-dataset";
 
@@ -22,7 +22,7 @@ import { construirDescarga, nombreArchivoDescarga } from "@/lib/utils/descarga-d
 /* -------------------------------------------------------------------------- */
 
 /**
- * Se declara LITERALMENTE en el test, y no se deriva de `COLUMNAS_EXPORT_OPERATIVO`, a
+ * Se declara LITERALMENTE en el test, y no se deriva de `COLUMNAS_DESCARGA_ANALITICA_OPERATIVA`, a
  * proposito: comparar el modulo consigo mismo aprobaria cualquier columna que alguien
  * anadiera. Anadir aqui una columna nueva obliga a justificarla de donde sale.
  */
@@ -91,7 +91,7 @@ async function csvDe(fuentes: Parameters<typeof filasDeSerie>[0], titulo = "Tasa
   const archivo = await construirDescarga({
     tipo: "csv",
     titulo,
-    columnas: COLUMNAS_EXPORT_OPERATIVO,
+    columnas: COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
     filas: filasDeSerie(fuentes),
   });
   return archivo;
@@ -101,8 +101,8 @@ describe("Feature 134 (R7) — el archivo no lleva ni una columna que no venga d
   it("toda celda del CSV procede de un campo de SerieOperativa", async () => {
     // R7 — el punto de mutacion es anadir una columna «Mensajero (nombre)» resuelta contra
     // cualquier catalogo. El archivo circula: una columna de identidad ahi ya no se retira.
-    expect(COLUMNAS_EXPORT_OPERATIVO.map((c) => c.clave)).toEqual([...CLAVES_CONTRATO]);
-    expect(COLUMNAS_EXPORT_OPERATIVO.map((c) => c.encabezado)).toEqual(ENCABEZADOS_CONTRATO);
+    expect(COLUMNAS_DESCARGA_ANALITICA_OPERATIVA.map((c) => c.clave)).toEqual([...CLAVES_CONTRATO]);
+    expect(COLUMNAS_DESCARGA_ANALITICA_OPERATIVA.map((c) => c.encabezado)).toEqual(ENCABEZADOS_CONTRATO);
 
     const s = serie();
     const filas = filasDeSerie([{ etiqueta: "Entregas", serie: s }]);
@@ -192,7 +192,7 @@ describe("Feature 134 (R20) — el nombre del archivo es el del patron comun", (
       {
         tipo: "csv",
         titulo: "Tasa de entrega",
-        columnas: COLUMNAS_EXPORT_OPERATIVO,
+        columnas: COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
         filas: filasDeSerie([{ etiqueta: "Tasa de entrega", serie: serie() }]),
       },
       fecha,
@@ -204,17 +204,22 @@ describe("Feature 134 (R20) — el nombre del archivo es el del patron comun", (
     expect(archivo.nombreArchivo).toBe("tasa-de-entrega-2026-08-04.csv");
 
     // R20 — el subarbol del export NO compone nombres: su superficie publica son las
-    // columnas, la proyeccion y el vocabulario de cobertura, y nada mas. (El censo del
-    // arbol entero lo hace el bloque 4 de `export-csv-frontera.guardia.test.ts`.)
-    const modulo = await import(
-      "@/app/(app)/analitica/_components/operativo/export-operativo"
+    // columnas, la proyeccion de una fila, el recorrido y el vocabulario de cobertura, y
+    // nada mas. (El censo del arbol entero lo hace el bloque 4 de
+    // `export-csv-frontera.guardia.test.ts`.)
+    const columnas = await import(
+      "@/app/(app)/analitica/_components/operativo/analitica-operativa-descarga-columnas"
     );
-    expect(Object.keys(modulo).sort()).toEqual([
+    expect(Object.keys(columnas).sort()).toEqual([
       "COBERTURA_COMPLETO",
       "COBERTURA_NO_COMPARABLE",
       "COBERTURA_PARCIAL",
-      "COLUMNAS_EXPORT_OPERATIVO",
-      "filasDeSerie",
+      "COLUMNAS_DESCARGA_ANALITICA_OPERATIVA",
+      "filaDescargaAnaliticaOperativa",
     ]);
+    const recorrido = await import(
+      "@/app/(app)/analitica/_components/operativo/export-operativo"
+    );
+    expect(Object.keys(recorrido).sort()).toEqual(["filasDeSerie"]);
   });
 });

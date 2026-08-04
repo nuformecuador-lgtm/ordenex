@@ -37,8 +37,12 @@ import type { EntradaOperativa } from "@/lib/actions/analitica-operativa";
 import type { ResultadoOperativo } from "@/lib/types/analitica-operativa";
 import type { DescargaTipo } from "@/lib/types/descarga";
 
+import {
+  COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
+  type FuenteExport,
+} from "./analitica-operativa-descarga-columnas";
 import type { PanelTablero } from "./catalogo-paneles";
-import { COLUMNAS_EXPORT_OPERATIVO, filasDeSerie, type FuenteExport } from "./export-operativo";
+import { filasDeSerie } from "./export-operativo";
 import { aRaw, type FiltroTablero } from "./filtro-tablero";
 import { lineasDeValidacion } from "./textos";
 
@@ -166,7 +170,7 @@ export function ExportarOperativoPanel({ panel, filtro }: ExportarOperativoPanel
   return (
     <DescargarDatasetButton
       titulo={panel.titulo}
-      columnas={COLUMNAS_EXPORT_OPERATIVO}
+      columnas={COLUMNAS_DESCARGA_ANALITICA_OPERATIVA}
       obtenerFilas={() => filasDelPanel(panel, filtro)}
       formatos={FORMATOS_EXPORT_OPERATIVO}
       className="self-end"

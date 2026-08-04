@@ -12,8 +12,8 @@ import { PENUMBRA, type PuntoSerie, type SerieOperativa } from "@/lib/types/anal
 
 import type { PanelTablero } from "@/app/(app)/analitica/_components/operativo/catalogo-paneles";
 import {
-  COLUMNAS_EXPORT_OPERATIVO,
-} from "@/app/(app)/analitica/_components/operativo/export-operativo";
+  COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
+} from "@/app/(app)/analitica/_components/operativo/analitica-operativa-descarga-columnas";
 import {
   ExportarOperativoPanel,
   FORMATOS_EXPORT_OPERATIVO,
@@ -128,7 +128,7 @@ describe("Feature 134 (R21/D5) — el control ofrece los dos formatos del patron
     // Y el texto lo produce el generador COMUN, con sus columnas declaradas y su dialecto.
     expect(buildCsvRowsMock).toHaveBeenCalledTimes(1);
     const [columnas] = buildCsvRowsMock.mock.calls[0];
-    expect(columnas.map((c) => c.key)).toEqual(COLUMNAS_EXPORT_OPERATIVO.map((c) => c.clave));
+    expect(columnas.map((c) => c.key)).toEqual(COLUMNAS_DESCARGA_ANALITICA_OPERATIVA.map((c) => c.clave));
 
     const [contenido, mime, nombre] = descargarBlobMock.mock.calls[0];
     const texto = String(contenido);

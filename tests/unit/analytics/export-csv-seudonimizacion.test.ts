@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 
 import {
-  COLUMNAS_EXPORT_OPERATIVO,
-  filasDeSerie,
-} from "@/app/(app)/analitica/_components/operativo/export-operativo";
+  COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
+} from "@/app/(app)/analitica/_components/operativo/analitica-operativa-descarga-columnas";
+import { filasDeSerie } from "@/app/(app)/analitica/_components/operativo/export-operativo";
 import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
 import { construirDescarga } from "@/lib/utils/descarga-dataset";
 
@@ -66,7 +66,7 @@ async function csvDeAdminTienda(): Promise<string> {
   const archivo = await construirDescarga({
     tipo: "csv",
     titulo: "Entregas por mensajero",
-    columnas: COLUMNAS_EXPORT_OPERATIVO,
+    columnas: COLUMNAS_DESCARGA_ANALITICA_OPERATIVA,
     filas: filasDeSerie([{ etiqueta: "Entregas", serie: resultado.datos }]),
   });
   return String(archivo.contenido);
