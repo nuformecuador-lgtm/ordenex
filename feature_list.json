@@ -2100,7 +2100,7 @@
       "name": "analitica: modo agregado de tasas y tiempos",
       "spec_path": "specs/176-analitica-modo-agregado-tasas",
       "description": "Backend. Extiende el contrato de lectura de la analitica operativa (126) con un modo AGREGADO por periodo para las metricas que NO son sumables: devuelve numerador y denominador (o los acumuladores seg_ciclo_acum/seg_ciclo_n) por cubo temporal, de modo que un consumidor pueda SUMAR ANTES DE DIVIDIR y presentar una tasa o un tiempo de ciclo correctos en rangos largos. Hoy el servicio solo devuelve el cociente ya dividido por dia, asi que el tablero (131) no puede agregar tasa_entrega, tasa_devolucion, tasa_rechazo, primer_intento_ok, tiempo_ciclo ni aging_por_estado sin caer en media de medias, y por decision D3 no pinta serie ni cifra por encima del techo de 62 puntos. Reusa ConsultaAnalitica y el alcance ya existentes; no anade metricas al catalogo.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
@@ -2108,7 +2108,7 @@
       "depends_on": [
         126
       ],
-      "status_note": "Sale de la decision D3 de la 131 (specs/131-analitica-tablero-operativo/requirements.md seccion 6). Conviene programarla DESPUES de la 128 para no escribir la capa de lectura a la vez que la cache. Mientras no aterrice, R27 de la 131 muestra aviso y CERO cifras en esos paneles en rangos largos."
+      "status_note": "2026-08-03 SPEC ESCRITA y PUERTA T0 CERRADA con 6 respuestas del humano (D1-D6 en requirements.md seccion 4). 19 requisitos, cada uno con su mutacion. D1 metodo nuevo consultarAgregado con Server Action propia: no se tocan PuntoSerie ni SerieOperativa, que la 131 y la 132 ya consumen, ni lib/analytics/consulta.ts, punto blindado de la 122. D2 denominador cero = valor null CON numerador y denominador a la vista, lo que MEJORA el precedente de la 126 (hoy un null no distingue 'denominador cero' de 'no hay dato'). D3 aging_por_estado entra como cubo unico al corte, agregando sobre la DIMENSION y no sobre el tiempo. HALLAZGO: el aging NUNCA estuvo afectado por los rangos largos -- es la unica metrica live del catalogo (metrics.ts:375), tiene una sola fecha y por tanto SIEMPRE pinta serie; lo que no tiene, ni ha tenido nunca en ningun rango, es cifra total, porque agregacion.ts:371 anula el total para toda unidad != conteo. D4 el dia en curso entra marcado parcial con su corteAt. D5 la 131 NO se cablea aqui (zone backend) -> ficha 182. D6 granos periodo Y semana, para que la 131 pueda BORRAR su lunesDeLaSemana en vez de mantener dos calendarios. Sin superficie de cache nueva: consume el mismo agregarCubos ya decorado por la 128."
     },
     {
       "id": 179,
@@ -2150,6 +2150,21 @@
       "branch": null,
       "depends_on": 132,
       "status_note": "Sale de la Q2 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). Se eligio (a) pintar el id crudo con la limitacion escrita EN PANTALLA, y NO (b) resolver los nombres en el Server Component de la 132 ni (c) ampliar el DTO de la 127. Motivos: (b) mete una consulta que el diseno de la 127 no previo y que habria que REPETIR en la 131 y en la 134 —tres copias de la misma traduccion—; (c) reabre una feature `done` y mergeada (PR #269) con su propia puerta y su reviewer. Al especificar: el sitio correcto es el DTO de los servicios de analitica, no cada pantalla, justamente para que la traduccion exista UNA vez. Ojo con el alcance por rol: la etiqueta no puede filtrar el nombre de una tienda que el actor no deberia ver (los guards de alcance de la 122/127 ya estan escritos y hay que respetarlos). Verificar tambien si la analitica OPERATIVA (126) tiene el mismo defecto antes de decidir la forma. Renumerada de 179 a 181: mientras esta rama estaba viva, la 128 dio de alta otra ficha con el 179 (analitica: cache financiera + invalidacion por ledger) y llego a dev primero."
+    },
+    {
+      "id": 182,
+      "name": "analitica: cablear el modo agregado al tablero operativo",
+      "spec_path": "specs/182-analitica-cablear-modo-agregado",
+      "description": "Frontend. Cablea el modo agregado de la 176 (consultarAgregadoOperativo) a los paneles de porcentaje y segundos del tablero operativo, cerrando el hueco declarado por R27 de la 131: por encima del techo de 62 puntos esos paneles pasan a pintar la serie por cubos SEMANALES servidos por el backend, y TODOS los paneles de esas dos unidades pasan a mostrar su cifra total -- incluido aging_por_estado, que hoy no la tiene en NINGUN rango. El total se toma del cubo periodo; ni media de medias ni formula recompuesta en la UI. Al consumir cubos semanales del servidor, retira lunesDeLaSemana de app/(app)/analitica/_components/operativo/agregacion.ts para porcentaje y segundos, de modo que no queden dos definiciones de semana. Reescribe R27 de la 131, que deja de ser un hueco.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/182-analitica-cablear-modo-agregado",
+      "depends_on": [
+        176
+      ],
+      "status_note": "Sale de la decision D5 de la 176. El hueco que cierra esta escrito en specs/131-analitica-tablero-operativo/requirements.md seccion 6.1. OJO con aging_por_estado: no es un caso de rango largo (nunca entro en rango_excedido), es un panel sin KPI en TODO rango -- ver D3 de specs/176-analitica-modo-agregado-tasas/requirements.md seccion 4."
     }
   ]
 }

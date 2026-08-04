@@ -46,6 +46,12 @@ function servicioEspia(): IAnaliticaOperativaService & { llamadas: number } {
       estado.llamadas += 1;
       return SERIE_VACIA;
     },
+    // Feature 176 — la interfaz gano `consultarAgregado`. Este doble es de la 126 y solo
+    // cuenta llamadas a `consultar`: si el borde de la serie llamara al agregado, esto lo
+    // dice a gritos en vez de devolver un objeto plausible.
+    async consultarAgregado(): Promise<never> {
+      throw new Error("este doble sirve la SERIE, no el agregado");
+    },
   };
 }
 
