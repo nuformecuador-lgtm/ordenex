@@ -17,6 +17,7 @@ import {
 import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
 import { PENUMBRA, type PuntoSerie, type ResultadoOperativo } from "@/lib/types/analitica-operativa";
 import type { MetricaUnidad } from "@/lib/analytics/types";
+import { ToastProvider } from "@/providers/ToastProvider";
 
 // Feature 131 (T3.1, T3.3) — R2, R3, R4, R5, R6, R8, R19, R23, R24, R27.
 //
@@ -71,9 +72,15 @@ function porDefecto(metricaId: string): ResultadoOperativo {
 
 function renderTablero() {
   return render(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <PanelesOperativos />
-    </SWRConfig>,
+    // Feature 134 (T4.2): el tablero monta ahora `ExportarOperativoPanel`, que envuelve
+    // `DescargarDatasetButton` y este llama a `useToast()`. En la app el `ToastProvider`
+    // vive en el layout; aqui se aporta igual, como en el resto de tests de descarga del
+    // repo (`tests/components/descarga/*`).
+    <ToastProvider>
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <PanelesOperativos />
+      </SWRConfig>
+    </ToastProvider>,
   );
 }
 

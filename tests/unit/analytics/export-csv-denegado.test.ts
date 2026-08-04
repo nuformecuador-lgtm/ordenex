@@ -57,7 +57,7 @@ const FILTRO_INVALIDO = { ...FILTRO, rango: "quincena" } as unknown as FiltroTab
  * La accion REAL con las dependencias de test enchufadas. El export la recibe por el mismo
  * parametro por el que en produccion recibe la accion desnuda.
  */
-function accionCon(logError: ReturnType<typeof vi.fn>, actor = TIENDA) {
+function accionCon(logError: ErrorLogger["logError"], actor = TIENDA) {
   const logger: ErrorLogger = { logError };
   return (entrada: EntradaOperativa) =>
     consultarAnaliticaOperativa(entrada, {
@@ -77,7 +77,7 @@ function accionCon(logError: ReturnType<typeof vi.fn>, actor = TIENDA) {
 
 describe("Feature 134 (R5) — un denegado no produce archivo y no se confunde con el vacio", () => {
   it("un forbidden no produce archivo y su mensaje no es el de sin datos", async () => {
-    const logError = vi.fn();
+    const logError = vi.fn<(registro: unknown) => void>();
     const resultado = await filasDelPanel(PANEL, FILTRO, accionCon(logError));
 
     // No hay filas que entregar: el control no llega siquiera a llamar al generador.
@@ -99,7 +99,7 @@ describe("Feature 134 (R5) — un denegado no produce archivo y no se confunde c
 describe("Feature 134 (R6) — el intento denegado queda auditado", () => {
   it("el intento de descarga denegado deja rastro en el logger antes de responder", async () => {
     const orden: string[] = [];
-    const logError = vi.fn(() => {
+    const logError = vi.fn<(registro: unknown) => void>(() => {
       orden.push("log");
     });
 
@@ -123,7 +123,7 @@ describe("Feature 134 (R6) — el intento denegado queda auditado", () => {
   it("y una descarga concedida no ensucia el canal de auditoria", async () => {
     // El canal de auditoria sirve para buscar el intento REAL. Registrar tambien lo
     // concedido lo llena de ruido justo donde hay que mirar.
-    const logError = vi.fn();
+    const logError = vi.fn<(registro: unknown) => void>();
     await filasDelPanel(PANEL_OK, FILTRO, (entrada) =>
       consultarAnaliticaOperativa(entrada, {
         logger: { logError },
@@ -161,7 +161,7 @@ describe("Feature 134 (R6) — el intento denegado queda auditado", () => {
 
 describe("Feature 134 (R18) — un filtro invalido no es un intento de acceso", () => {
   it("un validation_error no produce archivo y no llama al logger", async () => {
-    const logError = vi.fn();
+    const logError = vi.fn<(registro: unknown) => void>();
     const resultado = await filasDelPanel(
       PANEL_OK,
       FILTRO_INVALIDO,
