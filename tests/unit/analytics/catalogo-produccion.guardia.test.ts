@@ -75,12 +75,30 @@ function camposDelModelo(nombre: string): string[] {
     .map((linea) => linea.split(/\s+/)[0]);
 }
 
-/** El texto de la entrada del catalogo con ese `id`, comentarios incluidos. */
+/**
+ * El texto de la entrada del catalogo con ese `id`, comentarios incluidos.
+ *
+ * EL PARSEO SE COMPRUEBA ANTES DE USARLO, y no es paranoia de manual: medido durante este
+ * chore, un `metrics.ts` con finales de linea CRLF hace que `\n  {\n` no case NUNCA. El
+ * `split` devuelve entonces UN solo trozo —el archivo entero—, `encontrados.length` sigue
+ * valiendo 1 y la guardia pasa a juzgar el fichero completo como si fuera el bloque de cada
+ * metrica: el mensaje de fallo acusaba a `incidentes` de citar una fecha que esta a 250
+ * lineas de su entrada. Un parser que se rompe sin decirlo es peor que no tenerlo (172).
+ */
 function bloqueDeEntrada(id: string): string {
   const fuente = fs.readFileSync(METRICS_PATH, "utf8");
   const bloques = fuente.split(/\n  \{\n/);
+  expect(
+    bloques.length,
+    "metrics.ts no se partio en entradas (¿finales de linea CRLF?): el bloque de cada metrica " +
+      "seria el archivo entero y toda la comprobacion de abajo miraria el texto equivocado",
+  ).toBeGreaterThan(METRICAS.length);
   const encontrados = bloques.filter((b) => b.includes(`id: "${id}",`));
   expect(encontrados.length, `la entrada ${id} no se aisla en metrics.ts`).toBe(1);
+  expect(
+    encontrados[0].length,
+    `el bloque de ${id} es casi el archivo entero: el corte por entradas no funciono`,
+  ).toBeLessThan(fuente.length / 2);
   return encontrados[0];
 }
 
@@ -311,34 +329,82 @@ describe("R13 · los campos del catalogo no deciden datos en produccion", () => 
 /* -------------------------------------------------------------------------- */
 
 interface CambioDecidido {
-  /** id de la metrica del catalogo cuyo `estadoProduccion` cambio. */
+  /** id de la metrica del catalogo que la decision toca. */
   readonly id: string;
   /** nombre del fichero de `progress/` donde el humano lo decidio. */
   readonly fichero: string;
+  /**
+   * Que se decidio: el `estadoProduccion` (regla 1) u otro campo del catalogo (regla 2).
+   * Solo la primera permite afirmar el VALOR resultante; ver la comprobacion (c).
+   */
+  readonly motivo: "estado" | "campo";
 }
 
+/** Los campos de una entrada del catalogo, LEIDOS del catalogo y no escritos aqui. */
+const CAMPOS_DEL_CATALOGO = new Set(Object.keys(METRICAS[0]));
+
 /**
- * Deriva de `progress/` los cambios de `estadoProduccion` decididos por el humano, SIN
- * lista escrita a mano: una linea de un `decision_*.md` que nombre a la vez `declarada` y
- * `producida` esta declarando el cambio, y los ids que cita entre comillas invertidas
- * (`egresos`, `egresos.estadoProduccion`, `incidentes`...) son las metricas afectadas.
- * Asi la regla cubre tambien ⟨D8⟩ de la 127 y cualquier decision futura.
+ * Deriva de un `decision_*.md` los cambios de catalogo que declara, SIN lista escrita a
+ * mano. Funcion PURA sobre el texto para poder autocomprobarla: `cambiosDecididosEnProgress`
+ * solo le da de comer los ficheros.
+ *
+ * DOS REGLAS, y la segunda es la que cierra el agujero que midio el review de la 183.
+ *
+ * · Regla 1 (`estado`) — una linea que nombre a la vez `declarada` y `producida` esta
+ *   declarando un cambio de `estadoProduccion`, y los ids que cita entre comillas invertidas
+ *   son las metricas afectadas. Es la regla original, intacta.
+ *
+ * · Regla 2 (`campo`) — una referencia `` `metrica.campo` `` (p. ej.
+ *   `` `egresos.definicion.categorias` ``, `` `conciliacion_cierres.fuente.tablas` ``)
+ *   apunta a UN campo de UNA entrada: la decision esta decidiendo sobre esa entrada.
+ *
+ * POR QUE HACIA FALTA LA REGLA 2. Medido en `progress/review_183.md` (M1): con solo la
+ * regla 1, borrar del bloque de `egresos` la cita a `progress/decision_183.md` **y** su
+ * fecha dejaba la guardia VERDE. ⟨D12⟩ no cambia ningun `estadoProduccion` —cambia
+ * `definicion.categorias`—, asi que no habia sujeto derivado y nadie exigia la cita; lo
+ * unico que saltaba era la fecha huerfana, es decir la INCOHERENCIA, no la AUSENCIA.
+ *
+ * POR QUE NO SE EXIGE CITA A TODAS LAS ENTRADAS: la mayoria del catalogo no tiene ninguna
+ * decision humana detras y pedirsela seria pedir que se inventara. Lo que distingue a las
+ * que si es que un documento de decision las NOMBRA JUNTO AL CAMPO que toca — y ese es
+ * exactamente el criterio de la regla 2, no un listado.
+ *
+ * POR QUE NO BASTA CON QUE LA DECISION NOMBRE LA METRICA (una regla mas ancha que se
+ * descarto midiendo): `decision_183.md` nombra tambien `ingreso_flete`,
+ * `ingreso_comision_cod` e `ingreso_iva` —lo que ⟨D12⟩ decide sobre ellas es que el DTO
+ * deja de publicar su `neto`—, y sus entradas del catalogo NO cambian. Exigirles cita
+ * seria un falso positivo contra un catalogo correcto. Nombrar el campo es lo que separa
+ * «esta decision cambia esta entrada» de «esta decision habla de esta metrica».
  */
-function cambiosDecididosEnProgress(): CambioDecidido[] {
+function cambiosDeclaradosEnTexto(texto: string, fichero: string): CambioDecidido[] {
   const cambios: CambioDecidido[] = [];
-  const ficheros = fs.readdirSync(DIR_PROGRESS).filter((n) => /^decision.*\.md$/.test(n));
-  for (const fichero of ficheros) {
-    const texto = fs.readFileSync(path.join(DIR_PROGRESS, fichero), "utf8");
-    for (const linea of texto.split("\n")) {
-      if (!linea.includes("declarada") || !linea.includes("producida")) continue;
-      for (const m of linea.matchAll(/`([a-z_][a-z_0-9]*)(?:\.[A-Za-z]+)?`/g)) {
-        if (IDS_CATALOGO.has(m[1]) && !cambios.some((c) => c.id === m[1] && c.fichero === fichero)) {
-          cambios.push({ id: m[1], fichero });
-        }
-      }
+  const anadir = (id: string, motivo: CambioDecidido["motivo"]) => {
+    if (!IDS_CATALOGO.has(id)) return;
+    if (cambios.some((c) => c.id === id && c.fichero === fichero)) return;
+    cambios.push({ id, fichero, motivo });
+  };
+
+  for (const linea of texto.split("\n")) {
+    // Regla 2 primero: es la mas especifica, y asi el `motivo` de una entrada que cumple
+    // las dos queda en "estado", que es el que ademas fija el valor resultante.
+    for (const m of linea.matchAll(/`([a-z_][a-z_0-9]*)\.([A-Za-z][A-Za-z0-9_]*)[A-Za-z0-9_.]*`/g)) {
+      if (CAMPOS_DEL_CATALOGO.has(m[2])) anadir(m[1], "campo");
+    }
+    if (!linea.includes("declarada") || !linea.includes("producida")) continue;
+    for (const m of linea.matchAll(/`([a-z_][a-z_0-9]*)(?:\.[A-Za-z]+)?`/g)) {
+      const yaEsta = cambios.findIndex((c) => c.id === m[1] && c.fichero === fichero);
+      if (yaEsta >= 0) cambios[yaEsta] = { id: m[1], fichero, motivo: "estado" };
+      else anadir(m[1], "estado");
     }
   }
   return cambios;
+}
+
+function cambiosDecididosEnProgress(): CambioDecidido[] {
+  const ficheros = fs.readdirSync(DIR_PROGRESS).filter((n) => /^decision.*\.md$/.test(n));
+  return ficheros.flatMap((fichero) =>
+    cambiosDeclaradosEnTexto(fs.readFileSync(path.join(DIR_PROGRESS, fichero), "utf8"), fichero),
+  );
 }
 
 describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
@@ -347,6 +413,17 @@ describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
   // `progress/decision_175.md` de `metrics.ts:226-229`. Tambien muere si la decision no
   // lleva fecha, si el fichero citado no existe, o si el bloque escribe una fecha que ningun
   // documento citado respalda. Las tres, comprobadas de verdad: aplicadas, rojas, revertidas.
+  //
+  // ---------------------------------------------------------------------------------------
+  // QUE VIGILA HOY QUE NO VIGILABA: LA AUSENCIA, NO SOLO LA INCOHERENCIA
+  // ---------------------------------------------------------------------------------------
+  // El review de la 183 (M1) midio que, con la regla original, borrar la cita Y la fecha a la
+  // vez dejaba la guardia VERDE: solo saltaba si quedaba una fecha sin decision que la
+  // respaldara. Vigilaba la INCOHERENCIA entre lo escrito, no la AUSENCIA de firma. El motivo
+  // era el sujeto: ⟨D12⟩ cambia `definicion.categorias` y no `estadoProduccion`, asi que
+  // `egresos` no era sujeto derivado de nada y nadie exigia su cita. La regla 2 de
+  // `cambiosDeclaradosEnTexto` deriva tambien esos cambios; ver alli por que no se le exige
+  // cita a toda entrada del catalogo y que separa a las que si.
   //
   // ---------------------------------------------------------------------------------------
   // POR QUE LA COMPROBACION (b) NO EXIGE UN SOLO FICHERO: UNA METRICA ACUMULA DECISIONES
@@ -373,7 +450,40 @@ describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
   //     todas las del bloque de otro documento                     -> roja (ultima asercion).
   // El unico caso nuevo que pasa es el real: un bloque que cita dos decisiones fechadas y
   // escribe la fecha de cada una. Las comprobaciones (a) y (c) no cambiaron.
-  it("todo cambio de `estadoProduccion` cita una decision humana registrada en `progress/`", () => {
+  it("todo cambio de catalogo decidido en `progress/` esta citado por su entrada", () => {
+    // Autocomprobacion del DERIVADOR antes de usarlo, sobre texto sintetico. Sin esto, una
+    // regla que dejara de casar —un formato de cita distinto, un campo renombrado— no pondria
+    // la guardia roja: la dejaria SIN SUJETOS, o sea verde por vacio, que es el modo de fallo
+    // que este bloque ya tuvo una vez.
+    const [unaMetrica] = [...IDS_CATALOGO];
+    expect(
+      cambiosDeclaradosEnTexto(`\`${unaMetrica}.definicion.categorias\` gana una entrada`, "d.md"),
+    ).toEqual([{ id: unaMetrica, fichero: "d.md", motivo: "campo" }]);
+    expect(cambiosDeclaradosEnTexto(`\`${unaMetrica}.estadoProduccion\` cambia`, "d.md")).toEqual([
+      { id: unaMetrica, fichero: "d.md", motivo: "campo" },
+    ]);
+    expect(
+      cambiosDeclaradosEnTexto(`\`${unaMetrica}\`: "declarada" -> "producida"`, "d.md"),
+    ).toEqual([{ id: unaMetrica, fichero: "d.md", motivo: "estado" }]);
+    // Nombrar la metrica SIN nombrar un campo suyo no la convierte en sujeto: una decision
+    // habla de muchas metricas y solo cambia la entrada de algunas (⟨D12⟩ nombra las tres de
+    // Q1 y no toca su catalogo). Exigirles cita seria un falso positivo.
+    expect(cambiosDeclaradosEnTexto(`\`${unaMetrica}\` se sigue sirviendo igual`, "d.md")).toEqual(
+      [],
+    );
+    // Ni un campo sin metrica delante, ni un id que no existe, ni un campo inventado.
+    expect(cambiosDeclaradosEnTexto("`definicion.categorias` cambia", "d.md")).toEqual([]);
+    expect(cambiosDeclaradosEnTexto("`metrica_inventada.definicion` cambia", "d.md")).toEqual([]);
+    expect(cambiosDeclaradosEnTexto(`\`${unaMetrica}.campo_inventado\` cambia`, "d.md")).toEqual([]);
+    // Y una entrada que aparece por las dos reglas se declara "estado": es la que ademas fija
+    // el valor resultante en la comprobacion (c).
+    expect(
+      cambiosDeclaradosEnTexto(
+        `\`${unaMetrica}.definicion\` cambia\n\`${unaMetrica}\`: de "declarada" a "producida"`,
+        "d.md",
+      ),
+    ).toEqual([{ id: unaMetrica, fichero: "d.md", motivo: "estado" }]);
+
     const cambios = cambiosDecididosEnProgress();
 
     // Sanidad: sin cambios derivados el caso seria vacuo. Y al exigir DOS ficheros distintos
@@ -381,6 +491,14 @@ describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
     expect(cambios.length, "no se derivo ningun cambio de estadoProduccion de progress/").
       toBeGreaterThanOrEqual(3);
     expect(new Set(cambios.map((c) => c.fichero)).size).toBeGreaterThanOrEqual(2);
+    // Y las DOS reglas tienen sujeto real en el arbol: si una se rompiera, la otra la taparia
+    // y el conteo de arriba seguiria cuadrando.
+    for (const motivo of ["estado", "campo"] as const) {
+      expect(
+        cambios.filter((c) => c.motivo === motivo).length,
+        `ninguna decision de progress/ deriva por la regla "${motivo}": la regla esta ciega`,
+      ).toBeGreaterThanOrEqual(1);
+    }
 
     // Autocomprobacion del lector de citas ANTES de usarlo: si devolviera [] por un cambio de
     // formato del comentario, el bucle de abajo no comprobaria NINGUN fichero y (b) pasaria por
@@ -410,7 +528,9 @@ describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
       const bloque = bloqueDeEntrada(cambio.id);
       expect(
         bloque.includes(`progress/${cambio.fichero}`),
-        `${cambio.id} cambio de estadoProduccion sin citar progress/${cambio.fichero}`,
+        `${cambio.id}: progress/${cambio.fichero} decide sobre su ${
+          cambio.motivo === "estado" ? "estadoProduccion" : "entrada del catalogo"
+        } y la entrada NO lo cita`,
       ).toBe(true);
 
       const citadas = decisionesCitadas(bloque);
@@ -449,8 +569,13 @@ describe("R14 · el cambio de estadoProduccion lleva firma humana", () => {
         `${cambio.id} cita progress/${cambio.fichero} sin escribir ninguna de sus fechas`,
       ).toBe(true);
 
-      // (c) y el estado que la decision ratifico es el que el catalogo tiene hoy.
-      expect(getMetrica(cambio.id)!.estadoProduccion, cambio.id).toBe("producida");
+      // (c) y el estado que la decision ratifico es el que el catalogo tiene hoy. SOLO para
+      // los cambios de `estadoProduccion`: una decision sobre `definicion.categorias` no dice
+      // nada del estado, y afirmar `producida` para ella seria fijar un valor que ese
+      // documento nunca decidio — la clase de asercion que este archivo evita en su cabecera.
+      if (cambio.motivo === "estado") {
+        expect(getMetrica(cambio.id)!.estadoProduccion, cambio.id).toBe("producida");
+      }
     }
   });
 });

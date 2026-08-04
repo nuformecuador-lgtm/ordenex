@@ -48,6 +48,10 @@ function fila(over: Partial<IncidenteAdminRow> = {}): IncidenteAdminRow {
     motivo: "caja aplastada",
     estado: "solicitado",
     indemnizacion: null,
+    // Fix «tope de negocio» (2026-08-04): `null` = la orden no declara valor, asi que el tope de
+    // negocio NO aplica y esta suite —que mide alcance, colas y reversion— sigue midiendo lo
+    // mismo. El tope tiene la suya (`indemnizacion-tope-negocio-incidente.test.ts`).
+    ordenMontoCobrar: null,
     reportadoPor: "u-maestro",
     reportadoPorNombre: "Maestro",
     resueltoPor: null,

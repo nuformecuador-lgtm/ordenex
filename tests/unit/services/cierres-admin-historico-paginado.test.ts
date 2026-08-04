@@ -155,7 +155,7 @@ function repoEnMemoria(filas: CierreAdminResumenRow[] = ALMACEN) {
     findCierresByAlcance,
     findHistoricoPaginado,
     findCierreByIdEnAlcance: vi.fn(async () => null),
-    findGestionesIncidenteDelCierre: vi.fn(async () => [] as string[]),
+    findGestionesIncidenteDelCierre: vi.fn(async () => []),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
   } as unknown as ICierresAdminRepository;

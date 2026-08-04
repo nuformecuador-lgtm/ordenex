@@ -129,9 +129,24 @@ function buildRepo(prisma: ReturnType<typeof buildPrisma>) {
 }
 
 function gestionesIncidente() {
+  // `orden.montoCobrar`: fix «tope de negocio» (2026-08-04). Esta suite mide la ESCRITURA del
+  // monto y la emision del egreso, no el tope; el valor solo tiene que estar para que la
+  // proyeccion de `findGestionesIncidenteDelCierre` lo pueda serializar.
   return [
-    { id: G1, cierreId: "c1", resultado: "incidente", indemnizacion: null as Prisma.Decimal | null },
-    { id: G2, cierreId: "c1", resultado: "incidente", indemnizacion: null as Prisma.Decimal | null },
+    {
+      id: G1,
+      cierreId: "c1",
+      resultado: "incidente",
+      indemnizacion: null as Prisma.Decimal | null,
+      orden: { montoCobrar: new Prisma.Decimal("42000") },
+    },
+    {
+      id: G2,
+      cierreId: "c1",
+      resultado: "incidente",
+      indemnizacion: null as Prisma.Decimal | null,
+      orden: { montoCobrar: null as Prisma.Decimal | null },
+    },
   ];
 }
 
@@ -323,12 +338,16 @@ describe("R25 — la lectura de incidentes va acotada por alcance en el WHERE", 
     const prisma = buildPrisma(gestiones, store);
     const repo = buildRepo(prisma);
 
-    const ids = await repo.findGestionesIncidenteDelCierre("c1", {
+    const filas = await repo.findGestionesIncidenteDelCierre("c1", {
       destinoTipo: "bodega_satelite",
       destinoZonaId: "z-sat",
     });
 
-    expect(ids).toEqual([G1, G2]);
+    // Fix «tope de negocio» (2026-08-04): cada fila trae ADEMAS el valor de su orden.
+    expect(filas).toEqual([
+      { gestionId: G1, ordenMontoCobrar: "42000.00" },
+      { gestionId: G2, ordenMontoCobrar: null },
+    ]);
     const arg = (prisma.gestionOrden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       where: Record<string, unknown>;
       select: unknown;
@@ -339,7 +358,7 @@ describe("R25 — la lectura de incidentes va acotada por alcance en el WHERE", 
       // El alcance viaja por la RELACION al cierre: nunca se filtra en memoria.
       cierre: { destinoTipo: "bodega_satelite", destinoZonaId: "z-sat" },
     });
-    expect(arg.select).toEqual({ id: true });
+    expect(arg.select).toEqual({ id: true, orden: { select: { montoCobrar: true } } });
   });
 
   it("el alcance del maestro NO acota por zona (ve todos los `bodega_central`)", async () => {
