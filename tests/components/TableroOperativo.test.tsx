@@ -3,16 +3,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
+// Feature 133 (T4.6) — el censo de abajo lee el arbol de la ruta. Node esta disponible
+// aunque el entorno del archivo sea jsdom.
+import fs from "fs";
+import path from "path";
 
 import { PanelesOperativos } from "@/app/(app)/analitica/_components/operativo/PanelesOperativos";
 import { PANELES_OPERATIVOS } from "@/app/(app)/analitica/_components/operativo/catalogo-paneles";
 import {
+  ETIQUETA_ALCANCE,
   TEXTO_ERROR_PANEL,
   TEXTO_PROHIBIDO,
   TEXTO_SESION_NO_VALIDA,
   TITULO_COBERTURA,
   TITULO_RANGO_EXCEDIDO,
   VACIO_PANEL,
+  textoAlcance,
+  type AlcanceTablero,
 } from "@/app/(app)/analitica/_components/operativo/textos";
 import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
 import { PENUMBRA, type PuntoSerie, type ResultadoOperativo } from "@/lib/types/analitica-operativa";
@@ -383,5 +390,221 @@ describe("Feature 131 (R21) — las dos metricas `declarada` se pintan", () => {
     });
     expect(region("Ordenes sin gestionar")).toBeInTheDocument();
     expect(region("Resultado de las gestiones")).toBeInTheDocument();
+  });
+});
+
+/* ========================================================================== */
+/* Feature 133 (T4.5) — R11: LOS SEIS PANELES, PARA LOS CINCO ROLES           */
+/* ========================================================================== */
+
+// H8, y es un hecho del catalogo, no una preferencia: las 15 operativas declaran
+// `acotado` —no `prohibido`— para los tres roles nuevos, luego `listarMetricas({rol})`
+// devuelve las 15 para los cinco roles. NINGUN panel operativo se retira por rol; lo que
+// el recorte de presentacion cambia es el ROTULO de alcance y las facetas de la barra.
+//
+// El alcance de cada rol se escribe POR VALOR (misma tabla que
+// `tests/unit/analytics/presentacion.test.ts:38-49`) para no derivarlo de la funcion que
+// produce la prop, que haria tautologico el caso.
+
+const ALCANCE_POR_ROL = {
+  maestro: "global",
+  admin: "global",
+  adminTienda: "tienda",
+  adminSatelite: "zona",
+  mensajero: "mensajero",
+} as const;
+
+/** Todos los valores que la prop `alcance` puede tomar, incluido el que falla cerrado. */
+const ALCANCES: readonly AlcanceTablero[] = ["global", "zona", "tienda", "mensajero", "denegado"];
+
+function renderConAlcance(alcance: AlcanceTablero) {
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <PanelesOperativos alcance={alcance} />
+    </SWRConfig>,
+  );
+}
+
+describe("Feature 133 (R11) — ningun panel operativo se retira por rol", () => {
+  it("el catalogo declara SEIS paneles: el recorrido de abajo no pasa por vacio", () => {
+    expect(PANELES_OPERATIVOS).toHaveLength(6);
+  });
+
+  for (const [rol, alcance] of Object.entries(ALCANCE_POR_ROL)) {
+    it(`${rol} (alcance "${alcance}"): estan los seis paneles del catalogo`, async () => {
+      renderConAlcance(alcance);
+      for (const panel of PANELES_OPERATIVOS) {
+        expect(
+          await screen.findByRole("region", { name: panel.titulo }),
+          `falta el panel «${panel.titulo}» para ${rol}`,
+        ).toBeInTheDocument();
+      }
+      expect(screen.getAllByRole("region")).toHaveLength(PANELES_OPERATIVOS.length);
+    });
+  }
+
+  for (const alcance of ALCANCES) {
+    it(`alcance "${alcance}": estan los seis paneles del catalogo`, async () => {
+      renderConAlcance(alcance);
+      for (const panel of PANELES_OPERATIVOS) {
+        expect(await screen.findByRole("region", { name: panel.titulo })).toBeInTheDocument();
+      }
+    });
+  }
+});
+
+/* ========================================================================== */
+/* Feature 133 (T4.4) — R24 / R25: el ROTULO DE ALCANCE                       */
+/* ========================================================================== */
+
+describe("Feature 133 (R24) — un rotulo de alcance, uno solo, y solo si hace falta", () => {
+  it("alcance global: NO hay rotulo — ahi las cifras si son las del negocio entero", async () => {
+    renderConAlcance("global");
+    await screen.findByRole("region", { name: TITULO_CREADAS });
+    expect(screen.queryByRole("note", { name: ETIQUETA_ALCANCE })).toBeNull();
+    expect(textoAlcance("global")).toBeNull();
+  });
+
+  it("sin prop `alcance` se comporta como global (contrato de D6: siguen montandose sin props)", async () => {
+    renderTablero();
+    await screen.findByRole("region", { name: TITULO_CREADAS });
+    expect(screen.queryByRole("note", { name: ETIQUETA_ALCANCE })).toBeNull();
+  });
+
+  for (const alcance of ALCANCES.filter((a) => a !== "global")) {
+    it(`alcance "${alcance}": el rotulo esta, con su texto, y es UNICO para todo el tablero`, async () => {
+      renderConAlcance(alcance);
+      await screen.findByRole("region", { name: TITULO_CREADAS });
+
+      const rotulos = screen.getAllByRole("note", { name: ETIQUETA_ALCANCE });
+      // R24 — UNO para todo el tablero, no uno por panel: con seis paneles vivos, un
+      // rotulo por panel repetiria el mismo texto hasta volverlo invisible.
+      expect(rotulos).toHaveLength(1);
+
+      const texto = textoAlcance(alcance);
+      expect(texto).not.toBeNull();
+      expect(rotulos[0]).toHaveTextContent(texto as string);
+    });
+  }
+});
+
+describe("Feature 133 (R25) — el rotulo es una frase sobre el alcance, no un dato", () => {
+  const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+  it("ningun texto de alcance contiene un uuid ni un hueco interpolado", () => {
+    for (const alcance of ALCANCES) {
+      const texto = textoAlcance(alcance);
+      if (texto === null) continue;
+      expect(texto).not.toMatch(UUID);
+      // Nada del texto se interpola: si alguien colara un identificador por plantilla, el
+      // hueco quedaria visible aqui.
+      expect(texto).not.toContain("${");
+      expect(texto).not.toContain("undefined");
+    }
+  });
+
+  it("el rotulo pintado no trae ningun identificador del actor", async () => {
+    renderConAlcance("tienda");
+    const rotulo = await screen.findByRole("note", { name: ETIQUETA_ALCANCE });
+    expect(rotulo.textContent ?? "").not.toMatch(UUID);
+  });
+});
+
+/* ========================================================================== */
+/* Feature 133 (T4.6) — R12 / R13: censo sobre los archivos de la ruta        */
+/* ========================================================================== */
+
+// El censo vive AQUI y no dentro de `tests/unit/analytics/tablero-catalogo-paneles.test.ts`
+// a proposito: ese archivo acaba de ser reexpresado por la ficha 175 para NO afirmar
+// valores concretos de `estadoProduccion`, y devolverle una asercion sobre ese campo
+// desharia esa correccion. Este censo no afirma ningun valor: afirma que el campo NO SE
+// CONSULTA desde la ruta.
+//
+// Se retiran los comentarios antes de censar, como hacen los demas guardias del repo: la
+// cabecera de `catalogo-paneles.ts` esta OBLIGADA a nombrar ese campo para explicar por
+// que no lo usa, y censar el texto crudo convertiria el contrato escrito en una violacion.
+
+describe("Feature 133 (R12/R13) — la ruta no decide paneles leyendo el catalogo de servidor", () => {
+  const RAIZ = process.cwd();
+  const DIR = path.join(RAIZ, "app", "(app)", "analitica");
+
+  function recorrer(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const completo = path.join(dir, e.name);
+      if (e.isDirectory()) return recorrer(completo);
+      return [".ts", ".tsx"].includes(path.extname(e.name)) ? [completo] : [];
+    });
+  }
+
+  function soloCodigo(fuente: string): string {
+    return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  }
+
+  const CENSADOS = recorrer(DIR).map((archivo) => ({
+    ruta: path.relative(RAIZ, archivo).split(path.sep).join("/"),
+    codigo: soloCodigo(fs.readFileSync(archivo, "utf8")),
+  }));
+
+  const PROHIBIDOS: readonly { readonly patron: RegExp; readonly motivo: string }[] = [
+    {
+      patron: /\bestadoProduccion\b/,
+      motivo:
+        "lee `estadoProduccion` (ese campo dice si una metrica TIENE PRODUCTOR, no si su " +
+        "panel se pinta: usarlo para lo segundo borra KPI vivos sin excepcion ni log)",
+    },
+    {
+      patron: /\blistarMetricas\s*\(/,
+      motivo: "compone la rejilla desde el catalogo en vez de la lista declarativa (R13)",
+    },
+    {
+      patron: /from\s+["']@\/lib\/analytics\/metrics["']/,
+      motivo: "arrastra el catalogo de SERVIDOR a la ruta (R25 de la 131)",
+    },
+  ];
+
+  it("el censo mira archivos de verdad", () => {
+    expect(CENSADOS.length).toBeGreaterThan(5);
+    for (const nombre of [
+      "app/(app)/analitica/page.tsx",
+      "app/(app)/analitica/_components/operativo/FiltrosOperativos.tsx",
+      "app/(app)/analitica/_components/operativo/PanelesOperativos.tsx",
+      "app/(app)/analitica/_components/operativo/textos.ts",
+    ]) {
+      expect(
+        CENSADOS.map((c) => c.ruta),
+        `el censo no esta mirando ${nombre}`,
+      ).toContain(nombre);
+    }
+    for (const { codigo, ruta } of CENSADOS) {
+      expect(codigo.trim().length, `${ruta} quedo vacio al retirar comentarios`).toBeGreaterThan(0);
+    }
+  });
+
+  for (const { patron, motivo } of PROHIBIDOS) {
+    it(`ningun archivo de la ruta ${motivo}`, () => {
+      const infractores = CENSADOS.filter(({ codigo }) => patron.test(codigo)).map((c) => c.ruta);
+      expect(infractores).toEqual([]);
+    });
+  }
+
+  it("el censo DISCRIMINA: detecta el patron en codigo y no en una mencion en prosa", () => {
+    // Sin esto, un regex que dejara de casar seguiria verde por vacio para siempre.
+    const infractor = soloCodigo(
+      [
+        'import { listarMetricas } from "@/lib/analytics/metrics";',
+        "const vivos = PANELES.filter((p) => getMetrica(p.id).estadoProduccion === \"producida\");",
+        "export const x = listarMetricas({ rol });",
+      ].join("\n"),
+    );
+    expect(PROHIBIDOS.every(({ patron }) => patron.test(infractor))).toBe(true);
+
+    const prosa = soloCodigo(
+      [
+        "// esta lista NO consulta estadoProduccion ni listarMetricas(...)",
+        '/* y no importa "@/lib/analytics/metrics" */',
+        "export const PANELES = [];",
+      ].join("\n"),
+    );
+    expect(PROHIBIDOS.some(({ patron }) => patron.test(prosa))).toBe(false);
   });
 });
