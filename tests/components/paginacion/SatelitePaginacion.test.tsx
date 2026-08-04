@@ -24,8 +24,15 @@
 // Cómo está montado: 60 órdenes de la zona del actor, en los cinco estados y en el ORDEN DEL
 // FLUJO que impone el `ORDER BY` (R51), `pageSize` 25 → 3 páginas (la última, de 10). El
 // doble de la Server Action paginada FILTRA y RECORTA de verdad, así que navegar y filtrar
-// cambian las filas; el doble del listado sin paginar devuelve las 60 agrupadas por estado,
-// que es de donde la descarga tiene que sacar el archivo.
+// cambian las filas; el doble del conjunto devuelve las mismas 60 sin recorte, que es de donde
+// la descarga tiene que sacar el archivo.
+//
+// Feature 184 — Tanda A (T A.4/T A.5): el conjunto del archivo pasa a pedirse a la lectura
+// DEDICADA del listado (`listarOrdenesBodegaCompleto`), ya filtrada por la base. Y esta
+// pantalla gana la poda de la selección, así que aquí se mide lo que la poda NO puede hacer:
+// no mueve la página, ni suelta los filtros, ni recalcula los contadores (R26), y no le cuesta
+// una consulta ni al arranque ni a una descarga (R28). Lo que la poda SÍ hace se mide en
+// `SateliteSeleccionOtrasPaginas.test.tsx`.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   render,
@@ -50,19 +57,27 @@ import {
 
 // --- Dobles ---------------------------------------------------------------
 
-const { paginadoMock, conjuntoMock } = vi.hoisted(() => ({
+const { paginadoMock, completoMock, vigenciaMock } = vi.hoisted(() => ({
   /** La página que la tabla pinta (T K.1): filtra y recorta como el servidor. */
   paginadoMock: vi.fn(),
-  /** El listado SIN recorte, de donde sale la descarga (R52). */
-  conjuntoMock: vi.fn(),
+  /**
+   * El conjunto filtrado SIN recorte, de donde sale la descarga (R52). Feature 184 (T A.4):
+   * es una lectura DEDICADA a este listado y ya viene filtrada por la base; antes se releía el
+   * listado compuesto de la pantalla y se filtraba aquí.
+   */
+  completoMock: vi.fn(),
+  /** Feature 184 (T A.5): la comprobación de vigencia con la que se poda la selección. */
+  vigenciaMock: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   recibirLote: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
-  listarRecepcionSatelite: (...a: unknown[]) => conjuntoMock(...a),
+  listarRecepcionSatelite: vi.fn(),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoMock(...a),
+  listarOrdenesBodegaCompleto: (...a: unknown[]) => completoMock(...a),
+  listarIdsVigentesBodega: (...a: unknown[]) => vigenciaMock(...a),
 }));
 vi.mock("@/lib/actions/envio-devolucion-central", () => ({
   enviarACentral: vi.fn(),
@@ -250,25 +265,37 @@ function servirPaginas() {
   });
 }
 
-/** Doble del listado SIN recorte: los cinco grupos, como los devuelve `listar()`. */
-function servirConjunto() {
-  conjuntoMock.mockResolvedValue({
-    status: "ok",
-    porRecibir: [],
-    recibidas: deEstado("en_bodega_satelite"),
-    asignadas: deEstado("por_recoger"),
-    porDevolver: deEstado("por_devolver"),
-    enTransitoACentral: deEstado("devolviendo_a_bodega_central"),
-    devueltas: deEstado("devuelta"),
-    zonaNombre: ZONA,
-    sinZona: false,
+/**
+ * Doble del CONJUNTO de la descarga (T A.4): el mismo criterio que sirve las páginas, sin el
+ * recorte. Que use `filtrarComoElServidor` es el punto: desde la tanda A el filtro lo aplica el
+ * servidor también para el archivo, así que el doble tiene que devolverlo ya filtrado — si la
+ * pantalla volviera a filtrar por su cuenta, el archivo no cambiaría y nadie se enteraría.
+ */
+function servirCompleto() {
+  completoMock.mockImplementation(async (input: FiltroEntrada = {}) => {
+    const filtradas = filtrarComoElServidor(input);
+    return { status: "ok", items: filtradas, total: filtradas.length };
   });
+}
+
+/**
+ * Doble de la vigencia (T A.5). Por defecto NADA sale del listado: devuelve vigentes todos los
+ * identificadores que se le pregunten, de modo que la poda no retira nada y los casos de
+ * paginación miden lo suyo sin interferencias. Los casos que sí podan lo dicen con un
+ * `mockImplementationOnce`.
+ */
+function servirVigencia() {
+  vigenciaMock.mockImplementation(async (input: { ids?: string[] } = {}) => ({
+    status: "ok",
+    ids: input.ids ?? [],
+  }));
 }
 
 /** Monta la pantalla con la página 1 pre-cargada por el Server Component. */
 function montar() {
   servirPaginas();
-  servirConjunto();
+  servirCompleto();
+  servirVigencia();
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
@@ -366,6 +393,14 @@ async function opcionesDe(
 
 function botonDescarga(): HTMLElement {
   return screen.getByRole("button", { name: `Descargar ${LISTADO}` });
+}
+
+/** El aviso de lo marcado en otras páginas; `null` si no se pinta. */
+function avisoTexto(): string | null {
+  const nodo = within(region())
+    .queryAllByText(/marcadas en otras páginas/)
+    .at(0);
+  return nodo?.textContent?.replace(/\s+/g, " ").trim() ?? null;
 }
 
 beforeEach(() => {
@@ -601,5 +636,101 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     expect(titulo).toBe(LISTADO);
     expect(filas).toHaveLength(TOTAL);
     expect(filas.map((f) => f.numRemision)).toEqual(CONJUNTO.map((o) => o.numRemision));
+  });
+
+  it("podar no cambia la página visible, ni los filtros, ni los contadores (R26)", async () => {
+    // Feature 184 (T A.5). La poda toca UNA cosa —la selección— y no puede tocar ninguna otra:
+    // devolver a la página 1, soltar un filtro o recalcular el contador con las filas que
+    // quedan serían efectos colaterales que el operador no pidió y que nadie notaría hasta
+    // perder el sitio donde estaba trabajando.
+    const user = userEvent.setup();
+    montar();
+
+    // Con filtro puesto: 30 órdenes en dos páginas (25 + 5).
+    await filtrarPor(user, "Estado", "Recibidas");
+    await waitFor(() => {
+      expect(remisionesVisibles()).toHaveLength(PAGE_SIZE);
+      expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
+    });
+    await user.click(casilla(etiqueta(1)));
+    await user.click(casilla(etiqueta(2)));
+
+    // El servidor dirá que la 01 ya NO está en el conjunto filtrado: la poda la retira.
+    vigenciaMock.mockImplementationOnce(async () => ({ status: "ok", ids: ["o-2"] }));
+    await irAPagina(user, 2);
+
+    // Ancla POSITIVA de que la poda YA ocurrió: el aviso pasa a contar una sola.
+    await waitFor(() =>
+      expect(avisoTexto()).toBe(
+        "Tienes 1 orden(es) marcadas en otras páginas que no entran en esta acción.",
+      ),
+    );
+    const lecturasTrasPodar = paginadoMock.mock.calls.length;
+
+    // La PÁGINA sigue siendo la 2 del conjunto filtrado, con sus cinco filas.
+    expect(remisionesVisibles()).toEqual([26, 27, 28, 29, 30].map(etiqueta));
+    // El FILTRO sigue vigente: la barra lo dice y el servidor lo recibió en la última lectura.
+    expect(
+      screen.getByRole("button", { name: /^Estado:/ }).textContent,
+    ).toContain("Recibidas");
+    expect(
+      (paginadoMock.mock.calls.at(-1)?.[0] as { estados?: string[] })?.estados,
+    ).toEqual(["en_bodega_satelite"]);
+    // Los CONTADORES son los del servidor y no se mueven: 30 con el filtro, 60 sin él. Un
+    // contador recalculado sobre la selección o sobre las filas restantes se delataría aquí.
+    expect(within(region()).getByRole("status")).toHaveTextContent(`30 de ${TOTAL} órdenes`);
+    // Y podar no relee el listado: no cuesta ni una consulta de página.
+    expect(paginadoMock.mock.calls.length).toBe(lecturasTrasPodar);
+  });
+
+  it("la comprobación de vigencia viaja con los filtros vigentes (R19)", async () => {
+    // R19: la pertenencia se decide sobre el CONJUNTO FILTRADO, no sobre «todo lo del actor».
+    // Preguntar sin los filtros daría por vigente una orden que el filtro vigente excluye, y
+    // la marca sobreviviría a un cambio que el operador sí puede ver. Es el único sitio del
+    // repo donde se puede medir: para tener marcas fuera de la vista CON un filtro puesto hace
+    // falta filtrar, marcar y navegar —filtrar limpia la selección (R27)—, y eso exige un
+    // conjunto filtrado de más de una página.
+    const user = userEvent.setup();
+    montar();
+
+    await filtrarPor(user, "Estado", "Recibidas");
+    await waitFor(() => {
+      expect(remisionesVisibles()).toHaveLength(PAGE_SIZE);
+      expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
+    });
+    await user.click(casilla(etiqueta(1)));
+    await irAPagina(user, 2);
+
+    await waitFor(() => expect(vigenciaMock).toHaveBeenCalledTimes(1));
+    expect(vigenciaMock.mock.calls[0][0]).toEqual({
+      estados: ["en_bodega_satelite"],
+      ids: ["o-1"],
+    });
+  });
+
+  it("ni la carga inicial ni la descarga consultan la vigencia (R28)", async () => {
+    // La poda no puede colarse como coste fijo de la pantalla. Se paga sólo cuando hay algo
+    // invisible que comprobar, y descargar no es una de esas veces: el archivo ya sale de una
+    // lectura del conjunto que no necesita saber nada de la selección.
+    const user = userEvent.setup();
+    montar();
+
+    // (a) Carga inicial: la página 1 llega por `fallbackData` y SWR revalida una vez. Ni una
+    // consulta de vigencia en todo el arranque.
+    await waitFor(() => expect(paginadoMock).toHaveBeenCalled());
+    expect(vigenciaMock).not.toHaveBeenCalled();
+
+    // (b) Con marcas fuera de la vista —el único caso en que la poda sí trabaja— la descarga
+    // sigue sin sumarle nada.
+    await user.click(casilla(etiqueta(1)));
+    await user.click(casilla(etiqueta(2)));
+    await irAPagina(user, 2);
+    await waitFor(() => expect(vigenciaMock).toHaveBeenCalledTimes(1));
+
+    await user.click(botonDescarga());
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(completoMock).toHaveBeenCalledTimes(1);
+    expect(vigenciaMock).toHaveBeenCalledTimes(1);
   });
 });

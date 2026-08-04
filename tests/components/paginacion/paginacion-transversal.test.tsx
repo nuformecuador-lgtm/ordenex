@@ -258,10 +258,12 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_INCIDENTES_LABEL",
   },
   {
+    // Feature 184 — Tanda A (T A.4/T A.6): el SEGUNDO con `listarCompleto` propio. Era el
+    // único que además filtraba en el navegador; ese criterio duplicado ya no existe.
     listado: "Órdenes de la bodega satélite",
     ruta: "app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx",
     tanda: "K",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_LABEL",
   },
   {
@@ -314,7 +316,8 @@ const PENDIENTES_184: readonly string[] = [
   "Cierres del día a consolidar",
   "Incidentes pendientes de decisión",
   "Incidentes — histórico",
-  "Órdenes de la bodega satélite",
+  // Feature 184 — Tanda A: «Órdenes de la bodega satélite» salió de aquí en el MISMO commit
+  // que su pantalla. Quedan ONCE.
   "Plantillas de gasto fijo",
   "Saldos de tiendas",
 ];
