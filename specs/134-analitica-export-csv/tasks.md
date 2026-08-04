@@ -51,10 +51,19 @@ nada queda bloqueado por decidir.**
 
 ## Fase 2 — La proyeccion pura (sin UI)
 
-- [x] **T2.1** Crear `app/(app)/analitica/_components/operativo/export-operativo.ts` con
-      `COLUMNAS_EXPORT_OPERATIVO` y `filasDeSerie()` segun `design.md §4.2`.
-      **Hecho:** `pnpm typecheck` verde; el modulo no importa React, DOM, `lib/services`,
-      `lib/repositories` ni `lib/analytics/{alcance,identidad,metrics}`.
+- [x] **T2.1** Crear la proyeccion pura de `design.md §4.2`. **La implementacion son DOS
+      modulos, no uno** (desviacion declarada en `progress/impl_134.md §5`, aplicada en el
+      commit `8f485b03`):
+      `analitica-operativa-descarga-columnas.ts` (las columnas —antes llamadas
+      `COLUMNAS_EXPORT_OPERATIVO`, hoy `COLUMNAS_DESCARGA_ANALITICA_OPERATIVA`— y la
+      proyeccion de UNA fila) y `export-operativo.ts` (`filasDeSerie()`, el recorrido).
+      El nombre del primero NO es decorativo: la guardia perenne de la 170
+      (`tests/unit/descarga/columnas-sensibles.guardia.test.ts`) descubre las declaraciones de
+      columnas POR CONVENCION DE NOMBRE (`*-descarga-columnas.ts`) y las somete a su sonda;
+      declararlas en un archivo con otro nombre las habria dejado fuera de ese censo.
+      **Hecho:** `pnpm typecheck` verde; **ninguno de los dos** modulos importa React, DOM,
+      `lib/services`, `lib/repositories` ni `lib/analytics/{alcance,identidad,metrics}`, y los
+      dos quedan bajo el censo de la guardia de la 170.
 - [x] **T2.2 [P]** `tests/unit/analytics/export-csv-columnas.test.ts` — **R7, R12, R20**.
       Casos nombrados: `toda celda del CSV procede de un campo de SerieOperativa`,
       `cada fila declara la unidad de su metrica`,

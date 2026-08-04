@@ -27,7 +27,11 @@ verde con un conteo de tests plausible.
 
 Nuevos:
 
-- `app/(app)/analitica/_components/operativo/export-operativo.ts` — la proyeccion pura.
+- `app/(app)/analitica/_components/operativo/analitica-operativa-descarga-columnas.ts` — las
+  columnas y la proyeccion de UNA fila. **Tercer archivo de produccion, no previsto en
+  `design.md §1`:** desviacion declarada en la seccion 5, con su motivo.
+- `app/(app)/analitica/_components/operativo/export-operativo.ts` — el recorrido de la serie
+  (`filasDeSerie`), lo unico que el modulo de columnas no puede hacer.
 - `app/(app)/analitica/_components/operativo/ExportarOperativoPanel.tsx` — el control.
 - `tests/unit/analytics/export-csv-frontera.guardia.test.ts` — el guardia (4 bloques).
 - `tests/unit/analytics/export-csv-{columnas,nulos,cobertura,equivalencia,seudonimizacion,puerta,denegado}.test.ts`
@@ -48,6 +52,7 @@ Modificados:
 ```
 app/(app)/analitica/_components/operativo/ExportarOperativoPanel.tsx
 app/(app)/analitica/_components/operativo/PanelOperativo.tsx
+app/(app)/analitica/_components/operativo/analitica-operativa-descarga-columnas.ts
 app/(app)/analitica/_components/operativo/export-operativo.ts
 tests/components/TableroOperativo.test.tsx
 tests/components/TableroOperativoLatencia.test.tsx
@@ -61,6 +66,8 @@ tests/unit/analytics/export-csv-frontera.guardia.test.ts
 tests/unit/analytics/export-csv-nulos.test.ts
 tests/unit/analytics/export-csv-puerta.test.ts
 tests/unit/analytics/export-csv-seudonimizacion.test.ts
+progress/impl_134.md
+specs/134-analitica-export-csv/tasks.md
 ```
 
 **Ni un archivo de `lib/analytics/`, `lib/actions/`, `lib/services/`, `lib/repositories/`,
@@ -99,6 +106,11 @@ comprobo uno a uno, no se dedujo del nombre.
 | R20 | `export-csv-columnas.test.ts` | `el nombre del archivo lo produce nombreArchivoDescarga` (+ el bloque 4 del guardia, que censa el arbol) |
 | R21 | `tests/components/descarga/AnaliticaExportCsv.test.tsx` | `el control ofrece CSV y XLSX y no declara un dialecto propio` |
 
+**Nota sobre los modulos.** Tras el refactor `8f485b03` las columnas y la proyeccion de UNA
+fila viven en `analitica-operativa-descarga-columnas.ts`, y el recorrido en
+`export-operativo.ts`. Los tests importan de los dos. El mapa de arriba sigue siendo valido
+caso por caso: se reverifico entero, mutacion a mutacion, en la seccion 4.
+
 **Nota sobre los nombres de archivo.** `requirements.md` cita `export-csv-tope.test.ts` y
 `export-csv-vacio.test.ts` para R16/R17. `tasks.md > T4.3` los consolida en
 `tests/components/descarga/AnaliticaExportCsv.test.tsx`, junto al resto de tests de descarga
@@ -107,43 +119,48 @@ los aplica `DescargarDatasetButton`, no la proyeccion). Queda anotado aqui, como
 
 ---
 
-## 4. Mutaciones: 21 aplicadas, 21 muertas
+## 4. Mutaciones: 21 aplicadas, 21 muertas - REVERIFICADAS tras el refactor
 
-> **REVERIFICACION EN CURSO tras el refactor `8f485b03`** (que extrajo las columnas y la
-> proyeccion de una fila a `analitica-operativa-descarga-columnas.ts`). La tabla de abajo es la
-> de ANTES del refactor y varios de sus anclajes ya no viven donde dice. La tabla buena, medida
-> contra la disposicion de HOY, se esta escribiendo en §4bis. **No creerse esta hasta que §4bis
-> este completa.**
+La primera bateria se corrio ANTES del refactor `8f485b03`, que extrajo las columnas y la
+proyeccion de una fila a `analitica-operativa-descarga-columnas.ts`. **Una mutacion cuyo
+anclaje se mueve y no se vuelve a comprobar es exactamente como se cuela cobertura aparente**
+(paso en la 125, la 126 y la 131), asi que las 21 se han vuelto a aplicar UNA POR UNA contra la
+disposicion de HOY. La tabla de abajo es la de hoy; la de antes del refactor no se conserva
+porque describia anclajes que ya no existen.
 
+Procedimiento por mutacion: aplicar -> **`grep` que aterrizo en disco** -> correr el CASO
+NOMBRADO -> comprobar el rojo -> revertir -> `git status` limpio. Ninguna quedo commiteada.
 
+**Las que el refactor MOVIO:** **R7, R9, R11, R12, R13, R15 y R20** pasaron de
+`export-operativo.ts` a `analitica-operativa-descarga-columnas.ts`. **R14** se quedo en
+`export-operativo.ts` pero CAMBIO DE FORMA: el conjunto de fechas no comparables ya no se
+calcula dentro de la proyeccion, sino que se le pasa desde el recorrido, asi que hoy la
+mutacion es pasarle un `Set` vacio. R10 sigue en `export-operativo.ts` (el recorrido no se
+movio). Las once restantes no se movieron.
 
-Procedimiento para cada una: aplicar la mutacion → **comprobar con `grep` que aterrizo en
-disco** → correr el caso NOMBRADO → comprobar el rojo → revertir. Ninguna mutacion quedo
-commiteada; `git status` limpio y `git diff --stat` vacio despues de cada una.
-
-| R | Mutacion aplicada | Aterrizo (grep) | Resultado |
-| --- | --- | --- | --- |
-| R1 | el modulo de export importa `AnaliticaOperativaService` | `AnaliticaOperativaService` en `export-operativo.ts` | **MUERTA** |
-| R2 | el export construye su propio filtro (`{ rango: filtro.rango }`) en vez de `aRaw` | `const raw = { rango: filtro.rango }` | **MUERTA** |
-| R3 | nace `app/api/analitica/export/route.ts` | el archivo existe | **MUERTA** |
-| R4 | `lib/actions/analitica-operativa.ts` (`"use server"`) invoca `construirDescarga` | `const generar = construirDescarga` | **MUERTA** |
-| R5 | el `forbidden` se traduce a `{ status: "ok", filas: [] }` | `return { status: "ok", filas: [] }` | **MUERTA** |
-| R6 | un corte previo convierte el denegado en error generico ANTES de llamar a la accion | `m.metricaId === "egresos"` | **MUERTA** |
-| R7 | se anade la columna «Mensajero (nombre)» | `"mensajero_nombre"` | **MUERTA** |
-| R8 | se retira `seudonimizarPuntos` del servicio | el ancla desaparece de `AnaliticaOperativaService.ts` | **MUERTA** (salida en §4.1) |
-| R9 | se emite una columna `mensajero_ref` | `"mensajero_ref"` | **MUERTA** |
-| R10 | el export filtra los puntos con `valor === null` | `filter((p) => p.valor !== null)` | **MUERTA** |
-| R11 | `valor: punto.valor ?? 0` | `punto.valor ?? 0` | **MUERTA** |
-| R12 | se elimina la columna de unidad | el ancla desaparece de `export-operativo.ts` | **MUERTA** |
-| R13 | deja de propagarse `corteAt` a la fila | `corte_at: null,` | **MUERTA** |
-| R14 | se ignora `cobertura.fechasNoComparables` | `if (false) return COBERTURA_NO_COMPARABLE` | **MUERTA** |
-| R15 | se omite la declaracion de la penumbra | `limitacion_conocida: null,` | **MUERTA** |
-| R16 | `filas.slice(0, 5000)` antes del tope | `.slice(0, 5000)` | **MUERTA** |
-| R17 | sin puntos se emite igualmente un archivo de cabecera sola | `proyectadas.length === 0 ? [{}]` | **MUERTA** |
-| R18 | el borde audita tambien el `validation_error` | `motivo: "filtro_invalido"` | **MUERTA** |
-| R19 | nace un `buildCsvRowsAnalitica` dentro del subarbol | `buildCsvRowsAnalitica` | **MUERTA** |
-| R20 | el nombre del archivo se compone a mano en el subarbol | `nombreDelArchivo` | **MUERTA** |
-| R21 | `formatos: ["csv"]` | `= ["csv"];` | **MUERTA** |
+| R | Archivo mutado HOY | Mutacion | Aterrizo (grep) | Caso nombrado que cae | Resultado |
+| --- | --- | --- | --- | --- | --- |
+| R1 | `export-operativo.ts` | importa `AnaliticaOperativaService` | `:17` | `el subarbol de export no importa servicio, repositorio, Prisma ni el catalogo de servidor` | **MUERTA** |
+| R2 | `ExportarOperativoPanel.tsx` | `const raw = { rango: filtro.rango }` en vez de `aRaw` | `:101` | `el raw que envia el export es identico al que envia el panel para el mismo filtro` | **MUERTA** |
+| R3 | `app/api/analitica/export/route.ts` (nace) | una ruta de api sirve el export | el archivo existe | `ninguna ruta de app/api sirve el export de analitica` | **MUERTA** |
+| R4 | `lib/actions/analitica-operativa.ts` | el modulo `"use server"` invoca `construirDescarga` | `:3-4` | `ningun modulo "use server" invoca construirDescarga` | **MUERTA** |
+| R5 | `ExportarOperativoPanel.tsx` | el `forbidden` se traduce a `{ status: "ok", filas: [] }` | `:121` | `un forbidden no produce archivo y su mensaje no es el de sin datos` | **MUERTA** |
+| R6 | `ExportarOperativoPanel.tsx` | corte previo que evita la accion (`metricaId === "egresos"`) | `:102` | `el intento de descarga denegado deja rastro en el logger antes de responder` | **MUERTA** |
+| R7 | **`...-descarga-columnas.ts`** (MOVIDO) | se anade la columna «Mensajero (nombre)» | `:80`, `:139` | `toda celda del CSV procede de un campo de SerieOperativa` | **MUERTA** |
+| R8 | `lib/services/AnaliticaOperativaService.ts` | se retira `seudonimizarPuntos` (`:503-505`) | la llamada desaparece; quedan definicion y comentario | `el CSV de un adminTienda no contiene ningun uuid de mensajero` | **MUERTA** (salida en 4.1) |
+| R9 | **`...-descarga-columnas.ts`** (MOVIDO) | columna `mensajero_ref` con `uuid.slice(0,8)` | `:80`, `:139` | `el archivo no incluye ningun mapa seudonimo-id ni valor derivado del uuid` | **MUERTA** |
+| R10 | `export-operativo.ts` | `filter((p) => p.valor !== null)` en el recorrido | `:35` | `las filas del CSV son punto por punto las de la serie que pinta el panel` | **MUERTA** |
+| R11 | **`...-descarga-columnas.ts`** (MOVIDO) | `valor: punto.valor ?? 0` | `:137` | `un valor null se escribe como celda vacia y jamas como 0` | **MUERTA** |
+| R12 | **`...-descarga-columnas.ts`** (MOVIDO) | se elimina la columna de unidad | el ancla `clave: "unidad"` desaparece | `cada fila declara la unidad de su metrica` | **MUERTA** |
+| R13 | **`...-descarga-columnas.ts`** (MOVIDO) | `corte_at: null` | `:140` | `la fila del dia en curso se marca parcial y lleva su corte` | **MUERTA** |
+| R14 | `export-operativo.ts` (**CAMBIO DE FORMA**) | al recorrer se pasa `new Set<string>()` en vez de `cobertura.fechasNoComparables` | `:36` | `las fechas bajo el horizonte del historial se marcan no comparables en su fila` | **MUERTA** |
+| R15 | **`...-descarga-columnas.ts`** (MOVIDO) | `limitacion_conocida: null` | `:142` | `el archivo declara la penumbra sin estimarla` | **MUERTA** |
+| R16 | `ExportarOperativoPanel.tsx` | `.slice(0, 5000)` antes del tope | `:153` | `superar el tope no produce archivo truncado sino el mensaje accionable` | **MUERTA** (timeout, ver nota) |
+| R17 | `ExportarOperativoPanel.tsx` | sin puntos se emite igualmente una fila | `:154` | `sin puntos no se genera archivo y se avisa sin datos` | **MUERTA** (timeout, ver nota) |
+| R18 | `lib/actions/analitica-operativa.ts` | el borde audita tambien el `validation_error` | `:116` | `un validation_error no produce archivo y no llama al logger` | **MUERTA** |
+| R19 | `.../operativo/generador-propio.ts` (nace) | `buildCsvRowsAnalitica` propio en el subarbol | el archivo existe | `el export vive en su subarbol y reusa el patron 151 sin reimplementarlo` | **MUERTA** |
+| R20 | **`...-descarga-columnas.ts`** (MOVIDO) | se exporta un `nombreDelArchivo` compuesto a mano | `:146` | `el nombre del archivo lo produce nombreArchivoDescarga` | **MUERTA** |
+| R21 | `ExportarOperativoPanel.tsx` | `FORMATOS_EXPORT_OPERATIVO = ["csv"]` | `:58` | `el control ofrece CSV y XLSX y no declara un dialecto propio` | **MUERTA** |
 
 Dos apuntes de honestidad sobre COMO mueren:
 
@@ -156,26 +173,36 @@ Dos apuntes de honestidad sobre COMO mueren:
   tambien lo pone rojo, pero eso probaria R8 dos veces. La columna `mensajero_ref` es el mapa
   de vuelta que R9 prohibe, y cae por la comprobacion de cabecera palabra a palabra.
 
+### 4.0 Lo que la reverificacion ENCONTRO (y no es cosmetico)
 
-### 4bis. Reverificacion contra la disposicion de HOY (post-refactor)
+El refactor dejo **un patron muerto dentro del guardia permanente**. El bloque 2 (R3) censaba
+`app/api` buscando, entre otros nombres, `COLUMNAS_EXPORT_OPERATIVO` - el nombre viejo de la
+constante de columnas. Tras el refactor ese simbolo **no existia ya en ninguna parte del
+arbol**, asi que ese patron no podia volver a casar con nada.
 
-Procedimiento por mutacion: aplicar -> **`grep` que aterrizo en disco** -> correr el CASO
-NOMBRADO -> comprobar el rojo -> revertir y comprobar `git status` limpio.
+No hacia falso-verde el bloque entero (los otros patrones - `consultarAnaliticaOperativa`,
+`export-operativo`, `filasDeSerie`... - seguian vivos, y la mutacion de R3 se comprobo de nuevo
+y sigue muriendo), pero es literalmente el fallo contra el que la cabecera de ese mismo guardia
+previene: **una expresion regular que no casa con nada da el mismo verde que un arbol limpio**.
 
-| R | Archivo mutado HOY | Mutacion | Aterrizo (grep) | Caso nombrado | Resultado |
-| --- | --- | --- | --- | --- | --- |
-| R1 | `export-operativo.ts` | importa `AnaliticaOperativaService` | linea 17 | `el subarbol de export no importa servicio, repositorio, Prisma ni el catalogo de servidor` | **MUERTA** |
-| R2 | `ExportarOperativoPanel.tsx` | `const raw = { rango: filtro.rango }` en vez de `aRaw` | linea 101 | `el raw que envia el export es identico al que envia el panel para el mismo filtro` | **MUERTA** |
-| R3 | `app/api/analitica/export/route.ts` (nace) | ruta de api que sirve el export | el archivo existe | `ninguna ruta de app/api sirve el export de analitica` | **MUERTA** |
-| R4 | `lib/actions/analitica-operativa.ts` | el modulo `"use server"` invoca `construirDescarga` | lineas 3-4 | `ningun modulo "use server" invoca construirDescarga` | **MUERTA** |
-| R5 | `ExportarOperativoPanel.tsx` | el `forbidden` se traduce a `{ status: "ok", filas: [] }` | linea 121 | `un forbidden no produce archivo y su mensaje no es el de sin datos` | **MUERTA** |
-| R6 | `ExportarOperativoPanel.tsx` | corte previo que evita la accion (`metricaId === "egresos"`) | linea 102 | `el intento de descarga denegado deja rastro en el logger antes de responder` | **MUERTA** |
-| R16 | `ExportarOperativoPanel.tsx` | `.slice(0, 5000)` antes del tope | linea 153 | `superar el tope no produce archivo truncado sino el mensaje accionable` | **MUERTA** (timeout de `waitFor`) |
-| R17 | `ExportarOperativoPanel.tsx` | sin puntos se emite igualmente una fila | linea 154 | `sin puntos no se genera archivo y se avisa sin datos` | **MUERTA** (timeout de `waitFor`) |
-| R19 | `app/(app)/analitica/_components/operativo/generador-propio.ts` (nace) | `buildCsvRowsAnalitica` propio en el subarbol | el archivo existe | `el export vive en su subarbol y reusa el patron 151 sin reimplementarlo` | **MUERTA** |
-| R21 | `ExportarOperativoPanel.tsx` | `FORMATOS_EXPORT_OPERATIVO = ["csv"]` | linea 58 | `el control ofrece CSV y XLSX y no declara un dialecto propio` | **MUERTA** |
+Corregido en esta sesion:
 
-**PENDIENTES de reverificar:** R7, R8, R9, R10, R11, R12, R13, R14, R15, R18, R20.
+1. la lista del bloque 2 nombra ahora los DOS modulos del export, por nombre de archivo y por
+   simbolo publico (`analitica-operativa-descarga-columnas`,
+   `COLUMNAS_DESCARGA_ANALITICA_OPERATIVA`, `filaDescargaAnaliticaOperativa`);
+2. **se anade un auto-chequeo que impide que esto vuelva a pasar**: `y los patrones que nombran
+   el export siguen casando con el export que EXISTE` comprueba que CADA patron de la lista
+   casa con algo real del corpus (subarbol del export + `lib/actions` + `lib/analytics`). Si
+   alguien renombra un modulo y no toca la lista, ese caso cae y dice que patron persigue un
+   nombre muerto.
+
+Ese auto-chequeo **se comprobo con su propia mutacion**: sustituyendo
+`/analitica-operativa-descarga-columnas/` por un nombre inexistente, cae con
+`el censo persigue un nombre muerto: /analitica-operativa-columnas-QUE-YA-NO-EXISTE/`.
+Y encontro un segundo desajuste mientras se escribia: con el corpus reducido a los tres
+archivos del export marcaba `consultarAgregadoOperativo` como muerto, cuando esta vivo en
+`lib/actions/analitica-operativa.ts` y el patron es legitimo (una ruta infractora lo usaria).
+Se corrigio EL CORPUS, no el patron.
 
 ### 4.1 T3.1 — la task BLINDADA: salida de la mutacion
 
@@ -246,7 +273,29 @@ Las cuatro reglas del criterio de «NO HECHO», una por una:
 
 ## 5. Desviaciones respecto de `design.md`, con su motivo
 
-**Unica desviacion: tres tests existentes del tablero se envuelven en `ToastProvider`.**
+**Desviacion 1: la proyeccion pura son DOS modulos de produccion, no uno.**
+
+`design.md §1` declara DOS archivos nuevos de produccion (`export-operativo.ts` y
+`ExportarOperativoPanel.tsx`) y R19 repite «dos archivos nuevos». Son **tres**: las columnas y
+la proyeccion de una fila viven en `analitica-operativa-descarga-columnas.ts`.
+
+- **Por que.** La guardia PERENNE de la 170 (`tests/unit/descarga/columnas-sensibles.guardia.test.ts`)
+  descubre las declaraciones de columnas de export **POR CONVENCION DE NOMBRE**
+  (`*-descarga-columnas.ts`), sin lista fija, y ademas ejecuta cada proyeccion con una SONDA que
+  delata QUE CAMPO lee cada celda para que ninguna emita un uuid, una URL firmada o un id
+  interno. Declarar las columnas de este export dentro de `export-operativo.ts` las habria
+  dejado **fuera de ese censo** - y de todos los exports de la app, el de analitica es
+  precisamente el que mas necesita esa vigilancia (R7/R8/R9 existen por eso). Con el nombre de
+  la convencion, este export queda bajo la misma sonda que las otras ~25 tablas. Comprobado:
+  esa guardia corre en verde e incluye el modulo nuevo.
+- **Que NO cambia.** Cero archivos fuera del subarbol `app/(app)/analitica/_components/operativo/`.
+  El guardia de frontera de la 134 (bloque 4, R19) censa **el subarbol**, no cuenta archivos, y
+  sigue verde: lo que R19 protege es que no nazca un generador ni un nombre de archivo propios,
+  y eso se mantiene.
+- **Coste declarado:** `design.md §1` y el texto de R19 dicen «dos» y la realidad son tres. Se
+  deja anotado aqui en vez de reescribir el spec a posteriori para que cuadre.
+
+**Desviacion 2: tres tests existentes del tablero se envuelven en `ToastProvider`.**
 
 - Archivos: `tests/components/TableroOperativo.test.tsx`,
   `tests/components/TableroOperativoLatencia.test.tsx`,

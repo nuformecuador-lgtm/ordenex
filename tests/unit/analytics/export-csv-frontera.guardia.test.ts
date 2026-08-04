@@ -161,8 +161,15 @@ const EXPORT_DE_ANALITICA: readonly RegExp[] = [
   /consultarAnaliticaOperativa/,
   /consultarAgregadoOperativo/,
   /export-operativo/,
-  /COLUMNAS_EXPORT_OPERATIVO/,
+  // Los DOS modulos del export, por su nombre de archivo y por su simbolo publico. El
+  // segundo se llama asi por la convencion de la 170 (`*-descarga-columnas.ts`), no por
+  // gusto: ver la cabecera de `analitica-operativa-descarga-columnas.ts`. Si un dia se
+  // renombran, ESTAS DOS LINEAS SON LO QUE HAY QUE RENOMBRAR CON ELLOS — un patron que ya
+  // no casa con nada da el mismo verde que un arbol limpio.
+  /analitica-operativa-descarga-columnas/,
+  /COLUMNAS_DESCARGA_ANALITICA_OPERATIVA/,
   /filasDeSerie/,
+  /filaDescargaAnaliticaOperativa/,
   /from\s+["']@\/lib\/analytics\//,
 ];
 
@@ -198,6 +205,25 @@ describe("Feature 134 (R3) — el export no se sirve desde `app/api`", () => {
     ].join("\n");
     expect(EXPORT_DE_ANALITICA.some((p) => p.test(soloCodigo(prosa)))).toBe(false);
     expect(/analitica|analytics/i.test("app/api/webhooks/pagos/route.ts")).toBe(false);
+  });
+
+  it("y los patrones que nombran el export siguen casando con el export que EXISTE", () => {
+    // La leccion que este bloque estuvo a punto de aprender por las malas: tras el refactor
+    // que extrajo las columnas a su propio modulo, este censo seguia buscando
+    // `COLUMNAS_EXPORT_OPERATIVO`, un simbolo que ya no existia en ninguna parte. Un patron
+    // que no casa con nada NO PROTEGE NADA, y da exactamente el mismo verde que un arbol
+    // limpio. Aqui se comprueba que cada nombre que el censo persigue sigue siendo el nombre
+    // de verdad: si alguien renombra un modulo del export y no toca la lista, esto cae.
+    // El corpus es el sitio donde estos nombres VIVEN: el subarbol del export y el borde de
+    // la analitica. No solo los tres archivos del export, porque algunos patrones nombran a
+    // proposito cosas del BORDE (`consultarAgregadoOperativo`, de la 176) que una ruta
+    // infractora usaria y que nunca apareceran en el subarbol del export.
+    const texto = [...archivos(DIR_OPERATIVO), ...archivos("lib/actions"), ...archivos("lib/analytics")]
+      .map((rel) => `${rel}\n${fuenteDe(rel)}`)
+      .join("\n");
+    for (const patron of EXPORT_DE_ANALITICA) {
+      expect(patron.test(texto), `el censo persigue un nombre muerto: ${patron}`).toBe(true);
+    }
   });
 });
 
