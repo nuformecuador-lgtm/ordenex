@@ -137,6 +137,16 @@ finito, ENTONCES el sistema DEBE pintarlo como **dato ausente**, y NO DEBE pinta
 **R16.** Cada panel que muestre un importe DEBE mostrar tanto el `bruto` como el `neto` de ese
 importe, distinguibles entre sí.
 
+> 📌 **REINTERPRETADO el 2026-08-04 por la feature 183** (decisión ⟨D12⟩, `progress/decision_183.md`).
+> Se lee ahora como: **cada panel muestra todos los importes que su DTO trae y, cuando trae los dos,
+> distinguibles entre sí.** Desde la 183 hay importes que legítimamente no tienen `neto` —el de las
+> tres métricas de caja homogéneas era `+bruto` siempre—, así que exigir los dos obligaría a
+> inventar una cifra. Lo fijan R19 y R20 de la 183.
+>
+> ⚠️ **Y no puede pintarse el marcador de dato ausente en su lugar:** en esta feature ese marcador
+> significa **«no se sabe»** (R15), y aquí la verdad es **«no aplica»**. La mutación que lo comprueba
+> deja seis celdas pintando lo primero cuando corresponde lo segundo.
+
 **R17.** El sistema DEBE renderizar las dos vistas de `cod_recaudado` en paneles separados, y NO
 DEBE sumarlas, combinarlas en una misma serie ni presentar un total conjunto de ambas.
 

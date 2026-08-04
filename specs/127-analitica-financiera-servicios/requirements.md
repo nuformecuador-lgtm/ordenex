@@ -258,6 +258,12 @@ categorías `egreso_*` declaradas por el catálogo, y **NO DEBE** devolver un es
 *Mutación:* omitir `egreso_indemnizacion` de la suma → el test con una indemnización en el rango ve
 la cifra corta.
 
+> 📌 **ACOTADO el 2026-08-04 por la feature 183** (decisión ⟨D12⟩, `progress/decision_183.md`).
+> **Ya no son ocho categorías: son nueve.** `egresos` ganó `ingreso_ajuste`, porque
+> `WalletEgresoService.ts:89-96` revierte un egreso anulado emitiendo esa categoría y la métrica no
+> la declaraba: anular un egreso **no lo descontaba nunca** de la cifra. El resto de R18 —que no
+> exista un estado `no_producida`— sigue intacto, y el texto de arriba se conserva como estaba.
+
 **R19.** *(cerrado por D6 y D7)* CUANDO se consulte `cod_recaudado`, el sistema DEBE servir **dos
 vistas**: `cod_recaudado__por_metodo` (fecha × método, desde los `total_*` de los `cierre_dia`
 **resueltos** del rango) y `cod_recaudado__por_tienda` (fecha × tienda, desde el crédito
@@ -373,6 +379,14 @@ las categorías nominales) y `neto` (Σ con signo: créditos − débitos / ingr
 `ajuste_*` en el mismo rango ve `neto` distinto de cero cuando debería cancelarse. Segunda mutación:
 implementar el emparejamiento por `origen_id` → el test del ajuste manual (`origen_id NULL`) revienta
 o produce un neto arbitrario.
+
+> 📌 **ACOTADO el 2026-08-04 por la feature 183** (decisión ⟨D12⟩, `progress/decision_183.md`).
+> **«Toda métrica de ledger» pasa a ser «toda métrica de ledger cuyo neto no sea redundante por
+> construcción».** `ingreso_flete`, `ingreso_comision_cod` e `ingreso_iva` declaran listas homogéneas
+> de prefijo y, con el `CHECK` categoría↔tipo de la 173, cada categoría admite un solo `tipo`: su
+> `neto` era `+bruto` **siempre**, así que ahora publican solo `bruto`. Donde el neto sí significa
+> algo —`egresos` (que ganó `ingreso_ajuste`), el ledger de tienda, las dos métricas de tesorería—
+> R37 sigue vigente palabra por palabra, con sus dos mutaciones.
 
 **R38.** *(D6)* Las dos vistas de `cod_recaudado` DEBEN llevar **ids distintos**
 (`cod_recaudado__por_metodo`, `cod_recaudado__por_tienda`) y DEBEN declararse **mutuamente no

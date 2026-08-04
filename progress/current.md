@@ -9,6 +9,58 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🚀 2026-08-04 — **RELEASE EN PRODUCCIÓN + BACKFILL DE LA 173 SALDADO** — **EMPIEZA A LEER POR AQUÍ**
+
+**Lo que llevaba dos jornadas bloqueando todo está hecho y verificado en la base, no deducido del PR.**
+
+### Release `dev → prod` (PR #287) — 186 commits · 23 PRs · 456 archivos · 5 migraciones
+
+Pre-vuelo **rehecho** ese día, no reutilizado (es lo que salvó la release del 01-ago). Verificado
+**después** de mergear:
+
+| Comprobación | Resultado |
+| --- | --- |
+| Las 5 migraciones | ✅ `finished_at` puesto, `rolled_back_at` **nulo**, 1 paso cada una |
+| `CHECK` categoría↔tipo de la 173 | ✅ **`convalidated = true`** — recorrió las 35 filas reales y **ninguna la incumplió** |
+| Columnas, 3 índices, 2+1 valores de enum | ✅ todos creados |
+| Migraciones rotas en toda la tabla | ✅ **0** |
+| Despliegue de producción | ✅ **READY** |
+| Errores de runtime | ✅ **ninguno** |
+
+> ⚠️ **Un modo de fallo que ninguna bitácora había mirado en tres releases:** `caja_tesoreria` añade
+> dos valores de enum y **los usa dentro del `CHECK` en el mismo archivo**, cosa que Postgres puede
+> rechazar dentro de una transacción. Se descartó **empíricamente** (esa migración ya estaba aplicada
+> en un Postgres real con este mismo runner), no por lectura. **El patrón se repetirá** la próxima vez
+> que una migración añada un valor de enum y lo use acto seguido.
+
+### Backfill de la 173 (`T H.4`) — **APLICADO**, 5 filas, ₡203.055,90
+
+Se corrió **por MCP** (decisión del humano), no con el script: `DATABASE_URL` de prod no es
+recuperable desde la sesión. Riesgo declarado y aceptado: en SQL **hay que declarar la categoría y el
+origen**, que es la segunda declaración que `CajaBackfillTesoreriaService.ts:35-41` existe para
+evitar. Quedó acotado porque **de los tres emisores solo había uno con documentos** (0 pagos a
+tienda, 0 anulaciones) y porque la cifra **cuadra al céntimo** con la que el script midió en su día
+—dos derivaciones independientes al mismo número—.
+
+| Comprobación | Resultado |
+| --- | --- |
+| Filas insertadas / total | **5** · **₡203.055,90** exacto |
+| Reejecutar el mismo INSERT | **0 filas** — idempotente por `wallet_movimiento_origen_categoria_uq` |
+| Cierres aprobados sin su movimiento | **0** |
+| Filas fechadas después de julio | **0** — la fecha sale del ORIGEN, nunca del reloj (R41) |
+
+**Y las dos cifras de la caja ya difieren en producción, que es para lo que existe la 173:**
+**Dinero en caja ₡252.666,45** · **Ganancia de Ordenex ₡49.610,55** · de terceros ₡203.055,90.
+La ganancia **no se movió ni un céntimo** con el backfill: el contra-entrega es dinero de las tiendas.
+
+### 🚦 LO PRIMERO AL RETOMAR
+
+**VER LA 172 Y LA 173 EN PANTALLA.** Lleva **tres** jornadas pendiente y no lo sustituye ninguna
+suite. Ahora hay algo concreto que mirar: la caja de producción muestra **dos cifras distintas por
+primera vez**.
+
+---
+
 ## 2026-08-04 — **175 y 178 cerradas** · **alta de la 183** · **EN CURSO: spec de la 180**
 
 ### ✅ Cerradas hoy — las dos ya estaban en `dev`, lo que faltaba era el bookkeeping
@@ -23,11 +75,19 @@ El detalle de cada una vive ya en `progress/history.md`; aquí solo queda lo que
 futuro**.
 
 **La 175 no cerró su cuarta divergencia: la movió.** Su nota exigía «cerrarla o moverla a una ficha
-propia»; se movió, intacta, a la **ficha 183** recién dada de alta (nació como 182 y se renumeró: ver abajo). **Decisión humana del 2026-08-04,
+propia»; se movió, intacta, a la **ficha 183** recién dada de alta (nació como 182 y se renumeró: ver abajo).
+
+> ⛔ **EL PÁRRAFO SIGUIENTE QUEDÓ SUPERADO EL MISMO DÍA. NO LO SIGAS.** Lo sustituye ⟨D12⟩
+> (`progress/decision_183.md`): se retira la distinción en **TRES** métricas, y `egresos` **SÍ** gana
+> `ingreso_ajuste` y conserva su neto. El motivo que se lee abajo se midió contra producción y es
+> **falso**: había **cero** filas `ingreso_ajuste` y cero `egreso_ajuste`, así que el cambio no movía
+> ninguna cifra. Se conserva el texto porque explica de dónde venía la ficha.
+
+~~**Decisión humana del 2026-08-04,
 ya tomada, que el spec_author de la 183 no debe reabrir:** las cuatro métricas de caja
 (`ingreso_flete`, `ingreso_comision_cod`, `ingreso_iva`, `egresos`) **retiran la distinción
 `neto`/`bruto`** y se quedan solo con el bruto. **NO** se le da `ingreso_ajuste` a `egresos`: eso
-movería una cifra de dinero ya publicada, justo lo que la P4 de la 173 quiso evitar.
+movería una cifra de dinero ya publicada, justo lo que la P4 de la 173 quiso evitar.~~
 **Ojo al alcance de la 183:** el `neto` **no desaparece del sistema** —en la vista B (ledger de tienda)
 y en `derivarBalance` (R20 de la 127) el signo significa algo real y se conserva—. Es «retirar donde es
 degenerado», no «retirar el campo». Medido antes de dar el alta: toca el DTO, el servicio (11
