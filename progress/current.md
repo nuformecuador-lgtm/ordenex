@@ -9,45 +9,61 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 2026-08-04 — **177 en `dev` (PR #274)** · **178 lista, esperando PR**
+## 2026-08-04 — **175 y 178 cerradas** · **alta de la 182** · **EN CURSO: spec de la 180**
 
-**Feature 177 → `done`**, PR **#274** mergeado (`893cf007`). Reviewer aprobado, 0 bloqueantes, 45/45 R
-verificados uno a uno.
+### ✅ Cerradas hoy — las dos ya estaban en `dev`, lo que faltaba era el bookkeeping
 
-**Lo que la 177 deja vivo y hay que saber antes de tocar etiquetas:** el testigo de «el PDF existe» es
-la columna **`download_storage_path`**, NO `download_url`. La 136 guarda ahí una URL **ya firmada** que
-caduca; por eso se añadió la columna. Las filas heredadas se tratan como «sin PDF» y se regeneran.
+| | PR | Estado |
+|---|---|---|
+| **175** analítica: corregir el catálogo de métricas | **#277** (03-ago) | `done` |
+| **178** purga diaria de los PDF de cargas | **#284** (`e4cf28ad`) | `done` |
 
-### 🔵 EN CURSO — feature 178, purga **DIARIA** de los PDF de cargas · rama lista, falta el PR
+Ninguna de las dos esperaba un PR: ambas estaban **mergeadas** y la bitácora anterior lo decía mal.
+El detalle de cada una vive ya en `progress/history.md`; aquí solo queda lo que **condiciona trabajo
+futuro**.
 
-Rama `feature/178-purga-pdf-cargas`. **Ojo al nombre:** la cadencia es **diaria**; lo «semanal» del
-título original era el **default de la retención (N=7)**, no la frecuencia. Cron a las **03:00 CR**
-(09:00 UTC; Costa Rica es UTC−6 fijo, sin DST), protegido por `CRON_SECRET`. Corte **inclusivo** sobre
-`carga.created_at` —inmutable, a diferencia de `fecha_carga`, que es backdateable—. Retención por env,
-default 7, **mínimo 0**, sin tope.
+**La 175 no cerró su cuarta divergencia: la movió.** Su nota exigía «cerrarla o moverla a una ficha
+propia»; se movió, intacta, a la **ficha 182** recién dada de alta. **Decisión humana del 2026-08-04,
+ya tomada, que el spec_author de la 182 no debe reabrir:** las cuatro métricas de caja
+(`ingreso_flete`, `ingreso_comision_cod`, `ingreso_iva`, `egresos`) **retiran la distinción
+`neto`/`bruto`** y se quedan solo con el bruto. **NO** se le da `ingreso_ajuste` a `egresos`: eso
+movería una cifra de dinero ya publicada, justo lo que la P4 de la 173 quiso evitar.
+**Ojo al alcance de la 182:** el `neto` **no desaparece del sistema** —en la vista B (ledger de tienda)
+y en `derivarBalance` (R20 de la 127) el signo significa algo real y se conserva—. Es «retirar donde es
+degenerado», no «retirar el campo». Medido antes de dar el alta: toca el DTO, el servicio (11
+ocurrencias), los dos repos, el `TableroFinanciero` de la 132 —que pinta el `neto` como KPI principal
+con el bruto de línea secundaria, **R14/R16 de una feature `done`**— y `adaptar.ts`. Más **dos dobles
+en memoria que la 173 dejó sin tocar a propósito** esperando esta decisión:
+`tests/unit/analytics/financiera-ingresos-repo.test.ts:124` (fila cruzada `egreso_ajuste` + tipo
+`ingreso`) y `tests/unit/services/analitica-financiera-derivacion.test.ts:177`, verdes hoy **solo
+porque no pasan por el `CHECK`** de la base.
 
-**Reviewer: RECHAZADO en ronda 1, APROBADO en ronda 2.** 26/26 R. El bloqueante enseña algo que en este
-repo ya es patrón: `quedaPendiente` decía `false` habiendo trabajo, porque la comprobación se saltaba
-las `tope` filas ya devueltas **y lo purgado deja de casar el `where`** (la purga borra justo las
-columnas que hacen candidata a una carga). Con el default de 200, cualquier backlog de 201–400 mentía.
-**Lo tapaban dos tests verdes:** el de service usaba 5/2 y pasaba *por margen* con su doble replicando
-la semántica mala, y el de repositorio afirmaba `expect(arg.skip).toBe(200)` **como si fuera el
-contrato**. El reviewer reprodujo la mutación en ronda 2: 3 de 4 rojos con el caso de control verde.
+**Lo que la 177 dejó vivo y sigue vigente:** el testigo de «el PDF existe» es la columna
+**`download_storage_path`**, NO `download_url` —esta última guarda URLs firmadas ya caducadas de la
+136—. La purga de la 178 anula **las dos**; si dejara viva la primera, `/generate` se saltaría la
+generación y **firmaría un objeto ya borrado** (200 con URL que da 404).
 
-**Lo que NO puede olvidarse si se toca esta feature:** la purga anula `download_storage_path` **además
-de** `download_url`. Si se deja viva, `/generate` de la 177 se salta la generación y **firma un objeto
-ya borrado** → 200 con URL que da 404. Es R16, con test de control no vacuo.
+**⚠️ Deuda de entorno SIN DUEÑO, ajena y preexistente:** el drift de la base local (migración fantasma
+`20260728120000_...` presente en la base y ausente del repo, más un checksum modificado en
+`20260714123909_...`) hace fallar `pnpm db:migrate`. Por eso el round-trip `migrate`/`rollback` de la
+migración de la 178 **quedó sin medir**; se aplica con `prisma migrate deploy`, el mismo comando del
+build. **Sigue sin dueño.**
 
-**Fuera de alcance, declarado (no olvidado):** las órdenes con `carga_id` NULL —su PDF no caduca
-nunca— y los PDF de las features 136/141, **inalcanzables** porque de ellos solo se guardó la URL
-firmada, nunca la ruta. Esto **corrige un supuesto erróneo del `design.md` de la 177**, que daba por
-hecho que la 178 barrería sus huérfanos. Harían falta reglas de ciclo de vida del bucket: ticket aparte.
+### 🔵 EN CURSO — feature **180**, desglose por fecha de la analítica financiera · spec_author lanzado
 
-**⚠️ Deuda de entorno que impide cerrar la mitad empírica de R26:** el drift **ajeno y preexistente**
-de la base local (migración fantasma `20260728120000_...` presente en la base y ausente del repo, más
-un checksum modificado en `20260714123909_...`) hace fallar `pnpm db:migrate`, así que el round-trip
-`migrate`/`rollback` de esta migración **queda sin medir**; se aplica con `prisma migrate deploy`, el
-mismo comando del build. **Sigue sin dueño.**
+`AnaliticaFinancieraService` agrega la ventana **entera** y no publica filas por fecha ni para las
+cuatro métricas de caja ni para la cuenta por pagar de mensajeros: **hoy no existe serie temporal que
+dibujar** en el tablero financiero. Es el hueco más visible del módulo.
+
+Al spec_author se le pasaron cuatro interacciones que **debe declarar, no ignorar**: la **176** (modo
+agregado de la operativa: es el problema gemelo, y dos formas distintas de cubo temporal = dos
+contratos incompatibles), la **179** (esas filas entran en la misma caché), la **181** (el `tiendaId`
+crudo viajaría también en los cubos por fecha) y la **182** (su spec **no puede dar por hecho** que las
+métricas de caja seguirán publicando `neto`). Más el techo de **62 puntos** de la D3 de la 131/132: una
+serie por fecha sobre un rango largo lo supera, y el design tiene que decidir qué pasa —agrupar,
+recortar o rechazar el rango—, no dejarlo abierto.
+
+**Zona `backend`: 1 de 2 ocupada** (la 180). Tras cerrar 175 y 178 hay hueco para una segunda.
 
 
 ## 🏁 CIERRE DE JORNADA 2026-08-03 (tarde) — **EMPIEZA A LEER POR AQUÍ**
