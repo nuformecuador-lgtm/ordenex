@@ -70,10 +70,13 @@ export class IngresosAnaliticaRepository implements IIngresosAnaliticaRepository
    * Σ `monto` agrupada por `(categoria, tipo)` sobre las categorias del catalogo y la ventana
    * `[desde, hasta)` de `fecha_movimiento`.
    *
-   * El desglose por `tipo` NO es un capricho: de ahi salen los DOS importes de ⟨D1⟩/R37 (el
-   * `bruto` suma todo, el `neto` aplica el signo `ingreso − egreso`), y quien lo aplica es el
-   * servicio. El `orderBy` tampoco es defensivo (R28): sin el, el orden de los grupos lo decide
-   * el plan de la base y el DTO dejaria de ser reproducible sin que nada fallara.
+   * El desglose por `tipo` NO es un capricho: de ahi sale el `neto` con signo `ingreso − egreso`
+   * de ⟨D1⟩/R37, y quien lo aplica es el servicio. Desde ⟨D12⟩ (2026-08-04, feature 183) ese
+   * neto lo publican `egresos` y las dos metricas de tesoreria de la 173, no las tres `ingreso_*`
+   * —cuya lista es homogenea de prefijo, luego `Σ egreso = 0` siempre—; el desglose se sigue
+   * devolviendo igual porque esta consulta no sabe —ni tiene por que saber— quien la pide.
+   * El `orderBy` tampoco es defensivo (R28): sin el, el orden de los grupos lo decide el plan de
+   * la base y el DTO dejaria de ser reproducible sin que nada fallara.
    *
    * `_sum.monto` viene `null` solo cuando el grupo no existe —y un grupo nace de sus filas—,
    * asi que el `?? 0` de abajo es inalcanzable por la via normal; se deja porque el tipo de
