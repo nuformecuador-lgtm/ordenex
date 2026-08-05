@@ -18,6 +18,7 @@ import { listarMetricas } from "@/lib/analytics/metrics";
 import { ROLES_ANALITICA } from "@/lib/analytics/types";
 import type { RolAnalitica } from "@/lib/analytics/types";
 import type { ResultadoFinancieroVistas } from "@/lib/types/analitica-financiera";
+import { importeConNeto } from "@/tests/fixtures/importe-analitico";
 
 // Feature 129 (R1-R6, R24) — la PÁGINA de analítica resuelve el rol SOLO
 // server-side. La entrada del menú decide qué se MUESTRA; ESTA es la defensa real.
@@ -102,32 +103,39 @@ const cargarMock = vi.mocked(cargarTableroFinanciero);
  * Lleva a propósito una etiqueta de métrica y una cifra de dinero RECONOCIBLES:
  * son exactamente los textos que R2 exige que NO aparezcan para un rol sin
  * acceso. Un doble que devolviera `[]` haría pasar el test de R2 por vacío.
+ *
+ * Feature 183 ⟨D12⟩ (humano, 2026-08-04) — la métrica de la fixture pasa de
+ * `ingreso_flete` a `egresos`: desde esa decisión `ingreso_flete` publica **solo
+ * bruto**, y con ella el panel pintaría UNA cifra. Las DOS son el punto de este
+ * archivo (R2 exige que ninguna deje rastro), así que la fixture se muda a una métrica
+ * que sigue publicando las dos en vez de perder la mitad de la aserción. El id, la
+ * etiqueta, la fuente y la vista son los de `egresos`; las cifras no cambian.
  */
-const ETIQUETA_METRICA = "Ingreso por flete";
+const ETIQUETA_METRICA = "Egresos del período";
 const CIFRA_BRUTA = "918273.45";
 const CIFRA_NETA = "817263.45";
 
 const DATOS_FINANCIEROS: ResultadoFinancieroVistas = {
   tipo: "vistas",
-  metricaId: "ingreso_flete",
+  metricaId: "egresos",
   etiqueta: ETIQUETA_METRICA,
   unidad: "moneda",
   rango: { desdeFecha: "2026-07-05", hastaFecha: "2026-08-03" },
   esAcumulado: false,
   vistas: [
     {
-      id: "ingreso_flete__total",
+      id: "egresos__total",
       grano: "fecha",
       fuente: "wallet_movimiento",
       sumableCon: [],
       filas: [],
-      total: { bruto: CIFRA_BRUTA, neto: CIFRA_NETA, moneda: "__sin_leer__" },
+      total: importeConNeto(CIFRA_BRUTA, CIFRA_NETA, "__sin_leer__"),
     },
   ],
 };
 
 const PANELES: readonly PanelFinanciero[] = [
-  { estado: "ok", id: "ingreso_flete", datos: DATOS_FINANCIEROS },
+  { estado: "ok", id: "egresos", datos: DATOS_FINANCIEROS },
 ];
 
 /** Los SEIS `RolValue` del esquema, uno a uno. Ninguno se agrupa ni se omite. */

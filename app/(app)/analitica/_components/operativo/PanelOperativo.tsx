@@ -32,6 +32,7 @@ import type { Cobertura, ResultadoOperativo } from "@/lib/types/analitica-operat
 
 import { prepararPanel, type FuenteSerie } from "./agregacion";
 import type { PanelTablero } from "./catalogo-paneles";
+import { ExportarOperativoPanel } from "./ExportarOperativoPanel";
 import { serializarFiltro, type FiltroTablero } from "./filtro-tablero";
 import {
   TEXTO_ERROR_PANEL,
@@ -244,6 +245,11 @@ export function PanelOperativo({ panel, filtro }: PanelOperativoProps) {
         avisoRecorte={avisoRecorte}
         cargando={isLoading || estado.tipo === "cargando"}
       />
+      {/* Feature 134 (R19/T4.2) — UNICA insercion del export: solo con el panel en `ok`.
+          Se monta tambien con la serie vacia a proposito: quien avisa «no hay datos que
+          descargar» sin producir archivo es el control (R17), y esconderlo aqui dejaria al
+          usuario sin saber si no hay datos o si no puede descargarlos. */}
+      {estado.tipo === "ok" ? <ExportarOperativoPanel panel={panel} filtro={filtro} /> : null}
       {preparado && !preparado.vacio ? (
         <div className="flex flex-col gap-2">
           {preparado.total ? (

@@ -328,7 +328,18 @@ describe("Dinero por props · descarga", () => {
     await user.type(screen.getByRole("searchbox"), "Beto");
 
     const tabla = screen.getByRole("table", { name: "Cuentas por pagar a mensajeros" });
-    await waitFor(() => expect(within(tabla).getAllByRole("row")).toHaveLength(1 + 1));
+    // Anclar SOLO al número de filas era ambiguo, y es el tercer mecanismo del flake de jsdom
+    // (`progress/chore_flake_jsdom.md` §6): con la búsqueda resuelta en el servidor, durante la
+    // carga la tabla tiene header + la fila `role="status"` = 2, el MISMO número que el estado
+    // ya asentado (header + Beto). El ancla es positiva —Beto pintado—, con la ausencia de Ana
+    // (que `initialData` sí traía, así que «está Beto» es cierto ANTES de filtrar) y sin carga
+    // en vuelo.
+    await waitFor(() => {
+      expect(within(tabla).getByText("Beto Repartidor")).toBeInTheDocument();
+      expect(within(tabla).queryByText("Ana Mensajera")).not.toBeInTheDocument();
+      expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
+    });
+    expect(within(tabla).getAllByRole("row")).toHaveLength(1 + 1);
 
     await user.click(
       screen.getByRole("button", { name: "Descargar Cuentas por pagar a mensajeros" }),

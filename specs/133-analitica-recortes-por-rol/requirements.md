@@ -243,7 +243,9 @@ su línea y el motivo.
 > 122 le concedió). El dominio financiero no necesita guard equivalente: para `adminTienda` es
 > **prohibido entero**, así que no hay consulta desde la que sondear.
 >
-> **Consecuencia:** la ficha propuesta al final de esta sección se registró como **184** y quedó
+> **Consecuencia:** la ficha propuesta al final de esta sección se registró como **185** —nació
+> como **184** y se renumeró el 2026-08-05 al traer `dev` a esta rama, que ya había mergeado otra
+> 184 (*analítica financiera: export de la serie*) con rama y `spec_path` propios— y quedó
 > **CANCELADA sin implementar**. **R15 y R27 siguen siendo válidos y no cambian**: ocultarle el
 > selector sigue siendo correcto, y seguir prohibiendo que esa ocultación se presente como cierre
 > también — lo que cierra el agujero es el guard del borde, no la UI.

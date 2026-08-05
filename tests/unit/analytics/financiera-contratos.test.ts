@@ -15,6 +15,9 @@ import {
   esMetricaAcumulada,
 } from "@/lib/types/analitica-financiera";
 import type {
+  ImporteAnalitico,
+  ImporteConNeto,
+  ImporteSoloBruto,
   ResultadoFinanciero,
   ResultadoFinancieroConciliacion,
   ResultadoFinancieroVistas,
@@ -72,16 +75,26 @@ const COD_RECAUDADO_EJEMPLO: ResultadoFinancieroVistas = {
       grano: "metodo_pago",
       fuente: "cierre_dia",
       sumableCon: [],
-      filas: [{ cubo: "efectivo", importe: { bruto: "1000.00", neto: "1000.00", moneda: "CRC" } }],
-      total: { bruto: "1000.00", neto: "1000.00", moneda: "CRC" },
+      filas: [
+        {
+          cubo: "efectivo",
+          importe: { forma: "bruto_y_neto", bruto: "1000.00", neto: "1000.00", moneda: "CRC" },
+        },
+      ],
+      total: { forma: "bruto_y_neto", bruto: "1000.00", neto: "1000.00", moneda: "CRC" },
     },
     {
       id: VISTA_COD_RECAUDADO_POR_TIENDA,
       grano: "tienda",
       fuente: "wallet_tienda_movimiento",
       sumableCon: [],
-      filas: [{ cubo: "t-1", importe: { bruto: "600.00", neto: "600.00", moneda: "CRC" } }],
-      total: { bruto: "600.00", neto: "600.00", moneda: "CRC" },
+      filas: [
+        {
+          cubo: "t-1",
+          importe: { forma: "bruto_y_neto", bruto: "600.00", neto: "600.00", moneda: "CRC" },
+        },
+      ],
+      total: { forma: "bruto_y_neto", bruto: "600.00", neto: "600.00", moneda: "CRC" },
     },
   ],
 };
@@ -158,18 +171,94 @@ describe("R27 · ningun importe del contrato financiero es un number", () => {
 });
 
 describe("R37 · cada importe llega con bruto y neto, y son campos distintos", () => {
-  it("el contrato exige los dos campos, no uno copiado del otro", () => {
+  // ⚠️ DADO VUELTA por la feature 183 (R25: no se borra, se da vuelta). Hasta la 183 este
+  // bloque afirmaba que TODO importe trae los dos campos. ⟨D12⟩ (humano, 2026-08-04,
+  // `progress/decision_183.md`) acota R37: sigue valiendo donde el neto no es redundante por
+  // construccion —`ImporteConNeto`— y deja de aplicar a las tres metricas homogeneas de
+  // prefijo `ingreso_*`, que publican `ImporteSoloBruto`. Lo que se conserva palabra por
+  // palabra es la otra mitad: donde hay dos campos, el neto NO es una copia del bruto.
+  it("R37/183 · `ImporteConNeto` exige los dos campos, no uno copiado del otro", () => {
     // Un caso con anulacion: dos movimientos nominales que el `neto` cancela por signo.
-    const conAnulacion = { bruto: "2000.00", neto: "0.00", moneda: "CRC" };
+    const conAnulacion: ImporteConNeto = {
+      forma: "bruto_y_neto",
+      bruto: "2000.00",
+      neto: "0.00",
+      moneda: "CRC",
+    };
     expect(conAnulacion.bruto).not.toBe(conAnulacion.neto);
-    // Y el tipo no admite servir solo uno: quitar `neto` no compila.
-    // @ts-expect-error — falta `neto`: el ⟨D1⟩ obliga a los DOS importes.
-    const soloBruto: (typeof conAnulacion) & { bruto: string } = { bruto: "2000.00", moneda: "CRC" };
-    expect(soloBruto.bruto).toBe("2000.00");
+    // Y el tipo no admite servir solo uno: quitar `neto` de un `bruto_y_neto` no compila.
+    // @ts-expect-error — falta `neto`: donde el neto significa algo, ⟨D1⟩ obliga a los DOS.
+    const mutilado: ImporteConNeto = { forma: "bruto_y_neto", bruto: "2000.00", moneda: "CRC" };
+    expect(mutilado.bruto).toBe("2000.00");
+  });
+
+  it("R2/183 · leer el `neto` de un importe que no lo publica NO COMPILA", () => {
+    const soloBruto: ImporteSoloBruto = { forma: "solo_bruto", bruto: "1005.00", moneda: "CRC" };
+    // LA MUTACION QUE ESTE CASO MATA (R2): declarar el campo como `neto?: string` en el tipo
+    // compartido. Con el campo opcional esta lectura pasaria a compilar, la directiva de abajo
+    // quedaria sin usar y `pnpm run typecheck` lo delataria — que es exactamente la red que
+    // R2 pide, porque un `undefined` en ejecucion es indistinguible de «no se calculo».
+    // @ts-expect-error — R2: `ImporteSoloBruto` no tiene `neto`, ni con valor, ni en `null`.
+    const leido: string = soloBruto.neto;
+    expect(leido).toBeUndefined();
+    // Y en RUNTIME tampoco esta la clave: no es que valga `null`, es que no se serializa.
+    expect(Object.keys(JSON.parse(JSON.stringify(soloBruto)))).toEqual([
+      "forma",
+      "bruto",
+      "moneda",
+    ]);
+  });
+
+  it("R2/183 · escribir un `neto` en un importe `solo_bruto` tampoco compila", () => {
+    // El otro lado de R2: la forma no se puede ampliar por descuido desde el sitio que emite.
+    const contrabando: ImporteSoloBruto = {
+      forma: "solo_bruto",
+      bruto: "1005.00",
+      // @ts-expect-error — R2: `neto` no pertenece a `ImporteSoloBruto`, ni copiado del bruto.
+      neto: "1005.00",
+      moneda: "CRC",
+    };
+    expect(contrabando.bruto).toBe("1005.00");
+  });
+
+  it("R18/183 · la union DISCRIMINA: un `switch` sobre `forma` sin rama por defecto es total", () => {
+    // Si alguien anadiera una tercera forma sin cubrirla, `imposible` dejaria de ser `never` y
+    // esta funcion no compilaria. Es la propiedad que un campo opcional NO da (design.md §3.3).
+    function describir(importe: ImporteAnalitico): string {
+      switch (importe.forma) {
+        case "bruto_y_neto":
+          return `${importe.bruto}/${importe.neto}`;
+        case "solo_bruto":
+          return importe.bruto;
+        default: {
+          const imposible: never = importe;
+          return imposible;
+        }
+      }
+    }
+
+    const conNeto: ImporteAnalitico = {
+      forma: "bruto_y_neto",
+      bruto: "800.00",
+      neto: "0.00",
+      moneda: "CRC",
+    };
+    const sinNeto: ImporteAnalitico = { forma: "solo_bruto", bruto: "1005.00", moneda: "CRC" };
+    expect(describir(conNeto)).toBe("800.00/0.00");
+    expect(describir(sinNeto)).toBe("1005.00");
+
+    // Y sin estrechar por `forma` el compilador no deja leer el neto de la union entera.
+    // @ts-expect-error — R2: `ImporteAnalitico` solo garantiza `bruto` y `moneda`.
+    expect(sinNeto.neto).toBeUndefined();
   });
 
   it("el neto puede ser negativo y sigue siendo STRING escala 2", () => {
-    const saldoNegativo = { bruto: "500.00", neto: "-123.45", moneda: "CRC" };
+    const saldoNegativo: ImporteConNeto = {
+      forma: "bruto_y_neto",
+      bruto: "500.00",
+      neto: "-123.45",
+      moneda: "CRC",
+    };
     expect(typeof saldoNegativo.neto).toBe("string");
     expect(saldoNegativo.neto).toMatch(/^-?\d+\.\d{2}$/);
   });

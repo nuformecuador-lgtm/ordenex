@@ -32,7 +32,8 @@
       faceta que el alcance ya fija (Q3); no ofrecer selectores cuyo catálogo responde `forbidden`,
       para no dejar controles muertos (Q4); rótulo por tipo de alcance, sin identificadores (Q5);
       E2E de los 3 roles nuevos + `maestro` (Q6); y la ficha del oráculo **ya registrada por el
-      leader como la 184** (Q7).
+      leader como la 185** (Q7) —nació como 184 y se renumeró el 2026-08-05 al traer `dev`, que
+      ya había mergeado otra 184 con rama propia—.
 
 ---
 

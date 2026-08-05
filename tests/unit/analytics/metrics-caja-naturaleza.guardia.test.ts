@@ -131,16 +131,45 @@ describe("egresos: gana el pago a tienda por diseno, y nada mas", () => {
     expect(tercerosDeclaradasPor("egresos")).toEqual(["egreso_pago_tienda"]);
   });
 
-  it("y NO gana el reverso de la anulacion ni ningun ingreso: eso es territorio de la 175", () => {
-    // El reverso (`ingreso_reverso_pago_tienda`) y `ingreso_ajuste` son INGRESOS. Meterlos en
-    // una metrica llamada «Egresos» cambiaria el numero de una cifra de dinero ya publicada, y
-    // la autorizacion de la 173 lo excluye por escrito. El hallazgo del neto/bruto (§H7/§H10 de
-    // `progress/impl_173-caja-tesoreria.md`) esta dirigido a la 175.
+  // ⚠️ DADO VUELTA por la feature 183 (R25: se da vuelta, NO se borra). Hasta ⟨D12⟩ este caso
+  // afirmaba «ocho categorias, TODAS `egreso_*`, y NO contiene `ingreso_ajuste`», y remitia el
+  // hallazgo del neto/bruto (§H7/§H10 de `progress/impl_173-caja-tesoreria.md`) a la 175.
+  // ⟨D12⟩ (humano, 2026-08-04, `progress/decision_183.md`) lo resolvio al reves de como la
+  // `status_note` de la ficha suponia: `egresos` GANA `ingreso_ajuste` —el reverso que
+  // `WalletEgresoService` emite al anular un egreso— porque sin el, anular un egreso no lo
+  // descontaba nunca de la cifra. Medido antes de decidir: cero filas `ingreso_ajuste` en
+  // produccion, luego el cambio no mueve hoy ningun numero.
+  //
+  // Lo que el caso protege NO cambia: que la lista no se llene de ingresos ajenos. Por eso
+  // sigue afirmando que el reverso del pago a tienda queda FUERA y que la unica categoria de
+  // terceros sigue siendo `egreso_pago_tienda` (R51 de la 173 intacto: `ingreso_ajuste` es
+  // `propio`, y por eso entrar en `egresos` no lo convierte en dinero de terceros).
+  it("gana `ingreso_ajuste` y NADA mas: el reverso del pago a tienda sigue fuera", () => {
     const categorias = getMetrica("egresos")?.definicion.categorias ?? [];
-    expect(categorias).toHaveLength(8);
-    expect(categorias.every((c) => c.startsWith("egreso_"))).toBe(true);
+
+    expect(categorias).toHaveLength(9);
+    // Las OCHO historicas, sin que falte ninguna: sustituir una por `ingreso_ajuste` en vez de
+    // anadirla —la mutacion que R5 nombra— deja aqui una lista corta.
+    expect(categorias.filter((c) => c.startsWith("egreso_"))).toEqual([
+      "egreso_pago_tienda",
+      "egreso_pago_mensajero",
+      "egreso_gasto",
+      "egreso_sueldo",
+      "egreso_ajuste",
+      "egreso_gasto_fijo",
+      "egreso_gasto_variable",
+      "egreso_indemnizacion",
+    ]);
+    // Y la novena, la unica que no es `egreso_*`.
+    expect(categorias.filter((c) => !c.startsWith("egreso_"))).toEqual(["ingreso_ajuste"]);
+    // El reverso del pago a TIENDA sigue fuera: es dinero de terceros y meterlo aqui cambiaria
+    // lo que la cifra significa, no solo cuanto vale.
     expect(categorias).not.toContain("ingreso_reverso_pago_tienda");
-    expect(categorias).not.toContain("ingreso_ajuste");
+    expect(categorias).not.toContain("ingreso_cod_recaudado");
+    // R51/173 intacto: la unica de terceros sigue siendo el pago a la tienda.
+    expect(tercerosDeclaradasPor("egresos")).toEqual(["egreso_pago_tienda"]);
+    // R13/183 — y `ingreso_ajuste` NO se reclasifico para «que no cuente»: sigue siendo propio.
+    expect(NATURALEZA_POR_CATEGORIA.ingreso_ajuste).toBe("propio");
   });
 });
 
@@ -173,6 +202,44 @@ function declaraElCambioDe173(descripcion: string): boolean {
     /dinero entregado a las tiendas/.test(d) && // QUE entra en la cifra
     /(desde|a partir de)[^.]*\b173\b/.test(d) && // DESDE CUANDO, y por que feature
     /incluye/.test(d) // dicho como inclusion, no como un aviso vago
+  );
+}
+
+/**
+ * La `descripcion` de `egresos` TAL Y COMO ESTABA ANTES DE LA 183, copiada literal del estado
+ * que dejo la 173. Misma tecnica y misma razon que el fixture de arriba: es el texto contra el
+ * que se demuestra que la asercion de R11 DISCRIMINA. Sin este fixture, borrar la clausula
+ * nueva dejaria la suite entera en verde —el defecto exacto que el reviewer de la 173 encontro
+ * y que `progress/current.md:169-171` documenta—, porque el unico guardia que mira TODAS las
+ * descripciones (`metrics.test.ts`, «cita las gestiones anuladas») lo pasa este texto igual de
+ * bien que el nuevo: los dos terminan en la misma coletilla.
+ */
+const DESCRIPCION_EGRESOS_PRE_183 =
+  "Salidas de la caja principal (pagos a tienda y mensajero, sueldos, gastos fijos y variables, " +
+  "indemnizaciones y ajustes) segun el libro append-only de la wallet; DESDE LA FEATURE 173 " +
+  "incluye el dinero ENTREGADO A LAS TIENDAS, que antes ninguna via emitia, asi que su cifra " +
+  "crece a partir de esa fecha sin que su id ni su nombre cambien y no es comparable con la de " +
+  "antes. Se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que " +
+  "contar.";
+
+/**
+ * Lo que R11 de la 183 exige DE UN TEXTO. Cuatro piezas, y las cuatro son informacion que quien
+ * mira la cifra necesita:
+ *   1. DESDE CUANDO y por que feature se descuenta la anulacion;
+ *   2. que la anulacion de un egreso SE DESCUENTA de esta cifra (el cambio de significado);
+ *   3. COMO: nombrando `ingreso_ajuste`, que es la categoria que entra en la definicion;
+ *   4. que el BRUTO cuenta los DOS movimientos (respuesta ratificada a la P1 del spec: el bruto
+ *      es volumen movido ⟨D1(c)⟩, asi que anular un pago de 400 lo SUBE a 800).
+ * Se escribe como predicado, y no como cuatro `expect` sueltos, para poder aplicarselo tambien
+ * al texto pre-183 y demostrar en el propio archivo que separa los dos casos.
+ */
+function declaraElDescuentoDe183(descripcion: string): boolean {
+  const d = descripcion.toLowerCase();
+  return (
+    /(desde|a partir de)[^.;]*\b183\b/.test(d) && // 1
+    /anulacion[^.]*se descuenta/.test(d) && // 2
+    /ingreso_ajuste/.test(d) && // 3
+    /el bruto cuenta los dos movimientos/.test(d) // 4
   );
 }
 
@@ -215,6 +282,59 @@ describe("R53/R54 · lo que las descripciones del catalogo declaran de la caja e
     // ambos terminan en la misma coletilla. Es decir: R53 podia revertirse con la suite entera en
     // verde. Se comprueba aqui, sobre el texto viejo, en vez de confiarlo a la lectura del PR.
     expect(DESCRIPCION_EGRESOS_PRE_173.toLowerCase()).toMatch(/gestion(es)? anulada|anulada_at/);
+  });
+
+  it("R11/183 · la de `egresos` dice que DESDE LA 183 la anulacion se DESCUENTA de la cifra", () => {
+    const descripcion = getMetrica("egresos")?.descripcion ?? "";
+    const d = descripcion.toLowerCase();
+
+    // Las cuatro piezas por separado, para que el rojo diga CUAL falta y no solo que algo falta.
+    expect(d, "no dice desde cuando ni por que feature").toMatch(/(desde|a partir de)[^.;]*\b183\b/);
+    expect(d, "no dice que la anulacion se descuenta de la cifra").toMatch(
+      /anulacion[^.]*se descuenta/,
+    );
+    expect(d, "no nombra la categoria del reverso que entra en la definicion").toContain(
+      "ingreso_ajuste",
+    );
+    // P1 del spec, ratificada: el bruto es VOLUMEN MOVIDO y sube al anular. Sin esta frase la
+    // cifra se lee como «hubo mas egresos» cuando hubo menos, y nadie sabria por que.
+    expect(d, "no declara que el bruto cuenta los dos movimientos (P1 / ⟨D1(c)⟩)").toContain(
+      "el bruto cuenta los dos movimientos",
+    );
+    expect(declaraElDescuentoDe183(descripcion), "la descripcion de `egresos` no cumple R11").toBe(
+      true,
+    );
+
+    // Y lo que ya declaraba SIGUE en pie: la clausula nueva no sustituyo a las anteriores.
+    expect(d).toContain("salidas de la caja principal");
+    expect(declaraElCambioDe173(descripcion), "la 183 se llevo por delante R53 de la 173").toBe(
+      true,
+    );
+    expect(d).toMatch(/gestion(es)? anulada/);
+  });
+
+  it("y la asercion discrimina: el texto PRE-183 no la pasa, aunque ya hablaba de ajustes", () => {
+    // AUTOCOMPROBACION, y es la mitad del valor del caso anterior. Sin esto, `toMatch(/ajuste/)`
+    // habria bastado para dar verde: el texto viejo ya enumeraba «indemnizaciones y ajustes».
+    // La diferencia entre los dos textos no es que uno nombre los ajustes: es que uno declara el
+    // CAMBIO de significado de la cifra.
+    expect(DESCRIPCION_EGRESOS_PRE_183.toLowerCase()).toContain("ajustes");
+    expect(declaraElDescuentoDe183(DESCRIPCION_EGRESOS_PRE_183)).toBe(false);
+    expect(declaraElDescuentoDe183(getMetrica("egresos")?.descripcion ?? "")).toBe(true);
+
+    // El texto pre-183 pasa TODOS los demas guardias de descripcion del repo: el de R53 de la
+    // 173 y el de las gestiones anuladas de `metrics.test.ts`. Es decir: revertir la clausula de
+    // la 183 dejaria la suite entera en verde si este caso no existiera.
+    expect(declaraElCambioDe173(DESCRIPCION_EGRESOS_PRE_183)).toBe(true);
+    expect(DESCRIPCION_EGRESOS_PRE_183.toLowerCase()).toMatch(/gestion(es)? anulada|anulada_at/);
+
+    // Y el fixture es el texto de VERDAD, no una parafrasis: es el actual menos la clausula
+    // nueva. Si alguien reescribiera la descripcion entera, esto obliga a actualizar el fixture
+    // en vez de dejarlo como un recuerdo que ya no representa a nada.
+    const actual = getMetrica("egresos")?.descripcion ?? "";
+    expect(actual).not.toBe(DESCRIPCION_EGRESOS_PRE_183);
+    expect(actual.startsWith("Salidas de la caja principal (pagos a tienda y mensajero")).toBe(true);
+    expect(actual.endsWith("las gestiones anuladas no generan movimiento que contar.")).toBe(true);
   });
 
   it("R54 · `dinero_en_caja` y `ganancia_ordenex` tienen descripcion PROPIA, no prestada", () => {

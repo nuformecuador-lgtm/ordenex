@@ -10,11 +10,32 @@ import userEvent from "@testing-library/user-event";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import { PagosRegistradosTabla } from "@/components/shared/liquidacion/PagosRegistradosTabla";
+import { descargarBlob } from "@/components/shared/descargar-blob";
+import { buildXlsxRows } from "@/lib/utils/xlsx-template";
 import type { PagoRegistradoDTO } from "@/lib/types/liquidacion";
 import {
   LLAMADAS_PROHIBIDAS_EN_DINERO,
   codigoSinComentarios,
 } from "@/tests/fixtures/money-safe";
+
+// Se aísla SOLO el codificador binario (exceljs) y la entrega del blob, igual que hacen los
+// otros cinco archivos de descarga del repo (`SateliteDescarga`, `WalletDescarga`,
+// `WalletPropsDescarga`, `ColasPaginacion`, `SatelitePaginacion`). `construirDescarga` —la
+// proyección, que es lo que este archivo juzga— sigue corriendo REAL.
+//
+// Este archivo era el ÚNICO de los seis que ejecutaba exceljs de verdad, y eso lo pagaba el
+// reloj: la señal de «la descarga terminó» quedaba detrás de una compresión real, que bajo la
+// suite completa no cabe en el presupuesto de un `waitFor`. Aislar el codificador no debilita
+// nada aquí —ninguna aserción de este archivo mira el binario— y deja la señal donde el caso
+// la necesita: en la proyección.
+vi.mock("@/components/shared/descargar-blob", () => ({ descargarBlob: vi.fn() }));
+const descargarBlobMock = vi.mocked(descargarBlob);
+
+vi.mock("@/lib/utils/xlsx-template", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils/xlsx-template")>();
+  return { ...actual, buildXlsxRows: vi.fn(async () => new ArrayBuffer(8)) };
+});
+const buildXlsxRowsMock = vi.mocked(buildXlsxRows);
 
 // --- Datos ---------------------------------------------------------------
 
@@ -439,10 +460,26 @@ describe("descarga — Familia B, sobre lo que ya está en el cliente", () => {
     montar([VIGENTE, ANULADO]);
 
     await user.click(screen.getByRole("button", { name: `Descargar ${TITULO}` }));
-    await waitFor(() =>
-      expect(screen.queryAllByText(/No hay datos que descargar/)).toHaveLength(0),
-    );
+    // Contar cuántos avisos NO hay es un ancla que el estado transitorio también cumple: cero
+    // avisos es cierto también ANTES de que la descarga empiece, así que esa espera no esperaba
+    // nada. La señal POSITIVA es que la PROYECCIÓN ya ocurrió: `buildXlsxRows` recibe las filas
+    // ya proyectadas, y ninguna relectura podría venir después de ese punto (releer es lo
+    // primero que haría una Familia A). No se ancla a que el BOTÓN vuelva a estar pulsable
+    // porque eso espera además a que el codificador termine —trabajo real de CPU—, y bajo la
+    // suite completa esa espera no cabe en el presupuesto de un `waitFor`.
+    // Se espera al ÚLTIMO paso (la entrega del blob) y no al primero: `descargarBlob` corre
+    // después de `buildXlsxRows`, así que cuando ésta se cumple la proyección ya está hecha y
+    // leerla a continuación no es una carrera. Anclar a `buildXlsxRows` y afirmar la entrega
+    // acto seguido sería el segundo mecanismo del flake, con otro disfraz.
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    // Ninguna petición: el archivo sale del array que la tabla ya tiene (Familia B).
     expect(fetchSpy).not.toHaveBeenCalled();
+    // Y «el mismo array que pinta», que es lo que el título promete y antes no se comprobaba:
+    // los DOS comprobantes, en el orden de la pantalla y con el monto STRING intacto.
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas.map((f) => f.monto)).toEqual([VIGENTE.monto, ANULADO.monto]);
+    expect(screen.queryByText(/No hay datos que descargar/)).not.toBeInTheDocument();
     fetchSpy.mockRestore();
   });
 

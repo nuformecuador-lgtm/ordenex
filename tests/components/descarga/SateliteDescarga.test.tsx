@@ -250,7 +250,14 @@ describe("Órdenes de la bodega satélite · descarga", () => {
     // La etiqueta del cantón desambigua con la provincia (feature 117).
     await filtrarPor(user, "Cantón", "Pococí (Limón)");
     const tabla = screen.getByRole("table", { name: "Órdenes de la bodega" });
-    await waitFor(() => expect(within(tabla).getAllByRole("row")).toHaveLength(2 + 1));
+    // El conteo NO basta como ancla: durante la carga el `DataTable` pinta un `<tr>` con
+    // `role="status"` («Cargando») y filas skeleton `aria-hidden` que no cuentan como `row`,
+    // así que hay instantes en los que el número cuadra con la tabla a medio cargar. Se exige
+    // además que no quede carga en vuelo.
+    await waitFor(() => {
+      expect(within(tabla).getAllByRole("row")).toHaveLength(2 + 1);
+      expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
+    });
 
     await user.click(botonDescarga());
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
@@ -261,7 +268,10 @@ describe("Órdenes de la bodega satélite · descarga", () => {
 
     // Se añade el filtro de estado (AND con el de cantón): queda una sola.
     await filtrarPor(user, "Estado", "Recibidas");
-    await waitFor(() => expect(within(tabla).getAllByRole("row")).toHaveLength(1 + 1));
+    await waitFor(() => {
+      expect(within(tabla).getAllByRole("row")).toHaveLength(1 + 1);
+      expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
+    });
 
     await user.click(botonDescarga());
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(2));
