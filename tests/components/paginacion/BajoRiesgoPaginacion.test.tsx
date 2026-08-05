@@ -69,6 +69,11 @@ const { paginado, completo } = vi.hoisted(() => ({
     // ausencia no puede ser lo que explique que ya no se llame.
     cierresHistoricoCompleto: vi.fn(),
     bodegaAdmin: vi.fn(),
+    // Feature 184 — Tanda E (T E.3): «Cierres de bodega resueltos» ya no saca su archivo del
+    // listado compuesto (`bodegaAdmin`), que traía la cola además del histórico, sino de su
+    // lectura DEDICADA. El doble del compuesto se conserva: la pantalla lo seguía usando y su
+    // ausencia no puede ser lo que explique que ya no se llame.
+    bodegaHistoricoCompleto: vi.fn(),
     consolidacion: vi.fn(),
     // Feature 184 — Tanda B (T B.2): «Cierres de bodega solicitados» ya no saca su archivo del
     // listado compuesto (`consolidacion`), sino de su lectura DEDICADA. El doble del compuesto
@@ -115,6 +120,10 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   // control de descarga de esa tabla llama a `undefined` y el archivo no sale.
   listarCierresBodegaSolicitadosCompleto: (...a: unknown[]) =>
     completo.bodegaSolicitados(...a),
+  // Feature 184 — Tanda E (T E.3): la lectura dedicada del listado 5. Sin declararla aquí, el
+  // control de descarga de esa tabla llama a `undefined` y el archivo no sale.
+  listarHistoricoCierresBodegaCompleto: (...a: unknown[]) =>
+    completo.bodegaHistoricoCompleto(...a),
   listarHistoricoCierresBodegaPaginado: (...a: unknown[]) =>
     paginado.bodegaResueltos(...a),
   listarCierresBodegaSolicitadosPaginado: (...a: unknown[]) =>
@@ -418,6 +427,12 @@ const LISTADOS: Listado[] = [
       const todos = conjunto(cierreBodega);
       servirPaginas(paginado.bodegaResueltos, todos);
       servirPaginas(paginado.bodegaPendientes, []);
+      // Feature 184 — Tanda E (T E.3): de aquí sale el archivo (R52), sin recorte.
+      completo.bodegaHistoricoCompleto.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
       completo.bodegaAdmin.mockResolvedValue({
         status: "ok",
         pendientes: [],

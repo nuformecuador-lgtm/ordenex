@@ -240,10 +240,12 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_BODEGA_PENDIENTES_LABEL",
   },
   {
+    // Feature 184 — Tanda E (T E.3/T E.4): el gemelo del anterior, y la otra mitad del mismo
+    // listado compuesto. Aquí lo que se arrastraba era la cola; allí, el histórico.
     listado: "Cierres de bodega resueltos",
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_RESUELTOS_LABEL",
   },
   {
@@ -335,9 +337,9 @@ const PENDIENTES_184: readonly string[] = [
   // cola de pendientes— salieron de aquí, cada uno en el MISMO commit que su pantalla.
   // Quedan SEIS.
   //
-  // Feature 184 — Tanda E: «Cierres de bodega pendientes» salió de aquí en el MISMO commit que
-  // su pantalla. Quedan CINCO.
-  "Cierres de bodega resueltos",
+  // Feature 184 — Tanda E: los DOS listados de «Cierres de bodega» del admin —la cola de
+  // pendientes y el histórico de resueltos— salieron de aquí, cada uno en el MISMO commit que
+  // su pantalla. Quedan CUATRO.
   // Feature 184 — Tanda B: los DOS listados de la consolidación —«Cierres de bodega
   // solicitados» y «Cierres del día a consolidar»— salieron de aquí, cada uno en el MISMO
   // commit que su pantalla. Quedan NUEVE.
