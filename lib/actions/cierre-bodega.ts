@@ -17,9 +17,13 @@ import {
   aprobarCierreBodegaSchema,
   rechazarCierreBodegaSchema,
   listarCierresBodegaPaginadoSchema,
+  listarCierresBodegaSolicitadosCompletoSchema,
   listarConsolidablesSchema,
+  listarConsolidablesCompletoSchema,
   type ListarConsolidacionResult,
   type ListarConsolidablesResult,
+  type ListarCierresBodegaSolicitadosCompletoResult,
+  type ListarConsolidablesCompletoResult,
   type SolicitarCierreBodegaResult,
   type ListarCierresBodegaAdminResult,
   type ListarCierresBodegaSolicitadosResult,
@@ -193,6 +197,56 @@ export async function listarConsolidablesPaginado(
     const data = listarConsolidablesSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierreBodegaService ?? buildCierreBodegaService();
     return service.listarConsolidablesPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda B (R1/R6/R7/R10) — el CONJUNTO de «Cierres de bodega solicitados» de la
+ * zona del actor, sin recorte, para producir el archivo.
+ *
+ * Sustituye a la relectura de `listarConsolidacion()` que hacia la pantalla, que traia ademas
+ * los consolidables, el contador de pendientes y los cinco agregados de dinero con su reparto de
+ * efectivo — de todo eso, el archivo usaba un solo campo.
+ *
+ * La zona NO viaja en el input: la resuelve el servicio desde el actor. Y como este listado no
+ * tiene filtros, la lista blanca derivada de la de su pagina no deja NINGUNA clave: cualquier
+ * cosa que llegue —empezando por `zonaId`— muere aqui con `validation_error` sin tocar el
+ * servicio (R17). El input se parsea aunque no se transporte nada: parsear ES la barrera.
+ */
+export async function listarCierresBodegaSolicitadosCompleto(
+  input: unknown = {},
+  deps: CierreBodegaDeps = {},
+): Promise<ListarCierresBodegaSolicitadosCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarCierresBodegaSolicitadosCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierreBodegaService ?? buildCierreBodegaService();
+    return service.listarCierresBodegaSolicitadosCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda B (R1/R6/R7/R10) — el CONJUNTO de «Cierres del dia a consolidar» de la
+ * zona del actor, sin recorte, para producir el archivo.
+ *
+ * Espejo del de arriba, y con el mismo motivo: descargar esta tabla no tiene por que costar los
+ * cinco agregados de dinero de su cabecera ni el reparto del efectivo entre todos los pagos de
+ * la zona. Esos numeros los sigue produciendo `listarConsolidacion` para la PANTALLA, sobre el
+ * mismo conjunto y sin cambiar (R49 de la 170).
+ */
+export async function listarConsolidablesCompleto(
+  input: unknown = {},
+  deps: CierreBodegaDeps = {},
+): Promise<ListarConsolidablesCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarConsolidablesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierreBodegaService ?? buildCierreBodegaService();
+    return service.listarConsolidablesCompleto(actor);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }

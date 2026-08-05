@@ -5,11 +5,14 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   ICierreBodegaService,
+  ListarCierresBodegaSolicitadosCompletoServiceResult,
   ListarCierresBodegaSolicitadosServiceResult,
+  ListarConsolidablesCompletoServiceResult,
   ListarConsolidablesServiceResult,
   ListarConsolidacionServiceResult,
   SolicitarCierreBodegaServiceResult,
 } from "@/lib/interfaces/services/ICierreBodegaService";
+import { descargaConfig } from "@/lib/config/descarga";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 // Solo el rol autorizado (R1): el adminSatelite, SIEMPRE acotado a SU zona (el filtro
@@ -308,6 +311,79 @@ export class CierreBodegaService implements ICierreBodegaService {
       pageSize: input.pageSize,
       total, // R41/R42: el total del CONJUNTO, nunca `items.length`
     };
+  }
+
+  /**
+   * Feature 184 — Tanda B (R1/R4/R6/R10) — el CONJUNTO de «Cierres de bodega solicitados» de la
+   * zona, sin recorte, que es del que sale el archivo.
+   *
+   * **Lo que cierra.** Hasta hoy ese archivo se producia releyendo `listarConsolidacion()`, que
+   * es el listado COMPUESTO de la otra pantalla: cuatro consultas (la zona, los consolidables,
+   * el contador de pendientes y este historico), los cinco agregados de dinero y el reparto del
+   * efectivo entre todos los pagos individuales ordenados. De todo eso, el archivo usaba UN
+   * campo. Aqui son DOS consultas —la zona y el listado— y ni un calculo de dinero (R10).
+   *
+   * **No lleva `input`, y es deliberado.** Este listado no admite filtros: su schema de pagina
+   * solo tenia `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El borde la
+   * sigue aplicando —una clave colada, `zonaId` incluida, muere alli con `validation_error`
+   * (R17)— pero no hay nada que transportar hasta aqui. El alcance sale del actor, como en la
+   * pagina.
+   *
+   * Sin zona -> conjunto vacio, no `forbidden`: el rol tiene acceso al modulo, lo que no tiene
+   * es alcance. Es lo mismo que devuelve hoy `listarConsolidacion` (`cierresBodegaPasados: []`).
+   */
+  async listarCierresBodegaSolicitadosCompleto(
+    actor: Actor,
+  ): Promise<ListarCierresBodegaSolicitadosCompletoServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R4: antes del repo
+
+    const zonaId = await this.ordenRepo.findUsuarioZonaId(actor.usuarioId); // R4
+    if (zonaId === null) return { status: "ok", items: [], total: 0 };
+
+    // El MISMO metodo del que la pagina saca su recorte: mismo where, mismo orden y —lo que en
+    // una pantalla de dinero no es estilo— el MISMO mapper de totales.
+    const conjunto = await this.repo.findCierresBodegaByZona(zonaId);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return { status: "ok", items: conjunto, total: conjunto.length };
+  }
+
+  /**
+   * Feature 184 — Tanda B (R1/R4/R6/R10) — el CONJUNTO de «Cierres del dia a consolidar» de la
+   * zona, sin recorte, para el archivo.
+   *
+   * Comparte con el de arriba la relectura que evita: la pantalla de consolidacion pedia el
+   * listado compuesto entero —incluido el historico de cierres de bodega, que este archivo no
+   * usa— y con el los cinco agregados y `repartirEfectivo`, que ordena TODOS los pagos
+   * individuales de la zona. El archivo no necesita ninguno de esos numeros: la cabecera los
+   * sigue recibiendo por `listarConsolidacion` (R49 de la 170), calculados sobre este mismo
+   * conjunto. Aqui se leen las filas y se acaba.
+   *
+   * Sin `input` por el mismo motivo que su hermano: cero filtros, cero claves en la lista
+   * blanca, alcance desde el actor.
+   */
+  async listarConsolidablesCompleto(
+    actor: Actor,
+  ): Promise<ListarConsolidablesCompletoServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R4: antes del repo
+
+    const zonaId = await this.ordenRepo.findUsuarioZonaId(actor.usuarioId); // R4
+    if (zonaId === null) return { status: "ok", items: [], total: 0 };
+
+    // El MISMO metodo que alimenta la pagina y los agregados: un conjunto, no dos parecidos.
+    const conjunto = await this.repo.findCierresDiaConsolidables(zonaId);
+
+    const limite = descargaConfig.MAX_FILAS;
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite }; // R6
+    }
+
+    return { status: "ok", items: conjunto, total: conjunto.length };
   }
 
   async solicitarCierreBodega(actor: Actor): Promise<SolicitarCierreBodegaServiceResult> {

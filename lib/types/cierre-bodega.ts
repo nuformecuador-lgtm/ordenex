@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cierreConfig } from "@/lib/config/cierre";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
 import type {
@@ -68,6 +69,38 @@ export const listarConsolidablesSchema = paginaInputSchema(cierreConfig);
 
 export type ListarConsolidablesInput = z.infer<typeof listarConsolidablesSchema>;
 
+/**
+ * Feature 184 — Tanda B (R17) — entrada de los DOS conjuntos de esta tanda: el de «Cierres de
+ * bodega solicitados» y el de «Cierres del dia a consolidar».
+ *
+ * Se DERIVAN del schema de su pagina quitando `page`/`pageSize`, igual que los `…CompletoSchema`
+ * de la 170: asi los dos caminos —la tabla y el archivo— no pueden entender cosas distintas por
+ * «entrada». Como ninguno de los dos listados tiene filtros, lo que queda es una lista blanca de
+ * CERO claves, que es exactamente lo correcto: la zona sale del actor y nunca de la peticion, y
+ * un `zonaId` colado —el que abriria el dinero de la bodega vecina— muere aqui con
+ * `validation_error` sin llegar al servicio (R4/R17).
+ *
+ * Son dos constantes y no una, aunque hoy su forma coincida, por el mismo motivo por el que sus
+ * hermanas paginadas son dos: si manana uno de los dos listados gana un filtro, lo gana en su
+ * schema de pagina y lo hereda AQUI, sin arrastrar al otro.
+ *
+ * `.strict()` se reescribe aunque `.omit()` lo herede: la barrera es de ESTOS listados y no debe
+ * depender de que el schema base nunca se afloje.
+ */
+export const listarCierresBodegaSolicitadosCompletoSchema = listarCierresBodegaPaginadoSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarCierresBodegaSolicitadosCompletoInput = z.infer<
+  typeof listarCierresBodegaSolicitadosCompletoSchema
+>;
+
+export const listarConsolidablesCompletoSchema = listarConsolidablesSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarConsolidablesCompletoInput = z.infer<typeof listarConsolidablesCompletoSchema>;
+
 /** Errores de BORDE de los listados de este modulo (dominio + los dos que resuelve la action). */
 export type CierreBodegaListadoError =
   | { status: "forbidden" }
@@ -97,6 +130,18 @@ export type ListarConsolidablesResult = ListarPaginadoResult<
   CierreBodegaResumenLite,
   CierreBodegaListadoError
 >;
+
+/**
+ * Feature 184 — Tanda B (R6/R7) — los dos conjuntos tal como los recibe el cliente.
+ *
+ * Union de error ANCHO (`ActionError`, dentro de `ListarCompletoResult`) y no el estrecho de la
+ * pagina: quien los consume es `filasDesdeResultado`, el adaptador comun de la descarga, que
+ * redacta el mensaje de CUALQUIER error de borde en un solo sitio. `limite_excedido` lleva SOLO
+ * conteos, jamas filas ni un conjunto truncado (R6).
+ */
+export type ListarCierresBodegaSolicitadosCompletoResult =
+  ListarCompletoResult<CierreBodegaResumen>;
+export type ListarConsolidablesCompletoResult = ListarCompletoResult<CierreBodegaResumenLite>;
 
 // Resultados de las Server Actions: resultado de dominio del service +
 // `unauthenticated` (sin sesion, lo resuelve el borde). Para ver-detalle/aprobar se
