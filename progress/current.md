@@ -9,6 +9,50 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🚦 2026-08-05 — **180 en revisión humana: PR #295 abierto**
+
+**180 (`analitica financiera: desglose por fecha`)** implementada, revisada y con el gate completo
+verde. **PR [#295](https://github.com/nuformecuador-lgtm/ordenex/pull/295) → `dev`, esperando merge.**
+Worktree `C:/wser`, rama `feature/180-analitica-financiera-serie-temporal` (de `dev` @ `805fb253`).
+
+- Review `progress/review_180.md`: **APROBADO-CON-NOTAS, cero bloqueantes**. Bitácora `impl_180.md`.
+- **32/32 R** a test nombrado por comportamiento. **19 mutaciones, 18 muertas**; la 19 no es matable
+  por comportamiento y está declarada, no escondida.
+- Gate: **942 archivos / 11 775 tests, 0 fallos** (baseline `dev` 930 / 11 626 → **+149, cero
+  regresiones**), lint 0 errores, `tsc` limpio, `next build` verde.
+
+### Lo que esta feature enseñó, y que sirve para las siguientes
+
+1. **La Q5 de su propia spec preguntaba por una feature que ya había aterrizado.** Era la 183, `done`
+   y en producción, y además **no hizo lo que su ficha anunciaba**. Segunda vez en dos días (la otra
+   fue M-4 en la 133): **entre que una deuda se anota y se lee, otra feature puede haberla saldado**.
+   Comprobar en el código antes de planificar contra una ficha.
+2. **`listasDeIdsAMano` no cubre lo que su nombre promete**: solo marca arrays de **dos o más** ids,
+   así que una decisión por id suelto pasa verde. Está **medido** (censo propio rojo / guardia
+   heredado verde 24/24). Sigue vivo para quien toque el tablero financiero — avisado en la ficha 185.
+3. **La API se cayó cuatro veces** (522 de Cloudflare) matando implementer y reviewer. Lo que estaba
+   commiteado sobrevivió intacto; lo que vivía en el working tree hubo que reconstruirlo dos veces.
+   **Pedir tandas commiteadas pronto y bitácora incremental** cuando la plataforma esté inestable.
+
+### Deudas vivas que deja, con dueño
+
+- **186** (backend): el **R12 es cierto en los tests y NO está garantizado en runtime** — total y
+  filas son dos consultas sin transacción. **No arreglarlo sumando las filas**: eso lo convierte en
+  tautología.
+- **185** (frontend): la gráfica de líneas que la Q4 dejó fuera a propósito. **Debe leer
+  `granularidad` del DTO**: un rango largo llega en cubos **semanales**, y etiquetarlos como días
+  miente sin poner ningún test en rojo.
+- `⟨L4⟩` el `bruto` de `cuenta_por_pagar_mensajero` pasó a `devengo + pago`: hoy idéntico, pero un
+  tercer valor del enum se caería en silencio.
+
+### También en el aire
+
+- **PR #292 (feature 133)** sigue **abierto**, esperando merge humano.
+- **134** (export CSV) está **en vuelo en otra sesión** (`C:/w134`, puerta T0 cerrada). No tocar.
+- **176**: su código ya está en `dev` (diff vacío); solo el registro se quedó en `in_progress`.
+
+---
+
 ## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo — **EMPIEZA A LEER POR AQUÍ**
 
 **183 `done`.** PR **#288** → `dev`, release **#289** → `prod` (**cero migraciones**), despliegue
