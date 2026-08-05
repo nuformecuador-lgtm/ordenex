@@ -316,3 +316,42 @@ firma no consumidos por un doble. **Cero errores** y **cero warnings** en los di
 El test de integracion (`tests/integration/repositories/financiera-cubo-temporal.integration.test.ts`)
 se salta solo sin `DATABASE_URL` y se corrio contra la base real pasandola **inline**; nunca se
 escribio un `.env` dentro del worktree.
+
+### 11.1 Gate por tanda
+
+```
+$ ./init.sh --rapido
+✓ lint paso
+  test:cambiados   Test Files  93 passed | 3 skipped (96)   Tests  1087 passed | 24 skipped
+  test:guardias    Test Files  64 passed (64)               Tests   860 passed
+✓ test:rapido paso
+✓ todas las migraciones tienen down.sql
+== init OK ==
+```
+
+### 11.2 Suite completa: 3 rojos, y **no son de esta feature**
+
+```
+$ pnpm exec vitest run
+ Test Files  1 failed | 931 passed | 10 skipped (942)
+      Tests  3 failed | 11615 passed | 157 skipped (11775)
+```
+
+Los tres estan en `tests/integration/db/analytics-daily-migration.test.ts` y **todos** dicen lo
+mismo: `PrismaConfigEnvError: Cannot resolve environment variable: DATABASE_URL`. Es un guardia de
+drift que invoca `prisma migrate diff` y necesita la variable.
+
+**Causa: este worktree no tiene `.env` a proposito** (instruccion explicita: no crear uno dentro del
+worktree). **No es una regresion**, y no se supone — se comprobo pasando la URL **inline**:
+
+```
+$ DATABASE_URL=<inline> pnpm exec vitest run tests/integration/db/analytics-daily-migration.test.ts
+ Test Files  1 passed (1)
+      Tests  62 passed (62)
+```
+
+Esta feature **no toca `db/schema.prisma` ni anade ninguna migracion** (⟨D⟩ `design.md` §4: ninguna
+migracion, ninguna tabla nueva, ningun cambio de esquema, de RLS ni de indice), asi que no tiene por
+donde afectar a ese guardia. En un checkout con `.env`, `./init.sh` completo pasa.
+
+**Delta de rojos atribuible a la 180: 0.**
