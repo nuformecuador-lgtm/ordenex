@@ -1551,8 +1551,8 @@
       "name": "analitica: export CSV",
       "spec_path": "specs/134-analitica-export-csv",
       "description": "Frontend. Export CSV/XLSX de la analitica OPERATIVA: el archivo se arma en el navegador a partir del mismo borde que pinta la pantalla (consultarAnaliticaOperativa), nunca reconstruyendo el filtro, de modo que el alcance por rol y la seudonimizacion se HEREDAN del servicio (122) en vez de reimplementarse en el borde. Reusa el patron de descarga 151/148. Depende de 126. La financiera queda fuera por decision (ficha 184).",
-      "status": "in_progress",
-      "status_note": "2026-08-04 SPEC ESCRITA y PUERTA T0 CERRADA con 6 respuestas (D1-D6). 21 requisitos, cada uno con su mutacion. HALLAZGO QUE ENCOGE LA FEATURE: no necesita codigo de servidor. La seudonimizacion ocurre en AnaliticaOperativaService, no en el borde, y su propio comentario nombra a la 134 -- 'ningun borde futuro (la 134, por ejemplo) puede olvidarla' --, asi que el uuid real NUNCA cruza al navegador; y el borde de la 126 ya audita el denegado. Los tres pasos (auditar, 403, seudonimizar) se HEREDAN: lo verificable aqui es que no se abra un camino que los evite. D1 solo operativa, la financiera FUERA POR DECISION -> ficha 184. D2 se reusa consultarAnaliticaOperativa y el archivo se arma en el navegador: dos guardias vivos prohiben un handler de app/api para analitica (operativa-frontera.guardia.test.ts:44 y tablero-operativo-frontera.guardia.test.ts:136). D3 la ventana ciega y el dia parcial viajan como COLUMNAS POR FILA: la fila es lo unico de un fichero plano que sobrevive a filtrar, ordenar y copiar. D4 sin cabecera de metadatos: escribir el tiendaId/zonaId del actor como 'alcance' meteria en un archivo que circula justo el identificador que R8/R9 quieren fuera. D5 no se toca el dialecto (25 tablas dependen) y se ofrece tambien XLSX: coma + decimales con punto + UTF-8 SIN BOM abre en UNA sola columna y rompe tildes en Windows es-EC. D6 un archivo por panel. CORRECCIONES DE FICHA aplicadas por el leader: zone fullstack -> frontend (cero archivos en lib/, cero endpoints, cero migraciones), depends_on 127 -> 126, y la descripcion cita '(121)' donde el punto de entrada real es de la 122.",
+      "status": "done",
+      "status_note": "2026-08-05 DONE. PR #294 mergeado. Review APROBADO sin bloqueantes: 21/21 requisitos con test nombrado y las 21 mutaciones aplicadas DOS veces -- implementer y reviewer por su cuenta -- muertas todas EN EL CASO QUE EL MAPA LES ASIGNA (cero anclajes silenciosos). Gate con dev dentro: 941 archivos / 11.639 tests, 3 rojos los tres flakes por saturacion, verificados verdes en aislado. LA FEATURE ENCOGIO: no lleva codigo de servidor. Auditar, 403 y seudonimizar SE HEREDAN del servicio de la 126 -- la seudonimizacion vive dentro de AnaliticaOperativaService y no en el borde, asi que el uuid real nunca cruza al navegador --, y lo verificable pasa a ser que no se abra un camino que los evite. Su guardia NO se retira: censa el arbol, no el diff contra dev. La reverificacion posterior al refactor encontro 8 de 21 anclajes movidos y un PATRON MUERTO en el guardia permanente; queda instalado un auto-chequeo que exige que cada patron del censo case con algo real.",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
@@ -2104,7 +2104,7 @@
       "name": "analitica: modo agregado de tasas y tiempos",
       "spec_path": "specs/176-analitica-modo-agregado-tasas",
       "description": "Backend. Extiende el contrato de lectura de la analitica operativa (126) con un modo AGREGADO por periodo para las metricas que NO son sumables: devuelve numerador y denominador (o los acumuladores seg_ciclo_acum/seg_ciclo_n) por cubo temporal, de modo que un consumidor pueda SUMAR ANTES DE DIVIDIR y presentar una tasa o un tiempo de ciclo correctos en rangos largos. Hoy el servicio solo devuelve el cociente ya dividido por dia, asi que el tablero (131) no puede agregar tasa_entrega, tasa_devolucion, tasa_rechazo, primer_intento_ok, tiempo_ciclo ni aging_por_estado sin caer en media de medias, y por decision D3 no pinta serie ni cifra por encima del techo de 62 puntos. Reusa ConsultaAnalitica y el alcance ya existentes; no anade metricas al catalogo.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
@@ -2112,7 +2112,7 @@
       "depends_on": [
         126
       ],
-      "status_note": "2026-08-03 SPEC ESCRITA y PUERTA T0 CERRADA con 6 respuestas del humano (D1-D6 en requirements.md seccion 4). 19 requisitos, cada uno con su mutacion. D1 metodo nuevo consultarAgregado con Server Action propia: no se tocan PuntoSerie ni SerieOperativa, que la 131 y la 132 ya consumen, ni lib/analytics/consulta.ts, punto blindado de la 122. D2 denominador cero = valor null CON numerador y denominador a la vista, lo que MEJORA el precedente de la 126 (hoy un null no distingue 'denominador cero' de 'no hay dato'). D3 aging_por_estado entra como cubo unico al corte, agregando sobre la DIMENSION y no sobre el tiempo. HALLAZGO: el aging NUNCA estuvo afectado por los rangos largos -- es la unica metrica live del catalogo (metrics.ts:375), tiene una sola fecha y por tanto SIEMPRE pinta serie; lo que no tiene, ni ha tenido nunca en ningun rango, es cifra total, porque agregacion.ts:371 anula el total para toda unidad != conteo. D4 el dia en curso entra marcado parcial con su corteAt. D5 la 131 NO se cablea aqui (zone backend) -> ficha 182. D6 granos periodo Y semana, para que la 131 pueda BORRAR su lunesDeLaSemana en vez de mantener dos calendarios. Sin superficie de cache nueva: consume el mismo agregarCubos ya decorado por la 128."
+      "status_note": "2026-08-05 DONE. PR #285 mergeado el 2026-08-04; la ficha se habia quedado en in_progress y bloqueaba capacidad de zona backend a las demas sesiones. Review APROBADO: 19/19 requisitos, 19 mutaciones del implementer + 19 del reviewer, todas muertas. Devuelve numerador y denominador por cubo para que el consumidor SUME ANTES DE DIVIDIR: promediar los cocientes ya divididos por dia es media de medias. Desbloquea la 182."
     },
     {
       "id": 179,
@@ -2160,7 +2160,7 @@
       "name": "analitica: cablear el modo agregado al tablero operativo",
       "spec_path": "specs/182-analitica-cablear-modo-agregado",
       "description": "Frontend. Cablea el modo agregado de la 176 (consultarAgregadoOperativo) a los paneles de porcentaje y segundos del tablero operativo, cerrando el hueco declarado por R27 de la 131: por encima del techo de 62 puntos esos paneles pasan a pintar la serie por cubos SEMANALES servidos por el backend, y TODOS los paneles de esas dos unidades pasan a mostrar su cifra total -- incluido aging_por_estado, que hoy no la tiene en NINGUN rango. El total se toma del cubo periodo; ni media de medias ni formula recompuesta en la UI. Al consumir cubos semanales del servidor, retira lunesDeLaSemana de app/(app)/analitica/_components/operativo/agregacion.ts para porcentaje y segundos, de modo que no queden dos definiciones de semana. Reescribe R27 de la 131, que deja de ser un hueco.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
@@ -2168,7 +2168,7 @@
       "depends_on": [
         176
       ],
-      "status_note": "Sale de la decision D5 de la 176. El hueco que cierra esta escrito en specs/131-analitica-tablero-operativo/requirements.md seccion 6.1. OJO con aging_por_estado: no es un caso de rango largo (nunca entro en rango_excedido), es un panel sin KPI en TODO rango -- ver D3 de specs/176-analitica-modo-agregado-tasas/requirements.md seccion 4."
+      "status_note": "Sale de la decision D5 de la 176. El hueco que cierra esta escrito en specs/131-analitica-tablero-operativo/requirements.md seccion 6.1. OJO con aging_por_estado: no es un caso de rango largo (nunca entro en rango_excedido), es un panel sin KPI en TODO rango -- ver D3 de specs/176-analitica-modo-agregado-tasas/requirements.md seccion 4. || 2026-08-05 IN_PROGRESS: spec_author lanzado por el leader. Worktree C:/w182, rama feature/182-analitica-cablear-modo-agregado desde dev (c16aa20a). Su dependencia, la 176, esta en dev desde el PR #285."
     },
     {
       "id": 183,
