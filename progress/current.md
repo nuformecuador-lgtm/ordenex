@@ -9,7 +9,78 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 CIERRE DE JORNADA 2026-08-04 (noche) — **EMPIEZA A LEER POR AQUÍ**
+
+### ✅ En producción hoy
+
+| | Qué | Estado |
+| --- | --- | --- |
+| **release** | `dev → prod` #287 — 186 commits, 23 PRs, **5 migraciones** | ✅ `CHECK` **convalidado** contra las 35 filas reales, deploy READY, 0 errores |
+| **173** | backfill de la caja: **5 filas, ₡203.055,90** | ✅ aplicado, idempotente, fechas del origen |
+| **183** | el `neto` de las cuatro métricas de caja | ✅ PR #288 → release #289 → **en producción** |
+| **fix** | tope de **negocio** de la indemnización, atado al valor de la orden | ✅ #291 mergeado |
+| **arnés** | dos guardias ciegas + 3.er mecanismo del flake | ✅ #291 mergeado |
+
+### 🔵 EN RAMA, SIN PR: la feature 184 (`feature/184-deuda-170-listados`)
+
+**Los 12 listados CERRADOS.** `PENDIENTES_184` vacío, **0 llamadas a `filasDelConjuntoCompleto(`** bajo
+`app/`, 8 tandas, **52 commits**. Gate completo **VERDE: 949 archivos / 11.824 tests**.
+
+**Lo que falta, y en este orden:**
+
+1. **H.3 — verificar el mapa `R1..R34` caso a caso.** La tanda H lo dejó sin hacer **y lo dijo**: comprobó
+   por script que 16 títulos citados existen literalmente, lo que descarta nombres muertos pero **NO**
+   que cada test mida su requisito. Es exactamente la verificación que hoy cazó cuatro coberturas falsas.
+2. **Review** de la feature · 3. **PR a `dev`** · 4. **Release** (arrastra también el lote de deudas).
+
+### 🚦 LO PRIMERO AL RETOMAR, ADEMÁS DE ESO
+
+**VER LA 172 Y LA 173 EN PANTALLA.** Cuarta jornada pendiente. Hoy se empezó a usar la app en producción
+y eso solo ya destapó el caso de los ₡10.000 millones.
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**Cinco veces el spec afirmó una cobertura que no existía, y las cinco las cazó una MEDICIÓN, no una
+lectura:**
+
+1. **Una mutación sobrevivió** en la 183: el test que decía «el catálogo manda» medía `ingreso_flete`, no
+   `egresos`, que es la definición que la feature cambiaba.
+2. **R22 de la 183:** el guardia que el spec le asignaba **no caza** su mutación — `listasDeIdsAMano` solo
+   marca arrays con ≥2 ids.
+3. **R16 de la 127:** el requisito vivo **más directamente derogado** por la 183 —nombra las tres métricas
+   una por una— y **ni el spec, ni ⟨D12⟩, ni las bitácoras lo miraron**. Lo cazó el reviewer.
+4. **El `--reporter` inexistente** (tanda F): 7 corridas de mutación **fallaron al arrancar y parecían
+   ejecutadas**.
+5. **La guardia de la tanda H pasa VERDE con su propio detector roto**: encuentra cero llamadas porque no
+   encuentra nada. Solo la salvan sus auto-tests. **Habría sido un adorno permanente.**
+
+> **La regla que queda:** buscar los requisitos vivos afectados **leyendo el spec que cita tu archivo** no
+> basta —así se encontraron R18 y R37 de la 127 y por eso se escapó R16, que no habla de `metrics.ts` sino
+> del **contrato de salida**—. Hay que buscarlos por el **texto del contrato que cambia**.
+
+**Y el criterio duplicado apareció en las SIETE tandas.** El `orderBy` estaba escrito dos o tres veces en
+cada par; varias tandas lo habrían dejado en cinco. Ninguna estaba mal *hoy*, pero dos literales permiten
+que el Excel y la pantalla se ordenen distinto **sin que ningún test lo note**, porque cada uno prueba su
+copia. En la tanda F apareció la versión cara: **`alcanceWhere` —la guardia que decide si un `adminSatelite`
+ve el dinero de otra zona— estaba declarada TRES veces.**
+
+### ⚠️ Defecto de producción destapado, NO arreglado
+
+**El archivo de «Saldos de tiendas» sale hoy sin orden determinista**: `listarSaldosTodasTiendas()` devuelve
+orden de planificador y la tabla ordena por nombre, así que **dos descargas seguidas pueden diferir**. La
+170 lo declaró desviación consciente cuando ese conjunto no sostenía archivo; ahora lo sostiene. La 184 lo
+esquiva sirviendo el listado por el paginado, pero **el defecto de origen sigue ahí**.
+
+### 🧰 Higiene de agentes: tres prohibiciones que costaron incidentes reales
+
+En un worktree compartido: **nada de `git checkout -- .` / `restore .` / `stash`** (borró trabajo ajeno),
+**nada de `git commit --amend`** (reescribió el commit de otro agente; recuperado con `reset --soft`), y
+**verificar por hash que la restauración tras mutar funcionó** — a un agente le falló un `writeFileSync`
+por un lock de Windows y **dejó la mutación aplicada en código de producción**.
+
+---
+
+## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo
 
 **183 `done`.** PR **#288** → `dev`, release **#289** → `prod` (**cero migraciones**), despliegue
 **READY**, sin errores de runtime nuevos. `dev` y `prod` a **0 commits**. Review **APROBADO en ronda
