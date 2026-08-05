@@ -409,6 +409,22 @@ describe("los conjuntos de la descarga de «Incidentes» (feature 184, T F.2)", 
       proyectar(paginaCola.items, filaDescargaIncidentePendiente),
     );
 
+    // Y la comparación FUERTE: el DTO entero, campo por campo, salvo el ÚNICO campo que difiere a
+    // propósito. Es lo que cierra el hueco que dejaría comparar sólo las columnas de hoy: el
+    // mapper es el mismo (`toDTO`) y recibe el mismo actor, así que `esPropio` —que lo calcula el
+    // SERVIDOR (R51 de la 158)— tiene que salir igual en el archivo y en la pantalla.
+    const sinEvidencias = (items: IncidenteAdminDTO[]) =>
+      items.map(({ evidenciaUrls, ...resto }) => {
+        void evidenciaUrls;
+        return resto;
+      });
+    expect(sinEvidencias(conjuntoHistorico.items)).toEqual(sinEvidencias(paginaHistorico.items));
+    expect(sinEvidencias(conjuntoCola.items)).toEqual(sinEvidencias(paginaCola.items));
+    // Anti-vacuidad de ese `toEqual`: `esPropio` está dentro y no es constante en el árbol —el
+    // autor de estos incidentes NO es el maestro que descarga—, así que un mapper que lo
+    // calculara con otro actor lo pondría rojo.
+    expect(conjuntoHistorico.items.every((i) => i.esPropio === false)).toBe(true);
+
     // Anti-vacuidad de la comparación: las filas proyectadas llevan datos, y datos que distinguen
     // unas de otras (el estado y la indemnización separan aprobados de rechazados).
     const filasHistorico = proyectar(
