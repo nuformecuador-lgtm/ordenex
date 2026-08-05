@@ -1550,14 +1550,16 @@
       "id": 134,
       "name": "analitica: export CSV",
       "spec_path": "specs/134-analitica-export-csv",
-      "description": "Fullstack. Export CSV de cualquier vista de analitica: Server Action/route con gating por rol que exporta el dataset filtrado respetando el alcance (121); reusa el patron de export existente. Depende de 126.",
-      "status": "pending",
-      "status_note": "AVISO DIRIGIDO POR LA 122 (specs/122-analitica-alcance-por-rol/design.md 7): el export es el consumidor MAS PELIGROSO, porque una fila filtrada se descarga en un archivo. Debe construir su dataset por el MISMO punto de entrada, no reconstruir el filtro. Y el CSV de un adminTienda con grano mensajero va SEUDONIMIZADO (D5/R39): una columna mensajero_id en un archivo descargable es la fuga mas dificil de retirar. Los tres pasos del borde (auditar -> 403 -> seudonimizar) los exigen R40, R41 y R39.",
+      "description": "Frontend. Export CSV/XLSX de la analitica OPERATIVA: el archivo se arma en el navegador a partir del mismo borde que pinta la pantalla (consultarAnaliticaOperativa), nunca reconstruyendo el filtro, de modo que el alcance por rol y la seudonimizacion se HEREDAN del servicio (122) en vez de reimplementarse en el borde. Reusa el patron de descarga 151/148. Depende de 126. La financiera queda fuera por decision (ficha 184).",
+      "status": "in_progress",
+      "status_note": "2026-08-04 SPEC ESCRITA y PUERTA T0 CERRADA con 6 respuestas (D1-D6). 21 requisitos, cada uno con su mutacion. HALLAZGO QUE ENCOGE LA FEATURE: no necesita codigo de servidor. La seudonimizacion ocurre en AnaliticaOperativaService, no en el borde, y su propio comentario nombra a la 134 -- 'ningun borde futuro (la 134, por ejemplo) puede olvidarla' --, asi que el uuid real NUNCA cruza al navegador; y el borde de la 126 ya audita el denegado. Los tres pasos (auditar, 403, seudonimizar) se HEREDAN: lo verificable aqui es que no se abra un camino que los evite. D1 solo operativa, la financiera FUERA POR DECISION -> ficha 184. D2 se reusa consultarAnaliticaOperativa y el archivo se arma en el navegador: dos guardias vivos prohiben un handler de app/api para analitica (operativa-frontera.guardia.test.ts:44 y tablero-operativo-frontera.guardia.test.ts:136). D3 la ventana ciega y el dia parcial viajan como COLUMNAS POR FILA: la fila es lo unico de un fichero plano que sobrevive a filtrar, ordenar y copiar. D4 sin cabecera de metadatos: escribir el tiendaId/zonaId del actor como 'alcance' meteria en un archivo que circula justo el identificador que R8/R9 quieren fuera. D5 no se toca el dialecto (25 tablas dependen) y se ofrece tambien XLSX: coma + decimales con punto + UTF-8 SIN BOM abre en UNA sola columna y rompe tildes en Windows es-EC. D6 un archivo por panel. CORRECCIONES DE FICHA aplicadas por el leader: zone fullstack -> frontend (cero archivos en lib/, cero endpoints, cero migraciones), depends_on 127 -> 126, y la descripcion cita '(121)' donde el punto de entrada real es de la 122.",
       "sdd": true,
       "complexity": "medium",
-      "zone": "fullstack",
+      "zone": "frontend",
       "branch": "feature/134-analitica-export-csv",
-      "depends_on": 127
+      "depends_on": [
+        126
+      ]
     },
     {
       "id": 137,
@@ -2180,6 +2182,22 @@
       "branch": "feature/183-neto-bruto-caja",
       "depends_on": 175,
       "status_note": "DONE 2026-08-04. PR #288 -> dev, release #289 -> prod (cero migraciones). Review APROBADO en ronda 2; los 2 bloqueantes de la ronda 1 eran de rastro y se cerraron sin tocar codigo. Gate verde sobre el arbol mergeado: 926 archivos / 11.528 tests (+43, cero regresiones). 35 mutaciones, 35 muertas. || DECISION D12 (progress/decision_183.md) SUSTITUYO a la nota de alta: NO se retiro el neto en las cuatro. Se retiro en TRES y egresos GANO ingreso_ajuste, porque anular un egreso no lo descontaba nunca de la cifra. El motivo de la nota vieja se midio contra produccion y era falso: cero filas ingreso_ajuste. || DEUDA VIVA, declarada y sin dueno: dos guardias afirman cobertura que no tienen. listasDeIdsAMano (tablero-financiero.guardia.test.ts:202) solo marca arrays con >=2 ids, asi que una decision por id suelta pasa verde; y la guardia de R12 solo mata su mutacion si la fecha huerfana permanece. Ninguna se ensancho: son de features done. Detalle en progress/impl_183.md."
+    },
+    {
+      "id": 184,
+      "name": "analitica financiera: export de la serie",
+      "spec_path": "specs/184-analitica-financiera-export",
+      "description": "Frontend. Export CSV/XLSX de las metricas financieras por el MISMO borde (consultarMetricaFinanciera), reusando el patron de descarga 151/148 y con las mismas garantias que la 134: puerta unica -- el dataset se construye por el mismo punto de entrada que la pantalla, nunca reconstruyendo el filtro --, denegado auditado antes del 403, y SIN cabecera de metadatos con el alcance del actor (escribir su tiendaId o zonaId en un archivo que circula es justo el identificador que hay que mantener fuera). Requiere que AnaliticaFinancieraService publique una forma de serie estable.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/184-analitica-financiera-export",
+      "depends_on": [
+        180,
+        183
+      ],
+      "status_note": "Sale de la decision D1 de la 134: la analitica financiera queda fuera de aquel export POR DECISION, no por olvido. NO adelantarla: RespuestaFinanciera no expone hoy una serie que proyectar a filas (la publica la 180) y la 183 cambia QUE SIGNIFICAN las cifras de caja. Exportar antes es escribir dos veces la proyeccion, y la segunda con prisa -- que en un export es como se cuela una columna que no debia salir."
     }
   ]
 }

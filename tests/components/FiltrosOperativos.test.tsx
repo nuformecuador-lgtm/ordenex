@@ -12,6 +12,7 @@ import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarUsuariosPorRol } from "@/lib/actions/usuarios-por-rol";
 import { PENUMBRA, type ResultadoOperativo } from "@/lib/types/analitica-operativa";
+import { ToastProvider } from "@/providers/ToastProvider";
 
 // Feature 131 (T2.1, T2.2) — R12 y R22.
 //
@@ -87,10 +88,14 @@ function ok(metricaId: string): ResultadoOperativo {
 
 function renderPantalla() {
   return render(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <FiltrosOperativos />
-      <PanelesOperativos />
-    </SWRConfig>,
+    // Feature 134 (T4.2): el tablero monta ahora el control de descarga, que llama a
+    // `useToast()`. En la app el `ToastProvider` vive en el layout; aqui se aporta igual.
+    <ToastProvider>
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <FiltrosOperativos />
+        <PanelesOperativos />
+      </SWRConfig>
+    </ToastProvider>,
   );
 }
 
