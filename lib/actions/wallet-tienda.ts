@@ -140,7 +140,25 @@ export async function listarMisMovimientosCompletoAction(
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }
 
-/** R20/R27: saldo de TODAS las tiendas (solo maestro). Forbidden/unauthenticated sin exponer datos. */
+/**
+ * R20/R27: saldo de TODAS las tiendas (solo maestro). Forbidden/unauthenticated sin exponer datos.
+ *
+ * **Feature 184 (T H.2) — CERO consumidores de produccion, y se CONSERVA a proposito.** La tanda G
+ * se llevo su unico lector: la descarga de `SaldosTiendasTable`, que ahora sale de
+ * `listarSaldosTiendasCompletoAction` —la MISMA llamada que la pagina, con otro rango, para que el
+ * archivo salga ORDENADO como la tabla (R5)—.
+ *
+ * Por que NO se borra: en este listado y en el de plantillas, a diferencia de los de las tandas
+ * B-F, las dos lecturas devuelven **las mismas filas** y el xlsx sale identico por los dos
+ * caminos. Contar llamadas es lo UNICO que los separa, y por eso
+ * `tests/components/descarga/WalletPropsDescarga.test.tsx` (R1) afirma que esta no se llama **y**
+ * la invoca al final para comprobar que el doble esta VIVO y responde el conjunto entero. Borrarla
+ * deja el `not.toHaveBeenCalled()` sin objeto y R1 de este listado sin discriminador de conducta:
+ * quedaria solo la mitad estatica del censo.
+ *
+ * Lo que impide que «conservar» sea «olvidar»: `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`
+ * (R32) afirma que ninguna pantalla vuelve a llamarla. Vive como testigo, no como camino.
+ */
 export async function listarSaldosTiendasAction(
   deps: WalletTiendaDeps = {},
 ): Promise<ListarSaldosTiendasActionResult> {

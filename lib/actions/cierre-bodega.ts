@@ -115,7 +115,37 @@ export async function solicitarCierreBodega(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
-/** R2/R15: cola + historico de cierres de bodega; solo maestro (via service). */
+/**
+ * R2/R15: cola + historico de cierres de bodega; solo maestro (via service).
+ *
+ * **Feature 184 (T H.2) — CERO consumidores de produccion, y se CONSERVA a proposito.** La T M.1
+ * de la 170 la saco del render de `cierres-admin/page.tsx` y la tanda E se llevo sus dos ultimas
+ * llamadas (las descargas de los listados 4 y 5, que ahora salen de
+ * `listarPendientesCierresBodegaCompleto` y `listarHistoricoCierresBodegaCompleto`).
+ *
+ * Por que NO se borra, con el precio delante: es el TESTIGO de anti-vacuidad de tres casos que
+ * miden lo que la tanda E entrego, y no hay sustituto que no sea sintetico.
+ *
+ *  1. `tests/unit/services/cierres-bodega-admin-completo.test.ts` (R1) la ejecuta y cuenta que lee
+ *     **7 filas** para producir cualquiera de los dos archivos, frente a las 5 y 2 de las lecturas
+ *     dedicadas. Sin ese lado, los `toEqual(["findHistoricoCompleto"])` los pasaria igual un
+ *     servicio que no leyera nada. Es el unico caso que mata la mutacion M8 de esa tanda, que
+ *     dejaba 43 de 44 en verde.
+ *  2. `tests/unit/repositories/historicos-paginados-where.test.ts` (R1/R14) ejecuta
+ *     `findCierresBodega` y afirma que su consulta **no lleva `where` en absoluto**: es la
+ *     evidencia de que los dos metodos nuevos tenian que existir. Para preguntarselo hay que
+ *     conservarla.
+ *  3. `tests/components/descarga/CierresDescarga.test.tsx` (R1, mitad de cliente) la usa como
+ *     doble VIVO: invoca el doble al final y comprueba que devuelve las dos mitades, para que
+ *     `not.toHaveBeenCalled()` signifique «la pantalla decidio no llamarla» y no «el mock estaba
+ *     muerto».
+ *
+ * Ademas la sostienen los casos de la 170 que afirman que el listado paginado y el sin paginar
+ * coinciden (`cierres-bodega-admin-historico-paginado`, `cierres-bodega-pendientes-paginado`).
+ *
+ * Lo que impide que «conservar» sea «olvidar»: `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`
+ * (R32) afirma que NINGUNA pantalla vuelve a cablearse a ella. Vive como testigo, no como camino.
+ */
 export async function listarCierresBodegaAdmin(
   deps: CierreBodegaDeps = {},
 ): Promise<ListarCierresBodegaAdminResult> {

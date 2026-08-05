@@ -130,7 +130,22 @@ export async function setActivaPlantillaAction(
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }
 
-/** R17/R18/R26: lista todas las plantillas (solo maestro). */
+/**
+ * R17/R18/R26: lista todas las plantillas (solo maestro).
+ *
+ * **Feature 184 (T H.2) — CERO consumidores de produccion, y se CONSERVA a proposito.** La tanda G
+ * se llevo su unico lector: la descarga de `GastosFijosPlantillasPanel`, que ahora sale de
+ * `listarPlantillasCompletoAction`, con el tope evaluado en el SERVIDOR.
+ *
+ * Mismo motivo, palabra por palabra, que `listarSaldosTiendasAction` (ver alli): las dos lecturas
+ * devuelven las mismas filas, el xlsx sale identico por los dos caminos y contar llamadas es lo
+ * unico que los separa. `tests/components/descarga/WalletPropsDescarga.test.tsx` (R1) la usa como
+ * doble VIVO —la invoca al final para probar que responde— y sin ella ese caso pierde su
+ * discriminador de conducta.
+ *
+ * Que ninguna pantalla vuelva a llamarla lo afirma
+ * `tests/unit/descarga/adaptador-conjunto.guardia.test.ts` (R32).
+ */
 export async function listarPlantillasAction(
   deps: PlantillaDeps = {},
 ): Promise<ListarPlantillasActionResult> {
