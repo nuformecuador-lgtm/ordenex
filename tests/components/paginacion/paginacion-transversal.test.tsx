@@ -239,10 +239,12 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_BODEGA_SOLICITADOS_LABEL",
   },
   {
+    // Feature 184 — Tanda B (T B.2/T B.3): el gemelo del anterior. Su relectura, además de las
+    // cuatro consultas, repartía el efectivo entre TODOS los pagos individuales de la zona.
     listado: "Cierres del día a consolidar",
     ruta: "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx",
     tanda: "J",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_CONSOLIDABLES_LABEL",
   },
   {
@@ -314,9 +316,9 @@ const PENDIENTES_184: readonly string[] = [
   "Cierres del día pendientes de decisión",
   "Cierres de bodega pendientes",
   "Cierres de bodega resueltos",
-  // Feature 184 — Tanda B: «Cierres de bodega solicitados» salió de aquí en el MISMO commit que
-  // su pantalla. Quedan DIEZ.
-  "Cierres del día a consolidar",
+  // Feature 184 — Tanda B: los DOS listados de la consolidación —«Cierres de bodega
+  // solicitados» y «Cierres del día a consolidar»— salieron de aquí, cada uno en el MISMO
+  // commit que su pantalla. Quedan NUEVE.
   "Incidentes pendientes de decisión",
   "Incidentes — histórico",
   // Feature 184 — Tanda A: «Órdenes de la bodega satélite» salió de aquí en el MISMO commit

@@ -63,10 +63,11 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   // Feature 170 — FASE 2 (T J.2): las dos COLAS de esta pantalla también llegan paginadas.
   listarPendientesCierresBodegaPaginado: vi.fn(),
   listarConsolidablesPaginado: vi.fn(),
-  // Feature 184 — Tanda B (T B.2): la lectura DEDICADA de «Cierres de bodega solicitados». El
-  // doble de `listarConsolidacion` se conserva A PROPÓSITO: que el archivo ya no salga de él es
-  // la mitad de lo que R1 pide, y sin el doble no habría forma de afirmar su ausencia.
+  // Feature 184 — Tanda B (T B.2): las lecturas DEDICADAS de los dos listados de esta pantalla.
+  // El doble de `listarConsolidacion` se conserva A PROPÓSITO: que el archivo ya no salga de él
+  // es la mitad de lo que R1 pide, y sin el doble no habría forma de afirmar su ausencia.
   listarCierresBodegaSolicitadosCompleto: vi.fn(),
+  listarConsolidablesCompleto: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierre-dia", () => ({
   solicitarCierre: vi.fn(),
@@ -112,6 +113,7 @@ import {
   listarConsolidacion,
   listarCierresBodegaSolicitadosCompleto,
   listarCierresBodegaSolicitadosPaginado,
+  listarConsolidablesCompleto,
   listarConsolidablesPaginado,
   listarHistoricoCierresBodegaPaginado,
   listarPendientesCierresBodegaPaginado,
@@ -390,12 +392,18 @@ function renderConsolidacion() {
     page: 1,
     ...paginaInicial(BODEGA_SOLICITADOS),
   });
-  // Feature 184 — Tanda B (T B.2): de aquí sale el archivo del listado 6, sin recorte y con la
-  // forma que `filasDesdeResultado` traduce (`ListarCompletoResult`).
+  // Feature 184 — Tanda B (T B.2): de aquí salen los archivos de los dos listados de esta
+  // pantalla, sin recorte y con la forma que `filasDesdeResultado` traduce
+  // (`ListarCompletoResult`).
   vi.mocked(listarCierresBodegaSolicitadosCompleto).mockResolvedValue({
     status: "ok",
     items: BODEGA_SOLICITADOS,
     total: BODEGA_SOLICITADOS.length,
+  });
+  vi.mocked(listarConsolidablesCompleto).mockResolvedValue({
+    status: "ok",
+    items: CONSOLIDABLES,
+    total: CONSOLIDABLES.length,
   });
   vi.mocked(listarConsolidacion).mockResolvedValue({
     status: "ok",
@@ -720,6 +728,103 @@ describe("Cierres · descarga", () => {
     expect(mensaje).toMatch(/Vuelve a intentarlo/);
     // Accionable, y sin un solo dato del dominio: ni quién solicitó, ni zona, ni montos.
     for (const dato of ["Sara Satélite", "Limón", "1000.10", "b3"]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda B (T B.2): «Cierres del día a consolidar» (listado 7)
+  // -------------------------------------------------------------------------
+
+  it("el archivo de los consolidables sale de su lectura DEDICADA, no del listado compuesto (R1/R8)", async () => {
+    // El gemelo del listado 6, y con el mismo motivo doblado: `listarConsolidacion` no solo
+    // devuelve estas filas, sino que reparte el efectivo entre TODOS los pagos individuales de
+    // la zona para producir dos de los cinco agregados. Descargar siete columnas no tiene por
+    // qué costar eso (R10; la mitad de servidor son los espías de
+    // `tests/unit/services/consolidacion-completo.test.ts`).
+    const user = userEvent.setup();
+    renderConsolidacion();
+
+    expect(listarConsolidablesCompleto).not.toHaveBeenCalled();
+    expect(listarConsolidacion).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres del día a consolidar" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarConsolidablesCompleto).toHaveBeenCalledTimes(1);
+    // Sin un solo argumento: este listado tampoco tiene filtros, así que ni `page`, ni
+    // `pageSize`, ni `zonaId` pueden viajar (R4/R17).
+    expect(vi.mocked(listarConsolidablesCompleto).mock.calls[0]).toEqual([]);
+    expect(listarConsolidacion).not.toHaveBeenCalled();
+    expect(listarConsolidablesPaginado).toHaveBeenCalledTimes(1);
+  });
+
+  it("descargar los consolidables no cambia el contador ni los agregados de la cabecera (R10/R26)", async () => {
+    // El contador «(N)» de esta sección sale del `total` del servidor y los cinco agregados de
+    // dinero llegan por props: cambiar de dónde sale el archivo no puede tocar ninguno de los
+    // dos. Es lo que R49/R50 de la 170 fijaron y esta tanda no revisa.
+    const user = userEvent.setup();
+    renderConsolidacion();
+
+    const seccion = () =>
+      screen.getByRole("region", { name: "Cierres del día a consolidar" }).textContent;
+    const totales = () =>
+      screen.getByRole("region", { name: "Totales a consolidar" }).textContent;
+    const antes = [seccion(), totales()];
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres del día a consolidar" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarConsolidacion).not.toHaveBeenCalled();
+    expect([seccion(), totales()]).toEqual(antes);
+  });
+
+  it("la pantalla NO recorta ni reordena el conjunto de consolidables que devolvió el servidor (R2)", async () => {
+    // Mismo discriminador que en el listado 6: el doble devuelve una fila MÁS de las que la
+    // tabla pinta y en un orden que un orden alfabético de cliente cambiaría.
+    const user = userEvent.setup();
+    renderConsolidacion();
+
+    const primero = consolidable(9);
+    primero.mensajeroNombre = "Zoe Mensajera";
+    vi.mocked(listarConsolidablesCompleto).mockResolvedValueOnce({
+      status: "ok",
+      items: [primero, ...CONSOLIDABLES],
+      total: 3,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres del día a consolidar" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas.map((f) => f.mensajero)).toEqual([
+      "Zoe Mensajera",
+      ...CONSOLIDABLES.map((c) => c.mensajeroNombre),
+    ]);
+  });
+
+  it("un fallo de la lectura de los consolidables no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
+    const user = userEvent.setup();
+    renderConsolidacion();
+    vi.mocked(listarConsolidablesCompleto).mockResolvedValueOnce({ status: "forbidden" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres del día a consolidar" }),
+    );
+    // Ancla POSITIVA: el aviso que SALE, no el archivo que no sale.
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+
+    const [mensaje] = errorToastMock.mock.calls[0] as [string];
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    for (const dato of ["Mensajero 1", "1000.10", "cd-1"]) {
       expect(mensaje).not.toContain(dato);
     }
     expect(descargarBlobMock).not.toHaveBeenCalled();
