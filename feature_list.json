@@ -2132,11 +2132,11 @@
       "name": "analitica financiera: desglose por fecha para las series temporales",
       "spec_path": "specs/180-analitica-financiera-serie-temporal",
       "description": "Backend. `AnaliticaFinancieraService` agrega la ventana ENTERA y no publica filas por fecha para las cuatro metricas de caja ni para la cuenta por pagar de mensajeros, asi que hoy NO existe serie temporal que dibujar. Publicar el desglose por fecha para que el tablero financiero pueda tener grafica de lineas.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/180-analitica-financiera-serie-temporal",
       "depends_on": 127,
       "status_note": "2026-08-04 EN CURSO: spec_author lanzado por el leader tras cerrar la 175 y la 178 (que liberaron la zona backend). Cuatro interacciones que el spec DEBE declarar: (176) el modo agregado de la operativa es el problema gemelo -dos formas distintas de cubo temporal dan dos contratos incompatibles-; (179) las filas por fecha entran en la misma cache financiera; (181) el tiendaId crudo viajaria tambien en los cubos por fecha; (183) el spec NO puede dar por hecho que las metricas de caja seguiran publicando 'neto'. Y el techo de 62 puntos de la D3 de la 131/132: una serie por fecha sobre un rango largo lo supera, y el design tiene que decidir si agrupa, recorta o rechaza el rango. || Sale de la Q3 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). El tablero financiero se entrega SIN grafica de lineas —tarjetas de KPI, donut de recaudo por metodo, barra por tienda y tablas— porque la alternativa era inventarse los puntos. Verificado en el codigo, no supuesto: `AnaliticaFinancieraService.ts:196-221,319-337` agrega la ventana entera. Cuando esta ficha entre, la linea se anade al tablero SIN rehacerlo: los componentes de grafica ya existen (130) y el hueco esta declarado en el design de la 132. NOTA para quien la especifique: comprobar antes si el rollup diario de la 123 ya guarda el grano por fecha que hace falta —si lo guarda, esto es exponerlo, no recalcularlo—."
     },
