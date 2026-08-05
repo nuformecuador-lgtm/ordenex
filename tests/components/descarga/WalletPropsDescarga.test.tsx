@@ -402,6 +402,12 @@ describe("Dinero por props · descarga", () => {
     // borra: mientras exista `filasDelConjuntoCompleto`, la mitad NEGATIVA de abajo es lo que
     // impide que una de las tres vuelva a él sin que nadie lo note.
     //
+    // Feature 184 (T H.2): el adaptador se RETIRÓ, y la mitad negativa se conserva igual —misma
+    // decisión y mismo motivo que en `paginacion-transversal.test.tsx`—. Sin el export, la media
+    // migración que MG3/MG11 midieron deja de ser posible por construcción; lo que esta mitad
+    // sigue vigilando es que nadie lo rescate del historial y cablee AQUÍ uno de los tres. Que
+    // el export no vuelva lo afirma `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`.
+    //
     // Feature 184 (T0.2): cada módulo declara su adaptador por NOMBRE y se comprueba la mitad
     // NEGATIVA además de la positiva —el declarado es el ÚNICO que usa—. Sin ella, una pantalla
     // que llamara a los dos (una migración a medias) pasaría verde con cualquiera de las dos

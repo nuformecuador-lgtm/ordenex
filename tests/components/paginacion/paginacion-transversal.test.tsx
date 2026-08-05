@@ -174,6 +174,15 @@ const ARBOL_UI = "app";
  *
  * Lo que NINGUNO puede ser es `filasLocales(loQueLaTablaPinta)`: con la tabla paginada eso es
  * literalmente «descargar lo que se ve».
+ *
+ * **Feature 184 (T H.2): `filasDelConjuntoCompleto` ya no existe, y esta variante se conserva a
+ * propósito.** No es un descuido de limpieza: la rama `conjunto` ya no puede aparecer por el
+ * lado POSITIVO —`PENDIENTES_184` está vacía—, pero sigue siendo la MITAD NEGATIVA de los trece,
+ * y una afirmación negativa sobre algo que no existe es exactamente lo que impide que vuelva. Si
+ * alguien rescatara el adaptador del historial, este censo diría CUÁL de los trece se cableó a
+ * él; sin la variante, solo lo diría la guardia, y en forma de «alguien, en algún archivo».
+ * Que el export siga retirado lo afirma `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`
+ * (R32), que es lo que hace que esta mitad no sea vacua sino redundante a propósito.
  */
 type AdaptadorDescarga = "conjunto" | "completo";
 
@@ -332,6 +341,10 @@ const ANEXO_III: ListadoPaginado[] = [
     // Feature 184 (T G.3): esa frase caducó hoy. Los TRECE declaran `completo` y la deuda de
     // Q-I5/Q-K4 queda cerrada; el campo se conserva porque mientras `filasDelConjuntoCompleto`
     // exista, la mitad negativa del caso de R52 es lo que impide volver a él en silencio.
+    //
+    // Feature 184 (T H.2): el adaptador ya NO existe —se retiró—, y el campo se conserva igual.
+    // Lo que vigila deja de ser «no vuelvas a él» y pasa a ser «no lo rescates del historial»,
+    // que es un riesgo más pequeño pero no cero, y cuesta una línea.
     listado: "Cuentas por pagar a mensajeros",
     ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
     tanda: "L",

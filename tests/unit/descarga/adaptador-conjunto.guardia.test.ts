@@ -154,6 +154,39 @@ describe("R32 — el adaptador de relectura no vuelve a la capa de pantallas", (
     ).toEqual([]);
   });
 
+  it("el adaptador de relectura ya no existe: no se puede llamar ni por descuido (T H.2)", () => {
+    // La forma FUERTE de R32, y lo que la separa del caso de arriba: aquél dice «hoy nadie lo
+    // llama», éste dice «no hay nada que llamar». Retirado el export, el modo de fallo que la
+    // tanda G midió como el único superviviente —la MEDIA MIGRACIÓN: llamar a la acción nueva y
+    // aun así evaluar el tope en el cliente, con lo que el aviso pierde el total y el tope
+    // (MG3/MG11)— deja de ser posible por construcción.
+    //
+    // Se afirma sobre el módulo donde vivía, y no sobre «ningún archivo del repo lo exporta»,
+    // porque lo segundo pasaría verde con el adaptador resucitado en otro archivo. El caso de
+    // arriba cubre esa mitad: da igual dónde viva, ninguna pantalla puede llamarlo.
+    const modulo = readFileSync(
+      path.join(RAIZ, "components/shared/descarga-resultado.ts"),
+      "utf8",
+    );
+    const codigo = sinComentarios(modulo);
+    expect(
+      codigo,
+      `${ADAPTADOR_RELECTURA} volvió a exportarse: la media migración vuelve a ser posible`,
+    ).not.toMatch(new RegExp(`export\\s+(?:async\\s+)?function\\s+${ADAPTADOR_RELECTURA}\\b`));
+
+    // CONTROL POSITIVO, en el mismo archivo: los DOS adaptadores que sí se conservan siguen
+    // exportados. Sin esto, borrar el módulo entero —o renombrarlo— dejaría este caso verde y
+    // las 26 tablas sin adaptador común, que es lo contrario de lo que se pretende.
+    for (const vivo of [ADAPTADOR_DEDICADO, "filasLocales"]) {
+      expect(codigo, `${vivo} desapareció del módulo de adaptadores`).toMatch(
+        new RegExp(`export\\s+async\\s+function\\s+${vivo}\\b`),
+      );
+    }
+    // Y la prosa que explica la retirada sigue ahí: es lo único que le dice al próximo lector
+    // por qué el módulo tiene dos familias y media, y qué pasó con la tercera.
+    expect(modulo, "se perdió el motivo escrito de la retirada").toContain("T H.2");
+  });
+
   it("CONTROL POSITIVO: el mismo escaneo SÍ ve el adaptador al que migraron los trece", () => {
     // La anti-vacuidad del caso de arriba. «Cero llamadas» lo cumple igual un escaneo que no mira
     // nada; lo que lo hace una afirmación es que el MISMO recorrido, con el MISMO detector, saque
