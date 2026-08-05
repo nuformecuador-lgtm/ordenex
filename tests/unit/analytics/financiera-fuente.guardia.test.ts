@@ -153,6 +153,12 @@ const ARCHIVOS_DECLARADOS = [
   "lib/repositories/ConciliacionCierresAnaliticaRepository.ts",
   "lib/services/AnaliticaFinancieraService.ts",
   "lib/actions/analitica-financiera.ts",
+  // Feature 180 (T5.2 / R31) — el modulo de cubos temporales. Es el UNICO archivo nuevo de
+  // produccion de esa feature y NO entra por el brazo de descubrimiento: es puro y no importa
+  // nada de la 127 (esa es justamente su propiedad, ⟨D8⟩). Sin declararlo aqui, el sitio donde
+  // se decide la ventana de cada consulta quedaria fuera del censo de fuente. El censo se
+  // AMPLIA, no se relaja: pasa de trece modulos a catorce.
+  "lib/analytics/cubo-temporal.ts",
 ];
 
 /**
@@ -211,7 +217,7 @@ describe("R1/R2/R3/R33 · censo de fuente sobre los archivos de la 127", () => {
     expect(infractores).toEqual([]);
   });
 
-  it("el censo mira los TRECE modulos declarados, todos: no pasa por conjunto vacio ni recortado", () => {
+  it("el censo mira los CATORCE modulos declarados, todos: no pasa por conjunto vacio ni recortado", () => {
     // ⚠ POR QUE NO HAY UNA IGUALDAD EXACTA CONTRA UNA LISTA DE TRECE (cierre del menor 1 del
     // review, 2026-08-02). El censo tiene DOS brazos: la lista declarada y el descubrimiento por
     // import. El segundo es abierto por diseño —en cuanto la 132 o la 134 escriban un modulo que
@@ -223,11 +229,12 @@ describe("R1/R2/R3/R33 · censo de fuente sobre los archivos de la 127", () => {
     const declarados = declaradosExistentes();
     const descubiertos = descubiertosPorImport();
 
-    // (1) IGUALDAD EXACTA sobre la lista declarada: los TRECE existen, ni uno menos. Antes se
+    // (1) IGUALDAD EXACTA sobre la lista declarada: los CATORCE existen, ni uno menos. Antes se
     //     podian borrar diez y el ancla `>= 3` seguia verde.
     expect([...declarados].sort()).toEqual([...ARCHIVOS_DECLARADOS].sort());
+    expect(ARCHIVOS_DECLARADOS).toHaveLength(14);
 
-    // (2) Y los trece estan DENTRO del censo. El censo puede tener mas (brazo de import), nunca
+    // (2) Y los catorce estan DENTRO del censo. El censo puede tener mas (brazo de import), nunca
     //     menos: la diferencia en el sentido que importa es vacia.
     expect(ARCHIVOS_DECLARADOS.filter((rel) => !censados.includes(rel))).toEqual([]);
 

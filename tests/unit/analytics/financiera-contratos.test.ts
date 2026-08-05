@@ -376,6 +376,12 @@ describe("R7 · toda firma publica de la 127 recibe ConsultaAnalitica y nada mas
       };
       return [fila];
     },
+    // Feature 180 — el contrato gano `sumarPorCuboYCategoria`. Este doble juzga la FIRMA del
+    // primer parametro, no la agregacion por cubo: el stub devuelve `[]` a proposito y quien
+    // mide el desglose de verdad es `financiera-ingresos-cubo-repo.test.ts`.
+    async sumarPorCuboYCategoria() {
+      return [];
+    },
   };
 
   it("el repositorio de ingresos acepta la consulta preparada", async () => {

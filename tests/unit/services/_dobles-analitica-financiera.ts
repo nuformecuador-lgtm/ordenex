@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { prepararConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
+import type { CuboTemporal } from "@/lib/analytics/cubo-temporal";
 import type { ActorAnalitica } from "@/lib/analytics/alcance";
 import type { ErrorLogger } from "@/lib/errors/logger";
 import type {
@@ -110,7 +111,13 @@ export function armarServicio(datos: Partial<DatosFinancieros> = {}, umbral?: st
 
   const ingresos = {
     sumarPorCategoria: vi.fn(async () => d.caja),
-    sumarPorCuboYCategoria: vi.fn(async () => d.cajaPorCubo),
+    // Feature 180 — los DOS parametros se declaran aunque el doble devuelva filas fijas: sin
+    // ellos, `mock.calls` queda tipado como `[]` y el test de coherencia (R22: los cubos que el
+    // servicio pasa son EXACTAMENTE `trocear(consulta.rango)`) no tendria argumentos que mirar
+    // sin un cast que apagaria justo lo que se quiere comprobar.
+    sumarPorCuboYCategoria: vi.fn(
+      async (_consulta: ConsultaAnalitica, _cubos: readonly CuboTemporal[]) => d.cajaPorCubo,
+    ),
   };
   const recaudo = {
     porMetodoDeCierresResueltos: vi.fn(async () => d.porMetodo),
@@ -119,7 +126,10 @@ export function armarServicio(datos: Partial<DatosFinancieros> = {}, umbral?: st
   const cuentasPorPagar = {
     saldoPorTiendaAlCorte: vi.fn(async () => d.saldoTiendas),
     cuentaPorPagarMensajerosAlCorte: vi.fn(async () => d.cuentaMensajeros),
-    cuentaPorPagarMensajerosPorCubo: vi.fn(async () => d.cuentaMensajerosPorCubo),
+    cuentaPorPagarMensajerosPorCubo: vi.fn(
+      async (_consulta: ConsultaAnalitica, _cubos: readonly CuboTemporal[]) =>
+        d.cuentaMensajerosPorCubo,
+    ),
     cuentaPorPagarMensajerosAntesDe: vi.fn(async () => d.cuentaMensajerosAntes),
   };
   const conciliacion = {
