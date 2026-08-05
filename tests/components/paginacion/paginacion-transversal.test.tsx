@@ -230,10 +230,12 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_BODEGA_RESUELTOS_LABEL",
   },
   {
+    // Feature 184 — Tanda B (T B.2/T B.3): su relectura era la más cara del inventario —cuatro
+    // consultas, cinco agregados de dinero y el reparto del efectivo— para quedarse con un campo.
     listado: "Cierres de bodega solicitados",
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_SOLICITADOS_LABEL",
   },
   {
@@ -312,7 +314,8 @@ const PENDIENTES_184: readonly string[] = [
   "Cierres del día pendientes de decisión",
   "Cierres de bodega pendientes",
   "Cierres de bodega resueltos",
-  "Cierres de bodega solicitados",
+  // Feature 184 — Tanda B: «Cierres de bodega solicitados» salió de aquí en el MISMO commit que
+  // su pantalla. Quedan DIEZ.
   "Cierres del día a consolidar",
   "Incidentes pendientes de decisión",
   "Incidentes — histórico",

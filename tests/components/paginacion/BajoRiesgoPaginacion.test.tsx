@@ -65,6 +65,10 @@ const { paginado, completo } = vi.hoisted(() => ({
     cierresAdmin: vi.fn(),
     bodegaAdmin: vi.fn(),
     consolidacion: vi.fn(),
+    // Feature 184 — Tanda B (T B.2): «Cierres de bodega solicitados» ya no saca su archivo del
+    // listado compuesto (`consolidacion`), sino de su lectura DEDICADA. El doble del compuesto
+    // se conserva porque esa pantalla lo sigue usando para lo demás.
+    bodegaSolicitados: vi.fn(),
     cierreDia: vi.fn(),
     incidentes: vi.fn(),
     saldos: vi.fn(),
@@ -93,6 +97,10 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   solicitarCierreBodega: vi.fn(),
   listarCierresBodegaAdmin: (...a: unknown[]) => completo.bodegaAdmin(...a),
   listarConsolidacion: (...a: unknown[]) => completo.consolidacion(...a),
+  // Feature 184 — Tanda B (T B.2): la lectura dedicada del listado 6. Sin declararla aquí, el
+  // control de descarga de esa tabla llama a `undefined` y el archivo no sale.
+  listarCierresBodegaSolicitadosCompleto: (...a: unknown[]) =>
+    completo.bodegaSolicitados(...a),
   listarHistoricoCierresBodegaPaginado: (...a: unknown[]) =>
     paginado.bodegaResueltos(...a),
   listarCierresBodegaSolicitadosPaginado: (...a: unknown[]) =>
@@ -410,6 +418,15 @@ const LISTADOS: Listado[] = [
       const todos = conjunto(cierreBodega);
       servirPaginas(paginado.bodegaSolicitados, todos);
       servirPaginas(paginado.consolidables, []);
+      // T B.2: de aquí sale el archivo — el conjunto de la zona, sin recorte y con la forma
+      // que `filasDesdeResultado` traduce.
+      completo.bodegaSolicitados.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
+      // El compuesto sigue respondiendo (la pantalla lo usa para sus agregados): que el archivo
+      // ya no salga de él tiene que ser una decisión de la pantalla, no del doble.
       completo.consolidacion.mockResolvedValue({
         status: "ok",
         consolidables: [],

@@ -8,6 +8,13 @@
 // origen trae URL FIRMADAS de evidencia: un `xlsx` con una de ellas dentro, reenviado por
 // correo, es acceso a la foto sin sesión. En el archivo va «Tiene evidencia: Sí/No» y nunca
 // el enlace, y hay un test que lo comprueba sobre las filas REALES que se generan.
+//
+// Feature 184 — Tanda B (T B.2, R1/R2/R7/R8/R10): los dos listados de la consolidación dejan de
+// sacar su archivo de `listarConsolidacion()` —cuatro consultas, cinco agregados de dinero y el
+// reparto del efectivo, para quedarse con UN campo— y pasan a pedírselo a su lectura dedicada.
+// Lo que este archivo gana son los casos que el xlsx por sí solo NO distingue: de qué lectura
+// sale el conjunto, que la pantalla no lo vuelva a tocar y que un fallo no produzca archivo.
+// Los agregados de la cabecera siguen llegando por props y no cambian (R49/R50 de la 170).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -56,6 +63,10 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   // Feature 170 — FASE 2 (T J.2): las dos COLAS de esta pantalla también llegan paginadas.
   listarPendientesCierresBodegaPaginado: vi.fn(),
   listarConsolidablesPaginado: vi.fn(),
+  // Feature 184 — Tanda B (T B.2): la lectura DEDICADA de «Cierres de bodega solicitados». El
+  // doble de `listarConsolidacion` se conserva A PROPÓSITO: que el archivo ya no salga de él es
+  // la mitad de lo que R1 pide, y sin el doble no habría forma de afirmar su ausencia.
+  listarCierresBodegaSolicitadosCompleto: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierre-dia", () => ({
   solicitarCierre: vi.fn(),
@@ -76,10 +87,14 @@ vi.mock("@/lib/utils/xlsx-template", async (importOriginal) => {
 });
 const buildXlsxRowsMock = vi.mocked(buildXlsxRows);
 
+// Feature 184 — Tanda B (T B.2, R7): el control de descarga NO pinta el fallo en la tabla, lo
+// dice por toast (`DescargarDatasetButton:96`). Para poder afirmar QUÉ dice —y sobre todo qué NO
+// dice— el doble del error tiene que ser inspeccionable.
+const { errorToastMock } = vi.hoisted(() => ({ errorToastMock: vi.fn() }));
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
     success: vi.fn(),
-    error: vi.fn(),
+    error: errorToastMock,
     warning: vi.fn(),
     info: vi.fn(),
     show: vi.fn(),
@@ -95,6 +110,7 @@ import {
 import {
   listarCierresBodegaAdmin,
   listarConsolidacion,
+  listarCierresBodegaSolicitadosCompleto,
   listarCierresBodegaSolicitadosPaginado,
   listarConsolidablesPaginado,
   listarHistoricoCierresBodegaPaginado,
@@ -374,6 +390,13 @@ function renderConsolidacion() {
     page: 1,
     ...paginaInicial(BODEGA_SOLICITADOS),
   });
+  // Feature 184 — Tanda B (T B.2): de aquí sale el archivo del listado 6, sin recorte y con la
+  // forma que `filasDesdeResultado` traduce (`ListarCompletoResult`).
+  vi.mocked(listarCierresBodegaSolicitadosCompleto).mockResolvedValue({
+    status: "ok",
+    items: BODEGA_SOLICITADOS,
+    total: BODEGA_SOLICITADOS.length,
+  });
   vi.mocked(listarConsolidacion).mockResolvedValue({
     status: "ok",
     consolidables: CONSOLIDABLES,
@@ -588,6 +611,119 @@ describe("Cierres · descarga", () => {
     expect(filas.map((f) => f.mensajero)).toEqual(
       CONSOLIDABLES.map((c) => c.mensajeroNombre),
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda B (T B.2): «Cierres de bodega solicitados» (listado 6)
+  // -------------------------------------------------------------------------
+
+  it("el archivo de los cierres de bodega solicitados sale de su lectura DEDICADA, no del listado compuesto (R1/R8)", async () => {
+    // Las tres mitades de lo que la tanda B cierra para el listado 6:
+    //
+    //   (a) montar la pantalla NO ejecuta la lectura del conjunto (R8);
+    //   (b) al pulsar se llama a `listarCierresBodegaSolicitadosCompleto` UNA vez, y sin un solo
+    //       argumento: este listado no tiene filtros, así que ni `page`, ni `pageSize`, ni
+    //       `zonaId` —la única cuya aceptación abriría el dinero de la bodega vecina— pueden
+    //       viajar (R4/R17);
+    //   (c) y NO se relee `listarConsolidacion`, que además de este histórico devuelve los
+    //       consolidables, el gate de bloqueo y los cinco agregados de dinero con su reparto de
+    //       efectivo. De todo eso, el archivo usaba UN campo. Ésa era la deuda.
+    const user = userEvent.setup();
+    renderConsolidacion();
+
+    expect(listarCierresBodegaSolicitadosCompleto).not.toHaveBeenCalled();
+    expect(listarConsolidacion).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres de bodega solicitados" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarCierresBodegaSolicitadosCompleto).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(listarCierresBodegaSolicitadosCompleto).mock.calls[0]).toEqual([]);
+    expect(listarConsolidacion).not.toHaveBeenCalled();
+    // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
+    // de degradar el archivo.
+    expect(listarCierresBodegaSolicitadosPaginado).toHaveBeenCalledTimes(1);
+  });
+
+  it("descargar los cierres de bodega solicitados no cuesta los agregados de dinero de la cabecera (R10)", async () => {
+    // La mitad de CLIENTE de R10 (la de servidor son los espías de
+    // `tests/unit/services/consolidacion-completo.test.ts`): los cinco agregados y el reparto de
+    // efectivo los produce `listarConsolidacion`, así que «no calcularlos al descargar» se
+    // observa aquí como «no volver a leer el listado que los calcula». Y su otra mitad, la que
+    // impide que el ahorro se cobre en la pantalla: los números siguen ahí, iguales, porque
+    // llegan por props y esta tanda no los toca (R49/R50 de la 170).
+    const user = userEvent.setup();
+    renderConsolidacion();
+
+    const numero = (etiqueta: string) =>
+      screen.getByRole("region", { name: etiqueta }).textContent;
+    const antes = [
+      numero("Totales a consolidar"),
+      numero("Pago a mensajeros a consolidar"),
+      numero("Ingreso de bodega por rechazos a consolidar"),
+    ];
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres de bodega solicitados" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarConsolidacion).not.toHaveBeenCalled();
+    expect([
+      numero("Totales a consolidar"),
+      numero("Pago a mensajeros a consolidar"),
+      numero("Ingreso de bodega por rechazos a consolidar"),
+    ]).toEqual(antes);
+  });
+
+  it("la pantalla NO recorta ni reordena el conjunto que devolvió el servidor (R2)", async () => {
+    // El caso que discrimina «el servidor entrega el conjunto» de «el servidor lo entrega Y la
+    // pantalla lo vuelve a tocar». La tabla pinta UNA fila (su página) y el doble devuelve a
+    // propósito DOS, en un orden que cualquier orden de cliente cambiaría (el rechazado antes
+    // que el aprobado). El archivo tiene que traer las dos, en ESE orden.
+    const user = userEvent.setup();
+    renderConsolidacion();
+
+    const otro = cierreBodega({ cierreBodegaId: "b9", estado: "rechazado" });
+    vi.mocked(listarCierresBodegaSolicitadosCompleto).mockResolvedValueOnce({
+      status: "ok",
+      items: [otro, ...BODEGA_SOLICITADOS],
+      total: 2,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres de bodega solicitados" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas.map((f) => f.estado)).toEqual(["Rechazado", "Aprobado"]);
+  });
+
+  it("un fallo de la lectura del conjunto no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
+    const user = userEvent.setup();
+    renderConsolidacion();
+    vi.mocked(listarCierresBodegaSolicitadosCompleto).mockResolvedValueOnce({
+      status: "forbidden",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres de bodega solicitados" }),
+    );
+    // Ancla POSITIVA: se espera a que el aviso SALGA, no a que el archivo no salga —una ausencia
+    // se cumple también antes de que la descarga empiece, y eso no ancla nada—.
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+
+    const [mensaje] = errorToastMock.mock.calls[0] as [string];
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    // Accionable, y sin un solo dato del dominio: ni quién solicitó, ni zona, ni montos.
+    for (const dato of ["Sara Satélite", "Limón", "1000.10", "b3"]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
   });
 
   it("descargar no cambia la fila expandida ni el modal abierto", async () => {
