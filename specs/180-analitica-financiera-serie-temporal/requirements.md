@@ -1,8 +1,10 @@
 # Feature 180 — analitica financiera: desglose por fecha para las series temporales · requirements (EARS)
 
 > Zona: `backend`. Complejidad: `medium`. `depends_on: 127` (**done**, PR #269).
-> Rama: sin crear. Spec escrita sobre `chore/cierre-175-178` (cortada de `dev` @ `e4cf28ad`).
-> Estado: **spec sin aprobar**. Las preguntas `Q1..Q6` del final son la puerta humana.
+> Rama: `feature/180-analitica-financiera-serie-temporal`, cortada de `dev` @ `805fb253`.
+> Spec escrita sobre `chore/cierre-175-178` (`dev` @ `e4cf28ad`) y **reverificada** sobre `805fb253`.
+> Estado: **spec APROBADA el 2026-08-05**. Puerta humana cerrada en §5 (Q1,Q3,Q4,Q6 por el humano;
+> Q2 por lo declarado; Q5 por hecho consumado). Lee §5 ⟨L1⟩ y ⟨L2⟩ **antes** de tocar codigo.
 
 ---
 
@@ -219,7 +221,58 @@ verifica, y el mapa `R<n> → test` DEBE quedar escrito en `progress/impl_180.md
 
 ---
 
-## 5. Preguntas abiertas (puerta humana)
+## 5. Puerta humana — **CERRADA el 2026-08-05**
+
+> Cerrada por el humano sobre la rama `feature/180-analitica-financiera-serie-temporal`, cortada de
+> `dev` @ `805fb253`. Las preguntas se conservan integras debajo: son el rastro del porque, no una
+> lista pendiente. **Ninguna vuelve a abrirse sin una decision humana nueva y fechada.**
+
+| Pregunta | Decision | Efecto |
+|---|---|---|
+| **Q1** conjunto con desglose | **(a)** las SIETE que hoy no tienen ningun cubo: las **seis** de caja (`ingreso_flete`, `ingreso_comision_cod`, `ingreso_iva`, `egresos`, `dinero_en_caja`, `ganancia_ordenex`) mas `cuenta_por_pagar_mensajero` | R2. `cod_recaudado` y `cuenta_por_pagar_tienda` quedan FUERA: ya tienen cubo (por metodo y por tienda) y abrirles una vista nueva no lo ha pedido ninguna pantalla |
+| **Q2** cubo en curso parcial | **(a)** NO se marca | R26 intacto: el servicio financiero sigue sin reloj y determinista. Anadirlo por un marcador de presentacion cambiaria su constructor y su superficie de test. El consumidor ya recibe `rango.hastaFecha` |
+| **Q3** rango por encima del techo | **(a)** el **servidor** agrega en cubos semanales por encima del umbral y declara la granularidad en el DTO | R18-R21. El propio comentario de `topes.ts` justifica el 62 como «53 semanas mas margen»: el numero se eligio suponiendo esta agregacion |
+| **Q4** cablear la grafica | **(a)** **solo backend**; el panel de lineas va en ficha nueva | Seccion 2 (Alcance). La zona declarada es `backend` y el tablero es propiedad de una feature `done` con guardias de censo propios |
+| **Q5** orden 180 / «182» | **CERRADA POR HECHO CONSUMADO, no por eleccion** — ver ⟨L1⟩ abajo | La opcion recomendada (a) ya ocurrio sola |
+| **Q6** SQL crudo en un repositorio de dinero | **(a)** crudo **acotado y parametrizado**, con las fronteras de dia calculadas en TypeScript y pasadas como parametros | `design.md` §5, R23/R25. La prosa «ni un `$queryRaw`» de la cabecera de `IngresosAnaliticaRepository` se actualiza **en el mismo PR**: hoy contradice a los guardias, que YA lo permiten sobre las cinco tablas de dinero si el archivo recibe `ConsultaAnalitica` |
+
+### ⟨L1⟩ Correccion del leader: la Q5 pregunta por una feature que ya aterrizo
+
+La Q5 planteaba el orden entre esta feature y «la **182**» que retira `neto`. Verificado en `dev`, no
+supuesto: esa ficha es la **183** (`analitica financiera: retirar la distincion neto/bruto de las
+cuatro metricas de caja`), esta **`done`**, y aterrizo por PR **#288** → `dev` → release #289 a
+produccion. La recomendacion era «182 primero»; **se cumplio sola**. Consecuencias que el
+implementer DEBE tratar como hechos:
+
+1. **Toda mencion a «la 182» en esta spec se lee «la 183».** Aparece en la seccion 2 (FUERA), en
+   R27 y en la Q5. No es un renombrado cosmetico: cambia a que codigo hay que mirar.
+2. **La 183 NO hizo lo que su ficha anunciaba.** Su decision ⟨D12⟩ (`progress/decision_183.md`)
+   sustituyo la nota de alta: el `neto` se retiro en **TRES** metricas, no en cuatro, y `egresos`
+   **gano** `ingreso_ajuste` porque anular un egreso no lo descontaba nunca de la cifra. El motivo
+   de la nota vieja se midio contra produccion y era falso.
+3. **`ImporteAnalitico` ya no es un registro con dos campos: es una union discriminada**
+   `ImporteConNeto | ImporteSoloBruto` con campo `forma`. Por eso **R27 sigue vivo y ahora vale
+   MAS**: el importe de cada fila tiene que salir de la misma funcion que el `total` de su vista, y
+   por tanto ser **la misma variante de la union**. Una vista cuyo total sea `solo_bruto` y cuyas
+   filas lleven `neto` es una incoherencia que el tipo NO atrapa por si solo, porque cada fila se
+   tipa por separado. **Merece su propio test.**
+4. **Los numeros de linea de la tabla §1 se midieron sobre `e4cf28ad` y se han movido.** Los
+   hechos se reverificaron sobre `805fb253` y siguen ciertos (`MAX_PUNTOS_SERIE = 62`,
+   `RANGO_TOPE_DIAS = 366`, las tres vistas de grano `fecha` con `filas: []`). **Localiza por
+   simbolo, no por linea.**
+
+### ⟨L2⟩ Deuda heredada que esta feature NO puede confiar en que la cubra
+
+La ficha de la 183 declara una **deuda viva y sin dueno**: el guardia `listasDeIdsAMano`
+(`tests/unit/guards/tablero-financiero.guardia.test.ts`) **solo marca arrays con dos o mas ids**, asi
+que una decision tomada sobre un id suelto pasa verde. El **R2** de esta feature exige exactamente lo
+contrario —el conjunto con desglose en **una unica constante exportada**, sin ninguna otra lista a
+mano—. **No des ese guardia por bueno para probar el R2**: escribe la comprobacion del R2 de forma
+que muera si alguien decide por id suelto, y demuestralo con la mutacion.
+
+---
+
+### Preguntas, tal como se plantearon
 
 **Q1 — BLOQUEANTE. ¿Que metricas entran en el conjunto con desglose?** La ficha dice «las cuatro
 metricas de caja y la cuenta por pagar de mensajeros», pero en el codigo las metricas de caja son
@@ -287,32 +340,3 @@ ledgers.
 *Recomendacion:* **(a)**, actualizando esa prosa en el mismo PR. (b) trae un volumen no acotado de
 un libro append-only; (c) no es viable con Prisma y anade una reescritura de tabla a tres tablas de
 dinero. Afecta a `design.md` §5 y a R23/R25.
-
----
-
-## 6. Respuestas de la puerta humana (2026-08-04)
-
-Registradas por el leader. **No se reabren**: quien implemente parte de aquí.
-
-| | Decisión | Efecto |
-|---|---|---|
-| **Q1** | **(a)** — las **SIETE** métricas que hoy no tienen ningún cubo: las **seis** de caja (incluidas `dinero_en_caja` y `ganancia_ordenex`, que la 173 añadió) más `cuenta_por_pagar_mensajero`. **No** las nueve de tipo `vistas`, **no** las cinco literales de la ficha. | Fija **R2**. `cod_recaudado` y `cuenta_por_pagar_tienda` **no** ganan vista por fecha en esta feature. |
-| **Q3** | **(a)** — por encima del umbral el **servidor** agrega en **cubos semanales** y lo declara en el DTO. | Fija **R18–R21**. La granularidad es decisión del servidor, no del consumidor. |
-| **Q4** | **(a)** — **solo backend**. El cableado de la gráfica de líneas va en ficha aparte. | Fija la §2 (Alcance). La ficha sigue siendo de zona `backend`. |
-| **Q5** | **(a)** — **la 183 aterriza primero** (retirar `neto` de las métricas de caja) y la 180 nace publicando solo los campos que sobreviven. | La 180 **no arranca** hasta que la 183 esté mergeada. **R27** sigue siendo obligatorio de todos modos: un único constructor de importe. |
-
-**Q2** y **Q6 siguen abiertas.** No bloquean el arranque, pero **Q6 hay que responderla antes de T2**
-(condiciona `design.md` §5 y **R23/R25**): decide si se acepta `$queryRaw` acotado y parametrizado
-dentro de un repositorio de dinero. La recomendación del spec es **(a)**, actualizando en el mismo PR
-la prosa de la cabecera de `IngresosAnaliticaRepository` que hoy promete «ni un `$queryRaw`».
-
-### ⚠️ Revisión obligatoria antes de T0: este spec se escribió contra un `dev` sin la 176
-
-La feature **176** (modo agregado de tasas y tiempos en la analítica **operativa**) se mergeó a `dev`
-en el **PR #285** *mientras se escribía este spec*. Al spec_author se le pidió alinear la forma del
-cubo temporal con «lo que la 176 va a necesitar», tratándola como **hipotética**. Ya no lo es:
-`consultarAgregadoOperativo`, sus cubos semanales y su cubo `periodo` **están en el código**.
-
-**Antes de la primera tarea hay que releer `design.md` §4 y §5 contra la 176 real** y declarar si la
-forma de cubo coincide. Si no coincide, el módulo se queda con **dos contratos temporales
-incompatibles** —justo lo que esta alineación existía para evitar—. Esa comprobación **no se ha hecho**.

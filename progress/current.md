@@ -9,6 +9,56 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🚦 2026-08-05 — **180 en revisión humana: PR #295 abierto**
+
+**180 (`analitica financiera: desglose por fecha`)** implementada, revisada y con el gate completo
+verde. **PR [#295](https://github.com/nuformecuador-lgtm/ordenex/pull/295) → `dev`, esperando merge.**
+Worktree `C:/wser`, rama `feature/180-analitica-financiera-serie-temporal` (de `dev` @ `805fb253`).
+
+- Review `progress/review_180.md`: **APROBADO-CON-NOTAS, cero bloqueantes**. Bitácora `impl_180.md`.
+- **32/32 R** a test nombrado por comportamiento. **19 mutaciones, 18 muertas**; la 19 no es matable
+  por comportamiento y está declarada, no escondida.
+- Gate: **942 archivos / 11 775 tests, 0 fallos** (baseline `dev` 930 / 11 626 → **+149, cero
+  regresiones**), lint 0 errores, `tsc` limpio, `next build` verde.
+
+### Lo que esta feature enseñó, y que sirve para las siguientes
+
+1. **La Q5 de su propia spec preguntaba por una feature que ya había aterrizado.** Era la 183, `done`
+   y en producción, y además **no hizo lo que su ficha anunciaba**. Segunda vez en dos días (la otra
+   fue M-4 en la 133): **entre que una deuda se anota y se lee, otra feature puede haberla saldado**.
+   Comprobar en el código antes de planificar contra una ficha.
+2. **`listasDeIdsAMano` no cubre lo que su nombre promete**: solo marca arrays de **dos o más** ids,
+   así que una decisión por id suelto pasa verde. Está **medido** (censo propio rojo / guardia
+   heredado verde 24/24). Sigue vivo para quien toque el tablero financiero — avisado en la ficha 186.
+3. **La API se cayó cuatro veces** (522 de Cloudflare) matando implementer y reviewer. Lo que estaba
+   commiteado sobrevivió intacto; lo que vivía en el working tree hubo que reconstruirlo dos veces.
+   **Pedir tandas commiteadas pronto y bitácora incremental** cuando la plataforma esté inestable.
+
+### Deudas vivas que deja, con dueño
+
+- **187** (backend): el **R12 es cierto en los tests y NO está garantizado en runtime** — total y
+  filas son dos consultas sin transacción. **No arreglarlo sumando las filas**: eso lo convierte en
+  tautología.
+- **186** (frontend): la gráfica de líneas que la Q4 dejó fuera a propósito. **Debe leer
+  `granularidad` del DTO**: un rango largo llega en cubos **semanales**, y etiquetarlos como días
+  miente sin poner ningún test en rojo.
+- `⟨L4⟩` el `bruto` de `cuenta_por_pagar_mensajero` pasó a `devengo + pago`: hoy idéntico, pero un
+  tercer valor del enum se caería en silencio.
+
+> ⚠️ **Ojo, esas dos fichas se renumeraron el 05-ago al traer `dev`:** nacieron como **185** y **186**,
+> pero `dev` ya había publicado (PR #292) una ficha 185 —el oráculo de conteo del filtro mensajero,
+> cancelada—. Se corrieron en bloque a **186** y **187**. Las citas de arriba ya están corregidas.
+
+### También en el aire
+
+- **PR #292 (feature 133)** ya está **mergeado** (`03b593e7`): conflicto de `feature_list.json`
+  resuelto y arnés de sus tests reparado. Queda su bookkeeping post-merge.
+- **PR #293 (feature 166)** abierto y mergeable, gate verde, **esperando la franja 00:00–06:00 CR**.
+- **134** (export CSV) **ya está en `dev`** (PR #294 mergeado), no en vuelo.
+- **176**: su código ya está en `dev` (diff vacío); solo el registro se quedó en `in_progress`.
+
+---
+
 ## 2026-08-05 — **166 implementada y aprobada** · ⛔ **PR abierto a la espera de la franja de despliegue**
 
 Rama `feature/166-ranking-ventana-dia`, commit `60eabee6` sobre `origin/dev` @ `64957dca`.
@@ -57,8 +107,8 @@ el `.env` del checkout principal antes de medir nada. Es el mismo tropiezo que e
 ## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo — **LO DE PRODUCCIÓN, VIGENTE**
 
 > *Esta sección decía «EMPIEZA A LEER POR AQUÍ» cuando era la más reciente. Sigue vigente entera
-> —incluido el «LO PRIMERO AL RETOMAR» del final—, pero ya no es la de arriba: la 166 del 05-ago la
-> precede. Se conserva intacta salvo este marcador, que había caducado.*
+> —incluido el «LO PRIMERO AL RETOMAR» del final—, pero ya no es la de arriba: la 180 y la 166 del
+> 05-ago la preceden. Se conserva intacta salvo este marcador, que había caducado.*
 
 **183 `done`.** PR **#288** → `dev`, release **#289** → `prod` (**cero migraciones**), despliegue
 **READY**, sin errores de runtime nuevos. `dev` y `prod` a **0 commits**. Review **APROBADO en ronda

@@ -8,6 +8,7 @@ import { IngresosAnaliticaRepository } from "@/lib/repositories/IngresosAnalitic
 import { RecaudoAnaliticaRepository } from "@/lib/repositories/RecaudoAnaliticaRepository";
 import { CuentasPorPagarAnaliticaRepository } from "@/lib/repositories/CuentasPorPagarAnaliticaRepository";
 import { ConciliacionCierresAnaliticaRepository } from "@/lib/repositories/ConciliacionCierresAnaliticaRepository";
+import { trocear } from "@/lib/analytics/cubo-temporal";
 import { fakePrismaQueFalla } from "./_fake-prisma-dinero";
 
 // Feature 127 / T C.5 — GUARDIA TRANSVERSAL DE LOS REPOSITORIOS: R30 y R32.
@@ -30,6 +31,17 @@ import { fakePrismaQueFalla } from "./_fake-prisma-dinero";
 // La TANDA C esta COMPLETA desde C.4 (⟨D10⟩ cerro la contradiccion R4 ↔ R23): el censo mira los
 // CUATRO repositorios y exige que esten los cuatro, para que no pueda quedarse mudo por una
 // ausencia que ya no es legitima. La lista de propagacion pasa de cinco metodos a OCHO.
+//
+// AMPLIADO POR LA FEATURE 180 (T5.1, R31): de OCHO a ONCE. Los tres metodos nuevos del desglose
+// por fecha —`sumarPorCuboYCategoria`, `cuentaPorPagarMensajerosPorCubo` y
+// `cuentaPorPagarMensajerosAntesDe`— entran en la lista de propagacion. Dos de ellos consultan con
+// `$queryRaw` (Q6 de la 180, humano 2026-08-05), asi que el cliente que siempre falla revienta
+// tambien por ahi: sin eso, su caso pasaria por la via del "no consulte y salio bien".
+//
+// El guardia se AMPLIA, no se relaja: los dos detectores de texto siguen exactamente igual y
+// siguen mirando los mismos cuatro archivos. Lo que la 180 anadio a esos archivos es SQL crudo
+// —permitido por los guardias de fuente y de alcance sobre las cinco tablas de dinero— y ni un
+// `try`, ni un `catch`, ni un `.sub(`, ni un `toNumber`, ni un `"0.00"` escrito a mano.
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 
@@ -61,7 +73,14 @@ export function derivaEnElRepositorio(nombre: string, fuente: string): string | 
   if (m) {
     return `${nombre}: hace aritmetica de derivacion (${m[1]}) dentro del repositorio; eso es del servicio (R30)`;
   }
-  if (/\bparseFloat\s*\(|\.\s*toNumber\s*\(/.test(codigo)) {
+  // ENSANCHADO POR LA FEATURE 180 (R16), con `\bNumber\s*\(`. Por que, medido y no supuesto: la
+  // mutacion «emitir `suma` con `Number(x).toFixed(2)`» SOBREVIVIA a este detector, porque no
+  // escribe `parseFloat` ni `.toNumber(` y aun asi pasa el dinero por coma flotante — que es
+  // exactamente lo que R27 de la 127 y R16 de la 180 prohiben. Hoy no hay ni una ocurrencia de
+  // `Number(` en los cuatro repositorios, asi que el ensanche no amnistia ni obliga a tocar
+  // nada: es un ENDURECIMIENTO puro y por tanto compatible con R31 (los guardias se amplian,
+  // nunca se relajan).
+  if (/\bparseFloat\s*\(|\.\s*toNumber\s*\(|\bNumber\s*\(/.test(codigo)) {
     return `${nombre}: convierte dinero a number, que R27 prohibe en toda frontera`;
   }
   return null;
@@ -153,6 +172,23 @@ describe("autocomprobacion de los dos detectores", () => {
     expect(derivaEnElRepositorio("number.ts", infractor)).toContain("number");
   });
 
+  it("rechaza tambien el `Number(x).toFixed(2)`, que antes de la 180 se colaba", () => {
+    // La mutacion medida: ni `parseFloat` ni `.toNumber(`, y el dinero pasa por coma flotante
+    // igual. Con el detector viejo esto devolvia `null`.
+    const infractor = FIXTURE_LEGITIMO.replace(
+      "(g._sum.monto ?? new Prisma.Decimal(0)).toFixed(2)",
+      "Number(g._sum.monto ?? 0).toFixed(2)",
+    );
+    expect(infractor).not.toBe(FIXTURE_LEGITIMO);
+    expect(derivaEnElRepositorio("number-crudo.ts", infractor)).toContain("number");
+  });
+
+  it("y no marca `new Prisma.Decimal(...)`, que es la forma legitima de construir el importe", () => {
+    // Contrapeso del ensanche: si `\\bNumber\\s*\\(` marcara de mas, el repo entero se pondria
+    // rojo y alguien acabaria aflojando el detector — que es como se pierde un guardia.
+    expect(derivaEnElRepositorio("decimal.ts", FIXTURE_LEGITIMO)).toBeNull();
+  });
+
   it("no marca la prosa que EXPLICA por que no se resta aqui", () => {
     const conProsa = `// Aqui no se hace creditos.sub(debitos) ni un try { } catch { return "0.00" }.\n${FIXTURE_LEGITIMO}`;
     expect(derivaEnElRepositorio("prosa.ts", conProsa)).toBeNull();
@@ -161,7 +197,7 @@ describe("autocomprobacion de los dos detectores", () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 3. R32 en ejecucion: el error de base SE PROPAGA, en los cinco metodos      */
+/* 3. R32 en ejecucion: el error de base SE PROPAGA, en los ONCE metodos       */
 /* -------------------------------------------------------------------------- */
 
 const MAESTRO: ActorAnalitica = { usuarioId: "u-maestro", rol: "maestro" };
@@ -233,12 +269,48 @@ describe("R32 · un fallo de la base se propaga; nunca se convierte en un cero",
           ["c1"],
         ),
     },
+    /* --- Feature 180 (T5.1): los tres metodos del desglose por fecha --------------------- */
+    {
+      nombre: "IngresosAnaliticaRepository.sumarPorCuboYCategoria",
+      ejecutar: () => {
+        const consulta = consultaDe("ingreso_flete");
+        // Los cubos salen de `trocear`, no de una lista escrita aqui (R22): con `[]` el metodo
+        // ni siquiera consulta y este caso pasaria sin comprobar nada.
+        return new IngresosAnaliticaRepository(cliente).sumarPorCuboYCategoria(
+          consulta,
+          trocear(consulta.rango),
+        );
+      },
+    },
+    {
+      nombre: "CuentasPorPagarAnaliticaRepository.cuentaPorPagarMensajerosPorCubo",
+      ejecutar: () => {
+        const consulta = consultaDe("cuenta_por_pagar_mensajero");
+        return new CuentasPorPagarAnaliticaRepository(cliente).cuentaPorPagarMensajerosPorCubo(
+          consulta,
+          trocear(consulta.rango),
+        );
+      },
+    },
+    {
+      nombre: "CuentasPorPagarAnaliticaRepository.cuentaPorPagarMensajerosAntesDe",
+      ejecutar: () =>
+        new CuentasPorPagarAnaliticaRepository(cliente).cuentaPorPagarMensajerosAntesDe(
+          consultaDe("cuenta_por_pagar_mensajero"),
+        ),
+    },
   ];
 
-  it("los OCHO metodos publicos de la TANDA C estan cubiertos", () => {
+  it("los ONCE metodos publicos de la TANDA C y de la 180 estan cubiertos", () => {
     // El numero es a proposito: cuando un repositorio gane un metodo, este caso obliga a mirar
-    // la lista en vez de dejarlo sin cubrir en silencio.
-    expect(casos).toHaveLength(8);
+    // la lista en vez de dejarlo sin cubrir en silencio. Paso de 8 a 11 con la feature 180 (R31).
+    expect(casos).toHaveLength(11);
+  });
+
+  it("y los dos que consultan por cubo reciben cubos de verdad: el caso no pasa por lista vacia", () => {
+    // Con `cubos: []` los dos metodos devuelven `[]` sin tocar la base, asi que su caso de
+    // propagacion pasaria verde sin haber comprobado nada. Esto lo impide.
+    expect(trocear(consultaDe("ingreso_flete").rango).length).toBeGreaterThan(0);
   });
 
   for (const caso of casos) {

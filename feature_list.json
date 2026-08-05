@@ -2134,11 +2134,11 @@
       "name": "analitica financiera: desglose por fecha para las series temporales",
       "spec_path": "specs/180-analitica-financiera-serie-temporal",
       "description": "Backend. `AnaliticaFinancieraService` agrega la ventana ENTERA y no publica filas por fecha para las cuatro metricas de caja ni para la cuenta por pagar de mensajeros, asi que hoy NO existe serie temporal que dibujar. Publicar el desglose por fecha para que el tablero financiero pueda tener grafica de lineas.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/180-analitica-financiera-serie-temporal",
       "depends_on": 127,
       "status_note": "2026-08-04 EN CURSO: spec_author lanzado por el leader tras cerrar la 175 y la 178 (que liberaron la zona backend). Cuatro interacciones que el spec DEBE declarar: (176) el modo agregado de la operativa es el problema gemelo -dos formas distintas de cubo temporal dan dos contratos incompatibles-; (179) las filas por fecha entran en la misma cache financiera; (181) el tiendaId crudo viajaria tambien en los cubos por fecha; (183) el spec NO puede dar por hecho que las metricas de caja seguiran publicando 'neto'. Y el techo de 62 puntos de la D3 de la 131/132: una serie por fecha sobre un rango largo lo supera, y el design tiene que decidir si agrupa, recorta o rechaza el rango. || Sale de la Q3 de la 132 (puerta cerrada el 2026-08-03 por defecto declarado). El tablero financiero se entrega SIN grafica de lineas —tarjetas de KPI, donut de recaudo por metodo, barra por tienda y tablas— porque la alternativa era inventarse los puntos. Verificado en el codigo, no supuesto: `AnaliticaFinancieraService.ts:196-221,319-337` agrega la ventana entera. Cuando esta ficha entre, la linea se anade al tablero SIN rehacerlo: los componentes de grafica ya existen (130) y el hueco esta declarado en el design de la 132. NOTA para quien la especifique: comprobar antes si el rollup diario de la 123 ya guarda el grano por fecha que hace falta —si lo guarda, esto es exponerlo, no recalcularlo—."
     },
@@ -2211,6 +2211,32 @@
       "branch": null,
       "depends_on": 122,
       "status_note": "RENUMERADA DE 184 A 185 el 2026-08-05 al traer dev a la rama de la 133: mientras esta rama estaba viva, dev mergeo otra ficha con el id 184 ('analitica financiera: export de la serie') que YA traia rama y spec_path. Mismo criterio que la 165, la 168, la 177, la 178, la 181 y la 183: la ficha que ya tiene rama conserva el id y la otra toma el primer id libre CONSERVANDO su contenido. Si alguna nota vieja habla de 'la ficha 184' a proposito del oraculo de conteo del filtro mensajero, se refiere a ESTA. || CANCELADA el 2026-08-04, SIN implementar: el hallazgo YA ESTABA CERRADO por la feature 126 y nadie lo sabia. Verificado en el codigo por el leader, no deducido: lib/actions/analitica-operativa.ts:117-128 invoca sondeaIdentidadDeMensajero (helper unico en lib/analytics/oraculo-mensajero.ts) y responde forbidden + auditoria con motivo filtro_fuera_de_alcance -- que es EXACTAMENTE el enfoque candidato que esta ficha proponia. Su test tests/unit/analytics/operativa-oraculo.test.ts cubre el caso del adminTienda y ademas mata la mutacion fina (responder forbidden pero quitarle de paso la desagregacion seudonima que D5 de la 122 le concedio). El dominio financiero no necesita guard equivalente: para adminTienda es PROHIBIDO entero, asi que no hay consulta desde la que sondear. || POR QUE SE REGISTRO IGUAL: el review de la 122 (2026-08-01) dejo M-4 abierto, y ni ese review ni el spec_author de la 133 sabian que la 126 lo cerraria despues. La leccion no es del registro sino del metodo: una deuda heredada se comprueba EN EL CODIGO antes de convertirla en ficha, porque entre que se anota y que se lee puede haberla saldado otra feature."
+    },
+    {
+      "id": 186,
+      "name": "analitica financiera: grafica de lineas en el tablero",
+      "spec_path": null,
+      "description": "Frontend. La 180 ya publica el desglose por fecha de las SIETE metricas (las seis de caja + cuenta_por_pagar_mensajero) con su granularidad declarada en el DTO, y los componentes de grafica existen desde la 130. Falta cablear el panel de lineas en el tablero financiero, que la 132 entrego SIN el porque el dato no existia. El hueco esta declarado en specs/132-analitica-tablero-financiero/design.md seccion 5: se anade, no se rehace.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": 180,
+      "status_note": "RENUMERADA DE 185 A 186 el 2026-08-05 al traer dev a la rama de la 180: mientras esta rama estaba viva, dev mergeo (PR #292) una ficha con el id 185 -el oraculo de conteo del filtro mensajero, cancelada- que YA estaba publicada. Ninguna de las dos tenia rama, asi que el desempate no fue ese sino la publicacion: renumerar la que ya circula en dev invalidaria sus citas. Las dos fichas nuevas de esta rama se corrieron en bloque (185->186, 186->187) CONSERVANDO su contenido. Si alguna nota vieja habla de 'la ficha 185' a proposito de la grafica de lineas del tablero financiero, se refiere a ESTA. || Sale de la Q4 de la 180, cerrada por el humano el 2026-08-05: la 180 es zona backend y NO cablea la grafica. || El DTO ya trae 'granularidad' (dia | semana | no_temporal) como campo OBLIGATORIO de cada vista: el tablero NO tiene que adivinar el grano ni recortar puntos, porque el servidor ya garantiza (R19 de la 180) que ninguna serie supera MAX_PUNTOS_SERIE para cualquier rango admisible. Pintar el eje SIN leer 'granularidad' es el error a evitar: un rango largo llega en cubos SEMANALES y etiquetarlos como dias miente al usuario sin que ningun test se ponga rojo. || El adaptador app/(app)/analitica/_components/financiero/adaptar.ts ya sabe convertir 'filas' en serie y en tabla. || OJO: el tablero financiero tiene guardia de censo propio (tests/unit/guards/tablero-financiero.guardia.test.ts) que arrastra la deuda declarada por la 183: 'listasDeIdsAMano' solo marca arrays de DOS o mas ids, asi que una decision por id suelto pasa verde. No la des por buena; la 180 tuvo que escribir su propio censo por esto mismo (medido, mutacion 18)."
+    },
+    {
+      "id": 187,
+      "name": "analitica financiera: lectura consistente del total y su desglose",
+      "spec_path": null,
+      "description": "Backend. deCaja y deTesoreria obtienen el total y las filas por cubo con DOS consultas independientes lanzadas con Promise.all, sin transaccion ni snapshot compartido. Una escritura en el ledger entre ambas lecturas deja el total y la suma de las filas discrepando, que es exactamente lo que el R12 de la 180 afirma que no pasa. Envolver ambas lecturas en una transaccion de solo lectura con aislamiento repeatable read.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 180,
+      "status_note": "RENUMERADA DE 186 A 187 el 2026-08-05 al traer dev a la rama de la 180: mientras esta rama estaba viva, dev mergeo (PR #292) una ficha con el id 185 -el oraculo de conteo del filtro mensajero, cancelada- que YA estaba publicada. Ninguna de las dos tenia rama, asi que el desempate no fue ese sino la publicacion: renumerar la que ya circula en dev invalidaria sus citas. Las dos fichas nuevas de esta rama se corrieron en bloque (185->186, 186->187) CONSERVANDO su contenido. Si alguna nota vieja habla de 'la ficha 186' a proposito de la lectura consistente del total y su desglose, se refiere a ESTA. || Sale de la nota 3 de progress/review_180.md y esta escrita como decision L3 en progress/impl_180.md. NO es un defecto de la 180: es un limite suyo, medido y declarado antes de mergear. || NO se arregle derivando el total sumando las filas: eso convierte el R12 en una TAUTOLOGIA y destruye lo unico que hoy lo hace valioso, que la igualdad se comprueba entre DOS caminos independientes (el total por sumarPorCategoria, las filas por cubo). El arreglo correcto es de infraestructura de repositorio (transaccion de solo lectura), no de calculo. || Impacto real medido: ventana de milisegundos sobre un libro append-only; el sintoma seria un descuadre de centimos en un tablero de consulta, sin corrupcion de datos. Prioridad baja, pero el R12 no debe seguir afirmando en una spec algo que el runtime no garantiza."
     }
   ]
 }

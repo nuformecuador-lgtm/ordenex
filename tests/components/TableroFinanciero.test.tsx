@@ -82,6 +82,10 @@ function vistaSinFilas(id: string, total: ImporteAnalitico): VistaFinanciera {
     grano: "fecha",
     fuente: "wallet_tienda_movimiento",
     sumableCon: [],
+    // Feature 180 (R4) — `granularidad` REQUERIDA. Grano `fecha` y rango de 30 dias: `dia`.
+    // El tablero NO la lee (Q4 = (a): esta feature es solo backend y no anade panel de lineas);
+    // aparece aqui porque el tipo obliga a nombrarla en todo productor, incluidos los fixtures.
+    granularidad: "dia",
     filas: [],
     total,
   };
@@ -171,6 +175,8 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         grano: "metodo_pago",
         fuente: "cierre_dia",
         sumableCon: [],
+        // R4 — el cubo es el metodo de pago, no una fecha: `no_temporal`, declarado.
+        granularidad: "no_temporal",
         filas: [
           { cubo: "efectivo", importe: importeConNeto("111.11", "101.11") },
           { cubo: "simpe", importe: importeConNeto("122.22", "102.22") },
@@ -183,6 +189,8 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         grano: "tienda",
         fuente: "wallet_tienda_movimiento",
         sumableCon: [],
+        // R4 — el cubo es la tienda: `no_temporal`.
+        granularidad: "no_temporal",
         // SEIS cubos con MAX_SERIES = 5: sin `agruparCola` la grafica LANZA
         // `SeriesExcedidasError` fuera de produccion, asi que este numero de
         // filas es parte de la prueba.
@@ -207,6 +215,8 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         grano: "tienda",
         fuente: "wallet_tienda_movimiento",
         sumableCon: [],
+        // R4 — el cubo es la tienda: `no_temporal`.
+        granularidad: "no_temporal",
         filas: [
           { cubo: CUBOS_TIENDA[0], importe: importeConNeto("55.00", "50.00") },
           { cubo: CUBOS_TIENDA[1], importe: importeConNeto("66.00", "60.00") },

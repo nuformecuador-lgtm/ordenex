@@ -47,8 +47,9 @@ const DIR_ANALYTICS = path.join(REPO_ROOT, "lib", "analytics");
 const METRICS_PATH = path.join(DIR_ANALYTICS, "metrics.ts");
 
 /**
- * Los modulos del contrato: los cuatro de la 135 (T1.1, T3.1, T4.1, T5.1) y los cinco
- * de la 122 (alcance, alcance-columnas, consulta, identidad, auditoria). Los cargadores son
+ * Los modulos del contrato: los cuatro de la 135 (T1.1, T3.1, T4.1, T5.1), los cinco
+ * de la 122 (alcance, alcance-columnas, consulta, identidad, auditoria) y el de troceo
+ * temporal de la 180 (`cubo-temporal`, T1.1). Los cargadores son
  * `import()` con literal estatico a proposito: un `import(\`.../${variable}\`)` no lo
  * puede resolver el bundler y el test pasaria a depender de resolucion en runtime.
  */
@@ -64,6 +65,9 @@ const CARGADORES = {
   consulta: () => import("@/lib/analytics/consulta"),
   identidad: () => import("@/lib/analytics/identidad"),
   auditoria: () => import("@/lib/analytics/auditoria"),
+  // Feature 180 (T1.1 / R29): el troceo temporal es un modulo PURO mas y entra en el
+  // MISMO guardia. La 176 lo va a reutilizar, asi que su pureza no es un detalle interno.
+  "cubo-temporal": () => import("@/lib/analytics/cubo-temporal"),
 } as const;
 
 const MODULOS = Object.keys(CARGADORES) as (keyof typeof CARGADORES)[];
@@ -204,7 +208,7 @@ function relativa(archivo: string): string {
 /* -------------------------------------------------------------------------- */
 
 describe("R1 · lib/analytics no importa infraestructura", () => {
-  it("censa los nueve modulos del contrato y ninguno mas se cuela sin vigilancia", () => {
+  it("censa los diez modulos del contrato y ninguno mas se cuela sin vigilancia", () => {
     // Si manana alguien anade `lib/analytics/rollup.ts`, el censo lo cubre solo
     // (se lee el directorio, no una lista fija). Esta asercion solo garantiza que
     // los cuatro que el spec nombra estan presentes.
@@ -279,7 +283,7 @@ describe("R1 · lib/analytics se importa sin DATABASE_URL y sin efectos", () => 
     expect(process.env.DATABASE_URL).toBeUndefined();
   }
 
-  it("importa los nueve modulos sin DATABASE_URL y ninguno lanza", async () => {
+  it("importa los diez modulos sin DATABASE_URL y ninguno lanza", async () => {
     entornoSinBaseDeDatos();
     vi.resetModules();
 
@@ -290,7 +294,7 @@ describe("R1 · lib/analytics se importa sin DATABASE_URL y sin efectos", () => 
     }
   });
 
-  it("importar los nueve modulos no ejecuta efectos observables", async () => {
+  it("importar los diez modulos no ejecuta efectos observables", async () => {
     entornoSinBaseDeDatos();
     vi.resetModules();
 

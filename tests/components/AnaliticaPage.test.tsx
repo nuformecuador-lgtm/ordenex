@@ -128,6 +128,11 @@ const DATOS_FINANCIEROS: ResultadoFinancieroVistas = {
       grano: "fecha",
       fuente: "wallet_movimiento",
       sumableCon: [],
+      // Feature 180 (R4): `granularidad` es REQUERIDA en toda vista. Grano `fecha` sin filas
+      // todavia: la granularidad que el servidor declararia para este rango de 30 dias es `dia`.
+      // La pagina NO la consume (Q4 = (a), esta feature es solo backend); esta aqui porque el
+      // tipo la exige, que es exactamente el efecto que se buscaba al hacerla obligatoria.
+      granularidad: "dia",
       filas: [],
       total: importeConNeto(CIFRA_BRUTA, CIFRA_NETA, "__sin_leer__"),
     },

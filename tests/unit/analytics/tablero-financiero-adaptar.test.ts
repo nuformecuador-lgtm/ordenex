@@ -54,6 +54,9 @@ function vistaDeEjemplo(): VistaConNeto {
     grano: "tienda",
     fuente: "wallet_tienda_movimiento",
     sumableCon: [],
+    // Feature 180 / R4 — `granularidad` REQUERIDA. El cubo es la tienda: `no_temporal`.
+    // El adaptador NO la lee (Q4 = (a): la 180 es solo backend); esta porque el tipo la exige.
+    granularidad: "no_temporal",
     filas: [
       { cubo: CUBO_OPACO, importe: importeConNeto("1234567.89", "1200000.00") },
       { cubo: "clx8s7q0001tienda", importe: importeConNeto("500.25", "-123.45") },
@@ -85,6 +88,8 @@ function vistaConCubos(cantidad: number): VistaConNeto {
     grano: "tienda",
     fuente: "wallet_tienda_movimiento",
     sumableCon: [],
+    // R4 — el cubo es la tienda: `no_temporal`.
+    granularidad: "no_temporal",
     filas: Array.from({ length: cantidad }, (_, indice) => ({
       cubo: `${CUBO_OPACO}${indice}`,
       importe: importeConNeto(`${(indice + 1) * 100}.00`, `${(indice + 1) * 90}.00`),
