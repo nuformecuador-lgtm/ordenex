@@ -49,11 +49,12 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   listarHistoricoCierresAdminPaginado: vi.fn(),
   // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también llega paginada.
   listarPendientesCierresAdminPaginado: vi.fn(),
-  // Feature 184 — Tanda D (T D.3): la lectura DEDICADA del histórico. El doble de
-  // `listarCierresAdmin` se conserva A PROPÓSITO —y programado con las DOS mitades, cola e
-  // histórico— porque es el listado compuesto del que salía el archivo: sin él, «ya no se
-  // relee» no sería una decisión de la pantalla, sería que el doble no responde.
+  // Feature 184 — Tanda D (T D.3): las lecturas DEDICADAS de las dos tablas de esta pantalla.
+  // El doble de `listarCierresAdmin` se conserva A PROPÓSITO —y programado con las DOS mitades,
+  // cola e histórico— porque es el listado compuesto del que salían los dos archivos: sin él,
+  // «ya no se relee» no sería una decisión de la pantalla, sería que el doble no responde.
   listarHistoricoCierresAdminCompleto: vi.fn(),
+  listarPendientesCierresAdminCompleto: vi.fn(),
   forzarSolicitudVencido: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierre-bodega", () => ({
@@ -117,6 +118,7 @@ import {
   listarCierresAdmin,
   listarHistoricoCierresAdminCompleto,
   listarHistoricoCierresAdminPaginado,
+  listarPendientesCierresAdminCompleto,
   listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import {
@@ -357,13 +359,18 @@ function renderCierresAdmin() {
     page: 1,
     ...paginaInicial(HISTORICO),
   });
-  // Feature 184 — Tanda D (T D.3): de aquí sale el archivo del histórico — SU mitad del
-  // alcance, sin recorte y con la forma que `filasDesdeResultado` traduce
+  // Feature 184 — Tanda D (T D.3): de aquí salen los dos archivos de esta pantalla — cada uno
+  // SU mitad del alcance, sin recorte y con la forma que `filasDesdeResultado` traduce
   // (`ListarCompletoResult`).
   vi.mocked(listarHistoricoCierresAdminCompleto).mockResolvedValue({
     status: "ok",
     items: HISTORICO,
     total: HISTORICO.length,
+  });
+  vi.mocked(listarPendientesCierresAdminCompleto).mockResolvedValue({
+    status: "ok",
+    items: PENDIENTES,
+    total: PENDIENTES.length,
   });
   // El listado COMPUESTO sigue programado, y con las DOS mitades dentro: es lo que hace que
   // «no se relee» sea observable (si la pantalla lo llamara, respondería).
@@ -1105,6 +1112,113 @@ describe("Cierres · descarga", () => {
     // Accionable, y sin un solo dato del dominio: ni quién cerró, ni zona, ni montos, ni el
     // motivo del rechazo —que es texto libre escrito por un administrador—.
     for (const dato of ["Carla Mensajera", "Limón", "1000.10", "c3", "Falta el depósito"]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda D (T D.3): «Cierres del día pendientes» (listado 3)
+  // -------------------------------------------------------------------------
+
+  it("el archivo de la cola de cierres del día sale de su lectura DEDICADA, no del listado compuesto (R1/R8)", async () => {
+    // El gemelo del histórico, y el que más se ahorra en producción: la cola son los cierres
+    // sin resolver —una decena— y el histórico que arrastraba crece sin tope con los días, así
+    // que descargar la cola costaba el alcance entero.
+    const user = userEvent.setup();
+    renderCierresAdmin();
+
+    expect(listarPendientesCierresAdminCompleto).not.toHaveBeenCalled();
+    expect(listarCierresAdmin).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres pendientes de decisión" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarPendientesCierresAdminCompleto).toHaveBeenCalledTimes(1);
+    // Sin un solo argumento: ni `page`, ni `pageSize`, ni `destinoZonaId`/`destinoTipo`, que
+    // son las claves que abrirían el dinero de la bodega vecina (R4/R17).
+    expect(vi.mocked(listarPendientesCierresAdminCompleto).mock.calls[0]).toEqual([]);
+    expect(listarCierresAdmin).not.toHaveBeenCalled();
+    expect(listarPendientesCierresAdminPaginado).toHaveBeenCalledTimes(1);
+  });
+
+  it("descargar la cola ya no arrastra el HISTÓRICO: el compuesto trae las dos mitades y ya no se pide (R1)", async () => {
+    // Misma propiedad que en el histórico y con el mismo motivo para existir: volver al listado
+    // compuesto y quedarse con `res.pendientes` produce EXACTAMENTE las mismas filas, en el
+    // mismo orden. El xlsx no lo distingue; el recuento de llamadas sí.
+    const user = userEvent.setup();
+    renderCierresAdmin();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres pendientes de decisión" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarCierresAdmin).not.toHaveBeenCalled();
+
+    // ANTI-VACUIDAD, en dos pasos:
+    //  1. la descarga SÍ ocurrió y produjo sus filas;
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas).toHaveLength(PENDIENTES.length);
+    //  2. y el doble del compuesto está VIVO y trae LAS DOS MITADES.
+    const compuesto = await listarCierresAdmin();
+    expect(compuesto.status === "ok" && compuesto.pendientes).toHaveLength(PENDIENTES.length);
+    expect(compuesto.status === "ok" && compuesto.historico).toHaveLength(HISTORICO.length);
+  });
+
+  it("la pantalla NO recorta ni reordena la cola de cierres del día que devolvió el servidor (R2)", async () => {
+    // El doble devuelve TREINTA filas y la tabla pinta DOS: un archivo de 25 —el `pageSize` del
+    // dominio— o de 2 se distingue del bueno. Y las tres primeras van en un orden que ningún
+    // orden de cliente reproduce, ni ascendente ni descendente por fecha.
+    const user = userEvent.setup();
+    renderCierresAdmin();
+
+    const solicitado = (i: number, dia: string) =>
+      cierreAdmin({
+        cierreId: `cc-${i}`,
+        estado: "solicitado",
+        solicitadoAt: `2026-07-${dia}T10:00:00.000Z`,
+      });
+    const relleno = Array.from({ length: 27 }, (_, i) => solicitado(100 + i, "15"));
+    vi.mocked(listarPendientesCierresAdminCompleto).mockResolvedValueOnce({
+      status: "ok",
+      items: [solicitado(1, "12"), solicitado(2, "19"), solicitado(3, "11"), ...relleno],
+      total: 30,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres pendientes de decisión" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas, "el archivo trae la página, no el conjunto").toHaveLength(30);
+    expect(filas.slice(0, 3).map((f) => f.fecha)).toEqual([
+      "2026-07-12",
+      "2026-07-19",
+      "2026-07-11",
+    ]);
+  });
+
+  it("un fallo de la lectura de la cola de cierres del día no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
+    const user = userEvent.setup();
+    renderCierresAdmin();
+    vi.mocked(listarPendientesCierresAdminCompleto).mockResolvedValueOnce({
+      status: "forbidden",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres pendientes de decisión" }),
+    );
+    // Ancla POSITIVA: el aviso que SALE, no el archivo que no sale.
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+
+    const [mensaje] = errorToastMock.mock.calls[0] as [string];
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    for (const dato of ["Ana Mensajera", "Beto Mensajero", "Limón", "1000.10", "c1"]) {
       expect(mensaje).not.toContain(dato);
     }
     expect(descargarBlobMock).not.toHaveBeenCalled();

@@ -68,6 +68,11 @@ const { paginado, completo, verIncidenteMock } = vi.hoisted(() => ({
   /** Un doble por listado SIN recorte (lo que la descarga debe entregar, R52). */
   completo: {
     cierresAdmin: vi.fn(),
+    // Feature 184 — Tanda D (T D.3): «Cierres del día pendientes» ya no saca su archivo del
+    // listado compuesto (`cierresAdmin`), que arrastraba el histórico entero además de la cola,
+    // sino de su lectura DEDICADA. El doble del compuesto se conserva: la pantalla lo seguía
+    // usando y su ausencia no puede ser lo que explique que ya no se llame.
+    cierresPendientesCompleto: vi.fn(),
     bodegaAdmin: vi.fn(),
     consolidacion: vi.fn(),
     // Feature 184 — Tanda B (T B.2): «Cierres del día a consolidar» ya no saca su archivo del
@@ -85,6 +90,10 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   rechazarCierre: vi.fn(),
   forzarSolicitudVencido: vi.fn(),
   listarCierresAdmin: (...a: unknown[]) => completo.cierresAdmin(...a),
+  // Feature 184 — Tanda D (T D.3): la lectura dedicada del listado 3. Sin declararla aquí, el
+  // control de descarga de esa cola llama a `undefined` y el archivo no sale.
+  listarPendientesCierresAdminCompleto: (...a: unknown[]) =>
+    completo.cierresPendientesCompleto(...a),
   listarPendientesCierresAdminPaginado: (...a: unknown[]) =>
     paginado.cierresPendientes(...a),
   listarHistoricoCierresAdminPaginado: (...a: unknown[]) =>
@@ -357,6 +366,12 @@ const COLAS: Cola[] = [
       const todos = conjunto(cierreAdmin);
       servirPaginas(paginado.cierresPendientes, todos);
       servirPaginas(paginado.cierresHistorico, []);
+      // Feature 184 — Tanda D (T D.3): de aquí sale el archivo (R52), sin recorte.
+      completo.cierresPendientesCompleto.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
       completo.cierresAdmin.mockResolvedValue({
         status: "ok",
         pendientes: todos,

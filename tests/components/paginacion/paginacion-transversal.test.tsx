@@ -76,6 +76,11 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   listarCierresAdmin: vi.fn(),
   listarPendientesCierresAdminPaginado: vi.fn(),
   listarHistoricoCierresAdminPaginado: vi.fn(),
+  // Feature 184 — Tanda D (T D.3): la lectura dedicada de la COLA. Es el peaje que anticipaba
+  // la tanda C: este archivo renderizaba `CierresAdminModule` y además PULSA su control de
+  // descarga (`MUESTRA`), así que sin declarar el export nuevo el control llama a `undefined`
+  // y el archivo no sale.
+  listarPendientesCierresAdminCompleto: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarSaldosTiendasAction: vi.fn(),
@@ -113,6 +118,7 @@ vi.mock("@/hooks/useToast", () => ({
 
 import {
   listarCierresAdmin,
+  listarPendientesCierresAdminCompleto,
   listarPendientesCierresAdminPaginado,
   listarHistoricoCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
@@ -214,10 +220,13 @@ const ANEXO_III: ListadoPaginado[] = [
     lector: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
   },
   {
+    // Feature 184 — Tanda D (T D.3/T D.4): el gemelo del anterior, y el que más se ahorra en
+    // producción — la cola son una decena de cierres sin resolver y el histórico que arrastraba
+    // crece sin tope con los días.
     listado: "Cierres del día pendientes de decisión",
     ruta: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
     tanda: "J",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_PENDIENTES_LABEL",
   },
   {
@@ -319,9 +328,9 @@ const PENDIENTES_184: readonly string[] = [
   // Feature 184 — Tanda C: «Cierres solicitados por el mensajero» salió de aquí en el MISMO
   // commit que su pantalla. Quedan OCHO.
   //
-  // Feature 184 — Tanda D: «Cierres del día — histórico» salió de aquí en el MISMO commit que
-  // su pantalla. Quedan SIETE.
-  "Cierres del día pendientes de decisión",
+  // Feature 184 — Tanda D: los DOS listados de «Cierres del día» del admin —el histórico y la
+  // cola de pendientes— salieron de aquí, cada uno en el MISMO commit que su pantalla.
+  // Quedan SEIS.
   "Cierres de bodega pendientes",
   "Cierres de bodega resueltos",
   // Feature 184 — Tanda B: los DOS listados de la consolidación —«Cierres de bodega
@@ -609,6 +618,12 @@ function montarColaCierres() {
   vi.mocked(listarHistoricoCierresAdminPaginado).mockImplementation(
     servirPagina([]) as never,
   );
+  // Feature 184 — Tanda D (T D.3): de aquí sale el archivo (R52), sin recorte.
+  vi.mocked(listarPendientesCierresAdminCompleto).mockResolvedValue({
+    status: "ok",
+    items: [...COLA_CIERRES],
+    total: COLA_CIERRES.length,
+  });
   vi.mocked(listarCierresAdmin).mockResolvedValue({
     status: "ok",
     pendientes: [...COLA_CIERRES],
