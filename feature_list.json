@@ -2180,6 +2180,32 @@
       "branch": "feature/183-neto-bruto-caja",
       "depends_on": 175,
       "status_note": "DONE 2026-08-04. PR #288 -> dev, release #289 -> prod (cero migraciones). Review APROBADO en ronda 2; los 2 bloqueantes de la ronda 1 eran de rastro y se cerraron sin tocar codigo. Gate verde sobre el arbol mergeado: 926 archivos / 11.528 tests (+43, cero regresiones). 35 mutaciones, 35 muertas. || DECISION D12 (progress/decision_183.md) SUSTITUYO a la nota de alta: NO se retiro el neto en las cuatro. Se retiro en TRES y egresos GANO ingreso_ajuste, porque anular un egreso no lo descontaba nunca de la cifra. El motivo de la nota vieja se midio contra produccion y era falso: cero filas ingreso_ajuste. || DEUDA VIVA, declarada y sin dueno: dos guardias afirman cobertura que no tienen. listasDeIdsAMano (tablero-financiero.guardia.test.ts:202) solo marca arrays con >=2 ids, asi que una decision por id suelta pasa verde; y la guardia de R12 solo mata su mutacion si la fecha huerfana permanece. Ninguna se ensancho: son de features done. Detalle en progress/impl_183.md."
+    },
+    {
+      "id": 185,
+      "name": "analitica financiera: grafica de lineas en el tablero",
+      "spec_path": null,
+      "description": "Frontend. La 180 ya publica el desglose por fecha de las SIETE metricas (las seis de caja + cuenta_por_pagar_mensajero) con su granularidad declarada en el DTO, y los componentes de grafica existen desde la 130. Falta cablear el panel de lineas en el tablero financiero, que la 132 entrego SIN el porque el dato no existia. El hueco esta declarado en specs/132-analitica-tablero-financiero/design.md seccion 5: se anade, no se rehace.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": 180,
+      "status_note": "Sale de la Q4 de la 180, cerrada por el humano el 2026-08-05: la 180 es zona backend y NO cablea la grafica. || El DTO ya trae 'granularidad' (dia | semana | no_temporal) como campo OBLIGATORIO de cada vista: el tablero NO tiene que adivinar el grano ni recortar puntos, porque el servidor ya garantiza (R19 de la 180) que ninguna serie supera MAX_PUNTOS_SERIE para cualquier rango admisible. Pintar el eje SIN leer 'granularidad' es el error a evitar: un rango largo llega en cubos SEMANALES y etiquetarlos como dias miente al usuario sin que ningun test se ponga rojo. || El adaptador app/(app)/analitica/_components/financiero/adaptar.ts ya sabe convertir 'filas' en serie y en tabla. || OJO: el tablero financiero tiene guardia de censo propio (tests/unit/guards/tablero-financiero.guardia.test.ts) que arrastra la deuda declarada por la 183: 'listasDeIdsAMano' solo marca arrays de DOS o mas ids, asi que una decision por id suelto pasa verde. No la des por buena; la 180 tuvo que escribir su propio censo por esto mismo (medido, mutacion 18)."
+    },
+    {
+      "id": 186,
+      "name": "analitica financiera: lectura consistente del total y su desglose",
+      "spec_path": null,
+      "description": "Backend. deCaja y deTesoreria obtienen el total y las filas por cubo con DOS consultas independientes lanzadas con Promise.all, sin transaccion ni snapshot compartido. Una escritura en el ledger entre ambas lecturas deja el total y la suma de las filas discrepando, que es exactamente lo que el R12 de la 180 afirma que no pasa. Envolver ambas lecturas en una transaccion de solo lectura con aislamiento repeatable read.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 180,
+      "status_note": "Sale de la nota 3 de progress/review_180.md y esta escrita como decision L3 en progress/impl_180.md. NO es un defecto de la 180: es un limite suyo, medido y declarado antes de mergear. || NO se arregle derivando el total sumando las filas: eso convierte el R12 en una TAUTOLOGIA y destruye lo unico que hoy lo hace valioso, que la igualdad se comprueba entre DOS caminos independientes (el total por sumarPorCategoria, las filas por cubo). El arreglo correcto es de infraestructura de repositorio (transaccion de solo lectura), no de calculo. || Impacto real medido: ventana de milisegundos sobre un libro append-only; el sintoma seria un descuadre de centimos en un tablero de consulta, sin corrupcion de datos. Prioridad baja, pero el R12 no debe seguir afirmando en una spec algo que el runtime no garantiza."
     }
   ]
 }

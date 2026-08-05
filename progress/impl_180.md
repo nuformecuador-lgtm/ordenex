@@ -355,3 +355,41 @@ migracion, ninguna tabla nueva, ningun cambio de esquema, de RLS ni de indice), 
 donde afectar a ese guardia. En un checkout con `.env`, `./init.sh` completo pasa.
 
 **Delta de rojos atribuible a la 180: 0.**
+
+---
+
+## 10. Cierre del leader — dos deudas que la revision dejo vivas y con nombre
+
+Revision en `progress/review_180.md`: **APROBADO-CON-NOTAS, cero bloqueantes**. Las tres mutaciones
+que se pidieron reverificar resistieron la falsacion, y la del R16 se comprobo **al reves**: el
+reviewer revirtio el regex al estado pre-180 dejando la mutacion puesta y el censo paso verde, lo
+que demuestra que el ensanchamiento del detector es real y no una racionalizacion.
+
+Dos notas `menor` de la revision **NO se arreglan aqui** y quedan escritas para que nadie las
+descubra por sorpresa. Ninguna es un defecto de esta feature; las dos son limites suyos.
+
+### ⟨L3⟩ El R12 es cierto en los tests y NO esta garantizado en runtime
+
+`deCaja` / `deTesoreria` hacen **dos consultas** —el total por `sumarPorCategoria` y las filas por
+cubo—, lanzadas con `Promise.all` y **sin transaccion ni snapshot compartido**. Una escritura en el
+ledger **entre** ambas lecturas dejaria el `total` y la Σ de las filas discrepando, y el R12 afirma
+que son iguales.
+
+**Por que no se arregla en esta feature:** el arreglo obvio —derivar el total sumando las filas—
+convierte el R12 en una **tautologia** y tira a la basura justo lo que hoy lo hace valioso: que la
+igualdad se comprueba entre **dos caminos independientes**. La alternativa correcta es envolver las
+dos lecturas en una transaccion de solo lectura con nivel de aislamiento `repeatable read`, que es
+un cambio de infraestructura de repositorio, no de esta feature.
+
+**Ventana real:** milisegundos, en un libro `append-only`, y el sintoma seria una descuadre de
+centimos en un tablero de consulta. No corrompe nada. Pero **es un hecho del sistema y hasta hoy no
+estaba dicho en ningun sitio**.
+
+### ⟨L4⟩ El `bruto` de `cuenta_por_pagar_mensajero` dejo de ser «todos los tipos»
+
+Paso de sumar **todos** los tipos a sumar explicitamente `devengo + pago`. Hoy es **exactamente lo
+mismo** —el enum tiene esos dos valores y nada mas, comprobado— pero la equivalencia depende del
+enum, no del codigo: **si alguien anade un tercer tipo, se quedaria fuera del bruto en silencio**, sin
+un solo test rojo.
+
+Quien toque ese enum tiene que mirar aqui. Esa es toda la deuda, y es barata mientras este escrita.
