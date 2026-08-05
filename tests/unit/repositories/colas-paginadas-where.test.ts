@@ -454,3 +454,72 @@ describe("el conjunto de la COLA de cierres del admin (feature 184, tanda D)", (
     });
   });
 });
+
+// Feature 184 — Tanda E (R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 4,
+// «Cierres de bodega pendientes» del admin.
+//
+// Mitad de cola de lo que `historicos-paginados-where.test.ts` afirma para el listado 5. Lo que
+// se prueba AQUÍ y no allí es la propiedad que sólo se ve mirando las dos mitades a la vez: que
+// la cola y el histórico siguen PARTICIONANDO la tabla también en los caminos del archivo, y con
+// la MISMA constante (`ESTADOS_COLA_SOLICITADO`) que las dos páginas. Con listas distintas, un
+// cierre de bodega puede quedar en los dos archivos o —lo grave— en ninguno, y el dinero agregado
+// de una zona entera se queda sin nadie que lo apruebe hasta que alguien lo note.
+describe("el conjunto de la COLA de cierres de bodega (feature 184, tanda E)", () => {
+  function repoBodegaAdmin(cierreBodega: ReturnType<typeof delegado>) {
+    return new CierresBodegaAdminRepository({ cierreBodega } as unknown as PrismaClient);
+  }
+
+  it("cierres de bodega — pendientes: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await repoBodegaAdmin(entero).findColaCompleta();
+
+    const pagina = delegado();
+    await repoBodegaAdmin(pagina).findColaPaginada(RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // `in: ["solicitado"]` en valor ABSOLUTO: los RECHAZADOS quedan fuera de este archivo igual
+    // que quedan fuera de esta tabla.
+    expect(argsEntero.where).toEqual({ estado: { in: ["solicitado"] } });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    expect(argsEntero.orderBy).toEqual({ solicitadoAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte (R15).
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("los CONJUNTOS de cola e histórico de bodega particionan la tabla con la MISMA constante (R16)", async () => {
+    // La afirmación que sostiene R44 de la 170 en los dos caminos NUEVOS. Se comprueba emitiendo
+    // los dos `where` y exigiendo que el `in` de la cola y el `notIn` del histórico lleven la
+    // misma lista de estados, que es la constante compartida — no una copia que hoy coincide.
+    const cola = delegado();
+    await repoBodegaAdmin(cola).findColaCompleta();
+
+    const historico = delegado();
+    await repoBodegaAdmin(historico).findHistoricoCompleto();
+
+    const whereCola = (cola.findMany.mock.calls[0]![0] as { where: { estado: { in: string[] } } })
+      .where;
+    const whereHistorico = (
+      historico.findMany.mock.calls[0]![0] as { where: { estado: { notIn: string[] } } }
+    ).where;
+
+    expect(whereCola.estado.in).toEqual([...ESTADOS_COLA_SOLICITADO]);
+    expect(whereHistorico.estado.notIn).toEqual([...ESTADOS_COLA_SOLICITADO]);
+    // La partición, dicha sin rodeos: la lista es LA MISMA en las dos mitades.
+    expect(whereCola.estado.in).toEqual(whereHistorico.estado.notIn);
+    // Y no hay nada más en ninguno de los dos `where`: este listado es de acceso total y no se
+    // acota por zona, así que lo único que separa las dos mitades es el corte por estado.
+    expect(sinEstado(whereCola)).toEqual({});
+    expect(sinEstado(whereCola)).toEqual(sinEstado(whereHistorico));
+    // Y las CUATRO consultas de este listado —dos páginas y dos conjuntos— ordenan igual: si no,
+    // el archivo de una mitad no casaría con su pantalla.
+    expect(cola.findMany.mock.calls[0]![0]!.orderBy).toEqual(
+      historico.findMany.mock.calls[0]![0]!.orderBy,
+    );
+  });
+});
