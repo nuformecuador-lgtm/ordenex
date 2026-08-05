@@ -20,10 +20,14 @@ import {
   listarCierresBodegaSolicitadosCompletoSchema,
   listarConsolidablesSchema,
   listarConsolidablesCompletoSchema,
+  listarPendientesCierresBodegaCompletoSchema,
+  listarHistoricoCierresBodegaCompletoSchema,
   type ListarConsolidacionResult,
   type ListarConsolidablesResult,
   type ListarCierresBodegaSolicitadosCompletoResult,
   type ListarConsolidablesCompletoResult,
+  type ListarPendientesCierresBodegaCompletoResult,
+  type ListarHistoricoCierresBodegaCompletoResult,
   type SolicitarCierreBodegaResult,
   type ListarCierresBodegaAdminResult,
   type ListarCierresBodegaSolicitadosResult,
@@ -247,6 +251,55 @@ export async function listarConsolidablesCompleto(
     listarConsolidablesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierreBodegaService ?? buildCierreBodegaService();
     return service.listarConsolidablesCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda E (R1/R4/R6/R7/R17) — el CONJUNTO de «Cierres de bodega pendientes»
+ * (listado 4), sin recorte, para producir el archivo.
+ *
+ * Sustituye a la relectura de `listarCierresBodegaAdmin()` que hacia la pantalla, que trae los
+ * DOS conjuntos —la cola y el historico entero de la operacion— para que el archivo se quede con
+ * uno. Aqui el corte lo hace la base.
+ *
+ * El alcance no viaja en el input y no puede: es acceso total y lo decide el servicio desde el
+ * actor. Como este listado no tiene filtros, la lista blanca derivada de la de su pagina no deja
+ * NINGUNA clave: cualquier cosa que llegue muere aqui con `validation_error` sin tocar el
+ * servicio (R17). El input se parsea aunque no se transporte nada: parsear ES la barrera.
+ */
+export async function listarPendientesCierresBodegaCompleto(
+  input: unknown = {},
+  deps: CierreBodegaDeps = {},
+): Promise<ListarPendientesCierresBodegaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarPendientesCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
+    return service.listarPendientesCierresBodegaCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda E (R1/R4/R6/R7/R17) — el CONJUNTO de «Cierres de bodega resueltos»
+ * (listado 5), sin recorte, para producir el archivo.
+ *
+ * Espejo del de arriba, y con el mismo motivo: descargar una de las dos tablas de esta pantalla
+ * no tiene por que costar la otra. Aqui la asimetria pesa al reves — el historico crece sin tope
+ * con los dias— pero la relectura de hoy paga las dos mitades en los dos sentidos.
+ */
+export async function listarHistoricoCierresBodegaCompleto(
+  input: unknown = {},
+  deps: CierreBodegaDeps = {},
+): Promise<ListarHistoricoCierresBodegaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarHistoricoCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
+    return service.listarHistoricoCierresBodegaCompleto(actor);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }

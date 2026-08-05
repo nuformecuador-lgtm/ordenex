@@ -65,6 +65,49 @@ function toDetalleCierreRow(r: DetalleCierreRow): CierreBodegaDetalleCierreRow {
 }
 
 /**
+ * Feature 184 — Tanda E (R16) — el ORDEN de los cierres de bodega del admin, declarado UNA vez.
+ *
+ * Lo comparten los CINCO caminos que leen esta tabla desde este repositorio: el listado sin
+ * paginar, las dos paginas (cola e historico) y los dos CONJUNTOS de los que salen los archivos.
+ * Estaba escrito TRES veces —una por metodo— y la tanda E habria sumado dos copias mas.
+ *
+ * No es simetria: en cuanto un archivo depende de estos conjuntos, si su orden diverge del de la
+ * pagina, la fila 26 del archivo deja de ser la primera de la pagina 2 (R5) y no hay ninguna
+ * pantalla que lo diga. Una sola declaracion tampoco lo vuelve invisible: los casos de los
+ * `*-where.test.ts` fijan el valor ABSOLUTO, asi que cambiar la constante los pone rojos.
+ */
+const ORDEN_CIERRES_BODEGA_ADMIN = {
+  solicitadoAt: "desc",
+} as const satisfies Prisma.CierreBodegaOrderByWithRelationInput;
+
+/**
+ * Feature 184 — Tanda E (R16) — el criterio del HISTORICO (cierres de bodega ya RESUELTOS),
+ * declarado UNA vez para su pagina y para su conjunto.
+ *
+ * R44 de la 170 sigue vigente y es el motivo del `notIn`: es el espejo EXACTO del `else` con que
+ * el servicio manda al historico todo lo que no esta en la cola. Con un `in: ["aprobado"]` un
+ * cierre de bodega RECHAZADO —o cualquier estado nuevo del enum— desapareceria de las dos listas
+ * en vez de caer en el historico.
+ */
+function historicoBodegaWhere(): Prisma.CierreBodegaWhereInput {
+  return { estado: { notIn: [...ESTADOS_COLA_SOLICITADO] } };
+}
+
+/**
+ * Feature 184 — Tanda E (R16) — el criterio de la COLA de pendientes, declarado UNA vez para su
+ * pagina y para su conjunto.
+ *
+ * COMPLEMENTO EXACTO del de arriba: la MISMA constante de estados, aqui con `in` (el espejo del
+ * `if` del servicio) y alli con `notIn`. Que las dos mitades lean la misma constante es lo que
+ * garantiza que ninguna fila quede en las dos listas ni se caiga de las dos — y aqui «caerse»
+ * significa que un cierre de bodega deja de verse para aprobarlo, con el dinero agregado de una
+ * zona entera parado hasta que alguien lo note.
+ */
+function colaBodegaWhere(): Prisma.CierreBodegaWhereInput {
+  return { estado: { in: [...ESTADOS_COLA_SOLICITADO] } };
+}
+
+/**
  * Feature 40 — repositorio de "Cierres de bodega" del maestro. SOLO queries Prisma. El
  * maestro NO se acota por zona (todo va a la central). Reusa BODEGA_RESUMEN_SELECT /
  * toBodegaResumenRow (cabecera). `resolverCierreBodega` es un unico UPDATE guardado por
@@ -80,7 +123,54 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
   /** R15: todos los cierres de bodega, mas reciente primero, totales -> STRING. */
   async findCierresBodega(): Promise<CierreBodegaResumenRow[]> {
     const rows = await this.prisma.cierreBodega.findMany({
-      orderBy: { solicitadoAt: "desc" },
+      orderBy: ORDEN_CIERRES_BODEGA_ADMIN,
+      select: BODEGA_RESUMEN_SELECT,
+    });
+    return rows.map(toBodegaResumenRow);
+  }
+
+  /**
+   * Feature 184 — Tanda E (T E.1, R1/R14/R15/R16) — el HISTORICO ENTERO, sin recorte: el conjunto
+   * del que sale el archivo de «Cierres de bodega resueltos» (listado 5).
+   *
+   * **Por que existe, y por que no bastaba reusar.** Hasta hoy ese archivo se producia releyendo
+   * `listarCierresBodegaAdmin()`, que llama a `findCierresBodega`: TODOS los cierres de bodega,
+   * cola e historico juntos, para quedarse con una de las dos mitades. `findCierresBodega` NO se
+   * puede reusar aqui —a diferencia de lo que pasaba en las tandas B y C, donde el conjunto ya
+   * existia— porque no es este conjunto: es su union con el de la cola. Y cada fila de mas no es
+   * gratis: `BODEGA_RESUMEN_SELECT` lleva dos joins de nombre y un `_count` de `cierresDia`.
+   *
+   * Es `findHistoricoPaginado` sin `skip`/`take` y sin el `count`: MISMO `historicoBodegaWhere` y
+   * MISMO `ORDEN_CIERRES_BODEGA_ADMIN` (R16), de una sola declaracion cada uno, para que la
+   * pagina N sea el segmento N de este conjunto (R5). UNA consulta y ninguna mas (R15): el
+   * `count` de la pagina no viaja aqui, porque el total de un conjunto sin recorte es su longitud.
+   */
+  async findHistoricoCompleto(): Promise<CierreBodegaResumenRow[]> {
+    const rows = await this.prisma.cierreBodega.findMany({
+      where: historicoBodegaWhere(),
+      orderBy: ORDEN_CIERRES_BODEGA_ADMIN,
+      select: BODEGA_RESUMEN_SELECT,
+    });
+    return rows.map(toBodegaResumenRow);
+  }
+
+  /**
+   * Feature 184 — Tanda E (T E.1, R1/R14/R15/R16) — la COLA ENTERA de pendientes, sin recorte:
+   * el conjunto del que sale el archivo de «Cierres de bodega pendientes» (listado 4).
+   *
+   * Espejo exacto del de arriba, y con el mismo motivo para existir. Aqui se nota mas: la cola
+   * son los cierres SIN resolver —una decena— y el historico crece sin tope con los dias, asi que
+   * descargar la cola arrastraba todo el historico de la operacion para descartarlo en memoria.
+   *
+   * La particion sigue viva en los CUATRO caminos: `colaBodegaWhere` e `historicoBodegaWhere`
+   * leen la MISMA `ESTADOS_COLA_SOLICITADO`, una con `in` y otra con `notIn`, y las dos paginas y
+   * los dos conjuntos salen de esas dos funciones. Ninguna fila puede quedar en las dos listas ni
+   * caerse de las dos.
+   */
+  async findColaCompleta(): Promise<CierreBodegaResumenRow[]> {
+    const rows = await this.prisma.cierreBodega.findMany({
+      where: colaBodegaWhere(),
+      orderBy: ORDEN_CIERRES_BODEGA_ADMIN,
       select: BODEGA_RESUMEN_SELECT,
     });
     return rows.map(toBodegaResumenRow);
@@ -95,13 +185,15 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
   async findHistoricoPaginado(
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
-    // R44: `notIn` es el espejo EXACTO del `else` del servicio. Con un
-    // `in: ["aprobado","rechazado"]`, un `vencido` desapareceria de las dos listas.
-    const where = { estado: { notIn: [...ESTADOS_COLA_SOLICITADO] } };
+    // Feature 184/R16: el criterio sale de `historicoBodegaWhere`, la MISMA declaracion que usa
+    // el conjunto completo del que sale el archivo. Estaba escrito aqui y habria que haberlo
+    // escrito otra vez alli. R44 sigue siendo el motivo del `notIn`: con un
+    // `in: ["aprobado","rechazado"]`, un estado nuevo del enum desapareceria de las dos listas.
+    const where = historicoBodegaWhere();
     const [rows, total] = await Promise.all([
       this.prisma.cierreBodega.findMany({
         where,
-        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_CIERRES_BODEGA_ADMIN, // R51: el mismo criterio del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: BODEGA_RESUMEN_SELECT,
@@ -121,11 +213,12 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
    * nuevo del enum acabe en las dos colas o en ninguna.
    */
   async findColaPaginada(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
-    const where = { estado: { in: [...ESTADOS_COLA_SOLICITADO] } };
+    // Feature 184/R16: mismo criterio compartido que el conjunto completo de esta cola.
+    const where = colaBodegaWhere();
     const [rows, total] = await Promise.all([
       this.prisma.cierreBodega.findMany({
         where,
-        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_CIERRES_BODEGA_ADMIN, // R51: el mismo criterio del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: BODEGA_RESUMEN_SELECT,

@@ -101,6 +101,41 @@ export const listarConsolidablesCompletoSchema = listarConsolidablesSchema
 
 export type ListarConsolidablesCompletoInput = z.infer<typeof listarConsolidablesCompletoSchema>;
 
+/**
+ * Feature 184 — Tanda E (R17) — entrada de los DOS conjuntos del ADMIN: el de «Cierres de bodega
+ * pendientes» (listado 4) y el de «Cierres de bodega resueltos» (listado 5).
+ *
+ * Se DERIVAN del schema de su pagina quitando `page`/`pageSize`, igual que los de la tanda B: asi
+ * los dos caminos —la tabla y el archivo— no pueden entender cosas distintas por «entrada». Como
+ * ninguno de los dos listados tiene filtros, lo que queda es una lista blanca de CERO claves, y
+ * eso es exactamente lo correcto: el alcance de estos dos es el ROL (acceso total, toda la
+ * operacion), lo decide el servicio desde la sesion y no hay nada que la peticion pueda decir al
+ * respecto. Un `zonaId` o un `estado` colados mueren aqui con `validation_error` sin llegar al
+ * servicio (R4/R17).
+ *
+ * Son dos constantes y no una, aunque hoy su forma coincida y aunque compartan schema de pagina:
+ * el nombre es lo unico que dice cual de las dos mitades se pide, y si manana una de ellas gana
+ * un filtro lo hereda AQUI sin arrastrar a la otra.
+ *
+ * `.strict()` se reescribe aunque `.omit()` lo herede: la barrera es de ESTOS listados y no debe
+ * depender de que el schema base nunca se afloje.
+ */
+export const listarPendientesCierresBodegaCompletoSchema = listarCierresBodegaPaginadoSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarPendientesCierresBodegaCompletoInput = z.infer<
+  typeof listarPendientesCierresBodegaCompletoSchema
+>;
+
+export const listarHistoricoCierresBodegaCompletoSchema = listarCierresBodegaPaginadoSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarHistoricoCierresBodegaCompletoInput = z.infer<
+  typeof listarHistoricoCierresBodegaCompletoSchema
+>;
+
 /** Errores de BORDE de los listados de este modulo (dominio + los dos que resuelve la action). */
 export type CierreBodegaListadoError =
   | { status: "forbidden" }
@@ -142,6 +177,19 @@ export type ListarConsolidablesResult = ListarPaginadoResult<
 export type ListarCierresBodegaSolicitadosCompletoResult =
   ListarCompletoResult<CierreBodegaResumen>;
 export type ListarConsolidablesCompletoResult = ListarCompletoResult<CierreBodegaResumenLite>;
+
+/**
+ * Feature 184 — Tanda E (R6/R7) — los dos conjuntos del ADMIN tal como los recibe el cliente.
+ *
+ * Union de error ANCHO por el mismo motivo que los de la tanda B: quien los consume es
+ * `filasDesdeResultado`, el adaptador comun de la descarga, que redacta el mensaje de CUALQUIER
+ * error de borde en un solo sitio. `limite_excedido` lleva SOLO conteos, jamas filas ni un
+ * conjunto truncado (R6).
+ */
+export type ListarPendientesCierresBodegaCompletoResult =
+  ListarCompletoResult<CierreBodegaResumen>;
+export type ListarHistoricoCierresBodegaCompletoResult =
+  ListarCompletoResult<CierreBodegaResumen>;
 
 // Resultados de las Server Actions: resultado de dominio del service +
 // `unauthenticated` (sin sesion, lo resuelve el borde). Para ver-detalle/aprobar se

@@ -4,6 +4,7 @@ import type {
   CierreBodegaResumen,
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 40 — contrato del servicio "Cierres de bodega" del maestro (aprobar /
@@ -39,6 +40,23 @@ export type ListarHistoricoCierresBodegaServiceResult =
  */
 export type ListarPendientesCierresBodegaServiceResult =
   ListarPaginadoServiceResult<CierreBodegaResumen>;
+
+/**
+ * Feature 184 — Tanda E (T E.2, R1/R6) — el HISTORICO ENTERO de cierres de bodega, sin recorte:
+ * el conjunto del que sale el archivo del listado 5.
+ *
+ * `limite_excedido` lleva SOLO conteos, nunca filas ni un conjunto truncado (R6). No hay
+ * `sinZona`: este listado es de acceso total y no se acota por zona.
+ */
+export type ListarHistoricoCierresBodegaCompletoServiceResult =
+  ListarCompletoServiceResult<CierreBodegaResumen>;
+
+/**
+ * Feature 184 — Tanda E (T E.2, R1/R6) — la COLA ENTERA de cierres de bodega pendientes, sin
+ * recorte: el conjunto del que sale el archivo del listado 4.
+ */
+export type ListarPendientesCierresBodegaCompletoServiceResult =
+  ListarCompletoServiceResult<CierreBodegaResumen>;
 
 // R2/R11-R13/R19: detalle agregado de UN cierre de bodega (por cada cierre_dia, su
 // detalle por resultado reuso 37 + totales). `no_encontrada` = id inexistente (R19).
@@ -106,6 +124,24 @@ export interface ICierresBodegaAdminService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarPendientesCierresBodegaServiceResult>;
+  /**
+   * Feature 184 — Tanda E (T E.2, R1/R4/R6): el HISTORICO ENTERO de cierres de bodega, sin
+   * recorte, que es del que sale el archivo (listado 5).
+   *
+   * MISMA guardia de rol que su pagina (`esAccesoTotal`, R2/R4) evaluada ANTES de tocar el
+   * repositorio, y MISMO corte cola/historico, escrito en la BASE. No recibe `input`: este
+   * listado no tiene filtros ni acepta su alcance por la peticion.
+   */
+  listarHistoricoCierresBodegaCompleto(
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresBodegaCompletoServiceResult>;
+  /**
+   * Feature 184 — Tanda E (T E.2, R1/R4/R6): la COLA ENTERA de cierres de bodega pendientes, sin
+   * recorte, para el archivo (listado 4). Espejo exacto del de arriba.
+   */
+  listarPendientesCierresBodegaCompleto(
+    actor: Actor,
+  ): Promise<ListarPendientesCierresBodegaCompletoServiceResult>;
   /**
    * R2/R11-R13/R19: detalle agregado de un cierre de bodega (cada cierre_dia con sus
    * gestiones por resultado, evidencias firmadas). Solo lectura. Inexistente ->
