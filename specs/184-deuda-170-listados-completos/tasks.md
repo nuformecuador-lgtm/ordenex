@@ -250,7 +250,7 @@
   títulos de test: aquí ya produjo un falso «68/68» por cruce de espacios de nombres entre
   features.
 
-- [ ] **H.4 — Gate final y PR.** · depende de H.3
+- [x] **H.4 — Gate final y PR.** · depende de H.3
   `./init.sh` completo en verde, `progress/history.md` con su entrada, y el estado de la feature
   a `done` solo tras el merge.
 
