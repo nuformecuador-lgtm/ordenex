@@ -444,3 +444,157 @@ describe("el conjunto de la descarga de la tanda C (feature 184)", () => {
     expect(args.take).toBeUndefined();
   });
 });
+
+// Feature 184 — Tanda D (R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 2,
+// «Cierres del día — histórico» del admin.
+//
+// **Aquí SÍ hay método de repositorio nuevo, y es la diferencia con las tandas B y C.** Allí el
+// conjunto ya existía y bastó reusarlo. Aquí la única lectura sin recorte de este dominio es
+// `findCierresByAlcance`, que devuelve la UNIÓN de la cola y el histórico: no es este conjunto,
+// es este conjunto MÁS el otro listado de la misma pantalla. Reusarla habría dejado el archivo
+// saliendo de un listado compuesto (R1) y habría obligado a partir en memoria lo que la base ya
+// sabe cortar. De ahí `findHistoricoCompleto`.
+//
+// Lo que sí se hizo igual que en B y C: el criterio y el orden se declaran UNA vez
+// (`historicoWhere`, `ORDEN_CIERRES_ADMIN`) y los comparten la página y el conjunto. El orden
+// estaba escrito TRES veces en el archivo y esta tanda habría sumado dos copias más.
+//
+// El aviso de siempre: `tests/unit/services/cierres-admin-completo.test.ts` usa un doble de
+// repositorio y NO ve esta traducción a SQL. Por eso estas propiedades se afirman aquí.
+describe("el conjunto del HISTÓRICO de cierres del admin (feature 184, tanda D)", () => {
+  function repoCierresAdmin(cierreDia: ReturnType<typeof delegado>) {
+    return new CierresAdminRepository(
+      { cierreDia } as unknown as PrismaClient,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+  }
+
+  it("cierres del día — histórico: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await repoCierresAdmin(entero).findHistoricoCompleto({
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z-a",
+    });
+
+    const pagina = delegado();
+    await repoCierresAdmin(pagina).findHistoricoPaginado(
+      { destinoTipo: "bodega_satelite", destinoZonaId: "z-a" },
+      RANGO,
+    );
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // El alcance del actor (tipo de bodega + zona) MÁS el corte cola/histórico, en valores
+    // ABSOLUTOS: compartir la declaración no la vuelve invisible.
+    expect(argsEntero.where).toEqual({
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z-a",
+      estado: { notIn: ["solicitado", "vencido"] },
+    });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden también: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ solicitadoAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("cierres del día — histórico: el acceso total NO emite destinoZonaId, pero SÍ el tipo de bodega (R4)", async () => {
+    // El lado feo de R4: el maestro ve TODA la central sin filtro de zona, pero `destinoTipo`
+    // sigue estando. Sin él, su archivo traería además los cierres de todas las satélite.
+    const entero = delegado();
+    await repoCierresAdmin(entero).findHistoricoCompleto({
+      destinoTipo: "bodega_central",
+      destinoZonaId: null,
+    });
+
+    expect(entero.findMany.mock.calls[0]![0]!.where).toEqual({
+      destinoTipo: "bodega_central",
+      estado: { notIn: ["solicitado", "vencido"] },
+    });
+  });
+
+  it("los dos conjuntos del admin cuestan UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Lo que hace de esta tanda una mejora medible: el archivo pasa de traer el alcance ENTERO
+    // (cola + histórico) a traer solo su mitad. Si mañana alguien le añadiera un `count` «para el
+    // total», el total del archivo saldría de otro sitio que sus filas.
+    const casos: Array<[string, ReturnType<typeof delegado>, () => Promise<unknown>]> = [];
+
+    const d1 = delegado();
+    casos.push([
+      "cierres del día — histórico",
+      d1,
+      () =>
+        repoCierresAdmin(d1).findHistoricoCompleto({
+          destinoTipo: "bodega_central",
+          destinoZonaId: null,
+        }),
+    ]);
+
+    const d2 = delegado();
+    casos.push([
+      "cierres del día — cola",
+      d2,
+      () =>
+        repoCierresAdmin(d2).findColaCompleta({
+          destinoTipo: "bodega_central",
+          destinoZonaId: null,
+        }),
+    ]);
+
+    expect(casos).toHaveLength(2); // los DOS listados de la tanda D
+
+    for (const [nombre, d, ejecutar] of casos) {
+      await ejecutar();
+      expect(d.findMany, `${nombre}: una sola consulta`).toHaveBeenCalledTimes(1);
+      expect(d.count, `${nombre}: el conjunto NO cuenta`).not.toHaveBeenCalled();
+      const args = d.findMany.mock.calls[0]![0]!;
+      expect(args.skip, `${nombre}: sin recorte`).toBeUndefined();
+      expect(args.take, `${nombre}: sin recorte`).toBeUndefined();
+    }
+  });
+
+  it("el conjunto del archivo NO es el listado compuesto: trae UNA mitad, no las dos (R1)", async () => {
+    // Es la afirmación que justifica que este método exista. `findCierresByAlcance` —la lectura
+    // que la pantalla releía— emite el MISMO alcance pero SIN corte por estado: devuelve la cola
+    // y el histórico juntos. Si `findHistoricoCompleto` se hubiera implementado delegando en
+    // ella, su `where` no llevaría `estado` y este caso lo diría.
+    const compuesto = delegado();
+    await repoCierresAdmin(compuesto).findCierresByAlcance({
+      destinoTipo: "bodega_central",
+      destinoZonaId: null,
+    });
+
+    const historico = delegado();
+    await repoCierresAdmin(historico).findHistoricoCompleto({
+      destinoTipo: "bodega_central",
+      destinoZonaId: null,
+    });
+
+    type ArgsConWhere = Consulta & { where: Record<string, unknown> };
+    const argsCompuesto = compuesto.findMany.mock.calls[0]![0]! as ArgsConWhere;
+    const argsHistorico = historico.findMany.mock.calls[0]![0]! as ArgsConWhere;
+
+    // El listado compuesto no corta por estado: por eso descargar una mitad traía las dos.
+    expect(argsCompuesto.where).not.toHaveProperty("estado");
+    expect(argsHistorico.where.estado).toEqual({ notIn: ["solicitado", "vencido"] });
+    // Y el resto del `where` —el ALCANCE— es idéntico: lo único que el conjunto añade es el corte.
+    expect(argsCompuesto.where).toEqual(
+      Object.fromEntries(
+        Object.entries(argsHistorico.where).filter(([clave]) => clave !== "estado"),
+      ),
+    );
+    // Mismo orden en los dos: el archivo no cambia de criterio al dejar de releer el compuesto.
+    expect(argsHistorico.orderBy).toEqual(compuesto.findMany.mock.calls[0]![0]!.orderBy);
+  });
+});
