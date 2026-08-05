@@ -35,6 +35,19 @@ hallazgo bloqueante**; si hace falta uno mas, se anade aqui con su motivo antes 
 | `tests/components/TableroOperativoLatencia.test.tsx` | existente | Anadir el simbolo a la factoria de `vi.mock`; casos de R8 y R11; presupuesto de invocaciones actualizado. **El `toBeLessThanOrEqual(6)` de `:106` se conserva intacto** (Q1 = B) |
 | `tests/unit/analytics/tablero-agregacion.test.ts` | existente | **Reescribir** los dos casos de `rango_excedido` (`:198-220`) para que afirmen el comportamiento nuevo (R16) |
 | `tests/unit/analytics/tablero-catalogo-paneles.test.ts` | existente | R9: la `unidad` declarada vs `getMetrica()` |
+| `tests/components/descarga/AnaliticaExportCsv.test.tsx` | existente | **AÑADIDO POR EL IMPLEMENTER (2026-08-05)**, ver motivo abajo |
+| `tests/unit/analytics/export-csv-denegado.test.ts` | existente | idem |
+| `tests/unit/analytics/export-csv-puerta.test.ts` | existente | idem |
+
+**Ampliacion de la frontera, con su motivo (implementer, 2026-08-05).** R9 exige que la
+`unidad` este DECLARADA por cada metrica del catalogo de paneles, y el caso de R9 recorre
+**todas** las metricas: si el campo fuese opcional, una metrica nueva sin declararla pasaria
+sin ruido (es el «NO HECHO» de T2.3). Al ser obligatorio en `MetricaDePanel`, los **fixtures
+de `PanelTablero` de la 134** —tres archivos de test que construyen paneles a mano— dejan de
+compilar. El cambio en ellos es **mecanico y solo en el fixture** (`unidad: "conteo"` /
+`"porcentaje"` / `"moneda"` segun la metrica): no se toca ni una asercion, ni un nombre de
+caso, ni el comportamiento que la 134 vigila. La alternativa —`unidad?`— se descarta porque
+convierte el ancla de R9 en un censo que puede quedar verde por omision.
 
 ### 1.3 Documentacion / bitacora
 

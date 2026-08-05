@@ -162,27 +162,49 @@ export function textoOtros(agrupadas: number): string {
   );
 }
 
-/** R16 — el grano usado, anunciado. */
+/** R16 — el grano usado, anunciado. Es la semana que el CLIENTE sumo, y solo de conteos. */
 export function textoGrano(grano: "dia" | "semana"): string {
   return grano === "semana"
     ? "El rango supera lo que cabe en un eje diario: los conteos se muestran sumados por semana."
     : "Los datos se muestran por dia.";
 }
 
-/**
- * R17/R27/D3 — el hueco DECLARADO, no rellenado.
- *
- * No lleva ninguna cifra a proposito: R27 prohibe mostrar un total de esta metrica
- * mientras no exista una fuente que lo calcule sumando ANTES de dividir. Promediar los
- * cocientes diarios seria la media de medias que `AnaliticaOperativaService` evita a
- * proposito, y recomponer la razon a mano duplicaria en la UI una formula de negocio.
- */
-export const TEXTO_RANGO_EXCEDIDO =
-  "El rango es demasiado largo para esta metrica. No se muestra ni la serie ni ninguna " +
-  "cifra: promediar los valores diarios daria un promedio de promedios, que es un numero " +
-  "falso. Reduce el rango para verla.";
+/* -------------------------------------------------------------------------- */
+/* Feature 182 — la cifra del periodo y la semana DEL SERVIDOR                 */
+/* -------------------------------------------------------------------------- */
 
-export const TITULO_RANGO_EXCEDIDO = "Rango demasiado largo para esta metrica";
+// El aviso de «rango demasiado largo» de la 131 (`TEXTO_RANGO_EXCEDIDO` /
+// `TITULO_RANGO_EXCEDIDO`) SE RETIRA aqui (R16): declaraba un hueco —«no hay forma honesta
+// de calcular esta cifra»— que dejo de existir cuando la 176 puso a sumar antes de dividir
+// en el servidor. Dejarlo exportado y sin uso seria codigo muerto con texto de UI propio,
+// que es justo lo que un guardia futuro puede acabar censando creyendo que vigila algo
+// vivo. Su ausencia esta afirmada en `tests/unit/analytics/tablero-agregado-frontera.guardia.test.ts`.
+
+/** R4 — etiqueta de la cifra total. El «de que» y el «de cuando», en el mismo renglon. */
+export function etiquetaTotalPeriodo(titulo: string): string {
+  return `${titulo} · total del periodo`;
+}
+
+/**
+ * R14 — el grano SERVIDO, anunciado. Texto distinto al de la semana del cliente a
+ * proposito: no es la misma afirmacion. Aqui el servidor sumo los componentes de cada
+ * semana y dividio una sola vez; alli el cliente sumo conteos diarios.
+ */
+export const TEXTO_GRANO_SERVIDOR =
+  "El rango supera lo que cabe en un eje diario: se muestra una semana por punto, " +
+  "calculada por el servidor sumando antes de dividir.";
+
+/**
+ * R7 — «no hubo gestiones» NO es «no hay dato» y NO es un cero.
+ *
+ * Es el valor que el modo agregado anadio al contrato (D2 de la 176): con el denominador
+ * a la vista, el cero legitimo y el dato ausente dejan de ser el mismo pixel. Texto propio
+ * y distinto de `VACIO_PANEL`: aquel habla de una metrica sin movimiento en el rango, este
+ * de un periodo en el que no hubo nada que dividir.
+ */
+export const TEXTO_SIN_GESTIONES =
+  "No hubo ninguna gestion en el periodo, asi que esta cifra no se puede calcular. " +
+  "No es un cero: es la ausencia del denominador.";
 
 /** Aviso de recorte que consume el paquete de la 130 (`avisoRecorte`). */
 export function avisoRecorte(mostradas: number, recibidas: number): string {
