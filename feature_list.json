@@ -1538,7 +1538,7 @@
       "name": "analitica: recortes por rol",
       "spec_path": "specs/133-analitica-recortes-por-rol",
       "description": "Frontend. Define que PANELES ve cada rol sobre los tableros 130/131 (adminTienda = su tienda; adminSatelite = su zona; mensajero = su productividad). El recorte de DATOS ya lo garantiza 121; esta feature recorta la presentacion. Depende de 131.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
@@ -1550,14 +1550,16 @@
       "id": 134,
       "name": "analitica: export CSV",
       "spec_path": "specs/134-analitica-export-csv",
-      "description": "Fullstack. Export CSV de cualquier vista de analitica: Server Action/route con gating por rol que exporta el dataset filtrado respetando el alcance (121); reusa el patron de export existente. Depende de 126.",
-      "status": "pending",
-      "status_note": "AVISO DIRIGIDO POR LA 122 (specs/122-analitica-alcance-por-rol/design.md 7): el export es el consumidor MAS PELIGROSO, porque una fila filtrada se descarga en un archivo. Debe construir su dataset por el MISMO punto de entrada, no reconstruir el filtro. Y el CSV de un adminTienda con grano mensajero va SEUDONIMIZADO (D5/R39): una columna mensajero_id en un archivo descargable es la fuga mas dificil de retirar. Los tres pasos del borde (auditar -> 403 -> seudonimizar) los exigen R40, R41 y R39.",
+      "description": "Frontend. Export CSV/XLSX de la analitica OPERATIVA: el archivo se arma en el navegador a partir del mismo borde que pinta la pantalla (consultarAnaliticaOperativa), nunca reconstruyendo el filtro, de modo que el alcance por rol y la seudonimizacion se HEREDAN del servicio (122) en vez de reimplementarse en el borde. Reusa el patron de descarga 151/148. Depende de 126. La financiera queda fuera por decision (ficha 184).",
+      "status": "in_progress",
+      "status_note": "2026-08-04 SPEC ESCRITA y PUERTA T0 CERRADA con 6 respuestas (D1-D6). 21 requisitos, cada uno con su mutacion. HALLAZGO QUE ENCOGE LA FEATURE: no necesita codigo de servidor. La seudonimizacion ocurre en AnaliticaOperativaService, no en el borde, y su propio comentario nombra a la 134 -- 'ningun borde futuro (la 134, por ejemplo) puede olvidarla' --, asi que el uuid real NUNCA cruza al navegador; y el borde de la 126 ya audita el denegado. Los tres pasos (auditar, 403, seudonimizar) se HEREDAN: lo verificable aqui es que no se abra un camino que los evite. D1 solo operativa, la financiera FUERA POR DECISION -> ficha 184. D2 se reusa consultarAnaliticaOperativa y el archivo se arma en el navegador: dos guardias vivos prohiben un handler de app/api para analitica (operativa-frontera.guardia.test.ts:44 y tablero-operativo-frontera.guardia.test.ts:136). D3 la ventana ciega y el dia parcial viajan como COLUMNAS POR FILA: la fila es lo unico de un fichero plano que sobrevive a filtrar, ordenar y copiar. D4 sin cabecera de metadatos: escribir el tiendaId/zonaId del actor como 'alcance' meteria en un archivo que circula justo el identificador que R8/R9 quieren fuera. D5 no se toca el dialecto (25 tablas dependen) y se ofrece tambien XLSX: coma + decimales con punto + UTF-8 SIN BOM abre en UNA sola columna y rompe tildes en Windows es-EC. D6 un archivo por panel. CORRECCIONES DE FICHA aplicadas por el leader: zone fullstack -> frontend (cero archivos en lib/, cero endpoints, cero migraciones), depends_on 127 -> 126, y la descripcion cita '(121)' donde el punto de entrada real es de la 122.",
       "sdd": true,
       "complexity": "medium",
-      "zone": "fullstack",
+      "zone": "frontend",
       "branch": "feature/134-analitica-export-csv",
-      "depends_on": 127
+      "depends_on": [
+        126
+      ]
     },
     {
       "id": 137,
@@ -2171,15 +2173,44 @@
     {
       "id": 183,
       "name": "analitica financiera: retirar la distincion neto/bruto de las cuatro metricas de caja",
-      "spec_path": null,
+      "spec_path": "specs/183-analitica-neto-bruto-caja",
       "description": "Backend (+ el minimo de frontend que arrastre). Las CUATRO metricas de caja que leen wallet_movimiento (ingreso_flete, ingreso_comision_cod, ingreso_iva, egresos) publican `bruto` y `neto` en su ImporteAnalitico, pero declaran listas HOMOGENEAS de prefijo y con el CHECK categoria<->tipo de la 173 cada una solo puede contener un `tipo`: luego neto = +-bruto SIEMPRE. Retirar la distincion PARA ESAS CUATRO, dejando solo el bruto. OJO AL ALCANCE: el `neto` NO desaparece del sistema — en la vista B (ledger de tienda) y en `derivarBalance` (R20 de la 127) el neto con signo SI significa algo real (Σ ingreso − Σ egreso sobre un ledger con credito y debito), y ahi se conserva. La ficha es 'retirar donde es degenerado', no 'retirar el campo'.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
-      "branch": null,
+      "branch": "feature/183-neto-bruto-caja",
       "depends_on": 175,
-      "status_note": "DECISION HUMANA TOMADA EL 2026-08-04, no la reabra el spec_author: de las dos salidas que planteaba la 175 se eligio RETIRAR LA DISTINCION, y NO que 'egresos' gane ingreso_ajuste en definicion.categorias. Motivo: esa segunda opcion cambia el numero de una metrica de dinero YA PUBLICADA, que es justo lo que la P4 de la 173 quiso evitar; retirar un campo que era redundante por construccion no mueve ninguna cifra. || DADA DE ALTA el 2026-08-04 al cerrar la 175: es su CUARTA divergencia, movida aqui intacta en vez de quedar huerfana (la nota de la 175 exigia cerrarla o moverla). La dirigio a la 175 la feature 173. || POR QUE NO ES UN ONE-LINER, medido antes de dar de alta la ficha: `neto` esta en lib/types/analitica-financiera.ts, lib/services/AnaliticaFinancieraService.ts (11 ocurrencias, incluida la eleccion de cual de las dos cifras de derivarCaja se publica como neto), los dos repos (IIngresosAnaliticaRepository, IRecaudoAnaliticaRepository + sus implementaciones, donde el desglose por tipo existe PARA el neto), el TableroFinanciero de la 132 —que lo pinta como KPI principal con el bruto de linea secundaria (R14/R16) y dibuja DOS series con el— y app/(app)/analitica/_components/financiero/adaptar.ts (CampoImporte = 'bruto'|'neto'). Al especificar hay que decidir que pasa con R14 y R16 de la 132, que son requisitos VIVOS de una feature done y mergeada. || DOS DOBLES EN MEMORIA ESPERANDO A ESTA FICHA, verdes hoy solo porque no pasan por el CHECK de la base: tests/unit/analytics/financiera-ingresos-repo.test.ts:124 (fila cruzada: categoria egreso_ajuste + tipo ingreso) y tests/unit/services/analitica-financiera-derivacion.test.ts:177. La 173 los dejo sin tocar A PROPOSITO porque su arreglo dependia de esta decision. Su unico rojo propio ya lo reescribio: tests/integration/actions/analitica-financiera-action.test.ts F.4 (bruto 800 / neto -800). || RENUMERADA DE 182 A 183 el 2026-08-04, en el mismo dia en que se dio de alta: mientras esta rama estaba viva, la sesion de la 176 mergeo a dev (PR #285) otra ficha con el id 182 ('analitica: cablear el modo agregado al tablero operativo'), que YA traia rama y spec_path. Mismo criterio que la 165, la 168, la 177, la 178 y la 181: la ficha que ya tiene rama conserva el id y la otra toma el primer id libre CONSERVANDO su contenido. Si alguna nota vieja habla de 'la ficha 182' a proposito del neto/bruto, se refiere a ESTA."
+      "status_note": "DONE 2026-08-04. PR #288 -> dev, release #289 -> prod (cero migraciones). Review APROBADO en ronda 2; los 2 bloqueantes de la ronda 1 eran de rastro y se cerraron sin tocar codigo. Gate verde sobre el arbol mergeado: 926 archivos / 11.528 tests (+43, cero regresiones). 35 mutaciones, 35 muertas. || DECISION D12 (progress/decision_183.md) SUSTITUYO a la nota de alta: NO se retiro el neto en las cuatro. Se retiro en TRES y egresos GANO ingreso_ajuste, porque anular un egreso no lo descontaba nunca de la cifra. El motivo de la nota vieja se midio contra produccion y era falso: cero filas ingreso_ajuste. || DEUDA VIVA, declarada y sin dueno: dos guardias afirman cobertura que no tienen. listasDeIdsAMano (tablero-financiero.guardia.test.ts:202) solo marca arrays con >=2 ids, asi que una decision por id suelta pasa verde; y la guardia de R12 solo mata su mutacion si la fecha huerfana permanece. Ninguna se ensancho: son de features done. Detalle en progress/impl_183.md."
+    },
+    {
+      "id": 184,
+      "name": "analitica financiera: export de la serie",
+      "spec_path": "specs/184-analitica-financiera-export",
+      "description": "Frontend. Export CSV/XLSX de las metricas financieras por el MISMO borde (consultarMetricaFinanciera), reusando el patron de descarga 151/148 y con las mismas garantias que la 134: puerta unica -- el dataset se construye por el mismo punto de entrada que la pantalla, nunca reconstruyendo el filtro --, denegado auditado antes del 403, y SIN cabecera de metadatos con el alcance del actor (escribir su tiendaId o zonaId en un archivo que circula es justo el identificador que hay que mantener fuera). Requiere que AnaliticaFinancieraService publique una forma de serie estable.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/184-analitica-financiera-export",
+      "depends_on": [
+        180,
+        183
+      ],
+      "status_note": "Sale de la decision D1 de la 134: la analitica financiera queda fuera de aquel export POR DECISION, no por olvido. NO adelantarla: RespuestaFinanciera no expone hoy una serie que proyectar a filas (la publica la 180) y la 183 cambia QUE SIGNIFICAN las cifras de caja. Exportar antes es escribir dos veces la proyeccion, y la segunda con prisa -- que en un export es como se cuela una columna que no debia salir."
+    },
+    {
+      "id": 185,
+      "name": "analitica: cerrar el oraculo de conteo del filtro mensajero (R39 de la 122)",
+      "spec_path": null,
+      "description": "Backend. Un actor con politica de identidad SEUDONIMA (adminTienda + grano mensajero) puede confirmar por el CONTEO si un mensajero concreto trabajo para el, enviando su uuid en `mensajero_id`: `recortarFiltro` solo interseca la dimension del alcance, asi que el filtro pasa y el conteo devuelto responde la pregunta. Enfoque candidato: para ese actor, `mensajero_id` en el filtro se RECHAZA con `filtro_fuera_de_alcance` (403) en vez de intersecarse -- un id que no puede nombrar tampoco puede preguntar por el. Alternativa a evaluar: ruido o umbral minimo de celda.",
+      "status": "cancelled",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 122,
+      "status_note": "RENUMERADA DE 184 A 185 el 2026-08-05 al traer dev a la rama de la 133: mientras esta rama estaba viva, dev mergeo otra ficha con el id 184 ('analitica financiera: export de la serie') que YA traia rama y spec_path. Mismo criterio que la 165, la 168, la 177, la 178, la 181 y la 183: la ficha que ya tiene rama conserva el id y la otra toma el primer id libre CONSERVANDO su contenido. Si alguna nota vieja habla de 'la ficha 184' a proposito del oraculo de conteo del filtro mensajero, se refiere a ESTA. || CANCELADA el 2026-08-04, SIN implementar: el hallazgo YA ESTABA CERRADO por la feature 126 y nadie lo sabia. Verificado en el codigo por el leader, no deducido: lib/actions/analitica-operativa.ts:117-128 invoca sondeaIdentidadDeMensajero (helper unico en lib/analytics/oraculo-mensajero.ts) y responde forbidden + auditoria con motivo filtro_fuera_de_alcance -- que es EXACTAMENTE el enfoque candidato que esta ficha proponia. Su test tests/unit/analytics/operativa-oraculo.test.ts cubre el caso del adminTienda y ademas mata la mutacion fina (responder forbidden pero quitarle de paso la desagregacion seudonima que D5 de la 122 le concedio). El dominio financiero no necesita guard equivalente: para adminTienda es PROHIBIDO entero, asi que no hay consulta desde la que sondear. || POR QUE SE REGISTRO IGUAL: el review de la 122 (2026-08-01) dejo M-4 abierto, y ni ese review ni el spec_author de la 133 sabian que la 126 lo cerraria despues. La leccion no es del registro sino del metodo: una deuda heredada se comprueba EN EL CODIGO antes de convertirla en ficha, porque entre que se anota y que se lee puede haberla saldado otra feature."
     }
   ]
 }

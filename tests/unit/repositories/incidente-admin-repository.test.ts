@@ -618,6 +618,7 @@ describe("R48/R49 — las lecturas van acotadas por alcance en el WHERE", () => 
         numRemision: "R-42",
         destinatario: "Ana",
         zonaId: "z-1",
+        montoCobrar: null, // fix «tope de negocio» (2026-08-04): columna nueva del select
         zona: { nombre: "Centro" },
         estatus: { value: "incidente" },
       },
@@ -659,6 +660,7 @@ describe("R48/R49 — las lecturas van acotadas por alcance en el WHERE", () => 
         numRemision: "R-1",
         destinatario: "Ana",
         zonaId: "z-1",
+        montoCobrar: null, // fix «tope de negocio» (2026-08-04): columna nueva del select
         zona: { nombre: "Centro" },
         estatus: { value: "incidente" },
       },

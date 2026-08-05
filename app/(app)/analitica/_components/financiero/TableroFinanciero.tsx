@@ -21,7 +21,13 @@
 //    PANTALLA. Resolverlos es la ficha 178.
 //  - NO escribe la lista de ids financieros (R27): recorre los paneles que le da
 //    `cargar.ts` y elige el componente por la FORMA del DTO (tipo, id de vista,
-//    grano, si trae filas), no por un `switch` sobre nombres de metrica.
+//    grano, si trae filas), no por un `switch` sobre nombres de metrica. Desde la
+//    feature 183 ⟨D12⟩ (humano, 2026-08-04) eso incluye la `forma` del importe: hay
+//    metricas que publican `bruto` y `neto` y otras que solo publican `bruto`, y cual
+//    es cual NO se escribe aqui (R22 de la 183).
+//  - NO pinta el marcador de dato ausente donde la metrica no tiene neto (R19 de la
+//    183): en la 132 ese marcador significa «no se sabe» (R15) y aqui la verdad es
+//    «no aplica». Donde no hay neto, no hay linea, ni columna, ni etiqueta.
 //
 // DESVIACION DECLARADA de `design.md §5` (paneles 6, 7 y 9): alli la tabla lleva
 // "fila de totales". Aqui NO se usa la prop `totales` de `TablaResumen`, porque
@@ -56,7 +62,14 @@ import {
   type VistaFinanciera,
 } from "@/lib/types/analitica-financiera";
 
-import { COLUMNAS_IMPORTE, aNumero, agruparCola, filasDeVista, serieDeVista } from "./adaptar";
+import {
+  aNumero,
+  agruparCola,
+  columnasDeVista,
+  esVistaConNeto,
+  filasDeVista,
+  serieDeVista,
+} from "./adaptar";
 import type { PanelFinanciero } from "./cargar";
 import { PanelConciliacion } from "./PanelConciliacion";
 
@@ -128,7 +141,11 @@ function CabeceraPanel({
 }
 
 /**
- * El `total` del DTO, bruto y neto, etiquetados y distinguibles (R14, R16).
+ * El `total` del DTO: los DOS importes donde el DTO los trae, etiquetados y
+ * distinguibles (R14, R16/132; R20 de la 183); solo el bruto donde no (R19).
+ *
+ * La linea del neto no se pinta vacia ni con el marcador de dato ausente: se OMITE.
+ * En la 132 ese marcador significa «no se sabe» (R15) y aqui la verdad es «no aplica».
  *
  * Sustituye a la fila de totales calculada del paquete: ver la desviacion
  * declarada en la cabecera del archivo.
@@ -142,12 +159,14 @@ function TotalDelDto({
 }) {
   return (
     <dl className="flex flex-wrap gap-x-8 gap-y-1 text-sm">
-      <div className="flex items-baseline gap-2">
-        <dt className="text-muted-foreground">{TEXTOS.totalNeto}</dt>
-        <dd className="font-semibold tabular-nums text-foreground">
-          {formatearValor(aNumero(total.neto), unidad)}
-        </dd>
-      </div>
+      {total.forma === "bruto_y_neto" ? (
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground">{TEXTOS.totalNeto}</dt>
+          <dd className="font-semibold tabular-nums text-foreground">
+            {formatearValor(aNumero(total.neto), unidad)}
+          </dd>
+        </div>
+      ) : null}
       <div className="flex items-baseline gap-2">
         <dt className="text-muted-foreground">{TEXTOS.totalBruto}</dt>
         <dd className="tabular-nums text-foreground">
@@ -158,7 +177,17 @@ function TotalDelDto({
   );
 }
 
-/** KPI: el `neto` como cifra y el `bruto` en una linea secundaria VISIBLE (R16). */
+/**
+ * KPI, ramificado por la FORMA del total y no por el id de la metrica (R22).
+ *
+ * - Con neto: el `neto` como cifra y el `bruto` en una linea secundaria VISIBLE
+ *   (R16/132, conservado donde hay material — R20).
+ * - Sin neto: el `bruto` como cifra, con la etiqueta «Bruto» que ya existe en `TEXTOS`
+ *   y SIN linea secundaria (P2, humana, 2026-08-04). No se deja sin etiqueta: el nombre
+ *   de la metrica esta en la cabecera de la seccion, pero un KPI sin etiqueta pierde el
+ *   nombre accesible que la 132 le dio. Y donde iba el neto no va NADA: ni la etiqueta
+ *   «Neto», ni un guion, ni el marcador de dato ausente (R19).
+ */
 function PanelKpi({
   vista,
   unidad,
@@ -166,20 +195,46 @@ function PanelKpi({
   readonly vista: VistaFinanciera;
   readonly unidad: MetricaUnidad;
 }) {
+  const { total } = vista;
+  if (total.forma === "solo_bruto") {
+    return <KpiCard etiqueta={TEXTOS.bruto} valor={aNumero(total.bruto)} unidad={unidad} />;
+  }
   return (
     <>
-      <KpiCard etiqueta={TEXTOS.neto} valor={aNumero(vista.total.neto)} unidad={unidad} />
+      <KpiCard etiqueta={TEXTOS.neto} valor={aNumero(total.neto)} unidad={unidad} />
       <p className="text-sm text-muted-foreground">
-        {`${TEXTOS.bruto}: ${formatearValor(aNumero(vista.total.bruto), unidad)}`}
+        {`${TEXTOS.bruto}: ${formatearValor(aNumero(total.bruto), unidad)}`}
       </p>
     </>
   );
 }
 
-/** Serie de una vista con la cola ya agrupada: el paquete nunca recibe de mas (R20, R21). */
-function serieAcotada(vista: VistaFinanciera, campo: "bruto" | "neto"): SerieDato {
-  const serie = serieDeVista(vista, campo);
+/** Una serie con la cola ya agrupada: el paquete nunca recibe de mas (R20, R21 de la 132). */
+function acotar(serie: SerieDato): SerieDato {
   return { ...serie, puntos: agruparCola(serie.puntos, MAX_SERIES, TEXTOS.otros) };
+}
+
+/**
+ * Las series de una grafica comparativa: DOS donde el importe trae los dos campos, UNA
+ * —la del bruto— donde no (R21 de la 183).
+ *
+ * Emitir dos series iguales donde el neto es `+bruto` por construccion consumiria el
+ * techo `MAX_SERIES` al doble y pintaria dos veces la misma cifra con dos nombres.
+ */
+function seriesComparativas(vista: VistaFinanciera): readonly SerieDato[] {
+  if (!esVistaConNeto(vista)) return [acotar(serieDeVista(vista, "bruto"))];
+  return [acotar(serieDeVista(vista, "bruto")), acotar(serieDeVista(vista, "neto"))];
+}
+
+/**
+ * La serie UNICA de una grafica que pinta una sola cifra: el `neto` donde lo hay —es la
+ * cifra con signo, la que esa grafica lleva pintando desde la 132— y el `bruto` donde no.
+ * Nunca las dos: el donut aplica el techo a los SEGMENTOS de la unica serie que pinta.
+ */
+function serieUnica(vista: VistaFinanciera): SerieDato {
+  return esVistaConNeto(vista)
+    ? acotar(serieDeVista(vista, "neto"))
+    : acotar(serieDeVista(vista, "bruto"));
 }
 
 /** Tabla con TODAS las filas del DTO y, al lado, el total literal del DTO. */
@@ -197,7 +252,7 @@ function PanelTabla({
       <TablaResumen
         titulo={`${titulo} · ${TEXTOS.detalle}`}
         encabezadoCategoria={TEXTOS.columnaTienda}
-        columnas={COLUMNAS_IMPORTE}
+        columnas={columnasDeVista(vista)}
         filas={filasDeVista(vista)}
         vacio={TEXTO_VACIO}
       />
@@ -232,7 +287,7 @@ function ContenidoDeVista({
       <>
         <GraficaDonut
           titulo={`${titulo} · ${TEXTOS.distribucion}`}
-          series={[serieAcotada(vista, "neto")]}
+          series={[serieUnica(vista)]}
           unidad={unidad}
           vacio={TEXTO_VACIO}
         />
@@ -246,7 +301,7 @@ function ContenidoDeVista({
       <>
         <GraficaBarras
           titulo={`${titulo} · ${TEXTOS.comparativa}`}
-          series={[serieAcotada(vista, "bruto"), serieAcotada(vista, "neto")]}
+          series={seriesComparativas(vista)}
           unidad={unidad}
           vacio={TEXTO_VACIO}
         />

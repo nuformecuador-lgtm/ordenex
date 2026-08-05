@@ -563,9 +563,18 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     // «descargá lo que se ves» es más fácil de no notar: el filtro de estado «Recibidas» deja
     // 30 órdenes en dos páginas, y la segunda trae CINCO.
     await filtrarPor(user, "Estado", "Recibidas");
-    await waitFor(() => expect(remisionesVisibles()).toHaveLength(PAGE_SIZE));
+    // El número de filas solo no distingue «la página llegó» de «la página está llegando»:
+    // el `DataTable` en carga deja un `<tr>` con `role="status"` y filas skeleton, y hay
+    // recuentos que cuadran a medio camino. Se exige además que no quede carga en vuelo.
+    await waitFor(() => {
+      expect(remisionesVisibles()).toHaveLength(PAGE_SIZE);
+      expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
+    });
     await user.click(within(nav()).getByRole("button", { name: "Página siguiente" }));
-    await waitFor(() => expect(remisionesVisibles()).toHaveLength(5));
+    await waitFor(() => {
+      expect(remisionesVisibles()).toHaveLength(5);
+      expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
+    });
 
     await user.click(botonDescarga());
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));

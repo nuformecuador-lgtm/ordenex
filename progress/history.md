@@ -2822,3 +2822,75 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   `20260714123909_*`— hace fallar `pnpm db:migrate`, así que el round-trip `migrate`/`rollback` de
   esta migración **queda sin medir**; se aplica con `prisma migrate deploy`, el mismo comando del
   build.
+
+## 2026-08-04 — 183 · el `neto` de las cuatro métricas de caja
+- Las cuatro métricas que leen `wallet_movimiento` dejan de recibir el mismo trato:
+  `ingreso_flete`, `ingreso_comision_cod` e `ingreso_iva` **retiran el `neto`** (era
+  `+bruto` siempre: listas homogéneas de prefijo + el `CHECK` categoría↔tipo de la 173),
+  y **`egresos` lo conserva ganando `ingreso_ajuste`**. `ImporteAnalitico` pasa a unión
+  discriminada por `forma`, así que leer un `neto` inexistente **no compila**.
+- Requisitos cubiertos: R1–R27, mapeados en `progress/impl_183.md` leyendo cada caso
+  citado. Gate: `./init.sh` verde sobre árbol quieto, 926 archivos / 11.528 tests
+  (baseline 925 / 11.485 ⇒ +43 tests, cero regresiones). 35 mutaciones, 35 muertas.
+- Por qué `egresos` no se trata como las otras tres: `WalletEgresoService.ts:89-96`
+  revierte un egreso anulado emitiendo `ingreso_ajuste`, y la métrica no lo declaraba.
+  **Anular un egreso no lo descontaba nunca de la cifra.** Con la reversión dentro, el
+  neto pasa a significar lo que realmente salió de caja.
+- Decisión ⟨D12⟩ (`progress/decision_183.md`, humana, 2026-08-04) **sustituye** a la que
+  la ficha traía escrita el mismo día («retirar en las CUATRO, y NO dar `ingreso_ajuste`
+  a `egresos`»). El motivo de aquélla —«cambia una cifra de dinero ya publicada»— se
+  midió contra producción y era **falso**: cero filas `ingreso_ajuste` y cero
+  `egreso_ajuste`, así que el cambio no movía ningún número. Puerta cerrada con P1–P4 al
+  default.
+- LO QUE SOBREVIVE, y no es de esta feature: **buscar los requisitos vivos afectados
+  leyendo el spec que cita tu archivo NO basta.** R18 y R37 de la 127 se encontraron así;
+  **R16 de la 127 se escapó** —el más directamente derogado, nombra las tres métricas una
+  por una— porque no habla de `metrics.ts` sino del contrato de salida. Lo cazó el
+  reviewer (B1). Hay que buscarlos por el texto del contrato que cambia.
+- Deuda identificada, declarada y sin dueño: dos guardias afirman cobertura que no
+  tienen. `listasDeIdsAMano` (`tablero-financiero.guardia.test.ts:202`) solo marca
+  arrays con ≥2 ids, así que una comparación suelta por id pasa verde; y la guardia de
+  R12 solo mata su mutación si la fecha huérfana permanece. Ninguna se ensanchó: son de
+  features `done`.
+
+## 2026-08-05 — 134 · export CSV/XLSX de la analítica operativa
+- El archivo se arma **en el navegador** desde el mismo borde que pinta la pantalla
+  (`consultarAnaliticaOperativa`), nunca reconstruyendo el filtro. Cero código de
+  servidor: ni endpoint, ni Server Action nueva, ni migración.
+- Requisitos cubiertos: R1–R21, cada uno con test nombrado. **21 mutaciones aplicadas por
+  el implementer y 21 más por el reviewer por su cuenta: las 21 mueren en el caso que el
+  mapa les asigna, cero anclajes silenciosos.** Gate: `./init.sh` con `dev` mergeado, 941
+  archivos / 11.639 tests, 3 rojos **todos flakes por saturación** verificados verdes en
+  aislado (detalle y descarte de causa en `tasks.md > T5.4`).
+- EL HALLAZGO QUE ENCOGIÓ LA FEATURE, y que es lo que más vale conservar: la ficha pedía
+  «Server Action/route con gating por rol». **No hacía falta ninguna de las dos.** La
+  seudonimización ocurre dentro de `AnaliticaOperativaService` —decisión de la 126,
+  declarada entonces como desviación de su propio design— y no en el borde, así que el
+  uuid real **nunca cruza al navegador**; y el borde de la 126 ya audita el denegado antes
+  del 403. Los tres pasos que exige el aviso de la 122 (auditar, 403, seudonimizar) aquí
+  **se heredan, no se implementan**. Lo verificable pasó a ser otra cosa: que no se abra un
+  camino que los evite. De eso se ocupan R5, R6, R8 y un guardia de cuatro bloques.
+- Aquella desviación de la 126 **se cobra hoy como ventaja**: es la razón de que este
+  export no pueda filtrar uuids aunque el autor quisiera. Una decisión de hace tres
+  features es lo que hace barata a ésta.
+- LO QUE SOBREVIVE, y no es de esta feature: **un refactor mueve los anclajes de mutación,
+  y un mapa R→mutación escrito antes del refactor deja de describir dónde vive el código.**
+  El implementer extrajo las columnas a un módulo propio a mitad de camino y se quedó sin
+  sesión declarando que estaba reejecutando la batería. La reverificación encontró **8 de
+  21 anclajes movidos** y, sobre todo, un **patrón muerto en el guardia permanente**: el
+  censo de `app/api` perseguía `COLUMNAS_EXPORT_OPERATIVO`, un símbolo que el propio
+  refactor había renombrado. No hacía falso-verde el bloque —los demás patrones seguían
+  vivos—, pero es exactamente el fallo contra el que la cabecera de ese guardia previene.
+- De ahí sale la defensa que queda instalada: **un auto-chequeo que exige que cada patrón
+  del censo case con algo real en el árbol**, para que un renombrado futuro no vuelva a
+  dejar el guardia persiguiendo un nombre muerto. El reviewer lo verificó metiéndole un
+  patrón inexistente, y se puso rojo.
+- Dos casillas llegaron marcadas sin estarlo, y las dos eran del leader: T0.3 sólo había
+  aplicado dos de sus tres correcciones de ficha, y **T5.4 afirmaba «`./init.sh` verde,
+  salida pegada» sin que nadie lo hubiera corrido**. Ninguna la habría cazado un test:
+  las casillas de proceso no tienen mutación que las mate.
+- El guardia de esta feature **es permanente y no se retira en su PR**: censa el árbol, no
+  el diff contra `dev`. Se escribió así a propósito, citando el `frontera.guardia.test.ts`
+  retirado en el PR #232 y el bloque branch-scoped que la 131 retiró en el suyo.
+- La financiera queda **fuera por decisión, no por olvido** → ficha **184**, que espera a
+  la 180 (publica la serie) y a la 183 (cambia qué significan las cifras de caja).

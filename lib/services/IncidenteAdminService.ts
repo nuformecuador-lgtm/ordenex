@@ -38,6 +38,7 @@ import {
 } from "@/lib/services/mensajes-incidente-admin";
 import { esColaSolicitado } from "@/lib/utils/colas-cierre";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
+import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
 
 // Feature 158 (T1.28/T1.29, camino del ADMIN) — logica de negocio del incidente reportado por un
 // admin. Espejo de forma de `CierresAdminService` (38), que es la aplicacion original del patron
@@ -297,6 +298,21 @@ export class IncidenteAdminService implements IIncidenteAdminService {
     // ser un decimal positivo. Money-safe: se compara con `Prisma.Decimal`, nunca con parseFloat.
     if (!montoValido(monto)) {
       return { status: "validation_error", fieldErrors: { monto: [MSG_MONTO_REQUERIDO] } };
+    }
+
+    /**
+     * Fix «tope de negocio de la indemnizacion» (2026-08-04) — TOPE por ARRIBA: tecnico (la
+     * columna) + NEGOCIO (el valor de la orden). **Este es el camino que se uso en produccion**
+     * el 2026-08-04 para registrar ₡9.999.999.999,99: hasta hoy su unica cota superior era la
+     * del borde, y esa era la de la columna.
+     *
+     * Vive AQUI y no en el schema zod porque el borde no sabe que orden es ni cuanto valia: el
+     * dato solo existe tras `cargarResoluble`. Y va ANTES de `repo.resolver`, para que el
+     * rechazo ocurra sin abrir la transaccion que escribe el monto y emite el egreso.
+     */
+    const exceso = excesoIndemnizacion(monto, previo.incidente.ordenMontoCobrar);
+    if (exceso !== null) {
+      return { status: "validation_error", fieldErrors: { monto: [exceso] } };
     }
 
     // R52: el repo escribe el monto y emite el egreso en la MISMA tx. Sin `reversion`: un

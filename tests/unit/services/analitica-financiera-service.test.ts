@@ -8,7 +8,7 @@ import {
   IDS_FINANCIERAS_SERVIDAS,
   type ResultadoFinanciero,
 } from "@/lib/types/analitica-financiera";
-import { armarServicio, consultaDe } from "./_dobles-analitica-financiera";
+import { armarServicio, conNeto, consultaDe } from "./_dobles-analitica-financiera";
 
 // Feature 127 / T D.1, D.3, D.4, D.5, D.8, D.9 — el despacho del servicio financiero.
 //
@@ -294,16 +294,27 @@ describe("R18 · egresos se sirve de verdad, incluida la indemnizacion", () => {
     const r = await servicio.consultar(consultaDe("egresos"));
     if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
 
+    const total = conNeto(r.datos.vistas[0].total, "egresos / total");
     // 100 + 400 + 250: omitir la indemnizacion daria 500.00 y seguiria pareciendo una cifra.
-    expect(r.datos.vistas[0].total.bruto).toBe("750.00");
-    // El neto de un egreso puro es NEGATIVO: `derivarBalance` lo firma (ingresos − egresos).
-    expect(r.datos.vistas[0].total.neto).toBe("-750.00");
+    expect(total.bruto).toBe("750.00");
+    // R6/R8 de la 183 — `egresos` CONSERVA el neto, y es NEGATIVO: `derivarBalance` lo firma
+    // (ingresos − egresos). Aplicarle la retirada de Q1 —la mutacion que R6 nombra— haria que
+    // esta lectura no compilara; publicar el valor absoluto daria "750.00".
+    expect(total.neto).toBe("-750.00");
     expect(ingresos.sumarPorCategoria).toHaveBeenCalledTimes(1);
   });
 
-  it("el catalogo declara las OCHO egreso_* que esa cifra tiene que sumar", () => {
+  it("el catalogo declara las NUEVE categorias que esa cifra tiene que sumar", () => {
+    // ⚠️ DADO VUELTA por la 183 (R25): era `toHaveLength(8)`. ⟨D12⟩ (humano, 2026-08-04,
+    // `progress/decision_183.md`) anadio `ingreso_ajuste` sin quitar ninguna de las ocho.
     const egresos = listarMetricas({ dominio: "financiera" }).find((m) => m.id === "egresos");
-    expect(egresos?.definicion.categorias).toHaveLength(8);
+    expect(egresos?.definicion.categorias).toHaveLength(9);
+    expect(egresos?.definicion.categorias).toContain("ingreso_ajuste");
+    // R10/183 — y de la entrada NO cambia nada mas que la definicion y la descripcion.
+    expect(egresos?.id).toBe("egresos");
+    expect(egresos?.etiqueta).toBe("Egresos");
+    expect(egresos?.granos).toEqual(["fecha"]);
+    expect(egresos?.fuente).toEqual({ tipo: "ledger", tablas: ["wallet_movimiento"] });
     // ⟨D8⟩ / D.6: y ya no esta marcada como declarada sin productor.
     expect(egresos?.estadoProduccion).toBe("producida");
   });
@@ -413,7 +424,11 @@ async function totalDe(metricaId: string, caja: readonly (typeof LIBRO_MIXTO)[nu
   const { servicio } = armarServicio({ caja: [...caja] });
   const r = await servicio.consultar(consultaDe(metricaId));
   if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error(`${metricaId} no dio vistas`);
-  return r.datos.vistas[0];
+  const vista = r.datos.vistas[0];
+  // R14/183 — las dos de tesoreria CONSERVAN el neto: mezclan prefijos a proposito y su neto
+  // significa algo real. `conNeto` lo afirma antes de dejar leerlo, asi que generalizarles la
+  // retirada de Q1 revienta aqui con el nombre de la metrica, no con un `undefined` silencioso.
+  return { ...vista, total: conNeto(vista.total, metricaId) };
 }
 
 describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma dos veces", () => {

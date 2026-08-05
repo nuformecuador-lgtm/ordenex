@@ -525,12 +525,19 @@ describe("Riesgo MEDIO · paginación de las 4 colas con contador de cabecera (T
       );
 
       await user.click(within(navDe(cola)).getByRole("button", { name: "Última página" }));
-      await waitFor(() =>
+      await waitFor(() => {
         expect(
           within(tablaDe(cola)).getAllByRole("row"),
           `${cola.nombre}: la última página`,
-        ).toHaveLength(1 + ULTIMA_PAGINA),
-      );
+        ).toHaveLength(1 + ULTIMA_PAGINA);
+        // Y que la página haya LLEGADO, no que esté llegando: en carga el `DataTable` deja un
+        // `<tr>` con `role="status"` y filas skeleton que no cuentan como `row`, así que un
+        // conteo solo puede cumplirse a mitad de camino.
+        expect(
+          within(tablaDe(cola)).queryByRole("status"),
+          `${cola.nombre}: se midió con la página en carga`,
+        ).not.toBeInTheDocument();
+      });
 
       const ultima = screen.getByRole("region", { name: cola.seccion });
       expect(

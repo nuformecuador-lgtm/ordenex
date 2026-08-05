@@ -58,6 +58,7 @@ function fila(
     motivo: "motivo",
     estado,
     indemnizacion: estado === "aprobado" ? "100.00" : null,
+    ordenMontoCobrar: null, // fix «tope de negocio» (2026-08-04): sin valor declarado, el tope no aplica
     reportadoPor: "u-otro",
     reportadoPorNombre: "Otro",
     resueltoPor: estado === "solicitado" ? null : "u-maestro",

@@ -26,6 +26,12 @@ import { Select } from "@/components/ui/select";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarUsuariosPorRol } from "@/lib/actions/usuarios-por-rol";
 import { RANGO_PRESETS, type RangoPreset } from "@/lib/analytics/types";
+// Feature 133 (T4.1) — SOLO EL TIPO. `import type` se borra en compilacion, asi que este
+// modulo de cliente no arrastra `lib/analytics/presentacion` (ni su cierre transitivo:
+// `alcance`, `metrics`, `@prisma/client`) al bundle del navegador. La DECISION de que
+// facetas se ofrecen se toma en el servidor (`page.tsx`) y baja por prop como un array de
+// strings; aqui solo se dibuja lo que se recibio.
+import type { Faceta } from "@/lib/analytics/presentacion";
 
 import {
   aSearchParams,
@@ -109,15 +115,56 @@ async function cargarMensajeros(): Promise<CatalogoMensajeros> {
   }
 }
 
-export function FiltrosOperativos() {
+/**
+ * Feature 133 (T4.1) — R14/R15/R16: QUE FACETAS SE DIBUJAN.
+ *
+ * Por defecto las TRES, para que este componente siga montandose sin props (los tests de
+ * la 131 lo hacen, y `design.md §D6` lo fija como contrato). Quien recorta es el Server
+ * Component: `page.tsx` pasa `recorteDePresentacion(actor).facetas`.
+ *
+ * NO se decide nada por rol aqui dentro: este archivo no sabe quien es el actor, y el
+ * guardia de frontera de la 131 prohibe que lo sepa. Llega una lista de strings.
+ */
+const FACETAS_TODAS: readonly Faceta[] = ["zona", "tienda", "mensajero"];
+
+export interface FiltrosOperativosProps {
+  /** Las dimensiones cuyo selector DEBE dibujarse. Ausente = las tres. */
+  readonly facetas?: readonly Faceta[];
+}
+
+export function FiltrosOperativos({ facetas = FACETAS_TODAS }: FiltrosOperativosProps = {}) {
   const router = useRouter();
   const params = useSearchParams();
   const filtro = useMemo(() => desdeSearchParams(params), [params]);
 
-  const { data: catalogo } = useSWR("analitica-catalogo-ordenes", cargarCatalogoOrdenes, {
+  // R16 — «no ofrecer es no dibujar». Una faceta ausente no aparece deshabilitada, ni
+  // vacia, ni con la nota de degradado en su lugar.
+  const ofreceZona = facetas.includes("zona");
+  const ofreceTienda = facetas.includes("tienda");
+  const ofreceMensajero = facetas.includes("mensajero");
+
+  /**
+   * R16, segunda consecuencia — NO SE PIDE UN CATALOGO CUYO SELECTOR NO SE DIBUJA.
+   *
+   * `useSWR` con clave `null` no dispara el fetcher (contrato de SWR: conditional
+   * fetching). Motivos, los dos verificados:
+   *
+   *  (a) Es una peticion cuyo resultado nadie podria mirar: `FiltrosOrdenesService` y
+   *      `UsuariosPorRolService` responden `forbidden` justo a los roles a los que esa
+   *      faceta no se ofrece, asi que el unico efecto seria un `forbidden` auditado por
+   *      pantalla cargada.
+   *  (b) Si se pidiera igual, `disponible === false` encenderia la nota de degradado y el
+   *      tablero anunciaria que «algun filtro no esta disponible» refiriendose a un
+   *      control que NO EXISTE en la pantalla. Eso es el mismo control muerto que R16
+   *      prohibe, servido en forma de texto en vez de en forma de selector.
+   */
+  const claveCatalogoOrdenes = ofreceZona || ofreceTienda ? "analitica-catalogo-ordenes" : null;
+  const claveMensajeros = ofreceMensajero ? "analitica-catalogo-mensajeros" : null;
+
+  const { data: catalogo } = useSWR(claveCatalogoOrdenes, cargarCatalogoOrdenes, {
     revalidateOnFocus: false,
   });
-  const { data: mensajeros } = useSWR("analitica-catalogo-mensajeros", cargarMensajeros, {
+  const { data: mensajeros } = useSWR(claveMensajeros, cargarMensajeros, {
     revalidateOnFocus: false,
   });
 
@@ -132,8 +179,13 @@ export function FiltrosOperativos() {
 
   // R22 — «apagado porque el catalogo no contesto» es distinto de «todavia cargando», y el
   // usuario tiene derecho a saber cual de las dos esta mirando.
+  //
+  // R16 — pero solo se anuncia el degradado de un catalogo que alimenta a un selector
+  // DIBUJADO. Un aviso sobre un filtro que el actor no tiene delante no le informa de
+  // nada: le habla de un control que nunca vera.
   const hayFiltroDegradado =
-    catalogo?.disponible === false || mensajeros?.disponible === false;
+    ((ofreceZona || ofreceTienda) && catalogo?.disponible === false) ||
+    (ofreceMensajero && mensajeros?.disponible === false);
 
   /**
    * R12 — escribir el filtro es lo unico que dispara la nueva consulta: la URL cambia, la
@@ -173,27 +225,40 @@ export function FiltrosOperativos() {
         />
       ) : null}
 
-      <MultiSelectFilter
-        label={ETIQUETA_ZONA}
-        options={zonas.opciones}
-        value={[...filtro.zonaIds]}
-        disabled={!zonas.disponible}
-        onChange={(zonaIds) => escribir({ ...filtro, zonaIds })}
-      />
-      <MultiSelectFilter
-        label={ETIQUETA_TIENDA}
-        options={tiendas.opciones}
-        value={[...filtro.tiendaIds]}
-        disabled={!tiendas.disponible}
-        onChange={(tiendaIds) => escribir({ ...filtro, tiendaIds })}
-      />
-      <MultiSelectFilter
-        label={ETIQUETA_MENSAJERO}
-        options={opcionesMensajero.opciones}
-        value={[...filtro.mensajeroIds]}
-        disabled={!opcionesMensajero.disponible}
-        onChange={(mensajeroIds) => escribir({ ...filtro, mensajeroIds })}
-      />
+      {/* R14/R16 — la faceta que no se ofrece NO SE DIBUJA. Ni deshabilitada, ni vacia.
+          R15 en particular: para un `adminTienda` el bloque «Mensajero» de abajo no llega
+          a existir, y con el no llega a existir el desplegable que le serviria el nombre
+          real y el uuid de cada mensajero (`UsuariosPorRolService.ts:15` SI le autoriza
+          ese catalogo). R27 — eso NO cierra el oraculo residual contra R39 de la 122: el
+          `mensajero_id` sigue viajando por la URL y por el argumento de la Server Action;
+          la prohibicion efectiva es del BORDE. */}
+      {ofreceZona ? (
+        <MultiSelectFilter
+          label={ETIQUETA_ZONA}
+          options={zonas.opciones}
+          value={[...filtro.zonaIds]}
+          disabled={!zonas.disponible}
+          onChange={(zonaIds) => escribir({ ...filtro, zonaIds })}
+        />
+      ) : null}
+      {ofreceTienda ? (
+        <MultiSelectFilter
+          label={ETIQUETA_TIENDA}
+          options={tiendas.opciones}
+          value={[...filtro.tiendaIds]}
+          disabled={!tiendas.disponible}
+          onChange={(tiendaIds) => escribir({ ...filtro, tiendaIds })}
+        />
+      ) : null}
+      {ofreceMensajero ? (
+        <MultiSelectFilter
+          label={ETIQUETA_MENSAJERO}
+          options={opcionesMensajero.opciones}
+          value={[...filtro.mensajeroIds]}
+          disabled={!opcionesMensajero.disponible}
+          onChange={(mensajeroIds) => escribir({ ...filtro, mensajeroIds })}
+        />
+      ) : null}
 
       {hayFiltroDegradado ? (
         <p role="note" className="w-full text-xs text-muted-foreground">
