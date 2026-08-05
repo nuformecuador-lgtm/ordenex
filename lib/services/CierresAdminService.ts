@@ -20,10 +20,13 @@ import type {
   ICierresAdminService,
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
+  ListarHistoricoCierresAdminCompletoServiceResult,
   ListarHistoricoCierresAdminServiceResult,
+  ListarPendientesCierresAdminCompletoServiceResult,
   ListarPendientesCierresAdminServiceResult,
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
+import { descargaConfig } from "@/lib/config/descarga";
 import { esColaCierreDia } from "@/lib/utils/colas-cierre";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
@@ -233,6 +236,75 @@ export class CierresAdminService implements ICierresAdminService {
       pageSize: input.pageSize,
       total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
     };
+  }
+
+  /**
+   * Feature 184 — Tanda D (T D.2, R1/R4/R6) — el HISTORICO ENTERO del alcance, sin recorte, que
+   * es del que sale el archivo.
+   *
+   * **Lo que cierra.** Hasta hoy ese archivo se producia releyendo `listarCierresAdmin()`, que
+   * trae el alcance ENTERO —cola e historico— y lo parte en memoria para que la pantalla se
+   * quede con una de las dos mitades. Aqui se lee SOLO el historico, cortado en la base por el
+   * mismo criterio que su pagina (R16).
+   *
+   * **No lleva `input`, y es deliberado.** Este listado no admite filtros: su schema de pagina
+   * solo tenia `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El borde la
+   * sigue aplicando entera —un `destinoZonaId` colado muere alli con `validation_error` (R17)—
+   * pero no hay nada que transportar hasta aqui. El alcance sale del ACTOR, como en la pagina.
+   *
+   * `sinZona` -> conjunto vacio sin consultar la base, no `forbidden`: el `adminSatelite` sin
+   * zona tiene acceso al modulo, lo que no tiene es alcance. Es lo mismo que devuelven hoy
+   * `listarCierresAdmin` (`historico: []`) y la pagina.
+   */
+  async listarHistoricoCierresAdminCompleto(
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresAdminCompletoServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findHistoricoCompleto(scope.alcance);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    // MISMO enriquecido que la pagina, y por eso las filas del archivo son las de la pagina y no
+    // unas parecidas. `conPendiente` es UNA agregacion para todo el conjunto —no una por fila—,
+    // asi que su coste no crece con el numero de filas. Se paga aunque el archivo no lleve la
+    // columna del pendiente: emitir `null` ahi seria decir «este cierre no esta aprobado»
+    // (172/R28) de cierres que SI lo estan, y eso es un dato equivocado en un DTO de dinero.
+    return { status: "ok", items: await this.conPendiente(conjunto), total: conjunto.length };
+  }
+
+  /**
+   * Feature 184 — Tanda D (T D.2, R1/R4/R6) — la COLA ENTERA de pendientes de decision del
+   * alcance, sin recorte, para el archivo.
+   *
+   * Comparte con el de arriba la relectura que evita, y aqui se nota mas: la cola es la mitad
+   * PEQUEÑA del conjunto (los cierres sin resolver), asi que producir su archivo arrastraba
+   * todo el historico del alcance —que crece sin tope con los dias— para descartarlo.
+   *
+   * Sin `input` por el mismo motivo que su hermano: cero filtros, cero claves en la lista
+   * blanca, alcance desde el actor.
+   */
+  async listarPendientesCierresAdminCompleto(
+    actor: Actor,
+  ): Promise<ListarPendientesCierresAdminCompletoServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findColaCompleta(scope.alcance);
+
+    const limite = descargaConfig.MAX_FILAS;
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite }; // R6
+    }
+
+    return { status: "ok", items: await this.conPendiente(conjunto), total: conjunto.length };
   }
 
   async verCierreDetalle(

@@ -40,6 +40,9 @@ function fakeRepo(delCierre: GestionIncidenteDelCierre[]): ICierresAdminReposito
     findCierresByAlcance: vi.fn(async () => []),
     findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
+    // Feature 184 (T D.1): los dos CONJUNTOS de la descarga; no-op en esta suite.
+    findHistoricoCompleto: vi.fn(async () => []),
+    findColaCompleta: vi.fn(async () => []),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),

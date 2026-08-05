@@ -1,6 +1,7 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type {
   CierreGrupos,
   CierreTotales,
@@ -81,6 +82,27 @@ export type ListarHistoricoCierresAdminServiceResult =
  */
 export type ListarPendientesCierresAdminServiceResult =
   ListarPaginadoServiceResult<CierreAdminResumen>;
+
+/**
+ * Feature 184 — Tanda D (T D.2, R1/R6) — el HISTORICO ENTERO del alcance, sin recorte: el
+ * conjunto del que sale el ARCHIVO de ese listado.
+ *
+ * Mismo elemento que la pagina (`CierreAdminResumen`), porque el archivo proyecta exactamente
+ * las columnas que la tabla enseña (R12) y las proyecta con la misma funcion. `limite_excedido`
+ * lleva SOLO conteos: ni una fila, ni un conjunto truncado (R6).
+ */
+export type ListarHistoricoCierresAdminCompletoServiceResult =
+  ListarCompletoServiceResult<CierreAdminResumen>;
+
+/**
+ * Feature 184 — Tanda D (T D.2, R1/R6) — la COLA ENTERA de pendientes de decision del alcance.
+ *
+ * Se declara aparte del historico aunque su forma coincida, por el mismo motivo que sus dos
+ * schemas de pagina: son dos listados distintos y el nombre es lo unico que dice cual de las
+ * dos mitades se esta pidiendo.
+ */
+export type ListarPendientesCierresAdminCompletoServiceResult =
+  ListarCompletoServiceResult<CierreAdminResumen>;
 
 // R6-R9/R13: detalle completo de UN cierre. Reusa CierreGrupos (grupos por
 // resultado) de la 37. `no_encontrada` = id inexistente o fuera de alcance (R13, no
@@ -196,6 +218,26 @@ export interface ICierresAdminService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarPendientesCierresAdminServiceResult>;
+  /**
+   * Feature 184 — Tanda D (T D.2, R1/R4/R6): el HISTORICO ENTERO del alcance, del que sale el
+   * ARCHIVO de ese listado.
+   *
+   * MISMO `resolveAlcance` que la pagina —el rol y la zona salen del actor, nunca de la
+   * entrada— y MISMO corte cola/historico. No recibe input: este listado no tiene filtros, asi
+   * que su lista blanca (derivada de la de la pagina) no deja ninguna clave que transportar.
+   * Rol invalido -> `forbidden` ANTES de tocar el repositorio; `adminSatelite` sin zona ->
+   * conjunto vacio sin consultar. Supera el tope -> `limite_excedido` con conteos y sin filas.
+   */
+  listarHistoricoCierresAdminCompleto(
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresAdminCompletoServiceResult>;
+  /**
+   * Feature 184 — Tanda D (T D.2, R1/R4/R6): la COLA ENTERA de pendientes de decision del
+   * alcance, del que sale el ARCHIVO de ese listado. Espejo exacto del anterior.
+   */
+  listarPendientesCierresAdminCompleto(
+    actor: Actor,
+  ): Promise<ListarPendientesCierresAdminCompletoServiceResult>;
   /**
    * R6-R9/R13/R16: detalle completo de un cierre del alcance (gestiones agrupadas
    * por resultado, evidencias firmadas). Solo lectura. Fuera de alcance ->

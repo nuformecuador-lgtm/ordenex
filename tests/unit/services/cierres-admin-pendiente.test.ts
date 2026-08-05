@@ -53,6 +53,9 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     findCierresByAlcance: vi.fn(async () => [] as CierreAdminResumenRow[]),
     findHistoricoPaginado: vi.fn(async () => ({ items: [] as CierreAdminResumenRow[], total: 0 })),
     findColaPaginada: vi.fn(async () => ({ items: [] as CierreAdminResumenRow[], total: 0 })),
+    // Feature 184 (T D.1): los dos CONJUNTOS de la descarga (no-op en esta suite).
+    findHistoricoCompleto: vi.fn(async () => [] as CierreAdminResumenRow[]),
+    findColaCompleta: vi.fn(async () => [] as CierreAdminResumenRow[]),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
