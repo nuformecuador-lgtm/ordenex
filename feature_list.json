@@ -2198,6 +2198,21 @@
         183
       ],
       "status_note": "Sale de la decision D1 de la 134: la analitica financiera queda fuera de aquel export POR DECISION, no por olvido. NO adelantarla: RespuestaFinanciera no expone hoy una serie que proyectar a filas (la publica la 180) y la 183 cambia QUE SIGNIFICAN las cifras de caja. Exportar antes es escribir dos veces la proyeccion, y la segunda con prisa -- que en un export es como se cuela una columna que no debia salir."
+    },
+    {
+      "id": 185,
+      "name": "analitica: panel de aging por estado con su KPI al corte",
+      "spec_path": null,
+      "description": "Frontend. `aging_por_estado` NO tiene panel en el tablero operativo (PANELES_OPERATIVOS tiene seis y el aging no esta), asi que hoy no se pinta en ninguna parte. Darle panel propio y su cifra al corte. Su agregacion es por DIMENSION, no temporal: es un stock instantaneo -- «el aging medio de agosto» no significa nada --, y su cubo unico al corte ya lo sirve el modo agregado de la 176, siempre con parcial: true.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": [
+        176
+      ],
+      "status_note": "Sale de la decision D7 de la 182 (puerta T0 cerrada el 2026-08-05, Q1 = B), con el detalle escrito en specs/182-analitica-cablear-modo-agregado/requirements.md seccion 5.1. NO se metio en la 182 A PROPOSITO: el tope de SEIS paneles no es arbitrario, lo defiende un test de LATENCIA (tests/components/TableroOperativoLatencia.test.tsx:106, toBeLessThanOrEqual(6)) y la 131 ya pago por el -- su D4 tiro `motivos_devolucion` del catalogo «para no pasar de SEIS paneles», anotado como desviacion de su propio design. Un septimo panel reabre esa decision de pasada. QUIEN TOME ESTA FICHA tiene que decidir DOS cosas, no una: el presupuesto de latencia, y que pasa con `motivos_devolucion`, que se cayo por el mismo tope y quedaria cortado por un limite que ya no rige. Ademas, por D3 de la 176, el aging nunca tuvo cifra en NINGUN rango: no es un caso de rango largo y no era el hueco que la 182 venia a cerrar. Sin panel tampoco tienen `tasa_devolucion`, `tasa_rechazo` ni `primer_intento_ok`: conviene mirarlos a la vez antes de decidir el presupuesto."
     }
   ]
 }
