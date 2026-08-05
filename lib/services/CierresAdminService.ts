@@ -4,6 +4,7 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type {
   Alcance,
   CierreAdminResumenRow,
+  GestionIncidenteDelCierre,
   ICierresAdminRepository,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { ILiquidacionPagoRepository } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
@@ -25,6 +26,7 @@ import type {
 } from "@/lib/interfaces/services/ICierresAdminService";
 import { esColaCierreDia } from "@/lib/utils/colas-cierre";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
+import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
@@ -485,6 +487,13 @@ export class CierresAdminService implements ICierresAdminService {
    * Se resuelve aqui y no en el borde a proposito: el borde (zod) no sabe que gestiones tiene
    * ese cierre. Y va ANTES de llamar al repo para que un envio incompleto NO llegue a abrir la
    * transaccion de aprobacion.
+   *
+   * Fix «tope de negocio» (2026-08-04): ademas de la cobertura, aqui se acota el IMPORTE contra
+   * el valor de la orden (`excesoIndemnizacion`). Vive en el mismo sitio y por el mismo motivo:
+   * el borde no sabe cuanto valia el paquete, y la comprobacion tiene que ocurrir ANTES de que
+   * se abra la transaccion que mueve el dinero. Este es UNO de los dos emisores; el otro es
+   * `IncidenteAdminService.aprobar`, y los dos tienen que aplicarlo o el agujero sigue abierto
+   * por el que falte.
    */
   private async validarCoberturaIndemnizaciones(
     cierreId: string,
@@ -496,11 +505,16 @@ export class CierresAdminService implements ICierresAdminService {
     // aguas abajo, ni un campo nuevo obligatorio).
     if (delCierre.length === 0 && indemnizaciones.length === 0) return null;
 
-    const esperados = new Set(delCierre);
+    // El valor de la ORDEN de cada gestion esperada: es a la vez el conjunto de ids admitidos
+    // (cobertura) y el tope de negocio de cada monto. Un solo mapa para las dos cosas, porque
+    // salen de la MISMA lectura.
+    const esperados = new Map<string, GestionIncidenteDelCierre["ordenMontoCobrar"]>(
+      delCierre.map((g) => [g.gestionId, g.ordenMontoCobrar]),
+    );
     const fieldErrors: Record<string, string[]> = {};
     const vistos = new Set<string>();
 
-    for (const { gestionId } of indemnizaciones) {
+    for (const { gestionId, monto } of indemnizaciones) {
       if (vistos.has(gestionId)) {
         // R21: dos montos para la misma gestion. Sin esto, el ultimo ganaria en silencio.
         fieldErrors[gestionId] = [MSG_INDEMNIZACION_DUPLICADA];
@@ -509,10 +523,17 @@ export class CierresAdminService implements ICierresAdminService {
       vistos.add(gestionId);
       // R21: una gestion que no pertenece a este cierre, o cuyo resultado no es `incidente`,
       // no esta en `esperados` (el repo filtra por las dos cosas).
-      if (!esperados.has(gestionId)) fieldErrors[gestionId] = [MSG_INDEMNIZACION_AJENA];
+      if (!esperados.has(gestionId)) {
+        fieldErrors[gestionId] = [MSG_INDEMNIZACION_AJENA];
+        continue;
+      }
+      // TOPE: tecnico + negocio (el valor de la orden). El monto viaja STRING y se compara con
+      // `Prisma.Decimal` dentro del helper: nunca `number`, nunca `parseFloat`.
+      const exceso = excesoIndemnizacion(monto, esperados.get(gestionId) ?? null);
+      if (exceso !== null) fieldErrors[gestionId] = [exceso];
     }
     // R19/R20: falta el monto de alguna gestion `incidente` del cierre.
-    for (const gestionId of delCierre) {
+    for (const { gestionId } of delCierre) {
       if (!vistos.has(gestionId)) fieldErrors[gestionId] = [MSG_INDEMNIZACION_FALTANTE];
     }
 

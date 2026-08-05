@@ -2822,3 +2822,33 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   `20260714123909_*`— hace fallar `pnpm db:migrate`, así que el round-trip `migrate`/`rollback` de
   esta migración **queda sin medir**; se aplica con `prisma migrate deploy`, el mismo comando del
   build.
+
+## 2026-08-04 — 183 · el `neto` de las cuatro métricas de caja
+- Las cuatro métricas que leen `wallet_movimiento` dejan de recibir el mismo trato:
+  `ingreso_flete`, `ingreso_comision_cod` e `ingreso_iva` **retiran el `neto`** (era
+  `+bruto` siempre: listas homogéneas de prefijo + el `CHECK` categoría↔tipo de la 173),
+  y **`egresos` lo conserva ganando `ingreso_ajuste`**. `ImporteAnalitico` pasa a unión
+  discriminada por `forma`, así que leer un `neto` inexistente **no compila**.
+- Requisitos cubiertos: R1–R27, mapeados en `progress/impl_183.md` leyendo cada caso
+  citado. Gate: `./init.sh` verde sobre árbol quieto, 926 archivos / 11.528 tests
+  (baseline 925 / 11.485 ⇒ +43 tests, cero regresiones). 35 mutaciones, 35 muertas.
+- Por qué `egresos` no se trata como las otras tres: `WalletEgresoService.ts:89-96`
+  revierte un egreso anulado emitiendo `ingreso_ajuste`, y la métrica no lo declaraba.
+  **Anular un egreso no lo descontaba nunca de la cifra.** Con la reversión dentro, el
+  neto pasa a significar lo que realmente salió de caja.
+- Decisión ⟨D12⟩ (`progress/decision_183.md`, humana, 2026-08-04) **sustituye** a la que
+  la ficha traía escrita el mismo día («retirar en las CUATRO, y NO dar `ingreso_ajuste`
+  a `egresos`»). El motivo de aquélla —«cambia una cifra de dinero ya publicada»— se
+  midió contra producción y era **falso**: cero filas `ingreso_ajuste` y cero
+  `egreso_ajuste`, así que el cambio no movía ningún número. Puerta cerrada con P1–P4 al
+  default.
+- LO QUE SOBREVIVE, y no es de esta feature: **buscar los requisitos vivos afectados
+  leyendo el spec que cita tu archivo NO basta.** R18 y R37 de la 127 se encontraron así;
+  **R16 de la 127 se escapó** —el más directamente derogado, nombra las tres métricas una
+  por una— porque no habla de `metrics.ts` sino del contrato de salida. Lo cazó el
+  reviewer (B1). Hay que buscarlos por el texto del contrato que cambia.
+- Deuda identificada, declarada y sin dueño: dos guardias afirman cobertura que no
+  tienen. `listasDeIdsAMano` (`tablero-financiero.guardia.test.ts:202`) solo marca
+  arrays con ≥2 ids, así que una comparación suelta por id pasa verde; y la guardia de
+  R12 solo mata su mutación si la fecha huérfana permanece. Ninguna se ensanchó: son de
+  features `done`.

@@ -26,9 +26,16 @@ import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 /**
  * Una fila del `groupBy(categoria, tipo)` con su `_sum(monto)`.
  *
- * Viene desglosada POR TIPO ademas de por categoria porque de ahi salen los DOS importes que
- * ⟨D1⟩/R37 obliga a servir: el `bruto` es la suma de todo, el `neto` es la suma con signo
- * (ingreso − egreso). El signo lo aplica el servicio, no esta consulta.
+ * Viene desglosada POR TIPO ademas de por categoria porque de ahi sale el `neto` con signo
+ * (ingreso − egreso) que ⟨D1⟩/R37 obliga a servir DONDE SIGNIFICA ALGO. El signo lo aplica el
+ * servicio con `derivarBalance`, no esta consulta.
+ *
+ * ACOTADO por ⟨D12⟩ (humano, 2026-08-04, `progress/decision_183.md`, feature 183): de las
+ * CUATRO metricas de caja, el desglose por `tipo` solo lo consume ya `egresos` —la unica cuya
+ * lista de categorias mezcla prefijos y, por tanto, la unica cuyo neto informa de algo—. Las
+ * tres `ingreso_*` publican solo el `bruto`. El campo `tipo` SIGUE HACIENDO FALTA y no se
+ * retira: `egresos` lo necesita, y las dos metricas de tesoreria de la 173 tambien
+ * (`derivarCaja` particiona por naturaleza Y por tipo).
  *
  * `suma` es STRING escala 2 (S1/R27): `monto` es `Decimal(12,2)` y sale de aqui ya
  * formateado, sin pasar nunca por `number`.

@@ -78,6 +78,10 @@ const INCIDENTE_SELECT = {
       numRemision: true,
       destinatario: true,
       zonaId: true,
+      // Fix «tope de negocio» (2026-08-04): el valor de la orden, que es el tope de NEGOCIO del
+      // monto de indemnizacion. Una COLUMNA MAS del select que la cola y el detalle ya hacen:
+      // el tope no puede costar una consulta extra por incidente.
+      montoCobrar: true,
       zona: { select: { nombre: true } },
       estatus: { select: { value: true } },
     },
@@ -104,6 +108,8 @@ function toRow(r: IncidenteRow): IncidenteAdminRow {
     motivo: r.motivo,
     estado: r.estado,
     indemnizacion: r.indemnizacion === null ? null : r.indemnizacion.toFixed(2),
+    // Tope de NEGOCIO (fix 2026-08-04). Money-safe: STRING escala 2, nunca number.
+    ordenMontoCobrar: r.orden.montoCobrar === null ? null : r.orden.montoCobrar.toFixed(2),
     reportadoPor: r.reportadoPor,
     reportadoPorNombre: r.reportadoPorUsuario.nombre,
     resueltoPor: r.resueltoPor,
