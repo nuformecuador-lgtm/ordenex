@@ -230,10 +230,13 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_PENDIENTES_LABEL",
   },
   {
+    // Feature 184 — Tanda E (T E.3/T E.4): su relectura traía la cola Y el histórico entero de
+    // la operación y se quedaba con una mitad. Es el lado caro de la asimetría: la cola son
+    // una decena de cierres sin resolver y el histórico que arrastraba no tiene techo.
     listado: "Cierres de bodega pendientes",
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
     tanda: "J",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_PENDIENTES_LABEL",
   },
   {
@@ -331,7 +334,9 @@ const PENDIENTES_184: readonly string[] = [
   // Feature 184 — Tanda D: los DOS listados de «Cierres del día» del admin —el histórico y la
   // cola de pendientes— salieron de aquí, cada uno en el MISMO commit que su pantalla.
   // Quedan SEIS.
-  "Cierres de bodega pendientes",
+  //
+  // Feature 184 — Tanda E: «Cierres de bodega pendientes» salió de aquí en el MISMO commit que
+  // su pantalla. Quedan CINCO.
   "Cierres de bodega resueltos",
   // Feature 184 — Tanda B: los DOS listados de la consolidación —«Cierres de bodega
   // solicitados» y «Cierres del día a consolidar»— salieron de aquí, cada uno en el MISMO

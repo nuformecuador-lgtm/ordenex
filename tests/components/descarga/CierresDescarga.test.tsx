@@ -74,6 +74,12 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   // es la mitad de lo que R1 pide, y sin el doble no habría forma de afirmar su ausencia.
   listarCierresBodegaSolicitadosCompleto: vi.fn(),
   listarConsolidablesCompleto: vi.fn(),
+  // Feature 184 — Tanda E (T E.3): la lectura DEDICADA de la COLA de cierres de bodega. El
+  // doble de `listarCierresBodegaAdmin` se conserva A PROPÓSITO —y programado con las DOS
+  // mitades, cola e histórico— porque es el listado compuesto del que salían los dos archivos
+  // de esa pantalla: sin él, «ya no se relee» no sería una decisión de la pantalla, sería que
+  // el doble no responde.
+  listarPendientesCierresBodegaCompleto: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierre-dia", () => ({
   solicitarCierre: vi.fn(),
@@ -129,6 +135,7 @@ import {
   listarConsolidablesCompleto,
   listarConsolidablesPaginado,
   listarHistoricoCierresBodegaPaginado,
+  listarPendientesCierresBodegaCompleto,
   listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
 import {
@@ -400,6 +407,16 @@ function renderCierresBodega() {
     page: 1,
     ...paginaInicial(BODEGA_RESUELTOS),
   });
+  // Feature 184 — Tanda E (T E.3): de aquí sale el archivo de la COLA — SU mitad de la
+  // operación, sin recorte y con la forma que `filasDesdeResultado` traduce
+  // (`ListarCompletoResult`).
+  vi.mocked(listarPendientesCierresBodegaCompleto).mockResolvedValue({
+    status: "ok",
+    items: BODEGA_PENDIENTES,
+    total: BODEGA_PENDIENTES.length,
+  });
+  // El listado COMPUESTO sigue programado, y con las DOS mitades dentro: es lo que hace que
+  // «no se relee» sea observable (si la pantalla lo llamara, respondería).
   vi.mocked(listarCierresBodegaAdmin).mockResolvedValue({
     status: "ok",
     pendientes: BODEGA_PENDIENTES,
@@ -1219,6 +1236,140 @@ describe("Cierres · descarga", () => {
     const [mensaje] = errorToastMock.mock.calls[0] as [string];
     expect(mensaje).toMatch(/Vuelve a intentarlo/);
     for (const dato of ["Ana Mensajera", "Beto Mensajero", "Limón", "1000.10", "c1"]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda E (T E.3): «Cierres de bodega pendientes» (listado 4)
+  // -------------------------------------------------------------------------
+
+  it("el archivo de la cola de cierres de bodega sale de su lectura DEDICADA, no del listado compuesto (R1/R8)", async () => {
+    // Las tres mitades, como en las tandas B, C y D:
+    //
+    //   (a) montar la pantalla NO ejecuta la lectura del conjunto (R8);
+    //   (b) al pulsar se llama a `listarPendientesCierresBodegaCompleto` UNA vez y SIN un solo
+    //       argumento: este listado no tiene filtros, así que ni `page`, ni `pageSize`, ni
+    //       `zonaId` —la única cuya aceptación entregaría el dinero agregado de otra bodega—
+    //       pueden viajar (R4/R17);
+    //   (c) y NO se relee `listarCierresBodegaAdmin`, el listado COMPUESTO de esta pantalla.
+    const user = userEvent.setup();
+    renderCierresBodega();
+
+    expect(listarPendientesCierresBodegaCompleto).not.toHaveBeenCalled();
+    expect(listarCierresBodegaAdmin).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres de bodega pendientes" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarPendientesCierresBodegaCompleto).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(listarPendientesCierresBodegaCompleto).mock.calls[0]).toEqual([]);
+    expect(listarCierresBodegaAdmin).not.toHaveBeenCalled();
+    // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
+    // de degradar el archivo.
+    expect(listarPendientesCierresBodegaPaginado).toHaveBeenCalledTimes(1);
+  });
+
+  it("descargar la cola de bodega ya no arrastra el HISTÓRICO: el compuesto trae las dos mitades y ya no se pide (R1)", async () => {
+    // LA propiedad de esta tanda, y la que el xlsx por sí solo NO puede distinguir. El listado
+    // compuesto (`listarCierresBodegaAdmin`) devuelve la cola Y el histórico de TODA la
+    // operación; esta descarga se quedaba con una de las dos mitades y pagaba las dos. Volver a
+    // ese camino y seleccionar `res.pendientes` produce EXACTAMENTE las mismas filas, en el
+    // mismo orden: no hay ninguna celda que cambie. Lo único que lo delata es contar las
+    // llamadas — por eso este `expect` no es decorado: si se quita, la relectura puede volver
+    // sin que nada falle.
+    //
+    // Y aquí la asimetría pesa del lado feo: la cola son los cierres sin resolver —una decena—
+    // y el histórico que arrastraba crece sin tope con los días.
+    //
+    // La mitad de SERVIDOR (que la lectura dedicada corta por estado en la base y lee 2 filas
+    // en vez de 7) vive en `tests/unit/services/cierres-bodega-admin-completo.test.ts`.
+    const user = userEvent.setup();
+    renderCierresBodega();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres de bodega pendientes" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarCierresBodegaAdmin).not.toHaveBeenCalled();
+
+    // ANTI-VACUIDAD, en dos pasos, porque «cero llamadas» pasa igual con un doble muerto:
+    //  1. la descarga SÍ ocurrió y produjo sus filas —el cero de arriba no es «no pasó nada»—;
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas).toHaveLength(BODEGA_PENDIENTES.length);
+    //  2. y el doble del compuesto está VIVO y trae LAS DOS MITADES: si la pantalla lo llamara,
+    //     respondería con el histórico además de la cola. No llamarlo es una decisión de la
+    //     pantalla, no del arnés.
+    const compuesto = await listarCierresBodegaAdmin();
+    expect(compuesto.status === "ok" && compuesto.pendientes).toHaveLength(
+      BODEGA_PENDIENTES.length,
+    );
+    expect(compuesto.status === "ok" && compuesto.historico).toHaveLength(
+      BODEGA_RESUELTOS.length,
+    );
+  });
+
+  it("la pantalla NO recorta ni reordena la cola de cierres de bodega que devolvió el servidor (R2)", async () => {
+    // El discriminador entre «el servidor entrega el conjunto» y «lo entrega Y la pantalla lo
+    // vuelve a tocar», con los dos números separados a propósito:
+    //
+    //   · el doble devuelve TREINTA filas y la tabla pinta UNA, así que un archivo de 25 —el
+    //     `pageSize` de este dominio— o de 1 se distingue del bueno (recorte). Con el fixture de
+    //     una fila, recortar a la página entera no se vería: la página SERÍA el conjunto;
+    //   · y las tres primeras van en un orden que NINGÚN orden de cliente reproduce: ni por
+    //     fecha descendente (sería 19, 12, 11) ni ascendente (11, 12, 19) (reordenación).
+    const user = userEvent.setup();
+    renderCierresBodega();
+
+    const pendiente = (i: number, dia: string) =>
+      cierreBodega({
+        cierreBodegaId: `bp-${i}`,
+        solicitadoAt: `2026-07-${dia}T10:00:00.000Z`,
+      });
+    const relleno = Array.from({ length: 27 }, (_, i) => pendiente(100 + i, "15"));
+    vi.mocked(listarPendientesCierresBodegaCompleto).mockResolvedValueOnce({
+      status: "ok",
+      items: [pendiente(1, "12"), pendiente(2, "19"), pendiente(3, "11"), ...relleno],
+      total: 30,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres de bodega pendientes" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas, "el archivo trae la página, no el conjunto").toHaveLength(30);
+    expect(filas.slice(0, 3).map((f) => f.fecha)).toEqual([
+      "2026-07-12",
+      "2026-07-19",
+      "2026-07-11",
+    ]);
+  });
+
+  it("un fallo de la lectura de la cola de cierres de bodega no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
+    const user = userEvent.setup();
+    renderCierresBodega();
+    vi.mocked(listarPendientesCierresBodegaCompleto).mockResolvedValueOnce({
+      status: "forbidden",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres de bodega pendientes" }),
+    );
+    // Ancla POSITIVA: el aviso que SALE, no el archivo que no sale.
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+
+    const [mensaje] = errorToastMock.mock.calls[0] as [string];
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    // Accionable, y sin un solo dato del dominio: ni quién solicitó, ni zona, ni montos, ni
+    // identificadores. Cada fila de esta cola ES el dinero agregado de una zona entera.
+    for (const dato of ["Sara Satélite", "Limón", "1000.10", "b1"]) {
       expect(mensaje).not.toContain(dato);
     }
     expect(descargarBlobMock).not.toHaveBeenCalled();

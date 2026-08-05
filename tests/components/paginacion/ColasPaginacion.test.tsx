@@ -74,6 +74,11 @@ const { paginado, completo, verIncidenteMock } = vi.hoisted(() => ({
     // usando y su ausencia no puede ser lo que explique que ya no se llame.
     cierresPendientesCompleto: vi.fn(),
     bodegaAdmin: vi.fn(),
+    // Feature 184 — Tanda E (T E.3): «Cierres de bodega pendientes» ya no saca su archivo del
+    // listado compuesto (`bodegaAdmin`), que arrastraba el histórico entero de la operación
+    // además de la cola, sino de su lectura DEDICADA. El doble del compuesto se conserva: la
+    // pantalla lo seguía usando y su ausencia no puede ser lo que explique que ya no se llame.
+    bodegaPendientesCompleto: vi.fn(),
     consolidacion: vi.fn(),
     // Feature 184 — Tanda B (T B.2): «Cierres del día a consolidar» ya no saca su archivo del
     // listado compuesto (`consolidacion`), sino de su lectura DEDICADA. El doble del compuesto
@@ -106,6 +111,10 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   solicitarCierreBodega: vi.fn(),
   listarCierresBodegaAdmin: (...a: unknown[]) => completo.bodegaAdmin(...a),
   listarConsolidacion: (...a: unknown[]) => completo.consolidacion(...a),
+  // Feature 184 — Tanda E (T E.3): la lectura dedicada del listado 4. Sin declararla aquí, el
+  // control de descarga de esa cola llama a `undefined` y el archivo no sale.
+  listarPendientesCierresBodegaCompleto: (...a: unknown[]) =>
+    completo.bodegaPendientesCompleto(...a),
   listarPendientesCierresBodegaPaginado: (...a: unknown[]) =>
     paginado.bodegaPendientes(...a),
   listarHistoricoCierresBodegaPaginado: (...a: unknown[]) =>
@@ -397,6 +406,12 @@ const COLAS: Cola[] = [
       const todos = conjunto(cierreBodega);
       servirPaginas(paginado.bodegaPendientes, todos);
       servirPaginas(paginado.bodegaResueltos, []);
+      // Feature 184 — Tanda E (T E.3): de aquí sale el archivo (R52), sin recorte.
+      completo.bodegaPendientesCompleto.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
       completo.bodegaAdmin.mockResolvedValue({
         status: "ok",
         pendientes: todos,
