@@ -847,3 +847,86 @@ describe("el conjunto del HISTÓRICO de incidentes (feature 184, tanda F)", () =
     expect(argsCola.orderBy).toEqual(argsCompuesto.orderBy);
   });
 });
+
+// Feature 184 — Tanda G (R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 11,
+// «Plantillas de gasto fijo».
+//
+// Tampoco aquí hay método de repositorio nuevo: `listar()` ya devolvía el conjunto entero, con
+// el mismo (nulo) `where`, el mismo orden y el mismo mapper que su hermano paginado. Lo que
+// cambia con esta tanda es su PAPEL —pasa de alimentar una tabla a sostener un archivo— y, con
+// él, la importancia de que su orden no se separe del de la página.
+//
+// Lo que SÍ se tocó del repositorio: `orderBy: { createdAt: "desc" }` estaba escrito TRES veces
+// en el archivo (`listar`, `listarPaginado`, `listarActivas`) y ahora es una sola declaración
+// (`ORDEN_PLANTILLAS`). Compartirla no la vuelve invisible: cambiarla pone rojas a la vez las
+// afirmaciones ABSOLUTAS de la página (arriba, «plantillas de gasto fijo: sin where…») y las
+// del conjunto (aquí).
+describe("el conjunto de la descarga de la tanda G (feature 184)", () => {
+  it("plantillas de gasto fijo: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: entero,
+    } as unknown as PrismaClient).listar();
+
+    const pagina = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: pagina,
+    } as unknown as PrismaClient).listarPaginado(RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // R26: NINGÚN `where` en ninguno de los dos. Un `activa: true` colado aquí convertiría el
+    // archivo del maestro en el conjunto del CRON, y las plantillas desactivadas —las que
+    // explican por qué un gasto dejó de cobrarse— desaparecerían del archivo sin avisar.
+    expect(argsEntero.where).toBeUndefined();
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ createdAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("el conjunto de plantillas cuesta UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Este listado es de los BARATOS del inventario: la consulta cuesta hoy lo mismo que antes
+    // de paginar, y esta tanda no la abarata. Lo que este caso vigila es que tampoco la
+    // encarezca: si mañana alguien le añadiera un `count` «para el total», el total del archivo
+    // saldría de otro sitio que sus filas.
+    const d = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: d,
+    } as unknown as PrismaClient).listar();
+
+    expect(d.findMany).toHaveBeenCalledTimes(1);
+    expect(d.count).not.toHaveBeenCalled();
+    const args = d.findMany.mock.calls[0]![0]!;
+    expect(args.skip).toBeUndefined();
+    expect(args.take).toBeUndefined();
+  });
+
+  it("el conjunto del archivo NO es el del cron: `listarActivas` sí filtra, y comparte el orden (R16)", async () => {
+    // Las tres lecturas de esta tabla presentan la misma secuencia; lo que las distingue es el
+    // `where`. Si el conjunto del archivo se hubiera implementado delegando en `listarActivas`
+    // —que es el otro listado sin recorte del repositorio— este caso lo diría.
+    const activas = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: activas,
+    } as unknown as PrismaClient).listarActivas();
+
+    const entero = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: entero,
+    } as unknown as PrismaClient).listar();
+
+    const argsActivas = activas.findMany.mock.calls[0]![0]!;
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+
+    expect(argsActivas.where).toEqual({ activa: true });
+    expect(argsEntero.where).toBeUndefined();
+    expect(argsActivas.orderBy).toEqual(argsEntero.orderBy); // una sola declaración del orden
+  });
+});

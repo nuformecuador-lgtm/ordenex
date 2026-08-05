@@ -46,7 +46,7 @@ function fakeService(overrides: Partial<IGastoFijoPlantillaService> = {}): IGast
       total: 1,
     })),
     // Feature 184 (Tanda G): idem. El conjunto del archivo lo ejercita
-    // `gasto-fijo-plantilla-descarga-action.test.ts`.
+    // `wallet-listados-descarga-action.test.ts`.
     listarPlantillasCompleto: vi.fn(async () => ({
       status: "ok" as const,
       items: [plantilla()],

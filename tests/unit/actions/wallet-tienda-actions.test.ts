@@ -63,7 +63,7 @@ function fakeService(overrides: Partial<IWalletTiendaService> = {}): IWalletTien
       total: 1,
     })),
     // Feature 184 (Tanda G): idem. El conjunto del archivo lo ejercita
-    // `wallet-tienda-saldos-descarga-action.test.ts`.
+    // `wallet-listados-descarga-action.test.ts`.
     listarSaldosTiendasCompleto: vi.fn(async () => ({
       status: "ok" as const,
       items: [
