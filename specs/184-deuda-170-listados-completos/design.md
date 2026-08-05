@@ -89,7 +89,32 @@ igual que en la página. El guard de rol se evalúa **antes** de tocar el reposi
 
 **Tope:** `descargaConfig.MAX_FILAS`, evaluado en el servicio (R6). Es el mismo número que hoy
 aplica `filasLocales` en el navegador, así que el usuario no ve un tope distinto; lo que cambia
-es **dónde** se aplica, que es lo que R29 de la 170 pedía.
+es **dónde** se aplica.
+
+**Qué mitad de R29 de la 170 cierra esto, y cuál no.** R29 de la 170 —feature `done`, requisito
+vivo— pide dos cosas: que el tope se aplique en el **servidor** y que, al superarlo, no se
+**materialice** ni se **transporte** más de `N + 1` filas.
+
+- **Transportar: cerrado, en los doce.** Superado el tope no cruza la frontera ni una fila:
+  `limite_excedido` lleva dos enteros. Hasta hoy cruzaba el conjunto entero y el navegador lo
+  medía después.
+- **Materializar: cerrado solo en el listado 12.** `listarSaldosTiendasCompleto` pide
+  `pageSize: limite + 1` y saca el total de la misma consulta. Los **once restantes NO lo
+  cierran**: el servicio pide el conjunto entero al repositorio y solo después compara
+  `conjunto.length > limite`, y ningún método `…Completo` lleva `take`. El caso más caro es el
+  listado 10: `findRecepcionSateliteCompleta` **hidrata** todas las filas con
+  `WITH_RECEPCION_SATELITE` antes de que el tope las mire.
+
+**En esos once es una excepción declarada, no un cumplimiento** (decisión humana del 2026-08-05,
+review de esta feature). El motivo medido: acotar la consulta a `limite + 1` obliga a un `count`
+aparte para conservar el total exacto que el aviso publica (R6 aquí, R27 de la 170), y esa
+segunda consulta pone rojos los tests de **R15** de esta feature —que afirman «UNA consulta, sin
+recorte y sin conteo de página»— y duplica las consultas de los listados, que es justo el coste
+que esta feature vino a reducir. El `N + 1` real se abre como **ficha aparte** y solo para los
+conjuntos que crecen con los días sin purga —los históricos de las tandas B a F— y para el
+listado 10, que además hidrata cada fila antes de mirar el tope. Cada uno de
+los once métodos lo declara en su docstring, con el riesgo concreto de su conjunto; el molde es
+`WalletMensajeroService.listarCuentasPorPagarCompleto`, que ya lo hizo en la 170.
 
 **Mapper:** el conjunto se proyecta con **el mismo mapper que la página**. En los tres listados
 de dinero (2/3 con totales snapshot, 6/7 con montos, 12 con saldos) esto no es estilo: dos

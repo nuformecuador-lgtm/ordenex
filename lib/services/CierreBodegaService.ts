@@ -331,6 +331,19 @@ export class CierreBodegaService implements ICierreBodegaService {
    *
    * Sin zona -> conjunto vacio, no `forbidden`: el rol tiene acceso al modulo, lo que no tiene
    * es alcance. Es lo mismo que devuelve hoy `listarConsolidacion` (`cierresBodegaPasados: []`).
+   *
+   * **Excepcion declarada a R29 de la 170.** R29 —feature `done`, requisito vivo— pide dos cosas
+   * y aqui se cumple una: por encima del tope no se transporta ni una fila (van el total y el
+   * tope, nada mas), pero el conjunto SI se materializa entero —`findCierresBodegaByZona` es un
+   * `findMany` sin `take`— y el tope lo mide este servicio despues. El conjunto es el historico
+   * de cierres de bodega de UNA zona: acotado por el alcance, que es lo que lo hace mas llevadero
+   * que su gemelo de `CierresBodegaAdminService` —aquel ve todas las zonas—, pero acumulativo,
+   * uno por dia operado y sin purga.
+   *
+   * Se acepta por el coste de la alternativa: pedir `limite + 1` obliga a un `count` aparte para
+   * conservar el total exacto del aviso (R6), que es la segunda consulta que R15 de esta feature
+   * mide y prohibe. Decision humana del 2026-08-05, anotada en el design §3.1; es una excepcion
+   * declarada, no un cumplimiento de R29.
    */
   async listarCierresBodegaSolicitadosCompleto(
     actor: Actor,
@@ -366,6 +379,14 @@ export class CierreBodegaService implements ICierreBodegaService {
    *
    * Sin `input` por el mismo motivo que su hermano: cero filtros, cero claves en la lista
    * blanca, alcance desde el actor.
+   *
+   * **Excepcion declarada a R29 de la 170, y aqui es la de menor riesgo del par.**
+   * `findCierresDiaConsolidables` tampoco lleva cota, asi que la materializacion entera vale
+   * igual que arriba y de R29 solo se cumple el transporte. Lo que la hace benigna es el
+   * conjunto: son los cierres del dia de la zona PENDIENTES de consolidar, o sea una cola de
+   * trabajo acotada por los mensajeros de esa zona, que la consolidacion vacia y que no acumula
+   * historia. Misma decision del 2026-08-05 y mismo motivo —el `count` extra que R15 de esta
+   * feature prohibe— (design §3.1).
    */
   async listarConsolidablesCompleto(
     actor: Actor,

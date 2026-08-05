@@ -356,6 +356,19 @@ export class CierreDiaService implements ICierreDiaService {
    *
    * El alcance ES el actor y no admite variantes: el rol tiene que ser `mensajero` y el
    * `mensajero_id` del WHERE es `actor.usuarioId` (R4), exactamente como en la pagina.
+   *
+   * **Excepcion declarada a R29 de la 170.** R29 —feature `done`, requisito vivo— pide no
+   * materializar NI transportar mas de `N + 1` filas por encima del tope. Aqui se cumple lo
+   * segundo: superado el tope viajan dos enteros y ninguna fila. No lo primero:
+   * `findCierresByMensajero` es un `findMany` sin `take`, asi que el historico entero llega a
+   * memoria y el tope lo evalua este servicio despues. De los once listados que declaran esta
+   * excepcion, este es el mas acotado por construccion: son los cierres de UN mensajero, uno por
+   * dia trabajado, y el alcance lo fija el propio actor; alcanzar el tope le costaria años de
+   * operacion continua.
+   *
+   * Aun asi es una excepcion, no un cumplimiento. No se cierra porque hacerlo pide `limite + 1`
+   * MAS un `count` para conservar el total exacto del aviso (R6): la segunda consulta que R15 de
+   * esta feature mide y prohibe. Decision humana del 2026-08-05, en el design §3.1.
    */
   async listarCierresPasadosCompleto(
     actor: Actor,

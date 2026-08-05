@@ -99,6 +99,20 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
    * Sin `input`, y es decision, no olvido: este listado no admite filtros —el schema de su
    * pagina solo llevaba `page`/`pageSize`— asi que la lista blanca derivada no deja NINGUNA
    * clave. El borde la sigue aplicando entera: parsear ES la barrera (R17).
+   *
+   * **Excepcion declarada a R29 de la 170, y la unica de las once con riesgo despreciable.**
+   * `repo.listar()` es un `findMany` sin `where` y sin `take`, asi que el conjunto se materializa
+   * entero antes de que el tope lo mire: de R29 —feature `done`, requisito vivo— se cumple el
+   * transporte y no la materializacion, igual que en los otros diez. La diferencia es QUE
+   * conjunto es: las plantillas de gasto fijo son una tabla de CONFIGURACION que un humano da de
+   * alta a mano y que no se borra (R25), asi que su tamaño lo marca el catalogo de gastos de la
+   * operacion —decenas— y no el paso de los dias. Llegar al tope aqui significaria que alguien la
+   * esta usando como bitacora, y el problema seria ese.
+   *
+   * Se declara igual que las diez restantes para que la excepcion se lea en los once sitios y no
+   * en diez: el motivo por el que no se cierra es comun —`limite + 1` obliga a un `count` aparte
+   * para conservar el total del aviso (R6), la segunda consulta que R15 de esta feature prohibe—
+   * pero el riesgo que se acepta es de cada listado. Decision humana del 2026-08-05 (design §3.1).
    */
   async listarPlantillasCompleto(actor: Actor): Promise<ListarPlantillasCompletoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: antes del repositorio

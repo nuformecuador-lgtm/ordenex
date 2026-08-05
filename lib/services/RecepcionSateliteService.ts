@@ -237,6 +237,23 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
    * **El tope se evalua aqui** (R6): por encima no se entrega ni una fila —ni un conjunto
    * truncado, que es peor— y tampoco se pide el lote de intentos, que no tendria a quien
    * adornar. Es el mismo numero que aplicaba el navegador; lo que cambia es DONDE se aplica.
+   *
+   * **Excepcion declarada a R29 de la 170, y aqui es la mas cara de las once.** R29 —feature
+   * `done`, requisito vivo— pide dos cosas: el tope en el SERVIDOR y, superado, ni materializar
+   * ni transportar mas de `N + 1` filas. Lo que se cumple es el transporte: por encima del tope
+   * no cruza ni una fila. Lo que NO se cumple es materializar, y en este listado no es solo
+   * contar de mas: `findRecepcionSateliteCompleta` ordena los ids del conjunto ENTERO y despues
+   * los HIDRATA todos con `WITH_RECEPCION_SATELITE` —la proyeccion completa de la fila y sus
+   * relaciones— antes de que esta linea mire el tope. Es el peor caso de los once y conviene
+   * decirlo asi: el conjunto son las ordenes vivas de la bodega de una zona, y lo que se trae de
+   * mas no es un entero por fila, es el payload entero.
+   *
+   * Se acepta por lo que costaria cerrarlo: acotar la consulta a `limite + 1` obliga a un `count`
+   * aparte para conservar el total EXACTO que el aviso publica (R6), y esa segunda consulta es
+   * justo la que R15 de esta feature mide y prohibe, y el coste que esta migracion vino a quitar.
+   * Decision humana del 2026-08-05, escrita en el design §3.1. Es una excepcion con motivo, no
+   * una forma de cumplir R29; el `N + 1` real queda como ficha aparte y este listado es su primer
+   * candidato.
    */
   async listarOrdenesBodegaCompleto(
     input: ListarOrdenesBodegaCompletoInput,

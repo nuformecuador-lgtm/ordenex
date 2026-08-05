@@ -149,6 +149,19 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
    * ni la pagina recomputan nada. A diferencia de la tanda D, aqui no hay ningun enriquecido que
    * conservar o saltarse: el camino del archivo no firma URL, no agrega dinero y no consulta
    * ninguna otra tabla.
+   *
+   * **Excepcion declarada a R29 de la 170.** De R29 —feature `done`, requisito vivo— se cumple
+   * la mitad del transporte: por encima del tope no sale ni una fila, solo los dos conteos del
+   * aviso. NO se cumple la de materializar: `findHistoricoCompleto` es un `findMany` sin `take`
+   * y el historico llega entero antes de que el tope lo mire. Y aqui el alcance es la operacion
+   * COMPLETA —este listado no acota por zona, ve todas—, asi que el conjunto suma los cierres de
+   * bodega resueltos de todas las zonas desde el primer dia: crece despacio, pero crece siempre
+   * y nada lo corta.
+   *
+   * Se acepta porque cerrarlo exige pedir `limite + 1` y un `count` aparte para no perder el
+   * total exacto del aviso (R6) —la segunda consulta que R15 de esta feature mide y prohibe—, y
+   * eso duplicaria las consultas que esta misma migracion vino a reducir. Decision humana del
+   * 2026-08-05, en el design §3.1. No es una forma de cumplir R29: es una excepcion con motivo.
    */
   async listarHistoricoCierresBodegaCompleto(
     actor: Actor,
@@ -176,6 +189,14 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
    *
    * Sin `input` y sin zona por el mismo motivo que su hermano: cero filtros, cero claves en la
    * lista blanca, alcance por ROL desde el actor.
+   *
+   * **Excepcion declarada a R29 de la 170, la mas benigna de las dos de este archivo.** Igual
+   * que arriba: transporte cumplido, materializacion no —`findColaCompleta` tampoco lleva cota,
+   * y la cola entra entera antes de medirse—. La diferencia es el conjunto: estos son los
+   * cierres de bodega SIN resolver, y su tamaño lo marca el retraso del maestro en decidir, no
+   * los dias operados; el historico de arriba se queda con todo lo que esta cola va soltando.
+   * Misma decision del 2026-08-05 y mismo motivo de coste: acotar en base pide el `count` extra
+   * que R15 de esta feature prohibe (design §3.1).
    */
   async listarPendientesCierresBodegaCompleto(
     actor: Actor,

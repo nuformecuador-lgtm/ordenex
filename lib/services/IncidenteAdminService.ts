@@ -256,6 +256,21 @@ export class IncidenteAdminService implements IIncidenteAdminService {
    * pagina solo llevaba `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El
    * borde la sigue aplicando entera —parsear ES la barrera (R17)— pero no hay nada que
    * transportar hasta aqui.
+   *
+   * **Excepcion declarada a R29 de la 170, y este es el conjunto con MAS riesgo de los once.**
+   * De R29 —feature `done`, requisito vivo— se cumple la mitad del transporte: superado el tope
+   * no viaja ni una fila, solo el total y el tope. NO se cumple la de materializar:
+   * `findHistoricoCompleto` es un `findMany` sin `take`, asi que el historico entra ENTERO en
+   * memoria y el `>` de aqui abajo lo mide despues. Y este historico es exactamente el que el
+   * docstring de su hermano, aqui debajo, describe como el que «crece sin tope con los dias»:
+   * los incidentes resueltos no se purgan ni tienen ventana temporal, asi que la unica cota del
+   * conjunto es cuanto lleve operando el alcance. No se suaviza: es la deuda mas viva de las
+   * once.
+   *
+   * Se acepta porque acotarlo pide `limite + 1` MAS un `count` para conservar el total exacto del
+   * aviso (R6), y esa segunda consulta es la que R15 de esta feature mide y prohibe. Decision
+   * humana del 2026-08-05 (design §3.1); el `N + 1` real se abre como ficha aparte, y este
+   * listado entra en ella.
    */
   async listarHistoricoIncidentesCompleto(
     actor: Actor,
@@ -290,6 +305,15 @@ export class IncidenteAdminService implements IIncidenteAdminService {
    * todo el historico del alcance —que crece sin tope con los dias— para descartarlo en memoria.
    *
    * Sin `input`, sin firmas y con el mismo guard que su hermano, por los mismos motivos.
+   *
+   * **Excepcion declarada a R29 de la 170, con el riesgo invertido respecto a su hermano.** La
+   * mitad que se cumple es la misma —por encima del tope no se transporta ni una fila— y la que
+   * no, tambien: `findColaCompleta` no lleva cota y la cola entra entera en memoria antes de
+   * medirse. Lo que cambia es el tamaño esperado: la cola son los incidentes SIN resolver, y lo
+   * que marca su tamaño no es el calendario sino el ritmo con que el admin decide; si un dia
+   * rozara el tope, lo que habria que arreglar no seria esta descarga. Por eso aqui la excepcion
+   * se acepta con holgura y en el historico de arriba no. Mismo motivo de coste —el `count`
+   * extra que R15 de esta feature prohibe— y misma decision del 2026-08-05 (design §3.1).
    */
   async listarPendientesIncidentesCompleto(
     actor: Actor,

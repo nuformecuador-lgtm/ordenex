@@ -255,6 +255,19 @@ export class CierresAdminService implements ICierresAdminService {
    * `sinZona` -> conjunto vacio sin consultar la base, no `forbidden`: el `adminSatelite` sin
    * zona tiene acceso al modulo, lo que no tiene es alcance. Es lo mismo que devuelven hoy
    * `listarCierresAdmin` (`historico: []`) y la pagina.
+   *
+   * **Excepcion declarada a R29 de la 170.** R29 —feature `done`, requisito vivo— exige el tope
+   * en el SERVIDOR y, superado, no materializar NI transportar mas de `N + 1` filas. Transportar
+   * se cumple: por encima del tope no sale ni una fila, y ni siquiera se paga el `conPendiente`
+   * de abajo. Materializar NO: `findHistoricoCompleto` es un `findMany` sin `take`, asi que el
+   * historico del alcance entra entero en memoria y el tope lo mide esta funcion despues. El
+   * conjunto es un cierre por mensajero y dia dentro del alcance —para un maestro, el alcance es
+   * la operacion ENTERA—, y los cierres aprobados no se purgan: crece de forma monotona.
+   *
+   * Se acepta por el coste de lo contrario: para conservar el total EXACTO que el aviso publica
+   * (R6) habria que pedir `limite + 1` y ademas un `count`, es decir la segunda consulta que R15
+   * de esta feature mide y que esta migracion vino a quitar. Decision humana del 2026-08-05,
+   * anotada en el design §3.1. Esto es una excepcion declarada, no un cumplimiento de R29.
    */
   async listarHistoricoCierresAdminCompleto(
     actor: Actor,
@@ -289,6 +302,13 @@ export class CierresAdminService implements ICierresAdminService {
    *
    * Sin `input` por el mismo motivo que su hermano: cero filtros, cero claves en la lista
    * blanca, alcance desde el actor.
+   *
+   * **Excepcion declarada a R29 de la 170**, la misma de arriba con el signo cambiado: se cumple
+   * el transporte —superado el tope no va ninguna fila— y no el materializar, porque
+   * `findColaCompleta` tampoco lleva cota. El riesgo, en cambio, es el menor de los dos: la cola
+   * son los cierres pendientes de DECISION, la mitad que se vacia cada vez que el admin trabaja,
+   * y no acumula con los dias como el historico. Misma decision del 2026-08-05 y mismo motivo:
+   * acotar en base costaria el `count` extra que R15 de esta feature prohibe (design §3.1).
    */
   async listarPendientesCierresAdminCompleto(
     actor: Actor,
