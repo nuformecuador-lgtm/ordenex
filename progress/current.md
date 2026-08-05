@@ -9,7 +9,56 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo — **EMPIEZA A LEER POR AQUÍ**
+## 2026-08-05 — **166 implementada y aprobada** · ⛔ **PR abierto a la espera de la franja de despliegue**
+
+Rama `feature/166-ranking-ventana-dia`, commit `60eabee6` sobre `origin/dev` @ `64957dca`.
+Reviewer **APROBADO**, cero hallazgos bloqueantes (`progress/review_166.md`).
+
+`RankingService` resolvía «hoy» como `[startOfDayCR(now), +24 h)`. `startOfDayCR` devuelve la
+**medianoche UTC** de la fecha CR —convención correcta para columnas `@db.Date` de la 46—, pero
+esas dos cotas se comparan contra columnas `timestamp` reales (`gestion_orden.created_at`,
+`orden.asignado_at`): la ventana efectiva era **18:00→18:00 CR** y una entrega de las 19:00 CR
+contaba para el día siguiente. Ahora se compone con `fechaCalendarioCR` +
+`inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` (convención de la 144): ambos bordes en
+`...T06:00:00.000Z`.
+
+**La divergencia D6/R31 de la 135 queda CERRADA.** El bloque `(c)` de `lib/analytics/ranges.ts`
+ya no promete dos cifras distintas para «hoy», pero **sigue nombrando la trampa `startOfDayCR`**,
+que sigue viva y sigue prohibida en `lib/analytics/**`. El guardia
+`ranges-reuso.guardia.test.ts:98-106` se **reexpresó** a (`startOfDayCR`, `/18:00/`, `/166/`),
+no se vació: mutación de control ejecutada y revertida.
+
+### ⛔ Lo único que falta, y no es código: la hora del merge
+
+**La ventana de despliegue 00:00–06:00 hora CR es OBLIGATORIA**, no una preferencia. El corte de
+ventana es una **discontinuidad declarada** (Q1 = opción C: ni recálculo ni fecha de corte), y lo
+que la hace inocua es que a esa hora el podio del día está vacío y no hay premio ya pagado que
+desplazar. **Si el merge cae fuera de la franja, hay que volver a preguntar al humano.** Por eso
+el PR se dejó **abierto sin mergear**. La ficha sigue en `in_progress` a propósito.
+
+**Q3 sigue pendiente:** avisar a los mensajeros de que el corte del día pasa de las 18:00 a las
+00:00 CR. Es tarea de despliegue, no de código; nadie la ha hecho todavía.
+
+### Gate, medido dos veces
+
+`926 files / 11 497 tests` en ambas corridas de `./init.sh` (el baseline de `dev` en `0c9ab8ce`
+eran 913: la corrida **no** está degradada, `dev` avanzó). 1ª corrida: 4 rojos. 2ª: 1 rojo,
+**conjunto disjunto** del anterior. Todos son timeouts de 20 s, todos pasan en aislado y ninguno
+importa `RankingService`, `ranges.ts` ni `fecha-cr.ts`. **Delta atribuible a la rama = 0.**
+Salvedad honesta: el cuarto rojo de la 1ª corrida quedó **sin nombrar** (log truncado), así que
+lo que sostiene el delta 0 es la disjunción entre corridas, no la inspección de ese fichero.
+
+**Deuda de entorno del worktree:** `C:\w166` nació sin `.env`, así que `pnpm db:generate` no
+corría y el typecheck salía rojo por cliente Prisma ausente —**entorno, no contenido**—. Se copió
+el `.env` del checkout principal antes de medir nada. Es el mismo tropiezo que en `C:\w180`.
+
+---
+
+## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo — **LO DE PRODUCCIÓN, VIGENTE**
+
+> *Esta sección decía «EMPIEZA A LEER POR AQUÍ» cuando era la más reciente. Sigue vigente entera
+> —incluido el «LO PRIMERO AL RETOMAR» del final—, pero ya no es la de arriba: la 166 del 05-ago la
+> precede. Se conserva intacta salvo este marcador, que había caducado.*
 
 **183 `done`.** PR **#288** → `dev`, release **#289** → `prod` (**cero migraciones**), despliegue
 **READY**, sin errores de runtime nuevos. `dev` y `prod` a **0 commits**. Review **APROBADO en ronda
@@ -91,6 +140,7 @@ La ganancia **no se movió ni un céntimo** con el backfill: el contra-entrega e
 **VER LA 172 Y LA 173 EN PANTALLA.** Lleva **tres** jornadas pendiente y no lo sustituye ninguna
 suite. Ahora hay algo concreto que mirar: la caja de producción muestra **dos cifras distintas por
 primera vez**.
+
 
 ---
 
