@@ -8,14 +8,25 @@ import { PanelesOperativos } from "@/app/(app)/analitica/_components/operativo/P
 import { PANELES_OPERATIVOS } from "@/app/(app)/analitica/_components/operativo/catalogo-paneles";
 import {
   TEXTO_ERROR_PANEL,
+  TEXTO_GRANO_SERVIDOR,
   TEXTO_PROHIBIDO,
   TEXTO_SESION_NO_VALIDA,
+  TEXTO_SIN_GESTIONES,
   TITULO_COBERTURA,
-  TITULO_RANGO_EXCEDIDO,
   VACIO_PANEL,
 } from "@/app/(app)/analitica/_components/operativo/textos";
-import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
-import { PENUMBRA, type PuntoSerie, type ResultadoOperativo } from "@/lib/types/analitica-operativa";
+import {
+  consultarAgregadoOperativo,
+  consultarAnaliticaOperativa,
+} from "@/lib/actions/analitica-operativa";
+import {
+  PENUMBRA,
+  type CuboAgregado,
+  type GranoAgregado,
+  type PuntoSerie,
+  type ResultadoAgregado,
+  type ResultadoOperativo,
+} from "@/lib/types/analitica-operativa";
 import type { MetricaUnidad } from "@/lib/analytics/types";
 import { ToastProvider } from "@/providers/ToastProvider";
 
@@ -24,8 +35,13 @@ import { ToastProvider } from "@/providers/ToastProvider";
 // El tablero se renderiza ENTERO (la rejilla, no un panel suelto): R24 afirma que un panel
 // que lanza no tumba a los demas, y eso solo se puede ver con varios paneles vivos a la vez.
 
+// Feature 182 (T2.1) — la factoria declara TAMBIEN `consultarAgregadoOperativo`. En
+// cuanto `PanelOperativo.tsx` importa el simbolo nuevo, una factoria incompleta pone rojo
+// este archivo entero por un `undefined is not a function`, y ese rojo se lee como una
+// regresion propia cuando no lo es.
 vi.mock("@/lib/actions/analitica-operativa", () => ({
   consultarAnaliticaOperativa: vi.fn(),
+  consultarAgregadoOperativo: vi.fn(),
 }));
 
 let searchParams = new URLSearchParams();
@@ -36,9 +52,23 @@ vi.mock("next/navigation", () => ({
 }));
 
 const accion = vi.mocked(consultarAnaliticaOperativa);
+const agregado = vi.mocked(consultarAgregadoOperativo);
 
 const TITULO_TASA = "Tasa de entrega";
 const TITULO_CREADAS = "Ordenes creadas";
+
+/**
+ * Feature 182 — la unidad DECLARADA por el catalogo de paneles. Las respuestas simuladas
+ * la respetan para que el fixture no afirme una unidad que la pantalla contradiria.
+ */
+function unidadDe(metricaId: string): MetricaUnidad {
+  for (const panel of PANELES_OPERATIVOS) {
+    for (const metrica of panel.metricas) {
+      if (metrica.metricaId === metricaId) return metrica.unidad;
+    }
+  }
+  return "conteo";
+}
 
 function serieOk(
   metricaId: string,
@@ -67,21 +97,83 @@ function serieOk(
 
 /** Respuesta por defecto de cualquier metrica que el caso no personalice. */
 function porDefecto(metricaId: string): ResultadoOperativo {
-  return serieOk(metricaId, [{ fecha: "2026-08-03", valor: 3 }]);
+  return serieOk(metricaId, [{ fecha: "2026-08-03", valor: 3 }], unidadDe(metricaId));
 }
 
-function renderTablero() {
-  return render(
+/* --- Feature 182: el modo agregado del servidor (176) --------------------- */
+
+/** Un cubo con su `valor` EXPLICITO: la razon la calculo el servidor, no este fixture. */
+function cubo(
+  fecha: string,
+  valor: number | null,
+  extra: Partial<CuboAgregado> = {},
+): CuboAgregado {
+  return {
+    fecha,
+    desdeFecha: fecha,
+    hastaFecha: fecha,
+    numerador: 0,
+    denominador: 10,
+    valor,
+    ...extra,
+  };
+}
+
+function agregadoOk(
+  metricaId: string,
+  grano: GranoAgregado,
+  cubos: readonly CuboAgregado[],
+): ResultadoAgregado {
+  return {
+    status: "ok",
+    datos: {
+      metricaId,
+      unidad: unidadDe(metricaId),
+      unidadDeConteo: "tiempo",
+      grano,
+      rango: {
+        preset: "semana",
+        desde: new Date("2026-08-03T06:00:00.000Z"),
+        hasta: new Date("2026-08-04T06:00:00.000Z"),
+        desdeFecha: "2026-08-03",
+        hastaFecha: "2026-08-03",
+      },
+      cubos,
+      cobertura: { fechasNoComparables: [], penumbra: PENUMBRA },
+    },
+  };
+}
+
+/** Agregado por defecto: un cubo por grano, con una razon reconocible (0,5 = 50 %). */
+function agregadoPorDefecto(metricaId: string, grano: GranoAgregado): ResultadoAgregado {
+  return agregadoOk(metricaId, grano, [cubo("2026-08-03", 0.5)]);
+}
+
+// La configuracion de SWR se declara FUERA del render para que `rerender` no reinicie la
+// cache: el caso de R10 cambia el filtro y vuelve a renderizar el mismo arbol.
+const SWR = { provider: () => new Map(), dedupingInterval: 0 };
+
+function tablero() {
+  return (
     // Feature 134 (T4.2): el tablero monta ahora `ExportarOperativoPanel`, que envuelve
     // `DescargarDatasetButton` y este llama a `useToast()`. En la app el `ToastProvider`
     // vive en el layout; aqui se aporta igual, como en el resto de tests de descarga del
     // repo (`tests/components/descarga/*`).
     <ToastProvider>
-      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <SWRConfig value={SWR}>
         <PanelesOperativos />
       </SWRConfig>
-    </ToastProvider>,
+    </ToastProvider>
   );
+}
+
+function renderTablero() {
+  return render(tablero());
+}
+
+/** El envoltorio del panel: la region es la GRAFICA, y la cifra total es hermana suya. */
+function envoltorio(nombre: string): HTMLElement {
+  return region(nombre).parentElement as HTMLElement;
 }
 
 function region(nombre: string): HTMLElement {
@@ -104,6 +196,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   searchParams = new URLSearchParams();
   accion.mockImplementation(async ({ metricaId }) => porDefecto(metricaId));
+  agregado.mockImplementation(async ({ metricaId, grano }) =>
+    agregadoPorDefecto(metricaId, grano ?? "periodo"),
+  );
 });
 afterEach(cleanup);
 
@@ -302,32 +397,179 @@ describe("Feature 131 (R19) — el porcentaje viaja como razon cruda", () => {
 });
 
 /* ========================================================================== */
-/* R27 / D3 — el hueco declarado                                               */
+/* Feature 182 — el modo agregado, en pantalla                                 */
 /* ========================================================================== */
 
-describe("Feature 131 (R27) — por encima del techo, ni serie ni cifra", () => {
-  it("un panel de tasa por encima del techo no muestra ninguna cifra total, solo el aviso de reducir el rango", async () => {
-    const noventaDias: PuntoSerie[] = Array.from({ length: 90 }, (_, i) => ({
-      fecha: new Date(Date.UTC(2026, 0, 1) + i * 86_400_000).toISOString().slice(0, 10),
-      valor: 0.5 + i / 1000,
-    }));
+// Lo que la 131 declaraba aqui como «hueco» (R27/D3: por encima del techo, ni serie ni
+// cifra) DEJO DE SER VERDAD: el servidor ya suma antes de dividir (176). El caso que
+// afirmaba el aviso de «reduce el rango» se REESCRIBE —no se borra— porque la propiedad
+// que protegia sigue viva: el cliente nunca promedia cocientes. Solo cambia como se
+// cumple: antes no pintando nada, ahora pintando lo que el servidor calculo.
+
+/** 90 dias consecutivos desde 2026-01-01: muy por encima del techo de 62 fechas. */
+const NOVENTA_DIAS: PuntoSerie[] = Array.from({ length: 90 }, (_, i) => ({
+  fecha: new Date(Date.UTC(2026, 0, 1) + i * 86_400_000).toISOString().slice(0, 10),
+  valor: 0.5 + i / 1000,
+}));
+
+describe("Feature 182 (R1, R14) — por encima del techo se pintan los cubos del servidor", () => {
+  const CUBOS_SEMANA = [cubo("2026-01-05", 0.2), cubo("2026-01-12", 0.4), cubo("2026-01-19", 0.6)];
+
+  beforeEach(() => {
     accion.mockImplementation(async ({ metricaId }) =>
       metricaId === "tasa_entrega"
-        ? serieOk(metricaId, noventaDias, "porcentaje")
+        ? serieOk(metricaId, NOVENTA_DIAS, "porcentaje")
         : porDefecto(metricaId),
+    );
+    agregado.mockImplementation(async ({ metricaId, grano }) =>
+      metricaId === "tasa_entrega" && grano === "semana"
+        ? agregadoOk(metricaId, "semana", CUBOS_SEMANA)
+        : agregadoPorDefecto(metricaId, grano ?? "periodo"),
+    );
+  });
+
+  it("un panel de tasa con 90 dias pinta la serie por cubos semanales del servidor y ya no pide reducir el rango", async () => {
+    renderTablero();
+    const panel = await panelEstable(TITULO_TASA, /2026-01-05: 20\s*%/);
+
+    // Los TRES cubos del servidor, y solo esos: ni los 90 puntos diarios (que reventarian
+    // el tope del paquete) ni las 13 semanas que saldrian de cubetear en el cliente.
+    expect(within(panel).getByText(/Tasa de entrega, 2026-01-05: 20\s*%/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Tasa de entrega, 2026-01-19: 60\s*%/)).toBeInTheDocument();
+    expect(within(panel).getAllByRole("listitem")).toHaveLength(CUBOS_SEMANA.length);
+
+    // Y el panel NO se declara vacio: hay serie que pintar donde antes solo habia un aviso.
+    expect(within(panel).queryByText(VACIO_PANEL.titulo)).toBeNull();
+  });
+
+  it("el panel de tasa por cubos semanales anuncia el grano usado", async () => {
+    renderTablero();
+    await panelEstable(TITULO_TASA, /2026-01-05: 20\s*%/);
+
+    // R14 — el grano se DICE, y se dice cual: la semana que sumo el servidor no es la
+    // semana que el cliente sumaria de los conteos, y el texto es distinto a proposito.
+    expect(within(envoltorio(TITULO_TASA)).getByText(TEXTO_GRANO_SERVIDOR)).toBeInTheDocument();
+  });
+});
+
+describe("Feature 182 (R4, R6, R7) — la cifra total del periodo", () => {
+  it("el panel de tasa muestra su cifra total del periodo tambien con el rango corto", async () => {
+    // Rango CORTO (un solo punto): la serie sigue siendo la diaria de la 126 (D1) y la
+    // cifra sale igualmente del cubo `periodo`. Es el caso que la 131 no tenia: alli un
+    // `porcentaje` no llevaba total en NINGUN rango.
+    accion.mockImplementation(async ({ metricaId }) =>
+      metricaId === "tasa_entrega"
+        ? serieOk(metricaId, [{ fecha: "2026-08-03", valor: 0.9 }], "porcentaje")
+        : porDefecto(metricaId),
+    );
+    agregado.mockImplementation(async ({ metricaId, grano }) =>
+      metricaId === "tasa_entrega" && grano === "periodo"
+        ? agregadoOk(metricaId, "periodo", [cubo("2026-08-01", 0.723)])
+        : agregadoPorDefecto(metricaId, grano ?? "periodo"),
     );
     renderTablero();
 
-    const panel = await panelEstable(TITULO_TASA, TITULO_RANGO_EXCEDIDO);
-    expect(within(panel).getByText(TITULO_RANGO_EXCEDIDO)).toBeInTheDocument();
-    expect(within(panel).getByText(/Reduce el rango/)).toBeInTheDocument();
-
-    // CERO NUMEROS. Ni la media de los puntos diarios (media de medias, que D3 prohibe),
-    // ni la razon recompuesta a mano: hasta que exista una fuente que sume ANTES de
-    // dividir, el hueco se DECLARA en pantalla en vez de rellenarse.
-    expect(panel.textContent ?? "").not.toMatch(/\d/);
+    await panelEstable(TITULO_TASA, /72,3\s*%/);
+    const marco = envoltorio(TITULO_TASA);
+    // La cifra es LA DEL CUBO (72,3 %), no la del punto diario que se ve en la grafica
+    // (90 %): son dos numeros distintos a proposito para que el caso no pueda confundirlos.
+    expect(within(marco).getByText(/72,3\s*%/)).toBeInTheDocument();
+    expect(within(marco).getByText(/total del periodo/)).toBeInTheDocument();
   });
 
+  it("un total de periodo que incluye el dia en curso se anuncia parcial con su hora de corte", async () => {
+    agregado.mockImplementation(async ({ metricaId, grano }) =>
+      metricaId === "tasa_entrega" && grano === "periodo"
+        ? agregadoOk(metricaId, "periodo", [
+            // 20:35 UTC = 14:35 en Costa Rica (UTC-6, sin horario de verano).
+            cubo("2026-08-01", 0.61, { parcial: true, corteAt: "2026-08-03T20:35:00.000Z" }),
+          ])
+        : agregadoPorDefecto(metricaId, grano ?? "periodo"),
+    );
+    renderTablero();
+
+    await panelEstable(TITULO_TASA, /Total parcial/);
+    const marco = envoltorio(TITULO_TASA);
+    // Un periodo que incluye el dia en curso presentado como cerrado seria una cifra falsa
+    // con forma de cifra buena: se dice que es parcial Y hasta que hora hay datos.
+    expect(within(marco).getByText(/Total parcial/)).toBeInTheDocument();
+    expect(within(marco).getByText(/14:35/)).toBeInTheDocument();
+    expect(within(marco).getByText(/61\s*%/)).toBeInTheDocument();
+  });
+
+  it("un periodo con denominador cero dice que no hubo gestiones y no pinta un cero", async () => {
+    agregado.mockImplementation(async ({ metricaId, grano }) =>
+      metricaId === "tasa_entrega" && grano === "periodo"
+        ? agregadoOk(metricaId, "periodo", [
+            { ...cubo("2026-08-01", null), numerador: 0, denominador: 0 },
+          ])
+        : agregadoPorDefecto(metricaId, grano ?? "periodo"),
+    );
+    renderTablero();
+
+    await panelEstable(TITULO_TASA, TEXTO_SIN_GESTIONES);
+    const marco = envoltorio(TITULO_TASA);
+    // «No hubo gestiones» tiene texto PROPIO, distinto del vacio de la metrica...
+    expect(within(marco).getByText(TEXTO_SIN_GESTIONES)).toBeInTheDocument();
+    expect(TEXTO_SIN_GESTIONES).not.toBe(VACIO_PANEL.descripcion);
+    // ...y la cifra NO es un cero: un 0 % es una afirmacion sobre el dato, y con el
+    // denominador a cero no hay dato que afirmar.
+    expect(within(marco).queryByText(/^\s*0\s*%\s*$/)).toBeNull();
+    expect(within(marco).getByText(/total del periodo/)).toBeInTheDocument();
+  });
+});
+
+describe("Feature 182 (R10) — la cifra sigue al filtro", () => {
+  it("al cambiar el filtro la cifra total se vuelve a pedir con el filtro nuevo", async () => {
+    agregado.mockImplementation(async ({ metricaId, raw, grano }) => {
+      const rango = (raw as { rango?: string }).rango;
+      return agregadoOk(metricaId, grano ?? "periodo", [
+        cubo("2026-08-01", rango === "mes" ? 0.125 : 0.842),
+      ]);
+    });
+    const { rerender } = renderTablero();
+    await panelEstable(TITULO_TASA, /84,2\s*%/);
+
+    searchParams = new URLSearchParams("rango=mes");
+    rerender(tablero());
+
+    // La cifra NUEVA aparece...
+    expect(await screen.findByText(/12,5\s*%/, undefined, { timeout: 4000 })).toBeInTheDocument();
+    // ...y la del filtro anterior NO se queda en pantalla como si fuera la de este filtro.
+    expect(within(envoltorio(TITULO_TASA)).queryByText(/84,2\s*%/)).toBeNull();
+
+    // Y se volvio a pedir CON EL FILTRO NUEVO, en los dos granos.
+    const conElRangoNuevo = agregado.mock.calls.filter(
+      ([entrada]) => (entrada.raw as { rango?: string }).rango === "mes",
+    );
+    expect(conElRangoNuevo.map(([e]) => e.grano).sort()).toContain("periodo");
+    expect(conElRangoNuevo.map(([e]) => e.grano).sort()).toContain("semana");
+  });
+});
+
+describe("Feature 182 (R13) — un agregado denegado no es «no hay cifra»", () => {
+  it("si el agregado responde `forbidden` el panel dice prohibido y no pinta ninguna cifra", async () => {
+    // La SERIE llega perfectamente: solo el agregado esta denegado. Sin R13 el panel
+    // pintaria la grafica y omitiria el total en silencio, y un problema de permisos se
+    // leeria como una metrica que «no tiene» cifra.
+    agregado.mockImplementation(async ({ metricaId, grano }) =>
+      metricaId === "tasa_entrega"
+        ? { status: "forbidden" }
+        : agregadoPorDefecto(metricaId, grano ?? "periodo"),
+    );
+    renderTablero();
+
+    const panel = await panelEstable(TITULO_TASA, TEXTO_PROHIBIDO);
+    expect(within(panel).getByRole("alert")).toHaveTextContent(TEXTO_PROHIBIDO);
+    expect(within(panel).queryByText(/total del periodo/)).toBeNull();
+    expect(within(panel).queryByText(VACIO_PANEL.titulo)).toBeNull();
+    expect(panel.textContent ?? "").not.toMatch(/\d/);
+    // Y los demas paneles siguen vivos: un denegado de una metrica no tumba el tablero.
+    expect(screen.getByRole("region", { name: TITULO_CREADAS })).toBeInTheDocument();
+  });
+});
+
+describe("Feature 131 (R16) — el conteo largo sigue agregandose por semana en el cliente", () => {
   it("un conteo por encima del techo SI se pinta, agregado por semana y anunciandolo", async () => {
     const noventaDias: PuntoSerie[] = Array.from({ length: 90 }, (_, i) => ({
       fecha: new Date(Date.UTC(2026, 0, 1) + i * 86_400_000).toISOString().slice(0, 10),
@@ -338,11 +580,22 @@ describe("Feature 131 (R27) — por encima del techo, ni serie ni cifra", () => 
     );
     renderTablero();
 
+    // Se conserva porque el modo agregado RECHAZA los conteos: este es el unico camino de
+    // `ordenes_creadas` en un rango largo. Lo que se RETIRO aqui (R16 de la 182) es la
+    // asercion hermana que comprobaba la AUSENCIA del titulo de `rango_excedido`: al
+    // desaparecer la constante se habria quedado verde sin medir nada.
     const panel = await panelEstable(TITULO_CREADAS, /sumados por semana/);
-    expect(within(panel).queryByText(TITULO_RANGO_EXCEDIDO)).toBeNull();
-    expect(
-      within(panel.parentElement as HTMLElement).getByText(/sumados por semana/),
-    ).toBeInTheDocument();
+    expect(within(envoltorio(TITULO_CREADAS)).getByText(/sumados por semana/)).toBeInTheDocument();
+    // Y es la semana DEL CLIENTE, no la del servidor: son dos textos distintos.
+    expect(within(envoltorio(TITULO_CREADAS)).queryByText(TEXTO_GRANO_SERVIDOR)).toBeNull();
+    expect(within(panel).queryByText(VACIO_PANEL.titulo)).toBeNull();
+  });
+
+  it("un panel de conteo no pide el modo agregado", async () => {
+    renderTablero();
+    await screen.findByRole("region", { name: TITULO_CREADAS });
+    await waitFor(() => expect(agregado.mock.calls.length).toBeGreaterThan(0));
+    expect(agregado.mock.calls.map(([e]) => e.metricaId)).not.toContain("ordenes_creadas");
   });
 });
 
