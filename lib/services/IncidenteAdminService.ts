@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { descargaConfig } from "@/lib/config/descarga";
 import { gestionConfig, GESTION_MIME_EXTENSION, type GestionMimeType } from "@/lib/config/gestion";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -16,8 +17,10 @@ import type {
   AprobarIncidenteServiceResult,
   IIncidenteAdminService,
   IncidenteAdminDTO,
+  ListarHistoricoIncidentesCompletoServiceResult,
   ListarHistoricoIncidentesServiceResult,
   ListarIncidentesServiceResult,
+  ListarPendientesIncidentesCompletoServiceResult,
   ListarPendientesIncidentesServiceResult,
   RechazarIncidenteServiceResult,
   ReportarIncidenteInput,
@@ -68,6 +71,26 @@ const SET_ORIGENES: ReadonlySet<string> = new Set(ORIGENES_INCIDENTE_ADMIN);
 
 /** Estado destino del reporte. Es el mismo `value` del catalogo que usa el camino del mensajero. */
 const ESTADO_INCIDENTE = "incidente";
+
+/**
+ * Feature 184 — Tanda F (T F.2) — el mapa de URL firmadas que recibe el camino del ARCHIVO: NINGUNA.
+ *
+ * No es un descuido ni un atajo, y la diferencia con la tanda D importa. Alli el enriquecido se
+ * CONSERVO porque saltarselo emitia `null` en un campo que el DTO si declara y que significa otra
+ * cosa. Aqui el campo tambien existe (`evidenciaUrls`), pero:
+ *
+ *  - **nadie lo lee en este camino**: `incidentes-descarga-columnas.ts` enumera las columnas una
+ *    a una y las evidencias NO estan en ninguna de las dos;
+ *  - **y no deben estar**: R22 de la 170 lo dice por escrito — un `xlsx` reenviado por correo con
+ *    URL firmadas dentro es acceso a las fotos sin sesion. Firmarlas aqui seria FABRICAR ese
+ *    riesgo para tirarlo a la basura una linea despues.
+ *
+ * Asi que `[]` en el archivo no es «este incidente no tiene fotos»: es «este camino no entrega
+ * fotos», que es exactamente lo que la pantalla ya decia en su comentario. El dia que alguien
+ * añada una columna de evidencia al archivo, el caso «las filas del archivo son las de la pagina
+ * en TODAS las columnas que el archivo proyecta» se pone rojo, que es donde tiene que doler.
+ */
+const SIN_URLS_FIRMADAS: Record<string, string> = {};
 
 /** Resultado interno de resolver el alcance del actor (R48). */
 type AlcanceResult =
@@ -208,6 +231,84 @@ export class IncidenteAdminService implements IIncidenteAdminService {
       page: input.page,
       pageSize: input.pageSize,
       total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
+    };
+  }
+
+  /**
+   * Feature 184 — Tanda F (T F.2, R1/R4/R6) — el HISTORICO ENTERO del alcance, sin recorte, que
+   * es del que sale el archivo de «Incidentes — historico» (listado 9).
+   *
+   * **Lo que cierra.** Hasta hoy ese archivo se producia releyendo `listarIncidentes()`, que trae
+   * los incidentes del alcance ENTEROS —cola e historico juntos— y los parte en memoria para que
+   * la pantalla se quede con una de las dos mitades. Aqui se lee SOLO el historico, cortado en la
+   * base por el mismo criterio que su pagina (R16). Las filas salen identicas; lo que cambia es
+   * cuantas se leen para producirlas, y de eso hablan los dos `*-where.test.ts` y el contador de
+   * filas leidas del test de servicio.
+   *
+   * **El guard va PRIMERO, antes del repositorio** (`resolveAlcance`, el MISMO de la pagina: rol
+   * + zona de la ORDEN resuelta server-side, nunca de la entrada). `adminSatelite` sin zona ->
+   * conjunto vacio SIN consultar la base, igual que la pagina.
+   *
+   * **No firma ninguna URL** — ver `SIN_URLS_FIRMADAS`. Es la unica diferencia deliberada con la
+   * pagina, y va en la direccion segura: menos superficie, no mas.
+   *
+   * **No recibe `input`, y es decision, no olvido.** Este listado no admite filtros: su schema de
+   * pagina solo llevaba `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El
+   * borde la sigue aplicando entera —parsear ES la barrera (R17)— pero no hay nada que
+   * transportar hasta aqui.
+   */
+  async listarHistoricoIncidentesCompleto(
+    actor: Actor,
+  ): Promise<ListarHistoricoIncidentesCompletoServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findHistoricoCompleto(scope.alcance);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return {
+      status: "ok",
+      // MISMO `toDTO` que la pagina (R5): las filas del archivo son las de la pantalla en todas
+      // las columnas que el archivo proyecta, incluido el `esPropio` que calcula el SERVIDOR.
+      items: conjunto.map((row) => toDTO(row, SIN_URLS_FIRMADAS, actor.usuarioId)),
+      total: conjunto.length,
+    };
+  }
+
+  /**
+   * Feature 184 — Tanda F (T F.2, R1/R4/R6) — la COLA ENTERA de pendientes de decision, sin
+   * recorte, para el archivo de «Incidentes pendientes» (listado 8).
+   *
+   * Comparte con el de arriba la relectura que evita, y aqui se nota mas: la cola es la mitad
+   * PEQUEÑA del conjunto (los incidentes sin resolver), asi que producir su archivo arrastraba
+   * todo el historico del alcance —que crece sin tope con los dias— para descartarlo en memoria.
+   *
+   * Sin `input`, sin firmas y con el mismo guard que su hermano, por los mismos motivos.
+   */
+  async listarPendientesIncidentesCompleto(
+    actor: Actor,
+  ): Promise<ListarPendientesIncidentesCompletoServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findColaCompleta(scope.alcance);
+
+    const limite = descargaConfig.MAX_FILAS;
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite }; // R6
+    }
+
+    return {
+      status: "ok",
+      items: conjunto.map((row) => toDTO(row, SIN_URLS_FIRMADAS, actor.usuarioId)),
+      total: conjunto.length,
     };
   }
 
