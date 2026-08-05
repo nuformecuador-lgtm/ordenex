@@ -288,3 +288,24 @@ actual (§2.2). Coste asumido: instrumentar los 4 writers (§4.1).
 | Limpieza `asignado_at = NULL` (LC1) | paths C1-C3 (§4.2) |
 | Denominador | `RankingRepository.contarAsignadasPorMensajero` (§3) + test R1 |
 | Limitación LC1 (devolución intradía) | test de `RankingService` (§2.3) |
+
+---
+
+## Nota de supersesión — feature 166 (2026-08-04)
+
+**Apendida, no reescrita.** Esta feature está `done` y su texto se conserva tal cual; lo que
+sigue solo declara qué parte de él dejó de estar vigente.
+
+La definición de **«Día CR»** de las líneas 18-20 de este documento —helper `startOfDayCR(now)`
+y rango `[startOfDayCR(now), startOfDayCR(now) + 24h)`, con la constante local `UN_DIA_MS`—
+quedó **SUSTITUIDA** por la ventana del **día natural de Costa Rica** de la feature **166**:
+`fechaCalendarioCR(now)` + `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc`
+(convención de la feature 144), con ambos bordes en `...T06:00:00.000Z`. `UN_DIA_MS`
+desapareció de `RankingService`.
+
+Motivo: las dos cotas viajan al repositorio y se comparan contra columnas `timestamp`
+(`gestion_orden.created_at`, `orden.asignado_at`), no contra `@db.Date`, así que la
+convención de `startOfDayCR` producía la ventana 18:00-18:00 hora CR en lugar del día
+natural. `RankingRepository` no cambió.
+
+Ver `specs/166-ranking-ventana-dia/`.

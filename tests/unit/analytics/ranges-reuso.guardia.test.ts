@@ -16,12 +16,14 @@ import path from "path";
 //     instante real de las 00:00 de pared en CR (feature 144). Es la que usa la
 //     analitica (decision D6 / R31).
 //
-// `lib/services/RankingService.ts:60-61` compara `timestamp` contra
-// `startOfDayCR(now)` + 24 h, o sea una ventana `[00:00Z, 24:00Z)` = 18:00-18:00
-// hora CR, NO el dia natural. Esa divergencia esta ACEPTADA y declarada en D6 (hay
-// un ticket de saneamiento aparte, tasks T0.3); lo que NO se acepta es COPIARLA aqui.
-// Si alguien "arregla" la analitica para que sus cifras cuadren con el ranking
-// importando `startOfDayCR`, este guardia cae — y esa es exactamente su razon de ser.
+// La TRAMPA sigue viva: `startOfDayCR` se conserva exportada porque es la funcion
+// CORRECTA para columnas `@db.Date`, y usarla como cota contra un `timestamp`
+// produce la ventana `[00:00Z, 24:00Z)` = 18:00-18:00 hora CR, NO el dia natural.
+// Lo que ya NO existe es la divergencia con el ranking: `RankingService` compara
+// `timestamp` y desde la feature **166** usa esta misma convencion, asi que
+// analitica y ranking resuelven "hoy" con cotas identicas (el ticket de
+// saneamiento D6 / T0.3 quedo cerrado ahi). Si alguien "arregla" la analitica
+// importando `startOfDayCR`, este guardia cae — y esa es su razon de ser.
 //
 // Se censa el CODIGO, no los comentarios: nombrar la trampa en la documentacion es
 // obligatorio (tasks T4.1(c)); usarla es lo prohibido. Por eso se quitan comentarios
@@ -95,14 +97,16 @@ describe("lib/analytics · reutiliza fecha-cr, no lo reimplementa (R14)", () => 
     }
   });
 
-  it("deja escrita en el propio modulo la divergencia aceptada con el ranking (R31)", () => {
+  it("documenta la trampa `startOfDayCR` y la divergencia YA CERRADA con el ranking (166)", () => {
     // El contrapeso del censo de arriba: la trampa debe estar NOMBRADA en la
-    // documentacion de `ranges.ts` para que nadie la "corrija" copiandola.
+    // documentacion de `ranges.ts` para que nadie la "corrija" copiandola. Se siguen
+    // exigiendo TRES coincidencias simultaneas —no basta nombrarla de pasada—: la
+    // funcion trampa, la ventana que produce y la ficha que cerro la divergencia.
     const fuente = fs.readFileSync(RANGES_PATH, "utf8");
 
-    expect(fuente).toContain("RankingService");
+    expect(fuente).toContain("startOfDayCR");
     expect(fuente).toMatch(/18:00/);
-    expect(fuente).toMatch(/D6/);
+    expect(fuente).toMatch(/166/);
   });
 
   it("el censo detecta el offset escrito a mano (autocomprobacion del guardia)", () => {
