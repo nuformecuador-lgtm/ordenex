@@ -301,3 +301,83 @@ describe("WHERE de los listados paginados de la tanda I (T I.1)", () => {
     expect(consultas).toBe(12);
   });
 });
+
+// Feature 184 — Tanda B (R5/R14/R15/R16) — los CONJUNTOS de los que salen los archivos de los
+// listados 6 y 7, «Cierres de bodega solicitados» y «Cierres del día a consolidar».
+//
+// Aquí no hay método de repositorio nuevo: los dos conjuntos ya existían
+// (`findCierresBodegaByZona` y `findCierresDiaConsolidables`) y son literalmente los que la
+// pantalla releía. Lo que cambia con esta tanda es su PAPEL: pasan de ser un campo suelto de un
+// listado compuesto a ser la lectura dedicada del archivo. Y en cuanto un archivo depende de
+// ellos, su `where` y su `orderBy` dejan de ser un detalle: si divergen de los de la página, la
+// fila 26 del archivo deja de ser la primera de la página 2 y no hay ninguna pantalla que lo
+// diga.
+//
+// El aviso de siempre: los tests de servicio usan un doble de repositorio y NO ven esta
+// traducción. Por eso estas dos propiedades se afirman aquí y no allí.
+describe("los conjuntos de la descarga de la tanda B (feature 184)", () => {
+  it("cierres de bodega solicitados: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await new CierreBodegaRepository({
+      cierreBodega: entero,
+    } as unknown as PrismaClient).findCierresBodegaByZona("z-a");
+
+    const pagina = delegado();
+    await new CierreBodegaRepository({
+      cierreBodega: pagina,
+    } as unknown as PrismaClient).findCierresBodegaByZonaPaginado("z-a", RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // El alcance por zona es TODO el criterio de este listado, y sale de una sola declaración.
+    expect(argsEntero.where).toEqual({ zonaId: "z-a" });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden también: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ solicitadoAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("los dos conjuntos cuestan UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Lo que hace de esta tanda una mejora medible: el archivo pasa de cuatro consultas + cinco
+    // agregados + el reparto del efectivo a ESTO. Si mañana alguien le añade a uno de los dos un
+    // `count` «para el total», el total del archivo pasaría a salir de otro sitio que sus filas.
+    const casos: Array<[string, ReturnType<typeof delegado>, () => Promise<unknown>]> = [];
+
+    const d1 = delegado();
+    casos.push([
+      "cierres de bodega solicitados",
+      d1,
+      () =>
+        new CierreBodegaRepository({
+          cierreBodega: d1,
+        } as unknown as PrismaClient).findCierresBodegaByZona("z-a"),
+    ]);
+
+    const d2 = delegado();
+    casos.push([
+      "cierres del día a consolidar",
+      d2,
+      () =>
+        new CierreBodegaRepository({
+          cierreDia: d2,
+        } as unknown as PrismaClient).findCierresDiaConsolidables("z-a"),
+    ]);
+
+    expect(casos).toHaveLength(2); // los DOS listados de la tanda B
+
+    for (const [nombre, d, ejecutar] of casos) {
+      await ejecutar();
+      expect(d.findMany, `${nombre}: una sola consulta`).toHaveBeenCalledTimes(1);
+      expect(d.count, `${nombre}: el conjunto NO cuenta`).not.toHaveBeenCalled();
+      const args = d.findMany.mock.calls[0]![0]!;
+      expect(args.skip, `${nombre}: sin recorte`).toBeUndefined();
+      expect(args.take, `${nombre}: sin recorte`).toBeUndefined();
+    }
+  });
+});
