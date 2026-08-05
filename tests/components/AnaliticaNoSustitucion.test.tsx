@@ -19,6 +19,7 @@ import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarUsuariosPorRol } from "@/lib/actions/usuarios-por-rol";
 import { PENUMBRA, type ResultadoOperativo } from "@/lib/types/analitica-operativa";
+import { ToastProvider } from "@/providers/ToastProvider";
 
 // Feature 133 (T6.2 / T6.3) — R21 y R19.
 //
@@ -142,10 +143,16 @@ async function montar(recorte: {
   readonly alcance: "global" | "zona" | "tienda" | "mensajero" | "denegado";
 }) {
   render(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <FiltrosOperativos facetas={recorte.facetas} />
-      <PanelesOperativos alcance={recorte.alcance} />
-    </SWRConfig>,
+    // Feature 134 (T4.2): montar el tablero arrastra `ExportarOperativoPanel` →
+    // `DescargarDatasetButton` → `useToast()`, asi que el `ToastProvider` es obligatorio;
+    // sin el, el render lanza y el body queda vacio. Mismo envoltorio que `renderTablero()`
+    // en `tests/components/TableroOperativo.test.tsx`.
+    <ToastProvider>
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <FiltrosOperativos facetas={recorte.facetas} />
+        <PanelesOperativos alcance={recorte.alcance} />
+      </SWRConfig>
+    </ToastProvider>,
   );
   await waitFor(() =>
     expect(new Set(accion.mock.calls.map(([e]) => e.metricaId)).size).toBe(

@@ -12,6 +12,7 @@ import { PanelesOperativos } from "@/app/(app)/analitica/_components/operativo/P
 import { PANELES_OPERATIVOS } from "@/app/(app)/analitica/_components/operativo/catalogo-paneles";
 import {
   ETIQUETA_ALCANCE,
+  ETIQUETA_REJILLA,
   TEXTO_ERROR_PANEL,
   TEXTO_PROHIBIDO,
   TEXTO_SESION_NO_VALIDA,
@@ -426,9 +427,14 @@ const ALCANCES: readonly AlcanceTablero[] = ["global", "zona", "tienda", "mensaj
 
 function renderConAlcance(alcance: AlcanceTablero) {
   return render(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <PanelesOperativos alcance={alcance} />
-    </SWRConfig>,
+    // Feature 134 (T4.2): montar el tablero arrastra `ExportarOperativoPanel` →
+    // `DescargarDatasetButton` → `useToast()`, asi que el `ToastProvider` es obligatorio;
+    // sin el, el render lanza y el body queda vacio. Mismo envoltorio que `renderTablero()`.
+    <ToastProvider>
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <PanelesOperativos alcance={alcance} />
+      </SWRConfig>
+    </ToastProvider>,
   );
 }
 
@@ -446,7 +452,11 @@ describe("Feature 133 (R11) — ningun panel operativo se retira por rol", () =>
           `falta el panel «${panel.titulo}» para ${rol}`,
         ).toBeInTheDocument();
       }
-      expect(screen.getAllByRole("region")).toHaveLength(PANELES_OPERATIVOS.length);
+      // El conteo se acota A LA REJILLA: contarlas en todo el body incluia el viewport
+      // del `ToastProvider` (region «Notificaciones»), que el montaje exige desde la 134
+      // y no es un panel del tablero. El numero esperado no se relaja.
+      const rejilla = screen.getByRole("group", { name: ETIQUETA_REJILLA });
+      expect(within(rejilla).getAllByRole("region")).toHaveLength(PANELES_OPERATIVOS.length);
     });
   }
 
