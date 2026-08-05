@@ -74,6 +74,11 @@ vi.mock("@/lib/actions/cierre-dia", () => ({
   listarCierreDia: vi.fn(),
   deshacerGestion: vi.fn(),
   listarCierresPasadosPaginado: vi.fn(),
+  // Feature 184 — Tanda C (T C.2): la lectura DEDICADA del listado 1. El doble de
+  // `listarCierreDia` se conserva A PROPÓSITO —y programado con evidencias FIRMADAS— porque es
+  // el que firmaba: sin él, «no se vuelve a leer el compuesto» no sería una decisión de la
+  // pantalla, sería que el doble no responde.
+  listarCierresPasadosCompleto: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -118,7 +123,11 @@ import {
   listarHistoricoCierresBodegaPaginado,
   listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
-import { listarCierreDia, listarCierresPasadosPaginado } from "@/lib/actions/cierre-dia";
+import {
+  listarCierreDia,
+  listarCierresPasadosCompleto,
+  listarCierresPasadosPaginado,
+} from "@/lib/actions/cierre-dia";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/CierresBodegaAdminModule";
@@ -439,6 +448,13 @@ function renderCierreDia() {
     status: "ok",
     page: 1,
     ...paginaInicial(CIERRES_PASADOS),
+  });
+  // Feature 184 — Tanda C (T C.2): de aquí sale el archivo — el conjunto de ESTE mensajero, sin
+  // recorte y con la forma que `filasDesdeResultado` traduce (`ListarCompletoResult`).
+  vi.mocked(listarCierresPasadosCompleto).mockResolvedValue({
+    status: "ok",
+    items: CIERRES_PASADOS,
+    total: CIERRES_PASADOS.length,
   });
   vi.mocked(listarCierreDia).mockResolvedValue({
     status: "ok",
@@ -825,6 +841,110 @@ describe("Cierres · descarga", () => {
     const [mensaje] = errorToastMock.mock.calls[0] as [string];
     expect(mensaje).toMatch(/Vuelve a intentarlo/);
     for (const dato of ["Mensajero 1", "1000.10", "cd-1"]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda C (T C.2): «Cierres solicitados por el mensajero» (listado 1)
+  // -------------------------------------------------------------------------
+
+  it("el archivo de los cierres del mensajero sale de su lectura DEDICADA, no del listado compuesto (R1/R8)", async () => {
+    // Las tres mitades, como en la tanda B:
+    //
+    //   (a) montar la pantalla NO ejecuta la lectura del conjunto (R8);
+    //   (b) al pulsar se llama a `listarCierresPasadosCompleto` UNA vez y SIN un solo argumento:
+    //       este listado no tiene filtros, así que ni `page`, ni `pageSize`, ni —sobre todo—
+    //       `mensajeroId` pueden viajar. Es el único listado del Anexo A cuyo alcance es el
+    //       propio usuario: una clave de alcance aceptada aquí abriría el histórico de dinero
+    //       de OTRO mensajero (R4/R17);
+    //   (c) y NO se relee `listarCierreDia`, el listado COMPUESTO de la pantalla.
+    const user = userEvent.setup();
+    renderCierreDia();
+
+    expect(listarCierresPasadosCompleto).not.toHaveBeenCalled();
+    expect(listarCierreDia).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Descargar Cierres solicitados" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarCierresPasadosCompleto).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(listarCierresPasadosCompleto).mock.calls[0]).toEqual([]);
+    expect(listarCierreDia).not.toHaveBeenCalled();
+    // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
+    // de degradar el archivo.
+    expect(listarCierresPasadosPaginado).toHaveBeenCalledTimes(1);
+  });
+
+  it("descargar los cierres del mensajero ya no dispara la relectura que FIRMA las evidencias (R9)", async () => {
+    // La mitad de CLIENTE de R9, y es la que este archivo puede medir sin duplicar la del
+    // servidor: el espía sobre `createSignedUrls` vive en
+    // `tests/unit/services/cierre-dia-pasados-completo.test.ts` y prueba que el camino nuevo no
+    // firma; lo que se prueba AQUÍ es que la pantalla dejó de PEDIR el camino que sí firmaba.
+    // Las dos mitades hacen falta: un servicio que no firma no sirve de nada si la pantalla
+    // sigue llamando al listado compuesto, y ese es justo el estado del que salimos.
+    //
+    // Por qué el archivo no lo delata: sus ocho columnas salen enteras del `CierrePasadoDTO`,
+    // que no tiene campo de evidencia. Firmando y sin firmar el xlsx es idéntico — por eso la
+    // deuda llevaba aquí desde la 170 sin que ningún test la viera, y por eso este `expect` no
+    // es decorado: si se quita, la relectura puede volver sin que nada falle.
+    const user = userEvent.setup();
+    renderCierreDia();
+
+    await user.click(screen.getByRole("button", { name: "Descargar Cierres solicitados" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarCierreDia).not.toHaveBeenCalled();
+
+    // ANTI-VACUIDAD, en dos pasos, porque «cero llamadas» pasa igual con un doble muerto:
+    //  1. la descarga SÍ ocurrió y produjo sus filas —el cero de arriba no es «no pasó nada»—;
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas).toHaveLength(CIERRES_PASADOS.length);
+    //  2. y el doble del compuesto está VIVO y trae evidencias FIRMADAS: si la pantalla lo
+    //     llamara, respondería. No llamarlo es una decisión de la pantalla, no del arnés.
+    const compuesto = await listarCierreDia();
+    expect(compuesto.status === "ok" && compuesto.grupos.rechazada[0].evidenciaUrl).toBe(
+      EVIDENCIA_FIRMADA,
+    );
+  });
+
+  it("la pantalla NO recorta ni reordena el conjunto de cierres del mensajero que devolvió el servidor (R2)", async () => {
+    // El discriminador entre «el servidor entrega el conjunto» y «lo entrega Y la pantalla lo
+    // vuelve a tocar». El doble devuelve TRES filas —una más de las que la tabla pinta— en un
+    // orden que NINGÚN orden de cliente reproduce: ni por fecha descendente (sería 19, 12, 11),
+    // ni ascendente (11, 12, 19). El archivo tiene que traer las tres, en ESE orden.
+    const user = userEvent.setup();
+    renderCierreDia();
+
+    vi.mocked(listarCierresPasadosCompleto).mockResolvedValueOnce({
+      status: "ok",
+      items: [cierrePasado(2), cierrePasado(9), cierrePasado(1)],
+      total: 3,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Descargar Cierres solicitados" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas.map((f) => f.fecha)).toEqual(["2026-07-12", "2026-07-19", "2026-07-11"]);
+  });
+
+  it("un fallo de la lectura de los cierres del mensajero no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
+    const user = userEvent.setup();
+    renderCierreDia();
+    vi.mocked(listarCierresPasadosCompleto).mockResolvedValueOnce({ status: "forbidden" });
+
+    await user.click(screen.getByRole("button", { name: "Descargar Cierres solicitados" }));
+    // Ancla POSITIVA: el aviso que SALE, no el archivo que no sale.
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+
+    const [mensaje] = errorToastMock.mock.calls[0] as [string];
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    // Accionable, y sin un solo dato del dominio: ni montos, ni identificadores, ni la URL
+    // firmada que esta pantalla es la única en tener a mano.
+    for (const dato of ["1000.10", "cp-1", "secreto", EVIDENCIA_FIRMADA]) {
       expect(mensaje).not.toContain(dato);
     }
     expect(descargarBlobMock).not.toHaveBeenCalled();

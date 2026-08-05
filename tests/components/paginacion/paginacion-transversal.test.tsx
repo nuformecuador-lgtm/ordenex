@@ -194,10 +194,13 @@ interface ListadoPaginado {
  */
 const ANEXO_III: ListadoPaginado[] = [
   {
+    // Feature 184 — Tanda C (T C.2/T C.3): el más caro por red del inventario. Su relectura
+    // FIRMABA en lote, contra Supabase Storage, las URL de evidencia de todas las gestiones del
+    // día, y el archivo no usaba ni una: el `CierrePasadoDTO` no tiene campo de evidencia.
     listado: "Cierres solicitados por el mensajero",
     ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_PASADOS_LABEL",
   },
   {
@@ -311,7 +314,8 @@ const ANEXO_III: ListadoPaginado[] = [
  * Q-I5/Q-K4 está cerrada.
  */
 const PENDIENTES_184: readonly string[] = [
-  "Cierres solicitados por el mensajero",
+  // Feature 184 — Tanda C: «Cierres solicitados por el mensajero» salió de aquí en el MISMO
+  // commit que su pantalla. Quedan OCHO.
   "Cierres del día — histórico",
   "Cierres del día pendientes de decisión",
   "Cierres de bodega pendientes",

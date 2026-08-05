@@ -70,6 +70,11 @@ const { paginado, completo } = vi.hoisted(() => ({
     // se conserva porque esa pantalla lo sigue usando para lo demás.
     bodegaSolicitados: vi.fn(),
     cierreDia: vi.fn(),
+    // Feature 184 — Tanda C (T C.2): «Cierres solicitados del mensajero» tampoco saca su archivo
+    // del listado compuesto (`cierreDia`) —el que firmaba las URL de evidencia— sino de su
+    // lectura DEDICADA. El doble del compuesto se conserva: la pantalla lo seguía usando y su
+    // ausencia no puede ser lo que explique que ya no se llame.
+    cierresPasadosCompleto: vi.fn(),
     incidentes: vi.fn(),
     saldos: vi.fn(),
     plantillas: vi.fn(),
@@ -114,6 +119,9 @@ vi.mock("@/lib/actions/cierre-dia", () => ({
   deshacerGestion: vi.fn(),
   listarCierreDia: (...a: unknown[]) => completo.cierreDia(...a),
   listarCierresPasadosPaginado: (...a: unknown[]) => paginado.cierresPasados(...a),
+  // Feature 184 — Tanda C (T C.2): la lectura dedicada del listado 1. Sin declararla aquí, el
+  // control de descarga de esa tabla llama a `undefined` y el archivo no sale.
+  listarCierresPasadosCompleto: (...a: unknown[]) => completo.cierresPasadosCompleto(...a),
 }));
 vi.mock("@/lib/actions/incidentes", () => ({
   verIncidente: vi.fn(),
@@ -465,6 +473,15 @@ const LISTADOS: Listado[] = [
     montar: () => {
       const todos = conjunto(cierrePasado);
       servirPaginas(paginado.cierresPasados, todos);
+      // T C.2: de aquí sale el archivo — el conjunto de ESTE mensajero, sin recorte y con la
+      // forma que `filasDesdeResultado` traduce.
+      completo.cierresPasadosCompleto.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
+      // El compuesto sigue respondiendo: que el archivo ya no salga de él tiene que ser una
+      // decisión de la pantalla, no del doble.
       completo.cierreDia.mockResolvedValue({
         status: "ok",
         grupos: gruposVacios(),
