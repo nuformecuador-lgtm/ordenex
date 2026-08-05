@@ -30,11 +30,13 @@
 // Feature 184 — Tanda A (T A.4/T A.5): el conjunto del archivo pasa a pedirse a la lectura
 // DEDICADA del listado (`listarOrdenesBodegaCompleto`), ya filtrada por la base. Y esta
 // pantalla gana la poda de la selección, así que aquí se mide lo que la poda NO puede hacer:
-// no mueve la página, ni suelta los filtros, ni recalcula los contadores (R26), y no le cuesta
-// una consulta ni al arranque ni a una descarga (R28). Lo que la poda SÍ hace se mide en
+// no mueve la página, ni suelta los filtros, ni recalcula los contadores, ni retira la acción de
+// lote de lo marcado en la página visible (R26, sus cuatro cláusulas), y no le cuesta una consulta
+// ni al arranque ni a una descarga (R28). Lo que la poda SÍ hace se mide en
 // `SateliteSeleccionOtrasPaginas.test.tsx`.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  act,
   render,
   screen,
   within,
@@ -289,6 +291,25 @@ function servirVigencia() {
     status: "ok",
     ids: input.ids ?? [],
   }));
+}
+
+/**
+ * Deja la SIGUIENTE comprobación de vigencia EN VUELO y devuelve el interruptor con el que el
+ * caso la responde cuando quiera.
+ *
+ * Existe para poder mirar la pantalla ANTES y DESPUÉS de la poda **sobre la misma página
+ * visible**: la comprobación se dispara al llegar la página, así que sin este control la
+ * respuesta llegaría antes de que el caso pueda marcar una fila de esa página, y el «antes»
+ * sería el estado transitorio de la navegación —que no es lo que R26 protege— o directamente
+ * una carrera.
+ */
+function vigenciaEnVuelo(): (idsVigentes: string[]) => void {
+  let responder!: (respuesta: { status: string; ids: string[] }) => void;
+  const respuesta = new Promise<{ status: string; ids: string[] }>((resolve) => {
+    responder = resolve;
+  });
+  vigenciaMock.mockImplementationOnce(() => respuesta);
+  return (idsVigentes) => responder({ status: "ok", ids: idsVigentes });
 }
 
 /** Monta la pantalla con la página 1 pre-cargada por el Server Component. */
@@ -681,6 +702,77 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     expect(within(region()).getByRole("status")).toHaveTextContent(`30 de ${TOTAL} órdenes`);
     // Y podar no relee el listado: no cuesta ni una consulta de página.
     expect(paginadoMock.mock.calls.length).toBe(lecturasTrasPodar);
+  });
+
+  it("podar no retira la acción de lote de lo marcado en la página visible (R26)", async () => {
+    // La CUARTA cláusula de R26, que el caso de arriba no puede afirmar: allí la página visible
+    // no tiene ninguna fila marcada, así que no hay acción de lote que observar.
+    //
+    // Es la cláusula peligrosa de las cuatro. La poda recorre la selección ENTERA para retirar
+    // lo que ya no está en el conjunto, y la selección entera incluye lo marcado en la página
+    // que el operador está mirando. Una poda que se pasara de larga —quedándose sólo con lo que
+    // el servidor confirmó, sin conservar lo de la página— le borraría la marca delante de los
+    // ojos y, con ella, el botón que estaba a punto de pulsar. No falla en ninguna parte: la
+    // pantalla queda coherente, sólo que sin la acción.
+    const user = userEvent.setup();
+    enviarACentralMock.mockResolvedValue({ status: "ok" });
+    montar();
+
+    // Dos marcas en la página 1 (`en_bodega_satelite`), que al pasar de página quedan fuera de
+    // la vista: son las que hacen que haya poda.
+    await user.click(casilla(etiqueta(1)));
+    await user.click(casilla(etiqueta(2)));
+
+    // La comprobación de la página 2 queda EN VUELO: la marca de esa página se pone mientras la
+    // poda aún no ha respondido, así el «antes» se mide con la pantalla quieta y el «después»
+    // llega por una respuesta que el caso decide cuándo entregar.
+    const responderVigencia = vigenciaEnVuelo();
+    await irAPagina(user, 2);
+    await waitFor(() => expect(vigenciaMock).toHaveBeenCalledTimes(1));
+
+    // Una marca en la PÁGINA VISIBLE, de un estado distinto al de las de fuera: la acción que se
+    // ofrece es la de ESTA orden, no la de las marcadas que no se ven.
+    await user.click(casilla(etiqueta(41)));
+
+    // ANTES de podar: la acción está ofrecida y habilitada sobre la única marca visible.
+    expect(within(region()).getByRole("button", { name: "Enviar a central" })).toBeEnabled();
+    expect(within(region()).getByRole("status")).toHaveTextContent(
+      "1 seleccionada(s) en esta página",
+    );
+    expect(avisoTexto()).toBe(
+      "Tienes 2 orden(es) marcadas en otras páginas que no entran en esta acción.",
+    );
+
+    // La poda responde: la 01 ya NO está en el conjunto filtrado; la 02 sí.
+    await act(async () => {
+      responderVigencia(["o-2"]);
+    });
+
+    // Ancla POSITIVA de que la poda YA ocurrió: el aviso BAJA de 2 a 1. Se espera al texto
+    // nuevo, no a que el viejo desaparezca; y la afirmación de abajo sobre el botón no valdría
+    // sin esto, porque un botón que sigue ahí es exactamente lo que se vería si la poda no se
+    // hubiera ejecutado nunca.
+    await waitFor(() =>
+      expect(avisoTexto()).toBe(
+        "Tienes 1 orden(es) marcadas en otras páginas que no entran en esta acción.",
+      ),
+    );
+
+    // DESPUÉS de podar: la MISMA acción sigue ofrecida, habilitada y sobre la misma selección
+    // visible. La poda se llevó una marca de otra página y ni tocó ésta.
+    expect(within(region()).getByRole("button", { name: "Enviar a central" })).toBeEnabled();
+    expect(within(region()).getByRole("status")).toHaveTextContent(
+      "1 seleccionada(s) en esta página",
+    );
+    // Y sigue siendo la acción de lo SELECCIONADO EN LA PÁGINA: la 02, que sobrevivió a la poda,
+    // es `en_bodega_satelite` y no trae su botón por estar marcada fuera de la vista.
+    expect(within(region()).queryByRole("button", { name: "Asignar" })).toBeNull();
+
+    // Y al pulsarla se lleva EXACTAMENTE la orden marcada en la página: ni la 02 que quedó viva
+    // en la selección, ni las nueve `por_devolver` que el conjunto tiene además de la 41.
+    await user.click(within(region()).getByRole("button", { name: "Enviar a central" }));
+    await waitFor(() => expect(enviarACentralMock).toHaveBeenCalledTimes(1));
+    expect(enviarACentralMock.mock.calls.map(([arg]) => arg)).toEqual([{ ordenId: "o-41" }]);
   });
 
   it("la comprobación de vigencia viaja con los filtros vigentes (R19)", async () => {
