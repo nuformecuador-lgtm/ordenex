@@ -204,10 +204,12 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_PASADOS_LABEL",
   },
   {
+    // Feature 184 — Tanda D (T D.3/T D.4): su relectura traía la cola Y el histórico juntos y
+    // se quedaba con una mitad; la lectura dedicada corta por estado en la base.
     listado: "Cierres del día — histórico",
     ruta: "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_HISTORICO_LABEL",
     lector: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
   },
@@ -316,7 +318,9 @@ const ANEXO_III: ListadoPaginado[] = [
 const PENDIENTES_184: readonly string[] = [
   // Feature 184 — Tanda C: «Cierres solicitados por el mensajero» salió de aquí en el MISMO
   // commit que su pantalla. Quedan OCHO.
-  "Cierres del día — histórico",
+  //
+  // Feature 184 — Tanda D: «Cierres del día — histórico» salió de aquí en el MISMO commit que
+  // su pantalla. Quedan SIETE.
   "Cierres del día pendientes de decisión",
   "Cierres de bodega pendientes",
   "Cierres de bodega resueltos",
