@@ -278,10 +278,12 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_PENDIENTES_LABEL",
   },
   {
+    // Feature 184 — Tanda F (T F.3/T F.4): la otra mitad del MISMO listado compuesto. Aquí lo
+    // que se arrastraba era la cola de pendientes de decisión.
     listado: "Incidentes — histórico",
     ruta: "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_INCIDENTES_LABEL",
   },
   {
@@ -347,9 +349,10 @@ const PENDIENTES_184: readonly string[] = [
   // Feature 184 — Tanda B: los DOS listados de la consolidación —«Cierres de bodega
   // solicitados» y «Cierres del día a consolidar»— salieron de aquí, cada uno en el MISMO
   // commit que su pantalla. Quedan NUEVE.
-  // Feature 184 — Tanda F: «Incidentes pendientes de decisión» salió de aquí en el MISMO commit
-  // que su pantalla. Quedan TRES.
-  "Incidentes — histórico",
+  // Feature 184 — Tanda F: los DOS listados de incidentes —la cola de pendientes de decisión y
+  // el histórico de resueltos— salieron de aquí, cada uno en el MISMO commit que su pantalla.
+  // Quedan DOS.
+  //
   // Feature 184 — Tanda A: «Órdenes de la bodega satélite» salió de aquí en el MISMO commit
   // que su pantalla. Quedan ONCE.
   "Plantillas de gasto fijo",

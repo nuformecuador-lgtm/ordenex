@@ -6,10 +6,10 @@ import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { incidentesConfig } from "@/lib/config/incidentes";
 import {
-  listarIncidentes,
+  listarHistoricoIncidentesCompleto,
   listarHistoricoIncidentesPaginado,
 } from "@/lib/actions/incidentes";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
@@ -114,9 +114,18 @@ export function IncidentesHistoricoTabla({
           error={error ? ERROR_CARGA : null}
           /**
            * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-           * CONJUNTO COMPLETO del alcance del actor. Se relee con el MISMO listado que la
-           * pantalla ya llamaba antes de paginar (`listarIncidentes`), que acota por la zona
-           * de la ORDEN para un `adminSatelite`: descargar no amplía el alcance (R44).
+           * CONJUNTO COMPLETO del alcance del actor.
+           *
+           * Feature 184 — Tanda F (T F.3, R1/R2/R6): ese conjunto ya NO sale de
+           * `listarIncidentes()`. Aquel listado devuelve las dos mitades de la pantalla que
+           * hospeda esta tabla —el histórico Y la cola de pendientes de decisión—, y descargar
+           * el histórico pagaba las dos para quedarse con una. Ahora el corte por estado lo
+           * hace la base (`listarHistoricoIncidentesCompleto`).
+           *
+           * Lo que NO cambia: el alcance no viaja en la llamada y no puede: lo resuelve el
+           * servicio desde la sesión, por la zona de la ORDEN, igual que la página, así que
+           * descargar no amplía lo que el actor podía ver (R14/R44). Y el tope de filas pasa a
+           * evaluarse en el SERVIDOR: por encima no viaja ni una fila (R6).
            *
            * Las URL firmadas siguen sin viajar al archivo (R22): el módulo de columnas ni
            * siquiera las lee.
@@ -125,12 +134,8 @@ export function IncidentesHistoricoTabla({
             titulo: tituloDescarga,
             columnas: COLUMNAS_DESCARGA_INCIDENTES_HISTORICO,
             obtenerFilas: () =>
-              filasDelConjuntoCompleto(
-                listarIncidentes().then((res) =>
-                  res.status === "ok"
-                    ? ({ status: "ok", items: res.historico } as const)
-                    : res,
-                ),
+              filasDesdeResultado(
+                listarHistoricoIncidentesCompleto(),
                 filaDescargaIncidenteHistorico,
               ),
           }}
