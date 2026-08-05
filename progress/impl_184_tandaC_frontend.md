@@ -281,6 +281,9 @@ typecheck con **todos** mis cambios de producción y censo dentro salió **exit 
 diff apareciera, y desde entonces lo único mío que cambió es un `.test.tsx` que `tsc` compila en
 el mismo programa y del que no reporta ni un error. **Se reporta, no se arregla.**
 
+**Cerrado por su dueño mientras se escribía esto**: la medición final, ya con esa tanda
+commiteada, es `typecheck errores: 0`.
+
 ---
 
 ## 7. Mapa `R<n>` → archivo + nombre del caso
