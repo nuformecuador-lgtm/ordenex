@@ -912,23 +912,39 @@ describe("Cierres · descarga", () => {
 
   it("la pantalla NO recorta ni reordena el conjunto de cierres del mensajero que devolvió el servidor (R2)", async () => {
     // El discriminador entre «el servidor entrega el conjunto» y «lo entrega Y la pantalla lo
-    // vuelve a tocar». El doble devuelve TRES filas —una más de las que la tabla pinta— en un
-    // orden que NINGÚN orden de cliente reproduce: ni por fecha descendente (sería 19, 12, 11),
-    // ni ascendente (11, 12, 19). El archivo tiene que traer las tres, en ESE orden.
+    // vuelve a tocar», con los dos números separados a propósito:
+    //
+    //   · el doble devuelve TREINTA filas y la tabla pinta DOS, así que un archivo de 25 —el
+    //     `pageSize` de este dominio— o de 2 se distingue del bueno (recorte);
+    //   · y las tres primeras van en un orden que NINGÚN orden de cliente reproduce: ni por
+    //     fecha descendente (sería 19, 12, 11) ni ascendente (11, 12, 19) (reordenación).
+    //
+    // Hacen falta las dos mitades: recortar lo caza además la guardia vieja de R52, pero
+    // reordenar NO —el archivo sigue teniendo todas sus filas— y ése es el defecto que Q-I2/Q-L3
+    // ya dejaron escrito en este repo.
     const user = userEvent.setup();
     renderCierreDia();
 
+    const relleno = Array.from({ length: 27 }, (_, i) => ({
+      ...cierrePasado(1),
+      cierreId: `cp-relleno-${i}`,
+    }));
     vi.mocked(listarCierresPasadosCompleto).mockResolvedValueOnce({
       status: "ok",
-      items: [cierrePasado(2), cierrePasado(9), cierrePasado(1)],
-      total: 3,
+      items: [cierrePasado(2), cierrePasado(9), cierrePasado(1), ...relleno],
+      total: 30,
     });
 
     await user.click(screen.getByRole("button", { name: "Descargar Cierres solicitados" }));
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     const [, filas] = buildXlsxRowsMock.mock.calls[0];
-    expect(filas.map((f) => f.fecha)).toEqual(["2026-07-12", "2026-07-19", "2026-07-11"]);
+    expect(filas, "el archivo trae la página, no el conjunto").toHaveLength(30);
+    expect(filas.slice(0, 3).map((f) => f.fecha)).toEqual([
+      "2026-07-12",
+      "2026-07-19",
+      "2026-07-11",
+    ]);
   });
 
   it("un fallo de la lectura de los cierres del mensajero no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
