@@ -84,6 +84,11 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
 }));
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarSaldosTiendasAction: vi.fn(),
+  // Feature 184 — Tanda G (T G.2): la lectura dedicada del listado 12. Es el peaje que la
+  // tanda F anticipó: este archivo renderiza `SaldosTiendasTable` y además PULSA su control de
+  // descarga (`MUESTRA`), así que sin declarar el export nuevo el control llama a `undefined`
+  // y el archivo no sale.
+  listarSaldosTiendasCompletoAction: vi.fn(),
   listarSaldosTiendasPaginadoAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
@@ -125,6 +130,7 @@ import {
 import { listarCierreDia, listarCierresPasadosPaginado } from "@/lib/actions/cierre-dia";
 import {
   listarSaldosTiendasAction,
+  listarSaldosTiendasCompletoAction,
   listarSaldosTiendasPaginadoAction,
 } from "@/lib/actions/wallet-tienda";
 import {
@@ -303,10 +309,15 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_PLANTILLAS_LABEL",
   },
   {
+    // Feature 184 — Tanda G (T G.2/T G.3): tampoco ahorra consultas —las mismas dos—, pero su
+    // relectura salía de `listarSaldosTodasTiendas`, que devuelve las filas en el orden del
+    // planificador mientras la tabla ordena por nombre: el archivo salía SIN ORDENAR y dos
+    // descargas seguidas podían diferir. La lectura dedicada es la misma llamada que la página
+    // con otro rango, así que el archivo y la tabla no pueden divergir (R5).
     listado: "Saldos de tiendas",
     ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_SALDOS_LABEL",
   },
   {
@@ -355,8 +366,10 @@ const PENDIENTES_184: readonly string[] = [
   //
   // Feature 184 — Tanda A: «Órdenes de la bodega satélite» salió de aquí en el MISMO commit
   // que su pantalla. Quedan ONCE.
+  //
+  // Feature 184 — Tanda G: «Saldos de tiendas» salió de aquí en el MISMO commit que su
+  // pantalla. Queda UNO.
   "Plantillas de gasto fijo",
-  "Saldos de tiendas",
 ];
 
 interface ListadoSinPaginar {
@@ -656,6 +669,14 @@ function montarColaCierres() {
 
 function montarSaldos() {
   vi.mocked(listarSaldosTiendasPaginadoAction).mockImplementation(servirPagina(TIENDAS) as never);
+  // Feature 184 — Tanda G (T G.2): de aquí sale el archivo (R52), sin recorte.
+  vi.mocked(listarSaldosTiendasCompletoAction).mockResolvedValue({
+    status: "ok",
+    items: [...TIENDAS],
+    total: TIENDAS.length,
+  });
+  // El listado sin recorte sigue programado: que el archivo ya no salga de él tiene que ser
+  // una decisión de la pantalla, no que el doble no responda.
   vi.mocked(listarSaldosTiendasAction).mockResolvedValue({
     status: "ok",
     tiendas: [...TIENDAS],

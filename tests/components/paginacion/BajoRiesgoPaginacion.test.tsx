@@ -92,6 +92,11 @@ const { paginado, completo } = vi.hoisted(() => ({
     // su ausencia no puede ser lo que explique que ya no se llame.
     incidentesHistoricoCompleto: vi.fn(),
     saldos: vi.fn(),
+    // Feature 184 — Tanda G (T G.2): «Saldos de tiendas» saca su archivo de su lectura
+    // DEDICADA. Aquí el doble viejo NO traía otra mitad —los dos listados devuelven las mismas
+    // filas—, así que se conserva por el mismo motivo de siempre: que ya no se llame tiene que
+    // ser una decisión de la pantalla, no que el doble no responda.
+    saldosCompleto: vi.fn(),
     plantillas: vi.fn(),
   },
 }));
@@ -164,6 +169,9 @@ vi.mock("@/lib/actions/incidentes", () => ({
 }));
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarSaldosTiendasAction: (...a: unknown[]) => completo.saldos(...a),
+  // Feature 184 — Tanda G (T G.2): la lectura dedicada del listado 12. Sin declararla aquí, el
+  // control de descarga de esa tabla llama a `undefined` y el archivo no sale.
+  listarSaldosTiendasCompletoAction: (...a: unknown[]) => completo.saldosCompleto(...a),
   listarSaldosTiendasPaginadoAction: (...a: unknown[]) => paginado.saldos(...a),
   listarMovimientosDeTiendaAction: vi.fn(),
   listarMovimientosDeTiendaCompletoAction: vi.fn(),
@@ -590,6 +598,12 @@ const LISTADOS: Listado[] = [
     montar: () => {
       const todos = conjunto(saldoTienda);
       servirPaginas(paginado.saldos, todos);
+      // Feature 184 — Tanda G (T G.2): de aquí sale el archivo (R52), sin recorte.
+      completo.saldosCompleto.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
       completo.saldos.mockResolvedValue({ status: "ok", tiendas: todos });
       envolver(<SaldosTiendasTable initialData={pagina1(todos)} />);
     },
