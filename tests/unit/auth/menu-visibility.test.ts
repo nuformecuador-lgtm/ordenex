@@ -158,16 +158,22 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Órdenes + Novedades, NO Configuración ni Incidentes", () => {
+  it("adminTienda ve Analítica + Órdenes + Novedades, NO Configuración ni Incidentes", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
-    expect(visibles).toEqual(["Órdenes", "Novedades"]);
+    // Feature 133 (T2.3, R1): "Analítica" entra en la lista del adminTienda, en la
+    // posición 2 de SIDEBAR_ITEMS (justo tras "Inicio", que este rol no ve). La lista
+    // se sigue comparando por IGUALDAD, no por `toContain`: la aserción NO se debilitó
+    // —un ítem nuevo no declarado aquí sigue poniendo el caso rojo—, sólo incorpora el
+    // ítem que esta feature le abre. Que ENTRE a la ruta no significa que vea el
+    // dinero: la región financiera sigue siendo de `esAccesoTotal` (D2).
+    expect(visibles).toEqual(["Analítica", "Órdenes", "Novedades"]);
     expect(visibles).not.toContain("Incidentes"); // feature 158 (R48)
     expect(visibles).not.toContain("Configuración");
     // "Ranking" es solo del maestro.
     expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Entregas + Recolección + Ranking + Cierre del día, NO Órdenes, Novedades ni Configuración", () => {
+  it("mensajero ve Analítica + Entregas + Recolección + Ranking + Cierre del día, NO Órdenes, Novedades ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
@@ -177,7 +183,15 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // mensajero DEJA de verlo.
     // Feature 167 (R4): "Recolección" es el apartado propio de la recolección en
     // tienda, que dejó de vivir dentro de "Entregas". Va justo debajo de ella.
+    // Feature 133 (T2.3, R1): "Analítica" entra PRIMERA en la lista del mensajero (es la
+    // posición 2 de SIDEBAR_ITEMS y este rol no ve "Inicio"). Comparación por IGUALDAD
+    // intacta: no se relajó nada, se añadió el ítem que la feature abre. Ojo: ser el
+    // primero de la barra NO la convierte en su aterrizaje post-login — el ítem está
+    // marcado `destinoInicial: false` (T5.1) y el mensajero sigue cayendo en
+    // `/mis-asignaciones/reparto` (ver el bloque de `primerDestino` de abajo y
+    // `tests/unit/auth/destino-post-login.test.ts`).
     expect(visibles).toEqual([
+      "Analítica",
       "Entregas",
       "Recolección",
       "Ranking",
@@ -191,11 +205,15 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Incidentes");
   });
 
-  it("adminSatelite ve Órdenes + Cierres del día + Incidentes", () => {
+  it("adminSatelite ve Analítica + Órdenes + Cierres del día + Incidentes", () => {
     // Feature 158 (R48): el adminSatelite SÍ resuelve incidentes, acotado a su zona por el
     // service; por eso gana el ítem. Su "Órdenes" apunta a /recepcion-satelite.
+    // Feature 133 (T2.3, R1): "Analítica" entra PRIMERA (posición 2 de SIDEBAR_ITEMS; este
+    // rol no ve "Inicio"). Igualdad conservada: la lista sigue siendo exhaustiva y un ítem
+    // no declarado sigue rompiendo. Su aterrizaje post-login NO cambia: sigue siendo
+    // `/recepcion-satelite` (T5.1, `destinoInicial: false`).
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Órdenes", "Cierres del día", "Incidentes"],
+      ["Analítica", "Órdenes", "Cierres del día", "Incidentes"],
     );
   });
 
@@ -220,7 +238,13 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
 });
 
 // Aterrizaje de `/dashboard` para los roles sin inicio propio (pedido humano): el primer
-// ítem de SU sidebar, no un "Bienvenido" vacío.
+// ítem ELEGIBLE de SU sidebar, no un "Bienvenido" vacío.
+//
+// Feature 133 (T5.1, Q2): desde que "Analítica" es visible para `mensajero` y
+// `adminSatelite`, es el primer ítem de su barra — y aun así NO es su aterrizaje: el ítem
+// está marcado `destinoInicial: false` y `primerDestino` lo salta. Los dos casos de abajo
+// siguen verdes por eso, y no por casualidad. El test que enumera los cinco destinos POR
+// VALOR (sin derivarlos de `primerDestino`) vive en `tests/unit/auth/destino-post-login.test.ts`.
 describe("primerDestino (aterrizaje de /dashboard)", () => {
   const destinoDe = (rol: RolValue) =>
     primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor(rol)));
@@ -323,39 +347,69 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     expect(conEseHref[0].label).toBe("Analítica");
   });
 
-  it("R8: puedeVer e itemsVisibles incluyen el ítem para maestro y admin", () => {
-    expect(puedeVer(analitica, actor("maestro"))).toBe(true);
-    expect(puedeVer(analitica, actor("admin"))).toBe(true);
-    expect(
-      itemsVisibles(SIDEBAR_ITEMS, actor("maestro")).some(
-        (i) => i.href === "/analitica",
-      ),
-    ).toBe(true);
-    expect(
-      itemsVisibles(SIDEBAR_ITEMS, actor("admin")).some(
-        (i) => i.href === "/analitica",
-      ),
-    ).toBe(true);
-  });
-
-  it("R9: puedeVer e itemsVisibles lo excluyen para el resto de roles y sin actor", () => {
+  // Feature 133 (T2.3, R1): el bloque R8 pasa de dos roles a los CINCO lectores. No es
+  // una relajación: es el otro lado del reparto que hace el R9 de abajo — los tres roles
+  // se MUEVEN de la lista de excluidos a la de incluidos, y ninguna lista pierde fuerza.
+  it("R8 (+133 R1): puedeVer e itemsVisibles incluyen el ítem para los CINCO roles lectores", () => {
     for (const rol of [
-      "mensajero",
+      "maestro",
+      "admin",
       "adminTienda",
       "adminSatelite",
-      "apiKey",
+      "mensajero",
     ] as RolValue[]) {
-      expect(puedeVer(analitica, actor(rol))).toBe(false);
+      expect(puedeVer(analitica, actor(rol))).toBe(true);
       expect(
         itemsVisibles(SIDEBAR_ITEMS, actor(rol)).some(
           (i) => i.href === "/analitica",
         ),
-      ).toBe(false);
+      ).toBe(true);
     }
+  });
+
+  // Feature 133 (T2.3, R1/R29): REEXPRESADO, no relajado. Antes decía «el resto de roles»
+  // y ahí caían `mensajero`, `adminTienda` y `adminSatelite`, que esta feature admite. Los
+  // que quedan fuera siguen fuera y siguen afirmándose: `apiKey` (cuenta de máquina, sin
+  // sesión de UI: `lib/analytics/types.ts` la deja fuera de los cinco lectores a propósito)
+  // y el actor ausente o inválido. La lista de excluidos se ENCOGE porque tres roles se
+  // pasaron a la de incluidos (R8, arriba); no porque se haya dejado de comprobar nada.
+  it("R9 (reexpresado por la 133): apiKey y el actor ausente siguen SIN ver el ítem", () => {
+    expect(puedeVer(analitica, actor("apiKey"))).toBe(false);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, actor("apiKey")).some(
+        (i) => i.href === "/analitica",
+      ),
+    ).toBe(false);
     expect(puedeVer(analitica, null)).toBe(false);
     expect(
       itemsVisibles(SIDEBAR_ITEMS, null).some((i) => i.href === "/analitica"),
     ).toBe(false);
+  });
+
+  // Feature 133 (T2.4) — R4: el conjunto de acceso es una WHITELIST.
+  //
+  // El rol es SINTÉTICO a propósito: representa un `RolValue` que alguien añada mañana al
+  // esquema sin pasar por aquí. Lo que se afirma es la política de la puerta —lo no
+  // enumerado queda FUERA por defecto—, no el nombre concreto. Si `puedeVer` cambiara
+  // alguna vez a "deny-list" (excluir apiKey y admitir el resto), este caso sería el que
+  // se pusiera rojo: hoy los cinco lectores son también todos los roles humanos, así que
+  // ningún rol REAL puede distinguir una política de la otra.
+  it("R4: un RolValue desconocido no ve el ítem ni pasaría el gate (whitelist, no deny-list)", () => {
+    const rolSintetico = "rolQueNoExisteTodavia" as RolValue;
+
+    expect(puedeVer(analitica, actor(rolSintetico))).toBe(false);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, actor(rolSintetico)).some(
+        (i) => i.href === "/analitica",
+      ),
+    ).toBe(false);
+    // Y el gate de la página (`app/(app)/analitica/page.tsx`) lee esta misma constante:
+    // si no está en ella, recibe `notFound()`.
+    expect(
+      (ROLES_ACCESO_ANALITICA as readonly string[]).includes(rolSintetico),
+    ).toBe(false);
+    // No ve NINGÚN ítem del sidebar, de hecho: ninguno lo enumera.
+    expect(itemsVisibles(SIDEBAR_ITEMS, actor(rolSintetico))).toEqual([]);
   });
 
   it("R11: su iconKey es 'chartColumn' y ningún otro ítem de SIDEBAR_ITEMS usa esa clave", () => {
