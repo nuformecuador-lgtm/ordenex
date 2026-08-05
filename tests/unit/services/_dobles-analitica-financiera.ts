@@ -3,12 +3,16 @@ import { prepararConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { ActorAnalitica } from "@/lib/analytics/alcance";
 import type { ErrorLogger } from "@/lib/errors/logger";
-import type { AgregadoCategoriaCaja } from "@/lib/interfaces/repositories/IIngresosAnaliticaRepository";
+import type {
+  AgregadoCategoriaCaja,
+  AgregadoCuboCategoriaCaja,
+} from "@/lib/interfaces/repositories/IIngresosAnaliticaRepository";
 import type {
   AgregadoTiendaLedger,
   TotalPorMetodoCierre,
 } from "@/lib/interfaces/repositories/IRecaudoAnaliticaRepository";
 import type {
+  AgregadoCuboTipo,
   CuentaMensajeroAlCorte,
   SaldoTiendaAlCorte,
 } from "@/lib/interfaces/repositories/ICuentasPorPagarAnaliticaRepository";
@@ -41,6 +45,10 @@ export interface DatosFinancieros {
   readonly porTienda: readonly AgregadoTiendaLedger[];
   readonly saldoTiendas: readonly SaldoTiendaAlCorte[];
   readonly cuentaMensajeros: readonly CuentaMensajeroAlCorte[];
+  /* --- Feature 180: el material del desglose por cubo temporal ------------------------- */
+  readonly cajaPorCubo: readonly AgregadoCuboCategoriaCaja[];
+  readonly cuentaMensajerosPorCubo: readonly AgregadoCuboTipo[];
+  readonly cuentaMensajerosAntes: readonly CuentaMensajeroAlCorte[];
   readonly porEstado: readonly GrupoCierrePorEstado[];
   readonly snapshots: readonly SnapshotCierreAprobado[];
   readonly ledger: readonly TotalLedgerPorOrigenCierre[];
@@ -52,6 +60,9 @@ const VACIO: DatosFinancieros = {
   porTienda: [],
   saldoTiendas: [],
   cuentaMensajeros: [],
+  cajaPorCubo: [],
+  cuentaMensajerosPorCubo: [],
+  cuentaMensajerosAntes: [],
   porEstado: [],
   snapshots: [],
   ledger: [],
@@ -97,7 +108,10 @@ export function soloBruto(importe: ImporteAnalitico, contexto = "el importe"): I
 export function armarServicio(datos: Partial<DatosFinancieros> = {}, umbral?: string) {
   const d = { ...VACIO, ...datos };
 
-  const ingresos = { sumarPorCategoria: vi.fn(async () => d.caja) };
+  const ingresos = {
+    sumarPorCategoria: vi.fn(async () => d.caja),
+    sumarPorCuboYCategoria: vi.fn(async () => d.cajaPorCubo),
+  };
   const recaudo = {
     porMetodoDeCierresResueltos: vi.fn(async () => d.porMetodo),
     porTiendaDeLedger: vi.fn(async () => d.porTienda),
@@ -105,6 +119,8 @@ export function armarServicio(datos: Partial<DatosFinancieros> = {}, umbral?: st
   const cuentasPorPagar = {
     saldoPorTiendaAlCorte: vi.fn(async () => d.saldoTiendas),
     cuentaPorPagarMensajerosAlCorte: vi.fn(async () => d.cuentaMensajeros),
+    cuentaPorPagarMensajerosPorCubo: vi.fn(async () => d.cuentaMensajerosPorCubo),
+    cuentaPorPagarMensajerosAntesDe: vi.fn(async () => d.cuentaMensajerosAntes),
   };
   const conciliacion = {
     contarCierresPorEstado: vi.fn(async () => d.porEstado),
@@ -115,10 +131,13 @@ export function armarServicio(datos: Partial<DatosFinancieros> = {}, umbral?: st
 
   const espias = [
     ingresos.sumarPorCategoria,
+    ingresos.sumarPorCuboYCategoria,
     recaudo.porMetodoDeCierresResueltos,
     recaudo.porTiendaDeLedger,
     cuentasPorPagar.saldoPorTiendaAlCorte,
     cuentasPorPagar.cuentaPorPagarMensajerosAlCorte,
+    cuentasPorPagar.cuentaPorPagarMensajerosPorCubo,
+    cuentasPorPagar.cuentaPorPagarMensajerosAntesDe,
     conciliacion.contarCierresPorEstado,
     conciliacion.totalesDeCierresAprobados,
     conciliacion.sumarLedgerPorOrigenDeCierre,

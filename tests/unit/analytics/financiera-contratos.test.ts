@@ -75,6 +75,9 @@ const COD_RECAUDADO_EJEMPLO: ResultadoFinancieroVistas = {
       grano: "metodo_pago",
       fuente: "cierre_dia",
       sumableCon: [],
+      // Feature 180 / R4 — `granularidad` REQUERIDA en toda vista. El cubo de esta es el metodo
+      // de pago, no una fecha: `no_temporal`, declarado y no omitido.
+      granularidad: "no_temporal",
       filas: [
         {
           cubo: "efectivo",
@@ -88,6 +91,8 @@ const COD_RECAUDADO_EJEMPLO: ResultadoFinancieroVistas = {
       grano: "tienda",
       fuente: "wallet_tienda_movimiento",
       sumableCon: [],
+      // R4 — el cubo es la tienda: `no_temporal`.
+      granularidad: "no_temporal",
       filas: [
         {
           cubo: "t-1",

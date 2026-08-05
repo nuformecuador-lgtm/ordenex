@@ -52,6 +52,9 @@ function dtoDe(metricaId: string): ResultadoFinanciero {
         grano: "fecha",
         fuente: "wallet_tienda_movimiento",
         sumableCon: [],
+        // Feature 180 / R4 — `granularidad` REQUERIDA en toda vista. Grano `fecha` sobre un rango
+        // de 30 dias: `dia`. `cargar.ts` no la lee (Q4 = (a): la 180 es solo backend).
+        granularidad: "dia",
         filas: [],
         // Feature 183 ⟨D12⟩: el importe lleva el discriminante `forma`, y lo pone el
         // helper compartido de `tests/fixtures/importe-analitico.ts` para que el DTO

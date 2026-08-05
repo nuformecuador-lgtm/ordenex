@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
+import { granularidadDe } from "@/lib/analytics/cubo-temporal";
 import { UMBRAL_AVISO_DESCUADRE_CONCILIACION } from "@/lib/config/analitica-financiera";
 import { monedaConfig } from "@/lib/config/moneda";
 import { defaultLogger, type ErrorLogger } from "@/lib/errors/logger";
@@ -272,6 +273,10 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           grano: "fecha",
           fuente: "wallet_movimiento",
           sumableCon: [],
+          // ⟨D2⟩ / R4 (feature 180) — la granularidad sale del RANGO, nunca de un `if` por id de
+          // metrica: este manejador sirve a las cuatro de caja y las cuatro publican grano
+          // `fecha`, asi que la unica variable es el tamano de la ventana consultada.
+          granularidad: granularidadDe(consulta.rango),
           filas: [],
           total:
             forma === "solo_bruto"
@@ -327,6 +332,8 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           // primera contiene dinero de terceros que la segunda excluye a proposito), ni con
           // `egresos`, que es un subconjunto de las dos.
           sumableCon: [],
+          // ⟨D2⟩ / R4 — grano `fecha`: la granularidad la decide el rango (ver `deCaja`).
+          granularidad: granularidadDe(consulta.rango),
           filas: [],
           total: importeConNeto(sumar(filas.map((f) => f.suma)), cifra(resumen)),
         },
@@ -358,6 +365,10 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
       grano: "metodo_pago",
       fuente: "cierre_dia",
       sumableCon: [],
+      // ⟨D2⟩ / R4 — `no_temporal` EXPLICITO: el cubo de esta vista es el metodo de pago, no una
+      // fecha. Se declara, no se omite: omitirlo dejaria «no se mide en el tiempo» y «se me
+      // olvido declararlo» siendo el mismo valor.
+      granularidad: "no_temporal",
       filas: porMetodo.map((m) => ({ cubo: m.metodo, importe: importeConNeto(m.suma, m.suma) })),
       total: (() => {
         const t = sumar(porMetodo.map((m) => m.suma));
@@ -380,6 +391,8 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
       grano: "tienda",
       fuente: "wallet_tienda_movimiento",
       sumableCon: [],
+      // ⟨D2⟩ / R4 — el cubo es la tienda: `no_temporal`, declarado igual que la vista A.
+      granularidad: "no_temporal",
       filas: filasTienda,
       total: importeConNeto(
         sumar(porTienda.map((f) => f.suma)),
@@ -407,6 +420,9 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           grano: "tienda",
           fuente: "wallet_tienda_movimiento",
           sumableCon: [],
+          // ⟨D2⟩ / R4 — el cubo es la tienda: `no_temporal`. Q1 = (a) deja esta metrica FUERA
+          // del conjunto con desglose por fecha, asi que aqui no hay serie que declarar.
+          granularidad: "no_temporal",
           filas: porCubo(filas, (f) => f.tiendaId).map((g) => ({
             cubo: g.cubo,
             importe: importeConNeto(
@@ -443,6 +459,8 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           grano: "fecha",
           fuente: "pago_mensajero_movimiento",
           sumableCon: [],
+          // ⟨D2⟩ / R4 — grano `fecha`: la granularidad la decide el rango (ver `deCaja`).
+          granularidad: granularidadDe(consulta.rango),
           filas: [],
           total: importeConNeto(sumar(filas.map((f) => f.suma)), cuenta.cuentaPorPagar),
         },
