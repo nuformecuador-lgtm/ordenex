@@ -302,10 +302,14 @@ const ANEXO_III: ListadoPaginado[] = [
     etiquetaPaginacion: "PAGINACION_BODEGA_LABEL",
   },
   {
+    // Feature 184 — Tanda G (T G.2/T G.3): el ÚLTIMO junto al de abajo. No ahorra ni una
+    // consulta —es un `findMany` sin `where` sobre una tabla de configuración, medido— y aun
+    // así migra: el tope pasa a decidirse en el servidor y el conjunto deja de cruzar al
+    // navegador para descartarlo allí.
     listado: "Plantillas de gasto fijo",
     ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_PLANTILLAS_LABEL",
   },
   {
@@ -324,6 +328,10 @@ const ANEXO_III: ListadoPaginado[] = [
     // El ÚNICO con `listarCompleto` propio, desde T M.1 (cierre de Q-L2). Los otros doce siguen
     // releyendo su listado sin recorte: es la deuda que Q-I5/Q-K4 dejaron escrita, y este campo
     // es lo que hace que se vea cuánta queda.
+    //
+    // Feature 184 (T G.3): esa frase caducó hoy. Los TRECE declaran `completo` y la deuda de
+    // Q-I5/Q-K4 queda cerrada; el campo se conserva porque mientras `filasDelConjuntoCompleto`
+    // exista, la mitad negativa del caso de R52 es lo que impide volver a él en silencio.
     listado: "Cuentas por pagar a mensajeros",
     ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
     tanda: "L",
@@ -367,9 +375,13 @@ const PENDIENTES_184: readonly string[] = [
   // Feature 184 — Tanda A: «Órdenes de la bodega satélite» salió de aquí en el MISMO commit
   // que su pantalla. Quedan ONCE.
   //
-  // Feature 184 — Tanda G: «Saldos de tiendas» salió de aquí en el MISMO commit que su
-  // pantalla. Queda UNO.
-  "Plantillas de gasto fijo",
+  // Feature 184 — Tanda G: los DOS listados de wallet —«Plantillas de gasto fijo» y «Saldos de
+  // tiendas»— salieron de aquí, cada uno en el MISMO commit que su pantalla. Quedan CERO: los
+  // trece obtienen su archivo de una lectura dedicada y la deuda de Q-I5/Q-K4 está cerrada.
+  //
+  // La lista se queda VACÍA, no se borra: es el ancla del caso de R52 —que la contrasta contra
+  // el campo `adaptador` de los trece— y lo que obliga a que un listado que volviera a releer
+  // tuviera que venir aquí a declararse.
 ];
 
 interface ListadoSinPaginar {
@@ -1017,9 +1029,19 @@ describe("T M.1 · R52 — toda descarga de un listado paginado entrega el datas
     // mano: los que siguen releyendo son EXACTAMENTE los de `PENDIENTES_184`, en su orden. Cada
     // tanda borra sus líneas de esa lista en el mismo commit en que cambia su pantalla; si se
     // borra la línea sin migrar la pantalla (o al revés), este caso se pone rojo.
+    //
+    // Feature 184 (T G.3): desde hoy los dos lados son la lista VACÍA, y eso no lo vuelve
+    // decorativo. Un listado que volviera a releer —o uno nuevo que naciera releyendo— rompe
+    // esta igualdad por el lado izquierdo, y su declaración `completo` rompe además el bucle de
+    // arriba por el positivo. Lo que sí deja de vigilar una lista vacía es el orden, y por eso
+    // la cuenta de los que YA migraron se afirma aparte: son los trece, sin excepción.
     expect(ANEXO_III.filter((l) => l.adaptador === "conjunto").map((l) => l.listado)).toEqual(
       PENDIENTES_184,
     );
+    expect(
+      ANEXO_III.filter((l) => l.adaptador === "completo"),
+      "la deuda de Q-I5/Q-K4 está cerrada: los TRECE sacan su archivo de una lectura dedicada",
+    ).toHaveLength(13);
   });
 
   it("descargar desde la ÚLTIMA página entrega el conjunto, no lo que se ve", async () => {

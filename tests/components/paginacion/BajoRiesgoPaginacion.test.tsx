@@ -92,12 +92,13 @@ const { paginado, completo } = vi.hoisted(() => ({
     // su ausencia no puede ser lo que explique que ya no se llame.
     incidentesHistoricoCompleto: vi.fn(),
     saldos: vi.fn(),
-    // Feature 184 — Tanda G (T G.2): «Saldos de tiendas» saca su archivo de su lectura
-    // DEDICADA. Aquí el doble viejo NO traía otra mitad —los dos listados devuelven las mismas
-    // filas—, así que se conserva por el mismo motivo de siempre: que ya no se llame tiene que
-    // ser una decisión de la pantalla, no que el doble no responda.
+    // Feature 184 — Tanda G (T G.2): «Saldos de tiendas» y «Plantillas de gasto fijo» sacan su
+    // archivo de su lectura DEDICADA. Aquí el doble viejo NO traía otra mitad —los dos listados
+    // devuelven las mismas filas—, así que se conserva por el mismo motivo de siempre: que ya no
+    // se llame tiene que ser una decisión de la pantalla, no que el doble no responda.
     saldosCompleto: vi.fn(),
     plantillas: vi.fn(),
+    plantillasCompleto: vi.fn(),
   },
 }));
 
@@ -181,6 +182,8 @@ vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   actualizarPlantillaAction: vi.fn(),
   setActivaPlantillaAction: vi.fn(),
   listarPlantillasAction: (...a: unknown[]) => completo.plantillas(...a),
+  // Feature 184 — Tanda G (T G.2): la lectura dedicada del listado 11. Ídem.
+  listarPlantillasCompletoAction: (...a: unknown[]) => completo.plantillasCompleto(...a),
   listarPlantillasPaginadoAction: (...a: unknown[]) => paginado.plantillas(...a),
 }));
 
@@ -617,6 +620,12 @@ const LISTADOS: Listado[] = [
     montar: () => {
       const todos = conjunto(plantilla);
       servirPaginas(paginado.plantillas, todos);
+      // Feature 184 — Tanda G (T G.2): de aquí sale el archivo (R52), sin recorte.
+      completo.plantillasCompleto.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
       completo.plantillas.mockResolvedValue({ status: "ok", plantillas: todos });
       envolver(<GastosFijosPlantillasPanel initialData={pagina1(todos)} />);
     },

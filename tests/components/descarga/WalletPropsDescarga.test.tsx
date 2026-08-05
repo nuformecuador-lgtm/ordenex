@@ -37,6 +37,10 @@ vi.mock("@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero", () =
 vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   setActivaPlantillaAction: vi.fn(),
   listarPlantillasAction: vi.fn(),
+  // Feature 184 — Tanda G (T G.2): la lectura DEDICADA del listado 11, de la que sale el
+  // archivo. La relectura de arriba se conserva VIVA y programada: que ya no se llame tiene
+  // que ser una decisión de la pantalla, no que el doble no responda.
+  listarPlantillasCompletoAction: vi.fn(),
   listarPlantillasPaginadoAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-tienda", () => ({
@@ -88,6 +92,7 @@ import {
 } from "@/lib/actions/wallet-tienda";
 import {
   listarPlantillasAction,
+  listarPlantillasCompletoAction,
   listarPlantillasPaginadoAction,
 } from "@/lib/actions/gasto-fijo-plantilla";
 import {
@@ -203,6 +208,11 @@ function montarPlantillas(
     status: "ok",
     page: 1,
     ...paginaInicial(visibles, { total: completo.length }),
+  });
+  vi.mocked(listarPlantillasCompletoAction).mockResolvedValue({
+    status: "ok",
+    items: completo,
+    total: completo.length,
   });
   vi.mocked(listarPlantillasAction).mockResolvedValue({
     status: "ok",
@@ -387,6 +397,11 @@ describe("Dinero por props · descarga", () => {
     // la propiedad —el archivo NO sale del array de la página— y cada tabla declara con cuál de
     // los dos adaptadores la cumple, para que ese reparto no cambie sin que nadie lo note.
     //
+    // Feature 184 (T G.2/T G.3): las TRES declaran ya `completo`. Es el estado final de este
+    // censo —la deuda de Q-I5 queda cerrada para los tres módulos de wallet— y el campo no se
+    // borra: mientras exista `filasDelConjuntoCompleto`, la mitad NEGATIVA de abajo es lo que
+    // impide que una de las tres vuelva a él sin que nadie lo note.
+    //
     // Feature 184 (T0.2): cada módulo declara su adaptador por NOMBRE y se comprueba la mitad
     // NEGATIVA además de la positiva —el declarado es el ÚNICO que usa—. Sin ella, una pantalla
     // que llamara a los dos (una migración a medias) pasaría verde con cualquiera de las dos
@@ -405,8 +420,8 @@ describe("Dinero por props · descarga", () => {
       },
       {
         ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
-        adaptador: "conjunto",
-        nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
+        adaptador: "completo",
+        nota: "T G.2: listarPlantillasCompleto, con el tope en el servidor",
       },
       {
         ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
@@ -579,4 +594,118 @@ describe("Dinero por props · descarga", () => {
     expect(buildXlsxRowsMock).not.toHaveBeenCalled();
   });
 
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda G (T G.2): «Plantillas de gasto fijo» (listado 11)
+  // -------------------------------------------------------------------------
+
+  it("el tope de las plantillas también lo decide el servidor (R6)", async () => {
+    // El gemelo del caso del tope de los saldos, sobre el listado 11. Aquí el aviso no se
+    // disparará jamás en producción —son un puñado de plantillas de configuración— y aun así
+    // el caso existe: lo que fija no es el volumen, es DÓNDE se decide. Sin él, este listado
+    // podría quedarse con el tope de cliente y el censo seguiría diciendo `completo`.
+    const user = userEvent.setup();
+    const total = descargaConfig.MAX_FILAS + 1;
+
+    montarPlantillas(PLANTILLAS);
+    vi.mocked(listarPlantillasCompletoAction).mockResolvedValue({
+      status: "limite_excedido",
+      total,
+      limite: descargaConfig.MAX_FILAS,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Plantillas de gasto fijo" }),
+    );
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+    const mensaje = String(toastErrorMock.mock.calls[0][0]);
+    expect(mensaje).toContain(String(total));
+    expect(mensaje).toContain(String(descargaConfig.MAX_FILAS));
+    expect(mensaje).toMatch(/acota los filtros/i);
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(listarPlantillasAction).not.toHaveBeenCalled();
+  });
+
+  it("el archivo de las plantillas sale de su lectura DEDICADA, no de releer el listado (R1/R8)", async () => {
+    // Espejo exacto del caso de los saldos, sobre el otro listado de la tanda.
+    const user = userEvent.setup();
+    montarPlantillas(PLANTILLAS);
+
+    expect(listarPlantillasCompletoAction).not.toHaveBeenCalled();
+    expect(listarPlantillasAction).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Plantillas de gasto fijo" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarPlantillasCompletoAction).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(listarPlantillasCompletoAction).mock.calls[0]).toEqual([]);
+    expect(listarPlantillasAction).not.toHaveBeenCalled();
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas).toHaveLength(PLANTILLAS.length);
+    const relectura = await listarPlantillasAction();
+    expect(relectura.status === "ok" && relectura.plantillas).toHaveLength(PLANTILLAS.length);
+  });
+
+  it("la pantalla NO recorta ni reordena las plantillas que devolvió el servidor (R2)", async () => {
+    // Mismo discriminador que en los saldos. El campo del fixture es `concepto` —el que la
+    // fila de descarga proyecta— y los montos se mueven en un orden DISTINTO al de los
+    // conceptos, para que reordenar por la otra columna de datos tampoco reproduzca la
+    // secuencia esperada.
+    const user = userEvent.setup();
+    montarPlantillas(PLANTILLAS);
+
+    const conConcepto = (i: number, concepto: string, monto: string): GastoFijoPlantillaDTO =>
+      ({ ...plantillaGasto(i), concepto, monto }) as GastoFijoPlantillaDTO;
+    const relleno = Array.from({ length: 27 }, (_, i) =>
+      conConcepto(100 + i, "Luz", "150.00"),
+    );
+    vi.mocked(listarPlantillasCompletoAction).mockResolvedValue({
+      status: "ok",
+      items: [
+        conConcepto(1, "Mantenimiento", "300.00"),
+        conConcepto(2, "Zeta seguros", "100.00"),
+        conConcepto(3, "Agua", "200.00"),
+        ...relleno,
+      ],
+      total: 30,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Plantillas de gasto fijo" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas, "el archivo trae la página, no el conjunto").toHaveLength(30);
+    // Por concepto, ascendente sería [Agua, Luz, Luz] y descendente [Zeta, Mantenimiento, Luz];
+    // por monto, [Zeta, Luz, Luz] y [Mantenimiento, Agua, Luz].
+    expect(filas.slice(0, 3).map((f) => f.concepto)).toEqual([
+      "Mantenimiento",
+      "Zeta seguros",
+      "Agua",
+    ]);
+  });
+
+  it("un fallo de la lectura de las plantillas no produce archivo y el mensaje no lleva datos del listado (R7)", async () => {
+    const user = userEvent.setup();
+    montarPlantillas(PLANTILLAS);
+    vi.mocked(listarPlantillasCompletoAction).mockResolvedValue({ status: "forbidden" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Plantillas de gasto fijo" }),
+    );
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+
+    const mensaje = String(toastErrorMock.mock.calls[0][0]);
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    for (const dato of [PLANTILLAS[0].concepto, PLANTILLAS[0].monto, PLANTILLAS[0].id]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
 });
