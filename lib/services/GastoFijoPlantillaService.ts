@@ -4,6 +4,7 @@ import type {
   ActualizarPlantillaServiceResult,
   CrearPlantillaServiceResult,
   IGastoFijoPlantillaService,
+  ListarPlantillasCompletoServiceResult,
   ListarPlantillasPaginadoServiceResult,
   ListarPlantillasServiceResult,
   SetActivaPlantillaServiceResult,
@@ -13,6 +14,7 @@ import type {
   CrearGastoFijoPlantillaInput,
   SetActivaPlantillaInput,
 } from "@/lib/types/gasto-fijo-plantilla";
+import { descargaConfig } from "@/lib/config/descarga";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
@@ -77,6 +79,42 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
     const plantillas = await this.repo.listar(); // R26 (activas e inactivas)
     return { status: "ok", plantillas };
+  }
+
+  /**
+   * Feature 184 — Tanda G (R1/R4/R6) — el CONJUNTO de las plantillas, sin recorte, para el
+   * archivo (listado 11 del Anexo A).
+   *
+   * **Lo que esta migracion cuesta en base: NADA.** Es literalmente el mismo `repo.listar()`
+   * que la pantalla ya releia —un `findMany` sin `where` sobre una tabla de configuracion con
+   * un punado de filas—, asi que aqui no hay ahorro que presumir, y decir lo contrario seria
+   * falso. Lo que si cambia, y es todo lo que esta tanda promete para este listado:
+   *
+   *  1. **el tope se evalua AQUI** (R6). Hoy lo evalua el navegador, despues de que el conjunto
+   *     entero cruzo la frontera; por encima del tope, lo que cruza pasa a ser dos enteros.
+   *  2. **el archivo deja de depender de un listado ajeno**: `listarPlantillas` es la lectura
+   *     de la TABLA, y su forma (`{ plantillas }`) obligaba a la pantalla a destriparla para
+   *     construir el archivo. Aqui sale ya en el contrato comun de descarga (R1).
+   *
+   * Sin `input`, y es decision, no olvido: este listado no admite filtros —el schema de su
+   * pagina solo llevaba `page`/`pageSize`— asi que la lista blanca derivada no deja NINGUNA
+   * clave. El borde la sigue aplicando entera: parsear ES la barrera (R17).
+   */
+  async listarPlantillasCompleto(actor: Actor): Promise<ListarPlantillasCompletoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: antes del repositorio
+
+    // El MISMO metodo del que la pagina saca su recorte: mismo (nulo) `where`, mismo orden y
+    // el MISMO mapper de dinero. Un gemelo `listarCompleto` seria la segunda declaracion del
+    // criterio que R16 prohibe.
+    const conjunto = await this.repo.listar(); // R26: activas e INACTIVAS, igual que la tabla
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return { status: "ok", items: conjunto, total: conjunto.length };
   }
 
   /**

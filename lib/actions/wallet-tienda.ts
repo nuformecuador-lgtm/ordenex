@@ -18,9 +18,11 @@ import {
   listarMovimientosDeTiendaSchema,
   listarMovimientosTiendaCompletoSchema,
   listarMovimientosTiendaSchema,
+  listarSaldosTiendasCompletoSchema,
   listarSaldosTiendasPaginadoSchema,
   type ListarMovimientosDeTiendaCompletoResult,
   type ListarMovimientosTiendaCompletoResult,
+  type ListarSaldosTiendasCompletoResult,
 } from "@/lib/types/wallet-tienda";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
@@ -168,6 +170,35 @@ export async function listarSaldosTiendasPaginadoAction(
     const data = listarSaldosTiendasPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarSaldosTiendasPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda G (R1/R5/R6/R7/R17) — el CONJUNTO de «Saldos de tiendas», sin recorte,
+ * para producir el archivo (listado 12 del Anexo A).
+ *
+ * Sustituye a la relectura de `listarSaldosTiendasAction()` que hacia la tabla. La sustitucion
+ * NO abarata la consulta —es la misma agregacion del ledger entero— y esta bitacora no va a
+ * fingir que si. Lo que gana: el tope lo decide el SERVIDOR (R6), y sobre todo el archivo pasa
+ * a salir ORDENADO como la tabla (R5), cosa que hoy no ocurre porque el listado sin paginar
+ * devuelve las filas en el orden del planificador.
+ *
+ * Como este listado no tiene filtros, la lista blanca derivada de la de su pagina no deja
+ * NINGUNA clave: `tiendaId` —la que convertiria el saldo de TODAS las tiendas en el de una— y
+ * `page`/`pageSize` mueren aqui con `validation_error` sin tocar el servicio (R17). El input se
+ * parsea aunque no se transporte nada: parsear ES la barrera.
+ */
+export async function listarSaldosTiendasCompletoAction(
+  input: unknown = {},
+  deps: WalletTiendaDeps = {},
+): Promise<ListarSaldosTiendasCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarSaldosTiendasCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarSaldosTiendasCompleto(actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

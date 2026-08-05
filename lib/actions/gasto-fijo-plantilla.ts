@@ -16,8 +16,10 @@ import type {
 import {
   actualizarGastoFijoPlantillaSchema,
   crearGastoFijoPlantillaSchema,
+  listarPlantillasGastoFijoCompletoSchema,
   listarPlantillasGastoFijoPaginadoSchema,
   setActivaPlantillaSchema,
+  type ListarPlantillasCompletoResult,
 } from "@/lib/types/gasto-fijo-plantilla";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
@@ -157,6 +159,34 @@ export async function listarPlantillasPaginadoAction(
     const data = listarPlantillasGastoFijoPaginadoSchema.parse(input); // -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarPlantillasPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda G (R1/R6/R7/R17) — el CONJUNTO de las plantillas, sin recorte, para
+ * producir el archivo (listado 11 del Anexo A).
+ *
+ * Sustituye a la relectura de `listarPlantillasAction()` que hacia el panel. La sustitucion NO
+ * abarata la consulta —es la misma, sobre la misma tabla— y esta bitacora no va a fingir que si:
+ * lo que gana es que el tope de filas lo decide el SERVIDOR (R6) y que el conjunto llega ya en
+ * el contrato comun de descarga, sin que la pantalla tenga que destripar `{ plantillas }`.
+ *
+ * Como este listado no tiene filtros, la lista blanca derivada de la de su pagina no deja
+ * NINGUNA clave: cualquier cosa que llegue —empezando por `page`/`pageSize`— muere aqui con
+ * `validation_error` sin tocar el servicio (R17). El input se parsea aunque no se transporte
+ * nada: parsear ES la barrera.
+ */
+export async function listarPlantillasCompletoAction(
+  input: unknown = {},
+  deps: PlantillaDeps = {},
+): Promise<ListarPlantillasCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarPlantillasGastoFijoCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPlantillasCompleto(actor);
   });
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }

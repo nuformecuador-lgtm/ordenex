@@ -45,6 +45,13 @@ function fakeService(overrides: Partial<IGastoFijoPlantillaService> = {}): IGast
       pageSize: 25,
       total: 1,
     })),
+    // Feature 184 (Tanda G): idem. El conjunto del archivo lo ejercita
+    // `gasto-fijo-plantilla-descarga-action.test.ts`.
+    listarPlantillasCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [plantilla()],
+      total: 1,
+    })),
     ...overrides,
   };
 }

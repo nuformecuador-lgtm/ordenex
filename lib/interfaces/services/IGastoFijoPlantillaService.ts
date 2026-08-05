@@ -5,6 +5,7 @@ import type {
   GastoFijoPlantillaDTO,
   SetActivaPlantillaInput,
 } from "@/lib/types/gasto-fijo-plantilla";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
 // Feature 45 (design §2.2b) — contrato del servicio de PLANTILLAS de gasto fijo (CRUD del
@@ -37,6 +38,13 @@ export type ListarPlantillasServiceResult =
 export type ListarPlantillasPaginadoServiceResult =
   ListarPaginadoServiceResult<GastoFijoPlantillaDTO>;
 
+/**
+ * Feature 184 — Tanda G (R1/R6) — el CONJUNTO de las plantillas para el archivo, sin recorte.
+ * Ni `forbidden` ni `limite_excedido` viajan nunca con filas.
+ */
+export type ListarPlantillasCompletoServiceResult =
+  ListarCompletoServiceResult<GastoFijoPlantillaDTO>;
+
 export interface IGastoFijoPlantillaService {
   /** R17/R24: solo maestro; crea una plantilla (activa=true). Forbidden sin efectos. */
   crearPlantilla(
@@ -67,4 +75,12 @@ export interface IGastoFijoPlantillaService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarPlantillasPaginadoServiceResult>;
+  /**
+   * Feature 184 — Tanda G (R1/R4/R6): el MISMO listado sin recorte por pagina, para el archivo.
+   *
+   * MISMA guardia de rol (`esAccesoTotal`) evaluada ANTES de tocar el repositorio, la MISMA
+   * lectura de la que sale la pagina (`listar()`) y el tope del servidor. Sin parametro de
+   * entrada: este listado no admite filtros, asi que no hay nada que transportar.
+   */
+  listarPlantillasCompleto(actor: Actor): Promise<ListarPlantillasCompletoServiceResult>;
 }
