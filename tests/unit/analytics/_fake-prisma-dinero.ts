@@ -85,17 +85,43 @@ export interface FilaCierreDia {
 /** Mismo snapshot que el cierre de dia; el nivel lo distingue la tabla, no la forma. */
 export type FilaCierreBodega = FilaCierreDia;
 
+/**
+ * AMPLIADO EN LA 180 (T2.5), no reemplazado: el fake gana `$queryRaw`.
+ *
+ * Un fake NO PUEDE ejecutar `width_bucket` ni el resto del SQL de la particion por cubo, y
+ * fingirlo seria peor que no tenerlo: un interprete de SQL escrito a mano en un test es una
+ * SEGUNDA implementacion cuyo acuerdo con Postgres nadie comprueba. El reparto es explicito:
+ *
+ *   - lo que este fake mide es la FORMA de la consulta emitida —el texto con sus `$n` y la lista
+ *     de parametros— y el formateo de la respuesta. Con eso muere quien quite la ventana, quien
+ *     escriba las categorias a mano, quien olvide el `ORDER BY` o quien pase el dinero por
+ *     `number`;
+ *   - lo que mide Postgres de verdad, en
+ *     `tests/integration/repositories/financiera-cubo-temporal.integration.test.ts`, es la
+ *     SEMANTICA: la frontera del dia CR, el cast `::timestamp` y el reparto en cubos.
+ *
+ * `respuestaCruda` es OBLIGATORIA para quien llame a `$queryRaw`: sin ella el fake LANZA en vez
+ * de devolver `[]`. Un `[]` por omision es justo el verde vacio que este archivo existe para
+ * evitar (un repositorio con el `WHERE` roto tambien devuelve `[]`).
+ */
 export interface DatosDinero {
   readonly caja?: readonly FilaCaja[];
   readonly ledgerTienda?: readonly FilaLedgerTienda[];
   readonly ledgerMensajero?: readonly FilaLedgerMensajero[];
   readonly cierresDia?: readonly FilaCierreDia[];
   readonly cierresBodega?: readonly FilaCierreBodega[];
+  readonly respuestaCruda?: (consulta: ConsultaCrudaFake) => readonly Registro[];
+}
+
+/** El SQL tal y como sale de `Prisma.sql`: texto con `$1..$n` y los parametros, en orden. */
+export interface ConsultaCrudaFake {
+  readonly texto: string;
+  readonly valores: readonly unknown[];
 }
 
 export interface LlamadaFake {
   readonly modelo: string;
-  readonly operacion: "groupBy" | "aggregate" | "findMany";
+  readonly operacion: "groupBy" | "aggregate" | "findMany" | "queryRaw";
   readonly args: Record<string, unknown>;
 }
 
@@ -331,12 +357,32 @@ export type ClienteDinero = Pick<
   | "pagoMensajeroMovimiento"
   | "cierreDia"
   | "cierreBodega"
+  | "$queryRaw"
 >;
 
 export interface FakeDinero {
   readonly cliente: ClienteDinero;
   /** Toda llamada que el repositorio hizo, en orden. */
   readonly llamadas: readonly LlamadaFake[];
+}
+
+/**
+ * ¿Es esto un `Prisma.sql` ya compuesto?
+ *
+ * SE COMPRUEBA POR FORMA, NO CON `instanceof`, y no es una laxitud: en esta version del cliente
+ * `Prisma.Sql` **no existe en tiempo de ejecucion** (solo estan `Prisma.sql` y `Prisma.raw`; la
+ * clase se llama `_Sql` y no se exporta). Un `x instanceof Prisma.Sql` no falla como "esto no es un
+ * Sql": revienta con `Right-hand side of 'instanceof' is not an object` para TODA llamada, legitima
+ * o no, y deja el fake incapaz de aceptar nada.
+ *
+ * La forma que se exige es justo la que el test necesita leer: `text` (con sus `$n`) y `values`. La
+ * variante de plantilla etiquetada —`$queryRaw` seguido de un literal— llega como
+ * `(TemplateStringsArray, ...valores)` y NO la cumple: sigue prohibida, que es lo que se queria.
+ */
+function esSqlCompuesto(x: unknown): x is { readonly text: string; readonly values: unknown[] } {
+  if (typeof x !== "object" || x === null || Array.isArray(x)) return false;
+  const candidato = x as { text?: unknown; values?: unknown };
+  return typeof candidato.text === "string" && Array.isArray(candidato.values);
 }
 
 export function fakePrismaDinero(datos: DatosDinero): FakeDinero {
@@ -360,12 +406,41 @@ export function fakePrismaDinero(datos: DatosDinero): FakeDinero {
   const filas = (xs: readonly object[] | undefined): readonly Registro[] =>
     (xs ?? []) as unknown as readonly Registro[];
 
+  /**
+   * `$queryRaw` — solo se acepta con un `Prisma.sql` ya compuesto (que es como lo llaman los
+   * repositorios de la 180). Con la forma de plantilla etiquetada el fake LANZA en vez de
+   * inventarse el texto: el test tiene que poder leer el SQL exacto que va a la base.
+   */
+  const queryRaw = (consultaSql: unknown, ...resto: unknown[]) => {
+    if (!esSqlCompuesto(consultaSql) || resto.length > 0) {
+      throw new Error(
+        "fake-prisma: $queryRaw solo se acepta como $queryRaw(Prisma.sql`...`); asi el test lee el texto y los parametros de verdad",
+      );
+    }
+    const consulta: ConsultaCrudaFake = {
+      texto: consultaSql.text,
+      valores: consultaSql.values as readonly unknown[],
+    };
+    llamadas.push({
+      modelo: "$queryRaw",
+      operacion: "queryRaw",
+      args: { texto: consulta.texto, valores: consulta.valores },
+    });
+    if (datos.respuestaCruda === undefined) {
+      throw new Error(
+        "fake-prisma: el repositorio emitio un $queryRaw y el fixture no declara `respuestaCruda`; devolver [] por omision seria el mismo verde vacio que un WHERE roto",
+      );
+    }
+    return Promise.resolve(datos.respuestaCruda(consulta));
+  };
+
   const cliente = {
     walletMovimiento: modelo("walletMovimiento", filas(datos.caja)),
     walletTiendaMovimiento: modelo("walletTiendaMovimiento", filas(datos.ledgerTienda)),
     pagoMensajeroMovimiento: modelo("pagoMensajeroMovimiento", filas(datos.ledgerMensajero)),
     cierreDia: modelo("cierreDia", filas(datos.cierresDia)),
     cierreBodega: modelo("cierreBodega", filas(datos.cierresBodega)),
+    $queryRaw: queryRaw,
   } as unknown as ClienteDinero;
 
   return { cliente, llamadas };
@@ -381,5 +456,8 @@ export function fakePrismaQueFalla(error: Error): ClienteDinero {
     pagoMensajeroMovimiento: modelo,
     cierreDia: modelo,
     cierreBodega: modelo,
+    // La 180 anade metodos que consultan con SQL crudo: si el fake no fallara tambien por ahi,
+    // el caso de propagacion de esos metodos pasaria por la via del "no consulte y salio bien".
+    $queryRaw: revienta,
   } as unknown as ClienteDinero;
 }

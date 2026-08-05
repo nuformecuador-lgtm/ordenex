@@ -37,18 +37,26 @@
 // R27 y R28 y sus tests, y nada mas del contrato.
 //
 // ---------------------------------------------------------------------------
-// (c) DIVERGENCIA ACEPTADA CON EL RANKING (D6 / R31)
+// (c) LA TRAMPA `startOfDayCR` — VIVA; LA DIVERGENCIA CON EL RANKING — CERRADA (166)
 // ---------------------------------------------------------------------------
 // El dia operativo de la analitica es el dia NATURAL de Costa Rica 00:00-24:00,
 // resuelto con `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` (convencion
 // de la feature 144): todo borde cae en `...T06:00:00.000Z`.
-// `lib/services/RankingService.ts:60-61` usa la OTRA convencion del repo
-// (medianoche UTC de la fecha CR, la de `@db.Date` de la feature 46) mas 24 h, lo
-// que produce una ventana `[00:00Z, 24:00Z)` = 18:00-18:00 hora CR. Mientras el
-// ticket de saneamiento del ranking (T0.3) no se cierre, **la analitica y el
-// ranking reportan cifras distintas para "hoy"**: es una divergencia CONOCIDA y
-// ACEPTADA en D6, no un defecto que reportar. No copies aqui la convencion del
-// ranking "para que cuadren": eso propagaria el bug a un rollup persistido.
+//
+// La trampa que este bloque existe para nombrar SIGUE VIVA: el repo exporta
+// tambien `startOfDayCR`, que devuelve la MEDIANOCHE UTC de la fecha calendario
+// CR. Esa es la convencion CORRECTA para columnas `@db.Date` (feature 46, p.ej.
+// `fecha_reprogramacion`) y por eso la funcion se conserva; pero como cota contra
+// columnas `timestamp` esta 6 h por debajo del inicio real del dia en CR, asi que
+// `[startOfDayCR(now), +24 h)` es en realidad la ventana 18:00-18:00 hora CR. NO
+// la importes aqui ni "corrijas" la analitica con ella: propagaria el error a un
+// rollup persistido.
+//
+// La divergencia que este bloque declaraba ACEPTADA (D6 / R31) esta CERRADA: la
+// feature **166** paso `RankingService` a esta misma convencion, asi que analitica
+// y ranking resuelven "hoy" con cotas identicas al milisegundo. Ya no hay dos
+// verdades sobre el dia; lo que queda es la eleccion de helper segun el TIPO de
+// columna, que es lo que documenta el parrafo anterior.
 
 import {
   fechaCalendarioCR,

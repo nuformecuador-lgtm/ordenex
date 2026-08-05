@@ -371,6 +371,11 @@ describe("R28 · misma entrada, misma salida, con mas de una fila", () => {
       // T E.1 — el borde tambien: un `new Date()` aqui haria que el rango dependiera del
       // reloj del servidor en vez de del `now` inyectable de `resolverRango` (R28).
       "lib/actions/analitica-financiera.ts",
+      // Feature 180 (R26 / Q2 = (a), humano 2026-08-05) — el modulo de cubos temporales. Es
+      // donde el reloj tenia mas tentacion de entrar: marcar «el cubo en curso es parcial»
+      // exige saber que hora es. Se decidio NO marcarlo, y este censo es lo que impide que
+      // vuelva por la puerta de atras dejando el DTO a merced del reloj del proceso.
+      "lib/analytics/cubo-temporal.ts",
     ];
     const infractores = ARCHIVOS.filter((rel) => {
       const codigo = fs
@@ -421,7 +426,13 @@ const LIBRO_SOLO_PROPIO = LIBRO_MIXTO.filter(
 );
 
 async function totalDe(metricaId: string, caja: readonly (typeof LIBRO_MIXTO)[number][]) {
-  const { servicio } = armarServicio({ caja: [...caja] });
+  // Feature 180 — el MISMO libro visto por cubo. El rango `dia` trocea en UN solo cubo, asi que
+  // el desglose es el libro entero con `indiceCubo: 0` y la unica fila de la serie tiene que dar
+  // exactamente el total (R12).
+  const { servicio } = armarServicio({
+    caja: [...caja],
+    cajaPorCubo: caja.map((f) => ({ ...f, indiceCubo: 0 })),
+  });
   const r = await servicio.consultar(consultaDe(metricaId));
   if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error(`${metricaId} no dio vistas`);
   const vista = r.datos.vistas[0];
@@ -442,7 +453,11 @@ describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma d
     expect(vista.grano).toBe("fecha");
     // No suma con nada: contiene dinero que `ganancia_ordenex` excluye a proposito.
     expect(vista.sumableCon).toEqual([]);
-    expect(vista.filas).toEqual([]);
+    // Feature 180 — la vista ya trae serie: una fila por cubo del rango (aqui, uno), y su
+    // importe es el del total porque todo el libro cae en ese cubo (R12).
+    expect(vista.filas).toHaveLength(1);
+    expect(vista.filas[0].cubo).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(vista.filas[0].importe).toEqual(vista.total);
   });
 
   it("`ganancia_ordenex` deja fuera el dinero de terceros: 730, no 2930", async () => {
@@ -486,13 +501,18 @@ describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma d
     expect(enCaja.total.neto).toBe(ganancia.total.neto);
   });
 
-  it("las dos consultan el libro de la caja UNA vez y ningun otro repositorio", async () => {
+  it("las dos consultan el libro de la caja y NINGUN otro repositorio", async () => {
     for (const id of ["dinero_en_caja", "ganancia_ordenex"]) {
       const { servicio, ingresos, consultasHechas } = armarServicio({ caja: [...LIBRO_MIXTO] });
       await servicio.consultar(consultaDe(id));
 
+      // Feature 180 — DOS lecturas, las dos del mismo repositorio de caja: el total sigue
+      // saliendo de `sumarPorCategoria` (R15, la cifra de la 127 no se toca) y la serie de
+      // `sumarPorCuboYCategoria`. Derivar el total de los cubos ahorraria esta llamada y
+      // convertiria la invariante de conservacion en una tautologia.
       expect(ingresos.sumarPorCategoria, id).toHaveBeenCalledTimes(1);
-      expect(consultasHechas(), id).toBe(1);
+      expect(ingresos.sumarPorCuboYCategoria, id).toHaveBeenCalledTimes(1);
+      expect(consultasHechas(), id).toBe(2);
     }
   });
 

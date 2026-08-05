@@ -213,6 +213,30 @@ export type RangoPreset = (typeof RANGO_PRESETS)[number];
 export const RANGO_TOPE_DIAS = 366;
 
 /**
+ * Feature 180 ⟨D2⟩ — tope de PUNTOS por serie que el SERVIDOR usa para decidir la
+ * granularidad temporal de una serie (`dia` hasta aqui inclusive, `semana` por encima).
+ * Se declara junto a `RANGO_TOPE_DIAS` por la misma razon que aquel: un tope se escribe
+ * una vez, y `lib/analytics/cubo-temporal.ts` lo importa en vez de repetir el literal.
+ *
+ * ESTE NUMERO **DEBE** COINCIDIR CON `MAX_PUNTOS_SERIE` DE
+ * `components/private/analytics/topes.ts`, y son DOS constantes a proposito, no un
+ * descuido: `lib/` **no puede** importar de `components/` porque seria una inversion de
+ * capas (un servicio dependiendo de un componente de presentacion), y el guardia de
+ * modulo puro de `lib/analytics/` lo prohibe. La igualdad la ata un TEST —
+ * `tests/unit/analytics/cubo-temporal-tope.guardia.test.ts` (R20)— que lee las dos
+ * fuentes y las compara. Es el mismo patron de dos-fuentes-independientes que la feature
+ * 127 usa con `IDS_FINANCIERAS_SERVIDAS` contra el catalogo.
+ *
+ * Por que 62 y no otro numero: lo justifica el propio comentario de `topes.ts`, «53
+ * semanas (el peor caso legitimo ya agregado en un rango de 366 dias) mas margen». Es
+ * decir, el 62 se eligio **dando por supuesta la agregacion semanal** de ⟨D2⟩: por encima
+ * del tope el servidor no recorta, agrega en cubos semanales, y 366 dias caben siempre en
+ * 53 cubos. Si alguien cambia este numero sin cambiar el otro, el test R20 lo dice y el
+ * comentario de arriba explica cual de los dos mover.
+ */
+export const TOPE_PUNTOS_SERIE = 62;
+
+/**
  * Ventana resuelta. Semiabierta en instantes `[desde, hasta)` para las tablas
  * vivas; fechas calendario CR INCLUSIVAS para el rollup (`analytics_daily.fecha`).
  */

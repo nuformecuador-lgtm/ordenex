@@ -22,6 +22,12 @@ import { useSWRConfig } from "swr";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { Cobertura } from "@/lib/types/analitica-operativa";
+// Feature 133 (T4.4) — SOLO EL TIPO (`import type` se borra en compilacion): este modulo
+// de cliente no arrastra `lib/analytics/presentacion` ni su cierre transitivo al bundle.
+// Se tipa contra el retorno del recorte —en vez de repetir la union a mano— para que
+// anadir un tipo de alcance nuevo alli rompa el typecheck aqui, en `textoAlcance`, en vez
+// de pintar un tablero sin rotulo en silencio.
+import type { RecortePresentacion } from "@/lib/analytics/presentacion";
 
 import { PANELES_OPERATIVOS } from "./catalogo-paneles";
 import { desdeSearchParams } from "./filtro-tablero";
@@ -29,9 +35,11 @@ import { CLAVE_TABLERO, CoberturaProvider, PanelOperativo } from "./PanelOperati
 import {
   DESCRIPCION_ACTUALIZAR,
   ETIQUETA_ACTUALIZAR,
+  ETIQUETA_ALCANCE,
   ETIQUETA_REJILLA,
   TEXTO_PENUMBRA,
   TITULO_COBERTURA,
+  textoAlcance,
   textoCobertura,
 } from "./textos";
 
@@ -51,7 +59,20 @@ export function unirCobertura(
   return [...fechas].sort();
 }
 
-export function PanelesOperativos() {
+export interface PanelesOperativosProps {
+  /**
+   * Feature 133 (T4.4) — el tipo de alcance con el que el borde calcula estas cifras.
+   * Ausente = `global`, para que el componente siga montandose sin props (contrato de
+   * `design.md §D6`). Es un ENUM, no un dato: aqui no llega ningun id ni ningun nombre.
+   */
+  readonly alcance?: RecortePresentacion["alcance"];
+}
+
+export function PanelesOperativos({ alcance = "global" }: PanelesOperativosProps = {}) {
+  // R24 — UN rotulo para todo el tablero, no uno por panel: repetido seis veces se
+  // volveria invisible, igual que ya razona D1 con el aviso de cobertura.
+  const rotuloAlcance = textoAlcance(alcance);
+
   // El filtro vive en la URL: `FiltrosOperativos` escribe y esta rejilla lee (design §4.2).
   const params = useSearchParams();
   const filtro = useMemo(() => desdeSearchParams(params), [params]);
@@ -82,6 +103,15 @@ export function PanelesOperativos() {
           {ETIQUETA_ACTUALIZAR}
         </Button>
       </div>
+
+      {/* R24/R25 — el rotulo de alcance: presente MIENTRAS el alcance no sea global,
+          ausente cuando lo es. Es una frase sobre el universo de las cifras, sin ningun
+          identificador: ni uuid, ni nombre de tienda, zona o persona. */}
+      {rotuloAlcance !== null ? (
+        <p role="note" aria-label={ETIQUETA_ALCANCE} className="text-sm text-muted-foreground">
+          {rotuloAlcance}
+        </p>
+      ) : null}
 
       {/* R5/R6/D1 — el aviso UNICO. Aparece si y solo si hay al menos una fecha no
           comparable, con su RECUENTO y sus EXTREMOS, y siempre con la penumbra: un cero

@@ -122,11 +122,29 @@ describe("R20 · la cuenta de mensajeros la produce derivarCuentaPorPagar", () =
     { tipo: "pago" as const, suma: "2000.00" },
   ];
 
+  /**
+   * FEATURE 180 — el mismo libro, visto por los otros dos metodos: 4000/1500 de ARRASTRE
+   * (anterior al rango) y 1000/500 DENTRO del unico cubo del rango `dia`. La identidad que ⟨D5⟩
+   * sostiene se cumple a proposito: arrastre + Σ cubos = el saldo al corte de `CUENTA`.
+   */
+  const ARRASTRE = [
+    { tipo: "devengo" as const, suma: "4000.00" },
+    { tipo: "pago" as const, suma: "1500.00" },
+  ];
+  const POR_CUBO = [
+    { indiceCubo: 0, tipo: "devengo" as const, suma: "1000.00" },
+    { indiceCubo: 0, tipo: "pago" as const, suma: "500.00" },
+  ];
+
   it("el neto es el que la funcion compartida devuelve, y la funcion se llamo", async () => {
     const esperado = derivarCuentaPorPagar("5000.00", "2000.00");
     espiaCuenta.mockClear();
 
-    const { servicio } = armarServicio({ cuentaMensajeros: CUENTA });
+    const { servicio } = armarServicio({
+      cuentaMensajeros: CUENTA,
+      cuentaMensajerosAntes: ARRASTRE,
+      cuentaMensajerosPorCubo: POR_CUBO,
+    });
     const r = await servicio.consultar(consultaDe("cuenta_por_pagar_mensajero"));
     if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
 
@@ -135,16 +153,33 @@ describe("R20 · la cuenta de mensajeros la produce derivarCuentaPorPagar", () =
     expect(total.neto).toBe("3000.00");
     expect(total.bruto).toBe("7000.00");
     expect(esperado.signo).toBe("positivo");
-    expect(argumentosDe(espiaCuenta)).toEqual([["5000", "2000"]]);
+    // DOS llamadas desde la 180: una por CUBO (el saldo acumulado al cierre de ese cubo, ⟨D5⟩) y
+    // la del total. Las dos con los mismos componentes aqui, porque el rango tiene un solo cubo y
+    // arrastre + movimiento = saldo al corte. Una resta escrita a mano dejaria esto vacio.
+    expect(argumentosDe(espiaCuenta)).toEqual([
+      ["5000", "2000"],
+      ["5000", "2000"],
+    ]);
   });
 
-  it("R14 — y no hay ni un cubo: la vista no tiene filas donde meter un mensajero", async () => {
-    const { servicio } = armarServicio({ cuentaMensajeros: CUENTA });
+  it("R14 — el cubo de cada fila es una FECHA: no hay donde meter un mensajero", async () => {
+    const { servicio } = armarServicio({
+      cuentaMensajeros: CUENTA,
+      cuentaMensajerosAntes: ARRASTRE,
+      cuentaMensajerosPorCubo: POR_CUBO,
+    });
     const r = await servicio.consultar(consultaDe("cuenta_por_pagar_mensajero"));
     if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
 
-    expect(r.datos.vistas[0].filas).toEqual([]);
-    expect(r.datos.vistas[0].grano).toBe("fecha");
+    const vista = r.datos.vistas[0];
+    expect(vista.grano).toBe("fecha");
+    // Feature 180: la vista YA trae serie —una fila por cubo del rango `dia`, o sea una— y su
+    // clave es una fecha calendario CR, nunca un id de persona.
+    expect(vista.filas).toHaveLength(1);
+    expect(vista.filas[0].cubo).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Object.keys(vista.filas[0])).toEqual(["cubo", "importe"]);
+    // Y el saldo acumulado al cierre del unico cubo ES el total (R13).
+    expect(vista.filas[0].importe).toEqual(vista.total);
   });
 });
 
@@ -174,6 +209,12 @@ describe("R20/R37 · el balance de la caja lo produce derivarBalance, con bruto 
         { categoria: "ingreso_ajuste", tipo: "ingreso", suma: "1000.00" },
         { categoria: "egreso_gasto", tipo: "egreso", suma: "1500.00" },
       ],
+      // Feature 180 — el mismo dinero visto por cubo: el rango `dia` tiene UN cubo, asi que el
+      // desglose es el mismo libro con `indiceCubo: 0`.
+      cajaPorCubo: [
+        { indiceCubo: 0, categoria: "ingreso_ajuste", tipo: "ingreso", suma: "1000.00" },
+        { indiceCubo: 0, categoria: "egreso_gasto", tipo: "egreso", suma: "1500.00" },
+      ],
     });
     const r = await servicio.consultar(consultaDe("egresos"));
     if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
@@ -185,8 +226,12 @@ describe("R20/R37 · el balance de la caja lo produce derivarBalance, con bruto 
     expect(total.neto).toBe("-500.00");
     // R8 mutacion 1 — la resta NO esta reescrita en el servicio: la funcion se LLAMO, y con
     // estos argumentos. Un `ingresos.sub(egresos)` a mano daria el mismo numero y dejaria este
-    // espia a cero.
-    expect(argumentosDe(espiaBalance)).toEqual([["1000", "1500"]]);
+    // espia a cero. DOS llamadas desde la 180 (R17): una por CUBO y la del total; el rango `dia`
+    // tiene un solo cubo y ahi vive todo el libro del fixture.
+    expect(argumentosDe(espiaBalance)).toEqual([
+      ["1000", "1500"],
+      ["1000", "1500"],
+    ]);
   });
 
   it("R7/183 · el par REAL egreso + su anulacion: neto 0.00 y bruto 2 × monto", async () => {
@@ -223,9 +268,12 @@ describe("R1 · las tres metricas homogeneas de prefijo no publican neto ⟨D12�
     { categoria: "ingreso_flete_devolucion" as const, tipo: "ingreso" as const, suma: "5.00" },
   ];
 
+  /** Feature 180 — el mismo libro por cubo; el rango `dia` tiene uno solo. */
+  const CAJA_POR_CUBO = CAJA.map((f) => ({ ...f, indiceCubo: 0 }));
+
   for (const id of ["ingreso_flete", "ingreso_comision_cod", "ingreso_iva"]) {
     it(`el DTO SERIALIZADO de \`${id}\` no lleva la clave \`neto\`, ni vacia ni en null`, async () => {
-      const { servicio } = armarServicio({ caja: CAJA });
+      const { servicio } = armarServicio({ caja: CAJA, cajaPorCubo: CAJA_POR_CUBO });
       const r = await servicio.consultar(consultaDe(id));
       if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
 
@@ -243,14 +291,20 @@ describe("R1 · las tres metricas homogeneas de prefijo no publican neto ⟨D12�
 
   it("R8 · a `derivarBalance` no se le pide una resta contra cero: no se la llama", async () => {
     espiaBalance.mockClear();
-    const { servicio } = armarServicio({ caja: CAJA });
+    const { servicio } = armarServicio({ caja: CAJA, cajaPorCubo: CAJA_POR_CUBO });
     await servicio.consultar(consultaDe("ingreso_flete"));
+    // NI UNA llamada, y desde la 180 eso dice mas que antes: la vista publica ademas una fila
+    // por cubo, asi que un desglose que construyera sus filas con el otro constructor —el que
+    // lleva neto— aparecería aqui como una llamada de mas (⟨D7⟩ / R27).
     expect(argumentosDe(espiaBalance)).toEqual([]);
 
     // Y en `egresos`, que si tiene resta que hacer, se la sigue llamando: el caso de arriba no
-    // pasa por «el espia nunca se llama en este archivo».
+    // pasa por «el espia nunca se llama en este archivo». Dos veces: el cubo y el total.
     await servicio.consultar(consultaDe("egresos"));
-    expect(argumentosDe(espiaBalance)).toEqual([["1005", "0"]]);
+    expect(argumentosDe(espiaBalance)).toEqual([
+      ["1005", "0"],
+      ["1005", "0"],
+    ]);
   });
 });
 

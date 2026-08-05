@@ -2853,14 +2853,56 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   R12 solo mata su mutación si la fecha huérfana permanece. Ninguna se ensanchó: son de
   features `done`.
 
-## 2026-08-05 — 184 (deuda de la 170: los 12 listados con descarga completa + poda de selección satélite)
+## 2026-08-05 — 134 · export CSV/XLSX de la analítica operativa
+- El archivo se arma **en el navegador** desde el mismo borde que pinta la pantalla
+  (`consultarAnaliticaOperativa`), nunca reconstruyendo el filtro. Cero código de
+  servidor: ni endpoint, ni Server Action nueva, ni migración.
+- Requisitos cubiertos: R1–R21, cada uno con test nombrado. **21 mutaciones aplicadas por
+  el implementer y 21 más por el reviewer por su cuenta: las 21 mueren en el caso que el
+  mapa les asigna, cero anclajes silenciosos.** Gate: `./init.sh` con `dev` mergeado, 941
+  archivos / 11.639 tests, 3 rojos **todos flakes por saturación** verificados verdes en
+  aislado (detalle y descarte de causa en `tasks.md > T5.4`).
+- EL HALLAZGO QUE ENCOGIÓ LA FEATURE, y que es lo que más vale conservar: la ficha pedía
+  «Server Action/route con gating por rol». **No hacía falta ninguna de las dos.** La
+  seudonimización ocurre dentro de `AnaliticaOperativaService` —decisión de la 126,
+  declarada entonces como desviación de su propio design— y no en el borde, así que el
+  uuid real **nunca cruza al navegador**; y el borde de la 126 ya audita el denegado antes
+  del 403. Los tres pasos que exige el aviso de la 122 (auditar, 403, seudonimizar) aquí
+  **se heredan, no se implementan**. Lo verificable pasó a ser otra cosa: que no se abra un
+  camino que los evite. De eso se ocupan R5, R6, R8 y un guardia de cuatro bloques.
+- Aquella desviación de la 126 **se cobra hoy como ventaja**: es la razón de que este
+  export no pueda filtrar uuids aunque el autor quisiera. Una decisión de hace tres
+  features es lo que hace barata a ésta.
+- LO QUE SOBREVIVE, y no es de esta feature: **un refactor mueve los anclajes de mutación,
+  y un mapa R→mutación escrito antes del refactor deja de describir dónde vive el código.**
+  El implementer extrajo las columnas a un módulo propio a mitad de camino y se quedó sin
+  sesión declarando que estaba reejecutando la batería. La reverificación encontró **8 de
+  21 anclajes movidos** y, sobre todo, un **patrón muerto en el guardia permanente**: el
+  censo de `app/api` perseguía `COLUMNAS_EXPORT_OPERATIVO`, un símbolo que el propio
+  refactor había renombrado. No hacía falso-verde el bloque —los demás patrones seguían
+  vivos—, pero es exactamente el fallo contra el que la cabecera de ese guardia previene.
+- De ahí sale la defensa que queda instalada: **un auto-chequeo que exige que cada patrón
+  del censo case con algo real en el árbol**, para que un renombrado futuro no vuelva a
+  dejar el guardia persiguiendo un nombre muerto. El reviewer lo verificó metiéndole un
+  patrón inexistente, y se puso rojo.
+- Dos casillas llegaron marcadas sin estarlo, y las dos eran del leader: T0.3 sólo había
+  aplicado dos de sus tres correcciones de ficha, y **T5.4 afirmaba «`./init.sh` verde,
+  salida pegada» sin que nadie lo hubiera corrido**. Ninguna la habría cazado un test:
+  las casillas de proceso no tienen mutación que las mate.
+- El guardia de esta feature **es permanente y no se retira en su PR**: censa el árbol, no
+  el diff contra `dev`. Se escribió así a propósito, citando el `frontera.guardia.test.ts`
+  retirado en el PR #232 y el bloque branch-scoped que la 131 retiró en el suyo.
+- La financiera queda **fuera por decisión, no por olvido** → ficha **184**, que espera a
+  la 180 (publica la serie) y a la 183 (cambia qué significan las cifras de caja).
+
+## 2026-08-05 — 188 —antes 184— (deuda de la 170: los 12 listados con descarga completa + poda de selección satélite)
 - Los **12 listados** cuya descarga a Excel releía el conjunto entero desde el navegador pasan a
   servirse **desde el servidor**, con lectura dedicada por listado; y la selección de la bodega
   satélite se **poda** contra el conjunto filtrado vigente, que es lo que hacía que el aviso de
   «marcadas en otras páginas» contara órdenes que ya no existían. 8 tandas, 55 commits, **cero
   migraciones**.
-- Requisitos cubiertos: **R1–R34**, mapeados caso a caso en `progress/impl_184-cierre.md`. Review
-  APROBADO en **ronda 2** (`progress/review_184.md`). Gate: **950 archivos / 11.847 tests**.
+- Requisitos cubiertos: **R1–R34**, mapeados caso a caso en `progress/impl_188-cierre.md`. Review
+  APROBADO en **ronda 2** (`progress/review_188.md`). Gate: **950 archivos / 11.847 tests**.
 - **H.3 no era un trámite y encontró dos huecos reales**, los dos cerrados aquí:
   - **R16** exige «no dos declaraciones separadas del mismo criterio» —el hallazgo que da nombre a
     la feature, el `orderBy` duplicado en las siete tandas— y **nada lo impedía**: bajo mutación,
@@ -2875,11 +2917,16 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   - **R29 de la 170 queda derogado en 11 de los 12 listados** —se materializa el conjunto entero
     antes de mirar el tope— y se **declara la excepción** en los once docstrings en vez de
     implementarla, porque el `count` que exige el total exacto **pone rojos los tests de R15 de esta
-    misma feature**. Ese conflicto es el trabajo de la **ficha 187**, no un detalle.
+    misma feature**. Ese conflicto es el trabajo de la **ficha 191**, no un detalle.
   - **Q-K6 rama B** estaba declarada dentro del alcance en `feature_list.json` pero **nunca bajó al
-    spec**; se saca del registro y va a la **ficha 186**, que esta feature deja desbloqueada.
+    spec**; se saca del registro y va a la **ficha 190**, que esta feature deja desbloqueada.
   - **R12 (columnas y orden)** sin test: deuda **preexistente** —el diff no toca ninguna de las 34
-    constantes `COLUMNAS_DESCARGA_*`— a la **ficha 185**.
+    constantes `COLUMNAS_DESCARGA_*`— a la **ficha 189**.
 - **Deuda dejada, sin dueño:** `listarSaldosTodasTiendas()` sigue sin orden determinista; ya **no
   sostiene ningún archivo** (la descarga sale del método paginado, con test que lo mide), pero
   volvería a morder si alguien lo usa para construir uno.
+- **RENUMERADA de 184 a 188** al traer `dev`: otra sesión había dado de alta una 184 distinta
+  (analítica: export de la serie) y también 185/186/187, así que las fichas de este cierre pasaron
+  a **189/190/191**. Los 60 commits, los comentarios de 111 archivos y la constante
+  `PENDIENTES_184` **siguen diciendo 184 a propósito**: reescribir una rama pusheada está
+  prohibido aquí, y esa constante es ancla de texto de una guardia.
