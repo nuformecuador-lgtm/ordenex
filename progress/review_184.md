@@ -1,7 +1,9 @@
 # Review — feature 184 (deuda de la 170: los 12 listados descargables)
 
-> Rama `feature/184-deuda-170-listados`, 56 commits sobre `origin/dev`. Revisión previa al PR.
-> **Veredicto: RECHAZADO** — 2 bloqueantes. Ninguno es de trazabilidad ni de tests.
+> Rama `feature/184-deuda-170-listados`. Revisión previa al PR, en dos rondas.
+> **Ronda 1 (2026-08-05): RECHAZADO** — 2 bloqueantes. Ninguno de trazabilidad ni de tests.
+> **Ronda 2 (2026-08-05): APROBADO** — los dos cerrados por decisión humana. Ver §8.
+> Lo que sigue (§1-§7) es la ronda 1, conservada sin editar: es la evidencia de qué se midió.
 
 ## 0. Qué se revisó y qué no
 
@@ -217,3 +219,141 @@ derogado en 11 de 12 superficies nuevas, sin declararlo, en un design que afirma
 
 B2 puede cerrarse con una corrección de registro por el humano/leader. B1 exige o el cap `N+1`
 con sus casos, o la excepción declarada y medida. Ninguno de los dos se arregla en este review.
+
+---
+
+# 8. Ronda 2 (2026-08-05) — verificación del cierre de B1 y B2
+
+Alcance de esta ronda: **solo** el cierre de los dos bloqueantes y el estado del registro. No se
+repite el review ni la auditoría de trazabilidad (8 de 8 en la ronda 1). Tres commits, todos
+posteriores al gate verde: `c61144ef` (prosa en `lib/` + design), `cf093260` (registro + este
+archivo), `c281a93b` (fichas 185/186/187).
+
+## 8.1 Que los tres commits no cambian comportamiento — verificado, no supuesto
+
+| Comprobación | Medida |
+| --- | --- |
+| Líneas añadidas en `lib/` fuera de un bloque de comentario | **cero** (todas casan `^\+\s*\*`) |
+| Líneas **borradas** en `lib/` | **cero** |
+| `*/` dentro de las líneas añadidas | **ninguna** — es el único modo en que un commit de prosa rompe la compilación: cerrar el bloque antes de tiempo |
+| `c281a93b` | toca **solo** `feature_list.json` |
+| `pnpm run typecheck` sobre el árbol de la ronda 2 | **verde** (corrido aquí; es lo único que el gate del leader no cubría, por ser anterior a estos commits) |
+| `git status` | limpio |
+
+## 8.2 B1 — la excepción a R29 de la 170: **CERRADO**
+
+Se pedían tres cosas. Las tres están.
+
+**(1) Las 11 declaraciones dicen qué mitad se cumple y cuál no, y ninguna afirma cumplir R29.**
+Leídas una a una. Todas separan «transportar: cumplido» de «materializar: no», y varias lo cierran
+con la frase explícita: «Esto es una excepcion declarada, no un cumplimiento de R29»
+(`CierresAdminService`), «No es una forma de cumplir R29: es una excepcion con motivo»
+(`CierresBodegaAdminService`), «Es una excepcion con motivo, no una forma de cumplir R29»
+(`RecepcionSateliteService`), «Aun asi es una excepcion, no un cumplimiento» (`CierreDiaService`).
+Ninguna afirma lo contrario en ningún sitio.
+
+**(2) Son específicas de cada conjunto, no un párrafo copiado once veces.** Lo que cambia entre
+ellas es el **riesgo medido**, que es justo lo que hace útil la declaración:
+
+| Servicio | Riesgo que declara |
+| --- | --- |
+| `RecepcionSateliteService` (listado 10) | «la mas cara de las once»: no cuenta de más, **HIDRATA** todas las filas con `WITH_RECEPCION_SATELITE` antes de mirar el tope — «lo que se trae de mas no es un entero por fila, es el payload entero» |
+| `IncidenteAdminService` histórico | «la deuda mas viva de las once»: «crece sin tope con los dias», los resueltos no se purgan ni tienen ventana; la única cota es cuánto lleve operando el alcance |
+| `IncidenteAdminService` cola | riesgo **invertido**: lo marca el ritmo con que el admin decide, no el calendario |
+| `CierresAdminService` histórico | para un maestro el alcance es «la operacion ENTERA», y los aprobados no se purgan: crece de forma monótona |
+| `CierresBodegaAdminService` histórico | **no acota por zona**: suma todas las zonas desde el primer día |
+| `CierreBodegaService` (solicitados / consolidables) | histórico de UNA zona frente a cola de trabajo que la consolidación vacía |
+| `CierreDiaService` | «el mas acotado por construccion»: los cierres de UN mensajero, uno por día; llegar al tope «le costaria años» |
+| `GastoFijoPlantillaService` | «riesgo despreciable»: tabla de **configuración**, decenas de filas; llegar al tope significaría que se usa como bitácora |
+
+Los 11 métodos que la ronda 1 señaló uno a uno están cubiertos: 1 + 2 + 2 + 2 + 2 + 1 + 1 = **11**.
+
+**(3) `design.md` ya no afirma lo falso.** La frase «lo que cambia es dónde se aplica, **que es lo
+que R29 de la 170 pedía**» se sustituyó por un bloque que reparte el requisito por mitades:
+transportar cerrado en los doce, materializar cerrado **solo en el listado 12**, «en esos once es
+una excepción declarada, no un cumplimiento» (`design.md:90-115`).
+
+**El motivo aducido es real, y se verificó aquí en vez de creerlo.**
+`tests/unit/repositories/historicos-paginados-where.test.ts:527` afirma literalmente
+`expect(d.count, ...).not.toHaveBeenCalled()`, y su propio comentario anticipa el conflicto: «Si
+mañana alguien le añadiera un count "para el total", el total del archivo saldría de otro sitio
+que sus filas». O sea: el `N+1` con total exacto **pone rojos los tests de R15 de esta misma
+feature**. Ese conflicto necesita diseño, no un parche dentro de un PR de 55 commits, y por eso la
+**ficha 187** lleva `sdd: true` y lo declara como el trabajo mismo («EL CONFLICTO ES PARTE DEL
+TRABAJO»), con la prioridad ordenada por riesgo medido: (1) histórico de incidentes, (2) listado 10.
+
+**Veredicto B1: cerrado.** La ronda 1 pedía «o el cap N+1 con sus casos, o la excepción declarada
+y medida, con su ficha propia». Se entregó la segunda, completa: declarada en los once sitios, con
+el riesgo concreto de cada conjunto, con el motivo verificable y con ficha SDD.
+
+## 8.3 B2 — Q-K6 rama B fuera del alcance declarado: **CERRADO**
+
+`feature_list.json` ya no dice lo que el árbol desmiente:
+
+- `description`: fuera «Absorbe Q-K6 (rama B) y el punto 4 del backlog».
+- `status_note`: reescrito; declara los dos bloqueantes y qué se hizo con cada uno, y dice que
+  Q-K6 «se SACA del alcance y va a ficha propia (queda desbloqueada: `listarRecepcionSatelite` ya
+  solo tiene 1 consumidor de produccion)».
+
+Y no queda huérfana: la **ficha 186** (`fullstack`, `sdd: true`, `depends_on: 184`) recoge el
+hallazgo entero —incluida la causa, que es la parte que importa: «se registro en este JSON como
+"dentro de la 184" pero NUNCA bajo a su spec»— con la superficie afectada ya enumerada.
+
+`requirements.md` **no necesitaba cambio**: su Q1 ya fijaba como default «fuera de esta feature,
+como ticket propio inmediatamente posterior», que es exactamente lo que ahora dice el registro. La
+contradicción que la ronda 1 señaló era entre el JSON y el spec, y se resolvió del lado del JSON,
+que era el que se había desviado.
+
+**Veredicto B2: cerrado.**
+
+## 8.4 El registro, revisado como pedía la ronda 1
+
+- `feature_list.json` parsea; 186 entradas; las tres nuevas bien formadas.
+- `185` (`sdd: false`, frontend), `186` y `187` (`sdd: true`, `depends_on: 184`) quedan `pending`
+  con `spec_path: null`. Es legal y no pone rojo el gate: `init.sh:67-90` exige carpeta de specs
+  **solo** a las `sdd` en vuelo (`spec_ready` / `in_progress`) y dice por escrito que `pending` no
+  la necesita todavía.
+- Regla de las 2 por zona: `in_progress` siguen siendo **176** (backend) y **184** (fullstack). Las
+  tres fichas nuevas son `pending` y no cuentan.
+- Los hallazgos de la ronda 1 que debían quedar con dueño lo tienen: menor 3 → ficha **185**,
+  B1 → **187**, B2 → **186**.
+
+## 8.5 Menores vivos al aprobar
+
+De la ronda 1 siguen abiertos, ninguno bloqueante:
+
+1. **`.claude/settings.json` viaja en el PR** (commit `72167549`, permiso `Bash(vercel env add:*)`).
+   Es configuración del agente, ajena a la 184. Sacarlo del PR o mencionarlo en su descripción.
+2. **La poda no maneja el rechazo de la promesa** (`SateliteOrdenesListado.tsx`, efecto de poda:
+   `void comprobar(fuera).then(...)` sin `.catch`). R22 se cumple por accidente —no hay
+   `setState`— y ningún test usa `mockRejectedValue`. Sin dueño.
+3. **R12 (columnas y su orden) sin test** → ficha **185**. Con dueño.
+4. Tres Server Actions con cero consumidores de producción, conservadas con motivo escrito y
+   vigiladas por la guardia de R32. Declarado; conviene que el PR lo diga.
+5. Comentario obsoleto en `app/(app)/cierres-admin/page.tsx:92-101` («candidata a retirada de la
+   tanda H», y la tanda H decidió conservarla).
+6. **R32/R54 de la 170 frente a la consulta de vigencia**: la poda añade una consulta por relectura
+   cuando hay marcas fuera de la página. Declarada y acotada dentro de la 184 (R28, design §4.2),
+   pero ninguna bitácora la contrasta contra R32/R54 de la 170. Debería ir en el PR.
+7. `MARCAS_DESACTIVACION` (`adaptador-conjunto.guardia.test.ts:361-365`) se evalúa **línea a
+   línea**: un `it` y su `.skip(` partidos en dos líneas lo evaden.
+
+Nuevo de esta ronda, muy menor:
+
+8. **Las fichas no se citan por número desde el código.** El `design.md` y los once docstrings
+   dicen «ficha aparte» / «ficha propia», sin el `187`. La traza existe en el otro sentido —186 y
+   187 llevan `depends_on: 184` y la 187 nombra el commit `c61144ef`—, así que nada queda huérfano,
+   pero quien lea el docstring no puede saltar a la ficha.
+
+Pendiente de H.4, del leader: entrada en `progress/history.md`, marcar H.4 y poner al día el
+`status_note` de la 184 (hoy dice «REVIEW RECHAZADO, 2 bloqueantes, ambos atendidos», que era
+cierto entre rondas; tras ésta el veredicto es APROBADO).
+
+## 8.6 Veredicto de la ronda 2
+
+**APROBADO.** Los dos bloqueantes están cerrados, y de la forma que la ronda 1 admitía
+explícitamente: B1 con la excepción declarada, medida por conjunto y con ficha SDD propia; B2
+corrigiendo el registro, que era el lado que se había desviado del spec. Los tres commits son prosa
+y JSON, sin una sola línea de comportamiento, y el `typecheck` lo confirma sobre el árbol final.
+
+Quedan 8 menores vivos, 3 de ellos con dueño (fichas 185/186/187). Ninguno impide el PR.
