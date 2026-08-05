@@ -85,6 +85,11 @@ const { paginado, completo, verIncidenteMock } = vi.hoisted(() => ({
     // se conserva porque esa pantalla lo sigue usando para lo demás.
     consolidables: vi.fn(),
     incidentes: vi.fn(),
+    // Feature 184 — Tanda F (T F.3): «Incidentes pendientes» ya no saca su archivo del listado
+    // compuesto (`incidentes`), que arrastraba el histórico entero de resueltos además de la
+    // cola, sino de su lectura DEDICADA. El doble del compuesto se conserva: la pantalla lo
+    // seguía usando y su ausencia no puede ser lo que explique que ya no se llame.
+    incidentesPendientesCompleto: vi.fn(),
   },
   verIncidenteMock: vi.fn(),
 }));
@@ -134,6 +139,10 @@ vi.mock("@/lib/actions/incidentes", () => ({
   retractarIncidente: vi.fn(),
   reportarIncidente: vi.fn(),
   listarIncidentes: (...a: unknown[]) => completo.incidentes(...a),
+  // Feature 184 — Tanda F (T F.3): la lectura dedicada del listado 8. Sin declararla aquí, el
+  // control de descarga de esa cola llama a `undefined` y el archivo no sale.
+  listarPendientesIncidentesCompleto: (...a: unknown[]) =>
+    completo.incidentesPendientesCompleto(...a),
   listarPendientesIncidentesPaginado: (...a: unknown[]) =>
     paginado.incidentesPendientes(...a),
   listarHistoricoIncidentesPaginado: (...a: unknown[]) =>
@@ -491,6 +500,14 @@ function montarIncidentes() {
   const todos = conjunto(incidente);
   servirPaginas(paginado.incidentesPendientes, todos);
   servirPaginas(paginado.incidentesHistorico, []);
+  // Feature 184 — Tanda F (T F.3): de aquí sale el archivo (R52), sin recorte.
+  completo.incidentesPendientesCompleto.mockResolvedValue({
+    status: "ok",
+    items: todos,
+    total: todos.length,
+  });
+  // El compuesto sigue programado, y con las dos mitades dentro: que el archivo ya no salga de
+  // él tiene que ser una decisión de la pantalla, no que el doble no responda.
   completo.incidentes.mockResolvedValue({
     status: "ok",
     pendientes: todos,
