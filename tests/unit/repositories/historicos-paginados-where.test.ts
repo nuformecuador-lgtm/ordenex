@@ -381,3 +381,66 @@ describe("los conjuntos de la descarga de la tanda B (feature 184)", () => {
     }
   });
 });
+
+// Feature 184 — Tanda C (R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 1,
+// «Cierres solicitados por el mensajero».
+//
+// Tampoco aquí hay método de repositorio nuevo: `findCierresByMensajero` ya devolvía el conjunto
+// entero del mensajero, con el mismo `select` y el mismo mapper que su hermano paginado. Lo que
+// cambia con esta tanda es su PAPEL —pasa de ser un campo suelto de un listado compuesto a ser la
+// lectura dedicada del archivo— y, con él, la importancia de su `where` y su `orderBy`: si
+// divergen de los de la página, la fila 26 del archivo deja de ser la primera de la página 2 y no
+// hay ninguna pantalla que lo diga.
+//
+// El aviso de siempre: `tests/unit/services/cierre-dia-pasados-completo.test.ts` usa un doble de
+// repositorio y NO ve esta traducción. Por eso estas propiedades se afirman aquí y no allí.
+describe("el conjunto de la descarga de la tanda C (feature 184)", () => {
+  it("cierres del mensajero: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await new CierreDiaRepository(
+      { cierreDia: entero } as unknown as PrismaClient,
+      {} as never,
+    ).findCierresByMensajero("m-a");
+
+    const pagina = delegado();
+    await new CierreDiaRepository(
+      { cierreDia: pagina } as unknown as PrismaClient,
+      {} as never,
+    ).findCierresByMensajeroPaginado("m-a", RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // El `mensajero_id` es TODO el criterio de este listado —no filtra por estado— y sale de una
+    // sola declaración. Es además el acotamiento por actor: sin él, el archivo traería el dinero
+    // de todos los mensajeros.
+    expect(argsEntero.where).toEqual({ mensajeroId: "m-a" });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden también: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ solicitadoAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("el conjunto del mensajero cuesta UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Lo que hace de esta tanda una mejora medible: el archivo pasa de cuatro consultas + la
+    // resolución de tarifa + la firma en lote de las evidencias del día a ESTO. Si mañana alguien
+    // le añadiera un `count` «para el total», el total del archivo saldría de otro sitio que sus
+    // filas.
+    const d = delegado();
+    await new CierreDiaRepository(
+      { cierreDia: d } as unknown as PrismaClient,
+      {} as never,
+    ).findCierresByMensajero("m-a");
+
+    expect(d.findMany).toHaveBeenCalledTimes(1);
+    expect(d.count).not.toHaveBeenCalled();
+    const args = d.findMany.mock.calls[0]![0]!;
+    expect(args.skip).toBeUndefined();
+    expect(args.take).toBeUndefined();
+  });
+});
