@@ -17,11 +17,13 @@ import type {
   DeshacerGestionServiceResult,
   ICierreDiaService,
   ListarCierreDiaServiceResult,
+  ListarCierresPasadosCompletoServiceResult,
   ListarCierresPasadosServiceResult,
   SolicitarCierreServiceResult,
   VerCierrePasadoServiceResult,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { GestionResultado } from "@prisma/client";
+import { descargaConfig } from "@/lib/config/descarga";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import {
@@ -332,6 +334,45 @@ export class CierreDiaService implements ICierreDiaService {
       pageSize: input.pageSize,
       total, // R41: el total del CONJUNTO, nunca `items.length`
     };
+  }
+
+  /**
+   * Feature 184 — Tanda C (R1/R4/R6/R9) — el CONJUNTO de «Cierres solicitados» del propio
+   * mensajero, sin recorte, que es del que sale el archivo.
+   *
+   * **Lo que cierra, y por que este listado estaba en la lista de los caros.** Hasta hoy el
+   * archivo se producia releyendo `listarCierreDia()`, el listado COMPUESTO de la pantalla
+   * entera: cuatro lecturas (las gestiones del dia, el contador de pendientes, este historico y
+   * la tarifa por zona+vehiculo), los pagos e ingresos derivados de cada gestion, los totales
+   * por metodo de pago y —lo que de verdad cuesta— la FIRMA EN LOTE de las evidencias
+   * fotograficas de todas las gestiones del dia contra Supabase Storage. El archivo no lleva
+   * ninguna de esas URL: sus ocho columnas salen enteras del `CierrePasadoDTO`. Aqui es UNA
+   * consulta y cero llamadas al firmador (R9).
+   *
+   * **No lleva `input`, y es deliberado** (mismo criterio que los dos conjuntos de la tanda B):
+   * este listado no admite filtros —su schema de pagina solo tenia `page`/`pageSize`— y quitarlos
+   * deja una lista blanca de CERO claves. El borde la sigue aplicando entera —un `mensajeroId`
+   * colado muere alli con `validation_error` (R17)— pero no hay nada que transportar hasta aqui.
+   *
+   * El alcance ES el actor y no admite variantes: el rol tiene que ser `mensajero` y el
+   * `mensajero_id` del WHERE es `actor.usuarioId` (R4), exactamente como en la pagina.
+   */
+  async listarCierresPasadosCompleto(
+    actor: Actor,
+  ): Promise<ListarCierresPasadosCompletoServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R4: antes del repo
+
+    // El MISMO metodo del que la pagina saca su recorte: mismo where, mismo orden y el mismo
+    // mapper de dinero. Un gemelo `…Completo` habria sido la tercera declaracion del criterio.
+    const conjunto = await this.repo.findCierresByMensajero(actor.usuarioId);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return { status: "ok", items: conjunto, total: conjunto.length };
   }
 
   async solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult> {

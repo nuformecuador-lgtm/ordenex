@@ -15,10 +15,12 @@ import type { ICierreDiaService } from "@/lib/interfaces/services/ICierreDiaServ
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import {
   deshacerGestionSchema,
+  listarCierresPasadosCompletoSchema,
   listarCierresPasadosSchema,
   verCierrePasadoSchema,
   type DeshacerGestionResult,
   type ListarCierreDiaResult,
+  type ListarCierresPasadosCompletoResult,
   type ListarCierresPasadosResult,
   type SolicitarCierreResult,
   type VerCierrePasadoResult,
@@ -119,6 +121,34 @@ export async function listarCierresPasadosPaginado(
     const data = listarCierresPasadosSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarCierresPasadosPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierreDiaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda C (R1/R4/R6/R7/R9) — el CONJUNTO de «Cierres solicitados» del propio
+ * mensajero, sin recorte, para producir el archivo.
+ *
+ * Sustituye a la relectura de `listarCierreDia()` que hacia la pantalla, que ademas del historico
+ * traia las gestiones del dia, la tarifa por zona+vehiculo y la FIRMA en lote de las evidencias
+ * fotograficas de todas ellas — de todo eso, el archivo usaba un solo campo y ninguna URL (R9).
+ *
+ * El `mensajero_id` no viaja en el input: lo pone el servicio desde el actor de la sesion. Y como
+ * este listado no tiene filtros, la lista blanca derivada de la de su pagina no deja NINGUNA
+ * clave: cualquier cosa que llegue —empezando por `mensajeroId`— muere aqui con
+ * `validation_error` sin tocar el servicio (R17). El input se parsea aunque no se transporte
+ * nada: parsear ES la barrera.
+ */
+export async function listarCierresPasadosCompleto(
+  input: unknown = {},
+  deps: CierreDiaDeps = {},
+): Promise<ListarCierresPasadosCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarCierresPasadosCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarCierresPasadosCompleto(actor);
   });
   return isAppErrorShape(r) ? toCierreDiaActionError(r) : r;
 }
