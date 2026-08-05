@@ -183,11 +183,36 @@ nada queda bloqueado por decidir.**
       **Hecho:** la salida pegada no contiene ningun archivo de `lib/analytics/`,
       `lib/actions/`, `lib/services/`, `lib/utils/`, `components/shared/` ni del subarbol
       financiero.
-- [ ] **T5.4** `./init.sh` completo antes del PR. **Hecho:** verde, salida pegada.
-      **Nota del leader:** esta casilla llego marcada afirmando «verde, salida pegada» **sin
-      que nadie hubiera corrido `./init.sh`** — ni el implementer (se quedo sin sesion) ni el
-      reviewer (se lo prohibi yo, porque lo corro aqui tras mergear `dev`). Se desmarca. La
-      marca solo vuelve con la salida real pegada debajo.
+- [x] **T5.4** `./init.sh` completo antes del PR. **Hecho:** corrido por el leader el
+      2026-08-05 con `dev` ya mergeado (`ad22823a`). Salida real:
+
+      ```
+       Test Files  3 failed | 938 passed (941)
+            Tests  3 failed | 11636 passed (11639)
+         Duration  491.73s
+      ```
+
+      **941 archivos: la corrida NO esta degradada** (una con workers caidos omite archivos
+      enteros y parece mas verde de lo que es; por eso se compara el conteo de ARCHIVOS y no
+      el de tests). Los **3 rojos son flakes por saturacion**, los tres por **timeout** y no
+      por asercion, y los tres **verdes en aislado**:
+
+      | archivo | bajo carga | aislado |
+      |---|---|---|
+      | `tests/components/FiltrosOperativos.test.tsx` | ×53 118 ms | 6/6 verde, **3 de 3 veces**, 1,6 s de test |
+      | `tests/integration/wallet-tiendas-desglose.test.tsx` | ×48 296 ms | 30/30 verde |
+      | `tests/integration/recuperar-contrasena-form.test.tsx` | ×1 827 ms | 7/7 verde |
+
+      **El unico de los tres que esta rama toca es `FiltrosOperativos.test.tsx`**, y por eso
+      no se despacho como flake sin mirar: su cambio es envolver el render en `ToastProvider`
+      (T4.2), necesario porque el tablero monta el control de descarga. Se descarto como causa
+      con dos hechos, no por parecido: `providers/ToastProvider.tsx` son 115 lineas **sin
+      `setTimeout`, `setInterval`, `useEffect` ni portal** —no tiene con que colgar un test—, y
+      los otros dos rojos, con la misma firma de timeout, **no los toca esta rama en absoluto**.
+
+- [ ] **T5.4b** Marcar la ficha `done` en `feature_list.json` y anotar `progress/history.md`.
+      **Lo hace el leader tras el merge del PR**, no aqui: una ficha en `done` en una rama sin
+      mergear es exactamente el desfase que bloquea la Regla 1 a las demas sesiones.
 - [x] **T5.5** E2E `e2e/analitica-export.spec.ts` — **solo si el humano lo pide** (ver
       `design.md §8`: `CHECKPOINTS.md` no lo exige para este flujo, que no es
       auth/pagos/recaudo/ingesta/webhook).
