@@ -9,6 +9,101 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🏁 CIERRE DE JORNADA 2026-08-05 — **EMPIEZA A LEER POR AQUÍ**
+
+### 🚦 LO ÚNICO ABIERTO: **el PR de release #301** (`dev → prod`, 126 commits)
+
+**CERO migraciones** — mergear no aplica nada. Gate `== init OK ==` (977 archivos / 12.251 tests)
+corrido sobre `dev` con todo dentro. Sin conflictos.
+
+**Al desplegar, mirar:** el botón de rutear en `/ordenes`, que **los 12 listados sigan sacando el
+Excel con las mismas columnas y en el mismo orden** (la 188 cambió de dónde salen las FILAS, no las
+columnas — pero es lo que un usuario notaría), y la analítica financiera, que gana serie temporal.
+
+### 🐛 El bug de producción de hoy, y lo que salió de tirar del hilo
+
+**Reportado:** «no se puede asignar guías a bodega satélite, desapareció el botón».
+**No era código roto.** `rutearABodegaSatelite` se quedó **sin superficie de UI** cuando el
+2026-07-31 se borró la vista legacy `OrdenesRevisionMaestro` (`54757be4`). Backend intacto, **suite
+verde, cinco días sin que nadie se enterara** — no había un solo test que afirmara que alguien puede
+dispararla. Arreglado y **en producción** (#297), más la mejora que pidió el humano al probarlo:
+«Asignar mensajero» solo lleva órdenes GAM (#299).
+
+**Tirando del hilo aparecieron tres cosas que nadie buscaba:**
+
+1. **Un falso éxito.** `ordenIds` sin `.min(1)` + servicios que devuelven `ok` con lista vacía =
+   «Mensajero asignado a **0** orden(es)» como éxito. Cerrado **en el schema** en los tres
+   (`rutearSatelite`, `asignarBodega`, `generarGuia`); el tercero **era el único sin ninguna guarda
+   en la UI**. Había un test afirmando que «`ordenIds` vacío es válido»: **describía el hueco como
+   si fuera requisito**.
+2. **Los dos hotfixes NUNCA volvieron a `dev`.** Lo detectó el barrido, no una alerta. `dev` seguía
+   con el modal sin montar y el comentario de orfandad: **cualquier rama nueva habría nacido con el
+   bug otra vez**. Merge-back hecho.
+3. **Cuatro huérfanas más**, una peor que la original: **`enviarPlantillaWhatsapp`** —el envío
+   server-side por Meta de la feature 107— está **completo y sin botón desde el día 1**. No hay un
+   «antes» al que volver, y **nadie lo reporta porque nadie sabe que existe**. Anotada como «DEUDA,
+   no diseño». También `listarPlantillasEnviables`, `marcarNotificacionLeida` y
+   `listarCatalogoEstatus` (segunda víctima del **mismo** commit `54757be4`).
+
+### 🛡️ La guardia que ataca la causa (#300, ya en `dev`)
+
+`tests/unit/guards/superficie-de-uso.guardia.test.ts` — 18 casos, **1,20 s**.
+
+> **Lo obvio no habría funcionado, y está medido:** marcar toda acción sin llamantes da **5 falsos
+> positivos de 20** y **NO habría cazado el incidente** — `rutearABodegaSatelite` tenía llamante (su
+> modal); **lo muerto era quien montaba el modal**.
+
+La señal es **alcanzabilidad desde las raíces de ruta**. Tres reglas, y **la tercera apareció al
+mutar**: quitar la entrada del menú deja el modal *importado y renderizado*, así que el grafo de
+módulos no se entera; lo que queda colgando es la función `abrirRutearSatelite`, sin una sola
+referencia — **y `typecheck` la deja pasar, porque este repo no tiene `noUnusedLocals`**.
+
+Verificada con **4 mutaciones**, entre ellas la **réplica literal de `54757be4`**. 24 anotaciones
+`@sin-superficie`, y la guardia **rechaza motivos de relleno** y **caduca las que sobreviven a su
+motivo**.
+
+> ⚠️ **Lo que NO cubre, y conviene no olvidarlo:** no sabe si el botón **se ve**. Un `if (rol === …)`
+> que nadie cumple, un `disabled` permanente o una ruta sin enlace en el menú **pasan verdes**.
+> Cubre la desconexión estructural, no la funcional.
+
+### ✅ La 188 (antes 184), en `dev`
+
+**33/33 tareas, review APROBADO en ronda 2.** H.3 —verificar el mapa `R1..R34` **caso a caso**—
+encontró dos huecos que ninguna lectura habría visto: **R16**, la propiedad que da nombre a la
+feature, **no tenía nada que impidiera su regreso** (bajo mutación, **129 tests de emisión seguían
+verdes**), y **R26** no afirmaba que la acción de lote sobrevive a la poda.
+
+**Renumerada de 184 a 188** por colisión con otra sesión. **«184» en un commit, un comentario o
+`PENDIENTES_184` significa esta feature** (nota de cabecera en el spec y en el cierre).
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**El flake de jsdom tumbó el gate TRES veces hoy**, siempre en archivos distintos y siempre verde al
+repetir. Sigue obligando a correr la suite dos veces para distinguirlo de una regresión.
+
+**El índice del MCP estaba a más de una semana** y contenía el test de la vista legacy **ya
+borrada** — usarlo sin reindexar habría dado un barrido con falsos positivos y negativos. Reindexar
+primero, siempre.
+
+**Y `dev` era irreproducible en local** por tres capas de entorno stale a la vez: cliente Prisma
+viejo, `node_modules` sin las dependencias de las features nuevas, y caché de `.next` apuntando a
+una página borrada hace días.
+
+### ⏳ Fichas abiertas
+
+**189** columnas de los 12 archivos sin test (deuda preexistente) · **190** Q-K6 rama B (la 188 la
+desbloqueó) · **191** el `N+1` real de R29 de la 170, hoy **excepción declarada en 11 de 12
+listados** — cerrarlo choca con los tests de R15 de la 188, y ese conflicto **es** el trabajo.
+
+**Sin ficha, y sin dueño:** `ZonasModule`/`ZonaForm` son código muerto **duplicado** (la gestión de
+zonas vive y funciona en `configuracion/tarifas`) — descartado como bug, ya anotado.
+
+### 🚦 SIGUE PENDIENTE, quinta jornada
+
+**VER LA 172 Y LA 173 EN PANTALLA.** No lo sustituye ninguna suite.
+
+---
+
 ## ✅ 2026-08-05 (noche) — TODO FUSIONADO. Lo único que falta: **la release a producción**
 
 **Cero PRs abiertos. Cero features `in_progress`.**
