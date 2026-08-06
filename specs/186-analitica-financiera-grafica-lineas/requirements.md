@@ -1,103 +1,108 @@
 # Feature 186 — analítica financiera: gráfica de líneas en el tablero · requirements (EARS)
 
-> Zona: `frontend`. Complejidad: `low`. `sdd: true`. `depends_on: 180` (**done**, ya mergeada
-> en la base de esta rama). Rama `feature/186-tablero-financiero-grafica-lineas`, cortada de
-> `dev` @ `d2898c48`.
-> Estado: **spec sin aprobar**. La puerta humana son las `Q1..Q5` del final.
-> Todo lo de la sección 1 se comprobó **en el árbol de esta rama**, localizando por símbolo y no
-> por número de línea (la 180 dejó escrito que sus líneas se habían movido).
+> Zona: `frontend`. Complejidad: `low`. `sdd: true`. `depends_on: 180` (**done**).
+> Rama `feature/186-tablero-financiero-grafica-lineas`, con `dev` mergeado dentro (incluye el
+> hotfix del 2026-08-06, PR #305).
+> **Puerta humana CERRADA el 2026-08-06.** Las decisiones están en §5; las preguntas se conservan
+> íntegras debajo porque son el rastro del porqué, no una lista pendiente.
+> Todo lo de §1 se comprobó **en el árbol de esta rama**, localizando por símbolo.
 
 ---
 
 ## 0. Contexto heredado (no se reabre)
 
-- **La 180 es `done` y su DTO ya está en esta rama.** `VistaFinanciera` tiene `granularidad`
-  requerida, `IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA` existe y el servicio publica filas por cubo
-  para las siete métricas. Esta feature **consume** ese contrato: no lo amplía, no lo corrige y no
-  toca `lib/`.
-- **La Q4 de la 180 la cerró el humano el 2026-08-05 con la opción (a):** aquella ficha era **solo
-  backend** y el panel de líneas iba en ficha nueva. Esta es esa ficha.
-- **El tablero financiero es de dos roles** (`esAccesoTotal`: `maestro` y `admin`), y eso no se
-  reabre aquí: R1–R5 de la 132 siguen vigentes palabra por palabra.
+- **La 180 es `done`.** `VistaFinanciera.granularidad` es requerida, `IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA`
+  existe y el servicio publica una serie densa para las siete métricas. Esta feature **consume**
+  ese contrato: no lo amplía y no toca `lib/`.
+- **La Q4 de la 180 la cerró el humano el 2026-08-05 con (a):** aquella ficha era solo backend y
+  el panel de líneas iba en ficha nueva. Esta es esa ficha.
+- **⟨H1⟩ El hotfix del 2026-08-06 (PR #305) ya está en producción.** Ver §1.1. Lo que esta feature
+  hereda **no** es un tablero roto: es un tablero reparado al que le falta la línea.
+- **El tablero es de dos roles** (`esAccesoTotal`: `maestro` y `admin`). R1–R5 de la 132 siguen
+  vigentes palabra por palabra y no se tocan.
 - **El tablero decide por la FORMA del DTO, nunca por el nombre de la métrica** (R27 de la 132,
   R22 de la 183). Esta feature no introduce la primera excepción.
-- **La región financiera no se rehace.** El hueco está declarado por la 132: en su
-  `design.md` **§7, alternativa 6** («Pintar una gráfica de líneas de evolución diaria del recaudo.
-  *Descartada por falta de dato, no por gusto*… Queda como Q3 y, si se quiere, como ficha aparte»)
-  y en la **Q3 de su `requirements.md`**, cerrada el 2026-08-03 «se acepta sin gráfica de líneas».
-  **Corrección de la cita de la ficha:** el §5 del design de la 132 es el *inventario de paneles*
-  y no contiene ninguna declaración de hueco; es lo que la Q3 dice que **se verá afectado** cuando
-  el dato exista. Quien vaya a §5 buscando el hueco no lo encuentra. (De paso: la Q3 remite a «la
+- **Dónde está declarado el hueco, con la cita corregida.** La ficha remite al `design.md` §5 de la
+  132; ese §5 es el *inventario de paneles* y no declara ningún hueco. El hueco está en su **§7,
+  alternativa 6** («Pintar una gráfica de líneas… *Descartada por falta de dato, no por gusto*…
+  Queda como Q3 y, si se quiere, como ficha aparte») y en la **Q3 de su `requirements.md`**,
+  cerrada el 2026-08-03. §5 es lo que la Q3 anuncia que cambiará. (De paso: esa Q3 remite a «la
   ficha 179» para el desglose por fecha; ese trabajo aterrizó como la **180**. La 179 es la caché.)
 
 ## 1. Hechos verificados en el código de ESTA rama (no supuestos)
 
 | # | Hecho | Dónde se comprobó |
 |---|---|---|
-| 1 | `VistaFinanciera.granularidad` es **requerida** y su dominio es `dia \| semana \| no_temporal` | `lib/types/analitica-financiera.ts`, símbolos `GranularidadVista` y `VistaFinanciera` |
-| 2 | `FilaFinanciera` tiene **solo** `cubo` e `importe`: el DTO **no publica el fin del cubo** | `lib/types/analitica-financiera.ts`, símbolo `FilaFinanciera` |
-| 3 | La clave de un cubo es la fecha CR del **primer día incluido**, y el **primero y el último** cubo están **truncados al rango** | `lib/analytics/cubo-temporal.ts`, `trocear` |
-| 4 | El servidor garantiza `granularidad = dia` hasta `TOPE_PUNTOS_SERIE` días y `semana` por encima; nunca más de `MAX_PUNTOS_SERIE` puntos | `granularidadDe`; R19/R20 de la 180 |
-| 5 | `deCaja`, `deTesoreria` y `deCuentaDeMensajeros` publican hoy `granularidad: granularidadDe(...)` y `filas: serieDensa(...)` | `lib/services/AnaliticaFinancieraService.ts` |
-| 6 | Las vistas de `cod_recaudado` y `cuenta_por_pagar_tienda` publican `granularidad: "no_temporal"` | ídem |
-| 7 | `esAcumulado` vive en la **cabecera de la métrica**, no en la vista, y es `true` exactamente en las dos cuentas por pagar | `CabeceraFinanciera`, `IDS_FINANCIERAS_ACUMULADAS` |
-| 8 | `cuenta_por_pagar_mensajero` es un **saldo al corte**: su repositorio agrega **sin cota inferior** y su serie es un acumulado corrido | `CuentasPorPagarAnaliticaRepository`, ⟨D5⟩ de la 180, `progress/impl_180.md` §4 |
-| 9 | `GraficaLineas` **existe** desde la 130, es `"use client"`, no importa recharts (lienzo diferido) y emite alternativa textual | `components/private/analytics/GraficaLineas.tsx`, `SerieTextual.tsx` |
-| 10 | `PuntoDato.categoria` viene **ya formateada por el llamador**; el paquete «no sabe de fechas ni de zona horaria» | `components/private/analytics/tipos.ts` |
-| 11 | `adaptar.ts` ya sabe convertir importes (`aNumero`), producir series (`serieDeVista`, con sobrecargas por forma del importe) y filas de tabla (`filasDeVista`) | `app/(app)/analitica/_components/financiero/adaptar.ts` |
-| 12 | El paquete **lanza** fuera de producción por encima de `MAX_SERIES = 5` series y `MAX_PUNTOS_SERIE = 62` puntos | `components/private/analytics/topes.ts` |
-| 13 | El filtro del tablero financiero es la constante `FILTRO_FINANCIERO_POR_DEFECTO = { rango: "mes" }`, ventana móvil de 30 días | `app/(app)/analitica/_components/financiero/rango.ts` |
-| 14 | El guardia del tablero **recorre** la carpeta `financiero/` entera: un archivo nuevo entra solo en el censo | `tests/unit/guards/tablero-financiero.guardia.test.ts`, caso «la carpeta financiero se RECORRE» |
+| 1 | `VistaFinanciera.granularidad` es **requerida**; dominio `dia \| semana \| no_temporal` | `lib/types/analitica-financiera.ts`, `GranularidadVista`, `VistaFinanciera` |
+| 2 | `FilaFinanciera` tiene **solo** `cubo` e `importe`: el DTO **no publica el fin del cubo** | ídem, `FilaFinanciera` |
+| 3 | La clave del cubo es la fecha CR del **primer día incluido**; el **primero y el último** están **truncados al rango** | `lib/analytics/cubo-temporal.ts`, `trocear` |
+| 4 | El servidor decide la granularidad y garantiza no pasar de `MAX_PUNTOS_SERIE` puntos | `granularidadDe`; R19/R20 de la 180 |
+| 5 | `esAcumulado` vive en la **cabecera de la métrica**, no en la vista, y es `true` exactamente en las dos cuentas por pagar | `CabeceraFinanciera`, `IDS_FINANCIERAS_ACUMULADAS` |
+| 6 | La 127 dejó escrito que `esAcumulado` existe **«para que la 132 no lo grafique como serie»** | `lib/repositories/CuentasPorPagarAnaliticaRepository.ts:19` |
+| 7 | `GraficaLineas` **existe** desde la 130, es `"use client"`, no importa recharts (lienzo diferido) y emite alternativa textual `"<serie>, <categoría>: <valor>"` en una `<ul aria-label>` | `components/private/analytics/GraficaLineas.tsx`, `SerieTextual.tsx` |
+| 8 | `PuntoDato.categoria` viene **ya formateada por el llamador**; el paquete «no sabe de fechas ni de zona horaria» | `components/private/analytics/tipos.ts` |
+| 9 | `SerieDato` es `{ id, etiqueta, puntos }`: **el color no viaja en las props** y no hay forma de trazo | ídem; `paleta.ts` |
+| 10 | `adaptar.ts` ya resuelve `string → number` (`aNumero`), la selección de campo por forma del importe y la construcción de serie (`serieDeVista`, con sobrecargas) | `app/(app)/analitica/_components/financiero/adaptar.ts` |
+| 11 | El paquete **lanza** fuera de producción por encima de `MAX_SERIES = 5` y `MAX_PUNTOS_SERIE = 62` | `components/private/analytics/topes.ts` |
+| 12 | El filtro del tablero financiero es la constante `FILTRO_FINANCIERO_POR_DEFECTO = { rango: "mes" }`, ventana móvil de 30 días | `app/(app)/analitica/_components/financiero/rango.ts` |
+| 13 | El guardia del tablero **recorre** la carpeta `financiero/`: un archivo nuevo entra solo en el censo | `tests/unit/guards/tablero-financiero.guardia.test.ts`, caso «la carpeta financiero se RECORRE» |
+| 14 | El arnés E2E **existe** (`@playwright/test`, script `test:e2e`, 19 specs) e incluye `e2e/analitica-roles.spec.ts`, que ya cubre la región financiera por rol | `package.json:16`, `e2e/` |
+| 15 | Los E2E **no se ejecutan**: `init.sh` corre `test:rapido`, y la revisión de la 133 lo declara —«E2E: escrito, **no ejecutado**», «hay 17 specs de `e2e/` en el mismo estado», decisión humana del 2026-07-30 | `init.sh:121`; `progress/review_133-analitica-recortes-por-rol.md:33,91,209-214` |
 
-### 1.1 Hallazgo H1 — la 180 encendió una tabla de fechas en el tablero, y ningún test se puso rojo
+### 1.1 ⟨H1⟩ Contexto heredado: el hotfix del 2026-08-06, y por qué media feature existe por él
 
-`ContenidoDeVista` (`TableroFinanciero.tsx`) elige el componente así, **en este orden**: vista por
-método → donut; vista por tienda → barras + tabla; **`vista.filas.length === 0` → KPI**; cualquier
-otra → tabla.
+**Lo que pasó.** Al aterrizar la 180, las siete métricas del desglose dejaron de publicar
+`filas: []` y pasaron a traer una serie densa (~30 filas para el rango por defecto). El tablero
+elegía panel con `vista.filas.length === 0 → KPI`, así que esas siete cayeron en la rama de tabla:
+durante **siete horas** producción pintó **una tabla de 30 fechas** donde va «Dinero en caja».
 
-Hasta la 180, las siete métricas del desglose publicaban `filas: []` y caían en la rama del KPI.
-**Hoy publican una fila por cubo**, así que caen en la **última** rama: con el rango por defecto
-(`mes`, 30 días, granularidad `dia`) el tablero pinta hoy, para cada una de las siete, **una tabla
-de ~30 filas de fechas** donde la 132 declaró una tarjeta de KPI (`design.md` §5 de la 132,
-paneles 1–4 y 8).
+**Por qué ninguna suite lo vio.** La fixture de `tests/components/TableroFinanciero.test.tsx`
+declaraba `filas: []` para esas siete, y la 180 **editó esa fixture** —para añadirle
+`granularidad`— sin ver que su premisa ya era falsa. El componente y su prueba compartían un mundo
+que el servicio había dejado de producir, y dos piezas que se equivocan igual no se contradicen
+nunca.
 
-**Por qué no hay ningún test rojo:** los dobles de `tests/components/TableroFinanciero.test.tsx`
-siguen construyendo esas vistas con `filas: []` (`vistaSinFilas`), y su propio comentario lo dice
-—«el tablero NO la lee (Q4 = (a)…)»—. El caso «el panel de KPI muestra el neto como cifra y el
-bruto etiquetado aparte» pasa verde midiendo **un DTO que el servidor ya no publica**.
+**Cómo se arregló (PR #305, desplegado READY).** La señal de forma pasó de `filas.length` a
+`granularidad`, mediante `esSerieTemporal(vista) { return vista.granularidad !== "no_temporal" }`
+—**por la negativa a propósito**, para que un valor futuro del enum no vuelva a caer en la tabla—.
+Hoy `esSerieTemporal(vista) || vista.filas.length === 0 → PanelKpi`. Los dobles de
+`TableroFinanciero.test.tsx` y `AnaliticaPage.test.tsx` llevan ya la serie densa, y el bloque
+`Hotfix — …` del primero ata la fixture al contrato («la fixture declara temporales EXACTAMENTE
+las siete que la 180 desglosó por fecha»).
 
-No es una interpretación: es la consecuencia mecánica de las dos ramas citadas. Qué se hace con
-ello es la **Q1**, y es la única pregunta bloqueante de esta spec.
+**Qué queda para esta feature.** El KPI está restaurado y no se retira: lo que falta es **añadir
+la línea encima de él**. Esta feature **no repara nada**; hereda el arreglo, se apoya en su señal
+y extiende su propiedad más frágil —la lectura por la negativa— al panel nuevo (**R5**). La deuda
+que el incidente deja sin dueño se responde en **R17** y en `design.md` §7.
 
 ## 2. Alcance
 
 DENTRO:
 
-1. El **panel de líneas** de cada vista financiera que declara granularidad temporal, dentro de la
-   sección que esa vista ya tiene.
-2. El adaptador **puro** de vista temporal a serie del paquete, incluida la etiqueta de cubo que
-   **lee `granularidad`**.
-3. La lectura de las siete métricas del desglose como **KPI + línea**, en vez de la tabla de fechas
-   de H1 (sujeto a **Q1**).
-4. El censo que falta para que la granularidad no se decida en dos sitios, y el mapa de
-   trazabilidad.
+1. El **panel de líneas** de cada vista financiera que declara granularidad temporal **y cuya
+   métrica no es un acumulado**, dentro de la sección que esa vista ya tiene.
+2. El adaptador **puro** de vista temporal a serie del paquete, con la etiqueta de cubo que **lee
+   `granularidad`**.
+3. El motivo **en pantalla** de por qué la métrica acumulada no trae gráfica.
+4. Los censos y ataduras que faltan para que esto no se desincronice como en ⟨H1⟩.
 
 FUERA, con su razón:
 
-- **Cualquier archivo de `lib/`, `db/` o `components/private/analytics/`.** El dato ya está
-  publicado (180) y las gráficas ya existen (130). Esta feature **cablea**.
+- **`lib/`, `db/` y `components/private/analytics/`.** El dato ya está publicado (180) y las
+  gráficas ya existen (130). Esta feature **cablea**.
 - **Cablear el rango del tablero financiero a la barra de filtros.** El slot `filtros` es de la
-  131 y el filtro financiero sigue siendo `FILTRO_FINANCIERO_POR_DEFECTO`. **Consecuencia que hay
-  que decir en voz alta:** con el rango fijo en `mes`, la granularidad `semana` **no es alcanzable
-  hoy en producción**; se construye y se prueba con dobles, como seguro para el día que el rango
-  sea elegible. Ver **Q4**.
-- **Marcar como parcial el cubo en curso.** El DTO no lleva ese marcador: la Q2 de la 180 se cerró
-  en (a) y el servicio financiero sigue sin reloj. Inventarlo aquí sería inventar dato.
-- **Línea para `cod_recaudado` y `cuenta_por_pagar_tienda`.** No tienen vista temporal: la Q1 de la
-  180 las dejó fuera del desglose a propósito, y sus vistas declaran `no_temporal`.
-- **Export de la serie (184), caché (179), nombres legibles de tienda (178/181).**
-- **E2E.** La Q5 de la 132 lo remitió a la 133 «cuando el tablero tenga su forma definitiva por
-  rol». No se declara aquí cobertura E2E que no existe: si el humano la quiere, es **Q5**.
+  131 y el filtro financiero sigue siendo la constante `mes`. **Consecuencia dicha en voz alta:**
+  la granularidad `semana` **no es alcanzable hoy en producción**; se construye y se prueba con
+  dobles (Q4 = (a)).
+- **Marcar como parcial el cubo en curso.** El DTO no lleva ese marcador (Q2 de la 180 = (a)).
+- **Línea para `cod_recaudado` y `cuenta_por_pagar_tienda`.** No tienen vista temporal.
+- **Línea para `cuenta_por_pagar_mensajero`.** Decisión humana del 2026-08-06 (Q2 = (b)); el
+  motivo es R3 y se dice en pantalla.
+- **Export (184), caché (179), nombres legibles de tienda (178/181).**
+- **E2E.** Q5 = no. El arnés existe pero sus specs **no se ejecutan** (hechos 14 y 15) y la 133 ya
+  escribió el de la región financiera por rol.
+- **El test de contrato general dobles ↔ servicio.** Se propone como ficha en `design.md` §7; lo
+  que sí entra aquí es R17.
 
 ---
 
@@ -105,79 +110,91 @@ FUERA, con su razón:
 
 ### 3.1 Qué lleva línea y qué no
 
-**R1.** CUANDO el tablero financiero recibe una vista cuya `granularidad` es `dia` o `semana`, el
-sistema DEBE renderizar dentro de la sección de esa vista una gráfica de líneas con una serie por
-cada campo de importe que esa vista publique.
+**R1.** CUANDO el tablero recibe una vista cuya `granularidad` no es `no_temporal` y cuyo DTO
+declara `esAcumulado: false`, el sistema DEBE renderizar dentro de la sección de esa vista una
+gráfica de líneas con una serie por cada campo de importe que la vista publique.
 
 **R2.** MIENTRAS una vista declare `granularidad: "no_temporal"`, el sistema NO DEBE renderizar
 para ella ninguna gráfica de líneas: ni con datos, ni vacía, ni con encabezado que la anuncie.
 
-**R3.** El sistema DEBE decidir si una vista lleva gráfica de líneas leyendo **exclusivamente** su
-campo `granularidad`, y NO DEBE decidirlo por el id de la métrica, por el id de la vista, por
-`grano` ni por el número de filas.
+**R3.** MIENTRAS el DTO de una métrica declare `esAcumulado: true`, el sistema NO DEBE renderizar
+gráfica de líneas para sus vistas temporales, y DEBE mostrar **en pantalla** el motivo: que la
+cifra es un saldo acumulado y que una línea de saldo solo puede subir o mantenerse, de modo que se
+leería como una tendencia sin serlo.
+
+**R4.** El sistema NO DEBE mostrar ese motivo en las vistas temporales de métricas de flujo ni en
+las vistas `no_temporal` de una métrica acumulada.
+
+**R5.** El sistema DEBE decidir que una vista es serie temporal **por la negativa** —negando
+`no_temporal`—, de modo que SI llega un valor de `GranularidadVista` que el tablero no conoce,
+ENTONCES esa vista DEBE tratarse como serie temporal y NO DEBE caer en el panel de tabla.
+
+**R6.** El sistema DEBE tomar esas decisiones leyendo exclusivamente `granularidad` y `esAcumulado`
+del DTO, y NO DEBE tomarlas por el id de la métrica, el id de la vista, el `grano` ni el número de
+filas.
 
 ### 3.2 El eje: la granularidad se lee o se miente
 
-**R4.** CUANDO se pinta una vista temporal, la etiqueta de cada punto DEBE contener literalmente la
+**R7.** CUANDO se pinta una vista temporal, la etiqueta de cada punto DEBE contener literalmente la
 clave del cubo tal como el DTO la entrega y DEBE declarar la granularidad de esa vista, de modo que
 la etiqueta de **la misma clave** sea distinta cuando la granularidad es `semana` que cuando es
 `dia`.
 
-**R5.** La etiqueta de un punto DEBE nombrar **exactamente una** fecha —la clave del cubo— y el
-sistema NO DEBE calcular el último día del cubo, ni ninguna otra frontera temporal, ni construir
-fechas propias.
+**R8.** La etiqueta de un punto DEBE nombrar **exactamente una** fecha —la clave del cubo— y el
+sistema NO DEBE calcular el fin del cubo, ninguna otra frontera temporal ni ninguna fecha propia.
 
-### 3.3 Un saldo al corte no es un flujo
+**R9.** SI la granularidad de una vista temporal no es una de las que el rotulador sabe nombrar,
+ENTONCES su etiqueta DEBE conservar la clave y DEBE ser distinguible de la etiqueta diaria; el
+sistema NO DEBE rotularla como si fuera un día.
 
-**R6.** MIENTRAS el DTO de la métrica declare `esAcumulado: true`, su gráfica de líneas DEBE
-mostrar en texto visible que cada punto es el **saldo acumulado al cierre de su cubo** y no el
-movimiento ocurrido dentro de él.
+### 3.3 Fidelidad de la serie
 
-**R7.** MIENTRAS el DTO de la métrica declare `esAcumulado: false`, el sistema NO DEBE mostrar ese
-texto en su gráfica de líneas.
-
-**R8.** El sistema NO DEBE entregar a una misma gráfica series procedentes de más de una vista:
-cada gráfica de líneas DEBE contener exclusivamente los puntos de la vista de su sección.
-
-### 3.4 Fidelidad de la serie
-
-**R9.** El sistema DEBE entregar a la gráfica **un punto por cada fila** de la vista y en el mismo
+**R10.** El sistema DEBE entregar a la gráfica **un punto por cada fila** de la vista y en el mismo
 orden en que el DTO las entrega, sin añadir, quitar, reordenar ni fusionar puntos, y sin agrupar
 ninguna cola en una categoría única.
 
-**R10.** El valor de cada punto DEBE proceder literalmente del campo de importe de esa fila; SI la
+**R11.** El valor de cada punto DEBE proceder literalmente del campo de importe de esa fila; SI la
 conversión de ese importe no produce un número finito, ENTONCES el punto DEBE quedar como **dato
 ausente** y NO DEBE pintarse como cero.
 
-**R11.** El sistema NO DEBE pasar a la gráfica de líneas ninguna prop cuyo valor sea una función,
+**R12.** El sistema NO DEBE pasar a la gráfica de líneas ninguna prop cuyo valor sea una función,
 en particular `avisoRecorte`.
 
-**R12.** SI una vista temporal llega con cero filas, ENTONCES el sistema DEBE renderizar el estado
+**R13.** SI una vista temporal llega con cero filas, ENTONCES el sistema DEBE renderizar el estado
 vacío de la gráfica con su texto explicativo, y NO DEBE renderizar un lienzo sin texto ni una serie
 de ceros.
 
-### 3.5 La lectura que la 180 dejó rota
+### 3.4 Lo que el hotfix restauró no se retira
 
-**R13.** CUANDO una vista declara granularidad temporal, el sistema DEBE seguir mostrando el
-`total` de esa vista como tarjeta de KPI y NO DEBE renderizar una tabla con una fila por cubo
-temporal. *(Sujeto a **Q1**: si el humano decide que la reparación de H1 es otra ficha, este
-requisito sale y R1 se implementa igual.)*
+**R14.** CUANDO una vista temporal lleva gráfica de líneas, el sistema DEBE seguir mostrando el
+`total` de esa vista como tarjeta de KPI en la misma sección, y NO DEBE renderizar una tabla con
+una fila por cubo temporal.
 
-### 3.6 Convenciones que esta feature no puede romper
+### 3.5 Convenciones que esta feature no puede romper
 
-**R14.** El sistema NO DEBE escribir en la región financiera un símbolo de moneda, un código ISO de
+**R15.** El sistema NO DEBE escribir en la región financiera un símbolo de moneda, un código ISO de
 moneda ni un literal de locale, **tampoco para dar formato a una fecha**.
 
-**R15.** Los valores del dominio `GranularidadVista` DEBEN escribirse en **un único módulo** de la
+**R16.** Los valores del dominio `GranularidadVista` DEBEN escribirse en **un único módulo** de la
 región financiera; ningún otro archivo de la región DEBE escribirlos ni compararlos.
+
+### 3.6 Que los dobles no vuelvan a declarar un mundo que no existe
+
+**R17.** El juego de dobles con el que se verifica el tablero DEBE satisfacer los invariantes que
+el contrato financiero publica como constante exportada o como regla de tipo, y al menos:
+
+- **(a)** el conjunto de métricas con vista temporal DEBE ser exactamente
+  `IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA` *(ya atado por el hotfix; se conserva, no se reescribe)*;
+- **(b)** el conjunto de métricas con `esAcumulado: true` DEBE ser exactamente
+  `IDS_FINANCIERAS_ACUMULADAS`;
+- **(c)** DEBE existir al menos una vista por cada valor de `GranularidadVista`, **incluida
+  `semana`**;
+- **(d)** dentro de una misma vista, el `total` y todas sus filas DEBEN publicar la misma `forma`
+  de importe (R18 de la 183).
 
 ### 3.7 Verificación y trazabilidad
 
-**R16.** El juego de dobles con el que se verifica el tablero DEBE cubrir los **tres** valores de
-`GranularidadVista` con al menos una vista cada uno, y NO DEBE declarar `filas: []` en ninguna
-vista de granularidad temporal.
-
-**R17.** Cada requisito `R1..R17` DEBE tener al menos un test nombrado por el comportamiento que
+**R18.** Cada requisito `R1..R18` DEBE tener al menos un test nombrado por el comportamiento que
 verifica, y el mapa `R<n> → test` DEBE quedar escrito en `progress/impl_186.md` citando archivos
 que existan en el árbol.
 
@@ -186,95 +203,84 @@ que existan en el árbol.
 ## 4. Verificación: qué test cubre cada requisito y qué mutación lo mata
 
 > Los nombres de caso son **el contrato para el implementer**, no una afirmación de que hoy
-> existan. La columna «archivo» distingue lo que ya está en el árbol de lo que hay que crear.
-> El mapa definitivo, con los nombres tal como queden escritos, va en `progress/impl_186.md` (R17).
+> existan; la columna «archivo» distingue lo que ya está en el árbol de lo que hay que crear, y la
+> nota «(ya existe)» señala el único caso que **no** hay que volver a escribir. El mapa definitivo,
+> con los nombres tal como queden, va en `progress/impl_186.md` (R18).
 
 | Req | Archivo | Nombre esperado del caso | Mutación que lo mata |
 |---|---|---|---|
-| R1 | `tests/components/TableroFinanciero.test.tsx` *(existe)* | `una vista con granularidad dia trae su grafica de lineas dentro de su seccion` | no renderizar la gráfica |
+| R1 | `tests/components/TableroFinanciero.test.tsx` *(existe)* | `una vista temporal de metrica de flujo trae su grafica de lineas dentro de su seccion` | no renderizar la gráfica |
 | R2 | ídem | `las vistas no_temporal no traen ninguna grafica de lineas, ni vacia` | renderizarla siempre |
-| R3 | ídem | `una vista de grano tienda con granularidad dia SI lleva linea, y una de grano fecha con no_temporal NO` | decidir por `grano === "fecha"`, por `filas.length` o por id de métrica |
-| R3 | `tests/unit/guards/tablero-financiero.guardia.test.ts` *(existe, se amplía)* | `ningun archivo decide por el id de una metrica financiera` *(caso ya existente, censo (f))* | comparar contra un id suelto |
-| R4 | `tests/unit/analytics/tablero-financiero-adaptar.test.ts` *(existe)* | `la etiqueta del MISMO cubo cambia entre dia y semana` | ignorar `granularidad` al etiquetar |
-| R4 | `tests/components/TableroFinanciero.test.tsx` | `la alternativa textual de una vista semanal no lee sus puntos como dias` | ídem, medido de punta a punta |
-| R5 | `tests/unit/analytics/tablero-financiero-adaptar.test.ts` | `la etiqueta nombra UNA sola fecha: la clave del cubo, y ninguna calculada` | etiquetar con un rango `clave – clave+6` |
-| R6 | `tests/components/TableroFinanciero.test.tsx` | `la metrica acumulada dice que cada punto es saldo al cierre de su cubo` | no mostrar el texto |
-| R7 | ídem | `las metricas de flujo NO dicen eso en su grafica` | mostrarlo siempre |
-| R8 | ídem | `cada grafica de lineas contiene solo los puntos de su propia vista` | fusionar las series de dos vistas en una gráfica |
-| R9 | `tests/unit/analytics/tablero-financiero-adaptar.test.ts` | `un punto por fila, en el orden del DTO, sin cola agrupada` | aplicar `agruparCola`; ordenar; perder el último |
-| R9 | ídem | `una serie de 62 puntos llega entera y no lanza` | recortar puntos en el tablero |
-| R10 | ídem | `un importe ilegible es dato ausente y nunca cero` | `?? 0` en la conversión |
-| R11 | `tests/unit/guards/tablero-financiero.guardia.test.ts` | `ningun archivo pasa avisoRecorte ni ninguna otra prop-funcion` *(existe, censo (b))* | pasar `avisoRecorte` a la gráfica |
-| R12 | `tests/components/TableroFinanciero.test.tsx` | `una vista temporal sin filas muestra el vacio con su texto, no un lienzo mudo` | pintar la gráfica con una serie de ceros |
-| R13 | ídem | `una vista temporal muestra el KPI del total y NINGUNA tabla por cubo` | dejar la caída actual a `PanelTabla` (H1) |
-| R14 | `tests/unit/guards/tablero-financiero.guardia.test.ts` | `ningun archivo escribe un simbolo de moneda, un codigo ISO ni un locale` *(existe, censo (c))* | formatear la fecha con `toLocaleDateString("es-CR")` |
-| R15 | `tests/unit/guards/tablero-financiero.guardia.test.ts` *(censo nuevo)* | `solo un modulo de la region nombra los valores de granularidad` | comparar `granularidad === "dia"` en un segundo archivo |
-| R16 | `tests/components/TableroFinanciero.test.tsx` | `los dobles cubren las TRES granularidades y ninguna temporal viene con filas vacias` | quitar la vista semanal del juego de dobles |
-| R17 | `tests/unit/guards/tablero-lineas-trazabilidad.guardia.test.ts` *(nuevo)* | `el mapa R1..R17 esta completo, sin saltos ni repetidos, y cita tests que existen` | citar un archivo que no existe |
+| R3 | ídem | `la cuenta por pagar de mensajero NO trae grafica y dice en pantalla por que` | pintarle la línea; o quitarle el motivo |
+| R4 | ídem | `el motivo no aparece en las seis de flujo ni en la cuenta por pagar de tienda` | mostrar el motivo en toda métrica acumulada o en todas |
+| R5 | ídem | `una granularidad que el tablero no conoce se trata como serie, no como tabla` | escribir la señal en positivo (`=== "dia" \|\| === "semana"`) |
+| R6 | ídem | `una vista de grano tienda con granularidad dia SI lleva linea, y una de grano fecha con no_temporal NO` | decidir por `grano`, por `filas.length` o por id de métrica |
+| R6 | `tests/unit/guards/tablero-financiero.guardia.test.ts` *(existe)* | `ningun archivo decide por el id de una metrica financiera` *(censo (f), ya existe)* | comparar contra un id suelto |
+| R7 | `tests/unit/analytics/tablero-financiero-adaptar.test.ts` *(existe)* | `la etiqueta del MISMO cubo cambia entre dia y semana` | ignorar `granularidad` al etiquetar |
+| R7 | `tests/components/TableroFinanciero.test.tsx` | `la alternativa textual de una vista semanal no lee sus puntos como dias` | ídem, medido de punta a punta |
+| R8 | `tests/unit/analytics/tablero-financiero-adaptar.test.ts` | `la etiqueta nombra UNA sola fecha: la clave del cubo, y ninguna calculada` | etiquetar con un rango `clave – clave+6` |
+| R9 | ídem | `una granularidad desconocida no se rotula como si fuera un dia` | devolver la clave cruda en el caso por defecto |
+| R10 | ídem | `un punto por fila, en el orden del DTO, sin cola agrupada` | aplicar `agruparCola`; ordenar; perder el último |
+| R10 | ídem | `una serie de 62 puntos llega entera y no lanza` | recortar puntos en el tablero |
+| R11 | ídem | `un importe ilegible es dato ausente y nunca cero` | `?? 0` en la conversión |
+| R12 | `tests/unit/guards/tablero-financiero.guardia.test.ts` | `ningun archivo pasa avisoRecorte ni ninguna otra prop-funcion` *(censo (b), ya existe)* | pasar `avisoRecorte` a la gráfica |
+| R13 | `tests/components/TableroFinanciero.test.tsx` | `una vista temporal sin filas muestra el vacio con su texto, no un lienzo mudo` | pintar la gráfica con una serie de ceros |
+| R14 | ídem | `la vista temporal conserva su KPI junto a la linea y sigue sin tabla` | sustituir el KPI por la gráfica |
+| R15 | `tests/unit/guards/tablero-financiero.guardia.test.ts` | `ningun archivo escribe un simbolo de moneda, un codigo ISO ni un locale` *(censo (c), ya existe)* | formatear la fecha con `toLocaleDateString("es-CR")` |
+| R16 | ídem *(censo nuevo (g))* | `solo un modulo de la region nombra los valores de granularidad` | comparar `granularidad === "dia"` en un segundo archivo |
+| R17 (a) | `tests/components/TableroFinanciero.test.tsx` | `la fixture declara temporales EXACTAMENTE las siete que la 180 desgloso por fecha` — **ya existe, no se reescribe** | sacar una métrica de la fixture |
+| R17 (b) | ídem | `la fixture declara acumuladas EXACTAMENTE las dos que el contrato acumula` | poner `esAcumulado` a mano y que deje de coincidir |
+| R17 (c) | ídem | `los dobles cubren las TRES granularidades, semana incluida` | quitar la vista semanal |
+| R17 (d) | ídem | `ninguna vista de la fixture mezcla formas de importe entre su total y sus filas` | mezclar `solo_bruto` con `bruto_y_neto` en una vista |
+| R18 | `tests/unit/guards/tablero-lineas-trazabilidad.guardia.test.ts` *(nuevo)* | `el mapa R1..R18 esta completo, sin saltos ni repetidos, y cita tests que existen` | citar un archivo que no existe |
 
 Además, y sin sustituir a nada de lo anterior:
 
 - `./init.sh --rapido` por tanda; **`./init.sh` completo antes del PR**, sin excepción.
-- `pnpm exec next build` **a mano**, con la salida pegada en `progress/impl_186.md`: es el mismo
-  agujero que la 132 declaró en su R11 (la frontera RSC no la ve ningún test) y esta feature monta
-  un componente cliente nuevo (`GraficaLineas`) desde un Server Component. **Nunca `pnpm build`**,
-  que encadena `migrate deploy` contra una base real.
+- `pnpm exec next build` **a mano**, con la salida pegada en `progress/impl_186.md`: es el agujero
+  que la 132 declaró en su R11 (la frontera RSC no la ve ningún test) y esta feature monta un
+  Client Component nuevo (`GraficaLineas`) desde un Server Component. **Nunca `pnpm build`**.
+- **Los seis casos del bloque `Hotfix — …` deben seguir verdes sin tocarlos.** Es la comprobación
+  de que mover `esSerieTemporal` a `adaptar.ts` (⟨D1⟩) no cambia una sola conducta.
 
 ---
 
-## 5. Preguntas abiertas (puerta humana)
+## 5. Puerta humana — **CERRADA el 2026-08-06**
 
-> **Q1 es bloqueante. Q2–Q5 tienen default y se aplicarán tal cual si el humano no dice otra cosa**,
-> igual que hizo la 132 con sus seis preguntas. Ninguna se rellena con un supuesto: lo que no está
-> decidido está escrito aquí.
+| Pregunta | Decisión | Efecto |
+|---|---|---|
+| **Q1** ¿repara esta feature la tabla de fechas? | **DISUELTA**: salió a **hotfix** (PR #305) y está en producción desde el 2026-08-06 | §1.1 pasa a ser **contexto heredado**. R14 pide KPI **+** línea sobre el estado actual, no una transición desde la tabla |
+| **Q2** ¿lleva línea `cuenta_por_pagar_mensajero`? | **(b) NO.** Se queda como KPI | R3/R4. Motivo: la 127 dejó escrito que `esAcumulado` existe «para que la 132 no lo grafique como serie» (hecho 6), y un saldo acumulado dibujado como línea **siempre sube o se mantiene**: parece una tendencia sin serlo. **El motivo se dice EN PANTALLA**, con test |
+| **Q3** ¿cómo se rotula un cubo semanal? | **(a)** prefijo textual + clave literal | R7/R8 |
+| **Q4** ¿se construye la rama `semana` sabiendo que hoy no es alcanzable? | **(a)** sí, probada con dobles y con el límite declarado | R7, R17(c) |
+| **Q5** ¿E2E? | **No** | El arnés **existe** pero sus specs **no se ejecutan** (hechos 14 y 15) y la 133 ya escribió `e2e/analitica-roles.spec.ts` para la región financiera por rol. Añadir uno más sería declarar cobertura que nadie corre |
 
-**Q1 — BLOQUEANTE. ¿Esta feature repara H1 (la tabla de fechas que la 180 encendió), o eso es otra
-ficha?** Los hechos están en §1.1 y son mecánicos: hoy las siete métricas caen en la rama de tabla
-de `ContenidoDeVista` y ningún test lo ve porque los dobles siguen diciendo `filas: []`.
-Opciones: **(a)** se repara aquí — la vista temporal pasa a KPI + línea (R13), que es exactamente
-el inventario que la 132 declaró más la línea que faltaba; **(b)** se abre ficha aparte para la
-regresión y esta feature solo **añade** la línea, con lo que durante un tiempo el tablero mostraría
-para la misma métrica una tabla de 30 fechas **y** una gráfica de las mismas 30 fechas;
-**(c)** se repara aquí y además se conserva la tabla por cubo como detalle plegado bajo la gráfica.
-*Recomendación:* **(a)**. Es «se añade, no se rehace» leído en su sentido fuerte: devuelve el panel
-al inventario que la 132 escribió y le suma la línea. (b) deja en pantalla dos veces el mismo dato
-durante el hueco entre fichas, y (c) es la tabla que R14 de la 132 no necesita: el total ya viaja
-en el DTO y la línea ya cuenta la evolución. **Afecta a R13 y al tamaño de la feature.**
+> **Matiz sobre Q5, dicho porque la diferencia importa:** no es cierto que este repo «no tenga
+> arnés E2E» —hay `@playwright/test`, script `test:e2e` y 19 specs—. Lo cierto, y peor, es que
+> **están escritos y no se ejecutan**: `init.sh` corre `test:rapido`, y la revisión de la 133 lo
+> declara con nombre y apellidos. La conclusión no cambia; la razón sí, y escribir la razón falsa
+> habría dejado la spec afirmando algo que el árbol desmiente.
 
-**Q2 — no bloqueante. ¿`cuenta_por_pagar_mensajero` lleva línea?** Es la única de las siete que
-**no es un flujo**: es un saldo al corte (hecho 8 de §1), y su serie es un acumulado corrido.
-Opciones: **(a)** lleva su propia gráfica, en su propia sección —como todas—, con el texto de R6
-diciendo que cada punto es un saldo al cierre de su cubo; **(b)** no lleva línea y se queda como
-KPI; **(c)** iría en la misma gráfica que las seis de flujo, con otra forma de trazo.
-*Recomendación:* **(a)**. La (c) **no es construible sin tocar la 130**: `SerieDato` no lleva forma
-ni color (el color lo pone `paleta.ts` por orden), así que «otra forma» no existe en el contrato; y
-además seis métricas de flujo más una acumulada son **siete series**, por encima de `MAX_SERIES = 5`,
-lo que hace **lanzar** al paquete fuera de producción. La (b) dejaría seis métricas con línea y una
-séptima idéntica en todo lo demás sin ella, que es el problema que la 180 evitó al no dejar fuera
-`dinero_en_caja` y `ganancia_ordenex`. **Afecta a R6/R7.**
+### Las preguntas, tal como se plantearon
 
-**Q3 — no bloqueante. ¿Cómo se rotula un cubo semanal?** El DTO **no publica el fin del cubo** y
-el primero y el último están **truncados al rango** (hechos 2 y 3), así que un rótulo de rango
-(`2026-08-10 – 2026-08-16`) sería **falso justo en los dos extremos**, y calcularlo metería una
-segunda definición del día CR en el frontend —lo que ⟨D4⟩ de la 180 existe para impedir—.
-Opciones: **(a)** prefijo textual más la clave literal (del tipo «Semana del 2026-08-10»), que es
-cierto también en los cubos truncados; **(b)** declarar la granularidad solo en el título de la
-gráfica y dejar los puntos con la fecha cruda.
-*Recomendación:* **(a)**. La (b) deja el **eje** —que es lo que el usuario lee punto a punto, y lo
-que `SerieTextual` dicta a un lector de pantalla— diciendo «10 ago» para siete días de dinero: es
-literalmente el error que la ficha nombra, con un título correcto encima. **Afecta a R4/R5.**
+**Q1 — ¿Esta feature repara H1 o es otra ficha?** Opciones: (a) repararlo aquí; (b) ficha aparte;
+(c) repararlo y conservar la tabla como detalle plegado. *Recomendación escrita:* (a).
+**Resuelta por los hechos:** el tablero llevaba siete horas pintando tablas de treinta fechas y no
+esperó a esta feature.
 
-**Q4 — no bloqueante. ¿Se acepta construir y probar la rama `semana` sabiendo que hoy no es
-alcanzable en producción?** El filtro del tablero es la constante `mes` (hecho 13), es decir 30
-días, es decir granularidad `dia` **siempre**. Opciones: **(a)** se construye y se prueba con
-dobles, como seguro para cuando el rango sea elegible; **(b)** no se construye, y el tablero avisa
-en texto si algún día recibe `semana`.
-*Recomendación:* **(a)**. Cuesta una rama y una constante de texto, y es exactamente la deuda que
-la ficha manda no contraer. La (b) escribe código de aviso que tampoco se puede ejercitar hoy y
-deja la mentira del eje esperando a otra feature. **Afecta a R4 y a R16.**
+**Q2 — ¿`cuenta_por_pagar_mensajero` lleva línea?** Opciones: (a) su propia gráfica con el texto de
+«saldo al cierre de cada cubo»; (b) sin línea, KPI; (c) en la misma gráfica que las seis de flujo
+con otra forma de trazo. *Recomendación escrita:* (a). **Decisión humana: (b)**, con dos motivos
+que la recomendación no pesó bien —la 127 lo dejó dicho junto al repositorio, y una línea de saldo
+acumulado es monótona por construcción, así que su forma comunica «tendencia» donde solo hay
+«acumulación»—. La (c) seguía siendo imposible: `SerieDato` no lleva forma ni color, y siete series
+superan `MAX_SERIES = 5`.
 
-**Q5 — no bloqueante. ¿Se exige E2E?** La Q5 de la 132 lo remitió a la 133 y la 133 ya está
-`done` sin haberlo escrito. Esta feature es lectura, no muta dinero, y su gate de rol no cambia.
-*Recomendación:* no. Se cubre con tests de componente sobre nombres accesibles y texto (nunca sobre
-nodos de recharts, que el guardia del paquete prohíbe) más el `next build` a mano de §4. Si el
-humano lo quiere, es una ficha aparte con su propio arranque de harness.
+**Q3 — ¿Cómo se rotula un cubo semanal?** Opciones: (a) prefijo textual + clave literal;
+(b) declararlo solo en el título. *Recomendación:* (a) — el DTO no publica el fin del cubo y el
+primero y el último están truncados, así que un rótulo de rango sería falso justo en los extremos.
+
+**Q4 — ¿Se construye la rama `semana`?** Opciones: (a) sí, con dobles; (b) no, y avisar si llega.
+*Recomendación:* (a) — cuesta una rama y una constante de texto.
+
+**Q5 — ¿E2E?** *Recomendación:* no. Ver el matiz de arriba.
