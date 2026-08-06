@@ -26,6 +26,8 @@ export interface ZonasColumnsActions {
  * Mapea directamente el `ZonaDTO` que exponen las Server Actions (feature 54;
  * los pagos al mensajero viven ahora en `tarifa_zona_mensajero`, fuera de esta
  * tabla) sin proyectar campos internos.
+ *
+ * @sin-superficie son las columnas de la tabla de `ZonasModule`, y a `ZonasModule` no lo monta ninguna ruta (ver el motivo completo alli). Muere con el, no por su cuenta.
  */
 export function buildZonasColumns({
   onEditar,

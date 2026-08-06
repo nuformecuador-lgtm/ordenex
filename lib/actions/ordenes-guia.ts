@@ -249,6 +249,8 @@ export async function rutearABodegaSatelite(
  * estatusId por value" de design.md §4). `maestro` y `admin` pueden leer
  * (mismo criterio de solo-lectura que `listarMensajerosParaAsignacion`); el
  * resto -> forbidden.
+ *
+ * @sin-superficie SEGUNDA VICTIMA del commit 54757be4 (2026-07-31), el mismo que dejo a `rutearABodegaSatelite` sin boton: la vista legacy `OrdenesRevisionMaestro` era su unico consumidor. El dano real es bajo porque existe la sustituta viva `listarOrderStatus` (`lib/actions/order-status.ts`), con autorizacion mas amplia; se conserva solo mientras se decide si borrarla. Deuda, no diseno.
  */
 export async function listarCatalogoEstatus(
   deps: ListarCatalogoEstatusDeps = {},

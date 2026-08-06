@@ -199,6 +199,9 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const ordenIds = distinct(input.ordenIds);
+    // Inalcanzable DESDE LA ACTION: `generarGuiaSchema.ordenIds` ya exige `.min(1)`, asi que
+    // un lote vacio muere en el borde con `validation_error` (2026-08-05). Se conserva como
+    // defensa en profundidad para quien llame al service directamente (otros services, tests).
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };
 
     const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
@@ -275,6 +278,8 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const ordenIds = distinct(input.ordenIds);
+    // Inalcanzable DESDE LA ACTION: `asignarBodegaSchema.ordenIds` ya exige `.min(1)`
+    // (2026-08-05). Se conserva como defensa en profundidad para llamadas directas al service.
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };
 
     // --- Guardia R4 ---
@@ -553,6 +558,8 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const ordenIds = distinct(input.ordenIds);
+    // Inalcanzable DESDE LA ACTION: `rutearSateliteSchema.ordenIds` ya exige `.min(1)`
+    // (2026-08-05). Se conserva como defensa en profundidad para llamadas directas al service.
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };
 
     // --- Guardia R4 ---

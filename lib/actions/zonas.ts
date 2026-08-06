@@ -152,7 +152,11 @@ export async function borrarZona(
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }
 
-/** Arbol zona -> canton -> distrito indexado por nombre normalizado (solo maestro). */
+/**
+ * Arbol zona -> canton -> distrito indexado por nombre normalizado (solo maestro).
+ *
+ * @sin-superficie muerte de SEGUNDO ORDEN, misma forma que el bug de `rutearABodegaSatelite`: su unico importador es `configuracion/_components/ZonaForm.tsx`, al que no monta ninguna pantalla. El resto de este modulo (`crearZona`, `obtenerZona`, `borrarZona`) SI vive, por `ZonasTarifasModule`; es solo este arbol el que se quedo colgando. Pregunta de producto ABIERTA.
+ */
 export async function arbolZonas(deps: ZonaActionDeps = {}): Promise<ArbolZonasResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();

@@ -158,6 +158,8 @@ export async function listarMisMovimientosCompletoAction(
  *
  * Lo que impide que «conservar» sea «olvidar»: `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`
  * (R32) afirma que ninguna pantalla vuelve a llamarla. Vive como testigo, no como camino.
+ *
+ * @sin-superficie decision de la feature 184 (T H.2), no deuda: testigo de anti-vacuidad de R1, no camino de usuario. La superficie viva es `listarSaldosTiendasCompletoAction`.
  */
 export async function listarSaldosTiendasAction(
   deps: WalletTiendaDeps = {},

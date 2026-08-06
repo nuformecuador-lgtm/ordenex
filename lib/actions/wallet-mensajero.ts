@@ -132,7 +132,12 @@ export async function listarMisPagosCompletoAction(
   return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
 }
 
-/** R18/R19/R27: cuentas por pagar de TODOS los mensajeros (solo maestro). Forbidden/unauthenticated sin exponer datos. */
+/**
+ * R18/R19/R27: cuentas por pagar de TODOS los mensajeros (solo maestro). Forbidden/unauthenticated
+ * sin exponer datos.
+ *
+ * @sin-superficie sustituida por `listarCuentasPorPagarPaginadoAction` en a0ae14e7/adce25ce (2026-08-01), que es la que llama `wallet/mensajeros/page.tsx`. Se conserva como lectura sin recorte para los tests de paridad del listado paginado; no es deuda.
+ */
 export async function listarCuentasPorPagarAction(
   deps: WalletMensajeroDeps = {},
 ): Promise<ListarCuentasPorPagarActionResult> {
