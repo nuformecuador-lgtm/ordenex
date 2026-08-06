@@ -343,7 +343,7 @@ URL (`CierreDiaService.ts:317` no llama a `createSignedUrls`; el compuesto sí, 
   **argumentos** de la consulta, cuántas consultas se emiten y qué **no** lleva el `where`.
 - **Trazabilidad (R34).** El mapa `R<n>` → archivo + nombre del caso está en
   `requirements.md > Anexo B` y el implementador lo repite, ya con la salida real, en
-  `progress/impl_184-<tanda>.md`. **Contar `R<n>` en títulos de test no es evidencia**: los
+  `progress/impl_188-<tanda>.md`. **Contar `R<n>` en títulos de test no es evidencia**: los
   espacios de nombres se cruzan entre features y aquí ya produjo un falso «68/68».
 - **Gates.** `./init.sh --rapido` al cerrar cada tanda; `./init.sh` completo antes de cada PR.
   Ningún subagente corre la suite entera (`AGENTS.md > Regla del gate`).

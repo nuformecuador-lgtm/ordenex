@@ -443,14 +443,14 @@ verificarlo, y el encargo de esta tanda no incluía re-leer 34 requisitos en ~40
 | R | Cerrado en | Bitácora con el caso nombrado |
 | --- | --- | --- |
 | R1, R2, R3, R7, R8 | tandas A–G (mitad de servidor + mitad de pantalla) | las 14 bitácoras, sección «Mapa» |
-| R4, R6, R17 | servicio y borde de cada tanda | `impl_184_tanda{A..G}_backend.md` |
+| R4, R6, R17 | servicio y borde de cada tanda | `impl_188_tanda{A..G}_backend.md` |
 | R5, R14, R15, R16 | los tres `*-where.test.ts` + `wallet-tienda-movimiento-repository` | ídem |
-| R9 | tanda C (+ extendido en F) | `impl_184_tandaC_backend.md §7`, `impl_184_tandaF_backend.md §6` |
-| R10 | tanda B | `impl_184_tandaB_backend.md §5` |
-| R11 | tanda A | `impl_184_tandaA_backend.md §5` |
+| R9 | tanda C (+ extendido en F) | `impl_188_tandaC_backend.md §7`, `impl_188_tandaF_backend.md §6` |
+| R10 | tanda B | `impl_188_tandaB_backend.md §5` |
+| R11 | tanda A | `impl_188_tandaA_backend.md §5` |
 | R12, R13 | sin cambios / censo | `ControlDescargaTransversal`, `paginacion-transversal` |
-| R18–R28 | tanda A (poda de la satélite) | `impl_184_tandaA_frontend.md §6` |
-| R29, R30 | los dos censos | `impl_184_tandaG_frontend.md §9` |
+| R18–R28 | tanda A (poda de la satélite) | `impl_188_tandaA_frontend.md §6` |
+| R29, R30 | los dos censos | `impl_188_tandaG_frontend.md §9` |
 | **R31, R32** | **tanda H** | **§7.1 de este archivo** |
 | R33 | ninguna tanda tocó `useSWR` | las 14 bitácoras |
 | R34 | las 15 bitácoras | pendiente de consolidar en **H.3** |

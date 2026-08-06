@@ -1,5 +1,31 @@
 # 184 — Deuda dirigida de la 170: los doce listados y la poda de la selección satélite
 
+> ## ⚠️ ESTA FEATURE SE RENUMERÓ: era la **184**, ahora es la **188**
+>
+> **Qué pasó (2026-08-05):** mientras esta rama estaba viva, otra sesión mergeó en `dev` una ficha
+> **184 distinta** («analítica financiera: export de la serie»), además de una 185, una 186 y una
+> 187. Al traer `dev`, los cuatro ids colisionaron. Por decisión humana se renumeró **todo lo de
+> esta rama**: `184→188`, y las tres fichas que salieron de su cierre `185/186/187 → 189/190/191`.
+>
+> **Lo que NO se renumeró, y hay que saberlo al leer el repo:**
+>
+> - **Los 60 mensajes de commit** siguen diciendo «184». No se reescribieron a propósito:
+>   `rebase`/`amend` sobre una rama ya pusheada está prohibido aquí desde que reescribió el commit
+>   de otro agente.
+> - **El código**: 111 archivos citan `Feature 184 — …` en comentarios, y la constante
+>   **`PENDIENTES_184`** está usada **como ancla de texto** dentro de
+>   `tests/unit/descarga/adaptador-conjunto.guardia.test.ts:313`. Renombrarla a medias pone la
+>   guardia roja; renombrarla entera es una refactorización de 111 archivos sin ganancia funcional.
+>   **Los nombres del código se quedan como están y significan esta feature.**
+> - **La rama**: se llamó `feature/184-deuda-170-listados` hasta el 05-ago, y así quedó escrita en la
+>   cabecera de las 17 bitácoras `impl_188_*`. Hoy es `feature/188-deuda-170-listados` (PR #298, ya
+>   mergeado). No busques la vieja: no existe.
+>
+> Es decir: **«184» en un commit, un comentario, una cabecera de bitácora o `PENDIENTES_184` = esta
+> feature, la 188.**
+
+
+
 > Zona: `fullstack` · Complejidad: `large` · Sale de: `progress/chore_deuda_170.md` (inventario
 > medido, 2026-08-03) y de la verificación del 2026-08-04 sobre
 > `app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx`.
@@ -247,7 +273,7 @@ implementador debe escribir (puede reformularlo, pero el caso debe existir y afi
 | R31 | `tests/unit/descarga/adaptador-conjunto.guardia.test.ts` (nuevo) | «los dos censos de adaptador no tienen casos deshabilitados ni pendientes» |
 | R32 | `tests/unit/descarga/adaptador-conjunto.guardia.test.ts` (nuevo) | «no queda ninguna llamada al adaptador de relectura bajo `app/`» |
 | R33 | `tests/components/paginacion/paginacion-transversal.test.tsx` | el caso ya existente de `fallbackData` y de «una sola revalidación de entrada», sin cambios |
-| R34 | `progress/impl_184-*.md` + revisión | el mapa completo, verificado por el reviewer archivo a archivo |
+| R34 | `progress/impl_188-*.md` + revisión | el mapa completo, verificado por el reviewer archivo a archivo |
 
 **Por qué no vale contar `R<n>` en títulos:** los espacios de nombres de requisitos se cruzan
 entre features (`R29` es el tope de la 170 y también un requisito de esta), y ese recuento ya
