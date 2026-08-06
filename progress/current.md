@@ -9,9 +9,41 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🏁 CIERRE DE JORNADA 2026-08-05 — **EMPIEZA A LEER POR AQUÍ**
+## 🔵 2026-08-06 — **EN CURSO: la 189** · y la auditoría del backlog que la precedió
 
-### 🚦 LO ÚNICO ABIERTO: **el PR de release #301** (`dev → prod`, 126 commits)
+**189 `in_progress`** (`frontend`, `small`, `sdd: false`), rama `feature/189-columnas-descarga-listados`
+desde `dev` @ `84dc7b40`. Fija la lista **y el orden** de columnas de los 12 listados del Anexo A.
+
+### 🔎 La auditoría del backlog, y lo que encontró
+
+**El registro no está inflado de fichas: está inflado de bloqueos que ya no existen.** Verificado
+contra el código, no contra las notas:
+
+| Lo que decía el registro | Lo que dice el código |
+| --- | --- |
+| 145 → 169 · 147 → 154 · 162 → 161 · 85 → 84 · 182 → 176 · 186/184 → 180 y 183 | **los ocho `done`** |
+
+**Siete fichas arrastran un `depends_on` ya satisfecho** y sus notas siguen leyéndose como un
+bloqueo. Nada del backlog espera a nada.
+
+**Dos correcciones a lo que la propia auditoría creyó primero:**
+
+1. **Sospeché de la 189 y la sospecha era falsa.** Existen 8 tests `*-descarga-columnas.test.ts`,
+   pero cubren **otras** tablas. Medido: **35** constantes `COLUMNAS_DESCARGA_*` declaradas en el
+   árbol, y **13 archivos de test** con la aserción `map(c => c.clave).toEqual(…)` — **ninguno
+   sobre las 12** de esta ficha. La ficha es exacta y `impl_188-cierre.md:167` ya lo decía.
+   *(«13» son archivos, no constantes: varios cubren dos, y tres de esos archivos ni siquiera son
+   de descarga. El censo constante-a-constante lo produce esta feature.)*
+2. **La 85 es peor que su ficha.** El DTO ya trae `periodicidadUnidad` y `periodicidadCantidad`
+   (feature 84) y **no los muestra ni la pantalla ni el Excel** — `gastos-fijos-descarga-columnas.ts:10-11`
+   los excluye a propósito. **Misma familia que el botón huérfano**: capacidad entregada, cero
+   superficie. Y la guardia nueva **no lo caza**: vigila acciones, no campos.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-05
+
+### 🚦 LO ÚNICO ABIERTO: **el PR de release #301** (`dev → prod`, 126 commits) — ✅ **MERGEADO el 06-ago 04:09, deploy READY**
 
 **CERO migraciones** — mergear no aplica nada. Gate `== init OK ==` (977 archivos / 12.251 tests)
 corrido sobre `dev` con todo dentro. Sin conflictos.
