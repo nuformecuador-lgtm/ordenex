@@ -2258,11 +2258,11 @@
       "name": "descargas: fijar las columnas y su orden en los 12 listados del Anexo A",
       "spec_path": null,
       "description": "Frontend. Ningun test fija la lista ni el orden de columnas de los archivos de los 12 listados descargables: reordenar o quitar una columna no pone rojo nada.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "small",
       "zone": "frontend",
-      "branch": null,
+      "branch": "feature/189-columnas-descarga-listados",
       "depends_on": null,
       "status_note": "Deuda PREEXISTENTE heredada de la 184, NO introducida por ella: su diff no toca ninguna de las 34 constantes COLUMNAS_DESCARGA_*, verificado sobre el diff. Cierra la clausula 'columnas y orden' de su R12, hoy cumplida por medicion del diff pero sin test que la atornille. || Molde exacto: tests/unit/descarga/api-keys-descarga-columnas.test.ts:24-31 (map(c => c.clave)).toEqual([...]) y lo mismo con encabezado). || Las 12 constantes estan listadas en progress/impl_184-cierre.md seccion 2.1. OJO al homonimo: plantillas-descarga-columnas.test.ts cubre las plantillas de MENSAJE, no las de gasto fijo."
     },
