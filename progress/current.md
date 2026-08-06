@@ -9,6 +9,55 @@
 > `git show <rev>:progress/current.md`.
 
 
+## ✅ 2026-08-05 (noche) — TODO FUSIONADO. Lo único que falta: **la release a producción**
+
+**Cero PRs abiertos. Cero features `in_progress`.**
+
+| PR | Qué | Estado |
+| --- | --- | --- |
+| **#297 → `prod`** | hotfix: vuelve «Rutear a bodega satélite» | ✅ **en producción**, deploy READY, 0 errores |
+| **#299 → `prod`** | «Asignar mensajero» solo lleva GAM + el falso éxito del lote vacío | ✅ **en producción**, 0 errores |
+| **#298 → `dev`** | la **188** (antes 184): los 12 listados | ✅ mergeado — **pero NO está en producción** |
+
+### 🚦 LO PRIMERO AL RETOMAR: **release `dev → prod`**
+
+**`dev` está 119 commits por delante de `prod`** y arrastra la **188**, la **180** (serie temporal de la
+analítica financiera), la **166** (ventana de día del ranking), la **133** (recortes por rol), la **134**
+(export CSV) y el chore del lote de deudas (#291).
+
+> ✅ **La release es BARATA: CERO migraciones.** Verificado sobre el diff `origin/prod...origin/dev`:
+> ni un archivo bajo `prisma/migrations/`. Mergear a `prod` **no aplica nada** — no hace falta el
+> pre-vuelo caro de las releases con `CHECK` y enums.
+
+Aun así, el pre-vuelo que **sí** aplica: correr `./init.sh` completo sobre `dev` **antes** de abrir el
+PR de release. Es la lección del #237 y de «un PR verde no dice nada de los tests».
+
+### 🐛 Lo que enseñó el bug de producción de hoy
+
+**«Rutear a bodega satélite» llevaba cinco días sin superficie de UI.** Se retiró de `/ordenes` por
+decisión previa y la ofrecía la vista legacy `OrdenesRevisionMaestro`; al borrarse ésta el 2026-07-31
+(`54757be4`), la acción quedó **huérfana con el backend intacto**, y la suite **no se puso roja** —no
+había un solo test que afirmara que alguien puede dispararla—.
+
+> ⚠️ **PATRÓN SIN DUEÑO:** borrar una vista puede dejar acciones huérfanas, y **nada lo detecta**.
+> **Nadie ha barrido el resto de la app buscando el mismo caso.**
+
+Y al arreglarlo apareció un **falso éxito** preexistente: `asignarBodegaSchema.ordenIds` no lleva
+`.min(1)` y el servicio devuelve `ok` con lista vacía → «Mensajero asignado a 0 orden(es)». Cerrado en
+la UI (#299). **`rutearSateliteSchema` tiene el mismo hueco**, hoy inalcanzable porque su modal lo
+tapa por otra vía.
+
+### ⏳ Lo que queda vivo
+
+- **Release `dev → prod`** (arriba).
+- **Fichas 189 / 190 / 191**, las tres de la 188: columnas sin test · Q-K6 rama B (desbloqueada) · el
+  `N+1` real de R29 de la 170.
+- **VER LA 172 Y LA 173 EN PANTALLA.** Cuarta jornada pendiente.
+- El **flake de jsdom** sigue vivo: hoy tumbó una corrida entera del gate en
+  `recuperar-contrasena-form`, verde aislado y verde al repetir.
+
+---
+
 ## 🏁 CIERRE DE JORNADA 2026-08-05 — **EMPIEZA A LEER POR AQUÍ**
 
 ### 🔴 LO PRIMERO: dos PRs abiertos esperando tu decisión

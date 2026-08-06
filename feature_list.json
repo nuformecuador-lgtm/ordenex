@@ -2243,7 +2243,7 @@
       "name": "deuda 170: cerrar los 12 listados con descarga completa + poda de seleccion satelite",
       "spec_path": "specs/188-deuda-170-listados-completos",
       "description": "Fullstack. Los 12 listados cuya descarga a Excel todavia relee el conjunto completo pasan a servirse desde el servidor, y la seleccion de bodega satelite se poda contra el conjunto filtrado vigente.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "large",
       "zone": "fullstack",
@@ -2251,7 +2251,7 @@
       "depends_on": [
         170
       ],
-      "status_note": "RENUMERADA de 184 a 188 el 2026-08-05: otra sesion mergeo en dev una ficha 184 distinta (analitica financiera: export de la serie) mientras esta rama estaba viva. OJO AL HISTORIAL: los 60 commits, el nombre de las 16 bitacoras y los mensajes de commit siguen diciendo 184 -- NO se reescribieron a proposito (rebase/amend sobre rama pusheada esta prohibido en este repo). || LISTA PARA PR (2026-08-05). Los 12 listados cerrados; H.3 hecha: mapa R1-R34 verificado caso a caso en progress/impl_184-cierre.md (no por recuento de titulos). REVIEW APROBADO EN RONDA 2. Gate completo VERDE: 950 archivos / 11.847 tests. Cero migraciones. || H.3 destapo dos huecos, ya cerrados: R16 no tenia guardia de 'declaracion unica' -bajo mutacion, 129 tests de emision seguian verdes- y R26 no afirmaba la accion de lote tras la poda. || Los 2 bloqueantes del review, cerrados por decision humana: B1 = R29 de la 170 ('no materializar mas de N+1') queda derogado en 11 de los 12 listados; se DECLARA la excepcion en los once docstrings, no se implementa, porque el count del total exacto rompe los tests de R15 de esta feature -> ficha 187. B2 = Q-K6 rama B se saca del alcance declarado (nunca bajo al spec) -> ficha 186, que esta feature deja desbloqueada. R12 columnas -> ficha 185 (deuda preexistente: el diff no toca ninguna COLUMNAS_DESCARGA_*). || AVISO PARA EL PR: tres filas del Anexo B de requirements.md apuntan a casos que no existen donde dicen (R2, R8, R12); la cobertura existe en otro archivo y el mapa de H.3 se escribio contra el arbol. || Detalle en progress/impl_184-cierre.md, review_184.md e history.md."
+      "status_note": "DONE 2026-08-05. PR #298 -> dev (mergeado). 33/33 tareas, review APROBADO en ronda 2, gate completo VERDE con dev dentro: 975 archivos / 12.222 tests. Cero migraciones. || RENUMERADA de 184 a 188: otra sesion mergeo en dev una ficha 184 distinta mientras esta rama estaba viva. Los 60 commits, los comentarios de 111 archivos y la constante PENDIENTES_184 SIGUEN diciendo 184 a proposito (reescribir rama pusheada esta prohibido; esa constante es ancla de texto de una guardia). Nota de cabecera en el spec y en impl_188-cierre.md. || H.3 destapo dos huecos, cerrados aqui: R16 no tenia guardia de 'declaracion unica' (bajo mutacion, 129 tests de emision seguian verdes) y R26 no afirmaba la accion de lote tras la poda. || Deja tres fichas: 189 (columnas sin test), 190 (Q-K6 rama B, desbloqueada), 191 (el N+1 real de R29 de la 170, hoy excepcion declarada en 11 de 12 listados). || NO esta en produccion: pendiente release dev -> prod."
     },
     {
       "id": 189,
