@@ -291,8 +291,13 @@ export function OrdenesListado({
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("generar-guia");
   }
+  // "Asignar mensajero" desde bodega solo aplica a órdenes GAM (`zonaEsGam === true`):
+  // `asignarDesdeBodega` exige origen `en_bodega_central` + zona GAM (R27/R12) y un
+  // mensajero de la zona CENTRAL, así que una orden satélite ahí sale `conflict`. Se
+  // filtra el snapshot seleccionado antes de abrir, igual que hacen `abrirRutearSatelite`
+  // (regla inversa) y `abrirRecuperar`; el service revalida (defensa en profundidad).
   function abrirAsignarBodega(seleccionadas: OrdenListItemDTO[]) {
-    setOrdenesSeleccionadas(seleccionadas);
+    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
     setModalAbierto("asignar-bodega");
   }
   // Feature 157: quien va a la tienda a recoger el lote.
