@@ -151,6 +151,8 @@ function toFieldErrors(error: ZodError): FieldErrors {
  * pero `listarDistritos` (GeoRepository) lee la asignación del N:M `ZonaDistrito`. Una
  * zona SEMBRADA (no creada por el CRUD) tendría sus distritos NO pre-marcados en edición,
  * porque no existen filas `ZonaDistrito` para ella. Sólo se documenta el efecto.
+ *
+ * @sin-superficie muerte de SEGUNDO ORDEN: su unico montador es `ZonasModule`, al que ninguna ruta monta (ver el motivo completo alli). Arrastra consigo a `listarProvincias`/`listarCantones`/`listarDistritos` de `lib/actions/geo.ts` y a `arbolZonas`, que son suyas y de nadie mas.
  */
 export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
   function ZonaForm({ mode, zona, centralActual }, ref) {

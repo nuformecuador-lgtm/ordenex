@@ -44,7 +44,11 @@ export async function listarVehiculos(
   return service.listar(actor);
 }
 
-/** R9/R10/R11: obtener una fila del catalogo por id (solo maestro). */
+/**
+ * R9/R10/R11: obtener una fila del catalogo por id (solo maestro).
+ *
+ * @sin-superficie no existe pantalla de vehiculos: de la feature 50 solo se consume `listarVehiculos`, desde `configuracion/tarifas/page.tsx`. Sin consumidor desde fc64e88d (2026-07-10). Deuda inocua (lectura de un catalogo de solo lectura), pendiente de decidir si se borra.
+ */
 export async function obtenerVehiculo(
   id: unknown,
   deps: VehiculoActionDeps = {},

@@ -1,6 +1,7 @@
 import type { RolValue } from "@prisma/client";
 import { notFound } from "next/navigation";
 
+import { recorteDePresentacion } from "@/lib/analytics/presentacion";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { ROLES_ACCESO_ANALITICA } from "@/lib/auth/menu-visibility";
@@ -18,9 +19,21 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
  * (`lib/auth/menu-visibility.ts`) sólo decide qué se MUESTRA, la defensa real
  * es este `notFound()`.
  *
- * SOLO `maestro`/`admin` (D1, `ROLES_ACCESO_ANALITICA`). La feature 133 amplía a
- * `mensajero`, `adminTienda` y `adminSatelite` tocando ESTA misma constante
- * (para no romper R10).
+ * Entran los cinco roles lectores de analítica (D1 de la 133,
+ * `ROLES_ACCESO_ANALITICA`, que ahora se DERIVA del conjunto del dominio). El
+ * ítem de menú consume esa misma constante, así que las dos capas no pueden
+ * divergir (R10 de la 129).
+ *
+ * ─── FEATURE 133: EL RECORTE DE PRESENTACIÓN ─────────────────────────────────
+ *
+ * `recorteDePresentacion(actor)` decide, EN EL SERVIDOR, qué CONTROL se dibuja:
+ * las facetas de filtro que la barra ofrece y el tipo de alcance que rotula el
+ * tablero. Devuelve enums y arrays de strings — ni filas, ni ids, ni nombres —,
+ * de modo que lo que cruza la frontera RSC son props planas y serializables.
+ *
+ * NO es el recorte de DATOS. Ese lo aplica el borde de la 122 antes de tocar la
+ * base, y sigue aplicándose igual aunque estas props dijeran otra cosa: un panel
+ * que no se pinta no es un dato que no se filtra.
  *
  * ─── LAS DOS REGIONES SE CABLEAN DE FORMAS DISTINTAS, Y ES DELIBERADO ────────
  *
@@ -57,28 +70,41 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
  */
 export default async function AnaliticaPage() {
   const actor = await resolveActorFromSession();
-  // `ROLES_ACCESO_ANALITICA` es una tupla literal (`readonly ["maestro","admin"]`)
-  // y su `.includes` sólo acepta esos dos literales, no cualquier `RolValue`. Se
-  // ensancha el tipo del ARRAY (no el de `actor.rol`) en este único punto de uso.
+  // `ROLES_ACCESO_ANALITICA` es una tupla de literales de rol —la del dominio de
+  // analítica, del que ahora deriva (D1 de la 133)— y su `.includes` sólo acepta
+  // esos literales, no cualquier `RolValue`. Se ensancha el tipo del ARRAY (no el
+  // de `actor.rol`) en este único punto de uso.
+  //
+  // Ojo con lo que este conjunto NO decide: quién ve el DINERO lo sigue decidiendo
+  // `esAccesoTotal` unas líneas más abajo, que es otro concepto y otra fuente.
+  // Entrar a la página y ver la región financiera son dos permisos distintos.
   const rolesConAcceso: readonly RolValue[] = ROLES_ACCESO_ANALITICA;
   if (!actor || !rolesConAcceso.includes(actor.rol)) {
     notFound();
   }
+
+  // Feature 133 (D5/D6) — qué se le PINTA a este actor. Props planas: un array de
+  // strings y un enum. Se calcula después del gate: para quien no entra, no hay
+  // nada que recortar.
+  const recorte = recorteDePresentacion(actor);
 
   // El pre-fetch del dinero va DESPUÉS del gate a propósito: un rol denegado no
   // debe llegar a consultarlo ni una sola vez (R9). Y va dentro de la guarda de
   // `esAccesoTotal` por el mismo motivo: un rol sin acceso total tampoco lo pide.
   if (!esAccesoTotal(actor.rol)) {
     return (
-      <AnaliticaShell filtros={<FiltrosOperativos />} operativo={<PanelesOperativos />} />
+      <AnaliticaShell
+        filtros={<FiltrosOperativos facetas={recorte.facetas} />}
+        operativo={<PanelesOperativos alcance={recorte.alcance} />}
+      />
     );
   }
 
   const paneles = await cargarTableroFinanciero();
   return (
     <AnaliticaShell
-      filtros={<FiltrosOperativos />}
-      operativo={<PanelesOperativos />}
+      filtros={<FiltrosOperativos facetas={recorte.facetas} />}
+      operativo={<PanelesOperativos alcance={recorte.alcance} />}
       financiero={<TableroFinanciero paneles={paneles} />}
     />
   );

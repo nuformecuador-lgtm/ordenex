@@ -5,6 +5,7 @@ import type { IPremioRankingRepository } from "@/lib/interfaces/repositories/IPr
 import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ConteoPorMensajero, PremioRankingDTO } from "@/lib/types/ranking";
+import { resolverRango } from "@/lib/analytics/ranges";
 
 // Feature 76 (design §5) — logica del ranking DIARIO con repos fake (sin DB). `now` inyectable.
 // Cubre R2 (pct), R3 (asignadas=0 -> indefinido, fuera de podio), R4/R5 (orden/desempate),
@@ -240,18 +241,89 @@ describe("RankingService.obtenerRanking — LC1 (devolucion intradia)", () => {
   });
 });
 
-describe("RankingService.obtenerRanking — rango del dia por helper CR (R22)", () => {
-  it("pasa desde=startOfDayCR(now) y hasta=+24h a ambos conteos", async () => {
+// Feature 166 — ventana del DIA NATURAL de Costa Rica. Sustituye al bloque de la 76 que
+// codificaba la ventana vieja (`startOfDayCR(now)` + 24 h = `[00:00Z, 24:00Z)` = 18:00-18:00
+// hora CR). Ahora ambos bordes caen en `...T06:00:00.000Z` (convencion de la feature 144,
+// la misma que usa la analitica). Costa Rica es UTC-6 FIJO, sin horario de verano: por eso
+// cada instante se escribe en UTC explicito con su hora CR equivalente al lado.
+describe("RankingService.obtenerRanking — ventana del dia natural CR (166)", () => {
+  /** Captura la pareja (desde, hasta) que el service pasa a los conteos para `now`. */
+  async function ventanaPara(now: Date) {
     const { service, contarAsignadasPorMensajero, contarEntregadasPorMensajero } = buildDeps({
       mensajeros: [],
     });
-    await service.obtenerRanking(MAESTRO, new Date("2026-07-16T12:00:00.000Z"));
-    // startOfDayCR devuelve la medianoche UTC de la fecha CALENDARIO de CR (feature 46):
-    // 12:00Z (06:00 CR del 16) -> 2026-07-16T00:00:00Z; hasta = +24h.
-    const desde = new Date("2026-07-16T00:00:00.000Z");
-    const hasta = new Date("2026-07-17T00:00:00.000Z");
-    expect(contarAsignadasPorMensajero).toHaveBeenCalledWith(desde, hasta);
-    expect(contarEntregadasPorMensajero).toHaveBeenCalledWith(desde, hasta);
+    await service.obtenerRanking(MAESTRO, now);
+    const entregadas = contarEntregadasPorMensajero.mock.calls[0] as unknown as [Date, Date];
+    const asignadas = contarAsignadasPorMensajero.mock.calls[0] as unknown as [Date, Date];
+    return { desde: entregadas[0], hasta: entregadas[1], entregadas, asignadas };
+  }
+
+  it("la ventana de hoy es el dia natural CR: ambos bordes en `T06:00:00.000Z`", async () => {
+    // 2026-07-16T12:00:00Z = 06:00 CR del 16 -> dia CR = 2026-07-16.
+    const { desde, hasta } = await ventanaPara(new Date("2026-07-16T12:00:00.000Z"));
+    expect(desde.toISOString()).toBe("2026-07-16T06:00:00.000Z"); // 00:00 CR del 16
+    expect(hasta.toISOString()).toBe("2026-07-17T06:00:00.000Z"); // 00:00 CR del 17
+  });
+
+  it("pasa la MISMA pareja (desde, hasta) a entregadas y a asignadas", async () => {
+    const { entregadas, asignadas } = await ventanaPara(new Date("2026-07-16T12:00:00.000Z"));
+    expect(asignadas[0].getTime()).toBe(entregadas[0].getTime());
+    expect(asignadas[1].getTime()).toBe(entregadas[1].getTime());
+    expect(entregadas[0].getTime()).toBeLessThan(entregadas[1].getTime()); // [desde, hasta)
+  });
+
+  it("la entrega de las 19:00 CR cuenta HOY, no manana", async () => {
+    // 19:00 CR del 16 == 2026-07-17T01:00:00.000Z (UTC-6 fijo). Con la ventana vieja
+    // (`hasta` = 2026-07-17T00:00:00Z) este instante caia FUERA del dia 16.
+    const entregaDeLas19CR = new Date("2026-07-17T01:00:00.000Z");
+    const { desde, hasta } = await ventanaPara(entregaDeLas19CR);
+    expect(desde.toISOString()).toBe("2026-07-16T06:00:00.000Z");
+    expect(entregaDeLas19CR.getTime()).toBeGreaterThanOrEqual(desde.getTime());
+    expect(entregaDeLas19CR.getTime()).toBeLessThan(hasta.getTime());
+  });
+
+  it("la entrega de las 19:00 CR de AYER queda fuera del ranking de hoy", async () => {
+    // 19:00 CR del 15 == 2026-07-16T01:00:00.000Z. La ventana vieja del dia 16
+    // (`[2026-07-16T00:00Z, 2026-07-17T00:00Z)`) la ARRASTRABA; la nueva no.
+    const entregaDeAyer = new Date("2026-07-16T01:00:00.000Z");
+    const { desde, hasta } = await ventanaPara(new Date("2026-07-16T12:00:00.000Z"));
+    expect(entregaDeAyer.getTime()).toBeLessThan(desde.getTime());
+    expect(entregaDeAyer.getTime()).toBeLessThan(hasta.getTime());
+  });
+
+  it("23:59:59.999 CR dentro; 00:00:00.000 CR del dia siguiente fuera (cota exclusiva)", async () => {
+    const { desde, hasta } = await ventanaPara(new Date("2026-07-16T12:00:00.000Z"));
+    const ultimoInstanteDelDia = new Date("2026-07-17T05:59:59.999Z"); // 23:59:59.999 CR del 16
+    const primerInstanteDelSiguiente = new Date("2026-07-17T06:00:00.000Z"); // 00:00 CR del 17
+    expect(ultimoInstanteDelDia.getTime()).toBeGreaterThanOrEqual(desde.getTime());
+    expect(ultimoInstanteDelDia.getTime()).toBeLessThan(hasta.getTime());
+    expect(primerInstanteDelSiguiente.getTime()).toBe(hasta.getTime()); // borde superior EXCLUSIVO
+    expect(primerInstanteDelSiguiente.getTime()).not.toBeLessThan(hasta.getTime());
+  });
+
+  it("dos llamadas con el mismo `now` producen la misma ventana", async () => {
+    const now = new Date("2026-07-16T23:30:00.000Z"); // 17:30 CR del 16
+    const a = await ventanaPara(now);
+    const b = await ventanaPara(now);
+    expect(a.desde.getTime()).toBe(b.desde.getTime());
+    expect(a.hasta.getTime()).toBe(b.hasta.getTime());
+  });
+
+  it('la ventana coincide al milisegundo con `resolverRango({preset:"dia"}, now)`', async () => {
+    // R13: analitica y ranking dejan de reportar cifras distintas para "hoy". Se importa
+    // `resolverRango` en el TEST, no en el service (design §7, Alt. 2 descartada).
+    const now = new Date("2026-07-16T12:00:00.000Z");
+    const { desde, hasta } = await ventanaPara(now);
+    const rango = resolverRango({ preset: "dia" }, now);
+    expect(desde.getTime()).toBe(rango.desde.getTime());
+    expect(hasta.getTime()).toBe(rango.hasta.getTime());
+  });
+
+  it("la cota superior son las 24:00 CR, no `now`", async () => {
+    const now = new Date("2026-07-16T18:00:00.000Z"); // 12:00 CR del 16, dia en curso
+    const { hasta } = await ventanaPara(now);
+    expect(hasta.getTime()).toBeGreaterThan(now.getTime()); // cubre el dia COMPLETO (R14)
+    expect(hasta.toISOString()).toBe("2026-07-17T06:00:00.000Z"); // 24:00 CR del 16
   });
 });
 

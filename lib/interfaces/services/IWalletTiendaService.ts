@@ -71,6 +71,17 @@ export type ListarSaldosTiendasPaginadoServiceResult =
   ListarPaginadoServiceResult<SaldoTiendaResumenDTO>;
 
 /**
+ * Feature 184 — Tanda G (R1/R5/R6) — el MISMO conjunto de saldos por tienda sin recorte, para
+ * el archivo.
+ *
+ * Sale del MISMO metodo del que sale la pagina, y no de `listarSaldosTodasTiendas`: ahi es
+ * donde vive el orden, y sin el la fila 26 del archivo no seria la primera de la pagina 2 (R5).
+ * Ni `forbidden` ni `limite_excedido` viajan con filas.
+ */
+export type ListarSaldosTiendasCompletoServiceResult =
+  ListarCompletoServiceResult<SaldoTiendaResumenDTO>;
+
+/**
  * Feature 171 — desglose de UNA tienda ELEGIDA (superficie del acceso total).
  *
  * Contrapartida exacta de `listarMisMovimientos`, con el alcance invertido: alli la tienda ve
@@ -121,6 +132,13 @@ export interface IWalletTiendaService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarSaldosTiendasPaginadoServiceResult>;
+  /**
+   * Feature 184 — Tanda G (R1/R4/R5/R6): el MISMO listado sin recorte por pagina, para el
+   * archivo. Mismo guard (`esAccesoTotal`) evaluado ANTES de tocar el repositorio, la MISMA
+   * lectura ordenada de la que sale la pagina y el tope del servidor. Sin parametro de entrada:
+   * este listado no admite filtros.
+   */
+  listarSaldosTiendasCompleto(actor: Actor): Promise<ListarSaldosTiendasCompletoServiceResult>;
   /**
    * Feature 171 (R22/R24/R26/R27/R28) — desglose de UNA tienda elegida: pagina de movimientos
    * + total del conjunto filtrado + los cuatro importes de la cabecera, en una sola respuesta.

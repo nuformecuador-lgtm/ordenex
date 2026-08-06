@@ -3,6 +3,7 @@ import type { CierreEstado } from "@/lib/types/cierre";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { EvidenciaArchivo } from "@/lib/interfaces/services/IMisAsignacionesService";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 
 // Feature 158 (T1.28/T1.29, camino del ADMIN) — contrato del servicio del incidente reportado
 // por un admin. Espejo de forma de `ICierresAdminService` (38): dos colas, alcance por rol+zona
@@ -73,6 +74,21 @@ export type ListarHistoricoIncidentesServiceResult =
 export type ListarPendientesIncidentesServiceResult =
   ListarPaginadoServiceResult<IncidenteAdminDTO>;
 
+/**
+ * Feature 184 — Tanda F (T F.2, R1/R6): el HISTORICO ENTERO del alcance, sin recorte, que es del
+ * que sale el archivo (listado 9). `limite_excedido` lleva SOLO conteos, jamas filas ni un
+ * conjunto truncado (R6).
+ */
+export type ListarHistoricoIncidentesCompletoServiceResult =
+  ListarCompletoServiceResult<IncidenteAdminDTO>;
+
+/**
+ * Feature 184 — Tanda F (T F.2, R1/R6): la COLA ENTERA de pendientes de decision, sin recorte,
+ * para el archivo del listado 8. Mismo contrato que su hermano del historico.
+ */
+export type ListarPendientesIncidentesCompletoServiceResult =
+  ListarCompletoServiceResult<IncidenteAdminDTO>;
+
 export type VerIncidenteServiceResult =
   | { status: "ok"; incidente: IncidenteAdminDTO }
   | { status: "forbidden" }
@@ -130,6 +146,31 @@ export interface IIncidenteAdminService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarPendientesIncidentesServiceResult>;
+  /**
+   * Feature 184 — Tanda F (T F.2, R1/R4/R6): el HISTORICO ENTERO del alcance, sin recorte, del
+   * que sale el archivo del listado 9.
+   *
+   * MISMO `resolveAlcance` por rol+zona que su pagina, evaluado ANTES de tocar el repositorio, y
+   * MISMO corte cola/historico, escrito en la BASE. No recibe `input`: este listado no tiene
+   * filtros ni acepta su alcance por la peticion (R4). `adminSatelite` sin zona -> conjunto
+   * vacio, sin tocar la base.
+   *
+   * **NO firma ninguna URL de evidencia**, a diferencia de su pagina: el archivo no lleva
+   * evidencias (R22 de la 170, un `xlsx` reenviado con URL firmadas dentro es acceso a las fotos
+   * sin sesion) y su modulo de columnas ni siquiera las lee, asi que firmarlas seria producir un
+   * riesgo que nadie consume.
+   */
+  listarHistoricoIncidentesCompleto(
+    actor: Actor,
+  ): Promise<ListarHistoricoIncidentesCompletoServiceResult>;
+  /**
+   * Feature 184 — Tanda F (T F.2, R1/R4/R6): la COLA ENTERA de pendientes de decision, sin
+   * recorte, para el archivo del listado 8. Espejo exacto del de arriba, incluida la ausencia de
+   * firmas.
+   */
+  listarPendientesIncidentesCompleto(
+    actor: Actor,
+  ): Promise<ListarPendientesIncidentesCompletoServiceResult>;
   /** R46/R48: detalle con las evidencias FIRMADAS; fuera de alcance -> `no_encontrada`. */
   verIncidente(incidenteId: string, actor: Actor): Promise<VerIncidenteServiceResult>;
   /** R41-R48: reporta el incidente y transiciona la orden, en una unica transaccion. */

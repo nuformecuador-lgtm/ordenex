@@ -17,9 +17,17 @@ import {
   aprobarCierreBodegaSchema,
   rechazarCierreBodegaSchema,
   listarCierresBodegaPaginadoSchema,
+  listarCierresBodegaSolicitadosCompletoSchema,
   listarConsolidablesSchema,
+  listarConsolidablesCompletoSchema,
+  listarPendientesCierresBodegaCompletoSchema,
+  listarHistoricoCierresBodegaCompletoSchema,
   type ListarConsolidacionResult,
   type ListarConsolidablesResult,
+  type ListarCierresBodegaSolicitadosCompletoResult,
+  type ListarConsolidablesCompletoResult,
+  type ListarPendientesCierresBodegaCompletoResult,
+  type ListarHistoricoCierresBodegaCompletoResult,
   type SolicitarCierreBodegaResult,
   type ListarCierresBodegaAdminResult,
   type ListarCierresBodegaSolicitadosResult,
@@ -107,7 +115,39 @@ export async function solicitarCierreBodega(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
-/** R2/R15: cola + historico de cierres de bodega; solo maestro (via service). */
+/**
+ * R2/R15: cola + historico de cierres de bodega; solo maestro (via service).
+ *
+ * **Feature 184 (T H.2) — CERO consumidores de produccion, y se CONSERVA a proposito.** La T M.1
+ * de la 170 la saco del render de `cierres-admin/page.tsx` y la tanda E se llevo sus dos ultimas
+ * llamadas (las descargas de los listados 4 y 5, que ahora salen de
+ * `listarPendientesCierresBodegaCompleto` y `listarHistoricoCierresBodegaCompleto`).
+ *
+ * Por que NO se borra, con el precio delante: es el TESTIGO de anti-vacuidad de tres casos que
+ * miden lo que la tanda E entrego, y no hay sustituto que no sea sintetico.
+ *
+ *  1. `tests/unit/services/cierres-bodega-admin-completo.test.ts` (R1) la ejecuta y cuenta que lee
+ *     **7 filas** para producir cualquiera de los dos archivos, frente a las 5 y 2 de las lecturas
+ *     dedicadas. Sin ese lado, los `toEqual(["findHistoricoCompleto"])` los pasaria igual un
+ *     servicio que no leyera nada. Es el unico caso que mata la mutacion M8 de esa tanda, que
+ *     dejaba 43 de 44 en verde.
+ *  2. `tests/unit/repositories/historicos-paginados-where.test.ts` (R1/R14) ejecuta
+ *     `findCierresBodega` y afirma que su consulta **no lleva `where` en absoluto**: es la
+ *     evidencia de que los dos metodos nuevos tenian que existir. Para preguntarselo hay que
+ *     conservarla.
+ *  3. `tests/components/descarga/CierresDescarga.test.tsx` (R1, mitad de cliente) la usa como
+ *     doble VIVO: invoca el doble al final y comprueba que devuelve las dos mitades, para que
+ *     `not.toHaveBeenCalled()` signifique «la pantalla decidio no llamarla» y no «el mock estaba
+ *     muerto».
+ *
+ * Ademas la sostienen los casos de la 170 que afirman que el listado paginado y el sin paginar
+ * coinciden (`cierres-bodega-admin-historico-paginado`, `cierres-bodega-pendientes-paginado`).
+ *
+ * Lo que impide que «conservar» sea «olvidar»: `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`
+ * (R32) afirma que NINGUNA pantalla vuelve a cablearse a ella. Vive como testigo, no como camino.
+ *
+ * @sin-superficie decision de las features 170 (T M.1) y 184 (T E.3), no deuda: testigo de tres casos de R1. La superficie viva son `listarPendientesCierresBodegaCompleto` y `listarHistoricoCierresBodegaCompleto`.
+ */
 export async function listarCierresBodegaAdmin(
   deps: CierreBodegaDeps = {},
 ): Promise<ListarCierresBodegaAdminResult> {
@@ -193,6 +233,105 @@ export async function listarConsolidablesPaginado(
     const data = listarConsolidablesSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierreBodegaService ?? buildCierreBodegaService();
     return service.listarConsolidablesPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda B (R1/R6/R7/R10) — el CONJUNTO de «Cierres de bodega solicitados» de la
+ * zona del actor, sin recorte, para producir el archivo.
+ *
+ * Sustituye a la relectura de `listarConsolidacion()` que hacia la pantalla, que traia ademas
+ * los consolidables, el contador de pendientes y los cinco agregados de dinero con su reparto de
+ * efectivo — de todo eso, el archivo usaba un solo campo.
+ *
+ * La zona NO viaja en el input: la resuelve el servicio desde el actor. Y como este listado no
+ * tiene filtros, la lista blanca derivada de la de su pagina no deja NINGUNA clave: cualquier
+ * cosa que llegue —empezando por `zonaId`— muere aqui con `validation_error` sin tocar el
+ * servicio (R17). El input se parsea aunque no se transporte nada: parsear ES la barrera.
+ */
+export async function listarCierresBodegaSolicitadosCompleto(
+  input: unknown = {},
+  deps: CierreBodegaDeps = {},
+): Promise<ListarCierresBodegaSolicitadosCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarCierresBodegaSolicitadosCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierreBodegaService ?? buildCierreBodegaService();
+    return service.listarCierresBodegaSolicitadosCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda B (R1/R6/R7/R10) — el CONJUNTO de «Cierres del dia a consolidar» de la
+ * zona del actor, sin recorte, para producir el archivo.
+ *
+ * Espejo del de arriba, y con el mismo motivo: descargar esta tabla no tiene por que costar los
+ * cinco agregados de dinero de su cabecera ni el reparto del efectivo entre todos los pagos de
+ * la zona. Esos numeros los sigue produciendo `listarConsolidacion` para la PANTALLA, sobre el
+ * mismo conjunto y sin cambiar (R49 de la 170).
+ */
+export async function listarConsolidablesCompleto(
+  input: unknown = {},
+  deps: CierreBodegaDeps = {},
+): Promise<ListarConsolidablesCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarConsolidablesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierreBodegaService ?? buildCierreBodegaService();
+    return service.listarConsolidablesCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda E (R1/R4/R6/R7/R17) — el CONJUNTO de «Cierres de bodega pendientes»
+ * (listado 4), sin recorte, para producir el archivo.
+ *
+ * Sustituye a la relectura de `listarCierresBodegaAdmin()` que hacia la pantalla, que trae los
+ * DOS conjuntos —la cola y el historico entero de la operacion— para que el archivo se quede con
+ * uno. Aqui el corte lo hace la base.
+ *
+ * El alcance no viaja en el input y no puede: es acceso total y lo decide el servicio desde el
+ * actor. Como este listado no tiene filtros, la lista blanca derivada de la de su pagina no deja
+ * NINGUNA clave: cualquier cosa que llegue muere aqui con `validation_error` sin tocar el
+ * servicio (R17). El input se parsea aunque no se transporte nada: parsear ES la barrera.
+ */
+export async function listarPendientesCierresBodegaCompleto(
+  input: unknown = {},
+  deps: CierreBodegaDeps = {},
+): Promise<ListarPendientesCierresBodegaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarPendientesCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
+    return service.listarPendientesCierresBodegaCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda E (R1/R4/R6/R7/R17) — el CONJUNTO de «Cierres de bodega resueltos»
+ * (listado 5), sin recorte, para producir el archivo.
+ *
+ * Espejo del de arriba, y con el mismo motivo: descargar una de las dos tablas de esta pantalla
+ * no tiene por que costar la otra. Aqui la asimetria pesa al reves — el historico crece sin tope
+ * con los dias— pero la relectura de hoy paga las dos mitades en los dos sentidos.
+ */
+export async function listarHistoricoCierresBodegaCompleto(
+  input: unknown = {},
+  deps: CierreBodegaDeps = {},
+): Promise<ListarHistoricoCierresBodegaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarHistoricoCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
+    return service.listarHistoricoCierresBodegaCompleto(actor);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }

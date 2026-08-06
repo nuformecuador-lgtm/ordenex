@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { CierreEstado as PrismaCierreEstado, CierreDestinoTipo as PrismaCierreDestinoTipo } from "@prisma/client";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type {
   CierrePasadoDTO,
   DeshacerGestionServiceResult,
@@ -106,6 +107,27 @@ export const listarCierresPasadosSchema = z
 
 export type ListarCierresPasadosInput = z.infer<typeof listarCierresPasadosSchema>;
 
+/**
+ * Feature 184 — Tanda C (R17) — entrada del CONJUNTO de «Cierres solicitados» del mensajero.
+ *
+ * Se DERIVA del schema de su pagina quitando `page`/`pageSize`, igual que los `…CompletoSchema`
+ * de la 170 y los de la tanda B: la tabla y el archivo no pueden entender cosas distintas por
+ * «entrada». Como este listado no tiene filtros, lo que queda es una lista blanca de CERO claves,
+ * que aqui es exactamente lo correcto — y no es higiene: es el UNICO listado del Anexo A cuyo
+ * alcance es el propio usuario, asi que un `mensajeroId` colado que el servicio llegara a leer
+ * algun dia abriria el historico de dinero de otro mensajero. Muere aqui, sin tocar el servicio.
+ *
+ * `.strict()` se reescribe aunque `.omit()` lo herede: la barrera es de ESTE listado y no debe
+ * depender de que el schema base nunca se afloje.
+ */
+export const listarCierresPasadosCompletoSchema = listarCierresPasadosSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarCierresPasadosCompletoInput = z.infer<
+  typeof listarCierresPasadosCompletoSchema
+>;
+
 /** Errores de BORDE del listado (dominio + los dos que resuelve la Server Action). */
 export type CierreDiaListadoError =
   | { status: "forbidden" }
@@ -117,3 +139,13 @@ export type ListarCierresPasadosResult = ListarPaginadoResult<
   CierrePasadoDTO,
   CierreDiaListadoError
 >;
+
+/**
+ * Feature 184 — Tanda C (R6/R7) — el conjunto tal como lo recibe el cliente.
+ *
+ * Union de error ANCHO (`ActionError`, dentro de `ListarCompletoResult`) y no el estrecho de la
+ * pagina: quien lo consume es `filasDesdeResultado`, el adaptador comun de la descarga, que
+ * redacta el mensaje de CUALQUIER error de borde en un solo sitio. `limite_excedido` lleva SOLO
+ * conteos, jamas filas ni un conjunto truncado (R6).
+ */
+export type ListarCierresPasadosCompletoResult = ListarCompletoResult<CierrePasadoDTO>;

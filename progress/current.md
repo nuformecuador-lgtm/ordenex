@@ -9,7 +9,432 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚀 2026-08-04 — **RELEASE EN PRODUCCIÓN + BACKFILL DE LA 173 SALDADO** — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 CIERRE DE JORNADA 2026-08-05 — **EMPIEZA A LEER POR AQUÍ**
+
+### 🚦 LO ÚNICO ABIERTO: **el PR de release #301** (`dev → prod`, 126 commits)
+
+**CERO migraciones** — mergear no aplica nada. Gate `== init OK ==` (977 archivos / 12.251 tests)
+corrido sobre `dev` con todo dentro. Sin conflictos.
+
+**Al desplegar, mirar:** el botón de rutear en `/ordenes`, que **los 12 listados sigan sacando el
+Excel con las mismas columnas y en el mismo orden** (la 188 cambió de dónde salen las FILAS, no las
+columnas — pero es lo que un usuario notaría), y la analítica financiera, que gana serie temporal.
+
+### 🐛 El bug de producción de hoy, y lo que salió de tirar del hilo
+
+**Reportado:** «no se puede asignar guías a bodega satélite, desapareció el botón».
+**No era código roto.** `rutearABodegaSatelite` se quedó **sin superficie de UI** cuando el
+2026-07-31 se borró la vista legacy `OrdenesRevisionMaestro` (`54757be4`). Backend intacto, **suite
+verde, cinco días sin que nadie se enterara** — no había un solo test que afirmara que alguien puede
+dispararla. Arreglado y **en producción** (#297), más la mejora que pidió el humano al probarlo:
+«Asignar mensajero» solo lleva órdenes GAM (#299).
+
+**Tirando del hilo aparecieron tres cosas que nadie buscaba:**
+
+1. **Un falso éxito.** `ordenIds` sin `.min(1)` + servicios que devuelven `ok` con lista vacía =
+   «Mensajero asignado a **0** orden(es)» como éxito. Cerrado **en el schema** en los tres
+   (`rutearSatelite`, `asignarBodega`, `generarGuia`); el tercero **era el único sin ninguna guarda
+   en la UI**. Había un test afirmando que «`ordenIds` vacío es válido»: **describía el hueco como
+   si fuera requisito**.
+2. **Los dos hotfixes NUNCA volvieron a `dev`.** Lo detectó el barrido, no una alerta. `dev` seguía
+   con el modal sin montar y el comentario de orfandad: **cualquier rama nueva habría nacido con el
+   bug otra vez**. Merge-back hecho.
+3. **Cuatro huérfanas más**, una peor que la original: **`enviarPlantillaWhatsapp`** —el envío
+   server-side por Meta de la feature 107— está **completo y sin botón desde el día 1**. No hay un
+   «antes» al que volver, y **nadie lo reporta porque nadie sabe que existe**. Anotada como «DEUDA,
+   no diseño». También `listarPlantillasEnviables`, `marcarNotificacionLeida` y
+   `listarCatalogoEstatus` (segunda víctima del **mismo** commit `54757be4`).
+
+### 🛡️ La guardia que ataca la causa (#300, ya en `dev`)
+
+`tests/unit/guards/superficie-de-uso.guardia.test.ts` — 18 casos, **1,20 s**.
+
+> **Lo obvio no habría funcionado, y está medido:** marcar toda acción sin llamantes da **5 falsos
+> positivos de 20** y **NO habría cazado el incidente** — `rutearABodegaSatelite` tenía llamante (su
+> modal); **lo muerto era quien montaba el modal**.
+
+La señal es **alcanzabilidad desde las raíces de ruta**. Tres reglas, y **la tercera apareció al
+mutar**: quitar la entrada del menú deja el modal *importado y renderizado*, así que el grafo de
+módulos no se entera; lo que queda colgando es la función `abrirRutearSatelite`, sin una sola
+referencia — **y `typecheck` la deja pasar, porque este repo no tiene `noUnusedLocals`**.
+
+Verificada con **4 mutaciones**, entre ellas la **réplica literal de `54757be4`**. 24 anotaciones
+`@sin-superficie`, y la guardia **rechaza motivos de relleno** y **caduca las que sobreviven a su
+motivo**.
+
+> ⚠️ **Lo que NO cubre, y conviene no olvidarlo:** no sabe si el botón **se ve**. Un `if (rol === …)`
+> que nadie cumple, un `disabled` permanente o una ruta sin enlace en el menú **pasan verdes**.
+> Cubre la desconexión estructural, no la funcional.
+
+### ✅ La 188 (antes 184), en `dev`
+
+**33/33 tareas, review APROBADO en ronda 2.** H.3 —verificar el mapa `R1..R34` **caso a caso**—
+encontró dos huecos que ninguna lectura habría visto: **R16**, la propiedad que da nombre a la
+feature, **no tenía nada que impidiera su regreso** (bajo mutación, **129 tests de emisión seguían
+verdes**), y **R26** no afirmaba que la acción de lote sobrevive a la poda.
+
+**Renumerada de 184 a 188** por colisión con otra sesión. **«184» en un commit, un comentario o
+`PENDIENTES_184` significa esta feature** (nota de cabecera en el spec y en el cierre).
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**El flake de jsdom tumbó el gate TRES veces hoy**, siempre en archivos distintos y siempre verde al
+repetir. Sigue obligando a correr la suite dos veces para distinguirlo de una regresión.
+
+**El índice del MCP estaba a más de una semana** y contenía el test de la vista legacy **ya
+borrada** — usarlo sin reindexar habría dado un barrido con falsos positivos y negativos. Reindexar
+primero, siempre.
+
+**Y `dev` era irreproducible en local** por tres capas de entorno stale a la vez: cliente Prisma
+viejo, `node_modules` sin las dependencias de las features nuevas, y caché de `.next` apuntando a
+una página borrada hace días.
+
+### ⏳ Fichas abiertas
+
+**189** columnas de los 12 archivos sin test (deuda preexistente) · **190** Q-K6 rama B (la 188 la
+desbloqueó) · **191** el `N+1` real de R29 de la 170, hoy **excepción declarada en 11 de 12
+listados** — cerrarlo choca con los tests de R15 de la 188, y ese conflicto **es** el trabajo.
+
+**Sin ficha, y sin dueño:** `ZonasModule`/`ZonaForm` son código muerto **duplicado** (la gestión de
+zonas vive y funciona en `configuracion/tarifas`) — descartado como bug, ya anotado.
+
+### 🚦 SIGUE PENDIENTE, quinta jornada
+
+**VER LA 172 Y LA 173 EN PANTALLA.** No lo sustituye ninguna suite.
+
+---
+
+## ✅ 2026-08-05 (noche) — TODO FUSIONADO. Lo único que falta: **la release a producción**
+
+**Cero PRs abiertos. Cero features `in_progress`.**
+
+| PR | Qué | Estado |
+| --- | --- | --- |
+| **#297 → `prod`** | hotfix: vuelve «Rutear a bodega satélite» | ✅ **en producción**, deploy READY, 0 errores |
+| **#299 → `prod`** | «Asignar mensajero» solo lleva GAM + el falso éxito del lote vacío | ✅ **en producción**, 0 errores |
+| **#298 → `dev`** | la **188** (antes 184): los 12 listados | ✅ mergeado — **pero NO está en producción** |
+
+### 🚦 LO PRIMERO AL RETOMAR: **release `dev → prod`**
+
+**`dev` está 119 commits por delante de `prod`** y arrastra la **188**, la **180** (serie temporal de la
+analítica financiera), la **166** (ventana de día del ranking), la **133** (recortes por rol), la **134**
+(export CSV) y el chore del lote de deudas (#291).
+
+> ✅ **La release es BARATA: CERO migraciones.** Verificado sobre el diff `origin/prod...origin/dev`:
+> ni un archivo bajo `prisma/migrations/`. Mergear a `prod` **no aplica nada** — no hace falta el
+> pre-vuelo caro de las releases con `CHECK` y enums.
+
+Aun así, el pre-vuelo que **sí** aplica: correr `./init.sh` completo sobre `dev` **antes** de abrir el
+PR de release. Es la lección del #237 y de «un PR verde no dice nada de los tests».
+
+### 🐛 Lo que enseñó el bug de producción de hoy
+
+**«Rutear a bodega satélite» llevaba cinco días sin superficie de UI.** Se retiró de `/ordenes` por
+decisión previa y la ofrecía la vista legacy `OrdenesRevisionMaestro`; al borrarse ésta el 2026-07-31
+(`54757be4`), la acción quedó **huérfana con el backend intacto**, y la suite **no se puso roja** —no
+había un solo test que afirmara que alguien puede dispararla—.
+
+> ⚠️ **PATRÓN SIN DUEÑO:** borrar una vista puede dejar acciones huérfanas, y **nada lo detecta**.
+> **Nadie ha barrido el resto de la app buscando el mismo caso.**
+
+Y al arreglarlo apareció un **falso éxito** preexistente: `asignarBodegaSchema.ordenIds` no lleva
+`.min(1)` y el servicio devuelve `ok` con lista vacía → «Mensajero asignado a 0 orden(es)». Cerrado en
+la UI (#299). **`rutearSateliteSchema` tiene el mismo hueco**, hoy inalcanzable porque su modal lo
+tapa por otra vía.
+
+### ⏳ Lo que queda vivo
+
+- **Release `dev → prod`** (arriba).
+- **Fichas 189 / 190 / 191**, las tres de la 188: columnas sin test · Q-K6 rama B (desbloqueada) · el
+  `N+1` real de R29 de la 170.
+- **VER LA 172 Y LA 173 EN PANTALLA.** Cuarta jornada pendiente.
+- El **flake de jsdom** sigue vivo: hoy tumbó una corrida entera del gate en
+  `recuperar-contrasena-form`, verde aislado y verde al repetir.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-05 — **EMPIEZA A LEER POR AQUÍ**
+
+### 🔴 LO PRIMERO: dos PRs abiertos esperando tu decisión
+
+| PR | Qué | Estado |
+| --- | --- | --- |
+| **#297 → `prod`** | **HOTFIX: vuelve el botón «Rutear a bodega satélite»** | gate **VERDE** (927 archivos / 11.533 tests). **Producción no puede rutear guías hasta que esto se despliegue** |
+| **la 188 → `dev`** | la deuda de la 170: los 12 listados | review **APROBADO ronda 2**, gate **VERDE**. El PR **#296 quedó obsoleto** al renumerar la rama; hay que reabrirlo |
+
+### 🐛 El bug de producción de hoy, y la lección que deja
+
+**Reportado:** «no se puede asignar guías a una bodega satélite, desapareció el botón».
+**No era código roto: la acción se quedó SIN SUPERFICIE DE UI.** Se había retirado de `/ordenes`
+por decisión previa, y hasta el **2026-07-31** la seguía ofreciendo la vista legacy
+`OrdenesRevisionMaestro`. **Al borrarse esa vista, dejó de existir cualquier forma de invocarla** —
+con el backend intacto y probado todo el tiempo.
+
+> ⚠️ **El patrón, que NO tiene dueño:** borrar una vista puede dejar acciones huérfanas —backend
+> vivo, cero botones— y **nada lo detecta**. Aquí tardó cinco días en notarse, y solo porque alguien
+> intentó usarlo. **Nadie ha barrido el resto de la app buscando el mismo caso.**
+
+El arreglo monta la acción en `en_bodega_central` (origen único desde la 156) filtrando a no-GAM, y
+la ofrece a **maestro y admin** —`ROLES_ACCESO_TOTAL` son dos—. Los tests **montan la página real
+variando el rol**, no pasan la prop: la mutación que lo prueba es que restringir a `maestro` pone
+rojo el caso de `admin`. Es la lección del review de la 172.
+
+### 🔢 LA 184 AHORA ES LA 188, y hay que leerlo antes de tocar nada
+
+Mientras esta rama estaba viva, **otra sesión mergeó en `dev` una ficha 184 distinta** («analítica
+financiera: export de la serie») **y también 185, 186 y 187**. Los cuatro ids colisionaron. Por
+decisión humana se renumeró **todo lo de esta rama**: **184→188**, y las fichas de su cierre
+**185/186/187 → 189/190/191**.
+
+> **Lo que NO se renumeró, a propósito:** los **60 mensajes de commit**, los comentarios de **111
+> archivos de código** (`Feature 184 — …`) y la constante **`PENDIENTES_184`**, que es **ancla de
+> texto** de una guardia (`adaptador-conjunto.guardia.test.ts:313`) y romperla a medias la pone
+> roja. **«184» en un commit, un comentario o esa constante significa la 188.**
+
+Es la **segunda vez** que pasa (la primera fue la 182 el 2026-08-04). **Dos sesiones dando ids del
+`feature_list.json` en paralelo colisionan siempre**, y la convención de «la ficha con rama conserva
+el id» no se aplicó aquí: se renumeró la que tenía rama, PR y 60 commits.
+
+### ✅ La 188 (antes 184), cerrada por completo
+
+**33/33 tareas. Review APROBADO en ronda 2. Gate `== init OK ==`: 950 archivos / 11.847 tests.**
+Cero migraciones.
+
+**H.3 no era un trámite: encontró dos huecos que ninguna lectura habría visto.**
+
+1. **R16** —«no dos declaraciones separadas del mismo criterio», el hallazgo que da nombre a la
+   feature— **no tenía nada que impidiera su regreso**. Bajo mutación, deshacer una constante y
+   repetir el literal idéntico dejaba **129 tests de emisión en VERDE**. Ahora hay guardia.
+2. **R26** no afirmaba que la acción de lote sobrevive a la poda: al hacer que la poda se pase de
+   larga, **el caso nuevo falla y el viejo sigue verde**.
+
+**Y tres filas del Anexo B del spec apuntan a casos que no existen donde dicen** (R2, R8, R12). La
+cobertura existe, en otro archivo. **Un mapa copiado del spec habría heredado las tres** — por eso
+se escribió contra el árbol.
+
+### ⏳ Lo que queda vivo, con ficha
+
+| Ficha | Qué | Por qué no entró |
+| --- | --- | --- |
+| **189** | columnas y orden de los 12 archivos, sin test | deuda **preexistente**: el diff no toca ninguna `COLUMNAS_DESCARGA_*` |
+| **190** | Q-K6 rama B | estaba en el registro pero **nunca bajó al spec**; la 188 la deja desbloqueada |
+| **191** | el `N+1` real de **R29 de la 170**, hoy derogado en 11 de 12 listados | el `count` del total exacto **pone rojos los tests de R15** de la 188. Ese conflicto ES el trabajo |
+
+### 🚦 SIGUE PENDIENTE, cuarta jornada
+
+**VER LA 172 Y LA 173 EN PANTALLA.** No lo sustituye ninguna suite, y hoy la app ya está en uso real
+en producción.
+
+---
+
+## 🚦 2026-08-05 — **180 en revisión humana: PR #295 abierto**
+
+**180 (`analitica financiera: desglose por fecha`)** implementada, revisada y con el gate completo
+verde. **PR [#295](https://github.com/nuformecuador-lgtm/ordenex/pull/295) → `dev`, esperando merge.**
+Worktree `C:/wser`, rama `feature/180-analitica-financiera-serie-temporal` (de `dev` @ `805fb253`).
+
+- Review `progress/review_180.md`: **APROBADO-CON-NOTAS, cero bloqueantes**. Bitácora `impl_180.md`.
+- **32/32 R** a test nombrado por comportamiento. **19 mutaciones, 18 muertas**; la 19 no es matable
+  por comportamiento y está declarada, no escondida.
+- Gate: **942 archivos / 11 775 tests, 0 fallos** (baseline `dev` 930 / 11 626 → **+149, cero
+  regresiones**), lint 0 errores, `tsc` limpio, `next build` verde.
+
+### Lo que esta feature enseñó, y que sirve para las siguientes
+
+1. **La Q5 de su propia spec preguntaba por una feature que ya había aterrizado.** Era la 183, `done`
+   y en producción, y además **no hizo lo que su ficha anunciaba**. Segunda vez en dos días (la otra
+   fue M-4 en la 133): **entre que una deuda se anota y se lee, otra feature puede haberla saldado**.
+   Comprobar en el código antes de planificar contra una ficha.
+2. **`listasDeIdsAMano` no cubre lo que su nombre promete**: solo marca arrays de **dos o más** ids,
+   así que una decisión por id suelto pasa verde. Está **medido** (censo propio rojo / guardia
+   heredado verde 24/24). Sigue vivo para quien toque el tablero financiero — avisado en la ficha 186.
+3. **La API se cayó cuatro veces** (522 de Cloudflare) matando implementer y reviewer. Lo que estaba
+   commiteado sobrevivió intacto; lo que vivía en el working tree hubo que reconstruirlo dos veces.
+   **Pedir tandas commiteadas pronto y bitácora incremental** cuando la plataforma esté inestable.
+
+### Deudas vivas que deja, con dueño
+
+- **187** (backend): el **R12 es cierto en los tests y NO está garantizado en runtime** — total y
+  filas son dos consultas sin transacción. **No arreglarlo sumando las filas**: eso lo convierte en
+  tautología.
+- **186** (frontend): la gráfica de líneas que la Q4 dejó fuera a propósito. **Debe leer
+  `granularidad` del DTO**: un rango largo llega en cubos **semanales**, y etiquetarlos como días
+  miente sin poner ningún test en rojo.
+- `⟨L4⟩` el `bruto` de `cuenta_por_pagar_mensajero` pasó a `devengo + pago`: hoy idéntico, pero un
+  tercer valor del enum se caería en silencio.
+
+> ⚠️ **Ojo, esas dos fichas se renumeraron el 05-ago al traer `dev`:** nacieron como **185** y **186**,
+> pero `dev` ya había publicado (PR #292) una ficha 185 —el oráculo de conteo del filtro mensajero,
+> cancelada—. Se corrieron en bloque a **186** y **187**. Las citas de arriba ya están corregidas.
+
+### También en el aire
+
+- **PR #292 (feature 133)** ya está **mergeado** (`03b593e7`): conflicto de `feature_list.json`
+  resuelto y arnés de sus tests reparado. Queda su bookkeeping post-merge.
+- **PR #293 (feature 166)** abierto y mergeable, gate verde, **esperando la franja 00:00–06:00 CR**.
+- **134** (export CSV) **ya está en `dev`** (PR #294 mergeado), no en vuelo.
+- **176**: su código ya está en `dev` (diff vacío); solo el registro se quedó en `in_progress`.
+
+---
+
+## 2026-08-05 — **166 implementada y aprobada** · ⛔ **PR abierto a la espera de la franja de despliegue**
+
+Rama `feature/166-ranking-ventana-dia`, commit `60eabee6` sobre `origin/dev` @ `64957dca`.
+Reviewer **APROBADO**, cero hallazgos bloqueantes (`progress/review_166.md`).
+
+`RankingService` resolvía «hoy» como `[startOfDayCR(now), +24 h)`. `startOfDayCR` devuelve la
+**medianoche UTC** de la fecha CR —convención correcta para columnas `@db.Date` de la 46—, pero
+esas dos cotas se comparan contra columnas `timestamp` reales (`gestion_orden.created_at`,
+`orden.asignado_at`): la ventana efectiva era **18:00→18:00 CR** y una entrega de las 19:00 CR
+contaba para el día siguiente. Ahora se compone con `fechaCalendarioCR` +
+`inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` (convención de la 144): ambos bordes en
+`...T06:00:00.000Z`.
+
+**La divergencia D6/R31 de la 135 queda CERRADA.** El bloque `(c)` de `lib/analytics/ranges.ts`
+ya no promete dos cifras distintas para «hoy», pero **sigue nombrando la trampa `startOfDayCR`**,
+que sigue viva y sigue prohibida en `lib/analytics/**`. El guardia
+`ranges-reuso.guardia.test.ts:98-106` se **reexpresó** a (`startOfDayCR`, `/18:00/`, `/166/`),
+no se vació: mutación de control ejecutada y revertida.
+
+### ⛔ Lo único que falta, y no es código: la hora del merge
+
+**La ventana de despliegue 00:00–06:00 hora CR es OBLIGATORIA**, no una preferencia. El corte de
+ventana es una **discontinuidad declarada** (Q1 = opción C: ni recálculo ni fecha de corte), y lo
+que la hace inocua es que a esa hora el podio del día está vacío y no hay premio ya pagado que
+desplazar. **Si el merge cae fuera de la franja, hay que volver a preguntar al humano.** Por eso
+el PR se dejó **abierto sin mergear**. La ficha sigue en `in_progress` a propósito.
+
+**Q3 sigue pendiente:** avisar a los mensajeros de que el corte del día pasa de las 18:00 a las
+00:00 CR. Es tarea de despliegue, no de código; nadie la ha hecho todavía.
+
+### Gate, medido dos veces
+
+`926 files / 11 497 tests` en ambas corridas de `./init.sh` (el baseline de `dev` en `0c9ab8ce`
+eran 913: la corrida **no** está degradada, `dev` avanzó). 1ª corrida: 4 rojos. 2ª: 1 rojo,
+**conjunto disjunto** del anterior. Todos son timeouts de 20 s, todos pasan en aislado y ninguno
+importa `RankingService`, `ranges.ts` ni `fecha-cr.ts`. **Delta atribuible a la rama = 0.**
+Salvedad honesta: el cuarto rojo de la 1ª corrida quedó **sin nombrar** (log truncado), así que
+lo que sostiene el delta 0 es la disjunción entre corridas, no la inspección de ese fichero.
+
+**Deuda de entorno del worktree:** `C:\w166` nació sin `.env`, así que `pnpm db:generate` no
+corría y el typecheck salía rojo por cliente Prisma ausente —**entorno, no contenido**—. Se copió
+el `.env` del checkout principal antes de medir nada. Es el mismo tropiezo que en `C:\w180`.
+
+---
+
+## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo — **LO DE PRODUCCIÓN, VIGENTE**
+
+> *Esta sección decía «EMPIEZA A LEER POR AQUÍ» cuando era la más reciente. Sigue vigente entera
+> —incluido el «LO PRIMERO AL RETOMAR» del final—, pero ya no es la de arriba: la 180 y la 166 del
+> 05-ago la preceden. Se conserva intacta salvo este marcador, que había caducado.*
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-04 (noche) — **EMPIEZA A LEER POR AQUÍ**
+
+### ✅ En producción hoy
+
+| | Qué | Estado |
+| --- | --- | --- |
+| **release** | `dev → prod` #287 — 186 commits, 23 PRs, **5 migraciones** | ✅ `CHECK` **convalidado** contra las 35 filas reales, deploy READY, 0 errores |
+| **173** | backfill de la caja: **5 filas, ₡203.055,90** | ✅ aplicado, idempotente, fechas del origen |
+| **183** | el `neto` de las cuatro métricas de caja | ✅ PR #288 → release #289 → **en producción** |
+| **fix** | tope de **negocio** de la indemnización, atado al valor de la orden | ✅ #291 mergeado |
+| **arnés** | dos guardias ciegas + 3.er mecanismo del flake | ✅ #291 mergeado |
+
+### 🔵 EN RAMA, SIN PR: la feature 184 (`feature/184-deuda-170-listados`)
+
+**Los 12 listados CERRADOS.** `PENDIENTES_184` vacío, **0 llamadas a `filasDelConjuntoCompleto(`** bajo
+`app/`, 8 tandas, **52 commits**. Gate completo **VERDE: 949 archivos / 11.824 tests**.
+
+**Lo que falta, y en este orden:**
+
+1. **H.3 — verificar el mapa `R1..R34` caso a caso.** La tanda H lo dejó sin hacer **y lo dijo**: comprobó
+   por script que 16 títulos citados existen literalmente, lo que descarta nombres muertos pero **NO**
+   que cada test mida su requisito. Es exactamente la verificación que hoy cazó cuatro coberturas falsas.
+2. **Review** de la feature · 3. **PR a `dev`** · 4. **Release** (arrastra también el lote de deudas).
+
+### 🚦 LO PRIMERO AL RETOMAR, ADEMÁS DE ESO
+
+**VER LA 172 Y LA 173 EN PANTALLA.** Cuarta jornada pendiente. Hoy se empezó a usar la app en producción
+y eso solo ya destapó el caso de los ₡10.000 millones.
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**Cinco veces el spec afirmó una cobertura que no existía, y las cinco las cazó una MEDICIÓN, no una
+lectura:**
+
+1. **Una mutación sobrevivió** en la 183: el test que decía «el catálogo manda» medía `ingreso_flete`, no
+   `egresos`, que es la definición que la feature cambiaba.
+2. **R22 de la 183:** el guardia que el spec le asignaba **no caza** su mutación — `listasDeIdsAMano` solo
+   marca arrays con ≥2 ids.
+3. **R16 de la 127:** el requisito vivo **más directamente derogado** por la 183 —nombra las tres métricas
+   una por una— y **ni el spec, ni ⟨D12⟩, ni las bitácoras lo miraron**. Lo cazó el reviewer.
+4. **El `--reporter` inexistente** (tanda F): 7 corridas de mutación **fallaron al arrancar y parecían
+   ejecutadas**.
+5. **La guardia de la tanda H pasa VERDE con su propio detector roto**: encuentra cero llamadas porque no
+   encuentra nada. Solo la salvan sus auto-tests. **Habría sido un adorno permanente.**
+
+> **La regla que queda:** buscar los requisitos vivos afectados **leyendo el spec que cita tu archivo** no
+> basta —así se encontraron R18 y R37 de la 127 y por eso se escapó R16, que no habla de `metrics.ts` sino
+> del **contrato de salida**—. Hay que buscarlos por el **texto del contrato que cambia**.
+
+**Y el criterio duplicado apareció en las SIETE tandas.** El `orderBy` estaba escrito dos o tres veces en
+cada par; varias tandas lo habrían dejado en cinco. Ninguna estaba mal *hoy*, pero dos literales permiten
+que el Excel y la pantalla se ordenen distinto **sin que ningún test lo note**, porque cada uno prueba su
+copia. En la tanda F apareció la versión cara: **`alcanceWhere` —la guardia que decide si un `adminSatelite`
+ve el dinero de otra zona— estaba declarada TRES veces.**
+
+### ⚠️ Defecto de producción destapado, NO arreglado
+
+**El archivo de «Saldos de tiendas» sale hoy sin orden determinista**: `listarSaldosTodasTiendas()` devuelve
+orden de planificador y la tabla ordena por nombre, así que **dos descargas seguidas pueden diferir**. La
+170 lo declaró desviación consciente cuando ese conjunto no sostenía archivo; ahora lo sostiene. La 184 lo
+esquiva sirviendo el listado por el paginado, pero **el defecto de origen sigue ahí**.
+
+### 🧰 Higiene de agentes: tres prohibiciones que costaron incidentes reales
+
+En un worktree compartido: **nada de `git checkout -- .` / `restore .` / `stash`** (borró trabajo ajeno),
+**nada de `git commit --amend`** (reescribió el commit de otro agente; recuperado con `reset --soft`), y
+**verificar por hash que la restauración tras mutar funcionó** — a un agente le falló un `writeFileSync`
+por un lock de Windows y **dejó la mutación aplicada en código de producción**.
+
+---
+
+## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo
+
+**183 `done`.** PR **#288** → `dev`, release **#289** → `prod` (**cero migraciones**), despliegue
+**READY**, sin errores de runtime nuevos. `dev` y `prod` a **0 commits**. Review **APROBADO en ronda
+2**; los dos bloqueantes de la ronda 1 eran de rastro y se cerraron **sin tocar código**.
+
+### 🎯 La medición post-merge (`T18`) encontró algo que ningún test podía dar
+
+Mientras se implementaba la feature, **alguien usó la app en producción** —lo que llevábamos tres
+jornadas pidiendo— y registró, a las 18:12, una **indemnización de ₡9.999.999.999,99**; un minuto
+después la revirtió con un ajuste manual («devolcuion»). Sin querer, **eso es exactamente el caso que
+la 183 existe para arreglar**:
+
+| Cifra de `egresos` | Valor |
+| --- | --- |
+| **Lo que mostraría SIN la 183** (solo las ocho `egreso_*`) | **₡10.000.054.062,39** — para siempre, aunque ya esté revertido |
+| **Neto, CON la 183** (nueve categorías) | **₡54.062,40** — lo que salió de verdad |
+| Bruto (volumen movido, P1 = (a)) | ₡20.000.054.062,38 |
+
+**La reversión existía en el libro desde el minuto siguiente y la cifra la ignoraba.** Es el defecto
+que ⟨D12⟩ nombró en abstracto, ocurrido de verdad en producción horas después de decidirlo.
+
+> ⚠️ **Y deja una pregunta abierta que NO es de esta feature:** la app aceptó una indemnización de
+> **diez mil millones de colones** (`origen_tipo: orden_incidente`, emitida por el camino automático,
+> `registrado_por` nulo). Puede ser un monto de prueba puesto a propósito —es exactamente el máximo de
+> `numeric(12,2)`—, pero **si no hay tope superior en el monto de una indemnización, eso es un agujero
+> real** y no tiene dueño. Verificar antes de que la app deje de ser una base de pruebas.
+
+**También quedó confirmado que el camino vivo de la 173 funciona en producción:** el cierre aprobado
+de las 19:21 emitió **solo** su `ingreso_cod_recaudado` (₡45,90) automáticamente, sin backfill.
+
+---
+
+## 🚀 2026-08-04 — **RELEASE EN PRODUCCIÓN + BACKFILL DE LA 173 SALDADO**
 
 **Lo que llevaba dos jornadas bloqueando todo está hecho y verificado en la base, no deducido del PR.**
 
@@ -58,6 +483,7 @@ La ganancia **no se movió ni un céntimo** con el backfill: el contra-entrega e
 **VER LA 172 Y LA 173 EN PANTALLA.** Lleva **tres** jornadas pendiente y no lo sustituye ninguna
 suite. Ahora hay algo concreto que mirar: la caja de producción muestra **dos cifras distintas por
 primera vez**.
+
 
 ---
 

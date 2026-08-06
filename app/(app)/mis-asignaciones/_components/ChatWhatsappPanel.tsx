@@ -151,6 +151,8 @@ function Burbuja({
  * Panel del chat 1:1 mensajero <-> cliente de la orden. Lista el hilo con refresco
  * automatico y, dentro de la ventana de 24 h, permite responder con texto libre; fuera
  * de ella exige plantilla aprobada (feature 107).
+ *
+ * @sin-superficie el chat del detalle de la asignacion se sustituyo por el chat FLOTANTE (`ChatConversacion` dentro de `ChatFlotante`, montado desde `RepartoModule`), que si esta vivo: las Server Actions de chat no se pierden, solo este panel. Se pierde el punto de entrada desde el detalle de la orden; si eso fue deliberado, este archivo sobra.
  */
 export function ChatWhatsappPanel({
   orden,

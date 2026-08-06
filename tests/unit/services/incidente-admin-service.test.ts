@@ -48,6 +48,10 @@ function fila(over: Partial<IncidenteAdminRow> = {}): IncidenteAdminRow {
     motivo: "caja aplastada",
     estado: "solicitado",
     indemnizacion: null,
+    // Fix «tope de negocio» (2026-08-04): `null` = la orden no declara valor, asi que el tope de
+    // negocio NO aplica y esta suite —que mide alcance, colas y reversion— sigue midiendo lo
+    // mismo. El tope tiene la suya (`indemnizacion-tope-negocio-incidente.test.ts`).
+    ordenMontoCobrar: null,
     reportadoPor: "u-maestro",
     reportadoPorNombre: "Maestro",
     resueltoPor: null,
@@ -90,6 +94,9 @@ function build(opts: DobleOpts = {}) {
     // Feature 170 (T I.1): el historico paginado vive en su propia suite (*-paginado).
     findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
+    // Feature 184 (T F.2): los dos conjuntos de la descarga viven en `incidentes-completo`.
+    findHistoricoCompleto: vi.fn(async () => []),
+    findColaCompleta: vi.fn(async () => []),
     findByIdEnAlcance: vi.fn(async (id: string, alcance: AlcanceIncidente) => {
       void id;
       void alcance;

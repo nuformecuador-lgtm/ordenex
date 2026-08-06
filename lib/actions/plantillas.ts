@@ -137,7 +137,11 @@ export async function listarPlantillasCompleto(
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }
 
-/** R4/R5: obtener plantilla por id. */
+/**
+ * R4/R5: obtener plantilla por id.
+ *
+ * @sin-superficie lectura de detalle para una pantalla de detalle que nunca se construyo: `configuracion/plantillas/page.tsx` usa `listarPlantillas` y `EditarPlantillaForm` recibe la plantilla por props y solo llama a `actualizarPlantilla`. `git log -S` no devuelve ningun commit en `app/` ni `components/`, asi que jamas tuvo consumidor. Deuda inocua (lectura, no capacidad perdida).
+ */
 export async function obtenerPlantilla(
   id: unknown,
   deps: PlantillaActionDeps = {},

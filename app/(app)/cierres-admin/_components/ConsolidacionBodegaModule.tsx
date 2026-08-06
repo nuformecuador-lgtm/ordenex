@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { cierreConfig } from "@/lib/config/cierre";
 import {
   solicitarCierreBodega,
-  listarConsolidacion,
+  listarConsolidablesCompleto,
   listarConsolidablesPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type { CierreBodegaResumenLite } from "@/lib/interfaces/services/ICierreBodegaService";
@@ -262,23 +262,27 @@ export function ConsolidacionBodegaModule({
                 error={error ? ERROR_CARGA_CONSOLIDABLES : null}
                 /**
                  * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue
-                 * siendo el CONJUNTO COMPLETO de consolidables de SU zona. Se relee con el
-                 * MISMO listado que la pantalla ya llamaba antes de paginar
-                 * (`listarConsolidacion`), que resuelve la zona desde la sesión: descargar no
-                 * amplía el alcance ni una fila (R14/R44). Es además el listado del que salen
-                 * los agregados de dinero, así que el archivo y los totales de la cabecera
-                 * hablan del mismo conjunto.
+                 * siendo el CONJUNTO COMPLETO de consolidables de SU zona, y esa zona la
+                 * resuelve el servidor desde la sesión: descargar no amplía el alcance ni una
+                 * fila (R14/R44).
+                 *
+                 * Feature 184 — Tanda B (T B.2, R1/R6/R10): ese conjunto lo entrega ahora una
+                 * lectura DEDICADA. Antes salía de releer `listarConsolidacion()`, que además
+                 * de estas filas produce los cinco agregados de dinero y —lo caro— el reparto
+                 * del efectivo entre los pagos INDIVIDUALES de la zona, ordenados de menor a
+                 * mayor. Descargar una tabla de siete columnas no tiene por qué costar eso.
+                 *
+                 * Y no se pierde nada de lo que el comentario anterior defendía: el archivo y
+                 * los totales de la cabecera siguen hablando del MISMO conjunto —los
+                 * consolidables de la zona—, solo que cada uno lo lee por su lado. Los cinco
+                 * agregados siguen llegando por props, sin cambios (R49/R50 de la 170).
                  */
                 descarga={{
                   titulo: TITULO_DESCARGA_CONSOLIDABLES,
                   columnas: COLUMNAS_DESCARGA_CONSOLIDABLES,
                   obtenerFilas: () =>
-                    filasDelConjuntoCompleto(
-                      listarConsolidacion().then((res) =>
-                        res.status === "ok"
-                          ? ({ status: "ok", items: res.consolidables } as const)
-                          : res,
-                      ),
+                    filasDesdeResultado(
+                      listarConsolidablesCompleto(),
                       filaDescargaConsolidable,
                     ),
                 }}

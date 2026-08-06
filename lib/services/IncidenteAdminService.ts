@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { descargaConfig } from "@/lib/config/descarga";
 import { gestionConfig, GESTION_MIME_EXTENSION, type GestionMimeType } from "@/lib/config/gestion";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -16,8 +17,10 @@ import type {
   AprobarIncidenteServiceResult,
   IIncidenteAdminService,
   IncidenteAdminDTO,
+  ListarHistoricoIncidentesCompletoServiceResult,
   ListarHistoricoIncidentesServiceResult,
   ListarIncidentesServiceResult,
+  ListarPendientesIncidentesCompletoServiceResult,
   ListarPendientesIncidentesServiceResult,
   RechazarIncidenteServiceResult,
   ReportarIncidenteInput,
@@ -38,6 +41,7 @@ import {
 } from "@/lib/services/mensajes-incidente-admin";
 import { esColaSolicitado } from "@/lib/utils/colas-cierre";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
+import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
 
 // Feature 158 (T1.28/T1.29, camino del ADMIN) — logica de negocio del incidente reportado por un
 // admin. Espejo de forma de `CierresAdminService` (38), que es la aplicacion original del patron
@@ -67,6 +71,26 @@ const SET_ORIGENES: ReadonlySet<string> = new Set(ORIGENES_INCIDENTE_ADMIN);
 
 /** Estado destino del reporte. Es el mismo `value` del catalogo que usa el camino del mensajero. */
 const ESTADO_INCIDENTE = "incidente";
+
+/**
+ * Feature 184 — Tanda F (T F.2) — el mapa de URL firmadas que recibe el camino del ARCHIVO: NINGUNA.
+ *
+ * No es un descuido ni un atajo, y la diferencia con la tanda D importa. Alli el enriquecido se
+ * CONSERVO porque saltarselo emitia `null` en un campo que el DTO si declara y que significa otra
+ * cosa. Aqui el campo tambien existe (`evidenciaUrls`), pero:
+ *
+ *  - **nadie lo lee en este camino**: `incidentes-descarga-columnas.ts` enumera las columnas una
+ *    a una y las evidencias NO estan en ninguna de las dos;
+ *  - **y no deben estar**: R22 de la 170 lo dice por escrito — un `xlsx` reenviado por correo con
+ *    URL firmadas dentro es acceso a las fotos sin sesion. Firmarlas aqui seria FABRICAR ese
+ *    riesgo para tirarlo a la basura una linea despues.
+ *
+ * Asi que `[]` en el archivo no es «este incidente no tiene fotos»: es «este camino no entrega
+ * fotos», que es exactamente lo que la pantalla ya decia en su comentario. El dia que alguien
+ * añada una columna de evidencia al archivo, el caso «las filas del archivo son las de la pagina
+ * en TODAS las columnas que el archivo proyecta» se pone rojo, que es donde tiene que doler.
+ */
+const SIN_URLS_FIRMADAS: Record<string, string> = {};
 
 /** Resultado interno de resolver el alcance del actor (R48). */
 type AlcanceResult =
@@ -210,6 +234,108 @@ export class IncidenteAdminService implements IIncidenteAdminService {
     };
   }
 
+  /**
+   * Feature 184 — Tanda F (T F.2, R1/R4/R6) — el HISTORICO ENTERO del alcance, sin recorte, que
+   * es del que sale el archivo de «Incidentes — historico» (listado 9).
+   *
+   * **Lo que cierra.** Hasta hoy ese archivo se producia releyendo `listarIncidentes()`, que trae
+   * los incidentes del alcance ENTEROS —cola e historico juntos— y los parte en memoria para que
+   * la pantalla se quede con una de las dos mitades. Aqui se lee SOLO el historico, cortado en la
+   * base por el mismo criterio que su pagina (R16). Las filas salen identicas; lo que cambia es
+   * cuantas se leen para producirlas, y de eso hablan los dos `*-where.test.ts` y el contador de
+   * filas leidas del test de servicio.
+   *
+   * **El guard va PRIMERO, antes del repositorio** (`resolveAlcance`, el MISMO de la pagina: rol
+   * + zona de la ORDEN resuelta server-side, nunca de la entrada). `adminSatelite` sin zona ->
+   * conjunto vacio SIN consultar la base, igual que la pagina.
+   *
+   * **No firma ninguna URL** — ver `SIN_URLS_FIRMADAS`. Es la unica diferencia deliberada con la
+   * pagina, y va en la direccion segura: menos superficie, no mas.
+   *
+   * **No recibe `input`, y es decision, no olvido.** Este listado no admite filtros: su schema de
+   * pagina solo llevaba `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El
+   * borde la sigue aplicando entera —parsear ES la barrera (R17)— pero no hay nada que
+   * transportar hasta aqui.
+   *
+   * **Excepcion declarada a R29 de la 170, y este es el conjunto con MAS riesgo de los once.**
+   * De R29 —feature `done`, requisito vivo— se cumple la mitad del transporte: superado el tope
+   * no viaja ni una fila, solo el total y el tope. NO se cumple la de materializar:
+   * `findHistoricoCompleto` es un `findMany` sin `take`, asi que el historico entra ENTERO en
+   * memoria y el `>` de aqui abajo lo mide despues. Y este historico es exactamente el que el
+   * docstring de su hermano, aqui debajo, describe como el que «crece sin tope con los dias»:
+   * los incidentes resueltos no se purgan ni tienen ventana temporal, asi que la unica cota del
+   * conjunto es cuanto lleve operando el alcance. No se suaviza: es la deuda mas viva de las
+   * once.
+   *
+   * Se acepta porque acotarlo pide `limite + 1` MAS un `count` para conservar el total exacto del
+   * aviso (R6), y esa segunda consulta es la que R15 de esta feature mide y prohibe. Decision
+   * humana del 2026-08-05 (design §3.1); el `N + 1` real se abre como ficha aparte, y este
+   * listado entra en ella.
+   */
+  async listarHistoricoIncidentesCompleto(
+    actor: Actor,
+  ): Promise<ListarHistoricoIncidentesCompletoServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findHistoricoCompleto(scope.alcance);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return {
+      status: "ok",
+      // MISMO `toDTO` que la pagina (R5): las filas del archivo son las de la pantalla en todas
+      // las columnas que el archivo proyecta, incluido el `esPropio` que calcula el SERVIDOR.
+      items: conjunto.map((row) => toDTO(row, SIN_URLS_FIRMADAS, actor.usuarioId)),
+      total: conjunto.length,
+    };
+  }
+
+  /**
+   * Feature 184 — Tanda F (T F.2, R1/R4/R6) — la COLA ENTERA de pendientes de decision, sin
+   * recorte, para el archivo de «Incidentes pendientes» (listado 8).
+   *
+   * Comparte con el de arriba la relectura que evita, y aqui se nota mas: la cola es la mitad
+   * PEQUEÑA del conjunto (los incidentes sin resolver), asi que producir su archivo arrastraba
+   * todo el historico del alcance —que crece sin tope con los dias— para descartarlo en memoria.
+   *
+   * Sin `input`, sin firmas y con el mismo guard que su hermano, por los mismos motivos.
+   *
+   * **Excepcion declarada a R29 de la 170, con el riesgo invertido respecto a su hermano.** La
+   * mitad que se cumple es la misma —por encima del tope no se transporta ni una fila— y la que
+   * no, tambien: `findColaCompleta` no lleva cota y la cola entra entera en memoria antes de
+   * medirse. Lo que cambia es el tamaño esperado: la cola son los incidentes SIN resolver, y lo
+   * que marca su tamaño no es el calendario sino el ritmo con que el admin decide; si un dia
+   * rozara el tope, lo que habria que arreglar no seria esta descarga. Por eso aqui la excepcion
+   * se acepta con holgura y en el historico de arriba no. Mismo motivo de coste —el `count`
+   * extra que R15 de esta feature prohibe— y misma decision del 2026-08-05 (design §3.1).
+   */
+  async listarPendientesIncidentesCompleto(
+    actor: Actor,
+  ): Promise<ListarPendientesIncidentesCompletoServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findColaCompleta(scope.alcance);
+
+    const limite = descargaConfig.MAX_FILAS;
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite }; // R6
+    }
+
+    return {
+      status: "ok",
+      items: conjunto.map((row) => toDTO(row, SIN_URLS_FIRMADAS, actor.usuarioId)),
+      total: conjunto.length,
+    };
+  }
+
   async verIncidente(incidenteId: string, actor: Actor): Promise<VerIncidenteServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" };
@@ -297,6 +423,21 @@ export class IncidenteAdminService implements IIncidenteAdminService {
     // ser un decimal positivo. Money-safe: se compara con `Prisma.Decimal`, nunca con parseFloat.
     if (!montoValido(monto)) {
       return { status: "validation_error", fieldErrors: { monto: [MSG_MONTO_REQUERIDO] } };
+    }
+
+    /**
+     * Fix «tope de negocio de la indemnizacion» (2026-08-04) — TOPE por ARRIBA: tecnico (la
+     * columna) + NEGOCIO (el valor de la orden). **Este es el camino que se uso en produccion**
+     * el 2026-08-04 para registrar ₡9.999.999.999,99: hasta hoy su unica cota superior era la
+     * del borde, y esa era la de la columna.
+     *
+     * Vive AQUI y no en el schema zod porque el borde no sabe que orden es ni cuanto valia: el
+     * dato solo existe tras `cargarResoluble`. Y va ANTES de `repo.resolver`, para que el
+     * rechazo ocurra sin abrir la transaccion que escribe el monto y emite el egreso.
+     */
+    const exceso = excesoIndemnizacion(monto, previo.incidente.ordenMontoCobrar);
+    if (exceso !== null) {
+      return { status: "validation_error", fieldErrors: { monto: [exceso] } };
     }
 
     // R52: el repo escribe el monto y emite el egreso en la MISMA tx. Sin `reversion`: un

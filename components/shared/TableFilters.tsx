@@ -61,6 +61,8 @@ function buildInitialValues(fields: FilterField[]): FilterValues {
  * `nombre` y `defaultValue`) y mantiene su propio estado, emitiéndolo por
  * `onChange` en cada tecleo y por `onSubmit` al aplicar. UI pura: no conoce el
  * dominio ni la tabla, solo produce el mapa de valores.
+ *
+ * @sin-superficie componente generico de de69f7d1 (2026-07-13) que ninguna pantalla llego a usar nunca: cero referencias en `app/`, `components/` y `lib/`. Nacio como pieza reutilizable y las tablas acabaron montando sus propios filtros. Deuda inocua (UI pura, sin backend detras); candidato claro a borrado.
  */
 export function TableFilters({
   fields,

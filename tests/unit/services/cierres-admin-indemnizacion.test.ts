@@ -20,16 +20,33 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const G1 = "g-incidente-1";
 const G2 = "g-incidente-2";
 
+/**
+ * Una gestion `incidente` del cierre, tal como la devuelve el repo.
+ *
+ * Fix «tope de negocio» (2026-08-04): la lectura pasó de `string[]` a llevar tambien el valor de
+ * la orden. Esta suite —que mide COBERTURA, no importe— lo deja en `null` a proposito: `null`
+ * significa «el tope de negocio no aplica», asi que estos casos siguen midiendo exactamente lo
+ * que median. El tope tiene sus propias suites
+ * (`indemnizacion-tope-negocio-{cierre,incidente}.test.ts`).
+ */
+function inc(gestionId: string) {
+  return { gestionId, ordenMontoCobrar: null };
+}
+
 function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdminRepository {
   return {
     findCierresByAlcance: vi.fn(async () => []),
     // Feature 170 (T I.1): el historico paginado. Doble no-op: esta suite no lo ejercita.
     findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
+    // Feature 184 (T D.1): los dos CONJUNTOS de la descarga. Dobles no-op: esta suite no los
+    // ejercita (viven en `cierres-admin-completo.test.ts`).
+    findHistoricoCompleto: vi.fn(async () => []),
+    findColaCompleta: vi.fn(async () => []),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
-    findGestionesIncidenteDelCierre: vi.fn(async () => [] as string[]),
+    findGestionesIncidenteDelCierre: vi.fn(async () => []),
     ...overrides,
   };
 }
@@ -85,7 +102,7 @@ describe("R36 — un cierre SIN incidentes se aprueba exactamente como hoy", () 
 
 describe("R19/R20 — falta el monto de alguna gestion `incidente`", () => {
   it("cierre con UN incidente y lista VACIA -> validation_error, sin tocar el repo", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1)]) });
 
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, []);
 
@@ -97,7 +114,7 @@ describe("R19/R20 — falta el monto de alguna gestion `incidente`", () => {
   });
 
   it("cierre con DOS incidentes y solo UN monto -> error en la gestion que falta", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1, G2]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1), inc(G2)]) });
 
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, [
       { gestionId: G1, monto: "100.00" },
@@ -112,7 +129,7 @@ describe("R19/R20 — falta el monto de alguna gestion `incidente`", () => {
 
 describe("R21 — sobra un monto, o no corresponde a este cierre", () => {
   it("un `gestionId` que no es incidente de este cierre -> validation_error por esa entrada", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1)]) });
 
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, [
       { gestionId: G1, monto: "100.00" },
@@ -137,7 +154,7 @@ describe("R21 — sobra un monto, o no corresponde a este cierre", () => {
   });
 
   it("R21: DOS montos para la MISMA gestion -> validation_error (sin esto, el ultimo ganaria)", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1)]) });
 
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, [
       { gestionId: G1, monto: "100.00" },
@@ -150,7 +167,7 @@ describe("R21 — sobra un monto, o no corresponde a este cierre", () => {
   });
 
   it("acumula TODOS los errores en la MISMA respuesta (falta uno y sobra otro)", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1, G2]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1), inc(G2)]) });
 
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, [
       { gestionId: G1, monto: "100.00" },
@@ -164,7 +181,7 @@ describe("R21 — sobra un monto, o no corresponde a este cierre", () => {
 
 describe("R19/R22 — con cobertura EXACTA la aprobacion procede", () => {
   it("un monto por cada incidente -> ok, y los montos llegan TAL CUAL al repo", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1, G2]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1), inc(G2)]) });
 
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, [
       { gestionId: G1, monto: "12500.75" },
@@ -187,7 +204,7 @@ describe("R19/R22 — con cobertura EXACTA la aprobacion procede", () => {
   });
 
   it("el orden de los montos no importa (se compara por CONJUNTO, no por posicion)", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1, G2]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1), inc(G2)]) });
 
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, [
       { gestionId: G2, monto: "2.00" },
@@ -246,7 +263,7 @@ describe("R25 — alcance: la lectura de incidentes va acotada, y no revela nada
   });
 
   it("los mensajes de error NO llevan PII (ni mensajero, ni destinatario, ni montos)", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1)]) });
     const r = await newService(repo).aprobarCierre("c1", MAESTRO, []);
     if (r.status !== "validation_error") throw new Error("esperaba validation_error");
     const texto = Object.values(r.fieldErrors).flat().join(" ");
@@ -256,7 +273,7 @@ describe("R25 — alcance: la lectura de incidentes va acotada, y no revela nada
 
 describe("R23 — el RECHAZO no captura montos", () => {
   it("rechazarCierre no consulta incidentes ni pasa `indemnizaciones` al repo", async () => {
-    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [G1]) });
+    const repo = fakeRepo({ findGestionesIncidenteDelCierre: vi.fn(async () => [inc(G1)]) });
 
     const r = await newService(repo).rechazarCierre("c1", "no cuadra", MAESTRO);
 

@@ -1,6 +1,7 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletTiendaMovimientoRepository,
+  SaldoTiendaAgregadoRow,
   SaldoTiendaFiltros,
 } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
@@ -9,6 +10,7 @@ import type {
   ListarMisMovimientosServiceResult,
   ListarMovimientosDeTiendaCompletoServiceResult,
   ListarMovimientosDeTiendaServiceResult,
+  ListarSaldosTiendasCompletoServiceResult,
   ListarSaldosTiendasPaginadoServiceResult,
   ListarSaldosTiendasServiceResult,
   VerMiSaldoServiceResult,
@@ -30,6 +32,22 @@ import { rangoDePagina } from "@/lib/utils/rango-pagina";
 // ve lo suyo (acotado en el WHERE del repo). El acceso total (maestro/admin) ve el saldo de
 // TODAS las tiendas.
 const ROL_TIENDA = "adminTienda";
+
+/**
+ * Feature 184 — Tanda G (R16) — la fila de «Saldos de tiendas», derivada UNA vez.
+ *
+ * Estaba escrita dos veces (el listado sin paginar y el paginado) con el mismo cuerpo, y esta
+ * tanda habria hecho tres. No es simetria: es el mapper de DINERO de una pantalla de dinero.
+ * Dos copias divergentes producen una tabla y un archivo que dicen cifras distintas del mismo
+ * libro, y ninguna de las dos falla.
+ *
+ * El saldo se DERIVA con `derivarSaldoTienda` (R16 de la 43), nunca se lee de un saldo
+ * almacenado. Money-safe: entra y sale STRING.
+ */
+function toSaldoResumen(r: SaldoTiendaAgregadoRow): SaldoTiendaResumenDTO {
+  const s = derivarSaldoTienda(r.creditos, r.debitos);
+  return { tiendaId: r.tiendaId, tiendaNombre: r.tiendaNombre, saldo: s.saldo, signo: s.signo };
+}
 
 /**
  * Feature 43 — logica de negocio de lectura del ledger POR TIENDA. No conoce HTTP ni Prisma
@@ -154,11 +172,52 @@ export class WalletTiendaService implements IWalletTiendaService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R20
 
     const rows = await this.repo.listarSaldosTodasTiendas();
-    const tiendas: SaldoTiendaResumenDTO[] = rows.map((r) => {
-      const s = derivarSaldoTienda(r.creditos, r.debitos);
-      return { tiendaId: r.tiendaId, tiendaNombre: r.tiendaNombre, saldo: s.saldo, signo: s.signo };
-    });
+    const tiendas: SaldoTiendaResumenDTO[] = rows.map(toSaldoResumen);
     return { status: "ok", tiendas };
+  }
+
+  /**
+   * Feature 184 — Tanda G (R1/R4/R5/R6/R16) — el CONJUNTO de «Saldos de tiendas», sin recorte,
+   * para el archivo (listado 12 del Anexo A).
+   *
+   * **Lo que esta migracion cuesta en base: NADA.** Son las mismas dos consultas de siempre —el
+   * `groupBy` del ledger entero y la resolucion de nombres—, ni una mas ni una menos. Aqui no
+   * hay ahorro que presumir. Lo que si arregla, y no es cosmetico:
+   *
+   * **el archivo estaba SIN ORDENAR.** `listarSaldosTodasTiendas()` devuelve las filas en el
+   * orden en que le conviene al planificador de Postgres —lo dice el propio repositorio, y por
+   * eso la 170 tuvo que anadir el orden al paginar—, mientras que la tabla las presenta por
+   * nombre de tienda. Con la relectura de hoy, la fila 26 del archivo NO es la primera de la
+   * pagina 2, y entre dos descargas seguidas el mismo conjunto puede salir en otro orden. Eso
+   * es exactamente lo que R5 prohibe, y la 170 lo dejo declarado como desviacion consciente
+   * porque entonces ese conjunto no sostenia ningun archivo. Ahora lo sostiene.
+   *
+   * Por eso el conjunto NO se pide a `listarSaldosTodasTiendas` —que es lo que el inventario
+   * anoto, y seria heredar el defecto— sino al MISMO metodo del que sale la pagina, que es
+   * donde vive la unica declaracion del orden (R16). `page: 1` + `pageSize: limite + 1` es el
+   * patron ya establecido en este servicio (`listarMisMovimientosCompleto`): pide UNA fila mas
+   * que el tope, lo justo para saber que se supero sin construir nunca un archivo truncado.
+   *
+   * El `total` sale de la misma llamada y cuenta el CONJUNTO, no las filas devueltas: sin eso,
+   * el aviso de tope diria «hay 5001» tenga el ledger las tiendas que tenga.
+   */
+  async listarSaldosTiendasCompleto(
+    actor: Actor,
+  ): Promise<ListarSaldosTiendasCompletoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: antes del repositorio
+
+    const limite = descargaConfig.MAX_FILAS;
+
+    const { items, total } = await this.repo.listarSaldosTiendasPaginado(
+      rangoDePagina({ page: 1, pageSize: limite + 1 }),
+    );
+
+    // R6: o van TODAS las tiendas del conjunto, o van solo los conteos. Nunca un archivo al que
+    // le faltan filas sin avisar.
+    if (total > limite) return { status: "limite_excedido", total, limite };
+
+    // R16: el MISMO mapper de dinero que la pagina, no una copia con el mismo aspecto.
+    return { status: "ok", items: items.map(toSaldoResumen), total };
   }
 
   /**
@@ -181,17 +240,9 @@ export class WalletTiendaService implements IWalletTiendaService {
 
     return {
       status: "ok",
-      // R16: el saldo se DERIVA con el MISMO helper que el listado sin paginar; nunca se lee
-      // de un saldo almacenado ni se recalcula de otra forma aqui.
-      items: items.map((r) => {
-        const s = derivarSaldoTienda(r.creditos, r.debitos);
-        return {
-          tiendaId: r.tiendaId,
-          tiendaNombre: r.tiendaNombre,
-          saldo: s.saldo,
-          signo: s.signo,
-        };
-      }),
+      // R16: el saldo se DERIVA con el MISMO helper que el listado sin paginar y que el
+      // conjunto del archivo; nunca se lee de un saldo almacenado ni se recalcula aparte.
+      items: items.map(toSaldoResumen),
       page: input.page,
       pageSize: input.pageSize,
       total, // R41: el total del CONJUNTO, nunca `items.length`

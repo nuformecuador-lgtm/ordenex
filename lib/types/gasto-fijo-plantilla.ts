@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { montoPositivoSchema } from "@/lib/types/wallet";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { gastoFijoConfig } from "@/lib/config/gasto-fijo";
@@ -91,3 +92,29 @@ export const listarPlantillasGastoFijoPaginadoSchema = z
 export type ListarPlantillasGastoFijoPaginadoInput = z.infer<
   typeof listarPlantillasGastoFijoPaginadoSchema
 >;
+
+/**
+ * Feature 184 — Tanda G (R17) — entrada del modo SIN paginacion (el conjunto del archivo).
+ *
+ * DERIVADA de la de su pagina quitando `page`/`pageSize`, no reescrita: si manana este listado
+ * ganara un filtro, lo ganaria en el schema de la pagina y este lo heredaria, de modo que los
+ * dos caminos no puedan resolver conjuntos distintos.
+ *
+ * Como la pagina solo llevaba esas dos claves, la lista blanca resultante tiene CERO claves.
+ * Eso no vuelve prescindible el borde: lo vuelve maximamente estricto —cualquier clave, y en
+ * particular `page`/`pageSize`, muere aqui con `validation_error` sin tocar el servicio—.
+ * `.strict()` se reescribe aunque `.omit()` lo herede, por el mismo motivo que en la pagina.
+ */
+export const listarPlantillasGastoFijoCompletoSchema = listarPlantillasGastoFijoPaginadoSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarPlantillasGastoFijoCompletoInput = z.infer<
+  typeof listarPlantillasGastoFijoCompletoSchema
+>;
+
+/**
+ * Resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO conteos y ninguna rama
+ * de error viaja con filas (R6/R7).
+ */
+export type ListarPlantillasCompletoResult = ListarCompletoResult<GastoFijoPlantillaDTO>;

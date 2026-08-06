@@ -609,12 +609,18 @@ describe("Control de descarga · consistencia transversal", () => {
     // R26/R28 transversal, y la razón por la que este test es ESTÁTICO.
     //
     // El tope de 5000 vive en un solo sitio por familia (`filasLocales` y el
-    // `limite_excedido` que traduce `filasDesdeResultado`; feature 170 - FASE 2 suma
-    // `filasDelConjuntoCompleto`, que RELEE el conjunto y delega en `filasLocales`, o sea que
-    // no anade un tercer sitio donde viva el tope). Una tabla que construyera su
-    // `DescargaFilasResult` a mano —`{ status: "ok", filas: … }`— se lo saltaría entera y
-    // entregaría un archivo gigante o, peor, truncado en silencio; y ningún test de esa
-    // pantalla lo notaría, porque su fixture tiene tres filas.
+    // `limite_excedido` que traduce `filasDesdeResultado`).
+    //
+    // Feature 170 - FASE 2 sumaba aqui `filasDelConjuntoCompleto`, que RELEIA el conjunto y
+    // delegaba en `filasLocales`. Feature 184 (T H.2) lo RETIRA —los doce listados que lo
+    // usaban migraron a su lectura dedicada, con el tope en el servidor— y por eso sale de esta
+    // alternancia. La afirmacion queda ESTRICTAMENTE MAS FUERTE: una via aceptada menos, y las
+    // 26 tablas siguen verdes porque ninguna la usaba ya. Que no vuelva lo vigila
+    // `tests/unit/descarga/adaptador-conjunto.guardia.test.ts` (R32).
+    //
+    // Una tabla que construyera su `DescargaFilasResult` a mano —`{ status: "ok", filas: … }`—
+    // se saltaria el tope entero y entregaria un archivo gigante o, peor, truncado en silencio;
+    // y ningun test de esa pantalla lo notaria, porque su fixture tiene tres filas.
     //
     // Probarlo montando 5001 filas en CADA pantalla es lo que la tanda E midió como
     // inviable (esas vistas renderizan además una tarjeta por fila y el test no termina).
@@ -622,9 +628,7 @@ describe("Control de descarga · consistencia transversal", () => {
     // tabla que se añada dentro de un año.
     for (const modulo of MODULOS_CON_DESCARGA) {
       expect(
-        /\bfilasLocales\(|\bfilasDesdeResultado\(|\bfilasDelConjuntoCompleto\(|\bobtenerFilasDescarga\b/.test(
-          modulo.fuente,
-        ),
+        /\bfilasLocales\(|\bfilasDesdeResultado\(|\bobtenerFilasDescarga\b/.test(modulo.fuente),
         `${modulo.ruta}: su descarga no pasa por un adaptador común`,
       ).toBe(true);
 
@@ -642,7 +646,7 @@ describe("Control de descarga · consistencia transversal", () => {
     expect(MODULOS_PROVEEDORES.length).toBe(4);
     for (const modulo of MODULOS_PROVEEDORES) {
       expect(modulo.fuente, `${modulo.ruta} pasa filas sin adaptador`).toMatch(
-        /obtenerFilasDescarga=\{[^}]*?(filasDesdeResultado|filasLocales|filasDelConjuntoCompleto)\(/,
+        /obtenerFilasDescarga=\{[^}]*?(filasDesdeResultado|filasLocales)\(/,
       );
     }
   });

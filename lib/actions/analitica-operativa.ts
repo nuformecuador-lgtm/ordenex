@@ -151,6 +151,8 @@ export async function consultarAnaliticaOperativa(
  * metodo que decora la cache de la 128, con la misma clave; no hay superficie de cache
  * nueva, el codec de `bigint` no se toca y el dia en curso sigue fuera de la cache por
  * construccion (el repositorio vivo no se decora).
+ *
+ * @sin-superficie nacio sin cablear (feature 176, be51ad9c del 2026-08-03) y sigue asi: la UI de analitica agrega en el CLIENTE (`analitica/_components/operativo/agregacion.ts`), asi que el «modo agregado» del servidor no tiene todavia pantalla que lo pida. Backend listo y probado a la espera de su UI; si esa UI no llega, esto sobra.
  */
 export async function consultarAgregadoOperativo(
   entrada: EntradaOperativa & { readonly grano?: GranoAgregado },

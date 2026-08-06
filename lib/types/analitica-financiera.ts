@@ -101,6 +101,26 @@ export interface ImporteSoloBruto {
 export type ImporteAnalitico = ImporteConNeto | ImporteSoloBruto;
 
 /* -------------------------------------------------------------------------- */
+/* 1 bis. Granularidad temporal de una vista ⟨D2⟩ R4 (feature 180)             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⟨D2⟩ de la feature 180 — el grano TEMPORAL con el que una vista publica sus filas.
+ *
+ * `dia` y `semana` son las dos granularidades que el servidor sabe producir (ver
+ * `granularidadDe` en `lib/analytics/cubo-temporal.ts`, que las decide a partir del tamano del
+ * rango y del tope de puntos). `no_temporal` es la respuesta HONESTA de una vista cuyo grano no
+ * es una fecha —hoy, las de grano `tienda` y `metodo_pago`—: no es «no se sabe», es «esta vista
+ * no se mide en el tiempo».
+ *
+ * La decision la toma el SERVIDOR y viaja en el DTO: el borde admite rangos de hasta
+ * `RANGO_TOPE_DIAS` = 366 dias y el paquete de graficas lanza por encima de `TOPE_PUNTOS_SERIE`
+ * puntos, asi que agregar o no agregar no puede quedar a criterio del consumidor (Q3 = (a),
+ * 2026-08-05).
+ */
+export type GranularidadVista = "dia" | "semana" | "no_temporal";
+
+/* -------------------------------------------------------------------------- */
 /* 2. Vistas ⟨D6⟩ R38                                                          */
 /* -------------------------------------------------------------------------- */
 
@@ -136,6 +156,20 @@ export interface VistaFinanciera {
    */
   readonly sumableCon: readonly string[];
   readonly filas: readonly FilaFinanciera[];
+  /**
+   * ⟨D2⟩ / R4 (feature 180) — con que grano TEMPORAL estan agregadas las `filas`.
+   *
+   * REQUERIDO Y NO OPCIONAL, por la misma razon exacta por la que `cobertura` es obligatoria en
+   * la 126 (`lib/types/analitica-operativa.ts:13-15`): un campo opcional se ignora por omision, y
+   * en cuanto un consumidor lo ignora, «dia» y «semana» acaban siendo el mismo pixel —una serie
+   * semanal pintada como si fuera diaria miente sobre siete veces mas dinero por punto—.
+   *
+   * Las vistas de grano `tienda` y `metodo_pago` declaran `"no_temporal"` EXPLICITAMENTE en vez
+   * de omitirlo: obliga a nombrarlo en cada productor, y el typecheck lo exige. Omitirlo dejaria
+   * a un productor futuro de grano `fecha` publicando una serie sin declarar su grano y sin que
+   * nada fallara.
+   */
+  readonly granularidad: GranularidadVista;
   /**
    * R18 (feature 183) — UNA VISTA, UNA FORMA: el `total` y TODAS las `filas` publican la misma
    * `forma`. Una vista que mezclara obligaria a cada consumidor a ramificar fila a fila, y la
@@ -301,4 +335,43 @@ export const IDS_FINANCIERAS_ACUMULADAS = [
 /** Total, sin rama por defecto: un id que no sea de las dos cuentas por pagar es `false`. */
 export function esMetricaAcumulada(metricaId: string): boolean {
   return (IDS_FINANCIERAS_ACUMULADAS as readonly string[]).includes(metricaId);
+}
+
+/**
+ * ⟨D1⟩ / R2 (feature 180) — las SIETE metricas cuyo desglose por fecha produce esa feature: las
+ * unicas que hoy no tienen NINGUN cubo y publican `filas: []`.
+ *
+ * Q1 = (a), decidida por el humano el **2026-08-05** (`requirements.md` §5 de la 180). Son las
+ * SEIS de caja —la ficha decia «cuatro», pero desde la 173 `dinero_en_caja` y `ganancia_ordenex`
+ * salen del mismo repositorio y del mismo material— mas `cuenta_por_pagar_mensajero`.
+ *
+ * POR QUE `cod_recaudado` Y `cuenta_por_pagar_tienda` QUEDAN FUERA, que es la parte que no se
+ * lee sola: las dos declaran grano `fecha` en el catalogo, pero YA TIENEN CUBO —`cod_recaudado`
+ * por metodo de pago y por tienda; `cuenta_por_pagar_tienda` por tienda— y la afirmacion «no
+ * existe serie temporal que dibujar» no es cierta en ellas. Darles ademas una vista por fecha
+ * seria abrir una vista NUEVA por metrica (un id estable mas, un `sumableCon` mas que declarar,
+ * y un consumidor teniendo que elegir cual de las dos mira) que ninguna pantalla ha pedido.
+ * `conciliacion_cierres` ni siquiera es candidata: no produce importes por cubo.
+ *
+ * UNA UNICA CONSTANTE EXPORTADA (R2): ninguna otra lista de ids se escribe a mano en la feature,
+ * ni siquiera de un id suelto. Lo vigila `tests/unit/analytics/financiera-desglose-ids.guardia.test.ts`,
+ * que censa el backend de la feature entero — y NO se apoya en `listasDeIdsAMano` del guardia del
+ * tablero, que solo marca arrays de dos o mas ids y por tanto deja pasar la decision por id suelto.
+ */
+export const IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA = [
+  "ingreso_flete",
+  "ingreso_comision_cod",
+  "ingreso_iva",
+  "egresos",
+  "dinero_en_caja",
+  "ganancia_ordenex",
+  "cuenta_por_pagar_mensajero",
+] as const satisfies readonly MetricaFinancieraId[];
+
+/**
+ * Total, sin rama por defecto (mismo patron que `esMetricaAcumulada`): un id que no este en el
+ * conjunto —incluido un id que ni siquiera sea financiero— es `false`, no un fallo.
+ */
+export function tieneDesglosePorFecha(metricaId: string): boolean {
+  return (IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA as readonly string[]).includes(metricaId);
 }

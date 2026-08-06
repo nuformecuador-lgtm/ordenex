@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -106,6 +106,18 @@ export interface SateliteOrdenesListadoProps {
    * COLUMNAS del archivo las declara esta tabla, que es la que sabe qué enseña.
    */
   obtenerFilasDescarga: () => Promise<DescargaFilasResult>;
+  /**
+   * Feature 184 — Tanda A (T A.5, R18/R19/R22) — cuáles de estos identificadores SIGUEN en el
+   * conjunto filtrado, según el SERVIDOR.
+   *
+   * Es un callback por lo mismo que `obtenerFilasDescarga`: los filtros vigentes los conoce el
+   * módulo, no esta tabla. Devuelve los VIGENTES —nunca los caducados— para que una respuesta
+   * corta por error no pueda leerse como «desmarca todo», y `null` cuando la comprobación no
+   * se pudo hacer, que aquí significa NO PODAR (R22).
+   *
+   * Opcional: sin él la selección se comporta como antes de la tanda A.
+   */
+  comprobarVigencia?: (ids: string[]) => Promise<readonly string[] | null>;
   /** `true` mientras no hay ninguna página que pintar (primer viaje al servidor). */
   cargando?: boolean;
   /** Mensaje de error de la carga de la página, ya redactado; `null` si no lo hay. */
@@ -146,6 +158,7 @@ export function SateliteOrdenesListado({
   catalogo,
   onFiltroChange,
   obtenerFilasDescarga,
+  comprobarVigencia,
   cargando = false,
   errorCarga = null,
   zonaNombre,
@@ -225,6 +238,66 @@ export function SateliteOrdenesListado({
    * —no se cambia ni la selección ni la acción, esto es sólo un aviso—.
    */
   const marcadasFuera = seleccionados.size - seleccionadas.length;
+
+  /**
+   * Feature 184 — Tanda A (T A.5, R18-R26) — LA PODA de la selección.
+   *
+   * El aviso de arriba hizo VISIBLE y CONTABLE un hueco que ya existía: la selección
+   * sobrevive al cambio de página (a propósito) y se limpia al cambiar los filtros (a
+   * propósito), pero NUNCA se limpiaba cuando una orden marcada dejaba de estar en el listado
+   * —por ejemplo al reportarle un incidente, que la saca del flujo—. La marca seguía viva,
+   * invisible, y el aviso contaba órdenes que ya no existen ahí.
+   *
+   * Qué hace: tras cada lectura del listado, si hay marcas FUERA de la página visible,
+   * pregunta al servidor cuáles siguen en el conjunto filtrado y se queda con
+   * `seleccionados ∩ (idsPágina ∪ vigentes)`. La pertenencia la decide el servidor sobre el
+   * conjunto entero (R19), nunca la página: por eso una marca de otra página no se pierde por
+   * el solo hecho de no verse (R20).
+   *
+   * Q3 CERRADA (decisión del humano): al podar NO se avisa. La poda corrige un número que
+   * estaba mal; el contador simplemente pasa a ser correcto, y un tercer mensaje en una barra
+   * que ya dice dos cosas sería ruido — el mismo criterio con el que se decidió el aviso.
+   *
+   * El disparador es la IDENTIDAD de la página recibida, que cambia una vez por lectura del
+   * servidor (navegar, `mutate()` tras una acción, revalidar). La selección se lee de una ref
+   * y no de las dependencias, para que podar —que cambia la selección— no encadene otra
+   * comprobación (R24).
+   */
+  const podaRef = useRef({ seleccionados, comprobarVigencia });
+  useEffect(() => {
+    podaRef.current = { seleccionados, comprobarVigencia };
+  });
+
+  useEffect(() => {
+    // Sin página que comparar no hay nada que decidir: durante la carga `ordenes` está vacío
+    // y todo lo marcado parecería estar fuera (R28: la carga no consulta vigencia).
+    if (cargando) return;
+    const { comprobarVigencia: comprobar, seleccionados: marcados } = podaRef.current;
+    if (!comprobar || marcados.size === 0) return;
+    const enPagina = new Set(ordenes.map((orden) => orden.id));
+    const fuera = [...marcados].filter((id) => !enPagina.has(id));
+    // R23: sin marcas fuera de la vista no hay nada que comprobar — ni una consulta.
+    if (fuera.length === 0) return;
+
+    let vigente = true;
+    void comprobar(fuera).then((vigentes) => {
+      // La respuesta de una página que ya no está a la vista se descarta: `enPagina` sería de
+      // otra página y la intersección conservaría lo que no debe.
+      if (!vigente || vigentes === null) return; // R22: no se pudo comprobar ⇒ no se poda
+      const conservar = new Set(vigentes);
+      setSeleccionados((prev) => {
+        const podado = new Set(
+          [...prev].filter((id) => enPagina.has(id) || conservar.has(id)),
+        );
+        // R24: si no retira nada, NO se reemplaza el Set. Un Set nuevo equivalente sería un
+        // re-render y, con él, una segunda comprobación que no cambia nada.
+        return podado.size === prev.size ? prev : podado;
+      });
+    });
+    return () => {
+      vigente = false;
+    };
+  }, [ordenes, cargando]);
 
   // La acción disponible sale del estado COMÚN de lo seleccionado: con una selección
   // mixta no hay transición única que ofrecer.

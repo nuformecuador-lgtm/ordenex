@@ -6,10 +6,10 @@ import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import {
-  listarCierresBodegaAdmin,
+  listarHistoricoCierresBodegaCompleto,
   listarHistoricoCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
@@ -110,20 +110,24 @@ export function CierresBodegaResueltosTabla({
           error={error ? ERROR_CARGA : null}
           /**
            * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-           * CONJUNTO COMPLETO. Se relee con el MISMO listado que la pantalla ya llamaba antes
-           * de paginar (`listarCierresBodegaAdmin`), que aplica el mismo acceso total que la
-           * página: descargar no amplía lo que el actor podía ver (R44).
+           * CONJUNTO COMPLETO.
+           *
+           * Feature 184 — Tanda E (T E.3, R1/R2/R6): ese conjunto ya NO sale de
+           * `listarCierresBodegaAdmin()`, que devuelve las dos mitades de esta pantalla —el
+           * histórico Y la cola de pendientes— para que el archivo se quede con una. Ahora el
+           * corte por estado lo hace la base (`listarHistoricoCierresBodegaCompleto`), con el
+           * MISMO `where` y el MISMO orden que la página.
+           *
+           * Lo que NO cambia: el acceso total lo aplica el servicio desde la sesión, igual que
+           * en la página, así que descargar no amplía lo que el actor podía ver (R44). Y el
+           * tope de filas pasa a evaluarse en el SERVIDOR: por encima no viaja ni una (R6).
            */
           descarga={{
             titulo: TITULO_DESCARGA,
             columnas: COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
             obtenerFilas: () =>
-              filasDelConjuntoCompleto(
-                listarCierresBodegaAdmin().then((res) =>
-                  res.status === "ok"
-                    ? ({ status: "ok", items: res.historico } as const)
-                    : res,
-                ),
+              filasDesdeResultado(
+                listarHistoricoCierresBodegaCompleto(),
                 filaDescargaBodegaResuelto,
               ),
           }}

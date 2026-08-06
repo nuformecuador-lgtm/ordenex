@@ -64,7 +64,11 @@ export async function listarNotificaciones(
   return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
-/** R31/R35/R37: marca una notificacion como leida para el actor. */
+/**
+ * R31/R35/R37: marca una notificacion como leida para el actor.
+ *
+ * @sin-superficie DEUDA, no diseno: la campana (`components/shared/NotificationsBell.tsx`) solo ofrece «descartar» y «marcar todas»; marcar UNA no tiene punto de entrada y `git log -S` no devuelve ningun commit en `app/` ni `components/`, asi que nunca lo tuvo. Capacidad de usuario completa, implementada y testeada, sin boton.
+ */
 export async function marcarNotificacionLeida(
   id: unknown,
   deps: NotificacionActionDeps = {},

@@ -3,6 +3,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 
 // Feature 37 — contrato del servicio del "Cierre del dia" del mensajero. Logica de
 // negocio pura (sin HTTP ni Prisma); el borde (Server Action) la traduce a
@@ -253,6 +254,22 @@ export type VerCierrePasadoServiceResult =
  */
 export type ListarCierresPasadosServiceResult = ListarPaginadoServiceResult<CierrePasadoDTO>;
 
+/**
+ * Feature 184 — Tanda C (R1/R4/R6/R9) — el CONJUNTO de «Cierres solicitados» del PROPIO
+ * mensajero, sin recorte, que es del que sale el archivo.
+ *
+ * Hermano de `listarCierresPasadosPaginado`: mismo guard, mismo acotamiento por actor, mismo
+ * metodo de repositorio y por tanto MISMO mapper de dinero. Lo unico que no lleva es el recorte.
+ *
+ * **Y, sobre todo, no firma ninguna URL de evidencia (R9).** Hasta hoy este archivo se producia
+ * releyendo `listarCierreDia()`, que ademas del historico trae las gestiones del dia, resuelve la
+ * tarifa del mensajero y firma en lote las evidencias fotograficas de TODAS ellas contra Supabase
+ * Storage. El archivo no lleva ninguna de esas URL —sus ocho columnas salen enteras del
+ * `CierrePasadoDTO`—, asi que firmarlas para generarlo era trabajo perdido, y pagado en red.
+ */
+export type ListarCierresPasadosCompletoServiceResult =
+  ListarCompletoServiceResult<CierrePasadoDTO>;
+
 // R10-R16: solicitud de cierre. Sin input de negocio (el actor y sus gestiones lo
 // determinan todo). `conflict` cubre R10 (pendientes) / R11 (vacio) / R12
 // (duplicado); `validation_error` cubre R16 (sin zona).
@@ -313,6 +330,21 @@ export interface ICierreDiaService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarCierresPasadosServiceResult>;
+  /**
+   * Feature 184 — Tanda C (R1/R4/R6/R9): el CONJUNTO de «Cierres solicitados» del propio
+   * mensajero, sin recorte, para producir el archivo.
+   *
+   * **No recibe entrada**: este listado no admite filtros, asi que su lista blanca —derivada de
+   * la de la pagina quitando `page`/`pageSize`— no deja ninguna clave, y la barrera se aplica
+   * entera en el borde (R17). El alcance ES el actor: `actor.usuarioId` va al `mensajero_id` del
+   * WHERE y no hay parametro por el que pedir el historico de otro (R4).
+   *
+   * El tope de filas se evalua aqui (R6): superarlo NO entrega filas ni un archivo truncado.
+   *
+   * **R9:** ni una llamada al firmador de URL. La relectura que sustituye (`listarCierreDia`)
+   * firma las evidencias de todas las gestiones del dia; el archivo no usa ninguna.
+   */
+  listarCierresPasadosCompleto(actor: Actor): Promise<ListarCierresPasadosCompletoServiceResult>;
   /**
    * R10-R16: crea la solicitud de cierre (`solicitado`) agrupando TODAS las
    * gestiones pendientes del mensajero, con destino derivado por zona (R15) y

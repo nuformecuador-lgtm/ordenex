@@ -133,6 +133,26 @@ export const listarSaldosTiendasPaginadoSchema = z
 
 export type ListarSaldosTiendasPaginadoInput = z.infer<typeof listarSaldosTiendasPaginadoSchema>;
 
+/**
+ * Feature 184 — Tanda G (R17) — entrada del modo SIN paginacion (el conjunto del archivo).
+ *
+ * DERIVADA de la de su pagina quitando `page`/`pageSize`, no reescrita. La lista blanca
+ * resultante tiene CERO claves, y la que importa sigue siendo `tiendaId`: la unica que
+ * convertiria un listado global —el saldo de TODAS las tiendas— en uno dirigido. Muere aqui,
+ * antes del servicio, con `validation_error`.
+ */
+export const listarSaldosTiendasCompletoSchema = listarSaldosTiendasPaginadoSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarSaldosTiendasCompletoInput = z.infer<typeof listarSaldosTiendasCompletoSchema>;
+
+/**
+ * Resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO conteos y ninguna rama
+ * de error viaja con filas (R6/R7).
+ */
+export type ListarSaldosTiendasCompletoResult = ListarCompletoResult<SaldoTiendaResumenDTO>;
+
 // ── Schema zod de borde (R22) ──
 
 // Listado del ledger de la tienda: paginado + filtros opcionales por cierre, concepto y
