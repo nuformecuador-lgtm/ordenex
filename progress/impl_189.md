@@ -276,3 +276,38 @@ No se corrió la suite completa (regla del repo). No se vio ningún rojo en arch
 
 **Modificados:** ninguno de producción. **Cero líneas** tocadas en `app/`, `components/` y `lib/`,
 verificado con `git status --porcelain` tras las 48 mutaciones de las dos pasadas.
+
+---
+
+## 8. Añadido por el LEADER al verificar: el encabezado que esta feature deja congelado
+
+> Esto **no** lo encontró el rol que implementó; sale de revisar su entrega contra el backlog.
+> Se anota aquí porque el sitio donde importa es este archivo, no la ficha ajena.
+
+**`COLUMNAS_DESCARGA_GASTOS_FIJOS` declara el encabezado `"Monto mensual"` (línea 24), y esta
+feature acaba de atornillarlo.**
+
+La cadena, verificada contra el código:
+
+1. La **feature 84** (`done`) añadió `periodicidadUnidad` y `periodicidadCantidad` a
+   `GastoFijoPlantilla`: las plantillas pueden ser **diaria, semanal, quincenal o mensual**.
+2. El archivo descargable **omite esos campos a propósito** y lo argumenta bien
+   (`gastos-fijos-descarga-columnas.ts:10-13`): R24 prohíbe emitir lo que el listado no enseña, y
+   el panel no los enseña. **La omisión es defendible; el encabezado no.** Una plantilla semanal
+   sale con la etiqueta «Monto mensual».
+3. **Hoy la etiqueta es cierta por accidente**: medido, `periodicidad` no aparece en **ninguna**
+   línea de `app/` fuera del propio comentario de este archivo — el diálogo no ofrece el selector,
+   así que toda plantilla creada por la UI nace mensual. Es un defecto **latente, no vivo**.
+
+> ⚠️ **Lo que esta feature cambia es cuándo se entera alguien.** El caso nuevo fija
+> `"Monto mensual"` como valor esperado. **El día que aterrice la ficha 85** —que es justamente
+> exponer la periodicidad en la UI— dos plantillas de ₡50.000, una semanal y una mensual, saldrán
+> como filas idénticas bajo esa etiqueta, y **el test seguirá VERDE afirmando que está bien**.
+
+**Dirigido a la ficha 85, no a esta.** Al tocar el panel hay que decidir el encabezado (`"Monto"` +
+columna de periodicidad, o `"Monto por ciclo"`) y **actualizar este caso a la vez**. Arreglarlo aquí
+sería cambiar un archivo que un usuario descarga, que es exactamente lo que el encargo prohíbe.
+
+**Y no lo cubre la guardia de superficie de uso** (`superficie-de-uso.guardia.test.ts`, del
+2026-08-05): vigila **acciones sin superficie**, no **campos sin superficie**. Es la misma familia
+que el botón huérfano —capacidad entregada, cero sitio donde verla—, y sigue sin detector.

@@ -29,8 +29,11 @@ bloqueo. Nada del backlog espera a nada.
 **Dos correcciones a lo que la propia auditoría creyó primero:**
 
 1. **Sospeché de la 189 y la sospecha era falsa.** Existen 8 tests `*-descarga-columnas.test.ts`,
-   pero cubren **otras** tablas: hay **35** constantes `COLUMNAS_DESCARGA_*`, **13** con aserción de
-   orden, y **ninguna de las 12**. La ficha es exacta y `impl_188-cierre.md:167` ya lo decía.
+   pero cubren **otras** tablas. Medido: **35** constantes `COLUMNAS_DESCARGA_*` declaradas en el
+   árbol, y **13 archivos de test** con la aserción `map(c => c.clave).toEqual(…)` — **ninguno
+   sobre las 12** de esta ficha. La ficha es exacta y `impl_188-cierre.md:167` ya lo decía.
+   *(«13» son archivos, no constantes: varios cubren dos, y tres de esos archivos ni siquiera son
+   de descarga. El censo constante-a-constante lo produce esta feature.)*
 2. **La 85 es peor que su ficha.** El DTO ya trae `periodicidadUnidad` y `periodicidadCantidad`
    (feature 84) y **no los muestra ni la pantalla ni el Excel** — `gastos-fijos-descarga-columnas.ts:10-11`
    los excluye a propósito. **Misma familia que el botón huérfano**: capacidad entregada, cero
