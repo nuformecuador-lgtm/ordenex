@@ -11,6 +11,7 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import {
+  asignarDesdeBodega,
   listarMensajerosParaAsignacion,
   listarZonasBloqueadasPorCierre,
   rutearABodegaSatelite,
@@ -84,9 +85,12 @@ const listarOrderStatusMock = vi.mocked(listarOrderStatus);
 const listarMensajerosMock = vi.mocked(listarMensajerosParaAsignacion);
 const listarZonasBloqueadasMock = vi.mocked(listarZonasBloqueadasPorCierre);
 const rutearMock = vi.mocked(rutearABodegaSatelite);
+const asignarMock = vi.mocked(asignarDesdeBodega);
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 
 const ACCION = "Rutear a bodega satélite";
+// La acción HERMANA del mismo estado `en_bodega_central`, con la regla de zona inversa.
+const ACCION_ASIGNAR = "Asignar mensajero";
 
 function makeOrden(
   overrides: Partial<OrdenListItemDTO> & { id: string; numRemision: string },
@@ -136,6 +140,22 @@ async function renderPageComo(
       </SWRConfig>
     </ToastProvider>,
   );
+}
+
+/**
+ * Elige al único mensajero del stub en el selector del modal de asignación. El listbox de
+ * la primitiva `Select` sale por un portal FUERA del diálogo, así que se busca en
+ * `screen`; la opción se espera con `find*` porque su lista llega por SWR.
+ */
+async function elegirMensajero(
+  user: ReturnType<typeof userEvent.setup>,
+  dialogo: HTMLElement,
+) {
+  await user.click(
+    within(dialogo).getByRole("combobox", { name: "Mensajero para el lote" }),
+  );
+  const listbox = await screen.findByRole("listbox");
+  await user.click(await within(listbox).findByRole("option", { name: "Juan" }));
 }
 
 const CATALOGO_BODEGA = [{ id: "id-bodega", value: "en_bodega_central" }];
@@ -300,5 +320,140 @@ describe("/ordenes — 'Rutear a bodega satélite' vuelve a tener superficie (ho
       expect(rutearMock).toHaveBeenCalledWith({ ordenIds: ["o1", "o2"] }),
     );
     expect(rutearMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Reportado por el humano al probar el hotfix (2026-08-05): con órdenes de zona satélite
+ * seleccionadas, la barra ofrecía TAMBIÉN "Asignar mensajero", que para esas órdenes no
+ * puede funcionar — `GuiaAsignacionService.asignarDesdeBodega` exige origen
+ * `en_bodega_central` **y** zona GAM (R27/R12), y un mensajero de la zona central: una
+ * orden no-GAM ahí sale `conflict`. Ofrecer una acción que va a fallar es el mismo defecto
+ * que el hotfix vino a corregir, en espejo.
+ *
+ * Viven en este archivo porque comparten estado de origen y arnés con el ruteo: la MISMA
+ * página real, el mismo lote de `en_bodega_central`, y la regla de zona INVERSA. Un filtro
+ * mal puesto rompe a la vez a las dos, y aquí se ven juntas.
+ */
+describe("/ordenes — 'Asignar mensajero' desde bodega solo lleva órdenes GAM (R27/R12)", () => {
+  it("solo satélite: la orden no-GAM NO llega al modal, que avisa y deja el confirmar deshabilitado", async () => {
+    const user = userEvent.setup();
+    await renderPageComo(
+      RolValue.maestro,
+      [makeOrden({ id: "o1", numRemision: "REM-SAT-1" })],
+      CATALOGO_BODEGA,
+    );
+
+    await user.click(
+      await screen.findByRole("checkbox", {
+        name: "Seleccionar orden REM-SAT-1",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: ACCION_ASIGNAR }),
+    );
+
+    const dialogo = await screen.findByRole("dialog");
+    // Ancla: el aviso de lote vacío SOLO existe cuando el filtro se llevó todo. El estado
+    // transitorio del modal (recién abierto, con su lista) no lo cumple, así que la
+    // ausencia de abajo se afirma sobre la vista final y no sobre un render a medias.
+    expect(
+      await within(dialogo).findByText("Selecciona órdenes de la zona central."),
+    ).toBeInTheDocument();
+    expect(within(dialogo).queryByText(/REM-SAT-1/)).toBeNull();
+
+    // Sin órdenes no se puede confirmar: nunca sale un `ordenIds: []` a la Server Action.
+    expect(within(dialogo).getByRole("button", { name: "Asignar" })).toBeDisabled();
+    expect(asignarMock).not.toHaveBeenCalled();
+  });
+
+  it("control positivo: una orden GAM SÍ llega — la Server Action recibe su ordenId", async () => {
+    const user = userEvent.setup();
+    asignarMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "o-gam", estado: "por_recoger" }],
+    });
+
+    await renderPageComo(
+      RolValue.maestro,
+      [
+        makeOrden({
+          id: "o-gam",
+          numRemision: "REM-GAM-1",
+          zonaId: "zona-central",
+          zonaEsGam: true,
+        }),
+      ],
+      CATALOGO_BODEGA,
+    );
+
+    await user.click(
+      await screen.findByRole("checkbox", {
+        name: "Seleccionar orden REM-GAM-1",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: ACCION_ASIGNAR }),
+    );
+
+    const dialogo = await screen.findByRole("dialog");
+    expect(within(dialogo).getByText(/REM-GAM-1/)).toBeInTheDocument();
+
+    await elegirMensajero(user, dialogo);
+    await user.click(within(dialogo).getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(asignarMock).toHaveBeenCalledWith({
+        ordenIds: ["o-gam"],
+        mensajeroId: "m1",
+      }),
+    );
+    expect(asignarMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("mixto: con una GAM y una no-GAM seleccionadas, a la Server Action solo llega la GAM", async () => {
+    const user = userEvent.setup();
+    asignarMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "o-gam", estado: "por_recoger" }],
+    });
+
+    await renderPageComo(
+      RolValue.maestro,
+      [
+        makeOrden({ id: "o1", numRemision: "REM-SAT-1" }),
+        makeOrden({
+          id: "o-gam",
+          numRemision: "REM-GAM-1",
+          zonaId: "zona-central",
+          zonaEsGam: true,
+        }),
+      ],
+      CATALOGO_BODEGA,
+    );
+
+    for (const ref of ["REM-SAT-1", "REM-GAM-1"]) {
+      await user.click(
+        await screen.findByRole("checkbox", { name: `Seleccionar orden ${ref}` }),
+      );
+    }
+    await user.click(
+      await screen.findByRole("button", { name: ACCION_ASIGNAR }),
+    );
+
+    const dialogo = await screen.findByRole("dialog");
+    expect(within(dialogo).getByText(/REM-GAM-1/)).toBeInTheDocument();
+    expect(within(dialogo).queryByText(/REM-SAT-1/)).toBeNull();
+
+    await elegirMensajero(user, dialogo);
+    await user.click(within(dialogo).getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(asignarMock).toHaveBeenCalledWith({
+        ordenIds: ["o-gam"],
+        mensajeroId: "m1",
+      }),
+    );
+    expect(asignarMock).toHaveBeenCalledTimes(1);
   });
 });
