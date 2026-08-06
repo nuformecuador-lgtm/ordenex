@@ -6,9 +6,11 @@ import { TableroFinanciero } from "@/app/(app)/analitica/_components/financiero/
 import type { PanelFinanciero } from "@/app/(app)/analitica/_components/financiero/cargar";
 import { formatearValor } from "@/components/private/analytics/formato";
 import {
+  IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA,
   IDS_FINANCIERAS_SERVIDAS,
   VISTA_COD_RECAUDADO_POR_METODO,
   VISTA_COD_RECAUDADO_POR_TIENDA,
+  type FilaFinanciera,
   type ImporteAnalitico,
   type MetricaFinancieraId,
   type ResultadoFinanciero,
@@ -76,17 +78,81 @@ function cifra(valor: number, unidad: "moneda" | "conteo"): string {
 // (R25)— y el helper la rellena con un marcador para que un panel que la leyera pintara
 // basura visible en vez de acertar por azar.
 
-function vistaSinFilas(id: string, total: ImporteAnalitico): VistaFinanciera {
+/**
+ * Los cubos que el servicio produce para ESTE rango con `granularidad: "dia"`: los treinta
+ * dias de `RANGO`, ambos extremos incluidos.
+ *
+ * Se DERIVAN de `RANGO` en vez de escribirse a mano: si alguien mueve las fechas del rango,
+ * la serie lo sigue en vez de quedarse describiendo otra ventana. Todo en UTC, que es como
+ * `trocear` produce sus claves `YYYY-MM-DD`.
+ */
+const CUBOS_FECHA: readonly string[] = (() => {
+  const MS_POR_DIA = 86_400_000;
+  const fin = Date.parse(`${RANGO.hastaFecha}T00:00:00Z`);
+  const cubos: string[] = [];
+  for (let t = Date.parse(`${RANGO.desdeFecha}T00:00:00Z`); t <= fin; t += MS_POR_DIA) {
+    cubos.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return cubos;
+})();
+
+/**
+ * Un cubo INTERMEDIO de la serie, y por eso util: las dos fechas EXTREMAS del rango ya se
+ * pintan en la cabecera de cada panel (R22), asi que afirmar sobre ellas no distinguiria la
+ * cabecera de una tabla. Esta fecha solo puede aparecer si alguien pinto la serie.
+ */
+const CUBO_INTERMEDIO: string = CUBOS_FECHA[15]!;
+
+/**
+ * La serie DENSA de una vista temporal, tal como la produce `serieDensa` desde la feature
+ * 180: UNA fila por cubo del rango, incluidos los cubos sin movimiento.
+ *
+ * Las cifras de las filas son deliberadamente AJENAS a todos los totales de este archivo
+ * (terminan en 13 y en 17 centimos, que ningun total usa): si un panel pintara una fila
+ * donde va el titular, ninguna asercion podria acertar por azar.
+ *
+ * La `forma` de cada fila la dicta el TOTAL y no se elige aparte: R18 de la 183 exige que
+ * una vista no mezcle formas, y una fixture que las mezclara describiria un DTO imposible.
+ */
+function serieDensaDelRango(total: ImporteAnalitico): readonly FilaFinanciera[] {
+  return CUBOS_FECHA.map((cubo, indice) => {
+    const bruto = `${(indice + 1) * 7}.13`;
+    return {
+      cubo,
+      importe:
+        total.forma === "solo_bruto"
+          ? importeSoloBruto(bruto)
+          : importeConNeto(bruto, `-${(indice + 1) * 3}.17`),
+    };
+  });
+}
+
+/**
+ * Una vista de SERIE TEMPORAL, como las produce el servicio HOY.
+ *
+ * HASTA EL HOTFIX DEL 2026-08-06 ESTA FIXTURE SE LLAMABA `vistaSinFilas`, declaraba
+ * `filas: []` y llevaba al lado el comentario «el tablero NO la lee» sobre `granularidad`.
+ * Las dos cosas eran falsas desde la 180: `serieDensa` emite una fila por cubo del rango
+ * —cubos sin movimiento incluidos—, asi que las SIETE metricas que pasan por este helper
+ * llegan a la pantalla con treinta filas. La fixture fijaba la premisa VIEJA, y por eso la
+ * suite entera siguio en verde mientras produccion pintaba una tabla de fechas donde va
+ * «Dinero en caja». Una fixture cuyo DTO el servicio ya no produce no protege nada:
+ * describe un mundo que no existe.
+ *
+ * NO LA VUELVAS A VACIAR para «simplificar». El caso de la vista sin filas sigue existiendo
+ * y se prueba APARTE, con su propia fixture, en el bloque del hotfix.
+ */
+function vistaTemporal(id: string, total: ImporteAnalitico): VistaFinanciera {
   return {
     id,
     grano: "fecha",
     fuente: "wallet_tienda_movimiento",
     sumableCon: [],
     // Feature 180 (R4) — `granularidad` REQUERIDA. Grano `fecha` y rango de 30 dias: `dia`.
-    // El tablero NO la lee (Q4 = (a): esta feature es solo backend y no anade panel de lineas);
-    // aparece aqui porque el tipo obliga a nombrarla en todo productor, incluidos los fixtures.
+    // El tablero SI la lee: desde el hotfix es la señal de forma con la que separa una serie
+    // temporal (KPI) de un desglose (tabla).
     granularidad: "dia",
-    filas: [],
+    filas: serieDensaDelRango(total),
     total,
   };
 }
@@ -104,7 +170,7 @@ function dtoKpi(
     unidad: "moneda",
     rango: RANGO,
     esAcumulado,
-    vistas: [vistaSinFilas(`${metricaId}__vista`, total)],
+    vistas: [vistaTemporal(`${metricaId}__vista`, total)],
   };
 }
 
@@ -152,10 +218,11 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
   // dos cifras ligadas, un panel que pintara la misma dos veces pasaria igual.
   egresos: dtoKpi("egresos", ETIQUETAS.egresos, importeConNeto("4000.00", "-3600.00")),
   // Feature 173 ⟨P4⟩ — `deTesoreria` las sirve con la MISMA forma que las cuatro de
-  // arriba: una vista sola, `grano: "fecha"`, `sumableCon: []`, SIN filas (el
-  // repositorio agrega la ventana entera) y `esAcumulado: false` — no son un saldo
-  // al corte, son el movimiento del rango. Por eso van con el mismo helper que sus
-  // vecinas y con importes que continuan su serie.
+  // arriba: una vista sola, `grano: "fecha"`, `sumableCon: []`, con la SERIE DENSA por
+  // cubo que la 180 les dio (decia «SIN filas» hasta el hotfix del 2026-08-06, y era la
+  // premisa vieja) y `esAcumulado: false` — no son un saldo al corte, son el movimiento
+  // del rango. Por eso van con el mismo helper que sus vecinas y con importes que
+  // continuan su serie.
   dinero_en_caja: dtoKpi("dinero_en_caja", ETIQUETAS.dinero_en_caja, importeConNeto("5000.00", "4500.00")),
   ganancia_ordenex: dtoKpi(
     "ganancia_ordenex",
@@ -777,5 +844,163 @@ describe("Feature 132 (R24, Q2) — el cubo de tienda se pinta crudo y la limita
 
     const seccion = screen.getByRole("region", { name: ETIQUETAS.ingreso_flete });
     expect(seccion.textContent ?? "").not.toMatch(/identificadores internos de tienda/i);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* HOTFIX 2026-08-06 — la serie densa de la 180 no convierte el KPI en tabla   */
+/* -------------------------------------------------------------------------- */
+//
+// EL DEFECTO, que estuvo VIVO EN PRODUCCION: `ContenidoDeVista` elegia el componente con
+// `vista.filas.length === 0 -> KPI`. Esa condicion era una señal de forma valida mientras el
+// servicio devolviera las siete vistas de grano `fecha` agregadas y sin cubo. La 180 la
+// invalido: `serieDensa` emite una fila por cubo del rango —incluidos los cubos sin
+// movimiento—, asi que las siete cayeron en `PanelTabla` y el maestro perdio la cifra de
+// titular («Dinero en caja», «Ganancia de Ordenex», …) a cambio de una tabla de treinta
+// fechas.
+//
+// POR QUE NINGUNA SUITE LO VIO: la fixture de este mismo archivo declaraba `filas: []` para
+// esas siete y la 180 la dejo asi, limitandose a añadirle `granularidad`. El componente y su
+// prueba compartian una premisa que el servicio ya no cumplia, y dos piezas que se equivocan
+// igual no se contradicen nunca. Por eso el arreglo incluye la fixture: sin eso, este bloque
+// mediria el mismo mundo inexistente.
+//
+// LA SEÑAL CORRECTA es `granularidad`, obligatoria en toda vista desde la 180 y con un valor
+// —`no_temporal`— que AFIRMA «esta vista no se mide en el tiempo». Sigue sin haber ni una
+// decision por id de metrica (R27 / R22 de la 183): se pregunta por la forma del DTO.
+
+describe("Hotfix — una vista TEMPORAL con filas es la cifra de titular, no una tabla de fechas", () => {
+  /** Las metricas cuya vista es temporal, leidas de la FORMA de la fixture y no de una lista. */
+  const TEMPORALES: readonly MetricaFinancieraId[] = IDS_FINANCIERAS_SERVIDAS.filter((id) => {
+    const dto = DTOS[id];
+    return dto.tipo === "vistas" && dto.vistas.some((v) => v.granularidad !== "no_temporal");
+  });
+
+  /** La cifra que el KPI pone de titular: el `neto` donde el DTO lo trae, el `bruto` donde no. */
+  function titularDe(vista: VistaFinanciera): string {
+    const { total } = vista;
+    return total.forma === "bruto_y_neto"
+      ? cifra(Number(total.neto), "moneda")
+      : cifra(Number(total.bruto), "moneda");
+  }
+
+  function vistaUnicaDe(id: MetricaFinancieraId): VistaFinanciera {
+    const dto = DTOS[id];
+    if (dto.tipo !== "vistas") throw new Error(`${id} no es una metrica de vistas`);
+    return dto.vistas[0]!;
+  }
+
+  it("la fixture declara temporales EXACTAMENTE las siete que la 180 desgloso por fecha", () => {
+    // El contrapeso que ata la fixture al contrato: el dia que una metrica entre o salga de
+    // `IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA`, esta linea se pone roja y la fixture se
+    // actualiza — en vez de seguir describiendo el reparto de ayer, que es como nacio el
+    // defecto que este bloque persigue.
+    expect([...TEMPORALES].sort()).toEqual([...IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA].sort());
+    expect(TEMPORALES).toHaveLength(7);
+  });
+
+  it("la serie de la fixture es DENSA: una fila por dia del rango, treinta para treinta dias", () => {
+    // Sin esto el bloque entero podria pasar por vacio: con `filas: []` la vista cae en la
+    // rama del KPI por la OTRA condicion y ninguna asercion de abajo distinguiria nada.
+    expect(CUBOS_FECHA).toHaveLength(30);
+    expect(CUBOS_FECHA[0]).toBe(RANGO.desdeFecha);
+    expect(CUBOS_FECHA.at(-1)).toBe(RANGO.hastaFecha);
+    for (const id of TEMPORALES) {
+      expect(vistaUnicaDe(id).filas.map((f) => f.cubo)).toEqual(CUBOS_FECHA);
+    }
+    // Y el cubo con el que se afirma abajo NO es ninguno de los dos extremos, que la
+    // cabecera del panel ya pinta como rango (R22).
+    expect(CUBO_INTERMEDIO).not.toBe(RANGO.desdeFecha);
+    expect(CUBO_INTERMEDIO).not.toBe(RANGO.hastaFecha);
+  });
+
+  it.each(TEMPORALES)("`%s` pinta la cifra de titular de su KPI", (id) => {
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+    expect(within(seccion).getByText(titularDe(vistaUnicaDe(id)))).toBeInTheDocument();
+  });
+
+  it.each(TEMPORALES)("`%s` NO pinta ninguna tabla", (id) => {
+    // `TablaResumen` emite un `<table>` con su titulo por `<caption>`; el KPI no emite
+    // ninguno. Es la asercion que separa las dos pantallas sin mirar una sola cifra.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+    expect(within(seccion).queryByRole("table")).toBeNull();
+    expect(within(seccion).queryAllByRole("row")).toHaveLength(0);
+  });
+
+  it.each(TEMPORALES)("`%s` NO pinta las fechas de la serie", (id) => {
+    // La forma del defecto tal como el maestro lo vio: una columna de fechas donde iba el
+    // numero. Se afirma sobre un cubo INTERMEDIO, que no aparece en la cabecera del rango.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+    expect(within(seccion).queryByRole("cell", { name: CUBO_INTERMEDIO })).toBeNull();
+    expect(seccion.textContent ?? "").not.toContain(CUBO_INTERMEDIO);
+  });
+
+  it.each(TEMPORALES)("`%s` no pinta el total al pie, que es la marca del panel de tabla", (id) => {
+    // `TotalDelDto` —la fila de total que acompaña a toda tabla— siempre escribe «Total
+    // bruto». Su ausencia distingue el KPI de la tabla incluso si las dos pintaran la misma
+    // cifra, que es justo lo que pasa: el titular del KPI y el total del DTO son el mismo
+    // numero, y sin esta asercion el caso de arriba pasaria en verde con el defecto puesto.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
+    expect(within(seccion).queryByText("Total bruto")).toBeNull();
+    expect(within(seccion).queryByText("Total neto")).toBeNull();
+  });
+});
+
+describe("Hotfix — las otras dos conductas de la 132 siguen intactas", () => {
+  /** Una vista NO temporal y sin filas: el otro camino al KPI, el que ya existia. */
+  function panelSinFilas(): PanelFinanciero {
+    return {
+      estado: "ok",
+      id: "cuenta_por_pagar_tienda",
+      datos: {
+        tipo: "vistas",
+        metricaId: "cuenta_por_pagar_tienda",
+        etiqueta: ETIQUETAS.cuenta_por_pagar_tienda,
+        unidad: "moneda",
+        rango: RANGO,
+        esAcumulado: true,
+        vistas: [
+          {
+            id: "cuenta_por_pagar_tienda__vista",
+            grano: "tienda",
+            fuente: "wallet_tienda_movimiento",
+            sumableCon: [],
+            granularidad: "no_temporal",
+            filas: [],
+            total: importeConNeto("77.00", "70.00"),
+          },
+        ],
+      },
+    };
+  }
+
+  it("una vista NO temporal y SIN filas sigue siendo un KPI, no una tabla vacia", () => {
+    // La segunda condicion del arreglo, con su propio caso: sin ella, «simplificar» el `if`
+    // a solo la granularidad dejaria una tabla con el cartel de vacio donde iba una cifra, y
+    // ningun otro caso lo veria.
+    render(<TableroFinanciero paneles={[panelSinFilas()]} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS.cuenta_por_pagar_tienda });
+    expect(within(seccion).queryByRole("table")).toBeNull();
+    expect(within(seccion).queryByText(/Sin movimientos en el rango/i)).toBeNull();
+    expect(within(seccion).getByText(cifra(70, "moneda"))).toBeInTheDocument();
+  });
+
+  it("una vista NO temporal CON filas sigue siendo una tabla: el arreglo no lo mando todo a KPI", () => {
+    // El contrapeso del bloque anterior. Sin el, un `ContenidoDeVista` que devolviera SIEMPRE
+    // el KPI pasaria en verde todos los casos del hotfix y perderia los desgloses por tienda.
+    render(<TableroFinanciero paneles={panelesOk()} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS.cuenta_por_pagar_tienda });
+    expect(within(seccion).getByRole("table")).toBeInTheDocument();
+    expect(within(seccion).getByRole("cell", { name: CUBOS_TIENDA[0] })).toBeInTheDocument();
   });
 });
