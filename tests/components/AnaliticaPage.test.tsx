@@ -115,12 +115,25 @@ const ETIQUETA_METRICA = "Egresos del período";
 const CIFRA_BRUTA = "918273.45";
 const CIFRA_NETA = "817263.45";
 
+const RANGO = { desdeFecha: "2026-07-05", hastaFecha: "2026-08-03" } as const;
+
+/** Los cubos diarios de `RANGO`, derivados de el: los mismos que `trocear` produciria. */
+const CUBOS_DEL_RANGO: readonly string[] = (() => {
+  const MS_POR_DIA = 86_400_000;
+  const fin = Date.parse(`${RANGO.hastaFecha}T00:00:00Z`);
+  const cubos: string[] = [];
+  for (let t = Date.parse(`${RANGO.desdeFecha}T00:00:00Z`); t <= fin; t += MS_POR_DIA) {
+    cubos.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return cubos;
+})();
+
 const DATOS_FINANCIEROS: ResultadoFinancieroVistas = {
   tipo: "vistas",
   metricaId: "egresos",
   etiqueta: ETIQUETA_METRICA,
   unidad: "moneda",
-  rango: { desdeFecha: "2026-07-05", hastaFecha: "2026-08-03" },
+  rango: RANGO,
   esAcumulado: false,
   vistas: [
     {
@@ -128,12 +141,22 @@ const DATOS_FINANCIEROS: ResultadoFinancieroVistas = {
       grano: "fecha",
       fuente: "wallet_movimiento",
       sumableCon: [],
-      // Feature 180 (R4): `granularidad` es REQUERIDA en toda vista. Grano `fecha` sin filas
-      // todavia: la granularidad que el servidor declararia para este rango de 30 dias es `dia`.
-      // La pagina NO la consume (Q4 = (a), esta feature es solo backend); esta aqui porque el
-      // tipo la exige, que es exactamente el efecto que se buscaba al hacerla obligatoria.
+      // Feature 180 (R4): `granularidad` es REQUERIDA en toda vista. Grano `fecha` sobre un
+      // rango de 30 dias: `dia`.
+      //
+      // HOTFIX 2026-08-06 — esta fixture declaraba `filas: []` y decia «la pagina NO la
+      // consume». Las dos cosas eran falsas desde la 180: `serieDensa` emite UNA fila por
+      // cubo del rango (cubos sin movimiento incluidos), y la pagina renderiza
+      // `TableroFinanciero`, que decide KPI vs. tabla precisamente por `granularidad`. Se
+      // pone la serie densa de verdad para que este archivo mida el DTO que el servicio
+      // produce y no el que producia hace dos features. El detalle de esa decision se prueba
+      // en `tests/components/TableroFinanciero.test.tsx`; aqui lo unico que importa es que el
+      // DTO sea REAL, porque de el salen las cifras que R2 exige que no dejen rastro.
       granularidad: "dia",
-      filas: [],
+      filas: CUBOS_DEL_RANGO.map((cubo, indice) => ({
+        cubo,
+        importe: importeConNeto(`${(indice + 1) * 7}.13`, `-${(indice + 1) * 3}.17`, "__sin_leer__"),
+      })),
       total: importeConNeto(CIFRA_BRUTA, CIFRA_NETA, "__sin_leer__"),
     },
   ],

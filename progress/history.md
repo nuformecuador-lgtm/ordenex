@@ -2930,3 +2930,35 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   a **189/190/191**. Los 60 commits, los comentarios de 111 archivos y la constante
   `PENDIENTES_184` **siguen diciendo 184 a propósito**: reescribir una rama pusheada está
   prohibido aquí, y esa constante es ancla de texto de una guardia.
+
+## 2026-08-06 — 189 (descargas: fijar las columnas y su orden en los 12 listados del Anexo A)
+- Doce casos nuevos en `tests/unit/descarga/` que clavan, por `clave` **y** por `encabezado`, las
+  columnas de los 12 listados del Anexo A. **Solo tests: cero líneas tocadas en `app/`,
+  `components/` y `lib/`.** Cierra la cláusula «columnas y orden» del **R12 de la 188**, que hasta
+  hoy se sostenía únicamente por una medición del diff —evidencia buena para «no lo rompí», nula
+  para «no se romperá mañana»—. `sdd: false`, sin puerta de spec. PR #303.
+- Requisitos cubiertos: la ficha no tiene EARS; el mapa constante → archivo de test → nombre
+  literal del caso está en `progress/impl_189.md §2`.
+- **Verificación: 24 mutaciones, 24 ROJO / 0 VERDE** (por constante: reordenar dos columnas
+  contiguas, y quitar una), cada una tumbando **solo su caso**, con el árbol de producción
+  restaurado y **comprobado por SHA-256** tras cada una. Gate completo `== init OK ==`: 984
+  archivos / 12.263 tests (baseline `dev` 977 / 12.251 → **+7 archivos, +12 tests**, cero
+  regresiones).
+- **Hallazgo: una tautología con disfraz de cobertura.** `RankingDescarga.test.tsx:138` hace
+  `expect(columnas.map(c => c.key)).toEqual(COLUMNAS_DESCARGA_RANKING.map(c => c.clave))`. Mide
+  algo útil —que el componente pasa al `xlsx` lo declarado—, pero **el esperado es la propia
+  constante**: reordenarla mueve los dos lados a la vez y el test sigue verde. `_RANKING` **parece
+  cubierta y no lo está**; quien tome la ficha hermana tiene ahí un caso que **sustituir**, no
+  completar.
+- **Censo, que la ficha pedía y no existía:** de las **35** constantes `COLUMNAS_DESCARGA_*` del
+  árbol, **11** ya tenían aserción de orden, **12** la ganan aquí y **12 siguen sin ella**
+  (nombradas una a una en `impl_189.md §4`). `_CUENTAS_POR_PAGAR` es la única de las 35 que **no
+  aparece ni una vez** en `tests/`. Material para decidir una ficha hermana; no se cubrieron.
+- **Deuda dejada, dirigida y con dueño: `COLUMNAS_DESCARGA_GASTOS_FIJOS` declara «Monto mensual» y
+  esta feature acaba de atornillarlo.** La feature 84 ya permite plantillas
+  diaria/semanal/quincenal/mensual; hoy la etiqueta es cierta **por accidente**, porque el diálogo
+  no ofrece el selector (medido: `periodicidad` no aparece en ninguna línea de `app/` fuera del
+  comentario de ese archivo). El día que aterrice la **ficha 85**, dos plantillas de ₡50.000 —una
+  semanal y una mensual— saldrán como filas idénticas y **el test seguirá verde**. No se arregla
+  aquí: sería cambiar un archivo que un usuario descarga. Y **la guardia de superficie de uso no lo
+  caza**: vigila acciones sin superficie, no **campos** sin superficie.
