@@ -8,14 +8,25 @@ import { z } from "zod";
 // ya no decide mensajero, asi que cualquier dato de mensajero en la entrada es un
 // error de contrato y se resuelve como `validation_error` en el borde, sin llamar al
 // service (zod descarta las claves no declaradas).
+//
+// COTA INFERIOR DEL LOTE (2026-08-05) — vale para las TRES acciones de este archivo que
+// reciben `ordenIds` sueltos (`generarGuia`, `asignarDesdeBodega`, `rutearABodegaSatelite`).
+// Un lote vacio NO es una peticion valida: sin `.min(1)` en el array, `{ ordenIds: [] }`
+// cruzaba el borde y el service lo resolvia como `{ status: "ok", resultados: [] }`, asi que
+// la UI cantaba un exito ("Mensajero asignado a 0 orden(es)") por una accion que no hizo
+// nada. Se cierra en la raiz —el schema—, no en cada modal. Es la misma cota que ya tenian
+// el resto de acciones de lote del repo (`recogerSchema`, `recibirLoteSchema`,
+// `etiquetaGuiaSchema`, `asignarRecoleccionSchema`...), y se declara igual que ellas: SIN
+// mensaje propio, porque la UI traduce `validation_error` a un literal fijo
+// (`guiaDecisionErrorMessage`) y el texto de zod no llega nunca al usuario.
 export const generarGuiaSchema = z.object({
-  ordenIds: z.array(z.string().min(1)),
+  ordenIds: z.array(z.string().min(1)).min(1),
 });
 export type GenerarGuiaActionInput = z.infer<typeof generarGuiaSchema>;
 
 // R26: un solo mensajero para el lote completo (asignacion desde bodega).
 export const asignarBodegaSchema = z.object({
-  ordenIds: z.array(z.string().min(1)),
+  ordenIds: z.array(z.string().min(1)).min(1), // cota del lote: ver el bloque de arriba
   mensajeroId: z.string().min(1),
 });
 export type AsignarBodegaActionInput = z.infer<typeof asignarBodegaSchema>;
@@ -34,7 +45,7 @@ export interface AsignarBodegaResultadoItem {
 // Feature 30/R13 — ruteo dedicado de ordenes no-GAM a la bodega satelite. Zod en
 // el borde (mismo patron que asignarBodegaSchema).
 export const rutearSateliteSchema = z.object({
-  ordenIds: z.array(z.string().min(1)),
+  ordenIds: z.array(z.string().min(1)).min(1), // cota del lote: ver el bloque de arriba
 });
 export type RutearSateliteActionInput = z.infer<typeof rutearSateliteSchema>;
 
