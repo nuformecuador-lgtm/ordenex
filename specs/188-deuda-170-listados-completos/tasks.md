@@ -90,7 +90,7 @@
   Listado 10 pasa a `adaptador: "completo"` y sale de `PENDIENTES_184` (11 restantes), en el
   MISMO commit que A.4.
   **Hecho:** los dos censos verdes; `./init.sh --rapido` verde; bitácora en
-  `progress/impl_184-tanda-a.md` con el mapa `R<n>` → archivo + nombre del caso.
+  `progress/impl_188-tanda-a.md` con el mapa `R<n>` → archivo + nombre del caso.
 
 ---
 
@@ -244,7 +244,7 @@
   bitácora.
 
 - [x] **H.3 — Bitácora y trazabilidad final.** · depende de H.2
-  `progress/impl_184-cierre.md` con el mapa `R1..R34` → archivo + nombre del caso, la salida
+  `progress/impl_188-cierre.md` con el mapa `R1..R34` → archivo + nombre del caso, la salida
   real de los gates y las mutaciones verificadas.
   **Hecho:** los 34 requisitos tienen su caso nombrado. **No vale** un recuento de `R<n>` en
   títulos de test: aquí ya produjo un falso «68/68» por cruce de espacios de nombres entre

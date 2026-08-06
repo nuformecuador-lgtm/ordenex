@@ -2,7 +2,7 @@
 
 > Rama: `feature/184-deuda-170-listados` · Fecha: 2026-08-04 · Rol: FRONTEND_DEV
 >
-> Alcance entregado: **C.2 y C.3**. Punto de partida: `progress/impl_184_tandaC_backend.md` (la
+> Alcance entregado: **C.2 y C.3**. Punto de partida: `progress/impl_188_tandaC_backend.md` (la
 > Server Action ya estaba, verde y con 17 mutaciones). `lib/**`, `db/**` y los tests de backend
 > **no se tocan**.
 >
@@ -290,7 +290,7 @@ commiteada, es `typecheck errores: 0`.
 
 Construido **leyendo el caso**, no contando `R\d+` en títulos: los espacios de nombres de la 170 y
 la 184 se cruzan en este archivo (`R52`, `R44`, `R43` son de la 170). Solo se listan los requisitos
-que esta entrega toca; los del servidor están en `progress/impl_184_tandaC_backend.md §7`.
+que esta entrega toca; los del servidor están en `progress/impl_188_tandaC_backend.md §7`.
 
 | R | Archivo | Caso | Estado |
 | --- | --- | --- | --- |
@@ -311,7 +311,7 @@ que esta entrega toca; los del servidor están en `progress/impl_184_tandaC_back
 
 **Lo que NO se puede cubrir aquí, con su motivo:** R5, R14, R15, R16 y R17 son de repositorio o
 borde (`lib/**`, fuera del alcance de FRONTEND_DEV) y están cerrados en
-`impl_184_tandaC_backend.md`. **R10** es de la tanda B (los agregados de la consolidación) y
+`impl_188_tandaC_backend.md`. **R10** es de la tanda B (los agregados de la consolidación) y
 **R11** es del listado 10, cerrado en la tanda A. **R18–R28** son la poda de la selección
 satélite, cerrada en la tanda A. **R31 y R32** son de la **tanda H**: la guardia nueva solo puede
 correr cuando A–G estén dentro, y hoy quedan ocho listados.

@@ -2,7 +2,7 @@
 
 > Rama: `feature/184-deuda-170-listados` · Fecha: 2026-08-04 · Rol: FRONTEND_DEV
 >
-> Alcance entregado: **A.4, A.5 y A.6**. Punto de partida: `progress/impl_184_tandaA_backend.md`
+> Alcance entregado: **A.4, A.5 y A.6**. Punto de partida: `progress/impl_188_tandaA_backend.md`
 > (las dos Server Actions ya estaban, verdes y con 17 mutaciones). `lib/**`, `db/**` y los tests
 > de backend **no se tocan**.
 >
@@ -336,7 +336,7 @@ por los mismos workers. No hubo ningún rojo intermitente que reejecutar en aisl
 ## 6. Mapa `R<n>` → archivo + nombre del caso
 
 Construido **leyendo el caso**, no contando `R\d+` en títulos. Sólo se listan los requisitos que
-esta entrega toca; los del servidor están en `progress/impl_184_tandaA_backend.md §5`.
+esta entrega toca; los del servidor están en `progress/impl_188_tandaA_backend.md §5`.
 
 | R | Archivo | Caso | Estado |
 | --- | --- | --- | --- |

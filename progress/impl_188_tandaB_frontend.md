@@ -2,7 +2,7 @@
 
 > Rama: `feature/184-deuda-170-listados` · Fecha: 2026-08-04 · Rol: FRONTEND_DEV
 >
-> Alcance entregado: **B.2 y B.3**. Punto de partida: `progress/impl_184_tandaB_backend.md` (las
+> Alcance entregado: **B.2 y B.3**. Punto de partida: `progress/impl_188_tandaB_backend.md` (las
 > dos Server Actions ya estaban, verdes y con 18 mutaciones). `lib/**`, `db/**` y los tests de
 > backend **no se tocan**.
 >
@@ -317,7 +317,7 @@ su propia suite: es exactamente el escenario en que vence el presupuesto de 1.00
 ## 7. Mapa `R<n>` → archivo + nombre del caso
 
 Construido **leyendo el caso**, no contando `R\d+` en títulos. Solo se listan los requisitos que
-esta entrega toca; los del servidor están en `progress/impl_184_tandaB_backend.md §5`.
+esta entrega toca; los del servidor están en `progress/impl_188_tandaB_backend.md §5`.
 
 | R | Archivo | Caso | Estado |
 | --- | --- | --- | --- |
@@ -338,7 +338,7 @@ esta entrega toca; los del servidor están en `progress/impl_184_tandaB_backend.
 
 **Lo que NO se puede cubrir aquí, con su motivo:** R5, R9, R11, R14, R15, R16 y R17 son de
 repositorio, servicio o borde (`lib/**`, fuera del alcance de FRONTEND_DEV) y están cerrados en
-`impl_184_tandaB_backend.md` —salvo R9 (tanda C) y R11 (tanda A, cerrado)—. **R18–R28** son la
+`impl_188_tandaB_backend.md` —salvo R9 (tanda C) y R11 (tanda A, cerrado)—. **R18–R28** son la
 poda de la selección satélite, cerrada en la tanda A. **R31 y R32** son de la **tanda H**: la
 guardia nueva solo puede correr cuando A–G estén dentro, y hoy quedan nueve listados. **R3** no
 aplica a estos dos listados por lo dicho en la tabla.

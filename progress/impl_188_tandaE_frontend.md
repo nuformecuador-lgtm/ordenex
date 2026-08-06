@@ -2,7 +2,7 @@
 
 > Rama: `feature/184-deuda-170-listados` · Fecha: 2026-08-04 · Rol: FRONTEND_DEV
 >
-> Alcance entregado: **E.3 y E.4**. Punto de partida: `progress/impl_184_tandaE_backend.md` (los
+> Alcance entregado: **E.3 y E.4**. Punto de partida: `progress/impl_188_tandaE_backend.md` (los
 > dos métodos de repositorio, los dos servicios, los dos schemas derivados y los dos bordes ya
 > estaban, verdes y con 19 mutaciones). `lib/**`, `db/**` y los tests de backend **no se tocan**.
 >
@@ -359,7 +359,7 @@ medición final, ya con esa tanda commiteada, es **`typecheck exit: 0`**.
 
 Construido **leyendo el caso**, no contando `R\d+` en títulos: los espacios de nombres de la 170 y
 la 184 se cruzan en estos archivos (`R52`, `R44`, `R43`, `R42` son de la 170). Solo se listan los
-requisitos que esta entrega toca; los del servidor están en `progress/impl_184_tandaE_backend.md §6`.
+requisitos que esta entrega toca; los del servidor están en `progress/impl_188_tandaE_backend.md §6`.
 
 | R | Archivo | Caso | Estado |
 | --- | --- | --- | --- |
@@ -379,7 +379,7 @@ requisitos que esta entrega toca; los del servidor están en `progress/impl_184_
 
 **Lo que NO se puede cubrir aquí, con su motivo:** R5, R14, R15, R16 y R17 son de repositorio o
 borde (`lib/**`, fuera del alcance de FRONTEND_DEV) y están cerrados en
-`impl_184_tandaE_backend.md`. **R9** es de la tanda C (las URL de evidencia del listado 1) y **R10**
+`impl_188_tandaE_backend.md`. **R9** es de la tanda C (las URL de evidencia del listado 1) y **R10**
 de la tanda B (los agregados de la consolidación); ninguno aplica a estos dos listados —el camino
 del archivo no firma ni agrega nada, y el backend lo midió con espías en cero—. **R11** es del
 listado 10 y **R18–R28** son la poda de la selección satélite, las dos cerradas en la tanda A.
@@ -390,7 +390,7 @@ hoy quedan **cuatro** listados (tandas F y G).
 
 ## 8. Confirmado: la relectura compuesta de bodega se queda SIN consumidores
 
-El backend lo anticipó (`impl_184_tandaE_backend.md §8`) y pidió que se confirmara al terminar.
+El backend lo anticipó (`impl_188_tandaE_backend.md §8`) y pidió que se confirmara al terminar.
 **Confirmado, y medido contra el árbol de hoy:**
 
 ```
