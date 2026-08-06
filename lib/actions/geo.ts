@@ -60,7 +60,11 @@ export interface GeoActionDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-/** Provincias del catalogo geografico global (solo maestro). */
+/**
+ * Provincias del catalogo geografico global (solo maestro).
+ *
+ * @sin-superficie muerte de SEGUNDO ORDEN, la misma forma que el bug de `rutearABodegaSatelite`: su unico importador es `configuracion/_components/ZonaForm.tsx`, y a `ZonaForm` no lo monta nadie desde que la gestion de zonas se movio a `configuracion/tarifas/_components/ZonasTarifasModule.tsx`. Si esa mudanza fue deliberada, `geo.ts` entero sobra; si no, falta la pantalla. Pregunta de producto ABIERTA, anotada para que no siga invisible.
+ */
 export async function listarProvincias(
   deps: GeoActionDeps = {},
 ): Promise<ListarProvinciasResult> {
@@ -73,7 +77,11 @@ export async function listarProvincias(
   return isAppErrorShape(r) ? toGeoActionError(r) : r;
 }
 
-/** Cantones de una provincia (solo maestro). */
+/**
+ * Cantones de una provincia (solo maestro).
+ *
+ * @sin-superficie muerte de SEGUNDO ORDEN, mismo caso que `listarProvincias` (ver alli): `lib/actions/geo.ts` es el unico modulo de `lib/actions/` entero que ninguna raiz de ruta alcanza, porque su unico importador (`ZonaForm.tsx`) tampoco lo esta.
+ */
 export async function listarCantones(
   provinciaId: unknown,
   deps: GeoActionDeps = {},
@@ -93,7 +101,11 @@ export async function listarCantones(
   return isAppErrorShape(r) ? toGeoActionError(r) : r;
 }
 
-/** Distritos de un canton, con su zona asignada si la hay (solo maestro). */
+/**
+ * Distritos de un canton, con su zona asignada si la hay (solo maestro).
+ *
+ * @sin-superficie muerte de SEGUNDO ORDEN, mismo caso que `listarProvincias` (ver alli): su unico importador es `ZonaForm.tsx`, que ninguna pantalla monta.
+ */
 export async function listarDistritos(
   cantonId: unknown,
   deps: GeoActionDeps = {},

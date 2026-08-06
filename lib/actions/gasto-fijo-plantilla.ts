@@ -145,6 +145,8 @@ export async function setActivaPlantillaAction(
  *
  * Que ninguna pantalla vuelva a llamarla lo afirma
  * `tests/unit/descarga/adaptador-conjunto.guardia.test.ts` (R32).
+ *
+ * @sin-superficie decision de la feature 184 (T H.2), no deuda: doble VIVO de R1 en el censo de descarga. La superficie viva es `listarPlantillasCompletoAction`.
  */
 export async function listarPlantillasAction(
   deps: PlantillaDeps = {},

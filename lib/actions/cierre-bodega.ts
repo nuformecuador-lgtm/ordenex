@@ -145,6 +145,8 @@ export async function solicitarCierreBodega(
  *
  * Lo que impide que «conservar» sea «olvidar»: `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`
  * (R32) afirma que NINGUNA pantalla vuelve a cablearse a ella. Vive como testigo, no como camino.
+ *
+ * @sin-superficie decision de las features 170 (T M.1) y 184 (T E.3), no deuda: testigo de tres casos de R1. La superficie viva son `listarPendientesCierresBodegaCompleto` y `listarHistoricoCierresBodegaCompleto`.
  */
 export async function listarCierresBodegaAdmin(
   deps: CierreBodegaDeps = {},

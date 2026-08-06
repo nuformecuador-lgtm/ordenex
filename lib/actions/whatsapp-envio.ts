@@ -82,7 +82,11 @@ export async function listarPlantillasActivasParaEnvio(
   return { status: "ok", items: textos.filter((p) => activas.has(p.id)) };
 }
 
-/** Lista las plantillas enviables (activas + enlazadas con Meta) para el envio server-side por Meta. */
+/**
+ * Lista las plantillas enviables (activas + enlazadas con Meta) para el envio server-side por Meta.
+ *
+ * @sin-superficie DEUDA, no diseno (feature 107, eb50730f/2dfd7c50 del 2026-07-23): es el listado que alimentaria al boton de `enviarPlantillaWhatsapp`, y ese boton nunca se construyo. Camino muerto desde el dia 1; se conserva porque el backend de Meta esta entero y probado. Quien cablee el envio server-side tiene que quitar esta anotacion.
+ */
 export async function listarPlantillasEnviables(
   deps: WhatsappEnvioDeps = {},
 ): Promise<ListarEnviablesResult> {
@@ -94,7 +98,11 @@ export async function listarPlantillasEnviables(
   return { status: "ok", items: items.map((p) => ({ id: p.id, nombre: p.nombre })) };
 }
 
-/** Envia la plantilla `plantillaId` a la orden `ordenId` (que debe estar asignada al mensajero). */
+/**
+ * Envia la plantilla `plantillaId` a la orden `ordenId` (que debe estar asignada al mensajero).
+ *
+ * @sin-superficie DEUDA, no diseno (feature 107, 2026-07-23): el envio server-side por Meta NUNCA tuvo boton. La UI que existe (`EnviarPlantillaWhatsappButton`) usa el camino wa.me con `listarPlantillasParaEnvio`, que abre WhatsApp en el cliente y no manda nada por Meta. Es una capacidad implementada y probada que ningun usuario puede disparar.
+ */
 export async function enviarPlantillaWhatsapp(
   ordenId: unknown,
   plantillaId: unknown,

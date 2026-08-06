@@ -41,7 +41,11 @@ export interface OrdenActionDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-/** R25/R26/R27/R28: crear orden. */
+/**
+ * R25/R26/R27/R28: crear orden.
+ *
+ * @sin-superficie andamiaje CRUD del arranque: ninguna pantalla ni ruta de API lo usa. Las rutas `app/api/ordenes/api-key/**` instancian `BulkOrdenService`/`ApiOrdenLecturaService` directamente, y la creacion real de ordenes entra por la carga masiva. Su unico consumidor es `tests/integration/actions/ordenes-action.test.ts`. Deuda inocua (no es capacidad perdida: hay otro camino), pendiente de decidir si se borra.
+ */
 export async function crearOrden(
   input: unknown,
   deps: OrdenActionDeps = {},
@@ -56,7 +60,11 @@ export async function crearOrden(
   return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
-/** R29/R34: obtener orden por id. */
+/**
+ * R29/R34: obtener orden por id.
+ *
+ * @sin-superficie andamiaje CRUD del arranque, mismo caso que `crearOrden` (ver alli): sin consumidor en `app/` ni en `components/` desde que nacio; el detalle de la orden se sirve por props desde la pagina. Solo lo toca su propio test de integracion.
+ */
 export async function obtenerOrden(
   id: unknown,
   deps: OrdenActionDeps = {},
@@ -110,7 +118,11 @@ export async function listarOrdenesCompleto(
   return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
-/** R35/R36/R37/R38: actualizar orden por id. */
+/**
+ * R35/R36/R37/R38: actualizar orden por id.
+ *
+ * @sin-superficie andamiaje CRUD del arranque, mismo caso que `crearOrden` (ver alli): las ediciones reales de una orden pasan por las acciones de dominio (guia, asignacion, incidencias), no por este update generico. Solo lo toca su propio test de integracion.
+ */
 export async function actualizarOrden(
   id: unknown,
   input: unknown,
@@ -131,7 +143,11 @@ export async function actualizarOrden(
   return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
-/** R39/R40/R41: borrado logico de orden por id. */
+/**
+ * R39/R40/R41: borrado logico de orden por id.
+ *
+ * @sin-superficie andamiaje CRUD del arranque, mismo caso que `crearOrden` (ver alli): no hay ninguna pantalla que ofrezca borrar una orden, ni se ha pedido. Solo lo toca su propio test de integracion.
+ */
 export async function borrarOrden(
   id: unknown,
   deps: OrdenActionDeps = {},

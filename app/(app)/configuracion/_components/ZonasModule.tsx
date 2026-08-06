@@ -52,6 +52,8 @@ type FormMode = "crear" | "editar";
  * pre-cargados por props (R30), botón Crear + Modal async con `ZonaForm`, y
  * feedback vía `useToast` refrescando el listado en éxito (R32). Cablea las
  * Server Actions de zonas; no hace `fetch` a rutas de API.
+ *
+ * @sin-superficie NO EXISTE `app/(app)/configuracion/zonas/page.tsx`: ninguna ruta monta este modulo. La gestion de zonas se movio a `configuracion/tarifas/_components/ZonasTarifasModule.tsx`, que si esta montado, pero NO esta comprobado si esta pantalla se desmonto a proposito o por descuido — es una pregunta de producto ABIERTA. Con este modulo mueren tambien `ZonaForm`, `zonas-columns` y las acciones de `lib/actions/geo.ts` + `arbolZonas`.
  */
 export function ZonasModule({ initialData }: ZonasModuleProps) {
   const toast = useToast();
