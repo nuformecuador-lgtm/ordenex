@@ -9,10 +9,28 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🔵 2026-08-06 — **EN CURSO: la 189** · y la auditoría del backlog que la precedió
+## 🔵 2026-08-06 — **EN CURSO: la 186** · ✅ la 189 cerrada · y la auditoría del backlog
 
-**189 `in_progress`** (`frontend`, `small`, `sdd: false`), rama `feature/189-columnas-descarga-listados`
-desde `dev` @ `84dc7b40`. Fija la lista **y el orden** de columnas de los 12 listados del Anexo A.
+### 🟡 EN CURSO: **186** — la gráfica de líneas del tablero financiero
+
+`frontend`, `sdd: true` → **lleva puerta humana tras el spec**. Rama
+`feature/186-tablero-financiero-grafica-lineas`. La 180 ya publica el desglose por fecha de las
+SIETE métricas y los componentes de gráfica existen desde la 130: **se añade, no se rehace**.
+
+> ⚠️ **Lo que hay que respetar al especificarla:** el DTO trae `granularidad`
+> (`dia | semana | no_temporal`) como campo **obligatorio**. Un rango largo llega en cubos
+> **semanales**, y etiquetarlos como días **miente sin poner ningún test en rojo**.
+
+### ✅ La 189, cerrada (PR #303)
+
+12 casos, **solo tests**, cero líneas de producción. Gate `== init OK ==` **984 / 12.263** (+7
+archivos, +12 tests sobre el baseline). **24 mutaciones, 24 rojas.** Cierra la cláusula «columnas y
+orden» del R12 de la 188. Relato completo en `history.md`; censo y hallazgos en `impl_189.md`.
+
+**Lo que deja vivo:** `_RANKING` **parece cubierta y no lo está** (su esperado es la propia
+constante: tautología con disfraz de test de integración); **12 de las 35** constantes siguen sin
+aserción de orden; y `COLUMNAS_DESCARGA_GASTOS_FIJOS` dice **«Monto mensual»**, hoy cierto por
+accidente y **congelado por el test nuevo** — dirigido a la **ficha 85**.
 
 ### 🔎 La auditoría del backlog, y lo que encontró
 
