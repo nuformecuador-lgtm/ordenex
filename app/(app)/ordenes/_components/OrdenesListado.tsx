@@ -33,6 +33,7 @@ import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { AsignarRecoleccionModal } from "./AsignarRecoleccionModal";
 import { QuitarRecoleccionModal } from "./QuitarRecoleccionModal";
+import { RutearSateliteModal } from "./RutearSateliteModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
@@ -51,6 +52,7 @@ type ModalAbierto =
   | "asignar-bodega"
   | "asignar-recoleccion" // feature 157
   | "quitar-recoleccion" // feature 157 (ampliacion)
+  | "rutear-satelite" // feature 30 (reinstalado el 2026-08-05)
   | "etiquetas"
   | "devolver-tienda"
   | "recuperar-bodega"
@@ -289,8 +291,13 @@ export function OrdenesListado({
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("generar-guia");
   }
+  // "Asignar mensajero" desde bodega solo aplica a órdenes GAM (`zonaEsGam === true`):
+  // `asignarDesdeBodega` exige origen `en_bodega_central` + zona GAM (R27/R12) y un
+  // mensajero de la zona CENTRAL, así que una orden satélite ahí sale `conflict`. Se
+  // filtra el snapshot seleccionado antes de abrir, igual que hacen `abrirRutearSatelite`
+  // (regla inversa) y `abrirRecuperar`; el service revalida (defensa en profundidad).
   function abrirAsignarBodega(seleccionadas: OrdenListItemDTO[]) {
-    setOrdenesSeleccionadas(seleccionadas);
+    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
     setModalAbierto("asignar-bodega");
   }
   // Feature 157: quien va a la tienda a recoger el lote.
@@ -302,6 +309,14 @@ export function OrdenesListado({
   function abrirQuitarRecoleccion(seleccionadas: OrdenListItemDTO[]) {
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("quitar-recoleccion");
+  }
+  // Feature 30/R13: "Rutear a bodega satélite" solo aplica a órdenes NO-GAM
+  // (`zonaEsGam === false`): la GAM ya está en su bodega de destino. Se filtra el
+  // snapshot seleccionado antes de abrir, igual que hace `abrirRecuperar` con la regla
+  // inversa; el service revalida (defensa en profundidad, R17).
+  function abrirRutearSatelite(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === false));
+    setModalAbierto("rutear-satelite");
   }
   function abrirEtiquetas(seleccionadas: OrdenListItemDTO[]) {
     setOrdenesSeleccionadas(seleccionadas);
@@ -375,14 +390,14 @@ export function OrdenesListado({
 
   // Mapeo estado -> acciones por lote.
   //
-  // Nota: "Rutear a bodega satélite" NO se ofrece en esta vista (se retiró de
-  // `en_bodega_central` por decisión humana). Hasta el 2026-07-31 la ofrecía la vista
-  // legacy `OrdenesRevisionMaestro`; al borrarse ésa, la acción se quedó SIN NINGUNA
-  // superficie de UI. El backend sigue entero y probado (`rutearABodegaSatelite` en
-  // `lib/actions/ordenes-guia`, `GuiaAsignacionService.rutearABodegaSatelite`) y
-  // `RutearSateliteModal.tsx` se conservó a propósito, listo para volver a montarse.
-  // Devolverla —aquí o donde se decida— es una decisión de producto pendiente, no un
-  // olvido de este archivo.
+  // Nota (2026-08-05): "Rutear a bodega satélite" VOLVIÓ a `en_bodega_central`, que es su
+  // origen único desde la feature 156 (R15/R16). Historia, para que no se repita: hasta el
+  // 2026-07-31 la ofrecía la vista legacy `OrdenesRevisionMaestro`, y al borrarse ésa la
+  // acción se quedó SIN NINGUNA superficie de UI — el backend entero
+  // (`rutearABodegaSatelite`, `GuiaAsignacionService.rutearABodegaSatelite`) y
+  // `RutearSateliteModal.tsx` seguían vivos, pero nadie podía dispararlos. Se reportó
+  // desde PRODUCCIÓN como "desapareció el botón para rutear a satélite". Se remonta aquí,
+  // que es la única superficie de la bodega central hoy.
   function accionesDe(estatusValue: string | undefined): AccionLote[] {
     switch (estatusValue) {
       // Feature 155/R32: el estado interno de fulfillment en bodega salió del
@@ -443,6 +458,16 @@ export function OrdenesListado({
             key: "asignar",
             label: "Asignar mensajero",
             onRun: abrirAsignarBodega,
+          },
+          // Feature 30/R13 + 156/R15: el paquete está en la central y su zona es
+          // satélite ⇒ sale hacia la bodega satélite de esa zona. Secundaria, como en la
+          // vista legacy que la ofrecía: la acción primaria de este estado sigue siendo
+          // asignar mensajero para reparto directo.
+          {
+            key: "rutear-satelite",
+            label: "Rutear a bodega satélite",
+            variant: "outline",
+            onRun: abrirRutearSatelite,
           },
           {
             key: "etiquetas",
@@ -767,6 +792,16 @@ export function OrdenesListado({
             mensajerosConRecoleccionIds={mensajerosConRecoleccionIds}
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
+          />
+          {/* Feature 30 (T16) — remontado el 2026-08-05. NO encadena etiquetas: la
+              etiqueta del lote ya se imprimió en la central, y el modal tiene su propia
+              fase de manifiesto antes de cerrar. `handleSuccess` cierra y revalida, de
+              modo que las órdenes ruteadas pasan a `en_ruta_bodega_satelite`. */}
+          <RutearSateliteModal
+            open={modalAbierto === "rutear-satelite"}
+            ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
           />
           <EtiquetasGuiaModal
             open={modalAbierto === "etiquetas"}
