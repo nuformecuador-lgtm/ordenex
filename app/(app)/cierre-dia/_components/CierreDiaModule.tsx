@@ -14,7 +14,7 @@ import { cierreConfig } from "@/lib/config/cierre";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import {
   deshacerGestion,
-  listarCierreDia,
+  listarCierresPasadosCompleto,
   listarCierresPasadosPaginado,
   solicitarCierre,
   verCierrePasado,
@@ -43,7 +43,7 @@ import {
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 import {
   filasLocales,
-  filasDelConjuntoCompleto,
+  filasDesdeResultado,
 } from "@/components/shared/descarga-resultado";
 import {
   COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
@@ -594,20 +594,26 @@ export function CierreDiaModule({
             error={pasadosError ? ERROR_PASADOS : null}
             /**
              * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-             * CONJUNTO COMPLETO de ESTE mensajero. Se relee con el MISMO listado que la
-             * pantalla ya llamaba antes de paginar (`listarCierreDia`), que resuelve el
-             * mensajero desde la sesión: descargar no puede traer los cierres de otro (R44).
+             * CONJUNTO COMPLETO de ESTE mensajero, y ese acotamiento lo resuelve el servidor
+             * desde la sesión: descargar no puede traer los cierres de otro (R44).
+             *
+             * Feature 184 — Tanda C (T C.2, R1/R2/R6/R9): ese conjunto lo entrega ahora una
+             * lectura DEDICADA. Antes salía de releer `listarCierreDia()`, el listado COMPUESTO
+             * de esta pantalla, que además del histórico trae las gestiones del día, el conteo
+             * de órdenes pendientes, la tarifa por zona+vehículo y —lo caro— la FIRMA EN LOTE,
+             * contra Supabase Storage, de las evidencias fotográficas de todas esas gestiones.
+             * De todo eso el archivo usaba UN campo y NINGUNA URL: sus ocho columnas salen
+             * enteras del `CierrePasadoDTO`, que ni siquiera tiene campo de evidencia (R9).
+             *
+             * La lectura nueva cuesta una consulta, cero firmas, y el tope de filas lo evalúa
+             * el servidor (R6): por encima no viaja ni una fila.
              */
             descarga={{
               titulo: TITULO_DESCARGA_PASADOS,
               columnas: COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
               obtenerFilas: () =>
-                filasDelConjuntoCompleto(
-                  listarCierreDia().then((res) =>
-                    res.status === "ok"
-                      ? ({ status: "ok", items: res.cierresPasados } as const)
-                      : res,
-                  ),
+                filasDesdeResultado(
+                  listarCierresPasadosCompleto(),
                   filaDescargaDiaCierrePasado,
                 ),
             }}

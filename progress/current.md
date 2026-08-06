@@ -9,6 +9,80 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🏁 CIERRE DE JORNADA 2026-08-05 — **EMPIEZA A LEER POR AQUÍ**
+
+### 🔴 LO PRIMERO: dos PRs abiertos esperando tu decisión
+
+| PR | Qué | Estado |
+| --- | --- | --- |
+| **#297 → `prod`** | **HOTFIX: vuelve el botón «Rutear a bodega satélite»** | gate **VERDE** (927 archivos / 11.533 tests). **Producción no puede rutear guías hasta que esto se despliegue** |
+| **la 188 → `dev`** | la deuda de la 170: los 12 listados | review **APROBADO ronda 2**, gate **VERDE**. El PR **#296 quedó obsoleto** al renumerar la rama; hay que reabrirlo |
+
+### 🐛 El bug de producción de hoy, y la lección que deja
+
+**Reportado:** «no se puede asignar guías a una bodega satélite, desapareció el botón».
+**No era código roto: la acción se quedó SIN SUPERFICIE DE UI.** Se había retirado de `/ordenes`
+por decisión previa, y hasta el **2026-07-31** la seguía ofreciendo la vista legacy
+`OrdenesRevisionMaestro`. **Al borrarse esa vista, dejó de existir cualquier forma de invocarla** —
+con el backend intacto y probado todo el tiempo.
+
+> ⚠️ **El patrón, que NO tiene dueño:** borrar una vista puede dejar acciones huérfanas —backend
+> vivo, cero botones— y **nada lo detecta**. Aquí tardó cinco días en notarse, y solo porque alguien
+> intentó usarlo. **Nadie ha barrido el resto de la app buscando el mismo caso.**
+
+El arreglo monta la acción en `en_bodega_central` (origen único desde la 156) filtrando a no-GAM, y
+la ofrece a **maestro y admin** —`ROLES_ACCESO_TOTAL` son dos—. Los tests **montan la página real
+variando el rol**, no pasan la prop: la mutación que lo prueba es que restringir a `maestro` pone
+rojo el caso de `admin`. Es la lección del review de la 172.
+
+### 🔢 LA 184 AHORA ES LA 188, y hay que leerlo antes de tocar nada
+
+Mientras esta rama estaba viva, **otra sesión mergeó en `dev` una ficha 184 distinta** («analítica
+financiera: export de la serie») **y también 185, 186 y 187**. Los cuatro ids colisionaron. Por
+decisión humana se renumeró **todo lo de esta rama**: **184→188**, y las fichas de su cierre
+**185/186/187 → 189/190/191**.
+
+> **Lo que NO se renumeró, a propósito:** los **60 mensajes de commit**, los comentarios de **111
+> archivos de código** (`Feature 184 — …`) y la constante **`PENDIENTES_184`**, que es **ancla de
+> texto** de una guardia (`adaptador-conjunto.guardia.test.ts:313`) y romperla a medias la pone
+> roja. **«184» en un commit, un comentario o esa constante significa la 188.**
+
+Es la **segunda vez** que pasa (la primera fue la 182 el 2026-08-04). **Dos sesiones dando ids del
+`feature_list.json` en paralelo colisionan siempre**, y la convención de «la ficha con rama conserva
+el id» no se aplicó aquí: se renumeró la que tenía rama, PR y 60 commits.
+
+### ✅ La 188 (antes 184), cerrada por completo
+
+**33/33 tareas. Review APROBADO en ronda 2. Gate `== init OK ==`: 950 archivos / 11.847 tests.**
+Cero migraciones.
+
+**H.3 no era un trámite: encontró dos huecos que ninguna lectura habría visto.**
+
+1. **R16** —«no dos declaraciones separadas del mismo criterio», el hallazgo que da nombre a la
+   feature— **no tenía nada que impidiera su regreso**. Bajo mutación, deshacer una constante y
+   repetir el literal idéntico dejaba **129 tests de emisión en VERDE**. Ahora hay guardia.
+2. **R26** no afirmaba que la acción de lote sobrevive a la poda: al hacer que la poda se pase de
+   larga, **el caso nuevo falla y el viejo sigue verde**.
+
+**Y tres filas del Anexo B del spec apuntan a casos que no existen donde dicen** (R2, R8, R12). La
+cobertura existe, en otro archivo. **Un mapa copiado del spec habría heredado las tres** — por eso
+se escribió contra el árbol.
+
+### ⏳ Lo que queda vivo, con ficha
+
+| Ficha | Qué | Por qué no entró |
+| --- | --- | --- |
+| **189** | columnas y orden de los 12 archivos, sin test | deuda **preexistente**: el diff no toca ninguna `COLUMNAS_DESCARGA_*` |
+| **190** | Q-K6 rama B | estaba en el registro pero **nunca bajó al spec**; la 188 la deja desbloqueada |
+| **191** | el `N+1` real de **R29 de la 170**, hoy derogado en 11 de 12 listados | el `count` del total exacto **pone rojos los tests de R15** de la 188. Ese conflicto ES el trabajo |
+
+### 🚦 SIGUE PENDIENTE, cuarta jornada
+
+**VER LA 172 Y LA 173 EN PANTALLA.** No lo sustituye ninguna suite, y hoy la app ya está en uso real
+en producción.
+
+---
+
 ## 🚦 2026-08-05 — **180 en revisión humana: PR #295 abierto**
 
 **180 (`analitica financiera: desglose por fecha`)** implementada, revisada y con el gate completo
@@ -109,6 +183,81 @@ el `.env` del checkout principal antes de medir nada. Es el mismo tropiezo que e
 > *Esta sección decía «EMPIEZA A LEER POR AQUÍ» cuando era la más reciente. Sigue vigente entera
 > —incluido el «LO PRIMERO AL RETOMAR» del final—, pero ya no es la de arriba: la 180 y la 166 del
 > 05-ago la preceden. Se conserva intacta salvo este marcador, que había caducado.*
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-04 (noche) — **EMPIEZA A LEER POR AQUÍ**
+
+### ✅ En producción hoy
+
+| | Qué | Estado |
+| --- | --- | --- |
+| **release** | `dev → prod` #287 — 186 commits, 23 PRs, **5 migraciones** | ✅ `CHECK` **convalidado** contra las 35 filas reales, deploy READY, 0 errores |
+| **173** | backfill de la caja: **5 filas, ₡203.055,90** | ✅ aplicado, idempotente, fechas del origen |
+| **183** | el `neto` de las cuatro métricas de caja | ✅ PR #288 → release #289 → **en producción** |
+| **fix** | tope de **negocio** de la indemnización, atado al valor de la orden | ✅ #291 mergeado |
+| **arnés** | dos guardias ciegas + 3.er mecanismo del flake | ✅ #291 mergeado |
+
+### 🔵 EN RAMA, SIN PR: la feature 184 (`feature/184-deuda-170-listados`)
+
+**Los 12 listados CERRADOS.** `PENDIENTES_184` vacío, **0 llamadas a `filasDelConjuntoCompleto(`** bajo
+`app/`, 8 tandas, **52 commits**. Gate completo **VERDE: 949 archivos / 11.824 tests**.
+
+**Lo que falta, y en este orden:**
+
+1. **H.3 — verificar el mapa `R1..R34` caso a caso.** La tanda H lo dejó sin hacer **y lo dijo**: comprobó
+   por script que 16 títulos citados existen literalmente, lo que descarta nombres muertos pero **NO**
+   que cada test mida su requisito. Es exactamente la verificación que hoy cazó cuatro coberturas falsas.
+2. **Review** de la feature · 3. **PR a `dev`** · 4. **Release** (arrastra también el lote de deudas).
+
+### 🚦 LO PRIMERO AL RETOMAR, ADEMÁS DE ESO
+
+**VER LA 172 Y LA 173 EN PANTALLA.** Cuarta jornada pendiente. Hoy se empezó a usar la app en producción
+y eso solo ya destapó el caso de los ₡10.000 millones.
+
+### 🔎 Lo que sobrevive a esta jornada
+
+**Cinco veces el spec afirmó una cobertura que no existía, y las cinco las cazó una MEDICIÓN, no una
+lectura:**
+
+1. **Una mutación sobrevivió** en la 183: el test que decía «el catálogo manda» medía `ingreso_flete`, no
+   `egresos`, que es la definición que la feature cambiaba.
+2. **R22 de la 183:** el guardia que el spec le asignaba **no caza** su mutación — `listasDeIdsAMano` solo
+   marca arrays con ≥2 ids.
+3. **R16 de la 127:** el requisito vivo **más directamente derogado** por la 183 —nombra las tres métricas
+   una por una— y **ni el spec, ni ⟨D12⟩, ni las bitácoras lo miraron**. Lo cazó el reviewer.
+4. **El `--reporter` inexistente** (tanda F): 7 corridas de mutación **fallaron al arrancar y parecían
+   ejecutadas**.
+5. **La guardia de la tanda H pasa VERDE con su propio detector roto**: encuentra cero llamadas porque no
+   encuentra nada. Solo la salvan sus auto-tests. **Habría sido un adorno permanente.**
+
+> **La regla que queda:** buscar los requisitos vivos afectados **leyendo el spec que cita tu archivo** no
+> basta —así se encontraron R18 y R37 de la 127 y por eso se escapó R16, que no habla de `metrics.ts` sino
+> del **contrato de salida**—. Hay que buscarlos por el **texto del contrato que cambia**.
+
+**Y el criterio duplicado apareció en las SIETE tandas.** El `orderBy` estaba escrito dos o tres veces en
+cada par; varias tandas lo habrían dejado en cinco. Ninguna estaba mal *hoy*, pero dos literales permiten
+que el Excel y la pantalla se ordenen distinto **sin que ningún test lo note**, porque cada uno prueba su
+copia. En la tanda F apareció la versión cara: **`alcanceWhere` —la guardia que decide si un `adminSatelite`
+ve el dinero de otra zona— estaba declarada TRES veces.**
+
+### ⚠️ Defecto de producción destapado, NO arreglado
+
+**El archivo de «Saldos de tiendas» sale hoy sin orden determinista**: `listarSaldosTodasTiendas()` devuelve
+orden de planificador y la tabla ordena por nombre, así que **dos descargas seguidas pueden diferir**. La
+170 lo declaró desviación consciente cuando ese conjunto no sostenía archivo; ahora lo sostiene. La 184 lo
+esquiva sirviendo el listado por el paginado, pero **el defecto de origen sigue ahí**.
+
+### 🧰 Higiene de agentes: tres prohibiciones que costaron incidentes reales
+
+En un worktree compartido: **nada de `git checkout -- .` / `restore .` / `stash`** (borró trabajo ajeno),
+**nada de `git commit --amend`** (reescribió el commit de otro agente; recuperado con `reset --soft`), y
+**verificar por hash que la restauración tras mutar funcionó** — a un agente le falló un `writeFileSync`
+por un lock de Windows y **dejó la mutación aplicada en código de producción**.
+
+---
+
+## ✅ 2026-08-04 (tarde) — **183 EN PRODUCCIÓN**, y la validó un accidente tuyo
 
 **183 `done`.** PR **#288** → `dev`, release **#289** → `prod` (**cero migraciones**), despliegue
 **READY**, sin errores de runtime nuevos. `dev` y `prod` a **0 commits**. Review **APROBADO en ronda

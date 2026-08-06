@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { incidentesConfig } from "@/lib/config/incidentes";
 import {
@@ -18,7 +18,7 @@ import {
   rechazarIncidente,
   retractarIncidente,
   verIncidente,
-  listarIncidentes,
+  listarPendientesIncidentesCompleto,
   listarPendientesIncidentesPaginado,
 } from "@/lib/actions/incidentes";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
@@ -391,23 +391,30 @@ export function IncidentesAdminModule({
             error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
             /**
              * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue siendo la
-             * COLA COMPLETA. Se relee con el MISMO listado que la pantalla ya llamaba antes de
-             * paginar (`listarIncidentes`), que acota por la zona de la ORDEN para un
-             * `adminSatelite`: descargar no amplía el alcance (R14/R44).
+             * COLA COMPLETA.
              *
-             * Las URL firmadas de las evidencias NO viajan al archivo (R22): esta tabla no
-             * las muestra y el módulo de columnas ni siquiera las lee.
+             * Feature 184 — Tanda F (T F.3, R1/R2/R6): ese conjunto ya NO sale de
+             * `listarIncidentes()`. Aquel listado devuelve las dos mitades de esta pantalla —la
+             * cola de pendientes de decisión Y el histórico entero de incidentes resueltos del
+             * alcance—, y descargar la cola pagaba las dos para quedarse con una: el histórico
+             * crece sin techo con los días mientras la cola son los incidentes sin decidir, un
+             * puñado. Ahora el corte por estado lo hace la base
+             * (`listarPendientesIncidentesCompleto`).
+             *
+             * Lo que NO cambia: el alcance no viaja en la llamada y no puede: lo resuelve el
+             * servicio desde la sesión, por la zona de la ORDEN, igual que la página, así que
+             * descargar no amplía lo que el actor podía ver (R14/R44). Y el tope de filas pasa
+             * a evaluarse en el SERVIDOR: por encima no viaja ni una fila (R6).
+             *
+             * Las URL firmadas de las evidencias siguen sin viajar al archivo (R22): esta tabla
+             * no las muestra y el módulo de columnas ni siquiera las lee.
              */
             descarga={{
               titulo: TITULO_DESCARGA_PENDIENTES,
               columnas: COLUMNAS_DESCARGA_INCIDENTES_PENDIENTES,
               obtenerFilas: () =>
-                filasDelConjuntoCompleto(
-                  listarIncidentes().then((res) =>
-                    res.status === "ok"
-                      ? ({ status: "ok", items: res.pendientes } as const)
-                      : res,
-                  ),
+                filasDesdeResultado(
+                  listarPendientesIncidentesCompleto(),
                   filaDescargaIncidentePendiente,
                 ),
             }}

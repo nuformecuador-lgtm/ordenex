@@ -68,9 +68,28 @@ const { paginado, completo, verIncidenteMock } = vi.hoisted(() => ({
   /** Un doble por listado SIN recorte (lo que la descarga debe entregar, R52). */
   completo: {
     cierresAdmin: vi.fn(),
+    // Feature 184 — Tanda D (T D.3): «Cierres del día pendientes» ya no saca su archivo del
+    // listado compuesto (`cierresAdmin`), que arrastraba el histórico entero además de la cola,
+    // sino de su lectura DEDICADA. El doble del compuesto se conserva: la pantalla lo seguía
+    // usando y su ausencia no puede ser lo que explique que ya no se llame.
+    cierresPendientesCompleto: vi.fn(),
     bodegaAdmin: vi.fn(),
+    // Feature 184 — Tanda E (T E.3): «Cierres de bodega pendientes» ya no saca su archivo del
+    // listado compuesto (`bodegaAdmin`), que arrastraba el histórico entero de la operación
+    // además de la cola, sino de su lectura DEDICADA. El doble del compuesto se conserva: la
+    // pantalla lo seguía usando y su ausencia no puede ser lo que explique que ya no se llame.
+    bodegaPendientesCompleto: vi.fn(),
     consolidacion: vi.fn(),
+    // Feature 184 — Tanda B (T B.2): «Cierres del día a consolidar» ya no saca su archivo del
+    // listado compuesto (`consolidacion`), sino de su lectura DEDICADA. El doble del compuesto
+    // se conserva porque esa pantalla lo sigue usando para lo demás.
+    consolidables: vi.fn(),
     incidentes: vi.fn(),
+    // Feature 184 — Tanda F (T F.3): «Incidentes pendientes» ya no saca su archivo del listado
+    // compuesto (`incidentes`), que arrastraba el histórico entero de resueltos además de la
+    // cola, sino de su lectura DEDICADA. El doble del compuesto se conserva: la pantalla lo
+    // seguía usando y su ausencia no puede ser lo que explique que ya no se llame.
+    incidentesPendientesCompleto: vi.fn(),
   },
   verIncidenteMock: vi.fn(),
 }));
@@ -81,6 +100,10 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   rechazarCierre: vi.fn(),
   forzarSolicitudVencido: vi.fn(),
   listarCierresAdmin: (...a: unknown[]) => completo.cierresAdmin(...a),
+  // Feature 184 — Tanda D (T D.3): la lectura dedicada del listado 3. Sin declararla aquí, el
+  // control de descarga de esa cola llama a `undefined` y el archivo no sale.
+  listarPendientesCierresAdminCompleto: (...a: unknown[]) =>
+    completo.cierresPendientesCompleto(...a),
   listarPendientesCierresAdminPaginado: (...a: unknown[]) =>
     paginado.cierresPendientes(...a),
   listarHistoricoCierresAdminPaginado: (...a: unknown[]) =>
@@ -93,6 +116,10 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   solicitarCierreBodega: vi.fn(),
   listarCierresBodegaAdmin: (...a: unknown[]) => completo.bodegaAdmin(...a),
   listarConsolidacion: (...a: unknown[]) => completo.consolidacion(...a),
+  // Feature 184 — Tanda E (T E.3): la lectura dedicada del listado 4. Sin declararla aquí, el
+  // control de descarga de esa cola llama a `undefined` y el archivo no sale.
+  listarPendientesCierresBodegaCompleto: (...a: unknown[]) =>
+    completo.bodegaPendientesCompleto(...a),
   listarPendientesCierresBodegaPaginado: (...a: unknown[]) =>
     paginado.bodegaPendientes(...a),
   listarHistoricoCierresBodegaPaginado: (...a: unknown[]) =>
@@ -100,6 +127,10 @@ vi.mock("@/lib/actions/cierre-bodega", () => ({
   listarConsolidablesPaginado: (...a: unknown[]) => paginado.consolidables(...a),
   listarCierresBodegaSolicitadosPaginado: (...a: unknown[]) =>
     paginado.bodegaSolicitados(...a),
+  // Feature 184 — Tanda B (T B.2): las dos lecturas dedicadas de esta pantalla. Sin declararlas
+  // aquí, el control de descarga llama a `undefined` y el archivo no sale.
+  listarConsolidablesCompleto: (...a: unknown[]) => completo.consolidables(...a),
+  listarCierresBodegaSolicitadosCompleto: vi.fn(),
 }));
 vi.mock("@/lib/actions/incidentes", () => ({
   verIncidente: (...a: unknown[]) => verIncidenteMock(...a),
@@ -108,6 +139,10 @@ vi.mock("@/lib/actions/incidentes", () => ({
   retractarIncidente: vi.fn(),
   reportarIncidente: vi.fn(),
   listarIncidentes: (...a: unknown[]) => completo.incidentes(...a),
+  // Feature 184 — Tanda F (T F.3): la lectura dedicada del listado 8. Sin declararla aquí, el
+  // control de descarga de esa cola llama a `undefined` y el archivo no sale.
+  listarPendientesIncidentesCompleto: (...a: unknown[]) =>
+    completo.incidentesPendientesCompleto(...a),
   listarPendientesIncidentesPaginado: (...a: unknown[]) =>
     paginado.incidentesPendientes(...a),
   listarHistoricoIncidentesPaginado: (...a: unknown[]) =>
@@ -349,6 +384,12 @@ const COLAS: Cola[] = [
       const todos = conjunto(cierreAdmin);
       servirPaginas(paginado.cierresPendientes, todos);
       servirPaginas(paginado.cierresHistorico, []);
+      // Feature 184 — Tanda D (T D.3): de aquí sale el archivo (R52), sin recorte.
+      completo.cierresPendientesCompleto.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
       completo.cierresAdmin.mockResolvedValue({
         status: "ok",
         pendientes: todos,
@@ -374,6 +415,12 @@ const COLAS: Cola[] = [
       const todos = conjunto(cierreBodega);
       servirPaginas(paginado.bodegaPendientes, todos);
       servirPaginas(paginado.bodegaResueltos, []);
+      // Feature 184 — Tanda E (T E.3): de aquí sale el archivo (R52), sin recorte.
+      completo.bodegaPendientesCompleto.mockResolvedValue({
+        status: "ok",
+        items: todos,
+        total: todos.length,
+      });
       completo.bodegaAdmin.mockResolvedValue({
         status: "ok",
         pendientes: todos,
@@ -410,6 +457,15 @@ function montarConsolidacion() {
   const todos = conjunto(consolidable);
   servirPaginas(paginado.consolidables, todos);
   servirPaginas(paginado.bodegaSolicitados, []);
+  // T B.2: de aquí sale el archivo — el conjunto de la zona, sin recorte y con la forma que
+  // `filasDesdeResultado` traduce.
+  completo.consolidables.mockResolvedValue({
+    status: "ok",
+    items: todos,
+    total: todos.length,
+  });
+  // El compuesto sigue respondiendo (de él salen los cinco agregados de la cabecera): que el
+  // archivo ya no salga de él tiene que ser una decisión de la pantalla, no del doble.
   completo.consolidacion.mockResolvedValue({
     status: "ok",
     consolidables: todos,
@@ -444,6 +500,14 @@ function montarIncidentes() {
   const todos = conjunto(incidente);
   servirPaginas(paginado.incidentesPendientes, todos);
   servirPaginas(paginado.incidentesHistorico, []);
+  // Feature 184 — Tanda F (T F.3): de aquí sale el archivo (R52), sin recorte.
+  completo.incidentesPendientesCompleto.mockResolvedValue({
+    status: "ok",
+    items: todos,
+    total: todos.length,
+  });
+  // El compuesto sigue programado, y con las dos mitades dentro: que el archivo ya no salga de
+  // él tiene que ser una decisión de la pantalla, no que el doble no responda.
   completo.incidentes.mockResolvedValue({
     status: "ok",
     pendientes: todos,

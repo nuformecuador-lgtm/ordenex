@@ -108,6 +108,34 @@ function consolidablesWhere(zonaId: string): Prisma.CierreDiaWhereInput {
   };
 }
 
+/**
+ * Feature 184 — Tanda B (R16) — el ORDEN del listado de consolidables, declarado una vez.
+ *
+ * `consolidablesWhere` ya evitaba la segunda copia del criterio de SELECCION; el ORDEN seguia
+ * escrito dos veces, una en cada metodo. No es simetria: la pagina N que la tabla pinta tiene
+ * que ser el segmento N del conjunto del que sale el archivo (feature 184/R5), y eso solo se
+ * sostiene si las dos consultas ordenan igual. Con dos literales, cambiar uno deja el archivo
+ * ordenado de una forma y la tabla de otra, y ninguna prueba de servicio lo ve.
+ */
+const ORDEN_CONSOLIDABLES: Prisma.CierreDiaOrderByWithRelationInput = { solicitadoAt: "desc" };
+
+/**
+ * Feature 184 — Tanda B (R16) — el ALCANCE del listado «Cierres de bodega solicitados».
+ *
+ * La zona es TODO el acotamiento de este listado (no filtra por estado: muestra los cierres de
+ * la bodega en cualquier estado). Estaba escrito dos veces —una en el conjunto y otra en la
+ * pagina—; que las dos digan `{ zonaId }` por separado es justo lo que permite que una se quede
+ * atras el dia que este listado gane un predicado.
+ */
+function cierresBodegaDeZonaWhere(zonaId: string): Prisma.CierreBodegaWhereInput {
+  return { zonaId }; // R3: el alcance por zona, en el WHERE y nunca en memoria
+}
+
+/** El orden de «Cierres de bodega solicitados», compartido por el conjunto y la pagina (R16). */
+const ORDEN_CIERRES_BODEGA: Prisma.CierreBodegaOrderByWithRelationInput = {
+  solicitadoAt: "desc",
+};
+
 type ConsolidableRow = Prisma.CierreDiaGetPayload<{ select: typeof CONSOLIDABLE_SELECT }>;
 
 /** Fila cruda de un cierre_dia consolidable -> DTO de dominio (money-safe STRING). */
@@ -132,11 +160,18 @@ function toConsolidableRow(r: ConsolidableRow): CierreDiaConsolidableRow {
 export class CierreBodegaRepository implements ICierreBodegaRepository {
   constructor(private readonly prisma: CierreBodegaPrismaClient) {}
 
-  /** R5: cierre_dia aprobados de la zona, destino satelite, sin cierre de bodega. */
+  /**
+   * R5: cierre_dia aprobados de la zona, destino satelite, sin cierre de bodega.
+   *
+   * Feature 184 — Tanda B: es tambien el CONJUNTO del que sale el archivo del listado «Cierres
+   * del dia a consolidar» (`listarConsolidablesCompleto`). No hizo falta un metodo nuevo: este
+   * ya devolvia el conjunto entero, con el mismo criterio, el mismo orden y el mismo mapper que
+   * la pagina, y anadir un gemelo habria sido la tercera declaracion del mismo `where`.
+   */
   async findCierresDiaConsolidables(zonaId: string): Promise<CierreDiaConsolidableRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
       where: consolidablesWhere(zonaId),
-      orderBy: { solicitadoAt: "desc" },
+      orderBy: ORDEN_CONSOLIDABLES,
       select: CONSOLIDABLE_SELECT,
     });
     return rows.map(toConsolidableRow);
@@ -165,7 +200,7 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
-        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_CONSOLIDABLES, // R51/R16: el MISMO orden del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: CONSOLIDABLE_SELECT,
@@ -230,11 +265,18 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
     });
   }
 
-  /** F1.4-h: historico propio de la zona, mas reciente primero, totales -> STRING. */
+  /**
+   * F1.4-h: historico propio de la zona, mas reciente primero, totales -> STRING.
+   *
+   * Feature 184 — Tanda B: es tambien el CONJUNTO del que sale el archivo del listado «Cierres
+   * de bodega solicitados» (`listarCierresBodegaSolicitadosCompleto`). Igual que en los
+   * consolidables, no se anadio un metodo nuevo: este devuelve ya el conjunto entero de la zona
+   * con el mismo orden y el mismo mapper que la pagina.
+   */
   async findCierresBodegaByZona(zonaId: string): Promise<CierreBodegaResumenRow[]> {
     const rows = await this.prisma.cierreBodega.findMany({
-      where: { zonaId },
-      orderBy: { solicitadoAt: "desc" },
+      where: cierresBodegaDeZonaWhere(zonaId),
+      orderBy: ORDEN_CIERRES_BODEGA,
       select: BODEGA_RESUMEN_SELECT,
     });
     return rows.map(toBodegaResumenRow);
@@ -253,11 +295,11 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
     zonaId: string,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
-    const where = { zonaId }; // R3: el alcance por zona, en el WHERE y nunca en memoria
+    const where = cierresBodegaDeZonaWhere(zonaId); // R3/R16: el MISMO alcance del conjunto
     const [rows, total] = await Promise.all([
       this.prisma.cierreBodega.findMany({
         where,
-        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_CIERRES_BODEGA, // R51/R16: el MISMO orden del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: BODEGA_RESUMEN_SELECT,

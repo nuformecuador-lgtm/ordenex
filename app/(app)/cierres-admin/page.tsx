@@ -92,8 +92,13 @@ export default async function CierresAdminPage() {
   // tener lector de tabla en T I.2/T J.2, y su `status` no decidía nada que no decidiera ya el
   // `esAccesoTotal` de esta misma línea, que es el MISMO guard que aplican los dos listados
   // paginados. Traerlo era una lectura de TODOS los cierres de bodega por render cuyo único
-  // efecto era un `if` redundante. La acción sigue existiendo y sigue haciendo falta: es de
-  // donde el control de descarga saca el conjunto completo (R52), y sólo se ejecuta al pulsarlo.
+  // efecto era un `if` redundante.
+  //
+  // Feature 184 — Tanda E (T E.3): la acción tampoco es ya de donde sale el archivo. Las dos
+  // tablas de esta sección descargan cada una SU mitad (`listarPendientesCierresBodegaCompleto`
+  // y `listarHistoricoCierresBodegaCompleto`), así que `listarCierresBodegaAdmin` se queda sin
+  // ningún lector de producción. No se retira aquí: es candidata a retirada de la tanda H,
+  // anotada en `progress/impl_184_tandaE_frontend.md §8`.
   const [bodegaPendientesResult, resueltosResult] = esAccesoTotal(actor.rol)
     ? await Promise.all([
         listarPendientesCierresBodegaPaginado({}),

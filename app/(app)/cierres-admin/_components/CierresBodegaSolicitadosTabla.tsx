@@ -5,10 +5,10 @@ import useSWR from "swr";
 
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import {
-  listarConsolidacion,
+  listarCierresBodegaSolicitadosCompleto,
   listarCierresBodegaSolicitadosPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
@@ -109,20 +109,25 @@ export function CierresBodegaSolicitadosTabla({
           error={error ? ERROR_CARGA : null}
           /**
            * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-           * CONJUNTO COMPLETO de SU zona. Se relee con el MISMO listado que la pantalla ya
-           * llamaba antes de paginar (`listarConsolidacion`), que resuelve la zona desde la
-           * sesión: descargar no amplía el alcance ni una fila (R14/R44).
+           * CONJUNTO COMPLETO de SU zona, y esa zona la resuelve el servidor desde la sesión:
+           * descargar no amplía el alcance ni una fila (R14/R44).
+           *
+           * Feature 184 — Tanda B (T B.2, R1/R6/R10): ese conjunto lo entrega ahora una lectura
+           * DEDICADA a este listado. Antes salía de releer `listarConsolidacion()`, el listado
+           * COMPUESTO de la pantalla: cuatro consultas, los cinco agregados de dinero y el
+           * reparto del efectivo entre los pagos de la zona, para quedarse con UN campo. La
+           * lectura nueva cuesta una consulta y cero aritmética de dinero, y el tope de filas lo
+           * evalúa el servidor (R6): por encima no viaja ni una fila.
+           *
+           * Los agregados de la cabecera de la pantalla siguen llegando por props desde
+           * `listarConsolidacion` y NO se tocan (R49/R50 de la 170).
            */
           descarga={{
             titulo: TITULO_DESCARGA,
             columnas: COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
             obtenerFilas: () =>
-              filasDelConjuntoCompleto(
-                listarConsolidacion().then((res) =>
-                  res.status === "ok"
-                    ? ({ status: "ok", items: res.cierresBodegaPasados } as const)
-                    : res,
-                ),
+              filasDesdeResultado(
+                listarCierresBodegaSolicitadosCompleto(),
                 filaDescargaBodegaSolicitado,
               ),
           }}

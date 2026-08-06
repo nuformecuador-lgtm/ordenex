@@ -37,10 +37,18 @@ vi.mock("@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero", () =
 vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   setActivaPlantillaAction: vi.fn(),
   listarPlantillasAction: vi.fn(),
+  // Feature 184 — Tanda G (T G.2): la lectura DEDICADA del listado 11, de la que sale el
+  // archivo. La relectura de arriba se conserva VIVA y programada: que ya no se llame tiene
+  // que ser una decisión de la pantalla, no que el doble no responda.
+  listarPlantillasCompletoAction: vi.fn(),
   listarPlantillasPaginadoAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarSaldosTiendasAction: vi.fn(),
+  // Feature 184 — Tanda G (T G.2): la lectura DEDICADA del listado 12, de la que sale el
+  // archivo. La relectura de arriba se conserva VIVA y programada: que ya no se llame tiene
+  // que ser una decisión de la pantalla, no que el doble no responda.
+  listarSaldosTiendasCompletoAction: vi.fn(),
   listarSaldosTiendasPaginadoAction: vi.fn(),
 }));
 // Feature 170 — FASE 2 (T L.2): cuentas por pagar pasa a leer su página —y su conjunto para el
@@ -79,10 +87,12 @@ vi.mock("@/hooks/useToast", () => ({
 
 import {
   listarSaldosTiendasAction,
+  listarSaldosTiendasCompletoAction,
   listarSaldosTiendasPaginadoAction,
 } from "@/lib/actions/wallet-tienda";
 import {
   listarPlantillasAction,
+  listarPlantillasCompletoAction,
   listarPlantillasPaginadoAction,
 } from "@/lib/actions/gasto-fijo-plantilla";
 import {
@@ -157,6 +167,12 @@ function sinComentarios(fuente: string): string {
 /**
  * Feature 170 — FASE 2 (T I.2): monta la tabla de saldos con su PÁGINA y programa las dos
  * lecturas —la de la página y la del conjunto completo que alimenta la descarga—.
+ *
+ * Feature 184 — Tanda G (T G.2): el conjunto del archivo sale de la lectura DEDICADA
+ * (`listarSaldosTiendasCompletoAction`). La relectura vieja se programa IGUAL, con el mismo
+ * conjunto: si el archivo saliera todavía de ella, saldría idéntico —los dos listados
+ * devuelven las mismas filas—, así que lo único que separa un camino del otro es contar las
+ * llamadas y el TOPE, que ahora decide el servidor.
  */
 function montarSaldos(
   visibles: SaldoTiendaResumenDTO[],
@@ -166,6 +182,11 @@ function montarSaldos(
     status: "ok",
     page: 1,
     ...paginaInicial(visibles, { total: completo.length }),
+  });
+  vi.mocked(listarSaldosTiendasCompletoAction).mockResolvedValue({
+    status: "ok",
+    items: completo,
+    total: completo.length,
   });
   vi.mocked(listarSaldosTiendasAction).mockResolvedValue({
     status: "ok",
@@ -187,6 +208,11 @@ function montarPlantillas(
     status: "ok",
     page: 1,
     ...paginaInicial(visibles, { total: completo.length }),
+  });
+  vi.mocked(listarPlantillasCompletoAction).mockResolvedValue({
+    status: "ok",
+    items: completo,
+    total: completo.length,
   });
   vi.mocked(listarPlantillasAction).mockResolvedValue({
     status: "ok",
@@ -370,28 +396,53 @@ describe("Dinero por props · descarga", () => {
     // `filasDelConjuntoCompleto`, que es la deuda que Q-I5 dejó abierta. Lo que se exige aquí es
     // la propiedad —el archivo NO sale del array de la página— y cada tabla declara con cuál de
     // los dos adaptadores la cumple, para que ese reparto no cambie sin que nadie lo note.
+    //
+    // Feature 184 (T G.2/T G.3): las TRES declaran ya `completo`. Es el estado final de este
+    // censo —la deuda de Q-I5 queda cerrada para los tres módulos de wallet— y el campo no se
+    // borra: mientras exista `filasDelConjuntoCompleto`, la mitad NEGATIVA de abajo es lo que
+    // impide que una de las tres vuelva a él sin que nadie lo note.
+    //
+    // Feature 184 (T H.2): el adaptador se RETIRÓ, y la mitad negativa se conserva igual —misma
+    // decisión y mismo motivo que en `paginacion-transversal.test.tsx`—. Sin el export, la media
+    // migración que MG3/MG11 midieron deja de ser posible por construcción; lo que esta mitad
+    // sigue vigilando es que nadie lo rescate del historial y cablee AQUÍ uno de los tres. Que
+    // el export no vuelva lo afirma `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`.
+    //
+    // Feature 184 (T0.2): cada módulo declara su adaptador por NOMBRE y se comprueba la mitad
+    // NEGATIVA además de la positiva —el declarado es el ÚNICO que usa—. Sin ella, una pantalla
+    // que llamara a los dos (una migración a medias) pasaría verde con cualquiera de las dos
+    // declaraciones, que es justo lo que este censo existe para impedir.
     const raiz = path.resolve(__dirname, "../../..");
-    const modulos = [
+    const ADAPTADOR = {
+      conjunto: /filasDelConjuntoCompleto\(/,
+      completo: /filasDesdeResultado\(/,
+    } as const;
+    const CONTRARIO = { conjunto: "completo", completo: "conjunto" } as const;
+    const modulos: { ruta: string; adaptador: keyof typeof ADAPTADOR; nota: string }[] = [
       {
         ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
-        adaptador: /filasDelConjuntoCompleto\(/,
-        nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
+        adaptador: "completo",
+        nota: "T G.2: listarSaldosTiendasCompleto, con el tope en el servidor y el MISMO orden que la tabla",
       },
       {
         ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
-        adaptador: /filasDelConjuntoCompleto\(/,
-        nota: "relee el listado sin recorte (Q-I5: no tiene listarCompleto)",
+        adaptador: "completo",
+        nota: "T G.2: listarPlantillasCompleto, con el tope en el servidor",
       },
       {
         ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
-        adaptador: /filasDesdeResultado\(/,
+        adaptador: "completo",
         nota: "T M.1: listarCuentasPorPagarCompleto, con la búsqueda y el tope en el servidor",
       },
     ];
 
     for (const { ruta, adaptador, nota } of modulos) {
       const fuente = sinComentarios(readFileSync(path.join(raiz, ruta), "utf8"));
-      expect(fuente, `${ruta}: ${nota}`).toMatch(adaptador);
+      expect(fuente, `${ruta}: ${nota}`).toMatch(ADAPTADOR[adaptador]);
+      expect(
+        fuente,
+        `${ruta}: se declara «${adaptador}» pero también llama al adaptador «${CONTRARIO[adaptador]}»`,
+      ).not.toMatch(ADAPTADOR[CONTRARIO[adaptador]]);
       expect(fuente, `${ruta}: no puede proyectar el array visible`).not.toMatch(
         /filasLocales\(/,
       );
@@ -402,21 +453,29 @@ describe("Dinero por props · descarga", () => {
   });
 
   it("por encima del tope rechaza con un error accionable y NO produce archivo", async () => {
-    // R26/R28: el tope de 5000 rige igual en Familia B. Con un array por encima, la salida
-    // es un mensaje con total y tope —y ningún xlsx—: un archivo al que le faltan filas sin
-    // avisar es peor que no poder descargarlo.
+    // R26/R28: por encima del tope la salida es un mensaje con total y tope —y ningún xlsx—:
+    // un archivo al que le faltan filas sin avisar es peor que no poder descargarlo.
+    //
+    // Feature 184 — Tanda G (T G.2, R6): quién decide eso CAMBIA, y es lo único que esta
+    // tanda gana de verdad en estos dos listados —en consultas no ahorran nada, medido—.
+    // Antes: el servidor mandaba las 5001 filas, cruzaban al navegador y `filasLocales` las
+    // contaba y las tiraba allí. Ahora el servidor responde `limite_excedido` con SOLO
+    // conteos y NI UNA fila, y por eso el doble de aquí ni siquiera puede entregar el
+    // conjunto: si la pantalla siguiera usando el adaptador que relee, no sabría leer esta
+    // respuesta —`limite_excedido` no es un `ActionError`— y el mensaje saldría sin el total
+    // ni el tope, que es justo lo que hace accionable al aviso.
     const user = userEvent.setup();
     const total = descargaConfig.MAX_FILAS + 1;
-    const muchas: SaldoTiendaResumenDTO[] = Array.from({ length: total }, (_, i) => ({
-      tiendaId: `t-${i}`,
-      tiendaNombre: `Tienda ${i}`,
-      saldo: "10.00",
-      signo: "positivo",
-    }));
 
-    // La página visible es pequeña; el CONJUNTO que releerá la descarga es el que se pasa
-    // del tope. Es el caso real: nadie ve 5001 filas, pero sí puede pedirlas en un archivo.
-    montarSaldos(muchas.slice(0, 25), muchas);
+    // La página visible es pequeña y real; el CONJUNTO nunca llega. Es el caso de verdad:
+    // nadie ve 5001 filas, pero sí puede pedirlas en un archivo.
+    montarSaldos(TIENDAS);
+    vi.mocked(listarSaldosTiendasCompletoAction).mockResolvedValue({
+      status: "limite_excedido",
+      total,
+      limite: descargaConfig.MAX_FILAS,
+    });
+
     await user.click(screen.getByRole("button", { name: "Descargar Saldos de tiendas" }));
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
@@ -426,5 +485,233 @@ describe("Dinero por props · descarga", () => {
     expect(mensaje).toMatch(/acota los filtros/i);
     expect(buildXlsxRowsMock).not.toHaveBeenCalled();
     expect(descargarBlobMock).not.toHaveBeenCalled();
+    // Y el conjunto NO cruzó: la respuesta del servidor son dos números. La relectura vieja
+    // tampoco se pidió por detrás —eso serían las 5001 filas viajando igual—.
+    expect(listarSaldosTiendasAction).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda G (T G.2): «Saldos de tiendas» (listado 12)
+  // -------------------------------------------------------------------------
+
+  it("el archivo de los saldos sale de su lectura DEDICADA, no de releer el listado (R1/R8)", async () => {
+    // Las tres mitades, como en las tandas B–F:
+    //
+    //   (a) montar la pantalla NO ejecuta la lectura del conjunto (R8);
+    //   (b) al pulsar se llama a `listarSaldosTiendasCompletoAction` UNA vez y SIN un solo
+    //       argumento: este listado no tiene filtros, así que ni `page`, ni `pageSize`, ni
+    //       `tiendaId` —la única cuya aceptación convertiría el saldo de TODAS las tiendas en
+    //       el de una elegida por quien pide— pueden viajar (R3/R4/R17);
+    //   (c) y NO se relee `listarSaldosTiendasAction`.
+    //
+    // Aquí (c) NO es «ya no arrastra la otra mitad» —este listado no es compuesto y las dos
+    // lecturas devuelven las mismas filas—, y por eso el xlsx no distingue un camino del
+    // otro: ni una celda cambia. Lo que se gana está medido y es otra cosa (el tope, arriba,
+    // y el ORDEN del archivo, que el servidor fija en `saldos-tiendas-completo.test.ts`), así
+    // que este `expect` es lo único que impide que la relectura vuelva sin que nada falle.
+    const user = userEvent.setup();
+    montarSaldos(TIENDAS);
+
+    expect(listarSaldosTiendasCompletoAction).not.toHaveBeenCalled();
+    expect(listarSaldosTiendasAction).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Descargar Saldos de tiendas" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarSaldosTiendasCompletoAction).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(listarSaldosTiendasCompletoAction).mock.calls[0]).toEqual([]);
+    expect(listarSaldosTiendasAction).not.toHaveBeenCalled();
+
+    // ANTI-VACUIDAD, en dos pasos, porque «cero llamadas» pasa igual con un doble muerto o
+    // con una descarga que nunca ocurrió:
+    //  1. la descarga SÍ ocurrió y produjo sus filas;
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas).toHaveLength(TIENDAS.length);
+    //  2. y el doble de la relectura está VIVO y responde con el conjunto entero. No llamarlo
+    //     es una decisión de la pantalla, no del arnés.
+    const relectura = await listarSaldosTiendasAction();
+    expect(relectura.status === "ok" && relectura.tiendas).toHaveLength(TIENDAS.length);
+  });
+
+  it("la pantalla NO recorta ni reordena los saldos que devolvió el servidor (R2)", async () => {
+    // El discriminador entre «el servidor entrega el conjunto» y «lo entrega Y la pantalla lo
+    // vuelve a tocar», con los dos números separados a propósito:
+    //
+    //   · el doble devuelve TREINTA filas y la tabla pinta TRES, así que un archivo de 25 —el
+    //     `pageSize` de este dominio— o de 3 se distingue del bueno (recorte). Con el fixture
+    //     de tres filas a secas, recortar a la página entera no se vería: la página SERÍA el
+    //     conjunto;
+    //   · y las tres primeras van en un orden que NINGÚN orden de cliente reproduce, EN EL
+    //     CAMPO POR EL QUE EL SERVIDOR ORDENA y que la fila de descarga proyecta
+    //     (`tiendaNombre` → `tienda`). Con el nombre idéntico en las treinta filas, un `sort`
+    //     estable no movería nada y la mutación sobreviviría por un defecto del fixture, no
+    //     del código — es exactamente lo que la tanda G de backend midió con su M9.
+    const user = userEvent.setup();
+    montarSaldos(TIENDAS);
+
+    const conNombre = (i: number, nombre: string): SaldoTiendaResumenDTO => ({
+      tiendaId: `t-${i}`,
+      tiendaNombre: nombre,
+      saldo: "10.00",
+      signo: "positivo",
+    });
+    const relleno = Array.from({ length: 27 }, (_, i) => conNombre(100 + i, "Tienda Norte"));
+    vi.mocked(listarSaldosTiendasCompletoAction).mockResolvedValue({
+      status: "ok",
+      items: [
+        conNombre(1, "Tienda Media"),
+        conNombre(2, "Tienda Zeta"),
+        conNombre(3, "Tienda Alfa"),
+        ...relleno,
+      ],
+      total: 30,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Descargar Saldos de tiendas" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas, "el archivo trae la página, no el conjunto").toHaveLength(30);
+    // Ascendente sería [Alfa, Media, Norte]; descendente, [Zeta, Norte, Norte].
+    expect(filas.slice(0, 3).map((f) => f.tienda)).toEqual([
+      "Tienda Media",
+      "Tienda Zeta",
+      "Tienda Alfa",
+    ]);
+  });
+
+  it("un fallo de la lectura de los saldos no produce archivo y el mensaje no lleva cifras de nadie (R7)", async () => {
+    const user = userEvent.setup();
+    montarSaldos(TIENDAS);
+    vi.mocked(listarSaldosTiendasCompletoAction).mockResolvedValue({ status: "forbidden" });
+
+    await user.click(screen.getByRole("button", { name: "Descargar Saldos de tiendas" }));
+    // Ancla POSITIVA: el aviso que SALE, no el archivo que no sale.
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+
+    const mensaje = String(toastErrorMock.mock.calls[0][0]);
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    // Accionable, y sin un solo dato del dominio: cada fila de esta tabla dice qué tienda es
+    // y cuánto dinero se le debe (o debe), y el identificador interno no sale nunca.
+    for (const dato of [TIENDAS[0].tiendaNombre, TIENDAS[0].saldo, TIENDAS[0].tiendaId]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda G (T G.2): «Plantillas de gasto fijo» (listado 11)
+  // -------------------------------------------------------------------------
+
+  it("el tope de las plantillas también lo decide el servidor (R6)", async () => {
+    // El gemelo del caso del tope de los saldos, sobre el listado 11. Aquí el aviso no se
+    // disparará jamás en producción —son un puñado de plantillas de configuración— y aun así
+    // el caso existe: lo que fija no es el volumen, es DÓNDE se decide. Sin él, este listado
+    // podría quedarse con el tope de cliente y el censo seguiría diciendo `completo`.
+    const user = userEvent.setup();
+    const total = descargaConfig.MAX_FILAS + 1;
+
+    montarPlantillas(PLANTILLAS);
+    vi.mocked(listarPlantillasCompletoAction).mockResolvedValue({
+      status: "limite_excedido",
+      total,
+      limite: descargaConfig.MAX_FILAS,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Plantillas de gasto fijo" }),
+    );
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+    const mensaje = String(toastErrorMock.mock.calls[0][0]);
+    expect(mensaje).toContain(String(total));
+    expect(mensaje).toContain(String(descargaConfig.MAX_FILAS));
+    expect(mensaje).toMatch(/acota los filtros/i);
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(listarPlantillasAction).not.toHaveBeenCalled();
+  });
+
+  it("el archivo de las plantillas sale de su lectura DEDICADA, no de releer el listado (R1/R8)", async () => {
+    // Espejo exacto del caso de los saldos, sobre el otro listado de la tanda.
+    const user = userEvent.setup();
+    montarPlantillas(PLANTILLAS);
+
+    expect(listarPlantillasCompletoAction).not.toHaveBeenCalled();
+    expect(listarPlantillasAction).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Plantillas de gasto fijo" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarPlantillasCompletoAction).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(listarPlantillasCompletoAction).mock.calls[0]).toEqual([]);
+    expect(listarPlantillasAction).not.toHaveBeenCalled();
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas).toHaveLength(PLANTILLAS.length);
+    const relectura = await listarPlantillasAction();
+    expect(relectura.status === "ok" && relectura.plantillas).toHaveLength(PLANTILLAS.length);
+  });
+
+  it("la pantalla NO recorta ni reordena las plantillas que devolvió el servidor (R2)", async () => {
+    // Mismo discriminador que en los saldos. El campo del fixture es `concepto` —el que la
+    // fila de descarga proyecta— y los montos se mueven en un orden DISTINTO al de los
+    // conceptos, para que reordenar por la otra columna de datos tampoco reproduzca la
+    // secuencia esperada.
+    const user = userEvent.setup();
+    montarPlantillas(PLANTILLAS);
+
+    const conConcepto = (i: number, concepto: string, monto: string): GastoFijoPlantillaDTO =>
+      ({ ...plantillaGasto(i), concepto, monto }) as GastoFijoPlantillaDTO;
+    const relleno = Array.from({ length: 27 }, (_, i) =>
+      conConcepto(100 + i, "Luz", "150.00"),
+    );
+    vi.mocked(listarPlantillasCompletoAction).mockResolvedValue({
+      status: "ok",
+      items: [
+        conConcepto(1, "Mantenimiento", "300.00"),
+        conConcepto(2, "Zeta seguros", "100.00"),
+        conConcepto(3, "Agua", "200.00"),
+        ...relleno,
+      ],
+      total: 30,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Plantillas de gasto fijo" }),
+    );
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas, "el archivo trae la página, no el conjunto").toHaveLength(30);
+    // Por concepto, ascendente sería [Agua, Luz, Luz] y descendente [Zeta, Mantenimiento, Luz];
+    // por monto, [Zeta, Luz, Luz] y [Mantenimiento, Agua, Luz].
+    expect(filas.slice(0, 3).map((f) => f.concepto)).toEqual([
+      "Mantenimiento",
+      "Zeta seguros",
+      "Agua",
+    ]);
+  });
+
+  it("un fallo de la lectura de las plantillas no produce archivo y el mensaje no lleva datos del listado (R7)", async () => {
+    const user = userEvent.setup();
+    montarPlantillas(PLANTILLAS);
+    vi.mocked(listarPlantillasCompletoAction).mockResolvedValue({ status: "forbidden" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Plantillas de gasto fijo" }),
+    );
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+
+    const mensaje = String(toastErrorMock.mock.calls[0][0]);
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    for (const dato of [PLANTILLAS[0].concepto, PLANTILLAS[0].monto, PLANTILLAS[0].id]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
   });
 });

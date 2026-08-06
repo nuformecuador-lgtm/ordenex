@@ -76,9 +76,19 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   listarCierresAdmin: vi.fn(),
   listarPendientesCierresAdminPaginado: vi.fn(),
   listarHistoricoCierresAdminPaginado: vi.fn(),
+  // Feature 184 — Tanda D (T D.3): la lectura dedicada de la COLA. Es el peaje que anticipaba
+  // la tanda C: este archivo renderizaba `CierresAdminModule` y además PULSA su control de
+  // descarga (`MUESTRA`), así que sin declarar el export nuevo el control llama a `undefined`
+  // y el archivo no sale.
+  listarPendientesCierresAdminCompleto: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarSaldosTiendasAction: vi.fn(),
+  // Feature 184 — Tanda G (T G.2): la lectura dedicada del listado 12. Es el peaje que la
+  // tanda F anticipó: este archivo renderiza `SaldosTiendasTable` y además PULSA su control de
+  // descarga (`MUESTRA`), así que sin declarar el export nuevo el control llama a `undefined`
+  // y el archivo no sale.
+  listarSaldosTiendasCompletoAction: vi.fn(),
   listarSaldosTiendasPaginadoAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
@@ -113,12 +123,14 @@ vi.mock("@/hooks/useToast", () => ({
 
 import {
   listarCierresAdmin,
+  listarPendientesCierresAdminCompleto,
   listarPendientesCierresAdminPaginado,
   listarHistoricoCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import { listarCierreDia, listarCierresPasadosPaginado } from "@/lib/actions/cierre-dia";
 import {
   listarSaldosTiendasAction,
+  listarSaldosTiendasCompletoAction,
   listarSaldosTiendasPaginadoAction,
 } from "@/lib/actions/wallet-tienda";
 import {
@@ -162,6 +174,15 @@ const ARBOL_UI = "app";
  *
  * Lo que NINGUNO puede ser es `filasLocales(loQueLaTablaPinta)`: con la tabla paginada eso es
  * literalmente «descargar lo que se ve».
+ *
+ * **Feature 184 (T H.2): `filasDelConjuntoCompleto` ya no existe, y esta variante se conserva a
+ * propósito.** No es un descuido de limpieza: la rama `conjunto` ya no puede aparecer por el
+ * lado POSITIVO —`PENDIENTES_184` está vacía—, pero sigue siendo la MITAD NEGATIVA de los trece,
+ * y una afirmación negativa sobre algo que no existe es exactamente lo que impide que vuelva. Si
+ * alguien rescatara el adaptador del historial, este censo diría CUÁL de los trece se cableó a
+ * él; sin la variante, solo lo diría la guardia, y en forma de «alguien, en algún archivo».
+ * Que el export siga retirado lo afirma `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`
+ * (R32), que es lo que hace que esta mitad no sea vacua sino redundante a propósito.
  */
 type AdaptadorDescarga = "conjunto" | "completo";
 
@@ -194,100 +215,186 @@ interface ListadoPaginado {
  */
 const ANEXO_III: ListadoPaginado[] = [
   {
+    // Feature 184 — Tanda C (T C.2/T C.3): el más caro por red del inventario. Su relectura
+    // FIRMABA en lote, contra Supabase Storage, las URL de evidencia de todas las gestiones del
+    // día, y el archivo no usaba ni una: el `CierrePasadoDTO` no tiene campo de evidencia.
     listado: "Cierres solicitados por el mensajero",
     ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_PASADOS_LABEL",
   },
   {
+    // Feature 184 — Tanda D (T D.3/T D.4): su relectura traía la cola Y el histórico juntos y
+    // se quedaba con una mitad; la lectura dedicada corta por estado en la base.
     listado: "Cierres del día — histórico",
     ruta: "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_HISTORICO_LABEL",
     lector: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
   },
   {
+    // Feature 184 — Tanda D (T D.3/T D.4): el gemelo del anterior, y el que más se ahorra en
+    // producción — la cola son una decena de cierres sin resolver y el histórico que arrastraba
+    // crece sin tope con los días.
     listado: "Cierres del día pendientes de decisión",
     ruta: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
     tanda: "J",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_PENDIENTES_LABEL",
   },
   {
+    // Feature 184 — Tanda E (T E.3/T E.4): su relectura traía la cola Y el histórico entero de
+    // la operación y se quedaba con una mitad. Es el lado caro de la asimetría: la cola son
+    // una decena de cierres sin resolver y el histórico que arrastraba no tiene techo.
     listado: "Cierres de bodega pendientes",
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
     tanda: "J",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_PENDIENTES_LABEL",
   },
   {
+    // Feature 184 — Tanda E (T E.3/T E.4): el gemelo del anterior, y la otra mitad del mismo
+    // listado compuesto. Aquí lo que se arrastraba era la cola; allí, el histórico.
     listado: "Cierres de bodega resueltos",
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_RESUELTOS_LABEL",
   },
   {
+    // Feature 184 — Tanda B (T B.2/T B.3): su relectura era la más cara del inventario —cuatro
+    // consultas, cinco agregados de dinero y el reparto del efectivo— para quedarse con un campo.
     listado: "Cierres de bodega solicitados",
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_SOLICITADOS_LABEL",
   },
   {
+    // Feature 184 — Tanda B (T B.2/T B.3): el gemelo del anterior. Su relectura, además de las
+    // cuatro consultas, repartía el efectivo entre TODOS los pagos individuales de la zona.
     listado: "Cierres del día a consolidar",
     ruta: "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx",
     tanda: "J",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_CONSOLIDABLES_LABEL",
   },
   {
+    // Feature 184 — Tanda F (T F.3/T F.4): su relectura traía la cola Y el histórico entero de
+    // incidentes resueltos del alcance, y se quedaba con una mitad. Es el lado caro de la
+    // asimetría: la cola son los incidentes sin decidir, un puñado, y el histórico que
+    // arrastraba no tiene techo.
     listado: "Incidentes pendientes de decisión",
     ruta: "app/(app)/incidentes/_components/IncidentesAdminModule.tsx",
     tanda: "J",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_PENDIENTES_LABEL",
   },
   {
+    // Feature 184 — Tanda F (T F.3/T F.4): la otra mitad del MISMO listado compuesto. Aquí lo
+    // que se arrastraba era la cola de pendientes de decisión.
     listado: "Incidentes — histórico",
     ruta: "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_INCIDENTES_LABEL",
   },
   {
+    // Feature 184 — Tanda A (T A.4/T A.6): el SEGUNDO con `listarCompleto` propio. Era el
+    // único que además filtraba en el navegador; ese criterio duplicado ya no existe.
     listado: "Órdenes de la bodega satélite",
     ruta: "app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx",
     tanda: "K",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_LABEL",
   },
   {
+    // Feature 184 — Tanda G (T G.2/T G.3): el ÚLTIMO junto al de abajo. No ahorra ni una
+    // consulta —es un `findMany` sin `where` sobre una tabla de configuración, medido— y aun
+    // así migra: el tope pasa a decidirse en el servidor y el conjunto deja de cruzar al
+    // navegador para descartarlo allí.
     listado: "Plantillas de gasto fijo",
     ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_PLANTILLAS_LABEL",
   },
   {
+    // Feature 184 — Tanda G (T G.2/T G.3): tampoco ahorra consultas —las mismas dos—, pero su
+    // relectura salía de `listarSaldosTodasTiendas`, que devuelve las filas en el orden del
+    // planificador mientras la tabla ordena por nombre: el archivo salía SIN ORDENAR y dos
+    // descargas seguidas podían diferir. La lectura dedicada es la misma llamada que la página
+    // con otro rango, así que el archivo y la tabla no pueden divergir (R5).
     listado: "Saldos de tiendas",
     ruta: "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
     tanda: "I",
-    adaptador: "conjunto",
+    adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_SALDOS_LABEL",
   },
   {
     // El ÚNICO con `listarCompleto` propio, desde T M.1 (cierre de Q-L2). Los otros doce siguen
     // releyendo su listado sin recorte: es la deuda que Q-I5/Q-K4 dejaron escrita, y este campo
     // es lo que hace que se vea cuánta queda.
+    //
+    // Feature 184 (T G.3): esa frase caducó hoy. Los TRECE declaran `completo` y la deuda de
+    // Q-I5/Q-K4 queda cerrada; el campo se conserva porque mientras `filasDelConjuntoCompleto`
+    // exista, la mitad negativa del caso de R52 es lo que impide volver a él en silencio.
+    //
+    // Feature 184 (T H.2): el adaptador ya NO existe —se retiró—, y el campo se conserva igual.
+    // Lo que vigila deja de ser «no vuelvas a él» y pasa a ser «no lo rescates del historial»,
+    // que es un riesgo más pequeño pero no cero, y cuesta una línea.
     listado: "Cuentas por pagar a mensajeros",
     ruta: "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
     tanda: "L",
     adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_CUENTAS_LABEL",
   },
+];
+
+/**
+ * Feature 184 (T0.1) — los listados que TODAVÍA obtienen el archivo releyendo su listado sin
+ * recorte, DECLARADOS POR NOMBRE y en el orden del Anexo III.
+ *
+ * Sustituye a las dos afirmaciones agregadas que había aquí (la lista de los `completo` y un
+ * `toHaveLength(12)`). Aquellas eran un número y un nombre escritos a mano sobre un reparto que
+ * cambia doce veces durante la feature 184: a mitad de la entrega el número miente, y con
+ * `.skip` no diría nada. Esta lista se edita UNA vez por tanda, en el MISMO commit que la
+ * pantalla, y no puede desviarse del campo `adaptador` —que a su vez se contrasta contra el
+ * árbol en los dos sentidos, arriba y abajo—.
+ *
+ * Cuando quede VACÍA, los trece obtienen su archivo de una lectura dedicada y la deuda de
+ * Q-I5/Q-K4 está cerrada.
+ */
+const PENDIENTES_184: readonly string[] = [
+  // Feature 184 — Tanda C: «Cierres solicitados por el mensajero» salió de aquí en el MISMO
+  // commit que su pantalla. Quedan OCHO.
+  //
+  // Feature 184 — Tanda D: los DOS listados de «Cierres del día» del admin —el histórico y la
+  // cola de pendientes— salieron de aquí, cada uno en el MISMO commit que su pantalla.
+  // Quedan SEIS.
+  //
+  // Feature 184 — Tanda E: los DOS listados de «Cierres de bodega» del admin —la cola de
+  // pendientes y el histórico de resueltos— salieron de aquí, cada uno en el MISMO commit que
+  // su pantalla. Quedan CUATRO.
+  // Feature 184 — Tanda B: los DOS listados de la consolidación —«Cierres de bodega
+  // solicitados» y «Cierres del día a consolidar»— salieron de aquí, cada uno en el MISMO
+  // commit que su pantalla. Quedan NUEVE.
+  // Feature 184 — Tanda F: los DOS listados de incidentes —la cola de pendientes de decisión y
+  // el histórico de resueltos— salieron de aquí, cada uno en el MISMO commit que su pantalla.
+  // Quedan DOS.
+  //
+  // Feature 184 — Tanda A: «Órdenes de la bodega satélite» salió de aquí en el MISMO commit
+  // que su pantalla. Quedan ONCE.
+  //
+  // Feature 184 — Tanda G: los DOS listados de wallet —«Plantillas de gasto fijo» y «Saldos de
+  // tiendas»— salieron de aquí, cada uno en el MISMO commit que su pantalla. Quedan CERO: los
+  // trece obtienen su archivo de una lectura dedicada y la deuda de Q-I5/Q-K4 está cerrada.
+  //
+  // La lista se queda VACÍA, no se borra: es el ancla del caso de R52 —que la contrasta contra
+  // el campo `adaptador` de los trece— y lo que obliga a que un listado que volviera a releer
+  // tuviera que venir aquí a declararse.
 ];
 
 interface ListadoSinPaginar {
@@ -564,6 +671,12 @@ function montarColaCierres() {
   vi.mocked(listarHistoricoCierresAdminPaginado).mockImplementation(
     servirPagina([]) as never,
   );
+  // Feature 184 — Tanda D (T D.3): de aquí sale el archivo (R52), sin recorte.
+  vi.mocked(listarPendientesCierresAdminCompleto).mockResolvedValue({
+    status: "ok",
+    items: [...COLA_CIERRES],
+    total: COLA_CIERRES.length,
+  });
   vi.mocked(listarCierresAdmin).mockResolvedValue({
     status: "ok",
     pendientes: [...COLA_CIERRES],
@@ -581,6 +694,14 @@ function montarColaCierres() {
 
 function montarSaldos() {
   vi.mocked(listarSaldosTiendasPaginadoAction).mockImplementation(servirPagina(TIENDAS) as never);
+  // Feature 184 — Tanda G (T G.2): de aquí sale el archivo (R52), sin recorte.
+  vi.mocked(listarSaldosTiendasCompletoAction).mockResolvedValue({
+    status: "ok",
+    items: [...TIENDAS],
+    total: TIENDAS.length,
+  });
+  // El listado sin recorte sigue programado: que el archivo ya no salga de él tiene que ser
+  // una decisión de la pantalla, no que el doble no responda.
   vi.mocked(listarSaldosTiendasAction).mockResolvedValue({
     status: "ok",
     tiendas: [...TIENDAS],
@@ -890,12 +1011,24 @@ describe("T M.1 · R52 — toda descarga de un listado paginado entrega el datas
       conjunto: /filasDelConjuntoCompleto\(/,
       completo: /filasDesdeResultado\(/,
     };
+    // Feature 184 (T0.2) — la MITAD NEGATIVA, que hasta hoy faltaba: el adaptador que un
+    // listado declara NO es «el que además usa», es el ÚNICO que usa. Sin esto, una pantalla
+    // migrada a medias —que llame a los dos— pasaría verde con cualquiera de las dos
+    // declaraciones, y el censo dejaría de decir cuánta deuda queda.
+    const CONTRARIO: Record<AdaptadorDescarga, AdaptadorDescarga> = {
+      conjunto: "completo",
+      completo: "conjunto",
+    };
 
     for (const { listado, ruta, adaptador } of ANEXO_III) {
       const fuente = fuenteDe(ruta);
       expect(fuente, `${listado}: su descarga no va al servidor por el conjunto (R52)`).toMatch(
         ADAPTADOR[adaptador],
       );
+      expect(
+        fuente,
+        `${listado}: se declara «${adaptador}» pero también llama al adaptador «${CONTRARIO[adaptador]}»`,
+      ).not.toMatch(ADAPTADOR[CONTRARIO[adaptador]]);
 
       if (!CONVIVEN_ANEXO_III_Y_IV.has(ruta)) {
         expect(
@@ -905,12 +1038,23 @@ describe("T M.1 · R52 — toda descarga de un listado paginado entrega el datas
       }
     }
 
-    // Anti-vacuidad del reparto: hoy son doce que releen y UNO con `listarCompleto` propio. Si
-    // una tanda futura cierra Q-I5, este número sube y hay que venir a decirlo.
-    expect(ANEXO_III.filter((l) => l.adaptador === "completo").map((l) => l.listado)).toEqual([
-      "Cuentas por pagar a mensajeros",
-    ]);
-    expect(ANEXO_III.filter((l) => l.adaptador === "conjunto")).toHaveLength(12);
+    // Feature 184 (T0.1/R30) — el reparto, declarado POR NOMBRE y no por un número escrito a
+    // mano: los que siguen releyendo son EXACTAMENTE los de `PENDIENTES_184`, en su orden. Cada
+    // tanda borra sus líneas de esa lista en el mismo commit en que cambia su pantalla; si se
+    // borra la línea sin migrar la pantalla (o al revés), este caso se pone rojo.
+    //
+    // Feature 184 (T G.3): desde hoy los dos lados son la lista VACÍA, y eso no lo vuelve
+    // decorativo. Un listado que volviera a releer —o uno nuevo que naciera releyendo— rompe
+    // esta igualdad por el lado izquierdo, y su declaración `completo` rompe además el bucle de
+    // arriba por el positivo. Lo que sí deja de vigilar una lista vacía es el orden, y por eso
+    // la cuenta de los que YA migraron se afirma aparte: son los trece, sin excepción.
+    expect(ANEXO_III.filter((l) => l.adaptador === "conjunto").map((l) => l.listado)).toEqual(
+      PENDIENTES_184,
+    );
+    expect(
+      ANEXO_III.filter((l) => l.adaptador === "completo"),
+      "la deuda de Q-I5/Q-K4 está cerrada: los TRECE sacan su archivo de una lectura dedicada",
+    ).toHaveLength(13);
   });
 
   it("descargar desde la ÚLTIMA página entrega el conjunto, no lo que se ve", async () => {

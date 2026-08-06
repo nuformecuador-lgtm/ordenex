@@ -31,6 +31,9 @@ function fakeRepo(): ICierresAdminRepository {
     // Feature 170 (T I.1): doble no-op; esta suite solo aprueba cierres.
     findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
+    // Feature 184 (T D.1): los dos CONJUNTOS de la descarga; no-op, esta suite solo aprueba.
+    findHistoricoCompleto: vi.fn(async () => []),
+    findColaCompleta: vi.fn(async () => []),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),

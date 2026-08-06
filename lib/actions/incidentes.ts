@@ -19,14 +19,18 @@ import type {
 import {
   aprobarIncidenteSchema,
   incidenteIdSchema,
+  listarHistoricoIncidentesCompletoSchema,
   listarHistoricoIncidentesSchema,
+  listarPendientesIncidentesCompletoSchema,
   listarPendientesIncidentesSchema,
   rechazarIncidenteSchema,
   reportarIncidenteSchema,
   retractarIncidenteSchema,
   type AprobarIncidenteResult,
+  type ListarHistoricoIncidentesCompletoResult,
   type ListarHistoricoIncidentesResult,
   type ListarIncidentesResult,
+  type ListarPendientesIncidentesCompletoResult,
   type ListarPendientesIncidentesResult,
   type RechazarIncidenteResult,
   type ReportarIncidenteResult,
@@ -149,6 +153,46 @@ export async function listarPendientesIncidentesPaginado(
     const data = listarPendientesIncidentesSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarPendientesIncidentesPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toIncidenteActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda F (T F.2, R1/R6/R7/R17): el HISTORICO ENTERO del alcance, sin recorte, del
+ * que sale el archivo de «Incidentes — historico» (listado 9).
+ *
+ * Calcada de su hermana paginada: actor PRIMERO (sin sesion no se filtra la lista blanca), zod
+ * despues, servicio al final, todo bajo `withErrorHandler`. `input: unknown = {}` para que la
+ * pantalla pueda llamarla sin argumentos: este listado no tiene filtros que transportar.
+ */
+export async function listarHistoricoIncidentesCompleto(
+  input: unknown = {},
+  deps: IncidentesDeps = {},
+): Promise<ListarHistoricoIncidentesCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarHistoricoIncidentesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarHistoricoIncidentesCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toIncidenteActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda F (T F.2, R1/R6/R7/R17): la COLA ENTERA de pendientes de decision, sin
+ * recorte, para el archivo de «Incidentes pendientes» (listado 8). Espejo exacto de la de arriba.
+ */
+export async function listarPendientesIncidentesCompleto(
+  input: unknown = {},
+  deps: IncidentesDeps = {},
+): Promise<ListarPendientesIncidentesCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarPendientesIncidentesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPendientesIncidentesCompleto(actor);
   });
   return isAppErrorShape(r) ? toIncidenteActionError(r) : r;
 }

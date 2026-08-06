@@ -173,6 +173,25 @@ export interface IIncidenteAdminRepository {
     alcance: AlcanceIncidente,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<IncidenteAdminRow>>;
+  /**
+   * Feature 184 — Tanda F (T F.1, R1/R14/R15/R16): el HISTORICO ENTERO del alcance, sin recorte
+   * y sin conteo — el conjunto del que sale el ARCHIVO del listado 9.
+   *
+   * Existe porque `findByAlcance` NO es este conjunto: es este conjunto MAS la cola de la misma
+   * pantalla, y producir el archivo con ella lo dejaba saliendo de un listado compuesto (R1).
+   * Mismo `where` y mismo `orderBy` que `findHistoricoPaginado`, de una sola declaracion cada
+   * uno: la pagina N tiene que ser el segmento N de este conjunto (R5).
+   */
+  findHistoricoCompleto(alcance: AlcanceIncidente): Promise<IncidenteAdminRow[]>;
+  /**
+   * Feature 184 — Tanda F (T F.1, R1/R14/R15/R16): la COLA ENTERA de pendientes de decision del
+   * alcance, sin recorte y sin conteo — el conjunto del ARCHIVO del listado 8.
+   *
+   * COMPLEMENTO EXACTO del de arriba (misma constante de estados, `in` en vez de `notIn`), y
+   * donde mas se nota: la cola es la mitad pequeña, asi que su archivo arrastraba todo el
+   * historico del alcance, que crece sin tope con los dias.
+   */
+  findColaCompleta(alcance: AlcanceIncidente): Promise<IncidenteAdminRow[]>;
   /** R48/R49 — un incidente SOLO si su orden casa el alcance en el WHERE; si no, `null`. */
   findByIdEnAlcance(
     incidenteId: string,

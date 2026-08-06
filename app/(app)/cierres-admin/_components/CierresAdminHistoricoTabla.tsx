@@ -3,9 +3,9 @@
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { cierreConfig } from "@/lib/config/cierre";
-import { listarCierresAdmin } from "@/lib/actions/cierres-admin";
+import { listarHistoricoCierresAdminCompleto } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 
 import {
@@ -95,23 +95,25 @@ export function CierresAdminHistoricoTabla({
           error={hayError ? ERROR_CARGA : null}
           /**
            * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-           * CONJUNTO COMPLETO del alcance del actor. Se relee al pulsar el control, con el
-           * MISMO listado que la pantalla ya llamaba antes de paginar (`listarCierresAdmin`),
-           * que reparte cola e histórico con el mismo criterio y el mismo acotamiento por rol:
-           * un `adminSatelite` sigue descargando solo los cierres de su zona (R14/R44).
-           * Proyectar `pagina.items` habría convertido «descargar el histórico» en «descargar
-           * lo que se ve» sin que nada fallara.
+           * CONJUNTO COMPLETO del alcance del actor, y ese acotamiento lo pone el SERVIDOR
+           * desde la sesión: un `adminSatelite` sigue descargando solo los cierres de su zona
+           * (R14/R44). Proyectar `pagina.items` habría convertido «descargar el histórico» en
+           * «descargar lo que se ve» sin que nada fallara.
+           *
+           * Feature 184 — Tanda D (T D.3, R1): lo que cambia es DE DÓNDE sale ese conjunto.
+           * Hasta aquí se releía `listarCierresAdmin()`, que devuelve la cola Y el histórico
+           * juntos y del que esta descarga se quedaba con UNA de las dos mitades: para las
+           * cinco filas del histórico se leían siete. Ahora se pide la lectura DEDICADA, que
+           * corta por estado en la base (`estado notIn` la cola) con el mismo criterio y el
+           * mismo orden que la página, y el tope de filas lo evalúa el servidor (R6): por
+           * encima no viaja ni una fila, en vez de traerlas todas para descartarlas aquí.
            */
           descarga={{
             titulo: TITULO_DESCARGA,
             columnas: COLUMNAS_DESCARGA_CIERRES_HISTORICO,
             obtenerFilas: () =>
-              filasDelConjuntoCompleto(
-                listarCierresAdmin().then((res) =>
-                  res.status === "ok"
-                    ? ({ status: "ok", items: res.historico } as const)
-                    : res,
-                ),
+              filasDesdeResultado(
+                listarHistoricoCierresAdminCompleto(),
                 filaDescargaCierreHistorico,
               ),
           }}

@@ -2894,3 +2894,39 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   retirado en el PR #232 y el bloque branch-scoped que la 131 retiró en el suyo.
 - La financiera queda **fuera por decisión, no por olvido** → ficha **184**, que espera a
   la 180 (publica la serie) y a la 183 (cambia qué significan las cifras de caja).
+
+## 2026-08-05 — 188 —antes 184— (deuda de la 170: los 12 listados con descarga completa + poda de selección satélite)
+- Los **12 listados** cuya descarga a Excel releía el conjunto entero desde el navegador pasan a
+  servirse **desde el servidor**, con lectura dedicada por listado; y la selección de la bodega
+  satélite se **poda** contra el conjunto filtrado vigente, que es lo que hacía que el aviso de
+  «marcadas en otras páginas» contara órdenes que ya no existían. 8 tandas, 55 commits, **cero
+  migraciones**.
+- Requisitos cubiertos: **R1–R34**, mapeados caso a caso en `progress/impl_188-cierre.md`. Review
+  APROBADO en **ronda 2** (`progress/review_188.md`). Gate: **950 archivos / 11.847 tests**.
+- **H.3 no era un trámite y encontró dos huecos reales**, los dos cerrados aquí:
+  - **R16** exige «no dos declaraciones separadas del mismo criterio» —el hallazgo que da nombre a
+    la feature, el `orderBy` duplicado en las siete tandas— y **nada lo impedía**: bajo mutación,
+    deshacer una constante y repetir el literal idéntico dejaba **129 tests de emisión en verde**.
+    Se escribió una guardia (22 casos, 4 mutaciones reales).
+  - **R26** no afirmaba que la acción de lote sobrevive a la poda. La mutación lo prueba: al hacer
+    que la poda se pase de larga, el caso nuevo falla **y el viejo sigue verde**.
+- **Tres filas del Anexo B del spec apuntan a casos que no existen donde dicen** (R2, R8, R12). La
+  cobertura existe, en otro archivo. Por eso el mapa de H.3 se escribió contra el árbol y **no se
+  copió del spec**: un mapa copiado habría heredado las tres.
+- **Decisiones del humano (2026-08-05), las tres con ficha:**
+  - **R29 de la 170 queda derogado en 11 de los 12 listados** —se materializa el conjunto entero
+    antes de mirar el tope— y se **declara la excepción** en los once docstrings en vez de
+    implementarla, porque el `count` que exige el total exacto **pone rojos los tests de R15 de esta
+    misma feature**. Ese conflicto es el trabajo de la **ficha 191**, no un detalle.
+  - **Q-K6 rama B** estaba declarada dentro del alcance en `feature_list.json` pero **nunca bajó al
+    spec**; se saca del registro y va a la **ficha 190**, que esta feature deja desbloqueada.
+  - **R12 (columnas y orden)** sin test: deuda **preexistente** —el diff no toca ninguna de las 34
+    constantes `COLUMNAS_DESCARGA_*`— a la **ficha 189**.
+- **Deuda dejada, sin dueño:** `listarSaldosTodasTiendas()` sigue sin orden determinista; ya **no
+  sostiene ningún archivo** (la descarga sale del método paginado, con test que lo mide), pero
+  volvería a morder si alguien lo usa para construir uno.
+- **RENUMERADA de 184 a 188** al traer `dev`: otra sesión había dado de alta una 184 distinta
+  (analítica: export de la serie) y también 185/186/187, así que las fichas de este cierre pasaron
+  a **189/190/191**. Los 60 commits, los comentarios de 111 archivos y la constante
+  `PENDIENTES_184` **siguen diciendo 184 a propósito**: reescribir una rama pusheada está
+  prohibido aquí, y esa constante es ancla de texto de una guardia.

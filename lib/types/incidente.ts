@@ -5,6 +5,7 @@ import { evidenciasSchema } from "@/lib/types/gestion-orden";
 import { montoPositivoSchema } from "@/lib/types/wallet";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 import { incidentesConfig } from "@/lib/config/incidentes";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
 import type {
@@ -123,6 +124,32 @@ export const listarPendientesIncidentesSchema = paginaInputSchema(incidentesConf
 
 export type ListarPendientesIncidentesInput = z.infer<typeof listarPendientesIncidentesSchema>;
 
+/**
+ * Feature 184 — Tanda F (T F.2, R17) — la lista blanca de los DOS conjuntos de la descarga.
+ *
+ * Se DERIVAN de las de sus paginas quitando el recorte, no se reescriben: con una lista copiada a
+ * mano, `page: 2` y `pageSize: 100` pasarian —son claves que la pagina acepta y el conjunto no
+ * debe— y el archivo saldria recortado sin que nadie lo pidiera. Lo que queda es una lista blanca
+ * de CERO claves, y eso no hace el borde prescindible: lo hace mas estricto. La clave que importa
+ * aqui es `zonaId`, la que convertiria el archivo de un `adminSatelite` en el de la zona vecina;
+ * el alcance SIEMPRE sale del actor de la sesion (R4).
+ *
+ * `.strict()` se reescribe aunque `.omit()` lo herede, por el mismo motivo que en el schema de la
+ * pagina: que se lea aqui y no haya que ir a buscarlo.
+ */
+export const listarHistoricoIncidentesCompletoSchema = listarHistoricoIncidentesSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+/**
+ * Dos constantes y no una, aunque hoy su forma coincida y las dos deriven de un schema de la
+ * misma forma: el nombre es lo unico que dice cual de las dos mitades se pide, y si manana una
+ * gana un filtro lo hereda aqui sin arrastrar a la otra.
+ */
+export const listarPendientesIncidentesCompletoSchema = listarPendientesIncidentesSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
 /** Errores de BORDE del listado (dominio + los dos que resuelve la Server Action). */
 export type IncidentesListadoError =
   | { status: "forbidden" }
@@ -141,6 +168,17 @@ export type ListarPendientesIncidentesResult = ListarPaginadoResult<
   IncidenteAdminDTO,
   IncidentesListadoError
 >;
+
+/**
+ * Feature 184 — Tanda F (R6/R7) — los dos conjuntos tal como los recibe el cliente.
+ *
+ * Union de error ANCHO (`ActionError`, dentro de `ListarCompletoResult`) y no el estrecho de la
+ * pagina: quien los consume es `filasDesdeResultado`, el adaptador comun de la descarga, que
+ * redacta el mensaje de CUALQUIER error de borde en un solo sitio. `limite_excedido` lleva SOLO
+ * conteos, jamas filas ni un conjunto truncado (R6).
+ */
+export type ListarHistoricoIncidentesCompletoResult = ListarCompletoResult<IncidenteAdminDTO>;
+export type ListarPendientesIncidentesCompletoResult = ListarCompletoResult<IncidenteAdminDTO>;
 
 // ── Resultados de las Server Actions (dominio del service + lo que resuelve el borde) ──
 

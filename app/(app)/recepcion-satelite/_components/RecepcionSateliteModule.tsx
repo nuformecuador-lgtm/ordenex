@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
@@ -20,8 +20,9 @@ import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionRe
 
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
 import {
+  listarIdsVigentesBodega,
+  listarOrdenesBodegaCompleto,
   listarOrdenesBodegaPaginado,
-  listarRecepcionSatelite,
   recibirLote,
 } from "@/lib/actions/recepcion-satelite";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
@@ -37,7 +38,6 @@ import { DeshacerAsignacionSateliteModal } from "./DeshacerAsignacionSateliteMod
 import { filaDescargaSatelite } from "./satelite-descarga-columnas";
 import {
   FILTRO_SATELITE_VACIO,
-  filtrarOrdenesSatelite,
   serializarFiltroSatelite,
   type FiltroBodegaSatelite,
 } from "./satelite-ordenes-filtros";
@@ -95,32 +95,6 @@ async function leerPagina(
   const res = await listarOrdenesBodegaPaginado({ ...filtro, page, pageSize });
   if (res.status !== "ok") throw new Error(res.status);
   return { items: res.items, total: res.total, pageSize: res.pageSize };
-}
-
-/**
- * Feature 170 — FASE 2 (T K.3, R52 / Q-K4) — el CONJUNTO COMPLETO con los filtros vigentes,
- * para la descarga.
- *
- * Relee el MISMO listado que la pantalla llamaba antes de paginar
- * (`listarRecepcionSatelite`, acotado server-side a la zona del actor: descargar no amplía
- * el alcance ni una fila) y aplica los tres filtros en memoria, porque ninguna acción
- * devuelve hoy «el conjunto filtrado». Es exactamente lo que la pantalla hacía antes, así
- * que no es una regresión; la deuda queda declarada para la tanda M (Q-K4).
- *
- * Los cinco grupos se concatenan en el ORDEN DEL FLUJO de la bodega, el mismo que impone el
- * `ORDER BY` del listado paginado (R51): el archivo se lee como la pantalla.
- */
-async function conjuntoFiltrado(filtro: FiltroBodegaSatelite) {
-  const res = await listarRecepcionSatelite();
-  if (res.status !== "ok") return res;
-  const conjunto = [
-    ...res.recibidas,
-    ...res.asignadas,
-    ...res.porDevolver,
-    ...res.enTransitoACentral,
-    ...res.devueltas,
-  ];
-  return { status: "ok" as const, items: filtrarOrdenesSatelite(conjunto, filtro) };
 }
 
 export interface RecepcionSateliteModuleProps {
@@ -253,6 +227,25 @@ export function RecepcionSateliteModule({
   function cambiarFiltro(nuevo: FiltroBodegaSatelite) {
     setFiltro(nuevo);
     setPage(1);
+  }
+
+  /**
+   * Feature 184 — Tanda A (T A.5, R18/R19/R21/R22) — cuáles de los identificadores marcados
+   * SIGUEN perteneciendo al conjunto filtrado.
+   *
+   * Vive aquí y baja como callback por lo mismo que `obtenerFilasDescarga`: los filtros
+   * vigentes son de este módulo y la selección es del listado. Se construye EN EL RENDER, así
+   * que el closure lee el `filtro` de ESTE render y la comprobación se hace sobre el conjunto
+   * que el usuario está viendo (R19). El alcance por zona lo impone el servidor: aquí no viaja
+   * ninguna clave de alcance (R21).
+   *
+   * Devuelve `null` en CUALQUIER respuesta que no sea `ok` —incluida la de pasarse del tope de
+   * identificadores— y el listado lo trata como «no podar»: la selección queda intacta (R22).
+   * El tope lo decide el servidor y no se replica aquí, para que no haya dos números.
+   */
+  async function comprobarVigencia(ids: string[]): Promise<readonly string[] | null> {
+    const res = await listarIdsVigentesBodega({ ...filtro, ids });
+    return res.status === "ok" ? res.ids : null;
   }
 
   /**
@@ -500,6 +493,10 @@ export function RecepcionSateliteModule({
         </div>
 
         <SateliteOrdenesListado
+          // T A.5: el listado dispara la poda cuando cambia la IDENTIDAD de este array. `[]`
+          // es un array nuevo en cada render, pero sólo se usa mientras `data` no ha llegado
+          // —o sea, exactamente cuando `cargando` es `true`—, y con la carga en vuelo el
+          // listado no comprueba nada. El guard que sostiene R24/R28 es ese, no esta línea.
           ordenes={data?.items ?? []}
           total={data?.total ?? 0}
           // R42: el «de Y» del contador es el total del conjunto SIN filtros que resolvió el
@@ -510,21 +507,37 @@ export function RecepcionSateliteModule({
           cargando={cargando}
           errorCarga={error ? ERROR_CARGA : null}
           /**
-           * Feature 170 (T K.3, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-           * CONJUNTO COMPLETO con los filtros vigentes. El callback se construye EN EL
-           * RENDER, no en un memo: el closure lee el `filtro` de ESTE render, así que la
-           * descarga refleja los filtros aplicados en el momento de pulsar (R10/R33).
+           * Feature 170 (T K.3, R52) · Feature 184 (T A.4, R1/R2/R3/R6/R11) — la tabla pinta
+           * UNA página; el archivo sigue siendo el CONJUNTO COMPLETO con los filtros vigentes,
+           * y desde la tanda A lo pide a una lectura DEDICADA a este listado, con los tres
+           * filtros ya aplicados en la base (`listarOrdenesBodegaCompleto`).
            *
-           * Baja como callback y no como filtros (design §5, patrón `WalletModule`): la
-           * tabla no conoce —ni debe conocer— de dónde sale el conjunto.
+           * Qué cambió y por qué importa: T K.3 releía `listarRecepcionSatelite()` —los cinco
+           * grupos de la zona entera, que además resuelve «Por recibir» y el nombre de zona—
+           * y volvía a filtrarlos AQUÍ con `filtrarOrdenesSatelite`. Salía bien, pero bajaba
+           * al navegador filas que los filtros descartaban (R11) y dejaba el criterio escrito
+           * dos veces, en dos capas y con dos formas de comparar (R16). Ahora el servidor
+           * devuelve exactamente las filas del archivo y el tope de 5000 lo decide él (R6):
+           * por encima no viaja ni una fila.
            *
-           * `filasDelConjuntoCompleto` conserva el tope de 5000 de `filasLocales`: por encima
-           * devuelve un error accionable y NO produce archivo, nunca un xlsx al que le faltan
-           * filas sin avisar (R26/R28).
+           * El callback se construye EN EL RENDER, no en un memo: el closure lee el `filtro`
+           * de ESTE render, así que la descarga refleja los filtros aplicados en el momento de
+           * pulsar (R3). Baja como callback y no como filtros (design §5, patrón
+           * `WalletModule`): la tabla no conoce —ni debe conocer— de dónde sale el conjunto.
            */
           obtenerFilasDescarga={() =>
-            filasDelConjuntoCompleto(conjuntoFiltrado(filtro), filaDescargaSatelite)
+            filasDesdeResultado(
+              listarOrdenesBodegaCompleto({ ...filtro }),
+              filaDescargaSatelite,
+            )
           }
+          /**
+           * Feature 184 (T A.5, R18/R19): con qué se poda la selección. Mismo reparto que la
+           * descarga —el módulo conoce los filtros vigentes, el listado conoce las marcas—, y
+           * la decisión de CUÁNDO preguntar es del listado, que es quien sabe si hay marcas
+           * fuera de la página visible (R23).
+           */
+          comprobarVigencia={comprobarVigencia}
           zonaNombre={zonaNombre}
           puedeAsignar={!bloqueoBodega.bloqueada}
           onAsignar={abrirAsignacion}

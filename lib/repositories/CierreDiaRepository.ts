@@ -223,6 +223,28 @@ type CierrePasadoSelectRow = Prisma.CierreDiaGetPayload<{
   select: typeof CIERRE_PASADO_SELECT;
 }>;
 
+/**
+ * Feature 184 — Tanda C (R16) — el ALCANCE del listado «Cierres solicitados por el mensajero»,
+ * declarado UNA vez.
+ *
+ * El `mensajero_id` es TODO el acotamiento de este listado (no filtra por estado: el mensajero ve
+ * sus cierres en cualquiera, incluido el `solicitado`/`vencido` que le esta bloqueando las
+ * guias). Lo escribe siempre el servicio desde la sesion, jamas la peticion.
+ *
+ * Estaba escrito dos veces —una en el conjunto y otra en la pagina—, y con dos literales basta
+ * que una gane un predicado para que el archivo y la tabla dejen de contar el mismo conjunto.
+ */
+function cierresDeMensajeroWhere(mensajeroId: string): Prisma.CierreDiaWhereInput {
+  return { mensajeroId };
+}
+
+/**
+ * Feature 184 — Tanda C (R16/R5) — el ORDEN del mismo listado, compartido por el conjunto y la
+ * pagina. No es simetria: la pagina N que la tabla pinta tiene que ser el segmento N del conjunto
+ * del que sale el archivo, y eso solo se sostiene si las dos consultas ordenan igual.
+ */
+const ORDEN_CIERRES_MENSAJERO: Prisma.CierreDiaOrderByWithRelationInput = { solicitadoAt: "desc" };
+
 /** Mapper de la cabecera: Decimal -> STRING escala 2 (money-safe), fechas -> ISO. */
 function toCierrePasadoDTO(r: CierrePasadoSelectRow): CierrePasadoDTO {
   return {
@@ -566,11 +588,18 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     }
   }
 
-  /** R18: cierres del mensajero (mas reciente primero) con totales snapshot. */
+  /**
+   * R18: cierres del mensajero (mas reciente primero) con totales snapshot.
+   *
+   * Feature 184 — Tanda C: es tambien el CONJUNTO del que sale el archivo de «Cierres solicitados»
+   * (`listarCierresPasadosCompleto`). No hizo falta un metodo nuevo: este ya devolvia el conjunto
+   * entero del mensajero, con el mismo `where`, el mismo orden y el mismo mapper que la pagina, y
+   * un gemelo `…Completo` habria sido la tercera declaracion del mismo criterio (R16).
+   */
   async findCierresByMensajero(mensajeroId: string): Promise<CierrePasadoDTO[]> {
     const rows = await this.prisma.cierreDia.findMany({
-      where: { mensajeroId },
-      orderBy: { solicitadoAt: "desc" },
+      where: cierresDeMensajeroWhere(mensajeroId),
+      orderBy: ORDEN_CIERRES_MENSAJERO,
       select: CIERRE_PASADO_SELECT,
     });
     return rows.map(toCierrePasadoDTO);
@@ -623,11 +652,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     mensajeroId: string,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CierrePasadoDTO>> {
-    const where = { mensajeroId };
+    const where = cierresDeMensajeroWhere(mensajeroId); // R16: el MISMO alcance del conjunto
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
-        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_CIERRES_MENSAJERO, // R51/R16: el MISMO orden del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: CIERRE_PASADO_SELECT,

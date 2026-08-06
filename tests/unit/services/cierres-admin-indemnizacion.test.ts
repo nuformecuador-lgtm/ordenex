@@ -39,6 +39,10 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     // Feature 170 (T I.1): el historico paginado. Doble no-op: esta suite no lo ejercita.
     findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
+    // Feature 184 (T D.1): los dos CONJUNTOS de la descarga. Dobles no-op: esta suite no los
+    // ejercita (viven en `cierres-admin-completo.test.ts`).
+    findHistoricoCompleto: vi.fn(async () => []),
+    findColaCompleta: vi.fn(async () => []),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),

@@ -102,6 +102,10 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
       items: [] as CierreBodegaResumenRow[],
       total: 0,
     })),
+    // Feature 184 (T E.1): los dos CONJUNTOS de los que salen los archivos. Sus casos viven en
+    // `cierres-bodega-admin-completo.test.ts`; aqui son no-op para completar el contrato.
+    findHistoricoCompleto: vi.fn(async () => [] as CierreBodegaResumenRow[]),
+    findColaCompleta: vi.fn(async () => [] as CierreBodegaResumenRow[]),
     findCierreBodegaConDetalle: vi.fn(async () => null),
     resolverCierreBodega: vi.fn(async () => "updated" as const),
     ...overrides,
