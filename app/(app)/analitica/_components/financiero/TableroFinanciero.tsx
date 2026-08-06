@@ -67,6 +67,7 @@ import {
   agruparCola,
   columnasDeVista,
   esVistaConNeto,
+  esVistaTemporal,
   filasDeVista,
   serieDeVista,
 } from "./adaptar";
@@ -262,31 +263,6 @@ function PanelTabla({
 }
 
 /**
- * ¿Es esta vista una SERIE TEMPORAL, o sea, esta medida en el tiempo?
- *
- * Es la señal de FORMA que hoy separa una serie de un desglose, y sustituye a «¿trae
- * filas?», que dejo de separar nada en la feature 180. Hasta la 179 las siete vistas de
- * grano `fecha` llegaban con `filas: []` —el servicio agregaba la ventana entera y se
- * negaba a atribuirla a una fecha inventada—, asi que «sin filas» y «cifra de titular»
- * eran lo mismo. Desde la 180 el servicio construye la serie DENSA (`serieDensa` en
- * `lib/services/AnaliticaFinancieraService.ts`: UNA fila por cubo del rango, incluidos los
- * cubos sin movimiento), y esas siete llegan con ~30 filas para un rango de 30 dias.
- * Preguntar por `filas.length` las mandaba a la tabla y le quitaba al maestro el numero
- * que venia a ver: treinta fechas donde va «Dinero en caja».
- *
- * SE PREGUNTA POR LA NEGATIVA —«no es `no_temporal`»— Y NO POR LA LISTA DE GRANOS
- * TEMPORALES: `GranularidadVista` puede ganar un valor nuevo (hoy son `dia` y `semana`), y
- * con la forma positiva ese valor caeria por defecto en la tabla, que es exactamente el
- * defecto que este arreglo repara. `no_temporal` es el UNICO valor que AFIRMA «esta vista
- * no se mide en el tiempo», y el contrato obliga a declararlo explicitamente en cada
- * productor (`lib/types/analitica-financiera.ts`, ⟨D2⟩ / R4 de la 180); omitirlo no
- * compila.
- */
-function esSerieTemporal(vista: VistaFinanciera): boolean {
-  return vista.granularidad !== "no_temporal";
-}
-
-/**
  * Que componente pinta cada vista, decidido por la FORMA del DTO y no por el
  * nombre de la metrica (R27).
  *
@@ -341,7 +317,7 @@ function ContenidoDeVista({
   // Las DOS conductas que la 132 declaro, y ninguna tercera: la serie temporal se lee como
   // cifra de titular, y una vista sin filas tampoco tiene tabla que pintar. Antes de la 180
   // la segunda condicion cubria a la primera por accidente; hoy hacen falta las dos.
-  if (esSerieTemporal(vista) || vista.filas.length === 0) {
+  if (esVistaTemporal(vista) || vista.filas.length === 0) {
     return <PanelKpi vista={vista} unidad={unidad} />;
   }
 
