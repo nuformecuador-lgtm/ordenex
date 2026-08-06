@@ -76,6 +76,16 @@ verdes**), y **R26** no afirmaba que la acción de lote sobrevive a la poda.
 **Renumerada de 184 a 188** por colisión con otra sesión. **«184» en un commit, un comentario o
 `PENDIENTES_184` significa esta feature** (nota de cabecera en el spec y en el cierre).
 
+> ⚠️ **Rescatado el 2026-08-06 (PR #302): esa nota de cabecera NO estaba.** Se quedó **sin
+> commitear** en el working tree del worktree `lote-135` y el **PR #298 se mergeó sin ella** —junto
+> con **once rutas `impl_184_*` que apuntaban a ficheros ya renombrados**, punteros rotos entre
+> bitácoras—. Este párrafo llevaba un día afirmando algo falso.
+>
+> **El modo de fallo, que no tiene dueño:** *el PR se abre desde una rama, no desde el worktree*.
+> Nada avisa de que quedan cambios sin commitear cuando se mergea, y **`git status` en un worktree
+> ajeno no lo mira nadie**. Es la misma familia que los dos hotfixes que nunca volvieron a `dev`:
+> lo detecta un barrido, jamás una alerta.
+
 ### 🔎 Lo que sobrevive a esta jornada
 
 **El flake de jsdom tumbó el gate TRES veces hoy**, siempre en archivos distintos y siempre verde al
