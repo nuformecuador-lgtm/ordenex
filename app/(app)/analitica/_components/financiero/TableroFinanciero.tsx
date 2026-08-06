@@ -21,10 +21,10 @@
 //    PANTALLA. Resolverlos es la ficha 178.
 //  - NO escribe la lista de ids financieros (R27): recorre los paneles que le da
 //    `cargar.ts` y elige el componente por la FORMA del DTO (tipo, id de vista,
-//    grano, si trae filas), no por un `switch` sobre nombres de metrica. Desde la
-//    feature 183 ⟨D12⟩ (humano, 2026-08-04) eso incluye la `forma` del importe: hay
-//    metricas que publican `bruto` y `neto` y otras que solo publican `bruto`, y cual
-//    es cual NO se escribe aqui (R22 de la 183).
+//    grano, GRANULARIDAD, si trae filas), no por un `switch` sobre nombres de
+//    metrica. Desde la feature 183 ⟨D12⟩ (humano, 2026-08-04) eso incluye la `forma`
+//    del importe: hay metricas que publican `bruto` y `neto` y otras que solo publican
+//    `bruto`, y cual es cual NO se escribe aqui (R22 de la 183).
 //  - NO pinta el marcador de dato ausente donde la metrica no tiene neto (R19 de la
 //    183): en la 132 ese marcador significa «no se sabe» (R15) y aqui la verdad es
 //    «no aplica». Donde no hay neto, no hay linea, ni columna, ni etiqueta.
@@ -262,6 +262,31 @@ function PanelTabla({
 }
 
 /**
+ * ¿Es esta vista una SERIE TEMPORAL, o sea, esta medida en el tiempo?
+ *
+ * Es la señal de FORMA que hoy separa una serie de un desglose, y sustituye a «¿trae
+ * filas?», que dejo de separar nada en la feature 180. Hasta la 179 las siete vistas de
+ * grano `fecha` llegaban con `filas: []` —el servicio agregaba la ventana entera y se
+ * negaba a atribuirla a una fecha inventada—, asi que «sin filas» y «cifra de titular»
+ * eran lo mismo. Desde la 180 el servicio construye la serie DENSA (`serieDensa` en
+ * `lib/services/AnaliticaFinancieraService.ts`: UNA fila por cubo del rango, incluidos los
+ * cubos sin movimiento), y esas siete llegan con ~30 filas para un rango de 30 dias.
+ * Preguntar por `filas.length` las mandaba a la tabla y le quitaba al maestro el numero
+ * que venia a ver: treinta fechas donde va «Dinero en caja».
+ *
+ * SE PREGUNTA POR LA NEGATIVA —«no es `no_temporal`»— Y NO POR LA LISTA DE GRANOS
+ * TEMPORALES: `GranularidadVista` puede ganar un valor nuevo (hoy son `dia` y `semana`), y
+ * con la forma positiva ese valor caeria por defecto en la tabla, que es exactamente el
+ * defecto que este arreglo repara. `no_temporal` es el UNICO valor que AFIRMA «esta vista
+ * no se mide en el tiempo», y el contrato obliga a declararlo explicitamente en cada
+ * productor (`lib/types/analitica-financiera.ts`, ⟨D2⟩ / R4 de la 180); omitirlo no
+ * compila.
+ */
+function esSerieTemporal(vista: VistaFinanciera): boolean {
+  return vista.granularidad !== "no_temporal";
+}
+
+/**
  * Que componente pinta cada vista, decidido por la FORMA del DTO y no por el
  * nombre de la metrica (R27).
  *
@@ -269,9 +294,12 @@ function PanelTabla({
  * - la vista por tienda de `cod_recaudado` -> barras (con la cola agrupada) MAS
  *   la tabla con todas las filas: la grafica se lee de un vistazo y la tabla no
  *   esconde ninguna tienda;
- * - una vista SIN filas (las cuatro de caja y la cuenta por pagar de mensajero,
- *   que el servicio devuelve agregadas a proposito) -> KPI;
- * - cualquier otra vista con filas -> tabla.
+ * - una SERIE TEMPORAL (las seis de caja y la cuenta por pagar de mensajero, que declaran
+ *   `granularidad` `dia` o `semana`) -> KPI: la cifra de titular del periodo. La 132 les
+ *   dio esa forma y la 180 no la retiro; lo que la 180 añadio fue el desglose por fecha,
+ *   cuyo panel de lineas es la ficha 186 y NO se adelanta aqui;
+ * - una vista SIN filas -> KPI tambien: no hay tabla que pintar;
+ * - cualquier otra vista con filas (los desgloses por tienda y por metodo) -> tabla.
  */
 function ContenidoDeVista({
   titulo,
@@ -310,7 +338,10 @@ function ContenidoDeVista({
     );
   }
 
-  if (vista.filas.length === 0) {
+  // Las DOS conductas que la 132 declaro, y ninguna tercera: la serie temporal se lee como
+  // cifra de titular, y una vista sin filas tampoco tiene tabla que pintar. Antes de la 180
+  // la segunda condicion cubria a la primera por accidente; hoy hacen falta las dos.
+  if (esSerieTemporal(vista) || vista.filas.length === 0) {
     return <PanelKpi vista={vista} unidad={unidad} />;
   }
 

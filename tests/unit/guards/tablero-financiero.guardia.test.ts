@@ -216,8 +216,9 @@ function listasDeIdsAMano(codigo: string): string[] {
  * DONDE ESTA LA FRONTERA, que es lo unico dificil de este censo. El tablero SI decide
  * por identificadores: `vista.id === VISTA_COD_RECAUDADO_POR_METODO` elige el donut, y eso
  * es legitimo y ademas obligatorio —la cabecera de `TableroFinanciero.tsx` lo declara: se
- * elige el componente por «tipo, id de VISTA, grano, si trae filas»—. Lo que el requisito
- * prohibe es otra cosa: decidir por el id de la METRICA, que es el nombre del catalogo.
+ * elige el componente por «tipo, id de VISTA, grano, granularidad, si trae filas»—. Lo que
+ * el requisito prohibe es otra cosa: decidir por el id de la METRICA, que es el nombre del
+ * catalogo.
  *
  * La distincion se puede escribir sin ambiguedad porque los dos vocabularios son disjuntos
  * y estan en modulos distintos:
@@ -410,7 +411,7 @@ describe("R27 · la lista de metricas financieras tiene una sola fuente", () => 
     );
     expect(
       infractores,
-      "ramifican por el nombre de la metrica en vez de por la forma del DTO (tipo, id de vista, grano, filas, forma del importe)",
+      "ramifican por el nombre de la metrica en vez de por la forma del DTO (tipo, id de vista, grano, granularidad, filas, forma del importe)",
     ).toEqual([]);
   });
 
@@ -552,6 +553,9 @@ describe("autocomprobacion · el censo detecta lo que dice detectar", () => {
       'if (panel.estado === "denegado") return null;',
       'if (vista.grano === "tienda") return <Aviso />;',
       "if (vista.filas.length === 0) return <PanelKpi />;",
+      // La rama que el hotfix del 2026-08-06 añadio: `granularidad` es un campo del DTO y
+      // `no_temporal` uno de sus valores, no el nombre de ninguna metrica.
+      'if (vista.granularidad !== "no_temporal") return <PanelKpi />;',
       // El id de VISTA escrito entero: empieza por el id de la metrica y NO es el id de la
       // metrica. Si esto se marcara, el censo estaria prohibiendo la decision legitima.
       'if (vista.id === "cod_recaudado__por_metodo") return <GraficaDonut />;',
