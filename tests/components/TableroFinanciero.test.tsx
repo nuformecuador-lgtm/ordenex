@@ -339,7 +339,12 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
     tipo: "conciliacion",
     metricaId: "conciliacion_cierres",
     etiqueta: ETIQUETAS.conciliacion_cierres,
-    unidad: "moneda",
+    // `conteo` y no `moneda`: es lo que el catalogo declara para esta metrica
+    // (`lib/analytics/metrics.ts`) y lo que el servicio copia a la cabecera. El doble
+    // decia `moneda` —un DTO que nadie produce— y con esa premisa falsa este archivo no
+    // podia ver que el cuadre se estaba pintando redondeado y sin moneda. Lo mismo que
+    // el doble de `PanelConciliacion.test.tsx`, corregido el 2026-08-07.
+    unidad: "conteo",
     rango: RANGO,
     esAcumulado: false,
     conciliacion: {
