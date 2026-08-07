@@ -45,7 +45,6 @@ function fakeService(overrides: Partial<IPlantillaMensajeService> = {}): IPlanti
     // ejercita el modo sin paginacion (lo hace `plantillas-descarga-action.test.ts`); el
     // stub existe para que el doble siga siendo un `IPlantillaMensajeService` valido.
     listarCompleto: vi.fn().mockResolvedValue({ status: "ok", items: [], total: 0 }),
-    obtener: vi.fn().mockResolvedValue({ status: "ok", plantilla: plantilla() }),
     actualizar: vi.fn().mockResolvedValue({ status: "ok", plantilla: plantilla() }),
     cambiarEstado: vi
       .fn()

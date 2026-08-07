@@ -18,13 +18,11 @@ const SEED: VehiculoDTO[] = [
   { id: "veh-3", name: "moto" },
 ];
 
-// El doble sigue declarando `obtener` porque `IVehiculoService` lo declara (lo usa
-// `VehiculoService`, probado en tests/unit/services/); su Server Action de borde se borro el
-// 2026-08-07 por nacer sin pantalla.
+// `IVehiculoService` quedo con una sola operacion: `obtener` se retiro el 2026-08-07 junto
+// con su Server Action, que nacio sin pantalla.
 function fakeService(overrides: Partial<IVehiculoService> = {}): IVehiculoService {
   return {
     listar: vi.fn().mockResolvedValue({ status: "ok", items: SEED }),
-    obtener: vi.fn().mockResolvedValue({ status: "ok", vehiculo: SEED[0] }),
     ...overrides,
   };
 }

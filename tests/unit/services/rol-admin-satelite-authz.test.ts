@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import { OrdenService } from "@/lib/services/OrdenService";
 import { TarifaService } from "@/lib/services/TarifaService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -10,12 +9,6 @@ import type { Actor as TarifaActor } from "@/lib/interfaces/services/ITarifaServ
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
-import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
-
-// Feature 160: `OrdenService` gano el derivador de intentos EN LOTE como dependencia
-// REQUERIDA. Estas pruebas son de AUTORIZACION (`crear`), que ni siquiera lo consume: doble
-// neutro compartido, sin aserciones sobre el.
-const intentos = fakeIntentosEnLote();
 
 // Feature 98: la via sesion no tarifa; stub neutro para el 2do parametro del constructor.
 const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
@@ -26,12 +19,16 @@ const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
 // Feature 19 (rol-adminsatelite): R9, R10, R11. `adminSatelite` es un rol SIN
 // permisos nuevos: en toda puerta de autorizacion por rol existente debe caer
 // en el default-forbidden (sin cambios de codigo de servicio, verificado en
-// design.md). Este test cubre las cuatro puertas listadas en el spec y un caso
-// de no-regresion por servicio con un rol previamente autorizado.
+// design.md). Cada puerta lleva su caso de no-regresion con un rol previamente autorizado.
+//
+// 2026-08-07: eran CUATRO puertas; hoy son TRES. La cuarta era `OrdenService.crear`, que se
+// borro con el resto del CRUD de andamiaje (nacio sin pantalla). La regla que protegia —«un
+// adminSatelite no puede crear ordenes»— NO se queda sin testigo: sigue afirmada sobre
+// `BulkOrdenService.cargarMasiva`, que es la via VIVA de creacion, en el tercer bloque de
+// este mismo archivo. Se comprobo antes de borrar; ver progress/impl_borrar-acciones-huerfanas.md.
 
 const ADMIN_SATELITE_ORDEN: OrdenActor = { usuarioId: "sat1", rol: "adminSatelite" };
 const ADMIN_SATELITE_TARIFA: TarifaActor = { usuarioId: "sat1", rol: "adminSatelite" };
-const MAESTRO_ORDEN: OrdenActor = { usuarioId: "m1", rol: "maestro" };
 const MAESTRO_TARIFA: TarifaActor = { usuarioId: "m1", rol: "maestro" };
 const TIENDA_ORDEN: OrdenActor = { usuarioId: "store1", rol: "adminTienda" };
 
@@ -163,21 +160,6 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
   };
 }
 
-function crearOrdenInput(overrides: Record<string, unknown> = {}) {
-  return {
-    numRemision: "REM-1",
-    destinatario: "Ana",
-    telefonoDest: "0991234567",
-    producto: "Caja",
-    peso: 1.5,
-    zonaId: "z1",
-    provinciaId: "p1",
-    cantonId: "c1",
-    tiendaId: "store1",
-    ...overrides,
-  };
-}
-
 function tarifaDto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
@@ -244,27 +226,6 @@ function bulkRow(overrides: Partial<RawRow> = {}): RawRow {
     ...overrides,
   };
 }
-
-describe("OrdenService.crear — adminSatelite sin permisos nuevos (R9, R11)", () => {
-  it("adminSatelite -> forbidden, no crea", async () => {
-    const repo = buildOrdenRepo();
-    const service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearOrdenInput(), ADMIN_SATELITE_ORDEN);
-
-    expect(r.status).toBe("forbidden");
-    expect(repo.create).not.toHaveBeenCalled();
-  });
-
-  it("no-regresion: maestro conserva su resultado exitoso (R11)", async () => {
-    const repo = buildOrdenRepo();
-    const service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearOrdenInput({ tiendaId: "storeX" }), MAESTRO_ORDEN);
-
-    expect(r.status).toBe("ok");
-  });
-});
 
 describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => {
   it("lectura (obtener): adminSatelite -> forbidden, no consulta el repo", async () => {

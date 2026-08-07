@@ -262,9 +262,8 @@ describe("R27/R28: soft delete oculta la plantilla del listado", () => {
       expect(lista.items.map((i) => i.nombre)).toEqual(["B"]);
     }
 
-    // R28: la lectura por id de la borrada devuelve not_found.
-    const obt = await service.obtener(a.plantilla.id, MAESTRO);
-    expect(obt.status).toBe("not_found");
+    // (La lectura por id de la borrada se afirmaba aqui via `obtener`, retirada el 2026-08-07.
+    // R28 no se queda sin testigo: lo es el `listar` de arriba, que ya no la devuelve.)
 
     // R29: re-eliminar la ya borrada -> not_found.
     const reDel = await service.eliminar(a.plantilla.id, MAESTRO);

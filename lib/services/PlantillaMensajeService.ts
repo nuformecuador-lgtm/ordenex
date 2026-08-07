@@ -12,7 +12,6 @@ import type {
   IPlantillaMensajeService,
   ListarPlantillasCompletoServiceResult,
   ListarPlantillasServiceResult,
-  ObtenerPlantillaServiceResult,
   PreviewPlantillaServiceResult,
 } from "@/lib/interfaces/services/IPlantillaMensajeService";
 import type {
@@ -113,13 +112,9 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     return { status: "ok", items, total };
   }
 
-  async obtener(id: string, actor: Actor): Promise<ObtenerPlantillaServiceResult> {
-    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R5
-
-    const plantilla = await this.repo.findById(id); // R28: null si borrada
-    if (!plantilla) return { status: "not_found" };
-    return { status: "ok", plantilla };
-  }
+  // BORRADO 2026-08-07 (tanda 2): aqui vivia `obtener`. Su Server Action se borro en la
+  // tanda 1 por nacer sin pantalla de detalle. `this.repo.findById` NO muere: lo siguen
+  // usando `actualizar` y `eliminar`, que estan vivas.
 
   async actualizar(
     id: string,

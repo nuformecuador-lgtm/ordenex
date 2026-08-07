@@ -60,25 +60,6 @@ describe("listar — autz (R9, R10, R11)", () => {
   });
 });
 
-describe("obtener — autz (R9, R10, R11)", () => {
-  it("R9/R11: maestro obtiene la fila por id", async () => {
-    const r = await service.obtener("veh-1", MAESTRO);
-    expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.vehiculo).toEqual(SEED_ROWS[0]);
-  });
-
-  it("R10: cualquier rol distinto de maestro -> forbidden, sin tocar el repo", async () => {
-    for (const actor of NO_MAESTRO) {
-      const r = await service.obtener("veh-1", actor);
-      expect(r.status).toBe("forbidden");
-    }
-    expect(repo.findById).not.toHaveBeenCalled();
-  });
-
-  it("maestro + id inexistente -> not_found", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    service = new VehiculoService(repo);
-    const r = await service.obtener("nope", MAESTRO);
-    expect(r.status).toBe("not_found");
-  });
-});
+// BORRADO 2026-08-07 (tanda 2): aqui vivia el bloque de `obtener`, retirado de
+// `VehiculoService` al quedarse sin llamador. R9/R10 (solo maestro; cualquier otro rol ->
+// forbidden sin tocar el repo) conserva su testigo en el bloque de `listar`, arriba.

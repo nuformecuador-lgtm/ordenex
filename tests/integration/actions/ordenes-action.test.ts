@@ -30,14 +30,11 @@ function dto(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
   };
 }
 
-// El doble implementa `IOrdenService` ENTERO aunque este archivo solo ejercite `listar`:
-// `crear`/`obtener`/`actualizar`/`borrar` siguen declarados en la interfaz (los usa
-// `OrdenService`, probado en tests/unit/services/), asi que el literal tiene que
-// satisfacerlos para type-checkear. Sus Server Actions de borde se borraron el 2026-08-07.
+// El doble implementa `IOrdenService` entero, que desde el 2026-08-07 son SOLO las dos
+// lecturas: `crear`/`obtener`/`actualizar`/`borrar` se retiraron de la interfaz al quedarse
+// sin llamador (tanda 2 del chore de deuda de superficie).
 function fakeService(overrides: Partial<IOrdenService> = {}): IOrdenService {
   return {
-    crear: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
-    obtener: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
     listar: vi.fn().mockResolvedValue({
       status: "ok",
       items: [{ ...dto(), tiendaNombre: "Tienda Uno" }], // R25/R26: listado con nombre tienda
@@ -45,8 +42,6 @@ function fakeService(overrides: Partial<IOrdenService> = {}): IOrdenService {
       pageSize: 20,
       total: 1,
     }),
-    actualizar: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
-    borrar: vi.fn().mockResolvedValue({ status: "ok" }),
     // Feature 151: modo sin paginacion (descarga). El doble lo satisface para cumplir
     // el contrato de IOrdenService; su comportamiento se prueba en
     // tests/unit/actions/ordenes-descarga-action.test.ts.

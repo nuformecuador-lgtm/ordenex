@@ -1,10 +1,7 @@
 import type { RolValue } from "@prisma/client";
 import type {
-  CrearOrdenInput,
-  ActualizarOrdenInput,
   ListarOrdenesInput,
   ListarOrdenesCompletoInput,
-  OrdenDTO,
   OrdenListItemDTO,
 } from "@/lib/types/orden";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
@@ -26,16 +23,9 @@ export interface Actor {
 
 // Resultados de dominio del servicio (sin acoplarse a HTTP). El borde (Server
 // Action) los traduce al resultado tipado expuesto (R42).
-export type CrearOrdenServiceResult =
-  | { status: "ok"; orden: OrdenDTO }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "forbidden" }
-  | { status: "conflict" };
-
-export type ObtenerOrdenServiceResult =
-  | { status: "ok"; orden: OrdenDTO }
-  | { status: "forbidden" }
-  | { status: "not_found" };
+// BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivian
+// `CrearOrdenServiceResult` y `ObtenerOrdenServiceResult`, de los metodos `crear`/`obtener`
+// que se van de esta interfaz mas abajo.
 
 // Feature 170 (T H.2): reexpresado sobre el contrato comun de listado paginado
 // (`lib/types/listado-paginado`). Es el MOLDE que copian los 13 listados del Anexo III
@@ -53,30 +43,21 @@ export type ListarOrdenesCompletoServiceResult =
   | { status: "limite_excedido"; total: number; limite: number } // R20
   | { status: "forbidden" }; // R14
 
-export type ActualizarOrdenServiceResult =
-  | { status: "ok"; orden: OrdenDTO }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "forbidden" }
-  | { status: "not_found" };
+// BORRADO 2026-08-07 (tanda 2): idem con `ActualizarOrdenServiceResult` y
+// `BorrarOrdenServiceResult`.
 
-export type BorrarOrdenServiceResult =
-  | { status: "ok" }
-  | { status: "forbidden" }
-  | { status: "not_found" };
-
+/**
+ * Contrato del servicio de ordenes. Desde el 2026-08-07 son SOLO LECTURAS: el CRUD de
+ * escritura (`crear`/`actualizar`/`borrar`) y la lectura de detalle (`obtener`) se retiraron
+ * al quedarse sin superficie. La escritura real de ordenes vive en `IBulkOrdenService` (carga
+ * masiva por sesion y por API key) y en los servicios de dominio (guia, asignacion,
+ * recepcion, devoluciones, incidencias).
+ */
 export interface IOrdenService {
-  crear(input: CrearOrdenInput, actor: Actor): Promise<CrearOrdenServiceResult>;
-  obtener(id: string, actor: Actor): Promise<ObtenerOrdenServiceResult>;
   listar(input: ListarOrdenesInput, actor: Actor): Promise<ListarOrdenesServiceResult>;
   /** Feature 151/R11: mismo listado, sin recorte por pagina y con tope duro (R20/R22). */
   listarCompleto(
     input: ListarOrdenesCompletoInput,
     actor: Actor,
   ): Promise<ListarOrdenesCompletoServiceResult>;
-  actualizar(
-    id: string,
-    input: ActualizarOrdenInput,
-    actor: Actor,
-  ): Promise<ActualizarOrdenServiceResult>;
-  borrar(id: string, actor: Actor): Promise<BorrarOrdenServiceResult>;
 }
