@@ -43,10 +43,12 @@ import { formatMonto } from "../pos-card/pos-format";
 // Rediseño del chat (rama ux) — columna derecha del chat separado: hilo REAL de la orden,
 // plantillas REALES y composer.
 //
-// Lee la MISMA fuente que el chat del detalle (`ChatWhatsappPanel`): `listarHiloChat` con
-// polling SWR, así que los mensajes se ven en los dos sitios y ninguno queda desfasado.
-// Las plantillas son las de `listarPlantillasParaEnvio` (feature 87), las mismas que
-// ofrece la burbuja del detalle, renderizadas con los datos de esta orden.
+// Lee el hilo con `listarHiloChat` y polling SWR. Hasta el 2026-08-07 convivía con el chat
+// del panel del detalle (`ChatWhatsappPanel`), que leía esa MISMA fuente; ese panel se borró
+// por decisión humana tras quedarse sin montaje, así que ésta es hoy la ÚNICA superficie del
+// hilo. Las plantillas son las de `listarPlantillasParaEnvio` (feature 87), las mismas que
+// ofrece `EnviarPlantillaWhatsappButton` en el panel de gestión, renderizadas con los datos
+// de esta orden.
 //
 // Regla del composer (la impone el BACKEND; aquí solo se refleja): mientras el cliente no
 // haya respondido ni una vez, el texto libre está DESHABILITADO y la única vía es una
