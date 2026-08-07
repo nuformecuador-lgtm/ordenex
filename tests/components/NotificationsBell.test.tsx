@@ -37,7 +37,6 @@ vi.mock("@/lib/actions/notificaciones", () => ({
   listarNotificaciones: listarMock,
   marcarTodasLeidas: marcarTodasMock,
   descartarNotificacion: descartarMock,
-  marcarNotificacionLeida: vi.fn(),
   notificarCargaMasivaTerminada: vi.fn(),
 }));
 

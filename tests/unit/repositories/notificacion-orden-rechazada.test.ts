@@ -255,7 +255,6 @@ describe("emitirOrdenRechazada — dedupe (R27) sobre el rechazo", () => {
       existeNoLeidaPara: vi.fn(async () => true),
       listarParaUsuario: vi.fn(),
       verificarVisible: vi.fn(),
-      marcarLeida: vi.fn(),
       marcarTodasLeidas: vi.fn(),
       descartar: vi.fn(),
     };

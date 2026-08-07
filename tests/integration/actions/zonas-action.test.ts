@@ -5,7 +5,6 @@ import {
   listarZonas,
   actualizarZona,
   borrarZona,
-  arbolZonas,
 } from "@/lib/actions/zonas";
 import type { Actor, IZonaService } from "@/lib/interfaces/services/IZonaService";
 import type { ZonaDTO } from "@/lib/types/zona";
@@ -37,7 +36,6 @@ function fakeService(over: Partial<IZonaService> = {}): IZonaService {
     listar: vi.fn().mockResolvedValue({ status: "ok", items: [dto()], page: 1, pageSize: 25, total: 1 }),
     actualizar: vi.fn().mockResolvedValue({ status: "ok", zona: dto() }),
     borrar: vi.fn().mockResolvedValue({ status: "ok" }),
-    arbol: vi.fn().mockResolvedValue({ status: "ok", arbol: {} }),
     ...over,
   };
 }
@@ -59,7 +57,6 @@ describe("sin sesion -> unauthenticated sin tocar el service", () => {
     expect((await listarZonas({}, deps)).status).toBe("unauthenticated");
     expect((await actualizarZona("z1", validCrear, deps)).status).toBe("unauthenticated");
     expect((await borrarZona("z1", deps)).status).toBe("unauthenticated");
-    expect((await arbolZonas(deps)).status).toBe("unauthenticated");
     expect(service.crear).not.toHaveBeenCalled();
     expect(service.listar).not.toHaveBeenCalled();
     expect(service.borrar).not.toHaveBeenCalled();
@@ -139,14 +136,5 @@ describe("DTO nuevo (esCentral, sin campos internos)", () => {
       expect(r.items[0].distritosCount).toBe(2);
       expect(r.items[0].esCentral).toBe(false);
     }
-  });
-});
-
-describe("arbolZonas", () => {
-  it("maestro -> ok con arbol", async () => {
-    const service = fakeService();
-    const r = await arbolZonas({ zonaService: service, getActor: getActor(MAESTRO) });
-    expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.arbol).toEqual({});
   });
 });

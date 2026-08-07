@@ -60,13 +60,6 @@ export class NotificacionService implements INotificacionService {
     return { status: "ok", items, noLeidas: items.filter((i) => !i.read).length };
   }
 
-  async marcarLeida(id: string, actor: Actor): Promise<MarcarNotificacionServiceResult> {
-    const acceso = await this.autorizar(id, actor);
-    if (acceso !== "ok") return acceso;
-    await this.repo.marcarLeida(id, actor.usuarioId, this.now()); // R31/R37
-    return { status: "ok" };
-  }
-
   async descartar(id: string, actor: Actor): Promise<MarcarNotificacionServiceResult> {
     const acceso = await this.autorizar(id, actor);
     if (acceso !== "ok") return acceso;

@@ -591,9 +591,10 @@ export function RepartoModule({
           una capa aparte del buscador/filtro de la lista); las de "Por recoger" no tienen
           gestión que conversar — por eso el chat vive aquí y no en su pantalla. La marcada
           "en gestión" es la que el módulo tiene en DETALLE, y es por donde entra al abrirse.
-          El hilo y las plantillas son los MISMOS que consume `ChatWhatsappPanel` dentro del
-          panel del detalle (feature 120/87): los dos conviven y muestran la misma
-          conversación. */}
+          El hilo y las plantillas son los REALES de las features 120/87. Hasta el 2026-08-07
+          esta ruta convivía con `ChatWhatsappPanel` dentro del panel del detalle, que leía la
+          misma conversación; ese panel se borró por decisión humana tras perder su montaje en
+          `6dc18dc2`, así que este botón es hoy la ÚNICA entrada al chat. */}
       <ChatFlotante
         ordenes={porGestionar}
         ordenEnDetalleId={detalleOrden?.id ?? null}
