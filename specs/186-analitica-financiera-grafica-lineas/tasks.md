@@ -151,7 +151,7 @@
   motivo en toda métrica acumulada; KPI sustituido por la gráfica).
   **Hecho:** cada una se sembró en el código de **producción**, se corrió y se revirtió con la
   edición inversa exacta (**nunca `git checkout`**), con `git status` limpio comprobado después.
-- [ ] **T F.3 — `pnpm exec next build` a mano**, con la salida pegada en la bitácora.
+- [x] **T F.3 — `pnpm exec next build` a mano**, con la salida pegada en la bitácora.
   **Hecho:** termina sin error. **Nunca `pnpm build`**, que encadena `migrate deploy` contra una
   base real.
 - [ ] **T F.4 — Gate.** `./init.sh --rapido` al cerrar cada tanda; **`./init.sh` completo antes del

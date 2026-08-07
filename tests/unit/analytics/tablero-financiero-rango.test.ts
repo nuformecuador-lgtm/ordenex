@@ -79,14 +79,24 @@ const RE_CLAVE_RANGO_LITERAL = /\brango\s*:\s*["'][^"']*["']/;
 //    sea `rango.ts`. Ahi el censo queda exactamente igual de estricto que antes.
 //  - La clave `rango: "…"` se marca en cualquier archivo, tambien en `adaptar.ts`: escribir
 //    la clave del filtro SI es decidir una ventana, diga lo que diga el literal.
-//  - Los DOS homonimos se admiten unicamente en el UNICO modulo de la region autorizado a
-//    nombrar los valores de la granularidad (R16 de la 186). Que ese modulo sea uno solo no
-//    se supone aqui: lo garantiza el censo (g) de
-//    `tests/unit/guards/tablero-financiero.guardia.test.ts`, y si manana un segundo archivo
-//    empezara a nombrarlos, aquel se pondria rojo antes que este.
+//  - Los DOS homonimos se admiten en el modulo autorizado SOLO EN LA FORMA `case "…":`, que es
+//    la unica en la que un rotulador necesita nombrarlos. Cualquier otra forma —una constante,
+//    un array, una comparacion— se marca tambien ahi.
 //
-// El resultado es MAS estrecho que el censo original en un punto (la clave `rango:` ya no
-// tiene excepcion posible) y igual de estrecho en el resto.
+// ESA ULTIMA VIÑETA ES UN ARREGLO, Y CONVIENE DECIR DE QUE. La primera version de esta
+// particion (revision del 2026-08-06, m2) admitia los homonimos en el modulo autorizado SIN
+// mas condicion, y el reviewer lo midio: `export const PRESET_DEL_TABLERO = "semana";` escrito
+// dentro de `adaptar.ts` NO ponia rojo nada, cuando antes de esta feature ese mismo literal en
+// ese mismo archivo si lo ponia. Era una excepcion CON COSTE descrita como si no lo tuviera.
+// Acotarla a la forma `case` cierra el hueco: un preset de verdad no se escribe nunca asi.
+//
+// Y por si `case` fuera poco, hay un segundo cinturon INDEPENDIENTE, abajo: el modulo
+// autorizado no puede importar `rango.ts` ni nombrar la constante del filtro. Un archivo que
+// no puede referirse al rango no puede decidirlo, escriba el literal que escriba.
+//
+// El resultado es MAS estrecho que el censo original en dos puntos (la clave `rango:` ya no
+// tiene excepcion posible, y el modulo autorizado no puede tocar el rango ni por import) e
+// igual de estrecho en el resto.
 
 /** Los dos presets que NO colisionan con ningun valor de `GranularidadVista`. */
 const RE_PRESET_INEQUIVOCO = /["'](mes|personalizado)["']/;
@@ -95,19 +105,51 @@ const RE_PRESET_INEQUIVOCO = /["'](mes|personalizado)["']/;
 const RE_PRESET_HOMONIMO = /["'](dia|semana)["']/;
 
 /**
+ * La UNICA forma en que el modulo autorizado puede nombrar un homonimo: la rama de un `switch`.
+ *
+ * Es lo que `etiquetaDeCubo` necesita para rotular, y es una forma en la que un preset de rango
+ * no se escribe jamas: un preset se asigna, se compara o se mete en un filtro, no se declara
+ * como etiqueta de `case` en la region financiera.
+ */
+const RE_HOMONIMO_EN_CASE = /\bcase\s+["'](dia|semana)["']\s*:/g;
+
+/**
  * El unico modulo de la region que puede nombrar los valores de `GranularidadVista`
  * (R16 / ⟨D1⟩ de la 186). Escrito como ruta y no como excepcion por archivo: si el rotulador
  * se mudara, esto se pone rojo en vez de callar.
  */
 const MODULO_DE_GRANULARIDAD = "app/(app)/analitica/_components/financiero/adaptar.ts";
 
-/** Los tres valores del dominio, IMPORTADOS por tipo y escritos una sola vez aqui. */
-const GRANULARIDADES: readonly GranularidadVista[] = ["dia", "semana", "no_temporal"];
+/**
+ * Los tres valores del dominio EN RUNTIME, como registro exhaustivo sobre el tipo importado.
+ *
+ * Antes era un array escrito a mano (revision del 2026-08-06, m3): ahi un cuarto valor del
+ * contrato NO rompia nada y el censo seguia comparando tres de cuatro. Con el registro, ese
+ * cuarto valor rompe la COMPILACION de este archivo. Es la misma tecnica que ya usan el guardia
+ * del tablero y el test de componente, y no habia motivo para que aqui fuera otra.
+ */
+const GRANULARIDADES_DEL_DOMINIO: Readonly<Record<GranularidadVista, true>> = {
+  dia: true,
+  semana: true,
+  no_temporal: true,
+};
+
+/**
+ * Los homonimos que quedan tras descontar los que estan en forma de `case`.
+ *
+ * Se descuentan por SUSTITUCION y no contando: asi un archivo que tenga a la vez un `case`
+ * legitimo y una constante ilegitima sigue marcado, que es justo el caso que se escapaba.
+ */
+function homonimosFueraDeCase(codigo: string): boolean {
+  return RE_PRESET_HOMONIMO.test(codigo.replace(RE_HOMONIMO_EN_CASE, ""));
+}
 
 function escribeUnPresetDeRango(codigo: string, ruta: string): boolean {
   if (RE_CLAVE_RANGO_LITERAL.test(codigo)) return true;
   if (RE_PRESET_INEQUIVOCO.test(codigo)) return true;
-  return RE_PRESET_HOMONIMO.test(codigo) && ruta !== MODULO_DE_GRANULARIDAD;
+  if (!RE_PRESET_HOMONIMO.test(codigo)) return false;
+  // Fuera del modulo autorizado, cualquier homonimo basta. Dentro, solo los que no son `case`.
+  return ruta !== MODULO_DE_GRANULARIDAD || homonimosFueraDeCase(codigo);
 }
 
 describe("R26 · el rango por defecto del tablero financiero es una constante y no una decision de cada panel", () => {
@@ -154,17 +196,39 @@ describe("R26 · el rango por defecto del tablero financiero es una constante y 
     // seria una puerta abierta de la que solo constaria la intencion.
     const OTRO = "app/(app)/analitica/_components/financiero/TableroFinanciero.tsx";
 
-    // Los dos homonimos: admitidos SOLO en el modulo del rotulador...
+    // Los dos homonimos: admitidos en el modulo del rotulador SOLO en forma de `case`...
     expect(escribeUnPresetDeRango('case "dia": return x;', MODULO_DE_GRANULARIDAD)).toBe(false);
     expect(escribeUnPresetDeRango('case "semana": return x;', MODULO_DE_GRANULARIDAD)).toBe(false);
-    // ...y marcados en cualquier otro archivo de la region.
+    // ...y marcados en cualquier otro archivo de la region, tambien en forma de `case`.
     expect(escribeUnPresetDeRango('const r = "dia";', OTRO)).toBe(true);
     expect(escribeUnPresetDeRango('const r = "semana";', OTRO)).toBe(true);
+    expect(escribeUnPresetDeRango('case "semana": return x;', OTRO)).toBe(true);
+
+    // EL HUECO QUE LA REVISION MIDIO (m2), cerrado: dentro del modulo autorizado, un homonimo
+    // que NO es una rama de `switch` se marca igual. Es el ejemplo literal del reviewer.
+    expect(
+      escribeUnPresetDeRango('export const PRESET_DEL_TABLERO = "semana";', MODULO_DE_GRANULARIDAD),
+    ).toBe(true);
+    expect(escribeUnPresetDeRango('if (f.rango === "dia") return x;', MODULO_DE_GRANULARIDAD)).toBe(
+      true,
+    );
+    expect(escribeUnPresetDeRango('const PRESETS = ["dia", "semana"];', MODULO_DE_GRANULARIDAD)).toBe(
+      true,
+    );
+    // Y el caso mixto, que es el que se escaparia si el descuento fuera por CUENTA y no por
+    // sustitucion: un `case` legitimo y una constante ilegitima en el mismo archivo.
+    expect(
+      escribeUnPresetDeRango(
+        'case "dia": return x;\nexport const PRESET = "semana";',
+        MODULO_DE_GRANULARIDAD,
+      ),
+    ).toBe(true);
 
     // Los presets SIN homonimo se marcan en TODOS, incluido el modulo excepcionado.
     for (const ruta of [MODULO_DE_GRANULARIDAD, OTRO]) {
       expect(escribeUnPresetDeRango('const r = "mes";', ruta)).toBe(true);
       expect(escribeUnPresetDeRango('const r = "personalizado";', ruta)).toBe(true);
+      expect(escribeUnPresetDeRango('case "mes": return x;', ruta)).toBe(true);
       // Y la clave del filtro tampoco tiene excepcion: escribirla ES elegir una ventana.
       expect(escribeUnPresetDeRango('consultar({ rango: "dia" });', ruta)).toBe(true);
       expect(escribeUnPresetDeRango('consultar({ rango: "mes" });', ruta)).toBe(true);
@@ -176,19 +240,43 @@ describe("R26 · el rango por defecto del tablero financiero es una constante y 
     }
   });
 
+  it("el modulo excepcionado no puede referirse al rango ni por import: segundo cinturon (186)", () => {
+    // Cinturon INDEPENDIENTE del anterior, y de la revision m2. La excepcion por homonimia solo
+    // es segura mientras `adaptar.ts` no tenga forma de decidir una ventana; si un dia importara
+    // `rango.ts` o nombrara `RANGO_PRESETS`, el literal homonimo dejaria de ser inocente aunque
+    // siguiera escrito como `case`. Un archivo que no puede referirse al rango no puede
+    // decidirlo, escriba lo que escriba.
+    const autorizado = archivosDeLaFeature().find(
+      (archivo) => relativa(archivo) === MODULO_DE_GRANULARIDAD,
+    );
+    expect(autorizado, `${MODULO_DE_GRANULARIDAD} no esta en el censo`).toBeDefined();
+
+    const codigo = soloCodigo(fs.readFileSync(autorizado!, "utf8"));
+    expect(codigo, "el modulo del rotulador importa rango.ts").not.toMatch(
+      /from\s+["'][^"']*\/rango["']/,
+    );
+    expect(codigo, "el modulo del rotulador nombra el catalogo de presets").not.toContain(
+      "RANGO_PRESETS",
+    );
+    expect(codigo, "el modulo del rotulador nombra la constante del filtro").not.toContain(
+      "FILTRO_FINANCIERO_POR_DEFECTO",
+    );
+    // Contrapeso: el archivo se leyo de verdad y SI contiene el vocabulario que motiva la
+    // excepcion. Sin esto, mover o vaciar `adaptar.ts` dejaria este caso verde por vacio.
+    expect(RE_HOMONIMO_EN_CASE.test(codigo)).toBe(true);
+    RE_HOMONIMO_EN_CASE.lastIndex = 0;
+  });
+
   it("los dos dominios comparten EXACTAMENTE dos literales: ni mas, ni menos (186)", () => {
     // El contrapeso que hace verdadera la premisa del recorte. Si manana `RANGO_PRESETS`
     // ganara un valor que tambien es una granularidad —o si `GranularidadVista` ganara uno
     // que tambien es un preset—, la particion de arriba dejaria de cubrir el dominio y este
     // caso se pone rojo antes de que el censo empiece a mentir por omision.
-    const compartidos = RANGO_PRESETS.filter((preset) =>
-      (GRANULARIDADES as readonly string[]).includes(preset),
-    );
+    const granularidades = Object.keys(GRANULARIDADES_DEL_DOMINIO);
+    const compartidos = RANGO_PRESETS.filter((preset) => granularidades.includes(preset));
     expect([...compartidos].sort()).toEqual(["dia", "semana"]);
 
-    const exclusivos = RANGO_PRESETS.filter(
-      (preset) => !(GRANULARIDADES as readonly string[]).includes(preset),
-    );
+    const exclusivos = RANGO_PRESETS.filter((preset) => !granularidades.includes(preset));
     expect(exclusivos.length).toBeGreaterThan(0);
     for (const preset of exclusivos) {
       expect(RE_PRESET_INEQUIVOCO.test(`"${preset}"`), `${preset} no lo cubre el patron`).toBe(

@@ -61,7 +61,7 @@ tocaron**. Ni `lib/`, ni `db/`, ni `components/private/analytics/`.
 | Req | Caso(s), con el nombre tal como quedó escrito, y su archivo | Nota |
 |---|---|---|
 | R1 | `` `%s`: una vista temporal de metrica de flujo trae su grafica de lineas dentro de su seccion `` (`it.each` sobre las seis de flujo), `son SEIS: la septima temporal es la acumulada, y esa no lleva linea` y `una vista temporal con neto emite DOS series en su linea, y una sin neto UNA`, los tres en `tests/components/TableroFinanciero.test.tsx` | el previsto no llevaba el prefijo `%s`, que es del `it.each`; los dos contrapesos son añadidos |
-| R2 | `las vistas no_temporal no traen ninguna grafica de lineas, ni vacia` — `tests/components/TableroFinanciero.test.tsx` | literal |
+| R2 | `las vistas no_temporal no traen ninguna grafica de lineas, ni vacia` y **`una vista no_temporal de metrica de FLUJO que llega al KPI tampoco trae linea, ni su encabezado`** — `tests/components/TableroFinanciero.test.tsx` | el primero es literal pero **no ejercita la condición**; el segundo se añadió tras la revisión (B1) y es el que la mata: §4, M-14 |
 | R3 | `la cuenta por pagar de mensajero NO trae grafica y dice en pantalla por que` y `el texto de «saldo al corte» de la 132 sigue donde estaba, y son dos frases distintas` — `tests/components/TableroFinanciero.test.tsx` | literal, con un caso más que fija ⟨D3⟩ |
 | R4 | `el motivo no aparece en las seis de flujo ni en la cuenta por pagar de tienda` y **`una vista no_temporal de una metrica ACUMULADA que llega al KPI tampoco trae el motivo`** — `tests/components/TableroFinanciero.test.tsx` | el segundo NO estaba previsto y es el que de verdad mata la mutación: §4, M-10 |
 | R5 | `una granularidad que el tablero no conoce se trata como serie, no como tabla` y `y su serie se rotula como grano NO DECLARADO, nunca como si fuera un dia` en `tests/components/TableroFinanciero.test.tsx`; `una granularidad que este binario no conoce se trata como SERIE, no como desglose` en `tests/unit/analytics/tablero-financiero-adaptar.test.ts` | literal; el unitario es añadido |
@@ -104,11 +104,16 @@ después de cada una de las mutaciones que lo tocan.
 | M-11 | **KPI sustituido por la gráfica** (borrar `<PanelKpi/>` de la rama) | `TableroFinanciero.tsx` | **muere**: 17 rojos (R14 + 10 heredados de la 132/183 y del hotfix) |
 | M-12 | **nombrar la granularidad en un segundo módulo** (`vista.granularidad === "dia"` en el tablero) | `TableroFinanciero.tsx` | **muere**: 2 rojos (censo (g) de R16 + el censo de rango de la 132) |
 | M-13 | **quitar la vista semanal del juego de dobles** | `TableroFinanciero.test.tsx` | **muere**: 1 rojo (R17 c) |
+| **M-14** | **quitar `esVistaTemporal(vista) &&` de la línea** (dejarla en `!esAcumulado`) — el **gemelo exacto de M-10**, la otra mitad de la misma línea de código | `TableroFinanciero.tsx` | **SOBREVIVIÓ** a los 144 casos de componente (hallazgo del reviewer, B1). Con el caso añadido, **muere**: 1 rojo — `una vista no_temporal de metrica de FLUJO que llega al KPI tampoco trae linea, ni su encabezado` |
+| **M-15** | **`export const PRESET_DEL_TABLERO = "semana";` dentro de `adaptar.ts`** — el ejemplo literal del reviewer para m2 | `adaptar.ts` | antes de la corrección: **0 rojos**. Después: **muere**, 1 rojo en el censo de rango. Ver §5.3 |
 
-### Las dos mutaciones que sobrevivieron a la primera versión de su test
+### Las TRES mutaciones que sobrevivieron a la primera versión de su test
 
-Se anotan porque son el único hallazgo real de la campaña, y porque las dos son de la misma
-familia: **un requisito escrito, un test con el nombre correcto, y ninguna rama ejercitada**.
+Se anotan porque son el hallazgo real de la campaña, y porque las tres son de la misma familia:
+**un requisito escrito, un test con el nombre correcto, y ninguna rama ejercitada**. Dos las
+encontré yo; **la tercera la encontró el reviewer, y es la misma línea de código que la primera**
+—lo arreglé en una mitad y lo dejé en la otra—, que es exactamente la forma en que este error se
+repite.
 
 **M-5 (`?? 0`) sobrevivió a la primera versión de R11.** El caso usaba un importe `""` como
 «ilegible», y `""` sale por la guarda del vacío (`if (recortado === "") return null`), no por la
@@ -124,35 +129,94 @@ se podía borrar entera sin que nada se pusiera rojo. Se añadió
 rama del KPI por la segunda condición del hotfix— y con ella la mutación murió. R4 estaba escrito
 en el spec y no lo protegía nada.
 
+**M-14 (línea sin guardia temporal) sobrevivió a los 144 casos de componente, y la encontró el
+reviewer.** Es el **gemelo exacto de M-10**: la condición de `<PanelLineas>` y la de
+`<MotivoSinSerie>` son las dos mitades de la misma línea, y las dos llevaban el mismo
+`esVistaTemporal(vista) &&`. Encontré el agujero en la mitad del motivo, escribí la lección —«un
+test que no ejercita la rama no la protege, aunque su nombre diga que sí»— **y no la apliqué a la
+mitad de al lado**. El caso que citaba para R2 mira las tres vistas `no_temporal` de
+`panelesOk()`, y las tres salen por las ramas de donut, barras o tabla: ninguna llega a la rama
+del KPI, que es donde vive la condición. Medía que las otras tres ramas no pintan líneas —cierto
+por construcción— y dejaba R2 sin nada.
+
+Se añadió `panelNoTemporalDeFlujoSinFilas` —`no_temporal` + `esAcumulado: false` + `filas: []`,
+la única combinación que entra en la rama del KPI **sin ser temporal**— y con ella la mutación
+murió. El test dice, como el de R5, **por qué el servicio no produce hoy ese DTO**: las únicas
+vistas `no_temporal` de métrica de flujo son las dos de `cod_recaudado`, y las dos salen por sus
+ramas propias. Es decir: **no era un fallo vivo**, era un requisito sin red. La lección corregida,
+que es la que vale para la próxima: cuando una condición tiene dos consumidores, **el caso hay que
+escribirlo para cada uno**; encontrar el agujero en uno no lo cierra en el otro.
+
 ## 5. Los tres puntos donde la implementación se separó del spec, y por qué
 
 Ninguno cambia una decisión: los tres son cosas que el spec no podía saber hasta escribir el
 código. **No se ha editado ningún archivo de `specs/`.**
 
-### 5.1 El bloque del hotfix: una de sus seis aserciones es incompatible con R1
+### 5.1 El criterio «los seis casos del hotfix, verdes sin tocarlos» NO ERA SATISFACIBLE, y aquí está la demostración
 
-`design.md` §3 ⟨D1⟩ pone como criterio de hecho que «los seis casos del bloque `Hotfix — …` sigan
-verdes **sin tocarlos**». **Ese criterio se cumplió donde aplica**: al cerrar T A.1 —la muda de
-`esVistaTemporal`, que es de lo que ⟨D1⟩ habla— los 67 casos del archivo pasaron sin tocar una
-línea. Queda anotado como evidencia: el movimiento fue puro.
+> Reescrito tras la revisión (m1). El reviewer midió y dio por buena la desviación de fondo, pero
+> dejó dicho lo que faltaba: **el spec sigue afirmando algo que el árbol no cumple**. Lo que sigue
+> es lo que me toca aportar —la prueba de que el criterio, tal como está escrito, no podía
+> cumplirse a la vez que R1— y una redacción concreta para que el leader reconcilie el spec. **No
+> he editado ningún archivo de `specs/`.**
 
-Al aterrizar la Tanda C, un caso del bloque se puso rojo, y es **estructural, no un descuido**:
+**Primero, lo que sí se cumplió, porque es de lo que ⟨D1⟩ habla.** ⟨D1⟩ pone el criterio para
+demostrar que **mover `esSerieTemporal` fue un movimiento puro**. Lo fue: el commit de T A.1
+(`5d79c56f`) **no toca** `tests/components/TableroFinanciero.test.tsx` y los 67 casos pasaron
+verdes sin tocar una línea. El cambio del caso entra dos commits después, con la Tanda C
+(`881717c6`), que es cuando aparece la línea. El reviewer lo verificó por separado.
 
-> `` `%s` NO pinta las fechas de la serie `` afirmaba
-> `expect(seccion.textContent).not.toContain(CUBO_INTERMEDIO)`.
+**Ahora la demostración de incompatibilidad.** El caso decía:
 
-R1 exige la gráfica **dentro de la sección de la vista**, y `SerieTextual` emite su alternativa
-textual —«serie, categoría: valor»— en el DOM (`sr-only`), que es donde un lector de pantalla lee
-la gráfica. Con la línea puesta, la fecha del cubo **tiene** que estar en el `textContent` de la
-sección; si no estuviera, la gráfica sería muda. Las dos afirmaciones no pueden ser ciertas a la
-vez, y R1 es la que manda.
+> `` `%s` NO pinta las fechas de la serie `` → `expect(seccion.textContent).not.toContain(CUBO_INTERMEDIO)`
 
-**Qué se hizo, y por qué no es una relajación:** el caso pasa a exigir que la fecha no sea el
-texto **propio** de ningún elemento —`queryByRole("cell", …)` y `queryByText(…)`, que es
-exactamente como la pintaba `PanelTabla` (`<td>2026-07-20</td>`)—, y **conserva la aserción vieja
-literal** en la métrica acumulada, que por Q2 = (b) no lleva línea. Medido: M-8 (poner línea en la
-acumulada) pone rojo ese resto conservado, y M-9/M-11 ponen rojo el caso entero. El defecto
-original —treinta fechas donde va la cifra— sigue matando este caso.
+Y se aplicaba (`it.each(TEMPORALES)`) a las **siete** métricas temporales, seis de las cuales son
+de flujo. Tomemos una cualquiera de esas seis:
+
+1. **R1** obliga a renderizar la gráfica de líneas **dentro de la sección de esa vista**.
+2. `GraficaLineas` renderiza **siempre** `SerieTextual` cuando hay datos
+   (`components/private/analytics/GraficaLineas.tsx:48`). No es opcional ni configurable.
+3. `SerieTextual` emite un `<li>` por punto con el texto `"<serie>, <categoría>: <valor>"`
+   (`SerieTextual.tsx:63-70`), dentro de un `<div className="sr-only">` — **presente en el DOM**,
+   que es precisamente lo que R10 de la 130 exige: es la única forma en que un lector de pantalla
+   «oye» un SVG.
+4. **R7** obliga a que esa `categoría` **contenga literalmente la clave del cubo**.
+5. Luego el `textContent` de la sección contiene la clave del cubo. **Q.E.D.**
+
+O sea: **R1 ∧ R7 ⟹ ¬(la aserción original)**, para las seis de flujo. No es que yo eligiera
+debilitar el caso: las dos afirmaciones **no pueden ser ciertas a la vez**, y el spec exige las
+dos.
+
+**Las tres únicas salidas, y la regla que rompe cada una** —las escribo para que se vea que no
+hay una cuarta que se me escapara:
+
+| Salida | Qué rompe |
+|---|---|
+| Sacar la gráfica fuera de la `<section>` de la vista | **R1**, que dice «dentro de la sección de esa vista» |
+| Rotular el punto sin la clave del cubo | **R7** y R24 de la 132 (la clave se pinta literal) |
+| Quitar o esconder `SerieTextual` | Edita `components/private/analytics/`, que `tasks.md` prohíbe explícitamente; y rompe R10 de la 130 |
+
+**Qué se hizo:** el caso pasa a exigir que la fecha no sea el texto **propio** de ningún elemento
+—`queryByRole("cell", …)` y `queryByText(…)`—, que es exactamente como la pintaba `PanelTabla`
+(`<td>2026-07-20</td>`), y **conserva la aserción vieja literal** en la métrica acumulada, que por
+Q2 = (b) no lleva línea. Tres líneas de aserción retiradas en todo el archivo, ni una más.
+
+**Medido, y confirmado por el reviewer por su cuenta:** volver la señal de forma a
+`vista.filas.length === 0` —el defecto de ⟨H1⟩ exacto— produce **39 rojos**, entre ellos los 7 de
+este caso. M-8 pone rojo el resto conservado para la acumulada. M-9 y M-11 ponen rojo el caso
+entero. El defecto original sigue muriendo aquí.
+
+**Redacción propuesta al leader para reconciliar el spec** (no la escribo yo en `specs/`). En
+`requirements.md` §4, última viñeta, y en `design.md` ⟨D1⟩:
+
+> **Los seis casos del bloque `Hotfix — …` deben seguir verdes sin tocarlos AL CERRAR LA TANDA A**
+> —ese es el criterio de que mover `esSerieTemporal` (⟨D1⟩) no cambió una sola conducta—. Al
+> aterrizar la línea (Tanda C), **uno de los seis deja de ser satisfacible**: `` `%s` NO pinta las
+> fechas de la serie `` afirma que el `textContent` de la sección no contiene la clave del cubo, y
+> R1 + R7 obligan a que la contenga, porque la alternativa textual de la gráfica la nombra. Ese
+> caso —y solo ese— se estrecha a «la fecha no es el texto propio de ningún elemento», que es como
+> la pintaba `PanelTabla`, y conserva la forma original en la métrica acumulada, que no lleva
+> línea. Los otros cinco siguen intactos.
 
 ### 5.2 Un segundo caso preexistente cambió de forma, hacia más estrecho
 
@@ -181,11 +245,43 @@ dejarían entrar un preset de verdad.
 - los presets **sin homónimo** (`mes`, `personalizado`) se marcan en cualquier archivo ≠ `rango.ts`;
 - la clave `rango: "…"` se marca **en todos**, `adaptar.ts` incluido — o sea, **sin excepción
   posible**, que es más estricto que el censo original;
-- los dos homónimos se admiten **solo** en el único módulo que R16 autoriza a nombrar la
-  granularidad, y que ese módulo sea uno solo no se supone: lo garantiza el censo (g).
+- los dos homónimos se admiten en el módulo autorizado **solo en la forma `case "…":`**, que es la
+  única en la que un rotulador necesita nombrarlos, y una en la que un preset de rango no se
+  escribe jamás.
 
-Con autocomprobación sobre texto sintético y con un caso que se pone rojo el día que los dos
-dominios dejen de compartir exactamente esos dos literales.
+#### Corrección tras la revisión (m2): la primera versión SÍ abría un hueco, y estaba mal descrito
+
+La primera versión admitía los homónimos en `adaptar.ts` **sin más condición**, y esta bitácora lo
+presentaba como un intercambio sin pérdida. **No lo era, y el reviewer lo midió:**
+
+| Texto sembrado | Antes de la corrección | Después |
+|---|---|---|
+| `export const PRESET_DEL_TABLERO = "semana";` **en `adaptar.ts`** | **0 rojos** (37 verdes) — y antes de esta feature ese literal ahí daba rojo | **1 rojo** (censo de rango) |
+| el mismo literal en `TableroFinanciero.tsx` | 2 rojos | 2 rojos |
+
+Es decir: la excepción **tenía coste** —dentro de un archivo, un preset de verdad entraba— y la
+bitácora afirmaba lo contrario. Corregido con dos cinturones **independientes**:
+
+1. **La forma `case`.** Dentro del módulo autorizado, un homónimo solo se admite como rama de
+   `switch`. El descuento se hace **por sustitución, no contando**, para que un archivo con un
+   `case` legítimo *y* una constante ilegítima siga marcado — ese era el caso que se escapaba si
+   se hubiera implementado a la ligera, y tiene su propia autocomprobación.
+2. **El módulo autorizado no puede referirse al rango.** Caso nuevo: `adaptar.ts` no importa
+   `rango.ts`, no nombra `RANGO_PRESETS` ni `FILTRO_FINANCIERO_POR_DEFECTO`. Un archivo que no
+   puede referirse al rango no puede decidirlo, escriba el literal que escriba. Con contrapeso
+   para que no pase por vacío si alguien mueve o vacía el archivo.
+
+**Coste residual, declarado:** dentro de `adaptar.ts`, alguien podría escribir
+`case "semana":` en un `switch` que no fuera el del rotulador. Para que eso decidiera una ventana
+tendría además que importar `rango.ts` o nombrar la constante del filtro, que es lo que el segundo
+cinturón prohíbe. **No es cero; es lo más estrecho que sé escribir sin volver a marcar el
+rotulador.** Queda dicho aquí y en la cabecera del propio censo.
+
+#### m3, de paso
+
+`GRANULARIDADES` estaba escrito a mano en ese archivo (`["dia","semana","no_temporal"]`), donde un
+cuarto valor del contrato no rompía nada. Pasa a `Record<GranularidadVista, true>`, que es la
+técnica que ya usaban el guardia y el test de componente. No había motivo para que aquí fuera otra.
 
 ## 6. Lo que NO se relajó (T E.2)
 
@@ -278,16 +374,18 @@ No se escribe en `feature_list.json` desde aquí.
 |---|---|
 | `pnpm typecheck` | limpio, en cada tanda |
 | `pnpm lint` | **0 errores**; 48 warnings, todos `no-unused-vars` preexistentes y en archivos ajenos. Ni uno en `financiero/` ni en `adaptar` |
+| `pnpm exec vitest related --run` sobre los dos archivos de producción | 4 archivos, verde |
+| `pnpm exec next build` | **verde, `EXIT=0`** — salida arriba |
 | `pnpm exec vitest run` de los archivos de la feature | ver abajo |
 
-Perímetro de la feature, al cierre:
+Perímetro de la feature, al cierre (tras la revisión):
 
 | Archivo | Casos |
 |---|---|
-| `tests/components/TableroFinanciero.test.tsx` | 92 (baseline 67) |
+| `tests/components/TableroFinanciero.test.tsx` | **93** (baseline 67; +1 tras la revisión, B1) |
 | `tests/unit/analytics/tablero-financiero-adaptar.test.ts` | 49 (baseline 24) |
 | `tests/unit/guards/tablero-financiero.guardia.test.ts` | 29 (baseline 24) |
-| `tests/unit/analytics/tablero-financiero-rango.test.ts` | 8 (baseline 6) |
+| `tests/unit/analytics/tablero-financiero-rango.test.ts` | **9** (baseline 6; +1 tras la revisión, m2) |
 | `tests/unit/guards/tablero-lineas-trazabilidad.guardia.test.ts` | 7 (nuevo) |
 | `tests/unit/analytics/tablero-financiero-cargar.test.ts` | sin cambios, verde |
 | `tests/components/AnaliticaPage.test.tsx` | sin cambios, verde |
@@ -295,13 +393,55 @@ Perímetro de la feature, al cierre:
 
 **Delta de rojos en el perímetro: 0.**
 
+### Nota sobre un rojo transitorio que no es de esta rama
+
+Durante la revisión se observó un rojo en
+`tablero-financiero-adaptar.test.ts > R5/186 · … una granularidad que este binario no conoce …`.
+**No es un defecto:** el gate completo se corrió en paralelo con el reviewer mientras éste tenía
+sembrada justo esa mutación (la señal en positivo). Confirmado en el árbol de hoy:
+`esVistaTemporal` sigue escrito por la negativa (`!== "no_temporal"`), el hash de `adaptar.ts` es
+el de referencia y ese caso pasa verde.
+
+### T F.3 — `pnpm exec next build`, corrido a mano
+
+**Nunca `pnpm build`**, que encadena `prisma generate` y `tsx scripts/migrate-deploy.ts` contra una
+base real. Es el agujero que la 132 declaró en su R11 —la frontera RSC no la ve ningún test— y con
+Q5 = no E2E, este build es la **única** cobertura de que un Client Component nuevo
+(`GraficaLineas`) montado desde un Server Component no revienta en render. Los censos (a) y (b)
+del guardia cubren la mitad estática (la directiva de cliente y las prop-función); el build es la
+otra mitad.
+
+```
+$ pnpm exec next build
+
+ ✓ Compiled successfully in 11.1s
+   Running TypeScript ...
+   Finished TypeScript in 23.4s ...
+   Collecting page data using 11 workers ...
+   Generating static pages using 11 workers (0/42) ...
+   Generating static pages using 11 workers (10/42)
+   Generating static pages using 11 workers (20/42)
+   Generating static pages using 11 workers (31/42)
+ ✓ Generating static pages using 11 workers (42/42) in 439ms
+
+ ├ ƒ /analitica
+
+ ƒ Proxy (Middleware)
+ ○  (Static)   prerendered as static content
+ ƒ  (Dynamic)  server-rendered on demand
+
+EXIT=0
+```
+
+**Verde. `EXIT=0`, TypeScript sin errores, 42 páginas generadas y `/analitica` presente** como ruta
+dinámica servida en servidor, que es lo que le toca. Cero errores y cero avisos nuevos: el único
+warning de la salida es el de `turbopack.root` por los dos lockfiles del worktree, preexistente y
+ajeno a esta feature. Coincide con lo que el reviewer obtuvo por su cuenta.
+
 ### Lo que NO corrió el implementer, y queda para el leader
 
-- **`pnpm exec next build`** a mano (T F.3), con la salida pegada aquí. **Nunca `pnpm build`**, que
-  encadena `migrate deploy` contra una base real. Es el agujero que la 132 declaró en su R11: la
-  frontera RSC no la ve ningún test, y esta feature monta un Client Component nuevo
-  (`GraficaLineas`) desde un Server Component. Los censos (a) y (b) del guardia cubren la mitad
-  estática; el build es la otra mitad.
 - **La suite completa** y **`./init.sh` completo antes del PR** (T F.4).
+- **T F.6** (cerrar la ficha) y la reconciliación del spec de §5.1 (m1), con la redacción propuesta
+  ya escrita ahí.
 
 **No se abrió PR.**

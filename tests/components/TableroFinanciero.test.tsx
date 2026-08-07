@@ -1326,10 +1326,15 @@ describe("Feature 186 (R1, R2, R6) — la linea va donde el DTO dice, y solo ahi
   });
 
   it("las vistas no_temporal no traen ninguna grafica de lineas, ni vacia", () => {
-    // R2. Se afirma sobre las TRES vistas `no_temporal` de la fixture: las dos de
-    // `cod_recaudado` (que si tienen donut y barras) y la de la cuenta por pagar de tiendas
+    // R2, primera mitad. Se afirma sobre las TRES vistas `no_temporal` de la fixture: las dos
+    // de `cod_recaudado` (que si tienen donut y barras) y la de la cuenta por pagar de tiendas
     // (que tiene tabla). Ninguna puede ganar una region de evolucion, ni siquiera con el
     // cartel de vacio: anunciar una serie que no existe es peor que no anunciarla.
+    //
+    // LO QUE ESTE CASO **NO** MIDE, y por eso hace falta el de abajo: ninguna de las tres entra
+    // en la rama del KPI, que es donde vive la condicion de la linea. Salen antes, por sus
+    // propias ramas. Este caso comprueba que las OTRAS TRES ramas no pintan lineas —cierto por
+    // construccion— y deja la condicion de R2 sin ejercitar.
     render(<TableroFinanciero paneles={panelesOk()} />);
 
     const noTemporales = [
@@ -1342,6 +1347,71 @@ describe("Feature 186 (R1, R2, R6) — la linea va donde el DTO dice, y solo ahi
     expect(screen.queryAllByRole("region", { name: tituloDeLinea(ETIQUETAS.cod_recaudado) })).toEqual(
       [],
     );
+  });
+
+  /**
+   * Una vista `no_temporal` de una metrica de FLUJO y SIN FILAS.
+   *
+   * Es la unica combinacion que llega a la rama del KPI **sin ser temporal**: entra por la
+   * segunda condicion del hotfix (`vista.filas.length === 0`), no por la primera. Y es por tanto
+   * la unica que pone a prueba el `esVistaTemporal(vista) &&` de la condicion de la linea.
+   *
+   * POR QUE EL SERVICIO NO PRODUCE HOY ESTE DTO, dicho como en el caso de R5 para que nadie lo
+   * lea como una fixture caprichosa: las unicas vistas `no_temporal` de metrica de flujo son las
+   * dos de `cod_recaudado`, y las dos salen por sus ramas propias (donut y barras) antes de
+   * llegar aqui. O sea que hoy el defecto **no es alcanzable en produccion**. Eso no lo hace
+   * menos exigible: R2 prohibe el encabezado que ANUNCIA la grafica, y una condicion que nadie
+   * ejercita es exactamente la clase de agujero que produjo ⟨H1⟩ —una premisa que nadie
+   * comprueba, esperando a la metrica que la alcance—.
+   *
+   * MEDIDO: sin este caso, quitar `esVistaTemporal(vista) &&` de la condicion de la linea pasaba
+   * los 144 casos de componente en VERDE. Es el gemelo exacto de la mutacion que ya se descubrio
+   * viva para el motivo (M-10): la misma linea de codigo, la otra mitad.
+   */
+  function panelNoTemporalDeFlujoSinFilas(): PanelFinanciero {
+    return {
+      estado: "ok",
+      id: "egresos",
+      datos: {
+        tipo: "vistas",
+        metricaId: "egresos",
+        etiqueta: ETIQUETAS.egresos,
+        unidad: "moneda",
+        rango: RANGO,
+        esAcumulado: false,
+        vistas: [
+          {
+            id: "egresos__vista",
+            grano: "metodo_pago",
+            fuente: "wallet_tienda_movimiento",
+            sumableCon: [],
+            granularidad: "no_temporal",
+            filas: [],
+            total: importeConNeto("4000.00", "-3600.00"),
+          },
+        ],
+      },
+    };
+  }
+
+  it("una vista no_temporal de metrica de FLUJO que llega al KPI tampoco trae linea, ni su encabezado", () => {
+    // R2, segunda mitad, y la que de verdad ejercita la condicion. La vista entra en la rama del
+    // KPI por no traer filas; si la linea se decidiera solo por `!esAcumulado`, esta seccion
+    // ganaria una region titulada «… · Evolución en el tiempo» para una vista que NO esta medida
+    // en el tiempo — el tercer inciso de R2, el del encabezado que la anuncia.
+    render(<TableroFinanciero paneles={[panelNoTemporalDeFlujoSinFilas()]} />);
+
+    const seccion = screen.getByRole("region", { name: ETIQUETAS.egresos });
+
+    expect(tieneLinea(ETIQUETAS.egresos)).toBe(false);
+    // Ni la region, ni su nombre suelto por ningun sitio: «ni con datos, ni vacia, ni con
+    // encabezado que la anuncie».
+    expect(screen.queryAllByRole("region", { name: tituloDeLinea(ETIQUETAS.egresos) })).toEqual([]);
+    expect(seccion.textContent ?? "").not.toContain(PIEZA_EVOLUCION);
+    // Y tampoco el cartel de vacio de la grafica, que es como se colaria una linea sin puntos.
+    expect(within(seccion).queryByText(/Sin movimientos en el rango/i)).toBeNull();
+    // Lo que si sigue habiendo es el KPI: la vista no pierde nada por no llevar linea.
+    expect(within(seccion).getByText(cifra(-3600, "moneda"))).toBeInTheDocument();
   });
 
   it("una vista de grano tienda con granularidad dia SI lleva linea, y una de grano fecha con no_temporal NO", () => {
