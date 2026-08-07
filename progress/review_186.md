@@ -346,3 +346,212 @@ La bitácora dice la verdad en este punto.
 
 Los menores m2, m3 y m5 no bloquean: m2 y m3 conviene anotarlos como deuda declarada donde ya
 viven (la cabecera del censo de rango) si no se atienden ahora.
+
+---
+---
+
+# RONDA 2 — 2026-08-06
+
+> Reviso **solo lo que cambió** desde `3ebf237f`: los commits `4d8ca24e` (cierre de B1, B2, m2, m3)
+> y `2d41d94c` (reconciliación del spec, m1). **El código de producción no se ha tocado**:
+> `git diff 3ebf237f..HEAD` sobre `app/` y `lib/` está vacío; el diff son tests, specs y bitácora.
+> Vuelvo a medir con mutaciones sembradas y revertidas byte a byte, esta vez sin nadie corriendo el
+> gate en paralelo.
+
+## VEREDICTO DE LA RONDA 2: **APROBADO**
+
+**0 bloqueantes · 2 menores nuevos** (m7, m8), más la deuda viva del final. Los dos bloqueantes de
+la ronda 1 están cerrados y reproducidos; m2 y m3 también. La reconciliación del spec (m1) la juzgo
+**correcta, no una racionalización** — con una salvedad medida, que es m7.
+
+## B1 — cerrado. Reproducido
+
+Caso nuevo `una vista no_temporal de metrica de FLUJO que llega al KPI tampoco trae linea, ni su
+encabezado`, con el doble `panelNoTemporalDeFlujoSinFilas`.
+
+- La mutación gemela de M-10 —dejar la condición de la línea en `!esAcumulado`— pasa de
+  **144 verdes / 0 rojos** a **1 rojo**, y el rojo es exactamente ese caso:
+  `Tests 1 failed | 144 passed (145)`. **Confirmado el número que declara el implementador.**
+- **Los tres incisos de R2 son carga, no adorno.** Lo medí neutralizando aserciones una a una,
+  con la mutación puesta:
+  - solo con las dos primeras neutralizadas → rojo por el nombre de la pieza suelto
+    («expected …Egresos del período… not to contain Evolución en el tiempo»);
+  - con las tres primeras neutralizadas → rojo por el cartel de vacío
+    (`expected <p …> to be null`).
+  O sea: región, encabezado suelto y cartel de vacío **cada uno** mata la mutación por su cuenta.
+  El caso cubre los tres incisos que dice cubrir.
+
+## B2 — cerrado. La salida del build es real, no un resumen de memoria
+
+`tasks.md:175` marcada, y `progress/impl_186.md` §T F.3 trae la salida. **No es una copia de la
+mía**: sus números difieren de los que yo obtuve en la ronda 1 (`11.1s` vs `12.1s` de compilación,
+`23.4s` vs `24.4s` de TypeScript, `439ms` vs `497ms` de generación estática) y coinciden en todo lo
+estructural (42 páginas, `/analitica` dinámica, `EXIT=0`). Dos ejecuciones independientes del mismo
+build se parecen así. Está abreviada —elide la tabla de rutas— y lo dice; me parece correcto.
+
+## m2 — cerrado, y el hueco que yo medí ya no existe. Con el caso mixto comprobado
+
+Las tres mutaciones, sobre `adaptar.ts` **real** (que ya contiene los `case "dia":` / `case
+"semana":` legítimos, o sea que es el archivo mixto):
+
+| Mutación en `adaptar.ts` | Ronda 1 | Ronda 2 |
+|---|---|---|
+| `export const PRESET_DEL_TABLERO = "semana";` | 0 rojos | **1 rojo** (censo de rango) |
+| `if (String(vista.grano) === "semana")` — homónimo ni en `case` ni en `const` | — | **1 rojo** |
+| importar `./rango` y nombrar `FILTRO_FINANCIERO_POR_DEFECTO` | — | **1 rojo** (segundo cinturón) |
+
+El **descuento por sustitución** hace lo que dice: el archivo tiene `case` legítimos **y** la
+constante ilegítima, y sigue marcado. Con un descuento por cuenta, ese caso se habría escapado.
+Nota menor de forma: `RE_HOMONIMO_EN_CASE` es un regex `/g` compartido entre `.replace(...)` y un
+`.test(...)`; el `lastIndex` se resetea a mano después, así que hoy es correcto, pero es una
+fragilidad conocida de los `/g` reutilizados.
+
+## m3 — cerrado, y verificado en compilación
+
+Añadí un cuarto valor a `GranularidadVista` en `lib/types/analitica-financiera.ts` y corrí
+`pnpm typecheck`: **3 errores TS2741**, uno por cada registro exhaustivo —
+`tests/components/TableroFinanciero.test.tsx:1229`,
+`tests/unit/analytics/tablero-financiero-rango.test.ts:131` y
+`tests/unit/guards/tablero-financiero.guardia.test.ts:294`. El array a mano que señalé ya no está:
+un cuarto valor rompe la compilación en los tres sitios en vez de censar tres de cuatro en
+silencio.
+
+## m1 — la reconciliación del spec: la juzgo CORRECTA, y aquí está por qué
+
+Verifiqué las tres piezas que la sostienen, en este orden:
+
+**1. La implicación `R1 ∧ R7 ⟹ ¬(aserción original)` es real, no retórica.** Leí las citas:
+`GraficaLineas.tsx:48` monta `<SerieTextual>` dentro de `{preparadas ? …}` —o sea **siempre que hay
+datos**, sin prop que lo desactive— y `SerieTextual.tsx:63-70` emite un `<li>` por punto con
+«serie, categoría: valor» dentro de un `<div className="sr-only">`, que **es** `textContent`. Con
+R7 obligando a que la categoría contenga la clave literal, `seccion.textContent` **tiene** que
+contener la clave. La aserción original no puede ser cierta a la vez que R1. **La demostración se
+sostiene.**
+
+**2. La condición de reversión, que es lo que impide que esto sea un permiso retroactivo.**
+Revertida la señal a `vista.filas.length === 0` sobre el árbol de hoy (93 casos):
+
+    Tests  39 failed | 54 passed (93)
+
+**39 rojos exactos**, siete de ellos «`%s` NO pinta las fechas de la serie», y con ellos los siete
+de «`%s` NO pinta ninguna tabla», que no se tocó. El número que el spec fija como condición
+**sale**. Si no hubiera salido, la reconciliación no procedía; salió.
+
+**3. `5d79c56f` no toca el archivo de test.** `git show --stat` lo confirma: ese commit toca
+`TableroFinanciero.tsx`, `adaptar.ts`, `decision_186.md` y `tablero-financiero-adaptar.test.ts`, y
+**no** `tests/components/TableroFinanciero.test.tsx`. El cambio del caso entra dos commits después
+(`881717c6`, Tanda C). La tesis «el criterio no estaba incumplido sino mal acotado» **es cierta**:
+lo que ⟨D1⟩ quería probar —que la mudanza fue pura— se probó.
+
+Y verifiqué lo que no me pedían: **ningún requisito se movió** (`R1..R18` idénticos en el diff), y
+ya no queda ninguna mención sin acotar del criterio en `specs/` ni en la bitácora.
+
+**Conclusión: no es una racionalización.** Una racionalización presenta como inevitable algo que se
+eligió; aquí la **necesidad de cambiar** el caso está demostrada contra el árbol y la **propiedad
+protegida** está medida con un número que reproduje. Ahora bien, hay una cosa que sí está de más, y
+va como menor.
+
+## m7 (nuevo). «Las tres únicas salidas» no son tres: hay una cuarta, y es MÁS fuerte que la adoptada
+
+`requirements.md` §4.1, `design.md` ⟨D1⟩ y `progress/impl_186.md` §5.1 tabulan tres salidas y
+añaden —literal— «las escribo para que se vea que no hay una cuarta que se me escapara». **La hay,
+y la medí.** No es una forma de mantener la aserción original (eso sí es imposible): es un
+**reemplazo distinto**, que conserva la forma `not.toContain` restringiendo el **texto** en vez de
+debilitar la **aserción**. El fallo del caso original viene solo de la alternativa textual, así que
+basta excluirla:
+
+```ts
+function textoFueraDeLaGrafica(seccion: HTMLElement, tituloGrafica: string): string {
+  const copia = seccion.cloneNode(true) as HTMLElement;
+  copia.querySelectorAll(`[aria-label="${tituloGrafica}"]`).forEach((n) => n.remove());
+  return copia.textContent ?? "";
+}
+```
+
+Medido con un caso temporal (ya borrado; `git status` limpio), en sus dos variantes —quitando la
+región de la gráfica por su **nombre accesible**, y quitando los nodos `.sr-only`—:
+
+| Escenario | forma adoptada (`queryByRole cell` + `queryByText`) | cuarta salida |
+|---|---|---|
+| código actual | verde | **verde** |
+| defecto de ⟨H1⟩ (`filas.length === 0`) | rojo | **rojo** |
+| una fecha **visible** embebida en un texto más largo, en la sección de una métrica de flujo | **NO la ve**: el único rojo que sale es el de `cuenta_por_pagar_mensajero`, por la aserción original conservada | **la ve**: rojo en la métrica de flujo |
+
+O sea: la cuarta salida no rompe R1, ni R7, ni R24, ni R10, no edita el paquete, **y es
+estrictamente más fuerte** para las seis de flujo. Además dejaría el caso unificado para las siete
+métricas —en la acumulada no hay región de gráfica que quitar, así que la aserción queda idéntica a
+la original— y haría innecesaria la rama condicional por `esAcumulado`.
+
+Coste honesto de la cuarta salida, que también hay que decir: acopla el test a la estructura del
+DOM (un `cloneNode` + `remove`) o al nombre de la clase `sr-only`; la variante por nombre accesible
+evita lo segundo y se apoya en algo que ese archivo ya usa por todas partes (`tituloDeLinea`).
+
+**Por qué es menor y no bloqueante:** el defecto que el caso existe para cazar —la tabla de treinta
+fechas— sigue muriendo (39 rojos), y el hueco que queda es una forma de regresión que ningún camino
+del código produce hoy (`PanelTabla` pinta la fecha como texto propio de una celda, que las dos
+aserciones adoptadas sí ven). Lo que **no** puede quedarse es la frase: un spec que afirma «no hay
+una cuarta» cuando la hay es exactamente la clase de afirmación que este arnés castiga en el
+código. **O se corrige la frase, o se adopta la cuarta salida** — recomiendo lo segundo, que cuesta
+ocho líneas y devuelve al caso la fuerza que tenía.
+
+## m8 (nuevo, de forma). El doble nuevo no entra en el censo de dobles
+
+`panelNoTemporalDeFlujoSinFilas` no está en `todasLasVistasDobladas()`, así que sus vistas no pasan
+por los invariantes de R17 (b)(c)(d). No es regresión —`panelAcumuladoNoTemporalSinFilas` ya estaba
+igual desde antes— y el doble nuevo no los violaría (una vista sin filas no puede mezclar formas),
+pero el censo de dobles ya no cubre «todos los dobles del archivo», que es lo que su nombre
+promete. Anotarlo o incluirlos.
+
+## Gate y estado ejecutable (medido por mí, con el árbol limpio y sin nadie más tocándolo)
+
+| Comando | Resultado |
+|---|---|
+| `pnpm typecheck` | **limpio** |
+| `pnpm lint` | **0 errores** (48 warnings preexistentes y ajenos) |
+| `pnpm test` (suite completa) | **985 archivos · 12.355 casos · 0 rojos**, `EXIT=0`, 248 s |
+| `pnpm exec next build` | verde en la ronda 1; la salida de la bitácora es de una corrida propia del implementador |
+| Perímetro de la feature | 93 + 49 + 29 + 9 + 7 = **187 casos**, todos verdes |
+
+Sobre el rojo transitorio que la bitácora explica en su §10: **era mío**. El gate se corrió en
+paralelo mientras yo tenía sembrada la mutación de la señal en positivo. La suite completa de hoy,
+con el árbol limpio, sale entera en verde: queda descartado, y la explicación de la bitácora es
+correcta.
+
+## CHECKPOINTS que cambiaron desde la ronda 1
+
+| Punto | Ronda 1 | Ronda 2 |
+|---|---|---|
+| Todas las tasks `[x]` | NO (F.3, F.4, F.6) | **T F.3 marcada**; quedan F.4 y F.6, que son del leader |
+| Cada `R<n>` con red medida | 17/18 | **18/18** |
+| `pnpm test` pasa | pendiente | **verde, corrido por mí: 12.355 casos** |
+| Verificación final `./init.sh` | pendiente | sus tres pasos (typecheck, lint, `test`) verdes por separado; falta que el leader lo corra entero |
+| `review_<feature>.md` con veredicto OK | RECHAZADO | **APROBADO** |
+
+Todo lo demás de `CHECKPOINTS.md` sigue como en la ronda 1: sin migraciones, sin RLS que revisar,
+sin secretos, capas separadas (el diff de producción sigue siendo de **dos archivos**, ninguno en
+`lib/`, `db/` ni `components/private/analytics/`), y la dispensa de E2E en pie con sus tres
+coberturas sustitutas.
+
+## Deuda viva que se lleva la ficha siguiente
+
+1. **m7**: o se corrige la frase de las «tres únicas salidas» en los tres archivos, o se adopta la
+   cuarta salida (que es lo que recomiendo). Mientras no se haga, el spec afirma algo que el árbol
+   desmiente, aunque su conclusión sea correcta.
+2. **La ficha de `design.md` §7.3** —«tests: perfil de forma del DTO financiero, compartido entre
+   el servicio y el tablero»—, que es la deuda que ⟨H1⟩ deja sin dueño: hoy los dobles se comparan
+   contra **constantes publicadas**, nunca contra lo que el servicio produce. Sigue sin registrar
+   en `feature_list.json`.
+3. **La granularidad `semana` no es alcanzable en producción** mientras el filtro financiero sea la
+   constante `mes` (slot de la 131). La rama existe, se prueba con dobles, y el límite está dicho
+   en el propio test.
+4. **La discrepancia de centavos** entre el `total` del KPI y la Σ de los puntos hasta que aterrice
+   la **187**. Esta feature no la disimula derivando el total, y hace bien.
+5. **El cubo en curso no se marca como parcial**: el DTO no publica ese marcador (Q2 de la 180).
+6. **m8** y la fragilidad del `/g` compartido en el censo de rango: cosméticas, sin prisa.
+7. **Nadie ha visto esta pantalla en un navegador.** La dispensa de E2E sigue en pie con sus tres
+   coberturas sustitutas, y ese hueco es del repo, no de esta ficha.
+
+---
+
+**Cierre de la ronda 2: APROBADO.** Quedan T F.4 (`./init.sh` completo) y T F.6 (cerrar ficha e
+historia), que son del leader.
