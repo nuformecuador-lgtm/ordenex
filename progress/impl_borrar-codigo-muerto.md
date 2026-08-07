@@ -733,3 +733,172 @@ visto. Dos merecen mirada aparte:
   `whatsapp-envio.ts`, `zonas.ts`, `notificaciones.ts`, `zona.ts`, `whatsapp-envio.ts` (tipos),
   `IGeoRepository.ts` y `GeoRepository.ts`, y están ahí para que el próximo `grep` no vuelva a
   confundir prosa con uso.
+
+---
+---
+
+# Borrar código muerto — tanda 4 (el ÚLTIMO componente sin montar)
+
+**Fecha:** 2026-08-07 · **Decisión:** humana, tomada hoy sobre el hecho medido
+**Origen:** el aviso de §20 («falta confirmarlo con su propio `git log -S`») disparó la
+medición. Esta tanda es esa medición, confirmada, y su consecuencia.
+
+Cierra el PR #312. Un archivo: `components/shared/TableFilters.tsx`, 139 líneas, UI pura.
+
+---
+
+## 21 · `git log -S`: nació muerto, y además resucitó muerto
+
+Las tres afirmaciones que traía el encargo se verificaron una a una. **Las tres se confirman**,
+y la arqueología añade un cuarto hecho que no estaba en el parte.
+
+### 21.1 · Nació muerto — confirmado
+
+```
+git grep -l "TableFilters" de69f7d1 -- app components lib hooks providers
+-> de69f7d1:components/shared/TableFilters.tsx
+```
+
+En `de69f7d1` («feat: datatable and order adjustments», 2026-07-13), **el commit que lo crea**,
+el único archivo de todo el árbol de producción que menciona `TableFilters` es **él mismo**. Ese
+commit sí toca `OrdenesModule.tsx` y `ordenes-columns.tsx`, pero por otra cosa: ni uno de los
+dos lo importa. Nació sin consumidor.
+
+Esto lo separa de los cuatro componentes de la tanda 1, y la distinción es la que costó entender
+el bug del botón de rutear: aquéllos **tuvieron pantalla y la perdieron** (`19b9cccf`,
+`6dc18dc2`, con hash). Éste **nunca la tuvo**. Consecuencia práctica: en aquéllos había que
+comprobar que el sustituto vivo cubría la capacidad; aquí no hay capacidad que cubrir, porque
+ningún usuario pudo usarla jamás.
+
+### 21.2 · El `Revert` del PR #54 no lo mató — confirmado, y hay más
+
+Confirmado que `12a67ccc` no es el asesino, pero no por la razón que parecía. Recorriendo el
+árbol revisión a revisión:
+
+| Revisión | ¿Existe el archivo? | ¿Algún consumidor? |
+|---|---|---|
+| `de69f7d1` (lo crea) | sí | **no** |
+| `12a67ccc^` (justo antes del Revert) | sí | **no** |
+| **`12a67ccc`** (Revert del PR #54) | **NO — el Revert lo BORRA entero** | — |
+| `2616233f` («fix: integracion con dev») | sí, **vuelve** | **no** |
+| `3713e743` (base de este PR) | sí | **no** |
+
+O sea: **el Revert no lo dejó sin consumidor, lo eliminó del repo**; y la integración posterior
+`2616233f` lo **resucitó**, todavía sin un solo consumidor. No es «nació muerto» a secas: es
+«nació muerto, se murió del todo, y alguien lo trajo de vuelta igual de muerto». Ha tenido
+**dos** oportunidades de ganar una pantalla en 25 días y no ganó ninguna.
+
+Ese detalle refuerza el borrado en vez de complicarlo: la resurrección de `2616233f` no fue una
+decisión de producto sobre este archivo, fue el arrastre de una integración de ramas. Nadie lo
+ha querido nunca, ni cuando lo escribió ni cuando volvió.
+
+### 21.3 · Cero consumidores hoy — confirmado
+
+`grep -a "TableFilters"` sobre `app/ components/ lib/ hooks/ providers/ tests/ e2e/ scripts/`
+devuelve **3 líneas, las tres dentro del propio archivo** (su `interface`, su `function` y su
+tipo de props). **Ningún test**: no existe ningún `*table-filters*` ni `*TableFilters*` bajo
+`tests/`, ni una mención suelta. Nada que borrar además del archivo.
+
+### 21.4 · El trabajo que hacía, hecho por otros — confirmado
+
+Los tres sustitutos existen y están **vivos y montados**:
+
+| Componente | Montado desde |
+|---|---|
+| `components/shared/FilterComponent.tsx` | `ordenes/_components/OrdenesListado.tsx`, `recepcion-satelite/_components/SateliteOrdenesListado.tsx`, `wallet/mensajeros/_components/CuentasPorPagarTable.tsx`, + defs de filtros |
+| `components/shared/MultiSelectFilter.tsx` | `analitica/_components/operativo/FiltrosOperativos.tsx`, `FilterComponent.tsx` |
+| `components/shared/DateRangeFilter.tsx` | `analitica/_components/operativo/FiltrosOperativos.tsx`, `FilterComponent.tsx` |
+
+Más los filtros propios de cada pantalla. La capacidad «filtrar una tabla» no pierde nada.
+
+---
+
+## 22 · Guardias: antes / después
+
+| Medida | Antes | Después |
+|---|---|---|
+| Anotaciones `@sin-superficie` (total) | **13** | **12** |
+| — de COMPONENTE (R-B) | 1 | **0** |
+| — de Server Action (R-A) | 12 | 12 (sin tocar) |
+| `pnpm test:guardias` | 70 archivos / 958 tests OK | **70 / 958 OK** |
+
+**13 -> 12, exactamente lo previsto.** No queda ninguna anotación huérfana.
+
+### Los dos censos que la tanda 1 sí movió NO se han movido, y está medido
+
+La tanda 1 (§5) tuvo que ajustar `cobertura-tablas.guardia` (cuatro totales) y
+`contadores-cabecera.guardia` (el piso) porque `ZonasModule` montaba `<DataTable>` y
+`<Pagination>`. Aquí **no se ha ajustado ni una cifra**, y no por suerte:
+
+```
+git show HEAD:components/shared/TableFilters.tsx | grep -c "<DataTable\|<Pagination"
+-> 0
+```
+
+`TableFilters` es una barra de **filtros**: no monta tabla ni control de paginación, así que no
+figuraba en ninguno de los dos censos y su borrado no los toca. Se comprobó ejecutando
+`pnpm test:guardias` completo antes y después: **70/958 en los dos extremos**, mismos números.
+Medido, no supuesto.
+
+---
+
+## 23 · Un ajuste de prosa en la guardia, declarado
+
+Se modificó **un comentario** de `tests/unit/guards/superficie-de-uso.guardia.test.ts` (R-B), y
+se declara aquí en vez de dejarlo pasar como parte del borrado. Decía:
+
+> «El coste está acotado: hoy son **cinco módulos**, cada uno con una línea de motivo.»
+
+Es el argumento de coste que justifica que R-B **falle** en vez de solo informar. Esos cinco
+módulos son exactamente los cinco que este PR ha borrado —cuatro en la tanda 1, éste ahora—, así
+que la frase pasaba a ser **falsa**: el coste es **cero**. Se dejó escrita la cuenta nueva, con
+sus nombres y su motivo, y una advertencia de que **no es una cuota**: si mañana hace falta
+anotar un componente, se anota y se actualiza el número.
+
+**Ninguna cifra que la guardia afirme (`expect`) se ha tocado.** Solo prosa. Es exactamente la
+misma disciplina que la guardia impone a las anotaciones —una excepción que sobrevive a su
+motivo es basura— aplicada al comentario que las contaba.
+
+---
+
+## 24 · Verificación
+
+| Paso | Resultado |
+|---|---|
+| `pnpm run typecheck` | **limpio** |
+| `pnpm test:guardias` antes | 70 archivos / 958 tests OK |
+| `pnpm test:guardias` después | **70 / 958 OK** (sin mover una cifra) |
+| `eslint` sobre el archivo tocado | 0 errores |
+| `./init.sh --rapido` | **`== init OK ==`, exit 0** |
+
+---
+
+## 25 · Recuento final del PR #312
+
+| Momento | Anotaciones `@sin-superficie` |
+|---|---|
+| Al empezar el día (base `3713e743`) | **24** |
+| Tras la tanda 1 (UI) | 20 |
+| Tras las tandas 2 y 3 (Server Actions e islas) | 13 |
+| **Tras esta tanda 4** | **12** |
+
+**El PR se lleva 12 de 24: la mitad exacta.**
+
+Y un cambio de forma que importa más que el número: **R-B se queda sin una sola excepción**. Las
+12 supervivientes son **todas** de `lib/actions/**`, es decir, R-A. De ellas, 3 no son deuda sino
+testigos declarados a propósito por las features 170/184 (§19), así que **la deuda real que sale
+viva del PR son 9 Server Actions**, ninguna con superficie de UI que reponer.
+
+Que R-B quede a cero es la parte útil: el próximo componente que se quede sin quien lo monte
+—el modo de fallo que originó la guardia con `RutearSateliteModal`— será el **único** de la
+lista. No habrá que distinguirlo de un fondo de cinco excepciones antiguas.
+
+### Lo que sigue ABIERTO (actualiza §20)
+
+- **`chat-demo/`** — resuelto **fuera de este PR**: hay decisión humana de renombrar, en PR
+  aparte. Hasta que ese PR entre, la trampa sigue viva en el árbol.
+- **Las 9 anotaciones de deuda real de `lib/actions/`**, sin decisión humana. Las dos que
+  siguen mereciendo mirada aparte son las mismas de §19: `ordenes.ts` (**4 de las 12** ella
+  sola, el mayor foco del repo) y `ordenes-guia.ts` (**segunda víctima no reparada** del commit
+  `54757be4`, el del incidente original).
+- **Ya NO queda nada abierto en la capa de componentes.**

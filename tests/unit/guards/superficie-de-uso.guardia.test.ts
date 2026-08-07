@@ -713,8 +713,16 @@ describe("R-B — todo componente tiene quien lo monte, o dice por escrito por q
     // el 2026-07-31 —cualquiera podía haber corrido un barrido— y nadie lo miró en cinco días. Y
     // es el nivel en el que EMPEZÓ el incidente: `RutearSateliteModal` quedó huérfano antes que su
     // acción, así que aquí el mensaje es «has borrado la vista que montaba esto», que es accionable,
-    // en vez de «esta acción ya no se usa», que invita a borrarla. El coste está acotado: hoy son
-    // cinco módulos, cada uno con una línea de motivo.
+    // en vez de «esta acción ya no se usa», que invita a borrarla. El coste está acotado: cuando
+    // se escribió esto eran cinco módulos, cada uno con una línea de motivo.
+    //
+    // Y el coste bajó a CERO: el chore «borrar código muerto de UI» (PR #312, 2026-08-07) borró
+    // los cinco. Cuatro eran vistas que perdieron su montaje y nadie retiró (`ZonasModule`,
+    // `ZonaForm`, `zonas-columns`, `ChatWhatsappPanel`); el quinto (`TableFilters`) nunca lo
+    // tuvo. Hoy R-B no tiene ni una excepción, que es el estado en el que su mensaje vale más:
+    // el primer componente que se quede sin quien lo monte será el único de la lista, no uno más
+    // entre cinco. Este comentario NO es una cuota: si mañana hace falta anotar un componente,
+    // se anota y se actualiza esta cuenta.
     const huerfanos = COMPONENTES.filter(
       (c) => !GRAFO.alcanzables.has(c) && anotacionDeModulo(c) === null,
     );
