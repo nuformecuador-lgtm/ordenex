@@ -105,8 +105,11 @@ export const GRANO_TEMPORAL: DimensionAnalitica = "fecha";
  * publica **`conteo`** (`lib/analytics/metrics.ts`: `unidad: "conteo"`, `unidadDeConteo: "moneda"`),
  * porque lo que esa metrica cuenta son CIERRES por estado; el dinero que ademas reporta va en las
  * columnas de la tabla, que declaran su unidad aparte. Los dos dobles del repo declaraban
- * `unidad: "moneda"` para ella, y esa mentira tiene consecuencia VISIBLE: ver la bitacora
- * `progress/impl_guardia-servicio-dobles.md` §4 bis (defecto abierto, `PanelConciliacion.tsx:140`).
+ * `unidad: "moneda"` para ella, y esa mentira tapaba un defecto VISIBLE en produccion: el cuadre
+ * de conciliacion se pintaba redondeado y sin simbolo de moneda. Hallazgo en
+ * `progress/impl_guardia-servicio-dobles.md` §4 bis; CERRADO el 2026-08-07
+ * (`progress/impl_fix-conciliacion-unidad.md`): el panel declara hoy la unidad POR CIFRA y no lee
+ * la de la cabecera.
  *
  * Exhaustivo sobre `MetricaFinancieraId`: una metrica nueva no compila hasta declarar su unidad.
  */
@@ -384,9 +387,11 @@ export function dtoNoTemporalServido(
  * `UNIDAD_SERVIDA` y no de un literal— y el contenido (`porEstado`, `cuadre`) lo pone el llamador:
  * sus filas y sus cifras las deciden los datos, como en cualquier desglose.
  *
- * OJO CON `unidad` AL LEER ESTO: vale `"conteo"`, no `"moneda"`. Los dos dobles del repo decian
- * `"moneda"` y `PanelConciliacion.tsx:140` formatea con ella TRES CIFRAS DE DINERO. Ver la
- * bitacora §4 bis: es un defecto VIVO, no una curiosidad de fixture.
+ * OJO CON `unidad` AL LEER ESTO: vale `"conteo"`, no `"moneda"`. No es una curiosidad de fixture.
+ * Los dos dobles del repo decian `"moneda"`, y mientras lo dijeron taparon que `PanelConciliacion`
+ * formateaba con esa unidad TRES CIFRAS DE DINERO (el cuadre). Se arreglo el 2026-08-07
+ * (`progress/impl_fix-conciliacion-unidad.md`): el panel ya no lee la unidad de la cabecera para
+ * los importes. Si algun consumidor NUEVO vuelve a formatear dinero con esta `unidad`, mentira.
  */
 export function dtoConciliacionServido(
   etiqueta: string,
