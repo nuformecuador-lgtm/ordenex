@@ -17,7 +17,6 @@ import { buildCargaDelegate, loteCtx, type CargaDelegateFake } from "@/tests/fix
 //   R34     — el lote se resuelve y las ordenes se insertan en la MISMA $transaction.
 //   R28/R35 — ningun lote huerfano: un batch sin filas por insertar NO toca `carga`.
 //   R36     — TODAS las creadas del batch llevan el MISMO carga_id.
-//   R37     — el alta manual individual (`create`) deja carga_id NULL y no crea lote.
 //   R30/R32 — via API key: UN lote por peticion aunque haya varios batches internos.
 //   R14/R40 — la carga masiva no envia `num_guia` ni `download_url` en el INSERT.
 //   R47/R48 — persistencia POST-COMMIT de las URLs de descarga.
@@ -348,80 +347,9 @@ describe("createManyOrdenesConGuia — un lote por peticion (R30/R32/R36)", () =
   });
 });
 
-describe("alta manual individual — sin lote (R37/R40)", () => {
-  it("`create` no envia carga_id ni download_url y no toca `carga`", async () => {
-    const carga = buildCargaDelegate();
-    const prisma = buildPrisma(carga);
-    prisma.orden.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
-      id: "orden-manual",
-      ...data,
-      numGuia: null,
-      estatus: { value: "en_preparacion" },
-      peso: null,
-      montoCobrar: null,
-      deletedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.create(baseCreateData(), {
-      actorUsuarioId: "tienda-1",
-      origenTipo: "creacion_manual",
-    });
-
-    const data = prisma.orden.create.mock.calls[0][0].data;
-    expect(data).not.toHaveProperty("cargaId");
-    expect(data).not.toHaveProperty("downloadUrl");
-    expect(carga.create).not.toHaveBeenCalled();
-    expect(carga.filas.size).toBe(0);
-  });
-});
-
-describe("persistencia de las URLs de descarga (R47/R48)", () => {
-  it("R47: setCargaDownloadUrl actualiza SOLO `download_url` de la fila del lote", async () => {
-    const carga = buildCargaDelegate([
-      { id: TOKEN, usuarioCarga: "key-user-1", name: null, totalFiles: 2, downloadUrl: null },
-    ]);
-    const prisma = buildPrisma(carga);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.setCargaDownloadUrl(TOKEN, "https://signed.example/lote.pdf");
-
-    expect(carga.update).toHaveBeenCalledWith({
-      where: { id: TOKEN },
-      data: { downloadUrl: "https://signed.example/lote.pdf" },
-    });
-    expect(carga.filas.get(TOKEN)).toMatchObject({
-      downloadUrl: "https://signed.example/lote.pdf",
-      totalFiles: 2, // el resto de la fila intacto
-      name: null,
-    });
-  });
-
-  it("R48: setOrdenesDownloadUrl escribe la URL de cada orden en UNA transaccion", async () => {
-    const prisma = buildPrisma();
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.setOrdenesDownloadUrl([
-      { ordenId: "o1", url: "https://signed.example/1.pdf" },
-      { ordenId: "o2", url: "https://signed.example/2.pdf" },
-    ]);
-
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.orden.update.mock.calls.map((c) => (c as unknown[])[0])).toEqual([
-      { where: { id: "o1" }, data: { downloadUrl: "https://signed.example/1.pdf" } },
-      { where: { id: "o2" }, data: { downloadUrl: "https://signed.example/2.pdf" } },
-    ]);
-  });
-
-  it("R48: lista vacia -> no-op (ni transaccion ni updates)", async () => {
-    const prisma = buildPrisma();
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.setOrdenesDownloadUrl([]);
-
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(prisma.orden.update).not.toHaveBeenCalled();
-  });
-});
+// BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivia el caso del ALTA
+// MANUAL INDIVIDUAL, que afirmaba que `create` no enviaba `carga_id`/`download_url` ni tocaba
+// `carga`. `create` se borro al quedarse sin llamador, asi que la afirmacion es hoy vacua: no
+// existe alta manual de la que aislar el lote. R40 conserva testigo en "R14/R40: la fila
+// insertada no lleva num_guia ni download_url", arriba. R37 se retira CON la capacidad que
+// describia — era un requisito DEL alta manual, no del lote.

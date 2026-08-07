@@ -9,7 +9,149 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🏁 CIERRE DE JORNADA 2026-08-06 — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 CIERRE DE JORNADA 2026-08-07 — **EMPIEZA A LEER POR AQUÍ**
+
+**Siete PRs. Ninguna feature del backlog: la jornada entera fue saldar deuda**, por encargo humano
+explícito («punto por punto hasta no tener ni una deuda»). Y saldarla destapó **un bug de producción
+con dinero mal pintado en pantalla**.
+
+### 🚦 LO PRIMERO AL RETOMAR: **tres PRs abiertos**, y uno corre prisa
+
+| PR | Qué | Por qué importa |
+| --- | --- | --- |
+| **#314 → `prod`** | release, **cero migraciones** | 🔴 **lleva el fix del dinero.** Hasta que se despliegue, el cuadre de conciliación sigue mal en producción |
+| **#315 → `dev`** | `@sin-superficie` 12 → 5 | cierra la segunda víctima de `54757be4` |
+| **#316 → `dev`** | columnas: **0 de 35** sin aserción de orden | cierra la deuda que dejó la 189 |
+
+Ya mergeados hoy: **#309** (release), **#310** (guardia servicio↔dobles), **#311** (el fix del dinero),
+**#312** (borrado de código muerto), **#313** (renombrado de `chat/`).
+
+### 🐛 El bug del día lo encontró la guardia que escribimos esta mañana, en su primer día
+
+`PanelConciliacion` formateaba `totalSnapshot`, `totalLedger` y `diferencia` —**los tres importes de
+dinero del cuadre**— con `datos.unidad`, que para `conciliacion_cierres` es `"conteo"`
+(`metrics.ts:659`, y hace bien: la métrica cuenta cierres). `formato.ts` traduce `"conteo"` a **0
+decimales y sin símbolo de moneda**.
+
+En producción, **en la única pantalla que existe para cuadrar dinero**: `1 561` donde va **₡1 560,50**,
+y un descuadre de **₡60,50 anunciado como «61»**.
+
+> ⚠️ **Y por qué ningún test lo veía, que es lo único reutilizable:** `PanelConciliacion.test.tsx`
+> declaraba `unidad: "moneda"` en su doble — **un DTO que el servicio no produce**. Es *exactamente* la
+> misma familia que el bug de 7 h del 06-ago. **Segunda vez en dos días.**
+
+El arreglo declara la unidad **por cifra y en un solo sitio** (`UNIDAD = { importe, conteo }`), en vez
+de añadir un `"moneda"` literal más: el criterio ya estaba escrito en `COLUMNAS_CONCILIACION` tres
+líneas más arriba.
+
+### 🛡️ La guardia que lo destapó (#310) — y la deuda que cierra
+
+Era la deuda **sin dueño y sin ficha** que dejó el hotfix #305: *una guardia que ate lo que el servicio
+produce con lo que los dobles del tablero declaran*. Las ataduras que había comparaban la fixture
+contra constantes publicadas —**el espejo consigo mismo**—.
+
+Ahora **ejecuta el servicio real** y compara. **25 casos, 9 mutaciones, todas rojas** — y **seis de las
+nueve son invisibles para `TableroFinanciero.test.tsx`**, que sigue verde 93/93. La peor: intercambiar
+las dos vistas de `cod_recaudado` **en el servicio** pondría el donut donde van las barras sin mover
+una sola aserción.
+
+**Encontró cinco dobles mintiendo** sobre el DTO real: `fuente` incorrecta en las siete métricas
+temporales, un id de vista inexistente, `cuenta_por_pagar_tienda__vista`, y la `unidad` de conciliación
+(el bug de arriba).
+
+### 🧹 La limpieza: `@sin-superficie` de **24 a 5**
+
+Y el cambio de forma importa más que el número: **R-B se queda con cero excepciones**. Ya **no hay ni
+un componente de UI huérfano** en el repo; las 5 supervivientes son todas Server Actions, y **ninguna
+es deuda**: cuatro son testigos declarados por las features 170/184 y la quinta —el modo agregado— es
+la **ficha 182**.
+
+**Las historias no eran la misma, y el `git log -S` las separó:**
+
+| | Diagnóstico |
+| --- | --- |
+| Zonas (`ZonasModule`, `geo.ts`, `arbolZonas`) | **lo mató un borrado** (`19b9cccf`). Y antes se había quitado, **repuesto** (`258bd6ad`) y vuelto a quitar |
+| `ChatWhatsappPanel` | **sustitución incompleta**: `6dc18dc2` quitó su montaje y añadió el flotante en el mismo commit |
+| WhatsApp Meta, `marcarNotificacionLeida`, `ordenes.ts`×4, `plantillas`, `vehiculos` | **nacieron muertas** — cero commits en `app/` en toda su vida |
+| `listarCatalogoEstatus` | **segunda víctima de `54757be4`**, el commit del incidente del botón de rutear |
+
+> **Matiz que corrige el relato que llevábamos:** el mensaje de `54757be4` **sí buscó daños colaterales
+> y declaró uno** (`RutearSateliteModal`). Encontró **uno de los dos**. *No fue no mirar; fue una
+> búsqueda corta.* Sus dos víctimas quedan reparadas ocho días después.
+
+### 💣 Una mina desactivada: el chat vivo se llamaba `chat-demo/`
+
+El chat **de producción** —única entrada desde que se borró el panel del detalle— vivía en una carpeta
+llamada `chat-demo/`, con un archivo `chat-demo-data.ts` y un comentario de montaje que decía
+**«MAQUETA»**. **El chore de borrado de este mismo día demuestra que esa mina explota.** Renombrado a
+`chat/` + `chat-format.ts` con `git mv` (el `--follow` cruza).
+
+### 📏 Tres reglas que salieron de medir, no de opinar
+
+1. **La unidad es el símbolo, no el fichero.** `GeoRepository` perdió tres métodos y **sigue viva**
+   (`filtros-ordenes.ts:33` usa sus proyecciones `*Lite`). Borrar por fichero se habría llevado código
+   en uso.
+2. **En tests, borrar todo lo que nombre el símbolo es un error.** Se conservaron **nueve** bloques
+   reapuntándolos, porque eran el único testigo de propiedades vivas — entre ellos la `dedupeKey` con
+   hash, sin la cual una corrección de dirección se descarta en silencio contra una fila `done`.
+3. **Una guardia anclada en código real muere con el código que vigila.**
+   `superficie-de-uso.guardia.test.ts` anclaba en **dos de los símbolos que había que borrar** y se
+   tumbaba sola. *Si una guardia debe anclar, que ancle en código vivo y central, nunca en el caso raro
+   que documenta.*
+
+### ⚠️ La lección más incómoda, en TRES iteraciones el mismo día
+
+Verificar «todas las guardias» falló **tres veces seguidas, cada vez con una herramienta distinta**:
+
+- `grep --include=*guard*` filtra por **nombre de fichero** → dejaba fuera **13 de 72**.
+- `vitest list guard` filtra por **ruta** → dejaba fuera `orden-historial-cobertura.test.ts`, que vive
+  en `tests/unit/repositories/`.
+- Se cazó **en rojo**, no antes.
+
+> **Ninguna lista basta. Lo único que basta es correr la suite de la zona que tocas.**
+
+**Y el leader falló TRES mediciones**, las tres cazadas por un subagente, no por él: (a) el censo de
+columnas dio «0 de 34 cubiertas» dos veces por una `\b` que el shell des-escapaba a **backspace**;
+(b) se dio por vivo `EnvioPlantillaWhatsappService` **contando comentarios en prosa como imports**;
+(c) el universo eran **35** constantes y no 34, porque el detector no recorría `components/`.
+**El patrón es siempre el mismo: un detector que no cubre lo que uno cree.** Lo único que lo frenó fue
+una **autocomprobación con caso conocido-positivo** que aborta si no lo encuentra.
+
+### 🔎 Tres deudas del registro **no existían**
+
+Verificado contra el código, no contra las notas: el **tope de indemnización** ya estaba cerrado por
+#291 (técnico + de negocio atado a `orden.monto_cobrar`, en los dos caminos); el **orden determinista
+de «Saldos de tiendas»** lo cerró la 188 (el archivo sale por el camino ordenado); y el **drift de la
+base local** no era la migración fantasma —solo faltaba aplicar la de la 178—.
+
+### ⏳ LO QUE QUEDA VIVO, con nombre
+
+1. **`«Devengado»` y `«Pagado»`** en el Excel de cuentas por pagar **incluyen los pagos anulados y su
+   reverso**, y la hoja va **sin el aviso que la pantalla sí lleva** (`CuentasPorPagarTable.tsx:215-217`).
+   **Se dispara HOY**, no a futuro. Decisión de producto; el #316 lo **congela**, así que hay que
+   cambiar test y constante a la vez.
+2. **`feature_list.json`, ficha 161** (`done`): su `description` cita `chat-demo/chat-demo-data.ts`
+   —ruta que ya no existe— **y** afirma que el contador de no leídos es un «DATO QUEMADO» ahí, cuando
+   **`sinLeer` no existe en todo `mis-asignaciones/`**. Doblemente caducada, y vive en el archivo de
+   estado vivo.
+3. **Nada impide que la constante `COLUMNAS_DESCARGA_*` nº 36 nazca desnuda.** `censo-tablas.ts` vigila
+   **tablas**, no listados de columnas. Quien escriba la guardia hermana necesita saber que hay que
+   recorrer `app/` **y** `components/`, y que un detector textual da falsos positivos con
+   `describe.each`.
+4. **El flake de jsdom sigue vivo** — hoy tumbó el pre-vuelo de la release (timeout de 20 s en
+   `TableroOperativo.test.tsx`, verde en aislado en 5,97 s). **No tiene arreglo por encargo:** acotarlo
+   subiendo el `testTimeout` taparía el síntoma sin la causa, y ya van tres mecanismos identificados sin
+   dar con ella. Necesita investigación propia.
+
+### 🚦 SIGUE PENDIENTE, SÉPTIMA JORNADA
+
+**VER LA 172 Y LA 173 EN PANTALLA.** No lo sustituye ninguna suite, y hoy hay tres cosas concretas que
+mirar: la gráfica de líneas ya en producción, las dos cifras distintas de la caja, y —en cuanto se
+despliegue el #314— el cuadre de conciliación con su dinero bien escrito.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-06
 
 **Registro limpio: cero PRs abiertos, cero features `in_progress`.** `prod` va por detrás de `dev`
 en documentación, tests y la 186; **el hotfix del día YA está en producción**.

@@ -17,8 +17,7 @@ export class VehiculoRepository implements IVehiculoRepository {
     return rows.map(toDTO);
   }
 
-  async findById(id: string): Promise<VehiculoDTO | null> {
-    const row = await this.prisma.vehiculo.findUnique({ where: { id } });
-    return row ? toDTO(row) : null;
-  }
+  // BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivia `findById`. Se
+  // quedo sin llamador al retirarse `VehiculoService.obtener`. El catalogo son TRES filas
+  // (moto/carro/camion) y se lee entero con `findMany`.
 }

@@ -14,12 +14,10 @@ export type ListarVehiculosServiceResult =
   | { status: "ok"; items: VehiculoDTO[] }
   | { status: "forbidden" };
 
-export type ObtenerVehiculoServiceResult =
-  | { status: "ok"; vehiculo: VehiculoDTO }
-  | { status: "forbidden" }
-  | { status: "not_found" };
+// BORRADO 2026-08-07 (tanda 2): aqui vivia `ObtenerVehiculoServiceResult`, del metodo
+// `obtener`. El catalogo vehiculos vuelve a ser lo que dice su contrato de repositorio:
+// solo-lectura y de una sola operacion.
 
 export interface IVehiculoService {
   listar(actor: Actor): Promise<ListarVehiculosServiceResult>;
-  obtener(id: string, actor: Actor): Promise<ObtenerVehiculoServiceResult>;
 }

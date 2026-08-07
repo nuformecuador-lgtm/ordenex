@@ -328,8 +328,9 @@ export interface OrdenListItemRelaciones {
   mensajeroAsignado: RefNombre | null;
 }
 
-export type CrearOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
-export type ObtenerOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
+// BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivian
+// `CrearOrdenResult` y `ObtenerOrdenResult`, tipos de retorno de dos Server Actions que se
+// borraron en la tanda 1 por nacer sin pantalla. Sin ninguna referencia desde entonces.
 // Feature 170 (T H.2): se REEXPRESA sobre `ListarPaginadoResult<T>`
 // (lib/types/listado-paginado), el contrato comun de pagina+total que la FASE 2 extiende a
 // los 13 listados del Anexo III. La forma publica NO cambia —los mismos cinco campos, el
@@ -344,5 +345,6 @@ export type ListarOrdenesResult = ListarPaginadoResult<OrdenListItemDTO>;
 // publica NO cambia —es el mismo union, con los mismos nombres de campo—, asi que ningun
 // consumidor de la 151 se entera; lo que cambia es que ahora hay UNA sola definicion.
 export type ListarOrdenesCompletoResult = ListarCompletoResult<OrdenListItemDTO>;
-export type ActualizarOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
-export type BorrarOrdenResult = { status: "ok" } | ActionError;
+// BORRADO 2026-08-07 (tanda 2): idem con `ActualizarOrdenResult` y `BorrarOrdenResult`.
+// Lo que SIGUE VIVO en este archivo son los dos resultados del listado, `ListarOrdenesResult`
+// y `ListarOrdenesCompletoResult`, que consume `ordenes/_components/OrdenesModule.tsx`.

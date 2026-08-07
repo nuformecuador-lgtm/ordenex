@@ -1,11 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  crearOrden,
-  obtenerOrden,
-  listarOrdenes,
-  actualizarOrden,
-  borrarOrden,
-} from "@/lib/actions/ordenes";
+import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { Actor, IOrdenService } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO } from "@/lib/types/orden";
 
@@ -36,14 +30,11 @@ function dto(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
   };
 }
 
-// Fixture de geografia (R14b): en un entorno real, crear una orden exige que
-// existan zona/provincia/canton (FK NOT NULL contra tablas creadas vacias). Aqui
-// el service esta inyectado como fake, de modo que la dependencia operativa se
-// documenta y se ejercita via el caso "geografia inexistente -> validation_error".
+// El doble implementa `IOrdenService` entero, que desde el 2026-08-07 son SOLO las dos
+// lecturas: `crear`/`obtener`/`actualizar`/`borrar` se retiraron de la interfaz al quedarse
+// sin llamador (tanda 2 del chore de deuda de superficie).
 function fakeService(overrides: Partial<IOrdenService> = {}): IOrdenService {
   return {
-    crear: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
-    obtener: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
     listar: vi.fn().mockResolvedValue({
       status: "ok",
       items: [{ ...dto(), tiendaNombre: "Tienda Uno" }], // R25/R26: listado con nombre tienda
@@ -51,8 +42,6 @@ function fakeService(overrides: Partial<IOrdenService> = {}): IOrdenService {
       pageSize: 20,
       total: 1,
     }),
-    actualizar: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
-    borrar: vi.fn().mockResolvedValue({ status: "ok" }),
     // Feature 151: modo sin paginacion (descarga). El doble lo satisface para cumplir
     // el contrato de IOrdenService; su comportamiento se prueba en
     // tests/unit/actions/ordenes-descarga-action.test.ts.
@@ -65,109 +54,33 @@ function fakeService(overrides: Partial<IOrdenService> = {}): IOrdenService {
   };
 }
 
-const validCrear = {
-  numRemision: "REM-1",
-  destinatario: "Ana",
-  telefonoDest: "0991234567",
-  producto: "Caja",
-  peso: 1.5,
-  zonaId: "z1",
-  provinciaId: "p1",
-  cantonId: "c1",
-};
-
 describe("R18: sin sesion valida -> unauthenticated sin tocar el service", () => {
-  it("crearOrden", async () => {
+  it("listarOrdenes rechaza sin sesion", async () => {
     const service = fakeService();
-    const r = await crearOrden(validCrear, { ordenService: service, getActor: noActor });
+    const r = await listarOrdenes({}, { ordenService: service, getActor: noActor });
     expect(r.status).toBe("unauthenticated");
-    expect(service.crear).not.toHaveBeenCalled();
-  });
-
-  it("obtener/listar/actualizar/borrar tambien rechazan sin sesion", async () => {
-    const service = fakeService();
-    const deps = { ordenService: service, getActor: noActor };
-    expect((await obtenerOrden("ord-1", deps)).status).toBe("unauthenticated");
-    expect((await listarOrdenes({}, deps)).status).toBe("unauthenticated");
-    expect((await actualizarOrden("ord-1", {}, deps)).status).toBe("unauthenticated");
-    expect((await borrarOrden("ord-1", deps)).status).toBe("unauthenticated");
-    expect(service.obtener).not.toHaveBeenCalled();
-    expect(service.borrar).not.toHaveBeenCalled();
+    expect(service.listar).not.toHaveBeenCalled();
   });
 });
 
-describe("R26/R32/R38: validation_error con fieldErrors sin llamar al service", () => {
-  it("crear con input invalido (peso negativo, sin zona)", async () => {
-    const service = fakeService();
-    const r = await crearOrden(
-      { numRemision: "R", destinatario: "A", telefonoDest: "1", producto: "P", peso: -1 },
-      { ordenService: service, getActor },
-    );
-    expect(r.status).toBe("validation_error");
-    if (r.status === "validation_error") {
-      expect(r.fieldErrors).toHaveProperty("peso");
-      expect(r.fieldErrors).toHaveProperty("zonaId");
-    }
-    expect(service.crear).not.toHaveBeenCalled();
-  });
-
+describe("R32: validation_error sin llamar al service", () => {
   it("listar con sortBy fuera de lista blanca (R32)", async () => {
     const service = fakeService();
     const r = await listarOrdenes({ sortBy: "peso" }, { ordenService: service, getActor });
     expect(r.status).toBe("validation_error");
     expect(service.listar).not.toHaveBeenCalled();
   });
-
-  it("actualizar con campo inmutable (numGuia) -> validation_error", async () => {
-    const service = fakeService();
-    const r = await actualizarOrden(
-      "ord-1",
-      { numGuia: 9 },
-      { ordenService: service, getActor },
-    );
-    expect(r.status).toBe("validation_error");
-    expect(service.actualizar).not.toHaveBeenCalled();
-  });
 });
 
-describe("R27: crear valido -> ok con OrdenDTO y num_guia asignado", () => {
-  it("devuelve la orden con numGuia crudo", async () => {
-    const service = fakeService();
-    const r = await crearOrden(validCrear, { ordenService: service, getActor });
-    expect(r.status).toBe("ok");
-    if (r.status === "ok") {
-      expect(r.orden.numGuia).toBe(42);
-      expect(r.orden).not.toHaveProperty("deletedAt"); // R42/N3
-    }
-    expect(service.crear).toHaveBeenCalledWith(expect.objectContaining(validCrear), ACTOR);
-  });
-});
-
-describe("R19-R24/R41: autorizacion propagada desde el service", () => {
+describe("R19-R24: autorizacion propagada desde el service", () => {
+  // REAPUNTADO 2026-08-07: esta afirmacion se ejercitaba via `crearOrden`, borrada por el
+  // chore de `@sin-superficie`. Lo que prueba NO es de crear, sino del borde: el resultado
+  // de dominio del service viaja intacto y sin envolver. `listarOrdenes` tiene exactamente
+  // el mismo `isAppErrorShape(r) ? toActionError(r) : r`, y ademas esta VIVA.
   it("forbidden se propaga tal cual (R22/R24)", async () => {
-    const service = fakeService({ crear: vi.fn().mockResolvedValue({ status: "forbidden" }) });
-    const r = await crearOrden(validCrear, { ordenService: service, getActor });
+    const service = fakeService({ listar: vi.fn().mockResolvedValue({ status: "forbidden" }) });
+    const r = await listarOrdenes({}, { ordenService: service, getActor });
     expect(r.status).toBe("forbidden");
-  });
-
-  it("mensajero: borrar propaga forbidden (R41)", async () => {
-    const service = fakeService({ borrar: vi.fn().mockResolvedValue({ status: "forbidden" }) });
-    const r = await borrarOrden("ord-1", { ordenService: service, getActor });
-    expect(r.status).toBe("forbidden");
-  });
-});
-
-describe("R29: obtener ok / not_found", () => {
-  it("ok con orden", async () => {
-    const service = fakeService();
-    const r = await obtenerOrden("ord-1", { ordenService: service, getActor });
-    expect(r.status).toBe("ok");
-  });
-
-  it("not_found se propaga", async () => {
-    const service = fakeService({ obtener: vi.fn().mockResolvedValue({ status: "not_found" }) });
-    const r = await obtenerOrden("ord-9", { ordenService: service, getActor });
-    expect(r.status).toBe("not_found");
   });
 });
 
@@ -190,104 +103,14 @@ describe("R30/R31/R33/R34: listar", () => {
   });
 });
 
-describe("R35/R36/R37: actualizar", () => {
-  it("ok con orden actualizada", async () => {
-    const service = fakeService();
-    const r = await actualizarOrden(
-      "ord-1",
-      { estatusId: "os-entregada" },
-      { ordenService: service, getActor },
-    );
-    expect(r.status).toBe("ok");
-    expect(service.actualizar).toHaveBeenCalledWith(
-      "ord-1",
-      { estatusId: "os-entregada" },
-      ACTOR,
-    );
-  });
-
-  it("not_found se propaga (R36)", async () => {
-    const service = fakeService({
-      actualizar: vi.fn().mockResolvedValue({ status: "not_found" }),
-    });
-    const r = await actualizarOrden("x", { producto: "N" }, { ordenService: service, getActor });
-    expect(r.status).toBe("not_found");
-  });
-});
-
-describe("R39: borrar (soft) -> ok", () => {
-  it("propaga ok", async () => {
-    const service = fakeService();
-    const r = await borrarOrden("ord-1", { ordenService: service, getActor });
-    expect(r.status).toBe("ok");
-    expect(service.borrar).toHaveBeenCalledWith("ord-1", ACTOR);
-  });
-});
-
-describe("R28: num_remision duplicado -> conflict", () => {
-  it("propaga conflict del service", async () => {
-    const service = fakeService({ crear: vi.fn().mockResolvedValue({ status: "conflict" }) });
-    const r = await crearOrden(validCrear, { ordenService: service, getActor });
-    expect(r.status).toBe("conflict");
-  });
-});
-
-describe("R14b/R42: dependencia de geografia y errores tipados sin PII", () => {
-  it("geografia inexistente -> validation_error tipado (no crea)", async () => {
-    // R14b: sin geografia poblada el service rechaza la creacion por FK NOT NULL.
-    const service = fakeService({
-      crear: vi.fn().mockResolvedValue({
-        status: "validation_error",
-        fieldErrors: { zonaId: ["zonaId no existe"] },
-      }),
-    });
-    const r = await crearOrden(validCrear, { ordenService: service, getActor });
-    expect(r.status).toBe("validation_error");
-    if (r.status === "validation_error") {
-      expect(r.fieldErrors.zonaId).toBeDefined();
-      // R42: el resultado es un objeto discriminado, no una excepcion ni PII.
-      expect(Object.keys(r)).toEqual(["status", "fieldErrors"]);
-    }
-  });
-});
-
-describe("R9: conserva la clave id en fieldErrors", () => {
-  it("obtenerOrden con id vacio -> validation_error con solo la clave id", async () => {
-    const service = fakeService();
-    const r = await obtenerOrden("", { ordenService: service, getActor });
-    expect(r.status).toBe("validation_error");
-    if (r.status === "validation_error") {
-      expect(r.fieldErrors.id).toBeDefined();
-      expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
-    }
-    expect(service.obtener).not.toHaveBeenCalled();
-  });
-
-  it("actualizarOrden con id vacio -> validation_error con solo la clave id", async () => {
-    const service = fakeService();
-    const r = await actualizarOrden("", { producto: "N" }, { ordenService: service, getActor });
-    expect(r.status).toBe("validation_error");
-    if (r.status === "validation_error") {
-      expect(r.fieldErrors.id).toBeDefined();
-      expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
-    }
-    expect(service.actualizar).not.toHaveBeenCalled();
-  });
-
-  it("borrarOrden con id vacio -> validation_error con solo la clave id", async () => {
-    const service = fakeService();
-    const r = await borrarOrden("", { ordenService: service, getActor });
-    expect(r.status).toBe("validation_error");
-    if (r.status === "validation_error") {
-      expect(r.fieldErrors.id).toBeDefined();
-      expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
-    }
-    expect(service.borrar).not.toHaveBeenCalled();
-  });
-});
-
+// Los dos casos que siguen estaban escritos sobre `crearOrden` y se REAPUNTARON a
+// `listarOrdenes` el 2026-08-07 en vez de borrarse. Ninguno afirma nada sobre crear: los dos
+// prueban la cadena de errores del BORDE (`withErrorHandler` -> `isAppErrorShape` ->
+// `toActionError`), que es identica en las dos acciones vivas de este archivo. Es el unico
+// sitio donde esa cadena se prueba end-to-end desde una Server Action; `normalize.test.ts` y
+// `with-error-handler.test.ts` prueban las piezas por separado, no el borde entero.
 describe("R11: error de dominio por nombre -> conflict via handler", () => {
-  it("crear con NumRemisionDuplicadoError -> conflict (no lanza, no 500)", async () => {
+  it("service que rechaza con NumRemisionDuplicadoError -> conflict (no lanza, no 500)", async () => {
     class NumRemisionDuplicadoError extends Error {
       constructor() {
         super("dup");
@@ -295,22 +118,20 @@ describe("R11: error de dominio por nombre -> conflict via handler", () => {
       }
     }
     const service = fakeService({
-      crear: vi.fn().mockRejectedValue(new NumRemisionDuplicadoError()),
+      listar: vi.fn().mockRejectedValue(new NumRemisionDuplicadoError()),
     });
-    const r = await crearOrden(validCrear, { ordenService: service, getActor });
+    const r = await listarOrdenes({}, { ordenService: service, getActor });
     expect(r.status).toBe("conflict");
   });
 });
 
 describe("INTERNAL: throw inesperado se re-lanza", () => {
-  it("crear con error desconocido -> la accion rechaza (preserva 500)", async () => {
+  it("service con error desconocido -> la accion rechaza (preserva 500)", async () => {
     const service = fakeService({
-      crear: vi.fn().mockImplementation(() => {
+      listar: vi.fn().mockImplementation(() => {
         throw new Error("boom");
       }),
     });
-    await expect(
-      crearOrden(validCrear, { ordenService: service, getActor }),
-    ).rejects.toThrow();
+    await expect(listarOrdenes({}, { ordenService: service, getActor })).rejects.toThrow();
   });
 });

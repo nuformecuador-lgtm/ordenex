@@ -190,4 +190,34 @@ describe("columnas de descarga del listado de órdenes", () => {
       "Fecha de creación",
     ]);
   });
+
+  it("declara sus CLAVES en el mismo orden que sus encabezados (R5/R35)", () => {
+    // El agujero que este caso tapa, censado por la 189: el test de arriba fija los quince
+    // ENCABEZADOS en orden, pero de las claves solo se dice qué NO están (`CLAVES` solo se usa
+    // con `not.toContain`). Una permuta se detecta por el encabezado, sí; pero renombrar la
+    // `clave` de una columna sin tocar su encabezado no lo veía nadie —y la clave es lo que
+    // indexa la fila que devuelve `filaDescargaOrden`, así que ese cambio vacía la columna en
+    // silencio: el archivo sale con su cabecera puesta y las celdas en blanco—.
+    //
+    // Esperado escrito a mano, nunca derivado de la constante. La lista va en el MISMO orden
+    // que los encabezados de arriba, y eso es parte de lo que se afirma: `estatus` es la
+    // tercera clave y «Estado» el tercer encabezado.
+    expect(COLUMNAS_DESCARGA_ORDENES.map((c) => c.clave)).toEqual([
+      "numGuia",
+      "numRemision",
+      "estatus",
+      "destinatario",
+      "producto",
+      "direccion",
+      "tienda",
+      "zona",
+      "provincia",
+      "canton",
+      "distrito",
+      "montoCobrar",
+      "mensajero",
+      "intentos",
+      "fechaCreacion",
+    ]);
+  });
 });

@@ -1,25 +1,17 @@
-import { NumRemisionDuplicadoError } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   IOrdenRepository,
   ListOrdenesResult,
   ListOrdenesWhere,
-  UpdateOrdenData,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   Actor,
-  ActualizarOrdenServiceResult,
-  BorrarOrdenServiceResult,
-  CrearOrdenServiceResult,
   IOrdenService,
   ListarOrdenesCompletoServiceResult,
   ListarOrdenesServiceResult,
-  ObtenerOrdenServiceResult,
 } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
-  ActualizarOrdenInput,
   CreatedPreset,
-  CrearOrdenInput,
   ListarOrdenesCompletoInput,
   ListarOrdenesInput,
   OrdenFilterInput,
@@ -30,10 +22,10 @@ import {
   normalizarTerminoBusqueda,
   soloDigitosSiPareceNumero,
 } from "@/lib/utils/busqueda-orden";
-import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
 // Feature 151: el limite de filas de `listarCompleto`. `ordenesConfig` salio de este archivo
-// al integrar la 155: su unico consumidor aqui era el default `DEFAULT_ESTATUS_VALUE` del alta
-// manual, que la bifurcacion por bodega sustituyo por `resolverDestinoCreacion`.
+// al integrar la 155, y `resolverDestinoCreacion` salio el 2026-08-07 con el alta manual: los
+// dos eran del camino de CREACION, que este servicio ya no tiene. Quien los usa hoy es
+// `BulkOrdenService`, que es por donde se crean las ordenes de verdad.
 import { descargaConfig } from "@/lib/config/descarga";
 import {
   inicioDelDiaCREnUtc,
@@ -41,8 +33,9 @@ import {
   inicioDeUltimosNDiasCREnUtc,
 } from "@/lib/utils/fecha-cr";
 
-// Roles reconocidos por el CRUD (los demas -> forbidden, R24). maestro/admin
-// tienen acceso total (R20); adminTienda/mensajero con restriccion (R21/R23).
+// Roles reconocidos por las lecturas (los demas -> forbidden, R24). maestro/admin ven todo
+// (R20); adminTienda/mensajero con acotamiento (R21/R23). Se llamaba "del CRUD" cuando este
+// servicio tambien escribia; desde el 2026-08-07 solo lee.
 const KNOWN_ROLES = new Set<string>(["maestro", "admin", "adminTienda", "mensajero"]);
 
 // Feature 63/B2 (R8): mapa EXPLICITO clave-publica-del-filtro -> columna Prisma.
@@ -127,111 +120,13 @@ export class OrdenService implements IOrdenService {
     private readonly ahora: () => Date = () => new Date(),
   ) {}
 
-  async crear(input: CrearOrdenInput, actor: Actor): Promise<CrearOrdenServiceResult> {
-    // --- Autorizacion (R19-R24), antes de tocar datos ---
-    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
-    if (actor.rol === "mensajero") return { status: "forbidden" }; // R23
-
-    let tiendaId: string;
-    if (actor.rol === "adminTienda") {
-      // R21/R22: adminTienda solo puede crear para si mismo.
-      if (input.tiendaId !== undefined && input.tiendaId !== actor.usuarioId) {
-        return { status: "forbidden" }; // R22
-      }
-      tiendaId = actor.usuarioId; // R21: fuerza tienda propia
-    } else {
-      // maestro/admin: tienda_id debe venir explicito (R11, FK NOT NULL).
-      if (input.tiendaId === undefined) {
-        return {
-          status: "validation_error",
-          fieldErrors: { tiendaId: ["tiendaId es obligatorio"] },
-        };
-      }
-      tiendaId = input.tiendaId;
-    }
-
-    // --- Validacion de FKs (estatus + geografia), R26/R12/R27 ---
-    const fieldErrors: Record<string, string[]> = {};
-
-    // Feature 155 (R1/R5/R6/R13/R14) — BIFURCACION POR BODEGA. El estado inicial NO sale del
-    // payload ni de una constante de configuracion: sale del flag `fulfillment` de la tienda
-    // DUEÑA (`tiendaId`, ya resuelto arriba: la indicada en la entrada para maestro/admin, la
-    // propia para adminTienda). El alta manual dejo de aceptar un `estatusId` explicito (R5):
-    // el campo salio de `crearOrdenSchema` y, como el schema no es `.strict()`, una entrada
-    // legada que lo traiga se IGNORA en silencio en vez de romper.
-    const destino = resolverDestinoCreacion(await this.repo.findUsuarioFulfillment(tiendaId));
-
-    // R7: sin el value del catalogo no se crea NADA. El error nombra el value que falta, para
-    // que el operador sepa que sembrar (patron de la guarda previa).
-    const estatusIdResuelto = await this.repo.findEstatusIdByValue(destino.estatus);
-    if (estatusIdResuelto === null) {
-      fieldErrors.estatusId = [
-        `estatus inicial "${destino.estatus}" no disponible en el catalogo (seed pendiente)`,
-      ];
-    }
-    const estatusId = estatusIdResuelto ?? "";
-
-    // R14b/R12: zona/provincia/canton NOT NULL y geografia creada vacia; deben
-    // existir filas referenciables. distrito opcional.
-    const geo = await this.repo.existsGeo({
-      zonaId: input.zonaId,
-      provinciaId: input.provinciaId,
-      cantonId: input.cantonId,
-      distritoId: input.distritoId,
-    });
-    if (!geo.zona) fieldErrors.zonaId = ["zonaId no existe"];
-    if (!geo.provincia) fieldErrors.provinciaId = ["provinciaId no existe"];
-    if (!geo.canton) fieldErrors.cantonId = ["cantonId no existe"];
-    if (!geo.distrito) fieldErrors.distritoId = ["distritoId no existe"];
-
-    if (Object.keys(fieldErrors).length > 0) {
-      return { status: "validation_error", fieldErrors }; // R26
-    }
-
-    // --- Persistencia ---
-    try {
-      const orden = await this.repo.create(
-        {
-          numRemision: input.numRemision,
-          estatusId,
-          destinatario: input.destinatario,
-          telefonoDest: input.telefonoDest,
-          tiendaId,
-          zonaId: input.zonaId,
-          provinciaId: input.provinciaId,
-          cantonId: input.cantonId,
-          distritoId: input.distritoId ?? null,
-          producto: input.producto,
-          peso: input.peso,
-          notas: input.notas ?? null,
-        },
-        // Feature 49/#2 (R10/R21/R23): la crea el usuario autenticado; origen null.
-        { actorUsuarioId: actor.usuarioId, origenTipo: "creacion_manual" },
-        // Feature 155/R3/R8/R9/R12: la rama (b) numera en la MISMA tx; la (a) nace sin guia.
-        // El mensajero NO se asigna en ninguna de las dos (`create` nunca lo escribe, R9).
-        { conGuia: destino.conGuia },
-      );
-      return { status: "ok", orden };
-    } catch (error) {
-      if (error instanceof NumRemisionDuplicadoError) {
-        return { status: "conflict" }; // R28
-      }
-      throw error;
-    }
-  }
-
-  async obtener(id: string, actor: Actor): Promise<ObtenerOrdenServiceResult> {
-    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
-
-    const orden = await this.repo.findById(id); // excluye borradas (R34)
-    if (!orden) return { status: "not_found" }; // R29
-
-    // R21: adminTienda solo ve las suyas; ajena en lectura -> not_found.
-    if (actor.rol === "adminTienda" && orden.tiendaId !== actor.usuarioId) {
-      return { status: "not_found" };
-    }
-    return { status: "ok", orden };
-  }
+  // BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivian `crear` y
+  // `obtener`. Sus Server Actions se borraron en la tanda 1 por nacer sin pantalla, y con ellas
+  // desaparecio el ultimo llamador. La CLASE NO muere: `listar` y `listarCompleto` siguen vivas
+  // y las instancia `lib/actions/ordenes.ts`.
+  //
+  // La creacion real de ordenes NO pasaba por aqui: entra por `BulkOrdenService.cargarMasiva`
+  // (sesion, solo `adminTienda`) y `cargarMasivaViaApi` (solo `apiKey`).
 
   /**
    * Feature 144: ORDEN DE ESCRITURA del `where`, y es lo que garantiza R36/R37:
@@ -466,88 +361,9 @@ export class OrdenService implements IOrdenService {
     return { status: "ok", items: itemsConIntentos, total };
   }
 
-  async actualizar(
-    id: string,
-    input: ActualizarOrdenInput,
-    actor: Actor,
-  ): Promise<ActualizarOrdenServiceResult> {
-    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
-
-    // R23/R41: mensajero solo puede tocar estatusId; cualquier otro campo -> forbidden.
-    if (actor.rol === "mensajero") {
-      const otrosCampos = Object.keys(input).filter((k) => k !== "estatusId");
-      if (otrosCampos.length > 0) return { status: "forbidden" };
-    }
-
-    const orden = await this.repo.findById(id); // excluye borradas (R34)
-    if (!orden) return { status: "not_found" }; // R36
-
-    // R21: adminTienda solo edita las suyas; mutacion de ajena -> forbidden.
-    if (actor.rol === "adminTienda" && orden.tiendaId !== actor.usuarioId) {
-      return { status: "forbidden" };
-    }
-
-    // R38: estatusId nuevo debe existir en el catalogo.
-    if (input.estatusId !== undefined) {
-      const exists = await this.repo.existsEstatus(input.estatusId);
-      if (!exists) {
-        return {
-          status: "validation_error",
-          fieldErrors: { estatusId: ["estatusId no existe en el catalogo"] },
-        };
-      }
-    }
-
-    // R37: aplica solo los campos permitidos por rol; no toca inmutables.
-    const data = this.buildUpdateData(input, actor.rol);
-    // Feature 49/#11 (R19/R20/R23): si el update cambia `estatus_id`, deja rastro
-    // (origenTipo ajuste_estado, actor = usuario autenticado); si no, no registra nada.
-    const actualizada = await this.repo.update(id, data, {
-      actorUsuarioId: actor.usuarioId,
-      origenTipo: "ajuste_estado",
-    });
-    if (!actualizada) return { status: "not_found" }; // carrera: borrada entre medias
-    return { status: "ok", orden: actualizada };
-  }
-
-  async borrar(id: string, actor: Actor): Promise<BorrarOrdenServiceResult> {
-    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
-    if (actor.rol === "mensajero") return { status: "forbidden" }; // R41
-
-    const orden = await this.repo.findById(id); // excluye ya borradas (R40)
-    if (!orden) return { status: "not_found" }; // R40
-
-    // R21: adminTienda solo borra las suyas; ajena -> forbidden.
-    if (actor.rol === "adminTienda" && orden.tiendaId !== actor.usuarioId) {
-      return { status: "forbidden" };
-    }
-
-    const ok = await this.repo.softDelete(id); // R39: soft delete
-    if (!ok) return { status: "not_found" };
-    return { status: "ok" };
-  }
-
-  // R37: para mensajero solo estatusId; para el resto, todos los campos de negocio
-  // presentes en el input (id/numGuia/createdAt jamas entran, no estan en el schema).
-  private buildUpdateData(
-    input: ActualizarOrdenInput,
-    rol: Actor["rol"],
-  ): UpdateOrdenData {
-    if (rol === "mensajero") {
-      return input.estatusId !== undefined ? { estatusId: input.estatusId } : {};
-    }
-    const data: UpdateOrdenData = {};
-    if (input.estatusId !== undefined) data.estatusId = input.estatusId;
-    if (input.destinatario !== undefined) data.destinatario = input.destinatario;
-    if (input.telefonoDest !== undefined) data.telefonoDest = input.telefonoDest;
-    if (input.tiendaId !== undefined) data.tiendaId = input.tiendaId;
-    if (input.zonaId !== undefined) data.zonaId = input.zonaId;
-    if (input.provinciaId !== undefined) data.provinciaId = input.provinciaId;
-    if (input.cantonId !== undefined) data.cantonId = input.cantonId;
-    if (input.distritoId !== undefined) data.distritoId = input.distritoId;
-    if (input.producto !== undefined) data.producto = input.producto;
-    if (input.peso !== undefined) data.peso = input.peso;
-    if (input.notas !== undefined) data.notas = input.notas;
-    return data;
-  }
+  // BORRADO 2026-08-07 (tanda 2): aqui vivian `actualizar`, `borrar` y el privado
+  // `buildUpdateData` que solo usaba `actualizar`. Las ediciones reales de una orden pasan por
+  // las acciones de dominio (guia, asignacion, incidencias, devoluciones), no por este update
+  // generico. OJO: `TarifaService` y `UsuarioService` tienen su PROPIO `buildUpdateData`
+  // privado y homonimo; no son este y siguen vivos.
 }
