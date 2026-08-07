@@ -29,9 +29,11 @@ export interface ListarOrderStatusDeps {
 
 /**
  * Feature 63/A2 (R1-R5): lista el catalogo `order_status` (id, value) para las
- * tabs de ordenes. Accion NUEVA e independiente de `listarCatalogoEstatus()`
- * (feature 17): NO relaja la autorizacion de esa (que sigue en maestro/admin);
- * aqui la autz es "todos excepto mensajero" (R2/R4). Sin sesion -> unauthenticated
+ * tabs de ordenes. Nacio como accion NUEVA e independiente de `listarCatalogoEstatus()`
+ * (feature 17, `lib/actions/ordenes-guia.ts`) para NO relajar la autorizacion de aquella,
+ * que era solo maestro/admin. Desde el 2026-08-07 aquella ya no existe —se borro por
+ * quedarse sin consumidor tras `54757be4`— y esta es la UNICA lectura del catalogo:
+ * la autz es "todos excepto mensajero" (R2/R4). Sin sesion -> unauthenticated
  * (R3). Reusa `IOrdenRepository.listOrderStatus()`, que garantiza orden
  * determinista (R5). `deps` inyectables (`getActor`, `ordenRepo`) para test.
  */

@@ -9,7 +9,6 @@ import {
   type AsignarBodegaResult,
   type AsignarRecoleccionResult,
   type GenerarGuiaResult,
-  type ListarCatalogoEstatusResult,
   type ListarMensajerosParaAsignacionResult,
   type ListarZonasBloqueadasResult,
   type RutearSateliteResult,
@@ -52,10 +51,6 @@ function buildZonaRepoParaMensajeros(): Pick<IZonaRepository, "findCentralZonaId
   return new ZonaRepository(getPrismaClient());
 }
 
-function buildOrdenRepoParaCatalogo(): Pick<IOrdenRepository, "listOrderStatus"> {
-  return new OrdenRepository(getPrismaClient());
-}
-
 function buildOrdenRepoParaZonasBloqueadas(): Pick<
   IOrdenRepository,
   "findZonasConMensajeroBloqueado"
@@ -76,11 +71,6 @@ export interface ListarMensajerosDeps {
     | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
   >;
   zonaRepo?: Pick<IZonaRepository, "findCentralZonaId">;
-  getActor?: () => Promise<Actor | null>;
-}
-
-export interface ListarCatalogoEstatusDeps {
-  ordenRepo?: Pick<IOrdenRepository, "listOrderStatus">;
   getActor?: () => Promise<Actor | null>;
 }
 
@@ -242,33 +232,17 @@ export async function rutearABodegaSatelite(
   return isAppErrorShape(r) ? toGuiaActionError(r) : r;
 }
 
-/**
- * Soporte R15/R16 — loader de solo lectura del catalogo `order_status` (id,
- * value) para que la UI del maestro resuelva `value` -> `estatusId` y siga
- * usando `listarOrdenes` (contrato feature 6/7 intacto, patron "filtrando
- * estatusId por value" de design.md §4). `maestro` y `admin` pueden leer
- * (mismo criterio de solo-lectura que `listarMensajerosParaAsignacion`); el
- * resto -> forbidden.
- *
- * @sin-superficie SEGUNDA VICTIMA del commit 54757be4 (2026-07-31), el mismo que dejo a `rutearABodegaSatelite` sin boton: la vista legacy `OrdenesRevisionMaestro` era su unico consumidor. El dano real es bajo porque existe la sustituta viva `listarOrderStatus` (`lib/actions/order-status.ts`), con autorizacion mas amplia; se conserva solo mientras se decide si borrarla. Deuda, no diseno.
- */
-export async function listarCatalogoEstatus(
-  deps: ListarCatalogoEstatusDeps = {},
-): Promise<ListarCatalogoEstatusResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    if (actor.rol !== "maestro" && actor.rol !== "admin") {
-      return { status: "forbidden" as const };
-    }
-    const repo = deps.ordenRepo ?? buildOrdenRepoParaCatalogo();
-    const estatus = await repo.listOrderStatus();
-    return { status: "ok" as const, estatus };
-  });
-  // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el
-  // unico AppErrorShape posible es UNAUTHORIZED.
-  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
-}
+// BORRADO 2026-08-07 (chore de deuda de superficie, decision humana): aqui vivia
+// `listarCatalogoEstatus` (soporte R15/R16, feature 17), el loader de solo lectura del catalogo
+// `order_status`. Es la SEGUNDA VICTIMA del commit `54757be4` (2026-07-31), el mismo que dejo a
+// `rutearABodegaSatelite` sin boton y causo el incidente de produccion. Ese commit borro
+// `OrdenesRevisionMaestro.tsx`, que era su UNICO consumidor (la importaba y la llamaba). Aquel
+// borrado dejo dos cosas colgando y solo se reparo una; esto cierra la otra.
+//
+// NO es capacidad perdida: la sustituta viva es `listarOrderStatus`
+// (`lib/actions/order-status.ts`), montada desde `ordenes/_components/OrdenesListado.tsx`, con
+// autorizacion MAS AMPLIA (todos menos mensajero, frente a solo maestro/admin) y mejor probada.
+// `IOrdenRepository.listOrderStatus()` NO se toca: lo sigue usando esa sustituta.
 
 /**
  * Gate de seleccion del maestro — loader de solo lectura de las zonas BLOQUEADAS: las

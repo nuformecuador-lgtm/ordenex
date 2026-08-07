@@ -4,7 +4,6 @@ import {
   asignarDesdeBodega,
   asignarRecoleccion,
   listarMensajerosParaAsignacion,
-  listarCatalogoEstatus,
   listarZonasBloqueadasPorCierre,
   rutearABodegaSatelite,
 } from "@/lib/actions/ordenes-guia";
@@ -73,14 +72,6 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
 
     expect(r.status).toBe("unauthenticated");
     expect(service.rutearABodegaSatelite).not.toHaveBeenCalled();
-  });
-
-  it("listarCatalogoEstatus", async () => {
-    const ordenRepo = { listOrderStatus: vi.fn() };
-    const r = await listarCatalogoEstatus({ ordenRepo, getActor: getActor(null) });
-
-    expect(r.status).toBe("unauthenticated");
-    expect(ordenRepo.listOrderStatus).not.toHaveBeenCalled();
   });
 });
 
@@ -365,52 +356,13 @@ describe("Feature 30/R13/R16: rutearABodegaSatelite (server action)", () => {
   });
 });
 
-describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, value)", () => {
-  it("maestro: repo.listOrderStatus resuelve el catalogo completo", async () => {
-    const listOrderStatus = vi.fn().mockResolvedValue([
-      { id: "os-1", value: "por_recolectar_en_tienda" },
-      { id: "os-2", value: "en_preparacion" },
-      { id: "os-3", value: "por_recoger" },
-      { id: "os-4", value: "en_bodega_central" },
-    ]);
-    const r = await listarCatalogoEstatus({
-      ordenRepo: { listOrderStatus },
-      getActor: getActor(MAESTRO),
-    });
-
-    expect(r).toEqual({
-      status: "ok",
-      estatus: [
-        { id: "os-1", value: "por_recolectar_en_tienda" },
-        { id: "os-2", value: "en_preparacion" },
-        { id: "os-3", value: "por_recoger" },
-        { id: "os-4", value: "en_bodega_central" },
-      ],
-    });
-    expect(listOrderStatus).toHaveBeenCalledWith();
-  });
-
-  it("feature 94: admin (paridad con maestro) tambien puede listar", async () => {
-    const listOrderStatus = vi.fn().mockResolvedValue([]);
-    const r = await listarCatalogoEstatus({
-      ordenRepo: { listOrderStatus },
-      getActor: getActor(ADMIN),
-    });
-
-    expect(r.status).toBe("ok");
-  });
-
-  it("mensajero/adminTienda -> forbidden", async () => {
-    const listOrderStatus = vi.fn();
-    const r = await listarCatalogoEstatus({
-      ordenRepo: { listOrderStatus },
-      getActor: getActor({ usuarioId: "u-msg", rol: "mensajero" }),
-    });
-
-    expect(r).toEqual({ status: "forbidden" });
-    expect(listOrderStatus).not.toHaveBeenCalled();
-  });
-});
+// BORRADO 2026-08-07 (chore de deuda de superficie): aqui vivia
+// `describe("R15/R16: listarCatalogoEstatus ...")`, con los tres casos de esa accion (catalogo
+// completo, paridad admin, forbidden a mensajero). Se van CON la accion, no se reapuntan: la
+// sustituta viva `listarOrderStatus` (`lib/actions/order-status.ts`) ya prueba las tres
+// propiedades y mas, en `tests/unit/actions/order-status.test.ts` — catalogo {id,value},
+// los CUATRO roles autorizados, sin sesion, mensajero -> forbidden y rol desconocido ->
+// forbidden. No se pierde ninguna cobertura.
 
 // Gate de seleccion del maestro (decision del humano 2026-07-16): la UI deshabilita el
 // checkbox de las ordenes cuya zona tenga >=1 mensajero con cierre abierto. Cubre TODAS
