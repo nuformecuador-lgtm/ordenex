@@ -2215,9 +2215,9 @@
     {
       "id": 186,
       "name": "analitica financiera: grafica de lineas en el tablero",
-      "spec_path": null,
+      "spec_path": "specs/186-analitica-financiera-grafica-lineas",
       "description": "Frontend. La 180 ya publica el desglose por fecha de las SIETE metricas (las seis de caja + cuenta_por_pagar_mensajero) con su granularidad declarada en el DTO, y los componentes de grafica existen desde la 130. Falta cablear el panel de lineas en el tablero financiero, que la 132 entrego SIN el porque el dato no existia. El hueco esta declarado en specs/132-analitica-tablero-financiero/design.md seccion 5: se anade, no se rehace.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "frontend",
