@@ -9,7 +9,7 @@ import { COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR } from "@/app/(app)/wallet/mensajer
 // UNA VEZ en `tests/`: no es que su aserción fuera floja, es que no había ninguna. Este
 // archivo es el primer sitio donde el listado que un usuario descarga queda escrito.
 //
-// Los cinco encabezados salen en producción de `COLUMNAS_DESCARGA_MAESTRO`, derivado del mismo
+// Los cinco encabezados salen en producción de `ENCABEZADOS_DESCARGA_MAESTRO`, derivado del mismo
 // objeto que titula la tabla. Aquí se fijan por su TEXTO y no importando la constante: lo que
 // llega a la hoja es el texto, y si alguien lo cambia el test tiene que enterarse. Importar la
 // constante haría que renombrar la cabecera moviera los dos lados a la vez, que es la

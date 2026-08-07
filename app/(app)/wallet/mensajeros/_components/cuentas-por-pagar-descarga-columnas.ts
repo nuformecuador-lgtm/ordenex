@@ -13,7 +13,7 @@
  * Lo que NO sale: `mensajeroId` (uuid interno, R23). El identificador de negocio de la fila
  * es el NOMBRE del mensajero, que es lo que la tabla enseña.
  *
- * Los encabezados salen de `COLUMNAS_DESCARGA_MAESTRO`, que es `COLUMNAS_MAESTRO` —el mismo
+ * Los encabezados salen de `ENCABEZADOS_DESCARGA_MAESTRO`, que es `COLUMNAS_MAESTRO` —el mismo
  * objeto del que la tabla toma sus cabeceras— con UNA divergencia deliberada: «Devengado» y
  * «Pagado» llevan aquí la salvedad de los pagos anulados. En pantalla no hace falta porque el
  * aviso de la feature 172 va justo encima de la tabla; el archivo se reenvía sin él. Renombrar
@@ -22,15 +22,15 @@
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
-import { COLUMNAS_DESCARGA_MAESTRO, SIGNO_BADGE } from "./wallet-mensajeros-labels";
+import { ENCABEZADOS_DESCARGA_MAESTRO, SIGNO_BADGE } from "./wallet-mensajeros-labels";
 
 /** Columnas del archivo, en el orden de la pantalla: las cinco que la tabla pinta. */
 export const COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR: DescargaColumna[] = [
-  { clave: "mensajero", encabezado: COLUMNAS_DESCARGA_MAESTRO.mensajero },
-  { clave: "devengado", encabezado: COLUMNAS_DESCARGA_MAESTRO.devengado },
-  { clave: "pagado", encabezado: COLUMNAS_DESCARGA_MAESTRO.pagado },
-  { clave: "cuentaPorPagar", encabezado: COLUMNAS_DESCARGA_MAESTRO.cuentaPorPagar },
-  { clave: "estado", encabezado: COLUMNAS_DESCARGA_MAESTRO.estado },
+  { clave: "mensajero", encabezado: ENCABEZADOS_DESCARGA_MAESTRO.mensajero },
+  { clave: "devengado", encabezado: ENCABEZADOS_DESCARGA_MAESTRO.devengado },
+  { clave: "pagado", encabezado: ENCABEZADOS_DESCARGA_MAESTRO.pagado },
+  { clave: "cuentaPorPagar", encabezado: ENCABEZADOS_DESCARGA_MAESTRO.cuentaPorPagar },
+  { clave: "estado", encabezado: ENCABEZADOS_DESCARGA_MAESTRO.estado },
 ];
 
 /**

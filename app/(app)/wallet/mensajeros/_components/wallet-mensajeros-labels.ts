@@ -113,8 +113,12 @@ export const CUENTAS_AVISO_BRUTOS = avisoImportesBrutos({
  * resta— sale exacta y no lleva salvedad.
  *
  * El DATO no cambia: cambia lo que la cabecera promete.
+ *
+ * NO se llama `COLUMNAS_DESCARGA_*`: ese prefijo está reservado a los `DescargaColumna[]` que
+ * vigila `columnas-asercion-de-orden.guardia`, y esto es un diccionario de rótulos. Nombrarlo
+ * así metería una entrada falsa en ese censo.
  */
-export const COLUMNAS_DESCARGA_MAESTRO = {
+export const ENCABEZADOS_DESCARGA_MAESTRO = {
   ...COLUMNAS_MAESTRO,
   devengado: `${COLUMNAS_MAESTRO.devengado} (incluye la devolución de los pagos anulados)`,
   pagado: `${COLUMNAS_MAESTRO.pagado} (incluye los pagos anulados)`,
