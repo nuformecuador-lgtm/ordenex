@@ -15,7 +15,6 @@ import {
   type EliminarPlantillaResult,
   type ListarPlantillasCompletoResult,
   type ListarPlantillasResult,
-  type ObtenerPlantillaResult,
   type PreviewPlantillaResult,
 } from "@/lib/types/plantilla-mensaje";
 import type {
@@ -137,27 +136,13 @@ export async function listarPlantillasCompleto(
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }
 
-/**
- * R4/R5: obtener plantilla por id.
- *
- * @sin-superficie lectura de detalle para una pantalla de detalle que nunca se construyo: `configuracion/plantillas/page.tsx` usa `listarPlantillas` y `EditarPlantillaForm` recibe la plantilla por props y solo llama a `actualizarPlantilla`. `git log -S` no devuelve ningun commit en `app/` ni `components/`, asi que jamas tuvo consumidor. Deuda inocua (lectura, no capacidad perdida).
- */
-export async function obtenerPlantilla(
-  id: unknown,
-  deps: PlantillaActionDeps = {},
-): Promise<ObtenerPlantillaResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R4
-    const parsedId = idSchema.safeParse(id);
-    if (!parsedId.success) {
-      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
-    }
-    const service = deps.plantillaService ?? buildPlantillaService();
-    return service.obtener(parsedId.data, actor);
-  });
-  return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
-}
+// BORRADO 2026-08-07 (chore de deuda de superficie, decision humana): aqui vivia
+// `obtenerPlantilla` (R4/R5), la lectura de detalle para una pantalla de detalle que nunca se
+// construyo. NACIO MUERTA: `git log -S "obtenerPlantilla" -- app components` devuelve una lista
+// VACIA desde `1de7605c` (2026-07-22, feature 107). Lo vivo es `listarPlantillas`, que usa
+// `configuracion/plantillas/page.tsx`; `EditarPlantillaForm` recibe la plantilla por props y
+// solo llama a `actualizarPlantilla`. `IPlantillaMensajeService.obtener` NO se toca: sigue
+// declarado y probado en tests/unit/services/.
 
 /** R4/R5/R20/R22: actualizar nombre y/o cuerpo. */
 export async function actualizarPlantilla(
