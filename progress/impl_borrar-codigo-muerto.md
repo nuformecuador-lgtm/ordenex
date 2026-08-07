@@ -529,3 +529,207 @@ Tres pares de nombres casi idénticos. Los tres pueden costar un incidente de pr
 archivos —cambió menos— sino **dónde**: tocar `lib/actions/` y `lib/services/` arrastra por el
 grafo de imports muchísimo más que tocar `app/**/_components/`. Si alguien mide el coste del gate
 rápido, que lo mida por capa y no por número de archivos.
+
+---
+---
+
+# Borrar código muerto — tanda 3 (la ISLA que dejó abierta el borrado)
+
+**Rama:** `chore/borrar-codigo-muerto` · **Fecha:** 2026-08-07 · **Decisión:** humana, la misma
+del día. Cierra lo que las tandas 1 y 2 dejaron colgando: borrar un consumidor deja huérfano a su
+proveedor, y borrar el proveedor deja huérfano al suyo. Tres tandas es exactamente lo que mide de
+hondo el árbol.
+
+**Commits:**
+
+| # | Hash | Grupo |
+|---|------|-------|
+| 6 | `4bf797ee` | `chore(services): cierra la isla del envio por Meta que dejo abierta la tanda 2` |
+| 7 | `0a685abd` | `chore(services): borra GeoService y las cadenas arbol/marcarLeida, sin llamador` |
+
+**Balance:** 27 archivos, **+61 / −589 líneas**.
+
+---
+
+## 15 · EL PATRÓN, no la incidencia: una guardia anclada en código real muere con el código que vigila
+
+La tanda 2 se comió esto y conviene que quede escrito como **regla general**, porque va a volver a
+pasar cada vez que alguien borre algo.
+
+`superficie-de-uso.guardia.test.ts` se auto-prueba **contra archivos reales del repo** — y hace
+bien, porque es lo que impide que un movimiento de árbol la deje midiendo el vacío en silencio (su
+propio comentario lo dice: «una guardia estática rota no falla, calla»). Pero eso tiene un precio
+que nadie había pagado todavía: **sus anclas son código, y el código se borra.** En la tanda 2 dos
+de sus anclas eran justo lo que había que borrar (`@/lib/actions/geo` en el detector de símbolos,
+`marcarNotificacionLeida` en la anti-vacuidad del censo), y sólo se descubrió leyendo la guardia
+entera antes de tocar nada.
+
+**La regla, en una línea: antes de borrar un símbolo, `grep` de ese símbolo en TODOS los ficheros
+`*guard*` del repo — no sólo en `tests/unit/guards/`.** Las guardias de este repo viven también en
+`tests/unit/analytics/`, `tests/unit/descarga/` y sueltas por ahí; `vitest run guard` las
+selecciona por NOMBRE DE ARCHIVO, no por carpeta, así que buscar sólo en una carpeta da falsa
+tranquilidad. En la tanda 3 se hizo así desde el principio y **salió limpio: ninguna guardia
+ancla en nada de lo borrado**. Es la diferencia entre encontrarlo antes y encontrarlo en rojo.
+
+**Corolario para quien escriba guardias nuevas:** si tienes que anclar en código real, ancla en
+código **vivo y central**, no en el caso raro que estás documentando. Por eso el ancla de la
+anti-vacuidad se movió a `descartarNotificacion` en vez de a otra acción muerta: un ancla viva no
+vuelve a caer en la próxima limpieza. Anclar la guardia de código muerto en código muerto es una
+bomba de relojería con la mecha puesta por ti mismo.
+
+---
+
+## 16 · Grupo 1 (`4bf797ee`) — la isla del envío por Meta
+
+Todo esto es el camino server-side por Meta, que es exactamente lo que el humano decidió retirar;
+no amplía la decisión.
+
+**Borrado:** `lib/services/EnvioPlantillaWhatsappService.ts` (sin interfaz propia en
+`lib/interfaces/services/`, así que no arrastra ninguna) y de `lib/types/whatsapp-envio.ts` los
+tipos `EnviarPlantillaResult`, `ListarEnviablesResult` y `PlantillaEnviableDTO`.
+
+### `repo.listarEnviables()`: re-medido, y SIGUE VIVO
+
+Se pidió comprobarlo otra vez ahora que las acciones ya no están, y hace falta: la afirmación de
+la tanda 2 no se hereda, se vuelve a medir. **Sigue vivo**, y la cadena completa es:
+
+```
+chat-demo/ChatConversacion.tsx:21
+  → listarPlantillasActivasParaEnvio   (whatsapp-envio.ts:45)
+    → repo.listarEnviables()           (whatsapp-envio.ts:54)
+```
+
+**No se borra.** Lo mismo `findEnviableById` (vivo por `chat-whatsapp.ts:149` y
+`ChatWhatsappService.ts:424`), `construirComponentsEnvio` (vivo por `chat-whatsapp.ts:158` y
+`ChatWhatsappService.ts:434`) y `PlantillaEnviable` —el **tipo de repositorio**, que no es lo
+mismo que el DTO `PlantillaEnviableDTO` que sí se fue—.
+
+---
+
+## 17 · Grupo 2 (`0a685abd`) — tres cadenas sin llamador, con sus tests
+
+El criterio que pidió el encargo, aplicado: **un test que prueba código que nadie llama da
+cobertura falsa y mantiene vivo el código muerto.** Se midió cadena por cadena que ningún módulo
+vivo las usa, y se borraron con sus tests.
+
+| Cadena | Qué cae |
+|---|---|
+| **Geo** (feature 24/R14 + 55/R10) | `GeoService`, `IGeoService`, los tres métodos **no-Lite** de `IGeoRepository`/`GeoRepository`, los DTOs `ProvinciaLightDTO`/`CantonLightDTO`/`DistritoCatalogoDTO` y los resultados `GeoActionError`/`ListarProvincias|Cantones|DistritosResult`. Tests `geo-service.test.ts` y `geo-repository.test.ts` **enteros** |
+| **Árbol de zonas** | `IZonaService.arbol`, `ZonaService.arbol`, `IZonaRepository.arbol`, `ZonaRepository.arbol`, `ArbolZonasServiceResult` y los cuatro tipos `ArbolZonas`/`ArbolZonaNode`/`ArbolCantonNode`/`ArbolDistritoNode` |
+| **`marcarLeida`** (R31) | los cuatro niveles: `INotificacionService`, `NotificacionService`, `INotificacionRepository`, `NotificacionRepository` |
+
+### Dónde corta exactamente, que es lo delicado
+
+**`GeoRepository` la CLASE no muere.** Es el riesgo obvio de esta tanda y hay que decirlo con el
+llamador: la mantiene viva **`lib/actions/filtros-ordenes.ts:33`** (feature 144). Lo que se le
+quita son sólo los tres métodos de navegación por niveles (`listProvincias`, `listCantones`,
+`listDistritos`); las tres proyecciones planas (`listProvinciasLite`, `listCantonesLite`,
+`listDistritosLite`) se quedan porque son las que ese llamador usa. **Un mismo archivo puede estar
+medio vivo y medio muerto**, y por eso la unidad de medida útil es el símbolo, no el fichero.
+
+Tampoco se van, con su llamador concreto: `MarcarNotificacionServiceResult` (lo usa `descartar`),
+`ZonaActionError` (lo usan las cinco acciones de zonas vivas) y
+`NotificacionRepository.marcarTodasLeidas`/`.descartar` — se comprobó que tienen su **propia**
+sentencia y no pasaban por `marcarLeida`, así que borrarlo no toca el camino de «marcar todas».
+
+### El criterio en los tests: aserción-sobre-lo-muerto ≠ montaje-para-lo-vivo
+
+Borrar todo test que **nombre** el símbolo habría sido un error, y es donde esta tanda gastó el
+rato. La distinción:
+
+| Caso | Qué era | Qué se hizo |
+|---|---|---|
+| **R31** «marcar como leída se refleja en el listado» | el requisito **de** la acción borrada | se va entero |
+| **R30** «el contador se calcula sobre el mismo conjunto» | probaba el contador de `listar` (**vivo**); `marcarLeida` era sólo el **montaje** | se conserva sembrando la lectura en el doble |
+| **R3** «lo que lee admin 1 sigue no leído para admin 2» | probaba el aislamiento de lecturas por usuario (**propiedad viva del modelo**) | ídem, lectura sembrada |
+| **R35 / R37** | afirmaban sobre `marcarLeida` **y** sobre `descartar` | se conserva la mitad de `descartar` |
+| `ZonaService` gate maestro | la lista incluía `arbol` entre cinco operaciones | se quita `arbol`, las otras cinco siguen probadas |
+
+En R30 y R3 **no vale** reescribirlo con `marcarTodasLeidas` —la única vía viva que crea filas de
+lectura— porque los dos casos necesitan una **mezcla** de leída y no leída, y «marcar todas» las
+marca todas. Sembrar `repo.lecturas` en el doble en memoria es legítimo y además más honesto: el
+test pasa a decir «dado un estado de lectura, el contador es éste», que es justo la propiedad que
+importa y ya no depende de por qué vía se llegó a ese estado.
+
+Los dobles sueltos (`marcarLeida: vi.fn()`, `arbol: vi.fn()`) se quitaron de seis ficheros más.
+TypeScript los cazó todos: al desaparecer el método de la interfaz, todo literal de objeto
+anotado con ella da `TS2353`. **Los 14 errores de `tsc` fueron el mapa completo de qué tocar** —
+ninguno apareció después, en tiempo de test.
+
+---
+
+## 18 · Guardias y verificación
+
+| Medida | Antes (tanda 3) | Después |
+|---|---|---|
+| Anotaciones `@sin-superficie` | **13** | **13** (sin cambio: no se borró ninguna Server Action) |
+| `pnpm test:guardias` | **70 archivos / 958 tests ✅** | **70 / 958 ✅** |
+| Contadores de censo (`cobertura-tablas`, `contadores-cabecera`) | — | **ninguno se movió** |
+
+Que las anotaciones NO se muevan es lo correcto y es la comprobación de que la tanda 3 no se salió
+del carril: la guardia cuenta Server Actions de `lib/actions/**`, y esta tanda no ha tocado ni una
+—sólo `lib/services/`, `lib/interfaces/`, `lib/repositories/`, `lib/types/` y tests—. **Ninguna
+anotación huérfana**: el caso de caducidad de R-A sigue verde.
+
+| Paso | Resultado |
+|---|---|
+| `pnpm run typecheck` tras Grupo 1 | **limpio** |
+| `pnpm run typecheck` tras Grupo 2 | **limpio** (tras resolver los 14 `TS2353`/`TS2339` de tests) |
+| `pnpm test:guardias` tras cada grupo | **70 / 958 ✅** |
+| `vitest run whatsapp plantilla` | 30 archivos / 265 tests ✅ |
+| `vitest run notificacion zona usuario-zona filtros-ordenes catalogo` | 33 / 386 ✅ |
+| **`./init.sh --rapido`** | **`== init OK ==`, exit 0** |
+| — `test:cambiados` | **274 archivos / 3797 tests ✅** |
+| — `test:guardias` | **70 / 958 ✅** |
+
+Sin flakes. Nótese el salto de `test:cambiados`: 7 archivos (tanda 1) → 58 (tanda 2) → **274**
+(tanda 3). Tocar `lib/types/` y `lib/interfaces/` arrastra por el grafo de imports casi todo el
+repo. Es la confirmación de lo que apuntaba §14: el coste del gate rápido se mide por **capa**, no
+por número de archivos cambiados.
+
+---
+
+## 19 · Recuento final de deuda `@sin-superficie` que SOBREVIVE
+
+**13 anotaciones**, de **24** al empezar el día: la limpieza se llevó **11** (46%).
+
+| Módulo | Nº | Qué es |
+|---|---|---|
+| `lib/actions/ordenes.ts` | **4** | andamiaje CRUD del arranque; las rutas reales van por otro lado |
+| `lib/actions/cierre-bodega.ts` | 1 | **decisión, no deuda** (features 170/184): testigo declarado |
+| `lib/actions/gasto-fijo-plantilla.ts` | 1 | **decisión, no deuda** (feature 184): doble vivo de R1 |
+| `lib/actions/wallet-tienda.ts` | 1 | **decisión, no deuda** (feature 184): testigo de anti-vacuidad |
+| `lib/actions/analitica-operativa.ts` | 1 | nació sin cablear (feature 176, `be51ad9c`) |
+| `lib/actions/ordenes-guia.ts` | 1 | **segunda víctima de `54757be4`**, el commit del incidente original |
+| `lib/actions/plantillas.ts` | 1 | lectura de detalle para una pantalla que nunca se construyó |
+| `lib/actions/vehiculos.ts` | 1 | no existe pantalla de vehículos (feature 50) |
+| `lib/actions/wallet-mensajero.ts` | 1 | sustituida por `listarCuentasPorPagarPaginadoAction` |
+| `components/shared/TableFilters.tsx` | 1 | único componente; genérico que ninguna pantalla usó |
+
+**Lectura honesta de esa lista: 3 de las 13 NO son deuda**, son testigos declarados a propósito
+por las features 170/184 y la anotación es su documentación. La deuda real que sobrevive son
+**10**, y no se han tocado porque **no hay decisión humana sobre ellas** — no porque no se hayan
+visto. Dos merecen mirada aparte:
+
+- **`ordenes-guia.ts`** es la *segunda víctima del mismo commit* `54757be4` que provocó el
+  incidente de `rutearABodegaSatelite`. Es decir: aquel borrado de 2026-07-31 dejó **dos** cosas
+  colgando y sólo se reparó una. La otra sigue ahí.
+- **`ordenes.ts`** concentra **4 de las 13** ella sola: es el mayor foco de deuda de este tipo en
+  el repo y el candidato natural a la siguiente decisión.
+
+---
+
+## 20 · Qué queda ABIERTO tras las tres tandas
+
+- **Las 10 anotaciones de deuda real** de §19, en especial las 4 de `ordenes.ts` y la de
+  `ordenes-guia.ts` (segunda víctima no reparada de `54757be4`).
+- **`components/shared/TableFilters.tsx`** — único componente sin montar; parece «nació muerto»,
+  falta confirmarlo con su propio `git log -S`.
+- **`chat-demo/`** — la carpeta del chat VIVO se sigue llamando «demo» y el comentario que lo
+  monta lo llama «MAQUETA». Sigue siendo la trampa de nombres más peligrosa del repo (tanda 1 §7).
+- **Nada más de las islas cerradas hoy**: geo, árbol de zonas, `marcarLeida` y el camino Meta
+  quedan sin residuo. Se verificó que no queda ninguna referencia de código a lo borrado — las
+  únicas menciones que quedan son los comentarios-lápida que se dejaron a propósito en
+  `whatsapp-envio.ts`, `zonas.ts`, `notificaciones.ts`, `zona.ts`, `whatsapp-envio.ts` (tipos),
+  `IGeoRepository.ts` y `GeoRepository.ts`, y están ahí para que el próximo `grep` no vuelva a
+  confundir prosa con uso.
