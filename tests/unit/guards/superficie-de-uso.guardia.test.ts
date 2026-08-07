@@ -21,6 +21,9 @@
 // positivos se resuelven solos (la cadena `ChatConversacion → ChatFlotante → RepartoModule →
 // reparto/page.tsx` se recorre sin ayuda), las huérfanas reales quedan aisladas y salen además las
 // de SEGUNDO ORDEN —`geo.ts`, `arbolZonas`, `rutearABodegaSatelite`— que el conteo no ve.
+// (Las dos primeras ya no están en el árbol: el humano decidió borrarlas el 2026-08-07 y esta
+// guardia fue quien las puso encima de la mesa. Se citan aquí como el HALLAZGO que justifica la
+// primitiva, no como código vigente.)
 //
 // **Tres capas, porque la superficie se corta en tres sitios distintos:**
 //
@@ -468,7 +471,11 @@ describe("superficie de uso — el detector", () => {
     const codigo = sinComentarios(
       [
         'import { marcarTodasLeidas as marcarTodasLeidasAction } from "@/lib/actions/notificaciones";',
-        'import { listarProvincias, type ZonaDTO } from "@/lib/actions/geo";',
+        // El ancla del import nombrado + tipo era `@/lib/actions/geo`; ese módulo se borró entero
+        // el 2026-08-07 (chore de código muerto, tanda 2) y `resolverEspecificador` exige que el
+        // archivo EXISTA, así que el ancla tiene que ser un módulo vivo o este caso se cae solo.
+        // `lib/actions/zonas.ts` sirve igual: import nombrado de valor + import de tipo en línea.
+        'import { listarZonas, type ZonaDTO } from "@/lib/actions/zonas";',
         'const mod = await import("@/lib/actions/orden-historial");',
       ].join("\n"),
     );
@@ -478,9 +485,9 @@ describe("superficie de uso — el detector", () => {
       notificaciones?.nombres,
       "un alias oculta el símbolo de origen: `marcarTodasLeidas` parecería huérfana",
     ).toContain("marcarTodasLeidas");
-    const geo = aristas.find((a) => a.destino === "lib/actions/geo.ts");
-    expect(geo?.nombres).toContain("listarProvincias");
-    expect(geo?.nombres, "un `type` importado no es una superficie de ejecución").not.toContain(
+    const zonas = aristas.find((a) => a.destino === "lib/actions/zonas.ts");
+    expect(zonas?.nombres).toContain("listarZonas");
+    expect(zonas?.nombres, "un `type` importado no es una superficie de ejecución").not.toContain(
       "ZonaDTO",
     );
     const dinamico = aristas.find((a) => a.destino === "lib/actions/orden-historial.ts");
