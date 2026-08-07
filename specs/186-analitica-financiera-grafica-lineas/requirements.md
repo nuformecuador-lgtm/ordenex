@@ -264,28 +264,67 @@ Luego el `textContent` de la sección **contiene** la clave del cubo, y el caso
 `` `%s` NO pinta las fechas de la serie `` afirmaba `not.toContain(CUBO_INTERMEDIO)` sobre ese mismo
 `textContent`, aplicado a las siete métricas temporales. Es decir: **R1 ∧ R7 ⟹ ¬(aserción
 original)** para las seis de flujo. Las dos afirmaciones no pueden ser ciertas a la vez y esta spec
-exige las dos. Las únicas tres salidas rompen cada una una regla — sacar la gráfica de la sección
-rompe R1; rotular sin la clave rompe R7 y R24 de la 132; quitar `SerieTextual` edita
-`components/private/analytics/`, que `tasks.md` prohíbe, y rompe R10 de la 130.
+exige las dos.
 
-**Qué lo sustituye como garantía de que el defecto de ⟨H1⟩ no vuelve**, que es lo único que ese
-caso protegía:
+**Las cuatro salidas — y esta enumeración empezó diciendo «las tres únicas», que era falso.**
 
-- **La aserción original se conserva literal donde sí es satisfacible:** la métrica acumulada, que
-  por Q2 = (b) no lleva línea. Ahí el `not.toContain` sigue escrito tal cual.
-- **El caso se estrecha, para las seis de flujo, a «la fecha no es el texto propio de ningún
-  elemento»** (`queryByRole("cell", …)`, `queryByText(…)`), que es exactamente la forma en que
-  `PanelTabla` la pintaba: `<td>2026-07-20</td>`. Tres líneas de aserción retiradas en todo el
-  archivo, ni una más.
-- **Medido, no alegado:** revertir la señal de forma a `vista.filas.length === 0` —el defecto de
-  ⟨H1⟩ exacto— produce **39 rojos**, siete de ellos de este caso. El reviewer lo reprodujo por su
-  cuenta.
+| # | Salida | Veredicto |
+|---|---|---|
+| 1 | Sacar la gráfica fuera de la `<section>` de la vista | rompe **R1** |
+| 2 | Rotular el punto sin la clave del cubo | rompe **R7** y R24 de la 132 |
+| 3 | Quitar o esconder `SerieTextual` | edita `components/private/analytics/`, que `tasks.md` prohíbe, y rompe R10 de la 130 |
+| 4 | **Conservar la aserción y restringir el SUJETO:** descontar del texto la región de la gráfica y afirmar sobre el resto | **no rompe nada y caza más. ADOPTADA** |
+
+**Por qué la cuarta no apareció en la enumeración original, que es lo reutilizable de todo esto:**
+las tres primeras son formas de **conservar la aserción sobre el mismo sujeto** —`seccion.textContent`
+entero—. La pregunta que las generó fue «¿cómo mantengo esta aserción?», y las tres son las únicas
+respuestas *a esa* pregunta. La pregunta correcta era «¿qué tiene que cazar este caso?», y su
+respuesta —que la fecha no aparezca en ninguna parte de la sección **salvo dentro de la gráfica**,
+que es su única fuente legítima— abre una cuarta vía que no cambia la aserción sino aquello sobre lo
+que se afirma. **Enumerar sobre el propio razonamiento en vez de sobre el código es exactamente cómo
+se afirma una exhaustividad falsa**, y por eso la tabla se deja escrita con su error a la vista en
+vez de sustituirse en silencio.
+
+**La implicación NO se cae, y conviene decirlo:** sobre `seccion.textContent` entero, `R1 ∧ R7`
+siguen negando la aserción original. La cuarta salida no la refuta; cambia el **sujeto** de la
+aserción, no su verdad. De ahí se sigue lo que la hace elegante: en la métrica acumulada —que por
+Q2 = (b) no lleva línea— **no hay gráfica que descontar**, así que la aserción vuelve a ser
+satisfacible **palabra por palabra** sin necesidad de ninguna rama condicional.
+
+**Qué sustituye al caso como garantía de que el defecto de ⟨H1⟩ no vuelve**, que es lo único que
+protegía:
+
+- **Una sola vara para las siete métricas.** El caso conserva su aserción y la aplica al texto que
+  devuelve `textoFueraDeLaGrafica(seccion, tituloGrafica)`, que localiza la región de la gráfica
+  **por su nombre accesible** —no por la clase `sr-only`, que es del paquete de la 130 y esta
+  feature no controla—, la descuenta y afirma sobre el resto. Sin `if` por `esAcumulado`: en la
+  acumulada el descuento es vacío y el texto es el de siempre. Es lo que el `it.each` prometía.
+- **Caza una regresión que la forma anterior dejaba pasar**, medido con la misma mutación sembrada
+  y revertida (M-16 en `progress/impl_186.md` §4):
+
+  | Escenario | forma anterior (`queryByRole("cell")` + `queryByText`) | cuarta salida |
+  |---|---|---|
+  | código actual | verde (93) | **verde (93)** |
+  | defecto de ⟨H1⟩ (`filas.length === 0`) | **39 rojos** | **39 rojos** — idéntico |
+  | una fecha **visible** embebida en un texto más largo (`«Cubos del periodo: …»` junto al KPI) | **1 rojo** — solo la acumulada, por la aserción que se le conservaba; **las seis de flujo no lo ven** | **7 rojos** — las siete |
+
+  La tercera fila es la que decide: una regresión perfectamente escribible que la forma anterior
+  dejaba pasar **en todas las métricas que esta feature toca**.
+- **Aserciones retiradas en todo el archivo: dos**, no tres. La que se ahorra es precisamente la
+  rama por `esAcumulado` que ya no hace falta.
+- **La condición de reversión se mantiene, y se volvió a medir:** revertir la señal de forma a
+  `vista.filas.length === 0` —el defecto de ⟨H1⟩ exacto— produce **39 rojos**, de los cuales **14
+  en el propio bloque del hotfix**: sus dos casos `it.each` por las siete métricas temporales.
+- **Coste declarado:** el caso queda acoplado a un `cloneNode` + `remove`, es decir a la estructura
+  del DOM. Es el precio de restringir el sujeto en vez de la aserción, y se paga en un solo helper
+  documentado.
 
 > **Esto no es un criterio relajado después de fallar,** que es como se pierde el rigor. Un criterio
 > se relaja cuando cuesta cumplirlo; aquí hay una **demostración** de que es incumplible junto a R1
 > y una **medición** de que la propiedad que protegía sigue protegida. Faltando cualquiera de las
 > dos, la reconciliación no procedería y lo que habría que cambiar sería el código. La demostración
-> completa, con las tres salidas tabuladas, está en `progress/impl_186.md` §5.1.
+> completa, con las **cuatro** salidas tabuladas y la medición de la adoptada, está en
+> `progress/impl_186.md` §5.1.
 
 ---
 

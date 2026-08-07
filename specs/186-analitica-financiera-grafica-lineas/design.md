@@ -105,26 +105,54 @@ va **dentro** de la sección de la vista— y **R7** —la categoría contiene l
 `textContent`. Es decir **R1 ∧ R7 ⟹ ¬(aserción original)** para las seis métricas de flujo: no es
 que cueste cumplirlo, es que **no puede ser cierto** a la vez que R1, y este diseño exige R1.
 
-Las tres únicas salidas rompen cada una una regla: sacar la gráfica fuera de la `<section>` rompe
-R1; rotular el punto sin la clave rompe R7 y R24 de la 132; quitar o esconder `SerieTextual` edita
-`components/private/analytics/` —que `tasks.md` prohíbe— y rompe R10 de la 130.
+**Aquí escribí «las tres únicas salidas», y eran cuatro.** Las tres primeras rompen cada una una
+regla: sacar la gráfica fuera de la `<section>` rompe R1; rotular el punto sin la clave rompe R7 y
+R24 de la 132; quitar o esconder `SerieTextual` edita `components/private/analytics/` —que
+`tasks.md` prohíbe— y rompe R10 de la 130. **La cuarta no rompe ninguna, caza más, y es la
+adoptada.**
+
+**Por qué se me escapó, que es lo único reutilizable del error:** las tres primeras son las formas
+de conservar la aserción **sobre el mismo sujeto**, `seccion.textContent` entero. Son exhaustivas
+respecto de la pregunta que las generó —«¿cómo mantengo esta aserción?»— y esa no era la pregunta.
+La buena era «¿qué tiene que cazar este caso?»: que la fecha no aparezca en ninguna parte de la
+sección **salvo dentro de la gráfica**, su única fuente legítima. Eso se consigue **conservando la
+aserción y restringiendo el sujeto**, que es una categoría de solución que mi enumeración no podía
+contener porque enumeré sobre mi propio encuadre y no sobre el código. Queda escrito con el error a
+la vista: una exhaustividad afirmada sobre el razonamiento propio es más peligrosa que una afirmada
+sobre el árbol, porque nada la desmiente al leerla.
+
+**La implicación no se cae.** Sobre `seccion.textContent` entero, `R1 ∧ R7 ⟹ ¬(aserción original)`
+sigue siendo cierto; la cuarta salida cambia el **sujeto** de la aserción, no su verdad. Por eso —y
+esto es la consecuencia bonita— en la métrica acumulada, donde no hay gráfica que descontar, la
+aserción vuelve a ser satisfacible **byte a byte** sin ninguna rama condicional.
 
 **Qué sustituye a ese caso como red contra ⟨H1⟩,** que es lo único que protegía:
 
-1. **la aserción original, literal**, conservada en la métrica acumulada, que por Q2 = (b) no lleva
-   línea y donde por tanto sí es satisfacible;
-2. **el caso estrechado** a «la fecha no es el texto **propio** de ningún elemento»
-   (`queryByRole("cell", …)`, `queryByText(…)`) — que es la forma exacta en que `PanelTabla` la
-   pintaba, `<td>2026-07-20</td>`. Tres líneas de aserción retiradas en todo el archivo;
-3. **la medición:** revertir la señal a `vista.filas.length === 0` da **39 rojos**, siete de ellos
-   de este caso, reproducidos por el reviewer.
+1. **`textoFueraDeLaGrafica(seccion, tituloGrafica)`**: clona la sección, quita los nodos de la
+   región de la gráfica —localizada por **nombre accesible**, no por la clase `sr-only`, que es del
+   paquete de la 130 y esta feature no controla— y afirma sobre el texto restante **exactamente lo
+   que afirmaba antes**. Una sola vara para las siete métricas, que es lo que el `it.each` prometía;
+   la rama por `esAcumulado` desaparece y las aserciones retiradas en todo el archivo bajan de tres
+   a **dos**.
+2. **Lo que caza de más, medido antes de adoptarla** (M-16 en `progress/impl_186.md` §4): con la
+   forma anterior, una fecha **visible** embebida en un texto más largo —«Cubos del periodo: …»
+   junto al KPI— daba **1 rojo**, solo en la acumulada; **las seis de flujo no lo veían**. Con esta,
+   **7 rojos**. En los otros dos escenarios las dos formas empatan: verde (93) con el código actual
+   y **39 rojos** con el defecto de ⟨H1⟩.
+3. **La condición de reversión, remedida:** revertir la señal a `vista.filas.length === 0` produce
+   **39 rojos**. El **desglose por bloque NO está medido**: circuló un «14 en el bloque del hotfix»
+   que la bitácora **no registra** —su único 14 es el de M-9, otra mutación—, así que se retira en
+   vez de reconstruirlo por aritmética. Lo que sostiene la reversión es el 39, que sí está medido
+   y anotado (`impl_186.md:218`).
+4. **Coste declarado:** el caso queda acoplado a un `cloneNode` + `remove`, o sea a la estructura
+   del DOM. Es el precio de restringir el sujeto en vez de la aserción, y se paga en un helper.
 
 **Y esto no es un permiso retroactivo.** Un criterio de hecho que se ablanda después de fallar es
 justo como se pierde el rigor de este arnés. Lo que salva la reconciliación aquí son dos cosas
 concretas y verificables —una **demostración** de imposibilidad y un **número** que dice que la
 propiedad sigue viva—; sin cualquiera de las dos, lo que habría que cambiar es el código y no el
-spec. La demostración completa, con las tres salidas tabuladas, está en `progress/impl_186.md`
-§5.1.
+spec. La demostración completa, con las **cuatro** salidas tabuladas y la medición de la adoptada,
+está en `progress/impl_186.md` §5.1.
 
 ### ⟨D2⟩ Una gráfica por vista. No hay gráfica combinada, y no es una omisión
 
@@ -488,7 +516,7 @@ prisa dentro de esta es exactamente cómo nació ⟨H1⟩.
 
 | Artefacto | Impacto | Acción |
 |---|---|---|
-| `tests/components/TableroFinanciero.test.tsx` | Bloque `Hotfix — …` (6 casos): **verde sin tocarse al cerrar la Tanda A** (criterio de ⟨D1⟩, cumplido). En la Tanda C, **uno de los seis deja de ser satisfacible** por `R1 ∧ R7`; los otros cinco siguen intactos | Ampliar con los casos de R1–R6, R13, R14, R17(b)(c)(d) y añadir un doble con `granularidad: "semana"`. Para el caso incompatible, lo que se exige está en `requirements.md` §4.1 y en ⟨D1⟩: aserción original conservada literal en la acumulada, estrechamiento a «texto propio» en las de flujo, y los 39 rojos como medida |
+| `tests/components/TableroFinanciero.test.tsx` | Bloque `Hotfix — …` (6 casos): **verde sin tocarse al cerrar la Tanda A** (criterio de ⟨D1⟩, cumplido). En la Tanda C, **uno de los seis deja de ser satisfacible** por `R1 ∧ R7`; los otros cinco siguen intactos | Ampliar con los casos de R1–R6, R13, R14, R17(b)(c)(d) y añadir un doble con `granularidad: "semana"`. Para el caso incompatible, lo que se exige está en `requirements.md` §4.1 y en ⟨D1⟩: **conservar la aserción y restringir el sujeto** con `textoFueraDeLaGrafica(...)` —una sola vara para las siete, sin rama por `esAcumulado`—, con los **39 rojos** como medida |
 | `tests/components/TableroFinanciero.test.tsx` — caso R22 de la 132 | Buscaba cada fecha del rango por separado; con la línea, `desdeFecha` es además la clave del primer punto y la búsqueda encuentra **dos** elementos: falla **por ambigua, no por incorrecta** | Afirmar sobre la cabecera entera —las dos fechas juntas, en el orden del DTO y sin dígitos en medio—, que es **más estrecho** que antes, no menos |
 | `tests/unit/analytics/tablero-financiero-adaptar.test.ts` | Verde; se le **añaden** los casos del adaptador temporal | R7–R11 |
 | `tests/unit/guards/tablero-financiero.guardia.test.ts` | Verde; gana el censo (g) | Ampliar sin retirar ninguna aserción |

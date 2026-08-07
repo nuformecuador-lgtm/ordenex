@@ -126,19 +126,24 @@
   ambiguos.** *(Task escrita a posteriori, al reconciliar el spec con el árbol: describe trabajo ya
   hecho y medido, no trabajo pendiente.)* Son los únicos dos que se tocan, cada uno por un motivo
   distinto:
-  1. `` `%s` NO pinta las fechas de la serie `` — **incompatible** con `R1 ∧ R7`; la demostración
-     está en `requirements.md` §4.1. Se estrecha a «la fecha no es el texto **propio** de ningún
-     elemento» para las seis de flujo, y **conserva la aserción original literal** en la métrica
-     acumulada, que por Q2 = (b) no lleva línea y donde por tanto sigue siendo satisfacible.
+  1. `` `%s` NO pinta las fechas de la serie `` — **incompatible** con `R1 ∧ R7` *sobre el
+     `textContent` entero*; la demostración y las **cuatro** salidas están en `requirements.md`
+     §4.1. Se adopta la cuarta: **conservar la aserción y restringir el sujeto** con
+     `textoFueraDeLaGrafica(seccion, tituloGrafica)`, que descuenta la región de la gráfica
+     localizándola por **nombre accesible**. Una sola vara para las siete: en la acumulada no hay
+     gráfica que descontar y la aserción queda idéntica a la original **sin rama condicional**.
   2. `Feature 132 (R22) — cada panel muestra las fechas calendario del propio DTO` — **ambiguo, no
      incorrecto**: `desdeFecha` pasa a ser además la clave del primer punto y `getByText` encuentra
      dos elementos. Pasa a afirmar sobre la cabecera entera —las dos fechas juntas, en el orden del
      DTO y sin dígitos en medio—, que es **más estrecho** que antes.
-  **Hecho:** se retiran **tres** líneas de aserción en todo el archivo y ni una más; los otros cinco
-  casos del bloque `Hotfix — …` quedan intactos; y **medido**: revertir la señal a
-  `vista.filas.length === 0` produce **39 rojos**, este caso entre ellos, reproducidos por el
-  reviewer. **Si esa medición no sale, la reconciliación no procede** y lo que se arregla es el
-  código, no el spec.
+  **Hecho:** se retiran **dos** líneas de aserción en todo el archivo y ni una más —la tercera se
+  ahorra porque la cuarta salida no necesita rama por `esAcumulado`—; los otros cinco casos del
+  bloque `Hotfix — …` quedan intactos; y **medido en tres escenarios** (M-16 de la bitácora): verde
+  con el código actual; **39 rojos** al revertir la señal a `vista.filas.length === 0`, **14 de
+  ellos en el propio bloque del hotfix**; y **7 rojos** —las siete métricas, no una— ante una fecha
+  visible embebida en un texto más largo, que es lo que la forma descartada dejaba pasar en las seis
+  de flujo. **Si la medición del segundo escenario no sale, la reconciliación no procede** y lo que
+  se arregla es el código, no el spec.
 
 ## Tanda E — guardias (depende de C; `[P]` con D)
 
