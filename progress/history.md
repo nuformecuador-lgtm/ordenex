@@ -2962,3 +2962,42 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   semanal y una mensual— saldrán como filas idénticas y **el test seguirá verde**. No se arregla
   aquí: sería cambiar un archivo que un usuario descarga. Y **la guardia de superficie de uso no lo
   caza**: vigila acciones sin superficie, no **campos** sin superficie.
+
+## 2026-08-06 — 186 (analítica financiera: gráfica de líneas en el tablero)
+- La 180 publicó el desglose por fecha de las siete métricas y **nadie lo pintaba**. Esto lo pinta:
+  línea sobre el KPI en las seis métricas **de flujo**, leyendo `granularidad` del DTO para rotular.
+  **Se añade, no se rehace**: 2 archivos de producción, exactamente los que el design anticipó.
+  18 requisitos, cero preguntas abiertas, review **APROBADO en ronda 2**. PR #307. Cero migraciones.
+- Requisitos cubiertos: `R1`–`R18`, mapa caso a caso en `progress/impl_186.md`. Gate `== init OK ==`
+  **985 archivos / 12.355 tests** (baseline `dev` 984 / 12.295 → **+1 archivo, +60 tests**, cero
+  regresiones), `next build` verde.
+- **Decisión humana Q2 = (b): `cuenta_por_pagar_mensajero` NO lleva línea.** Es un saldo al corte;
+  dibujado como línea **siempre sube y parece tendencia sin serlo**, y la 127 ya lo había declarado
+  junto a su repositorio. Se lee la bandera **`esAcumulado` del DTO**, no una lista de ids, y el
+  motivo **se dice en pantalla** con test.
+- **Dos requisitos estaban escritos y no los protegía nada, y son la misma línea partida por la
+  mitad:** `R4` sobrevivía a **91 casos** y `R2` a **144**. Los dos los cazó una mutación. El
+  segundo lo encontró el reviewer, después de que el implementador arreglara el primero: *«escribí
+  la lección y no la apliqué a la mitad de al lado de la misma línea»*.
+- **Y una afirmación de exhaustividad que era falsa: «las tres únicas salidas» eran cuatro.** La
+  cuarta —conservar la aserción y **restringir el sujeto**, no conservarla sobre el mismo sujeto—
+  empata en los dos escenarios de control (verde 93; **39 rojos** ante el defecto de ⟨H1⟩) y pasa de
+  **1 a 7 rojos** ante una fecha visible embebida en un texto más largo. Ese era el agujero: esa
+  regresión **solo la veía la métrica acumulada**; las seis de flujo se la comían. Con ella, el caso
+  del hotfix **recupera su aserción original** restringiendo el sujeto en vez de debilitarla.
+  > **La regla que queda:** una exhaustividad afirmada sobre el **propio razonamiento** es más
+  > peligrosa que una afirmada sobre el código, porque **nada la desmiente al leerla**. Las tres
+  > primeras salidas eran las formas de conservar la aserción; la pregunta correcta no era «¿cómo
+  > mantengo esta aserción?» sino «¿qué tiene que cazar este caso?».
+- **El criterio de hecho de ⟨D1⟩ se acotó, no se relajó.** Uno de los seis casos del hotfix es
+  **insatisfacible** y está demostrado (`R1 ∧ R7 ⟹ ¬(aserción original)`), no alegado. Lo que
+  sostiene la reconciliación es la **condición de reversión escrita en el spec**: reintroducir
+  `filas.length === 0` da **39 rojos**; si esa medición no saliera, la reconciliación no procede y
+  lo que se arregla es el código.
+- **Número retirado:** circuló un «14 de esos 39 en el bloque del hotfix» que **nadie midió** —el
+  único 14 de la bitácora es de otra mutación—. Se retiró en vez de reconstruirlo por aritmética.
+- **Deuda que deja, sin dueño:** una guardia que ate **lo que el servicio produce** con **lo que los
+  dobles del tablero declaran**. Las ataduras que hay comparan la fixture contra constantes
+  publicadas, nunca contra la salida real: si `serieDensa` cambiara de grano, seguirían verdes
+  **comparando el espejo consigo mismo**. Es exactamente lo que habría puesto la 180 en rojo el
+  05-ago en vez de dejar el defecto salir a producción.

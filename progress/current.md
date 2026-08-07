@@ -9,17 +9,55 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🔵 2026-08-06 — **EN CURSO: la 186** · ✅ la 189 cerrada · y la auditoría del backlog
+## 🏁 CIERRE DE JORNADA 2026-08-06 — **EMPIEZA A LEER POR AQUÍ**
 
-### 🟡 EN CURSO: **186** — la gráfica de líneas del tablero financiero
+**Registro limpio: cero PRs abiertos, cero features `in_progress`.** `prod` va por detrás de `dev`
+en documentación, tests y la 186; **el hotfix del día YA está en producción**.
 
-`frontend`, `sdd: true` → **lleva puerta humana tras el spec**. Rama
-`feature/186-tablero-financiero-grafica-lineas`. La 180 ya publica el desglose por fecha de las
-SIETE métricas y los componentes de gráfica existen desde la 130: **se añade, no se rehace**.
+### 🐛 Lo importante del día no estaba en el plan: **el tablero de dinero llevaba 7 h roto en producción**
 
-> ⚠️ **Lo que hay que respetar al especificarla:** el DTO trae `granularidad`
-> (`dia | semana | no_temporal`) como campo **obligatorio**. Un rango largo llega en cubos
-> **semanales**, y etiquetarlos como días **miente sin poner ningún test en rojo**.
+La **180** encendió `filas` para las siete métricas financieras. El tablero decidía KPI-vs-tabla con
+`filas.length === 0` —esa era su señal de **forma**—, así que las siete cayeron en `PanelTabla`: el
+maestro perdió «Dinero en caja», «Ganancia de Ordenex» y las demás, y en su lugar vio **treinta
+fechas**. Salió con el release de las 04:09 y **lo destapó escribir un spec**, no un usuario.
+
+Arreglado por hotfix (**PR #305**, desplegado READY): la señal pasa a `granularidad`, preguntando
+**por la negativa** (`!== "no_temporal"`) para que un valor futuro del enum no vuelva a caer en el
+mismo sitio.
+
+> ⚠️ **Por qué ningún test se enteró, que es lo que hay que recordar:** el fixture se llamaba
+> `vistaSinFilas`, con `grano: "fecha"` y `filas: []` — **y lo tocó la propia 180** para añadirle
+> `granularidad`, dejando escrito al lado «el tablero NO la lee». Pasó por delante del doble que
+> fijaba la premisa vieja, lo editó, y no vio que su cambio la invalidaba.
+
+**La deuda que deja, sin dueño:** una guardia que ate **lo que el servicio produce** con **lo que
+los dobles del tablero declaran**. Las ataduras que hay comparan la fixture contra constantes
+publicadas, nunca contra la salida real: si `serieDensa` cambiara de grano seguirían verdes
+**comparando el espejo consigo mismo**.
+
+### ✅ La 186, cerrada (PR #307)
+
+La gráfica de líneas sobre el KPI restaurado. **18 R, review APROBADO en ronda 2**, gate
+`== init OK ==` **985 / 12.355** (+1 archivo, +60 tests), `next build` verde, 2 archivos de
+producción. `cuenta_por_pagar_mensajero` **no lleva línea** por decisión humana: es un saldo al
+corte y dibujarlo como línea parece una tendencia sin serlo. Detalle en `history.md`.
+
+**Dos requisitos estaban escritos y no los protegía nada** —`R4` sobrevivía a 91 casos, `R2` a
+144—, **y son la misma línea partida por la mitad**. Y **«las tres únicas salidas» eran cuatro**: la
+cuarta caza en las siete métricas una regresión que antes solo veía en una.
+
+> **La regla que queda:** una exhaustividad afirmada sobre el **propio razonamiento** es más
+> peligrosa que una afirmada sobre el código, porque **nada la desmiente al leerla**.
+
+### ⚠️ Y el modo de fallo del worktree, repetido POR MÍ el mismo día que lo documenté
+
+El 05-ago el PR #298 se mergeó con la nota de renumeración **sin commitear** en el working tree. Lo
+arreglé por la mañana (PR #302), escribí la lección aquí mismo… **y por la tarde volví a hacerlo**:
+el PR #307 se mergeó con `feature_list.json` modificado y sin commitear, así que `dev` decía que la
+186 seguía `pending` **después de estar mergeada**.
+
+> **No basta con saberlo: `git status` antes de abrir el PR, no después.** El PR se arma desde la
+> **rama**; nada avisa de lo que quedó en el worktree.
 
 ### ✅ La 189, cerrada (PR #303)
 
