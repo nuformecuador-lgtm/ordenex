@@ -424,15 +424,18 @@ describe("R11/186 · el valor sale del importe de esa fila y el ilegible queda a
     // Mismo cinturon que `serieDeVista`: las sobrecargas lo impiden en compilacion, y si
     // alguien lo fuerza con un `as`, el adaptador no inventa.
     const conNeto = vistaTemporalDeEjemplo("dia", 2);
-    const soloBruto = {
+    // Se tipa como `VistaTemporal` —que es lo que de verdad es— y el `as` a la
+    // interseccion es lo unico que permite ESCRIBIR la llamada prohibida. Las
+    // sobrecargas la rechazan en compilacion, que es la defensa de verdad.
+    const soloBruto: VistaTemporal = {
       ...conNeto,
       filas: conNeto.filas.map((fila) => ({ ...fila, importe: sinNeto(fila.importe) })),
       total: sinNeto(conNeto.total),
-    } as VistaTemporal & VistaConNeto;
+    };
 
-    expect(() => serieTemporalDeVista(soloBruto, "neto", TEXTOS_CUBO)).toThrow(
-      ImporteSinNetoError,
-    );
+    expect(() =>
+      serieTemporalDeVista(soloBruto as VistaTemporal & VistaConNeto, "neto", TEXTOS_CUBO),
+    ).toThrow(ImporteSinNetoError);
   });
 });
 

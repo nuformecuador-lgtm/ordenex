@@ -502,12 +502,27 @@ describe("Feature 132 (R17) — las dos vistas de cod_recaudado, separadas y sin
 });
 
 describe("Feature 132 (R22) — el rango es el que devuelve el DTO", () => {
+  /**
+   * Las dos fechas del rango, EN EL MISMO elemento y en el orden del DTO.
+   *
+   * AJUSTADO POR LA FEATURE 186, y hacia MAS estrecho, no hacia menos: hasta la 186 este
+   * caso buscaba cada fecha por separado (`getByText(/2026-07-05/)`). Desde que la vista
+   * temporal lleva linea, `2026-07-05` es ademas la clave del PRIMER punto de la serie y
+   * `SerieTextual` la emite en su alternativa textual, asi que la busqueda suelta
+   * encontraba dos elementos y fallaba por ambigua — no por incorrecta.
+   *
+   * Afirmar sobre la cabecera ENTERA fija mas que antes: las dos fechas juntas, en el orden
+   * en que el DTO las trae, en un solo nodo. El separador no se escribe aqui (es texto de
+   * UI del componente); lo que se fija es que entre las dos fechas no hay ningun digito,
+   * que es lo que impediria que una tercera fecha calculada se colara en medio.
+   */
+  const CABECERA_DE_RANGO = new RegExp(`${RANGO.desdeFecha}\\D+${RANGO.hastaFecha}`);
+
   it("cada panel muestra las fechas calendario del propio DTO, sin recalcularlas", () => {
     render(<TableroFinanciero paneles={panelesOk()} />);
 
     const seccion = screen.getByRole("region", { name: ETIQUETAS.ingreso_flete });
-    expect(within(seccion).getByText(/2026-07-05/)).toBeInTheDocument();
-    expect(within(seccion).getByText(/2026-08-03/)).toBeInTheDocument();
+    expect(within(seccion).getByText(CABECERA_DE_RANGO)).toBeInTheDocument();
   });
 });
 
@@ -934,11 +949,34 @@ describe("Hotfix — una vista TEMPORAL con filas es la cifra de titular, no una
   it.each(TEMPORALES)("`%s` NO pinta las fechas de la serie", (id) => {
     // La forma del defecto tal como el maestro lo vio: una columna de fechas donde iba el
     // numero. Se afirma sobre un cubo INTERMEDIO, que no aparece en la cabecera del rango.
+    //
+    // AJUSTADO POR LA FEATURE 186, Y ES LA UNICA ASERCION DEL BLOQUE DEL HOTFIX QUE SE
+    // TOCA. Antes decia, ademas de las dos lineas de abajo,
+    // `expect(seccion.textContent).not.toContain(CUBO_INTERMEDIO)`. Esa forma es
+    // INCOMPATIBLE con R1 de la 186 y no por un descuido de nadie: la linea vive DENTRO de
+    // la seccion de la vista y `SerieTextual` emite su alternativa textual —«serie,
+    // categoria: valor»— en el DOM, en `sr-only`, que es exactamente donde un lector de
+    // pantalla lee la grafica. Con la linea puesta, la fecha del cubo TIENE que aparecer
+    // ahi; si no apareciera, la grafica seria muda.
+    //
+    // Lo que este caso mide sigue siendo lo mismo, y sigue matando el defecto original: la
+    // fecha no puede ser el texto PROPIO de ningun elemento —ni celda, ni fila, ni parrafo,
+    // ni titulo—, que es como la pintaba `PanelTabla` (`<td>2026-07-20</td>`). Dentro de la
+    // entrada de la alternativa textual la fecha va acompañada de su serie y su valor, asi
+    // que no es el texto propio de nada y no cuela por aqui.
+    //
+    // Y donde la asercion vieja sigue siendo cierta —la metrica ACUMULADA, que por Q2 = (b)
+    // no lleva linea— se conserva LITERAL, abajo. Sin eso, este caso perderia la unica
+    // version fuerte que le quedaba.
     render(<TableroFinanciero paneles={panelesOk()} />);
 
     const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
     expect(within(seccion).queryByRole("cell", { name: CUBO_INTERMEDIO })).toBeNull();
-    expect(seccion.textContent ?? "").not.toContain(CUBO_INTERMEDIO);
+    expect(within(seccion).queryByText(CUBO_INTERMEDIO)).toBeNull();
+
+    if (DTOS[id].esAcumulado) {
+      expect(seccion.textContent ?? "").not.toContain(CUBO_INTERMEDIO);
+    }
   });
 
   it.each(TEMPORALES)("`%s` no pinta el total al pie, que es la marca del panel de tabla", (id) => {

@@ -6,11 +6,14 @@
 //
 // Lo que NUNCA hace, y no es un olvido:
 //
-//  - NO pasa `avisoRecorte` (R10). Es la unica prop-funcion del contrato de la
-//    130 y una funcion no cruza la frontera RSC: un Server Component que pase una
-//    funcion a un Client Component falla en RENDER, no en compilacion. No hace
-//    falta: `agruparCola` garantiza POR CONSTRUCCION que no hay recorte que
-//    anunciar.
+//  - NO pasa `avisoRecorte` (R10; R12 de la 186). Es la unica prop-funcion del
+//    contrato de la 130 y una funcion no cruza la frontera RSC: un Server Component
+//    que pase una funcion a un Client Component falla en RENDER, no en compilacion.
+//    No hace falta, y por dos vias distintas: en los paneles de categoria
+//    `agruparCola` garantiza POR CONSTRUCCION que no hay recorte que anunciar, y en
+//    la linea temporal lo garantiza el SERVIDOR (R19/R20 de la 180: ningun rango
+//    admisible pasa de `MAX_PUNTOS_SERIE` puntos). Ahi NO se recorta a proposito:
+//    ver ⟨D7⟩ de la 186.
 //  - NO suma, resta ni promedia importes (R14). Toda cifra sale literalmente de un
 //    `bruto`/`neto` del DTO. La unica agregacion es la cola de R20/R21, que el
 //    propio requisito ordena.
@@ -47,6 +50,7 @@ import type { ReactNode } from "react";
 
 import { GraficaBarras } from "@/components/private/analytics/GraficaBarras";
 import { GraficaDonut } from "@/components/private/analytics/GraficaDonut";
+import { GraficaLineas } from "@/components/private/analytics/GraficaLineas";
 import { KpiCard } from "@/components/private/analytics/KpiCard";
 import { TablaResumen } from "@/components/private/analytics/TablaResumen";
 import { formatearValor } from "@/components/private/analytics/formato";
@@ -70,6 +74,9 @@ import {
   esVistaTemporal,
   filasDeVista,
   serieDeVista,
+  serieTemporalDeVista,
+  type TextosCubo,
+  type VistaTemporal,
 } from "./adaptar";
 import type { PanelFinanciero } from "./cargar";
 import { PanelConciliacion } from "./PanelConciliacion";
@@ -101,14 +108,49 @@ const TEXTOS = {
   distribucion: "Distribución",
   comparativa: "Comparativa por categoría",
   detalle: "Detalle por categoría",
+  evolucion: "Evolución en el tiempo",
   vacioTitulo: "Sin movimientos en el rango",
   vacioDescripcion: "La consulta no devolvió ninguna categoría para este rango.",
+  // Feature 186 ⟨D4⟩ — como se nombra un cubo. El prefijo declara el GRANO y la clave
+  // del DTO se concatena literal: el contrato no publica el fin del cubo y el primero y
+  // el ultimo estan truncados al rango, asi que un rotulo de rango seria falso justo en
+  // los dos extremos. Aqui no se escribe ninguna fecha ni ningun literal de idioma: se
+  // escribe la PALABRA que declara el grano, y la fecha la pone el DTO.
+  cuboDia: "Día",
+  cuboSemana: "Semana del",
+  // ⟨D5⟩ — el grano que el rotulador no sabe nombrar. Decir "día" aqui seria afirmar un
+  // grano que no sabemos, y una serie semanal leida como diaria miente sobre siete veces
+  // mas dinero por punto.
+  cuboGranoNoDeclarado: "Cubo",
+  // Feature 186 R3 / ⟨D3⟩ (Q2 = (b), humana 2026-08-06) — POR QUE esta metrica no trae
+  // gráfica, dicho EN PANTALLA. Seis metricas vecinas la tienen y esta no; sin
+  // explicacion, la ausencia se lee como «falta un dato» o «se rompio algo». Nombra el
+  // MOTIVO (un saldo acumulado es monotono por construccion), no solo el hecho.
+  //
+  // NO repite la frase de `saldoAlCorte`, y no es casualidad: aquella habla del TOTAL
+  // (R18 de la 132) y esta de por que no hay serie dibujada. Son dos afirmaciones
+  // distintas y fundirlas dejaria una sola frase que no dice ninguna de las dos.
+  sinSerieAcumulado:
+    "Esta cifra es un saldo acumulado, no el movimiento del período: dibujada como línea solo podría subir o mantenerse, y se leería como una tendencia sin serlo. Por eso esta métrica no trae gráfica de evolución.",
 } as const;
 
 const TEXTO_VACIO = {
   titulo: TEXTOS.vacioTitulo,
   descripcion: TEXTOS.vacioDescripcion,
 } as const;
+
+/**
+ * Los textos con los que `adaptar.ts` rotula cada cubo.
+ *
+ * Se componen aqui y no alli por la misma razon que `etiquetaOtros` en `agruparCola`: el
+ * modulo puro no escribe texto de UI, para que la region entera tenga sus cadenas en un
+ * solo objeto y quede lista para i18n sin tocar un adaptador.
+ */
+const TEXTOS_CUBO: TextosCubo = {
+  dia: TEXTOS.cuboDia,
+  semana: TEXTOS.cuboSemana,
+  granoNoDeclarado: TEXTOS.cuboGranoNoDeclarado,
+};
 
 export interface TableroFinancieroProps {
   /** Objetos PLANOS ya resueltos por `cargar.ts`. Ninguna prop es una función (R10). */
@@ -238,6 +280,65 @@ function serieUnica(vista: VistaFinanciera): SerieDato {
     : acotar(serieDeVista(vista, "bruto"));
 }
 
+/**
+ * Las series de la LINEA temporal: DOS donde el importe trae los dos campos, UNA —la del
+ * bruto— donde no. Mismo criterio y mismo motivo que `seriesComparativas`.
+ *
+ * NO pasa por `acotar` A PROPOSITO (⟨D7⟩ de la 186): fundir fechas en «Otros» no significa
+ * nada en un eje de tiempo, se comeria el final de la serie —que es lo que se mira— y
+ * escondería el dia en que la garantia del servidor (R19/R20 de la 180) se rompa. Si el
+ * servicio mandara mas de `MAX_PUNTOS_SERIE` puntos, lo correcto es que `aplicarTopePuntos`
+ * lance fuera de produccion, que es para lo que esta escrito.
+ */
+function seriesTemporales(vista: VistaTemporal): readonly SerieDato[] {
+  if (!esVistaConNeto(vista)) return [serieTemporalDeVista(vista, "bruto", TEXTOS_CUBO)];
+  return [
+    serieTemporalDeVista(vista, "bruto", TEXTOS_CUBO),
+    serieTemporalDeVista(vista, "neto", TEXTOS_CUBO),
+  ];
+}
+
+/**
+ * La linea de una vista temporal de metrica de FLUJO (R1 de la 186).
+ *
+ * El titulo lleva el sufijo de pieza porque `GraficaMarco` emite su propia
+ * `<section aria-label>`: dos regiones con el mismo nombre son indistinguibles para un
+ * lector de pantalla, y esta cuelga dentro de la seccion de la vista.
+ *
+ * Una grafica POR VISTA, y no una combinada con las seis metricas de flujo: seis series
+ * (mas, contando `bruto` y `neto`) superan `MAX_SERIES` y `aplicarTopeSeries` LANZA fuera
+ * de produccion; y el DTO no declara sumabilidad entre metricas, solo entre vistas.
+ */
+function PanelLineas({
+  titulo,
+  vista,
+  unidad,
+}: {
+  readonly titulo: string;
+  readonly vista: VistaTemporal;
+  readonly unidad: MetricaUnidad;
+}) {
+  return (
+    <GraficaLineas
+      titulo={`${titulo} · ${TEXTOS.evolucion}`}
+      series={seriesTemporales(vista)}
+      unidad={unidad}
+      vacio={TEXTO_VACIO}
+    />
+  );
+}
+
+/**
+ * Por que una vista temporal ACUMULADA no trae linea, dicho en pantalla (R3 de la 186).
+ *
+ * Lo decide el DTO (`esAcumulado`), no una lista de ids escrita aqui — igual que el «saldo
+ * al corte» de `CabeceraPanel` (R18 de la 132). El tablero no sabe, ni tiene por que saber,
+ * cual es la metrica que hoy cae en esta rama.
+ */
+function MotivoSinSerie() {
+  return <p className="text-xs text-muted-foreground">{TEXTOS.sinSerieAcumulado}</p>;
+}
+
 /** Tabla con TODAS las filas del DTO y, al lado, el total literal del DTO. */
 function PanelTabla({
   titulo,
@@ -271,20 +372,27 @@ function PanelTabla({
  *   la tabla con todas las filas: la grafica se lee de un vistazo y la tabla no
  *   esconde ninguna tienda;
  * - una SERIE TEMPORAL (las seis de caja y la cuenta por pagar de mensajero, que declaran
- *   `granularidad` `dia` o `semana`) -> KPI: la cifra de titular del periodo. La 132 les
- *   dio esa forma y la 180 no la retiro; lo que la 180 añadio fue el desglose por fecha,
- *   cuyo panel de lineas es la ficha 186 y NO se adelanta aqui;
+ *   un grano temporal) -> KPI: la cifra de titular del periodo. La 132 les dio esa forma,
+ *   la 180 no la retiro y la 186 no la retira tampoco: lo que la 186 añade es la LINEA
+ *   ENCIMA del KPI (R14), no en su lugar;
  * - una vista SIN filas -> KPI tambien: no hay tabla que pintar;
  * - cualquier otra vista con filas (los desgloses por tienda y por metodo) -> tabla.
+ *
+ * La linea se añade DENTRO de la rama del KPI y no como una quinta rama (⟨D8⟩ de la 186):
+ * asi la conducta que el hotfix del 2026-08-06 restauro —toda vista temporal es KPI— se
+ * conserva literalmente y lo nuevo cuelga de ella en vez de competir con ella.
  */
 function ContenidoDeVista({
   titulo,
   vista,
   unidad,
+  esAcumulado,
 }: {
   readonly titulo: string;
   readonly vista: VistaFinanciera;
   readonly unidad: MetricaUnidad;
+  /** Del DTO, no de una lista de ids: vive en la cabecera de la metrica (R43 de la 127). */
+  readonly esAcumulado: boolean;
 }): ReactNode {
   if (vista.id === VISTA_COD_RECAUDADO_POR_METODO) {
     return (
@@ -318,7 +426,19 @@ function ContenidoDeVista({
   // cifra de titular, y una vista sin filas tampoco tiene tabla que pintar. Antes de la 180
   // la segunda condicion cubria a la primera por accidente; hoy hacen falta las dos.
   if (esVistaTemporal(vista) || vista.filas.length === 0) {
-    return <PanelKpi vista={vista} unidad={unidad} />;
+    return (
+      <>
+        <PanelKpi vista={vista} unidad={unidad} />
+        {/* R1 / R3 / R4 de la 186 — la linea va donde hay grano temporal Y la metrica es
+            de FLUJO; donde es un ACUMULADO va el motivo escrito, y donde no hay grano
+            temporal no va ninguna de las dos cosas. Las dos preguntas salen del DTO
+            (`granularidad` y `esAcumulado`) y de ningun id de metrica (R6). */}
+        {esVistaTemporal(vista) && !esAcumulado ? (
+          <PanelLineas titulo={titulo} vista={vista} unidad={unidad} />
+        ) : null}
+        {esVistaTemporal(vista) && esAcumulado ? <MotivoSinSerie /> : null}
+      </>
+    );
   }
 
   return <PanelTabla titulo={titulo} vista={vista} unidad={unidad} />;
@@ -348,7 +468,12 @@ function SeccionVista({
       {vista.grano === "tienda" ? (
         <p className="text-xs text-muted-foreground">{TEXTOS.limitacionTienda}</p>
       ) : null}
-      <ContenidoDeVista titulo={titulo} vista={vista} unidad={datos.unidad} />
+      <ContenidoDeVista
+        titulo={titulo}
+        vista={vista}
+        unidad={datos.unidad}
+        esAcumulado={datos.esAcumulado}
+      />
     </section>
   );
 }
