@@ -379,3 +379,238 @@ Balance del día completo, sumando los tres chores: **24 → 5**.
 6. **`54757be4` queda cerrado.** Sus dos víctimas están reparadas: `rutearABodegaSatelite` el
    2026-07-31 y `listarCatalogoEstatus` hoy. Si vuelve a aparecer algo colgando de ese commit,
    es una tercera y no estaba prevista.
+
+---
+---
+
+# Tanda 2 — cerrar los huérfanos de capa
+
+**Rama:** la misma, `chore/borrar-acciones-huerfanas`, encima de los 5 commits de la tanda 1.
+**Fecha:** 2026-08-07 · **Decisión:** humana, la misma del día. Los huérfanos que la tanda 1
+nombró en §9 son consecuencia directa de retirar las siete capacidades, igual que la isla de
+Meta lo fue en el PR #312: no se vuelve a preguntar, se cierran.
+
+**Commits, uno por capa:**
+
+| # | Hash | Capa |
+|---|------|------|
+| 6 | `cce3018b` | `chore(types): borra los seis tipos de retorno de las acciones ya borradas` |
+| 7 | `e98876ae` | `chore(services): borra los seis metodos de servicio sin llamador, con sus tests` |
+| 8 | `f0047301` | `chore(repositories): borra los cinco metodos de repositorio sin llamador` |
+
+---
+
+## 11 · Qué se borró, por capa — y qué NO
+
+### Capa 1 (`cce3018b`) — tipos de retorno de las acciones
+
+Los seis de §9.1, todos con **cero** referencias. Arrastra un séptimo, `EstatusLiteDTO`, que era
+la fila de `ListarCatalogoEstatusResult` y no tenía otro usuario. Se verificó que la lectura viva
+del catálogo **no** pasaba por él: `listarOrderStatus` tiene sus propios tipos en
+`lib/types/order-status.ts`.
+
+### Capa 2 (`e98876ae`) — servicios e interfaces
+
+`OrdenService.crear/.obtener/.actualizar/.borrar` (+ el privado `buildUpdateData`),
+`PlantillaMensajeService.obtener` y `VehiculoService.obtener`, con sus declaraciones de interfaz
+y sus cuatro tipos de resultado de servicio. **`IOrdenService` queda con SOLO LECTURAS** y se le
+reescribe la cabecera para que lo diga.
+
+**Lo que NO se tocó, con su llamador comprobado:**
+
+| Superviviente | Por qué |
+|---|---|
+| la **clase** `OrdenService` | `listar` y `listarCompleto` siguen vivas (`lib/actions/ordenes.ts`) |
+| `KNOWN_ROLES` | lo usan las dos lecturas |
+| `UpdateOrdenData` | lo usa `IOrdenRepository.update`, vivo |
+| `PlantillaMensajeRepository.findById` | lo usan `actualizar` y `eliminar` |
+| `buildUpdateData` de `TarifaService` y `UsuarioService` | **homónimos privados**, no son este |
+
+### Capa 3 (`f0047301`) — repositorios
+
+`IOrdenRepository.create`, `.softDelete`, `.existsGeo`, `.existsEstatus` y
+`IVehiculoRepository.findById`, más el tipo `GeoExistence` y la función `mapCreateError`.
+
+**El riesgo obvio, medido y descartado:** `IOrdenRepository.findById` y `.update` están **muy
+vivos** — `findById` lo llaman seis servicios (devoluciones origen y central, historial, meta del
+mensajero, recuperación de bodega, reprogramación) y `update` dos. Un `grep` apresurado de
+«métodos CRUD del repositorio de órdenes» los habría barrido. `CreateOrdenData` y
+`CreateOrdenOpciones` tampoco mueren: son también de `createManyOrdenes` y su hermana con guía.
+
+---
+
+## 12 · El veredicto sobre los tests de autorización
+
+Esto es lo que el encargo pidió tratar con cuidado, así que va con su medición.
+
+### `OrdenService.crear` en `rol-admin-satelite-authz.test.ts`
+
+Ese archivo es un censo de **puertas de autorización** para la feature 19 (`adminSatelite` es un
+rol SIN permisos nuevos). Tenía cuatro; pierde una.
+
+**La regla NO se queda sin testigo, y no hace falta reapuntarla porque ya la había:** el tercer
+bloque del mismo archivo afirma `BulkOrdenService.cargarMasiva` + `adminSatelite` -> `forbidden`.
+Y esa **es la vía viva de creación** — se verificó en el código, no de memoria:
+`BulkOrdenService.cargarMasiva:250` es `if (actor.rol !== "adminTienda") return forbidden`, y
+`cargarMasivaViaApi:367` exige `apiKey`. Es decir, «un adminSatelite no puede crear órdenes»
+sigue afirmado exactamente donde las órdenes se crean.
+
+Reapuntar habría sido **duplicar**. Se borra el bloque y se corrige la cabecera del archivo, que
+decía «cubre las cuatro puertas listadas en el spec»: ahora dice tres, con el motivo y la
+remisión a esta bitácora.
+
+**Lo que sí se pierde, y se dice:** el caso «no-regresión: maestro conserva su resultado exitoso».
+No es reapuntable — tras este borrado **maestro/admin no tienen ninguna vía viva de crear una
+orden** (la carga masiva por sesión es solo `adminTienda`). No es un test que se caiga: es una
+capacidad que ya no existe.
+
+### Los otros casos de autorización
+
+- **Feature 155 (dónde NACE la orden)**, que se probaba vía `crear`: **tres testigos vivos** —
+  `bulk-orden-service.test.ts` (R16, las dos ramas del flag `fulfillment`),
+  `bulk-orden-service.carga-api.test.ts` (vía API key) y `destino-creacion.test.ts` (la función
+  de decisión, aislada).
+- **R24** (rol desconocido -> `forbidden`): conserva testigo en el bloque de `listar`.
+- **R5 de plantillas**: era un **bucle sobre las siete operaciones**; se quita la línea de
+  `obtener` y las otras seis siguen afirmando lo mismo. El test NO se borra.
+- **R28** (la borrada no se lee): sigue mapeado al `listar` de su mismo caso.
+
+---
+
+## 13 · Cinco bloques de test REAPUNTADOS en la capa 3
+
+Aquí es donde la regla «aserción-sobre-lo-muerto no es lo mismo que montaje-para-lo-vivo» rindió
+más. Los cinco afirmaban propiedades de **helpers compartidos y vivos**; `create` era el vehículo.
+
+| Bloque | Reapuntado a | Por qué NO era de `create` |
+|---|---|---|
+| `orden-geocode-enqueue` **R6** | `createManyOrdenes` | era el **único** testigo del `maxIntentos` = 8 (R34) y de la `dedupeKey` CON HASH. El bloque de carga masiva solo miraba el `payload` |
+| `orden-geocode-enqueue` **R7** | `createManyOrdenes` | el encolado va DENTRO de la tx del writer (patrón **outbox**); nadie más lo afirmaba |
+| `orden-geocode-enqueue` **R12/R13** | `createManyOrdenes` | la propiedad es de la `dedupeKey` con hash: sin ella, corregir una dirección chocaría contra una fila `done` (que no se purga) y **la corrección no se geocodificaría jamás** |
+| `orden-historial-atomicidad` **mecanismo #2** | `createManyOrdenes` | el archivo es un **censo POR MECANISMO** de escritura; quitar la fila dejaría la inserción —viva— sin auditar la atomicidad de su rastro |
+| `creacion-bifurcada` **R12** | `createManyOrdenesConGuia` | hace exactamente lo mismo: insertar, numerar, anexar historial y encolar en UNA tx |
+
+`encolarGeocodificacion` es un helper **compartido** por `update`, `createManyOrdenes` y
+`createManyOrdenesConGuia`: por eso el reapuntado es legítimo y no una maniobra para mantener el
+verde.
+
+**Lo que SÍ se borró, con su justificación medida:**
+
+- **R3/R8** (`num_guia IS NULL`, la guarda idempotente de la numeración): tiene **cuatro
+  testigos vivos** — `orden-repository.carga-api.test.ts:105`, `orden-repository.guia.test.ts`
+  (dos casos) y `guia-asignacion-service.test.ts:310`.
+- **155/R9** (la creación NUNCA escribe `mensajero_asignado_id`): pasa a estar garantizada
+  **por el TIPO**, que es más fuerte que un test — `CreateOrdenData` **no tiene ese campo**, y el
+  insert en lote se construye desde él con `toCreateManyInput`.
+- **R39/R40** (`softDelete`): eran los requisitos DE la capacidad retirada. El predicado
+  `deleted_at IS NULL` sigue vivo y probado en TODAS las lecturas.
+- **R37** (el alta manual no toca el lote): requisito DEL alta manual. Hoy la afirmación sería
+  vacua. R40 conserva testigo en el bloque del lote.
+- **P2002 -> `NumRemisionDuplicadoError`**: se va con su traductor. La carga masiva **nunca
+  provoca ese error**: detecta duplicados antes de insertar (`findExistingRemisiones`) y usa
+  `skipDuplicates`.
+
+---
+
+## 14 · El hallazgo de la tanda: un valor de enum se queda sin productor
+
+Es lo más importante de esta tanda y no estaba previsto en el encargo.
+
+**`OrdenRepository.create` era el ÚNICO productor de la familia `creacion_manual`** del enum
+`orden_historial_origen_tipo` (`lib/types/orden-historial.ts:13`, sembrado en la base).
+
+**El valor NO se retira del seed, y es deliberado:** hay **filas históricas reales** en la base
+apuntándolo. Quitarlo dejaría historial existente sin su familia. Lo que desaparece es la
+capacidad de producir filas NUEVAS con esa familia, no las que ya hay.
+
+Se modeló explícito en vez de esconderlo: nueva lista **`FAMILIAS_CON_PRODUCTOR_RETIRADO`** en
+`orden-historial-cobertura.test.ts`, **distinta** de `FAMILIAS_SIN_PRODUCTOR`. La diferencia
+importa: aquéllas *esperan a su feature* (`recoleccion_tienda` espera a la 157); ésta **ya no
+espera a nadie**. Sin esa distinción, alguien leería el hueco como un olvido de implementación y
+se pondría a «arreglarlo».
+
+### El censo de puntos de escritura: 27 -> 26, dejando un HUECO a propósito
+
+La guardia exigía numeración **contigua** `1..27`. Renumerar era la reacción obvia y habría sido
+un error: **`n` es un identificador estable, no un índice**. Lo citan `design §2` y **cuatro
+casos del propio archivo**, que buscan por `n === 12 / 24 / 25 / 26`. Renumerar sale barato
+dentro del archivo y caro fuera.
+
+Se cambió la aserción a la **lista explícita de números vigentes** (con el `2` ausente) y se
+documentó que un punto retirado **jubila su número**. La guardia no se debilita: un hueco NO
+declarado en esa lista sigue rompiendo.
+
+### Y una lección de método, otra vez la misma
+
+Esta guardia **no la cazó mi comprobación de anclas**. Verifiqué los 72 ficheros que selecciona
+`vitest run guard` — pero `orden-historial-cobertura.test.ts` vive en `tests/unit/repositories/`
+y **no lleva «guard» en la ruta**, así que no está entre los 72. Salió en rojo al correr la suite
+de repositorios.
+
+Es el error de la tanda 1 repetido un nivel más arriba: **medí con una herramienta que no cubría
+lo que yo creía**. La regla completa, ya en tercera iteración:
+
+> Un censo que se ancla en símbolos reales puede estar en CUALQUIER archivo de test, se llame
+> como se llame y esté donde esté. `grep --include=*guard*` no basta; `vitest list guard` tampoco.
+> Lo único que basta es **correr la suite** de la zona que tocas.
+
+---
+
+## 15 · Comentarios que pasaban a mentir: seis, corregidos
+
+| Archivo | Qué decía |
+|---|---|
+| `lib/types/orden-historial.ts:13` | «feature 6: `OrdenService.crear`» — nombraba el símbolo borrado como productor vigente |
+| `orden-historial-cobertura.test.ts` | «Los 24 puntos», «numeración 1..27 sin huecos», y `softDelete` en la lista de «no escriben estado» |
+| `creacion-bifurcada` (cabecera) | «las **TRES** rutas de creación» — hoy son dos |
+| `orden-repository.carga-lote.test.ts:20` | «R37 — el alta manual individual (`create`) deja carga_id NULL» |
+| `orden-repository.test.ts` | «`create`/`update` ahora corren en `$transaction`» |
+| **`ordenes-action.test.ts` y `vehiculos-action.test.ts`** | **los escribí YO en la tanda 1**: decían que el doble implementaba la interfaz entera «porque esos métodos siguen declarados en ella». Horas después ya no lo estaban |
+
+Los dos últimos son el aviso útil: **una lápida también caduca**. Si documentas «esto sigue vivo
+por tal razón», la razón puede morir en el commit siguiente — y ser el tuyo.
+
+---
+
+## 16 · Verificación
+
+| Paso | Resultado |
+|---|---|
+| `pnpm run typecheck` tras cada capa | **limpio** las tres veces |
+| `pnpm test:guardias` (72, por RUTA) | **72 archivos / 996 tests OK**, igual que la línea base |
+| Anotaciones `@sin-superficie` | **5 antes y 5 después** — esta tanda no toca Server Actions |
+| `vitest run` repositorios + integración | 98 archivos / 1249 tests OK (tras arreglar el censo) |
+| `vitest run` orden-service + vehiculo + plantilla + ordenes-action + authz | 36 / 437 OK |
+| `eslint` sobre los archivos tocados | **0 errores, 0 advertencias** |
+| **`./init.sh --rapido`** | **`== init OK ==`, exit 0** |
+| — `test:cambiados` | **236 archivos / 3076 tests OK** |
+| — `test:guardias` | **72 / 996 OK** |
+| — `lint` global | 0 errores, 49 advertencias (las mismas preexistentes de la tanda 1; ninguna en un archivo de este chore) |
+
+Sin flakes: ningún test necesitó repetirse en aislado. El salto de `test:cambiados` (38 -> 236)
+confirma lo que ya apuntaba el PR #312: el coste del gate rápido se mide por **capa**, no por
+número de archivos. Tocar `lib/interfaces/` y `lib/types/` arrastra casi todo el grafo.
+
+Que las anotaciones **no se muevan** es la comprobación de que la tanda no se salió del carril:
+la guardia cuenta Server Actions de `lib/actions/**`, y aquí no se ha tocado ninguna — solo
+`lib/types/`, `lib/interfaces/`, `lib/services/`, `lib/repositories/` y tests.
+
+---
+
+## 17 · Lo que queda ABIERTO — y por qué me paré aquí
+
+Tres huérfanos nuevos que **no** son «un método de repositorio o una interfaz sin llamador», que
+es hasta donde llegaba el encargo. Los nombro en vez de borrarlos:
+
+| Huérfano | Estado | Por qué no lo toqué |
+|---|---|---|
+| **`NumRemisionDuplicadoError`** (`IOrdenRepository.ts:210`) | clase sin **ningún** lanzador desde que se fue `mapCreateError` | sigue en la tabla de contrato `DOMAIN_ERROR_CODE` de `lib/errors/normalize.ts:14`, que mapea **por nombre**. Borrarla toca la **taxonomía de errores**, otro subsistema. Además `normalize.test.ts` y el R11 que reapunté construyen la clase por nombre, así que el mapeo sigue probado |
+| **`crearOrdenSchema` + `CrearOrdenInput`** | cero consumidores de producción | es un **contrato de validación** con test propio (`orden-schemas.test.ts`) y citado en prosa por `IOrdenRepository.ts:13` para explicar **por qué una columna es nullable**, y por cuatro specs |
+| **`actualizarOrdenSchema` + `ActualizarOrdenInput`** | ídem | ídem: `IOrdenRepository.ts:47` y `OrdenRepository.ts:894` lo citan para explicar que un guard es **estructuralmente inalcanzable** — un invariante VIVO que se apoya en él |
+
+La razón de fondo es la misma para los tres: **son documentación de invariantes de código vivo**.
+Borrarlos no es quitar código muerto, es quitarle a código vivo la explicación de por qué es como
+es. Merece su propia decisión, no el arrastre de ésta.
+
+**Nada más quedó suelto.** Se comprobó que no queda ninguna referencia de código a lo borrado en
+las tres capas; las únicas menciones son las lápidas dejadas a propósito.
