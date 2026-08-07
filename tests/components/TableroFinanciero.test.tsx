@@ -9,8 +9,6 @@ import {
   IDS_FINANCIERAS_ACUMULADAS,
   IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA,
   IDS_FINANCIERAS_SERVIDAS,
-  VISTA_COD_RECAUDADO_POR_METODO,
-  VISTA_COD_RECAUDADO_POR_TIENDA,
   type GranularidadVista,
   type ImporteAnalitico,
   type MetricaFinancieraId,
@@ -25,11 +23,13 @@ import {
 } from "@/tests/fixtures/importe-analitico";
 import {
   cubosDelRango,
+  dtoConciliacionServido,
+  dtoNoTemporalServido,
   dtoTemporalServido,
   RANGO_TABLERO,
   type ImporteDeFila,
   type MetricaTemporalServida,
-} from "@/tests/fixtures/dto-financiero-temporal";
+} from "@/tests/fixtures/dto-financiero-servido";
 
 // Feature 132 (T4.1, T4.2) — los paneles del tablero financiero.
 //
@@ -147,7 +147,7 @@ function cifrasDeLaSerie(total: ImporteAnalitico): ImporteDeFila {
  *
  * LA FORMA YA NO SE ESCRIBE AQUI (guardia de arnes del 2026-08-07): `grano`, `fuente`,
  * `sumableCon`, `granularidad`, el id de la vista, `esAcumulado`, la unidad y la cardinalidad de
- * la serie salen de `tests/fixtures/dto-financiero-temporal.ts`, que los DERIVA de las mismas
+ * la serie salen de `tests/fixtures/dto-financiero-servido.ts`, que los DERIVA de las mismas
  * funciones puras que el servicio usa y que `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts`
  * ATA por ejecucion contra la salida real. Este archivo solo aporta la etiqueta y las cifras.
  *
@@ -224,61 +224,44 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
     ETIQUETAS.ganancia_ordenex,
     importeConNeto("6000.00", "5400.00"),
   ),
-  cod_recaudado: {
-    tipo: "vistas",
-    metricaId: "cod_recaudado",
-    etiqueta: ETIQUETAS.cod_recaudado,
-    unidad: "moneda",
-    rango: RANGO,
-    esAcumulado: false,
-    vistas: [
+  // TANDA 2 de la guardia de arne (2026-08-07) — la IDENTIDAD de las dos vistas
+  // (`id`, `grano`, `fuente`, `sumableCon`, `granularidad`) y el ORDEN en que van ya no se
+  // escriben aqui: salen de `IDENTIDAD_NO_TEMPORAL` y las ata contra el servicio real
+  // `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts`. Este archivo aporta lo que la
+  // identidad no fija y el servicio tampoco puede fijar: las FILAS y el TOTAL, que en un desglose
+  // los deciden los datos.
+  //
+  // El ORDEN importa y por eso viaja en la fixture: la primera vista es la del metodo de pago
+  // (donut) y la segunda la de tienda (barras); los casos de abajo indexan `[0]` y `[1]`.
+  cod_recaudado: dtoNoTemporalServido("cod_recaudado", ETIQUETAS.cod_recaudado, [
+    {
+      filas: [
+        { cubo: "efectivo", importe: importeConNeto("111.11", "101.11") },
+        { cubo: "simpe", importe: importeConNeto("122.22", "102.22") },
+        { cubo: "transferencia", importe: importeConNeto("133.33", "103.33") },
+      ],
+      total: importeConNeto("366.66", "311.11"),
+    },
+    {
+      // SEIS cubos con MAX_SERIES = 5: sin `agruparCola` la grafica LANZA
+      // `SeriesExcedidasError` fuera de produccion, asi que este numero de
+      // filas es parte de la prueba.
+      filas: CUBOS_TIENDA.map((cubo, indice) => ({
+        cubo,
+        importe: importeConNeto(`${201 + indice}.00`, `${101 + indice}.00`),
+      })),
+      total: importeConNeto("1206.00", "722.22"),
+    },
+  ]),
+  // TANDA 2 — la identidad la pone `IDENTIDAD_NO_TEMPORAL`. Aqui vivia la divergencia que la
+  // §6.5 de la bitacora dejo abierta: el doble declaraba `id: "cuenta_por_pagar_tienda__vista"`
+  // y el servicio publica `"cuenta_por_pagar_tienda"`, sin sufijo. Se ato primero y se corrigio
+  // despues; corregirla sin atarla habria recreado el fallo que la guardia cierra.
+  cuenta_por_pagar_tienda: dtoNoTemporalServido(
+    "cuenta_por_pagar_tienda",
+    ETIQUETAS.cuenta_por_pagar_tienda,
+    [
       {
-        id: VISTA_COD_RECAUDADO_POR_METODO,
-        grano: "metodo_pago",
-        fuente: "cierre_dia",
-        sumableCon: [],
-        // R4 — el cubo es el metodo de pago, no una fecha: `no_temporal`, declarado.
-        granularidad: "no_temporal",
-        filas: [
-          { cubo: "efectivo", importe: importeConNeto("111.11", "101.11") },
-          { cubo: "simpe", importe: importeConNeto("122.22", "102.22") },
-          { cubo: "transferencia", importe: importeConNeto("133.33", "103.33") },
-        ],
-        total: importeConNeto("366.66", "311.11"),
-      },
-      {
-        id: VISTA_COD_RECAUDADO_POR_TIENDA,
-        grano: "tienda",
-        fuente: "wallet_tienda_movimiento",
-        sumableCon: [],
-        // R4 — el cubo es la tienda: `no_temporal`.
-        granularidad: "no_temporal",
-        // SEIS cubos con MAX_SERIES = 5: sin `agruparCola` la grafica LANZA
-        // `SeriesExcedidasError` fuera de produccion, asi que este numero de
-        // filas es parte de la prueba.
-        filas: CUBOS_TIENDA.map((cubo, indice) => ({
-          cubo,
-          importe: importeConNeto(`${201 + indice}.00`, `${101 + indice}.00`),
-        })),
-        total: importeConNeto("1206.00", "722.22"),
-      },
-    ],
-  },
-  cuenta_por_pagar_tienda: {
-    tipo: "vistas",
-    metricaId: "cuenta_por_pagar_tienda",
-    etiqueta: ETIQUETAS.cuenta_por_pagar_tienda,
-    unidad: "moneda",
-    rango: RANGO,
-    esAcumulado: true,
-    vistas: [
-      {
-        id: "cuenta_por_pagar_tienda__vista",
-        grano: "tienda",
-        fuente: "wallet_tienda_movimiento",
-        sumableCon: [],
-        // R4 — el cubo es la tienda: `no_temporal`.
-        granularidad: "no_temporal",
         filas: [
           { cubo: CUBOS_TIENDA[0], importe: importeConNeto("55.00", "50.00") },
           { cubo: CUBOS_TIENDA[1], importe: importeConNeto("66.00", "60.00") },
@@ -313,7 +296,7 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         total: importeConNeto("140.00", "128.00"),
       },
     ],
-  },
+  ),
   // `esAcumulado: true` YA NO SE PASA A MANO: lo deriva `dtoTemporalServido` de
   // `esMetricaAcumulada`, la misma funcion del contrato que el servicio llama en su cabecera.
   // Era el ultimo campo de la cabecera que este doble podia contradecir en silencio, y no es
@@ -324,37 +307,35 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
     ETIQUETAS.cuenta_por_pagar_mensajero,
     importeConNeto("88.00", "80.00"),
   ),
-  conciliacion_cierres: {
-    tipo: "conciliacion",
-    metricaId: "conciliacion_cierres",
-    etiqueta: ETIQUETAS.conciliacion_cierres,
-    unidad: "moneda",
-    rango: RANGO,
-    esAcumulado: false,
-    conciliacion: {
-      porEstado: [
-        {
-          nivel: "cierre_dia",
-          estado: "aprobado",
-          cantidad: 7,
-          totales: {
-            efectivo: "10.00",
-            simpe: "11.00",
-            transferencia: "12.00",
-            general: "33.00",
-          },
-          fechadoPor: "resuelto_at",
+  // TANDA 2 — la cabecera la construye `dtoConciliacionServido`, y con ella llega el hallazgo mas
+  // caro de esta tanda: `unidad` NO es `"moneda"` sino `"conteo"`, que es lo que el catalogo
+  // declara para esta metrica y lo que el servicio publica. Este doble decia `"moneda"` desde la
+  // 132. La consecuencia NO es cosmetica y esta abierta: `PanelConciliacion.tsx:140` formatea con
+  // `datos.unidad` las TRES cifras de dinero del cuadre, asi que en produccion se pintan
+  // redondeadas y sin moneda. Ver la bitacora §4 bis.
+  conciliacion_cierres: dtoConciliacionServido(ETIQUETAS.conciliacion_cierres, {
+    porEstado: [
+      {
+        nivel: "cierre_dia",
+        estado: "aprobado",
+        cantidad: 7,
+        totales: {
+          efectivo: "10.00",
+          simpe: "11.00",
+          transferencia: "12.00",
+          general: "33.00",
         },
-      ],
-      cuadre: {
-        cuadra: true,
-        totalSnapshot: "33.00",
-        totalLedger: "33.00",
-        diferencia: "0.00",
-        cierresDescuadrados: [],
+        fechadoPor: "resuelto_at",
       },
+    ],
+    cuadre: {
+      cuadra: true,
+      totalSnapshot: "33.00",
+      totalLedger: "33.00",
+      diferencia: "0.00",
+      cierresDescuadrados: [],
     },
-  },
+  }),
 };
 
 /** Los paneles "todo bien", derivados de la CONSTANTE del contrato y no de una lista local. */

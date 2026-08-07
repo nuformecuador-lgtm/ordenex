@@ -3,17 +3,25 @@ import { describe, expect, it } from "vitest";
 import { trocear } from "@/lib/analytics/cubo-temporal";
 import {
   IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA,
+  IDS_FINANCIERAS_SERVIDAS,
   type ResultadoFinanciero,
+  type ResultadoFinancieroConciliacion,
   type ResultadoFinancieroVistas,
   type VistaFinanciera,
 } from "@/lib/types/analitica-financiera";
 import { importeConNeto } from "@/tests/fixtures/importe-analitico";
 import {
+  dtoConciliacionServido,
+  dtoNoTemporalServido,
   dtoTemporalServido,
+  IDENTIDAD_NO_TEMPORAL,
   rangoResuelto,
   RANGO_TABLERO,
+  UNIDAD_SERVIDA,
+  type IdentidadDeVista,
+  type MetricaNoTemporalServida,
   type MetricaTemporalServida,
-} from "@/tests/fixtures/dto-financiero-temporal";
+} from "@/tests/fixtures/dto-financiero-servido";
 
 import { armarServicio, consultaDe, type DatosFinancieros } from "../services/_dobles-analitica-financiera";
 
@@ -48,7 +56,7 @@ import { armarServicio, consultaDe, type DatosFinancieros } from "../services/_d
 // basta con afirmar aqui «el servicio emite treinta filas»: eso comprobaria el servicio contra
 // una constante escrita al lado —el espejo consigo mismo— y seguiria verde con el doble
 // mintiendo, que es exactamente lo que paso. La forma del doble se saco del `.test.tsx` a
-// `tests/fixtures/dto-financiero-temporal.ts` (a) DERIVADA de las mismas funciones puras que el
+// `tests/fixtures/dto-financiero-servido.ts` (a) DERIVADA de las mismas funciones puras que el
 // servicio usa y (b) comparada AQUI, ejecutando las dos partes. El test de componente importa
 // ESE constructor. Consecuencia: editar la forma del doble para que describa un DTO que el
 // servicio ya no produce pone ROJA esta guardia, aunque los 93 casos de componente sigan verdes.
@@ -140,16 +148,53 @@ function formaDeDto(dto: ResultadoFinancieroVistas) {
   };
 }
 
+/**
+ * La IDENTIDAD de una vista: lo que el servicio fija POR CODIGO.
+ *
+ * Es `formaDeVista` menos todo lo que depende de los datos. Existe para las vistas NO temporales
+ * (tanda 2), donde la cardinalidad y el orden de las filas los decide el repositorio y por tanto
+ * no hay nada que atar; la identidad, en cambio, esta escrita en el manejador y sí.
+ */
+function identidadDeVista(vista: VistaFinanciera): IdentidadDeVista {
+  return {
+    id: vista.id,
+    grano: vista.grano,
+    fuente: vista.fuente,
+    sumableCon: [...vista.sumableCon],
+    granularidad: vista.granularidad,
+  };
+}
+
+/** La cabecera del DTO, sin `etiqueta` (mismo criterio y mismo motivo que `formaDeDto`). */
+function cabeceraDe(dto: ResultadoFinanciero) {
+  return {
+    tipo: dto.tipo,
+    metricaId: dto.metricaId,
+    unidad: dto.unidad,
+    rango: { ...dto.rango },
+    esAcumulado: dto.esAcumulado,
+  };
+}
+
+/** El DTO que el SERVICIO produce, sin estrechar: `conciliacion_cierres` no es de vistas. */
+async function delServicioCrudo(
+  metricaId: string,
+  datos: Partial<DatosFinancieros> = {},
+): Promise<ResultadoFinanciero> {
+  const { servicio } = armarServicio(datos);
+  const r = await servicio.consultar(consultaDe(metricaId, FILTRO_TABLERO));
+  if (r.status !== "ok") throw new Error(`${metricaId}: el servicio devolvio ${r.status}`);
+  return r.datos;
+}
+
 /** El DTO que el SERVICIO produce hoy para esa metrica y esa ventana. */
 async function delServicio(
   metricaId: string,
   datos: Partial<DatosFinancieros> = {},
 ): Promise<ResultadoFinancieroVistas> {
-  const { servicio } = armarServicio(datos);
-  const r = await servicio.consultar(consultaDe(metricaId, FILTRO_TABLERO));
-  if (r.status !== "ok") throw new Error(`${metricaId}: el servicio devolvio ${r.status}`);
-  if (r.datos.tipo !== "vistas") throw new Error(`${metricaId}: el DTO no es de vistas`);
-  return r.datos;
+  const datosDto = await delServicioCrudo(metricaId, datos);
+  if (datosDto.tipo !== "vistas") throw new Error(`${metricaId}: el DTO no es de vistas`);
+  return datosDto;
 }
 
 /**
@@ -373,5 +418,256 @@ describe("autocomprobacion · el comparador detecta lo que dice detectar", () =>
       expect(doble.vistas, id).toHaveLength(1);
       expect(doble.vistas[0]!.filas, id).toHaveLength(30);
     }
+  });
+});
+
+/* ========================================================================== */
+/* TANDA 2 (2026-08-07) — LAS TRES METRICAS NO TEMPORALES                     */
+/* ========================================================================== */
+//
+// La §6.5 de `progress/impl_guardia-servicio-dobles.md` dejaba esto abierto por escrito: las
+// fixtures de `cod_recaudado` (dos vistas), `cuenta_por_pagar_tienda` y `conciliacion_cierres`
+// seguian siendo declaraciones libres, con una divergencia YA MEDIDA
+// (`id: "cuenta_por_pagar_tienda__vista"` frente al `"cuenta_por_pagar_tienda"` que el servicio
+// publica). Se ata primero y se corrige despues, en ese orden.
+//
+// LA FRONTERA DE LO ATABLE, que es lo unico que hay que entender de este bloque. En una vista
+// TEMPORAL la cardinalidad de las filas la decide el RANGO (`serieDensa` reparte sobre
+// `cubos.map(() => [])`), asi que es una propiedad del codigo y se puede atar. En un desglose por
+// tienda o por metodo de pago la deciden los DATOS: `porCubo` agrupa lo que el repositorio
+// devolvio y conserva su orden de llegada. Medido abajo: con el repositorio vacio las tres
+// publican CERO filas y con material publican las que haya, en el orden en que llegaron. Ahi no
+// hay nada que atar sin inventarselo, y forzarlo convertiria la guardia en una fixture disfrazada.
+//
+// Lo que SI esta escrito en el manejador y por tanto se ata: el id de la vista, su grano, su
+// fuente, `sumableCon`, la granularidad, el NUMERO de vistas, EL ORDEN en que se publican y la
+// cabecera entera menos la etiqueta.
+
+/** Los datos de una vista no temporal del doble: relleno, porque la identidad no los mira. */
+const RELLENO = {
+  filas: [{ cubo: "cubo-de-relleno", importe: importeConNeto("1.00", "1.00") }],
+  total: importeConNeto("1.00", "1.00"),
+};
+
+/** El doble de una metrica no temporal, con tantas vistas como el modulo declara. */
+function dobleNoTemporal(metricaId: MetricaNoTemporalServida): ResultadoFinancieroVistas {
+  return dtoNoTemporalServido(
+    metricaId,
+    "etiqueta que esta guardia no compara",
+    IDENTIDAD_NO_TEMPORAL[metricaId].map(() => RELLENO),
+  );
+}
+
+/** El doble de `conciliacion_cierres`, la unica servida cuyo `tipo` no es de vistas. */
+function dobleConciliacion(): ResultadoFinancieroConciliacion {
+  return dtoConciliacionServido("etiqueta que esta guardia no compara", {
+    porEstado: [],
+    cuadre: {
+      cuadra: true,
+      totalSnapshot: "0.00",
+      totalLedger: "0.00",
+      diferencia: "0.00",
+      cierresDescuadrados: [],
+    },
+  });
+}
+
+/** Material que hace que las no temporales publiquen filas de verdad. */
+const CON_DESGLOSE: Partial<DatosFinancieros> = {
+  porMetodo: [
+    { metodo: "transferencia", suma: "3.00" },
+    { metodo: "efectivo", suma: "1.00" },
+  ],
+  porTienda: [
+    { tiendaId: "t-zzz", tipo: "credito", suma: "10.00" },
+    { tiendaId: "t-aaa", tipo: "credito", suma: "20.00" },
+  ],
+  saldoTiendas: [
+    { tiendaId: "t-mmm", tipo: "credito", suma: "70.00" },
+    { tiendaId: "t-bbb", tipo: "debito", suma: "30.00" },
+  ],
+};
+
+/** Las dos que publican vistas. `conciliacion_cierres` va aparte: no publica ninguna. */
+const CON_VISTAS_NO_TEMPORALES: readonly MetricaNoTemporalServida[] = [
+  "cod_recaudado",
+  "cuenta_por_pagar_tienda",
+];
+
+describe("el doble NO temporal declara la identidad de vista que el servicio publica", () => {
+  it("identidad y ORDEN de cada vista, con el repositorio vacio y con desglose", async () => {
+    let vistas = 0;
+    for (const escenario of [{}, CON_DESGLOSE]) {
+      for (const id of CON_VISTAS_NO_TEMPORALES) {
+        const real = await delServicio(id, escenario);
+        // Se compara el ARRAY entero, no un conjunto: el orden es parte de lo que se ata.
+        expect(
+          IDENTIDAD_NO_TEMPORAL[id],
+          `${id}: el doble describe vistas que el servicio no publica`,
+        ).toEqual(real.vistas.map(identidadDeVista));
+        vistas += real.vistas.length;
+      }
+    }
+    // 2 escenarios x (2 vistas de cod_recaudado + 1 de cuenta_por_pagar_tienda).
+    expect(vistas, "el censo no llego a ninguna vista no temporal").toBe(6);
+  });
+
+  it("`conciliacion_cierres` no publica NINGUNA vista, y el doble declara cero", async () => {
+    // Se afirma por los dos lados: el modulo declara la lista vacia Y el servicio devuelve un DTO
+    // de otro `tipo`, sin clave `vistas`. Si algun dia esa metrica pasara a servir vistas, esto se
+    // pone rojo en vez de dejar la lista vacia pasando por «no hay nada que mirar».
+    expect(IDENTIDAD_NO_TEMPORAL.conciliacion_cierres).toEqual([]);
+    const real = await delServicioCrudo("conciliacion_cierres", CON_DESGLOSE);
+    expect(real.tipo).toBe("conciliacion");
+    expect(Object.keys(real)).not.toContain("vistas");
+    expect(Object.keys(real).sort()).toEqual([
+      "conciliacion",
+      "esAcumulado",
+      "etiqueta",
+      "metricaId",
+      "rango",
+      "tipo",
+      "unidad",
+    ]);
+  });
+
+  it("la cabecera de las tres coincide campo a campo con la del servicio", async () => {
+    for (const id of CON_VISTAS_NO_TEMPORALES) {
+      expect(cabeceraDe(dobleNoTemporal(id)), id).toEqual(cabeceraDe(await delServicioCrudo(id)));
+    }
+    expect(cabeceraDe(dobleConciliacion())).toEqual(
+      cabeceraDe(await delServicioCrudo("conciliacion_cierres")),
+    );
+  });
+});
+
+describe("la UNIDAD de las diez servidas, atada por ejecucion", () => {
+  it("`UNIDAD_SERVIDA` es la que el servicio publica, y NO son todas `moneda`", async () => {
+    // EL HALLAZGO CARO DE LA TANDA 2. `conciliacion_cierres` publica `conteo` —lo declara el
+    // catalogo— y los dos dobles del repo decian `moneda`. No es cosmetico: `PanelConciliacion`
+    // formatea con `datos.unidad` las TRES cifras de dinero del cuadre
+    // (`PanelConciliacion.tsx:140`), asi que con la unidad de verdad se pintan REDONDEADAS y sin
+    // moneda. Queda dicho aqui y ABIERTO en la bitacora §4 bis: esta guardia no arregla la
+    // pantalla, solo impide que el doble lo siga tapando.
+    const obtenido: Record<string, string> = {};
+    for (const id of IDS_FINANCIERAS_SERVIDAS) {
+      obtenido[id] = (await delServicioCrudo(id)).unidad;
+    }
+    expect(obtenido).toEqual(UNIDAD_SERVIDA);
+    // El contrapeso que impide que el caso pase por uniformidad: hay MAS DE UNA unidad.
+    expect(new Set(Object.values(obtenido)).size).toBeGreaterThan(1);
+    expect(obtenido.conciliacion_cierres).toBe("conteo");
+  });
+});
+
+describe("lo que NO se ata de una vista no temporal, y la medicion que lo justifica", () => {
+  it("sus filas las deciden los DATOS: cero con el repositorio vacio, N con material", async () => {
+    // Si esto dejara de ser cierto —si la cardinalidad pasara a depender del rango, como en una
+    // serie temporal—, la exclusion de `filas` de esta mitad de la guardia dejaria de estar
+    // justificada y habria que atarlas tambien. Por eso se mide en vez de suponerse.
+    const vacio = await delServicio("cod_recaudado");
+    expect(vacio.vistas.map((v) => v.filas.length)).toEqual([0, 0]);
+
+    const conDatos = await delServicio("cod_recaudado", CON_DESGLOSE);
+    expect(conDatos.vistas.map((v) => v.filas.length)).toEqual([2, 2]);
+    // Y el ORDEN de las filas es el de llegada del repositorio, no uno propio: `transferencia`
+    // llega antes que `efectivo` en `CON_DESGLOSE` y sale igual.
+    expect(conDatos.vistas[0]!.filas.map((f) => f.cubo)).toEqual(["transferencia", "efectivo"]);
+    expect(conDatos.vistas[1]!.filas.map((f) => f.cubo)).toEqual(["t-zzz", "t-aaa"]);
+  });
+
+  it("el orden de las DOS vistas de `cod_recaudado` si es estable entre corridas", async () => {
+    // La otra cara: las filas varian con los datos, las VISTAS no. `deRecaudo` devuelve
+    // `[vistaMetodo, vistaTienda]`, un literal. Se comprueba porque ni `specs/127-*` ni
+    // `specs/132-*` lo declaran en ninguna parte y hay dos consumidores que dependen de el (el
+    // tablero pinta en orden de DTO; el test de componente indexa `[0]` donut y `[1]` barras).
+    const ordenes = new Set<string>();
+    for (let corrida = 0; corrida < 5; corrida += 1) {
+      const real = await delServicio("cod_recaudado", corrida % 2 === 0 ? {} : CON_DESGLOSE);
+      ordenes.add(real.vistas.map((v) => v.id).join(" | "));
+    }
+    expect([...ordenes]).toHaveLength(1);
+    // Y las dos vistas NO son intercambiables: tienen grano y fuente distintos, asi que el orden
+    // decide que panel se pinta con cual.
+    const real = await delServicio("cod_recaudado");
+    expect(real.vistas[0]!.grano).toBe("metodo_pago");
+    expect(real.vistas[1]!.grano).toBe("tienda");
+    expect(real.vistas[0]!.fuente).not.toBe(real.vistas[1]!.fuente);
+  });
+});
+
+describe("autocomprobacion tanda 2 · el comparador de identidad detecta lo que dice detectar", () => {
+  /** La identidad declarada, con una vista alterada. */
+  function identidadMutada(
+    metricaId: MetricaNoTemporalServida,
+    indice: number,
+    cambio: Partial<IdentidadDeVista>,
+  ): readonly IdentidadDeVista[] {
+    return IDENTIDAD_NO_TEMPORAL[metricaId].map((identidad, i) =>
+      i === indice ? { ...identidad, ...cambio } : identidad,
+    );
+  }
+
+  it("(f) el sufijo `__vista` que el doble llevaba hasta hoy NO coincide con el servicio", async () => {
+    // Es la divergencia que la §6.5 dejo abierta, ejercida como mutacion permanente: si alguien se
+    // la devuelve al doble, esto se pone rojo. Hasta la tanda 2 ninguna prueba del repo la veia —
+    // `cuenta_por_pagar_tienda` trae UNA sola vista, asi que su id no llega al nombre accesible y
+    // ningun caso de componente lo mira.
+    const real = (await delServicio("cuenta_por_pagar_tienda")).vistas.map(identidadDeVista);
+    const mutada = identidadMutada("cuenta_por_pagar_tienda", 0, {
+      id: "cuenta_por_pagar_tienda__vista",
+    });
+    expect(mutada).not.toEqual(real);
+    expect(IDENTIDAD_NO_TEMPORAL.cuenta_por_pagar_tienda).toEqual(real);
+  });
+
+  it("(g) las dos vistas de `cod_recaudado` INTERCAMBIADAS no coinciden con el servicio", async () => {
+    // La mutacion que mide que el ORDEN se ata de verdad. Con un comparador de conjuntos —o con un
+    // `sort()` de mas— esto pasaria en verde y el donut podria acabar donde van las barras.
+    const real = (await delServicio("cod_recaudado")).vistas.map(identidadDeVista);
+    const intercambiadas = [...IDENTIDAD_NO_TEMPORAL.cod_recaudado].reverse();
+    expect(intercambiadas).not.toEqual(real);
+    expect(IDENTIDAD_NO_TEMPORAL.cod_recaudado).toEqual(real);
+  });
+
+  it("(h) cada campo de la identidad discrimina por separado", async () => {
+    const real = (await delServicio("cod_recaudado")).vistas.map(identidadDeVista);
+    const mutaciones: readonly [string, Partial<IdentidadDeVista>][] = [
+      ["id", { id: "cod_recaudado" }],
+      ["grano", { grano: "fecha" }],
+      ["fuente", { fuente: "wallet_movimiento" }],
+      ["sumableCon", { sumableCon: ["otra_vista"] }],
+      ["granularidad", { granularidad: "dia" }],
+    ];
+    for (const [nombre, cambio] of mutaciones) {
+      expect(
+        identidadMutada("cod_recaudado", 0, cambio),
+        `el comparador no ve una mutacion de ${nombre}`,
+      ).not.toEqual(real);
+    }
+  });
+
+  it("(i) una unidad equivocada en el doble NO coincide con la del servicio", async () => {
+    // La mutacion que corresponde al hallazgo: devolverle `moneda` a `conciliacion_cierres`.
+    const real = await delServicioCrudo("conciliacion_cierres");
+    const cabeceraMutada = { ...cabeceraDe(dobleConciliacion()), unidad: "moneda" as const };
+    expect(cabeceraMutada).not.toEqual(cabeceraDe(real));
+    expect(cabeceraDe(dobleConciliacion())).toEqual(cabeceraDe(real));
+  });
+
+  it("(j) el conjunto no temporal no esta vacio y cubre las tres metricas", () => {
+    const declaradas = Object.keys(IDENTIDAD_NO_TEMPORAL).sort();
+    expect(declaradas).toEqual([
+      "cod_recaudado",
+      "conciliacion_cierres",
+      "cuenta_por_pagar_tienda",
+    ]);
+    // Las siete temporales mas estas tres son las diez del contrato: ninguna queda sin familia.
+    expect(declaradas.length + IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA.length).toBe(
+      IDS_FINANCIERAS_SERVIDAS.length,
+    );
+    // Y hay vistas de verdad que mirar: dos metricas con vista, una con ninguna.
+    expect(IDENTIDAD_NO_TEMPORAL.cod_recaudado).toHaveLength(2);
+    expect(IDENTIDAD_NO_TEMPORAL.cuenta_por_pagar_tienda).toHaveLength(1);
   });
 });

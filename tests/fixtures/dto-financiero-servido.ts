@@ -4,15 +4,20 @@ import type { DimensionAnalitica, MetricaUnidad, RangoResuelto, TablaDinero } fr
 import {
   esMetricaAcumulada,
   IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA,
+  VISTA_COD_RECAUDADO_POR_METODO,
+  VISTA_COD_RECAUDADO_POR_TIENDA,
   type FilaFinanciera,
   type GranularidadVista,
   type ImporteAnalitico,
+  type MetricaFinancieraId,
   type RangoFinanciero,
+  type ResultadoConciliacion,
+  type ResultadoFinancieroConciliacion,
   type ResultadoFinancieroVistas,
   type VistaFinanciera,
 } from "@/lib/types/analitica-financiera";
 
-// GUARDIA DE ARNES (2026-08-07, sin ficha) — EL DOBLE DE UNA METRICA TEMPORAL DEL TABLERO.
+// GUARDIA DE ARNES (2026-08-07, sin ficha) — LA FORMA QUE EL SERVICIO SIRVE, PARA LOS DOBLES.
 //
 // POR QUE ESTE ARCHIVO EXISTE, con nombre y fecha del incidente que lo paga:
 //
@@ -28,8 +33,20 @@ import {
 // mundo que no existe, y el componente y su prueba se equivocan igual, asi que no se
 // contradicen nunca.
 //
+// TANDA 2 (2026-08-07) — este modulo cubria solo las SIETE metricas temporales y ahora cubre las
+// DIEZ. La §6.5 de la bitacora dejaba abierto que las fixtures no temporales (`cod_recaudado` con
+// sus dos vistas, `cuenta_por_pagar_tienda`, `conciliacion_cierres`) seguian siendo declaraciones
+// libres, con una divergencia ya medida (`cuenta_por_pagar_tienda__vista`). Se ata primero y se
+// corrige despues, en ese orden: corregir sin atar recrea el fallo que esta guardia cierra —una
+// declaracion libre que hoy acierta—.
+//
+// LO QUE NO SE ATA DE LAS NO TEMPORALES, y es la diferencia que importa: la CARDINALIDAD y el
+// ORDEN de sus filas los deciden los DATOS (`porCubo` conserva el orden de llegada del
+// repositorio), no el rango. En una serie temporal la densidad la decide `trocear` y por eso es
+// atable; en un desglose por tienda o por metodo de pago no hay nada que atar sin inventarselo.
+//
 // LA DECISION DE DISENO, escrita aqui porque es lo unico que impide que vuelva a pasar: la forma
-// del DTO temporal deja de ser una DECLARACION LIBRE dentro de un archivo de test y pasa a ser
+// del DTO deja de ser una DECLARACION LIBRE dentro de un archivo de test y pasa a ser
 // (a) DERIVADA de las mismas funciones puras que el servicio usa —`resolverRango`, `trocear`,
 // `granularidadDe`, `esMetricaAcumulada`— y (b) ATADA por ejecucion a la salida real del
 // servicio en `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts`. Las dos mitades
@@ -81,8 +98,30 @@ export const RANGO_TABLERO: RangoFinanciero = {
  */
 export const GRANO_TEMPORAL: DimensionAnalitica = "fecha";
 
-/** La unidad de las diez financieras del catalogo. */
-export const UNIDAD_TEMPORAL: MetricaUnidad = "moneda";
+/**
+ * La UNIDAD que el servicio publica en la cabecera de cada metrica, sacada del catalogo.
+ *
+ * NO SON TODAS `moneda`, y descubrirlo es el hallazgo caro de la tanda 2: `conciliacion_cierres`
+ * publica **`conteo`** (`lib/analytics/metrics.ts`: `unidad: "conteo"`, `unidadDeConteo: "moneda"`),
+ * porque lo que esa metrica cuenta son CIERRES por estado; el dinero que ademas reporta va en las
+ * columnas de la tabla, que declaran su unidad aparte. Los dos dobles del repo declaraban
+ * `unidad: "moneda"` para ella, y esa mentira tiene consecuencia VISIBLE: ver la bitacora
+ * `progress/impl_guardia-servicio-dobles.md` §4 bis (defecto abierto, `PanelConciliacion.tsx:140`).
+ *
+ * Exhaustivo sobre `MetricaFinancieraId`: una metrica nueva no compila hasta declarar su unidad.
+ */
+export const UNIDAD_SERVIDA: Readonly<Record<MetricaFinancieraId, MetricaUnidad>> = {
+  ingreso_flete: "moneda",
+  ingreso_comision_cod: "moneda",
+  ingreso_iva: "moneda",
+  egresos: "moneda",
+  dinero_en_caja: "moneda",
+  ganancia_ordenex: "moneda",
+  cod_recaudado: "moneda",
+  cuenta_por_pagar_tienda: "moneda",
+  cuenta_por_pagar_mensajero: "moneda",
+  conciliacion_cierres: "conteo",
+};
 
 /**
  * De que tabla sale cada una, tal como el servicio lo publica.
@@ -212,9 +251,156 @@ export function dtoTemporalServido(
     tipo: "vistas",
     metricaId,
     etiqueta,
-    unidad: UNIDAD_TEMPORAL,
+    unidad: UNIDAD_SERVIDA[metricaId],
     rango,
     esAcumulado: esMetricaAcumulada(metricaId),
     vistas: [vistaTemporalServida(metricaId, importeDeFila, total, rango)],
+  };
+}
+
+/* ========================================================================== */
+/* TANDA 2 — LAS TRES METRICAS NO TEMPORALES                                  */
+/* ========================================================================== */
+
+/**
+ * Las metricas servidas que NO publican serie temporal: `cod_recaudado` (dos vistas),
+ * `cuenta_por_pagar_tienda` y `conciliacion_cierres`.
+ *
+ * Se define por RESTA sobre el contrato y no como lista propia: asi el dia que una metrica entre
+ * o salga de `IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA` cambia de familia sola, y el registro de
+ * abajo deja de compilar hasta que alguien declare su identidad. Una lista escrita a mano se
+ * quedaria describiendo el reparto de ayer, que es el error del que trata este archivo entero.
+ */
+export type MetricaNoTemporalServida = Exclude<MetricaFinancieraId, MetricaTemporalServida>;
+
+/**
+ * Lo que identifica a una vista, sin sus datos.
+ *
+ * Son los campos que el servicio fija POR CODIGO —no dependen de lo que haya en la base— y por
+ * tanto los unicos de una vista no temporal que se pueden atar. `filas` y `total` quedan fuera:
+ * ver la cabecera del archivo.
+ */
+export interface IdentidadDeVista {
+  readonly id: string;
+  readonly grano: DimensionAnalitica;
+  readonly fuente: TablaDinero;
+  readonly sumableCon: readonly string[];
+  readonly granularidad: GranularidadVista;
+}
+
+/**
+ * La identidad de cada vista no temporal, **EN EL ORDEN EN QUE EL SERVICIO LAS PUBLICA**.
+ *
+ * EL ORDEN ES PARTE DEL CONTRATO Y NADIE LO HABIA DECLARADO — hallazgo de la tanda 2. `deRecaudo`
+ * devuelve `vistas: [vistaMetodo, vistaTienda]`, un literal, asi que es determinista (medido: 5
+ * corridas, siempre igual); pero ni `specs/127-*` ni `specs/132-*` lo dicen en ninguna parte, y
+ * hay dos consumidores que DEPENDEN de el: el tablero pinta una seccion por vista en orden del
+ * DTO, y `TableroFinanciero.test.tsx` indexa `[0]` para el donut y `[1]` para las barras. Un
+ * servicio que las intercambiara pondria el donut donde van las barras sin romper nada declarado.
+ * Al atarlo aqui pasa a ser un contrato ejecutable.
+ *
+ * Los ids de `cod_recaudado` salen de las CONSTANTES del contrato, no de dos literales: son la
+ * misma fuente que el servicio importa. El de `cuenta_por_pagar_tienda` es el id de la METRICA,
+ * como en las siete temporales (`id: consulta.metrica.id`); el doble declaraba
+ * `"cuenta_por_pagar_tienda__vista"`, que no existe en ningun DTO real — la divergencia que la
+ * §6.5 de la bitacora dejo abierta y que esta tanda cierra.
+ *
+ * `conciliacion_cierres` no publica NINGUNA vista: su DTO es `tipo: "conciliacion"` y lleva
+ * conteos por estado mas un cuadre. Se declara con la lista VACIA en vez de omitirse, para que el
+ * registro siga siendo exhaustivo sobre las tres y la guardia pueda afirmar que son cero.
+ */
+export const IDENTIDAD_NO_TEMPORAL: Readonly<
+  Record<MetricaNoTemporalServida, readonly IdentidadDeVista[]>
+> = {
+  cod_recaudado: [
+    {
+      id: VISTA_COD_RECAUDADO_POR_METODO,
+      grano: "metodo_pago",
+      fuente: "cierre_dia",
+      sumableCon: [],
+      granularidad: "no_temporal",
+    },
+    {
+      id: VISTA_COD_RECAUDADO_POR_TIENDA,
+      grano: "tienda",
+      fuente: "wallet_tienda_movimiento",
+      sumableCon: [],
+      granularidad: "no_temporal",
+    },
+  ],
+  cuenta_por_pagar_tienda: [
+    {
+      id: "cuenta_por_pagar_tienda",
+      grano: "tienda",
+      fuente: "wallet_tienda_movimiento",
+      sumableCon: [],
+      granularidad: "no_temporal",
+    },
+  ],
+  conciliacion_cierres: [],
+};
+
+/** Los datos que el llamador aporta a una vista no temporal: lo que la identidad no fija. */
+export interface DatosDeVista {
+  readonly filas: readonly FilaFinanciera[];
+  readonly total: ImporteAnalitico;
+}
+
+/**
+ * El DTO de una metrica no temporal: la identidad la pone este modulo, los datos el llamador.
+ *
+ * `datos` se pasa VISTA A VISTA y en el mismo orden de `IDENTIDAD_NO_TEMPORAL`; que el numero de
+ * elementos coincida se comprueba aqui y no en el llamador, porque una vista de menos en el doble
+ * es exactamente la clase de omision silenciosa que este modulo existe para impedir.
+ */
+export function dtoNoTemporalServido(
+  metricaId: MetricaNoTemporalServida,
+  etiqueta: string,
+  datos: readonly DatosDeVista[],
+  rango: RangoFinanciero = RANGO_TABLERO,
+): ResultadoFinancieroVistas {
+  const identidades = IDENTIDAD_NO_TEMPORAL[metricaId];
+  if (identidades.length !== datos.length) {
+    throw new Error(
+      `${metricaId}: el servicio publica ${identidades.length} vista(s) y el doble trae ${datos.length}`,
+    );
+  }
+
+  return {
+    tipo: "vistas",
+    metricaId,
+    etiqueta,
+    unidad: UNIDAD_SERVIDA[metricaId],
+    rango,
+    esAcumulado: esMetricaAcumulada(metricaId),
+    vistas: identidades.map((identidad, indice) => ({ ...identidad, ...datos[indice]! })),
+  };
+}
+
+/**
+ * El DTO de `conciliacion_cierres`: la unica metrica servida cuyo `tipo` NO es `"vistas"`.
+ *
+ * La cabecera se construye igual que las otras nueve —de ahi que `unidad` salga de
+ * `UNIDAD_SERVIDA` y no de un literal— y el contenido (`porEstado`, `cuadre`) lo pone el llamador:
+ * sus filas y sus cifras las deciden los datos, como en cualquier desglose.
+ *
+ * OJO CON `unidad` AL LEER ESTO: vale `"conteo"`, no `"moneda"`. Los dos dobles del repo decian
+ * `"moneda"` y `PanelConciliacion.tsx:140` formatea con ella TRES CIFRAS DE DINERO. Ver la
+ * bitacora §4 bis: es un defecto VIVO, no una curiosidad de fixture.
+ */
+export function dtoConciliacionServido(
+  etiqueta: string,
+  conciliacion: ResultadoConciliacion,
+  rango: RangoFinanciero = RANGO_TABLERO,
+): ResultadoFinancieroConciliacion {
+  const metricaId = "conciliacion_cierres" as const;
+  return {
+    tipo: "conciliacion",
+    metricaId,
+    etiqueta,
+    unidad: UNIDAD_SERVIDA[metricaId],
+    rango,
+    esAcumulado: esMetricaAcumulada(metricaId),
+    conciliacion,
   };
 }
