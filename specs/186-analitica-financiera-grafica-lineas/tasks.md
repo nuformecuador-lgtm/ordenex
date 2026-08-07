@@ -37,6 +37,10 @@
   **Hecho:** `pnpm run typecheck` limpio **y los seis casos del bloque `Hotfix — …` de
   `tests/components/TableroFinanciero.test.tsx` siguen verdes SIN TOCARLOS.** Si alguno cambia, el
   movimiento no fue puro: se para. `pnpm exec vitest run` de ese archivo pegado en la bitácora.
+  **El criterio vale EN ESTA TANDA y solo aquí**: aún no hay gráfica, así que los seis son
+  satisfacibles a la vez. A partir de la Tanda C uno deja de serlo por `R1 ∧ R7` —ver
+  `requirements.md` §4.1— y eso **no se anticipa aquí**: tocar el archivo de test en la Tanda A
+  destruiría la única prueba de que la mudanza fue pura.
 - [x] **T A.2 [P] — `etiquetaDeCubo(clave, granularidad, textos)`** (⟨D4⟩/⟨D5⟩): pura, sin `Date`,
   sin zona horaria, sin aritmética de calendario, sin literal de locale ni de moneda, con `switch`
   y **rama `default`** para el grano no declarado.
@@ -118,6 +122,23 @@
   **Hecho:** el caso afirma sobre el contenido de la `<ul aria-label>` de `SerieTextual`, **nunca**
   sobre nodos de recharts (lo prohíbe `analytics-paquete-guard.test.ts`); `LineasLienzo` se dobla
   como ya se doblan `BarrasLienzo` y `DonutLienzo` en ese mismo archivo.
+- [x] **T D.8 — Reconciliar los dos casos preexistentes que la línea vuelve incompatibles o
+  ambiguos.** *(Task escrita a posteriori, al reconciliar el spec con el árbol: describe trabajo ya
+  hecho y medido, no trabajo pendiente.)* Son los únicos dos que se tocan, cada uno por un motivo
+  distinto:
+  1. `` `%s` NO pinta las fechas de la serie `` — **incompatible** con `R1 ∧ R7`; la demostración
+     está en `requirements.md` §4.1. Se estrecha a «la fecha no es el texto **propio** de ningún
+     elemento» para las seis de flujo, y **conserva la aserción original literal** en la métrica
+     acumulada, que por Q2 = (b) no lleva línea y donde por tanto sigue siendo satisfacible.
+  2. `Feature 132 (R22) — cada panel muestra las fechas calendario del propio DTO` — **ambiguo, no
+     incorrecto**: `desdeFecha` pasa a ser además la clave del primer punto y `getByText` encuentra
+     dos elementos. Pasa a afirmar sobre la cabecera entera —las dos fechas juntas, en el orden del
+     DTO y sin dígitos en medio—, que es **más estrecho** que antes.
+  **Hecho:** se retiran **tres** líneas de aserción en todo el archivo y ni una más; los otros cinco
+  casos del bloque `Hotfix — …` quedan intactos; y **medido**: revertir la señal a
+  `vista.filas.length === 0` produce **39 rojos**, este caso entre ellos, reproducidos por el
+  reviewer. **Si esa medición no sale, la reconciliación no procede** y lo que se arregla es el
+  código, no el spec.
 
 ## Tanda E — guardias (depende de C; `[P]` con D)
 

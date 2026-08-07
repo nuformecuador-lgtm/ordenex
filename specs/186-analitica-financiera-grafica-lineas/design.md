@@ -87,8 +87,44 @@ Tres razones, y una advertencia:
 
 **Advertencia declarada:** esto toca código que acaba de salir a producción en un hotfix. Es un
 **movimiento puro más un estrechamiento de tipo**, sin cambio de conducta, y el criterio de hecho es
-que **los seis casos del bloque `Hotfix — …` sigan verdes sin tocarlos**. Si alguno cambia, el
-movimiento no fue puro y hay que parar.
+que **al cerrar la Tanda A los seis casos del bloque `Hotfix — …` sigan verdes sin tocarlos**. Si
+alguno cambia **en esa tanda**, el movimiento no fue puro y hay que parar.
+
+**El criterio se cumplió donde ⟨D1⟩ lo pide, y estaba mal enunciado más allá de ahí.** Se cumplió:
+el commit de T A.1 (`5d79c56f`) **no toca** `tests/components/TableroFinanciero.test.tsx` y sus 67
+casos pasaron verdes sin tocar una línea; el reviewer lo verificó por separado. Estaba mal
+enunciado porque, escrito sin acotar la tanda, se leía como válido para toda la feature — y a partir
+de la Tanda C **uno de los seis no es satisfacible**:
+
+`GraficaLineas` monta **siempre** `SerieTextual` cuando hay datos (`GraficaLineas.tsx:48`), que
+emite un `<li>` por punto con `"<serie>, <categoría>: <valor>"` en el DOM (`SerieTextual.tsx:63-70`;
+es lo que R10 de la 130 exige para que un lector de pantalla «oiga» el SVG). Con **R1** —la gráfica
+va **dentro** de la sección de la vista— y **R7** —la categoría contiene la clave del cubo—, el
+`textContent` de la sección contiene esa clave. El caso
+`` `%s` NO pinta las fechas de la serie `` afirmaba exactamente lo contrario sobre ese
+`textContent`. Es decir **R1 ∧ R7 ⟹ ¬(aserción original)** para las seis métricas de flujo: no es
+que cueste cumplirlo, es que **no puede ser cierto** a la vez que R1, y este diseño exige R1.
+
+Las tres únicas salidas rompen cada una una regla: sacar la gráfica fuera de la `<section>` rompe
+R1; rotular el punto sin la clave rompe R7 y R24 de la 132; quitar o esconder `SerieTextual` edita
+`components/private/analytics/` —que `tasks.md` prohíbe— y rompe R10 de la 130.
+
+**Qué sustituye a ese caso como red contra ⟨H1⟩,** que es lo único que protegía:
+
+1. **la aserción original, literal**, conservada en la métrica acumulada, que por Q2 = (b) no lleva
+   línea y donde por tanto sí es satisfacible;
+2. **el caso estrechado** a «la fecha no es el texto **propio** de ningún elemento»
+   (`queryByRole("cell", …)`, `queryByText(…)`) — que es la forma exacta en que `PanelTabla` la
+   pintaba, `<td>2026-07-20</td>`. Tres líneas de aserción retiradas en todo el archivo;
+3. **la medición:** revertir la señal a `vista.filas.length === 0` da **39 rojos**, siete de ellos
+   de este caso, reproducidos por el reviewer.
+
+**Y esto no es un permiso retroactivo.** Un criterio de hecho que se ablanda después de fallar es
+justo como se pierde el rigor de este arnés. Lo que salva la reconciliación aquí son dos cosas
+concretas y verificables —una **demostración** de imposibilidad y un **número** que dice que la
+propiedad sigue viva—; sin cualquiera de las dos, lo que habría que cambiar es el código y no el
+spec. La demostración completa, con las tres salidas tabuladas, está en `progress/impl_186.md`
+§5.1.
 
 ### ⟨D2⟩ Una gráfica por vista. No hay gráfica combinada, y no es una omisión
 
@@ -436,7 +472,8 @@ prisa dentro de esta es exactamente cómo nació ⟨H1⟩.
 9. **Dejar `esSerieTemporal` donde el hotfix la puso.** *Descartada:* dejaría dos archivos de la
    región hablando el vocabulario de la granularidad (R16) y un `boolean` que no estrecha el tipo,
    con lo que `serieTemporalDeVista` no podría exigir una `VistaTemporal`. Se muda con el criterio
-   de hecho de que los seis casos del hotfix sigan verdes sin tocarlos. Ver ⟨D1⟩.
+   de hecho de que **al cerrar la Tanda A** los seis casos del hotfix sigan verdes sin tocarlos —que
+   se cumplió—; el alcance de ese criterio y por qué no se extiende más allá está en ⟨D1⟩.
 
 10. **Escribir un censo propio para «decisión por id suelto», calcado del de la 180.** *Descartada
     tras medirlo:* el censo (f) ya lo cubre para los archivos de esta región, y duplicarlo daría dos
@@ -451,7 +488,8 @@ prisa dentro de esta es exactamente cómo nació ⟨H1⟩.
 
 | Artefacto | Impacto | Acción |
 |---|---|---|
-| `tests/components/TableroFinanciero.test.tsx` | Bloque `Hotfix — …` (6 casos) **debe seguir verde sin tocarse**: es el criterio de que ⟨D1⟩ fue un movimiento puro | Ampliar con los casos de R1–R6, R13, R14, R17(b)(c)(d). Añadir un doble con `granularidad: "semana"` |
+| `tests/components/TableroFinanciero.test.tsx` | Bloque `Hotfix — …` (6 casos): **verde sin tocarse al cerrar la Tanda A** (criterio de ⟨D1⟩, cumplido). En la Tanda C, **uno de los seis deja de ser satisfacible** por `R1 ∧ R7`; los otros cinco siguen intactos | Ampliar con los casos de R1–R6, R13, R14, R17(b)(c)(d) y añadir un doble con `granularidad: "semana"`. Para el caso incompatible, lo que se exige está en `requirements.md` §4.1 y en ⟨D1⟩: aserción original conservada literal en la acumulada, estrechamiento a «texto propio» en las de flujo, y los 39 rojos como medida |
+| `tests/components/TableroFinanciero.test.tsx` — caso R22 de la 132 | Buscaba cada fecha del rango por separado; con la línea, `desdeFecha` es además la clave del primer punto y la búsqueda encuentra **dos** elementos: falla **por ambigua, no por incorrecta** | Afirmar sobre la cabecera entera —las dos fechas juntas, en el orden del DTO y sin dígitos en medio—, que es **más estrecho** que antes, no menos |
 | `tests/unit/analytics/tablero-financiero-adaptar.test.ts` | Verde; se le **añaden** los casos del adaptador temporal | R7–R11 |
 | `tests/unit/guards/tablero-financiero.guardia.test.ts` | Verde; gana el censo (g) | Ampliar sin retirar ninguna aserción |
 | `tests/components/AnaliticaPage.test.tsx` | Sus dobles ya llevan la serie densa (hotfix). Esta feature no cambia el gate ni el pre-fetch | Sin cambios previstos; si alguno se pone rojo, se explica antes de tocarlo |

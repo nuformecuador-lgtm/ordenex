@@ -240,8 +240,52 @@ Además, y sin sustituir a nada de lo anterior:
 - `pnpm exec next build` **a mano**, con la salida pegada en `progress/impl_186.md`: es el agujero
   que la 132 declaró en su R11 (la frontera RSC no la ve ningún test) y esta feature monta un
   Client Component nuevo (`GraficaLineas`) desde un Server Component. **Nunca `pnpm build`**.
-- **Los seis casos del bloque `Hotfix — …` deben seguir verdes sin tocarlos.** Es la comprobación
-  de que mover `esSerieTemporal` a `adaptar.ts` (⟨D1⟩) no cambia una sola conducta.
+
+### 4.1 El bloque `Hotfix — …`: qué se exige, hasta dónde, y qué lo sustituye después
+
+**Se exige, y se cumplió:** al cerrar la **Tanda A** —mudar `esSerieTemporal` a `adaptar.ts`
+(⟨D1⟩)— los seis casos del bloque `Hotfix — …` de `tests/components/TableroFinanciero.test.tsx`
+deben seguir verdes **sin tocar una línea**. Es la comprobación de que la mudanza fue un movimiento
+puro. Lo fue: el commit de T A.1 (`5d79c56f`) **no toca ese archivo** y sus 67 casos pasaron verdes.
+
+**Y estaba mal enunciado más allá de eso.** Tal como se escribió, el criterio se leía como válido
+para toda la feature. Al aterrizar la línea (Tanda C), **uno de los seis deja de ser satisfacible**,
+y no por elección:
+
+1. **R1** obliga a montar la gráfica **dentro de la sección de esa vista**.
+2. `GraficaLineas` monta **siempre** `SerieTextual` cuando hay datos (`GraficaLineas.tsx:48`); no es
+   opcional ni configurable.
+3. `SerieTextual` emite un `<li>` por punto con el texto `"<serie>, <categoría>: <valor>"`
+   (`SerieTextual.tsx:63-70`), **presente en el DOM** — es la única forma en que un lector de
+   pantalla «oye» un SVG (R10 de la 130).
+4. **R7** obliga a que esa categoría **contenga literalmente la clave del cubo**.
+
+Luego el `textContent` de la sección **contiene** la clave del cubo, y el caso
+`` `%s` NO pinta las fechas de la serie `` afirmaba `not.toContain(CUBO_INTERMEDIO)` sobre ese mismo
+`textContent`, aplicado a las siete métricas temporales. Es decir: **R1 ∧ R7 ⟹ ¬(aserción
+original)** para las seis de flujo. Las dos afirmaciones no pueden ser ciertas a la vez y esta spec
+exige las dos. Las únicas tres salidas rompen cada una una regla — sacar la gráfica de la sección
+rompe R1; rotular sin la clave rompe R7 y R24 de la 132; quitar `SerieTextual` edita
+`components/private/analytics/`, que `tasks.md` prohíbe, y rompe R10 de la 130.
+
+**Qué lo sustituye como garantía de que el defecto de ⟨H1⟩ no vuelve**, que es lo único que ese
+caso protegía:
+
+- **La aserción original se conserva literal donde sí es satisfacible:** la métrica acumulada, que
+  por Q2 = (b) no lleva línea. Ahí el `not.toContain` sigue escrito tal cual.
+- **El caso se estrecha, para las seis de flujo, a «la fecha no es el texto propio de ningún
+  elemento»** (`queryByRole("cell", …)`, `queryByText(…)`), que es exactamente la forma en que
+  `PanelTabla` la pintaba: `<td>2026-07-20</td>`. Tres líneas de aserción retiradas en todo el
+  archivo, ni una más.
+- **Medido, no alegado:** revertir la señal de forma a `vista.filas.length === 0` —el defecto de
+  ⟨H1⟩ exacto— produce **39 rojos**, siete de ellos de este caso. El reviewer lo reprodujo por su
+  cuenta.
+
+> **Esto no es un criterio relajado después de fallar,** que es como se pierde el rigor. Un criterio
+> se relaja cuando cuesta cumplirlo; aquí hay una **demostración** de que es incumplible junto a R1
+> y una **medición** de que la propiedad que protegía sigue protegida. Faltando cualquiera de las
+> dos, la reconciliación no procedería y lo que habría que cambiar sería el código. La demostración
+> completa, con las tres salidas tabuladas, está en `progress/impl_186.md` §5.1.
 
 ---
 
