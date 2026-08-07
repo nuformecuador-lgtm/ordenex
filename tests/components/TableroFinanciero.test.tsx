@@ -9,9 +9,6 @@ import {
   IDS_FINANCIERAS_ACUMULADAS,
   IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA,
   IDS_FINANCIERAS_SERVIDAS,
-  VISTA_COD_RECAUDADO_POR_METODO,
-  VISTA_COD_RECAUDADO_POR_TIENDA,
-  type FilaFinanciera,
   type GranularidadVista,
   type ImporteAnalitico,
   type MetricaFinancieraId,
@@ -24,6 +21,15 @@ import {
   importeSoloBruto,
   sinNeto,
 } from "@/tests/fixtures/importe-analitico";
+import {
+  cubosDelRango,
+  dtoConciliacionServido,
+  dtoNoTemporalServido,
+  dtoTemporalServido,
+  RANGO_TABLERO,
+  type ImporteDeFila,
+  type MetricaTemporalServida,
+} from "@/tests/fixtures/dto-financiero-servido";
 
 // Feature 132 (T4.1, T4.2) — los paneles del tablero financiero.
 //
@@ -56,7 +62,16 @@ vi.mock("@/components/private/analytics/lienzo/LineasLienzo", () => ({
   default: () => <div data-testid="lienzo-lineas" />,
 }));
 
-const RANGO = { desdeFecha: "2026-07-05", hastaFecha: "2026-08-03" } as const;
+/**
+ * El rango con el que se prueba el tablero: treinta dias, ambos extremos incluidos.
+ *
+ * SE IMPORTA, no se declara aqui (guardia de arnes del 2026-08-07): la guardia
+ * `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts` consulta al servicio REAL por
+ * esta misma ventana y compara la forma que sale con la que estas fixtures declaran. Con dos
+ * declaraciones del rango, esa comparacion mediria dos mundos distintos y volveria a pasar en
+ * verde con el doble mintiendo.
+ */
+const RANGO = RANGO_TABLERO;
 
 /** Ids opacos de tienda, tal como los entrega el servicio: sin nombre legible (Q2). */
 const CUBOS_TIENDA = [
@@ -92,19 +107,13 @@ function cifra(valor: number, unidad: "moneda" | "conteo"): string {
  * Los cubos que el servicio produce para ESTE rango con `granularidad: "dia"`: los treinta
  * dias de `RANGO`, ambos extremos incluidos.
  *
- * Se DERIVAN de `RANGO` en vez de escribirse a mano: si alguien mueve las fechas del rango,
- * la serie lo sigue en vez de quedarse describiendo otra ventana. Todo en UTC, que es como
- * `trocear` produce sus claves `YYYY-MM-DD`.
+ * Salen de `trocear`, la MISMA funcion que el servicio usa, en vez de una aritmetica de
+ * milisegundos propia como hasta el 2026-08-07. Daba el mismo resultado —medido: identico, 30
+ * claves— y aun asi era una SEGUNDA definicion del troceo viviendo al lado de la primera, que
+ * es como nace un off-by-one que nadie ve. Si alguien mueve las fechas del rango, la serie lo
+ * sigue en vez de quedarse describiendo otra ventana.
  */
-const CUBOS_FECHA: readonly string[] = (() => {
-  const MS_POR_DIA = 86_400_000;
-  const fin = Date.parse(`${RANGO.hastaFecha}T00:00:00Z`);
-  const cubos: string[] = [];
-  for (let t = Date.parse(`${RANGO.desdeFecha}T00:00:00Z`); t <= fin; t += MS_POR_DIA) {
-    cubos.push(new Date(t).toISOString().slice(0, 10));
-  }
-  return cubos;
-})();
+const CUBOS_FECHA: readonly string[] = cubosDelRango(RANGO);
 
 /**
  * Un cubo INTERMEDIO de la serie, y por eso util: las dos fechas EXTREMAS del rango ya se
@@ -114,74 +123,50 @@ const CUBOS_FECHA: readonly string[] = (() => {
 const CUBO_INTERMEDIO: string = CUBOS_FECHA[15]!;
 
 /**
- * La serie DENSA de una vista temporal, tal como la produce `serieDensa` desde la feature
- * 180: UNA fila por cubo del rango, incluidos los cubos sin movimiento.
+ * Las cifras de la serie DENSA de una vista temporal.
  *
- * Las cifras de las filas son deliberadamente AJENAS a todos los totales de este archivo
- * (terminan en 13 y en 17 centimos, que ningun total usa): si un panel pintara una fila
- * donde va el titular, ninguna asercion podria acertar por azar.
+ * Son deliberadamente AJENAS a todos los totales de este archivo (terminan en 13 y en 17
+ * centimos, que ningun total usa): si un panel pintara una fila donde va el titular, ninguna
+ * asercion podria acertar por azar. Por eso las cifras se quedan AQUI y no viajan a la fixture
+ * compartida: atarlas a las del servicio destruiria justo esa propiedad.
  *
- * La `forma` de cada fila la dicta el TOTAL y no se elige aparte: R18 de la 183 exige que
- * una vista no mezcle formas, y una fixture que las mezclara describiria un DTO imposible.
+ * La `forma` de cada fila la dicta el TOTAL y no se elige aparte: R18 de la 183 exige que una
+ * vista no mezcle formas, y una fixture que las mezclara describiria un DTO imposible.
  */
-function serieDensaDelRango(total: ImporteAnalitico): readonly FilaFinanciera[] {
-  return CUBOS_FECHA.map((cubo, indice) => {
+function cifrasDeLaSerie(total: ImporteAnalitico): ImporteDeFila {
+  return (indice) => {
     const bruto = `${(indice + 1) * 7}.13`;
-    return {
-      cubo,
-      importe:
-        total.forma === "solo_bruto"
-          ? importeSoloBruto(bruto)
-          : importeConNeto(bruto, `-${(indice + 1) * 3}.17`),
-    };
-  });
+    return total.forma === "solo_bruto"
+      ? importeSoloBruto(bruto)
+      : importeConNeto(bruto, `-${(indice + 1) * 3}.17`);
+  };
 }
 
 /**
- * Una vista de SERIE TEMPORAL, como las produce el servicio HOY.
+ * El DTO de una metrica de SERIE TEMPORAL, con la FORMA que el servicio produce hoy.
  *
- * HASTA EL HOTFIX DEL 2026-08-06 ESTA FIXTURE SE LLAMABA `vistaSinFilas`, declaraba
- * `filas: []` y llevaba al lado el comentario «el tablero NO la lee» sobre `granularidad`.
- * Las dos cosas eran falsas desde la 180: `serieDensa` emite una fila por cubo del rango
- * —cubos sin movimiento incluidos—, asi que las SIETE metricas que pasan por este helper
- * llegan a la pantalla con treinta filas. La fixture fijaba la premisa VIEJA, y por eso la
- * suite entera siguio en verde mientras produccion pintaba una tabla de fechas donde va
- * «Dinero en caja». Una fixture cuyo DTO el servicio ya no produce no protege nada:
- * describe un mundo que no existe.
+ * LA FORMA YA NO SE ESCRIBE AQUI (guardia de arnes del 2026-08-07): `grano`, `fuente`,
+ * `sumableCon`, `granularidad`, el id de la vista, `esAcumulado`, la unidad y la cardinalidad de
+ * la serie salen de `tests/fixtures/dto-financiero-servido.ts`, que los DERIVA de las mismas
+ * funciones puras que el servicio usa y que `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts`
+ * ATA por ejecucion contra la salida real. Este archivo solo aporta la etiqueta y las cifras.
  *
- * NO LA VUELVAS A VACIAR para «simplificar». El caso de la vista sin filas sigue existiendo
- * y se prueba APARTE, con su propia fixture, en el bloque del hotfix.
+ * POR QUE, en dos frases. Hasta el hotfix del 2026-08-06 este helper se llamaba `vistaSinFilas`,
+ * declaraba `filas: []` y llevaba al lado el comentario «el tablero NO la lee» sobre
+ * `granularidad`; las dos cosas eran falsas desde la 180 —`serieDensa` emite una fila por cubo
+ * del rango— y la suite entera siguio en verde mientras produccion pintaba una tabla de treinta
+ * fechas donde va «Dinero en caja». La 180 EDITO esta misma fixture sin ver que la invalidaba, y
+ * eso es lo que una declaracion libre no puede impedir y una derivada atada si.
+ *
+ * NO LA VUELVAS A VACIAR para «simplificar». El caso de la vista sin filas sigue existiendo y se
+ * prueba APARTE, con su propia fixture, en el bloque del hotfix.
  */
-function vistaTemporal(id: string, total: ImporteAnalitico): VistaFinanciera {
-  return {
-    id,
-    grano: "fecha",
-    fuente: "wallet_tienda_movimiento",
-    sumableCon: [],
-    // Feature 180 (R4) — `granularidad` REQUERIDA. Grano `fecha` y rango de 30 dias: `dia`.
-    // El tablero SI la lee: desde el hotfix es la señal de forma con la que separa una serie
-    // temporal (KPI) de un desglose (tabla).
-    granularidad: "dia",
-    filas: serieDensaDelRango(total),
-    total,
-  };
-}
-
 function dtoKpi(
-  metricaId: string,
+  metricaId: MetricaTemporalServida,
   etiqueta: string,
   total: ImporteAnalitico,
-  esAcumulado = false,
 ): ResultadoFinanciero {
-  return {
-    tipo: "vistas",
-    metricaId,
-    etiqueta,
-    unidad: "moneda",
-    rango: RANGO,
-    esAcumulado,
-    vistas: [vistaTemporal(`${metricaId}__vista`, total)],
-  };
+  return dtoTemporalServido(metricaId, etiqueta, cifrasDeLaSerie(total), total, RANGO);
 }
 
 const ETIQUETAS: Readonly<Record<MetricaFinancieraId, string>> = {
@@ -239,61 +224,44 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
     ETIQUETAS.ganancia_ordenex,
     importeConNeto("6000.00", "5400.00"),
   ),
-  cod_recaudado: {
-    tipo: "vistas",
-    metricaId: "cod_recaudado",
-    etiqueta: ETIQUETAS.cod_recaudado,
-    unidad: "moneda",
-    rango: RANGO,
-    esAcumulado: false,
-    vistas: [
+  // TANDA 2 de la guardia de arne (2026-08-07) — la IDENTIDAD de las dos vistas
+  // (`id`, `grano`, `fuente`, `sumableCon`, `granularidad`) y el ORDEN en que van ya no se
+  // escriben aqui: salen de `IDENTIDAD_NO_TEMPORAL` y las ata contra el servicio real
+  // `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts`. Este archivo aporta lo que la
+  // identidad no fija y el servicio tampoco puede fijar: las FILAS y el TOTAL, que en un desglose
+  // los deciden los datos.
+  //
+  // El ORDEN importa y por eso viaja en la fixture: la primera vista es la del metodo de pago
+  // (donut) y la segunda la de tienda (barras); los casos de abajo indexan `[0]` y `[1]`.
+  cod_recaudado: dtoNoTemporalServido("cod_recaudado", ETIQUETAS.cod_recaudado, [
+    {
+      filas: [
+        { cubo: "efectivo", importe: importeConNeto("111.11", "101.11") },
+        { cubo: "simpe", importe: importeConNeto("122.22", "102.22") },
+        { cubo: "transferencia", importe: importeConNeto("133.33", "103.33") },
+      ],
+      total: importeConNeto("366.66", "311.11"),
+    },
+    {
+      // SEIS cubos con MAX_SERIES = 5: sin `agruparCola` la grafica LANZA
+      // `SeriesExcedidasError` fuera de produccion, asi que este numero de
+      // filas es parte de la prueba.
+      filas: CUBOS_TIENDA.map((cubo, indice) => ({
+        cubo,
+        importe: importeConNeto(`${201 + indice}.00`, `${101 + indice}.00`),
+      })),
+      total: importeConNeto("1206.00", "722.22"),
+    },
+  ]),
+  // TANDA 2 — la identidad la pone `IDENTIDAD_NO_TEMPORAL`. Aqui vivia la divergencia que la
+  // §6.5 de la bitacora dejo abierta: el doble declaraba `id: "cuenta_por_pagar_tienda__vista"`
+  // y el servicio publica `"cuenta_por_pagar_tienda"`, sin sufijo. Se ato primero y se corrigio
+  // despues; corregirla sin atarla habria recreado el fallo que la guardia cierra.
+  cuenta_por_pagar_tienda: dtoNoTemporalServido(
+    "cuenta_por_pagar_tienda",
+    ETIQUETAS.cuenta_por_pagar_tienda,
+    [
       {
-        id: VISTA_COD_RECAUDADO_POR_METODO,
-        grano: "metodo_pago",
-        fuente: "cierre_dia",
-        sumableCon: [],
-        // R4 — el cubo es el metodo de pago, no una fecha: `no_temporal`, declarado.
-        granularidad: "no_temporal",
-        filas: [
-          { cubo: "efectivo", importe: importeConNeto("111.11", "101.11") },
-          { cubo: "simpe", importe: importeConNeto("122.22", "102.22") },
-          { cubo: "transferencia", importe: importeConNeto("133.33", "103.33") },
-        ],
-        total: importeConNeto("366.66", "311.11"),
-      },
-      {
-        id: VISTA_COD_RECAUDADO_POR_TIENDA,
-        grano: "tienda",
-        fuente: "wallet_tienda_movimiento",
-        sumableCon: [],
-        // R4 — el cubo es la tienda: `no_temporal`.
-        granularidad: "no_temporal",
-        // SEIS cubos con MAX_SERIES = 5: sin `agruparCola` la grafica LANZA
-        // `SeriesExcedidasError` fuera de produccion, asi que este numero de
-        // filas es parte de la prueba.
-        filas: CUBOS_TIENDA.map((cubo, indice) => ({
-          cubo,
-          importe: importeConNeto(`${201 + indice}.00`, `${101 + indice}.00`),
-        })),
-        total: importeConNeto("1206.00", "722.22"),
-      },
-    ],
-  },
-  cuenta_por_pagar_tienda: {
-    tipo: "vistas",
-    metricaId: "cuenta_por_pagar_tienda",
-    etiqueta: ETIQUETAS.cuenta_por_pagar_tienda,
-    unidad: "moneda",
-    rango: RANGO,
-    esAcumulado: true,
-    vistas: [
-      {
-        id: "cuenta_por_pagar_tienda__vista",
-        grano: "tienda",
-        fuente: "wallet_tienda_movimiento",
-        sumableCon: [],
-        // R4 — el cubo es la tienda: `no_temporal`.
-        granularidad: "no_temporal",
         filas: [
           { cubo: CUBOS_TIENDA[0], importe: importeConNeto("55.00", "50.00") },
           { cubo: CUBOS_TIENDA[1], importe: importeConNeto("66.00", "60.00") },
@@ -328,44 +296,46 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
         total: importeConNeto("140.00", "128.00"),
       },
     ],
-  },
+  ),
+  // `esAcumulado: true` YA NO SE PASA A MANO: lo deriva `dtoTemporalServido` de
+  // `esMetricaAcumulada`, la misma funcion del contrato que el servicio llama en su cabecera.
+  // Era el ultimo campo de la cabecera que este doble podia contradecir en silencio, y no es
+  // inocuo: con el decide el tablero si pinta «saldo al corte» y si sustituye la linea por el
+  // motivo escrito (R3 de la 186).
   cuenta_por_pagar_mensajero: dtoKpi(
     "cuenta_por_pagar_mensajero",
     ETIQUETAS.cuenta_por_pagar_mensajero,
     importeConNeto("88.00", "80.00"),
-    true,
   ),
-  conciliacion_cierres: {
-    tipo: "conciliacion",
-    metricaId: "conciliacion_cierres",
-    etiqueta: ETIQUETAS.conciliacion_cierres,
-    unidad: "moneda",
-    rango: RANGO,
-    esAcumulado: false,
-    conciliacion: {
-      porEstado: [
-        {
-          nivel: "cierre_dia",
-          estado: "aprobado",
-          cantidad: 7,
-          totales: {
-            efectivo: "10.00",
-            simpe: "11.00",
-            transferencia: "12.00",
-            general: "33.00",
-          },
-          fechadoPor: "resuelto_at",
+  // TANDA 2 — la cabecera la construye `dtoConciliacionServido`, y con ella llega el hallazgo mas
+  // caro de esta tanda: `unidad` NO es `"moneda"` sino `"conteo"`, que es lo que el catalogo
+  // declara para esta metrica y lo que el servicio publica. Este doble decia `"moneda"` desde la
+  // 132. La consecuencia NO es cosmetica y esta abierta: `PanelConciliacion.tsx:140` formatea con
+  // `datos.unidad` las TRES cifras de dinero del cuadre, asi que en produccion se pintan
+  // redondeadas y sin moneda. Ver la bitacora §4 bis.
+  conciliacion_cierres: dtoConciliacionServido(ETIQUETAS.conciliacion_cierres, {
+    porEstado: [
+      {
+        nivel: "cierre_dia",
+        estado: "aprobado",
+        cantidad: 7,
+        totales: {
+          efectivo: "10.00",
+          simpe: "11.00",
+          transferencia: "12.00",
+          general: "33.00",
         },
-      ],
-      cuadre: {
-        cuadra: true,
-        totalSnapshot: "33.00",
-        totalLedger: "33.00",
-        diferencia: "0.00",
-        cierresDescuadrados: [],
+        fechadoPor: "resuelto_at",
       },
+    ],
+    cuadre: {
+      cuadra: true,
+      totalSnapshot: "33.00",
+      totalLedger: "33.00",
+      diferencia: "0.00",
+      cierresDescuadrados: [],
     },
-  },
+  }),
 };
 
 /** Los paneles "todo bien", derivados de la CONSTANTE del contrato y no de una lista local. */
