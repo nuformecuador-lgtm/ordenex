@@ -272,8 +272,15 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
     // que esta guardia los vea. T K.3 suma DOS: el modulo de la bodega satelite (monta el
     // control) y su listado (monta el `<DataTable>` y lleva el contador). T L.2 suma la tabla
     // de cuentas por pagar, que monta control, tabla y contador en el mismo archivo.
+    //
+    // chore «borrar codigo muerto de UI» (2026-08-07): 31 -> 30, y es la PRIMERA vez que este
+    // numero BAJA. No es que el detector reconozca menos: es que hay un archivo menos.
+    // `configuracion/_components/ZonasModule.tsx` montaba `<Pagination>` y `<DataTable>` en el
+    // mismo archivo, y se borro entero por decision humana porque ninguna ruta lo montaba (no
+    // existe `configuracion/zonas/page.tsx`). Bajar el piso solo es legitimo cuando se puede
+    // nombrar la pantalla que desaparecio; si vuelve a bajar sin nombre, el detector se rompio.
     expect(paginadas.size, "no se reconocio ninguna pantalla paginada").toBeGreaterThanOrEqual(
-      31,
+      30,
     );
 
     const excluidos = new Set(
