@@ -76,7 +76,6 @@ function buildZonaRepo(exists: boolean): IZonaRepository {
     listLite: vi.fn().mockResolvedValue([]), // feature 144; no ejercitado aqui
     update: vi.fn(),
     hardDelete: vi.fn(),
-    arbol: vi.fn(),
     countExistingDistritos: vi.fn(),
     countExistingVehiculos: vi.fn(),
     findCentralZonaId: vi.fn().mockResolvedValue(null),

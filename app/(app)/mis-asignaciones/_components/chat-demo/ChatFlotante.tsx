@@ -14,9 +14,10 @@ import { ChatOrdenesLista } from "./ChatOrdenesLista";
 // centrado, misma ventana, sin navegar).
 //
 // Contactos = las órdenes EN REPARTO (una por destinatario). Abrir el chat entra por la
-// conversación de la orden en DETALLE. El hilo y las plantillas son los REALES, los mismos
-// que consume `ChatWhatsappPanel` en el panel del detalle: los dos conviven y leen la misma
-// fuente (`listarHiloChat`), así que los mensajes se ven en ambos sitios.
+// conversación de la orden en DETALLE. El hilo y las plantillas son los REALES
+// (`listarHiloChat`). Convivió con el chat del panel del detalle (`ChatWhatsappPanel`), que
+// leía la misma fuente; ese panel se borró el 2026-08-07 por decisión humana al quedarse sin
+// montaje, y esta ruta flotante es desde entonces la única entrada al hilo.
 //
 // Layout del modal: dos columnas en ≥md (lista | conversación). En móvil solo se ve una a
 // la vez y el header de la conversación trae la flecha de "volver a la lista".

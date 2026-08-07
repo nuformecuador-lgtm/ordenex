@@ -48,6 +48,15 @@
 // volverá a necesitarlo, pero `cobertura-tablas.guardia` («la FASE 1 del export queda
 // cerrada…») FALLA si alguien lo reintroduce sin reabrir la fase: la fase no puede darse
 // por terminada con tablas a medias, y una tabla a medias no puede colarse como terminada.
+//
+// chore «borrar código muerto de UI» (2026-08-07) — RESTA de una tabla, por decisión humana:
+// sale `app/(app)/configuracion/_components/ZonasModule.tsx` («Zonas (configuración)»,
+// censada `fuera` precisamente porque ninguna página la montaba). Igual que con
+// `OrdenesApartado.tsx` el 2026-07-31, lo que se borró fue la vista, no una capacidad: la
+// gestión de zonas vive y funciona en `configuracion/tarifas/_components/ZonasTarifasModule`,
+// que no monta `<DataTable>` y por eso nunca figuró en este censo. Totales VIGENTES:
+// **32 tablas = 26 dentro de alcance + 6 fuera**, con 31 instancias de `<DataTable>` en 30
+// archivos (los de partida son los de la 172, ver `cobertura-tablas.guardia.test.ts`).
 
 /** Estado de una tabla censada respecto de la descarga. */
 export type EstadoDescarga = "con_descarga" | "pendiente" | "fuera";
@@ -136,16 +145,14 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ruta: "app/(app)/configuracion/_components/UsuariosModule.tsx",
     tablas: [{ nombre: "Usuarios", estado: "con_descarga" }],
   },
-  {
-    ruta: "app/(app)/configuracion/_components/ZonasModule.tsx",
-    tablas: [
-      {
-        nombre: "Zonas (configuración)",
-        estado: "fuera",
-        nota: "el módulo NO está montado en ninguna página (P4 ratificada): ConfiguracionPage solo renderiza UsuariosModule",
-      },
-    ],
-  },
+  // BORRADO (chore borrar-codigo-muerto, 2026-08-07): aquí estaba
+  // `app/(app)/configuracion/_components/ZonasModule.tsx`, censado `fuera` porque ninguna
+  // página lo montaba. Esa entrada dejó de existir con el archivo: la decisión humana fue
+  // borrar el árbol entero (módulo + `ZonaForm` + `zonas-columns`), no seguir vigilándolo. La
+  // gestión de zonas VIVA es `configuracion/tarifas/_components/ZonasTarifasModule.tsx`, que
+  // no monta `<DataTable>` y por eso nunca entró en este censo. Con el borrado bajan los
+  // totales de `cobertura-tablas.guardia.test.ts`: 31→30 archivos, 32→31 instancias, 6→5
+  // exclusiones con `<DataTable>` y 33→32 tablas censadas.
   {
     ruta: "app/(app)/configuracion/api/_components/ApiKeysModule.tsx",
     tablas: [{ nombre: "API keys", estado: "con_descarga" }],
@@ -264,7 +271,8 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     // HALLAZGO de T H.1, no una tabla de la 172: existe desde la feature 130 y el censo no
     // podía verla porque el recorrido se paraba en `app/`. Se registra con su estado REAL.
     //
-    // `fuera` con el mismo criterio ya ratificado para `ZonasModule`: es un componente del
+    // `fuera` con el mismo criterio que en su día se ratificó para `ZonasModule` (P4; aquel
+    // módulo ya no existe, se borró el 2026-08-07): es un componente del
     // paquete de analítica SIN ningún consumidor montado en una página (`TablaResumen` solo
     // aparece en sus propios tests y en `components/private/analytics/tipos.ts`). No se le
     // cablea descarga aquí: eso sería tocar analítica, que la 172 declara fuera de alcance

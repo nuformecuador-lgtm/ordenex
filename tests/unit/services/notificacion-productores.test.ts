@@ -41,7 +41,6 @@ class RepoFake implements INotificacionRepository {
 
   listarParaUsuario = vi.fn().mockResolvedValue([]);
   verificarVisible = vi.fn().mockResolvedValue("visible" as const);
-  marcarLeida = vi.fn().mockResolvedValue(undefined);
   marcarTodasLeidas = vi.fn().mockResolvedValue(0);
   descartar = vi.fn().mockResolvedValue(undefined);
 }

@@ -22,15 +22,11 @@ vi.mock("@/lib/actions/usuarios", () => ({
   listarUsuarios: (...a: unknown[]) => listarUsuariosMock(...a),
 }));
 
-// Feature 24: la misma página pre-carga el listado de zonas. Se mockea la acción
-// y se stubea el módulo de zonas para aislar la lógica de usuarios de este test.
-const listarZonasMock = vi.fn();
-vi.mock("@/lib/actions/zonas", () => ({
-  listarZonas: (...a: unknown[]) => listarZonasMock(...a),
-}));
-vi.mock("@/app/(app)/configuracion/_components/ZonasModule", () => ({
-  ZonasModule: () => <div data-testid="zonas-module-stub" />,
-}));
+// Aquí estaban el mock de `listarZonas` y el stub de `ZonasModule`: la feature 24 montaba el
+// módulo de zonas en esta MISMA página y había que aislarlo. Dejó de montarse en `19b9cccf`
+// («remove zones from cofign>user», 2026-07-22), que sacó `ZonasModule` y su pre-carga de
+// `configuracion/page.tsx`, y el árbol entero se borró en el chore del 2026-08-07 por
+// decisión humana. El stub ya no puede resolverse; la pre-carga que aislaba no existe.
 
 // Stub identificable del módulo cliente que captura las props recibidas.
 const moduleCalls: UsuariosPageData[] = [];
@@ -44,13 +40,6 @@ vi.mock("@/app/(app)/configuracion/_components/UsuariosModule", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   moduleCalls.length = 0;
-  listarZonasMock.mockResolvedValue({
-    status: "ok",
-    items: [],
-    page: 1,
-    pageSize: 25,
-    total: 0,
-  });
 });
 
 describe("app/(app)/configuracion/page.tsx — autorización (R1/R3)", () => {

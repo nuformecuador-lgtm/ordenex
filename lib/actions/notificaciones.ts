@@ -1,10 +1,16 @@
 "use server";
 
-// Feature 146 (design §3, R38) — las CINCO operaciones de la campana como Server Actions del
+// Feature 146 (design §3, R38) — las operaciones de la campana como Server Actions del
 // propio proyecto, NO como rutas API internas consumidas por `fetch` (docs/architecture.md;
 // alternativa A7 descartada). Patron `lib/actions/aprobacion-postulaciones.ts`: resuelven el
 // actor con la sesion, validan el borde con zod, envuelven con `withErrorHandler` y traducen
 // con `toActionError`. `deps` inyectables para test sin DB ni cookies.
+//
+// Eran CINCO; hoy son CUATRO. `marcarNotificacionLeida` (R31) se borro el 2026-08-07 por
+// decision humana: la campana solo ofrece «descartar» y «marcar todas», y `git log -S` sobre
+// `app/` y `components/` devuelve CERO commits en toda su vida — nunca tuvo punto de entrada.
+// `INotificacionService.marcarLeida` y `NotificacionRepository.marcarLeida` NO se tocan: siguen
+// probados y son lo que habria que recablear si alguien anade el boton.
 import {
   cargaTerminadaSchema,
   notificacionIdSchema,
@@ -60,23 +66,6 @@ export async function listarNotificaciones(
   const r = await withErrorHandler(async () => {
     const actor = await actorRequerido(deps);
     return (deps.service ?? buildService()).listar(actor);
-  });
-  return isAppErrorShape(r) ? toActionError(r) : r;
-}
-
-/**
- * R31/R35/R37: marca una notificacion como leida para el actor.
- *
- * @sin-superficie DEUDA, no diseno: la campana (`components/shared/NotificationsBell.tsx`) solo ofrece «descartar» y «marcar todas»; marcar UNA no tiene punto de entrada y `git log -S` no devuelve ningun commit en `app/` ni `components/`, asi que nunca lo tuvo. Capacidad de usuario completa, implementada y testeada, sin boton.
- */
-export async function marcarNotificacionLeida(
-  id: unknown,
-  deps: NotificacionActionDeps = {},
-): Promise<MarcarNotificacionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await actorRequerido(deps);
-    const notificacionId = idValidado(id);
-    return (deps.service ?? buildService()).marcarLeida(notificacionId, actor);
   });
   return isAppErrorShape(r) ? toActionError(r) : r;
 }

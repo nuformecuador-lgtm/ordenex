@@ -5,7 +5,6 @@ import type {
 import type {
   Actor,
   ActualizarZonaServiceResult,
-  ArbolZonasServiceResult,
   BorrarZonaServiceResult,
   CrearZonaServiceResult,
   IZonaService,
@@ -120,11 +119,5 @@ export class ZonaService implements IZonaService {
     if (res === "not_found") return { status: "not_found" };
     if (res === "referenced") return { status: "conflict" };
     return { status: "ok" };
-  }
-
-  async arbol(actor: Actor): Promise<ArbolZonasServiceResult> {
-    if (!esMaestro(actor)) return { status: "forbidden" };
-    const arbol = await this.repo.arbol();
-    return { status: "ok", arbol };
   }
 }

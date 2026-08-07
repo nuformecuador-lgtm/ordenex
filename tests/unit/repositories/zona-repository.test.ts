@@ -344,46 +344,6 @@ describe("ZonaRepository.hardDelete", () => {
   });
 });
 
-describe("ZonaRepository.arbol", () => {
-  it("indexa por nombre normalizado con id + value", async () => {
-    const tx = buildTx();
-    const prisma = buildPrisma(tx, {
-      zona: {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            id: "z1",
-            nombre: "GUANACASTE",
-            distritos: [
-              {
-                distrito: {
-                  id: "d1",
-                  nombre: "Liberia",
-                  canton: { id: "c1", nombre: "Liberia" },
-                },
-              },
-              {
-                distrito: {
-                  id: "d2",
-                  nombre: "Cañas Dulces",
-                  canton: { id: "c1", nombre: "Liberia" },
-                },
-              },
-            ],
-          },
-        ]),
-      },
-    });
-
-    const arbol = await repoOf(prisma).arbol();
-    expect(Object.keys(arbol)).toEqual(["guanacaste"]);
-    expect(arbol["guanacaste"].value).toBe("GUANACASTE");
-    const liberia = arbol["guanacaste"].cantones["liberia"];
-    expect(liberia.id).toBe("c1");
-    expect(Object.keys(liberia.distritos).sort()).toEqual(["canas dulces", "liberia"]);
-    expect(liberia.distritos["liberia"]).toEqual({ id: "d1", value: "Liberia" });
-  });
-});
-
 describe("ZonaRepository.list", () => {
   it("mapea distritosCount y NO incluye tarifas sin include", async () => {
     const tx = buildTx();
