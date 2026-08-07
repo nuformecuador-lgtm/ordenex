@@ -590,7 +590,10 @@ describe("superficie de uso — anti-vacuidad", () => {
     // Un par de anclas concretas, para que la cifra no sea el único testigo.
     const claves = ACCIONES.map((a) => `${a.modulo}#${a.nombre}`);
     expect(claves).toContain("lib/actions/ordenes-guia.ts#rutearABodegaSatelite");
-    expect(claves).toContain("lib/actions/notificaciones.ts#marcarNotificacionLeida");
+    // El ancla de este segundo modulo era `marcarNotificacionLeida`, borrada el 2026-08-07 por
+    // no tener boton. `descartarNotificacion` sirve igual y ademas esta VIVA, que para un ancla
+    // del censo es mejor: no volvera a desaparecer por una limpieza de codigo muerto.
+    expect(claves).toContain("lib/actions/notificaciones.ts#descartarNotificacion");
     // `_shared/to-action-error.ts` no lleva `"use server"`: es un helper, no una acción.
     expect(claves.some((c) => c.includes("to-action-error"))).toBe(false);
 

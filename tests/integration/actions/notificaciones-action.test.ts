@@ -3,7 +3,6 @@ import fs from "fs";
 import path from "path";
 import {
   listarNotificaciones,
-  marcarNotificacionLeida,
   marcarTodasLeidas,
   descartarNotificacion,
   notificarCargaMasivaTerminada,
@@ -44,13 +43,6 @@ describe("R34 — sin sesion valida ninguna accion lee ni escribe notificaciones
     expect(service.listar).not.toHaveBeenCalled();
   });
 
-  it("marcarNotificacionLeida responde unauthenticated sin tocar el service", async () => {
-    const service = fakeService();
-    const r = await marcarNotificacionLeida("n-1", { service, getActor: sinActor });
-    expect(r.status).toBe("unauthenticated");
-    expect(service.marcarLeida).not.toHaveBeenCalled();
-  });
-
   it("marcarTodasLeidas responde unauthenticated sin tocar el service", async () => {
     const service = fakeService();
     const r = await marcarTodasLeidas({ service, getActor: sinActor });
@@ -77,11 +69,14 @@ describe("R34 — sin sesion valida ninguna accion lee ni escribe notificaciones
 });
 
 describe("R36 — entrada mal formada -> validation_error sin tocar la base de datos", () => {
-  it("rechaza un id vacio al marcar como leida", async () => {
+  // Ejercia `marcarNotificacionLeida`, borrada el 2026-08-07. La rama del schema que probaba
+  // (cadena VACIA, distinta de «no es texto») vive en `idValidado`, compartido por las acciones
+  // que quedan, asi que se reapunta a `descartarNotificacion` en vez de perderse.
+  it("rechaza un id vacio al descartar", async () => {
     const service = fakeService();
-    const r = await marcarNotificacionLeida("", { service, getActor });
+    const r = await descartarNotificacion("", { service, getActor });
     expect(r.status).toBe("validation_error");
-    expect(service.marcarLeida).not.toHaveBeenCalled();
+    expect(service.descartar).not.toHaveBeenCalled();
   });
 
   it("rechaza un id que no es texto al descartar", async () => {
@@ -155,10 +150,10 @@ describe("R38 — las operaciones son Server Actions, no rutas API internas", ()
     }
   });
 
-  it("las cinco acciones estan exportadas como funciones async", () => {
+  // Eran cinco hasta el 2026-08-07; `marcarNotificacionLeida` se borro por no tener boton.
+  it("las cuatro acciones estan exportadas como funciones async", () => {
     for (const accion of [
       listarNotificaciones,
-      marcarNotificacionLeida,
       marcarTodasLeidas,
       descartarNotificacion,
       notificarCargaMasivaTerminada,
@@ -233,15 +228,19 @@ describe("R39 — la carga terminada notifica SOLO al ejecutor y una sola vez po
 });
 
 describe("las acciones traducen el resultado de dominio al contrato de la campana", () => {
+  // El `forbidden` lo propagaba `marcarNotificacionLeida` (borrada el 2026-08-07); los dos
+  // status siguen probados sobre `descartarNotificacion`, que recorre el mismo `toActionError`.
   it("propaga forbidden y not_found del service", async () => {
     const forbidden = fakeService({
-      marcarLeida: vi.fn().mockResolvedValue({ status: "forbidden" }),
+      descartar: vi.fn().mockResolvedValue({ status: "forbidden" }),
+    });
+    const noEncontrado = fakeService({
       descartar: vi.fn().mockResolvedValue({ status: "not_found" }),
     });
-    expect(await marcarNotificacionLeida("n-1", { service: forbidden, getActor })).toEqual({
+    expect(await descartarNotificacion("n-1", { service: forbidden, getActor })).toEqual({
       status: "forbidden",
     });
-    expect(await descartarNotificacion("n-1", { service: forbidden, getActor })).toEqual({
+    expect(await descartarNotificacion("n-1", { service: noEncontrado, getActor })).toEqual({
       status: "not_found",
     });
   });
