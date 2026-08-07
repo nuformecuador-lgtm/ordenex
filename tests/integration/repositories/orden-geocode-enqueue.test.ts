@@ -134,39 +134,45 @@ beforeEach(async () => {
   await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
 });
 
-describe("R6 — creacion individual", () => {
-  it("crear una orden con direccion deja un job geocodificacion pendiente", async () => {
-    const { prisma } = buildPrisma({});
+// REAPUNTADO 2026-08-07 (tanda 2 del chore de deuda de superficie). Estos bloques se
+// escribieron sobre `OrdenRepository.create`, el insert de UNA orden, que se borro al quedarse
+// sin llamador (su Server Action nacio sin pantalla). NO se borran con el: lo que afirman no es
+// de `create`, sino de `encolarGeocodificacion` y del patron OUTBOX, que son COMPARTIDOS y
+// siguen VIVOS —los usan `update`, `createManyOrdenes` y `createManyOrdenesConGuia`—. Y son su
+// unico testigo: el bloque de carga masiva de abajo solo mira el `payload`, no el `maxIntentos`
+// (R34), ni la `dedupeKey` con hash, ni que el encolado reciba el cliente transaccional.
+// Reapuntados a `createManyOrdenes`, que es la via VIVA de creacion.
+describe("R6 — encolado en la insercion (via createManyOrdenes)", () => {
+  it("una orden con direccion deja un job geocodificacion pendiente, con su maxIntentos y su dedupeKey", async () => {
+    const { prisma } = buildPrisma({
+      before: [],
+      after: [{ id: "orden-a", estatusId: idEstado("en_preparacion"), direccion: "Av. Central 100" }],
+      createManyCount: 1,
+    });
     const cola = new ColaEnMemoria();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, cola);
 
-    await repo.create(CREATE_DATA, HISTORIAL);
+    await repo.createManyOrdenes([CREATE_DATA], 100, HISTORIAL, loteCtx());
 
     expect(cola.geo).toHaveLength(1);
-    expect(cola.geo[0].payload).toEqual({ ordenId: "orden-1" });
+    expect(cola.geo[0].payload).toEqual({ ordenId: "orden-a" });
     expect(cola.geo[0].maxIntentos).toBe(8); // R34
     expect(cola.geo[0].dedupeKey).toBe(
-      dedupeKeyGeocodificacion("orden-1", hashDireccion("Av. Central 100")),
+      dedupeKeyGeocodificacion("orden-a", hashDireccion("Av. Central 100")),
     );
   });
 
-  it("R9: crear una orden SIN direccion no encola nada", async () => {
-    const { prisma } = buildPrisma({});
-    const cola = new ColaEnMemoria();
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient, cola);
-
-    await repo.create({ ...CREATE_DATA, direccion: null }, HISTORIAL);
-
-    expect(cola.geo).toHaveLength(0);
-  });
-
-  it("el encolado ocurre DENTRO de la transaccion que inserta la orden", async () => {
-    const { prisma } = buildPrisma({});
+  it("el encolado ocurre DENTRO de la transaccion que inserta (outbox)", async () => {
+    const { prisma } = buildPrisma({
+      before: [],
+      after: [{ id: "orden-a", estatusId: idEstado("en_preparacion"), direccion: "Av. Central 100" }],
+      createManyCount: 1,
+    });
     const cola = new ColaEnMemoria();
     const enqueueSpy = vi.spyOn(cola, "enqueue");
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, cola);
 
-    await repo.create(CREATE_DATA, HISTORIAL);
+    await repo.createManyOrdenes([CREATE_DATA], 100, HISTORIAL, loteCtx());
 
     // El 4.º argumento de `enqueue` es el cliente transaccional del writer (outbox).
     expect(enqueueSpy.mock.calls[0][3]).toBe(prisma);
@@ -175,28 +181,33 @@ describe("R6 — creacion individual", () => {
 });
 
 describe("R7 — la transaccion revertida no deja jobs huerfanos", () => {
-  it("si la creacion falla no queda job huerfano en la cola", async () => {
-    // El append del historial revienta DESPUES del create: la tx entera revierte.
-    const { prisma, ordenHistorialEstado } = buildPrisma({});
+  it("si el append del historial falla, la tx revierte y no queda job huerfano", async () => {
+    const { prisma, ordenHistorialEstado } = buildPrisma({
+      before: [],
+      after: [{ id: "orden-a", estatusId: idEstado("en_preparacion"), direccion: "Av. Central 100" }],
+      createManyCount: 1,
+    });
     ordenHistorialEstado.createMany.mockRejectedValue(new Error("append boom"));
     const cola = new ColaEnMemoria();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, cola);
 
-    await expect(repo.create(CREATE_DATA, HISTORIAL)).rejects.toThrow();
+    await expect(
+      repo.createManyOrdenes([CREATE_DATA], 100, HISTORIAL, loteCtx()),
+    ).rejects.toThrow();
 
     // El encolado va DESPUES del append en la misma tx: nunca llego a ejecutarse.
     expect(cola.geo).toHaveLength(0);
   });
 
-  it("si el insert de la orden falla, tampoco se encola", async () => {
-    const ordenCreate = vi.fn(async () => {
-      throw new Error("create boom");
-    });
-    const { prisma } = buildPrisma({ ordenCreate });
+  it("si el insert falla, tampoco se encola", async () => {
+    const { prisma, orden } = buildPrisma({ before: [], after: [], createManyCount: 0 });
+    orden.createMany.mockRejectedValue(new Error("create boom"));
     const cola = new ColaEnMemoria();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, cola);
 
-    await expect(repo.create(CREATE_DATA, HISTORIAL)).rejects.toThrow();
+    await expect(
+      repo.createManyOrdenes([CREATE_DATA], 100, HISTORIAL, loteCtx()),
+    ).rejects.toThrow();
     expect(cola.geo).toHaveLength(0);
   });
 });
@@ -257,13 +268,22 @@ describe("R8 — carga masiva", () => {
   });
 });
 
+// REAPUNTADO 2026-08-07 (misma razon que arriba): la propiedad es de la `dedupeKey` CON HASH
+// —que es lo que impide que una correccion de direccion se descarte en silencio contra una
+// fila `done` que no se purga—, no de `create`. Reapuntado a `createManyOrdenes`.
 describe("R12/R13 — idempotencia y re-geocodificacion", () => {
+  const soloOrdenA = {
+    before: [],
+    after: [{ id: "orden-a", estatusId: idEstado("en_preparacion"), direccion: "Av. Central 100" }],
+    createManyCount: 1,
+  };
+
   it("dos encolados de la misma orden y direccion producen una sola fila", async () => {
     const cola = new ColaEnMemoria();
     for (let i = 0; i < 2; i++) {
-      const { prisma } = buildPrisma({});
+      const { prisma } = buildPrisma(soloOrdenA);
       const repo = new OrdenRepository(prisma as unknown as PrismaClient, cola);
-      await repo.create(CREATE_DATA, HISTORIAL);
+      await repo.createManyOrdenes([CREATE_DATA], 100, HISTORIAL, loteCtx());
     }
     expect(cola.geo).toHaveLength(1); // el 2.º choco con la clave y se descarto
   });
@@ -272,10 +292,12 @@ describe("R12/R13 — idempotencia y re-geocodificacion", () => {
     const cola = new ColaEnMemoria();
 
     // 1.º encolado: direccion original. Se procesa y la fila queda `done` (NO se purga).
-    const primero = buildPrisma({});
-    await new OrdenRepository(primero.prisma as unknown as PrismaClient, cola).create(
-      CREATE_DATA,
+    const primero = buildPrisma(soloOrdenA);
+    await new OrdenRepository(primero.prisma as unknown as PrismaClient, cola).createManyOrdenes(
+      [CREATE_DATA],
+      100,
       HISTORIAL,
+      loteCtx(),
     );
     expect(cola.geo).toHaveLength(1);
 
@@ -283,23 +305,20 @@ describe("R12/R13 — idempotencia y re-geocodificacion", () => {
     // chocaria con la fila anterior y el ON CONFLICT DO NOTHING lo descartaria EN
     // SILENCIO: la correccion no se geocodificaria jamas.
     const segundo = buildPrisma({
-      ordenCreate: vi.fn(async () => ({
-        id: "orden-1",
-        direccion: "Av. Central 200",
-        estatus: { value: "pendiente" },
-        peso: null,
-        montoCobrar: null,
-      })),
+      before: [],
+      after: [{ id: "orden-a", estatusId: idEstado("en_preparacion"), direccion: "Av. Central 200" }],
+      createManyCount: 1,
     });
-    await new OrdenRepository(segundo.prisma as unknown as PrismaClient, cola).create(
-      { ...CREATE_DATA, numRemision: "REM-9", direccion: "Av. Central 200" },
+    await new OrdenRepository(segundo.prisma as unknown as PrismaClient, cola).createManyOrdenes(
+      [{ ...CREATE_DATA, numRemision: "REM-9", direccion: "Av. Central 200" }],
+      100,
       HISTORIAL,
+      loteCtx(),
     );
 
     expect(cola.geo).toHaveLength(2);
     expect(cola.geo[1].dedupeKey).toBe(
-      dedupeKeyGeocodificacion("orden-1", hashDireccion("Av. Central 200")),
+      dedupeKeyGeocodificacion("orden-a", hashDireccion("Av. Central 200")),
     );
-    expect(cola.geo[1].dedupeKey).not.toBe(cola.geo[0].dedupeKey);
   });
 });

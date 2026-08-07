@@ -40,10 +40,16 @@ const REPOS = {
   >,
 };
 
-// Los 24 puntos del mapa (design §2), 1 por familia de transicion.
+// Los puntos del mapa (design §2), 1 por familia de transicion.
+//
+// EL `n` ES UN IDENTIFICADOR ESTABLE, NO UN INDICE. Lo citan `design §2` y cuatro casos de este
+// mismo archivo, que buscan por `n === 12 / 24 / 25 / 26`. Por eso, cuando un punto se retira,
+// su numero SE JUBILA y queda un HUECO: renumerar seria mas barato aqui y mucho mas caro fuera.
+// Hueco vigente: el #2 (`OrdenRepository.create`, `creacion_manual`), retirado el 2026-08-07
+// al borrarse el alta manual individual por quedarse sin superficie. Ver
+// `FAMILIAS_CON_PRODUCTOR_RETIRADO` mas abajo.
 const PUNTOS_DE_ESCRITURA = [
   { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
-  { n: 2, repo: "OrdenRepository", simbolo: "create", origenTipo: "creacion_manual" },
   { n: 3, repo: "OrdenRepository", simbolo: "generarGuiaLote", origenTipo: "generacion_guia" },
   { n: 4, repo: "OrdenRepository", simbolo: "asignarBodegaLote", origenTipo: "asignacion_bodega" },
   { n: 5, repo: "OrdenRepository", simbolo: "rutearBodegaSateliteLote", origenTipo: "ruteo_satelite" },
@@ -295,8 +301,24 @@ const FAMILIAS_SIN_PRODUCTOR = [
   { origenTipo: "recoleccion_tienda", productorFuturo: "feature 157 (recoleccion en tienda)" },
 ] as const;
 
+// Familias cuyo productor EXISTIO y se RETIRO. No es lo mismo que `FAMILIAS_SIN_PRODUCTOR`
+// —aquellas esperan a su feature; estas ya no esperan a nadie— y la diferencia importa para no
+// leer un hueco como un olvido de implementacion.
+//
+// El valor NO se quita de `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED`, y esto es deliberado: es un valor
+// sembrado en la base con FILAS HISTORICAS reales apuntandolo. Retirarlo del seed dejaria
+// historial existente sin su familia. Lo que desaparece es la capacidad de producir filas
+// NUEVAS con esa familia, no las que ya hay.
+const FAMILIAS_CON_PRODUCTOR_RETIRADO = [
+  {
+    origenTipo: "creacion_manual",
+    productorRetirado: "OrdenRepository.create (punto #2), borrado el 2026-08-07 con el alta " +
+      "manual individual: nacio sin pantalla y nunca tuvo consumidor. Hoy TODAS las ordenes " +
+      "nacen por lote (`carga_masiva` / `carga_api`).",
+  },
+] as const;
+
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
-// softDelete (solo deleted_at),
 // setOrdenEnGestion / liberarOrdenEnGestion (puntero de bloqueo 1-a-1). Existen pero NO
 // forman parte del conjunto de escritura de estado -> NO instrumentan historial.
 // Feature 67: las dos LECTURAS del deshacer (`findGestionParaDeshacer`,
@@ -304,8 +326,9 @@ const FAMILIAS_SIN_PRODUCTOR = [
 // orden para que el service decida; la UNICA escritura del deshacer es el punto #12.
 // `crearCierre` (37) escribe `gestion_orden.cierre_id`; feature 109 lo convierte ADEMAS en el
 // punto #19 (`corte_sin_gestionar`) cuando recibe el input del corte -> ya NO va en esta lista.
+// (`softDelete` figuraba aqui hasta el 2026-08-07; se borro del repositorio al retirarse el
+// borrado logico de ordenes, que no tenia superficie.)
 const NO_ESCRIBEN_ESTADO = [
-  { repo: "OrdenRepository", simbolo: "softDelete" },
   { repo: "GestionOrdenRepository", simbolo: "setOrdenEnGestion" },
   { repo: "GestionOrdenRepository", simbolo: "liberarOrdenEnGestion" },
   { repo: "CierreDiaRepository", simbolo: "findGestionParaDeshacer" }, // feature 67: solo query
@@ -313,11 +336,13 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 27 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(27); // +1: feature 157 (ampliacion)
-    // numeracion 1..27 sin huecos ni duplicados.
+  it("son EXACTAMENTE 26 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(26); // 27 - 1: el #2 se retiro el 2026-08-07
+    // Numeracion CRECIENTE y sin duplicados, con los numeros JUBILADOS declarados uno a uno.
+    // No se exige contigüidad a proposito: `n` identifica el punto, no su posicion (ver la
+    // cabecera del mapa). Un hueco no declarado aqui SI rompe.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
       26, 27,
     ]);
   });
@@ -335,10 +360,13 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     // del enum es lo que este caso mide y no se debilita: sigue exigiendo IGUALDAD exacta.
     const familiasDelMapa = [...new Set(PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo))];
     const tiposSinProductor = FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo);
+    const tiposRetirados = FAMILIAS_CON_PRODUCTOR_RETIRADO.map((f) => f.origenTipo);
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
-    expect([...familiasDelMapa, ...tiposSinProductor].sort()).toEqual(tiposDelSeed);
+    expect([...familiasDelMapa, ...tiposSinProductor, ...tiposRetirados].sort()).toEqual(
+      tiposDelSeed,
+    );
     // Y no se solapan: una familia o tiene productor instrumentado o no lo tiene, nunca las dos.
-    for (const familia of tiposSinProductor) {
+    for (const familia of [...tiposSinProductor, ...tiposRetirados]) {
       expect(familiasDelMapa as readonly string[]).not.toContain(familia);
     }
   });

@@ -1,17 +1,10 @@
 "use server";
 
-import { z } from "zod";
 import {
-  actualizarOrdenSchema,
-  crearOrdenSchema,
   listarOrdenesSchema,
   listarOrdenesCompletoSchema,
-  type ActualizarOrdenResult,
-  type BorrarOrdenResult,
-  type CrearOrdenResult,
   type ListarOrdenesCompletoResult,
   type ListarOrdenesResult,
-  type ObtenerOrdenResult,
 } from "@/lib/types/orden";
 import type { Actor, IOrdenService } from "@/lib/interfaces/services/IOrdenService";
 import { OrdenService } from "@/lib/services/OrdenService";
@@ -20,10 +13,8 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import { withErrorHandler, isAppErrorShape, UnauthenticatedError, ValidationError, MSG } from "@/lib/errors";
+import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import { toActionError } from "@/lib/actions/_shared/to-action-error";
-
-const idSchema = z.string().min(1);
 
 function buildOrdenService(): IOrdenService {
   const prisma = getPrismaClient();
@@ -41,47 +32,16 @@ export interface OrdenActionDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-/**
- * R25/R26/R27/R28: crear orden.
- *
- * @sin-superficie andamiaje CRUD del arranque: ninguna pantalla ni ruta de API lo usa. Las rutas `app/api/ordenes/api-key/**` instancian `BulkOrdenService`/`ApiOrdenLecturaService` directamente, y la creacion real de ordenes entra por la carga masiva. Su unico consumidor es `tests/integration/actions/ordenes-action.test.ts`. Deuda inocua (no es capacidad perdida: hay otro camino), pendiente de decidir si se borra.
- */
-export async function crearOrden(
-  input: unknown,
-  deps: OrdenActionDeps = {},
-): Promise<CrearOrdenResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R18: antes de tocar el service
-    const data = crearOrdenSchema.parse(input); // ZodError -> VALIDATION_ERROR
-    const service = deps.ordenService ?? buildOrdenService();
-    return service.crear(data, actor); // R42: resultado tipado de dominio
-  });
-  return isAppErrorShape(r) ? toActionError(r) : r;
-}
-
-/**
- * R29/R34: obtener orden por id.
- *
- * @sin-superficie andamiaje CRUD del arranque, mismo caso que `crearOrden` (ver alli): sin consumidor en `app/` ni en `components/` desde que nacio; el detalle de la orden se sirve por props desde la pagina. Solo lo toca su propio test de integracion.
- */
-export async function obtenerOrden(
-  id: unknown,
-  deps: OrdenActionDeps = {},
-): Promise<ObtenerOrdenResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R18
-    const parsedId = idSchema.safeParse(id);
-    if (!parsedId.success) {
-      // R9: conservar la clave `id` en fieldErrors.
-      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
-    }
-    const service = deps.ordenService ?? buildOrdenService();
-    return service.obtener(parsedId.data, actor);
-  });
-  return isAppErrorShape(r) ? toActionError(r) : r;
-}
+// BORRADO 2026-08-07 (chore de deuda de superficie, decision humana): aqui vivian `crearOrden`,
+// `obtenerOrden`, `actualizarOrden` y `borrarOrden` — el andamiaje CRUD del arranque
+// (`07c63d8b`, 2026-07-09). `git log -S` sobre `app/` y `components/` devolvia VACIO para las
+// cuatro: NACIERON MUERTAS, nunca tuvieron pantalla. La creacion real entra por la carga masiva
+// (`app/api/ordenes/api-key/**` instancia `BulkOrdenService`/`ApiOrdenLecturaService` directo),
+// el detalle se sirve por props desde la pagina y las ediciones pasan por las acciones de
+// dominio (guia, asignacion, incidencias). Lo que queda vivo en este archivo son las DOS
+// lecturas del listado, y esas si tienen consumidor: `ordenes/_components/OrdenesModule.tsx`.
+// OJO: `tests/integration/db/_semilla-rollup.ts` exporta un helper de siembra TAMBIEN llamado
+// `crearOrden`. Es un homonimo sin relacion con esto; no lo confundas en un `grep`.
 
 /** R30/R31/R32/R33/R34: listar ordenes paginadas. */
 export async function listarOrdenes(
@@ -114,54 +74,6 @@ export async function listarOrdenesCompleto(
     const data = listarOrdenesCompletoSchema.parse(input ?? {}); // R15: ZodError -> VALIDATION_ERROR
     const service = deps.ordenService ?? buildOrdenService();
     return service.listarCompleto(data, actor);
-  });
-  return isAppErrorShape(r) ? toActionError(r) : r;
-}
-
-/**
- * R35/R36/R37/R38: actualizar orden por id.
- *
- * @sin-superficie andamiaje CRUD del arranque, mismo caso que `crearOrden` (ver alli): las ediciones reales de una orden pasan por las acciones de dominio (guia, asignacion, incidencias), no por este update generico. Solo lo toca su propio test de integracion.
- */
-export async function actualizarOrden(
-  id: unknown,
-  input: unknown,
-  deps: OrdenActionDeps = {},
-): Promise<ActualizarOrdenResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R18
-    const parsedId = idSchema.safeParse(id);
-    if (!parsedId.success) {
-      // R9: conservar la clave `id` en fieldErrors.
-      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
-    }
-    const data = actualizarOrdenSchema.parse(input); // R38: ZodError -> VALIDATION_ERROR
-    const service = deps.ordenService ?? buildOrdenService();
-    return service.actualizar(parsedId.data, data, actor);
-  });
-  return isAppErrorShape(r) ? toActionError(r) : r;
-}
-
-/**
- * R39/R40/R41: borrado logico de orden por id.
- *
- * @sin-superficie andamiaje CRUD del arranque, mismo caso que `crearOrden` (ver alli): no hay ninguna pantalla que ofrezca borrar una orden, ni se ha pedido. Solo lo toca su propio test de integracion.
- */
-export async function borrarOrden(
-  id: unknown,
-  deps: OrdenActionDeps = {},
-): Promise<BorrarOrdenResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R18
-    const parsedId = idSchema.safeParse(id);
-    if (!parsedId.success) {
-      // R9: conservar la clave `id` en fieldErrors.
-      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
-    }
-    const service = deps.ordenService ?? buildOrdenService();
-    return service.borrar(parsedId.data, actor);
   });
   return isAppErrorShape(r) ? toActionError(r) : r;
 }

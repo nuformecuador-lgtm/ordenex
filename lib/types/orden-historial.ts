@@ -10,7 +10,11 @@ import type { OrdenHistorialOrigenTipo as PrismaOrdenHistorialOrigenTipo } from 
 //     NO lista (conjunto cerrado de los 12 tipos).
 export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "carga_masiva", // feature 15/27: estado inicial en createMany
-  "creacion_manual", // feature 6: OrdenService.crear (create individual)
+  // feature 6. PRODUCTOR RETIRADO el 2026-08-07: lo producia `OrdenService.crear` ->
+  // `OrdenRepository.create`, borrados por no tener superficie. El valor SE QUEDA porque hay
+  // filas historicas que lo apuntan; lo que ya no se puede es generar filas NUEVAS con el.
+  // Hoy todas las ordenes nacen por lote (`carga_masiva` / `carga_api`).
+  "creacion_manual",
   "generacion_guia", // feature 17/30: generarGuiaLote
   "asignacion_bodega", // feature 17: asignarBodegaLote
   "ruteo_satelite", // feature 30: rutearBodegaSateliteLote

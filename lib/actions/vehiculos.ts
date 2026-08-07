@@ -1,11 +1,9 @@
 "use server";
 
-import { z } from "zod";
 import type {
   Actor,
   IVehiculoService,
   ListarVehiculosServiceResult,
-  ObtenerVehiculoServiceResult,
 } from "@/lib/interfaces/services/IVehiculoService";
 import { VehiculoService } from "@/lib/services/VehiculoService";
 import { VehiculoRepository } from "@/lib/repositories/VehiculoRepository";
@@ -17,12 +15,6 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 export type ListarVehiculosResult =
   | ListarVehiculosServiceResult
   | { status: "unauthenticated" };
-
-export type ObtenerVehiculoResult =
-  | ObtenerVehiculoServiceResult
-  | { status: "unauthenticated" };
-
-const idSchema = z.string().min(1);
 
 function buildVehiculoService(): IVehiculoService {
   const prisma = getPrismaClient();
@@ -44,19 +36,10 @@ export async function listarVehiculos(
   return service.listar(actor);
 }
 
-/**
- * R9/R10/R11: obtener una fila del catalogo por id (solo maestro).
- *
- * @sin-superficie no existe pantalla de vehiculos: de la feature 50 solo se consume `listarVehiculos`, desde `configuracion/tarifas/page.tsx`. Sin consumidor desde fc64e88d (2026-07-10). Deuda inocua (lectura de un catalogo de solo lectura), pendiente de decidir si se borra.
- */
-export async function obtenerVehiculo(
-  id: unknown,
-  deps: VehiculoActionDeps = {},
-): Promise<ObtenerVehiculoResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" }; // R10
-  const parsedId = idSchema.safeParse(id);
-  if (!parsedId.success) return { status: "not_found" };
-  const service = deps.vehiculoService ?? buildVehiculoService();
-  return service.obtener(parsedId.data, actor);
-}
+// BORRADO 2026-08-07 (chore de deuda de superficie, decision humana): aqui vivia
+// `obtenerVehiculo` (R9/R10/R11), y con ella su `ObtenerVehiculoResult`, el `idSchema` y el
+// import de `zod`. NACIO MUERTA: `git log -S "obtenerVehiculo" -- app components` devuelve una
+// lista VACIA desde `fc64e88d` (2026-07-10, feature 50). No existe pantalla de vehiculos; de
+// toda la feature 50 lo unico que se consume es `listarVehiculos`, desde
+// `configuracion/tarifas/page.tsx`. `IVehiculoService.obtener` NO se toca: sigue declarado y
+// probado en `tests/unit/services/vehiculo-service.test.ts`, que es donde vive la autz por rol.

@@ -75,15 +75,11 @@ function conGuiaEco(
 
 function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
   return {
-    create: vi.fn(),
     findById: vi.fn(),
     list: vi.fn(),
     update: vi.fn(),
-    softDelete: vi.fn(),
-    existsEstatus: vi.fn(),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-erbp"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
-    existsGeo: vi.fn(),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
     findAllProvincias: vi.fn().mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([{ id: "c1", nombre: "Quito", provinciaId: "p1" }]),

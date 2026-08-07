@@ -4,6 +4,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionReprogramadaRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { buildCargaDelegate, loteCtx } from "@/tests/fixtures/carga-lote";
 
 // Feature 49 — T5.1 (R7): ATOMICIDAD del cambio de estado + su rastro. Por cada MECANISMO
 // de escritura (transaccion con create/loop de updates, updateMany-envuelto, raw con
@@ -23,69 +24,70 @@ beforeEach(async () => {
   await sembrarCatalogoEstados(); // feature 140: la guardia es de fallo CERRADO
 });
 
-// --- Mecanismo A: create dentro de $transaction (#2) ---
-describe("R7 · mecanismo create-en-transaccion (#2)", () => {
+// --- Mecanismo A: insercion dentro de $transaction (#2) ---
+// REAPUNTADO 2026-08-07 (tanda 2 del chore de deuda de superficie): este bloque se escribia
+// sobre `OrdenRepository.create` (alta individual), borrado al quedarse sin llamador. El
+// MECANISMO no ha muerto —insertar y anexar historial en la misma tx sigue siendo como nacen
+// TODAS las ordenes—, solo cambia de puerta: hoy es `createManyOrdenes`. Se reapunta en vez de
+// borrarse porque este archivo es un CENSO POR MECANISMO: quitar una fila dejaria la insercion,
+// que esta viva, sin auditar la atomicidad de su rastro.
+describe("R7 · mecanismo insercion-en-transaccion (#2)", () => {
   function build() {
-    const orden = { create: vi.fn(async () => ({ id: "o1", estatusId: idEstado("en_preparacion"), peso: null })) };
-    const ordenHistorialEstado = { createMany: vi.fn() };
+    const orden = {
+      createMany: vi.fn(async () => ({ count: 1 })),
+      findMany: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { id: "o1", estatusId: idEstado("en_preparacion"), direccion: null },
+        ]),
+    };
+    const ordenHistorialEstado = { createMany: vi.fn(async () => ({ count: 1 })) };
     const prisma = {
       orden,
       ordenHistorialEstado,
+      carga: buildCargaDelegate(),
       $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prismaObj)),
+      $queryRaw: vi.fn(async () => []),
+      $executeRaw: vi.fn(async () => 0),
     };
     const prismaObj = prisma;
     return { prisma, orden, ordenHistorialEstado };
   }
 
-  it("(a) el append falla -> create RECHAZA (nada persiste)", async () => {
+  const FILA = {
+    numRemision: "R",
+    estatusId: idEstado("en_preparacion"),
+    destinatario: "A",
+    telefonoDest: "0",
+    tiendaId: "t",
+    zonaId: "z",
+    provinciaId: "p",
+    cantonId: "c",
+    producto: "x",
+    peso: null,
+  };
+
+  it("(a) el append falla -> la insercion RECHAZA (nada persiste)", async () => {
     const { prisma, ordenHistorialEstado } = build();
     ordenHistorialEstado.createMany.mockRejectedValue(new Error("append boom"));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
     await expect(
-      repo.create(
-        {
-          numRemision: "R",
-          estatusId: idEstado("en_preparacion"),
-          destinatario: "A",
-          telefonoDest: "0",
-          tiendaId: "t",
-          zonaId: "z",
-          provinciaId: "p",
-          cantonId: "c",
-          producto: "x",
-          peso: null,
-        },
-        HIST_CREACION,
-      ),
+      repo.createManyOrdenes([FILA], 100, HIST_CREACION, loteCtx()),
     ).rejects.toThrow("append boom");
   });
 
-  it("(b) el create falla -> el append NUNCA se ejecuta", async () => {
+  it("(b) la insercion falla -> el append NUNCA se ejecuta", async () => {
     const { prisma, orden, ordenHistorialEstado } = build();
-    orden.create.mockRejectedValue(new Error("create boom"));
+    orden.createMany.mockRejectedValue(new Error("insert boom"));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
     await expect(
-      repo.create(
-        {
-          numRemision: "R",
-          estatusId: idEstado("en_preparacion"),
-          destinatario: "A",
-          telefonoDest: "0",
-          tiendaId: "t",
-          zonaId: "z",
-          provinciaId: "p",
-          cantonId: "c",
-          producto: "x",
-          peso: null,
-        },
-        HIST_CREACION,
-      ),
-    ).rejects.toThrow("create boom");
+      repo.createManyOrdenes([FILA], 100, HIST_CREACION, loteCtx()),
+    ).rejects.toThrow("insert boom");
     expect(ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });
 
-// --- Mecanismo B: loop de updates dentro de $transaction (#3/#5) ---
 describe("R7 · mecanismo loop-de-updates-en-transaccion (#3)", () => {
   function build() {
     const orden = {

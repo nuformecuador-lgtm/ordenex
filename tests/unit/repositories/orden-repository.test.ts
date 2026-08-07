@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { NumRemisionDuplicadoError } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 function ordenRow(overrides: Record<string, unknown> = {}) {
@@ -76,26 +75,11 @@ function ordenListRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function baseCreateData() {
-  return {
-    numRemision: "REM-1",
-    // Feature 140/Q5: una orden nace SOLO en un ESTADOS_CREACION (aqui el default global).
-    estatusId: idEstado("en_preparacion"),
-    destinatario: "Ana",
-    telefonoDest: "0991234567",
-    tiendaId: "t1",
-    zonaId: "z1",
-    provinciaId: "p1",
-    cantonId: "c1",
-    producto: "Caja",
-    peso: 1.5,
-  };
-}
-
-// Feature 49: create/update ahora corren en `$transaction`; el fake `$transaction`
-// invoca el callback con el propio `prisma` como `tx` (tiene los modelos + el choke
-// point `ordenHistorialEstado.createMany`), asi las aserciones sobre `prisma.orden.*`
-// siguen viendo las llamadas hechas dentro de la tx.
+// Feature 49: `update` corre en `$transaction`; el fake `$transaction` invoca el callback con
+// el propio `prisma` como `tx` (tiene los modelos + el choke point
+// `ordenHistorialEstado.createMany`), asi las aserciones sobre `prisma.orden.*` siguen viendo
+// las llamadas hechas dentro de la tx. (`create` tambien lo hacia, hasta que se borro el
+// 2026-08-07 por quedarse sin llamador.)
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   const prisma = {
     orden: {
@@ -121,102 +105,26 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 }
 
 // Feature 49/#2/#10/#20: contexto de historial que el service inyecta al repo.
-const HIST_CREACION = { actorUsuarioId: "u-actor", origenTipo: "creacion_manual" } as const;
 const HIST_AJUSTE = { actorUsuarioId: "u-actor", origenTipo: "ajuste_estado" } as const;
 
 beforeEach(async () => {
   await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
 });
 
-describe("OrdenRepository.create", () => {
-  it("serializa peso Decimal a number y arma OrdenDTO sin deletedAt", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const dto = await repo.create(baseCreateData(), HIST_CREACION);
-
-    expect(dto.peso).toBe(1.5);
-    expect(dto.estatusValue).toBe("en_bodega_central");
-    expect(dto).not.toHaveProperty("deletedAt");
-  });
-
-  // Feature 17/R2/R8: num_guia se asigna en "Generar guia" (nunca al insertar) y
-  // mensajero_asignado_id nace NULL (es un acto posterior del maestro).
-  it("no envia num_guia ni mensajero_asignado_id al crear (R2/R8)", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: null }));
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.create(baseCreateData(), HIST_CREACION);
-
-    const arg = prisma.orden.create.mock.calls[0][0];
-    expect(arg.data).not.toHaveProperty("numGuia");
-    expect(arg.data).not.toHaveProperty("mensajeroAsignadoId");
-  });
-
-  // Feature 17/R30: numGuia NULL se serializa como null (sin romper el DTO).
-  it("serializa numGuia NULL como null (R30)", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: null }));
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const dto = await repo.create(baseCreateData(), HIST_CREACION);
-
-    expect(dto.numGuia).toBeNull();
-  });
-
-  it("traduce P2002 de num_remision a NumRemisionDuplicadoError (R14/R28)", async () => {
-    const prisma = buildPrisma();
-    const p2002 = new Prisma.PrismaClientKnownRequestError("dup", {
-      code: "P2002",
-      clientVersion: "7.8.0",
-      meta: { target: ["num_remision"] },
-    });
-    prisma.orden.create.mockRejectedValue(p2002);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await expect(repo.create(baseCreateData(), HIST_CREACION)).rejects.toBeInstanceOf(
-      NumRemisionDuplicadoError,
-    );
-  });
-
-  // Feature 49/#2 (R10/R20/R7): la creacion deja 1 fila de historial con origen null
-  // (creacion) -> destino estado inicial, actor y tipo creacion_manual, en la misma tx.
-  it("R10/R20: registra 1 historial con origen null, destino=estado inicial, tipo creacion_manual", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(
-      ordenRow({ id: "ord-1", estatusId: idEstado("en_preparacion") }),
-    );
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.create(baseCreateData(), HIST_CREACION);
-
-    expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
-    const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
-    expect(arg.data).toEqual([
-      {
-        ordenId: "ord-1",
-        estatusOrigenId: null,
-        estatusDestinoId: idEstado("en_preparacion"),
-        actorUsuarioId: "u-actor",
-        origenTipo: "creacion_manual",
-        motivo: null,
-        gestionOrdenId: null,
-      },
-    ]);
-  });
-
-  // R7: si el append del historial falla, el create se revierte (nada persiste).
-  it("R7: fallo del append propaga y aborta la tx (atomicidad)", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
-    prisma.ordenHistorialEstado.createMany.mockRejectedValue(new Error("append boom"));
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await expect(repo.create(baseCreateData(), HIST_CREACION)).rejects.toThrow("append boom");
-  });
-});
+// BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivia el bloque de
+// `create`, el insert individual, retirado al quedarse sin llamador. Ninguna de sus seis
+// afirmaciones se queda huerfana, y se comprobo una a una:
+//   - la serializacion del DTO (peso Decimal -> number, numGuia NULL -> null, sin deletedAt)
+//     la afirman los bloques de `findById`, `list` y `update`, que comparten el mismo `toDTO`;
+//   - la atomicidad historial/insert la afirma `orden-historial-atomicidad.test.ts`, reapuntado
+//     a `createManyOrdenes` (mecanismo #2), y `orden-geocode-enqueue.test.ts` (R7);
+//   - el historial de creacion lo afirman los tests de las dos rutas de lote;
+//   - la traduccion de P2002 a `NumRemisionDuplicadoError` se va CON su traductor
+//     (`mapCreateError`): la carga masiva detecta duplicados antes de insertar
+//     (`findExistingRemisiones` + `skipDuplicates`) y nunca provoca ese error;
+//   - «la creacion nunca escribe mensajero_asignado_id» (155/R9) pasa a estar garantizada por
+//     el TIPO, que es mas fuerte que un test: `CreateOrdenData` no tiene ese campo, y el
+//     insert en lote se construye desde el con `toCreateManyInput`.
 
 describe("OrdenRepository.findById (R34)", () => {
   it("filtra deleted_at IS NULL en el where", async () => {
@@ -583,27 +491,10 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
   });
 });
 
-describe("OrdenRepository.softDelete (R39/R40)", () => {
-  it("fija deleted_at solo si la orden no estaba borrada", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    expect(await repo.softDelete("ord-1")).toBe(true);
-    const arg = prisma.orden.updateMany.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ id: "ord-1", deletedAt: null });
-    expect(arg.data.deletedAt).toBeInstanceOf(Date);
-  });
-
-  it("devuelve false si no habia fila que borrar (R40)", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.updateMany.mockResolvedValue({ count: 0 });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    expect(await repo.softDelete("x")).toBe(false);
-  });
-});
-
+// BORRADO 2026-08-07 (tanda 2): aqui vivia el bloque de `softDelete`. R39/R40 eran los
+// requisitos DEL borrado logico de una orden, capacidad retirada: no hay pantalla que la
+// ofrezca ni servicio que la invoque. El predicado `deleted_at IS NULL` sigue vivo y probado
+// en las LECTURAS (`findById (R34)` arriba, y el bloque de `list`).
 describe("OrdenRepository.update (R36/R37)", () => {
   it("aplica cambios solo sobre no borradas y devuelve el DTO", async () => {
     const prisma = buildPrisma();
@@ -689,46 +580,19 @@ describe("OrdenRepository.update (R36/R37)", () => {
   });
 });
 
-describe("OrdenRepository.existsGeo / existsEstatus / findEstatusIdByValue", () => {
-  it("existsGeo marca distrito=true cuando no se consulta (opcional)", async () => {
-    const prisma = buildPrisma();
-    prisma.zona.findUnique.mockResolvedValue({ id: "z1" });
-    prisma.provincia.findUnique.mockResolvedValue({ id: "p1" });
-    prisma.canton.findUnique.mockResolvedValue({ id: "c1" });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const geo = await repo.existsGeo({ zonaId: "z1", provinciaId: "p1", cantonId: "c1" });
-    expect(geo).toEqual({ zona: true, provincia: true, canton: true, distrito: true });
-    expect(prisma.distrito.findUnique).not.toHaveBeenCalled();
-  });
-
-  it("existsGeo detecta geografia inexistente", async () => {
-    const prisma = buildPrisma();
-    prisma.zona.findUnique.mockResolvedValue(null);
-    prisma.provincia.findUnique.mockResolvedValue({ id: "p1" });
-    prisma.canton.findUnique.mockResolvedValue(null);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const geo = await repo.existsGeo({ zonaId: "z9", provinciaId: "p1", cantonId: "c9" });
-    expect(geo.zona).toBe(false);
-    expect(geo.canton).toBe(false);
-    expect(geo.provincia).toBe(true);
-  });
-
+// El bloque afirmaba `existsGeo`, `existsEstatus` y `findEstatusIdByValue`. Los DOS primeros se
+// borraron el 2026-08-07 con el alta manual y la edicion individual, sus unicos llamadores:
+// `existsGeo` comprobaba fila a fila que zona/provincia/canton existieran antes de un alta
+// manual —la carga masiva resuelve la geografia por NOMBRE, no por id, y las FK NOT NULL siguen
+// siendo la garantia dura—, y `existsEstatus` era la guarda de catalogo de `actualizar`.
+// `findEstatusIdByValue` esta MUY vivo: lo usan trece servicios de dominio.
+describe("OrdenRepository.findEstatusIdByValue", () => {
   it("findEstatusIdByValue resuelve el id por value", async () => {
     const prisma = buildPrisma();
     prisma.orderStatus.findUnique.mockResolvedValue({ id: idEstado("en_bodega_central"), value: "en_bodega_central" });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     expect(await repo.findEstatusIdByValue("en_bodega_central")).toBe(idEstado("en_bodega_central"));
-  });
-
-  it("existsEstatus devuelve false cuando no existe", async () => {
-    const prisma = buildPrisma();
-    prisma.orderStatus.findUnique.mockResolvedValue(null);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    expect(await repo.existsEstatus("os-x")).toBe(false);
   });
 });
 

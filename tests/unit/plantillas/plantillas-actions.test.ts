@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import {
   crearPlantilla,
   listarPlantillas,
-  obtenerPlantilla,
   actualizarPlantilla,
   cambiarEstadoPlantilla,
   eliminarPlantilla,
@@ -46,7 +45,6 @@ function fakeService(overrides: Partial<IPlantillaMensajeService> = {}): IPlanti
     // ejercita el modo sin paginacion (lo hace `plantillas-descarga-action.test.ts`); el
     // stub existe para que el doble siga siendo un `IPlantillaMensajeService` valido.
     listarCompleto: vi.fn().mockResolvedValue({ status: "ok", items: [], total: 0 }),
-    obtener: vi.fn().mockResolvedValue({ status: "ok", plantilla: plantilla() }),
     actualizar: vi.fn().mockResolvedValue({ status: "ok", plantilla: plantilla() }),
     cambiarEstado: vi
       .fn()
@@ -65,7 +63,6 @@ describe("R4: sin sesion -> unauthenticated sin tocar el service", () => {
     const deps = { plantillaService: service, getActor: noActor };
     expect((await crearPlantilla(validCrear, deps)).status).toBe("unauthenticated");
     expect((await listarPlantillas({}, deps)).status).toBe("unauthenticated");
-    expect((await obtenerPlantilla("pl-1", deps)).status).toBe("unauthenticated");
     expect((await actualizarPlantilla("pl-1", { nombre: "N" }, deps)).status).toBe("unauthenticated");
     expect((await cambiarEstadoPlantilla("pl-1", { estado: "inactivo" }, deps)).status).toBe(
       "unauthenticated",
@@ -120,11 +117,19 @@ describe("validaciones de borde y delegacion", () => {
     expect(service.crear).not.toHaveBeenCalled();
   });
 
-  it("obtener id vacio -> validation_error con clave id", async () => {
+  // REAPUNTADO 2026-08-07: se escribio sobre `obtenerPlantilla`, borrada por el chore de deuda
+  // de superficie. Lo que afirma no es de obtener, sino del guard `idSchema` COMPARTIDO por las
+  // cuatro acciones con id de este modulo: id vacio -> validation_error con SOLO la clave `id`,
+  // sin tocar el service. `actualizarPlantilla` esta viva y lleva el mismo guard.
+  it("id vacio -> validation_error con clave id, sin tocar el service", async () => {
     const service = fakeService();
-    const r = await obtenerPlantilla("", { plantillaService: service, getActor: getActor(MAESTRO) });
+    const r = await actualizarPlantilla("", { nombre: "N" }, {
+      plantillaService: service,
+      getActor: getActor(MAESTRO),
+    });
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
+    expect(service.actualizar).not.toHaveBeenCalled();
   });
 
   it("crear propaga conflict(nombre) del service (R10)", async () => {
