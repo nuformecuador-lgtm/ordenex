@@ -307,12 +307,21 @@ const DTOS: Readonly<Record<MetricaFinancieraId, ResultadoFinanciero>> = {
     ETIQUETAS.cuenta_por_pagar_mensajero,
     importeConNeto("88.00", "80.00"),
   ),
-  // TANDA 2 — la cabecera la construye `dtoConciliacionServido`, y con ella llega el hallazgo mas
-  // caro de esta tanda: `unidad` NO es `"moneda"` sino `"conteo"`, que es lo que el catalogo
+  // TANDA 2 — la cabecera la construye `dtoConciliacionServido`, y con ella llego el hallazgo mas
+  // caro de aquella tanda: `unidad` NO es `"moneda"` sino `"conteo"`, que es lo que el catalogo
   // declara para esta metrica y lo que el servicio publica. Este doble decia `"moneda"` desde la
-  // 132. La consecuencia NO es cosmetica y esta abierta: `PanelConciliacion.tsx:140` formatea con
-  // `datos.unidad` las TRES cifras de dinero del cuadre, asi que en produccion se pintan
-  // redondeadas y sin moneda. Ver la bitacora §4 bis.
+  // 132, y de ahi viene la forma de este fixture: la unidad ya no se escribe aqui, sale de
+  // `UNIDAD_SERVIDA` (`tests/fixtures/dto-financiero-servido.ts`), que la deriva del catalogo.
+  //
+  // LA CONSECUENCIA ERA REAL Y ESTA CERRADA (2026-08-07,
+  // `progress/impl_fix-conciliacion-unidad.md`). `PanelConciliacion` formateaba las TRES cifras
+  // de dinero del cuadre con `datos.unidad`, y en produccion se pintaban redondeadas y sin
+  // moneda: ₡1 560,50 salia como «1 561» y un descuadre de ₡60,50 se anunciaba como «61». Hoy ese
+  // panel declara la unidad POR CIFRA (`UNIDAD.importe`) y no lee la de la cabecera. Lo fija el
+  // caso de regresion de `tests/components/PanelConciliacion.test.tsx`, y el mismo riesgo en el
+  // tablero —que formatea con `datos.unidad` y hoy solo es correcto porque las nueve metricas de
+  // vistas son `moneda`— lo vigila
+  // `tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts`.
   conciliacion_cierres: dtoConciliacionServido(ETIQUETAS.conciliacion_cierres, {
     porEstado: [
       {

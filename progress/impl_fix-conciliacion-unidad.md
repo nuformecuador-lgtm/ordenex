@@ -136,16 +136,54 @@ arreglar ningún otro panel.**
 
 ## 6. Un segundo doble mentiroso, encontrado en el barrido
 
-`tests/components/TableroFinanciero.test.tsx:342` construía el mismo DTO de
+`tests/components/TableroFinanciero.test.tsx` construía el mismo DTO de
 `conciliacion_cierres` con `unidad: "moneda"`. Es test, no producción, y con el arreglo ya
 puesto no cambia un solo píxel del render — pero afirmaba algo falso sobre el productor, que
-es exactamente lo que costó las 7 horas del 2026-08-06. Corregido a `"conteo"` (commit
-aparte).
+es exactamente lo que costó las 7 horas del 2026-08-06. Lo corregí a `"conteo"` en el commit
+`1b797387`.
+
+**Ese hunk ya no está en la rama, y está bien que no esté** (merge `5b86279f`, 2026-08-07). El
+PR #310 llegó a `dev` con una solución mejor: ese doble lo construye ahora
+`dtoConciliacionServido(...)`, que saca la unidad de `UNIDAD_SERVIDA`
+(`tests/fixtures/dto-financiero-servido.ts`), derivada del catálogo y atada por ejecución
+contra el servicio real (`tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts`). Mi
+versión escribía el literal correcto a mano; la suya hace que el literal no exista. El
+conflicto se resolvió a favor de `dev` y mi hunk era **redundante, no contradictorio**.
 
 Dato incómodo: el doble del contrato,
 `tests/unit/analytics/financiera-contratos.test.ts:111`, **ya declaraba `"conteo"`** desde
 siempre. La verdad estaba escrita a un directorio de distancia de los dos dobles que
 mentían.
+
+## 6 bis. Comentarios que este PR volvió falsos (tanda 3, tras el merge)
+
+El merge trajo de `dev` cuatro comentarios que decían, en presente, que el defecto **sigue
+abierto**. Eran ciertos cuando se escribieron —el #310 lo encontró y no podía arreglarlo— y
+este PR los vuelve mentira. Es el mismo modo de fallo que la frase «el tablero NO la lee» que
+costó siete horas de producción: prosa que envejece y nadie vuelve a leer con desconfianza.
+
+Reescritos para que digan la verdad **después** de este PR, conservando de dónde salió el
+hallazgo y que el doble decía `"moneda"` desde la 132 (que es lo que explica la forma del
+fixture y no hay que perder):
+
+| Archivo | Qué decía | Qué dice ahora |
+|---|---|---|
+| `tests/components/TableroFinanciero.test.tsx` (sobre `conciliacion_cierres`) | «la consecuencia … **está abierta**: `PanelConciliacion.tsx:140` formatea con `datos.unidad`» | el hallazgo, con su cifra (₡1 560,50 → «1 561»), y que está **cerrado**, con el caso de regresión y la guardia donde vive |
+| `tests/fixtures/dto-financiero-servido.ts` (doc de `UNIDAD_SERVIDA`) | «(defecto abierto, `PanelConciliacion.tsx:140`)» | la mentira **tapaba** un defecto real; hallazgo en §4 bis, cerrado el 2026-08-07 |
+| `tests/fixtures/dto-financiero-servido.ts` (doc de `dtoConciliacionServido`) | «es un defecto **VIVO**, no una curiosidad de fixture» | sigue sin ser curiosidad: se arregló, y se avisa al consumidor **nuevo** que formatee dinero con esta `unidad` |
+| `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts` | «Queda dicho aquí y **ABIERTO** en la bitácora §4 bis» | esa guardia nunca arregló la pantalla y esa mitad ya se cerró; lo que sigue vivo —y es su trabajo— es que el doble no se invente la unidad |
+
+Ninguno cambia una sola aserción: son comentarios. Los cuatro archivos se corrieron después.
+
+Se anotó además la **cabecera de §4 bis** de `progress/impl_guardia-servicio-dobles.md` (la
+bitácora del #310) con una línea de cierre, sin tocar su relato: un lector de `progress/` que
+llegue a un apartado titulado «DEFECTO ABIERTO» tiene que ver en la primera línea que ya no lo
+está.
+
+**Deuda de estilo que dejo dicha:** esos comentarios citaban `PanelConciliacion.tsx:140`, un
+número de línea. El arreglo movió esa llamada a la 171 y la cita quedó apuntando a otra cosa
+el mismo día. En los textos nuevos cito **símbolos** (`UNIDAD.importe`, `datos.unidad`), no
+líneas.
 
 ## 7. Qué queda sin cubrir (abierto, no resuelto aquí)
 
@@ -249,8 +287,20 @@ modificado.
 
 ## Archivos tocados
 
-- `app/(app)/analitica/_components/financiero/PanelConciliacion.tsx` (producción)
-- `tests/components/PanelConciliacion.test.tsx`
-- `tests/components/TableroFinanciero.test.tsx`
-- `tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts` (tanda 2)
+Producción — **uno solo**:
+
+- `app/(app)/analitica/_components/financiero/PanelConciliacion.tsx`
+
+Tests:
+
+- `tests/components/PanelConciliacion.test.tsx` (doble honesto + caso de regresión)
+- `tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts` (tanda 2, nuevo)
+- `tests/components/TableroFinanciero.test.tsx` — tras el merge, **sólo el comentario**: el
+  doble lo construye `dtoConciliacionServido` desde el #310 (ver §6)
+- `tests/fixtures/dto-financiero-servido.ts` — dos comentarios (tanda 3)
+- `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts` — un comentario (tanda 3)
+
+Bitácoras:
+
 - `progress/impl_fix-conciliacion-unidad.md` (este archivo)
+- `progress/impl_guardia-servicio-dobles.md` — sólo la línea de cierre en la cabecera de §4 bis

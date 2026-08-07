@@ -183,6 +183,15 @@ disfrazada.
 
 ## 4 bis. DEFECTO ABIERTO — `conciliacion_cierres` formatea dinero con `unidad: "conteo"`
 
+> **CERRADO el 2026-08-07** en la rama `fix/conciliacion-unidad-moneda` — ver
+> `progress/impl_fix-conciliacion-unidad.md`. El panel declara hoy la unidad **por cifra**
+> (`UNIDAD.importe`) y no lee la de la cabecera; hay caso de regresión que afirma `₡60,50` y
+> niega «61», y una guardia para el mismo riesgo en el tablero
+> (`tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts`). El apartado se conserva
+> entero porque es de donde salió el hallazgo, y no se toca su relato: sólo deja de afirmarse
+> en presente. (El arreglo NO fue el literal de una línea que se propone al final: se declaró
+> la unidad una sola vez para las tres cifras, el aviso y las columnas.)
+
 **Esto no es una curiosidad de fixture. Es un defecto vivo en producción, y lo tapaban los dobles.**
 
 - El catálogo declara `conciliacion_cierres` con `unidad: "conteo"` (`lib/analytics/metrics.ts`;

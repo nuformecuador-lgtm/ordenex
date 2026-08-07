@@ -544,11 +544,14 @@ describe("el doble NO temporal declara la identidad de vista que el servicio pub
 describe("la UNIDAD de las diez servidas, atada por ejecucion", () => {
   it("`UNIDAD_SERVIDA` es la que el servicio publica, y NO son todas `moneda`", async () => {
     // EL HALLAZGO CARO DE LA TANDA 2. `conciliacion_cierres` publica `conteo` —lo declara el
-    // catalogo— y los dos dobles del repo decian `moneda`. No es cosmetico: `PanelConciliacion`
-    // formatea con `datos.unidad` las TRES cifras de dinero del cuadre
-    // (`PanelConciliacion.tsx:140`), asi que con la unidad de verdad se pintan REDONDEADAS y sin
-    // moneda. Queda dicho aqui y ABIERTO en la bitacora §4 bis: esta guardia no arregla la
-    // pantalla, solo impide que el doble lo siga tapando.
+    // catalogo— y los dos dobles del repo decian `moneda`. No era cosmetico: `PanelConciliacion`
+    // formateaba con `datos.unidad` las TRES cifras de dinero del cuadre, asi que con la unidad de
+    // verdad se pintaban REDONDEADAS y sin moneda, como salio en produccion.
+    //
+    // Esta guardia nunca arreglo la pantalla —solo impidio que el doble lo siguiera tapando—, y
+    // esa mitad se cerro el 2026-08-07 (`progress/impl_fix-conciliacion-unidad.md`): el panel
+    // declara la unidad por cifra. Lo que sigue vivo, y es el trabajo de este caso, es que el
+    // doble no pueda volver a inventarse la unidad.
     const obtenido: Record<string, string> = {};
     for (const id of IDS_FINANCIERAS_SERVIDAS) {
       obtenido[id] = (await delServicioCrudo(id)).unidad;
