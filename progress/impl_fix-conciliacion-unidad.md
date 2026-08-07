@@ -149,19 +149,13 @@ mentían.
 
 ## 7. Qué queda sin cubrir (abierto, no resuelto aquí)
 
-- **El riesgo latente de `TableroFinanciero.tsx:474` sigue vivo.** Hoy es correcto por
-  coincidencia: porque las 9 métricas de `vistas` son `moneda`. Una métrica financiera
-  nueva con `unidad: "conteo"` y forma `vistas` reproduciría el mismo defecto en el KPI, en
-  las gráficas y en `TotalDelDto`, y ningún test de hoy lo vería. Un guardia de catálogo lo
-  cerraría en una línea (*toda métrica financiera con forma `vistas` declara
-  `unidad: "moneda"`*). **No lo escribí: excede el encargo y quiero decidirlo con el
-  leader.**
-- **La causa raíz sigue en el contrato, no en la UI.** El catálogo declara
-  `unidadDeConteo: "moneda"` para `conciliacion_cierres`, pero `CabeceraFinanciera`
-  (`lib/types/analitica-financiera.ts:248-257`) **no publica ese campo** — sí lo publica el
-  DTO operativo (`AnaliticaOperativaService.ts:199,243`). Si la cabecera financiera lo
-  publicara, el panel podría leer la unidad de dinero del contrato en vez de declararla en
-  la UI. Es cambio de **backend** (tipos + servicio) y está fuera de mi alcance. Abierto.
+- ~~**El riesgo latente de `TableroFinanciero.tsx:474`.**~~ **CERRADO en la tanda 2**, ver §8.
+- **Publicar `unidadDeConteo` en `CabeceraFinanciera`: DESCARTADO** (decisión del
+  coordinador, 2026-08-07). Lo había anotado como «causa raíz»; **no lo es**. La unidad con
+  la que se pinta una cifra concreta es propiedad de **esa cifra**, no de la métrica que la
+  contiene — que es justamente lo que este fix establece. Hacerla viajar en el DTO
+  devolvería al panel una señal **de cabecera** ambigua, que es el mecanismo por el que se
+  equivocó. Es otra forma de la misma señal equivocada, no su cura. No se hace.
 - **No hay comprobación de extremo a extremo.** Lo verificado es render en jsdom con dobles;
   nadie ha vuelto a mirar la pantalla de producción con datos reales tras el despliegue.
 - **El texto exacto (`₡…`) del caso de regresión asume la configuración por defecto**
@@ -173,9 +167,90 @@ mentían.
   «declaradas una vez»). No es el criterio de unidad y no es este defecto; lo dejo anotado
   y no lo toqué en un fix de producción.
 
+## 8. Tanda 2 — la guardia que cierra el riesgo latente
+
+`tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts` (13 casos).
+
+### La premisa, verificada ANTES de escribir nada
+
+El encargo pedía parar si la premisa era falsa. No lo es. Sonda que arma el servicio real
+con los dobles de la 127 (`tests/unit/services/_dobles-analitica-financiera.ts`) y consulta
+las 10 métricas financieras del catálogo, leyendo el discriminante del DTO **que el
+productor devuelve de verdad**:
+
+```
+cod_recaudado, ingreso_flete, ingreso_comision_cod, ingreso_iva, egresos,
+dinero_en_caja, ganancia_ordenex, cuenta_por_pagar_tienda,
+cuenta_por_pagar_mensajero        tipo=vistas        unidad=moneda
+conciliacion_cierres              tipo=conciliacion  unidad=conteo
+```
+
+Y en las 10, `dto.unidad === catalogo.unidad`: la cabecera copia el catálogo, sin excepción.
+El desvío de `seccionesDePanel` es tan limpio como parecía: una sola rama,
+`datos.tipo === "conciliacion"` → `<PanelConciliacion>`.
+
+### De dónde saca cada mitad (ninguna lista escrita al lado)
+
+- **Qué métricas llegan por el camino de `vistas`:** se le pregunta **al productor**. La
+  guardia arma el servicio con los dobles y consulta cada métrica de
+  `listarMetricas({ dominio: "financiera" })`, leyendo `datos.tipo`. Una métrica nueva entra
+  en el censo sola; si una existente cambia de forma de DTO, se ve el mismo día.
+- **Qué unidad declara cada una:** del catálogo, la misma fuente que copia `cabecera()`.
+
+### Lo que afirma
+
+1. Ninguna métrica de `tipo: "vistas"` declara una unidad que no sea `moneda`. El mensaje
+   nombra a la infractora y dice **por qué importa** («sus importes se pintarían redondeados
+   y sin moneda, como le pasó al cuadre de conciliación en producción»).
+2. Y la recíproca: toda métrica cuya unidad no es dinero **no** llega por `vistas`. Sin
+   esta, la regla 1 seguiría verde el día que `conciliacion_cierres` empezara a publicar
+   vistas — y ese día el defecto vuelve por la puerta grande.
+3. **No puede pasar por vacío** (lección de la tanda H de la 184): rojo si el dominio
+   financiero del catálogo está vacío, si alguna métrica no respondió `ok` y se cayó del
+   censo en silencio, o si alguna de las dos familias de DTO queda sin representantes. No se
+   fija el número de métricas: una métrica nueva no debe poner rojo un guardia por existir.
+4. **La premisa sigue viva:** por texto sobre `TableroFinanciero.tsx`, que el desvío del DTO
+   de conciliación existe (comparación **y** `<PanelConciliacion`, no una mención en prosa);
+   y un contrapeso incómodo a propósito: que `unidad={datos.unidad}` sigue ahí. Si alguien lo
+   retira —declarando la unidad por cifra, como se hizo en `PanelConciliacion`—, ese caso se
+   pone rojo para obligar a releer la guardia antes de darla por buena o retirarla.
+5. **Autocomprobación** (7 casos): los detectores son funciones puras y se ejercitan contra
+   censos sintéticos. Marcan `porcentaje` y `segundos`, no solo `conteo`; **no** marcan la
+   métrica desviada aunque su unidad no sea dinero; y se afirma por escrito la limitación de
+   que con censo vacío no marcan nada — por eso hacen falta los casos de cobertura.
+
+### Mutación de control
+
+Se cambió en el catálogo `lib/analytics/metrics.ts:436` la unidad de `ingreso_flete` (métrica
+de vistas) de `"moneda"` a `"conteo"`:
+
+| | |
+|---|---|
+| catálogo intacto | `13 passed (13)` |
+| con la mutación | `2 failed \| 11 passed` — las dos reglas, nombrando `ingreso_flete` |
+| tras restaurar | `13 passed (13)` |
+
+Los 5 casos de cobertura y los 7 de autocomprobación siguieron verdes durante la mutación,
+que es lo correcto: miden otra cosa. Restauración **verificada por hash**:
+`1ff18fe07d0ff34f78ebf3d63294086f83658d36ae65c91a3ad533aa94065c17` antes, `30c40e40…`
+mutado, `1ff18fe0…` de nuevo tras restaurar; y `git status` no lista `metrics.ts` como
+modificado.
+
+### Lo que esta guardia NO cubre
+
+- Vigila el **catálogo**, no la pantalla: si alguien escribiera en el tablero un
+  `formatearValor(importe, "conteo")` a mano, esta guardia no lo vería (sí lo vería el censo
+  de `tests/unit/guards/tablero-financiero.guardia.test.ts` solo si el literal fuera de
+  moneda, que no es el caso). Queda anotado.
+- Depende de que los dobles de la 127 sigan sirviendo las 10 métricas. Si dejaran de
+  hacerlo, el caso «ninguna se cayó del censo en silencio» se pone rojo — que es la conducta
+  querida, pero es una dependencia real de este archivo sobre
+  `tests/unit/services/_dobles-analitica-financiera.ts`.
+
 ## Archivos tocados
 
 - `app/(app)/analitica/_components/financiero/PanelConciliacion.tsx` (producción)
 - `tests/components/PanelConciliacion.test.tsx`
 - `tests/components/TableroFinanciero.test.tsx`
+- `tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts` (tanda 2)
 - `progress/impl_fix-conciliacion-unidad.md` (este archivo)
