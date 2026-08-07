@@ -410,7 +410,7 @@ y tercero que llegan a cero consumidores** (el primero fue `listarCierresBodegaA
 Construido **leyendo el caso**, no contando `R\d+` en títulos: los espacios de nombres de la 170,
 la 171/172 y la 184 se cruzan en estos archivos (`R52`, `R44`, `R43`, `R26`, `R28`, `R30` de los
 títulos viejos son de la 170). Solo se listan los requisitos que esta entrega toca; los del
-servidor están en `progress/impl_184_tandaG_backend.md §6`.
+servidor están en `progress/impl_188_tandaG_backend.md §6`.
 
 | R | Archivo | Caso | Estado |
 | --- | --- | --- | --- |

@@ -260,7 +260,7 @@ mutante equivalente que declarar.
 
 ## 4. El peaje de los `vi.mock` ajenos: **DOS archivos**, los que la tanda E predijo
 
-La tanda E lo anticipó (`impl_184_tandaE_frontend.md §9`): «el mismo par de suites
+La tanda E lo anticipó (`impl_188_tandaE_frontend.md §9`): «el mismo par de suites
 (`ColasPaginacion` y `BajoRiesgoPaginacion`) hospeda los dos listados de incidentes». **Confirmado
 midiéndolo.**
 

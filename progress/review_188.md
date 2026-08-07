@@ -7,7 +7,7 @@
 
 ## 0. Qué se revisó y qué no
 
-- **NO se rehízo la trazabilidad `R1..R34`.** Vive en `progress/impl_184-cierre.md`. Se auditó
+- **NO se rehízo la trazabilidad `R1..R34`.** Vive en `progress/impl_188-cierre.md`. Se auditó
   **por muestreo adversarial** (§1): 6 filas obligatorias + 2 extra. Las 8 se sostienen.
 - **NO se corrió `./init.sh`** ni la suite (el gate es de H.4 y lo lleva el leader). Sí se
   corrieron las dos guardias nuevas: `adaptador-conjunto.guardia` + `criterio-unico.guardia`,
@@ -36,7 +36,7 @@ dudar del resto del mapa.
 
 - [x] `requirements.md` (34 EARS numerados), `design.md` (con 5 alternativas descartadas, §7).
 - [ ] `tasks.md` todas `[x]` — **falta H.4** (gate final y PR). Es la tarea del leader.
-- [x] Cada `R<n>` mapea a test concreto; `progress/impl_184-cierre.md` tiene el mapa.
+- [x] Cada `R<n>` mapea a test concreto; `progress/impl_188-cierre.md` tiene el mapa.
 - [x] typecheck / lint / test verdes (gate del leader: 950 archivos / 11.847 tests, 44 warnings
       ajenas y preexistentes).
 - [~] E2E — no hay harness en el repo; checkpoint **inaplicable**, como en features previas.
@@ -48,7 +48,7 @@ dudar del resto del mapa.
       derivados con `.omit({page,pageSize})`.
 - [x] Multi-país: sin hardcode de país/moneda/cuenta en el código nuevo.
 - [ ] `progress/history.md` sin entrada de la 184 — es H.4.
-- [x] `progress/review_184.md` — este archivo.
+- [x] `progress/review_188.md` — este archivo.
 
 ## 3. Bloqueantes
 
@@ -134,7 +134,7 @@ repite en su propio mensaje. Es la puerta humana, cerrada y escrita.
 
 La contradicción está **dentro del mismo commit**: `requirements.md:47` dice «Q-K6: no se decide
 aquí» y su Q1 fija como default «fuera de esta feature»; `tasks.md` no tiene ninguna tarea para
-ello; y las bitácoras la dan por fuera (`impl_184_tandaH.md:533`). O sea: la decisión humana se
+ello; y las bitácoras la dan por fuera (`impl_188_tandaH.md:533`). O sea: la decisión humana se
 registró en el JSON y nunca bajó ni al spec ni a las tasks.
 
 **Qué falta:** una de dos, y la decide el humano/leader, no el implementer:
@@ -175,7 +175,7 @@ ganada con R16 de la 127). Sobre `specs/**` completo:
    (`SateliteSeleccionOtrasPaginas.test.tsx:512`), nunca un `mockRejectedValue`.
    `docs/conventions.md`: «Nada de catch vacíos. Un error o se maneja o se propaga con contexto.»
 3. **R12, mitad de «columnas y orden de columnas»: sin test.** Ya declarado DÉBIL por la propia
-   bitácora (`impl_184-cierre.md §2.1`), con la medición del diff que demuestra que esta rama no
+   bitácora (`impl_188-cierre.md §2.1`), con la medición del diff que demuestra que esta rama no
    pudo romperlo y con la ficha propia acotada. Se acepta como deuda declarada; queda sin dueño.
 4. **Tres Server Actions exportadas con cero consumidores de producción**
    (`listarCierresBodegaAdmin`, `listarPlantillasAction`, `listarSaldosTiendasAction`). Se
@@ -192,7 +192,7 @@ ganada con R16 de la 127). Sobre `specs/**` completo:
    el control de descarga» y «por render». Debería quedar escrito en el PR.
 7. **Dos huecos de la guardia de R31**, uno ya declarado y otro no:
    (a) `adaptador-conjunto.guardia.test.ts:377` cuenta `\bit\s*\(` en TODO el archivo, no los
-   casos censales — declarado en `impl_184-cierre.md §5`;
+   casos censales — declarado en `impl_188-cierre.md §5`;
    (b) **no declarado:** `MARCAS_DESACTIVACION` se evalúa **línea a línea** (`:361-365`), así que
    un `it` y su `.skip(` partidos en dos líneas lo evaden, aunque la regex sí los casaría sobre el
    texto entero.

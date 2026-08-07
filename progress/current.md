@@ -9,9 +9,97 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🏁 CIERRE DE JORNADA 2026-08-05 — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 CIERRE DE JORNADA 2026-08-06 — **EMPIEZA A LEER POR AQUÍ**
 
-### 🚦 LO ÚNICO ABIERTO: **el PR de release #301** (`dev → prod`, 126 commits)
+**Registro limpio: cero PRs abiertos, cero features `in_progress`.** `prod` va por detrás de `dev`
+en documentación, tests y la 186; **el hotfix del día YA está en producción**.
+
+### 🐛 Lo importante del día no estaba en el plan: **el tablero de dinero llevaba 7 h roto en producción**
+
+La **180** encendió `filas` para las siete métricas financieras. El tablero decidía KPI-vs-tabla con
+`filas.length === 0` —esa era su señal de **forma**—, así que las siete cayeron en `PanelTabla`: el
+maestro perdió «Dinero en caja», «Ganancia de Ordenex» y las demás, y en su lugar vio **treinta
+fechas**. Salió con el release de las 04:09 y **lo destapó escribir un spec**, no un usuario.
+
+Arreglado por hotfix (**PR #305**, desplegado READY): la señal pasa a `granularidad`, preguntando
+**por la negativa** (`!== "no_temporal"`) para que un valor futuro del enum no vuelva a caer en el
+mismo sitio.
+
+> ⚠️ **Por qué ningún test se enteró, que es lo que hay que recordar:** el fixture se llamaba
+> `vistaSinFilas`, con `grano: "fecha"` y `filas: []` — **y lo tocó la propia 180** para añadirle
+> `granularidad`, dejando escrito al lado «el tablero NO la lee». Pasó por delante del doble que
+> fijaba la premisa vieja, lo editó, y no vio que su cambio la invalidaba.
+
+**La deuda que deja, sin dueño:** una guardia que ate **lo que el servicio produce** con **lo que
+los dobles del tablero declaran**. Las ataduras que hay comparan la fixture contra constantes
+publicadas, nunca contra la salida real: si `serieDensa` cambiara de grano seguirían verdes
+**comparando el espejo consigo mismo**.
+
+### ✅ La 186, cerrada (PR #307)
+
+La gráfica de líneas sobre el KPI restaurado. **18 R, review APROBADO en ronda 2**, gate
+`== init OK ==` **985 / 12.355** (+1 archivo, +60 tests), `next build` verde, 2 archivos de
+producción. `cuenta_por_pagar_mensajero` **no lleva línea** por decisión humana: es un saldo al
+corte y dibujarlo como línea parece una tendencia sin serlo. Detalle en `history.md`.
+
+**Dos requisitos estaban escritos y no los protegía nada** —`R4` sobrevivía a 91 casos, `R2` a
+144—, **y son la misma línea partida por la mitad**. Y **«las tres únicas salidas» eran cuatro**: la
+cuarta caza en las siete métricas una regresión que antes solo veía en una.
+
+> **La regla que queda:** una exhaustividad afirmada sobre el **propio razonamiento** es más
+> peligrosa que una afirmada sobre el código, porque **nada la desmiente al leerla**.
+
+### ⚠️ Y el modo de fallo del worktree, repetido POR MÍ el mismo día que lo documenté
+
+El 05-ago el PR #298 se mergeó con la nota de renumeración **sin commitear** en el working tree. Lo
+arreglé por la mañana (PR #302), escribí la lección aquí mismo… **y por la tarde volví a hacerlo**:
+el PR #307 se mergeó con `feature_list.json` modificado y sin commitear, así que `dev` decía que la
+186 seguía `pending` **después de estar mergeada**.
+
+> **No basta con saberlo: `git status` antes de abrir el PR, no después.** El PR se arma desde la
+> **rama**; nada avisa de lo que quedó en el worktree.
+
+### ✅ La 189, cerrada (PR #303)
+
+12 casos, **solo tests**, cero líneas de producción. Gate `== init OK ==` **984 / 12.263** (+7
+archivos, +12 tests sobre el baseline). **24 mutaciones, 24 rojas.** Cierra la cláusula «columnas y
+orden» del R12 de la 188. Relato completo en `history.md`; censo y hallazgos en `impl_189.md`.
+
+**Lo que deja vivo:** `_RANKING` **parece cubierta y no lo está** (su esperado es la propia
+constante: tautología con disfraz de test de integración); **12 de las 35** constantes siguen sin
+aserción de orden; y `COLUMNAS_DESCARGA_GASTOS_FIJOS` dice **«Monto mensual»**, hoy cierto por
+accidente y **congelado por el test nuevo** — dirigido a la **ficha 85**.
+
+### 🔎 La auditoría del backlog, y lo que encontró
+
+**El registro no está inflado de fichas: está inflado de bloqueos que ya no existen.** Verificado
+contra el código, no contra las notas:
+
+| Lo que decía el registro | Lo que dice el código |
+| --- | --- |
+| 145 → 169 · 147 → 154 · 162 → 161 · 85 → 84 · 182 → 176 · 186/184 → 180 y 183 | **los ocho `done`** |
+
+**Siete fichas arrastran un `depends_on` ya satisfecho** y sus notas siguen leyéndose como un
+bloqueo. Nada del backlog espera a nada.
+
+**Dos correcciones a lo que la propia auditoría creyó primero:**
+
+1. **Sospeché de la 189 y la sospecha era falsa.** Existen 8 tests `*-descarga-columnas.test.ts`,
+   pero cubren **otras** tablas. Medido: **35** constantes `COLUMNAS_DESCARGA_*` declaradas en el
+   árbol, y **13 archivos de test** con la aserción `map(c => c.clave).toEqual(…)` — **ninguno
+   sobre las 12** de esta ficha. La ficha es exacta y `impl_188-cierre.md:167` ya lo decía.
+   *(«13» son archivos, no constantes: varios cubren dos, y tres de esos archivos ni siquiera son
+   de descarga. El censo constante-a-constante lo produce esta feature.)*
+2. **La 85 es peor que su ficha.** El DTO ya trae `periodicidadUnidad` y `periodicidadCantidad`
+   (feature 84) y **no los muestra ni la pantalla ni el Excel** — `gastos-fijos-descarga-columnas.ts:10-11`
+   los excluye a propósito. **Misma familia que el botón huérfano**: capacidad entregada, cero
+   superficie. Y la guardia nueva **no lo caza**: vigila acciones, no campos.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-05
+
+### 🚦 LO ÚNICO ABIERTO: **el PR de release #301** (`dev → prod`, 126 commits) — ✅ **MERGEADO el 06-ago 04:09, deploy READY**
 
 **CERO migraciones** — mergear no aplica nada. Gate `== init OK ==` (977 archivos / 12.251 tests)
 corrido sobre `dev` con todo dentro. Sin conflictos.
@@ -75,6 +163,16 @@ verdes**), y **R26** no afirmaba que la acción de lote sobrevive a la poda.
 
 **Renumerada de 184 a 188** por colisión con otra sesión. **«184» en un commit, un comentario o
 `PENDIENTES_184` significa esta feature** (nota de cabecera en el spec y en el cierre).
+
+> ⚠️ **Rescatado el 2026-08-06 (PR #302): esa nota de cabecera NO estaba.** Se quedó **sin
+> commitear** en el working tree del worktree `lote-135` y el **PR #298 se mergeó sin ella** —junto
+> con **once rutas `impl_184_*` que apuntaban a ficheros ya renombrados**, punteros rotos entre
+> bitácoras—. Este párrafo llevaba un día afirmando algo falso.
+>
+> **El modo de fallo, que no tiene dueño:** *el PR se abre desde una rama, no desde el worktree*.
+> Nada avisa de que quedan cambios sin commitear cuando se mergea, y **`git status` en un worktree
+> ajeno no lo mira nadie**. Es la misma familia que los dos hotfixes que nunca volvieron a `dev`:
+> lo detecta un barrido, jamás una alerta.
 
 ### 🔎 Lo que sobrevive a esta jornada
 

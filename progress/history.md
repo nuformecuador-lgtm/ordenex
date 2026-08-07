@@ -2930,3 +2930,74 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   a **189/190/191**. Los 60 commits, los comentarios de 111 archivos y la constante
   `PENDIENTES_184` **siguen diciendo 184 a propósito**: reescribir una rama pusheada está
   prohibido aquí, y esa constante es ancla de texto de una guardia.
+
+## 2026-08-06 — 189 (descargas: fijar las columnas y su orden en los 12 listados del Anexo A)
+- Doce casos nuevos en `tests/unit/descarga/` que clavan, por `clave` **y** por `encabezado`, las
+  columnas de los 12 listados del Anexo A. **Solo tests: cero líneas tocadas en `app/`,
+  `components/` y `lib/`.** Cierra la cláusula «columnas y orden» del **R12 de la 188**, que hasta
+  hoy se sostenía únicamente por una medición del diff —evidencia buena para «no lo rompí», nula
+  para «no se romperá mañana»—. `sdd: false`, sin puerta de spec. PR #303.
+- Requisitos cubiertos: la ficha no tiene EARS; el mapa constante → archivo de test → nombre
+  literal del caso está en `progress/impl_189.md §2`.
+- **Verificación: 24 mutaciones, 24 ROJO / 0 VERDE** (por constante: reordenar dos columnas
+  contiguas, y quitar una), cada una tumbando **solo su caso**, con el árbol de producción
+  restaurado y **comprobado por SHA-256** tras cada una. Gate completo `== init OK ==`: 984
+  archivos / 12.263 tests (baseline `dev` 977 / 12.251 → **+7 archivos, +12 tests**, cero
+  regresiones).
+- **Hallazgo: una tautología con disfraz de cobertura.** `RankingDescarga.test.tsx:138` hace
+  `expect(columnas.map(c => c.key)).toEqual(COLUMNAS_DESCARGA_RANKING.map(c => c.clave))`. Mide
+  algo útil —que el componente pasa al `xlsx` lo declarado—, pero **el esperado es la propia
+  constante**: reordenarla mueve los dos lados a la vez y el test sigue verde. `_RANKING` **parece
+  cubierta y no lo está**; quien tome la ficha hermana tiene ahí un caso que **sustituir**, no
+  completar.
+- **Censo, que la ficha pedía y no existía:** de las **35** constantes `COLUMNAS_DESCARGA_*` del
+  árbol, **11** ya tenían aserción de orden, **12** la ganan aquí y **12 siguen sin ella**
+  (nombradas una a una en `impl_189.md §4`). `_CUENTAS_POR_PAGAR` es la única de las 35 que **no
+  aparece ni una vez** en `tests/`. Material para decidir una ficha hermana; no se cubrieron.
+- **Deuda dejada, dirigida y con dueño: `COLUMNAS_DESCARGA_GASTOS_FIJOS` declara «Monto mensual» y
+  esta feature acaba de atornillarlo.** La feature 84 ya permite plantillas
+  diaria/semanal/quincenal/mensual; hoy la etiqueta es cierta **por accidente**, porque el diálogo
+  no ofrece el selector (medido: `periodicidad` no aparece en ninguna línea de `app/` fuera del
+  comentario de ese archivo). El día que aterrice la **ficha 85**, dos plantillas de ₡50.000 —una
+  semanal y una mensual— saldrán como filas idénticas y **el test seguirá verde**. No se arregla
+  aquí: sería cambiar un archivo que un usuario descarga. Y **la guardia de superficie de uso no lo
+  caza**: vigila acciones sin superficie, no **campos** sin superficie.
+
+## 2026-08-06 — 186 (analítica financiera: gráfica de líneas en el tablero)
+- La 180 publicó el desglose por fecha de las siete métricas y **nadie lo pintaba**. Esto lo pinta:
+  línea sobre el KPI en las seis métricas **de flujo**, leyendo `granularidad` del DTO para rotular.
+  **Se añade, no se rehace**: 2 archivos de producción, exactamente los que el design anticipó.
+  18 requisitos, cero preguntas abiertas, review **APROBADO en ronda 2**. PR #307. Cero migraciones.
+- Requisitos cubiertos: `R1`–`R18`, mapa caso a caso en `progress/impl_186.md`. Gate `== init OK ==`
+  **985 archivos / 12.355 tests** (baseline `dev` 984 / 12.295 → **+1 archivo, +60 tests**, cero
+  regresiones), `next build` verde.
+- **Decisión humana Q2 = (b): `cuenta_por_pagar_mensajero` NO lleva línea.** Es un saldo al corte;
+  dibujado como línea **siempre sube y parece tendencia sin serlo**, y la 127 ya lo había declarado
+  junto a su repositorio. Se lee la bandera **`esAcumulado` del DTO**, no una lista de ids, y el
+  motivo **se dice en pantalla** con test.
+- **Dos requisitos estaban escritos y no los protegía nada, y son la misma línea partida por la
+  mitad:** `R4` sobrevivía a **91 casos** y `R2` a **144**. Los dos los cazó una mutación. El
+  segundo lo encontró el reviewer, después de que el implementador arreglara el primero: *«escribí
+  la lección y no la apliqué a la mitad de al lado de la misma línea»*.
+- **Y una afirmación de exhaustividad que era falsa: «las tres únicas salidas» eran cuatro.** La
+  cuarta —conservar la aserción y **restringir el sujeto**, no conservarla sobre el mismo sujeto—
+  empata en los dos escenarios de control (verde 93; **39 rojos** ante el defecto de ⟨H1⟩) y pasa de
+  **1 a 7 rojos** ante una fecha visible embebida en un texto más largo. Ese era el agujero: esa
+  regresión **solo la veía la métrica acumulada**; las seis de flujo se la comían. Con ella, el caso
+  del hotfix **recupera su aserción original** restringiendo el sujeto en vez de debilitarla.
+  > **La regla que queda:** una exhaustividad afirmada sobre el **propio razonamiento** es más
+  > peligrosa que una afirmada sobre el código, porque **nada la desmiente al leerla**. Las tres
+  > primeras salidas eran las formas de conservar la aserción; la pregunta correcta no era «¿cómo
+  > mantengo esta aserción?» sino «¿qué tiene que cazar este caso?».
+- **El criterio de hecho de ⟨D1⟩ se acotó, no se relajó.** Uno de los seis casos del hotfix es
+  **insatisfacible** y está demostrado (`R1 ∧ R7 ⟹ ¬(aserción original)`), no alegado. Lo que
+  sostiene la reconciliación es la **condición de reversión escrita en el spec**: reintroducir
+  `filas.length === 0` da **39 rojos**; si esa medición no saliera, la reconciliación no procede y
+  lo que se arregla es el código.
+- **Número retirado:** circuló un «14 de esos 39 en el bloque del hotfix» que **nadie midió** —el
+  único 14 de la bitácora es de otra mutación—. Se retiró en vez de reconstruirlo por aritmética.
+- **Deuda que deja, sin dueño:** una guardia que ate **lo que el servicio produce** con **lo que los
+  dobles del tablero declaran**. Las ataduras que hay comparan la fixture contra constantes
+  publicadas, nunca contra la salida real: si `serieDensa` cambiara de grano, seguirían verdes
+  **comparando el espejo consigo mismo**. Es exactamente lo que habría puesto la 180 en rojo el
+  05-ago en vez de dejar el defecto salir a producción.

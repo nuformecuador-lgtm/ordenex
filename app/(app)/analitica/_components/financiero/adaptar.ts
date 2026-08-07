@@ -20,6 +20,14 @@
 // del `neto` con nada —ni `null`, ni `0`, ni el bruto— porque el ausente de la 132
 // significa «no se sabe» (R15) y aqui la verdad es «no aplica» (R19, R23).
 //
+// Feature 186 ⟨D1⟩ (2026-08-06): este modulo es ademas el UNICO de la region financiera
+// que nombra los valores de `GranularidadVista`. La señal de forma —«¿es esta vista una
+// serie temporal?»— vivia en `TableroFinanciero.tsx` desde el hotfix del 2026-08-06 y se
+// muda aqui por dos motivos: porque el rotulador de cubos tiene que enumerar los granos
+// para nombrarlos, y dos archivos de la region hablando el vocabulario de la granularidad
+// es exactamente la forma en que «dia» y «semana» acaban siendo el mismo pixel (R16). Lo
+// vigila el censo (g) de `tests/unit/guards/tablero-financiero.guardia.test.ts`.
+//
 // Por que `agruparCola` vive aqui y no en el paquete de la 130: lo dice el
 // propio paquete en `components/private/analytics/topes.ts:16-17` («no agrupa la
 // cola en "otros" ni re-muestrea: los dos calculos son del tablero»), y ademas
@@ -35,6 +43,7 @@ import type {
 } from "@/components/private/analytics/tipos";
 import type {
   FilaFinanciera,
+  GranularidadVista,
   ImporteAnalitico,
   ImporteConNeto,
   VistaFinanciera,
@@ -165,6 +174,175 @@ export function serieDeVista(v: VistaFinanciera, campo: CampoImporte): SerieDato
     puntos: v.filas.map((fila) => ({
       categoria: fila.cubo,
       valor: aNumero(cifraDeImporte(fila.importe, campo, fila.cubo)),
+    })),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Feature 186 — la dimension TEMPORAL de una vista                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Una vista que SI esta medida en el tiempo: su `granularidad` no es la que niega serie.
+ *
+ * Existe para que `serieTemporalDeVista` pueda EXIGIRLA, igual que `VistaConNeto` existe
+ * para que pedir el `neto` de una vista que no lo publica no compile. Un `boolean` no
+ * estrecha nada, y esta era la otra mitad de ⟨D1⟩.
+ */
+export type VistaTemporal = Omit<VistaFinanciera, "granularidad"> & {
+  readonly granularidad: Exclude<GranularidadVista, "no_temporal">;
+};
+
+/**
+ * ¿Es esta vista una SERIE TEMPORAL, o sea, esta medida en el tiempo?
+ *
+ * MUDADA desde `TableroFinanciero.tsx` por ⟨D1⟩ de la feature 186 (2026-08-06), con su
+ * comentario y SIN cambiar una sola conducta: sigue siendo la misma pregunta, con la misma
+ * forma negativa, y lo unico que gana es que ahora ESTRECHA el tipo.
+ *
+ * Es la señal de FORMA que hoy separa una serie de un desglose, y sustituye a «¿trae
+ * filas?», que dejo de separar nada en la feature 180. Hasta la 179 las siete vistas de
+ * grano `fecha` llegaban sin filas —el servicio agregaba la ventana entera y se negaba a
+ * atribuirla a una fecha inventada—, asi que «sin filas» y «cifra de titular» eran lo
+ * mismo. Desde la 180 el servicio construye la serie DENSA (`serieDensa` en
+ * `lib/services/AnaliticaFinancieraService.ts`: UNA fila por cubo del rango, incluidos los
+ * cubos sin movimiento), y esas siete llegan con ~30 filas para un rango de 30 dias.
+ * Preguntar por `filas.length` las mandaba a la tabla y le quitaba al maestro el numero
+ * que venia a ver: treinta fechas donde va «Dinero en caja».
+ *
+ * SE PREGUNTA POR LA NEGATIVA Y NO POR LA LISTA DE GRANOS TEMPORALES: `GranularidadVista`
+ * puede ganar un valor nuevo (hoy son dos), y con la forma positiva ese valor caeria por
+ * defecto en la tabla, que es exactamente el defecto que el hotfix reparo. El valor que
+ * niega la serie es el UNICO que AFIRMA «esta vista no se mide en el tiempo», y el contrato
+ * obliga a declararlo explicitamente en cada productor
+ * (`lib/types/analitica-financiera.ts`, ⟨D2⟩ / R4 de la 180); omitirlo no compila.
+ *
+ * OJO AL LEER ESTE ARCHIVO SEGUIDO (⟨D5⟩ de la 186): esta pregunta y `etiquetaDeCubo`
+ * tienen defaults OPUESTOS a proposito. Aqui lo desconocido cae en «serie», porque caer en
+ * «tabla» es el defecto de produccion que se reparo. Alli lo desconocido cae en «grano no
+ * declarado», porque caer en «dia» seria afirmar un grano que no sabemos. En los dos casos
+ * el default es la respuesta segura DE ESA PREGUNTA, y las preguntas son distintas.
+ */
+export function esVistaTemporal(vista: VistaFinanciera): vista is VistaTemporal {
+  return vista.granularidad !== "no_temporal";
+}
+
+/**
+ * Los textos con los que se rotula un cubo. Los pone el LLAMADOR, no este modulo.
+ *
+ * Mismo patron y misma razon que `etiquetaOtros` en `agruparCola`: aqui no se escribe
+ * texto de UI, para que la region entera siga teniendo sus cadenas en un solo objeto y
+ * lista para i18n.
+ */
+export interface TextosCubo {
+  /** Prefijo del cubo diario. Puede ser cadena vacia: la clave se lee sola. */
+  readonly dia: string;
+  /** Prefijo del cubo semanal. La clave se concatena LITERAL, sin calcular su fin. */
+  readonly semana: string;
+  /** ⟨D5⟩ Rama por defecto: un grano que este rotulador no sabe nombrar. */
+  readonly granoNoDeclarado: string;
+}
+
+/** Prefijo + clave, sin separador sobrante cuando el prefijo esta vacio. */
+function rotular(prefijo: string, clave: string): string {
+  const limpio = prefijo.trim();
+  return limpio === "" ? clave : `${limpio} ${clave}`;
+}
+
+/**
+ * La etiqueta de un punto: el prefijo que declara el grano MAS la clave del cubo, literal
+ * (⟨D4⟩ / Q3 = (a) de la puerta humana).
+ *
+ * PURA: sin `Date`, sin zona horaria, sin aritmetica de calendario y sin literal de locale.
+ * Nombra EXACTAMENTE UNA fecha —la que el DTO entrega— y no calcula ninguna otra (R8).
+ *
+ * POR QUE NO UN RANGO (`clave – clave+6`), que es lo primero que apetece con una semana:
+ *
+ *  - el DTO no publica el fin del cubo: `FilaFinanciera` es `{ cubo, importe }`;
+ *  - el PRIMER y el ULTIMO cubo estan TRUNCADOS al rango (`trocear`), asi que un rango
+ *    calculado seria falso justo en los dos extremos, que es donde se mira para saber si el
+ *    periodo esta completo;
+ *  - calcularlo meteria una segunda definicion del dia de Costa Rica en el frontend, en una
+ *    capa donde ningun guardia de `lib/analytics` mira.
+ *
+ * «Semana del <clave>» es cierto en TODOS los cubos, truncados incluidos: el cubo empieza
+ * donde dice su clave, siempre.
+ *
+ * LA RAMA `default` NO ES CODIGO MUERTO (⟨D5⟩): el `switch` es exhaustivo para el tipo de
+ * HOY, pero un DTO puede llegar de una cache o de una version desplegada antes con un valor
+ * que este binario no conoce. Rotularlo como si fuera un dia seria afirmar un grano que no
+ * sabemos —una serie semanal leida como diaria miente sobre siete veces mas dinero por
+ * punto—, asi que se rotula como grano no declarado y se conserva la clave (R9).
+ */
+export function etiquetaDeCubo(
+  clave: string,
+  granularidad: VistaTemporal["granularidad"],
+  textos: TextosCubo,
+): string {
+  switch (granularidad) {
+    case "dia":
+      return rotular(textos.dia, clave);
+    case "semana":
+      return rotular(textos.semana, clave);
+    default:
+      return rotular(textos.granoNoDeclarado, clave);
+  }
+}
+
+/**
+ * Una vista TEMPORAL -> una serie del paquete con las categorias ya rotuladas (⟨D6⟩).
+ *
+ * DELEGA en `serieDeVista` y solo reemplaza la categoria de cada punto. Asi la conversion
+ * `string -> number`, el tratamiento del dato ausente y la seleccion de campo por forma del
+ * importe siguen en UN SOLO SITIO: una segunda funcion que leyera `fila.importe` por su
+ * cuenta duplicaria la frontera del dinero, que es el punto exacto de este archivo donde
+ * una feature puede mentir sin que se note.
+ *
+ * UN PUNTO POR FILA, EN EL ORDEN DEL DTO (R10). No se ordena, no se fusiona y NO se aplica
+ * `agruparCola`: «Otros» no significa nada en un eje de tiempo, se comeria el final de la
+ * serie —que es lo que se mira— y esconderia el dia en que la garantia del servidor
+ * (R19/R20 de la 180: ningun rango admisible pasa de `MAX_PUNTOS_SERIE` puntos) se rompa.
+ * Si se rompe, lo correcto es que `aplicarTopePuntos` lance fuera de produccion, que es
+ * para lo que esta escrito.
+ *
+ * Las sobrecargas son las mismas de `serieDeVista`, por el mismo motivo: de una vista sin
+ * `neto` solo se puede pedir el `"bruto"`, y pedir el otro NO COMPILA.
+ *
+ * LIMITE DECLARADO: `serieDeVista` sigue siendo invocable sobre una vista temporal y
+ * devolveria las claves CRUDAS, sin rotular. El tipo no lo impide sin romper a sus
+ * llamadores actuales; lo cubren el censo (g) del guardia y el caso de R7 de punta a punta,
+ * no el compilador.
+ */
+export function serieTemporalDeVista(
+  vista: VistaTemporal & VistaConNeto,
+  campo: CampoImporte,
+  textos: TextosCubo,
+): SerieDato;
+export function serieTemporalDeVista(
+  vista: VistaTemporal,
+  campo: "bruto",
+  textos: TextosCubo,
+): SerieDato;
+export function serieTemporalDeVista(
+  vista: VistaTemporal,
+  campo: CampoImporte,
+  textos: TextosCubo,
+): SerieDato {
+  // El `as` es el unico modo de reusar la sobrecarga del `neto` desde aqui, y NO puede
+  // esconder nada: si alguien fuerza esta llamada sobre una vista `solo_bruto`,
+  // `cifraDeImporte` lanza `ImporteSinNetoError` en la primera fila en vez de devolver el
+  // bruto disfrazado de neto (R23 de la 183). Las sobrecargas de arriba ya lo impiden en
+  // compilacion; esto es el cinturon.
+  const serie =
+    campo === "neto"
+      ? serieDeVista(vista as VistaTemporal & VistaConNeto, "neto")
+      : serieDeVista(vista, "bruto");
+
+  return {
+    ...serie,
+    puntos: serie.puntos.map((punto) => ({
+      ...punto,
+      categoria: etiquetaDeCubo(punto.categoria, vista.granularidad, textos),
     })),
   };
 }
