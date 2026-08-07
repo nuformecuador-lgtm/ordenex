@@ -150,15 +150,8 @@ export type ListarZonasBloqueadasResult =
   | { status: "unauthenticated" }
   | { status: "forbidden" };
 
-// Soporte R15/R16 — loader de solo lectura del catalogo `order_status` (id,
-// value) para que la UI resuelva value -> estatusId y siga filtrando
-// `listarOrdenes` por `estatusId` (contrato feature 6/7 intacto, design.md §4).
-export interface EstatusLiteDTO {
-  id: string;
-  value: string;
-}
-
-export type ListarCatalogoEstatusResult =
-  | { status: "ok"; estatus: EstatusLiteDTO[] }
-  | { status: "unauthenticated" }
-  | { status: "forbidden" };
+// BORRADO 2026-08-07 (tanda 2): aqui vivian `EstatusLiteDTO` y `ListarCatalogoEstatusResult`,
+// el soporte R15/R16 de `listarCatalogoEstatus` — borrada en la tanda 1 por ser la segunda
+// victima de `54757be4`. La lectura viva del catalogo `order_status` es `listarOrderStatus`
+// (`lib/actions/order-status.ts`), que tiene sus PROPIOS tipos en `lib/types/order-status.ts`
+// (`OrderStatusLiteRow` / `ListarOrderStatusResult`) y no pasaba por estos.
