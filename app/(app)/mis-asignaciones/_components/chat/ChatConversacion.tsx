@@ -37,7 +37,7 @@ import {
   horaCorta,
   iniciales,
   nombrePlantilla,
-} from "./chat-demo-data";
+} from "./chat-format";
 import { formatMonto } from "../pos-card/pos-format";
 
 // Rediseño del chat (rama ux) — columna derecha del chat separado: hilo REAL de la orden,

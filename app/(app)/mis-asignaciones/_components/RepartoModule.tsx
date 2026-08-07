@@ -27,7 +27,7 @@ import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { GestionarOrdenCardButton } from "./GestionarOrdenCardButton";
-import { ChatFlotante } from "./chat-demo/ChatFlotante";
+import { ChatFlotante } from "./chat/ChatFlotante";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
 import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
 import { RutaMapa } from "./RutaMapa";
