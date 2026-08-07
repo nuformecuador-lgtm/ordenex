@@ -2,6 +2,7 @@
 
 **Fecha:** 2026-08-07 · **Rama:** `chore/guardia-servicio-dobles-tablero` (desde `origin/dev` @ `3713e743`)
 **Tipo:** deuda de arnés, sin ficha y sin spec. No es una feature: es una guardia.
+**Tandas:** 1 (las siete métricas temporales) y 2 (las tres no temporales), misma rama.
 
 ---
 
@@ -54,7 +55,8 @@ visible hoy; el de `granularidad` tampoco la tenía el día antes de la 180.
 - La fixture semanal (`RANGO_SEMANAL` = `2026-06-01`…`2026-08-02`, `CUBOS_SEMANA`) también
   coincide con `trocear`: 9 cubos, `granularidadDe` da `"semana"`. **No se tocó** (ver §6).
 - `cuenta_por_pagar_tienda` declara en su fixture `id: "cuenta_por_pagar_tienda__vista"` y el
-  servicio publica `"cuenta_por_pagar_tienda"`. **Medido, no cubierto, no tocado** (ver §6).
+  servicio publica `"cuenta_por_pagar_tienda"`. Medido en la tanda 1 y dejado abierto a propósito;
+  **atado y corregido en la tanda 2** (§3 bis, mutación F).
 
 ### `cuenta_por_pagar_mensajero`, medida antes de afirmar nada sobre ella
 
@@ -70,7 +72,7 @@ primer cubo). La guardia afirma las tres cosas por separado en vez de forzar sim
 
 ## 3. Qué se hizo
 
-### `tests/fixtures/dto-financiero-temporal.ts` (nuevo)
+### `tests/fixtures/dto-financiero-servido.ts` (nuevo)
 
 La forma del DTO temporal deja de ser una declaración libre dentro de un `.test.tsx` y pasa a ser
 **derivada** de las mismas funciones puras que usa el servicio: `resolverRango`, `trocear`,
@@ -106,7 +108,7 @@ Sólo (a) derivar o sólo (b) comparar no bastaría, y por eso están las dos mi
 
 ---
 
-## 4. Mutaciones de control
+## 4. Mutaciones de control — tanda 1
 
 Todas con verificación de restauración **por hash** (`sha256sum -c`), por el aviso del encargo:
 a un agente le falló un `writeFileSync` por un lock de Windows y dejó la mutación aplicada en
@@ -114,10 +116,10 @@ código de producción.
 
 | # | Mutación | Archivo | Guardia | `TableroFinanciero.test.tsx` | Restaurado (hash) |
 |---|---|---|---|---|---|
-| **A** | `granularidadDelRango` devuelve `"no_temporal"` (equivale a escribir `granularidad: "no_temporal"` en el doble) | `tests/fixtures/dto-financiero-temporal.ts` | **ROJA** (3/14) | ROJO (16 fallos) | OK |
+| **A** | `granularidadDelRango` devuelve `"no_temporal"` (equivale a escribir `granularidad: "no_temporal"` en el doble) | `tests/fixtures/dto-financiero-servido.ts` | **ROJA** (3/14) | ROJO (16 fallos) | OK |
 | **B** | `serieDensa` devuelve `[]` | `lib/services/AnaliticaFinancieraService.ts` | **ROJA** (9/14) | **VERDE (93/93)** | OK |
-| **C** | `FUENTE_TEMPORAL` vuelve a `wallet_tienda_movimiento` en las 7 (la mentira que había) | `tests/fixtures/dto-financiero-temporal.ts` | **ROJA** (3/14) | **VERDE (93/93)** | OK |
-| **D** | el id de la vista vuelve a `${metricaId}__vista` (la mentira que había) | `tests/fixtures/dto-financiero-temporal.ts` | **ROJA** (3/14) | **VERDE (93/93)** | OK |
+| **C** | `FUENTE_TEMPORAL` vuelve a `wallet_tienda_movimiento` en las 7 (la mentira que había) | `tests/fixtures/dto-financiero-servido.ts` | **ROJA** (3/14) | **VERDE (93/93)** | OK |
+| **D** | el id de la vista vuelve a `${metricaId}__vista` (la mentira que había) | `tests/fixtures/dto-financiero-servido.ts` | **ROJA** (3/14) | **VERDE (93/93)** | OK |
 | **E** | `granularidadDe` compara contra `0` en vez de `TOPE_PUNTOS_SERIE` (30 días pasan a `"semana"`) | `lib/analytics/cubo-temporal.ts` | **ROJA** (4/14) | ROJO (10 fallos) | OK |
 
 **La fila que justifica la guardia es la B**: el servicio cambia de forma y los 93 casos de
@@ -134,6 +136,106 @@ mientras todo lo demás estaba verde.
 `granularidadDe`, así que se movieron juntas. Lo que la puso roja fueron los **anclajes escritos a
 mano** de la guardia (`granularidad === "dia"` y `CUBOS` de longitud 30). Están ahí precisamente
 por eso, y esta medición es la razón por la que no se retiran.
+
+---
+
+## 3 bis. Tanda 2 (2026-08-07) — las tres métricas NO temporales
+
+Cierra el punto 5 de la §6, que quedaba abierto por escrito.
+
+### Lo que medí antes de tocar nada
+
+Ejecuté el servicio para `cod_recaudado`, `cuenta_por_pagar_tienda` y `conciliacion_cierres`, con
+el repositorio vacío y con material, sobre la misma ventana del tablero:
+
+| Campo | Servicio (medido) | Doble (antes) | ¿Divergía? |
+|---|---|---|---|
+| `cod_recaudado` · nº de vistas y orden | `[cod_recaudado__por_metodo, cod_recaudado__por_tienda]`, estable en 5 corridas | igual | no |
+| `cod_recaudado` · identidad de cada vista | `metodo_pago`/`cierre_dia` y `tienda`/`wallet_tienda_movimiento`, ambas `no_temporal`, `sumableCon: []` | igual | no |
+| `cuenta_por_pagar_tienda` · `vista.id` | `"cuenta_por_pagar_tienda"` | `"cuenta_por_pagar_tienda__vista"` | **SÍ** |
+| `conciliacion_cierres` · `tipo` | `"conciliacion"`, sin clave `vistas` | igual | no |
+| `conciliacion_cierres` · **`unidad`** | **`"conteo"`** | `"moneda"` | **SÍ** |
+| filas de un desglose | 0 con repo vacío; N con material, en el orden de llegada | N propias del doble | no atable (ver abajo) |
+
+**Hallazgo sobre el orden de las dos vistas de `cod_recaudado`.** Es determinista (`deRecaudo`
+devuelve el literal `[vistaMetodo, vistaTienda]`) y estable en 5 corridas, pero **ningún spec lo
+declara**: `grep` sobre `specs/127-*` y `specs/132-*` no encuentra una sola línea sobre el orden.
+Y hay **dos consumidores que dependen de él**: el tablero pinta una sección por vista en orden del
+DTO, y `TableroFinanciero.test.tsx` indexa `[0]` para el donut y `[1]` para las barras. Un
+servicio que las intercambiara pondría el donut donde van las barras sin romper nada declarado.
+Ahora está atado por ejecución, así que es un contrato ejecutable.
+
+### Lo que se ató, y lo que no
+
+**Se ata** (está escrito en el manejador, no depende de datos): `id`, `grano`, `fuente`,
+`sumableCon`, `granularidad`, el **número** de vistas, el **orden** en que se publican, y la
+cabecera entera menos `etiqueta`.
+
+**No se ata, con la medición que lo justifica**: la cardinalidad y el orden de las **filas**. En
+una serie temporal la densidad la decide el rango (`serieDensa` reparte sobre `cubos.map(() => [])`)
+y por eso es una propiedad del código; en un desglose la deciden los datos (`porCubo` agrupa lo que
+el repositorio devolvió y conserva su orden de llegada). Medido y afirmado en la guardia: con el
+repo vacío, `cod_recaudado` publica `[0, 0]` filas; con material, `[2, 2]`, y `transferencia` sale
+antes que `efectivo` porque así llegó. Forzar una atadura ahí convertiría la guardia en una fixture
+disfrazada.
+
+---
+
+## 4 bis. DEFECTO ABIERTO — `conciliacion_cierres` formatea dinero con `unidad: "conteo"`
+
+**Esto no es una curiosidad de fixture. Es un defecto vivo en producción, y lo tapaban los dobles.**
+
+- El catálogo declara `conciliacion_cierres` con `unidad: "conteo"` (`lib/analytics/metrics.ts`;
+  `unidadDeConteo: "moneda"`), y el servicio lo publica tal cual en la cabecera del DTO.
+- `PanelConciliacion.tsx:140` formatea las **tres cifras de dinero del cuadre** —«Total snapshot»,
+  «Total ledger», «Diferencia»— con `formatearValor(aNumero(cifra.importe), datos.unidad)`.
+- `formatearValor(x, "conteo")` usa `maximumFractionDigits: 0` y no pone moneda.
+
+**Medido**, sustituyendo `unidad: "moneda"` por la de verdad en el doble de
+`tests/components/PanelConciliacion.test.tsx` (probe temporal, restaurado por hash): el cuadre
+renderiza `1 561` donde el test espera `₡1 560,50`, y `61` donde el importe es `60,50`. Es decir:
+en producción esas tres cifras salen **redondeadas y sin moneda**, y un descuadre de ₡60,50 se
+anuncia como «61». Dos de los siete casos de ese archivo se ponen rojos con la unidad correcta.
+
+La causa está a la vista: el mismo archivo ya declara `unidad: "moneda"` **a mano** en las cuatro
+columnas de dinero de la tabla (`COLUMNAS_CONCILIACION`, `PanelConciliacion.tsx:69-72`) y sólo el
+bloque del cuadre usa `datos.unidad`. El arreglo probable es de una línea: usar el literal
+`"moneda"` en la línea 140, igual que las columnas.
+
+**NO LO HE TOCADO, y es deliberado.** (a) La UI está fuera de mi alcance. (b) Decidir si el cuadre
+debe formatearse como dinero (arreglar el componente) o si el catálogo debería declarar otra unidad
+es una decisión de producto, no mía; encajar cualquiera de las dos en las aserciones la
+pre-decidiría. Queda **abierto** con el diagnóstico completo.
+
+**Consecuencia inmediata sobre el árbol:** `tests/components/PanelConciliacion.test.tsx` sigue
+declarando su propio doble con `unidad: "moneda"` y **no está atado** — es el único doble del DTO
+financiero que queda mintiendo, y miente justo donde está el defecto. No lo corregí porque
+corregirlo **exige** decidir antes lo del párrafo anterior: con la unidad de verdad, esos dos casos
+sólo pueden pasar afirmando el redondeo, o sea bendiciendo el defecto. `TableroFinanciero.test.tsx`
+sí quedó corregido y sigue verde (93/93): sus aserciones nunca dependieron de esa unidad, que es
+precisamente por lo que la mentira llevaba ahí desde la 132 sin que nadie la viera.
+
+---
+
+## 4 ter. Mutaciones de control — tanda 2
+
+Mismas reglas: restauración verificada por hash en las cuatro.
+
+| # | Mutación | Archivo | Guardia | `TableroFinanciero.test.tsx` | Restaurado (hash) |
+|---|---|---|---|---|---|
+| **F** | el id vuelve a `cuenta_por_pagar_tienda__vista` (la divergencia que la §6.5 dejaba abierta) | `tests/fixtures/dto-financiero-servido.ts` | **ROJA** (2/25) | **VERDE (93/93)** | OK |
+| **G** | `UNIDAD_SERVIDA.conciliacion_cierres` vuelve a `"moneda"` (la otra mentira) | `tests/fixtures/dto-financiero-servido.ts` | **ROJA** (3/25) | **VERDE (93/93)** | OK |
+| **H** | las dos vistas de `cod_recaudado` INTERCAMBIADAS en el doble | `tests/fixtures/dto-financiero-servido.ts` | **ROJA** (2/25) | ROJO (5 fallos) | OK |
+| **I** | las dos vistas INTERCAMBIADAS en el **servicio** (`deRecaudo`) | `lib/services/AnaliticaFinancieraService.ts` | **ROJA** (4/25) | **VERDE (93/93)** | OK |
+
+**F, G e I repiten la firma del incidente**: el doble (o el servicio) miente y los 93 casos de
+componente siguen en verde. La I es especialmente clara: intercambiar las vistas en **producción**
+—lo que pondría el donut donde van las barras— no mueve una sola aserción del tablero, porque ese
+archivo no ejecuta el servicio. Bajo la I corrí además `tests/unit/analytics` +
+`analitica-financiera-serie-frontera`: 3 casos rojos de 1310, todos del backend.
+
+La H es la que demuestra que el **orden** se ata de verdad: con un comparador de conjuntos o un
+`sort()` de más habría pasado en verde.
 
 ---
 
@@ -165,15 +267,20 @@ La sección más valiosa. Nada de lo que sigue es un olvido: está medido y deci
    Medido en la mutación E: la comparación pura se queda verde. Lo tapan los anclajes escritos a
    mano de la guardia (`"dia"`, 30 cubos) y los tests propios de la 180. Si alguien retira esos
    anclajes «porque son redundantes», este agujero se abre.
-5. **Las fixtures NO temporales del tablero.** `cod_recaudado` (2 vistas), `cuenta_por_pagar_tienda`
-   y `conciliacion_cierres` siguen siendo declaraciones libres dentro del `.test.tsx`. La
-   cardinalidad de sus filas la deciden los DATOS y no el rango, así que no es atable del mismo
-   modo; sus campos de identidad (`id`, `grano`, `fuente`, `granularidad`) **sí lo serían** y no se
-   hizo. **Divergencia medida y NO corregida**: `cuenta_por_pagar_tienda` declara
-   `id: "cuenta_por_pagar_tienda__vista"` y el servicio publica `"cuenta_por_pagar_tienda"`. No se
-   tocó porque corregirla sin atarla recrearía exactamente el fallo que esta guardia cierra (una
-   declaración libre que hoy acierta). Queda **abierto** para quien extienda la fixture compartida
-   a las vistas no temporales.
+5. **Las filas de las tres fixtures NO temporales** (`cod_recaudado` ×2, `cuenta_por_pagar_tienda`,
+   y el `porEstado`/`cuadre` de `conciliacion_cierres`). *Reescrito tras la tanda 2:* su
+   **identidad** (`id`, `grano`, `fuente`, `sumableCon`, `granularidad`), el número de vistas, su
+   **orden** y la cabecera **ya están atados**, y las dos divergencias que había —el sufijo
+   `__vista` y la `unidad` de conciliación— están corregidas. Lo que sigue sin atar, y ahora por
+   una razón medida y no por falta de tiempo, es la **cardinalidad, el orden y las cifras de sus
+   filas**: los deciden los datos del repositorio, no el rango, así que no hay contrato que
+   comparar (§3 bis). Si algún día el servicio pasara a rellenar esos desgloses densamente —como
+   hizo la 180 con las series—, esta exclusión dejaría de estar justificada; el caso «sus filas las
+   deciden los DATOS» de la guardia se pondría rojo y avisaría.
+   **Sigue vivo aquí un solo hueco**, y no es de forma sino de decisión pendiente:
+   `tests/components/PanelConciliacion.test.tsx` mantiene su propio doble con `unidad: "moneda"`,
+   contradiciendo al servicio, porque corregirlo obliga a decidir antes el defecto de §4 bis. Es el
+   **único doble del DTO financiero que queda mintiendo** en el árbol.
 6. **Las fixtures de caso límite** (`panelSemanal`, `panelTemporalSinFilas`,
    `panelGranoTiendaPeroTemporal`, `panelNoTemporalDeFlujoSinFilas`, …) describen DTOs que el
    servicio **no produce hoy**, y lo declaran por escrito en su propio comentario. Están fuera a
@@ -194,21 +301,24 @@ La sección más valiosa. Nada de lo que sigue es un olvido: está medido y deci
 ## 7. Archivos
 
 **Nuevos**
-- `tests/fixtures/dto-financiero-temporal.ts`
-- `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts`
+- `tests/fixtures/dto-financiero-servido.ts` (tanda 1 como `dto-financiero-temporal.ts`; renombrado
+  en la tanda 2, que lo extendió de las siete métricas temporales a las diez servidas)
+- `tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts` (14 casos en la tanda 1, 25 tras la 2)
 - `progress/impl_guardia-servicio-dobles.md` (este archivo)
 
 **Modificados**
 - `tests/components/TableroFinanciero.test.tsx`
 
 **Tocados sólo durante las mutaciones y restaurados con hash verificado**
-- `lib/services/AnaliticaFinancieraService.ts`
-- `lib/analytics/cubo-temporal.ts`
+- `lib/services/AnaliticaFinancieraService.ts` (mutaciones B, I)
+- `lib/analytics/cubo-temporal.ts` (mutación E)
+- `tests/components/PanelConciliacion.test.tsx` (sonda de §4 bis)
 
 ---
 
 ## 8. Veredicto
 
-El doble temporal del tablero ya no puede describir un DTO que el servicio no produce sin que algo
-se ponga rojo: medido con cinco mutaciones, y tres de ellas son invisibles para la suite de
-componente.
+Ningún doble del DTO financiero del tablero puede ya describir una forma que el servicio no produce
+sin que algo se ponga rojo: nueve mutaciones, seis de ellas invisibles para la suite de componente.
+Queda **un** doble mintiendo a propósito —el de `PanelConciliacion`— porque corregirlo exige
+decidir antes el defecto de §4 bis, que es de producto y no mío.
