@@ -8,7 +8,7 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 import { normalizeName } from "@/lib/utils/normalize";
 
 import { coincideBusqueda } from "../mis-asignaciones-buscador";
-import { ESTADO_CHIP, estadoDe, iniciales, zonaCorta } from "./chat-demo-data";
+import { ESTADO_CHIP, estadoDe, iniciales, zonaCorta } from "./chat-format";
 
 // Rediseño del chat (rama ux) — columna izquierda: un contacto por orden EN REPARTO (su
 // destinatario). Filtra en cliente con el MISMO criterio que el buscador del módulo
