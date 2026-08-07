@@ -2,12 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { normalizeName } from "@/lib/utils/normalize";
-import type {
-  ArbolCantonNode,
-  ArbolZonas,
-  TarifaZonaMensajeroDTO,
-  ZonaDTO,
-} from "@/lib/types/zona";
+import type { TarifaZonaMensajeroDTO, ZonaDTO } from "@/lib/types/zona";
 import type {
   CreateZonaData,
   DeleteZonaResult,
@@ -227,32 +222,6 @@ export class ZonaRepository implements IZonaRepository {
       }
       throw e;
     }
-  }
-
-  async arbol(): Promise<ArbolZonas> {
-    const zonas = await this.prisma.zona.findMany({
-      orderBy: { nombre: "asc" },
-      include: { distritos: { include: { distrito: { include: { canton: true } } } } },
-    });
-
-    const arbol: ArbolZonas = {};
-    for (const zona of zonas) {
-      const cantones: Record<string, ArbolCantonNode> = {};
-      for (const zd of zona.distritos) {
-        const distrito = zd.distrito;
-        const canton = distrito.canton;
-        const ck = normalizeName(canton.nombre);
-        if (!cantones[ck]) {
-          cantones[ck] = { id: canton.id, value: canton.nombre, distritos: {} };
-        }
-        cantones[ck].distritos[normalizeName(distrito.nombre)] = {
-          id: distrito.id,
-          value: distrito.nombre,
-        };
-      }
-      arbol[normalizeName(zona.nombre)] = { id: zona.id, value: zona.nombre, cantones };
-    }
-    return arbol;
   }
 
   async countExistingDistritos(ids: string[]): Promise<number> {

@@ -1,47 +1,22 @@
 "use server";
 
-// Integracion WhatsApp — Server Actions del mensajero: listar las plantillas ENVIABLES y
-// ENVIAR una a la orden que gestiona. Mutaciones internas del propio proyecto -> Server Action
-// (patron feature 36). Resuelve el actor por sesion; la propiedad de la orden la impone el
-// `OrdenEnvioReader` (scope por `mensajeroAsignadoId`), no un check de rol suelto.
-import { z } from "zod";
+// Integracion WhatsApp — Server Actions del mensajero: LISTAR las plantillas que puede usar,
+// para que el cliente renderice el texto y abra WhatsApp por el camino wa.me. Mutaciones
+// internas del propio proyecto -> Server Action (patron feature 36). Resuelve el actor por
+// sesion.
+//
+// El ENVIO SERVER-SIDE POR META se borro de aqui el 2026-08-07 por decision humana
+// (`enviarPlantillaWhatsapp` + `listarPlantillasEnviables`): nunca tuvo boton — `git log -S`
+// sobre `app/` y `components/` devuelve CERO commits en toda su vida — y la UI que existe usa
+// el camino wa.me. Lo que se manda por Meta de verdad va por `lib/actions/chat-whatsapp.ts`.
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { PlantillaMensajeRepository } from "@/lib/repositories/PlantillaMensajeRepository";
-import { OrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
-import { EnvioPlantillaWhatsappService } from "@/lib/services/EnvioPlantillaWhatsappService";
-import { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
-import { consoleLogger } from "@/lib/services/whatsapp/chat-logger";
-import { loadWhatsappConfig } from "@/lib/config/whatsapp";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import type {
-  EnviarPlantillaResult,
-  ListarEnviablesResult,
-  ListarPlantillasTextoResult,
-} from "@/lib/types/whatsapp-envio";
-
-const idSchema = z.string().min(1);
+import type { ListarPlantillasTextoResult } from "@/lib/types/whatsapp-envio";
 
 export interface WhatsappEnvioDeps {
   getActor?: () => Promise<Actor | null>;
-  service?: EnvioPlantillaWhatsappService | null;
-}
-
-/** Construye el service de envio; `null` si WhatsApp no esta configurado todavia. */
-function buildEnvioService(): EnvioPlantillaWhatsappService | null {
-  let config;
-  try {
-    config = loadWhatsappConfig();
-  } catch {
-    return null;
-  }
-  const prisma = getPrismaClient();
-  return new EnvioPlantillaWhatsappService({
-    ordenReader: new OrdenEnvioReader(prisma),
-    plantillaRepo: new PlantillaMensajeRepository(prisma),
-    client: new WhatsappCloudClient({ config, logger: consoleLogger }),
-    idiomaPorDefecto: config.templateIdioma,
-  });
 }
 
 /**
@@ -82,41 +57,9 @@ export async function listarPlantillasActivasParaEnvio(
   return { status: "ok", items: textos.filter((p) => activas.has(p.id)) };
 }
 
-/**
- * Lista las plantillas enviables (activas + enlazadas con Meta) para el envio server-side por Meta.
- *
- * @sin-superficie DEUDA, no diseno (feature 107, eb50730f/2dfd7c50 del 2026-07-23): es el listado que alimentaria al boton de `enviarPlantillaWhatsapp`, y ese boton nunca se construyo. Camino muerto desde el dia 1; se conserva porque el backend de Meta esta entero y probado. Quien cablee el envio server-side tiene que quitar esta anotacion.
- */
-export async function listarPlantillasEnviables(
-  deps: WhatsappEnvioDeps = {},
-): Promise<ListarEnviablesResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" };
-
-  const repo = new PlantillaMensajeRepository(getPrismaClient());
-  const items = await repo.listarEnviables();
-  return { status: "ok", items: items.map((p) => ({ id: p.id, nombre: p.nombre })) };
-}
-
-/**
- * Envia la plantilla `plantillaId` a la orden `ordenId` (que debe estar asignada al mensajero).
- *
- * @sin-superficie DEUDA, no diseno (feature 107, 2026-07-23): el envio server-side por Meta NUNCA tuvo boton. La UI que existe (`EnviarPlantillaWhatsappButton`) usa el camino wa.me con `listarPlantillasParaEnvio`, que abre WhatsApp en el cliente y no manda nada por Meta. Es una capacidad implementada y probada que ningun usuario puede disparar.
- */
-export async function enviarPlantillaWhatsapp(
-  ordenId: unknown,
-  plantillaId: unknown,
-  deps: WhatsappEnvioDeps = {},
-): Promise<EnviarPlantillaResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" };
-
-  const oId = idSchema.safeParse(ordenId);
-  const pId = idSchema.safeParse(plantillaId);
-  if (!oId.success || !pId.success) return { status: "not_found" };
-
-  const service = deps.service !== undefined ? deps.service : buildEnvioService();
-  if (service === null) return { status: "no_configurado" };
-
-  return service.enviar(oId.data, pId.data, actor.usuarioId);
-}
+// OJO AL NOMBRE. Aqui vivian `listarPlantillasEnviables` y `enviarPlantillaWhatsapp` (el camino
+// Meta), borradas el 2026-08-07. Las DOS que quedan arriba se llaman casi igual y estan VIVAS:
+// `listarPlantillasParaEnvio` la llama `EnviarPlantillaWhatsappButton.tsx:99` y
+// `listarPlantillasActivasParaEnvio` la llama `chat/ChatConversacion.tsx:21`.
+// `repo.listarEnviables()` tampoco murio: lo sigue usando `listarPlantillasActivasParaEnvio`
+// para quedarse solo con las plantillas que Meta aceptaria.

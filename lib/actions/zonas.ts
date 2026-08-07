@@ -6,7 +6,6 @@ import {
   crearZonaSchema,
   listarZonasSchema,
   type ActualizarZonaResult,
-  type ArbolZonasResult,
   type BorrarZonaResult,
   type CrearZonaResult,
   type ListarZonasResult,
@@ -152,17 +151,8 @@ export async function borrarZona(
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }
 
-/**
- * Arbol zona -> canton -> distrito indexado por nombre normalizado (solo maestro).
- *
- * @sin-superficie muerte de SEGUNDO ORDEN, misma forma que el bug de `rutearABodegaSatelite`: su unico importador es `configuracion/_components/ZonaForm.tsx`, al que no monta ninguna pantalla. El resto de este modulo (`crearZona`, `obtenerZona`, `borrarZona`) SI vive, por `ZonasTarifasModule`; es solo este arbol el que se quedo colgando. Pregunta de producto ABIERTA.
- */
-export async function arbolZonas(deps: ZonaActionDeps = {}): Promise<ArbolZonasResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const service = deps.zonaService ?? buildZonaService();
-    return service.arbol(actor);
-  });
-  return isAppErrorShape(r) ? toZonaActionError(r) : r;
-}
+// `arbolZonas` (arbol zona -> canton -> distrito) se borro el 2026-08-07 por decision humana:
+// su unico importador fue siempre `configuracion/_components/ZonaForm.tsx`, que dejo de estar
+// montado en `19b9cccf` (2026-07-22, «remove zones from cofign>user») y lo borro la tanda 1 de
+// este mismo chore. `IZonaService.arbol` / `ZonaRepository.arbol` NO se tocan: siguen probados y
+// son la lectura que habria que recablear si la pantalla vuelve.
