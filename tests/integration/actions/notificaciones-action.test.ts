@@ -25,7 +25,6 @@ const sinActor = async (): Promise<Actor | null> => null;
 function fakeService(overrides: Partial<INotificacionService> = {}): INotificacionService {
   return {
     listar: vi.fn().mockResolvedValue({ status: "ok", items: [], noLeidas: 0 }),
-    marcarLeida: vi.fn().mockResolvedValue({ status: "ok" }),
     marcarTodasLeidas: vi.fn().mockResolvedValue({ status: "ok", marcadas: 0 }),
     descartar: vi.fn().mockResolvedValue({ status: "ok" }),
     notificarCargaTerminada: vi.fn().mockResolvedValue({ status: "ok" }),
@@ -177,7 +176,6 @@ describe("R39 — la carga terminada notifica SOLO al ejecutor y una sola vez po
     }
     listarParaUsuario = vi.fn().mockResolvedValue([]);
     verificarVisible = vi.fn().mockResolvedValue("visible" as const);
-    marcarLeida = vi.fn().mockResolvedValue(undefined);
     marcarTodasLeidas = vi.fn().mockResolvedValue(0);
     descartar = vi.fn().mockResolvedValue(undefined);
   }

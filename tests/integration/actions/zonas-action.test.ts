@@ -36,7 +36,6 @@ function fakeService(over: Partial<IZonaService> = {}): IZonaService {
     listar: vi.fn().mockResolvedValue({ status: "ok", items: [dto()], page: 1, pageSize: 25, total: 1 }),
     actualizar: vi.fn().mockResolvedValue({ status: "ok", zona: dto() }),
     borrar: vi.fn().mockResolvedValue({ status: "ok" }),
-    arbol: vi.fn().mockResolvedValue({ status: "ok", arbol: {} }),
     ...over,
   };
 }
