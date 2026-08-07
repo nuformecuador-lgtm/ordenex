@@ -13,6 +13,7 @@ import useSWR from "swr";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
+import { useTonoAlIncrementar } from "@/hooks/useTonoAlIncrementar";
 import {
   enviarMensajeChat,
   enviarPlantillaChat,
@@ -190,6 +191,25 @@ export function ChatConversacion({
   const hayEntrante = mensajes.some((m) => m.direccion === "entrante");
   const haySaliente = mensajes.some((m) => m.direccion === "saliente");
   const plantillasBloqueadas = !hayEntrante && haySaliente;
+
+  // Feature 161 (R21-R23): tono cuando el refresco de 10 s trae un mensaje NUEVO del
+  // cliente. Se cuentan SOLO los entrantes, de modo que un saliente propio no suene (R22).
+  //
+  // Este enganche vivía en `ChatWhatsappPanel` (el chat del detalle de la asignación) y se
+  // fue con él al borrarlo el 2026-08-07: la feature 161 quedó con una sola superficie —la
+  // campana— y el mensajero dejó de oír los mensajes del cliente. Vuelve aquí, que es hoy
+  // la única superficie viva del hilo.
+  //
+  // `null` MIENTRAS el hilo no ha cargado (R24): sin eso, la primera carga se leería como un
+  // salto de cero a N y sonaría al abrir un hilo con entrantes previos (R23). Sin orden
+  // seleccionada la clave de SWR es `null`, no hay `data` y el contador también es `null`.
+  //
+  // LÍMITE declarado (design §4, heredado del panel): solo suena con el chat ABIERTO, que es
+  // cuando este componente está montado y hay polling. El aviso con el chat cerrado exigiría
+  // un contador real de no leídos, que hoy no existe.
+  useTonoAlIncrementar(
+    hiloOk ? mensajes.filter((m) => m.direccion === "entrante").length : null,
+  );
 
   // Datos de la orden para resolver las variables de cada plantilla.
   const ordenEnvio = useMemo<OrdenEnvioData | null>(
