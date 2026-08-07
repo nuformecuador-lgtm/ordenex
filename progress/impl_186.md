@@ -106,6 +106,8 @@ después de cada una de las mutaciones que lo tocan.
 | M-13 | **quitar la vista semanal del juego de dobles** | `TableroFinanciero.test.tsx` | **muere**: 1 rojo (R17 c) |
 | **M-14** | **quitar `esVistaTemporal(vista) &&` de la línea** (dejarla en `!esAcumulado`) — el **gemelo exacto de M-10**, la otra mitad de la misma línea de código | `TableroFinanciero.tsx` | **SOBREVIVIÓ** a los 144 casos de componente (hallazgo del reviewer, B1). Con el caso añadido, **muere**: 1 rojo — `una vista no_temporal de metrica de FLUJO que llega al KPI tampoco trae linea, ni su encabezado` |
 | **M-15** | **`export const PRESET_DEL_TABLERO = "semana";` dentro de `adaptar.ts`** — el ejemplo literal del reviewer para m2 | `adaptar.ts` | antes de la corrección: **0 rojos**. Después: **muere**, 1 rojo en el censo de rango. Ver §5.3 |
+| **M-16** | **una fecha VISIBLE embebida en texto más largo**: `<p>{`Cubos del periodo: …`}</p>` en la rama del KPI | `TableroFinanciero.tsx` | con la forma que yo había adoptado: **1 rojo** (solo la acumulada). Con la cuarta salida (m7): **muere en las siete**, 7 rojos. Ver §5.1 |
+| **M-17** | **mezclar formas de importe en `panelNoTemporalDeFlujoSinFilas`** — control de que el doble nuevo entró de verdad en el censo (m8) | `TableroFinanciero.test.tsx` | antes de meterlo en `todasLasVistasDobladas()`: verde. Después: **muere**, 1 rojo en R17(d) |
 
 ### Las TRES mutaciones que sobrevivieron a la primera versión de su test
 
@@ -187,36 +189,68 @@ O sea: **R1 ∧ R7 ⟹ ¬(la aserción original)**, para las seis de flujo. No e
 debilitar el caso: las dos afirmaciones **no pueden ser ciertas a la vez**, y el spec exige las
 dos.
 
-**Las tres únicas salidas, y la regla que rompe cada una** —las escribo para que se vea que no
-hay una cuarta que se me escapara:
+**Las CUATRO salidas, y qué pasa con cada una.** Escribí «las tres únicas» y **me equivoqué**: la
+ronda 2 de la revisión (m7) encontró una cuarta, y es mejor que la que yo había adoptado. La dejo
+tabulada entera, porque afirmar una exhaustividad falsa es exactamente el defecto que este arnés
+persigue —y afirmarla *sobre mi propio razonamiento* es peor que afirmarla sobre el código.
 
-| Salida | Qué rompe |
+| Salida | Qué rompe / veredicto |
 |---|---|
 | Sacar la gráfica fuera de la `<section>` de la vista | **R1**, que dice «dentro de la sección de esa vista» |
 | Rotular el punto sin la clave del cubo | **R7** y R24 de la 132 (la clave se pinta literal) |
-| Quitar o esconder `SerieTextual` | Edita `components/private/analytics/`, que `tasks.md` prohíbe explícitamente; y rompe R10 de la 130 |
+| Quitar o esconder `SerieTextual` | Edita `components/private/analytics/`, que `tasks.md` prohíbe; y rompe R10 de la 130 |
+| **Restringir el TEXTO sobre el que se afirma, no la aserción** — quitar del árbol la región de la gráfica y afirmar `not.toContain` sobre el resto | **No rompe nada, y es más fuerte. ADOPTADA.** |
 
-**Qué se hizo:** el caso pasa a exigir que la fecha no sea el texto **propio** de ningún elemento
-—`queryByRole("cell", …)` y `queryByText(…)`—, que es exactamente como la pintaba `PanelTabla`
-(`<td>2026-07-20</td>`), y **conserva la aserción vieja literal** en la métrica acumulada, que por
-Q2 = (b) no lleva línea. Tres líneas de aserción retiradas en todo el archivo, ni una más.
+**Las tres primeras eran las formas de conservar la aserción original; la cuarta no lo es —es un
+reemplazo distinto—, y ese es justo el hueco por el que se me escapó:** me pregunté «¿cómo
+mantengo `seccion.textContent`?» en vez de «¿qué es lo que este caso tiene que cazar?». La
+respuesta a la segunda es que la fecha no aparezca en ninguna parte de la sección **salvo dentro
+de la gráfica**, que es su única fuente legítima. Eso se expresa quitando la gráfica del texto, no
+debilitando la aserción.
 
-**Medido, y confirmado por el reviewer por su cuenta:** volver la señal de forma a
-`vista.filas.length === 0` —el defecto de ⟨H1⟩ exacto— produce **39 rojos**, entre ellos los 7 de
-este caso. M-8 pone rojo el resto conservado para la acumulada. M-9 y M-11 ponen rojo el caso
-entero. El defecto original sigue muriendo aquí.
+**Lo que la cuarta salida caza de más, medido por mí antes de adoptarla** (no copiado del review;
+la mutación se sembró en `TableroFinanciero.tsx` y se revirtió con la edición inversa, hash
+`864c0e6f…` verificado después):
 
-**Redacción propuesta al leader para reconciliar el spec** (no la escribo yo en `specs/`). En
-`requirements.md` §4, última viñeta, y en `design.md` ⟨D1⟩:
+| Escenario | forma que yo había adoptado (`queryByRole cell` + `queryByText`) | cuarta salida |
+|---|---|---|
+| código actual | verde (93) | **verde (93)** |
+| defecto de ⟨H1⟩ (señal de vuelta a `filas.length === 0`) | **39 rojos** | **39 rojos** — idéntico |
+| **una fecha VISIBLE embebida en un texto más largo**: `<p>{`Cubos del periodo: …`}</p>` en la rama del KPI | **1 rojo** — solo `cuenta_por_pagar_mensajero`, por la aserción original que se le conservaba. **Las SEIS de flujo no lo ven** | **7 rojos** — las siete métricas |
+
+El tercer escenario es lo que se ganó: una regresión perfectamente escribible —alguien añade una
+línea de «detalle» con las fechas— que mi forma dejaba pasar en las seis métricas que llevan
+línea, es decir, en todas las que esta feature toca. Y ninguna de las dos formas es peor en los
+otros dos escenarios.
+
+**Cómo queda implementada:** un helper `textoFueraDeLaGrafica(seccion, tituloGrafica)` clona la
+sección, quita los nodos con ese `aria-label` y devuelve el `textContent` restante. La región se
+localiza **por su nombre accesible** —lo que ya usa `tieneLinea` y todo el archivo— y no por la
+clase `sr-only`, que es del paquete de la 130 y esta feature no controla. Efectos secundarios,
+los dos buenos:
+
+- **la rama condicional por `esAcumulado` desaparece**: en la acumulada no hay gráfica que quitar,
+  así que la aserción queda **idéntica a la original, byte a byte**, sin necesidad de un `if`;
+- **las siete métricas se miden con la misma vara**, que era lo que el `it.each` prometía.
+
+**Coste, dicho:** acopla el caso a un `cloneNode` + `remove`, o sea a la estructura del DOM. Es el
+precio de restringir el texto en vez de la aserción, y se paga en un solo helper documentado.
+
+**Aserciones retiradas en todo el archivo tras esto: dos** (las de §5.2), una menos que antes.
+
+**Redacción propuesta al leader para reconciliar el spec** (no la escribo yo en `specs/`).
+Actualizada tras m7: el leader ya acotó el criterio a su tanda en `2d41d94c`, y lo que sigue es la
+corrección de la parte que hablaba de «tres salidas». En `requirements.md` §4, `design.md` ⟨D1⟩:
 
 > **Los seis casos del bloque `Hotfix — …` deben seguir verdes sin tocarlos AL CERRAR LA TANDA A**
 > —ese es el criterio de que mover `esSerieTemporal` (⟨D1⟩) no cambió una sola conducta—. Al
-> aterrizar la línea (Tanda C), **uno de los seis deja de ser satisfacible**: `` `%s` NO pinta las
-> fechas de la serie `` afirma que el `textContent` de la sección no contiene la clave del cubo, y
-> R1 + R7 obligan a que la contenga, porque la alternativa textual de la gráfica la nombra. Ese
-> caso —y solo ese— se estrecha a «la fecha no es el texto propio de ningún elemento», que es como
-> la pintaba `PanelTabla`, y conserva la forma original en la métrica acumulada, que no lleva
-> línea. Los otros cinco siguen intactos.
+> aterrizar la línea (Tanda C), **uno de los seis deja de ser satisfacible tal como está escrito**:
+> `` `%s` NO pinta las fechas de la serie `` afirma que el `textContent` de la sección no contiene
+> la clave del cubo, y R1 + R7 obligan a que la contenga, porque la alternativa textual de la
+> gráfica la nombra. Ese caso —y solo ese— **conserva su aserción y restringe el texto**: se
+> excluye del `textContent` la región de la gráfica, que es la única fuente legítima de la fecha, y
+> sobre el resto se afirma exactamente lo que afirmaba antes. En la métrica acumulada, que no lleva
+> línea, no hay nada que excluir y la aserción queda idéntica. Los otros cinco siguen intactos.
 
 ### 5.2 Un segundo caso preexistente cambió de forma, hacia más estrecho
 
@@ -299,7 +333,15 @@ ninguna cuenta anclada cambiada, censos (a)–(f) intactos.** Lo añadido: el bl
 
 En `tests/components/TableroFinanciero.test.tsx` se conservan **los dos casos de R17(a)** del
 hotfix, palabra por palabra. Los dos casos que cambiaron de forma están en §5.1 y §5.2, cada uno
-con el motivo y con la medición que demuestra que siguen mordiendo.
+con el motivo y con la medición que demuestra que siguen mordiendo. Tras adoptar la cuarta salida
+(m7), el caso de §5.1 **recupera su aserción original** —`not.toContain` sobre texto— y lo único
+que cambia es el texto sobre el que se afirma: **quedan dos líneas de aserción retiradas en todo
+el archivo**, las dos de §5.2.
+
+`todasLasVistasDobladas()` recoge ahora **todos** los dobles del archivo, incluidos los dos que la
+revisión encontró fuera (m8). La única exclusión es `panelConGranularidadFutura`, que declara a
+propósito un valor fuera del dominio para ejercitar R5; está escrita y razonada en el propio
+helper. Control medido (M-17): mezclar formas en el doble nuevo pone rojo R17(d) — antes no.
 
 ## 7. Decisiones de implementación que conviene poder citar
 

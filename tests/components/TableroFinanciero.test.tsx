@@ -988,33 +988,33 @@ describe("Hotfix — una vista TEMPORAL con filas es la cifra de titular, no una
     // La forma del defecto tal como el maestro lo vio: una columna de fechas donde iba el
     // numero. Se afirma sobre un cubo INTERMEDIO, que no aparece en la cabecera del rango.
     //
-    // AJUSTADO POR LA FEATURE 186, Y ES LA UNICA ASERCION DEL BLOQUE DEL HOTFIX QUE SE
-    // TOCA. Antes decia, ademas de las dos lineas de abajo,
-    // `expect(seccion.textContent).not.toContain(CUBO_INTERMEDIO)`. Esa forma es
-    // INCOMPATIBLE con R1 de la 186 y no por un descuido de nadie: la linea vive DENTRO de
-    // la seccion de la vista y `SerieTextual` emite su alternativa textual —«serie,
-    // categoria: valor»— en el DOM, en `sr-only`, que es exactamente donde un lector de
-    // pantalla lee la grafica. Con la linea puesta, la fecha del cubo TIENE que aparecer
-    // ahi; si no apareciera, la grafica seria muda.
+    // AJUSTADO POR LA FEATURE 186, Y ES LA UNICA ASERCION DEL BLOQUE DEL HOTFIX QUE SE TOCA.
+    // Antes decia `expect(seccion.textContent).not.toContain(CUBO_INTERMEDIO)` sobre la
+    // seccion ENTERA. Esa forma es incompatible con R1, y no por descuido de nadie: la linea
+    // vive DENTRO de la seccion y `SerieTextual` emite su alternativa textual —«serie,
+    // categoria: valor»— en el DOM, que es exactamente donde un lector de pantalla lee la
+    // grafica. Con la linea puesta, la fecha del cubo TIENE que aparecer ahi; si no
+    // apareciera, la grafica seria muda.
     //
-    // Lo que este caso mide sigue siendo lo mismo, y sigue matando el defecto original: la
-    // fecha no puede ser el texto PROPIO de ningun elemento —ni celda, ni fila, ni parrafo,
-    // ni titulo—, que es como la pintaba `PanelTabla` (`<td>2026-07-20</td>`). Dentro de la
-    // entrada de la alternativa textual la fecha va acompañada de su serie y su valor, asi
-    // que no es el texto propio de nada y no cuela por aqui.
+    // LO QUE **NO** HAY QUE HACER —y fue mi primera version, corregida en la ronda 2 de la
+    // revision (m7)— es debilitar la ASERCION a «la fecha no es el texto propio de ningun
+    // elemento». Eso deja pasar una fecha VISIBLE embebida en un texto mas largo, que es una
+    // regresion perfectamente escribible. Medido: un `<p>` con «Cubos del periodo: …» en la
+    // rama del KPI producia UN solo rojo —el de la metrica acumulada, por la asercion
+    // original que se le conservaba— y las SEIS de flujo no lo veian.
     //
-    // Y donde la asercion vieja sigue siendo cierta —la metrica ACUMULADA, que por Q2 = (b)
-    // no lleva linea— se conserva LITERAL, abajo. Sin eso, este caso perderia la unica
-    // version fuerte que le quedaba.
+    // Lo correcto es restringir el TEXTO, no la asercion: se quita del arbol la region de la
+    // grafica —que es la unica fuente legitima de la fecha— y sobre el resto se afirma
+    // exactamente lo que el caso afirmaba antes. Asi la forma `not.toContain` sobrevive
+    // intacta, la metrica acumulada queda con la asercion ORIGINAL byte a byte (no tiene
+    // grafica que quitar) y las siete se miden con la misma vara, sin rama condicional.
     render(<TableroFinanciero paneles={panelesOk()} />);
 
     const seccion = screen.getByRole("region", { name: ETIQUETAS[id] });
     expect(within(seccion).queryByRole("cell", { name: CUBO_INTERMEDIO })).toBeNull();
-    expect(within(seccion).queryByText(CUBO_INTERMEDIO)).toBeNull();
-
-    if (DTOS[id].esAcumulado) {
-      expect(seccion.textContent ?? "").not.toContain(CUBO_INTERMEDIO);
-    }
+    expect(textoFueraDeLaGrafica(seccion, tituloDeLinea(ETIQUETAS[id]))).not.toContain(
+      CUBO_INTERMEDIO,
+    );
   });
 
   it.each(TEMPORALES)("`%s` no pinta el total al pie, que es la marca del panel de tabla", (id) => {
@@ -1055,6 +1055,32 @@ function tituloDeLinea(nombreSeccion: string): string {
 function tieneLinea(nombreSeccion: string): boolean {
   const seccion = screen.getByRole("region", { name: nombreSeccion });
   return within(seccion).queryByRole("region", { name: tituloDeLinea(nombreSeccion) }) !== null;
+}
+
+/**
+ * El texto de una seccion SIN el de su grafica de evolucion.
+ *
+ * Existe para que el caso del hotfix pueda seguir afirmando `not.toContain(<fecha>)` sobre el
+ * texto de la seccion —tal como lo afirmaba antes de esta feature— ahora que la grafica TIENE
+ * que nombrar las fechas en su alternativa textual (R1 + R7). Se restringe el TEXTO sobre el
+ * que se afirma, no la ASERCION: lo que queda fuera de la grafica no puede contener la fecha
+ * de ninguna forma, ni como texto propio de un nodo ni embebida en una frase mas larga.
+ *
+ * La region se localiza por su NOMBRE ACCESIBLE, que es lo que ya usan `tieneLinea` y todo
+ * este archivo, y NO por la clase `sr-only`: acoplarse a una clase de presentacion del paquete
+ * de la 130 seria acoplarse a algo que esta feature no controla ni puede tocar. El selector
+ * cubre a la vez la `<section>` de `GraficaMarco` y la `<ul>` de `SerieTextual`, que comparten
+ * ese `aria-label`; quitar la primera ya se lleva la segunda por dentro.
+ *
+ * Si la seccion NO tiene grafica —la metrica acumulada por Q2 = (b), y cualquier vista no
+ * temporal— no se quita nada y la asercion queda IDENTICA a la original, byte a byte.
+ */
+function textoFueraDeLaGrafica(seccion: HTMLElement, tituloGrafica: string): string {
+  const copia = seccion.cloneNode(true) as HTMLElement;
+  for (const nodo of Array.from(copia.querySelectorAll(`[aria-label="${tituloGrafica}"]`))) {
+    nodo.remove();
+  }
+  return copia.textContent ?? "";
 }
 
 /**
@@ -1203,7 +1229,107 @@ function panelGranoFechaPeroNoTemporal(): PanelFinanciero {
   } as PanelFinanciero;
 }
 
-/** Todas las vistas que este archivo dobla, vengan del juego "todo bien" o de una fixture suelta. */
+/**
+ * Una vista `no_temporal` de una metrica de FLUJO y SIN FILAS.
+ *
+ * Es la unica combinacion que llega a la rama del KPI **sin ser temporal**: entra por la
+ * segunda condicion del hotfix (`vista.filas.length === 0`), no por la primera. Y es por tanto
+ * la unica que pone a prueba el `esVistaTemporal(vista) &&` de la condicion de la linea.
+ *
+ * POR QUE EL SERVICIO NO PRODUCE HOY ESTE DTO, dicho como en el caso de R5 para que nadie lo
+ * lea como una fixture caprichosa: las unicas vistas `no_temporal` de metrica de flujo son las
+ * dos de `cod_recaudado`, y las dos salen por sus ramas propias (donut y barras) antes de
+ * llegar aqui. O sea que hoy el defecto **no es alcanzable en produccion**. Eso no lo hace
+ * menos exigible: R2 prohibe el encabezado que ANUNCIA la grafica, y una condicion que nadie
+ * ejercita es exactamente la clase de agujero que produjo ⟨H1⟩ —una premisa que nadie
+ * comprueba, esperando a la metrica que la alcance—.
+ *
+ * MEDIDO: sin este caso, quitar `esVistaTemporal(vista) &&` de la condicion de la linea pasaba
+ * los 144 casos de componente en VERDE. Es el gemelo exacto de la mutacion que ya se descubrio
+ * viva para el motivo (M-10): la misma linea de codigo, la otra mitad.
+ */
+function panelNoTemporalDeFlujoSinFilas(): PanelFinanciero {
+  return {
+    estado: "ok",
+    id: "egresos",
+    datos: {
+      tipo: "vistas",
+      metricaId: "egresos",
+      etiqueta: ETIQUETAS.egresos,
+      unidad: "moneda",
+      rango: RANGO,
+      esAcumulado: false,
+      vistas: [
+        {
+          id: "egresos__vista",
+          grano: "metodo_pago",
+          fuente: "wallet_tienda_movimiento",
+          sumableCon: [],
+          granularidad: "no_temporal",
+          filas: [],
+          total: importeConNeto("4000.00", "-3600.00"),
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * Una metrica ACUMULADA con vista `no_temporal` Y SIN FILAS.
+ *
+ * Es la fixture que hace discriminante el caso de R4, y hace falta por una razon que no se
+ * ve leyendo el requisito: la otra acumulada de la fixture (`cuenta_por_pagar_tienda`) trae
+ * filas, asi que cae en `PanelTabla` y NUNCA entra en la rama del KPI donde vive el motivo.
+ * Sin filas entra por la segunda condicion del hotfix, y ahi si coincide con el motivo en
+ * el mismo bloque de codigo.
+ *
+ * MEDIDO, y por eso esta escrito: con solo `panelesOk()`, la mutacion «pintar el motivo en
+ * toda metrica acumulada» —quitarle el `esVistaTemporal(vista) &&`— pasaba los 91 casos en
+ * VERDE. El requisito estaba escrito y no lo protegia nada.
+ */
+function panelAcumuladoNoTemporalSinFilas(): PanelFinanciero {
+  return {
+    estado: "ok",
+    id: "cuenta_por_pagar_tienda",
+    datos: {
+      tipo: "vistas",
+      metricaId: "cuenta_por_pagar_tienda",
+      etiqueta: ETIQUETAS.cuenta_por_pagar_tienda,
+      unidad: "moneda",
+      rango: RANGO,
+      esAcumulado: true,
+      vistas: [
+        {
+          id: "cuenta_por_pagar_tienda__vista",
+          grano: "tienda",
+          fuente: "wallet_tienda_movimiento",
+          sumableCon: [],
+          granularidad: "no_temporal",
+          filas: [],
+          total: importeConNeto("77.00", "70.00"),
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * Todas las vistas que este archivo dobla, vengan del juego "todo bien" o de una fixture suelta.
+ *
+ * EL NOMBRE PROMETE «TODOS», ASI QUE LA LISTA SE MANTIENE. Cuando una fixture nueva se queda
+ * fuera, el censo de R17 sigue verde y deja de cubrir lo que dice cubrir — que es la misma forma
+ * de agujero que esta feature persigue en el codigo de produccion. Las dos que la revision
+ * encontro fuera (`panelNoTemporalDeFlujoSinFilas`, de la ronda 1, y
+ * `panelAcumuladoNoTemporalSinFilas`) se declaran ahora a nivel de modulo justo para poder
+ * entrar aqui, en vez de vivir dentro del `describe` que las usa.
+ *
+ * LA UNICA EXCLUSION, y es deliberada: `panelConGranularidadFutura`, que declara a proposito un
+ * valor FUERA del dominio de `GranularidadVista` para ejercitar R5. Meterlo aqui pondria rojo el
+ * caso de R17(c) —que exige que las granularidades dobladas sean EXACTAMENTE las del dominio— y
+ * el rojo seria falso: ese doble no describe un DTO que el contrato admita, describe uno que
+ * llega de una cache o de una version desplegada antes. Queda dicho aqui para que la exclusion
+ * sea una decision escrita y no un olvido.
+ */
 function todasLasVistasDobladas(): readonly VistaFinanciera[] {
   const paneles: readonly PanelFinanciero[] = [
     ...panelesOk(),
@@ -1212,6 +1338,8 @@ function todasLasVistasDobladas(): readonly VistaFinanciera[] {
     panelDeTablaSinNeto(),
     panelGranoTiendaPeroTemporal(),
     panelGranoFechaPeroNoTemporal(),
+    panelNoTemporalDeFlujoSinFilas(),
+    panelAcumuladoNoTemporalSinFilas(),
   ];
   return paneles.flatMap((panel) =>
     panel.estado === "ok" && panel.datos.tipo === "vistas" ? panel.datos.vistas : [],
@@ -1349,50 +1477,6 @@ describe("Feature 186 (R1, R2, R6) — la linea va donde el DTO dice, y solo ahi
     );
   });
 
-  /**
-   * Una vista `no_temporal` de una metrica de FLUJO y SIN FILAS.
-   *
-   * Es la unica combinacion que llega a la rama del KPI **sin ser temporal**: entra por la
-   * segunda condicion del hotfix (`vista.filas.length === 0`), no por la primera. Y es por tanto
-   * la unica que pone a prueba el `esVistaTemporal(vista) &&` de la condicion de la linea.
-   *
-   * POR QUE EL SERVICIO NO PRODUCE HOY ESTE DTO, dicho como en el caso de R5 para que nadie lo
-   * lea como una fixture caprichosa: las unicas vistas `no_temporal` de metrica de flujo son las
-   * dos de `cod_recaudado`, y las dos salen por sus ramas propias (donut y barras) antes de
-   * llegar aqui. O sea que hoy el defecto **no es alcanzable en produccion**. Eso no lo hace
-   * menos exigible: R2 prohibe el encabezado que ANUNCIA la grafica, y una condicion que nadie
-   * ejercita es exactamente la clase de agujero que produjo ⟨H1⟩ —una premisa que nadie
-   * comprueba, esperando a la metrica que la alcance—.
-   *
-   * MEDIDO: sin este caso, quitar `esVistaTemporal(vista) &&` de la condicion de la linea pasaba
-   * los 144 casos de componente en VERDE. Es el gemelo exacto de la mutacion que ya se descubrio
-   * viva para el motivo (M-10): la misma linea de codigo, la otra mitad.
-   */
-  function panelNoTemporalDeFlujoSinFilas(): PanelFinanciero {
-    return {
-      estado: "ok",
-      id: "egresos",
-      datos: {
-        tipo: "vistas",
-        metricaId: "egresos",
-        etiqueta: ETIQUETAS.egresos,
-        unidad: "moneda",
-        rango: RANGO,
-        esAcumulado: false,
-        vistas: [
-          {
-            id: "egresos__vista",
-            grano: "metodo_pago",
-            fuente: "wallet_tienda_movimiento",
-            sumableCon: [],
-            granularidad: "no_temporal",
-            filas: [],
-            total: importeConNeto("4000.00", "-3600.00"),
-          },
-        ],
-      },
-    };
-  }
 
   it("una vista no_temporal de metrica de FLUJO que llega al KPI tampoco trae linea, ni su encabezado", () => {
     // R2, segunda mitad, y la que de verdad ejercita la condicion. La vista entra en la rama del
@@ -1574,44 +1658,6 @@ describe("Feature 186 (R3, R4) — el motivo de por que la acumulada no trae lin
     expect(within(seccion).getByText(MOTIVO).textContent ?? "").toMatch(/subir|mantener/i);
   });
 
-  /**
-   * Una metrica ACUMULADA con vista `no_temporal` Y SIN FILAS.
-   *
-   * Es la fixture que hace discriminante el caso de R4, y hace falta por una razon que no se
-   * ve leyendo el requisito: la otra acumulada de la fixture (`cuenta_por_pagar_tienda`) trae
-   * filas, asi que cae en `PanelTabla` y NUNCA entra en la rama del KPI donde vive el motivo.
-   * Sin filas entra por la segunda condicion del hotfix, y ahi si coincide con el motivo en
-   * el mismo bloque de codigo.
-   *
-   * MEDIDO, y por eso esta escrito: con solo `panelesOk()`, la mutacion «pintar el motivo en
-   * toda metrica acumulada» —quitarle el `esVistaTemporal(vista) &&`— pasaba los 91 casos en
-   * VERDE. El requisito estaba escrito y no lo protegia nada.
-   */
-  function panelAcumuladoNoTemporalSinFilas(): PanelFinanciero {
-    return {
-      estado: "ok",
-      id: "cuenta_por_pagar_tienda",
-      datos: {
-        tipo: "vistas",
-        metricaId: "cuenta_por_pagar_tienda",
-        etiqueta: ETIQUETAS.cuenta_por_pagar_tienda,
-        unidad: "moneda",
-        rango: RANGO,
-        esAcumulado: true,
-        vistas: [
-          {
-            id: "cuenta_por_pagar_tienda__vista",
-            grano: "tienda",
-            fuente: "wallet_tienda_movimiento",
-            sumableCon: [],
-            granularidad: "no_temporal",
-            filas: [],
-            total: importeConNeto("77.00", "70.00"),
-          },
-        ],
-      },
-    };
-  }
 
   it("el motivo no aparece en las seis de flujo ni en la cuenta por pagar de tienda", () => {
     // R4, y es la mitad que discrimina. `cuenta_por_pagar_tienda` TAMBIEN es acumulada, pero
