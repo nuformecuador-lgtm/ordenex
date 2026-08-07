@@ -4,6 +4,15 @@
 //
 // El envio usa `enviarPlantilla` (name + language + components), no texto libre: es la unica
 // forma de INICIAR conversacion fuera de la ventana de 24 h (decision humana).
+//
+// ⚠️ SIN IMPORTADOR desde el 2026-08-07. Su unico consumidor era `enviarPlantillaWhatsapp`
+// (`lib/actions/whatsapp-envio.ts`), borrada ese dia por decision humana porque nunca tuvo boton.
+// Hoy este archivo NO lo importa nadie: ni produccion ni un solo test. Las tres menciones que
+// quedan en el repo (`ChatWhatsappService.ts:5,406`, `whatsapp-chat-envio-handler.ts:35`) son
+// PROSA — dicen «mismo patron que», no lo usan; medirlo con grep da un falso vivo, y ya lo dio
+// una vez. Se conserva a la espera de decision humana: o se cablea el envio server-side por
+// Meta, o se borra junto con `ListarEnviablesResult`. NO es lo mismo que `ChatWhatsappService`,
+// que si esta vivo y es quien manda por Meta de verdad.
 import type { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
 import type { IPlantillaMensajeRepository } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import type { IOrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
