@@ -99,6 +99,27 @@ export const CUENTAS_AVISO_BRUTOS = avisoImportesBrutos({
   correcto: COLUMNAS_MAESTRO.cuentaPorPagar,
 });
 
+/**
+ * Cabeceras de los MISMOS importes cuando salen en el ARCHIVO descargable.
+ *
+ * En pantalla estas dos columnas se llaman «Devengado» y «Pagado» a secas porque justo encima
+ * va `CUENTAS_AVISO_BRUTOS`, que dice qué incluyen. La hoja de cálculo se reenvía SIN ese
+ * aviso: quien la abre ve dos importes que prometen más exactitud de la que tienen. Por eso el
+ * archivo lleva la salvedad EN la cabecera, con las MISMAS palabras del aviso que el usuario ya
+ * vio en pantalla («los pagos que se anularon», «la devolución de cada uno»).
+ *
+ * La salvedad de cada una es distinta, y por eso no se abrevian igual: «Pagado» incluye los
+ * pagos anulados; «Devengado» no los incluye, incluye su DEVOLUCIÓN. «Cuenta por pagar» —la
+ * resta— sale exacta y no lleva salvedad.
+ *
+ * El DATO no cambia: cambia lo que la cabecera promete.
+ */
+export const COLUMNAS_DESCARGA_MAESTRO = {
+  ...COLUMNAS_MAESTRO,
+  devengado: `${COLUMNAS_MAESTRO.devengado} (incluye la devolución de los pagos anulados)`,
+  pagado: `${COLUMNAS_MAESTRO.pagado} (incluye los pagos anulados)`,
+} as const;
+
 // ── Desglose POR CIERRE del maestro (R18/R22) ──
 
 /** Etiqueta legible del tipo de movimiento (devengo = lo devengado / pago = lo entregado). */
