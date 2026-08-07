@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
@@ -7,46 +7,25 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
 import { buildCargaDelegate, loteCtx } from "@/tests/fixtures/carga-lote";
 
 // Feature 155 (T3.1/T3.2) — el lado REPOSITORIO de la bifurcacion de creacion:
-//   R3/R8  `create` puede numerar en la MISMA tx, con la guarda idempotente `num_guia IS NULL`
-//   R11    las TRES rutas de creacion encolan geocodificacion por orden EFECTIVAMENTE insertada
+//   R11    las DOS rutas de creacion encolan geocodificacion por orden EFECTIVAMENTE insertada
 //   R12    todo-o-nada: estado, guia, historial y encolado se cometen o se revierten juntos
 //   R21    `createManyOrdenesConGuia` con `conGuia: false` no consume secuencia (numGuia null)
+//
+// 2026-08-07 (tanda 2 del chore de deuda de superficie): eran TRES rutas de creacion; hoy son
+// DOS. La tercera era `create`, el alta individual, borrada al quedarse sin llamador. Con ella
+// se fue el bloque de R3/R8; esa guarda idempotente (`num_guia IS NULL`) NO se queda sin
+// testigo: la afirman `orden-repository.carga-api.test.ts` sobre `createManyOrdenesConGuia` y
+// `orden-repository.guia.test.ts` sobre `generarGuiaLote`, las dos vivas. R12 se REAPUNTA aqui
+// abajo a `createManyOrdenesConGuia`, que hace exactamente lo mismo —insertar, numerar, anexar
+// historial y encolar en UNA tx— y esta viva.
 //
 // El fake de Prisma ejecuta el callback de `$transaction` con el propio objeto como `tx`, igual
 // que el resto de tests de repositorio del repo.
 
-const HIST_MANUAL = { actorUsuarioId: "u-actor", origenTipo: "creacion_manual" } as const;
 const HIST_API = { actorUsuarioId: "key-user-1", origenTipo: "carga_api" } as const;
 const HIST_MASIVA = { actorUsuarioId: "store-1", origenTipo: "carga_masiva" } as const;
 
 const DIRECCION_GEOCODIFICABLE = "Av. Central, 200m norte del parque";
-
-function ordenRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "ord-1",
-    numGuia: null as number | null,
-    numRemision: "REM-1",
-    estatusId: idEstado("por_recolectar_en_tienda"),
-    destinatario: "Ana",
-    telefonoDest: "0991234567",
-    tiendaId: "t1",
-    zonaId: "z1",
-    provinciaId: "p1",
-    cantonId: "c1",
-    distritoId: null,
-    producto: "Caja",
-    peso: new Prisma.Decimal("1.500"),
-    notas: null,
-    direccion: DIRECCION_GEOCODIFICABLE,
-    deletedAt: null,
-    createdAt: new Date("2026-01-01"),
-    updatedAt: new Date("2026-01-01"),
-    estatus: { value: "por_recolectar_en_tienda" },
-    mensajeroAsignadoId: null,
-    prioridad: false,
-    ...overrides,
-  };
-}
 
 function baseCreateData(overrides: Partial<CreateOrdenData> = {}): CreateOrdenData {
   return {
@@ -104,148 +83,58 @@ beforeEach(async () => {
 // ---------------------------------------------------------------------------------------------
 // T3.1 — `create` con guia opcional
 // ---------------------------------------------------------------------------------------------
-describe("155/R3/R8 — OrdenRepository.create con `conGuia`", () => {
-  it("conGuia: true numera en la MISMA tx y devuelve el DTO ya numerado", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: null }));
-    prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 100234 });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+describe("155/R12 — todo-o-nada de la creacion con guia (via createManyOrdenesConGuia)", () => {
+  // REAPUNTADO 2026-08-07: se escribia sobre `create`, borrada. La propiedad —los cuatro
+  // efectos se cometen o se revierten JUNTOS— es de la ruta que numera dentro de la tx, y esa
+  // sigue viva en `createManyOrdenesConGuia`.
+  function conUnaFilaNueva(prisma: ReturnType<typeof buildPrisma>) {
+    prisma.orden.findMany.mockReset();
+    prisma.orden.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: "ord-1",
+        numRemision: "REM-1",
+        estatusId: idEstado("por_recolectar_en_tienda"),
+        direccion: DIRECCION_GEOCODIFICABLE,
+        estatus: { value: "por_recolectar_en_tienda" },
+      },
+    ]);
+    prisma.orden.createMany.mockResolvedValue({ count: 1 });
+    return prisma;
+  }
 
-    const dto = await repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true });
-
-    expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
-    // El DTO refleja el estado FINAL de la fila: el `row` del create es previo al UPDATE.
-    expect(dto.numGuia).toBe(100234);
-    // Todo dentro de UNA sola transaccion.
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-  });
-
-  it("conGuia: false (y el default) NO tocan la secuencia: la orden nace sin guia", async () => {
-    for (const opciones of [undefined, {}, { conGuia: false }]) {
-      const prisma = buildPrisma();
-      prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: null }));
-      const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-      const dto = await repo.create(baseCreateData(), HIST_MANUAL, opciones);
-
-      expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
-      expect(prisma.orden.findUniqueOrThrow).not.toHaveBeenCalled();
-      expect(dto.numGuia).toBeNull();
-    }
-  });
-
-  it("R8: usa la MISMA secuencia atomica del resto del sistema, con la guarda idempotente", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
-    prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 7 });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true });
-
-    const [sql, param] = prisma.$executeRawUnsafe.mock.calls[0];
-    expect(sql).toContain("siguiente_num_guia()");
-    // La guarda es lo que hace la operacion idempotente: nunca reasigna una guia existente.
-    expect(sql).toContain("num_guia IS NULL");
-    // El id viaja como PARAMETRO, jamas interpolado en el SQL.
-    expect(sql).toContain("$1");
-    expect(param).toBe("ord-1");
-    expect(sql).not.toContain("ord-1");
-  });
-
-  it("R8: sobre una orden que YA tiene guia, la guarda impide consumir un segundo numero", async () => {
-    // Se simula la semantica del `WHERE num_guia IS NULL`: el UPDATE no afecta filas y la
-    // relectura devuelve la guia previa. El repositorio NO debe fabricar otra.
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: 555 }));
-    prisma.$executeRawUnsafe.mockResolvedValue(0); // 0 filas afectadas
-    prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 555 });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const dto = await repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true });
-
-    expect(dto.numGuia).toBe(555);
-    expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(1); // una sola sentencia, no dos
-  });
-
-  it("nunca miente con un `as number`: si la relectura vuelve NULL, lanza", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
-    prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: null });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await expect(repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true })).rejects.toThrow(
-      /num_guia no asignado/,
-    );
-  });
-
-  it("R10: la numeracion va ANTES del historial, y el historial se registra igual", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
-    prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 9 });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true });
-
-    const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
-    expect(arg.data[0]).toMatchObject({
-      estatusOrigenId: null, // creacion
-      estatusDestinoId: idEstado("por_recolectar_en_tienda"),
-      origenTipo: "creacion_manual",
-    });
-  });
-
-  it("R9: la creacion NUNCA escribe mensajero_asignado_id, tampoco en la rama con guia", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
-    prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 9 });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true });
-
-    const data = prisma.orden.create.mock.calls[0][0].data;
-    expect(data).not.toHaveProperty("mensajeroAsignadoId");
-    expect(data).not.toHaveProperty("numGuia");
-  });
-});
-
-describe("155/R12 — todo-o-nada de la creacion con guia", () => {
   it("si el historial falla, la tx aborta (la guia consumida se revierte con ella)", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
+    const prisma = conUnaFilaNueva(buildPrisma());
     prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 9 });
     prisma.ordenHistorialEstado.createMany.mockRejectedValue(new Error("append boom"));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await expect(repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true })).rejects.toThrow(
-      "append boom",
-    );
+    await expect(
+      repo.createManyOrdenesConGuia([baseCreateData()], 100, HIST_API, loteCtx()),
+    ).rejects.toThrow("append boom");
   });
 
   it("si el encolado de geocodificacion falla, la tx aborta", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
+    const prisma = conUnaFilaNueva(buildPrisma());
     prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 9 });
     const jobRepo = {
       enqueue: vi.fn().mockRejectedValue(new Error("outbox boom")),
     } as unknown as IJobRepository;
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, jobRepo);
 
-    await expect(repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true })).rejects.toThrow(
-      "outbox boom",
-    );
+    await expect(
+      repo.createManyOrdenesConGuia([baseCreateData()], 100, HIST_API, loteCtx()),
+    ).rejects.toThrow("outbox boom");
   });
 
-  it("si la numeracion falla, ni historial ni encolado llegan a ejecutarse", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
+  it("si la numeracion falla, el encolado no llega a ejecutarse", async () => {
+    const prisma = conUnaFilaNueva(buildPrisma());
     prisma.$executeRawUnsafe.mockRejectedValue(new Error("secuencia caida"));
     const { jobRepo, enqueue } = buildJobRepo();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient, jobRepo);
 
-    await expect(repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true })).rejects.toThrow(
-      "secuencia caida",
-    );
-    expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+    await expect(
+      repo.createManyOrdenesConGuia([baseCreateData()], 100, HIST_API, loteCtx()),
+    ).rejects.toThrow("secuencia caida");
     expect(enqueue).not.toHaveBeenCalled();
   });
 });
@@ -254,41 +143,10 @@ describe("155/R12 — todo-o-nada de la creacion con guia", () => {
 // T3.2 — el hueco de geocodificacion de `createManyOrdenesConGuia`
 // ---------------------------------------------------------------------------------------------
 describe("155/R11 — un encolado de geocodificacion por orden EFECTIVAMENTE insertada", () => {
-  it("create: encola una vez", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
-    const { jobRepo, enqueue } = buildJobRepo();
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient, jobRepo);
-
-    await repo.create(baseCreateData(), HIST_MANUAL);
-
-    expect(enqueue).toHaveBeenCalledTimes(1);
-    expect(enqueue.mock.calls[0][0]).toBe("geocodificacion");
-    expect(enqueue.mock.calls[0][1]).toEqual({ ordenId: "ord-1" }); // R14: solo el id
-  });
-
-  it("create con guia: encola exactamente igual (la rama no cambia el criterio)", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow());
-    prisma.orden.findUniqueOrThrow.mockResolvedValue({ numGuia: 3 });
-    const { jobRepo, enqueue } = buildJobRepo();
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient, jobRepo);
-
-    await repo.create(baseCreateData(), HIST_MANUAL, { conGuia: true });
-
-    expect(enqueue).toHaveBeenCalledTimes(1);
-  });
-
-  it("create: no-op si la direccion no es geocodificable", async () => {
-    const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow({ direccion: "   " }));
-    const { jobRepo, enqueue } = buildJobRepo();
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient, jobRepo);
-
-    await repo.create(baseCreateData({ direccion: "   " }), HIST_MANUAL);
-
-    expect(enqueue).not.toHaveBeenCalled();
-  });
+  // BORRADO 2026-08-07: los tres primeros casos de este bloque ejercitaban `create` (alta
+  // individual). El criterio que afirmaban —encolar UNA vez por orden efectivamente insertada,
+  // y no-op si la direccion no es geocodificable— lo siguen afirmando los cuatro casos de
+  // abajo sobre las dos rutas VIVAS.
 
   it("createManyOrdenesConGuia: HUECO CERRADO — encola por cada orden nueva", async () => {
     const prisma = buildPrisma();

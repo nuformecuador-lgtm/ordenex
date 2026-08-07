@@ -13,7 +13,6 @@ import { JobRepository } from "@/lib/repositories/JobRepository";
 import { encolarGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
 import {
   DeshacerAsignacionConflictoError,
-  NumRemisionDuplicadoError,
   type DeshacerAsignacionItem,
   type CantonRow,
   type CreateOrdenData,
@@ -23,7 +22,6 @@ import {
   type EtiquetaRow,
   type GenerarGuiaDecisionData,
   type GenerarGuiaResultRow,
-  type GeoExistence,
   type BodegaBloqueoResult,
   type IOrdenRepository,
   type ListOrdenesParams,
@@ -696,81 +694,11 @@ export class OrdenRepository implements IOrdenRepository {
     private readonly jobRepo: IJobRepository = new JobRepository(prisma),
   ) {}
 
-  async create(
-    data: CreateOrdenData,
-    historial: HistorialContexto,
-    opciones: CreateOrdenOpciones = {},
-  ): Promise<OrdenDTO> {
-    try {
-      // Feature 49/#2 (R7/R10): create + append del historial en la MISMA transaccion.
-      return await this.prisma.$transaction(async (tx) => {
-        const row = await tx.orden.create({
-          data: {
-            numRemision: data.numRemision,
-            estatusId: data.estatusId,
-            destinatario: data.destinatario,
-            telefonoDest: data.telefonoDest,
-            tiendaId: data.tiendaId,
-            zonaId: data.zonaId,
-            provinciaId: data.provinciaId,
-            cantonId: data.cantonId,
-            distritoId: data.distritoId ?? null,
-            producto: data.producto,
-            peso: data.peso !== null ? new Prisma.Decimal(data.peso) : null,
-            notas: data.notas ?? null,
-            direccion: data.direccion ?? null,
-            montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
-          },
-          ...WITH_ESTATUS,
-        });
-        // Feature 155/R3/R8/R12 — numeracion OPCIONAL en la MISMA tx que la creacion. Va
-        // ANTES del historial para que la orden ya este numerada cuando se registre su
-        // nacimiento. Idempotente por la guarda `num_guia IS NULL` (R8), misma secuencia
-        // atomica que el resto del sistema (`NUM_GUIA_GENERATOR`), y todo-o-nada con el
-        // resto de la tx (R12): si el historial o el encolado fallan, la guia se revierte
-        // con ellos y el numero no se pierde.
-        let numGuia = row.numGuia;
-        if (opciones.conGuia === true) {
-          await tx.$executeRawUnsafe(
-            `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
-            row.id,
-          );
-          // Relectura DEFENSIVA (patron `createManyOrdenesConGuia`): nunca un `as number`
-          // sobre un valor que no se ha visto.
-          const numerada = await tx.orden.findUniqueOrThrow({
-            where: { id: row.id },
-            select: { numGuia: true },
-          });
-          if (numerada.numGuia === null) {
-            throw new Error(`num_guia no asignado para la orden ${row.id}`);
-          }
-          numGuia = numerada.numGuia;
-        }
-        // R10/R20: la creacion es la transicion `vacio -> estado inicial`.
-        await appendCambioEstado(tx, [
-          {
-            ordenId: row.id,
-            estatusOrigenId: null, // creacion (R1/R20)
-            estatusDestinoId: data.estatusId,
-            actorUsuarioId: historial.actorUsuarioId,
-            origenTipo: historial.origenTipo, // creacion_manual
-          },
-        ]);
-        // Feature 91 (R6/R7): encolado outbox DENTRO de esta misma tx. Si el create o el
-        // append revierten, el job se va con ellos. No-op si la direccion no es
-        // geocodificable (R9).
-        await encolarGeocodificacion(this.jobRepo, tx as unknown as JobTxClient, {
-          id: row.id,
-          direccion: row.direccion,
-        });
-        // El DTO refleja el estado FINAL de la fila dentro de la tx: si se numero aqui, el
-        // llamador ve el `num_guia` (el `row` del create es previo al UPDATE).
-        return toDTO({ ...row, numGuia });
-      });
-    } catch (error) {
-      throw mapCreateError(error, data.numRemision);
-    }
-  }
+  // BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivia `create`, el
+  // insert de UNA orden. Se quedo sin llamador al retirarse `OrdenService.crear`. Las ordenes
+  // se crean EN LOTE: `createManyOrdenes` (rama sin guia) y `createManyOrdenesConGuia`, que
+  // siguen vivas y son las que usa `BulkOrdenService`. `CreateOrdenData` y
+  // `CreateOrdenOpciones` NO mueren: son de ellas tambien.
 
   async findById(id: string): Promise<OrdenDTO | null> {
     const row = await this.prisma.orden.findFirst({
@@ -1023,18 +951,12 @@ export class OrdenRepository implements IOrdenRepository {
     });
   }
 
-  async softDelete(id: string): Promise<boolean> {
-    const result = await this.prisma.orden.updateMany({
-      where: { id, deletedAt: null }, // R40: solo si no estaba ya borrada
-      data: { deletedAt: new Date() }, // R39
-    });
-    return result.count > 0;
-  }
-
-  async existsEstatus(estatusId: string): Promise<boolean> {
-    const found = await this.prisma.orderStatus.findUnique({ where: { id: estatusId } });
-    return found !== null;
-  }
+  // BORRADO 2026-08-07 (tanda 2): aqui vivian `softDelete` (el borrado logico de UNA orden,
+  // de `OrdenService.borrar`) y `existsEstatus` (la guarda de catalogo de
+  // `OrdenService.actualizar`). Ninguna pantalla ofrece borrar una orden. OJO: el
+  // `deleted_at IS NULL` sigue vivo y aplicandose en TODAS las lecturas; lo que se va es el
+  // unico WRITER que lo fijaba. Para comprobar que un estatus existe, lo vivo es
+  // `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
 
   async findEstatusIdByValue(value: string): Promise<string | null> {
     const found = await this.prisma.orderStatus.findUnique({ where: { value } });
@@ -1050,27 +972,11 @@ export class OrdenRepository implements IOrdenRepository {
     return row?.fulfillment ?? false;
   }
 
-  async existsGeo(input: {
-    zonaId: string;
-    provinciaId: string;
-    cantonId: string;
-    distritoId?: string | null;
-  }): Promise<GeoExistence> {
-    const [zona, provincia, canton, distrito] = await Promise.all([
-      this.prisma.zona.findUnique({ where: { id: input.zonaId } }),
-      this.prisma.provincia.findUnique({ where: { id: input.provinciaId } }),
-      this.prisma.canton.findUnique({ where: { id: input.cantonId } }),
-      input.distritoId
-        ? this.prisma.distrito.findUnique({ where: { id: input.distritoId } })
-        : Promise.resolve(true),
-    ]);
-    return {
-      zona: zona !== null,
-      provincia: provincia !== null,
-      canton: canton !== null,
-      distrito: distrito !== null,
-    };
-  }
+  // BORRADO 2026-08-07 (tanda 2): aqui vivia `existsGeo`, la comprobacion fila-a-fila de que
+  // zona/provincia/canton/distrito existen antes de un alta MANUAL. Se fue con
+  // `OrdenService.crear`. La carga masiva NO la usaba: resuelve la geografia por NOMBRE con
+  // `findAllProvincias`/`findCantonesByProvinciaIds`/`findDistritosByCantonIds`, que siguen
+  // vivas. Las FK NOT NULL de la tabla siguen siendo la garantia dura.
 
   private toUpdateData(data: UpdateOrdenData): Prisma.OrdenUncheckedUpdateManyInput {
     const out: Prisma.OrdenUncheckedUpdateManyInput = {};
@@ -3058,16 +2964,8 @@ export class OrdenRepository implements IOrdenRepository {
   }
 }
 
-/** R28/R14: traduce la violacion de unicidad de num_remision a error de dominio. */
-function mapCreateError(error: unknown, numRemision: string): unknown {
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-    const target = Array.isArray(error.meta?.target) ? (error.meta.target as string[]) : [];
-    if (target.some((t) => t.includes("num_remision") || t.includes("numRemision"))) {
-      return new NumRemisionDuplicadoError(numRemision);
-    }
-    // Cualquier otra unicidad se traduce igual a conflicto de num_remision por ser
-    // el unico campo unico que el usuario provee.
-    return new NumRemisionDuplicadoError(numRemision);
-  }
-  return error;
-}
+// BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivia `mapCreateError`,
+// que traducia el P2002 de `num_remision` a `NumRemisionDuplicadoError`. Su unico llamador era
+// `create` (alta individual). La via VIVA no lo necesita: la carga masiva detecta los
+// duplicados ANTES de insertar, con `findExistingRemisiones`, y ademas inserta con
+// `skipDuplicates`, asi que nunca provoca el P2002.

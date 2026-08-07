@@ -61,17 +61,11 @@ function ordenListItem(overrides: Partial<OrdenListItemDTO> = {}): OrdenListItem
 
 function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
   return {
-    create: vi.fn().mockResolvedValue(ordenDto()),
     findById: vi.fn().mockResolvedValue(ordenDto()),
     list: vi.fn().mockResolvedValue({ items: [ordenListItem()], total: 1 }),
     update: vi.fn().mockResolvedValue(ordenDto()),
-    softDelete: vi.fn().mockResolvedValue(true),
-    existsEstatus: vi.fn().mockResolvedValue(true),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
-    existsGeo: vi
-      .fn()
-      .mockResolvedValue({ zona: true, provincia: true, canton: true, distrito: true }),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
     findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),

@@ -21,16 +21,12 @@ const DESCONOCIDO: Actor = { usuarioId: "x", rol: "invitado" as RolValue };
 
 function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
   return {
-    create: vi.fn(),
     findById: vi.fn(),
     list: vi.fn(),
     update: vi.fn(),
-    softDelete: vi.fn(),
-    existsEstatus: vi.fn(),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-preparacion"),
     // Feature 27: por defecto la tienda NO tiene fulfillment -> en_preparacion (R17/R22).
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
-    existsGeo: vi.fn(),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
     findAllProvincias: vi.fn().mockResolvedValue([
       { id: "p1", nombre: "Pichincha" },

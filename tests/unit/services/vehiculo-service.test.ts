@@ -27,7 +27,6 @@ const SEED_ROWS: VehiculoDTO[] = [
 function buildRepo(overrides: Partial<IVehiculoRepository> = {}): IVehiculoRepository {
   return {
     findMany: vi.fn().mockResolvedValue(SEED_ROWS),
-    findById: vi.fn().mockResolvedValue(SEED_ROWS[0]),
     ...overrides,
   };
 }

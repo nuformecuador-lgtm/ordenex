@@ -47,17 +47,11 @@ function listItem(overrides: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO {
 // poder ejercitar la creacion (FKs NOT NULL contra tablas creadas vacias).
 function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
   return {
-    create: vi.fn().mockResolvedValue(dto()),
     findById: vi.fn().mockResolvedValue(dto()),
     list: vi.fn().mockResolvedValue({ items: [listItem()], total: 1 }),
     update: vi.fn().mockResolvedValue(dto()),
-    softDelete: vi.fn().mockResolvedValue(true),
-    existsEstatus: vi.fn().mockResolvedValue(true),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
-    existsGeo: vi
-      .fn()
-      .mockResolvedValue({ zona: true, provincia: true, canton: true, distrito: true }),
     // Feature 15: metodos batch de carga masiva, no ejercitados por el CRUD
     // (feature 6) pero exigidos por la interfaz IOrdenRepository.
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
