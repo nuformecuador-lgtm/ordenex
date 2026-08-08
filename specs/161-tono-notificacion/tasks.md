@@ -22,7 +22,11 @@
 ## T3 — Enganches (dependen de T2.1)
 - [x] **T3.1** `components/shared/NotificationsBell.tsx`: llamada al hook con `noLeidas` +
       toggle `Volume2`/`VolumeX` en la cabecera del popover con nombre accesible.
-- [x] **T3.2** `[P]` `ChatWhatsappPanel.tsx`: contar entrantes y pasarlos al hook.
+- [x] **T3.2** `[P]` contar entrantes del hilo y pasarlos al hook. Se implementó en
+      `ChatWhatsappPanel.tsx`; ese panel se borró el 2026-08-07 (`da544b30`, lo sustituye el chat
+      flotante) **y el enganche se fue con él**: la feature quedó con una sola superficie y el
+      mensajero dejó de oír el tono en producción. Repuesto en
+      `chat/ChatConversacion.tsx` por `4a862356`, que es hoy la única superficie viva del hilo.
 
 ## T4 — Tests (trazabilidad R → test)
 
@@ -48,10 +52,10 @@
 | R18 | `NotificationsBell.test.tsx` › el toggle expone su estado en el nombre accesible y persiste |
 | R19 | `NotificationsBell.test.tsx` › suena cuando sube el total sin leer |
 | R20 | `NotificationsBell.test.tsx` › marcar todas como leídas no suena |
-| R21 | `ChatWhatsappPanel.test.tsx` › un entrante nuevo en el siguiente refresco suena |
-| R22 | `ChatWhatsappPanel.test.tsx` › un saliente nuevo no suena |
-| R23 | `ChatWhatsappPanel.test.tsx` › abrir el hilo con entrantes previos no suena |
-| R24 | `useTonoAlIncrementar.test.tsx` › el primer dato cargado no suena; una lectura fallida no borra la referencia · `NotificationsBell.test.tsx` › no suena al montar aunque el servidor devuelva no leídas |
+| R21 | `ChatConversacionTono.test.tsx` › R21: un mensaje entrante nuevo en el refresco suena |
+| R22 | `ChatConversacionTono.test.tsx` › R22: un saliente nuevo no suena |
+| R23 | `ChatConversacionTono.test.tsx` › R23/R24: abrir el chat sobre un hilo con entrantes previos no suena |
+| R24 | `useTonoAlIncrementar.test.tsx` › el primer dato cargado no suena; una lectura fallida no borra la referencia · `NotificationsBell.test.tsx` › no suena al montar aunque el servidor devuelva no leídas · `ChatConversacionTono.test.tsx` › R24: la PRIMERA carga del hilo no suena, aunque llegue con varios entrantes |
 
 - [x] **T4.1** `tests/unit/audio/tono-notificacion.test.ts` (R1–R9).
 - [x] **T4.2** `[P]` `tests/unit/audio/preferencia-sonido.test.ts` (R15–R17).
@@ -59,7 +63,11 @@
 - [x] **T4.3-bis** `[P]` `tests/unit/hooks/usePreferenciaSonido.test.tsx` (R15–R16, incluida
       la sincronización entre pestañas).
 - [x] **T4.4** ampliar `tests/components/NotificationsBell.test.tsx` (R18–R20).
-- [x] **T4.5** `[P]` ampliar `tests/components/ChatWhatsappPanel.test.tsx` (R21–R23).
+- [x] **T4.5** `[P]` R21–R23 del chat. Se escribieron dentro de
+      `tests/components/ChatWhatsappPanel.test.tsx` y se borraron con el panel (`da544b30`), que es
+      cómo esta feature perdió su prueba sin que nada se pusiera rojo. Recuperados y ampliados en
+      `tests/components/ChatConversacionTono.test.tsx` (`4a862356`), que añade además el caso
+      aislado de R24.
 
 ## T5 — Verificación
 - [x] **T5.1** `pnpm test`: 6347 tests, 6333 verdes. Las 14 rojas son PREVIAS a esta feature
