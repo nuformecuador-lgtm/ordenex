@@ -24,10 +24,19 @@
 // Cómo está montado: 60 órdenes de la zona del actor, en los cinco estados y en el ORDEN DEL
 // FLUJO que impone el `ORDER BY` (R51), `pageSize` 25 → 3 páginas (la última, de 10). El
 // doble de la Server Action paginada FILTRA y RECORTA de verdad, así que navegar y filtrar
-// cambian las filas; el doble del listado sin paginar devuelve las 60 agrupadas por estado,
-// que es de donde la descarga tiene que sacar el archivo.
+// cambian las filas; el doble del conjunto devuelve las mismas 60 sin recorte, que es de donde
+// la descarga tiene que sacar el archivo.
+//
+// Feature 184 — Tanda A (T A.4/T A.5): el conjunto del archivo pasa a pedirse a la lectura
+// DEDICADA del listado (`listarOrdenesBodegaCompleto`), ya filtrada por la base. Y esta
+// pantalla gana la poda de la selección, así que aquí se mide lo que la poda NO puede hacer:
+// no mueve la página, ni suelta los filtros, ni recalcula los contadores, ni retira la acción de
+// lote de lo marcado en la página visible (R26, sus cuatro cláusulas), y no le cuesta una consulta
+// ni al arranque ni a una descarga (R28). Lo que la poda SÍ hace se mide en
+// `SateliteSeleccionOtrasPaginas.test.tsx`.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  act,
   render,
   screen,
   within,
@@ -50,19 +59,27 @@ import {
 
 // --- Dobles ---------------------------------------------------------------
 
-const { paginadoMock, conjuntoMock } = vi.hoisted(() => ({
+const { paginadoMock, completoMock, vigenciaMock } = vi.hoisted(() => ({
   /** La página que la tabla pinta (T K.1): filtra y recorta como el servidor. */
   paginadoMock: vi.fn(),
-  /** El listado SIN recorte, de donde sale la descarga (R52). */
-  conjuntoMock: vi.fn(),
+  /**
+   * El conjunto filtrado SIN recorte, de donde sale la descarga (R52). Feature 184 (T A.4):
+   * es una lectura DEDICADA a este listado y ya viene filtrada por la base; antes se releía el
+   * listado compuesto de la pantalla y se filtraba aquí.
+   */
+  completoMock: vi.fn(),
+  /** Feature 184 (T A.5): la comprobación de vigencia con la que se poda la selección. */
+  vigenciaMock: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   recibirLote: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
-  listarRecepcionSatelite: (...a: unknown[]) => conjuntoMock(...a),
+  listarRecepcionSatelite: vi.fn(),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoMock(...a),
+  listarOrdenesBodegaCompleto: (...a: unknown[]) => completoMock(...a),
+  listarIdsVigentesBodega: (...a: unknown[]) => vigenciaMock(...a),
 }));
 vi.mock("@/lib/actions/envio-devolucion-central", () => ({
   enviarACentral: vi.fn(),
@@ -250,25 +267,56 @@ function servirPaginas() {
   });
 }
 
-/** Doble del listado SIN recorte: los cinco grupos, como los devuelve `listar()`. */
-function servirConjunto() {
-  conjuntoMock.mockResolvedValue({
-    status: "ok",
-    porRecibir: [],
-    recibidas: deEstado("en_bodega_satelite"),
-    asignadas: deEstado("por_recoger"),
-    porDevolver: deEstado("por_devolver"),
-    enTransitoACentral: deEstado("devolviendo_a_bodega_central"),
-    devueltas: deEstado("devuelta"),
-    zonaNombre: ZONA,
-    sinZona: false,
+/**
+ * Doble del CONJUNTO de la descarga (T A.4): el mismo criterio que sirve las páginas, sin el
+ * recorte. Que use `filtrarComoElServidor` es el punto: desde la tanda A el filtro lo aplica el
+ * servidor también para el archivo, así que el doble tiene que devolverlo ya filtrado — si la
+ * pantalla volviera a filtrar por su cuenta, el archivo no cambiaría y nadie se enteraría.
+ */
+function servirCompleto() {
+  completoMock.mockImplementation(async (input: FiltroEntrada = {}) => {
+    const filtradas = filtrarComoElServidor(input);
+    return { status: "ok", items: filtradas, total: filtradas.length };
   });
+}
+
+/**
+ * Doble de la vigencia (T A.5). Por defecto NADA sale del listado: devuelve vigentes todos los
+ * identificadores que se le pregunten, de modo que la poda no retira nada y los casos de
+ * paginación miden lo suyo sin interferencias. Los casos que sí podan lo dicen con un
+ * `mockImplementationOnce`.
+ */
+function servirVigencia() {
+  vigenciaMock.mockImplementation(async (input: { ids?: string[] } = {}) => ({
+    status: "ok",
+    ids: input.ids ?? [],
+  }));
+}
+
+/**
+ * Deja la SIGUIENTE comprobación de vigencia EN VUELO y devuelve el interruptor con el que el
+ * caso la responde cuando quiera.
+ *
+ * Existe para poder mirar la pantalla ANTES y DESPUÉS de la poda **sobre la misma página
+ * visible**: la comprobación se dispara al llegar la página, así que sin este control la
+ * respuesta llegaría antes de que el caso pueda marcar una fila de esa página, y el «antes»
+ * sería el estado transitorio de la navegación —que no es lo que R26 protege— o directamente
+ * una carrera.
+ */
+function vigenciaEnVuelo(): (idsVigentes: string[]) => void {
+  let responder!: (respuesta: { status: string; ids: string[] }) => void;
+  const respuesta = new Promise<{ status: string; ids: string[] }>((resolve) => {
+    responder = resolve;
+  });
+  vigenciaMock.mockImplementationOnce(() => respuesta);
+  return (idsVigentes) => responder({ status: "ok", ids: idsVigentes });
 }
 
 /** Monta la pantalla con la página 1 pre-cargada por el Server Component. */
 function montar() {
   servirPaginas();
-  servirConjunto();
+  servirCompleto();
+  servirVigencia();
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
@@ -366,6 +414,14 @@ async function opcionesDe(
 
 function botonDescarga(): HTMLElement {
   return screen.getByRole("button", { name: `Descargar ${LISTADO}` });
+}
+
+/** El aviso de lo marcado en otras páginas; `null` si no se pinta. */
+function avisoTexto(): string | null {
+  const nodo = within(region())
+    .queryAllByText(/marcadas en otras páginas/)
+    .at(0);
+  return nodo?.textContent?.replace(/\s+/g, " ").trim() ?? null;
 }
 
 beforeEach(() => {
@@ -563,9 +619,18 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     // «descargá lo que se ves» es más fácil de no notar: el filtro de estado «Recibidas» deja
     // 30 órdenes en dos páginas, y la segunda trae CINCO.
     await filtrarPor(user, "Estado", "Recibidas");
-    await waitFor(() => expect(remisionesVisibles()).toHaveLength(PAGE_SIZE));
+    // El número de filas solo no distingue «la página llegó» de «la página está llegando»:
+    // el `DataTable` en carga deja un `<tr>` con `role="status"` y filas skeleton, y hay
+    // recuentos que cuadran a medio camino. Se exige además que no quede carga en vuelo.
+    await waitFor(() => {
+      expect(remisionesVisibles()).toHaveLength(PAGE_SIZE);
+      expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
+    });
     await user.click(within(nav()).getByRole("button", { name: "Página siguiente" }));
-    await waitFor(() => expect(remisionesVisibles()).toHaveLength(5));
+    await waitFor(() => {
+      expect(remisionesVisibles()).toHaveLength(5);
+      expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
+    });
 
     await user.click(botonDescarga());
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
@@ -592,5 +657,172 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     expect(titulo).toBe(LISTADO);
     expect(filas).toHaveLength(TOTAL);
     expect(filas.map((f) => f.numRemision)).toEqual(CONJUNTO.map((o) => o.numRemision));
+  });
+
+  it("podar no cambia la página visible, ni los filtros, ni los contadores (R26)", async () => {
+    // Feature 184 (T A.5). La poda toca UNA cosa —la selección— y no puede tocar ninguna otra:
+    // devolver a la página 1, soltar un filtro o recalcular el contador con las filas que
+    // quedan serían efectos colaterales que el operador no pidió y que nadie notaría hasta
+    // perder el sitio donde estaba trabajando.
+    const user = userEvent.setup();
+    montar();
+
+    // Con filtro puesto: 30 órdenes en dos páginas (25 + 5).
+    await filtrarPor(user, "Estado", "Recibidas");
+    await waitFor(() => {
+      expect(remisionesVisibles()).toHaveLength(PAGE_SIZE);
+      expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
+    });
+    await user.click(casilla(etiqueta(1)));
+    await user.click(casilla(etiqueta(2)));
+
+    // El servidor dirá que la 01 ya NO está en el conjunto filtrado: la poda la retira.
+    vigenciaMock.mockImplementationOnce(async () => ({ status: "ok", ids: ["o-2"] }));
+    await irAPagina(user, 2);
+
+    // Ancla POSITIVA de que la poda YA ocurrió: el aviso pasa a contar una sola.
+    await waitFor(() =>
+      expect(avisoTexto()).toBe(
+        "Tienes 1 orden(es) marcadas en otras páginas que no entran en esta acción.",
+      ),
+    );
+    const lecturasTrasPodar = paginadoMock.mock.calls.length;
+
+    // La PÁGINA sigue siendo la 2 del conjunto filtrado, con sus cinco filas.
+    expect(remisionesVisibles()).toEqual([26, 27, 28, 29, 30].map(etiqueta));
+    // El FILTRO sigue vigente: la barra lo dice y el servidor lo recibió en la última lectura.
+    expect(
+      screen.getByRole("button", { name: /^Estado:/ }).textContent,
+    ).toContain("Recibidas");
+    expect(
+      (paginadoMock.mock.calls.at(-1)?.[0] as { estados?: string[] })?.estados,
+    ).toEqual(["en_bodega_satelite"]);
+    // Los CONTADORES son los del servidor y no se mueven: 30 con el filtro, 60 sin él. Un
+    // contador recalculado sobre la selección o sobre las filas restantes se delataría aquí.
+    expect(within(region()).getByRole("status")).toHaveTextContent(`30 de ${TOTAL} órdenes`);
+    // Y podar no relee el listado: no cuesta ni una consulta de página.
+    expect(paginadoMock.mock.calls.length).toBe(lecturasTrasPodar);
+  });
+
+  it("podar no retira la acción de lote de lo marcado en la página visible (R26)", async () => {
+    // La CUARTA cláusula de R26, que el caso de arriba no puede afirmar: allí la página visible
+    // no tiene ninguna fila marcada, así que no hay acción de lote que observar.
+    //
+    // Es la cláusula peligrosa de las cuatro. La poda recorre la selección ENTERA para retirar
+    // lo que ya no está en el conjunto, y la selección entera incluye lo marcado en la página
+    // que el operador está mirando. Una poda que se pasara de larga —quedándose sólo con lo que
+    // el servidor confirmó, sin conservar lo de la página— le borraría la marca delante de los
+    // ojos y, con ella, el botón que estaba a punto de pulsar. No falla en ninguna parte: la
+    // pantalla queda coherente, sólo que sin la acción.
+    const user = userEvent.setup();
+    enviarACentralMock.mockResolvedValue({ status: "ok" });
+    montar();
+
+    // Dos marcas en la página 1 (`en_bodega_satelite`), que al pasar de página quedan fuera de
+    // la vista: son las que hacen que haya poda.
+    await user.click(casilla(etiqueta(1)));
+    await user.click(casilla(etiqueta(2)));
+
+    // La comprobación de la página 2 queda EN VUELO: la marca de esa página se pone mientras la
+    // poda aún no ha respondido, así el «antes» se mide con la pantalla quieta y el «después»
+    // llega por una respuesta que el caso decide cuándo entregar.
+    const responderVigencia = vigenciaEnVuelo();
+    await irAPagina(user, 2);
+    await waitFor(() => expect(vigenciaMock).toHaveBeenCalledTimes(1));
+
+    // Una marca en la PÁGINA VISIBLE, de un estado distinto al de las de fuera: la acción que se
+    // ofrece es la de ESTA orden, no la de las marcadas que no se ven.
+    await user.click(casilla(etiqueta(41)));
+
+    // ANTES de podar: la acción está ofrecida y habilitada sobre la única marca visible.
+    expect(within(region()).getByRole("button", { name: "Enviar a central" })).toBeEnabled();
+    expect(within(region()).getByRole("status")).toHaveTextContent(
+      "1 seleccionada(s) en esta página",
+    );
+    expect(avisoTexto()).toBe(
+      "Tienes 2 orden(es) marcadas en otras páginas que no entran en esta acción.",
+    );
+
+    // La poda responde: la 01 ya NO está en el conjunto filtrado; la 02 sí.
+    await act(async () => {
+      responderVigencia(["o-2"]);
+    });
+
+    // Ancla POSITIVA de que la poda YA ocurrió: el aviso BAJA de 2 a 1. Se espera al texto
+    // nuevo, no a que el viejo desaparezca; y la afirmación de abajo sobre el botón no valdría
+    // sin esto, porque un botón que sigue ahí es exactamente lo que se vería si la poda no se
+    // hubiera ejecutado nunca.
+    await waitFor(() =>
+      expect(avisoTexto()).toBe(
+        "Tienes 1 orden(es) marcadas en otras páginas que no entran en esta acción.",
+      ),
+    );
+
+    // DESPUÉS de podar: la MISMA acción sigue ofrecida, habilitada y sobre la misma selección
+    // visible. La poda se llevó una marca de otra página y ni tocó ésta.
+    expect(within(region()).getByRole("button", { name: "Enviar a central" })).toBeEnabled();
+    expect(within(region()).getByRole("status")).toHaveTextContent(
+      "1 seleccionada(s) en esta página",
+    );
+    // Y sigue siendo la acción de lo SELECCIONADO EN LA PÁGINA: la 02, que sobrevivió a la poda,
+    // es `en_bodega_satelite` y no trae su botón por estar marcada fuera de la vista.
+    expect(within(region()).queryByRole("button", { name: "Asignar" })).toBeNull();
+
+    // Y al pulsarla se lleva EXACTAMENTE la orden marcada en la página: ni la 02 que quedó viva
+    // en la selección, ni las nueve `por_devolver` que el conjunto tiene además de la 41.
+    await user.click(within(region()).getByRole("button", { name: "Enviar a central" }));
+    await waitFor(() => expect(enviarACentralMock).toHaveBeenCalledTimes(1));
+    expect(enviarACentralMock.mock.calls.map(([arg]) => arg)).toEqual([{ ordenId: "o-41" }]);
+  });
+
+  it("la comprobación de vigencia viaja con los filtros vigentes (R19)", async () => {
+    // R19: la pertenencia se decide sobre el CONJUNTO FILTRADO, no sobre «todo lo del actor».
+    // Preguntar sin los filtros daría por vigente una orden que el filtro vigente excluye, y
+    // la marca sobreviviría a un cambio que el operador sí puede ver. Es el único sitio del
+    // repo donde se puede medir: para tener marcas fuera de la vista CON un filtro puesto hace
+    // falta filtrar, marcar y navegar —filtrar limpia la selección (R27)—, y eso exige un
+    // conjunto filtrado de más de una página.
+    const user = userEvent.setup();
+    montar();
+
+    await filtrarPor(user, "Estado", "Recibidas");
+    await waitFor(() => {
+      expect(remisionesVisibles()).toHaveLength(PAGE_SIZE);
+      expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
+    });
+    await user.click(casilla(etiqueta(1)));
+    await irAPagina(user, 2);
+
+    await waitFor(() => expect(vigenciaMock).toHaveBeenCalledTimes(1));
+    expect(vigenciaMock.mock.calls[0][0]).toEqual({
+      estados: ["en_bodega_satelite"],
+      ids: ["o-1"],
+    });
+  });
+
+  it("ni la carga inicial ni la descarga consultan la vigencia (R28)", async () => {
+    // La poda no puede colarse como coste fijo de la pantalla. Se paga sólo cuando hay algo
+    // invisible que comprobar, y descargar no es una de esas veces: el archivo ya sale de una
+    // lectura del conjunto que no necesita saber nada de la selección.
+    const user = userEvent.setup();
+    montar();
+
+    // (a) Carga inicial: la página 1 llega por `fallbackData` y SWR revalida una vez. Ni una
+    // consulta de vigencia en todo el arranque.
+    await waitFor(() => expect(paginadoMock).toHaveBeenCalled());
+    expect(vigenciaMock).not.toHaveBeenCalled();
+
+    // (b) Con marcas fuera de la vista —el único caso en que la poda sí trabaja— la descarga
+    // sigue sin sumarle nada.
+    await user.click(casilla(etiqueta(1)));
+    await user.click(casilla(etiqueta(2)));
+    await irAPagina(user, 2);
+    await waitFor(() => expect(vigenciaMock).toHaveBeenCalledTimes(1));
+
+    await user.click(botonDescarga());
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(completoMock).toHaveBeenCalledTimes(1);
+    expect(vigenciaMock).toHaveBeenCalledTimes(1);
   });
 });

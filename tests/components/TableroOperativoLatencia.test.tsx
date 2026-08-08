@@ -8,6 +8,7 @@ import { PanelesOperativos } from "@/app/(app)/analitica/_components/operativo/P
 import { PANELES_OPERATIVOS } from "@/app/(app)/analitica/_components/operativo/catalogo-paneles";
 import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
 import { PENUMBRA, type ResultadoOperativo } from "@/lib/types/analitica-operativa";
+import { ToastProvider } from "@/providers/ToastProvider";
 
 // Feature 131 (T7.2) — MEDIR el coste de las N invocaciones. D4 lo hace parte de la
 // entrega, no un extra: el design declara que ese coste NO estaba medido y que medirlo era
@@ -88,11 +89,15 @@ afterEach(cleanup);
 describe("Feature 131 (T7.2, D4) — el coste de las N invocaciones", () => {
   it("una carga del tablero dispara UNA invocacion por metrica declarada, y ni una mas", async () => {
     render(
-      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <PanelesOperativos />
-      </SWRConfig>,
+      // Feature 134 (T4.2): el tablero monta ahora el control de descarga, que llama a
+      // `useToast()`. En la app el `ToastProvider` vive en el layout; aqui se aporta igual.
+      <ToastProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <PanelesOperativos />
+        </SWRConfig>
+      </ToastProvider>,
     );
-    await screen.findByRole("region", { name: "Ordenes creadas" }, { timeout: 4000 });
+    await screen.findByRole("region", { name: "Órdenes creadas" }, { timeout: 4000 });
     await waitFor(() => expect(accion.mock.calls.length).toBe(METRICAS.length));
 
     // D4 fija el presupuesto en <=6 PANELES; el numero de invocaciones sale de las
@@ -104,9 +109,13 @@ describe("Feature 131 (T7.2, D4) — el coste de las N invocaciones", () => {
 
   it("las invocaciones se SOLAPAN: no se serializan una tras otra", async () => {
     render(
-      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <PanelesOperativos />
-      </SWRConfig>,
+      // Feature 134 (T4.2): el tablero monta ahora el control de descarga, que llama a
+      // `useToast()`. En la app el `ToastProvider` vive en el layout; aqui se aporta igual.
+      <ToastProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <PanelesOperativos />
+        </SWRConfig>
+      </ToastProvider>,
     );
     await waitFor(() => expect(accion.mock.calls.length).toBe(METRICAS.length), {
       timeout: 10_000,
@@ -123,9 +132,13 @@ describe("Feature 131 (T7.2, D4) — el coste de las N invocaciones", () => {
 
   it("un cambio de filtro rehace TODOS los paneles, tambien en paralelo", async () => {
     render(
-      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <PanelesOperativos />
-      </SWRConfig>,
+      // Feature 134 (T4.2): el tablero monta ahora el control de descarga, que llama a
+      // `useToast()`. En la app el `ToastProvider` vive en el layout; aqui se aporta igual.
+      <ToastProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <PanelesOperativos />
+        </SWRConfig>
+      </ToastProvider>,
     );
     await waitFor(() => expect(accion.mock.calls.length).toBe(METRICAS.length), {
       timeout: 10_000,

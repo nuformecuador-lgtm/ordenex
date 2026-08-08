@@ -4,6 +4,10 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   IRecepcionSateliteService,
+  ListarIdsVigentesBodegaInput,
+  ListarIdsVigentesBodegaServiceResult,
+  ListarOrdenesBodegaCompletoInput,
+  ListarOrdenesBodegaCompletoServiceResult,
   ListarOrdenesBodegaPaginadoInput,
   ListarOrdenesBodegaPaginadoServiceResult,
   ListarRecepcionSateliteServiceResult,
@@ -13,6 +17,7 @@ import type {
   RecibirLoteServiceResult,
   RecibirServiceResult,
 } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { descargaConfig } from "@/lib/config/descarga";
 import {
   ESTADOS_BODEGA_SATELITE,
   estadosDelListado,
@@ -63,6 +68,10 @@ type RecepcionSateliteRepo = Pick<
   // Feature 170 — FASE 2 (T K.1/T K.2): la pagina del listado y el catalogo de sus filtros.
   | "findRecepcionSatelitePaginada"
   | "findRecepcionSateliteGeoByZona"
+  // Feature 184 — Tanda A (T A.1/T A.2): el conjunto entero para el archivo y la vigencia de
+  // los identificadores marcados, los dos con el MISMO criterio que la pagina.
+  | "findRecepcionSateliteCompleta"
+  | "findIdsVigentesEnBodega"
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recibirEnSatelite"
@@ -209,6 +218,116 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       pageSize: input.pageSize,
       total, // R41: el total del CONJUNTO filtrado, nunca `items.length`
     };
+  }
+
+  /**
+   * Feature 184 — Tanda A (T A.3, R1/R2/R4/R6/R11) — el CONJUNTO filtrado ENTERO del listado
+   * «Órdenes de la bodega», para producir el archivo.
+   *
+   * **Que cierra.** Hasta hoy la descarga releia `listar()` —los CINCO grupos de la zona
+   * entera, sin filtrar— y volvia a cruzar estado ∧ canton ∧ distrito en el navegador. Eso era
+   * el criterio escrito dos veces, en dos capas, y el conjunto SIN filtrar cruzando a la
+   * pantalla para producir un archivo filtrado. Aqui el conjunto llega ya filtrado por la base
+   * con el MISMO `WHERE` y el MISMO `ORDER BY` que la pagina (R11/R16).
+   *
+   * **Que NO cambia.** El guard de rol va ANTES de tocar nada (R4) y la zona sale del usuario,
+   * nunca de la entrada. Sin zona el conjunto es vacio, no `forbidden`: el rol tiene acceso al
+   * modulo, lo que no tiene es alcance.
+   *
+   * **El tope se evalua aqui** (R6): por encima no se entrega ni una fila —ni un conjunto
+   * truncado, que es peor— y tampoco se pide el lote de intentos, que no tendria a quien
+   * adornar. Es el mismo numero que aplicaba el navegador; lo que cambia es DONDE se aplica.
+   *
+   * **Excepcion declarada a R29 de la 170, y aqui es la mas cara de las once.** R29 —feature
+   * `done`, requisito vivo— pide dos cosas: el tope en el SERVIDOR y, superado, ni materializar
+   * ni transportar mas de `N + 1` filas. Lo que se cumple es el transporte: por encima del tope
+   * no cruza ni una fila. Lo que NO se cumple es materializar, y en este listado no es solo
+   * contar de mas: `findRecepcionSateliteCompleta` ordena los ids del conjunto ENTERO y despues
+   * los HIDRATA todos con `WITH_RECEPCION_SATELITE` —la proyeccion completa de la fila y sus
+   * relaciones— antes de que esta linea mire el tope. Es el peor caso de los once y conviene
+   * decirlo asi: el conjunto son las ordenes vivas de la bodega de una zona, y lo que se trae de
+   * mas no es un entero por fila, es el payload entero.
+   *
+   * Se acepta por lo que costaria cerrarlo: acotar la consulta a `limite + 1` obliga a un `count`
+   * aparte para conservar el total EXACTO que el aviso publica (R6), y esa segunda consulta es
+   * justo la que R15 de esta feature mide y prohibe, y el coste que esta migracion vino a quitar.
+   * Decision humana del 2026-08-05, escrita en el design §3.1. Es una excepcion con motivo, no
+   * una forma de cumplir R29; el `N + 1` real queda como ficha aparte y este listado es su primer
+   * candidato.
+   */
+  async listarOrdenesBodegaCompleto(
+    input: ListarOrdenesBodegaCompletoInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesBodegaCompletoServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R4: antes del repo
+
+    const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
+    if (zonaId === null) return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findRecepcionSateliteCompleta({
+      zonaId,
+      estatusValues: estadosDelListado(input.estados), // la lista blanca, igual que la pagina
+      cantonNombres: input.cantones,
+      distritoNombres: input.distritos,
+    });
+
+    const limite = descargaConfig.MAX_FILAS;
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    // Feature 160 (R12/R13/R15): UN SOLO lote con los ids del conjunto. La columna «Intentos»
+    // del archivo sale de aqui; sin este lote el archivo publicaria un 0 para todas.
+    const intentos = await this.historial.contarIntentosEnLote(conjunto.map((r) => r.id));
+
+    return {
+      status: "ok",
+      // El MISMO mapper que la pagina: dos proyecciones distintas de la misma fila son dos
+      // archivos distintos del mismo listado.
+      items: conjunto.map((row) => ({
+        ...toDTO(row),
+        intentosEntrega: intentos.get(row.id) ?? 0, // R14/R19: el `0` SIEMPRE se expone
+      })),
+      total: conjunto.length,
+    };
+  }
+
+  /**
+   * Feature 184 — Tanda A (T A.3, R19/R21/R23) — cuales de los identificadores marcados siguen
+   * perteneciendo al conjunto filtrado. Es la comprobacion con la que la pantalla PODA su
+   * seleccion.
+   *
+   * **Se decide sobre el CONJUNTO, no sobre la pagina** (R19): una orden marcada puede haber
+   * salido del listado por una accion de esta pantalla o por la de otro operador, y en los dos
+   * casos sigue siendo invisible aqui.
+   *
+   * **Devuelve los VIGENTES.** El cliente interseca, asi que una respuesta corta no puede
+   * leerse como «desmarca todo» (R22).
+   *
+   * **Sin ids no se consulta NADA** (R23 tambien en el servidor: el borde ya exige `.min(1)`,
+   * pero la regla es del dominio y se sostiene sola). Sin zona, `[]` sin tocar el listado: un
+   * actor sin alcance no tiene ordenes vigentes.
+   */
+  async listarIdsVigentesBodega(
+    input: ListarIdsVigentesBodegaInput,
+    actor: Actor,
+  ): Promise<ListarIdsVigentesBodegaServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R4: antes del repo
+    if (input.ids.length === 0) return { status: "ok", ids: [] }; // R23: ni una consulta
+
+    const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R21
+    if (zonaId === null) return { status: "ok", ids: [] };
+
+    const ids = await this.repo.findIdsVigentesEnBodega(
+      {
+        zonaId,
+        estatusValues: estadosDelListado(input.estados),
+        cantonNombres: input.cantones,
+        distritoNombres: input.distritos,
+      },
+      input.ids,
+    );
+    return { status: "ok", ids };
   }
 
   /**

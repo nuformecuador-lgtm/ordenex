@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   Alcance,
   CierreAdminResumenRow,
+  GestionIncidenteDelCierre,
   ICierresAdminRepository,
   ResolverCierreInput,
   ResolverCierreResult,
@@ -330,6 +331,53 @@ function alcanceWhere(alcance: Alcance): { destinoTipo: Alcance["destinoTipo"]; 
 }
 
 /**
+ * Feature 184 — Tanda D (R16) — el ORDEN de los cierres del dia del admin, declarado UNA vez.
+ *
+ * Lo comparten los CINCO caminos que leen este listado: el listado sin paginar, las dos
+ * paginas (cola e historico) y los dos CONJUNTOS de los que salen los archivos. Estaba escrito
+ * tres veces —una por metodo— y la tanda D habria sumado dos copias mas.
+ *
+ * No es simetria: en cuanto un archivo depende de estos conjuntos, si su orden diverge del de
+ * la pagina, la fila 26 del archivo deja de ser la primera de la pagina 2 (R5) y no hay ninguna
+ * pantalla que lo diga. Una sola declaracion tampoco lo vuelve invisible: los casos de los
+ * `*-where.test.ts` fijan el valor ABSOLUTO, asi que cambiar la constante los pone rojos.
+ */
+const ORDEN_CIERRES_ADMIN = { solicitadoAt: "desc" } as const satisfies Prisma.CierreDiaOrderByWithRelationInput;
+
+/**
+ * Feature 184 — Tanda D (R16) — el criterio del HISTORICO, declarado UNA vez para su pagina y
+ * para su conjunto.
+ *
+ * R44 de la 170 sigue vigente y es el motivo del `notIn`: es el espejo EXACTO del `else` con
+ * que el servicio manda al historico todo lo que no esta en la cola. Con un
+ * `in: ["aprobado","rechazado"]` un estado nuevo del enum desapareceria de las dos listas en
+ * vez de caer en el historico.
+ */
+function historicoWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
+  return {
+    ...alcanceWhere(alcance), // R2/R13: el alcance, en el WHERE y nunca en memoria
+    estado: { notIn: [...ESTADOS_COLA_CIERRE_DIA] },
+  };
+}
+
+/**
+ * Feature 184 — Tanda D (R16) — el criterio de la COLA, declarado UNA vez para su pagina y para
+ * su conjunto.
+ *
+ * COMPLEMENTO EXACTO del de arriba: mismo `alcanceWhere` y la MISMA constante de estados, aqui
+ * con `in` (el espejo del `if` del servicio) y alli con `notIn`. Que las dos mitades lean la
+ * misma constante es lo que garantiza que ninguna fila quede en las dos listas ni se caiga de
+ * las dos — y en esta cola «caerse» significa que un cierre `vencido` deja de verse, con la
+ * bodega de su mensajero bloqueada hasta que alguien lo note.
+ */
+function colaWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
+  return {
+    ...alcanceWhere(alcance),
+    estado: { in: [...ESTADOS_COLA_CIERRE_DIA] },
+  };
+}
+
+/**
  * Feature 38 — repositorio de "Cierres del dia" del admin. SOLO queries Prisma. El
  * ALCANCE (rol+zona destino) va SIEMPRE en el WHERE (R2/R13), nunca en memoria.
  *
@@ -365,26 +413,85 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   ) {}
 
   /**
-   * Feature 158 (T1.12, R19/R21/R25): ids de las gestiones `incidente` del cierre, con el
-   * ALCANCE en el WHERE (via la relacion `cierre`), nunca filtrado en memoria. Fuera de
-   * alcance -> [] (no se distingue de "el cierre no tiene incidentes": R25 no revela nada).
+   * Feature 158 (T1.12, R19/R21/R25): las gestiones `incidente` del cierre, con el ALCANCE en el
+   * WHERE (via la relacion `cierre`), nunca filtrado en memoria. Fuera de alcance -> [] (no se
+   * distingue de "el cierre no tiene incidentes": R25 no revela nada).
+   *
+   * Fix «tope de negocio» (2026-08-04): el `select` gana `orden.montoCobrar`, el valor de la
+   * orden, que es el tope de NEGOCIO del monto de indemnizacion. Es una COLUMNA MAS en la MISMA
+   * consulta —mismo WHERE, mismo alcance, ninguna query extra—: el tope no puede costar un
+   * round-trip por gestion. Money-safe: sale ya como STRING escala 2 (`null` si la orden no
+   * declara valor).
    */
-  async findGestionesIncidenteDelCierre(cierreId: string, alcance: Alcance): Promise<string[]> {
+  async findGestionesIncidenteDelCierre(
+    cierreId: string,
+    alcance: Alcance,
+  ): Promise<GestionIncidenteDelCierre[]> {
     const rows = await this.prisma.gestionOrden.findMany({
       // MISMO predicado que la escritura del monto y que el feed: `(cierreId, incidente)`. Que
       // los tres coincidan es lo que impide que el service exija un monto para una gestion que
       // el feed luego no sumaria.
       where: { cierreId, resultado: "incidente", cierre: alcanceWhere(alcance) },
-      select: { id: true },
+      select: { id: true, orden: { select: { montoCobrar: true } } },
     });
-    return rows.map((r) => r.id);
+    return rows.map((r) => ({
+      gestionId: r.id,
+      ordenMontoCobrar: decimalToString(r.orden.montoCobrar),
+    }));
   }
 
   /** R2/R4/R5/R8/R9: cierres del alcance, mas reciente primero, totales -> string. */
   async findCierresByAlcance(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
       where: alcanceWhere(alcance), // R2/R13: filtro por alcance en el WHERE, usa el indice [destinoTipo, destinoZonaId]
-      orderBy: { solicitadoAt: "desc" },
+      orderBy: ORDEN_CIERRES_ADMIN,
+      select: CIERRE_RESUMEN_SELECT,
+    });
+    return rows.map(toResumenRow);
+  }
+
+  /**
+   * Feature 184 — Tanda D (T D.1, R1/R14/R15/R16) — el HISTORICO ENTERO del alcance, sin
+   * recorte: el conjunto del que sale el archivo de «Cierres del dia — historico».
+   *
+   * **Por que existe, y por que no bastaba reusar.** Hasta hoy ese archivo se producia
+   * releyendo `listarCierresAdmin()`, que llama a `findCierresByAlcance`: el alcance ENTERO,
+   * cola e historico juntos, para quedarse con una de las dos mitades. `findCierresByAlcance`
+   * NO se puede reusar aqui —a diferencia de lo que pasaba en las tandas B y C, donde el
+   * conjunto ya existia— porque no es este conjunto: es su union con el de la cola. Descargar
+   * la cola de 30 filas traia tambien los 2000 del historico, y al reves.
+   *
+   * Es `findHistoricoPaginado` sin `skip`/`take` y sin el `count`: MISMO `historicoWhere` y
+   * MISMO `ORDEN_CIERRES_ADMIN` (R16), de una sola declaracion cada uno, para que la pagina N
+   * sea el segmento N de este conjunto (R5). UNA consulta y ninguna mas (R15): el `count` de la
+   * pagina no viaja aqui, porque el total de un conjunto sin recorte es su longitud.
+   */
+  async findHistoricoCompleto(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
+    const rows = await this.prisma.cierreDia.findMany({
+      where: historicoWhere(alcance),
+      orderBy: ORDEN_CIERRES_ADMIN,
+      select: CIERRE_RESUMEN_SELECT,
+    });
+    return rows.map(toResumenRow);
+  }
+
+  /**
+   * Feature 184 — Tanda D (T D.1, R1/R14/R15/R16) — la COLA ENTERA de pendientes de decision del
+   * alcance, sin recorte: el conjunto del que sale el archivo de «Cierres del dia pendientes».
+   *
+   * Espejo exacto del de arriba, y con el mismo motivo para existir: el archivo de esta cola
+   * salia de `findCierresByAlcance`, que trae ADEMAS todo el historico del alcance para
+   * descartarlo en memoria.
+   *
+   * La particion sigue viva en los CUATRO caminos: `colaWhere` y `historicoWhere` leen la MISMA
+   * `ESTADOS_COLA_CIERRE_DIA`, una con `in` y otra con `notIn`, y las dos paginas y los dos
+   * conjuntos salen de esas dos funciones. Ninguna fila puede quedar en las dos listas ni
+   * caerse de las dos.
+   */
+  async findColaCompleta(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
+    const rows = await this.prisma.cierreDia.findMany({
+      where: colaWhere(alcance),
+      orderBy: ORDEN_CIERRES_ADMIN,
       select: CIERRE_RESUMEN_SELECT,
     });
     return rows.map(toResumenRow);
@@ -402,17 +509,14 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     alcance: Alcance,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
-    // R44: `notIn` es el espejo EXACTO del `else` con que el servicio manda al historico todo
-    // lo que no esta en la cola. Con un `in: ["aprobado","rechazado"]` un estado nuevo del
-    // enum desapareceria de las dos listas en vez de caer en el historico.
-    const where = {
-      ...alcanceWhere(alcance),
-      estado: { notIn: [...ESTADOS_COLA_CIERRE_DIA] },
-    };
+    // Feature 184/R16: el criterio sale de `historicoWhere`, la MISMA declaracion que usa el
+    // conjunto completo del que sale el archivo. Estaba escrito aqui y habria que haberlo
+    // escrito otra vez alli.
+    const where = historicoWhere(alcance);
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
-        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_CIERRES_ADMIN, // R51: el mismo criterio del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: CIERRE_RESUMEN_SELECT,
@@ -440,14 +544,12 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     alcance: Alcance,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
-    const where = {
-      ...alcanceWhere(alcance), // R2/R13: el alcance, en el WHERE y nunca en memoria
-      estado: { in: [...ESTADOS_COLA_CIERRE_DIA] },
-    };
+    // Feature 184/R16: mismo criterio compartido que el conjunto completo de esta cola.
+    const where = colaWhere(alcance);
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
-        orderBy: { solicitadoAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_CIERRES_ADMIN, // R51: el mismo criterio del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: CIERRE_RESUMEN_SELECT,

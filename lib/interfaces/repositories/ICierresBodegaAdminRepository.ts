@@ -42,6 +42,25 @@ export interface ICierresBodegaAdminRepository {
    */
   findCierresBodega(): Promise<CierreBodegaResumenRow[]>;
   /**
+   * Feature 184 — Tanda E (T E.1, R1/R14/R15/R16): el HISTORICO ENTERO (cierres de bodega ya
+   * RESUELTOS), sin recorte. Es el conjunto del que sale el archivo del listado 5.
+   *
+   * NO es `findCierresBodega`: aquel devuelve la UNION de la cola y el historico, que es
+   * justamente el listado compuesto que R1 prohibe releer para producir un archivo. Es
+   * `findHistoricoPaginado` sin `skip`/`take` y sin el `count`, con el MISMO `where` y el MISMO
+   * `orderBy` por construccion (R16), de modo que la pagina N es el segmento N de este conjunto
+   * (R5). UNA sola consulta (R15).
+   */
+  findHistoricoCompleto(): Promise<CierreBodegaResumenRow[]>;
+  /**
+   * Feature 184 — Tanda E (T E.1, R1/R14/R15/R16): la COLA ENTERA de cierres de bodega
+   * PENDIENTES (`solicitado`), sin recorte. Es el conjunto del que sale el archivo del listado 4.
+   *
+   * COMPLEMENTO EXACTO del de arriba, con la MISMA constante de estados (`in` aqui, `notIn`
+   * alli): los dos conjuntos particionan la tabla igual que las dos paginas.
+   */
+  findColaCompleta(): Promise<CierreBodegaResumenRow[]>;
+  /**
    * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA del historico (los cierres
    * de bodega ya RESUELTOS) + el TOTAL del conjunto.
    *

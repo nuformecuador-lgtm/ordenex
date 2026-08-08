@@ -15,6 +15,13 @@
 //  - ⟨D1⟩ / R37 — cada importe llega DOS veces: `bruto` (Σ de las categorias nominales) y
 //    `neto` (Σ CON SIGNO). El `neto` NO sale de emparejar un `ajuste_*` con el movimiento
 //    que corrige: el libro no tiene ese puntero (design.md §2.1 hecho 3).
+//    ACOTADO por ⟨D12⟩ (humano, 2026-08-04, `progress/decision_183.md`, feature 183): R37 sigue
+//    valiendo donde el neto NO es redundante por construccion, y deja de aplicar a las tres
+//    metricas cuya lista de categorias es homogenea de prefijo `ingreso_*` —`ingreso_flete`,
+//    `ingreso_comision_cod`, `ingreso_iva`—. Con el CHECK categoria↔tipo de la 173 esas tres
+//    admiten un solo `tipo`, luego `Σ egreso = 0` y `neto = +bruto` SIEMPRE: el campo no
+//    informa de nada. Publican `ImporteSoloBruto`. Lo que R37 sigue prohibiendo —derivar el
+//    neto emparejando un `ajuste_*` con el movimiento que corrige— no se toca.
 //  - ⟨D3⟩ / R43 — `esAcumulado` es `true` EXACTAMENTE en las dos cuentas por pagar, que son
 //    un saldo al corte y no un flujo del periodo.
 //  - ⟨D6⟩ / R38 — `cod_recaudado` se sirve en DOS vistas con ids distintos que NO suman
@@ -39,11 +46,23 @@ import type { DimensionAnalitica, MetricaUnidad, TablaDinero } from "@/lib/analy
 import type { MetricaId } from "@/lib/analytics/metrics";
 
 /* -------------------------------------------------------------------------- */
-/* 1. Importe: STRING escala 2, bruto + neto ⟨D1⟩ R37                          */
+/* 1. Importe: STRING escala 2. UNION DISCRIMINADA por `forma` ⟨D1⟩ R37 / ⟨D12⟩ */
 /* -------------------------------------------------------------------------- */
+//
+// EL DISCRIMINANTE SE LLAMA `forma` Y NO `tipo` A PROPOSITO: en este mismo archivo `tipo` ya
+// significa otras dos cosas —`ResultadoFinanciero.tipo` ("vistas" | "conciliacion") y, en el
+// contrato del repositorio, `AgregadoCategoriaCaja.tipo` ("ingreso" | "egreso")—. Un tercer
+// `tipo` con un tercer significado seria una trampa gratuita.
+//
+// POR QUE UNA UNION Y NO UN CAMPO OPCIONAL `neto?: string` (feature 183, design.md §3.3(a)):
+// un campo opcional invita al arreglo de una linea `importe.neto ?? "0.00"`, que INVENTA un
+// cero —el pecado que este contrato persigue desde `aNumero`—, y `undefined` no distingue
+// «no aplica» de «no se calculo». En la 132 el dato ausente ya significa «no se sabe» (R15) y
+// pintarlo donde la verdad es «no aplica» seria una mentira nueva. Aqui no hay carencia: hay
+// otra CLASE de importe. El precedente vive en este mismo archivo (`ResultadoFinanciero`).
 
 /**
- * Un importe servido por la analitica financiera.
+ * Importe de una metrica cuyo `neto` con signo significa algo real.
  *
  * Los dos campos existen a la vez A PROPOSITO ⟨D1(c)⟩: el `bruto` es lo que las categorias
  * nominales sumaron, el `neto` es esa misma suma con el signo aplicado (credito − debito,
@@ -51,14 +70,55 @@ import type { MetricaId } from "@/lib/analytics/metrics";
  * el bruto mentiria en cuanto hubiera una anulacion. La diferencia entre ambos ES el
  * problema abierto de la 172, y se deja a la vista.
  */
-export interface ImporteAnalitico {
-  /** Σ de las categorias nominales. STRING escala 2. */
+export interface ImporteConNeto {
+  readonly forma: "bruto_y_neto";
+  /** Σ de las categorias nominales, SIN signo. STRING escala 2. */
   readonly bruto: string;
   /** Σ CON SIGNO agregado. STRING escala 2; puede venir negativo ("-123.45"). */
   readonly neto: string;
   /** Codigo ISO 4217 resuelto por `lib/config/moneda.ts` (S2 / R29). Nunca un simbolo. */
   readonly moneda: string;
 }
+
+/**
+ * Importe de una metrica cuyo `neto` seria redundante POR CONSTRUCCION: su lista de categorias
+ * es homogenea de prefijo y el CHECK categoria↔tipo de la 173
+ * (`db/migrations/20260803120000_caja_tesoreria/migration.sql`) admite un solo `tipo` por
+ * categoria, luego `Σ egreso = 0` y `neto = +bruto` SIEMPRE.
+ *
+ * NO lleva `neto` ni siquiera en `null`: leer ese campo de un importe que no lo tiene NO
+ * COMPILA, y eso es el punto. ⟨D12⟩ (humano, 2026-08-04, `progress/decision_183.md`).
+ */
+export interface ImporteSoloBruto {
+  readonly forma: "solo_bruto";
+  /** Σ de las categorias nominales, SIN signo. STRING escala 2. */
+  readonly bruto: string;
+  /** Codigo ISO 4217 resuelto por `lib/config/moneda.ts` (S2 / R29). Nunca un simbolo. */
+  readonly moneda: string;
+}
+
+/** Un importe servido por la analitica financiera, en una de sus DOS formas. */
+export type ImporteAnalitico = ImporteConNeto | ImporteSoloBruto;
+
+/* -------------------------------------------------------------------------- */
+/* 1 bis. Granularidad temporal de una vista ⟨D2⟩ R4 (feature 180)             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⟨D2⟩ de la feature 180 — el grano TEMPORAL con el que una vista publica sus filas.
+ *
+ * `dia` y `semana` son las dos granularidades que el servidor sabe producir (ver
+ * `granularidadDe` en `lib/analytics/cubo-temporal.ts`, que las decide a partir del tamano del
+ * rango y del tope de puntos). `no_temporal` es la respuesta HONESTA de una vista cuyo grano no
+ * es una fecha —hoy, las de grano `tienda` y `metodo_pago`—: no es «no se sabe», es «esta vista
+ * no se mide en el tiempo».
+ *
+ * La decision la toma el SERVIDOR y viaja en el DTO: el borde admite rangos de hasta
+ * `RANGO_TOPE_DIAS` = 366 dias y el paquete de graficas lanza por encima de `TOPE_PUNTOS_SERIE`
+ * puntos, asi que agregar o no agregar no puede quedar a criterio del consumidor (Q3 = (a),
+ * 2026-08-05).
+ */
+export type GranularidadVista = "dia" | "semana" | "no_temporal";
 
 /* -------------------------------------------------------------------------- */
 /* 2. Vistas ⟨D6⟩ R38                                                          */
@@ -96,6 +156,26 @@ export interface VistaFinanciera {
    */
   readonly sumableCon: readonly string[];
   readonly filas: readonly FilaFinanciera[];
+  /**
+   * ⟨D2⟩ / R4 (feature 180) — con que grano TEMPORAL estan agregadas las `filas`.
+   *
+   * REQUERIDO Y NO OPCIONAL, por la misma razon exacta por la que `cobertura` es obligatoria en
+   * la 126 (`lib/types/analitica-operativa.ts:13-15`): un campo opcional se ignora por omision, y
+   * en cuanto un consumidor lo ignora, «dia» y «semana» acaban siendo el mismo pixel —una serie
+   * semanal pintada como si fuera diaria miente sobre siete veces mas dinero por punto—.
+   *
+   * Las vistas de grano `tienda` y `metodo_pago` declaran `"no_temporal"` EXPLICITAMENTE en vez
+   * de omitirlo: obliga a nombrarlo en cada productor, y el typecheck lo exige. Omitirlo dejaria
+   * a un productor futuro de grano `fecha` publicando una serie sin declarar su grano y sin que
+   * nada fallara.
+   */
+  readonly granularidad: GranularidadVista;
+  /**
+   * R18 (feature 183) — UNA VISTA, UNA FORMA: el `total` y TODAS las `filas` publican la misma
+   * `forma`. Una vista que mezclara obligaria a cada consumidor a ramificar fila a fila, y la
+   * 180 multiplica por ~62 los sitios donde se emite un importe. Lo vigila
+   * `tests/unit/analytics/financiera-forma-importe.guardia.test.ts`.
+   */
   readonly total: ImporteAnalitico;
 }
 
@@ -255,4 +335,43 @@ export const IDS_FINANCIERAS_ACUMULADAS = [
 /** Total, sin rama por defecto: un id que no sea de las dos cuentas por pagar es `false`. */
 export function esMetricaAcumulada(metricaId: string): boolean {
   return (IDS_FINANCIERAS_ACUMULADAS as readonly string[]).includes(metricaId);
+}
+
+/**
+ * ⟨D1⟩ / R2 (feature 180) — las SIETE metricas cuyo desglose por fecha produce esa feature: las
+ * unicas que hoy no tienen NINGUN cubo y publican `filas: []`.
+ *
+ * Q1 = (a), decidida por el humano el **2026-08-05** (`requirements.md` §5 de la 180). Son las
+ * SEIS de caja —la ficha decia «cuatro», pero desde la 173 `dinero_en_caja` y `ganancia_ordenex`
+ * salen del mismo repositorio y del mismo material— mas `cuenta_por_pagar_mensajero`.
+ *
+ * POR QUE `cod_recaudado` Y `cuenta_por_pagar_tienda` QUEDAN FUERA, que es la parte que no se
+ * lee sola: las dos declaran grano `fecha` en el catalogo, pero YA TIENEN CUBO —`cod_recaudado`
+ * por metodo de pago y por tienda; `cuenta_por_pagar_tienda` por tienda— y la afirmacion «no
+ * existe serie temporal que dibujar» no es cierta en ellas. Darles ademas una vista por fecha
+ * seria abrir una vista NUEVA por metrica (un id estable mas, un `sumableCon` mas que declarar,
+ * y un consumidor teniendo que elegir cual de las dos mira) que ninguna pantalla ha pedido.
+ * `conciliacion_cierres` ni siquiera es candidata: no produce importes por cubo.
+ *
+ * UNA UNICA CONSTANTE EXPORTADA (R2): ninguna otra lista de ids se escribe a mano en la feature,
+ * ni siquiera de un id suelto. Lo vigila `tests/unit/analytics/financiera-desglose-ids.guardia.test.ts`,
+ * que censa el backend de la feature entero — y NO se apoya en `listasDeIdsAMano` del guardia del
+ * tablero, que solo marca arrays de dos o mas ids y por tanto deja pasar la decision por id suelto.
+ */
+export const IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA = [
+  "ingreso_flete",
+  "ingreso_comision_cod",
+  "ingreso_iva",
+  "egresos",
+  "dinero_en_caja",
+  "ganancia_ordenex",
+  "cuenta_por_pagar_mensajero",
+] as const satisfies readonly MetricaFinancieraId[];
+
+/**
+ * Total, sin rama por defecto (mismo patron que `esMetricaAcumulada`): un id que no este en el
+ * conjunto —incluido un id que ni siquiera sea financiero— es `false`, no un fallo.
+ */
+export function tieneDesglosePorFecha(metricaId: string): boolean {
+  return (IDS_FINANCIERAS_CON_DESGLOSE_POR_FECHA as readonly string[]).includes(metricaId);
 }

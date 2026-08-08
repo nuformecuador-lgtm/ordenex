@@ -8,14 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import {
   verCierreBodegaDetalle,
   aprobarCierreBodega,
   rechazarCierreBodega,
-  listarCierresBodegaAdmin,
+  listarPendientesCierresBodegaCompleto,
   listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type {
@@ -304,20 +304,26 @@ export function CierresBodegaAdminModule({
             error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
             /**
              * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue siendo
-             * la COLA COMPLETA. Se relee con el MISMO listado que la pantalla ya llamaba
-             * antes de paginar (`listarCierresBodegaAdmin`), que resuelve el alcance desde la
-             * sesión: descargar no amplía el alcance ni una fila (R14/R44).
+             * la COLA COMPLETA.
+             *
+             * Feature 184 — Tanda E (T E.3, R1/R2/R6): ese conjunto ya NO sale de
+             * `listarCierresBodegaAdmin()`. Aquel listado devuelve las dos mitades de esta
+             * pantalla —la cola Y el histórico entero de la operación—, y descargar la cola
+             * pagaba las dos para quedarse con una: el histórico crece sin tope con los días
+             * mientras la cola son los cierres sin resolver, una decena. Ahora el corte por
+             * estado lo hace la base (`listarPendientesCierresBodegaCompleto`).
+             *
+             * Lo que NO cambia: el alcance no viaja en la llamada y no puede: es acceso total
+             * y lo decide el servicio desde la sesión, igual que la página, así que descargar
+             * no amplía lo que el actor podía ver (R14/R44). Y el tope de filas pasa a
+             * evaluarse en el SERVIDOR: por encima no viaja ni una fila (R6).
              */
             descarga={{
               titulo: TITULO_DESCARGA_PENDIENTES,
               columnas: COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
               obtenerFilas: () =>
-                filasDelConjuntoCompleto(
-                  listarCierresBodegaAdmin().then((res) =>
-                    res.status === "ok"
-                      ? ({ status: "ok", items: res.pendientes } as const)
-                      : res,
-                  ),
+                filasDesdeResultado(
+                  listarPendientesCierresBodegaCompleto(),
                   filaDescargaBodegaPendiente,
                 ),
             }}

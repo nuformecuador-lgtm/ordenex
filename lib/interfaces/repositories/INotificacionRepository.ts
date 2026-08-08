@@ -107,9 +107,6 @@ export interface INotificacionRepository {
     actor: NotificacionActor,
   ): Promise<"visible" | "no_visible" | "no_existe">;
 
-  /** R31/R37: upsert idempotente de la lectura por (notificacion, usuario). */
-  marcarLeida(notificacionId: string, usuarioId: string, ahora: Date): Promise<void>;
-
   /**
    * R32: registra la lectura de TODAS las visibles y no descartadas del actor dentro de la
    * ventana, en UNA sentencia con `ON CONFLICT DO NOTHING` (idempotente, sin

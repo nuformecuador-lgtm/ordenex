@@ -71,12 +71,6 @@ class RepoFake implements INotificacionRepository {
     return fila.visiblePara.includes(actor.usuarioId) ? "visible" : "no_visible";
   }
 
-  async marcarLeida(notificacionId: string, usuarioId: string, ahora: Date): Promise<void> {
-    const existente = this.marca(notificacionId, usuarioId);
-    if (existente) return; // la primera lectura manda (idempotente, R37)
-    this.lecturas.push({ notificacionId, usuarioId, leidaAt: ahora, descartadaAt: null });
-  }
-
   async marcarTodasLeidas(
     actor: NotificacionActor,
     desde: Date,
@@ -210,7 +204,15 @@ describe("R30 — el listado indica lectura por usuario y cuenta las no leidas",
   it("el contador se calcula sobre el mismo conjunto que se devuelve", async () => {
     const repo = new RepoFake([fila("n-1"), fila("n-2"), fila("n-3")]);
     const service = servicioCon(repo);
-    await service.marcarLeida("n-2", ADMIN_1);
+    // `marcarLeida` se borro el 2026-08-07, pero lo que prueba este caso es el CONTADOR de
+    // `listar` (R30), que sigue vivo. La lectura se siembra en el doble: hace falta una
+    // mezcla leida/no-leida, y `marcarTodasLeidas` —la unica via viva— las marcaria todas.
+    repo.lecturas.push({
+      notificacionId: "n-2",
+      usuarioId: ADMIN_1.usuarioId,
+      leidaAt: AHORA,
+      descartadaAt: null,
+    });
 
     const r = await service.listar(ADMIN_1);
 
@@ -237,7 +239,14 @@ describe("R3 — la lectura de un usuario no altera el estado de los demas del m
     const repo = new RepoFake([fila("n-1"), fila("n-2")]);
     const service = servicioCon(repo);
 
-    await service.marcarLeida("n-1", ADMIN_1);
+    // Lectura sembrada (ver R30): lo que se prueba es que la fila de lectura de un usuario
+    // NO altera el listado de otro, y eso no depende de que exista `marcarLeida`.
+    repo.lecturas.push({
+      notificacionId: "n-1",
+      usuarioId: ADMIN_1.usuarioId,
+      leidaAt: AHORA,
+      descartadaAt: null,
+    });
 
     const delUno = await service.listar(ADMIN_1);
     const delDos = await service.listar(ADMIN_2);
@@ -257,18 +266,9 @@ describe("R3 — la lectura de un usuario no altera el estado de los demas del m
   });
 });
 
-describe("R31 — marcar como leida se refleja en el siguiente listado", () => {
-  it("la notificacion aparece con read=true tras marcarla", async () => {
-    const repo = new RepoFake([fila("n-1")]);
-    const service = servicioCon(repo);
-
-    expect(await service.marcarLeida("n-1", ADMIN_1)).toEqual({ status: "ok" });
-
-    const r = await service.listar(ADMIN_1);
-    expect(r.items[0].read).toBe(true);
-    expect(r.noLeidas).toBe(0);
-  });
-});
+// R31 («marcar UNA como leida») se borro el 2026-08-07 junto con su accion, su metodo de
+// service y su metodo de repositorio: nunca tuvo control en la campana. R30 y R3 conservan
+// la lectura por usuario, que es la parte del modelo que sigue viva.
 
 describe("R32 — marcar todas deja el contador en cero", () => {
   it("marca todas las visibles y no descartadas del actor", async () => {
@@ -320,7 +320,6 @@ describe("R35 — no se puede marcar ni descartar lo que no es visible", () => {
     const repo = new RepoFake([fila("n-1", { visiblePara: ["admin-2"] })]);
     const service = servicioCon(repo);
 
-    expect(await service.marcarLeida("n-1", ADMIN_1)).toEqual({ status: "forbidden" });
     expect(await service.descartar("n-1", ADMIN_1)).toEqual({ status: "forbidden" });
     expect(repo.lecturas).toHaveLength(0);
   });
@@ -329,23 +328,12 @@ describe("R35 — no se puede marcar ni descartar lo que no es visible", () => {
     const repo = new RepoFake([]);
     const service = servicioCon(repo);
 
-    expect(await service.marcarLeida("n-x", ADMIN_1)).toEqual({ status: "not_found" });
     expect(await service.descartar("n-x", ADMIN_1)).toEqual({ status: "not_found" });
     expect(repo.lecturas).toHaveLength(0);
   });
 });
 
 describe("R37 — repetir la operacion termina con exito y con una sola fila de lectura", () => {
-  it("marcar dos veces la misma notificacion deja una unica fila", async () => {
-    const repo = new RepoFake([fila("n-1")]);
-    const service = servicioCon(repo);
-
-    expect(await service.marcarLeida("n-1", ADMIN_1)).toEqual({ status: "ok" });
-    expect(await service.marcarLeida("n-1", ADMIN_1)).toEqual({ status: "ok" });
-
-    expect(repo.lecturas).toHaveLength(1);
-  });
-
   it("descartar dos veces la misma notificacion deja una unica fila", async () => {
     const repo = new RepoFake([fila("n-1")]);
     const service = servicioCon(repo);

@@ -128,41 +128,15 @@ export interface ZonaDTO {
   tarifas?: TarifaZonaMensajeroDTO[];
 }
 
-// Feature 24/R14: DTOs del catalogo geografico global (los usa GeoRepository/
-// IGeoRepository). Reintroducidos en feature 54 (reconciliacion PR #40).
-export interface ProvinciaLightDTO {
-  id: string;
-  nombre: string;
-}
-export interface CantonLightDTO {
-  id: string;
-  nombre: string;
-}
-export interface DistritoCatalogoDTO {
-  id: string;
-  nombre: string;
-  zonaId: string | null;
-  zonaNombre: string | null;
-}
+// Aqui vivian `ProvinciaLightDTO`, `CantonLightDTO` y `DistritoCatalogoDTO` (feature 24/R14),
+// los DTOs de la navegacion por niveles del catalogo geografico. Se borraron el 2026-08-07 con
+// `GeoService`, `IGeoService` y los tres metodos no-Lite de `IGeoRepository`. El catalogo que
+// sigue vivo (feature 144) usa `OpcionCatalogo`/`OpcionConPadre` de `lib/types/filtros-ordenes`.
 
-// --- Arbol de zonas indexado por nombre normalizado (get) ---
-// Cada nivel es un objeto cuya clave es el nombre normalizado (minuscula, sin
-// acentos); el valor lleva el id, el `value` (nombre original) y sus hijos.
-export interface ArbolDistritoNode {
-  id: string;
-  value: string;
-}
-export interface ArbolCantonNode {
-  id: string;
-  value: string;
-  distritos: Record<string, ArbolDistritoNode>;
-}
-export interface ArbolZonaNode {
-  id: string;
-  value: string;
-  cantones: Record<string, ArbolCantonNode>;
-}
-export type ArbolZonas = Record<string, ArbolZonaNode>;
+// Aqui vivia el arbol zona -> canton -> distrito indexado por nombre normalizado
+// (`ArbolDistritoNode`, `ArbolCantonNode`, `ArbolZonaNode`, `ArbolZonas`). Se borro el
+// 2026-08-07 con toda su cadena: la accion `arbolZonas`, `IZonaService.arbol`,
+// `ZonaService.arbol` y `ZonaRepository.arbol`. Su unico consumidor fue siempre `ZonaForm`.
 
 // --- Resultados discriminados ---
 export type ZonaActionError =
@@ -179,18 +153,8 @@ export type ListarZonasResult =
   | { status: "ok"; items: ZonaDTO[]; page: number; pageSize: number; total: number }
   | ZonaActionError;
 export type BorrarZonaResult = { status: "ok" } | ZonaActionError;
-export type ArbolZonasResult = { status: "ok"; arbol: ArbolZonas } | ZonaActionError;
 
-// Feature 55/R10: resultados de las Server Actions del catalogo geografico. Reusan
-// el shape ZonaActionError (superset: geo solo produce validation_error/
-// unauthenticated/forbidden) para no duplicar el manejo tipado de errores.
-export type GeoActionError = ZonaActionError;
-export type ListarProvinciasResult =
-  | { status: "ok"; items: ProvinciaLightDTO[] }
-  | GeoActionError;
-export type ListarCantonesResult =
-  | { status: "ok"; items: CantonLightDTO[] }
-  | GeoActionError;
-export type ListarDistritosResult =
-  | { status: "ok"; items: DistritoCatalogoDTO[] }
-  | GeoActionError;
+// `GeoActionError` y `ListarProvinciasResult`/`ListarCantonesResult`/`ListarDistritosResult`
+// (feature 55/R10) eran los resultados de las Server Actions de `lib/actions/geo.ts`, borradas
+// el 2026-08-07. `ZonaActionError`, del que colgaban, SI sigue vivo: lo usan las cinco acciones
+// de zonas que quedan.

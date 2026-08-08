@@ -6,6 +6,6 @@ import type { VehiculoDTO } from "@/lib/types/vehiculos";
 export interface IVehiculoRepository {
   /** Todas las filas del catalogo, ordenadas por name (3: moto/carro/camion). */
   findMany(): Promise<VehiculoDTO[]>;
-  /** Fila por id; null si no existe. */
-  findById(id: string): Promise<VehiculoDTO | null>;
+  // BORRADO 2026-08-07 (tanda 2): `findById`, sin llamador desde que se retiro
+  // `VehiculoService.obtener`. El catalogo son tres filas y se lee entero.
 }

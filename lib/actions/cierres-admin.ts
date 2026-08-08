@@ -24,10 +24,14 @@ import {
   rechazarCierreSchema,
   forzarSolicitudVencidoSchema,
   listarHistoricoCierresAdminSchema,
+  listarHistoricoCierresAdminCompletoSchema,
   listarPendientesCierresAdminSchema,
+  listarPendientesCierresAdminCompletoSchema,
   type ListarCierresAdminResult,
   type ListarHistoricoCierresAdminResult,
+  type ListarHistoricoCierresAdminCompletoResult,
   type ListarPendientesCierresAdminResult,
+  type ListarPendientesCierresAdminCompletoResult,
   type VerCierreDetalleResult,
   type AprobarCierreResult,
   type RechazarCierreResult,
@@ -162,6 +166,48 @@ export async function listarPendientesCierresAdminPaginado(
     const data = listarPendientesCierresAdminSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarPendientesCierresAdminPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda D (T D.2, R1/R6/R7/R17): el HISTORICO ENTERO del alcance, del que sale el
+ * ARCHIVO de ese listado. Lectura interna del mismo proyecto -> Server Action, como el resto de
+ * este archivo.
+ *
+ * El actor se resuelve ANTES de validar (quien no tiene sesion no debe poder deducir que claves
+ * acepta esta superficie probando entradas) y la lista blanca la aplica un schema DERIVADO del
+ * de la pagina: `page`/`pageSize` mueren aqui igual que `destinoZonaId` (R17). `input: unknown =
+ * {}` para que la pantalla pueda llamarla sin argumentos.
+ */
+export async function listarHistoricoCierresAdminCompleto(
+  input: unknown = {},
+  deps: CierresAdminDeps = {},
+): Promise<ListarHistoricoCierresAdminCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarHistoricoCierresAdminCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarHistoricoCierresAdminCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda D (T D.2, R1/R6/R7/R17): la COLA ENTERA de pendientes de decision del
+ * alcance, de la que sale el ARCHIVO de ese listado. Espejo exacto de la anterior.
+ */
+export async function listarPendientesCierresAdminCompleto(
+  input: unknown = {},
+  deps: CierresAdminDeps = {},
+): Promise<ListarPendientesCierresAdminCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarPendientesCierresAdminCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarPendientesCierresAdminCompleto(actor);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }

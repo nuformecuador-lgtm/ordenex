@@ -7,6 +7,7 @@ import {
   type RespuestaFinanciera,
   type ResultadoFinanciero,
 } from "@/lib/types/analitica-financiera";
+import { importeConNeto } from "@/tests/fixtures/importe-analitico";
 
 // Feature 132 (T3.1) — el cargador del tablero financiero.
 //
@@ -51,8 +52,14 @@ function dtoDe(metricaId: string): ResultadoFinanciero {
         grano: "fecha",
         fuente: "wallet_tienda_movimiento",
         sumableCon: [],
+        // Feature 180 / R4 — `granularidad` REQUERIDA en toda vista. Grano `fecha` sobre un rango
+        // de 30 dias: `dia`. `cargar.ts` no la lee (Q4 = (a): la 180 es solo backend).
+        granularidad: "dia",
         filas: [],
-        total: { bruto: "100.00", neto: "90.00", moneda: "moneda-que-nadie-lee" },
+        // Feature 183 ⟨D12⟩: el importe lleva el discriminante `forma`, y lo pone el
+        // helper compartido de `tests/fixtures/importe-analitico.ts` para que el DTO
+        // siga siendo REAL (sin `as unknown as`) y el tipo siga vigilando este archivo.
+        total: importeConNeto("100.00", "90.00"),
       },
     ],
   };

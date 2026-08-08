@@ -82,7 +82,8 @@ export type ListarPlantillasResult = ListarPaginadoResult<PlantillaListItemDTO, 
 // Feature 170 (T B.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
 // SOLO conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18).
 export type ListarPlantillasCompletoResult = ListarCompletoResult<PlantillaListItemDTO>;
-export type ObtenerPlantillaResult = { status: "ok"; plantilla: PlantillaPublica } | ActionError;
+// BORRADO 2026-08-07 (tanda 2): `ObtenerPlantillaResult` era el retorno de `obtenerPlantilla`,
+// borrada en la tanda 1 por nacer sin pantalla de detalle. Sin referencias desde entonces.
 export type ActualizarPlantillaResult = { status: "ok"; plantilla: PlantillaPublica } | ActionError;
 export type CambiarEstadoPlantillaResult =
   | { status: "ok"; plantilla: PlantillaPublica }

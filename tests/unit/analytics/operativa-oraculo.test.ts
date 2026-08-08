@@ -28,6 +28,11 @@ const SERVICIO_MUDO: IAnaliticaOperativaService = {
   async consultar() {
     throw new Error("el servicio NO debe llegar a ejecutarse en un sondeo");
   },
+  // Feature 176 — el modo agregado recorre el MISMO oraculo. Este doble tambien lo declara
+  // mudo: si alguna vez llegara aqui por la puerta del agregado, el test lo dice a gritos.
+  async consultarAgregado() {
+    throw new Error("el servicio NO debe llegar a ejecutarse en un sondeo");
+  },
 };
 
 describe("R24 · un adminTienda no puede sondear por mensajero_id", () => {
@@ -74,6 +79,10 @@ describe("R24 · un adminTienda no puede sondear por mensajero_id", () => {
           consultaDe("entregas", MAESTRO),
         )) as never;
       },
+      // Feature 176 — la interfaz gano `consultarAgregado`; este doble no lo ejercita.
+      async consultarAgregado() {
+        throw new Error("este doble no sirve el modo agregado");
+      },
     };
     const r = await consultarAnaliticaOperativa(
       { metricaId: "entregas", raw: { rango: "dia", mensajero_id: [UUID_SONDEADO] } },
@@ -114,6 +123,10 @@ describe("R24 · lo que pierde es el FILTRO, no la VISTA", () => {
         return (await servicioCon(rollupFalso([cubo({ fecha: "2026-08-01" })])).consultar(
           consultaDe("entregas", TIENDA),
         )) as never;
+      },
+      // Feature 176 — la interfaz gano `consultarAgregado`; este doble no lo ejercita.
+      async consultarAgregado() {
+        throw new Error("este doble no sirve el modo agregado");
       },
     };
     const r = await consultarAnaliticaOperativa(

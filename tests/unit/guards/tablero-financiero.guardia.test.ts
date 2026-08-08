@@ -31,7 +31,14 @@
 //    esta atada al catalogo por el guardia de correspondencia de la 127. Una
 //    lista de ids reescrita a mano en la pantalla se desincroniza en silencio.
 //
-// AUTOCOMPROBACION: los cinco censos se ejercitan ademas contra texto sintetico
+//  - R27 (132) / R22 (183), la DECISION por id. La lista reescrita no es la unica
+//    forma de que la pantalla vuelva a saber nombres de metrica: basta un
+//    `if (metricaId === "ingreso_flete")`. El censo de listas NO lo ve —y lo dice
+//    por escrito en su propia autocomprobacion—, asi que el requisito «el tablero
+//    decide por la FORMA del DTO, nunca por el id de la metrica» quedaba sin
+//    guardia. Ver el censo (f) para donde esta la frontera.
+//
+// AUTOCOMPROBACION: los seis censos se ejercitan ademas contra texto sintetico
 // que SI contiene el patron prohibido (deben detectarlo) y contra texto limpio
 // (no deben detectarlo). Sin eso, un censo roto —una ruta mal calculada, un
 // regex que dejo de casar— seguiria en verde para siempre por vacio. Es el mismo
@@ -46,7 +53,10 @@ import path from "node:path";
 import { RolValue } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
-import { IDS_FINANCIERAS_SERVIDAS } from "@/lib/types/analitica-financiera";
+import {
+  IDS_FINANCIERAS_SERVIDAS,
+  type GranularidadVista,
+} from "@/lib/types/analitica-financiera";
 
 const RAIZ = process.cwd();
 const DIR_ANALITICA = path.join(RAIZ, "app", "(app)", "analitica");
@@ -115,7 +125,7 @@ const CENSADOS: readonly ArchivoCensado[] = [
   }));
 
 /* -------------------------------------------------------------------------- */
-/* Los cuatro censos, como funciones puras para poder autocomprobarlos         */
+/* Los censos, como funciones puras para poder autocomprobarlos                */
 /* -------------------------------------------------------------------------- */
 
 /** (a) R10 — la directiva de cliente, ignorando su mencion en un comentario. */
@@ -200,6 +210,107 @@ function listasDeIdsAMano(codigo: string): string[] {
       new RegExp(`["'\`]${id}["'\`]`).test(bloque),
     );
     return presentes.length >= 2;
+  });
+}
+
+/**
+ * (f) R27 (132) y R22 (183) — una DECISION tomada por el id de una metrica financiera.
+ *
+ * DONDE ESTA LA FRONTERA, que es lo unico dificil de este censo. El tablero SI decide
+ * por identificadores: `vista.id === VISTA_COD_RECAUDADO_POR_METODO` elige el donut, y eso
+ * es legitimo y ademas obligatorio —la cabecera de `TableroFinanciero.tsx` lo declara: se
+ * elige el componente por «tipo, id de VISTA, grano, granularidad, si trae filas»—. Lo que
+ * el requisito prohibe es otra cosa: decidir por el id de la METRICA, que es el nombre del
+ * catalogo.
+ *
+ * La distincion se puede escribir sin ambiguedad porque los dos vocabularios son disjuntos
+ * y estan en modulos distintos:
+ *
+ *   - id de VISTA  -> `"cod_recaudado__por_metodo"`, y ademas llega por CONSTANTE importada;
+ *   - id de METRICA -> `"cod_recaudado"`, uno de los diez de `IDS_FINANCIERAS_SERVIDAS`.
+ *
+ * Por eso el literal se exige COMPLETO entre comillas (`["']id["']`): la vista por metodo
+ * empieza por el id de la metrica y NO se marca, porque tras `cod_recaudado` viene `_` y no
+ * la comilla de cierre. Es la misma tecnica de `listasDeIdsAMano`, aplicada a un id suelto.
+ *
+ * Se marcan las CUATRO formas en las que un id decide algo, y solo esas:
+ *   1. una comparacion, en cualquiera de los dos ordenes (`x === "egresos"`);
+ *   2. una rama de `switch` (`case "egresos":`);
+ *   3. una prueba de pertenencia (`.includes("egresos")`, `.startsWith(...)`, `.indexOf(...)`);
+ *   4. un literal de array (`["egresos"]`), CON UNO SOLO YA BASTA: una lista de ids en la
+ *      pantalla solo existe para preguntarle si contiene algo, y el `.includes` que la
+ *      consulta suele estar en otra linea. Aqui el censo es a proposito mas ancho que
+ *      `listasDeIdsAMano` (que exige dos ids y persigue otra cosa: la lista REESCRITA).
+ *
+ * Lo que NO se marca, y no es un olvido: un id de metrica como CLAVE de un objeto de
+ * presentacion (`ETIQUETAS[id]`) o como valor de una prop. Buscar un texto por clave no
+ * ramifica QUE se pinta —que es lo que R22 prohibe—, y marcarlo convertiria el guardia en
+ * una fuente de falsos positivos sobre codigo que hoy nadie considera prohibido. Queda
+ * declarado como limite: este censo cubre la DECISION, no el diccionario.
+ *
+ * Los ids no se escriben aqui: salen de `IDS_FINANCIERAS_SERVIDAS`, la fuente unica que el
+ * censo defiende. Un id nuevo entra en el censo solo.
+ */
+function decisionesPorIdDeMetrica(codigo: string): string[] {
+  const limpio = soloCodigo(codigo);
+  return IDS_FINANCIERAS_SERVIDAS.flatMap((id) => {
+    const literal = `["'\`]${id}["'\`]`;
+    const formas: readonly RegExp[] = [
+      new RegExp(`[=!]==?\\s*${literal}`, "g"),
+      new RegExp(`${literal}\\s*[=!]==?`, "g"),
+      new RegExp(`\\bcase\\s+${literal}\\s*:`, "g"),
+      new RegExp(`\\.(?:includes|startsWith|endsWith|indexOf|lastIndexOf)\\s*\\(\\s*${literal}`, "g"),
+      new RegExp(`\\[[^[\\]]*${literal}[^[\\]]*\\]`, "g"),
+    ];
+    return formas.flatMap((forma) =>
+      (limpio.match(forma) ?? []).map((coincidencia) => `${id}: ${coincidencia.trim()}`),
+    );
+  });
+}
+
+/**
+ * (g) R16 (feature 186) — los valores del dominio `GranularidadVista`, nombrados fuera del
+ * UNICO modulo de la region autorizado a nombrarlos.
+ *
+ * POR QUE HACE FALTA ESTE CENSO Y NO OTRO. Ningun guardia del repo miraba hoy ese
+ * vocabulario. Tras el hotfix del 2026-08-06 vivia en `TableroFinanciero.tsx`; la 186 lo
+ * muda a `adaptar.ts` (⟨D1⟩) porque el rotulador de cubos tiene que ENUMERAR los granos para
+ * nombrarlos, y con la señal de forma en un archivo y el rotulador en otro habria DOS
+ * archivos de la region hablando el mismo idioma. Ahi es exactamente donde «dia» y «semana»
+ * acaban siendo el mismo pixel: uno de los dos se actualiza y el otro no, y la pantalla
+ * rotula como dias una serie semanal —siete veces mas dinero por punto— sin que ninguna
+ * asercion sobre la cifra pueda verlo.
+ *
+ * El dominio NO se reescribe aqui: se declara como registro EXHAUSTIVO sobre el tipo
+ * importado, que es la unica forma de derivarlo cuando el contrato lo publica como union de
+ * literales y no como constante de runtime. Un cuarto valor rompe la COMPILACION de este
+ * guardia (TS2739) en vez de dejarlo censando tres de cuatro en silencio. Misma intencion
+ * que el censo (e) con `RolValue`, con el mecanismo que el tipo permite.
+ *
+ * SE EXIGE EL LITERAL COMPLETO ENTRE COMILLAS, igual que en `decisionesPorIdDeMetrica`: el
+ * texto de UI que la region escribe para rotular («Semana del …») no es el valor del dominio
+ * y no se marca, porque tras `semana` no viene la comilla de cierre.
+ */
+const GRANULARIDADES_DEL_DOMINIO: Readonly<Record<GranularidadVista, true>> = {
+  dia: true,
+  semana: true,
+  no_temporal: true,
+};
+
+/**
+ * El unico modulo de la region que puede nombrar esos valores.
+ *
+ * Es `adaptar.ts` porque es el modulo PURO de la region: ahi viven la señal de forma
+ * (`esVistaTemporal`) y el rotulador (`etiquetaDeCubo`), que son las dos unicas piezas que
+ * necesitan el vocabulario, y ahi se pueden probar sin renderizar nada.
+ */
+const MODULO_DE_GRANULARIDAD = "app/(app)/analitica/_components/financiero/adaptar.ts";
+
+function nombraValoresDeGranularidad(codigo: string): string[] {
+  const limpio = soloCodigo(codigo);
+  return Object.keys(GRANULARIDADES_DEL_DOMINIO).flatMap((valor) => {
+    const patron = new RegExp(`["'\`]${valor}["'\`]`, "g");
+    return (limpio.match(patron) ?? []).map((coincidencia) => `${valor}: ${coincidencia}`);
   });
 }
 
@@ -341,6 +452,18 @@ describe("R27 · la lista de metricas financieras tiene una sola fuente", () => 
     expect(infractores, "reescriben IDS_FINANCIERAS_SERVIDAS").toEqual([]);
   });
 
+  it("ningun archivo decide por el id de una metrica financiera", () => {
+    // R22 de la 183: el tablero decide por la FORMA del DTO. Un `if (id === "ingreso_flete")`
+    // pasa el censo de listas (un id suelto no es una lista) y viola el requisito igual.
+    const infractores = CENSADOS.flatMap(({ ruta, codigo }) =>
+      decisionesPorIdDeMetrica(codigo).map((coincidencia) => `${ruta}: ${coincidencia}`),
+    );
+    expect(
+      infractores,
+      "ramifican por el nombre de la metrica en vez de por la forma del DTO (tipo, id de vista, grano, granularidad, filas, forma del importe)",
+    ).toEqual([]);
+  });
+
   it("alguien consume IDS_FINANCIERAS_SERVIDAS: la lista se usa, no se copia", () => {
     expect(
       CENSADOS.some(({ codigo }) => codigo.includes("IDS_FINANCIERAS_SERVIDAS")),
@@ -371,6 +494,43 @@ describe("R3 · el conjunto de roles que ve la region financiera tiene una sola 
       infractores,
       "redefinen a mano quien ve el dinero, en vez de derivarlo de esAccesoTotal",
     ).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (g) — R16 (186), el vocabulario de la granularidad tiene UN solo modulo     */
+/* -------------------------------------------------------------------------- */
+
+describe("R16/186 · solo un modulo de la region nombra los valores de granularidad", () => {
+  it("solo un modulo de la region nombra los valores de granularidad", () => {
+    const infractores = CENSADOS.filter(({ ruta }) => ruta !== MODULO_DE_GRANULARIDAD).flatMap(
+      ({ ruta, codigo }) =>
+        nombraValoresDeGranularidad(codigo).map((coincidencia) => `${ruta}: ${coincidencia}`),
+    );
+
+    expect(
+      infractores,
+      `el vocabulario de GranularidadVista vive en ${MODULO_DE_GRANULARIDAD} y en ningun otro archivo de la region: con dos, «dia» y «semana» acaban siendo el mismo pixel`,
+    ).toEqual([]);
+  });
+
+  it("y ese modulo SI los nombra: el censo no puede pasar por vacio", () => {
+    // Contrapeso. Sin esto, borrar el rotulador entero —o mover `adaptar.ts` de sitio— dejaria
+    // el caso de arriba en verde para siempre, censando un conjunto vacio.
+    const autorizado = CENSADOS.find(({ ruta }) => ruta === MODULO_DE_GRANULARIDAD);
+    expect(autorizado, `${MODULO_DE_GRANULARIDAD} no esta en el censo`).toBeDefined();
+
+    const nombrados = new Set(
+      nombraValoresDeGranularidad(autorizado?.codigo ?? "").map((linea) => linea.split(":")[0]),
+    );
+    // Los TRES valores del dominio, no solo alguno: el predicado nombra el no temporal y el
+    // rotulador los dos temporales.
+    expect([...nombrados].sort()).toEqual(Object.keys(GRANULARIDADES_DEL_DOMINIO).sort());
+  });
+
+  it("el dominio censado no esta vacio y sale del tipo, no de una lista escrita al lado", () => {
+    expect(Object.keys(GRANULARIDADES_DEL_DOMINIO).length).toBeGreaterThanOrEqual(3);
+    expect(Object.keys(GRANULARIDADES_DEL_DOMINIO).every((valor) => valor.length > 0)).toBe(true);
   });
 });
 
@@ -449,6 +609,91 @@ describe("autocomprobacion · el censo detecta lo que dice detectar", () => {
     expect(listasDeIdsAMano(`const ids = ["${primero}"];`)).toEqual([]);
     expect(listasDeIdsAMano("const ids = IDS_FINANCIERAS_SERVIDAS;")).toEqual([]);
     expect(listasDeIdsAMano(`// ["${primero}", "${segundo}"] escrito en un comentario`)).toEqual([]);
+  });
+
+  it("(f) detecta la decision por id de metrica en sus cuatro formas", () => {
+    const [primero] = IDS_FINANCIERAS_SERVIDAS;
+    const prohibidos = [
+      `if (metricaId === "${primero}") return null;`,
+      `if (panel.id !== '${primero}') return null;`,
+      `if ("${primero}" === panel.id) return null;`,
+      `switch (vista.id) { case "${primero}": return <PanelKpi />; }`,
+      `if (CON_NETO.includes("${primero}")) return dos;`,
+      `if (panel.id.startsWith("${primero}")) return null;`,
+      `const SOLO_ESTAS = ["${primero}"];`,
+    ];
+    for (const caso of prohibidos) {
+      expect(decisionesPorIdDeMetrica(caso), caso).not.toEqual([]);
+    }
+  });
+
+  it("(f) no marca la decision por la FORMA del DTO, que es la legitima", () => {
+    const [primero] = IDS_FINANCIERAS_SERVIDAS;
+    const legitimos = [
+      // Las tres ramas que el tablero tiene HOY: id de VISTA por constante importada,
+      // discriminante de la union y forma del importe. Ninguna nombra una metrica.
+      "if (vista.id === VISTA_COD_RECAUDADO_POR_METODO) return <GraficaDonut />;",
+      "if (vista.id === VISTA_COD_RECAUDADO_POR_TIENDA) return <GraficaBarras />;",
+      'if (datos.tipo === "conciliacion") return <PanelConciliacion />;',
+      'if (total.forma === "solo_bruto") return <KpiCard />;',
+      'if (panel.estado === "denegado") return null;',
+      'if (vista.grano === "tienda") return <Aviso />;',
+      "if (vista.filas.length === 0) return <PanelKpi />;",
+      // La rama que el hotfix del 2026-08-06 añadio: `granularidad` es un campo del DTO y
+      // `no_temporal` uno de sus valores, no el nombre de ninguna metrica.
+      'if (vista.granularidad !== "no_temporal") return <PanelKpi />;',
+      // El id de VISTA escrito entero: empieza por el id de la metrica y NO es el id de la
+      // metrica. Si esto se marcara, el censo estaria prohibiendo la decision legitima.
+      'if (vista.id === "cod_recaudado__por_metodo") return <GraficaDonut />;',
+      // Recorrer la fuente unica no es decidir por un nombre.
+      "IDS_FINANCIERAS_SERVIDAS.map((id) => consultar(id));",
+      // Y la mencion en un comentario sigue siendo obligatoria, no una violacion.
+      `// el tablero NO hace panel.id === "${primero}" (R22)`,
+    ];
+    for (const caso of legitimos) {
+      expect(decisionesPorIdDeMetrica(caso), caso).toEqual([]);
+    }
+  });
+
+  it("(f) el dominio de ids servidos no esta vacio: el censo no puede pasar por ciego", () => {
+    expect(IDS_FINANCIERAS_SERVIDAS.length).toBeGreaterThanOrEqual(2);
+    expect(IDS_FINANCIERAS_SERVIDAS.every((id) => id.length > 0)).toBe(true);
+  });
+
+  it("(g) detecta el valor de granularidad entrecomillado en sus formas reales", () => {
+    // Los ejemplos se construyen A PARTIR del dominio: si aqui se escribieran los valores, el
+    // caso seguiria en verde el dia que uno se renombre.
+    const [primero, segundo] = Object.keys(GRANULARIDADES_DEL_DOMINIO);
+    const prohibidos = [
+      `if (vista.granularidad === "${primero}") return <PanelKpi />;`,
+      `if (vista.granularidad !== '${segundo}') return null;`,
+      `switch (g) { case "${primero}": return x; }`,
+      `const TEMPORALES = ["${primero}", "${segundo}"];`,
+      `const t = \`${"${x}"}\`; const g = "${primero}";`,
+    ];
+    for (const caso of prohibidos) {
+      expect(nombraValoresDeGranularidad(caso), caso).not.toEqual([]);
+    }
+  });
+
+  it("(g) no marca el campo, ni el TIPO, ni el texto de UI que empieza igual", () => {
+    const [primero, segundo] = Object.keys(GRANULARIDADES_DEL_DOMINIO);
+    const legitimos = [
+      // El campo y el tipo se nombran en toda la region y no son el vocabulario prohibido.
+      "readonly granularidad: GranularidadVista;",
+      "if (esVistaTemporal(vista)) return <PanelLineas />;",
+      "const g = vista.granularidad;",
+      // El texto de UI del rotulo: empieza por el valor y NO es el valor, porque tras el
+      // literal no viene la comilla de cierre. Si esto se marcara, el censo prohibiria
+      // escribir la palabra en la pantalla, que es justo lo que la feature tiene que hacer.
+      `const TEXTOS = { cuboSemana: "Semana del", cuboDia: "Día" };`,
+      // Y la mencion en un comentario sigue siendo obligatoria, no una violacion.
+      `// se pregunta por la negativa: distinto de "${primero}" y de "${segundo}"`,
+      `/* el dominio es "${primero}" | "${segundo}" */`,
+    ];
+    for (const caso of legitimos) {
+      expect(nombraValoresDeGranularidad(caso), caso).toEqual([]);
+    }
   });
 
   it("(e) detecta una lista de roles a mano y no un rol suelto ni el TIPO", () => {

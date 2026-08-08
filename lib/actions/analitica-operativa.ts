@@ -16,7 +16,13 @@ import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepos
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import type { IAnaliticaOperativaService } from "@/lib/interfaces/services/IAnaliticaOperativaService";
-import type { ResultadoOperativo } from "@/lib/types/analitica-operativa";
+import {
+  ERROR_UNIDAD_NO_AGREGABLE,
+  esUnidadAgregable,
+  type GranoAgregado,
+  type ResultadoAgregado,
+  type ResultadoOperativo,
+} from "@/lib/types/analitica-operativa";
 import { sondeaIdentidadDeMensajero } from "@/lib/analytics/oraculo-mensajero";
 
 // Feature 126 (T9, design §5.3) — EL BORDE de la analitica operativa.
@@ -133,6 +139,62 @@ export async function consultarAnaliticaOperativa(
 }
 
 /**
+ * Feature 176 (D1/T3.1) — LA LECTURA AGREGADA, por su propia Server Action.
+ *
+ * Recorre EXACTAMENTE los mismos cuatro pasos que `consultarAnaliticaOperativa` y reusa
+ * `denegar()` y `sondeaIdentidadDeMensajero`: el modo agregado NO es una puerta trasera. Si
+ * el oraculo se duplicara aqui, el agujero que R24/R36 de la 126 cerro para el filtro por
+ * mensajero se reabriria por la puerta del agregado — literalmente lo que la 126 advirtio
+ * para el CSV de la 134.
+ *
+ * `construirServicio` se reusa TAL CUAL (R17): el agregado consume `agregarCubos`, el mismo
+ * metodo que decora la cache de la 128, con la misma clave; no hay superficie de cache
+ * nueva, el codec de `bigint` no se toca y el dia en curso sigue fuera de la cache por
+ * construccion (el repositorio vivo no se decora).
+ *
+ * @sin-superficie nacio sin cablear (feature 176, be51ad9c del 2026-08-03) y sigue asi: la UI de analitica agrega en el CLIENTE (`analitica/_components/operativo/agregacion.ts`), asi que el «modo agregado» del servidor no tiene todavia pantalla que lo pida. Backend listo y probado a la espera de su UI; si esa UI no llega, esto sobra.
+ */
+export async function consultarAgregadoOperativo(
+  entrada: EntradaOperativa & { readonly grano?: GranoAgregado },
+  deps: AnaliticaOperativaDeps = {},
+): Promise<ResultadoAgregado> {
+  const logger = deps.logger ?? defaultLogger;
+  const now = deps.now ?? (() => new Date());
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+
+  const preparada = prepararConsultaAnalitica(entrada.raw, actor, entrada.metricaId, now());
+
+  if (preparada.status === "validation_error") {
+    return { status: "validation_error", fieldErrors: preparada.fieldErrors };
+  }
+
+  if (preparada.status === "forbidden") {
+    return denegar(logger, preparada.motivo, actor, entrada);
+  }
+
+  if (sondeaIdentidadDeMensajero(preparada.consulta.filtro, preparada.consulta.politicaIdentidad)) {
+    return denegar(logger, "filtro_fuera_de_alcance", actor, entrada);
+  }
+
+  // R12 — DESPUES del alcance, nunca antes: quien no puede ver la metrica recibe `forbidden`
+  // y no una pista sobre su unidad. Y antes del servicio: el repositorio recibe CERO
+  // llamadas. Agregar una metrica de `conteo` sumaria un STOCK entre fechas.
+  if (!esUnidadAgregable(preparada.consulta.metrica.unidad)) {
+    return {
+      status: "validation_error",
+      fieldErrors: { metricaId: [ERROR_UNIDAD_NO_AGREGABLE] },
+    };
+  }
+
+  const service = deps.service ?? construirServicio(now);
+  const datos = await service.consultarAgregado(preparada.consulta, {
+    ...(entrada.grano ? { grano: entrada.grano } : {}),
+    ...(entrada.desagregacion ? { desagregacion: entrada.desagregacion } : {}),
+  });
+  return { status: "ok", datos };
+}
+
+/**
  * R5 — auditar y DESPUES responder. Se aisla en una funcion para que las dos vias de denegado
  * (la del resolutor y la del oraculo de R24) dejen EXACTAMENTE el mismo rastro y no haya una
  * segunda forma de responder 403 que alguien pueda olvidar auditar.
@@ -145,7 +207,11 @@ function denegar(
   motivo: Parameters<typeof describirDenegado>[0]["motivo"],
   actor: ActorAnalitica | null,
   entrada: EntradaOperativa,
-): ResultadoOperativo {
+  // El tipo de retorno es el `forbidden` DESNUDO —no `ResultadoOperativo`— para que las dos
+  // lecturas (serie y agregado, feature 176) compartan esta misma funcion. Es el punto del
+  // comentario de arriba: una segunda forma de responder 403 seria una que alguien puede
+  // olvidar auditar.
+): { readonly status: "forbidden" } {
   logger.logError(
     describirDenegado({ motivo, actor, metricaId: entrada.metricaId, filtro: entrada.raw }),
   );

@@ -149,12 +149,9 @@ export interface ListOrdenesResult {
   total: number;
 }
 
-export interface GeoExistence {
-  zona: boolean;
-  provincia: boolean;
-  canton: boolean;
-  distrito: boolean; // true si no se consulta distrito (opcional) o si existe
-}
+// BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivia `GeoExistence`,
+// el resultado de `existsGeo`. Se fue con el alta MANUAL. La carga masiva resuelve la
+// geografia por NOMBRE, no comprobando ids uno a uno.
 
 /**
  * Feature 141 (design §3.1) — contexto del LOTE de carga masiva que acompana a una insercion
@@ -663,23 +660,11 @@ export interface IOrdenRepository {
     ownerId: string;
     devueltaOrigenEstatusId: string;
   }): Promise<CancelarViaApiResult>;
-  /**
-   * Feature 49/#2 (R10/R20): crea la orden y su primera fila de historial (origen null =
-   * creacion, destino = estado inicial) en la MISMA transaccion (R7). `historial` aporta el
-   * actor (usuario que crea) y `origenTipo` = `creacion_manual`.
-   *
-   * Feature 155 (R3/R8/R12): `opciones.conGuia` numera la orden DENTRO de esa misma tx. Se
-   * eligio un parametro con default en vez de un `createConGuia` hermano porque duplicaria
-   * la transaccion entera (create + historial + geocodificacion) por UNA sentencia de
-   * diferencia — y ya sabemos como termina eso: `createManyOrdenes` y
-   * `createManyOrdenesConGuia` divergieron hasta que una encolaba geocodificacion y la otra
-   * no. El default preserva el comportamiento de todos los llamadores previos.
-   */
-  create(
-    data: CreateOrdenData,
-    historial: HistorialContexto,
-    opciones?: CreateOrdenOpciones,
-  ): Promise<OrdenDTO>;
+  // BORRADO 2026-08-07 (tanda 2): aqui se declaraba `create`, el insert de UNA orden (alta
+  // manual). Sin llamador desde que se retiro `OrdenService.crear`. El insert vivo es EN
+  // LOTE: `createManyOrdenes` y `createManyOrdenesConGuia`, mas abajo. El argumento sobre
+  // `opciones.conGuia` que vivia en este jsdoc sigue siendo valido y esta en el de
+  // `createManyOrdenesConGuia`.
   /** Excluye borradas (deleted_at IS NOT NULL); null si no existe o esta borrada (R34). */
   findById(id: string): Promise<OrdenDTO | null>;
   list(params: ListOrdenesParams): Promise<ListOrdenesResult>;
@@ -694,9 +679,8 @@ export interface IOrdenRepository {
     data: UpdateOrdenData,
     historial: HistorialContexto,
   ): Promise<OrdenDTO | null>;
-  /** Fija deleted_at; false si no existe o ya estaba borrada (R39/R40). */
-  softDelete(id: string): Promise<boolean>;
-  existsEstatus(estatusId: string): Promise<boolean>;
+  // BORRADO 2026-08-07 (tanda 2): `softDelete` (unico writer de `deleted_at`) y
+  // `existsEstatus`. El predicado `deleted_at IS NULL` sigue vivo en TODAS las lecturas.
   findEstatusIdByValue(value: string): Promise<string | null>;
   /**
    * Feature 27/R15/R16/R17: lee `usuario.fulfillment` de la tienda que realiza la
@@ -704,12 +688,7 @@ export interface IOrdenRepository {
    * no resuelve, coherente con el default de la columna (R3).
    */
   findUsuarioFulfillment(usuarioId: string): Promise<boolean>;
-  existsGeo(input: {
-    zonaId: string;
-    provinciaId: string;
-    cantonId: string;
-    distritoId?: string | null;
-  }): Promise<GeoExistence>;
+  // BORRADO 2026-08-07 (tanda 2): `existsGeo`. Ver la lapida de `GeoExistence` arriba.
 
   // --- Feature 15: carga masiva (metodos batch, R19/R21/R22/R25/R27) ---
 
@@ -1010,6 +989,38 @@ export interface IOrdenRepository {
     filtro: RecepcionSateliteFiltro,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<RecepcionSateliteRow>>;
+  /**
+   * Feature 184 — Tanda A (T A.1, R1/R2/R15/R16): el CONJUNTO FILTRADO ENTERO del mismo
+   * listado, sin recorte, para producir el archivo de la descarga.
+   *
+   * Comparte con `findRecepcionSatelitePaginada` el criterio y el orden —los dos salen del
+   * mismo fragmento SQL, no de dos declaraciones parecidas—, asi que la fila N del archivo es
+   * la fila N que la pantalla enseña paginando (R5/R16). Lo unico que NO lleva es
+   * `LIMIT`/`OFFSET`.
+   *
+   * El tope de filas es una regla de NEGOCIO y no se evalua aqui (R6: lo aplica el servicio).
+   * Vacio si `estatusValues` esta vacio. Solo query.
+   */
+  findRecepcionSateliteCompleta(
+    filtro: RecepcionSateliteFiltro,
+  ): Promise<RecepcionSateliteRow[]>;
+  /**
+   * Feature 184 — Tanda A (T A.2, R19/R21): cuales de `ids` siguen perteneciendo al conjunto
+   * filtrado. Es la comprobacion con la que la pantalla PODA su seleccion cuando una orden
+   * marcada deja de estar en el listado.
+   *
+   * Devuelve los VIGENTES (subconjunto de `ids`), nunca los caducados: una respuesta vacia por
+   * error no puede leerse como «desmarca todo». El acotamiento del listado —zona, no borradas,
+   * estados y filtros vigentes— se repite ENTERO en el `WHERE`: el `IN` de ids no es la guarda,
+   * porque los ids los propone el cliente (R21).
+   *
+   * Una sola consulta de UNA columna. Vacio —y sin consultar— si `ids` o `estatusValues` estan
+   * vacios. Solo query.
+   */
+  findIdsVigentesEnBodega(
+    filtro: RecepcionSateliteFiltro,
+    ids: readonly string[],
+  ): Promise<string[]>;
   /**
    * Feature 170 — FASE 2 (T K.2, R44/R46): los pares canton/distrito DISTINTOS del conjunto
    * del actor (su zona + los estados del listado), para las OPCIONES de los desplegables.

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
+import { granularidadDe, trocear, type CuboTemporal } from "@/lib/analytics/cubo-temporal";
 import { UMBRAL_AVISO_DESCUADRE_CONCILIACION } from "@/lib/config/analitica-financiera";
 import { monedaConfig } from "@/lib/config/moneda";
 import { defaultLogger, type ErrorLogger } from "@/lib/errors/logger";
@@ -28,6 +29,8 @@ import {
   type FilaConciliacion,
   type FilaFinanciera,
   type ImporteAnalitico,
+  type ImporteConNeto,
+  type ImporteSoloBruto,
   type ResultadoFinanciero,
   type VistaFinanciera,
 } from "@/lib/types/analitica-financiera";
@@ -44,13 +47,21 @@ import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 // alcance, parsear filtros y —sobre todo— reimplementar una resta de dinero.
 //
 // R20 / R27 — EL REUSO NO ES OPCIONAL, Y ES EL PUNTO MAS CARO DE LA FEATURE. El `neto` de las
-// dos cuentas por pagar y de las SEIS metricas de caja sale de `derivarSaldoTienda`,
+// dos cuentas por pagar y de las metricas de caja que lo publican sale de `derivarSaldoTienda`,
 // `derivarCuentaPorPagar`, `derivarBalance` y —desde la 173— `derivarCaja`, que ya existen, ya son
 // money-safe y ya tienen sus tests. Escribir aqui `creditos.sub(debitos)` crearia una SEGUNDA
 // definicion de "saldo" al lado
 // de la que la tienda ve en `/mi-wallet`, y las dos pueden divergir sin que nada falle: no da un
 // error, da una discusion. Toda la aritmetica que si vive aqui es SUMA de agregados —nunca la
 // resta con signo— y toda es `Prisma.Decimal`.
+//
+// ⟨D12⟩ humano, 2026-08-04 (`progress/decision_183.md`, feature 183) — CUANTAS METRICAS DE CAJA
+// PUBLICAN NETO. De las CUATRO que salen de `wallet_movimiento` por `deCaja`, solo `egresos` lo
+// publica: las tres `ingreso_*` declaran listas homogeneas de prefijo y el CHECK categoria↔tipo
+// de la 173 admite un solo `tipo` por categoria, luego `Σ egreso = 0` y `neto = +bruto` SIEMPRE.
+// Para esas tres `derivarBalance` DEJA DE LLAMARSE, y no es una perdida de reuso: era una resta
+// contra cero. Donde hay resta que hacer —`egresos`, las dos cuentas por pagar, la vista B de
+// recaudo y las dos de tesoreria— R20 sigue cumpliendose entera.
 //
 // R5 / R10 — `dominio_invalido` es un estado de PRIMERA CLASE y se decide ANTES de tocar ningun
 // repositorio. Una rama por defecto que sirviera `entregas` con ceros seria peor que un fallo:
@@ -77,13 +88,32 @@ function sumar(valores: readonly string[]): Prisma.Decimal {
 }
 
 /**
- * Un importe del DTO. La moneda sale de `lib/config/moneda.ts` (S2/R29): ni el codigo ni el
- * simbolo se escriben aqui.
+ * Un importe del DTO con las DOS cifras. La moneda sale de `lib/config/moneda.ts` (S2/R29): ni
+ * el codigo ni el simbolo se escriben aqui.
  */
-function importe(bruto: Prisma.Decimal | string, neto: Prisma.Decimal | string): ImporteAnalitico {
+function importeConNeto(
+  bruto: Prisma.Decimal | string,
+  neto: Prisma.Decimal | string,
+): ImporteConNeto {
   return {
+    forma: "bruto_y_neto",
     bruto: new Prisma.Decimal(bruto).toFixed(2),
     neto: new Prisma.Decimal(neto).toFixed(2),
+    moneda: monedaConfig.currency,
+  };
+}
+
+/**
+ * Un importe del DTO SIN neto ⟨D12⟩. El segundo —y ultimo— sitio donde se escribe `moneda`:
+ * partir el constructor en dos no abre una via nueva para el codigo ISO (S2/R29).
+ *
+ * No lleva `neto: null` a proposito (R23 / R15 de la 132): un ausente significa «no se sabe» y
+ * aqui la verdad es «no aplica». La clave no existe, y leerla no compila.
+ */
+function importeSoloBruto(bruto: Prisma.Decimal | string): ImporteSoloBruto {
+  return {
+    forma: "solo_bruto",
+    bruto: new Prisma.Decimal(bruto).toFixed(2),
     moneda: monedaConfig.currency,
   };
 }
@@ -108,6 +138,56 @@ function porCubo<T>(
   return orden.map((clave) => ({ cubo: clave, filas: mapa.get(clave) ?? [] }));
 }
 
+/**
+ * Feature 180 ⟨D3⟩ / R7 — reparte las filas del repositorio en UN GRUPO POR CUBO, incluidos los
+ * cubos en los que no hubo ningun movimiento (que se quedan con la lista vacia).
+ *
+ * Aqui nace la DENSIDAD de la serie, y nace de una sola linea: `cubos.map(() => [])`. Un cubo sin
+ * movimiento no necesita ningun caso especial ni ningun literal `"0.00"` — su grupo vacio pasa por
+ * el mismo constructor de importe que los demas y `sumar([])` da cero con escala 2. Si esto se
+ * escribiera al reves (agrupar lo que vino y luego "rellenar los huecos"), el cero seria un valor
+ * inventado en vez del resultado de sumar nada.
+ *
+ * Un indice fuera del troceo LANZA (R25, mismo criterio que el resto de la feature): significaria
+ * que el repositorio particiono por una ventana distinta de la que el servicio pidio, y descartar
+ * esa fila en silencio perderia dinero de la serie sin que nada fallara.
+ */
+function agruparPorIndiceDeCubo<T extends { readonly indiceCubo: number }>(
+  cubos: readonly CuboTemporal[],
+  filas: readonly T[],
+): readonly (readonly T[])[] {
+  const grupos: T[][] = cubos.map(() => []);
+  for (const fila of filas) {
+    const grupo = grupos[fila.indiceCubo];
+    if (grupo === undefined) {
+      throw new Error(
+        `analitica financiera: el repositorio devolvio el cubo ${fila.indiceCubo} y el troceo del rango solo tiene ${cubos.length}`,
+      );
+    }
+    grupo.push(fila);
+  }
+  return grupos;
+}
+
+/**
+ * Feature 180 R6/R7/R10 — la serie DENSA de una metrica de FLUJO: una fila por cubo, en el orden
+ * de `trocear(rango)` (cronologico ascendente y sin claves repetidas, por construccion).
+ *
+ * La clave la pone AQUI el servicio, desde `cubo.clave`, y no el repositorio ⟨D4⟩: el SQL nunca
+ * emite una fecha, asi que no puede nacer una segunda definicion del dia de Costa Rica.
+ *
+ * `importeDe` es el MISMO constructor que produce el `total` de la vista (⟨D7⟩ / R27), de modo que
+ * la variante de `ImporteAnalitico` de cada fila no puede divergir de la del total.
+ */
+function serieDensa<T extends { readonly indiceCubo: number }>(
+  cubos: readonly CuboTemporal[],
+  filas: readonly T[],
+  importeDe: (delCubo: readonly T[]) => ImporteAnalitico,
+): readonly FilaFinanciera[] {
+  const grupos = agruparPorIndiceDeCubo(cubos, filas);
+  return cubos.map((cubo, i) => ({ cubo: cubo.clave, importe: importeDe(grupos[i]) }));
+}
+
 /** Σ de las filas cuyo `tipo` es el pedido. */
 function sumaDeTipo<T extends { readonly tipo: string; readonly suma: string }>(
   filas: readonly T[],
@@ -128,14 +208,23 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
     /** ⟨D5⟩/R40 — se inyecta para poder medir los dos lados del umbral sin tocar la config. */
     private readonly umbralDescuadre: string = UMBRAL_AVISO_DESCUADRE_CONCILIACION,
   ) {
-    const caja: Manejador = (c) => this.deCaja(c);
+    // ⟨D12⟩ humano, 2026-08-04 (`progress/decision_183.md`) — LA FORMA DEL IMPORTE ENTRA COMO
+    // SELECTOR EXPLICITO, no como un `if` por id dentro del manejador (mismo precedente que las
+    // dos de tesoreria, abajo). Las cuatro comparten repositorio, consulta y manejador; lo unico
+    // que las separa es si su `neto` informa de algo.
+    const cajaSoloBruto: Manejador = (c) => this.deCaja(c, "solo_bruto");
+    const cajaConNeto: Manejador = (c) => this.deCaja(c, "bruto_y_neto");
     this.despacho = {
-      ingreso_flete: caja,
-      ingreso_comision_cod: caja,
-      ingreso_iva: caja,
-      // ⟨D8(b)⟩ / R18 — `egresos` la produce ESTA feature, con el mismo repositorio y las OCHO
-      // categorias `egreso_*` que el catalogo declara. No hay estado `no_producida`.
-      egresos: caja,
+      // Listas homogeneas de prefijo `ingreso_*`: con el CHECK de la 173, `neto = +bruto` siempre.
+      ingreso_flete: cajaSoloBruto,
+      ingreso_comision_cod: cajaSoloBruto,
+      ingreso_iva: cajaSoloBruto,
+      // ⟨D8(b)⟩ / R18 — `egresos` la produce ESTA feature, con el mismo repositorio y las NUEVE
+      // categorias que el catalogo declara. No hay estado `no_producida`.
+      // ⟨D12⟩ — y CONSERVA el neto: desde la 183 su definicion incluye `ingreso_ajuste`, el
+      // reverso que emite la anulacion de un egreso, asi que la lista deja de ser homogenea y el
+      // neto pasa a significar lo que de verdad salio de caja.
+      egresos: cajaConNeto,
       // Feature 173 ⟨P4⟩ (`progress/decision_F2_173.md`) — las DOS cifras de la caja en modo
       // tesoreria. Mismo repositorio y misma consulta; lo unico que cambia entre ellas es CUAL de
       // las dos cifras que `derivarCaja` produce se publica como `neto`, y eso entra como
@@ -199,19 +288,62 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
   /**
    * `ingreso_flete`, `ingreso_comision_cod`, `ingreso_iva` y `egresos`.
    *
-   * El repositorio devuelve `(categoria, tipo, suma)` y aqui se aplica el signo con
-   * `derivarBalance` (R20): `neto = Σ ingreso − Σ egreso`. El `bruto` es la Σ de todo, sin signo
-   * ⟨D1(c)⟩ — servir solo el neto esconderia el volumen y servir solo el bruto mentiria en cuanto
-   * hubiera una anulacion.
+   * El repositorio devuelve `(categoria, tipo, suma)`. El `bruto` es la Σ de todo, SIN signo
+   * ⟨D1(c)⟩: es VOLUMEN MOVIDO, y por eso la anulacion de un egreso lo SUBE (el pago y su
+   * reverso son dos movimientos) mientras baja el neto. Es la respuesta ratificada a la P1 de
+   * la 183, y la descripcion de `egresos` en el catalogo la declara con todas las letras.
    *
-   * La vista no trae `filas` (S16): la unica dimension que estas cuatro metricas declaran es
-   * `fecha`, y el repositorio agrega la ventana entera —es lo que `design.md §6` especifica—, asi
-   * que no hay cubos que publicar. Inventar una fila con la fecha de inicio del rango afirmaria
-   * que todo el dinero se movio ese dia.
+   * La `forma` llega como PARAMETRO ⟨D12⟩, no se decide aqui por id:
+   *
+   *  - `"bruto_y_neto"` (solo `egresos`) — el signo lo aplica `derivarBalance` (R20):
+   *    `neto = Σ ingreso − Σ egreso`, y se CONSERVA negativo cuando sale dinero. Esa resta no se
+   *    escribe aqui: duplicarla crearia una segunda definicion de «balance» al lado de la que
+   *    `/mi-wallet` muestra.
+   *  - `"solo_bruto"` (las tres `ingreso_*`) — `derivarBalance` ni se llama: sus listas son
+   *    homogeneas de prefijo, `Σ egreso` es cero por construccion y el neto no informaria de
+   *    nada. Publicarlo invitaria a leerlo como si informara.
+   *
+   * FEATURE 180 — LA VISTA YA TRAE `filas`: una por cubo temporal del rango ⟨D1⟩/R1. Lo que la
+   * 127 se negaba a hacer era ATRIBUIR el agregado de la ventana entera a una fecha inventada;
+   * aqui la atribucion es real, porque cada movimiento lo coloca en su cubo el repositorio por su
+   * propio `fecha_movimiento`.
+   *
+   * DOS consultas, no una (⟨D7⟩ + R12/R15): el `total` lo sigue produciendo `sumarPorCategoria`
+   * —exactamente como en la 127, de donde sale R15 por construccion— y las filas salen de
+   * `sumarPorCuboYCategoria`. Derivar el total sumando los cubos ahorraria una consulta y
+   * convertiria R12 («Σ filas == total») en una tautologia: la invariante solo vale algo mientras
+   * los dos numeros lleguen por caminos distintos.
    */
-  private async deCaja(consulta: ConsultaAnalitica): Promise<ResultadoFinanciero> {
-    const filas: readonly AgregadoCategoriaCaja[] = await this.ingresos.sumarPorCategoria(consulta);
-    const balance = derivarBalance(sumaDeTipo(filas, "ingreso"), sumaDeTipo(filas, "egreso"));
+  private async deCaja(
+    consulta: ConsultaAnalitica,
+    forma: "solo_bruto" | "bruto_y_neto",
+  ): Promise<ResultadoFinanciero> {
+    const cubos = trocear(consulta.rango);
+    const [filas, porCuboTemporal] = await Promise.all([
+      this.ingresos.sumarPorCategoria(consulta),
+      // R22 — los cubos salen de `trocear(consulta.rango)` y de ningun otro sitio: no son un
+      // canal para colar una ventana propia.
+      this.ingresos.sumarPorCuboYCategoria(consulta, cubos),
+    ]);
+
+    /**
+     * ⟨D7⟩ / R27 — EL UNICO SITIO DONDE SE CONSTRUYE UN IMPORTE DE ESTA VISTA. Lo usan el `total`
+     * Y cada una de las filas, asi que las dos cosas son siempre la MISMA variante de la union
+     * (`solo_bruto` o `bruto_y_neto`). Duplicar el ternario para las filas compilaria igual —cada
+     * fila se tipa por separado— y produciria una vista con el total de una forma y las filas de
+     * otra, que es exactamente lo que R18 de la 183 declara inaceptable. Y cuando una ficha
+     * futura retire un campo de `ImporteAnalitico`, el cambio sigue siendo de UN sitio y no de
+     * uno por cubo.
+     */
+    const construirImporte = (delGrupo: readonly AgregadoCategoriaCaja[]): ImporteAnalitico =>
+      forma === "solo_bruto"
+        ? importeSoloBruto(sumar(delGrupo.map((f) => f.suma)))
+        : importeConNeto(
+            sumar(delGrupo.map((f) => f.suma)),
+            // R17 — la resta con signo la sigue haciendo `derivarBalance`, ahora tambien POR
+            // CUBO. Ni un `.sub(` nuevo aqui.
+            derivarBalance(sumaDeTipo(delGrupo, "ingreso"), sumaDeTipo(delGrupo, "egreso")).balance,
+          );
 
     return {
       ...this.cabecera(consulta),
@@ -222,8 +354,12 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           grano: "fecha",
           fuente: "wallet_movimiento",
           sumableCon: [],
-          filas: [],
-          total: importe(sumar(filas.map((f) => f.suma)), balance.balance),
+          // ⟨D2⟩ / R4 (feature 180) — la granularidad sale del RANGO, nunca de un `if` por id de
+          // metrica: este manejador sirve a las cuatro de caja y las cuatro publican grano
+          // `fecha`, asi que la unica variable es el tamano de la ventana consultada.
+          granularidad: granularidadDe(consulta.rango),
+          filas: serieDensa(cubos, porCuboTemporal, construirImporte),
+          total: construirImporte(filas),
         },
       ],
     };
@@ -254,10 +390,20 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
     consulta: ConsultaAnalitica,
     cifra: (resumen: CajaResumenDTO) => string,
   ): Promise<ResultadoFinanciero> {
-    const filas: readonly AgregadoCategoriaCaja[] = await this.ingresos.sumarPorCategoria(consulta);
-    const resumen = derivarCaja(
-      filas.map((f) => ({ categoria: f.categoria, tipo: f.tipo, total: f.suma })),
-    );
+    const cubos = trocear(consulta.rango);
+    const [filas, porCuboTemporal] = await Promise.all([
+      this.ingresos.sumarPorCategoria(consulta),
+      this.ingresos.sumarPorCuboYCategoria(consulta, cubos),
+    ]);
+
+    /** ⟨D7⟩ / R27 — el mismo constructor para el total y para cada cubo. Ver `deCaja`. */
+    const construirImporte = (delGrupo: readonly AgregadoCategoriaCaja[]): ImporteAnalitico =>
+      importeConNeto(
+        sumar(delGrupo.map((f) => f.suma)),
+        // R17 — la particion por naturaleza y las restas con signo las hace `derivarCaja`,
+        // ahora tambien POR CUBO. El selector elige la misma cifra en las filas y en el total.
+        cifra(derivarCaja(delGrupo.map((f) => ({ categoria: f.categoria, tipo: f.tipo, total: f.suma })))),
+      );
 
     return {
       ...this.cabecera(consulta),
@@ -271,8 +417,10 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           // primera contiene dinero de terceros que la segunda excluye a proposito), ni con
           // `egresos`, que es un subconjunto de las dos.
           sumableCon: [],
-          filas: [],
-          total: importe(sumar(filas.map((f) => f.suma)), cifra(resumen)),
+          // ⟨D2⟩ / R4 — grano `fecha`: la granularidad la decide el rango (ver `deCaja`).
+          granularidad: granularidadDe(consulta.rango),
+          filas: serieDensa(cubos, porCuboTemporal, construirImporte),
+          total: construirImporte(filas),
         },
       ],
     };
@@ -302,10 +450,14 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
       grano: "metodo_pago",
       fuente: "cierre_dia",
       sumableCon: [],
-      filas: porMetodo.map((m) => ({ cubo: m.metodo, importe: importe(m.suma, m.suma) })),
+      // ⟨D2⟩ / R4 — `no_temporal` EXPLICITO: el cubo de esta vista es el metodo de pago, no una
+      // fecha. Se declara, no se omite: omitirlo dejaria «no se mide en el tiempo» y «se me
+      // olvido declararlo» siendo el mismo valor.
+      granularidad: "no_temporal",
+      filas: porMetodo.map((m) => ({ cubo: m.metodo, importe: importeConNeto(m.suma, m.suma) })),
       total: (() => {
         const t = sumar(porMetodo.map((m) => m.suma));
-        return importe(t, t);
+        return importeConNeto(t, t);
       })(),
     };
 
@@ -313,7 +465,7 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
     // algo, y lo produce `derivarSaldoTienda` (R20).
     const filasTienda: FilaFinanciera[] = porCubo(porTienda, (f) => f.tiendaId).map((g) => ({
       cubo: g.cubo,
-      importe: importe(
+      importe: importeConNeto(
         sumar(g.filas.map((f) => f.suma)),
         derivarSaldoTienda(sumaDeTipo(g.filas, "credito"), sumaDeTipo(g.filas, "debito")).saldo,
       ),
@@ -324,8 +476,10 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
       grano: "tienda",
       fuente: "wallet_tienda_movimiento",
       sumableCon: [],
+      // ⟨D2⟩ / R4 — el cubo es la tienda: `no_temporal`, declarado igual que la vista A.
+      granularidad: "no_temporal",
       filas: filasTienda,
-      total: importe(
+      total: importeConNeto(
         sumar(porTienda.map((f) => f.suma)),
         derivarSaldoTienda(sumaDeTipo(porTienda, "credito"), sumaDeTipo(porTienda, "debito")).saldo,
       ),
@@ -351,15 +505,18 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           grano: "tienda",
           fuente: "wallet_tienda_movimiento",
           sumableCon: [],
+          // ⟨D2⟩ / R4 — el cubo es la tienda: `no_temporal`. Q1 = (a) deja esta metrica FUERA
+          // del conjunto con desglose por fecha, asi que aqui no hay serie que declarar.
+          granularidad: "no_temporal",
           filas: porCubo(filas, (f) => f.tiendaId).map((g) => ({
             cubo: g.cubo,
-            importe: importe(
+            importe: importeConNeto(
               sumar(g.filas.map((f) => f.suma)),
               derivarSaldoTienda(sumaDeTipo(g.filas, "credito"), sumaDeTipo(g.filas, "debito"))
                 .saldo,
             ),
           })),
-          total: importe(
+          total: importeConNeto(
             sumar(filas.map((f) => f.suma)),
             derivarSaldoTienda(sumaDeTipo(filas, "credito"), sumaDeTipo(filas, "debito")).saldo,
           ),
@@ -369,14 +526,64 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
   }
 
   /**
-   * `cuenta_por_pagar_mensajero`: UN total al corte, con `derivarCuentaPorPagar` (R20/R21).
+   * `cuenta_por_pagar_mensajero`: el saldo al corte, con `derivarCuentaPorPagar` (R20/R21), y
+   * —desde la feature 180— su serie por fecha.
    *
-   * Sin `filas` y sin cubos, y eso es la proteccion, no una carencia (R14): el catalogo no
-   * declara grano `mensajero`, asi que aqui no hay —ni puede haber— un id de persona.
+   * Las filas siguen SIN cubo de persona, y eso es la proteccion, no una carencia (R14/R24): el
+   * catalogo no declara grano `mensajero`, la clave de cada fila es una fecha y ninguno de los
+   * tres metodos de repositorio acepta ni emite un id de persona.
+   *
+   * ⟨D5⟩ / R9 / R14 — ESTA SERIE NO ES UN FLUJO, Y ESA ES TODA LA DIFICULTAD. La metrica es
+   * `esAcumulado: true`: cada fila es el SALDO AL CIERRE de su cubo sobre todo el libro anterior,
+   * sin cota inferior. Publicar el movimiento del cubo daria una cifra distinta, plausible y
+   * falsa — la peor combinacion, porque nadie la vería como un error.
+   *
+   * Como se construye, y por que asi:
+   *   1. `...AntesDe` trae el SALDO DE ARRASTRE (Σ por tipo con `< rango.desde`);
+   *   2. `...PorCubo` trae el movimiento de cada cubo dentro del rango;
+   *   3. el servicio acumula los COMPONENTES —`devengo` y `pago` por separado, en
+   *      `Prisma.Decimal`— arrancando desde el arrastre, y llama a `derivarCuentaPorPagar` UNA
+   *      VEZ POR CUBO.
+   *
+   * Asi el servicio solo SUMA, que es lo unico que la 127 le permite hacer con dinero, y la resta
+   * con signo la sigue haciendo la funcion compartida que `/mi-wallet` tambien usa (R17): no
+   * aparece ni un `.sub(` nuevo. Y como arrastre (`< desde`) + Σ cubos (`[desde, hasta)`) es
+   * exactamente `...AlCorte` (`< hasta`), la ULTIMA fila coincide campo a campo con el `total`
+   * (R13) — incluido el `bruto`, que por eso es el acumulado (`devengo + pago`) y no el del cubo.
    */
   private async deCuentaDeMensajeros(consulta: ConsultaAnalitica): Promise<ResultadoFinanciero> {
-    const filas = await this.cuentasPorPagar.cuentaPorPagarMensajerosAlCorte(consulta);
-    const cuenta = derivarCuentaPorPagar(sumaDeTipo(filas, "devengo"), sumaDeTipo(filas, "pago"));
+    const cubos = trocear(consulta.rango);
+    const [filas, arrastre, porCuboTemporal] = await Promise.all([
+      this.cuentasPorPagar.cuentaPorPagarMensajerosAlCorte(consulta),
+      this.cuentasPorPagar.cuentaPorPagarMensajerosAntesDe(consulta),
+      this.cuentasPorPagar.cuentaPorPagarMensajerosPorCubo(consulta, cubos),
+    ]);
+
+    /**
+     * ⟨D7⟩ / R27 — el UNICO constructor de importe de esta vista, para el total y para cada fila.
+     * Recibe los dos COMPONENTES, no un saldo ya restado: el `bruto` es el volumen movido
+     * (`devengo + pago`, sin signo, ⟨D1(c)⟩) y el `neto` lo produce la funcion compartida.
+     */
+    const construirImporte = (
+      devengo: Prisma.Decimal,
+      pago: Prisma.Decimal,
+    ): ImporteAnalitico =>
+      importeConNeto(devengo.plus(pago), derivarCuentaPorPagar(devengo, pago).cuentaPorPagar);
+
+    const porCubo = agruparPorIndiceDeCubo(cubos, porCuboTemporal);
+    let devengoAcumulado = sumaDeTipo(arrastre, "devengo");
+    let pagoAcumulado = sumaDeTipo(arrastre, "pago");
+    const serie: FilaFinanciera[] = [];
+    for (const [i, cubo] of cubos.entries()) {
+      // R9 — un cubo sin movimiento no vale cero: no suma nada y REPITE el saldo anterior. Sale
+      // solo del acumulado corrido, sin ningun caso especial que alguien pueda olvidar.
+      devengoAcumulado = devengoAcumulado.plus(sumaDeTipo(porCubo[i], "devengo"));
+      pagoAcumulado = pagoAcumulado.plus(sumaDeTipo(porCubo[i], "pago"));
+      serie.push({
+        cubo: cubo.clave,
+        importe: construirImporte(devengoAcumulado, pagoAcumulado),
+      });
+    }
 
     return {
       ...this.cabecera(consulta),
@@ -387,8 +594,13 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
           grano: "fecha",
           fuente: "pago_mensajero_movimiento",
           sumableCon: [],
-          filas: [],
-          total: importe(sumar(filas.map((f) => f.suma)), cuenta.cuentaPorPagar),
+          // ⟨D2⟩ / R4 — grano `fecha`: la granularidad la decide el rango (ver `deCaja`).
+          granularidad: granularidadDe(consulta.rango),
+          filas: serie,
+          // R15 — el total NO se deriva de la serie: sigue saliendo de `...AlCorte`, la misma
+          // consulta y la misma cifra que la 127 publica hoy. Que la ultima fila coincida con el
+          // es una invariante entre dos caminos distintos (R13), no una tautologia.
+          total: construirImporte(sumaDeTipo(filas, "devengo"), sumaDeTipo(filas, "pago")),
         },
       ],
     };

@@ -37,6 +37,23 @@ export interface CierreAdminResumenRow {
   motivoRechazo: string | null;
 }
 
+/**
+ * Fix «tope de negocio de la indemnizacion» (2026-08-04) — una gestion `incidente` del cierre
+ * pendiente de que el admin le capture el monto, JUNTO CON el valor de su orden.
+ *
+ * Antes esta lectura devolvia `string[]` (solo los ids) y por eso el unico tope posible era el
+ * TECNICO: el servicio no tenia con que comparar. `ordenMontoCobrar` viaja aqui —en la MISMA
+ * consulta y con el MISMO WHERE de alcance, sin una query extra— para que el tope de NEGOCIO se
+ * pueda aplicar antes de abrir la transaccion del dinero.
+ *
+ * Money-safe: STRING escala 2. `null` = la orden no declara valor a cobrar; que hace el tope con
+ * ese caso lo decide `lib/utils/tope-indemnizacion.ts`, no este contrato.
+ */
+export interface GestionIncidenteDelCierre {
+  gestionId: string;
+  ordenMontoCobrar: string | null;
+}
+
 // Feature 109 (T3.1, R16-R19): config OPCIONAL de la LIBERACION de ordenes `sin_gestionar` a
 // bodega. Presente SOLO al APROBAR (la resuelve el service via `findEstatusIdByValue`/
 // `findCentralZonaId`); ausente al rechazar (R27: un rechazo NO libera). Los estatus ids del
@@ -136,6 +153,26 @@ export interface ICierresAdminRepository {
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>>;
   /**
+   * Feature 184 — Tanda D (T D.1, R1/R14/R15/R16): el HISTORICO ENTERO del alcance, sin recorte
+   * y sin conteo — el conjunto del que sale el ARCHIVO de ese listado.
+   *
+   * Es `findHistoricoPaginado` sin `skip`/`take` ni `count`, y lo es por construccion: los dos
+   * leen el MISMO criterio y el MISMO orden de una sola declaracion, de modo que la pagina N
+   * sea el segmento N de este conjunto (R5/R16).
+   *
+   * NO se puede sustituir por `findCierresByAlcance`: aquel devuelve la UNION de la cola y el
+   * historico, que es justo la relectura compuesta que esta tanda retira (R1).
+   */
+  findHistoricoCompleto(alcance: Alcance): Promise<CierreAdminResumenRow[]>;
+  /**
+   * Feature 184 — Tanda D (T D.1, R1/R14/R15/R16): la COLA ENTERA de pendientes de decision del
+   * alcance, sin recorte y sin conteo — el conjunto del que sale el ARCHIVO de ese listado.
+   *
+   * Complemento exacto de `findHistoricoCompleto` por la MISMA `ESTADOS_COLA_CIERRE_DIA` que
+   * usan las dos paginas: los cuatro caminos particionan el mismo conjunto.
+   */
+  findColaCompleta(alcance: Alcance): Promise<CierreAdminResumenRow[]>;
+  /**
    * R6/R7/R9/R13: un cierre SOLO si su destino casa el alcance en el WHERE (guardia
    * R13) + sus gestiones (WITH_DETALLE, reuso 37, WHERE cierre_id = X). Fuera de
    * alcance / inexistente -> null (no se distingue).
@@ -145,13 +182,20 @@ export interface ICierresAdminRepository {
     alcance: Alcance,
   ): Promise<{ cierre: CierreAdminResumenRow; gestiones: CierreGestionPendienteRow[] } | null>;
   /**
-   * Feature 158 (T1.12, R19/R21/R25): ids de las gestiones con `resultado = incidente`
-   * vinculadas a ESE cierre, acotadas por el alcance en el WHERE (nunca en memoria). Es lo que
-   * el service necesita para exigir COBERTURA EXACTA de los montos al aprobar: ni falta
-   * ninguna (R19/R20) ni sobra ninguna (R21). Fuera de alcance / cierre inexistente -> lista
-   * vacia, sin distinguir (R25: no se revela nada del cierre).
+   * Feature 158 (T1.12, R19/R21/R25): las gestiones con `resultado = incidente` vinculadas a ESE
+   * cierre, acotadas por el alcance en el WHERE (nunca en memoria). Es lo que el service necesita
+   * para exigir COBERTURA EXACTA de los montos al aprobar: ni falta ninguna (R19/R20) ni sobra
+   * ninguna (R21). Fuera de alcance / cierre inexistente -> lista vacia, sin distinguir (R25: no
+   * se revela nada del cierre).
+   *
+   * Fix «tope de negocio» (2026-08-04): cada fila trae ADEMAS `ordenMontoCobrar`, el valor de su
+   * orden, que es el tope de NEGOCIO del monto. Devolver solo los ids —como hacia antes— es lo
+   * que dejaba al servicio sin nada con que acotar el dinero mas alla del limite de la columna.
    */
-  findGestionesIncidenteDelCierre(cierreId: string, alcance: Alcance): Promise<string[]>;
+  findGestionesIncidenteDelCierre(
+    cierreId: string,
+    alcance: Alcance,
+  ): Promise<GestionIncidenteDelCierre[]>;
   /**
    * R10-R15: transicion atomica y guardada de `solicitado` -> nuevoEstado, SOLO si
    * el cierre sigue `solicitado` y casa el alcance (updateMany con guardia). NO toca

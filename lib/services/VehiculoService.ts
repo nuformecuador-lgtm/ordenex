@@ -3,7 +3,6 @@ import type {
   Actor,
   IVehiculoService,
   ListarVehiculosServiceResult,
-  ObtenerVehiculoServiceResult,
 } from "@/lib/interfaces/services/IVehiculoService";
 
 // Autz del catalogo vehiculos: SOLO `maestro` (R9). Cualquier otro rol
@@ -20,10 +19,7 @@ export class VehiculoService implements IVehiculoService {
     return { status: "ok", items };
   }
 
-  async obtener(id: string, actor: Actor): Promise<ObtenerVehiculoServiceResult> {
-    if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R10
-    const vehiculo = await this.repo.findById(id);
-    if (!vehiculo) return { status: "not_found" };
-    return { status: "ok", vehiculo }; // R11
-  }
+  // BORRADO 2026-08-07 (tanda 2): aqui vivia `obtener`. Su Server Action se borro en la
+  // tanda 1 por no existir pantalla de vehiculos. El catalogo sigue siendo legible entero
+  // por `listar`, que es lo unico que `configuracion/tarifas/page.tsx` necesita.
 }

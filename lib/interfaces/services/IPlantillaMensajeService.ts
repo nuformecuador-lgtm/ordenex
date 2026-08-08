@@ -33,10 +33,8 @@ export type ListarPlantillasServiceResult = ListarPaginadoServiceResult<Plantill
 export type ListarPlantillasCompletoServiceResult =
   ListarCompletoServiceResult<PlantillaListItemDTO>;
 
-export type ObtenerPlantillaServiceResult =
-  | { status: "ok"; plantilla: PlantillaPublica }
-  | { status: "forbidden" }
-  | { status: "not_found" }; // R28
+// BORRADO 2026-08-07 (tanda 2): aqui vivia `ObtenerPlantillaServiceResult`, del metodo
+// `obtener` que se va de esta interfaz mas abajo.
 
 export type ActualizarPlantillaServiceResult =
   | { status: "ok"; plantilla: PlantillaPublica }
@@ -72,7 +70,6 @@ export interface IPlantillaMensajeService {
     input: ListarPlantillasCompletoInput,
     actor: Actor,
   ): Promise<ListarPlantillasCompletoServiceResult>;
-  obtener(id: string, actor: Actor): Promise<ObtenerPlantillaServiceResult>;
   actualizar(
     id: string,
     input: ActualizarPlantillaInput,

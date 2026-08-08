@@ -8,7 +8,7 @@ import {
   IDS_FINANCIERAS_SERVIDAS,
   type ResultadoFinanciero,
 } from "@/lib/types/analitica-financiera";
-import { armarServicio, consultaDe } from "./_dobles-analitica-financiera";
+import { armarServicio, conNeto, consultaDe } from "./_dobles-analitica-financiera";
 
 // Feature 127 / T D.1, D.3, D.4, D.5, D.8, D.9 — el despacho del servicio financiero.
 //
@@ -294,16 +294,27 @@ describe("R18 · egresos se sirve de verdad, incluida la indemnizacion", () => {
     const r = await servicio.consultar(consultaDe("egresos"));
     if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
 
+    const total = conNeto(r.datos.vistas[0].total, "egresos / total");
     // 100 + 400 + 250: omitir la indemnizacion daria 500.00 y seguiria pareciendo una cifra.
-    expect(r.datos.vistas[0].total.bruto).toBe("750.00");
-    // El neto de un egreso puro es NEGATIVO: `derivarBalance` lo firma (ingresos − egresos).
-    expect(r.datos.vistas[0].total.neto).toBe("-750.00");
+    expect(total.bruto).toBe("750.00");
+    // R6/R8 de la 183 — `egresos` CONSERVA el neto, y es NEGATIVO: `derivarBalance` lo firma
+    // (ingresos − egresos). Aplicarle la retirada de Q1 —la mutacion que R6 nombra— haria que
+    // esta lectura no compilara; publicar el valor absoluto daria "750.00".
+    expect(total.neto).toBe("-750.00");
     expect(ingresos.sumarPorCategoria).toHaveBeenCalledTimes(1);
   });
 
-  it("el catalogo declara las OCHO egreso_* que esa cifra tiene que sumar", () => {
+  it("el catalogo declara las NUEVE categorias que esa cifra tiene que sumar", () => {
+    // ⚠️ DADO VUELTA por la 183 (R25): era `toHaveLength(8)`. ⟨D12⟩ (humano, 2026-08-04,
+    // `progress/decision_183.md`) anadio `ingreso_ajuste` sin quitar ninguna de las ocho.
     const egresos = listarMetricas({ dominio: "financiera" }).find((m) => m.id === "egresos");
-    expect(egresos?.definicion.categorias).toHaveLength(8);
+    expect(egresos?.definicion.categorias).toHaveLength(9);
+    expect(egresos?.definicion.categorias).toContain("ingreso_ajuste");
+    // R10/183 — y de la entrada NO cambia nada mas que la definicion y la descripcion.
+    expect(egresos?.id).toBe("egresos");
+    expect(egresos?.etiqueta).toBe("Egresos");
+    expect(egresos?.granos).toEqual(["fecha"]);
+    expect(egresos?.fuente).toEqual({ tipo: "ledger", tablas: ["wallet_movimiento"] });
     // ⟨D8⟩ / D.6: y ya no esta marcada como declarada sin productor.
     expect(egresos?.estadoProduccion).toBe("producida");
   });
@@ -360,6 +371,11 @@ describe("R28 · misma entrada, misma salida, con mas de una fila", () => {
       // T E.1 — el borde tambien: un `new Date()` aqui haria que el rango dependiera del
       // reloj del servidor en vez de del `now` inyectable de `resolverRango` (R28).
       "lib/actions/analitica-financiera.ts",
+      // Feature 180 (R26 / Q2 = (a), humano 2026-08-05) — el modulo de cubos temporales. Es
+      // donde el reloj tenia mas tentacion de entrar: marcar «el cubo en curso es parcial»
+      // exige saber que hora es. Se decidio NO marcarlo, y este censo es lo que impide que
+      // vuelva por la puerta de atras dejando el DTO a merced del reloj del proceso.
+      "lib/analytics/cubo-temporal.ts",
     ];
     const infractores = ARCHIVOS.filter((rel) => {
       const codigo = fs
@@ -410,10 +426,20 @@ const LIBRO_SOLO_PROPIO = LIBRO_MIXTO.filter(
 );
 
 async function totalDe(metricaId: string, caja: readonly (typeof LIBRO_MIXTO)[number][]) {
-  const { servicio } = armarServicio({ caja: [...caja] });
+  // Feature 180 — el MISMO libro visto por cubo. El rango `dia` trocea en UN solo cubo, asi que
+  // el desglose es el libro entero con `indiceCubo: 0` y la unica fila de la serie tiene que dar
+  // exactamente el total (R12).
+  const { servicio } = armarServicio({
+    caja: [...caja],
+    cajaPorCubo: caja.map((f) => ({ ...f, indiceCubo: 0 })),
+  });
   const r = await servicio.consultar(consultaDe(metricaId));
   if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error(`${metricaId} no dio vistas`);
-  return r.datos.vistas[0];
+  const vista = r.datos.vistas[0];
+  // R14/183 — las dos de tesoreria CONSERVAN el neto: mezclan prefijos a proposito y su neto
+  // significa algo real. `conNeto` lo afirma antes de dejar leerlo, asi que generalizarles la
+  // retirada de Q1 revienta aqui con el nombre de la metrica, no con un `undefined` silencioso.
+  return { ...vista, total: conNeto(vista.total, metricaId) };
 }
 
 describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma dos veces", () => {
@@ -427,7 +453,11 @@ describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma d
     expect(vista.grano).toBe("fecha");
     // No suma con nada: contiene dinero que `ganancia_ordenex` excluye a proposito.
     expect(vista.sumableCon).toEqual([]);
-    expect(vista.filas).toEqual([]);
+    // Feature 180 — la vista ya trae serie: una fila por cubo del rango (aqui, uno), y su
+    // importe es el del total porque todo el libro cae en ese cubo (R12).
+    expect(vista.filas).toHaveLength(1);
+    expect(vista.filas[0].cubo).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(vista.filas[0].importe).toEqual(vista.total);
   });
 
   it("`ganancia_ordenex` deja fuera el dinero de terceros: 730, no 2930", async () => {
@@ -471,13 +501,18 @@ describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma d
     expect(enCaja.total.neto).toBe(ganancia.total.neto);
   });
 
-  it("las dos consultan el libro de la caja UNA vez y ningun otro repositorio", async () => {
+  it("las dos consultan el libro de la caja y NINGUN otro repositorio", async () => {
     for (const id of ["dinero_en_caja", "ganancia_ordenex"]) {
       const { servicio, ingresos, consultasHechas } = armarServicio({ caja: [...LIBRO_MIXTO] });
       await servicio.consultar(consultaDe(id));
 
+      // Feature 180 — DOS lecturas, las dos del mismo repositorio de caja: el total sigue
+      // saliendo de `sumarPorCategoria` (R15, la cifra de la 127 no se toca) y la serie de
+      // `sumarPorCuboYCategoria`. Derivar el total de los cubos ahorraria esta llamada y
+      // convertiria la invariante de conservacion en una tautologia.
       expect(ingresos.sumarPorCategoria, id).toHaveBeenCalledTimes(1);
-      expect(consultasHechas(), id).toBe(1);
+      expect(ingresos.sumarPorCuboYCategoria, id).toHaveBeenCalledTimes(1);
+      expect(consultasHechas(), id).toBe(2);
     }
   });
 

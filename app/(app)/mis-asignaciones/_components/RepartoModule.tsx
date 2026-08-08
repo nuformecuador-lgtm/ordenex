@@ -27,7 +27,7 @@ import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { GestionarOrdenCardButton } from "./GestionarOrdenCardButton";
-import { ChatFlotante } from "./chat-demo/ChatFlotante";
+import { ChatFlotante } from "./chat/ChatFlotante";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
 import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
 import { RutaMapa } from "./RutaMapa";
@@ -584,16 +584,22 @@ export function RepartoModule({
         </>
       )}
 
-      {/* Rediseño del chat (rama ux) — MAQUETA: botón flotante fijo abajo a la derecha que
-          abre el chat con los clientes como modal. Se muestra en las dos vistas (foco y
-          lista) porque el mensajero puede necesitar escribir en cualquier momento.
+      {/* Chat del mensajero — CÓDIGO VIVO Y ÚNICA ENTRADA AL CHAT. Esto NO es una maqueta:
+          el hilo lo sirve `listarHiloChat` (feature 120) y las plantillas
+          `listarPlantillasParaEnvio` (feature 87), las dos REALES y contra la misma
+          conversación de WhatsApp que ve el cliente. Nació en el rediseño de la rama `ux`,
+          de ahí el estilo; lo que nació entonces como maqueta ya se cableó a datos reales.
+          Botón flotante fijo abajo a la derecha que abre el chat con los clientes como
+          modal. Se muestra en las dos vistas (foco y lista) porque el mensajero puede
+          necesitar escribir en cualquier momento.
           Contactos = SOLO las órdenes EN REPARTO (`porGestionar`, sin filtrar: el chat es
           una capa aparte del buscador/filtro de la lista); las de "Por recoger" no tienen
           gestión que conversar — por eso el chat vive aquí y no en su pantalla. La marcada
           "en gestión" es la que el módulo tiene en DETALLE, y es por donde entra al abrirse.
-          El hilo y las plantillas son los MISMOS que consume `ChatWhatsappPanel` dentro del
-          panel del detalle (feature 120/87): los dos conviven y muestran la misma
-          conversación. */}
+          Hasta el 2026-08-07 esta ruta convivía con `ChatWhatsappPanel` dentro del panel del
+          detalle, que leía la misma conversación; ese panel se borró por decisión humana tras
+          perder su montaje en `6dc18dc2`, así que este botón es hoy la ÚNICA entrada al chat:
+          si se borra, el mensajero se queda sin poder escribirle al cliente. */}
       <ChatFlotante
         ordenes={porGestionar}
         ordenEnDetalleId={detalleOrden?.id ?? null}

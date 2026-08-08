@@ -4,6 +4,7 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type {
   Alcance,
   CierreAdminResumenRow,
+  GestionIncidenteDelCierre,
   ICierresAdminRepository,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { ILiquidacionPagoRepository } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
@@ -19,12 +20,16 @@ import type {
   ICierresAdminService,
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
+  ListarHistoricoCierresAdminCompletoServiceResult,
   ListarHistoricoCierresAdminServiceResult,
+  ListarPendientesCierresAdminCompletoServiceResult,
   ListarPendientesCierresAdminServiceResult,
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
+import { descargaConfig } from "@/lib/config/descarga";
 import { esColaCierreDia } from "@/lib/utils/colas-cierre";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
+import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
@@ -231,6 +236,95 @@ export class CierresAdminService implements ICierresAdminService {
       pageSize: input.pageSize,
       total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
     };
+  }
+
+  /**
+   * Feature 184 — Tanda D (T D.2, R1/R4/R6) — el HISTORICO ENTERO del alcance, sin recorte, que
+   * es del que sale el archivo.
+   *
+   * **Lo que cierra.** Hasta hoy ese archivo se producia releyendo `listarCierresAdmin()`, que
+   * trae el alcance ENTERO —cola e historico— y lo parte en memoria para que la pantalla se
+   * quede con una de las dos mitades. Aqui se lee SOLO el historico, cortado en la base por el
+   * mismo criterio que su pagina (R16).
+   *
+   * **No lleva `input`, y es deliberado.** Este listado no admite filtros: su schema de pagina
+   * solo tenia `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El borde la
+   * sigue aplicando entera —un `destinoZonaId` colado muere alli con `validation_error` (R17)—
+   * pero no hay nada que transportar hasta aqui. El alcance sale del ACTOR, como en la pagina.
+   *
+   * `sinZona` -> conjunto vacio sin consultar la base, no `forbidden`: el `adminSatelite` sin
+   * zona tiene acceso al modulo, lo que no tiene es alcance. Es lo mismo que devuelven hoy
+   * `listarCierresAdmin` (`historico: []`) y la pagina.
+   *
+   * **Excepcion declarada a R29 de la 170.** R29 —feature `done`, requisito vivo— exige el tope
+   * en el SERVIDOR y, superado, no materializar NI transportar mas de `N + 1` filas. Transportar
+   * se cumple: por encima del tope no sale ni una fila, y ni siquiera se paga el `conPendiente`
+   * de abajo. Materializar NO: `findHistoricoCompleto` es un `findMany` sin `take`, asi que el
+   * historico del alcance entra entero en memoria y el tope lo mide esta funcion despues. El
+   * conjunto es un cierre por mensajero y dia dentro del alcance —para un maestro, el alcance es
+   * la operacion ENTERA—, y los cierres aprobados no se purgan: crece de forma monotona.
+   *
+   * Se acepta por el coste de lo contrario: para conservar el total EXACTO que el aviso publica
+   * (R6) habria que pedir `limite + 1` y ademas un `count`, es decir la segunda consulta que R15
+   * de esta feature mide y que esta migracion vino a quitar. Decision humana del 2026-08-05,
+   * anotada en el design §3.1. Esto es una excepcion declarada, no un cumplimiento de R29.
+   */
+  async listarHistoricoCierresAdminCompleto(
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresAdminCompletoServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findHistoricoCompleto(scope.alcance);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    // MISMO enriquecido que la pagina, y por eso las filas del archivo son las de la pagina y no
+    // unas parecidas. `conPendiente` es UNA agregacion para todo el conjunto —no una por fila—,
+    // asi que su coste no crece con el numero de filas. Se paga aunque el archivo no lleve la
+    // columna del pendiente: emitir `null` ahi seria decir «este cierre no esta aprobado»
+    // (172/R28) de cierres que SI lo estan, y eso es un dato equivocado en un DTO de dinero.
+    return { status: "ok", items: await this.conPendiente(conjunto), total: conjunto.length };
+  }
+
+  /**
+   * Feature 184 — Tanda D (T D.2, R1/R4/R6) — la COLA ENTERA de pendientes de decision del
+   * alcance, sin recorte, para el archivo.
+   *
+   * Comparte con el de arriba la relectura que evita, y aqui se nota mas: la cola es la mitad
+   * PEQUEÑA del conjunto (los cierres sin resolver), asi que producir su archivo arrastraba
+   * todo el historico del alcance —que crece sin tope con los dias— para descartarlo.
+   *
+   * Sin `input` por el mismo motivo que su hermano: cero filtros, cero claves en la lista
+   * blanca, alcance desde el actor.
+   *
+   * **Excepcion declarada a R29 de la 170**, la misma de arriba con el signo cambiado: se cumple
+   * el transporte —superado el tope no va ninguna fila— y no el materializar, porque
+   * `findColaCompleta` tampoco lleva cota. El riesgo, en cambio, es el menor de los dos: la cola
+   * son los cierres pendientes de DECISION, la mitad que se vacia cada vez que el admin trabaja,
+   * y no acumula con los dias como el historico. Misma decision del 2026-08-05 y mismo motivo:
+   * acotar en base costaria el `count` extra que R15 de esta feature prohibe (design §3.1).
+   */
+  async listarPendientesCierresAdminCompleto(
+    actor: Actor,
+  ): Promise<ListarPendientesCierresAdminCompletoServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
+
+    const conjunto = await this.repo.findColaCompleta(scope.alcance);
+
+    const limite = descargaConfig.MAX_FILAS;
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite }; // R6
+    }
+
+    return { status: "ok", items: await this.conPendiente(conjunto), total: conjunto.length };
   }
 
   async verCierreDetalle(
@@ -485,6 +579,13 @@ export class CierresAdminService implements ICierresAdminService {
    * Se resuelve aqui y no en el borde a proposito: el borde (zod) no sabe que gestiones tiene
    * ese cierre. Y va ANTES de llamar al repo para que un envio incompleto NO llegue a abrir la
    * transaccion de aprobacion.
+   *
+   * Fix «tope de negocio» (2026-08-04): ademas de la cobertura, aqui se acota el IMPORTE contra
+   * el valor de la orden (`excesoIndemnizacion`). Vive en el mismo sitio y por el mismo motivo:
+   * el borde no sabe cuanto valia el paquete, y la comprobacion tiene que ocurrir ANTES de que
+   * se abra la transaccion que mueve el dinero. Este es UNO de los dos emisores; el otro es
+   * `IncidenteAdminService.aprobar`, y los dos tienen que aplicarlo o el agujero sigue abierto
+   * por el que falte.
    */
   private async validarCoberturaIndemnizaciones(
     cierreId: string,
@@ -496,11 +597,16 @@ export class CierresAdminService implements ICierresAdminService {
     // aguas abajo, ni un campo nuevo obligatorio).
     if (delCierre.length === 0 && indemnizaciones.length === 0) return null;
 
-    const esperados = new Set(delCierre);
+    // El valor de la ORDEN de cada gestion esperada: es a la vez el conjunto de ids admitidos
+    // (cobertura) y el tope de negocio de cada monto. Un solo mapa para las dos cosas, porque
+    // salen de la MISMA lectura.
+    const esperados = new Map<string, GestionIncidenteDelCierre["ordenMontoCobrar"]>(
+      delCierre.map((g) => [g.gestionId, g.ordenMontoCobrar]),
+    );
     const fieldErrors: Record<string, string[]> = {};
     const vistos = new Set<string>();
 
-    for (const { gestionId } of indemnizaciones) {
+    for (const { gestionId, monto } of indemnizaciones) {
       if (vistos.has(gestionId)) {
         // R21: dos montos para la misma gestion. Sin esto, el ultimo ganaria en silencio.
         fieldErrors[gestionId] = [MSG_INDEMNIZACION_DUPLICADA];
@@ -509,10 +615,17 @@ export class CierresAdminService implements ICierresAdminService {
       vistos.add(gestionId);
       // R21: una gestion que no pertenece a este cierre, o cuyo resultado no es `incidente`,
       // no esta en `esperados` (el repo filtra por las dos cosas).
-      if (!esperados.has(gestionId)) fieldErrors[gestionId] = [MSG_INDEMNIZACION_AJENA];
+      if (!esperados.has(gestionId)) {
+        fieldErrors[gestionId] = [MSG_INDEMNIZACION_AJENA];
+        continue;
+      }
+      // TOPE: tecnico + negocio (el valor de la orden). El monto viaja STRING y se compara con
+      // `Prisma.Decimal` dentro del helper: nunca `number`, nunca `parseFloat`.
+      const exceso = excesoIndemnizacion(monto, esperados.get(gestionId) ?? null);
+      if (exceso !== null) fieldErrors[gestionId] = [exceso];
     }
     // R19/R20: falta el monto de alguna gestion `incidente` del cierre.
-    for (const gestionId of delCierre) {
+    for (const { gestionId } of delCierre) {
       if (!vistos.has(gestionId)) fieldErrors[gestionId] = [MSG_INDEMNIZACION_FALTANTE];
     }
 

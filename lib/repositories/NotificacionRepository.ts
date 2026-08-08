@@ -192,18 +192,6 @@ export class NotificacionRepository implements INotificacionRepository {
     return existe === null ? "no_existe" : "no_visible";
   }
 
-  async marcarLeida(notificacionId: string, usuarioId: string, ahora: Date): Promise<void> {
-    // R37: upsert por el unico (notificacion, usuario) -> idempotente y con UNA sola fila.
-    // La PRIMERA lectura manda: re-marcar no reescribe el instante. Toda fila de lectura
-    // nace con `leida_at` (tambien las que crea `descartar`), asi que el `update` vacio no
-    // deja nunca una fila "no leida".
-    await this.prisma.notificacionLectura.upsert({
-      where: { notificacionId_usuarioId: { notificacionId, usuarioId } },
-      create: { notificacionId, usuarioId, leidaAt: ahora },
-      update: {},
-    });
-  }
-
   async marcarTodasLeidas(
     actor: NotificacionActor,
     desde: Date,

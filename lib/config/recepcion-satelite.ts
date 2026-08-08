@@ -19,12 +19,23 @@ export interface RecepcionSateliteConfig {
   DEFAULT_PAGE_SIZE: number;
   /** Cota maxima del tamano de pagina, evita consultas sin limite (R40). */
   MAX_PAGE_SIZE: number;
+  /**
+   * Feature 184 — Tanda A (Q2) — cuantos identificadores como maximo admite la comprobacion de
+   * vigencia con la que se poda la seleccion.
+   *
+   * La entrada de esa comprobacion es la lista de ordenes marcadas FUERA de la pagina visible, y
+   * acaba en un `IN` de SQL: sin cota es una lista abierta que el cliente decide. 500 son veinte
+   * paginas de 25 marcadas enteras, muy por encima de cualquier uso observado; pasarse devuelve
+   * `validation_error` en el borde y la seleccion NO se toca (R22).
+   */
+  MAX_IDS_VIGENCIA: number;
 }
 
 export function loadRecepcionSateliteConfig(): RecepcionSateliteConfig {
   return {
     DEFAULT_PAGE_SIZE: readPositiveInt("RECEPCION_SATELITE_DEFAULT_PAGE_SIZE", 25),
     MAX_PAGE_SIZE: readPositiveInt("RECEPCION_SATELITE_MAX_PAGE_SIZE", 100),
+    MAX_IDS_VIGENCIA: readPositiveInt("RECEPCION_SATELITE_MAX_IDS_VIGENCIA", 500),
   };
 }
 

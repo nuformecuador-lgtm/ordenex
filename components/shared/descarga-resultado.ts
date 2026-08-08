@@ -16,7 +16,6 @@ import type { DescargaFilasResult } from "@/components/shared/DataTable";
 import { descargaConfig } from "@/lib/config/descarga";
 import type { DescargaFila } from "@/lib/types/descarga";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
-import type { ActionError } from "@/lib/types/orden";
 import { messageFromActionError } from "@/lib/utils/action-error-message";
 
 /**
@@ -96,34 +95,27 @@ export async function filasLocales<T>(
   return { status: "ok", filas: filas.map(proyectar) };
 }
 
-/**
- * FAMILIA B **PAGINADA** (feature 170 — FASE 2, T I.2, R52): la tabla pinta UNA página que le
- * llega del servidor, pero la descarga sigue entregando el CONJUNTO COMPLETO.
+/*
+ * FAMILIA B **PAGINADA** — `filasDelConjuntoCompleto`, RETIRADO por la feature 184 (T H.2).
  *
- * Por qué hace falta un tercer adaptador y no vale ninguno de los dos de arriba: al paginar
- * una tabla de Familia B, `filasLocales(loQueLaTablaPinta)` deja de significar «el dataset» y
- * pasa a significar «lo que se ve». Eso es exactamente la degradación que R52 prohíbe, y no
- * falla en ninguna parte: el archivo sale, con 25 filas de 300. Aquí el conjunto se **relee**
- * del servidor al pulsar el control —una lectura más, y solo cuando el usuario descarga— y se
- * proyecta con el MISMO `filasLocales`, para no perder el tope de filas ni su mensaje
- * accionable (R26/R27/R28).
+ * Qué era y por qué existió: la 170 — FASE 2 (T I.2, R52) paginó trece listados de Familia B.
+ * Al paginar una tabla así, `filasLocales(loQueLaTablaPinta)` deja de significar «el dataset» y
+ * pasa a significar «lo que se ve» —un archivo de 25 filas de 300, sin fallar en ninguna
+ * parte—, así que el conjunto se **releía** del servidor al pulsar el control: el mismo listado
+ * SIN recorte que la pantalla ya llamaba antes de paginar. Era un puente, y estaba declarado
+ * como tal (Q-I5/Q-K4).
  *
- * `items` es lo que devuelve el listado SIN recorte que la pantalla ya llamaba antes de
- * paginar; quien llama lo selecciona del resultado de su Server Action. No se usa
- * `filasDesdeResultado` porque estos listados no tienen modo «completo» con tope server-side:
- * sin `filasLocales` la descarga se quedaría sin tope ninguno, justo en los históricos que
- * crecen sin techo.
+ * Por qué se retira: los doce listados que quedaban migraron en las tandas A–G a una lectura
+ * DEDICADA con su tope en el SERVIDOR, y ese camino es `filasDesdeResultado`. Con cero llamadas
+ * en `app/`, dejarlo exportado no era neutro: mantenía vivo el modo de fallo que la tanda G
+ * midió como el único que sobrevivía a todo lo demás —la **media migración**, una pantalla que
+ * llama a la acción nueva y aun así evalúa el tope en el CLIENTE, con lo que el aviso pierde el
+ * total y el tope y deja de ser accionable (R6)—. Sin este adaptador, esa media migración deja
+ * de ser posible por construcción y no por vigilancia.
+ *
+ * Lo que sigue vigilándolo, para que retirarlo no apague nada:
+ *  - `tests/unit/descarga/adaptador-conjunto.guardia.test.ts` (R32) — ni el export vuelve ni
+ *    ninguna pantalla lo llama;
+ *  - la MITAD NEGATIVA de los dos censos de adaptador, conservada a propósito: si alguien lo
+ *    rescatara del historial, dice CUÁL de los trece volvió a él.
  */
-export async function filasDelConjuntoCompleto<T>(
-  resultado: Promise<{ status: "ok"; items: readonly T[] } | ActionError>,
-  proyectar: (item: T) => DescargaFila,
-): Promise<DescargaFilasResult> {
-  const res = await resultado;
-  if (res.status !== "ok") {
-    return {
-      status: "error",
-      mensaje: `${messageFromActionError(res)} ${SUFIJO_REINTENTO}`,
-    };
-  }
-  return filasLocales(res.items, proyectar);
-}

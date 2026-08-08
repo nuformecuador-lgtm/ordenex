@@ -1,5 +1,33 @@
 # Feature 161 — Tono breve para notificaciones in-app · design
 
+> ## ⚠️ UNA DE LAS DOS SUPERFICIES DE ESTE DISEÑO YA NO EXISTE
+>
+> **Qué pasó (2026-08-07):** el commit `da544b30` borró
+> `app/(app)/mis-asignaciones/_components/ChatWhatsappPanel.tsx` —decisión humana correcta: lo
+> sustituye el chat flotante—. Ese panel era una de las **dos** superficies que D1 declara y uno de
+> los dos consumidores del hook: **el enganche del tono se fue con él**, y con él se fue también su
+> archivo de test, donde vivía el bloque R21–R23. El mensajero dejó de oír el tono del chat y así
+> salió a producción (release #314). Lo encontró una tarea de contabilidad horas después, no una
+> alerta.
+>
+> **Dónde vive hoy:** el enganche está repuesto en
+> `app/(app)/mis-asignaciones/_components/chat/ChatConversacion.tsx` (`4a862356`, PR #318), dentro
+> de `ChatFlotante` y montado por `RepartoModule`. Se verificó que tiene la misma forma que el panel
+> borrado: mismo `listarHiloChat` con polling de 10 s, mismo `hiloOk` y mismos mensajes con
+> `direccion: "entrante"`. Las pruebas están en `tests/components/ChatConversacionTono.test.tsx`, y
+> el mapa `R → test` de `tasks.md` ya apunta ahí.
+>
+> **Por qué el resto de este documento NO se reescribe.** `design.md` es el registro de lo que se
+> diseñó **entonces**, igual que un `down.sql` es la foto de su migración. Cambiar
+> `ChatWhatsappPanel.tsx` por `ChatConversacion.tsx` en §1, §3 y §4 borraría justo la información
+> que explica **por qué** el tono se rompió: que la feature colgaba de un componente que otra
+> decisión, legítima y ajena, podía retirar. Léelo con esta nota delante. Una cita rota se repara o
+> se anota; una decisión histórica se anota, nunca se reescribe.
+>
+> **Qué lo vigila ahora:** `tests/unit/guards/test-citado-desaparecido.guardia.test.ts` — si el mapa
+> `R → test` de una ficha apunta a un test que existió y hoy no está, la suite se pone roja en el
+> mismo commit que lo borra. Bitácora: `progress/impl_guardia-citas-rotas.md`.
+
 ## 0. Decisiones del humano (puerta previa al spec, 2026-07-30)
 
 La feature nace de una pregunta: *¿cómo agrego un tono breve, o Google trae algo por

@@ -3,11 +3,7 @@ import {
   ESTADOS_BODEGA_SATELITE,
   type EstadoBodegaSatelite,
 } from "@/lib/utils/estados-bodega-satelite";
-import { normalizeName } from "@/lib/utils/normalize";
-import type {
-  CatalogoFiltrosSateliteDTO,
-  RecepcionSateliteDTO,
-} from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { CatalogoFiltrosSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Barra de filtros del listado de la bodega satélite (pedido humano: "el mismo diseño
 // que en el admin"). Declaración PURA de los filtros que ofrece `FilterComponent`,
@@ -21,10 +17,12 @@ import type {
 //
 // Feature 170 — FASE 2 (T K.3): los tres filtros los resuelve AHORA EL SERVIDOR (T K.1) y
 // las opciones de cantón y distrito vienen del catálogo del conjunto (T K.2, R46), no de
-// las órdenes cargadas. Este módulo pasa a hacer tres cosas: declarar los filtros a partir
-// de ese catálogo, traducir la selección de la barra al input de la Server Action y —solo
-// para la descarga (R52, Q-K4)— conservar el filtro EN MEMORIA que la pantalla aplicaba
-// antes de paginar.
+// las órdenes cargadas.
+//
+// Feature 184 — Tanda A (T A.4): la descarga también los resuelve en el servidor, así que
+// este módulo se queda SOLO con lo que es de presentación: declarar los filtros a partir del
+// catálogo, traducir la selección de la barra al input de la Server Action y serializarla
+// para la caché. Ya no filtra nada (ver el bloque del final).
 
 /** Clave del filtro de estado dentro de la selección de `FilterComponent`. */
 export const CLAVE_ESTADO = "estado";
@@ -178,39 +176,10 @@ export function serializarFiltroSatelite(filtro: FiltroBodegaSatelite): string {
 /** Clave de «sin ningún filtro marcado»: la única página que el servidor pre-carga. */
 export const FILTRO_SATELITE_VACIO = serializarFiltroSatelite({});
 
-/**
- * Filtro compuesto en AND —estado ∧ cantón ∧ distrito— aplicado EN MEMORIA, conservando el
- * orden de entrada.
- *
- * Feature 170 — FASE 2 (T K.3, R52 / Q-K4): esto es lo que el listado hacía dentro de un
- * `useMemo` cuando recibía el conjunto entero. La TABLA ya no lo usa (filtra el servidor),
- * pero la DESCARGA sí: tiene que entregar el conjunto COMPLETO con los filtros vigentes y
- * hoy no existe un listado de servidor que devuelva «todo el conjunto filtrado»
- * (`listarRecepcionSatelite()` no acepta filtros). Mientras no exista —deuda declarada para
- * la tanda M—, la descarga relee ese listado y aplica AQUÍ los mismos tres filtros, que es
- * exactamente lo que la pantalla hacía antes de paginar: no es una regresión.
- *
- * La comparación es NORMALIZADA (sin acentos ni caso) porque así comparaba el filtro de
- * cliente; el servidor compara por igualdad exacta del nombre. Los dos coinciden para todo
- * valor que el catálogo puede ofrecer —sale de la misma columna— y el catálogo sembrado no
- * tiene dos nombres que colisionen al normalizar (medido y vigilado por test en T K.1, Q-K1).
- */
-export function filtrarOrdenesSatelite<T extends RecepcionSateliteDTO>(
-  ordenes: readonly T[],
-  filtro: FiltroBodegaSatelite,
-): T[] {
-  const estados = new Set<string>(filtro.estados ?? []);
-  const cantones = new Set((filtro.cantones ?? []).map(normalizeName));
-  const distritos = new Set((filtro.distritos ?? []).map(normalizeName));
-  return ordenes.filter((orden) => {
-    if (estados.size > 0 && !estados.has(orden.estatusValue)) return false;
-    if (cantones.size > 0 && !cantones.has(normalizeName(orden.cantonNombre))) {
-      return false;
-    }
-    if (distritos.size > 0) {
-      if (orden.distritoNombre === null) return false;
-      if (!distritos.has(normalizeName(orden.distritoNombre))) return false;
-    }
-    return true;
-  });
-}
+// Feature 184 — Tanda A (T A.4, R16): aquí vivía `filtrarOrdenesSatelite`, el filtro
+// compuesto en AND que la DESCARGA aplicaba en el navegador sobre el listado sin recorte,
+// porque ninguna acción devolvía «el conjunto filtrado». Ya existe
+// (`listarOrdenesBodegaCompleto`), así que la segunda declaración del criterio se retira en
+// vez de quedarse muerta: este listado era el ÚNICO del Anexo A que lo tenía escrito dos
+// veces —una en SQL y otra aquí, con dos formas de comparar (exacta contra normalizada)—, y
+// dos declaraciones del mismo criterio es exactamente lo que R16 prohíbe.

@@ -38,6 +38,8 @@ const listarDesgloseCompletoMock = vi.fn();
 // desglose, que es lo que este archivo vigila; se programan en `renderTabla`.
 const listarSaldosPaginaMock = vi.fn();
 const listarSaldosCompletoMock = vi.fn();
+/** Feature 184 - Tanda G (T G.2): la lectura DEDICADA de la que sale el archivo. */
+const listarSaldosDedicadoMock = vi.fn();
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarMovimientosDeTiendaAction: (...a: unknown[]) => listarDesgloseMock(...a),
   listarMovimientosDeTiendaCompletoAction: (...a: unknown[]) =>
@@ -45,7 +47,12 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
   // Feature 170 - FASE 2 (T I.2): la tabla de saldos pide su pagina al servidor y relee el
   // conjunto completo para descargar. Ninguna de las dos toca el desglose, que es lo que
   // este archivo vigila.
+  //
+  // Feature 184 - Tanda G (T G.2): el conjunto del archivo sale ya de la lectura DEDICADA.
+  // Sin declararla aqui, el control de descarga de esta tabla llama a `undefined` y el
+  // archivo no sale (este archivo lo PULSA en su caso de la descarga).
   listarSaldosTiendasPaginadoAction: (...a: unknown[]) => listarSaldosPaginaMock(...a),
+  listarSaldosTiendasCompletoAction: (...a: unknown[]) => listarSaldosDedicadoMock(...a),
   listarSaldosTiendasAction: (...a: unknown[]) => listarSaldosCompletoMock(...a),
 }));
 
@@ -208,12 +215,19 @@ function renderTabla(tiendas: SaldoTiendaResumenDTO[] = TIENDAS) {
   return envolver(<SaldosTiendasTable initialData={paginaInicial(tiendas)} />);
 }
 
-/** Deja las dos lecturas de saldos devolviendo el MISMO conjunto que se monta. */
+/** Deja las tres lecturas de saldos devolviendo el MISMO conjunto que se monta. */
 function programarSaldos(tiendas: SaldoTiendaResumenDTO[]) {
   listarSaldosPaginaMock.mockResolvedValue({
     status: "ok",
     page: 1,
     ...paginaInicial(tiendas),
+  });
+  // T G.2: de aqui sale el archivo. La relectura vieja se conserva programada: que ya no se
+  // llame tiene que ser una decision de la pantalla, no que el doble no responda.
+  listarSaldosDedicadoMock.mockResolvedValue({
+    status: "ok",
+    items: tiendas,
+    total: tiendas.length,
   });
   listarSaldosCompletoMock.mockResolvedValue({ status: "ok", tiendas });
 }

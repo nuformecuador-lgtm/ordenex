@@ -233,18 +233,6 @@ describe("verificarVisible — distingue no_existe de no_visible (R35)", () => {
 });
 
 describe("R37 — marcar y descartar son idempotentes y dejan UNA sola fila", () => {
-  it("marcarLeida hace upsert por el unico (notificacion, usuario) y no reescribe el instante", async () => {
-    const prisma = buildPrisma();
-    prisma.notificacionLectura.upsert.mockResolvedValue({});
-
-    await repoCon(prisma).marcarLeida("n-1", "u-1", AHORA);
-
-    const arg = prisma.notificacionLectura.upsert.mock.calls[0][0];
-    expect(arg.where).toEqual({ notificacionId_usuarioId: { notificacionId: "n-1", usuarioId: "u-1" } });
-    expect(arg.create).toEqual({ notificacionId: "n-1", usuarioId: "u-1", leidaAt: AHORA });
-    expect(arg.update).toEqual({});
-  });
-
   it("descartar sella descartada_at y garantiza leida_at, sin borrar la notificacion (R33)", async () => {
     const prisma = buildPrisma();
     prisma.notificacionLectura.upsert.mockResolvedValue({});

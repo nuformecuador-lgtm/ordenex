@@ -6,10 +6,10 @@ import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 import {
-  listarSaldosTiendasAction,
+  listarSaldosTiendasCompletoAction,
   listarSaldosTiendasPaginadoAction,
 } from "@/lib/actions/wallet-tienda";
 import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
@@ -153,24 +153,25 @@ export function SaldosTiendasTable({
         error={error ? ERROR_CARGA : null}
         /**
          * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-         * CONJUNTO COMPLETO. Se relee con el MISMO listado que la pantalla ya llamaba antes
-         * de paginar (`listarSaldosTiendasAction`), que exige el mismo acceso total: la
-         * descarga no amplía lo que el actor podía ver (R7/R44).
+         * CONJUNTO COMPLETO, y exige el mismo acceso total que la tabla: la descarga no
+         * amplía lo que el actor podía ver (R7/R44). Por encima del tope de filas NO se
+         * produce archivo, nunca un xlsx al que le faltan filas sin avisar (R26/R28).
          *
-         * `filasDelConjuntoCompleto` conserva el tope de 5000 de `filasLocales`: por encima
-         * devuelve un error accionable y NO produce archivo, nunca un xlsx al que le faltan
-         * filas sin avisar (R26/R28).
+         * Feature 184 (T G.2, R1/R2/R5/R6) — ese conjunto sale ahora de la lectura DEDICADA
+         * y no de releer `listarSaldosTiendasAction`. Consultas: las mismas dos, medido
+         * (`progress/impl_184_tandaG_backend.md §1`). Lo que cambia son dos cosas que sí
+         * importan: el tope pasa a decidirse en el SERVIDOR —el conjunto ya no cruza al
+         * navegador para descartarlo allí— y el archivo sale ORDENADO como la tabla. La
+         * relectura salía de `listarSaldosTodasTiendas`, que devuelve las filas en el orden
+         * del planificador mientras la tabla ordena por nombre: la fila 26 del archivo no
+         * era la primera de la página 2 y dos descargas seguidas podían diferir (R5).
          */
         descarga={{
           titulo: TITULO_DESCARGA,
           columnas: COLUMNAS_DESCARGA_SALDOS_TIENDAS,
           obtenerFilas: () =>
-            filasDelConjuntoCompleto(
-              listarSaldosTiendasAction().then((res) =>
-                res.status === "ok"
-                  ? ({ status: "ok", items: res.tiendas } as const)
-                  : res,
-              ),
+            filasDesdeResultado(
+              listarSaldosTiendasCompletoAction(),
               filaDescargaSaldoTienda,
             ),
         }}

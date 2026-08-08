@@ -4,7 +4,6 @@ import {
   asignarDesdeBodega,
   asignarRecoleccion,
   listarMensajerosParaAsignacion,
-  listarCatalogoEstatus,
   listarZonasBloqueadasPorCierre,
   rutearABodegaSatelite,
 } from "@/lib/actions/ordenes-guia";
@@ -73,14 +72,6 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
 
     expect(r.status).toBe("unauthenticated");
     expect(service.rutearABodegaSatelite).not.toHaveBeenCalled();
-  });
-
-  it("listarCatalogoEstatus", async () => {
-    const ordenRepo = { listOrderStatus: vi.fn() };
-    const r = await listarCatalogoEstatus({ ordenRepo, getActor: getActor(null) });
-
-    expect(r.status).toBe("unauthenticated");
-    expect(ordenRepo.listOrderStatus).not.toHaveBeenCalled();
   });
 });
 
@@ -154,19 +145,65 @@ describe("generarGuia — validacion de entrada (zod, 156/R14)", () => {
     expect(service.generarGuia).toHaveBeenCalledWith({ ordenIds: ["o1"] }, MAESTRO);
   });
 
-  it("ordenIds vacio es valido (lote vacio); un id vacio no lo es", async () => {
+  it("un id vacio dentro del lote -> validation_error", async () => {
     const service = fakeGuiaService();
-    const rVacio = await generarGuia(
-      { ordenIds: [] },
-      { guiaService: service, getActor: getActor(MAESTRO) },
-    );
-    expect(rVacio.status).toBe("ok");
-
     const rIdVacio = await generarGuia(
       { ordenIds: [""] },
       { guiaService: service, getActor: getActor(MAESTRO) },
     );
     expect(rIdVacio.status).toBe("validation_error");
+    expect(service.generarGuia).not.toHaveBeenCalled();
+  });
+});
+
+// 2026-08-05 — EL LOTE VACIO NO ES UN EXITO. Las tres acciones de lote de este archivo
+// declaraban `ordenIds: z.array(...)` SIN cota inferior, y sus tres services arrancan con
+// `if (ordenIds.length === 0) return { status: "ok", resultados: [] }`: `{ ordenIds: [] }`
+// cruzaba el borde y volvia como `ok` con 0 resultados, que la UI cantaba como exito
+// ("Mensajero asignado a 0 orden(es)"). Se cerro en el schema —la raiz—, no en los modales:
+// el borde rechaza el lote vacio con `validation_error` y el service NI SE ENTERA.
+//
+// Cada caso espia el service: `not.toHaveBeenCalled()` es lo que distingue "lo para el
+// borde" de "lo absorbe el service y devuelve ok". Si a `orden-guia.ts` se le quita el
+// `.min(1)` del array, estos tres se ponen en rojo (verificado por mutacion).
+describe("lote vacio -> validation_error en el borde, sin tocar el service", () => {
+  it("generarGuia", async () => {
+    const service = fakeGuiaService();
+    const r = await generarGuia(
+      { ordenIds: [] },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("unreachable");
+    expect(r.fieldErrors.ordenIds).toBeDefined();
+    expect(service.generarGuia).not.toHaveBeenCalled();
+  });
+
+  it("asignarDesdeBodega", async () => {
+    const service = fakeGuiaService();
+    const r = await asignarDesdeBodega(
+      { ordenIds: [], mensajeroId: "m1" },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("unreachable");
+    expect(r.fieldErrors.ordenIds).toBeDefined();
+    expect(service.asignarDesdeBodega).not.toHaveBeenCalled();
+  });
+
+  it("rutearABodegaSatelite", async () => {
+    const service = fakeGuiaService();
+    const r = await rutearABodegaSatelite(
+      { ordenIds: [] },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("unreachable");
+    expect(r.fieldErrors.ordenIds).toBeDefined();
+    expect(service.rutearABodegaSatelite).not.toHaveBeenCalled();
   });
 });
 
@@ -319,52 +356,13 @@ describe("Feature 30/R13/R16: rutearABodegaSatelite (server action)", () => {
   });
 });
 
-describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, value)", () => {
-  it("maestro: repo.listOrderStatus resuelve el catalogo completo", async () => {
-    const listOrderStatus = vi.fn().mockResolvedValue([
-      { id: "os-1", value: "por_recolectar_en_tienda" },
-      { id: "os-2", value: "en_preparacion" },
-      { id: "os-3", value: "por_recoger" },
-      { id: "os-4", value: "en_bodega_central" },
-    ]);
-    const r = await listarCatalogoEstatus({
-      ordenRepo: { listOrderStatus },
-      getActor: getActor(MAESTRO),
-    });
-
-    expect(r).toEqual({
-      status: "ok",
-      estatus: [
-        { id: "os-1", value: "por_recolectar_en_tienda" },
-        { id: "os-2", value: "en_preparacion" },
-        { id: "os-3", value: "por_recoger" },
-        { id: "os-4", value: "en_bodega_central" },
-      ],
-    });
-    expect(listOrderStatus).toHaveBeenCalledWith();
-  });
-
-  it("feature 94: admin (paridad con maestro) tambien puede listar", async () => {
-    const listOrderStatus = vi.fn().mockResolvedValue([]);
-    const r = await listarCatalogoEstatus({
-      ordenRepo: { listOrderStatus },
-      getActor: getActor(ADMIN),
-    });
-
-    expect(r.status).toBe("ok");
-  });
-
-  it("mensajero/adminTienda -> forbidden", async () => {
-    const listOrderStatus = vi.fn();
-    const r = await listarCatalogoEstatus({
-      ordenRepo: { listOrderStatus },
-      getActor: getActor({ usuarioId: "u-msg", rol: "mensajero" }),
-    });
-
-    expect(r).toEqual({ status: "forbidden" });
-    expect(listOrderStatus).not.toHaveBeenCalled();
-  });
-});
+// BORRADO 2026-08-07 (chore de deuda de superficie): aqui vivia
+// `describe("R15/R16: listarCatalogoEstatus ...")`, con los tres casos de esa accion (catalogo
+// completo, paridad admin, forbidden a mensajero). Se van CON la accion, no se reapuntan: la
+// sustituta viva `listarOrderStatus` (`lib/actions/order-status.ts`) ya prueba las tres
+// propiedades y mas, en `tests/unit/actions/order-status.test.ts` — catalogo {id,value},
+// los CUATRO roles autorizados, sin sesion, mensajero -> forbidden y rol desconocido ->
+// forbidden. No se pierde ninguna cobertura.
 
 // Gate de seleccion del maestro (decision del humano 2026-07-16): la UI deshabilita el
 // checkbox de las ordenes cuya zona tenga >=1 mensajero con cierre abierto. Cubre TODAS

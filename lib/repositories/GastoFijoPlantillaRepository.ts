@@ -40,6 +40,20 @@ function toDTO(r: PlantillaRow): GastoFijoPlantillaDTO {
 }
 
 /**
+ * Feature 184 — Tanda G (R16) — el ORDEN de las plantillas, declarado UNA vez.
+ *
+ * Estaba escrito TRES veces en este archivo (`listar`, `listarPaginado`, `listarActivas`) con
+ * el mismo literal. Mientras el conjunto entero solo alimentaba una tabla sin paginar, dos
+ * copias divergentes eran un defecto cosmetico. Desde que el conjunto sostiene el ARCHIVO de
+ * la descarga deja de serlo: si el orden del conjunto se separa del de la pagina, la fila 26
+ * del archivo deja de ser la primera de la pagina 2 y no hay ninguna pantalla que lo diga.
+ *
+ * Lo que distingue a las tres lecturas es su `where` —`listarActivas` es el conjunto del CRON,
+ * y ese filtro sigue siendo suyo—, no la secuencia en que presentan las filas.
+ */
+const ORDEN_PLANTILLAS: Prisma.GastoFijoPlantillaOrderByWithRelationInput = { createdAt: "desc" };
+
+/**
  * Feature 45 — repositorio de PLANTILLAS de gasto fijo. SOLO queries Prisma. CRUD sin borrado
  * (R25): crear, actualizar (concepto/monto), setActiva (activar/desactivar), listar (todas),
  * listarActivas (cron), obtenerPorId. Montos SIEMPRE STRING en el DTO (money-safe, R12).
@@ -85,9 +99,17 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
     return toDTO(row);
   }
 
-  /** R26: todas las plantillas, mas recientes primero. */
+  /**
+   * R26: todas las plantillas, mas recientes primero.
+   *
+   * Feature 184 — Tanda G: este es ademas el CONJUNTO del que sale el archivo de la descarga
+   * (listado 11 del Anexo A). No se le anadio un gemelo `listarCompleto`: seria un tercer
+   * `findMany` sin `where` con el mismo orden, o sea una segunda declaracion del mismo
+   * criterio, que es justo lo que R16 prohibe. Sin `skip`/`take` y sin `count` (R15): el total
+   * del archivo es el numero de filas que devuelve, no un conteo aparte.
+   */
   async listar(): Promise<GastoFijoPlantillaDTO[]> {
-    const rows = await this.prisma.gastoFijoPlantilla.findMany({ orderBy: { createdAt: "desc" } });
+    const rows = await this.prisma.gastoFijoPlantilla.findMany({ orderBy: ORDEN_PLANTILLAS });
     return rows.map(toDTO);
   }
 
@@ -100,7 +122,7 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
   async listarPaginado(rango: RangoPagina): Promise<PaginaRepositorio<GastoFijoPlantillaDTO>> {
     const [rows, total] = await Promise.all([
       this.prisma.gastoFijoPlantilla.findMany({
-        orderBy: { createdAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_PLANTILLAS, // R51/R16: el MISMO criterio del listado sin paginar
         skip: rango.skip,
         take: rango.take,
       }),
@@ -112,8 +134,8 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
   /** R27: solo las activas (consumo del cron). */
   async listarActivas(): Promise<GastoFijoPlantillaDTO[]> {
     const rows = await this.prisma.gastoFijoPlantilla.findMany({
-      where: { activa: true },
-      orderBy: { createdAt: "desc" },
+      where: { activa: true }, // lo que distingue al conjunto del CRON es ESTO, no el orden
+      orderBy: ORDEN_PLANTILLAS,
     });
     return rows.map(toDTO);
   }

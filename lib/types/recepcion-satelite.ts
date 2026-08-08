@@ -5,6 +5,7 @@ import type {
 } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { MensajeroLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
@@ -61,6 +62,45 @@ export type ListarOrdenesBodegaPaginadoActionInput = z.infer<
   typeof listarOrdenesBodegaPaginadoSchema
 >;
 
+/**
+ * Feature 184 — Tanda A (T A.3, R3/R17) — el MISMO listado sin recorte por pagina, para la
+ * descarga. Se DERIVA del schema de la pagina quitandole `page`/`pageSize`, no se reescribe: si
+ * mañana el listado gana un filtro, el conjunto lo gana en la misma linea y los dos caminos no
+ * pueden entender cosas distintas por «filtro» (R16).
+ *
+ * `.strict()` se reescribe aunque `.omit()` lo herede, por el mismo motivo que en el schema de
+ * la pagina: la barrera de ALCANCE es de este listado y no debe depender de que el schema base
+ * nunca se afloje. Un `zonaId` colado muere aqui, sin llegar al servicio (R4/R17).
+ */
+export const listarOrdenesBodegaCompletoSchema = listarOrdenesBodegaPaginadoSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarOrdenesBodegaCompletoActionInput = z.infer<
+  typeof listarOrdenesBodegaCompletoSchema
+>;
+
+/**
+ * Feature 184 — Tanda A (T A.3, R21/Q2) — la comprobacion de VIGENCIA con la que se poda la
+ * seleccion: los mismos filtros del listado mas los identificadores que el cliente tiene
+ * marcados fuera de la pagina visible.
+ *
+ * `ids` es la unica clave nueva y va acotada por los dos lados: `uuid` porque `orden.id` lo es,
+ * `.min(1)` porque preguntar por nada no es una pregunta (R23) y `.max(MAX_IDS_VIGENCIA)`
+ * porque esta lista acaba en un `IN` de SQL y la propone el cliente (Q2, default 500).
+ * Pasarse devuelve `validation_error` y la seleccion NO se toca (R22).
+ */
+export const listarIdsVigentesBodegaSchema = listarOrdenesBodegaCompletoSchema
+  .extend({
+    ids: z
+      .array(z.string().uuid())
+      .min(1)
+      .max(recepcionSateliteConfig.MAX_IDS_VIGENCIA),
+  })
+  .strict();
+
+export type ListarIdsVigentesBodegaActionInput = z.infer<typeof listarIdsVigentesBodegaSchema>;
+
 // --- Resultados expuestos por las Server Actions (agregan `unauthenticated`) ---
 
 /**
@@ -75,6 +115,28 @@ export type ListarOrdenesBodegaPaginadoResult = ListarPaginadoResult<
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "unauthenticated" }
 >;
+
+/**
+ * Feature 184 — Tanda A (T A.3, R1/R6/R7): el conjunto filtrado ENTERO tal como lo recibe el
+ * cliente. Union de error ANCHO (`ActionError`) y no el estrecho de la pagina: quien lo consume
+ * es `filasDesdeResultado`, el adaptador comun de la descarga, que redacta el mensaje de
+ * CUALQUIER error de borde en un solo sitio. `limite_excedido` lleva solo conteos, nunca filas.
+ */
+export type ListarOrdenesBodegaCompletoResult = ListarCompletoResult<RecepcionSateliteDTO>;
+
+/**
+ * Feature 184 — Tanda A (T A.3, R18/R21/R22): los identificadores que SIGUEN en el conjunto
+ * filtrado, de entre los preguntados.
+ *
+ * Devuelve los VIGENTES y no los caducados a proposito: el cliente interseca, asi que un fallo
+ * —o una respuesta que no llega— no puede leerse nunca como «desmarca todo». Ninguna rama de
+ * error lleva datos del identificador ajeno (R21).
+ */
+export type ListarIdsVigentesBodegaResult =
+  | { status: "ok"; ids: string[] }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
 
 /** Feature 170 — FASE 2 (T K.2, R46): opciones de canton y distrito del conjunto del actor. */
 export type ObtenerCatalogoFiltrosSateliteResult =

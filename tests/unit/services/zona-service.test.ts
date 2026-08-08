@@ -24,7 +24,6 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     listLite: vi.fn().mockResolvedValue([]), // feature 144; no ejercitado aqui
     update: vi.fn().mockResolvedValue(dto()),
     hardDelete: vi.fn().mockResolvedValue("ok"),
-    arbol: vi.fn().mockResolvedValue({}),
     // por defecto: todos los ids existen.
     countExistingDistritos: vi.fn(async (ids: string[]) => ids.length),
     countExistingVehiculos: vi.fn(async (ids: string[]) => ids.length),
@@ -64,12 +63,13 @@ describe("autorizacion — solo maestro (feature 24)", () => {
     expect(repo.create).not.toHaveBeenCalled();
   });
 
-  it("listar/obtener/actualizar/borrar/arbol: no-maestro -> forbidden", async () => {
+  // `arbol` salio de esta lista el 2026-08-07 al borrarse la cadena entera; el gate maestro
+  // de las cinco operaciones que quedan se sigue probando igual.
+  it("listar/obtener/actualizar/borrar: no-maestro -> forbidden", async () => {
     expect((await service.listar({ page: 1, pageSize: 25 }, ADMIN)).status).toBe("forbidden");
     expect((await service.obtener("z1", ADMIN)).status).toBe("forbidden");
     expect((await service.actualizar("z1", crearInput(), ADMIN)).status).toBe("forbidden");
     expect((await service.borrar("z1", ADMIN)).status).toBe("forbidden");
-    expect((await service.arbol(ADMIN)).status).toBe("forbidden");
     expect(repo.hardDelete).not.toHaveBeenCalled();
   });
 });

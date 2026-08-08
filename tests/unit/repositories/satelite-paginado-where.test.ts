@@ -70,6 +70,23 @@ function texto(sql: Prisma.Sql): string {
   return sql.sql.replace(/\s+/g, " ").trim();
 }
 
+/** El `FROM ... WHERE ...` de una consulta: todo lo que hay entre el `FROM` y el `ORDER BY`. */
+function desdeDe(sql: Prisma.Sql): string {
+  const t = texto(sql);
+  const inicio = t.indexOf('FROM "orden"');
+  const fin = t.indexOf(" ORDER BY");
+  return fin === -1 ? t.slice(inicio) : t.slice(inicio, fin);
+}
+
+/** El `ORDER BY ...` de una consulta, sin el recorte que pueda venir detras. */
+function ordenDe(sql: Prisma.Sql): string {
+  const t = texto(sql);
+  const inicio = t.indexOf("ORDER BY");
+  if (inicio === -1) return "";
+  const fin = t.indexOf(" LIMIT ", inicio);
+  return fin === -1 ? t.slice(inicio) : t.slice(inicio, fin);
+}
+
 describe("SQL de la página de la bodega satélite (T K.1)", () => {
   it("el acotamiento por zona del actor y las borradas van SIEMPRE en el where", async () => {
     const { repo, consultas } = clienteFalso(["o-1", "o-2"], 17);
@@ -191,12 +208,6 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
 
     // El fragmento `FROM ... WHERE` del conteo es el MISMO texto que el de la pagina (lo que
     // sigue en la pagina es solo el orden y el recorte).
-    const desdeDe = (sql: Prisma.Sql): string => {
-      const t = texto(sql);
-      const inicio = t.indexOf('FROM "orden"');
-      const fin = t.indexOf(" ORDER BY");
-      return fin === -1 ? t.slice(inicio) : t.slice(inicio, fin);
-    };
     expect(desdeDe(conteo)).toBe(desdeDe(pagina));
     expect(conteo.values).toEqual(pagina.values.slice(0, conteo.values.length));
     // El conteo NO lleva recorte: contaria la pagina.
@@ -332,5 +343,236 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
         [],
       );
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 184 — Tanda A: el CONJUNTO de la descarga (T A.1) y la VIGENCIA de ids (T A.2)
+// ---------------------------------------------------------------------------
+//
+// Los dos metodos nuevos nacen del MISMO fragmento SQL que la pagina, y esa es justamente la
+// propiedad que no se puede probar con un doble de repositorio: los tests de servicio ven un
+// filtro que entra y unas filas que salen, no la traduccion a SQL. En la 170 sobrevivieron 7+
+// mutaciones del `WHERE` a los tests de servicio y solo las cazo este archivo.
+
+const FILTRO_COMPLETO = {
+  zonaId: "z-a",
+  estatusValues: [...ESTADOS_BODEGA_SATELITE],
+  cantonNombres: ["Escazú", "Barva"],
+  distritoNombres: ["San Rafael"],
+} as const;
+
+describe("SQL del conjunto completo de la bodega satélite (feature 184, T A.1)", () => {
+  it("el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    // Es LA propiedad de la tanda: el criterio se declara una vez. Si el `WHERE` o el `ORDER
+    // BY` del archivo se despegaran del de la pantalla, la fila N del archivo dejaria de ser la
+    // fila N que el usuario ve, y ninguna de las dos superficies fallaria.
+    const a = clienteFalso(["o-1", "o-2"], 2);
+    await a.repo.findRecepcionSatelitePaginada(FILTRO_COMPLETO, RANGO);
+    const b = clienteFalso(["o-1", "o-2"], 2);
+    await b.repo.findRecepcionSateliteCompleta(FILTRO_COMPLETO);
+
+    const pagina = a.consultas[0]!;
+    const conjunto = b.consultas[0]!;
+
+    // Mismas condiciones, TEXTO a texto (incluidos los JOINs que las sostienen).
+    expect(desdeDe(conjunto)).toBe(desdeDe(pagina));
+    // Y mismos VALORES: un `WHERE` identico con otros parametros seria otro conjunto.
+    expect(conjunto.values.slice(0, 6)).toEqual(pagina.values.slice(0, 6));
+    // Mismo orden, incluido el desempate por `id` (sin el, dos filas empatadas pueden cambiar
+    // de sitio entre la pantalla y el archivo).
+    expect(ordenDe(conjunto)).toBe(ordenDe(pagina));
+    expect(ordenDe(conjunto)).toContain('array_position(ARRAY[?,?,?,?,?]::text[], os."value") ASC');
+
+    // La pagina es EXACTAMENTE el conjunto + el recorte: sus valores son los del conjunto y,
+    // detras, `take`/`skip`. Es la forma medible de «la pagina N es el segmento N del conjunto».
+    expect(pagina.values.slice(0, conjunto.values.length)).toEqual([...conjunto.values]);
+    expect(pagina.values.slice(conjunto.values.length)).toEqual([RANGO.take, RANGO.skip]);
+  });
+
+  it("el conjunto NO lleva LIMIT ni OFFSET, y tampoco el conteo de ventana (R15)", async () => {
+    const { repo, consultas } = clienteFalso(["o-1", "o-2", "o-3"], 3);
+
+    await repo.findRecepcionSateliteCompleta(FILTRO_COMPLETO);
+
+    const sql = texto(consultas[0]!);
+    // Lo que R15 exige afirmar: que NO lleva. Un `LIMIT` colado aqui produce un archivo al que
+    // le faltan filas sin que nada avise, que es el defecto que esta feature viene a cerrar.
+    expect(sql).not.toContain("LIMIT");
+    expect(sql).not.toContain("OFFSET");
+    // El `COUNT(*) OVER ()` es de la pagina: aqui el total es el tamaño de lo que se devuelve.
+    expect(sql).not.toContain("COUNT(*) OVER ()");
+    expect(sql).toContain('SELECT o."id"');
+    // Y ningun valor de recorte viaja: 9 de condiciones (zona + 5 estados + 2 cantones + 1
+    // distrito) + los 5 de la secuencia del orden. Ni un `take` ni un `skip` detras.
+    expect(consultas[0]!.values).toHaveLength(9 + ESTADOS_BODEGA_SATELITE.length);
+  });
+
+  it("emite exactamente DOS consultas: la que ordena y la que hidrata (R15)", async () => {
+    const { repo, consultas, findMany } = clienteFalso(["o-9", "o-1", "o-5"], 3);
+
+    const filas = await repo.findRecepcionSateliteCompleta({
+      zonaId: "z-a",
+      estatusValues: [...ESTADOS_BODEGA_SATELITE],
+    });
+
+    // Las mismas dos que la pagina: ni una consulta mas por descargar (R28 de la 184).
+    expect(consultas).toHaveLength(1);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    // La hidratacion REPITE el acotamiento por zona: los ids salen de una consulta acotada,
+    // pero esta es la que devuelve datos y una lista de ids nunca es su unica guarda.
+    expect(findMany.mock.calls[0]![0]!.where).toEqual({
+      id: { in: ["o-9", "o-1", "o-5"] },
+      zonaId: "z-a",
+      deletedAt: null,
+    });
+    // El orden lo manda la consulta que ordeno, no el `findMany` (que no lo garantiza).
+    expect(filas.map((f) => f.id)).toEqual(["o-9", "o-1", "o-5"]);
+  });
+
+  it("el acotamiento del actor va en el where del conjunto, y los filtros solo lo estrechan (R4/R11)", async () => {
+    const { repo, consultas } = clienteFalso(["o-1"], 1);
+
+    await repo.findRecepcionSateliteCompleta(FILTRO_COMPLETO);
+
+    const sql = texto(consultas[0]!);
+    expect(sql).toContain('WHERE o."zona_id" = ?');
+    expect(sql).toContain('o."deleted_at" IS NULL');
+    expect(sql).toMatch(
+      /o\."zona_id" = \? AND o\."deleted_at" IS NULL AND os\."value" IN \(\?,\?,\?,\?,\?\) AND c\."nombre" IN \(\?,\?\) AND d\."nombre" IN \(\?\)/,
+    );
+    // La zona es el PRIMER parametro y es la del actor: el archivo no puede traer una fila que
+    // la pantalla no enseñaria.
+    expect(consultas[0]!.values[0]).toBe("z-a");
+    expect(consultas[0]!.values.slice(6, 8)).toEqual(["Escazú", "Barva"]);
+  });
+
+  it("sin filtros de geografía el conjunto no emite ninguna condición de geografía", async () => {
+    const { repo, consultas } = clienteFalso(["o-1"], 1);
+
+    await repo.findRecepcionSateliteCompleta({
+      zonaId: "z-a",
+      estatusValues: [...ESTADOS_BODEGA_SATELITE],
+    });
+
+    expect(texto(consultas[0]!)).not.toContain('c."nombre"');
+    expect(texto(consultas[0]!)).not.toContain('d."nombre"');
+  });
+
+  it("sin estados no consulta nada: el conjunto se define por ellos", async () => {
+    const { repo, $queryRaw, findMany } = clienteFalso(["o-1"], 1);
+
+    expect(
+      await repo.findRecepcionSateliteCompleta({ zonaId: "z-a", estatusValues: [] }),
+    ).toEqual([]);
+    expect($queryRaw).not.toHaveBeenCalled();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("un conjunto vacío no hidrata: una consulta y ninguna fila", async () => {
+    const { repo, consultas, findMany } = clienteFalso([], 0);
+
+    expect(
+      await repo.findRecepcionSateliteCompleta({
+        zonaId: "z-a",
+        estatusValues: ["devuelta"],
+      }),
+    ).toEqual([]);
+    expect(consultas).toHaveLength(1);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("SQL de la vigencia de identificadores de la bodega satélite (feature 184, T A.2)", () => {
+  it("el where lleva la ZONA del actor además del IN de ids (R21)", async () => {
+    const { repo, consultas } = clienteFalso(["o-1"], 1);
+
+    await repo.findIdsVigentesEnBodega(
+      { zonaId: "z-a", estatusValues: [...ESTADOS_BODEGA_SATELITE] },
+      ["o-1", "o-2", "o-3"],
+    );
+
+    const sql = texto(consultas[0]!);
+    // El `IN` de ids NO es la guarda: los ids los propone el cliente. Sin la zona, un actor
+    // podria preguntar por identificadores de otra zona y el propio hecho de que uno volviera
+    // le confirmaria que existe.
+    expect(sql).toContain('o."zona_id" = ?');
+    expect(sql).toContain('o."deleted_at" IS NULL');
+    expect(sql).toContain('os."value" IN (?,?,?,?,?)');
+    expect(sql).toContain('o."id" IN (?,?,?)');
+    expect(sql).toMatch(
+      /o\."zona_id" = \? AND o\."deleted_at" IS NULL AND os\."value" IN \(\?,\?,\?,\?,\?\) AND o\."id" IN \(\?,\?,\?\)/,
+    );
+    // La zona es el primer parametro y los ids van al final, detras del acotamiento.
+    expect(consultas[0]!.values[0]).toBe("z-a");
+    expect(consultas[0]!.values.slice(-3)).toEqual(["o-1", "o-2", "o-3"]);
+  });
+
+  it("es UNA sola consulta de UNA sola columna, sin orden ni recorte (R15)", async () => {
+    const { repo, consultas, findMany } = clienteFalso(["o-1"], 1);
+
+    await repo.findIdsVigentesEnBodega(
+      { zonaId: "z-a", estatusValues: [...ESTADOS_BODEGA_SATELITE] },
+      ["o-1", "o-2"],
+    );
+
+    // Es una pregunta de PERTENENCIA, no una lectura del listado: ni hidrata ni ordena ni
+    // recorta. Si algun dia trajera filas, la poda costaria lo que una descarga.
+    expect(consultas).toHaveLength(1);
+    expect(findMany).not.toHaveBeenCalled();
+    const sql = texto(consultas[0]!);
+    expect(sql).toContain('SELECT o."id"');
+    expect(sql).not.toContain("ORDER BY");
+    expect(sql).not.toContain("LIMIT");
+    expect(sql).not.toContain("COUNT(");
+    expect(sql).not.toContain("destinatario");
+  });
+
+  it("los filtros vigentes también acotan la vigencia: es el MISMO conjunto que el listado (R19)", async () => {
+    const { repo, consultas } = clienteFalso(["o-1"], 1);
+    const conFiltros = clienteFalso(["o-1"], 1);
+
+    await repo.findIdsVigentesEnBodega(FILTRO_COMPLETO, ["o-1"]);
+    await conFiltros.repo.findRecepcionSateliteCompleta(FILTRO_COMPLETO);
+
+    // Mismo `FROM ... WHERE` que el conjunto salvo por el `IN` de ids que se le añade: la
+    // pertenencia se decide sobre el conjunto FILTRADO, no sobre «todo lo de la zona».
+    const vigencia = desdeDe(consultas[0]!);
+    expect(vigencia).toContain('c."nombre" IN (?,?)');
+    expect(vigencia).toContain('d."nombre" IN (?)');
+    expect(vigencia).toBe(
+      `${desdeDe(conFiltros.consultas[0]!)} AND o."id" IN (?)`.replace(/\s+/g, " "),
+    );
+  });
+
+  it("devuelve solo los que la base confirma: un id de otra zona no vuelve (R21)", async () => {
+    // El cliente falso responde con UN id de los dos preguntados: es lo que hace la base cuando
+    // el otro no pasa el acotamiento (otra zona, borrada, estado fuera del listado).
+    const { repo } = clienteFalso(["o-mia"], 1);
+
+    const vigentes = await repo.findIdsVigentesEnBodega(
+      { zonaId: "z-a", estatusValues: [...ESTADOS_BODEGA_SATELITE] },
+      ["o-mia", "o-ajena"],
+    );
+
+    // Devuelve los VIGENTES, nunca los caducados: asi una respuesta corta —o vacia— no puede
+    // leerse como «desmarca todo», y del id ajeno no vuelve ni un dato.
+    expect(vigentes).toEqual(["o-mia"]);
+    expect(vigentes).not.toContain("o-ajena");
+  });
+
+  it("sin ids no consulta (R23) y sin estados tampoco", async () => {
+    const { repo, $queryRaw } = clienteFalso(["o-1"], 1);
+
+    expect(
+      await repo.findIdsVigentesEnBodega(
+        { zonaId: "z-a", estatusValues: [...ESTADOS_BODEGA_SATELITE] },
+        [],
+      ),
+    ).toEqual([]);
+    expect(
+      await repo.findIdsVigentesEnBodega({ zonaId: "z-a", estatusValues: [] }, ["o-1"]),
+    ).toEqual([]);
+    expect($queryRaw).not.toHaveBeenCalled();
   });
 });

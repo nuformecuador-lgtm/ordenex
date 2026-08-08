@@ -30,6 +30,12 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   asignarDesdeSatelite: vi.fn(),
   recibirLote: vi.fn(),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoBodegaMock(...a),
+  // Feature 184 — Tanda A (T A.4/T A.5): el modulo importa las DOS acciones nuevas —el
+  // conjunto de la descarga y la vigencia con la que poda la seleccion—, asi que el doble
+  // tiene que declararlas o el modulo revienta al importarlo. Aqui no se invocan: no se
+  // descarga nada y no hay marcas fuera de la pagina visible (el listado cabe entero).
+  listarOrdenesBodegaCompleto: vi.fn(async () => ({ status: "ok", items: [], total: 0 })),
+  listarIdsVigentesBodega: vi.fn(async () => ({ status: "ok", ids: [] })),
 }));
 
 const recibirLoteMock = vi.mocked(recibirLote);

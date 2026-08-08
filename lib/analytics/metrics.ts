@@ -100,7 +100,7 @@ const CATALOGO = [
   /* ---------------------------- 15 OPERATIVAS ---------------------------- */
   {
     id: "ordenes_creadas",
-    etiqueta: "Ordenes creadas",
+    etiqueta: "Órdenes creadas",
     descripcion:
       "Ordenes nacidas en el rango (en_preparacion o por_recolectar_en_tienda); cuenta ORDENES, no gestiones, asi que las gestiones anuladas (anulada_at) no la afectan ni la inflan.",
     dominio: "operativa",
@@ -115,7 +115,7 @@ const CATALOGO = [
   },
   {
     id: "ordenes_por_estado",
-    etiqueta: "Ordenes por estado",
+    etiqueta: "Órdenes por estado",
     descripcion:
       "Embudo: ORDENES agrupadas por su estatus al corte sobre el universo B2 de la 124 (las vivas al corte mas las que llegaron a un estado terminal ese mismo dia), cada orden en una sola fila; el rollup NO conserva el archivo historico de estados terminales, asi que el historico de terminales se sirve de las medidas de flujo (entregas, devoluciones, rechazos, incidentes) y no de este embudo; no cuenta gestiones, asi que una gestion anulada no mueve esta cifra (solo la mueve el estado real de la orden).",
     dominio: "operativa",
@@ -290,7 +290,7 @@ const CATALOGO = [
   },
   {
     id: "tasa_devolucion",
-    etiqueta: "Tasa de devolucion",
+    etiqueta: "Tasa de devolución",
     descripcion:
       "Devoluciones sobre el total de gestiones vigentes de resultado (entregas+devoluciones+rechazos+incidentes); es una tasa SOBRE GESTIONES: el denominador NO es el numero de ordenes y excluye las gestiones anuladas.",
     dominio: "operativa",
@@ -353,7 +353,7 @@ const CATALOGO = [
   },
   {
     id: "motivos_devolucion",
-    etiqueta: "Motivos de devolucion",
+    etiqueta: "Motivos de devolución",
     descripcion:
       "Gestiones VIGENTES de resultado devuelta agrupadas por su causa tipificada (not_found, wrong_number, wrong_address); no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
@@ -389,7 +389,7 @@ const CATALOGO = [
   },
   {
     id: "aging_por_estado",
-    etiqueta: "Antiguedad por estado",
+    etiqueta: "Antigüedad por estado",
     descripcion:
       "Segundos que las ordenes vivas llevan en su estado actual, leidos INTRADIA de las tablas vivas; mide tiempo de ordenes, no volumen de gestiones, y las gestiones anuladas no cuentan porque no producen transicion vigente.",
     dominio: "operativa",
@@ -443,7 +443,7 @@ const CATALOGO = [
   },
   {
     id: "ingreso_comision_cod",
-    etiqueta: "Ingreso por comision COD",
+    etiqueta: "Ingreso por comisión COD",
     descripcion:
       "Ingreso de Ordenex por comision sobre el contra-entrega segun el libro append-only de la wallet; se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
@@ -481,8 +481,17 @@ const CATALOGO = [
     // la emitia, asi que esta cifra no la contenia nunca. Desde la 173 si, y su numero crece sin
     // que nada mas cambie: quien compare mes contra mes veria un salto que no es un salto. Por eso
     // se declara en el propio catalogo, que es donde lo lee quien mira la cifra.
+    //
+    // ⟨D12⟩ humano, 2026-08-04 (`progress/decision_183.md`), feature 183: `definicion.categorias`
+    // pasa de OCHO a NUEVE ganando `ingreso_ajuste`, y la DESCRIPCION lo declara. Motivo:
+    // `WalletEgresoService` revierte un egreso anulado emitiendo un `ingreso_ajuste` que esta
+    // metrica no declaraba, asi que ANULAR UN EGRESO NO LO DESCONTABA NUNCA de la cifra. El `id`,
+    // la `etiqueta`, el `estadoProduccion`, los `granos`, la `fuente` y el `alcance` no cambian.
+    // Medido por MCP contra produccion ese mismo dia, antes de decidir: CERO filas
+    // `ingreso_ajuste` y cero `egreso_ajuste`, luego el cambio no mueve hoy ningun numero
+    // (`egresos` sigue valiendo 22042.40 de bruto). Es la ventana barata.
     descripcion:
-      "Salidas de la caja principal (pagos a tienda y mensajero, sueldos, gastos fijos y variables, indemnizaciones y ajustes) segun el libro append-only de la wallet; DESDE LA FEATURE 173 incluye el dinero ENTREGADO A LAS TIENDAS, que antes ninguna via emitia, asi que su cifra crece a partir de esa fecha sin que su id ni su nombre cambien y no es comparable con la de antes. Se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "Salidas de la caja principal (pagos a tienda y mensajero, sueldos, gastos fijos y variables, indemnizaciones y ajustes) segun el libro append-only de la wallet; DESDE LA FEATURE 173 incluye el dinero ENTREGADO A LAS TIENDAS, que antes ninguna via emitia, asi que su cifra crece a partir de esa fecha sin que su id ni su nombre cambien y no es comparable con la de antes; DESDE LA FEATURE 183 la ANULACION de un egreso se DESCUENTA de esta cifra: el reverso que la anulacion emite (ingreso_ajuste) entra en la definicion, de modo que el bruto cuenta los DOS movimientos (el pago y su reverso) y el neto es lo que de verdad salio de caja. Se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -490,7 +499,8 @@ const CATALOGO = [
     // `producida` desde ⟨D8⟩ (humano, 2026-08-02 — ver `progress/decision_C2_127.md`). La ficha
     // original de la 127 comprometia ingresos, cuentas por pagar y conciliacion de cierres, y los
     // egresos NO aparecian ahi: por eso esto decia `declarada`. El humano amplio el alcance y la
-    // 127 los sirve de verdad (Σ de las ocho categorias `egreso_*`, tarea D.5).
+    // 127 los sirve de verdad (Σ de las nueve categorias que declara abajo, tarea D.5; eran las
+    // ocho `egreso_*` hasta la 183, que anadio el reverso de la anulacion).
     estadoProduccion: "producida",
     granos: ["fecha"],
     fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
@@ -505,6 +515,10 @@ const CATALOGO = [
         "egreso_gasto_fijo",
         "egreso_gasto_variable",
         "egreso_indemnizacion",
+        // La NOVENA, y la unica que no es `egreso_*`: el reverso que la anulacion de un egreso
+        // emite. Va AL FINAL y sin reordenar las ocho para que el diff se lea de un vistazo.
+        // Sin ella la lista es homogenea de prefijo y el neto seria `-bruto` siempre.
+        "ingreso_ajuste",
       ],
     },
   },
@@ -637,7 +651,7 @@ const CATALOGO = [
   },
   {
     id: "conciliacion_cierres",
-    etiqueta: "Conciliacion de cierres",
+    etiqueta: "Conciliación de cierres",
     descripcion:
       "Cierres de dia y de bodega por estado (solicitado, aprobado, rechazado, vencido) con sus totales snapshot; se lee de los cierres, no de ordenes, y las gestiones anuladas no alteran un total ya congelado.",
     dominio: "financiera",

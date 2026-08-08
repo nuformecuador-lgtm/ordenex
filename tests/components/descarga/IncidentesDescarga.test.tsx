@@ -17,7 +17,9 @@ import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
 import {
   listarIncidentes,
+  listarHistoricoIncidentesCompleto,
   listarHistoricoIncidentesPaginado,
+  listarPendientesIncidentesCompleto,
   listarPendientesIncidentesPaginado,
 } from "@/lib/actions/incidentes";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
@@ -32,6 +34,14 @@ vi.mock("@/lib/actions/incidentes", () => ({
   listarHistoricoIncidentesPaginado: vi.fn(),
   // Feature 170 — FASE 2 (T J.2): la COLA de pendientes también.
   listarPendientesIncidentesPaginado: vi.fn(),
+  // Feature 184 — Tanda F (T F.3): la lectura DEDICADA de la COLA de incidentes. El doble de
+  // `listarIncidentes` se conserva A PROPÓSITO —y programado con las DOS mitades, cola e
+  // histórico— porque es el listado compuesto del que salían los dos archivos de esta
+  // pantalla: sin él, «ya no se relee» no sería una decisión de la pantalla, sería que el
+  // doble no responde.
+  listarPendientesIncidentesCompleto: vi.fn(),
+  // Feature 184 — Tanda F (T F.3): la otra mitad, la del HISTÓRICO (listado 9).
+  listarHistoricoIncidentesCompleto: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -46,10 +56,14 @@ vi.mock("@/lib/utils/xlsx-template", async (importOriginal) => {
 });
 const buildXlsxRowsMock = vi.mocked(buildXlsxRows);
 
+// Feature 184 — Tanda F (T F.3, R7): el toast de error se HOISTEA para poder leer su mensaje.
+// La factoría anterior devolvía un `vi.fn()` nuevo en cada render, así que no había forma de
+// afirmar qué se le dijo al usuario cuando la lectura del conjunto falla.
+const { errorToastMock } = vi.hoisted(() => ({ errorToastMock: vi.fn() }));
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
     success: vi.fn(),
-    error: vi.fn(),
+    error: errorToastMock,
     warning: vi.fn(),
     info: vi.fn(),
     show: vi.fn(),
@@ -141,6 +155,22 @@ function renderIncidentes(
     page: 1,
     ...pagina,
   });
+  // Feature 184 — Tanda F (T F.3): de aquí sale el archivo de la COLA — SU mitad del alcance,
+  // sin recorte y con la forma que `filasDesdeResultado` traduce (`ListarCompletoResult`).
+  vi.mocked(listarPendientesIncidentesCompleto).mockResolvedValue({
+    status: "ok",
+    items: pendientes,
+    total: pendientes.length,
+  });
+  // Y de aquí el del HISTÓRICO. Toma `historicoCompleto` —no `historico`, que es la PÁGINA que
+  // la tabla pinta—: es lo que separa «el archivo trae el conjunto» de «trae lo que se ve».
+  vi.mocked(listarHistoricoIncidentesCompleto).mockResolvedValue({
+    status: "ok",
+    items: historicoCompleto,
+    total: historicoCompleto.length,
+  });
+  // El listado COMPUESTO sigue programado, y con las DOS mitades dentro: es lo que hace que «no
+  // se relee» sea observable (si la pantalla lo llamara, respondería).
   vi.mocked(listarIncidentes).mockResolvedValue({
     status: "ok",
     pendientes,
@@ -258,5 +288,230 @@ describe("Incidentes · descarga", () => {
     expect(filas).toHaveLength(1);
     expect(filas[0].zona).toBe("Limón");
     expect(filas[0].numRemision).toBe(soloSuZona[0].numRemision);
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda F (T F.3): «Incidentes pendientes de decisión» (listado 8)
+  // -------------------------------------------------------------------------
+
+  it("el archivo de la cola de incidentes sale de su lectura DEDICADA, no del listado compuesto (R1/R8)", async () => {
+    // Las tres mitades, como en las tandas B, C, D y E:
+    //
+    //   (a) montar la pantalla NO ejecuta la lectura del conjunto (R8);
+    //   (b) al pulsar se llama a `listarPendientesIncidentesCompleto` UNA vez y SIN un solo
+    //       argumento: este listado no tiene filtros, así que ni `page`, ni `pageSize`, ni
+    //       `zonaId` —la única cuya aceptación convertiría el archivo de un `adminSatelite` en
+    //       el de la zona vecina— pueden viajar (R3/R4/R17);
+    //   (c) y NO se relee `listarIncidentes`, el listado COMPUESTO de esta pantalla.
+    const user = userEvent.setup();
+    renderIncidentes();
+
+    expect(listarPendientesIncidentesCompleto).not.toHaveBeenCalled();
+    expect(listarIncidentes).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Descargar Incidentes pendientes" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarPendientesIncidentesCompleto).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(listarPendientesIncidentesCompleto).mock.calls[0]).toEqual([]);
+    expect(listarIncidentes).not.toHaveBeenCalled();
+    // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
+    // de degradar el archivo.
+    expect(listarPendientesIncidentesPaginado).toHaveBeenCalledTimes(1);
+  });
+
+  it("descargar los incidentes pendientes ya no arrastra el HISTÓRICO: el compuesto trae las dos mitades y ya no se pide (R1)", async () => {
+    // LA propiedad de esta tanda, y la que el xlsx por sí solo NO puede distinguir. El listado
+    // compuesto (`listarIncidentes`) devuelve la cola de pendientes de decisión Y el histórico
+    // entero de incidentes resueltos del alcance; esta descarga se quedaba con una de las dos
+    // mitades y pagaba las dos. Volver a ese camino y seleccionar `res.pendientes` produce
+    // EXACTAMENTE las mismas filas, en el mismo orden: no hay ninguna celda que cambie. Lo
+    // único que lo delata es contar las llamadas — por eso este `expect` no es decorado: si se
+    // quita, la relectura puede volver sin que nada falle.
+    //
+    // Y aquí la asimetría pesa del lado feo: la cola son los incidentes sin decidir —un
+    // puñado— y el histórico que arrastraba crece sin techo con los días.
+    //
+    // La mitad de SERVIDOR (que la lectura dedicada corta por estado en la base y no lee el
+    // alcance entero) vive en `tests/unit/services/incidentes-completo.test.ts`.
+    const user = userEvent.setup();
+    renderIncidentes();
+
+    await user.click(screen.getByRole("button", { name: "Descargar Incidentes pendientes" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarIncidentes).not.toHaveBeenCalled();
+
+    // ANTI-VACUIDAD, en dos pasos, porque «cero llamadas» pasa igual con un doble muerto:
+    //  1. la descarga SÍ ocurrió y produjo sus filas —el cero de arriba no es «no pasó nada»—;
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas).toHaveLength(PENDIENTES.length);
+    //  2. y el doble del compuesto está VIVO y trae LAS DOS MITADES: si la pantalla lo llamara,
+    //     respondería con el histórico además de la cola. No llamarlo es una decisión de la
+    //     pantalla, no del arnés.
+    const compuesto = await listarIncidentes();
+    expect(compuesto.status === "ok" && compuesto.pendientes).toHaveLength(PENDIENTES.length);
+    expect(compuesto.status === "ok" && compuesto.historico).toHaveLength(HISTORICO.length);
+  });
+
+  it("la pantalla NO recorta ni reordena la cola de incidentes que devolvió el servidor (R2)", async () => {
+    // El discriminador entre «el servidor entrega el conjunto» y «lo entrega Y la pantalla lo
+    // vuelve a tocar», con los dos números separados a propósito:
+    //
+    //   · el doble devuelve TREINTA filas y la tabla pinta DOS, así que un archivo de 25 —el
+    //     `pageSize` de este dominio— o de 2 se distingue del bueno (recorte). Con el fixture
+    //     de dos filas a secas, recortar a la página entera no se vería: la página SERÍA el
+    //     conjunto;
+    //   · y las tres primeras van en un orden que NINGÚN orden de cliente reproduce: ni por
+    //     fecha descendente (sería 19, 12, 11) ni ascendente (11, 12, 19) (reordenación). El
+    //     campo por el que difieren es el que la fila de descarga PROYECTA (`createdAt` →
+    //     `fecha`): con un campo idéntico en las treinta filas, un `sort` estable no movería
+    //     nada y la mutación sobreviviría por un defecto del fixture, no del código.
+    const user = userEvent.setup();
+    renderIncidentes();
+
+    const pendiente = (i: number, dia: string) =>
+      incidente({
+        incidenteId: `ip-${i}`,
+        createdAt: `2026-07-${dia}T10:00:00.000Z`,
+      });
+    const relleno = Array.from({ length: 27 }, (_, i) => pendiente(100 + i, "15"));
+    vi.mocked(listarPendientesIncidentesCompleto).mockResolvedValueOnce({
+      status: "ok",
+      items: [pendiente(1, "12"), pendiente(2, "19"), pendiente(3, "11"), ...relleno],
+      total: 30,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Descargar Incidentes pendientes" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas, "el archivo trae la página, no el conjunto").toHaveLength(30);
+    expect(filas.slice(0, 3).map((f) => f.fecha)).toEqual([
+      "2026-07-12",
+      "2026-07-19",
+      "2026-07-11",
+    ]);
+  });
+
+  it("un fallo de la lectura de la cola de incidentes no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
+    const user = userEvent.setup();
+    renderIncidentes();
+    vi.mocked(listarPendientesIncidentesCompleto).mockResolvedValueOnce({
+      status: "forbidden",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Descargar Incidentes pendientes" }));
+    // Ancla POSITIVA: el aviso que SALE, no el archivo que no sale.
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+
+    const [mensaje] = errorToastMock.mock.calls[0] as [string];
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    // Accionable, y sin un solo dato del dominio: ni destinatario, ni quién reportó, ni zona,
+    // ni el motivo del incidente, ni identificadores. Cada fila de esta cola nombra a una
+    // persona y el paquete que perdió.
+    for (const dato of ["Ana Pérez", "Beto Mensajero", "Limón", "Robo en la parada", "REM-i1"]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 184 — Tanda F (T F.3): «Incidentes — histórico» (listado 9)
+  // -------------------------------------------------------------------------
+
+  it("el archivo del histórico de incidentes sale de su lectura DEDICADA, no del listado compuesto (R1/R8)", async () => {
+    // Espejo exacto del caso de la cola, sobre la otra mitad del MISMO listado compuesto.
+    const user = userEvent.setup();
+    renderIncidentes();
+
+    expect(listarHistoricoIncidentesCompleto).not.toHaveBeenCalled();
+    expect(listarIncidentes).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Descargar Incidentes resueltos" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarHistoricoIncidentesCompleto).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(listarHistoricoIncidentesCompleto).mock.calls[0]).toEqual([]);
+    expect(listarIncidentes).not.toHaveBeenCalled();
+    expect(listarHistoricoIncidentesPaginado).toHaveBeenCalledTimes(1);
+  });
+
+  it("descargar el histórico de incidentes ya no arrastra la COLA: el compuesto trae las dos mitades y ya no se pide (R1)", async () => {
+    // La mitad que el xlsx no distingue, del lado del histórico: volver a `listarIncidentes()`
+    // y seleccionar `res.historico` produce el MISMO archivo byte a byte. Solo lo delata el
+    // recuento de llamadas.
+    const user = userEvent.setup();
+    renderIncidentes();
+
+    await user.click(screen.getByRole("button", { name: "Descargar Incidentes resueltos" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    expect(listarIncidentes).not.toHaveBeenCalled();
+
+    // ANTI-VACUIDAD, en los mismos dos pasos.
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas).toHaveLength(HISTORICO.length);
+    const compuesto = await listarIncidentes();
+    expect(compuesto.status === "ok" && compuesto.historico).toHaveLength(HISTORICO.length);
+    expect(compuesto.status === "ok" && compuesto.pendientes).toHaveLength(PENDIENTES.length);
+  });
+
+  it("la pantalla NO recorta ni reordena el histórico de incidentes que devolvió el servidor (R2)", async () => {
+    // Mismo discriminador, con el campo por el que ORDENA esta tabla: el histórico se lee por
+    // `resueltoAt`, no por `createdAt`. Si el fixture repitiera `resueltoAt` en las treinta
+    // filas, un `sort` estable no movería nada y la mutación de reordenación sobreviviría por
+    // un defecto del doble; por eso las tres primeras difieren en el campo que la fila de
+    // descarga PROYECTA (`resueltoAt` → `fechaResuelta`).
+    const user = userEvent.setup();
+    renderIncidentes();
+
+    const resuelto = (i: number, dia: string) =>
+      incidente({
+        incidenteId: `ih-${i}`,
+        estado: "aprobado",
+        indemnizacion: "2500.10",
+        resueltoPorNombre: "Maestra Ordenex",
+        resueltoAt: `2026-07-${dia}T10:00:00.000Z`,
+      });
+    const relleno = Array.from({ length: 27 }, (_, i) => resuelto(100 + i, "15"));
+    vi.mocked(listarHistoricoIncidentesCompleto).mockResolvedValueOnce({
+      status: "ok",
+      items: [resuelto(1, "12"), resuelto(2, "19"), resuelto(3, "11"), ...relleno],
+      total: 30,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Descargar Incidentes resueltos" }));
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas, "el archivo trae la página, no el conjunto").toHaveLength(30);
+    expect(filas.slice(0, 3).map((f) => f.fechaResuelta)).toEqual([
+      "2026-07-12",
+      "2026-07-19",
+      "2026-07-11",
+    ]);
+  });
+
+  it("un fallo de la lectura del histórico de incidentes no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
+    const user = userEvent.setup();
+    renderIncidentes();
+    vi.mocked(listarHistoricoIncidentesCompleto).mockResolvedValueOnce({
+      status: "forbidden",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Descargar Incidentes resueltos" }));
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+
+    const [mensaje] = errorToastMock.mock.calls[0] as [string];
+    expect(mensaje).toMatch(/Vuelve a intentarlo/);
+    // Sin un solo dato del dominio: aquí cada fila lleva ADEMÁS el monto indemnizado y quién
+    // lo decidió.
+    for (const dato of ["Ana Pérez", "Maestra Ordenex", "2500.10", "No procede", "REM-i3"]) {
+      expect(mensaje).not.toContain(dato);
+    }
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
   });
 });

@@ -45,11 +45,16 @@ const listarDesgloseMock = vi.fn();
 const listarDesgloseCompletoMock = vi.fn();
 const listarSaldosPaginaMock = vi.fn();
 const listarSaldosCompletoMock = vi.fn();
+/** Feature 184 - Tanda G (T G.2): la lectura DEDICADA de la que sale el archivo. */
+const listarSaldosDedicadoMock = vi.fn();
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   listarMovimientosDeTiendaAction: (...a: unknown[]) => listarDesgloseMock(...a),
   listarMovimientosDeTiendaCompletoAction: (...a: unknown[]) =>
     listarDesgloseCompletoMock(...a),
   listarSaldosTiendasPaginadoAction: (...a: unknown[]) => listarSaldosPaginaMock(...a),
+  // Feature 184 - Tanda G (T G.2): sin declararla aqui, el control de descarga de la tabla
+  // llama a `undefined` y el archivo no sale (este archivo lo PULSA).
+  listarSaldosTiendasCompletoAction: (...a: unknown[]) => listarSaldosDedicadoMock(...a),
   listarSaldosTiendasAction: (...a: unknown[]) => listarSaldosCompletoMock(...a),
 }));
 
@@ -248,6 +253,12 @@ function renderTabla(
     status: "ok",
     page: 1,
     ...paginaInicial(tiendas),
+  });
+  // T G.2: de aqui sale el archivo; la relectura vieja sigue viva y programada.
+  listarSaldosDedicadoMock.mockResolvedValue({
+    status: "ok",
+    items: tiendas,
+    total: tiendas.length,
   });
   listarSaldosCompletoMock.mockResolvedValue({ status: "ok", tiendas });
   return envolver(

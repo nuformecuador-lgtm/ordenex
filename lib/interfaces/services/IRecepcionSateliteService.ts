@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { OpcionFiltro } from "@/lib/utils/filtro-canton-distrito";
 
@@ -112,6 +113,49 @@ export type ListarOrdenesBodegaPaginadoServiceResult =
   ListarPaginadoServiceResult<RecepcionSateliteDTO>;
 
 /**
+ * Feature 184 — Tanda A (T A.3, R1/R3/R4) — entrada del CONJUNTO del listado «Órdenes de la
+ * bodega» para la descarga: los MISMOS filtros de la pagina, sin `page`/`pageSize`.
+ *
+ * Aqui tampoco hay —ni puede haber— una clave de alcance: la zona sale del actor, siempre.
+ */
+export interface ListarOrdenesBodegaCompletoInput {
+  /** `estatus.value` elegidos; se intersecan con la lista blanca de los cinco (R4). */
+  estados?: string[];
+  /** Nombres de canton elegidos; vacio/ausente = todos. */
+  cantones?: string[];
+  /** Nombres de distrito elegidos; una orden sin distrito queda fuera bajo este filtro. */
+  distritos?: string[];
+}
+
+/**
+ * Feature 184 — Tanda A (T A.3, R6): el conjunto entero o el aviso de tope, nunca las dos cosas
+ * ni un conjunto truncado. El tope (`descargaConfig.MAX_FILAS`) se evalua AQUI, en el servidor.
+ */
+export type ListarOrdenesBodegaCompletoServiceResult =
+  ListarCompletoServiceResult<RecepcionSateliteDTO>;
+
+/**
+ * Feature 184 — Tanda A (T A.3, R19/R21) — entrada de la comprobacion de vigencia: los filtros
+ * VIGENTES del listado mas los identificadores marcados fuera de la pagina visible.
+ *
+ * Los filtros no son decorativos: la pertenencia se decide sobre el conjunto FILTRADO (R19), que
+ * es lo que el usuario esta viendo, y no sobre «todo lo de la zona».
+ */
+export interface ListarIdsVigentesBodegaInput extends ListarOrdenesBodegaCompletoInput {
+  /** Identificadores por los que se pregunta. Vacio -> `[]` sin consultar (R23). */
+  ids: string[];
+}
+
+/**
+ * Feature 184 — Tanda A (T A.3, R21/R22): los que SIGUEN en el conjunto, subconjunto de los
+ * preguntados. Un id fuera del alcance del actor simplemente no vuelve, y de el no viaja ningun
+ * dato. `forbidden` si el rol no es adminSatelite.
+ */
+export type ListarIdsVigentesBodegaServiceResult =
+  | { status: "ok"; ids: string[] }
+  | { status: "forbidden" };
+
+/**
  * Feature 170 — FASE 2 (T K.2, R46) — opciones de los desplegables de canton y distrito,
  * derivadas del CONJUNTO del actor y no de la pagina visible.
  *
@@ -186,6 +230,31 @@ export interface IRecepcionSateliteService {
     input: ListarOrdenesBodegaPaginadoInput,
     actor: Actor,
   ): Promise<ListarOrdenesBodegaPaginadoServiceResult>;
+  /**
+   * Feature 184 — Tanda A (T A.3, R1/R2/R4/R6/R11): el CONJUNTO filtrado entero del mismo
+   * listado, para producir el archivo. Mismo guard de rol, misma zona del actor y la MISMA
+   * lista blanca de estados que la pagina: descargar no amplia el alcance ni una fila.
+   *
+   * El tope de filas se evalua aqui (R6): superarlo NO entrega filas ni un conjunto truncado,
+   * devuelve el total encontrado y el tope vigente. Sin zona -> conjunto vacio, no `forbidden`.
+   */
+  listarOrdenesBodegaCompleto(
+    input: ListarOrdenesBodegaCompletoInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesBodegaCompletoServiceResult>;
+  /**
+   * Feature 184 — Tanda A (T A.3, R19/R21/R23): cuales de los identificadores preguntados
+   * siguen perteneciendo al conjunto filtrado. Es lo que permite PODAR la seleccion cuando una
+   * orden marcada deja de estar en el listado.
+   *
+   * Se decide sobre el CONJUNTO con los filtros vigentes, nunca sobre la pagina visible (R19), y
+   * acotado al alcance del actor: un id de otra zona vuelve como no vigente y de el no se revela
+   * nada (R21). Sin ids —o sin zona— devuelve `[]` sin consultar (R23).
+   */
+  listarIdsVigentesBodega(
+    input: ListarIdsVigentesBodegaInput,
+    actor: Actor,
+  ): Promise<ListarIdsVigentesBodegaServiceResult>;
   /**
    * Feature 170 — FASE 2 (T K.2, R44/R46): opciones de canton y distrito del CONJUNTO del
    * actor, independientes del recorte de pagina. Mismo guard de rol y misma zona que

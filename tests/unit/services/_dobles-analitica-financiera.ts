@@ -1,14 +1,19 @@
 import { vi } from "vitest";
 import { prepararConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
+import type { CuboTemporal } from "@/lib/analytics/cubo-temporal";
 import type { ActorAnalitica } from "@/lib/analytics/alcance";
 import type { ErrorLogger } from "@/lib/errors/logger";
-import type { AgregadoCategoriaCaja } from "@/lib/interfaces/repositories/IIngresosAnaliticaRepository";
+import type {
+  AgregadoCategoriaCaja,
+  AgregadoCuboCategoriaCaja,
+} from "@/lib/interfaces/repositories/IIngresosAnaliticaRepository";
 import type {
   AgregadoTiendaLedger,
   TotalPorMetodoCierre,
 } from "@/lib/interfaces/repositories/IRecaudoAnaliticaRepository";
 import type {
+  AgregadoCuboTipo,
   CuentaMensajeroAlCorte,
   SaldoTiendaAlCorte,
 } from "@/lib/interfaces/repositories/ICuentasPorPagarAnaliticaRepository";
@@ -18,6 +23,11 @@ import type {
   TotalLedgerPorOrigenCierre,
 } from "@/lib/interfaces/repositories/IConciliacionCierresAnaliticaRepository";
 import { AnaliticaFinancieraService } from "@/lib/services/AnaliticaFinancieraService";
+import type {
+  ImporteAnalitico,
+  ImporteConNeto,
+  ImporteSoloBruto,
+} from "@/lib/types/analitica-financiera";
 
 // Feature 127 / TANDA D — DOBLES DE LOS CUATRO REPOSITORIOS (R31).
 //
@@ -36,6 +46,10 @@ export interface DatosFinancieros {
   readonly porTienda: readonly AgregadoTiendaLedger[];
   readonly saldoTiendas: readonly SaldoTiendaAlCorte[];
   readonly cuentaMensajeros: readonly CuentaMensajeroAlCorte[];
+  /* --- Feature 180: el material del desglose por cubo temporal ------------------------- */
+  readonly cajaPorCubo: readonly AgregadoCuboCategoriaCaja[];
+  readonly cuentaMensajerosPorCubo: readonly AgregadoCuboTipo[];
+  readonly cuentaMensajerosAntes: readonly CuentaMensajeroAlCorte[];
   readonly porEstado: readonly GrupoCierrePorEstado[];
   readonly snapshots: readonly SnapshotCierreAprobado[];
   readonly ledger: readonly TotalLedgerPorOrigenCierre[];
@@ -47,6 +61,9 @@ const VACIO: DatosFinancieros = {
   porTienda: [],
   saldoTiendas: [],
   cuentaMensajeros: [],
+  cajaPorCubo: [],
+  cuentaMensajerosPorCubo: [],
+  cuentaMensajerosAntes: [],
   porEstado: [],
   snapshots: [],
   ledger: [],
@@ -63,10 +80,45 @@ export function consultaDe(metricaId: string, raw: unknown = { rango: "dia" }): 
   return r.consulta;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Feature 183 — leer un importe de la union discriminada, SIN apagar la union  */
+/* -------------------------------------------------------------------------- */
+//
+// Desde ⟨D12⟩ (2026-08-04) `ImporteAnalitico` es `ImporteConNeto | ImporteSoloBruto` y `.neto`
+// no se puede leer sin estrechar por `forma`. Un `as ImporteConNeto` en cada caso apagaria justo
+// la comprobacion que la union existe para dar. Estos dos helpers NO apagan nada: AFIRMAN la
+// forma antes de devolver, asi que si una metrica cambiara de forma sin querer, el caso que la
+// lee se pone rojo con un mensaje que dice cual y cual llego.
+
+/** El importe estrechado a `bruto_y_neto`, o un fallo con nombre. */
+export function conNeto(importe: ImporteAnalitico, contexto = "el importe"): ImporteConNeto {
+  if (importe.forma !== "bruto_y_neto") {
+    throw new Error(`${contexto}: se esperaba forma "bruto_y_neto" y llego "${importe.forma}"`);
+  }
+  return importe;
+}
+
+/** El importe estrechado a `solo_bruto`, o un fallo con nombre. */
+export function soloBruto(importe: ImporteAnalitico, contexto = "el importe"): ImporteSoloBruto {
+  if (importe.forma !== "solo_bruto") {
+    throw new Error(`${contexto}: se esperaba forma "solo_bruto" y llego "${importe.forma}"`);
+  }
+  return importe;
+}
+
 export function armarServicio(datos: Partial<DatosFinancieros> = {}, umbral?: string) {
   const d = { ...VACIO, ...datos };
 
-  const ingresos = { sumarPorCategoria: vi.fn(async () => d.caja) };
+  const ingresos = {
+    sumarPorCategoria: vi.fn(async () => d.caja),
+    // Feature 180 — los DOS parametros se declaran aunque el doble devuelva filas fijas: sin
+    // ellos, `mock.calls` queda tipado como `[]` y el test de coherencia (R22: los cubos que el
+    // servicio pasa son EXACTAMENTE `trocear(consulta.rango)`) no tendria argumentos que mirar
+    // sin un cast que apagaria justo lo que se quiere comprobar.
+    sumarPorCuboYCategoria: vi.fn(
+      async (_consulta: ConsultaAnalitica, _cubos: readonly CuboTemporal[]) => d.cajaPorCubo,
+    ),
+  };
   const recaudo = {
     porMetodoDeCierresResueltos: vi.fn(async () => d.porMetodo),
     porTiendaDeLedger: vi.fn(async () => d.porTienda),
@@ -74,6 +126,11 @@ export function armarServicio(datos: Partial<DatosFinancieros> = {}, umbral?: st
   const cuentasPorPagar = {
     saldoPorTiendaAlCorte: vi.fn(async () => d.saldoTiendas),
     cuentaPorPagarMensajerosAlCorte: vi.fn(async () => d.cuentaMensajeros),
+    cuentaPorPagarMensajerosPorCubo: vi.fn(
+      async (_consulta: ConsultaAnalitica, _cubos: readonly CuboTemporal[]) =>
+        d.cuentaMensajerosPorCubo,
+    ),
+    cuentaPorPagarMensajerosAntesDe: vi.fn(async () => d.cuentaMensajerosAntes),
   };
   const conciliacion = {
     contarCierresPorEstado: vi.fn(async () => d.porEstado),
@@ -84,10 +141,13 @@ export function armarServicio(datos: Partial<DatosFinancieros> = {}, umbral?: st
 
   const espias = [
     ingresos.sumarPorCategoria,
+    ingresos.sumarPorCuboYCategoria,
     recaudo.porMetodoDeCierresResueltos,
     recaudo.porTiendaDeLedger,
     cuentasPorPagar.saldoPorTiendaAlCorte,
     cuentasPorPagar.cuentaPorPagarMensajerosAlCorte,
+    cuentasPorPagar.cuentaPorPagarMensajerosPorCubo,
+    cuentasPorPagar.cuentaPorPagarMensajerosAntesDe,
     conciliacion.contarCierresPorEstado,
     conciliacion.totalesDeCierresAprobados,
     conciliacion.sumarLedgerPorOrigenDeCierre,
