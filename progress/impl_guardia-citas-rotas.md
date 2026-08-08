@@ -237,8 +237,41 @@ directorio completo (`tests/unit` + `tests/components`), no por patrón de nombr
 
 ## 9. Resultados de la corrida
 
-<!-- se rellena abajo, con la salida real -->
+**Zona completa** — `pnpm exec vitest run tests/unit tests/components` (por directorio, no por
+patrón de nombre):
+
+```
+ Test Files  815 passed (815)
+      Tests  10377 passed (10377)
+   Duration  223.05s
+EXIT=0
+```
+
+**Gate rápido** — `./init.sh --rapido`:
+
+```
+✓ node v24.13.0 · dependencias presentes · max-2-por-zona (in_progress=0) · specs presentes
+✓ typecheck paso            (tsc --noEmit, sin salida)
+✓ lint paso                 (✖ 49 problems, 0 errors, 49 warnings — todos previos)
+-> test:cambiados           Test Files 1 passed (1) · Tests 12 passed (12)
+-> test:guardias            Test Files 74 passed (74) · Tests 1011 passed (1011)
+✓ test:rapido paso
+✓ todas las migraciones tienen down.sql · ✓ .env presente
+== init OK ==
+```
+
+Un detalle que conviene saber: `test:cambiados` (`vitest run --changed origin/dev`) seleccionó
+**solo 1 archivo** — el de la guardia. Los cuatro `tasks.md` no están en el grafo de imports, así
+que un cambio que solo tocara fichas no arrastraría nada por esa vía. La guardia entra igualmente
+porque su nombre lleva `guard` y `test:guardias` la selecciona siempre; si alguien la renombrara
+sin `guard`, saldría del gate rápido sin hacer ruido.
+
+El gate completo (`./init.sh` sin flags) lo corre el humano antes del PR, según el punto 5 de
+`CLAUDE.md`.
 
 ## 10. Veredicto
 
-Pendiente de §9.
+La guardia entra en verde, arranca con **cero** excepciones sin motivo escrito, cierra los cinco
+casos reales que encontró (1 reparado, 4 anotados, en 2 features y con sus commits de origen
+nombrados) y está demostrado —por réplica histórica y por mutación— que se habría puesto roja en
+el mismo commit que causó el fallo de producción del 2026-08-07.
