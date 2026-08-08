@@ -26,8 +26,8 @@
 
 | R | Test |
 |---|---|
-| R1 | `MisAsignacionesModule.test.tsx` › la vista arranca en mosaico y las cards siguen presentes y en orden (`MarcarLuegoToggle.test.tsx` › R19 verifica el orden dentro del carrusel) |
-| R2 | `MisAsignacionesModule.test.tsx` › la vista detalle conserva su lista |
+| R1 | **PLANIFICADO, NUNCA ESCRITO** (ver T5.3, abierta) — `MisAsignacionesModule.test.tsx` › la vista arranca en mosaico y las cards siguen presentes y en orden (`MarcarLuegoToggle.test.tsx` › R19 sí verifica el orden dentro del carrusel) |
+| R2 | **PLANIFICADO, NUNCA ESCRITO** (T5.3) — `MisAsignacionesModule.test.tsx` › la vista detalle conserva su lista |
 | R3 | `MarcarLuegoToggle.test.tsx` › R19: el orden de las cards dentro del carrusel es el de ruta |
 | R4 | `CarruselCards.test.tsx` › sin elementos no renderiza nada |
 | R5 | `CarruselCards.test.tsx` › cada tarjeta lleva `basis-full sm:basis-1/2 lg:basis-1/3` |
@@ -46,14 +46,33 @@
 | R18 | `CarruselCards.test.tsx` › los controles no se posicionan fuera del contenedor |
 | R19 | `CarruselCards.test.tsx` › se monta con elementos ajenos al dominio de órdenes |
 | R20 | `CarruselCards.test.tsx` › permite sustituir el ancho por breakpoint |
-| R21 | `MisAsignacionesModule.test.tsx` › la card ofrece las mismas señales en las dos vistas |
+| R21 | **PLANIFICADO, NUNCA ESCRITO** (T5.3) — `MisAsignacionesModule.test.tsx` › la card ofrece las mismas señales en las dos vistas |
+
+<!-- @test-desaparecido MisAsignacionesModule.test.tsx: R1, R2 y R21 NUNCA llegaron a tener test.
+     T5.3 se dejó bloqueada el 2026-07-31 (el archivo arrastraba 16 rojas ajenas) y el archivo se
+     fue el 2026-08-03 con `369ccc4c`, que partió el módulo del mensajero en dos y renombró
+     `MisAsignacionesModule.test.tsx` a `tests/components/RepartoModule.test.tsx`. Ese sucesor
+     NO monta el conmutador ni el carrusel: hoy nadie afirma el aria-label «Órdenes en reparto»
+     fuera de la fixture de `CarruselCards.test.tsx`. No se repunta la cita a `RepartoModule` ni a
+     `RecogerModule.test.tsx` porque sería falsa: `RecogerModule` prueba las mismas tres conductas
+     (arranca en mosaico dentro del carrusel / detalle vuelve a lista / vacío no monta carrusel)
+     pero sobre «Por recoger», que estos requisitos dejan explícitamente FUERA de alcance. Lo que
+     sí está probado es el compuesto (`CarruselCards.test.tsx`, R4-R8 y R14-R20) y que el enganche
+     sigue vivo (`RepartoModule.tsx` monta `CarruselCards` con `ariaLabel="Órdenes en reparto"`).
+     Queda sin prueba la integración en la superficie de esta feature: T5.3 sigue abierta. -->
 
 - [x] **T5.1** `tests/unit/components/carrusel-rango.test.ts` (R9–R13).
 - [x] **T5.2** `[P]` `tests/components/CarruselCards.test.tsx` (R4–R8, R14–R20).
-- [ ] **T5.3** ampliar `tests/components/MisAsignacionesModule.test.tsx` (R1, R2, R21).
-      **Bloqueada**: ese archivo tiene 16 rojas AJENAS a esta feature (13 previas + 3 de los
-      cambios sin commitear de `GestionarOrdenPanel`/`AsignacionDetalle` del 2026-07-30).
-      Añadir casos ahí ahora mezcla señales; se hace cuando el archivo esté en verde.
+- [ ] **T5.3** escribir R1, R2 y R21 sobre `tests/components/RepartoModule.test.tsx` (el archivo
+      que hoy monta el módulo de "En reparto"). Se planificó sobre
+      `tests/components/MisAsignacionesModule.test.tsx` y quedó **bloqueada** el 2026-07-31: ese
+      archivo arrastraba 16 rojas AJENAS a esta feature (13 previas + 3 de los cambios sin
+      commitear de `GestionarOrdenPanel`/`AsignacionDetalle` del 2026-07-30), y añadir casos ahí
+      mezclaba señales. **Sigue sin hacerse**, y entretanto el archivo desapareció: `369ccc4c`
+      (2026-08-03) partió el módulo y lo renombró a `RepartoModule.test.tsx`. El mismo commit
+      llevó el carrusel a "Por recoger" y ESA superficie sí quedó cubierta
+      (`tests/components/RecogerModule.test.tsx` › "conmutador mosaico/detalle y carrusel"),
+      lo que da el molde exacto para escribir estos tres casos en Reparto.
 
 ## T6 — Verificación
 - [x] **T6.1** `pnpm lint`: 0 errores. `pnpm typecheck`: limpio salvo los 2 errores previos de
