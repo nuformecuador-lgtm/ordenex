@@ -90,10 +90,10 @@ const REGION_OPERATIVA = "Tablero operativo";
 
 /** Los SEIS paneles operativos: se pintan para los cinco roles (R11). */
 const PANELES_OPERATIVOS = [
-  "Ordenes creadas",
-  "Ordenes por estado",
+  "Órdenes creadas",
+  "Órdenes por estado",
   "Resultado de las gestiones",
-  "Ordenes sin gestionar",
+  "Órdenes sin gestionar",
   "Tasa de entrega",
   "Tiempo de ciclo",
 ] as const;
@@ -105,12 +105,12 @@ const PANELES_OPERATIVOS = [
 const ETIQUETAS_FINANCIERAS = [
   "COD recaudado",
   "Ingreso por flete",
-  "Ingreso por comision COD",
+  "Ingreso por comisión COD",
   "Ingreso por IVA",
   "Egresos",
   "Cuenta por pagar a tiendas",
   "Cuenta por pagar a mensajeros",
-  "Conciliacion de cierres",
+  "Conciliación de cierres",
 ] as const;
 
 /**
