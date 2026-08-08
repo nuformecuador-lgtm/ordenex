@@ -184,7 +184,7 @@ describe("Feature 131 (R22) — el catalogo de opciones falla en blando", () => 
     // El tablero sigue consultando y pintando: no depende de que la lista de zonas
     // conteste para poder dar sus cifras.
     await waitFor(() => expect(accion.mock.calls.length).toBeGreaterThan(0));
-    expect(await screen.findByRole("region", { name: "Ordenes creadas" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Órdenes creadas" })).toBeInTheDocument();
 
     // Y el selector afectado esta APAGADO, no ausente ni mintiendo con una lista vacia...
     await waitFor(() => {
@@ -207,7 +207,7 @@ describe("Feature 131 (R22) — el catalogo de opciones falla en blando", () => 
     mensajeros.mockResolvedValue({ status: "forbidden" });
     renderPantalla();
 
-    expect(await screen.findByRole("region", { name: "Ordenes creadas" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Órdenes creadas" })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
       expect(screen.getByRole("button", { name: /^Mensajero:/ })).toBeDisabled();

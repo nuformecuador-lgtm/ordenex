@@ -46,7 +46,7 @@ vi.mock("next/navigation", () => ({
 const accion = vi.mocked(consultarAnaliticaOperativa);
 
 const TITULO_TASA = "Tasa de entrega";
-const TITULO_CREADAS = "Ordenes creadas";
+const TITULO_CREADAS = "Órdenes creadas";
 
 function serieOk(
   metricaId: string,
@@ -396,7 +396,7 @@ describe("Feature 131 (R21) — las dos metricas `declarada` se pintan", () => {
       expect(consultadas).toContain("incidentes");
       expect(consultadas).toContain("sin_gestionar");
     });
-    expect(region("Ordenes sin gestionar")).toBeInTheDocument();
+    expect(region("Órdenes sin gestionar")).toBeInTheDocument();
     expect(region("Resultado de las gestiones")).toBeInTheDocument();
   });
 });

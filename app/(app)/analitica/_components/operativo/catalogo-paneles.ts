@@ -63,15 +63,15 @@ export interface PanelTablero {
 export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
   {
     id: "ordenes-creadas",
-    titulo: "Ordenes creadas",
+    titulo: "Órdenes creadas",
     grafica: "lineas",
-    metricas: [{ metricaId: "ordenes_creadas", etiqueta: "Ordenes creadas" }],
+    metricas: [{ metricaId: "ordenes_creadas", etiqueta: "Órdenes creadas" }],
   },
   {
     id: "ordenes-por-estado",
-    titulo: "Ordenes por estado",
+    titulo: "Órdenes por estado",
     grafica: "donut",
-    metricas: [{ metricaId: "ordenes_por_estado", etiqueta: "Ordenes por estado" }],
+    metricas: [{ metricaId: "ordenes_por_estado", etiqueta: "Órdenes por estado" }],
     desagregacion: "estatus",
   },
   {
@@ -88,7 +88,7 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
   },
   {
     id: "sin-gestionar",
-    titulo: "Ordenes sin gestionar",
+    titulo: "Órdenes sin gestionar",
     grafica: "lineas",
     // R21/D6 — DERIVADA del embudo por la 126 (y antes dada por «sin productor»). No se filtra.
     metricas: [{ metricaId: "sin_gestionar", etiqueta: "Sin gestionar" }],
