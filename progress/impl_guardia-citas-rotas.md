@@ -405,4 +405,139 @@ Siete etiquetas corregidas de veinticinco revisadas, más tres títulos duplicad
 conocía; la guardia amplía a `design.md` sin coste y con su mutación de control; y el design de la
 161 queda anotado sin falsificarse. Lo que queda escrito y sin cerrar: **las etiquetas del catálogo
 no las afirma ningún test** —M2 lo demuestra en verde— y el resto de la copia de la analítica
-arrastra el mismo descuido, con ~30 candidatos medidos.
+arrastra el mismo descuido, con ~30 candidatos medidos. (El primero se cierra en §16.)
+
+---
+
+# Tercera tanda: fijar las 25 etiquetas
+
+## 16. El caso que cierra el agujero de M2
+
+`tests/unit/analytics/etiquetas-visibles.guardia.test.ts` — **4 casos**, que fijan **40 cadenas
+visibles escritas a mano**:
+
+| caso | qué fija |
+|---|---|
+| «son exactamente estas 25, con su acentuación, y en este orden» | los **25** pares `id → etiqueta` del catálogo, más una aserción de tamaño explícita |
+| «los títulos de panel son estos seis, escritos a mano» | los **6** `titulo` de `PANELES_OPERATIVOS` (son el `aria-label` de la región) |
+| «las leyendas son estas nueve, escritas a mano» | las **9** `etiqueta` de leyenda del tablero operativo |
+| «ninguna leyenda se ha separado de la etiqueta del catálogo» | la **costura** entre los dos módulos duplicados |
+
+**El esperado va transcrito, no derivado.** Es el error que la 189 encontró en
+`COLUMNAS_DESCARGA_RANKING`: su aserción hacía `expect(columnas.map(…)).toEqual(CONSTANTE.map(…))`,
+así que el esperado ERA la constante y permutar dos columnas movía los dos lados a la vez. Aquí un
+esperado derivado del catálogo pasaría haga lo que haga, que es justamente lo que M2 demostró que
+ya ocurría.
+
+**Y no es tautología comparar los dos catálogos.** El cuarto caso sí deriva un lado del otro, y ahí
+es correcto: `catalogo-paneles.ts` y `lib/analytics/metrics.ts` son **módulos independientes por
+decisión** (R25 — el de cliente no importa el de servidor para no publicar al navegador el censo de
+25 métricas con su alcance por rol, su fuente y sus nombres de tabla). Nada en el código obliga hoy
+a que digan lo mismo; si divergen, el maestro leería dos nombres para la misma cifra. Ésa es la
+única costura que los ata, y el mensaje del fallo lo dice con las dos cadenas.
+
+Dos rótulos de panel **no** se cruzan con el catálogo porque no son etiquetas de métrica, y va
+escrito en el archivo: «Resultado de las gestiones» (el panel junta cuatro) y «Órdenes sin
+gestionar» (la métrica se llama «Sin gestionar»; el panel la nombra entera). Esa tercera fue la que
+el censo por `etiqueta:` no podía ver.
+
+### La comparación que se pedía: M2 contra M3
+
+**La misma mutación** (quitar la tilde a `Órdenes creadas` y `Conciliación de cierres` en
+`lib/analytics/metrics.ts`) y **el mismo alcance de ejecución**, antes y después de existir el caso:
+
+| | mutación | alcance corrido | veredicto |
+|---|---|---|---|
+| **M2** (§12, antes) | las dos etiquetas sin tilde | 123 archivos · 1.500 tests | **VERDE — no se enteró nadie** |
+| **M3** (ahora) | idéntica | 124 archivos · 1.504 tests | **ROJA — 2 casos**: el pin de las 25 y la costura entre catálogos |
+
+El mensaje de la costura, literal: «el panel «Órdenes creadas» llama «Órdenes creadas» a lo que el
+catálogo llama «Ordenes creadas»: el maestro leería dos nombres para la misma cifra».
+
+**M4 — la 26.ª etiqueta que nace desnuda.** Se duplicó una entrada entera del catálogo con un `id`
+nuevo (`metrica_26_de_prueba`): el catálogo pasa a 26 etiquetas y el caso se pone **ROJO** con
+«el catálogo cambió de tamaño… escribe su etiqueta en la lista de abajo (a mano, no la derives del
+catálogo)». Es el requisito de la guardia de columnas nº 36, aplicado al texto visible.
+
+Las tres restauradas y **verificadas por hash**: `lib/analytics/metrics.ts` vuelve a
+`83e9c6df…` después de cada una, `git status` limpio, y el caso en verde (4/4).
+
+### Qué sigue sin cubrir
+
+1. **Fija las cadenas, no la ortografía.** Si alguien escribe mal una etiqueta **nueva** y la
+   transcribe igual de mal en el esperado, esto pasa en verde. No hay diccionario ni heurística de
+   tildes: lo que hay es que cambiar texto visible **obliga a tocar dos sitios y a mirarlo**. Es una
+   defensa contra el descuido, no contra la falta de ortografía deliberada.
+2. **Solo el tablero.** Fuera quedan los ~30 candidatos sin tilde medidos en `app/(app)/analitica`
+   (§12), entre ellos el estado vacío que se ve en pantalla («Esta metrica no registro ningun
+   movimiento…», `textos.ts`). El censo es heurístico y con falsos positivos: hay que mirarlos uno a
+   uno, y eso es otra decisión. **Sigue abierto, con su número.**
+3. **Ninguna de las dos mitades prueba que el texto LLEGUE a la pantalla.** Eso lo hacen los tests
+   de componente (`TableroOperativo`, `FiltrosOperativos`, `TableroOperativoLatencia`), que buscan
+   la región por su nombre accesible. Este caso fija el dato; aquéllos, el cableado.
+4. **El orden entra en el contrato.** Reordenar el catálogo pone el caso rojo aunque no cambie
+   ningún texto. Es deliberado —el orden es lo que se ve— pero significa que un reordenamiento
+   legítimo obliga a reordenar el esperado a mano.
+
+## 17. Aviso de método: `perl -pi` escribe Latin-1 y corrompe el fichero
+
+Le va a pasar al siguiente que toque acentos en este repo, así que queda escrito.
+
+**Qué pasó.** El primer intento de poner las tildes fue
+`perl -pi -e 's/"Ordenes creadas"/"\x{d3}rdenes creadas"/'`. Sin `use utf8` ni `-CSD`, Perl escribe
+`\x{d3}` como **un solo byte** `0xD3` (Latin-1), no como los dos bytes UTF-8 `0xC3 0x93`. El fichero
+queda con UTF-8 **inválido**.
+
+**Por qué no se nota.** La terminal de Git Bash pinta `�` tanto para «byte inválido» como para
+«tu fuente no tiene ese glifo», así que la salida de `grep` parecía un problema de la consola. El
+`git diff` tampoco chilla: para git son bytes.
+
+**Cómo se detectó — leyendo los bytes, no la pantalla:**
+
+```
+node -e "const b=require('fs').readFileSync('lib/analytics/metrics.ts');
+         console.log('utf8 válido?', !b.toString('utf8').includes('�'));
+         console.log([...b.subarray(off, off+30)]);"
+→ utf8 válido? false     y el byte 211 (0xD3) suelto donde debía ir 195,147
+```
+
+**Cómo se restauró, sin `git restore` ni `checkout -- .`** (prohibidos aquí: worktree compartido, ya
+borraron trabajo ajeno una vez): guardando el hash del blob **antes** de tocar nada y volcándolo.
+
+```
+git hash-object lib/analytics/metrics.ts     # antes: 258400ff…
+git cat-file -p 258400ff… > lib/analytics/metrics.ts
+git hash-object lib/analytics/metrics.ts     # después: 258400ff…  (idéntico)
+```
+
+**Cómo se hizo bien.** Un script de Node con `fs.writeFileSync(f, s, "utf8")` y escapes `Ó`,
+que además **aborta si el patrón no aparece exactamente el número de veces esperado** —así una
+sustitución que no encaja no pasa en silencio, y una que encaja de más tampoco—. La misma forma se
+usó para las tres mutaciones de control y para las tres restauraciones.
+
+## 18. Verificación de la tercera tanda
+
+```
+pnpm run typecheck                       -> limpio (tsc --noEmit, sin salida)
+pnpm exec eslint <archivo nuevo>         -> 0 problemas
+pnpm exec vitest run tests/unit tests/components
+                                         -> Test Files 816 passed (816)
+                                            Tests 10382 passed (10382)   [225.44s, EXIT=0]
+./init.sh --rapido                       -> == init OK ==
+   ✓ typecheck · ✓ lint (0 errores, 49 avisos previos)
+   test:cambiados   115 archivos, 1.288 tests
+   test:guardias     75 archivos, 1.016 tests
+   ✓ down.sql de todas las migraciones · ✓ .env
+```
+
+El caso nuevo entra en `test:guardias` (74 → **75** archivos) porque lleva `guardia` en el nombre:
+así lo corre el gate rápido aunque el cambio no toque `lib/analytics/`. Y entra también por
+`test:cambiados`, que sube a 115 archivos.
+
+## 19. Veredicto de la tercera tanda
+
+**40 cadenas visibles fijadas a mano** (25 etiquetas de catálogo + 6 títulos de panel + 9 leyendas)
+y una costura que ata los dos módulos duplicados. **La mutación que ayer salía verde sobre 1.500
+tests hoy sale roja por dos sitios**, y una métrica nueva no puede nacer con su etiqueta sin
+revisar. Queda abierto, con su número: los ~30 candidatos sin tilde del resto de la copia de la
+analítica.
