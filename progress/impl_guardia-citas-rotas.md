@@ -148,13 +148,12 @@ La sección más valiosa. Todo esto está **medido**, no supuesto:
 
 1. **Solo lee `specs/*/tasks.md`.** El mapa `R → test` vive en cuatro sitios: 22 fichas lo tienen
    en `tasks.md` (477 citas), 32 en `requirements.md` (619), 9 en `design.md` (57) y 116
-   `progress/impl_*.md` (3.080). Fuera del alcance quedan hoy **107 citas rotas en 24 archivos de
-   `progress/`** y **32 en 7 `requirements.md`** (features 55, 59, 94, 114, 135, 160, 167).
-   `progress/**` se deja fuera **a propósito**: es una bitácora, un registro de lo que pasó, y
-   reescribirla para que apunte a un archivo renombrado después falsifica el registro.
-   `requirements.md` es **deuda abierta**, no decisión: sus 32 rotas son de UI retirada cuyo
-   sustituto no se pudo verificar sin inventar. `design.md` tiene **0** rotas sobre 57 citas: ese
-   se podría incluir hoy mismo, y es el siguiente paso barato.
+   `progress/impl_*.md` (3.080). **`design.md` ya entró** (§11). Fuera del alcance quedan hoy
+   **107 citas rotas en 24 archivos de `progress/`** y **32 en 7 `requirements.md`** (features 55,
+   59, 94, 114, 135, 160, 167). `progress/**` se deja fuera **a propósito**: es una bitácora, un
+   registro de lo que pasó, y reescribirla para que apunte a un archivo renombrado después
+   falsifica el registro. `requirements.md` es **deuda abierta con coste**, no un trámite: sus 32
+   rotas son de UI retirada cuyo sustituto no se pudo verificar sin inventar.
 2. **No vigila el mapa que nunca se escribió.** Una feature sin tabla `R → test` es invisible
    aquí: 22 de 150 fichas tienen mapa en `tasks.md`. Eso lo cubre el reviewer, no una guardia.
 3. **No distingue «el test existe» de «el test prueba el requisito».** Es la mitad más importante
@@ -221,6 +220,7 @@ ficha SDD):
 | G9 — toda cita a un test borrado está anotada | «toda cita `R → test` a un archivo borrado está anotada con su motivo» |
 | G10 — la anotación caduca | «ninguna anotación `@test-desaparecido` sobrevive a su motivo» |
 | G11 — la anotación no queda huérfana | «ninguna anotación `@test-desaparecido` cuelga de una cita que ya no existe» |
+| G12 — el censo cubre `tasks.md` **y** `design.md` | «el censo cubre LAS DOS clases de documento, y se nota si alguna se cae» (§11) |
 
 ## 8. Verificación
 
@@ -275,3 +275,134 @@ La guardia entra en verde, arranca con **cero** excepciones sin motivo escrito, 
 casos reales que encontró (1 reparado, 4 anotados, en 2 features y con sus commits de origen
 nombrados) y está demostrado —por réplica histórica y por mutación— que se habría puesto roja en
 el mismo commit que causó el fallo de producción del 2026-08-07.
+
+---
+
+# Segunda tanda (mismo día): tildes, alcance y el registro histórico
+
+## 11. `design.md` entra en el censo — y costó cero
+
+Medido **antes** de tocar nada: `design.md` tenía **0 citas rotas sobre 57**. Ampliar el alcance el
+mismo día en que se mide es la única ventana en la que sale gratis, así que se amplió: el censo pasa
+de **477 a 534 citas** y de **22 a 31 documentos con mapa** (22 `tasks.md` + 9 `design.md`), y la
+guardia sigue en verde **sin una sola anotación nueva**.
+
+`requirements.md` **no** entra: 32 rotas en 7 fichas (55, 59, 94, 114, 135, 160, 167). Eso es una
+decisión de alcance **con coste**, no un trámite, y queda anotada como deuda con sus números.
+
+Ampliar un alcance tiene una trampa conocida: que luego se estreche en silencio. Por eso el caso
+nuevo **G12** exige que las **dos** clases de documento sigan aportando mapa (≥ 5 cada una); los
+umbrales agregados no lo distinguirían. Y la ampliación se probó con una **mutación**: apuntar R28
+de `specs/154-catalogo-estados-v2/design.md` a un test borrado pone la guardia **ROJA**, nombrando
+ficha, línea, requisito y commit. Restaurado y verificado por hash (`63bdcee5…` antes y después).
+
+## 12. Las siete tildes del tablero
+
+**Revisadas las 25 etiquetas de `lib/analytics/metrics.ts`, una a una.** Siete estaban mal escritas
+—exactamente las siete señaladas, ni una más— y las otras dieciocho están bien:
+
+| etiqueta | corregida a |
+|---|---|
+| `Ordenes creadas` | `Órdenes creadas` |
+| `Ordenes por estado` | `Órdenes por estado` |
+| `Antiguedad por estado` | `Antigüedad por estado` |
+| `Conciliacion de cierres` | `Conciliación de cierres` |
+| `Ingreso por comision COD` | `Ingreso por comisión COD` |
+| `Tasa de devolucion` | `Tasa de devolución` |
+| `Motivos de devolucion` | `Motivos de devolución` |
+
+Dos comprobaciones que valía la pena hacer y que confirman las siete: **`Ganancia de Ordenex`** no
+lleva tilde porque `Ordenex` es marca, y **`antigüedad`** solo pide **diéresis**, no acento (es
+aguda terminada en `-d`). Las otras dieciséis son llanas terminadas en vocal o `-s`.
+
+**El catálogo no bastaba, y esto no estaba en el encargo.** Los títulos de panel viven
+**duplicados** en `app/(app)/analitica/_components/operativo/catalogo-paneles.ts` —duplicación
+deliberada, R25: ese archivo no importa el catálogo para no publicar el censo de servidor al
+navegador— y son el `aria-label` de la región, es decir, lo que el maestro lee como título. Ahí
+estaban las dos mismas… **y una tercera que el censo por etiquetas no veía: `Ordenes sin
+gestionar`**, que no es ninguna de las 25.
+
+**Qué se movió y qué no**, con el criterio explícito de tocar solo lo que se rompe:
+
+- Rojas de verdad (3 archivos, 21 casos): `TableroOperativo.test.tsx`,
+  `TableroOperativoLatencia.test.tsx` y `FiltrosOperativos.test.tsx`, que buscan la región por su
+  nombre accesible literal.
+- `e2e/analitica-roles.spec.ts` (5 literales): no se ejecuta en este repo, pero enumera lo que cada
+  rol ve en pantalla; dejarlo desactualizado es dejar escrito algo falso.
+- **NO se tocaron**, medido: las fixtures de `export-csv-{cobertura,denegado,puerta}.test.ts` y de
+  `financiera-contratos.test.ts` construyen paneles de prueba y no afirman la copia del producto —
+  la suite lo confirma en verde—. Tampoco los `descripcion:` del catálogo: **no llegan a pantalla**
+  (el vacío que se ve sale de `textos.ts`), así que siguen la convención sin tildes del repo, como
+  los comentarios.
+
+De los tres archivos que el encargo daba por afectados, **solo uno lo estaba**, y no como se
+esperaba: `caja-173-alcance.guardia.test.ts` cita `Ganancia de Ordenex` (etiqueta que no cambia),
+`cierre-detail-congelado.test.ts` cita `Rechazos` (tampoco cambia), y `financiera-contratos.test.ts`
+sí cita `Conciliacion de cierres` **pero como fixture**, así que no se pone roja. Se dicen los tres
+porque la instrucción pedía decirlo si alguna no se sostenía.
+
+### La mutación, y el agujero que destapa
+
+| # | mutación | resultado |
+|---|---|---|
+| M1 | `titulo: "Órdenes creadas"` → sin tilde en `catalogo-paneles.ts` | **ROJA**: 21 casos en 3 archivos |
+| M2 | `etiqueta:` de **dos** de las siete → sin tilde en `lib/analytics/metrics.ts` | **VERDE**: 123 archivos, 1.500 tests |
+
+Restauración verificada por hash: `ae028261…` (paneles) y `83e9c6df…` (catálogo), idénticos antes y
+después; `git status` limpio.
+
+**M2 es el hallazgo, no el trámite.** Las 25 etiquetas del catálogo —texto que el maestro lee en la
+primera pantalla— **no las afirma ningún test**. Se pueden cambiar todas, una a una, y la suite
+entera sigue verde. Lo único fijado es el título del panel, y solo porque vive en el archivo
+duplicado. Por eso este fallo lo encontró un humano mirando el navegador y no la suite, y por eso
+volverá a pasar. **Propuesta, no ejecutada** (queda fuera del encargo, decídela): un caso que fije
+las 25 etiquetas literalmente, del mismo tamaño que el censo de columnas de descarga; cambiar copia
+visible pasaría a ser un acto deliberado en vez de un descuido invisible.
+
+**Fuera de alcance, medido para que exista el número:** el problema no se acaba en las etiquetas.
+Un censo grueso de literales de cadena en `app/(app)/analitica` da **~30 candidatos sin tilde en 6
+archivos** (p. ej. `textos.ts` → «Esta metrica no registro ningun movimiento…», que es el estado
+vacío que se ve en pantalla). Es heurístico y trae falsos positivos: hay que mirarlos uno a uno. No
+se tocó nada de eso — el encargo acotaba a las etiquetas del catálogo.
+
+## 13. `specs/161/design.md`: se anota, no se reescribe
+
+El design nombra `ChatWhatsappPanel.tsx` en tres sitios (§1, §3, §4). **Las tres se conservan.** Un
+`design.md` es el registro de lo que se diseñó **entonces** —misma naturaleza que un `down.sql`
+respecto de su migración— y sustituir el nombre por `ChatConversacion.tsx` borraría justo lo que
+explica **por qué** el tono se rompió: que la feature colgaba de un componente que otra decisión,
+legítima y ajena, podía retirar.
+
+En su lugar, una **nota de cabecera** con el formato que el PR #302 usó en la 188 por la
+renumeración: qué pasó, con su commit y su release; dónde vive hoy el enganche y con qué pruebas; y
+qué lo vigila ahora. Quien abra el documento la ve antes que nada, sin cruzar bitácoras.
+
+Es la misma distinción que decidió R12 de la 63: **una cita rota se repara o se anota; una decisión
+histórica se anota, nunca se reescribe.**
+
+## 14. Verificación de la segunda tanda
+
+```
+pnpm run typecheck                       -> limpio (tsc --noEmit, sin salida)
+pnpm exec vitest run tests/unit tests/components
+                                         -> Test Files 815 passed (815)
+                                            Tests 10378 passed (10378)   [227.36s, EXIT=0]
+./init.sh --rapido                       -> == init OK ==
+   ✓ typecheck · ✓ lint (0 errores, 49 avisos previos)
+   test:cambiados   114 archivos, 1.284 tests
+   test:guardias     74 archivos, 1.012 tests
+   ✓ down.sql de todas las migraciones · ✓ .env
+```
+
+Nota sobre el gate: en la primera tanda `test:cambiados` seleccionó **1** archivo (solo se habían
+tocado `.md` y la guardia); en esta, **114**, porque el cambio entra por `lib/analytics/metrics.ts`
+y el grafo de imports arrastra media analítica. Es la diferencia entre tocar documentación y tocar
+producto, y se ve en el gate.
+
+## 15. Veredicto de la segunda tanda
+
+Siete etiquetas corregidas de veinticinco revisadas, más tres títulos duplicados que el encargo no
+conocía; la guardia amplía a `design.md` sin coste y con su mutación de control; y el design de la
+161 queda anotado sin falsificarse. Lo que queda escrito y sin cerrar: **las etiquetas del catálogo
+no las afirma ningún test** —M2 lo demuestra en verde— y el resto de la copia de la analítica
+arrastra el mismo descuido, con ~30 candidatos medidos.
