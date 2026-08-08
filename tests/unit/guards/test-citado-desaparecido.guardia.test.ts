@@ -12,47 +12,51 @@
 // nada huérfano: quedó un hook **vivo** que pasó de 2 consumidores a 1. Lo que desapareció fue el
 // test.
 //
-// **La señal NO es el número de consumidores, y esto se midió antes de escribir una línea.** Sobre
-// el árbol del 2026-08-07 (950 módulos de producción, 1.026 exports de valor en `hooks/` + `lib/`):
+// **La señal NO es el número de consumidores, y esto se midió antes de dar nada por bueno.** Sobre
+// el árbol del 2026-08-07 (949 módulos de producción; 1.047 exports de valor en `hooks/` + `lib/`;
+// método y script en la bitácora, reproducible):
 //
-// | señal candidata | anotaciones para arrancar en verde | ¿caza el incidente? |
+// | señal candidata | excepciones para arrancar en verde | ¿caza el incidente? |
 // |---|---|---|
-// | `in_degree == 0` (símbolo sin consumidores) | **204** | **NO** — tras el borrado el hook tenía 1 |
-// | `in_degree <= 1` («bajó a 1») | **758** | sí, pero 758 excepciones no son una señal |
-// | export de `hooks/`+`lib/` sin consumidor en `app/` ni `components/` | **651** (207 si se sigue la cadena) | **NO** — el consumidor que quedó era `components/shared/NotificationsBell.tsx` |
-// | **test citado por una feature que EXISTIÓ y hoy no está** | **2** | **SÍ** |
+// | `in_degree == 0` (símbolo sin consumidores) | **166** | **NO** — tras el borrado el hook tenía 1 |
+// | `in_degree <= 1` («bajó a 1») | **529** | sí, pero 529 excepciones no son una señal |
+// | export de `hooks/`+`lib/` sin consumidor en `app/` ni `components/` | **610** (172 si se sigue la cadena) | **NO** — el consumidor que quedó era `components/shared/NotificationsBell.tsx` |
+// | **test citado por una feature que EXISTIÓ y hoy no está** | **5 citas, 2 fichas** | **SÍ** |
 //
-// El detalle de la medición, con los censos completos, está en
-// `progress/impl_guardia-consumidores.md`. La conclusión es la misma que en el PR #300: contar
-// aristas es ruidoso Y ciego al caso que lo motiva. Aquí la primitiva correcta no está en el grafo
-// de imports: está en el **mapa `R<n> → test`** que la regla nº 4 de `CLAUDE.md` exige y que
-// `docs/specs.md` llama trazabilidad. Si el mapa de una feature apunta a un archivo que ya no
-// existe, esa feature tiene requisitos sin prueba — que es exactamente lo que le pasó a la 161.
+// El detalle, con los censos completos, está en `progress/impl_guardia-citas-rotas.md`. La
+// conclusión es la misma que en el PR #300: contar aristas es ruidoso Y ciego al caso que lo
+// motiva. Aquí la primitiva correcta no está en el grafo de imports: está en el **mapa `R<n> →
+// test`** que la regla nº 4 de `CLAUDE.md` exige y que `docs/specs.md` llama trazabilidad. Si el
+// mapa de una feature apunta a un archivo que ya no existe, esa feature tiene requisitos sin
+// prueba — que es exactamente lo que le pasó a la 161.
 //
-// **Réplica histórica, medida.** Aplicando este detector al árbol de los dos commits del incidente:
-// en `da544b30^` el censo de `specs/*/tasks.md` tenía 16 citas rotas; en `da544b30`, 19. Las tres
-// nuevas son `specs/161-tono-notificacion/tasks.md:51-53` → `ChatWhatsappPanel.test.tsx`, R21, R22 y
-// R23. La guardia se habría puesto roja **en el commit que causó el fallo**, nombrando la feature y
-// los tres requisitos que se quedaron sin prueba.
+// **Réplica histórica, medida sobre los commits reales (sin checkout, con `git ls-tree`+`git
+// show`).** El censo de `specs/*/tasks.md` daba **5** citas rotas en `da544b30^` y **8** en
+// `da544b30`. Las tres nuevas: `specs/161-tono-notificacion/tasks.md`, R21/R22/R23 →
+// `ChatWhatsappPanel.test.tsx`. La guardia se habría puesto roja **en el commit que causó el fallo**,
+// nombrando la feature y los tres requisitos que se quedaron sin prueba. En `40f150a5` (cuatro días
+// después, con el fallo ya en producción y reparado) seguían siendo 8: nadie las vio.
 //
 // **Alcance: `specs/*/tasks.md`, y por qué no más.** El mapa `R → test` aparece en cuatro sitios
 // distintos de este repo (22 features lo tienen en `tasks.md`, 32 en `requirements.md`, 9 en
 // `design.md`, 116 en `progress/impl_*.md`). Esta guardia lee **solo `specs/*/tasks.md`**:
 //  - `progress/**` es una **bitácora**: un registro de lo que pasó en una tanda. Reescribirla para
 //    que apunte a un archivo renombrado después falsifica el registro. (Censo medido si se
-//    incluyera: 29 archivos y 108 citas — impagable, y por el motivo equivocado.)
-//  - `requirements.md` y `design.md` sí son contrato vivo, y AMPLIARLO AHÍ ES DEUDA ABIERTA, no
-//    una decisión de diseño: son 12 archivos y 41 citas más, de features (55, 59, 94, 114, 135,
-//    160, 167, 176) cuya UI se retiró y cuyo sustituto **no se pudo verificar sin inventar**. Está
-//    anotado en la bitácora con los números para que alguien lo cierre con datos.
+//    incluyera: 107 citas rotas en 24 archivos — impagable, y por el motivo equivocado.)
+//  - `requirements.md` sí es contrato vivo, y AMPLIARLO AHÍ ES DEUDA ABIERTA, no una decisión de
+//    diseño: son 32 citas rotas más en 7 archivos (features 55, 59, 94, 114, 135, 160, 167), de UI
+//    retirada cuyo sustituto **no se pudo verificar sin inventar**. `design.md` no añade ninguna
+//    (0 rotas sobre 57 citas), así que ese sí se podría incluir hoy mismo. Está en la bitácora con
+//    los números para que alguien lo cierre con datos.
 //
 // **La excepción va ANOTADA EN EL MISMO `tasks.md`**, no en una allowlist central: es la convención
 // que este repo ya adoptó («el motivo junto al código», `fa60b0ce`) y sobre todo invierte la carga
 // de la prueba en el momento correcto — quien borre el test se encuentra la suite roja y tiene que
 // elegir entre reescribirlo, repuntar la cita al sustituto, o escribir por qué esa feature se queda
-// sin prueba. Va en un comentario HTML propio y no dentro de la fila porque un comentario en medio
-// de una tabla markdown la parte en dos. Por simetría **caduca**: si el archivo vuelve a existir, la
-// anotación sobra, y una anotación que no corresponde a ninguna cita también es roja.
+// sin prueba. Va en un comentario HTML propio —puede ocupar varias líneas— y no dentro de la fila,
+// porque un comentario en medio de una tabla markdown la parte en dos. Por simetría **caduca**: si
+// el archivo vuelve a existir, la anotación sobra, y una anotación que no corresponde a ninguna cita
+// también es roja.
 //
 // **Por qué el detector se auto-prueba.** Precedente de la casa: una guardia de este repo pasó VERDE
 // con su detector roto —encontraba cero porque no encontraba NADA— y otra se tumbó sola por anclar
@@ -282,7 +286,8 @@ const DESAPARECIDOS: Desaparecido[] = CITAS.flatMap((cita) => {
   const borrado = BORRADOS.get(nombreDe(cita.archivo));
   // Sin entrada en la historia el archivo NUNCA existió: es una tabla que planificó un nombre y
   // nunca lo escribió (specs/109 dice literalmente «archivo de test esperado»). Es otro problema,
-  // y meterlo aquí ahogaría esta señal en 8 hallazgos de otra especie.
+  // y meterlo aquí ahogaría esta señal en 11 hallazgos de otra especie (9 de la 109 y 2 de la 173,
+  // medidos hoy). Deuda anotada en la bitácora, con su censo.
   return borrado ? [{ ...cita, borrado }] : [];
 });
 
