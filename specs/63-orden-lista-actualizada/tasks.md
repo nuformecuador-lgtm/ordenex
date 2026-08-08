@@ -82,7 +82,7 @@
 | R9 | idem → filtro por estado + adminTienda acotado a su tienda |
 | R10 | idem → sin `filter` = comportamiento previo; `estatusId` escalar sigue |
 | R11 | `tests/unit/types/orden-filter.test.ts` → ninguna columna arbitraria pasa el schema |
-| R12 | `tests/unit/components/ordenes-tabs.test.tsx` → renderiza `Tabs`, una tab por estado |
+| R12 | **DEROGADO el 2026-07-27** (ver nota bajo la tabla) — `tests/unit/components/ordenes-tabs.test.tsx` → renderiza `Tabs`, una tab por estado |
 | R13 | idem → `exclude` no genera tab para esos estados |
 | R14 | idem → tabs derivadas del catálogo menos `exclude` |
 | R15 | idem → tab activa consulta `listarOrdenes` con `filter.status_id` |
@@ -90,7 +90,26 @@
 | R17 | idem → paginación por tab independiente (key SWR por status) |
 | R18 | idem → `TabsList` con clase overflow / accesible con muchas tabs |
 | R19 | `tests/unit/components/ordenes-module.test.tsx` → `OrdenesModule` con/sin `filter` sin regresión |
-| R20 | `tests/unit/components/ordenes-tabs.test.tsx` (o page) → mensajero no monta tabs |
+| R20 | `tests/components/OrdenesPage.test.tsx` → "seguridad: mensajero y adminSatelite NO alcanzan /ordenes (notFound)" |
+
+> **Nota 2026-08-07 — R12 no perdió su prueba: perdió su vigencia.** Las tabs se retiraron del
+> producto. `3cdfb503` renombró `OrdenesTabs.tsx` a `OrdenesListado.tsx`, y `cfba5af2`
+> (2026-07-27, "feat: ordenes") sustituyó `tests/unit/components/ordenes-tabs.test.tsx` por
+> `tests/unit/components/ordenes-listado.test.tsx` en el MISMO commit —368 líneas fuera, 347
+> dentro—. El sucesor afirma **lo contrario** de R12: `OrdenesListado — una sola tabla (R12)` ›
+> "renderiza UNA tabla, no tabs por estado", con `queryAllByRole("tab")` en 0. Por eso la cita de
+> R12 **no** se repunta al sucesor: apuntar un requisito al test que prueba su negación lo dejaría
+> verde sin que nadie lo sostenga. R13–R18 ("idem") corren la misma suerte; su forma ACTUAL
+> —opciones derivadas del catálogo, `exclude`, filtro de selección múltiple, catálogo no
+> autorizado— sí está cubierta en el sucesor y, más tarde, en la feature 144. R19 y R20 siguen
+> vigentes: R20 se repunta aquí a la prueba que hoy lo verifica de verdad (el mensajero ni
+> siquiera alcanza `/ordenes`), que es más fuerte que "no monta tabs".
+
+<!-- @test-desaparecido tests/unit/components/ordenes-tabs.test.tsx: R12 quedó DEROGADO, no
+     huérfano: `cfba5af2` (2026-07-27) retiró las tabs y sustituyó este archivo por
+     `ordenes-listado.test.tsx`, cuyo primer caso afirma lo contrario ("renderiza UNA tabla, no
+     tabs por estado"). No se repunta la cita porque ese test prueba la negación del requisito.
+     Detalle completo en la nota visible justo encima de esta anotación. -->
 
 ## Dependencias (resumen)
 
