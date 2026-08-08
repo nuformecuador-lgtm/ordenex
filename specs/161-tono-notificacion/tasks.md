@@ -78,7 +78,9 @@
 - [ ] **T5.3** En pantalla: campana suena una sola vez al llegar una notificación; marcar
       todas como leídas → silencio; toggle en off → silencio; recargar con no-leídas
       pendientes → **no** suena.
-- [ ] **T5.4** En pantalla: panel de gestión abierto + entrante insertado en `chat_mensaje`
-      → suena en el siguiente tick de 10 s.
+- [ ] **T5.4** En pantalla: chat flotante abierto sobre un hilo + entrante insertado en
+      `chat_mensaje` → suena en el siguiente tick de 10 s. (Decía "panel de gestión abierto",
+      que era la superficie de `ChatWhatsappPanel`; desde `da544b30` la superficie viva es
+      `ChatFlotante` → `chat/ChatConversacion.tsx`, montado por `RepartoModule`.)
 - [ ] **T5.5** MANUAL, no lo cubren los tests: móvil real. iOS Safari exige gesto y suspende
       el contexto al ir a background (design §6). No dar la feature por buena sin esto.
