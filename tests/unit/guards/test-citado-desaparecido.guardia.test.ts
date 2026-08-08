@@ -37,17 +37,21 @@
 // nombrando la feature y los tres requisitos que se quedaron sin prueba. En `40f150a5` (cuatro días
 // después, con el fallo ya en producción y reparado) seguían siendo 8: nadie las vio.
 //
-// **Alcance: `specs/*/tasks.md`, y por qué no más.** El mapa `R → test` aparece en cuatro sitios
-// distintos de este repo (22 features lo tienen en `tasks.md`, 32 en `requirements.md`, 9 en
-// `design.md`, 116 en `progress/impl_*.md`). Esta guardia lee **solo `specs/*/tasks.md`**:
+// **Alcance: `specs/*/tasks.md` + `specs/*/design.md`, y por qué no más.** El mapa `R → test`
+// aparece en cuatro sitios distintos de este repo (22 features lo tienen en `tasks.md`, 32 en
+// `requirements.md`, 9 en `design.md`, 116 en `progress/impl_*.md`). Esta guardia lee los dos
+// primeros —534 citas entre ambos—:
+//  - `design.md` entró **el 2026-08-07 y costó CERO anotaciones**: se midió antes (0 citas rotas
+//    sobre 57) y se amplió el mismo día, que es la única ventana en que ampliar un alcance es
+//    gratis. Un caso de anti-vacuidad afirma que las dos clases de documento siguen aportando
+//    mapa, para que estrechar esto otra vez no pase en silencio.
 //  - `progress/**` es una **bitácora**: un registro de lo que pasó en una tanda. Reescribirla para
 //    que apunte a un archivo renombrado después falsifica el registro. (Censo medido si se
 //    incluyera: 107 citas rotas en 24 archivos — impagable, y por el motivo equivocado.)
-//  - `requirements.md` sí es contrato vivo, y AMPLIARLO AHÍ ES DEUDA ABIERTA, no una decisión de
-//    diseño: son 32 citas rotas más en 7 archivos (features 55, 59, 94, 114, 135, 160, 167), de UI
-//    retirada cuyo sustituto **no se pudo verificar sin inventar**. `design.md` no añade ninguna
-//    (0 rotas sobre 57 citas), así que ese sí se podría incluir hoy mismo. Está en la bitácora con
-//    los números para que alguien lo cierre con datos.
+//  - `requirements.md` sí es contrato vivo, y AMPLIARLO AHÍ ES DEUDA ABIERTA con coste, no una
+//    decisión de diseño: son 32 citas rotas más en 7 archivos (features 55, 59, 94, 114, 135, 160,
+//    167), de UI retirada cuyo sustituto **no se pudo verificar sin inventar**. Está en la bitácora
+//    con los números para que alguien lo cierre con datos.
 //
 // **La excepción va ANOTADA EN EL MISMO `tasks.md`**, no en una allowlist central: es la convención
 // que este repo ya adoptó («el motivo junto al código», `fa60b0ce`) y sobre todo invierte la carga
@@ -253,10 +257,13 @@ const BORRADOS = leerBorradosDeLaHistoria();
 // El censo
 // ---------------------------------------------------------------------------
 
+/** Los documentos de una ficha que SÍ son contrato vivo y entran en el censo. */
+const DOCS_DE_FICHA = ["tasks.md", "design.md"] as const;
+
 const FICHAS = existsSync(path.join(RAIZ, "specs"))
   ? readdirSync(path.join(RAIZ, "specs"), { withFileTypes: true })
       .filter((e) => e.isDirectory())
-      .map((e) => `specs/${e.name}/tasks.md`)
+      .flatMap((e) => DOCS_DE_FICHA.map((doc) => `specs/${e.name}/${doc}`))
       .filter((d) => existsSync(path.join(RAIZ, d)))
       .sort()
   : [];
@@ -422,15 +429,31 @@ describe("test citado desaparecido — anti-vacuidad", () => {
     // Sin esto, un `specs/` que se mueva o un `tasks.md` que cambie de formato dejan todos los
     // `toEqual([])` de abajo pasando sobre CERO datos, para siempre. Es el modo de fallo que este
     // repo ya se comió: la guardia verde porque no encontraba nada.
-    expect(FICHAS.length, "no se encontró ningún `specs/*/tasks.md`").toBeGreaterThanOrEqual(100);
+    expect(FICHAS.length, "no se encontró ningún `specs/*/{tasks,design}.md`").toBeGreaterThanOrEqual(
+      250,
+    );
     expect(
       DOCS.filter((d) => d.citas.length > 0).length,
       "ninguna ficha tiene mapa `R → test`: el lector de filas dejó de reconocer el formato",
-    ).toBeGreaterThanOrEqual(15);
-    expect(CITAS.length, "el lector de citas no encontró casi nada").toBeGreaterThanOrEqual(350);
-    expect(new Set(CITAS.map((c) => c.archivo)).size).toBeGreaterThanOrEqual(120);
+    ).toBeGreaterThanOrEqual(25);
+    expect(CITAS.length, "el lector de citas no encontró casi nada").toBeGreaterThanOrEqual(450);
+    expect(new Set(CITAS.map((c) => c.archivo)).size).toBeGreaterThanOrEqual(180);
     expect(TESTS_DE_HOY.length, "no se encontró el árbol de tests").toBeGreaterThanOrEqual(800);
     expect(DOCS.every((d) => d.texto.trim().length > 0), "alguna ficha se leyó vacía").toBe(true);
+  });
+
+  it("el censo cubre LAS DOS clases de documento, y se nota si alguna se cae", () => {
+    // Sin esto, estrechar el alcance a `tasks.md` otra vez —o que `DOCS_DE_FICHA` pierda una
+    // entrada— dejaría la guardia verde y más ciega, que es el modo de fallo silencioso que
+    // esta suite persigue. Los umbrales de arriba, agregados, no lo distinguirían.
+    for (const doc of DOCS_DE_FICHA) {
+      const conMapa = DOCS.filter((d) => d.ruta.endsWith(`/${doc}`) && d.citas.length > 0);
+      expect(
+        conMapa.length,
+        `ninguna ficha aporta mapa \`R → test\` desde su \`${doc}\`: o el alcance se estrechó, ` +
+          "o el lector dejó de reconocer ese documento",
+      ).toBeGreaterThanOrEqual(5);
+    }
   });
 
   it("git respondió con la historia de borrados: un clon superficial pone esto ROJO, no mudo", () => {
