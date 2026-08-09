@@ -2228,13 +2228,13 @@
     {
       "id": 187,
       "name": "analitica financiera: lectura consistente del total y su desglose",
-      "spec_path": null,
+      "spec_path": "specs/187-analitica-lectura-consistente",
       "description": "Backend. deCaja y deTesoreria obtienen el total y las filas por cubo con DOS consultas independientes lanzadas con Promise.all, sin transaccion ni snapshot compartido. Una escritura en el ledger entre ambas lecturas deja el total y la suma de las filas discrepando, que es exactamente lo que el R12 de la 180 afirma que no pasa. Envolver ambas lecturas en una transaccion de solo lectura con aislamiento repeatable read.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "low",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/187-analitica-lectura-consistente",
       "depends_on": 180,
       "status_note": "RENUMERADA DE 186 A 187 el 2026-08-05 al traer dev a la rama de la 180: mientras esta rama estaba viva, dev mergeo (PR #292) una ficha con el id 185 -el oraculo de conteo del filtro mensajero, cancelada- que YA estaba publicada. Ninguna de las dos tenia rama, asi que el desempate no fue ese sino la publicacion: renumerar la que ya circula en dev invalidaria sus citas. Las dos fichas nuevas de esta rama se corrieron en bloque (185->186, 186->187) CONSERVANDO su contenido. Si alguna nota vieja habla de 'la ficha 186' a proposito de la lectura consistente del total y su desglose, se refiere a ESTA. || Sale de la nota 3 de progress/review_180.md y esta escrita como decision L3 en progress/impl_180.md. NO es un defecto de la 180: es un limite suyo, medido y declarado antes de mergear. || NO se arregle derivando el total sumando las filas: eso convierte el R12 en una TAUTOLOGIA y destruye lo unico que hoy lo hace valioso, que la igualdad se comprueba entre DOS caminos independientes (el total por sumarPorCategoria, las filas por cubo). El arreglo correcto es de infraestructura de repositorio (transaccion de solo lectura), no de calculo. || Impacto real medido: ventana de milisegundos sobre un libro append-only; el sintoma seria un descuadre de centimos en un tablero de consulta, sin corrupcion de datos. Prioridad baja, pero el R12 no debe seguir afirmando en una spec algo que el runtime no garantiza."
     },

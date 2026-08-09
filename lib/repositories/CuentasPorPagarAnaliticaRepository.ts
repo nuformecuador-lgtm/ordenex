@@ -1,6 +1,10 @@
 import { Prisma, type PrismaClient, type PagoMensajeroMovimientoTipo } from "@prisma/client";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { CuboTemporal } from "@/lib/analytics/cubo-temporal";
+import {
+  MAX_WAIT_LECTURA_CONSISTENTE_MS,
+  TIMEOUT_LECTURA_CONSISTENTE_MS,
+} from "@/lib/config/analitica-financiera";
 import type {
   AgregadoCuboTipo,
   CuentaMensajeroAlCorte,
@@ -54,12 +58,31 @@ import type {
 // TypeScript por `lib/analytics/cubo-temporal.ts` y pasadas como PARAMETROS ⟨D4⟩, CERO zonas
 // horarias en el SQL (ni `AT TIME ZONE`, ni `date_trunc` con zona, ni `interval '6 hours'`) y
 // `Prisma.sql`/`Prisma.join` en vez de `$queryRawUnsafe`.
+//
+// ---------------------------------------------------------------------------
+// FEATURE 187 — AQUI SE ABRE UNA TRANSACCION, Y SIGUE SIENDO SOLO CONSULTAS
+// ---------------------------------------------------------------------------
+// `enLecturaConsistente` es el UNICO metodo que no consulta: abre una transaccion de solo lectura
+// con aislamiento `repeatable read` para que las TRES consultas de `cuenta_por_pagar_mensajero`
+// vean el mismo snapshot. Abrir un snapshot es acceso a datos, no logica de negocio; el servicio
+// no puede conocer Prisma (R6), asi que vive aqui. Lo que NO cambia: siguen siendo tres consultas
+// por tres caminos, porque de eso vive la invariante R13 de la 180.
 
-/** Cliente Prisma MINIMO: los dos ledgers que las dos metricas declaran, mas `$queryRaw`. */
+/**
+ * Cliente Prisma MINIMO: los dos ledgers que las dos metricas declaran, mas `$queryRaw`.
+ *
+ * FEATURE 187 — gana `$transaction`, y OPCIONAL. Gemelo exacto del de
+ * `IngresosAnaliticaRepository`, con el mismo motivo escrito alli: dentro de una lectura
+ * consistente este repositorio se construye con el cliente TRANSACCIONAL de Prisma, que no ofrece
+ * `$transaction` porque las transacciones no se anidan. Obligarlo exigiria un cast que mentiria;
+ * opcional, el tipo dice la verdad y anidar falla con un mensaje que se entiende.
+ */
 type CuentasPorPagarPrismaClient = Pick<
   PrismaClient,
   "walletTiendaMovimiento" | "pagoMensajeroMovimiento" | "$queryRaw"
->;
+> & {
+  readonly $transaction?: PrismaClient["$transaction"];
+};
 
 /** `Decimal | null` -> STRING escala 2 (S1/R27). Nunca pasa por `number`. */
 function importe(valor: Prisma.Decimal | null): string {
@@ -101,6 +124,43 @@ interface FilaCrudaCuboMensajero {
 
 export class CuentasPorPagarAnaliticaRepository implements ICuentasPorPagarAnaliticaRepository {
   constructor(private readonly prisma: CuentasPorPagarPrismaClient) {}
+
+  /**
+   * Feature 187 (T2.4, R1/R2/R6/R10) — EL ALCANCE DE LECTURA CONSISTENTE. Gemelo exacto del de
+   * `IngresosAnaliticaRepository`, con el mismo criterio con el que los dos `limitesDeCubo` son
+   * gemelos: el detalle que decide si la garantia existe —el nivel de aislamiento— tiene que estar
+   * escrito dentro de cada archivo que los censos miran, y un test comprueba que los dos abren el
+   * alcance con el MISMO nivel, para que arreglar uno y olvidar el otro se ponga rojo.
+   *
+   * Aqui son TRES las consultas que comparten snapshot (`...AlCorte`, `...AntesDe`,
+   * `...PorCubo`), y de esas tres depende R13 de la 180: la ultima fila de la serie acumulada ==
+   * el total. Las tres cortan el mismo libro por fronteras distintas, asi que una escritura
+   * confirmada en medio entra en unas y no en otras y descuadra la igualdad sin que nada falle.
+   *
+   * `repeatable read` y no `serializable` (para lecturas no compra nada y arriesga abortos, ver
+   * alternativa K de la 172). Sin `READ ONLY` explicito, decision declarada en `design.md` §3.1.
+   * Tiempos desde `lib/config/analitica-financiera.ts` (R10): en este archivo no hay ni un numero
+   * de milisegundos. Sin `try`/`catch` (R7): el fallo aborta la transaccion y sube tal cual.
+   *
+   * El `throw` de abajo cubre el unico caso que el tipo ya impide en compilacion: anidar alcances.
+   */
+  async enLecturaConsistente<T>(
+    fn: (repo: ICuentasPorPagarAnaliticaRepository) => Promise<T>,
+  ): Promise<T> {
+    if (this.prisma.$transaction === undefined) {
+      throw new Error(
+        "analitica financiera: este repositorio ya esta ligado a una lectura consistente; los alcances no se anidan",
+      );
+    }
+    return this.prisma.$transaction(
+      async (tx) => fn(new CuentasPorPagarAnaliticaRepository(tx)),
+      {
+        isolationLevel: "RepeatableRead",
+        timeout: TIMEOUT_LECTURA_CONSISTENTE_MS,
+        maxWait: MAX_WAIT_LECTURA_CONSISTENTE_MS,
+      },
+    );
+  }
 
   /**
    * `groupBy(tienda_id, tipo)` + `_sum(monto)` con la UNICA cota `fecha_movimiento < hasta`.
