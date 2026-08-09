@@ -141,6 +141,29 @@ esto. Quien mergee segundo resuelve tres conflictos pequeños; no hay conflicto 
 | integración contra Postgres | 3/3 (I1, I2, I2b) |
 | `./init.sh` completo | ver §9 |
 
-## 9. Gate completo
+## 9. Gate completo — **NO está verde, y no es por esta feature**
 
-<!-- lo rellena el leader antes del PR -->
+`./init.sh` (suite entera, 989 archivos / 12.304 tests) termina en **14 rojos repartidos en 3
+archivos**:
+
+| Archivo | Veredicto |
+|---|---|
+| `tests/unit/components/filter-component.test.tsx` | **Flake de saturación.** Un debounce que emite 2 veces en vez de 1 bajo carga. **Pasa en aislado.** |
+| `tests/integration/db/busqueda-comportamiento.test.ts` | **Baseline de `dev`.** 12 rojos entre los dos: la columna generada `busqueda_texto` de la base local incluye el producto y el normalizador de Node no. |
+| `tests/integration/db/busqueda-normalizacion-paridad.test.ts` | ídem |
+
+**Por qué consta que no son de la 187, y no es una corazonada.** Esta rama es `origin/dev`
+(`80aa3721`) **más 18 archivos**, todos listados en §2, y **ninguno** toca la búsqueda. Los dos
+ficheros de `busqueda-*` tienen en esta rama exactamente el mismo contenido que en `dev`, así que
+fallan igual ahí. Se comprobó además que corren verdes en el checkout de `ux` — pero **esa
+comparación no vale y se deja anotada para que nadie la repita**: `ux` tiene una versión distinta de
+esos dos archivos de test (55 casos frente a 54), así que no mide lo mismo.
+
+La corrida previa dio **20 rojos en 11 archivos** y esta **14 en 3**, con los mismos cambios: la
+diferencia son flakes por saturación de la máquina, no regresiones. El guard `no-embalaje` cayó por
+**timeout** en la primera y pasó en la segunda; en aislado tarda 1,19 s.
+
+**Consecuencia honesta:** el criterio «gate verde antes del PR» **no se cumple**, y no puede
+cumplirse mientras `dev` arrastre esos 12 rojos de búsqueda. Lo que sí se cumple, medido: todo lo
+que esta feature toca está verde (97 unitarios nuevos/tocados, 99 heredados sin editar aserciones,
+3 de integración, 1017 guardias).
