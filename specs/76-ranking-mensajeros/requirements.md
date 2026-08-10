@@ -210,3 +210,25 @@ dashboards, gráficos, histórico de rankings/premios, notificaciones.
   no existe / no es `entregada` vigente). Documentado; sin corrección en esta feature.
   Trazabilidad: un test de `RankingService` DEBE fijar este comportamiento como esperado
   (orden con asignación limpiada ese día no cuenta en denominador ni numerador).
+
+---
+
+## Nota de supersesión — feature 166 (2026-08-04)
+
+**Apendida, no reescrita.** Esta feature está `done` y su texto se conserva tal cual; lo que
+sigue solo declara qué parte de él dejó de estar vigente.
+
+La definición de **«Hoy(CR)»** de las líneas 40-41 de este documento —límite inferior
+`startOfDayCR(now)`, límite superior `startOfDayCR(now) + 24h`— quedó **SUSTITUIDA** por la
+ventana del **día natural de Costa Rica** de la feature **166**:
+`[inicioDelDiaCREnUtc(f), inicioDelDiaSiguienteCREnUtc(f))` con `f = fechaCalendarioCR(now)`,
+es decir ambos bordes en `...T06:00:00.000Z`.
+
+Motivo: `startOfDayCR` devuelve la medianoche **UTC** de la fecha calendario CR (convención
+`@db.Date` de la feature 46), y las dos cotas del ranking se comparan contra columnas
+`timestamp` (`gestion_orden.created_at`, `orden.asignado_at`). Con la convención vieja la
+ventana real era 18:00-18:00 hora CR: una entrega de las 19:00 CR contaba para el día
+siguiente.
+
+Todo lo demás de la feature 76 (contrato de salida, orden, podio, umbral, premios,
+autorización) sigue vigente sin cambios. Ver `specs/166-ranking-ventana-dia/`.

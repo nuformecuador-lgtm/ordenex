@@ -153,6 +153,26 @@ export interface ICierresAdminRepository {
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>>;
   /**
+   * Feature 184 — Tanda D (T D.1, R1/R14/R15/R16): el HISTORICO ENTERO del alcance, sin recorte
+   * y sin conteo — el conjunto del que sale el ARCHIVO de ese listado.
+   *
+   * Es `findHistoricoPaginado` sin `skip`/`take` ni `count`, y lo es por construccion: los dos
+   * leen el MISMO criterio y el MISMO orden de una sola declaracion, de modo que la pagina N
+   * sea el segmento N de este conjunto (R5/R16).
+   *
+   * NO se puede sustituir por `findCierresByAlcance`: aquel devuelve la UNION de la cola y el
+   * historico, que es justo la relectura compuesta que esta tanda retira (R1).
+   */
+  findHistoricoCompleto(alcance: Alcance): Promise<CierreAdminResumenRow[]>;
+  /**
+   * Feature 184 — Tanda D (T D.1, R1/R14/R15/R16): la COLA ENTERA de pendientes de decision del
+   * alcance, sin recorte y sin conteo — el conjunto del que sale el ARCHIVO de ese listado.
+   *
+   * Complemento exacto de `findHistoricoCompleto` por la MISMA `ESTADOS_COLA_CIERRE_DIA` que
+   * usan las dos paginas: los cuatro caminos particionan el mismo conjunto.
+   */
+  findColaCompleta(alcance: Alcance): Promise<CierreAdminResumenRow[]>;
+  /**
    * R6/R7/R9/R13: un cierre SOLO si su destino casa el alcance en el WHERE (guardia
    * R13) + sus gestiones (WITH_DETALLE, reuso 37, WHERE cierre_id = X). Fuera de
    * alcance / inexistente -> null (no se distingue).

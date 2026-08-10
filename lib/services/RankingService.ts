@@ -8,13 +8,13 @@ import type { IRankingRepository } from "@/lib/interfaces/repositories/IRankingR
 import type { IPremioRankingRepository } from "@/lib/interfaces/repositories/IPremioRankingRepository";
 import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
 import type { EditarPremioInput, RankingRowDTO } from "@/lib/types/ranking";
-import { startOfDayCR } from "@/lib/utils/fecha-cr";
+import {
+  fechaCalendarioCR,
+  inicioDelDiaCREnUtc,
+  inicioDelDiaSiguienteCREnUtc,
+} from "@/lib/utils/fecha-cr";
 import { loadRankingConfig, type RankingConfig } from "@/lib/config/ranking";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-
-// Un dia en milisegundos: limite superior del rango HOY(CR) = startOfDayCR(now) + 24h.
-// (fecha-cr.ts no exporta esta constante; se define aqui, igual que LiberacionReprogramadaRepository.)
-const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
 // Rol lector adicional (solo-lectura) ademas del acceso total: el mensajero. El acceso total
 // (maestro/admin) VE (editable) y EDITA los premios (R16/R17/R19).
@@ -56,9 +56,22 @@ export class RankingService implements IRankingService {
       return { status: "forbidden" };
     }
 
-    // R22: rango HOY(CR) por el helper, half-open [desde, hasta).
-    const desde = startOfDayCR(now);
-    const hasta = new Date(desde.getTime() + UN_DIA_MS);
+    // Feature 166 — ventana del DIA NATURAL de Costa Rica, half-open [desde, hasta): ambos
+    // bordes caen en `...T06:00:00.000Z`, que es las 00:00 de PARED en CR (UTC-6 fijo, sin
+    // horario de verano). Es la convencion de la feature 144, la misma que usa la analitica
+    // (`lib/analytics/ranges.ts`), de modo que "hoy" significa lo mismo en ambos modulos.
+    //
+    // NO uses `startOfDayCR` aqui, aunque parezca "el helper del dia de CR" y aunque otros
+    // modulos del repo si la usen: `startOfDayCR` devuelve la MEDIANOCHE UTC de la fecha
+    // calendario CR, que es la convencion de las columnas `@db.Date` (feature 46, p.ej.
+    // `fecha_reprogramacion`). Estas dos cotas, en cambio, se comparan contra columnas
+    // `timestamp` reales —`gestion_orden.created_at` y `orden.asignado_at`—, y con aquella
+    // convencion la ventana resultante `[00:00Z, 24:00Z)` es en realidad 18:00-18:00 hora
+    // CR: una entrega de las 19:00 CR contaba para el dia SIGUIENTE. Ese era el defecto que
+    // cerro la ficha 166; volver a `startOfDayCR` (o sumarle 6 h a mano) lo reintroduce.
+    const hoyCR = fechaCalendarioCR(now);
+    const desde = inicioDelDiaCREnUtc(hoyCR);
+    const hasta = inicioDelDiaSiguienteCREnUtc(hoyCR);
 
     const [mensajeros, entregadas, asignadas, premios] = await Promise.all([
       this.userRepo.listMensajeros(),

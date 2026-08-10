@@ -21,8 +21,12 @@ import {
   recibirLoteSchema,
   asignarSateliteSchema,
   listarOrdenesBodegaPaginadoSchema,
+  listarOrdenesBodegaCompletoSchema,
+  listarIdsVigentesBodegaSchema,
   type ListarRecepcionSateliteResult,
   type ListarOrdenesBodegaPaginadoResult,
+  type ListarOrdenesBodegaCompletoResult,
+  type ListarIdsVigentesBodegaResult,
   type ObtenerCatalogoFiltrosSateliteResult,
   type RecibirResult,
   type RecibirLoteResult,
@@ -162,6 +166,55 @@ export async function listarOrdenesBodegaPaginado(
     const data = listarOrdenesBodegaPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarOrdenesBodegaPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda A (T A.3, R1/R3/R6/R7) — el CONJUNTO filtrado entero de «Órdenes de la
+ * bodega», para producir el archivo.
+ *
+ * Calcada del borde de su página: mismo actor, mismo servicio y el mismo schema menos
+ * `page`/`pageSize`. Los filtros vigentes viajan tal cual y el conjunto vuelve YA filtrado por
+ * la base: la pantalla deja de releer los cinco grupos de la zona para volver a filtrarlos en
+ * el navegador (Q-K4).
+ *
+ * Una clave no declarada —o una de alcance, como `zonaId`— muere aquí con `validation_error`,
+ * sin llegar al servicio (R17).
+ */
+export async function listarOrdenesBodegaCompleto(
+  input: unknown = {},
+  deps: RecepcionSateliteDeps = {},
+): Promise<ListarOrdenesBodegaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R3: antes de tocar el service
+    const data = listarOrdenesBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarOrdenesBodegaCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda A (T A.3, R18/R21/R22) — cuáles de los identificadores marcados siguen
+ * en el conjunto filtrado. Con esto la pantalla PODA su selección.
+ *
+ * Devuelve los VIGENTES, no los caducados: el cliente interseca, así que si esta acción falla
+ * —o si devuelve menos de lo que debería por un error— lo peor que pasa es que no se pode
+ * (R22). El tope de identificadores lo impone el schema (Q2), y pasarse es `validation_error`
+ * sin tocar la selección.
+ */
+export async function listarIdsVigentesBodega(
+  input: unknown,
+  deps: RecepcionSateliteDeps = {},
+): Promise<ListarIdsVigentesBodegaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R3: antes de tocar el service
+    const data = listarIdsVigentesBodegaSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarIdsVigentesBodega(data, actor);
   });
   return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
 }

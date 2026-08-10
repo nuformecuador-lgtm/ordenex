@@ -17,12 +17,6 @@ export interface OrdenEnvioData {
   mensajeroNombre: string;
 }
 
-/** Fila del listado de plantillas enviables que consume la UI del mensajero. */
-export interface PlantillaEnviableDTO {
-  id: string;
-  nombre: string;
-}
-
 /**
  * Fila del flujo wa.me: incluye el CUERPO y las variables para renderizar el texto en el
  * cliente y abrir WhatsApp con el mensaje ya escrito.
@@ -39,17 +33,9 @@ export type ListarPlantillasTextoResult =
   | { status: "ok"; items: PlantillaTextoDTO[] }
   | { status: "unauthenticated" };
 
-/** Resultado de dominio del envio (lo que la server action devuelve a la UI). */
-export type EnviarPlantillaResult =
-  | { status: "ok"; mensajeId: string }
-  | { status: "unauthenticated" }
-  | { status: "forbidden" } // la orden no esta asignada a este mensajero
-  | { status: "not_found" } // orden o plantilla inexistente / no enviable
-  | { status: "no_configurado" } // WhatsApp aun sin credenciales
-  | { status: "envio_fallido"; detalle: string }; // Meta rechazo o no respondio
-
-/** Resultado del listado de enviables. */
-export type ListarEnviablesResult =
-  | { status: "ok"; items: PlantillaEnviableDTO[] }
-  | { status: "unauthenticated" }
-  | { status: "forbidden" };
+// Aqui vivian `EnviarPlantillaResult`, `ListarEnviablesResult` y `PlantillaEnviableDTO`, los
+// tipos del envio server-side por Meta. Se borraron el 2026-08-07 con el resto de esa isla
+// (`EnvioPlantillaWhatsappService` y sus dos Server Actions): el camino que los usaba nunca
+// tuvo boton. Lo que SI sigue vivo y se le parece es `PlantillaEnviable` (el tipo del
+// repositorio, en `IPlantillaMensajeRepository`), que alimenta a `listarEnviables()` y
+// `findEnviableById()` — ambos con llamador vivo. No confundir DTO con tipo de repositorio.

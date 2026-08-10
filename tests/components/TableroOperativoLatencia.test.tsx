@@ -167,7 +167,7 @@ describe("Feature 131 (T7.2, D4) — el coste de las N invocaciones", () => {
         </SWRConfig>
       </ToastProvider>,
     );
-    await screen.findByRole("region", { name: "Ordenes creadas" }, { timeout: 4000 });
+    await screen.findByRole("region", { name: "Órdenes creadas" }, { timeout: 4000 });
     await waitFor(() => expect(accion.mock.calls.length).toBe(METRICAS.length));
 
     // D4 fija el presupuesto en <=6 PANELES; el numero de invocaciones sale de las

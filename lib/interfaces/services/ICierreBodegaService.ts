@@ -1,6 +1,7 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type {
   CierreGrupos,
   CierreTotales,
@@ -105,6 +106,33 @@ export type ListarCierresBodegaSolicitadosServiceResult =
 export type ListarConsolidablesServiceResult =
   ListarPaginadoServiceResult<CierreBodegaResumenLite>;
 
+/**
+ * Feature 184 — Tanda B (R1/R6/R10) — el CONJUNTO de «Cierres de bodega solicitados» de la zona,
+ * sin recorte, que es del que sale el archivo.
+ *
+ * Es el hermano de `listarCierresBodegaSolicitadosPaginado`: mismo guard, misma zona resuelta
+ * desde el actor, mismo metodo de repositorio y por tanto MISMO mapper de dinero. Lo unico que
+ * no lleva es el recorte por pagina.
+ *
+ * **No devuelve NADA de la otra mitad de esa pantalla** (R10): ni los cinco agregados de dinero
+ * ni el reparto de efectivo, que son de `listarConsolidacion` y viven sobre otro conjunto —los
+ * consolidables—. Ese es justo el coste que esta tanda quita del camino de la descarga.
+ */
+export type ListarCierresBodegaSolicitadosCompletoServiceResult =
+  ListarCompletoServiceResult<CierreBodegaResumen>;
+
+/**
+ * Feature 184 — Tanda B (R1/R6/R10) — el CONJUNTO de «Cierres del dia a consolidar» de la zona,
+ * sin recorte, para el archivo.
+ *
+ * Hermano de `listarConsolidablesPaginado` y, como el, **sin dinero agregado**: los cinco
+ * numeros de la cabecera los sigue calculando `listarConsolidacion` sobre este mismo conjunto
+ * (R49 de la 170). Que el archivo no los pida no los cambia; lo que evita es pagar el reparto
+ * del efectivo —que ordena todos los pagos individuales— cada vez que alguien descarga.
+ */
+export type ListarConsolidablesCompletoServiceResult =
+  ListarCompletoServiceResult<CierreBodegaResumenLite>;
+
 // R1/R4/R6-R10: solicitud del cierre de bodega. Sin input de negocio (el actor y su
 // zona lo determinan todo). `conflict` cubre R6 (pendientes) / R7 (vacio) / R8
 // (duplicado); `validation_error` cubre R4 (sin zona).
@@ -152,6 +180,28 @@ export interface ICierreBodegaService {
     input: { page: number; pageSize: number },
     actor: Actor,
   ): Promise<ListarConsolidablesServiceResult>;
+  /**
+   * Feature 184 — Tanda B (R1/R4/R6/R10): el CONJUNTO de «Cierres de bodega solicitados» de la
+   * zona del actor, sin recorte, para producir el archivo.
+   *
+   * Mismo guard y misma resolucion de zona que su hermana paginada. **No recibe entrada**: este
+   * listado no admite filtros, asi que su lista blanca —derivada de la de la pagina quitando
+   * `page`/`pageSize`— no deja ninguna clave, y la barrera se aplica entera en el borde (R17).
+   * El tope de filas se evalua aqui (R6): superarlo NO entrega filas ni un conjunto truncado.
+   * Sin zona -> conjunto vacio, no `forbidden`.
+   */
+  listarCierresBodegaSolicitadosCompleto(
+    actor: Actor,
+  ): Promise<ListarCierresBodegaSolicitadosCompletoServiceResult>;
+  /**
+   * Feature 184 — Tanda B (R1/R4/R6/R10): el CONJUNTO de «Cierres del dia a consolidar» de la
+   * zona del actor, sin recorte, para producir el archivo.
+   *
+   * Lee el MISMO conjunto sobre el que `listarConsolidacion` calcula los cinco agregados, pero
+   * **no calcula ninguno** (R10): el archivo lleva filas, no totales, y el reparto del efectivo
+   * —que ordena todos los pagos individuales de la zona— no tiene por que pagarse al descargar.
+   */
+  listarConsolidablesCompleto(actor: Actor): Promise<ListarConsolidablesCompletoServiceResult>;
   /**
    * R1/R4/R6-R10: crea la solicitud de cierre de bodega (`solicitado`) consolidando
    * TODOS los cierre_dia aprobados de la zona, con snapshot de totales agregados

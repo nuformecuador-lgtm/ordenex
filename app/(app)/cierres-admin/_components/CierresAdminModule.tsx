@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { cierreConfig } from "@/lib/config/cierre";
 import {
@@ -18,8 +18,8 @@ import {
   aprobarCierre,
   rechazarCierre,
   forzarSolicitudVencido,
-  listarCierresAdmin,
   listarHistoricoCierresAdminPaginado,
+  listarPendientesCierresAdminCompleto,
   listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
@@ -578,12 +578,19 @@ export function CierresAdminModule({
             error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
             /**
              * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue siendo
-             * la COLA COMPLETA del alcance del actor. Se relee al pulsar el control, con el
-             * MISMO listado que la pantalla ya llamaba antes de paginar (`listarCierresAdmin`),
-             * que reparte cola e histórico con el mismo criterio y el mismo acotamiento por
-             * rol: un `adminSatelite` sigue descargando solo los cierres de su zona (R14/R44).
-             * Proyectar `colaPendientes.items` habría convertido «descargar la cola» en
-             * «descargar lo que se ve» sin que nada fallara.
+             * la COLA COMPLETA del alcance del actor, y ese acotamiento lo pone el SERVIDOR
+             * desde la sesión: un `adminSatelite` sigue descargando solo los cierres de su
+             * zona (R14/R44). Proyectar `colaPendientes.items` habría convertido «descargar
+             * la cola» en «descargar lo que se ve» sin que nada fallara.
+             *
+             * Feature 184 — Tanda D (T D.3, R1): lo que cambia es DE DÓNDE sale esa cola.
+             * Hasta aquí se releía `listarCierresAdmin()`, que devuelve la cola Y el histórico
+             * juntos, y de ahí esta descarga se quedaba con UNA de las dos mitades. En
+             * producción esa relectura es la cara: la cola son los cierres sin resolver —una
+             * decena— y el histórico crece sin tope con los días, así que descargar la cola
+             * arrastraba todo el histórico del alcance. Ahora se pide la lectura DEDICADA, que
+             * corta por estado en la base (`estado in` la cola) con el mismo criterio y el
+             * mismo orden que la página, y cuyo tope de filas evalúa el servidor (R6).
              *
              * El título no repite el de la otra tabla: dos controles en la misma pantalla
              * necesitan nombres accesibles distintos (R13).
@@ -592,12 +599,8 @@ export function CierresAdminModule({
               titulo: TITULO_DESCARGA_PENDIENTES,
               columnas: COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
               obtenerFilas: () =>
-                filasDelConjuntoCompleto(
-                  listarCierresAdmin().then((res) =>
-                    res.status === "ok"
-                      ? ({ status: "ok", items: res.pendientes } as const)
-                      : res,
-                  ),
+                filasDesdeResultado(
+                  listarPendientesCierresAdminCompleto(),
                   filaDescargaCierrePendiente,
                 ),
             }}

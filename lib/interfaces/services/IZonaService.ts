@@ -1,7 +1,6 @@
 import type { RolValue } from "@prisma/client";
 import type {
   ActualizarZonaInput,
-  ArbolZonas,
   CrearZonaInput,
   ListarZonasInput,
   ZonaDTO,
@@ -39,10 +38,6 @@ export type BorrarZonaServiceResult =
   | { status: "not_found" }
   | { status: "conflict" };
 
-export type ArbolZonasServiceResult =
-  | { status: "ok"; arbol: ArbolZonas }
-  | { status: "forbidden" };
-
 export interface IZonaService {
   crear(input: CrearZonaInput, actor: Actor): Promise<CrearZonaServiceResult>;
   obtener(id: string, actor: Actor): Promise<ObtenerZonaServiceResult>;
@@ -53,5 +48,4 @@ export interface IZonaService {
     actor: Actor,
   ): Promise<ActualizarZonaServiceResult>;
   borrar(id: string, actor: Actor): Promise<BorrarZonaServiceResult>;
-  arbol(actor: Actor): Promise<ArbolZonasServiceResult>;
 }

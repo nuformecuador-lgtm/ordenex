@@ -15,8 +15,9 @@ export interface INotificacionService {
   /** R28/R29/R30: listado visible del actor, en ventana, ordenado, con `read` y `noLeidas`. */
   listar(actor: Actor): Promise<ListarNotificacionesServiceResult>;
 
-  /** R31/R35/R37: registra la lectura del actor si la notificacion le es visible. */
-  marcarLeida(id: string, actor: Actor): Promise<MarcarNotificacionServiceResult>;
+  // `marcarLeida` (R31) se borro el 2026-08-07: la campana nunca tuvo un control para marcar
+  // UNA notificacion. `marcarTodasLeidas` (R32) si lo tiene y se queda. `descartar` conserva
+  // el tipo `MarcarNotificacionServiceResult`, que por eso NO se va con ella.
 
   /** R32: marca todas las visibles y no descartadas del actor; el contador queda en cero. */
   marcarTodasLeidas(actor: Actor): Promise<MarcarTodasServiceResult>;

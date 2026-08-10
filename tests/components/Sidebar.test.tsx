@@ -311,6 +311,8 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     "shieldAlert",
     "chartColumn",
     "store",
+    // Feature 192 (R53): tablero del día "Monitoreo".
+    "gauge",
   ] as const satisfies readonly IconKey[];
   // Comprobación de exhaustividad tipada: si `IconKey` gana una clave que no está en
   // el array de arriba, `Exclude<IconKey, (typeof TODAS_LAS_CLAVES)[number]>` deja de

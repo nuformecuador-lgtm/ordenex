@@ -2,11 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import {
   listarRecepcionSatelite,
   listarOrdenesBodegaPaginado,
+  listarOrdenesBodegaCompleto,
+  listarIdsVigentesBodega,
   recibirPorQr,
   recibirLote,
 } from "@/lib/actions/recepcion-satelite";
 import type { IRecepcionSateliteService } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
 
 const ADMIN: Actor = { usuarioId: "as1", rol: "adminSatelite" };
 
@@ -43,8 +46,20 @@ function buildService(overrides: Partial<IRecepcionSateliteService> = {}): IRece
       status: "ok" as const,
       catalogo: { cantones: [], distritos: [] },
     })),
+    // Feature 184 (T A.3): el conjunto de la descarga y la vigencia de la seleccion.
+    listarOrdenesBodegaCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [],
+      total: 0,
+    })),
+    listarIdsVigentesBodega: vi.fn(async () => ({ status: "ok" as const, ids: [] })),
     ...overrides,
   };
+}
+
+/** Un uuid valido y distinto por indice: `ids` los exige con formato (feature 184, T A.3). */
+function uuid(i: number): string {
+  return `3f1c7c2e-9a1a-4f0e-9d4a-${String(i).padStart(12, "0")}`;
 }
 
 const noActor = async () => null;
@@ -269,6 +284,179 @@ describe("listarOrdenesBodegaPaginado — el borde (feature 170, T K.1)", () => 
     expect(r).toEqual({ status: "forbidden" });
     expect(r).not.toHaveProperty("items");
     expect(r).not.toHaveProperty("total");
+  });
+});
+
+// --- listarOrdenesBodegaCompleto: la lista blanca DERIVADA (feature 184, T A.3/R17) ---
+
+describe("listarOrdenesBodegaCompleto — el borde del conjunto (feature 184, T A.3)", () => {
+  it("sin actor -> unauthenticated, sin tocar el service", async () => {
+    const service = buildService();
+    const r = await listarOrdenesBodegaCompleto({}, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.listarOrdenesBodegaCompleto).not.toHaveBeenCalled();
+  });
+
+  it("input vacío vale: el conjunto sin filtros, y sin page ni pageSize", async () => {
+    const service = buildService();
+    const r = await listarOrdenesBodegaCompleto({}, { service, getActor: actorAdmin });
+    expect(r.status).toBe("ok");
+    // La lista blanca es la de la pagina MENOS el recorte: al servicio no le llega ni un
+    // `page` con default. Si llegara, el «conjunto» seria una pagina.
+    expect(service.listarOrdenesBodegaCompleto).toHaveBeenCalledWith({}, ADMIN);
+  });
+
+  it("una clave no declarada muere con validation_error sin tocar el service (R17)", async () => {
+    // Las dos familias: las de ALCANCE —que convertirian el archivo en una ventana a la bodega
+    // del vecino— y las de RECORTE, que lo convertirian en una pagina. `page`/`pageSize` valen
+    // en la pantalla y NO valen aqui: eso es exactamente lo que «derivada» significa.
+    for (const colada of [
+      { zonaId: "z-b" },
+      { usuarioId: "u-sat-b" },
+      { page: 2 },
+      { pageSize: 25 },
+      { busqueda: "x" },
+    ]) {
+      const service = buildService();
+      const r = await listarOrdenesBodegaCompleto(colada, { service, getActor: actorAdmin });
+      expect(r.status, JSON.stringify(colada)).toBe("validation_error");
+      expect(service.listarOrdenesBodegaCompleto).not.toHaveBeenCalled();
+    }
+  });
+
+  it("un estado fuera de los cinco del listado muere en el borde", async () => {
+    const service = buildService();
+    const r = await listarOrdenesBodegaCompleto(
+      { estados: ["entregada"] },
+      { service, getActor: actorAdmin },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.listarOrdenesBodegaCompleto).not.toHaveBeenCalled();
+  });
+
+  it("los tres filtros vigentes llegan al service tal cual (R3)", async () => {
+    const service = buildService();
+    await listarOrdenesBodegaCompleto(
+      {
+        estados: ["devuelta", "por_recoger"],
+        cantones: ["Escazú"],
+        distritos: ["San Rafael", "San Antonio"],
+      },
+      { service, getActor: actorAdmin },
+    );
+    expect(service.listarOrdenesBodegaCompleto).toHaveBeenCalledWith(
+      {
+        estados: ["devuelta", "por_recoger"],
+        cantones: ["Escazú"],
+        distritos: ["San Rafael", "San Antonio"],
+      },
+      ADMIN,
+    );
+  });
+
+  it("limite_excedido del service pasa tal cual: conteos y NINGUNA fila (R6)", async () => {
+    const service = buildService({
+      listarOrdenesBodegaCompleto: vi.fn(async () => ({
+        status: "limite_excedido" as const,
+        total: 5001,
+        limite: 5000,
+      })),
+    });
+    const r = await listarOrdenesBodegaCompleto({}, { service, getActor: actorAdmin });
+    expect(r).toEqual({ status: "limite_excedido", total: 5001, limite: 5000 });
+    expect(r).not.toHaveProperty("items");
+  });
+
+  it("forbidden del service pasa tal cual, sin filas ni total", async () => {
+    const service = buildService({
+      listarOrdenesBodegaCompleto: vi.fn(async () => ({ status: "forbidden" as const })),
+    });
+    const r = await listarOrdenesBodegaCompleto({}, { service, getActor: actorAdmin });
+    expect(r).toEqual({ status: "forbidden" });
+    expect(r).not.toHaveProperty("items");
+  });
+});
+
+// --- listarIdsVigentesBodega: la cota de ids y la lista blanca (feature 184, T A.3) ---
+
+describe("listarIdsVigentesBodega — el borde de la vigencia (feature 184, T A.3)", () => {
+  it("sin actor -> unauthenticated, sin tocar el service", async () => {
+    const service = buildService();
+    const r = await listarIdsVigentesBodega({ ids: [uuid(1)] }, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.listarIdsVigentesBodega).not.toHaveBeenCalled();
+  });
+
+  it("los ids y los filtros vigentes llegan al service tal cual (R19)", async () => {
+    const service = buildService({
+      listarIdsVigentesBodega: vi.fn(async () => ({
+        status: "ok" as const,
+        ids: [uuid(1)],
+      })),
+    });
+    const r = await listarIdsVigentesBodega(
+      { ids: [uuid(1), uuid(2)], estados: ["devuelta"], cantones: ["Escazú"] },
+      { service, getActor: actorAdmin },
+    );
+    expect(r).toEqual({ status: "ok", ids: [uuid(1)] });
+    expect(service.listarIdsVigentesBodega).toHaveBeenCalledWith(
+      { ids: [uuid(1), uuid(2)], estados: ["devuelta"], cantones: ["Escazú"] },
+      ADMIN,
+    );
+  });
+
+  it("una clave no declarada muere con validation_error sin tocar el service (R17)", async () => {
+    for (const colada of [
+      { ids: [uuid(1)], zonaId: "z-b" },
+      { ids: [uuid(1)], page: 1 },
+      { ids: [uuid(1)], pageSize: 25 },
+      { ids: [uuid(1)], usuarioId: "u-sat-b" },
+    ]) {
+      const service = buildService();
+      const r = await listarIdsVigentesBodega(colada, { service, getActor: actorAdmin });
+      expect(r.status, JSON.stringify(colada)).toBe("validation_error");
+      expect(service.listarIdsVigentesBodega).not.toHaveBeenCalled();
+    }
+  });
+
+  it("ids ausente, vacío o con un valor que no es uuid muere en el borde", async () => {
+    // `orden.id` es uuid: un id con otra forma no puede ser vigente, y dejarlo pasar lo
+    // convertiria en un parametro libre del `IN`.
+    for (const malo of [{}, { ids: [] }, { ids: ["o-1"] }, { ids: [uuid(1), "no-uuid"] }]) {
+      const service = buildService();
+      const r = await listarIdsVigentesBodega(malo, { service, getActor: actorAdmin });
+      expect(r.status, JSON.stringify(malo)).toBe("validation_error");
+      expect(service.listarIdsVigentesBodega).not.toHaveBeenCalled();
+    }
+  });
+
+  it("la cota de identificadores se aplica en el BORDE exacto (Q2)", async () => {
+    const cota = recepcionSateliteConfig.MAX_IDS_VIGENCIA;
+    const enLaCota = Array.from({ length: cota }, (_, i) => uuid(i));
+
+    // Con la cota EXACTA pasa: la frontera es «más de», no «casi».
+    const ok = buildService();
+    expect((await listarIdsVigentesBodega({ ids: enLaCota }, { service: ok, getActor: actorAdmin })).status).toBe("ok");
+    expect(ok.listarIdsVigentesBodega).toHaveBeenCalledTimes(1);
+
+    // Con uno más, `validation_error` y el service NI SE TOCA: la lista acaba en un `IN` de
+    // SQL y la propone el cliente. La selección no se altera (R22: el cliente no poda).
+    const excedido = buildService();
+    const r = await listarIdsVigentesBodega(
+      { ids: [...enLaCota, uuid(cota)] },
+      { service: excedido, getActor: actorAdmin },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(excedido.listarIdsVigentesBodega).not.toHaveBeenCalled();
+  });
+
+  it("forbidden del service pasa tal cual y no revela ningún id (R21)", async () => {
+    const service = buildService({
+      listarIdsVigentesBodega: vi.fn(async () => ({ status: "forbidden" as const })),
+    });
+    const r = await listarIdsVigentesBodega({ ids: [uuid(1)] }, { service, getActor: actorAdmin });
+    expect(r).toEqual({ status: "forbidden" });
+    expect(r).not.toHaveProperty("ids");
   });
 });
 

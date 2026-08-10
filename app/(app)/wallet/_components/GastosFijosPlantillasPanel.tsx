@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDelConjuntoCompleto } from "@/components/shared/descarga-resultado";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { gastoFijoConfig } from "@/lib/config/gasto-fijo";
 import {
-  listarPlantillasAction,
+  listarPlantillasCompletoAction,
   listarPlantillasPaginadoAction,
   setActivaPlantillaAction,
 } from "@/lib/actions/gasto-fijo-plantilla";
@@ -234,21 +234,23 @@ export function GastosFijosPlantillasPanel({
             error={error ? ERROR_CARGA : null}
             /**
              * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo
-             * el CONJUNTO COMPLETO. Se relee con el MISMO listado que el panel ya llamaba
-             * antes de paginar (`listarPlantillasAction`), con su mismo guard de rol. Salen
-             * TODAS las plantillas, activas e inactivas, igual que la tabla: aquí no hay
-             * filtro de pantalla que respetar.
+             * el CONJUNTO COMPLETO. Salen TODAS las plantillas, activas e inactivas, igual
+             * que la tabla: aquí no hay filtro de pantalla que respetar.
+             *
+             * Feature 184 (T G.2, R1/R2/R6) — ese conjunto ya no se obtiene releyendo el
+             * listado sin recorte (`listarPlantillasAction`), sino de la lectura DEDICADA,
+             * con el mismo guard de rol. En consultas no se ahorra nada y está medido —es
+             * el mismo `findMany` sin `where` sobre una tabla de configuración
+             * (`progress/impl_184_tandaG_backend.md §1`)—; lo que cambia es dónde se decide
+             * el TOPE: por encima de él el servidor devuelve `limite_excedido` con solo
+             * conteos y el conjunto ya no cruza al navegador para descartarlo allí.
              */
             descarga={{
               titulo: TITULO_DESCARGA,
               columnas: COLUMNAS_DESCARGA_GASTOS_FIJOS,
               obtenerFilas: () =>
-                filasDelConjuntoCompleto(
-                  listarPlantillasAction().then((res) =>
-                    res.status === "ok"
-                      ? ({ status: "ok", items: res.plantillas } as const)
-                      : res,
-                  ),
+                filasDesdeResultado(
+                  listarPlantillasCompletoAction(),
                   filaDescargaGastoFijo,
                 ),
             }}

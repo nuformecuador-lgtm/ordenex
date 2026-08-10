@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  MAX_PUNTOS_SERIE,
   MAX_SERIES,
   SeriesExcedidasError,
   aplicarTopeSeries,
   prepararSeries,
 } from "@/components/private/analytics/topes";
-import type { VistaFinanciera } from "@/lib/types/analitica-financiera";
+import type { GranularidadVista, VistaFinanciera } from "@/lib/types/analitica-financiera";
 import {
   COLUMNAS_IMPORTE,
   COLUMNAS_IMPORTE_SOLO_BRUTO,
@@ -15,9 +16,14 @@ import {
   agruparCola,
   columnasDeVista,
   esVistaConNeto,
+  esVistaTemporal,
+  etiquetaDeCubo,
   filasDeVista,
   serieDeVista,
+  serieTemporalDeVista,
+  type TextosCubo,
   type VistaConNeto,
+  type VistaTemporal,
 } from "@/app/(app)/analitica/_components/financiero/adaptar";
 import {
   importeConNeto,
@@ -54,6 +60,9 @@ function vistaDeEjemplo(): VistaConNeto {
     grano: "tienda",
     fuente: "wallet_tienda_movimiento",
     sumableCon: [],
+    // Feature 180 / R4 — `granularidad` REQUERIDA. El cubo es la tienda: `no_temporal`.
+    // El adaptador NO la lee (Q4 = (a): la 180 es solo backend); esta porque el tipo la exige.
+    granularidad: "no_temporal",
     filas: [
       { cubo: CUBO_OPACO, importe: importeConNeto("1234567.89", "1200000.00") },
       { cubo: "clx8s7q0001tienda", importe: importeConNeto("500.25", "-123.45") },
@@ -85,6 +94,8 @@ function vistaConCubos(cantidad: number): VistaConNeto {
     grano: "tienda",
     fuente: "wallet_tienda_movimiento",
     sumableCon: [],
+    // R4 — el cubo es la tienda: `no_temporal`.
+    granularidad: "no_temporal",
     filas: Array.from({ length: cantidad }, (_, indice) => ({
       cubo: `${CUBO_OPACO}${indice}`,
       importe: importeConNeto(`${(indice + 1) * 100}.00`, `${(indice + 1) * 90}.00`),
@@ -96,6 +107,337 @@ function vistaConCubos(cantidad: number): VistaConNeto {
 function sumaDe(puntos: readonly { valor: number | null }[]): number {
   return puntos.reduce((total, punto) => total + (punto.valor ?? 0), 0);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Feature 186 — fixtures de la dimension TEMPORAL                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Los textos de rotulacion, escritos AQUI porque el modulo puro no los escribe: los pone
+ * el llamador, igual que `etiquetaOtros` en `agruparCola`. No son los del tablero a
+ * proposito —son marcadores inconfundibles—, para que estos casos midan la FUNCION y no
+ * las cadenas concretas que la region acabe eligiendo.
+ */
+const TEXTOS_CUBO: TextosCubo = {
+  dia: "DIARIO",
+  semana: "SEMANAL",
+  granoNoDeclarado: "GRANO-SIN-DECLARAR",
+};
+
+/** Una clave de cubo tal como la publica el DTO: la fecha del PRIMER dia incluido. */
+const CLAVE_CUBO = "2026-07-20";
+
+/** Cuenta cuantas fechas `YYYY-MM-DD` distintas nombra un texto. */
+function fechasEn(texto: string): string[] {
+  return texto.match(/\d{4}-\d{2}-\d{2}/g) ?? [];
+}
+
+/**
+ * Una vista TEMPORAL con `n` cubos consecutivos, tipada como `VistaTemporal & VistaConNeto`
+ * para poder pedirle las dos series.
+ *
+ * Las claves se derivan de `CLAVE_CUBO` en UTC, que es como `trocear` produce las suyas.
+ * Los importes son ajenos entre si (13 y 17 centimos) para que ningun punto pueda acertar
+ * por azar el valor de otro.
+ */
+function vistaTemporalDeEjemplo(
+  granularidad: VistaTemporal["granularidad"],
+  cubos = 3,
+): VistaTemporal & VistaConNeto {
+  const MS_POR_DIA = 86_400_000;
+  const origen = Date.parse(`${CLAVE_CUBO}T00:00:00Z`);
+  return {
+    id: "dinero_en_caja__vista",
+    grano: "fecha",
+    fuente: "wallet_tienda_movimiento",
+    sumableCon: [],
+    granularidad,
+    filas: Array.from({ length: cubos }, (_, indice) => ({
+      cubo: new Date(origen + indice * MS_POR_DIA).toISOString().slice(0, 10),
+      importe: importeConNeto(`${(indice + 1) * 7}.13`, `-${(indice + 1) * 3}.17`),
+    })),
+    total: importeConNeto("999.99", "-888.88"),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* R5/186 · la señal de serie temporal se lee POR LA NEGATIVA                  */
+/* -------------------------------------------------------------------------- */
+
+describe("R5/186 · `esVistaTemporal` niega el valor no temporal en vez de enumerar los granos", () => {
+  it("las dos granularidades temporales de hoy son serie, y la no temporal no lo es", () => {
+    expect(esVistaTemporal(vistaTemporalDeEjemplo("dia"))).toBe(true);
+    expect(esVistaTemporal(vistaTemporalDeEjemplo("semana"))).toBe(true);
+    expect(esVistaTemporal(vistaDeEjemplo())).toBe(false);
+  });
+
+  it("una granularidad que este binario no conoce se trata como SERIE, no como desglose", () => {
+    // El `as` construye un valor fuera del dominio de HOY a proposito: el caso no habla de
+    // lo que el tipo permite, sino de lo que llega por JSON desde una cache o desde una
+    // version del servidor desplegada antes que este cliente. Con la señal escrita en
+    // positivo (`=== "dia" || === "semana"`) esta vista caeria en la rama de tabla, que es
+    // exactamente el defecto que estuvo siete horas en produccion el 2026-08-06.
+    const futura = {
+      ...vistaTemporalDeEjemplo("dia"),
+      granularidad: "quincena" as unknown as GranularidadVista,
+    } as VistaFinanciera;
+
+    expect(esVistaTemporal(futura)).toBe(true);
+  });
+
+  it("`esVistaTemporal` no mira el grano, ni el numero de filas, ni el id de la vista", () => {
+    // Contrapeso de forma: la MISMA vista con la misma dimension, las mismas filas y el
+    // mismo id responde distinto solo al cambiar `granularidad`. Un predicado que decidiera
+    // por `grano === "fecha"` o por `filas.length > 0` daria la misma respuesta a las dos.
+    const temporal = vistaTemporalDeEjemplo("dia");
+    const noTemporal: VistaFinanciera = { ...temporal, granularidad: "no_temporal" };
+
+    expect(temporal.grano).toBe(noTemporal.grano);
+    expect(temporal.id).toBe(noTemporal.id);
+    expect(temporal.filas).toHaveLength(noTemporal.filas.length);
+    expect(esVistaTemporal(temporal)).toBe(true);
+    expect(esVistaTemporal(noTemporal)).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* R7, R8, R9/186 · la granularidad se lee o se miente                        */
+/* -------------------------------------------------------------------------- */
+
+describe("R7/186 · la etiqueta declara el grano: la misma clave no se rotula igual en dia que en semana", () => {
+  it("la etiqueta del MISMO cubo cambia entre dia y semana", () => {
+    // ES EL CASO QUE DA NOMBRE A LA FICHA. Un rango largo llega en cubos SEMANALES y su
+    // clave es la del primer dia incluido: rotularla como un dia miente sobre siete veces
+    // mas dinero por punto, y lo hace sin que ningun otro test se ponga rojo. La mutacion
+    // que este caso mata es ignorar el parametro `granularidad` al etiquetar.
+    const comoDia = etiquetaDeCubo(CLAVE_CUBO, "dia", TEXTOS_CUBO);
+    const comoSemana = etiquetaDeCubo(CLAVE_CUBO, "semana", TEXTOS_CUBO);
+
+    expect(comoDia).not.toBe(comoSemana);
+    expect(comoSemana).toContain(TEXTOS_CUBO.semana);
+    expect(comoDia).not.toContain(TEXTOS_CUBO.semana);
+  });
+
+  it("las dos etiquetas conservan la clave del DTO LITERAL, sin traducirla ni acortarla", () => {
+    // R24 de la 132: el identificador del cubo se pinta tal cual. Declarar el grano solo en
+    // el titulo (alternativa 7, descartada) dejaria el eje diciendo una fecha suelta.
+    for (const grano of ["dia", "semana"] as const) {
+      expect(etiquetaDeCubo(CLAVE_CUBO, grano, TEXTOS_CUBO)).toContain(CLAVE_CUBO);
+    }
+  });
+
+  it("la serie entera se rotula con el grano de SU vista, punto a punto", () => {
+    const semanal = serieTemporalDeVista(vistaTemporalDeEjemplo("semana"), "bruto", TEXTOS_CUBO);
+    const diaria = serieTemporalDeVista(vistaTemporalDeEjemplo("dia"), "bruto", TEXTOS_CUBO);
+
+    expect(semanal.puntos.map((p) => p.categoria)).not.toEqual(
+      diaria.puntos.map((p) => p.categoria),
+    );
+    for (const punto of semanal.puntos) {
+      expect(punto.categoria).toContain(TEXTOS_CUBO.semana);
+    }
+  });
+});
+
+describe("R8/186 · la etiqueta nombra UNA sola fecha y el sistema no calcula ninguna", () => {
+  it("la etiqueta nombra UNA sola fecha: la clave del cubo, y ninguna calculada", () => {
+    // La mutacion que mata: etiquetar el cubo semanal con su rango (`clave – clave+6`). El
+    // DTO no publica el fin del cubo y el primero y el ultimo estan TRUNCADOS al rango, asi
+    // que un rango calculado seria falso justo en los dos extremos — que es donde se mira
+    // para saber si el periodo esta completo.
+    for (const grano of ["dia", "semana"] as const) {
+      const etiqueta = etiquetaDeCubo(CLAVE_CUBO, grano, TEXTOS_CUBO);
+      expect(fechasEn(etiqueta)).toEqual([CLAVE_CUBO]);
+      expect(fechasEn(etiqueta)).toHaveLength(1);
+    }
+  });
+
+  it("ninguna etiqueta de una serie semanal nombra una segunda fecha", () => {
+    const serie = serieTemporalDeVista(vistaTemporalDeEjemplo("semana", 8), "bruto", TEXTOS_CUBO);
+    const claves = vistaTemporalDeEjemplo("semana", 8).filas.map((fila) => fila.cubo);
+
+    serie.puntos.forEach((punto, indice) => {
+      expect(fechasEn(punto.categoria)).toEqual([claves[indice]!]);
+    });
+  });
+
+  it("el rotulador es PURO: la misma entrada da la misma salida y no depende del reloj", () => {
+    // Sin `Date`, sin zona horaria y sin aritmetica de calendario (⟨D4⟩). Si la funcion
+    // construyera una fecha, dos llamadas en momentos distintos podrian diferir y, peor,
+    // meteria una segunda definicion del dia de Costa Rica en el frontend.
+    expect(etiquetaDeCubo(CLAVE_CUBO, "semana", TEXTOS_CUBO)).toBe(
+      etiquetaDeCubo(CLAVE_CUBO, "semana", TEXTOS_CUBO),
+    );
+    // Una clave que NO es una fecha se copia igual de literal: el rotulador no la
+    // interpreta ni la valida.
+    expect(etiquetaDeCubo("clave-opaca", "dia", TEXTOS_CUBO)).toContain("clave-opaca");
+  });
+});
+
+describe("R9/186 · una granularidad desconocida no se rotula como si fuera un dia", () => {
+  it("una granularidad desconocida no se rotula como si fuera un dia", () => {
+    // El `as` esta aqui por ⟨D5⟩ y se explica para que nadie lo lea como un descuido: la
+    // rama `default` NO existe para un valor que el tipo permita hoy —el `switch` es
+    // exhaustivo—, sino para un DTO que llegue de una cache o de una version desplegada
+    // antes con un valor nuevo del enum. Un `switch` con `never` daria seguridad en
+    // compilacion y NINGUNA en ejecucion, que es donde ese DTO aparece.
+    const desconocida = "quincena" as unknown as VistaTemporal["granularidad"];
+    const etiqueta = etiquetaDeCubo(CLAVE_CUBO, desconocida, TEXTOS_CUBO);
+
+    expect(etiqueta).not.toBe(etiquetaDeCubo(CLAVE_CUBO, "dia", TEXTOS_CUBO));
+    expect(etiqueta).not.toBe(etiquetaDeCubo(CLAVE_CUBO, "semana", TEXTOS_CUBO));
+    expect(etiqueta).toContain(TEXTOS_CUBO.granoNoDeclarado);
+  });
+
+  it("y aun asi conserva la clave del cubo, que es el unico dato cierto que hay", () => {
+    // La mutacion que mata este par: devolver la clave CRUDA en el `default`. Con el texto
+    // diario vacio, esa clave cruda seria BYTE A BYTE la etiqueta diaria — o sea, afirmar
+    // un grano que no sabemos. Por eso el primer caso compara contra la etiqueta diaria y
+    // este exige que la clave siga ahi.
+    const desconocida = "quincena" as unknown as VistaTemporal["granularidad"];
+    const etiqueta = etiquetaDeCubo(CLAVE_CUBO, desconocida, TEXTOS_CUBO);
+
+    expect(etiqueta).toContain(CLAVE_CUBO);
+    expect(fechasEn(etiqueta)).toEqual([CLAVE_CUBO]);
+  });
+
+  it("el default se distingue de la etiqueta diaria incluso con el prefijo diario VACIO", () => {
+    // El contrapeso que hace el caso independiente de la cadena que el tablero elija: si el
+    // texto del dia fuera "" —el contrato lo permite: «la clave se lee sola»—, un `default`
+    // que devolviera la clave cruda pasaria los otros dos casos en verde.
+    const textosConDiaVacio: TextosCubo = { ...TEXTOS_CUBO, dia: "" };
+    const desconocida = "quincena" as unknown as VistaTemporal["granularidad"];
+
+    expect(etiquetaDeCubo(CLAVE_CUBO, "dia", textosConDiaVacio)).toBe(CLAVE_CUBO);
+    expect(etiquetaDeCubo(CLAVE_CUBO, desconocida, textosConDiaVacio)).not.toBe(CLAVE_CUBO);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* R10, R11/186 · fidelidad de la serie temporal                              */
+/* -------------------------------------------------------------------------- */
+
+describe("R10/186 · un punto por fila, en el orden del DTO, sin cola agrupada", () => {
+  it("un punto por fila, en el orden del DTO, sin cola agrupada", () => {
+    // Doce cubos con `MAX_SERIES = 5`: si alguien aplicara `agruparCola` a la serie
+    // temporal —«por si acaso», por simetria con el donut y las barras— quedarian CINCO
+    // puntos y el ultimo se llamaria «Otros». Fundir fechas en «Otros» no significa nada en
+    // un eje de tiempo y se comeria el final de la serie, que es lo que se mira.
+    const vista = vistaTemporalDeEjemplo("dia", 12);
+    const serie = serieTemporalDeVista(vista, "bruto", TEXTOS_CUBO);
+
+    expect(serie.puntos).toHaveLength(12);
+    expect(serie.puntos.length).toBeGreaterThan(MAX_SERIES);
+    serie.puntos.forEach((punto, indice) => {
+      expect(punto.categoria).toContain(vista.filas[indice]!.cubo);
+    });
+    expect(serie.puntos.map((punto) => punto.categoria)).not.toContain("Otros");
+  });
+
+  it("el orden es el del DTO: no se reordena por clave ni por valor", () => {
+    // Se construye una vista con las claves DESORDENADAS: un adaptador que ordenara
+    // devolveria otra secuencia, y en un eje de tiempo eso cambia la forma de la linea.
+    const base = vistaTemporalDeEjemplo("dia", 3);
+    const desordenada: VistaTemporal & VistaConNeto = {
+      ...base,
+      filas: [base.filas[2]!, base.filas[0]!, base.filas[1]!],
+    };
+    const serie = serieTemporalDeVista(desordenada, "bruto", TEXTOS_CUBO);
+
+    expect(serie.puntos.map((punto) => fechasEn(punto.categoria)[0])).toEqual([
+      base.filas[2]!.cubo,
+      base.filas[0]!.cubo,
+      base.filas[1]!.cubo,
+    ]);
+  });
+
+  it("una serie de 62 puntos llega entera y no lanza", () => {
+    // La frontera por el lado bueno: `MAX_PUNTOS_SERIE` es 62 y el servidor garantiza
+    // (R19/R20 de la 180) que ningun rango admisible produce mas. El tablero NO recorta
+    // aqui: recortar dos veces esconderia el dia en que esa garantia se rompa, y lo
+    // correcto entonces es que `aplicarTopePuntos` lance fuera de produccion.
+    const serie = serieTemporalDeVista(
+      vistaTemporalDeEjemplo("dia", MAX_PUNTOS_SERIE),
+      "bruto",
+      TEXTOS_CUBO,
+    );
+
+    expect(serie.puntos).toHaveLength(MAX_PUNTOS_SERIE);
+    expect(() => prepararSeries([serie])).not.toThrow();
+    expect(prepararSeries([serie]).recortePuntos.recortado).toBe(false);
+    expect(prepararSeries([serie]).series[0]?.puntos).toHaveLength(MAX_PUNTOS_SERIE);
+  });
+
+  it("las dos series de una vista con neto salen del MISMO reparto de cubos", () => {
+    const vista = vistaTemporalDeEjemplo("dia", 5);
+    const bruto = serieTemporalDeVista(vista, "bruto", TEXTOS_CUBO);
+    const neto = serieTemporalDeVista(vista, "neto", TEXTOS_CUBO);
+
+    expect(bruto.puntos.map((p) => p.categoria)).toEqual(neto.puntos.map((p) => p.categoria));
+    expect(bruto.id).not.toBe(neto.id);
+    expect(neto.puntos[0]?.valor).toBe(-3.17);
+    expect(bruto.puntos[0]?.valor).toBe(7.13);
+  });
+});
+
+describe("R11/186 · el valor sale del importe de esa fila y el ilegible queda ausente", () => {
+  it("un importe ilegible es dato ausente y nunca cero", () => {
+    // La mutacion que mata: un `?? 0` en la conversion. Un cero es indistinguible de «no
+    // hubo movimiento», que es justamente la afirmacion que la 127 se nego a hacer — y en
+    // una linea, ademas, dibuja un valle que nadie midio.
+    // LAS DOS FORMAS DE ILEGIBLE, y hacen falta las dos: `""` sale por la guarda del vacio
+    // —`Number("")` vale 0 en JavaScript— y `"no-es-un-numero"` sale por la comprobacion de
+    // finitud. Medido: con solo la primera, un `?? 0` en el `Number.isFinite(...)` de
+    // `aNumero` SOBREVIVIA a este caso. Un test que no ejercita la rama no la protege.
+    const base = vistaTemporalDeEjemplo("dia", 4);
+    const conRotos: VistaTemporal & VistaConNeto = {
+      ...base,
+      filas: [
+        base.filas[0]!,
+        { cubo: base.filas[1]!.cubo, importe: importeConNeto("no-es-un-numero", "tampoco") },
+        { cubo: base.filas[2]!.cubo, importe: importeConNeto("", "") },
+        base.filas[3]!,
+      ],
+    };
+    const serie = serieTemporalDeVista(conRotos, "bruto", TEXTOS_CUBO);
+
+    expect(serie.puntos.map((punto) => punto.valor)).toEqual([7.13, null, null, 28.13]);
+    expect(serie.puntos[1]?.valor).not.toBe(0);
+    expect(serie.puntos[2]?.valor).not.toBe(0);
+    // Y los puntos siguen en su sitio: el ausente no se quita, se marca.
+    expect(serie.puntos).toHaveLength(4);
+    expect(serie.puntos[1]?.categoria).toContain(base.filas[1]!.cubo);
+  });
+
+  it("el valor es el del campo pedido de SU fila, sin derivarlo del total ni del vecino", () => {
+    const vista = vistaTemporalDeEjemplo("dia", 4);
+    const serie = serieTemporalDeVista(vista, "bruto", TEXTOS_CUBO);
+
+    serie.puntos.forEach((punto, indice) => {
+      expect(punto.valor).toBe(Number(vista.filas[indice]!.importe.bruto));
+    });
+    // El total del DTO (999.99) no aparece en ningun punto: la linea no lo reparte.
+    expect(serie.puntos.map((punto) => punto.valor)).not.toContain(999.99);
+  });
+
+  it("pedirle el neto a una vista temporal `solo_bruto` FALLA con nombre, no devuelve el bruto", () => {
+    // Mismo cinturon que `serieDeVista`: las sobrecargas lo impiden en compilacion, y si
+    // alguien lo fuerza con un `as`, el adaptador no inventa.
+    const conNeto = vistaTemporalDeEjemplo("dia", 2);
+    // Se tipa como `VistaTemporal` —que es lo que de verdad es— y el `as` a la
+    // interseccion es lo unico que permite ESCRIBIR la llamada prohibida. Las
+    // sobrecargas la rechazan en compilacion, que es la defensa de verdad.
+    const soloBruto: VistaTemporal = {
+      ...conNeto,
+      filas: conNeto.filas.map((fila) => ({ ...fila, importe: sinNeto(fila.importe) })),
+      total: sinNeto(conNeto.total),
+    };
+
+    expect(() =>
+      serieTemporalDeVista(soloBruto as VistaTemporal & VistaConNeto, "neto", TEXTOS_CUBO),
+    ).toThrow(ImporteSinNetoError);
+  });
+});
 
 /* -------------------------------------------------------------------------- */
 /* R15 · un importe ilegible es un dato AUSENTE, nunca un cero                 */

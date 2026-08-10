@@ -26,7 +26,11 @@
 
 import { TablaResumen } from "@/components/private/analytics/TablaResumen";
 import { formatearValor } from "@/components/private/analytics/formato";
-import type { ColumnaResumen, FilaResumen } from "@/components/private/analytics/tipos";
+import type {
+  ColumnaResumen,
+  FilaResumen,
+  MetricaUnidad,
+} from "@/components/private/analytics/tipos";
 import type {
   ClaveTotalCierre,
   ResultadoFinancieroConciliacion,
@@ -58,18 +62,42 @@ const TEXTOS = {
 } as const;
 
 /**
- * Las cinco columnas del DTO de conciliacion.
+ * LAS DOS UNIDADES DE ESTE PANEL, DECLARADAS UNA SOLA VEZ.
  *
- * `cantidad` es unidad `conteo` y NO `moneda`: es el unico `number` del contrato
- * de la 127 y no es dinero (`analitica-financiera.ts:127`). Formatearla como
- * importe la convertiria en una cifra de plata inventada.
+ * Aqui conviven dinero y conteos, y la unidad de la CABECERA del DTO (`datos.unidad`) no
+ * sirve para elegir entre ellos: `conciliacion_cierres` declara `unidad: "conteo"` en el
+ * catalogo (`lib/analytics/metrics.ts`) —y hace bien, la metrica cuenta cierres— mientras
+ * que los cuatro totales por metodo y las TRES CIFRAS DEL CUADRE son importes.
+ *
+ * Formatear un importe con la unidad de la cabecera lo redondea a entero y le quita el
+ * simbolo de moneda (`formato.ts`, `case "conteo"`). Eso llego a produccion: el cuadre
+ * pintaba `1 561` donde el importe era ₡1 560,50 y anunciaba un descuadre de ₡60,50 como
+ * «61», en la unica pantalla que existe para cuadrar dinero.
+ *
+ * Por eso la unidad se declara POR CIFRA y en UN SOLO SITIO: la tabla, el aviso y el
+ * cuadre leen de aqui. El mismo criterio escrito en dos sitios es como se arregla uno y
+ * se queda el otro.
  */
+const UNIDAD = {
+  /** Dinero: los cuatro totales por metodo y las tres cifras del cuadre. */
+  importe: "moneda",
+  /**
+   * Lo que se CUENTA: los cierres por (nivel, estado) y los cierres descuadrados.
+   *
+   * `cantidad` es el unico `number` del contrato de la 127 y no es dinero
+   * (`analitica-financiera.ts:127`); formatearla como importe la convertiria en una cifra
+   * de plata inventada.
+   */
+  conteo: "conteo",
+} as const satisfies Record<string, MetricaUnidad>;
+
+/** Las cinco columnas del DTO de conciliacion: un conteo y cuatro importes. */
 const COLUMNAS_CONCILIACION: readonly ColumnaResumen[] = [
-  { id: "cantidad", etiqueta: TEXTOS.cantidad, unidad: "conteo" },
-  { id: "efectivo", etiqueta: TEXTOS.efectivo, unidad: "moneda" },
-  { id: "simpe", etiqueta: TEXTOS.simpe, unidad: "moneda" },
-  { id: "transferencia", etiqueta: TEXTOS.transferencia, unidad: "moneda" },
-  { id: "general", etiqueta: TEXTOS.general, unidad: "moneda" },
+  { id: "cantidad", etiqueta: TEXTOS.cantidad, unidad: UNIDAD.conteo },
+  { id: "efectivo", etiqueta: TEXTOS.efectivo, unidad: UNIDAD.importe },
+  { id: "simpe", etiqueta: TEXTOS.simpe, unidad: UNIDAD.importe },
+  { id: "transferencia", etiqueta: TEXTOS.transferencia, unidad: UNIDAD.importe },
+  { id: "general", etiqueta: TEXTOS.general, unidad: UNIDAD.importe },
 ];
 
 /** Las cuatro claves de moneda del DTO, declaradas una vez y en el orden de la tabla. */
@@ -120,7 +148,7 @@ export function PanelConciliacion({ datos }: PanelConciliacionProps) {
           renderiza igual, porque el detalle es lo que permite investigar. */}
       {cuadre.cuadra ? null : (
         <p role="alert" className="text-sm font-medium text-danger-strong">
-          {`${TEXTOS.descuadre} ${formatearValor(cuadre.cierresDescuadrados.length, "conteo")}`}
+          {`${TEXTOS.descuadre} ${formatearValor(cuadre.cierresDescuadrados.length, UNIDAD.conteo)}`}
         </p>
       )}
 
@@ -132,12 +160,15 @@ export function PanelConciliacion({ datos }: PanelConciliacionProps) {
         vacio={{ titulo: TEXTOS.vacioTitulo, descripcion: TEXTOS.vacioDescripcion }}
       />
 
+      {/* Las tres cifras del cuadre son DINERO y se formatean como tal (`UNIDAD.importe`),
+          nunca con `datos.unidad`: la unidad de la cabecera es `conteo` y redondearia el
+          descuadre a un entero sin moneda. */}
       <dl className="flex flex-wrap gap-x-8 gap-y-1 text-sm">
         {cifrasDelCuadre.map((cifra) => (
           <div key={cifra.id} className="flex items-baseline gap-2">
             <dt className="text-muted-foreground">{cifra.etiqueta}</dt>
             <dd className="tabular-nums text-foreground">
-              {formatearValor(aNumero(cifra.importe), datos.unidad)}
+              {formatearValor(aNumero(cifra.importe), UNIDAD.importe)}
             </dd>
           </div>
         ))}

@@ -1,5 +1,6 @@
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { cierreConfig } from "@/lib/config/cierre";
+import { descargaConfig } from "@/lib/config/descarga";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { ICierresBodegaAdminRepository } from "@/lib/interfaces/repositories/ICierresBodegaAdminRepository";
@@ -14,7 +15,9 @@ import type {
   CierreBodegaDetalleServiceResult,
   ICierresBodegaAdminService,
   ListarCierresBodegaAdminServiceResult,
+  ListarHistoricoCierresBodegaCompletoServiceResult,
   ListarHistoricoCierresBodegaServiceResult,
+  ListarPendientesCierresBodegaCompletoServiceResult,
   ListarPendientesCierresBodegaServiceResult,
   RechazarCierreBodegaServiceResult,
 } from "@/lib/interfaces/services/ICierresBodegaAdminService";
@@ -119,6 +122,95 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
       pageSize: input.pageSize,
       total, // R41/R42: el total del CONJUNTO de la cola, nunca `items.length`
     };
+  }
+
+  /**
+   * Feature 184 — Tanda E (T E.2, R1/R4/R6) — el HISTORICO ENTERO de cierres de bodega, sin
+   * recorte, que es del que sale el archivo de «Cierres de bodega resueltos» (listado 5).
+   *
+   * **Lo que cierra.** Hasta hoy ese archivo se producia releyendo `listarCierresBodegaAdmin()`,
+   * que trae TODOS los cierres de bodega —cola e historico— y los parte en memoria para que la
+   * pantalla se quede con una de las dos mitades. Aqui se lee SOLO el historico, cortado en la
+   * base por el mismo criterio que su pagina (R16). Las filas salen identicas; lo que cambia es
+   * cuantas se leen para producirlas, y de eso hablan los dos `*-where.test.ts` y el contador de
+   * filas leidas del test de servicio.
+   *
+   * **El guard va PRIMERO, antes de tocar el repositorio**, por el mismo motivo que en la
+   * pagina: la cabecera de un cierre de bodega ES dinero agregado de una zona entera, y con el
+   * guard despues ya habria salido de la base aunque la respuesta fuera un error.
+   *
+   * **No lleva `input`, y es deliberado.** Este listado no admite filtros: su schema de pagina
+   * solo tenia `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El borde la
+   * sigue aplicando entera —parsear ES la barrera (R17)— pero no hay nada que transportar hasta
+   * aqui. Y tampoco hay zona que resolver: este listado es de acceso total y ve la operacion
+   * completa; el alcance es el ROL, y sale del actor.
+   *
+   * **Mismo mapper que la pagina** (`toResumen`, R13): los totales son SNAPSHOT y ni el conjunto
+   * ni la pagina recomputan nada. A diferencia de la tanda D, aqui no hay ningun enriquecido que
+   * conservar o saltarse: el camino del archivo no firma URL, no agrega dinero y no consulta
+   * ninguna otra tabla.
+   *
+   * **Excepcion declarada a R29 de la 170.** De R29 —feature `done`, requisito vivo— se cumple
+   * la mitad del transporte: por encima del tope no sale ni una fila, solo los dos conteos del
+   * aviso. NO se cumple la de materializar: `findHistoricoCompleto` es un `findMany` sin `take`
+   * y el historico llega entero antes de que el tope lo mire. Y aqui el alcance es la operacion
+   * COMPLETA —este listado no acota por zona, ve todas—, asi que el conjunto suma los cierres de
+   * bodega resueltos de todas las zonas desde el primer dia: crece despacio, pero crece siempre
+   * y nada lo corta.
+   *
+   * Se acepta porque cerrarlo exige pedir `limite + 1` y un `count` aparte para no perder el
+   * total exacto del aviso (R6) —la segunda consulta que R15 de esta feature mide y prohibe—, y
+   * eso duplicaria las consultas que esta misma migracion vino a reducir. Decision humana del
+   * 2026-08-05, en el design §3.1. No es una forma de cumplir R29: es una excepcion con motivo.
+   */
+  async listarHistoricoCierresBodegaCompleto(
+    actor: Actor,
+  ): Promise<ListarHistoricoCierresBodegaCompletoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: antes del repo
+
+    const conjunto = await this.repo.findHistoricoCompleto();
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return { status: "ok", items: conjunto.map(toResumen), total: conjunto.length };
+  }
+
+  /**
+   * Feature 184 — Tanda E (T E.2, R1/R4/R6) — la COLA ENTERA de cierres de bodega pendientes,
+   * sin recorte, para el archivo de «Cierres de bodega pendientes» (listado 4).
+   *
+   * Comparte con el de arriba la relectura que evita, y aqui se nota mas: la cola es la mitad
+   * PEQUEÑA de la tabla (los cierres sin resolver), asi que producir su archivo arrastraba todo
+   * el historico de la operacion —que crece sin tope con los dias— para descartarlo en memoria.
+   *
+   * Sin `input` y sin zona por el mismo motivo que su hermano: cero filtros, cero claves en la
+   * lista blanca, alcance por ROL desde el actor.
+   *
+   * **Excepcion declarada a R29 de la 170, la mas benigna de las dos de este archivo.** Igual
+   * que arriba: transporte cumplido, materializacion no —`findColaCompleta` tampoco lleva cota,
+   * y la cola entra entera antes de medirse—. La diferencia es el conjunto: estos son los
+   * cierres de bodega SIN resolver, y su tamaño lo marca el retraso del maestro en decidir, no
+   * los dias operados; el historico de arriba se queda con todo lo que esta cola va soltando.
+   * Misma decision del 2026-08-05 y mismo motivo de coste: acotar en base pide el `count` extra
+   * que R15 de esta feature prohibe (design §3.1).
+   */
+  async listarPendientesCierresBodegaCompleto(
+    actor: Actor,
+  ): Promise<ListarPendientesCierresBodegaCompletoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: antes del repo
+
+    const conjunto = await this.repo.findColaCompleta();
+
+    const limite = descargaConfig.MAX_FILAS;
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite }; // R6
+    }
+
+    return { status: "ok", items: conjunto.map(toResumen), total: conjunto.length };
   }
 
   async verCierreBodegaDetalle(

@@ -64,7 +64,6 @@ describe("R5: forbidden si el actor no es maestro", () => {
     for (const actor of [ADMIN, DESCONOCIDO]) {
       expect((await service.crear({ nombre: "N", cuerpo: "c" }, actor)).status).toBe("forbidden");
       expect((await service.listar({ page: 1, pageSize: 25 }, actor)).status).toBe("forbidden");
-      expect((await service.obtener("pl-1", actor)).status).toBe("forbidden");
       expect((await service.actualizar("pl-1", { nombre: "N" }, actor)).status).toBe("forbidden");
       expect((await service.cambiarEstado("pl-1", { estado: "inactivo" }, actor)).status).toBe(
         "forbidden",

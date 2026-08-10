@@ -1,4 +1,4 @@
-import type { ArbolZonas, ZonaDTO } from "@/lib/types/zona";
+import type { ZonaDTO } from "@/lib/types/zona";
 import type { OpcionCatalogo } from "@/lib/types/filtros-ordenes";
 
 // Datos listos para persistir una fila de tarifa_zona_mensajero (numbers; el repo
@@ -52,8 +52,6 @@ export interface IZonaRepository {
   update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null>;
   /** Borrado FISICO (cascade de zona_distrito y tarifas). */
   hardDelete(id: string): Promise<DeleteZonaResult>;
-  /** Arbol zona -> canton -> distrito indexado por nombre normalizado. */
-  arbol(): Promise<ArbolZonas>;
   /** Cuenta cuantos de `ids` existen como distrito (validacion de existencia). */
   countExistingDistritos(ids: string[]): Promise<number>;
   /** Cuenta cuantos de `ids` existen como vehiculo (validacion de existencia). */

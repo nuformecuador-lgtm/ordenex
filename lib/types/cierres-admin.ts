@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { montoPositivoSchema } from "@/lib/types/wallet";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
 import type {
   ListarCierresAdminServiceResult,
@@ -131,6 +132,38 @@ export const listarPendientesCierresAdminSchema = paginaInputSchema(cierreConfig
 export type ListarPendientesCierresAdminInput = z.infer<typeof listarPendientesCierresAdminSchema>;
 
 /**
+ * Feature 184 — Tanda D (R17) — entrada de los CONJUNTOS de los dos listados de esta pantalla.
+ *
+ * Se DERIVAN del schema de su pagina quitando `page`/`pageSize`, igual que los de las tandas B
+ * y C: la tabla y el archivo no pueden entender cosas distintas por «entrada». Como estos dos
+ * listados no tienen filtros, lo que queda es una lista blanca de CERO claves — y aqui la clave
+ * que importa tiene nombre propio: `destinoZonaId`. El alcance de esta pantalla es rol + zona
+ * DESTINO, asi que una clave de alcance que el servicio llegara a leer algun dia abriria el
+ * dinero de la bodega vecina. Muere en el borde, sin tocar el servicio.
+ *
+ * Son DOS constantes y no una, aunque hoy su forma coincida, por el mismo motivo que sus dos
+ * schemas de pagina: el nombre es lo unico que dice cual de las dos mitades se esta pidiendo.
+ *
+ * `.strict()` se reescribe aunque `.omit()` lo herede: la barrera es de ESTOS listados y no
+ * debe depender de que el schema base nunca se afloje.
+ */
+export const listarHistoricoCierresAdminCompletoSchema = listarHistoricoCierresAdminSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarHistoricoCierresAdminCompletoInput = z.infer<
+  typeof listarHistoricoCierresAdminCompletoSchema
+>;
+
+export const listarPendientesCierresAdminCompletoSchema = listarPendientesCierresAdminSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarPendientesCierresAdminCompletoInput = z.infer<
+  typeof listarPendientesCierresAdminCompletoSchema
+>;
+
+/**
  * Errores de BORDE de los listados de este modulo: los de dominio que decide el servicio
  * (`forbidden`) mas los dos que decide la Server Action antes de llamarlo. Se declara aparte
  * para poder pasarlo como parametro al contrato comun (T H.2): unificar la forma del EXITO no
@@ -153,6 +186,17 @@ export type ListarPendientesCierresAdminResult = ListarPaginadoResult<
   CierreAdminResumen,
   CierresAdminListadoError
 >;
+
+/**
+ * Feature 184 — Tanda D (R6/R7) — los dos conjuntos tal como los recibe el cliente.
+ *
+ * Union de error ANCHO (`ActionError`, dentro de `ListarCompletoResult`) y no el estrecho de la
+ * pagina: quien los consume es `filasDesdeResultado`, el adaptador comun de la descarga, que
+ * redacta el mensaje de CUALQUIER error de borde en un solo sitio. `limite_excedido` lleva SOLO
+ * conteos, jamas filas ni un conjunto truncado (R6).
+ */
+export type ListarHistoricoCierresAdminCompletoResult = ListarCompletoResult<CierreAdminResumen>;
+export type ListarPendientesCierresAdminCompletoResult = ListarCompletoResult<CierreAdminResumen>;
 
 // Resultados de las Server Actions: resultado de dominio del service +
 // `unauthenticated` (sin sesion, lo resuelve el borde).

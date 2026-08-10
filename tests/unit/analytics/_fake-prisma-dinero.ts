@@ -21,6 +21,12 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 //
 // El dinero entra como STRING y se guarda como `Prisma.Decimal`: ni un `number` en el camino.
 //
+// AMPLIADO EN LA 187 (T1.1, 2026-08-08), no reemplazado: gana `$transaction` interactiva, cada
+// llamada registra POR QUE CLIENTE salio (`transaccion: null` = por el de fuera) y las opciones de
+// cada transaccion quedan guardadas tal y como llegaron. Nada de lo de abajo se afloja; lo que se
+// gana es poder afirmar que las consultas del alcance salieron DE VERDAD por el cliente
+// transaccional, en vez de comprobar que se llamo a una funcion.
+//
 // AMPLIADO EN C.4 (2026-08-02), no reemplazado: gana `cierre_bodega` como quinta tabla, el par
 // `origen_tipo`/`origen_id` en las tres filas de ledger y la operacion `findMany` con `select`.
 // Las tres cosas las pide la conciliacion y ninguna afloja lo de arriba: agrupar por una columna
@@ -85,18 +91,66 @@ export interface FilaCierreDia {
 /** Mismo snapshot que el cierre de dia; el nivel lo distingue la tabla, no la forma. */
 export type FilaCierreBodega = FilaCierreDia;
 
+/**
+ * AMPLIADO EN LA 180 (T2.5), no reemplazado: el fake gana `$queryRaw`.
+ *
+ * Un fake NO PUEDE ejecutar `width_bucket` ni el resto del SQL de la particion por cubo, y
+ * fingirlo seria peor que no tenerlo: un interprete de SQL escrito a mano en un test es una
+ * SEGUNDA implementacion cuyo acuerdo con Postgres nadie comprueba. El reparto es explicito:
+ *
+ *   - lo que este fake mide es la FORMA de la consulta emitida —el texto con sus `$n` y la lista
+ *     de parametros— y el formateo de la respuesta. Con eso muere quien quite la ventana, quien
+ *     escriba las categorias a mano, quien olvide el `ORDER BY` o quien pase el dinero por
+ *     `number`;
+ *   - lo que mide Postgres de verdad, en
+ *     `tests/integration/repositories/financiera-cubo-temporal.integration.test.ts`, es la
+ *     SEMANTICA: la frontera del dia CR, el cast `::timestamp` y el reparto en cubos.
+ *
+ * `respuestaCruda` es OBLIGATORIA para quien llame a `$queryRaw`: sin ella el fake LANZA en vez
+ * de devolver `[]`. Un `[]` por omision es justo el verde vacio que este archivo existe para
+ * evitar (un repositorio con el `WHERE` roto tambien devuelve `[]`).
+ */
 export interface DatosDinero {
   readonly caja?: readonly FilaCaja[];
   readonly ledgerTienda?: readonly FilaLedgerTienda[];
   readonly ledgerMensajero?: readonly FilaLedgerMensajero[];
   readonly cierresDia?: readonly FilaCierreDia[];
   readonly cierresBodega?: readonly FilaCierreBodega[];
+  readonly respuestaCruda?: (consulta: ConsultaCrudaFake) => readonly Registro[];
+}
+
+/** El SQL tal y como sale de `Prisma.sql`: texto con `$1..$n` y los parametros, en orden. */
+export interface ConsultaCrudaFake {
+  readonly texto: string;
+  readonly valores: readonly unknown[];
 }
 
 export interface LlamadaFake {
   readonly modelo: string;
-  readonly operacion: "groupBy" | "aggregate" | "findMany";
+  readonly operacion: "groupBy" | "aggregate" | "findMany" | "queryRaw";
   readonly args: Record<string, unknown>;
+  /**
+   * AMPLIADO EN LA 187 (T1.1) — POR QUE CLIENTE SALIO ESTA CONSULTA.
+   *
+   * `null` = por el cliente de fuera; un numero = por el cliente hijo de esa transaccion. Sin
+   * este campo, «las dos consultas del alcance van dentro de la transaccion» solo se podria
+   * comprobar contando llamadas, y eso lo cumple igual un repositorio que abra la transaccion, no
+   * la use y consulte por fuera — que es exactamente el bug que la 187 vino a cerrar.
+   */
+  readonly transaccion: number | null;
+}
+
+/**
+ * Las opciones con las que se pidio una transaccion, tal y como llegaron.
+ *
+ * `isolationLevel` es OPCIONAL a proposito y se guarda aunque venga `undefined` (T1.1.d): si el
+ * fake pusiera un valor por defecto, un repositorio que se olvidara de pedir `RepeatableRead`
+ * pasaria el test — y el nivel de aislamiento es la unica cosa que esta feature promete.
+ */
+export interface OpcionesTransaccionFake {
+  readonly isolationLevel?: string;
+  readonly timeout?: number;
+  readonly maxWait?: number;
 }
 
 type Registro = Record<string, unknown>;
@@ -331,28 +385,64 @@ export type ClienteDinero = Pick<
   | "pagoMensajeroMovimiento"
   | "cierreDia"
   | "cierreBodega"
+  | "$queryRaw"
+  | "$transaction"
 >;
 
 export interface FakeDinero {
   readonly cliente: ClienteDinero;
   /** Toda llamada que el repositorio hizo, en orden. */
   readonly llamadas: readonly LlamadaFake[];
+  /**
+   * Feature 187 — las opciones de cada `$transaction` pedida, en orden. Lo que un test lee de
+   * aqui es lo que el repositorio PIDIO; que Postgres lo respete es otra pregunta y la contesta
+   * el test de integracion I1.
+   */
+  readonly transacciones: readonly OpcionesTransaccionFake[];
+}
+
+/**
+ * ¿Es esto un `Prisma.sql` ya compuesto?
+ *
+ * SE COMPRUEBA POR FORMA, NO CON `instanceof`, y no es una laxitud: en esta version del cliente
+ * `Prisma.Sql` **no existe en tiempo de ejecucion** (solo estan `Prisma.sql` y `Prisma.raw`; la
+ * clase se llama `_Sql` y no se exporta). Un `x instanceof Prisma.Sql` no falla como "esto no es un
+ * Sql": revienta con `Right-hand side of 'instanceof' is not an object` para TODA llamada, legitima
+ * o no, y deja el fake incapaz de aceptar nada.
+ *
+ * La forma que se exige es justo la que el test necesita leer: `text` (con sus `$n`) y `values`. La
+ * variante de plantilla etiquetada —`$queryRaw` seguido de un literal— llega como
+ * `(TemplateStringsArray, ...valores)` y NO la cumple: sigue prohibida, que es lo que se queria.
+ */
+function esSqlCompuesto(x: unknown): x is { readonly text: string; readonly values: unknown[] } {
+  if (typeof x !== "object" || x === null || Array.isArray(x)) return false;
+  const candidato = x as { text?: unknown; values?: unknown };
+  return typeof candidato.text === "string" && Array.isArray(candidato.values);
 }
 
 export function fakePrismaDinero(datos: DatosDinero): FakeDinero {
   const llamadas: LlamadaFake[] = [];
+  const transacciones: OpcionesTransaccionFake[] = [];
+
+  /**
+   * Feature 187 — QUE TRANSACCION ESTA VIGENTE. Es una pila y no un booleano porque un fake que
+   * no supiera de anidamiento devolveria `true` para siempre en cuanto alguien anidara, y el
+   * caso «ninguna consulta salio por el cliente de fuera» dejaria de significar nada.
+   */
+  const pila: number[] = [];
+  const vigente = (): number | null => (pila.length === 0 ? null : pila[pila.length - 1]);
 
   const modelo = (nombre: string, filas: readonly Registro[]) => ({
     groupBy: (args: Registro) => {
-      llamadas.push({ modelo: nombre, operacion: "groupBy", args });
+      llamadas.push({ modelo: nombre, operacion: "groupBy", args, transaccion: vigente() });
       return Promise.resolve(ejecutarGroupBy(filas, args));
     },
     aggregate: (args: Registro) => {
-      llamadas.push({ modelo: nombre, operacion: "aggregate", args });
+      llamadas.push({ modelo: nombre, operacion: "aggregate", args, transaccion: vigente() });
       return Promise.resolve(ejecutarAggregate(filas, args));
     },
     findMany: (args: Registro) => {
-      llamadas.push({ modelo: nombre, operacion: "findMany", args });
+      llamadas.push({ modelo: nombre, operacion: "findMany", args, transaccion: vigente() });
       return Promise.resolve(ejecutarFindMany(filas, args));
     },
   });
@@ -360,26 +450,128 @@ export function fakePrismaDinero(datos: DatosDinero): FakeDinero {
   const filas = (xs: readonly object[] | undefined): readonly Registro[] =>
     (xs ?? []) as unknown as readonly Registro[];
 
+  /**
+   * `$queryRaw` — solo se acepta con un `Prisma.sql` ya compuesto (que es como lo llaman los
+   * repositorios de la 180). Con la forma de plantilla etiquetada el fake LANZA en vez de
+   * inventarse el texto: el test tiene que poder leer el SQL exacto que va a la base.
+   */
+  const queryRaw = (consultaSql: unknown, ...resto: unknown[]) => {
+    if (!esSqlCompuesto(consultaSql) || resto.length > 0) {
+      throw new Error(
+        "fake-prisma: $queryRaw solo se acepta como $queryRaw(Prisma.sql`...`); asi el test lee el texto y los parametros de verdad",
+      );
+    }
+    const consulta: ConsultaCrudaFake = {
+      texto: consultaSql.text,
+      valores: consultaSql.values as readonly unknown[],
+    };
+    llamadas.push({
+      modelo: "$queryRaw",
+      operacion: "queryRaw",
+      args: { texto: consulta.texto, valores: consulta.valores },
+      transaccion: vigente(),
+    });
+    if (datos.respuestaCruda === undefined) {
+      throw new Error(
+        "fake-prisma: el repositorio emitio un $queryRaw y el fixture no declara `respuestaCruda`; devolver [] por omision seria el mismo verde vacio que un WHERE roto",
+      );
+    }
+    return Promise.resolve(datos.respuestaCruda(consulta));
+  };
+
+  /**
+   * Feature 187 (T1.1) — `$transaction` INTERACTIVA.
+   *
+   * Tres cosas que lo hacen morder, y ninguna es decorativa:
+   *
+   *  1. **Las opciones se guardan tal cual**, incluido el caso en que no vengan. Un fake que
+   *     rellenara `isolationLevel` por su cuenta dejaria pasar al repositorio que se lo olvida.
+   *  2. **El cliente que recibe `fn` es OTRO objeto**, distinguible del de fuera. No basta con
+   *     devolverse a si mismo: si lo hiciera, «todas las consultas salieron por el cliente de la
+   *     transaccion» seria cierto por construccion y no diria nada.
+   *  3. **La forma de array NO se acepta.** Los dos repositorios de esta feature usan la
+   *     interactiva; si alguien cambiara a `$transaction([p1, p2])`, el fake lanza en vez de
+   *     fingir que da igual — porque no da igual: esa forma exige exponer `PrismaPromise` sin
+   *     `await` y cambia la firma de los metodos de lectura.
+   */
+  const transaction = (fn: unknown, opciones?: OpcionesTransaccionFake) => {
+    if (typeof fn !== "function") {
+      throw new Error(
+        "fake-prisma: $transaction solo se acepta en su forma INTERACTIVA, $transaction(async (tx) => …, opciones)",
+      );
+    }
+    transacciones.push({
+      isolationLevel: opciones?.isolationLevel,
+      timeout: opciones?.timeout,
+      maxWait: opciones?.maxWait,
+    });
+    const id = transacciones.length - 1;
+    pila.push(id);
+    // Sin `try/catch`: si `fn` rechaza, el error sube tal cual, que es lo que el repositorio
+    // promete (R7). El `finally` solo cierra la pila para que el siguiente caso no herede un
+    // alcance abierto.
+    return Promise.resolve((fn as (tx: unknown) => unknown)(clienteDeTransaccion(id))).finally(
+      () => {
+        pila.pop();
+      },
+    );
+  };
+
+  /**
+   * El cliente hijo. Comparte los modelos —las consultas se ejecutan igual y se registran en la
+   * misma lista— pero es un objeto DISTINTO y ademas no ofrece `$transaction`, igual que el
+   * `Prisma.TransactionClient` de verdad: las transacciones no se anidan.
+   */
+  const clienteDeTransaccion = (_id: number) =>
+    ({
+      walletMovimiento: modelo("walletMovimiento", filas(datos.caja)),
+      walletTiendaMovimiento: modelo("walletTiendaMovimiento", filas(datos.ledgerTienda)),
+      pagoMensajeroMovimiento: modelo("pagoMensajeroMovimiento", filas(datos.ledgerMensajero)),
+      cierreDia: modelo("cierreDia", filas(datos.cierresDia)),
+      cierreBodega: modelo("cierreBodega", filas(datos.cierresBodega)),
+      $queryRaw: queryRaw,
+    }) as unknown as ClienteDinero;
+
   const cliente = {
     walletMovimiento: modelo("walletMovimiento", filas(datos.caja)),
     walletTiendaMovimiento: modelo("walletTiendaMovimiento", filas(datos.ledgerTienda)),
     pagoMensajeroMovimiento: modelo("pagoMensajeroMovimiento", filas(datos.ledgerMensajero)),
     cierreDia: modelo("cierreDia", filas(datos.cierresDia)),
     cierreBodega: modelo("cierreBodega", filas(datos.cierresBodega)),
+    $queryRaw: queryRaw,
+    $transaction: transaction,
   } as unknown as ClienteDinero;
 
-  return { cliente, llamadas };
+  return { cliente, llamadas, transacciones };
 }
 
 /** Un cliente cuya base SIEMPRE falla: para comprobar que el error se propaga (R32). */
 export function fakePrismaQueFalla(error: Error): ClienteDinero {
   const revienta = () => Promise.reject(error);
   const modelo = { groupBy: revienta, aggregate: revienta, findMany: revienta };
-  return {
+  const cliente = {
     walletMovimiento: modelo,
     walletTiendaMovimiento: modelo,
     pagoMensajeroMovimiento: modelo,
     cierreDia: modelo,
     cierreBodega: modelo,
+    // La 180 anade metodos que consultan con SQL crudo: si el fake no fallara tambien por ahi,
+    // el caso de propagacion de esos metodos pasaria por la via del "no consulte y salio bien".
+    $queryRaw: revienta,
+    /**
+     * Feature 187 (T1.1.c) — `$transaction` EJECUTA `fn` con este mismo cliente roto, en vez de
+     * rechazar de entrada.
+     *
+     * La diferencia importa. Si `$transaction` rechazara sin llamar a `fn`, el caso de
+     * propagacion de `enLecturaConsistente` (T4.1) pasaria sin haber ejercitado NI UNA lectura
+     * dentro del alcance — la misma trampa que la 180 evito pasando cubos de verdad en vez de
+     * `[]`. Asi, el error que sube nace de una consulta emitida DENTRO de la transaccion, que es
+     * el camino que R7 promete que no se traga nadie.
+     */
+    $transaction: (fn: unknown) => {
+      if (typeof fn !== "function") return Promise.reject(error);
+      return Promise.resolve((fn as (tx: unknown) => unknown)(cliente));
+    },
   } as unknown as ClienteDinero;
+  return cliente;
 }

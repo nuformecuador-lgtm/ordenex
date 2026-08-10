@@ -301,3 +301,632 @@ describe("WHERE de los listados paginados de la tanda I (T I.1)", () => {
     expect(consultas).toBe(12);
   });
 });
+
+// Feature 184 — Tanda B (R5/R14/R15/R16) — los CONJUNTOS de los que salen los archivos de los
+// listados 6 y 7, «Cierres de bodega solicitados» y «Cierres del día a consolidar».
+//
+// Aquí no hay método de repositorio nuevo: los dos conjuntos ya existían
+// (`findCierresBodegaByZona` y `findCierresDiaConsolidables`) y son literalmente los que la
+// pantalla releía. Lo que cambia con esta tanda es su PAPEL: pasan de ser un campo suelto de un
+// listado compuesto a ser la lectura dedicada del archivo. Y en cuanto un archivo depende de
+// ellos, su `where` y su `orderBy` dejan de ser un detalle: si divergen de los de la página, la
+// fila 26 del archivo deja de ser la primera de la página 2 y no hay ninguna pantalla que lo
+// diga.
+//
+// El aviso de siempre: los tests de servicio usan un doble de repositorio y NO ven esta
+// traducción. Por eso estas dos propiedades se afirman aquí y no allí.
+describe("los conjuntos de la descarga de la tanda B (feature 184)", () => {
+  it("cierres de bodega solicitados: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await new CierreBodegaRepository({
+      cierreBodega: entero,
+    } as unknown as PrismaClient).findCierresBodegaByZona("z-a");
+
+    const pagina = delegado();
+    await new CierreBodegaRepository({
+      cierreBodega: pagina,
+    } as unknown as PrismaClient).findCierresBodegaByZonaPaginado("z-a", RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // El alcance por zona es TODO el criterio de este listado, y sale de una sola declaración.
+    expect(argsEntero.where).toEqual({ zonaId: "z-a" });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden también: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ solicitadoAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("los dos conjuntos cuestan UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Lo que hace de esta tanda una mejora medible: el archivo pasa de cuatro consultas + cinco
+    // agregados + el reparto del efectivo a ESTO. Si mañana alguien le añade a uno de los dos un
+    // `count` «para el total», el total del archivo pasaría a salir de otro sitio que sus filas.
+    const casos: Array<[string, ReturnType<typeof delegado>, () => Promise<unknown>]> = [];
+
+    const d1 = delegado();
+    casos.push([
+      "cierres de bodega solicitados",
+      d1,
+      () =>
+        new CierreBodegaRepository({
+          cierreBodega: d1,
+        } as unknown as PrismaClient).findCierresBodegaByZona("z-a"),
+    ]);
+
+    const d2 = delegado();
+    casos.push([
+      "cierres del día a consolidar",
+      d2,
+      () =>
+        new CierreBodegaRepository({
+          cierreDia: d2,
+        } as unknown as PrismaClient).findCierresDiaConsolidables("z-a"),
+    ]);
+
+    expect(casos).toHaveLength(2); // los DOS listados de la tanda B
+
+    for (const [nombre, d, ejecutar] of casos) {
+      await ejecutar();
+      expect(d.findMany, `${nombre}: una sola consulta`).toHaveBeenCalledTimes(1);
+      expect(d.count, `${nombre}: el conjunto NO cuenta`).not.toHaveBeenCalled();
+      const args = d.findMany.mock.calls[0]![0]!;
+      expect(args.skip, `${nombre}: sin recorte`).toBeUndefined();
+      expect(args.take, `${nombre}: sin recorte`).toBeUndefined();
+    }
+  });
+});
+
+// Feature 184 — Tanda C (R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 1,
+// «Cierres solicitados por el mensajero».
+//
+// Tampoco aquí hay método de repositorio nuevo: `findCierresByMensajero` ya devolvía el conjunto
+// entero del mensajero, con el mismo `select` y el mismo mapper que su hermano paginado. Lo que
+// cambia con esta tanda es su PAPEL —pasa de ser un campo suelto de un listado compuesto a ser la
+// lectura dedicada del archivo— y, con él, la importancia de su `where` y su `orderBy`: si
+// divergen de los de la página, la fila 26 del archivo deja de ser la primera de la página 2 y no
+// hay ninguna pantalla que lo diga.
+//
+// El aviso de siempre: `tests/unit/services/cierre-dia-pasados-completo.test.ts` usa un doble de
+// repositorio y NO ve esta traducción. Por eso estas propiedades se afirman aquí y no allí.
+describe("el conjunto de la descarga de la tanda C (feature 184)", () => {
+  it("cierres del mensajero: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await new CierreDiaRepository(
+      { cierreDia: entero } as unknown as PrismaClient,
+      {} as never,
+    ).findCierresByMensajero("m-a");
+
+    const pagina = delegado();
+    await new CierreDiaRepository(
+      { cierreDia: pagina } as unknown as PrismaClient,
+      {} as never,
+    ).findCierresByMensajeroPaginado("m-a", RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // El `mensajero_id` es TODO el criterio de este listado —no filtra por estado— y sale de una
+    // sola declaración. Es además el acotamiento por actor: sin él, el archivo traería el dinero
+    // de todos los mensajeros.
+    expect(argsEntero.where).toEqual({ mensajeroId: "m-a" });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden también: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ solicitadoAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("el conjunto del mensajero cuesta UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Lo que hace de esta tanda una mejora medible: el archivo pasa de cuatro consultas + la
+    // resolución de tarifa + la firma en lote de las evidencias del día a ESTO. Si mañana alguien
+    // le añadiera un `count` «para el total», el total del archivo saldría de otro sitio que sus
+    // filas.
+    const d = delegado();
+    await new CierreDiaRepository(
+      { cierreDia: d } as unknown as PrismaClient,
+      {} as never,
+    ).findCierresByMensajero("m-a");
+
+    expect(d.findMany).toHaveBeenCalledTimes(1);
+    expect(d.count).not.toHaveBeenCalled();
+    const args = d.findMany.mock.calls[0]![0]!;
+    expect(args.skip).toBeUndefined();
+    expect(args.take).toBeUndefined();
+  });
+});
+
+// Feature 184 — Tanda D (R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 2,
+// «Cierres del día — histórico» del admin.
+//
+// **Aquí SÍ hay método de repositorio nuevo, y es la diferencia con las tandas B y C.** Allí el
+// conjunto ya existía y bastó reusarlo. Aquí la única lectura sin recorte de este dominio es
+// `findCierresByAlcance`, que devuelve la UNIÓN de la cola y el histórico: no es este conjunto,
+// es este conjunto MÁS el otro listado de la misma pantalla. Reusarla habría dejado el archivo
+// saliendo de un listado compuesto (R1) y habría obligado a partir en memoria lo que la base ya
+// sabe cortar. De ahí `findHistoricoCompleto`.
+//
+// Lo que sí se hizo igual que en B y C: el criterio y el orden se declaran UNA vez
+// (`historicoWhere`, `ORDEN_CIERRES_ADMIN`) y los comparten la página y el conjunto. El orden
+// estaba escrito TRES veces en el archivo y esta tanda habría sumado dos copias más.
+//
+// El aviso de siempre: `tests/unit/services/cierres-admin-completo.test.ts` usa un doble de
+// repositorio y NO ve esta traducción a SQL. Por eso estas propiedades se afirman aquí.
+describe("el conjunto del HISTÓRICO de cierres del admin (feature 184, tanda D)", () => {
+  function repoCierresAdmin(cierreDia: ReturnType<typeof delegado>) {
+    return new CierresAdminRepository(
+      { cierreDia } as unknown as PrismaClient,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+  }
+
+  it("cierres del día — histórico: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await repoCierresAdmin(entero).findHistoricoCompleto({
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z-a",
+    });
+
+    const pagina = delegado();
+    await repoCierresAdmin(pagina).findHistoricoPaginado(
+      { destinoTipo: "bodega_satelite", destinoZonaId: "z-a" },
+      RANGO,
+    );
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // El alcance del actor (tipo de bodega + zona) MÁS el corte cola/histórico, en valores
+    // ABSOLUTOS: compartir la declaración no la vuelve invisible.
+    expect(argsEntero.where).toEqual({
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z-a",
+      estado: { notIn: ["solicitado", "vencido"] },
+    });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden también: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ solicitadoAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("cierres del día — histórico: el acceso total NO emite destinoZonaId, pero SÍ el tipo de bodega (R4)", async () => {
+    // El lado feo de R4: el maestro ve TODA la central sin filtro de zona, pero `destinoTipo`
+    // sigue estando. Sin él, su archivo traería además los cierres de todas las satélite.
+    const entero = delegado();
+    await repoCierresAdmin(entero).findHistoricoCompleto({
+      destinoTipo: "bodega_central",
+      destinoZonaId: null,
+    });
+
+    expect(entero.findMany.mock.calls[0]![0]!.where).toEqual({
+      destinoTipo: "bodega_central",
+      estado: { notIn: ["solicitado", "vencido"] },
+    });
+  });
+
+  it("los dos conjuntos del admin cuestan UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Lo que hace de esta tanda una mejora medible: el archivo pasa de traer el alcance ENTERO
+    // (cola + histórico) a traer solo su mitad. Si mañana alguien le añadiera un `count` «para el
+    // total», el total del archivo saldría de otro sitio que sus filas.
+    const casos: Array<[string, ReturnType<typeof delegado>, () => Promise<unknown>]> = [];
+
+    const d1 = delegado();
+    casos.push([
+      "cierres del día — histórico",
+      d1,
+      () =>
+        repoCierresAdmin(d1).findHistoricoCompleto({
+          destinoTipo: "bodega_central",
+          destinoZonaId: null,
+        }),
+    ]);
+
+    const d2 = delegado();
+    casos.push([
+      "cierres del día — cola",
+      d2,
+      () =>
+        repoCierresAdmin(d2).findColaCompleta({
+          destinoTipo: "bodega_central",
+          destinoZonaId: null,
+        }),
+    ]);
+
+    expect(casos).toHaveLength(2); // los DOS listados de la tanda D
+
+    for (const [nombre, d, ejecutar] of casos) {
+      await ejecutar();
+      expect(d.findMany, `${nombre}: una sola consulta`).toHaveBeenCalledTimes(1);
+      expect(d.count, `${nombre}: el conjunto NO cuenta`).not.toHaveBeenCalled();
+      const args = d.findMany.mock.calls[0]![0]!;
+      expect(args.skip, `${nombre}: sin recorte`).toBeUndefined();
+      expect(args.take, `${nombre}: sin recorte`).toBeUndefined();
+    }
+  });
+
+  it("el conjunto del archivo NO es el listado compuesto: trae UNA mitad, no las dos (R1)", async () => {
+    // Es la afirmación que justifica que este método exista. `findCierresByAlcance` —la lectura
+    // que la pantalla releía— emite el MISMO alcance pero SIN corte por estado: devuelve la cola
+    // y el histórico juntos. Si `findHistoricoCompleto` se hubiera implementado delegando en
+    // ella, su `where` no llevaría `estado` y este caso lo diría.
+    const compuesto = delegado();
+    await repoCierresAdmin(compuesto).findCierresByAlcance({
+      destinoTipo: "bodega_central",
+      destinoZonaId: null,
+    });
+
+    const historico = delegado();
+    await repoCierresAdmin(historico).findHistoricoCompleto({
+      destinoTipo: "bodega_central",
+      destinoZonaId: null,
+    });
+
+    type ArgsConWhere = Consulta & { where: Record<string, unknown> };
+    const argsCompuesto = compuesto.findMany.mock.calls[0]![0]! as ArgsConWhere;
+    const argsHistorico = historico.findMany.mock.calls[0]![0]! as ArgsConWhere;
+
+    // El listado compuesto no corta por estado: por eso descargar una mitad traía las dos.
+    expect(argsCompuesto.where).not.toHaveProperty("estado");
+    expect(argsHistorico.where.estado).toEqual({ notIn: ["solicitado", "vencido"] });
+    // Y el resto del `where` —el ALCANCE— es idéntico: lo único que el conjunto añade es el corte.
+    expect(argsCompuesto.where).toEqual(
+      Object.fromEntries(
+        Object.entries(argsHistorico.where).filter(([clave]) => clave !== "estado"),
+      ),
+    );
+    // Mismo orden en los dos: el archivo no cambia de criterio al dejar de releer el compuesto.
+    expect(argsHistorico.orderBy).toEqual(compuesto.findMany.mock.calls[0]![0]!.orderBy);
+  });
+});
+
+// Feature 184 — Tanda E (R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 5,
+// «Cierres de bodega resueltos» del admin.
+//
+// **Aquí SÍ hay método de repositorio nuevo, como en la tanda D y a diferencia de la B y la C.**
+// La única lectura sin recorte de este repositorio es `findCierresBodega`, que devuelve TODOS los
+// cierres de bodega sin corte por estado: no es este conjunto, es este conjunto MÁS la cola de la
+// misma pantalla. Reusarla habría dejado el archivo saliendo de un listado compuesto (R1) y
+// obligado a partir en memoria lo que la base ya sabe cortar. De ahí `findHistoricoCompleto`.
+//
+// Lo que sí se hizo igual que en B, C y D: el criterio y el orden se declaran UNA vez
+// (`historicoBodegaWhere`, `ORDEN_CIERRES_BODEGA_ADMIN`) y los comparten la página y el conjunto.
+// El orden estaba escrito TRES veces en el archivo y esta tanda habría sumado dos copias más.
+//
+// El aviso de siempre: `tests/unit/services/cierres-bodega-admin-completo.test.ts` usa un doble de
+// repositorio y NO ve esta traducción a SQL. Por eso estas propiedades se afirman aquí.
+describe("el conjunto del HISTÓRICO de cierres de bodega (feature 184, tanda E)", () => {
+  function repoBodegaAdmin(cierreBodega: ReturnType<typeof delegado>) {
+    return new CierresBodegaAdminRepository({ cierreBodega } as unknown as PrismaClient);
+  }
+
+  it("cierres de bodega — resueltos: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await repoBodegaAdmin(entero).findHistoricoCompleto();
+
+    const pagina = delegado();
+    await repoBodegaAdmin(pagina).findHistoricoPaginado(RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // En valores ABSOLUTOS: compartir la declaración no la vuelve invisible. `notIn`, no
+    // `in: ["aprobado"]` — un cierre de bodega RECHAZADO es histórico y va en este archivo.
+    expect(argsEntero.where).toEqual({ estado: { notIn: ["solicitado"] } });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden también: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ solicitadoAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("los dos conjuntos de la bodega del admin cuestan UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Lo que hace de esta tanda una mejora medible: el archivo pasa de traer la tabla ENTERA
+    // (cola + histórico) a traer solo su mitad, y cada fila de más arrastra dos joins de nombre y
+    // el `_count` de `cierresDia` de `BODEGA_RESUMEN_SELECT`. Si mañana alguien le añadiera un
+    // `count` «para el total», el total del archivo saldría de otro sitio que sus filas.
+    const casos: Array<[string, ReturnType<typeof delegado>, () => Promise<unknown>]> = [];
+
+    const d1 = delegado();
+    casos.push([
+      "cierres de bodega — resueltos",
+      d1,
+      () => repoBodegaAdmin(d1).findHistoricoCompleto(),
+    ]);
+
+    const d2 = delegado();
+    casos.push([
+      "cierres de bodega — pendientes",
+      d2,
+      () => repoBodegaAdmin(d2).findColaCompleta(),
+    ]);
+
+    expect(casos).toHaveLength(2); // los DOS listados de la tanda E
+
+    for (const [nombre, d, ejecutar] of casos) {
+      await ejecutar();
+      expect(d.findMany, `${nombre}: una sola consulta`).toHaveBeenCalledTimes(1);
+      expect(d.count, `${nombre}: el conjunto NO cuenta`).not.toHaveBeenCalled();
+      const args = d.findMany.mock.calls[0]![0]!;
+      expect(args.skip, `${nombre}: sin recorte`).toBeUndefined();
+      expect(args.take, `${nombre}: sin recorte`).toBeUndefined();
+    }
+  });
+
+  it("el conjunto del archivo NO es el listado compuesto: trae UNA mitad, no las dos (R1)", async () => {
+    // Es la afirmación que justifica que estos dos métodos existan. `findCierresBodega` —la
+    // lectura que las dos pantallas releían— no lleva NINGÚN corte por estado: devuelve la cola y
+    // el histórico juntos. Si `findHistoricoCompleto` se hubiera implementado delegando en ella,
+    // su `where` no llevaría `estado` y este caso lo diría.
+    const compuesto = delegado();
+    await repoBodegaAdmin(compuesto).findCierresBodega();
+
+    const historico = delegado();
+    await repoBodegaAdmin(historico).findHistoricoCompleto();
+
+    const cola = delegado();
+    await repoBodegaAdmin(cola).findColaCompleta();
+
+    type ArgsConWhere = Consulta & { where?: Record<string, unknown> };
+    const argsCompuesto = compuesto.findMany.mock.calls[0]![0]! as ArgsConWhere;
+    const argsHistorico = historico.findMany.mock.calls[0]![0]! as ArgsConWhere;
+    const argsCola = cola.findMany.mock.calls[0]![0]! as ArgsConWhere;
+
+    // El listado compuesto no corta por estado —ni siquiera lleva `where`—: por eso descargar una
+    // mitad traía las dos.
+    expect(argsCompuesto.where).toBeUndefined();
+    expect(argsHistorico.where?.estado).toEqual({ notIn: ["solicitado"] });
+    expect(argsCola.where?.estado).toEqual({ in: ["solicitado"] });
+    // Y el corte por estado es LO ÚNICO que cada conjunto añade: este listado no se acota por
+    // zona (es acceso total, ve toda la operación), así que el `where` no tiene nada más.
+    expect(Object.keys(argsHistorico.where ?? {})).toEqual(["estado"]);
+    expect(Object.keys(argsCola.where ?? {})).toEqual(["estado"]);
+    // Mismo orden en los tres: el archivo no cambia de criterio al dejar de releer el compuesto.
+    expect(argsHistorico.orderBy).toEqual(argsCompuesto.orderBy);
+    expect(argsCola.orderBy).toEqual(argsCompuesto.orderBy);
+  });
+});
+
+// Feature 184 — Tanda F (R1/R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 9,
+// «Incidentes — histórico».
+//
+// **Aquí SÍ hay método de repositorio nuevo, como en las tandas D y E y a diferencia de la B y la
+// C.** La única lectura sin recorte de este repositorio es `findByAlcance`, que emite el mismo
+// alcance pero SIN corte por estado: no es este conjunto, es este conjunto MÁS la cola de la misma
+// pantalla. Reusarla habría dejado el archivo saliendo de un listado compuesto (R1) y obligado a
+// partir en memoria lo que la base ya sabe cortar. De ahí `findHistoricoCompleto`.
+//
+// Lo que sí se hizo igual que en B, C, D y E: el criterio y el orden se declaran UNA vez
+// (`historicoIncidentesWhere`, `ORDEN_INCIDENTES_ADMIN`) y los comparten la página y el conjunto.
+// El orden estaba escrito TRES veces en el archivo y esta tanda habría sumado dos copias más.
+//
+// El aviso de siempre: `tests/unit/services/incidentes-completo.test.ts` usa un doble de
+// repositorio y NO ve esta traducción a SQL. Por eso estas propiedades se afirman aquí.
+describe("el conjunto del HISTÓRICO de incidentes (feature 184, tanda F)", () => {
+  function repoIncidentes(ordenIncidente: ReturnType<typeof delegado>) {
+    return new IncidenteAdminRepository(
+      { ordenIncidente } as unknown as PrismaClient,
+      {} as never,
+      {} as never,
+    );
+  }
+
+  it("incidentes — histórico: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await repoIncidentes(entero).findHistoricoCompleto({ zonaId: "z-a" });
+
+    const pagina = delegado();
+    await repoIncidentes(pagina).findHistoricoPaginado({ zonaId: "z-a" }, RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // En valores ABSOLUTOS: compartir la declaración no la vuelve invisible. El alcance va por
+    // `orden.zonaId` —la zona de la ORDEN, no la del autor— y el corte es `notIn`, no
+    // `in: ["aprobado","rechazado"]`: un estado nuevo del enum debe caer en el histórico, no
+    // desaparecer de las dos mitades.
+    expect(argsEntero.where).toEqual({
+      orden: { zonaId: "z-a" },
+      estado: { notIn: ["solicitado"] },
+    });
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden también: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ createdAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte (R15).
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("incidentes — histórico: el acceso total NO emite filtro de zona, y el adminSatelite SÍ (R4)", async () => {
+    // Las dos mitades de R4 en un solo caso: sin el `orden.zonaId`, el archivo de un
+    // `adminSatelite` traería los incidentes —con su indemnización— de todas las zonas; con él
+    // puesto de más, el maestro dejaría de ver la operación entera que sí ve en pantalla.
+    const total = delegado();
+    await repoIncidentes(total).findHistoricoCompleto({ zonaId: null });
+    expect(total.findMany.mock.calls[0]![0]!.where).toEqual({ estado: { notIn: ["solicitado"] } });
+
+    const acotado = delegado();
+    await repoIncidentes(acotado).findHistoricoCompleto({ zonaId: "z-b" });
+    expect(acotado.findMany.mock.calls[0]![0]!.where).toEqual({
+      orden: { zonaId: "z-b" },
+      estado: { notIn: ["solicitado"] },
+    });
+  });
+
+  it("los dos conjuntos de incidentes cuestan UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Lo que hace de esta tanda una mejora medible: el archivo pasa de traer el alcance ENTERO
+    // (cola + histórico) a traer solo su mitad, y cada fila de más arrastra los tres joins de
+    // nombre de `INCIDENTE_SELECT` (`orden`+`zona`+`estatus`, autor y resolutor) y la subconsulta
+    // de sus evidencias. Si mañana alguien le añadiera un `count` «para el total», el total del
+    // archivo saldría de otro sitio que sus filas.
+    const casos: Array<[string, ReturnType<typeof delegado>, () => Promise<unknown>]> = [];
+
+    const d1 = delegado();
+    casos.push([
+      "incidentes — histórico",
+      d1,
+      () => repoIncidentes(d1).findHistoricoCompleto({ zonaId: null }),
+    ]);
+
+    const d2 = delegado();
+    casos.push([
+      "incidentes — pendientes",
+      d2,
+      () => repoIncidentes(d2).findColaCompleta({ zonaId: null }),
+    ]);
+
+    expect(casos).toHaveLength(2); // los DOS listados de la tanda F
+
+    for (const [nombre, d, ejecutar] of casos) {
+      await ejecutar();
+      expect(d.findMany, `${nombre}: una sola consulta`).toHaveBeenCalledTimes(1);
+      expect(d.count, `${nombre}: el conjunto NO cuenta`).not.toHaveBeenCalled();
+      const args = d.findMany.mock.calls[0]![0]!;
+      expect(args.skip, `${nombre}: sin recorte`).toBeUndefined();
+      expect(args.take, `${nombre}: sin recorte`).toBeUndefined();
+    }
+  });
+
+  it("el conjunto del archivo NO es el listado compuesto: trae UNA mitad, no las dos (R1)", async () => {
+    // Es la afirmación que justifica que estos dos métodos existan. `findByAlcance` —la lectura
+    // que las dos pantallas releían— emite el MISMO alcance pero SIN corte por estado: devuelve la
+    // cola y el histórico juntos. Si `findHistoricoCompleto` se hubiera implementado delegando en
+    // ella, su `where` no llevaría `estado` y este caso lo diría.
+    const compuesto = delegado();
+    await repoIncidentes(compuesto).findByAlcance({ zonaId: "z-a" });
+
+    const historico = delegado();
+    await repoIncidentes(historico).findHistoricoCompleto({ zonaId: "z-a" });
+
+    const cola = delegado();
+    await repoIncidentes(cola).findColaCompleta({ zonaId: "z-a" });
+
+    type ArgsConWhere = Consulta & { where: Record<string, unknown> };
+    const argsCompuesto = compuesto.findMany.mock.calls[0]![0]! as ArgsConWhere;
+    const argsHistorico = historico.findMany.mock.calls[0]![0]! as ArgsConWhere;
+    const argsCola = cola.findMany.mock.calls[0]![0]! as ArgsConWhere;
+
+    // El listado compuesto no corta por estado: por eso descargar una mitad traía las dos.
+    expect(argsCompuesto.where).not.toHaveProperty("estado");
+    expect(argsHistorico.where.estado).toEqual({ notIn: ["solicitado"] });
+    expect(argsCola.where.estado).toEqual({ in: ["solicitado"] });
+    // Y el corte por estado es LO ÚNICO que cada conjunto añade: el resto del `where` —el
+    // ALCANCE— es idéntico al del compuesto.
+    const sinCorte = (where: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(where).filter(([clave]) => clave !== "estado"));
+    expect(sinCorte(argsHistorico.where)).toEqual(argsCompuesto.where);
+    expect(sinCorte(argsCola.where)).toEqual(argsCompuesto.where);
+    // Mismo orden en los tres: el archivo no cambia de criterio al dejar de releer el compuesto.
+    expect(argsHistorico.orderBy).toEqual(argsCompuesto.orderBy);
+    expect(argsCola.orderBy).toEqual(argsCompuesto.orderBy);
+  });
+});
+
+// Feature 184 — Tanda G (R5/R14/R15/R16) — el CONJUNTO del que sale el archivo del listado 11,
+// «Plantillas de gasto fijo».
+//
+// Tampoco aquí hay método de repositorio nuevo: `listar()` ya devolvía el conjunto entero, con
+// el mismo (nulo) `where`, el mismo orden y el mismo mapper que su hermano paginado. Lo que
+// cambia con esta tanda es su PAPEL —pasa de alimentar una tabla a sostener un archivo— y, con
+// él, la importancia de que su orden no se separe del de la página.
+//
+// Lo que SÍ se tocó del repositorio: `orderBy: { createdAt: "desc" }` estaba escrito TRES veces
+// en el archivo (`listar`, `listarPaginado`, `listarActivas`) y ahora es una sola declaración
+// (`ORDEN_PLANTILLAS`). Compartirla no la vuelve invisible: cambiarla pone rojas a la vez las
+// afirmaciones ABSOLUTAS de la página (arriba, «plantillas de gasto fijo: sin where…») y las
+// del conjunto (aquí).
+describe("el conjunto de la descarga de la tanda G (feature 184)", () => {
+  it("plantillas de gasto fijo: el conjunto y la página emiten las MISMAS condiciones y el MISMO orden (R16/R5)", async () => {
+    const entero = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: entero,
+    } as unknown as PrismaClient).listar();
+
+    const pagina = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: pagina,
+    } as unknown as PrismaClient).listarPaginado(RANGO);
+
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+    const argsPagina = pagina.findMany.mock.calls[0]![0]!;
+
+    // R26: NINGÚN `where` en ninguno de los dos. Un `activa: true` colado aquí convertiría el
+    // archivo del maestro en el conjunto del CRON, y las plantillas desactivadas —las que
+    // explican por qué un gasto dejó de cobrarse— desaparecerían del archivo sin avisar.
+    expect(argsEntero.where).toBeUndefined();
+    expect(argsPagina.where).toEqual(argsEntero.where);
+    // El orden: la página N tiene que ser el segmento N de este conjunto (R5).
+    expect(argsEntero.orderBy).toEqual({ createdAt: "desc" });
+    expect(argsPagina.orderBy).toEqual(argsEntero.orderBy);
+    // La ÚNICA diferencia entre las dos consultas es el recorte.
+    expect(argsEntero.skip).toBeUndefined();
+    expect(argsEntero.take).toBeUndefined();
+    expect(argsPagina.skip).toBe(RANGO.skip);
+    expect(argsPagina.take).toBe(RANGO.take);
+  });
+
+  it("el conjunto de plantillas cuesta UNA consulta, sin recorte y sin conteo de página (R15)", async () => {
+    // Este listado es de los BARATOS del inventario: la consulta cuesta hoy lo mismo que antes
+    // de paginar, y esta tanda no la abarata. Lo que este caso vigila es que tampoco la
+    // encarezca: si mañana alguien le añadiera un `count` «para el total», el total del archivo
+    // saldría de otro sitio que sus filas.
+    const d = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: d,
+    } as unknown as PrismaClient).listar();
+
+    expect(d.findMany).toHaveBeenCalledTimes(1);
+    expect(d.count).not.toHaveBeenCalled();
+    const args = d.findMany.mock.calls[0]![0]!;
+    expect(args.skip).toBeUndefined();
+    expect(args.take).toBeUndefined();
+  });
+
+  it("el conjunto del archivo NO es el del cron: `listarActivas` sí filtra, y comparte el orden (R16)", async () => {
+    // Las tres lecturas de esta tabla presentan la misma secuencia; lo que las distingue es el
+    // `where`. Si el conjunto del archivo se hubiera implementado delegando en `listarActivas`
+    // —que es el otro listado sin recorte del repositorio— este caso lo diría.
+    const activas = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: activas,
+    } as unknown as PrismaClient).listarActivas();
+
+    const entero = delegado();
+    await new GastoFijoPlantillaRepository({
+      gastoFijoPlantilla: entero,
+    } as unknown as PrismaClient).listar();
+
+    const argsActivas = activas.findMany.mock.calls[0]![0]!;
+    const argsEntero = entero.findMany.mock.calls[0]![0]!;
+
+    expect(argsActivas.where).toEqual({ activa: true });
+    expect(argsEntero.where).toBeUndefined();
+    expect(argsActivas.orderBy).toEqual(argsEntero.orderBy); // una sola declaración del orden
+  });
+});

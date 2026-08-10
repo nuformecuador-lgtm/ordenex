@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { nombrePlantilla } from "@/app/(app)/mis-asignaciones/_components/chat-demo/chat-demo-data";
+import { nombrePlantilla } from "@/app/(app)/mis-asignaciones/_components/chat/chat-format";
 
 // Rediseno del chat del mensajero (rama ux) — presentacion del nombre de plantilla en los
 // chips del chat. Las plantillas de Meta llegan en snake_case; el chip las muestra legibles.

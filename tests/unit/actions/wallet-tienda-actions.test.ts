@@ -62,6 +62,15 @@ function fakeService(overrides: Partial<IWalletTiendaService> = {}): IWalletTien
       pageSize: 25,
       total: 1,
     })),
+    // Feature 184 (Tanda G): idem. El conjunto del archivo lo ejercita
+    // `wallet-listados-descarga-action.test.ts`.
+    listarSaldosTiendasCompleto: vi.fn(async () => ({
+      status: "ok" as const,
+      items: [
+        { tiendaId: "t1", tiendaNombre: "Tienda Uno", saldo: "8500.00", signo: "positivo" as const },
+      ],
+      total: 1,
+    })),
     // Feature 171: el doble sigue implementando la interfaz COMPLETA. El desglose de una
     // tienda elegida lo ejercita `wallet-tienda-desglose-action.test.ts`.
     listarMovimientosDeTienda: vi.fn(async () => ({

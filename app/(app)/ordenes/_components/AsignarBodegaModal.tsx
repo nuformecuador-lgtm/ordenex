@@ -17,7 +17,13 @@ import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
 
 export interface AsignarBodegaModalProps {
   open: boolean;
-  /** Órdenes de `en_bodega_central` seleccionadas al abrir (snapshot, R17/R26). */
+  /**
+   * Órdenes de `en_bodega_central` seleccionadas al abrir (snapshot, R17/R26). El padre
+   * ya filtró a `zonaEsGam === true`: `asignarDesdeBodega` exige zona GAM y mensajero de
+   * la zona central (R27/R12), así que una orden satélite aquí saldría `conflict`
+   * (defensa en profundidad), pero no se ofrece en la UI. Si el filtro deja el lote
+   * vacío, el modal avisa y deshabilita el confirmar.
+   */
   ordenes: OrdenListItemDTO[];
   /** TODOS los mensajeros, sin filtro de zona (R28). */
   mensajeros: MensajeroLiteDTO[];
@@ -72,6 +78,12 @@ export function AsignarBodegaModal({
       mensajerosConRecoleccionIds.map((id) => [id, "tiene recolección pendiente"]),
     ),
   );
+
+  // El filtro por zona del padre puede dejar el lote vacío (selección solo de zonas
+  // satélite). Sin órdenes no hay nada que asignar, y `asignarDesdeBodega` devolvería
+  // un "ok" de 0 órdenes: se avisa y se deshabilita el confirmar, igual que
+  // `RecuperarABodegaModal` con su propio filtro.
+  const sinOrdenes = ordenes.length === 0;
 
   async function handleConfirm() {
     if (!mensajeroId) {
@@ -129,6 +141,7 @@ export function AsignarBodegaModal({
       }
       confirmLabel="Asignar"
       cancelLabel={resultado ? "Cerrar" : "Cancelar"}
+      confirmDisabled={sinOrdenes}
       hideConfirm={resultado !== null}
       closeOnConfirm={false}
       onConfirm={handleConfirm}
@@ -140,6 +153,13 @@ export function AsignarBodegaModal({
           flujo="generacion_guia"
           seleccion={{ ordenIds: resultado.ordenIds }}
         />
+      ) : sinOrdenes ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          Selecciona órdenes de la zona central.
+        </p>
       ) : (
       <div className="flex flex-col gap-2">
         <ul className="max-h-40 list-disc overflow-auto pl-5 text-sm text-muted-foreground">

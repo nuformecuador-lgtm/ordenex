@@ -233,6 +233,55 @@ export const TEXTO_FILTROS_DEGRADADOS =
   "Algun filtro no esta disponible ahora mismo porque su catalogo no respondio. " +
   "El tablero sigue funcionando con los filtros restantes.";
 
+/* -------------------------------------------------------------------------- */
+/* Feature 133 (T4.4) — R24 / R25: el ROTULO DE ALCANCE                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * R24 — sobre que universo estan calculadas las cifras, dicho UNA vez para todo el
+ * tablero. Sin esta frase, un `adminTienda` lee «Ordenes creadas: 812» como el total del
+ * negocio.
+ *
+ * R25 — es una frase sobre el ALCANCE, no un dato: ni uuid, ni nombre de tienda, ni de
+ * zona, ni de persona. Nada de lo que hay aqui se interpola.
+ *
+ * Q5 (cerrada) — un texto por TIPO DE ALCANCE, no por rol. Si fuese por rol, esto seria
+ * la segunda tabla `rol -> …` que R8/R37 de la 122 prohiben por escrito, y ademas habria
+ * que tocarlo cada vez que un rol cambie de alcance. El tipo lo resuelve la 122.
+ */
+export type AlcanceTablero = "global" | "zona" | "tienda" | "mensajero" | "denegado";
+
+/**
+ * `global` no lleva rotulo: ahi las cifras SI son las del negocio entero y una frase que
+ * lo dijera solo seria ruido permanente (R24 pide la indicacion MIENTRAS el alcance no sea
+ * global).
+ *
+ * `denegado` SI lleva rotulo, y es una decision tomada aqui —la spec no la cubre— con su
+ * motivo: cuando `resolverAlcance` deniega (p. ej. un `adminSatelite` sin zona asignada,
+ * R13 de la 122) el actor entra a la pagina pero el borde le respondera `forbidden` en
+ * los seis paneles. Callar el rotulo dejaria seis errores sin causa visible; y elegir
+ * `global` por defecto seria peor: prometeria un universo total que no se esta viendo.
+ * El texto no promete cifras ni las excusa: dice que no se pudo determinar el alcance.
+ */
+const TEXTO_ALCANCE: Readonly<Record<AlcanceTablero, string | null>> = {
+  global: null,
+  zona: "Estas viendo unicamente las ordenes de tu zona: los totales no son los del negocio completo.",
+  tienda:
+    "Estas viendo unicamente las ordenes de tu tienda: los totales no son los del negocio completo.",
+  mensajero:
+    "Estas viendo unicamente tus propias ordenes: los totales no son los del negocio completo.",
+  denegado:
+    "No se pudo determinar sobre que ordenes calcular estas cifras, asi que no se muestra ninguna.",
+};
+
+/** El texto del rotulo, o `null` cuando el alcance es global y no hay nada que advertir. */
+export function textoAlcance(alcance: AlcanceTablero): string | null {
+  return TEXTO_ALCANCE[alcance] ?? null;
+}
+
+/** Nombre accesible del rotulo unico de alcance (R24: uno para todo el tablero). */
+export const ETIQUETA_ALCANCE = "Alcance de las cifras";
+
 export const ETIQUETA_ACTUALIZAR = "Actualizar";
 
 export const DESCRIPCION_ACTUALIZAR =

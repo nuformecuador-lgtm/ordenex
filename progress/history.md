@@ -2929,3 +2929,110 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   retirado en el PR #232 y el bloque branch-scoped que la 131 retiró en el suyo.
 - La financiera queda **fuera por decisión, no por olvido** → ficha **184**, que espera a
   la 180 (publica la serie) y a la 183 (cambia qué significan las cifras de caja).
+
+## 2026-08-05 — 188 —antes 184— (deuda de la 170: los 12 listados con descarga completa + poda de selección satélite)
+- Los **12 listados** cuya descarga a Excel releía el conjunto entero desde el navegador pasan a
+  servirse **desde el servidor**, con lectura dedicada por listado; y la selección de la bodega
+  satélite se **poda** contra el conjunto filtrado vigente, que es lo que hacía que el aviso de
+  «marcadas en otras páginas» contara órdenes que ya no existían. 8 tandas, 55 commits, **cero
+  migraciones**.
+- Requisitos cubiertos: **R1–R34**, mapeados caso a caso en `progress/impl_188-cierre.md`. Review
+  APROBADO en **ronda 2** (`progress/review_188.md`). Gate: **950 archivos / 11.847 tests**.
+- **H.3 no era un trámite y encontró dos huecos reales**, los dos cerrados aquí:
+  - **R16** exige «no dos declaraciones separadas del mismo criterio» —el hallazgo que da nombre a
+    la feature, el `orderBy` duplicado en las siete tandas— y **nada lo impedía**: bajo mutación,
+    deshacer una constante y repetir el literal idéntico dejaba **129 tests de emisión en verde**.
+    Se escribió una guardia (22 casos, 4 mutaciones reales).
+  - **R26** no afirmaba que la acción de lote sobrevive a la poda. La mutación lo prueba: al hacer
+    que la poda se pase de larga, el caso nuevo falla **y el viejo sigue verde**.
+- **Tres filas del Anexo B del spec apuntan a casos que no existen donde dicen** (R2, R8, R12). La
+  cobertura existe, en otro archivo. Por eso el mapa de H.3 se escribió contra el árbol y **no se
+  copió del spec**: un mapa copiado habría heredado las tres.
+- **Decisiones del humano (2026-08-05), las tres con ficha:**
+  - **R29 de la 170 queda derogado en 11 de los 12 listados** —se materializa el conjunto entero
+    antes de mirar el tope— y se **declara la excepción** en los once docstrings en vez de
+    implementarla, porque el `count` que exige el total exacto **pone rojos los tests de R15 de esta
+    misma feature**. Ese conflicto es el trabajo de la **ficha 191**, no un detalle.
+  - **Q-K6 rama B** estaba declarada dentro del alcance en `feature_list.json` pero **nunca bajó al
+    spec**; se saca del registro y va a la **ficha 190**, que esta feature deja desbloqueada.
+  - **R12 (columnas y orden)** sin test: deuda **preexistente** —el diff no toca ninguna de las 34
+    constantes `COLUMNAS_DESCARGA_*`— a la **ficha 189**.
+- **Deuda dejada, sin dueño:** `listarSaldosTodasTiendas()` sigue sin orden determinista; ya **no
+  sostiene ningún archivo** (la descarga sale del método paginado, con test que lo mide), pero
+  volvería a morder si alguien lo usa para construir uno.
+- **RENUMERADA de 184 a 188** al traer `dev`: otra sesión había dado de alta una 184 distinta
+  (analítica: export de la serie) y también 185/186/187, así que las fichas de este cierre pasaron
+  a **189/190/191**. Los 60 commits, los comentarios de 111 archivos y la constante
+  `PENDIENTES_184` **siguen diciendo 184 a propósito**: reescribir una rama pusheada está
+  prohibido aquí, y esa constante es ancla de texto de una guardia.
+
+## 2026-08-06 — 189 (descargas: fijar las columnas y su orden en los 12 listados del Anexo A)
+- Doce casos nuevos en `tests/unit/descarga/` que clavan, por `clave` **y** por `encabezado`, las
+  columnas de los 12 listados del Anexo A. **Solo tests: cero líneas tocadas en `app/`,
+  `components/` y `lib/`.** Cierra la cláusula «columnas y orden» del **R12 de la 188**, que hasta
+  hoy se sostenía únicamente por una medición del diff —evidencia buena para «no lo rompí», nula
+  para «no se romperá mañana»—. `sdd: false`, sin puerta de spec. PR #303.
+- Requisitos cubiertos: la ficha no tiene EARS; el mapa constante → archivo de test → nombre
+  literal del caso está en `progress/impl_189.md §2`.
+- **Verificación: 24 mutaciones, 24 ROJO / 0 VERDE** (por constante: reordenar dos columnas
+  contiguas, y quitar una), cada una tumbando **solo su caso**, con el árbol de producción
+  restaurado y **comprobado por SHA-256** tras cada una. Gate completo `== init OK ==`: 984
+  archivos / 12.263 tests (baseline `dev` 977 / 12.251 → **+7 archivos, +12 tests**, cero
+  regresiones).
+- **Hallazgo: una tautología con disfraz de cobertura.** `RankingDescarga.test.tsx:138` hace
+  `expect(columnas.map(c => c.key)).toEqual(COLUMNAS_DESCARGA_RANKING.map(c => c.clave))`. Mide
+  algo útil —que el componente pasa al `xlsx` lo declarado—, pero **el esperado es la propia
+  constante**: reordenarla mueve los dos lados a la vez y el test sigue verde. `_RANKING` **parece
+  cubierta y no lo está**; quien tome la ficha hermana tiene ahí un caso que **sustituir**, no
+  completar.
+- **Censo, que la ficha pedía y no existía:** de las **35** constantes `COLUMNAS_DESCARGA_*` del
+  árbol, **11** ya tenían aserción de orden, **12** la ganan aquí y **12 siguen sin ella**
+  (nombradas una a una en `impl_189.md §4`). `_CUENTAS_POR_PAGAR` es la única de las 35 que **no
+  aparece ni una vez** en `tests/`. Material para decidir una ficha hermana; no se cubrieron.
+- **Deuda dejada, dirigida y con dueño: `COLUMNAS_DESCARGA_GASTOS_FIJOS` declara «Monto mensual» y
+  esta feature acaba de atornillarlo.** La feature 84 ya permite plantillas
+  diaria/semanal/quincenal/mensual; hoy la etiqueta es cierta **por accidente**, porque el diálogo
+  no ofrece el selector (medido: `periodicidad` no aparece en ninguna línea de `app/` fuera del
+  comentario de ese archivo). El día que aterrice la **ficha 85**, dos plantillas de ₡50.000 —una
+  semanal y una mensual— saldrán como filas idénticas y **el test seguirá verde**. No se arregla
+  aquí: sería cambiar un archivo que un usuario descarga. Y **la guardia de superficie de uso no lo
+  caza**: vigila acciones sin superficie, no **campos** sin superficie.
+
+## 2026-08-06 — 186 (analítica financiera: gráfica de líneas en el tablero)
+- La 180 publicó el desglose por fecha de las siete métricas y **nadie lo pintaba**. Esto lo pinta:
+  línea sobre el KPI en las seis métricas **de flujo**, leyendo `granularidad` del DTO para rotular.
+  **Se añade, no se rehace**: 2 archivos de producción, exactamente los que el design anticipó.
+  18 requisitos, cero preguntas abiertas, review **APROBADO en ronda 2**. PR #307. Cero migraciones.
+- Requisitos cubiertos: `R1`–`R18`, mapa caso a caso en `progress/impl_186.md`. Gate `== init OK ==`
+  **985 archivos / 12.355 tests** (baseline `dev` 984 / 12.295 → **+1 archivo, +60 tests**, cero
+  regresiones), `next build` verde.
+- **Decisión humana Q2 = (b): `cuenta_por_pagar_mensajero` NO lleva línea.** Es un saldo al corte;
+  dibujado como línea **siempre sube y parece tendencia sin serlo**, y la 127 ya lo había declarado
+  junto a su repositorio. Se lee la bandera **`esAcumulado` del DTO**, no una lista de ids, y el
+  motivo **se dice en pantalla** con test.
+- **Dos requisitos estaban escritos y no los protegía nada, y son la misma línea partida por la
+  mitad:** `R4` sobrevivía a **91 casos** y `R2` a **144**. Los dos los cazó una mutación. El
+  segundo lo encontró el reviewer, después de que el implementador arreglara el primero: *«escribí
+  la lección y no la apliqué a la mitad de al lado de la misma línea»*.
+- **Y una afirmación de exhaustividad que era falsa: «las tres únicas salidas» eran cuatro.** La
+  cuarta —conservar la aserción y **restringir el sujeto**, no conservarla sobre el mismo sujeto—
+  empata en los dos escenarios de control (verde 93; **39 rojos** ante el defecto de ⟨H1⟩) y pasa de
+  **1 a 7 rojos** ante una fecha visible embebida en un texto más largo. Ese era el agujero: esa
+  regresión **solo la veía la métrica acumulada**; las seis de flujo se la comían. Con ella, el caso
+  del hotfix **recupera su aserción original** restringiendo el sujeto en vez de debilitarla.
+  > **La regla que queda:** una exhaustividad afirmada sobre el **propio razonamiento** es más
+  > peligrosa que una afirmada sobre el código, porque **nada la desmiente al leerla**. Las tres
+  > primeras salidas eran las formas de conservar la aserción; la pregunta correcta no era «¿cómo
+  > mantengo esta aserción?» sino «¿qué tiene que cazar este caso?».
+- **El criterio de hecho de ⟨D1⟩ se acotó, no se relajó.** Uno de los seis casos del hotfix es
+  **insatisfacible** y está demostrado (`R1 ∧ R7 ⟹ ¬(aserción original)`), no alegado. Lo que
+  sostiene la reconciliación es la **condición de reversión escrita en el spec**: reintroducir
+  `filas.length === 0` da **39 rojos**; si esa medición no saliera, la reconciliación no procede y
+  lo que se arregla es el código.
+- **Número retirado:** circuló un «14 de esos 39 en el bloque del hotfix» que **nadie midió** —el
+  único 14 de la bitácora es de otra mutación—. Se retiró en vez de reconstruirlo por aritmética.
+- **Deuda que deja, sin dueño:** una guardia que ate **lo que el servicio produce** con **lo que los
+  dobles del tablero declaran**. Las ataduras que hay comparan la fixture contra constantes
+  publicadas, nunca contra la salida real: si `serieDensa` cambiara de grano, seguirían verdes
+  **comparando el espejo consigo mismo**. Es exactamente lo que habría puesto la 180 en rojo el
+  05-ago en vez de dejar el defecto salir a producción.

@@ -284,3 +284,133 @@ describe("WalletTiendaMovimientoRepository.agregarDesglosePorTienda (R24/R34)", 
     expect(await repo.agregarDesglosePorTienda("t1", {})).toEqual([]);
   });
 });
+
+// ── Feature 184 — Tanda G (R5/R15/R16) — el CONJUNTO del que sale el archivo de «Saldos de
+// tiendas» (listado 12 del Anexo A) ──
+//
+// Aqui no hay metodo de repositorio nuevo, y el que se reusa no es un `findMany`: cada fila es
+// una AGREGACION de todo el ledger de esa tienda. Lo que estos casos cierran es el hueco que el
+// test de servicio no puede ver, porque alli el repositorio es un doble:
+//
+//   - que la agregacion del conjunto sea EXACTAMENTE la misma que la de la pagina (R16), y
+//   - que el ORDEN por el que sale el archivo lo ponga el repositorio y no el planificador (R5).
+//
+// El segundo es el defecto que esta tanda corrige: `listarSaldosTodasTiendas` devuelve las filas
+// como se las da el `groupBy`, y el archivo salia asi. La 170 declaro esa divergencia como
+// desviacion consciente porque ese conjunto no sostenia ningun archivo; desde esta tanda si.
+
+describe("WalletTiendaMovimientoRepository — el conjunto del archivo (feature 184, T G.1)", () => {
+  /** Cinco tiendas con nombres DISTINTOS y en desorden: es lo unico que hace visible el orden. */
+  function prismaConCincoTiendas() {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([
+      { tiendaId: "t-3", tipo: "credito", _sum: { monto: new Prisma.Decimal("1000.00") } },
+      { tiendaId: "t-1", tipo: "credito", _sum: { monto: new Prisma.Decimal("500.00") } },
+      { tiendaId: "t-5", tipo: "debito", _sum: { monto: new Prisma.Decimal("80.00") } },
+      { tiendaId: "t-2", tipo: "credito", _sum: { monto: new Prisma.Decimal("300.00") } },
+      { tiendaId: "t-4", tipo: "credito", _sum: { monto: new Prisma.Decimal("10.00") } },
+    ]);
+    prisma.usuario.findMany.mockResolvedValue([
+      { id: "t-1", nombre: "Ana" },
+      { id: "t-2", nombre: "Beto" },
+      { id: "t-3", nombre: "Carlos" },
+      { id: "t-4", nombre: "Dora" },
+      { id: "t-5", nombre: "Elena" },
+    ]);
+    return prisma;
+  }
+
+  it("el conjunto del archivo y la pagina salen de la MISMA agregacion, sin where ni recorte (R15/R16)", async () => {
+    const conjunto = prismaConCincoTiendas();
+    await new WalletTiendaMovimientoRepository(
+      conjunto as unknown as PrismaClient,
+    ).listarSaldosTiendasPaginado({ skip: 0, take: 5001 }); // el conjunto: tope + 1
+
+    const pagina = prismaConCincoTiendas();
+    await new WalletTiendaMovimientoRepository(
+      pagina as unknown as PrismaClient,
+    ).listarSaldosTiendasPaginado({ skip: 2, take: 2 }); // una pagina cualquiera
+
+    const argsConjunto = conjunto.walletTiendaMovimiento.groupBy.mock.calls[0][0];
+    const argsPagina = pagina.walletTiendaMovimiento.groupBy.mock.calls[0][0];
+
+    // La agregacion es la MISMA, literalmente: si divergieran, el archivo sumaria un ledger y la
+    // tabla otro, y las dos cifras pasarian por buenas.
+    expect(argsConjunto).toEqual(argsPagina);
+    expect(argsConjunto.by).toEqual(["tiendaId", "tipo"]);
+    expect(argsConjunto._sum).toEqual({ monto: true });
+    // Sin `where`: este listado no acota nada —quien lo ve lo decide el ROL, en el servicio— y
+    // un `where` aqui recortaria el conjunto del archivo sin que ninguna pantalla lo dijera.
+    expect(argsConjunto.where).toBeUndefined();
+    // El recorte NO viaja a la base: no puede, porque el saldo de una tienda no se calcula con
+    // una pagina de movimientos. Lo que se recorta es el resultado ya agregado (R15).
+    expect(argsConjunto.skip).toBeUndefined();
+    expect(argsConjunto.take).toBeUndefined();
+
+    // Y son DOS consultas en los dos caminos: la agregacion y los nombres. Ni una mas.
+    for (const [nombre, p] of [["conjunto", conjunto], ["pagina", pagina]] as const) {
+      expect(p.walletTiendaMovimiento.groupBy, nombre).toHaveBeenCalledTimes(1);
+      expect(p.usuario.findMany, nombre).toHaveBeenCalledTimes(1);
+      expect(p.walletTiendaMovimiento.findMany, nombre).not.toHaveBeenCalled();
+      expect(p.walletTiendaMovimiento.count, nombre).not.toHaveBeenCalled();
+    }
+  });
+
+  it("el conjunto sale ORDENADO por nombre y la pagina es su segmento exacto (R5)", async () => {
+    const repoConjunto = new WalletTiendaMovimientoRepository(
+      prismaConCincoTiendas() as unknown as PrismaClient,
+    );
+    const { items, total } = await repoConjunto.listarSaldosTiendasPaginado({ skip: 0, take: 5001 });
+
+    // El `groupBy` las devolvio en otro orden (Carlos, Ana, Elena, Beto, Dora): si el conjunto
+    // saliera como llega —que es lo que hacia `listarSaldosTodasTiendas`— este caso se pone rojo.
+    expect(items.map((r) => r.tiendaNombre)).toEqual(["Ana", "Beto", "Carlos", "Dora", "Elena"]);
+    expect(total).toBe(5);
+
+    // Y la pagina N es el segmento N de ese mismo conjunto, en el mismo orden.
+    const recorrido: string[] = [];
+    for (let page = 1; page <= 5; page += 1) {
+      const repoPagina = new WalletTiendaMovimientoRepository(
+        prismaConCincoTiendas() as unknown as PrismaClient,
+      );
+      const p = await repoPagina.listarSaldosTiendasPaginado({ skip: (page - 1) * 2, take: 2 });
+      recorrido.push(...p.items.map((r) => r.tiendaNombre));
+      expect(p.total).toBe(5); // R41: el del CONJUNTO, no el de la pagina
+    }
+    expect(recorrido).toEqual(items.map((r) => r.tiendaNombre));
+  });
+
+  it("dos tiendas con el MISMO nombre no se solapan entre paginas: el orden es TOTAL (R5)", async () => {
+    // Sin desempate por id el orden no seria total, y una de las dos podria aparecer en dos
+    // paginas del archivo (o en ninguna).
+    function prismaHomonimas() {
+      const prisma = buildPrisma();
+      prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([
+        { tiendaId: "t-b", tipo: "credito", _sum: { monto: new Prisma.Decimal("2.00") } },
+        { tiendaId: "t-a", tipo: "credito", _sum: { monto: new Prisma.Decimal("1.00") } },
+        { tiendaId: "t-c", tipo: "credito", _sum: { monto: new Prisma.Decimal("3.00") } },
+      ]);
+      prisma.usuario.findMany.mockResolvedValue([
+        { id: "t-a", nombre: "Repetida" },
+        { id: "t-b", nombre: "Repetida" },
+        { id: "t-c", nombre: "Zeta" },
+      ]);
+      return prisma;
+    }
+
+    const conjunto = await new WalletTiendaMovimientoRepository(
+      prismaHomonimas() as unknown as PrismaClient,
+    ).listarSaldosTiendasPaginado({ skip: 0, take: 5001 });
+    expect(conjunto.items.map((r) => r.tiendaId)).toEqual(["t-a", "t-b", "t-c"]);
+
+    const recorrido: string[] = [];
+    for (let page = 1; page <= 3; page += 1) {
+      const p = await new WalletTiendaMovimientoRepository(
+        prismaHomonimas() as unknown as PrismaClient,
+      ).listarSaldosTiendasPaginado({ skip: page - 1, take: 1 });
+      recorrido.push(...p.items.map((r) => r.tiendaId));
+    }
+    expect(recorrido).toEqual(["t-a", "t-b", "t-c"]);
+    expect(new Set(recorrido).size).toBe(3);
+  });
+});

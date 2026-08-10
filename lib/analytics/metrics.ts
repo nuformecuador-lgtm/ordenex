@@ -100,7 +100,7 @@ const CATALOGO = [
   /* ---------------------------- 15 OPERATIVAS ---------------------------- */
   {
     id: "ordenes_creadas",
-    etiqueta: "Ordenes creadas",
+    etiqueta: "Órdenes creadas",
     descripcion:
       "Ordenes nacidas en el rango (en_preparacion o por_recolectar_en_tienda); cuenta ORDENES, no gestiones, asi que las gestiones anuladas (anulada_at) no la afectan ni la inflan.",
     dominio: "operativa",
@@ -115,7 +115,7 @@ const CATALOGO = [
   },
   {
     id: "ordenes_por_estado",
-    etiqueta: "Ordenes por estado",
+    etiqueta: "Órdenes por estado",
     descripcion:
       "Embudo: ORDENES agrupadas por su estatus al corte sobre el universo B2 de la 124 (las vivas al corte mas las que llegaron a un estado terminal ese mismo dia), cada orden en una sola fila; el rollup NO conserva el archivo historico de estados terminales, asi que el historico de terminales se sirve de las medidas de flujo (entregas, devoluciones, rechazos, incidentes) y no de este embudo; no cuenta gestiones, asi que una gestion anulada no mueve esta cifra (solo la mueve el estado real de la orden).",
     dominio: "operativa",
@@ -290,7 +290,7 @@ const CATALOGO = [
   },
   {
     id: "tasa_devolucion",
-    etiqueta: "Tasa de devolucion",
+    etiqueta: "Tasa de devolución",
     descripcion:
       "Devoluciones sobre el total de gestiones vigentes de resultado (entregas+devoluciones+rechazos+incidentes); es una tasa SOBRE GESTIONES: el denominador NO es el numero de ordenes y excluye las gestiones anuladas.",
     dominio: "operativa",
@@ -353,7 +353,7 @@ const CATALOGO = [
   },
   {
     id: "motivos_devolucion",
-    etiqueta: "Motivos de devolucion",
+    etiqueta: "Motivos de devolución",
     descripcion:
       "Gestiones VIGENTES de resultado devuelta agrupadas por su causa tipificada (not_found, wrong_number, wrong_address); no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
@@ -389,7 +389,7 @@ const CATALOGO = [
   },
   {
     id: "aging_por_estado",
-    etiqueta: "Antiguedad por estado",
+    etiqueta: "Antigüedad por estado",
     descripcion:
       "Segundos que las ordenes vivas llevan en su estado actual, leidos INTRADIA de las tablas vivas; mide tiempo de ordenes, no volumen de gestiones, y las gestiones anuladas no cuentan porque no producen transicion vigente.",
     dominio: "operativa",
@@ -443,7 +443,7 @@ const CATALOGO = [
   },
   {
     id: "ingreso_comision_cod",
-    etiqueta: "Ingreso por comision COD",
+    etiqueta: "Ingreso por comisión COD",
     descripcion:
       "Ingreso de Ordenex por comision sobre el contra-entrega segun el libro append-only de la wallet; se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
@@ -651,7 +651,7 @@ const CATALOGO = [
   },
   {
     id: "conciliacion_cierres",
-    etiqueta: "Conciliacion de cierres",
+    etiqueta: "Conciliación de cierres",
     descripcion:
       "Cierres de dia y de bodega por estado (solicitado, aprobado, rechazado, vencido) con sus totales snapshot; se lee de los cierres, no de ordenes, y las gestiones anuladas no alteran un total ya congelado.",
     dominio: "financiera",

@@ -65,6 +65,9 @@ function build(ordenMontoCobrar: string | null) {
     findByAlcance: vi.fn(async () => []),
     findHistoricoPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     findColaPaginada: vi.fn(async () => ({ items: [], total: 0 })),
+    // Feature 184 (T F.2): los dos conjuntos de la descarga; aqui no se usan.
+    findHistoricoCompleto: vi.fn(async () => []),
+    findColaCompleta: vi.fn(async () => []),
     findByIdEnAlcance: vi.fn(async () => fila(ordenMontoCobrar)),
   };
   const ordenRepo = {

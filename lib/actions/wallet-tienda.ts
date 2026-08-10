@@ -18,9 +18,11 @@ import {
   listarMovimientosDeTiendaSchema,
   listarMovimientosTiendaCompletoSchema,
   listarMovimientosTiendaSchema,
+  listarSaldosTiendasCompletoSchema,
   listarSaldosTiendasPaginadoSchema,
   type ListarMovimientosDeTiendaCompletoResult,
   type ListarMovimientosTiendaCompletoResult,
+  type ListarSaldosTiendasCompletoResult,
 } from "@/lib/types/wallet-tienda";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
@@ -138,7 +140,27 @@ export async function listarMisMovimientosCompletoAction(
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }
 
-/** R20/R27: saldo de TODAS las tiendas (solo maestro). Forbidden/unauthenticated sin exponer datos. */
+/**
+ * R20/R27: saldo de TODAS las tiendas (solo maestro). Forbidden/unauthenticated sin exponer datos.
+ *
+ * **Feature 184 (T H.2) — CERO consumidores de produccion, y se CONSERVA a proposito.** La tanda G
+ * se llevo su unico lector: la descarga de `SaldosTiendasTable`, que ahora sale de
+ * `listarSaldosTiendasCompletoAction` —la MISMA llamada que la pagina, con otro rango, para que el
+ * archivo salga ORDENADO como la tabla (R5)—.
+ *
+ * Por que NO se borra: en este listado y en el de plantillas, a diferencia de los de las tandas
+ * B-F, las dos lecturas devuelven **las mismas filas** y el xlsx sale identico por los dos
+ * caminos. Contar llamadas es lo UNICO que los separa, y por eso
+ * `tests/components/descarga/WalletPropsDescarga.test.tsx` (R1) afirma que esta no se llama **y**
+ * la invoca al final para comprobar que el doble esta VIVO y responde el conjunto entero. Borrarla
+ * deja el `not.toHaveBeenCalled()` sin objeto y R1 de este listado sin discriminador de conducta:
+ * quedaria solo la mitad estatica del censo.
+ *
+ * Lo que impide que «conservar» sea «olvidar»: `tests/unit/descarga/adaptador-conjunto.guardia.test.ts`
+ * (R32) afirma que ninguna pantalla vuelve a llamarla. Vive como testigo, no como camino.
+ *
+ * @sin-superficie decision de la feature 184 (T H.2), no deuda: testigo de anti-vacuidad de R1, no camino de usuario. La superficie viva es `listarSaldosTiendasCompletoAction`.
+ */
 export async function listarSaldosTiendasAction(
   deps: WalletTiendaDeps = {},
 ): Promise<ListarSaldosTiendasActionResult> {
@@ -168,6 +190,35 @@ export async function listarSaldosTiendasPaginadoAction(
     const data = listarSaldosTiendasPaginadoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarSaldosTiendasPaginado(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * Feature 184 — Tanda G (R1/R5/R6/R7/R17) — el CONJUNTO de «Saldos de tiendas», sin recorte,
+ * para producir el archivo (listado 12 del Anexo A).
+ *
+ * Sustituye a la relectura de `listarSaldosTiendasAction()` que hacia la tabla. La sustitucion
+ * NO abarata la consulta —es la misma agregacion del ledger entero— y esta bitacora no va a
+ * fingir que si. Lo que gana: el tope lo decide el SERVIDOR (R6), y sobre todo el archivo pasa
+ * a salir ORDENADO como la tabla (R5), cosa que hoy no ocurre porque el listado sin paginar
+ * devuelve las filas en el orden del planificador.
+ *
+ * Como este listado no tiene filtros, la lista blanca derivada de la de su pagina no deja
+ * NINGUNA clave: `tiendaId` —la que convertiria el saldo de TODAS las tiendas en el de una— y
+ * `page`/`pageSize` mueren aqui con `validation_error` sin tocar el servicio (R17). El input se
+ * parsea aunque no se transporte nada: parsear ES la barrera.
+ */
+export async function listarSaldosTiendasCompletoAction(
+  input: unknown = {},
+  deps: WalletTiendaDeps = {},
+): Promise<ListarSaldosTiendasCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
+    listarSaldosTiendasCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarSaldosTiendasCompleto(actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

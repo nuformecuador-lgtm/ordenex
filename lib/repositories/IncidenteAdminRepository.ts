@@ -58,6 +58,53 @@ function alcanceWhere(alcance: AlcanceIncidente): { orden?: { zonaId: string } }
   return alcance.zonaId === null ? {} : { orden: { zonaId: alcance.zonaId } };
 }
 
+/**
+ * Feature 184 — Tanda F (R16) — el ORDEN de los dos listados de incidentes, declarado UNA vez.
+ *
+ * Estaba escrito TRES veces en este archivo (`findByAlcance`, `findHistoricoPaginado`,
+ * `findColaPaginada`) y los dos conjuntos de esta tanda habrian sido la cuarta y la quinta
+ * copia. No es simetria: en cuanto un archivo depende de estos conjuntos, si su orden diverge
+ * del de la pagina, la fila 26 del archivo deja de ser la primera de la pagina 2 (R5) y no hay
+ * ninguna pantalla que lo diga. Una sola declaracion tampoco lo vuelve invisible: los casos de
+ * los `*-where.test.ts` fijan el valor ABSOLUTO, asi que cambiar la constante los pone rojos.
+ */
+const ORDEN_INCIDENTES_ADMIN = {
+  createdAt: "desc",
+} as const satisfies Prisma.OrdenIncidenteOrderByWithRelationInput;
+
+/**
+ * Feature 184 — Tanda F (R16) — el criterio del HISTORICO de incidentes, declarado UNA vez para
+ * su pagina y para su conjunto.
+ *
+ * R44 de la 170 sigue vigente y es el motivo del `notIn`: es el espejo EXACTO del `else` con que
+ * el servicio manda al historico todo lo que no esta en la cola. Con un `in: ["aprobado",
+ * "rechazado"]` un estado nuevo del enum desapareceria de las dos listas en vez de caer en el
+ * historico.
+ */
+function historicoIncidentesWhere(alcance: AlcanceIncidente): Prisma.OrdenIncidenteWhereInput {
+  return {
+    ...alcanceWhere(alcance), // R48: el alcance va en el WHERE, nunca en memoria
+    estado: { notIn: [...ESTADOS_COLA_SOLICITADO] },
+  };
+}
+
+/**
+ * Feature 184 — Tanda F (R16) — el criterio de la COLA de incidentes pendientes de decision,
+ * declarado UNA vez para su pagina y para su conjunto.
+ *
+ * COMPLEMENTO EXACTO del de arriba: mismo `alcanceWhere` y la MISMA constante de estados, aqui
+ * con `in` (el espejo del `if` del servicio) y alli con `notIn`. Que las dos mitades lean la
+ * misma constante es lo que garantiza que ningun incidente quede en las dos listas ni se caiga
+ * de las dos — y aqui «caerse» significa que un incidente sin resolver deja de verse, con una
+ * orden atrapada en `incidente` y, si lleva indemnizacion, dinero sin decidir.
+ */
+function colaIncidentesWhere(alcance: AlcanceIncidente): Prisma.OrdenIncidenteWhereInput {
+  return {
+    ...alcanceWhere(alcance),
+    estado: { in: [...ESTADOS_COLA_SOLICITADO] },
+  };
+}
+
 // Proyeccion de una fila de incidente con lo que la cola y el detalle necesitan. Las evidencias
 // entran ORDENADAS por `indice` para que la portada (0) sea siempre la primera.
 const INCIDENTE_SELECT = {
@@ -254,7 +301,10 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
         where: {
           id: incidenteId,
           estado: ESTADO_RESOLUBLE,
-          ...(alcance.zonaId === null ? {} : { orden: { zonaId: alcance.zonaId } }),
+          // Feature 184 (T F.1, R16): la MISMA `alcanceWhere` que las lecturas. Estaba escrita
+          // a mano aqui y en el `count` de abajo; tres declaraciones del mismo criterio, y la
+          // que decide si un `adminSatelite` puede mover el dinero de otra zona.
+          ...alcanceWhere(alcance),
         },
         data: {
           estado: nuevoEstado,
@@ -317,7 +367,7 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
     const existe = await this.prisma.ordenIncidente.count({
       where: {
         id: incidenteId,
-        ...(alcance.zonaId === null ? {} : { orden: { zonaId: alcance.zonaId } }),
+        ...alcanceWhere(alcance), // R48/R16: la MISMA guardia de zona que la escritura
       },
     });
     return existe > 0 ? "conflict" : "fuera_de_alcance";
@@ -327,7 +377,46 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
   async findByAlcance(alcance: AlcanceIncidente): Promise<IncidenteAdminRow[]> {
     const rows = await this.prisma.ordenIncidente.findMany({
       where: alcanceWhere(alcance), // R48: el alcance va en el WHERE, nunca en memoria
-      orderBy: { createdAt: "desc" },
+      orderBy: ORDEN_INCIDENTES_ADMIN,
+      select: INCIDENTE_SELECT,
+    });
+    return rows.map(toRow);
+  }
+
+  /**
+   * Feature 184 — Tanda F (T F.1, R1/R14/R15/R16) — el HISTORICO ENTERO del alcance, sin
+   * recorte: el conjunto del que sale el archivo de «Incidentes — historico» (listado 9).
+   *
+   * **Por que existe.** La unica lectura sin recorte de este repositorio es `findByAlcance`, y
+   * NO es este conjunto: es este conjunto MAS la cola de la misma pantalla. Producir el archivo
+   * con ella obliga a partir en memoria lo que la base ya sabe cortar, y deja el archivo
+   * saliendo de un listado compuesto (R1).
+   *
+   * Es su hermano paginado SIN `skip`/`take` y SIN el `count`, con el MISMO
+   * `historicoIncidentesWhere` y el MISMO `ORDEN_INCIDENTES_ADMIN` por construccion, no por
+   * vigilancia (R16). UNA consulta (R15).
+   */
+  async findHistoricoCompleto(alcance: AlcanceIncidente): Promise<IncidenteAdminRow[]> {
+    const rows = await this.prisma.ordenIncidente.findMany({
+      where: historicoIncidentesWhere(alcance),
+      orderBy: ORDEN_INCIDENTES_ADMIN,
+      select: INCIDENTE_SELECT,
+    });
+    return rows.map(toRow);
+  }
+
+  /**
+   * Feature 184 — Tanda F (T F.1, R1/R14/R15/R16) — la COLA ENTERA de pendientes de decision
+   * del alcance, sin recorte: el conjunto del archivo de «Incidentes pendientes» (listado 8).
+   *
+   * COMPLEMENTO EXACTO del de arriba, y donde mas se nota la mejora: la cola son los incidentes
+   * sin resolver —una decena— y el historico crece sin tope con los dias, asi que descargar la
+   * cola arrastraba TODOS los incidentes que el actor puede ver.
+   */
+  async findColaCompleta(alcance: AlcanceIncidente): Promise<IncidenteAdminRow[]> {
+    const rows = await this.prisma.ordenIncidente.findMany({
+      where: colaIncidentesWhere(alcance),
+      orderBy: ORDEN_INCIDENTES_ADMIN,
       select: INCIDENTE_SELECT,
     });
     return rows.map(toRow);
@@ -346,14 +435,14 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
     alcance: AlcanceIncidente,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<IncidenteAdminRow>> {
-    const where = {
-      ...alcanceWhere(alcance),
-      estado: { notIn: [...ESTADOS_COLA_SOLICITADO] },
-    };
+    // Feature 184 (T F.1, R16): UNA declaracion del criterio y del orden, compartida con el
+    // conjunto del archivo (`findHistoricoCompleto`). El `where` se construye una vez y lo
+    // comparten `findMany` y `count`.
+    const where = historicoIncidentesWhere(alcance);
     const [rows, total] = await Promise.all([
       this.prisma.ordenIncidente.findMany({
         where,
-        orderBy: { createdAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_INCIDENTES_ADMIN, // R51: el mismo criterio del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: INCIDENTE_SELECT,
@@ -376,14 +465,13 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
     alcance: AlcanceIncidente,
     rango: RangoPagina,
   ): Promise<PaginaRepositorio<IncidenteAdminRow>> {
-    const where = {
-      ...alcanceWhere(alcance),
-      estado: { in: [...ESTADOS_COLA_SOLICITADO] },
-    };
+    // Feature 184 (T F.1, R16): UNA declaracion del criterio y del orden, compartida con el
+    // conjunto del archivo (`findColaCompleta`).
+    const where = colaIncidentesWhere(alcance);
     const [rows, total] = await Promise.all([
       this.prisma.ordenIncidente.findMany({
         where,
-        orderBy: { createdAt: "desc" }, // R51: el mismo criterio del listado sin paginar
+        orderBy: ORDEN_INCIDENTES_ADMIN, // R51: el mismo criterio del listado sin paginar
         skip: rango.skip,
         take: rango.take,
         select: INCIDENTE_SELECT,

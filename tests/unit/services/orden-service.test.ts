@@ -1,10 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { RolValue } from "@prisma/client";
 import { OrdenService } from "@/lib/services/OrdenService";
-import {
-  NumRemisionDuplicadoError,
-  type IOrdenRepository,
-} from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import {
@@ -14,10 +11,8 @@ import {
 } from "@/tests/fixtures/intentos-entrega";
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
-const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
 const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
 const OTRA_TIENDA_ID = "store2";
-const MENSAJERO: Actor = { usuarioId: "msg1", rol: "mensajero" };
 const DESCONOCIDO: Actor = { usuarioId: "x", rol: "invitado" as RolValue };
 
 function dto(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
@@ -52,17 +47,11 @@ function listItem(overrides: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO {
 // poder ejercitar la creacion (FKs NOT NULL contra tablas creadas vacias).
 function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
   return {
-    create: vi.fn().mockResolvedValue(dto()),
     findById: vi.fn().mockResolvedValue(dto()),
     list: vi.fn().mockResolvedValue({ items: [listItem()], total: 1 }),
     update: vi.fn().mockResolvedValue(dto()),
-    softDelete: vi.fn().mockResolvedValue(true),
-    existsEstatus: vi.fn().mockResolvedValue(true),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
-    existsGeo: vi
-      .fn()
-      .mockResolvedValue({ zona: true, provincia: true, canton: true, distrito: true }),
     // Feature 15: metodos batch de carga masiva, no ejercitados por el CRUD
     // (feature 6) pero exigidos por la interfaz IOrdenRepository.
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
@@ -113,6 +102,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 170 (T K.1/T K.2): la pagina del listado satelite y el catalogo de sus filtros.
     findRecepcionSatelitePaginada: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     findRecepcionSateliteGeoByZona: vi.fn().mockResolvedValue([]),
+    // Feature 184 (T A.1/T A.2): el conjunto completo del listado y la vigencia de ids.
+    findRecepcionSateliteCompleta: vi.fn().mockResolvedValue([]),
+    findIdsVigentesEnBodega: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
     recibirEnBodegaCentral: vi.fn().mockResolvedValue(false),
@@ -152,21 +144,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
   };
 }
 
-function crearInput(overrides: Record<string, unknown> = {}) {
-  return {
-    numRemision: "REM-1",
-    destinatario: "Ana",
-    telefonoDest: "0991234567",
-    producto: "Caja",
-    peso: 1.5,
-    zonaId: "z1",
-    provinciaId: "p1",
-    cantonId: "c1",
-    tiendaId: "store1",
-    ...overrides,
-  };
-}
-
 let repo: IOrdenRepository;
 let service: OrdenService;
 // Feature 160: derivador de intentos EN LOTE, dependencia REQUERIDA del constructor. Por
@@ -179,233 +156,17 @@ beforeEach(() => {
   service = new OrdenService(repo, intentos);
 });
 
-describe("crear — matriz de autorizacion", () => {
-  it("R20: maestro/admin crean cualquier orden", async () => {
-    for (const actor of [MAESTRO, ADMIN]) {
-      const r = await service.crear(crearInput({ tiendaId: "storeX" }), actor);
-      expect(r.status).toBe("ok");
-    }
-  });
-
-  it("R21: adminTienda crea forzando tiendaId=actor.usuarioId", async () => {
-    const r = await service.crear(crearInput({ tiendaId: undefined }), TIENDA);
-    expect(r.status).toBe("ok");
-    const data = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(data.tiendaId).toBe("store1");
-  });
-
-  it("R22: adminTienda con tiendaId ajeno -> forbidden y no crea", async () => {
-    const r = await service.crear(crearInput({ tiendaId: OTRA_TIENDA_ID }), TIENDA);
-    expect(r.status).toBe("forbidden");
-    expect(repo.create).not.toHaveBeenCalled();
-  });
-
-  it("R23: mensajero no puede crear -> forbidden", async () => {
-    const r = await service.crear(crearInput(), MENSAJERO);
-    expect(r.status).toBe("forbidden");
-    expect(repo.create).not.toHaveBeenCalled();
-  });
-
-  it("R24: rol no reconocido -> forbidden", async () => {
-    const r = await service.crear(crearInput(), DESCONOCIDO);
-    expect(r.status).toBe("forbidden");
-  });
-
-  it("maestro/admin sin tiendaId -> validation_error (R11)", async () => {
-    const r = await service.crear(crearInput({ tiendaId: undefined }), MAESTRO);
-    expect(r.status).toBe("validation_error");
-  });
-});
-
-// ---------------------------------------------------------------------------------------------
-// Feature 155 — BIFURCACION POR BODEGA en el alta manual. El estado inicial ya no sale de una
-// constante de configuracion ni del payload: sale del flag `fulfillment` de la tienda DUEÑA.
-// ---------------------------------------------------------------------------------------------
-describe("155/R1/R2/R3/R13/R14 — alta manual: donde nace la orden", () => {
-  function argsDeCreate() {
-    const llamada = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0];
-    return { data: llamada[0], historial: llamada[1], opciones: llamada[2] };
-  }
-
-  it("R14: adminTienda con fulfillment=false -> nace en por_recolectar_en_tienda CON guia", async () => {
-    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearInput(), TIENDA);
-
-    expect(r.status).toBe("ok");
-    // R14: el predicado se evalua sobre la tienda que su rol le fuerza (el actor).
-    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith("store1");
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
-    expect(argsDeCreate().opciones).toEqual({ conGuia: true });
-  });
-
-  it("R2: adminTienda con fulfillment=true -> nace en en_preparacion SIN guia", async () => {
-    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearInput(), TIENDA);
-
-    expect(r.status).toBe("ok");
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
-    expect(argsDeCreate().opciones).toEqual({ conGuia: false });
-  });
-
-  it("R13: maestro creando PARA una tienda evalua el flag de ESA tienda, no el suyo", async () => {
-    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearInput({ tiendaId: OTRA_TIENDA_ID }), MAESTRO);
-
-    expect(r.status).toBe("ok");
-    // El actor es `m1` (maestro) y la tienda dueña es `store2`: se pregunta por la DUEÑA.
-    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith(OTRA_TIENDA_ID);
-    expect(repo.findUsuarioFulfillment).not.toHaveBeenCalledWith("m1");
-    expect(argsDeCreate().data.tiendaId).toBe(OTRA_TIENDA_ID);
-  });
-
-  it("R13: admin creando para una tienda sin fulfillment tambien cae en la rama con guia", async () => {
-    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearInput({ tiendaId: OTRA_TIENDA_ID }), ADMIN);
-
-    expect(r.status).toBe("ok");
-    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith(OTRA_TIENDA_ID);
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
-    expect(argsDeCreate().opciones).toEqual({ conGuia: true });
-  });
-
-  it("R5: un estatusId arbitrario en la entrada NO altera donde nace la orden", async () => {
-    repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(
-      crearInput({ estatusId: "os-entregada-inyectado" }),
-      TIENDA,
-    );
-
-    expect(r.status).toBe("ok");
-    // Manda el flag, no el payload: ni se consulta el id recibido ni se usa.
-    expect(repo.existsEstatus).not.toHaveBeenCalled();
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
-    expect(argsDeCreate().data.estatusId).toBe("os-bodega");
-    expect(argsDeCreate().data.estatusId).not.toBe("os-entregada-inyectado");
-  });
-
-  it("R9: la creacion NUNCA asigna mensajero (en ninguna de las dos ramas)", async () => {
-    for (const fulfillment of [true, false]) {
-      repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(fulfillment) });
-      service = new OrdenService(repo, intentos);
-      await service.crear(crearInput(), TIENDA);
-      expect(argsDeCreate().data).not.toHaveProperty("mensajeroAsignadoId");
-    }
-  });
-
-  it("R10: deja historial de creacion con la familia de la via (creacion_manual)", async () => {
-    const r = await service.crear(crearInput(), TIENDA);
-    expect(r.status).toBe("ok");
-    expect(argsDeCreate().historial).toEqual({
-      actorUsuarioId: "store1",
-      origenTipo: "creacion_manual",
-    });
-  });
-
-  it("R7: catalogo sin el value de la rama resuelta -> validation_error que lo NOMBRA, sin crear", async () => {
-    repo = buildRepo({
-      findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
-      findEstatusIdByValue: vi.fn().mockResolvedValue(null),
-    });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearInput(), TIENDA);
-
-    expect(r.status).toBe("validation_error");
-    if (r.status === "validation_error") {
-      expect(r.fieldErrors.estatusId?.[0]).toContain("por_recolectar_en_tienda");
-    }
-    expect(repo.create).not.toHaveBeenCalled();
-  });
-});
-
-describe("crear — validacion de FKs y defaults", () => {
-
-  it("R26/R12: geografia inexistente -> validation_error por campo, no crea", async () => {
-    repo = buildRepo({
-      existsGeo: vi
-        .fn()
-        .mockResolvedValue({ zona: false, provincia: true, canton: false, distrito: true }),
-    });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearInput(), TIENDA);
-    expect(r.status).toBe("validation_error");
-    if (r.status === "validation_error") {
-      expect(r.fieldErrors).toHaveProperty("zonaId");
-      expect(r.fieldErrors).toHaveProperty("cantonId");
-      expect(r.fieldErrors).not.toHaveProperty("provinciaId");
-    }
-    expect(repo.create).not.toHaveBeenCalled();
-  });
-
-  // Feature 155/R5/R15: el caso "estatusId provisto inexistente" DEJO DE EXISTIR como camino
-  // (la entrada ya no expone estatus inicial). Se conserva su contraparte: una entrada con un
-  // `estatusId` que no existe en el catalogo YA NO produce validation_error — se ignora — y la
-  // orden nace donde manda el flag. El resto de resultados de dominio del alta manual (entrada
-  // invalida, rol no autorizado, duplicado) NO cambia: sus tests siguen vivos en este archivo.
-  it("R5/R15: un estatusId inexistente en la entrada se IGNORA y la orden se crea igual", async () => {
-    repo = buildRepo({ existsEstatus: vi.fn().mockResolvedValue(false) });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearInput({ estatusId: "os-x" }), TIENDA);
-    expect(r.status).toBe("ok");
-    expect(repo.existsEstatus).not.toHaveBeenCalled();
-    expect(repo.create).toHaveBeenCalledTimes(1);
-  });
-
-  it("R28: num_remision duplicado -> conflict", async () => {
-    repo = buildRepo({
-      create: vi.fn().mockRejectedValue(new NumRemisionDuplicadoError("REM-1")),
-    });
-    service = new OrdenService(repo, intentos);
-
-    const r = await service.crear(crearInput(), TIENDA);
-    expect(r.status).toBe("conflict");
-  });
-});
-
-describe("obtener", () => {
-  it("R20: maestro obtiene cualquier orden", async () => {
-    const r = await service.obtener("ord-1", MAESTRO);
-    expect(r.status).toBe("ok");
-  });
-
-  it("R21: adminTienda obtiene la suya", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(dto({ tiendaId: "store1" })) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.obtener("ord-1", TIENDA);
-    expect(r.status).toBe("ok");
-  });
-
-  it("R21/R29: adminTienda con orden ajena -> not_found", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(dto({ tiendaId: "store2" })) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.obtener("ord-1", TIENDA);
-    expect(r.status).toBe("not_found");
-  });
-
-  it("R29/R34: inexistente o borrada -> not_found", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.obtener("x", MAESTRO);
-    expect(r.status).toBe("not_found");
-  });
-
-  it("R24: rol desconocido -> forbidden", async () => {
-    const r = await service.obtener("ord-1", DESCONOCIDO);
-    expect(r.status).toBe("forbidden");
-  });
-});
+// BORRADO 2026-08-07 (tanda 2 del chore de deuda de superficie): aqui vivian los bloques de
+// `crear` (matriz de autorizacion R20-R24, alta manual de la feature 155, validacion de FKs) y
+// de `obtener`. Los metodos se retiraron de `OrdenService` al quedarse sin llamador. NO se
+// pierde ninguna regla viva, y se comprobo una a una antes de borrar:
+//
+//   - la bifurcacion por bodega de la 155 (donde NACE la orden) tiene TRES testigos vivos:
+//     `bulk-orden-service.test.ts` (R16, las dos ramas), `bulk-orden-service.carga-api.test.ts`
+//     (la via API key) y `destino-creacion.test.ts` (la funcion de decision, aislada);
+//   - «adminSatelite no puede crear» sigue afirmada sobre `BulkOrdenService.cargarMasiva` en
+//     `rol-admin-satelite-authz.test.ts`, que es la via VIVA de creacion;
+//   - R24 (rol desconocido -> forbidden) conserva su testigo en el bloque de `listar`, abajo.
 
 describe("listar", () => {
   it("R30: devuelve items/page/pageSize/total", async () => {
@@ -725,99 +486,8 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
   });
 });
 
-describe("actualizar", () => {
-  it("R37: maestro aplica solo los campos presentes y delega", async () => {
-    const r = await service.actualizar("ord-1", { producto: "Nuevo", notas: "x" }, MAESTRO);
-    expect(r.status).toBe("ok");
-    const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(data).toEqual({ producto: "Nuevo", notas: "x" });
-  });
-
-  it("R23/R41: mensajero solo estatusId -> ok", async () => {
-    const r = await service.actualizar("ord-1", { estatusId: "os-entregada" }, MENSAJERO);
-    expect(r.status).toBe("ok");
-    const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(data).toEqual({ estatusId: "os-entregada" });
-  });
-
-  it("R23: mensajero con otro campo -> forbidden, no actualiza", async () => {
-    const r = await service.actualizar(
-      "ord-1",
-      { estatusId: "os-entregada", producto: "Hack" },
-      MENSAJERO,
-    );
-    expect(r.status).toBe("forbidden");
-    expect(repo.update).not.toHaveBeenCalled();
-  });
-
-  it("R21: adminTienda actualiza la suya", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(dto({ tiendaId: "store1" })) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.actualizar("ord-1", { producto: "N" }, TIENDA);
-    expect(r.status).toBe("ok");
-  });
-
-  it("R21: adminTienda sobre orden ajena -> forbidden", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(dto({ tiendaId: "store2" })) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.actualizar("ord-1", { producto: "N" }, TIENDA);
-    expect(r.status).toBe("forbidden");
-    expect(repo.update).not.toHaveBeenCalled();
-  });
-
-  it("R36/R40: orden inexistente/borrada -> not_found", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.actualizar("x", { producto: "N" }, MAESTRO);
-    expect(r.status).toBe("not_found");
-  });
-
-  it("R38: estatusId inexistente -> validation_error", async () => {
-    repo = buildRepo({ existsEstatus: vi.fn().mockResolvedValue(false) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.actualizar("ord-1", { estatusId: "os-x" }, MAESTRO);
-    expect(r.status).toBe("validation_error");
-    expect(repo.update).not.toHaveBeenCalled();
-  });
-});
-
-describe("borrar", () => {
-  it("R39: maestro borra (soft delete) -> ok", async () => {
-    const r = await service.borrar("ord-1", MAESTRO);
-    expect(r.status).toBe("ok");
-    expect(repo.softDelete).toHaveBeenCalledWith("ord-1");
-  });
-
-  it("R41: mensajero no puede borrar -> forbidden", async () => {
-    const r = await service.borrar("ord-1", MENSAJERO);
-    expect(r.status).toBe("forbidden");
-    expect(repo.softDelete).not.toHaveBeenCalled();
-  });
-
-  it("R21: adminTienda borra la suya", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(dto({ tiendaId: "store1" })) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.borrar("ord-1", TIENDA);
-    expect(r.status).toBe("ok");
-  });
-
-  it("R21: adminTienda sobre ajena -> forbidden", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(dto({ tiendaId: "store2" })) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.borrar("ord-1", TIENDA);
-    expect(r.status).toBe("forbidden");
-    expect(repo.softDelete).not.toHaveBeenCalled();
-  });
-
-  it("R40: inexistente/borrada -> not_found", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    service = new OrdenService(repo, intentos);
-    const r = await service.borrar("x", MAESTRO);
-    expect(r.status).toBe("not_found");
-  });
-
-  it("R24: rol desconocido -> forbidden", async () => {
-    const r = await service.borrar("ord-1", DESCONOCIDO);
-    expect(r.status).toBe("forbidden");
-  });
-});
+// BORRADO 2026-08-07 (tanda 2): aqui vivian los bloques de `actualizar` y `borrar`, retirados
+// de `OrdenService` con sus Server Actions. Las ediciones reales de una orden pasan por los
+// servicios de dominio —guia, asignacion, recepcion, devoluciones, incidencias—, cada uno con
+// su propia suite y su propia matriz de autorizacion. R21 (adminTienda solo las suyas) y R24
+// conservan testigo en el bloque de `listar`.

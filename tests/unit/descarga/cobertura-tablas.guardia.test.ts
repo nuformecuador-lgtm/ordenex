@@ -64,8 +64,16 @@ const ARBOLES_UI = ["app", "components"] as const;
 // `components/private/analytics/TablaResumen`, de la 130). Los números se leyeron del ÁRBOL
 // —la guardia se vio fallar con `31 recibido / 29 esperado` antes de tocarlos—, no de ningún
 // documento. Censo total: 33 tablas = 32 `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 31;
-const TOTAL_INSTANCIAS_DATATABLE = 32;
+//
+// chore «borrar código muerto de UI» (2026-08-07): 31 → 30 archivos y 32 → 31 instancias. La
+// que falta NO es una tabla que se haya dejado de vigilar: es `ZonasModule.tsx`, borrada por
+// decisión humana junto con `ZonaForm` y `zonas-columns` porque NINGUNA ruta la montaba (no
+// existe `configuracion/zonas/page.tsx`). Estaba censada `fuera` por ese mismo motivo, así
+// que baja también el nº de exclusiones con `<DataTable>` (6 → 5) y el censo total (33 → 32).
+// El caso es idéntico al de `OrdenesApartado.tsx` del 2026-07-31, con una diferencia que
+// importa: aquélla descargaba y ésta no, así que aquí NO se pierde ninguna descarga.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 30;
+const TOTAL_INSTANCIAS_DATATABLE = 31;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -227,19 +235,23 @@ describe("guardia de cobertura del censo de tablas", () => {
   });
 
   it("las tablas declaradas fuera de alcance no montan control de descarga", () => {
-    // R2. Las siete exclusiones vigentes: seis `<DataTable>` y la `<table>` cruda del podio.
+    // R2. Las seis exclusiones vigentes: cinco `<DataTable>` y la `<table>` cruda del podio.
     // Ninguna puede acabar ofreciendo la descarga "de paso".
     //
-    // Feature 172 (T H.1): la sexta `<DataTable>` excluida es `TablaResumen` (analítica),
-    // que el recorrido viejo no veía. No es una decisión de alcance nueva de la 172: es una
+    // Feature 172 (T H.1): entre las excluidas entró `TablaResumen` (analítica), que el
+    // recorrido viejo no veía. No es una decisión de alcance nueva de la 172: es una
     // tabla preexistente que pasa a estar vigilada.
+    //
+    // chore «borrar código muerto de UI» (2026-08-07): 6 → 5 `<DataTable>` excluidas. Sale la
+    // de `ZonasModule`, borrada con su módulo. Ninguna decisión de alcance cambia: se retira
+    // el archivo que la contenía, no la razón por la que estaba fuera.
     const instancias = instanciasDelArbol();
     const registro = registroPorRuta(CENSO_DATATABLE);
 
     const excluidas = instancias.filter(
       (inst) => registro.get(inst.ruta)?.tablas[inst.indice]?.estado === "fuera",
     );
-    expect(excluidas.length).toBe(6);
+    expect(excluidas.length).toBe(5);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -259,11 +271,12 @@ describe("guardia de cobertura del censo de tablas", () => {
       }
     }
 
-    // El censo total vigente: 32 instancias + 1 tabla cruda = 33 tablas (feature 172, T H.1).
+    // El censo total vigente: 31 instancias + 1 tabla cruda = 32 tablas (feature 172, T H.1,
+    // menos `ZonasModule`, borrada el 2026-08-07 con el árbol de zonas sin montar).
     const totalCensado =
       CENSO_DATATABLE.reduce((n, e) => n + e.tablas.length, 0) +
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
-    expect(totalCensado).toBe(33);
+    expect(totalCensado).toBe(32);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -302,8 +315,12 @@ describe("guardia de cobertura del censo de tablas", () => {
     // Feature 172 (T H.1): 25 → 26 y 6 → 7 al abrir el recorrido a `components/`. La de más
     // dentro de alcance es la lista de comprobantes de la liquidación (nace `con_descarga`);
     // la de más fuera es `TablaResumen`, preexistente y sin consumidor montado.
+    //
+    // chore «borrar código muerto de UI» (2026-08-07): 7 → 6 fuera de alcance, y las 26
+    // dentro de alcance NO se mueven. Esa asimetría es el dato: lo borrado (`ZonasModule`)
+    // era una exclusión declarada, no una tabla que descargara — ninguna descarga se pierde.
     expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(26);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(7);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(6);
   });
 
   it("una tabla compartida declara TODAS las pantallas que la montan", () => {
