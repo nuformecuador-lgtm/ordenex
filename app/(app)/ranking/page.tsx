@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AppPage } from "@/components/shared/AppPage";
+import { buttonVariants } from "@/components/ui/button";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { obtenerRankingAction } from "@/lib/actions/ranking";
@@ -35,10 +37,24 @@ export default async function RankingPage() {
   const result = await obtenerRankingAction();
   if (result.status !== "ok") notFound(); // defensa en profundidad (R18)
 
+  // Feature 196 (T4.5): ÚNICO cambio de esta pantalla — el enlace al histórico congelado.
+  // `obtenerRanking` y `editarPremio` siguen exactamente igual (R36). Es un `<Link>` con el
+  // estilo del botón (patrón `PostulacionForm`) y no un `<Button onClick>`: navegar es un
+  // enlace, y así funciona con el clic central y el «abrir en pestaña nueva».
+  const enlaceHistorico = (
+    <Link
+      href="/ranking/historico"
+      className={buttonVariants({ variant: "brand-outline" })}
+    >
+      Histórico
+    </Link>
+  );
+
   return (
     <AppPage
       title="Ranking"
       description="Ranking diario de mensajeros por entregas exitosas y premios del podio"
+      actions={enlaceHistorico}
     >
       <div className="flex flex-col gap-8">
         {/* Rediseño en evaluación: podio visual + lista. Solo-lectura.

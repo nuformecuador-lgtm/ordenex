@@ -39,6 +39,16 @@ function soloCodigo(fuente: string): string {
     .replace(/(^|\s)\/\/.*$/gm, "$1");
 }
 
+/**
+ * Deja de un `.sql` solo las sentencias que CAMBIAN el esquema: fuera los comentarios `--` y
+ * fuera los `COMMENT ON ... IS '...'`, que son documentacion escrita EN la base. Las dos
+ * cosas nombran tablas de las que la migracion habla sin tocarlas (`premio_ranking`, y de eso
+ * va justo este censo), y exigirles silencio obligaria a migraciones mudas.
+ */
+function soloSentenciasDdl(sql: string): string {
+  return sql.replace(/^\s*--.*$/gm, "").replace(/COMMENT\s+ON[\s\S]*?'[\s\S]*?';/g, "");
+}
+
 /** Normaliza espacios para que el censo no dependa del formato del literal. */
 function sinEspacios(fuente: string): string {
   return fuente.replace(/\s+/g, "");
@@ -110,13 +120,38 @@ describe("RankingService · ventana del dia natural CR (166)", () => {
     expect(sinDefaultDeNow("const ahora = new Date();")).toMatch(/new\s+Date\s*\(\s*\)/);
   });
 
-  it("no hay migracion nueva de ranking/premio y premio_ranking no cambia (R16)", () => {
+  it("las migraciones del modulo son las censadas y ninguna toca premio_ranking (R16)", () => {
     const migracionesDelModulo = fs
       .readdirSync(DIR_MIGRACIONES)
       .filter((d) => /ranking|premio/i.test(d))
       .sort();
-    // La unica es la que creo la tabla en la feature 76: la 166 no migra nada.
-    expect(migracionesDelModulo).toEqual(["20260716130000_premio_ranking"]);
+    // Lista ACTUALIZADA el 2026-08-10 por la feature 196 (snapshot diario del ranking), que
+    // añade la segunda migracion del modulo: dos tablas NUEVAS de historico congelado.
+    //
+    // Lo que este caso protege NO es "que no haya migraciones" —eso era cierto mientras la
+    // 166 fue la ultima, y no es lo que importa—, sino lo de siempre: que la tabla
+    // `premio_ranking` de la feature 76 siga intacta y que nadie mueva la ventana del dia CR
+    // por la puerta de una migracion. Por eso, ademas de la lista, se censa lo que TOCA cada
+    // migracion nueva. Una tercera entrada aqui exige mirarla a mano antes de ampliarla.
+    expect(migracionesDelModulo).toEqual([
+      "20260716130000_premio_ranking",
+      "20260811120000_ranking_snapshot",
+    ]);
+
+    // La migracion de la 196 es ADITIVA: solo crea/altera sus dos tablas propias. Se mide el
+    // codigo, no la prosa: el `.sql` explica por escrito de que tabla NO habla, y un censo
+    // que leyera esa frase como infraccion obligaria a borrar la explicacion.
+    const sql = soloSentenciasDdl(
+      fs.readFileSync(
+        path.join(DIR_MIGRACIONES, "20260811120000_ranking_snapshot", "migration.sql"),
+        "utf8",
+      ),
+    );
+    expect(sql).not.toMatch(/premio_ranking/);
+    expect(sql).not.toMatch(/\bDROP\b/i);
+    for (const [, tabla] of sql.matchAll(/(?:CREATE|ALTER)\s+TABLE\s+"([a-z_]+)"/gi)) {
+      expect(["ranking_snapshot_dia", "ranking_snapshot_fila"]).toContain(tabla);
+    }
 
     const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
     const modelo = /model PremioRanking \{[\s\S]*?\n\}/.exec(schema)?.[0] ?? "";
