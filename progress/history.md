@@ -2853,6 +2853,41 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   R12 solo mata su mutación si la fecha huérfana permanece. Ninguna se ensanchó: son de
   features `done`.
 
+## 2026-08-04 — 176 · modo agregado de tasas y tiempos
+- Métricas **no sumables** por período: el servicio devuelve **numerador y denominador**
+  (o los acumuladores de tiempo) por cubo, para que el consumidor **sume antes de dividir**.
+  Anotada el 2026-08-05: el PR #285 se mergeó sin pasar por aquí.
+- Requisitos cubiertos: R1–R19. 19 mutaciones del implementer + **19 aplicadas por el
+  reviewer por su cuenta, todas muertas**. Gate: `./init.sh` verde, 925 archivos / 11.485
+  tests, cero rojos.
+- El problema, y por qué no bastaba con que sumara el cliente: la 126 devuelve **el
+  cociente ya dividido por día**, y promediar cocientes es **media de medias** —mal en
+  cuanto los días tienen volúmenes distintos—. Por eso R27 de la 131 dejó esos paneles sin
+  serie **ni cifra** por encima de 62 puntos: se prefirió el hueco declarado a una cifra
+  falsa en pantalla. Y para `tiempo_ciclo` era **imposible desde fuera**: `seg_ciclo_acum`
+  y `seg_ciclo_n` existían en `CuboRollup` y **morían en `valorDe`**; nadie podía sumarlos
+  porque nadie los veía.
+- LO QUE SOBREVIVE, y no es de esta feature: **un test cuyos datos están equilibrados no
+  prueba una fórmula de agregación.** Con volúmenes iguales, sumar-antes-de-dividir y
+  media-de-medias **dan lo mismo**. Los datos se eligieron deliberadamente desiguales
+  (día 1: 1/1; día 2: 9/99 ⇒ 0,10 frente a 0,5455) y cada test **afirma el valor correcto
+  y niega el de la fórmula mala**. Sin esa segunda mitad, una implementación parecida pero
+  incorrecta pasa.
+- Corolario del mismo filo: el test que ya existía para tiempo de ciclo usa **dos zonas del
+  mismo día**, un caso que la 126 ya resuelve bien. **Quien lo hubiera copiado como
+  plantilla habría escrito un test que pasa con la implementación mala.** Por eso T4.2
+  exigía días distintos con criterio de «no hecho» explícito.
+- `aging_por_estado` quedó **reencuadrada**: nunca estuvo afectada por los rangos largos.
+  Es la única métrica `live` del catálogo, tiene una sola fecha —la del corte— y **siempre
+  pinta serie**; lo que no tiene, ni ha tenido nunca en ningún rango, es **cifra total**.
+  Un stock instantáneo no se promedia sobre el tiempo: se agrega sobre la **dimensión**.
+- Un rojo real **se arregló cambiando el código, no el guardia**: un fixture nombraba
+  `en_ruta` y `en_bodega`, dos values retirados por la 153. No se veía corriendo sólo la
+  carpeta de la feature — el censo vive fuera.
+- El primer implementer se colgó tras escribir código y tests **sin verificar ninguna
+  mutación**. Un segundo agente cerró las 19; al reviewer se le avisó de desconfiar de la
+  costura entre ambos y las aplicó por su cuenta. → ficha **182**.
+
 ## 2026-08-05 — 134 · export CSV/XLSX de la analítica operativa
 - El archivo se arma **en el navegador** desde el mismo borde que pinta la pantalla
   (`consultarAnaliticaOperativa`), nunca reconstruyendo el filtro. Cero código de

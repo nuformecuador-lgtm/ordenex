@@ -61,7 +61,7 @@ const PANEL: PanelTablero = {
   id: "tasa-entrega",
   titulo: "Tasa de entrega",
   grafica: "lineas",
-  metricas: [{ metricaId: "tasa_entrega", etiqueta: "Tasa de entrega" }],
+  metricas: [{ metricaId: "tasa_entrega", etiqueta: "Tasa de entrega", unidad: "porcentaje" }],
 };
 
 function serie(puntos: readonly PuntoSerie[]): SerieOperativa {
