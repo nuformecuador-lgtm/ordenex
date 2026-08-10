@@ -134,11 +134,11 @@ describe("NovedadesModule", () => {
       />,
     );
 
-    // total 25 / pageSize 10 = 3 paginas; page 2 de 3.
+    // total 25 / pageSize 10: la pagina 2 cubre los elementos 11 al 20.
     expect(
       screen.getByRole("navigation", { name: "Paginación de novedades" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Página 2 de 3")).toBeInTheDocument();
+    expect(screen.getByText("11-20 de 25")).toBeInTheDocument();
   });
 
   // ---------- Feature 100 (T3.1/T3.2) — Reprogramar ----------
