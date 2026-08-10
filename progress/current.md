@@ -9,7 +9,68 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🔴 EN CURSO 2026-08-08 — feature **192**, fase 1 (spec)
+## 🏁 2026-08-10 — **PRE-VUELO DE LA RELEASE HECHO** — EMPIEZA A LEER POR AQUÍ
+
+### 🚦 LO PRIMERO: la release `dev → prod` está lista y **sin abrir**
+
+**Cero PRs abiertos.** `dev` va **6 commits por delante de `prod`** y arrastra la **187** (el total y su
+desglose bajo un mismo snapshot) y la **192** (tablero del día por mensajero, ítem «Monitoreo»).
+Producción sigue en el **#321 del 07-ago**. **Cero migraciones**, verificado sobre el diff
+`origin/prod...origin/dev`: mergear no aplica nada.
+
+### ✅ El gate completo, corrido hoy sobre `dev` (`ae6b65c5`)
+
+**1015 archivos / 12.584 tests / 1 rojo.** Typecheck y lint verdes (0 errores, 50 warnings).
+El rojo es **el flake de jsdom**: `TableroOperativo.test.tsx` a **22.073 ms** (timeout de 20 s),
+**verde 43/43 en 6,04 s en aislado**. Mismo archivo que tumbó el pre-vuelo del 07-ago. Sigue sin dueño.
+
+### 🔎 Los 12 rojos que bloqueaban la 192 YA NO EXISTEN — y lo reutilizable es cómo se comprobó
+
+`review_192.md §7` los atribuía a drift de `busqueda_texto` en la base local. **Medido hoy: no hay
+drift.** La expresión viva de la columna generada coincide carácter por carácter con
+`20260731160000_orden_busqueda_trgm`, y `producto` aparece **0 veces**. **Producción, consultada por
+MCP, tiene exactamente la misma expresión.** El árbol nunca tuvo `producto`: ese `migration.sql` tiene
+**un solo commit** y ninguna otra migración la redefine.
+
+> ⚠️ **Honestidad sobre lo que NO sé:** no puedo decir POR QUÉ desapareció entre el 09 y el 10; la base
+> local cambió y nadie lo anotó. Lo que sí está medido es el estado de hoy, en las dos bases.
+>
+> **Y «verde» no bastaba para creerlo:** esos tests abren con `if (!fks) return;` y con la tabla vacía
+> se reportan *passed* sin comprobar nada. **Mutación de control** (quitar el `.toLowerCase()` de
+> `busqueda-orden.ts`): **11 de 16 rojos**. Tienen dientes. Restauración verificada **por hash idéntico**.
+
+### 🔎 Auditoría del backlog contra el código: **ninguna de las 17 está resuelta**, pero CINCO fichas describen un mundo que ya no existe
+
+| Ficha | Lo que dice la ficha | Lo que dice el código |
+| --- | --- | --- |
+| **191** | el N+1 de `filasDelConjuntoCompleto` | ese símbolo tiene **0 ocurrencias**: la 188 cambió el mecanismo. El N+1 sigue, pero hay que re-localizarlo |
+| **168** | no enviar WhatsApp sobre estados no elegibles | el camino que la motivaba (`enviarPlantillaWhatsapp`, Meta) **se borró el 07-ago**. Quedan wa.me y el chat; el chat filtra por plantilla activa, **nadie filtra por estado de la orden** |
+| **74** | mostrar Y agrupar la causa de devolución | **agrupar ya existe**: `causa_devolucion` es grano de la analítica operativa (`metrics.ts:364`). Falta solo mostrarla |
+| **165** | crédito de indemnización en el ledger | la 158 ya construye el **egreso** (`WalletIndemnizacionFeedService`); el **crédito por tienda** no existe |
+| **190** | `listarRecepcionSatelite` devuelve los cinco grupos | ya hay sustituto paginado para esa tabla, pero `page.tsx:30` **sigue llamándolo** |
+
+Las otras doce, verificadas una a una, están intactas: **70** (el `TODO:` sigue), **80**
+(`StubEmailProvider` con `console.info`), **85** (las columnas excluyen `periodicidadUnidad`/
+`periodicidadCantidad`), **145** (37 consumidores de `DataTable`, **4** con búsqueda), **147**, **162**
+(cero rastro de `Notification`), **174** («PROVISIONAL Y NO MEDIDA», 20.000), **179** (el tag declarado,
+sin un envoltorio ni una invalidación), **181**, **182** (`consultarAgregadoOperativo` **sin un solo
+consumidor**), **71**, **184**.
+
+### ⏳ LO QUE QUEDA VIVO
+
+1. **Abrir y mergear la release** (arriba). Decisión humana.
+2. **F4.1 de la 192**: la comprobación **a mano** del flujo en pantalla. La firma una persona, no un grep.
+   Por eso la ficha sigue `in_progress` con el código ya mergeado.
+3. **VER LA 172 Y LA 173 EN PANTALLA.** Octava jornada.
+4. Del cierre del 07-ago siguen vivas: el **Excel de cuentas por pagar** («Devengado»/«Pagado» incluyen
+   anulados y su reverso, sin el aviso que la pantalla sí lleva), la **guardia hermana de columnas**
+   (`censo-tablas.ts` vigila tablas, no listados) y el **flake de jsdom**.
+   **La deuda nº 2 de aquel cierre —la ficha 161 caducada— YA ESTÁ SALDADA**: su nota dice hoy que ni
+   la ruta `chat-demo/` ni el contador existen.
+
+---
+
+## 2026-08-08 — la 192, fase 1 (spec) · **SUPERADA por la sección de arriba: ya está mergeada**
 
 **Tablero del día: órdenes por mensajero y el resultado de su gestión.** Pedido humano de hoy.
 Ficha registrada en `feature_list.json` (`id: 192`, `pending`, `fullstack`, `sdd: true`).
