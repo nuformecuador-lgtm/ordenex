@@ -254,3 +254,59 @@ arbol limpio.
    espera a los cubos y mientras tanto esta en carga—; solo queda alcanzable si el servidor
    responde `ok` con cero cubos para un rango de mas de 62 fechas, que es una incoherencia real y no
    un estado de negocio.
+
+---
+
+## 6. Aterrizaje (2026-08-10, leader)
+
+La rama llevaba desde el **2026-08-05** completa y **varada**: sin pushear, sin reviewer y sin
+PR, con la ficha de `dev` diciendo `pending` y **221 commits** de retraso.
+
+### 6.1 Merge de `dev` — dos conflictos, ninguno ambiguo
+
+| Archivo | Choque | Resolucion |
+|---|---|---|
+| `catalogo-paneles.ts` | `dev` puso las **tildes** en las etiquetas; la 182 anadio **`unidad`** | Las DOS cosas. Quedarse con un lado borraba trabajo ajeno o desarmaba el acotamiento de R15 |
+| `feature_list.json` | La ficha que esta rama dio de alta como **185** choca con la que `dev` publico ahi (el oraculo de conteo, cancelada) | Se renumera **la que nunca circulo -> 194**, conservando contenido. Mismo criterio que 185->186->187. Se salta el 193: otra sesion lo ocupo hoy |
+
+Las notas de la **134** y la **176** se **unieron**: `dev` y esta rama cerraron la misma ficha con
+evidencia distinta y complementaria. No se perdio ninguna de las dos.
+
+### 6.2 Lo que solo aparecio con `dev` dentro
+
+1. **`presentacion-etiquetas-mensajero.test.ts`** (llego con `dev` despues de que esta rama
+   naciera) construia un `MetricaDePanel` sin `unidad`, que la 182 volvio obligatoria: rompia el
+   **typecheck**. Lleva `conteo`, la unidad inocua — ese caso mide desagregacion, no unidad.
+2. **`AnaliticaNoSustitucion.test.tsx`** (feature 133) doblaba el modulo de acciones exportando
+   **solo** `consultarAnaliticaOperativa`. Desde la 182 el panel tambien pide
+   `consultarAgregadoOperativo`, que en ese doble llegaba `undefined`: el panel caia en su pixel
+   de error y **tapaba el denegado que el caso mide**. No bastaba con doblarla: **R21 afirma una
+   NO-DIFERENCIA sobre «la puerta que toca el dato», y ahora son DOS**. `llamadasAlBorde()` recorre
+   las dos —con el `grano` dentro de la normalizacion—, el conteo se **deriva del catalogo** en vez
+   de ir tecleado, y `montar()` espera tambien a los cubos (sin esa espera la comparacion entre
+   recortes compara **carreras**, no consultas).
+3. **`consultarAgregadoOperativo` seguia anotada `@sin-superficie`** («nacio sin cablear y sigue
+   asi»). **Esta feature ES su superficie.** La anotacion se retira aqui, no en un barrido
+   posterior: una excusa que sobrevive a su motivo deja de avisar y pasa a mentir. Lo pone rojo
+   `tests/unit/guards/superficie-de-uso.guardia.test.ts`, que hizo exactamente su trabajo.
+
+### 6.3 Gate completo (`./init.sh`) sobre el arbol mergeado
+
+**1015 de 1017 archivos verdes · 12.596 de 12.608 tests · typecheck y lint limpios · cero flakes.**
+
+Los **12 rojos** son los dos archivos de `busqueda-*` de siempre, y esta vez **con causa raiz
+identificada, que no es la que decian las bitacoras de la 187 y la 192**:
+
+> La migracion **`20260808120000_orden_busqueda_producto` existe SOLO en la rama `ux`**
+> (commit `f74462f9`, WIP del humano) y **esta aplicada a la base local compartida**. Por eso la
+> columna generada viva incluye `producto` y el normalizador de Node de `dev` no.
+> No es «drift de la base local» ni deuda de `dev`: es una rama sin mergear que ya toco la base.
+> **Se va sola en cuanto esa migracion llegue a `dev`**; recrear la columna a mano la
+> desincronizaria de `ux`.
+
+Inocencia de esta rama, por construccion: no toca busqueda, ni SQL, ni una migracion.
+
+### 6.4 Lo que falta
+
+- **Reviewer (F2.2): NO ha corrido.** Es la puerta que verifica la trazabilidad `R<n> -> test`.
+- **Push y PR**: la rama sigue siendo local.
