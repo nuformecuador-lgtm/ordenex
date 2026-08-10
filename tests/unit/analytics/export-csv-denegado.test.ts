@@ -31,14 +31,14 @@ const PANEL: PanelTablero = {
   titulo: "Egresos",
   grafica: "lineas",
   // Una metrica del DINERO: un `adminTienda` pidiendola es `metrica_prohibida`, garantizado.
-  metricas: [{ metricaId: "egresos", etiqueta: "Egresos" }],
+  metricas: [{ metricaId: "egresos", etiqueta: "Egresos", unidad: "moneda" }],
 };
 
 const PANEL_OK: PanelTablero = {
   id: "ordenes-creadas",
   titulo: "Ordenes creadas",
   grafica: "lineas",
-  metricas: [{ metricaId: "ordenes_creadas", etiqueta: "Ordenes creadas" }],
+  metricas: [{ metricaId: "ordenes_creadas", etiqueta: "Ordenes creadas", unidad: "conteo" }],
 };
 
 const FILTRO: FiltroTablero = {

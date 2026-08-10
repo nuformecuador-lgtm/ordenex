@@ -13,7 +13,12 @@ import { categoriaDePunto } from "@/app/(app)/analitica/_components/operativo/te
 import { MAX_PUNTOS_SERIE, MAX_SERIES, prepararSeries } from "@/components/private/analytics/topes";
 import type { SerieDato } from "@/components/private/analytics/tipos";
 import type { MetricaUnidad } from "@/lib/analytics/types";
-import { PENUMBRA, type PuntoSerie, type SerieOperativa } from "@/lib/types/analitica-operativa";
+import {
+  PENUMBRA,
+  type CuboAgregado,
+  type PuntoSerie,
+  type SerieOperativa,
+} from "@/lib/types/analitica-operativa";
 
 // Feature 131 (T1.2) — R9, R15, R16, R17, R18, R20.
 //
@@ -45,6 +50,11 @@ function serie(
 
 function fuente(s: SerieOperativa, etiqueta = "Entregas"): FuenteSerie {
   return { etiqueta, serie: s };
+}
+
+/** Un cubo del servidor (176) con su `valor` YA calculado: la UI no divide. */
+function cubo(fecha: string, valor: number | null): CuboAgregado {
+  return { fecha, desdeFecha: fecha, hastaFecha: fecha, numerador: 0, denominador: 10, valor };
 }
 
 /** `n` dias consecutivos desde `2026-01-01`, con valor 1 cada uno. */
@@ -115,10 +125,13 @@ describe("Feature 131 (R20) — el dato ausente se propaga", () => {
   });
 
   it("la agregacion semanal tampoco convierte el ausente en cero", () => {
-    const cubos = agregarPorSemana([
-      { fecha: "2026-01-05", valor: null },
-      { fecha: "2026-01-06", valor: null },
-    ]);
+    const cubos = agregarPorSemana(
+      [
+        { fecha: "2026-01-05", valor: null },
+        { fecha: "2026-01-06", valor: null },
+      ],
+      "conteo",
+    );
     expect(cubos).toHaveLength(1);
     expect(cubos[0]?.valor).toBeNull();
   });
@@ -194,51 +207,78 @@ describe("Feature 131 (R16) — por encima del techo, los conteos se agregan", (
 });
 
 describe("Feature 131 (R17) — jamas una media de medias", () => {
-  it("una metrica de porcentaje nunca se agrega promediando dias", () => {
+  // REESCRITOS POR LA FICHA 182 (T1.4, R16). Estos dos casos afirmaban el modo de aviso
+  // `rango_excedido`: por encima del techo, un `porcentaje` o un `segundos` no devolvia NI
+  // serie NI cifra, porque calcularlas en el cliente habria sido una media de medias.
+  //
+  // La propiedad que protegian SIGUE VIVA y sigue afirmada aqui —el cliente no promedia
+  // cocientes—; lo que cambio es COMO se cumple: ahora hay una fuente que suma antes de
+  // dividir (176), asi que la serie y la cifra vienen de sus CUBOS. Se reescriben en vez de
+  // borrarse justamente por eso: borrar el caso habria dejado la propiedad sin vigilar.
+  it("una metrica de porcentaje nunca se agrega promediando dias: se pinta con los cubos del servidor", () => {
     const preparado = prepararPanel(
       [fuente(serie(diasSeguidos(90, "porcentaje"), "porcentaje", "tasa_entrega"))],
       OPCIONES,
+      {
+        semana: [cubo("2026-01-05", 0.2), cubo("2026-01-12", 0.4)],
+        periodo: [cubo("2026-01-01", 0.31)],
+      },
     );
 
-    // NI serie NI cifra (R27/D3): el servicio ya dividio por dia, y promediar cocientes
-    // reintroduce por la UI la media de medias que `AnaliticaOperativaService` evita.
-    expect(preparado.modo).toBe("rango_excedido");
-    expect(preparado.series).toEqual([]);
-    expect(preparado.total).toBeNull();
+    expect(preparado.modo).toBe("serie");
+    expect(preparado.desdeCubos).toBe(true);
+    // Las categorias son las FECHAS DE LOS CUBOS, no 13 semanas recalculadas en el cliente.
+    expect(preparado.series[0]?.puntos.map((p) => p.categoria)).toEqual([
+      "2026-01-05",
+      "2026-01-12",
+    ]);
+    expect(preparado.total?.valor).toBe(0.31);
+    // Y la agregacion temporal del cliente sigue sin admitir esta unidad: la unica semana
+    // que toca un `porcentaje` es la que calculo el servidor.
     expect(esAgregableTemporal("porcentaje")).toBe(false);
+    expect(() => agregarPorSemana(diasSeguidos(90, "porcentaje"), "porcentaje")).toThrow();
   });
 
   it("lo mismo con `segundos`: `tiempo_ciclo` tampoco se promedia", () => {
     const preparado = prepararPanel(
       [fuente(serie(diasSeguidos(90, "segundos"), "segundos", "tiempo_ciclo"))],
       OPCIONES,
+      { semana: [cubo("2026-01-05", 900)], periodo: [cubo("2026-01-01", 1234)] },
     );
-    expect(preparado.modo).toBe("rango_excedido");
-    expect(preparado.series).toEqual([]);
-    expect(preparado.total).toBeNull();
+    expect(preparado.modo).toBe("serie");
+    expect(preparado.desdeCubos).toBe(true);
+    expect(preparado.series[0]?.puntos.map((p) => p.valor)).toEqual([900]);
+    expect(preparado.total?.valor).toBe(1234);
     expect(esAgregableTemporal("segundos")).toBe(false);
+    expect(() => agregarPorSemana(diasSeguidos(90, "segundos"), "segundos")).toThrow();
   });
 
   it("por debajo del techo el porcentaje SI pinta serie, con su razon cruda", () => {
     const preparado = prepararPanel(
       [fuente(serie([{ fecha: "2026-08-01", valor: 0.842 }], "porcentaje", "tasa_entrega"))],
       OPCIONES,
+      { periodo: [cubo("2026-08-01", 0.777)] },
     );
     expect(preparado.modo).toBe("serie");
+    expect(preparado.desdeCubos).toBe(false);
     // R19 — cruda: `formato.ts` la pinta como 84,2 %. Multiplicarla aqui daria 8420 %.
     expect(preparado.series[0]?.puntos[0]?.valor).toBe(0.842);
-    // Pero sin total: un total de cocientes es media de medias en cualquier rango.
-    expect(preparado.total).toBeNull();
+    // Y ahora SI hay total, tambien en rango corto: el del cubo `periodo`, que NO es el
+    // valor del punto diario (0,842) ni un promedio de los puntos.
+    expect(preparado.total?.valor).toBe(0.777);
   });
 });
 
 describe("Feature 131 (R18) — el cubo agregado hereda la parcialidad", () => {
   it("el cubo semanal que contiene el dia en curso hereda `parcial` y el `corteAt` mayor", () => {
-    const cubos = agregarPorSemana([
-      { fecha: "2026-08-03", valor: 4 }, // lunes, cerrado
-      { fecha: "2026-08-04", valor: 3 }, // martes, cerrado
-      { fecha: "2026-08-05", valor: 1, parcial: true, corteAt: "2026-08-05T20:35:00.000Z" },
-    ]);
+    const cubos = agregarPorSemana(
+      [
+        { fecha: "2026-08-03", valor: 4 }, // lunes, cerrado
+        { fecha: "2026-08-04", valor: 3 }, // martes, cerrado
+        { fecha: "2026-08-05", valor: 1, parcial: true, corteAt: "2026-08-05T20:35:00.000Z" },
+      ],
+      "conteo",
+    );
 
     expect(cubos).toHaveLength(1);
     expect(cubos[0]?.fecha).toBe("2026-08-03");
@@ -249,10 +289,13 @@ describe("Feature 131 (R18) — el cubo agregado hereda la parcialidad", () => {
   });
 
   it("una semana entera de dias cerrados no se marca parcial", () => {
-    const cubos = agregarPorSemana([
-      { fecha: "2026-08-03", valor: 4 },
-      { fecha: "2026-08-04", valor: 3 },
-    ]);
+    const cubos = agregarPorSemana(
+      [
+        { fecha: "2026-08-03", valor: 4 },
+        { fecha: "2026-08-04", valor: 3 },
+      ],
+      "conteo",
+    );
     expect(cubos[0]?.parcial).toBeUndefined();
   });
 

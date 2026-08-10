@@ -10,11 +10,33 @@ afterEach(() => {
 });
 
 describe("Pagination", () => {
-  it("B1: expone un <nav> accesible y el indicador de posición 'Página X de Y' (R3, R15, R17)", () => {
+  it("B1: expone un <nav> accesible y el indicador de posición '1-25 de 1000' (R3, R15, R17)", () => {
     render(<Pagination page={2} pageSize={10} total={45} ariaLabel="Paginación" />);
     const nav = screen.getByRole("navigation", { name: "Paginación" });
     expect(nav).toBeInTheDocument();
-    expect(within(nav).getByText("Página 2 de 5")).toBeInTheDocument();
+    expect(within(nav).getByText("11-20 de 45")).toBeInTheDocument();
+  });
+
+  it("B1.bis: la última página recorta el rango contra el total, no lo extrapola", () => {
+    // 45 elementos en páginas de 10: la 5ª tiene CINCO filas, no diez. Sin el recorte el
+    // indicador prometería `41-50 de 45`, que además de falso es incoherente consigo mismo.
+    render(<Pagination page={5} pageSize={10} total={45} />);
+    expect(screen.getByText("41-45 de 45")).toBeInTheDocument();
+  });
+
+  it("B1.ter: un conjunto que cabe entero en una página se anuncia completo", () => {
+    render(<Pagination page={1} pageSize={25} total={8} />);
+    expect(screen.getByText("1-8 de 8")).toBeInTheDocument();
+  });
+
+  it("B1.quater: labels.status recibe el pageSize, sin el cual el rango no se puede rehacer (R17)", () => {
+    const status = vi.fn(
+      (page: number, totalPages: number, total: number, pageSize: number) =>
+        `p${page}/${totalPages} · ${pageSize} de ${total}`,
+    );
+    render(<Pagination page={2} pageSize={10} total={45} labels={{ status }} />);
+    expect(status).toHaveBeenCalledWith(2, 5, 45, 10);
+    expect(screen.getByText("p2/5 · 10 de 45")).toBeInTheDocument();
   });
 
   it("B2: los controles siguiente/anterior emiten onPageChange con el número correcto (R4, R16)", async () => {
@@ -99,7 +121,7 @@ describe("Pagination", () => {
 
   it("B7: un page fuera de rango se acota a [1, totalPages] sin lanzar (R9)", () => {
     render(<Pagination page={99} pageSize={10} total={45} />);
-    expect(screen.getByText("Página 5 de 5")).toBeInTheDocument();
+    expect(screen.getByText("41-45 de 45")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
   });
 
@@ -132,9 +154,10 @@ describe("Pagination", () => {
     expect(onPageChange).toHaveBeenCalledWith(3);
   });
 
-  it("B10: dataset vacío (total=0) muestra 'Página 1 de 1' con todos los controles disabled (R13)", () => {
+  it("B10: dataset vacío (total=0) muestra 'Sin resultados' con todos los controles disabled (R13)", () => {
     render(<Pagination page={1} pageSize={10} total={0} showFirstLast />);
-    expect(screen.getByText("Página 1 de 1")).toBeInTheDocument();
+    // Ni `0-0 de 0` ni `1-0 de 0`: el primero es ruido y el segundo es falso.
+    expect(screen.getByText("Sin resultados")).toBeInTheDocument();
     for (const button of screen.getAllByRole("button")) {
       expect(button).toBeDisabled();
     }
@@ -151,7 +174,7 @@ describe("Pagination", () => {
         onPageSizeChange={vi.fn()}
       />,
     );
-    expect(screen.getByText("Página 1 de 1")).toBeInTheDocument();
+    expect(screen.getByText("1-5 de 5")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Página anterior" })).toBeDisabled();
     expect(

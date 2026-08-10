@@ -500,7 +500,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     const nav = within(region).getByRole("navigation", {
       name: "Paginación del desglose de Tienda Norte",
     });
-    expect(within(nav).getByText("Página 1 de 3")).toBeInTheDocument();
+    expect(within(nav).getByText("1-20 de 42")).toBeInTheDocument();
 
     fireEvent.click(within(nav).getByRole("button", { name: "Página siguiente" }));
     await waitFor(() => expect(listarDesgloseMock).toHaveBeenCalledTimes(2));

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { render, screen, within, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
@@ -119,7 +119,7 @@ describe("OrdenesPage — paginación", () => {
     const nav = pagination();
     expect(nav).toBeInTheDocument();
     expect(screen.getByRole("table").contains(nav)).toBe(false);
-    expect(within(nav).getByText("Página 1 de 2")).toBeInTheDocument();
+    expect(within(nav).getByText("1-25 de 45")).toBeInTheDocument();
   });
 
   it("E2: al cambiar de página re-consulta listarOrdenes con la nueva page y renderiza sus filas (R21)", async () => {
@@ -133,7 +133,8 @@ describe("OrdenesPage — paginación", () => {
     await screen.findByText("REM-1026"); // primera fila de la página 2
     expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 2, pageSize: 25 });
     expect(screen.queryByText("REM-1001")).toBeNull();
-    expect(within(pagination()).getByText("Página 2 de 2")).toBeInTheDocument();
+    // Última página: 45 elementos en páginas de 25 ⇒ la 2ª va del 26 al 45, no al 50.
+    expect(within(pagination()).getByText("26-45 de 45")).toBeInTheDocument();
   });
 
   it("E3: el selector ofrece [10,25,50] y cambiar de tamaño vuelve a la página 1 (R33, R34)", async () => {
@@ -156,8 +157,12 @@ describe("OrdenesPage — paginación", () => {
 
     // Cambiar a 50 (distinto del default 25) → vuelve a página 1 con el nuevo tamaño.
     await user.selectOptions(select, "50");
-    await screen.findByText("Página 1 de 2");
-    expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 50 });
+    // Se espera la CONSULTA, no el texto del indicador: el rango se recalcula en cuanto el
+    // pageSize local cambia, así que un texto sería un ancla que depende de en qué punto del
+    // ciclo de SWR caiga la comprobación. Lo que este caso afirma es la re-consulta.
+    await waitFor(() =>
+      expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 50 }),
+    );
   });
 
   it("E4: durante la carga muestra el estado de DataTable y deshabilita los controles sin perder el indicador (R23)", async () => {
@@ -168,8 +173,10 @@ describe("OrdenesPage — paginación", () => {
     for (const button of within(pagination()).getAllByRole("button")) {
       expect(button).toBeDisabled();
     }
-    // El indicador de posición sigue presente.
-    expect(within(pagination()).getByText("Página 1 de 1")).toBeInTheDocument();
+    // El indicador de posición sigue presente. Durante la carga no hay `total` todavía, así
+    // que dice "Sin resultados": es el mismo texto que el conjunto vacío, y no miente en
+    // ninguno de los dos casos porque no hay nada que rangear.
+    expect(within(pagination()).getByText("Sin resultados")).toBeInTheDocument();
   });
 
   it("E5: total 0 muestra 'No hay órdenes' y el Pagination vacío con controles disabled (R24)", async () => {
@@ -178,7 +185,7 @@ describe("OrdenesPage — paginación", () => {
 
     await screen.findByText("No hay órdenes");
     const nav = pagination();
-    expect(within(nav).getByText("Página 1 de 1")).toBeInTheDocument();
+    expect(within(nav).getByText("Sin resultados")).toBeInTheDocument();
     for (const button of within(nav).getAllByRole("button")) {
       expect(button).toBeDisabled();
     }
@@ -196,8 +203,11 @@ describe("OrdenesPage — paginación", () => {
     await renderPage();
 
     await screen.findByText("REM-5001");
-    // totalPages = ceil(45/25) = 2, derivado del total del backend (no de 2 items).
-    expect(within(pagination()).getByText("Página 1 de 2")).toBeInTheDocument();
+    // El rango sale del total del backend (45), no de los 2 items: `1-25 de 45`. El `25` es
+    // el pageSize, no las filas pintadas — un backend que devuelve MENOS items que el
+    // pageSize en una página que no es la última se está contradiciendo a sí mismo, y el
+    // control no puede detectarlo porque no recibe los items (solo page/pageSize/total).
+    expect(within(pagination()).getByText("1-25 de 45")).toBeInTheDocument();
     expect(bodyRows()).toHaveLength(2);
   });
 
@@ -212,14 +222,14 @@ describe("OrdenesPage — paginación", () => {
       screen.getByRole("combobox", { name: "Elementos por página" }),
       "10",
     );
-    await screen.findByText("Página 1 de 9");
+    await screen.findByText("1-10 de 90");
 
     await user.click(screen.getByRole("button", { name: "Última página" }));
-    await screen.findByText("Página 9 de 9");
+    await screen.findByText("81-90 de 90");
     expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 9, pageSize: 10 });
 
     await user.click(screen.getByRole("button", { name: "Primera página" }));
-    await screen.findByText("Página 1 de 9");
+    await screen.findByText("1-10 de 90");
     expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 10 });
   });
 
@@ -233,13 +243,13 @@ describe("OrdenesPage — paginación", () => {
       screen.getByRole("combobox", { name: "Elementos por página" }),
       "10",
     );
-    await screen.findByText("Página 1 de 9");
+    await screen.findByText("1-10 de 90");
 
     // Navegar hasta la página 5.
     for (let i = 0; i < 4; i++) {
       await user.click(screen.getByRole("button", { name: "Página siguiente" }));
     }
-    await screen.findByText("Página 5 de 9");
+    await screen.findByText("41-50 de 90");
 
     // El botón "5" es la página actual (aria-current); hay elipsis en la ventana.
     const current = within(pagination())
@@ -251,7 +261,7 @@ describe("OrdenesPage — paginación", () => {
 
     // Click en un botón numérico visible (6) re-consulta esa página.
     await user.click(screen.getByRole("button", { name: "Ir a la página 6" }));
-    await screen.findByText("Página 6 de 9");
+    await screen.findByText("51-60 de 90");
     expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 6, pageSize: 10 });
   });
 });
