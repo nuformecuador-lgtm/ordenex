@@ -3036,3 +3036,39 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   publicadas, nunca contra la salida real: si `serieDensa` cambiara de grano, seguirían verdes
   **comparando el espejo consigo mismo**. Es exactamente lo que habría puesto la 180 en rojo el
   05-ago en vez de dejar el defecto salir a producción.
+
+## 2026-08-10 — 182 (analítica: cablear el modo agregado al tablero operativo)
+
+**PR #324 → `dev`.** Reviewer **APROBADO, cero bloqueantes**: 16/16 requisitos con test nombrado
+y vivo (`progress/review_182.md`). Los paneles de **porcentaje** y **segundos** dejan de agregar en
+el cliente y consumen los cubos de `consultarAgregadoOperativo` (feature 176), con la cifra total
+tomada del cubo `periodo`. Cierra el hueco declarado por **R27 de la 131**, que deja de serlo.
+
+- **Llevaba cinco días varada.** La implementación estaba completa en `C:/w182` desde el
+  **2026-08-05** —spec, producción, tests y bitácora, cinco commits— **sin pushear, sin reviewer y
+  sin PR**, con la ficha diciendo `pending` y **221 commits** de retraso. No fue un problema de
+  código: fue que nadie la aterrizó. Un worktree con trabajo hecho y sin rama remota es invisible
+  para la siguiente sesión, que ve `pending` y está a un paso de rehacerlo todo.
+- **El merge destapó dos defectos que solo existen en la intersección.** (a) El test de la 133
+  doblaba el módulo de acciones exportando **una sola** de las dos puertas al dato; la segunda
+  llegaba `undefined` y el panel caía en su píxel de error **tapando el denegado que el caso mide**.
+  No bastó con doblarla: R21 afirma una no-diferencia sobre «la puerta que toca el dato», y desde
+  esta feature son **dos**, así que la comparación pasa a recorrer las dos. (b) La acción seguía
+  anotada `@sin-superficie` («nació sin cablear **y sigue así**») cuando esta feature **es** su
+  superficie; lo puso rojo `superficie-de-uso.guardia.test.ts`.
+  > **La regla que queda:** una excusa escrita en el código sobrevive a su motivo sin avisar. La
+  > que aquí la cazó fue una guardia, no una lectura: si la anotación no hubiera tenido guardia,
+  > seguiría ahí, mintiendo, después del commit que la desmiente.
+- **`aging_por_estado` NO entró**, aunque la `description` de la ficha lo prometía: la puerta T0
+  (Q1 = B) lo sacó a ficha propia. La `description` se corrigió en el mismo PR — quien lea una ficha
+  sin abrir su spec no debería entender que falta trabajo que una puerta humana ya revirtió.
+- **Un byte NUL de la 131 hacía ilegible el archivo central.** `agregacion.ts` usaba `\0` como
+  separador de clave, así que git lo trataba como **binario** y el diff del archivo más importante
+  del PR salía como `Bin 14529 -> 22687 bytes`. Sustituido por `U+001F`: misma imposibilidad dentro
+  de una fecha o dimensión, ni una clave distinta, y el diff vuelve a revisarse.
+- **Gate:** 1015/1017 archivos · 12.596/12.608 tests · typecheck y lint limpios · cero flakes. Los
+  12 rojos eran `busqueda-*`, y su causa raíz se identificó aquí: la migración
+  `20260808120000_orden_busqueda_producto` vivía **solo en la rama `ux`** y ya estaba aplicada a la
+  base local. Las bitácoras de la 187 y la 192 lo habían llamado «drift de la base local» y
+  sugerían recrear la columna — lo que la habría desincronizado de `ux`. Se fueron solos al
+  mergearse `ux` (PR #327), sin que nadie tocara la base.
