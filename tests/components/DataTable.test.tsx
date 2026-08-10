@@ -353,6 +353,20 @@ describe("DataTable", () => {
     expect(ceci).toHaveClass("border-b");
   });
 
+  it("minWidth fija el ancho mínimo de la columna en su <th>; sin la prop no se emite style", () => {
+    const columns: Column<Row>[] = [
+      { id: "id", value: "ID", minWidth: "8rem" },
+      { id: "nombre", value: "Nombre" },
+    ];
+
+    render(<DataTable columns={columns} data={baseData} ariaLabel="T" />);
+
+    const [conAncho, sinAncho] = screen.getAllByRole("columnheader");
+    expect(conAncho).toHaveStyle({ minWidth: "8rem" });
+    // Retrocompatible: la columna que no lo declara queda con ancho automático.
+    expect(sinAncho.style.minWidth).toBe("");
+  });
+
   it("B11: columnas con id único renderizan sin throw (R4)", () => {
     const columns: Column<Row>[] = [
       { id: "id", value: "ID" },

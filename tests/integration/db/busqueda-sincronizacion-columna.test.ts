@@ -30,7 +30,7 @@ async function leerBusquedaTexto(
   return filas[0]?.busqueda_texto ?? null;
 }
 
-describeSiHayBase("orden.busqueda_texto se sincroniza sola con los cuatro campos", () => {
+describeSiHayBase("orden.busqueda_texto se sincroniza sola con los campos buscables", () => {
   let prisma: PrismaClient;
   let fks: FksDeOrden | null;
 
@@ -78,6 +78,54 @@ describeSiHayBase("orden.busqueda_texto se sincroniza sola con los cuatro campos
     });
     expect(encontrada.texto).not.toBeNull();
     expect(encontrada.porDato).toEqual([1, 1, 1, 1]);
+  });
+
+  it("se encuentra tambien por el PRODUCTO, y con acentos plegados como el resto", async () => {
+    if (!fks) return;
+    const base = fks;
+    // Migracion `20260808120000_orden_busqueda_producto`. Lo que se comprueba no es solo
+    // que el texto contenga el producto, sino que lo contenga NORMALIZADO igual que los
+    // otros cinco segmentos: teclear "cafe" tiene que encontrar "Café Molido". Un
+    // `ILIKE` sobre la columna cruda —la via sin migracion— baja la caja pero NO pliega
+    // el acento, y este caso es el que lo distingue.
+    const resultado = await enTransaccionRevertida(prisma, async (tx) => {
+      const creada = await tx.orden.create({
+        data: {
+          numRemision: `REM-${SUFIJO}-PROD`,
+          destinatario: "Lucía Brenes",
+          telefonoDest: "88884444",
+          producto: "Café Molido",
+          estatusId: base.estatusId,
+          tiendaId: base.tiendaId,
+          zonaId: base.zonaId,
+          provinciaId: base.provinciaId,
+          cantonId: base.cantonId,
+        },
+        select: { id: true },
+      });
+      const texto = await leerBusquedaTexto(tx, creada.id);
+      const porProducto = await tx.orden.count({
+        where: { id: creada.id, busquedaTexto: { contains: "cafe molido" } },
+      });
+      // Y al CAMBIAR el producto, la columna se reajusta sola: es GENERATED, no hay
+      // ninguna ruta de mantenimiento que alguien pueda olvidarse de llamar (R26).
+      await tx.orden.update({
+        where: { id: creada.id },
+        data: { producto: "Bolsa de arroz" },
+        select: { id: true },
+      });
+      const porViejo = await tx.orden.count({
+        where: { id: creada.id, busquedaTexto: { contains: "cafe molido" } },
+      });
+      const porNuevo = await tx.orden.count({
+        where: { id: creada.id, busquedaTexto: { contains: "bolsa de arroz" } },
+      });
+      return { texto, porProducto, porViejo, porNuevo };
+    });
+    expect(resultado.texto).toContain("cafe molido");
+    expect(resultado.porProducto).toBe(1);
+    expect(resultado.porViejo).toBe(0);
+    expect(resultado.porNuevo).toBe(1);
   });
 
   it("al MODIFICAR el destinatario, se encuentra por el nuevo y NO por el anterior (R26)", async () => {

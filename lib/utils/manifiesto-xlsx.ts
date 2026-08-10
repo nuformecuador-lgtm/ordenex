@@ -5,6 +5,7 @@
  * `components/shared/descargar-blob.ts` y el binario se arma en el NAVEGADOR
  * (design.md §0/D1), nunca en el servidor ni en almacenamiento.
  */
+import { COLUMNAS_MANIFIESTO } from "@/lib/manifiesto/columnas-publicadas";
 import type { ManifiestoFilaDTO, ManifiestoFlujo } from "@/lib/types/manifiesto";
 import {
   buildXlsxRows,
@@ -16,37 +17,12 @@ import {
 export const MANIFIESTO_SHEET = "Manifiesto";
 
 /**
- * Columnas del manifiesto, en su orden. Las cabeceras son las claves máquina del requisito
- * (`num_guia`, `num_remision`, …), no etiquetas de presentación: el manifiesto es un documento
- * operativo estable, no una vista.
- *
- * REGLA VIGENTE (feature 160/R28, design 160 §6.3 — DEROGA y REEMPLAZA los R2/R11 de la 148,
- * decisión del humano del 2026-07-29): **el manifiesto refleja los datos de la orden**, y este
- * conjunto es ABIERTO — **crece** cuando la orden gana un dato nuevo. Ni este módulo ni sus
- * pruebas pueden afirmar "exactamente N columnas"; las pruebas verifican que ciertas columnas
- * ESTÁN, con su clave y su orden relativo, nunca que no haya otras.
- *
- * Lo que se derogó es el número cerrado, NO el filtro: cualquier campo que no esté en esta
- * lista sigue sin emitirse, y los identificadores internos, las banderas de borrado y los datos
- * que no son de la orden siguen prohibidos.
+ * El catálogo de columnas publicadas vive en `lib/manifiesto/columnas-publicadas.ts` (feature
+ * 194): es un DATO que también consume la UI del selector de columnas, que no debe depender del
+ * generador de binarios. Se RE-EXPORTA aquí para no romper a ningún consumidor existente que ya
+ * lo importaba desde este módulo.
  */
-export const COLUMNAS_MANIFIESTO: XlsxColumn[] = [
-  { key: "numGuia", header: "num_guia" },
-  { key: "numRemision", header: "num_remision" },
-  { key: "destinatario", header: "destinatario" },
-  { key: "telefono", header: "telefono" },
-  { key: "direccion", header: "direccion" },
-  { key: "zona", header: "zona" },
-  { key: "monto", header: "monto" },
-  // Feature 160 (R28a): dato propio de la orden -> columna propia del manifiesto. Va tras
-  // `monto` y ANTES del bloque de logística del movimiento (origen/destino/responsable/fecha),
-  // que describe la OPERACIÓN y no la orden.
-  { key: "intentos", header: "intentos" },
-  { key: "origen", header: "origen" },
-  { key: "destino", header: "destino" },
-  { key: "responsable", header: "responsable" },
-  { key: "fecha", header: "fecha" },
-];
+export { COLUMNAS_MANIFIESTO };
 
 /**
  * Proyecta la fila del dominio a celdas. Se enumeran las propiedades una a una a propósito: si
@@ -73,8 +49,36 @@ function toRow(fila: ManifiestoFilaDTO): Record<string, XlsxCellValue> {
 }
 
 /**
+ * Selecciona las columnas a emitir a partir de las claves pedidas (feature 194 §7).
+ *
+ * El filtro va SOBRE `COLUMNAS_MANIFIESTO`, jamás sobre la entrada: por construcción el orden
+ * relativo publicado se conserva sea cual sea el orden en que llegan las claves (194/R8), y una
+ * clave que no corresponda a ninguna columna publicada se ignora sin ruido.
+ *
+ * Si el filtro no deja ninguna columna, se devuelve el conjunto COMPLETO (194/R13): el fallo
+ * sería un archivo que el usuario no obtiene por una preferencia corrupta. El `throw` de
+ * `buildXlsxRows` con 0 columnas sigue vivo como red de seguridad de sus otros llamadores.
+ */
+function columnasAEmitir(clavesVisibles?: readonly string[]): XlsxColumn[] {
+  if (clavesVisibles === undefined) return COLUMNAS_MANIFIESTO;
+  const elegidas = COLUMNAS_MANIFIESTO.filter((columna) =>
+    clavesVisibles.includes(columna.key),
+  );
+  return elegidas.length === 0 ? COLUMNAS_MANIFIESTO : elegidas;
+}
+
+/**
  * Construye el binario `.xlsx` del manifiesto: una hoja, cabecera con las columnas de
  * `COLUMNAS_MANIFIESTO` y una fila por orden, en el orden recibido (R3, R13).
+ *
+ * @param filas filas del manifiesto ya devueltas por el servidor, en su orden.
+ * @param clavesVisibles feature 194 — subconjunto OPCIONAL de `key`s de `COLUMNAS_MANIFIESTO`
+ * que el usuario quiere ver en el archivo. Si se OMITE, se emiten todas las columnas
+ * publicadas, exactamente como hasta ahora (194/R24). Si se pasa, se emiten las columnas
+ * publicadas cuyas claves figuren en la lista, siempre en el orden de `COLUMNAS_MANIFIESTO`
+ * (194/R7, R8, R9). Si ninguna clave casa, se DEGRADA a "todas las publicadas" en lugar de
+ * fallar (194/R13). El filtrado ocurre en las columnas, no en los datos: `toRow` sigue
+ * proyectando la fila entera y `buildXlsxRows` ignora las claves no declaradas.
  *
  * @throws si `filas` está vacío. R17: sin filas NO se ofrece la descarga y NO se
  * genera archivo alguno; el consumidor no debe llegar hasta aquí, pero la utilidad
@@ -82,13 +86,18 @@ function toRow(fila: ManifiestoFilaDTO): Record<string, XlsxCellValue> {
  */
 export async function buildManifiestoXlsx(
   filas: ManifiestoFilaDTO[],
+  clavesVisibles?: readonly string[],
 ): Promise<ArrayBuffer> {
   if (filas.length === 0) {
     throw new Error(
       "buildManifiestoXlsx: no hay filas de manifiesto que descargar",
     );
   }
-  return buildXlsxRows(COLUMNAS_MANIFIESTO, filas.map(toRow), MANIFIESTO_SHEET);
+  return buildXlsxRows(
+    columnasAEmitir(clavesVisibles),
+    filas.map(toRow),
+    MANIFIESTO_SHEET,
+  );
 }
 
 /**

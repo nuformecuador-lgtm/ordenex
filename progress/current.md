@@ -9,7 +9,45 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🎨 2026-08-08 — landing pública replicada (rama `ux`): **enmienda de la feature 86**
+
+Pedido humano: replicar el home de <https://ordenex.co/> en la ruta `/`, sin imágenes, solo
+maquetado. Hecho en `app/_landing/` (carpeta privada: nav, hero, servicios, banda, cómo
+funciona, políticas, postulación, pie + `primitivas.tsx`), con `app/page.tsx` como composición
+pura. Commiteado en `ux` (`wip(86)`) el 2026-08-10, junto al WIP de búsqueda-producto, para
+poder mergear `dev` sobre un árbol limpio.
+
+**Choque de spec resuelto en el gate humano de hoy.** El R5 original de la feature 86 prohibía
+explícitamente toda sección de marketing («servicios, testimonios, precios») porque en julio no
+había copy verificable en el repo. Con el sitio publicado como fuente, ese motivo cae. Se
+enmendaron **R2–R5** de `specs/86-landing-publica/requirements.md` (R1 y R6–R16 intactos), se
+añadió **R5b** (scroll suave respetando `prefers-reduced-motion`) y se reescribió
+`tests/components/LandingPage.test.tsx`: 5 tests, verde.
+
+Dos cosas que costaron y conviene no re-descubrir:
+
+1. **El router de Next anula el scroll suave.** Fuerza `scroll-behavior: auto` mientras salta a
+   un ancla, así que los enlaces a `#servicios`/`#como-funciona`/`#politicas` van en `<a>`
+   nativo, no en `<Link>`. La declaración vive en `app/globals.css` sobre `html`, envuelta en
+   `@media (prefers-reduced-motion: no-preference)`.
+2. **El guard `no-embalaje` cazó copy de políticas.** «Embalaje inadecuado exime de
+   responsabilidad» es castellano ordinario, no el value de `order_status` que el guard
+   persigue. Alta de `app/_landing/LandingPoliticas.tsx` en el whitelist **por archivo**, no por
+   carpeta, para que el guard siga viendo el resto de `app/_landing/`.
+
+`./init.sh --rapido` en verde (1016 guardias + los 6 tests relacionados). **Falta `./init.sh`
+completo antes de cualquier PR.**
+
+
 ## 🔴 EN CURSO 2026-08-08 — feature **192**, fase 1 (spec)
+
+> ⏭️ **SUPERADO — leer con fecha.** Todo lo que sigue en este bloque es el diario de la fase de
+> spec (2026-08-08). La feature **ya está implementada y mergeada a `dev`** (PR #323), con el
+> `reviewer` en **APROBADO, 73/73 requisitos trazados** (`progress/review_192.md`), y desde el
+> merge de hoy 2026-08-10 vive también en `ux`. Dos cosas siguen abiertas y NO son de la spec:
+> `feature_list.json` aún la marca `in_progress` con `branch` puesta (bookkeeping pendiente), y
+> el review la declara **no liberable** hasta que `./init.sh` completo dé verde (§5 de su
+> informe). Lo de abajo se conserva por las decisiones y sus porqués, no como estado.
 
 **Tablero del día: órdenes por mensajero y el resultado de su gestión.** Pedido humano de hoy.
 Ficha registrada en `feature_list.json` (`id: 192`, `pending`, `fullstack`, `sdd: true`).

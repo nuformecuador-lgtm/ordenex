@@ -89,8 +89,12 @@ const SEMILLAS: Semilla[] = [
     borrada: true,
   },
   {
-    // Contraprueba de R2: los tres campos que el humano dejo FUERA del alcance llevan
-    // palabras unicas. Si alguna vez coinciden, es que alguien amplio la columna generada.
+    // Contraprueba de R2: los campos que siguen FUERA del alcance (direccion y notas)
+    // llevan palabras unicas. Si alguna vez coinciden, es que alguien amplio la columna
+    // generada sin decirlo. `producto` estuvo aqui hasta la migracion
+    // `20260808120000_orden_busqueda_producto`, que lo metio DENTRO del alcance; su
+    // palabra unica se conserva porque ahora sirve para lo contrario: demostrar que SI se
+    // encuentra (ver "el PRODUCTO tambien es buscable").
     clave: "fuera-de-alcance",
     numGuia: 44556616,
     numRemision: `REM-${SUFIJO}-OUT`,
@@ -246,6 +250,15 @@ describeSiHayBase("comportamiento de la busqueda contra Postgres", () => {
       expect((await buscar(SUFIJO)).claves.length).toBe(VIVAS);
     });
 
+    it("el PRODUCTO tambien es buscable, y con el mismo plegado que el resto", async () => {
+      // Migracion `20260808120000_orden_busqueda_producto`. Se busca en minusculas un
+      // producto guardado como "Berenjena Cuantica": si alguien resolviera esto con un
+      // `ILIKE` sobre la columna cruda en vez de por la columna generada, este caso
+      // pasaria igual pero el de acentos (paridad) no.
+      expect((await buscar("berenjena")).claves).toEqual(["fuera-de-alcance"]);
+      expect((await buscar("berenjena cuantica")).claves).toEqual(["fuera-de-alcance"]);
+    });
+
     it("fragmento de la GUIA (los ultimos digitos)", async () => {
       // Sin la columna generada esto seria imposible: `num_guia` es `int` y ningun indice
       // btree sirve para un fragmento en medio.
@@ -340,10 +353,6 @@ describeSiHayBase("comportamiento de la busqueda contra Postgres", () => {
 
     it("R2: la DIRECCION no es buscable", async () => {
       expect((await buscar("zarzaparrilla")).total).toBe(0);
-    });
-
-    it("R2: el PRODUCTO no es buscable", async () => {
-      expect((await buscar("berenjena")).total).toBe(0);
     });
 
     it("R2: las NOTAS no son buscables", async () => {

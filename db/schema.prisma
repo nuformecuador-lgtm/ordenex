@@ -521,8 +521,9 @@ model Orden {
   // `downloadUrl` no se lee ni se escribe en esta feature (R26/R38).
   downloadStoragePath    String?   @map("download_storage_path")
   /// Feature 169 (design §2.5) — columna GENERADA ALWAYS ... STORED en la base: concatena
-  /// los cuatro campos buscables ya normalizados (guia, remision, telefono con y sin
-  /// separadores, destinatario). NUNCA se escribe desde la aplicacion — Postgres rechaza
+  /// los campos buscables ya normalizados (guia, remision, telefono con y sin
+  /// separadores, destinatario y —desde `20260808120000_orden_busqueda_producto`—
+  /// producto). NUNCA se escribe desde la aplicacion — Postgres rechaza
   /// cualquier INSERT/UPDATE sobre ella— y el cliente la OMITE globalmente
   /// (`lib/db/prisma-client.ts`) para que no llegue a ningun DTO ni descarga (R28).
   /// Se declara aqui para (a) poder filtrar con Prisma y (b) que schema.prisma no diverja

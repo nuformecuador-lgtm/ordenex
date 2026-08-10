@@ -21,22 +21,38 @@ se mantiene; mantén los colores que se están usando."*
 - **R1** — CUANDO un visitante sin cookie de sesión solicita `/`, el sistema DEBE
   responder con la landing pública (HTTP 200) sin redirigir a `/login`.
 
-- **R2** — La landing DEBE renderizar un topbar que contenga: (a) el logo/wordmark
-  de Ordenex, (b) un enlace «Trabaja con nosotros» cuyo destino es `/postulacion`,
-  y (c) un enlace «Ingreso» cuyo destino es `/login`.
+> **Enmienda 2026-08-08 (gate humano): R2–R5 revisados.** El humano pidió
+> replicar el home público de <https://ordenex.co/> en la ruta `/`, sin imágenes.
+> Eso deroga la interpretación restrictiva de R5 (que prohibía toda sección de
+> marketing por no ser verificable): el copy **sí** es verificable ahora, su
+> fuente es el sitio publicado de la empresa. Los requisitos R1 y R6–R16 no
+> cambian. Ver «Decisiones del gate de la enmienda» al final.
 
-- **R3** — La landing DEBE renderizar un hero que contenga el wordmark/claim de
-  Ordenex y los dos llamados a la acción: «Ingreso» (→ `/login`) y «Trabaja con
-  nosotros» (→ `/postulacion`).
+- **R2** — La landing DEBE renderizar una barra superior pegajosa que contenga:
+  (a) el logo/wordmark de Ordenex, (b) los enlaces de sección a las anclas de la
+  propia página (`#servicios`, `#como-funciona`, `#politicas`), (c) un enlace
+  «Trabajá con nosotros» cuyo destino es `/postulacion`, y (d) un enlace
+  «Ingresar» cuyo destino es `/login`.
+
+- **R3** — La landing DEBE renderizar, bajo la barra, las secciones del home
+  público en este orden: hero, servicios (`#servicios`), banda de cifras, cómo
+  funciona (`#como-funciona`), políticas (`#politicas`), postulación y pie. El
+  hero DEBE contener el titular y las tres cifras de cobertura.
 
 - **R4** — La landing DEBE reutilizar la paleta de marca ya existente
-  (`navy` #0b2545, `brand` #f26419, `brand-soft`, `font-heading` Poppins) sin
-  introducir nuevos tokens de color ni un archivo de configuración de Tailwind.
+  (`navy-deep` #0b2545, `brand` #f26419, `brand-soft`, `font-heading` Poppins)
+  vía los tokens de `app/globals.css`, sin hex sueltos de color ni un archivo de
+  configuración de Tailwind (`DESIGN.md`).
 
-- **R5** — El único texto descriptivo permitido en la landing es el ya presente en
-  el repo: «Plataforma de logística y entregas Ordenex» (metadata del root layout).
-  El sistema NO DEBE introducir secciones, claims ni copy de marketing no
-  verificables (servicios, testimonios, precios, footer con texto inventado).
+- **R5** — El copy de la landing DEBE provenir del home publicado en
+  <https://ordenex.co/>; el sistema NO DEBE inventar claims, cifras, precios ni
+  testimonios ausentes de esa fuente. Los destinos que la app todavía no sirve
+  (términos, privacidad, acuerdo COD, dirección, WhatsApp) DEBEN pintarse como
+  texto, nunca como un enlace muerto `href="#"`.
+
+- **R5b** — La navegación por anclas de la propia página DEBE desplazarse de
+  forma suave, y DEBE respetar `prefers-reduced-motion`: con «menos movimiento»
+  activado, el salto vuelve a ser instantáneo.
 
 ### Componente logo compartido
 
@@ -96,10 +112,11 @@ se mantiene; mantén los colores que se están usando."*
 | Req | Test |
 | --- | --- |
 | R1  | `tests/unit/auth/middleware.test.ts`: `/` sin sesión → 200 |
-| R2  | `tests/components/LandingPage.test.tsx`: topbar con logo + 2 enlaces y sus `href` |
-| R3  | `tests/components/LandingPage.test.tsx`: hero con los 2 CTA y sus `href` |
-| R4  | `tests/components/LandingPage.test.tsx`: clases de marca presentes (navy/brand) |
-| R5  | `tests/components/LandingPage.test.tsx`: sin secciones extra; copy = descripción base |
+| R2  | `tests/components/LandingPage.test.tsx`: barra con logo, anclas y los 2 enlaces con `href` |
+| R3  | `tests/components/LandingPage.test.tsx`: las 3 anclas existen y el hero trae titular + cifras |
+| R4  | `tests/components/LandingPage.test.tsx`: clases de marca presentes (navy-deep/brand), sin hex sueltos |
+| R5  | `tests/components/LandingPage.test.tsx`: los destinos sin ruta no son enlaces (0 `href="#"`) |
+| R5b | `tests/components/LandingPage.test.tsx`: las anclas internas son `<a>` nativo; `globals.css` declara el `scroll-behavior` bajo `prefers-reduced-motion` |
 | R6  | `tests/components/Logo.test.tsx`: renderiza el wordmark; usado por la landing |
 | R7  | `tests/unit/auth/middleware.test.ts`: `/` con sesión → 307 a `/dashboard` |
 | R8  | `tests/unit/auth/middleware.test.ts`: `/xyz` con prefijo `/` no se vuelve público |
@@ -123,3 +140,19 @@ se mantiene; mantén los colores que se están usando."*
 3. **Tagline: solo el copy existente.** El hero usa únicamente «Ordenex» +
    «Plataforma de logística y entregas» (de `metadata.description`). No se
    inventa copy adicional (regla 6 CLAUDE.md).
+   *(Derogado por la enmienda de 2026-08-08; ver abajo.)*
+
+## Decisiones del gate de la enmienda (resueltas por el humano 2026-08-08)
+
+1. **Fuente del copy: el home publicado de ordenex.co.** Deja de aplicar la
+   prohibición de R5 original. La regla 6 de `CLAUDE.md` se satisface porque el
+   sitio publicado ES la fuente; lo que no esté ahí sigue prohibido.
+2. **Sin imágenes.** El home del sitio apoya el hero y las tarjetas de
+   postulación en fotografías; aquí se sustituyen por bloques de color con los
+   tokens de marca. Es maquetado, no arte final.
+3. **«Rastrear envío» queda inerte.** En el sitio abre un diálogo de consulta por
+   guía; el seguimiento real de la app vive en `/paquete/[numGuia]` y exige un
+   número. Se pinta como `<button disabled>` hasta que exista ese diálogo.
+4. **Composición en `app/_landing/`.** Carpeta privada (el guion bajo la excluye
+   del enrutado) con una sección por archivo más `primitivas.tsx`. `app/page.tsx`
+   queda como composición pura.

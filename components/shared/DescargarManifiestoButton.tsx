@@ -4,7 +4,9 @@ import { useState } from "react";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ColumnasManifiestoPopover } from "@/components/shared/ColumnasManifiestoPopover";
 import { descargarBlob } from "@/components/shared/descargar-blob";
+import { usePreferenciaColumnasManifiesto } from "@/hooks/usePreferenciaColumnasManifiesto";
 import { useToast } from "@/hooks/useToast";
 import { obtenerManifiesto } from "@/lib/actions/manifiesto";
 import type { ManifiestoFlujo, ManifiestoResult } from "@/lib/types/manifiesto";
@@ -66,6 +68,14 @@ function tieneSeleccion(seleccion: ManifiestoSeleccion): boolean {
  * camino crítico: pulsa quien quiere el archivo, y si el archivo falla, el resultado ya
  * cometido no se toca, no se reintenta y no se revierte (R25). El binario se arma aquí,
  * en el navegador, y se descarga sin subirlo a ninguna parte (R15).
+ *
+ * Feature 194 (design §6, D4) — el botón lleva ADOSADO su selector de columnas, de modo que
+ * los 7 puntos de enganche ganan la función sin tocar un solo archivo de `app/`. El selector
+ * es un control PARALELO, nunca un paso del camino del botón: abrirlo NO descarga nada, y
+ * pulsar el botón descarga en UN solo click con la preferencia ya guardada de ese flujo, sin
+ * ningún paso intermedio de confirmación de columnas (R10). Lo único que cambia respecto de la
+ * 148 es qué columnas lleva el archivo: ni la petición al servidor (R25) ni el nombre del
+ * archivo (R11) se ven afectados.
  */
 export function DescargarManifiestoButton({
   flujo,
@@ -75,8 +85,12 @@ export function DescargarManifiestoButton({
 }: DescargarManifiestoButtonProps) {
   const toast = useToast();
   const [generando, setGenerando] = useState(false);
+  // Los hooks van ANTES del return temprano de R17: React exige el mismo número de hooks en
+  // cada render y la selección puede vaciarse entre uno y otro.
+  const { clavesVisibles } = usePreferenciaColumnasManifiesto(flujo);
 
-  // R17: con el lote vacío no se ofrece la descarga (y no se genera nada).
+  // R17: con el lote vacío no se ofrece la descarga (y no se genera nada). Desaparece el
+  // grupo ENTERO, botón y selector: sin lote no hay columnas que elegir.
   if (!tieneSeleccion(seleccion)) return null;
 
   async function handleClick() {
@@ -100,7 +114,9 @@ export function DescargarManifiestoButton({
       const { buildManifiestoXlsx, manifiestoFileName } = await import(
         "@/lib/utils/manifiesto-xlsx"
       );
-      const buffer = await buildManifiestoXlsx(result.filas);
+      // 194/R7: el archivo lleva las columnas visibles de ESTE flujo. El generador filtra
+      // `COLUMNAS_MANIFIESTO` con estas claves, así que el orden publicado es inviolable (R8).
+      const buffer = await buildManifiestoXlsx(result.filas, clavesVisibles);
       descargarBlob(
         buffer,
         XLSX_MIME,
@@ -122,16 +138,21 @@ export function DescargarManifiestoButton({
   }
 
   return (
-    <Button
-      type="button"
-      variant="brand-outline"
-      className={className}
-      onClick={() => void handleClick()}
-      disabled={generando}
-      loading={generando}
-    >
-      {generando ? null : <Download aria-hidden="true" />}
-      {label ?? DEFAULT_LABEL}
-    </Button>
+    <div className="flex items-center gap-1">
+      {/* `className` sigue aplicándose al BOTÓN, no al grupo: los consumidores la usan para
+          encajar el botón en su barra de acciones (design §6). */}
+      <Button
+        type="button"
+        variant="brand-outline"
+        className={className}
+        onClick={() => void handleClick()}
+        disabled={generando}
+        loading={generando}
+      >
+        {generando ? null : <Download aria-hidden="true" />}
+        {label ?? DEFAULT_LABEL}
+      </Button>
+      <ColumnasManifiestoPopover flujo={flujo} />
+    </div>
   );
 }

@@ -110,7 +110,7 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("OrdenesListado — el buscador es el PRIMER control (R32)", () => {
-  it("R32: la barra monta UN campo de busqueda, con su placeholder de los cuatro datos", async () => {
+  it("R32: la barra monta UN campo de busqueda, con su placeholder de los cinco datos", async () => {
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
 
     const campo = await screen.findByRole("searchbox", { name: "Buscar" });
