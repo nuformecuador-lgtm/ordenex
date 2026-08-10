@@ -253,10 +253,26 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     // editan los premios — feature 94, paridad adm↔maestro) y `mensajero` (lo ve en
     // solo-lectura) de forma intencional; la defensa real es el `notFound` de la página
     // `/ranking`, que resuelve el rol server-side y decide el modo editable.
+    // Feature 196 (T4.5, design §6): el ítem pasa a tener SUBÍTEMS porque el ranking son
+    // ahora dos pantallas —el día en curso (que se recalcula en vivo) y el histórico
+    // congelado (que no se recalcula nunca)—, y son cosas distintas: una cambia mientras se
+    // mira, la otra es inmutable por diseño.
+    //
+    // El `href` del padre NO navega —un ítem con `children` se renderiza como disparador del
+    // desplegable, no como enlace (ver `Sidebar.tsx` y `primerDestino`)—, pero se conserva
+    // porque identifica al ítem. Por eso el primer subítem apunta a `/ranking`: sin él, este
+    // cambio habría dejado la pantalla del ranking en vivo SIN entrada de menú. Mismo patrón
+    // que "Wallet" (cuyo primer subítem es su propio `href`) y que "Entregas".
+    //
+    // Los subítems heredan los roles del padre: no hay una segunda lista que pueda divergir.
     label: "Ranking",
     href: "/ranking",
     iconKey: "trophy",
     roles: ["maestro", "admin", "mensajero"],
+    children: [
+      { label: "Ranking del día", href: "/ranking" },
+      { label: "Histórico", href: "/ranking/historico" },
+    ],
   },
   {
     // Feature 42: caja principal de Ordenex (balance + libro de movimientos).

@@ -114,8 +114,9 @@ const porRecoger = [
 ];
 
 /**
- * Monta la tarjeta y la DESPLIEGA. Desde el 2026-07-31 (decisión del humano) la tarjeta
- * vive plegada tras el disparador de `EscanerDesplegable`, igual que en el resto de la app:
+ * Monta la tarjeta y la ABRE. Desde el 2026-07-31 (decisión del humano) la tarjeta vive tras
+ * el disparador de `EscanerModal` —en modal desde el 2026-08-10—, igual que en el resto de
+ * la app:
  * montada dejaba `QrScanner` vivo —la cámara encendida— todo el tiempo que el mensajero
  * tuviera la pantalla abierta, en la calle. Cada caso abre primero, que es exactamente lo
  * que hace el mensajero cuando va a recoger.
@@ -383,11 +384,11 @@ describe("RecogerPaqueteCard — el desplegable (cámara apagada por defecto)", 
     const user = userEvent.setup();
     await renderAbierta(user);
 
-    // Cámara abierta dentro de la tarjeta desplegada.
+    // Cámara abierta dentro de la tarjeta, ya en el modal.
     await user.click(screen.getByRole("button", { name: "Escanear con cámara" }));
     await vi.waitFor(() => expect(decodeCallback.current).not.toBeNull());
 
-    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
 
     // Nada del escáner queda en el DOM: no es un `hidden`, es un desmontaje — que es lo
     // que dispara el cleanup de `QrScanner` y detiene html5-qrcode.

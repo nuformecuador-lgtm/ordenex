@@ -43,6 +43,29 @@ export function crearPrismaDeTest(): PrismaClient {
 }
 
 /**
+ * Feature 196 — cliente cuyas consultas de MODELO (`prisma.x.create()`, `findUnique`, …) se
+ * dirigen a `esquema` en vez de a `public`.
+ *
+ * POR QUE NO BASTA EL `search_path`: Prisma CUALIFICA la tabla en el SQL que genera
+ * (`INSERT INTO "public"."ranking_snapshot_dia" …`). Medido, no supuesto: con un
+ * `SET LOCAL search_path` a un esquema temporal, la API de modelo sigue yendo a `public` y
+ * falla con P2021 «no existe la relacion public.ranking_snapshot_dia». El unico punto donde
+ * ese prefijo se puede cambiar es `PrismaPgOptions.schema` del driver adapter, que es lo que
+ * hace esta funcion.
+ *
+ * Para que sirve: probar el DDL REAL de una migracion —y el comportamiento del repositorio
+ * que lo usa— por la API publica de Prisma, en un esquema desechable, SIN aplicar la
+ * migracion a `public` ni tocar `_prisma_migrations`. Quien la use es responsable de crear
+ * el esquema, de aplicar ahi el DDL y de soltarlo (`DROP SCHEMA … CASCADE`) al terminar.
+ */
+export function crearPrismaDeTestEnEsquema(esquema: string): PrismaClient {
+  return new PrismaClient({
+    adapter: new PrismaPg({ connectionString: urlDeBaseDeDatos(), max: 2 }, { schema: esquema }),
+    omit: PRISMA_OMIT,
+  }) as unknown as PrismaClient;
+}
+
+/**
  * Feature 169 / T4.2 — una consulta tal y como Prisma la mando al servidor.
  *
  * `params` viene serializado a JSON por Prisma y con los numericos convertidos a string;

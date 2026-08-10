@@ -42,7 +42,12 @@ const TABLA_ARIA_LABEL = "Órdenes por numerar";
  * ancla habitual (design §5.2).
  */
 const COLUMNS: Column<OrdenListItemDTO>[] = [
-  { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
+  {
+    id: "numRemision",
+    value: "Nº Remisión",
+    render: "numRemision",
+    minWidth: "120px",
+  },
   { id: "destinatario", value: "Destinatario", render: "destinatario" },
   columnaIntentos<OrdenListItemDTO>(),
 ];

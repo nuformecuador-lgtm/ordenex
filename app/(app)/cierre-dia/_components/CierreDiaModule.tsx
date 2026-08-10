@@ -820,13 +820,18 @@ const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
   {
     id: "numGuia",
     value: "Nº Guía",
-    render: (g) => g.numGuia ?? "—",
+    render: (g) => <span className="font-semibold">{g.numGuia ?? "—"}</span>,
   },
-  { id: "numRemision", value: "Nº Remisión" },
+  { id: "numRemision", value: "Nº Remisión", minWidth: "120px" },
   { id: "destinatario", value: "Destinatario" },
-  { id: "direccion", value: "Dirección", render: (g) => g.direccion ?? "—" },
+  {
+    id: "direccion",
+    value: "Dirección",
+    render: (g) => g.direccion ?? "—",
+    minWidth: "200px",
+  },
   { id: "ubicacion", value: "Ubicación", render: (g) => ubicacion(g) || "—" },
-  { id: "producto", value: "Producto" },
+  { id: "producto", value: "Producto", minWidth: "300px" },
   { id: "tiendaNombre", value: "Tienda" },
 ];
 

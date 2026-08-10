@@ -66,7 +66,10 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     expect(
       screen.getByRole("button", { name: /configuración/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ranking" })).toBeInTheDocument();
+    // Feature 196 (T4.5): "Ranking" pasó a tener subítems ("Ranking del día" / "Histórico"),
+    // así que el Sidebar lo renderiza como disparador colapsable y ya no como enlace. La
+    // intención del caso —que el ítem del maestro esté montado— se conserva intacta.
+    expect(screen.getByRole("button", { name: /ranking/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Órdenes" })).toBeInTheDocument();
     // ...junto con los children del layout.
     expect(screen.getByTestId("page-children")).toBeInTheDocument();

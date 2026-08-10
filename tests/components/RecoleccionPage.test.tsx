@@ -59,8 +59,9 @@ const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 
 /**
  * El acceso al escaneo, que es lo que R7 exige que no desaparezca nunca. Desde el
- * 2026-07-31 la tarjeta vive PLEGADA tras este disparador (`EscanerDesplegable`, decisión
- * del humano): montada dejaba la cámara encendida todo el rato que el mensajero tuviera la
+ * 2026-07-31 la tarjeta vive TRAS este disparador (`EscanerModal`, decisión del humano; en
+ * modal desde el 2026-08-10): montada dejaba la cámara encendida todo el rato que el
+ * mensajero tuviera la
  * pantalla abierta. Aquí se mira el disparador porque es lo que la página renderiza; que al
  * abrirlo salga un escáner que funciona lo fija `RecoleccionModule.test.tsx`.
  */

@@ -77,10 +77,15 @@ export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps)
   const filas = filasState.status === "ok" ? filasState.data : [];
 
   const columns: Column<ResumenCargaOrdenDTO>[] = [
-    { id: "numRemision", value: "Nº Remisión", render: "numRemision" }, // R23
+    {
+      id: "numRemision",
+      value: "Nº Remisión",
+      render: "numRemision",
+      minWidth: "120px",
+    }, // R23
     { id: "destinatario", value: "Destinatario", render: "destinatario" },
     { id: "telefonoDest", value: "Teléfono", render: "telefonoDest" },
-    { id: "producto", value: "Producto", render: "producto" },
+    { id: "producto", value: "Producto", render: "producto", minWidth: "300px" },
     {
       id: "estatus",
       value: "Estatus",
@@ -95,6 +100,7 @@ export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps)
       id: "direccion",
       value: "Dirección",
       render: (row) => row.direccion ?? "-",
+      minWidth: "200px",
     },
     {
       id: "zona",

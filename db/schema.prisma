@@ -144,6 +144,7 @@ model Usuario {
   liquidacionPagosComoTienda          LiquidacionPago[]         @relation("LiquidacionPagoTienda") // feature 172/R29: pagos recibidos por ESTA tienda (contra su saldo acumulado)
   liquidacionPagosRegistrados         LiquidacionPago[]         @relation("LiquidacionPagoRegistrador") // feature 172/R7: pagos que este usuario (maestro/admin) registro
   liquidacionAnulacionesRealizadas    LiquidacionAnulacion[]    @relation("LiquidacionAnulacionActor") // feature 172/R73: anulaciones de pago que este usuario realizo
+  rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -1961,4 +1962,83 @@ model AnalyticsDaily {
   @@index([mensajeroId, fecha], map: "analytics_daily_mensajero_fecha_idx") // recorte de mensajero; cubre el cubo sin_asignar
   @@index([zonaId, fecha], map: "analytics_daily_zona_fecha_idx") // recorte de adminSatelite, por zona DE LA ORDEN
   @@map("analytics_daily")
+}
+
+// Feature 196 (design §2.1, R1/R11/R12/R13/R24) — CABECERA del ranking CONGELADO de una
+// fecha calendario de Costa Rica. Una fila por fecha; `fecha` es UNIQUE y ESA restriccion
+// es la idempotencia del cron (R13): la reejecucion choca en la base, no en el codigo.
+//
+// `fecha` es DATE (medianoche UTC), convencion del repo para fecha calendario CR (feature
+// 46, `fechaComoDate` en lib/analytics/rollup-dia.ts): NO es el `desde` de la ventana.
+//
+// SIN `updatedAt` a proposito (R12): la fila es INMUTABLE por diseno. Una columna que nunca
+// se actualiza es una invitacion a actualizarla.
+//
+// `minAsignadasPodio` congela el umbral APLICADO en esa corrida: es lo que hace auditable
+// el podio el dia que `RANKING_MIN_ASIGNADAS` cambie. `filas` congela el conteo; `0` es un
+// dato real ("ese dia no hubo actividad"), distinto de la AUSENCIA de cabecera ("el cron no
+// corrio esa fecha") — la distincion que R26 exige y que una tabla plana no podria dar.
+//
+// RLS habilitada sin policies (va en la migracion, patron ruta_optimizada / analytics_daily):
+// son datos de rendimiento de personas identificadas, nunca accesibles desde el cliente (R38).
+model RankingSnapshotDia {
+  id                String   @id @default(cuid())
+  fecha             DateTime @unique @db.Date // fecha calendario de COSTA RICA congelada, nunca un instante (R2)
+  generadoAt        DateTime @default(now()) @map("generado_at") // R24: evidencia de que el cron corrio y CUANDO (deja auditable el desfase del premio, Q2)
+  minAsignadasPodio Int      @map("min_asignadas_podio") // R1: umbral APLICADO en esta corrida (CHECK >= 1 en la migracion)
+  filas             Int // R1/R11: conteo congelado; 0 = dia sin actividad (CHECK >= 0 en la migracion)
+
+  filasSnapshot RankingSnapshotFila[]
+
+  @@map("ranking_snapshot_dia")
+}
+
+// Feature 196 (design §2.2, R6/R8/R9/R10/R13/R16/R17/R25) — DETALLE: una fila por mensajero
+// CON ACTIVIDAD en la fecha congelada (R5). Patron cabecera+detalle de
+// `ruta_optimizada` / `ruta_optimizada_parada`.
+//
+// `puesto` (1..N) ES el orden congelado: la lectura hace `ORDER BY puesto` y JAMAS reordena
+// ni recalcula (R25). `posicion` es 1/2/3 solo si la fila ocupo podio, NULL si no (R6/R9).
+//
+// `mensajeroNombre` es el nombre CONGELADO (R16): un renombrado posterior no reescribe la
+// historia. La FK a `usuario` es ON DELETE RESTRICT (R17), igual que las cuatro de
+// `analytics_daily`: ante la duda, que falle el borrado y no que se corrompa la historia.
+//
+// NO se guarda el porcentaje (R10, regla 3 de `analytics_daily`: nada de tasas persistidas):
+// `pct` es funcion pura de `entregadas`/`asignadas`, y el ORDEN —lo unico que un cambio de
+// comparador podria mover— ya esta congelado en `puesto`.
+//
+// NO hay CHECK `entregadas <= asignadas`, y es DELIBERADO: las dos magnitudes salen de
+// fuentes distintas (`gestion_orden.created_at` vs `orden.asignado_at`), asi que una orden
+// asignada ayer y entregada hoy hace `entregadas > asignadas` legitimamente. Un CHECK ahi
+// tumbaria el cron un dia cualquiera.
+//
+// INDICES QUE VIVEN SOLO EN LA MIGRACION: el UNIQUE PARCIAL
+// `(snapshot_id, posicion) WHERE posicion IS NOT NULL` (R13) — Prisma no sabe expresar un
+// indice parcial (no hay `WHERE` en `@@unique`), asi que va a mano en el `.sql` y queda
+// HUERFANO del datamodel, mismo patron y misma consecuencia aceptada que
+// `wallet_movimiento_origen_categoria_uq` y los indices de `purga_pdf_indices`: un
+// `prisma migrate dev --create-only` futuro puede proponer un `DROP INDEX` fantasma, que
+// NUNCA se resuelve borrando el indice sino descartando la migracion propuesta.
+// Declararlo aqui como `@@unique([snapshotId, posicion])` NO es equivalente: seria un
+// indice TOTAL, y aunque Postgres trate los NULL como distintos, el indice cargaria con
+// todas las filas fuera de podio sin necesidad.
+model RankingSnapshotFila {
+  id                String   @id @default(cuid())
+  snapshotId        String   @map("snapshot_id")
+  puesto            Int // 1..N: el orden congelado es DATO, no derivacion (R25)
+  posicion          Int? // 1/2/3 si ocupo podio; NULL si no (R6/R9)
+  mensajeroId       String   @map("mensajero_id")
+  mensajeroNombre   String   @map("mensajero_nombre") // R16: nombre congelado, no el actual
+  entregadas        Int // numerador del dia
+  asignadas         Int // denominador del dia
+  premioMonto       Decimal? @map("premio_monto") @db.Decimal(12, 2) // R7: mismo tipo exacto que premio_ranking.monto; NULL fuera de podio (R8, CHECK en la migracion)
+  premioDescripcion String?  @map("premio_descripcion") // R7
+
+  snapshot  RankingSnapshotDia @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  mensajero Usuario            @relation("RankingSnapshotFilaMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([snapshotId, mensajeroId]) // R13: un mensajero no puede aparecer dos veces en el mismo dia
+  @@unique([snapshotId, puesto]) // R13: dos filas no pueden ocupar el mismo puesto
+  @@map("ranking_snapshot_fila")
 }
