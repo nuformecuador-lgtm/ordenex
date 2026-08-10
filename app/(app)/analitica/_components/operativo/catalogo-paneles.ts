@@ -29,7 +29,13 @@
 // mantiene POR TEST (`tests/unit/analytics/tablero-catalogo-paneles.test.ts`), que si corre
 // en Node y si puede leer `getMetrica()`.
 
-import type { DimensionAnalitica } from "@/lib/analytics/types";
+// Feature 182 (T2.2/R9/D4) — cada metrica DECLARA su `unidad`, y el vinculo con el
+// catalogo real se ancla POR TEST, igual que todo lo demas de este archivo. La unidad es
+// lo que decide si el panel pide el modo agregado (R8: el borde rechaza los `conteo`), asi
+// que hace falta ANTES de la primera respuesta: deducirla de la serie obligaria a encadenar
+// la llamada agregada tras la serie y romperia la oleada unica de R11.
+
+import type { DimensionAnalitica, MetricaUnidad } from "@/lib/analytics/types";
 
 import type { TipoGrafica } from "./agregacion";
 
@@ -37,6 +43,12 @@ import type { TipoGrafica } from "./agregacion";
 export interface MetricaDePanel {
   readonly metricaId: string;
   readonly etiqueta: string;
+  /**
+   * R9 — la unidad que el catalogo de SERVIDOR declara para este `metricaId`. Se escribe a
+   * mano porque el catalogo real no puede importarse aqui (R25), y
+   * `tests/unit/analytics/tablero-catalogo-paneles.test.ts` comprueba que coincide.
+   */
+  readonly unidad: MetricaUnidad;
 }
 
 export interface PanelTablero {
@@ -65,13 +77,21 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
     id: "ordenes-creadas",
     titulo: "Órdenes creadas",
     grafica: "lineas",
-    metricas: [{ metricaId: "ordenes_creadas", etiqueta: "Órdenes creadas" }],
+    metricas: [
+      { metricaId: "ordenes_creadas", etiqueta: "Órdenes creadas", unidad: "conteo" },
+    ],
   },
   {
     id: "ordenes-por-estado",
     titulo: "Órdenes por estado",
     grafica: "donut",
-    metricas: [{ metricaId: "ordenes_por_estado", etiqueta: "Órdenes por estado" }],
+    metricas: [
+      {
+        metricaId: "ordenes_por_estado",
+        etiqueta: "Órdenes por estado",
+        unidad: "conteo",
+      },
+    ],
     desagregacion: "estatus",
   },
   {
@@ -79,11 +99,11 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
     titulo: "Resultado de las gestiones",
     grafica: "barras",
     metricas: [
-      { metricaId: "entregas", etiqueta: "Entregas" },
-      { metricaId: "devoluciones", etiqueta: "Devoluciones" },
-      { metricaId: "rechazos", etiqueta: "Rechazos" },
+      { metricaId: "entregas", etiqueta: "Entregas", unidad: "conteo" },
+      { metricaId: "devoluciones", etiqueta: "Devoluciones", unidad: "conteo" },
+      { metricaId: "rechazos", etiqueta: "Rechazos", unidad: "conteo" },
       // R21/D6 — SERVIDA por la 126 (y antes dada por «sin productor»). No se filtra.
-      { metricaId: "incidentes", etiqueta: "Incidentes" },
+      { metricaId: "incidentes", etiqueta: "Incidentes", unidad: "conteo" },
     ],
   },
   {
@@ -91,21 +111,30 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
     titulo: "Órdenes sin gestionar",
     grafica: "lineas",
     // R21/D6 — DERIVADA del embudo por la 126 (y antes dada por «sin productor»). No se filtra.
-    metricas: [{ metricaId: "sin_gestionar", etiqueta: "Sin gestionar" }],
+    metricas: [{ metricaId: "sin_gestionar", etiqueta: "Sin gestionar", unidad: "conteo" }],
   },
   {
     id: "tasa-entrega",
     titulo: "Tasa de entrega",
     grafica: "lineas",
-    metricas: [{ metricaId: "tasa_entrega", etiqueta: "Tasa de entrega" }],
+    metricas: [{ metricaId: "tasa_entrega", etiqueta: "Tasa de entrega", unidad: "porcentaje" }],
   },
   {
     id: "tiempo-ciclo",
     titulo: "Tiempo de ciclo",
     grafica: "lineas",
-    metricas: [{ metricaId: "tiempo_ciclo", etiqueta: "Tiempo de ciclo" }],
+    metricas: [{ metricaId: "tiempo_ciclo", etiqueta: "Tiempo de ciclo", unidad: "segundos" }],
   },
 ];
+
+/**
+ * R9/R8 — la unidad de un panel: la de sus metricas, que comparten unidad por construccion
+ * (lo afirma `tablero-catalogo-paneles.test.ts`; dos unidades en un mismo eje no se leen).
+ * Es lo que decide si el panel pide el modo agregado.
+ */
+export function unidadDelPanel(panel: PanelTablero): MetricaUnidad {
+  return panel.metricas[0]?.unidad ?? "conteo";
+}
 
 /** Todos los `metricaId` que el tablero consulta, sin repetir. */
 export function metricasDelTablero(): string[] {

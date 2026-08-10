@@ -19,6 +19,28 @@
 // lanza no tumba a los demas. No hay un `Promise.all` del tablero entero cuyo rechazo se
 // propague hacia arriba.
 
+// Feature 182 (T3.1-T3.3) — EL MODO AGREGADO, CABLEADO.
+//
+// Un panel de `porcentaje`/`segundos` dispara TRES consultas en la MISMA oleada (R11): la
+// serie de la 126 y los dos granos del agregado de la 176 (`periodo` y `semana`). Los tres
+// hooks son de primer nivel del mismo render: no hay un `await` de la serie antes de pedir
+// el agregado, porque encadenarlas convertiria el panel mas lento en el doble de lento sin
+// que nada avisara (es la mutacion que mide `TableroOperativoLatencia.test.tsx`).
+//
+// Los dos granos SIEMPRE, y no «el que haga falta» (Q2): saber de antemano si se excede el
+// techo exigiria resolver el rango en el cliente, o sea una SEGUNDA definicion del techo, y
+// dos definiciones se desincronizan solas.
+//
+// R8 — un `conteo` no pide el agregado: el borde responderia `validation_error` por
+// contrato (`UNIDADES_AGREGABLES`), asi que seria una llamada que solo puede fallar. La
+// unidad la DECLARA el catalogo de paneles, que es lo que permite decidirlo antes de la
+// primera respuesta.
+//
+// R13 — las tres respuestas entran en la MISMA precedencia (`unauthenticated` > `forbidden`
+// > `validation_error` > `ok`). Un agregado denegado no se degrada a «no hay cifra»: seria
+// convertir un problema de permisos en un problema de negocio que no existe, que es el
+// mismo pecado que R2 de la 131 persigue para la serie.
+
 import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
 import useSWR from "swr";
 
@@ -27,24 +49,35 @@ import { GraficaDonut } from "@/components/private/analytics/GraficaDonut";
 import { GraficaLineas } from "@/components/private/analytics/GraficaLineas";
 import { KpiCard } from "@/components/private/analytics/KpiCard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
-import type { Cobertura, ResultadoOperativo } from "@/lib/types/analitica-operativa";
+import {
+  consultarAgregadoOperativo,
+  consultarAnaliticaOperativa,
+} from "@/lib/actions/analitica-operativa";
+import {
+  esUnidadAgregable,
+  type Cobertura,
+  type CuboAgregado,
+  type GranoAgregado,
+  type ResultadoAgregado,
+  type ResultadoOperativo,
+} from "@/lib/types/analitica-operativa";
 
-import { prepararPanel, type FuenteSerie } from "./agregacion";
-import type { PanelTablero } from "./catalogo-paneles";
+import { prepararPanel, type CubosDelPanel, type FuenteSerie, type PanelPreparado } from "./agregacion";
+import { unidadDelPanel, type PanelTablero } from "./catalogo-paneles";
 import { ExportarOperativoPanel } from "./ExportarOperativoPanel";
 import { serializarFiltro, type FiltroTablero } from "./filtro-tablero";
 import {
   TEXTO_ERROR_PANEL,
+  TEXTO_GRANO_SERVIDOR,
   TEXTO_NOTA_SIN_GESTIONAR,
   TEXTO_PROHIBIDO,
-  TEXTO_RANGO_EXCEDIDO,
   TEXTO_SESION_NO_VALIDA,
+  TEXTO_SIN_GESTIONES,
   TITULO_FILTRO_INVALIDO,
-  TITULO_RANGO_EXCEDIDO,
   VACIO_PANEL,
   avisoRecorte,
   categoriaDePunto,
+  etiquetaTotalPeriodo,
   lineasDeValidacion,
   textoGrano,
   textoOtros,
@@ -97,6 +130,30 @@ async function consultarPanel(
   );
 }
 
+/**
+ * Feature 182 (R11/R8) — las dos lecturas agregadas de un panel, por grano.
+ *
+ * Misma traduccion del filtro que la serie (`serializarFiltro`): no hay una segunda forma
+ * de decir el mismo filtro que pueda divergir de la primera.
+ */
+async function consultarAgregadoPanel(
+  panel: PanelTablero,
+  filtro: FiltroTablero,
+  grano: GranoAgregado,
+): Promise<ResultadoAgregado[]> {
+  const raw = JSON.parse(serializarFiltro(filtro)) as unknown;
+  return Promise.all(
+    panel.metricas.map((metrica) =>
+      consultarAgregadoOperativo({
+        metricaId: metrica.metricaId,
+        raw,
+        grano,
+        ...(panel.desagregacion ? { desagregacion: panel.desagregacion } : {}),
+      }),
+    ),
+  );
+}
+
 type EstadoPanel =
   | { readonly tipo: "cargando" }
   | { readonly tipo: "error" }
@@ -108,12 +165,44 @@ type EstadoPanel =
       readonly fuentes: FuenteSerie[];
       readonly cobertura: Cobertura;
       readonly hayNota: boolean;
+      /** Feature 182 — lo que el servidor agrego para este panel. Vacio en los conteos. */
+      readonly cubos: CubosDelPanel;
     };
 
+/** Cualquiera de las dos lecturas del borde: comparten los tres estados que no son `ok`. */
+type RespuestaDelBorde = ResultadoOperativo | ResultadoAgregado;
+
+type EstadoDenegado = Extract<
+  EstadoPanel,
+  { tipo: "unauthenticated" } | { tipo: "forbidden" } | { tipo: "validation_error" }
+>;
+
 /**
- * Reduce los N resultados del panel a UN estado visual. La precedencia no es arbitraria:
- * una sesion caida explica cualquier otra cosa, un denegado explica un filtro raro, y solo
- * cuando TODOS los resultados son `ok` hay algo que pintar.
+ * Feature 182 (R13) — LA PRECEDENCIA, en un solo sitio y para las tres lecturas.
+ *
+ * No es arbitraria: una sesion caida explica cualquier otra cosa, un denegado explica un
+ * filtro raro, y solo cuando TODOS los resultados son `ok` hay algo que pintar. Que la
+ * serie y el agregado la compartan es lo que impide que un `forbidden` del agregado se
+ * lea como «este panel no tiene cifra».
+ */
+export function denegadoDe(resultados: readonly RespuestaDelBorde[]): EstadoDenegado | null {
+  if (resultados.some((r) => r.status === "unauthenticated")) return { tipo: "unauthenticated" };
+  if (resultados.some((r) => r.status === "forbidden")) return { tipo: "forbidden" };
+
+  const invalido = resultados.find((r) => r.status === "validation_error");
+  if (invalido && invalido.status === "validation_error") {
+    return { tipo: "validation_error", fieldErrors: invalido.fieldErrors };
+  }
+  return null;
+}
+
+/** Los cubos de una respuesta agregada `ok`. Sin respuesta no hay cubos, y eso es carga. */
+export function cubosDe(resultados: readonly ResultadoAgregado[] | undefined): CuboAgregado[] {
+  return (resultados ?? []).flatMap((r) => (r.status === "ok" ? [...r.datos.cubos] : []));
+}
+
+/**
+ * Reduce los N resultados del panel a UN estado visual.
  *
  * Punto de mutacion de R2: devolver aqui un `ok` con `puntos: []` para el denegado hace
  * caer el panel al `EmptyState` de la grafica, y entonces «no puedes verlo» y «no hubo
@@ -122,14 +211,10 @@ type EstadoPanel =
 export function reducirResultados(
   panel: PanelTablero,
   resultados: readonly ResultadoOperativo[],
+  cubos: CubosDelPanel = {},
 ): EstadoPanel {
-  if (resultados.some((r) => r.status === "unauthenticated")) return { tipo: "unauthenticated" };
-  if (resultados.some((r) => r.status === "forbidden")) return { tipo: "forbidden" };
-
-  const invalido = resultados.find((r) => r.status === "validation_error");
-  if (invalido && invalido.status === "validation_error") {
-    return { tipo: "validation_error", fieldErrors: invalido.fieldErrors };
-  }
+  const denegado = denegadoDe(resultados);
+  if (denegado) return denegado;
 
   const fuentes: FuenteSerie[] = [];
   let cobertura: Cobertura | null = null;
@@ -145,7 +230,7 @@ export function reducirResultados(
   // `cobertura` es OBLIGATORIA en toda respuesta `ok` (su tipo se declara sin `?`), asi
   // que solo falta si no hubo ni un `ok`.
   if (cobertura === null) return { tipo: "cargando" };
-  return { tipo: "ok", fuentes, cobertura, hayNota };
+  return { tipo: "ok", fuentes, cobertura, hayNota, cubos };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -170,11 +255,51 @@ export function PanelOperativo({ panel, filtro }: PanelOperativoProps) {
     { keepPreviousData: false, revalidateOnFocus: false },
   );
 
+  // R8 — solo `porcentaje` y `segundos`. La unidad la declara el catalogo de paneles, y el
+  // predicado es el MISMO del contrato del borde (`esUnidadAgregable`): una segunda lista
+  // de unidades agregables en el cliente se desincronizaria de la del servidor.
+  const pideAgregado = esUnidadAgregable(unidadDelPanel(panel));
+
+  // R10/R11 — el grano entra en la CLAVE, junto al filtro: sin el, la cifra del filtro
+  // anterior (o la del otro grano) sobreviviria a un cambio de filtro. Y las tres claves
+  // comparten el prefijo `CLAVE_TABLERO`, con lo que el boton «Actualizar» las revalida
+  // todas sin que la rejilla tenga que saber que existen.
+  const periodo = useSWR(
+    pideAgregado
+      ? [CLAVE_TABLERO, panel.id, panel.desagregacion ?? "", filtroSerializado, "periodo"]
+      : null,
+    () => consultarAgregadoPanel(panel, filtro, "periodo"),
+    { keepPreviousData: false, revalidateOnFocus: false },
+  );
+
+  const semana = useSWR(
+    pideAgregado
+      ? [CLAVE_TABLERO, panel.id, panel.desagregacion ?? "", filtroSerializado, "semana"]
+      : null,
+    () => consultarAgregadoPanel(panel, filtro, "semana"),
+    { keepPreviousData: false, revalidateOnFocus: false },
+  );
+
   const estado: EstadoPanel = useMemo(() => {
-    if (error) return { tipo: "error" };
+    if (error || periodo.error || semana.error) return { tipo: "error" };
+
+    // R13 — LA MISMA precedencia para las tres lecturas, antes de mirar si falta alguna:
+    // un denegado no espera a que lleguen las demas para decir lo que es.
+    const denegado = denegadoDe([...(data ?? []), ...(periodo.data ?? []), ...(semana.data ?? [])]);
+    if (denegado) return denegado;
+
     if (!data) return { tipo: "cargando" };
-    return reducirResultados(panel, data);
-  }, [data, error, panel]);
+    // Mientras el agregado no ha llegado el panel esta EN CARGA: no hay ventana en la que
+    // se pinte la serie sin su cifra, ni una serie diaria «casi completa» de un rango largo.
+    if (pideAgregado && (periodo.data === undefined || semana.data === undefined)) {
+      return { tipo: "cargando" };
+    }
+
+    return reducirResultados(panel, data, {
+      periodo: cubosDe(periodo.data),
+      semana: cubosDe(semana.data),
+    });
+  }, [data, error, panel, pideAgregado, periodo.data, periodo.error, semana.data, semana.error]);
 
   const cobertura = estado.tipo === "ok" ? estado.cobertura : null;
   const publicar = useCallback(
@@ -185,13 +310,29 @@ export function PanelOperativo({ panel, filtro }: PanelOperativoProps) {
     publicar(cobertura);
   }, [publicar, cobertura]);
 
-  const preparado = useMemo(
-    () =>
-      estado.tipo === "ok"
-        ? prepararPanel(estado.fuentes, { grafica: panel.grafica, categoriaDePunto })
-        : null,
-    [estado, panel.grafica],
-  );
+  // R3 — `prepararPanel` LANZA si le llega un rango largo de `porcentaje`/`segundos` sin
+  // los cubos del servidor (antes que agregarlos en el cliente, que seria una media de
+  // medias). Aqui esa condicion no deberia darse —el panel espera a los cubos—, y si se
+  // diera igual se presenta con el pixel de error del panel: R24 de la 131 exige que un
+  // panel roto no tumbe a los demas, y una excepcion en render tumbaria el tablero entero.
+  const preparacion = useMemo<
+    { readonly panel: PanelPreparado } | { readonly fallo: true } | null
+  >(() => {
+    if (estado.tipo !== "ok") return null;
+    try {
+      return {
+        panel: prepararPanel(
+          estado.fuentes,
+          { grafica: panel.grafica, categoriaDePunto },
+          estado.cubos,
+        ),
+      };
+    } catch {
+      return { fallo: true };
+    }
+  }, [estado, panel.grafica]);
+
+  const preparado = preparacion !== null && "panel" in preparacion ? preparacion.panel : null;
 
   /* --- Los cuatro estados que NO son «sin datos» (R2, R3, R4, R24) --------- */
 
@@ -212,22 +353,10 @@ export function PanelOperativo({ panel, filtro }: PanelOperativoProps) {
       />
     );
   }
-  if (estado.tipo === "error") {
+  if (estado.tipo === "error" || (preparacion !== null && "fallo" in preparacion)) {
     // R24 — mensaje FIJO. Nunca `error.message`: puede arrastrar ids de orden, guias o
     // telefonos, y el filtro crudo puede arrastrar ids de mensajero.
     return <PanelConAviso titulo={panel.titulo} texto={TEXTO_ERROR_PANEL} />;
-  }
-
-  /* --- R27/D3: el hueco declarado, sin ninguna cifra ----------------------- */
-
-  if (preparado?.modo === "rango_excedido") {
-    return (
-      <PanelConAviso
-        titulo={panel.titulo}
-        encabezado={TITULO_RANGO_EXCEDIDO}
-        texto={TEXTO_RANGO_EXCEDIDO}
-      />
-    );
   }
 
   /* --- Datos ---------------------------------------------------------------- */
@@ -250,25 +379,33 @@ export function PanelOperativo({ panel, filtro }: PanelOperativoProps) {
           descargar» sin producir archivo es el control (R17), y esconderlo aqui dejaria al
           usuario sin saber si no hay datos o si no puede descargarlos. */}
       {estado.tipo === "ok" ? <ExportarOperativoPanel panel={panel} filtro={filtro} /> : null}
-      {preparado && !preparado.vacio ? (
+      {preparado && (!preparado.vacio || preparado.total !== null) ? (
         <div className="flex flex-col gap-2">
           {preparado.total ? (
             <>
               <KpiCard
-                etiqueta={`${panel.titulo} · total del periodo`}
+                etiqueta={etiquetaTotalPeriodo(panel.titulo)}
                 valor={preparado.total.valor}
                 unidad={preparado.unidad}
               />
-              {/* R9/D2 — un total que incluye el dia en curso NO se presenta como cerrado. */}
+              {/* R9/R6 — un total que incluye el dia en curso NO se presenta como cerrado. */}
               {preparado.total.parcial ? (
                 <p className="text-xs text-muted-foreground">
                   {textoTotalParcial(preparado.total.corteAt)}
                 </p>
               ) : null}
+              {/* R7 — denominador cero: no hubo gestiones. No es un cero, y no es el vacio
+                  de la metrica: son tres afirmaciones distintas con tres pixeles distintos. */}
+              {preparado.total.sinGestiones ? (
+                <p className="text-xs text-muted-foreground">{TEXTO_SIN_GESTIONES}</p>
+              ) : null}
             </>
           ) : null}
-          {/* R16 — el grano usado se anuncia; nadie tiene que deducirlo del eje. */}
-          {preparado.grano === "semana" ? (
+          {/* R14/R16 — el grano usado se anuncia; nadie tiene que deducirlo del eje. Y se
+              dice CUAL de los dos es: la semana que sumo el servidor no es la del cliente. */}
+          {preparado.desdeCubos ? (
+            <p className="text-xs text-muted-foreground">{TEXTO_GRANO_SERVIDOR}</p>
+          ) : preparado.grano === "semana" ? (
             <p className="text-xs text-muted-foreground">{textoGrano(preparado.grano)}</p>
           ) : null}
           {/* R15 — cuantas categorias se fundieron en «otros». */}

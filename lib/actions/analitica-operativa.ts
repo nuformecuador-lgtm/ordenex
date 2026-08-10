@@ -152,7 +152,13 @@ export async function consultarAnaliticaOperativa(
  * nueva, el codec de `bigint` no se toca y el dia en curso sigue fuera de la cache por
  * construccion (el repositorio vivo no se decora).
  *
- * @sin-superficie nacio sin cablear (feature 176, be51ad9c del 2026-08-03) y sigue asi: la UI de analitica agrega en el CLIENTE (`analitica/_components/operativo/agregacion.ts`), asi que el «modo agregado» del servidor no tiene todavia pantalla que lo pida. Backend listo y probado a la espera de su UI; si esa UI no llega, esto sobra.
+ * YA TIENE SUPERFICIE. Nacio sin cablear (feature 176, be51ad9c del 2026-08-03) y llevaba
+ * una anotacion `@sin-superficie` diciendo que la UI agregaba en el CLIENTE. La feature 182
+ * la cablea: `PanelOperativo` la consulta con los dos granos (`periodo` y `semana`) para los
+ * paneles de porcentaje y segundos. La anotacion se retira aqui —no en un barrido posterior—
+ * porque una excusa que sobrevive a su motivo deja de avisar y pasa a mentir; el guardia
+ * `tests/unit/guards/superficie-de-uso.guardia.test.ts` lo pone rojo, y por eso este cambio
+ * de comentario viaja en la 182 aunque sea zona `frontend`.
  */
 export async function consultarAgregadoOperativo(
   entrada: EntradaOperativa & { readonly grano?: GranoAgregado },
