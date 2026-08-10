@@ -117,4 +117,38 @@ export interface IIngresosAnaliticaRepository {
     consulta: ConsultaAnalitica,
     cubos: readonly CuboTemporal[],
   ): Promise<readonly AgregadoCuboCategoriaCaja[]>;
+
+  /**
+   * Feature 187 (R1/R6) — UNA LECTURA CONSISTENTE: ejecuta `fn` sobre una instancia de este mismo
+   * repositorio ligada a un unico snapshot de la base, y devuelve lo que `fn` devuelva.
+   *
+   * **QUE GARANTIZA.** Todas las consultas que se emitan por el repositorio que `fn` recibe ven
+   * exactamente la MISMA foto de los datos, aunque otra conexion confirme escrituras en medio. Es
+   * lo que hace cierta en runtime la invariante de la 180 —R12: «Σ de los importes de las filas ==
+   * `total`»—, que hasta ahora se cumplia solo porque nadie escribia entre las dos consultas.
+   *
+   * **QUE NO GARANTIZA.** No es una cerradura: nadie queda bloqueado, ninguna escritura ajena se
+   * retrasa y lo que se lee puede estar desactualizado respecto del instante en que la respuesta
+   * llega al usuario. Tampoco protege nada que se lea por OTRO repositorio o fuera de `fn`.
+   *
+   * **EL TOTAL SIGUE SIENDO UNA CONSULTA APARTE** (D1 de `design.md` §2, R5). Este metodo NO
+   * existe para fusionar `sumarPorCategoria` con `sumarPorCuboYCategoria` en una sola llamada: el
+   * total se sigue pidiendo por su camino y el desglose por el suyo, y la igualdad entre ambos
+   * sigue siendo una invariante comprobable entre DOS caminos independientes. Derivar el total
+   * sumando las filas la convertiria en una tautologia, que es justo lo que la ficha prohibe.
+   *
+   * **VOCABULARIO DE DOMINIO, NO DE ORM** (R6). El servicio que lo llama no sabe —ni puede saber—
+   * que por debajo hay una transaccion, ni con que nivel de aislamiento: eso vive entero en la
+   * implementacion. Si esta firma mencionara `$transaction` o `isolationLevel`, la capa de
+   * servicio quedaria atada a Prisma, que es lo que `docs/architecture.md` prohibe.
+   *
+   * **SOLO LECTURAS DENTRO** (R3): `fn` no debe emitir ninguna sentencia de escritura. No hay
+   * `READ ONLY` en la base que lo impida —exigirlo obligaria a meter `$executeRaw` en el tipo del
+   * cliente, o sea a abrir la puerta de la escritura para prometer que no se escribe—, asi que la
+   * garantia la sostienen las consultas que hay dentro y el test que las censa.
+   *
+   * **LOS ERRORES SUBEN TAL CUAL** (R7): un fallo dentro del alcance aborta la transaccion y se
+   * propaga. Ni `try`/`catch` ni importes por defecto.
+   */
+  enLecturaConsistente<T>(fn: (repo: IIngresosAnaliticaRepository) => Promise<T>): Promise<T>;
 }
