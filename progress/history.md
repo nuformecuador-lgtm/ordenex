@@ -3072,3 +3072,42 @@ tomada del cubo `periodo`. Cierra el hueco declarado por **R27 de la 131**, que 
   base local. Las bitácoras de la 187 y la 192 lo habían llamado «drift de la base local» y
   sugerían recrear la columna — lo que la habría desincronizado de `ux`. Se fueron solos al
   mergearse `ux` (PR #327), sin que nadie tocara la base.
+
+## 2026-08-10 — 184 (analítica financiera: export CSV/XLSX de la serie)
+
+**PR #331 → `dev`.** Reviewer **APROBADO**: 30/30 requisitos trazados a tests que miden lo que
+piden, verificados **leyendo los treinta**, no por muestreo. Cierra la **D1 de la 134**, que dejó la
+analítica financiera fuera de aquel export *por decisión, no por olvido*, y que ahora lo dice por
+escrito en su propia spec en vez de seguir leyéndose como trabajo pendiente.
+
+- **Estuvo dos días a un `git checkout` de desaparecer.** El grueso —spec completo, tres archivos de
+  producción, nueve de test— lo escribió otro implementer el **2026-08-08** y quedó **sin un solo
+  commit** en un worktree local. Se rescató tal cual estaba y se **pusheó antes de tocarlo**, para
+  que se distinga qué dejó él y qué se puso encima.
+  > **La regla que queda, y es la misma que dejó la 182 doce horas antes:** trabajo que solo existe
+  > en un worktree local no existe. La 182 estuvo cinco días con rama local y sin push; esta, dos
+  > días sin commit. Las dos aparecían como `pending` en el registro. **Si una feature se queda a
+  > medias, lo primero es la rama remota** — el bookkeeping puede esperar, el disco no.
+- **El lint rojo era un defecto real, no ruido.** `columnas.current` se leía **durante el render**.
+  El diseño detrás era correcto —el juego de columnas tiene que ser una instancia estable que
+  `obtenerFilas` reescribe justo antes de que el generador la lea, y un `setState` no llegaría a ese
+  click—, así que se conservó y se cambió **cómo se expresa**: `useState` con inicializador
+  perezoso. Sin `eslint-disable`: callar al linter habría dejado en pie exactamente la lectura que
+  la regla vigila.
+- **Tres mutaciones, no las dos exigidas.** La tercera —invertir las dos sentencias del borde—
+  **nunca se había verificado** en esta feature. Las tres dieron rojo y están revertidas byte a byte.
+- **Gate:** 1037/1039 archivos · 12.822/12.824 tests · typecheck y lint limpios. Los 2 rojos,
+  verdes en aislado. Ese gate es además el baseline que T0.2 exigía y que nadie llegó a medir: la
+  comparación «antes/después» propia de la rama **ya no se puede reconstruir**, y así se anotó.
+- **Deuda declarada, no tapada:** la **rama XLSX no se ejecuta en ningún caso de esta feature** —el
+  menú ofrece los dos formatos, pero todo lo que descarga pulsa CSV, así que el generador con
+  *estas* columnas nunca corre aquí y la aserción de R10 sobre el texto se mide sobre el CSV, no
+  sobre el libro—. No es una fuga; es la línea que la feature introduce y no recorre.
+
+### Nota de arnés del mismo día
+
+`feature_list.json` estuvo **sintácticamente roto en `dev`** desde el merge de `ux` (PR #327):
+faltaba la llave de apertura de una ficha, resultado de resolver un conflicto a mano. `./init.sh` lo
+valida y cualquier `JSON.parse` casca, así que el registro que lee el arnés entero estuvo
+inservible para todas las sesiones hasta el PR #329. **Un conflicto en este archivo no se resuelve a
+ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
