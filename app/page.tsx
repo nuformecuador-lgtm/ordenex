@@ -8,7 +8,7 @@ import { LandingPostular } from "./_landing/LandingPostular";
 import { LandingServicios } from "./_landing/LandingServicios";
 
 /**
- * Landing pública en `/`: réplica del home de ordenex.co, **sin imágenes**.
+ * Landing pública en `/`: réplica del home de ordenex.co.
  *
  * Server Component fuera del grupo `(app)` → no hereda el Sidebar ni
  * `resolveActorFromSession`. Sin fetch de datos.
@@ -16,9 +16,23 @@ import { LandingServicios } from "./_landing/LandingServicios";
  * El sitio define su maquetado en clases `lp-*`; aquí se traduce a utilidades
  * Tailwind sobre los tokens de marca que `globals.css` ya expone (`brand`,
  * `navy-deep`, escala `asfalto`, `kraft-*`, `ink-blue`), sin CSS suelto ni hex
- * ad-hoc (DESIGN.md). Los tres puntos donde el sitio pone una fotografía —fondo
- * del hero, banda intermedia y cabecera de las tarjetas de postulación— quedan
- * resueltos con el navy y el halo naranja que ya usan las páginas públicas.
+ * ad-hoc (DESIGN.md).
+ *
+ * Los tres puntos donde el sitio pone fotografía ya las llevan, desde
+ * `public/landing/`: fondo del hero (bodega), banda intermedia (paquetes) y
+ * cabecera de las tarjetas de postulación (logística, bodega y mensajera). Todas
+ * son DECORATIVAS —`alt=""`— porque lo que comunican ya está en los titulares, y
+ * todas van bajo un degradado navy que sostiene el contraste del texto blanco. El
+ * `bg-navy-deep` de cada sección sigue siendo el respaldo si una foto no carga.
+ *
+ * Van con `next/image`, que las sirve optimizadas y en el tamaño que pide cada
+ * hueco: sin eso las cuatro fotos suman ~2 MB en la página de entrada del sitio.
+ *
+ * Durante un tiempo NO se pintaba ninguna, y la causa no estaba aquí: el `matcher`
+ * del middleware excluía `.svg` pero no `.jpg`, así que la petición de cada foto se
+ * trataba como ruta privada y salía en 307 a /login. Corregido en `middleware.ts`;
+ * si algún día vuelven a desaparecer todas a la vez, ese es el primer sitio donde
+ * mirar, y no las rutas de `public/`.
  */
 export default function LandingPage() {
   return (
