@@ -405,10 +405,19 @@ describe("OrdenesPage", () => {
     for (const rol of [RolValue.maestro, RolValue.admin]) {
       resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
       await renderPage();
-      // El receptor es una tarjeta plegada: la barra de acciones ofrece el botón que
-      // la despliega. Dentro está la entrada manual (input "Número de guía" + botón
-      // "Recibir"), que el escáner de origen del adminTienda no tiene.
+      // El receptor es una tarjeta plegada: la barra de acciones ofrece el botón que la
+      // despliega. Se identifica por el NOMBRE ACCESIBLE de su región, que es lo que
+      // distingue las dos recepciones por lo que SON.
+      //
+      // Antes se usaba «tiene entrada manual» como discriminador, apoyándose en que el
+      // escáner de origen del adminTienda no la tenía. Eso dejó de ser cierto el
+      // 2026-08-10 (pedido humano: esa pantalla también acepta el número tecleado), y el
+      // test pasó a fallar por un motivo que nada tenía que ver con lo que afirma. La
+      // región es un discriminador que no depende de qué controles ofrezca cada una.
       await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
+      expect(
+        screen.getByRole("region", { name: "Recepción en bodega central" }),
+      ).toBeInTheDocument();
       expect(screen.getByLabelText("Número de guía")).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Recibir" }),
@@ -428,15 +437,26 @@ describe("OrdenesPage", () => {
 
     const user = userEvent.setup();
 
-    // adminTienda opera la recepción en ORIGEN (cámara), NO la de bodega central: al
-    // desplegar su receptor no aparece la entrada manual de guía.
+    // adminTienda opera la recepción en ORIGEN, NO la de bodega central. Se afirma sobre
+    // las REGIONES: la suya está y la de bodega central no.
+    //
+    // Ya NO se puede afirmar «no tiene entrada manual»: desde el 2026-08-10 la recepción
+    // en origen también acepta el número tecleado (pedido humano), así que ese rasgo dejó
+    // de separar las dos superficies. Lo que R16 protege —que el adminTienda no alcance la
+    // recepción de bodega central— se comprueba igual de fuerte, y ahora sin apoyarse en
+    // un detalle que podía cambiar por otros motivos.
     resolveActorMock.mockResolvedValueOnce({
       usuarioId: "t1",
       rol: RolValue.adminTienda,
     });
     await renderPage();
     await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
-    expect(screen.queryByLabelText("Número de guía")).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recepción en bodega central" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("region", { name: "Recepción en tienda por escaneo" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
     cleanup();
 
