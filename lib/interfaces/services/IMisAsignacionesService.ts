@@ -2,6 +2,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
+import type { GestionUbicacionAusenciaValue } from "@/lib/types/gestion-orden";
 
 // Feature 36 — contrato del servicio del flujo del mensajero: listar mis
 // asignaciones, recoger (una o varias), escoger una para gestionar (bloqueo
@@ -207,7 +208,14 @@ export interface EvidenciaArchivo {
 // repetirla en cada variante ni tocar el discriminante.
 // Feature 119 (R5): la evidencia UNICA (`evidencia`) pasa a una LISTA `evidencias`
 // (1..N, tope R7) en las 3 ramas con foto. `reprogramada` sigue sin evidencia.
-export type GestionarInput = { ubicacion?: UbicacionInput } & (
+// Feature 193 (R14): `ubicacionAusencia` viaja por la MISMA interseccion, por el mismo motivo.
+// Sigue siendo opcional AQUI —el tipo no puede expresar «una u otra»— porque esa regla ya la
+// impuso el borde (`gestionarSchema`, R8-R12) y duplicarla en el tipo no la haria mas cierta:
+// al service solo le llegan entradas que ya pasaron por zod.
+export type GestionarInput = {
+  ubicacion?: UbicacionInput;
+  ubicacionAusencia?: GestionUbicacionAusenciaValue;
+} & (
   | {
       ordenId: string;
       resultado: "entregada";

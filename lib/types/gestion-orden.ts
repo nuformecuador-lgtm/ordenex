@@ -70,9 +70,85 @@ export const evidenciasSchema = z
     `maximo ${gestionConfig.MAX_EVIDENCIAS_POR_GESTION} fotos de evidencia`,
   ); // R7
 
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// Feature 193 (R5-R14) — la ubicacion del mensajero en la GESTION.
+//
+// Aqui se ACOTA la R25 de la feature 92 («SIEMPRE OPCIONAL en sus consumidores: denegar el
+// permiso no puede bloquear nada», `ruta-mensajero.ts:17`). Esa regla SIGUE VIGENTE para
+// `recogerSchema` y para `sincronizarRutaSchema` (R15, mas abajo no se tocan). Solo en la
+// gestion de una orden la denegacion pasa a bloquear, por decision humana del 2026-08-10.
+// Se declara la contradiccion en vez de dejarla silenciosa.
+
+/** R5: los cuatro fallos TECNICOS. Espejo exacto del enum nativo `gestion_ubicacion_ausencia`. */
+export const GESTION_UBICACION_AUSENCIA = [
+  "timeout",
+  "no_disponible",
+  "no_soportado",
+  "contexto_inseguro",
+] as const;
+
+/**
+ * R12 — la DENEGACION del permiso NO esta en esta lista, y esa ausencia ES el mecanismo del
+ * bloqueo: no se puede expresar, asi que el rechazo es estructural y no depende de una
+ * comprobacion aparte que alguien pueda olvidar. Anadirla aqui tumbaria R19 en silencio.
+ */
+export const gestionUbicacionAusenciaSchema = z.enum(GESTION_UBICACION_AUSENCIA);
+export type GestionUbicacionAusenciaValue =
+  (typeof GESTION_UBICACION_AUSENCIA)[number];
+
+/**
+ * Los dos campos de ubicacion, declarados UNA vez y compuestos en las cinco ramas por spread
+ * (R14). Cinco copias es como divergen: la 92 ya dejo escrito ese razonamiento al sacar
+ * `ubicacionSchema` a su propio archivo.
+ *
+ * Ambos son opcionales AQUI a proposito: la regla que los relaciona no se puede expresar
+ * campo a campo —depende de los dos a la vez— y vive en `exigirUbicacionOAusencia`.
+ */
+const camposUbicacion = {
+  ubicacion: ubicacionSchema.optional(),
+  ubicacionAusencia: gestionUbicacionAusenciaSchema.optional(),
+};
+
+/**
+ * R6/R8/R9/R10/R11 — la disyuncion: O coordenadas O motivo, nunca las dos y nunca ninguna.
+ *
+ * Se aplica UNA vez sobre la union entera (R14), no rama por rama: asi una sexta rama futura
+ * nace con la regla puesta en vez de heredarla solo si alguien se acuerda.
+ */
+function exigirUbicacionOAusencia(
+  valor: { ubicacion?: unknown; ubicacionAusencia?: unknown },
+  ctx: z.RefinementCtx,
+): void {
+  const tieneUbicacion = valor.ubicacion !== undefined;
+  const tieneAusencia = valor.ubicacionAusencia !== undefined;
+
+  // R11: aceptar las dos haria indistinguible el dato medido del justificado.
+  if (tieneUbicacion && tieneAusencia) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["ubicacion"],
+      message:
+        "no se puede enviar la ubicacion y un motivo de ausencia a la vez",
+    });
+    return;
+  }
+
+  // R10: sin ninguna de las dos no hay nada que registrar ni nada que justificar.
+  if (!tieneUbicacion && !tieneAusencia) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["ubicacion"],
+      message: "se requiere la ubicacion del mensajero",
+    });
+  }
+}
+
 // R16: recoger recibe un conjunto NO vacio de ordenIds (lote o de a una).
 // Feature 92/R22: + `ubicacion` OPCIONAL. Al ser opcional, ninguna llamada existente se
 // rompe: un cliente que no la envie sigue validando igual.
+//
+// ⛔ Feature 193/R15: recoger NO cambia. Sigue siendo opcional y una denegacion NO lo
+// bloquea. El endurecimiento es SOLO de la gestion.
 export const recogerSchema = z.object({
   ordenIds: z.array(z.string().min(1)).min(1),
   ubicacion: ubicacionSchema.optional(),
@@ -145,14 +221,14 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
     metodoPago: z.enum(METODO_PAGO_SEED),
     // Feature 119 (R5): lista de 1..N fotos (antes una sola). Validacion por archivo (R8).
     evidencias: evidenciasSchema,
-    ubicacion: ubicacionSchema.optional(), // feature 92/R22
+    ...camposUbicacion, // feature 92/R22 + feature 193/R14
   }),
   z.object({
     ordenId: z.string().min(1),
     resultado: z.literal("reprogramada"),
     fechaReprogramacion: fechaFuturaSchema,
     motivo: motivoSchema,
-    ubicacion: ubicacionSchema.optional(), // feature 92/R22
+    ...camposUbicacion, // feature 92/R22 + feature 193/R14
   }),
   z.object({
     ordenId: z.string().min(1),
@@ -165,7 +241,7 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
     // Feature 75: la evidencia (foto) pasa a ser OBLIGATORIA en Devolver, igual que en
     // entrega/rechazo. Feature 119 (R5): ahora es una LISTA de 1..N fotos.
     evidencias: evidenciasSchema,
-    ubicacion: ubicacionSchema.optional(), // feature 92/R22
+    ...camposUbicacion, // feature 92/R22 + feature 193/R14
   }),
   z.object({
     ordenId: z.string().min(1),
@@ -173,7 +249,7 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
     motivo: motivoSchema,
     // Feature 119 (R5): lista de 1..N fotos (antes una sola).
     evidencias: evidenciasSchema,
-    ubicacion: ubicacionSchema.optional(), // feature 92/R22
+    ...camposUbicacion, // feature 92/R22 + feature 193/R14
   }),
   // Feature 158 (R9/R10/R11, Q-B) — QUINTA variante: el paquete esta danado, perdido o
   // robado. NO hay recaudo (`montoRecibido`/`metodoPago` no existen en esta rama), y al ser
@@ -193,7 +269,7 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
     // declarada en requirements.md y NO se re-litiga. Se reusa `evidenciasSchema` -> mismos
     // limites por archivo y por lista que el resto de los resultados con foto.
     evidencias: evidenciasSchema,
-    ubicacion: ubicacionSchema.optional(), // feature 92/R22
+    ...camposUbicacion, // feature 92/R22 + feature 193/R14
   }),
 ]);
 
@@ -201,7 +277,14 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
 // y servidor (Server Action) usan el MISMO schema (R8): el panel envia `evidencias` en su
 // `safeParse` y el borde arma `evidencias` con `getAll("evidencia")`, asi que ninguno depende ya
 // del campo singular historico (el puente `foldEvidenciaSingular` se retiro al migrar el panel).
-export const gestionarSchema = gestionarUnionSchema;
+//
+// Feature 193 (R14): la disyuncion de ubicacion se aplica UNA vez sobre la union entera, no
+// dentro de cada rama. Ese es el punto: una rama nueva la hereda sin que nadie tenga que
+// acordarse. El `superRefine` corre DESPUES de que la union resuelva el discriminante, asi
+// que un `resultado` invalido sigue fallando por su propio error y no por este.
+export const gestionarSchema = gestionarUnionSchema.superRefine(
+  exigirUbicacionOAusencia,
+);
 export type GestionarActionInput = z.infer<typeof gestionarSchema>;
 
 // --- Resultados expuestos por la Server Action (agregan `unauthenticated`) ---

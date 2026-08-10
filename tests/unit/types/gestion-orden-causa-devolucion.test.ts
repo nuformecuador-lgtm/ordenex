@@ -2,6 +2,14 @@ import { describe, it, expect } from "vitest";
 import type { ZodError } from "zod";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 
+// ⚠️ Feature 193 (R10), decision humana del 2026-08-10: la gestion pasa a EXIGIR la ubicacion
+// del mensajero (o un motivo tecnico de por que falta). Los casos validos de abajo se AMPLIAN
+// con `ubicacion` —no se relajan—, mismo criterio que aplicaron la 73 y la 75 al endurecer
+// esta misma rama. Lo que cada test AFIRMA no cambia; solo se le anade el dato que el
+// contrato nuevo pide. La disyuncion ubicacion/motivo tiene su cobertura propia y exhaustiva
+// en `gestion-ubicacion-borde.test.ts`.
+const UBICACION_193 = { lat: 9.9281, lng: -84.0907 };
+
 /**
  * `flatten().fieldErrors` de una discriminatedUnion es un tipo UNION (uno por variante), asi
  * que TS no deja indexar por un campo que solo existe en una rama. Se normaliza a un mapa
@@ -27,6 +35,7 @@ function evidenciaValida() {
 function devuelta(extra: Record<string, unknown> = {}) {
   return {
     ordenId: "o1",
+    ubicacion: UBICACION_193,
     resultado: "devuelta",
     causaDevolucion: "not_found",
     motivo: MOTIVO,
@@ -150,6 +159,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
   it("R10: enviada en `entregada` -> NO aparece en el objeto parseado (no se puede persistir)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
+      ubicacion: UBICACION_193,
       resultado: "entregada",
       montoRecibido: 1000,
       metodoPago: "efectivo",
@@ -163,6 +173,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
   it("R10: enviada en `rechazada` -> NO aparece en el objeto parseado (conserva motivo+evidencia)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
+      ubicacion: UBICACION_193,
       resultado: "rechazada",
       motivo: "cliente rechazo",
       evidencias: [evidenciaValida()],
@@ -175,6 +186,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
   it("R5/R10: enviada en `reprogramada` -> NO aparece en el objeto parseado", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
+      ubicacion: UBICACION_193,
       resultado: "reprogramada",
       fechaReprogramacion: fechaFuturaISO(),
       motivo: "reagendar",
@@ -187,6 +199,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
   it("R19: las otras 3 ramas NO exigen causa (siguen validando sin ella)", () => {
     const entregada = gestionarSchema.safeParse({
       ordenId: "o1",
+      ubicacion: UBICACION_193,
       resultado: "entregada",
       montoRecibido: 1000,
       metodoPago: "efectivo",
@@ -194,12 +207,14 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
     });
     const rechazada = gestionarSchema.safeParse({
       ordenId: "o1",
+      ubicacion: UBICACION_193,
       resultado: "rechazada",
       motivo: "cliente rechazo",
       evidencias: [evidenciaValida()],
     });
     const reprogramada = gestionarSchema.safeParse({
       ordenId: "o1",
+      ubicacion: UBICACION_193,
       resultado: "reprogramada",
       fechaReprogramacion: fechaFuturaISO(),
       motivo: "reagendar",

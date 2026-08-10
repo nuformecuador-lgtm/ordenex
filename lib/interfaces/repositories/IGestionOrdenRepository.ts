@@ -2,6 +2,7 @@ import type {
   GestionCausaDevolucion,
   GestionCausaIncidente,
   GestionResultado,
+  GestionUbicacionAusencia,
   MetodoPagoValue,
 } from "@prisma/client";
 
@@ -108,6 +109,23 @@ export interface GestionOrdenData {
    * admin al APROBAR el cierre (R19/R22), en otra transaccion y por otro camino.
    */
   causaIncidente?: GestionCausaIncidente | null;
+  /**
+   * Feature 193 (R1/R6): DONDE estaba el mensajero al registrar la gestion, o —si la captura
+   * fallo por una causa TECNICA— por que no se pudo saber (R18). Viajan DENTRO de
+   * `GestionOrdenData` como el resto, asi que `crearGestionYTransicionar` NO cambia su firma
+   * y la atomicidad se conserva tal cual.
+   *
+   * Las tres admiten solo DOS combinaciones validas: `(lat, lng, null)` o `(null, null,
+   * motivo)`. La regla la impuso el borde (`gestionarSchema`, R8-R12); aqui no se revalida
+   * porque el repo no es el sitio donde vive una regla de negocio, y duplicarla crearia dos
+   * verdades sobre lo mismo.
+   *
+   * La DENEGACION del permiso no llega nunca hasta aqui: no existe como valor del enum, asi
+   * que el borde la rechaza antes (R12/R19).
+   */
+  ubicacionLat?: number | null;
+  ubicacionLng?: number | null;
+  ubicacionAusencia?: GestionUbicacionAusencia | null;
 }
 
 // Feature 100 (design §2.1) — entrada de la REPROGRAMACION por la tienda. Los estatus ya vienen
