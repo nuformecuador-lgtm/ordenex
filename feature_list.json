@@ -2119,7 +2119,7 @@
       "name": "analitica: cache financiera + invalidacion por ledger",
       "spec_path": "specs/179-analitica-cache-financiera",
       "description": "Backend. Extiende la cache por tag de la 128 al dominio financiera: envuelve las lecturas de AnaliticaFinancieraService con el tag analitica:financiera (ya declarado en ANALITICA_TAGS, feature 135) e invalida desde TODOS los escritores de los tres ledgers, no solo desde la aprobacion de cierres: WalletEgresoService, LiquidacionService, GeneracionGastosFijosService (cron de gastos fijos), el flujo de indemnizaciones de incidentes y aprobarCierre/aprobarCierreBodega. Retira el guardia R15 de la 128 en el MISMO PR que lo sustituye por la invalidacion real. Cada escritor necesita su test de cinco pasos: un escritor sin invalidar sirve dinero rancio en silencio, que es exactamente por lo que la 128 no lo hizo.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
@@ -2127,7 +2127,7 @@
       "depends_on": [
         128
       ],
-      "status_note": "Sale de la decision D2 de la 128 (specs/128-analitica-cache-invalidacion/design.md seccion 14). Mientras no aterrice, R15 de la 128 PROHIBE con guardia cachear el dominio financiera. Renumerada de 177 a 179: otra sesion ocupo el 177 y el 178 en dev mientras esta rama estaba viva."
+      "status_note": "2026-08-10 SPEC_READY. Worktree C:/w179, rama feature/179-analitica-cache-financiera desde dev (871e6c5d). 28 requisitos EARS. PUERTA T0 CERRADA el 2026-08-10 con cuatro respuestas humanas, que viven como D1-D4 con sus alternativas descartadas: D1 invalidacion por TAG DE DOMINIO (no por clave: un mapa ledger->metrica que se equivoca no falla, sirve la cifra vieja); D2 el backfill de tesoreria ENCOLA el job analitica_invalidacion_cache de la 128 con un dominio en el payload (sin migracion); D3 conciliacion_cierres NUNCA se cachea (su valor para el negocio es la ALERTA, no la cifra, y cachearla la haria sonar una vez por hora en vez de una por consulta); D4 si la invalidacion falla DESPUES del commit de dinero NO se propaga -se registra con severidad y la operacion devuelve exito-, desviacion DECLARADA de R11 de la 128 y acotada: donde el llamador vuelve a ser un job (R27), R11 sigue aplicando. || TRES CORRECCIONES A ESTA FICHA, medidas en el arbol y escritas en requirements.md seccion 0: (a) los escritores NO son cinco sino OCHO puntos -faltaban WalletService.registrarMovimientoManual, CajaPagoTiendaFeedService y el backfill-, y el manual mueve egresos, dinero_en_caja y ganancia_ordenex, o sea que la lista de esta ficha habria dejado dinero rancio servido en silencio; (b) el cron de gastos fijos SI corre dentro de un request (es un route handler), asi que revalidateTag funciona ahi: quien escribe fuera de todo request es el backfill; (c) aqui NO hace falta codec porque el DTO ya es JSON-safe, y por eso mismo un campo Date futuro degradaria EN SILENCIO en vez de lanzar -de ahi R3-. || Por eso el mecanismo de vigilancia es un CENSO DEL ARBOL (R17/R18) y no una lista de rutas: la lista de la ficha envejecio antes de escribirse. || PENDIENTE: aprobacion humana del spec antes de tocar codigo."
     },
     {
       "id": 180,
