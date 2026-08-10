@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { obtenerConteosPublicos } from "@/lib/actions/conteos-publicos";
 import { ConteosPublicosRepository } from "@/lib/repositories/ConteosPublicosRepository";
 import { ConteosPublicosCacheNula } from "@/lib/cache/conteos-publicos-cache-nula";
+import type { IConteosPublicosCache } from "@/lib/interfaces/external/IConteosPublicosCache";
 import { CONTEOS_PUBLICOS_CACHE_KEY } from "@/lib/config/conteos-publicos-cache";
 import type { IConteosPublicosRepository } from "@/lib/interfaces/repositories/IConteosPublicosRepository";
 
@@ -20,6 +21,25 @@ const CONTEOS = {
 
 function repoDoble(): IConteosPublicosRepository {
   return { contar: vi.fn().mockResolvedValue(CONTEOS) };
+}
+
+/**
+ * Doble de cache. `envolver` es GENERICO en la interfaz y un `vi.fn()` suelto NO lo satisface
+ * —se instancia como `unknown` y `tsc` lo rechaza—, asi que el spy va dentro de una
+ * implementacion tipada en vez de sustituirla. Las claves quedan fuera para poder afirmarlas.
+ *
+ * `respuesta` simula un ACIERTO de cache: se devuelve sin llamar a `producir`.
+ */
+function cacheDoble(respuesta?: typeof CONTEOS) {
+  const claves: string[] = [];
+  const cache: IConteosPublicosCache = {
+    async envolver<T>(clave: string, producir: () => Promise<T>): Promise<T> {
+      claves.push(clave);
+      if (respuesta !== undefined) return respuesta as T;
+      return producir();
+    },
+  };
+  return { cache, claves };
 }
 
 describe("obtenerConteosPublicos", () => {
@@ -53,19 +73,16 @@ describe("obtenerConteosPublicos", () => {
   it("pasa por la cache, con la clave constante y sin discriminantes", async () => {
     // La clave no lleva rol, usuario ni filtro porque el resultado es global e igual para
     // todos. Si algun dia dejara de serlo, esta afirmacion tendria que caer primero.
-    const envolver = vi.fn(async (_clave: string, producir: () => Promise<unknown>) =>
-      producir(),
-    );
+    const { cache, claves } = cacheDoble();
 
-    await obtenerConteosPublicos({ repo: repoDoble(), cache: { envolver } });
+    await obtenerConteosPublicos({ repo: repoDoble(), cache });
 
-    expect(envolver).toHaveBeenCalledTimes(1);
-    expect(envolver.mock.calls[0][0]).toBe(CONTEOS_PUBLICOS_CACHE_KEY);
+    expect(claves).toEqual([CONTEOS_PUBLICOS_CACHE_KEY]);
   });
 
   it("no vuelve a consultar si la cache responde", async () => {
     const repo = repoDoble();
-    const cache = { envolver: vi.fn().mockResolvedValue(CONTEOS) };
+    const { cache } = cacheDoble(CONTEOS);
 
     const r = await obtenerConteosPublicos({ repo, cache });
 
