@@ -37,7 +37,13 @@ export type IconKey =
   // son dos trabajos distintos, y compartir icono con Entregas invitaría a leer la
   // recolección como una sección suya — que es exactamente de donde esta feature la sacó.
   // Mismo criterio que `shieldAlert` (158) y `chartColumn` (129).
-  | "store";
+  | "store"
+  // Feature 192 (R53): tablero del día "Monitoreo" (órdenes por mensajero, en vivo). Icono
+  // propio y NO el `chartColumn` de "Analítica": una cosa es el cierre analítico del negocio
+  // y otra el pulso del día en curso, y compartir icono invitaría a leer el monitoreo como
+  // una sección de analítica. Mismo criterio que `shieldAlert` (158), `chartColumn` (129) y
+  // `store` (167).
+  | "gauge";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -157,6 +163,25 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/analitica",
     iconKey: "chartColumn",
     roles: ROLES_ACCESO_ANALITICA,
+    destinoInicial: false,
+  },
+  {
+    // Feature 192 (R53): tablero del día — una tarjeta por mensajero con sus órdenes
+    // asignadas hoy y en qué terminó cada una. Va junto a "Analítica" porque ambos son
+    // tableros de LECTURA, pero es otra cosa: analítica cierra el día, esto lo vigila
+    // mientras pasa. Los `roles` son los de R1 y la defensa real es el `notFound()` de
+    // `/monitoreo` (R11): este ítem sólo decide qué se MUESTRA.
+    //
+    // `destinoInicial: false` NO es decorativo (R35/R54). El aterrizaje post-login se deriva
+    // del PRIMER ítem visible del menú (`primerDestino`, consumido por
+    // `app/(app)/dashboard/page.tsx`), y este ítem va en posición 3: para el `adminSatelite`
+    // —que no ve "Inicio" ni "Órdenes"— sería el primer ítem elegible después de "Analítica"
+    // y pasaría a aterrizar aquí en silencio, en vez de en `/recepcion-satelite`. Es
+    // exactamente el incidente que ya documenta el campo `destinoInicial` con "Analítica".
+    label: "Monitoreo",
+    href: "/monitoreo",
+    iconKey: "gauge",
+    roles: ["admin", "maestro", "adminSatelite"],
     destinoInicial: false,
   },
   {

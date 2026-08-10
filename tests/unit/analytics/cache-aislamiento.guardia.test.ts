@@ -28,8 +28,22 @@ const EXT = new Set([".ts", ".tsx"]);
  */
 const AMBITO = ["lib/analytics", "lib/cache", "lib/services", "lib/repositories", "scripts"];
 
-/** El unico archivo autorizado. Uno. Si algun dia son dos, esta lista lo dice en voz alta. */
-const ADAPTADOR = "lib/cache/next-analitica-cache.ts";
+/**
+ * Los archivos autorizados. La version original de este guardia decia «uno; si algun dia son
+ * dos, esta lista lo dice en voz alta». Son dos, y aqui esta dicho en voz alta:
+ *
+ *  - `next-analitica-cache.ts` — feature 128.
+ *  - `next-tablero-dia-cache.ts` — feature 192, la cache de ~15 s del tablero del dia. Es un
+ *    puerto DISTINTO y a proposito (`ITableroDiaCache`, un solo metodo, sin `tags` y sin
+ *    `invalidar`): reutilizar `IAnaliticaCache` habria arrastrado la invalidacion por evento
+ *    que su R71 prohibe, y habria metido sus entradas en el espacio de tags de la analitica,
+ *    que es justo lo que su R38 separa.
+ *
+ * Lo que el guardia protege NO cambia: cada adaptador sigue siendo el UNICO sitio de su
+ * feature que toca `next/cache`, y ninguna otra capa puede importarlo. Un tercer archivo
+ * tiene que volver a pasar por aqui y justificarse.
+ */
+const ADAPTADORES = ["lib/cache/next-analitica-cache.ts", "lib/cache/next-tablero-dia-cache.ts"];
 
 function archivos(dir: string): string[] {
   const abs = path.join(REPO_ROOT, dir);
@@ -57,7 +71,7 @@ const IMPORTA_NEXT_CACHE = /(from\s*|require\(\s*|import\(\s*)["']next\/cache["'
 describe("R21 · solo el adaptador importa `next/cache`", () => {
   it("ningun servicio, repositorio, modulo de analitica, script ni handler de job lo importa", () => {
     const infractores = AMBITO.flatMap((d) => archivos(d))
-      .filter((rel) => rel !== ADAPTADOR)
+      .filter((rel) => !ADAPTADORES.includes(rel))
       .filter((rel) => IMPORTA_NEXT_CACHE.test(soloCodigo(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8"))));
 
     expect(
@@ -65,14 +79,16 @@ describe("R21 · solo el adaptador importa `next/cache`", () => {
       "`unstable_cache` lanza `Invariant: incrementalCache missing` y `revalidateTag` lanza " +
         "`Invariant: static generation store missing` fuera de un request de Next. Un import " +
         `de "next/cache" en estas capas tumba la suite unitaria y el CLI del backfill. El ` +
-        `unico archivo autorizado es ${ADAPTADOR}. Archivos: ` +
+        `unicos archivos autorizados son ${ADAPTADORES.join(" y ")}. Archivos: ` +
         infractores.join(", "),
     ).toEqual([]);
   });
 
-  it("el adaptador SI lo importa (si no, el guardia seria verde por vacio)", () => {
-    const fuente = fs.readFileSync(path.join(REPO_ROOT, ADAPTADOR), "utf8");
-    expect(IMPORTA_NEXT_CACHE.test(soloCodigo(fuente))).toBe(true);
+  it("los adaptadores SI lo importan (si no, el guardia seria verde por vacio)", () => {
+    for (const adaptador of ADAPTADORES) {
+      const fuente = fs.readFileSync(path.join(REPO_ROOT, adaptador), "utf8");
+      expect(IMPORTA_NEXT_CACHE.test(soloCodigo(fuente)), adaptador).toBe(true);
+    }
     expect(archivos("lib/services").length).toBeGreaterThan(20);
   });
 

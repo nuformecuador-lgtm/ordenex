@@ -128,4 +128,32 @@ export interface ICuentasPorPagarAnaliticaRepository {
   cuentaPorPagarMensajerosAntesDe(
     consulta: ConsultaAnalitica,
   ): Promise<readonly CuentaMensajeroAlCorte[]>;
+
+  /**
+   * Feature 187 (R1/R6) — UNA LECTURA CONSISTENTE: ejecuta `fn` sobre una instancia de este mismo
+   * repositorio ligada a un unico snapshot de la base, y devuelve lo que `fn` devuelva. Gemelo
+   * exacto del de `IIngresosAnaliticaRepository`, y a proposito.
+   *
+   * **QUE GARANTIZA.** Las TRES consultas de `cuenta_por_pagar_mensajero` —el corte
+   * (`...AlCorte`), el arrastre (`...AntesDe`) y el movimiento por cubo (`...PorCubo`)— ven la
+   * MISMA foto de `pago_mensajero_movimiento`. Esa es la condicion que hace cierta en runtime la
+   * invariante R13 de la 180: la ULTIMA fila de la serie acumulada coincide, campo a campo, con el
+   * `total`. Las tres lecturas caen a un lado y otro de la misma frontera temporal
+   * (`< desde`, `[desde, hasta)`, `< hasta`), asi que una escritura confirmada entre ellas entra en
+   * unas y no en otras y descuadra la suma sin que nada falle.
+   *
+   * **QUE NO GARANTIZA.** No bloquea a nadie, no retrasa ninguna escritura ajena y no promete que
+   * lo leido siga vigente cuando la respuesta llegue al usuario. Solo cubre lo que se lea por el
+   * repositorio que `fn` recibe.
+   *
+   * **EL TOTAL SIGUE SIENDO UNA CONSULTA APARTE** (D1 de `design.md` §2, R5): `...AlCorte` produce
+   * el total y `...AntesDe` + `...PorCubo` producen la serie. La coincidencia entre la ultima fila
+   * y el total sigue siendo una invariante entre caminos distintos, no una tautologia.
+   *
+   * **VOCABULARIO DE DOMINIO, NO DE ORM** (R6), **SOLO LECTURAS DENTRO** (R3) y **los errores
+   * suben tal cual** (R7). Ver la prosa de `IIngresosAnaliticaRepository.enLecturaConsistente`.
+   */
+  enLecturaConsistente<T>(
+    fn: (repo: ICuentasPorPagarAnaliticaRepository) => Promise<T>,
+  ): Promise<T>;
 }

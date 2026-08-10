@@ -93,11 +93,17 @@ describe("R5 — destino post-login por rol (valores escritos a mano, NO derivad
   // Feature 133 (T5.1): la marca es del ÍTEM, no una ruta escrita dentro de `primerDestino`.
   // Se afirma aquí porque es la pieza de la que dependen los cinco casos de arriba: si
   // alguien la borra creyéndola decorativa, este caso dice qué era y por qué estaba.
-  it("el ítem 'Analítica' declara destinoInicial: false y es el ÚNICO que se excluye hoy", () => {
+  // Feature 192 (R54): "Monitoreo" es el SEGUNDO ítem que se excluye, por la misma razón y
+  // con la misma marca. Va en posición 3 de `SIDEBAR_ITEMS` y es visible para
+  // `adminSatelite`, que no ve "Inicio" ni "Órdenes": sin la marca, ese rol habría pasado a
+  // aterrizar en `/monitoreo` en vez de en `/recepcion-satelite`, exactamente el incidente
+  // que la 133 cerró con "Analítica". La lista se sigue comparando por IGUALDAD: un ítem
+  // que gane la marca sin decidirlo a mano pone este caso rojo.
+  it("los ítems 'Analítica' y 'Monitoreo' declaran destinoInicial: false y son los ÚNICOS que se excluyen hoy", () => {
     const noElegibles = SIDEBAR_ITEMS.filter(
       (item) => item.destinoInicial === false,
     ).map((item) => item.href);
-    expect(noElegibles).toEqual(["/analitica"]);
+    expect(noElegibles).toEqual(["/analitica", "/monitoreo"]);
   });
 
   it("el ítem sigue siendo VISIBLE para los cinco: no elegible como aterrizaje ≠ oculto", () => {

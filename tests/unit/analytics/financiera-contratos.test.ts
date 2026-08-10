@@ -382,6 +382,13 @@ describe("R7 · toda firma publica de la 127 recibe ConsultaAnalitica y nada mas
     async sumarPorCuboYCategoria() {
       return [];
     },
+    // Feature 187 — el contrato gano `enLecturaConsistente`. Este stub NO abre nada: lo que este
+    // archivo juzga es la FIRMA de las lecturas, y quien mide el alcance de verdad es
+    // `tests/unit/analytics/financiera-lectura-consistente.test.ts`. Ni una asercion de este
+    // archivo cambia por la 187 (T5.1), que es justamente la evidencia de R9.
+    async enLecturaConsistente(fn) {
+      return fn(ingresos);
+    },
   };
 
   it("el repositorio de ingresos acepta la consulta preparada", async () => {
