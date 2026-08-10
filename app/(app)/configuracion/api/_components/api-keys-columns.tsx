@@ -101,6 +101,7 @@ export function buildApiKeysColumns({
       id: "createdAt",
       value: "Fecha de creación",
       render: (row) => formatFechaCreacion(row.createdAt),
+      minWidth: "120px",
     },
     {
       id: "estado",

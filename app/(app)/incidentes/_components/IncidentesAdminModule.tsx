@@ -737,8 +737,17 @@ function columnasPendientes(
   abrir: (incidenteId: string) => void,
 ): Column<IncidenteAdminDTO>[] {
   return [
-    { id: "numRemision", value: "Nº Remisión", render: (i) => i.numRemision },
-    { id: "numGuia", value: "Nº Guía", render: (i) => i.numGuia ?? "—" },
+    {
+      id: "numRemision",
+      value: "Nº Remisión",
+      render: (i) => i.numRemision,
+      minWidth: "120px",
+    },
+    {
+      id: "numGuia",
+      value: "Nº Guía",
+      render: (i) => <span className="font-semibold">{i.numGuia ?? "—"}</span>,
+    },
     { id: "destinatario", value: "Destinatario", render: (i) => i.destinatario },
     { id: "zona", value: "Zona", render: (i) => i.zonaNombre },
     // La causa SIEMPRE traducida: el slug del enum (`danado`) no se pinta nunca.
