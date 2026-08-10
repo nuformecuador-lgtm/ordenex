@@ -183,6 +183,15 @@ app/(app)/analitica/
       rango.ts                          (NUEVO) La ÚNICA constante de rango por defecto (R26)
 ```
 
+> **NOTA AL MARGEN (2026-08-10, feature 184).** Esta región gana un **control de cliente** que este
+> diseño no previó: la 184 monta `ExportarVistaFinanciera` dentro de `TableroFinanciero.tsx` —una
+> sola inserción, con su condición íntegra— y ese control **sí** lleva `"use client"`. No rompe lo
+> de arriba: `TableroFinanciero` sigue siendo Server Component y sigue sin `"use client"`. Pero deja
+> de ser cierto que bajo esta región no haya nada de cliente. Los archivos nuevos viven aparte, en
+> `_components/export-financiero/`, precisamente para que la frontera se siga viendo. Si alguien
+> vuelve aquí a comprobar «esto es todo de servidor», la respuesta ya es: la composición sí, el
+> botón de descarga no.
+
 `docs/architecture.md:142-145` («sin sobre-ingeniería»): estas piezas se usan en **un solo sitio**,
 así que viven junto a la página y **no** se promueven a `components/shared/` ni a
 `components/private/`. Lo que sí es reutilizable ya está en `components/private/analytics/`.

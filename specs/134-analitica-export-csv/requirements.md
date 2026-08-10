@@ -257,6 +257,15 @@ La analitica financiera queda **fuera de alcance por decision, no por olvido**. 
 forma de serie que proyectar a filas. Una proyeccion de export rehecha con prisa es como se
 cuela una columna que no debia salir. Merece **ficha propia** (propuesta en `design.md §9`).
 
+> **NOTA AL MARGEN (2026-08-10, feature 184) — esta decision esta CONSUMIDA, no pendiente.**
+> La ficha propia existe y es la **184** («analitica financiera: export de la serie»), implementada
+> y con reviewer APROBADO. Las dos condiciones que D1 puso para poder abordarla se cumplieron
+> **antes** de empezarla: la **180** publico la serie temporal y la **183** cerro lo del neto/bruto.
+> La 184 reusa el patron de esta feature —puerta unica, denegado auditado antes del 403 y **sin**
+> cabecera de metadatos con el alcance del actor— y anade lo que aqui no hacia falta: la columna
+> constante `limitacion_conocida` y el importe como cadena literal de escala 2. **D1 no se reabre:
+> se cumplio tal como se escribio.**
+
 ### D2 — Se reusa `consultarAnaliticaOperativa`; el archivo se arma en el navegador
 No es preferencia de estilo. Hay **dos guardias vivos** que prohiben un handler de `app/api`
 para analitica:

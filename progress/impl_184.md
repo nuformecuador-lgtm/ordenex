@@ -303,3 +303,41 @@ Los casos que de verdad juzgan este cambio siguen verdes: *una vista solo_bruto 
 juego de columnas, sin una columna de neto vacia* (el que fallaria si la instancia dejara de ser
 estable o si la mutacion llegara tarde) y los dos censos de frontera RSC del tablero (R28), que el
 cambio no toca porque el componente sigue siendo de cliente y sus props siguen siendo planas.
+
+---
+
+## 8. Cierre (leader, 2026-08-10)
+
+**Reviewer: APROBADO** (`progress/review_184.md`) — 30/30 requisitos trazados a tests que miden lo
+que piden, verificados **leyendo los treinta**, no por muestreo. Cero bloqueantes, 7 menores.
+
+**T7.2 hecha en este commit**: las dos notas al margen fechadas.
+- `specs/134-analitica-export-csv/requirements.md` — su **D1 queda CONSUMIDA**: la ficha propia que
+  proponía es esta, y las dos condiciones que puso (la 180 y la 183) se cumplieron antes de empezar.
+- `specs/132-analitica-tablero-financiero/design.md` — su región gana un **control de cliente** que
+  aquel diseño no previó. `TableroFinanciero` sigue siendo Server Component; lo que deja de ser
+  cierto es que bajo esa región no haya nada de cliente.
+
+**`feature_list.json` NO se toca en esta rama, a propósito.** La ficha 184 pasa a `in_progress` en
+el **PR #329** (el que repara el JSON inválido de `dev`), con su nota completa. Escribirla también
+aquí garantizaría un conflicto textual entre dos PRs abiertos sobre el mismo bloque del mismo
+archivo, que es exactamente el ruido que ese PR viene a quitar. El menor 4.2 del review queda así
+cubierto, pero por otra rama.
+
+**Menores que NO se cierran aquí, y por qué:**
+- **4.5 — la rama XLSX no se ejecuta en ningún caso de esta feature.** R25 comprueba que el menú
+  ofrece los dos formatos, pero todos los casos que descargan pulsan CSV: el generador `xlsx` con
+  **estas** columnas —incluida la celda larga de `limitacion_conocida`— nunca corre aquí, y la
+  aserción de R10 sobre el TEXTO se mide sobre el CSV, no sobre el libro. No es una fuga (el XLSX
+  recibe las mismas columnas y filas), pero **es una línea sin recorrer en la feature que la
+  introduce**. Merece un caso, y cabe en una tanda corta; se deja anotado en vez de colarlo sin
+  spec después del review.
+- **4.6 — mutar en sitio un array guardado en `useState` es correcto pero frágil.** Depende de que
+  `DescargarDatasetButton` no copie ni memoize la prop. Hoy no lo hace y está comprobado. Si el
+  patrón se repite en otra feature, que `obtenerFilas` devuelva **también** sus columnas en vez de
+  compartir un buzón mutable.
+- **4.7 — el baseline de T0.2 no existe y ya no se puede reconstruir.** Lo cubre de hecho el
+  `./init.sh` completo del leader (**1037/1039 archivos · 12.822/12.824 tests**, typecheck y lint
+  limpios; los 2 rojos —`descarga-dataset-roundtrip` y el guard `no-embalaje`— verificados **verdes
+  en aislado**: flakes por saturación). Lo que no existe es la comparación «antes/después» propia de
+  esta rama.
