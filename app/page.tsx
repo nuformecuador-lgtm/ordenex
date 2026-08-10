@@ -1,5 +1,8 @@
+import { Suspense } from "react";
+
 import { LandingBanda } from "./_landing/LandingBanda";
 import { LandingComoFunciona } from "./_landing/LandingComoFunciona";
+import { LandingConteos } from "./_landing/LandingConteos";
 import { LandingFooter } from "./_landing/LandingFooter";
 import { LandingHero } from "./_landing/LandingHero";
 import { LandingNav } from "./_landing/LandingNav";
@@ -11,7 +14,8 @@ import { LandingServicios } from "./_landing/LandingServicios";
  * Landing pública en `/`: réplica del home de ordenex.co, **sin imágenes**.
  *
  * Server Component fuera del grupo `(app)` → no hereda el Sidebar ni
- * `resolveActorFromSession`. Sin fetch de datos.
+ * `resolveActorFromSession`. Lee UN dato publico (los conteos de la feature 198), en
+ * `<Suspense>` y tolerante a fallo: la landing nunca depende de el.
  *
  * El sitio define su maquetado en clases `lp-*`; aquí se traduce a utilidades
  * Tailwind sobre los tokens de marca que `globals.css` ya expone (`brand`,
@@ -27,6 +31,14 @@ export default function LandingPage() {
       <main>
         <LandingHero />
         <LandingServicios />
+        {/* Feature 198: las cifras publicas. Van en `<Suspense>` a proposito —pedido
+            humano: NO bloqueante—: la landing se pinta entera y estas llegan despues por
+            streaming, asi que una lectura lenta nunca retrasa el hero. El fallback es
+            `null` y no un esqueleto: es un bloque decorativo, y un hueco animado que
+            aparece y desaparece llama mas la atencion que la cifra misma. */}
+        <Suspense fallback={null}>
+          <LandingConteos />
+        </Suspense>
         <LandingBanda />
         <LandingComoFunciona />
         <LandingPoliticas />
