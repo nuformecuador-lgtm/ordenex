@@ -1,0 +1,231 @@
+import type { PrismaClient } from "@prisma/client";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import {
+  FECHA_CR,
+  VENTANA,
+  crearGestion,
+  crearOrden,
+  instanteCR,
+  repositorio,
+  sembrarBase,
+  sumaDeLosOcho,
+  transicionDeRecoleccion,
+  type BaseSembrada,
+  type TxDeTest,
+} from "./_semilla-tablero-dia";
+import {
+  HAY_BASE_DE_DATOS,
+  crearPrismaDeTest,
+  enTransaccionRevertida,
+} from "./db/_postgres-real";
+
+// Feature 192 (B7.7) — R51.
+//
+// EL CUADRE ENTRE LAS DOS CONSULTAS. La tarjeta dice "8" y el detalle tiene que traer 8: si
+// no, el usuario ve una contradiccion en la misma pantalla y deja de creerse las dos cifras.
+//
+// Es el test que caza el fallo concreto de esta feature: si el detalle usara SOLO
+// `asignado_at`, un mensajero con recolecciones veria una tarjeta que dice 8 y un detalle con
+// 5. Por eso los dos comparten literalmente el mismo fragmento de CTE, y por eso este archivo
+// mide las dos consultas SOBRE EL MISMO dataset y en el mismo alcance.
+
+const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
+
+const PAGINA_GRANDE = { pagina: 1, pageSize: 100 };
+
+describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
+  let prisma: PrismaClient;
+
+  beforeAll(() => {
+    prisma = crearPrismaDeTest();
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  /** Siembra un dia con las dos vias de entrada y compara tarjeta contra detalle. */
+  async function cuadrar(
+    sembrar: (tx: TxDeTest, base: BaseSembrada) => Promise<void>,
+    alcance: (base: BaseSembrada) => { tipo: "global" } | { tipo: "zona"; zonaId: string },
+  ) {
+    return enTransaccionRevertida(prisma, async (tx) => {
+      const base = await sembrarBase(tx);
+      await sembrar(tx, base);
+
+      const repo = repositorio(tx);
+      const filtro = alcance(base);
+      const filas = (await repo.contarPorMensajero(VENTANA, filtro)).filter((f) =>
+        f.mensajeroNombre.endsWith("Prueba"),
+      );
+      const detalles = await Promise.all(
+        filas.map(async (f) => ({
+          mensajeroId: f.mensajeroId,
+          asignadas: f.asignadas,
+          suma: sumaDeLosOcho(f),
+          detalle: await repo.listarOrdenesDelDia(VENTANA, filtro, f.mensajeroId, PAGINA_GRANDE),
+        })),
+      );
+      return detalles;
+    });
+  }
+
+  async function sembrarDiaCompleto(tx: TxDeTest, base: BaseSembrada): Promise<void> {
+    // Camino 1 (reparto), con y sin gestion.
+    const entregada = await crearOrden(tx, base, {
+      clave: "c1-entregada",
+      estatus: "entregada",
+      mensajeroId: base.mensajero1,
+      asignadoAt: instanteCR(FECHA_CR, "07:00"),
+    });
+    await crearGestion(tx, {
+      ordenId: entregada,
+      mensajeroId: base.mensajero1,
+      resultado: "entregada",
+      at: instanteCR(FECHA_CR, "10:00"),
+    });
+    const reintentada = await crearOrden(tx, base, {
+      clave: "c1-reintentada",
+      estatus: "reprogramada",
+      mensajeroId: base.mensajero1,
+      asignadoAt: instanteCR(FECHA_CR, "07:00"),
+    });
+    for (const [hora, resultado] of [
+      ["09:00", "incidente"],
+      ["11:00", "reprogramada"],
+    ] as const) {
+      await crearGestion(tx, {
+        ordenId: reintentada,
+        mensajeroId: base.mensajero1,
+        resultado,
+        at: instanteCR(FECHA_CR, hora),
+      });
+    }
+    await crearOrden(tx, base, {
+      clave: "c1-sin-gestion",
+      estatus: "por_recoger",
+      mensajeroId: base.mensajero1,
+      asignadoAt: instanteCR(FECHA_CR, "08:00"),
+    });
+
+    // Camino 2 (recoleccion), SIN `asignado_at`: si el detalle solo mirara esa columna, estas
+    // dos faltarian y el cuadre se rompería.
+    const soloRecoleccion = await crearOrden(tx, base, {
+      clave: "c2-solo",
+      estatus: "recolectando",
+      mensajeroId: base.mensajero1,
+      asignadoAt: null,
+    });
+    await transicionDeRecoleccion(tx, base, soloRecoleccion, instanteCR(FECHA_CR, "08:30"));
+    const recolectadaYGestionada = await crearOrden(tx, base, {
+      clave: "c2-gestionada",
+      estatus: "entregada",
+      mensajeroId: base.mensajero1,
+      asignadoAt: null,
+    });
+    await transicionDeRecoleccion(tx, base, recolectadaYGestionada, instanteCR(FECHA_CR, "09:30"));
+    await crearGestion(tx, {
+      ordenId: recolectadaYGestionada,
+      mensajeroId: base.mensajero1,
+      resultado: "entregada",
+      at: instanteCR(FECHA_CR, "16:00"),
+    });
+
+    // Los DOS caminos a la vez: sigue siendo UNA orden.
+    const ambos = await crearOrden(tx, base, {
+      clave: "c1-y-c2",
+      estatus: "en_reparto",
+      mensajeroId: base.mensajero1,
+      asignadoAt: instanteCR(FECHA_CR, "07:30"),
+    });
+    await transicionDeRecoleccion(tx, base, ambos, instanteCR(FECHA_CR, "07:45"));
+
+    // Y un segundo mensajero, para que la comparacion no sea de una sola tarjeta.
+    await crearOrden(tx, base, {
+      clave: "beto-1",
+      estatus: "en_reparto",
+      mensajeroId: base.mensajero2,
+      asignadoAt: instanteCR(FECHA_CR, "07:00"),
+    });
+  }
+
+  it("el total del detalle es igual a las asignadas de la tarjeta, mismo dataset (R51)", async () => {
+    const cuadres = await cuadrar(sembrarDiaCompleto, () => ({ tipo: "global" }));
+
+    expect(cuadres).toHaveLength(2);
+    for (const c of cuadres) {
+      expect(c.detalle.total).toBe(c.asignadas);
+      expect(c.detalle.ordenes).toHaveLength(c.asignadas);
+      // Y la identidad de los ocho sumandos se mantiene en la tarjeta comparada (R25).
+      expect(c.suma).toBe(c.asignadas);
+    }
+    // La tarjeta de Ana suma las seis ordenes de las dos vias, contando UNA sola vez la que
+    // entra por los dos caminos.
+    expect(cuadres.map((c) => c.asignadas).sort()).toEqual([1, 6]);
+  });
+
+  it("el cuadre se mantiene bajo el alcance de un satelite: se recortan las DOS consultas (R41/R51)", async () => {
+    const cuadres = await cuadrar(async (tx, base) => {
+      await sembrarDiaCompleto(tx, base);
+      // Ruido en la otra zona: no debe aparecer ni en la tarjeta ni en el detalle.
+      const ajena = await crearOrden(tx, base, {
+        clave: "zona-b",
+        estatus: "en_reparto",
+        zonaId: base.zonaB,
+        mensajeroId: base.mensajero1,
+        asignadoAt: instanteCR(FECHA_CR, "07:00"),
+      });
+      await transicionDeRecoleccion(tx, base, ajena, instanteCR(FECHA_CR, "07:10"));
+    }, (base) => ({ tipo: "zona", zonaId: base.zonaA }));
+
+    for (const c of cuadres) {
+      expect(c.detalle.total).toBe(c.asignadas);
+      expect(c.detalle.ordenes).toHaveLength(c.asignadas);
+    }
+    expect(cuadres.map((c) => c.asignadas).sort()).toEqual([1, 6]);
+  });
+
+  it("el resultado del dia del detalle coincide con el bucket de la tarjeta, orden a orden (R51)", async () => {
+    const detalle = await enTransaccionRevertida(prisma, async (tx) => {
+      const base = await sembrarBase(tx);
+      await sembrarDiaCompleto(tx, base);
+      const repo = repositorio(tx);
+      const fila = (await repo.contarPorMensajero(VENTANA, { tipo: "global" })).find((f) =>
+        f.mensajeroNombre.startsWith("Ana"),
+      );
+      if (fila === undefined) throw new Error("falta la tarjeta de Ana");
+      return {
+        fila,
+        pagina: await repo.listarOrdenesDelDia(
+          VENTANA,
+          { tipo: "global" },
+          fila.mensajeroId,
+          PAGINA_GRANDE,
+        ),
+      };
+    });
+
+    const conResultado = detalle.pagina.ordenes.filter((o) => o.resultadoDelDia !== null);
+    const sinResultado = detalle.pagina.ordenes.filter((o) => o.resultadoDelDia === null);
+
+    // Las dos consultas comparten la definicion de "resultado del dia" (`DISTINCT ON` y
+    // `LATERAL ... LIMIT 1`): si una cambiara sin la otra, estas dos cuentas divergirian.
+    expect(conResultado).toHaveLength(
+      detalle.fila.entregadas +
+        detalle.fila.reprogramadas +
+        detalle.fila.devueltas +
+        detalle.fila.rechazadas +
+        detalle.fila.incidentes,
+    );
+    expect(sinResultado).toHaveLength(
+      detalle.fila.sinRecoger + detalle.fila.enReparto + detalle.fila.otros,
+    );
+    expect(conResultado.filter((o) => o.resultadoDelDia === "entregada")).toHaveLength(
+      detalle.fila.entregadas,
+    );
+    expect(conResultado.filter((o) => o.resultadoDelDia === "reprogramada")).toHaveLength(
+      detalle.fila.reprogramadas,
+    );
+  });
+});

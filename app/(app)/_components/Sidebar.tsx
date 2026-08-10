@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Gauge,
   Home,
   Megaphone,
   Package,
@@ -157,6 +158,10 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   // mismo icono que ya encabezaba el bloque de escaneo de la recoleccion, asi que el
   // lenguaje visual del mensajero no cambia.
   store: Store,
+  // Feature 192 (R53): tablero del dia "Monitoreo". Icono PROPIO, distinto del
+  // `chartColumn` de "Analitica": el cierre analitico del negocio y el pulso del dia en
+  // curso son dos pantallas distintas.
+  gauge: Gauge,
 };
 
 // Entrada escalonada de los items al cargar (solo la primera vez). Cada item

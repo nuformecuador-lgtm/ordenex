@@ -34,6 +34,8 @@ const incidentes = byLabel("Incidentes");
 const analitica = byLabel("Analítica");
 // Feature 167 (R4): apartado propio de recolección en tienda del mensajero.
 const recoleccion = byLabel("Recolección");
+// Feature 192 (R53): tablero del día en vivo (órdenes por mensajero).
+const monitoreo = byLabel("Monitoreo");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -128,9 +130,14 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // Feature 158 (Q-I): "Incidentes" entra DESPUÉS de "Cierres del día" — el coste
     // declarado de que la cola sea página propia y no una sección de cierres. La lista se
     // compara por IGUALDAD: un ítem nuevo no declarado aquí pone el caso rojo.
+    // Feature 192 (R53): "Monitoreo" entra JUSTO DESPUÉS de "Analítica" (los dos son
+    // tableros de lectura). La lista se sigue comparando por IGUALDAD: un ítem nuevo no
+    // declarado aquí pone el caso rojo. Que sea visible no lo hace aterrizaje: lleva
+    // `destinoInicial: false` (ver el bloque de `primerDestino`).
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
       "Inicio",
       "Analítica",
+      "Monitoreo",
       "Órdenes",
       "Ranking",
       "Wallet",
@@ -149,6 +156,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).toEqual([
       "Inicio",
       "Analítica",
+      "Monitoreo", // feature 192 (R53)
       "Órdenes",
       "Ranking",
       "Wallet",
@@ -212,8 +220,11 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // rol no ve "Inicio"). Igualdad conservada: la lista sigue siendo exhaustiva y un ítem
     // no declarado sigue rompiendo. Su aterrizaje post-login NO cambia: sigue siendo
     // `/recepcion-satelite` (T5.1, `destinoInicial: false`).
+    // Feature 192 (R53): gana "Monitoreo", en segunda posición de su barra. Su aterrizaje
+    // post-login SIGUE siendo `/recepcion-satelite` (R54): el ítem lleva
+    // `destinoInicial: false` y `primerDestino` lo salta, igual que a "Analítica".
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Analítica", "Órdenes", "Cierres del día", "Incidentes"],
+      ["Analítica", "Monitoreo", "Órdenes", "Cierres del día", "Incidentes"],
     );
   });
 
@@ -530,5 +541,105 @@ describe("Feature 167 — ítem de sidebar de Recolección", () => {
 
   it("R4: el ítem no declara subítems (no es una sección de Entregas)", () => {
     expect(recoleccion.children).toBeUndefined();
+  });
+});
+
+// Feature 192 (F3.2) — el ítem de sidebar "Monitoreo" (R35, R53, R54).
+//
+// El tablero del día es una pantalla de LECTURA con datos de todas las zonas (o de la zona
+// del satélite): la lista de roles del ítem son los de R1 y ni uno más. Pero el caso que de
+// verdad hay que atornillar aquí es R54: el aterrizaje post-login sale del PRIMER ítem
+// visible del menú, y ya hubo un incidente exactamente así con "Analítica" (ver el campo
+// `destinoInicial` en `lib/auth/menu-visibility.ts`). Añadir un ítem visible en posición 3
+// mueve el aterrizaje de `adminSatelite` **en silencio** si falta la marca.
+const ROLES_MONITOREO = ["admin", "maestro", "adminSatelite"] as const;
+const ROLES_SIN_MONITOREO = ["adminTienda", "mensajero", "apiKey"] as const;
+
+describe("Feature 192 — ítem de sidebar de Monitoreo", () => {
+  it("R53: existe exactamente UN ítem con href '/monitoreo' y su label es 'Monitoreo'", () => {
+    const conEseHref = SIDEBAR_ITEMS.filter((i) => i.href === "/monitoreo");
+    expect(conEseHref).toHaveLength(1);
+    expect(conEseHref[0].label).toBe("Monitoreo");
+  });
+
+  it("R35/R53: lo ven los TRES roles de R1 (admin, maestro, adminSatelite) y nadie más", () => {
+    for (const rol of ROLES_MONITOREO) {
+      expect(puedeVer(monitoreo, actor(rol))).toBe(true);
+      expect(
+        itemsVisibles(SIDEBAR_ITEMS, actor(rol)).some((i) => i.href === "/monitoreo"),
+      ).toBe(true);
+    }
+    // El tablero enseña las órdenes de TODA una zona (o de todas): `adminTienda` y
+    // `mensajero` no tienen nada que hacer ahí, y `apiKey` es una cuenta de máquina que no
+    // navega. La defensa real es el `notFound()` de la ruta (R11); el menú no les ofrece la
+    // puerta.
+    for (const rol of ROLES_SIN_MONITOREO) {
+      expect(puedeVer(monitoreo, actor(rol))).toBe(false);
+      expect(
+        itemsVisibles(SIDEBAR_ITEMS, actor(rol)).some((i) => i.href === "/monitoreo"),
+      ).toBe(false);
+    }
+    expect(puedeVer(monitoreo, null)).toBe(false);
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, null).some((i) => i.href === "/monitoreo"),
+    ).toBe(false);
+    // Whitelist: un `RolValue` que alguien añada mañana al esquema NO entra por defecto.
+    expect(puedeVer(monitoreo, actor("rolQueNoExisteTodavia" as RolValue))).toBe(false);
+  });
+
+  it("R35/R54: el ítem está marcado `destinoInicial: false` (visible sí, aterrizaje no)", () => {
+    expect(monitoreo.destinoInicial).toBe(false);
+  });
+
+  it("R53: su iconKey es 'gauge' y ningún otro ítem usa esa clave (en particular, no comparte el de Analítica)", () => {
+    expect(monitoreo.iconKey).toBe("gauge");
+    const otrosConMismaClave = SIDEBAR_ITEMS.filter(
+      (i) => i !== monitoreo && i.iconKey === "gauge",
+    );
+    expect(otrosConMismaClave).toHaveLength(0);
+    expect(monitoreo.iconKey).not.toBe(analitica.iconKey);
+  });
+
+  it("R53: el ítem no declara subítems y va junto a 'Analítica'", () => {
+    expect(monitoreo.children).toBeUndefined();
+    const indiceAnalitica = SIDEBAR_ITEMS.findIndex((i) => i.href === "/analitica");
+    const indiceMonitoreo = SIDEBAR_ITEMS.findIndex((i) => i.href === "/monitoreo");
+    expect(indiceMonitoreo).toBe(indiceAnalitica + 1);
+  });
+
+  // R54, POR VALOR y escrito a mano: los cinco destinos son los mismos que antes de esta
+  // feature. Está prohibido derivarlos de `primerDestino`/`SIDEBAR_ITEMS` — eso sería la
+  // tautología que ya dejó pasar el incidente de "Analítica".
+  it("R54: el aterrizaje post-login de CADA rol es el mismo que antes de añadir el ítem", () => {
+    const destinoDe = (rol: RolValue) =>
+      primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor(rol)));
+
+    expect(destinoDe("maestro")).toBe("/dashboard");
+    expect(destinoDe("admin")).toBe("/dashboard");
+    expect(destinoDe("adminTienda")).toBe("/ordenes");
+    // Los dos que esta feature podría haber roto sin que nada se pusiera rojo:
+    expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite");
+    expect(destinoDe("mensajero")).toBe("/mis-asignaciones/reparto");
+  });
+
+  // Y la comprobación DIFERENCIAL, que es la que mata la mutación «quitar
+  // `destinoInicial: false`»: el destino calculado con el menú REAL debe coincidir, rol por
+  // rol, con el calculado sobre el mismo menú SIN el ítem de Monitoreo.
+  it("R54: quitar el ítem del menú no cambia el destino de NINGÚN rol (comparación diferencial)", () => {
+    const sinMonitoreo = SIDEBAR_ITEMS.filter((i) => i.href !== "/monitoreo");
+    expect(sinMonitoreo).toHaveLength(SIDEBAR_ITEMS.length - 1);
+
+    for (const rol of [
+      "maestro",
+      "admin",
+      "adminTienda",
+      "adminSatelite",
+      "mensajero",
+      "apiKey",
+    ] as RolValue[]) {
+      const conItem = primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor(rol)));
+      const sinItem = primerDestino(itemsVisibles(sinMonitoreo, actor(rol)));
+      expect(conItem).toBe(sinItem);
+    }
   });
 });

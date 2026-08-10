@@ -313,18 +313,25 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
    * `sumarPorCuboYCategoria`. Derivar el total sumando los cubos ahorraria una consulta y
    * convertiria R12 («Σ filas == total») en una tautologia: la invariante solo vale algo mientras
    * los dos numeros lleguen por caminos distintos.
+   *
+   * FEATURE 187 — Y DESDE AQUI, LAS DOS BAJO UN MISMO SNAPSHOT. Siguen siendo dos consultas por
+   * dos caminos; lo que cambia es que se emiten dentro de UNA LECTURA CONSISTENTE, asi que una
+   * escritura confirmada en el ledger entre ambas ya no puede entrar en una y no en la otra. Hasta
+   * la 187, R12 era cierto en los tests y no estaba garantizado en runtime (⟨L3⟩ de
+   * `progress/impl_180.md`). Que hay debajo de «lectura consistente» es asunto del repositorio: el
+   * servicio no conoce la transaccion ni su nivel de aislamiento (R6 de la 187).
    */
   private async deCaja(
     consulta: ConsultaAnalitica,
     forma: "solo_bruto" | "bruto_y_neto",
   ): Promise<ResultadoFinanciero> {
     const cubos = trocear(consulta.rango);
-    const [filas, porCuboTemporal] = await Promise.all([
-      this.ingresos.sumarPorCategoria(consulta),
+    const [filas, porCuboTemporal] = await this.ingresos.enLecturaConsistente(async (r) => [
+      await r.sumarPorCategoria(consulta),
       // R22 — los cubos salen de `trocear(consulta.rango)` y de ningun otro sitio: no son un
       // canal para colar una ventana propia.
-      this.ingresos.sumarPorCuboYCategoria(consulta, cubos),
-    ]);
+      await r.sumarPorCuboYCategoria(consulta, cubos),
+    ] as const);
 
     /**
      * ⟨D7⟩ / R27 — EL UNICO SITIO DONDE SE CONSTRUYE UN IMPORTE DE ESTA VISTA. Lo usan el `total`
@@ -391,10 +398,10 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
     cifra: (resumen: CajaResumenDTO) => string,
   ): Promise<ResultadoFinanciero> {
     const cubos = trocear(consulta.rango);
-    const [filas, porCuboTemporal] = await Promise.all([
-      this.ingresos.sumarPorCategoria(consulta),
-      this.ingresos.sumarPorCuboYCategoria(consulta, cubos),
-    ]);
+    const [filas, porCuboTemporal] = await this.ingresos.enLecturaConsistente(async (r) => [
+      await r.sumarPorCategoria(consulta),
+      await r.sumarPorCuboYCategoria(consulta, cubos),
+    ] as const);
 
     /** ⟨D7⟩ / R27 — el mismo constructor para el total y para cada cubo. Ver `deCaja`. */
     const construirImporte = (delGrupo: readonly AgregadoCategoriaCaja[]): ImporteAnalitico =>
@@ -553,11 +560,13 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
    */
   private async deCuentaDeMensajeros(consulta: ConsultaAnalitica): Promise<ResultadoFinanciero> {
     const cubos = trocear(consulta.rango);
-    const [filas, arrastre, porCuboTemporal] = await Promise.all([
-      this.cuentasPorPagar.cuentaPorPagarMensajerosAlCorte(consulta),
-      this.cuentasPorPagar.cuentaPorPagarMensajerosAntesDe(consulta),
-      this.cuentasPorPagar.cuentaPorPagarMensajerosPorCubo(consulta, cubos),
-    ]);
+    const [filas, arrastre, porCuboTemporal] = await this.cuentasPorPagar.enLecturaConsistente(
+      async (r) => [
+        await r.cuentaPorPagarMensajerosAlCorte(consulta),
+        await r.cuentaPorPagarMensajerosAntesDe(consulta),
+        await r.cuentaPorPagarMensajerosPorCubo(consulta, cubos),
+      ] as const,
+    );
 
     /**
      * ⟨D7⟩ / R27 — el UNICO constructor de importe de esta vista, para el total y para cada fila.
