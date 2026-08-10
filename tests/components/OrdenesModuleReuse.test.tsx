@@ -4,14 +4,12 @@ import { render, screen, cleanup } from "@testing-library/react";
 import type { Column } from "@/components/shared/DataTable";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
-import { ordenesColumnsAdminTienda } from "@/app/(app)/_components/ordenes-columns-admin-tienda";
 // Los módulos bajo prueba se importan estáticamente (no con `await import()`
 // dentro del `it`) para que su carga/transformación NO cuente contra
 // `testTimeout`: era la causa medida del flake de esta suite. Los `vi.mock` de
 // abajo son *hoisted* por Vitest, así que se aplican igual antes de estas
 // importaciones.
 import OrdenesPage from "@/app/(app)/ordenes/page";
-import { AdminTiendaDashboard } from "@/app/(app)/_components/AdminTiendaDashboard";
 
 /**
  * Reuso estructural (feature 26, R10): tanto `/ordenes` como el dashboard del
@@ -62,24 +60,9 @@ describe("Reuso de OrdenesModule (R10)", () => {
     expect(moduleCalls[0].columns).toBeUndefined();
   });
 
-  it("el dashboard del adminTienda monta el MISMO OrdenesModule con las columnas sin 'Tienda'", async () => {
-    render(AdminTiendaDashboard());
-
-    expect(screen.getByTestId("ordenes-module-stub")).toBeInTheDocument();
-    expect(moduleCalls).toHaveLength(1);
-    // Reutiliza el módulo compartido pasando las columnas de presentación (R11),
-    // sin una segunda DataTable/fetch propios.
-    expect(moduleCalls[0].columns).toBe(ordenesColumnsAdminTienda);
-    // 19 columnas del listado del maestro (18 + "Intentos", feature 160/R22),
-    // menos "tienda" = 18. La columna "zona" SÍ se muestra al adminTienda
-    // (decisión del humano 2026-07-14).
-    expect(moduleCalls[0].columns).toHaveLength(18);
-    expect(
-      moduleCalls[0].columns?.some((c) => c.id === "tienda"),
-    ).toBe(false);
-    // La columna "zona" está presente (ya NO se oculta al adminTienda).
-    expect(
-      moduleCalls[0].columns?.some((c) => c.id === "zona"),
-    ).toBe(true);
-  });
+  // El segundo caso de este archivo montaba el dashboard del adminTienda para afirmar
+  // que REUTILIZABA el mismo `OrdenesModule` con sus columnas propias. Esa pantalla se
+  // retiro el 2026-08-10 (pedido humano) junto con su archivo de columnas, asi que el
+  // caso se queda SIN SUJETO: no es que deje de cumplirse, es que ya no hay dashboard
+  // que montar. El reuso que R10 protege sigue cubierto por el caso de arriba.
 });
