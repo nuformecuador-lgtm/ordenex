@@ -65,6 +65,8 @@
   --color-asfalto-9: #0d2444;
   --color-info: #1a56db;
   --color-ink-blue: #1d5fd4;
+  /* Hover del azul de acción, tomado del `--ink-blue-l` de ordenex.co. */
+  --color-ink-blue-dark: #0b3880;
   --color-success: #10b981;
   --color-success-soft: #d1fae5;
   --color-warning: #f59e0b;
@@ -176,6 +178,18 @@
   }
   html {
     @apply font-sans;
+  }
+  /*
+   * Desplazamiento suave para la navegación por anclas (la landing de `/` lleva
+   * a #servicios, #como-funciona y #politicas desde la navbar y el pie). Va en
+   * <html> porque el elemento que scrollea es ese, no el contenedor de la
+   * página. Se respeta `prefers-reduced-motion`: quien pidió menos movimiento
+   * conserva el salto instantáneo.
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
   }
   /*
    * Pedido humano (rama ux): todo control accionable se siente pulsable. El navegador
