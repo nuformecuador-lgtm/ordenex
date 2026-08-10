@@ -20,6 +20,17 @@ hallazgo bloqueante**; si hace falta uno mas, se anade aqui con su motivo antes 
 | `app/(app)/analitica/_components/operativo/catalogo-paneles.ts` | `unidad` declarada por metrica (R9). **No se anade ningun panel** (D7/Q1 = B): siguen siendo seis |
 | `app/(app)/analitica/_components/operativo/textos.ts` | Textos del total del periodo, del total parcial de periodo, del denominador cero (R7) y del grano servido (R14); **borrado** de `TEXTO_RANGO_EXCEDIDO` y `TITULO_RANGO_EXCEDIDO` (R16) |
 
+**AMPLIACION DE LA FRONTERA (leader, 2026-08-10) — una excepcion, y es solo comentario.**
+`lib/actions/analitica-operativa.ts` **si** se toca, y esta linea existe para que la frontera siga
+siendo leible como lo que es. La accion `consultarAgregadoOperativo` llevaba una anotacion
+`@sin-superficie` que decia, textual, «nacio sin cablear (feature 176) **y sigue asi**: la UI de
+analitica agrega en el CLIENTE». **Esta feature ES su superficie**, asi que la anotacion se vuelve
+falsa en el mismo commit que la cablea, y `tests/unit/guards/superficie-de-uso.guardia.test.ts` la
+pone roja — con razon: una excusa que sobrevive a su motivo deja de avisar y pasa a mentir. El
+cambio es **un bloque de comentario y nada mas**: ni una linea ejecutable, ni una firma, ni un
+tipo. La alternativa —dejarla y saldarla en un chore posterior— se descarta porque el arbol
+quedaria rojo entre medias y el motivo acabaria contandose donde ya nadie lo relaciona.
+
 **No se tocan** (y el reviewer debe comprobarlo): `PanelesOperativos.tsx`, `FiltrosOperativos.tsx`,
 `filtro-tablero.ts`, `ExportarOperativoPanel.tsx`, `export-operativo.ts`,
 `analitica-operativa-descarga-columnas.ts`, `AnaliticaShell.tsx`, `page.tsx`, y todo

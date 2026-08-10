@@ -199,7 +199,12 @@ export function agregarPorSemana(
 
   for (const punto of puntos) {
     const semana = lunesDeLaSemana(punto.fecha);
-    const clave = `${semana} ${punto.dimension ?? ""}`;
+    // El separador es `\u001f` (US) y NO un byte NUL, que es lo que hubo hasta el
+    // 2026-08-10. Los dos son igual de imposibles dentro de una fecha o de una dimension,
+    // pero un NUL en el fuente hace que **git trate el archivo entero como binario**: el
+    // diff de este archivo —el central de la 182— salia como `Bin 14529 -> 22687 bytes` y
+    // no habia manera de revisarlo. No lo vuelvas a poner.
+    const clave = `${semana}\u001f${punto.dimension ?? ""}`;
     const previo = cubos.get(clave);
 
     const valor =

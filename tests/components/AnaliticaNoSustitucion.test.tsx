@@ -256,7 +256,6 @@ beforeEach(() => {
   searchParams = new URLSearchParams(QUERY);
   accion.mockImplementation(async ({ metricaId }) => serieOk(metricaId));
   agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
-  agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
   catalogo.mockResolvedValue({
     status: "ok",
     catalogo: {

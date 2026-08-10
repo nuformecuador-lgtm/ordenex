@@ -170,8 +170,13 @@
   - **NO HECHO** si algun archivo tocado no esta en §1 sin que §1 se haya actualizado antes con su
     motivo.
 
-- [ ] **T5.4** Gate. `./init.sh --rapido` al cerrar cada tanda; **`./init.sh` completo** antes del
+- [x] **T5.4** Gate. `./init.sh --rapido` al cerrar cada tanda; **`./init.sh` completo** antes del
       PR (lo corre el leader, no el implementer).
+  - **CERRADA (leader, 2026-08-10)**, ya con `dev` dentro: **1015/1017 archivos, 12.596/12.608
+    tests, typecheck y lint limpios, cero flakes**. Los 12 rojos son los dos archivos de
+    `busqueda-*` y son AJENOS, con causa raiz identificada (la migracion
+    `20260808120000_orden_busqueda_producto` vive solo en la rama `ux` y ya esta aplicada a la
+    base local). Salida y diagnostico completos en `progress/impl_182.md` seccion 6.3.
   - **depende de:** T5.3
   - **hecho:** verde, con la salida pegada.
   - **NO HECHO** si se cierra la feature con solo `--rapido`: este cambio toca tests de componente
