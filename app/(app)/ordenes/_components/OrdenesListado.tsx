@@ -18,7 +18,7 @@ import {
   listarZonasBloqueadasPorCierre,
 } from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
-import { EscanerDesplegable } from "@/components/shared/EscanerDesplegable";
+import { EscanerModal } from "@/components/shared/EscanerModal";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
@@ -688,18 +688,16 @@ export function OrdenesListado({
   // (R14), de modo que la orden recibida refleja su nuevo estado.
   //
   // El receptor es una TARJETA (cámara + número de guía), demasiado alta para vivir
-  // desplegada encima de la tabla: se abre desde la barra de acciones y se cierra
-  // igual. Quien no puede recibir no ve ni el botón.
-  // El receptor y su disparador viven a la IZQUIERDA, donde empieza la lectura de la
-  // pagina; la carga masiva sigue a la derecha de la misma fila. El disparador despliega
-  // la tarjeta con animacion y la desmonta al cerrar (apaga la camara): el mismo
-  // `EscanerDesplegable` compartido que usan las demás superficies de escaneo.
+  // desplegada encima de la tabla: se abre desde la barra de acciones EN MODAL y se
+  // cierra igual. Quien no puede recibir no ve ni el botón.
+  // El disparador vive a la IZQUIERDA, donde empieza la lectura de la pagina; la carga
+  // masiva sigue a la derecha de la misma fila. Abrir monta la tarjeta y cerrar la
+  // desmonta (apaga la camara): el mismo `EscanerModal` compartido que usan las demás
+  // superficies de escaneo. El label es el suyo por defecto ("Recibir paquete").
   const header =
     puedeCargarMasiva || puedeEscanearQr || puedeRecibirBodegaCentral ? (
       puedeEscanearQr || puedeRecibirBodegaCentral ? (
-        <EscanerDesplegable
-          label="Recibir paquete"
-          labelAbierto="Ocultar escáner"
+        <EscanerModal
           acciones={puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
         >
           {puedeRecibirBodegaCentral ? (
@@ -708,7 +706,7 @@ export function OrdenesListado({
           {puedeEscanearQr ? (
             <EscanerRecepcionOrigen onRecibida={handleSuccess} />
           ) : null}
-        </EscanerDesplegable>
+        </EscanerModal>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <OrdenesCargaMasivaButton />
