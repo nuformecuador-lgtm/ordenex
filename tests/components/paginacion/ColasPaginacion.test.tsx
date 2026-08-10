@@ -627,7 +627,10 @@ describe("Riesgo MEDIO · paginación de las 4 colas con contador de cabecera (T
       // El control se localiza por ROL y NOMBRE, nunca por clase: sin nombre accesible, un
       // lector de pantalla anuncia dos «navegación» idénticas en la misma pantalla.
       const nav = await screen.findByRole("navigation", { name: cola.paginacion });
-      expect(within(nav).getByText("Página 1 de 3"), cola.nombre).toBeInTheDocument();
+      expect(
+        within(nav).getByText(`1-${PAGE_SIZE} de ${TOTAL}`),
+        cola.nombre,
+      ).toBeInTheDocument();
       expect(within(tablaDe(cola)).getByText(cola.textoFila(1)), cola.nombre).toBeInTheDocument();
       expect(
         within(tablaDe(cola)).queryByText(cola.textoFila(26)),
@@ -645,7 +648,10 @@ describe("Riesgo MEDIO · paginación de las 4 colas con contador de cabecera (T
         within(tablaDe(cola)).queryByText(cola.textoFila(1)),
         `${cola.nombre}: la página 2 sigue mostrando filas de la 1`,
       ).not.toBeInTheDocument();
-      expect(within(nav).getByText("Página 2 de 3"), cola.nombre).toBeInTheDocument();
+      expect(
+        within(nav).getByText(`${PAGE_SIZE + 1}-${2 * PAGE_SIZE} de ${TOTAL}`),
+        cola.nombre,
+      ).toBeInTheDocument();
 
       // Y se puede volver: la navegación no es de ida.
       await user.click(within(nav).getByRole("button", { name: "Página anterior" }));

@@ -505,9 +505,23 @@ function buildGestionData(
   input: GestionarInput,
   evidencias: { storagePath: string; contentType: string; indice: number }[],
 ): GestionOrdenData {
+  // Feature 193 (R1/R6/R14): la ubicacion es transversal a las CINCO ramas, asi que se arma
+  // una vez y se esparce, en vez de repetirla en cada `return` —que es como una rama nueva
+  // acaba naciendo sin ella—.
+  //
+  // El `?? null` es explicito y no cosmetico: `undefined` haria que Prisma OMITIERA la
+  // columna del INSERT en vez de escribir NULL. Con columnas nullable el resultado
+  // coincidiria hoy, pero deja de coincidir en cuanto alguien anada un `@default`, y el fallo
+  // seria silencioso. El borde ya garantizo que llega O la ubicacion O el motivo (R8-R12).
+  const geo = {
+    ubicacionLat: input.ubicacion?.lat ?? null,
+    ubicacionLng: input.ubicacion?.lng ?? null,
+    ubicacionAusencia: input.ubicacionAusencia ?? null,
+  };
   switch (input.resultado) {
     case "entregada":
       return {
+        ...geo,
         resultado: "entregada",
         montoRecibido: input.montoRecibido,
         metodoPago: input.metodoPago,
@@ -515,6 +529,7 @@ function buildGestionData(
       };
     case "reprogramada":
       return {
+        ...geo,
         resultado: "reprogramada",
         fechaReprogramacion: input.fechaReprogramacion,
         motivo: input.motivo,
@@ -524,6 +539,7 @@ function buildGestionData(
       // `motivo` se persiste EXACTAMENTE como lo escribio el mensajero, sin decoracion.
       // Feature 75/119: la devolucion persiste sus 1..N fotos de evidencia (obligatorias).
       return {
+        ...geo,
         resultado: "devuelta",
         causaDevolucion: input.causaDevolucion,
         motivo: input.motivo,
@@ -531,6 +547,7 @@ function buildGestionData(
       };
     case "rechazada":
       return {
+        ...geo,
         resultado: "rechazada",
         motivo: input.motivo,
         evidencias,
@@ -541,6 +558,7 @@ function buildGestionData(
     // el admin al aprobar el cierre, R19/R22).
     case "incidente":
       return {
+        ...geo,
         resultado: "incidente",
         causaIncidente: input.causaIncidente,
         motivo: input.motivo,

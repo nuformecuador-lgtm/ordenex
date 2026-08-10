@@ -224,18 +224,29 @@ function rawFromFormData(formData: FormData): Record<string, unknown> {
   if (lat !== null && lat !== "" && lng !== null && lng !== "") {
     raw.ubicacion = { lat: Number(lat), lng: Number(lng) };
   }
+  // Feature 193 (R9/R18): POR QUE no viene la ubicacion, cuando la captura fallo por una
+  // causa TECNICA. Se pasa crudo: si el valor no es uno de los cuatro del enum —y la
+  // denegacion del permiso NO lo es (R12)— zod lo rechaza y la gestion no entra. Esa es
+  // exactamente la via por la que se bloquea el permiso denegado.
+  const ausencia = formData.get("ubicacionAusencia");
+  if (ausencia !== null && ausencia !== "") raw.ubicacionAusencia = ausencia;
   return raw;
 }
 
 /** Lee el binario de la evidencia (si aplica) y arma el input del servicio. */
 async function toGestionarInput(data: GestionarActionInput): Promise<GestionarInput> {
-  // Feature 92/R22: `ubicacion` es transversal a las cuatro ramas (interseccion en el
-  // tipo del service), asi que se adjunta una sola vez en vez de repetirla cuatro veces.
-  const ubicacion = data.ubicacion;
+  // Feature 92/R22 + 193/R14: la ubicacion es transversal a las CINCO ramas (interseccion en
+  // el tipo del service), asi que se adjunta una sola vez en vez de repetirla cinco veces.
+  // Van juntas a proposito: son las dos caras de la misma respuesta —donde estaba, o por que
+  // no se pudo saber— y separarlas invita a que una rama nueva adjunte solo una.
+  const geo = {
+    ubicacion: data.ubicacion,
+    ubicacionAusencia: data.ubicacionAusencia,
+  };
   switch (data.resultado) {
     case "entregada":
       return {
-        ubicacion,
+        ...geo,
         ordenId: data.ordenId,
         resultado: "entregada",
         montoRecibido: data.montoRecibido,
@@ -244,7 +255,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
       };
     case "reprogramada":
       return {
-        ubicacion,
+        ...geo,
         ordenId: data.ordenId,
         resultado: "reprogramada",
         fechaReprogramacion: data.fechaReprogramacion,
@@ -252,7 +263,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
       };
     case "devuelta":
       return {
-        ubicacion,
+        ...geo,
         ordenId: data.ordenId,
         resultado: "devuelta",
         causaDevolucion: data.causaDevolucion, // feature 73/R6
@@ -261,7 +272,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
       };
     case "rechazada":
       return {
-        ubicacion,
+        ...geo,
         ordenId: data.ordenId,
         resultado: "rechazada",
         motivo: data.motivo,
@@ -271,7 +282,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
     // causa tipificada + motivo libre + las 1..N fotos, obligatorias en las TRES causas.
     case "incidente":
       return {
-        ubicacion,
+        ...geo,
         ordenId: data.ordenId,
         resultado: "incidente",
         causaIncidente: data.causaIncidente,

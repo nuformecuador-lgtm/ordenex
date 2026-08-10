@@ -200,7 +200,10 @@ describe("Feature 133 (R26) — hoy ninguna leyenda usa las etiquetas seudonimas
     id: "carga-por-mensajero",
     titulo: "Carga por mensajero",
     grafica: "barras",
-    metricas: [{ metricaId: "entregas", etiqueta: "Entregas" }],
+    // `unidad` es OBLIGATORIA desde la 182: es lo que decide si un panel se agrega por
+    // semana. Aqui es relleno del panel sintetico —lo que este caso mide es la
+    // desagregacion por mensajero, no la unidad— y por eso lleva la mas inocua.
+    metricas: [{ metricaId: "entregas", etiqueta: "Entregas", unidad: "conteo" }],
     desagregacion: "mensajero",
   };
 

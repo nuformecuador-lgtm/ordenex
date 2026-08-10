@@ -4,6 +4,11 @@ import type { IMisAsignacionesService } from "@/lib/interfaces/services/IMisAsig
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 
+// ⚠️ Feature 193 (R10), decision humana del 2026-08-10: la gestion EXIGE la ubicacion del
+// mensajero (o un motivo tecnico). Los FormData validos de abajo se AMPLIAN con las dos
+// coordenadas —no se relajan—: lo que cada test AFIRMA sigue siendo lo mismo. La disyuncion
+// ubicacion/motivo se cubre aparte, en `mis-asignaciones-ubicacion.test.ts`.
+
 // Feature 73 (R6/R9/R10) — la Server Action lee la causa del FormData y la REVALIDA con el
 // MISMO schema que usa el cliente (R9): una peticion que evite la UI se rechaza igual, y el
 // service NO se invoca (cero efectos: ni gestion, ni estado, ni transicion de la 47).
@@ -45,6 +50,8 @@ function evidenciaFile(): File {
 function fdDevuelta(campos: Record<string, string> = {}): FormData {
   const fd = new FormData();
   fd.set("ordenId", "o1");
+  fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+  fd.set("ubicacionLng", "-84.0907");
   fd.set("resultado", "devuelta");
   fd.set("causaDevolucion", "not_found");
   fd.set("motivo", "nadie contesto");
@@ -129,6 +136,8 @@ describe("Feature 73 · la action rechaza en el borde, sin efectos (R6/R9)", () 
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "devuelta");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
     expect(r.status).toBe("validation_error");
@@ -166,6 +175,8 @@ describe("Feature 73 · la causa no se cuela en las otras ramas (R10)", () => {
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "rechazada");
     fd.set("motivo", "cliente rechazo");
     fd.set("causaDevolucion", "wrong_address"); // intento de colarla

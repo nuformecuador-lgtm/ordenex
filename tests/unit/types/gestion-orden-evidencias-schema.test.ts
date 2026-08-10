@@ -3,6 +3,14 @@ import type { ZodError } from "zod";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { gestionConfig } from "@/lib/config/gestion";
 
+// ⚠️ Feature 193 (R10), decision humana del 2026-08-10: la gestion pasa a EXIGIR la ubicacion
+// del mensajero (o un motivo tecnico de por que falta). Los casos validos de abajo se AMPLIAN
+// con `ubicacion` —no se relajan—, mismo criterio que aplicaron la 73 y la 75 al endurecer
+// esta misma rama. Lo que cada test AFIRMA no cambia; solo se le anade el dato que el
+// contrato nuevo pide. La disyuncion ubicacion/motivo tiene su cobertura propia y exhaustiva
+// en `gestion-ubicacion-borde.test.ts`.
+const UBICACION_193 = { lat: 9.9281, lng: -84.0907 };
+
 // Feature 119 (R5/R6/R7/R8) — el BORDE (zod) de la evidencia MULTIPLE. Mismo schema para
 // cliente (panel) y servidor (Server Action): validarlo aqui valida las dos defensas. La
 // evidencia paso de UNA foto a una LISTA `evidencias` de 1..N (tope R7), con validacion por
@@ -31,13 +39,33 @@ function fechaFuturaISO(): string {
 
 // Bases validas por rama, parametrizadas por la lista de fotos.
 function entregada(evidencias: unknown[]) {
-  return { ordenId: "o1", resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencias };
+  return {
+    ordenId: "o1",
+    ubicacion: UBICACION_193,
+    resultado: "entregada",
+    montoRecibido: 100,
+    metodoPago: "efectivo",
+    evidencias,
+  };
 }
 function rechazada(evidencias: unknown[]) {
-  return { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencias };
+  return {
+    ordenId: "o1",
+    ubicacion: UBICACION_193,
+    resultado: "rechazada",
+    motivo: "cliente rechazo",
+    evidencias,
+  };
 }
 function devuelta(evidencias: unknown[]) {
-  return { ordenId: "o1", resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "no vive", evidencias };
+  return {
+    ordenId: "o1",
+    ubicacion: UBICACION_193,
+    resultado: "devuelta",
+    causaDevolucion: "wrong_address",
+    motivo: "no vive",
+    evidencias,
+  };
 }
 
 const RAMAS_CON_FOTO = [
@@ -55,6 +83,7 @@ describe("R5: las 3 ramas con foto aceptan una LISTA de 1..MAX evidencias", () =
   it("reprogramada NO lleva evidencias (rama sin foto, sigue valida)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
+      ubicacion: UBICACION_193,
       resultado: "reprogramada",
       fechaReprogramacion: fechaFuturaISO(),
       motivo: "reagendar",

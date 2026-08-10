@@ -118,11 +118,11 @@ describe("RechazosSlaModule", () => {
       <RechazosSlaModule items={[rechazo()]} total={25} page={2} pageSize={10} />,
     );
 
-    // total 25 / pageSize 10 = 3 paginas; page 2 de 3.
+    // total 25 / pageSize 10: la pagina 2 cubre los elementos 11 al 20.
     expect(
       screen.getByRole("navigation", { name: "Paginación de rechazos por plazo vencido" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Página 2 de 3")).toBeInTheDocument();
+    expect(screen.getByText("11-20 de 25")).toBeInTheDocument();
   });
 
   it("al paginar re-fetch por Server Action y actualiza la lista con la nueva pagina", async () => {

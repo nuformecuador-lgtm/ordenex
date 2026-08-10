@@ -59,9 +59,9 @@ describe("construirFiltrosOrdenes — el buscador va PRIMERO (R32)", () => {
     expect(declarados()[0]?.minChars).toBe(BUSQUEDA_MIN_CHARS);
   });
 
-  it("el placeholder nombra los CUATRO datos buscables (es la unica pista que hay)", () => {
+  it("el placeholder nombra los CINCO datos buscables (es la unica pista que hay)", () => {
     expect(declarados()[0]?.placeholder).toBe(PLACEHOLDER_BUSQUEDA);
-    for (const dato of ["Guía", "remisión", "teléfono", "destinatario"]) {
+    for (const dato of ["Guía", "remisión", "teléfono", "destinatario", "producto"]) {
       expect(PLACEHOLDER_BUSQUEDA).toContain(dato);
     }
   });

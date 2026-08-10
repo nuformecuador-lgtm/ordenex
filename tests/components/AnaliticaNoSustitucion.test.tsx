@@ -7,6 +7,7 @@ import { FiltrosOperativos } from "@/app/(app)/analitica/_components/operativo/F
 import { PanelesOperativos } from "@/app/(app)/analitica/_components/operativo/PanelesOperativos";
 import {
   metricasDelTablero,
+  unidadDelPanel,
   PANELES_OPERATIVOS,
 } from "@/app/(app)/analitica/_components/operativo/catalogo-paneles";
 import {
@@ -15,10 +16,19 @@ import {
   VACIO_PANEL,
 } from "@/app/(app)/analitica/_components/operativo/textos";
 import type { Faceta } from "@/lib/analytics/presentacion";
-import { consultarAnaliticaOperativa } from "@/lib/actions/analitica-operativa";
+import {
+  consultarAgregadoOperativo,
+  consultarAnaliticaOperativa,
+} from "@/lib/actions/analitica-operativa";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarUsuariosPorRol } from "@/lib/actions/usuarios-por-rol";
-import { PENUMBRA, type ResultadoOperativo } from "@/lib/types/analitica-operativa";
+import {
+  esUnidadAgregable,
+  PENUMBRA,
+  type GranoAgregado,
+  type ResultadoAgregado,
+  type ResultadoOperativo,
+} from "@/lib/types/analitica-operativa";
 import { ToastProvider } from "@/providers/ToastProvider";
 
 // Feature 133 (T6.2 / T6.3) — R21 y R19.
@@ -35,7 +45,8 @@ import { ToastProvider } from "@/providers/ToastProvider";
 // Este archivo es el que impide confundir los dos recortes, y por eso su forma es la que
 // es: monta LA MISMA pantalla, con EL MISMO filtro en la URL, tres veces —con el recorte
 // de presentacion completo, con uno parcial y sin recorte ninguno— y compara lo que sale
-// por la unica puerta que toca el dato: `consultarAnaliticaOperativa`.
+// por las puertas que tocan el dato: `consultarAnaliticaOperativa` y, desde la 182,
+// `consultarAgregadoOperativo`.
 //
 // Lo que se afirma es una NO-DIFERENCIA: retirar el recorte de presentacion no cambia ni
 // un argumento de la consulta al borde ni una fila de la respuesta. Si esta comparacion
@@ -48,8 +59,16 @@ import { ToastProvider } from "@/providers/ToastProvider";
 // en pantalla (el caso «la barra si cambia» de abajo lo afirma). La igualdad no viene de
 // que el recorte no haga nada; viene de que lo que hace no toca la consulta.
 
+// La 182 abrio una SEGUNDA puerta al dato desde este mismo tablero
+// (`consultarAgregadoOperativo`, para los paneles de porcentaje y segundos). Se dobla aqui
+// por dos motivos, y el segundo es el que importa: (1) sin ella el modulo mockeado la
+// entrega como `undefined` y el panel cae en su pixel de error, tapando lo que cada caso
+// mide; (2) R21 afirma una NO-DIFERENCIA sobre «la puerta que toca el dato», y desde la 182
+// son dos — dejar una fuera convertiria la afirmacion en media verdad justo donde el
+// recorte de presentacion podria colarse.
 vi.mock("@/lib/actions/analitica-operativa", () => ({
   consultarAnaliticaOperativa: vi.fn(),
+  consultarAgregadoOperativo: vi.fn(),
 }));
 vi.mock("@/lib/actions/filtros-ordenes", () => ({
   obtenerCatalogoFiltrosOrdenes: vi.fn(),
@@ -66,6 +85,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const accion = vi.mocked(consultarAnaliticaOperativa);
+const agregado = vi.mocked(consultarAgregadoOperativo);
 const catalogo = vi.mocked(obtenerCatalogoFiltrosOrdenes);
 const mensajeros = vi.mocked(listarUsuariosPorRol);
 
@@ -87,6 +107,15 @@ const QUERY = `rango=mes&zona=${ZONA}&tienda=${TIENDA}&mensajero=${UUID_MENSAJER
  */
 const VALOR_FILA = 731;
 
+/** El rango resuelto de la fixture. Uno solo, para que las dos puertas no puedan divergir. */
+const RANGO_FIXTURE = {
+  preset: "mes",
+  desde: new Date("2026-07-05T06:00:00.000Z"),
+  hasta: new Date("2026-08-04T06:00:00.000Z"),
+  desdeFecha: "2026-07-05",
+  hastaFecha: "2026-08-03",
+} as const;
+
 function serieOk(metricaId: string): ResultadoOperativo {
   return {
     status: "ok",
@@ -94,17 +123,60 @@ function serieOk(metricaId: string): ResultadoOperativo {
       metricaId,
       unidad: "conteo",
       unidadDeConteo: "gestion",
-      rango: {
-        preset: "mes",
-        desde: new Date("2026-07-05T06:00:00.000Z"),
-        hasta: new Date("2026-08-04T06:00:00.000Z"),
-        desdeFecha: "2026-07-05",
-        hastaFecha: "2026-08-03",
-      },
+      rango: RANGO_FIXTURE,
       puntos: [{ fecha: "2026-08-03", valor: VALOR_FILA }],
       cobertura: { fechasNoComparables: [], penumbra: PENUMBRA },
     },
   };
+}
+
+/**
+ * La respuesta de la SEGUNDA puerta (182). Un solo cubo, con el mismo rango y la misma
+ * cobertura que `serieOk`: aqui no se mide la aritmetica del agregado —eso es de
+ * `tablero-agregado-cableado.test.ts`—, sino que la consulta no cambie con el recorte.
+ */
+function agregadoOk(
+  metricaId: string,
+  // El borde declara `grano` OPCIONAL, asi que el doble lo recibe igual de opcional: si la
+  // pantalla dejara de mandarlo, este archivo tiene que seguir compilando y que lo delate
+  // el caso de los granos, no el typecheck de un fixture.
+  grano: GranoAgregado | undefined,
+): ResultadoAgregado {
+  return {
+    status: "ok",
+    datos: {
+      metricaId,
+      unidad: "porcentaje",
+      unidadDeConteo: "gestion",
+      grano: grano ?? "periodo",
+      rango: RANGO_FIXTURE,
+      cubos: [
+        {
+          fecha: "2026-07-05",
+          desdeFecha: "2026-07-05",
+          hastaFecha: "2026-08-03",
+          numerador: VALOR_FILA,
+          denominador: 1000,
+          valor: VALOR_FILA / 1000,
+        },
+      ],
+      cobertura: { fechasNoComparables: [], penumbra: PENUMBRA },
+    },
+  };
+}
+
+/** Los dos granos que la 182 pide por panel agregable. */
+const GRANOS: readonly GranoAgregado[] = ["periodo", "semana"];
+
+/**
+ * Las metricas que ADEMAS de serie piden cubos: las de unidad `porcentaje` y `segundos`.
+ * Se derivan del catalogo con el MISMO predicado que usa el panel (`esUnidadAgregable`),
+ * para que este caso no tenga su propia idea de que es agregable.
+ */
+function metricasAgregables(): string[] {
+  return PANELES_OPERATIVOS.filter((p) => esUnidadAgregable(unidadDelPanel(p))).flatMap((p) =>
+    p.metricas.map((m) => m.metricaId),
+  );
 }
 
 const FACETAS_TODAS: readonly Faceta[] = ["zona", "tienda", "mensajero"];
@@ -124,17 +196,29 @@ const RECORTES = [
 
 type Recorte = (typeof RECORTES)[number];
 
-/** Una llamada al borde, normalizada y COMPLETA: nada de la entrada se descarta. */
+/**
+ * Una llamada al borde, normalizada y COMPLETA: nada de la entrada se descarta. Recorre LAS
+ * DOS puertas —serie y agregado (182)—, porque la afirmacion de R21 es sobre lo que la
+ * pantalla PREGUNTA, y desde la 182 pregunta por dos sitios. El `grano` entra en la
+ * normalizacion: es parte de la entrada del agregado, y omitirlo dejaria pasar un recorte
+ * que cambiara de grano sin cambiar nada mas.
+ */
 function llamadasAlBorde(): string[] {
-  return accion.mock.calls
-    .map(([entrada]) =>
-      JSON.stringify({
-        metricaId: entrada.metricaId,
-        raw: entrada.raw,
-        desagregacion: entrada.desagregacion ?? null,
-      }),
-    )
-    .sort();
+  const serie = accion.mock.calls.map(([entrada]) => ({
+    puerta: "serie",
+    metricaId: entrada.metricaId,
+    raw: entrada.raw,
+    desagregacion: entrada.desagregacion ?? null,
+    grano: null,
+  }));
+  const cubos = agregado.mock.calls.map(([entrada]) => ({
+    puerta: "agregado",
+    metricaId: entrada.metricaId,
+    raw: entrada.raw,
+    desagregacion: entrada.desagregacion ?? null,
+    grano: entrada.grano,
+  }));
+  return [...serie, ...cubos].map((x) => JSON.stringify(x)).sort();
 }
 
 /** Monta la pantalla con un recorte y espera a que TODAS las metricas hayan consultado. */
@@ -159,12 +243,19 @@ async function montar(recorte: {
       metricasDelTablero().length,
     ),
   );
+  // Y a la SEGUNDA puerta (182). Sin esta espera, la foto de `llamadasAlBorde()` se toma
+  // con los cubos a medio pedir y la comparacion entre recortes compara carreras, no
+  // consultas: verde o rojo segun quien llegara primero.
+  await waitFor(() =>
+    expect(agregado.mock.calls.length).toBe(metricasAgregables().length * GRANOS.length),
+  );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   searchParams = new URLSearchParams(QUERY);
   accion.mockImplementation(async ({ metricaId }) => serieOk(metricaId));
+  agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
   catalogo.mockResolvedValue({
     status: "ok",
     catalogo: {
@@ -199,20 +290,25 @@ describe("Feature 133 (R21) — retirar el recorte de presentacion no cambia la 
     }
   });
 
-  it("los argumentos enviados a `consultarAnaliticaOperativa` son IDENTICOS con y sin recorte", async () => {
+  it("los argumentos enviados al borde —serie y agregado— son IDENTICOS con y sin recorte", async () => {
     const porRecorte = new Map<string, string[]>();
 
     for (const recorte of RECORTES as readonly Recorte[]) {
       vi.clearAllMocks();
       accion.mockImplementation(async ({ metricaId }) => serieOk(metricaId));
+      agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
       await montar(recorte);
       porRecorte.set(recorte.nombre, llamadasAlBorde());
       cleanup();
     }
 
     const [referencia, ...resto] = [...porRecorte.entries()];
-    // Nueve metricas distintas, no una: la igualdad se afirma sobre el tablero entero.
-    expect(referencia[1]).toHaveLength(metricasDelTablero().length);
+    // El tablero ENTERO, no una metrica: las nueve de la serie mas los dos granos de cada
+    // metrica agregable (182). Se cuenta desde el catalogo, no con un numero tecleado: un
+    // panel nuevo tiene que mover esta cifra sola o el caso pasaria a medir de menos.
+    expect(referencia[1]).toHaveLength(
+      metricasDelTablero().length + metricasAgregables().length * GRANOS.length,
+    );
     for (const [nombre, llamadas] of resto) {
       expect(llamadas, `«${nombre}» consulta distinto que «${referencia[0]}»`).toEqual(
         referencia[1],
@@ -226,6 +322,7 @@ describe("Feature 133 (R21) — retirar el recorte de presentacion no cambia la 
     for (const recorte of RECORTES as readonly Recorte[]) {
       vi.clearAllMocks();
       accion.mockImplementation(async ({ metricaId }) => serieOk(metricaId));
+      agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
       await montar(recorte);
       // La rejilla, no la pantalla entera: el rotulo de alcance SI cambia con el recorte
       // (es su trabajo, R24) y compararlo aqui mezclaria dos cosas distintas.
@@ -255,6 +352,7 @@ describe("Feature 133 (R21) — retirar el recorte de presentacion no cambia la 
 
     vi.clearAllMocks();
     accion.mockImplementation(async ({ metricaId }) => serieOk(metricaId));
+    agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
     await montar(RECORTES[1]);
     expect(await screen.findByRole("button", { name: /^Zona:/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Tienda:/ })).toBeNull();
@@ -263,6 +361,7 @@ describe("Feature 133 (R21) — retirar el recorte de presentacion no cambia la 
 
     vi.clearAllMocks();
     accion.mockImplementation(async ({ metricaId }) => serieOk(metricaId));
+    agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
     await montar(RECORTES[2]);
     expect(screen.queryByRole("button", { name: /^(Zona|Tienda|Mensajero):/ })).toBeNull();
   });
@@ -301,6 +400,7 @@ describe("Feature 133 (R19) — un parametro de faceta oculta no se silencia ni 
 
     vi.clearAllMocks();
     accion.mockImplementation(async ({ metricaId }) => serieOk(metricaId));
+    agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
     await montar(RECORTES[0]);
     expect(conRecorte).toEqual(llamadasAlBorde());
   });
@@ -318,6 +418,7 @@ describe("Feature 133 (R19) — un parametro de faceta oculta no se silencia ni 
   it("lo que se pinta es lo que devolvio el borde, no un dato ajeno", async () => {
     const AJENO = 908;
     accion.mockImplementation(async ({ metricaId }) => serieOk(metricaId));
+    agregado.mockImplementation(async ({ metricaId, grano }) => agregadoOk(metricaId, grano));
     await montar(ADMIN_TIENDA);
     const rejilla = await screen.findByRole("group", { name: ETIQUETA_REJILLA });
     await within(rejilla).findAllByText(new RegExp(String(VALOR_FILA)));
@@ -329,8 +430,15 @@ describe("Feature 133 (R19) — un parametro de faceta oculta no se silencia ni 
     // La decision de que hacer con el `mensajero_id` inyectado es DEL BORDE (T6.6). Aqui se
     // comprueba lo unico que le toca a la pantalla: transcribir esa respuesta sin
     // convertirla en «sin datos» ni en una serie vacia que parezca una respuesta normal.
+    // El borde deniega la METRICA, asi que la deniega por las DOS puertas: `tasa_entrega`
+    // es de unidad porcentaje y desde la 182 tambien pide cubos. Denegar solo una dejaria
+    // el caso midiendo la precedencia entre puertas (que es de la 182, R13) en vez del
+    // denegado transcrito, que es lo que R19 afirma.
     accion.mockImplementation(async ({ metricaId }) =>
       metricaId === "tasa_entrega" ? { status: "forbidden" } : serieOk(metricaId),
+    );
+    agregado.mockImplementation(async ({ metricaId, grano }) =>
+      metricaId === "tasa_entrega" ? { status: "forbidden" } : agregadoOk(metricaId, grano),
     );
     await montar(ADMIN_TIENDA);
 

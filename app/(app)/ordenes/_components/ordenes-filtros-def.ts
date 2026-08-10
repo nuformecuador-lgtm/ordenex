@@ -59,10 +59,12 @@ export const CLAVE_BUSQUEDA = "q";
 
 /**
  * Que se puede teclear ahi. El placeholder ES la documentacion del buscador: sin el, el
- * usuario no tiene forma de saber que el campo alcanza cuatro datos y no solo la guia.
- * El orden es el de uso esperado en bodega.
+ * usuario no tiene forma de saber que el campo alcanza cinco datos y no solo la guia.
+ * El orden es el de uso esperado en bodega; `producto` va al final porque es el ultimo
+ * recurso ("la caja de zapatos de ayer"), no la forma habitual de buscar una orden.
  */
-export const PLACEHOLDER_BUSQUEDA = "Guía, remisión, teléfono o destinatario";
+export const PLACEHOLDER_BUSQUEDA =
+  "Guía, remisión, teléfono, destinatario o producto";
 
 /**
  * Declara los OCHO filtros de la barra de ordenes sobre el contrato del bloque A.

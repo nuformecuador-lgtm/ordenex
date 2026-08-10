@@ -98,8 +98,11 @@ export interface ListOrdenesWhere {
    * (minusculas, sin los acentos del mapa, espacios colapsados). Es un TERMINO, nunca un
    * patron: los comodines y su escape son dialecto de la capa de datos y se aplican en el
    * repositorio (R7). Se resuelve contra la columna generada `busqueda_texto`, que solo
-   * contiene los cuatro campos buscables — por construccion no puede coincidir con la
-   * direccion, el producto, las notas ni el nombre de la tienda (R2).
+   * contiene los CINCO campos buscables (guia, remision, telefono, destinatario y
+   * producto) — por construccion no puede coincidir con la direccion, las notas ni el
+   * nombre de la tienda (R2). `producto` entro despues, con la migracion
+   * `20260808120000_orden_busqueda_producto`; ni esta interfaz ni el repositorio
+   * cambiaron por ello: el campo buscable es un dato de la COLUMNA, no del contrato.
    *
    * Es una clave HERMANA de las demas => AND con todo lo que haya (R14/R21). Meterla
    * dentro de un `OR` con cualquier otra cosa abriria una fuga: el acotamiento por rol
