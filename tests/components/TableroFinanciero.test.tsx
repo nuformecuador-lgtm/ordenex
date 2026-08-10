@@ -62,6 +62,30 @@ vi.mock("@/components/private/analytics/lienzo/LineasLienzo", () => ({
   default: () => <div data-testid="lienzo-lineas" />,
 }));
 
+// Feature 184 — analitica financiera: export de la serie (⟨D6⟩ humano, 2026-08-08).
+//
+// Desde esa feature `SeccionVista` monta, en las vistas TEMPORALES, el control de descarga
+// `ExportarVistaFinanciera`, que envuelve `DescargarDatasetButton`; y ese control llama a
+// `useToast()`, que LANZA fuera de un `ToastProvider` (`hooks/useToast.ts`).
+//
+// Se dobla EL HOOK y no el control, y la diferencia importa: asi los ~40 casos de este archivo
+// siguen montando el arbol REAL —control incluido—, de modo que una prop-funcion cruzando la
+// frontera RSC seguiria fallando aqui, que es donde falla de verdad (en render, no en
+// compilacion). Mockear el control habria dejado ese arbol sin montar en el unico sitio que lo
+// monta entero. Y se dobla en vez de envolver con el `ToastProvider` real porque su viewport
+// emite su propia `<section role="region">`, y tres casos de este archivo CUENTAN las regiones
+// del tablero: envolverlo habria cambiado lo que esos casos miden.
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
+
 /**
  * El rango con el que se prueba el tablero: treinta dias, ambos extremos incluidos.
  *
