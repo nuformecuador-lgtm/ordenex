@@ -30,13 +30,19 @@ interface CasoOrden {
   numRemision: string;
   telefonoDest: string;
   destinatario: string;
+  /** Sexto segmento (migracion `*_orden_busqueda_producto`). Casi ningun caso lo varia. */
+  producto?: string;
 }
+
+/** Producto de los casos que no lo varian: participa igual, pero no es lo que miden. */
+const PRODUCTO_POR_DEFECTO = "producto de prueba";
 
 /**
  * El MISMO texto que concatena la columna generada, en el MISMO orden y con el MISMO
- * separador: guia, remision, telefono tal cual, telefono en solo-digitos, destinatario.
- * Se escribe aqui (y no en `lib/`) a proposito: si viviera junto al normalizador, este
- * test estaria comparando el codigo consigo mismo. Aqui compara contra la BASE.
+ * separador: guia, remision, telefono tal cual, telefono en solo-digitos, destinatario y
+ * producto. Se escribe aqui (y no en `lib/`) a proposito: si viviera junto al
+ * normalizador, este test estaria comparando el codigo consigo mismo. Aqui compara contra
+ * la BASE.
  */
 function textoConcatenado(caso: CasoOrden): string {
   return [
@@ -45,6 +51,7 @@ function textoConcatenado(caso: CasoOrden): string {
     caso.telefonoDest,
     caso.telefonoDest.replace(/[^0-9]/g, ""),
     caso.destinatario,
+    caso.producto ?? PRODUCTO_POR_DEFECTO,
   ].join(" ");
 }
 
@@ -157,6 +164,19 @@ const CORPUS: { nombre: string; caso: CasoOrden }[] = [
       destinatario: `Ana${NBSP}${NBSP}Rojas`,
     },
   },
+  {
+    // El sexto segmento pasa por el MISMO plegado que los demas: es lo que distingue esta
+    // via de un `ILIKE` sobre la columna cruda, que baja la caja pero deja el acento y
+    // haria que "cafe" no encontrara "Café".
+    nombre: "producto con acentos, mayusculas y espacios de sobra",
+    caso: {
+      numGuia: 11234567,
+      numRemision: `REM-${SUFIJO}-L`,
+      telefonoDest: "88886666",
+      destinatario: "Diego Alfaro",
+      producto: "  CAJA de   Café Añejo\tÑ  ",
+    },
+  },
 ];
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
@@ -180,7 +200,7 @@ describeSiHayBase("paridad SQL <-> TypeScript de la normalizacion de busqueda", 
             numRemision: caso.numRemision,
             destinatario: caso.destinatario,
             telefonoDest: caso.telefonoDest,
-            producto: "producto de prueba",
+            producto: caso.producto ?? PRODUCTO_POR_DEFECTO,
             estatusId: base.estatusId,
             tiendaId: base.tiendaId,
             zonaId: base.zonaId,
