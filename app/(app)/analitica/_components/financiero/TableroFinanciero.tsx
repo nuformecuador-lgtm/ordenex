@@ -66,6 +66,8 @@ import {
   type VistaFinanciera,
 } from "@/lib/types/analitica-financiera";
 
+import { ExportarVistaFinanciera } from "../export-financiero/ExportarVistaFinanciera";
+
 import {
   aNumero,
   agruparCola,
@@ -467,6 +469,23 @@ function SeccionVista({
       {/* Q2 / R24: la limitacion se dice EN PANTALLA en vez de esconderla. */}
       {vista.grano === "tienda" ? (
         <p className="text-xs text-muted-foreground">{TEXTOS.limitacionTienda}</p>
+      ) : null}
+      {/* Feature 184 — analitica financiera: export de la serie (⟨D6⟩ humano, 2026-08-08).
+          LA UNICA insercion de esa feature en este archivo, y con su condicion integra: no
+          añade la directiva de cliente aqui (el control vive en el subarbol HERMANO
+          `_components/export-financiero/`, porque el censo de esta carpeta la prohibe y
+          tiene razon: arrastraria el borde financiero —y con el Prisma— al navegador), no
+          pasa ninguna prop-funcion (las tres son cadenas del DTO que esta seccion ya pinta)
+          y no nombra ningun grano ni ningun id de metrica: la pregunta la responde
+          `esVistaTemporal`, que vive en `adaptar.ts`. Solo las vistas temporales, porque en
+          ellas la clave del cubo es una fecha por construccion y el archivo no puede llevar
+          un identificador ni por descuido (⟨D1⟩). */}
+      {esVistaTemporal(vista) ? (
+        <ExportarVistaFinanciera
+          metricaId={datos.metricaId}
+          vistaId={vista.id}
+          titulo={titulo}
+        />
       ) : null}
       <ContenidoDeVista
         titulo={titulo}

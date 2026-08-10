@@ -7,7 +7,6 @@ import {
   ordenesColumns,
   ordenesColumnsReprogramada,
 } from "@/app/(app)/ordenes/_components/ordenes-columns";
-import { ordenesColumnsAdminTienda } from "@/app/(app)/_components/ordenes-columns-admin-tienda";
 import { INTENTOS_COLUMN_ID } from "@/components/shared/intentos-entrega";
 import type { OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 
@@ -229,21 +228,19 @@ describe("ordenesColumns — feature 160 (R21: posicion e integridad de la colum
     expect(ordenesColumns).toHaveLength(IDS_PREEXISTENTES.length + 1);
   });
 
-  it("R22: las tres variantes derivadas heredan la columna sin tocar sus archivos", () => {
-    // `reprogramada` deriva por spread; el dashboard del adminTienda por `filter` de ids
-    // ocultos (y `intentos` no esta oculto).
+  // Este caso hablaba de TRES variantes derivadas. La del dashboard del adminTienda dejó de
+  // existir el 2026-08-10 (pedido humano: esa pantalla se retiró y su archivo de columnas
+  // con ella), así que ahora cubre las que quedan. Lo que afirma —que una variante derivada
+  // hereda la columna sin tocar su archivo— no cambia; cambia cuántas hay.
+  it("R22: las variantes derivadas heredan la columna sin tocar sus archivos", () => {
+    // `reprogramada` deriva por spread.
     expect(
       ordenesColumnsReprogramada.some((c) => c.id === INTENTOS_COLUMN_ID),
     ).toBe(true);
+    // Y sigue en la misma posicion relativa: justo tras `estatus`.
     expect(
-      ordenesColumnsAdminTienda.some((c) => c.id === INTENTOS_COLUMN_ID),
-    ).toBe(true);
-    // Y siguen en la misma posicion relativa (tras `estatus`) en las derivadas.
-    for (const cols of [ordenesColumnsReprogramada, ordenesColumnsAdminTienda]) {
-      expect(cols.findIndex((c) => c.id === INTENTOS_COLUMN_ID)).toBe(
-        cols.findIndex((c) => c.id === "estatus") + 1,
-      );
-    }
+      ordenesColumnsReprogramada.findIndex((c) => c.id === INTENTOS_COLUMN_ID),
+    ).toBe(ordenesColumnsReprogramada.findIndex((c) => c.id === "estatus") + 1);
   });
 });
 
