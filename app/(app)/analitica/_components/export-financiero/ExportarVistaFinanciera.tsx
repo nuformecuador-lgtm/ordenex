@@ -49,7 +49,7 @@
 // sino el mismo dato para el mismo ambito y el mismo filtro — y por eso cada fila lleva su
 // `limitacion_conocida` (R30).
 
-import { useRef } from "react";
+import { useState } from "react";
 
 import type { DescargaFilasResult } from "@/components/shared/DataTable";
 import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
@@ -207,32 +207,46 @@ export interface ExportarVistaFinancieraProps {
  * se escribe aqui ninguna condicion de permiso ni ninguna lista de perfiles: el control se
  * renderiza donde la region financiera se renderiza, y quien la ve lo decide la pagina.
  *
- * POR QUE EL JUEGO DE COLUMNAS VIVE EN UN REF Y NO EN ESTADO. `DescargarDatasetButton` entrega al
- * generador comun exactamente el array que recibio por props, en el mismo tick en que
- * `obtenerFilas` resuelve; un `setState` no llegaria a ese click. Y las columnas del archivo NO se
- * pueden fijar al renderizar: dependen de la FORMA del importe (R13), que solo se conoce cuando el
- * DTO llega. Por eso se pasa una instancia ESTABLE y `obtenerFilas` la fija con el juego que le
- * toca a ese archivo, justo antes de que el generador la lea. La alternativa —declarar las ocho
- * columnas siempre— dejaria una columna «Neto» VACIA en las metricas que no lo publican, y una
- * celda vacia significa «no se sabe» donde la verdad es «no aplica» (R13).
+ * POR QUE EL JUEGO DE COLUMNAS ES UNA INSTANCIA ESTABLE QUE SE MUTA, Y NO UN VALOR DE ESTADO.
+ * `DescargarDatasetButton` entrega al generador comun exactamente el array que recibio por props,
+ * EN EL MISMO TICK en que `obtenerFilas` resuelve; un `setState` programaria un re-render que
+ * llegaria despues de ese click, asi que el archivo saldria con las columnas anteriores. Y las
+ * columnas NO se pueden fijar al renderizar: dependen de la FORMA del importe (R13), que solo se
+ * conoce cuando el DTO llega. Por eso se crea UNA sola vez un array —el inicializador perezoso de
+ * `useState` lo construye en el primer render y no vuelve a evaluarse— y `obtenerFilas` lo REESCRIBE
+ * EN SITIO (`splice`) con el juego que le toca a ese archivo, justo antes de que el generador lo
+ * lea. Nunca se llama al `setState`: el array no es estado que se pinte, es un buzon estable
+ * compartido con el control comun, y su contenido no decide nada de lo que se renderiza.
+ *
+ * `useState` y no `useRef` por una razon concreta, no por gusto: leer `ref.current` DURANTE el
+ * render es lo que la regla `react-hooks/refs` prohibe —y con razon, porque un valor leido en
+ * render que cambia sin re-render es justo lo que no debe pintarse—. Aqui el valor no se pinta: se
+ * pasa por props para que lo lea el generador mas tarde. Con `useState` la instancia sigue siendo
+ * la misma, sigue siendo mutable y desaparece la lectura de ref en render, sin tocar el patron.
+ *
+ * La alternativa —declarar las ocho columnas siempre— queda descartada: dejaria una columna «Neto»
+ * VACIA en las metricas que no la publican, y una celda vacia significa «no se sabe» donde la
+ * verdad es «no aplica» (R13).
  */
 export function ExportarVistaFinanciera({
   metricaId,
   vistaId,
   titulo,
 }: ExportarVistaFinancieraProps) {
-  const columnas = useRef<DescargaColumna[]>([...COLUMNAS_DESCARGA_ANALITICA_FINANCIERA]);
+  const [columnas] = useState<DescargaColumna[]>(() => [
+    ...COLUMNAS_DESCARGA_ANALITICA_FINANCIERA,
+  ]);
 
   async function obtenerFilas(): Promise<DescargaFilasResult> {
     const preparado = await prepararExportFinanciero(metricaId, vistaId);
-    columnas.current.splice(0, columnas.current.length, ...preparado.columnas);
+    columnas.splice(0, columnas.length, ...preparado.columnas);
     return preparado.resultado;
   }
 
   return (
     <DescargarDatasetButton
       titulo={titulo}
-      columnas={columnas.current}
+      columnas={columnas}
       obtenerFilas={obtenerFilas}
       formatos={FORMATOS_EXPORT_FINANCIERO}
       className="self-end"
