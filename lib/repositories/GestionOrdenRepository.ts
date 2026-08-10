@@ -313,6 +313,15 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           // (atomicidad ya provista, sin firma nueva). `indemnizacion` NO se escribe aqui: el
           // monto lo captura el admin al APROBAR el cierre (R19/R22).
           causaIncidente: gestion.causaIncidente ?? null,
+          // Feature 193 (R1/R6): la ubicacion entra en el MISMO INSERT que la gestion, dentro
+          // de la tx que cambia el estatus -> si algo falla, NO queda una ubicacion huerfana
+          // apuntando a una gestion que no existe (atomicidad ya provista, sin firma nueva).
+          // Decimal, no Float: mismo criterio que `montoRecibido` unas lineas arriba.
+          ubicacionLat:
+            gestion.ubicacionLat != null ? new Prisma.Decimal(gestion.ubicacionLat) : null,
+          ubicacionLng:
+            gestion.ubicacionLng != null ? new Prisma.Decimal(gestion.ubicacionLng) : null,
+          ubicacionAusencia: gestion.ubicacionAusencia ?? null,
         },
         select: { id: true },
       });

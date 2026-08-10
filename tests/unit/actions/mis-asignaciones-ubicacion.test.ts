@@ -105,14 +105,66 @@ describe("R22 — recogerAsignaciones acepta `ubicacion` opcional", () => {
   });
 });
 
-describe("R22 — gestionar acepta `ubicacion` opcional via FormData", () => {
-  it("RETRO-COMPATIBILIDAD: un FormData sin los campos de ubicacion funciona igual", async () => {
+// ⚠️ CAMBIO DE CONTRATO — feature 193 (R10/R6), decision humana del 2026-08-10.
+//
+// Hasta la 192 este bloque afirmaba lo contrario: que gestionar sin ubicacion «funciona igual»
+// y que media coordenada «se IGNORA en vez de tumbar la gestion», por la R25 de la 92. Eso ya
+// NO rige PARA LA GESTION: ahora hace falta O la ubicacion O un motivo tecnico tipificado.
+//
+// El bloque de `recogerAsignaciones` de arriba se deja INTACTO a proposito (R15): alli la R25
+// sigue viva y una ausencia no bloquea nada. Que los dos bloques de este mismo archivo digan
+// cosas distintas NO es una incoherencia: es la frontera exacta del cambio.
+describe("Feature 193 (R8-R13) — gestionar EXIGE ubicacion o motivo de ausencia", () => {
+  it("R10: un FormData sin ubicacion NI motivo es validation_error", async () => {
     const { service, gestion } = buildService();
 
     const r = await gestionar(fdReprogramada(), { service, getActor: actorMensajero });
 
+    expect(r.status).toBe("validation_error");
+    expect(gestion).not.toHaveBeenCalled();
+  });
+
+  it("R9/R18: sin coordenadas pero CON motivo tecnico, la gestion entra", async () => {
+    const { service, gestion } = buildService();
+
+    const r = await gestionar(fdReprogramada({ ubicacionAusencia: "no_disponible" }), {
+      service,
+      getActor: actorMensajero,
+    });
+
     expect(r.status).toBe("ok");
     expect(gestion.mock.calls[0][0].ubicacion).toBeUndefined();
+    expect(gestion.mock.calls[0][0].ubicacionAusencia).toBe("no_disponible");
+  });
+
+  it("R12: el permiso DENEGADO no es un motivo aceptable — no existe en el enum", async () => {
+    // Esta es la via por la que R19 bloquea en el servidor, y no depende de que el front se
+    // porte bien: aunque alguien mande el motivo a mano, no hay valor que lo represente.
+    const { service, gestion } = buildService();
+
+    const r = await gestionar(fdReprogramada({ ubicacionAusencia: "denegado" }), {
+      service,
+      getActor: actorMensajero,
+    });
+
+    expect(r.status).toBe("validation_error");
+    expect(gestion).not.toHaveBeenCalled();
+  });
+
+  it("R11: ubicacion Y motivo a la vez es validation_error", async () => {
+    const { service, gestion } = buildService();
+
+    const r = await gestionar(
+      fdReprogramada({
+        ubicacionLat: "9.9281",
+        ubicacionLng: "-84.0907",
+        ubicacionAusencia: "timeout",
+      }),
+      { service, getActor: actorMensajero },
+    );
+
+    expect(r.status).toBe("validation_error");
+    expect(gestion).not.toHaveBeenCalled();
   });
 
   it("`ubicacionLat` + `ubicacionLng` se recomponen en un objeto y se propagan", async () => {
@@ -129,9 +181,11 @@ describe("R22 — gestionar acepta `ubicacion` opcional via FormData", () => {
     });
   });
 
-  it("MEDIA coordenada se IGNORA en vez de tumbar la gestion", async () => {
-    // Media coordenada no es una ubicacion. Dejarla pasar a zod haria fallar toda la
-    // gestion por un dato AUXILIAR, que es exactamente lo que R25 prohibe.
+  it("R6: MEDIA coordenada ya no cuela — sin la otra mitad no hay ubicacion, y eso ahora bloquea", async () => {
+    // La accion sigue IGNORANDO la media coordenada al recomponer (media coordenada no es una
+    // ubicacion), pero el resultado de ignorarla ya no es «sigue igual»: se queda sin
+    // ubicacion y sin motivo, y R10 lo rechaza. El comportamiento del recompositor no cambio;
+    // cambio lo que significa quedarse sin nada.
     const { service, gestion } = buildService();
 
     const r = await gestionar(fdReprogramada({ ubicacionLat: "9.9281" }), {
@@ -139,18 +193,18 @@ describe("R22 — gestionar acepta `ubicacion` opcional via FormData", () => {
       getActor: actorMensajero,
     });
 
-    expect(r.status).toBe("ok");
-    expect(gestion.mock.calls[0][0].ubicacion).toBeUndefined();
+    expect(r.status).toBe("validation_error");
+    expect(gestion).not.toHaveBeenCalled();
   });
 
-  it("cadenas vacias tambien se ignoran", async () => {
+  it("cadenas vacias se siguen ignorando, y por tanto tambien caen en R10", async () => {
     const { service, gestion } = buildService();
     const r = await gestionar(fdReprogramada({ ubicacionLat: "", ubicacionLng: "" }), {
       service,
       getActor: actorMensajero,
     });
-    expect(r.status).toBe("ok");
-    expect(gestion.mock.calls[0][0].ubicacion).toBeUndefined();
+    expect(r.status).toBe("validation_error");
+    expect(gestion).not.toHaveBeenCalled();
   });
 
   it("una ubicacion fuera de rango SI es validation_error (el campo existe y es invalido)", async () => {

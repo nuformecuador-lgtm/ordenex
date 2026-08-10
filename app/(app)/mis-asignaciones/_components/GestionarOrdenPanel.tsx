@@ -26,6 +26,10 @@ import { gestionar } from "@/lib/actions/mis-asignaciones";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
+import {
+  capturarUbicacion,
+  type CapturaUbicacion,
+} from "@/lib/utils/capturar-ubicacion";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
@@ -41,6 +45,28 @@ import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
 import { VerificarGuiaGate } from "./VerificarGuiaGate";
 import { UbicacionTrigger } from "./UbicacionTrigger";
 import { useSeccionColapsable } from "./useSeccionColapsable";
+
+// Feature 193 (R19) — el permiso de ubicación está DENEGADO y por eso la gestión no sale.
+//
+// El mensaje dice DÓNDE se reactiva, no solo que falta. Es toda la diferencia entre un
+// bloqueo con salida y una llamada a soporte: el mensajero está en la calle, la denegación la
+// revierte él mismo, y nadie recuerda dónde vive ese ajuste sin que se lo digan.
+const MSG_UBICACION_DENEGADA =
+  "Para registrar la gestión hace falta tu ubicación. Activá el permiso desde el candado " +
+  "de la barra de direcciones (Permisos del sitio → Ubicación) y volvé a intentarlo.";
+
+/**
+ * La captura, ya descartada la denegación: es el único desenlace que no llega a los
+ * constructores del envío porque `handleConfirm` corta antes (R19).
+ */
+type CapturaConDesenlace = Exclude<CapturaUbicacion, { estado: "denegado" }>;
+
+/** R17/R18: o las coordenadas, o el motivo por el que no las hay. Nunca ambas (R11). */
+function ubicacionRaw(captura: CapturaConDesenlace): Record<string, unknown> {
+  return captura.estado === "ok"
+    ? { ubicacion: { lat: captura.lat, lng: captura.lng } }
+    : { ubicacionAusencia: captura.motivo };
+}
 
 // Feature 36 / rediseño 63 (pedido humano): detalle GRANDE y centrado de UNA
 // orden en reparto con gestión multi-paso, ahora como PANEL INLINE (no modal /
@@ -245,6 +271,9 @@ export function GestionarOrdenPanel({
   const [comprimiendo, setComprimiendo] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [enviando, setEnviando] = useState(false);
+  // Feature 193/R21: la captura tarda (hasta 10 s). Sin este estado el CTA parecería muerto y
+  // el mensajero volvería a pulsarlo, disparando dos gestiones de la misma orden.
+  const [ubicando, setUbicando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
 
   // Feature 119 (R14/R16): agrega las fotos SELECCIONADAS a la lista. Cada foto se comprime
@@ -302,8 +331,8 @@ export function GestionarOrdenPanel({
   const metodoPagoEfectivo = sinCobro ? "efectivo" : metodoPago;
 
   /** Construye el objeto crudo para validar en cliente con gestionarSchema. */
-  function buildRaw(): Record<string, unknown> {
-    const base = { ordenId: orden.id, resultado };
+  function buildRaw(captura: CapturaConDesenlace): Record<string, unknown> {
+    const base = { ordenId: orden.id, resultado, ...ubicacionRaw(captura) };
     switch (resultado) {
       case "entregada":
         // Feature 119 (R5/R6): la evidencia es una LISTA; una lista vacía dispara `min(1)`.
@@ -346,10 +375,19 @@ export function GestionarOrdenPanel({
    * como un valor MÁS de la misma clave `evidencia` (`append`, no `set`); el borde las lee con
    * `getAll("evidencia")` y las reconstruye como lista en el ORDEN en que se enviaron (índice 0..N).
    */
-  function buildFormData(): FormData {
+  function buildFormData(captura: CapturaConDesenlace): FormData {
     const fd = new FormData();
     fd.set("ordenId", orden.id);
     fd.set("resultado", resultado);
+    // Feature 193 (R17/R18): la ubicación viaja como DOS escalares (el borde los recompone) o,
+    // si la captura falló por una causa técnica, el motivo tipificado en su lugar. Nunca las
+    // dos cosas: el borde rechaza esa combinación (R11).
+    if (captura.estado === "ok") {
+      fd.set("ubicacionLat", String(captura.lat));
+      fd.set("ubicacionLng", String(captura.lng));
+    } else {
+      fd.set("ubicacionAusencia", captura.motivo);
+    }
     const anexarEvidencias = () => {
       for (const foto of evidencias) fd.append("evidencia", foto);
     };
@@ -408,10 +446,31 @@ export function GestionarOrdenPanel({
   }
 
   async function handleConfirm() {
-    if (enviando || comprimiendo) return;
+    if (enviando || comprimiendo || ubicando) return; // feature 193/R21
+
+    // Feature 193 (R16/R22): la ubicación se pide AQUÍ, al confirmar, y no al abrir el panel
+    // ni al navegar. Pedir el permiso sin una acción que lo justifique es como se consigue
+    // que la persona lo deniegue para siempre — y aquí denegarlo tiene consecuencias (R19).
+    setUbicando(true);
+    let captura: CapturaUbicacion;
+    try {
+      captura = await capturarUbicacion();
+    } finally {
+      setUbicando(false);
+    }
+
+    // R19: el ÚNICO desenlace que bloquea. Es una decisión de la persona y ella misma puede
+    // revertirla, por eso el aviso dice DÓNDE se reactiva y no solo que falta. Un fallo
+    // técnico, en cambio, sigue adelante (R18): en una bodega sin señal no hay nada que el
+    // mensajero pueda hacer, y trabarlo ahí le impediría cerrar el día.
+    if (captura.estado === "denegado") {
+      toast.error(MSG_UBICACION_DENEGADA);
+      return;
+    }
+
     // R22/R24/R25/R27/R29: validación de borde en cliente (mismo schema que el
     // servidor revalida). Errores → por campo, sin enviar.
-    const parsed = gestionarSchema.safeParse(buildRaw());
+    const parsed = gestionarSchema.safeParse(buildRaw(captura));
     if (!parsed.success) {
       setFieldErrors(
         parsed.error.flatten().fieldErrors as Record<string, string[]>,
@@ -422,7 +481,7 @@ export function GestionarOrdenPanel({
 
     setEnviando(true);
     try {
-      const result = await gestionar(buildFormData());
+      const result = await gestionar(buildFormData(captura));
       if (result.status === "ok") {
         toast.success(
           `Orden ${orden.numRemision}: ${estatusLabel(result.estado)}.`,
@@ -782,13 +841,20 @@ export function GestionarOrdenPanel({
             >
               Cancelar gestión
             </Button>
+            {/* Feature 193/R21: `ubicando` cuenta como ocupado igual que `enviando`. La
+                captura puede tardar hasta 10 s y sin esto el botón se vería inerte: el
+                mensajero volvería a pulsarlo y saldrían dos gestiones de la misma orden. */}
             <Button
               type="button"
               onClick={handleConfirm}
-              loading={enviando}
+              loading={enviando || ubicando}
               disabled={comprimiendo}
             >
-              {comprimiendo ? "Procesando foto…" : "Guardar gestión"}
+              {comprimiendo
+                ? "Procesando foto…"
+                : ubicando
+                  ? "Obteniendo ubicación…"
+                  : "Guardar gestión"}
             </Button>
           </div>
         </div>

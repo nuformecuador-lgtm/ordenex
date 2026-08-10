@@ -9,6 +9,11 @@ import {
 import type { IMisAsignacionesService } from "@/lib/interfaces/services/IMisAsignacionesService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
+// ⚠️ Feature 193 (R10), decision humana del 2026-08-10: la gestion EXIGE la ubicacion del
+// mensajero (o un motivo tecnico). Los FormData validos de abajo se AMPLIAN con las dos
+// coordenadas —no se relajan—: lo que cada test AFIRMA sigue siendo lo mismo. La disyuncion
+// ubicacion/motivo se cubre aparte, en `mis-asignaciones-ubicacion.test.ts`.
+
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
 function imagenFile() {
@@ -106,6 +111,8 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
   function fdEntrega(overrides: Record<string, string> = {}, withFile = true): FormData {
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "entregada");
     fd.set("montoRecibido", "100");
     fd.set("metodoPago", "efectivo");
@@ -161,6 +168,8 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "reprogramada");
     fd.set("fechaReprogramacion", "2000-01-01");
     fd.set("motivo", "x");
@@ -173,6 +182,8 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "reprogramada");
     fd.set("fechaReprogramacion", fechaFuturaISO());
     fd.set("motivo", "cliente no estaba");
@@ -186,6 +197,8 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "devuelta");
     fd.set("motivo", "");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
@@ -196,6 +209,8 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "rechazada");
     fd.set("motivo", "cliente rechazo");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
@@ -207,6 +222,8 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "rechazada");
     fd.set("motivo", "cliente rechazo");
     fd.set("evidencia", imagenFile());
@@ -233,6 +250,8 @@ describe("menor-1: withErrorHandler envuelve los cuerpos de las actions", () => 
     });
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "devuelta");
     // Feature 73/R6: sin causa este FormData ya no llegaria al service (moriria en el borde
     // como validation_error) y el test dejaria de probar lo suyo — que un error EXCEPCIONAL
@@ -262,6 +281,8 @@ describe("menor-1: withErrorHandler envuelve los cuerpos de las actions", () => 
     });
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "devuelta");
     fd.set("motivo", "x");
     const r = await gestionar(fd, { service, getActor: noActor });
