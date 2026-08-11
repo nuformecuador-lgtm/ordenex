@@ -11,7 +11,9 @@ import { ConciliacionCierresAnaliticaRepository } from "@/lib/repositories/Conci
 import { CuentasPorPagarAnaliticaRepository } from "@/lib/repositories/CuentasPorPagarAnaliticaRepository";
 import { IngresosAnaliticaRepository } from "@/lib/repositories/IngresosAnaliticaRepository";
 import { RecaudoAnaliticaRepository } from "@/lib/repositories/RecaudoAnaliticaRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { AnaliticaFinancieraService } from "@/lib/services/AnaliticaFinancieraService";
+import { decorarFinancieraConCache } from "@/lib/services/CachedAnaliticaFinancieraService";
 import type { RespuestaFinanciera } from "@/lib/types/analitica-financiera";
 
 // Feature 127 (T E.1-E.5) — EL BORDE de la analitica financiera. Server Action, no route
@@ -62,14 +64,28 @@ export interface AnaliticaFinancieraActionDeps {
   readonly now?: Date;
 }
 
+/**
+ * Feature 179 (T2.4) — el UNICO sitio del arbol donde se cablea este servicio, y por eso el
+ * unico donde se envuelve con la cache.
+ *
+ * `consultarMetricaFinanciera` NO cambia (R20): ni su aridad, ni su tipo de retorno, ni una
+ * linea de su cuerpo. La 132, la 133 y la 134 no se enteran de que existe una cache.
+ *
+ * `decorarFinancieraConCache` decide por la bandera (R22) y `crearAnaliticaCacheDeNext()`
+ * devuelve la cache nula si esta apagada: con el kill-switch puesto no se lee ni se escribe una
+ * sola entrada.
+ */
 function construirServicio(logger: ErrorLogger): IAnaliticaFinancieraService {
   const prisma = getPrismaClient();
-  return new AnaliticaFinancieraService(
-    new IngresosAnaliticaRepository(prisma),
-    new RecaudoAnaliticaRepository(prisma),
-    new CuentasPorPagarAnaliticaRepository(prisma),
-    new ConciliacionCierresAnaliticaRepository(prisma),
-    logger,
+  return decorarFinancieraConCache(
+    new AnaliticaFinancieraService(
+      new IngresosAnaliticaRepository(prisma),
+      new RecaudoAnaliticaRepository(prisma),
+      new CuentasPorPagarAnaliticaRepository(prisma),
+      new ConciliacionCierresAnaliticaRepository(prisma),
+      logger,
+    ),
+    crearAnaliticaCacheDeNext(),
   );
 }
 

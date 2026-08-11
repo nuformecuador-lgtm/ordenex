@@ -27,8 +27,22 @@ import { ANALITICA_CACHE_TTL_SEGUNDOS } from "@/lib/config/analitica-cache";
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 const EXT = new Set([".ts", ".tsx"]);
 
-/** El ambito del censo: la analitica y la cache. Nada mas. */
-const AMBITO = ["lib/analytics", "lib/cache", "lib/repositories", "lib/services/jobs"];
+/**
+ * El ambito del censo: la analitica y la cache. Nada mas.
+ *
+ * AMPLIADO POR LA FEATURE 179 (T4.3 / R23) con el decorador financiero, que es el unico archivo
+ * de `lib/services/` (fuera de `jobs/`) que escribe entradas de esta cache. Se anade el ARCHIVO
+ * y no el directorio `lib/services` entero a proposito: el censo por directorio arrastraria
+ * decenas de servicios ajenos y bastaria un `3600` legitimo en cualquiera de ellos para que este
+ * guardia naciera rojo y se desarmara — la misma leccion que ya esta escrita arriba para `lib/`.
+ */
+const AMBITO = [
+  "lib/analytics",
+  "lib/cache",
+  "lib/repositories",
+  "lib/services/jobs",
+  "lib/services/CachedAnaliticaFinancieraService.ts",
+];
 
 /** El unico archivo donde el numero puede aparecer. */
 const CONSTANTE = "lib/config/analitica-cache.ts";
@@ -36,6 +50,9 @@ const CONSTANTE = "lib/config/analitica-cache.ts";
 function archivos(dir: string): string[] {
   const abs = path.join(REPO_ROOT, dir);
   if (!fs.existsSync(abs)) return [];
+  // Una entrada del ambito puede ser un ARCHIVO suelto (feature 179): censar el directorio
+  // entero de `lib/services` traeria servicios ajenos y el guardia naceria rojo.
+  if (fs.statSync(abs).isFile()) return EXT.has(path.extname(abs)) ? [dir] : [];
   const salida: string[] = [];
   for (const e of fs.readdirSync(abs, { withFileTypes: true })) {
     const rel = `${dir}/${e.name}`;
