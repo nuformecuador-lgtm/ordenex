@@ -2,7 +2,7 @@
 // Feature 196 (T5.3) — descarga del RANKING CONGELADO. Cubre R32, R33 y R35.
 //
 // Patrón de `RankingDescarga.test.tsx`, y el riesgo es el mismo de toda Familia B: que el
-// archivo ADORNE lo que la tabla pinta. Aquí hay tres celdas formateadas —`100.0%`, `₡5000.00`
+// archivo ADORNE lo que la tabla pinta. Aquí hay tres celdas formateadas —`100.0%`, `₡5.000,00`
 // y el `—` de las filas sin podio— y ninguna de las tres puede viajar así a una hoja: el `%`
 // y el `₡` convierten una celda numérica en texto, y un guion se lee como un valor.
 //
@@ -164,7 +164,7 @@ describe("Ranking histórico · descarga", () => {
     const tabla = screen.getByRole("table", { name: "Ranking congelado del día" });
     const filaAna = within(tabla).getByText("Ana Mensajera").closest("tr") as HTMLElement;
     expect(within(filaAna).getByText("100.0%")).toBeInTheDocument();
-    expect(within(filaAna).getByText("₡5000.00")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡5.000,00")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: `Descargar ${TITULO}` }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));

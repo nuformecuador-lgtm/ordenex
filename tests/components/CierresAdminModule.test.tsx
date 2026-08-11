@@ -247,7 +247,7 @@ describe("CierresAdminModule", () => {
     expect(
       within(region).getByText("Bodega central · GAM"),
     ).toBeInTheDocument();
-    expect(within(region).getByText("₡500.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡500,00")).toBeInTheDocument();
     expect(
       within(region).getByRole("button", { name: "Ver / decidir" }),
     ).toBeInTheDocument();
@@ -304,10 +304,10 @@ describe("CierresAdminModule", () => {
     const totales = within(dialog).getByRole("region", {
       name: "Totales del cierre",
     });
-    expect(within(totales).getByText("₡100.00")).toBeInTheDocument();
-    expect(within(totales).getByText("₡50.25")).toBeInTheDocument();
-    expect(within(totales).getByText("₡10.10")).toBeInTheDocument();
-    expect(within(totales).getByText("₡160.35")).toBeInTheDocument();
+    expect(within(totales).getByText("₡100,00")).toBeInTheDocument();
+    expect(within(totales).getByText("₡50,25")).toBeInTheDocument();
+    expect(within(totales).getByText("₡10,10")).toBeInTheDocument();
+    expect(within(totales).getByText("₡160,35")).toBeInTheDocument();
   });
 
   it("el detalle muestra el ingreso bruto y NO muestra card de ganancia cuando es ≥ 0", async () => {
@@ -330,11 +330,11 @@ describe("CierresAdminModule", () => {
     const liquidacion = within(dialog).getByRole("region", {
       name: "Liquidación",
     });
-    expect(within(liquidacion).getByText("₡3672.50")).toBeInTheDocument();
+    expect(within(liquidacion).getByText("₡3.672,50")).toBeInTheDocument();
     // Ganancia positiva: no se muestra ni la ganancia ni el "Debe".
     expect(within(liquidacion).queryByText("Ganancia")).toBeNull();
     expect(within(liquidacion).queryByText("Debe")).toBeNull();
-    expect(within(liquidacion).queryByText("₡2172.50")).toBeNull();
+    expect(within(liquidacion).queryByText("₡2.172,50")).toBeNull();
   });
 
   it("el detalle muestra el pago a tienda derivado server-side (sin recalcular)", async () => {
@@ -362,7 +362,7 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
 
     const pago = within(dialog).getByRole("region", { name: "Pago a tienda" });
-    expect(within(pago).getByText("₡21327.50")).toBeInTheDocument();
+    expect(within(pago).getByText("₡21.327,50")).toBeInTheDocument();
   });
 
   it("muestra 'Debe' en rojo cuando la ganancia es negativa (el pago supera el ingreso)", async () => {
@@ -386,7 +386,7 @@ describe("CierresAdminModule", () => {
     });
     expect(within(liquidacion).queryByText("Ganancia")).toBeNull();
     expect(within(liquidacion).getByText("Debe")).toBeInTheDocument();
-    const monto = within(liquidacion).getByText("₡-1500.00");
+    const monto = within(liquidacion).getByText("-₡1.500,00");
     expect(monto).toBeInTheDocument();
     expect(monto).toHaveClass("text-danger-strong");
   });
@@ -415,12 +415,12 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
     const panel = within(dialog).getByRole("region", { name: "Ingreso de Ordenex" });
     // Cada concepto va con su IVA incluido, en un solo monto.
-    expect(within(panel).getByText("₡2825.00")).toBeInTheDocument();
-    expect(within(panel).getByText("₡847.50")).toBeInTheDocument();
-    expect(within(panel).getByText("₡1130.00")).toBeInTheDocument();
-    expect(within(panel).getByText("₡4802.50")).toBeInTheDocument();
+    expect(within(panel).getByText("₡2.825,00")).toBeInTheDocument();
+    expect(within(panel).getByText("₡847,50")).toBeInTheDocument();
+    expect(within(panel).getByText("₡1.130,00")).toBeInTheDocument();
+    expect(within(panel).getByText("₡4.802,50")).toBeInTheDocument();
     // El monto a cobrar no es un concepto facturado: vive solo en el desglose por orden.
-    expect(within(panel).queryByText("₡25000.00")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("₡25.000,00")).not.toBeInTheDocument();
     // El IVA no se pinta como concepto aparte en el panel.
     expect(within(panel).queryByText("IVA flete")).not.toBeInTheDocument();
     expect(within(panel).queryByText("IVA comisión")).not.toBeInTheDocument();
@@ -488,7 +488,7 @@ describe("CierresAdminModule", () => {
 
     // La tarifa congelada, incluida la variante NO aplicada (base 2000, se aplicó GAM 2500).
     expect(within(region).getByText("tar_88")).toBeInTheDocument();
-    expect(within(region).getByText("₡2000.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡2.000,00")).toBeInTheDocument();
     expect(within(region).getAllByText("13.00 %").length).toBeGreaterThan(0);
     expect(within(region).getByText("3.00 %")).toBeInTheDocument();
   });
@@ -549,7 +549,7 @@ describe("CierresAdminModule", () => {
     await abrirFila(user, region, "REM-001");
     // Monto recibido y método van juntos en el desplegable de la orden.
     expect(
-      within(region).getByText("₡1250.50 · SINPE"),
+      within(region).getByText("₡1.250,50 · SINPE"),
     ).toBeInTheDocument();
   });
 
@@ -699,8 +699,9 @@ describe("CierresAdminModule", () => {
     });
     const region = within(dialog).getByRole("region", { name: "Rechazadas" });
     await abrirFila(user, region, "REM-REC");
-    expect(within(region).getByText("₡3500.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡3.500,00")).toBeInTheDocument();
   });
+
 
   it("feature 102/R8: el ingreso de bodega por rechazos muestra el total y los subtotales SLA y manual separados", async () => {
     const user = userEvent.setup();
@@ -731,11 +732,11 @@ describe("CierresAdminModule", () => {
       name: "Ingreso de bodega por rechazos del cierre",
     });
     // El total combinado (56) + las dos sublíneas del desglose por origen (102/R8).
-    expect(within(region).getByText("₡9200.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡9.200,00")).toBeInTheDocument();
     expect(within(region).getByText("Automático (por plazo vencido)")).toBeInTheDocument();
-    expect(within(region).getByText("₡6000.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡6.000,00")).toBeInTheDocument();
     expect(within(region).getByText("Manual (mensajero)")).toBeInTheDocument();
-    expect(within(region).getByText("₡3200.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡3.200,00")).toBeInTheDocument();
   });
 
   it("feature 102/R9: cada fila rechazada se marca como SLA (cron) o Manual (mensajero) según esRechazoSla", async () => {

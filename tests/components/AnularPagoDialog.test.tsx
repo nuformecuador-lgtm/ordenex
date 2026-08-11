@@ -162,7 +162,7 @@ describe("R74 — el diálogo dice QUÉ pago se está anulando", () => {
     montar();
     expect(screen.getByRole("dialog", { name: /Tienda Norte/ })).toBeInTheDocument();
     expect(
-      within(dialogo()).getByText("Pago de ₡4000.10 del 2026-07-30, en SINPE."),
+      within(dialogo()).getByText("Pago de ₡4.000,10 del 2026-07-30, en SINPE."),
     ).toBeInTheDocument();
   });
 
@@ -255,7 +255,7 @@ describe("R14 — money-safe", () => {
   it("el monto del pago se pinta TAL CUAL, hasta el tope de la columna", () => {
     montar({ pago: { ...PAGO, monto: "9999999999.99" } });
     expect(
-      within(dialogo()).getByText(/₡9999999999\.99/),
+      within(dialogo()).getByText(/₡9\.999\.999\.999,99/),
     ).toBeInTheDocument();
   });
 });

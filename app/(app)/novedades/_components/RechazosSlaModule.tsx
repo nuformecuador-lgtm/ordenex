@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
+import { money } from "@/lib/config/moneda";
 import { listarRechazosSlaTiendaAction } from "@/lib/actions/rechazos-sla-tienda";
 import type { RechazoSlaTiendaDTO } from "@/lib/types/rechazo-sla-tienda";
 
@@ -40,11 +41,14 @@ export interface RechazosSlaModuleProps {
 }
 
 /**
- * Monto del rechazo (STRING money-safe, escala 2): se le antepone el símbolo de colón SIN
- * parsear a número. `null` = la gestión SLA aún no está snapshoteada → "pendiente de cierre" (Q2).
+ * Monto del rechazo (STRING money-safe, escala 2): se formatea con el helper compartido SIN
+ * parsear a número (feature 201; antes se le pegaba un `₡` a mano y la tienda leía
+ * `₡13331832.72`). `null` = la gestión SLA aún no está snapshoteada → "pendiente de cierre"
+ * (Q2), que NO es lo mismo que "sin monto": por eso el nulo lo resuelve esta función y no el
+ * marcador genérico de `money`.
  */
 function montoLabel(monto: string | null): string {
-  return monto === null ? MONTO_PENDIENTE_LABEL : `₡${monto}`;
+  return monto === null ? MONTO_PENDIENTE_LABEL : money(monto);
 }
 
 export function RechazosSlaModule({

@@ -9,6 +9,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
+import { formatMonto as formatMontoConfigurado, SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 import { RecepcionDetalle } from "./RecepcionDetalle";
@@ -23,12 +24,15 @@ import { RecepcionDetalle } from "./RecepcionDetalle";
 // LENGUAJE VISUAL: remisión en mono, badge de estado, destinatario/producto, ubicación
 // sobre navy, monto a cobrar destacado y el desplegable "Ver detalle completo".
 
-/** Monto en colones (₡) con separador de miles, o "—" si es nulo. */
+/**
+ * Monto con la moneda configurada y separador de miles, o la raya larga si es nulo.
+ *
+ * Feature 201: el formato sale de `lib/config/moneda.ts` (era la cuarta copia del
+ * formateador "estilo EEUU", `₡13,331,832.72`). El marcador de ausencia se pasa
+ * explícito porque el default del compartido es el guion corto.
+ */
 function formatMonto(monto: number | null): string {
-  if (monto === null) return "—";
-  const [entero, decimales] = monto.toFixed(2).split(".");
-  const conMiles = entero.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `₡${conMiles}.${decimales}`;
+  return formatMontoConfigurado(monto, SIN_MONTO_RAYA);
 }
 
 export interface SateliteOrderCardProps {

@@ -4,6 +4,10 @@ import { render, screen, cleanup, within } from "@testing-library/react";
 import type { RolValue } from "@prisma/client";
 
 import { ToastProvider } from "@/providers/ToastProvider";
+// Feature 201 (tanda B): el caso que sigue a la DERIVACIÓN del servidor compara contra el dato
+// derivado, no contra un literal. Antes lo componía con `₡${…}`, que copiaba el formato a mano;
+// ahora usa el mismo formateador que pinta la cabecera. Lo que mide no cambia.
+import { money } from "@/lib/config/moneda";
 import {
   CUBETA_POR_CATEGORIA,
   derivarDesgloseTienda,
@@ -337,18 +341,24 @@ async function verMiWallet() {
   return props;
 }
 
+// El `-?` de las dos expresiones es de la feature 201 (tanda B): el signo de un importe
+// negativo va DELANTE del símbolo (`-₡450,00`), así que un `/^₡/` a secas dejaría de
+// encontrar el importe justo en el caso en que la tienda debe dinero. Aquí todos los casos
+// son positivos y por eso el cambio no altera qué elemento se elige; se escribe así para que
+// el buscador siga significando «el elemento que es un importe» y no «el que empieza por ₡».
+
 /** El importe de la cabecera cuyo rótulo es `rotulo`, tal como se pinta. */
 function importeDe(rotulo: string): string {
   const etiqueta = screen.getByText(rotulo);
   const bloque = etiqueta.closest("div");
   if (!bloque) throw new Error(`sin bloque para el importe ${rotulo}`);
-  return within(bloque).getByText(/^₡/).textContent ?? "";
+  return within(bloque).getByText(/^-?₡/).textContent ?? "";
 }
 
 /** La cifra grande: el saldo a favor de la tienda. */
 function saldoEnPantalla(): string {
   const region = screen.getByRole("region", { name: "Saldo a favor" });
-  return within(region).getByText(/^₡/).textContent ?? "";
+  return within(region).getByText(/^-?₡/).textContent ?? "";
 }
 
 describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", () => {
@@ -357,16 +367,16 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
     await verMiWallet();
 
     // Lo que le recaudaron, lo que le cobraron y lo que ya le entregaron: TRES cifras.
-    expect(importeDe("A tu favor")).toBe("₡50000.00");
-    expect(importeDe("Ya pagado")).toBe("₡20000.00");
+    expect(importeDe("A tu favor")).toBe("₡50.000,00");
+    expect(importeDe("Ya pagado")).toBe("₡20.000,00");
 
     // EL PUNTO DE LA TASK: el pago no engorda los cargos. 1 200 son los fletes, y solo eso.
-    expect(importeDe("Cargos de Ordenex")).toBe("₡1200.00");
+    expect(importeDe("Cargos de Ordenex")).toBe("₡1.200,00");
     // Contraprueba de la cabecera vieja: si el pago cayera en «cargos», la cifra sería 21 200.
-    expect(importeDe("Cargos de Ordenex")).not.toBe("₡21200.00");
+    expect(importeDe("Cargos de Ordenex")).not.toBe("₡21.200,00");
 
     // Y el saldo sigue siendo la resta de los tres: 50 000 − 1 200 − 20 000.
-    expect(saldoEnPantalla()).toBe("₡28800.00");
+    expect(saldoEnPantalla()).toBe("₡28.800,00");
   });
 
   it("la cabecera vieja ya NO existe: «Débitos» no es un rótulo de esta pantalla", async () => {
@@ -382,9 +392,9 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
     sembrarTienda([COD, FLETE], "1200.00");
     await verMiWallet();
 
-    expect(importeDe("Ya pagado")).toBe("₡0.00");
-    expect(importeDe("Cargos de Ordenex")).toBe("₡1200.00");
-    expect(saldoEnPantalla()).toBe("₡48800.00");
+    expect(importeDe("Ya pagado")).toBe("₡0,00");
+    expect(importeDe("Cargos de Ordenex")).toBe("₡1.200,00");
+    expect(saldoEnPantalla()).toBe("₡48.800,00");
   });
 
   it("los tres importes salen de la clasificación del servidor, no de una cuenta del cliente", async () => {
@@ -413,14 +423,17 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
     );
     await verMiWallet();
 
-    // Se pintan EXACTAMENTE los STRING que devolvió la derivación, carácter por carácter.
-    expect(importeDe("A tu favor")).toBe(`₡${esperado.aFavor}`);
-    expect(importeDe("Cargos de Ordenex")).toBe(`₡${esperado.cargos}`);
-    expect(importeDe("Ya pagado")).toBe(`₡${esperado.pagado}`);
-    expect(saldoEnPantalla()).toBe(`₡${esperado.saldo}`);
+    // Se pintan EXACTAMENTE los importes que devolvió la derivación, dígito a dígito: lo único
+    // que la pantalla les añade es el símbolo y los separadores (feature 201), y por eso el
+    // esperado se DERIVA del dato del servidor en vez de escribirse a mano. Si la cabecera
+    // recontara por su cuenta, estos cuatro dejarían de coincidir.
+    expect(importeDe("A tu favor")).toBe(money(esperado.aFavor));
+    expect(importeDe("Cargos de Ordenex")).toBe(money(esperado.cargos));
+    expect(importeDe("Ya pagado")).toBe(money(esperado.pagado));
+    expect(saldoEnPantalla()).toBe(money(esperado.saldo));
 
     // El pago anulado y su devolución: el saldo vuelve al valor de antes del pago (R71).
-    expect(saldoEnPantalla()).toBe("₡48800.00");
+    expect(saldoEnPantalla()).toBe("₡48.800,00");
   });
 
   it("declara que los importes brutos incluyen lo anulado, y cuál es el número correcto", async () => {
@@ -445,9 +458,9 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
 
     // Los dos importes quedan altos: 70 000 «a tu favor» y 20 000 «ya pagado» cuando de verdad
     // se recaudaron 50 000 y no se le entregó nada. El saldo, en cambio, sale exacto.
-    expect(importeDe("A tu favor")).toBe("₡70000.00");
-    expect(importeDe("Ya pagado")).toBe("₡20000.00");
-    expect(saldoEnPantalla()).toBe("₡48800.00");
+    expect(importeDe("A tu favor")).toBe("₡70.000,00");
+    expect(importeDe("Ya pagado")).toBe("₡20.000,00");
+    expect(saldoEnPantalla()).toBe("₡48.800,00");
 
     // Por eso el aviso: nombra las dos cifras infladas y la que hay que mirar.
     const aviso = screen.getByRole("note");

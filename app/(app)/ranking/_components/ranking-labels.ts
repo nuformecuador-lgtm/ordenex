@@ -3,13 +3,25 @@
 // Money-safe (R12): los montos ya llegan como STRING desde el Server Component; los
 // helpers solo anteponen el símbolo, NUNCA parseFloat/Number sobre montos.
 
-/** Símbolo de "sin dato" reutilizable para celdas vacías. */
+/**
+ * Símbolo de "sin dato" reutilizable para celdas vacías. Es EL MISMO carácter que
+ * `SIN_MONTO_RAYA` (U+2014) y por eso `money` se pudo mudar al helper compartido sin cambiar
+ * lo que ve el mensajero; se declara igualmente aquí porque también rotula el PORCENTAJE y la
+ * POSICIÓN, que no son dinero y no deben depender de la configuración de moneda.
+ *
+ * Que los dos no se separen en silencio —una tabla con «—» en el porcentaje y «-» en el
+ * premio, en la misma fila— lo vigila `tests/components/RankingHistoricoModule.test.tsx`,
+ * que es la pantalla donde ambos se pintan uno al lado del otro.
+ */
 export const SIN_DATO = "—";
 
-/** Antepone el símbolo de colón a un monto STRING (tal cual, sin parseo). `null` → "—" (R9). */
-export function money(value: string | null): string {
-  return value === null ? SIN_DATO : `₡${value}`;
-}
+/**
+ * Feature 201 (tanda C) — `money` ya NO se declara aquí: era una de las ocho copias byte a
+ * byte del mismo helper (de ahí `₡13331832.72` sin separador de miles). Vive en
+ * `lib/config/moneda.ts` y se RE-EXPORTA, así que ningún consumidor cambia su import.
+ * Money-safe igual que antes, y `null` sigue dando la raya larga (R9).
+ */
+export { money } from "@/lib/config/moneda";
 
 /** Formatea el porcentaje ya redondeado (STRING) del servidor. `null` → "—" (R3). */
 export function porcentaje(value: string | null): string {

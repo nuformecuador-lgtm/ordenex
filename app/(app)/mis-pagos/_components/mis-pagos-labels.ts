@@ -9,10 +9,14 @@ import type {
 // componente). Money-safe (R21/R27): `money` recibe un monto que YA viene como STRING desde
 // el Server Component y solo antepone el simbolo; NUNCA parseFloat/Number sobre montos.
 
-/** Antepone el simbolo de colon a un monto STRING (tal cual, sin parseo). `null` -> "—". */
-export function money(value: string | null): string {
-  return value === null ? "—" : `₡${value}`;
-}
+/**
+ * Feature 201 (tanda C) — `money` ya NO se declara aqui: era una de las ocho copias byte a
+ * byte del mismo helper, y por eso los importes de esta pantalla se pintaban sin separador de
+ * miles (`₡13331832.72`). Vive en `lib/config/moneda.ts` y se RE-EXPORTA para que ninguno de
+ * los consumidores cambie un import (mismo patron que `montoValido` en `monto-cliente`).
+ * Sigue siendo money-safe y sigue pintando la raya larga cuando no hay monto.
+ */
+export { money } from "@/lib/config/moneda";
 
 /** Etiqueta legible del tipo de movimiento (devengo = lo devengado / pago = lo entregado). */
 export const TIPO_PAGO_LABEL: Record<PagoMensajeroMovimientoTipo, string> = {
