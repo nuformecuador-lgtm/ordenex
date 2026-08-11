@@ -260,3 +260,266 @@ $ pnpm exec vitest related --run <los 8 archivos de lib/ tocados o nuevos>
   antes de T3.5 para que el guardia de frontera de T5.2 no lo marque.
 - **El registro de escritores adelantado** (§4.d) es la unica pieza de esta entrega que hoy es una
   declaracion sin prueba. Preferiria que el leader la commiteara junto con T4, no con T1.
+
+---
+---
+
+# impl 179 · TANDAS T3, T4 y T5 (segundo backend_dev, 2026-08-10)
+
+> **La parte de arriba (T1–T2) es de otro y se conserva entera.** Esto se anade debajo.
+>
+> Alcance: **T3.1–T3.10** (los ocho escritores + registro + fallo), **T4.1–T4.3** (el censo) y
+> **T5.1–T5.3** (la retirada del guardia de D2 de la 128 y el guardia branch-scoped de frontera).
+> **Sin commit**: el arbol queda con los cambios para que el leader los agrupe por tanda.
+>
+> **El arbol ya NO cachea dinero sin invalidador.** Los ocho puntos de escritura de
+> `requirements.md §0.a` invalidan, y el guardia R15 de la 128 se retiro **sustituido** por
+> `tests/unit/analytics/ledger-escritores.guardia.test.ts`, no antes.
+
+## 1. Archivos
+
+### Nuevos
+
+| archivo | task | que es |
+|---|---|---|
+| `tests/unit/analytics/_libro-financiero.ts` | T3 | **El libro compartido.** Los ocho escritores escriben en el MISMO agregado de caja que lee el `AnaliticaFinancieraService` real, asi que el paso 5 mide una consecuencia de la escritura y no una variable del test. No acaba en `.test.ts`. Anadido a `design.md §2` con su motivo. |
+| `tests/unit/analytics/cache-financiera-escritor-egreso.test.ts` | T3.1 | R9 (alta **y** reverso). |
+| `tests/unit/analytics/cache-financiera-escritor-manual.test.ts` | T3.2 | R10 — el escritor que la ficha se dejo fuera. |
+| `tests/unit/analytics/cache-financiera-escritor-liquidacion.test.ts` | T3.3 | R11 (pago a mensajero, pago a tienda y anulacion). |
+| `tests/unit/analytics/cache-financiera-invalidacion-orden.test.ts` | T3.3 | R8 — el orden de los eventos frente al commit. |
+| `tests/unit/analytics/cache-financiera-escritor-gastos-fijos.test.ts` | T3.4 | R12, contra `handleGenerarGastosFijos` real. |
+| `tests/unit/analytics/cache-financiera-escritor-indemnizacion.test.ts` | T3.5 | R13. |
+| `tests/unit/analytics/cache-financiera-escritor-cierre-dia.test.ts` | T3.6 | R14. |
+| `tests/unit/analytics/cache-financiera-escritor-cierre-bodega.test.ts` | T3.7 | R15, en su propio archivo a proposito. |
+| `tests/unit/scripts/backfill-caja-tesoreria-invalidacion.test.ts` | T3.9 | R26 — cuando encola y cuando no. Anadido a `design.md §2` con su motivo. |
+| `tests/unit/analytics/cache-financiera-invalidacion-backfill.test.ts` | T3.8/T3.9 | R27 — cinco pasos con **drenado real** + compatibilidad hacia atras + R11 de la 128 donde SI aplica. |
+| `tests/unit/analytics/cache-financiera-registro.test.ts` | T3.10 | R24 — los ocho origenes, ejercidos de verdad. |
+| `tests/unit/analytics/cache-financiera-invalidacion-fallo.test.ts` | T3.10 | R16 (D4) — las dos mutaciones opuestas. |
+| `tests/unit/analytics/ledger-escritores.guardia.test.ts` | T4.2 | R17/R18/R19. **Sobrevive al merge.** |
+| ~~`tests/unit/analytics/cache-financiera-frontera.guardia.test.ts`~~ | T5.2 → T5.3 | R25, branch-scoped. Escrito, **corrido en verde (3/3)** y **retirado en la misma tanda**, que es lo que `tasks.md` T5.3 exige. Ver §5. |
+
+### Existentes modificados
+
+| archivo | que se cambio |
+|---|---|
+| `lib/services/WalletEgresoService.ts` | + `IAnaliticaCache` (default `cacheNula()`); invalida tras `registrarEgreso` y tras `reversarEgreso` con `count > 0`. |
+| `lib/services/WalletService.ts` | idem en `registrarMovimientoManual`. |
+| `lib/services/LiquidacionService.ts` | idem; invalida **tras** cada `$transaction` que resuelve con `status: "ok"`, en las tres operaciones. Ver §4(b). |
+| `lib/services/GeneracionGastosFijosService.ts` | idem; **solo si `egresosGenerados > 0`**. |
+| `lib/services/IncidenteAdminService.ts` | idem; solo en la rama `aprobado`+`updated`. |
+| `lib/services/CierresAdminService.ts` | idem; tras `resolverCierre === "updated"`. |
+| `lib/services/CierresBodegaAdminService.ts` | idem; tras `resolverCierreBodega === "updated"`. |
+| `lib/services/jobs/analitica-invalidacion-cache-handler.ts` | lee el dominio del payload; `operativa` por default explicito; un origen por dominio. |
+| `lib/services/jobs/analitica-invalidacion-encolado.ts` | + `DominioInvalidacion`, `dominioDelPayload`, `payloadInvalidacionDeDominio`, `dedupeKeyInvalidacionSinRango`. `dedupeKeyInvalidacion` **NO se toca**: ver §4(a). |
+| `scripts/backfill-caja-tesoreria.ts` | + `crearJobs?` en el entorno y `encolarInvalidacionSiInserto`; cableado real en `main()`. |
+| `lib/actions/{wallet,wallet-egresos,liquidacion,incidentes,cierres-admin,cierre-bodega}.ts` | **solo el composition root**: `crearAnaliticaCacheDeNext()`. |
+| `app/api/cron/generar-gastos-fijos/route.ts` | idem en su `buildService`. |
+| `lib/analytics/escritores-ledger.ts` | se cierra T4.1: la cabecera deja de declararse «sin quien la haga cumplir» y dos entradas corrigen el test que nombran (ver §4(c)). |
+| `specs/179-analitica-cache-financiera/design.md` | **§2 gana dos filas** (el helper del libro y el test del CLI) y **se corrige la celda del encolado** (§4(a)). Escrito ANTES de tocar los archivos, que es lo que §2 exige. |
+
+### Borrado
+
+| archivo | por que |
+|---|---|
+| `tests/unit/analytics/cache-financiera.guardia.test.ts` | **T5.1/R19.** El guardia R15/D2 de la 128, retirado **sustituido** por el censo. Se borro DESPUES de que T3.1–T3.10 y T4.2 estuvieran verdes, y el censo lo comprueba por sistema de archivos en las dos direcciones. |
+
+---
+
+## 2. Mapa `R<n> -> test` (leyendo el caso, no contando menciones)
+
+| R | test (archivo › caso) | que afirma de verdad |
+|---|---|---|
+| **R7** | los ocho de R9–R15/R26 | es el enunciado general del que cuelgan; no tiene test propio a proposito |
+| **R8** | `cache-financiera-invalidacion-orden.test.ts` › «la secuencia es: abrir, escribir los tres libros, COMMIT y solo entonces invalidar» y › «una transaccion que REVIENTA no invalida nada» | compara la SECUENCIA de eventos de un doble de transaccion, no una llamada |
+| **R9** | `cache-financiera-escritor-egreso.test.ts` › «los cinco pasos, con `registrarEgreso` real…», › «y el REVERSO tambien», › «un reverso YA aplicado no invalida» | el total bruto servido pasa de `1000.00` a `1750.00` **solo si** la invalidacion llego |
+| **R10** | `cache-financiera-escritor-manual.test.ts` › «los cinco pasos, con `registrarMovimientoManual` real…» | `2000.00` -> `3000.00` |
+| **R11** | `cache-financiera-escritor-liquidacion.test.ts` › tienda (`16200.00`), › mensajero (`1450.00`), › anulacion (`30060.00`) | tres operaciones, tres casos: cada una es una llamada distinta que se puede olvidar por separado |
+| **R12** | `cache-financiera-escritor-gastos-fijos.test.ts` › «los cinco pasos, con `handleGenerarGastosFijos` real…», › «CERO egresos generados no invalida», › «una REEJECUCION del mismo dia tampoco» | `2050.00`, y las dos ramas que NO deben invalidar |
+| **R13** | `cache-financiera-escritor-indemnizacion.test.ts` › «los cinco pasos, con `aprobar` real…» + rechazo, `conflict` y tope de negocio | `9725.00`; y tres ramas sin escritura que no invalidan |
+| **R14** | `cache-financiera-escritor-cierre-dia.test.ts` › «los cinco pasos, con `aprobarCierre` real…» | `8120.00` |
+| **R15** | `cache-financiera-escritor-cierre-bodega.test.ts` › «los cinco pasos, con `aprobarCierreBodega` real…» | `2930.00`, en su propio archivo: borrar SU invalidacion no toca al de dia |
+| **R16** | `cache-financiera-invalidacion-fallo.test.ts` › «`aprobarCierre` devuelve `ok` aunque la cache reviente», › «el canal de errores recibe un `InvalidacionFinancieraFallida`…», › «el dinero escrito sigue escrito» | los DOS extremos de D4: mentir sobre la operacion y callar sobre la cache |
+| **R17** | `ledger-escritores.guardia.test.ts` › eje 1 (2 casos), › eje 2 «por DEFECTO» / «por EXCESO» / «son los OCHO», › los 4 de discriminacion | cuadra el arbol contra el registro en las dos direcciones, y demuestra que discrimina |
+| **R18** | `ledger-escritores.guardia.test.ts` › `it.each` de las ocho entradas + › «cubre los ocho puntos, incluido el que invalida POR JOB» | cada entrada nombra un test que EXISTE y cuyos **titulos** nombran los requisitos que declara |
+| **R19** | `ledger-escritores.guardia.test.ts` › «`cache-financiera.guardia.test.ts` fue retirado», › «y este censo SI existe», › «la cache financiera esta de verdad cableada» | las dos mutaciones posibles (retirar sin sustituir; dejar los dos) ponen rojo |
+| **R24** | `cache-financiera-registro.test.ts` › «los ocho origenes son distintos», › «son EXACTAMENTE los que el registro declara», › «ninguno de los ids… aparece en el rastro», › «`OrigenInvalidacion` sigue siendo un dominio CERRADO» | los ocho escritores se **corren de verdad**; el rastro se barre buscando ids reconocibles |
+| **R26** | `backfill-caja-tesoreria-invalidacion.test.ts` › «con `{ dominio: "financiera" }`…», › «el modo EN SECO no encola nada», › «una corrida en `aplicar` que no encontro pendientes tampoco», › «`--comprobar` no encola», + los dos avisos | encola exactamente uno cuando `insertadas > 0` y ninguno en el resto |
+| **R27** | `cache-financiera-invalidacion-backfill.test.ts` › «los cinco pasos, con el drenador real…», › «un job SIN `dominio` sigue invalidando la OPERATIVA», › «un `dominio` desconocido cae al default», › «cada dominio invalida SU tag», › «las claves… no se deduplican entre si», › «un invalidador que lanza hace fallar el job» | el camino entero con `JobQueueService.drenar`; y `cache-invalidacion-backfill.test.ts` de la 128 sigue verde **sin tocarlo** |
+
+**Requisitos de otras tandas que esta toco y siguen verdes:** R6 y R23 (`cache-tags.guardia`,
+`cache-config.guardia`, sin cambios), R21 (`cache-aislamiento.guardia`: ningun escritor ni el script
+importan `next/cache`), R25 (§5).
+
+---
+
+## 3. Mutaciones aplicadas, con su veredicto
+
+Aplicadas **de verdad** sobre el arbol, corridas contra los tests relacionados y revertidas.
+«Rojo» = el test nombrado falla. Los conteos son los que imprimio vitest.
+
+| # | mutacion | test que muere | veredicto medido |
+|---|---|---|---|
+| 1 | borrar la invalidacion de `WalletEgresoService` (R9) | `escritor-egreso` | **rojo**: 2 fallos (alta y reverso). Los otros siete escritores, verdes |
+| 2 | borrar la invalidacion de `registrarMovimientoManual` (R10) | `escritor-manual` | **rojo**: 2 de 4 |
+| 3 | invalidar **DENTRO** de la `tx` de `registrarPagoTienda` (R8) | `invalidacion-orden` + `escritor-liquidacion` | **rojo**: 2 fallos — la secuencia deja de cuadrar y la transaccion que revienta invalida igual |
+| 4 | el cron invalida **siempre** (R12) | `escritor-gastos-fijos` | **rojo**: 2 fallos — «cero egresos» y «reejecucion del mismo dia» |
+| 5 | borrar la invalidacion de `aprobarCierreBodega` (R15) | `escritor-cierre-bodega` | **rojo**: 2 fallos. **`escritor-cierre-dia` sigue VERDE** — la propiedad que hace imposible cerrar con siete de ocho |
+| 6 | un origen generico (`"manual"`) para el cierre de dia (R24) | `registro` + `escritor-cierre-dia` | **rojo**: 3 fallos |
+| 7 | el handler ignora el payload y siempre invalida `operativa` (R27) | `cache-financiera-invalidacion-backfill` | **rojo**: 2 fallos. El testigo de la 128 sigue verde, que es lo esperado en ESTA direccion |
+| 8 | leer el dominio del payload **sin default** (R27) | `cache-financiera-invalidacion-backfill` + **`cache-invalidacion-backfill` (128)** | **rojo**: 3 fallos. Es la mutacion importante: la compatibilidad hacia atras es un requisito, no una cortesia |
+| 9 | el backfill de tesoreria encola **siempre** (R26) | `backfill-caja-tesoreria-invalidacion` | **rojo**: 3 fallos (seco, sin pendientes, `--comprobar`) |
+| 10 | la invalidacion fallida **se propaga** (R16(a)) | `invalidacion-fallo` | **rojo**: 5 de 6 |
+| 11 | `catch {}` vacio: callar sobre la cache (R16(b)) | `invalidacion-fallo` | **rojo**: 3 fallos |
+| 12 | borrar del registro una entrada cuyo escritor sigue vivo (R17) | `ledger-escritores.guardia` | **rojo**: 3 fallos (por defecto, por exceso y el conteo de ocho) |
+| 13 | una entrada apunta a un test que no existe (R18) | `ledger-escritores.guardia` | **rojo**: 1 fallo, con el nombre del archivo que falta |
+| 14 | la `dedupeKey` sin rango pierde el dominio (R27) | `cache-financiera-invalidacion-backfill` | **rojo**: 1 fallo — las dos claves colisionan |
+| 15 | borrar la invalidacion de la indemnizacion (R13) | `escritor-indemnizacion` | **rojo**: 2 fallos |
+
+**Mutaciones que NO se aplicaron, y por que:**
+
+- **«Un solo test para las tres operaciones de la liquidacion».** No es una mutacion de una linea
+  sobre este codigo: seria escribir otro test para poder matarlo. Lo que si esta medido es que los
+  tres casos existen y que cada uno mide una cifra distinta.
+- **«Un escritor NUEVO sin registrar».** No se creo un servicio de verdad —seria codigo muerto en
+  el arbol—: se mide con el **fragmento sintetico** del bloque «el censo DISCRIMINA», que es lo que
+  `tasks.md` T4.2 pide. Lo que si se aplico de verdad es la mutacion 12, que es su simetrica.
+
+---
+
+## 4. Lo que el spec dice y el arbol desmiente (medido en `C:/w179`)
+
+**(a) `design.md §2` daba por hecho que la `dedupeKey` incorporaria el dominio. No se pudo, y la
+alternativa es mejor.** `tests/unit/scripts/backfill-analitica-invalidacion.test.ts` (feature 128)
+fija el FORMATO exacto de `dedupeKeyInvalidacion` con un `^…$`, y **ese archivo esta fuera de la
+frontera de R25**: meterle el dominio obligaba a ampliar la frontera para reescribir un test ajeno
+que no tiene nada que ver con esta feature. En su lugar, `dedupeKeyInvalidacion` queda **byte a
+byte como estaba** y la financiera estrena `dedupeKeyInvalidacionSinRango(dominio, instante)`. Lo
+que D2 perseguia se consigue igual y de forma **estructural**: donde una clave lleva
+`financiera:sin-rango`, la otra lleva `2026-07-20..2026-07-22`, y no pueden coincidir nunca. Medido
+en `cache-financiera-invalidacion-backfill.test.ts` › «las claves de los dos dominios…». **La celda
+de `design.md §2` se corrigio con este motivo escrito.**
+
+**(b) La invalidacion de `LiquidacionService` va INLINE tres veces y no en un metodo privado, y eso
+no es descuido.** `tests/unit/services/liquidacion-anulacion.test.ts` (feature 172, R82/R75) declara
+**CERRADA** la lista de metodos de esa clase —privados incluidos— «para que anadir uno obligue a
+mirar si tiene derecho a existir». Un helper `invalidarTrasConfirmar` la ponia roja, y ese archivo
+tambien esta fuera de la frontera. Tres lineas iguales cuestan menos que ampliar la frontera para
+relajar un guardia de una superficie de dinero. Queda escrito en el codigo.
+
+**(c) Dos entradas del registro adelantado (T4.1) nombraban tests que no cubren su requisito.**
+`LiquidacionService` declaraba `["R11","R8"]` pero solo nombraba el test de R11 (R8 vive en
+`cache-financiera-invalidacion-orden.test.ts`), y `CajaPagoTiendaFeedService` declaraba `R26`
+apuntando a `cache-financiera-invalidacion-backfill.test.ts`, que mide **R27**; R26 se mide en el
+test del CLI. Las dos se corrigieron. **Sin R18 esto no se habria visto**: el registro habria
+seguido diciendo que cubria algo que no cubria, que es exactamente la promesa que R18 existe para
+convertir en prueba.
+
+**(d) La caja no registra `origenTipo: "cierre"` ni `"gestion"`.** Los valores reales del enum son
+`cierre_dia` y `gestion_orden` (`WalletOrigenTipo`). No cambia nada de la feature; se dice porque
+los dobles de los tests de cierre e indemnizacion los escriben y alguien podria copiarlos.
+
+**(e) `registrarMovimientoManual` NO admite `egreso_gasto_variable`.** Su categoria esta acotada a
+`ingreso_ajuste | egreso_ajuste`, cosa que el enunciado de R10 («un egreso o ingreso de caja que un
+maestro mete a mano») no deja ver. El movimiento manual sigue entrando en `egresos`,
+`dinero_en_caja` y `ganancia_ordenex`, asi que el requisito no cambia.
+
+---
+
+## 5. T5.2/T5.3 — el guardia branch-scoped de frontera (R25)
+
+Se escribio `tests/unit/analytics/cache-financiera-frontera.guardia.test.ts`, se corrio y
+**paso 3/3**: ningun archivo del diff de la rama cae fuera de `design.md §2`, y los diez que §2
+declara intocables (`lib/analytics/metrics.ts`, `AnaliticaFinancieraService.ts`, `cache-clave.ts`,
+`next-analitica-cache.ts`, `analitica-cache.ts`, los tres repositorios de ledger, `db/schema.prisma`
+y el testigo de la 128) siguen fuera del diff. **Despues se retiro**, que es el criterio de «hecho»
+de T5.3 y la leccion del repo: un guardia que mide el diff pasa a juzgar toda rama posterior en
+cuanto se mergea.
+
+**Dos cosas que aprendio y conviene conservar:**
+
+1. **La base NO puede ser `origin/dev`, tiene que ser `git merge-base origin/dev HEAD`.** Medido:
+   contra la punta de `origin/dev` el diff traia **~90 archivos ajenos** (la feature 196 del ranking,
+   la landing, `middleware.ts`…), porque `dev` se movio despues de nacer esta rama. Contra el
+   merge-base (`871e6c5d`) el diff son **41 archivos, todos de esta feature**.
+2. **Hay que contar tambien lo NO commiteado** (`git status --porcelain --untracked-files=all`): un
+   guardia que solo mirara commits diria «verde» sobre un arbol que aun no lo esta — que es
+   exactamente el estado en que este trabajo se entrega.
+
+---
+
+## 6. Salida real del gate
+
+Corrido en `C:/w179`. **No se corrio la suite completa** (la corre el leader).
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida — verde)
+
+$ pnpm lint
+✖ 57 problems (0 errors, 57 warnings)
+  0 errores. Las 57 son `no-unused-vars` de parametros con `_`, el patron del repo;
+  4 de ellas en archivos nuevos de esta tanda (dobles de interfaz que no usan todos
+  sus parametros), mismo estilo que `_cache-falsa.ts` de la 128.
+
+$ pnpm exec vitest run <los 13 tests nuevos de T3/T4>
+ Test Files  13 passed (13)
+      Tests  85 passed (85)
+
+$ pnpm exec vitest run <los 15 de T1/T2 + los guardias de la 128>
+ Test Files  15 passed (15)
+      Tests  115 passed (115)
+  (cache-tags.guardia, cache-config.guardia, cache-aislamiento.guardia,
+   cache-registro y cache-invalidacion-job de la 128, todos verdes)
+
+$ pnpm exec vitest run tests/unit/analytics/ledger-escritores.guardia.test.ts   (ANTES de T5.1)
+ Test Files  1 failed (1)
+      Tests  1 failed | 20 passed (21)
+  -> el UNICO rojo era R19 esperando la retirada. Tras T5.1: 21 passed (21).
+
+$ pnpm exec vitest run tests/unit/analytics/cache-financiera-frontera.guardia.test.ts  (T5.2)
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+  -> y se retiro (T5.3).
+
+$ pnpm exec vitest related --run <los 19 archivos de lib/, app/ y scripts/ tocados>
+ Test Files  112 passed (112)
+      Tests  1641 passed (1641)
+  -> cero flakes en esta corrida. En la PRIMERA pasada salieron 3 rojos, y los tres
+     eran REGRESIONES REALES mias, no flakes: dos por el formato de la `dedupeKey`
+     (§4(a)) y una por el metodo privado nuevo en `LiquidacionService` (§4(b)). Las
+     tres se arreglaron SIN ampliar la frontera.
+```
+
+---
+
+## 7. Lo que queda sin hacer
+
+- **T6.1/T6.2** — el mapa `R<n> -> test` COMPLETO de la feature (T1–T5 juntos) y `./init.sh` entero
+  con delta 0 contra la medicion de T0.2. Este documento cubre solo R7–R19, R24, R26 y R27.
+- **T0.2 nunca se midio.** No hay en `progress/current.md` un baseline de `./init.sh` corrido en
+  esta rama ANTES de tocar nada, asi que el «delta 0» de T6.2 no tiene contra que medirse. Se dice
+  aqui en vez de inventarlo: la leccion del repo es que un baseline heredado caduca con cualquier
+  PR ajeno, y `origin/dev` **ya se movio** respecto a esta rama (§5).
+
+## 8. Lo que me chirria
+
+- **La rama esta ~90 archivos por detras de `origin/dev`** (feature 196, landing, `middleware.ts`,
+  `db/schema.prisma`). Nada de eso toca la cache financiera, pero el merge no va a ser trivial y el
+  gate completo hay que correrlo **despues** de reconciliar, no antes.
+- **El pago a MENSAJERO se mide por una cifra que no emite el.** `egresos` sale de
+  `wallet_movimiento` y el pago al mensajero no toca la caja por diseño ([P2] de la 173), asi que su
+  paso 5 afirma sobre el dinero que movio el paso 2. Sigue muriendo si se borra la invalidacion
+  —que es lo que el requisito pide— pero no es igual de fuerte que el del pago a tienda, donde la
+  cifra servida ES el egreso que la operacion emitio. Medirlo con una metrica de cuentas por pagar
+  exigiria cablear un segundo libro compartido; no lo hice y lo digo.
+- **Los tests de cierre, bodega e indemnizacion escriben en el libro desde el DOBLE del
+  repositorio.** El enganche de la invalidacion se mide de verdad; lo que no se mide en unitario es
+  que el SQL de `CierresAdminRepository`/`IncidenteAdminRepository` escriba lo que el doble finge
+  que escribe. Eso ya lo cubren sus propias suites y la integracion; queda dicho para que nadie lea
+  estos archivos como una prueba de la escritura.
+- **El censo de R17 obliga a registrar, no a invalidar BIEN.** Un escritor futuro puede registrarse
+  y llamar a `invalidarAnaliticaFinanciera` DENTRO de su transaccion: el censo lo daria por bueno y
+  solo R8 lo cazaria — y R8 hoy tiene un test de un solo escritor, la liquidacion. Es el hueco que
+  le queda a esta feature, y es el mismo limite declarado que §4bis reconoce para el guardia de
+  politica: se puede obligar a decidir, no a acertar.
