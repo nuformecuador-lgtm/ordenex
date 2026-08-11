@@ -21,6 +21,7 @@ import { AsignacionDetalle } from "../AsignacionDetalle";
 import { PosAmountRow } from "./PosAmountRow";
 import { PosCardHeader } from "./PosCardHeader";
 import { PosNavBlock } from "./PosNavBlock";
+import { seccionesVisibles, type PosSecciones } from "./pos-secciones";
 
 // POS card · card de una orden EN REPARTO, réplica del `PosCardExpand` de la
 // referencia (terminal de reparto: navegación primero, targets grandes, alto
@@ -64,6 +65,12 @@ export interface PosOrderCardProps {
    * gate de selección los ignora (ver `pos-seleccion`), no seleccionan de rebote.
    */
   acciones?: ReactNode;
+  /**
+   * Qué secciones se pintan (feature 196). Todas van a `true` por defecto, así que NINGUNA
+   * superficie existente cambia y la prop es puramente aditiva. Las TRES vistas la
+   * respetan: la resuelve `seccionesVisibles` en un solo sitio (`pos-secciones`).
+   */
+  secciones?: PosSecciones;
 }
 
 export function PosOrderCard({
@@ -75,6 +82,7 @@ export function PosOrderCard({
   onGestionar,
   estado: estadoProp,
   mostrarRuta = true,
+  secciones,
   acciones,
 }: PosOrderCardProps) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
@@ -109,6 +117,14 @@ export function PosOrderCard({
     event.preventDefault();
     onGestionar();
   }
+
+  // Feature 196: las secciones se pintan salvo que el consumidor las apague.
+  const {
+    navegacion: verNavegacion,
+    cobro: verCobro,
+    detalle: verDetalle,
+    intentos: verIntentos,
+  } = seccionesVisibles(secciones);
 
   // La card responde a puntero/teclado solo si hay selección disponible y no está bloqueada.
   const seleccionable = Boolean(onGestionar) && !bloqueado;
@@ -158,9 +174,11 @@ export function PosOrderCard({
                 "Pendiente de optimizar" y "Gestionar más tarde", que son marcas de
                 EXCEPCIÓN, y D6 decidió que los intentos son un dato. Siempre visible,
                 `0` incluido; sin umbral (R20). */}
-            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
-              <IntentosDato intentos={valorIntentos(orden)} />
-            </p>
+            {verIntentos ? (
+              <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+                <IntentosDato intentos={valorIntentos(orden)} />
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -194,8 +212,8 @@ export function PosOrderCard({
           </div>
         ) : null}
 
-        <PosNavBlock orden={orden} />
-        <PosAmountRow montoCobrar={orden.montoCobrar} />
+        {verNavegacion ? <PosNavBlock orden={orden} /> : null}
+        {verCobro ? <PosAmountRow montoCobrar={orden.montoCobrar} /> : null}
 
         {/* Feature 113/R1: detalle COMPLETO (Pedido/Entrega/Cobro) disponible sin salir
             de la card, plegado para no competir con la navegación. Es un `Collapsible` de
@@ -203,24 +221,26 @@ export function PosOrderCard({
             que el resto de desplegables de la app (`collapsible-panel`, globals.css);
             `keepMounted` deja el detalle en el DOM plegado, así la información sigue
             estando (y siendo buscable) sin depender de la animación. */}
-        <Collapsible
-          open={detalleAbierto}
-          onOpenChange={setDetalleAbierto}
-          className="group/detalle rounded-2xl border border-border bg-muted/40 px-3 py-2"
-        >
-          <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            Ver detalle completo
-            <ChevronDown
-              aria-hidden="true"
-              className="size-4 shrink-0 transition-transform duration-200 group-data-[open]/detalle:rotate-180 motion-reduce:transition-none"
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent keepMounted className="collapsible-panel">
-            <div className="mt-3 border-t border-border pt-3">
-              <AsignacionDetalle orden={orden} />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+        {verDetalle ? (
+          <Collapsible
+            open={detalleAbierto}
+            onOpenChange={setDetalleAbierto}
+            className="group/detalle rounded-2xl border border-border bg-muted/40 px-3 py-2"
+          >
+            <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Ver detalle completo
+              <ChevronDown
+                aria-hidden="true"
+                className="size-4 shrink-0 transition-transform duration-200 group-data-[open]/detalle:rotate-180 motion-reduce:transition-none"
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent keepMounted className="collapsible-panel">
+              <div className="mt-3 border-t border-border pt-3">
+                <AsignacionDetalle orden={orden} />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : null}
 
         {acciones}
       </div>

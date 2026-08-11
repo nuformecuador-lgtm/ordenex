@@ -197,8 +197,13 @@ describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
     renderModule({ porRecolectar: [makeOrden()] });
 
     // Lo que se ve por orden: guía, remisión, producto y destinatario. Nada de dinero.
+    //
+    // Feature 196: producto y destinatario ya NO comparten un `<p>` con «·». Los pinta la
+    // card compartida en elementos separados, así que se afirman por separado. Lo que este
+    // caso protege —que se vean los cuatro datos y ningún importe— no cambia.
     expect(screen.getByText("REM-1")).toBeInTheDocument();
-    expect(screen.getByText(/Caja · Ana/)).toBeInTheDocument();
+    expect(screen.getByText("Caja")).toBeInTheDocument();
+    expect(screen.getByText("Ana")).toBeInTheDocument();
     expect(screen.queryByText(/₡/)).toBeNull();
     // Contrato: el DTO de esta superficie no tiene por dónde filtrar cobro ni ruta.
     const orden = makeOrden();
@@ -211,6 +216,87 @@ describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
       "tiendaNombre",
       "tiendaTelefono",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 196 — la recolección pinta la MISMA card que el reparto (`PosOrderCardMosaico` /
+// `PosOrderCardDetalle`) con las cuatro secciones que no puede alimentar APAGADAS.
+//
+// Por qué se prueba en las DOS vistas y no solo en la que arranca: las dos cards son
+// implementaciones PARALELAS —solo comparten `PosOrderCardProps`—, así que una compuerta
+// puede quedarse sin replicar en una de ellas y el apartado seguiría verde. Fue exactamente
+// lo que pasó al cablearlas, y estos casos son lo que lo impide en adelante.
+//
+// Lo que se afirma NO es cosmética: el adaptador rellena esos campos con `null`/vacío para
+// satisfacer el tipo. Encender cualquiera de las cuatro aquí pinta huecos —o un "Cobrar" con
+// importe vacío en la pantalla de un mensajero—, y es justo lo que la 157/167 decidió no dar.
+// ---------------------------------------------------------------------------------------
+describe("RecoleccionModule — las dos vistas apagan lo que no hay (feature 196)", () => {
+  /** Lo que NINGUNA de las dos vistas puede pintar aquí, por vista. */
+  function esperarSeccionesApagadas() {
+    // Cobro: ni la etiqueta ni ningún importe (R18/R38 — el DTO no transporta monto).
+    expect(screen.queryByText(/cobrar/i)).toBeNull();
+    expect(screen.queryByText(/₡/)).toBeNull();
+    // Navegación: no hay dirección ni coordenadas, así que no hay a dónde llevar a nadie —y
+    // el "Sin dirección" del fallback afirmaría un hueco donde no hay dato que dar.
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText(/sin dirección/i)).toBeNull();
+    // Intentos de entrega: son del flujo de ENTREGA; recolectar no es entregar.
+    expect(screen.queryByText(/intentos/i)).toBeNull();
+    // Detalle completo: zona/provincia/cantón/notas no vienen en este DTO.
+    expect(screen.queryByText(/ver detalle completo/i)).toBeNull();
+  }
+
+  /** Lo que sí sale, en las dos vistas: los cuatro datos reales del DTO. */
+  function esperarDatosDeLaOrden() {
+    expect(screen.getByText("REM-1")).toBeInTheDocument();
+    expect(screen.getByText("Caja")).toBeInTheDocument();
+    expect(screen.getByText("Ana")).toBeInTheDocument();
+  }
+
+  it("vista MOSAICO (la de entrada): pinta la orden sin cobro, navegación, intentos ni detalle", () => {
+    renderModule({ porRecolectar: [makeOrden()] });
+
+    esperarDatosDeLaOrden();
+    esperarSeccionesApagadas();
+  });
+
+  it("vista DETALLE: las mismas cuatro secciones siguen apagadas tras conmutar", async () => {
+    const user = userEvent.setup();
+    renderModule({ porRecolectar: [makeOrden()] });
+
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+    // El conmutador anima: sostiene la vista vieja durante el tramo de salida
+    // (`useTransicionVista`), así que se espera a que la nueva esté montada.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Detalle" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    await waitFor(() => esperarDatosDeLaOrden());
+
+    esperarSeccionesApagadas();
+  });
+
+  it("el conmutador es UNO para todo el apartado, no uno por tienda", () => {
+    renderModule({
+      porRecolectar: [
+        makeOrden({ id: "a", numGuia: 1, numRemision: "REM-A", tiendaNombre: "Tienda Norte" }),
+        makeOrden({ id: "c", numGuia: 3, numRemision: "REM-C", tiendaNombre: "Tienda Sur" }),
+      ],
+    });
+
+    // Dos tiendas, un solo control: la vista es una preferencia de quien mira, no una
+    // propiedad de cada grupo.
+    expect(screen.getAllByRole("group", { name: "Vista de las órdenes" })).toHaveLength(1);
+  });
+
+  it("sin nada por recolectar no hay conmutador: no hay cards que conmutar", () => {
+    renderModule({ porRecolectar: [] });
+
+    expect(screen.queryByRole("group", { name: "Vista de las órdenes" })).toBeNull();
   });
 });
 
