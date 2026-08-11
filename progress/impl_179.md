@@ -691,3 +691,86 @@ $ borrar el `if (resultado.status === "ok") await invalidarAnaliticaFinanciera(.
   `design.md §2` de la 179.** Es contabilidad forzada por T5.1, no codigo, y el guardia
   branch-scoped ya estaba retirado cuando se escribio — pero conviene que el reviewer lo sepa en vez
   de descubrirlo en el diff.
+
+---
+
+## 10. El cuarto rojo: `liquidacion-money-safe.test.ts` (172, R14/R56)
+
+```
+> el censo de archivos de la feature existe entero y cubre sus propios arboles
++ [ "lib/services/LiquidacionConInvalidacionService.ts" ]
+```
+
+**Lo provoco el decorador de §9.1, y es el guardia funcionando.** Su primer caso no se conforma con
+que el censo apunte a archivos que existen: lista el arbol PROPIO de la liquidacion
+(`components/shared/liquidacion/**` y todo `lib/**` que case `/[Ll]iquidacion/`) y exige que **no
+sobre ni uno**. Un archivo nuevo ahi entra en el censo o el test cae — que es exactamente lo que
+esa lista existe para impedir: envejecer en silencio.
+
+**Se ANADIO al censo. No se excluyo.** Una exclusion en el arbol del dinero es la clase de
+excepcion que dentro de seis meses nadie recuerda por que esta, y el propio guardia dice que la
+lista es el censo. El unico cambio en ese archivo es **una linea en el array**, con su motivo escrito
+al lado; **ninguna asercion se toca, se relaja ni se debilita**.
+
+### 10.1 Que comprobaciones concretas le aplico el barrido
+
+Es un archivo de `lib/**` (no cliente), asi que le corren cuatro de los siete casos:
+
+| caso del guardia | que le mide a este archivo | resultado |
+|---|---|---|
+| «el censo existe entero y cubre sus propios arboles» | que exista en disco y que ningun archivo del arbol de la liquidacion quede fuera de la lista | verde |
+| «ningun archivo de la feature convierte un monto a numero» (R14) | barrido de `\bNumber\s*\(`, `\bparseFloat\s*\(` y `\bparseInt\s*\(` sobre su codigo **sin comentarios** (`LLAMADAS_PROHIBIDAS_EN_DINERO`, `tests/fixtures/money-safe.ts:36-41`). `.toFixed(` se salta en `lib/**` a proposito: ahi es `Decimal.toFixed(2)`, la serializacion canonica | verde — cero ocurrencias |
+| «en el servidor, todo `toFixed` de la feature es de escala 2» | cada `.toFixed(x)` del archivo debe llevar `2` | verde por vacio: no tiene ninguno |
+| «ningun archivo de CLIENTE trae una biblioteca de decimales» | no aplica: no vive en `app/` ni en `components/` | no evaluado |
+
+Los otros tres casos (DTO del comprobante, descarga sin uuid, contraprueba del barrido) son sobre
+`lib/types/liquidacion.ts` y sobre las columnas de descarga: no tocan este archivo.
+
+### 10.2 Y se comprobo que anadirlo SIGNIFICA algo
+
+Anadir una ruta a un array y ver el test verde no prueba que el barrido la mire. Se midio:
+
+```
+$ (mutacion) se inyecta en el decorador
+    if (Number((resultado as { restante?: string }).restante ?? "0") > 0) { }
+$ pnpm exec vitest run tests/unit/guards/liquidacion-money-safe.test.ts
+ Tests  1 failed | 6 passed (7)
+   + "lib/services/LiquidacionConInvalidacionService.ts: Number("
+$ (revertida)  →  Tests  7 passed (7)
+```
+
+El archivo esta dentro del barrido de verdad, no solo dentro de la lista.
+
+### 10.3 Por que pertenece a ese arbol aunque nazca de otra feature
+
+Queda escrito junto a la entrada del censo, y en corto: **maneja los mismos DTO de dinero que el
+servicio que envuelve**. `RegistrarPagoServiceResult` y `AnularPagoServiceResult` llevan `monto` y
+`restante` dentro, y el decorador los recibe enteros para decidir si invalida. Que hoy solo lea
+`status` no lo saca del arbol del dinero: el dia que alguien quiera invalidar «solo si el monto
+supera X», tendra ese DTO a mano — y este barrido es lo unico que impide que lo convierta a `number`
+para compararlo. Ademas nacio **por culpa de la propia 172**: existe porque su R68 prohibe que el
+servicio y su Server Action importen analitica (§9.1). Excluirlo seria dejar fuera del barrido de
+la liquidacion a una pieza que la liquidacion misma obligo a crear.
+
+### 10.4 Gate
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida — verde)
+
+$ pnpm lint
+✖ 57 problems (0 errors, 57 warnings)   ← identico; ningun warning nuevo
+
+$ pnpm exec vitest run tests/unit/guards/liquidacion-money-safe.test.ts
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+
+$ pnpm exec vitest related --run lib/services/LiquidacionConInvalidacionService.ts
+                                 tests/unit/guards/liquidacion-money-safe.test.ts
+ (ver la corrida en el mensaje de cierre)
+```
+
+**Archivos tocados:** `tests/unit/guards/liquidacion-money-safe.test.ts` (una entrada en el censo +
+su motivo) y `specs/179-analitica-cache-financiera/design.md` (§2 lo declara, con el motivo, como
+ampliacion de frontera del 2026-08-10).

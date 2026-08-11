@@ -84,6 +84,26 @@ const ARCHIVOS_DE_LA_FEATURE: readonly string[] = [
   "lib/repositories/PagoMensajeroMovimientoRepository.ts",
   "lib/repositories/WalletTiendaMovimientoRepository.ts",
   "lib/services/CierresAdminService.ts",
+  /**
+   * ⚠ ALTA DE LA FEATURE 179 (2026-08-10) — NO nacio de la 172 y, aun asi, PERTENECE a este censo.
+   *
+   * QUE ES. El decorador que invalida la cache de analitica financiera tras cada operacion de
+   * liquidacion que confirma (R11 de la 179). Existe **por culpa de esta misma feature**:
+   * `liquidacion-alcance.test.ts` (R68) prohibe que `LiquidacionService` y
+   * `lib/actions/liquidacion.ts` importen nada de `@/lib/analytics`, asi que la invalidacion no
+   * cabia ni en el servicio ni en el borde y se saco a una pieza que envuelve al servicio en el
+   * composition root.
+   *
+   * POR QUE ENTRA Y NO SE EXCLUYE. Vive en el arbol de la liquidacion —lo detecta solo el
+   * `filter(/[Ll]iquidacion/)` del primer test— y **maneja los mismos DTO de dinero que el
+   * servicio**: recibe `RegistrarPagoServiceResult` y `AnularPagoServiceResult`, que llevan
+   * `monto` y `restante` dentro. Que hoy solo lea `status` no lo saca del arbol del dinero: el
+   * dia que alguien quiera invalidar «solo si el monto supera X» tendra ese DTO a mano, y este
+   * barrido es lo unico que impide que lo convierta a `number` para compararlo. Una exclusion
+   * seria una excepcion sin dueño dentro del arbol del dinero, que es la clase de cosa que en
+   * seis meses nadie sabe por que esta.
+   */
+  "lib/services/LiquidacionConInvalidacionService.ts",
   "lib/services/LiquidacionService.ts",
   "lib/services/WalletTiendaService.ts",
   "lib/types/liquidacion.ts",
