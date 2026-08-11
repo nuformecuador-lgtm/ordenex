@@ -26,7 +26,6 @@ import {
   CLASE_FASE,
   useTransicionVista,
 } from "@/app/(app)/mis-asignaciones/_components/useTransicionVista";
-import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { RecolectadasHoyLista } from "./RecolectadasHoyLista";
 import { useRecolectarPorGuia } from "./useRecolectarPorGuia";
@@ -46,11 +45,16 @@ import { useRecolectarPorGuia } from "./useRecolectarPorGuia";
 // disparador no depende de la lista— y a cambio la cámara deja de estar encendida detrás de
 // la pantalla.
 //
-// Sigue siendo deliberadamente pobre comparado con el panel de gestión: aquí no hay entrega,
-// ni cobro, ni evidencia, ni causa de devolución, ni resultado que elegir (R22). Recolectar
-// es un acto físico de un paso —el paquete pasa de la tienda a la ruta hacia la bodega
-// central— y la pantalla no debe sugerir lo contrario. Ni siquiera TRANSPORTA cobro: los
-// datos llegan en `RecoleccionOrdenDTO`, un DTO sin monto, coordenadas ni ruta (R38).
+// Sigue sin haber ACCIONES de gestión: aquí no se entrega, ni se cobra, ni se adjunta
+// evidencia, ni se elige causa ni resultado (R22). Recolectar es un acto físico de un paso
+// —el paquete pasa de la tienda a la ruta hacia la bodega central— y la pantalla no ofrece
+// otro control que el escáner.
+//
+// 2026-08-11 (decisión del humano): lo que SÍ cambió es la INFORMACIÓN. El apartado muestra la
+// misma card que «Por recoger», entera: ubicación, cobro, detalle completo e intentos. El DTO
+// dejó de ser pobre a propósito (`RecoleccionOrdenDTO` extiende `MiAsignacionDTO`), lo que
+// retira el recorte de R38 (167): era la única razón por la que las dos pantallas hermanas del
+// portal se veían distintas, y el mensajero necesita ver de la orden lo mismo en ambas.
 //
 // El bloque de acción es UNO para todo el apartado, no un botón por tarjeta: en la tienda se
 // recogen decenas de paquetes seguidos y la acción natural es escanear en tanda (decisión del
@@ -67,78 +71,6 @@ function textoConteo(n: number): string {
   return n === 1
     ? "1 paquete por recolectar en tienda."
     : `${n} paquetes por recolectar en tienda.`;
-}
-
-interface GrupoTienda {
-  tiendaNombre: string;
-  tiendaTelefono: string | null;
-  ordenes: RecoleccionOrdenDTO[];
-}
-
-/**
- * Adapta una orden por recolectar a la forma que espera `PosOrderCard` (feature 196).
- *
- * ⚠️ Los campos que se rellenan con `null`/vacio NO SE PINTAN NUNCA: las cuatro secciones que
- * los leerian —navegacion, cobro, detalle e intentos— van APAGADAS en `SECCIONES_RECOLECCION`.
- * Lo que la card muestra sale todo de datos reales del DTO: guia, remision, producto y
- * destinatario. Si alguien enciende una de esas secciones aqui, empezara a pintar huecos.
- *
- * No se enriquece el DTO para llenarlos, y es deliberado: la 157/167 lo dejo pobre a proposito
- * —«ni siquiera TRANSPORTA cobro»— porque recolectar no es entregar y la pantalla no debe
- * sugerir lo contrario.
- */
-function comoCardDeRecoleccion(orden: RecoleccionOrdenDTO): MiAsignacionDTO {
-  return {
-    id: orden.id,
-    numGuia: orden.numGuia,
-    numRemision: orden.numRemision,
-    producto: orden.producto,
-    destinatario: orden.destinatario,
-    tiendaNombre: orden.tiendaNombre,
-    // Todo lo de abajo es relleno para satisfacer el tipo; ninguna seccion encendida lo lee.
-    estatusValue: "recolectando",
-    telefonoDest: "",
-    direccion: null,
-    peso: null,
-    montoCobrar: null,
-    latitud: null,
-    longitud: null,
-    notas: null,
-    zonaNombre: "",
-    provinciaNombre: "",
-    cantonNombre: "",
-    distritoNombre: null,
-    secuenciaRuta: null,
-  } as MiAsignacionDTO;
-}
-
-/** Las cuatro secciones que la recoleccion no puede alimentar (ver el adaptador). */
-const SECCIONES_RECOLECCION = {
-  navegacion: false,
-  cobro: false,
-  detalle: false,
-  intentos: false,
-} as const;
-
-/**
- * Agrupa por tienda (R17) conservando el orden de llegada: el mensajero recorre tiendas, no
- * órdenes sueltas, así que la lista se organiza por el sitio al que tiene que ir.
- */
-function agruparPorTienda(ordenes: RecoleccionOrdenDTO[]): GrupoTienda[] {
-  const grupos = new Map<string, GrupoTienda>();
-  for (const orden of ordenes) {
-    const grupo = grupos.get(orden.tiendaNombre);
-    if (grupo) {
-      grupo.ordenes.push(orden);
-      continue;
-    }
-    grupos.set(orden.tiendaNombre, {
-      tiendaNombre: orden.tiendaNombre,
-      tiendaTelefono: orden.tiendaTelefono ?? null,
-      ordenes: [orden],
-    });
-  }
-  return [...grupos.values()];
 }
 
 export interface RecoleccionModuleProps {
@@ -178,8 +110,6 @@ export function RecoleccionModule({
     fase: faseVista,
     cambiarVista,
   } = useTransicionVista<VistaCards>("mosaico");
-
-  const grupos = useMemo(() => agruparPorTienda(porRecolectar), [porRecolectar]);
 
   const recolectarGuia = useCallback(
     async (numGuia: number): Promise<boolean> => {
@@ -224,9 +154,14 @@ export function RecoleccionModule({
    * Una card «por recolectar». Extraida para que el CARRUSEL (mosaico) y la LISTA (detalle)
    * rendericen la MISMA card: el conmutador solo cambia el envoltorio.
    *
-   * Sin `onGestionar`: aqui no se gestiona nada, asi que la card es de solo-visualizacion (ni
-   * clickeable ni enfocable). `mostrarRuta={false}` porque estas ordenes no son paradas de la
-   * ruta optimizada, y las cuatro secciones sin datos van apagadas.
+   * 2026-08-11 (decision del humano): la card es EXACTAMENTE la de «Por recoger», sin
+   * compuertas. Ya no hay adaptador ni `secciones`: el DTO trae los mismos campos, asi que la
+   * orden se pasa tal cual y navegacion, cobro, detalle e intentos se pintan con datos reales.
+   *
+   * Lo unico que sigue difiriendo de «Por recoger» son las dos props que describen ESTA
+   * pantalla: sin `onGestionar` (aqui no se gestiona nada, asi que la card no es clickeable ni
+   * enfocable) y `mostrarRuta={false}`, porque estas ordenes no son paradas de la ruta
+   * optimizada. El `estado` lo dice: «Por recolectar», no «Por recoger».
    */
   function renderCardRecoleccion(
     orden: RecoleccionOrdenDTO,
@@ -237,11 +172,10 @@ export function RecoleccionModule({
       vista === "mosaico" ? PosOrderCardMosaico : PosOrderCardDetalle;
     return (
       <CardVista
-        orden={comoCardDeRecoleccion(orden)}
+        orden={orden}
         total={total}
         estado="Por recolectar"
         mostrarRuta={false}
-        secciones={SECCIONES_RECOLECCION}
       />
     );
   }
@@ -255,9 +189,10 @@ export function RecoleccionModule({
             <p role="status" className="text-sm text-muted-foreground">
               {textoConteo(porRecolectar.length)}
             </p>
-            {/* Feature 196: el conmutador es UNO para todo el apartado, no uno por tienda. La
-                vista es una preferencia de quien mira, no una propiedad de cada grupo, y
-                repetirlo por tienda llenaría la cabecera de controles idénticos. */}
+            {/* Feature 196: el conmutador ya no es uno por tienda —la agrupación se retiró—,
+                sino uno por LISTA. La preferencia es UNA sola para todo el apartado (el estado
+                vive aquí y «Recolectadas hoy» recibe el mismo), así que los dos controles se
+                mueven juntos; lo que se duplica es el mando, no la decisión. */}
             <VistaCardsToggle
               vista={vistaCardsPedida}
               onVistaChange={cambiarVista}
@@ -307,54 +242,34 @@ export function RecoleccionModule({
       )}
 
       {/* R8: sin nada asignado se DICE, en vez de dejar una pantalla muda bajo el escáner. */}
-      {grupos.length === 0 ? (
+      {porRecolectar.length === 0 ? (
         <p className="text-sm text-muted-foreground">{VACIO}</p>
+      ) : vistaCards === "mosaico" ? (
+        /* 2026-08-11 (decisión del humano): las cards van SUELTAS, en un carrusel único, igual
+           que en «Por recoger». Antes iban dentro de una caja por tienda (la agrupación de
+           R17), con un carrusel por grupo; esa caja se retira y con ella la cabecera de tienda
+           y sus botones de contacto. La tienda de cada orden sigue estando en la card, dentro
+           del detalle completo. */
+        <div className={CLASE_FASE[faseVista]}>
+          <CarruselCards
+            items={porRecolectar}
+            getKey={(orden) => orden.id}
+            ariaLabel="Órdenes por recolectar"
+            singular="Orden"
+            plural="Órdenes"
+            renderItem={(orden) =>
+              renderCardRecoleccion(orden, porRecolectar.length, "mosaico")
+            }
+          />
+        </div>
       ) : (
-        grupos.map((grupo) => (
-          <div
-            key={grupo.tiendaNombre}
-            className="flex flex-col gap-2 rounded-2xl border border-border p-3"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">{grupo.tiendaNombre}</h3>
-              {/* R19/R20: el interlocutor de una recolección es la TIENDA, no el
-                  destinatario. Sin teléfono registrado no se pintan botones que no llevan
-                  a ninguna parte. */}
-              {grupo.tiendaTelefono ? (
-                <ContactoButtons
-                  telefono={grupo.tiendaTelefono}
-                  nombre={grupo.tiendaNombre}
-                />
-              ) : null}
-            </div>
-            {vistaCards === "mosaico" ? (
-              /* En MOSAICO las cards van en carrusel, igual que en Entregas. El carrusel es
-                 POR GRUPO y no global a proposito: la agrupacion por tienda (R17) es lo que
-                 hace util esta pantalla —el mensajero recorre tiendas, no ordenes sueltas— y
-                 un carrusel unico la disolveria. */
-              <div className={CLASE_FASE[faseVista]}>
-                <CarruselCards
-                  items={grupo.ordenes}
-                  getKey={(orden) => orden.id}
-                  ariaLabel={`Por recolectar en ${grupo.tiendaNombre}`}
-                  singular="Orden"
-                  plural="Órdenes"
-                  renderItem={(orden) =>
-                    renderCardRecoleccion(orden, grupo.ordenes.length, "mosaico")
-                  }
-                />
-              </div>
-            ) : (
-              <ul className={`flex flex-col gap-3 ${CLASE_FASE[faseVista]}`}>
-                {grupo.ordenes.map((orden) => (
-                  <li key={orden.id}>
-                    {renderCardRecoleccion(orden, grupo.ordenes.length, "detalle")}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ))
+        <ul className={`flex flex-col gap-3 ${CLASE_FASE[faseVista]}`}>
+          {porRecolectar.map((orden) => (
+            <li key={orden.id}>
+              {renderCardRecoleccion(orden, porRecolectar.length, "detalle")}
+            </li>
+          ))}
+        </ul>
       )}
 
       {/* R24: el trabajo del día, que sale del HISTORIAL y por tanto sobrevive a que la
@@ -362,6 +277,10 @@ export function RecoleccionModule({
       <RecolectadasHoyLista
         recolectadasHoy={recolectadasHoy}
         recortada={recolectadasHoyRecortada}
+        vista={vistaCards}
+        vistaPedida={vistaCardsPedida}
+        fase={faseVista}
+        onVistaChange={cambiarVista}
       />
     </section>
   );

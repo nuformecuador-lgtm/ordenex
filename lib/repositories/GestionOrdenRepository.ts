@@ -119,6 +119,35 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     return rows.map(toMiAsignacionRow);
   }
 
+  /**
+   * 2026-08-11 — las MISMAS filas que `findMisAsignaciones`, resueltas por id en vez de por
+   * estado. La necesita «Recolectadas hoy» (`/recoleccion`): esa lista sale del HISTORIAL, que
+   * solo sabe QUÉ órdenes tocó el mensajero, y desde que pinta la card compartida hace falta el
+   * resto de los datos de cada una.
+   *
+   * NO se puede resolver con `findMisAsignaciones`: una orden ya recolectada esta en
+   * `en_ruta_bodega_central` o mas adelante (la bodega central ya la recibio), asi que no hay
+   * lista de estados que la acote sin arrastrar ordenes que no son de esa lista.
+   *
+   * Conserva las dos guardias del hermano —propiedad (`mensajero_asignado_id`) y `deleted_at IS
+   * NULL`— en el WHERE, nunca en el cliente: un id de historial no autoriza a leer la orden.
+   */
+  async findMisAsignacionesByIds(
+    mensajeroId: string,
+    ids: string[],
+  ): Promise<MiAsignacionRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: {
+        id: { in: ids },
+        mensajeroAsignadoId: mensajeroId,
+        deletedAt: null,
+      },
+      ...WITH_ASIGNACION,
+    });
+    return rows.map(toMiAsignacionRow);
+  }
+
   /** Feature 61: conteo de entregadas del mensajero (KPI del portal), no borradas. */
   async contarEntregadas(mensajeroId: string): Promise<number> {
     return this.prisma.orden.count({

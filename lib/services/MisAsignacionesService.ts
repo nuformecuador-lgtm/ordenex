@@ -451,7 +451,15 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   }
 }
 
-function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
+/**
+ * Proyeccion fila -> DTO de una asignacion del mensajero.
+ *
+ * EXPORTADA (2026-08-11, pedido humano «la recoleccion usa la misma card que Por recoger»):
+ * `RecoleccionTiendaService` la reutiliza para alimentar la MISMA card con los MISMOS campos.
+ * Copiar las veinte lineas alli habria dejado dos proyecciones que no pueden divergir sin que
+ * una de las dos pantallas empiece a pintar huecos.
+ */
+export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
   return {
     id: row.id,
     numGuia: row.numGuia,

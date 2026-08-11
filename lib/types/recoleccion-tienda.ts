@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+
 // Feature 157 — RECOLECCION EN TIENDA por el mensajero: validacion de borde (zod) y resultado
 // tipado expuesto por la Server Action. Espejo de `lib/types/recepcion-bodega-central.ts`.
 //
@@ -51,25 +53,21 @@ export type RecolectarEnTiendaResult =
 // ---------------------------------------------------------------------------------------
 
 /**
- * Feature 167 (R18/R38) — una orden que el mensajero tiene que ir a RECOLECTAR a la tienda.
+ * Feature 167 (R18) — una orden que el mensajero tiene que ir a RECOLECTAR a la tienda.
  *
- * DELIBERADAMENTE POBRE. No es `MiAsignacionDTO`: aquel arrastra `montoCobrar`, `latitud`,
- * `longitud`, `secuenciaRuta`, `marcarLuego`, `notaPrivada` e `intentosEntrega`. Una superficie
- * que por requisito NO muestra cobro (R18) tampoco debe TRANSPORTAR cobro hasta el navegador, ni
- * coordenadas ni secuencia de ruta (R38). Con un DTO propio, R38 se verifica con un test de
- * contrato en vez de con una revision visual.
+ * 2026-08-11 (decision del humano): el apartado debe pintar la MISMA card que «Por recoger»,
+ * completa y sin compuertas. Eso RETIRA el recorte que la 167 impuso via R38: el DTO era
+ * deliberadamente pobre —sin monto, coordenadas, direccion ni ruta— precisamente para que la
+ * card no pudiera mostrarlos, y ese recorte es hoy la unica razon por la que las dos pantallas
+ * del portal se ven distintas. Ahora extiende `MiAsignacionDTO` y transporta lo mismo que
+ * Entregas; los campos siguen saliendo de la MISMA fila (`MiAsignacionRow`), asi que no hay
+ * lectura nueva contra la base.
  *
- * Los cuatro datos de orden son los pertinentes a una recoleccion: identificar el paquete
- * (`numGuia`, `numRemision`), saber que es (`producto`) y para quien (`destinatario`). Los dos
- * de tienda sostienen la agrupacion (R17) y el contacto (R19/R20).
+ * Lo unico propio es `tiendaTelefono`, que aqui es REQUERIDO (en `MiAsignacionDTO` es opcional):
+ * sostiene el contacto de la cabecera de cada grupo de tienda (R19/R20), que sigue siendo de
+ * esta pantalla y no de Entregas.
  */
-export interface RecoleccionOrdenDTO {
-  id: string;
-  numGuia: number | null;
-  numRemision: string;
-  producto: string;
-  destinatario: string;
-  tiendaNombre: string;
+export interface RecoleccionOrdenDTO extends MiAsignacionDTO {
   /** `null` = la tienda no tiene telefono registrado -> sin controles de contacto (R20). */
   tiendaTelefono: string | null;
 }
@@ -85,11 +83,15 @@ export interface RecoleccionOrdenDTO {
  * `recolectadaAt` es el `created_at` de esa fila de historial: el instante REAL de la
  * recoleccion, no "ahora" ni la fecha de la orden.
  */
-export interface RecolectadaHoyDTO {
-  ordenId: string;
-  numGuia: number | null;
-  numRemision: string;
-  tiendaNombre: string;
+/**
+ * 2026-08-11 (decision del humano): «Recolectadas hoy» pinta la MISMA card que el resto del
+ * portal, asi que extiende `RecoleccionOrdenDTO` —la orden completa— y agrega lo unico que es
+ * suyo: CUANDO se recolecto. El `id` sale de la orden (antes se llamaba `ordenId`).
+ *
+ * La lista sigue derivando del HISTORIAL: lo que cambia es que a esos ids se les resuelven los
+ * datos de la orden (`findMisAsignacionesByIds`), con las mismas guardias de propiedad.
+ */
+export interface RecolectadaHoyDTO extends RecoleccionOrdenDTO {
   recolectadaAt: Date;
 }
 

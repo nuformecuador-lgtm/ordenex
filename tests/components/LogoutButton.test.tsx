@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("LogoutButton — topbar 'Salir' (feature 57)", () => {
-  it("al hacer click invoca la Server Action logout y luego navega a /login (R7)", async () => {
+  it("al hacer click invoca la Server Action logout y luego navega a la home / (R7)", async () => {
     mockedLogout.mockResolvedValue(undefined);
     const user = userEvent.setup();
     render(<LogoutButton />);
@@ -44,7 +44,7 @@ describe("LogoutButton — topbar 'Salir' (feature 57)", () => {
     await user.click(screen.getByRole("button", { name: "Salir" }));
 
     await waitFor(() => expect(mockedLogout).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/login"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
   });
 
   it("R11: mientras logout está en curso el botón queda disabled y muestra 'Saliendo…'", async () => {
@@ -72,7 +72,7 @@ describe("LogoutButton — topbar 'Salir' (feature 57)", () => {
 
     // Resolvemos el logout: el flujo debe completar la navegación.
     resolveLogout();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/login"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
   });
 
   it("R10: si logout rechaza, NO navega, re-habilita el botón y muestra toast de error", async () => {
@@ -82,7 +82,7 @@ describe("LogoutButton — topbar 'Salir' (feature 57)", () => {
 
     await user.click(screen.getByRole("button", { name: "Salir" }));
 
-    // (a) No se navega a /login.
+    // (a) No se navega a la home.
     await waitFor(() => expect(mockedLogout).toHaveBeenCalledTimes(1));
     expect(pushMock).not.toHaveBeenCalled();
     // (c) Feedback visible del error (toast, feature 11).

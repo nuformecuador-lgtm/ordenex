@@ -64,7 +64,10 @@ function makeRepo(overrides: Partial<RepoMethods> = {}) {
   // Feature 167: los dos repos de LECTURA son dependencias REQUERIDAS del constructor (una
   // opcional dejaria que el wiring se la olvidara). Los casos de confirmacion de la 157 no los
   // usan: aqui van como dobles vacios.
-  const repoGestion = { findMisAsignaciones: vi.fn().mockResolvedValue([]) };
+  const repoGestion = {
+    findMisAsignaciones: vi.fn().mockResolvedValue([]),
+    findMisAsignacionesByIds: vi.fn().mockResolvedValue([]),
+  };
   const repoHistorial = { findRecoleccionesDeActor: vi.fn().mockResolvedValue([]) };
   return {
     repo,
@@ -369,6 +372,13 @@ function makeLectura(opts: LecturaOpts = {}) {
   };
   const repoGestion = {
     findMisAsignaciones: vi.fn().mockResolvedValue(opts.pendientes ?? []),
+    // 2026-08-11: «Recolectadas hoy» pinta la MISMA card, asi que el service resuelve los datos
+    // de cada orden que el historial nombra. El doble devuelve una fila por id pedido, que es lo
+    // que hace la base cuando la orden existe y sigue siendo del actor; los casos que ejercen la
+    // AUSENCIA (borrada o reasignada) lo sobreescriben.
+    findMisAsignacionesByIds: vi.fn(async (_mensajeroId: string, ids: string[]) =>
+      ids.map((id) => asignacionRow({ id })),
+    ),
   };
   const repoHistorial = opts.historial ?? historialFijo();
   // Por defecto: 09:00 hora CR del 31 de julio de 2026.
@@ -414,6 +424,9 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
       findMisAsignaciones: vi.fn(async (mensajeroId: string) =>
         mensajeroId === MENSAJERO.usuarioId ? [asignacionRow()] : [],
       ),
+      findMisAsignacionesByIds: vi.fn(async (_mensajeroId: string, ids: string[]) =>
+        ids.map((id) => asignacionRow({ id })),
+      ),
     };
     const service = new RecoleccionTiendaService(
       {
@@ -434,7 +447,12 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
     expect(ajeno.porRecolectar).toEqual([]);
   });
 
-  it("R18/R38: el DTO lleva SOLO lo pertinente a una recoleccion", async () => {
+  // 2026-08-11 (decision del humano): la recoleccion usa la MISMA card que «Por recoger». Eso
+  // RETIRA el recorte de R38 —el DTO era pobre precisamente para que la card no pudiera pintar
+  // cobro, ubicacion ni detalle— y con el, la unica razon por la que las dos pantallas hermanas
+  // del portal mostraban distinto de la misma orden. Los dos casos de abajo son los de R38
+  // DADOS VUELTA: vigilan que el corte no vuelva a aparecer.
+  it("el DTO transporta la orden COMPLETA, igual que «Por recoger»", async () => {
     const { service } = makeLectura({ pendientes: [asignacionRow()] });
 
     const r = await service.listarRecoleccion(MENSAJERO);
@@ -445,25 +463,42 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
         id: "o-rec",
         numGuia: 1001,
         numRemision: "REM-1",
+        estatusValue: RECOLECTANDO,
         producto: "Zapatos",
         destinatario: "Ana Solis",
+        telefonoDest: "70001111",
+        direccion: "200m sur de la iglesia",
+        peso: 1.2,
+        montoCobrar: 25000,
+        latitud: 9.93,
+        longitud: -84.08,
+        notas: "llamar antes",
         tiendaNombre: "Tienda Central",
         tiendaTelefono: "88880000",
+        zonaNombre: "GAM",
+        provinciaNombre: "San Jose",
+        cantonNombre: "Escazu",
+        distritoNombre: "San Rafael",
+        // Una orden que sigue en la tienda no es parada de ninguna ruta, no tiene marca ni nota
+        // privadas (son de la gestion en reparto) y no ha tenido ningun intento de entrega.
+        secuenciaRuta: null,
+        marcarLuego: false,
+        notaPrivada: null,
+        intentosEntrega: 0,
       },
     ]);
   });
 
-  it("R38: NO transporta cobro ni ruta al navegador, aunque la fila los traiga", async () => {
-    // La fila de origen SI tiene montoCobrar/latitud/longitud (asignacionRow los pone): el corte
-    // lo hace el service. Que este test mire las CLAVES —y no valores— es lo que convierte R38
-    // en una verificacion de contrato en vez de una revision visual.
+  it("los campos que la card lee llegan CON la clave, no recortados", async () => {
+    // Mirar las CLAVES —y no solo el objeto entero— mantiene el caso legible como contrato: si
+    // alguien vuelve a recortar el DTO, la card empezaria a pintar huecos y esto lo ve primero.
     const { service } = makeLectura({ pendientes: [asignacionRow()] });
 
     const r = await service.listarRecoleccion(MENSAJERO);
 
     if (r.status !== "ok") throw new Error("esperaba ok");
     const dto = r.porRecolectar[0]!;
-    for (const prohibido of [
+    for (const requerido of [
       "montoCobrar",
       "latitud",
       "longitud",
@@ -473,8 +508,11 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
       "intentosEntrega",
       "direccion",
       "notas",
+      "peso",
+      "cantonNombre",
+      "distritoNombre",
     ]) {
-      expect(dto).not.toHaveProperty(prohibido);
+      expect(dto).toHaveProperty(requerido);
     }
   });
 
@@ -532,7 +570,7 @@ describe("listarRecoleccion — «Recolectadas hoy» sale del HISTORIAL (R24/R25
 
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.porRecolectar).toEqual([]);
-    expect(r.recolectadasHoy.map((o) => o.ordenId)).toEqual(["o-ya-en-central"]);
+    expect(r.recolectadasHoy.map((o) => o.id)).toEqual(["o-ya-en-central"]);
   });
 
   it("R29: no trae la de OTRO actor, ni la de AYER, ni la BORRADA, ni la de otra familia", async () => {
@@ -552,7 +590,7 @@ describe("listarRecoleccion — «Recolectadas hoy» sale del HISTORIAL (R24/R25
     const r = await service.listarRecoleccion(MENSAJERO);
 
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.recolectadasHoy.map((o) => o.ordenId)).toEqual(["mia-hoy"]);
+    expect(r.recolectadasHoy.map((o) => o.id)).toEqual(["mia-hoy"]);
   });
 
   it("R28: llega ordenada de la MAS RECIENTE a la mas antigua y el service no la reordena", async () => {
@@ -566,10 +604,13 @@ describe("listarRecoleccion — «Recolectadas hoy» sale del HISTORIAL (R24/R25
     const r = await service.listarRecoleccion(MENSAJERO);
 
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.recolectadasHoy.map((o) => o.ordenId)).toEqual(["b", "a"]);
+    expect(r.recolectadasHoy.map((o) => o.id)).toEqual(["b", "a"]);
   });
 
-  it("R28/R38: cada item lleva guia, remision, tienda e instante — y nada mas", async () => {
+  it("R28: cada item es la ORDEN COMPLETA mas el instante de la recoleccion", async () => {
+    // 2026-08-11: la seccion pinta la MISMA card, asi que el item ya no son cuatro datos del
+    // historial. Los de la orden salen de la segunda lectura (`findMisAsignacionesByIds`); del
+    // historial se conserva lo unico que es suyo y que la orden no sabe: CUANDO se recolecto.
     const { service } = makeLectura({
       historial: historialFijo([recoleccionRow()]),
     });
@@ -577,15 +618,28 @@ describe("listarRecoleccion — «Recolectadas hoy» sale del HISTORIAL (R24/R25
     const r = await service.listarRecoleccion(MENSAJERO);
 
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.recolectadasHoy).toEqual([
-      {
-        ordenId: "o-hist",
-        numGuia: 2002,
-        numRemision: "REM-H",
-        tiendaNombre: "Tienda Sur",
-        recolectadaAt: new Date("2026-07-31T15:00:00.000Z"),
-      },
-    ]);
+    expect(r.recolectadasHoy).toHaveLength(1);
+    const item = r.recolectadasHoy[0]!;
+    expect(item.id).toBe("o-hist");
+    expect(item.recolectadaAt).toEqual(new Date("2026-07-31T15:00:00.000Z"));
+    // Los datos de la orden, los mismos que alimentan la card en las otras dos listas.
+    expect(item.montoCobrar).toBe(25000);
+    expect(item.direccion).toBe("200m sur de la iglesia");
+    expect(item.cantonNombre).toBe("Escazu");
+  });
+
+  it("una orden que el historial nombra pero la lectura no devuelve se CAE de la lista", async () => {
+    // Borrada o reasignada entre las dos lecturas: la card no admite huecos, asi que la fila se
+    // omite en vez de pintarse a medias.
+    const { service, repoGestion } = makeLectura({
+      historial: historialFijo([recoleccionRow()]),
+    });
+    repoGestion.findMisAsignacionesByIds.mockResolvedValue([]);
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recolectadasHoy).toEqual([]);
   });
 });
 
@@ -640,7 +694,7 @@ describe("listarRecoleccion — la ventana de HOY es el dia natural de Costa Ric
     expect(desde.toISOString()).toBe("2026-08-01T06:00:00.000Z");
     expect(hasta.toISOString()).toBe("2026-08-02T06:00:00.000Z");
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.recolectadasHoy.map((o) => o.ordenId)).toEqual(["recien"]);
+    expect(r.recolectadasHoy.map((o) => o.id)).toEqual(["recien"]);
   });
 
   it("las 19:00 hora CR pertenecen al dia que el mensajero llama HOY (no al siguiente)", async () => {
@@ -666,7 +720,12 @@ describe("listarRecoleccion — la ventana de HOY es el dia natural de Costa Ric
         recolectarEnTienda: vi.fn(),
         findMensajerosBloqueados: vi.fn(),
       },
-      { findMisAsignaciones: vi.fn().mockResolvedValue([]) },
+      {
+        findMisAsignaciones: vi.fn().mockResolvedValue([]),
+        findMisAsignacionesByIds: vi.fn(async (_m: string, ids: string[]) =>
+          ids.map((id) => asignacionRow({ id })),
+        ),
+      },
       repoHistorial,
     );
 
@@ -723,8 +782,8 @@ describe("listarRecoleccion — tope de presentacion (R31)", () => {
     expect(r.recolectadasHoyRecortada).toBe(true);
     // Las que sobreviven son las primeras de la lista, que viene `createdAt desc`: las mas
     // recientes. La #101 (la mas antigua del dia) es la que se cae.
-    expect(r.recolectadasHoy[0]!.ordenId).toBe("o0");
-    expect(r.recolectadasHoy.at(-1)!.ordenId).toBe("o99");
+    expect(r.recolectadasHoy[0]!.id).toBe("o0");
+    expect(r.recolectadasHoy.at(-1)!.id).toBe("o99");
   });
 
   it("por debajo del tope no marca recorte", async () => {

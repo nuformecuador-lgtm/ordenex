@@ -150,6 +150,14 @@ export interface IGestionOrdenRepository {
   findMisAsignaciones(mensajeroId: string, estados: string[]): Promise<MiAsignacionRow[]>;
 
   /**
+   * 2026-08-11: las MISMAS filas, resueltas por ID en vez de por estado, con las MISMAS dos
+   * guardias en el WHERE (propiedad + no borradas). La consume «Recolectadas hoy», que sale del
+   * historial —solo tiene ids— y desde que pinta la card compartida necesita el resto de los
+   * datos de la orden. Vacio si `ids` esta vacio.
+   */
+  findMisAsignacionesByIds(mensajeroId: string, ids: string[]): Promise<MiAsignacionRow[]>;
+
+  /**
    * Feature 61: # de ordenes ENTREGADAS del mensajero (`mensajero_asignado_id =
    * mensajeroId`, estado `entregada`, no borradas). Conteo puro para el KPI del
    * portal; no trae filas.

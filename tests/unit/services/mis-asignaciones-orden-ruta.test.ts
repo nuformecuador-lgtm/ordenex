@@ -75,6 +75,7 @@ function build(rows: MiAsignacionRow[], rutaPrevia: RutaOptimizadaDTO | null) {
   const repo = {
     getOrdenEnGestion: vi.fn(async () => null),
     findMisAsignaciones: vi.fn(async () => rows),
+    findMisAsignacionesByIds: vi.fn(async () => []),
     contarEntregadas: vi.fn(async () => 7),
     sumMontoCobrarEntregadas: vi.fn(async () => 500),
   } as unknown as IGestionOrdenRepository;
