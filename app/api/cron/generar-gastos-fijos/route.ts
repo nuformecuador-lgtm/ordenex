@@ -11,6 +11,7 @@ import type { IGeneracionGastosFijosService } from "@/lib/interfaces/services/IG
 import { GeneracionGastosFijosService } from "@/lib/services/GeneracionGastosFijosService";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { GastoFijoPlantillaRepository } from "@/lib/repositories/GastoFijoPlantillaRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { loadCronConfig } from "@/lib/config/cron";
 
@@ -29,6 +30,9 @@ function buildService(): IGeneracionGastosFijosService {
     new GastoFijoPlantillaRepository(prisma),
     new WalletMovimientoRepository(prisma),
     prisma,
+    // Feature 179 (R12): el puerto de invalidacion de la cache financiera. Este cron corre
+    // DENTRO de un request (route handler), asi que invalida directo y no encola nada.
+    crearAnaliticaCacheDeNext(),
   );
 }
 

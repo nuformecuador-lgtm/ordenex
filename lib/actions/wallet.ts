@@ -2,6 +2,7 @@
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { WalletService } from "@/lib/services/WalletService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -64,7 +65,7 @@ function toWalletActionError(
 function buildService(): IWalletService {
   const prisma = getPrismaClient();
   const repo = new WalletMovimientoRepository(prisma);
-  return new WalletService(repo, prisma);
+  return new WalletService(repo, prisma, crearAnaliticaCacheDeNext());
 }
 
 export interface WalletDeps {

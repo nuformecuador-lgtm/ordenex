@@ -42,6 +42,9 @@ import {
 import { esColaSolicitado } from "@/lib/utils/colas-cierre";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
+import { invalidarAnaliticaFinanciera } from "@/lib/analytics/invalidacion-financiera";
+import { cacheNula } from "@/lib/cache/cache-nula";
+import type { IAnaliticaCache } from "@/lib/interfaces/external/IAnaliticaCache";
 
 // Feature 158 (T1.28/T1.29, camino del ADMIN) — logica de negocio del incidente reportado por un
 // admin. Espejo de forma de `CierresAdminService` (38), que es la aplicacion original del patron
@@ -109,6 +112,15 @@ export class IncidenteAdminService implements IIncidenteAdminService {
     private readonly historialRepo: HistorialRepo,
     private readonly storage: IFileStorage,
     private readonly signedUrls: ISignedUrlProvider,
+    /**
+     * Feature 179 (T3.5, R13) - el puerto de la cache de analitica.
+     *
+     * **Se engancha AQUI y no en `IncidenteAdminRepository`**, donde esta la escritura
+     * (`:327`), por dos razones a la vez: aquella escritura vive DENTRO de su `$transaction`
+     * -invalidar ahi seria antes del commit (R8)- y un repositorio no debe conocer un puerto de
+     * infraestructura de cache (acceso a datos y nada mas).
+     */
+    private readonly cache: IAnaliticaCache = cacheNula(),
   ) {}
 
   /**
@@ -450,7 +462,14 @@ export class IncidenteAdminService implements IIncidenteAdminService {
       monto,
       motivoRechazo: null,
     });
-    if (res === "updated") return { status: "ok", incidenteId, estado: "aprobado" };
+    if (res === "updated") {
+      // R13/R8 - la tx del repositorio ya confirmo: escribio el monto y emitio el egreso de
+      // indemnizacion. Solo esta rama invalida: un `conflict` (reintento sobre algo ya
+      // resuelto) y un `no_encontrada` no movieron un centimo, y el RECHAZO tampoco emite
+      // movimiento ninguno (`rechazar` no pasa por aqui).
+      await invalidarAnaliticaFinanciera(this.cache, "ledger_indemnizacion");
+      return { status: "ok", incidenteId, estado: "aprobado" };
+    }
     if (res === "conflict") return { status: "conflict", motivo: MSG_INCIDENTE_YA_RESUELTO }; // R53
     return { status: "no_encontrada" };
   }

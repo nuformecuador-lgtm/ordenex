@@ -3,6 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierreBodegaRepository } from "@/lib/repositories/CierreBodegaRepository";
 import { CierresBodegaAdminRepository } from "@/lib/repositories/CierresBodegaAdminRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { CierreBodegaService } from "@/lib/services/CierreBodegaService";
 import { CierresBodegaAdminService } from "@/lib/services/CierresBodegaAdminService";
@@ -79,6 +80,9 @@ function buildCierresBodegaAdminService(): ICierresBodegaAdminService {
     new CierresBodegaAdminRepository(prisma),
     // Evidencias: mismo bucket privado de gestion_orden (feature 36).
     new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET),
+    // Feature 179 (R14/R15, R12): el puerto de invalidacion de la cache financiera. Ni una
+    // linea de logica: el composition root es el UNICO sitio que conoce el adaptador de Next.
+    crearAnaliticaCacheDeNext(),
   );
 }
 

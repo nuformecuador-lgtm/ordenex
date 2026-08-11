@@ -38,6 +38,9 @@ import {
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
+import { invalidarAnaliticaFinanciera } from "@/lib/analytics/invalidacion-financiera";
+import { cacheNula } from "@/lib/cache/cache-nula";
+import type { IAnaliticaCache } from "@/lib/interfaces/external/IAnaliticaCache";
 
 // Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
 // adminSatelite (su bodega). Cualquier otro -> forbidden.
@@ -105,6 +108,19 @@ export class CierresAdminService implements ICierresAdminService {
     // fuera opcional, olvidar cablearla dejaria todos los pendientes en silencio a `null` —una
     // deuda invisible— en vez de romper el build.
     private readonly liquidacionRepo: LiquidacionLecturaRepo,
+    /**
+     * Feature 179 (T3.6, R14) - el puerto de la cache de analitica.
+     *
+     * `aprobarCierre` es la operacion que mas dinero mueve de todo el sistema: su
+     * `resolverCierre` emite, en una sola transaccion, el ledger de la caja (42), el de la
+     * tienda (43), el del mensajero (44) y el egreso de indemnizacion (158). **Toca los tres
+     * ledgers y seis de las diez metricas financieras** - que es, ademas, el dato que sostiene
+     * D1: invalidar por dominio en vez de mantener a mano un mapa ledger->metrica.
+     *
+     * Se engancha en el SERVICIO y no en `CierresAdminRepository` (`:665-725`, las seis
+     * escrituras) porque aquellas viven dentro de su `$transaction` (R8).
+     */
+    private readonly cache: IAnaliticaCache = cacheNula(),
   ) {}
 
   // R1/R2/R3: resuelve el alcance server-side por rol+zona. Acceso total (maestro/admin) ve
@@ -494,6 +510,11 @@ export class CierresAdminService implements ICierresAdminService {
       indemnizaciones,
     });
     if (res === "updated") {
+      // R14/R8 - la transaccion de la aprobacion ya confirmo. Va aqui, en la MISMA rama en la
+      // que la 172 deriva el pendiente y por el mismo motivo escrito abajo: despues del commit,
+      // nunca dentro. Un `conflict` o un `no_encontrada` no escribieron nada.
+      await invalidarAnaliticaFinanciera(this.cache, "ledger_cierre_dia");
+
       // Feature 172 (T C.2, §8/R16): el pendiente se deriva DESPUES de que la aprobacion haya
       // confirmado, nunca dentro de su transaccion. Un fallo aqui no puede revertir la
       // aprobacion —que es justo lo que el humano descarto (decision 3, alternativa A)—.

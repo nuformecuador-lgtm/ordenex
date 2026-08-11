@@ -2,6 +2,7 @@
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { WalletEgresoService } from "@/lib/services/WalletEgresoService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -64,7 +65,7 @@ function toEgresoActionError(
 function buildService(): IWalletEgresoService {
   const prisma = getPrismaClient();
   const repo = new WalletMovimientoRepository(prisma);
-  return new WalletEgresoService(repo, prisma);
+  return new WalletEgresoService(repo, prisma, crearAnaliticaCacheDeNext());
 }
 
 export interface WalletEgresoDeps {

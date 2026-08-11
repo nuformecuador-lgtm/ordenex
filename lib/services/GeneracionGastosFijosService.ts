@@ -10,6 +10,9 @@ import type {
 } from "@/lib/interfaces/services/IGeneracionGastosFijosService";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { aplicaHoy, periodoDe } from "@/lib/utils/periodicidad";
+import { invalidarAnaliticaFinanciera } from "@/lib/analytics/invalidacion-financiera";
+import { cacheNula } from "@/lib/cache/cache-nula";
+import type { IAnaliticaCache } from "@/lib/interfaces/external/IAnaliticaCache";
 
 /**
  * Feature 45 — logica del cron de GASTOS FIJOS (patron LiberacionReprogramadaService/
@@ -37,6 +40,16 @@ export class GeneracionGastosFijosService implements IGeneracionGastosFijosServi
     private readonly movimientoRepo: IWalletMovimientoRepository,
     // Cliente de escritura (PrismaClient completo); el repo acepta cualquier WalletTxClient.
     private readonly writeClient: WalletTxClient,
+    /**
+     * Feature 179 (T3.4, R12) - el puerto de la cache de analitica.
+     *
+     * El cron de gastos fijos es un ROUTE HANDLER (`app/api/cron/generar-gastos-fijos/route.ts`),
+     * o sea que corre DENTRO de un request: `revalidateTag` funciona ahi y no hace falta
+     * encolar nada. (La preocupacion «el cron escribe fuera de una peticion» que traia la ficha
+     * no aplica a este; el que si escribe fuera de todo request es el backfill de tesoreria, y
+     * ese encola un job - `requirements.md §0.b`.)
+     */
+    private readonly cache: IAnaliticaCache = cacheNula(),
   ) {}
 
   async ejecutarGeneracion(now: Date): Promise<GeneracionGastosFijosResult> {
@@ -71,6 +84,14 @@ export class GeneracionGastosFijosService implements IGeneracionGastosFijosServi
     // idempotente por (plantilla, periodo) sin TOCTOU. En una reejecucion del mismo dia inserta
     // 0 filas (el balance no cambia).
     const egresosGenerados = await this.movimientoRepo.crearMovimientos(this.writeClient, movs);
+
+    // R12/R8 - el `createMany` ya confirmo. **Solo si genero algo**: una reejecucion del mismo
+    // dia inserta 0 filas y el balance no cambia, asi que vaciar la cache financiera cada
+    // madrugada sin haber movido dinero seria coste sin motivo. Esa condicion no es un detalle
+    // de eficiencia: tiene su propio caso en `cache-financiera-escritor-gastos-fijos.test.ts`.
+    if (egresosGenerados > 0) {
+      await invalidarAnaliticaFinanciera(this.cache, "ledger_gastos_fijos");
+    }
 
     // R29: resumen SIN PII (solo conteos + fecha).
     return {

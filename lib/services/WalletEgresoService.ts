@@ -17,6 +17,9 @@ import {
   type ReversarEgresoInput,
 } from "@/lib/types/wallet";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { invalidarAnaliticaFinanciera } from "@/lib/analytics/invalidacion-financiera";
+import { cacheNula } from "@/lib/cache/cache-nula";
+import type { IAnaliticaCache } from "@/lib/interfaces/external/IAnaliticaCache";
 
 // Roles autorizados (R17): acceso total (maestro/admin, dueños de la caja central), espejo de
 // WalletService.
@@ -34,6 +37,17 @@ export class WalletEgresoService implements IWalletEgresoService {
     // Cliente de escritura para el egreso/reverso (fuera de una tx de cierre): el repo
     // acepta cualquier WalletTxClient; aqui inyectamos el PrismaClient completo.
     private readonly writeClient: WalletTxClient,
+    /**
+     * Feature 179 (T3.1, R9) — el puerto de la cache de analitica. **Un egreso administrativo
+     * mueve `egresos`, `dinero_en_caja` y `ganancia_ordenex`**: sin invalidar, el tablero
+     * financiero sirve la cifra anterior hasta que expire el TTL (una hora) y nada falla.
+     *
+     * Default `cacheNula()` —patron de `analitica-rollup-diario-handler.ts:25`— para no romper
+     * las suites y los composition roots que no invalidan. Que el default no degrade en
+     * silencio en produccion NO lo cubre el tipo: lo cubre el test de cableado del composition
+     * root en `cache-financiera-escritor-egreso.test.ts`.
+     */
+    private readonly cache: IAnaliticaCache = cacheNula(),
   ) {}
 
   async registrarEgreso(
@@ -59,6 +73,12 @@ export class WalletEgresoService implements IWalletEgresoService {
         registradoPor: actor.usuarioId,
       },
     ]);
+
+    // R9/R8 — el INSERT ya confirmo (`crearMovimientos` es su propia transaccion implicita
+    // sobre el cliente de escritura), asi que la invalidacion va AQUI y no antes: invalidar
+    // dentro de la escritura abriria una ventana en la que una lectura concurrente repuebla la
+    // cache con el estado ANTERIOR, y esa entrada vive el TTL entero.
+    await invalidarAnaliticaFinanciera(this.cache, "ledger_egreso_admin");
 
     // Relee el egreso recien creado (el manual no se deduplica, siempre se inserta). Se
     // relee el mas reciente de esa categoria para exponer id/fecha reales (patron
@@ -102,6 +122,12 @@ export class WalletEgresoService implements IWalletEgresoService {
       },
     ]);
     if (count === 0) return { status: "already_reversed" }; // R15
+
+    // R9 — **el reverso mueve dinero igual que el egreso** y por eso tiene su propia
+    // invalidacion, no la del alta. Va DESPUES del `count === 0`: un segundo intento no
+    // escribio nada, y vaciar la cache financiera por una operacion que fue no-op es coste sin
+    // motivo (mismo criterio que R12 con la corrida de cero egresos).
+    await invalidarAnaliticaFinanciera(this.cache, "ledger_egreso_admin");
     return { status: "ok" };
   }
 

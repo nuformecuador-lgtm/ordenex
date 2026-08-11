@@ -5,6 +5,7 @@ import { IncidenteAdminRepository } from "@/lib/repositories/IncidenteAdminRepos
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { IncidenteAdminService } from "@/lib/services/IncidenteAdminService";
 import { WalletIndemnizacionIncidenteFeedService } from "@/lib/services/WalletIndemnizacionIncidenteFeedService";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
@@ -91,6 +92,9 @@ function buildService(): IIncidenteAdminService {
     // path, no por el bucket.
     new SupabaseFileStorage(undefined, gestionConfig.EVIDENCIA_BUCKET),
     new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET),
+    // Feature 179 (T3.x, R9-R15): el puerto de invalidacion de la cache financiera. Ni una
+    // linea de logica: el composition root es el UNICO sitio que conoce el adaptador de Next.
+    crearAnaliticaCacheDeNext(),
   );
 }
 

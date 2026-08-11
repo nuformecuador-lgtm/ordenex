@@ -23,6 +23,9 @@ import type {
 } from "@/lib/interfaces/services/ICierresBodegaAdminService";
 import { esColaSolicitado } from "@/lib/utils/colas-cierre";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
+import { invalidarAnaliticaFinanciera } from "@/lib/analytics/invalidacion-financiera";
+import { cacheNula } from "@/lib/cache/cache-nula";
+import type { IAnaliticaCache } from "@/lib/interfaces/external/IAnaliticaCache";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
   gananciaOrdenex,
@@ -47,6 +50,15 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
   constructor(
     private readonly repo: ICierresBodegaAdminRepository,
     private readonly signedUrls: ISignedUrlProvider,
+    /**
+     * Feature 179 (T3.7, R15) - el puerto de la cache de analitica.
+     *
+     * **Es un servicio DISTINTO del de los cierres de dia**, aunque las dos aprobaciones
+     * escriban por el mismo repositorio de ledger. Por eso R14 y R15 son dos requisitos, dos
+     * origenes y dos tests: un solo test cubriria uno y dejaria el otro suelto, y «es igual que
+     * el de dia» es exactamente como se olvida una llamada.
+     */
+    private readonly cache: IAnaliticaCache = cacheNula(),
   ) {}
 
   async listarCierresBodegaAdmin(
@@ -299,7 +311,11 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
       resueltoPor: actor.usuarioId, // R20
       motivoRechazo: null,
     });
-    if (res === "updated") return { status: "ok", cierreBodegaId, estado: "aprobado" }; // R16
+    if (res === "updated") {
+      // R15/R8 - la transaccion de `resolverCierreBodega` ya confirmo.
+      await invalidarAnaliticaFinanciera(this.cache, "ledger_cierre_bodega");
+      return { status: "ok", cierreBodegaId, estado: "aprobado" }; // R16
+    }
     if (res === "conflict") return { status: "conflict" }; // R18
     return { status: "no_encontrada" }; // fuera_de_alcance (R19)
   }

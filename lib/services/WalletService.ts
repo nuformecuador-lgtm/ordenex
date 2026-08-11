@@ -21,6 +21,9 @@ import type {
 import { descargaConfig } from "@/lib/config/descarga";
 import { derivarCaja } from "@/lib/utils/caja-tesoreria";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { invalidarAnaliticaFinanciera } from "@/lib/analytics/invalidacion-financiera";
+import { cacheNula } from "@/lib/cache/cache-nula";
+import type { IAnaliticaCache } from "@/lib/interfaces/external/IAnaliticaCache";
 
 // Roles autorizados (R19/R65): acceso total (maestro/admin, dueños de la caja central).
 // Cualquier otro rol -> forbidden SIN exponer movimientos ni cifras.
@@ -49,6 +52,18 @@ export class WalletService implements IWalletService {
     // Cliente de escritura para el movimiento manual (fuera de una tx de cierre): el
     // repo acepta cualquier WalletTxClient; aqui inyectamos el PrismaClient completo.
     private readonly writeClient: WalletTxClient,
+    /**
+     * Feature 179 (T3.2, R10) — el puerto de la cache de analitica.
+     *
+     * **ESTE ESCRITOR NO ESTABA EN LA LISTA DE LA FICHA** (`requirements.md §0.a`), y es el
+     * hallazgo que justifica que el mecanismo de vigilancia de la 179 sea un CENSO DEL ARBOL
+     * (R17) y no una lista de rutas: un ingreso o egreso que un maestro mete a mano entra en
+     * `egresos`, `dinero_en_caja` y `ganancia_ordenex`. Servirlo rancio en silencio es, palabra
+     * por palabra, el modo de fallo que D2 de la 128 rechazo.
+     *
+     * Default `cacheNula()` para no romper las suites que no invalidan.
+     */
+    private readonly cache: IAnaliticaCache = cacheNula(),
   ) {}
 
   /**
@@ -185,6 +200,11 @@ export class WalletService implements IWalletService {
         registradoPor: actor.usuarioId,
       },
     ]);
+
+    // R10/R8 — el INSERT ya confirmo (transaccion implicita del cliente de escritura). La
+    // invalidacion va DESPUES, nunca dentro: entre una invalidacion prematura y el commit cabe
+    // una lectura que repuebla la cache con el estado ANTERIOR y se queda ahi el TTL entero.
+    await invalidarAnaliticaFinanciera(this.cache, "ledger_movimiento_manual");
 
     // Devuelve el movimiento recien creado (el manual no se deduplica, siempre se inserta).
     // Se relee el mas reciente del actor para exponer id/fecha reales.

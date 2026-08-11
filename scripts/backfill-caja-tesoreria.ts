@@ -2,14 +2,20 @@ import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import type {
   ICajaBackfillTesoreriaService,
   InformeBackfillCaja,
   ModoBackfillCaja,
   OrigenBackfillCaja,
 } from "@/lib/interfaces/services/ICajaBackfillTesoreriaService";
+import { JobRepository } from "@/lib/repositories/JobRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { CajaBackfillTesoreriaService } from "@/lib/services/CajaBackfillTesoreriaService";
+import {
+  dedupeKeyInvalidacionSinRango,
+  payloadInvalidacionDeDominio,
+} from "@/lib/services/jobs/analitica-invalidacion-encolado";
 import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 
@@ -50,6 +56,16 @@ export interface EntornoBackfillCaja {
   readonly errores: (linea: string) => void;
   /** Perezoso A PROPOSITO: mientras no se llame, no se abre ninguna conexion. */
   readonly crearServicio: () => ICajaBackfillTesoreriaService;
+  /**
+   * Feature 179 (T3.9, D2 — R26) — LA COLA DE JOBS, para encolar la invalidacion de la cache
+   * financiera cuando la corrida haya ESCRITO.
+   *
+   * Opcional y perezosa por el mismo motivo que el servicio: mientras no se llame no se abre
+   * ninguna conexion, y una corrida en seco no necesita cola. Entra por las deps que el script
+   * ya inyecta y **no como import duro de `next/cache`**: `revalidateTag` LANZA fuera de un
+   * request (`revalidate.js:104-107`) y esto es un proceso `tsx` (R21).
+   */
+  readonly crearJobs?: () => IJobRepository;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -171,10 +187,78 @@ export async function ejecutarBackfillCajaCli(entorno: EntornoBackfillCaja): Pro
   const informe = await entorno.crearServicio().ejecutar(modo);
   for (const linea of textoDelInforme(informe)) entorno.salida(linea);
 
+  // Feature 179 (R26): la invalidacion se encola SOLO si esta corrida metio filas de dinero.
+  await encolarInvalidacionSiInserto(entorno, informe);
+
   // R44: mientras quede uno, `--comprobar` no puede salir en 0. El codigo distinto de 0 es lo
   // que hace que un olvido se vea en el entorno, y no solo en la pantalla de quien lo corrio.
   if (modo === "comprobar" && !informe.alDia) return CODIGO_PENDIENTES;
   return 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Feature 179 (T3.9, D2 — R26) — el OCTAVO escritor de ledger                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Encola UN job `analitica_invalidacion_cache` con `{ dominio: "financiera" }` si la corrida
+ * **inserto** al menos una fila; ninguno si no.
+ *
+ * **Por que un job y no `revalidateTag`.** Este script es un proceso `tsx`, fuera de todo
+ * request de Next, y `revalidateTag` LANZA ahi (`Invariant: static generation store missing`,
+ * `node_modules/next/dist/server/web/spec-extension/revalidate.js:104-107`). El fallo aparecería
+ * en la corrida de mantenimiento y no en el gate, que es donde peor se descubre. El camino esta
+ * calcado del que la 128 ya tiene probado para su propio backfill (`design.md §7.1`): el
+ * drenador corre `* * * * *`, asi que la invalidacion llega en menos de un minuto, dentro de un
+ * request, con reintentos, backoff y dead-letter gratis.
+ *
+ * **El criterio es `insertadas > 0`, no el modo.** `insertadas` es 0 fuera de `aplicar` por
+ * contrato (R40/R42), asi que una corrida en seco no encola; y una corrida en `aplicar` que no
+ * encontro nada pendiente tampoco: vaciar la cache financiera sin haber movido un centimo es
+ * coste sin motivo.
+ *
+ * **Un fallo del encolado NO tumba la corrida** —el dinero ya se escribio y el codigo de salida
+ * tiene que seguir hablando del backfill— pero se AVISA ruidosamente: una invalidacion que no
+ * llega deja el tablero financiero sirviendo cifras viejas hasta que expire el TTL, y ese es
+ * justo el fallo que no se ve. Mismo criterio que `scripts/backfill-analitica.ts` (128).
+ *
+ * El instante de la clave sale del INFORME —el momento real de la corrida, ya fechado por el
+ * servicio— y no de un segundo reloj: dos relojes en el mismo script son dos ideas de «cuando».
+ */
+async function encolarInvalidacionSiInserto(
+  entorno: EntornoBackfillCaja,
+  informe: InformeBackfillCaja,
+): Promise<void> {
+
+
+  if (informe.insertadas === 0) return;
+  if (entorno.crearJobs === undefined) {
+    entorno.errores(
+      "AVISO: la corrida inserto filas de caja pero no hay cola de jobs configurada, asi que NO " +
+        "se ha encolado la invalidacion de la cache financiera. El tablero puede seguir " +
+        "sirviendo las cifras ANTERIORES al registro retroactivo hasta que expire el TTL.",
+    );
+    return;
+  }
+
+  const instante = new Date(informe.instante);
+  try {
+    await entorno.crearJobs().enqueue(
+      "analitica_invalidacion_cache",
+      payloadInvalidacionDeDominio("financiera"),
+      { dedupeKey: dedupeKeyInvalidacionSinRango("financiera", instante) },
+    );
+    entorno.salida(
+      "Invalidacion de la cache FINANCIERA encolada: el drenador de jobs (cron cada minuto) la " +
+        "aplicara. Hasta entonces el tablero puede servir las cifras anteriores.",
+    );
+  } catch (error) {
+    entorno.errores(
+      "AVISO: no se pudo encolar la invalidacion de la cache financiera " +
+        `(${error instanceof Error ? error.name : "error"}). Las filas de caja SI se ` +
+        "escribieron; lo que puede quedar viejo es lo que sirve el tablero hasta el TTL.",
+    );
+  }
 }
 
 /**
@@ -268,6 +352,8 @@ async function main(): Promise<void> {
           cajaRepo: new WalletMovimientoRepository(prisma),
           ahora: () => new Date(),
         }),
+      // Feature 179 (R26): la cola real. Perezosa: si la corrida no inserta, no se toca.
+      crearJobs: () => new JobRepository(prisma),
     });
     process.exitCode = codigo;
   } finally {

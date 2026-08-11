@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
@@ -88,6 +89,10 @@ function buildService(): ILiquidacionService {
     new PagoMensajeroMovimientoRepository(prisma),
     (fn) => prisma.$transaction((tx) => fn(tx)),
     new CajaPagoTiendaFeedService(new WalletMovimientoRepository(prisma)),
+    () => new Date(),
+    // Feature 179 (T3.x, R9-R15): el puerto de invalidacion de la cache financiera. Ni una
+    // linea de logica: el composition root es el UNICO sitio que conoce el adaptador de Next.
+    crearAnaliticaCacheDeNext(),
   );
 }
 

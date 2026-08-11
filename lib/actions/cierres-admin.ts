@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
@@ -106,6 +107,9 @@ function buildService(): ICierresAdminService {
     // necesita (`Pick`), asi que esta pantalla no puede registrar ni anular un pago: aprobar y
     // pagar son dos escrituras distintas (design §8).
     new LiquidacionPagoRepository(prisma),
+    // Feature 179 (R14/R15, R12): el puerto de invalidacion de la cache financiera. Ni una
+    // linea de logica: el composition root es el UNICO sitio que conoce el adaptador de Next.
+    crearAnaliticaCacheDeNext(),
   );
 }
 
