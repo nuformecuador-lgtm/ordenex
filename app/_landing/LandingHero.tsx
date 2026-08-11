@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import { Enfasis } from "./primitivas";
 
 /** Las tres cifras bajo el titular del hero (`.lp-hero-stats`). */
@@ -8,15 +10,37 @@ const CIFRAS = [
 ] as const;
 
 /**
- * Hero de la landing (`.lp-hero`): rótulo, titular y las tres cifras.
+ * Hero de la landing (`.lp-hero`): rótulo, titular y las tres cifras, sobre la
+ * foto de bodega que el sitio pinta de fondo bajo un degradado navy.
  *
- * El sitio pinta de fondo una foto de bodega bajo un degradado navy; aquí, sin
- * imágenes, queda el degradado navy con el halo naranja radial que ya usaban las
- * páginas públicas de la app.
+ * La foto es DECORATIVA (`alt=""`): todo lo que comunica ya está en el titular y
+ * en las cifras, así que anunciarla en un lector de pantalla solo añadiría ruido.
+ * El `bg-navy-deep` de la sección es el color de respaldo mientras carga o si
+ * nunca llega.
+ *
+ * `priority` porque es el LCP de la página: diferirla dejaría el hero en navy
+ * sólido durante la primera pintada.
  */
 export function LandingHero() {
   return (
     <section className="relative overflow-hidden bg-navy-deep py-7 lg:py-24">
+      <Image
+        src="/landing/hero-bodega.jpg"
+        alt=""
+        fill
+        priority
+        sizes="100vw"
+        className="pointer-events-none object-cover"
+      />
+      {/*
+        Dos capas sobre la foto, en este orden: el degradado navy que la apaga lo
+        suficiente para que el texto blanco conserve contraste AA, y encima el halo
+        naranja radial que ya usaban las páginas públicas de la app.
+      */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-navy-deep via-navy-deep/90 to-navy-deep/70"
+      />
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(242,100,25,0.16),transparent_55%)]"

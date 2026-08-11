@@ -43,7 +43,14 @@ const AMBITO = ["lib/analytics", "lib/cache", "lib/services", "lib/repositories"
  * feature que toca `next/cache`, y ninguna otra capa puede importarlo. Un tercer archivo
  * tiene que volver a pasar por aqui y justificarse.
  */
-const ADAPTADORES = ["lib/cache/next-analitica-cache.ts", "lib/cache/next-tablero-dia-cache.ts"];
+const ADAPTADORES = [
+  "lib/cache/next-analitica-cache.ts",
+  "lib/cache/next-tablero-dia-cache.ts",
+  // Feature 198 — la cache de 6 h de los conteos publicos. Se registra AQUI, a mano y con su
+  // motivo, que es exactamente lo que esta guardia busca: que anadir un tercer archivo con
+  // acceso a `next/cache` sea una decision visible en el diff, no algo que se cuela.
+  "lib/cache/next-conteos-publicos-cache.ts",
+];
 
 function archivos(dir: string): string[] {
   const abs = path.join(REPO_ROOT, dir);

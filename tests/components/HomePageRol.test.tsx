@@ -82,21 +82,23 @@ afterEach(() => {
 });
 
 describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
-  it("R1: rol adminTienda con sesión válida renderiza el dashboard del admin de tienda", async () => {
+  // ⛔ R1 DEROGADA por pedido humano del 2026-08-10. Decía que el `adminTienda` renderizaba
+  // aquí su «Panel de tienda»; ahora esa home NO EXISTE para él y entra directo al primer
+  // ítem de su menú, igual que mensajero y adminSatelite (R3). El caso no se borra: se
+  // INVIERTE, que es lo que deja constancia de que el cambio fue deliberado y no una
+  // regresión que se coló sin que nadie la mirara.
+  it("R1 (derogada): el adminTienda ya NO ve el panel de tienda aquí — redirige antes de pintar", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-    const element = await Home();
-    renderHome(element);
 
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Panel de tienda" }),
-    ).toBeInTheDocument();
-    // No es el placeholder genérico.
-    expect(screen.queryByText("Bienvenido")).toBeNull();
+    await expect(Home()).rejects.toThrow(/NEXT_REDIRECT/);
   });
 
   it("R5: el rol se resuelve server-side invocando resolveActorFromSession (sin hook de cliente)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-    await Home();
+
+    // Sigue afirmando lo MISMO que antes —que el rol se resuelve en el servidor— pero ahora
+    // el desenlace es un redirect, así que la llamada se comprueba tras capturar el throw.
+    await expect(Home()).rejects.toThrow(/NEXT_REDIRECT/);
 
     expect(resolveActorMock).toHaveBeenCalledTimes(1);
   });

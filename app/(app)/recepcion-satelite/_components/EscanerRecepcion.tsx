@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 
-import { EscanerDesplegable } from "@/components/shared/EscanerDesplegable";
+import { EscanerModal } from "@/components/shared/EscanerModal";
 import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
 import { recibirPorQr } from "@/lib/actions/recepcion-satelite";
@@ -146,10 +146,11 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
   );
 
   return (
-    /* 2026-07-31 (decisión del humano): la tarjeta vive PLEGADA tras su disparador, como en
-       el resto de la app. Sin él, `QrScanner` quedaba montado todo el tiempo que la bodega
-       tuviera la pantalla abierta, con la cámara encendida detrás del listado. */
-    <EscanerDesplegable label="Recibir paquete" labelAbierto="Ocultar escáner">
+    /* 2026-07-31 (decisión del humano): la tarjeta vive TRAS su disparador, como en el resto
+       de la app — desde el 2026-08-10, en modal. Sin él, `QrScanner` quedaba montado todo el
+       tiempo que la bodega tuviera la pantalla abierta, con la cámara encendida detrás del
+       listado. El label es el que `EscanerModal` trae por defecto. */
+    <EscanerModal>
       <EscanerGuiaCard
         ariaLabel="Recibir por número de guía o escaneo"
         titulo="Recibir paquete"
@@ -167,6 +168,6 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
           )
         }
       />
-    </EscanerDesplegable>
+    </EscanerModal>
   );
 }

@@ -125,13 +125,17 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
     ).toBeInTheDocument();
   });
 
-  it("R2: rol adminTienda conserva el Panel de tienda (feature 26 intacta)", async () => {
+  // Pedido humano del 2026-08-10: el `adminTienda` ya NO tiene panel propio en `/dashboard`
+  // (la R1 de la feature 26 queda derogada; ver `HomePageRol.test.tsx`). Lo que ESTE archivo
+  // afirma —que es lo de la feature 23— no cambia: el adminTienda no se cuela en el panel
+  // MAESTRO ni dispara su consulta de postulaciones. Solo cambia el desenlace: antes pintaba
+  // su propio panel, ahora redirige. Se CONSERVA la aserción de que `listarPendientes` no se
+  // llama, que es la que de verdad protege contra la fuga entre ramas.
+  it("R2: el adminTienda no cae en el panel maestro ni dispara su consulta (feature 23 intacta)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
-    renderHome(await Home());
 
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Panel de tienda" }),
-    ).toBeInTheDocument();
+    await expect(Home()).rejects.toThrow(/NEXT_REDIRECT/);
+
     expect(screen.queryByText("Panel maestro")).toBeNull();
     expect(listarPendientesMock).not.toHaveBeenCalled();
   });

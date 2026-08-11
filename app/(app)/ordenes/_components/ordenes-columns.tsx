@@ -83,9 +83,20 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     id: "numGuia",
     value: "Nº Guía",
     // La guía se asigna en "Generar guía", no al crear la orden: sin guía → "Pendiente".
-    render: (row) => (row.numGuia === null ? "Pendiente" : row.numGuia),
+    // El valor va resaltado: es el identificador con el que se rastrea el paquete y
+    // el ancla visual de la fila cuando la tabla desborda a scroll horizontal.
+    render: (row) => (
+      <span className="font-semibold">
+        {row.numGuia === null ? "Pendiente" : row.numGuia}
+      </span>
+    ),
   },
-  { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
+  {
+    id: "numRemision",
+    value: "Nº Remisión",
+    render: "numRemision",
+    minWidth: "120px",
+  },
   {
     id: "estatus",
     value: "Estado",
@@ -104,12 +115,13 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   // ids, encabezados y orden relativo de las preexistentes (R21).
   columnaIntentos<OrdenListItemDTO>(),
   { id: "destinatario", value: "Destinatario" },
-  { id: "producto", value: "Producto", render: "producto" },
+  { id: "producto", value: "Producto", render: "producto", minWidth: "300px" },
   {
     id: "direccion",
     value: "Dirección",
     // Escalar opcional de la orden (carga masiva); ausente → SIN_DATO.
     render: (row) => row.direccion ?? SIN_DATO,
+    minWidth: "200px",
   },
   {
     id: "tienda",
@@ -177,6 +189,7 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     id: "fechaCreacion",
     value: "Fecha de creación",
     render: (row) => formatFechaCreacion(row.createdAt),
+    minWidth: "120px",
   },
   {
     id: "tiempo",

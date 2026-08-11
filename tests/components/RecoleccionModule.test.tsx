@@ -307,8 +307,9 @@ describe("RecoleccionModule — las dos vistas apagan lo que no hay (feature 196
 // feature entera y NO se borran.
 //
 // 2026-07-31 — R7 cambia de FORMA, no de fondo (decisión del humano). El escáner pasa de
-// "SIEMPRE MONTADO" a "SIEMPRE ACCESIBLE": vive tras el disparador de `EscanerDesplegable`,
-// plegado de entrada como en el resto de la app, porque montado significaba la cámara
+// "SIEMPRE MONTADO" a "SIEMPRE ACCESIBLE": vive tras el disparador de `EscanerModal` —en
+// modal desde el 2026-08-10—, cerrado de entrada como en el resto de la app, porque montado
+// significaba la cámara
 // encendida todo el rato que el mensajero tuviera la pantalla abierta. Lo que la 167 vino a
 // impedir sigue impedido y se sigue verificando aquí:
 //   · con la lista vacía el ACCESO al escaneo no desaparece (el disparador está ahí);
@@ -362,18 +363,18 @@ describe("RecoleccionModule — el escáner está SIEMPRE accesible (R7/R8)", ()
     expect(escaner()).toBeInTheDocument();
   });
 
-  it("plegado, la CÁMARA no está montada; al cerrar se vuelve a desmontar", async () => {
+  it("cerrado, la CÁMARA no está montada; al cerrar se vuelve a desmontar", async () => {
     const user = userEvent.setup();
     renderModule({ porRecolectar: [makeOrden()] });
 
-    // Lo que apaga la cámara es el DESMONTAJE del panel, no un `hidden`: el doble de
-    // `QrScanner` solo existe en el DOM mientras la tarjeta está desplegada.
+    // Lo que apaga la cámara es el DESMONTAJE del contenido, no un `hidden`: el doble de
+    // `QrScanner` solo existe en el DOM mientras el modal está abierto.
     expect(screen.queryByRole("button", { name: "Simular escaneo" })).toBeNull();
 
     await abrirEscaner(user);
     expect(screen.getByRole("button", { name: "Simular escaneo" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
 
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Simular escaneo" })).toBeNull(),
@@ -590,9 +591,9 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
     await screen.findByText(/recolectada correctamente/i);
 
-    // La guía confirmada la recuerda el MÓDULO, que vive por encima del desplegable: plegar
+    // La guía confirmada la recuerda el MÓDULO, que vive por encima del modal: cerrar
     // apaga la cámara, no el rastro de lo que el mensajero acaba de recolectar.
-    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
     await waitFor(() => expect(escaner()).toBeNull());
     await abrirEscaner(user);
 

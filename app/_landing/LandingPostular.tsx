@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Truck, Users, Warehouse, type LucideIcon } from "lucide-react";
 import {
@@ -12,6 +13,8 @@ interface Tarjeta {
   readonly copy: string;
   readonly cta: string;
   readonly Icono: LucideIcon;
+  /** Foto de cabecera (168px). Decorativa: el título ya dice de qué va la tarjeta. */
+  readonly foto: string;
 }
 
 const TARJETAS: readonly Tarjeta[] = [
@@ -20,26 +23,33 @@ const TARJETAS: readonly Tarjeta[] = [
     copy: "¿Tenés un camión, carro o moto que no estás manejando? Ponelo a trabajar con Ordenex y generá ingresos con nuestra operación.",
     cta: "Postular mi vehículo",
     Icono: Truck,
+    foto: "/landing/logistica.jpg",
   },
   {
     titulo: "Tenés una bodega",
+    // Reusa la foto del hero a propósito: es la única de bodega que hay, y en una
+    // tarjeta titulada «Tenés una bodega» encaja mejor que cualquier alternativa.
+    // Van muy separadas en la página y a tamaños distintos, así que no se leen
+    // como repetición.
     copy: "Si tenés un espacio o bodega disponible, lo podemos sumar a nuestra red logística. Contanos qué tenés.",
     cta: "Postular mi bodega",
     Icono: Warehouse,
+    foto: "/landing/hero-bodega.jpg",
   },
   {
     titulo: "Querés trabajar con nosotros",
     copy: "¿Tenés otra forma de aportar o querés ser parte del equipo Ordenex? Postulate y conversemos.",
     cta: "Quiero postularme",
     Icono: Users,
+    foto: "/landing/mensajera.jpg",
   },
 ];
 
 /**
- * Bloque de reclutamiento (`.lp-postular-section`). Cada tarjeta abre con una
- * foto de 168px; sin imágenes, ese espacio queda como un panel navy con el
- * cuadro naranja del icono en la esquina, que es el remate que la foto llevaba
- * encima. Las tres llamadas van a `/postulacion`, la ruta pública que ya existe.
+ * Bloque de reclutamiento (`.lp-postular-section`). Cada tarjeta abre con su foto
+ * de 168px y el cuadro naranja del icono encima, en la esquina, que es el remate
+ * que la foto lleva en el sitio. Las tres llamadas van a `/postulacion`, la ruta
+ * pública que ya existe.
  */
 export function LandingPostular() {
   return (
@@ -60,7 +70,19 @@ export function LandingPostular() {
               key={tarjeta.titulo}
               className="flex flex-col overflow-hidden rounded-2xl border border-asfalto-2 bg-kraft-card shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-xl"
             >
-              <div className="relative h-[168px] bg-navy-deep">
+              <div className="relative h-[168px] overflow-hidden bg-navy-deep">
+                <Image
+                  src={tarjeta.foto}
+                  alt=""
+                  fill
+                  sizes="(min-width: 1024px) 380px, (min-width: 768px) 50vw, 100vw"
+                  className="object-cover"
+                />
+                {/* Velo navy: sostiene el contraste del cuadro naranja sobre fotos claras. */}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-navy-deep/70 to-transparent"
+                />
                 <span className="absolute bottom-4 left-4 grid size-10 place-items-center rounded-md bg-brand text-white">
                   <tarjeta.Icono className="size-5" aria-hidden="true" />
                 </span>

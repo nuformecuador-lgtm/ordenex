@@ -16,7 +16,12 @@ export interface OrdenesExistentesTablaProps {
  */
 export function OrdenesExistentesTabla({ existentes }: OrdenesExistentesTablaProps) {
   const columns: Column<OrdenExistente>[] = [
-    { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
+    {
+      id: "numRemision",
+      value: "Nº Remisión",
+      render: "numRemision",
+      minWidth: "120px",
+    },
     {
       id: "estatus",
       value: "Estado actual",

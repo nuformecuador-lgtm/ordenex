@@ -72,8 +72,12 @@ const ARBOLES_UI = ["app", "components"] as const;
 // que baja también el nº de exclusiones con `<DataTable>` (6 → 5) y el censo total (33 → 32).
 // El caso es idéntico al de `OrdenesApartado.tsx` del 2026-07-31, con una diferencia que
 // importa: aquélla descargaba y ésta no, así que aquí NO se pierde ninguna descarga.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 30;
-const TOTAL_INSTANCIAS_DATATABLE = 31;
+//
+// Feature 196 (T5.2): 30 → 31 archivos y 31 → 32 instancias. La de más es el ranking
+// CONGELADO (`ranking/historico/_components/RankingHistoricoModule.tsx`), una pantalla nueva
+// que nace `con_descarga`. Censo total: 33 tablas = 32 `<DataTable>` + 1 `<table>` cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 31;
+const TOTAL_INSTANCIAS_DATATABLE = 32;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -271,12 +275,13 @@ describe("guardia de cobertura del censo de tablas", () => {
       }
     }
 
-    // El censo total vigente: 31 instancias + 1 tabla cruda = 32 tablas (feature 172, T H.1,
-    // menos `ZonasModule`, borrada el 2026-08-07 con el árbol de zonas sin montar).
+    // El censo total vigente: 32 instancias + 1 tabla cruda = 33 tablas (feature 172, T H.1,
+    // menos `ZonasModule` —borrada el 2026-08-07 con el árbol de zonas sin montar—, más el
+    // ranking congelado que suma la feature 196).
     const totalCensado =
       CENSO_DATATABLE.reduce((n, e) => n + e.tablas.length, 0) +
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
-    expect(totalCensado).toBe(32);
+    expect(totalCensado).toBe(33);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -319,7 +324,11 @@ describe("guardia de cobertura del censo de tablas", () => {
     // chore «borrar código muerto de UI» (2026-08-07): 7 → 6 fuera de alcance, y las 26
     // dentro de alcance NO se mueven. Esa asimetría es el dato: lo borrado (`ZonasModule`)
     // era una exclusión declarada, no una tabla que descargara — ninguna descarga se pierde.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(26);
+    //
+    // Feature 196 (T5.2): 26 → 27 dentro de alcance y las 6 exclusiones NO se mueven. La de
+    // más es el ranking congelado del histórico, que nace descargando: ninguna decisión de
+    // alcance previa cambia.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(27);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(6);
   });
 

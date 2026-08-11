@@ -24,6 +24,10 @@
     {
       "path": "/api/cron/purga-pdf-cargas",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/snapshot-ranking",
+      "schedule": "0 8 * * *"
     }
   ]
 }

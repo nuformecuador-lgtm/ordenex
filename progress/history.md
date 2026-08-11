@@ -3036,3 +3036,78 @@ fecha respaldada por **alguna** decisión citada», con dos mutaciones que la pr
   publicadas, nunca contra la salida real: si `serieDensa` cambiara de grano, seguirían verdes
   **comparando el espejo consigo mismo**. Es exactamente lo que habría puesto la 180 en rojo el
   05-ago en vez de dejar el defecto salir a producción.
+
+## 2026-08-10 — 182 (analítica: cablear el modo agregado al tablero operativo)
+
+**PR #324 → `dev`.** Reviewer **APROBADO, cero bloqueantes**: 16/16 requisitos con test nombrado
+y vivo (`progress/review_182.md`). Los paneles de **porcentaje** y **segundos** dejan de agregar en
+el cliente y consumen los cubos de `consultarAgregadoOperativo` (feature 176), con la cifra total
+tomada del cubo `periodo`. Cierra el hueco declarado por **R27 de la 131**, que deja de serlo.
+
+- **Llevaba cinco días varada.** La implementación estaba completa en `C:/w182` desde el
+  **2026-08-05** —spec, producción, tests y bitácora, cinco commits— **sin pushear, sin reviewer y
+  sin PR**, con la ficha diciendo `pending` y **221 commits** de retraso. No fue un problema de
+  código: fue que nadie la aterrizó. Un worktree con trabajo hecho y sin rama remota es invisible
+  para la siguiente sesión, que ve `pending` y está a un paso de rehacerlo todo.
+- **El merge destapó dos defectos que solo existen en la intersección.** (a) El test de la 133
+  doblaba el módulo de acciones exportando **una sola** de las dos puertas al dato; la segunda
+  llegaba `undefined` y el panel caía en su píxel de error **tapando el denegado que el caso mide**.
+  No bastó con doblarla: R21 afirma una no-diferencia sobre «la puerta que toca el dato», y desde
+  esta feature son **dos**, así que la comparación pasa a recorrer las dos. (b) La acción seguía
+  anotada `@sin-superficie` («nació sin cablear **y sigue así**») cuando esta feature **es** su
+  superficie; lo puso rojo `superficie-de-uso.guardia.test.ts`.
+  > **La regla que queda:** una excusa escrita en el código sobrevive a su motivo sin avisar. La
+  > que aquí la cazó fue una guardia, no una lectura: si la anotación no hubiera tenido guardia,
+  > seguiría ahí, mintiendo, después del commit que la desmiente.
+- **`aging_por_estado` NO entró**, aunque la `description` de la ficha lo prometía: la puerta T0
+  (Q1 = B) lo sacó a ficha propia. La `description` se corrigió en el mismo PR — quien lea una ficha
+  sin abrir su spec no debería entender que falta trabajo que una puerta humana ya revirtió.
+- **Un byte NUL de la 131 hacía ilegible el archivo central.** `agregacion.ts` usaba `\0` como
+  separador de clave, así que git lo trataba como **binario** y el diff del archivo más importante
+  del PR salía como `Bin 14529 -> 22687 bytes`. Sustituido por `U+001F`: misma imposibilidad dentro
+  de una fecha o dimensión, ni una clave distinta, y el diff vuelve a revisarse.
+- **Gate:** 1015/1017 archivos · 12.596/12.608 tests · typecheck y lint limpios · cero flakes. Los
+  12 rojos eran `busqueda-*`, y su causa raíz se identificó aquí: la migración
+  `20260808120000_orden_busqueda_producto` vivía **solo en la rama `ux`** y ya estaba aplicada a la
+  base local. Las bitácoras de la 187 y la 192 lo habían llamado «drift de la base local» y
+  sugerían recrear la columna — lo que la habría desincronizado de `ux`. Se fueron solos al
+  mergearse `ux` (PR #327), sin que nadie tocara la base.
+
+## 2026-08-10 — 184 (analítica financiera: export CSV/XLSX de la serie)
+
+**PR #331 → `dev`.** Reviewer **APROBADO**: 30/30 requisitos trazados a tests que miden lo que
+piden, verificados **leyendo los treinta**, no por muestreo. Cierra la **D1 de la 134**, que dejó la
+analítica financiera fuera de aquel export *por decisión, no por olvido*, y que ahora lo dice por
+escrito en su propia spec en vez de seguir leyéndose como trabajo pendiente.
+
+- **Estuvo dos días a un `git checkout` de desaparecer.** El grueso —spec completo, tres archivos de
+  producción, nueve de test— lo escribió otro implementer el **2026-08-08** y quedó **sin un solo
+  commit** en un worktree local. Se rescató tal cual estaba y se **pusheó antes de tocarlo**, para
+  que se distinga qué dejó él y qué se puso encima.
+  > **La regla que queda, y es la misma que dejó la 182 doce horas antes:** trabajo que solo existe
+  > en un worktree local no existe. La 182 estuvo cinco días con rama local y sin push; esta, dos
+  > días sin commit. Las dos aparecían como `pending` en el registro. **Si una feature se queda a
+  > medias, lo primero es la rama remota** — el bookkeeping puede esperar, el disco no.
+- **El lint rojo era un defecto real, no ruido.** `columnas.current` se leía **durante el render**.
+  El diseño detrás era correcto —el juego de columnas tiene que ser una instancia estable que
+  `obtenerFilas` reescribe justo antes de que el generador la lea, y un `setState` no llegaría a ese
+  click—, así que se conservó y se cambió **cómo se expresa**: `useState` con inicializador
+  perezoso. Sin `eslint-disable`: callar al linter habría dejado en pie exactamente la lectura que
+  la regla vigila.
+- **Tres mutaciones, no las dos exigidas.** La tercera —invertir las dos sentencias del borde—
+  **nunca se había verificado** en esta feature. Las tres dieron rojo y están revertidas byte a byte.
+- **Gate:** 1037/1039 archivos · 12.822/12.824 tests · typecheck y lint limpios. Los 2 rojos,
+  verdes en aislado. Ese gate es además el baseline que T0.2 exigía y que nadie llegó a medir: la
+  comparación «antes/después» propia de la rama **ya no se puede reconstruir**, y así se anotó.
+- **Deuda declarada, no tapada:** la **rama XLSX no se ejecuta en ningún caso de esta feature** —el
+  menú ofrece los dos formatos, pero todo lo que descarga pulsa CSV, así que el generador con
+  *estas* columnas nunca corre aquí y la aserción de R10 sobre el texto se mide sobre el CSV, no
+  sobre el libro—. No es una fuga; es la línea que la feature introduce y no recorre.
+
+### Nota de arnés del mismo día
+
+`feature_list.json` estuvo **sintácticamente roto en `dev`** desde el merge de `ux` (PR #327):
+faltaba la llave de apertura de una ficha, resultado de resolver un conflicto a mano. `./init.sh` lo
+valida y cualquier `JSON.parse` casca, así que el registro que lee el arnés entero estuvo
+inservible para todas las sesiones hasta el PR #329. **Un conflicto en este archivo no se resuelve a
+ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
