@@ -913,3 +913,114 @@ $ pnpm exec vitest run tests/unit/analytics/ledger-escritores.guardia.test.ts
 M1, M2), `specs/179-analitica-cache-financiera/requirements.md` y `design.md` (M4),
 `specs/179-analitica-cache-financiera/tasks.md` (M7) y esta bitacora. **Ni una linea de codigo de
 produccion.**
+
+---
+
+## 12. Ronda 2 del review: B2 (2026-08-10)
+
+B1 y los cinco menores quedaron **cerrados y verificados por el reviewer con sus manos**. Pero al
+intentar romper el arreglo por donde nadie habia mirado, encontro **el mismo modo de fallo un
+escalon mas abajo**. Otra vez sin tocar produccion: todo en el mismo guardia.
+
+### 12.1 B2 — el criterio era TEXTUAL y no exigia que quien invalidara fuera EL escritor
+
+`problemasDe` aceptaba la entrada si **algun** archivo de su `invalidaEn` contenia la llamada y el
+literal de su `origen`. No comprobaba que ese archivo tuviera nada que ver con el escritor. El
+sondeo **P3**:
+
+```
+noveno escritor sintetico, que NO invalida en ninguna linea suya:
+  invalidaEn:    ["lib/services/WalletEgresoService.ts", INVALIDACION]   <- el archivo de OTRO
+  invalidadores: [{ clase: "directo", origen: "ledger_egreso_admin" }]   <- el origen de OTRO
+  tests:         [...cache-financiera-escritor-egreso.test.ts]           <- el test de OTRO
+
+  ledger-escritores.guardia  ->  41 passed (41)   VERDE
+  cache-financiera-registro  ->   5 passed (5)    VERDE
+```
+
+**Y no es un gesto rebuscado: es el gesto por defecto.** En la ronda 1 bastaba con NO rellenar;
+ahora bastaba con rellenar **con lo del vecino**, que es literalmente lo que uno hace —sin mala
+intencion— al anadir una fila a una tabla asi: copiar la de al lado y cambiar lo que se ve distinto.
+
+**Dos defensas, y cada una mata P3 por su cuenta:**
+
+1. **Unicidad del `origen`.** Cada `OrigenInvalidacion` pertenece a **exactamente una** entrada. Es
+   lo que R24 pide con todas las letras —«un origen por escritor», «la unica senal que distingue
+   *la cifra no cambio porque no hubo movimiento* de *la cifra no cambio porque el invalidador de
+   los cierres de bodega no llego*»— y **no lo medía nadie**. Con dos entradas compartiendo origen,
+   esa senal deja de decir cual invalidador no llego. El mensaje de fallo nombra al dueno actual y
+   dice donde dar de alta el valor nuevo (`OrigenInvalidacion` en `IAnaliticaCache.ts`).
+2. **Pertenencia a la cadena.** Al menos un archivo de `invalidaEn` tiene que ser el propio
+   `archivo` del escritor **o nombrarlo** —su servicio, su decorador o su composition root lo
+   mencionan por fuerza, aunque sea a traves de su interfaz (`ILiquidacionService` contiene
+   `LiquidacionService`)—. Sin esto, `invalidaEn` podia apuntar a cualquier sitio del arbol donde
+   por casualidad convivieran las dos cadenas de texto.
+
+Las dos se conservan a proposito: la unicidad es la regla de R24 y vale aunque alguien apunte a su
+propia cadena; la pertenencia vale aunque alguien invente un origen nuevo. Cerrar solo una dejaria
+la otra mitad de la puerta abierta.
+
+### 12.2 La cabecera prometia mas de lo que comprueba, y eso tambien se arregla
+
+El bloque se titulaba **«el registro DEMUESTRA su invalidador»** y lo que comprueba es que **el
+texto de la llamada existe en un archivo de su cadena**. El reviewer lo probo (sondeo **P2**):
+meter la llamada real dentro de una rama inalcanzable —`if (NUNCA) { await invalidar... }`— deja el
+guardia verde. **No es bloqueante y estoy de acuerdo:** exige escribir codigo muerto a proposito
+—sabotaje visible en cualquier revision— y ningun guardia estatico puede juzgar alcanzabilidad sin
+un parser de flujo.
+
+Pero se renombro y se le anadio una seccion **«LO QUE ESTE BLOQUE MIDE, DICHO SIN INFLAR»** que
+declara el limite y dice quien cubre la otra mitad: **los tests de cinco pasos de cada escritor**,
+que afirman sobre la cifra servida, y a los que R18 obliga a estar nombrados. El bloque no los
+sustituye — les impide quedarse huerfanos. Un guardia que promete mas de lo que comprueba es peor
+que uno modesto: el siguiente que lo lea deja de mirar lo que cree cubierto.
+
+Nuevo titulo: **«R17 · en la cadena de cada escritor esta escrita SU invalidacion y SU origen»**.
+
+### 12.3 P3 REPETIDO por mi, sobre el arbol real
+
+```
+P3 — noveno escritor con la entrada COPIADA DEL VECINO
+     (invalidaEn, origen y tests de WalletEgresoService; conteos subidos de 8 a 9)
+
+  ANTES  →  ledger-escritores.guardia   41 passed (41)     VERDE
+  AHORA  →  ledger-escritores.guardia   ROJO
+
+  y los mensajes son los que tienen que ser:
+    · __ProbeNovenoEscritorService.ts: ningun archivo de `invalidaEn`
+      (lib/services/WalletEgresoService.ts, lib/analytics/invalidacion-financiera.ts)
+      pertenece a la cadena de este escritor. Se espera su propio archivo, o uno que
+      nombre a `__ProbeNovenoEscritorService` …
+    · __ProbeNovenoEscritorService.ts: declara el origen "ledger_egreso_admin", que YA
+      pertenece a lib/services/WalletEgresoService.ts. R24 exige un origen por escritor …
+    · y el SIMETRICO, que es lo que remata: **WalletEgresoService.ts tambien se pone rojo**,
+      porque la unicidad se mide en las dos direcciones. El escritor legitimo avisa de que
+      alguien le copio el origen.
+
+LIMPIEZA: `git status --porcelain` sin rastro del sondeo; guardia de vuelta en 42/42 verde.
+```
+
+**Un hallazgo del propio sondeo, arreglado.** Durante P3 se ponian rojos ademas **dos casos de
+discriminacion mios** que partian de `ESCRITORES_DE_LEDGER[0]` y `[1]`: al insertar la entrada del
+sondeo al principio, los indices se desplazaban y esos casos fallaban **por el desplazamiento, no
+por lo que miden**. Era ruido del sondeo convertido en ruido del guardia. Se sustituyeron por
+`entradaDe(archivo)`, que busca por ruta: ahora los casos de discriminacion son independientes del
+orden del array, y el rojo de un sondeo futuro solo senalara lo que de verdad falla.
+
+### 12.4 Gate
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida — verde)
+
+$ pnpm lint
+✖ 57 problems (0 errors, 57 warnings)   ← identico; ningun warning nuevo
+
+$ pnpm exec vitest run tests/unit/analytics/ledger-escritores.guardia.test.ts
+ Test Files  1 passed (1)
+      Tests  42 passed (42)      ← 21 originales → 39 (ronda 1) → 42 (ronda 2)
+```
+
+**Archivos tocados en esta ronda:** `tests/unit/analytics/ledger-escritores.guardia.test.ts` y esta
+bitacora. **Ni una linea de codigo de produccion, ni una linea de spec.**

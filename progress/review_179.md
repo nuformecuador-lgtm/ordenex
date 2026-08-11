@@ -288,3 +288,179 @@ politica por metrica, el job del octavo escritor y la retirada del guardia R15 e
 y —donde se desvian de otra spec (D4 vs R11 de la 128; R30 de la 180; R68 de la 172)— declarados
 por escrito en el sitio donde el siguiente lector los va a encontrar. Lo unico que falta es que el
 censo mida lo que su propia cabecera promete.
+
+---
+---
+
+# RONDA 2 — verificacion del arreglo de B1 (2026-08-10)
+
+> La ronda 1 se conserva entera arriba: el registro de que fallo y por que es lo que hace util
+> esta bitacora.
+>
+> **VEREDICTO DE LA RONDA 2: RECHAZADO.** B1 esta **arreglado y verificado con mis manos**, y los
+> cinco menores devueltos tambien. Pero al intentar romper el arreglo por donde no habian mirado
+> **encontre otra entrada que pasa el guardia sin invalidar nada** (B2): el criterio es textual y
+> no exige que el archivo que invalida sea el de ESE escritor, ni que su `origen` sea suyo. Una
+> entrada copiada del vecino —el gesto mas probable al añadir un escritor— queda verde.
+>
+> Sigue sin tocarse una linea de produccion, y el remedio de B2 es **una asercion mas** en el
+> mismo guardia.
+
+Commit revisado: `5512a729`. Toca `tests/unit/analytics/ledger-escritores.guardia.test.ts` (+356),
+las tres piezas del spec, la bitacora y este review. **Cero archivos de `lib/`, `app/` o
+`scripts/`** — verificado en el `--stat`.
+
+## R2.1 — El sondeo de la ronda 1, repetido con mis manos
+
+No me fie de su transcripcion. Rehice el sondeo entero sobre el arbol real, en las dos fases, y lo
+revertí.
+
+```
+BASELINE  ledger-escritores.guardia            39 passed (39)
+
+FASE 1  noveno escritor sintetico (lib/services/__ProbeNovenoEscritorService.ts),
+        que llama a crearMovimientos y no invalida — SIN registrar
+  -> ROJO (eje 2 «por DEFECTO» + el conteo de ocho)
+
+FASE 2  el MISMO, REGISTRADO con invalidadores: [], requisitos: [], invalidaEn: [],
+        tests: apuntando a un test AJENO, y los dos conteos subidos de 8 a 9
+  RONDA 1  ->  Tests 22 passed              <- el agujero
+  AHORA    ->  Tests 1 failed | 40 passed (41)
+  y el fallo enumera los tres motivos, textualmente:
+     · invalidadores VACIO ...
+     · requisitos VACIO. ... el chequeo de titulos de R18 ITERA sobre esta lista ...
+     · invalidaEn VACIO. Nadie puede comprobar donde invalida.
+
+LIMPIEZA  git status --porcelain vacio; guardia de vuelta en 39/39.
+```
+
+**B1 queda cerrado.** Ademas la validacion vive de verdad en una funcion pura (`problemasDe`) que
+se ejerce sobre entradas sinteticas, asi que el guardia demuestra su propia discriminacion sin que
+nadie tenga que volver a mutar el arbol.
+
+## R2.2 — BLOQUEANTE **B2** (nuevo): el criterio es textual y no exige que quien invalide sea EL
+
+`problemasDe` acepta la entrada si **algun** archivo de su `invalidaEn` contiene
+`invalidarAnaliticaFinanciera(` **y** el literal de su `origen`. No comprueba que ese archivo tenga
+nada que ver con el escritor, ni que el `origen` sea suyo y de nadie mas. Con eso, **una entrada
+copiada del vecino pasa entera**.
+
+**Medido (sondeo P3), aplicado y revertido:**
+
+```
+entrada del noveno escritor sintetico —que NO invalida en ninguna linea suya—:
+  archivo:       "lib/services/__ProbeNovenoEscritorService.ts"
+  invalidaEn:    ["lib/services/WalletEgresoService.ts",          <- el archivo de OTRO escritor
+                  "lib/analytics/invalidacion-financiera.ts"]
+  invalidadores: [{ clase: "directo", origen: "ledger_egreso_admin" }]  <- el origen de OTRO
+  requisitos:    ["R9"]
+  tests:         ["...cache-financiera-escritor-egreso.test.ts"]  <- el test de OTRO
+  (+ los dos conteos de 8 a 9)
+
+  ledger-escritores.guardia        ->  Tests 41 passed (41)     VERDE
+  cache-financiera-registro        ->  Tests  5 passed (5)      VERDE
+```
+
+Un escritor de dinero que **no invalida en ninguna linea propia** queda censado, con test, con
+origen y en verde. Y no es un gesto rebuscado: **copiar la entrada de al lado y cambiarle el
+`archivo`** es exactamente como se añade una entrada a una tabla de este estilo. Es el mismo modo
+de fallo de la ronda 1 un escalon mas abajo: antes bastaba con no rellenar; ahora basta con
+rellenar con lo del vecino.
+
+Nada mas del arbol lo caza: `cache-financiera-registro.test.ts` compara el conjunto de origenes que
+**emiten los ocho escritores reales** contra el conjunto declarado, y un origen duplicado no cambia
+ningun conjunto.
+
+**Que falta para cerrarlo** (misma funcion `problemasDe`, sin tocar produccion):
+
+1. **Unicidad del origen**: cada `OrigenInvalidacion` declarado pertenece a **exactamente una**
+   entrada del registro. Es lo que R24 pide con todas las letras —«un origen por escritor», «la
+   unica senal que distingue cual invalidador no llego»— y hoy no lo mide nadie. Cierra P3 de un
+   golpe: reusar `ledger_egreso_admin` pasa a ser rojo.
+2. Y, como refuerzo barato, exigir que al menos un archivo de `invalidaEn` **pertenezca a la cadena
+   de ese escritor**: sea su propio `archivo`, sea un archivo que lo nombre (su servicio, su
+   decorador o su composition root). Hoy `invalidaEn` puede apuntar a cualquier sitio del arbol.
+
+## R2.3 — menor: el limite textual que queda, y que hay que DECLARAR
+
+Segunda via que probé (sondeo P2, aplicado y revertido): el escritor sintetico **con su propio
+archivo** en `invalidaEn` y la llamada real dentro de una rama **inalcanzable**:
+
+```ts
+const NUNCA = false;
+...
+if (NUNCA) { await invalidarAnaliticaFinanciera(this.cache, "ledger_probe_p2"); }
+
+  ledger-escritores.guardia   ->  Tests 41 passed (41)   VERDE
+```
+
+Esto **no lo cuento como bloqueante**: exige escribir codigo muerto a proposito, que es sabotaje
+visible en cualquier revision, y ningun guardia estatico puede juzgar alcanzabilidad sin un parser
+de flujo. Lo que si pido es **honestidad en la cabecera**: hoy el bloque se titula «el registro
+DEMUESTRA su invalidador» y lo que demuestra es que **el texto de la llamada existe en un archivo
+declarado**. Basta una linea de limite declarado —el mismo criterio que `design.md §4bis` ya usa
+para la politica («obliga a declarar, no a acertar»)—. Lo que si esta medido de verdad es el
+comportamiento: los ocho tests de cinco pasos.
+
+*(Verificado de paso: los comentarios no cuelan. `codigoDe` pasa por `soloCodigo`, asi que un
+`invalidarAnaliticaFinanciera(` comentado no cuenta.)*
+
+## R2.4 — Los menores devueltos: verificados uno a uno
+
+| menor | como lo comprobe | veredicto |
+|---|---|---|
+| **M1** (detector estructural de R8) | inyecte `await invalidarAnaliticaFinanciera(this.cache, "ledger_liquidacion")` **dentro** del `runTransaction` real de `LiquidacionService.ts:191` -> **ROJO**, nombrando el archivo. Revertido -> verde. La otra direccion (la llamada DESPUES de la tx) la sostiene el arbol entero, verde con los siete invalidadores post-commit, mas su contraprueba sintetica | **cerrado**. Limite: solo reconoce `$transaction(` y `runTransaction(`; una tercera forma de abrir transaccion no la veria. Suficiente para el arbol de hoy |
+| **M2** (censo del decorador) | cree un composition root falso (`lib/actions/__probe-otro-root.ts`) con `new LiquidacionService(...)` sin envolver -> **ROJO**: «lib/actions/__probe-otro-root.ts (1 sin envolver)». Revertido -> verde. Ademas la factoria se lee del **propio archivo del decorador**, asi que renombrarla no deja el guardia mirando un nombre muerto | **cerrado**: la debilidad que yo habia dejado como M2 queda atada al arbol entero |
+| **M3** (frontera a mano) | el cruce esta escrito en `impl_179.md §11.3` con los 60 archivos y coincide con el mio de la ronda 1: todo el codigo declarado (con las cuatro ampliaciones de frontera escritas antes de tocar), fuera de §2 solo contabilidad, y ninguno de los declarados intocables en el diff | **cerrado** |
+| **M4** (ocho -> diez metricas) | verificado en el diff: R1, R3 y D1 de `requirements.md` y §1.3, §4bis y la alternativa 6 de `design.md`, cada sitio con nota fechada; y —lo que mas importa— **deja escrito que los OCHO que siguen siendo ocho son los PUNTOS DE ESCRITURA**, que es justo la confusion que un cambio a ciegas habria creado | **cerrado** |
+| **M7** (contabilidad) | `tasks.md`: **27 `[x]`** y **3 `[ ]`** —T0.2, T6.1 y T6.2—, cada pendiente con su motivo, sin marcar como hecho lo que no lo esta. **T0.2 sigue sin medirse y esta bien que se diga**: el gate 100% verde absoluto no necesita baseline | **cerrado** |
+| **M5, M6, M8, M9** | sin accion, como correspondia (los dos ultimos eran notas favorables) | **conforme** |
+
+## R2.5 — Estado de la trazabilidad tras la ronda 2
+
+Cambian tres filas de la tabla de §2; el resto sigue vigente.
+
+| R | ahora | por que |
+|---|---|---|
+| **R8** | **cubierto en los ocho puntos** | al test de orden de la liquidacion se suma un detector estructural que barre `lib/`, `app/` y `scripts/`: ya no es «uno medido y siete por inspeccion». Probado en las dos direcciones (R2.4) |
+| **R17** | **cubierto, con la reserva B2** | el registro ya demuestra su invalidador; lo que falta es que el invalidador sea SUYO |
+| **R18** | **cubierto** | `requisitos` no vacio hace que el chequeo de titulos deje de ser vacuo |
+
+## R2.6 — Verificacion ejecutada en esta ronda
+
+```
+ledger-escritores.guardia (baseline)                     39 passed (39)
+FASE 1  probe sin registrar                              ROJO (2)
+FASE 2  probe registrado, campos vacios (B1)             ROJO (1), con los tres motivos
+P3      probe con invalidaEn/origen/test del VECINO      VERDE 41/41   <- B2
+        + cache-financiera-registro                      VERDE  5/5
+P2      probe con la llamada en rama inalcanzable        VERDE 41/41   <- limite declarado
+M1      invalidacion inyectada DENTRO de runTransaction  ROJO, nombra el archivo
+M2      composition root nuevo sin envolver              ROJO, nombra el archivo y cuenta 1
+```
+
+Todo revertido: **`git status --porcelain` vacio** y el guardia de vuelta en **39/39**. No se
+edito ni una linea de la entrega. **La suite completa no se re-corrio** (el leader la dejo en
+1058/1058 archivos y 12.994/12.994 tests, typecheck y lint limpios).
+
+## R2.7 — Lo que sigo sin poder verificar
+
+Lo mismo que en la ronda 1 (§5), sin cambios: el gate tras arreglar B2, el merge con `origin/dev`
+(~90 archivos por detras), `next-analitica-cache.ts` en produccion, el SQL real de los repositorios
+de cierre e incidente frente a sus dobles, la corrida real del CLI del backfill, y si la politica
+declarada por metrica es la *correcta*. Añado una de esta ronda: **la alcanzabilidad del codigo que
+el censo mira** (R2.3) no la puede verificar ningun guardia estatico, y por eso pido que se declare
+en vez de fingir que se resuelve.
+
+## R2.8 — Veredicto de la ronda 2
+
+**RECHAZADO**, por **B2**, con B1 y los cinco menores **cerrados y verificados por mi**.
+
+Para pasar a `APROBADO` basta con lo de R2.2 —unicidad del `origen` por entrada, mas la exigencia
+de que `invalidaEn` toque la cadena del propio escritor— demostrado con la mutacion que hoy pasa en
+verde (**registrar un escritor con el `invalidaEn` y el `origen` del vecino debe ponerse rojo**), y
+la linea de limite declarado de R2.3. Sigue sin hacer falta tocar codigo de produccion.
+
+Y que quede dicho, porque el arreglo de esta ronda es bueno: el censo paso de creerse el registro a
+exigirle la prueba, R8 dejo de ser «uno de ocho» y la forma mas debil de invalidar —el decorador—
+quedo atada al arbol entero. Lo que falta es la ultima vuelta de tuerca, no otra reescritura.

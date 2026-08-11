@@ -172,33 +172,60 @@ describe("R17 · el censo DISCRIMINA: no es verde por construccion", () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* R17 — EL REGISTRO NO ES UNA PROMESA: cada entrada DEMUESTRA su invalidador   */
+/* R17 — EL REGISTRO SE CRUZA CONTRA EL ARBOL                                   */
 /* -------------------------------------------------------------------------- */
 //
-// ⚠ POR QUE ESTE BLOQUE EXISTE, CON SU FECHA: el 2026-08-10 el reviewer rompio este censo y lo
-// dejo verde. El sondeo fue exacto y merece quedar escrito, porque es el que define que tiene
-// que medir esto:
+// ═══ LO QUE ESTE BLOQUE MIDE, DICHO SIN INFLAR ══════════════════════════════════════════════
 //
-//   1. creo un noveno escritor sintetico que llamaba a `crearMovimientos` y NO invalidaba nada
-//      -> el censo lo cazo (eje 2 «por DEFECTO» + el conteo). Esa mitad ya funcionaba.
-//   2. lo REGISTRO con `invalidadores: []`, `requisitos: []`, `invalidaEn: []` y un `tests:`
-//      que apuntaba a un test AJENO, y subio los dos conteos de 8 a 9 —que es literalmente lo
-//      que el mensaje de fallo de este guardia le pide a quien anade un escritor—
-//      -> **22 tests, todo verde**. Un escritor de dinero sin invalidador y sin test propio, y
-//         el guardia diciendo que todo esta bien.
+// Para cada entrada del registro, que **en la cadena de ESE escritor exista escrita la llamada
+// de invalidacion y el literal de SU origen**, y que ese origen no sea el de ningun otro. Es
+// una comprobacion TEXTUAL sobre el codigo (sin comentarios) de archivos que tienen que
+// pertenecer a esa cadena.
 //
-// Las tres puertas que lo permitian: `invalidadores` no se comprobaba ni no-vacio ni por
-// contenido; `requisitos` tampoco —y como el chequeo de titulos de R18 itera sobre esa lista,
-// **con la lista vacia R18 se volvia vacuo**—; y `invalidaEn` no lo leia ningun test: era prosa.
+// **NO demuestra que la invalidacion se EJECUTE.** Un guardia estatico no puede juzgar
+// alcanzabilidad sin un parser de flujo. Verificado por el reviewer (sondeo P2, 2026-08-10):
+// meter la llamada real dentro de una rama muerta —`if (NUNCA) { await invalidar... }`— deja
+// esto verde. Se acepta como limite y no como agujero por dos motivos: exige escribir codigo
+// muerto A PROPOSITO, que es sabotaje visible en cualquier revision; y quien de verdad mide la
+// EJECUCION son los tests de cinco pasos de cada escritor, que afirman sobre la cifra servida
+// (`cache-financiera-escritor-*.test.ts`, y R18 obliga a que cada entrada nombre el suyo).
+// **Este bloque no los sustituye: les impide quedarse huerfanos.**
 //
-// Lo que se mide ahora es lo que R17 pide TEXTUALMENTE —que cada llamador aparezca «con el
-// invalidador que le corresponde»—: no que el campo este relleno, sino que **el archivo que
-// dice invalidar contenga de verdad la llamada y el literal de SU origen**. Es barato porque el
-// arbol ya esta censado, y convierte «registrarse» en «registrarse Y demostrarlo».
+// El bloque se llamaba «el registro DEMUESTRA su invalidador» y eso prometia mas de lo que
+// comprueba. Se renombro el 2026-08-10 (B2 del review): un guardia que promete de mas es peor
+// que uno modesto, porque el siguiente que lo lea deja de mirar lo que cree cubierto.
 //
-// La validacion vive en funciones PURAS (`problemasDe`) para poder ejercerlas sobre entradas
-// SINTETICAS sin tocar el registro real: asi el bloque de discriminacion de abajo demuestra que
-// el sondeo del reviewer ya no pasa, sin necesidad de que nadie vuelva a mutar el arbol.
+// ═══ POR QUE EXISTE, CON SUS DOS SONDEOS ════════════════════════════════════════════════════
+//
+// **RONDA 1 (P1) — bastaba con NO RELLENAR.** El reviewer creo un noveno escritor sintetico que
+// llamaba a `crearMovimientos` y no invalidaba nada; el censo lo cazo (eje 2 «por DEFECTO» + el
+// conteo). Entonces lo REGISTRO con `invalidadores: []`, `requisitos: []`, `invalidaEn: []` y un
+// `tests:` ajeno, y subio los conteos de 8 a 9 —lo que el propio mensaje de fallo le pedia—:
+// **22 tests, verde entero**. Tres puertas: `invalidadores` y `requisitos` no se comprobaban ni
+// no-vacios, y como el chequeo de titulos de R18 ITERA sobre `requisitos`, con la lista vacia
+// **R18 se volvia vacuo**; `invalidaEn` no lo leia nadie.
+//
+// **RONDA 2 (P3) — bastaba con RELLENAR CON LO DEL VECINO.** Con las comprobaciones de la ronda
+// 1 puestas, el reviewer copio la entrada de al lado y le cambio solo el `archivo`:
+// `invalidaEn` y `origen` de `WalletEgresoService`, `tests` de `WalletEgresoService`. **41
+// tests, verde entero.** El criterio era textual y no exigia que quien invalida fuera EL
+// escritor. Y no es rebuscado: copiar la fila de al lado es exactamente como se anade una fila a
+// una tabla asi.
+//
+// Lo que cierra P3, y por que son dos cosas y no una:
+//
+//   · **Unicidad del origen.** Cada `OrigenInvalidacion` pertenece a EXACTAMENTE una entrada. Es
+//     lo que R24 pide con todas las letras —«un origen por escritor», «la unica senal que
+//     distingue cual invalidador no llego»— y no lo medía nadie. Dos entradas con el mismo
+//     origen convierten esa senal en ruido: se sabria que alguien invalido, no CUAL no lo hizo.
+//   · **Pertenencia a la cadena.** Al menos un archivo de `invalidaEn` tiene que ser el propio
+//     `archivo` del escritor o NOMBRARLO (su servicio, su decorador, su composition root). Sin
+//     esto, `invalidaEn` podia apuntar a cualquier sitio del arbol donde por casualidad
+//     estuvieran las dos cadenas de texto.
+//
+// La validacion vive en una funcion PURA (`problemasDe`) para poder ejercerla sobre entradas
+// SINTETICAS sin tocar el registro real: asi los casos de discriminacion de abajo demuestran que
+// P1 y P3 ya no pasan, sin que nadie tenga que volver a mutar el arbol.
 
 /** Marca de que un archivo ENCOLA el job de invalidacion en vez de llamar al invalidador. */
 const ENCOLA_JOB = /\.enqueue\s*\(/;
@@ -211,11 +238,29 @@ function codigoDe(rel: string): string | null {
   return fs.existsSync(abs) ? soloCodigo(fs.readFileSync(abs, "utf8")) : null;
 }
 
+/** El nombre del modulo de un escritor: `lib/services/WalletService.ts` -> `WalletService`. */
+function nombreDe(archivo: string): string {
+  return path.basename(archivo).replace(/\.tsx?$/, "");
+}
+
+/**
+ * ¿`rel` pertenece a la cadena de `escritor`? Lo es su propio archivo, o cualquiera que lo
+ * NOMBRE: su servicio, su decorador o su composition root lo mencionan por fuerza (aunque sea a
+ * traves de su interfaz — `ILiquidacionService` contiene `LiquidacionService`).
+ */
+function esDeLaCadena(rel: string, escritor: EscritorDeLedger): boolean {
+  if (rel === escritor.archivo) return true;
+  return (codigoDe(rel) ?? "").includes(nombreDe(escritor.archivo));
+}
+
 /**
  * TODOS los problemas de una entrada del registro. Devuelve una lista (no lanza) para que el
  * mensaje de fallo los enumere de golpe y para poder ejercerla sobre entradas sinteticas.
  */
-function problemasDe(escritor: EscritorDeLedger): string[] {
+function problemasDe(
+  escritor: EscritorDeLedger,
+  registro: readonly EscritorDeLedger[] = ESCRITORES_DE_LEDGER,
+): string[] {
   const p: string[] = [];
   const donde = escritor.archivo;
 
@@ -238,6 +283,18 @@ function problemasDe(escritor: EscritorDeLedger): string[] {
     if (codigoDe(rel) === null) {
       p.push(`${donde}: \`invalidaEn\` nombra un archivo que NO existe en disco: ${rel}`);
     }
+  }
+
+  // B2 (P3) — PERTENENCIA A LA CADENA. Sin esto, `invalidaEn` podia apuntar a cualquier sitio
+  // del arbol: copiar la entrada del vecino y cambiarle el `archivo` pasaba en verde, porque las
+  // dos cadenas de texto que se buscaban estaban ahi... en el archivo de OTRO escritor.
+  if (escritor.invalidaEn.length > 0 && !escritor.invalidaEn.some((rel) => esDeLaCadena(rel, escritor))) {
+    p.push(
+      `${donde}: ningun archivo de \`invalidaEn\` (${escritor.invalidaEn.join(", ")}) pertenece a ` +
+        `la cadena de este escritor. Se espera su propio archivo, o uno que nombre a ` +
+        `\`${nombreDe(donde)}\` —su servicio, su decorador o su composition root—. Apuntar al ` +
+        "archivo de otro escritor hace que este quede registrado sin invalidar nada suyo.",
+    );
   }
 
   const fuentes = escritor.invalidaEn
@@ -263,6 +320,25 @@ function problemasDe(escritor: EscritorDeLedger): string[] {
         }
       }
       continue;
+    }
+
+    // B2 (P3) — UNICIDAD DEL ORIGEN. R24, con todas las letras: «un origen por escritor», porque
+    // es «la unica senal que distingue "la cifra no cambio porque no hubo movimiento" de "la
+    // cifra no cambio porque el invalidador de los cierres de bodega no llego"». Dos entradas
+    // con el mismo origen convierten esa senal en ruido, y es lo que P3 explotaba.
+    const duenosAjenos = registro
+      .filter((otro) => otro.archivo !== escritor.archivo)
+      .filter((otro) =>
+        otro.invalidadores.some((i) => i.clase !== "por_su_llamador" && i.origen === inv.origen),
+      )
+      .map((otro) => otro.archivo);
+    if (duenosAjenos.length > 0) {
+      p.push(
+        `${donde}: declara el origen "${inv.origen}", que YA pertenece a ${duenosAjenos.join(", ")}. ` +
+          "R24 exige un origen por escritor: es la unica senal que dice CUAL invalidador no " +
+          "llego. Compartirlo la apaga. Si este escritor es nuevo, dale su propio valor en " +
+          "`OrigenInvalidacion` (`lib/interfaces/external/IAnaliticaCache.ts`).",
+      );
     }
 
     const origen = `"${inv.origen}"`;
@@ -308,7 +384,19 @@ function problemasDe(escritor: EscritorDeLedger): string[] {
   return p;
 }
 
-describe("R17 · el registro DEMUESTRA su invalidador, no solo lo declara", () => {
+/**
+ * Una entrada real, BUSCADA POR SU ARCHIVO y no por su indice. Los casos de discriminacion que
+ * parten de una entrada real no pueden depender del orden del array: durante el sondeo P3 —que
+ * inserta una entrada al principio— dos de ellos se ponian rojos por el desplazamiento y no por
+ * lo que median, y eso convierte el ruido del sondeo en ruido del guardia.
+ */
+function entradaDe(archivo: string): EscritorDeLedger {
+  const e = ESCRITORES_DE_LEDGER.find((x) => x.archivo === archivo);
+  if (e === undefined) throw new Error(`el registro no tiene entrada para ${archivo}`);
+  return e;
+}
+
+describe("R17 · en la cadena de cada escritor esta escrita SU invalidacion y SU origen", () => {
   it.each(ESCRITORES_DE_LEDGER.map((e) => [e.archivo, e] as const))(
     "%s",
     (_archivo, escritor) => {
@@ -316,9 +404,9 @@ describe("R17 · el registro DEMUESTRA su invalidador, no solo lo declara", () =
     },
   );
 
-  it("DISCRIMINA: el sondeo que dejo este censo en verde el 2026-08-10 ahora es ROJO", () => {
-    // La entrada EXACTA con la que el reviewer lo rompio: registrada, con los campos vacios y un
-    // test ajeno. Se ejerce sobre la funcion pura para no tener que mutar el registro real.
+  it("DISCRIMINA (P1): registrarse con los campos VACIOS ya no pasa", () => {
+    // La entrada EXACTA con la que el reviewer lo rompio en la ronda 1: registrada, con los
+    // campos vacios y un test ajeno. Se ejerce sobre la funcion pura para no mutar el registro.
     const promesa: EscritorDeLedger = {
       archivo: "lib/services/__ProbeNovenoEscritorService.ts",
       invalidaEn: [],
@@ -333,6 +421,51 @@ describe("R17 · el registro DEMUESTRA su invalidador, no solo lo declara", () =
     expect(problemas.join("\n")).toMatch(/`invalidadores` VACIO/);
     expect(problemas.join("\n")).toMatch(/`requisitos` VACIO/);
     expect(problemas.join("\n")).toMatch(/`invalidaEn` VACIO/);
+  });
+
+  it("DISCRIMINA (P3): COPIAR LA ENTRADA DEL VECINO y cambiarle solo el `archivo` tampoco pasa", () => {
+    // El sondeo de la ronda 2, palabra por palabra: un noveno escritor que no invalida en
+    // ninguna linea suya, con el `invalidaEn`, el `origen` y el `tests` de OTRO escritor. Con
+    // las comprobaciones de la ronda 1 puestas, esto pasaba en VERDE (41/41) — porque las dos
+    // cadenas de texto que se buscaban estaban ahi, en el archivo ajeno.
+    //
+    // Es el sondeo que mas importa de los tres: los otros dos exigen dejar campos vacios o
+    // apuntar a un archivo cualquiera; este es lo que uno hace SIN MALA INTENCION al anadir una
+    // fila a una tabla —copiar la de al lado— y por eso tenia que doler.
+    const copiado: EscritorDeLedger = {
+      archivo: "lib/services/__ProbeNovenoEscritorService.ts",
+      invalidaEn: ["lib/services/WalletEgresoService.ts", "lib/analytics/invalidacion-financiera.ts"],
+      invalidadores: [{ clase: "directo", origen: "ledger_egreso_admin" }],
+      requisitos: ["R9"],
+      tests: ["tests/unit/analytics/cache-financiera-escritor-egreso.test.ts"],
+      motivo: "copiado del vecino",
+    };
+
+    const problemas = problemasDe(copiado, [...ESCRITORES_DE_LEDGER, copiado]).join("\n");
+    // Las DOS defensas disparan, y cada una por su cuenta bastaria: la unicidad del origen (R24)
+    // y la pertenencia a la cadena.
+    expect(problemas).toMatch(/YA pertenece a lib\/services\/WalletEgresoService\.ts/);
+    expect(problemas).toMatch(/ningun archivo de `invalidaEn` .* pertenece a la cadena/);
+  });
+
+  it("DISCRIMINA (P3): dos entradas REALES no pueden compartir origen", () => {
+    // La mitad de P3 que vale por si sola, ejercida sobre el registro de verdad: si alguien le
+    // pusiera a un escritor el origen de otro, R24 dejaria de poder decir cual no llego.
+    const clon: EscritorDeLedger = {
+      ...entradaDe("lib/services/WalletService.ts"),
+      archivo: "lib/services/OtroServicioQueMueveDinero.ts",
+    };
+    expect(problemasDe(clon, [...ESCRITORES_DE_LEDGER, clon]).join("\n")).toMatch(
+      /declara el origen "ledger_movimiento_manual", que YA pertenece a/,
+    );
+  });
+
+  it("los OCHO origenes del registro real son distintos entre si (R24)", () => {
+    const origenes = ESCRITORES_DE_LEDGER.flatMap((e) =>
+      e.invalidadores.flatMap((i) => (i.clase === "por_su_llamador" ? [] : [i.origen])),
+    );
+    expect(new Set(origenes).size).toBe(origenes.length);
+    expect(origenes).toHaveLength(8);
   });
 
   it("DISCRIMINA: rellenar los campos sin escribir el invalidador tampoco pasa", () => {
@@ -354,7 +487,7 @@ describe("R17 · el registro DEMUESTRA su invalidador, no solo lo declara", () =
 
   it("DISCRIMINA: un `invalidaEn` que apunta a un archivo inexistente cae", () => {
     const fantasma: EscritorDeLedger = {
-      ...ESCRITORES_DE_LEDGER[0],
+      ...entradaDe("lib/services/WalletEgresoService.ts"),
       invalidaEn: ["lib/services/EsteArchivoNoExiste.ts"],
     };
     expect(problemasDe(fantasma).join("\n")).toMatch(/NO existe en disco/);
