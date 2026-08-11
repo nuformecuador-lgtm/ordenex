@@ -8,6 +8,7 @@ import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
+import { decorarLiquidacionConInvalidacion } from "@/lib/services/LiquidacionConInvalidacionService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ILiquidacionService } from "@/lib/interfaces/services/ILiquidacionService";
@@ -83,15 +84,18 @@ function toLiquidacionActionError(
  */
 function buildService(): ILiquidacionService {
   const prisma = getPrismaClient();
-  return new LiquidacionService(
-    new LiquidacionPagoRepository(prisma),
-    new WalletTiendaMovimientoRepository(prisma),
-    new PagoMensajeroMovimientoRepository(prisma),
-    (fn) => prisma.$transaction((tx) => fn(tx)),
-    new CajaPagoTiendaFeedService(new WalletMovimientoRepository(prisma)),
-    () => new Date(),
-    // Feature 179 (T3.x, R9-R15): el puerto de invalidacion de la cache financiera. Ni una
-    // linea de logica: el composition root es el UNICO sitio que conoce el adaptador de Next.
+  // Feature 179 (R11): el DECORADOR de invalidacion envuelve al servicio. No se importa nada de
+  // `@/lib/analytics` ni aqui ni en el servicio —lo prohibe `liquidacion-alcance.test.ts` de la
+  // 172 (R68)—: el modulo de invalidacion queda encapsulado DENTRO del decorador, igual que el
+  // repositorio de la caja queda encapsulado dentro del puerto estrecho de la 173.
+  return decorarLiquidacionConInvalidacion(
+    new LiquidacionService(
+      new LiquidacionPagoRepository(prisma),
+      new WalletTiendaMovimientoRepository(prisma),
+      new PagoMensajeroMovimientoRepository(prisma),
+      (fn) => prisma.$transaction((tx) => fn(tx)),
+      new CajaPagoTiendaFeedService(new WalletMovimientoRepository(prisma)),
+    ),
     crearAnaliticaCacheDeNext(),
   );
 }

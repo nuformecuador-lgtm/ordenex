@@ -399,12 +399,14 @@ que D2 perseguia se consigue igual y de forma **estructural**: donde una clave l
 en `cache-financiera-invalidacion-backfill.test.ts` › «las claves de los dos dominios…». **La celda
 de `design.md §2` se corrigio con este motivo escrito.**
 
-**(b) La invalidacion de `LiquidacionService` va INLINE tres veces y no en un metodo privado, y eso
-no es descuido.** `tests/unit/services/liquidacion-anulacion.test.ts` (feature 172, R82/R75) declara
-**CERRADA** la lista de metodos de esa clase —privados incluidos— «para que anadir uno obligue a
-mirar si tiene derecho a existir». Un helper `invalidarTrasConfirmar` la ponia roja, y ese archivo
-tambien esta fuera de la frontera. Tres lineas iguales cuestan menos que ampliar la frontera para
-relajar un guardia de una superficie de dinero. Queda escrito en el codigo.
+**(b) ~~La invalidacion de `LiquidacionService` va INLINE tres veces y no en un metodo privado~~ —
+SUPERADO EL 2026-08-10 POR §9.1: la invalidacion ya no vive dentro de ese servicio.** Lo que sigue
+valiendo de este parrafo es el hallazgo que lo motivo:
+`tests/unit/services/liquidacion-anulacion.test.ts` (feature 172, R82/R75) declara **CERRADA** la
+lista de metodos de esa clase —privados incluidos— «para que anadir uno obligue a mirar si tiene
+derecho a existir», asi que un helper privado nuevo la ponia roja. Fue el primer aviso de que esa
+clase esta rodeada de guardias ajenos; el segundo —el que obligo a sacar la invalidacion entera del
+servicio— esta en **§9.1**.
 
 **(c) Dos entradas del registro adelantado (T4.1) nombraban tests que no cubren su requisito.**
 `LiquidacionService` declaraba `["R11","R8"]` pero solo nombraba el test de R11 (R8 vive en
@@ -523,3 +525,169 @@ $ pnpm exec vitest related --run <los 19 archivos de lib/, app/ y scripts/ tocad
   solo R8 lo cazaria — y R8 hoy tiene un test de un solo escritor, la liquidacion. Es el hueco que
   le queda a esta feature, y es el mismo limite declarado que §4bis reconoce para el guardia de
   politica: se puede obligar a decidir, no a acertar.
+
+---
+
+## 9. Los tres rojos del gate completo (2026-08-10, tras el commit de T3–T5)
+
+El leader corrio `./init.sh` entero sobre el trabajo ya commiteado: **1054/1058 archivos,
+12.970/12.975 tests**, typecheck y lint limpios. Cuatro rojos: **tres mios, los tres de guardias
+ajenos**, y un flake (`TableroOperativo.test.tsx`, verde en aislado). Ninguno se arreglo tocando el
+guardia que se quejaba. Esto es lo que se decidio en cada uno y por que.
+
+### 9.1 El grave — `tests/unit/guards/liquidacion-alcance.test.ts` (feature 172, R68/R40/R62)
+
+```
+lib/services/LiquidacionService.ts importa analítica:
+  expected ... not to match /from\s+"@\/lib\/analytics/
+```
+
+**Que pasaba: dos specs se contradecian.** La 172 escribio un no-objetivo con todas las letras —«la
+caja entra SOLO por la puerta de la tienda, y **el catalogo de metricas no entra**»— y lo dejo
+medido sobre el codigo. La 179 exige (R7/R11) que ese mismo escritor invalide, y `design.md §5.2`
+elige como punto de enganche «la pieza que POSEE la transaccion», o sea el servicio. Poner ahi el
+import del invalidador rompia la promesa de la otra feature.
+
+**Lo primero que comprobe fue si bastaba con mover la llamada al borde**, que es la salida
+evidente. **No basta, y conviene que quede escrito**: la lista `CODIGO_DE_LA_FEATURE` del guardia
+(`liquidacion-alcance.test.ts:50-68`) incluye **`lib/actions/liquidacion.ts` tambien**, y la
+asercion (b) corre sobre todos sus elementos sin excepcion — el composition root no esta exento.
+Un `import { invalidarAnaliticaFinanciera } from "@/lib/analytics/..."` en la Server Action pone el
+guardia rojo exactamente igual. Y llamar a `cache.invalidar(...)` a mano desde ahi tampoco vale por
+dos motivos: necesita `TAGS_FINANCIERA` (otro import de `@/lib/analytics`) y `design.md §5.1` de la
+179 prohibe que un escritor componga su propio array de tags —«un escritor no puede invalidar casi
+bien»—.
+
+**La salida: un DECORADOR.** `lib/services/LiquidacionConInvalidacionService.ts` implementa
+`ILiquidacionService`, delega en el servicio real e invalida despues de cada operacion que devuelve
+`ok`. Se cablea en `buildService` de `lib/actions/liquidacion.ts`. Es el mismo patron que la propia
+179 ya usa para las lecturas (`CachedAnaliticaFinancieraService`) y el mismo que la 173 uso para
+encapsular el repositorio de la caja dentro del puerto estrecho.
+
+- **`LiquidacionService` queda como estaba antes de esta feature**: ni importa analitica, ni la
+  nombra, ni recibe el puerto de cache. Su constructor vuelve a seis parametros. El guardia de la
+  172 vuelve a verde **sin tocar una linea suya**.
+- **`lib/actions/liquidacion.ts` tampoco importa analitica**: importa el decorador desde
+  `@/lib/services/`. El invalidador queda encapsulado dentro.
+- **R8 sale reforzado, no debilitado.** Antes «despues del commit» era una linea bien colocada;
+  ahora es una **imposibilidad estructural**: el decorador no ve la `tx` y solo actua cuando el
+  metodo del servicio interno ya devolvio. `cache-financiera-invalidacion-orden.test.ts` se
+  reescribio para medir la composicion entera y sigue afirmando la misma secuencia.
+- **R16 y R24 no cambian**: sigue llamando a `invalidarAnaliticaFinanciera` (no propaga, deja
+  constancia) con su origen `ledger_liquidacion`.
+
+**Lo que se pierde, y esta declarado en tres sitios** (cabecera del decorador, `motivo` de su
+entrada en `escritores-ledger.ts`, y aqui): `design.md §5.2` descarta invalidar «demasiado arriba»
+porque «un servicio llamado desde otro sitio se escaparia». El decorador tiene esa debilidad. Hoy
+no puede ocurrir —`lib/actions/liquidacion.ts` es el UNICO composition root del arbol— y **el censo
+de R17 no la cubre**: el censo comprueba que el escritor esta registrado, no que su decorador este
+cableado. Por eso `cache-financiera-escritor-liquidacion.test.ts` gana un caso propio que exige que
+`buildService` envuelva y pase la cache, y otro que comprueba que ni el servicio ni la accion
+importan `@/lib/analytics` — o sea, la contradiccion medida desde el lado de la 179 para que no se
+pueda «simplificar» de vuelta sin enterarse.
+
+**Por que NO se convirtieron los otros siete escritores al mismo patron**, aunque el leader lo
+planteo por coherencia. Los siete invalidan dentro de su servicio, que es lo que `design.md §5.2`
+manda **con motivo escrito** y lo que da la garantia mas fuerte: no depende de que nadie recuerde
+envolver nada en ningun composition root. Uniformar los ocho seria derogar §5.2 para toda la
+feature —y perder esa garantia en siete sitios donde no hay ninguna frontera ajena que respetar— a
+cambio de simetria visual. **La asimetria es deliberada y esta escrita donde un lector la va a
+encontrar**, que es el criterio que el repo usa para las derogaciones (la 173 con R40 de la 172, y
+§9.2 aqui abajo). Si el reviewer o el humano prefieren la uniformidad, el cambio es mecanico y el
+sitio donde discutirlo es `design.md §5.2`, no el codigo.
+
+**Nuevo archivo declarado en `design.md §2`** con este motivo, escrito antes de crearlo.
+
+### 9.2 `tests/unit/analytics/financiera-180-trazabilidad.guardia.test.ts` — R30 de la 180
+
+El mapa `R1..R32` de la 180 citaba como testigo de su **R30** justo el guardia que T5.1 retiro.
+**No se quito la fila.** Se averiguo que afirmaba R30 y se partio en dos:
+
+1. *«no anadir, retirar ni modificar ningun `cacheTag`»* — **sigue verificada**, y por un guardia
+   que sobrevive al merge: `cache-tags.guardia.test.ts` (128) mide que los literales de tag viven
+   SOLO en el catalogo y que ningun archivo del arbol los escribe a mano.
+2. *«el guardia que hoy prohibe cachear el dominio financiera DEBE seguir verde»* — **derogada con
+   motivo**. Ese guardia lo escribio la 128 con su fecha de caducidad puesta: su D2 y su propio
+   mensaje de fallo decian que «el PR que engancha los escritores es el que retira este guardia», y
+   la 179 es ese PR. Lo que ocupa su sitio no es una prohibicion sino una **obligacion**, que es
+   mas fuerte: `ledger-escritores.guardia.test.ts` exige que los ocho puntos de escritura tengan
+   invalidador declarado y test, cuadrados contra el arbol en las dos direcciones.
+
+La fila del mapa pasa a citar esos dos guardias. **Nota fechada escrita en los dos sitios**:
+`specs/180-analitica-financiera-serie-temporal/requirements.md` (bajo R30) y `progress/impl_180.md`
+(§5 y §9). Precedente que se sigue: la 173 derogo la mitad-tienda de R40 de la 172 escribiendolo en
+el propio guardia en vez de borrarlo.
+
+**Lo que NO se sustituye, y es un hallazgo, no un remiendo:** ningun guardia dice hoy «la 180 no
+toco la invalidacion». **Tampoco lo decia antes** — `impl_180.md §9` ya lo declaraba como deuda:
+aquel guardia media el ESTADO y «no distingue "la 180 no lo toco" de "alguien lo quito y lo volvio a
+poner"». Asi que la 179 **hereda una deuda ya declarada, no abre una nueva**. Un guardia que si lo
+dijera tendria que medir el diff, y caducaria al mergear.
+
+### 9.3 `tests/unit/guards/censo-order-status-rename.test.ts`
+
+`cache-financiera-escritor-indemnizacion.test.ts` usaba el value retirado por el rename de la 153 en
+el doble de `findOrigenesReversion`. Se cambio por el vigente (`en_reparto`). **Solo aparecia ahi**
+(censado con `grep` sobre los 14 archivos nuevos de esta tanda). Detalle que costo una segunda
+vuelta: ese guardia barre el **texto crudo, comentarios incluidos**, asi que el comentario que
+explicaba el cambio tampoco podia nombrar el value viejo; esta redactado sin escribirlo.
+
+### 9.4 Gate tras los tres arreglos
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida — verde)
+
+$ pnpm lint
+✖ 57 problems (0 errors, 57 warnings)   ← identico al de antes; ningun warning nuevo
+
+$ pnpm exec vitest run <los 13 tests de T3/T4 + los TRES guardias del gate>
+ Test Files  16 passed (16)
+      Tests  105 passed (105)
+  (liquidacion-alcance, censo-order-status-rename y financiera-180-trazabilidad incluidos)
+
+$ pnpm exec vitest related --run <LiquidacionService, el decorador, la accion,
+                                  escritores-ledger, IncidenteAdminService>
+ Test Files  1 failed | 61 passed (62)
+      Tests  1 failed | 1132 passed (1133)
+  → el unico rojo es `tests/integration/wallet-tiendas-desglose.test.tsx`, timeout de jsdom
+    a 20 s. EN AISLADO: 30 passed (30) en 9,58 s. Flake por saturacion, no regresion; no
+    importa nada de esta feature.
+
+MUTACION DEL DECORADOR (la que sustituye a la #3 de §3, cuyo anclaje ya no existe):
+$ borrar el `if (resultado.status === "ok") await invalidarAnaliticaFinanciera(...)`
+ Test Files  3 failed (3)
+      Tests  7 failed | 7 passed (14)
+  → mueren los tres archivos de la liquidacion (escritor, orden y registro). El decorador
+    no es decorativo.
+```
+
+### 9.5 Archivos tocados en esta ronda
+
+| archivo | que |
+|---|---|
+| `lib/services/LiquidacionConInvalidacionService.ts` | **NUEVO** — el decorador (§9.1). |
+| `lib/services/LiquidacionService.ts` | **revertido a su estado previo a la 179**: sin import de analitica, sin puerto de cache, sin las tres invalidaciones inline. Solo queda un comentario que dice DONDE viven ahora y por que. |
+| `lib/actions/liquidacion.ts` | `buildService` envuelve con `decorarLiquidacionConInvalidacion(...)`; importa el decorador desde `@/lib/services/`, no analitica. |
+| `lib/analytics/escritores-ledger.ts` | nueva clase de invalidador `por_decorador` —documentada como **la mas debil de las cuatro**— y la entrada de la liquidacion actualizada con su motivo. |
+| `tests/unit/analytics/cache-financiera-escritor-liquidacion.test.ts` | el sujeto pasa a ser la composicion de produccion; + caso de cableado del composition root y + caso que mide la frontera de la 172 desde este lado. |
+| `tests/unit/analytics/cache-financiera-invalidacion-orden.test.ts` | idem; R8 se mide sobre decorador + servicio. |
+| `tests/unit/analytics/cache-financiera-registro.test.ts` | idem. |
+| `tests/unit/analytics/cache-financiera-escritor-indemnizacion.test.ts` | value de `order_status` vigente (§9.3). |
+| `progress/impl_180.md` | fila de R30 del mapa + nota fechada en §5 + actualizacion de la deuda de §9. |
+| `specs/180-analitica-financiera-serie-temporal/requirements.md` | nota fechada bajo R30. |
+| `specs/179-analitica-cache-financiera/design.md` | §2 declara el decorador con su motivo. |
+
+### 9.6 Lo que subo al leader
+
+- **La asimetria de §9.1** (un escritor por decorador, siete dentro del servicio) es una decision
+  mia, tomada para no forzar ninguna de las dos specs. Si se prefiere uniformar, eso **si** cambia
+  `design.md §5.2` de la 179 y debe decidirlo el humano, no yo.
+- **La derogacion de la mitad de R30 de la 180** (§9.2) toca una spec ajena. Esta escrita, fechada y
+  con precedente, pero es un requisito de otra feature: si el reviewer o el humano quieren otra
+  redaccion, el sitio esta marcado.
+- **`progress/impl_180.md` y `specs/180-*/requirements.md` quedan fuera de la frontera de
+  `design.md §2` de la 179.** Es contabilidad forzada por T5.1, no codigo, y el guardia
+  branch-scoped ya estaba retirado cuando se escribio — pero conviene que el reviewer lo sepa en vez
+  de descubrirlo en el diff.

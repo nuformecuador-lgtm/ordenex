@@ -82,7 +82,10 @@ function armarIncidentes(
     findEstatusIdByValue: vi.fn(async () => "e1"),
   };
   const historialRepo = {
-    findOrigenesReversion: vi.fn(async () => new Map<string, string>([["o1", "en_ruta"]])),
+    // `en_reparto` es el value VIGENTE: el que le precedia lo retiro el rename de la feature 153
+    // y lo censa `tests/unit/guards/censo-order-status-rename.test.ts` — que barre el texto
+    // crudo, comentarios incluidos, asi que aqui no se escribe ni para explicarlo.
+    findOrigenesReversion: vi.fn(async () => new Map<string, string>([["o1", "en_reparto"]])),
   };
 
   const servicio = new IncidenteAdminService(

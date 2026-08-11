@@ -45,6 +45,17 @@ export type Invalidador =
    */
   | { readonly clase: "por_job"; readonly origen: OrigenInvalidacion }
   /**
+   * Invalida un DECORADOR que lo envuelve, cableado en su composition root, tras cada operacion
+   * que confirma. Reservado a los escritores cuya feature de origen **prohibe** que el propio
+   * servicio importe analitica: hoy, solo la liquidacion (`liquidacion-alcance.test.ts` de la
+   * 172, R68).
+   *
+   * ⚠ Es la forma MAS DEBIL de las cuatro y por eso se distingue: un composition root nuevo que
+   * construyera el servicio sin envolverlo dejaria de invalidar y nada fallaria. Lo cubre el
+   * caso de cableado de su test, no el censo — que solo ve que el escritor esta registrado.
+   */
+  | { readonly clase: "por_decorador"; readonly origen: OrigenInvalidacion }
+  /**
    * No invalida por su cuenta porque NO es un escritor autonomo: solo lo instancian los
    * llamadores que se nombran, y son ellos quienes invalidan tras confirmar. Se registra igual
    * —aparece en el eje 2 del censo— para que «no invalida» sea una decision escrita y no un
@@ -99,17 +110,22 @@ export const ESCRITORES_DE_LEDGER: readonly EscritorDeLedger[] = [
   },
   {
     archivo: "lib/services/LiquidacionService.ts",
-    invalidaEn: ["lib/services/LiquidacionService.ts", INVALIDACION],
-    invalidadores: [{ clase: "directo", origen: "ledger_liquidacion" }],
+    invalidaEn: ["lib/services/LiquidacionConInvalidacionService.ts", INVALIDACION],
+    invalidadores: [{ clase: "por_decorador", origen: "ledger_liquidacion" }],
     tests: [
       "tests/unit/analytics/cache-financiera-escritor-liquidacion.test.ts",
       "tests/unit/analytics/cache-financiera-invalidacion-orden.test.ts",
     ],
     requisitos: ["R11", "R8"],
     motivo:
-      "sus escrituras viven DENTRO de `tx` (`:225`, `:322`, `:549`, `:565`): la invalidacion va " +
-      "tras cada `$transaction` que resuelve, nunca dentro (R8). Cubre los tres ledgers y, con " +
-      "ellos, el egreso de caja que emite `CajaPagoTiendaFeedService` en la misma operacion.",
+      "sus escrituras viven DENTRO de `tx` (`:225`, `:322`, `:549`, `:565`), asi que la " +
+      "invalidacion va tras cada `$transaction` que resuelve, nunca dentro (R8). Cubre los tres " +
+      "ledgers y, con ellos, el egreso de caja que emite `CajaPagoTiendaFeedService` en la misma " +
+      "operacion. **ES EL UNICO DE LOS SIETE EN REQUEST QUE NO INVALIDA DENTRO DE SU SERVICIO**, " +
+      "y no por gusto: `tests/unit/guards/liquidacion-alcance.test.ts` (feature 172, R68) prohibe " +
+      "que este archivo Y su Server Action importen NADA de `@/lib/analytics`. La invalidacion " +
+      "vive en un DECORADOR cableado en el composition root, que respeta las dos specs sin " +
+      "relajar ninguna; el motivo entero esta en la cabecera de ese archivo.",
   },
   {
     archivo: "lib/services/GeneracionGastosFijosService.ts",

@@ -25,9 +25,6 @@ import type {
   RegistrarPagoTiendaInput,
 } from "@/lib/types/liquidacion";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { invalidarAnaliticaFinanciera } from "@/lib/analytics/invalidacion-financiera";
-import { cacheNula } from "@/lib/cache/cache-nula";
-import type { IAnaliticaCache } from "@/lib/interfaces/external/IAnaliticaCache";
 import {
   descripcionDeAnulacion,
   descripcionDePago,
@@ -162,17 +159,6 @@ export class LiquidacionService implements ILiquidacionService {
      */
     private readonly caja: ICajaPagoTiendaFeedService,
     private readonly ahora: () => Date = () => new Date(),
-    /**
-     * Feature 179 (T3.3, R11) — el puerto de la cache de analitica.
-     *
-     * Este servicio es el que mas ledgers toca de los ocho escritores: el libro del mensajero,
-     * el de la tienda y —desde la 173— el egreso de la CAJA que emite `CajaPagoTiendaFeedService`
-     * dentro de la misma transaccion. Los tres alimentan el tablero financiero.
-     *
-     * Default `cacheNula()` para no romper las suites de la 172/173, que construyen este
-     * servicio con seis argumentos y no saben nada de cache.
-     */
-    private readonly cache: IAnaliticaCache = cacheNula(),
   ) {}
 
 
@@ -257,24 +243,13 @@ export class LiquidacionService implements ILiquidacionService {
           restante: pendiente.sub(monto).toFixed(2), // R24: el resto sigue pendiente
         };
       });
-      // R11/R8 — LA INVALIDACION, DESPUES DEL COMMIT Y SOLO SI HUBO ESCRITURA.
-      //
-      // Las tres operaciones de dinero de este servicio escriben DENTRO de `runTransaction`
-      // (`crearMovimientos` en `:225`, `:322`, `:549`, `:565`, mas el egreso de caja de la 173).
-      // Llamar a la invalidacion ahi dentro seria invalidar ANTES del commit: entre las dos
-      // cosas cabe una lectura concurrente que repuebla la cache con el estado ANTERIOR, y esa
-      // entrada vive el TTL entero. Nada falla y la cifra se congela vieja — el peor modo de
-      // fallo de esta feature, y por eso R8 tiene requisito y test propios
-      // (`cache-financiera-invalidacion-orden.test.ts`).
-      //
-      // ⚠ VA INLINE, TRES VECES, Y NO EN UN METODO PRIVADO COMPARTIDO. No es descuido: R82/R75
-      // de la 172 declara CERRADA la lista de metodos de esta clase —privados incluidos— para
-      // que anadir uno obligue a mirar si tiene derecho a existir. Tres lineas iguales cuestan
-      // menos que ampliar esa lista, y las ramas que NO escriben (`forbidden`, `sin_saldo`,
-      // `cierre_no_aprobado`, `ya_registrado`, `ya_anulado`) no tiran la cache de nadie.
-      if (resultado.status === "ok") {
-        await invalidarAnaliticaFinanciera(this.cache, "ledger_liquidacion");
-      }
+      // Feature 179 (R11/R8) — AQUI NO SE INVALIDA, Y ESO ES DELIBERADO. La invalidacion de la
+      // cache financiera vive en `lib/services/LiquidacionConInvalidacionService.ts`, un
+      // decorador que envuelve a este servicio en el composition root. Motivo, con su ruta:
+      // `tests/unit/guards/liquidacion-alcance.test.ts` (feature 172, R68/R40/R62) prohibe que
+      // este archivo —y su Server Action— importen NADA de `@/lib/analytics`. Poner la llamada
+      // aqui pone rojo ese guardia; el decorador respeta las dos specs sin relajar ninguna, y
+      // ademas hace estructuralmente imposible invalidar dentro de la `$transaction` (R8).
       return resultado;
     } catch (error) {
       if (error instanceof ClaveRepetidaError) {
@@ -387,10 +362,13 @@ export class LiquidacionService implements ILiquidacionService {
           restante: disponible.sub(monto).toFixed(2),
         };
       });
-      // R11/R8 — despues del commit (ver el comentario largo en `registrarPagoMensajero`).
-      if (resultado.status === "ok") {
-        await invalidarAnaliticaFinanciera(this.cache, "ledger_liquidacion");
-      }
+      // Feature 179 (R11/R8) — AQUI NO SE INVALIDA, Y ESO ES DELIBERADO. La invalidacion de la
+      // cache financiera vive en `lib/services/LiquidacionConInvalidacionService.ts`, un
+      // decorador que envuelve a este servicio en el composition root. Motivo, con su ruta:
+      // `tests/unit/guards/liquidacion-alcance.test.ts` (feature 172, R68/R40/R62) prohibe que
+      // este archivo —y su Server Action— importen NADA de `@/lib/analytics`. Poner la llamada
+      // aqui pone rojo ese guardia; el decorador respeta las dos specs sin relajar ninguna, y
+      // ademas hace estructuralmente imposible invalidar dentro de la `$transaction` (R8).
       return resultado;
     } catch (error) {
       if (error instanceof ClaveRepetidaError) {
@@ -479,10 +457,13 @@ export class LiquidacionService implements ILiquidacionService {
 
         return { status: "ok", pago: conAnulacion(pago, anulada.anulacion), restante };
       });
-      // R11/R8 — despues del commit (ver el comentario largo en `registrarPagoMensajero`).
-      if (resultado.status === "ok") {
-        await invalidarAnaliticaFinanciera(this.cache, "ledger_liquidacion");
-      }
+      // Feature 179 (R11/R8) — AQUI NO SE INVALIDA, Y ESO ES DELIBERADO. La invalidacion de la
+      // cache financiera vive en `lib/services/LiquidacionConInvalidacionService.ts`, un
+      // decorador que envuelve a este servicio en el composition root. Motivo, con su ruta:
+      // `tests/unit/guards/liquidacion-alcance.test.ts` (feature 172, R68/R40/R62) prohibe que
+      // este archivo —y su Server Action— importen NADA de `@/lib/analytics`. Poner la llamada
+      // aqui pone rojo ese guardia; el decorador respeta las dos specs sin relajar ninguna, y
+      // ademas hace estructuralmente imposible invalidar dentro de la `$transaction` (R8).
       return resultado;
     } catch (error) {
       if (error instanceof YaAnuladoError) return this.responderYaAnulado(pago.id);

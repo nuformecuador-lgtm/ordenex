@@ -20,6 +20,7 @@ import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { CierresBodegaAdminService } from "@/lib/services/CierresBodegaAdminService";
 import { GeneracionGastosFijosService } from "@/lib/services/GeneracionGastosFijosService";
 import { IncidenteAdminService } from "@/lib/services/IncidenteAdminService";
+import { decorarLiquidacionConInvalidacion } from "@/lib/services/LiquidacionConInvalidacionService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import { WalletEgresoService } from "@/lib/services/WalletEgresoService";
 import { WalletService } from "@/lib/services/WalletService";
@@ -98,13 +99,15 @@ async function correrLosOchoEscritores(libro: LibroFinanciero): Promise<void> {
     agregarSaldoPorTienda: vi.fn(async () => ({ creditos: "90000.00", debitos: "0.00" })),
   } as unknown as IWalletTiendaMovimientoRepository;
   const runner: LiquidacionTxRunner = async (fn) => fn({} as unknown as LiquidacionTx);
-  await new LiquidacionService(
-    pagoRepo,
-    tiendaRepo,
-    {} as unknown as IPagoMensajeroMovimientoRepository,
-    runner,
-    new CajaPagoTiendaFeedService(libro.cajaRepo),
-    () => AHORA,
+  await decorarLiquidacionConInvalidacion(
+    new LiquidacionService(
+      pagoRepo,
+      tiendaRepo,
+      {} as unknown as IPagoMensajeroMovimientoRepository,
+      runner,
+      new CajaPagoTiendaFeedService(libro.cajaRepo),
+      () => AHORA,
+    ),
     libro.cache,
   ).registrarPagoTienda(
     {

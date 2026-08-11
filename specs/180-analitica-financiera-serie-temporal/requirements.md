@@ -196,6 +196,30 @@ acceso a datos.
 **R30.** El sistema NO DEBE anadir, retirar ni modificar ningun `cacheTag` ni ninguna invalidacion:
 el guardia que hoy prohibe cachear el dominio financiera DEBE seguir verde.
 
+> **⚠ NOTA FECHADA — 2026-08-10 (feature 179): EL TESTIGO DE R30 CAMBIO.**
+>
+> La segunda mitad de este requisito —«el guardia que hoy prohibe cachear el dominio financiera
+> DEBE seguir verde»— nombraba `tests/unit/analytics/cache-financiera.guardia.test.ts`, y **la
+> feature 179 lo retiro**. No es una regresion: aquel guardia lo escribio la 128 con su fecha de
+> caducidad puesta (su D2 y su mensaje de fallo decian que «el PR que engancha los escritores es el
+> que retira este guardia»), y la 179 es ese PR. En su lugar quedan dos guardias que **sobreviven
+> al merge**:
+>
+> - `tests/unit/analytics/cache-tags.guardia.test.ts` (128) — la primera mitad de R30 sigue
+>   medida: ningun archivo del arbol escribe un literal de `cacheTag` fuera del catalogo.
+> - `tests/unit/analytics/ledger-escritores.guardia.test.ts` (179) — el heredero. Donde el
+>   retirado **prohibia** cachear dinero, este **obliga** a que los ocho puntos de escritura de los
+>   tres ledgers tengan invalidador declarado y test, cuadrados contra el arbol en las dos
+>   direcciones. El riesgo que R30 protegia sigue cubierto; cambio quien lo cubre.
+>
+> **Lo que esta nota NO arregla:** nunca hubo —ni hay— un guardia que diga «la 180 no toco la
+> invalidacion». `progress/impl_180.md §9` ya lo declaraba como deuda antes de este cambio, y la
+> deuda se hereda tal cual. El mapa `R<n> → test` de `progress/impl_180.md` se actualizo en la
+> misma fecha; **no se borro la fila**.
+>
+> Mismo criterio con el que la 173 derogo la mitad-tienda de R40 de la 172: la premisa que cae se
+> escribe, no se borra.
+
 ### 3.7 Verificacion y trazabilidad
 
 **R31.** Los guardias de la 127 que congelan superficie (numero de metodos publicos de repositorio,

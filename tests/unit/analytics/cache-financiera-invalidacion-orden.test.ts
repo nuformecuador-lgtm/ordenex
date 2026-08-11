@@ -17,6 +17,7 @@ import type {
   MovimientoDeCajaDePagoTienda,
 } from "@/lib/interfaces/services/ICajaPagoTiendaFeedService";
 import type { IAnaliticaCache, OrigenInvalidacion } from "@/lib/interfaces/external/IAnaliticaCache";
+import { decorarLiquidacionConInvalidacion } from "@/lib/services/LiquidacionConInvalidacionService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 
 // Feature 179 / T3.3 — R8: LA INVALIDACION VA DESPUES DEL COMMIT, NUNCA DENTRO.
@@ -117,13 +118,19 @@ function armar(opciones: { cajaExplota?: boolean } = {}) {
     return r;
   };
 
-  const servicio = new LiquidacionService(
-    pagoRepo,
-    tiendaRepo,
-    {} as unknown as IPagoMensajeroMovimientoRepository,
-    runner,
-    caja,
-    () => new Date("2026-08-03T12:00:00.000Z"),
+  // El sujeto es la COMPOSICION de produccion: decorador + servicio. Con la invalidacion en el
+  // decorador, «despues del commit» deja de ser una linea bien colocada y pasa a ser una
+  // imposibilidad estructural — el decorador ni siquiera ve la `tx`. Este test lo MIDE igual,
+  // porque lo que se afirma es la secuencia observada, no donde este escrita la llamada.
+  const servicio = decorarLiquidacionConInvalidacion(
+    new LiquidacionService(
+      pagoRepo,
+      tiendaRepo,
+      {} as unknown as IPagoMensajeroMovimientoRepository,
+      runner,
+      caja,
+      () => new Date("2026-08-03T12:00:00.000Z"),
+    ),
     cache,
   );
   return { servicio, eventos };

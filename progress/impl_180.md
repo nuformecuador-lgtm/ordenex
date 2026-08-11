@@ -121,6 +121,39 @@ R31 exige **actualizar**, no relajar. Los cinco cambios, cada uno justificado po
 **`cache-financiera.guardia.test.ts` sigue VERDE sin tocarlo** (R30 / T5.3): su ultimo commit es de
 la feature 128. Ni un `cacheTag` anadido ni retirado.
 
+> ### ⚠ NOTA FECHADA (2026-08-10) — EL TESTIGO DE R30 CAMBIO, PORQUE SU PREMISA CADUCO
+>
+> **La feature 179 retiro `tests/unit/analytics/cache-financiera.guardia.test.ts`**, que era el
+> archivo que R30 nombraba. No es un borrado accidental: **es el PR que la D2 de la 128 anuncio**
+> —aquel guardia se escribio para prohibir cachear dinero *hasta* que existiera la invalidacion
+> completa, y su propio mensaje de fallo decia que «el PR que engancha los escritores es el que
+> retira este guardia»— y la 179 lo sustituyo por
+> `tests/unit/analytics/ledger-escritores.guardia.test.ts` en la misma tanda (su R19 comprueba por
+> sistema de archivos que no puedan existir los dos ni faltar los dos).
+>
+> **Que era R30 y en que se parte hoy.** R30 tenia dos mitades:
+>
+> 1. *«no anadir, retirar ni modificar ningun `cacheTag`»* — **sigue verificada**, y por un
+>    guardia que sobrevive al merge: `cache-tags.guardia.test.ts` (128) mide que los literales de
+>    tag viven SOLO en el catalogo (`ANALITICA_TAGS`) y que ningun archivo del arbol los escribe a
+>    mano. La 180 no anadio ninguno y ese guardia lo seguiria diciendo.
+> 2. *«el guardia que hoy prohibe cachear el dominio financiera DEBE seguir verde»* — **derogada
+>    con motivo**. Ese dominio ya esta cacheado, a proposito y con su spec (179). Lo que ocupa su
+>    sitio no es una prohibicion sino una obligacion, que es mas fuerte: el censo de la 179 exige
+>    que **los OCHO puntos de escritura de los tres ledgers tengan invalidador declarado y test**,
+>    en las dos direcciones, y pone rojo un escritor nuevo que no invalide. El riesgo que R30
+>    protegia —dinero cacheado sin invalidar— sigue cubierto; lo que cambio es quien lo cubre.
+>
+> **Lo que NO se sustituye, dicho sin maquillar:** ningun guardia dice hoy «la 180 no toco la
+> invalidacion». Tampoco lo decia antes —§9 de esta misma bitacora ya lo declaraba: aquel guardia
+> media el ESTADO y «no distingue "la 180 no lo toco" de "alguien lo quito y lo volvio a poner"»—,
+> asi que la 179 no abre un agujero nuevo: hereda uno ya declarado. Un guardia que si lo dijera
+> tendria que medir el diff, y caducaria al mergear.
+>
+> Precedente de este mismo repo para esta forma de resolverlo: la 173 derogo la mitad-tienda de
+> R40 de la 172 y lo dejo escrito en `tests/unit/guards/liquidacion-alcance.test.ts` en vez de
+> borrar la fila del mapa.
+
 ## 6. Evidencia de mutacion
 
 Diecinueve mutaciones, cada una aplicada al codigo de **produccion**, corrida, y restaurada por la
@@ -225,6 +258,11 @@ la mutacion, o sea que la comparacion no es una tautologia.
   el dominio financiera no esta cacheado y sigue sin estarlo, pero no distingue «la 180 no lo toco»
   de «alguien lo quito y lo volvio a poner». Es lo mejor comprobable sin un guardia branch-scoped,
   que caducaria al mergear.
+  **⚠ ACTUALIZADO EL 2026-08-10 (feature 179):** ese guardia ya no existe —la 179 lo retiro
+  sustituido por el censo de escritores de ledger, que era el plan escrito de la D2 de la 128— y
+  la mitad de R30 que decia «el dominio financiera NO esta cacheado» esta **derogada con motivo**.
+  La deuda que este parrafo declaraba (medir el estado y no el diff) **no cambia y se hereda**.
+  El razonamiento completo esta en la nota fechada de §5.
 - **R31 se apoya en que los guardias ampliados esten verdes con sus cuentas ancladas** (11 metodos, 14
   modulos). Eso demuestra que cubren lo nuevo; no demuestra que nadie los relajara en el mismo commit.
   La mutacion 17 es la evidencia de que el unico detector que se ensancho se endurecio de verdad.
@@ -276,7 +314,7 @@ citado mida de verdad ese requisito— lo sostiene la seccion «Evidencia de mut
 | R27 | el total y TODAS las filas de una vista comparten variante de `ImporteAnalitico`, clave a clave | `tests/unit/services/analitica-financiera-serie.test.ts`, `tests/unit/analytics/financiera-forma-importe.guardia.test.ts` |
 | R28 | toda clave de una vista temporal es SOLO una fecha, sin separador de dimensiones | `tests/unit/services/analitica-financiera-serie.test.ts`, `tests/unit/analytics/financiera-granularidad.test.ts` |
 | R29 | `lib/analytics/cubo-temporal.ts` es un modulo puro: se importa sin `DATABASE_URL` y su troceo no depende del reloj | `tests/unit/analytics/modulo-puro.guardia.test.ts`, `tests/unit/analytics/cubo-temporal.test.ts` |
-| R30 | ningun archivo envuelve el servicio ni los repositorios financieros con la cache | `tests/unit/analytics/cache-financiera.guardia.test.ts` |
+| R30 | ningun `cacheTag` se escribe a mano fuera del catalogo, y la cache del dominio financiera —que la 180 no introdujo— solo puede existir con TODOS sus invalidadores | `tests/unit/analytics/cache-tags.guardia.test.ts`, `tests/unit/analytics/ledger-escritores.guardia.test.ts` |
 | R31 | los guardias de superficie de la 127 cubren los archivos y los ONCE metodos nuevos, y siguen verdes | `tests/unit/analytics/financiera-repositorios.guardia.test.ts`, `tests/unit/analytics/financiera-fuente.guardia.test.ts` |
 | R32 | el mapa `R1..R32` esta completo, sin saltos ni repetidos, y cita tests que existen en el arbol | `tests/unit/analytics/financiera-180-trazabilidad.guardia.test.ts` |
 

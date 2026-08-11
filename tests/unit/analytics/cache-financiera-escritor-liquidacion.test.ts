@@ -11,6 +11,7 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { LiquidacionTx, LiquidacionTxRunner } from "@/lib/interfaces/services/ILiquidacionService";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
+import { decorarLiquidacionConInvalidacion } from "@/lib/services/LiquidacionConInvalidacionService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import { libroFinanciero, type LibroFinanciero } from "./_libro-financiero";
 
@@ -100,13 +101,20 @@ function armarLiquidacion(libro: LibroFinanciero, pago: LiquidacionPagoDTO = pag
 
   const runner: LiquidacionTxRunner = async (fn) => fn(TX);
 
-  const servicio = new LiquidacionService(
-    pagoRepo,
-    tiendaRepo,
-    mensajeroRepo,
-    runner,
-    new CajaPagoTiendaFeedService(libro.cajaRepo), // el puerto REAL, sobre el libro compartido
-    () => new Date("2026-08-03T12:00:00.000Z"),
+  // EL SUJETO ES EL DECORADOR SOBRE EL SERVICIO REAL, que es exactamente lo que
+  // `lib/actions/liquidacion.ts` construye en produccion. Probar el servicio desnudo dejaria
+  // fuera justo la pieza que invalida (ver la cabecera de
+  // `lib/services/LiquidacionConInvalidacionService.ts`: la 172 prohibe que el servicio importe
+  // analitica, asi que la invalidacion vive en el decorador).
+  const servicio = decorarLiquidacionConInvalidacion(
+    new LiquidacionService(
+      pagoRepo,
+      tiendaRepo,
+      mensajeroRepo,
+      runner,
+      new CajaPagoTiendaFeedService(libro.cajaRepo), // el puerto REAL, sobre el libro compartido
+      () => new Date("2026-08-03T12:00:00.000Z"),
+    ),
     libro.cache,
   );
   return { servicio, pagoRepo, tiendaRepo, mensajeroRepo };
@@ -226,8 +234,25 @@ describe("R11/R24 · las tres operaciones registran el origen de la liquidacion"
 });
 
 describe("R11 · el composition root de produccion pasa el puerto de verdad", () => {
-  it("`buildService` de `lib/actions/liquidacion.ts` construye con `crearAnaliticaCacheDeNext()`", () => {
+  // ⚠ AQUI EL CABLEADO NO ES OPCIONAL DE VERDAD, y por eso este caso importa mas que sus siete
+  // hermanos. Los otros escritores invalidan DENTRO de su servicio: aunque el composition root
+  // se olvidara del puerto, la llamada seguiria ahi. La liquidacion invalida en un DECORADOR, y
+  // un `buildService` que dejara de envolver no invalidaria nunca sin que nada fallase. Este es
+  // el unico sitio que lo mide.
+  it("`buildService` de `lib/actions/liquidacion.ts` ENVUELVE con el decorador y le pasa la cache", () => {
     const fuente = fs.readFileSync(path.join(REPO_ROOT, "lib", "actions", "liquidacion.ts"), "utf8");
-    expect(fuente).toMatch(/new LiquidacionService\([\s\S]*?crearAnaliticaCacheDeNext\(\)/);
+    expect(fuente).toMatch(
+      /decorarLiquidacionConInvalidacion\(\s*new LiquidacionService\([\s\S]*?crearAnaliticaCacheDeNext\(\)/,
+    );
+  });
+
+  it("y ni el servicio ni su Server Action importan `@/lib/analytics` (frontera de la 172)", () => {
+    // La contradiccion que este decorador resuelve, medida desde el lado de la 179: si alguien
+    // «simplificara» devolviendo la llamada al servicio, `liquidacion-alcance.test.ts` de la 172
+    // se pondria rojo y este caso diria por que.
+    for (const rel of ["lib/services/LiquidacionService.ts", "lib/actions/liquidacion.ts"]) {
+      const fuente = fs.readFileSync(path.join(REPO_ROOT, ...rel.split("/")), "utf8");
+      expect(fuente, `${rel} importa @/lib/analytics`).not.toMatch(/from\s+"@\/lib\/analytics/);
+    }
   });
 });
