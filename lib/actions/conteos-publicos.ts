@@ -3,10 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { ConteosPublicosRepository } from "@/lib/repositories/ConteosPublicosRepository";
 import { crearConteosPublicosCacheDeNext } from "@/lib/cache/next-conteos-publicos-cache";
-import {
-  CONTEOS_PUBLICOS_CACHE_KEY,
-  CONTEOS_PUBLICOS_CACHE_TTL_SEGUNDOS,
-} from "@/lib/config/conteos-publicos-cache";
+import { CONTEOS_PUBLICOS_CACHE_KEY } from "@/lib/config/conteos-publicos-cache";
 import type { IConteosPublicosCache } from "@/lib/interfaces/external/IConteosPublicosCache";
 import type { IConteosPublicosRepository } from "@/lib/interfaces/repositories/IConteosPublicosRepository";
 import type { ConteosPublicos } from "@/lib/types/conteos-publicos";
@@ -60,5 +57,13 @@ export async function obtenerConteosPublicos(
   return cache.envolver(CONTEOS_PUBLICOS_CACHE_KEY, () => repo.contar());
 }
 
-/** Re-export para que un consumidor pueda anunciar la frescura del dato sin adivinar el TTL. */
-export { CONTEOS_PUBLICOS_CACHE_TTL_SEGUNDOS };
+// NO re-exportar aqui el TTL de la cache (ni ninguna otra constante). Un archivo
+// `"use server"` solo puede exportar funciones async: Next convierte CADA export en un
+// endpoint invocable desde el cliente, y un numero no puede serlo. El re-export que vivia
+// aqui rompia el BUILD entero con
+//   A "use server" file can only export async functions, found number
+// y ni siquiera se notaba en desarrollo ni en los tests, porque solo falla al recolectar
+// la configuracion de la pagina al compilar.
+//
+// Quien necesite el TTL lo importa de `@/lib/config/conteos-publicos-cache`, que es donde
+// vive y no lleva la directiva.
