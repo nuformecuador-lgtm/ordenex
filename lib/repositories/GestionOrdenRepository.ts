@@ -5,6 +5,7 @@ import type {
   MiAsignacionRow,
   OrdenGestionRow,
   ReprogramarDesdeDevueltaInput,
+  VentanaDia,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
@@ -17,12 +18,73 @@ import { loadRouteOptimizationConfig } from "@/lib/config/route-optimization";
 
 // Feature 61: estado terminal de entrega para el KPI "entregadas" del portal.
 const ESTATUS_ENTREGADA = "entregada";
+// Estado de las ordenes que el mensajero lleva encima. El KPI "Total a cobrar" lo EXCLUYE de
+// su parte gestionada porque esa mitad ya la aporta `porCobrar` (ver `gestionadasDelDiaWhere`).
+const ESTADO_EN_REPARTO = "en_reparto";
 
 // Feature 100 — `resultado` de la gestion que ancla la ventana en `devuelta` (R5: de ahi se deriva
 // el mensajero de la gestion sintetica) y `resultado` de la gestion sintetica de reprogramacion
 // (R3). Valores del catalogo `gestion_resultado` ya sembrados; esta feature NO agrega estados.
 const RESULTADO_DEVUELTA = "devuelta";
 const RESULTADO_REPROGRAMADA = "reprogramada";
+
+// `resultado` de la gestion que ancla los KPIs de entregadas a SU DIA. Homonimo de
+// `ESTATUS_ENTREGADA` pero de otro vocabulario (enum `gestion_resultado`, no el catalogo
+// `order_status`): por eso son dos constantes y no una compartida.
+const RESULTADO_ENTREGADA = "entregada";
+
+/**
+ * Gestion VIGENTE del mensajero dentro de la ventana del dia. Es el acote comun de los dos
+ * KPIs de jornada, y va sobre la GESTION —no sobre la orden— porque `orden` no tiene
+ * `entregada_at` ni `gestionada_at`: `updatedAt` lo mueve cualquier edicion posterior (una
+ * nota, una reasignacion) y sacaria la gestion de su dia real.
+ *
+ * `anuladaAt: null` es el mismo criterio de "gestion VIGENTE" que usa `RankingRepository`
+ * (feature 67/R11): una gestion deshecha deja de contar. `mensajeroId` la ancla a QUIEN
+ * gestiono, asi que una reasignacion posterior no le regala el KPI a otro mensajero.
+ * `createdAt` half-open cubre el dia sin invadir el primer instante del siguiente.
+ */
+function gestionDelDia(mensajeroId: string, dia: VentanaDia) {
+  return {
+    mensajeroId,
+    anuladaAt: null,
+    createdAt: { gte: dia.desde, lt: dia.hasta },
+  } satisfies Prisma.GestionOrdenWhereInput;
+}
+
+/** KPI "Entregadas": ordenes propias, no borradas, ENTREGADAS por el mensajero HOY. */
+function entregadasDelDiaWhere(mensajeroId: string, dia: VentanaDia) {
+  return {
+    mensajeroAsignadoId: mensajeroId,
+    deletedAt: null,
+    estatus: { value: ESTATUS_ENTREGADA },
+    gestiones: { some: { ...gestionDelDia(mensajeroId, dia), resultado: RESULTADO_ENTREGADA } },
+  } satisfies Prisma.OrdenWhereInput;
+}
+
+/**
+ * KPI "Total a cobrar" (parte YA GESTIONADA): ordenes propias, no borradas, con una gestion
+ * vigente del mensajero HOY, SEA CUAL SEA su resultado.
+ *
+ * Sin filtro de `resultado` a proposito: el total del dia mide TODO lo que paso por las manos
+ * del mensajero, no solo lo que termino cobrado. Una devuelta o una reprogramada gestionadas
+ * hoy siguen siendo parte de su jornada; si se filtraran, el total bajaria cada vez que una
+ * orden NO se entrega, que es justo cuando el mensajero necesita que el numero no se mueva.
+ *
+ * `estatus.value != en_reparto` es lo que hace DISJUNTOS los dos sumandos de `totalACobrar`.
+ * Sin el habria doble conteo real: una orden gestionada hoy como `reprogramada` y liberada de
+ * vuelta a reparto el mismo dia (feature 46) cae en los DOS conjuntos y su COD se sumaria dos
+ * veces. La exclusion vive AQUI, en la query, y no en el service, para que ningun llamador
+ * futuro pueda combinarlos mal.
+ */
+function gestionadasDelDiaWhere(mensajeroId: string, dia: VentanaDia) {
+  return {
+    mensajeroAsignadoId: mensajeroId,
+    deletedAt: null,
+    estatus: { value: { not: ESTADO_EN_REPARTO } },
+    gestiones: { some: gestionDelDia(mensajeroId, dia) },
+  } satisfies Prisma.OrdenWhereInput;
+}
 
 type GestionPrismaClient = Pick<
   PrismaClient,
@@ -149,25 +211,17 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
   }
 
   /** Feature 61: conteo de entregadas del mensajero (KPI del portal), no borradas. */
-  async contarEntregadas(mensajeroId: string): Promise<number> {
+  async contarEntregadas(mensajeroId: string, dia: VentanaDia): Promise<number> {
     return this.prisma.orden.count({
-      where: {
-        mensajeroAsignadoId: mensajeroId,
-        deletedAt: null,
-        estatus: { value: ESTATUS_ENTREGADA },
-      },
+      where: entregadasDelDiaWhere(mensajeroId, dia),
     });
   }
 
-  /** Suma de `montoCobrar` (COD) de las entregadas del mensajero, no borradas; null -> 0. */
-  async sumMontoCobrarEntregadas(mensajeroId: string): Promise<number> {
+  /** Suma de `montoCobrar` (COD) de las GESTIONADAS HOY del mensajero, ya fuera de reparto. */
+  async sumMontoCobrarGestionadas(mensajeroId: string, dia: VentanaDia): Promise<number> {
     const agg = await this.prisma.orden.aggregate({
       _sum: { montoCobrar: true },
-      where: {
-        mensajeroAsignadoId: mensajeroId,
-        deletedAt: null,
-        estatus: { value: ESTATUS_ENTREGADA },
-      },
+      where: gestionadasDelDiaWhere(mensajeroId, dia),
     });
     return agg._sum.montoCobrar ? agg._sum.montoCobrar.toNumber() : 0;
   }

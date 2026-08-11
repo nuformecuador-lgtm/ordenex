@@ -45,7 +45,7 @@ function fakeRepo(rows: MiAsignacionRow[]): IGestionOrdenRepository {
     findMisAsignaciones: vi.fn(async () => rows),
     findMisAsignacionesByIds: vi.fn(async () => []),
     contarEntregadas: vi.fn(async () => 0),
-    sumMontoCobrarEntregadas: vi.fn(async () => 0),
+    sumMontoCobrarGestionadas: vi.fn(async () => 0),
     findByIdsParaGestion: vi.fn(async () => []),
     getOrdenEnGestion: vi.fn(async () => null),
     setOrdenEnGestion: vi.fn(async () => true),
