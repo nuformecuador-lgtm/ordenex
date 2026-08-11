@@ -76,6 +76,12 @@ export const CAJA_RESUMEN_LABEL = {
   egresosPropios: "Gastos de Ordenex",
   deTerceros: "Contra-entrega cobrado y aún no entregado a las tiendas",
   deTercerosEnlace: "Ver la deuda de cada tienda",
+  // Feature 200 (tanda 1) — el TERCER tile de la cabecera. No es dinero: es cuántos registros
+  // hay en el conjunto que se está mirando, y por eso se pinta en color neutro y sin insignia
+  // de signo. La pista no nombra el control que recorta el conjunto: dice lo que la persona
+  // ve, que es el periodo elegido.
+  movimientos: "Movimientos",
+  movimientosPista: "Registros del periodo que estás viendo",
 } as const;
 
 /** Pantalla donde SI vive la deuda con cada tienda, derivada del ledger por tienda (R35). */
