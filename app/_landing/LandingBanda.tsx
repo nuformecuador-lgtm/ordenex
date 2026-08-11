@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import { Enfasis } from "./primitivas";
 
 const CIFRAS = [
@@ -7,14 +9,29 @@ const CIFRAS = [
 ] as const;
 
 /**
- * Banda oscura entre servicios y «cómo funciona» (`.lp-imgband`). En el sitio
- * lleva una foto de paquetes bajo un degradado navy; sin imágenes queda el navy
- * sólido, que es lo que el degradado dejaba ver en el borde izquierdo.
+ * Banda oscura entre servicios y «cómo funciona» (`.lp-imgband`), con la foto de
+ * paquetes bajo el degradado navy, igual que el sitio.
+ *
+ * El degradado va de navy opaco a la izquierda —donde vive el texto— hasta dejar
+ * ver la foto a la derecha: es exactamente lo que el sitio muestra en ese borde.
+ * Foto decorativa (`alt=""`) y sin `priority`: está por debajo del pliegue y su
+ * carga no debe competir con la del hero.
  */
 export function LandingBanda() {
   return (
-    <section className="bg-navy-deep px-6 py-[72px] text-white md:px-12 md:py-[104px]">
-      <div className="mx-auto max-w-[1200px]">
+    <section className="relative overflow-hidden bg-navy-deep px-6 py-[72px] text-white md:px-12 md:py-[104px]">
+      <Image
+        src="/landing/paquetes.jpg"
+        alt=""
+        fill
+        sizes="100vw"
+        className="pointer-events-none object-cover"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-navy-deep via-navy-deep/92 to-navy-deep/55"
+      />
+      <div className="relative mx-auto max-w-[1200px]">
         <p className="mb-3.5 text-xs font-bold tracking-[0.12em] text-brand-light uppercase">
           Operación real de despacho
         </p>

@@ -84,5 +84,18 @@ export const config = {
   // Prisma necesita el runtime de Node: el default (edge) no puede abrir la
   // conexion TCP a Postgres que exige `isSessionActive`.
   runtime: "nodejs",
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.svg).*)"],
+  // Los ESTATICOS DE IMAGEN de `public/` quedan fuera del guard. Antes solo se
+  // excluia `.svg`, asi que una peticion de `/landing/hero-bodega.jpg` entraba
+  // aqui, no casaba con ninguna ruta publica, se trataba como privada y salia en
+  // 307 a /login: el navegador recibia HTML donde esperaba una imagen y la
+  // landing publica se veia SIN NINGUNA FOTO (solo sobrevivian los `.svg`, que ya
+  // estaban excluidos). Feature 86: la landing es publica y sus fotos tambien.
+  //
+  // No afloja nada: lo que vive en `public/` ya se sirve tal cual a cualquiera que
+  // sepa la URL —el middleware nunca fue su control de acceso— y la exclusion se
+  // acota a extensiones de imagen, asi que el resto de `public/` (los `.xlsx` de
+  // geografia, por ejemplo) sigue pasando por el guard exactamente igual que antes.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|jpg|jpeg|png|gif|webp|avif|ico)).*)",
+  ],
 };
