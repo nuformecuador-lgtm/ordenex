@@ -33,3 +33,33 @@ export const TAG_OPERATIVA: string = tagDeDominio("operativa");
  * invalide con otro.
  */
 export const TAGS_OPERATIVA: readonly string[] = [TAG_OPERATIVA];
+
+/* -------------------------------------------------------------------------- */
+/* Feature 179 (T1.1, D1) — el dominio del DINERO                              */
+/* -------------------------------------------------------------------------- */
+//
+// D1 (humano, 2026-08-10) = (a): **un solo tag de dominio** tambien para la financiera. Al
+// invalidar se vacia la cache financiera ENTERA —un egreso manual de ₡5.000 tira tambien la
+// conciliacion del trimestre— y eso se asume: invalidar de mas cuesta RECOMPUTO, no
+// correccion. A cambio hace IMPOSIBLE que la invalidacion se desalinee de la lectura.
+//
+// El dato propio que lo decide, ademas del de la 128: el mapa «que escritura afecta a que
+// metrica» no es evidente ni estable — **un cierre aprobado toca los tres ledgers y seis de
+// las diez metricas financieras**. Un mapa ledger→metrica escrito a mano, cuando se
+// equivocara, NO fallaria: serviria la cifra vieja de la metrica olvidada.
+//
+// SE AÑADE AQUI Y NO EN UN MODULO NUEVO (R6/R20 de la 128): una sola lista la consumen el que
+// escribe la entrada y el que la invalida. Dos modulos de tags es exactamente como se
+// desalinean.
+
+/** El unico tag del dominio financiera. Derivado del catalogo, nunca escrito a mano (R6). */
+export const TAG_FINANCIERA: string = tagDeDominio("financiera");
+
+/**
+ * Los tags con los que se escribe y se invalida TODA entrada del dominio financiera.
+ *
+ * Misma propiedad que `TAGS_OPERATIVA`: los escritores de ledger no componen este array — lo
+ * consumen a traves de `invalidarAnaliticaFinanciera` (`lib/analytics/invalidacion-financiera.ts`),
+ * y el decorador de lectura escribe con el mismo. Un escritor no puede invalidar «casi bien».
+ */
+export const TAGS_FINANCIERA: readonly string[] = [TAG_FINANCIERA];

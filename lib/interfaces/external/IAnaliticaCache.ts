@@ -14,7 +14,27 @@
  * - `backfill` — el backfill de la 125 recomputo un rango (llega por job encolado, §7.1).
  * - `manual` — invocacion humana de mantenimiento.
  */
-export type OrigenInvalidacion = "job_rollup_diario" | "backfill" | "manual";
+export type OrigenInvalidacion =
+  | "job_rollup_diario"
+  | "backfill"
+  | "manual"
+  /* ---- Feature 179 (T1.3, R24): UN ORIGEN POR ESCRITOR DE LEDGER ------------------------- */
+  //
+  // POR QUE UNO POR ESCRITOR Y NO UNO GLOBAL `"ledger"`. Este registro es la unica senal que
+  // distingue «la cifra no cambio porque no hubo movimiento» de «la cifra no cambio porque el
+  // invalidador de los cierres de bodega no llego». Con un origen unico para los ocho, esa
+  // senal no existe: se sabria que alguien invalido, no CUAL no lo hizo. Y el modo de fallo de
+  // esta feature es precisamente mudo — nada se rompe, el numero se queda quieto.
+  //
+  // Sigue siendo un dominio CERRADO, nunca `string`: un texto libre acaba llevando un id.
+  | "ledger_egreso_admin" // WalletEgresoService: egreso administrativo y su reverso (R9)
+  | "ledger_movimiento_manual" // WalletService.registrarMovimientoManual (R10)
+  | "ledger_liquidacion" // LiquidacionService: pagos y anulaciones (R11)
+  | "ledger_gastos_fijos" // GeneracionGastosFijosService, via el cron (R12)
+  | "ledger_indemnizacion" // IncidenteAdminService: indemnizacion aprobada (R13)
+  | "ledger_cierre_dia" // CierresAdminService.aprobarCierre (R14)
+  | "ledger_cierre_bodega" // CierresBodegaAdminService.aprobarCierreBodega (R15)
+  | "job_backfill_tesoreria"; // el job que encola el backfill de tesoreria (R26/R27)
 
 export interface IAnaliticaCache {
   /**
