@@ -1,0 +1,361 @@
+{
+  "info": {
+    "name": "Ordenex — API key (canal integradores)",
+    "_postman_id": "b7d1f0a2-1770-4f2e-9a55-0177ea51ordx",
+    "description": "Los 7 endpoints accesibles con API key (`Authorization: Bearer ordx_...`).\n\nGenerada desde el contrato publicado del repo (`lib/api/openapi-spec.ts`, espejo en `docs/api/api-key-openapi.yaml`).\n\n## Antes de empezar\n\n1. Edita las variables de la colección: `baseUrl` y `apiKey`.\n2. Lanza **Carga › lote válido**: sus tests guardan `cargaId`, `numGuia` y `numRemision` en las variables, así que el resto de peticiones funcionan sin tocar nada.\n\n## Reglas que aplican a los 7\n\n- El **dueño va forzado a la key**: una orden o un lote de otro integrador responde `404`, idéntico a inexistente. No hay forma de leer ni generar nada ajeno.\n- Los errores tienen forma uniforme: `{ status, code, message }`, con `code` en `VALIDATION_ERROR | UNAUTHORIZED | FORBIDDEN | NOT_FOUND | CONFLICT | INTERNAL`.\n- Sin header `Authorization`, o con esquema distinto de `Bearer`, responde `401` sin tocar base de datos ni storage.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "description": "Sin barra final. En producción, el dominio de la app." },
+    { "key": "apiKey", "value": "ordx_pega_aqui_tu_key", "description": "El secreto se muestra UNA sola vez al crearla en Configuración > API." },
+    { "key": "numGuia", "value": "", "description": "Se rellena solo al correr 'Carga › lote válido'." },
+    { "key": "numRemision", "value": "", "description": "Se rellena solo al correr 'Carga › lote válido'." },
+    { "key": "cargaId", "value": "", "description": "Se rellena solo al correr 'Carga › lote válido'." }
+  ],
+  "item": [
+    {
+      "name": "1 · Carga de órdenes",
+      "description": "`POST /api/ordenes/api-key/carga` — crea órdenes en firme. Cada una nace en `por_recolectar_en_tienda` y recibe su `num_guia` en el acto.\n\n**Éxito parcial:** un `200` puede contener filas con `error`. Cada fila se clasifica en `creada`, `duplicada` (mismo `num_remision`) o `error`. El lote acepta de 1 a 5000 filas.",
+      "item": [
+        {
+          "name": "lote válido (2 filas) — guarda cargaId y numGuia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "if (b.cargaId) pm.collectionVariables.set('cargaId', b.cargaId);",
+                  "const creada = (b.resultados || []).find(r => r.resultado === 'creada');",
+                  "if (creada) {",
+                  "  pm.collectionVariables.set('numGuia', String(creada.numGuia));",
+                  "  pm.collectionVariables.set('numRemision', creada.numRemision);",
+                  "}",
+                  "console.log('cargaId:', pm.collectionVariables.get('cargaId'), '| numGuia:', pm.collectionVariables.get('numGuia'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga"] },
+            "description": "Los 10 campos requeridos, todos como texto. `notas` es opcional.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"num_remision\": \"REM-0001\",\n      \"destinatario\": \"Juan Pérez\",\n      \"telefono\": \"88887777\",\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Carmen\",\n      \"direccion\": \"Av. Central, 200m norte del parque\",\n      \"producto\": \"Camiseta talla M\",\n      \"peso\": \"1.5\",\n      \"monto_cobrar\": \"25.90\",\n      \"notas\": \"Entregar en la tarde\"\n    },\n    {\n      \"num_remision\": \"REM-0002\",\n      \"destinatario\": \"María Rodríguez\",\n      \"telefono\": \"71234567\",\n      \"provincia\": \"Alajuela\",\n      \"canton\": \"Alajuela\",\n      \"distrito\": \"Alajuela\",\n      \"direccion\": \"100m sur de la iglesia, casa azul\",\n      \"producto\": \"Zapatos talla 40\",\n      \"peso\": \"2.3\",\n      \"monto_cobrar\": \"48.00\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "lote mínimo (1 fila, solo requeridos)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga"] },
+            "description": "Lo mínimo que acepta el servidor: sin `notas` ni campos extra.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"num_remision\": \"REM-MIN-0001\",\n      \"destinatario\": \"Carlos Mora\",\n      \"telefono\": \"60001111\",\n      \"provincia\": \"Cartago\",\n      \"canton\": \"Cartago\",\n      \"distrito\": \"Oriental\",\n      \"direccion\": \"Frente a la escuela\",\n      \"producto\": \"Libro\",\n      \"peso\": \"0.4\",\n      \"monto_cobrar\": \"0.00\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "lote mixto: una válida y una inválida (200 con fila en error)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga"] },
+            "description": "La segunda fila va sin `telefono`. Demuestra el **éxito parcial**: responde `200`, la primera sale `creada` y la segunda `error` con `errores.telefono`. Una fila mala NO aborta el lote.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"num_remision\": \"REM-MIX-0001\",\n      \"destinatario\": \"Ana Jiménez\",\n      \"telefono\": \"85554444\",\n      \"provincia\": \"Heredia\",\n      \"canton\": \"Heredia\",\n      \"distrito\": \"Heredia\",\n      \"direccion\": \"Barrio María Auxiliadora, casa 12\",\n      \"producto\": \"Audífonos\",\n      \"peso\": \"0.3\",\n      \"monto_cobrar\": \"33.50\"\n    },\n    {\n      \"num_remision\": \"REM-MIX-0002\",\n      \"destinatario\": \"Sin teléfono\",\n      \"telefono\": \"\",\n      \"provincia\": \"San José\",\n      \"canton\": \"Escazú\",\n      \"distrito\": \"San Rafael\",\n      \"direccion\": \"Del cruce 300m oeste\",\n      \"producto\": \"Mochila\",\n      \"peso\": \"1.0\",\n      \"monto_cobrar\": \"12.00\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "duplicada: repetir un num_remision ya cargado",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga"] },
+            "description": "Reenvía `REM-0001`. La dedup es por `num_remision`: la fila vuelve como `duplicada`, no como error, y no crea una segunda orden. Útil para reintentar un envío sin miedo a duplicar.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"num_remision\": \"REM-0001\",\n      \"destinatario\": \"Juan Pérez\",\n      \"telefono\": \"88887777\",\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Carmen\",\n      \"direccion\": \"Av. Central, 200m norte del parque\",\n      \"producto\": \"Camiseta talla M\",\n      \"peso\": \"1.5\",\n      \"monto_cobrar\": \"25.90\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "422: lote vacío",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga"] },
+            "description": "`ordenes` exige al menos 1 fila (máx. 5000). Responde `422 VALIDATION_ERROR`.",
+            "body": { "mode": "raw", "raw": "{\n  \"ordenes\": []\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 · Listado de órdenes",
+      "description": "`GET /api/ordenes/api-key` — página de órdenes propias. El filtro `estado` solo acota; nunca amplía el alcance, y los parámetros desconocidos (`tiendaId`, etc.) se ignoran.",
+      "item": [
+        {
+          "name": "por defecto (limit 50, offset 0)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key"] }
+          }
+        },
+        {
+          "name": "paginado (limit 10, offset 20)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ordenes/api-key?limit=10&offset=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ordenes", "api-key"],
+              "query": [
+                { "key": "limit", "value": "10", "description": "1..100" },
+                { "key": "offset", "value": "20", "description": ">= 0" }
+              ]
+            },
+            "description": "Usa `total` de la respuesta para saber cuántas páginas quedan."
+          }
+        },
+        {
+          "name": "filtrado por estado (en_reparto)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ordenes/api-key?estado=en_reparto&limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ordenes", "api-key"],
+              "query": [
+                { "key": "estado", "value": "en_reparto", "description": "Estados válidos: entregada, devuelta, devolviendo_a_tienda, reprogramada, por_recolectar_en_tienda, en_ruta_bodega_central, en_bodega_central, en_preparacion, por_recoger, en_ruta_bodega_satelite, en_reparto, rechazada, en_bodega_satelite, devuelta_a_tienda" },
+                { "key": "limit", "value": "25" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "recién cargadas (por_recolectar_en_tienda)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ordenes/api-key?estado=por_recolectar_en_tienda",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ordenes", "api-key"],
+              "query": [{ "key": "estado", "value": "por_recolectar_en_tienda", "description": "Estado de nacimiento de toda orden creada por este canal." }]
+            }
+          }
+        },
+        {
+          "name": "422: limit fuera de rango",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ordenes/api-key?limit=500",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ordenes", "api-key"],
+              "query": [{ "key": "limit", "value": "500", "description": "El máximo es 100." }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 · Detalle por número de guía",
+      "description": "`GET /api/ordenes/api-key/{numGuia}` — detalle de una orden propia, con sus evidencias como URLs firmadas de corta duración. Solo acepta el **número de guía** (entero). Para buscar también por remisión, usa el endpoint 5.",
+      "item": [
+        {
+          "name": "detalle (usa {{numGuia}})",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/{{numGuia}}", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "{{numGuia}}"] }
+          }
+        },
+        {
+          "name": "404: guía inexistente o de otro integrador",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/999999999", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "999999999"] },
+            "description": "Una orden ajena devuelve exactamente el mismo `404` que una inexistente: desde fuera no se puede distinguir, que es justo lo que evita descubrir guías ajenas por sondeo."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 · Cancelar una orden",
+      "description": "`PUT /api/ordenes/api-key/{numGuia}/cancelar` — **sin cuerpo**. Solo procede desde `en_bodega_central` o `en_ruta_bodega_central`, y transiciona a `devolviendo_a_tienda`. Cualquier otro estado devuelve `409`.",
+      "item": [
+        {
+          "name": "cancelar (usa {{numGuia}})",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/{{numGuia}}/cancelar", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "{{numGuia}}", "cancelar"] },
+            "description": "No lleva body. Devuelve `{ numGuia, estadoAnterior, estado }`.\n\nOjo: una orden recién cargada está en `por_recolectar_en_tienda` y **no** es cancelable todavía → `409 CONFLICT`. Eso es correcto, no un fallo de la petición."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 · Consulta por guía O remisión",
+      "description": "`GET /api/ordenes/api-key/orden/{id}` — mismo detalle que el endpoint 3, pero `{id}` se resuelve contra `num_guia` **y** `num_remision`.\n\n**Precedencia:** primero se busca por guía; solo si no hay coincidencia se prueba la remisión. Si una orden tuviera como remisión la guía de otra, gana la de la guía.",
+      "item": [
+        {
+          "name": "por número de guía",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/orden/{{numGuia}}", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "orden", "{{numGuia}}"] }
+          }
+        },
+        {
+          "name": "por número de remisión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/orden/{{numRemision}}", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "orden", "{{numRemision}}"] },
+            "description": "El identificador no numérico ni siquiera se consulta contra `num_guia`: va directo a `num_remision`."
+          }
+        },
+        {
+          "name": "por remisión literal (REM-0001)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/orden/REM-0001", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "orden", "REM-0001"] }
+          }
+        },
+        {
+          "name": "404: identificador que no existe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/orden/NO-EXISTE-XYZ", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "orden", "NO-EXISTE-XYZ"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6 · PDF de etiqueta de una orden",
+      "description": "`POST /api/ordenes/api-key/orden/{id}/generate` — **sin cuerpo**. Devuelve una URL firmada que vence en 5 minutos.\n\nLa primera llamada construye el PDF (`generado: true`); las siguientes reutilizan el mismo documento y solo lo vuelven a firmar (`generado: false`), así que la `url` cambia en cada llamada aunque el PDF sea idéntico. **No hay modo de forzar la regeneración.**\n\nSolo responde a `POST`: un `GET` no genera nada.",
+      "item": [
+        {
+          "name": "generar / re-firmar (por guía)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "console.log(b.generado ? 'PDF construido ahora' : 'PDF reutilizado, solo re-firmado', '| vence en', b.expiraEnSegundos, 's');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/orden/{{numGuia}}/generate", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "orden", "{{numGuia}}", "generate"] },
+            "description": "Sin body. Lánzalo dos veces seguidas: la primera responde `generado: true` y la segunda `generado: false` con una `url` distinta."
+          }
+        },
+        {
+          "name": "generar / re-firmar (por remisión)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/orden/{{numRemision}}/generate", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "orden", "{{numRemision}}", "generate"] },
+            "description": "Misma resolución y misma precedencia que la consulta: guía primero, remisión después."
+          }
+        }
+      ]
+    },
+    {
+      "name": "7 · PDF consolidado de un lote",
+      "description": "`POST /api/ordenes/api-key/carga/{cargaId}/generate` — **sin cuerpo**. Mismo contrato que el PDF por orden, pero sobre el consolidado de todas las etiquetas imprimibles del lote (solo órdenes propias y vivas).\n\nEl `cargaId` es el uuid que devuelve la carga. Un lote sin etiquetas imprimibles, o que excede el tope de etiquetas por PDF, devuelve `409`.",
+      "item": [
+        {
+          "name": "generar / re-firmar consolidado (usa {{cargaId}})",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga/{{cargaId}}/generate", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga", "{{cargaId}}", "generate"] },
+            "description": "Sin body. Ojo con la caducidad: un job diario purga los PDF de las cargas con 7 días o más (configurable). Tras la purga, este endpoint vuelve a construirlo — no devuelve enlaces muertos."
+          }
+        },
+        {
+          "name": "422: cargaId que no es uuid",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga/REM-0001/generate", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga", "REM-0001", "generate"] },
+            "description": "El lote se identifica por su uuid, nunca por el nombre del lote ni por una remisión."
+          }
+        },
+        {
+          "name": "404: lote inexistente o de otro integrador",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga/00000000-0000-4000-8000-000000000000/generate", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga", "00000000-0000-4000-8000-000000000000", "generate"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8 · Autenticación (casos de error)",
+      "description": "Comprobaciones del borde de autenticación. Ninguna toca base de datos ni storage.",
+      "item": [
+        {
+          "name": "401: sin header Authorization",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key"] }
+          }
+        },
+        {
+          "name": "401: key inexistente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer ordx_key_que_no_existe" }],
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key"] }
+          }
+        },
+        {
+          "name": "401: esquema distinto de Bearer",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Basic {{apiKey}}" }],
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key"] },
+            "description": "Solo se acepta el esquema `Bearer`. Cualquier otro se trata como si no hubiera key."
+          }
+        }
+      ]
+    }
+  ]
+}
