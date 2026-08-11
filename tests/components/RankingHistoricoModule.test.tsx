@@ -12,6 +12,9 @@ import { render, screen, cleanup, fireEvent, within } from "@testing-library/rea
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import { RankingHistoricoModule } from "@/app/(app)/ranking/historico/_components/RankingHistoricoModule";
+import { RANKING_HISTORICO_COLUMNAS } from "@/app/(app)/ranking/historico/_components/ranking-historico-labels";
+import { SIN_DATO } from "@/app/(app)/ranking/_components/ranking-labels";
+import { SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import type { RankingSnapshotData, RankingSnapshotFilaDTO } from "@/lib/types/ranking-snapshot";
 
 const pushMock = vi.fn();
@@ -131,12 +134,61 @@ describe("RankingHistoricoModule — presentación money-safe (R31)", () => {
 
     // `"100.0"` con el decimal intacto: un `Number` intermedio lo habría dejado en "100".
     expect(within(filaAna).getByText("100.0%")).toBeInTheDocument();
-    expect(within(filaAna).getByText("₡5000.00")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡5.000,00")).toBeInTheDocument();
     expect(within(filaAna).getByText("Bono oro")).toBeInTheDocument();
 
     // Sin asignadas el porcentaje es INDEFINIDO, que no es cero: la celda dice «—».
     const filaCaro = within(tabla).getByText("Caro Sin Ruta").closest("tr") as HTMLElement;
     expect(within(filaCaro).getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  /**
+   * Feature 201 — EL MARCADOR DE «NO HAY IMPORTE», medido sobre LA CELDA.
+   *
+   * `money(null)` pinta la raya larga (`SIN_MONTO_RAYA`, U+2014), no el guion corto
+   * (`SIN_MONTO`, U+002D) con el que `formatMontoString` rotula la ausencia por defecto. Son
+   * dos caracteres que se parecen mucho, viven en el mismo módulo y se pasan uno al otro por
+   * un parámetro con valor por defecto: confundirlos no rompe ningún tipo, no rompe el build y
+   * cambia lo que se ve en TODAS las tablas de dinero de la app.
+   *
+   * Hasta esta tanda esa confusión la cazaba una sola aserción en todo el repo
+   * (`desglose-tienda-labels.test.ts`), y sobre una función suelta. El caso de arriba tampoco
+   * la vigila de verdad: cuenta cuántos «—» hay en la fila y con `toBeGreaterThanOrEqual` no
+   * dice CUÁL es de dinero ni cuál del porcentaje.
+   *
+   * Aquí se mide la celda exacta, y sobre la fila de Beto: tiene porcentaje («80.0%») y NO
+   * tiene premio, así que el único «no hay importe» de la fila es el que sale de `money`.
+   *
+   * El esperado sale de la CONSTANTE y no del carácter tecleado: nadie tiene que distinguir a
+   * ojo un «—» de un «-» al leer el test, y sigue muriendo si `money` elige el otro marcador.
+   */
+  it("R31: sin premio, la celda pinta la raya larga de «no hay importe» y no un cero", () => {
+    montar();
+    const tabla = screen.getByRole("table", { name: "Ranking congelado del día" });
+
+    // La columna se localiza por su rótulo y no por una posición escrita a mano: así el test
+    // sigue midiendo LA CELDA del premio aunque mañana se reordenen las columnas.
+    const cabeceras = within(tabla)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    const col = cabeceras.indexOf(RANKING_HISTORICO_COLUMNAS.premio);
+    expect(col).toBeGreaterThanOrEqual(0);
+
+    // Beto sí tiene porcentaje, así que el único «—» de su fila es el del premio ausente.
+    const filaBeto = within(tabla).getByText("Beto Repartidor").closest("tr") as HTMLElement;
+    expect(within(filaBeto).getByText("80.0%")).toBeInTheDocument();
+
+    const celdaPremio = within(filaBeto).getAllByRole("cell")[col];
+    expect(celdaPremio.textContent).toBe(SIN_MONTO_RAYA);
+    // «Sin premio» no es «premio de cero»: ni un importe ni un símbolo de moneda.
+    expect(celdaPremio.textContent).not.toContain("₡");
+
+    // Y el «sin dato» del ranking (porcentaje, posición) es EL MISMO carácter que el de
+    // dinero. Esta tabla los pinta uno al lado del otro en la misma fila —la de Caro, sin
+    // asignadas y sin premio—, así que si se separaran se leería «—» en una celda y «-» en la
+    // de al lado. `ranking-labels` declara `SIN_DATO` por su cuenta a propósito (un porcentaje
+    // no depende de la configuración de moneda); esto es lo que impide que diverjan callando.
+    expect(SIN_DATO).toBe(SIN_MONTO_RAYA);
   });
 
   it("la fila sin podio se lista con su puesto y sin posición (R9 congelada)", () => {

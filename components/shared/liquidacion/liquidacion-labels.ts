@@ -12,17 +12,20 @@
  * un libro de dinero se leen juntas.
  */
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
+import { money } from "@/lib/config/moneda";
 import type { MetodoLiquidacion } from "@/lib/types/liquidacion";
 
 /**
- * Antepone el símbolo de colón a un monto STRING (tal cual, sin parseo). `null` → «—».
- * Money-safe: nunca `Number`/`parseFloat`. Se declara aquí y no se importa de una pantalla
- * concreta porque este módulo lo usan dos features (`/wallet/tiendas` y `/cierres-admin`), y
- * `components/shared/` no puede depender de `app/`.
+ * Feature 201 (tanda C) — `money` ya NO se declara aquí. El motivo por el que no se importaba
+ * de una pantalla concreta sigue en pie (este módulo lo usan `/wallet/tiendas` y
+ * `/cierres-admin`, y `components/shared/` no puede depender de `app/`), pero la respuesta
+ * correcta no era una octava copia byte a byte: es `lib/config/moneda.ts`, que no es una
+ * pantalla y del que sí puede depender cualquiera. Se RE-EXPORTA para que la tabla de
+ * comprobantes, el diálogo y las columnas de descarga no cambien un import.
+ *
+ * Money-safe igual que antes (nunca `Number`/`parseFloat`) y `null` → «—».
  */
-export function money(value: string | null): string {
-  return value === null ? "—" : `₡${value}`;
-}
+export { money };
 
 /** Etiqueta legible de cada método de pago. Exhaustiva sobre el catálogo del enum (R8). */
 export const METODO_LIQUIDACION_LABEL: Record<MetodoLiquidacion, string> = {

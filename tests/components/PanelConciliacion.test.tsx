@@ -217,8 +217,8 @@ describe("Regresión: las tres cifras del cuadre no se formatean con la unidad d
    * unica afirmacion del archivo sobre el texto exacto que ve un humano.
    */
   const MONEDA = {
-    snapshot: "₡1 560,50",
-    ledger: "₡1 500,00",
+    snapshot: "₡1.560,50",
+    ledger: "₡1.500,00",
     diferencia: "₡60,50",
   } as const;
 
@@ -246,8 +246,8 @@ describe("Regresión: las tres cifras del cuadre no se formatean con la unidad d
 
     // Presentes: las tres cifras del cuadre como dinero. Escritas a mano y no derivadas
     // de `formatearValor`, para que el esperado no salga de la misma funcion que se
-    // esta comprobando. El separador de miles es un espacio NORMAL: `Intl` emite
-    // U+00A0 y testing-library lo colapsa antes de comparar.
+    // esta comprobando. Desde la feature 201 el separador de miles es un PUNTO: antes
+    // `Intl` agrupaba con espacio duro (U+00A0) y los importes largos se leian mal.
     expect(within(seccion).getByText(MONEDA.snapshot)).toBeInTheDocument();
     expect(within(seccion).getByText(MONEDA.ledger)).toBeInTheDocument();
     expect(within(seccion).getByText(MONEDA.diferencia)).toBeInTheDocument();

@@ -74,10 +74,10 @@ describe("CajaResumenCard — las dos cifras (R1/R58)", () => {
 
     // R1: son DOS números distintos, y cada uno está dentro de su propio bloque — no hay
     // forma de leer uno creyendo que es el otro.
-    expect(within(enCaja).getByText("₡12000.00")).toBeInTheDocument();
-    expect(within(ganancia).getByText("₡2000.00")).toBeInTheDocument();
-    expect(within(enCaja).queryByText("₡2000.00")).toBeNull();
-    expect(within(ganancia).queryByText("₡12000.00")).toBeNull();
+    expect(within(enCaja).getByText("₡12.000,00")).toBeInTheDocument();
+    expect(within(ganancia).getByText("₡2.000,00")).toBeInTheDocument();
+    expect(within(enCaja).queryByText("₡2.000,00")).toBeNull();
+    expect(within(ganancia).queryByText("₡12.000,00")).toBeNull();
   });
 
   it("R58: a la VEZ significa sin abrir nada — ni pestañas, ni desplegables, ni un botón", () => {
@@ -107,14 +107,14 @@ describe("CajaResumenCard — las dos cifras (R1/R58)", () => {
     const columnaGanancia = ganancia.parentElement as HTMLElement;
 
     expect(within(columnaCaja).getByText(CAJA_RESUMEN_LABEL.entradas)).toBeInTheDocument();
-    expect(within(columnaCaja).getByText("₡15000.00")).toBeInTheDocument();
+    expect(within(columnaCaja).getByText("₡15.000,00")).toBeInTheDocument();
     expect(within(columnaCaja).getByText(CAJA_RESUMEN_LABEL.salidas)).toBeInTheDocument();
-    expect(within(columnaCaja).getByText("₡3000.00")).toBeInTheDocument();
+    expect(within(columnaCaja).getByText("₡3.000,00")).toBeInTheDocument();
 
     expect(
       within(columnaGanancia).getByText(CAJA_RESUMEN_LABEL.ingresosPropios),
     ).toBeInTheDocument();
-    expect(within(columnaGanancia).getByText("₡5000.00")).toBeInTheDocument();
+    expect(within(columnaGanancia).getByText("₡5.000,00")).toBeInTheDocument();
     expect(
       within(columnaGanancia).getByText(CAJA_RESUMEN_LABEL.egresosPropios),
     ).toBeInTheDocument();
@@ -122,7 +122,7 @@ describe("CajaResumenCard — las dos cifras (R1/R58)", () => {
     // «Entró» (15 000) NO es «Ingresos de Ordenex» (5 000): el contra-entrega entra en la
     // caja y no en la ganancia. Si la tarjeta pintara el mismo par de importes en los dos
     // desgloses, esta línea lo caza.
-    expect(within(columnaGanancia).queryByText("₡15000.00")).toBeNull();
+    expect(within(columnaGanancia).queryByText("₡15.000,00")).toBeNull();
   });
 
   it("los signos los da el SERVIDOR: negativo y cero se pintan sin recalcular nada", () => {
@@ -137,9 +137,9 @@ describe("CajaResumenCard — las dos cifras (R1/R58)", () => {
     const ganancia = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia });
 
     // El STRING llega con su signo puesto y se pinta tal cual.
-    expect(within(enCaja).getByText("₡-500.00")).toBeInTheDocument();
+    expect(within(enCaja).getByText("-₡500,00")).toBeInTheDocument();
     expect(within(enCaja).getByText("Negativo")).toBeInTheDocument();
-    expect(within(ganancia).getByText("₡0.00")).toBeInTheDocument();
+    expect(within(ganancia).getByText("₡0,00")).toBeInTheDocument();
     expect(within(ganancia).getByText("En cero")).toBeInTheDocument();
   });
 });
@@ -221,7 +221,7 @@ describe("CajaResumenCard — la tercera línea y su advertencia (R34 / [P6])", 
     pintar();
 
     const tercera = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.deTerceros });
-    expect(within(tercera).getByText("₡10000.00")).toBeInTheDocument();
+    expect(within(tercera).getByText("₡10.000,00")).toBeInTheDocument();
 
     const aviso = within(tercera).getByRole("note");
     const texto = aviso.textContent ?? "";
@@ -292,7 +292,7 @@ describe("CajaResumenCard — el rótulo condicional ([P7])", () => {
     pintar({ periodoFiltrado: true });
 
     const periodo = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.enCajaPeriodo });
-    expect(within(periodo).getByText("₡12000.00")).toBeInTheDocument();
+    expect(within(periodo).getByText("₡12.000,00")).toBeInTheDocument();
     // La otra cifra se llama igual siempre: filtrar un periodo no le cambia el significado.
     expect(
       screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia }),
@@ -335,10 +335,10 @@ describe("CajaResumenCard — money-safe en el navegador (R64)", () => {
       deTerceros: "0.10",
     });
 
-    expect(screen.getByText("₡12345678901.99")).toBeInTheDocument();
-    expect(screen.getByText("₡1000.10")).toBeInTheDocument();
-    expect(screen.getByText("₡12345677901.89")).toBeInTheDocument();
-    expect(screen.getByText("₡0.10")).toBeInTheDocument();
+    expect(screen.getByText("₡12.345.678.901,99")).toBeInTheDocument();
+    expect(screen.getByText("₡1.000,10")).toBeInTheDocument();
+    expect(screen.getByText("₡12.345.677.901,89")).toBeInTheDocument();
+    expect(screen.getByText("₡0,10")).toBeInTheDocument();
   });
 
   it("R64: la tarjeta no tiene forma de operar con dinero", () => {

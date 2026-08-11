@@ -347,7 +347,7 @@ describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero",
     );
 
     const tabla = screen.getByRole("table", { name: "Incidentes" });
-    expect(within(tabla).getByText("₡12345678901.99")).toBeInTheDocument();
+    expect(within(tabla).getByText("₡12.345.678.901,99")).toBeInTheDocument();
   });
 
   it("sin monto todavía muestra '—' CON la nota de que se captura al aprobar", () => {

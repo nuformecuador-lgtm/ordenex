@@ -5,6 +5,7 @@ import {
   IntentosValor,
   valorIntentos,
 } from "@/components/shared/intentos-entrega";
+import { formatMonto as formatMontoConfigurado, SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Feature 33 (R9): detalle de presentación de una orden del módulo satélite,
@@ -13,12 +14,15 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 // Espejo de AsignacionDetalle (feature 36), adaptado a RecepcionSateliteDTO (sin
 // campo `notas`).
 
-/** Monto en colones (₡) con separador de miles, o "—" si es nulo. */
+/**
+ * Monto con la moneda configurada y separador de miles, o la raya larga si es nulo.
+ *
+ * Feature 201: el formato sale de `lib/config/moneda.ts` (era una copia del
+ * formateador "estilo EEUU", `₡13,331,832.72`). El marcador de ausencia se pasa
+ * explícito porque el default del compartido es el guion corto.
+ */
 function formatMonto(monto: number | null): string {
-  if (monto === null) return "—";
-  const [entero, decimales] = monto.toFixed(2).split(".");
-  const conMiles = entero.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `₡${conMiles}.${decimales}`;
+  return formatMontoConfigurado(monto, SIN_MONTO_RAYA);
 }
 
 /** Une la jerarquía geográfica en una línea legible (omite los vacíos). */

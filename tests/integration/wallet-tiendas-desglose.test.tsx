@@ -357,10 +357,10 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     // Nada se recalcula aquí: si el cliente hiciera la resta, un `Number()` intermedio ya
     // podría perder el céntimo. Y cuadran: 10000 − 1000 − 0 = 9000.
     expect(bloques.map(cifraDe)).toEqual([
-      "₡10000.00",
-      "₡1000.00",
-      "₡0.00",
-      "₡9000.00",
+      "₡10.000,00",
+      "₡1.000,00",
+      "₡0,00",
+      "₡9.000,00",
     ]);
   });
 
@@ -377,7 +377,7 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     expect(rotuloDe(bloque)).toBe("Pagado a la tienda");
     // Y no es un texto de ausencia («—», que es lo que se ve mientras carga): la cifra está,
     // con su símbolo y sus dos decimales.
-    await waitFor(() => expect(cifraDe(bloque)).toBe("₡0.00"));
+    await waitFor(() => expect(cifraDe(bloque)).toBe("₡0,00"));
   });
 
   it("R43 (contraprueba): el día que haya un pago, la MISMA cabecera lo refleja sin tocar nada", async () => {
@@ -399,9 +399,9 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     const region = await desplegar("Tienda Norte");
 
     await waitFor(() =>
-      expect(within(region).getByText("₡4000.00")).toBeInTheDocument(),
+      expect(within(region).getByText("₡4.000,00")).toBeInTheDocument(),
     );
-    expect(within(region).getByText("₡5000.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡5.000,00")).toBeInTheDocument();
   });
 
   it("R11: sin filtros, el saldo del desglose es el MISMO de la fila de esa tienda", async () => {
@@ -409,9 +409,9 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     const region = await desplegar("Tienda Norte");
     await waitFor(() => expect(listarDesgloseMock).toHaveBeenCalledTimes(1));
 
-    // La fila decía ₡9000.00; el desglose sin filtros dice lo mismo, cifra y signo.
+    // La fila decía ₡9.000,00; el desglose sin filtros dice lo mismo, cifra y signo.
     await waitFor(() =>
-      expect(within(region).getByText("₡9000.00")).toBeInTheDocument(),
+      expect(within(region).getByText("₡9.000,00")).toBeInTheDocument(),
     );
     expect(within(region).getByText("A favor")).toBeInTheDocument();
   });
@@ -423,7 +423,7 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     // Saldo negativo: la tienda le debe a Ordenex. La tabla lo llama «En contra»; el
     // desglose, también — porque leen del mismo mapa.
     await waitFor(() => expect(within(region).getByText("En contra")).toBeInTheDocument());
-    expect(within(region).getByText("₡-452.00")).toBeInTheDocument();
+    expect(within(region).getByText("-₡452,00")).toBeInTheDocument();
   });
 });
 
@@ -473,8 +473,8 @@ describe("R15/R16/R20/R21 — la lista de movimientos", () => {
       name: "Movimientos del desglose de Tienda Norte",
     });
     await within(tabla).findByText("2026-07-12");
-    expect(within(tabla).getByText("₡10000.00")).toBeInTheDocument();
-    expect(within(tabla).getByText("₡1000.00")).toBeInTheDocument();
+    expect(within(tabla).getByText("₡10.000,00")).toBeInTheDocument();
+    expect(within(tabla).getByText("₡1.000,00")).toBeInTheDocument();
   });
 
   it("R21: el conjunto filtrado sin movimientos lo DICE, no deja una tabla muda", async () => {
@@ -573,7 +573,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     renderTabla([NORTE]);
     const region = await desplegar("Tienda Norte");
     await waitFor(() =>
-      expect(within(region).getByText("₡9000.00")).toBeInTheDocument(),
+      expect(within(region).getByText("₡9.000,00")).toBeInTheDocument(),
     );
 
     listarDesgloseMock.mockResolvedValueOnce({ status: "ok", data: DESGLOSE_FILTRADO });
@@ -585,10 +585,10 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     );
 
     await waitFor(() =>
-      expect(within(region).getByText("₡-1000.00")).toBeInTheDocument(),
+      expect(within(region).getByText("-₡1.000,00")).toBeInTheDocument(),
     );
     // Y el agregado de antes ya no está: la cabecera habla del conjunto que se está viendo.
-    expect(within(region).queryByText("₡9000.00")).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡9.000,00")).not.toBeInTheDocument();
   });
 
   it("R12: mientras vuela la recarga filtrada, el saldo NO enseña la cifra sin filtrar", async () => {
@@ -598,7 +598,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     // así que hasta que llegue la respuesta el saldo también es «—».
     renderTabla([NORTE]);
     const region = await desplegar("Tienda Norte");
-    await waitFor(() => expect(within(region).getByText("₡9000.00")).toBeInTheDocument());
+    await waitFor(() => expect(within(region).getByText("₡9.000,00")).toBeInTheDocument());
 
     // La recarga filtrada se deja EN VUELO a propósito: es el instante del defecto.
     let resolver: (v: unknown) => void = () => {};
@@ -621,8 +621,8 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     await act(async () => {
       resolver({ status: "ok", data: DESGLOSE_FILTRADO });
     });
-    await waitFor(() => expect(cifraDe(saldo())).toBe("₡-1000.00"));
-    expect(within(region).queryByText("₡9000.00")).not.toBeInTheDocument();
+    await waitFor(() => expect(cifraDe(saldo())).toBe("-₡1.000,00"));
+    expect(within(region).queryByText("₡9.000,00")).not.toBeInTheDocument();
   });
 
   it("R3/R36: filtrar en una fila abierta NO vuelve a consultar la otra", async () => {
@@ -653,7 +653,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
       listarDesgloseMock.mock.calls.filter(([i]) => i.tiendaId === "t2").length,
     ).toBe(llamadasSurAntes);
     // Y su contenido sigue en pie, con SUS cifras.
-    expect(within(regionSur).getByText("₡-452.00")).toBeInTheDocument();
+    expect(within(regionSur).getByText("-₡452,00")).toBeInTheDocument();
   });
 
   it("R44: `pago_tienda` es una opción del filtro por concepto", async () => {
@@ -755,7 +755,7 @@ describe("R5 — un desglose que falla no se lleva por delante la pantalla", () 
     expect(within(saldos).getByText("Tienda Sur")).toBeInTheDocument();
     // …y el desglose de la otra tienda cargó igual.
     await waitFor(() =>
-      expect(within(regionSur).getByText("₡-452.00")).toBeInTheDocument(),
+      expect(within(regionSur).getByText("-₡452,00")).toBeInTheDocument(),
     );
     expect(within(regionSur).queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -877,8 +877,8 @@ describe("R6 — la tabla de saldos sigue siendo la de antes", () => {
     // propio nombre accesible; las tres de datos no cambian.
     expect(cabeceras).toEqual(["Desglose", "Tienda", "Saldo a favor", "Estado"]);
 
-    expect(within(tabla).getByText("₡9000.00")).toBeInTheDocument();
-    expect(within(tabla).getByText("₡-452.00")).toBeInTheDocument();
+    expect(within(tabla).getByText("₡9.000,00")).toBeInTheDocument();
+    expect(within(tabla).getByText("-₡452,00")).toBeInTheDocument();
     expect(within(tabla).getByText("A favor")).toBeInTheDocument();
     expect(within(tabla).getByText("En contra")).toBeInTheDocument();
 

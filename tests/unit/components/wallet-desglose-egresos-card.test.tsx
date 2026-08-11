@@ -32,13 +32,13 @@ describe("DesgloseEgresosCard — render (R11/R12)", () => {
 
     const lista = screen.getByRole("group", { name: "Desglose de egresos" });
     expect(within(lista).getByText("Gastos fijos")).toBeInTheDocument();
-    expect(within(lista).getByText("₡300.00")).toBeInTheDocument();
+    expect(within(lista).getByText("₡300,00")).toBeInTheDocument();
     expect(within(lista).getByText("Gastos variables")).toBeInTheDocument();
-    expect(within(lista).getByText("₡125.50")).toBeInTheDocument();
+    expect(within(lista).getByText("₡125,50")).toBeInTheDocument();
     expect(within(lista).getByText("Sueldos")).toBeInTheDocument();
-    expect(within(lista).getByText("₡800.00")).toBeInTheDocument();
+    expect(within(lista).getByText("₡800,00")).toBeInTheDocument();
     expect(within(lista).getByText("Total de egresos")).toBeInTheDocument();
-    expect(within(lista).getByText("₡1250.75")).toBeInTheDocument();
+    expect(within(lista).getByText("₡1.250,75")).toBeInTheDocument();
   });
 });
 
@@ -48,7 +48,7 @@ describe("Feature 158/R32 — la indemnización es una fila propia y suma al tot
 
     const lista = screen.getByRole("group", { name: "Desglose de egresos" });
     expect(within(lista).getByText("Indemnizaciones")).toBeInTheDocument();
-    expect(within(lista).getByText("₡25.25")).toBeInTheDocument();
+    expect(within(lista).getByText("₡25,25")).toBeInTheDocument();
   });
 
   it("el total mostrado es el que llega del servidor (la tarjeta NO suma dinero)", () => {
@@ -58,7 +58,7 @@ describe("Feature 158/R32 — la indemnización es una fila propia y suma al tot
       <DesgloseEgresosCard desglose={{ ...DESGLOSE, total: "999.99" }} />,
     );
     const lista = screen.getByRole("group", { name: "Desglose de egresos" });
-    expect(within(lista).getByText("₡999.99")).toBeInTheDocument();
+    expect(within(lista).getByText("₡999,99")).toBeInTheDocument();
   });
 
   it("un monto con muchos decimales o muy grande se muestra sin reformatear (sin parseFloat)", () => {
@@ -69,8 +69,8 @@ describe("Feature 158/R32 — la indemnización es una fila propia y suma al tot
     );
     const lista = screen.getByRole("group", { name: "Desglose de egresos" });
     // Un `parseFloat`/`Number` intermedio perdería precisión o cambiaría el texto.
-    expect(within(lista).getByText("₡12345678901.99")).toBeInTheDocument();
-    expect(within(lista).getByText("₡12345679127.49")).toBeInTheDocument();
+    expect(within(lista).getByText("₡12.345.678.901,99")).toBeInTheDocument();
+    expect(within(lista).getByText("₡12.345.679.127,49")).toBeInTheDocument();
   });
 });
 

@@ -13,6 +13,7 @@ import {
 import type { RegistrarPagoCampos } from "@/components/shared/liquidacion/RegistrarPagoDialog";
 import type { PagoAnuladoOk } from "@/components/shared/liquidacion/AnularPagoDialog";
 import { useToast } from "@/hooks/useToast";
+import { money } from "@/lib/config/moneda";
 import {
   anularPagoAction,
   listarPagosDeTiendaAction,
@@ -59,14 +60,21 @@ export function clavePagosDeTienda(tiendaId: string): readonly [string, string] 
 const PAGO_TIENDA_TEXTO = {
   /** R32: sin saldo a favor no hay nada que pagar, y la pantalla lo dice en vez de callar. */
   sinSaldo: "Esta tienda no tiene saldo a favor: no hay nada que pagar.",
-  registrado: (monto: string) => `Pago de ₡${monto} registrado.`,
+  /**
+   * Feature 201 (tanda C): el importe se compone con `money`, el MISMO formateador de la
+   * cabecera del desglose y de la tabla de comprobantes de abajo. Con el `₡` a mano, esta
+   * pantalla decía `₡9.000,00` arriba y `Pago de ₡4000.00 registrado.` en el toast, hablando
+   * las dos del mismo dinero. `money` no convierte a número: sigue siendo money-safe.
+   */
+  registrado: (monto: string) => `Pago de ${money(monto)} registrado.`,
   /**
    * T F.5 — confirmación de la anulación con el saldo que devolvió el SERVIDOR, pintado tal
-   * cual. **Puede ser NEGATIVO** (`₡-15000.00`) cuando la tienda debe más de lo que se le
+   * cual. **Puede ser NEGATIVO** (`-₡15.000,00`) cuando la tienda debe más de lo que se le
    * recaudó: es la cifra correcta y se enseña entera. Recortarla a cero, esconderla o
-   * quitarle el signo sería mentir sobre dinero — y aquí no se toca ningún monto.
+   * quitarle el signo sería mentir sobre dinero — y aquí no se toca ningún monto (el signo lo
+   * coloca `money` DELANTE del símbolo, que es como se lee un negativo).
    */
-  anulado: (saldo: string) => `Pago anulado. El saldo de la tienda quedó en ₡${saldo}.`,
+  anulado: (saldo: string) => `Pago anulado. El saldo de la tienda quedó en ${money(saldo)}.`,
   /** R75: el segundo intento no anula nada nuevo; se conserva la anulación original. */
   yaAnulado: "Este pago ya estaba anulado.",
   /**

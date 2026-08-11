@@ -7,12 +7,20 @@ import { WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet-tien
 // Feature 43 (T15) — etiquetas i18n-ready y helper de moneda del ledger POR TIENDA,
 // separados de la logica (docs/conventions: textos de UI fuera del componente).
 // Money-safe (R21/R27): `money` recibe un monto que YA viene como STRING desde el Server
-// Component y solo antepone el simbolo; NUNCA parseFloat/Number sobre montos.
+// Component y solo le da formato; NUNCA parseFloat/Number sobre montos.
 
-/** Antepone el simbolo de colon a un monto STRING (tal cual, sin parseo). `null` -> "—". */
-export function money(value: string | null): string {
-  return value === null ? "—" : `₡${value}`;
-}
+/**
+ * Feature 201 (tanda B): `money` se PROMOVIO a `lib/config/moneda.ts` sin cambiarle la firma
+ * ni el marcador de ausencia (`"—"`), porque era la misma funcion copiada byte a byte en
+ * siete archivos de etiquetas. Se re-exporta desde aqui para que sus consumidores sigan
+ * importandola del mismo sitio: es una mudanza, y lo unico que cambia es el ASPECTO del
+ * importe (ahora con separador de miles), que es el objetivo de la feature.
+ *
+ * Esta es la que alimenta TAMBIEN a `/wallet/tiendas` (R20): `desglose-tienda-labels.ts` la
+ * re-exporta desde aqui y `SaldosTiendasTable` la importa directo, para que las dos caras
+ * del mismo ledger no dupliquen el formato.
+ */
+export { money } from "@/lib/config/moneda";
 
 /**
  * Feature 172 (T G.2, R55) `[P5]` — los TRES importes de la cabecera de `/mi-wallet`, mas el

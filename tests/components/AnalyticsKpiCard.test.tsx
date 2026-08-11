@@ -10,7 +10,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 import { KpiCard } from "@/components/private/analytics/KpiCard";
 import { formatearValor } from "@/components/private/analytics/formato";
-import { SIN_MONTO, monedaConfig } from "@/lib/config/moneda";
+import { formatMonto, SIN_MONTO } from "@/lib/config/moneda";
 
 const VARIACION_TEXTO = { sube: "Sube", baja: "Baja", igual: "Sin cambio" };
 
@@ -39,11 +39,12 @@ describe("KpiCard (R12-R15)", () => {
   it("el valor en moneda usa el formato configurado, sin simbolo hardcodeado", () => {
     render(<KpiCard etiqueta="Ingresos" valor={3500} unidad="moneda" />);
 
-    const esperado = new Intl.NumberFormat(monedaConfig.locale, {
-      style: "currency",
-      currency: monedaConfig.currency,
-    }).format(3500);
-    expect(screen.getByText(norm(esperado))).toBeInTheDocument();
+    // Feature 201: el aspecto del dinero lo define `formatMonto` (punto para los
+    // miles, coma para los decimales) y ya no `Intl` con el locale, que agrupaba
+    // con espacio fino. El literal del formato se mide en
+    // `tests/unit/config/moneda-formato.test.ts`; aqui lo que se afirma es que
+    // la tarjeta no escribe ni el simbolo ni el formato por su cuenta.
+    expect(screen.getByText(norm(formatMonto(3500)))).toBeInTheDocument();
   });
 
   it("un valor nulo muestra el marcador de dato ausente y no cero", () => {

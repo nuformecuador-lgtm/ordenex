@@ -40,8 +40,8 @@ describe("etiquetas del desglose por tienda — R20: las MISMAS de /mi-wallet", 
     expect(money).toBe(miWalletLabels.money);
     // Money-safe: antepone el símbolo al STRING y no lo toca. Un `Number()` intermedio
     // habría perdido el céntimo.
-    expect(money("1000.10")).toBe("₡1000.10");
-    expect(money("-452.00")).toBe("₡-452.00");
+    expect(money("1000.10")).toBe("₡1.000,10");
+    expect(money("-452.00")).toBe("-₡452,00");
     // `null` = aún no cargado. NO es un cero: un cero falso en una pantalla de dinero miente.
     expect(money(null)).toBe("—");
   });

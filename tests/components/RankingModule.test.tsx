@@ -98,7 +98,7 @@ describe("RankingModule — premios ↔ ocupante del podio (R14/R15)", () => {
       .getByRole("rowheader", { name: "1" })
       .closest("tr") as HTMLElement;
     expect(within(filaPos1).getByText("Ana")).toBeInTheDocument();
-    expect(within(filaPos1).getByText("₡5000")).toBeInTheDocument();
+    expect(within(filaPos1).getByText("₡5.000")).toBeInTheDocument();
     expect(within(filaPos1).getByText("Bono oro")).toBeInTheDocument();
   });
 
@@ -111,7 +111,7 @@ describe("RankingModule — premios ↔ ocupante del podio (R14/R15)", () => {
       within(filaPos3).getByText("Sin ocupante elegible hoy"),
     ).toBeInTheDocument();
     // El premio se muestra igualmente, pero sin ocupante inventado.
-    expect(within(filaPos3).getByText("₡1000")).toBeInTheDocument();
+    expect(within(filaPos3).getByText("₡1.000")).toBeInTheDocument();
     expect(within(filaPos3).queryByText("Ana")).not.toBeInTheDocument();
     expect(within(filaPos3).queryByText("Beto")).not.toBeInTheDocument();
     expect(within(filaPos3).queryByText("Caro")).not.toBeInTheDocument();

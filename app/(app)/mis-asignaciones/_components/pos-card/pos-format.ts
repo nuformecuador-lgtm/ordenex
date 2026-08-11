@@ -1,3 +1,4 @@
+import { formatMonto as formatMontoConfigurado, SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Rediseño "POS card" (rama ux): helpers de PRESENTACIÓN puros para la card del
@@ -7,15 +8,22 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 // aislados y para no duplicar el formateo que ya vive en `AsignacionDetalle`.
 
 /**
- * Monto a cobrar en colones (₡) con 2 decimales y separador de miles, o "—" si es
- * nulo. Formateo determinista (no depende de datos ICU de locale, que varían por
- * entorno) — mismo criterio que `AsignacionDetalle`.
+ * Monto a cobrar con la moneda configurada, con 2 decimales y separador de miles,
+ * o la raya larga si es nulo.
+ *
+ * Feature 201: el formato ya no se escribe aquí. Este archivo tenía una de las
+ * CUATRO copias del formateador "estilo EEUU" (coma para miles y punto para
+ * decimales, `₡13,331,832.72`), que además hardcodeaba el símbolo pese a existir
+ * `lib/config/moneda.ts`. Lo que ve el mensajero pasa a ser lo mismo que ve el
+ * admin en cierres y en la wallet: `₡13.331.832,72`.
+ *
+ * El marcador de ausencia SÍ se conserva: estas pantallas pintan la raya larga
+ * (`SIN_MONTO_RAYA`), no el guion corto que `formatMonto` usa por defecto. Se pasa
+ * explícito para que la mudanza no cambie en silencio lo que se lee cuando no hay
+ * monto que cobrar.
  */
 export function formatMonto(monto: number | null): string {
-  if (monto === null) return "—";
-  const [entero, decimales] = monto.toFixed(2).split(".");
-  const conMiles = entero.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `₡${conMiles}.${decimales}`;
+  return formatMontoConfigurado(monto, SIN_MONTO_RAYA);
 }
 
 /** Peso en kilogramos (p. ej. "1.5 kg"), o "—" si es nulo. */

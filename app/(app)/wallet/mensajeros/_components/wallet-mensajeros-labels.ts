@@ -7,12 +7,16 @@ import type {
 // Feature 44 (T14) — etiquetas i18n-ready y helper de moneda de la vista del MAESTRO
 // (cuentas por pagar a mensajeros), separados de la logica (docs/conventions: textos de UI
 // fuera del componente). Money-safe (R21/R27): `money` recibe un monto que YA viene como
-// STRING desde el Server Component y solo antepone el simbolo; NUNCA parseFloat/Number.
+// STRING desde el Server Component y solo le da formato; NUNCA parseFloat/Number.
 
-/** Antepone el simbolo de colon a un monto STRING (tal cual, sin parseo). `null` -> "—". */
-export function money(value: string | null): string {
-  return value === null ? "—" : `₡${value}`;
-}
+/**
+ * Feature 201 (tanda B): `money` se PROMOVIO a `lib/config/moneda.ts` sin cambiarle la firma
+ * ni el marcador de ausencia (`"—"`), porque era la misma funcion copiada byte a byte en
+ * siete archivos de etiquetas. Se re-exporta desde aqui para que sus consumidores sigan
+ * importandola del mismo sitio: es una mudanza, y lo unico que cambia es el ASPECTO del
+ * importe (ahora con separador de miles), que es el objetivo de la feature.
+ */
+export { money } from "@/lib/config/moneda";
 
 /** Cabeceras de la tabla de cuentas por pagar (una fila por mensajero). */
 export const COLUMNAS_MAESTRO = {

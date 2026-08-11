@@ -1,8 +1,6 @@
+import { formatMonto } from "@/lib/config/moneda";
 import { cn } from "@/lib/utils";
 import { toValidNumber } from "@/lib/utils/number";
-
-// Símbolo del colón (₡), moneda de la app. Se antepone SIEMPRE al valor.
-const SIMBOLO = "₡";
 
 export interface PriceLabelProps {
   /**
@@ -11,29 +9,39 @@ export interface PriceLabelProps {
    * las tarifas del listado) sin castear en cada uso.
    */
   value?: string | number | null;
-  /** Nº máximo de decimales a mostrar (default 2; enteros no fuerzan decimales). */
-  maxDecimals?: number;
   className?: string;
 }
 
 /**
- * Etiqueta de precio: muestra el valor como número con separadores de miles y el
- * símbolo ₡ antepuesto (p. ej. `₡1.234,50`). Si el valor no existe o no es válido,
- * muestra `₡0`. UI pura, reutilizable en tablas, tarjetas y detalles.
+ * Etiqueta de precio: el valor con el símbolo de la moneda pegado delante,
+ * separador de miles y SIEMPRE dos decimales (`₡1.234,50`, `₡0,00`). UI pura,
+ * reutilizable en tablas, tarjetas y detalles.
+ *
+ * Si el valor no existe o no es un número válido muestra `₡0,00` —no el marcador
+ * de "sin importe"—. Es su contrato desde que existe y sus consumidores dependen
+ * de él: en el listado de órdenes, una tienda sin tarifa activa tiene flete cero,
+ * no flete desconocido, y el `toValidNumber` de la prop es lo que lo decide.
+ *
+ * Feature 201: el formato ya no se calcula aquí, sale de `lib/config/moneda.ts`
+ * como el del resto de la app. Cambian TRES cosas visibles, las tres a propósito:
+ *
+ * 1. Los miles se agrupan con punto. Antes los ponía `Intl.NumberFormat("es-CR")`,
+ *    que agrupa con ESPACIO FINO (`₡1 234,5`) — el docstring anterior prometía
+ *    `₡1.234,50` y no era lo que salía por pantalla.
+ * 2. El símbolo ya no lleva espacio detrás. El resto de la app no lo pone.
+ * 3. Los ceros finales se muestran. Antes `minimumFractionDigits: 0` los comía
+ *    (`₡0`, `₡1.234,5`) y una columna de dinero quedaba con la coma a distinta
+ *    altura en cada fila, que es justo lo que el `tabular-nums` intenta evitar.
+ *
+ * (Se retiró la prop `maxDecimals`: no la usaba ningún consumidor y la escala del
+ * dinero de esta app es 2, la misma con la que el importe cruza la frontera.)
  */
-export function PriceLabel({ value, maxDecimals = 2, className }: PriceLabelProps) {
+export function PriceLabel({ value, className }: PriceLabelProps) {
   const amount = toValidNumber(value);
-  // es-CR: separador de miles "." y decimal ",". minimumFractionDigits 0 para no
-  // forzar ",00" en enteros; maximumFractionDigits acota los decimales mostrados.
-  const formatted = new Intl.NumberFormat("es-CR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: maxDecimals,
-  }).format(amount);
 
   return (
     <span className={cn("tabular-nums whitespace-nowrap", className)}>
-      {SIMBOLO}{' '}
-      {formatted}
+      {formatMonto(amount)}
     </span>
   );
 }

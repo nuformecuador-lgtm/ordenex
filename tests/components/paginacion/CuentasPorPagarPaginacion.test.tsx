@@ -22,7 +22,7 @@
 //
 // Cómo está montado: 60 mensajeros, `pageSize` 25 → 3 páginas (la última, de 10). Los nombres
 // llevan un apellido por bloque para que una búsqueda case con filas que NO están en la página
-// visible, y el mensajero 51 —página 3— tiene una cuenta por pagar de ₡500.00, que es la que
+// visible, y el mensajero 51 —página 3— tiene una cuenta por pagar de ₡500,00, que es la que
 // se sigue hasta el desglose y hasta el archivo. El doble de la Server Action paginada FILTRA
 // y RECORTA de verdad, así que navegar y buscar cambian las filas.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -33,6 +33,12 @@ import { SWRConfig } from "swr";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows } from "@/lib/utils/xlsx-template";
 import { walletMensajeroConfig } from "@/lib/config/wallet-mensajero";
+// Feature 201 (tanda B): estas tres aserciones siguen a UNA fila concreta (¿el desglose de la
+// página 3 enseña el dinero del 51 o el del que ocupaba su sitio en la página 1?), y por eso el
+// importe esperado se DERIVA del dato del doble en vez de escribirse a mano. Antes se derivaba
+// con un `₡${…}` que copiaba el formato; ahora se deriva con el MISMO formateador que pinta la
+// tabla. Lo que se mide no cambia: sigue siendo de QUÉ fila es el importe.
+import { money } from "@/lib/config/moneda";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
 // --- Dobles ---------------------------------------------------------------
@@ -111,7 +117,7 @@ function nombre(i: number): string {
  * Una fila del listado. Los tres montos son STRING del servidor y NO guardan relación
  * aritmética entre sí a propósito: la pantalla no puede derivar ninguno de los otros dos.
  *
- * El 51 —página 3— debe ₡500.00. Es el que la tanda J midió: un importe que se calculara
+ * El 51 —página 3— debe ₡500,00. Es el que la tanda J midió: un importe que se calculara
  * sobre la página diría que no se debe nada cuando se deben 500.
  */
 function fila(i: number): CuentaPorPagarResumenDTO {
@@ -317,8 +323,8 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     expect(nombresVisibles()).toEqual(
       CONJUNTO.slice(0, PAGE_SIZE).map((m) => m.mensajeroNombre),
     );
-    // Y los montos son los del servidor, tal cual: la fila 1 debe ₡1.25.
-    expect(within(tabla()).getByText("₡1.25")).toBeInTheDocument();
+    // Y los montos son los del servidor, dígito a dígito: la fila 1 debe ₡1,25.
+    expect(within(tabla()).getByText("₡1,25")).toBeInTheDocument();
   });
 
   it("navega entre páginas (R43)", async () => {
@@ -359,7 +365,7 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     // Se hace en la PÁGINA 3, no en la 1: es donde un desglose resuelto contra las filas que
     // llegaron por props abriría la cuenta de otra persona sin fallar en ninguna parte.
     await irAPagina(user, 3);
-    const elegido = CONJUNTO[50]; // el 51: debe ₡500.00
+    const elegido = CONJUNTO[50]; // el 51: debe ₡500,00
     expect(nombresVisibles()).toContain(elegido.mensajeroNombre);
 
     await user.click(
@@ -382,12 +388,12 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
       expect.objectContaining({ mensajeroId: CONJUNTO[0].mensajeroId }),
     );
 
-    // Y el dinero que enseña es el del LIBRO ENTERO de ese mensajero (₡500.00 pendientes),
+    // Y el dinero que enseña es el del LIBRO ENTERO de ese mensajero (₡500,00 pendientes),
     // el mismo que su fila: cambiar de página no lo recalcula (R49/R50).
-    expect(within(desglose).getByText("₡500.00")).toBeInTheDocument();
+    expect(within(desglose).getByText("₡500,00")).toBeInTheDocument();
     // `pagado` solo aparece en el saldo del panel (el movimiento del doble es un devengo),
     // así que este es el monto que distingue a un mensajero de otro sin ambigüedad.
-    expect(within(desglose).getByText(`₡${elegido.pagado}`)).toBeInTheDocument();
+    expect(within(desglose).getByText(money(elegido.pagado))).toBeInTheDocument();
 
     // Ninguna otra fila quedó desplegada de paso.
     expect(screen.getAllByRole("region", { name: /^Desglose de / })).toHaveLength(1);
@@ -424,7 +430,7 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     const abierto = await screen.findByRole("region", {
       name: `Desglose de ${otro.mensajeroNombre}`,
     });
-    expect(within(abierto).getByText(`₡${otro.cuentaPorPagar}`)).toBeInTheDocument();
+    expect(within(abierto).getByText(money(otro.cuentaPorPagar))).toBeInTheDocument();
   });
 
   it("cambiar de página no toca lo escrito en el buscador ni los importes de la fila (R50)", async () => {
@@ -441,8 +447,8 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     expect(buscador.value).toBe("Solís");
     expect(contador()).toHaveTextContent(`${FILAS_POR_APELLIDO} de ${TOTAL} mensajeros`);
     expect(nombresVisibles()).toHaveLength(PAGE_SIZE);
-    // El importe de la fila 51 es el de su libro entero: ₡500.00 pendientes.
-    expect(within(tabla()).getByText("₡500.00")).toBeInTheDocument();
+    // El importe de la fila 51 es el de su libro entero: ₡500,00 pendientes.
+    expect(within(tabla()).getByText("₡500,00")).toBeInTheDocument();
 
     await user.click(within(nav()).getByRole("button", { name: "Página siguiente" }));
     await waitFor(() => expect(nombresVisibles()[0]).toBe(nombre(56)));
@@ -455,8 +461,8 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     );
     expect(contador()).toHaveTextContent(`${FILAS_POR_APELLIDO} de ${TOTAL} mensajeros`);
     // Y los importes siguen siendo los STRING del servidor, fila a fila.
-    expect(within(tabla()).getByText(`₡${CONJUNTO[55].cuentaPorPagar}`)).toBeInTheDocument();
-    expect(within(tabla()).getByText(`₡${CONJUNTO[55].devengado}`)).toBeInTheDocument();
+    expect(within(tabla()).getByText(money(CONJUNTO[55].cuentaPorPagar))).toBeInTheDocument();
+    expect(within(tabla()).getByText(money(CONJUNTO[55].devengado))).toBeInTheDocument();
   });
 
   it("la búsqueda mira el CONJUNTO y devuelve a la página 1 (R45)", async () => {

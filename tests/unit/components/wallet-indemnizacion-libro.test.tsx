@@ -76,7 +76,7 @@ describe("R31 — el concepto tiene etiqueta legible en el libro", () => {
     );
 
     const tabla = screen.getByRole("table", { name: "Libro de movimientos" });
-    expect(within(tabla).getByText("₡12345678901.99")).toBeInTheDocument();
+    expect(within(tabla).getByText("₡12.345.678.901,99")).toBeInTheDocument();
   });
 
   it("el origen se lee como 'Cierre del día' (de dónde salió la plata)", () => {

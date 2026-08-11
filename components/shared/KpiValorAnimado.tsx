@@ -16,9 +16,10 @@ import { toValidNumber } from "@/lib/utils/number";
 // configuración en `lib/config/moneda.ts`, como pide `docs/architecture.md`
 // («sin hardcode de contexto»). Hasta la feature 130 este archivo tenía un
 // `const SIMBOLO = "₡"` y un `"es-CR"` incrustados, así que cambiar de país
-// obligaba a editar un componente compartido. El formato resultante pasa a ser
-// el de `Intl` con `style: "currency"` («₡3 500,00»), el mismo que ya usan los
-// otros cinco consumidores cliente de `formatMonto`.
+// obligaba a editar un componente compartido. El formato resultante es el de
+// `formatMonto`, el mismo que ya usan los otros cinco consumidores cliente. Fue
+// el de `Intl` con `style: "currency"` («₡3 500,00», con espacio duro) hasta que
+// la feature 201 unifico la agrupacion en `lib/config/moneda.ts` («₡3.500,00»).
 //
 // Lo que este arreglo NO resuelve, y es PREEXISTENTE (no lo introduce la 130):
 // `loadMonedaConfig` lee `process.env[name]` con clave dinámica, y Next solo

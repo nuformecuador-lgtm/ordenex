@@ -94,7 +94,7 @@ describe("GastosFijosPlantillasPanel — listado (R26)", () => {
     montarPanel([ACTIVA, INACTIVA]);
 
     expect(screen.getByText("Alquiler de bodega")).toBeInTheDocument();
-    expect(screen.getByText("₡300.00")).toBeInTheDocument();
+    expect(screen.getByText("₡300,00")).toBeInTheDocument();
     expect(screen.getByText("Activa")).toBeInTheDocument();
     expect(screen.getByText("Internet")).toBeInTheDocument();
     expect(screen.getByText("Inactiva")).toBeInTheDocument();
