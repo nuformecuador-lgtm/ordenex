@@ -197,8 +197,13 @@ describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
     renderModule({ porRecolectar: [makeOrden()] });
 
     // Lo que se ve por orden: guía, remisión, producto y destinatario. Nada de dinero.
+    //
+    // Feature 196: producto y destinatario ya NO comparten un `<p>` con «·». Los pinta la
+    // card compartida en elementos separados, así que se afirman por separado. Lo que este
+    // caso protege —que se vean los cuatro datos y ningún importe— no cambia.
     expect(screen.getByText("REM-1")).toBeInTheDocument();
-    expect(screen.getByText(/Caja · Ana/)).toBeInTheDocument();
+    expect(screen.getByText("Caja")).toBeInTheDocument();
+    expect(screen.getByText("Ana")).toBeInTheDocument();
     expect(screen.queryByText(/₡/)).toBeNull();
     // Contrato: el DTO de esta superficie no tiene por dónde filtrar cobro ni ruta.
     const orden = makeOrden();
