@@ -64,6 +64,28 @@ export interface PosOrderCardProps {
    * gate de selección los ignora (ver `pos-seleccion`), no seleccionan de rebote.
    */
   acciones?: ReactNode;
+  /**
+   * Qué secciones se pintan. Todas van a `true` por defecto, así que NINGUNA superficie
+   * existente cambia y la prop es puramente aditiva.
+   *
+   * Existe para que la MISMA card sirva a superficies con menos datos que el reparto —la
+   * recolección en tienda, feature 196—, en vez de tener dos cards que se parecen y divergen.
+   * Se apagan por SECCIÓN y no por campo a propósito: cada una es un bloque con su marco, y
+   * una sección presente pero vacía se lee como un error de carga, no como "aquí no aplica".
+   *
+   * ⚠️ Apagar una sección NO es cosmético: es lo que permite pasar una orden que no tiene
+   * esos datos. Si se enciende una sección sobre un DTO que no los trae, la card los leerá.
+   */
+  secciones?: {
+    /** Bloque de navegación (dirección + coordenadas). */
+    navegacion?: boolean;
+    /** Fila de cobro (monto a cobrar). */
+    cobro?: boolean;
+    /** Desplegable "Ver detalle completo". */
+    detalle?: boolean;
+    /** Dato de intentos de entrega bajo el producto. */
+    intentos?: boolean;
+  };
 }
 
 export function PosOrderCard({
@@ -75,6 +97,7 @@ export function PosOrderCard({
   onGestionar,
   estado: estadoProp,
   mostrarRuta = true,
+  secciones,
   acciones,
 }: PosOrderCardProps) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
@@ -109,6 +132,14 @@ export function PosOrderCard({
     event.preventDefault();
     onGestionar();
   }
+
+  // Feature 196: las secciones se pintan salvo que el consumidor las apague. El default
+  // vive AQUI y no en la desestructuracion para que el objeto parcial no obligue a cada
+  // llamador a enumerar las cuatro.
+  const verNavegacion = secciones?.navegacion ?? true;
+  const verCobro = secciones?.cobro ?? true;
+  const verDetalle = secciones?.detalle ?? true;
+  const verIntentos = secciones?.intentos ?? true;
 
   // La card responde a puntero/teclado solo si hay selección disponible y no está bloqueada.
   const seleccionable = Boolean(onGestionar) && !bloqueado;
@@ -158,9 +189,11 @@ export function PosOrderCard({
                 "Pendiente de optimizar" y "Gestionar más tarde", que son marcas de
                 EXCEPCIÓN, y D6 decidió que los intentos son un dato. Siempre visible,
                 `0` incluido; sin umbral (R20). */}
-            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
-              <IntentosDato intentos={valorIntentos(orden)} />
-            </p>
+            {verIntentos ? (
+              <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+                <IntentosDato intentos={valorIntentos(orden)} />
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -194,8 +227,8 @@ export function PosOrderCard({
           </div>
         ) : null}
 
-        <PosNavBlock orden={orden} />
-        <PosAmountRow montoCobrar={orden.montoCobrar} />
+        {verNavegacion ? <PosNavBlock orden={orden} /> : null}
+        {verCobro ? <PosAmountRow montoCobrar={orden.montoCobrar} /> : null}
 
         {/* Feature 113/R1: detalle COMPLETO (Pedido/Entrega/Cobro) disponible sin salir
             de la card, plegado para no competir con la navegación. Es un `Collapsible` de
@@ -203,24 +236,26 @@ export function PosOrderCard({
             que el resto de desplegables de la app (`collapsible-panel`, globals.css);
             `keepMounted` deja el detalle en el DOM plegado, así la información sigue
             estando (y siendo buscable) sin depender de la animación. */}
-        <Collapsible
-          open={detalleAbierto}
-          onOpenChange={setDetalleAbierto}
-          className="group/detalle rounded-2xl border border-border bg-muted/40 px-3 py-2"
-        >
-          <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            Ver detalle completo
-            <ChevronDown
-              aria-hidden="true"
-              className="size-4 shrink-0 transition-transform duration-200 group-data-[open]/detalle:rotate-180 motion-reduce:transition-none"
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent keepMounted className="collapsible-panel">
-            <div className="mt-3 border-t border-border pt-3">
-              <AsignacionDetalle orden={orden} />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+        {verDetalle ? (
+          <Collapsible
+            open={detalleAbierto}
+            onOpenChange={setDetalleAbierto}
+            className="group/detalle rounded-2xl border border-border bg-muted/40 px-3 py-2"
+          >
+            <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Ver detalle completo
+              <ChevronDown
+                aria-hidden="true"
+                className="size-4 shrink-0 transition-transform duration-200 group-data-[open]/detalle:rotate-180 motion-reduce:transition-none"
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent keepMounted className="collapsible-panel">
+              <div className="mt-3 border-t border-border pt-3">
+                <AsignacionDetalle orden={orden} />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : null}
 
         {acciones}
       </div>
