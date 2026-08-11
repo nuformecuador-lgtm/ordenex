@@ -5,6 +5,7 @@ import {
   ARCHIVOS_ESCRITORES,
   ESCRITORES_DE_LEDGER,
   REPOSITORIOS_DE_LEDGER,
+  type EscritorDeLedger,
 } from "@/lib/analytics/escritores-ledger";
 
 // Feature 179 / T4.2 — EL CENSO DE ESCRITORES DE LEDGER (R17, R18, R19).
@@ -167,6 +168,361 @@ describe("R17 · el censo DISCRIMINA: no es verde por construccion", () => {
   it("y la DECLARACION del metodo en el repositorio no cuenta como llamada", () => {
     const declaracion = `  async crearMovimientos(tx: WalletTxClient, movs: CrearMovimientoInput[]) { return 0; }`;
     expect(LLAMA_CREAR_MOVIMIENTOS.test(soloCodigo(declaracion))).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* R17 — EL REGISTRO NO ES UNA PROMESA: cada entrada DEMUESTRA su invalidador   */
+/* -------------------------------------------------------------------------- */
+//
+// ⚠ POR QUE ESTE BLOQUE EXISTE, CON SU FECHA: el 2026-08-10 el reviewer rompio este censo y lo
+// dejo verde. El sondeo fue exacto y merece quedar escrito, porque es el que define que tiene
+// que medir esto:
+//
+//   1. creo un noveno escritor sintetico que llamaba a `crearMovimientos` y NO invalidaba nada
+//      -> el censo lo cazo (eje 2 «por DEFECTO» + el conteo). Esa mitad ya funcionaba.
+//   2. lo REGISTRO con `invalidadores: []`, `requisitos: []`, `invalidaEn: []` y un `tests:`
+//      que apuntaba a un test AJENO, y subio los dos conteos de 8 a 9 —que es literalmente lo
+//      que el mensaje de fallo de este guardia le pide a quien anade un escritor—
+//      -> **22 tests, todo verde**. Un escritor de dinero sin invalidador y sin test propio, y
+//         el guardia diciendo que todo esta bien.
+//
+// Las tres puertas que lo permitian: `invalidadores` no se comprobaba ni no-vacio ni por
+// contenido; `requisitos` tampoco —y como el chequeo de titulos de R18 itera sobre esa lista,
+// **con la lista vacia R18 se volvia vacuo**—; y `invalidaEn` no lo leia ningun test: era prosa.
+//
+// Lo que se mide ahora es lo que R17 pide TEXTUALMENTE —que cada llamador aparezca «con el
+// invalidador que le corresponde»—: no que el campo este relleno, sino que **el archivo que
+// dice invalidar contenga de verdad la llamada y el literal de SU origen**. Es barato porque el
+// arbol ya esta censado, y convierte «registrarse» en «registrarse Y demostrarlo».
+//
+// La validacion vive en funciones PURAS (`problemasDe`) para poder ejercerlas sobre entradas
+// SINTETICAS sin tocar el registro real: asi el bloque de discriminacion de abajo demuestra que
+// el sondeo del reviewer ya no pasa, sin necesidad de que nadie vuelva a mutar el arbol.
+
+/** Marca de que un archivo ENCOLA el job de invalidacion en vez de llamar al invalidador. */
+const ENCOLA_JOB = /\.enqueue\s*\(/;
+/** La llamada al unico punto de invalidacion directa (`design.md §5.1`). */
+const LLAMA_INVALIDADOR = /invalidarAnaliticaFinanciera\s*\(/;
+
+/** Codigo de un archivo de `invalidaEn`, o `null` si la ruta no existe en disco. */
+function codigoDe(rel: string): string | null {
+  const abs = path.join(REPO_ROOT, rel);
+  return fs.existsSync(abs) ? soloCodigo(fs.readFileSync(abs, "utf8")) : null;
+}
+
+/**
+ * TODOS los problemas de una entrada del registro. Devuelve una lista (no lanza) para que el
+ * mensaje de fallo los enumere de golpe y para poder ejercerla sobre entradas sinteticas.
+ */
+function problemasDe(escritor: EscritorDeLedger): string[] {
+  const p: string[] = [];
+  const donde = escritor.archivo;
+
+  if (escritor.invalidadores.length === 0) {
+    p.push(
+      `${donde}: \`invalidadores\` VACIO. Un escritor de dinero registrado sin invalidador es ` +
+        "exactamente el auto-engaño que R18 existe para impedir: el registro seria una promesa.",
+    );
+  }
+  if (escritor.requisitos.length === 0) {
+    p.push(
+      `${donde}: \`requisitos\` VACIO. No es contabilidad: el chequeo de titulos de R18 ITERA ` +
+        "sobre esta lista, asi que dejarla vacia deja R18 sin nada que comprobar.",
+    );
+  }
+  if (escritor.invalidaEn.length === 0) {
+    p.push(`${donde}: \`invalidaEn\` VACIO. Nadie puede comprobar donde invalida.`);
+  }
+  for (const rel of escritor.invalidaEn) {
+    if (codigoDe(rel) === null) {
+      p.push(`${donde}: \`invalidaEn\` nombra un archivo que NO existe en disco: ${rel}`);
+    }
+  }
+
+  const fuentes = escritor.invalidaEn
+    .map((rel) => [rel, codigoDe(rel)] as const)
+    .filter((par): par is readonly [string, string] => par[1] !== null);
+
+  for (const inv of escritor.invalidadores) {
+    if (inv.clase === "por_su_llamador") {
+      // «No invalida por su cuenta» solo vale si quien lo llama SI invalida. Se exige que cada
+      // llamador declarado sea a su vez un escritor registrado: si no, la cadena se corta y el
+      // dinero de esta pieza se queda sin nadie que lo anuncie.
+      if (inv.llamadores.length === 0) {
+        p.push(`${donde}: \`por_su_llamador\` sin llamadores. Eso es «no invalida» a secas.`);
+      }
+      for (const llamador of inv.llamadores) {
+        if (codigoDe(llamador) === null) {
+          p.push(`${donde}: declara un llamador que no existe en disco: ${llamador}`);
+        } else if (!ARCHIVOS_ESCRITORES.includes(llamador)) {
+          p.push(
+            `${donde}: delega en ${llamador}, que NO esta registrado como escritor. La cadena ` +
+              "se corta ahi y su dinero se queda sin invalidador.",
+          );
+        }
+      }
+      continue;
+    }
+
+    const origen = `"${inv.origen}"`;
+    const conOrigen = fuentes.filter(([, src]) => src.includes(origen));
+    if (conOrigen.length === 0) {
+      p.push(
+        `${donde}: ningun archivo de \`invalidaEn\` (${escritor.invalidaEn.join(", ")}) contiene ` +
+          `el literal de su origen ${origen}. Declarar un origen que nadie emite hace que el ` +
+          "registro de R24 no pueda decir CUAL invalidador no llego.",
+      );
+    }
+
+    if (inv.clase === "directo" || inv.clase === "por_decorador") {
+      const conLlamada = fuentes.filter(([, src]) => LLAMA_INVALIDADOR.test(src));
+      if (conLlamada.length === 0) {
+        p.push(
+          `${donde}: declara invalidacion \`${inv.clase}\` pero ninguno de sus archivos llama a ` +
+            "`invalidarAnaliticaFinanciera(`. Esto es lo que separa «esta registrado» de " +
+            "«invalida de verdad».",
+        );
+      }
+    }
+
+    if (inv.clase === "por_job") {
+      const conEncolado = fuentes.filter(([, src]) => ENCOLA_JOB.test(src));
+      if (conEncolado.length === 0) {
+        p.push(
+          `${donde}: declara invalidacion \`por_job\` pero ninguno de sus archivos encola nada. ` +
+            "El unico escritor que corre FUERA de un request no puede llamar a `revalidateTag` " +
+            "(lanza): si no encola, no invalida nunca.",
+        );
+      }
+      if (fuentes.some(([, src]) => LLAMA_INVALIDADOR.test(src))) {
+        p.push(
+          `${donde}: un escritor \`por_job\` NO debe llamar a \`invalidarAnaliticaFinanciera\`. ` +
+            "Esa funcion no propaga (D4) y aqui el llamador es un job idempotente con backoff, " +
+            "donde R11 de la 128 sigue aplicando: una invalidacion fallida DEBE hacerlo fallar.",
+        );
+      }
+    }
+  }
+
+  return p;
+}
+
+describe("R17 · el registro DEMUESTRA su invalidador, no solo lo declara", () => {
+  it.each(ESCRITORES_DE_LEDGER.map((e) => [e.archivo, e] as const))(
+    "%s",
+    (_archivo, escritor) => {
+      expect(problemasDe(escritor).join("\n"), QUE_HACER).toBe("");
+    },
+  );
+
+  it("DISCRIMINA: el sondeo que dejo este censo en verde el 2026-08-10 ahora es ROJO", () => {
+    // La entrada EXACTA con la que el reviewer lo rompio: registrada, con los campos vacios y un
+    // test ajeno. Se ejerce sobre la funcion pura para no tener que mutar el registro real.
+    const promesa: EscritorDeLedger = {
+      archivo: "lib/services/__ProbeNovenoEscritorService.ts",
+      invalidaEn: [],
+      invalidadores: [],
+      requisitos: [],
+      tests: ["tests/unit/analytics/cache-financiera-escritor-egreso.test.ts"],
+      motivo: "registrado para callar al guardia",
+    };
+
+    const problemas = problemasDe(promesa);
+    expect(problemas.length).toBeGreaterThanOrEqual(3);
+    expect(problemas.join("\n")).toMatch(/`invalidadores` VACIO/);
+    expect(problemas.join("\n")).toMatch(/`requisitos` VACIO/);
+    expect(problemas.join("\n")).toMatch(/`invalidaEn` VACIO/);
+  });
+
+  it("DISCRIMINA: rellenar los campos sin escribir el invalidador tampoco pasa", () => {
+    // El segundo intento natural de quien quiere callar al guardia: ya no deja nada vacio, pero
+    // apunta a un archivo real que no invalida nada.
+    const conRelleno: EscritorDeLedger = {
+      archivo: "lib/services/__ProbeNovenoEscritorService.ts",
+      invalidaEn: ["lib/services/AnaliticaFinancieraService.ts"], // existe, pero no invalida
+      invalidadores: [{ clase: "directo", origen: "ledger_egreso_admin" }],
+      requisitos: ["R9"],
+      tests: ["tests/unit/analytics/cache-financiera-escritor-egreso.test.ts"],
+      motivo: "relleno",
+    };
+
+    const problemas = problemasDe(conRelleno).join("\n");
+    expect(problemas).toMatch(/ningun archivo de `invalidaEn` .* contiene el literal de su origen/);
+    expect(problemas).toMatch(/ninguno de sus archivos llama a/);
+  });
+
+  it("DISCRIMINA: un `invalidaEn` que apunta a un archivo inexistente cae", () => {
+    const fantasma: EscritorDeLedger = {
+      ...ESCRITORES_DE_LEDGER[0],
+      invalidaEn: ["lib/services/EsteArchivoNoExiste.ts"],
+    };
+    expect(problemasDe(fantasma).join("\n")).toMatch(/NO existe en disco/);
+  });
+
+  it("DISCRIMINA: delegar en un llamador que no esta registrado corta la cadena", () => {
+    const huerfano: EscritorDeLedger = {
+      archivo: "lib/services/CajaPagoTiendaFeedService.ts",
+      invalidaEn: ["lib/services/LiquidacionService.ts"],
+      invalidadores: [
+        { clase: "por_su_llamador", llamadores: ["lib/services/AnaliticaFinancieraService.ts"] },
+      ],
+      requisitos: ["R11"],
+      tests: ["tests/unit/analytics/cache-financiera-escritor-liquidacion.test.ts"],
+      motivo: "delega en alguien que no invalida",
+    };
+    expect(problemasDe(huerfano).join("\n")).toMatch(/NO esta registrado como escritor/);
+  });
+
+  it("y no es verde por vacio: la validacion se ejerce sobre las OCHO entradas reales", () => {
+    expect(ESCRITORES_DE_LEDGER).toHaveLength(8);
+    // Al menos un escritor de cada clase, para que ninguna rama de `problemasDe` quede muerta.
+    const clases = new Set(ESCRITORES_DE_LEDGER.flatMap((e) => e.invalidadores.map((i) => i.clase)));
+    expect([...clases].sort()).toEqual(["directo", "por_decorador", "por_job", "por_su_llamador"]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* M2 — el invalidador `por_decorador` es el mas debil: se ata aqui             */
+/* -------------------------------------------------------------------------- */
+//
+// `por_decorador` depende de que el composition root ENVUELVA. El censo ve que el escritor esta
+// registrado; no ve si alguien construyo el servicio en otro sitio sin decorarlo, y ahi la
+// invalidacion desapareceria sin que nada fallara. Esto lo cierra: se censa el arbol entero
+// buscando `new <Clase>(` y se exige que TODA ocurrencia este envuelta por la factoria del
+// decorador. Un composition root nuevo sin envolver pone esto rojo el dia que se escribe.
+
+describe("M2/R11 · todo `new <Servicio>(` de un escritor `por_decorador` esta ENVUELTO", () => {
+  const conDecorador = ESCRITORES_DE_LEDGER.filter((e) =>
+    e.invalidadores.some((i) => i.clase === "por_decorador"),
+  );
+
+  it("hay al menos uno (si no, este bloque seria verde por vacio)", () => {
+    expect(conDecorador.length).toBeGreaterThan(0);
+  });
+
+  it.each(conDecorador.map((e) => [e.archivo, e] as const))("%s", (_a, escritor) => {
+    const clase = path.basename(escritor.archivo, ".ts");
+
+    // La factoria sale del PROPIO archivo del decorador, no de una constante escrita aqui: si
+    // se renombra, este guardia sigue midiendo lo correcto en vez de quedarse mirando un nombre
+    // que ya no existe.
+    const decoradores = escritor.invalidaEn.filter((rel) => rel !== "lib/analytics/invalidacion-financiera.ts");
+    const factorias = decoradores.flatMap((rel) => {
+      const src = codigoDe(rel) ?? "";
+      return [...src.matchAll(/export function (\w+)\s*\(/g)].map((m) => m[1]);
+    });
+    expect(factorias.length, `${escritor.archivo}: su decorador no exporta ninguna factoria`)
+      .toBeGreaterThan(0);
+
+    const construcciones: string[] = [];
+    const sinEnvolver: string[] = [];
+    for (const rel of TODOS) {
+      const src = leer(rel);
+      const total = [...src.matchAll(new RegExp(`new\\s+${clase}\\s*\\(`, "g"))].length;
+      if (total === 0) continue;
+      construcciones.push(rel);
+      const envueltas = factorias.reduce(
+        (n, f) => n + [...src.matchAll(new RegExp(`${f}\\s*\\(\\s*new\\s+${clase}\\s*\\(`, "g"))].length,
+        0,
+      );
+      if (envueltas < total) sinEnvolver.push(`${rel} (${total - envueltas} sin envolver)`);
+    }
+
+    expect(construcciones.length, `nadie construye ${clase}: el censo seria vacuo`).toBeGreaterThan(0);
+    expect(
+      sinEnvolver,
+      `${clase} se construye sin envolver con ${factorias.join("/")}. La invalidacion de ese ` +
+        "escritor vive en el DECORADOR: un composition root que no envuelva deja de invalidar y " +
+        "NADA falla. Envuelvelo, o mueve la invalidacion dentro del servicio si su feature de " +
+        "origen lo permite.",
+    ).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* M1 — R8: ninguna invalidacion cae DENTRO de una transaccion                  */
+/* -------------------------------------------------------------------------- */
+//
+// R8 tenia test en 1 de los 8 puntos (la liquidacion, con el doble que registra el orden de los
+// eventos). Los otros siete lo cumplian por INSPECCION, no por medida, y un escritor futuro que
+// invalidara dentro de su `tx` no lo cazaba nadie: los tests de cinco pasos no lo verian, porque
+// su doble confirma igual. Esto es el detector que faltaba, y es ESTRUCTURAL: no necesita un
+// test por escritor.
+//
+// Lo que mide: para cada apertura de transaccion (`$transaction(`, `runTransaction(`), se avanza
+// balanceando parentesis hasta el final de esa llamada; si dentro de ese tramo aparece un
+// `invalidarAnaliticaFinanciera(`, es rojo. No es un parser y no pretende serlo: no hay ningun
+// caso en el arbol donde un parentesis viva dentro de un string o de un regex en esas piezas, y
+// la contraprueba de abajo mide las dos direcciones.
+
+/** Fin (exclusivo) de la llamada que abre en `desde` (indice del `(`), balanceando parentesis. */
+function finDeLlamada(src: string, desde: number): number {
+  let nivel = 0;
+  for (let i = desde; i < src.length; i += 1) {
+    if (src[i] === "(") nivel += 1;
+    else if (src[i] === ")") {
+      nivel -= 1;
+      if (nivel === 0) return i;
+    }
+  }
+  return src.length;
+}
+
+/** Tramos `[inicio, fin)` de cada llamada a una transaccion en `src`. */
+function tramosDeTransaccion(src: string): [number, number][] {
+  const tramos: [number, number][] = [];
+  for (const m of src.matchAll(/\$transaction\s*\(|runTransaction\s*\(/g)) {
+    const abre = src.indexOf("(", m.index ?? 0);
+    if (abre >= 0) tramos.push([abre, finDeLlamada(src, abre)]);
+  }
+  return tramos;
+}
+
+/** Archivos donde una invalidacion cae dentro de una transaccion. */
+function invalidacionesDentroDeTx(src: string): number[] {
+  const tramos = tramosDeTransaccion(src);
+  return [...src.matchAll(/invalidarAnaliticaFinanciera\s*\(/g)]
+    .map((m) => m.index ?? -1)
+    .filter((i) => i >= 0 && tramos.some(([a, b]) => i > a && i < b));
+}
+
+describe("R8 · ninguna invalidacion se escribe DENTRO de una transaccion", () => {
+  it("en ningun archivo de `lib/`, `app/` ni `scripts/`", () => {
+    const infractores = TODOS.filter((rel) => invalidacionesDentroDeTx(leer(rel)).length > 0);
+
+    expect(
+      infractores,
+      "invalidar ANTES del commit abre una ventana en la que una lectura concurrente repuebla la " +
+        "cache con el estado ANTERIOR, y esa entrada vive el TTL entero (una hora). Nada falla y " +
+        "la cifra se congela vieja: es el peor modo de fallo de esta feature, y el unico que " +
+        "sobrevive a que todos los demas tests esten verdes. La invalidacion va DESPUES de que la " +
+        "transaccion resuelva. Archivos: " + infractores.join(", "),
+    ).toEqual([]);
+  });
+
+  it("DISCRIMINA: caza la llamada colada dentro de la `tx` y no la de despues", () => {
+    const dentro = `
+      const r = await this.runTransaction(async (tx) => {
+        await this.repo.crearMovimientos(tx, movs);
+        await invalidarAnaliticaFinanciera(this.cache, "ledger_liquidacion");
+        return { status: "ok" };
+      });`;
+    const fuera = `
+      const r = await this.runTransaction(async (tx) => {
+        await this.repo.crearMovimientos(tx, movs);
+        return { status: "ok" };
+      });
+      await invalidarAnaliticaFinanciera(this.cache, "ledger_liquidacion");`;
+
+    expect(invalidacionesDentroDeTx(soloCodigo(dentro))).toHaveLength(1);
+    expect(invalidacionesDentroDeTx(soloCodigo(fuera))).toHaveLength(0);
+  });
+
+  it("y los siete escritores en request SI llaman al invalidador (si no, seria verde por vacio)", () => {
+    // Sin esto, el caso de arriba pasaria igual en un arbol donde nadie invalidara.
+    const conLlamada = TODOS.filter((rel) => LLAMA_INVALIDADOR.test(leer(rel)));
+    expect(conLlamada.length).toBeGreaterThanOrEqual(7);
   });
 });
 

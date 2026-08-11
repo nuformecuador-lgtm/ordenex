@@ -57,7 +57,7 @@ arrays de objetos planos. Todo importe es `string` escala 2 porque el servicio l
 La 128 necesitaba un codec (su R9) porque `CuboRollup.segCicloAcum` es `bigint` y
 `JSON.stringify` **lanza**. Aqui pasa lo contrario y es peor: **nada lanza**. Si mañana alguien
 anade `corteAt: Date` al DTO, el viaje por JSON lo convierte en `string` y la pantalla sigue
-pintando. Por eso **R3 sustituye al codec por dos pruebas**: un round-trip real de las ocho
+pintando. Por eso **R3 sustituye al codec por dos pruebas**: un round-trip real de las diez
 metricas y un guardia estatico sobre el tipo.
 
 ---
@@ -192,6 +192,13 @@ equivocada servido desde cache. El prefijo cuesta seis caracteres.
 ---
 
 ## 4bis. La politica por metrica (D3): excluir no puede parecerse a olvidar
+
+> **⚠ CORRECCION FECHADA — 2026-08-10 (M4 del review): son DIEZ metricas financieras, no ocho.**
+> Esta seccion y R1/R3/D1 arrastraban el numero de antes de la feature 173, que anadio
+> `dinero_en_caja` y `ganancia_ordenex` (`lib/types/analitica-financiera.ts`,
+> `IDS_FINANCIERAS_SERVIDAS`). La politica declara las diez y todos los tests las enumeran desde
+> `listarMetricas({ dominio: "financiera" })`, asi que **el codigo nunca uso el numero viejo**: lo
+> arrastraba la prosa. Los **ocho** que siguen siendo ocho son los PUNTOS DE ESCRITURA de §1.2.
 
 ```ts
 // lib/analytics/cache-politica-financiera.ts  (modulo de datos, puro)
@@ -443,7 +450,7 @@ valores previos en orden; se descarto porque es cambio de esquema por comodidad 
    como mecanismo.
 6. **Un tag por ledger o por metrica** (invalidacion fina). **Descartada como recomendacion** por el
    mismo dato que D3 de la 128 y por uno propio: un cierre aprobado toca los tres ledgers y seis de
-   las ocho metricas, asi que el mapa ledger→metrica seria una tabla escrita a mano cuyo error **no
+   las diez metricas, asi que el mapa ledger→metrica seria una tabla escrita a mano cuyo error **no
    falla, sirve la cifra vieja**. **Cerrada en D1 = (a)** (humano, 2026-08-10).
 8. **Una lista de exclusiones de cache** en vez de una politica exhaustiva por metrica.
    **Descartada:** haria que una metrica financiera futura se cachease **por defecto**, y si esa

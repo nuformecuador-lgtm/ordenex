@@ -14,7 +14,7 @@
 
 ## T0 — La puerta (CERRADA)
 
-**T0.1 — ✅ HECHA (2026-08-10).** Las cuatro decisiones estan escritas como **D1–D4** al final de
+**[x] T0.1 — ✅ HECHA (2026-08-10).** Las cuatro decisiones estan escritas como **D1–D4** al final de
 `requirements.md`, con su motivo y **con las alternativas descartadas y su coste**, y propagadas a
 R2, R5, R6, R7, R16, R17, R26, R27 y R28.
 Requisitos: todos.
@@ -23,7 +23,7 @@ Requisitos: todos.
 - **NO hecho:** dejarlas solo en el chat del coordinador. Una decision que no esta en disco no
   existe (CLAUDE.md, regla 3) — por eso viven en el spec y no en un mensaje.
 
-**T0.2 — Medir el baseline en `C:/w179`, no heredarlo.**
+**[ ] T0.2 — Medir el baseline en `C:/w179`, no heredarlo.**
 Depende de: nada. `[P]` con T0.1.
 - **Hecho:** `./init.sh` corrido en la rama ANTES de tocar nada, con su salida guardada en
   `progress/current.md`; el criterio de cierre de la feature es **delta 0** contra ESA medicion.
@@ -33,7 +33,7 @@ Depende de: nada. `[P]` con T0.1.
 
 ## T1 — Los cimientos (puros, sin escritores todavia)
 
-**T1.1 [P] — `lib/analytics/cache-tags.ts`: anadir `TAG_FINANCIERA` / `TAGS_FINANCIERA`.**
+**[x] T1.1 [P] — `lib/analytics/cache-tags.ts`: anadir `TAG_FINANCIERA` / `TAGS_FINANCIERA`.**
 Depende de: T0.1 (D1). Requisitos: **R6**.
 - **Hecho:** los dos salen de `tagDeDominio("financiera")`; `tests/unit/analytics/cache-tags.
   guardia.test.ts` ampliado al segundo literal y verde; no aparece la cadena `"analitica:
@@ -41,7 +41,7 @@ Depende de: T0.1 (D1). Requisitos: **R6**.
 - **NO hecho:** un modulo de tags nuevo al lado del de la 128 (dos listas divergen), o el literal
   escrito «solo en el test».
 
-**T1.2 [P] — `lib/analytics/cache-clave-financiera.ts`.**
+**[x] T1.2 [P] — `lib/analytics/cache-clave-financiera.ts`.**
 Depende de: T0.1. Requisitos: **R5**.
 - **Hecho:** `claveFinanciera(c)` compone `claveDeConsulta(c, [])` con el prefijo de dominio;
   `cache-financiera-clave.test.ts` verde con los cuatro casos (alcance, preset, orden de ids,
@@ -49,14 +49,14 @@ Depende de: T0.1. Requisitos: **R5**.
 - **NO hecho:** copiar la logica de `claveDeConsulta` en vez de componerla. Dos definiciones de
   «que consultas son la misma» divergen sin que nada falle.
 
-**T1.3 [P] — Ampliar `OrigenInvalidacion` en `lib/interfaces/external/IAnaliticaCache.ts`.**
+**[x] T1.3 [P] — Ampliar `OrigenInvalidacion` en `lib/interfaces/external/IAnaliticaCache.ts`.**
 Depende de: T0.1. Requisitos: **R24**.
 - **Hecho:** un valor por escritor, union literal cerrada, con un comentario que diga por que hay
   uno por escritor y no uno global.
 - **NO hecho:** `string`, o un solo valor `"ledger"` para los siete. Con eso el registro no puede
   decir CUAL invalidador no llego, que es lo unico para lo que existe.
 
-**T1.4 — `lib/analytics/invalidacion-financiera.ts`.**
+**[x] T1.4 — `lib/analytics/invalidacion-financiera.ts`.**
 Depende de: T1.1, T1.3. Requisitos: **R7**, **R21**, **R16**.
 - **Hecho:** una sola funcion `invalidarAnaliticaFinanciera(cache, origen)`; no importa
   `next/cache`; `cache-aislamiento.guardia.test.ts` (128) sigue verde; su cabecera **declara por
@@ -66,7 +66,7 @@ Depende de: T1.1, T1.3. Requisitos: **R7**, **R21**, **R16**.
   la desviacion no queda escrita en el codigo: una contradiccion silenciosa entre dos specs es peor
   que la propia desviacion.
 
-**T1.5 [P] — `lib/analytics/cache-politica-financiera.ts` (D3).**
+**[x] T1.5 [P] — `lib/analytics/cache-politica-financiera.ts` (D3).**
 Depende de: T0.1. Requisitos: **R28**.
 - **Hecho:** politica **exhaustiva por metrica**, con `conciliacion_cierres` marcada no cacheable y
   causa `alerta_por_consulta` de un dominio **cerrado**; claves `string` (no `Record` cerrado, para
@@ -80,7 +80,7 @@ Depende de: T0.1. Requisitos: **R28**.
 
 ## T2 — El decorador de lectura
 
-**T2.1 — `lib/services/CachedAnaliticaFinancieraService.ts` + `decorarFinancieraConCache`.**
+**[x] T2.1 — `lib/services/CachedAnaliticaFinancieraService.ts` + `decorarFinancieraConCache`.**
 Depende de: T1.2, T1.4, T1.5. Requisitos: **R1, R2, R4, R22, R28**.
 - **Hecho:** `cache-financiera-decorador.test.ts` verde con: consulta de metrica no cacheable que
   **ni lee ni escribe** la cache (R28, paso 0 de `design.md §3`); segunda consulta equivalente sin
@@ -89,7 +89,7 @@ Depende de: T1.2, T1.4, T1.5. Requisitos: **R1, R2, R4, R22, R28**.
 - **NO hecho:** un decorador que «no sirve desde cache» pero sigue escribiendo entradas con la
   bandera apagada. Eso es un placebo, no un kill-switch.
 
-**T2.2 — Equivalencia de las ocho metricas.**
+**[x] T2.2 — Equivalencia de las ocho metricas.**
 Depende de: T2.1. Requisitos: **R1**.
 - **Hecho:** `cache-financiera-equivalencia.test.ts` compara, **metrica a metrica** y con igualdad
   profunda, el DTO servido desde cache y el servido sin cache. Las ocho, enumeradas desde
@@ -97,7 +97,7 @@ Depende de: T2.1. Requisitos: **R1**.
 - **NO hecho:** probar dos metricas «representativas». `cod_recaudado` trae dos vistas y
   `conciliacion_cierres` tiene otra forma de resultado: un muestreo las pierde.
 
-**T2.3 — JSON-safety: el guardia que ocupa el sitio del codec.**
+**[x] T2.3 — JSON-safety: el guardia que ocupa el sitio del codec.**
 Depende de: T2.1. Requisitos: **R3**.
 - **Hecho:** round-trip real de las ocho metricas + guardia estatico sobre
   `lib/types/analitica-financiera.ts` que falla si aparece un campo `Date`/`bigint`/`Map`/`Set`/
@@ -105,7 +105,7 @@ Depende de: T2.1. Requisitos: **R3**.
 - **NO hecho:** dar por buena la JSON-safety porque hoy lo es. Es la unica prueba que atrapa un
   campo futuro que degrade en silencio.
 
-**T2.5 — La exclusion de `conciliacion_cierres`, probada sobre el COMPORTAMIENTO (D3).**
+**[x] T2.5 — La exclusion de `conciliacion_cierres`, probada sobre el COMPORTAMIENTO (D3).**
 Depende de: T2.1. Requisitos: **R28**. `[P]` con T2.2 y T2.3.
 - **Hecho:** `cache-financiera-conciliacion.test.ts` verde con las dos aserciones: dos consultas
   identicas **consultan la base las dos veces**, y el aviso de descuadre **se emite en las dos**
@@ -116,7 +116,7 @@ Depende de: T2.1. Requisitos: **R28**. `[P]` con T2.2 y T2.3.
   alguien escribio `cacheable: false`, no que el decorador lo respete. La asercion que impide el
   «ya que estamos, cacheemos tambien esta» es la del **contador de emisiones del logger**.
 
-**T2.4 — Cablear el composition root.**
+**[x] T2.4 — Cablear el composition root.**
 Depende de: T2.1. Requisitos: **R20, R22**.
 - **Hecho:** solo `construirServicio` de `lib/actions/analitica-financiera.ts` cambia;
   `consultarMetricaFinanciera` intacta; `cache-financiera-frontera.test.ts` verde (aridad y tipo de
@@ -146,46 +146,46 @@ Depende de: T2.1. Requisitos: **R20, R22**.
 > **Y criterio de NO hecho de todo el bloque: cerrarlo con siete de ocho.** Ese es el fallo que esta
 > feature existe para impedir, y por eso el censo de T4 depende de las ocho.
 
-**T3.1 [P] — `WalletEgresoService`.** Requisitos: **R9**.
+**[x] T3.1 [P] — `WalletEgresoService`.** Requisitos: **R9**.
 - **Hecho:** `cache-financiera-escritor-egreso.test.ts` cubre `registrarEgreso` **y**
   `reversarEgreso`; borrar la invalidacion pone rojo **este** test y ninguno de los otros siete.
 - **NO hecho:** cubrir solo `registrarEgreso`. El reverso mueve dinero igual.
 
-**T3.2 [P] — `WalletService.registrarMovimientoManual`.** Requisitos: **R10**.
+**[x] T3.2 [P] — `WalletService.registrarMovimientoManual`.** Requisitos: **R10**.
 - **Hecho:** `cache-financiera-escritor-manual.test.ts` verde, y el registro de `escritores-ledger.
   ts` lo nombra.
 - **NO hecho:** saltarselo por no estar en la ficha. **Es el hallazgo de §0.a**: sin el, esta
   feature reintroduce exactamente el fallo que D2 rechazo.
 
-**T3.3 [P] — `LiquidacionService`.** Requisitos: **R11**, **R8**.
+**[x] T3.3 [P] — `LiquidacionService`.** Requisitos: **R11**, **R8**.
 - **Hecho:** `cache-financiera-escritor-liquidacion.test.ts` cubre pago a mensajero, pago a tienda y
   anulacion; la invalidacion ocurre **tras** el `$transaction`, y
   `cache-financiera-invalidacion-orden.test.ts` lo demuestra con un doble que registra el orden de
   los eventos.
 - **NO hecho:** invalidar dentro de la tx. Nada falla en el test feliz y abre la ventana de R8.
 
-**T3.4 [P] — `GeneracionGastosFijosService` (cron).** Requisitos: **R12**.
+**[x] T3.4 [P] — `GeneracionGastosFijosService` (cron).** Requisitos: **R12**.
 - **Hecho:** cinco pasos contra `handleGenerarGastosFijos` real, mas el caso «cero egresos
   generados no invalida».
 - **NO hecho:** invalidar siempre. Vaciar la cache financiera cada madrugada sin haber movido
   dinero es coste sin motivo, y el segundo test existe para eso.
 
-**T3.5 [P] — Indemnizacion de incidente (`IncidenteAdminService`).** Requisitos: **R13**.
+**[x] T3.5 [P] — Indemnizacion de incidente (`IncidenteAdminService`).** Requisitos: **R13**.
 - **Hecho:** cinco pasos en la rama `aprobado` con egreso emitido, mas «rechazo y reintento ya
   aplicado (`no_aplicado`) no invalidan».
 - **NO hecho:** enganchar la invalidacion en `IncidenteAdminRepository`. Esta dentro de su
   `$transaction` (R8) y un repositorio no conoce la cache.
 
-**T3.6 [P] — `aprobarCierre` (`CierresAdminService`).** Requisitos: **R14**.
+**[x] T3.6 [P] — `aprobarCierre` (`CierresAdminService`).** Requisitos: **R14**.
 - **Hecho:** cinco pasos, con las tres escrituras de ledger que la aprobacion emite.
 - **NO hecho:** compartir test con T3.7.
 
-**T3.7 [P] — `aprobarCierreBodega` (`CierresBodegaAdminService`).** Requisitos: **R15**.
+**[x] T3.7 [P] — `aprobarCierreBodega` (`CierresBodegaAdminService`).** Requisitos: **R15**.
 - **Hecho:** cinco pasos, en su propio archivo.
 - **NO hecho:** darlo por cubierto porque «es igual que el de dia». Es otro servicio, otro archivo,
   otra llamada que alguien puede olvidar.
 
-**T3.8 — El handler del job lee el dominio del payload (D2).** Requisitos: **R27**.
+**[x] T3.8 — El handler del job lee el dominio del payload (D2).** Requisitos: **R27**.
 Depende de: T1.1. **No es `[P]` con T3.9: T3.9 la necesita.**
 - **Hecho:** `analitica-invalidacion-cache-handler.ts` invalida el tag del `dominio` del payload,
   **con `operativa` como default explicito**; el `dedupeKey` de
@@ -197,7 +197,7 @@ Depende de: T1.1. **No es `[P]` con T3.9: T3.9 la necesita.**
   `dedupeKey` no distingue dominio: dos backfills en la misma ventana se deduplicarian entre si y
   una invalidacion desapareceria en silencio (`ON CONFLICT DO NOTHING`).
 
-**T3.9 — El octavo escritor: `scripts/backfill-caja-tesoreria.ts` encola (D2).** Requisitos: **R26**.
+**[x] T3.9 — El octavo escritor: `scripts/backfill-caja-tesoreria.ts` encola (D2).** Requisitos: **R26**.
 Depende de: T3.8.
 - **Hecho:** al cerrar una corrida en modo `aplicar` **con al menos una fila insertada**, encola el
   job con `{ dominio: "financiera" }`; `backfill-caja-tesoreria-invalidacion.test.ts` verde con los
@@ -209,7 +209,7 @@ Depende de: T3.8.
   es donde peor se descubre. **NO hecho** tambien si el test se queda en «se llamo a `enqueue`»: eso
   no prueba que la cifra servida cambie.
 
-**T3.10 — Registro y fallo de invalidacion (D4).** Depende de: T3.1–T3.9. Requisitos: **R16, R24**.
+**[x] T3.10 — Registro y fallo de invalidacion (D4).** Depende de: T3.1–T3.9. Requisitos: **R16, R24**.
 - **Hecho:** `cache-financiera-registro.test.ts` comprueba que **cada uno de los ocho** escritores
   registra **su** origen y que el registro no lleva ids de tienda, mensajero, cierre ni usuario;
   `cache-financiera-invalidacion-fallo.test.ts` verde con los tres casos de D4(a): la aprobacion
@@ -224,7 +224,7 @@ Depende de: T3.8.
 
 ## T4 — El censo
 
-**T4.1 — `lib/analytics/escritores-ledger.ts`: el registro declarado.**
+**[x] T4.1 — `lib/analytics/escritores-ledger.ts`: el registro declarado.**
 Depende de: T3.1–T3.9. Requisitos: **R17, R18**.
 - **Hecho:** una entrada por punto de escritura (**los ocho** de `requirements.md §0.a`, incluido el
   backfill de tesoreria, cuyo invalidador es el job de R27 y no una llamada directa), cada una con
@@ -232,7 +232,7 @@ Depende de: T3.1–T3.9. Requisitos: **R17, R18**.
 - **NO hecho:** una entrada sin test, o una entrada «pendiente». El registro es una prueba, no una
   lista de intenciones.
 
-**T4.2 — `tests/unit/analytics/ledger-escritores.guardia.test.ts`.**
+**[x] T4.2 — `tests/unit/analytics/ledger-escritores.guardia.test.ts`.**
 Depende de: T4.1. Requisitos: **R17, R18**.
 - **Hecho:** los dos ejes (escritura cruda ⊆ los tres repositorios; llamadores de `crearMovimientos`
   == claves del registro, **en las dos direcciones**); un test de discriminacion con un fragmento
@@ -242,7 +242,7 @@ Depende de: T4.1. Requisitos: **R17, R18**.
 - **NO hecho:** un guardia que solo compruebe una direccion. Con solo «todo registrado existe», un
   escritor nuevo pasa; con solo «todo escritor esta registrado», el registro acumula muertos.
 
-**T4.3 — Censo de TTL y de literales, ampliados.**
+**[x] T4.3 — Censo de TTL y de literales, ampliados.**
 Depende de: T2.1. Requisitos: **R6, R23**. `[P]` con T4.2.
 - **Hecho:** `cache-config.guardia.test.ts` y `cache-tags.guardia.test.ts` (128) ampliados al ambito
   nuevo y verdes; no existe una segunda constante de TTL.
@@ -254,7 +254,7 @@ Depende de: T2.1. Requisitos: **R6, R23**. `[P]` con T4.2.
 
 ## T5 — La retirada, y solo entonces
 
-**T5.1 — Borrar `tests/unit/analytics/cache-financiera.guardia.test.ts` (R15 / D2 **de la 128**).**
+**[x] T5.1 — Borrar `tests/unit/analytics/cache-financiera.guardia.test.ts` (R15 / D2 **de la 128**).**
 Depende de: **T3.1 a T3.10 verdes y T4.2 verde. De ninguna otra forma.** Requisitos: **R19**.
 - **Hecho:** el archivo ya no existe; `ledger-escritores.guardia.test.ts` comprueba **por sistema de
   archivos** que el guardia de D2 de la 128 no esta y que el censo si; el commit cita esa decision y
@@ -267,7 +267,7 @@ Depende de: **T3.1 a T3.10 verdes y T4.2 verde. De ninguna otra forma.** Requisi
   invalidaciones para una cache que no existe es codigo muerto, y partirla multiplica la posibilidad
   de que la mitad que retira el guardia llegue sin la mitad que invalida (`design.md §7`).
 
-**T5.2 — Guardia de frontera de archivos (branch-scoped).**
+**[x] T5.2 — Guardia de frontera de archivos (branch-scoped).**
 Depende de: T5.1. Requisitos: **R25**.
 - **Hecho:** `cache-financiera-frontera.guardia.test.ts` mide el diff contra `origin/dev` y compara
   con la lista de `design.md §2`; su cabecera declara **que caduca al mergear y que se retira en
@@ -275,7 +275,7 @@ Depende de: T5.1. Requisitos: **R25**.
 - **NO hecho:** dejarlo vivo tras el merge. Pasaria a juzgar toda rama posterior y se convertiria en
   un impuesto sobre features ajenas (leccion del repo; la 128 hizo lo mismo con el suyo).
 
-**T5.3 — Retirar el guardia branch-scoped.**
+**[x] T5.3 — Retirar el guardia branch-scoped.**
 Depende de: T5.2 verde. Requisitos: **R25**.
 - **Hecho:** borrado, con el comentario del commit como constancia de que cumplio su funcion.
 - **NO hecho:** «lo quitamos cuando duela».
@@ -284,15 +284,35 @@ Depende de: T5.2 verde. Requisitos: **R25**.
 
 ## T6 — Cierre
 
-**T6.1 — Mapa `R<n> → test` completo.**
+**[ ] T6.1 — Mapa `R<n> → test` completo.**
 Depende de: T5.3. Requisitos: todos.
 - **Hecho:** `progress/impl_179-analitica-cache-financiera.md` con **cada** requisito mapeado a un
   test concreto que existe y pasa. Ningun requisito sin test (CLAUDE.md, regla 4).
 - **NO hecho:** un requisito mapeado a «la suite en general».
 
-**T6.2 — `./init.sh` completo.**
+**[ ] T6.2 — `./init.sh` completo.**
 Depende de: T6.1. Requisitos: todos.
 - **Hecho:** corrida completa (no `--rapido`) con **delta 0** contra la medicion de T0.2, y las
   guardias todas verdes. El `--rapido` vale para cerrar tandas intermedias, no para el PR.
 - **NO hecho:** comparar contra el baseline de la bitacora, o cerrar con «los rojos ya estaban».
   Se mide en esta rama, hoy.
+
+---
+
+## Estado de las tasks (cerrado el 2026-08-10, tras el review)
+
+`[x]` = hecha y verificada. `[ ]` = no hecha, con su motivo escrito.
+
+| bloque | estado |
+|---|---|
+| **T0** | `[x]` T0.1 (D1–D4 cerradas por el humano). **`[ ]` T0.2**: el baseline de `./init.sh` en esta rama **nunca se midio**, asi que el «delta 0» de T6.2 no tenia contra que medirse. Lo salva que el gate final quedo en **verde absoluto** (1058/1058 archivos, 12.976/12.976 tests), que no necesita baseline — pero el hueco es real y se declara aqui, no se disimula. |
+| **T1** | `[x]` T1.1–T1.5 |
+| **T2** | `[x]` T2.1–T2.5 |
+| **T3** | `[x]` T3.1–T3.10 — los OCHO puntos de escritura, cada uno con su test de cinco pasos y su mutacion medida. T3.3 se engancha por DECORADOR y no dentro del servicio: lo obliga el R68 de la 172 (`progress/impl_179.md §9.1`). |
+| **T4** | `[x]` T4.1–T4.3 — el censo. **Endurecido el 2026-08-10 tras el B1 del review**: ya no basta con registrarse, hay que demostrar el invalidador. |
+| **T5** | `[x]` T5.1 (retirado el guardia R15 de la 128, sustituido) · `[x]` T5.2 (el guardia de frontera se escribio y paso 3/3) · `[x]` T5.3 (retirado en el mismo PR). **R25 se re-verifico A MANO** tras la ronda §9/§10, porque el guardia branch-scoped ya no estaba: `progress/impl_179.md §11.3`. |
+| **T6** | `[ ]` T6.1 y `[ ]` T6.2 — **son del leader**: el mapa consolidado y el `./init.sh` completo, que hay que correr **despues** de reconciliar con `origin/dev` (la rama esta ~90 archivos por detras). |
+
+**Lo que NO se cumplio de la letra del proceso, dicho entero:** T6.1 nombra
+`progress/impl_179-analitica-cache-financiera.md` y el mapa vive en `progress/impl_179.md`, partido
+en dos bitacoras (T1–T2 y T3–T5 + §9/§10/§11). El contenido esta; el nombre del archivo no coincide.

@@ -774,3 +774,142 @@ $ pnpm exec vitest related --run lib/services/LiquidacionConInvalidacionService.
 **Archivos tocados:** `tests/unit/guards/liquidacion-money-safe.test.ts` (una entrada en el censo +
 su motivo) y `specs/179-analitica-cache-financiera/design.md` (§2 lo declara, con el motivo, como
 ampliacion de frontera del 2026-08-10).
+
+---
+
+## 11. El RECHAZO del reviewer: B1 + los menores (2026-08-10)
+
+`progress/review_179.md` — **RECHAZADO** por un bloqueante. **Cero cambios en codigo de
+produccion**: todo el arreglo vive en `tests/unit/analytics/ledger-escritores.guardia.test.ts`.
+
+### 11.1 B1 — el censo obligaba a REGISTRARSE, no a INVALIDAR
+
+**El sondeo del reviewer, que no razono sino que midio.** Creo un noveno escritor sintetico que
+llamaba a `crearMovimientos` y no invalidaba nada; el censo lo cazo (2 rojos: eje 2 «por DEFECTO» y
+el conteo). **Despues lo REGISTRO** con `invalidadores: []`, `requisitos: []`, `invalidaEn: []` y un
+`tests:` que apuntaba a un test **ajeno**, y subio los dos conteos de 8 a 9 —que es literalmente lo
+que el mensaje de fallo de mi guardia le pedia a quien anade un escritor—. Resultado:
+**`22 passed`, verde entero**. Un escritor de dinero sin invalidador y sin test propio, y el censo
+diciendo que todo estaba bien.
+
+**Tenia razon, y escuece porque es mi propio R18 el que lo prohibia por escrito** —«sin R18, R17 se
+satisface escribiendo una linea en un array: el registro seria una promesa, no una prueba»—. Era una
+promesa. Las tres puertas, tal y como el las nombro:
+
+- `invalidadores` no se comprobaba ni no-vacio ni por contenido;
+- `requisitos` tampoco — y como el chequeo de titulos de R18 **itera** sobre esa lista, con la lista
+  vacia **R18 se volvia vacuo**: el test ajeno no tenia que declarar nada porque no habia nada que
+  declarar;
+- `invalidaEn` no lo leia ningun test: era prosa.
+
+**Lo que ahora mide.** Un bloque nuevo, `R17 · el registro DEMUESTRA su invalidador, no solo lo
+declara`, con la validacion en una funcion **pura** (`problemasDe(escritor)`) que devuelve la lista
+de problemas en vez de lanzar. Eso permite dos cosas a la vez: correrla sobre las ocho entradas
+reales (`it.each`) y **ejercerla sobre entradas sinteticas** sin volver a mutar el arbol.
+
+| comprobacion | que cierra |
+|---|---|
+| `invalidadores`, `requisitos` e `invalidaEn` **no vacios**, con mensaje que explica por que | las tres puertas del sondeo |
+| cada ruta de `invalidaEn` **existe en disco** | un registro que apunta a un archivo que ya no esta |
+| `directo` / `por_decorador`: algun archivo de `invalidaEn` contiene **`invalidarAnaliticaFinanciera(`** *y* el **literal de su `origen`** | «esta registrado» deja de ser lo mismo que «invalida de verdad» |
+| `por_job`: algun archivo de `invalidaEn` **encola** (`.enqueue(`), lleva el literal del origen, y **NO** llama al invalidador directo | el octavo escritor corre fuera de un request: si no encola, no invalida nunca. Y no puede usar la funcion que no propaga (D4), porque ahi R11 de la 128 sigue aplicando |
+| `por_su_llamador`: tiene llamadores, existen, y **cada uno es a su vez un escritor registrado** | «no invalida por su cuenta» solo vale si quien lo llama SI invalida; si no, la cadena se corta |
+
+Y cuatro casos de **discriminacion** que demuestran que no es verde por construccion: la entrada
+exacta del sondeo, la version «con los campos rellenos pero apuntando a un archivo que no invalida»,
+un `invalidaEn` fantasma y un `por_su_llamador` huerfano. Mas un caso que exige que las cuatro
+clases de invalidador esten representadas en el registro real, para que ninguna rama de
+`problemasDe` quede muerta.
+
+### 11.2 EL SONDEO REPETIDO — porque endurecer sin volver a intentar romperlo no es endurecer
+
+Se repitio **exactamente** el del reviewer, sobre el arbol real, y se revirtio.
+
+```
+FASE 1 — noveno escritor sintetico, SIN registrar
+  ledger-escritores.guardia   Tests  2 failed | 37 passed (39)
+  (eje 2 «por DEFECTO» + el conteo de ocho; el mensaje nombra el archivo)
+
+FASE 2 — el MISMO, REGISTRADO con `invalidadores: []`, `requisitos: []`, `invalidaEn: []`,
+         un test ajeno, y los dos conteos subidos de 8 a 9
+  ANTES  →  Test Files 1 passed · Tests 22 passed        ← el agujero
+  AHORA  →  Test Files 1 failed · Tests 1 failed | 40 passed (41)
+
+  y el fallo enumera los tres motivos, en su mensaje:
+    · `invalidadores` VACIO. Un escritor de dinero registrado sin invalidador es exactamente
+      el auto-engaño que R18 existe para impedir: el registro seria una promesa.
+    · `requisitos` VACIO. No es contabilidad: el chequeo de titulos de R18 ITERA sobre esta
+      lista, asi que dejarla vacia deja R18 sin nada que comprobar.
+    · `invalidaEn` VACIO. Nadie puede comprobar donde invalida.
+
+LIMPIEZA: `git status --porcelain` sin rastro del sondeo; guardia de vuelta en 39/39 verde.
+```
+
+### 11.3 Los menores
+
+**M2 — atado.** Bloque nuevo: para cada escritor `por_decorador` se censa **todo** `lib/`, `app/` y
+`scripts/` buscando `new <Clase>(` y se exige que **toda** ocurrencia este envuelta por la factoria
+del decorador. La factoria **se lee del propio archivo del decorador** (`export function (\w+)`) y
+no de una constante escrita en el test: si se renombra, el guardia sigue midiendo lo correcto en vez
+de mirar un nombre muerto. Hoy: 1 construccion, 1 envuelta. Un composition root nuevo sin envolver
+lo pone rojo el dia que se escribe — que es justo lo que M2 pedia.
+
+**M1 — resuelto de forma ESTRUCTURAL, sin un test por punto.** R8 tenia test en 1 de 8. Ahora hay un
+detector: se localiza cada apertura de transaccion (`$transaction(`, `runTransaction(`), se avanza
+**balanceando parentesis** hasta el final de esa llamada, y si un `invalidarAnaliticaFinanciera(`
+cae dentro de ese tramo, es rojo — en **cualquier** archivo de `lib/`, `app/` o `scripts/`, no solo
+en los ocho. Con su contraprueba en las dos direcciones (la llamada colada dentro de la `tx` se caza;
+la de despues, no) y un caso anti-vacio que exige que al menos siete archivos llamen al invalidador,
+para que la regla no pase en un arbol donde nadie invalide. **No es un parser y no pretende serlo**,
+y esta escrito en su cabecera: no hay hoy ningun parentesis dentro de un string o un regex en esas
+piezas que lo confunda.
+
+**M3 — R25 re-verificado A MANO**, que es lo que pedia: el guardia branch-scoped se retiro antes de
+las rondas §9/§10/§11, asi que esos archivos nunca pasaron por el. Cruce los **60 archivos** del
+diff `871e6c5d..HEAD` (commits + arbol sucio) contra `design.md §2`:
+
+- **Todo el codigo y todos los tests estan declarados** — incluidas las cuatro ampliaciones de
+  frontera, cada una escrita ANTES de tocar el archivo y con su motivo:
+  `LiquidacionConInvalidacionService.ts`, `_libro-financiero.ts`,
+  `backfill-caja-tesoreria-invalidacion.test.ts` y `liquidacion-money-safe.test.ts`.
+- **Fuera de §2 solo hay contabilidad**: `feature_list.json`, `progress/impl_179.md`,
+  `progress/impl_180.md`, `progress/review_179.md` (del reviewer), los tres `specs/179-*/` y
+  `specs/180-*/requirements.md`. Las cuatro ultimas estan declaradas en §9.6.
+- **Ni un archivo de los que §2 declara intocables aparece en el diff**: `lib/analytics/metrics.ts`,
+  `AnaliticaFinancieraService.ts`, `cache-clave.ts`, `next-analitica-cache.ts`,
+  `analitica-cache.ts`, los tres repositorios de ledger, `db/schema.prisma` y el testigo
+  `cache-invalidacion-backfill.test.ts` de la 128. **R25 se cumple materialmente.**
+
+**M4 — corregido: son DIEZ metricas, no ocho.** R1, R3 y D1 en `requirements.md` y §4bis en
+`design.md`, cada sitio con su **nota fechada** explicando que el numero venia de antes de la 173 y
+que **el codigo nunca lo uso** (todos los tests enumeran desde
+`listarMetricas({ dominio: "financiera" })`). Se deja dicho ademas lo que **si** sigue siendo ocho y
+no se toca: los **puntos de escritura**, que no tienen nada que ver con el numero de metricas — que
+es justo la confusion que un cambio a ciegas habria provocado.
+
+**M7 — `tasks.md` con casillas.** 30 tasks marcadas: **27 `[x]`** y **3 `[ ]`** (T0.2, T6.1, T6.2),
+cada pendiente con su motivo. Mas una tabla de estado por bloque al final, que dice sin adornos lo
+que no se cumplio de la letra del proceso: **T0.2 nunca se midio** y el mapa de T6.1 vive en
+`progress/impl_179.md` y no en el nombre de archivo que `tasks.md` anuncia.
+
+**M5, M6, M8, M9 — sin accion**, como indico el leader (los dos ultimos son notas favorables).
+
+### 11.4 Gate
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+(sin salida — verde)
+
+$ pnpm lint
+✖ 57 problems (0 errors, 57 warnings)   ← identico; ningun warning nuevo
+
+$ pnpm exec vitest run tests/unit/analytics/ledger-escritores.guardia.test.ts
+ Test Files  1 passed (1)
+      Tests  39 passed (39)          ← eran 21 antes del endurecimiento
+```
+
+**Archivos tocados en esta ronda:** `tests/unit/analytics/ledger-escritores.guardia.test.ts` (B1,
+M1, M2), `specs/179-analitica-cache-financiera/requirements.md` y `design.md` (M4),
+`specs/179-analitica-cache-financiera/tasks.md` (M7) y esta bitacora. **Ni una linea de codigo de
+produccion.**

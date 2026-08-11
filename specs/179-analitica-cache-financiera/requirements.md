@@ -56,6 +56,17 @@ dentro de un request: `revalidateTag` funciona ahi. Quien SI escribe fuera de to
 **backfill de tesoreria** (`scripts/backfill-caja-tesoreria.ts`), que es el mismo problema que la
 128 resolvio encolando un job (`design.md §7.1` de la 128). Ver **Q2**.
 
+> **⚠ CORRECCION FECHADA — 2026-08-10 (M4 del review).** Este documento decia «las ocho metricas
+> financieras» en R1, R3, D1 y en `design.md §4bis`. **Son DIEZ** desde la feature 173, que anadio
+> `dinero_en_caja` y `ganancia_ordenex`; el propio contrato lo dice
+> (`lib/types/analitica-financiera.ts`, `IDS_FINANCIERAS_SERVIDAS`, «Eran OCHO hasta la feature
+> 173»). **No se forzo nada al implementar**: todos los tests enumeran desde
+> `listarMetricas({ dominio: "financiera" })` y la politica de cache declara las diez. El numero no
+> cambia ninguna decision —ni D1, ni D3, ni el alcance— pero un requisito con un numero equivocado
+> es un requisito que no se puede verificar contra el arbol, asi que se corrige aqui y en los
+> cuatro sitios. **Los OCHO que si son ocho y no se tocan: los PUNTOS DE ESCRITURA** (§0.a), que no
+> tienen nada que ver con el numero de metricas.
+
 **(0.c) Aqui NO hace falta codec, y eso no es suerte: hay que vigilarlo.** El valor a cachear es
 `ResultadoFinanciero` (`lib/types/analitica-financiera.ts:272`), que es JSON-safe de punta a
 punta: todo importe viaja como `string` escala 2, el unico `number` es el CONTEO de cierres
@@ -87,10 +98,10 @@ no para las preguntas: **R16** (D4), **R26** y **R27** (D2) y **R28** (D3) nacen
 
 ## A. Correccion: la cache no puede cambiar el dinero servido
 
-**R1.** Para toda consulta valida de las **ocho** metricas financieras del catalogo, el resultado
+**R1.** Para toda consulta valida de las **diez** metricas financieras del catalogo, el resultado
 servido **desde cache** DEBE ser identico —campo a campo, tipo a tipo— al servido con la cache
 deshabilitada.
-*Test: `tests/unit/analytics/cache-financiera-equivalencia.test.ts` › «las ocho metricas sirven
+*Test: `tests/unit/analytics/cache-financiera-equivalencia.test.ts` › «las diez metricas sirven
 desde cache exactamente el mismo DTO que sin cache».*
 *Mutacion: que el decorador devuelva `JSON.parse` sin comparar la forma → `esAcumulado` o
 `sumableCon` se pierden y la igualdad profunda falla → rojo.*
@@ -109,7 +120,7 @@ DEBE sobrevivir a un viaje `JSON.stringify` → `JSON.parse` **sin cambiar de ti
 El sistema NO DEBE guardar valores con `bigint`, `Date`, `Map`, `Set`, `Prisma.Decimal` ni
 `undefined` con significado.
 *Tests: (1) `tests/unit/analytics/cache-financiera-json.test.ts` › «el DTO de cada una de las ocho
-metricas es identico tras el viaje por JSON» —las ocho, tambien la no cacheable: si mañana se
+metricas es identico tras el viaje por JSON» —las diez, tambien la no cacheable: si mañana se
 declarara cacheable, la prueba ya existe—; (2) guardia que SOBREVIVE al merge,
 `tests/unit/analytics/cache-financiera-json.guardia.test.ts` › «ningun campo del contrato
 `ResultadoFinanciero` es de un tipo que no sobreviva a JSON», por lectura estatica de
@@ -453,7 +464,7 @@ Al invalidar se vacia la cache financiera ENTERA: un egreso manual de ₡5.000 t
 conciliacion del trimestre. Se asume: **invalidar de mas cuesta recomputo, no correccion**, y a
 cambio hace **imposible** que la invalidacion se desalinee de la lectura. Es la misma decision que
 D3 de la 128 y por el mismo motivo, mas uno propio: el mapa «que escritura afecta a que metrica» no
-es evidente ni estable — **un cierre aprobado toca los tres ledgers y seis de las ocho metricas**.
+es evidente ni estable — **un cierre aprobado toca los tres ledgers y seis de las diez metricas**.
 
 **Descartada — (b) por clave o por sub-tag (un tag por ledger tocado).** Menos recomputo. Coste:
 obliga a mantener a mano el mapa ledger→metricas y **cuando ese mapa se equivoque no fallara nada**:
