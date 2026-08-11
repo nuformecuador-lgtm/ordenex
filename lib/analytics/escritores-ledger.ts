@@ -23,11 +23,12 @@
 // Un escritor retirado tambien lo pone rojo, por el lado contrario, para que el registro no
 // acumule entradas muertas.
 //
-// ⚠ ESTADO EN ESTA TANDA (T1/T2). Las entradas de abajo son las OCHO definitivas, pero los
-// invalidadores (T3) y el guardia que las cuadra (T4.2) aun NO estan en el arbol: mientras eso
-// dure, este archivo es una declaracion sin quien la haga cumplir. **No se cierra la feature
-// asi**: T4.2 es la task que lo convierte en prueba, y T5.1 —la retirada del guardia de D2 de la
-// 128— depende de las ocho tasks de escritor verdes, no de este archivo.
+// ESTADO (T4.1, cerrada en la tanda T3-T5): las OCHO entradas tienen su invalidador en el arbol
+// y su test escrito, y `ledger-escritores.guardia.test.ts` cuadra las dos direcciones en cada
+// corrida. Este archivo dejo de ser una declaracion y paso a ser la mitad declarada de una
+// prueba: R18 exige ademas que cada entrada nombre un test que EXISTE y que declara en el
+// nombre de alguno de sus casos el requisito que cubre. Sin R18, R17 se satisface escribiendo
+// una linea en este array.
 
 import type { OrigenInvalidacion } from "@/lib/interfaces/external/IAnaliticaCache";
 
@@ -100,7 +101,10 @@ export const ESCRITORES_DE_LEDGER: readonly EscritorDeLedger[] = [
     archivo: "lib/services/LiquidacionService.ts",
     invalidaEn: ["lib/services/LiquidacionService.ts", INVALIDACION],
     invalidadores: [{ clase: "directo", origen: "ledger_liquidacion" }],
-    tests: ["tests/unit/analytics/cache-financiera-escritor-liquidacion.test.ts"],
+    tests: [
+      "tests/unit/analytics/cache-financiera-escritor-liquidacion.test.ts",
+      "tests/unit/analytics/cache-financiera-invalidacion-orden.test.ts",
+    ],
     requisitos: ["R11", "R8"],
     motivo:
       "sus escrituras viven DENTRO de `tx` (`:225`, `:322`, `:549`, `:565`): la invalidacion va " +
@@ -166,7 +170,7 @@ export const ESCRITORES_DE_LEDGER: readonly EscritorDeLedger[] = [
     ],
     tests: [
       "tests/unit/analytics/cache-financiera-escritor-liquidacion.test.ts",
-      "tests/unit/analytics/cache-financiera-invalidacion-backfill.test.ts",
+      "tests/unit/scripts/backfill-caja-tesoreria-invalidacion.test.ts",
     ],
     requisitos: ["R11", "R26"],
     motivo:
