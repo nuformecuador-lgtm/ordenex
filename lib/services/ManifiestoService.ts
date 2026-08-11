@@ -240,6 +240,7 @@ export class ManifiestoService implements IManifiestoService {
       telefono: row.telefonoDest, // §9.4: telefono del DESTINATARIO
       direccion: row.direccion,
       zona: row.zonaNombre,
+      producto: row.producto, // dato propio de la orden (160/R28)
       monto: row.montoCobrar, // §9.3: monto_cobrar (COD)
       intentos, // feature 160/R28a: dato propio de la orden
       origen,
