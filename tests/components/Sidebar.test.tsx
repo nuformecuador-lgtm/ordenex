@@ -83,23 +83,31 @@ describe("Sidebar", () => {
     });
     expect(nav).toBeInTheDocument();
 
-    // Ranking y Órdenes son enlaces directos (sin subítems).
-    const ranking = screen.getByRole("link", { name: "Ranking" });
+    // Órdenes es un enlace directo (sin subítems).
     const ordenes = linkPorHref("/ordenes");
-    expect(ranking).toHaveAttribute("href", "/ranking");
     expect(ordenes).toHaveAccessibleName("Órdenes");
 
     // Configuración tiene subítems: es un botón colapsable, no un enlace.
     const config = screen.getByRole("button", { name: /configuración/i });
     expect(config).toBeInTheDocument();
     expect(config).toHaveAttribute("aria-expanded", "false");
+
+    // Feature 196 (T4.5): "Ranking" DEJÓ de ser un enlace directo. Ahora tiene subítems
+    // ("Ranking del día" / "Histórico"), así que se renderiza como disparador colapsable
+    // igual que Configuración. La intención original del caso —distinguir un ítem simple de
+    // uno con submenú— se conserva; lo que cambió es de qué lado está Ranking.
+    const ranking = screen.getByRole("button", { name: /ranking/i });
+    expect(ranking).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Ranking" })).toBeNull();
   });
 
   it("cada item tiene un icono propio (svg de lucide)", () => {
     renderSidebar();
 
     const config = screen.getByRole("button", { name: /configuración/i });
-    const ranking = screen.getByRole("link", { name: "Ranking" });
+    // Feature 196: Ranking pasó a ser colapsable (ver el caso de arriba); sigue teniendo
+    // que traer su propio icono, que es lo que este caso mide.
+    const ranking = screen.getByRole("button", { name: /ranking/i });
     const ordenes = linkPorHref("/ordenes");
 
     for (const el of [config, ranking, ordenes]) {
@@ -150,11 +158,37 @@ describe("Sidebar", () => {
     expect(api).not.toHaveAttribute("aria-current");
   });
 
+  // Feature 196 (T4.5): al convertir "Ranking" en desplegable, el caso de "item simple
+  // activo" cambió `/ranking` por `/incidentes` y ningún caso quedó cubriendo el subítem
+  // `/ranking/historico` como ACTIVO. Mismo molde que el caso de Tarifas de arriba.
+  it("con '/ranking/historico' el subítem Histórico queda activo y 'Ranking del día' no (R4)", () => {
+    currentPathname = "/ranking/historico";
+    renderSidebar();
+
+    const ranking = screen.getByRole("button", { name: /ranking/i });
+    expect(ranking).toHaveAttribute("aria-expanded", "true");
+
+    const historico = screen.getByRole("link", { name: "Histórico" });
+    expect(historico).toHaveAttribute("href", "/ranking/historico");
+    expect(historico).toHaveAttribute("aria-current", "page");
+    expect(historico).toHaveAttribute("data-active");
+
+    // `/ranking/historico` EMPIEZA por `/ranking`: si el activo se decidiera por prefijo
+    // quedarían DOS subítems marcados. El criterio es igualdad exacta y este assert lo fija.
+    const rankingDia = screen.getByRole("link", { name: "Ranking del día" });
+    expect(rankingDia).not.toHaveAttribute("aria-current");
+    expect(rankingDia).not.toHaveAttribute("data-active");
+  });
+
   it("marca item simple activo por ruta (R4, R5)", () => {
     // Por `href`: "Órdenes" está duplicado como label al renderizar sin filtrar.
+    // Feature 196 (T4.5): "/ranking" SALE de esta lista porque dejó de ser un ítem simple
+    // —ahora es un subítem del colapsable "Ranking"—, y este caso mide justo la otra cosa
+    // (el marcado activo de un ítem SIN submenú). Se sustituye por "/incidentes", que sigue
+    // siéndolo; el marcado de subítems activos ya lo cubre el caso de Tarifas.
     const cases: Array<{ path: string; activeHref: string }> = [
       { path: "/ordenes", activeHref: "/ordenes" },
-      { path: "/ranking", activeHref: "/ranking" },
+      { path: "/incidentes", activeHref: "/incidentes" },
     ];
 
     for (const { path, activeHref } of cases) {
@@ -311,6 +345,8 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     "shieldAlert",
     "chartColumn",
     "store",
+    // Feature 192 (R53): tablero del día "Monitoreo".
+    "gauge",
   ] as const satisfies readonly IconKey[];
   // Comprobación de exhaustividad tipada: si `IconKey` gana una clave que no está en
   // el array de arriba, `Exclude<IconKey, (typeof TODAS_LAS_CLAVES)[number]>` deja de

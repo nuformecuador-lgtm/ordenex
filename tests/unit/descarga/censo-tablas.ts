@@ -229,6 +229,15 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [{ nombre: "Ranking del día", estado: "con_descarga" }],
   },
   {
+    // Feature 196 (T5.2) — SUMA de una tabla: el ranking CONGELADO de una fecha ya cerrada.
+    // Nace `con_descarga`, que es lo que la guardia obliga a decidir: es Familia B (el
+    // histórico no pagina, el dataset completo ya está en el cliente) y declararla `fuera`
+    // habría exigido un motivo que no existe — el archivo del histórico es justo lo que hace
+    // auditable el podio y el premio que se pagó ese día.
+    ruta: "app/(app)/ranking/historico/_components/RankingHistoricoModule.tsx",
+    tablas: [{ nombre: "Ranking congelado del día (histórico)", estado: "con_descarga" }],
+  },
+  {
     ruta: "app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx",
     tablas: [{ nombre: "Órdenes de la bodega satélite", estado: "con_descarga" }],
   },

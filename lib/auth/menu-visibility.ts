@@ -37,7 +37,13 @@ export type IconKey =
   // son dos trabajos distintos, y compartir icono con Entregas invitaría a leer la
   // recolección como una sección suya — que es exactamente de donde esta feature la sacó.
   // Mismo criterio que `shieldAlert` (158) y `chartColumn` (129).
-  | "store";
+  | "store"
+  // Feature 192 (R53): tablero del día "Monitoreo" (órdenes por mensajero, en vivo). Icono
+  // propio y NO el `chartColumn` de "Analítica": una cosa es el cierre analítico del negocio
+  // y otra el pulso del día en curso, y compartir icono invitaría a leer el monitoreo como
+  // una sección de analítica. Mismo criterio que `shieldAlert` (158), `chartColumn` (129) y
+  // `store` (167).
+  | "gauge";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -160,6 +166,25 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     destinoInicial: false,
   },
   {
+    // Feature 192 (R53): tablero del día — una tarjeta por mensajero con sus órdenes
+    // asignadas hoy y en qué terminó cada una. Va junto a "Analítica" porque ambos son
+    // tableros de LECTURA, pero es otra cosa: analítica cierra el día, esto lo vigila
+    // mientras pasa. Los `roles` son los de R1 y la defensa real es el `notFound()` de
+    // `/monitoreo` (R11): este ítem sólo decide qué se MUESTRA.
+    //
+    // `destinoInicial: false` NO es decorativo (R35/R54). El aterrizaje post-login se deriva
+    // del PRIMER ítem visible del menú (`primerDestino`, consumido por
+    // `app/(app)/dashboard/page.tsx`), y este ítem va en posición 3: para el `adminSatelite`
+    // —que no ve "Inicio" ni "Órdenes"— sería el primer ítem elegible después de "Analítica"
+    // y pasaría a aterrizar aquí en silencio, en vez de en `/recepcion-satelite`. Es
+    // exactamente el incidente que ya documenta el campo `destinoInicial` con "Analítica".
+    label: "Monitoreo",
+    href: "/monitoreo",
+    iconKey: "gauge",
+    roles: ["admin", "maestro", "adminSatelite"],
+    destinoInicial: false,
+  },
+  {
     label: "Órdenes",
     href: "/ordenes",
     iconKey: "package",
@@ -228,10 +253,26 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     // editan los premios — feature 94, paridad adm↔maestro) y `mensajero` (lo ve en
     // solo-lectura) de forma intencional; la defensa real es el `notFound` de la página
     // `/ranking`, que resuelve el rol server-side y decide el modo editable.
+    // Feature 196 (T4.5, design §6): el ítem pasa a tener SUBÍTEMS porque el ranking son
+    // ahora dos pantallas —el día en curso (que se recalcula en vivo) y el histórico
+    // congelado (que no se recalcula nunca)—, y son cosas distintas: una cambia mientras se
+    // mira, la otra es inmutable por diseño.
+    //
+    // El `href` del padre NO navega —un ítem con `children` se renderiza como disparador del
+    // desplegable, no como enlace (ver `Sidebar.tsx` y `primerDestino`)—, pero se conserva
+    // porque identifica al ítem. Por eso el primer subítem apunta a `/ranking`: sin él, este
+    // cambio habría dejado la pantalla del ranking en vivo SIN entrada de menú. Mismo patrón
+    // que "Wallet" (cuyo primer subítem es su propio `href`) y que "Entregas".
+    //
+    // Los subítems heredan los roles del padre: no hay una segunda lista que pueda divergir.
     label: "Ranking",
     href: "/ranking",
     iconKey: "trophy",
     roles: ["maestro", "admin", "mensajero"],
+    children: [
+      { label: "Ranking del día", href: "/ranking" },
+      { label: "Histórico", href: "/ranking/historico" },
+    ],
   },
   {
     // Feature 42: caja principal de Ordenex (balance + libro de movimientos).

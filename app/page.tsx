@@ -1,66 +1,64 @@
-import Link from "next/link";
-import { Logo } from "@/components/shared/Logo";
-import { buttonVariants } from "@/components/ui/button";
+import { Suspense } from "react";
+
+import { LandingBanda } from "./_landing/LandingBanda";
+import { LandingComoFunciona } from "./_landing/LandingComoFunciona";
+import { LandingConteos } from "./_landing/LandingConteos";
+import { LandingFooter } from "./_landing/LandingFooter";
+import { LandingHero } from "./_landing/LandingHero";
+import { LandingNav } from "./_landing/LandingNav";
+import { LandingPoliticas } from "./_landing/LandingPoliticas";
+import { LandingPostular } from "./_landing/LandingPostular";
+import { LandingServicios } from "./_landing/LandingServicios";
 
 /**
- * Landing pública en `/` (feature 86, R1–R5). Server Component fuera del grupo
- * `(app)` → no hereda el Sidebar ni `resolveActorFromSession`. Sin fetch de datos
- * (no hay datos que cargar). Reutiliza el patrón «brand panel» de las páginas
- * públicas (`bg-navy` + radial-gradient naranja + barra `bg-brand`) y la paleta
- * de marca ya existente, sin introducir tokens ni copy de marketing (R4, R5).
- * El único texto descriptivo es el de `metadata.description` del root layout.
+ * Landing pública en `/`: réplica del home de ordenex.co.
+ *
+ * Server Component fuera del grupo `(app)` → no hereda el Sidebar ni
+ * `resolveActorFromSession`. Lee UN dato publico (los conteos de la feature 198), en
+ * `<Suspense>` y tolerante a fallo: la landing nunca depende de el.
+ *
+ * El sitio define su maquetado en clases `lp-*`; aquí se traduce a utilidades
+ * Tailwind sobre los tokens de marca que `globals.css` ya expone (`brand`,
+ * `navy-deep`, escala `asfalto`, `kraft-*`, `ink-blue`), sin CSS suelto ni hex
+ * ad-hoc (DESIGN.md).
+ *
+ * Los tres puntos donde el sitio pone fotografía ya las llevan, desde
+ * `public/landing/`: fondo del hero (bodega), banda intermedia (paquetes) y
+ * cabecera de las tarjetas de postulación (logística, bodega y mensajera). Todas
+ * son DECORATIVAS —`alt=""`— porque lo que comunican ya está en los titulares, y
+ * todas van bajo un degradado navy que sostiene el contraste del texto blanco. El
+ * `bg-navy-deep` de cada sección sigue siendo el respaldo si una foto no carga.
+ *
+ * Van con `next/image`, que las sirve optimizadas y en el tamaño que pide cada
+ * hueco: sin eso las cuatro fotos suman ~2 MB en la página de entrada del sitio.
+ *
+ * Durante un tiempo NO se pintaba ninguna, y la causa no estaba aquí: el `matcher`
+ * del middleware excluía `.svg` pero no `.jpg`, así que la petición de cada foto se
+ * trataba como ruta privada y salía en 307 a /login. Corregido en `middleware.ts`;
+ * si algún día vuelven a desaparecer todas a la vez, ese es el primer sitio donde
+ * mirar, y no las rutas de `public/`.
  */
 export default function LandingPage() {
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-navy text-white">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(242,100,25,0.16),transparent_55%)]"
-      />
-
-      {/* Topbar: logo + enlaces «Trabaja con nosotros» → /postulacion e «Ingreso» → /login (R2) */}
-      <header className="relative flex items-center justify-between px-6 py-5 sm:px-10">
-        <Logo />
-        <nav className="flex items-center gap-4 sm:gap-6">
-          <Link
-            href="/postulacion"
-            className="text-sm font-medium text-white/80 transition-colors hover:text-white"
-          >
-            Trabaja con nosotros
-          </Link>
-          <Link
-            href="/login"
-            className="text-sm font-medium text-white/80 transition-colors hover:text-white"
-          >
-            Ingreso
-          </Link>
-        </nav>
-      </header>
-
-      {/* Hero: wordmark/claim + los 2 CTA (R3) */}
-      <main className="relative flex flex-1 flex-col items-center justify-center gap-8 px-6 text-center">
-        <div className="flex flex-col items-center gap-4">
-          <Logo className="text-4xl sm:text-5xl" />
-          <div className="h-1 w-12 rounded-full bg-brand" />
-          <p className="max-w-md text-base leading-relaxed text-white/70">
-            Plataforma de logística y entregas Ordenex
-          </p>
-        </div>
-        <div className="flex flex-col items-center gap-3 sm:flex-row">
-          <Link
-            href="/login"
-            className={buttonVariants({ variant: "brand-outline", size: "lg" })}
-          >
-            Ingreso
-          </Link>
-          <Link
-            href="/postulacion"
-            className={buttonVariants({ variant: "brand-outline", size: "lg" })}
-          >
-            Trabaja con nosotros
-          </Link>
-        </div>
+    <div className="min-h-dvh overflow-x-clip bg-kraft-canvas font-sans text-asfalto-9">
+      <LandingNav />
+      <main>
+        <LandingHero />
+        <LandingServicios />
+        {/* Feature 198: las cifras publicas. Van en `<Suspense>` a proposito —pedido
+            humano: NO bloqueante—: la landing se pinta entera y estas llegan despues por
+            streaming, asi que una lectura lenta nunca retrasa el hero. El fallback es
+            `null` y no un esqueleto: es un bloque decorativo, y un hueco animado que
+            aparece y desaparece llama mas la atencion que la cifra misma. */}
+        <Suspense fallback={null}>
+          <LandingConteos />
+        </Suspense>
+        <LandingBanda />
+        <LandingComoFunciona />
+        <LandingPoliticas />
+        <LandingPostular />
       </main>
+      <LandingFooter />
     </div>
   );
 }

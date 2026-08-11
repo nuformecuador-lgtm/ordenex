@@ -163,4 +163,65 @@ describe("EscanerRecepcionOrigen", () => {
     expect(errorMock.mock.calls[0][0]).toMatch(/inválido/i);
     expect(recibirMock).not.toHaveBeenCalled();
   });
+
+  // Pedido humano del 2026-08-10 — LA SEGUNDA VÍA. `EscanerGuiaCard` ya ofrecía cámara y
+  // número tecleado, pero esta pantalla no activaba `manual`, así que degradaba a solo
+  // cámara: sin cámara disponible o con la etiqueta ilegible, no había forma de recibir.
+  describe("entrada manual del número de guía", () => {
+    function campoManual(): HTMLInputElement {
+      return screen.getByLabelText(/número de guía/i) as HTMLInputElement;
+    }
+
+    it("el campo manual EXISTE en esta superficie", () => {
+      render(<EscanerRecepcionOrigen onRecibida={vi.fn()} />);
+
+      expect(campoManual()).toBeInTheDocument();
+    });
+
+    it("lo tecleado ES el número: no pasa por el desenvoltorio del QR", async () => {
+      // El helper del QR desenvuelve `<origin>/paquete/<numGuia>`; aplicarlo a lo tecleado
+      // rechazaría el número escrito a secas. Ahí está la diferencia entre las dos vías.
+      const user = userEvent.setup();
+      const onRecibida = vi.fn();
+      recibirMock.mockResolvedValue({
+        status: "ok",
+        ordenId: "o1",
+        estado: "devuelta_a_tienda",
+      });
+      render(<EscanerRecepcionOrigen onRecibida={onRecibida} />);
+
+      await user.type(campoManual(), "77");
+      await user.click(screen.getByRole("button", { name: "Recibir en tienda" }));
+
+      await vi.waitFor(() =>
+        expect(recibirMock).toHaveBeenCalledWith({ numGuia: 77 }),
+      );
+      await vi.waitFor(() => expect(onRecibida).toHaveBeenCalled());
+    });
+
+    it("texto no numérico no llama a la acción y avisa", async () => {
+      const user = userEvent.setup();
+      render(<EscanerRecepcionOrigen onRecibida={vi.fn()} />);
+
+      await user.type(campoManual(), "abc");
+      await user.click(screen.getByRole("button", { name: "Recibir en tienda" }));
+
+      await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+      expect(recibirMock).not.toHaveBeenCalled();
+    });
+
+    it("un fallo conserva lo tecleado para corregirlo, en vez de vaciar el campo", async () => {
+      // Vaciarlo obligaría a reescribir la guía entera por un dígito mal puesto, de pie en
+      // el mostrador. `onSubmit` devuelve `false` justamente para eso.
+      const user = userEvent.setup();
+      recibirMock.mockResolvedValue({ status: "tienda_ajena" });
+      render(<EscanerRecepcionOrigen onRecibida={vi.fn()} />);
+
+      await user.type(campoManual(), "77");
+      await user.click(screen.getByRole("button", { name: "Recibir en tienda" }));
+
+      await vi.waitFor(() => expect(recibirMock).toHaveBeenCalled());
+      expect(campoManual().value).toBe("77");
+    });
+  });
 });

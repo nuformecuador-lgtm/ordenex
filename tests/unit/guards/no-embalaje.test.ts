@@ -93,6 +93,14 @@ const WHITELIST_FILES = new Set([
   // dejaba el gate del repo ENTERO rojo y la regla es que quien lo encuentra lo da de alta en
   // vez de declararlo deuda ajena y seguir. Alta por archivo, no por carpeta.
   "specs/122-analitica-alcance-por-rol/tasks.md",
+  // Feature 86 (enmienda 2026-08-08): la landing publica replica el home de
+  // ordenex.co, y sus politicas de dano usan `embalaje` en su sentido ordinario
+  // del castellano —el material con que se protege un paquete—, copy tomado del
+  // sitio publicado. Nada que ver con el value de `order_status` que este guard
+  // persigue: no es un estado, no toca la base, no vuelve por la puerta de
+  // atras. Alta por archivo (no por carpeta) para que si `app/_landing/` crece
+  // con codigo que SI toque estados, el guard lo siga viendo.
+  "app/_landing/LandingPoliticas.tsx",
 ]);
 
 function toRelPosix(absPath: string): string {

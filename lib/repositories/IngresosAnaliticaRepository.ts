@@ -6,6 +6,10 @@ import {
 } from "@prisma/client";
 import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { CuboTemporal } from "@/lib/analytics/cubo-temporal";
+import {
+  MAX_WAIT_LECTURA_CONSISTENTE_MS,
+  TIMEOUT_LECTURA_CONSISTENTE_MS,
+} from "@/lib/config/analitica-financiera";
 import type {
   AgregadoCategoriaCaja,
   AgregadoCuboCategoriaCaja,
@@ -66,13 +70,34 @@ import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
 // NO se usa `consulta.alcance` (R9): con el catalogo vigente toda financiera concedida tiene
 // alcance global, asi que un `where` de recorte seria codigo muerto que anuncia una privacidad
 // que nadie diseño.
+//
+// ---------------------------------------------------------------------------
+// FEATURE 187 — AQUI SE ABRE UNA TRANSACCION, Y SIGUE SIENDO SOLO CONSULTAS
+// ---------------------------------------------------------------------------
+// `enLecturaConsistente` es el UNICO metodo que no consulta: abre una transaccion de solo lectura
+// con aislamiento `repeatable read` y ejecuta dentro las consultas que le den. Abrir un snapshot
+// es acceso a datos, no logica de negocio (`CHECKPOINTS.md`), y por eso vive aqui y no en el
+// servicio — que ademas no puede conocer Prisma (R6). Lo que NO cambia: el total lo sigue
+// produciendo `sumarPorCategoria` y las filas `sumarPorCuboYCategoria`, dos consultas y dos
+// caminos, porque la invariante de la 180 solo vale algo mientras lleguen por separado.
 
 /**
  * Cliente Prisma MINIMO (patron `WalletMovimientoRepository`): una sola tabla, mas `$queryRaw`
  * para la particion por cubo (feature 180, Q6). `$queryRawUnsafe` NO esta y no puede estar: el
  * tipo del cliente es la primera barrera contra la interpolacion de strings.
+ *
+ * FEATURE 187 — gana `$transaction`, y OPCIONAL. Precedente del repo para el metodo:
+ * `AnaliticaRollupPrismaClient` (`lib/repositories/AnaliticaRollupRepository.ts`), que tambien lo
+ * incluye en su `Pick`. Lo que aqui es distinto es la opcionalidad, y no es una laxitud sino el
+ * unico modelado honesto del hecho: dentro de una lectura consistente, la instancia de este
+ * repositorio se construye con el cliente TRANSACCIONAL que Prisma entrega
+ * (`Prisma.TransactionClient`), y ese cliente NO tiene `$transaction` porque las transacciones no
+ * se anidan. Declararlo obligatorio obligaria a un cast que afirmaria lo contrario; declararlo
+ * opcional deja que el tipo diga la verdad y que anidar falle con un mensaje que se entiende.
  */
-type IngresosPrismaClient = Pick<PrismaClient, "walletMovimiento" | "$queryRaw">;
+type IngresosPrismaClient = Pick<PrismaClient, "walletMovimiento" | "$queryRaw"> & {
+  readonly $transaction?: PrismaClient["$transaction"];
+};
 
 /** El universo del enum de la caja, para validar lo que el catalogo declara. */
 const CATEGORIAS_DE_CAJA: ReadonlySet<string> = new Set(WALLET_MOVIMIENTO_CATEGORIA_SEED);
@@ -142,6 +167,54 @@ interface FilaCrudaCuboCaja {
 
 export class IngresosAnaliticaRepository implements IIngresosAnaliticaRepository {
   constructor(private readonly prisma: IngresosPrismaClient) {}
+
+  /**
+   * Feature 187 (T2.3, R1/R2/R6/R10) — EL ALCANCE DE LECTURA CONSISTENTE.
+   *
+   * Abre una transaccion `repeatable read` y ejecuta `fn` sobre una instancia de esta misma clase
+   * ligada al cliente transaccional. En Postgres, `repeatable read` fija el snapshot en la PRIMERA
+   * sentencia y lo mantiene hasta el final: por eso el total y el desglose, que salen de dos
+   * consultas distintas, dejan de poder ver dos fotos distintas del ledger.
+   *
+   * POR QUE UNA TRANSACCION INTERACTIVA y no la forma de array (`$transaction([p1, p2])`): la
+   * forma de array exigiria exponer las `PrismaPromise` sin `await`, o sea cambiar la firma de los
+   * metodos de lectura. Este metodo no cambia ni una.
+   *
+   * POR QUE `RepeatableRead` y no `Serializable`: para lecturas, `repeatable read` ya da snapshot
+   * estable, y `serializable` traeria el riesgo de aborto que la feature 172 documento en su
+   * alternativa K. Un tablero que a veces falla es peor que uno que a veces muestra centimos de
+   * mas — y esto ademas los deja de mostrar.
+   *
+   * SIN `READ ONLY` explicito, decision declarada (`design.md` §3.1): exigirlo obligaria a meter
+   * `$executeRaw` en el tipo del cliente, es decir a abrir la puerta de la escritura para prometer
+   * que no se escribe. R3 lo sostienen las consultas que hay dentro y el censo que las mira.
+   *
+   * LOS TIEMPOS SALEN DE LA CONFIGURACION (R10): en este archivo no hay ni un numero de
+   * milisegundos, igual que no hay ni un numero de dinero.
+   *
+   * SIN `try`/`catch` (R7): un fallo dentro del alcance aborta la transaccion y sube tal cual.
+   *
+   * El `throw` de abajo NO es un caso de error de la base: es la unica forma de anidar alcances, y
+   * anidar no se puede porque el cliente transaccional no ofrece `$transaction`. Falla ruidoso en
+   * vez de silenciosamente reusar el snapshot de fuera.
+   */
+  async enLecturaConsistente<T>(
+    fn: (repo: IIngresosAnaliticaRepository) => Promise<T>,
+  ): Promise<T> {
+    if (this.prisma.$transaction === undefined) {
+      throw new Error(
+        "analitica financiera: este repositorio ya esta ligado a una lectura consistente; los alcances no se anidan",
+      );
+    }
+    return this.prisma.$transaction(
+      async (tx) => fn(new IngresosAnaliticaRepository(tx)),
+      {
+        isolationLevel: "RepeatableRead",
+        timeout: TIMEOUT_LECTURA_CONSISTENTE_MS,
+        maxWait: MAX_WAIT_LECTURA_CONSISTENTE_MS,
+      },
+    );
+  }
 
   /**
    * Σ `monto` agrupada por `(categoria, tipo)` sobre las categorias del catalogo y la ventana

@@ -144,9 +144,9 @@ describe("PostulacionesPendientesPanel (feature 23)", () => {
     renderPanel();
 
     await screen.findByText("Nombre-u1 Ap");
-    // total 45 / pageSize 20 => 3 páginas.
+    // total 45 / pageSize 20: la pagina 1 cubre los elementos 1 al 20.
     const nav = screen.getByRole("navigation", { name: "Paginación" });
-    expect(within(nav).getByText("Página 1 de 3")).toBeInTheDocument();
+    expect(within(nav).getByText("1-20 de 45")).toBeInTheDocument();
 
     const user = userEvent.setup();
     await user.click(within(nav).getByRole("button", { name: "Página siguiente" }));

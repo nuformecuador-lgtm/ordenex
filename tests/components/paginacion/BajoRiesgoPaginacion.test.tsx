@@ -668,7 +668,10 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
       // El control se localiza por ROL y NOMBRE, nunca por clase: si no tiene nombre
       // accesible, un lector de pantalla anuncia siete «navegación» idénticas.
       const nav = await screen.findByRole("navigation", { name: listado.paginacion });
-      expect(within(nav).getByText("Página 1 de 3"), listado.nombre).toBeInTheDocument();
+      expect(
+        within(nav).getByText(`1-${PAGE_SIZE} de ${TOTAL}`),
+        listado.nombre,
+      ).toBeInTheDocument();
 
       const tabla = screen.getByRole("table", { name: listado.tabla });
       expect(within(tabla).getByText(listado.textoFila(1)), listado.nombre).toBeInTheDocument();
@@ -694,7 +697,10 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
         ),
         `${listado.nombre}: la página 2 sigue mostrando filas de la 1`,
       ).not.toBeInTheDocument();
-      expect(within(nav).getByText("Página 2 de 3"), listado.nombre).toBeInTheDocument();
+      expect(
+        within(nav).getByText(`${PAGE_SIZE + 1}-${2 * PAGE_SIZE} de ${TOTAL}`),
+        listado.nombre,
+      ).toBeInTheDocument();
 
       // Y se puede volver: la navegación no es de ida.
       await user.click(within(nav).getByRole("button", { name: "Página anterior" }));

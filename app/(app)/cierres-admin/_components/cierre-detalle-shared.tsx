@@ -835,12 +835,21 @@ const COLUMNA_INGRESO_TOTAL: Column<CierreDetalleGestion> = {
 
 // --- Columnas comunes a las 4 secciones del detalle (R11, reuso de la 37) ---
 export const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
-  { id: "numGuia", value: "Nº Guía", render: (g) => g.numGuia ?? "—" },
-  { id: "numRemision", value: "Nº Remisión" },
+  {
+    id: "numGuia",
+    value: "Nº Guía",
+    render: (g) => <span className="font-semibold">{g.numGuia ?? "—"}</span>,
+  },
+  { id: "numRemision", value: "Nº Remisión", minWidth: "120px" },
   { id: "destinatario", value: "Destinatario" },
-  { id: "direccion", value: "Dirección", render: (g) => g.direccion ?? "—" },
+  {
+    id: "direccion",
+    value: "Dirección",
+    render: (g) => g.direccion ?? "—",
+    minWidth: "200px",
+  },
   { id: "ubicacion", value: "Ubicación", render: (g) => ubicacion(g) || "—" },
-  { id: "producto", value: "Producto" },
+  { id: "producto", value: "Producto", minWidth: "300px" },
   { id: "tiendaNombre", value: "Tienda" },
 ];
 

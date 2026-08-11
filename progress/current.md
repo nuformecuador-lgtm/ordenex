@@ -9,7 +9,116 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🏁 CIERRE DE JORNADA 2026-08-07 — **EMPIEZA A LEER POR AQUÍ**
+## 🎨 2026-08-08 — landing pública replicada (rama `ux`): **enmienda de la feature 86**
+
+Pedido humano: replicar el home de <https://ordenex.co/> en la ruta `/`, sin imágenes, solo
+maquetado. Hecho en `app/_landing/` (carpeta privada: nav, hero, servicios, banda, cómo
+funciona, políticas, postulación, pie + `primitivas.tsx`), con `app/page.tsx` como composición
+pura. Commiteado en `ux` (`wip(86)`) el 2026-08-10, junto al WIP de búsqueda-producto, para
+poder mergear `dev` sobre un árbol limpio.
+
+**Choque de spec resuelto en el gate humano de hoy.** El R5 original de la feature 86 prohibía
+explícitamente toda sección de marketing («servicios, testimonios, precios») porque en julio no
+había copy verificable en el repo. Con el sitio publicado como fuente, ese motivo cae. Se
+enmendaron **R2–R5** de `specs/86-landing-publica/requirements.md` (R1 y R6–R16 intactos), se
+añadió **R5b** (scroll suave respetando `prefers-reduced-motion`) y se reescribió
+`tests/components/LandingPage.test.tsx`: 5 tests, verde.
+
+Dos cosas que costaron y conviene no re-descubrir:
+
+1. **El router de Next anula el scroll suave.** Fuerza `scroll-behavior: auto` mientras salta a
+   un ancla, así que los enlaces a `#servicios`/`#como-funciona`/`#politicas` van en `<a>`
+   nativo, no en `<Link>`. La declaración vive en `app/globals.css` sobre `html`, envuelta en
+   `@media (prefers-reduced-motion: no-preference)`.
+2. **El guard `no-embalaje` cazó copy de políticas.** «Embalaje inadecuado exime de
+   responsabilidad» es castellano ordinario, no el value de `order_status` que el guard
+   persigue. Alta de `app/_landing/LandingPoliticas.tsx` en el whitelist **por archivo**, no por
+   carpeta, para que el guard siga viendo el resto de `app/_landing/`.
+
+`./init.sh --rapido` en verde (1016 guardias + los 6 tests relacionados). **Falta `./init.sh`
+completo antes de cualquier PR.**
+
+
+## 🔴 EN CURSO 2026-08-08 — feature **192**, fase 1 (spec)
+
+> ⏭️ **SUPERADO — leer con fecha.** Todo lo que sigue en este bloque es el diario de la fase de
+> spec (2026-08-08). La feature **ya está implementada y mergeada a `dev`** (PR #323), con el
+> `reviewer` en **APROBADO, 73/73 requisitos trazados** (`progress/review_192.md`), y desde el
+> merge de hoy 2026-08-10 vive también en `ux`. Dos cosas siguen abiertas y NO son de la spec:
+> `feature_list.json` aún la marca `in_progress` con `branch` puesta (bookkeeping pendiente), y
+> el review la declara **no liberable** hasta que `./init.sh` completo dé verde (§5 de su
+> informe). Lo de abajo se conserva por las decisiones y sus porqués, no como estado.
+
+**Tablero del día: órdenes por mensajero y el resultado de su gestión.** Pedido humano de hoy.
+Ficha registrada en `feature_list.json` (`id: 192`, `pending`, `fullstack`, `sdd: true`).
+`spec_author` corriendo sobre `specs/192-tablero-dia-mensajeros/`.
+
+**Ojo al retomar:** la rama activa es `ux`, con el trabajo del landing sin commitear
+(`app/_landing/`, `app/globals.css`, `app/page.tsx`). La 192 **no nace de aquí**: rama propia
+desde `dev`.
+
+Tres decisiones humanas ya cerradas, en el `status_note` de la ficha con sus referencias:
+
+1. **Roles**: `admin`/`maestro` todo, `adminSatelite` solo su zona. Se reutiliza
+   `resolverAlcance` (`lib/analytics/alcance.ts:196`), que es la única separación multi-tenant
+   porque Prisma va con service role. Satélite sin zona → `denegado`, nunca global.
+2. **Conteo = resultado final de la orden, NO gestiones.** `GestionOrden` no tiene
+   `@@unique(ordenId)`: contar gestiones haría que los números sumaran más que las asignadas.
+3. **30s de refresco con SWR.** Realtime descartado a propósito: esto es una agregación, y
+   `postgres_changes` entrega eventos de fila → habría que re-agregar en cada evento. Además no
+   hay Supabase Auth (sesión propia, `lib/auth/resolve-actor.ts:16`) ni una sola policy en
+   `db/migrations/`. Puerta abierta si 30s se queda corto: Broadcast desde el server.
+
+**Trampa a vigilar en el design:** la ventana del día sale de `lib/utils/fecha-cr.ts`; `startOfDayCR`
+da medianoche **UTC** y produce la ventana 18:00–18:00 de la ficha 166 (`rollup-dia.ts:14-17`).
+
+**Puerta 1 pasada (2026-08-08).** El humano respondió las cinco preguntas abiertas; tres AMPLIARON
+el alcance, así que `spec_author` está en una segunda vuelta sobre los mismos tres archivos:
+
+- **`pendientes` se desglosa**: hay que separar «sin recoger» de «en reparto». Mete un SEGUNDO eje,
+  `orden.estatus_id` (`lib/types/order-status.ts`, 20 values), además de `gestion_resultado`.
+- **Drill-down SÍ entra** (revierte el defecto de la pregunta 4): clic en la card del mensajero abre
+  el detalle del día reutilizando `app/(app)/ordenes/_components/`, no una segunda tabla.
+- **Ítem de sidebar nuevo «Monitoreo»** en `menu-visibility.ts`, roles de R1. Vigilar que no mueva
+  el aterrizaje post-login, que sale del PRIMER ítem visible (`dashboard/page.tsx:34`).
+- Cards en vez de filas. Sin selector de fecha. Reasignación: solo el mensajero actual.
+
+⚠️ **Asunción SIN confirmar** que va al spec marcada como tal: «sin recoger» = estatus `por_recoger`
++ `recolectando`; «en reparto» = `en_reparto`. El humano dijo «incluyendo sin recoger» pero no
+enumeró estados. Se veta en la puerta 2.
+
+🔎 **Hallazgo de la segunda vuelta, VERIFICADO a mano** (`lib/repositories/OrdenRepository.ts:1820-1823`):
+`asignarRecoleccionLote` **no estampa `asignado_at` a propósito** —lo dice su docstring: es el
+denominador del ranking y estamparlo bajaría el porcentaje del mensajero—. Como «asignada hoy» se
+define por `asignado_at`, **las órdenes en `recolectando` no entrarían nunca al tablero**: el bucket
+«sin recoger» se llenaría solo con `por_recoger` (flujo bodega). Justo la mitad que el humano pidió
+ver. Tercera vía a evaluar: leer el rastro `asignacion_recoleccion` de `orden_historial_estado`
+(`db/schema.prisma:1410`), que la 157 SÍ escribe en la misma tx, sin tocar `asignado_at` ni el ranking.
+
+**Resuelto (puerta 2): opción C** — «asignada hoy» tiene DOS caminos en OR: `orden.asignado_at`
+(reparto) o una fila de `orden_historial_estado` con `origen_tipo = 'asignacion_recoleccion'`
+(recolección, `db/schema.prisma:1410`). ⛔ **`asignado_at` NO se escribe nunca**: mueve el denominador
+del ranking y con él la plata de los mensajeros. R59 lo afirma y un guardia lo atornilla.
+
+**Resuelto (puerta 3): opción 2 — SIN índice nuevo, con caché de servidor de ~15 s.** El humano lo
+eligió sobre la recomendación contraria del leader; queda registrado qué se compró y qué se pagó:
+ninguno de los tres índices de `orden_historial_estado` cubre el predicado del camino 2
+(`db/schema.prisma:1445-1456`; los dos primeros empiezan por `orden_id`, el de la 167 por
+`actor_usuario_id`), así que `ids_recoleccion` es un seq scan sobre una tabla append-only. El caché
+acota su FRECUENCIA, no su costo. La 167 resolvió la consulta gemela con índice, por si se reabre.
+
+⚠️ **Riesgo que introduce el caché y que el spec debe blindar:** la clave va por ALCANCE RESUELTO
+(global / zona+zonaId) + fecha CR, nunca por rol ni por usuario. Un caché compartido entre alcances
+distintos le sirve a un `adminSatelite` el tablero del país entero — y no falla: responde rápido y
+mal. El alcance se resuelve SIEMPRE antes de mirar el caché.
+
+**Siguiente paso: rama.** Bloqueado a la espera del humano: el landing sin commitear vive en `ux`
+(5 commits adelante de `dev`) y la 192 debe nacer de `dev`. Sin resolverlo no se mide baseline
+(`./init.sh` sobre `ux` da un número contaminado) ni se implementa.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-07
 
 **Siete PRs. Ninguna feature del backlog: la jornada entera fue saldar deuda**, por encargo humano
 explícito («punto por punto hasta no tener ni una deuda»). Y saldarla destapó **un bug de producción

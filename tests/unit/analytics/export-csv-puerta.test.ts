@@ -55,8 +55,8 @@ const PANEL: PanelTablero = {
   titulo: "Resultado de las gestiones",
   grafica: "barras",
   metricas: [
-    { metricaId: "entregas", etiqueta: "Entregas" },
-    { metricaId: "devoluciones", etiqueta: "Devoluciones" },
+    { metricaId: "entregas", etiqueta: "Entregas", unidad: "conteo" },
+    { metricaId: "devoluciones", etiqueta: "Devoluciones", unidad: "conteo" },
   ],
   desagregacion: "estatus",
 };
@@ -138,7 +138,7 @@ describe("Feature 134 (R2) — el export manda el MISMO filtro que el panel", ()
       id: "ordenes-creadas",
       titulo: "Ordenes creadas",
       grafica: "lineas",
-      metricas: [{ metricaId: "ordenes_creadas", etiqueta: "Ordenes creadas" }],
+      metricas: [{ metricaId: "ordenes_creadas", etiqueta: "Ordenes creadas", unidad: "conteo" }],
     };
     await filasDelPanel(simple, FILTRO);
     expect(accionMock).toHaveBeenCalledTimes(1);

@@ -32,6 +32,7 @@ export function OrdenesConErrorTabla({ errores }: OrdenesConErrorTablaProps) {
       id: "numRemision",
       value: "Nº Remisión",
       render: (row) => row.numRemision || "—",
+      minWidth: "120px",
     },
     {
       id: "motivo",

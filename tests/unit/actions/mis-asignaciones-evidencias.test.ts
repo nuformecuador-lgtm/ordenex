@@ -3,6 +3,11 @@ import { gestionar } from "@/lib/actions/mis-asignaciones";
 import type { IMisAsignacionesService } from "@/lib/interfaces/services/IMisAsignacionesService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
+// ⚠️ Feature 193 (R10), decision humana del 2026-08-10: la gestion EXIGE la ubicacion del
+// mensajero (o un motivo tecnico). Los FormData validos de abajo se AMPLIAN con las dos
+// coordenadas —no se relajan—: lo que cada test AFIRMA sigue siendo lo mismo. La disyuncion
+// ubicacion/motivo se cubre aparte, en `mis-asignaciones-ubicacion.test.ts`.
+
 // Feature 119 (R5) — el BORDE lee las N fotos del FormData con `getAll("evidencia")` (el panel
 // hace `append("evidencia", file)` por foto) y las mapea a `EvidenciaArchivo[]` en orden, que es
 // el `indice` 0..N-1. El panel sin migrar (T11) manda UN solo `evidencia`: se lee como lista de 1.
@@ -41,6 +46,8 @@ describe("R5: getAll('evidencia') -> lista de N EvidenciaArchivo, en orden", () 
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "rechazada");
     fd.set("motivo", "cliente rechazo");
     fd.append("evidencia", imagenFile("a.jpg", "image/jpeg"));
@@ -64,6 +71,8 @@ describe("R5: getAll('evidencia') -> lista de N EvidenciaArchivo, en orden", () 
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "rechazada");
     fd.set("motivo", "cliente rechazo");
     fd.set("evidencia", imagenFile("a.jpg"));
@@ -81,6 +90,8 @@ describe("R5: getAll('evidencia') -> lista de N EvidenciaArchivo, en orden", () 
     });
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "entregada");
     fd.set("montoRecibido", "100");
     fd.set("metodoPago", "efectivo");
@@ -101,6 +112,8 @@ describe("R6/R7: el borde revalida el conteo (min 1 / max) sin invocar al servic
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "rechazada");
     fd.set("motivo", "cliente rechazo");
 
@@ -114,6 +127,8 @@ describe("R6/R7: el borde revalida el conteo (min 1 / max) sin invocar al servic
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "rechazada");
     fd.set("motivo", "cliente rechazo");
     for (const nombre of ["a", "b", "c", "d"]) fd.append("evidencia", imagenFile(`${nombre}.jpg`));
@@ -128,6 +143,8 @@ describe("R6/R7: el borde revalida el conteo (min 1 / max) sin invocar al servic
     const service = buildService();
     const fd = new FormData();
     fd.set("ordenId", "o1");
+    fd.set("ubicacionLat", "9.9281"); // feature 193/R17
+    fd.set("ubicacionLng", "-84.0907");
     fd.set("resultado", "rechazada");
     fd.set("motivo", "cliente rechazo");
     fd.append("evidencia", imagenFile("a.jpg"));

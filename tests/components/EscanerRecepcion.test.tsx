@@ -65,8 +65,9 @@ function qrDeGuia(numGuia: number): string {
 }
 
 /**
- * Monta el receptor y DESPLIEGA la tarjeta. Desde el 2026-07-31 (decisión del humano) vive
- * plegada tras el disparador de `EscanerDesplegable`, como en el resto de la app: montada
+ * Monta el receptor y ABRE la tarjeta. Desde el 2026-07-31 (decisión del humano) vive tras
+ * el disparador de `EscanerModal` —en modal desde el 2026-08-10—, como en el resto de la
+ * app: montada
  * dejaba `QrScanner` vivo —la cámara encendida— todo el tiempo que la bodega tuviera la
  * pantalla abierta. Cada caso abre primero, que es lo que hace quien va a recibir.
  */
@@ -297,8 +298,8 @@ describe("EscanerRecepcion (cámara)", () => {
 // entrada. Dentro vive `QrScanner`: montado dejaba la cámara ENCENDIDA todo el rato que la
 // bodega satélite tuviera abierta su pantalla.
 // ---------------------------------------------------------------------------------------
-describe("EscanerRecepcion — el desplegable (cámara apagada por defecto)", () => {
-  it("arranca PLEGADO: se ofrece el acceso, pero la cámara no está montada", () => {
+describe("EscanerRecepcion — el modal (cámara apagada por defecto)", () => {
+  it("arranca CERRADO: se ofrece el acceso, pero la cámara no está montada", () => {
     render(<EscanerRecepcion onRecibida={vi.fn()} />);
 
     expect(
@@ -318,7 +319,7 @@ describe("EscanerRecepcion — el desplegable (cámara apagada por defecto)", ()
     await user.click(screen.getByRole("button", { name: "Escanear con cámara" }));
     await vi.waitFor(() => expect(decodeCallback.current).not.toBeNull());
 
-    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
 
     // Desmontaje, no `hidden`: es lo que dispara el cleanup de `QrScanner`.
     await vi.waitFor(() =>

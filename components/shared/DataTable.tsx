@@ -51,6 +51,18 @@ export interface Column<T> {
    * accesible/fallback de la columna, así que déjalo siempre poblado.
    */
   renderHeader?: () => ReactNode;
+  /**
+   * Ancho MÍNIMO de la columna, como longitud CSS (`"8rem"`, `"120px"`). Opcional:
+   * sin ella la columna se comporta exactamente como antes (ancho automático según
+   * contenido). Se aplica al `<th>` vía `style`, no como clase, porque el valor es
+   * un dato de la columna y Tailwind no puede generar clases dinámicas.
+   *
+   * Con `border-collapse` y layout automático, el `min-width` del `<th>` gobierna
+   * toda la columna: no hace falta repetirlo en cada `<td>`. Si la suma de mínimos
+   * excede el ancho disponible, la tabla desborda y aparece el scroll horizontal
+   * (comportamiento deseado: antes las columnas se estrujaban).
+   */
+  minWidth?: string;
 }
 
 /**
@@ -443,43 +455,51 @@ export function DataTable<T>({
       {/* Contenedor con scroll horizontal: cuando la tabla excede el ancho
           disponible, desborda DENTRO de este contenedor en vez de empujar la
           página. Requiere que los ancestros flex (p. ej. SidebarInset) permitan
-          encogerse (`min-w-0`), si no el overflow nunca se activa. */}
-      <div
-        ref={scrollRef}
-        onScroll={actualizarScroll}
-        className="w-full max-w-full overflow-x-auto scroll-smooth"
-      >
-        <table
-          aria-label={ariaLabel}
-          className={cn("w-full border-collapse text-left text-sm")}
+          encogerse (`min-w-0`), si no el overflow nunca se activa.
+          El marco (borde + esquinas redondeadas) va en un contenedor APARTE con
+          `overflow-hidden`: así la barra de scroll horizontal queda recortada
+          DENTRO del marco en vez de asomar por debajo del borde. */}
+      <div className="w-full max-w-full overflow-hidden rounded-lg border border-asfalto-2">
+        <div
+          ref={scrollRef}
+          onScroll={actualizarScroll}
+          className="w-full max-w-full overflow-x-auto scroll-smooth"
         >
-          {caption ? (
-            <caption className="mb-2 text-sm text-muted-foreground">
-              {caption}
-            </caption>
-          ) : null}
-          <thead ref={theadRef}>
-            <tr className="border-b">
-            {/* Cabecera de la columna del botón: sin texto visible, pero con nombre para
-                que la tabla no quede con una columna anónima para un lector de pantalla. */}
-            {expandible ? (
-              <th scope="col" className="px-3 py-2">
-                <span className="sr-only">Desglose</span>
-              </th>
+          <table
+            aria-label={ariaLabel}
+            className={cn("w-full border-collapse text-left text-sm")}
+          >
+            {caption ? (
+              <caption className="mb-2 text-sm text-muted-foreground">
+                {caption}
+              </caption>
             ) : null}
-            {columns.map((column) => (
-              <th
-                key={column.id}
-                scope="col"
-                className="px-3 py-2 font-medium text-muted-foreground"
-              >
-                {column.renderHeader ? column.renderHeader() : column.value}
-              </th>
-            ))}
-          </tr>
-        </thead>
-          <tbody>{body}</tbody>
-        </table>
+            <thead ref={theadRef}>
+              <tr className="border-b">
+                {/* Cabecera de la columna del botón: sin texto visible, pero con nombre para
+                    que la tabla no quede con una columna anónima para un lector de pantalla. */}
+                {expandible ? (
+                  <th scope="col" className="px-3 py-2">
+                    <span className="sr-only">Desglose</span>
+                  </th>
+                ) : null}
+                {columns.map((column) => (
+                  <th
+                    key={column.id}
+                    scope="col"
+                    className="px-3 py-2 text-xs font-bold text-muted-foreground"
+                    style={
+                      column.minWidth ? { minWidth: column.minWidth } : undefined
+                    }
+                  >
+                    {column.renderHeader ? column.renderHeader() : column.value}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>{body}</tbody>
+          </table>
+        </div>
       </div>
 
       {/* Flechas de scroll: solo si la tabla desborda. Cada una se deshabilita en

@@ -16,6 +16,7 @@ import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto, formatPeso } from "./pos-format";
 import { estadoBadgeClass, estadoPorDefecto, textoParada } from "./pos-estado";
 import { posSeleccionHandlers } from "./pos-seleccion";
+import { seccionesVisibles } from "./pos-secciones";
 import type { PosOrderCardProps } from "./PosOrderCard";
 
 // POS card · vista MOSAICO (rama ux, pedido humano): tarjeta COMPACTA para ver muchas
@@ -40,11 +41,19 @@ export function PosOrderCardMosaico({
   onGestionar,
   estado: estadoProp,
   mostrarRuta = true,
+  secciones,
   acciones,
 }: PosOrderCardProps) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
   const [detalleAbierto, setDetalleAbierto] = useState(false);
   const estado = estadoProp ?? estadoPorDefecto(esActiva, esDetalle);
+  // Feature 196: las mismas cuatro compuertas que la card completa, con el mismo default.
+  const {
+    navegacion: verNavegacion,
+    cobro: verCobro,
+    detalle: verDetalle,
+    intentos: verIntentos,
+  } = seccionesVisibles(secciones);
   const { seleccionable, onClick, onKeyDown } = posSeleccionHandlers({
     onGestionar,
     bloqueado,
@@ -120,39 +129,44 @@ export function PosOrderCardMosaico({
           <Package className="size-3 shrink-0 text-brand" aria-hidden="true" />
           {orden.producto}
         </p>
-        {/* Feature 160/R19: los intentos son un DATO de la orden, siempre visible (`0` incluido). */}
-        <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
-          <IntentosDato intentos={valorIntentos(orden)} />
-        </p>
+        {/* Feature 160/R19: los intentos son un DATO de la orden, siempre visible (`0` incluido)
+            en las superficies que los tienen; la 196 permite apagarlos donde no existen. */}
+        {verIntentos ? (
+          <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
+            <IntentosDato intentos={valorIntentos(orden)} />
+          </p>
+        ) : null}
       </div>
 
       {/* Bloque de ubicación sobre navy. Es un ENLACE real a Google Maps (mismo criterio
           que `PosNavBlock`: ruta directa, pestaña nueva, sin forzar permisos de GPS): en el
           mosaico no cabe el bloque "Ir" grande, así que la propia ubicación navega. Al ser
           un control interno, pulsarlo NO selecciona la orden de rebote. */}
-      <UbicacionTrigger
-        orden={orden}
-        ariaLabel={`Ver en el mapa la ruta hasta ${orden.direccion ?? orden.cantonNombre}`}
-        className="flex w-full items-center gap-2 rounded-lg bg-navy px-2 py-1.5 text-left text-white transition-colors hover:bg-navy-deep"
-      >
-        <MapPin className="size-3.5 shrink-0 text-brand" aria-hidden="true" />
-        {/* `min-w-0` en el contenedor + `truncate` en cada línea: una dirección larga se
-            corta con elipsis en vez de ensanchar la card del mosaico. */}
-        <div className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-semibold">
-            {orden.cantonNombre}
-            {orden.distritoNombre ? (
-              <span className="text-white/60"> · {orden.distritoNombre}</span>
-            ) : null}
-          </span>
-          {orden.direccion ? (
-            <span className="block truncate text-[0.6875rem] text-white/70">
-              {orden.direccion}
+      {verNavegacion ? (
+        <UbicacionTrigger
+          orden={orden}
+          ariaLabel={`Ver en el mapa la ruta hasta ${orden.direccion ?? orden.cantonNombre}`}
+          className="flex w-full items-center gap-2 rounded-lg bg-navy px-2 py-1.5 text-left text-white transition-colors hover:bg-navy-deep"
+        >
+          <MapPin className="size-3.5 shrink-0 text-brand" aria-hidden="true" />
+          {/* `min-w-0` en el contenedor + `truncate` en cada línea: una dirección larga se
+              corta con elipsis en vez de ensanchar la card del mosaico. */}
+          <div className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-semibold">
+              {orden.cantonNombre}
+              {orden.distritoNombre ? (
+                <span className="text-white/60"> · {orden.distritoNombre}</span>
+              ) : null}
             </span>
-          ) : null}
-        </div>
-        <Navigation className="size-3.5 shrink-0" aria-hidden="true" />
-      </UbicacionTrigger>
+            {orden.direccion ? (
+              <span className="block truncate text-[0.6875rem] text-white/70">
+                {orden.direccion}
+              </span>
+            ) : null}
+          </div>
+          <Navigation className="size-3.5 shrink-0" aria-hidden="true" />
+        </UbicacionTrigger>
+      ) : null}
 
       {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más tarde): marcas de
           EXCEPCIÓN, solo si aplican, para no engordar el mosaico. */}
@@ -184,38 +198,42 @@ export function PosOrderCardMosaico({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between border-t border-dashed border-border pt-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Cobrar
-        </span>
-        <span className="font-mono text-sm font-bold tabular-nums text-foreground">
-          {formatMonto(orden.montoCobrar)}
-        </span>
-      </div>
+      {verCobro ? (
+        <div className="flex items-center justify-between border-t border-dashed border-border pt-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Cobrar
+          </span>
+          <span className="font-mono text-sm font-bold tabular-nums text-foreground">
+            {formatMonto(orden.montoCobrar)}
+          </span>
+        </div>
+      ) : null}
 
       {/* Feature 113/R1: detalle COMPLETO (Pedido/Entrega/Cobro) disponible sin salir de
           la card, plegado para no romper el barrido del mosaico. Mismo `Collapsible` de
           Base UI que la card completa (barre la altura como el resto de desplegables de la
           app) y con `keepMounted`, así la información sigue en el DOM (y siendo buscable)
           aunque esté plegada o la animación no corra. */}
-      <Collapsible
-        open={detalleAbierto}
-        onOpenChange={setDetalleAbierto}
-        className="group/detalle rounded-lg border border-border bg-muted/40 px-2.5 py-1.5"
-      >
-        <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-          Ver detalle completo
-          <ChevronDown
-            aria-hidden="true"
-            className="size-3.5 shrink-0 transition-transform duration-200 group-data-[open]/detalle:rotate-180 motion-reduce:transition-none"
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent keepMounted className="collapsible-panel">
-          <div className="mt-2 border-t border-border pt-2">
-            <AsignacionDetalle orden={orden} />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      {verDetalle ? (
+        <Collapsible
+          open={detalleAbierto}
+          onOpenChange={setDetalleAbierto}
+          className="group/detalle rounded-lg border border-border bg-muted/40 px-2.5 py-1.5"
+        >
+          <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            Ver detalle completo
+            <ChevronDown
+              aria-hidden="true"
+              className="size-3.5 shrink-0 transition-transform duration-200 group-data-[open]/detalle:rotate-180 motion-reduce:transition-none"
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent keepMounted className="collapsible-panel">
+            <div className="mt-2 border-t border-border pt-2">
+              <AsignacionDetalle orden={orden} />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
 
       {/* Controles del consumidor al pie, DENTRO de la card (p. ej. el toggle
           "gestionar más tarde", feature 115/R5/R6). */}

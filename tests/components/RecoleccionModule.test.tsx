@@ -197,8 +197,13 @@ describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
     renderModule({ porRecolectar: [makeOrden()] });
 
     // Lo que se ve por orden: guía, remisión, producto y destinatario. Nada de dinero.
+    //
+    // Feature 196: producto y destinatario ya NO comparten un `<p>` con «·». Los pinta la
+    // card compartida en elementos separados, así que se afirman por separado. Lo que este
+    // caso protege —que se vean los cuatro datos y ningún importe— no cambia.
     expect(screen.getByText("REM-1")).toBeInTheDocument();
-    expect(screen.getByText(/Caja · Ana/)).toBeInTheDocument();
+    expect(screen.getByText("Caja")).toBeInTheDocument();
+    expect(screen.getByText("Ana")).toBeInTheDocument();
     expect(screen.queryByText(/₡/)).toBeNull();
     // Contrato: el DTO de esta superficie no tiene por dónde filtrar cobro ni ruta.
     const orden = makeOrden();
@@ -215,14 +220,96 @@ describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
 });
 
 // ---------------------------------------------------------------------------------------
+// Feature 196 — la recolección pinta la MISMA card que el reparto (`PosOrderCardMosaico` /
+// `PosOrderCardDetalle`) con las cuatro secciones que no puede alimentar APAGADAS.
+//
+// Por qué se prueba en las DOS vistas y no solo en la que arranca: las dos cards son
+// implementaciones PARALELAS —solo comparten `PosOrderCardProps`—, así que una compuerta
+// puede quedarse sin replicar en una de ellas y el apartado seguiría verde. Fue exactamente
+// lo que pasó al cablearlas, y estos casos son lo que lo impide en adelante.
+//
+// Lo que se afirma NO es cosmética: el adaptador rellena esos campos con `null`/vacío para
+// satisfacer el tipo. Encender cualquiera de las cuatro aquí pinta huecos —o un "Cobrar" con
+// importe vacío en la pantalla de un mensajero—, y es justo lo que la 157/167 decidió no dar.
+// ---------------------------------------------------------------------------------------
+describe("RecoleccionModule — las dos vistas apagan lo que no hay (feature 196)", () => {
+  /** Lo que NINGUNA de las dos vistas puede pintar aquí, por vista. */
+  function esperarSeccionesApagadas() {
+    // Cobro: ni la etiqueta ni ningún importe (R18/R38 — el DTO no transporta monto).
+    expect(screen.queryByText(/cobrar/i)).toBeNull();
+    expect(screen.queryByText(/₡/)).toBeNull();
+    // Navegación: no hay dirección ni coordenadas, así que no hay a dónde llevar a nadie —y
+    // el "Sin dirección" del fallback afirmaría un hueco donde no hay dato que dar.
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText(/sin dirección/i)).toBeNull();
+    // Intentos de entrega: son del flujo de ENTREGA; recolectar no es entregar.
+    expect(screen.queryByText(/intentos/i)).toBeNull();
+    // Detalle completo: zona/provincia/cantón/notas no vienen en este DTO.
+    expect(screen.queryByText(/ver detalle completo/i)).toBeNull();
+  }
+
+  /** Lo que sí sale, en las dos vistas: los cuatro datos reales del DTO. */
+  function esperarDatosDeLaOrden() {
+    expect(screen.getByText("REM-1")).toBeInTheDocument();
+    expect(screen.getByText("Caja")).toBeInTheDocument();
+    expect(screen.getByText("Ana")).toBeInTheDocument();
+  }
+
+  it("vista MOSAICO (la de entrada): pinta la orden sin cobro, navegación, intentos ni detalle", () => {
+    renderModule({ porRecolectar: [makeOrden()] });
+
+    esperarDatosDeLaOrden();
+    esperarSeccionesApagadas();
+  });
+
+  it("vista DETALLE: las mismas cuatro secciones siguen apagadas tras conmutar", async () => {
+    const user = userEvent.setup();
+    renderModule({ porRecolectar: [makeOrden()] });
+
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+    // El conmutador anima: sostiene la vista vieja durante el tramo de salida
+    // (`useTransicionVista`), así que se espera a que la nueva esté montada.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Detalle" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    await waitFor(() => esperarDatosDeLaOrden());
+
+    esperarSeccionesApagadas();
+  });
+
+  it("el conmutador es UNO para todo el apartado, no uno por tienda", () => {
+    renderModule({
+      porRecolectar: [
+        makeOrden({ id: "a", numGuia: 1, numRemision: "REM-A", tiendaNombre: "Tienda Norte" }),
+        makeOrden({ id: "c", numGuia: 3, numRemision: "REM-C", tiendaNombre: "Tienda Sur" }),
+      ],
+    });
+
+    // Dos tiendas, un solo control: la vista es una preferencia de quien mira, no una
+    // propiedad de cada grupo.
+    expect(screen.getAllByRole("group", { name: "Vista de las órdenes" })).toHaveLength(1);
+  });
+
+  it("sin nada por recolectar no hay conmutador: no hay cards que conmutar", () => {
+    renderModule({ porRecolectar: [] });
+
+    expect(screen.queryByRole("group", { name: "Vista de las órdenes" })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------------------
 // Feature 167 (R7/R8) — LA CAUSA RAÍZ. El panel de la 157 hacía `if (porRecolectar.length
 // === 0) return null`, así que el bloque de escaneo desaparecía justo cuando el mensajero
 // lo buscaba ("no veo la forma de recolectar"). Estos casos son la razón de existir de la
 // feature entera y NO se borran.
 //
 // 2026-07-31 — R7 cambia de FORMA, no de fondo (decisión del humano). El escáner pasa de
-// "SIEMPRE MONTADO" a "SIEMPRE ACCESIBLE": vive tras el disparador de `EscanerDesplegable`,
-// plegado de entrada como en el resto de la app, porque montado significaba la cámara
+// "SIEMPRE MONTADO" a "SIEMPRE ACCESIBLE": vive tras el disparador de `EscanerModal` —en
+// modal desde el 2026-08-10—, cerrado de entrada como en el resto de la app, porque montado
+// significaba la cámara
 // encendida todo el rato que el mensajero tuviera la pantalla abierta. Lo que la 167 vino a
 // impedir sigue impedido y se sigue verificando aquí:
 //   · con la lista vacía el ACCESO al escaneo no desaparece (el disparador está ahí);
@@ -276,18 +363,18 @@ describe("RecoleccionModule — el escáner está SIEMPRE accesible (R7/R8)", ()
     expect(escaner()).toBeInTheDocument();
   });
 
-  it("plegado, la CÁMARA no está montada; al cerrar se vuelve a desmontar", async () => {
+  it("cerrado, la CÁMARA no está montada; al cerrar se vuelve a desmontar", async () => {
     const user = userEvent.setup();
     renderModule({ porRecolectar: [makeOrden()] });
 
-    // Lo que apaga la cámara es el DESMONTAJE del panel, no un `hidden`: el doble de
-    // `QrScanner` solo existe en el DOM mientras la tarjeta está desplegada.
+    // Lo que apaga la cámara es el DESMONTAJE del contenido, no un `hidden`: el doble de
+    // `QrScanner` solo existe en el DOM mientras el modal está abierto.
     expect(screen.queryByRole("button", { name: "Simular escaneo" })).toBeNull();
 
     await abrirEscaner(user);
     expect(screen.getByRole("button", { name: "Simular escaneo" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
 
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Simular escaneo" })).toBeNull(),
@@ -504,9 +591,9 @@ describe("RecoleccionModule — confirmar la recolección (R10/R11/R12/R13/R14/R
     await user.click(screen.getByRole("button", { name: "Confirmar recolección" }));
     await screen.findByText(/recolectada correctamente/i);
 
-    // La guía confirmada la recuerda el MÓDULO, que vive por encima del desplegable: plegar
+    // La guía confirmada la recuerda el MÓDULO, que vive por encima del modal: cerrar
     // apaga la cámara, no el rastro de lo que el mensajero acaba de recolectar.
-    await user.click(screen.getByRole("button", { name: "Ocultar escáner" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
     await waitFor(() => expect(escaner()).toBeNull());
     await abrirEscaner(user);
 

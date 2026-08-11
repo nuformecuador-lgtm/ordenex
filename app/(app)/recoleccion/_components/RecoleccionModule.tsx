@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Store } from "lucide-react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
-import { EscanerDesplegable } from "@/components/shared/EscanerDesplegable";
+import { EscanerModal } from "@/components/shared/EscanerModal";
 import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
 import { BLOQUEO_AVISO } from "@/lib/constants/bloqueo-mensajero";
@@ -14,6 +14,19 @@ import type {
   RecolectadaHoyDTO,
   RecoleccionOrdenDTO,
 } from "@/lib/types/recoleccion-tienda";
+
+import { CarruselCards } from "@/components/shared/CarruselCards";
+import { PosOrderCardDetalle } from "@/app/(app)/mis-asignaciones/_components/pos-card/PosOrderCardDetalle";
+import { PosOrderCardMosaico } from "@/app/(app)/mis-asignaciones/_components/pos-card/PosOrderCardMosaico";
+import {
+  VistaCardsToggle,
+  type VistaCards,
+} from "@/app/(app)/mis-asignaciones/_components/VistaCardsToggle";
+import {
+  CLASE_FASE,
+  useTransicionVista,
+} from "@/app/(app)/mis-asignaciones/_components/useTransicionVista";
+import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { RecolectadasHoyLista } from "./RecolectadasHoyLista";
 import { useRecolectarPorGuia } from "./useRecolectarPorGuia";
@@ -28,9 +41,10 @@ import { useRecolectarPorGuia } from "./useRecolectarPorGuia";
 //          es su contexto. Lo único que lo apaga es el bloqueo por cierre pendiente (R9).
 //
 // 2026-07-31 (decisión del humano): R7 cambia de FORMA, no de fondo. El escáner pasa de
-// estar "siempre montado" a estar "siempre accesible": vive tras `EscanerDesplegable`,
-// plegado de entrada como en toda la app. Nunca desaparece —el disparador no depende de la
-// lista— y a cambio la cámara deja de estar encendida detrás de la pantalla.
+// estar "siempre montado" a estar "siempre accesible": vive tras `EscanerModal` —desde el
+// 2026-08-10, en modal—, cerrado de entrada como en toda la app. Nunca desaparece —el
+// disparador no depende de la lista— y a cambio la cámara deja de estar encendida detrás de
+// la pantalla.
 //
 // Sigue siendo deliberadamente pobre comparado con el panel de gestión: aquí no hay entrega,
 // ni cobro, ni evidencia, ni causa de devolución, ni resultado que elegir (R22). Recolectar
@@ -60,6 +74,51 @@ interface GrupoTienda {
   tiendaTelefono: string | null;
   ordenes: RecoleccionOrdenDTO[];
 }
+
+/**
+ * Adapta una orden por recolectar a la forma que espera `PosOrderCard` (feature 196).
+ *
+ * ⚠️ Los campos que se rellenan con `null`/vacio NO SE PINTAN NUNCA: las cuatro secciones que
+ * los leerian —navegacion, cobro, detalle e intentos— van APAGADAS en `SECCIONES_RECOLECCION`.
+ * Lo que la card muestra sale todo de datos reales del DTO: guia, remision, producto y
+ * destinatario. Si alguien enciende una de esas secciones aqui, empezara a pintar huecos.
+ *
+ * No se enriquece el DTO para llenarlos, y es deliberado: la 157/167 lo dejo pobre a proposito
+ * —«ni siquiera TRANSPORTA cobro»— porque recolectar no es entregar y la pantalla no debe
+ * sugerir lo contrario.
+ */
+function comoCardDeRecoleccion(orden: RecoleccionOrdenDTO): MiAsignacionDTO {
+  return {
+    id: orden.id,
+    numGuia: orden.numGuia,
+    numRemision: orden.numRemision,
+    producto: orden.producto,
+    destinatario: orden.destinatario,
+    tiendaNombre: orden.tiendaNombre,
+    // Todo lo de abajo es relleno para satisfacer el tipo; ninguna seccion encendida lo lee.
+    estatusValue: "recolectando",
+    telefonoDest: "",
+    direccion: null,
+    peso: null,
+    montoCobrar: null,
+    latitud: null,
+    longitud: null,
+    notas: null,
+    zonaNombre: "",
+    provinciaNombre: "",
+    cantonNombre: "",
+    distritoNombre: null,
+    secuenciaRuta: null,
+  } as MiAsignacionDTO;
+}
+
+/** Las cuatro secciones que la recoleccion no puede alimentar (ver el adaptador). */
+const SECCIONES_RECOLECCION = {
+  navegacion: false,
+  cobro: false,
+  detalle: false,
+  intentos: false,
+} as const;
 
 /**
  * Agrupa por tienda (R17) conservando el orden de llegada: el mensajero recorre tiendas, no
@@ -111,6 +170,15 @@ export function RecoleccionModule({
   // el mensajero necesita ver que la anterior sí entró (mismo criterio que `RecogerPaqueteCard`).
   const [ultima, setUltima] = useState<number | null>(null);
 
+  // Feature 196: mismo conmutador y misma transicion que Entregas/Por recoger, sobre las
+  // MISMAS piezas. Estado de UI efimero de un solo consumidor: no sube a la URL.
+  const {
+    vista: vistaCards,
+    vistaPedida: vistaCardsPedida,
+    fase: faseVista,
+    cambiarVista,
+  } = useTransicionVista<VistaCards>("mosaico");
+
   const grupos = useMemo(() => agruparPorTienda(porRecolectar), [porRecolectar]);
 
   const recolectarGuia = useCallback(
@@ -152,14 +220,49 @@ export function RecoleccionModule({
     [recolectarGuia],
   );
 
+  /**
+   * Una card «por recolectar». Extraida para que el CARRUSEL (mosaico) y la LISTA (detalle)
+   * rendericen la MISMA card: el conmutador solo cambia el envoltorio.
+   *
+   * Sin `onGestionar`: aqui no se gestiona nada, asi que la card es de solo-visualizacion (ni
+   * clickeable ni enfocable). `mostrarRuta={false}` porque estas ordenes no son paradas de la
+   * ruta optimizada, y las cuatro secciones sin datos van apagadas.
+   */
+  function renderCardRecoleccion(
+    orden: RecoleccionOrdenDTO,
+    total: number,
+    vista: VistaCards,
+  ) {
+    const CardVista =
+      vista === "mosaico" ? PosOrderCardMosaico : PosOrderCardDetalle;
+    return (
+      <CardVista
+        orden={comoCardDeRecoleccion(orden)}
+        total={total}
+        estado="Por recolectar"
+        mostrarRuta={false}
+        secciones={SECCIONES_RECOLECCION}
+      />
+    );
+  }
+
   return (
     <section aria-label={TITULO} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{TITULO}</h2>
         {porRecolectar.length > 0 ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {textoConteo(porRecolectar.length)}
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p role="status" className="text-sm text-muted-foreground">
+              {textoConteo(porRecolectar.length)}
+            </p>
+            {/* Feature 196: el conmutador es UNO para todo el apartado, no uno por tienda. La
+                vista es una preferencia de quien mira, no una propiedad de cada grupo, y
+                repetirlo por tienda llenaría la cabecera de controles idénticos. */}
+            <VistaCardsToggle
+              vista={vistaCardsPedida}
+              onVistaChange={cambiarVista}
+            />
+          </div>
         ) : null}
       </div>
 
@@ -177,13 +280,11 @@ export function RecoleccionModule({
       ) : (
         /* R7 en su forma vigente (decisión del humano del 2026-07-31): el acceso al
            escaneo está SIEMPRE —el disparador no depende de la lista, que era la causa
-           raíz—, pero la tarjeta vive plegada tras él, igual que en el resto de la app.
-           Lo que se gana: la cámara no queda encendida todo el rato que el mensajero
-           tiene la pantalla abierta, que es lo que pasaba con la tarjeta desnuda. */
-        <EscanerDesplegable
-          label="Recolectar en tienda"
-          labelAbierto="Ocultar escáner"
-        >
+           raíz—, pero la tarjeta vive tras él (en modal desde el 2026-08-10), igual que
+           en el resto de la app. Lo que se gana: la cámara no queda encendida todo el
+           rato que el mensajero tiene la pantalla abierta, que es lo que pasaba con la
+           tarjeta desnuda. El label NO es el de por defecto: aquí se RECOLECTA. */
+        <EscanerModal label="Recolectar en tienda">
           <EscanerGuiaCard
             ariaLabel="Recolectar por número de guía o escaneo"
             titulo="Recolectar en tienda"
@@ -202,7 +303,7 @@ export function RecoleccionModule({
               )
             }
           />
-        </EscanerDesplegable>
+        </EscanerModal>
       )}
 
       {/* R8: sin nada asignado se DICE, en vez de dejar una pantalla muda bajo el escáner. */}
@@ -226,24 +327,32 @@ export function RecoleccionModule({
                 />
               ) : null}
             </div>
-            <ul className="flex flex-col gap-2">
-              {grupo.ordenes.map((orden) => (
-                <li
-                  key={orden.id}
-                  className="rounded-xl bg-muted/40 px-3 py-2 text-sm"
-                >
-                  <p className="font-semibold tabular-nums">
-                    Guía {orden.numGuia ?? "—"}
-                    <span className="ml-2 font-normal text-muted-foreground">
-                      {orden.numRemision}
-                    </span>
-                  </p>
-                  <p className="text-muted-foreground">
-                    {orden.producto} · {orden.destinatario}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            {vistaCards === "mosaico" ? (
+              /* En MOSAICO las cards van en carrusel, igual que en Entregas. El carrusel es
+                 POR GRUPO y no global a proposito: la agrupacion por tienda (R17) es lo que
+                 hace util esta pantalla —el mensajero recorre tiendas, no ordenes sueltas— y
+                 un carrusel unico la disolveria. */
+              <div className={CLASE_FASE[faseVista]}>
+                <CarruselCards
+                  items={grupo.ordenes}
+                  getKey={(orden) => orden.id}
+                  ariaLabel={`Por recolectar en ${grupo.tiendaNombre}`}
+                  singular="Orden"
+                  plural="Órdenes"
+                  renderItem={(orden) =>
+                    renderCardRecoleccion(orden, grupo.ordenes.length, "mosaico")
+                  }
+                />
+              </div>
+            ) : (
+              <ul className={`flex flex-col gap-3 ${CLASE_FASE[faseVista]}`}>
+                {grupo.ordenes.map((orden) => (
+                  <li key={orden.id}>
+                    {renderCardRecoleccion(orden, grupo.ordenes.length, "detalle")}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         ))
       )}

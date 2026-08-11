@@ -9,6 +9,7 @@ import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto } from "./pos-format";
 import { estadoBadgeClass, estadoPorDefecto, textoParada } from "./pos-estado";
 import { posSeleccionHandlers } from "./pos-seleccion";
+import { seccionesVisibles } from "./pos-secciones";
 import type { PosOrderCardProps } from "./PosOrderCard";
 
 // POS card · vista DETALLE en FILA (rama ux, pedido humano): una línea por orden con la
@@ -30,9 +31,18 @@ export function PosOrderCardDetalle({
   onGestionar,
   estado: estadoProp,
   mostrarRuta = true,
+  secciones,
   acciones,
 }: PosOrderCardProps) {
   const estado = estadoProp ?? estadoPorDefecto(esActiva, esDetalle);
+  // Feature 196: las mismas compuertas que las otras dos vistas, con el mismo default.
+  // `detalle` no tiene nada que apagar AQUÍ: esta vista es una fila y nunca llevó el
+  // desplegable "Ver detalle completo" (lo dice el encabezado del componente).
+  const {
+    navegacion: verNavegacion,
+    cobro: verCobro,
+    intentos: verIntentos,
+  } = seccionesVisibles(secciones);
   const { seleccionable, onClick, onKeyDown } = posSeleccionHandlers({
     onGestionar,
     bloqueado,
@@ -67,13 +77,15 @@ export function PosOrderCardDetalle({
       }`}
     >
       <div className="flex items-center gap-3">
-      <UbicacionTrigger
-        orden={orden}
-        ariaLabel={`Ver en el mapa la ubicación de ${orden.destinatario}`}
-        className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand text-white transition-transform hover:scale-105 active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100"
-      >
-        <Navigation className="size-5" aria-hidden="true" />
-      </UbicacionTrigger>
+      {verNavegacion ? (
+        <UbicacionTrigger
+          orden={orden}
+          ariaLabel={`Ver en el mapa la ubicación de ${orden.destinatario}`}
+          className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand text-white transition-transform hover:scale-105 active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100"
+        >
+          <Navigation className="size-5" aria-hidden="true" />
+        </UbicacionTrigger>
+      ) : null}
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -112,14 +124,21 @@ export function PosOrderCardDetalle({
         <p className="truncate text-sm font-bold text-foreground">
           {orden.destinatario}
         </p>
-        <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
-          <MapPin className="size-3 shrink-0" aria-hidden="true" />
-          {ubicacion || "Sin dirección"}
-        </p>
-        {/* Feature 160/R19: intentos siempre visibles, `0` incluido. */}
-        <p className="text-[11px] font-semibold text-muted-foreground">
-          <IntentosDato intentos={valorIntentos(orden)} />
-        </p>
+        {/* La línea de ubicación es parte de la NAVEGACIÓN, no del identificador: sin ella
+            el "Sin dirección" del fallback afirmaría un hueco donde no hay dato que dar. */}
+        {verNavegacion ? (
+          <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+            <MapPin className="size-3 shrink-0" aria-hidden="true" />
+            {ubicacion || "Sin dirección"}
+          </p>
+        ) : null}
+        {/* Feature 160/R19: intentos siempre visibles, `0` incluido, en las superficies que
+            los tienen; la 196 permite apagarlos donde no existen. */}
+        {verIntentos ? (
+          <p className="text-[11px] font-semibold text-muted-foreground">
+            <IntentosDato intentos={valorIntentos(orden)} />
+          </p>
+        ) : null}
         {/* Feature 116/R12: preview de la nota privada (el badge de arriba es el indicador). */}
         {orden.notaPrivada ? (
           <p className="truncate text-[11px] text-muted-foreground">
@@ -128,14 +147,16 @@ export function PosOrderCardDetalle({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 flex-col items-end">
-        <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Cobrar
-        </span>
-        <span className="font-mono text-sm font-bold tabular-nums text-foreground">
-          {formatMonto(orden.montoCobrar)}
-        </span>
-      </div>
+      {verCobro ? (
+        <div className="flex shrink-0 flex-col items-end">
+          <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Cobrar
+          </span>
+          <span className="font-mono text-sm font-bold tabular-nums text-foreground">
+            {formatMonto(orden.montoCobrar)}
+          </span>
+        </div>
+      ) : null}
       </div>
 
       {/* Controles del consumidor al pie, DENTRO de la card (p. ej. el toggle

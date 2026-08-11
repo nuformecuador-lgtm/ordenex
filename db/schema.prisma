@@ -144,6 +144,7 @@ model Usuario {
   liquidacionPagosComoTienda          LiquidacionPago[]         @relation("LiquidacionPagoTienda") // feature 172/R29: pagos recibidos por ESTA tienda (contra su saldo acumulado)
   liquidacionPagosRegistrados         LiquidacionPago[]         @relation("LiquidacionPagoRegistrador") // feature 172/R7: pagos que este usuario (maestro/admin) registro
   liquidacionAnulacionesRealizadas    LiquidacionAnulacion[]    @relation("LiquidacionAnulacionActor") // feature 172/R73: anulaciones de pago que este usuario realizo
+  rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -521,8 +522,9 @@ model Orden {
   // `downloadUrl` no se lee ni se escribe en esta feature (R26/R38).
   downloadStoragePath    String?   @map("download_storage_path")
   /// Feature 169 (design §2.5) — columna GENERADA ALWAYS ... STORED en la base: concatena
-  /// los cuatro campos buscables ya normalizados (guia, remision, telefono con y sin
-  /// separadores, destinatario). NUNCA se escribe desde la aplicacion — Postgres rechaza
+  /// los campos buscables ya normalizados (guia, remision, telefono con y sin
+  /// separadores, destinatario y —desde `20260808120000_orden_busqueda_producto`—
+  /// producto). NUNCA se escribe desde la aplicacion — Postgres rechaza
   /// cualquier INSERT/UPDATE sobre ella— y el cliente la OMITE globalmente
   /// (`lib/db/prisma-client.ts`) para que no llegue a ningun DTO ni descarga (R28).
   /// Se declara aqui para (a) poder filtrar con Prisma y (b) que schema.prisma no diverja
@@ -588,17 +590,17 @@ model Orden {
 // plantilla_mensaje). `id` lo genera SIEMPRE el SERVIDOR dentro de la tx (R15/D8): el cliente
 // nunca lo propone. `name` es el UNICO campo definido por el usuario (D9).
 model Carga {
-  id           String   @id @default(uuid())
-  fechaCarga   DateTime @default(now()) @map("fecha_carga")
-  usuarioCarga String   @map("usuario_carga") // FK -> usuario: quien realizo la carga (R2)
-  name         String? // R8: nombre OPCIONAL del lote definido por el usuario; NULL = sin nombre
-  downloadUrl  String?  @map("download_url") // R47: URL del PDF CONSOLIDADO del lote (modo consolidate); NULL en la via sesion (R40)
+  id                  String   @id @default(uuid())
+  fechaCarga          DateTime @default(now()) @map("fecha_carga")
+  usuarioCarga        String   @map("usuario_carga") // FK -> usuario: quien realizo la carga (R2)
+  name                String? // R8: nombre OPCIONAL del lote definido por el usuario; NULL = sin nombre
+  downloadUrl         String?  @map("download_url") // R47: URL del PDF CONSOLIDADO del lote (modo consolidate); NULL en la via sesion (R40)
   // Feature 177 (R36/R37, design §2.2): RUTA del objeto del PDF CONSOLIDADO del lote en el
   // bucket de etiquetas. Misma semantica que en `Orden`: NOT NULL <=> existe => re-firmar.
-  downloadStoragePath String? @map("download_storage_path")
-  totalFiles   Int      @default(0) @map("total_files") // R7/R29/R32: tamano TOTAL del lote, nunca el del chunk/batch
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  downloadStoragePath String?  @map("download_storage_path")
+  totalFiles          Int      @default(0) @map("total_files") // R7/R29/R32: tamano TOTAL del lote, nunca el del chunk/batch
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   usuario Usuario @relation("CargaUsuario", fields: [usuarioCarga], references: [id], onDelete: Restrict)
   ordenes Orden[] @relation("OrdenCarga")
@@ -689,6 +691,27 @@ enum GestionCausaDevolucion {
   @@map("gestion_causa_devolucion")
 }
 
+// Feature 193 (R5, design §2): por que una gestion NO trae la ubicacion del mensajero —
+// lista CERRADA de 4 valores, todos FALLOS TECNICOS.
+//
+// ⛔ LA DENEGACION DEL PERMISO NO ES UN VALOR DE ESTE ENUM, Y ESA AUSENCIA ES EL MECANISMO
+// DE R12, no un olvido. Decision humana del 2026-08-10: denegar la ubicacion BLOQUEA la
+// gestion. Al no existir el valor, una gestion denegada no se puede representar y el rechazo
+// es ESTRUCTURAL: no depende de que alguien se acuerde de comprobarlo en el borde. Si algun
+// dia se decide aceptarla, anadir el valor es el cambio consciente que obliga a revisar R19.
+//
+// El fallo tecnico SI pasa (R18) porque no hay nada que la persona pueda hacer: sin senal en
+// una bodega, el mensajero quedaria trabado sin salida. La denegacion, en cambio, la revierte
+// ella misma desde los ajustes del navegador.
+enum GestionUbicacionAusencia {
+  timeout // la captura agoto el tiempo maximo
+  no_disponible // el dispositivo no pudo fijar posicion (sin senal)
+  no_soportado // el navegador no expone geolocalizacion
+  contexto_inseguro // sin HTTPS: la API no esta disponible
+
+  @@map("gestion_ubicacion_ausencia")
+}
+
 // Feature 36 (R6-R8, decision F1.4-d): UN registro por gestion de orden, con un
 // discriminador `resultado` y campos NULLABLE segun resultado. La evidencia se
 // guarda como `storage_path` de un bucket PRIVADO (nunca URL publica, R8); se
@@ -696,16 +719,16 @@ enum GestionCausaDevolucion {
 // mensajero_documento/orden). Una orden puede acumular varias gestiones a lo
 // largo de reintentos (features 46/47): NO se fuerza @@unique(ordenId).
 model GestionOrden {
-  id                   String                  @id @default(uuid())
-  ordenId              String                  @map("orden_id") // FK -> orden
-  mensajeroId          String                  @map("mensajero_id") // FK -> usuario (el actor)
+  id                   String                    @id @default(uuid())
+  ordenId              String                    @map("orden_id") // FK -> orden
+  mensajeroId          String                    @map("mensajero_id") // FK -> usuario (el actor)
   resultado            GestionResultado
-  montoRecibido        Decimal?                @map("monto_recibido") @db.Decimal(12, 2) // ENTREGADA
-  metodoPago           MetodoPagoValue?        @map("metodo_pago") // ENTREGADA
-  evidenciaStoragePath String?                 @map("evidencia_storage_path") // ENTREGADA/RECHAZO: path bucket privado, NO URL
-  evidenciaContentType String?                 @map("evidencia_content_type") // image/jpeg|png|webp
+  montoRecibido        Decimal?                  @map("monto_recibido") @db.Decimal(12, 2) // ENTREGADA
+  metodoPago           MetodoPagoValue?          @map("metodo_pago") // ENTREGADA
+  evidenciaStoragePath String?                   @map("evidencia_storage_path") // ENTREGADA/RECHAZO: path bucket privado, NO URL
+  evidenciaContentType String?                   @map("evidencia_content_type") // image/jpeg|png|webp
   motivo               String? // REPROGRAMAR/DEVOLUCION/RECHAZO
-  fechaReprogramacion  DateTime?               @map("fecha_reprogramacion") @db.Date // REPROGRAMAR
+  fechaReprogramacion  DateTime?                 @map("fecha_reprogramacion") @db.Date // REPROGRAMAR
   // Feature 73/R11 (F1.4-a): DEVOLUCION. NULLABLE como el resto de campos por rama: NULL =
   // gestion no-`devuelta`, o `devuelta` anterior a la feature 73 (el historico NO se
   // backfillea, R16). La obligatoriedad vive en el BORDE (zod, R6), sin CHECK en la base
@@ -713,23 +736,44 @@ model GestionOrden {
   // OJO (F1.4-c): esta columna nace de SOLO ESCRITURA por decision APROBADA del humano —
   // nadie la lee en este ciclo. Que no tenga consumidores NO es codigo muerto ni un olvido:
   // es el estado esperado. Mostrarla/agruparla es follow-up (ver requirements.md §F1.4-c).
-  causaDevolucion      GestionCausaDevolucion? @map("causa_devolucion") // DEVOLUCION
+  causaDevolucion      GestionCausaDevolucion?   @map("causa_devolucion") // DEVOLUCION
   // Feature 158/R9 (Q-B): causa tipificada del INCIDENTE. NULLABLE como el resto de campos
   // por rama: NULL = gestion no-`incidente`. La obligatoriedad vive en el BORDE (zod, R9),
   // sin CHECK en la base, igual que `causa_devolucion` (73/F1.4-b).
-  causaIncidente       GestionCausaIncidente?  @map("causa_incidente") // INCIDENTE
+  causaIncidente       GestionCausaIncidente?    @map("causa_incidente") // INCIDENTE
   // Feature 158/R19-R22 (Q-C): monto de la indemnizacion CAPTURADO POR EL ADMIN al aprobar
   // el cierre. NULL = gestion no-`incidente`, o `incidente` cuyo cierre aun no se aprobo.
   // Mismo patron snapshot-escrito-despues que `pago_mensajero` (39) e
   // `ingreso_bodega_rechazo` (56). NO vive en `cierre_detail`: esa tabla es un snapshot
   // INMUTABLE escrito solo al SOLICITAR (design §3.3 / §9.1).
-  indemnizacion        Decimal?                @map("indemnizacion") @db.Decimal(12, 2)
-  cierreId             String?                 @map("cierre_id") // feature 37/R13: nullable; NULL = gestion del dia aun no cerrada
-  pagoMensajero        Decimal?                @map("pago_mensajero") @db.Decimal(12, 2) // feature 39/R12: snapshot del pago al mensajero; NULL mientras no se cierra
-  ingresoBodegaRechazo Decimal?                @map("ingreso_bodega_rechazo") @db.Decimal(12, 2) // feature 56/R11: snapshot del ingreso de bodega por rechazo; NULL mientras no se cierra
-  anuladaAt            DateTime?               @map("anulada_at") // feature 67/R11: instante de la anulacion; NULL = gestion VIGENTE (patron cierre_id IS NULL de la 37)
-  anuladaPor           String?                 @map("anulada_por") // feature 67/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
-  createdAt            DateTime                @default(now()) @map("created_at")
+  indemnizacion        Decimal?                  @map("indemnizacion") @db.Decimal(12, 2)
+  cierreId             String?                   @map("cierre_id") // feature 37/R13: nullable; NULL = gestion del dia aun no cerrada
+  pagoMensajero        Decimal?                  @map("pago_mensajero") @db.Decimal(12, 2) // feature 39/R12: snapshot del pago al mensajero; NULL mientras no se cierra
+  ingresoBodegaRechazo Decimal?                  @map("ingreso_bodega_rechazo") @db.Decimal(12, 2) // feature 56/R11: snapshot del ingreso de bodega por rechazo; NULL mientras no se cierra
+  // Feature 193 (R1/R2/R4): DONDE estaba el mensajero al registrar la gestion, sea cual sea
+  // el resultado. NULLABLE como el resto de campos por rama, y por dos motivos mas:
+  // (a) las gestiones anteriores a esta feature quedan en NULL y NO se backfillean (R3) —no
+  // hay coordenada cierta que inventar—; (b) una gestion con fallo tecnico de captura se
+  // guarda sin coords y con `ubicacionAusencia` (R18). La obligatoriedad vive en el BORDE
+  // (zod, R8-R13), SIN CHECK en la base: mismo patron que monto_recibido/metodo_pago (36),
+  // causa_devolucion (73/F1.4-b) y causa_incidente (158).
+  //
+  // Decimal(10,7) —no Float— es el tipo de la geolocalizacion PROPIA en este repo:
+  // geocode_cache.latitud y ruta_optimizada.origen_lat. La 121 uso Float para las coords de
+  // WhatsApp, pero eso es un payload AJENO que se copia tal cual; aqui 7 decimales (~1 cm)
+  // sin error de representacion binaria, en un dato que puede acabar en una disputa laboral.
+  //
+  // OJO: nacen de SOLO ESCRITURA por decision humana (R7) — ningun repositorio de lectura las
+  // proyecta en este ciclo, y hay una guardia que lo atornilla. Que no tengan consumidores NO
+  // es codigo muerto: es el estado esperado (mismo patron declarado para causa_devolucion).
+  ubicacionLat         Decimal?                  @map("ubicacion_lat") @db.Decimal(10, 7)
+  ubicacionLng         Decimal?                  @map("ubicacion_lng") @db.Decimal(10, 7)
+  // R6: las tres columnas admiten DOS formas validas, (lat,lng,NULL) o (NULL,NULL,motivo).
+  // Media coordenada no es una ubicacion.
+  ubicacionAusencia    GestionUbicacionAusencia? @map("ubicacion_ausencia")
+  anuladaAt            DateTime?                 @map("anulada_at") // feature 67/R11: instante de la anulacion; NULL = gestion VIGENTE (patron cierre_id IS NULL de la 37)
+  anuladaPor           String?                   @map("anulada_por") // feature 67/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
+  createdAt            DateTime                  @default(now()) @map("created_at")
 
   orden             Orden                   @relation(fields: [ordenId], references: [id])
   mensajero         Usuario                 @relation("GestionMensajero", fields: [mensajeroId], references: [id])
@@ -897,10 +941,10 @@ model CierreDia {
 
   cierreBodegaId String? @map("cierre_bodega_id") // feature 40: nullable; NULL = cierre_dia aun no consolidado en bodega
 
-  mensajero          Usuario        @relation("CierreMensajero", fields: [mensajeroId], references: [id])
-  destinoZona        Zona           @relation(fields: [destinoZonaId], references: [id])
-  resueltoPorUsuario Usuario?       @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
-  cierreBodega       CierreBodega?  @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
+  mensajero          Usuario           @relation("CierreMensajero", fields: [mensajeroId], references: [id])
+  destinoZona        Zona              @relation(fields: [destinoZonaId], references: [id])
+  resueltoPorUsuario Usuario?          @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
+  cierreBodega       CierreBodega?     @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
   detalle            CierreDetail[] // feature 69/R1: snapshot congelado por orden de este cierre
   liquidacionPagos   LiquidacionPago[] // feature 172/R21/R22: pagos al mensajero registrados CONTRA este cierre
@@ -1918,4 +1962,83 @@ model AnalyticsDaily {
   @@index([mensajeroId, fecha], map: "analytics_daily_mensajero_fecha_idx") // recorte de mensajero; cubre el cubo sin_asignar
   @@index([zonaId, fecha], map: "analytics_daily_zona_fecha_idx") // recorte de adminSatelite, por zona DE LA ORDEN
   @@map("analytics_daily")
+}
+
+// Feature 196 (design §2.1, R1/R11/R12/R13/R24) — CABECERA del ranking CONGELADO de una
+// fecha calendario de Costa Rica. Una fila por fecha; `fecha` es UNIQUE y ESA restriccion
+// es la idempotencia del cron (R13): la reejecucion choca en la base, no en el codigo.
+//
+// `fecha` es DATE (medianoche UTC), convencion del repo para fecha calendario CR (feature
+// 46, `fechaComoDate` en lib/analytics/rollup-dia.ts): NO es el `desde` de la ventana.
+//
+// SIN `updatedAt` a proposito (R12): la fila es INMUTABLE por diseno. Una columna que nunca
+// se actualiza es una invitacion a actualizarla.
+//
+// `minAsignadasPodio` congela el umbral APLICADO en esa corrida: es lo que hace auditable
+// el podio el dia que `RANKING_MIN_ASIGNADAS` cambie. `filas` congela el conteo; `0` es un
+// dato real ("ese dia no hubo actividad"), distinto de la AUSENCIA de cabecera ("el cron no
+// corrio esa fecha") — la distincion que R26 exige y que una tabla plana no podria dar.
+//
+// RLS habilitada sin policies (va en la migracion, patron ruta_optimizada / analytics_daily):
+// son datos de rendimiento de personas identificadas, nunca accesibles desde el cliente (R38).
+model RankingSnapshotDia {
+  id                String   @id @default(cuid())
+  fecha             DateTime @unique @db.Date // fecha calendario de COSTA RICA congelada, nunca un instante (R2)
+  generadoAt        DateTime @default(now()) @map("generado_at") // R24: evidencia de que el cron corrio y CUANDO (deja auditable el desfase del premio, Q2)
+  minAsignadasPodio Int      @map("min_asignadas_podio") // R1: umbral APLICADO en esta corrida (CHECK >= 1 en la migracion)
+  filas             Int // R1/R11: conteo congelado; 0 = dia sin actividad (CHECK >= 0 en la migracion)
+
+  filasSnapshot RankingSnapshotFila[]
+
+  @@map("ranking_snapshot_dia")
+}
+
+// Feature 196 (design §2.2, R6/R8/R9/R10/R13/R16/R17/R25) — DETALLE: una fila por mensajero
+// CON ACTIVIDAD en la fecha congelada (R5). Patron cabecera+detalle de
+// `ruta_optimizada` / `ruta_optimizada_parada`.
+//
+// `puesto` (1..N) ES el orden congelado: la lectura hace `ORDER BY puesto` y JAMAS reordena
+// ni recalcula (R25). `posicion` es 1/2/3 solo si la fila ocupo podio, NULL si no (R6/R9).
+//
+// `mensajeroNombre` es el nombre CONGELADO (R16): un renombrado posterior no reescribe la
+// historia. La FK a `usuario` es ON DELETE RESTRICT (R17), igual que las cuatro de
+// `analytics_daily`: ante la duda, que falle el borrado y no que se corrompa la historia.
+//
+// NO se guarda el porcentaje (R10, regla 3 de `analytics_daily`: nada de tasas persistidas):
+// `pct` es funcion pura de `entregadas`/`asignadas`, y el ORDEN —lo unico que un cambio de
+// comparador podria mover— ya esta congelado en `puesto`.
+//
+// NO hay CHECK `entregadas <= asignadas`, y es DELIBERADO: las dos magnitudes salen de
+// fuentes distintas (`gestion_orden.created_at` vs `orden.asignado_at`), asi que una orden
+// asignada ayer y entregada hoy hace `entregadas > asignadas` legitimamente. Un CHECK ahi
+// tumbaria el cron un dia cualquiera.
+//
+// INDICES QUE VIVEN SOLO EN LA MIGRACION: el UNIQUE PARCIAL
+// `(snapshot_id, posicion) WHERE posicion IS NOT NULL` (R13) — Prisma no sabe expresar un
+// indice parcial (no hay `WHERE` en `@@unique`), asi que va a mano en el `.sql` y queda
+// HUERFANO del datamodel, mismo patron y misma consecuencia aceptada que
+// `wallet_movimiento_origen_categoria_uq` y los indices de `purga_pdf_indices`: un
+// `prisma migrate dev --create-only` futuro puede proponer un `DROP INDEX` fantasma, que
+// NUNCA se resuelve borrando el indice sino descartando la migracion propuesta.
+// Declararlo aqui como `@@unique([snapshotId, posicion])` NO es equivalente: seria un
+// indice TOTAL, y aunque Postgres trate los NULL como distintos, el indice cargaria con
+// todas las filas fuera de podio sin necesidad.
+model RankingSnapshotFila {
+  id                String   @id @default(cuid())
+  snapshotId        String   @map("snapshot_id")
+  puesto            Int // 1..N: el orden congelado es DATO, no derivacion (R25)
+  posicion          Int? // 1/2/3 si ocupo podio; NULL si no (R6/R9)
+  mensajeroId       String   @map("mensajero_id")
+  mensajeroNombre   String   @map("mensajero_nombre") // R16: nombre congelado, no el actual
+  entregadas        Int // numerador del dia
+  asignadas         Int // denominador del dia
+  premioMonto       Decimal? @map("premio_monto") @db.Decimal(12, 2) // R7: mismo tipo exacto que premio_ranking.monto; NULL fuera de podio (R8, CHECK en la migracion)
+  premioDescripcion String?  @map("premio_descripcion") // R7
+
+  snapshot  RankingSnapshotDia @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  mensajero Usuario            @relation("RankingSnapshotFilaMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([snapshotId, mensajeroId]) // R13: un mensajero no puede aparecer dos veces en el mismo dia
+  @@unique([snapshotId, puesto]) // R13: dos filas no pueden ocupar el mismo puesto
+  @@map("ranking_snapshot_fila")
 }

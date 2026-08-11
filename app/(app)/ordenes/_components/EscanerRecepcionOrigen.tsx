@@ -103,11 +103,46 @@ export function EscanerRecepcionOrigen({
     [procesar],
   );
 
+  /**
+   * Camino MANUAL (pedido humano del 2026-08-10): el admin de tienda teclea el número de
+   * guía en vez de escanearlo. `EscanerGuiaCard` ya ofrecía las dos vías —es la tarjeta
+   * compartida de todas las superficies de escaneo— pero esta pantalla no las activaba, así
+   * que degradaba a solo cámara: sin cámara disponible, o con una etiqueta ilegible, no
+   * había forma de recibir.
+   *
+   * Lo tecleado ES el número, sin pasar por `extractNumGuiaFromScan`: ese helper existe para
+   * desenvolver la URL que codifica el QR (`<origin>/paquete/<numGuia>`), y aplicarlo aquí
+   * rechazaría el número escrito a secas. Mismo criterio que la recolección en tienda.
+   *
+   * Devolver `false` conserva lo tecleado en el campo para corregirlo, en vez de vaciarlo y
+   * obligar a reescribir la guía entera.
+   */
+  const onManual = useCallback(
+    async (valor: string): Promise<boolean> => {
+      if (!/^\d+$/.test(valor)) {
+        toast.error("El número de guía solo admite dígitos.");
+        return false;
+      }
+      if (procesando) return false;
+      const numGuia = Number(valor);
+      setProcesando(true);
+      try {
+        const result = await recibirEnOrigenPorQr({ numGuia });
+        notificar(result, numGuia);
+        return result.status === "ok";
+      } finally {
+        setProcesando(false);
+      }
+    },
+    [notificar, procesando, toast],
+  );
+
   return (
     <EscanerGuiaCard
       ariaLabel="Recepción en tienda por escaneo"
       titulo="Recibir en tienda"
-      descripcion="Escanea el código de la guía devuelta"
+      descripcion="Escanea el código de la guía devuelta o ingresa su número"
+      manual={{ onSubmit: onManual, submitLabel: "Recibir en tienda" }}
       onDecoded={onDecoded}
       procesando={procesando}
       mensajeErrorCamara="No se pudo abrir la cámara."

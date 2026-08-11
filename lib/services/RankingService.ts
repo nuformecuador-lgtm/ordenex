@@ -15,6 +15,12 @@ import {
 } from "@/lib/utils/fecha-cr";
 import { loadRankingConfig, type RankingConfig } from "@/lib/config/ranking";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import {
+  asignarPodio,
+  formatearPct,
+  ordenarAgregados,
+  type AgregadoOrdenable,
+} from "@/lib/ranking/orden-ranking";
 
 // Rol lector adicional (solo-lectura) ademas del acceso total: el mensajero. El acceso total
 // (maestro/admin) VE (editable) y EDITA los premios (R16/R17/R19).
@@ -22,15 +28,6 @@ const ROL_LECTOR_SOLO_LECTURA = "mensajero";
 
 // R11: monto valido = no negativo, numerico, con a lo sumo 2 decimales. `null` = sin premio.
 const MONTO_RE = /^\d+(\.\d{1,2})?$/;
-
-interface AgregadoMensajero {
-  mensajeroId: string;
-  nombre: string;
-  entregadasHoy: number;
-  asignadasHoy: number;
-  pctNum: number | null; // porcentaje 0-100 redondeado a 1 decimal; null si asignadasHoy=0 (R3)
-  elegiblePodio: boolean; // R7: asignadasHoy >= umbral
-}
 
 /**
  * Feature 76 (design §5) — logica de negocio del ranking DIARIO. No conoce HTTP ni Prisma
@@ -84,61 +81,33 @@ export class RankingService implements IRankingService {
     const asignadasPorId = new Map(asignadas.map((c) => [c.mensajeroId, c.total]));
 
     // Un agregado por mensajero ACTIVO (incluye los de 0 para R3/R6).
-    const agregados: AgregadoMensajero[] = mensajeros.map((m) => {
-      const entregadasHoy = entregadasPorId.get(m.id) ?? 0;
-      const asignadasHoy = asignadasPorId.get(m.id) ?? 0;
-      // R2/R12/f: pct = entregadas/asignadas * 100, redondeado a 1 decimal EN SERVIDOR.
-      const pctNum =
-        asignadasHoy > 0 ? Math.round((entregadasHoy / asignadasHoy) * 1000) / 10 : null; // R3
-      return {
-        mensajeroId: m.id,
-        nombre: m.nombre,
-        entregadasHoy,
-        asignadasHoy,
-        pctNum,
-        elegiblePodio: asignadasHoy >= this.config.MIN_ASIGNADAS_PODIO, // R7
-      };
-    });
+    const agregados: AgregadoOrdenable[] = mensajeros.map((m) => ({
+      mensajeroId: m.id,
+      nombre: m.nombre,
+      entregadas: entregadasPorId.get(m.id) ?? 0,
+      asignadas: asignadasPorId.get(m.id) ?? 0,
+    }));
 
-    // R4/R5: definidos primero, orden pct desc -> entregadas desc -> nombre asc (determinista
-    // y estable); los de pct indefinido (asignadas=0) al final, por nombre asc.
-    agregados.sort((a, b) => {
-      const aDef = a.pctNum !== null;
-      const bDef = b.pctNum !== null;
-      if (aDef !== bDef) return aDef ? -1 : 1; // definidos antes que indefinidos
-      if (aDef && bDef) {
-        if (b.pctNum! !== a.pctNum!) return b.pctNum! - a.pctNum!; // R4: pct desc
-        if (b.entregadasHoy !== a.entregadasHoy) return b.entregadasHoy - a.entregadasHoy; // R5
-      }
-      return a.nombre.localeCompare(b.nombre); // R5: desempate final por nombre asc
-    });
+    // Feature 196 (design §3) — el orden (R4/R5), el podio (R7/R14/R15) y el redondeo del
+    // porcentaje (R2/R3/R12) viven en `lib/ranking/orden-ranking.ts`, modulo PURO que el
+    // snapshot diario reusa TAL CUAL. Reimplementar cualquiera de los tres aqui haria que el
+    // ranking en vivo y el congelado pudieran divergir en silencio.
+    const filas = asignarPodio(ordenarAgregados(agregados), this.config.MIN_ASIGNADAS_PODIO);
 
-    // R14/R15: la posicion i del podio la ocupa el i-esimo mensajero ELEGIBLE (pct definido y
-    // asignadas >= umbral); si no hay ocupante, la posicion no se inventa (no aparece en el
-    // ranking con posicion). Solo 3 posiciones de premio.
     const premioPorPosicion = new Map<number, string | null>(
       premios.map((p) => [p.posicion, p.monto]),
     );
-    let siguientePosicion = 1;
 
-    const ranking: RankingRowDTO[] = agregados.map((a) => {
-      let posicion: number | null = null;
-      let premio: string | null = null;
-      if (a.pctNum !== null && a.elegiblePodio && siguientePosicion <= 3) {
-        posicion = siguientePosicion;
-        premio = premioPorPosicion.get(posicion) ?? null; // R14: monto del podio; R9: null = sin premio
-        siguientePosicion += 1;
-      }
-      return {
-        posicion,
-        mensajeroId: a.mensajeroId,
-        nombre: a.nombre,
-        entregadasHoy: a.entregadasHoy, // R6
-        asignadasHoy: a.asignadasHoy, // R6
-        pct: a.pctNum === null ? null : a.pctNum.toFixed(1), // R3/R12: null | "96.0" STRING
-        premio, // R14: STRING|null
-      };
-    });
+    const ranking: RankingRowDTO[] = filas.map(({ agregado, posicion }) => ({
+      posicion,
+      mensajeroId: agregado.mensajeroId,
+      nombre: agregado.nombre,
+      entregadasHoy: agregado.entregadas, // R6
+      asignadasHoy: agregado.asignadas, // R6
+      pct: formatearPct(agregado.entregadas, agregado.asignadas), // R3/R12: null | "96.0" STRING
+      // R14: monto del ocupante del podio; R9: null = sin premio. Fuera del podio, nunca.
+      premio: posicion === null ? null : (premioPorPosicion.get(posicion) ?? null),
+    }));
 
     return {
       status: "ok",

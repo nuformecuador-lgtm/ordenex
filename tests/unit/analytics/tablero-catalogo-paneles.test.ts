@@ -191,6 +191,30 @@ describe("Feature 131 (R21) — todo panel corresponde a una metrica operativa r
     }
   });
 
+  it("la unidad declarada por cada metrica del catalogo de paneles es la que declara el catalogo de metricas", () => {
+    // Feature 182 (R9/D4) — el catalogo de paneles DECLARA la unidad porque no puede
+    // importar el de servidor (R25), y esa unidad decide si el panel pide el modo agregado
+    // (R8). Una unidad mal declarada no rompe nada visible: pediria el agregado de un
+    // `conteo` —que el borde rechaza con `validation_error`— o dejaria a una tasa sin cifra.
+    // El vinculo se ancla AQUI, donde `getMetrica()` si se puede leer.
+    //
+    // Recorre TODAS las metricas del catalogo de paneles, no solo las dos de tasa/tiempo:
+    // una metrica nueva mal declarada pasaria sin ruido.
+    let comprobadas = 0;
+    for (const panel of PANELES_OPERATIVOS) {
+      for (const metrica of panel.metricas) {
+        expect(
+          metrica.unidad,
+          `${metrica.metricaId} declara \`${metrica.unidad}\` en el catalogo de paneles`,
+        ).toBe(getMetrica(metrica.metricaId)?.unidad);
+        comprobadas += 1;
+      }
+    }
+    // Y no puede quedar verde por vacio.
+    expect(comprobadas).toBe(PANELES_OPERATIVOS.flatMap((p) => p.metricas).length);
+    expect(comprobadas).toBeGreaterThan(5);
+  });
+
   it("las metricas de un mismo panel comparten unidad: dos unidades en un eje no se leen", () => {
     for (const panel of PANELES_OPERATIVOS) {
       const unidades = new Set(panel.metricas.map((m) => getMetrica(m.metricaId)?.unidad));

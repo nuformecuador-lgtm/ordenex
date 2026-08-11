@@ -172,7 +172,12 @@ function columnasHistorico(
       value: "Estado",
       render: (i) => <EstadoCierreBadge estado={i.estado} />,
     },
-    { id: "numRemision", value: "Nº Remisión", render: (i) => i.numRemision },
+    {
+      id: "numRemision",
+      value: "Nº Remisión",
+      render: (i) => i.numRemision,
+      minWidth: "120px",
+    },
     { id: "destinatario", value: "Destinatario", render: (i) => i.destinatario },
     { id: "causa", value: "Causa", render: (i) => CAUSA_INCIDENTE_LABEL[i.causa] },
     // R55: el monto se renderiza TAL CUAL (STRING money-safe), sin `parseFloat` ni redondeo.

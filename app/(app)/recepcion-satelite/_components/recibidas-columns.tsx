@@ -35,10 +35,20 @@ export function recibidasColumns(
     {
       id: "numGuia",
       value: "Nº Guía",
-      // La guía se asigna en "Generar guía"; sin guía → "Pendiente".
-      render: (row) => (row.numGuia === null ? "Pendiente" : row.numGuia),
+      // La guía se asigna en "Generar guía"; sin guía → "Pendiente". El valor va
+      // resaltado, igual que en `ordenes-columns`: mismo dato, misma jerarquía visual.
+      render: (row) => (
+        <span className="font-semibold">
+          {row.numGuia === null ? "Pendiente" : row.numGuia}
+        </span>
+      ),
     },
-    { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
+    {
+      id: "numRemision",
+      value: "Nº Remisión",
+      render: "numRemision",
+      minWidth: "120px",
+    },
     {
       id: "estatus",
       value: "Estado",
@@ -50,11 +60,12 @@ export function recibidasColumns(
     // `conBadgePrioridad` siga decorando `numGuia` como primera columna de datos.
     columnaIntentos<RecepcionSateliteDTO>(),
     { id: "destinatario", value: "Destinatario", render: "destinatario" },
-    { id: "producto", value: "Producto", render: "producto" },
+    { id: "producto", value: "Producto", render: "producto", minWidth: "300px" },
     {
       id: "direccion",
       value: "Dirección",
       render: (row) => row.direccion ?? SIN_DATO,
+      minWidth: "200px",
     },
     { id: "tienda", value: "Tienda", render: "tiendaNombre" },
     {

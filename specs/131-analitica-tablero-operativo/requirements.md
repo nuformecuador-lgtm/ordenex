@@ -163,6 +163,25 @@ La 128 (`analitica: cache + invalidacion por tag`) es **backend** y está `pendi
   la ficha nueva de §6 viene a resolver, y hasta entonces el hueco se declara en pantalla en vez de
   rellenarse (`design.md §6.3`, punto de vuelta abierto).
 
+  > **NOTA ADITIVA — 2026-08-05, ficha 182.** El «hoy» de este requisito **caducó**. La ficha de
+  > §7 aterrizó como la **176** (`consultarAgregadoOperativo`: cubos con numerador y denominador
+  > ANTES de dividir, granos `periodo` y `semana`), y la **182** la cableó al tablero. Desde
+  > entonces, y en el código de hoy:
+  >
+  > - un panel de `porcentaje`/`segundos` **sí** muestra su cifra total en **cualquier** rango,
+  >   tomada del `valor` del cubo `periodo` que calculó el servidor (182 R4-R7);
+  > - por encima del techo **sí** pinta serie, con los **cubos de grano `semana`** del servidor
+  >   (182 R1/R2), y anuncia el grano usado;
+  > - el modo de aviso `rango_excedido` y sus dos textos **se retiraron** (182 R16), porque
+  >   quedaron inalcanzables.
+  >
+  > **Lo que R27 protegía sigue vigente y sigue vigilado**: la UI no promedia cocientes y no
+  > recompone ninguna fórmula de negocio. Solo cambió cómo se cumple —había una fuente que suma
+  > antes de dividir y ahora se usa—, y quién lo vigila:
+  > `tests/unit/analytics/tablero-agregado-cableado.test.ts` (la aritmética, con días de volumen
+  > desigual) y `tests/unit/analytics/tablero-agregado-frontera.guardia.test.ts` (el censo).
+  > Esta nota es **aditiva**: no reescribe lo que la 131 decidió con lo que sabía entonces.
+
 - **R18** — CUANDO el sistema agregue temporalmente un cubo que contenga al menos un punto
   `parcial: true`, el cubo resultante DEBE conservar la marca de parcialidad y el `corteAt` más
   reciente.
@@ -223,7 +242,7 @@ La 128 (`analitica: cache + invalidacion por tag`) es **backend** y está `pendi
 | R24 | `tests/components/TableroOperativo.test.tsx` › «un panel que lanza no tumba los demás y su mensaje no filtra ids» | Dejar que la excepción suba (sin frontera de error por panel) |
 | R25 | `tests/unit/analytics/tablero-operativo-frontera.guardia.test.ts` › «el tablero operativo no toca nada financiero y `lib/actions/analitica.ts` no existe» | Importar `@/lib/types/analitica-financiera` en un archivo del tablero |
 | R26 | `tests/components/AnaliticaPage.test.tsx` (existente, ampliado) › «la página no acepta parámetros y sigue negando a los tres roles restantes» | Añadir un rol a `ROLES_ACCESO_ANALITICA`, o dar un parámetro a `AnaliticaPage` |
-| R27 | `tests/components/TableroOperativo.test.tsx` › «un panel de tasa por encima del techo no muestra ninguna cifra total, solo el aviso de reducir el rango» | Pintar un `KpiCard` con la media de los puntos diarios (o con la razón recompuesta a mano) en ese panel |
+| R27 | `tests/components/TableroOperativo.test.tsx` › «un panel de tasa por encima del techo no muestra ninguna cifra total, solo el aviso de reducir el rango» **— REEMPLAZADO el 2026-08-05 por la ficha 182** (ver la nota aditiva bajo R27): el caso se reescribió como «un panel de tasa con 90 días pinta la serie por cubos semanales del servidor y ya no pide reducir el rango», y la propiedad «jamás una media de medias» la ancla ahora `tests/unit/analytics/tablero-agregado-cableado.test.ts` | Pintar un `KpiCard` con la media de los puntos diarios (o con la razón recompuesta a mano) en ese panel |
 
 **E2E:** `CHECKPOINTS.md` exige Playwright solo para flujos críticos (auth, pagos, recaudo, ingesta,
 webhooks). Este tablero es **solo lectura** y no es ninguno de ellos; la 130 ya declaró que el E2E

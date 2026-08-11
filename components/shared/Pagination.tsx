@@ -23,8 +23,19 @@ export interface PaginationLabels {
   pageSize?: string;
   /** aria-label de un botón numérico. Default: `Ir a la página ${n}`. */
   page?: (page: number) => string;
-  /** Render del indicador de posición. Default: `Página ${page} de ${totalPages}`. */
-  status?: (page: number, totalPages: number, total: number) => string;
+  /**
+   * Render del indicador de posición. Default: el RANGO visible, `1-25 de 1000`
+   * (`Sin resultados` con el conjunto vacío).
+   *
+   * Recibe `pageSize` además de la página porque el rango no se puede reconstruir sin él:
+   * quien sobreescriba esta etiqueta necesita el mismo dato que usa el default.
+   */
+  status?: (
+    page: number,
+    totalPages: number,
+    total: number,
+    pageSize: number,
+  ) => string;
 }
 
 export interface PaginationProps {
@@ -176,9 +187,26 @@ export function Pagination({
   const isFirst = safePage <= 1; // R7
   const isLast = safePage >= totalPages; // R8
 
+  // Rango de la página actual, 1-based e INCLUSIVO en los dos extremos: `1-25 de 1000`.
+  // `hasta` se recorta contra `total` para que la última página no prometa filas que no
+  // existen: con 45 elementos en páginas de 25, la 2ª es `26-45`, no `26-50`.
+  //
+  // El rango se DERIVA de page/pageSize/total; el control no recibe los items y por tanto no
+  // puede contrastarlo con las filas pintadas. Si un backend devuelve menos items que el
+  // pageSize en una página que no es la última, el rango dirá el tamaño de página y las
+  // filas serán menos. Eso es una incoherencia del backend, no del control.
+  const desde = (safePage - 1) * pageSize + 1;
+  const hasta = Math.min(safePage * pageSize, total);
+
+  // Con el conjunto vacío no hay rango que enseñar: `0-0 de 0` es ruido, y `1-0 de 0` es
+  // directamente falso. R13 ya deshabilita la navegación aquí; el texto lo acompaña.
+  const defaultStatus = emptyDataset
+    ? "Sin resultados"
+    : `${desde}-${hasta} de ${total}`;
+
   const statusText = labels?.status
-    ? labels.status(safePage, totalPages, total)
-    : `Página ${safePage} de ${totalPages}`;
+    ? labels.status(safePage, totalPages, total, pageSize)
+    : defaultStatus;
 
   const pageLabel = labels?.page ?? ((n: number) => `Ir a la página ${n}`);
 
