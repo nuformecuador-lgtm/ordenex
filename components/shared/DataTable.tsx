@@ -63,6 +63,24 @@ export interface Column<T> {
    * (comportamiento deseado: antes las columnas se estrujaban).
    */
   minWidth?: string;
+  /**
+   * Alineación horizontal de la columna (cabecera + celdas). Opcional y OPT-IN: sin
+   * ella la columna no recibe NINGUNA clase de alineación y hereda el `text-left` de
+   * la tabla, es decir, se comporta EXACTAMENTE como antes. Esta tabla la usan hoy 30
+   * listados: la prop no puede mover el render por defecto de ninguno.
+   *
+   * Existe por las columnas de DINERO. Un importe alineado a la izquierda deja las
+   * unidades a distinta altura en cada fila (`₡80.00` / `₡12500.00`), así que comparar
+   * dos filas obliga a leer cifra a cifra; a la derecha las unidades quedan en la misma
+   * columna y la magnitud se lee de un vistazo. Es la convención de cualquier libro
+   * contable, y por eso el valor útil es `"right"` (`"left"` está para poder declararlo
+   * explícito cuando conviva con columnas alineadas).
+   *
+   * Se aplica también a la celda del SKELETON —y ahí el placeholder se empuja con
+   * `ml-auto`, porque es un bloque con ancho propio y `text-align` no lo movería— para
+   * que la columna no salte de lado cuando terminan de llegar los datos.
+   */
+  align?: "left" | "right";
 }
 
 /**
@@ -223,6 +241,17 @@ function resolveCell<T>(column: Column<T>, row: T): ReactNode {
   return toRenderableNode(value);
 }
 
+/**
+ * Clase de alineación de una columna, o `undefined` si no la declara. Devolver
+ * `undefined` (y no `"text-left"`) es lo que hace la prop retrocompatible: la celda
+ * de una columna sin `align` queda con el mismo `className` de siempre.
+ */
+function alignClass<T>(column: Column<T>): string | undefined {
+  if (column.align === "right") return "text-right";
+  if (column.align === "left") return "text-left";
+  return undefined;
+}
+
 /** Deriva una key de React estable para una fila (R10). */
 function resolveRowKey<T>(
   rowKey: DataTableProps<T>["rowKey"],
@@ -362,11 +391,18 @@ export function DataTable<T>({
               </td>
             ) : null}
             {columns.map((column, columnIndex) => (
-              <td key={column.id} className="px-3 py-2 align-middle">
+              <td
+                key={column.id}
+                className={cn("px-3 py-2 align-middle", alignClass(column))}
+              >
                 <Skeleton
                   className={cn(
                     "h-4",
                     SKELETON_WIDTHS[columnIndex % SKELETON_WIDTHS.length],
+                    // El placeholder es un bloque con ancho propio: `text-align` no
+                    // lo mueve. Sin esto la columna alineada a la derecha saltaría de
+                    // lado al pasar de la carga a los datos.
+                    column.align === "right" && "ml-auto",
                   )}
                 />
               </td>
@@ -419,7 +455,10 @@ export function DataTable<T>({
               </td>
             ) : null}
             {columns.map((column) => (
-              <td key={column.id} className="px-3 py-2 align-middle">
+              <td
+                key={column.id}
+                className={cn("px-3 py-2 align-middle", alignClass(column))}
+              >
                 {resolveCell(column, row)}
               </td>
             ))}
@@ -487,7 +526,10 @@ export function DataTable<T>({
                   <th
                     key={column.id}
                     scope="col"
-                    className="px-3 py-2 text-xs font-bold text-muted-foreground"
+                    className={cn(
+                      "px-3 py-2 text-xs font-bold text-muted-foreground",
+                      alignClass(column),
+                    )}
                     style={
                       column.minWidth ? { minWidth: column.minWidth } : undefined
                     }

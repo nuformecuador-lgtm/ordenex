@@ -3,10 +3,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
+import { Plus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
@@ -207,19 +216,23 @@ export function GastosFijosPlantillasPanel({
 
   return (
     <Card>
+      {/* Feature 200 (tanda 2): la cabecera deja de armarse a mano con un `flex
+          justify-between`. El título y la descripción son los del `CardHeader` y la acción va
+          en su slot `CardAction`, que es donde la primitiva la coloca (y donde la alinea con
+          la de cualquier otra tarjeta de la app). El TEXTO del botón no cambia: el icono es
+          decoración (`aria-hidden`) y no entra en su nombre accesible. */}
       <CardHeader className="border-b">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <CardTitle>Gastos fijos (plantillas)</CardTitle>
-            <CardDescription>
-              El sistema cobra estos gastos automáticamente cada mes. No los registres a mano:
-              administrá acá las plantillas y desactivá las que ya no correspondan.
-            </CardDescription>
-          </div>
+        <CardTitle>Gastos fijos (plantillas)</CardTitle>
+        <CardDescription>
+          El sistema cobra estos gastos automáticamente cada mes. No los registres a mano:
+          administrá acá las plantillas y desactivá las que ya no correspondan.
+        </CardDescription>
+        <CardAction>
           <Button type="button" onClick={abrirCrear}>
+            <Plus aria-hidden="true" />
             Nueva plantilla
           </Button>
-        </div>
+        </CardAction>
       </CardHeader>
 
       <CardContent>
@@ -256,7 +269,20 @@ export function GastosFijosPlantillasPanel({
             }}
           />
         </div>
+      </CardContent>
 
+      {/* Feature 200 (tanda 2): el control de paginación baja al PIE de la tarjeta, que la
+          primitiva ya pinta como banda (`border-t bg-muted/50`) a lo ancho y apoyada en el
+          borde inferior. La tabla NO se toca: sigue siendo la MISMA de este archivo —la que el
+          censo de `tests/unit/descarga/censo-tablas.ts` vigila POR RUTA—, con su descarga del
+          conjunto completo y su paginación server-side.
+
+          `sticky={false}`: el `Card` tiene `overflow-hidden`, así que ya era el contenedor
+          contra el que se pegaba la barra —flotar sobre el viewport nunca ocurrió aquí—, y en
+          un pie con `display:flex` su envoltorio pegajoso y su centinela de 1px se colocarían
+          como dos columnas. Es el mismo motivo por el que la usan así los paneles de
+          `DetalleMensajeroPanel` y `DesglosePagosMensajero`. */}
+      <CardFooter>
         <Pagination
           page={page}
           pageSize={pageSize}
@@ -271,8 +297,10 @@ export function GastosFijosPlantillasPanel({
             setPage(1);
           }}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
+          sticky={false}
+          className="w-full justify-between gap-3 py-0"
         />
-      </CardContent>
+      </CardFooter>
 
       <GastoFijoPlantillaDialog
         open={dialogOpen}
