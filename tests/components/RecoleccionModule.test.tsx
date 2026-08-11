@@ -696,9 +696,14 @@ describe("RecoleccionModule — «Recolectadas hoy» (R24/R28/R30/R31)", () => {
     // completo se afirma en la vista de DETALLE, que las lista todas. El conmutador de esta
     // sección es el único montado aquí: no hay nada por recolectar.
     await user.click(screen.getByRole("button", { name: "Detalle" }));
-    await waitFor(() =>
-      expect(within(lista()).getAllByRole("listitem")).toHaveLength(3),
-    );
+    // El ancla NO puede ser solo el conteo: a media carga la lista tambien puede tener 3
+    // hijos (esqueleto + `role="status"`) y la espera se daria por cumplida antes de tiempo.
+    // Se ancla ADEMAS al contenido de la ultima fila, que solo existe ya montada la vista.
+    await waitFor(() => {
+      const enCurso = within(lista()).getAllByRole("listitem");
+      expect(enCurso).toHaveLength(3);
+      expect(enCurso[2]).toHaveTextContent("REM-VIEJA");
+    });
 
     const filas = within(lista()).getAllByRole("listitem");
     expect(filas).toHaveLength(3);
