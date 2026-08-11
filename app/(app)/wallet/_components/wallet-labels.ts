@@ -14,12 +14,18 @@ import {
 // Feature 42 (T12) — etiquetas i18n-ready y helper de moneda de la wallet, separados
 // de la lógica (docs/conventions: textos de UI fuera del componente). Money-safe (R21/
 // R25): `money` recibe un monto que YA viene como STRING desde el Server Component y solo
-// antepone el símbolo; NUNCA parseFloat/Number sobre montos (no se pierde precisión).
+// le da formato; NUNCA parseFloat/Number sobre montos (no se pierde precisión).
 
-/** Antepone el símbolo de colón a un monto STRING (tal cual, sin parseo). `null` → "—". */
-export function money(value: string | null): string {
-  return value === null ? "—" : `₡${value}`;
-}
+/**
+ * Feature 201 (tanda B): `money` se PROMOVIÓ a `lib/config/moneda.ts` sin cambiarle la
+ * firma ni el marcador de ausencia (`"—"`), porque era la misma función copiada byte a byte
+ * en siete archivos de etiquetas y por eso los importes se pintaban sin separador de miles
+ * (`₡13331832.72`) sin que nadie pudiera arreglarlo en un solo sitio. Se re-exporta desde
+ * aquí para que sus consumidores sigan importándola del mismo sitio: es una mudanza —el
+ * mismo precedente que `montoValido` al final de este archivo—, y lo único que cambia es el
+ * ASPECTO del importe, que es justamente el objetivo de la feature.
+ */
+export { money } from "@/lib/config/moneda";
 
 /** Etiqueta legible del tipo de movimiento (ingreso/egreso). */
 export const TIPO_LABEL: Record<WalletMovimientoTipo, string> = {
@@ -76,6 +82,12 @@ export const CAJA_RESUMEN_LABEL = {
   egresosPropios: "Gastos de Ordenex",
   deTerceros: "Contra-entrega cobrado y aún no entregado a las tiendas",
   deTercerosEnlace: "Ver la deuda de cada tienda",
+  // Feature 200 (tanda 1) — el TERCER tile de la cabecera. No es dinero: es cuántos registros
+  // hay en el conjunto que se está mirando, y por eso se pinta en color neutro y sin insignia
+  // de signo. La pista no nombra el control que recorta el conjunto: dice lo que la persona
+  // ve, que es el periodo elegido.
+  movimientos: "Movimientos",
+  movimientosPista: "Registros del periodo que estás viendo",
 } as const;
 
 /** Pantalla donde SI vive la deuda con cada tienda, derivada del ledger por tienda (R35). */

@@ -148,7 +148,7 @@ const NORTE_ANTES: ListarMovimientosDeTiendaResult = {
 };
 
 /**
- * El MISMO desglose DESPUÉS de pagar ₡4000: aparece el movimiento del pago con su concepto
+ * El MISMO desglose DESPUÉS de pagar ₡4.000: aparece el movimiento del pago con su concepto
  * propio (R51), «pagado» sube a 4000 y el saldo baja a 5000 (R53). Las cifras las produce el
  * servidor; aquí solo se comprueba que la pantalla las refleja sin recargar la página.
  */
@@ -503,19 +503,19 @@ describe("R51/R53 — lo que se ve en el desglose después de pagar", () => {
   it("«pagado a la tienda» sube y el saldo baja en el MISMO monto, sin recargar", async () => {
     renderTabla([NORTE]);
     const region = await desplegar("Tienda Norte");
-    await waitFor(() => expect(cifraDe(importesDeCabecera(region)[2])).toBe("₡0.00"));
-    expect(cifraDe(importesDeCabecera(region)[3])).toBe("₡9000.00");
+    await waitFor(() => expect(cifraDe(importesDeCabecera(region)[2])).toBe("₡0,00"));
+    expect(cifraDe(importesDeCabecera(region)[3])).toBe("₡9.000,00");
 
     // Tras el pago el servidor devuelve el desglose nuevo; la pantalla lo pinta tal cual.
     listarDesgloseMock.mockResolvedValue({ status: "ok", data: NORTE_DESPUES });
     const dialogo = await abrirDialogo(region);
     confirmarPago(dialogo);
 
-    await waitFor(() => expect(cifraDe(importesDeCabecera(region)[2])).toBe("₡4000.00"));
-    expect(cifraDe(importesDeCabecera(region)[3])).toBe("₡5000.00");
+    await waitFor(() => expect(cifraDe(importesDeCabecera(region)[2])).toBe("₡4.000,00"));
+    expect(cifraDe(importesDeCabecera(region)[3])).toBe("₡5.000,00");
     // 9000 − 4000 = 5000: las dos cifras se mueven en el mismo importe, y las dos las
     // calculó el servidor (aquí no se resta nada).
-    expect(cifraDe(importesDeCabecera(region)[0])).toBe("₡10000.00");
+    expect(cifraDe(importesDeCabecera(region)[0])).toBe("₡10.000,00");
   });
 
   it("R51: el movimiento del pago aparece con su concepto propio, distinguible", async () => {
@@ -529,7 +529,7 @@ describe("R51/R53 — lo que se ve en el desglose después de pagar", () => {
     await within(tablaMovs).findByText("Pago a la tienda");
     const fila = within(tablaMovs).getAllByText("Pago a la tienda")[0].closest("tr")!;
     expect(within(fila).getByText("Débito")).toBeInTheDocument();
-    expect(within(fila).getByText("₡4000.00")).toBeInTheDocument();
+    expect(within(fila).getByText("₡4.000,00")).toBeInTheDocument();
     // No se confunde con un cargo de Ordenex: son conceptos distintos del mismo libro.
     expect(within(fila).queryByText("COD recaudado")).not.toBeInTheDocument();
   });
@@ -567,7 +567,11 @@ describe("R50 — los comprobantes viven dentro del desglose de su tienda", () =
     const tablaPagos = await within(region).findByRole("table", {
       name: "Pagos registrados de Tienda Norte",
     });
-    await within(tablaPagos).findByText("₡4000.00");
+    // Sin separadores: la tabla de comprobantes la pinta `PagosRegistradosTabla`, que vive en
+    // `components/shared/liquidacion/` y todavía usa su propia copia de `money` (feature 201,
+    // tanda C). La cabecera y los movimientos de ESTA pantalla, dos aserciones más arriba, ya
+    // van con el formato nuevo: el desfase es de la tanda, no de la pantalla.
+    await within(tablaPagos).findByText("₡4.000,00");
     expect(within(tablaPagos).getByText("2026-07-30")).toBeInTheDocument();
     expect(within(tablaPagos).getByText("Ana Maestra")).toBeInTheDocument();
 
@@ -596,7 +600,8 @@ describe("R50 — los comprobantes viven dentro del desglose de su tienda", () =
     const tablaPagos = within(region).getByRole("table", {
       name: "Pagos registrados de Tienda Norte",
     });
-    await within(tablaPagos).findByText("₡4000.00");
+    // Sin separadores: la pinta `PagosRegistradosTabla`, de la tanda C (ver arriba).
+    await within(tablaPagos).findByText("₡4.000,00");
   });
 
   it("si la lista falla, el desglose sigue en pie y el fallo se cuenta ahí", async () => {
@@ -610,7 +615,7 @@ describe("R50 — los comprobantes viven dentro del desglose de su tienda", () =
       ).toBeInTheDocument(),
     );
     // La cabecera del desglose sigue mostrando sus cifras.
-    expect(cifraDe(importesDeCabecera(region)[3])).toBe("₡9000.00");
+    expect(cifraDe(importesDeCabecera(region)[3])).toBe("₡9.000,00");
   });
 });
 
@@ -727,8 +732,8 @@ describe("T F.5 — la anulación pide el pago y el motivo, y refresca SOLO su t
 
     await within(tablaPagos).findByText("Anulado");
     const fila = within(tablaPagos).getByText("2026-07-30").closest("tr") as HTMLElement;
-    // Todos sus datos siguen ahí…
-    expect(within(fila).getByText("₡4000.00")).toBeInTheDocument();
+    // Todos sus datos siguen ahí… (sin separadores: `PagosRegistradosTabla` es de la tanda C)
+    expect(within(fila).getByText("₡4.000,00")).toBeInTheDocument();
     expect(within(fila).getByText("Ana Maestra")).toBeInTheDocument();
     // …y encima, quién, cuándo y por qué.
     expect(
@@ -761,7 +766,7 @@ describe("T F.5 — la anulación pide el pago y el motivo, y refresca SOLO su t
     expect(
       (
         await screen.findAllByText(
-          "Pago anulado. El saldo de la tienda quedó en ₡-15000.00.",
+          "Pago anulado. El saldo de la tienda quedó en -₡15.000,00.",
         )
       ).length,
     ).toBeGreaterThan(0);
@@ -806,8 +811,8 @@ describe("R34 — la 171 se conserva tal cual", () => {
         .getAllByRole("columnheader")
         .map((th) => th.textContent),
     ).toEqual(["Desglose", "Tienda", "Saldo a favor", "Estado"]);
-    expect(within(tablaSaldos).getByText("₡9000.00")).toBeInTheDocument();
-    expect(within(tablaSaldos).getByText("₡-452.00")).toBeInTheDocument();
+    expect(within(tablaSaldos).getByText("₡9.000,00")).toBeInTheDocument();
+    expect(within(tablaSaldos).getByText("-₡452,00")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Descargar Saldos de tiendas" }),
     ).toBeInTheDocument();

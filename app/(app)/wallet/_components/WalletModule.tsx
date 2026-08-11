@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
@@ -165,65 +172,121 @@ export function WalletModule({
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       {/* R59: el nombre accesible de la sección también cambia — la palabra que mentía no se
           queda escondida en el árbol de accesibilidad, que para quien usa lector de pantalla
-          ES la pantalla. */}
-      <section
-        aria-label="Resumen de la caja y acciones"
-        className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
-      >
-        <div className="flex flex-col gap-4 lg:max-w-2xl lg:flex-1">
-          <CajaResumenCard resumen={resumen} />
-          <DesgloseEgresosCard desglose={desglose} />
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-          <RegistrarMovimientoManualDialog
-            onRegistrado={() => void recargar(filtros, page)}
-          />
+          ES la pantalla.
+
+          Feature 200 (tanda 1): las acciones suben a una barra propia arriba a la derecha y la
+          cabecera pasa a ocupar el ancho entero. Antes competían por el espacio en la misma
+          fila, y la tarjeta —que es lo que se viene a leer— quedaba encajonada a media
+          pantalla. El conteo del conjunto que se está mirando (`total`, el del SERVIDOR, no el
+          largo de la página pintada) se le pasa a la tarjeta como tercer tile. */}
+      <section aria-label="Resumen de la caja y acciones" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <RegistrarEgresoAdministrativoDialog
             onRegistrado={() => void recargar(filtros, page)}
           />
+          <RegistrarMovimientoManualDialog
+            onRegistrado={() => void recargar(filtros, page)}
+          />
         </div>
+
+        <CajaResumenCard resumen={resumen} movimientos={total} />
       </section>
 
-      <section aria-label="Gastos fijos">
-        {/* Feature 170 — FASE 2 (T I.2): el panel pagina su propio listado y relee su página
-            tras cada cambio del CRUD (R23); la wallet ya no guarda la lista en su estado. */}
-        <GastosFijosPlantillasPanel initialData={plantillas} />
-      </section>
+      {/* Feature 200 (tanda 2): el desglose sale de la sección de la caja —no es una de sus
+          cifras, es el detalle de lo que sale— y comparte fila con los gastos fijos, que hasta
+          ahora ocupaban un ancho entero para una tabla de cuatro columnas.
 
-      <section aria-label="Libro de movimientos" className="flex flex-col gap-4">
-        <WalletFiltros
-          onAplicar={aplicarFiltros}
-          onLimpiar={limpiarFiltros}
-          disabled={loading}
-        />
+          El reparto es 1/3 para el desglose y 2/3 para los gastos fijos, al revés que el
+          mockup: el desglose son cuatro filas cortas y un total, mientras que los gastos fijos
+          son una tabla PAGINADA con descarga, que a un tercio de ancho no cabe sin scroll
+          horizontal permanente.
 
-        {/* Feature 170 (T C.4, R9/R10): la descarga trae el libro ENTERO con los filtros
-            VIGENTES, no la página pintada. El callback se construye EN EL RENDER (design
-            §5), así que cierra sobre los `filtros` de ESTE render: aplicar un filtro y
-            descargar sin más no puede entregar el conjunto anterior. */}
-        <WalletLedger
-          movimientos={movimientos}
-          isLoading={loading}
-          onReversado={() => void recargar(filtros, page)}
-          obtenerFilasDescarga={() =>
-            filasDesdeResultado(
-              listarMovimientosCompletoAction(buildInputCompleto(filtros)),
-              filaDescargaMovimientoCaja,
-            )
-          }
-        />
+          `items-start`: sin él las dos columnas se estirarían a la altura de la más alta y el
+          pie del desglose —que es una banda apoyada en el borde— quedaría flotando a media
+          tarjeta con el hueco debajo. */}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <DesgloseEgresosCard desglose={desglose} />
+        </div>
 
-        <Pagination
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onPageChange={cambiarPagina}
-          disabled={loading}
-          ariaLabel="Paginación del libro"
-        />
+        <section aria-label="Gastos fijos" className="lg:col-span-2">
+          {/* Feature 170 — FASE 2 (T I.2): el panel pagina su propio listado y relee su página
+              tras cada cambio del CRUD (R23); la wallet ya no guarda la lista en su estado. */}
+          <GastosFijosPlantillasPanel initialData={plantillas} />
+        </section>
+      </div>
+
+      {/* Feature 200 (tanda 3): el libro deja de ser TRES hermanos sueltos —filtros, tabla y
+          paginación flotando uno debajo del otro— y pasa a UNA tarjeta que los contiene, como
+          ya lo son el desglose y los gastos fijos de la fila de arriba. Cards HERMANAS, nunca
+          anidadas: esta es la tercera de la página, no vive dentro de ninguna.
+
+          La `<section>` sigue por fuera y conserva su `aria-label`: quien navega por regiones
+          llega igual que antes, y el `CardTitle` le pone además el título VISIBLE que la
+          sección nunca tuvo (hasta ahora el nombre del bloque solo existía en el árbol de
+          accesibilidad). */}
+      <section aria-label="Libro de movimientos">
+        <Card>
+          <CardHeader>
+            <CardTitle>Libro de movimientos</CardTitle>
+          </CardHeader>
+
+          {/* La barra de filtros es una BANDA a lo ancho de la tarjeta: hija directa del
+              `Card` (sin `CardContent`, que solo aporta el padding lateral) para que el fondo
+              y el `border-b` lleguen a los dos bordes. El padding horizontal se repone con
+              `px-(--card-spacing)`, que es el mismo que usan la cabecera y el cuerpo, así que
+              los controles quedan alineados con el título. */}
+          <div className="border-b bg-muted/30 px-(--card-spacing) py-3">
+            <WalletFiltros
+              onAplicar={aplicarFiltros}
+              onLimpiar={limpiarFiltros}
+              disabled={loading}
+            />
+          </div>
+
+          <CardContent>
+            {/* Feature 170 (T C.4, R9/R10): la descarga trae el libro ENTERO con los filtros
+                VIGENTES, no la página pintada. El callback se construye EN EL RENDER (design
+                §5), así que cierra sobre los `filtros` de ESTE render: aplicar un filtro y
+                descargar sin más no puede entregar el conjunto anterior. */}
+            <WalletLedger
+              movimientos={movimientos}
+              isLoading={loading}
+              onReversado={() => void recargar(filtros, page)}
+              obtenerFilasDescarga={() =>
+                filasDesdeResultado(
+                  listarMovimientosCompletoAction(buildInputCompleto(filtros)),
+                  filaDescargaMovimientoCaja,
+                )
+              }
+            />
+          </CardContent>
+
+          {/* La paginación baja al PIE, que la primitiva ya pinta como banda (`border-t
+              bg-muted/50`) apoyada en el borde inferior — el mismo cierre que la tanda 2 le
+              dio al panel de gastos fijos.
+
+              `sticky={false}`: en modo pegajoso el control devuelve un fragmento de DOS
+              elementos (envoltorio + centinela de 1px) y el `display:flex` del pie los
+              colocaría como dos columnas, con el centinela `w-full` empujando la barra.
+              Además el `Card` tiene `overflow-hidden`, así que ya era el contenedor contra el
+              que se pegaba: flotar sobre el viewport nunca ocurrió aquí. */}
+          <CardFooter>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={cambiarPagina}
+              disabled={loading}
+              ariaLabel="Paginación del libro"
+              sticky={false}
+              className="w-full justify-between gap-3 py-0"
+            />
+          </CardFooter>
+        </Card>
       </section>
     </div>
   );

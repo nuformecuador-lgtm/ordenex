@@ -129,7 +129,7 @@ describe("R30/R23 — el monto se propone y se puede bajar", () => {
     render(<Arnes disponible="9000.00" />);
     expect(montoInput().value).toBe("9000.00");
     // Y el disponible se enseña con su símbolo, sin recalcularlo.
-    expect(screen.getByText("₡9000.00")).toBeInTheDocument();
+    expect(screen.getByText("₡9.000,00")).toBeInTheDocument();
   });
 
   it("un monto MENOR se acepta y viaja tal cual: es el pago parcial (R23/R30)", async () => {
@@ -154,7 +154,7 @@ describe("R30/R23 — el monto se propone y se puede bajar", () => {
     fireEvent.click(confirmar());
     await waitFor(() => expect(registrarMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "El monto supera lo que se puede pagar. Disponible: ₡9000.00.",
+      "El monto supera lo que se puede pagar. Disponible: ₡9.000,00.",
     );
   });
 });

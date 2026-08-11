@@ -43,6 +43,11 @@ import type { ReactElement } from "react";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows } from "@/lib/utils/xlsx-template";
+// Feature 201: el esperado se DERIVA del mismo dato del doble con el formateador de la app.
+// Estas aserciones no miden el formato —miden de qué conjunto sale cada agregado—, así que el
+// valor tiene que seguir saliendo de `AGREGADOS`; escribirlo a mano las dejaría envejeciendo
+// solas la próxima vez que el importe cambie de aspecto.
+import { money } from "@/lib/config/moneda";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
   CierreBodegaResumen,
@@ -276,13 +281,19 @@ const AGREGADOS = {
   neto: "120.00",
   centralDebe: "500.00",
 };
-/** Lo que se vería si un agregado se calculara sobre la página visible. NUNCA en pantalla. */
+/**
+ * Lo que se vería si un agregado se calculara sobre la página visible. NUNCA en pantalla.
+ *
+ * Se compone con `money` y no con el símbolo a mano: son valores cuya AUSENCIA se afirma, y
+ * una ausencia escrita en un formato que la app ya no emite se cumple sola. Derivándolos, la
+ * guardia sigue mirando exactamente lo que se pintaría.
+ */
 const AGREGADOS_DE_LA_PAGINA = [
-  "₡250.00",
-  "₡100.00",
-  "₡350.00",
-  "₡750.00",
-  "₡25.00",
+  money("250.00"),
+  money("100.00"),
+  money("350.00"),
+  money("750.00"),
+  money("25.00"),
 ];
 
 const MOTIVO_BLOQUEO =
@@ -756,19 +767,19 @@ describe("Riesgo MEDIO · paginación de las 4 colas con contador de cabecera (T
     const dineroVisible = () => ({
       general: within(
         screen.getByRole("region", { name: "Totales a consolidar" }),
-      ).getByText(`₡${AGREGADOS.totales.general}`),
+      ).getByText(money(AGREGADOS.totales.general)),
       neto: within(
         screen.getByRole("region", { name: "Totales a consolidar" }),
-      ).getByText(`₡${AGREGADOS.neto}`),
+      ).getByText(money(AGREGADOS.neto)),
       pago: within(
         screen.getByRole("region", { name: "Pago a mensajeros a consolidar" }),
-      ).getByText(`₡${AGREGADOS.pagoMensajero}`),
+      ).getByText(money(AGREGADOS.pagoMensajero)),
       ingreso: within(
         screen.getByRole("region", { name: "Ingreso de bodega por rechazos a consolidar" }),
-      ).getByText(`₡${AGREGADOS.ingresoBodega}`),
+      ).getByText(money(AGREGADOS.ingresoBodega)),
       centralDebe: within(
         screen.getByRole("region", { name: "Central debe" }),
-      ).getByText(`₡${AGREGADOS.centralDebe}`),
+      ).getByText(money(AGREGADOS.centralDebe)),
     });
 
     expect(dineroVisible().centralDebe).toBeInTheDocument();

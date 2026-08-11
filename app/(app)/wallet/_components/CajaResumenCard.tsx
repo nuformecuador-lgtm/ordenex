@@ -1,6 +1,14 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
+import {
+  ArrowLeftRight,
+  Landmark,
+  TrendingUp,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,14 +42,34 @@ import {
 // Money-safe (R64): los seis importes llegan ya derivados y serializados por el SERVIDOR y se
 // pintan TAL CUAL con `money`. Aqui no se suma, no se resta y no se convierte a numero; los dos
 // signos tambien los da el servidor. El rotulo condicional `[P7]` se decide con la bandera
-// `periodoFiltrado` del DTO, no deduciendo en el cliente si hay filtros puestos.
+// `periodoFiltrado` del DTO, no deduciendo nada en el cliente.
+//
+// ── Feature 200 (tanda 1) — REDISENO DE PRESENTACION, no de datos ──
+//
+// La misma informacion pasa de UNA tarjeta monolitica a una GRILLA DE TILES hermanos (DESIGN.md:
+// «Cards: hermanas, nunca anidadas»), con un tercer tile OPCIONAL de conteo. Lo que NO cambia,
+// porque es lo que la feature 173 vino a impedir:
+//
+//  - las dos cifras siguen viendose A LA VEZ, sin nada que abrir: esta tarjeta no tiene ni un
+//    solo `<button>`, y los iconos son decoracion (`aria-hidden`), no controles;
+//  - cada cifra sigue siendo HERMANA de su propio desglose dentro de su tile, para que ningun
+//    importe pueda leerse bajo el rotulo del de al lado;
+//  - la tercera linea sigue viviendo AQUI —ahora como banda destacada a lo ancho—, con su
+//    advertencia y su enlace: sacarla a otro componente la separaria de las cifras que explica.
+//
+// El tercer tile (`movimientos`) es un CONTEO, no dinero: color neutro, sin insignia de signo y
+// sin desglose. Llega como prop opcional; sin ella la grilla queda de dos columnas.
 
+// Feature 200 (tanda 2) — las insignias de signo pasan a las variantes SEMANTICAS de la
+// primitiva. «Positivo» venia con `default`, que es el naranja de marca, y DESIGN.md lo
+// reserva para accion primaria y seleccion: un estado pintado con el color de la accion
+// compite con los botones de la pantalla y deja de leerse como estado. Los TEXTOS no cambian.
 const SIGNO_BADGE: Record<
   WalletBalanceSigno,
-  { variant: "default" | "secondary" | "destructive" | "outline"; label: string }
+  { variant: "success" | "danger" | "secondary"; label: string }
 > = {
-  positivo: { variant: "default", label: "Positivo" },
-  negativo: { variant: "destructive", label: "Negativo" },
+  positivo: { variant: "success", label: "Positivo" },
+  negativo: { variant: "danger", label: "Negativo" },
   cero: { variant: "secondary", label: "En cero" },
 };
 
@@ -52,31 +80,101 @@ const SIGNO_COLOR: Record<WalletBalanceSigno, string> = {
   cero: "text-muted-foreground",
 };
 
-/** Una de las dos cifras grandes: rotulo, insignia de signo, importe y su aclaracion. */
-function Cifra({
+/** Tipografia comun de las cifras grandes: mismo peso para las tres, ninguna manda. */
+const CIFRA_GRANDE = "text-3xl font-semibold tracking-tight tabular-nums";
+
+/**
+ * El icono de un tile. Es DECORACION: nombra lo que el rotulo ya dice, asi que se oculta al
+ * lector de pantalla en vez de repetirselo.
+ */
+function IconoTile({ icono: Icono }: { icono: LucideIcon }) {
+  // La caja va EXPLICITA (`inline-flex items-center justify-center`). Un `<span>` es inline por
+  // defecto y hoy solo se comporta como caja porque su padre resulta ser un contenedor flex que
+  // lo blockifica: funcionaba por accidente. Sin la caja propia, en cualquier otro contenedor el
+  // `p-2` no genera area, el `bg-muted` se pinta como una tira estirada a la altura de la linea
+  // y el icono se desborda. Con ella mide 32 x 32 alli donde se ponga.
+  return (
+    <span className="inline-flex items-center justify-center rounded-md bg-muted p-2 text-muted-foreground">
+      <Icono className="size-4" aria-hidden="true" />
+    </span>
+  );
+}
+
+/** Cabecera de un tile: rotulo (con su insignia, si la lleva) a la izquierda; icono a la derecha. */
+function CabeceraTile({
+  rotulo,
+  insignia,
+  icono,
+}: {
+  rotulo: string;
+  insignia?: ReactNode;
+  icono: LucideIcon;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-muted-foreground">{rotulo}</span>
+        {insignia}
+      </div>
+      <IconoTile icono={icono} />
+    </div>
+  );
+}
+
+/**
+ * Tile de una de las dos cifras de DINERO: rotulo, insignia de signo, importe grande, su
+ * aclaracion y —hermano de la `<section>`, no dentro— su desglose.
+ */
+function TileCifra({
   rotulo,
   pista,
   valor,
   signo,
+  icono,
+  desglose,
 }: {
   rotulo: string;
   pista: string;
   /** STRING del servidor, pintado tal cual (puede venir "-123.45"). */
   valor: string;
   signo: WalletBalanceSigno;
+  icono: LucideIcon;
+  desglose: ReactNode;
 }) {
   const badge = SIGNO_BADGE[signo];
   return (
-    <section aria-label={rotulo} className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">{rotulo}</span>
-        <Badge variant={badge.variant}>{badge.label}</Badge>
-      </div>
-      <span className={`text-3xl font-semibold tracking-tight ${SIGNO_COLOR[signo]}`}>
-        {money(valor)}
-      </span>
-      <span className="text-xs text-muted-foreground">{pista}</span>
-    </section>
+    <Card>
+      <CardContent className="flex flex-1 flex-col gap-3">
+        <section aria-label={rotulo} className="flex flex-col gap-2">
+          <CabeceraTile
+            rotulo={rotulo}
+            insignia={<Badge variant={badge.variant}>{badge.label}</Badge>}
+            icono={icono}
+          />
+          <span className={`${CIFRA_GRANDE} ${SIGNO_COLOR[signo]}`}>{money(valor)}</span>
+          <span className="text-xs text-muted-foreground">{pista}</span>
+        </section>
+        <div className="mt-auto grid grid-cols-2 gap-4 border-t pt-3">{desglose}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Tile del CONTEO de movimientos. No es dinero: ni color semantico ni insignia de signo, para
+ * que no compita con las dos cifras ni parezca una tercera. El entero se pinta tal cual.
+ */
+function TileConteo({ cantidad }: { cantidad: number }) {
+  return (
+    <Card>
+      <CardContent className="flex flex-1 flex-col gap-2">
+        <CabeceraTile rotulo={CAJA_RESUMEN_LABEL.movimientos} icono={ArrowLeftRight} />
+        <span className={`${CIFRA_GRANDE} text-foreground`}>{cantidad}</span>
+        <span className="text-xs text-muted-foreground">
+          {CAJA_RESUMEN_LABEL.movimientosPista}
+        </span>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -93,8 +191,10 @@ function Importe({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-sm text-muted-foreground">{rotulo}</span>
-      <span className={`text-lg font-medium ${className ?? ""}`}>{money(valor)}</span>
+      <span className="text-xs text-muted-foreground">{rotulo}</span>
+      <span className={`text-lg font-medium tabular-nums ${className ?? ""}`}>
+        {money(valor)}
+      </span>
     </div>
   );
 }
@@ -102,27 +202,37 @@ function Importe({
 export interface CajaResumenCardProps {
   /** Las dos cifras (y la tercera linea) ya derivadas en el servidor, montos STRING. */
   resumen: CajaResumenDTO;
+  /**
+   * Feature 200: cuantos registros tiene el conjunto que se esta mirando. Es el `total` del
+   * servidor, no el largo de la pagina pintada. Opcional: sin el, la grilla queda de dos tiles.
+   */
+  movimientos?: number;
 }
 
-export function CajaResumenCard({ resumen }: CajaResumenCardProps) {
+export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) {
   // `[P7]`: el HECHO lo da el servidor; aqui solo se elige el rotulo que no miente.
   const rotuloEnCaja = resumen.periodoFiltrado
     ? CAJA_RESUMEN_LABEL.enCajaPeriodo
     : CAJA_RESUMEN_LABEL.enCaja;
 
+  // Las clases van completas en cada rama: Tailwind lee el fuente, no evalua expresiones.
+  const grilla =
+    movimientos === undefined
+      ? "grid grid-cols-1 gap-4 md:grid-cols-2"
+      : "grid grid-cols-1 gap-4 md:grid-cols-3";
+
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-6 pt-2">
-        {/* R58: las dos, a la vez y con el mismo peso visual. */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div className="flex flex-col gap-4">
-            <Cifra
-              rotulo={rotuloEnCaja}
-              pista={CAJA_RESUMEN_LABEL.enCajaPista}
-              valor={resumen.enCaja}
-              signo={resumen.signoEnCaja}
-            />
-            <div className="grid grid-cols-2 gap-4 border-t pt-3">
+    <div className="flex flex-col gap-4">
+      {/* R58: las dos, a la vez y con el mismo peso visual. */}
+      <div className={grilla}>
+        <TileCifra
+          rotulo={rotuloEnCaja}
+          pista={CAJA_RESUMEN_LABEL.enCajaPista}
+          valor={resumen.enCaja}
+          signo={resumen.signoEnCaja}
+          icono={Landmark}
+          desglose={
+            <>
               <Importe
                 rotulo={CAJA_RESUMEN_LABEL.entradas}
                 valor={resumen.entradas}
@@ -133,17 +243,18 @@ export function CajaResumenCard({ resumen }: CajaResumenCardProps) {
                 valor={resumen.salidas}
                 className="text-danger-strong"
               />
-            </div>
-          </div>
+            </>
+          }
+        />
 
-          <div className="flex flex-col gap-4">
-            <Cifra
-              rotulo={CAJA_RESUMEN_LABEL.ganancia}
-              pista={CAJA_RESUMEN_LABEL.gananciaPista}
-              valor={resumen.ganancia}
-              signo={resumen.signoGanancia}
-            />
-            <div className="grid grid-cols-2 gap-4 border-t pt-3">
+        <TileCifra
+          rotulo={CAJA_RESUMEN_LABEL.ganancia}
+          pista={CAJA_RESUMEN_LABEL.gananciaPista}
+          valor={resumen.ganancia}
+          signo={resumen.signoGanancia}
+          icono={TrendingUp}
+          desglose={
+            <>
               <Importe
                 rotulo={CAJA_RESUMEN_LABEL.ingresosPropios}
                 valor={resumen.ingresosPropios}
@@ -154,43 +265,56 @@ export function CajaResumenCard({ resumen }: CajaResumenCardProps) {
                 valor={resumen.egresosPropios}
                 className="text-danger-strong"
               />
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
 
-        {/* R60: en que se diferencian, junto a las dos cifras y no en otra pantalla. */}
-        <p role="note" className="border-t pt-4 text-xs text-muted-foreground">
+        {movimientos === undefined ? null : <TileConteo cantidad={movimientos} />}
+      </div>
+
+      {/* R60: en que se diferencian, junto a las dos cifras y no en otra pantalla. */}
+      <div className="flex flex-col gap-2">
+        <p role="note" className="text-xs text-muted-foreground">
           {CAJA_RESUMEN_NOTA_DIFERENCIA}
         </p>
 
-        {/* `[P7]`: solo cuando hay filtros, que es cuando el nombre de siempre mentiria. */}
+        {/* `[P7]`: solo cuando hay un periodo elegido, que es cuando el nombre de siempre
+            mentiria. */}
         {resumen.periodoFiltrado ? (
           <p role="note" className="text-xs text-muted-foreground">
             {CAJA_RESUMEN_AVISO_PERIODO}
           </p>
         ) : null}
+      </div>
 
-        {/* Tercera linea `[P6]` — R34: la advertencia y el enlace no son decorado, son la unica
-            defensa contra leer esta cifra como la deuda con las tiendas. */}
-        <section
-          aria-label={CAJA_RESUMEN_LABEL.deTerceros}
-          className="flex flex-col gap-1 border-t pt-4"
-        >
-          <span className="text-sm text-muted-foreground">
+      {/* Tercera linea `[P6]` — R34: la advertencia y el enlace no son decorado, son la unica
+          defensa contra leer esta cifra como la deuda con las tiendas. Va a lo ancho y con el
+          color de aviso porque es lo ultimo que se lee antes de sacar una conclusion. */}
+      <section
+        aria-label={CAJA_RESUMEN_LABEL.deTerceros}
+        className="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning-soft p-4 sm:flex-row sm:items-start sm:gap-4 dark:bg-warning/15"
+      >
+        <span className="w-fit rounded-md bg-warning/15 p-2 text-warning-strong">
+          <TriangleAlert className="size-4" aria-hidden="true" />
+        </span>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-warning-strong">
             {CAJA_RESUMEN_LABEL.deTerceros}
           </span>
-          <span className="text-lg font-medium">{money(resumen.deTerceros)}</span>
+          <span className="text-2xl font-semibold tracking-tight tabular-nums text-warning-strong">
+            {money(resumen.deTerceros)}
+          </span>
           <p role="note" className="text-xs text-muted-foreground">
             {CAJA_RESUMEN_AVISO_TERCEROS}
           </p>
           <Link
             href={CAJA_TIENDAS_HREF}
-            className="text-xs font-medium underline underline-offset-2 hover:text-foreground"
+            className="w-fit rounded-sm text-xs font-medium text-warning-strong underline underline-offset-2 transition-colors duration-200 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             {CAJA_RESUMEN_LABEL.deTercerosEnlace}
           </Link>
-        </section>
-      </CardContent>
-    </Card>
+        </div>
+      </section>
+    </div>
   );
 }

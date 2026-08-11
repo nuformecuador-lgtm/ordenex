@@ -101,13 +101,16 @@ export const APROBAR_DETALLE =
   "Al aprobar, el monto sale de la caja principal como un egreso de indemnización. La orden se queda en incidente: esta decisión no se deshace.";
 export const APROBAR_CONFIRMAR = "Aprobar e indemnizar";
 export const MONTO_LABEL = "Monto de la indemnización";
-export const MONTO_AYUDA = `Mayor que 0 y hasta ₡${INDEMNIZACION_MONTO_MAX}, con hasta 2 decimales (por ejemplo 12500.00).`;
+export const MONTO_AYUDA = `Mayor que 0 y hasta ${money(INDEMNIZACION_MONTO_MAX)}, con hasta 2 decimales (por ejemplo 12500.00).`;
 /**
  * Mensajes POR CAUSA del monto inválido: dicen QUÉ corregir. Es la misma lección de m5 del PR 1
  * —un «monto inválido» único deja al admin adivinando si sobra un dígito o si el problema es la
  * coma—, con el máximo interpolado del contrato y no tecleado.
  */
-export const MONTO_EXCEDE = `El monto no puede superar ₡${INDEMNIZACION_MONTO_MAX} (10 dígitos y 2 decimales). Revisá si sobra un dígito.`;
+// Feature 201: el tope se pinta con `money` por la misma razón que en `CierresAdminModule`
+// —«₡9.999.999.999,99» se lee y `₡9999999999.99` se cuenta con el dedo—, y el EJEMPLO de
+// entrada se queda crudo porque el campo no admite separador de miles.
+export const MONTO_EXCEDE = `El monto no puede superar ${money(INDEMNIZACION_MONTO_MAX)} (10 dígitos y 2 decimales). Revisá si sobra un dígito.`;
 export const MONTO_FORMATO =
   "Escribí un monto mayor que 0, con punto decimal y sin separador de miles (por ejemplo 12500.00).";
 

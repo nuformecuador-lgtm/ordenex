@@ -129,16 +129,16 @@ describe("CuentasPorPagarTable — columnas y datos (R18/R21)", () => {
     const filaAna = within(tabla())
       .getByText("Ana Mensajera")
       .closest("tr") as HTMLElement;
-    expect(within(filaAna).getByText("₡5000.00")).toBeInTheDocument();
-    expect(within(filaAna).getByText("₡3000.00")).toBeInTheDocument();
-    expect(within(filaAna).getByText("₡2000.00")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡5.000,00")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡3.000,00")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡2.000,00")).toBeInTheDocument();
     // Positivo (Ordenex debe) → badge "Pendiente".
     expect(within(filaAna).getByText("Pendiente")).toBeInTheDocument();
 
     const filaBeto = within(tabla())
       .getByText("Beto Repartidor")
       .closest("tr") as HTMLElement;
-    expect(within(filaBeto).getByText("₡0.00")).toBeInTheDocument();
+    expect(within(filaBeto).getByText("₡0,00")).toBeInTheDocument();
     // Cero (al día) → badge "Al día".
     expect(within(filaBeto).getByText("Al día")).toBeInTheDocument();
   });
