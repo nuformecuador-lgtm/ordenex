@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { filasLocales } from "@/components/shared/descarga-resultado";
+import { money } from "@/lib/config/moneda";
 import { cn } from "@/lib/utils";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type {
@@ -217,10 +218,16 @@ export const SIN_TARIFA_CONGELADA_NOTA =
 export const INDEMNIZACION_PENDIENTE_NOTA =
   "Se captura al aprobar el cierre; todavía no se indemnizó.";
 
-/** Aviso discreto (F1.4-5): pago de una entrega resuelto a ₡0.00 (tarifa faltante). */
+/** Aviso discreto (F1.4-5): pago de una entrega resuelto en cero (tarifa faltante). */
 export const PAGO_SIN_TARIFA_LABEL = "Sin tarifa";
-export const PAGO_SIN_TARIFA_NOTA =
-  "El pago al mensajero de esta entrega se resolvió en ₡0.00 (posible tarifa de zona sin configurar).";
+/**
+ * El cero se compone con el MISMO formateador que pinta la celda de al lado (feature 201): la
+ * nota explica un importe que el admin está viendo en la tabla, y escribirlo a mano la dejaría
+ * diciendo `₡0.00` mientras la columna dice `₡0,00`.
+ */
+export const PAGO_SIN_TARIFA_NOTA = `El pago al mensajero de esta entrega se resolvió en ${money(
+  "0.00",
+)} (posible tarifa de zona sin configurar).`;
 
 /**
  * Orden fijo de las secciones del detalle (R11). Feature 158/R18: `incidente` es un grupo
@@ -236,12 +243,15 @@ export const ORDEN_RESULTADOS: CierreResultado[] = [
 ];
 
 /**
- * Prefija el símbolo de colón a un monto que YA viene como string (money-safe,
- * R13): NUNCA se parsea a número para no perder precisión. `null` → "—".
+ * Feature 201 (tanda C) — `money` ya NO se declara aquí: era una de las ocho copias byte a
+ * byte del mismo helper, y por eso el detalle de un cierre enseñaba `₡13331832.72`. Vive en
+ * `lib/config/moneda.ts` y se RE-EXPORTA desde aquí, exactamente como este archivo ya
+ * re-exporta las etiquetas de `cierre-labels.ts`: los dos módulos de cierre (mensajero y
+ * bodega) que lo importaban de aquí siguen sin cambiar un import.
+ *
+ * Sigue siendo money-safe (R13: NUNCA se parsea a número) y `null` sigue dando "—".
  */
-export function money(value: string | null): string {
-  return value === null ? "—" : `₡${value}`;
-}
+export { money };
 
 /**
  * ¿El monto (STRING money-safe, escala 2 con signo, p. ej. "-12.50") es negativo?
@@ -660,28 +670,28 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
           <DesgloseFila
             label="Flete"
             value={money(ing.flete)}
-            hint={`tarifa ${variante}: ₡${fleteAplicado}`}
+            hint={`tarifa ${variante}: ${money(fleteAplicado)}`}
           />
         )}
         {ing.ivaFlete === null ? null : (
           <DesgloseFila
             label="IVA flete"
             value={money(ing.ivaFlete)}
-            hint={`${pct(t.ivaFlete)} de ₡${fleteAplicado}`}
+            hint={`${pct(t.ivaFlete)} de ${money(fleteAplicado)}`}
           />
         )}
         {ing.fleteDevolucion === null ? null : (
           <DesgloseFila
             label="Flete devolución"
             value={money(ing.fleteDevolucion)}
-            hint={`tarifa ${variante}: ₡${fleteDevAplicado}`}
+            hint={`tarifa ${variante}: ${money(fleteDevAplicado)}`}
           />
         )}
         {ing.ivaFleteDevolucion === null ? null : (
           <DesgloseFila
             label="IVA flete devolución"
             value={money(ing.ivaFleteDevolucion)}
-            hint={`${pct(t.ivaFlete)} de ₡${fleteDevAplicado}`}
+            hint={`${pct(t.ivaFlete)} de ${money(fleteDevAplicado)}`}
           />
         )}
         {ing.comisionCod === null ? null : (

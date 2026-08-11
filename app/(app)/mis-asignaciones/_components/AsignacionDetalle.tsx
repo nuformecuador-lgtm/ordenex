@@ -6,6 +6,7 @@ import {
   IntentosValor,
   valorIntentos,
 } from "@/components/shared/intentos-entrega";
+import { formatMonto as formatMontoConfigurado, SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 36 (R11) / rediseño 63: detalle de una orden asignada en TRES secciones
@@ -19,15 +20,16 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 // gestión y el desplegable de las cards POS, así que el cambio es el mismo en los tres.
 
 /**
- * Formatea el monto a cobrar en colones (₡) con 2 decimales y separador de
- * miles, o "—" si es nulo. Formateo determinista (no depende de datos ICU de
- * locale, que varían por entorno).
+ * Monto a cobrar con la moneda configurada, con 2 decimales y separador de miles,
+ * o la raya larga si es nulo.
+ *
+ * Feature 201: el formato sale de `lib/config/moneda.ts`. Aquí vivía una copia del
+ * formateador "estilo EEUU" (`₡13,331,832.72`), la misma que en `pos-format.ts`,
+ * `RecepcionDetalle` y `SateliteOrderCard`. El marcador de ausencia se pasa
+ * explícito (`SIN_MONTO_RAYA`) porque el default del compartido es el guion corto.
  */
 function formatMonto(monto: number | null): string {
-  if (monto === null) return "—";
-  const [entero, decimales] = monto.toFixed(2).split(".");
-  const conMiles = entero.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `₡${conMiles}.${decimales}`;
+  return formatMontoConfigurado(monto, SIN_MONTO_RAYA);
 }
 
 /** Peso en kilogramos (p. ej. "1.5 kg"), o "—" si es nulo. */

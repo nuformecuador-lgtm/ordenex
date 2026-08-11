@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { formatearValor, totalizar } from "@/components/private/analytics/formato";
-import { SIN_MONTO, monedaConfig } from "@/lib/config/moneda";
+import { formatMonto, SIN_MONTO, monedaConfig } from "@/lib/config/moneda";
 
 /**
  * Recarga `formato.ts` (y con el `lib/config/moneda.ts`, que resuelve su
@@ -16,10 +16,13 @@ import { SIN_MONTO, monedaConfig } from "@/lib/config/moneda";
  * configuracion los dos dejan de coincidir y la asercion vuelve a medir el
  * requisito (R13, R20) en vez de la moneda de hoy.
  */
-async function conMoneda(locale: string, currency: string) {
+async function conMoneda(locale: string, currency: string, simbolo?: string) {
   vi.resetModules();
   vi.stubEnv("MONEDA_LOCALE", locale);
   vi.stubEnv("MONEDA_CURRENCY", currency);
+  // Feature 201: el simbolo dejo de salir del codigo ISO via `Intl` y es una
+  // pieza propia de `lib/config/moneda.ts` (`MONEDA_SIMBOLO`).
+  if (simbolo !== undefined) vi.stubEnv("MONEDA_SIMBOLO", simbolo);
   return import("@/components/private/analytics/formato");
 }
 
@@ -42,10 +45,11 @@ describe("formato por unidad (R20, R21)", () => {
         style: "percent",
         maximumFractionDigits: 1,
       }).format(0.842),
-      moneda: new Intl.NumberFormat(monedaConfig.locale, {
-        style: "currency",
-        currency: monedaConfig.currency,
-      }).format(3500),
+      // Feature 201: la moneda ya NO la formatea `Intl` (agrupaba con espacio
+      // fino); el aspecto lo define `formatMonto`, y el literal del formato se
+      // mide en `tests/unit/config/moneda-formato.test.ts`. Lo que se afirma
+      // aqui es que el paquete de analitica delega en el, sin formato propio.
+      moneda: formatMonto(3500),
       segundos: new Intl.NumberFormat(monedaConfig.locale, {
         style: "unit",
         unit: "second",
@@ -107,12 +111,10 @@ describe("formato por unidad (R20, R21)", () => {
 
 describe("la moneda y el idioma salen de configuracion, no del codigo (R13, R20)", () => {
   it("con otra moneda configurada el valor NO lleva el simbolo del colon", async () => {
-    const { formatearValor: formatear } = await conMoneda("es-CR", "USD");
+    const { formatearValor: formatear } = await conMoneda("es-CR", "USD", "$");
 
     const salida = formatear(3500, "moneda");
-    expect(salida).toBe(
-      new Intl.NumberFormat("es-CR", { style: "currency", currency: "USD" }).format(3500),
-    );
+    expect(salida).toBe("$3.500,00");
     // Lo que de verdad se afirma: el simbolo NO esta escrito en el paquete.
     expect(salida).not.toContain("₡");
   });

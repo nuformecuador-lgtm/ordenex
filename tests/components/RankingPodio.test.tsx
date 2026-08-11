@@ -87,7 +87,7 @@ describe("RankingPodio — presentación del ranking (R13/R6/R12)", () => {
   it("R14: el premio del podio se muestra con su símbolo, sin recalcular el monto", () => {
     render(<RankingPodio ranking={RANKING} />);
     const primero = within(podio()).getAllByRole("listitem")[1];
-    expect(within(primero).getByText("₡5000")).toBeInTheDocument();
+    expect(within(primero).getByText("₡5.000")).toBeInTheDocument();
   });
 
   it("R15: la posición sin ocupante elegible NO inventa mensajero", () => {

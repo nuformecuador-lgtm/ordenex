@@ -32,6 +32,10 @@ import type { ReactElement } from "react";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows } from "@/lib/utils/xlsx-template";
+// Feature 201: el texto esperado de la fila se DERIVA del mismo importe que arma el doble
+// (`totales.general`), con el formateador de la app. Lo que mide es QUÉ fila salió en cada
+// página, no cómo se escribe un importe.
+import { money } from "@/lib/config/moneda";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
 import type {
@@ -519,7 +523,7 @@ const LISTADOS: Listado[] = [
     paginacion: "Paginación de los cierres solicitados",
     tabla: "Cierres solicitados",
     descarga: "Cierres solicitados",
-    textoFila: (i) => `₡${1000 + i}.00`,
+    textoFila: (i) => money(`${1000 + i}.00`),
     montar: () => {
       const todos = conjunto(cierrePasado);
       servirPaginas(paginado.cierresPasados, todos);

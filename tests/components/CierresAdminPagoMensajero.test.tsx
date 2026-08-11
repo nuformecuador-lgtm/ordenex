@@ -285,7 +285,7 @@ describe("T E.1/R16 — tras aprobar con pendiente > 0 se OFRECE registrar el pa
     const dialogo = await screen.findByRole("dialog", { name: DIALOGO_PAGO });
     // R23/R30: el monto llega prefijado con el pendiente que derivó el servidor, TAL CUAL.
     expect(within(dialogo).getByLabelText(/^Monto/)).toHaveValue("50000.00");
-    expect(within(dialogo).getByText("₡50000.00")).toBeInTheDocument();
+    expect(within(dialogo).getByText("₡50.000,00")).toBeInTheDocument();
     // Y el cierre ya está aprobado ANTES de que este diálogo exista.
     expect(successMock).toHaveBeenCalledWith("Cierre aprobado correctamente.");
   });
@@ -461,7 +461,7 @@ describe("T E.1/R17 — si el PAGO FALLA, el cierre sigue aprobado y el mensaje 
     expect(successMock).toHaveBeenCalledWith("Cierre aprobado correctamente.");
     ningunaOtraDecisionDelCierre();
     // Y el disponible que devolvió el servidor se pinta tal cual, sin recalcularlo.
-    expect(within(dialogo).getByRole("alert")).toHaveTextContent("₡40000.00");
+    expect(within(dialogo).getByRole("alert")).toHaveTextContent("₡40.000,00");
   });
 
   it("un `forbidden` del servidor deja igual el cierre: aprobado y con la deuda abierta", async () => {
@@ -530,7 +530,7 @@ describe("T E.2/R19 — el detalle de un cierre APROBADO ofrece registrar el pag
 
     const seccion = await screen.findByRole("region", { name: SECCION });
     expect(within(seccion).getByText(PAGO_MENSAJERO_TEXTO.pendiente + ":")).toBeInTheDocument();
-    expect(within(seccion).getByText("₡50000.00")).toBeInTheDocument();
+    expect(within(seccion).getByText("₡50.000,00")).toBeInTheDocument();
     expect(
       within(seccion).getByRole("button", { name: PAGO_MENSAJERO_TEXTO.registrar }),
     ).toBeInTheDocument();
@@ -666,7 +666,7 @@ describe("T E.2/R27 — con el cierre liquidado del todo NO hay botón de regist
     await abrirDetalleDelHistorico(user, LIQUIDADO);
 
     const seccion = await screen.findByRole("region", { name: SECCION });
-    expect(await within(seccion).findByText("₡50000.00")).toBeInTheDocument();
+    expect(await within(seccion).findByText("₡50.000,00")).toBeInTheDocument();
   });
 });
 
@@ -688,7 +688,7 @@ describe("T E.2/R49 — la lista de comprobantes del cierre", () => {
       name: `Pagos registrados de ${MENSAJERO}`,
     });
     const fila = within(tabla).getByText("2026-07-31").closest("tr") as HTMLElement;
-    expect(within(fila).getByText("₡50000.00")).toBeInTheDocument();
+    expect(within(fila).getByText("₡50.000,00")).toBeInTheDocument();
     expect(within(fila).getByText("SINPE")).toBeInTheDocument();
     expect(within(fila).getByText("SINPE-99887766")).toBeInTheDocument();
     expect(within(fila).getByText("Liquidación del cierre del 30")).toBeInTheDocument();
@@ -733,7 +733,7 @@ describe("T E.3/R26 — columna «pendiente de liquidar» en el listado", () => 
       within(region).getByRole("columnheader", { name: PAGO_MENSAJERO_TEXTO.pendiente }),
     ).toBeInTheDocument();
     // El importe se PINTA, no se calcula: es el STRING del servidor, carácter por carácter.
-    expect(within(region).getByText("₡1234.50")).toBeInTheDocument();
+    expect(within(region).getByText("₡1.234,50")).toBeInTheDocument();
   });
 
   it("los TRES casos se distinguen entre sí (no es una etiqueta fija)", async () => {
@@ -773,7 +773,7 @@ describe("T E.3/R26 — columna «pendiente de liquidar» en el listado", () => 
 
     // filas[0] es la cabecera; el orden de las demás es el que devolvió el servidor.
     // Con deuda: el importe, hasta el último céntimo.
-    expect(celda(filas[1])).toBe("₡0.10");
+    expect(celda(filas[1])).toBe("₡0,10");
     // Liquidado del todo (R27): deja de señalarse como pendiente, pero NO pasa por «no se
     // sabe» ni repite el importe: «no debe nada» y «todavía no aplica» son cosas distintas.
     expect(celda(filas[2])).toBe(PAGO_MENSAJERO_TEXTO.sinPendiente);

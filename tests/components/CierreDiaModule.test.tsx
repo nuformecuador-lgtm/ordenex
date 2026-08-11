@@ -242,7 +242,7 @@ describe("CierreDiaModule", () => {
     renderModule({ grupos });
 
     const region = screen.getByRole("region", { name: "Entregadas" });
-    expect(within(region).getByText("₡1250.50")).toBeInTheDocument();
+    expect(within(region).getByText("₡1.250,50")).toBeInTheDocument();
     expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
 
@@ -285,10 +285,10 @@ describe("CierreDiaModule", () => {
     });
 
     const region = screen.getByRole("region", { name: "Totales del día" });
-    expect(within(region).getByText("₡100.00")).toBeInTheDocument();
-    expect(within(region).getByText("₡50.25")).toBeInTheDocument();
-    expect(within(region).getByText("₡10.10")).toBeInTheDocument();
-    expect(within(region).getByText("₡160.35")).toBeInTheDocument();
+    expect(within(region).getByText("₡100,00")).toBeInTheDocument();
+    expect(within(region).getByText("₡50,25")).toBeInTheDocument();
+    expect(within(region).getByText("₡10,10")).toBeInTheDocument();
+    expect(within(region).getByText("₡160,35")).toBeInTheDocument();
   });
 
   it("R10: expone el pago al mensajero por orden (string, money-safe) en la sección de entregadas", () => {
@@ -306,14 +306,14 @@ describe("CierreDiaModule", () => {
     renderModule({ grupos });
 
     const region = screen.getByRole("region", { name: "Entregadas" });
-    expect(within(region).getByText("₡1500.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡1.500,00")).toBeInTheDocument();
   });
 
   it("R11: el total a pagar al mensajero se muestra separado de los totales de dinero recibido", () => {
     renderModule({ totalPagoMensajero: "4200.00" });
 
     const region = screen.getByRole("region", { name: "Ganancia" });
-    expect(within(region).getByText("₡4200.00")).toBeInTheDocument();
+    expect(within(region).getByText("₡4.200,00")).toBeInTheDocument();
   });
 
   it("feature 56/R12: el ingreso de bodega por rechazos NO se muestra por orden en la tabla de rechazadas (solo el total; el desglose vive en las vistas de bodega/admin)", () => {
@@ -331,7 +331,7 @@ describe("CierreDiaModule", () => {
 
     const region = screen.getByRole("region", { name: "Rechazadas" });
     expect(within(region).queryByText("Ingreso bodega")).not.toBeInTheDocument();
-    expect(within(region).queryByText("₡3500.00")).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡3.500,00")).not.toBeInTheDocument();
   });
 
   it("feature 56/R10: el ingreso de bodega por rechazos NO se le muestra al mensajero (el total vive en las vistas de bodega/admin)", () => {
@@ -422,11 +422,11 @@ describe("CierreDiaModule", () => {
     const region = screen.getByRole("region", { name: "Cierres solicitados" });
     expect(within(region).getByText("Solicitado")).toBeInTheDocument();
     expect(within(region).getByText("Bodega central")).toBeInTheDocument();
-    // Efectivo y total general comparten valor: hay 2 celdas con ₡300.00.
-    expect(within(region).getAllByText("₡300.00")).toHaveLength(2);
+    // Efectivo y total general comparten valor: hay 2 celdas con ₡300,00.
+    expect(within(region).getAllByText("₡300,00")).toHaveLength(2);
     // El histórico del mensajero nunca tuvo columna de ingreso de bodega (la tabla no
     // renderiza `totalIngresoBodegaRechazos`); ese desglose vive en bodega/admin.
-    expect(within(region).queryByText("₡2100.00")).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡2.100,00")).not.toBeInTheDocument();
     expect(within(region).getByText("2026-07-11")).toBeInTheDocument();
   });
 
@@ -828,9 +828,9 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
       within(region).getByRole("button", { name: "Devolver a gestión la orden REM-A · Ana Pérez" }),
     ).toBeEnabled();
     const panel = screen.getByRole("region", { name: "Totales del día" });
-    expect(within(panel).getAllByText("₡150.00")).toHaveLength(2);
+    expect(within(panel).getAllByText("₡150,00")).toHaveLength(2);
     expect(
-      within(screen.getByRole("region", { name: "Ganancia" })).getByText("₡1500.00"),
+      within(screen.getByRole("region", { name: "Ganancia" })).getByText("₡1.500,00"),
     ).toBeInTheDocument();
   });
 

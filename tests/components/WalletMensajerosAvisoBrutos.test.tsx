@@ -133,9 +133,9 @@ describe("/wallet/mensajeros — el aviso de los importes brutos (N1)", () => {
     // Y está en la misma sección que los tres importes, no colgando en otro sitio.
     const seccion = screen.getByRole("region", { name: "Desglose de Ana Mensajera" });
     expect(within(seccion).getByRole("note")).toBe(aviso);
-    expect(within(seccion).getByText("₡70000.00")).toBeInTheDocument();
-    expect(within(seccion).getByText("₡20000.00")).toBeInTheDocument();
-    expect(within(seccion).getByText("₡50000.00")).toBeInTheDocument();
+    expect(within(seccion).getByText("₡70.000,00")).toBeInTheDocument();
+    expect(within(seccion).getByText("₡20.000,00")).toBeInTheDocument();
+    expect(within(seccion).getByText("₡50.000,00")).toBeInTheDocument();
   });
 
   it("los dos avisos hablan en lenguaje claro: ni jerga contable ni siglas", () => {

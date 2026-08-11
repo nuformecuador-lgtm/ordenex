@@ -60,7 +60,18 @@ vi.mock("@/lib/actions/wallet-mensajero", () => ({
 
 vi.mock("@/lib/actions/wallet-egresos", () => ({
   reversarEgresoAdministrativoAction: vi.fn(),
-  verDesgloseEgresosAction: vi.fn(async () => ({ status: "ok", desglose: {} })),
+  // El `desglose` que devuelve la acción tiene los MISMOS cinco montos que la prop inicial
+  // (feature 201, tanda B): un `{}` deja los importes en `undefined` y el render se cae.
+  verDesgloseEgresosAction: vi.fn(async () => ({
+    status: "ok",
+    desglose: {
+      gastoFijo: "1.00",
+      gastoVariable: "0.00",
+      sueldo: "0.00",
+      indemnizacion: "0.00",
+      total: "1.00",
+    },
+  })),
 }));
 vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   listarPlantillasAction: vi.fn(async () => ({ status: "ok", plantillas: [] })),
@@ -178,7 +189,19 @@ const RESUMEN = {
   deTerceros: "0.00",
   periodoFiltrado: false,
 };
-const DESGLOSE_EGRESOS = {} as never;
+// Feature 201 (tanda B): era `{} as never`, y ese `as never` tapaba que el objeto NO tenía
+// ninguno de los cinco montos que `DesgloseEgresosDTO` declara obligatorios. Con el `money`
+// viejo el hueco se pintaba como «₡undefined» y nadie se enteraba; con el compartido —que
+// llama a `.trim()` sobre el STRING— el `undefined` revienta el render. Se rellena con montos
+// de verdad, igual que `RESUMEN` y `DESGLOSE_TIENDA` aquí al lado: este archivo mide la
+// DESCARGA, y el dato se adapta para que el módulo monte.
+const DESGLOSE_EGRESOS = {
+  gastoFijo: "1.00",
+  gastoVariable: "0.00",
+  sueldo: "0.00",
+  indemnizacion: "0.00",
+  total: "1.00",
+};
 const SALDO_TIENDA = {
   creditos: "500.25",
   debitos: "0.00",

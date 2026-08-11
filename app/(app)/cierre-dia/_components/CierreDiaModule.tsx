@@ -11,6 +11,7 @@ import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
 import { cierreConfig } from "@/lib/config/cierre";
+import { money } from "@/lib/config/moneda";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import {
   deshacerGestion,
@@ -258,13 +259,11 @@ async function leerCierresPasados(
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
 
-/**
- * Prefija el símbolo de colón a un monto que YA viene como string (money-safe,
- * R6/R7): NUNCA se parsea a número para no perder precisión. `null` → "—".
- */
-function money(value: string | null): string {
-  return value === null ? "—" : `₡${value}`;
-}
+// Feature 201 (tanda C) — aquí vivía una copia LOCAL (no exportada) del mismo `money` que las
+// otras siete pantallas de dinero: money-safe, sí, pero también la razón de que el cierre del
+// mensajero enseñara `₡13331832.72`. Ahora sale de `lib/config/moneda.ts`, igual que en el
+// detalle del admin, que es la MISMA hoja vista desde el otro lado (R6/R7 intactos: el monto
+// llega como STRING y NUNCA se parsea a número).
 
 /** Une la jerarquía geográfica en una línea legible (omite los vacíos, R4). */
 function ubicacion(g: CierreDetalleGestion): string {

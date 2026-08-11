@@ -13,6 +13,7 @@ import {
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
+import { money } from "@/lib/config/moneda";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
   CierreDetalleGestion,
@@ -373,8 +374,11 @@ describe("R34 — con incidentes, aprobar pasa SIEMPRE por la captura del monto"
     const error = document.getElementById("indemnizacion-gi1-error");
     expect(error).toHaveAttribute("role", "alert");
     const texto = error?.textContent ?? "";
-    // No basta con «monto inválido»: nombra el tope real y qué revisar.
-    expect(texto).toContain(INDEMNIZACION_MONTO_MAX);
+    // No basta con «monto inválido»: nombra el tope real y qué revisar. El esperado sigue
+    // saliendo del CONTRATO (`INDEMNIZACION_MONTO_MAX`) y no de un número tecleado; lo único
+    // que cambia (feature 201) es que el mensaje lo pinta legible, así que el esperado pasa
+    // por el mismo formateador que la pantalla.
+    expect(texto).toContain(money(INDEMNIZACION_MONTO_MAX));
     expect(texto).toMatch(/sobra un d[íi]gito/i);
   });
 
@@ -388,7 +392,10 @@ describe("R34 — con incidentes, aprobar pasa SIEMPRE por la captura del monto"
 
     const texto = document.getElementById("indemnizacion-gi1-error")?.textContent ?? "";
     expect(texto).toMatch(/punto decimal|separador de miles/i);
-    expect(texto).not.toContain(INDEMNIZACION_MONTO_MAX);
+    // Ojo: este esperado TAMBIÉN pasa por `money`. Con el tope crudo la aserción seguiría en
+    // verde sin comprobar nada —ese texto ya no aparece en ninguna pantalla— y el día que el
+    // mensaje de formato empezara a nombrar el tope, nadie se enteraría.
+    expect(texto).not.toContain(money(INDEMNIZACION_MONTO_MAX));
   });
 
   it("m5: el campo vacío NO pinta error de formato (todavía no se tecleó nada)", async () => {
@@ -410,7 +417,7 @@ describe("R34 — con incidentes, aprobar pasa SIEMPRE por la captura del monto"
     await screen.findByRole("dialog", { name: SUB_MODAL });
 
     const ayuda = document.getElementById("indemnizacion-gi1-ayuda");
-    expect(ayuda?.textContent ?? "").toContain(INDEMNIZACION_MONTO_MAX);
+    expect(ayuda?.textContent ?? "").toContain(money(INDEMNIZACION_MONTO_MAX));
   });
 
   it("no deja confirmar mientras falte algún monto, y lo dice con TEXTO", async () => {
