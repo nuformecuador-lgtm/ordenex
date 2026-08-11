@@ -21,6 +21,7 @@ import { AsignacionDetalle } from "../AsignacionDetalle";
 import { PosAmountRow } from "./PosAmountRow";
 import { PosCardHeader } from "./PosCardHeader";
 import { PosNavBlock } from "./PosNavBlock";
+import { seccionesVisibles, type PosSecciones } from "./pos-secciones";
 
 // POS card · card de una orden EN REPARTO, réplica del `PosCardExpand` de la
 // referencia (terminal de reparto: navegación primero, targets grandes, alto
@@ -65,27 +66,11 @@ export interface PosOrderCardProps {
    */
   acciones?: ReactNode;
   /**
-   * Qué secciones se pintan. Todas van a `true` por defecto, así que NINGUNA superficie
-   * existente cambia y la prop es puramente aditiva.
-   *
-   * Existe para que la MISMA card sirva a superficies con menos datos que el reparto —la
-   * recolección en tienda, feature 196—, en vez de tener dos cards que se parecen y divergen.
-   * Se apagan por SECCIÓN y no por campo a propósito: cada una es un bloque con su marco, y
-   * una sección presente pero vacía se lee como un error de carga, no como "aquí no aplica".
-   *
-   * ⚠️ Apagar una sección NO es cosmético: es lo que permite pasar una orden que no tiene
-   * esos datos. Si se enciende una sección sobre un DTO que no los trae, la card los leerá.
+   * Qué secciones se pintan (feature 196). Todas van a `true` por defecto, así que NINGUNA
+   * superficie existente cambia y la prop es puramente aditiva. Las TRES vistas la
+   * respetan: la resuelve `seccionesVisibles` en un solo sitio (`pos-secciones`).
    */
-  secciones?: {
-    /** Bloque de navegación (dirección + coordenadas). */
-    navegacion?: boolean;
-    /** Fila de cobro (monto a cobrar). */
-    cobro?: boolean;
-    /** Desplegable "Ver detalle completo". */
-    detalle?: boolean;
-    /** Dato de intentos de entrega bajo el producto. */
-    intentos?: boolean;
-  };
+  secciones?: PosSecciones;
 }
 
 export function PosOrderCard({
@@ -133,13 +118,13 @@ export function PosOrderCard({
     onGestionar();
   }
 
-  // Feature 196: las secciones se pintan salvo que el consumidor las apague. El default
-  // vive AQUI y no en la desestructuracion para que el objeto parcial no obligue a cada
-  // llamador a enumerar las cuatro.
-  const verNavegacion = secciones?.navegacion ?? true;
-  const verCobro = secciones?.cobro ?? true;
-  const verDetalle = secciones?.detalle ?? true;
-  const verIntentos = secciones?.intentos ?? true;
+  // Feature 196: las secciones se pintan salvo que el consumidor las apague.
+  const {
+    navegacion: verNavegacion,
+    cobro: verCobro,
+    detalle: verDetalle,
+    intentos: verIntentos,
+  } = seccionesVisibles(secciones);
 
   // La card responde a puntero/teclado solo si hay selección disponible y no está bloqueada.
   const seleccionable = Boolean(onGestionar) && !bloqueado;
