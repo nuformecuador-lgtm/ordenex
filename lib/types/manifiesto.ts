@@ -48,8 +48,8 @@ export type ManifiestoFlujo = (typeof MANIFIESTO_FLUJOS)[number];
  * banderas de borrado (`deletedAt`) y datos que NO son de la orden siguen SIN entrar.
  *
  * Orden de las columnas (estable, se verifica en los tests por clave y orden RELATIVO):
- * `num_guia`, `num_remision`, `destinatario`, `telefono`, `direccion`, `zona`, `monto`,
- * `intentos`, `origen`, `destino`, `responsable`, `fecha`.
+ * `num_guia`, `num_remision`, `destinatario`, `telefono`, `direccion`, `zona`, `producto`,
+ * `monto`, `intentos`, `origen`, `destino`, `responsable`, `fecha`.
  *
  * `numGuia` null -> celda vacia (R5). `monto` null -> celda vacia (R7). `direccion` es
  * nullable en la orden y se emite tal cual (nunca un texto inventado). `intentos` es NUMERICO
@@ -62,6 +62,12 @@ export interface ManifiestoFilaDTO {
   telefono: string; // R2/§9.4: telefono del DESTINATARIO
   direccion: string | null;
   zona: string; // R6: NOMBRE de la zona, nunca su id
+  /**
+   * `orden.producto` — descripcion de la mercancia. Dato propio de la orden, luego columna del
+   * manifiesto por la regla 160/R28 (el conjunto CRECE cuando la orden expone un dato mas). NO
+   * nullable: la columna es NOT NULL en `orden`, asi que no hay celda vacia que documentar.
+   */
+  producto: string;
   monto: number | null; // R7/§9.3: `orden.monto_cobrar` (COD)
   /**
    * Feature 160 (R28a): intentos de entrega VIGENTES de la orden (criterio unico de

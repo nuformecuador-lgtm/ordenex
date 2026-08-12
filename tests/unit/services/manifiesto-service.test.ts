@@ -43,6 +43,7 @@ function row(overrides: Partial<ManifiestoOrdenRow> = {}): ManifiestoOrdenRow {
     destinatario: "Juan Perez",
     telefonoDest: "88880000",
     direccion: "Av. Siempre Viva 742",
+    producto: "Camiseta talla M",
     montoCobrar: 25.5,
     tiendaNombre: "Tienda Uno",
     zonaNombre: "Cartago",
@@ -425,6 +426,7 @@ describe("R28 — el manifiesto refleja los datos de la orden (conjunto ABIERTO)
       "telefono",
       "direccion",
       "zona",
+      "producto", // dato propio de la orden (160/R28)
       "monto",
       "intentos", // feature 160/R28a
       "origen",
@@ -442,7 +444,7 @@ describe("R28 — el manifiesto refleja los datos de la orden (conjunto ABIERTO)
 
   it("R11 (lado prohibitivo, VIGENTE): no expone ids internos ni banderas de borrado", async () => {
     const fila = await unaFila("ruteo_satelite", row());
-    // Ni el id de la orden, ni el de la tienda, ni deleted_at, ni notas/producto.
+    // Ni el id de la orden, ni el de la tienda, ni deleted_at, ni notas.
     const serializada = JSON.stringify(fila);
     expect(serializada).not.toContain("o1");
     expect(serializada).not.toContain("tienda-1");

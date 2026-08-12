@@ -1,12 +1,60 @@
 import Image from "next/image";
+import { Suspense } from "react";
 
+import type { ConteosPublicos } from "@/lib/types/conteos-publicos";
+
+import {
+  CIFRAS_EN_CERO,
+  CifraAnimada,
+  cifrasDeConteo,
+  leerConteosPublicos,
+} from "./cifras-publicas";
 import { Enfasis } from "./primitivas";
 
-const CIFRAS = [
-  { valor: "GAM + 3", etiqueta: "Cobertura" },
-  { valor: "100+", etiqueta: "Cantones activos" },
-  { valor: "1–3", etiqueta: "Días de entrega" },
-] as const;
+/**
+ * Cifra fija de la banda. «1–3» es un RANGO, no un conteo: no sale de la base, no se aproxima
+ * y no se anima —animar un guion no significa nada—. Se queda tal cual estaba.
+ */
+const DIAS_DE_ENTREGA = { valor: "1–3", etiqueta: "Días de entrega" } as const;
+
+/**
+ * Las cifras de la banda: dos conteos + los días de entrega.
+ *
+ * Se anuncian solo DOS de los tres conteos (cobertura y órdenes efectivas): la banda tiene
+ * tres huecos y el tercero es de los días de entrega. Los tres completos viven en el hero.
+ */
+function BandaCifras({ conteos }: Readonly<{ conteos: ConteosPublicos | null }>) {
+  const deConteo = cifrasDeConteo(conteos).slice(0, 2);
+
+  return (
+    <dl className="grid max-w-[560px] grid-cols-2 gap-6 md:grid-cols-3">
+      {deConteo.map((cifra) => (
+        <div key={cifra.etiqueta} className="flex flex-col gap-1">
+          <dd className="font-mono text-[28px] font-semibold text-white tabular-nums">
+            {/* Por debajo del pliegue: la cuenta espera a que el bloque entre en pantalla. */}
+            <CifraAnimada valor={cifra.valor} animarAlSerVisible />
+          </dd>
+          <dt className="text-xs tracking-[0.04em] text-asfalto-2/70 uppercase">
+            {cifra.etiqueta}
+          </dt>
+        </div>
+      ))}
+      <div className="flex flex-col gap-1">
+        <dd className="font-mono text-[28px] font-semibold text-white tabular-nums">
+          {DIAS_DE_ENTREGA.valor}
+        </dd>
+        <dt className="text-xs tracking-[0.04em] text-asfalto-2/70 uppercase">
+          {DIAS_DE_ENTREGA.etiqueta}
+        </dt>
+      </div>
+    </dl>
+  );
+}
+
+/** La variante que consulta. Va dentro de `<Suspense>`: la banda nunca espera a la base. */
+async function BandaCifrasCargadas() {
+  return <BandaCifras conteos={await leerConteosPublicos()} />;
+}
 
 /**
  * Banda oscura entre servicios y «cómo funciona» (`.lp-imgband`), con la foto de
@@ -38,18 +86,9 @@ export function LandingBanda() {
         <h2 className="mb-7 max-w-[22ch] font-heading text-[clamp(26px,4.5vw,42px)] leading-[1.1] font-bold tracking-[-0.025em]">
           De la bodega a la puerta, <Enfasis>sin perder el rastro</Enfasis>.
         </h2>
-        <dl className="grid max-w-[560px] grid-cols-2 gap-6 md:grid-cols-3">
-          {CIFRAS.map((cifra) => (
-            <div key={cifra.etiqueta} className="flex flex-col gap-1">
-              <dd className="font-mono text-[28px] font-semibold text-white tabular-nums">
-                {cifra.valor}
-              </dd>
-              <dt className="text-xs tracking-[0.04em] text-asfalto-2/70 uppercase">
-                {cifra.etiqueta}
-              </dt>
-            </div>
-          ))}
-        </dl>
+        <Suspense fallback={<BandaCifras conteos={CIFRAS_EN_CERO} />}>
+          <BandaCifrasCargadas />
+        </Suspense>
       </div>
     </section>
   );

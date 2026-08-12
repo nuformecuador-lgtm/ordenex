@@ -14,7 +14,7 @@ import type { IConteosPublicosRepository } from "@/lib/interfaces/repositories/I
 // que un filtro la convertiria en un oraculo por inquilino. Esa guardia esta al final.
 
 const CONTEOS = {
-  cantonesConCobertura: 12,
+  distritosConCobertura: 12,
   ordenesGestionadas: 340,
   ordenesSinGestionar: 57,
 };
@@ -61,7 +61,7 @@ describe("obtenerConteosPublicos", () => {
     });
 
     expect(Object.keys(r).sort()).toEqual([
-      "cantonesConCobertura",
+      "distritosConCobertura",
       "ordenesGestionadas",
       "ordenesSinGestionar",
     ]);
@@ -104,10 +104,10 @@ describe("ConteosPublicosRepository", () => {
     // `gestion_orden` no tiene @@unique(ordenId): contar filas de gestion daria un numero
     // mayor que el total de ordenes (trampa que la feature 192 dejo documentada). Se afirma
     // sobre el WHERE, que es donde vive esa decision.
-    const canton = { count: vi.fn().mockResolvedValue(12) };
+    const distrito = { count: vi.fn().mockResolvedValue(12) };
     const orden = { count: vi.fn().mockResolvedValue(0) };
     const prisma = {
-      canton,
+      distrito,
       orden,
       $transaction: vi.fn(async (ops: Promise<number>[]) => Promise.all(ops)),
     };
@@ -125,32 +125,36 @@ describe("ConteosPublicosRepository", () => {
     expect(sinGestionar.where.gestiones).toEqual({ none: { anuladaAt: null } });
   });
 
-  it("cobertura: llega a la zona por la tabla puente, no por una columna escalar", async () => {
-    // `Canton` no tiene `zonaId` y `Distrito` tampoco —la escalar se elimino en la migracion
-    // de la feature 24—. Si alguien "simplifica" esto a un `zonaId`, no compilara; si lo
-    // cambia por otra ruta, este caso lo dira.
-    const canton = { count: vi.fn().mockResolvedValue(12) };
+  it("cobertura: cuenta DISTRITOS distintos por la tabla puente, no filas ni columna escalar", async () => {
+    // Dos afirmaciones en una: que la cuenta sea sobre `Distrito` —contar filas de
+    // `zona_distrito` contaria dos veces un distrito servido por dos zonas— y que llegue a la
+    // zona por la relacion `zonas` del puente. `Distrito` no tiene `zonaId`: la escalar se
+    // elimino en la migracion de la feature 24, asi que "simplificarlo" a un `zonaId` no
+    // compilaria; cambiarlo por otra ruta lo dice este caso.
+    const distrito = { count: vi.fn().mockResolvedValue(12) };
     const orden = { count: vi.fn().mockResolvedValue(0) };
     const prisma = {
-      canton,
+      distrito,
       orden,
       $transaction: vi.fn(async (ops: Promise<number>[]) => Promise.all(ops)),
     };
 
-    await new ConteosPublicosRepository(
+    const r = await new ConteosPublicosRepository(
       prisma as unknown as ConstructorParameters<typeof ConteosPublicosRepository>[0],
     ).contar();
 
-    expect(canton.count.mock.calls[0][0]).toEqual({
-      where: { distritos: { some: { zonas: { some: {} } } } },
+    expect(distrito.count.mock.calls[0][0]).toEqual({
+      where: { zonas: { some: {} } },
     });
+    // Y que ese numero sea el que sale por `distritosConCobertura`, no otro campo.
+    expect(r.distritosConCobertura).toBe(12);
   });
 
   it("las tres cuentas van bajo el MISMO snapshot", async () => {
     // Leidas en instantes distintos, una orden gestionada entre medias podria contarse en
     // las dos cuentas —o en ninguna— y la suma dejaria de cuadrar.
     const prisma = {
-      canton: { count: vi.fn().mockResolvedValue(1) },
+      distrito: { count: vi.fn().mockResolvedValue(1) },
       orden: { count: vi.fn().mockResolvedValue(1) },
       $transaction: vi.fn(async (ops: Promise<number>[]) => Promise.all(ops)),
     };

@@ -401,7 +401,7 @@ export interface EtiquetaRow {
 //     dejo mensajero asignado (R9 / design.md §9.8). Null si la orden no lo tiene.
 //   - `zonaEsCentral`: distingue la orden GAM de la no-GAM para resolver
 //     `origen`/`destino` de `generacion_guia` sin un parametro extra (design.md §4).
-// A cambio NO trae producto ni provincia/canton/distrito: el manifiesto no los usa
+// A cambio NO trae provincia/canton/distrito: el manifiesto no los usa
 // (R11). NUNCA incluye `deletedAt` (R11): el repo YA filtra `deletedAt: null` para
 // que una orden borrada cuente como no encontrada (R12). `numGuia` puede venir null
 // (R5): la celda queda vacia, la fila NO se descarta.
@@ -415,6 +415,9 @@ export interface ManifiestoOrdenRow {
   destinatario: string;
   telefonoDest: string;
   direccion: string | null;
+  // Dato propio de la orden: es columna del manifiesto por la regla 160/R28 (el conjunto de
+  // columnas CRECE cuando la orden expone un dato mas). NOT NULL en `orden`.
+  producto: string;
   montoCobrar: number | null;
   tiendaNombre: string;
   zonaNombre: string;

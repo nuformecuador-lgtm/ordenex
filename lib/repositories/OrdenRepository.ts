@@ -516,7 +516,8 @@ function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
 // las columnas que consumen las 11 celdas de R2 + `tiendaId` (dueño, para el filtro
 // por API key de R29). Suma dos datos que la etiqueta no tiene: el NOMBRE del
 // mensajero ASIGNADO (columna `responsable`, R9) y `zona.esCentral` (decide
-// GAM/no-GAM en `origen`/`destino`, design.md §4). NO selecciona producto,
+// GAM/no-GAM en `origen`/`destino`, design.md §4). Suma tambien `producto`, que paso a
+// ser columna del manifiesto por la regla 160/R28. NO selecciona
 // provincia/canton/distrito, notas ni `deletedAt` (R11); el filtro `deletedAt: null`
 // va en el `where` (R12).
 const WITH_MANIFIESTO = {
@@ -528,6 +529,7 @@ const WITH_MANIFIESTO = {
     destinatario: true,
     telefonoDest: true,
     direccion: true,
+    producto: true,
     montoCobrar: true,
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true, esCentral: true } },
@@ -550,6 +552,7 @@ function toManifiestoOrdenRow(row: OrdenManifiestoRow): ManifiestoOrdenRow {
     destinatario: row.destinatario,
     telefonoDest: row.telefonoDest,
     direccion: row.direccion,
+    producto: row.producto,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
     tiendaNombre: row.tienda.nombre,
     zonaNombre: row.zona.nombre,

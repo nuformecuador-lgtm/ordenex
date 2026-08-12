@@ -4,6 +4,7 @@ import type {
   IGestionOrdenRepository,
   MiAsignacionRow,
   OrdenGestionRow,
+  VentanaDia,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IOrdenMensajeroMetaRepository } from "@/lib/interfaces/repositories/IOrdenMensajeroMetaRepository";
@@ -73,8 +74,9 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
 function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrdenRepository {
   return {
     findMisAsignaciones: vi.fn(async () => []),
+    findMisAsignacionesByIds: vi.fn(async () => []),
     contarEntregadas: vi.fn(async () => 0),
-    sumMontoCobrarEntregadas: vi.fn(async () => 0),
+    sumMontoCobrarGestionadas: vi.fn(async () => 0),
     findByIdsParaGestion: vi.fn(async () => [gestionRow()]),
     getOrdenEnGestion: vi.fn(async () => null),
     setOrdenEnGestion: vi.fn(async () => true),
@@ -269,25 +271,54 @@ describe("listarMisAsignaciones (R9-R13)", () => {
         asignacionRow({ id: "d", estatusValue: "en_reparto", montoCobrar: null }),
       ]),
       contarEntregadas: vi.fn(async () => 7),
-      // COD ya entregado (400): alimenta 'Total a cobrar' junto al COD de en_reparto (350).
-      sumMontoCobrarEntregadas: vi.fn(async () => 400),
+      // COD ya GESTIONADO hoy (400), cualquier resultado y ya fuera de reparto: es la otra
+      // mitad de 'Total a cobrar', disjunta del COD de en_reparto (350).
+      sumMontoCobrarGestionadas: vi.fn(async () => 400),
     });
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     // pendientes = # en_reparto (no cuenta por recoger); porCobrar suma solo en_reparto,
-    // null cuenta 0 (100 + 250 + 0); entregadas viene del conteo del repo.
-    // totalACobrar = COD en_reparto (350) + COD entregado (400) = 750 (acumulado, no baja
-    // al entregar; reprogramada/devuelta/rechazada quedan fuera de ambos sets).
+    // null cuenta 0 (100 + 250 + 0) — sin ventana de dia, es estado vivo.
+    // totalACobrar = COD en_reparto (350) + COD gestionado hoy (400) = 750: la jornada
+    // completa del mensajero, sin doble conteo (la query excluye en_reparto).
     expect(r.kpis).toEqual({
       pendientes: 3,
       entregadas: 7,
       porCobrar: 350,
       totalACobrar: 750,
     });
-    expect(repo.contarEntregadas).toHaveBeenCalledWith("m1");
-    expect(repo.sumMontoCobrarEntregadas).toHaveBeenCalledWith("m1");
+    // Los KPIs de jornada van ACOTADOS AL DIA de Costa Rica, y AMBOS con la MISMA ventana:
+    // si cada query calculara la suya, una corrida que cruce la medianoche contaria las
+    // entregas de un dia y el monto de otro.
+    const ventana = (repo.contarEntregadas as ReturnType<typeof vi.fn>).mock
+      .calls[0][1] as VentanaDia;
+    expect(repo.contarEntregadas).toHaveBeenCalledWith("m1", ventana);
+    expect(repo.sumMontoCobrarGestionadas).toHaveBeenCalledWith("m1", ventana);
+    // Ventana half-open de un dia CR: empieza a las 06:00Z (00:00 CR) y dura 24 h exactas.
+    expect(ventana.desde.toISOString()).toMatch(/T06:00:00\.000Z$/);
+    expect(ventana.hasta.getTime() - ventana.desde.getTime()).toBe(24 * 60 * 60 * 1000);
+  });
+
+  // El acote es del DIA CALENDARIO de Costa Rica, no de "las ultimas 24 h" ni del dia UTC.
+  // Es la trampa clasica del repo (ver `inicioDelDiaCREnUtc`): a las 20:00 CR el dia UTC ya
+  // rodo al siguiente, y un corte en UTC le vaciaria la jornada al mensajero a las 18:00.
+  it("la ventana del dia es la de CR: a las 20:00 CR sigue siendo el dia CR en curso", async () => {
+    const repo = fakeRepo({});
+    // 2026-07-16T02:00:00Z = 20:00 CR del 15 -> la ventana debe ser la del 15, no la del 16.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-16T02:00:00.000Z"));
+    try {
+      await newService(repo).listarMisAsignaciones(MENSAJERO);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const ventana = (repo.contarEntregadas as ReturnType<typeof vi.fn>).mock
+      .calls[0][1] as VentanaDia;
+    expect(ventana.desde.toISOString()).toBe("2026-07-15T06:00:00.000Z");
+    expect(ventana.hasta.toISOString()).toBe("2026-07-16T06:00:00.000Z");
   });
 
   // Feature 97: el DTO expone las coords de la parada (feature 91) para dibujar el mapa.

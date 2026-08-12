@@ -63,8 +63,7 @@ export const CLAVE_BUSQUEDA = "q";
  * El orden es el de uso esperado en bodega; `producto` va al final porque es el ultimo
  * recurso ("la caja de zapatos de ayer"), no la forma habitual de buscar una orden.
  */
-export const PLACEHOLDER_BUSQUEDA =
-  "Guía, remisión, teléfono, destinatario o producto";
+export const PLACEHOLDER_BUSQUEDA = "Guía, remisión, teléfono, destinatario o producto";
 
 /**
  * Declara los OCHO filtros de la barra de ordenes sobre el contrato del bloque A.

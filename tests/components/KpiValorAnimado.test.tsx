@@ -15,13 +15,17 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { KpiValorAnimado } from "@/components/shared/KpiValorAnimado";
 import { formatMonto, monedaConfig } from "@/lib/config/moneda";
 
 /** `Intl` usa espacio duro (U+00A0); testing-library normaliza el DOM, no el esperado. */
 const norm = (texto: string) => texto.replace(/\s/g, " ");
+
+/** El mismo formato de enteros que usa el componente, derivado de la configuracion. */
+const miles = (n: number) =>
+  new Intl.NumberFormat(monedaConfig.locale, { maximumFractionDigits: 0 }).format(n);
 
 afterEach(() => {
   cleanup();
@@ -81,5 +85,75 @@ describe("KpiValorAnimado (R35, R37)", () => {
     const span = container.querySelector("span");
     expect(span?.className).toContain("tabular-nums");
     expect(span?.className).toContain("text-lg");
+  });
+});
+
+// Feature 198 — las dos puertas que se le añadieron para la landing publica. Ninguna de las
+// dos altera el comportamiento por defecto: los KPI del portal y de los cierres no pasan
+// `prefijo`, `animarAlSerVisible` ni `arrancarEnCero`, y los casos de arriba lo comprueban.
+describe("KpiValorAnimado — prefijo y puerta de visibilidad (feature 198)", () => {
+  /** Doble de `IntersectionObserver`: jsdom no lo implementa y hay que poder dispararlo. */
+  class ObservadorFalso {
+    static avisar: ((entradas: { isIntersecting: boolean }[]) => void) | null = null;
+    constructor(cb: (entradas: { isIntersecting: boolean }[]) => void) {
+      ObservadorFalso.avisar = cb;
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  }
+
+  const conObservador = (fn: () => void) => {
+    const previo = globalThis.IntersectionObserver;
+    Object.assign(globalThis, { IntersectionObserver: ObservadorFalso });
+    try {
+      fn();
+    } finally {
+      Object.assign(globalThis, { IntersectionObserver: previo });
+      ObservadorFalso.avisar = null;
+    }
+  };
+
+  it("el prefijo viaja DENTRO del formateo, pegado al numero", () => {
+    render(<KpiValorAnimado value={120} prefijo="+" />);
+
+    expect(screen.getByText("+120")).toBeInTheDocument();
+  });
+
+  it("con `animarAlSerVisible` no cuenta hasta que el bloque entra en pantalla", () => {
+    // La banda de la landing está por debajo del pliegue: si contara al montar, la animación
+    // se gastaría con nadie mirando. Antes esto lo hacía el scroll spy de countup.js, que
+    // ademas de no llegar a montar su observador imprimía «[CountUp] target is null».
+    conObservador(() => {
+      render(<KpiValorAnimado value={3500} prefijo="+" animarAlSerVisible />);
+
+      // Fuera de pantalla: el 0, no la cifra.
+      expect(screen.getByText("+0")).toBeInTheDocument();
+
+      act(() => ObservadorFalso.avisar?.([{ isIntersecting: true }]));
+
+      expect(screen.getByText(norm(`+${miles(3500)}`))).toBeInTheDocument();
+    });
+  });
+
+  it("sin `IntersectionObserver` NO se queda congelado en 0", () => {
+    // Degradación deliberada: más vale animar de más que dejar una cifra muerta en 0.
+    //
+    // El observador se BORRA a mano en vez de confiar en jsdom: `tests/setup/jest-dom.ts` ya
+    // instala uno inerte para embla-carousel, así que sin este borrado el caso mediría
+    // «observador que nunca avisa» —que es otro escenario— y pasaría por el motivo contrario.
+    const previo = globalThis.IntersectionObserver;
+    // @ts-expect-error se retira a proposito para simular un navegador que no lo trae
+    delete globalThis.IntersectionObserver;
+    try {
+      render(<KpiValorAnimado value={3500} prefijo="+" animarAlSerVisible />);
+
+      expect(screen.getByText(norm(`+${miles(3500)}`))).toBeInTheDocument();
+    } finally {
+      Object.assign(globalThis, { IntersectionObserver: previo });
+    }
   });
 });

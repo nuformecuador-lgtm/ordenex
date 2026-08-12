@@ -142,7 +142,7 @@ test.describe("Auth E2E Flow", () => {
   });
 
   test.describe("(d) Logout using PageHeader topbar button", () => {
-    test("should logout and redirect to /login", async ({ page }) => {
+    test("should logout and redirect to the public home (/)", async ({ page }) => {
       // First, login
       await page.goto("/login");
 
@@ -161,12 +161,11 @@ test.describe("Auth E2E Flow", () => {
       await expect(logoutButton).toBeVisible();
       await logoutButton.click();
 
-      // Should redirect to /login
-      await page.waitForURL("/login", { timeout: 5000 });
-      expect(page.url()).toContain("/login");
+      // Should redirect to the public home (/)
+      await page.waitForURL("/", { timeout: 5000 });
 
-      // Verify logout button is no longer visible: /login is public, so the
-      // authenticated shell (PageHeader topbar) is not mounted (R3).
+      // Verify logout button is no longer visible: sin sesión, / renderiza la
+      // landing pública y el shell autenticado (PageHeader topbar) no se monta (R3).
       const shellLogoutButton = page.getByRole("button", {
         name: "Salir",
       });
@@ -190,14 +189,13 @@ test.describe("Auth E2E Flow", () => {
       // Logout via the PageHeader topbar control (feature 57)
       const logoutButton = page.getByRole("button", { name: "Salir" });
       await logoutButton.click();
-      await page.waitForURL("/login", { timeout: 5000 });
+      await page.waitForURL("/", { timeout: 5000 });
 
-      // Try to access a protected route
-      // (if you have one other than /; otherwise, / itself should redirect)
-      await page.goto("/");
+      // Try to access a protected route (/ ya es pública tras el logout)
+      await page.goto("/dashboard");
 
       // Should be redirected to /login (middleware catches this)
-      await page.waitForURL("/login", { timeout: 5000 });
+      await page.waitForURL(/\/login/, { timeout: 5000 });
       expect(page.url()).toContain("/login");
     });
   });
