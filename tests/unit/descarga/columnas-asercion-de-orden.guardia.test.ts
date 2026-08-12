@@ -48,6 +48,12 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 
+// Feature 207 — el lector de `expect(…)` vive ahora en su propio módulo, con su propio test.
+// Lo que cambió al mudarse: quita los comentarios ANTES de leer, para que un `expect(...)`
+// COMENTADO deje de contar como aserción. La cobertura de las 38 constantes del árbol NO se
+// movió por ello (medida archivo a archivo, antes y después).
+import { tieneAsercionDeOrden } from "./aserciones-de-orden";
+
 const RAIZ = path.resolve(__dirname, "../../..");
 
 /** Los dos árboles de UI. Mirar solo `app/` deja fuera `components/shared/liquidacion/`. */
@@ -55,9 +61,6 @@ const ARBOLES_UI = ["app", "components"] as const;
 
 /** Dónde viven las aserciones. */
 const ARBOL_TESTS = "tests";
-
-/** Matchers que fijan una secuencia completa. `toContain`/`toHaveLength` no fijan el orden. */
-const MATCHERS_DE_ORDEN = ["toEqual", "toStrictEqual"] as const;
 
 /**
  * Suelo del censo, no total exacto.
@@ -120,66 +123,6 @@ export function constantesDeColumnas(archivos: string[]): ConstanteDeColumnas[] 
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
-interface Asercion {
-  /** Texto del argumento de `expect(...)`, con los paréntesis internos equilibrados. */
-  sujeto: string;
-  /** Nombre del matcher encadenado (`toEqual`, `toBe`…), o `""` si no hay ninguno. */
-  matcher: string;
-}
-
-/**
- * Extrae cada `expect(<sujeto>).<matcher>` de un archivo de test.
- *
- * Hay que equilibrar paréntesis y respetar cadenas: el sujeto típico
- * (`X.map((c) => c.clave)`) trae paréntesis anidados, y una cadena puede contener un `)`
- * suelto. Mismo enfoque que `etiquetasDataTable` en `cobertura-tablas.guardia`.
- */
-export function aserciones(fuente: string): Asercion[] {
-  const salida: Asercion[] = [];
-  const apertura = /\bexpect\s*\(/g;
-  let encontrado: RegExpExecArray | null;
-  while ((encontrado = apertura.exec(fuente)) !== null) {
-    let i = encontrado.index + encontrado[0].length;
-    const desde = i;
-    let profundidad = 1;
-    let comilla: string | null = null;
-    while (i < fuente.length && profundidad > 0) {
-      const c = fuente[i];
-      if (comilla !== null) {
-        if (c === comilla && fuente[i - 1] !== "\\") comilla = null;
-      } else if (c === '"' || c === "'" || c === "`") {
-        comilla = c;
-      } else if (c === "(") {
-        profundidad++;
-      } else if (c === ")") {
-        profundidad--;
-      }
-      i++;
-    }
-    // Tras el `)` de cierre puede venir `.not`, `.resolves`… antes del matcher; se toma el
-    // primer identificador `toXxx` de la cadena.
-    const cola = fuente.slice(i, i + 120);
-    const matcher = /^(?:\s*\.\s*[A-Za-z]+)*?\s*\.\s*(to[A-Za-z]+)/.exec(cola);
-    salida.push({ sujeto: fuente.slice(desde, i - 1), matcher: matcher?.[1] ?? "" });
-  }
-  return salida;
-}
-
-/**
- * `true` si el texto contiene una aserción de ORDEN que nombra a `constante`.
- *
- * Exige las tres cosas del contrato: matcher de secuencia, sujeto que proyecta con `.map(` y
- * el NOMBRE de la constante como sujeto de esa proyección.
- */
-export function tieneAsercionDeOrden(fuente: string, constante: string): boolean {
-  const proyeccion = new RegExp(`\\b${constante}\\s*\\.\\s*map\\s*\\(`);
-  return aserciones(fuente).some(
-    (a) =>
-      (MATCHERS_DE_ORDEN as readonly string[]).includes(a.matcher) &&
-      proyeccion.test(a.sujeto),
-  );
-}
-
 /** Archivos de `tests/` que cubren cada constante, por nombre. */
 function coberturaPorConstante(
   constantes: ConstanteDeColumnas[],
@@ -229,6 +172,11 @@ describe("guardia: toda lista de columnas descargables tiene aserción de orden"
     // (c) Negativo: afirmar sobre un parámetro (la forma `describe.each`) NO cuenta. Sin esto,
     // un detector que aceptara cualquier `.map(` pasaría verde habiendo dejado de exigir que la
     // aserción nombre la constante.
+    //
+    // La mención en comentario del final es la SEGUNDA cara del mismo negativo, y desde la
+    // feature 207 la sostiene sobre todo `aserciones-de-orden.test.ts`: el lector quita los
+    // comentarios antes de leer, así que un `expect(...)` comentado ya no cuenta como
+    // aserción. Se deja aquí porque es la forma en que se ve en un archivo real.
     const comoDescribeEach = `
       describe.each(LEDGERS)("$nombre", ({ columnas }) => {
         it("orden", () => {
