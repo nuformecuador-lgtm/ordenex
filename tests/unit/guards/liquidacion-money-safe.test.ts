@@ -89,6 +89,58 @@ const ARCHIVOS_DE_LA_FEATURE: readonly string[] = [
   "lib/types/liquidacion.ts",
   "lib/utils/descripcion-pago.ts",
   "lib/utils/pendiente-cierre.ts",
+  // Feature 205 (T0.3, R16/R50) — la aritmética del reparto entre cierres. NO entró a mano:
+  // entró porque la cláusula de auto-captura de abajo puso este test en ROJO al crearse el
+  // archivo («expected [ "lib/utils/reparto-liquidacion-mensajero.ts" ] to deeply equal []»,
+  // :146). El nombre lleva `liquidacion` a propósito para que eso ocurra (design §11).
+  //
+  // Su módulo de configuración hermano, `lib/config/reparto-mensajero.ts`, NO está aquí y
+  // tampoco por olvido: no maneja ningún monto —exporta un cardinal leído del entorno— y el
+  // `Number.parseInt` del patrón de config casa con `/\bparseInt\s*\(/`, así que censarlo
+  // pondría este barrido en rojo por un FALSO POSITIVO. Por eso su ruta no casa
+  // `/[Ll]iquidacion/` (design §2.5.2). La solución es el nombre, no una excepción aquí.
+  "lib/utils/reparto-liquidacion-mensajero.ts",
+  // Feature 205 (T2.1, R16/R50) — el repositorio del ACTO de repartir y su contrato. Tampoco
+  // entraron a mano: la misma cláusula de auto-captura puso este test en ROJO al crearlos
+  // («expected [ "lib/interfaces/repositories/ILiquidacionRepartoRepository.ts",
+  // "lib/repositories/LiquidacionRepartoRepository.ts" ] to deeply equal []», :157). Manejan
+  // `monto_total`, así que el barrido es exactamente donde tienen que estar (design §11).
+  "lib/interfaces/repositories/ILiquidacionRepartoRepository.ts",
+  "lib/repositories/LiquidacionRepartoRepository.ts",
+  // Feature 205 (T4.1, R16/R46/R50) — los contratos I/O del reparto y sus dos schemas de borde.
+  // Tercera vez que la cláusula de auto-captura hace el trabajo: al crearse el archivo, este
+  // test cayó con «expected [ "lib/types/liquidacion-reparto.ts" ] to deeply equal []» (:164).
+  // Declara los DTO por los que cruzan todos los importes del reparto, así que el barrido de
+  // `Number(`/`parseFloat`/`parseInt` es exactamente donde tiene que estar.
+  "lib/types/liquidacion-reparto.ts",
+  // Feature 205 (T5.4, R16/R50) — los archivos de CLIENTE del reparto. Éstos NO los captura
+  // ninguna cláusula: la auto-captura de abajo solo alcanza `components/shared/liquidacion/`
+  // y `lib/**` con `liquidacion` en la ruta, y estos tres viven en `app/**`. Entran a mano, y
+  // por eso el criterio de la tarea es que entren ELLOS: los tres pintan importes del
+  // servidor y son exactamente donde la aritmética de dinero podría reaparecer en el
+  // navegador (design §11).
+  //
+  // Sobre estos tres pesan las CUATRO aserciones, no dos: además de `Number(`/`parseFloat(`/
+  // `parseInt(`, el `.toFixed(` está prohibido (son cliente) y no pueden importar
+  // `@prisma/client` ni `decimal.js` — sin biblioteca de decimales y sin conversión a número,
+  // en el navegador no queda forma de operar con dinero, solo de pintarlo.
+  "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
+  "app/(app)/wallet/mensajeros/_components/PagoMensajeroAcciones.tsx",
+  "app/(app)/wallet/mensajeros/_components/RepartoPrevisualizacion.tsx",
+  // Feature 205 (review m2, R16/R50) — los RÓTULOS de esos tres. Entra por el mismo criterio de
+  // T5.4 y con un motivo propio: la 205 le añadió cinco bloques que formatean dinero
+  // (`money(totalImputado)`, `money(montoFuera)`, `money(pendienteDespues)`, `money(sobrante)`,
+  // `money(imputable)`), así que el formateo de los importes del reparto vive AQUÍ y no en los
+  // componentes que lo consumen —que sí estaban censados—. La red cubría a los lectores y dejaba
+  // fuera el sitio donde se escribe.
+  //
+  // Hoy no hay nada que cazar (`money` opera sobre el STRING del servidor y no convierte a
+  // número, `lib/config/moneda.ts`), y por eso la entrada podría parecer cosmética: NO lo es. Se
+  // midió plantando un `Number(pendienteDespues)` en `REPARTO_APLICADO.quedaPendiente` con este
+  // archivo FUERA del censo — `tests/unit/{guards,utils,services}` pasaba entero, 3530 verdes— y
+  // con él DENTRO: rojo nombrando la ruta. Es un archivo de cliente, así que pesan las cuatro
+  // aserciones, incluidas la de `.toFixed(` y la de la biblioteca de decimales.
+  "app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts",
 ];
 
 /** Un archivo es de CLIENTE si vive en los árboles de UI. */

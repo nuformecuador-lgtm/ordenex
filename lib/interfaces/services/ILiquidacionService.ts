@@ -4,6 +4,7 @@ import type {
   LiquidacionCierreTxClient,
   LiquidacionPagoTxClient,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type { LiquidacionRepartoTxClient } from "@/lib/interfaces/repositories/ILiquidacionRepartoRepository";
 import type { PagoMensajeroTxClient } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { WalletTiendaTxClient } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { CajaPagoTiendaTxClient } from "@/lib/interfaces/services/ICajaPagoTiendaFeedService";
@@ -15,6 +16,12 @@ import type {
   RegistrarPagoResult,
   RegistrarPagoTiendaInput,
 } from "@/lib/types/liquidacion";
+import type {
+  PrevisualizarRepartoInput,
+  PrevisualizarRepartoResult,
+  RegistrarRepartoMensajeroInput,
+  RegistrarRepartoResult,
+} from "@/lib/types/liquidacion-reparto";
 
 // Feature 172 (design §3.1) — contrato del servicio de LIQUIDACION. Un solo servicio para los
 // tres actos (pagar a un mensajero, pagar a una tienda, anular), no tres: el 80 % —permisos,
@@ -42,7 +49,12 @@ export type LiquidacionTx = LiquidacionPagoTxClient &
   LiquidacionCierreTxClient &
   WalletTiendaTxClient &
   PagoMensajeroTxClient &
-  CajaPagoTiendaTxClient;
+  CajaPagoTiendaTxClient &
+  // Feature 205 (T3.2, R20/R29): la fila del ACTO de repartir se escribe en ESTA misma
+  // transaccion y la PRIMERA de todas (design §5.1), asi que el `tx` tiene que llevar tambien su
+  // delegado. Es un `Pick` de un solo modelo: quien tiene el `tx` puede insertar el acto y nada
+  // mas — no hay por donde editarlo ni borrarlo (R52).
+  LiquidacionRepartoTxClient;
 
 /**
  * Ejecuta `fn` dentro de UNA transaccion y revierte si lanza (R39: o quedan el documento y su
@@ -82,6 +94,21 @@ export type ListarPagosServiceResult = Exclude<
  */
 export type AnularPagoServiceResult = Exclude<
   AnularPagoResult,
+  { status: "validation_error" } | { status: "unauthenticated" }
+>;
+
+/**
+ * Feature 205 (T3.1) — resultado de DOMINIO de PREVISUALIZAR un reparto, con el mismo recorte
+ * que los tres de arriba y por el mismo motivo: la sesion y la forma son del borde.
+ */
+export type PrevisualizarRepartoServiceResult = Exclude<
+  PrevisualizarRepartoResult,
+  { status: "validation_error" } | { status: "unauthenticated" }
+>;
+
+/** Feature 205 (T3.2) — resultado de DOMINIO de REGISTRAR un reparto, con el mismo recorte. */
+export type RegistrarRepartoServiceResult = Exclude<
+  RegistrarRepartoResult,
   { status: "validation_error" } | { status: "unauthenticated" }
 >;
 
@@ -137,6 +164,50 @@ export interface ILiquidacionService {
    * y un registro simultaneos no lean el mismo disponible.
    */
   anularPago(input: AnularPagoInput, actor: Actor): Promise<AnularPagoServiceResult>;
+  /**
+   * Feature 205 (T3.1, R32-R38/R56/R57) — QUE PASARIA si se repartiera este importe. Solo
+   * lectura y **sin efecto alguno** (R35): no abre transaccion, no toma ningun bloqueo y no
+   * invoca ningun metodo de escritura. Hay un test que lo mide contando llamadas sobre los
+   * dobles, no leyendo el codigo.
+   *
+   * Sin `monto` devuelve el conjunto imputable y sus avisos (es lo que abre el dialogo y decide
+   * si el boton se habilita); con `monto`, ademas las imputaciones que produciria.
+   *
+   * **Es una ADVERTENCIA, no un contrato ni una reserva** (design §6.1). No congela nada, no
+   * aparta ningun cierre y no vale como promesa: al confirmar, el reparto se recalcula BAJO
+   * BLOQUEO (R23) y lo que se aplica puede diferir de lo que se enseño. Convertirla en una
+   * reserva exigiria mantener bloqueos entre dos peticiones HTTP, que es justo lo que nadie
+   * quiere en una pantalla de dinero.
+   *
+   * MISMO gate que registrar (`esAccesoTotal`, R1/R4): dice cuanto se le debe a una persona y por
+   * que cierres — la misma superficie de dinero, no «solo lectura».
+   */
+  previsualizarRepartoMensajero(
+    input: PrevisualizarRepartoInput,
+    actor: Actor,
+  ): Promise<PrevisualizarRepartoServiceResult>;
+  /**
+   * Feature 205 (T3.2, R14/R18-R25/R28/R29/R55/R57/R58) — REPARTE un importe entre los cierres
+   * pendientes del mensajero, del mas antiguo al mas reciente, en UN solo acto.
+   *
+   * Cinco invariantes que este contrato impone por su FORMA, antes de mirar la implementacion:
+   *
+   *  - **la peticion no elige cierre** (R9): `RegistrarRepartoMensajeroInput` no tiene `cierreId`
+   *    y su schema es `.strict()`. Contra que se imputa lo decide el servidor;
+   *  - **un solo metodo, una sola referencia y una sola fecha** (R58): no hay forma de expresar
+   *    una por cierre, asi que las N imputaciones no pueden discrepar;
+   *  - **todo o nada** (R20): devuelve el reparto aplicado o no escribe nada. No existe un
+   *    resultado «se pagaron 2 de 4»;
+   *  - **el grano del bloqueo no cambia** (R21): se toma el MISMO bloqueo por cierre que toma el
+   *    pago contra un cierre unico, uno por cada cierre que se toca, y en el orden determinista
+   *    del reparto (R22) — que es lo unico que separa esto de un interbloqueo;
+   *  - **no se puede editar ni borrar** (R52): no hay metodo que lo haga, ni aqui ni en el
+   *    repositorio. Deshacer un reparto es anular sus pagos, uno a uno.
+   */
+  registrarRepartoMensajero(
+    input: RegistrarRepartoMensajeroInput,
+    actor: Actor,
+  ): Promise<RegistrarRepartoServiceResult>;
   /**
    * R49/R56/R74 — los comprobantes de UN cierre, anulados incluidos y marcados.
    *

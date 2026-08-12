@@ -1,8 +1,9 @@
 # Feature 205 — Pagar la cuenta por pagar del mensajero desde `/wallet/mensajeros`
 
 **Requisitos en notación EARS.** Sin detalles de implementación (esos van en `design.md`).
-Cada `R<n>` termina mapeado a un test concreto (`docs/specs.md > Trazabilidad`); el mapa vive
-en `design.md §12` y lo verifica el reviewer.
+Cada `R<n>` termina mapeado a un test concreto (`docs/specs.md > Trazabilidad`); el mapa
+previsto vive en `design.md §12` y el mapa **con la evidencia real de los 58**, en
+`progress/impl_205_mapa.md` (T7.1). Lo verifica el reviewer.
 
 ---
 
@@ -216,7 +217,11 @@ como texto; el cliente NO DEBE calcularlos ni recomponerlos.
 reparto.
 
 **R36** — La previsualización DEBE informar de los cierres **excluidos** por no estar
-aprobados, identificándolos y diciendo su estado, de modo que no desaparezcan en silencio.
+aprobados diciendo **cuántos** quedan fuera y **por qué estado**, de modo que no desaparezcan
+en silencio; NO DEBE identificar ni fechar ninguno de esos cierres, NO DEBE emitir ningún
+importe de ellos, y el tamaño de ese aviso NO DEBE crecer con el número de cierres del
+mensajero. *(Reescrito por la enmienda de la sección J; el enunciado anterior exigía
+identificarlos — el porqué y su precio, en `design.md §6.4`.)*
 
 **R37** — SI el total imputable es menor que la cuenta por pagar del mensajero, ENTONCES la
 previsualización DEBE advertirlo (hay deuda que esta pantalla no puede imputar).
@@ -302,6 +307,31 @@ NO DEBE existir camino que impute a más cierres de los que la previsualización
 imputaciones el mismo método, la misma referencia y la misma fecha de pago, capturados UNA sola
 vez para el reparto entero; NO DEBE derivar, alterar ni inventar una referencia distinta por
 cierre.
+
+## J. Enmienda posterior — el aviso de excluidos es un CONTEO, no una lista
+
+**Cronología, dicha para que se entienda por qué esta enmienda llega aparte de las cinco de la
+sección I.** El aviso de R36 se implementó primero **tal y como estaba escrito arriba**: una fila
+por cierre excluido, con su id y su `solicitadoAt`. Al hacerlo, la implementación reportó que esa
+lista **no tenía tope** —un mensajero con dos años de cierres rechazados los recibiría todos en la
+previsualización— y lo dejó como decisión de negocio pendiente
+(`progress/impl_205_tandas3y4.md > HUECO DEL SPEC`). El humano la cerró el mismo día: **conteo por
+estado**. El código y sus tests se cambiaron entonces; **este documento no**, y por eso el requisito
+se quedó describiendo una conducta que ya no era la implementada. Esta sección cierra ese desfase.
+No es un cambio nuevo: es el plegado tardío de una decisión ya tomada y ya construida.
+
+**Qué requisito cambia:** solo **R36**, reescrito arriba. Ningún otro. R37 (deuda no imputable) y
+R56 (recorte por tope) son avisos distintos y siguen intactos: los tres tienen que poder
+distinguirse en pantalla.
+
+**Qué se gana:** el aviso queda acotado **por construcción** —tiene tantas entradas como estados no
+aprobados existan, nunca tantas como cierres—, así que ningún historial, por largo que sea, puede
+hacerlo crecer.
+
+**Qué se pierde, y se acepta:** el aviso ya **no puede nombrar un cierre concreto**. Antes viajaba
+la fecha de cada excluido justamente para eso. Quien necesite el inventario de esos cierres abre
+`/cierres-admin` por el enlace que esta misma feature construye (R39/R43/R44). El razonamiento
+completo y la alternativa descartada, en `design.md §6.4`.
 
 ---
 

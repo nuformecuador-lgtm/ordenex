@@ -80,6 +80,11 @@ function fakeService(overrides: Partial<ILiquidacionService> = {}): ILiquidacion
     // las aserciones de forma tengan algo que mirar.
     listarPagosDeCierre: vi.fn(async () => ({ status: "ok" as const, pagos: [comprobante()] })),
     listarPagosDeTienda: vi.fn(async () => ({ status: "ok" as const, pagos: [comprobante()] })),
+    // Feature 205 (T4.2): los dos metodos del REPARTO. Ningun caso de ESTE archivo los ejercita
+    // —tienen el suyo, `liquidacion-reparto-actions.test.ts`—, pero el doble los expone porque el
+    // contrato del servicio los tiene, y asi las aserciones de aqui siguen midiendo lo mismo.
+    previsualizarRepartoMensajero: vi.fn(async () => ({ status: "no_encontrado" as const })),
+    registrarRepartoMensajero: vi.fn(async () => ({ status: "sin_saldo" as const })),
     ...overrides,
   };
 }
@@ -606,12 +611,18 @@ describe("R65/R82 — NO se exporta ninguna accion de EDITAR ni de DESANULAR un 
     // en CINCO, que son las del diseño §3.1 — y al hacerlo ha tenido que tocar este test, que es
     // justo el momento de mirar si lo que se anade tiene derecho a existir. Un `editarPagoAction`
     // no lo tiene; un `desanularPagoAction` tampoco (R82).
+    //
+    // Feature 205 (T4.3, R52): SIETE. Las dos nuevas son PREVISUALIZAR (solo lectura) y
+    // REGISTRAR un reparto; no hay ninguna de editarlo ni de anularlo en bloque, y eso es una
+    // decision escrita (design §10.5, Q3): deshacer un reparto es anular sus pagos uno a uno.
     expect(Object.keys(accionesLiquidacion).sort()).toEqual([
       "anularPagoAction",
       "listarPagosDeCierreAction",
       "listarPagosDeTiendaAction",
+      "previsualizarRepartoMensajeroAction",
       "registrarPagoMensajeroAction",
       "registrarPagoTiendaAction",
+      "registrarRepartoMensajeroAction",
     ]);
   });
 

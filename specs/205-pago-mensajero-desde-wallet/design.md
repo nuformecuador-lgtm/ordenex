@@ -12,6 +12,11 @@ citado con archivo y línea en `requirements.md > Punto de partida`.
 > son nuevas; las secciones que cambiaron son §2.1, §2.4, §2.5, §5.4, §6.1, §7.2, §10, §11 y
 > §12. Todo lo anterior sigue en pie salvo el límite «sin tope» de §10.1, que la respuesta a Q2
 > deroga.
+>
+> **Enmienda posterior (misma fecha, ya con la tanda 4 construida).** El aviso de cierres
+> excluidos de R36 pasa de **lista** a **conteo por estado**: D-I es nueva y las secciones que
+> cambiaron son §6.4 (nueva), §7.2 y §12. Llegó **después** del spec aprobado, al descubrir la
+> implementación que la lista no tenía cota; la cronología completa, en §6.4.
 
 | # | Decisión | Alternativa descartada |
 | --- | --- | --- |
@@ -23,6 +28,7 @@ citado con archivo y línea en `requirements.md > Punto de partida`.
 | D-F *(Q1)* | El FIFO ordena por **`solicitado_at`** (el día trabajado), desempate por `id` | Ordenar por `resuelto_at`, la fecha de aprobación (§2.4) |
 | D-G *(Q2)* | Tope de **50** cierres por reparto, en `lib/config/reparto-mensajero.ts`, que **recorta la ventana** y responde `excede` con el disponible de esa ventana | Rechazar la operación al superar el tope (§2.5.3); y no poner tope (§2.5.4) |
 | D-H *(Q4)* | **Una** captura de método/referencia/fecha, copiada literal en las N imputaciones | Pedir una referencia por cierre (§5.4.2) |
+| D-I *(enmienda posterior)* | El aviso de cierres excluidos (R36) es un **conteo por estado**, agregado en la base y acotado por construcción | La **lista** de cierres excluidos con su id y su fecha, que es lo que R36 decía al aprobarse (§6.4) |
 
 ---
 
@@ -495,6 +501,57 @@ preciso («esto cambió, revisá») a cambio de un rechazo extra en un caso raro
 nuevo que mantener. Se descarta: recalcular bajo bloqueo ya impide el daño, y `excede` con el
 importe vigente es un mensaje suficiente.
 
+### 6.4 — El aviso de excluidos es un CONTEO por estado (D-I, enmienda posterior)
+
+> **Cronología, dicha a propósito.** Esta decisión **no** venía en el spec aprobado. R36 se
+> escribió y se implementó como una **lista** —una fila por cierre excluido, con su `cierreId` y su
+> `solicitadoAt` «para nombrarlo en pantalla»—, y fue al construirla cuando salió el problema:
+> *esa lista no tiene tope*. Se reportó como decisión de negocio pendiente
+> (`progress/impl_205_tandas3y4.md > HUECO DEL SPEC`), el humano la cerró el mismo día —conteo por
+> estado— y el código y los tests se cambiaron entonces. **El spec se quedó sin plegar**, y el
+> reviewer lo bloqueó por eso: R36 exigía una conducta y sus tests verificaban otra. Esta sección
+> y la §J de `requirements.md` cierran ese desfase; no abren nada nuevo.
+
+#### Lo elegido
+
+`previsualizarRepartoMensajero` devuelve `excluidos: ExcluidosPorEstadoDTO[]` (§7.2): **una entrada
+por estado** que tenga al menos un cierre no aprobado, con su `cantidad`. Nunca una fila por cierre.
+El agregado lo hace la **base de datos**, no el servidor en memoria: lo que hay que acotar no es lo
+que se devuelve, es lo que se **lee**.
+
+Lo que hace correcta a esta forma es que queda acotada **por construcción**: el tamaño de la
+respuesta depende del número de valores de `CierreEstado` —un puñado, y cerrado por el enum—, no
+del número de cierres del mensajero. Por eso no hay `take`, ni recorte, ni tope: no hace falta
+ninguno, y no hay ningún número que pueda quedarse corto el día que un mensajero acumule historial.
+
+#### Alternativa descartada: la lista de cierres excluidos (lo que decía R36 al aprobarse)
+
+Era la lectura literal del requisito y es la que se construyó primero. Se descarta porque **no
+tiene cota**: la previsualización se pide en cada tecleo del importe, y un mensajero con dos años
+de cierres rechazados se llevaría *todos* sus cierres —id y fecha, uno a uno— al diálogo, cada vez.
+Ponerle un tope arbitrario («los 20 últimos») no arregla nada: convierte un aviso que dice la
+verdad en uno que la dice a medias y sin manera de saber cuánto se calló. El conteo da la misma
+información útil —hay dinero que esta pantalla no está pagando, y por qué— con una respuesta que
+no puede crecer.
+
+#### El precio, escrito para que no sorprenda
+
+**Se pierde poder nombrar un cierre concreto en el aviso.** Antes viajaba el `solicitadoAt` de cada
+excluido justamente para eso, y ya no viaja. Quien necesite el detalle —qué cierre, de qué día, por
+qué se rechazó— abre `/cierres-admin`, que es adonde lleva el enlace que construye **T6** (R39,
+R43, R44). El aviso informa; el **inventario** vive en la pantalla que existe para eso.
+
+Consecuencia práctica: el aviso tampoco deriva un total («12 cierres quedan fuera»). Sumar los
+`cantidad` sería aritmética en el cliente, y aunque sean cardinales y no dinero, la regla de esta
+pantalla es que **no se deriva nada**. El texto enumera los estados con su cifra tal cual llegan.
+
+#### Que nadie lo revierta por intuición
+
+Devolver otra vez `cierreId`/`solicitadoAt` «para poder nombrarlos» **deshace esta decisión, no
+arregla un olvido**. Está escrito en los dos docstrings del código (el DTO del repositorio y el del
+borde) y hay **dos tests estructurales** que se ponen rojos si esos campos reaparecen — uno sobre el
+módulo de tipos y otro sobre la forma de la respuesta del servicio (§12, fila de R36).
+
 ---
 
 ## §7 — Contratos I/O
@@ -532,9 +589,14 @@ type ImputacionPrevistaDTO = {
   parcial: boolean;
 };
 
-type CierreExcluidoDTO = { cierreId: string; estado: CierreEstado; solicitadoAt: string };
-// R36 y §10.2: NO lleva importe. Un cierre no aprobado no ha devengado nada todavía y la 172
-// (R28) enseña `null` para su pendiente a propósito; inventar aquí una cifra lo contradiría.
+type ExcluidosPorEstadoDTO = { estado: CierreEstado; cantidad: number };
+// R36 (enmienda posterior, §6.4): es un CONTEO por estado, UNA entrada por estado que tenga al
+// menos un cierre — jamás una fila por cierre. `cantidad` es un CARDINAL (cuenta cierres, no
+// dinero) y por eso viaja como `number`, igual que los tres del recorte.
+// NO lleva `cierreId` ni `solicitadoAt`: el aviso informa, no inventaría, y el detalle vive en
+// `/cierres-admin` (§6.4). NO lleva importe, y tampoco es un olvido (§10.2): un cierre no
+// aprobado no ha devengado nada todavía y la 172 (R28) enseña `null` para su pendiente a
+// propósito; inventar aquí una cifra lo contradiría.
 
 type RecorteDTO = {          // enmienda Q2 — R56. El cliente lo PINTA, no lo deduce.
   aplicado: boolean;         // hay cierres imputables fuera de la ventana
@@ -557,7 +619,7 @@ type PrevisualizacionRepartoDTO = {
   imputaciones: ImputacionPrevistaDTO[];
   sobrante: string;
   excede: boolean;
-  excluidos: CierreExcluidoDTO[];
+  excluidos: ExcluidosPorEstadoDTO[];  // R36 — CONTEO por estado, jamás la lista de cierres
 };
 
 type RepartoAplicadoDTO = {
@@ -774,7 +836,8 @@ está entera en `reparto-liquidacion-mensajero.ts`, que sí está censado.
 | R28, R29, R30 | `liquidacion-reparto-service.test.ts` + `tests/integration/db/liquidacion-reparto-migration.test.ts` (el `UNIQUE` rechaza el duplicado en la base) |
 | R32–R34, R38 | `tests/components/RepartoPrevisualizacion.test.tsx` (pinta lo que devuelve el servidor; no calcula) |
 | R35 | `liquidacion-reparto-service.test.ts` (previsualizar no invoca ningún método de escritura) |
-| R36, R37 | `RepartoPrevisualizacion.test.tsx` (excluidos con su estado; aviso de deuda no imputable) |
+| R36 | *(enmienda §6.4: CONTEO por estado, no lista)* `tests/unit/repositories/liquidacion-pago-repository.test.ts` (el agregado ocurre en la BASE: `groupBy` por `estado` con el complemento exacto de `aprobado`, `findMany` ni una vez, sin ninguna columna de dinero) + `tests/unit/services/liquidacion-reparto-service.test.ts` (cada excluido tiene exactamente las claves `estado` y `cantidad`; con 900 rechazados sigue siendo UNA entrada, sin `cierreId` ni `solicitadoAt`) + `tests/unit/types/liquidacion-reparto-schema.test.ts` (estructural: `ExcluidosPorEstadoDTO` declara esos dos campos y ninguno más — es el test que impide revertir la decisión) + `tests/components/RepartoPrevisualizacion.test.tsx` (la pantalla pinta el conteo con su rótulo por estado y no deriva ningún total) |
+| R37 | `RepartoPrevisualizacion.test.tsx` (aviso de deuda no imputable con su cifra ya comparada en el servidor) |
 | R39, R40, R45 | `tests/components/CierresAdminDeepLink.test.tsx` (`?cierre=` abre el detalle; cerrarlo limpia la URL) |
 | R41, R42 | `CierresAdminDeepLink.test.tsx` (id inexistente ⇒ aviso sin datos; rol sin acceso ⇒ el guard de la página manda) |
 | R43, R44 | `tests/components/DesglosePagosMensajero.test.tsx` (fila con cierre ⇒ enlace; fila sin cierre ⇒ sin enlace) |

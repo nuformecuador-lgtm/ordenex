@@ -9,6 +9,50 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🔴 EN CURSO 2026-08-11/12 — feature **205**, rechazada por el reviewer y en corrección
+
+Pagar la cuenta por pagar del mensajero **desde `/wallet/mensajeros`**, imputando el importe a
+sus cierres pendientes. Rama `feature/205-pago-mensajero-desde-wallet`. Spec aprobado por el
+humano: 58 requisitos, 8 tandas. Implementación completa (tandas 0–6), gate completo **verde
+13346/13346**, migración `20260811140000_liquidacion_reparto` **aplicada SOLO en local**.
+
+**El reviewer RECHAZÓ, y ningún hallazgo es de código** (`progress/review_205.md`): 57/58
+requisitos con test verificado y 11 mutaciones propias del reviewer, 10 muertas. Los dos
+bloqueantes eran documentales y **el primero fue error del leader**: al encargar el cambio de
+lista→conteo acotó el encargo a «código y tests, no toques nada más» y nunca mandó plegarlo al
+spec, así que R36 exigía «identificándolos» mientras el código devolvía un conteo **y dos tests
+impedían volver atrás**. Plegado ya (R36, `design §6.4/§7.2/§12`, sección J con la cronología).
+Segundo bloqueante: la tanda 7 sin hacer — 29/31 tareas marcadas ahora, mapa consolidado en
+`progress/impl_205_mapa.md` (nombra R10–R13 y R17, que no aparecían en ninguna bitácora).
+
+**Pendiente**: rehacer el gate completo tras el plegado, m2/m3 del review, y el PR.
+
+**Hueco declarado**: el diálogo de pago, la previsualización, el aviso de excluidos y el enlace
+por fila **no se han visto en pantalla** — la base local no tiene ningún mensajero con cuenta
+por pagar, y fabricar ese estado por SQL daría un libro posiblemente inconsistente. Cubiertos
+por 44 tests de componente. El reviewer lo considera suficiente para aprobar el código y **no**
+para dar la pantalla por vista: recomienda sembrar un cierre aprobado y ejercerlo una vez antes
+de desplegar.
+
+## ✅ 2026-08-11 — features **200** y **201** EN PRODUCCIÓN (releases #341 y #343)
+
+**200 — rediseño de presentación de `/wallet`**: las dos cifras de la caja pasan a grilla de
+tiles, el dinero de terceros a banda destacada, el libro a una card con filtros en cabecera y
+paginación en el pie. `DataTable` gana `align` opcional. Mirar la app encontró dos defectos que
+13.000 tests daban por buenos: un icono `inline` de 16×72 px que se salía de su tarjeta, y los
+cuatro `Label htmlFor` de los filtros apuntando a ids **inexistentes desde la feature 42**.
+
+**201 — un solo formato de dinero**: la app mostraba la misma moneda de **cuatro maneras
+distintas** según la pantalla, con la coma y el punto intercambiados entre unas y otras. Trece
+copias del formateo mueren; queda `lib/config/moneda.ts`, que agrupa **por STRING** (nunca
+`Number`: medido, `"1500.50"` deja de serlo). Auditoría en la app: 120 importes, 0 fuera de
+formato.
+
+**Deuda dada de alta y no tocada**: 202 (`PageHeader` ilegible en oscuro, afecta a TODAS las
+páginas), 203 (el `testTimeout` da rojos espurios: el gate miente en las dos direcciones), 204
+(aritmética de dinero en el navegador), 206 (anulación agrupada), 207 (el censo de tablas cuenta
+prosa como JSX — **segunda ocurrencia**, y el daño real es que entrena a registrar fantasmas).
+
 ## 🎨 2026-08-08 — landing pública replicada (rama `ux`): **enmienda de la feature 86**
 
 Pedido humano: replicar el home de <https://ordenex.co/> en la ruta `/`, sin imágenes, solo

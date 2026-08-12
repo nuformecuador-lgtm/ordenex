@@ -62,6 +62,16 @@ export interface CrearLiquidacionPagoInput {
   nota: string | null;
   fechaPago: Date;
   registradoPor: string;
+  /**
+   * Feature 205 (T2.2, R28) — el ACTO del que nace este pago, o `null` si no nace de ninguno.
+   *
+   * Es OBLIGATORIO en el input y nullable en la columna, y las dos cosas a la vez son
+   * deliberadas: nullable porque un pago contra UN cierre desde `/cierres-admin` no pertenece a
+   * ningun reparto (R51, cero backfill); obligatorio en el tipo porque asi TODO camino de
+   * escritura tiene que declarar a que grupo pertenece lo que escribe. Un campo opcional dejaria
+   * que un escritor futuro se olvidara de atarlo y el reparto quedaria irreconstruible (R28).
+   */
+  repartoId: string | null;
 }
 
 /**
@@ -104,6 +114,55 @@ export interface CierreParaPagoDTO {
   estado: CierreEstado;
   totalPagoMensajero: string; // P — STRING 2 dec (snapshot de la 39)
   totalEfectivo: string; // E — STRING 2 dec (snapshot de la 37)
+}
+
+/**
+ * Feature 205 (T2.2, R5/R6/R8) — lo mismo de arriba MAS la ANTIGUEDAD, que es lo unico que el
+ * reparto necesita y el pago contra un cierre no: `solicitado_at` es el dia TRABAJADO y es el
+ * criterio del FIFO de R8 (Q1, design §2.4). NO se emite `resuelto_at`: ordenar por la fecha de
+ * aprobacion haria que la prioridad de cobro la fijara la latencia administrativa, y no emitirla
+ * es lo que impide que alguien la use por descuido.
+ *
+ * El pendiente NO viene aqui: se DERIVA en el servicio con `derivarPendienteCierre` a partir de
+ * estos dos snapshots y de la Σ de pagos vigentes (R6). Un `pendiente` calculado en el
+ * repositorio seria logica de negocio en la capa equivocada, y ademas dos derivaciones distintas
+ * del mismo numero.
+ */
+export interface CierreImputableDTO extends CierreParaPagoDTO {
+  solicitadoAt: string; // ISO — la antiguedad de R8 (el dia trabajado)
+}
+
+/**
+ * Feature 205 (T3.1, R36 — enmienda de negocio) — CUANTOS cierres del mensajero quedan fuera del
+ * reparto por no estar `aprobado`, agrupados por el estado que los deja fuera: «9 rechazados,
+ * 3 solicitados».
+ *
+ * **Es un CONTEO por estado, y nunca una lista.** Es una decision de negocio, no una
+ * optimizacion: el aviso de R36 existe para transmitir «hay dinero que no estas pagando aqui, y
+ * por que», no para inventariar. El inventario ya vive en `/cierres-admin`, que es adonde lleva
+ * el enlace de la pantalla. La primera version devolvia una fila por cierre y **no tenia tope**:
+ * un mensajero con dos años de cierres rechazados se los llevaba todos a la previsualizacion.
+ * Asi queda acotado **POR CONSTRUCCION** —el tamaño depende del numero de valores de
+ * `CierreEstado`, que es un puñado, no del numero de cierres— y por eso no hace falta ningun
+ * `take` ni recorte que pueda quedarse corto.
+ *
+ * **LO QUE SE PIERDE, y se acepta a sabiendas:** con un conteo ya no se puede nombrar un cierre
+ * concreto en el aviso. Antes viajaba tambien `solicitadoAt`, literalmente «para nombrarlo en
+ * pantalla», y ya no viaja. Es el precio de que la respuesta este acotada, y esta pagado a
+ * proposito. **Devolver otra vez la lista para poder nombrarlos deshace la decision, no arregla
+ * un olvido**: quien necesite el detalle abre `/cierres-admin`.
+ *
+ * **NO lleva ningun monto, y esa ausencia sigue siendo el diseño** (design §7.2/§10.2): un
+ * cierre no aprobado no ha devengado nada todavia —el libro del mensajero se escribe AL APROBAR—
+ * y la 172 enseña `null` como su pendiente a proposito. Sin montos aqui no hay forma de que una
+ * cifra inventada llegue a la pantalla por descuido. Un conteo no es un monto.
+ *
+ * El `estado` viaja porque R36 exige decir POR QUE quedan fuera: «no aparecen» y «aparecen como
+ * rechazados» son dos cosas distintas para quien mira si le pagaron todo.
+ */
+export interface CierresNoAprobadosPorEstadoDTO {
+  estado: CierreEstado;
+  cantidad: number; // CARDINAL: cuenta cierres, no dinero
 }
 
 /**
@@ -176,6 +235,68 @@ export interface ILiquidacionPagoRepository {
     cierreId: string,
     tx?: LiquidacionCierreTxClient,
   ): Promise<CierreParaPagoDTO | null>;
+  /**
+   * Feature 205 (T2.2, R5/R6/R8) — los cierres `aprobado` de UN mensajero, ordenados
+   * `solicitado_at ASC, id ASC`.
+   *
+   * **SIN `take`/`LIMIT`, y es una decision, no un olvido** (design §2.5.6). El tope de R53 acota
+   * la ESCRITURA (cuantos cierres se bloquean y se tocan), no la LECTURA: la previsualizacion
+   * necesita TODOS los imputables para poder decir cuantos quedan fuera de la ventana y cuanto
+   * suman (R56), y el aviso de deuda no imputable de R37 se mide contra el total. Son filas de
+   * `cierre_dia` de un solo mensajero, leidas sin bloqueo.
+   *
+   * **El `estado: aprobado` va en el WHERE** (mitad de R5): un cierre `solicitado`, `rechazado` o
+   * `vencido` no ha devengado nada todavia y no puede recibir un pago. La otra mitad —«pendiente
+   * > 0»— NO se puede expresar aqui, porque el pendiente se DERIVA de los pagos vigentes (R6):
+   * la resuelve el servicio.
+   *
+   * **El `orderBy` es EFICIENCIA, no la verdad del orden.** El criterio de R8 vive en
+   * `ordenarCierresFifo` (`lib/utils/reparto-liquidacion-mensajero.ts`), que reordena lo que
+   * reciba: asi el determinismo se prueba sin base de datos (R17) y no depende de que dos sitios
+   * escriban el mismo `ORDER BY`. Aqui se ordena igual para que el motor entregue las filas ya
+   * casi en su sitio.
+   *
+   * `tx` opcional por el mismo motivo que en `obtenerCierreParaPago`: la relectura bajo bloqueo
+   * (R23) tiene que ocurrir DENTRO de la transaccion; la previsualizacion (R35) ocurre fuera.
+   *
+   * SOLO LEE (R26): no existe en esta clase ningun metodo que escriba en `cierre_dia`.
+   */
+  listarCierresImputables(
+    mensajeroId: string,
+    tx?: LiquidacionCierreTxClient,
+  ): Promise<CierreImputableDTO[]>;
+  /**
+   * Feature 205 (T3.1, R36 — enmienda de negocio) — CUANTOS cierres del mensajero NO estan
+   * `aprobado`, agrupados por estado. Solo salen los estados que tienen al menos un cierre, y el
+   * orden es por `estado` para que dos llamadas iguales pinten igual.
+   *
+   * Es el complemento EXACTO de `listarCierresImputables`: aquel filtra `estado = aprobado`,
+   * este `estado != aprobado`. Los dos juntos son todos los cierres del mensajero y ninguno se
+   * cuenta dos veces — que es lo que R36 pide («que no desaparezcan en silencio»).
+   *
+   * **El conteo lo hace la BASE, con un `groupBy`, y eso es la mitad del contrato.** Traer las
+   * filas y contarlas en el proceso daria el mismo numero y dejaria intacto el problema que esta
+   * enmienda cierra: N filas sin tope viajando desde la base. Lo acotado no es lo que se devuelve,
+   * es lo que se lee. Hay un test que exige el `groupBy` y que `findMany` NO se llame.
+   *
+   * **No emite montos** (`CierresNoAprobadosPorEstadoDTO`): ver el DTO. **No admite `tx`**: la
+   * unica situacion que lo necesita es la PREVISUALIZACION, que ocurre fuera de toda transaccion
+   * (R35); un parametro opcional invitaria a usarlo dentro de la escritura, donde no pinta nada.
+   *
+   * SOLO LEE (R26).
+   */
+  contarCierresNoAprobadosPorEstado(
+    mensajeroId: string,
+  ): Promise<CierresNoAprobadosPorEstadoDTO[]>;
+  /**
+   * Feature 205 (T2.2, R28) — los pagos de UN reparto, que es como se reconstruye el resultado
+   * original de un reparto repetido en vez de inferirlo.
+   *
+   * Trae tambien los ANULADOS, igual que `listarPorCierre` y por el mismo motivo (R74): un pago
+   * anulado deja de descontar pero no deja de verse. Quien necesite solo los vigentes filtra por
+   * su `anulacion`.
+   */
+  listarPorReparto(repartoId: string): Promise<LiquidacionPagoDTO[]>;
   /**
    * T F.1 (R73/R75) — inserta la ANULACION en `tx`, traduciendo el choque del `UNIQUE(pago_id)`
    * en `ya_anulado`. **Nunca lanza por ese motivo**: un segundo intento es un desenlace

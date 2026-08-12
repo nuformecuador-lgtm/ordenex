@@ -78,6 +78,21 @@ export type PagoMensajeroMovimientoDTO = {
   origenId: string | null;
   descripcion: string | null;
   fechaMovimiento: string; // ISO
+  /**
+   * Feature 205 (T2.4, R43, design §7.3) — el CIERRE al que pertenece esta fila, o `null` si no
+   * pertenece a ninguno. Es lo que hace direccionable su detalle: la fila con cierre lleva enlace
+   * y la que no, no lo lleva (ni roto ni deshabilitado).
+   *
+   * **DERIVADO, no almacenado.** `pago_mensajero_movimiento` NO gana columna `cierre_id`: esa
+   * alternativa ya la descarto la 172 (§11.G) porque exigiria backfillear una tabla declarada
+   * inmutable y crearia una segunda forma de decir de donde viene un movimiento. Aqui el cierre
+   * se resuelve en la lectura: `origen_tipo = cierre_dia` -> el `origen_id` ES el cierre;
+   * `origen_tipo = pago_mensajero` -> el cierre del PAGO, resuelto con UNA consulta por pagina;
+   * el resto (`manual`) -> `null`.
+   *
+   * NO entra en las columnas de descarga: ese archivo sigue sin emitir identificadores.
+   */
+  cierreId: string | null;
 };
 
 // La cuenta por pagar nunca es negativa en el flujo normal (R16): positivo (Ordenex debe) o cero.

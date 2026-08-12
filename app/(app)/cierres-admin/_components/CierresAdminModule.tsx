@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,10 @@ import {
   CierreFacturaDetalle,
 } from "./cierre-factura";
 import { destinoCierre } from "./cierre-labels";
+// Feature 205 (T6.1): el nombre del parámetro que hace direccionable un cierre. Sale del
+// módulo compartido y no de un literal acá, porque quien construye el enlace vive en OTRA
+// pantalla (`/wallet/mensajeros`) y renombrarlo en un solo lado dejaría el enlace mudo.
+import { PARAM_CIERRE } from "./cierre-enlace";
 import {
   CierresAdminHistoricoTabla,
   type CierresAdminHistoricoPagina,
@@ -212,6 +216,45 @@ interface DetalleAbierto {
   pagoTienda: string;
 }
 
+/**
+ * Feature 205 (T6.1, design §4.1, R39/R40) — abre el detalle del cierre que nombra la URL.
+ *
+ * **No lee ninguna fila de ninguna tabla**: llama al `abrirDetalle` que ya existía, y ese pide
+ * `verCierreDetalle({ cierreId })` POR ID. Es lo que hace que el enlace funcione igual para un
+ * cierre de la página 7 del histórico, para uno filtrado fuera de la vista o para uno que ni
+ * siquiera está en la página cargada (R40), y es lo que hizo barata esta feature: los tres
+ * desenlaces de error —el cierre que no existe o está fuera de alcance, la sesión caída y el
+ * fallo genérico— ya estaban escritos ahí (R41).
+ *
+ * Va en un componente propio, y renderiza `null`, por un motivo mecánico: el efecto tiene que
+ * poder depender de `abrirDetalle`, que se declara DESPUÉS del `return` temprano de `sinZona`
+ * y por tanto no puede ser dependencia de un hook del módulo. Acá la dependencia es explícita
+ * y el disparo queda medido por el `ref`, no por la identidad de la función.
+ *
+ * **Una vez por navegación** (R40/R45): el `ref` recuerda qué id ya se abrió, así que los
+ * re-renders que provoca abrirlo no lo vuelven a abrir. Y cuando el parámetro desaparece —al
+ * cerrar el detalle, que lo retira de la URL (R45)— la memoria se borra: volver a navegar al
+ * MISMO cierre lo abre de nuevo, que es lo que espera quien pulsa el enlace por segunda vez.
+ */
+function AbrirCierreDeLaUrl({
+  cierreId,
+  onAbrir,
+}: Readonly<{ cierreId: string | null; onAbrir: (cierreId: string) => void }>) {
+  const abiertoPorUrl = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (cierreId === null) {
+      abiertoPorUrl.current = null;
+      return;
+    }
+    if (abiertoPorUrl.current === cierreId) return;
+    abiertoPorUrl.current = cierreId;
+    onAbrir(cierreId);
+  }, [cierreId, onAbrir]);
+
+  return null;
+}
+
 export function CierresAdminModule({
   pendientes,
   historico,
@@ -219,6 +262,10 @@ export function CierresAdminModule({
   puedeRegistrarPago = false,
 }: Readonly<CierresAdminModuleProps>) {
   const router = useRouter();
+  const pathname = usePathname();
+  // Feature 205 (T6.1, R39/R40): `?cierre=<uuid>` abre el detalle de ESE cierre. Se lee la
+  // URL y no un estado propio, que es lo que hace la dirección compartible y recargable.
+  const searchParams = useSearchParams();
   const toast = useToast();
   const { mutate } = useSWRConfig();
 
@@ -373,7 +420,26 @@ export function CierresAdminModule({
     toast.error("No se pudo abrir el detalle del cierre. Intentá de nuevo.");
   }
 
+  /**
+   * Feature 205 (T6.1, R45) — saca `?cierre=` de la dirección, conservando el resto de
+   * parámetros. Sin esto, recargar la pantalla volvería a abrir el detalle que se acaba de
+   * cerrar, y el usuario no tendría forma de salir de él salvo editando la URL a mano.
+   *
+   * `replace` y no `push`: cerrar un modal no es un paso de navegación que el botón «atrás»
+   * deba deshacer. Y no se hace nada si el parámetro no está: el detalle abierto desde la
+   * tabla no toca la URL, así que cerrarlo tampoco.
+   */
+  function limpiarCierreDeLaUrl() {
+    if (searchParams.get(PARAM_CIERRE) === null) return;
+    const parametros = new URLSearchParams(
+      [...searchParams.entries()].filter(([clave]) => clave !== PARAM_CIERRE),
+    );
+    const cadena = parametros.toString();
+    router.replace(cadena ? `${pathname}?${cadena}` : pathname, { scroll: false });
+  }
+
   function cerrarDetalle() {
+    limpiarCierreDeLaUrl();
     setDetalle(null);
     setRechazando(false);
     setMotivo("");
@@ -557,6 +623,13 @@ export function CierresAdminModule({
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Feature 205 (T6.1, R39/R40): el cierre que nombra la URL se abre al llegar. No pinta
+          nada; solo dispara la MISMA lectura por id que usa la tabla. */}
+      <AbrirCierreDeLaUrl
+        cierreId={searchParams.get(PARAM_CIERRE)}
+        onAbrir={abrirDetalle}
+      />
+
       {/* ---------- Pendientes de decisión (R4) ---------- */}
       <section
         aria-label="Pendientes de decisión"

@@ -11,6 +11,7 @@ import type {
   ILiquidacionPagoRepository,
   LiquidacionPagoDTO,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type { ILiquidacionRepartoRepository } from "@/lib/interfaces/repositories/ILiquidacionRepartoRepository";
 import type {
   CrearPagoMensajeroInput,
   IPagoMensajeroMovimientoRepository,
@@ -212,6 +213,42 @@ function buildDobles(opciones: {
       log.push("listar:por-tienda");
       return opciones.pagos ?? [];
     }),
+    // Feature 205 (T2.2): el contrato gana dos LECTURAS. Ningun test de este archivo las
+    // usa —son del reparto—, pero el doble las expone para poder afirmar que los caminos de la
+    // 172 NO las llaman.
+    listarCierresImputables: vi.fn(async () => {
+      log.push("listar:cierres-imputables");
+      return [];
+    }),
+    listarPorReparto: vi.fn(async () => {
+      log.push("listar:por-reparto");
+      return [];
+    }),
+    // Feature 205 (T3.1): la tercera lectura del reparto (el CONTEO por estado de los cierres no
+    // aprobados de R36). Tampoco la usa ningun test de este archivo, y por eso mismo esta
+    // espiada: los caminos de la 172 comparan el log ENTERO, asi que una llamada colada aqui los
+    // pondria rojos.
+    contarCierresNoAprobadosPorEstado: vi.fn(async () => {
+      log.push("contar:cierres-no-aprobados");
+      return [];
+    }),
+  };
+
+  /**
+   * Feature 205 (T3.2): el repositorio del ACTO de repartir, doble MUDO. Ningun test de este
+   * archivo reparte —eso vive en `liquidacion-reparto-service.test.ts`—, pero el servicio lo
+   * exige por constructor (no tiene default a proposito) y sus dos metodos escriben en el log:
+   * si un camino de la 172 escribiera un reparto, las comparaciones del log lo dirian.
+   */
+  const repartoRepo: ILiquidacionRepartoRepository = {
+    crear: vi.fn(async () => {
+      log.push("crear:reparto");
+      return { status: "clave_repetida" as const };
+    }),
+    obtenerPorClave: vi.fn(async () => {
+      log.push("obtener:reparto-por-clave");
+      return null;
+    }),
   };
 
   const tiendaRepo: IWalletTiendaMovimientoRepository = {
@@ -276,8 +313,20 @@ function buildDobles(opciones: {
     mensajeroRepo,
     runTransaction,
     caja,
+    repartoRepo, // feature 205 (T3.2): sin default, igual que el puerto de la caja
   );
-  return { service, pagoRepo, tiendaRepo, mensajeroRepo, caja, llamadasTx, log, tx, txsVistos };
+  return {
+    service,
+    pagoRepo,
+    tiendaRepo,
+    mensajeroRepo,
+    repartoRepo,
+    caja,
+    llamadasTx,
+    log,
+    tx,
+    txsVistos,
+  };
 }
 
 /** La fila que el servicio mando escribir en la CAJA PRINCIPAL (feature 173). */

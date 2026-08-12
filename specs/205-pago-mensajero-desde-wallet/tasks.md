@@ -7,6 +7,14 @@ hecho** y **dependencias**.
 **Gate por tanda:** `./init.sh --rapido`. **Gate final y antes del PR:** `./init.sh` completo,
 sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a medias.
 
+> **Estado — marcado el 2026-08-12, comprobado contra el árbol y las bitácoras.** `### [x]` = hecha
+> y verificada archivo por archivo (no por lo que diga una bitácora). **29 de 31 marcadas.** Las
+> dos que quedan sin marcar son de la tanda 7 y **no son mías**: **T7.2** (el gate completo lo
+> corre el leader, y además hay que volver a correrlo después de este plegado del spec) y **T7.3**
+> (bookkeeping: `spec_path` de la ficha 205 sí queda puesto, pero `progress/current.md` y la
+> entrada de `progress/history.md` las escribe el leader). Es el mismo corte que dejó
+> `specs/196-snapshot-ranking-diario/tasks.md`, donde T6.2 y T6.3 tampoco llevan marca.
+
 > **Enmienda del 2026-08-11** (respuestas Q1–Q5). Tareas nuevas: **T0.4** (config del tope) y
 > **T0.5** (verificación de la referencia repetida, que **bloquea** la tanda 3). Tareas
 > ampliadas: T0.1, T0.2, T0.3, T2.2, T3.1, T3.2, T3.3, T3.4, T4.1, T5.2, T5.5 y T7.1.
@@ -15,7 +23,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 
 ## Tanda 0 — El cálculo, puro y sin base de datos
 
-### T0.1 — Módulo puro del reparto
+### [x] T0.1 — Módulo puro del reparto
 - **Crea**: `lib/utils/reparto-liquidacion-mensajero.ts`
 - **Exporta**: `CierreImputable`, `Imputacion`, `RecorteVentana`, `Reparto`,
   `ordenarCierresFifo`, `repartirEntreCierres` (design §2.1).
@@ -30,7 +38,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   design §11).
 - **Depende de**: —
 
-### T0.2 — Tests del módulo puro `[P con T0.3, T0.4, T0.5]`
+### [x] T0.2 — Tests del módulo puro `[P con T0.3, T0.4, T0.5]`
 - **Crea**: `tests/unit/utils/reparto-liquidacion-mensajero.test.ts`
 - **Cubre**: R8, R10, R11, R12, R13, R17, R53 (parcial), R54.
 - **Hecho**: importe menor que el primer pendiente ⇒ una sola imputación parcial; importe que
@@ -47,7 +55,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   El archivo **no** importa Prisma para construir datos de entrada (entra STRING, sale STRING).
 - **Depende de**: T0.1
 
-### T0.3 — Censo money-safe ampliado `[P con T0.2, T0.4, T0.5]`
+### [x] T0.3 — Censo money-safe ampliado `[P con T0.2, T0.4, T0.5]`
 - **Edita**: `tests/unit/guards/liquidacion-money-safe.test.ts` (`ARCHIVOS_DE_LA_FEATURE`)
 - **Cubre**: R16, R50.
 - **Hecho**: se añade `lib/utils/reparto-liquidacion-mensajero.ts`; **antes** de añadirlo se
@@ -59,7 +67,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   resuelve tocando la guardia, se resuelve con el nombre.
 - **Depende de**: T0.1
 
-### T0.4 — Config del tope de imputaciones `[P con T0.2, T0.3, T0.5]`
+### [x] T0.4 — Config del tope de imputaciones `[P con T0.2, T0.3, T0.5]`
 - **Crea**: `lib/config/reparto-mensajero.ts`, `tests/unit/config/reparto-mensajero-config.test.ts`
 - **Cubre**: R53.
 - **Hecho**: patrón literal de `lib/config/gasto-fijo.ts` (`readPositiveInt` + `export const`);
@@ -73,8 +81,11 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   no lo es; meterlo ahí obligaría a inventarle un `DEFAULT_PAGE_SIZE` que no existe.
 - **Depende de**: —
 
-### T0.5 — VERIFICACIÓN: nadie asume una referencia por pago `[P con T0.2, T0.3, T0.4]`
+### [x] T0.5 — VERIFICACIÓN: nadie asume una referencia por pago `[P con T0.2, T0.3, T0.4]`
 - **Crea**: nota en `progress/impl_205-pago-mensajero-desde-wallet.md` (sección «T0.5»)
+  — **hecha, en `progress/impl_205_tanda0.md > T0.5`** (la bitácora se partió por tandas y el
+  nombre único no se llegó a usar; el mapa consolidado vive en `progress/impl_205_mapa.md`).
+  Resultado: compuerta **ABIERTA**, nada del árbol asume una referencia única por pago.
 - **Toca código**: **NO**. Es una auditoría de lectura; si hay que cambiar algo, no se cambia
   aquí (ver abajo).
 - **Cubre**: R58 (pre-requisito de su implementación) — design §5.4.3.
@@ -101,7 +112,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 
 ## Tanda 1 — Persistencia del acto
 
-### T1.1 — Modelos Prisma
+### [x] T1.1 — Modelos Prisma
 - **Edita**: `db/schema.prisma` (modelo `LiquidacionReparto`; `repartoId` nullable + relación
   en `LiquidacionPago`).
 - **Cubre**: R29, R49.
@@ -110,18 +121,23 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   `(mensajeroId, createdAt)`; `LiquidacionPago` no pierde ni renombra nada.
 - **Depende de**: —
 
-### T1.2 — Migración UP
+### [x] T1.2 — Migración UP
 - **Crea**: `db/migrations/<ts>_liquidacion_reparto/migration.sql`
 - **Cubre**: R29, R49.
 - **Hecho**: generada con `pnpm run db:migrate:create` (no a mano ni editada después de
-  aplicarse); crea la tabla con su `CHECK (monto_total > 0)`, sus dos FK, el `UNIQUE` y el
+  aplicarse) — **desviación declarada**: se generó con `prisma migrate diff
+  --from-config-datasource --to-schema --script` porque `db:migrate:create` aplica las
+  migraciones pendientes antes de escribir el archivo; el `CHECK` y el `ENABLE ROW LEVEL
+  SECURITY` se añadieron a mano sobre esa salida **antes** de aplicarla, igual que en la 172
+  (`progress/impl_205_tandas1y2.md > T1.2`); crea la tabla con su `CHECK (monto_total > 0)`,
+  sus dos FK, el `UNIQUE` y el
   índice; añade `liquidacion_pago.reparto_id` **nullable** con su FK e índice;
   `ALTER TABLE liquidacion_reparto ENABLE ROW LEVEL SECURITY`; **ninguna** sentencia altera,
   renombra o borra objetos preexistentes; **no** se crea ningún enum (los `down.sql` previos no
   se tocan).
 - **Depende de**: T1.1
 
-### T1.3 — Migración DOWN
+### [x] T1.3 — Migración DOWN
 - **Crea**: `db/migrations/<ts>_liquidacion_reparto/down.sql`
 - **Cubre**: R49.
 - **Hecho**: `ALTER TABLE liquidacion_pago DROP COLUMN IF EXISTS reparto_id` y luego
@@ -130,7 +146,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   (comparado, no supuesto).
 - **Depende de**: T1.2
 
-### T1.4 — Test de esquema y migración
+### [x] T1.4 — Test de esquema y migración
 - **Crea**: `tests/integration/db/liquidacion-reparto-migration.test.ts`
 - **Cubre**: R29, R49.
 - **Hecho**: columnas y tipos; el `UNIQUE` de `clave_idempotencia` **rechaza** el duplicado; el
@@ -143,7 +159,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 
 ## Tanda 2 — Repositorios
 
-### T2.1 — Repositorio del reparto
+### [x] T2.1 — Repositorio del reparto
 - **Crea**: `lib/interfaces/repositories/ILiquidacionRepartoRepository.ts`,
   `lib/repositories/LiquidacionRepartoRepository.ts`
 - **Cubre**: R28, R29.
@@ -154,7 +170,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   entrada y salida.
 - **Depende de**: T1.1
 
-### T2.2 — Ampliación del repositorio del pago
+### [x] T2.2 — Ampliación del repositorio del pago
 - **Edita**: `lib/interfaces/repositories/ILiquidacionPagoRepository.ts`,
   `lib/repositories/LiquidacionPagoRepository.ts`
 - **Cubre**: R5, R6, R8, R18, R28.
@@ -167,7 +183,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   **Ningún** método nuevo escribe en `cierre_dia`.
 - **Depende de**: T1.1
 
-### T2.3 — Tests de repositorios `[P con T2.4]`
+### [x] T2.3 — Tests de repositorios `[P con T2.4]`
 - **Crea**: `tests/unit/repositories/liquidacion-reparto-repository.test.ts`
 - **Edita**: el test existente del repositorio del pago (el que cubra `crear`).
 - **Cubre**: R5, R8, R28, R29.
@@ -177,7 +193,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   cuando no. Se comprueba el **WHERE**, no solo el resultado del doble.
 - **Depende de**: T2.1, T2.2
 
-### T2.4 — Cierre resuelto en el desglose `[P con T2.3]`
+### [x] T2.4 — Cierre resuelto en el desglose `[P con T2.3]`
 - **Edita**: `lib/types/wallet-mensajero.ts` (`PagoMensajeroMovimientoDTO.cierreId`),
   `lib/repositories/PagoMensajeroMovimientoRepository.ts`
 - **Cubre**: R43.
@@ -191,7 +207,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 
 ## Tanda 3 — El servicio
 
-### T3.1 — Escritor único y previsualización
+### [x] T3.1 — Escritor único y previsualización
 - **Edita**: `lib/services/LiquidacionService.ts`,
   `lib/interfaces/services/ILiquidacionService.ts`
 - **Cubre**: R1, R5, R6, R7, R15, R32, R35, R36, R37, R38, R51, R56, R57.
@@ -204,9 +220,14 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   `excluidos` y —si viene monto— las imputaciones, usando T0.1; el `tope` llega **una sola vez**
   por construcción del servicio desde T0.4 y lo comparten previsualizar y aplicar (R57); **no
   abre transacción, no toma bloqueos y no invoca ningún método de escritura**.
+- **Añadido aquí, que el spec no había previsto**: ninguna lectura de la tanda 2 podía dar los
+  `excluidos` de R36 (`listarCierresImputables` lleva `estado: "aprobado"` en el WHERE), así que
+  esta tarea añadió la lectura complementaria al repositorio del pago. Tras la **enmienda de
+  `design.md §6.4`** esa lectura es `contarCierresNoAprobadosPorEstado(mensajeroId)`: un
+  `groupBy` por estado, acotado por construcción y sin ninguna columna de dinero.
 - **Depende de**: T0.1, T0.4, T2.2
 
-### T3.2 — Aplicación del reparto
+### [x] T3.2 — Aplicación del reparto
 - **Edita**: `lib/services/LiquidacionService.ts`,
   `lib/interfaces/services/ILiquidacionService.ts`
 - **Cubre**: R1, R4, R14, R18, R19, R20, R21, R22, R23, R24, R25, R26, R28, R29, R55, R57, R58.
@@ -220,7 +241,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   devuelve el reparto **aplicado**; una excepción en cualquier punto revierte todo.
 - **Depende de**: T2.1, T3.1, **T0.5** (la verificación de la referencia va antes de escribir)
 
-### T3.3 — Tests del servicio
+### [x] T3.3 — Tests del servicio
 - **Crea**: `tests/unit/services/liquidacion-reparto-service.test.ts`
 - **Cubre**: R1, R5, R6, R7, R14, R15, R18, R19, R20, R23, R24, R25, R26, R28, R30, R35, R51,
   R54, R56, R57, R58.
@@ -241,7 +262,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   `registrarPagoMensajero` por ese importe.
 - **Depende de**: T3.2
 
-### T3.4 — Guardia de bloqueos y de alcance
+### [x] T3.4 — Guardia de bloqueos y de alcance
 - **Crea**: `tests/unit/guards/liquidacion-reparto-bloqueos.guardia.test.ts`
 - **Cubre**: R21, R22, R26, R52, R55.
 - **Hecho**: el reparto toma `{ tipo: "cierre" }` para **cada** cierre que toca y ninguno de
@@ -257,7 +278,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 
 ## Tanda 4 — Borde
 
-### T4.1 — Tipos y schemas
+### [x] T4.1 — Tipos y schemas
 - **Crea**: `lib/types/liquidacion-reparto.ts`
 - **Cubre**: R9, R27, R46, R47, R48, R56.
 - **Hecho**: los dos schemas de design §7.1 con `.strict()`; reusa `montoLiquidacionSchema`,
@@ -269,7 +290,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   un cardinal, no un monto.
 - **Depende de**: T0.1
 
-### T4.2 — Server Actions
+### [x] T4.2 — Server Actions
 - **Edita**: `lib/actions/liquidacion.ts`
 - **Cubre**: R2, R9, R47.
 - **Hecho**: `previsualizarRepartoMensajeroAction` y `registrarRepartoMensajeroAction` con el
@@ -279,7 +300,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   del mensajero).
 - **Depende de**: T3.2, T4.1
 
-### T4.3 — Tests del borde
+### [x] T4.3 — Tests del borde
 - **Crea**: `tests/unit/actions/liquidacion-reparto-actions.test.ts`
 - **Edita**: `tests/unit/actions/liquidacion-action.test.ts` (lista de exportaciones: 5 → 7)
 - **Cubre**: R2, R9, R46, R47, R52.
@@ -293,23 +314,31 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 
 ## Tanda 5 — UI del pago
 
-### T5.1 — Hueco de previsualización en el diálogo compartido
+### [x] T5.1 — Hueco de previsualización en el diálogo compartido
 - **Edita**: `components/shared/liquidacion/RegistrarPagoDialog.tsx`
 - **Cubre**: R27, R31, R34.
 - **Hecho**: prop **aditiva y opcional** `renderPrevisualizacion?: (monto: string) => ReactNode`
   pintada bajo el campo de monto; sin ella, el diálogo se comporta **exactamente** como hoy
   (`tests/components/RegistrarPagoDialog.test.tsx` verde sin tocar asserts); el archivo sigue
   sin `Number(`, sin `parseFloat` y sin biblioteca de decimales.
+- **Desviación declarada**: entraron **dos** props aditivas, no una. La segunda,
+  `mensajeSinSaldo`, existe porque el texto de `sin_saldo` del diálogo dice literalmente «esta
+  **tienda**» y hay un test de la 172 que lo fija palabra por palabra; es un rótulo con el
+  valor de siempre por defecto, no una regla. Además el tipo del resultado se ensanchó a
+  `RegistrarPagoResult | RegistrarRepartoResult`. Las dos ampliaciones son aditivas y el test
+  del diálogo siguió verde sin tocar un assert (`progress/impl_205_tandas5y6.md > 1 y 2`).
 - **Depende de**: —
 
-### T5.2 — Previsualización y acciones `[P con T5.3]`
+### [x] T5.2 — Previsualización y acciones `[P con T5.3]`
 - **Crea**: `app/(app)/wallet/mensajeros/_components/RepartoPrevisualizacion.tsx`,
   `app/(app)/wallet/mensajeros/_components/PagoMensajeroAcciones.tsx`
 - **Edita**: `app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts`
 - **Cubre**: R3, R32, R33, R36, R37, R38, R44, R56.
 - **Hecho**: la previsualización se pide al servidor con espera (`DEBOUNCE_MS_DEFAULT`) y se
   pinta como **lista descriptiva** (ni `<DataTable>` ni `<table>`, design §8); marca la
-  imputación parcial y su resto; lista los excluidos con su estado; pinta **dos avisos
+  imputación parcial y su resto; pinta el **conteo** de excluidos por estado —cuántos y de qué
+  estado, sin nombrar ningún cierre y sin sumar un total en el cliente (enmienda `design.md
+  §6.4`; el enunciado anterior decía «lista los excluidos con su estado»)—; pinta **dos avisos
   distintos** (design §8): el del **recorte por tope** con `enVentana`, `fuera` y `montoFuera`
   cuando `recorte.aplicado`, y el de **deuda no imputable** cuando `deudaNoImputable.hay` — nunca
   fundidos en uno; avisa cuando el importe excede; el botón se deshabilita con
@@ -317,7 +346,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   booleanos vienen del servidor); el texto no usa siglas contables.
 - **Depende de**: T4.2, T5.1
 
-### T5.3 — Montaje en el desglose `[P con T5.2]`
+### [x] T5.3 — Montaje en el desglose `[P con T5.2]`
 - **Edita**: `app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx`
 - **Cubre**: R3.
 - **Hecho**: `PagoMensajeroAcciones` se monta en la cabecera del desglose (espejo de
@@ -325,7 +354,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   la tabla, los filtros y la descarga existentes no cambian de comportamiento.
 - **Depende de**: T5.2
 
-### T5.4 — Censo money-safe de los archivos de cliente
+### [x] T5.4 — Censo money-safe de los archivos de cliente
 - **Edita**: `tests/unit/guards/liquidacion-money-safe.test.ts`
 - **Cubre**: R16, R50.
 - **Hecho**: los tres archivos de cliente nuevos/editados entran en el censo y pasan las cuatro
@@ -333,13 +362,14 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   `new Decimal`).
 - **Depende de**: T5.3
 
-### T5.5 — Tests de componentes
+### [x] T5.5 — Tests de componentes
 - **Crea**: `tests/components/RepartoPrevisualizacion.test.tsx`,
   `tests/components/PagoMensajeroAcciones.test.tsx`
 - **Cubre**: R3, R32, R33, R34, R36, R37, R38, R56.
 - **Hecho**: con una respuesta de servidor fija, la pantalla pinta esos importes **tal cual**
   (se cambia un importe de la respuesta y cambia el pintado, prueba de que no se recalcula);
-  la parcial aparece marcada con su resto; los excluidos aparecen con su estado; el aviso de
+  la parcial aparece marcada con su resto; los excluidos aparecen **contados por estado** (con
+  900 rechazados sigue siendo UNA línea, sin ids ni fechas — enmienda `design.md §6.4`); el aviso de
   deuda no imputable aparece solo cuando corresponde; con `recorte.aplicado` aparece el aviso del
   recorte con las tres cifras y **sin** el otro, y con los dos activos aparecen los **dos**
   textos, distinguibles (R56); sin nada imputable el control queda deshabilitado con su
@@ -350,7 +380,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 
 ## Tanda 6 — El cierre, direccionable
 
-### T6.1 — Enlace profundo en `/cierres-admin`
+### [x] T6.1 — Enlace profundo en `/cierres-admin`
 - **Edita**: `app/(app)/cierres-admin/_components/CierresAdminModule.tsx`
   (y `app/(app)/cierres-admin/page.tsx` **solo** si hace falta el límite de `Suspense`)
 - **Cubre**: R39, R40, R41, R42, R45.
@@ -361,7 +391,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   sin tocar asserts).
 - **Depende de**: —
 
-### T6.2 — Enlaces por fila
+### [x] T6.2 — Enlaces por fila
 - **Edita**: `app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx`,
   `app/(app)/wallet/mensajeros/_components/RepartoPrevisualizacion.tsx`
 - **Cubre**: R43, R44.
@@ -370,7 +400,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   cada cierre de la previsualización y del resultado lleva el mismo enlace.
 - **Depende de**: T2.4, T6.1, T5.2
 
-### T6.3 — Tests del enlace
+### [x] T6.3 — Tests del enlace
 - **Crea**: `tests/components/CierresAdminDeepLink.test.tsx`
 - **Edita**: `tests/components/DesglosePagosMensajero.test.tsx` (o se crea si no existe)
 - **Cubre**: R39, R40, R41, R42, R43, R44, R45.
@@ -384,8 +414,11 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 
 ## Tanda 7 — Cierre
 
-### T7.1 — Mapa de trazabilidad y evidencia
-- **Crea**: `progress/impl_205-pago-mensajero-desde-wallet.md`
+### [x] T7.1 — Mapa de trazabilidad y evidencia
+- **Crea**: `progress/impl_205-pago-mensajero-desde-wallet.md` → **hecho en
+  `progress/impl_205_mapa.md`** (2026-08-12). El nombre cambia porque las bitácoras de esta
+  feature se partieron por tandas (`impl_205_tanda0`, `impl_205_tandas1y2`, `impl_205_tandas3y4`,
+  `impl_205_tandas5y6`) y el archivo consolidado tenía que distinguirse de las cuatro.
 - **Cubre**: los 58 requisitos.
 - **Hecho**: tabla `R<n> → test` completa (design §12) con la **salida real** de los tests
   pegada; ningún `R` sin test; se anota además la contraprueba de T0.3 (el censo visto en rojo
@@ -404,6 +437,10 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
 - **Edita**: `feature_list.json` (id 205 → estado y `spec_path`), `progress/current.md`
 - **Hecho**: solo se tocan los campos de la 205; el diff no arrastra altas ajenas; `status_note`
   de 3-6 líneas técnicas (el detalle vive en `progress/`); archivos en LF.
+- **Parcial (2026-08-12)**: `spec_path` de la ficha 205 ya apunta a
+  `specs/205-pago-mensajero-desde-wallet`. Quedan `progress/current.md`, la entrada de
+  `progress/history.md` (`CHECKPOINTS > Verificación final`) y el `status_note`/estado final,
+  que los escribe el leader tras T7.2. Por eso la tarea sigue **sin marcar**.
 - **Depende de**: T7.2
 
 ---

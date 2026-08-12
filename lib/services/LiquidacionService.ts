@@ -3,9 +3,11 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   BeneficiarioBloqueo,
   CierreParaPagoDTO,
+  CrearLiquidacionPagoResult,
   ILiquidacionPagoRepository,
   LiquidacionPagoDTO,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type { ILiquidacionRepartoRepository } from "@/lib/interfaces/repositories/ILiquidacionRepartoRepository";
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { ICajaPagoTiendaFeedService } from "@/lib/interfaces/services/ICajaPagoTiendaFeedService";
@@ -15,16 +17,26 @@ import type {
   ListarPagosServiceResult,
   LiquidacionTx,
   LiquidacionTxRunner,
+  PrevisualizarRepartoServiceResult,
   RegistrarPagoServiceResult,
+  RegistrarRepartoServiceResult,
 } from "@/lib/interfaces/services/ILiquidacionService";
 import type {
   AnulacionDTO,
   AnularPagoInput,
+  MetodoLiquidacion,
   PagoRegistradoDTO,
   RegistrarPagoMensajeroInput,
   RegistrarPagoTiendaInput,
 } from "@/lib/types/liquidacion";
+import type {
+  ImputacionAplicadaDTO,
+  PrevisualizarRepartoInput,
+  RegistrarRepartoMensajeroInput,
+} from "@/lib/types/liquidacion-reparto";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { repartoMensajeroConfig } from "@/lib/config/reparto-mensajero";
+import { derivarCuentaPorPagar } from "@/lib/utils/cuenta-por-pagar";
 import {
   descripcionDeAnulacion,
   descripcionDePago,
@@ -32,6 +44,11 @@ import {
 } from "@/lib/utils/descripcion-pago";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
+import {
+  ordenarCierresFifo,
+  repartirEntreCierres,
+  type CierreImputable,
+} from "@/lib/utils/reparto-liquidacion-mensajero";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 
 /**
@@ -61,6 +78,65 @@ class YaAnuladoError extends Error {
     super("liquidacion: el pago ya estaba anulado");
     this.name = "YaAnuladoError";
   }
+}
+
+/**
+ * Feature 205 (§5.1/R28/R29) — la tercera hermana, para el `UNIQUE(clave_idempotencia)` de
+ * `liquidacion_reparto`, y existe por la MISMA razon tecnica que las dos de arriba: en Postgres
+ * un error de sentencia deja la transaccion ABORTADA, asi que el reparto original no se puede
+ * releer dentro de ella. Se lanza para salir y la relectura ocurre FUERA.
+ *
+ * La fila del reparto se inserta LA PRIMERA de la transaccion, antes de mover un centimo: cuando
+ * esta señal salta no hay ni un pago escrito que revertir, solo la transaccion vacia. Nunca
+ * escapa de `registrarRepartoMensajero`.
+ */
+class RepartoRepetidoError extends Error {
+  constructor() {
+    super("liquidacion: clave de idempotencia del reparto ya usada");
+    this.name = "RepartoRepetidoError";
+  }
+}
+
+/**
+ * Feature 205 — el caso IMPOSIBLE-EN-TEORIA de la escritura del reparto: la clave derivada de
+ * una imputacion (`<clave del reparto>:<cierreId>`) ya existe.
+ *
+ * No puede ocurrir: esa clave solo la acuña este metodo, y para repetirla haria falta repetir la
+ * clave DEL REPARTO — que el `UNIQUE` de `liquidacion_reparto` ya rechazo tres pasos antes, antes
+ * de escribir nada. Si aun asi ocurriera, lo correcto es **fallar y revertirlo todo** (R20): un
+ * reparto al que le falta una imputacion es dinero comprometido que no se aplico, y devolver `ok`
+ * con menos filas de las debidas seria mentir sobre lo que se pago. No se traduce a ningun estado
+ * de respuesta a proposito — no hay ninguno que describa esto sin inventarselo.
+ */
+class ImputacionRepetidaError extends Error {
+  constructor(cierreId: string) {
+    super(`liquidacion: la imputacion al cierre ${cierreId} choco con una clave ya usada`);
+    this.name = "ImputacionRepetidaError";
+  }
+}
+
+/**
+ * Feature 205 (§2.3) — lo que el ESCRITOR UNICO necesita para dejar un pago contra un cierre:
+ * el documento y su movimiento en el libro del mensajero.
+ *
+ * Los nueve campos son los mismos que escribe hoy el pago contra un cierre unico, y el tipo
+ * existe para que los dos caminos —el pago simple y cada imputacion de un reparto— no puedan
+ * pasar cosas distintas. `repartoId` es el unico que difiere entre ellos, y es obligatorio: cada
+ * escritor declara a que acto pertenece lo que escribe, o `null` si no pertenece a ninguno.
+ */
+interface PagoDeCierreEscrito {
+  claveIdempotencia: string;
+  mensajeroId: string;
+  cierreId: string;
+  /** STRING escala 2, YA redondeado por quien llama: documento y libro comparten este mismo. */
+  monto: string;
+  metodo: MetodoLiquidacion;
+  referencia: string | null;
+  nota: string | null;
+  /** Medianoche UTC del dia de pago (`medianocheUtcDelDia`), no el instante de registro. */
+  fechaPago: Date;
+  registradoPor: string;
+  repartoId: string | null;
 }
 
 /**
@@ -115,6 +191,17 @@ function bloqueoDelBeneficiario(beneficiario: BeneficiarioDelPago): Beneficiario
     : { tipo: "tienda", tiendaId: beneficiario.tiendaId };
 }
 
+/**
+ * Feature 205 — Σ de los pendientes de una lista de cierres imputables, con `Prisma.Decimal` y
+ * sin pasar por ningun `number`. Se usa para lo que queda por imputar tras un reparto (el resto
+ * de la ventana MAS los recortados) y para el restante de la respuesta idempotente.
+ */
+function sumarPendientes(cierres: readonly CierreImputable[]): Prisma.Decimal {
+  let total = new Prisma.Decimal(0);
+  for (const cierre of cierres) total = total.add(new Prisma.Decimal(cierre.pendiente));
+  return total;
+}
+
 /** R74 — el comprobante con su bloque de anulacion recien puesto, sin releerlo de la base. */
 function conAnulacion(pago: LiquidacionPagoDTO, anulacion: AnulacionDTO): PagoRegistradoDTO {
   return { ...aPagoRegistradoDTO(pago), anulacion };
@@ -158,7 +245,25 @@ export class LiquidacionService implements ILiquidacionService {
      * inaceptable. Si falta, no compila.
      */
     private readonly caja: ICajaPagoTiendaFeedService,
+    /**
+     * Feature 205 (T3.2, R28/R29) — el repositorio del ACTO de repartir. Va SIN valor por
+     * defecto y ANTES del reloj por el mismo criterio que el puerto de la caja: sin el no hay
+     * barrera de idempotencia para el reparto, y un reparto sin barrera es un doble pago. Si
+     * falta, no compila; y como va antes que `ahora`, no hay forma de cablearlo «casi bien».
+     */
+    private readonly repartoRepo: ILiquidacionRepartoRepository,
     private readonly ahora: () => Date = () => new Date(),
+    /**
+     * Feature 205 (T3.1/T3.2, R53/R57) — el TOPE de cierres que UN reparto puede tocar, recibido
+     * **una sola vez** en la construccion y compartido por previsualizar y aplicar: no hay dos
+     * numeros que puedan divergir, que es literalmente lo que R57 exige.
+     *
+     * El default sale del unico punto de configuracion (`lib/config/reparto-mensajero.ts`, R53)
+     * y NO se escribe aqui ningun numero: un literal en este archivo seria la segunda copia. Es
+     * inyectable para que un test ejercite el recorte con `tope: 2` y tres cierres en vez de con
+     * cincuenta y uno.
+     */
+    private readonly maxCierresPorReparto: number = repartoMensajeroConfig.MAX_CIERRES_POR_REPARTO,
   ) {}
 
   /**
@@ -207,10 +312,12 @@ export class LiquidacionService implements ILiquidacionService {
           return { status: "excede", disponible: pendiente.toFixed(2) };
         }
 
-        const creado = await this.pagoRepo.crear(tx, {
+        // Feature 205 (§2.3): el cuerpo que escribe documento + movimiento vive en UN solo
+        // metodo, compartido con cada imputacion de un reparto. Lo que se le pasa es lo mismo
+        // que se escribia aqui, campo a campo.
+        const creado = await this.escribirPagoDeCierre(tx, {
           claveIdempotencia: input.claveIdempotencia,
           mensajeroId: cierre.mensajeroId, // R5: el beneficiario sale del CIERRE
-          tiendaId: null,
           cierreId: cierre.id, // R21: el pago al mensajero va SIEMPRE atado a un cierre
           monto: montoStr,
           metodo: input.metodo,
@@ -218,23 +325,12 @@ export class LiquidacionService implements ILiquidacionService {
           nota: input.nota ?? null,
           fechaPago: medianocheUtcDelDia(input.fechaPago),
           registradoPor: actor.usuarioId,
+          // Feature 205 (T2.2/R51): este camino paga contra UN cierre desde /cierres-admin y NO
+          // pertenece a ningun reparto. `null` es el dato, no una ausencia — y el comportamiento
+          // observable de este metodo no cambia ni un byte.
+          repartoId: null,
         });
         if (creado.status === "clave_repetida") throw new ClaveRepetidaError();
-
-        // R35/R37/R38/R39: el movimiento del libro del mensajero nace del documento.
-        await this.mensajeroRepo.crearMovimientos(tx, [
-          {
-            mensajeroId: cierre.mensajeroId,
-            tipo: "pago",
-            categoria: "liquidacion",
-            monto: montoStr,
-            origenTipo: "pago_mensajero", // R38: enlaza el movimiento con su documento…
-            origenId: creado.pago.id, //      …y hereda la idempotencia del indice unico parcial
-            descripcion: descripcionDePago(input.metodo, input.referencia ?? null),
-            registradoPor: actor.usuarioId,
-            fechaMovimiento: medianocheUtcDelDia(input.fechaPago), // R37: la fecha REAL del pago
-          },
-        ]);
 
         return {
           status: "ok",
@@ -249,6 +345,244 @@ export class LiquidacionService implements ILiquidacionService {
           cierreId: input.cierreId,
         });
       }
+      throw error;
+    }
+  }
+
+  /**
+   * Feature 205 (T3.1, R32-R38/R56/R57) — QUE PASARIA si se repartiera este importe entre los
+   * cierres pendientes del mensajero. **Solo lectura, y sin efecto alguno** (R35).
+   *
+   * Lo que NO hace, y es la mitad de su contrato: no abre transaccion, no toma ni un bloqueo y no
+   * llama a ningun metodo de escritura. No es una reserva ni un contrato: es una ADVERTENCIA
+   * (design §6.1). Al confirmar, el reparto se recalcula BAJO BLOQUEO (R23) y lo que se aplica
+   * puede diferir de esto. Congelarlo exigiria mantener bloqueos entre dos peticiones HTTP.
+   *
+   * Todo lo que devuelve va ya DERIVADO y comparado en el servidor (R34): los importes salen como
+   * STRING de escala 2 y los dos avisos —`recorte` y `deudaNoImputable`— llegan como booleanos con
+   * sus cifras, para que el cliente no reste ni compare dinero.
+   *
+   * Usa EXACTAMENTE la misma funcion pura y el MISMO tope que la escritura (R57): los dos caminos
+   * llaman a `repartirEntreCierres` con `this.maxCierresPorReparto`, que entro una sola vez por
+   * construccion.
+   */
+  async previsualizarRepartoMensajero(
+    input: PrevisualizarRepartoInput,
+    actor: Actor,
+  ): Promise<PrevisualizarRepartoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R4 — antes de leer NADA
+
+    // El NOMBRE es lo unico de la persona que cruza (R48) y ademas es la guardia de existencia:
+    // `null` = ese mensajero no existe, y se responde sin exponer ninguna cifra.
+    const mensajeroNombre = await this.mensajeroRepo.obtenerNombreMensajero(input.mensajeroId);
+    if (mensajeroNombre === null) return { status: "no_encontrado" };
+
+    const imputables = await this.imputablesDe(input.mensajeroId);
+    // Sin monto, se reparte "0.00": la funcion pura devuelve cero imputaciones y las MISMAS
+    // cifras de ventana, total y recorte. Asi no hay dos caminos que puedan calcular la ventana
+    // de dos maneras (R57).
+    const reparto = repartirEntreCierres(
+      input.monto ?? "0.00",
+      imputables,
+      this.maxCierresPorReparto,
+    );
+
+    // R37: la cuenta por pagar de la fila de la pantalla, derivada del LIBRO (Σ devengo − Σ pago),
+    // que es un conjunto mas ancho que los cierres: puede incluir ajustes manuales que no cuelgan
+    // de ninguno. La comparacion se hace AQUI (design §7.2), no en el cliente.
+    const agregado = await this.mensajeroRepo.agregarCuentaPorPagar(input.mensajeroId, {});
+    const cuentaPorPagar = derivarCuentaPorPagar(agregado.devengado, agregado.pagado).cuentaPorPagar;
+    const noImputable = new Prisma.Decimal(cuentaPorPagar).sub(reparto.imputableTotal);
+    const hayNoImputable = noImputable.gt(0);
+
+    // R36: CUANTOS cierres quedan fuera por no estar aprobados, por estado y SIN importe. Es un
+    // conteo agregado en la base, no la lista de cierres: el aviso dice «hay dinero que no estas
+    // pagando aqui, y por que», no inventaria (el inventario esta en `/cierres-admin`). Asi la
+    // respuesta queda acotada por el numero de estados, no por el de cierres. Ver el DTO.
+    const excluidos = await this.pagoRepo.contarCierresNoAprobadosPorEstado(input.mensajeroId);
+
+    const antiguedadPorCierre = new Map(imputables.map((c) => [c.cierreId, c.solicitadoAt]));
+
+    return {
+      status: "ok",
+      previsualizacion: {
+        mensajeroNombre,
+        imputable: reparto.imputable, // el de la VENTANA: es el `disponible` del dialogo
+        imputableTotal: reparto.imputableTotal,
+        cuentaPorPagar,
+        deudaNoImputable: {
+          hay: hayNoImputable,
+          // Nunca negativo: si el imputable supera a la cuenta por pagar —posible con un dato
+          // historico raro— lo que hay que decir es «no hay deuda fuera de los cierres», no una
+          // deuda al reves.
+          monto: hayNoImputable ? noImputable.toFixed(2) : "0.00",
+        },
+        recorte: {
+          // R56: `aplicado` es «hay cierres imputables FUERA de la ventana», no «la ventana esta
+          // llena». Con exactamente `tope` cierres imputables no hay recorte que avisar.
+          aplicado: reparto.recorte.fuera > 0,
+          tope: reparto.recorte.tope,
+          enVentana: reparto.recorte.enVentana,
+          fuera: reparto.recorte.fuera,
+          montoFuera: reparto.recorte.montoFuera,
+        },
+        imputaciones: reparto.imputaciones.map((imputacion) => ({
+          cierreId: imputacion.cierreId,
+          solicitadoAt: antiguedadPorCierre.get(imputacion.cierreId) ?? "",
+          pendienteActual: imputacion.pendienteAntes,
+          monto: imputacion.monto,
+          pendienteDespues: imputacion.pendienteDespues,
+          parcial: imputacion.parcial,
+        })),
+        sobrante: reparto.sobrante,
+        // R38: el aviso de exceso lo resuelve el servidor comparando con `Prisma.Decimal`.
+        excede: new Prisma.Decimal(reparto.sobrante).gt(0),
+        // Se copia grupo a grupo, sin expandir a filas y sin sumar un total: lo que la pantalla
+        // dice es «N rechazados, M solicitados», y ningun cierre concreto (se perdio poder
+        // nombrarlo, y es el precio aceptado de que esto no crezca con el historial).
+        excluidos: excluidos.map((grupo) => ({
+          estado: grupo.estado,
+          cantidad: grupo.cantidad,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Feature 205 (T3.2) — REPARTE un importe entre los cierres pendientes del mensajero, del mas
+   * antiguo al mas reciente, en UN solo acto y **todo o nada** (R20).
+   *
+   * Los pasos, en el orden de `design.md §2.1`, y CADA UNO esta donde esta por un motivo:
+   *
+   *  1. **ROL** (R1/R4), antes de tocar o leer un solo dato. Igual que los otros dos registros.
+   *  2. **UNA transaccion** (R20). Si algo falla en la imputacion N, no queda ni la primera.
+   *  3. **La fila del ACTO, LA PRIMERA** (§5.1/R28/R29). El choque de su `UNIQUE` sale por una
+   *     señal interna y se responde FUERA (en Postgres la transaccion queda abortada). Derivar la
+   *     clave por cierre en vez de tener esta fila esta ROTO y se midio por que: tras un primer
+   *     intento con exito el FIFO empieza en otro cierre, la clave derivada no colisiona con nada
+   *     y **se pagaria dos veces** (§5.2).
+   *  4. **La VENTANA**: los `tope` primeros del orden FIFO (R53/R54). Los recortados no se
+   *     bloquean ni se tocan (R55) — no se van a escribir.
+   *  5. **LOS BLOQUEOS, uno por cierre de la ventana y EN ESE ORDEN** (R21/R22). El grano no
+   *     cambia (la fila del cierre, el mismo que toma el pago simple) y el orden total es lo unico
+   *     que impide el interbloqueo: dos repartos concurrentes del mismo mensajero adquieren en el
+   *     mismo orden, y el pago simple toma UN solo candado, asi que nunca espera con otro en la
+   *     mano (§3.1). **Reordenarlos por conveniencia es fabricar un interbloqueo en produccion.**
+   *  6. **RELECTURA bajo bloqueo y RECALCULO** (R23/R24): manda lo que se lee aqui, nunca lo que
+   *     dijo una previsualizacion. Si un cierre de la ventana se cayo, la ventana ENCOGE — no se
+   *     rellena con el siguiente (§2.5.5), porque rellenar obligaria a bloquear un cierre fuera
+   *     del orden acordado, que es como se fabrican los interbloqueos.
+   *  7. **ESCRITURA** por imputacion con el escritor unico (§2.3), con el MISMO metodo, la MISMA
+   *     referencia y la MISMA fecha en las N (R58): hubo una transferencia y un comprobante.
+   *  8. Devuelve el reparto **realmente aplicado** (R25).
+   */
+  async registrarRepartoMensajero(
+    input: RegistrarRepartoMensajeroInput,
+    actor: Actor,
+  ): Promise<RegistrarRepartoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R4 — antes de tocar datos
+
+    // Escala 2 fijada UNA vez: el mismo STRING va al acto, a cada documento y a cada linea del
+    // libro, asi que ninguna de las tres cosas puede discrepar por un redondeo.
+    const monto = new Prisma.Decimal(input.monto).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    const montoStr = monto.toFixed(2);
+    // R58: metodo, referencia y fecha se capturan UNA vez, aqui, y se copian literales en las N.
+    const referencia = input.referencia ?? null;
+    const nota = input.nota ?? null;
+    const fechaPago = medianocheUtcDelDia(input.fechaPago);
+
+    try {
+      return await this.runTransaction(async (tx) => {
+        // (3) El ACTO, antes de mover un centimo.
+        const acto = await this.repartoRepo.crear(tx, {
+          claveIdempotencia: input.claveIdempotencia,
+          mensajeroId: input.mensajeroId,
+          montoTotal: montoStr,
+          registradoPor: actor.usuarioId, // R7 de la 172: un pago siempre lo registra alguien
+        });
+        if (acto.status === "clave_repetida") throw new RepartoRepetidoError();
+
+        // (4) La ventana. `ordenarCierresFifo` es la verdad del orden (R8), no el `ORDER BY`.
+        const previos = ordenarCierresFifo(await this.imputablesDe(input.mensajeroId, tx));
+        const ventana = previos.slice(0, this.maxCierresPorReparto);
+        const recortados = previos.slice(this.maxCierresPorReparto);
+
+        // (5) Los candados, EN EL ORDEN DE LA VENTANA. Es un bucle secuencial a proposito: un
+        // `Promise.all` los pediria en orden indeterminado y se acabo la defensa anti-interbloqueo.
+        for (const cierre of ventana) {
+          await this.pagoRepo.bloquearBeneficiario(tx, {
+            tipo: "cierre",
+            cierreId: cierre.cierreId,
+          });
+        }
+
+        // (6) Relectura bajo bloqueo y recalculo con el MISMO tope.
+        const bajoBloqueo = await this.ventanaBajoBloqueo(tx, input.mensajeroId, ventana);
+        const reparto = repartirEntreCierres(montoStr, bajoBloqueo, this.maxCierresPorReparto);
+
+        // R15: nada que imputar. Va ANTES que el exceso: con la ventana vacia el importe siempre
+        // «excede», y decirle al operador que el disponible es 0.00 es peor que decirle que no
+        // hay nada que pagar.
+        if (new Prisma.Decimal(reparto.imputable).lte(0)) return { status: "sin_saldo" };
+        // R14: el disponible es el de la VENTANA vigente, y no se escribe nada.
+        //
+        // Se nombra `imputable` y no `imputableTotal` aunque AQUI valgan lo mismo, y conviene
+        // saber por que valen lo mismo: a este recalculo se le pasa `bajoBloqueo`, que ya es la
+        // ventana (≤ tope), asi que no queda nada recortado y `imputableTotal = imputable + 0`.
+        // Lo que hace que el disponible sea el de la VENTANA no es esta linea: es que el conjunto
+        // que se recalcula es la ventana. Los recortados vuelven a aparecer, y solo ahi, en
+        // `restanteImputable` — que es informativo y no un limite de lo que se puede pagar hoy.
+        if (new Prisma.Decimal(reparto.sobrante).gt(0)) {
+          return { status: "excede", disponible: reparto.imputable };
+        }
+
+        // (7) Una fila de pago y un movimiento por imputacion, con SU cierre (R18/R19).
+        const imputaciones: ImputacionAplicadaDTO[] = [];
+        for (const imputacion of reparto.imputaciones) {
+          const creado = await this.escribirPagoDeCierre(tx, {
+            // §5.1: derivada y AUDITABLE. No es la barrera —esa es la fila del acto— pero deja
+            // la columna con un valor que dice de que reparto y de que cierre nacio, en vez de
+            // un uuid inventado.
+            claveIdempotencia: `${input.claveIdempotencia}:${imputacion.cierreId}`,
+            mensajeroId: input.mensajeroId,
+            cierreId: imputacion.cierreId,
+            monto: imputacion.monto,
+            metodo: input.metodo, // R58: los tres, IDENTICOS en las N imputaciones
+            referencia,
+            nota,
+            fechaPago,
+            registradoPor: actor.usuarioId,
+            repartoId: acto.reparto.id, // R28: lo que hace el grupo reconstruible
+          });
+          // Imposible en teoria (ver `ImputacionRepetidaError`): revierte el reparto ENTERO en
+          // vez de devolver un `ok` al que le falta una imputacion.
+          if (creado.status !== "creado") throw new ImputacionRepetidaError(imputacion.cierreId);
+
+          imputaciones.push({
+            cierreId: imputacion.cierreId,
+            monto: imputacion.monto,
+            pendienteDespues: imputacion.pendienteDespues,
+          });
+        }
+
+        return {
+          status: "ok",
+          reparto: {
+            totalImputado: reparto.totalImputado,
+            // Lo que SIGUE debiendose por cierres: lo que queda en la ventana MAS lo que quedo
+            // recortado. Tras un reparto con recorte es > 0 a proposito, y es lo que dice que
+            // hace falta registrar otro (design §7.2).
+            restanteImputable: new Prisma.Decimal(reparto.imputable)
+              .sub(reparto.totalImputado)
+              .add(sumarPendientes(recortados))
+              .toFixed(2),
+            imputaciones,
+          },
+        };
+      });
+    } catch (error) {
+      // R28: la respuesta idempotente se compone FUERA de la transaccion, que ya revirtio.
+      if (error instanceof RepartoRepetidoError) return this.responderRepartoYaRegistrado(input);
       throw error;
     }
   }
@@ -314,6 +648,7 @@ export class LiquidacionService implements ILiquidacionService {
           nota: input.nota ?? null,
           fechaPago: medianocheUtcDelDia(input.fechaPago), // R9: fecha REAL, distinta del registro
           registradoPor: actor.usuarioId, // R7: un pago siempre lo registra alguien
+          repartoId: null, // feature 205: el pago a una TIENDA nunca nace de un reparto
         });
         // §4.1: sale de la transaccion (que revierte) y la relectura ocurre fuera.
         if (creado.status === "clave_repetida") throw new ClaveRepetidaError();
@@ -476,6 +811,191 @@ export class LiquidacionService implements ILiquidacionService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R1/R2/R6
     const pagos = await this.pagoRepo.listarPorTienda(tiendaId);
     return { status: "ok", pagos: pagos.map(aPagoRegistradoDTO) };
+  }
+
+  /**
+   * Feature 205 (§2.3) — EL ESCRITOR UNICO del pago contra un cierre: el documento y su
+   * movimiento en el libro del mensajero, en la transaccion que se le pasa.
+   *
+   * Lo usan los DOS caminos —el pago simple de `/cierres-admin` y cada imputacion de un reparto—
+   * y esa es toda su razon de ser: no puede haber dos copias del camino money-critical que
+   * diverjan. El comentario de la 172 sobre «no factorizar» habla del eje mensajero↔tienda (contra
+   * que se compara, en que libro se escribe, con que signo); aqui esas tres cosas son la MISMA, asi
+   * que aquella razon no aplica.
+   *
+   * Devuelve el resultado del repositorio TAL CUAL, sin traducirlo: quien llama decide que
+   * significa un `clave_repetida` en su camino (respuesta idempotente en el pago simple, fallo
+   * imposible-en-teoria en el reparto). El movimiento solo se escribe si el documento se creo:
+   * un libro con una linea sin documento seria peor que no escribir nada.
+   */
+  private async escribirPagoDeCierre(
+    tx: LiquidacionTx,
+    pago: PagoDeCierreEscrito,
+  ): Promise<CrearLiquidacionPagoResult> {
+    const creado = await this.pagoRepo.crear(tx, {
+      claveIdempotencia: pago.claveIdempotencia,
+      mensajeroId: pago.mensajeroId,
+      tiendaId: null,
+      cierreId: pago.cierreId, // R18/R21: el pago al mensajero va SIEMPRE atado a un cierre
+      monto: pago.monto,
+      metodo: pago.metodo,
+      referencia: pago.referencia,
+      nota: pago.nota,
+      fechaPago: pago.fechaPago,
+      registradoPor: pago.registradoPor,
+      repartoId: pago.repartoId,
+    });
+    if (creado.status !== "creado") return creado;
+
+    // R19/R35/R37/R38/R39: el movimiento del libro del mensajero nace del documento.
+    await this.mensajeroRepo.crearMovimientos(tx, [
+      {
+        mensajeroId: pago.mensajeroId,
+        tipo: "pago",
+        categoria: "liquidacion",
+        monto: pago.monto,
+        origenTipo: "pago_mensajero", // R38: enlaza el movimiento con su documento…
+        origenId: creado.pago.id, //      …y hereda la idempotencia del indice unico parcial
+        descripcion: descripcionDePago(pago.metodo, pago.referencia),
+        registradoPor: pago.registradoPor,
+        fechaMovimiento: pago.fechaPago, // R37: la fecha REAL del pago
+      },
+    ]);
+
+    return creado;
+  }
+
+  /**
+   * Feature 205 (T3.1, R5/R6/R7) — los cierres IMPUTABLES del mensajero con su pendiente ya
+   * DERIVADO: `aprobado` (lo pone el WHERE del repositorio) **y** pendiente > 0 (se decide aqui,
+   * porque el pendiente no es una columna: se deriva de los pagos VIGENTES, R6/R7).
+   *
+   * Es el unico sitio donde esta feature deriva un pendiente, y lo usan los TRES caminos
+   * —previsualizar, aplicar y la respuesta idempotente—: dos derivaciones del mismo numero es
+   * exactamente lo que hace que dos pantallas digan cifras distintas.
+   *
+   * `tx` presente = lectura DENTRO de la transaccion y bajo los candados (R23); ausente = lectura
+   * suelta de la previsualizacion (R35). La Σ de pagos vigentes se lee con el cliente propio del
+   * repositorio, igual que en el pago contra un cierre unico y por el mismo motivo: cuando importa
+   * (bajo candado) nadie mas puede confirmar un pago contra esos cierres.
+   */
+  private async imputablesDe(mensajeroId: string, tx?: LiquidacionTx): Promise<CierreImputable[]> {
+    const cierres = await this.pagoRepo.listarCierresImputables(mensajeroId, tx);
+    if (cierres.length === 0) return [];
+
+    const pagados = await this.pagoRepo.sumarVigentesPorCierre(cierres.map((c) => c.id));
+    const imputables: CierreImputable[] = [];
+    for (const cierre of cierres) {
+      // R24, defensa en profundidad: el WHERE del repositorio ya acota por mensajero, pero un
+      // cierre de otra persona no puede recibir un centimo aunque una lectura futura se
+      // equivocara. Cuesta una comparacion y cierra el agujero en el punto donde duele.
+      if (cierre.mensajeroId !== mensajeroId) continue;
+      const pendiente = derivarPendienteCierre(
+        cierre.totalPagoMensajero,
+        cierre.totalEfectivo,
+        pagados[cierre.id] ?? "0.00",
+      );
+      if (new Prisma.Decimal(pendiente).lte(0)) continue; // R5: imputable = pendiente > 0
+      imputables.push({
+        cierreId: cierre.id,
+        pendiente,
+        solicitadoAt: cierre.solicitadoAt, // R8: la antiguedad es el dia TRABAJADO
+      });
+    }
+    return imputables;
+  }
+
+  /**
+   * Feature 205 (T3.2, R23/R24; design §2.5.5) — la ventana RELEIDA bajo los candados ya tomados.
+   *
+   * **La ventana SE ENCOGE, NO SE RELLENA, y esa es la linea que no se puede cruzar.** El bucle
+   * recorre `ventana` —los cierres que SI se bloquearon— y no la lectura fresca: si uno de ellos
+   * dejo de estar `aprobado`, se pago por otra via o cambio de dueño, desaparece del reparto y no
+   * se sube el siguiente candidato a ocupar su hueco. Rellenar obligaria a bloquear un cierre que
+   * no se bloqueo al principio, es decir, a adquirir candados FUERA del orden acordado (§3.1), que
+   * es literalmente como se fabrica un interbloqueo. El precio es un reparto que toca 49 en vez de
+   * 50; la ganancia es que el conjunto bloqueado nunca crece a mitad de la operacion.
+   *
+   * El ORDEN de la ventana se conserva intacto: es el del reparto y el de los candados.
+   */
+  private async ventanaBajoBloqueo(
+    tx: LiquidacionTx,
+    mensajeroId: string,
+    ventana: readonly CierreImputable[],
+  ): Promise<CierreImputable[]> {
+    const frescos = await this.imputablesDe(mensajeroId, tx);
+    const porCierre = new Map(frescos.map((cierre) => [cierre.cierreId, cierre]));
+
+    const vivos: CierreImputable[] = [];
+    for (const cierre of ventana) {
+      const fresco = porCierre.get(cierre.cierreId);
+      // `undefined` = ya no es imputable (dejo de estar aprobado, quedo saldado o no es suyo).
+      // R23: lo que manda es el pendiente FRESCO, nunca el de la lectura previa.
+      if (fresco !== undefined) vivos.push(fresco);
+    }
+    return vivos;
+  }
+
+  /**
+   * Feature 205 (T3.2, R28) — la respuesta del SEGUNDO envio del mismo reparto: el resultado
+   * ORIGINAL y **cero filas nuevas**.
+   *
+   * Se reconstruye por `reparto_id` (`listarPorReparto`), que es una consulta directa, y no se
+   * infiere del importe, de la fecha ni de la referencia. El reparto releido tiene que ser el del
+   * mensajero que se pide: reusar una clave ya consumida apuntando a otra persona no puede
+   * devolver el reparto de un tercero.
+   *
+   * Dos cosas que este metodo declara en voz alta, porque el diseño no las fija:
+   *
+   *  - **`pendienteDespues` se vuelve a DERIVAR** (es lo que el pendiente es, R6: nunca un valor
+   *    guardado), asi que refleja el estado de HOY, no una foto del dia del reparto. `"0.00"` es
+   *    lo que se dice de un cierre que ya no es imputable (saldado o fuera de `aprobado`).
+   *  - **El orden es `(registradoAt, cierreId)`.** Las N filas de un reparto nacen en la MISMA
+   *    transaccion y comparten `created_at` (Postgres fecha con el instante de la transaccion),
+   *    asi que el desempate real es el `cierreId`: no reconstruye el orden FIFO original, pero es
+   *    total y repetible — dos llamadas devuelven siempre lo mismo.
+   */
+  private async responderRepartoYaRegistrado(
+    input: RegistrarRepartoMensajeroInput,
+  ): Promise<RegistrarRepartoServiceResult> {
+    const reparto = await this.repartoRepo.obtenerPorClave(input.claveIdempotencia);
+    if (reparto === null) return { status: "no_encontrado" };
+    if (reparto.mensajeroId !== input.mensajeroId) return { status: "no_encontrado" };
+
+    const pagos = await this.pagoRepo.listarPorReparto(reparto.id);
+    const imputables = await this.imputablesDe(reparto.mensajeroId);
+    const pendientePorCierre = new Map(imputables.map((c) => [c.cierreId, c.pendiente]));
+
+    const ordenados = [...pagos].sort((a, b) => {
+      if (a.registradoAt !== b.registradoAt) return a.registradoAt < b.registradoAt ? -1 : 1;
+      const ca = a.cierreId ?? "";
+      const cb = b.cierreId ?? "";
+      if (ca === cb) return 0;
+      return ca < cb ? -1 : 1;
+    });
+
+    let totalImputado = new Prisma.Decimal(0);
+    const imputaciones: ImputacionAplicadaDTO[] = [];
+    for (const pago of ordenados) {
+      // Imposible por construccion (R21 de la 172: el pago a un mensajero va atado a un cierre);
+      // se salta en vez de emitir una imputacion sin cierre, que la pantalla no sabria enlazar.
+      if (pago.cierreId === null) continue;
+      totalImputado = totalImputado.add(new Prisma.Decimal(pago.monto));
+      imputaciones.push({
+        cierreId: pago.cierreId,
+        monto: pago.monto,
+        pendienteDespues: pendientePorCierre.get(pago.cierreId) ?? "0.00",
+      });
+    }
+
+    return {
+      status: "ya_registrado",
+      reparto: {
+        totalImputado: totalImputado.toFixed(2),
+        restanteImputable: sumarPendientes(imputables).toFixed(2),
+        imputaciones,
+      },
+    };
   }
 
   /**

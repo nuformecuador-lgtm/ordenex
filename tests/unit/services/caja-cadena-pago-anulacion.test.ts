@@ -6,6 +6,7 @@ import type {
   ILiquidacionPagoRepository,
   LiquidacionPagoDTO,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type { ILiquidacionRepartoRepository } from "@/lib/interfaces/repositories/ILiquidacionRepartoRepository";
 import type {
   CrearMovimientoTiendaInput,
   IWalletTiendaMovimientoRepository,
@@ -201,6 +202,23 @@ function makeStore(saldoTienda: string) {
     sumarVigentesPorTienda: vi.fn(async () => "0.00"),
     listarPorCierre: vi.fn(async () => []),
     listarPorTienda: vi.fn(async () => pagos),
+    // Feature 205 (T2.2): el contrato gana dos LECTURAS. Ningun test de este archivo las
+    // usa —son del reparto—, pero el doble las expone para poder afirmar que los caminos de la
+    // 172 NO las llaman.
+    listarCierresImputables: vi.fn(async () => []),
+    listarPorReparto: vi.fn(async () => []),
+    // Feature 205 (T3.1): la tercera lectura del reparto (el CONTEO por estado de R36).
+    contarCierresNoAprobadosPorEstado: vi.fn(async () => []),
+  };
+
+  /**
+   * Feature 205 (T3.2): el repositorio del ACTO de repartir, doble mudo. Esta cadena es de
+   * TIENDA (pagar -> anular -> caja) y no reparte nada; el doble existe porque el servicio exige
+   * el repositorio por constructor, sin default.
+   */
+  const repartoRepo: ILiquidacionRepartoRepository = {
+    crear: vi.fn(async () => ({ status: "clave_repetida" as const })),
+    obtenerPorClave: vi.fn(async () => null),
   };
 
   const tiendaRepo: IWalletTiendaMovimientoRepository = {
@@ -234,6 +252,7 @@ function makeStore(saldoTienda: string) {
     mensajeroRepo,
     runTransaction,
     puerto,
+    repartoRepo, // feature 205 (T3.2): va ANTES del reloj y sin default
     () => AHORA,
   );
 

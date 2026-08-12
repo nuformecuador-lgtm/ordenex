@@ -1,3 +1,5 @@
+import { money } from "@/lib/config/moneda";
+import type { CierreEstado } from "@/lib/types/cierre";
 import type {
   CuentaPorPagarSigno,
   PagoMensajeroMovimientoCategoria,
@@ -16,7 +18,7 @@ import type {
  * importandola del mismo sitio: es una mudanza, y lo unico que cambia es el ASPECTO del
  * importe (ahora con separador de miles), que es el objetivo de la feature.
  */
-export { money } from "@/lib/config/moneda";
+export { money };
 
 /** Cabeceras de la tabla de cuentas por pagar (una fila por mensajero). */
 export const COLUMNAS_MAESTRO = {
@@ -178,3 +180,145 @@ export const DESGLOSE_FILTRO_LABEL = {
 
 /** Mensaje cuando el desglose filtrado no tiene movimientos. */
 export const DESGLOSE_VACIO = "No hay movimientos que coincidan con los filtros.";
+
+// ── Feature 205 — pagar la cuenta por pagar del mensajero desde esta pantalla ──
+//
+// Textos separados del componente (`docs/conventions.md`: listos para i18n) y en lenguaje
+// claro: ni siglas ni jerga contable. Aquí no se hace ARITMÉTICA con ningún importe: cada
+// función recibe el STRING que derivó el SERVIDOR y solo le da formato con `money` (R16/R34).
+// Los cardinales (cuántos cierres entran, cuántos quedan fuera, cuántos hay de cada estado)
+// son `number` porque cuentan CIERRES, no dinero.
+
+/** Nombre accesible del enlace al detalle de un cierre (R43/R44). */
+export const CIERRE_ENLACE = {
+  /**
+   * Texto VISIBLE del enlace. Corto a propósito: va dentro de una celda o de una línea de la
+   * previsualización, donde el resto de la fila ya dice de qué cierre se habla.
+   */
+  ver: "Ver el cierre",
+  /**
+   * Lo que se añade al nombre accesible, solo para lectores de pantalla. Existe porque una
+   * pantalla puede tener veinte enlaces «Ver el cierre» y un lector de pantalla los leería
+   * todos igual; con el identificador detrás, cada uno se nombra solo. El texto visible sigue
+   * contenido en el nombre accesible, que es lo que exige «Label in Name».
+   */
+  identificacion: (cierreId: string) => ` (${cierreId})`,
+} as const;
+
+/** La cabecera de la columna del desglose que lleva el enlace (R43). */
+export const DESGLOSE_COLUMNA_CIERRE = "Cierre";
+
+/** Lo que se pinta en la celda de una fila que NO corresponde a ningún cierre (R43). */
+export const DESGLOSE_SIN_CIERRE = "—";
+
+/** Textos del bloque de pago del desglose (R3). */
+export const PAGO_MENSAJERO_WALLET = {
+  /** Nombre accesible del bloque entero, en la cabecera del desglose. */
+  seccion: "Pago al mensajero",
+  /** Rótulo del importe que este pago puede saldar AHORA (el imputable de la ventana). */
+  disponible: "Se puede pagar ahora",
+  disponibleHint:
+    "La suma de los cierres aprobados que un solo pago puede saldar. Sale del servidor.",
+  /** Abre el formulario. */
+  abrir: "Registrar pago",
+  /** R15 — sin cierres aprobados con saldo no hay nada que pagar, y se dice con texto. */
+  sinImputable:
+    "Este mensajero no tiene cierres aprobados con saldo pendiente: no hay nada que pagar desde acá.",
+  cargando: "Calculando lo que se puede pagar…",
+  error: "No se pudo calcular lo que se puede pagar. Volvé a abrir el desglose.",
+  /**
+   * El aviso de `sin_saldo` de ESTA pantalla: el del diálogo compartido habla de una tienda.
+   * Aquí significa que entre abrir el formulario y confirmar dejó de haber cierres que cobrar.
+   */
+  sinSaldo:
+    "Ya no queda ningún cierre aprobado con saldo pendiente: no hay nada que pagar.",
+  /** Confirmación del pago, con el total que devolvió el servidor. */
+  registrado: (totalImputado: string) => `Pago de ${money(totalImputado)} registrado.`,
+  /** R28 — la respuesta idempotente: no se cobró dos veces. */
+  yaRegistrado:
+    "Este pago ya estaba registrado: se conservó el reparto original y no se cobró dos veces.",
+  /** El pago no quedó registrado; el formulario sigue abierto con lo escrito. */
+  noRegistrado: "No se registró el pago. Revisá el aviso del formulario e intentá de nuevo.",
+} as const;
+
+/**
+ * R25 — el reparto REALMENTE aplicado, que es lo que se enseña al terminar.
+ *
+ * No es la previsualización confirmada: entre mirar y confirmar, otro pudo haber pagado, y el
+ * servidor recalcula bajo bloqueo. Por eso esta pantalla pinta lo que devolvió la escritura y
+ * no lo que enseñó antes.
+ */
+export const REPARTO_APLICADO = {
+  titulo: "Último pago registrado",
+  total: "Total aplicado",
+  restante: "Sigue pendiente por cierres",
+  restanteHint: "Lo que queda por pagar en otro registro.",
+  imputaciones: "A qué cierres se aplicó",
+  /** Lo que le queda a ESE cierre después del pago. */
+  quedaPendiente: (pendienteDespues: string) => `Queda pendiente: ${money(pendienteDespues)}`,
+} as const;
+
+/** Textos de la PREVISUALIZACIÓN del reparto (R32-R38, R56). */
+export const REPARTO_PREVISUALIZACION = {
+  /** Nombre accesible del bloque dentro del formulario. */
+  seccion: "Cómo se reparte este pago",
+  cargando: "Calculando el reparto…",
+  error: "No se pudo calcular el reparto. Cambiá el monto o volvé a intentarlo.",
+  /** Sin un monto legible todavía no hay reparto que enseñar, y se dice. */
+  sinMonto: "Escribí un monto para ver a qué cierres se aplicaría.",
+  /** Con monto pero sin nada que aplicar (no debería verse: el botón ya está deshabilitado). */
+  sinImputaciones: "Con este monto no se aplica nada a ningún cierre.",
+  /** Nombra un cierre por el día TRABAJADO, que es la antigüedad que ordena el reparto (R8). */
+  cierre: (fecha: string) => `Cierre del ${fecha}`,
+  /** Lo que se le aplica a ese cierre. */
+  seAplica: (monto: string) => `Se aplica ${money(monto)}`,
+  pendienteActual: (pendiente: string) => `Pendiente hoy: ${money(pendiente)}`,
+  pendienteDespues: (pendiente: string) => `Queda pendiente: ${money(pendiente)}`,
+  /** R33 — la imputación PARCIAL, marcada. Solo la última puede serlo. */
+  parcial: "Pago parcial",
+  /** R38 — el importe no cabe. Las dos cifras las derivó el servidor. */
+  excede: (sobrante: string, imputable: string) =>
+    `El monto supera lo que se puede pagar ahora: sobran ${money(sobrante)}. ` +
+    `Como máximo se pueden aplicar ${money(imputable)}.`,
+  /**
+   * R56 — el RECORTE por el tope: deuda que sí se puede pagar acá, pero en otro registro.
+   * Es un aviso DISTINTO del de abajo y no se puede fundir con él: éste habla de dinero que
+   * el siguiente pago sí alcanza.
+   */
+  recorte: (enVentana: number, fuera: number, montoFuera: string) =>
+    `Este pago alcanza a los ${enVentana} cierres más antiguos. Quedan ${fuera} cierres ` +
+    `por ${money(montoFuera)}, que se pagan en el siguiente registro.`,
+  /**
+   * R37 — deuda que esta pantalla NO sabe pagar porque no cuelga de ningún cierre. El servidor
+   * ya hizo la comparación y mandó el resultado: acá no se compara ningún importe.
+   */
+  deudaNoImputable: (monto: string) =>
+    `${money(monto)} de la cuenta por pagar no corresponde a ningún cierre y no se puede ` +
+    `pagar desde esta pantalla.`,
+  /**
+   * R36 — los cierres que NO pueden recibir pago por no estar aprobados. Es un CONTEO por
+   * estado, no un listado: el inventario vive en la pantalla de cierres, que es adonde lleva
+   * el enlace de cada fila. No se suma ningún total acá; se enumeran los estados tal cual
+   * llegaron.
+   */
+  excluidos: (detalle: string) =>
+    `Estos cierres no pueden recibir pago porque no están aprobados: ${detalle}.`,
+  /** Una entrada del conteo: «9 rechazados». El plural lo pone el propio rótulo del estado. */
+  excluido: (cantidad: number, estado: string) => `${cantidad} ${estado}`,
+} as const;
+
+/**
+ * Rótulo en plural de cada estado de cierre, para el conteo de R36 («9 rechazados, 3
+ * solicitados»).
+ *
+ * Es un `Record` EXHAUSTIVO y no un plural derivado del rótulo singular a base de añadirle una
+ * «s»: el día que el catálogo gane un estado, esto rompe el build y alguien escribe su palabra,
+ * en vez de que la pantalla invente una. `aprobado` no puede aparecer en este aviso —son
+ * justamente los que SÍ reciben pago— pero se declara igual: el mapa cubre el enum entero.
+ */
+export const ESTADO_CIERRE_PLURAL: Record<CierreEstado, string> = {
+  solicitado: "solicitados",
+  aprobado: "aprobados",
+  rechazado: "rechazados",
+  vencido: "vencidos",
+};
