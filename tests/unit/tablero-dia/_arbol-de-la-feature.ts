@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
 
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
+
 /**
  * Feature 192 — EL ARBOL DE LA FEATURE, en un solo sitio.
  *
@@ -56,13 +58,17 @@ function archivosDe(dir: string): string[] {
  * Los comentarios, fuera. Los archivos de esta feature EXPLICAN por escrito lo que no hacen
  * ("ni un `INSERT`", "no se reutiliza `rollup-dia`"), y un censo que leyera esas frases como
  * infracciones obligaria a borrar la explicacion para pasar el guardia. Se mide el codigo.
+ *
+ * Feature 209 — pasa a usar el quitador COMPARTIDO. Dos cambios, los dos medidos contra el
+ * arbol ANTES de aceptarlos (ninguno mueve el veredicto de ningun archivo censado):
+ *   · antes solo caian los comentarios de LINEA COMPLETA (`^\s*\/\/`), asi que un
+ *     `prisma.orden.update(...) // no, esto no` al final de una linea de codigo sobrevivia
+ *     entero y el censo lo leia como una escritura;
+ *   · se retira la pasada de `--`: este censo solo lee `.ts`/`.tsx` (ver `EXTENSIONES`), y
+ *     aplicar el comentario de SQL a TypeScript se come `i-- > 0` y todo lo que le siga en la
+ *     linea, que es un falso VERDE silencioso. Para SQL esta `quitarComentariosSql`.
  */
-export function sinComentarios(texto: string): string {
-  return texto
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
-    .replace(/^\s*--.*$/gm, "");
-}
+export const sinComentarios = quitarComentarios;
 
 export interface ArchivoDeLaFeature {
   readonly ruta: string;

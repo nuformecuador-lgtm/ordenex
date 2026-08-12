@@ -9,6 +9,7 @@ import {
   ROLES_ANALITICA,
 } from "@/lib/analytics/types";
 import type { RolAnalitica } from "@/lib/analytics/types";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 135 / T1.2 — consistencia entre `RolAnalitica` (lib/analytics/types.ts) y
 // el enum `RolValue` del esquema. `types.ts` declara los roles como union literal
@@ -25,9 +26,9 @@ function leerEnumDelEsquema(nombre: string): string[] {
   const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
   const bloque = new RegExp(`enum ${nombre} \\{([\\s\\S]*?)\\n\\}`).exec(schema);
   if (!bloque) throw new Error(`No se encontro el enum ${nombre} en db/schema.prisma`);
-  return bloque[1]
+  return quitarComentarios(bloque[1])
     .split("\n")
-    .map((linea) => linea.replace(/\/\/.*$/, "").trim())
+    .map((linea) => linea.trim())
     .filter((linea) => linea.length > 0 && !linea.startsWith("@@"))
     .map((linea) => linea.split(/\s+/)[0]);
 }

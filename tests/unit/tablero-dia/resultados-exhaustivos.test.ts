@@ -4,6 +4,7 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 
 import { CONTADOR_POR_RESULTADO } from "@/lib/repositories/TableroDiaRepository";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 192 (B3.5) — R24, R27.
 //
@@ -33,9 +34,9 @@ function valuesDelEnumEnElEsquema(): string[] {
   const schema = fs.readFileSync(path.join(REPO_ROOT, "db", "schema.prisma"), "utf8");
   const bloque = /enum GestionResultado \{([\s\S]*?)\n\}/.exec(schema);
   if (bloque === null) throw new Error("no se encontro `enum GestionResultado` en schema.prisma");
-  return bloque[1]
+  return quitarComentarios(bloque[1])
     .split("\n")
-    .map((linea) => linea.replace(/\/\/.*$/, "").trim())
+    .map((linea) => linea.trim())
     .filter((linea) => linea.length > 0 && !linea.startsWith("@@"));
 }
 

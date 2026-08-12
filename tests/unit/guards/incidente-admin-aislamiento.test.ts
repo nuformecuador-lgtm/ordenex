@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import type { PrismaClient } from "@prisma/client";
 import { CorteDiarioRepository } from "@/lib/repositories/CorteDiarioRepository";
 import { RankingRepository } from "@/lib/repositories/RankingRepository";
@@ -196,9 +197,15 @@ describe("R38 — el ranking diario no cuenta el incidente del admin", () => {
 
 describe("R38/R63 — el camino del ADMIN no toca ninguna tabla del mensajero (estructural)", () => {
   const leer = (rel: string) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
-  /** Quita comentarios de bloque y de linea para no afirmar sobre prosa. */
-  const sinComentarios = (src: string) =>
-    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  /**
+   * Quita comentarios de bloque y de linea para no afirmar sobre prosa.
+   *
+   * Feature 209 — quitador COMPARTIDO. La copia local solo borraba la linea de comentario
+   * COMPLETA, asi que un `prisma.gestionOrden` citado al final de una linea de codigo
+   * sobrevivia y esta guardia de AISLAMIENTO lo leia como un acceso real. Medido sobre los
+   * 12 modulos que censa: ninguno de los 7 patrones cambia de veredicto.
+   */
+  const sinComentarios = quitarComentarios;
 
   const MODULOS_DEL_ADMIN = [
     "lib/repositories/IncidenteAdminRepository.ts",

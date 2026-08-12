@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 import { METRICAS, getMetrica } from "@/lib/analytics/metrics";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 175 / T2.3 — GUARDIA de `estadoProduccion` (R1, R2, R3, R13, R14).
 //
@@ -68,9 +69,9 @@ function camposDelModelo(nombre: string): string[] {
   const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
   const bloque = new RegExp(`model ${nombre} \\{([\\s\\S]*?)\\n\\}`).exec(schema);
   if (!bloque) throw new Error(`No se encontro el modelo ${nombre} en db/schema.prisma`);
-  return bloque[1]
+  return quitarComentarios(bloque[1])
     .split("\n")
-    .map((linea) => linea.replace(/\/\/.*$/, "").trim())
+    .map((linea) => linea.trim())
     .filter((linea) => linea.length > 0 && !linea.startsWith("@@"))
     .map((linea) => linea.split(/\s+/)[0]);
 }

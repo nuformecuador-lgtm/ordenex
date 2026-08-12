@@ -6,6 +6,8 @@ import { render, screen, cleanup, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
+import { quitarComentarios } from "../fixtures/sin-comentarios";
+
 import {
   NotificationsBell,
   type NotificationItem,
@@ -84,13 +86,15 @@ async function abrir(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByText("Marcar todas como leídas");
 }
 
-/** Quita comentarios: las guardias de código no deben disparar con la prosa. */
-function sinComentarios(fuente: string): string {
-  return fuente
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
-}
+/**
+ * Quita comentarios: las guardias de código no deben disparar con la prosa.
+ *
+ * Feature 209 — quitador COMPARTIDO. La copia local (a) dejaba vivo el comentario de cola y
+ * (b) pasaba el barrido de JSX DESPUÉS del de bloque, cuando el de bloque ya se había comido
+ * el `/* … *\/` de dentro y dejado las llaves sueltas. Medido sobre los dos archivos que lee:
+ * los cuatro patrones de R47 dan lo mismo antes y después.
+ */
+const sinComentarios = quitarComentarios;
 
 const FUENTE_CAMPANA = readFileSync(
   path.join(process.cwd(), "components/shared/NotificationsBell.tsx"),

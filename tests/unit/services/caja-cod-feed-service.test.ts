@@ -1,9 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { Prisma } from "@prisma/client";
 import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
 import type { CajaCodFeedTxClient } from "@/lib/interfaces/services/ICajaCodFeedService";
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 
 /**
  * Feature 173 / T B.1 (R11/R12/R13/R17) — el feed que mete el CONTRA-ENTREGA en la caja.
@@ -256,9 +255,7 @@ describe("CajaCodFeedService — money-safe (R7 aplicado a este emisor)", () => 
   it("el modulo no nombra `Number(`, `parseFloat(`, `parseInt(` ni lee otra tabla", () => {
     // Se barre el CODIGO, no los comentarios: el modulo explica por escrito por que NO lee
     // `gestion_orden.montoRecibido`, y esa frase no puede poner el barrido rojo.
-    const codigo = readFileSync(resolve(process.cwd(), "lib/services/CajaCodFeedService.ts"), "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+    const codigo = codigoSinComentarios("lib/services/CajaCodFeedService.ts");
 
     expect(codigo).not.toMatch(/Number\(/);
     expect(codigo).not.toMatch(/parseFloat\(/);

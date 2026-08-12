@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { lineasSinComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 169 / T2.9 (R27/R28) — GUARDIA DE ESCRITURA de la columna generada.
 //
@@ -19,12 +20,10 @@ const RAICES = ["lib", "app", "components", "hooks", "scripts"] as const;
 const EXTENSIONES = new Set([".ts", ".tsx"]);
 
 /**
- * Los UNICOS lugares donde el nombre puede aparecer, y por que:
- *   · `lib/db/prisma-client.ts`  -> el `omit` global que la esconde de toda lectura (R28).
+ * Los UNICOS lugares donde el nombre puede aparecer EN CODIGO, y por que:
+ *   · `lib/db/prisma-client.ts`  -> el `omit` global que la esconde de toda lectura (R28):
+ *     `PRISMA_OMIT = { orden: { busquedaTexto: true } }`.
  *   · `lib/repositories/OrdenRepository.ts` -> el `where` del buscador, que es su unico uso.
- *   · `lib/interfaces/repositories/IOrdenRepository.ts` -> documentacion del contrato.
- *   · `lib/utils/busqueda-orden.ts` -> la nombra en su cabecera para decir de que columna
- *     es espejo; no la lee ni la escribe (es un modulo puro, sin Prisma).
  *   · `scripts/bench-busqueda-ordenes.ts` (feature 169 / T4.1) -> el banco de rendimiento.
  *     Es el UNICO sitio que la nombra en DDL, y hacerlo es su trabajo: para medir el
  *     sobrecoste de escritura del indice (E5 del design §6) tiene que dropear la columna y
@@ -35,12 +34,22 @@ const EXTENSIONES = new Set([".ts", ".tsx"]);
  *     tres casos de abajo (verbo de escritura, `data:`, `select:`) lo comprueban sobre EL
  *     MISMO archivo, porque solo esta lista de nombres se amplia, no las reglas.
  * Cualquier archivo nuevo en esta lista es una decision que hay que tomar a mano.
+ *
+ * FEATURE 209 — LA LISTA BAJO DE CINCO A TRES, y no es cosmetica. El censo leia el fuente
+ * CRUDO, asi que una mencion en un docstring contaba como uso de la columna y habia que
+ * apuntar el archivo aqui para callarla. Dos de las cinco entradas eran exactamente eso:
+ *   · `lib/interfaces/repositories/IOrdenRepository.ts` — dos menciones, las dos en JSDoc;
+ *   · `lib/utils/busqueda-orden.ts` — una mencion, en la cabecera (modulo puro, sin Prisma).
+ * Con el censo leyendo CODIGO, ninguno de los dos nombra ya la columna (medido: 25 menciones
+ * en 5 archivos en crudo -> 17 en 3 archivos sin comentarios), asi que su permiso sobraba. Y
+ * una lista blanca con entradas de mas MIENTE sobre quien puede tocar el campo, que es
+ * justo lo que esta guardia protege: si manana alguien mete un `busquedaTexto` de verdad en
+ * cualquiera de esos dos, ahora sale ROJO. Los dos siguen pudiendo DOCUMENTARLA cuanto
+ * quieran; lo que ya no pueden es usarla en silencio.
  */
 const PERMITIDOS = new Set([
   "lib/db/prisma-client.ts",
   "lib/repositories/OrdenRepository.ts",
-  "lib/interfaces/repositories/IOrdenRepository.ts",
-  "lib/utils/busqueda-orden.ts",
   "scripts/bench-busqueda-ordenes.ts",
 ]);
 
@@ -67,11 +76,16 @@ interface Mencion {
   texto: string;
 }
 
+/**
+ * El censo se hace sobre el CODIGO, no sobre el texto. `lineasSinComentarios` devuelve las
+ * lineas alineadas una a una con las del original, asi que el `linea` que se informa aqui
+ * sigue apuntando al sitio de verdad (feature 209).
+ */
 const MENCIONES: Mencion[] = (() => {
   const salida: Mencion[] = [];
   for (const completo of archivosDeCodigo()) {
     const relativo = path.relative(ROOT, completo).split(path.sep).join("/");
-    const lineas = fs.readFileSync(completo, "utf8").split("\n");
+    const lineas = lineasSinComentarios(fs.readFileSync(completo, "utf8"));
     lineas.forEach((texto, i) => {
       if (texto.includes("busquedaTexto") || texto.includes("busqueda_texto")) {
         salida.push({ archivo: relativo, linea: i + 1, texto: texto.trim() });
@@ -88,7 +102,7 @@ describe("nadie escribe `busquedaTexto` (R27)", () => {
     expect(MENCIONES.length).toBeGreaterThan(0);
   });
 
-  it("solo la mencionan los tres archivos que deben", () => {
+  it("solo la nombran EN CODIGO los tres archivos que deben", () => {
     const archivos = [...new Set(MENCIONES.map((m) => m.archivo))].sort();
     const intrusos = archivos.filter((a) => !PERMITIDOS.has(a));
     expect(
@@ -98,10 +112,24 @@ describe("nadie escribe `busquedaTexto` (R27)", () => {
     ).toEqual([]);
   });
 
+  it("209: los dos archivos que salieron de la lista blanca no la nombran en CODIGO", () => {
+    // Su permiso existia para callar a un comentario. Se afirma la mitad que importa —el
+    // CODIGO no la nombra— y no la existencia del docstring: borrar la documentacion no debe
+    // poner esto rojo; meter un uso real, si.
+    for (const rel of [
+      "lib/interfaces/repositories/IOrdenRepository.ts",
+      "lib/utils/busqueda-orden.ts",
+    ]) {
+      expect(fs.existsSync(path.join(ROOT, rel)), `falta ${rel}`).toBe(true);
+      expect(MENCIONES.filter((m) => m.archivo === rel)).toEqual([]);
+      expect(PERMITIDOS.has(rel)).toBe(false);
+    }
+  });
+
   it("ninguna mencion esta dentro de un `data:` de create/update/createMany", () => {
     const fuentes = archivosDeCodigo().map((completo) => ({
       archivo: path.relative(ROOT, completo).split(path.sep).join("/"),
-      texto: fs.readFileSync(completo, "utf8"),
+      texto: lineasSinComentarios(fs.readFileSync(completo, "utf8")).join("\n"),
     }));
     // Busca `data: { … busquedaTexto … }` y `data: [ … ]` (createMany) con el nombre
     // dentro, sin cruzar el cierre del objeto.
@@ -117,9 +145,10 @@ describe("nadie escribe `busquedaTexto` (R27)", () => {
   });
 
   it("en el repositorio solo aparece como criterio de LECTURA (`contains`)", () => {
-    const enRepo = MENCIONES.filter(
-      (m) => m.archivo === "lib/repositories/OrdenRepository.ts" && !m.texto.startsWith("//"),
-    );
+    // El filtro `!texto.startsWith("//")` que habia aqui se retira: era la mitigacion local de
+    // que el censo leyera prosa, y ademas solo cubria el comentario de linea COMPLETA. Ahora
+    // MENCIONES ya viene sin comentarios de ningun tipo (feature 209).
+    const enRepo = MENCIONES.filter((m) => m.archivo === "lib/repositories/OrdenRepository.ts");
     expect(enRepo.length).toBeGreaterThan(0);
     for (const mencion of enRepo) {
       expect(mencion.texto).toContain("contains");

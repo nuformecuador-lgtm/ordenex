@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import type {
   EntregaVigente,
   EscrituraFecha,
@@ -898,8 +899,7 @@ describe("R38 — el error se propaga con fecha y etapa, y NO se traga", () => {
 
 const ROOT = path.join(__dirname, "..", "..", "..");
 const leer = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
-const sinComentarios = (s: string) =>
-  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const sinComentarios = quitarComentarios;
 
 const FUENTE_REPO = sinComentarios(leer("lib/repositories/AnaliticaRollupRepository.ts"));
 const FUENTE_SERVICE = sinComentarios(leer("lib/services/AnaliticaRollupService.ts"));
