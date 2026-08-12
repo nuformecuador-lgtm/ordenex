@@ -51,22 +51,36 @@ export const CUENTA_COLOR: Record<CuentaPorPagarSigno, string> = {
  * Etiquetas del saldo del desglose (split devengado/pagado/pendiente de un mensajero). En la
  * vista del maestro el saldo refleja el CONJUNTO FILTRADO (R22): al aplicar filtros de
  * fecha/cierre estos tres montos se recalculan desde `result.data.cuenta`, no del agregado.
+ *
+ * Deuda 203 (cabo suelto) — cada pista lleva AHORA la salvedad de la limitación N1. Antes, el
+ * desglose repetía el párrafo entero de la tabla (`CUENTAS_AVISO_BRUTOS`) con los rótulos
+ * cambiados, y las dos copias se veían A LA VEZ: medido en la app el 2026-08-12 con la primera
+ * fila desplegada, una en y=181 y la otra en y=457 de una ventana de 900 px. Como la tabla
+ * admite varias filas abiertas a la vez, cada fila añadía otra copia del mismo párrafo.
+ *
+ * Lo que NO se podía hacer es borrarlo sin más y dejar que hablara el de la tabla:
+ *
+ *  - estos tres importes son los del CONJUNTO FILTRADO (R22), no los de la fila de la tabla:
+ *    filtrar por fecha los cambia, y el párrafo de arriba habla de otras cifras y con otros
+ *    rótulos («Pagado», no «Total pagado»);
+ *  - para las filas de abajo, el párrafo de la tabla ni siquiera está en pantalla: con el
+ *    tamaño de página por defecto (25) y filas de 42 px, desplegar la 19.ª deja el aviso de la
+ *    cabecera a más de 900 px por encima del desglose.
+ *
+ * Así que la salvedad se queda donde estaba el importe que describe, en una línea y con las
+ * MISMAS palabras que ya usan las cabeceras del archivo descargable (más abajo). Deja de ser un
+ * párrafo repetido y pasa a ser lo que la cifra promete.
  */
 export const DESGLOSE_LABEL = {
   devengado: "Total devengado",
-  devengadoHint: "Lo que Ordenex le debe por sus entregas",
+  devengadoHint:
+    "Lo que Ordenex le debe por sus entregas. Incluye la devolución de los pagos anulados.",
   pagado: "Total pagado",
-  pagadoHint: "Lo ya entregado (del efectivo recaudado)",
+  pagadoHint: "Lo ya entregado (del efectivo recaudado). Incluye los pagos anulados.",
   cuentaPorPagar: "Cuenta por pagar",
-  cuentaPorPagarHint: "Lo pendiente de pagar al mensajero",
+  cuentaPorPagarHint:
+    "Lo pendiente de pagar al mensajero. Es el número correcto: ya tiene descontado lo anulado.",
 } as const;
-
-/** El aviso de la CABECERA del desglose, con sus tres rótulos (feature 172, T H.4). */
-export const DESGLOSE_AVISO_BRUTOS = avisoImportesBrutos({
-  pagado: DESGLOSE_LABEL.pagado,
-  devengado: DESGLOSE_LABEL.devengado,
-  correcto: DESGLOSE_LABEL.cuentaPorPagar,
-});
 
 /**
  * Feature 172 (T H.4) — el AVISO de la limitación N1, compuesto con los rótulos REALES de la
@@ -79,9 +93,14 @@ export const DESGLOSE_AVISO_BRUTOS = avisoImportesBrutos({
  * `liquidacion` anulada sigue dentro de lo pagado. La RESTA —la cuenta por pagar— sale exacta.
  *
  * Regla aplicada (decisión del leader): el aviso hace falta donde se muestre un IMPORTE
- * AGREGADO que incluya lo anulado; no donde solo se listen movimientos. Aquí lo llevan las
- * DOS superficies con agregados —la tabla de cuentas y la cabecera del desglose— y NO la
- * tabla de movimientos del desglose, donde el pago y su reverso se ven los dos.
+ * AGREGADO que incluya lo anulado; no donde solo se listen movimientos. Las DOS superficies con
+ * agregados lo llevan, y NO lo lleva la tabla de movimientos del desglose, donde el pago y su
+ * reverso se ven los dos.
+ *
+ * Deuda 203 — lo que cambió es la FORMA, no la regla: este párrafo se pinta UNA sola vez por
+ * pantalla, en la cabecera de la tabla, porque es la única superficie que se ve sin desplegar
+ * nada. La otra superficie con agregados —la cabecera del desglose— lleva la misma salvedad
+ * pegada a cada importe (`DESGLOSE_LABEL`, arriba), que es donde no puede sobrar.
  *
  * Sin jerga: ni «contraasiento», ni «neteo», ni siglas.
  */
@@ -168,10 +187,26 @@ export const DESGLOSE_COLUMNAS = {
   origen: "Origen",
 } as const;
 
-/** Etiquetas de los filtros server-side del desglose por cierre (fecha/cierre, R22). */
+/**
+ * Etiquetas de los filtros server-side del desglose por cierre (fecha/cierre, R22).
+ *
+ * Deuda 203 (cabo suelto) — el campo del cierre decía «ID del cierre», o sea le pedía a una
+ * persona que tecleara un uuid de 36 caracteres. Comprobado en la app el 2026-08-12: ese
+ * identificador NO se ve en ninguna parte de la pantalla. En el enlace «Ver el cierre» viaja en
+ * un `sr-only`, solo para lectores de pantalla (`CIERRE_ENLACE.identificacion`), así que la
+ * única forma de conseguirlo es copiar la DIRECCIÓN de ese enlace —o leerla de la barra del
+ * navegador tras abrirlo—, y eso es exactamente lo que la ayuda dice ahora.
+ *
+ * El filtro NO se quita: el `cierreId` va al WHERE server-side (R22), viaja también en la
+ * descarga del desglose completo (`buildInputCompleto`) y lo fijan dos casos de
+ * `tests/integration/wallet-mensajeros-page.test.tsx`. Lo que se arregla es lo que la pantalla
+ * PROMETE: se pega, no se teclea, y dice de dónde sale.
+ */
 export const DESGLOSE_FILTRO_LABEL = {
   cierre: "Cierre",
-  cierrePlaceholder: "ID del cierre",
+  cierrePlaceholder: "Pegá el identificador",
+  cierreAyuda:
+    "El identificador del cierre sale del enlace «Ver el cierre» de la tabla: copiá su dirección y pegala en «Cierre».",
   desde: "Desde",
   hasta: "Hasta",
   aplicar: "Aplicar",
