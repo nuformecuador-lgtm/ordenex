@@ -130,6 +130,7 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
       monto: "3000.00",
       origenTipo: "cierre_dia",
       origenId: "c2",
+      cierreId: "c2", // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
       descripcion: null,
       fechaMovimiento: "2026-07-12T10:00:00.000Z",
     },
@@ -141,6 +142,7 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
       monto: "5000.00",
       origenTipo: "cierre_dia",
       origenId: "c1",
+      cierreId: "c1",
       descripcion: null,
       fechaMovimiento: "2026-07-05T10:00:00.000Z",
     },
@@ -169,6 +171,7 @@ const DESGLOSE_FILTRADO: ListarPagosDeMensajeroResult = {
       monto: "2500.00",
       origenTipo: "cierre_dia",
       origenId: "c1",
+      cierreId: "c1",
       descripcion: null,
       fechaMovimiento: "2026-07-05T10:00:00.000Z",
     },

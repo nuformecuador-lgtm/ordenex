@@ -3,7 +3,9 @@ import type {
   AnularLiquidacionPagoInput,
   AnularLiquidacionPagoResult,
   BeneficiarioBloqueo,
+  CierreImputableDTO,
   CierreParaPagoDTO,
+  CierresNoAprobadosPorEstadoDTO,
   CrearLiquidacionPagoInput,
   CrearLiquidacionPagoResult,
   ILiquidacionPagoRepository,
@@ -76,6 +78,16 @@ function toDTO(r: DocumentoRow): LiquidacionPagoDTO {
  * restricciones unicas —la PK sobre un uuid recien generado, imposible de repetir, y esta—, y
  * la consecuencia de acertar mal es benigna: el servicio relee por la clave, no la encuentra y
  * responde `no_encontrado`. Nunca un pago duplicado en silencio.
+ *
+ * **ESE «solo tiene dos» ES UNA PREMISA VIVA, no una observacion de una vez.** El dia que alguien
+ * le anada una tercera restriccion unica a `liquidacion_pago`, su choque llegaria aqui sin pista
+ * (bajo el driver adapter el `meta.target` viene VACIO) y se leeria como clave repetida: el
+ * servicio releeria por la clave, no la encontraria y responderia `no_encontrado` a un pago
+ * legitimo — un error silencioso y carisimo de diagnosticar desde el sintoma. Por eso la feature
+ * 205 le puso a `reparto_id` un indice a secas y llevo el `UNIQUE` de su idempotencia a
+ * `liquidacion_reparto`, y por eso la premisa esta bajo test: el bloque de Postgres real de
+ * `tests/integration/db/liquidacion-reparto-migration.test.ts` compara el conjunto de indices
+ * unicos de esta tabla antes y despues de la migracion y exige que sea el MISMO.
  */
 function esChoqueDeClave(error: unknown): boolean {
   if (!esP2002(error)) return false;
@@ -137,8 +149,9 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
   }
 
   /**
-   * R7/R9 — escribe las 10 columnas del documento en `tx`. El instante de registro lo pone la
-   * base (`created_at DEFAULT now()`), asi que fecha real e instante conviven y pueden diferir.
+   * R7/R9 — escribe las 11 columnas del documento en `tx` (10 de la 172 + `reparto_id` de la
+   * 205). El instante de registro lo pone la base (`created_at DEFAULT now()`), asi que fecha
+   * real e instante conviven y pueden diferir.
    *
    * El choque de `clave_idempotencia` sale como RESULTADO (`clave_repetida`), no como excepcion:
    * es un desenlace previsto del doble submit, no un fallo. Cualquier otro error se propaga.
@@ -160,6 +173,10 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
           nota: input.nota,
           fechaPago: input.fechaPago,
           registradoPor: input.registradoPor,
+          // Feature 205 (R28): el ACTO del que nace, o `null` si no nace de ninguno. Se emite
+          // SIEMPRE (no `...(x ? {} : {})`): la columna es nullable y `null` significa «pago
+          // suelto contra un cierre», que es un dato, no una ausencia.
+          repartoId: input.repartoId,
         },
         include: INCLUDE_DOCUMENTO,
       });
@@ -201,6 +218,82 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
       totalPagoMensajero: row.totalPagoMensajero.toFixed(2),
       totalEfectivo: row.totalEfectivo.toFixed(2),
     };
+  }
+
+  /**
+   * Feature 205 (T2.2, R5/R6/R8) — los cierres `aprobado` de UN mensajero, con sus dos snapshots
+   * y su ANTIGUEDAD, ordenados `solicitado_at ASC, id ASC`.
+   *
+   * Tres cosas que solo se ven aqui y que ningun doble de servicio veria:
+   *
+   *  - el WHERE lleva `estado: "aprobado"` (mitad de R5) **y** `mensajeroId` (R24: nunca se
+   *    imputa a un cierre de otra persona). Quitar cualquiera de los dos es lo que una mutacion
+   *    del `where` haria, y los tests de servicio pasarian igual;
+   *  - **no hay `take`** (design §2.5.6): el tope de R53 acota la escritura, no la lectura;
+   *  - el `select` es explicito y minimo: de una tabla que esta feature NO gobierna se leen seis
+   *    columnas y ni una mas. `resuelto_at` NO esta, a proposito (design §2.4).
+   */
+  async listarCierresImputables(
+    mensajeroId: string,
+    tx?: LiquidacionCierreTxClient,
+  ): Promise<CierreImputableDTO[]> {
+    const cliente = tx ?? this.prisma;
+    const rows = await cliente.cierreDia.findMany({
+      where: { mensajeroId, estado: "aprobado" },
+      select: {
+        id: true,
+        mensajeroId: true,
+        estado: true,
+        totalPagoMensajero: true,
+        totalEfectivo: true,
+        solicitadoAt: true,
+      },
+      // Eficiencia, no la verdad del orden: quien fija R8 es `ordenarCierresFifo`, que reordena
+      // lo que reciba. El desempate por `id` esta igualmente aqui para que dos cierres del mismo
+      // instante salgan siempre igual del motor.
+      orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      mensajeroId: row.mensajeroId,
+      estado: row.estado,
+      totalPagoMensajero: row.totalPagoMensajero.toFixed(2),
+      totalEfectivo: row.totalEfectivo.toFixed(2),
+      solicitadoAt: row.solicitadoAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Feature 205 (T3.1, R36 — enmienda de negocio) — CUANTOS cierres del mensajero NO estan
+   * `aprobado`, por estado. Es el complemento exacto del metodo de arriba, contado.
+   *
+   * Lo que solo se ve aqui, y por eso se prueba aqui:
+   *
+   *  - **es un `groupBy`, no un `findMany` que se cuenta despues.** El agregado lo hace la base:
+   *    de la base salen tantas filas como estados no aprobados tenga el mensajero (un puñado),
+   *    no tantas como cierres. Contar en memoria daria el mismo numero devolviendo la lista
+   *    entera por la red, que es exactamente lo que esta lectura existe para no hacer;
+   *  - el WHERE lleva `estado: { not: "aprobado" }` **y** `mensajeroId`. Sin el `not` se contarian
+   *    tambien los cierres pagables y la pantalla los daria por excluidos; sin el `mensajeroId`
+   *    contaria los de otra persona;
+   *  - se agrupa por `estado` y por nada mas (R36 pide decir POR QUE quedan fuera). Agrupar por
+   *    otra columna —`solicitadoAt`, por ejemplo— devolveria otra vez una fila por cierre con
+   *    otro nombre, y el tope volveria a desaparecer;
+   *  - el `_count` no trae **ningun** `_sum` (R36/design §7.2): un cierre no aprobado no ha
+   *    devengado nada, asi que de aqui no puede salir una cifra que inventar. Un conteo no es un
+   *    monto;
+   *  - el orden es por `estado`, que es total y estable: dos llamadas iguales pintan igual.
+   */
+  async contarCierresNoAprobadosPorEstado(
+    mensajeroId: string,
+  ): Promise<CierresNoAprobadosPorEstadoDTO[]> {
+    const grupos = await this.prisma.cierreDia.groupBy({
+      by: ["estado"],
+      where: { mensajeroId, estado: { not: "aprobado" } },
+      _count: { _all: true },
+      orderBy: { estado: "asc" },
+    });
+    return grupos.map((grupo) => ({ estado: grupo.estado, cantidad: grupo._count._all }));
   }
 
   /**
@@ -300,6 +393,23 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
   async listarPorCierre(cierreId: string): Promise<LiquidacionPagoDTO[]> {
     const rows = await this.prisma.liquidacionPago.findMany({
       where: { cierreId },
+      include: INCLUDE_DOCUMENTO,
+      orderBy: [{ fechaPago: "desc" }, { createdAt: "desc" }],
+    });
+    return rows.map(toDTO);
+  }
+
+  /**
+   * Feature 205 (T2.2, R28) — los pagos de UN reparto. Es lo que permite reconstruir el
+   * resultado original de un reparto repetido con una consulta directa (`WHERE reparto_id = ...`)
+   * en vez de inferirlo del importe, de la fecha o de la referencia.
+   *
+   * Mismo criterio que `listarPorCierre`: trae los ANULADOS marcados (R74) y ordena por la fecha
+   * real con el instante de registro como desempate.
+   */
+  async listarPorReparto(repartoId: string): Promise<LiquidacionPagoDTO[]> {
+    const rows = await this.prisma.liquidacionPago.findMany({
+      where: { repartoId },
       include: INCLUDE_DOCUMENTO,
       orderBy: [{ fechaPago: "desc" }, { createdAt: "desc" }],
     });

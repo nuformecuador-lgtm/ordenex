@@ -87,11 +87,24 @@ describe("R23 — `LiquidacionService` NO recibe el repositorio de la caja", () 
     }
   });
 
-  it("el constructor pide CINCO dependencias, y la quinta es el puerto (no un repositorio)", () => {
-    // `.length` cuenta los parametros SIN valor por defecto: los cuatro de la 172 mas el puerto.
-    // El reloj queda fuera porque trae default. Si alguien añadiera aqui un sexto repositorio,
-    // este numero lo delataria antes de que ningun test de comportamiento se enterara.
-    expect(LiquidacionService.length).toBe(5);
+  it("el constructor pide SEIS dependencias, y la quinta es el puerto (no un repositorio de caja)", () => {
+    // `.length` cuenta los parametros SIN valor por defecto: los cuatro de la 172, el puerto y
+    // —desde la feature 205— el repositorio del ACTO de repartir. El reloj y el tope quedan
+    // fuera porque traen default.
+    //
+    // ⚠️ **El numero sube de 5 a 6, y este test hizo su trabajo:** se puso rojo al añadirse la
+    // sexta dependencia y obligo a mirar QUE es. Es `ILiquidacionRepartoRepository`, el
+    // repositorio de `liquidacion_reparto` (la barrera de idempotencia del reparto, R29), no un
+    // repositorio de la caja: la mitad-MENSAJERO de R40 sigue intacta y los dos casos de arriba
+    // —que barren la fuente entera— lo siguen afirmando.
+    expect(LiquidacionService.length).toBe(6);
+
+    // Y la contraprueba de QUE es la sexta, leida del propio constructor: el nombre del tipo
+    // esta ahi, asi que colar un repositorio de caja en esa posicion no pasaria por aqui.
+    const codigo = codigoSinComentarios(FUENTE_SERVICIO);
+    const constructor = codigo.slice(codigo.indexOf("constructor("), codigo.indexOf(") {}"));
+    expect(constructor).toMatch(/repartoRepo: ILiquidacionRepartoRepository/);
+    expect(constructor).toMatch(/caja: ICajaPagoTiendaFeedService/);
   });
 
   it("el composition root le da el PUERTO, con el repositorio encapsulado dentro", () => {

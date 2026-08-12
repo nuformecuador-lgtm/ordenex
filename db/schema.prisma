@@ -144,6 +144,8 @@ model Usuario {
   liquidacionPagosComoTienda          LiquidacionPago[]         @relation("LiquidacionPagoTienda") // feature 172/R29: pagos recibidos por ESTA tienda (contra su saldo acumulado)
   liquidacionPagosRegistrados         LiquidacionPago[]         @relation("LiquidacionPagoRegistrador") // feature 172/R7: pagos que este usuario (maestro/admin) registro
   liquidacionAnulacionesRealizadas    LiquidacionAnulacion[]    @relation("LiquidacionAnulacionActor") // feature 172/R73: anulaciones de pago que este usuario realizo
+  liquidacionRepartosComoMensajero    LiquidacionReparto[]      @relation("LiquidacionRepartoMensajero") // feature 205/R29: repartos (un importe troceado entre sus cierres) recibidos por ESTE mensajero
+  liquidacionRepartosRegistrados      LiquidacionReparto[]      @relation("LiquidacionRepartoRegistrador") // feature 205/R29: repartos que este usuario (maestro/admin) registro
   rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
 
   @@index([tipoIdentificacionId])
@@ -1305,6 +1307,20 @@ model PagoMensajeroMovimiento {
 //
 // RLS habilitada SIN policies (solo service role, patron wallet_tienda_movimiento /
 // pago_mensajero_movimiento / cierre_dia), R63.
+//
+// ────────────────────────────────────────────────────────────────────────────────────────
+// FEATURE 205 — NO SE LE AÑADE NINGUNA RESTRICCION UNICA A ESTA TABLA. NUNCA. Y no es
+// estetica: `LiquidacionPagoRepository.esChoqueDeClave` (`:80-84`) trata un P2002 SIN pista
+// como choque de `clave_idempotencia`, y ese razonamiento se apoya POR ESCRITO en que
+// «liquidacion_pago solo tiene dos restricciones unicas» (la PK sobre un uuid recien
+// generado y esta). Bajo el driver adapter de Prisma 7 el `meta.target` de un P2002 llega
+// VACIO —la cicatriz de `_shared/prisma-unique.ts`—, asi que un choque de CUALQUIER unico
+// nuevo llegaria sin pista y se leeria como «clave repetida»: el servicio releeria por la
+// clave, no la encontraria y responderia `no_encontrado`. Un pago legitimo rechazado con el
+// mensaje equivocado, imposible de diagnosticar desde el sintoma.
+// Por eso `reparto_id` lleva SOLO indice (design §1.2) y el `UNIQUE` de la idempotencia del
+// reparto vive en `liquidacion_reparto`, que es otra tabla y otro `create`.
+// ────────────────────────────────────────────────────────────────────────────────────────
 model LiquidacionPago {
   id                String          @id @default(uuid())
   claveIdempotencia String          @unique @map("clave_idempotencia") // §4.1: uuid del cliente; el UNIQUE es la barrera contra el doble pago (R44)
@@ -1317,6 +1333,7 @@ model LiquidacionPago {
   nota              String?
   fechaPago         DateTime        @map("fecha_pago") @db.Date // fecha REAL del pago (R9/R37)
   registradoPor     String          @map("registrado_por") // FK -> usuario (actor); NOT NULL: un pago siempre lo registra alguien (R7)
+  repartoId         String?         @map("reparto_id") // feature 205/R29: FK -> liquidacion_reparto; NULL = pago suelto contra UN cierre. Solo INDICE, jamas UNIQUE (ver nota abajo)
   createdAt         DateTime        @default(now()) @map("created_at") // instante de REGISTRO (R9)
   // SIN updatedAt / deletedAt: fila INMUTABLE, igual que los libros. La anulacion NO la toca.
 
@@ -1325,10 +1342,12 @@ model LiquidacionPago {
   tienda      Usuario?              @relation("LiquidacionPagoTienda", fields: [tiendaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   cierre      CierreDia?            @relation(fields: [cierreId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   registrador Usuario               @relation("LiquidacionPagoRegistrador", fields: [registradoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reparto     LiquidacionReparto?   @relation(fields: [repartoId], references: [id], onDelete: Restrict, onUpdate: Cascade) // feature 205
 
   @@index([mensajeroId, fechaPago])
   @@index([tiendaId, fechaPago])
   @@index([cierreId]) // pendiente por cierre (§5) y lista de comprobantes del cierre
+  @@index([repartoId]) // feature 205/R28: reconstruir el resultado de UN reparto (`WHERE reparto_id = ...`)
   @@map("liquidacion_pago")
 }
 
@@ -1353,6 +1372,44 @@ model LiquidacionAnulacion {
   anulador Usuario         @relation("LiquidacionAnulacionActor", fields: [anuladoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@map("liquidacion_anulacion")
+}
+
+// Feature 205 (design §1.1, D-D) — el ACTO de repartir UN importe entre los cierres pendientes
+// de un mensajero. Una fila por reparto; los N `liquidacion_pago` que nacen de el cuelgan por
+// `reparto_id`.
+//
+// POR QUE EXISTE LA TABLA y no se deriva la clave por cierre (§5.2, alternativa descartada):
+// con `<clave>:<cierreId>` un reintento que recalcula el FIFO empieza en OTRO cierre, la clave
+// derivada no colisiona con nada y SE PAGA DOS VECES. Evitarlo exigiria un `SELECT` previo por
+// prefijo, es decir el TOCTOU que R29 prohibe. Aqui la barrera es de DATOS: el `UNIQUE` de
+// `clave_idempotencia`, sobre una fila que se inserta la PRIMERA dentro de la transaccion, antes
+// de mover un centimo.
+//
+// Fila INMUTABLE: sin `updated_at` ni `deleted_at`, igual que `liquidacion_pago` y
+// `liquidacion_anulacion`. No existe metodo que la edite ni que la borre (R52); deshacer un
+// reparto es anular sus pagos uno a uno (§10.5).
+//
+// `monto_total` es lo que la persona COMPROMETIO. La suma de sus pagos es igual por
+// construccion y NO se guarda duplicada: derivarla es una suma sobre `liquidacion_pago`.
+// El CHECK `monto_total > 0` va a mano en la migracion (Prisma no expresa CHECK).
+//
+// FKs `ON DELETE RESTRICT`: el rastro de quien cobro y quien registro no se pierde borrando un
+// usuario. RLS habilitada SIN policies (solo service role), R49.
+model LiquidacionReparto {
+  id                String   @id @default(uuid())
+  claveIdempotencia String   @unique @map("clave_idempotencia") // R29: la barrera contra el doble reparto; misma semantica que la del pago
+  mensajeroId       String   @map("mensajero_id") // FK -> usuario (rol mensajero): el BENEFICIARIO del acto
+  montoTotal        Decimal  @map("monto_total") @db.Decimal(12, 2) // > 0 (CHECK en la migracion); lo comprometido en UNA captura
+  registradoPor     String   @map("registrado_por") // FK -> usuario (actor); NOT NULL: un pago siempre lo registra alguien
+  createdAt         DateTime @default(now()) @map("created_at") // instante del registro
+  // SIN updatedAt / deletedAt: fila INMUTABLE (R52).
+
+  mensajero   Usuario           @relation("LiquidacionRepartoMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  registrador Usuario           @relation("LiquidacionRepartoRegistrador", fields: [registradoPor], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  pagos       LiquidacionPago[] // las N imputaciones de este reparto (R28: `WHERE reparto_id = ...`)
+
+  @@index([mensajeroId, createdAt(sort: Desc)]) // auditar los repartos de un mensajero, del mas reciente al mas viejo
+  @@map("liquidacion_reparto")
 }
 
 // Feature 84: unidad de la periodicidad de una plantilla de gasto fijo. Con `periodicidadCantidad`

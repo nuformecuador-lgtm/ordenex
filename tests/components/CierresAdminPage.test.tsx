@@ -134,6 +134,11 @@ vi.mock("next/navigation", () => ({
     throw new NotFoundError();
   },
   useRouter: () => ({ refresh: refreshMock, push: pushMock }),
+  // Feature 205 (T6.1): el modulo lee `?cierre=` para abrir un detalle por enlace, asi que
+  // el doble de `next/navigation` tiene que exportar tambien estos dos. Cambio del ARNES:
+  // ninguna asercion de este archivo se toca.
+  usePathname: () => "/cierres-admin",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/hooks/useToast", () => ({

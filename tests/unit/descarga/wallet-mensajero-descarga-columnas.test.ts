@@ -25,6 +25,9 @@ const MOV: PagoMensajeroMovimientoDTO = {
   monto: "10203040506.07",
   origenTipo: "cierre_dia",
   origenId: "4d3c2b1a-9876-4543-a210-fedcba987654",
+  // feature 205/R43: el DTO lo lleva; la DESCARGA no lo emite (y este archivo mide justo eso:
+  // ningun uuid sobrevive a la proyeccion).
+  cierreId: "4d3c2b1a-9876-4543-a210-fedcba987654",
   descripcion: "Cierre del 12 de julio",
   fechaMovimiento: "2026-07-12T10:00:00.000Z",
 };

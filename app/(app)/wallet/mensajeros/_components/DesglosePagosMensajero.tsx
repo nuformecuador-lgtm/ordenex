@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,13 +25,17 @@ import {
   COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO,
   filaDescargaDesgloseMensajero,
 } from "./desglose-mensajero-descarga-columnas";
+import { PagoMensajeroAcciones } from "./PagoMensajeroAcciones";
+import { EnlaceCierre } from "./RepartoPrevisualizacion";
 import {
   CATEGORIA_PAGO_LABEL,
   CUENTA_COLOR,
   DESGLOSE_AVISO_BRUTOS,
   DESGLOSE_COLUMNAS,
+  DESGLOSE_COLUMNA_CIERRE,
   DESGLOSE_FILTRO_LABEL,
   DESGLOSE_LABEL,
+  DESGLOSE_SIN_CIERRE,
   DESGLOSE_VACIO,
   SIGNO_BADGE,
   TIPO_PAGO_LABEL,
@@ -51,6 +55,23 @@ import {
 
 /** Tamaño de pagina del desglose por cierre (coincide con el default del schema zod). */
 const DESGLOSE_PAGE_SIZE = 20;
+
+/** Prefijo de la clave SWR de este desglose. Identifica la lectura entre todas las de la app. */
+const CLAVE_DESGLOSE = "wallet-mensajeros:desglose";
+
+/**
+ * Feature 205 (T5.3, design §8) — filtro de `mutate` que alcanza el desglose de UN mensajero
+ * en CUALQUIER página y con cualquier filtro, y ninguno de los demás.
+ *
+ * Es un filtro y no una clave literal porque la clave lleva la página y los tres filtros
+ * vigentes: tras registrar un pago hay que releer lo que ese mensajero tenga a la vista, sea
+ * cual sea. Un `mutate()` sin argumentos refrescaría también los desgloses de los otros
+ * mensajeros abiertos, y cada uno cuesta una consulta (R33 de la 172).
+ */
+function esClaveDesgloseDe(mensajeroId: string): (clave: unknown) => boolean {
+  return (clave) =>
+    Array.isArray(clave) && clave[0] === CLAVE_DESGLOSE && clave[1] === mensajeroId;
+}
 
 /** Borrador / conjunto aplicado de filtros del desglose (cierre + rango de fechas). */
 interface FiltrosDesglose {
@@ -155,6 +176,20 @@ const COLUMNS: Column<PagoMensajeroMovimientoDTO>[] = [
     value: DESGLOSE_COLUMNAS.origen,
     render: (m) => origenTexto(m),
   },
+  {
+    // Feature 205 (T6.2, R43) — el enlace al detalle del cierre de esta fila. La fila que NO
+    // identifica ningún cierre (un ajuste manual) NO lleva enlace: ni roto ni deshabilitado,
+    // sino la misma raya con la que esta pantalla dice «acá no hay dato». El `cierreId` lo
+    // DERIVA el servidor (design §7.3); acá no se adivina de qué cierre viene un movimiento.
+    id: "cierre",
+    value: DESGLOSE_COLUMNA_CIERRE,
+    render: (m) =>
+      m.cierreId === null ? (
+        <span className="text-muted-foreground">{DESGLOSE_SIN_CIERRE}</span>
+      ) : (
+        <EnlaceCierre cierreId={m.cierreId} />
+      ),
+  },
 ];
 
 export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroProps) {
@@ -164,9 +199,10 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
   const [filtros, setFiltros] = useState<FiltrosDesglose>(FILTROS_VACIOS);
   const [draft, setDraft] = useState<FiltrosDesglose>(FILTROS_VACIOS);
 
+  const { mutate } = useSWRConfig();
   const { data, error, isLoading } = useSWR(
     [
-      "wallet-mensajeros:desglose",
+      CLAVE_DESGLOSE,
       mensajeroId,
       page,
       filtros.cierreId,
@@ -253,6 +289,22 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
       <p role="note" className="text-xs text-muted-foreground">
         {DESGLOSE_AVISO_BRUTOS}
       </p>
+
+      {/*
+        Feature 205 (T5.3, R3) — PAGAR desde acá, sin ir a otra pantalla. Va en la cabecera del
+        desglose, junto a los importes que explica y encima de los movimientos que el pago va a
+        mover, y es el espejo de lo que hace la tienda en su propio desglose.
+
+        El refresco es DIRIGIDO y lo hace el dueño de la clave: el bloque de pago refresca sus
+        previsualizaciones y avisa acá, y acá se relee el desglose de ESTE mensajero —en la
+        página y con los filtros que tenga puestos— y ninguno más.
+      */}
+      <PagoMensajeroAcciones
+        resumen={resumen}
+        onRegistrado={async () => {
+          await mutate(esClaveDesgloseDe(mensajeroId));
+        }}
+      />
 
       {/* Filtros server-side por fecha/cierre (R22). */}
       <form

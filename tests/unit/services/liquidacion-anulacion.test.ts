@@ -12,6 +12,7 @@ import type {
   ILiquidacionPagoRepository,
   LiquidacionPagoDTO,
 } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type { ILiquidacionRepartoRepository } from "@/lib/interfaces/repositories/ILiquidacionRepartoRepository";
 import type {
   CrearPagoMensajeroInput,
   IPagoMensajeroMovimientoRepository,
@@ -223,6 +224,30 @@ function buildDobles(opciones: {
     sumarVigentesPorTienda: vi.fn(async () => "0.00"),
     listarPorCierre: vi.fn(async () => []),
     listarPorTienda: vi.fn(async () => []),
+    // Feature 205 (T2.2): el contrato gana dos LECTURAS. Ningun test de este archivo las
+    // usa —son del reparto—, pero el doble las expone para poder afirmar que los caminos de la
+    // 172 NO las llaman.
+    listarCierresImputables: vi.fn(async () => []),
+    listarPorReparto: vi.fn(async () => []),
+    // Feature 205 (T3.1): la tercera lectura del reparto (el CONTEO por estado de R36).
+    contarCierresNoAprobadosPorEstado: vi.fn(async () => []),
+  };
+
+  /**
+   * Feature 205 (T3.2): el repositorio del ACTO de repartir, doble mudo. Anular no reparte y no
+   * lo toca; esta aqui porque el servicio lo exige por constructor (sin default, igual que el
+   * puerto de la caja) y porque sus dos metodos escriben en el log: si la anulacion tocara un
+   * reparto, las comparaciones del log lo dirian.
+   */
+  const repartoRepo: ILiquidacionRepartoRepository = {
+    crear: vi.fn(async () => {
+      log.push("crear:reparto");
+      return { status: "clave_repetida" as const };
+    }),
+    obtenerPorClave: vi.fn(async () => {
+      log.push("obtener:reparto-por-clave");
+      return null;
+    }),
   };
 
   const tiendaRepo: IWalletTiendaMovimientoRepository = {
@@ -287,6 +312,7 @@ function buildDobles(opciones: {
     mensajeroRepo,
     runTransaction,
     caja,
+    repartoRepo, // feature 205 (T3.2): va ANTES del reloj y sin default
     () => opciones.ahora ?? AHORA,
   );
   return { service, pagoRepo, tiendaRepo, mensajeroRepo, caja, llamadasTx, log, tx, txsVistos };
@@ -1068,18 +1094,38 @@ describe("R82/R75 — no hay camino para anular una anulacion", () => {
 
     // Lista CERRADA a proposito (incluidos los privados): anadir un `desanularPago` obliga a
     // tocar este test, que es justo el momento de mirar si tiene derecho a existir. No lo tiene.
+    //
+    // ⚠️ **Feature 205 (T3.1/T3.2) — la lista crece de 11 a 17, y cada nombre nuevo tiene su
+    // porque.** Este test hizo exactamente su trabajo: se puso rojo al aparecer los metodos del
+    // reparto y obligo a mirarlos uno a uno.
+    //
+    //  - `previsualizarRepartoMensajero` / `registrarRepartoMensajero`: los dos actos publicos.
+    //  - `escribirPagoDeCierre`: el ESCRITOR UNICO (design §2.3), extraido del cuerpo que ya
+    //    estaba dentro de `registrarPagoMensajero`. No es capacidad nueva: es la MISMA, en un
+    //    solo sitio, para que el pago simple y cada imputacion no puedan divergir.
+    //  - `imputablesDe` / `ventanaBajoBloqueo` / `responderRepartoYaRegistrado`: lecturas y
+    //    composicion del reparto.
+    //
+    // Ninguno edita, borra ni deshace nada — lo sigue afirmando el barrido de abajo, y R52 lo
+    // exige: deshacer un reparto es anular sus pagos uno a uno (design §10.5).
     expect(metodos).toEqual([
       "anularPago",
       "escribirContraasiento",
+      "escribirPagoDeCierre",
+      "imputablesDe",
       "listarPagosDeCierre",
       "listarPagosDeTienda",
       "pendienteDelCierre",
+      "previsualizarRepartoMensajero",
       "registrarPagoMensajero",
       "registrarPagoTienda",
+      "registrarRepartoMensajero",
+      "responderRepartoYaRegistrado",
       "responderYaAnulado",
       "responderYaRegistrado",
       "restanteDe",
       "restanteTrasAnular",
+      "ventanaBajoBloqueo",
     ]);
     for (const nombre of metodos) {
       expect(nombre, `metodo sospechoso: ${nombre}`).not.toMatch(

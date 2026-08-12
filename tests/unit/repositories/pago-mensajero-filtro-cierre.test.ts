@@ -218,8 +218,18 @@ function buildPrisma(movs: MovimientoFila[] = libro(), pagos = PAGOS) {
       }),
     },
     liquidacionPago: {
-      findMany: vi.fn(async (args: { where?: Record<string, unknown> } = {}) =>
-        pagos.filter((p) => casaWhere(comoFila(p), args.where ?? {})).map((p) => ({ id: p.id })),
+      // Feature 205 (T2.4): esta tabla la consultan ahora DOS caminos con `select` distintos —el
+      // filtro por cierre (`{ id }`) y la derivacion del cierre de cada fila (`{ id, cierreId }`)—,
+      // asi que el doble HONRA el `select` en vez de devolver siempre lo mismo. Si lo ignorara,
+      // la derivacion recibiria un `cierreId` que nadie pidio y el test dejaria de medir cual de
+      // los dos caminos pide que.
+      findMany: vi.fn(
+        async (
+          args: { where?: Record<string, unknown>; select?: Record<string, boolean> } = {},
+        ) =>
+          pagos
+            .filter((p) => casaWhere(comoFila(p), args.where ?? {}))
+            .map((p) => (args.select?.cierreId === true ? { id: p.id, cierreId: p.cierreId } : { id: p.id })),
       ),
     },
     usuario: { findMany: vi.fn(), findUnique: vi.fn() },
@@ -316,19 +326,56 @@ describe("R52 — como se leen los pagos del cierre", () => {
 
     await idsFiltrandoPor(prisma, { cierreId: C1 });
 
+    // La PRIMERA consulta es la del FILTRO (`buildFiltrosWhere` corre antes de leer la pagina).
     expect(prisma.liquidacionPago.findMany.mock.calls[0]![0]).toEqual({
       where: { cierreId: C1 },
       select: { id: true }, // ni una columna mas de una tabla de otra feature
     });
   });
 
-  it("sin `cierreId` NO se consulta `liquidacion_pago` (el desglose sin filtro no paga peaje)", async () => {
+  it("sin `cierreId` el FILTRO no consulta `liquidacion_pago`: no hay peaje por filtrar", async () => {
+    // ⚠️ ACTUALIZADO POR LA FEATURE 205 / T2.4. Lo que este caso afirmaba antes era «sin cierreId
+    // NO se consulta `liquidacion_pago`, punto». Dejo de ser cierto, y a proposito: R43 obliga a
+    // DERIVAR el cierre de cada fila para poder enlazarlo, y las filas cuyo origen es un PAGO
+    // solo saben su cierre mirando el documento (design §7.3).
+    //
+    // Lo que sigue siendo cierto —y es lo que este caso protege ahora— es que el FILTRO no cuesta
+    // nada cuando no se filtra: la unica consulta que queda es la de la derivacion, va DESPUES de
+    // leer la pagina y su `where` es por ID DE PAGO, no por cierre.
     const prisma = buildPrisma();
 
     const ids = await idsFiltrandoPor(prisma);
 
-    expect(prisma.liquidacionPago.findMany).not.toHaveBeenCalled();
     expect(ids).toHaveLength(6); // los 6 del mensajero m1 (el septimo es de m2)
+    expect(prisma.liquidacionPago.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.liquidacionPago.findMany.mock.calls[0]![0]).toEqual({
+      where: { id: { in: [PAGO_1, PAGO_2] } }, // por PAGO; ninguna clave habla de cierre
+      select: { id: true, cierreId: true },
+    });
+  });
+
+  it("205/R43: sin filas de pago en la pagina, la derivacion no consulta nada", async () => {
+    // El coste es proporcional a lo que la pagina trae, no fijo: una pagina con solo devengos
+    // del cierre no paga ninguna consulta extra.
+    const soloFeed = libro().filter((m) => m.origenTipo === "cierre_dia");
+    const prisma = buildPrisma(soloFeed);
+
+    const ids = await idsFiltrandoPor(prisma);
+
+    expect(ids.length).toBeGreaterThan(0);
+    expect(prisma.liquidacionPago.findMany).not.toHaveBeenCalled();
+  });
+
+  it("205/R43: con filtro por cierre son DOS consultas —el filtro y la derivacion—, no una por fila", async () => {
+    const prisma = buildPrisma();
+
+    await idsFiltrandoPor(prisma, { cierreId: C1 });
+
+    expect(prisma.liquidacionPago.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.liquidacionPago.findMany.mock.calls[1]![0]).toEqual({
+      where: { id: { in: [PAGO_1] } }, // solo el pago que aparece en la pagina
+      select: { id: true, cierreId: true },
+    });
   });
 
   it("la pagina y el conteo miran el MISMO conjunto (el total no cuenta otra cosa)", async () => {

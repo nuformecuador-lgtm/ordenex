@@ -77,7 +77,7 @@ export const LIQUIDACION_REFERENCIA_MAX = 60;
  * wallet: la misma regla money-safe que ya valida los egresos), acotado ademas por arriba a lo
  * que la columna puede representar.
  */
-const montoLiquidacionSchema = montoPositivoSchema.refine((v) => {
+export const montoLiquidacionSchema = montoPositivoSchema.refine((v) => {
   try {
     return new Prisma.Decimal(v).lte(LIQUIDACION_MONTO_MAX);
   } catch {
@@ -110,7 +110,7 @@ export function esFechaPagoValida(value: string, now: Date = new Date()): boolea
   return value <= fechaCalendarioCR(now);
 }
 
-const fechaPagoSchema = z
+export const fechaPagoSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha del pago debe tener el formato YYYY-MM-DD.")
   .refine((v) => esFechaPagoValida(v), "La fecha del pago no puede ser posterior a hoy.");
@@ -120,7 +120,7 @@ const fechaPagoSchema = z
  * referencia no se puede conciliar) y OPCIONAL en efectivo. Se emite en el campo `referencia`
  * para que la pantalla la pinte donde toca.
  */
-function exigirReferenciaEnPagoElectronico(
+export function exigirReferenciaEnPagoElectronico(
   valor: { metodo: MetodoLiquidacion; referencia?: string },
   ctx: z.RefinementCtx,
 ): void {
@@ -135,7 +135,12 @@ function exigirReferenciaEnPagoElectronico(
 
 // Campos comunes a los dos registros de pago. Lo unico que cambia entre ellos es CONTRA QUE se
 // registra: un cierre aprobado (mensajero) o la tienda entera (decision 4 del humano).
-const camposComunesDelPago = {
+//
+// Feature 205 (T4.1) — se EXPORTA para que el borde del REPARTO lo reuse tal cual en vez de
+// reescribirlo. Que el reparto y el pago compartan literalmente estos seis campos es lo que
+// impide que uno de los dos se quede sin el tope del monto, sin el `.trim()` de la referencia o
+// sin el rechazo de la fecha futura el dia que uno de ellos cambie (R47).
+export const camposComunesDelPago = {
   // §4.1: uuid generado por el CLIENTE al ABRIR el formulario. La columna es UNIQUE, asi que
   // la proteccion contra el doble pago es DE DATOS (R44), no un `if` previo.
   claveIdempotencia: z.string().uuid(),

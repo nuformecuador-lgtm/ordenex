@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { CierreEstado, Prisma, type PrismaClient } from "@prisma/client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
 import type { CrearLiquidacionPagoInput } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
 
@@ -82,6 +82,13 @@ function buildPrisma() {
     // escrituras, espiadas, para poder afirmar que ninguna se usa.
     cierreDia: {
       findUnique: vi.fn(),
+      // Feature 205 (T2.2): el listado de imputables. Mismo criterio que arriba — se LEE y jamas
+      // se escribe, y las escrituras siguen espiadas para poder afirmarlo.
+      findMany: vi.fn(),
+      // Feature 205 (T3.1, enmienda): el CONTEO por estado de R36 lo agrega la base. Esta aqui
+      // junto a `findMany` a proposito: los dos espiados es lo que permite afirmar que el conteo
+      // NO se hace trayendo las filas y contandolas en memoria.
+      groupBy: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
       create: vi.fn(),
@@ -149,10 +156,11 @@ const INPUT: CrearLiquidacionPagoInput = {
   nota: "Pago parcial de julio",
   fechaPago: FECHA_PAGO,
   registradoPor: "u-admin",
+  repartoId: null, // feature 205 (T2.2): pago suelto, no nace de ningun reparto
 };
 
 describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
-  it("R7: escribe las 10 columnas del documento, con el monto como Decimal", async () => {
+  it("R7: escribe las 11 columnas del documento, con el monto como Decimal", async () => {
     const prisma = buildPrisma();
     prisma.liquidacionPago.create.mockResolvedValue(documentoRow());
     const repo = buildRepo(prisma);
@@ -161,7 +169,9 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
 
     expect(r.status).toBe("creado");
     const arg = prisma.liquidacionPago.create.mock.calls[0][0];
-    // Las 10 columnas que el emisor decide (`created_at` lo pone la base).
+    // Las 11 columnas que el emisor decide (`created_at` lo pone la base): las 10 de la 172 mas
+    // `repartoId` (feature 205/T2.2). La lista es EXHAUSTIVA a proposito: una columna nueva
+    // escrita en silencio rompe este caso.
     expect(Object.keys(arg.data).sort()).toEqual(
       [
         "claveIdempotencia",
@@ -174,6 +184,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
         "nota",
         "fechaPago",
         "registradoPor",
+        "repartoId",
       ].sort(),
     );
     expect(arg.data).toMatchObject({
@@ -280,6 +291,350 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     await expect(
       repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT),
     ).rejects.toThrow("conexion caida");
+  });
+
+  // ── Feature 205 (T2.2/T2.3, R28): el pago se ata a su ACTO ──
+
+  it("205/R28: emite `reparto_id` cuando el pago nace de un reparto", async () => {
+    const prisma = buildPrisma();
+    prisma.liquidacionPago.create.mockResolvedValue(documentoRow());
+    const repo = buildRepo(prisma);
+
+    await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, {
+      ...INPUT,
+      mensajeroId: "m1",
+      tiendaId: null,
+      cierreId: "c1",
+      repartoId: "rep-1",
+    });
+
+    expect(prisma.liquidacionPago.create.mock.calls[0][0].data.repartoId).toBe("rep-1");
+  });
+
+  it("205/R51: y emite `null` cuando no nace de ninguno — la clave SE EMITE, no se omite", async () => {
+    // La diferencia entre `repartoId: null` y no mandar la clave no es cosmetica: con la clave
+    // ausente, un `data` construido con spreads condicionales dejaria de decir nada sobre la
+    // columna, y el dia que el caller se olvidara de pasarla el pago quedaria sin atar sin que
+    // nada se queje. `null` es el DATO «pago suelto contra un cierre».
+    const prisma = buildPrisma();
+    prisma.liquidacionPago.create.mockResolvedValue(documentoRow());
+    const repo = buildRepo(prisma);
+
+    await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT);
+
+    const { data } = prisma.liquidacionPago.create.mock.calls[0][0];
+    expect(data).toHaveProperty("repartoId");
+    expect(data.repartoId).toBeNull();
+  });
+});
+
+// ── Feature 205 (T2.2/T2.3) — las dos LECTURAS nuevas. El WHERE se prueba donde vive ──
+
+/** La fila de `cierre_dia` tal como la devuelve Prisma para el listado de imputables. */
+function cierreImputableRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "c1",
+    mensajeroId: "m1",
+    estado: "aprobado",
+    totalPagoMensajero: new Prisma.Decimal("50000.00"),
+    totalEfectivo: new Prisma.Decimal("12345.6"), // escala 1 a proposito: se normaliza a 2
+    solicitadoAt: new Date("2026-07-05T10:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+describe("LiquidacionPagoRepository.listarCierresImputables (205 / R5/R6/R8)", () => {
+  it("R5/R24 — EL WHERE: filtra por mensajero Y por estado `aprobado`, los dos", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findMany.mockResolvedValue([cierreImputableRow()]);
+    const repo = buildRepo(prisma);
+
+    await repo.listarCierresImputables("m1");
+
+    const arg = prisma.cierreDia.findMany.mock.calls[0][0];
+    // ESTE es el where que ningun doble de servicio ve. Sin `estado`, el reparto imputaria a
+    // cierres `solicitado`/`rechazado`/`vencido`, que no han devengado nada; sin `mensajeroId`,
+    // a los cierres de OTRA persona (R24). Igualdad exacta: ni una clave de mas.
+    expect(arg.where).toEqual({ mensajeroId: "m1", estado: "aprobado" });
+  });
+
+  it("R8 — EL ORDEN: `solicitadoAt` asc con desempate por `id` asc, y NUNCA por `resueltoAt`", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findMany.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+
+    await repo.listarCierresImputables("m1");
+
+    const arg = prisma.cierreDia.findMany.mock.calls[0][0];
+    expect(arg.orderBy).toEqual([{ solicitadoAt: "asc" }, { id: "asc" }]);
+    // Q1/design §2.4: ordenar por la fecha de APROBACION haria que la prioridad de cobro la
+    // fijara la latencia administrativa. Aqui no se nombra ni para leerla.
+    expect(JSON.stringify(arg)).not.toContain("resueltoAt");
+  });
+
+  it("R53/§2.5.6 — SIN `take`: el tope acota la ESCRITURA, no la lectura", async () => {
+    // La previsualizacion necesita TODOS los imputables para decir cuantos quedan fuera de la
+    // ventana y cuanto suman (R56). Un `take` aqui haria que el aviso mintiera y que la deuda no
+    // imputable de R37 se midiera contra un conjunto recortado.
+    const prisma = buildPrisma();
+    prisma.cierreDia.findMany.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+
+    await repo.listarCierresImputables("m1");
+
+    const arg = prisma.cierreDia.findMany.mock.calls[0][0];
+    expect(arg).not.toHaveProperty("take");
+    expect(arg).not.toHaveProperty("skip");
+    expect(arg).not.toHaveProperty("cursor");
+  });
+
+  it("lee SEIS columnas del cierre y emite los montos como STRING de escala 2", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findMany.mockResolvedValue([cierreImputableRow()]);
+    const repo = buildRepo(prisma);
+
+    const cierres = await repo.listarCierresImputables("m1");
+
+    expect(prisma.cierreDia.findMany.mock.calls[0][0].select).toEqual({
+      id: true,
+      mensajeroId: true,
+      estado: true,
+      totalPagoMensajero: true,
+      totalEfectivo: true,
+      solicitadoAt: true,
+    });
+    expect(cierres).toEqual([
+      {
+        id: "c1",
+        mensajeroId: "m1",
+        estado: "aprobado",
+        totalPagoMensajero: "50000.00",
+        totalEfectivo: "12345.60", // Decimal -> STRING escala 2 (money-safe)
+        solicitadoAt: "2026-07-05T10:00:00.000Z",
+      },
+    ]);
+    // El PENDIENTE no sale de aqui: se deriva en el servicio (R6). Un pendiente calculado en el
+    // repositorio seria logica de negocio en la capa equivocada.
+    expect(cierres[0]).not.toHaveProperty("pendiente");
+  });
+
+  it("R23: con `tx` la relectura ocurre EN LA TRANSACCION, no en el cliente propio", async () => {
+    const prisma = buildPrisma();
+    const tx = { cierreDia: { findMany: vi.fn().mockResolvedValue([cierreImputableRow()]) } };
+    const repo = buildRepo(prisma);
+
+    await repo.listarCierresImputables("m1", tx as never);
+
+    expect(tx.cierreDia.findMany).toHaveBeenCalledTimes(1);
+    // Leer fuera de la transaccion dejaria una ventana entre el bloqueo y la escritura.
+    expect(prisma.cierreDia.findMany).not.toHaveBeenCalled();
+  });
+
+  it("R26: listarlos no ESCRIBE nada en el cierre", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findMany.mockResolvedValue([cierreImputableRow()]);
+    const repo = buildRepo(prisma);
+
+    await repo.listarCierresImputables("m1");
+
+    for (const metodo of ["update", "updateMany", "create", "delete", "upsert"] as const) {
+      expect(prisma.cierreDia[metodo], `cierreDia.${metodo}`).not.toHaveBeenCalled();
+    }
+  });
+
+  it("un mensajero sin cierres aprobados devuelve la lista vacia (no null)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findMany.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+    expect(await repo.listarCierresImputables("m1")).toEqual([]);
+  });
+});
+
+describe("LiquidacionPagoRepository.contarCierresNoAprobadosPorEstado (205 / T3.1, R36)", () => {
+  /** Los grupos tal y como los devuelve un `groupBy` de Prisma: `_count._all` por grupo. */
+  function grupo(estado: string, cantidad: number) {
+    return { estado, _count: { _all: cantidad } };
+  }
+
+  it("R36 — EL WHERE: el mensajero Y el complemento EXACTO de `aprobado`", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.groupBy.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+
+    await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    const arg = prisma.cierreDia.groupBy.mock.calls[0][0];
+    // Igualdad EXACTA, y el `not` es lo que se mide: sin el, el conteo incluiria tambien los
+    // cierres APROBADOS y la pantalla daria por excluido lo que si se puede pagar aqui mismo.
+    // `not: aprobado` y no una lista de estados escrita a mano: con una lista, un estado nuevo
+    // del enum se quedaria fuera del aviso en silencio y esos cierres DESAPARECERIAN, que es
+    // justo lo que R36 existe para impedir. Y sin `mensajeroId`, contaria los de otra persona.
+    expect(arg.where).toEqual({ mensajeroId: "m1", estado: { not: "aprobado" } });
+  });
+
+  it("R36 — AGREGA EN LA BASE: es un `groupBy`, y `findMany` no se llama ni una vez", async () => {
+    // El corazon de la enmienda. Traer las filas y contarlas en memoria daria el MISMO numero y
+    // dejaria intacto el problema: N filas sin tope viajando desde la base, que es lo que un
+    // mensajero con dos años de cierres rechazados convertia en un payload enorme. Lo acotado no
+    // es lo que se devuelve, es lo que se LEE — y eso solo se ve aqui.
+    const prisma = buildPrisma();
+    prisma.cierreDia.groupBy.mockResolvedValue([grupo("rechazado", 9)]);
+    const repo = buildRepo(prisma);
+
+    await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    expect(prisma.cierreDia.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.cierreDia.findMany).not.toHaveBeenCalled();
+    expect(prisma.cierreDia.findUnique).not.toHaveBeenCalled();
+    // Y el conteo lo pide la consulta, no el proceso.
+    expect(prisma.cierreDia.groupBy.mock.calls[0][0]._count).toEqual({ _all: true });
+  });
+
+  it("R36 — agrupa por ESTADO y por nada mas: agrupar por otra columna devolveria la lista", async () => {
+    // Con `by: ["solicitadoAt"]` —o con el `id` dentro— vuelve a salir practicamente una fila por
+    // cierre, con otro nombre y sin tope: la enmienda quedaria deshecha sin que ningun test de
+    // servicio se enterase. Y R36 pide decir POR QUE quedan fuera, que es exactamente el estado.
+    const prisma = buildPrisma();
+    prisma.cierreDia.groupBy.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+
+    await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    expect(prisma.cierreDia.groupBy.mock.calls[0][0].by).toEqual(["estado"]);
+  });
+
+  it("R36 — es el COMPLEMENTO de los imputables: ni un cierre en las dos lecturas, ni uno fuera", async () => {
+    // Las dos consultas juntas tienen que cubrir TODOS los cierres del mensajero y ninguno dos
+    // veces. Se mide comparando los dos `where` reales, que es donde vive la particion.
+    const prisma = buildPrisma();
+    prisma.cierreDia.findMany.mockResolvedValue([]);
+    prisma.cierreDia.groupBy.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+
+    await repo.listarCierresImputables("m1");
+    await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    const imputables = prisma.cierreDia.findMany.mock.calls[0][0].where;
+    const excluidos = prisma.cierreDia.groupBy.mock.calls[0][0].where;
+    expect(imputables.mensajeroId).toBe(excluidos.mensajeroId);
+    expect(imputables.estado).toBe("aprobado");
+    expect(excluidos.estado).toEqual({ not: "aprobado" });
+  });
+
+  it("R36/§7.2 — la consulta NO pide ningun monto: un cierre no aprobado no ha devengado nada", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.groupBy.mockResolvedValue([grupo("solicitado", 3)]);
+    const repo = buildRepo(prisma);
+
+    await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    const arg = prisma.cierreDia.groupBy.mock.calls[0][0];
+    // Un conteo no es un monto: ni `_sum`, ni `_avg`, ni una columna de dinero por ningun lado.
+    expect(arg).not.toHaveProperty("_sum");
+    expect(arg).not.toHaveProperty("_avg");
+    expect(JSON.stringify(arg)).not.toContain("total");
+    expect(JSON.stringify(arg)).not.toContain("Efectivo");
+  });
+
+  it("devuelve `{ estado, cantidad }` por grupo: el CONTEO, sin ningun cierre nombrado", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.groupBy.mockResolvedValue([grupo("rechazado", 9), grupo("solicitado", 3)]);
+    const repo = buildRepo(prisma);
+
+    const excluidos = await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    expect(excluidos).toEqual([
+      { estado: "rechazado", cantidad: 9 },
+      { estado: "solicitado", cantidad: 3 },
+    ]);
+    // Se perdio poder nombrar un cierre concreto en el aviso (antes viajaba su `solicitadoAt`) y
+    // es el precio aceptado de que la respuesta este acotada. Volver a emitir el id o la fecha
+    // es deshacer la decision, no arreglar un olvido.
+    for (const fila of excluidos) {
+      expect(Object.keys(fila).sort()).toEqual(["cantidad", "estado"]);
+    }
+  });
+
+  it("ACOTADO POR CONSTRUCCION: nunca mas entradas que valores tiene `CierreEstado`", async () => {
+    // El tamaño de la respuesta depende del enum, no del historial: por eso esta lectura no
+    // necesita `take` ni recorte. Se comprueba con el enum REAL de Prisma, no con una lista
+    // escrita aqui: si un dia el enum crece, el limite crece con el y sigue siendo finito.
+    const estados = Object.values(CierreEstado).filter((estado) => estado !== "aprobado");
+    const prisma = buildPrisma();
+    prisma.cierreDia.groupBy.mockResolvedValue(estados.map((estado) => grupo(estado, 900)));
+    const repo = buildRepo(prisma);
+
+    const excluidos = await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    expect(excluidos.length).toBe(estados.length);
+    expect(excluidos.length).toBeLessThan(Object.values(CierreEstado).length);
+    // 900 cierres por estado y la respuesta sigue teniendo un puñado de filas.
+    expect(excluidos.every((fila) => fila.cantidad === 900)).toBe(true);
+    expect(prisma.cierreDia.groupBy.mock.calls[0][0]).not.toHaveProperty("take");
+  });
+
+  it("orden determinista por `estado`: dos llamadas iguales pintan igual", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.groupBy.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+
+    await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    expect(prisma.cierreDia.groupBy.mock.calls[0][0].orderBy).toEqual({ estado: "asc" });
+  });
+
+  it("R26: contarlos tampoco ESCRIBE nada en el cierre", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.groupBy.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+
+    await repo.contarCierresNoAprobadosPorEstado("m1");
+
+    for (const metodo of ["update", "updateMany", "create", "delete", "upsert"] as const) {
+      expect(prisma.cierreDia[metodo], `cierreDia.${metodo}`).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("LiquidacionPagoRepository.listarPorReparto (205 / R28)", () => {
+  it("acota por `reparto_id` — es lo que reconstruye el resultado original en vez de inferirlo", async () => {
+    const prisma = buildPrisma();
+    prisma.liquidacionPago.findMany.mockResolvedValue([
+      documentoRow({ mensajeroId: "m1", tiendaId: null, cierreId: "c1" }),
+    ]);
+    const repo = buildRepo(prisma);
+
+    const filas = await repo.listarPorReparto("rep-1");
+
+    const arg = prisma.liquidacionPago.findMany.mock.calls[0][0];
+    expect(arg.where).toEqual({ repartoId: "rep-1" });
+    expect(arg.orderBy).toEqual([{ fechaPago: "desc" }, { createdAt: "desc" }]);
+    expect(filas[0].cierreId).toBe("c1"); // cada imputacion conserva SU cierre (R18)
+    expect(filas[0].monto).toBe("15000.00");
+  });
+
+  it("R74: trae tambien los ANULADOS, igual que el listado por cierre", async () => {
+    // Un pago anulado deja de descontar (R80) pero NO deja de verse. Si este listado filtrara
+    // por vigencia, la respuesta idempotente de un reparto con una imputacion anulada mostraria
+    // menos filas de las que ese acto escribio.
+    const prisma = buildPrisma();
+    prisma.liquidacionPago.findMany.mockResolvedValue([
+      documentoRow({ anulacion: anulacionRow() }),
+    ]);
+    const repo = buildRepo(prisma);
+
+    const filas = await repo.listarPorReparto("rep-1");
+
+    expect(prisma.liquidacionPago.findMany.mock.calls[0][0].where).toEqual({ repartoId: "rep-1" });
+    expect(prisma.liquidacionPago.findMany.mock.calls[0][0].where).not.toHaveProperty("anulacion");
+    expect(filas[0].anulacion?.motivo).toBe("Monto mal tecleado");
+  });
+
+  it("un reparto sin pagos devuelve la lista vacia", async () => {
+    const prisma = buildPrisma();
+    prisma.liquidacionPago.findMany.mockResolvedValue([]);
+    const repo = buildRepo(prisma);
+    expect(await repo.listarPorReparto("rep-1")).toEqual([]);
   });
 });
 

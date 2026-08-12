@@ -28,7 +28,18 @@ type PagoMensajeroPrismaClient = Pick<
 // Money-safe: Decimal -> STRING escala 2 (nunca number/parseFloat).
 type MovimientoRow = Prisma.PagoMensajeroMovimientoGetPayload<Record<string, never>>;
 
-function toDTO(r: MovimientoRow): PagoMensajeroMovimientoDTO {
+/**
+ * Feature 205 (T2.4, R43, design §7.3) — el cierre de la fila, DERIVADO. `cierrePorPago` es el
+ * mapa `id de pago -> cierre`, resuelto por el caller con UNA consulta para toda la pagina.
+ *
+ * Las tres ramas son exhaustivas sobre `WalletOrigenTipo` y el orden importa: un `origen_id`
+ * ausente cae en `null` en cualquiera de ellas, y un `pago_mensajero` cuyo pago no aparezca en el
+ * mapa —imposible por la FK, pero el tipo lo admite— tambien. Nunca se inventa un cierre.
+ */
+function toDTO(
+  r: MovimientoRow,
+  cierrePorPago: ReadonlyMap<string, string | null>,
+): PagoMensajeroMovimientoDTO {
   return {
     id: r.id,
     mensajeroId: r.mensajeroId,
@@ -39,7 +50,21 @@ function toDTO(r: MovimientoRow): PagoMensajeroMovimientoDTO {
     origenId: r.origenId,
     descripcion: r.descripcion,
     fechaMovimiento: r.fechaMovimiento.toISOString(),
+    cierreId: cierreDeLaFila(r, cierrePorPago),
   };
+}
+
+function cierreDeLaFila(
+  r: MovimientoRow,
+  cierrePorPago: ReadonlyMap<string, string | null>,
+): string | null {
+  if (r.origenId === null) return null; // `manual`: el unico origen con origen_id NULL
+  // El feed del cierre aprobado escribe con `origen_id = <cierre>`: la fila ES su propio enlace.
+  if (r.origenTipo === "cierre_dia") return r.origenId;
+  // El pago (y sus contraasientos de anulacion) escriben con `origen_id = <pago>`: el cierre vive
+  // en el documento y se resuelve por consulta. `?? null` cubre el pago que no esta en el mapa.
+  if (r.origenTipo === "pago_mensajero") return cierrePorPago.get(r.origenId) ?? null;
+  return null;
 }
 
 /**
@@ -127,6 +152,32 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     return res.count;
   }
 
+  /**
+   * Feature 205 (T2.4, R43, design §7.3) — el cierre de cada PAGO que aparece en la pagina, en
+   * UNA sola consulta. Mismo patron de dos pasos que `buildFiltrosWhere`, y por el mismo motivo:
+   * el numero de consultas NO crece con el tamano de pagina.
+   *
+   * Sin ids de pago devuelve un mapa vacio y no toca la base: una pagina que solo trae devengos
+   * del cierre no paga una consulta por nada.
+   */
+  private async resolverCierrePorPago(
+    rows: readonly MovimientoRow[],
+  ): Promise<ReadonlyMap<string, string | null>> {
+    const pagoIds = [
+      ...new Set(
+        rows
+          .filter((r) => r.origenTipo === "pago_mensajero" && r.origenId !== null)
+          .map((r) => r.origenId as string),
+      ),
+    ];
+    if (pagoIds.length === 0) return new Map();
+    const pagos = await this.prisma.liquidacionPago.findMany({
+      where: { id: { in: pagoIds } },
+      select: { id: true, cierreId: true },
+    });
+    return new Map(pagos.map((p) => [p.id, p.cierreId]));
+  }
+
   /** R20/R22: pagina el libro de UN mensajero, mas reciente primero, mensajero + filtros en el WHERE. */
   async listarPorMensajero(filtros: ListarPorMensajeroFiltros): Promise<ListarPorMensajeroPage> {
     // R20: el acotado por mensajero va SIEMPRE en el WHERE, nunca en memoria.
@@ -144,7 +195,9 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
       }),
       this.prisma.pagoMensajeroMovimiento.count({ where }),
     ]);
-    return { movimientos: rows.map(toDTO), total };
+    // Feature 205 (T2.4/R43): UNA consulta mas por pagina, solo si la pagina trae pagos.
+    const cierrePorPago = await this.resolverCierrePorPago(rows);
+    return { movimientos: rows.map((r) => toDTO(r, cierrePorPago)), total };
   }
 
   /** R14/R20: SUM(monto) por tipo acotado a `mensajeroId` + filtros. Salida STRING (money-safe). */

@@ -3111,3 +3111,42 @@ faltaba la llave de apertura de una ficha, resultado de resolver un conflicto a 
 valida y cualquier `JSON.parse` casca, así que el registro que lee el arnés entero estuvo
 inservible para todas las sesiones hasta el PR #329. **Un conflicto en este archivo no se resuelve a
 ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
+
+## 2026-08-11 — 200 (rediseño de la presentación de `/wallet`)
+- Las dos cifras de la caja pasan de una tarjeta monolítica a una grilla de tiles hermanos (más
+  un tercer tile de conteo), el dinero de terceros a banda destacada, y el libro a una card con
+  los filtros en cabecera —en una sola línea— y la paginación en el pie. El monto va a la
+  derecha, en `tabular-nums` y con color semántico. Sin SDD: presentación pura, sin tocar
+  actions, permisos, queries ni lógica financiera.
+- Único cambio en compartidos: `DataTable` gana `align?: "left" | "right"` por columna, aditiva
+  y apagada por defecto — el render de las otras 29 tablas no cambia en una sola clase.
+- **Mirar la app encontró lo que 13.000 tests daban por bueno**: un icono `inline` de 16×72 px
+  que se salía de su tarjeta (el mismo patrón funcionaba en los tiles *por accidente*, porque
+  allí el padre es flex), y los cuatro `Label htmlFor` de los filtros apuntando a ids
+  **inexistentes desde la feature 42**. Ninguno de los dos lo veía la suite.
+- Se descartó, con motivo: las barras de porcentaje del desglose (exigen convertir montos a
+  número en el cliente) y el reorden de columnas del libro (desalinearía el ledger hermano de
+  `/wallet/tiendas`, que fija su propio orden en otra aserción).
+- Deuda detectada y NO tocada: `PageHeader` usa `text-navy` fijo y es casi ilegible en modo
+  oscuro **en todas las páginas** (ficha 202).
+
+## 2026-08-11 — 201 (un solo formato de dinero en toda la app)
+- Los importes se pintaban sin separador de miles. Ahora todos usan punto para miles y coma para
+  decimales, y el formato vive en un solo sitio (`lib/config/moneda.ts`), con el símbolo y los
+  dos separadores en configuración.
+- **El problema no era «faltan separadores»**: barriendo el símbolo en vez de la firma apareció
+  que la app mostraba la misma moneda de **cuatro maneras distintas** según la pantalla, con la
+  coma y el punto intercambiados entre unas y otras. Trece copias del formateo mueren.
+- Se agrupa **por STRING**, nunca convirtiendo a número: medido, `Number("1500.50")` deja de ser
+  `"1500.50"` y `"0.10"` se vuelve `0.1`. Un `DECIMAL(12,2)` de once dígitos no cabe exacto en un
+  `number`.
+- Cambios de comportamiento visibles y deliberados: `MONEDA_CURRENCY` ya no decide el símbolo
+  (ahora `MONEDA_SIMBOLO`); `PriceLabel` deja de comerse los ceros finales y pierde su prop
+  `maxDecimals`, que no usaba nadie; el signo va delante del símbolo.
+- Encontrado por el camino: un fixture que mentía con `as never` (el `money` viejo devolvía
+  `"₡undefined"` sin que nadie se enterara), una aserción hueca (`not.toContain` contra un texto
+  que la app ya no emitía, verde para siempre), y `PriceLabel` sin un solo test pese a pintar
+  dinero en cinco llamadas — ahora tiene 21.
+- **El censo inicial estaba mal y se dejó escrito por qué**: se contó por firma
+  (`export function money`) en vez de por símbolo, lo que dejaba fuera una copia local no
+  exportada, cuatro con formato estadounidense, `PriceLabel` y una decena de literales.

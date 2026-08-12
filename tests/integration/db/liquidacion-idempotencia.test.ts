@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Prisma, RolValue, type PrismaClient } from "@prisma/client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
+import { LiquidacionRepartoRepository } from "@/lib/repositories/LiquidacionRepartoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
@@ -588,6 +589,11 @@ function buildService(store: ReturnType<typeof makeStore>, ahora?: () => Date) {
     // un doble inerte dejaria este store —el unico que modela candados y visibilidad— sin ver la
     // tercera escritura del pago a tienda.
     new CajaPagoTiendaFeedService(new WalletMovimientoRepository(cliente)),
+    // Feature 205 (T3.2): el repositorio del ACTO, REAL sobre el mismo cliente del store. Ningun
+    // caso de este archivo reparte —la idempotencia del REPARTO tiene la suya—, asi que su
+    // delegado no se toca; va cableado de verdad y no con un doble para que el dia que un caso de
+    // aqui reparta, hable con el mismo store que todo lo demas.
+    new LiquidacionRepartoRepository(cliente),
     ahora,
   );
 }

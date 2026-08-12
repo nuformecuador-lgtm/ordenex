@@ -163,6 +163,7 @@ function pagoMensajero(i: number): PagoMensajeroMovimientoDTO {
     monto: `${300 + i}.50`,
     origenTipo: "cierre_dia",
     origenId: `o-${i}`,
+    cierreId: `o-${i}`, // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
     descripcion: `Devengo ${i}`,
     fechaMovimiento: `2026-07-${String(10 + i).padStart(2, "0")}T14:00:00.000Z`,
   };
