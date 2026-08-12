@@ -44,6 +44,8 @@ import {
   type LoteContexto,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
 import type { ZonaDeOrden } from "@/lib/utils/filtro-canton-distrito";
@@ -369,6 +371,27 @@ function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): Tarifa
   };
 }
 
+/**
+ * Feature 204 — la MISMA tarifa, en la forma que consume la aritmetica de dinero: los 7
+ * campos como STRING escala 2 (`TarifaVigente`), no como `number`.
+ *
+ * Convive con `toTarifaDTO` a proposito y no lo sustituye: aquel serializa la tarifa para
+ * MOSTRARLA (`TarifaDTO`, Decimal -> number, contrato de la feature 18) y este la prepara
+ * para OPERAR con ella en `Prisma.Decimal`. Son dos usos distintos del mismo dato y el
+ * segundo no admite `number`: ahi es donde se pierde el centimo.
+ */
+function toTarifaVigente(t: OrdenListRow["tienda"]["tarifasTienda"][number]): TarifaVigente {
+  return {
+    valorFlete: t.valorFlete.toFixed(2),
+    valorFleteGam: t.valorFleteGam.toFixed(2),
+    valorFleteDevuelto: t.valorFleteDevuelto.toFixed(2),
+    valorFleteDevueltoGam: t.valorFleteDevueltoGam.toFixed(2),
+    comisionCod: t.comisionCod.toFixed(2),
+    ivaFlete: t.ivaFlete.toFixed(2),
+    ivaComisionCod: t.ivaComisionCod.toFixed(2),
+  };
+}
+
 // Arma el bloque `relaciones` con los datos de las relaciones directas (FK) de la
 // orden, resueltas por el include del listado. `tienda` incluye su tarifa activa.
 function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
@@ -403,6 +426,16 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
 // Ademas expone en `relaciones` los datos de TODAS las relaciones directas (FK),
 // con la tarifa activa anidada dentro de `tienda` (resueltas via joins en el listado).
 function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
+  // Feature 204: las dos columnas de dinero DERIVADO ("Flete + IVA" y "Comisión + IVA") se
+  // resuelven AQUI, con Decimal, y viajan como STRING ya derivado. Antes las calculaba el
+  // navegador multiplicando los `number` de la tarifa, y no daba lo mismo: sobre las órdenes
+  // reales de la base, 14 de 66 se veían un céntimo desviadas de lo que factura el cierre.
+  const tarifaActiva = row.tienda.tarifasTienda[0];
+  const costos = costosListadoOrden(tarifaActiva ? toTarifaVigente(tarifaActiva) : null, {
+    esCentral: row.zona.esCentral,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toFixed(2) : null,
+    cobraComision: row.cobraComision,
+  });
   return {
     ...toDTO(row),
     tiendaNombre: row.tienda.nombre,
@@ -416,6 +449,10 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     direccion: row.direccion,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
     cobraComision: row.cobraComision,
+    // Feature 204: los dos importes DERIVADOS, ya calculados arriba en Decimal. El cliente
+    // los pinta; no vuelve a operar con ellos.
+    fleteConIva: costos.fleteConIva,
+    comisionConIva: costos.comisionConIva,
     // Fecha de la gestion de reprogramacion vigente -> `YYYY-MM-DD` (patron
     // CierreDiaRepository). `fecha_reprogramacion` es `@db.Date` guardada a
     // medianoche UTC, asi que `toISOString().slice(0, 10)` da el dia calendario
