@@ -62,6 +62,7 @@ function makeFila(over: Partial<ManifiestoFilaDTO> = {}): ManifiestoFilaDTO {
     telefono: "88880000",
     direccion: "Calle 1, casa 2",
     zona: "Limón",
+    producto: "Camiseta talla M",
     monto: 15000,
     intentos: 0,
     origen: "Bodega central",

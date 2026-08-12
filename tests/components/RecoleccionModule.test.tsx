@@ -78,16 +78,34 @@ function makeOrden(over: Partial<RecoleccionOrdenDTO> = {}): RecoleccionOrdenDTO
     destinatario: "Ana",
     tiendaNombre: "Tienda Norte",
     tiendaTelefono: "88880000",
+    // 2026-08-11: el DTO dejó de ser pobre — extiende `MiAsignacionDTO` para alimentar la
+    // MISMA card que «Por recoger», entera. El fixture trae valores REALES en los campos que
+    // antes iban recortados, que es lo que permite verificar que la card los pinta.
+    estatusValue: "recolectando",
+    telefonoDest: "70001111",
+    direccion: "200m sur de la iglesia",
+    peso: 1.2,
+    montoCobrar: 25000,
+    latitud: 9.93,
+    longitud: -84.08,
+    notas: null,
+    zonaNombre: "GAM",
+    provinciaNombre: "San José",
+    cantonNombre: "Escazú",
+    distritoNombre: "San Rafael",
+    secuenciaRuta: null,
+    marcarLuego: false,
+    notaPrivada: null,
+    intentosEntrega: 0,
     ...over,
   };
 }
 
+// 2026-08-11: «Recolectadas hoy» pinta la MISMA card, así que su DTO es el de la orden más el
+// instante de la recolección. `ordenId` pasó a ser el `id` de la orden.
 function makeRecolectada(over: Partial<RecolectadaHoyDTO> = {}): RecolectadaHoyDTO {
   return {
-    ordenId: "h1",
-    numGuia: 5001,
-    numRemision: "REM-H1",
-    tiendaNombre: "Tienda Norte",
+    ...makeOrden({ id: "h1", numGuia: 5001, numRemision: "REM-H1" }),
     recolectadaAt: new Date("2026-07-31T15:30:00.000Z"), // 09:30 hora CR
     ...over,
   };
@@ -146,7 +164,11 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
-  it("R17: agrupa por tienda, con una tarjeta por orden", () => {
+  // 2026-08-11 (decisión del humano): «las cards van fuera, ese envoltorio no va». La caja
+  // por tienda (R17) se retira, y con ella su cabecera y los botones de contacto de la tienda
+  // (R19/R20): las cards quedan sueltas, exactamente como en «Por recoger». Los tres casos que
+  // vigilaban la agrupación y el contacto se sustituyen por este, que fija lo contrario.
+  it("las cards van SUELTAS: sin caja por tienda ni contacto de tienda", () => {
     renderModule({
       porRecolectar: [
         makeOrden({ id: "a", numGuia: 1, numRemision: "REM-A", tiendaNombre: "Tienda Norte" }),
@@ -155,30 +177,14 @@ describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
       ],
     });
 
-    expect(screen.getByRole("heading", { name: "Tienda Norte" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Tienda Sur" })).toBeInTheDocument();
-    expect(screen.getByText("REM-A")).toBeInTheDocument();
-    expect(screen.getByText("REM-C")).toBeInTheDocument();
-  });
-
-  it("R19: llama a la TIENDA, no al destinatario", async () => {
-    const user = userEvent.setup();
-    const open = vi.fn();
-    vi.stubGlobal("open", open);
-    renderModule({ porRecolectar: [makeOrden({ tiendaTelefono: "88880000" })] });
-
-    // El interlocutor de una recolección es la tienda: el nombre del control lo dice y el
-    // número marcado es el suyo, no el del destinatario final (que aquí no pinta nada).
-    await user.click(screen.getByRole("button", { name: "Llamar a Tienda Norte" }));
-
-    expect(open).toHaveBeenCalledWith("tel:88880000", "_self");
-    vi.unstubAllGlobals();
-  });
-
-  it("R20: una tienda sin teléfono no pinta botones de contacto muertos", () => {
-    renderModule({ porRecolectar: [makeOrden({ tiendaTelefono: null })] });
-
+    // Ninguna cabecera de grupo: la tienda ya no organiza la pantalla.
+    expect(screen.queryByRole("heading", { name: "Tienda Norte" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Tienda Sur" })).toBeNull();
+    // Ni botones de contacto de la tienda, que vivían en esa cabecera.
     expect(screen.queryByRole("button", { name: /^Llamar a/ })).toBeNull();
+    // Las órdenes siguen ahí, en un solo listado.
+    expect(screen.getAllByText("REM-A").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("REM-C").length).toBeGreaterThan(0);
   });
 
   it("R22: NO ofrece ningún control de gestión (ni cobro, ni evidencia, ni resultados)", () => {
@@ -189,80 +195,79 @@ describe("RecoleccionModule — qué muestra (R17/R18/R19/R20/R22)", () => {
       expect(screen.queryByRole("button", { name: nombre })).toBeNull();
     }
     expect(screen.queryByText(/método de pago/i)).toBeNull();
-    expect(screen.queryByText(/valor a cobrar/i)).toBeNull();
     expect(document.querySelector('input[type="file"]')).toBeNull();
+    // «Valor a cobrar» SÍ aparece desde el 2026-08-11: es el `<dt>` del detalle plegable de la
+    // card compartida —un DATO de la orden, el mismo que ve «Por recoger»—, no un control de
+    // gestión. Lo que este caso protege es que no haya con qué GESTIONAR, y sigue en pie.
   });
 
-  it("R18: no muestra monto a cobrar — el DTO ni siquiera lo transporta (R38)", () => {
+  // 2026-08-11 (decisión del humano): «la recolección debe usar la MISMA card que Por recoger».
+  // Este caso era el opuesto —afirmaba que el monto NO se veía y que el DTO no lo transportaba
+  // (R18/R38)— y se da vuelta: el recorte era la única razón por la que las dos pantallas
+  // hermanas del portal mostraban distinto de la misma orden.
+  it("muestra la orden con sus datos, monto incluido, igual que «Por recoger»", () => {
     renderModule({ porRecolectar: [makeOrden()] });
 
-    // Lo que se ve por orden: guía, remisión, producto y destinatario. Nada de dinero.
-    //
     // Feature 196: producto y destinatario ya NO comparten un `<p>` con «·». Los pinta la
-    // card compartida en elementos separados, así que se afirman por separado. Lo que este
-    // caso protege —que se vean los cuatro datos y ningún importe— no cambia.
-    expect(screen.getByText("REM-1")).toBeInTheDocument();
-    expect(screen.getByText("Caja")).toBeInTheDocument();
-    expect(screen.getByText("Ana")).toBeInTheDocument();
-    expect(screen.queryByText(/₡/)).toBeNull();
-    // Contrato: el DTO de esta superficie no tiene por dónde filtrar cobro ni ruta.
-    const orden = makeOrden();
-    expect(Object.keys(orden).sort()).toEqual([
-      "destinatario",
-      "id",
-      "numGuia",
-      "numRemision",
-      "producto",
-      "tiendaNombre",
-      "tiendaTelefono",
-    ]);
+    // card compartida en elementos separados, así que se afirman por separado.
+    // `getAllByText`: el detalle plegable de la card (`keepMounted`) repite producto y
+    // destinatario en el DOM aunque esté cerrado, igual que en «Por recoger».
+    expect(screen.getAllByText("REM-1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Caja").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ana").length).toBeGreaterThan(0);
+    // El importe SÍ se pinta: el DTO lo transporta y la card lo lee.
+    expect(screen.getAllByText(/₡/).length).toBeGreaterThan(0);
   });
 });
 
 // ---------------------------------------------------------------------------------------
-// Feature 196 — la recolección pinta la MISMA card que el reparto (`PosOrderCardMosaico` /
-// `PosOrderCardDetalle`) con las cuatro secciones que no puede alimentar APAGADAS.
+// Feature 196 + decisión del humano del 2026-08-11 — la recolección pinta la MISMA card que
+// «Por recoger» (`PosOrderCardMosaico` / `PosOrderCardDetalle`), ENTERA: sin compuertas.
+//
+// Estos casos eran los que vigilaban las cuatro secciones APAGADAS (196). Se dan vuelta: lo
+// que hay que impedir ahora es que el recorte vuelva por la puerta de atrás y las dos
+// pantallas hermanas del portal vuelvan a mostrar distinto de la misma orden.
 //
 // Por qué se prueba en las DOS vistas y no solo en la que arranca: las dos cards son
-// implementaciones PARALELAS —solo comparten `PosOrderCardProps`—, así que una compuerta
-// puede quedarse sin replicar en una de ellas y el apartado seguiría verde. Fue exactamente
-// lo que pasó al cablearlas, y estos casos son lo que lo impide en adelante.
-//
-// Lo que se afirma NO es cosmética: el adaptador rellena esos campos con `null`/vacío para
-// satisfacer el tipo. Encender cualquiera de las cuatro aquí pinta huecos —o un "Cobrar" con
-// importe vacío en la pantalla de un mensajero—, y es justo lo que la 157/167 decidió no dar.
+// implementaciones PARALELAS —solo comparten `PosOrderCardProps`—, así que un cambio puede
+// quedarse sin replicar en una de ellas y el apartado seguiría verde.
 // ---------------------------------------------------------------------------------------
-describe("RecoleccionModule — las dos vistas apagan lo que no hay (feature 196)", () => {
-  /** Lo que NINGUNA de las dos vistas puede pintar aquí, por vista. */
-  function esperarSeccionesApagadas() {
-    // Cobro: ni la etiqueta ni ningún importe (R18/R38 — el DTO no transporta monto).
-    expect(screen.queryByText(/cobrar/i)).toBeNull();
-    expect(screen.queryByText(/₡/)).toBeNull();
-    // Navegación: no hay dirección ni coordenadas, así que no hay a dónde llevar a nadie —y
-    // el "Sin dirección" del fallback afirmaría un hueco donde no hay dato que dar.
-    expect(screen.queryByRole("link")).toBeNull();
-    expect(screen.queryByText(/sin dirección/i)).toBeNull();
-    // Intentos de entrega: son del flujo de ENTREGA; recolectar no es entregar.
-    expect(screen.queryByText(/intentos/i)).toBeNull();
-    // Detalle completo: zona/provincia/cantón/notas no vienen en este DTO.
-    expect(screen.queryByText(/ver detalle completo/i)).toBeNull();
+describe("RecoleccionModule — las dos vistas pintan la card completa", () => {
+  /** Lo que las dos vistas comparten con «Por recoger». */
+  function esperarSeccionesEncendidas() {
+    // Cobro: etiqueta e importe, con el monto real del DTO.
+    expect(screen.getAllByText(/cobrar/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/₡/).length).toBeGreaterThan(0);
+    // Navegación: el control de ubicación de la card (`UbicacionTrigger`), que con coordenadas
+    // abre el minimapa y sin ellas cae al enlace a Maps. Se busca por su nombre accesible para
+    // no atarse a cuál de las dos formas toca en este fixture.
+    expect(
+      screen.getAllByRole("button", { name: /ver en el mapa/i }).length,
+    ).toBeGreaterThan(0);
+    // Intentos de entrega: dato de la orden, `0` incluido.
+    expect(screen.getAllByText(/intentos/i).length).toBeGreaterThan(0);
   }
 
-  /** Lo que sí sale, en las dos vistas: los cuatro datos reales del DTO. */
+  /**
+   * Lo que sí sale, en las dos vistas: los datos que identifican la orden. Producto NO entra
+   * aquí porque la vista de FILA no lo pinta en la línea principal —igual que en «Por
+   * recoger»—, y esa es justamente la paridad que estos casos vigilan.
+   */
   function esperarDatosDeLaOrden() {
-    expect(screen.getByText("REM-1")).toBeInTheDocument();
-    expect(screen.getByText("Caja")).toBeInTheDocument();
-    expect(screen.getByText("Ana")).toBeInTheDocument();
+    expect(screen.getAllByText("REM-1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ana").length).toBeGreaterThan(0);
   }
 
-  it("vista MOSAICO (la de entrada): pinta la orden sin cobro, navegación, intentos ni detalle", () => {
+  it("vista MOSAICO (la de entrada): cobro, navegación, intentos y detalle completo", () => {
     renderModule({ porRecolectar: [makeOrden()] });
 
     esperarDatosDeLaOrden();
-    esperarSeccionesApagadas();
+    esperarSeccionesEncendidas();
+    // El desplegable del detalle es propio del mosaico (la vista de fila nunca lo llevó).
+    expect(screen.getByText(/ver detalle completo/i)).toBeInTheDocument();
   });
 
-  it("vista DETALLE: las mismas cuatro secciones siguen apagadas tras conmutar", async () => {
+  it("vista DETALLE: las mismas secciones siguen encendidas tras conmutar", async () => {
     const user = userEvent.setup();
     renderModule({ porRecolectar: [makeOrden()] });
 
@@ -277,7 +282,7 @@ describe("RecoleccionModule — las dos vistas apagan lo que no hay (feature 196
     );
     await waitFor(() => esperarDatosDeLaOrden());
 
-    esperarSeccionesApagadas();
+    esperarSeccionesEncendidas();
   });
 
   it("el conmutador es UNO para todo el apartado, no uno por tienda", () => {
@@ -631,10 +636,9 @@ describe("RecoleccionModule — bloqueado por cierre pendiente (R9/R23)", () => 
       bloqueado: true,
     });
 
-    expect(screen.getByText("REM-A")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Tienda Norte" })).toBeInTheDocument();
+    expect(screen.getAllByText("REM-A").length).toBeGreaterThan(0);
     // El historial del día es historial, no una acción: sigue visible.
-    expect(screen.getByText("REM-H1")).toBeInTheDocument();
+    expect(screen.getAllByText("REM-H1").length).toBeGreaterThan(0);
   });
 
   it("R8/R9: bloqueado y sin nada asignado, el vacío se explica igual (sin escáner)", () => {
@@ -655,11 +659,11 @@ describe("RecoleccionModule — bloqueado por cierre pendiente (R9/R23)", () => 
 describe("RecoleccionModule — «Recolectadas hoy» (R24/R28/R30/R31)", () => {
   const lista = () => screen.getByRole("region", { name: "Recolectadas hoy" });
 
-  it("R24/R28: muestra guía, remisión, tienda y hora de cada recolección del día", () => {
+  it("R24/R28: pinta la MISMA card de la orden, con la hora de la recolección", () => {
     renderModule({
       recolectadasHoy: [
         makeRecolectada({
-          ordenId: "h1",
+          id: "h1",
           numGuia: 5001,
           numRemision: "REM-H1",
           tiendaNombre: "Tienda Sur",
@@ -669,21 +673,36 @@ describe("RecoleccionModule — «Recolectadas hoy» (R24/R28/R30/R31)", () => {
     });
 
     const region = lista();
-    expect(within(region).getByText(/Guía 5001/)).toBeInTheDocument();
-    expect(within(region).getByText("REM-H1")).toBeInTheDocument();
-    expect(within(region).getByText(/Tienda Sur/)).toBeInTheDocument();
-    // Hora FIJA en zona de Costa Rica: no depende de la zona del dispositivo, que es la
-    // misma convención con la que el servidor decidió qué es "hoy" (R27).
+    // La card compartida: remisión y destinatario, igual que en las otras dos listas.
+    expect(within(region).getAllByText("REM-H1").length).toBeGreaterThan(0);
+    expect(within(region).getAllByText("Ana").length).toBeGreaterThan(0);
+    // Lo ÚNICO propio de esta lista: cuándo se recolectó. Hora FIJA en zona de Costa Rica —no
+    // depende de la del dispositivo—, la misma convención con la que el servidor decidió qué
+    // es "hoy" (R27).
     expect(within(region).getByText(/9:30/)).toBeInTheDocument();
   });
 
-  it("R28: respeta el orden recibido (más reciente primero) sin reordenar", () => {
+  it("R28: respeta el orden recibido (más reciente primero) sin reordenar", async () => {
+    const user = userEvent.setup();
     renderModule({
       recolectadasHoy: [
-        makeRecolectada({ ordenId: "h1", numRemision: "REM-NUEVA", numGuia: 5003 }),
-        makeRecolectada({ ordenId: "h2", numRemision: "REM-MEDIA", numGuia: 5002 }),
-        makeRecolectada({ ordenId: "h3", numRemision: "REM-VIEJA", numGuia: 5001 }),
+        makeRecolectada({ id: "h1", numRemision: "REM-NUEVA", numGuia: 5003 }),
+        makeRecolectada({ id: "h2", numRemision: "REM-MEDIA", numGuia: 5002 }),
+        makeRecolectada({ id: "h3", numRemision: "REM-VIEJA", numGuia: 5001 }),
       ],
+    });
+
+    // 2026-08-11: en MOSAICO las cards van en carrusel (ventana de 3), así que el orden
+    // completo se afirma en la vista de DETALLE, que las lista todas. El conmutador de esta
+    // sección es el único montado aquí: no hay nada por recolectar.
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+    // El ancla NO puede ser solo el conteo: a media carga la lista tambien puede tener 3
+    // hijos (esqueleto + `role="status"`) y la espera se daria por cumplida antes de tiempo.
+    // Se ancla ADEMAS al contenido de la ultima fila, que solo existe ya montada la vista.
+    await waitFor(() => {
+      const enCurso = within(lista()).getAllByRole("listitem");
+      expect(enCurso).toHaveLength(3);
+      expect(enCurso[2]).toHaveTextContent("REM-VIEJA");
     });
 
     const filas = within(lista()).getAllByRole("listitem");
@@ -726,9 +745,12 @@ describe("RecoleccionModule — «Recolectadas hoy» (R24/R28/R30/R31)", () => {
     expect(within(lista()).queryByText(/más recientes de hoy/i)).toBeNull();
   });
 
-  it("R24: una guía sin número se muestra igual, sin romper la fila", () => {
+  it("R24: una orden sin número de guía se pinta igual, sin romper la card", () => {
+    // La card se identifica por la REMISIÓN, no por la guía, así que una orden a la que
+    // todavía no se le asignó número no deja un hueco: sale entera como cualquier otra.
     renderModule({ recolectadasHoy: [makeRecolectada({ numGuia: null })] });
 
-    expect(within(lista()).getByText(/Guía —/)).toBeInTheDocument();
+    expect(within(lista()).getAllByText("REM-H1").length).toBeGreaterThan(0);
+    expect(within(lista()).getByText(/9:30/)).toBeInTheDocument();
   });
 });

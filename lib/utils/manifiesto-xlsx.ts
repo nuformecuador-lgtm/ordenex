@@ -39,6 +39,7 @@ function toRow(fila: ManifiestoFilaDTO): Record<string, XlsxCellValue> {
     telefono: fila.telefono,
     direccion: fila.direccion,
     zona: fila.zona,
+    producto: fila.producto,
     monto: fila.monto,
     intentos: fila.intentos, // feature 160/R28a
     origen: fila.origen,

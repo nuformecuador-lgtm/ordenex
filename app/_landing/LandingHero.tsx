@@ -1,13 +1,46 @@
 import Image from "next/image";
+import { Suspense } from "react";
 
+import type { ConteosPublicos } from "@/lib/types/conteos-publicos";
+
+import {
+  CIFRAS_EN_CERO,
+  CifraAnimada,
+  cifrasDeConteo,
+  leerConteosPublicos,
+} from "./cifras-publicas";
 import { Enfasis } from "./primitivas";
 
-/** Las tres cifras bajo el titular del hero (`.lp-hero-stats`). */
-const CIFRAS = [
-  { etiqueta: "Cobertura", valor: "GAM + 3" },
-  { etiqueta: "Cantones activos", valor: "100+" },
-  { etiqueta: "Envíos entregados", valor: "9.9K+" },
-] as const;
+/**
+ * Las tres cifras bajo el titular del hero (`.lp-hero-stats`).
+ *
+ * Antes eran texto fijo («GAM + 3», «100+», «9.9K+»); ahora salen de la base (feature 198),
+ * aproximadas a la baja. Ver `cifras-publicas.tsx` para el porque de cada decision.
+ */
+function HeroCifras({ conteos }: Readonly<{ conteos: ConteosPublicos | null }>) {
+  const cifras = cifrasDeConteo(conteos);
+  if (cifras.length === 0) return null;
+
+  return (
+    <dl className="mt-9 grid grid-cols-3 gap-6 border-t border-white/20 pt-6">
+      {cifras.map((cifra) => (
+        <div key={cifra.etiqueta} className="flex flex-col gap-1">
+          <dt className="text-[11px] font-semibold tracking-[0.06em] text-asfalto-2/65 uppercase">
+            {cifra.etiqueta}
+          </dt>
+          <dd className="font-mono text-[clamp(22px,4vw,30px)] leading-none font-semibold tracking-[-0.01em] text-brand tabular-nums">
+            <CifraAnimada valor={cifra.valor} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** La variante que consulta. Va dentro de `<Suspense>` para no retrasar el titular. */
+async function HeroCifrasCargadas() {
+  return <HeroCifras conteos={await leerConteosPublicos()} />;
+}
 
 /**
  * Hero de la landing (`.lp-hero`): rótulo, titular y las tres cifras, sobre la
@@ -66,18 +99,12 @@ export function LandingHero() {
             transparentes y entrega garantizada. Expandiéndonos pronto a todo el país.
           </p>
 
-          <dl className="mt-9 grid grid-cols-3 gap-6 border-t border-white/20 pt-6">
-            {CIFRAS.map((cifra) => (
-              <div key={cifra.etiqueta} className="flex flex-col gap-1">
-                <dt className="text-[11px] font-semibold tracking-[0.06em] text-asfalto-2/65 uppercase">
-                  {cifra.etiqueta}
-                </dt>
-                <dd className="font-mono text-[clamp(22px,4vw,30px)] leading-none font-semibold tracking-[-0.01em] text-brand tabular-nums">
-                  {cifra.valor}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          {/* El fallback pinta la MISMA rejilla en 0, no un hueco vacío: así el titular no
+              salta cuando llegan los números, y el contador arranca desde el 0 que ya está
+              en pantalla en vez de aparecer con el valor final puesto. */}
+          <Suspense fallback={<HeroCifras conteos={CIFRAS_EN_CERO} />}>
+            <HeroCifrasCargadas />
+          </Suspense>
         </div>
 
       </div>

@@ -95,11 +95,17 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
 });
 
 describe("GestionOrdenRepository.contarEntregadas (feature 61)", () => {
+  // Ventana de un dia de CR: 15/07 00:00 CR = 06:00Z, cota superior EXCLUSIVA en 16/07 06:00Z.
+  const DIA = {
+    desde: new Date("2026-07-15T06:00:00.000Z"),
+    hasta: new Date("2026-07-16T06:00:00.000Z"),
+  };
+
   it("cuenta por mensajero + estado entregada + no borradas, en el WHERE", async () => {
     const count = vi.fn(async () => 5);
     const repo = new GestionOrdenRepository({ orden: { count } } as never);
 
-    const total = await repo.contarEntregadas("m1");
+    const total = await repo.contarEntregadas("m1", DIA);
 
     expect(total).toBe(5);
     expect(count).toHaveBeenCalledTimes(1);
@@ -107,6 +113,73 @@ describe("GestionOrdenRepository.contarEntregadas (feature 61)", () => {
     expect(arg.where.mensajeroAsignadoId).toBe("m1");
     expect(arg.where.deletedAt).toBeNull();
     expect(arg.where.estatus).toEqual({ value: "entregada" });
+  });
+
+  // El KPI es de JORNADA, no acumulado: el acote va sobre la GESTION vigente que entrego
+  // (la orden no tiene `entregada_at`), con rango HALF-OPEN para cubrir el dia sin invadir
+  // el siguiente. Si esto se rompe, el mensajero vuelve a ver su historico completo.
+  it("acota al dia por la gestion VIGENTE que entrego, con rango half-open", async () => {
+    const count = vi.fn(async () => 2);
+    const repo = new GestionOrdenRepository({ orden: { count } } as never);
+
+    await repo.contarEntregadas("m1", DIA);
+
+    const arg = (count.mock.calls[0] as unknown[])[0] as { where: { gestiones: { some: unknown } } };
+    expect(arg.where.gestiones.some).toEqual({
+      mensajeroId: "m1", // ancla a QUIEN entrego: una reasignacion posterior no regala el KPI
+      resultado: "entregada",
+      anuladaAt: null, // feature 67/R11: una entrega deshecha deja de contar
+      createdAt: { gte: DIA.desde, lt: DIA.hasta }, // `lt`, NO `lte`
+    });
+  });
+
+});
+
+describe("GestionOrdenRepository.sumMontoCobrarGestionadas (KPI 'Total a cobrar')", () => {
+  const DIA = {
+    desde: new Date("2026-07-15T06:00:00.000Z"),
+    hasta: new Date("2026-07-16T06:00:00.000Z"),
+  };
+
+  function repoConAggregate(sum: Prisma.Decimal | null) {
+    const aggregate = vi.fn(async () => ({ _sum: { montoCobrar: sum } }));
+    return { repo: new GestionOrdenRepository({ orden: { aggregate } } as never), aggregate };
+  }
+
+  // NO filtra por `resultado`: el total del dia mide todo lo que paso por las manos del
+  // mensajero. Si se filtrara a `entregada`, el total BAJARIA cada vez que una orden no se
+  // entrega —justo cuando el mensajero necesita que el numero no se mueva—.
+  it("cuenta la gestion del dia con CUALQUIER resultado, no solo entregada", async () => {
+    const { repo, aggregate } = repoConAggregate(new Prisma.Decimal(750));
+
+    const total = await repo.sumMontoCobrarGestionadas("m1", DIA);
+
+    expect(total).toBe(750);
+    const arg = (aggregate.mock.calls[0] as unknown[])[0] as {
+      where: { gestiones: { some: Record<string, unknown> } };
+    };
+    expect(arg.where.gestiones.some).toEqual({
+      mensajeroId: "m1",
+      anuladaAt: null, // feature 67/R11: una gestion deshecha deja de contar
+      createdAt: { gte: DIA.desde, lt: DIA.hasta }, // `lt`, NO `lte`
+    });
+    expect(arg.where.gestiones.some.resultado).toBeUndefined();
+  });
+
+  // La guardia del doble conteo: `totalACobrar` suma ESTE resultado + el COD de las que
+  // siguen en reparto. Si la query no excluyera `en_reparto`, una orden gestionada hoy como
+  // reprogramada y liberada de vuelta a reparto el mismo dia (feature 46) caeria en los DOS
+  // conjuntos y su monto se sumaria dos veces.
+  it("EXCLUYE en_reparto para no solaparse con la otra mitad del total", async () => {
+    const { repo, aggregate } = repoConAggregate(null);
+
+    const total = await repo.sumMontoCobrarGestionadas("m1", DIA);
+
+    expect(total).toBe(0); // sin gestionadas / montos nulos -> 0, no null
+    const arg = (aggregate.mock.calls[0] as unknown[])[0] as { where: Record<string, unknown> };
+    expect(arg.where.estatus).toEqual({ value: { not: "en_reparto" } });
+    expect(arg.where.mensajeroAsignadoId).toBe("m1");
+    expect(arg.where.deletedAt).toBeNull();
   });
 });
 

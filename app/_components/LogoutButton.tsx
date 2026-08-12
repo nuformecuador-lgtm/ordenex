@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
  * Control "Salir" del topbar (feature 57). Vive en el `PageHeader` compartido
  * (esquina superior derecha), presente en toda página autenticada. Un click:
  * `logout()` (Server Action que invalida la sesión + expira la cookie) →
- * `router.push("/login")`. Mientras la operación está en curso el botón queda
+ * `router.push("/")` (home pública). Mientras la operación está en curso el botón queda
  * deshabilitado ("Saliendo…") para impedir doble envío (R11). Si `logout()`
  * falla, NO se navega: se rehabilita el control y se avisa con un toast (R10).
  *
@@ -27,8 +27,8 @@ export function LogoutButton() {
     startTransition(async () => {
       try {
         await logout();
-        // R7: al completar el logout, redirige a /login.
-        router.push("/login");
+        // R7: al completar el logout, redirige a la home pública (/).
+        router.push("/");
       } catch (error) {
         // R10: el fallo NO simula éxito; feedback visible (toast, feature 11).
         console.error("Logout failed:", error);

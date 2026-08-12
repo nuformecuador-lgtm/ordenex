@@ -26,6 +26,11 @@ import type {
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import {
+  fechaCalendarioCR,
+  inicioDelDiaCREnUtc,
+  inicioDelDiaSiguienteCREnUtc,
+} from "@/lib/utils/fecha-cr";
 
 // Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo total sobre las guías (texto fijo
 // i18n-ready, SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre
@@ -126,7 +131,15 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta, marcadasLuego, notasPrivadas] =
+    // Los KPIs de entregadas son DEL DIA, no acumulados: el mensajero mira esta fila para
+    // saber como va SU jornada, y un acumulado historico solo crece y deja de informar.
+    // La ventana es la del dia de Costa Rica y se calcula AQUI (una sola vez, compartida
+    // por los dos KPIs) para que ambos midan exactamente el mismo dia aunque el reloj
+    // cruce la medianoche entre las dos queries del `Promise.all`.
+    const hoy = fechaCalendarioCR();
+    const dia = { desde: inicioDelDiaCREnUtc(hoy), hasta: inicioDelDiaSiguienteCREnUtc(hoy) };
+
+    const [ordenEnGestionId, rows, entregadas, montoGestionadas, ruta, marcadasLuego, notasPrivadas] =
       await Promise.all([
         this.repo.getOrdenEnGestion(actor.usuarioId), // R20
         // Feature 167 (R34) — CORTE LIMPIO: Entregas lee EXACTAMENTE los dos estados de su
@@ -135,8 +148,8 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         // `recolectando` NO se lea es la forma FUERTE del aislamiento: lo que no se lee no
         // puede contaminar los KPIs, el mapa, la ruta ni el corte del dia (R36).
         this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
-        this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
-        this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
+        this.repo.contarEntregadas(actor.usuarioId, dia), // Feature 61: KPI entregadas (HOY)
+        this.repo.sumMontoCobrarGestionadas(actor.usuarioId, dia), // "Total a cobrar" (parte gestionada HOY)
         this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
         // Feature 115 (R17/R20): marcas "gestionar mas tarde" del PROPIO actor (Set<ordenId>).
         this.metaRepo.findMarcarLuegoByMensajero(actor.usuarioId),
@@ -192,14 +205,29 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const paradasSinOptimizar = porGestionar.filter((o) => o.secuenciaRuta === null).length;
     // Feature 61: KPIs derivados de las ordenes en_reparto (porGestionar) + el conteo
     // de entregadas. `pendientes` = en camino; `porCobrar` = COD por recaudar (null = 0).
+    //
+    // OJO con la asimetria, que es DELIBERADA: `pendientes`/`porCobrar` NO llevan ventana
+    // de dia y `entregadas`/`totalACobrar` si. Los dos primeros salen de `porGestionar`,
+    // que es la lista que el mensajero tiene DEBAJO de los KPIs: acotarlos por fecha
+    // dejaria fuera lo que quedo en reparto de ayer —trabajo que sigue en su mano— y el
+    // KPI dejaria de cuadrar con la lista que lo acompaña. Son indicadores de ESTADO VIVO
+    // ("lo que me falta"), no de jornada. Los otros dos son de JORNADA ("lo que llevo
+    // hecho hoy") y por eso se cortan a medianoche CR.
+    //
+    // Y por eso `porCobrar` es un reduce y no una query: `porGestionar` YA son exactamente
+    // las ordenes en reparto del mensajero, asi que la base ya respondio esa pregunta.
+    // Preguntarsela de nuevo seria una segunda fuente de verdad para el mismo numero, libre
+    // de discrepar de la lista que lo acompaña.
     const codEnReparto = porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
     const kpis: MisAsignacionesKpis = {
       pendientes: porGestionar.length,
       entregadas,
       porCobrar: codEnReparto,
-      // Total a cobrar ACUMULADO: COD en_reparto + COD ya entregado. Estable al entregar;
-      // se descuenta al gestionar como reprogramada/devuelta/rechazada (fuera de ambos sets).
-      totalACobrar: codEnReparto + montoEntregadas,
+      // Total a cobrar DEL DIA = lo que el mensajero YA gestiono hoy (cualquier resultado)
+      // + lo que todavia lleva en reparto. Los dos sumandos son DISJUNTOS: la query excluye
+      // `en_reparto`, que es justo lo que aporta `codEnReparto`. No se mueve al gestionar
+      // —la orden solo cambia de sumando— y se reinicia al cruzar la medianoche CR.
+      totalACobrar: codEnReparto + montoGestionadas,
     };
     return {
       status: "ok",
@@ -451,7 +479,15 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   }
 }
 
-function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
+/**
+ * Proyeccion fila -> DTO de una asignacion del mensajero.
+ *
+ * EXPORTADA (2026-08-11, pedido humano «la recoleccion usa la misma card que Por recoger»):
+ * `RecoleccionTiendaService` la reutiliza para alimentar la MISMA card con los MISMOS campos.
+ * Copiar las veinte lineas alli habria dejado dos proyecciones que no pueden divergir sin que
+ * una de las dos pantallas empiece a pintar huecos.
+ */
+export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
   return {
     id: row.id,
     numGuia: row.numGuia,

@@ -202,7 +202,13 @@ function TextFilter({
           aria-describedby={faltanCaracteres ? idAviso : undefined}
           placeholder={placeholder}
           disabled={disabled}
-          className="min-w-56 pr-8"
+          // `text-ellipsis`: el placeholder de un filtro de texto ENUMERA lo que se puede
+          // teclear ahi, asi que es largo por necesidad y no cabe en el ancho real del campo.
+          // Sin esto el navegador lo recorta a hueso, en seco y a mitad de palabra. El corte
+          // lo decide el ancho de cada viewport, NO una cadena acortada a mano: el texto
+          // completo sigue en el DOM, asi que quien tenga sitio —o use un lector de
+          // pantalla— lo recibe entero. Acortar la constante lo habria perdido para todos.
+          className="min-w-56 pr-8 text-ellipsis"
           onChange={(e) => escribir(e.target.value)}
         />
         {/* R37: limpieza individual, sin tocar el resto de la barra. */}
