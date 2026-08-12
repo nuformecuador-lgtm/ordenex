@@ -47,7 +47,15 @@ Cada línea se releyó en esta rama antes de apoyarse en ella:
   `components/shared/liquidacion/` y todo archivo de `lib/**` cuya ruta case
   `/[Ll]iquidacion/` **tiene que estar en el censo o el test cae** (`:139-146`).
 - `CierreDia` tiene `solicitadoAt` y `resueltoAt` (`db/schema.prisma:935-937`): son dos
-  antigüedades distintas y hay que elegir una (ver **Q1**).
+  antigüedades distintas y hay que elegir una (**Q1**, resuelta: `solicitadoAt`).
+- El barrido money-safe prohíbe `parseInt(` con `\b` por delante
+  (`tests/fixtures/money-safe.ts:37-42`), y `Number.parseInt(` **casa** con esa expresión. Eso
+  ata el nombre del módulo de configuración del tope (`design.md §2.5.2`): si su ruta contuviera
+  `liquidacion`, la auto-captura lo metería en el censo y el barrido caería por un falso
+  positivo sobre un cardinal que no es dinero.
+- `liquidacion_pago.referencia` es `String?` **sin `@unique`** (`db/schema.prisma:1316`) y
+  `LiquidacionPagoRepository` no consulta por ella (sus lecturas puntuales son `findUnique` por
+  id, `:186`, `:248`, `:257`). Es el punto de partida de la verificación de R58, no su prueba.
 
 ---
 
@@ -58,6 +66,17 @@ Cada línea se releyó en esta rama antes de apoyarse en ella:
 - **Pago vigente**: pago sin fila de anulación.
 - **Cierre imputable**: cierre del mensajero con estado `aprobado` **y** pendiente > 0.
 - **Total imputable**: suma de los pendientes de los cierres imputables de ese mensajero.
+- **Antigüedad de un cierre**: la fecha del **día trabajado** —cuándo el mensajero pidió el
+  cierre—, no la fecha en que un administrador lo resolvió (enmienda Q1; el porqué, en
+  `design.md §2.4`).
+- **Tope de imputaciones**: número máximo de cierres que UN reparto puede tocar. Es
+  configuración, vale 50 mientras nadie lo cambie (enmienda Q2).
+- **Ventana de imputación**: los primeros `min(tope, nº de cierres imputables)` cierres
+  imputables en el orden de R8. Es sobre lo que un reparto puede escribir.
+- **Imputable de la ventana**: suma de los pendientes de la ventana. Es el importe máximo que
+  UN reparto admite, y es lo que un rechazo por exceso informa como disponible.
+- **Cierre recortado**: cierre **imputable** que queda fuera de la ventana por el tope. No es lo
+  mismo que un cierre excluido: el recortado sí es pagable, pero en otro reparto.
 - **Reparto**: la operación de tomar UN importe y convertirlo en N pagos, uno por cierre.
 - **Imputación**: la parte del importe que va a UN cierre concreto dentro de un reparto.
 - **Imputación parcial**: imputación de importe menor que el pendiente de su cierre.
@@ -97,17 +116,19 @@ ningún saldo acumulado almacenado.
 **R7** — El sistema DEBE tratar un pago anulado como no realizado al derivar el pendiente de
 su cierre.
 
-**R8** — El sistema DEBE imputar del cierre **más antiguo al más reciente**, y el orden DEBE
-ser totalmente determinista: dos ejecuciones sobre los mismos datos DEBEN producir el mismo
-orden, incluso cuando dos cierres comparten instante de antigüedad.
+**R8** — El sistema DEBE imputar del cierre **más antiguo al más reciente** por la **antigüedad
+del cierre** (el día trabajado), NO por la fecha en que se resolvió; y el orden DEBE ser
+totalmente determinista: dos ejecuciones sobre los mismos datos DEBEN producir el mismo orden,
+incluso cuando dos cierres comparten instante de antigüedad.
 
 **R9** — El sistema NO DEBE admitir que la petición de reparto elija contra qué cierre se
 imputa; SI la petición nombra un cierre, ENTONCES DEBE rechazarse en el borde sin tocar datos.
 
 ## C. Cálculo del reparto
 
-**R10** — CUANDO se reparte un importe, el sistema DEBE imputar a cada cierre, en el orden de
-R8, el menor entre lo que queda del importe y el pendiente de ese cierre.
+**R10** — CUANDO se reparte un importe, el sistema DEBE imputar a cada cierre **de la ventana de
+imputación**, en el orden de R8, el menor entre lo que queda del importe y el pendiente de ese
+cierre.
 
 **R11** — El sistema DEBE imputar hasta agotar el importe, y a lo sumo UNA imputación —la
 última— DEBE poder ser parcial.
@@ -115,11 +136,12 @@ R8, el menor entre lo que queda del importe y el pendiente de ese cierre.
 **R12** — El sistema NO DEBE producir imputaciones de importe cero ni negativo: un cierre que
 no recibe nada no aparece en el reparto.
 
-**R13** — CUANDO el importe no supera el total imputable, la suma de las imputaciones DEBE ser
-exactamente igual al importe solicitado: el reparto NO DEBE crear ni perder un céntimo.
+**R13** — CUANDO el importe no supera el **imputable de la ventana**, la suma de las
+imputaciones DEBE ser exactamente igual al importe solicitado: el reparto NO DEBE crear ni
+perder un céntimo.
 
-**R14** — SI el importe supera el total imputable, ENTONCES el sistema DEBE rechazar la
-operación entera, DEBE informar del total imputable vigente y NO DEBE escribir nada.
+**R14** — SI el importe supera el **imputable de la ventana**, ENTONCES el sistema DEBE rechazar
+la operación entera, DEBE informar del imputable de la ventana vigente y NO DEBE escribir nada.
 
 **R15** — SI el total imputable es cero, ENTONCES el sistema DEBE rechazar informando que no
 hay nada que imputar y NO DEBE escribir nada.
@@ -199,8 +221,8 @@ aprobados, identificándolos y diciendo su estado, de modo que no desaparezcan e
 **R37** — SI el total imputable es menor que la cuenta por pagar del mensajero, ENTONCES la
 previsualización DEBE advertirlo (hay deuda que esta pantalla no puede imputar).
 
-**R38** — SI el importe tecleado supera el total imputable, ENTONCES la previsualización DEBE
-decirlo antes de que el usuario confirme.
+**R38** — SI el importe tecleado supera el **imputable de la ventana**, ENTONCES la
+previsualización DEBE decirlo antes de que el usuario confirme.
 
 ## G. El cierre, direccionable
 
@@ -251,12 +273,58 @@ observable: mismos estados de respuesta, mismas filas escritas y mismo bloqueo.
 **R52** — El sistema NO DEBE ofrecer ninguna forma de editar ni de borrar un reparto ni sus
 pagos; la única corrección posible DEBE seguir siendo anular cada pago y registrar de nuevo.
 
+## I. Enmienda del 2026-08-11 — tope y captura única
+
+Requisitos añadidos al plegar las respuestas a las preguntas abiertas. Cada uno dice qué
+sección extiende; los de arriba que cambiaron con ellos son R8 (Q1), R10, R13, R14 y R38 (Q2).
+
+**R53** *(extiende C)* — El sistema DEBE limitar a un máximo el número de cierres que UN reparto
+puede tocar; ese máximo DEBE estar definido en un único punto de configuración, DEBE valer 50
+mientras nadie lo cambie y DEBE poder cambiarse sin tocar el cálculo del reparto.
+
+**R54** *(extiende C)* — SI el número de cierres imputables del mensajero supera ese máximo,
+ENTONCES el sistema DEBE formar la ventana con los primeros en el orden de R8 hasta ese máximo
+y DEBE seguir admitiendo la operación; NO DEBE rechazarla por ese motivo.
+
+**R55** *(extiende D)* — El sistema NO DEBE tomar bloqueo ni escribir fila alguna sobre un
+cierre imputable que quede fuera de la ventana: el número de cierres bloqueados y el de
+imputaciones escritas por un reparto DEBEN quedar acotados por el máximo de R53.
+
+**R56** *(extiende F)* — SI algún cierre imputable queda fuera de la ventana, ENTONCES la
+previsualización DEBE decir cuántos cierres entran, cuántos quedan fuera y cuánto suman los
+pendientes de los que quedan fuera; ese aviso DEBE ser distinguible del de R37, que habla de
+deuda que no cuelga de ningún cierre.
+
+**R57** *(extiende C y F)* — El sistema DEBE usar el mismo máximo al previsualizar y al escribir;
+NO DEBE existir camino que impute a más cierres de los que la previsualización declaró incluidos.
+
+**R58** *(extiende D)* — CUANDO un reparto se aplica, el sistema DEBE registrar en TODAS sus
+imputaciones el mismo método, la misma referencia y la misma fecha de pago, capturados UNA sola
+vez para el reparto entero; NO DEBE derivar, alterar ni inventar una referencia distinta por
+cierre.
+
 ---
 
-## Preguntas abiertas
+## Preguntas abiertas — RESUELTAS el 2026-08-11
 
-Ninguna de estas se rellena con un supuesto (`CLAUDE.md > No inventes`). Las cinco necesitan al
-humano; para cada una se indica **qué se escribió mientras tanto** y qué costaría cambiarlo.
+Las cinco están contestadas por el humano y plegadas al spec. Se conserva el enunciado original
+porque explica de dónde sale cada decisión; debajo de cada una, la respuesta y dónde vive.
+
+| # | Respuesta | Dónde quedó |
+| --- | --- | --- |
+| Q1 | `solicitado_at` asc, desempate por id — **confirmado** | R8 (precisado) · `design.md §2.4` |
+| Q2 | Tope 50 configurable que **recorta**, no rechaza | R53–R57, R10/R13/R14/R38 · `design.md §2.5` |
+| Q3 | Anulación pago a pago — **fuera de alcance, confirmado** | R52 (sin cambios) · `design.md §10.5` |
+| Q4 | Una referencia, copiada en los N pagos | R58 · `design.md §5.4` + tarea de verificación T0.5 |
+| Q5 | Se advierte y no se paga — **confirmado con medición** | R37 (sin cambios) · `design.md §10.2` |
+
+**No quedan preguntas abiertas.** Lo que sigue es el enunciado original de cada una.
+
+### Enunciado original
+
+Ninguna se rellenó con un supuesto (`CLAUDE.md > No inventes`). Las cinco fueron al humano; para
+cada una se indicaba **qué se escribió mientras tanto** y qué costaría cambiarlo. Debajo de cada
+enunciado va ahora la respuesta recibida.
 
 **Q1 — ¿Qué antigüedad ordena el FIFO de R8: `solicitado_at` o `resuelto_at`?**
 D1 dice «el cierre aprobado más antiguo primero». `cierre_dia` tiene las dos marcas y NO
@@ -266,6 +334,10 @@ antiguo por una y el más nuevo por la otra. *Escrito mientras tanto:* `solicita
 (el día trabajado es lo que una persona llama «el cierre más viejo»), con desempate por
 identificador ascendente para que R8 sea determinista de verdad. Cambiarlo cuesta una línea del
 comparador y sus tests: no arrastra esquema.
+**Respuesta (2026-08-11): confirmado, queda `solicitado_at` asc + id asc.** Es la fecha del
+TRABAJO, que es lo que el mensajero percibe como deuda; `resuelto_at` depende de la latencia
+administrativa. El razonamiento completo, en `design.md §2.4`. R8 se precisó para nombrar la
+antigüedad sin ambigüedad.
 
 **Q2 — ¿Hay tope al número de cierres que un solo reparto puede tocar?**
 El reparto escribe `2·N` filas dentro de UNA transacción (R20). Con la deuda acumulada de meses,
@@ -273,12 +345,21 @@ El reparto escribe `2·N` filas dentro de UNA transacción (R20). Con la deuda a
 mientras tanto:* NO se pone tope y se declara el riesgo en `design.md §10`; el `N` real está
 acotado por el importe (solo entran los cierres que el importe alcanza). Si el humano prefiere
 un tope, es una constante y un estado de rechazo nuevo, y hay que decidir el número.
+**Respuesta (2026-08-11): SÍ hay tope, pero NO bloquea.** 50 por defecto, configurable en
+`lib/config/` (patrón `gasto-fijo.ts`). Al superarlo se imputa sobre los 50 más antiguos y, si el
+importe excede lo que ESOS cubren, se responde `excede` con el `disponible` — la semántica que el
+servicio ya tiene, sin estado nuevo. La previsualización enseña el recorte. Un tope que corta la
+operación en seco es un callejón sin salida; uno que acota y avisa, no. → R53–R57 y
+`design.md §2.5`.
 
 **Q3 — ¿Anular un reparto entero, o pago a pago como hoy?**
 Hoy `anularPago` anula UN pago. Tras un reparto de 4 imputaciones, deshacerlo son 4 anulaciones
 con 4 motivos. *Escrito mientras tanto:* fuera de alcance — se anula pago a pago, exactamente
 como hoy, y el reparto queda como agrupador de auditoría. Añadir «anular el reparto entero»
 sería otra feature (y otra decisión: qué pasa si una de las 4 ya se anuló a mano).
+**Respuesta (2026-08-11): fuera de alcance, confirmado.** No es un fallo de corrección —cada
+anulación escribe su contraasiento y el dinero termina bien—, es incomodidad. `reparto_id` es lo
+que mantiene la puerta abierta para agruparlas. Ficha aparte, sin urgencia. → `design.md §10.5`.
 
 **Q4 — Método y referencia únicos para N pagos.**
 El reparto captura un método y una referencia y los copia en las N filas: una referencia de
@@ -286,6 +367,11 @@ SINPE aparecerá repetida en 3 comprobantes. *Escrito mientras tanto:* se copia 
 que de verdad ocurrió: una transferencia que salda tres cierres). Si conciliación necesita
 referencia por cierre, el formulario tendría que pedir N referencias y el reparto dejaría de ser
 un solo acto.
+**Respuesta (2026-08-11): UNA sola, copiada en los N pagos.** Es la verdad: hubo una
+transferencia y un número de comprobante; inventar una referencia por cierre sería fabricar un
+dato que no existe. Además favorece la conciliación (se busca la referencia y aparecen las N
+imputaciones). → R58 y `design.md §5.4`. Lleva **tarea de verificación** T0.5: comprobar que nada
+del árbol asuma referencia única por pago; si aparece algo así, se **para y se reporta**.
 
 **Q5 — La deuda no imputable.**
 El total imputable puede ser MENOR que la cuenta por pagar que enseña la fila cuando existen
@@ -293,3 +379,8 @@ ajustes manuales en el libro (`ajuste_devengo` / `ajuste_pago`), que no cuelgan 
 R37 obliga a advertirlo, pero **no existe hoy ninguna vía para pagar esa parte** y esta feature
 no la abre (abrirla rompería R21 de la 172). *Escrito mientras tanto:* se advierte y no se paga.
 Confirmar que ese es el comportamiento deseado, o convertirlo en ficha aparte.
+**Respuesta (2026-08-11): confirmado, se advierte y no se paga. NO va ficha aparte.** Medido
+contra producción ese día: **cero** movimientos con `origen_tipo = 'manual'` en
+`pago_mensajero_movimiento`. La medición y su límite honesto —11 filas en total, muy poco dato
+productivo: vale «no existe HOY», no «nunca existirá»— y qué hacer si eso cambia, en
+`design.md §10.2`. R37 es la red y se queda tal cual.

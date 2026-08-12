@@ -6,7 +6,12 @@ citado con archivo y línea en `requirements.md > Punto de partida`.
 
 ---
 
-## §0 — Las cinco decisiones, en una línea cada una
+## §0 — Las decisiones, en una línea cada una
+
+> **Enmienda del 2026-08-11.** Las cinco preguntas abiertas están contestadas. D-F, D-G y D-H
+> son nuevas; las secciones que cambiaron son §2.1, §2.4, §2.5, §5.4, §6.1, §7.2, §10, §11 y
+> §12. Todo lo anterior sigue en pie salvo el límite «sin tope» de §10.1, que la respuesta a Q2
+> deroga.
 
 | # | Decisión | Alternativa descartada |
 | --- | --- | --- |
@@ -15,6 +20,9 @@ citado con archivo y línea en `requirements.md > Punto de partida`.
 | D-C | El cierre se hace direccionable con **parámetro de búsqueda** `?cierre=<id>` en `/cierres-admin` | Ruta propia `/cierres-admin/[cierreId]` (§4.2) |
 | D-D | La clave de idempotencia vive en una **tabla nueva `liquidacion_reparto`** con `UNIQUE(clave_idempotencia)`, insertada la primera dentro de la transacción | Derivar una clave por cierre sobre `liquidacion_pago.clave_idempotencia` (§5.2) |
 | D-E | La previsualización la calcula el **servidor**, con la misma función pura, en una acción de solo lectura; el cliente solo pinta cadenas | Calcular el reparto en el diálogo a partir del listado de pendientes (§6.2) |
+| D-F *(Q1)* | El FIFO ordena por **`solicitado_at`** (el día trabajado), desempate por `id` | Ordenar por `resuelto_at`, la fecha de aprobación (§2.4) |
+| D-G *(Q2)* | Tope de **50** cierres por reparto, en `lib/config/reparto-mensajero.ts`, que **recorta la ventana** y responde `excede` con el disponible de esa ventana | Rechazar la operación al superar el tope (§2.5.3); y no poner tope (§2.5.4) |
+| D-H *(Q4)* | **Una** captura de método/referencia/fecha, copiada literal en las N imputaciones | Pedir una referencia por cierre (§5.4.2) |
 
 ---
 
@@ -92,15 +100,28 @@ export interface Imputacion {
   parcial: boolean;         // monto < pendienteAntes
 }
 
+export interface RecorteVentana {         // enmienda Q2 — R53/R54/R56
+  tope: number;             // el máximo que se aplicó (parámetro, no leído de config aquí)
+  enVentana: number;        // cuántos cierres imputables entran
+  fuera: number;            // cuántos quedan recortados
+  montoFuera: string;       // Σ pendientes de los recortados, STRING 2 dec
+}
+
 export interface Reparto {
   imputaciones: Imputacion[];
   totalImputado: string;  // Σ montos
-  imputable: string;      // Σ pendientes de la entrada
+  imputable: string;      // Σ pendientes de la VENTANA — es el `disponible` de `excede`
+  imputableTotal: string; // Σ pendientes de TODA la entrada imputable (para R37)
   sobrante: string;       // importe − totalImputado (> 0 solo si excede)
+  recorte: RecorteVentana;
 }
 
 export function ordenarCierresFifo(cierres: readonly CierreImputable[]): CierreImputable[];
-export function repartirEntreCierres(importe: string, cierres: readonly CierreImputable[]): Reparto;
+export function repartirEntreCierres(
+  importe: string,
+  cierres: readonly CierreImputable[],   // TODOS los imputables, sin recortar
+  tope: number,                          // R53: entra por parámetro, nunca por `process.env`
+): Reparto;
 ```
 
 - `repartirEntreCierres` **ordena por su cuenta** (llama a `ordenarCierresFifo`): el criterio
@@ -110,6 +131,10 @@ export function repartirEntreCierres(importe: string, cierres: readonly CierreIm
   dos cierres del mismo instante dan un orden que depende del motor (R8).
 - Todo con `Prisma.Decimal`; salida `toFixed(2)`. Cero `Number(`/`parseFloat` (R16).
 - Descarta las entradas con pendiente ≤ 0 y no emite imputaciones de 0 (R12).
+- **La ventana se forma aquí**, no en el `WHERE` (enmienda Q2): la función recibe todos los
+  imputables y el `tope`, corta los `tope` primeros del orden FIFO y reparte solo sobre ellos.
+  Así el recorte se prueba sin base de datos (R17/R54) y `imputable`, `imputableTotal` y
+  `recorte` salen de una sola pasada, coherentes entre sí por construcción.
 
 **`LiquidacionService.registrarRepartoMensajero(input, actor)`** es quien lo aplica. El
 esqueleto, en el orden en que importa:
@@ -119,11 +144,12 @@ esqueleto, en el orden en que importa:
 3. Inserta la fila de `liquidacion_reparto`. Un choque de `clave_idempotencia` sale de la
    transacción con una señal interna y se responde fuera (§5.1) — mismo patrón que
    `ClaveRepetidaError` de la 172.
-4. Lee los cierres imputables del mensajero **ordenados** y toma el **bloqueo de cada uno** en
-   ese orden (R21/R22).
-5. **Relee** el pendiente de cada cierre bajo bloqueo y vuelve a llamar a
+4. Lee los cierres imputables del mensajero **ordenados**, forma la **ventana** con los `tope`
+   primeros y toma el **bloqueo de cada uno de la ventana** en ese orden (R21/R22/R55). Los
+   recortados no se bloquean: no se van a tocar.
+5. **Relee** el pendiente de cada cierre de la ventana bajo bloqueo y vuelve a llamar a
    `repartirEntreCierres` con esos valores (R23).
-6. `sobrante > 0` → `excede` con el imputable vigente, sin escribir (R14).
+6. `sobrante > 0` → `excede` con el imputable **de la ventana** vigente, sin escribir (R14).
    Sin cierres imputables → `sin_saldo` (R15).
 7. Por cada imputación, escribe documento + movimiento **con el mismo escritor privado** que
    usa el pago contra un cierre único (§2.3).
@@ -147,6 +173,126 @@ divergir, y hay un test que lo mide (un reparto que cae entero en un cierre prod
 filas que el pago simple por ese importe). El comentario de la 172 sobre «no factorizar» habla
 del eje mensajero↔tienda (contra qué se compara, en qué libro se escribe, con qué signo); aquí
 las tres cosas son idénticas, así que la razón de no factorizar no aplica.
+
+### 2.4 — La antigüedad que ordena el FIFO: `solicitado_at` (D-F, Q1 resuelta)
+
+`cierre_dia` tiene dos marcas y no coinciden. Se ordena por **`solicitado_at` ascendente**, con
+desempate por `id` ascendente. El motivo, escrito para que nadie lo revierta por intuición:
+
+**`solicitado_at` es la fecha del TRABAJO, y el trabajo es lo que el mensajero percibe como
+deuda.** «Todavía me deben el lunes» es una frase sobre el día trabajado, no sobre el día en que
+un administrador tocó un botón.
+
+**`resuelto_at` depende de la latencia administrativa.** Ordenar por él haría que el orden de
+cobro dependiera del proceso interno: un admin que aprueba en orden raro —o que deja un cierre
+del lunes trabado hasta el viernes— cambiaría **en silencio** la prioridad de cobro del
+mensajero. Sería una decisión de negocio tomada por accidente, sin que nadie la escriba.
+
+El desempate por `id` no es adorno: dos cierres con el mismo `solicitado_at` darían, sin él, un
+orden que decide el motor, y R8 exige determinismo. El comparador vive en la función pura (§2.1),
+no en el `ORDER BY`, para poder probarlo sin base de datos.
+
+**Alternativa descartada — ordenar por `resuelto_at`.** Tiene un argumento a favor: es la fecha en
+que la deuda quedó *confirmada*, y hasta que un cierre no se aprueba no ha devengado nada, así que
+es el instante en que el pendiente empieza a existir. Se descarta porque hace que el orden de
+cobro lo fije el proceso interno y no la deuda, que es exactamente lo que un mensajero no puede
+verificar ni discutir. Cambiar de opinión cuesta una línea del comparador y sus tests: no arrastra
+esquema.
+
+### 2.5 — El tope de imputaciones (D-G, Q2 resuelta)
+
+#### 2.5.1 — Qué hace
+
+Un reparto toca **como mucho 50 cierres**. Si el mensajero tiene más cierres imputables, se
+imputa sobre los **50 más antiguos** (el orden de §2.4) y el resto queda **recortado**: sigue
+siendo deuda pagable, pero en otro reparto.
+
+Al superarlo **no se rechaza nada**. Lo que cambia es de qué se calcula el disponible:
+
+| Situación | Respuesta |
+| --- | --- |
+| importe ≤ imputable de la ventana | se aplica (R13) |
+| importe > imputable de la ventana | **`excede`** con `disponible` = imputable de la ventana (R14) |
+| no hay cierres imputables | `sin_saldo` (R15) |
+
+**No hay estado de respuesta nuevo.** `excede` + `disponible` es exactamente la semántica que
+`registrarPagoMensajero` ya tiene para un cierre (`LiquidacionService.ts:205-208`); lo único que
+cambia es el conjunto sobre el que se mide el disponible. Reusarla mantiene el vocabulario de la
+pantalla intacto (§7.2) y evita enseñar al operador una palabra nueva para una situación que ya
+sabe resolver: teclear el disponible que le ofrecen.
+
+**Cómo termina de pagar el operador.** Registra el reparto por el disponible de la ventana; al
+volver, esos 50 cierres han quedado saldados, la ventana se vuelve a formar con los siguientes y
+el resto entra. Dos repartos, dos comprobantes, ninguna deuda inalcanzable. Eso es lo que
+convierte al tope en una cota de tamaño de transacción y no en un límite de negocio.
+
+#### 2.5.2 — Dónde vive el número, y por qué el archivo NO se llama `liquidacion`
+
+`lib/config/reparto-mensajero.ts`, patrón exacto de `lib/config/gasto-fijo.ts` /
+`lib/config/wallet-mensajero.ts`: `readPositiveInt` sobre una variable de entorno con
+`fallback`, más un `export const` ya cargado.
+
+```ts
+export interface RepartoMensajeroConfig {
+  /** Máximo de cierres que UN reparto puede tocar (R53). */
+  MAX_CIERRES_POR_REPARTO: number;   // REPARTO_MENSAJERO_MAX_CIERRES, por defecto 50
+}
+```
+
+Por qué **50**: un cierre por día laborado, así que 50 son ~2 meses de trabajo seguido. Con pagos
+semanales o quincenales no se acerca; con la deuda de un mensajero que lleva meses sin cobrar, el
+tope corta y avisa en vez de abrir una transacción de 400 filas.
+
+**El nombre del archivo no lleva `liquidacion`, y eso está medido.** El barrido money-safe
+auto-captura *todo* archivo de `lib/**` cuya ruta case `/[Ll]iquidacion/`
+(`liquidacion-money-safe.test.ts:140-146`) y prohíbe `parseInt(` en los censados
+(`tests/fixtures/money-safe.ts:37-42`, con `\b` antes del nombre: `Number.parseInt(` **casa**).
+Un `lib/config/liquidacion-reparto.ts` con el `readPositiveInt` del patrón pondría el barrido en
+rojo por un **falso positivo**: ahí no hay ningún monto, hay un cardinal leído del entorno. En vez
+de debilitar la guardia con una excepción, el módulo se queda fuera de su alcance por lo que es.
+La aritmética de dinero sigue entera en `reparto-liquidacion-mensajero.ts`, que **sí** está
+censado (§11). El módulo de config no importa `Prisma`, no toca ningún monto y solo exporta un
+entero; hay un criterio de hecho en T0.4 que lo fija.
+
+**El `tope` entra por parámetro** a la función pura y al servicio (§2.1): el módulo puro no lee
+`process.env` —eso lo haría intestable y dependiente del entorno del runner— y el servicio recibe
+el valor de config en su construcción, que es lo que permite a un test inyectar `tope: 2` y
+ejercitar el recorte con tres cierres en vez de con cincuenta y uno (R53/R54).
+
+#### 2.5.3 — Alternativa descartada: rechazar al superar el tope
+
+Era la lectura literal de la pregunta: estado `demasiados_cierres` y a otra cosa. Se descarta
+porque **es un callejón sin salida**: el operador ve que se le debe una cantidad, teclea, y el
+sistema le dice que no sin ofrecerle ninguna acción que lo desbloquee. El único camino sería
+pagar por otra pantalla, cierre a cierre, que es exactamente lo que esta feature existe para
+evitar. Un tope que acota y avisa consigue la misma cota de transacción sin dejar a nadie
+encerrado. Coste de haberla elegido: un estado de respuesta más en el contrato y una pantalla que
+tiene que explicarlo.
+
+#### 2.5.4 — Alternativa descartada: no poner tope (lo que decía §10.1)
+
+Lo escrito antes de la respuesta: sin tope, con el riesgo declarado. Se descarta porque el
+argumento que lo sostenía —«`N` está acotado en la práctica por el importe»— **es circular**: es
+verdad para un importe pequeño y falso justo en el caso que preocupa, el operador que salda meses
+de deuda de una vez. Sin tope, la cota de la transacción la fija el usuario al teclear.
+
+#### 2.5.5 — La ventana se fija al bloquear
+
+La ventana se calcula sobre la lectura previa y se **congela** al tomar los bloqueos. Si entre
+esa lectura y el bloqueo un cierre de la ventana deja de estar `aprobado` o queda en pendiente 0,
+la ventana **se encoge** (R24): no se sube al cierre 51 para rellenar el hueco. Es deliberado —
+subir uno obligaría a bloquear un cierre que no se bloqueó al principio, es decir, a adquirir
+bloqueos fuera del orden acordado (§3.1), que es como se fabrican los interbloqueos. El precio es
+un reparto que toca 49 en vez de 50; la ganancia es que el conjunto bloqueado nunca crece a mitad
+de la operación.
+
+#### 2.5.6 — El tope acota la ESCRITURA, no la LECTURA
+
+`listarCierresImputables` **no** lleva `LIMIT`: la previsualización necesita todos los imputables
+para poder decir `imputableTotal`, cuántos quedan fuera y cuánto suman (R56), y el aviso de deuda
+no imputable de R37 se mide contra el total, no contra la ventana. Son filas de `cierre_dia` de
+un solo mensajero, leídas sin bloqueo; lo que había que acotar era la transacción de escritura y
+el número de bloqueos, y eso lo acota la ventana (R55).
 
 ---
 
@@ -260,6 +406,53 @@ prohíbe. Se descarta.
 Ya venía descartada de fábrica en la ficha (D3) y se deja escrito: bloquea el caso legítimo
 —dos pagos iguales el mismo día— y nadie puede razonar sobre ella seis meses después.
 
+### 5.4 Método, referencia y fecha: una captura, copiada en las N (D-H, Q4 resuelta)
+
+#### 5.4.1 — Qué se hace y por qué
+
+El formulario pide **una** vez el método, la referencia y la fecha de pago, y el servicio los
+copia **literales** en las N filas de `liquidacion_pago` del reparto (R58).
+
+El motivo no es economía de tecleo: **es la verdad**. Hubo una sola transferencia y un solo
+número de comprobante. Inventar una referencia por cierre —`REF-1/3`, un sufijo, un uuid—
+fabricaría un dato que no existe en ningún extracto bancario y que nadie podría cotejar contra
+nada. Y la repetición **favorece** la conciliación en vez de estorbarla: se busca la referencia y
+aparecen las N imputaciones que esa transferencia saldó, que es justo la pregunta que alguien se
+hace al conciliar.
+
+Consecuencias, escritas para que no sorprendan:
+
+- El libro del mensajero mostrará N líneas con la **misma** descripción (`"SINPE · 1234567"`,
+  `lib/utils/descripcion-pago.ts:34`). Se distinguen por su `origen_id`, que es el id del pago y
+  es distinto en cada una; el índice único parcial de `pago_mensajero_movimiento`
+  (`origen_tipo, origen_id, mensajero_id, categoria`) no se ve afectado, porque el `origen_id`
+  difiere fila a fila.
+- La lista de comprobantes mostrará N filas con la misma referencia y montos que suman el
+  importe transferido.
+
+#### 5.4.2 — Alternativa descartada: una referencia por cierre
+
+Obligaría al formulario a pedir N referencias —N que el usuario no conoce hasta que ve la
+previsualización— y convertiría el reparto en N actos con N datos distintos, deshaciendo la
+premisa de la feature (un pago, un comprobante). Se descarta por eso y porque el dato no existe.
+
+#### 5.4.3 — Verificación pendiente, NO decisión (tarea T0.5)
+
+Copiar la referencia crea, por primera vez, **N filas de `liquidacion_pago` con la misma
+`referencia`**. Antes de escribir el reparto hay que comprobar que nada del árbol dé por hecho
+que esa columna es única o 1:1 por pago: una constraint `UNIQUE`, un `findFirst`/`findUnique` por
+referencia, o una consulta de conciliación que asuma un pago por referencia se romperían —o, peor,
+devolverían una de las N en silencio.
+
+Lo que ya se miró al escribir esta enmienda, para que la tarea empiece donde esto acaba y no lo
+repita: `liquidacion_pago.referencia` es `String?` **sin `@unique`** (`db/schema.prisma:1316`) y
+`LiquidacionPagoRepository` no tiene ningún `where` por `referencia` (sus tres lecturas puntuales
+son `findUnique` por `id` de cierre o de pago, `:186`, `:248`, `:257`). Eso es indicio, **no
+prueba**: falta barrer servicios, acciones, descargas, guardias, `scripts/**` y tests.
+
+**Si aparece algo que asuma unicidad, se para y se reporta.** No se cambia por cuenta propia:
+tocar una constraint o una consulta de conciliación es una decisión de otra persona.
+
 ---
 
 ## §6 — Previsualización derivada del servidor (D-E)
@@ -269,10 +462,13 @@ Ya venía descartada de fábrica en la ficha (D3) y se deja escrito: bloquea el 
 `previsualizarRepartoMensajeroAction({ mensajeroId, monto? })`:
 
 - **sin `monto`**: devuelve el conjunto imputable (cierres con su pendiente), el `imputable`
-  total, la `cuentaPorPagar` del mensajero y los `excluidos`. Es lo que alimenta el
-  `disponible` con el que se abre el diálogo y decide si el botón está habilitado (R15).
+  **de la ventana**, el `imputableTotal`, el `recorte` (R56), la `cuentaPorPagar` del mensajero,
+  la `deudaNoImputable` (R37) y los `excluidos`. Es lo que alimenta el `disponible` con el que se
+  abre el diálogo y decide si el botón está habilitado (R15).
 - **con `monto`**: además, las `imputaciones` que produciría, el `sobrante` y `excede`
   (R32/R33/R38).
+- El **mismo tope** que usa la escritura (R57): el servicio lo recibe una vez en su construcción
+  y lo pasa a la función pura por los dos caminos. No hay dos números que puedan divergir.
 - **No escribe nada** (R35): el servicio no abre transacción, no toma bloqueos y no llama a
   ningún método de escritura. Hay un test que lo mide con dobles.
 - Todos los importes salen ya derivados y serializados como **STRING** (R34/R46). El diálogo
@@ -340,10 +536,24 @@ type CierreExcluidoDTO = { cierreId: string; estado: CierreEstado; solicitadoAt:
 // R36 y §10.2: NO lleva importe. Un cierre no aprobado no ha devengado nada todavía y la 172
 // (R28) enseña `null` para su pendiente a propósito; inventar aquí una cifra lo contradiría.
 
+type RecorteDTO = {          // enmienda Q2 — R56. El cliente lo PINTA, no lo deduce.
+  aplicado: boolean;         // hay cierres imputables fuera de la ventana
+  tope: number;              // el máximo vigente, para poder decirlo en pantalla
+  enVentana: number;         // cuántos cierres entran
+  fuera: number;             // cuántos quedan fuera
+  montoFuera: string;        // STRING 2 dec — cuánto suman los que quedan fuera
+};
+
 type PrevisualizacionRepartoDTO = {
   mensajeroNombre: string;   // NOMBRE, nunca el id de la persona (R48)
-  imputable: string;
+  imputable: string;         // el de la VENTANA: es el `disponible` del diálogo (R14/R38)
+  imputableTotal: string;    // el de TODOS los imputables (imputable + recorte.montoFuera)
   cuentaPorPagar: string;    // para la advertencia de R37
+  deudaNoImputable: {        // R37 ya resuelto en el servidor: el cliente no compara importes
+    hay: boolean;            // imputableTotal < cuentaPorPagar
+    monto: string;           // STRING 2 dec — la parte que esta pantalla no puede imputar
+  };
+  recorte: RecorteDTO;       // R56 — distinto y separado del aviso de arriba
   imputaciones: ImputacionPrevistaDTO[];
   sobrante: string;
   excede: boolean;
@@ -352,7 +562,9 @@ type PrevisualizacionRepartoDTO = {
 
 type RepartoAplicadoDTO = {
   totalImputado: string;
-  restanteImputable: string;
+  restanteImputable: string;  // lo que SIGUE debiéndose por cierres tras el reparto: el TOTAL
+                              // imputable, no el de la ventana. Tras un reparto con recorte es
+                              // > 0 a propósito, y es lo que dice que hay que registrar otro.
   imputaciones: ImputacionAplicadaDTO[];  // { cierreId, monto, pendienteDespues }
 };
 ```
@@ -402,6 +614,18 @@ El diálogo sigue sin saber a quién se paga y sin calcular nada; el hijo se enc
 previsualización al servidor. Reusarlo no es economía: es lo que hereda **gratis** la
 disciplina de la clave de idempotencia (R27/R30/R31), que es el corazón de D3.
 
+**Los dos avisos son dos líneas distintas** (R56 exige distinguirlos, y confundirlos sería
+mentir sobre qué se puede cobrar y cuándo):
+
+- **Recorte por tope** — «Este pago alcanza a los {enVentana} cierres más antiguos. Quedan
+  {fuera} cierres por ₡{montoFuera}, que se pagan en el siguiente registro.» Es deuda **pagable**
+  aquí mismo, en otro acto.
+- **Deuda no imputable (R37)** — «₡{monto} de la cuenta por pagar no corresponde a ningún cierre
+  y no puede pagarse desde esta pantalla.» Es deuda que esta feature **no** sabe pagar (§10.2).
+
+El texto final lo fija el implementer en el módulo de labels; lo que no puede es fundir los dos
+en un solo mensaje ni omitir las cifras.
+
 **La previsualización se pinta como lista descriptiva, no como `<DataTable>` ni `<table>`.**
 No es un listado de registro (no ordena, no pagina, no se descarga) y ambas formas están
 censadas por `cobertura-tablas.guardia` / `censo-tablas.ts`: meter una tabla ahí obligaría a
@@ -424,18 +648,66 @@ persona y por qué cierres, que es la misma superficie de dinero.
 
 ## §10 — Límites conocidos, declarados
 
-1. **Tamaño de la transacción (Q2).** `2·N + 1` filas en una transacción interactiva. `N` está
-   acotado en la práctica por el importe, pero no hay tope duro. Riesgo: un importe enorme sobre
-   una deuda muy fragmentada podría agotar el tiempo de transacción — y, por R20, no dejaría
-   nada escrito (falla del lado seguro).
-2. **Deuda no imputable (Q5).** `imputable` puede ser menor que `cuentaPorPagar` si hay ajustes
-   manuales en el libro (`ajuste_devengo`/`ajuste_pago`), que no cuelgan de ningún cierre. Se
-   **advierte** (R37) y no se paga: pagarla exigiría un pago sin cierre, es decir romper R21.
+1. **Tamaño de la transacción (Q2) — ACOTADO desde la enmienda.** `2·N + 1` filas en una
+   transacción interactiva, con `N ≤ 50` (§2.5). El límite que decía «no hay tope duro» queda
+   derogado: ahora la cota no la fija el importe que teclee el usuario, la fija la configuración.
+   Lo que queda declarado es el techo: un reparto lleno son 101 filas y 50 bloqueos de fila en
+   una transacción. Si algún día ese techo resulta caro, se baja `REPARTO_MENSAJERO_MAX_CIERRES`
+   sin desplegar código.
+2. **Deuda no imputable (Q5) — medida, no supuesta.** `imputableTotal` puede ser menor que
+   `cuentaPorPagar` si hay movimientos en el libro que no cuelgan de ningún cierre
+   (`origen_tipo = 'manual'`, con categorías `ajuste_devengo`/`ajuste_pago`). Se **advierte**
+   (R37) y no se paga: pagarla exigiría un pago sin cierre, es decir romper R21 de la 172.
+
+   **Medición contra producción, 2026-08-11:** en `pago_mensajero_movimiento` hay **cero**
+   movimientos con `origen_tipo = 'manual'`. Control de que la consulta no miente por tabla
+   vacía: la tabla tiene 11 filas — 10 de `cierre_dia` por ₡46.025,90 y 1 de `pago_mensajero`
+   por ₡1.800,00.
+
+   **Por qué ese `origen_tipo` es la sonda correcta** (y no `categoria`, donde viven los nombres
+   `ajuste_devengo`/`ajuste_pago`): al libro solo entran tres orígenes —`cierre_dia` (devengo `P`
+   + pago `min(P,E)` al aprobar), `pago_mensajero` (que por R21 de la 172 **siempre** cuelga de un
+   cierre) y `manual`, el único con `origen_id` NULL (`db/schema.prisma:1269`)—. Como
+   `cuentaPorPagar = Σ devengo − Σ pago` y el pendiente de un cierre es
+   `P − min(P,E) − Σ pagos vigentes` (`lib/utils/pendiente-cierre.ts:28`), las dos cifras
+   coinciden **exactamente** salvo por lo que entró como `manual`. Cero manuales ⇒ cero deuda no
+   imputable. El nombre de la categoría no cambia esa cuenta: cambia cómo se etiqueta la fila.
+
+   **Y el límite de esa medición, con honestidad:** 11 filas son muy poco dato productivo. Lo
+   correcto es afirmar «esto **no existe hoy**», no «no existirá nunca». Por eso R37 no se
+   elimina aunque la cifra medida sea cero: el aviso es la red que hace visible el día en que
+   alguien empiece a usar los ajustes manuales, en vez de dejar una diferencia callada entre lo
+   que la fila dice que se debe y lo que esta pantalla sabe pagar.
+
+   **Qué hacer si eso ocurre** (para quien lo lea con el aviso ya en pantalla): (a) confirmar con
+   la misma consulta que los `manual` existen y en qué volumen; (b) NO abrir aquí una vía para
+   pagarlos — seguiría rompiendo R21; (c) abrir ficha propia que decida el modelo, que es una
+   decisión de negocio y no de implementación: o el ajuste manual pasa a colgar de un cierre, o
+   se admite un pago sin cierre con su propio documento y su propia auditoría. La medición de
+   este día es el punto de partida para saber si el problema creció.
 3. **Los importes agregados siguen siendo brutos.** La fila de la tabla suma pagos anulados y
    sus reversos en «Devengado» y «Pagado» (aviso N1 de la 172, ya en pantalla). El `imputable`
    de esta feature **no** hereda ese problema: se deriva de pagos **vigentes** (R7).
 4. **La previsualización caduca.** Entre verla y confirmar puede cambiar el estado; se resuelve
    recalculando bajo bloqueo (§6.1), no congelando la previsualización.
+5. **Anular un reparto es anular sus pagos, uno a uno (Q3) — fuera de alcance, confirmado.**
+   Deshacer un reparto de 4 imputaciones son 4 anulaciones con 4 motivos.
+
+   **Por qué es aceptable:** no es un fallo de corrección. Cada anulación escribe su
+   contraasiento en el libro (172, §6.2) y el dinero termina exactamente donde debe; el pendiente
+   de cada cierre vuelve a su sitio porque se deriva de pagos vigentes (R7). Lo que sobra es
+   **incomodidad**: cuatro diálogos en vez de uno. Se paga esa incomodidad a cambio de no
+   inventar aquí una operación de anulación en bloque cuyo caso difícil —una de las cuatro ya
+   anulada a mano, con otro motivo y otra fecha— exige decisiones que nadie ha tomado.
+
+   **La puerta queda abierta, y esto es lo importante:** `liquidacion_pago.reparto_id` (§1.2) es
+   lo que permitirá agruparlas el día que se haga, sin migración de datos ni arqueología —
+   `WHERE reparto_id = …` devuelve el grupo entero. Si no existiera esa columna, «anular el
+   reparto» sería irreconstruible después. Va **ficha aparte, sin urgencia**.
+6. **La referencia se repetirá en N comprobantes (Q4).** Decidido y explicado en §5.4; queda como
+   límite declarado porque cambia lo que ve quien lee la lista de comprobantes. La comprobación
+   de que nada del árbol asume unicidad es la tarea T0.5, y su desenlace «parar y reportar» está
+   escrito en §5.4.3.
 
 ---
 
@@ -461,6 +733,13 @@ Entran en el censo:
 | `app/(app)/wallet/mensajeros/_components/RepartoPrevisualizacion.tsx` | ídem |
 | `app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx` | gana el enlace y monta lo anterior |
 
+**No entra, y no por olvido:** `lib/config/reparto-mensajero.ts`. Su ruta no casa
+`/[Ll]iquidacion/` **a propósito** (§2.5.2): no maneja ningún monto —exporta un cardinal leído
+del entorno— y el `Number.parseInt` del patrón de config casaría con `/\bparseInt\s*\(/`, que es
+la prohibición de dinero del barrido. Meterlo dejaría dos opciones malas: el barrido en rojo por
+un falso positivo, o una excepción dentro de la guardia. La aritmética de dinero de esta feature
+está entera en `reparto-liquidacion-mensajero.ts`, que sí está censado.
+
 (Los ya censados que se editan —`LiquidacionService.ts`, `lib/actions/liquidacion.ts`,
 `ILiquidacionService.ts`, `ILiquidacionPagoRepository.ts`, `LiquidacionPagoRepository.ts`,
 `components/shared/liquidacion/RegistrarPagoDialog.tsx`— siguen bajo las mismas reglas.)
@@ -480,7 +759,7 @@ Entran en el censo:
 | R1, R2, R4 | `tests/unit/services/liquidacion-reparto-service.test.ts` (rol ajeno ⇒ `forbidden` sin lecturas) + `tests/unit/actions/liquidacion-reparto-actions.test.ts` (sin sesión ⇒ rechazo antes del service) |
 | R3 | `tests/components/PagoMensajeroAcciones.test.tsx` (el control existe en el desglose de la pantalla) |
 | R5, R6, R7 | `liquidacion-reparto-service.test.ts` (cierre `solicitado` y cierre con pendiente 0 fuera del conjunto; pago anulado no descuenta) |
-| R8, R17 | `tests/unit/utils/reparto-liquidacion-mensajero.test.ts` (orden FIFO + desempate por id, sin DB) |
+| R8, R17 | `tests/unit/utils/reparto-liquidacion-mensajero.test.ts` (FIFO por `solicitadoAt` + desempate por id, sin DB; y un caso donde `resueltoAt` daría otro orden y **no** lo cambia) |
 | R9, R47 | `tests/unit/types/liquidacion-reparto-schema.test.ts` (`cierreId` colado ⇒ `validation_error`) |
 | R10–R13 | `reparto-liquidacion-mensajero.test.ts` (tope por cierre, solo la última parcial, Σ exacta, sin ceros) |
 | R14, R15 | `liquidacion-reparto-service.test.ts` (`excede` con `disponible`; `sin_saldo`; cero escrituras) |
@@ -503,3 +782,9 @@ Entran en el censo:
 | R49 | `tests/integration/db/liquidacion-reparto-migration.test.ts` (columnas, FK, `UNIQUE`, `CHECK`, RLS, y `down.sql` deja el esquema idéntico) |
 | R51 | `tests/unit/services/liquidacion-service.test.ts` **sin tocar un solo assert** + equivalencia reparto-de-un-cierre ↔ pago simple |
 | R52 | `tests/unit/actions/liquidacion-action.test.ts:609` (la lista exacta de exportaciones, ampliada a siete; ninguna se llama editar/actualizar/modificar/corregir/desanular) |
+| R53 | `tests/unit/config/reparto-mensajero-config.test.ts` (por defecto 50; la variable de entorno lo cambia; un valor basura cae al defecto) + `reparto-liquidacion-mensajero.test.ts` (el `tope` es parámetro: el módulo puro no lee `process.env`) |
+| R54 | `reparto-liquidacion-mensajero.test.ts` (3 cierres con `tope: 2` ⇒ ventana de 2, reparto válido y **ningún** rechazo) + `liquidacion-reparto-service.test.ts` (importe que cabe en la ventana ⇒ `ok`, con más cierres imputables de los que toca) |
+| R55 | `liquidacion-reparto-bloqueos.guardia.test.ts` (con `tope: 2` y 5 imputables: 2 bloqueos, 2 pagos, 2 movimientos; los otros 3 cierres no se bloquean ni se tocan) |
+| R56 | `RepartoPrevisualizacion.test.tsx` (con `recorte.aplicado` pinta cuántos entran, cuántos quedan fuera y su suma) + `liquidacion-reparto-service.test.ts` (el `recorte` sale del servidor con las tres cifras) |
+| R57 | `liquidacion-reparto-service.test.ts` (previsualizar y aplicar con el MISMO servicio dan la misma ventana; el tope entra una sola vez por construcción) |
+| R58 | `liquidacion-reparto-service.test.ts` (3 imputaciones ⇒ 3 pagos con idéntico `metodo`, `referencia` y `fechaPago`, y 3 descripciones de libro iguales con `origen_id` distinto) |
