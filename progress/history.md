@@ -3150,3 +3150,34 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
 - **El censo inicial estaba mal y se dejó escrito por qué**: se contó por firma
   (`export function money`) en vez de por símbolo, lo que dejaba fuera una copia local no
   exportada, cuatro con formato estadounidense, `PriceLabel` y una decena de literales.
+
+## 2026-08-12 — 205 (pagar la cuenta por pagar del mensajero desde `/wallet/mensajeros`)
+- La pantalla enseñaba la deuda de cada mensajero y no ofrecía ningún camino para actuar sobre
+  ella. Ahora se registra el pago desde ahí, imputándolo a sus cierres pendientes (FIFO por
+  `solicitado_at`, parcial permitido, todo o nada en una transacción con N candados por cierre
+  en orden determinista), y cada fila enlaza al detalle de su cierre vía `?cierre=<uuid>`.
+- Requisitos cubiertos: R1..R58. Trazabilidad en `progress/impl_205_mapa.md`.
+- **R21 no se toca**: cada imputación escribe su pago con su `cierreId` y su candado. La primera
+  versión de la ficha decía que no se podía pagar desde aquí — era leer un `.strict()` que exige
+  `cierreId` y confundir «exige elegir o repartir cierres» con «no se puede».
+- Decisiones: clave de idempotencia acuñada **al abrir el diálogo** (derivarla por cierre está
+  roto: tras un intento con éxito el FIFO empieza en otro cierre, la clave no colisiona y se
+  pagaría dos veces); la ventana **encoge** y no se rellena si un cierre se cae bajo candado
+  (rellenar obligaría a bloquear fuera de orden); la previsualización es advertencia y no
+  reserva; el aviso de excluidos es un **conteo** agregado en la base, no una lista sin tope.
+- **Lo que destaparon las mutaciones** (88 del implementer, 18 del reviewer): saltarse una
+  imputación devolvía `ok` por menos dinero del comprometido; `buildService` sin el repositorio
+  del acto dejaba el reparto **sin su `UNIQUE`** —doble pago— en la ruta que de verdad se
+  ejecuta; y **siete fixtures donde dos valores coincidían** y hacían sobrevivir mutaciones, el
+  peor de ellos sobre la cifra que la pantalla propone como monto.
+- **Aplicar la migración en local destapó que su test solo pasaba mientras NO estuviera
+  aplicada**: habría estallado para todo el mundo justo después del despliegue. De paso apareció
+  que su DOWN corría con `public` en el `search_path`, así que su `DROP TABLE IF EXISTS` habría
+  resuelto contra la tabla real.
+- **El reviewer rechazó la primera vuelta**, y ningún hallazgo era de código: el spec describía
+  otra conducta que la implementada —error del leader, que encargó el cambio a conteo acotado a
+  «código y tests» sin mandar plegarlo al spec— y la tanda 7 no estaba hecha.
+- **Deuda dejada**: la pantalla **no se ha visto nunca** (la base local no tiene mensajeros con
+  cuenta por pagar); cubierta por 44 tests de componente, que el reviewer considera suficientes
+  para el código y no para dar la pantalla por vista. Fichas 206 (anulación agrupada de un
+  reparto, que `reparto_id` deja posible) y 207 (el censo de tablas cuenta prosa como JSX).

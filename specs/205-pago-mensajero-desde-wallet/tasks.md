@@ -425,7 +425,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   antes de ampliarlo) y el resultado del barrido de T0.5 con sus comandos.
 - **Depende de**: todas las anteriores.
 
-### T7.2 — Gate completo
+### [x] T7.2 — Gate completo
 - **Cubre**: —
 - **Hecho**: `./init.sh` completo en verde medido **en esta rama**, y comparado contra el
   baseline de `origin/dev` medido el mismo día. Un rojo por `Test timed out` se trata con el
@@ -433,7 +433,7 @@ sin excepción (`docs/verification.md`). Ocho tandas; ninguna deja el árbol a m
   por real. El estado verde de un PR **no** cuenta: es un build.
 - **Depende de**: T7.1
 
-### T7.3 — Bookkeeping
+### [x] T7.3 — Bookkeeping
 - **Edita**: `feature_list.json` (id 205 → estado y `spec_path`), `progress/current.md`
 - **Hecho**: solo se tocan los campos de la 205; el diff no arrastra altas ajenas; `status_note`
   de 3-6 líneas técnicas (el detalle vive en `progress/`); archivos en LF.
