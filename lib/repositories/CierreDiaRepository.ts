@@ -14,6 +14,7 @@ import type {
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import { toLineasPago } from "@/lib/utils/lineas-pago";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
@@ -120,6 +121,12 @@ export const WITH_DETALLE = {
     pagoMensajero: true, // feature 39: snapshot del pago al mensajero (reuso 38/40)
     ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo (reuso 38/40)
     causaIncidente: true, // feature 158/R9: causa tipificada del incidente (null en el resto)
+    // Feature 208/R21/R22/R23: el DESGLOSE del recaudo. Sin esto la fila de dominio no
+    // compila, y si compilara los totales del cierre saldrian en CERO: `computeTotales` suma
+    // EXCLUSIVAMENTE estas lineas, sin fallback al par escalar (design §3.1). `orderBy` sobre
+    // un enum NATIVO ordena por orden de DECLARACION (efectivo, SINPE, transferencia): orden
+    // determinista sin columna que mantener.
+    pagos: { select: { metodo: true, monto: true }, orderBy: { metodo: "asc" } },
     // ⚠️ `indemnizacion` NO se selecciona A PROPOSITO. Esta es la proyeccion de la vista EN
     // VIVO del MENSAJERO, y la indemnizacion es plata que Ordenex paga por el paquete, no del
     // mensajero (R17/design §7.2). Dejarla fuera de la CONSULTA —y no solo de la pantalla— es
@@ -166,7 +173,11 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     tiendaNombre: row.orden.tienda.nombre,
     resultado: row.resultado,
     montoRecibido: decimalToString(row.montoRecibido),
+    // Feature 208/R31: el par escalar se CONSERVA (la 209 decide su retiro)...
     metodoPago: row.metodoPago,
+    // ...pero el dinero que suma es ESTE: el desglose por metodo, money-safe STRING, en el
+    // orden que impuso el `orderBy` de la proyeccion (R21/R22).
+    pagos: toLineasPago(row.pagos),
     motivo: row.motivo,
     fechaReprogramacion: row.fechaReprogramacion
       ? row.fechaReprogramacion.toISOString().slice(0, 10)

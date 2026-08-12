@@ -9,6 +9,7 @@ import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { ESTADOS_COLA_SOLICITADO } from "@/lib/utils/colas-cierre";
 import { descargaConfig } from "@/lib/config/descarga";
 import { listarCierresBodegaPaginadoSchema } from "@/lib/types/cierre-bodega";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 // Feature 184 — Tanda E (T E.2, R1/R2/R4/R5/R6) — los CONJUNTOS de los que salen los archivos de
 // «Cierres de bodega pendientes» (listado 4) y «Cierres de bodega resueltos» (listado 5).
@@ -99,7 +100,8 @@ function porSolicitadoDesc(a: CierreBodegaResumenRow, b: CierreBodegaResumenRow)
 
 /** Una gestión con evidencia, para que el espía de firmas tenga a quién dispararse. */
 function gestionConEvidencia(): CierreGestionPendienteRow {
-  return {
+  // Feature 208/T9: `pagos` es obligatorio; `conPagos` lo deriva del par escalar (UNA linea).
+  return conPagos({
     gestionId: "g-1",
     ordenId: "o-1",
     numGuia: 10,
@@ -123,7 +125,7 @@ function gestionConEvidencia(): CierreGestionPendienteRow {
     esRechazoSla: false,
     causaIncidente: null,
     indemnizacion: null,
-  };
+  });
 }
 
 /**

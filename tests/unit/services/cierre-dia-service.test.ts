@@ -13,6 +13,7 @@ import type {
   PagoTarifa,
 } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 // Feature 37 — tests unit del CierreDiaService (mocks de repos + dobles de
 // ISignedUrlProvider/findCentralZonaId, sin DB/red). Cubre R1,R2,R3,R4,R5,R6,R7,R8,
@@ -25,7 +26,10 @@ const ZONA_MENSAJERO = "z-cartago";
 const ZONA_CENTRAL = "z-central";
 
 function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
-  return {
+  // Feature 208/T9: el desglose OBLIGATORIO se deriva del par escalar (una linea, como el
+  // backfill) salvo que el caso pase el suyo — asi las aserciones previas no cambian.
+  const { pagos, ...resto } = overrides;
+  const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
     gestionId: "g1",
     ordenId: "o1",
     numGuia: 10,
@@ -51,8 +55,9 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
     indemnizacion: null,
-    ...overrides,
+    ...resto,
   };
+  return conPagos(fila, pagos);
 }
 
 type Repo = ICierreDiaRepository;
@@ -1792,5 +1797,89 @@ describe("Feature 158 · listarCierreDia — la causa sí, el monto NO (R17, des
       expect(g.causaIncidente).toBeNull();
       expect(g.indemnizacion).toBeNull();
     }
+  });
+});
+
+// --- Feature 208 (T13, R31): el DTO lleva el desglose y CONSERVA el escalar ---------------
+
+describe("listarCierreDia — el DTO de gestion expone el desglose del recaudo (208/R31)", () => {
+  const MIXTA = [
+    { metodo: "efectivo" as const, monto: "5000.00" },
+    { metodo: "transferencia" as const, monto: "3000.00" },
+  ];
+
+  it("una entrega MIXTA llega al DTO con sus dos lineas, en el orden del enum", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "mix", montoRecibido: "8000.00", metodoPago: null, pagos: MIXTA }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.entregada[0].pagos).toEqual(MIXTA);
+  });
+
+  it("R31: `metodoPago` NO desaparece — la 209 lo retira, no esta ficha", async () => {
+    // Entre el merge de la 208 y el de la 209 la pantalla sigue pintando el campo escalar.
+    // Quitarlo aqui dejaria la app rota en esa ventana, y por eso este caso existe.
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({
+          gestionId: "uno",
+          montoRecibido: "5000.00",
+          metodoPago: "efectivo",
+          pagos: [{ metodo: "efectivo", monto: "5000.00" }],
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.entregada[0]).toMatchObject({
+      montoRecibido: "5000.00",
+      metodoPago: "efectivo",
+      pagos: [{ metodo: "efectivo", monto: "5000.00" }],
+    });
+  });
+
+  it("el mapper NO re-deriva el desglose: pasa EXACTAMENTE lo que trajo el repositorio", async () => {
+    // Una fila incoherente a proposito (el escalar dice `SINPE`, las lineas dicen otra cosa):
+    // si el DTO «arreglara» el desglose desde `metodoPago`, este caso lo caza.
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "raro", montoRecibido: "1.00", metodoPago: "SINPE", pagos: [] }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.entregada[0].pagos).toEqual([]);
+    expect(r.grupos.entregada[0].metodoPago).toBe("SINPE");
+  });
+
+  it("una gestion que no es entrega llega con el desglose vacio", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({
+          gestionId: "rep",
+          resultado: "reprogramada",
+          montoRecibido: null,
+          metodoPago: null,
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.reprogramada[0].pagos).toEqual([]);
   });
 });

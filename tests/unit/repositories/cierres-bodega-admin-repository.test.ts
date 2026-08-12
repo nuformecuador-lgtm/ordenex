@@ -68,6 +68,8 @@ function gestionDbRow(overrides: Record<string, unknown> = {}) {
     // `GESTION_ADMIN_SELECT`. `null` en un resultado que no sea `incidente`.
     causaIncidente: null,
     indemnizacion: null,
+    // Feature 208/R21/R23: el TERCER camino de lectura tambien trae el desglose.
+    pagos: [{ metodo: "efectivo", monto: new Prisma.Decimal("10.00") }],
     historialEstados: [], // feature 102: acotado al origen SLA (vacio = rechazo NO-SLA/otro resultado)
     ...overrides,
   };

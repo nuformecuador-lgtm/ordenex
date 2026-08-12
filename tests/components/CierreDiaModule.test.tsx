@@ -96,6 +96,8 @@ function makeGestion(
     tiendaNombre: "Tienda X",
     montoRecibido: null,
     metodoPago: null,
+    // Feature 208/R31: el DTO gana el desglose y CONSERVA el escalar de arriba.
+    pagos: [],
     motivo: null,
     fechaReprogramacion: null,
     evidenciaUrl: null,

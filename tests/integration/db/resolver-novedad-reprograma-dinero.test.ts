@@ -9,6 +9,7 @@ import {
   agregarIngresosPorConcepto,
   derivarIngresoOrden,
 } from "@/lib/utils/ingreso-ordenex";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 // Feature 100 (T5.3) [💰] — money-critical: la gestion sintetica `reprogramada` que crea la
 // reprogramacion de la tienda (`GestionOrdenRepository.reprogramarDesdeDevuelta`, `cierre_id null`,
@@ -33,7 +34,11 @@ const TARIFA_ORDENEX: TarifaVigente = {
 
 // Fila de gestion como la lee `findGestionesPendientes` (cierre_id null -> entra al proximo cierre).
 function gestion(overrides: Partial<CierreGestionPendienteRow>): CierreGestionPendienteRow {
-  return {
+  // Feature 208/T9: el desglose es OBLIGATORIO en la fila. Por defecto se deriva del par
+  // escalar (UNA linea, igual que el backfill), asi que los casos previos no cambian; un
+  // caso que quiera un cobro MIXTO pasa sus propias lineas en `overrides.pagos`.
+  const { pagos, ...resto } = overrides;
+  const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
     gestionId: "g1",
     ordenId: "o1",
     numGuia: 1,
@@ -59,8 +64,9 @@ function gestion(overrides: Partial<CierreGestionPendienteRow>): CierreGestionPe
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
     indemnizacion: null,
-    ...overrides,
+    ...resto,
   };
+  return conPagos(fila, pagos);
 }
 
 // La gestion sintetica de reprogramacion EXACTAMENTE como la persiste el repo (T1.2):

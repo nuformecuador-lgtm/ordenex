@@ -21,6 +21,7 @@ import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaReposit
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 // Feature 38 — tests unit del CierresAdminService (dobles de repo/zona/orden/
 // signedUrls, sin DB/red). Cubre R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11,R12,R13,R16.
@@ -52,7 +53,11 @@ function resumenRow(overrides: Partial<CierreAdminResumenRow> = {}): CierreAdmin
 }
 
 function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
-  return {
+  // Feature 208/T9: el desglose es OBLIGATORIO en la fila. Por defecto se deriva del par
+  // escalar (UNA linea, igual que el backfill), asi que los casos previos no cambian; un
+  // caso que quiera un cobro MIXTO pasa sus propias lineas en `overrides.pagos`.
+  const { pagos, ...resto } = overrides;
+  const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
     gestionId: "g1",
     ordenId: "o1",
     numGuia: 10,
@@ -78,8 +83,9 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
     indemnizacion: null,
-    ...overrides,
+    ...resto,
   };
+  return conPagos(fila, pagos);
 }
 
 type Repo = ICierresAdminRepository;

@@ -48,27 +48,42 @@ export function derivarIngresoBodega(
   return { ingresoByGestionId, total: total.toFixed(2) };
 }
 
-// R7/R8/R9: suma con Prisma.Decimal (exacto). Solo `entregada` con montoRecibido
-// aporta; reprogramada/devuelta/rechazada cuentan $0 (R8). Serializa a STRING (R9).
+// R7/R8/R9: suma con Prisma.Decimal (exacto). Solo `entregada` aporta;
+// reprogramada/devuelta/rechazada cuentan $0 (R8). Serializa a STRING (R9).
+//
+// Feature 208 (R24-R28/R30): la fuente del reparto por metodo son las LINEAS del desglose
+// (`g.pagos`), no el par escalar `montoRecibido`/`metodoPago`. Cada linea cae en el balde de
+// SU metodo, asi que una entrega cobrada 5.000 en efectivo + 3.000 por transferencia aporta
+// 5.000 a `efectivo` y 3.000 a `transferencia`, y no 8.000 a un solo balde.
+//
+// Esto NO es cosmetica: `cierre_dia.total_efectivo` es la `E` del `min(P, E)` del pago al
+// mensajero (feature 44). Sumar de mas aqui no produce un numero feo en pantalla — le paga de
+// mas o de menos a una persona. Por eso el reparto se prueba con mutaciones
+// (`tests/unit/utils/cierre-totales-pagos.test.ts`) y no con un test de humo.
+//
+// Una gestion `entregada` SIN lineas no aporta a ningun balde (R26), que es el equivalente
+// exacto del `default: break` defensivo que tenia el switch escalar para una entrega sin
+// metodo. Y no hay fallback al par escalar (design §3.1): si una proyeccion se olvidara del
+// desglose, el total sale CERO —ruidoso— en vez de plausible.
 export function computeTotales(gestiones: CierreGestionPendienteRow[]): CierreTotales {
   let efectivo = new Prisma.Decimal(0);
   let simpe = new Prisma.Decimal(0);
   let transferencia = new Prisma.Decimal(0);
   for (const g of gestiones) {
-    if (g.resultado !== "entregada" || g.montoRecibido === null) continue; // R8
-    const monto = new Prisma.Decimal(g.montoRecibido);
-    switch (g.metodoPago) {
-      case "efectivo":
-        efectivo = efectivo.plus(monto);
-        break;
-      case "SINPE":
-        simpe = simpe.plus(monto);
-        break;
-      case "transferencia":
-        transferencia = transferencia.plus(monto);
-        break;
-      default:
-        break; // entregada sin metodo (dato inconsistente): no suma (defensivo)
+    if (g.resultado !== "entregada") continue; // R8/R25
+    for (const p of g.pagos) {
+      const monto = new Prisma.Decimal(p.monto);
+      switch (p.metodo) {
+        case "efectivo":
+          efectivo = efectivo.plus(monto);
+          break;
+        case "SINPE":
+          simpe = simpe.plus(monto);
+          break;
+        case "transferencia":
+          transferencia = transferencia.plus(monto);
+          break;
+      }
     }
   }
   const general = efectivo.plus(simpe).plus(transferencia);

@@ -1,0 +1,11 @@
+-- DOWN: revierte EXACTAMENTE migration.sql de esta carpeta (R9).
+-- Suelta la tabla nueva (y con ella el backfill, sus indices, su unique y su FK, que caen
+-- con la tabla).
+-- NO toca gestion_orden: `monto_recibido` y `metodo_pago` y sus datos quedan intactos, por
+-- eso revertir NO pierde el recaudo historico (el par escalar sigue siendo la fuente de
+-- verdad tras el rollback).
+-- Lo que SI se pierde al revertir son los desgloses MIXTOS creados despues de la migracion:
+-- una entrega cobrada con dos metodos conserva su TOTAL en `monto_recibido`, pero su reparto
+-- por metodo desaparece (y `metodo_pago` es NULL en esas gestiones por R19). Es el reverso
+-- exacto de la feature.
+DROP TABLE IF EXISTS "gestion_orden_pago";

@@ -14,6 +14,7 @@ import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaReposit
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ITarifaZonaMensajeroRepository } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 // Feature 37 — tests de integracion de las Server Actions del cierre (patron
 // asignacion-satelite-action.test.ts). Cubre `unauthenticated` sin sesion,
@@ -115,7 +116,11 @@ function realService(repo: ICierreDiaRepository): ICierreDiaService {
 }
 
 function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
-  return {
+  // Feature 208/T9: el desglose es OBLIGATORIO en la fila. Por defecto se deriva del par
+  // escalar (UNA linea, igual que el backfill), asi que los casos previos no cambian; un
+  // caso que quiera un cobro MIXTO pasa sus propias lineas en `overrides.pagos`.
+  const { pagos, ...resto } = overrides;
+  const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
     gestionId: "g1",
     ordenId: "o1",
     numGuia: 10,
@@ -141,8 +146,9 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
     indemnizacion: null,
-    ...overrides,
+    ...resto,
   };
+  return conPagos(fila, pagos);
 }
 
 describe("cierre-dia actions — unauthenticated en el borde", () => {

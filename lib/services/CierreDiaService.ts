@@ -596,7 +596,11 @@ export function toDetalleDTO(
     tiendaNombre: g.tiendaNombre,
     resultado: g.resultado,
     montoRecibido: g.montoRecibido,
+    // Feature 208/R31: el escalar se CONSERVA (lo pinta la UI de hoy) y el desglose viaja a su
+    // lado (lo consume la 209). Passthrough puro: el mapper no re-deriva ni normaliza nada —
+    // el reparto por metodo ya lo decidio el repositorio al leer las lineas.
     metodoPago: g.metodoPago,
+    pagos: g.pagos,
     motivo: g.motivo,
     fechaReprogramacion: g.fechaReprogramacion,
     evidenciaUrl: g.evidenciaStoragePath ? (urlByPath[g.evidenciaStoragePath] ?? null) : null,

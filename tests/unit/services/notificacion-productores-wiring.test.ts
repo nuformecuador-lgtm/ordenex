@@ -148,6 +148,7 @@ const GESTION_PENDIENTE = {
   causaDevolucion: null,
   pagoMensajero: null,
   ingresoBodegaRechazo: null,
+  pagos: [], // feature 208/R21: gestion sin cobro -> cero lineas de desglose
   createdAt: new Date("2026-07-27T10:00:00.000Z"),
 };
 

@@ -3,6 +3,7 @@ import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/IC
 import type { PagoTarifa } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import { derivarIngresoBodega } from "@/lib/utils/cierre-totales";
 import { ingresoBodegaPorResultado } from "@/lib/utils/ingreso-bodega";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 // Feature 99 (T15) [💰] — cierra el CIRCULO del dinero de la Option A SIN codigo monetario nuevo.
 // La gestion sintetica `rechazada` (cierre_id null) que crea `DevolucionSlaRepository.escalarDevueltaSla`
@@ -16,7 +17,11 @@ const TARIFA: PagoTarifa = { cobroEntregado: "1500.00", cobroRechazado: "800.00"
 
 // Fila de gestion como la lee `findGestionesPendientes` (cierre_id null -> entra al proximo cierre).
 function gestion(overrides: Partial<CierreGestionPendienteRow>): CierreGestionPendienteRow {
-  return {
+  // Feature 208/T9: el desglose es OBLIGATORIO en la fila. Por defecto se deriva del par
+  // escalar (UNA linea, igual que el backfill), asi que los casos previos no cambian; un
+  // caso que quiera un cobro MIXTO pasa sus propias lineas en `overrides.pagos`.
+  const { pagos, ...resto } = overrides;
+  const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
     gestionId: "g1",
     ordenId: "o1",
     numGuia: 1,
@@ -42,8 +47,9 @@ function gestion(overrides: Partial<CierreGestionPendienteRow>): CierreGestionPe
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
     indemnizacion: null,
-    ...overrides,
+    ...resto,
   };
+  return conPagos(fila, pagos);
 }
 
 describe("Feature 99 [💰] · el snapshot de la 56 cobra la gestion sintetica del escalado SLA (R20/R22/R23)", () => {

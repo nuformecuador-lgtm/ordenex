@@ -32,7 +32,22 @@ export interface CierreGestionPendienteRow {
   tiendaNombre: string;
   resultado: GestionResultado;
   montoRecibido: string | null;
+  // Feature 208/R31: columna DEPRECADA (la 209 decide su retiro). Se CONSERVA mientras la
+  // presentacion actual la consuma: `null` cuando la gestion tiene 0 o >=2 lineas de pago.
   metodoPago: MetodoPagoValue | null;
+  /**
+   * Feature 208 (R21/R22): DESGLOSE del recaudo al cliente — 0..N lineas `(metodo, monto)`,
+   * money-safe STRING escala 2, en el orden de declaracion del enum (`efectivo`, `SINPE`,
+   * `transferencia`), que es el que devuelve `orderBy: { metodo: "asc" }` sobre un enum nativo.
+   *
+   * OBLIGATORIO y SIN FALLBACK al par escalar (`montoRecibido`/`metodoPago`), a proposito
+   * (design §3.1 y alternativa descartada B). `computeTotales` suma EXCLUSIVAMENTE estas
+   * lineas: una proyeccion que se olvide de seleccionarlas da CERO —escandaloso e inmediato—
+   * en vez de un total «plausible» calculado por el camino viejo, que en un cierre mixto
+   * inflaria la `E` del `min(P, E)` del pago al mensajero (feature 44) sin que nadie lo note.
+   * `[]` cuando la gestion no tiene ninguna linea (entrega sin cobro, o no `entregada`).
+   */
+  pagos: { metodo: MetodoPagoValue; monto: string }[];
   motivo: string | null;
   fechaReprogramacion: string | null; // ISO date (YYYY-MM-DD)
   evidenciaStoragePath: string | null;

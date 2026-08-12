@@ -9,6 +9,110 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🟡 EN CURSO 2026-08-12 — features **208** (backend) y **209** (frontend), fase 1 (spec)
+
+Pago múltiple en una entrega: hoy el recaudo es un par único `monto_recibido` + `metodo_pago`
+(`db/schema.prisma:726-727`), así que una entrega cobrada en efectivo **y** transferencia no se
+puede registrar sin mentir en los totales por método. Rama `feature/208-pago-multiple-entrega`,
+nacida de `origin/dev` (c23c118a). `spec_author` corriendo sobre la 208.
+
+**Evaluación (F1.0).** Alta como fullstack y **partida en 208 `backend` + 209 `frontend`** por la
+regla F1.0. La costura no es burocrática: el panel no puede pintar un desglose que aún no existe.
+La 209 queda con `depends_on: 208`.
+
+**Renumerada de 200 a 208 antes de publicar nada.** La ficha se dio de alta estando en `ux`, que
+iba **21 commits por detrás de `dev`**, y allí el id 200 ya estaba tomado por «wallet - rediseño
+de presentación» (`done`). El máximo real en `dev` era 207. Es el drift de sesiones paralelas de
+siempre: **mirar `dev` antes de asignar un id, no la rama en la que uno está parado.**
+
+**Las cuatro decisiones de la puerta humana, ya cerradas** — no reabrirlas: **[D1]** alcance solo
+el recaudo, `LiquidacionPago` (172) intacta; **[D2]** `@@unique([gestion_id, metodo])`, sin
+duplicados; **[D3]** sin número de referencia en la línea; **[D4]** las descargas concatenan los
+métodos en la celda escalar, sin cambiar filas ni ancho del CSV.
+
+**Restricción que el spec debe honrar:** entre el merge de la 208 y el de la 209 el panel viejo
+sigue mandando un método **escalar**. El borde tiene que aceptar las dos formas y normalizar la
+escalar a una fila (aditivo y retrocompatible, patrón de la 199), o queda una ventana con la app
+rota en producción.
+
+**El censo se corrigió antes de especificar.** La primera versión de la nota decía «~60 archivos»
+y mandaba a tocar código **inmune**: `CajaCodFeedService` (lee el ledger, no las gestiones, por
+diseño explícito R12), `WalletTiendaFeedService` (su `select` es solo el total),
+`RecaudoAnaliticaRepository` / `AnaliticaFinancieraService` (leen los `cierre_dia.total_*`, y
+bajar a `gestion_orden` les está *prohibido*). El radio real son tres bloques: schema+migración,
+el borde de escritura, y `computeTotales` con sus tipos y `select`.
+
+**El riesgo no es trabajo, es consecuencia.** `cierre_dia.totalEfectivo` es la **E** del
+`min(P, E)` del pago al mensajero (44). La fórmula no cambia; el valor de E sí. Un desglose mal
+sumado no da un número feo en pantalla: **le paga de menos o de más a una persona.** El spec
+exige tests de mutación ahí, no de humo.
+
+**Puerta F1.4 SUPERADA el 2026-08-12.** Spec aprobado: 33 requisitos EARS, 18 tasks en 4 tandas,
+trazabilidad `R → test` completa. La 208 pasa a `in_progress` y el `implementer` está corriendo.
+Alternativa descartada en el diseño: columna `JSONB pagos` — no sostiene el `@@unique` de [D2]
+sin trigger, deja el monto como float JSON sin validar contra el enum, no agrega en SQL, y va
+contra el precedente de `gestion_orden_evidencia` (119).
+
+**Las tres preguntas del spec, respondidas y cerradas:** **[Q1]** backfill **fiel al dato** (sin
+filtrar por `resultado`: los totales no cambian porque R25 ignora las no-entregadas, y no se
+pierde histórico); **[Q2]** **la 209 filtra** sus filas vacías — R11 se queda, un monto no
+positivo es error de validación y no una línea de 0; **[Q3]** el retiro va en **ficha aparte**, la
+**210**, dada de alta hoy con `depends_on: 209`.
+
+**Dos hallazgos del spec que el censo del leader no tenía**, y que conviene no re-descubrir:
+`lib/types/gestion-orden.ts` **viaja al bundle del navegador** (el panel valida con el mismo
+`gestionarSchema`, `GestionarOrdenPanel.tsx:334-344`), así que no puede importar `@prisma/client`
+y la suma del borde va en **céntimos enteros** en un util puro; y hay un **tercer** camino de
+lectura, `CierresBodegaAdminRepository`, además de cierre-día y cierres-admin (R23).
+
+**Cambio visible aprobado a sabiendas:** R19 escribe `metodo_pago = NULL` cuando hay cero o 2+
+líneas. Hoy una entrega *sin cobro* guarda `"efectivo"` a la fuerza (`GestionarOrdenPanel.tsx:331`),
+así que entre el merge de la 208 y el de la 209 esa gestión se verá como **«—»**. Es más correcto,
+pero no lo reportes como defecto: se aprobó viéndolo.
+
+**🔴 IMPLEMENTADA Y RECHAZADA POR EL REVIEWER (2026-08-12).** Un solo bloqueante, verificado por el
+leader antes de aceptarlo: **la migración nunca tocó un motor de Postgres.** El implementer abortó
+`migrate dev` correctamente (la base local está intacta y sigue divergente por causas ajenas:
+`liquidacion_reparto` pendiente y `orden_historial_origen_deshacer_asignacion` con otro timestamp),
+pero dejó R1/R2/R4/R6/R7/R9 sostenidos **solo por regex sobre el texto del SQL**. Y el repo tenía
+la vía: desde la feature 205 existe `enTransaccionRevertida` (`tests/integration/db/_postgres-real.ts:127`)
+con el molde completo en `liquidacion-reparto-migration.test.ts` — corre el `migration.sql` **real**
+en un esquema temporal dentro de una transacción siempre revertida, sin aplicar nada y sin tocar
+`_prisma_migrations`. Es la migración inmediatamente anterior y sus tests salen verdes. **Ese es el
+patrón para toda migración de aquí en adelante: no aplicarla no es excusa para no ejecutarla.**
+
+Lo que el reviewer sí dio por bueno, verificándolo de primera mano: gate completo verde y **no
+degradado** (1078 archivos / 13524 tests, 0 rojos, 0 `unhandled errors`, 564 s), mapa `R → test`
+**33/33** sin tests vacíos, y las mutaciones reproducidas — incluida una suya que el implementer no
+había probado: **intercambiar los baldes `SINPE` ↔ `transferencia`**, la más peligrosa porque *no
+altera el total general* ni la invariante R28. Dio 9 rojos. No hay agujero ahí. Árbol restaurado
+con sha256 idéntico.
+
+**Cuatro menores en corrección**: la frase de `impl_208.md` §6.2 (para `montoRecibido = 0` con
+escalar `efectivo` el valor **no** es idéntico al de hoy: pasa a `NULL` — de ahí que la columna
+deprecada quede con **dos semánticas**, munición para la 210); el nombre `cierre_maestro`; y la
+guardia de R30, que omite el tramo de revalidación del servicio. `lib/utils/lineas-pago.ts` quedó
+**avalado**, no es alcance de más.
+
+**Dato ajeno que conviene no olvidar:** sin `jq`, los pasos 3 y 4 de `init.sh` se omiten con `warn`
+y la corrida llega a `init OK` **sin evaluarlos**. Un `init OK` no prueba que esos pasos corrieran.
+
+**Segunda sesión en el mismo checkout.** Analítica, novedades, `menu-visibility.ts`,
+`e2e/analitica-roles.spec.ts` y sus tests están modificados **sin commitear** junto a lo de la 208.
+El commit tendrá que ser selectivo, archivo por archivo: `git add -A` se llevaría trabajo ajeno.
+
+**Error propio corregido en el camino:** `cierre_maestro` **no existe** — el segundo modelo con los
+tres `total_*` es `CierreBodega` (`db/schema.prisma:996`). El nombre equivocado lo escribió el
+leader en la ficha y de ahí se propagó al spec (R32 y design §6). Corregido en `feature_list.json`;
+el spec lo corrige el implementer. No invalida R32: la guardia recorre todos los `model` y exige
+exactamente `["CierreBodega","CierreDia"]`.
+
+Y las fichas 208/209 se dieron de alta con **dos espacios
+menos de indentación** que las otras 204 de `feature_list.json` — JSON válido, formato
+inconsistente. Reescritas con la sangría del resto; la comprobación de que solo existe una forma
+de apertura de ficha (`    {`) es ahora parte del bookkeeping.
+
+
 ## 🔴 EN CURSO 2026-08-11/12 — feature **205**, rechazada por el reviewer y en corrección
 
 Pagar la cuenta por pagar del mensajero **desde `/wallet/mensajeros`**, imputando el importe a
