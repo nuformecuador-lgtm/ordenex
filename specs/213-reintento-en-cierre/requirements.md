@@ -8,12 +8,17 @@ Requisitos en notación EARS. Cada `R<n>` es verificable con un test. Feature
 > automático del cron SLA (99) y, por esa vía, el `cobroRechazado` de la 56
 > (dinero real). El mapa de estados NO cambia.
 >
-> **Estado de las 12 preguntas (2026-08-13, segunda ronda):** ocho **CERRADAS**
-> (Q1, Q2, Q6, Q7, Q8, Q9, Q11, Q12); **cuatro siguen ABIERTAS y bloquean
-> requisitos**: **Q3** (lazo de `rechazada`), **Q4** (efecto retroactivo), **Q5**
-> (cierre que nunca se aprueba — **se AGRAVA con la decisión de Q2**) y **Q10**
-> (KPI de analítica persistido). Los requisitos que dependen de ellas siguen
-> marcados `⛔ BLOQUEADO POR Qn`. Ninguna de esas cuatro se decide aquí.
+> **Estado de las 12 preguntas (2026-08-13, tercera ronda):** **diez CERRADAS**
+> (Q1, Q2, Q3, Q5, Q6, Q7, Q8, Q9, Q11, Q12). **Siguen ABIERTAS dos:** **Q4**
+> (efecto retroactivo — no es una decisión, es una MEDICIÓN pendiente de ejecutar;
+> la consulta está lista en `design.md §7.6`) y **Q10** (KPI de analítica
+> persistido, bloquea R24). Ninguna de las dos se decide aquí.
+>
+> **Estado de la implementación:** el commit **7d9471c3** ya implementa el criterio
+> nuevo (30 requisitos; bitácora en `progress/impl_213.md`). De aquí en adelante
+> este documento describe lo que **EXISTE**, no un plan. Lo que la tercera ronda
+> añade —el **discriminador de las gestiones SINTÉTICAS** (R18, R12, R34)— **NO
+> está implementado** y va marcado como tal en cada requisito.
 
 ## La decisión del humano, textual (2026-08-13)
 
@@ -51,6 +56,42 @@ contradice el código; se verificó abriendo los archivos):
 | **D10** | **El conteo ACUMULA sobre todos los cierres aprobados de la orden**, no solo el último. | Sin acumulación ninguna orden alcanzaría el umbral (default 3) y la feature dejaría el escalado muerto. | **Q8** |
 | **D11** | **Cuenta el RESULTADO ya ocurrido, no dónde está la orden ahora.** SI entre la gestión y la aprobación la orden se reprogramó por la tienda (#22), se liberó por SLA (#19/#20) o se recuperó a mano (#23/#24), el resultado sigue contando. | El conteo mide lo que pasó, no el estado actual. El predicado no mira `orden.estatus_id`. | **Q11** |
 | **D12** | **El contador es MONÓTONO CRECIENTE: se declara como propiedad.** | Verificado: `aprobado` no está en `ESTADOS_RESOLUBLES` (`CierresAdminRepository.ts:39`) ni en `ESTADOS_REABRIBLES` (`:44`) ⇒ un cierre aprobado no puede salir de ese estado; y la anulación de una gestión está guardada por `cierre_id: null` (`CierreDiaRepository.ts:728`) ⇒ una gestión ya contada no puede anularse. **Es un cambio de comportamiento observable**: hoy el número BAJA al deshacer una gestión (`160/R5`). | **Q12** |
+
+## Tercera ronda de decisiones (2026-08-13) — ENTRADA, no sugerencia
+
+| # | Decisión del humano, textual | Lectura | Cierra |
+| --- | --- | --- | --- |
+| **D13** | «el cron debe validar y si ya esta en 3 actualizar el estado sin aumentar el conteo» | El escalado del cron SLA transiciona a `rechazada` **sin incrementar el contador**: la **gestión sintética** que crea ese escalado **NO cuenta como intento**. El cron valida el conteo contra el umbral y, si ya lo alcanzó, cambia el estado y nada más. | **Q3** → R18 |
+| **D14** | «el cierre se cerrara en algun momento por un usuario» | **Se ACEPTA el riesgo de Q5.** NO se implementa ninguna de las tres mitigaciones (M1 contar también al vencer/solicitar, M2 tope de liberaciones, M3 alerta). Se asume que toda cierre acaba resolviéndose por acción de una persona, y por tanto el conteo anclado en `aprobado` termina ocurriendo. → §Supuesto operativo declarado. | **Q5** |
+
+---
+
+## ⚠️ SUPUESTO OPERATIVO DECLARADO (D14) — de qué depende que esta feature funcione
+
+**El conteo solo avanza si alguien resuelve el cierre.** Esta feature no tiene
+ningún mecanismo propio que garantice que un cierre llegue a `aprobado`: depende de
+que una persona lo apruebe, o de que el mensajero lo re-solicite y luego un admin lo
+apruebe. El humano **acepta ese supuesto explícitamente** («el cierre se cerrará en
+algún momento por un usuario») y por eso **no se implementa ninguna mitigación**.
+
+**Qué pasa si el supuesto NO se cumple:** la orden queda con conteo **0**
+indefinidamente; el cron SLA lee 0 < umbral y la **libera a bodega una y otra vez,
+sin escalar jamás** a `rechazada`. Consecuencia de negocio: esa orden gira
+indefinidamente y **el rechazo nunca se cobra** (el `cobroRechazado` de la 56 no
+llega a emitirse por esa vía).
+
+**Agravante ya medido:** un cierre `vencido` **no es aprobable directamente**
+(`ESTADOS_RESOLUBLES = ["solicitado"]`, `lib/repositories/CierresAdminRepository.ts:39`;
+la feature 111/R15 retiró `vencido` a propósito). Igual un `rechazado`. Los dos
+necesitan un **paso humano previo**: que el mensajero lo re-solicite
+(`CierreDiaService.ts:401-407` y `:414-419`) o que un admin use la válvula de escape
+`forzarSolicitudVencido` (`CierresAdminRepository.ts:879`). Es decir: el supuesto no
+pide «que alguien apruebe», pide **hasta dos acciones humanas** en los casos
+`vencido` y `rechazado`.
+
+Las tres mitigaciones descartadas **se conservan escritas** en `design.md §7bis`
+con su coste, para que quien vuelva a esto no tenga que redescubrirlas. Si el
+supuesto se rompe en producción, ahí está el menú.
 
 ---
 
@@ -269,10 +310,24 @@ incremento DEBE ocurrir según R1/R3.
 
 **R12 — La reprogramación de la tienda sigue sin sumar.** SI una orden `devuelta`
 se reprograma desde la tienda (arista #22, `reprogramacion_tienda`), ENTONCES el
-sistema NO DEBE sumar un intento por esa reprogramación. *(El motivo cambia: ya no
-es «para no contar doble con la fila `devuelta` vigente», sino que esa
-reprogramación no es un resultado de gestión de un cierre. La conclusión de
-`160/R2` sobrevive; su razonamiento se reescribe.)*
+sistema NO DEBE sumar un intento por esa reprogramación, **ni siquiera cuando la
+gestión sintética que crea quede vinculada a un cierre aprobado**.
+
+> ⚠️ **INCUMPLIDO en 7d9471c3.** `GestionOrdenRepository.reprogramarDesdeDevuelta`
+> (`:525-535`) crea una gestión sintética con `resultado: reprogramada`,
+> `cierre_id: null` y `mensajero_id` = el de la última `devuelta` vigente (`:509-513`).
+> `CierreDiaRepository.crearCierre` vincula por `{ mensajeroId, cierreId: null,
+> anuladaAt: null }` (`:480-483`), así que esa gestión **entra al siguiente cierre
+> de ese mensajero** y, al aprobarse, el predicado vigente la cuenta: la orden
+> sumaría 2 (su `devuelta` + la reprogramación de escritorio de la tienda), que es
+> exactamente el doble conteo que `160/R2` evitaba. El test que hoy cubre R12
+> (`criterio-intento-entrega.test.ts` · «R12/R14: ninguna arista del mapa decide por
+> sí sola un intento») afirma algo cierto pero **distinto** de lo que R12 exige: mide
+> el mapa, no el predicado. Se corrige con el mismo discriminador de R18 → **R34**.
+
+*(El motivo cambia respecto de `160/R2`: ya no es «para no contar doble con la fila
+`devuelta` vigente», sino que **una reprogramación de escritorio no es una visita**.
+La conclusión sobrevive; el razonamiento se reescribe.)*
 
 **R13 — Sin criterio residual por transición.** El sistema NO DEBE conservar
 ningún camino de lectura, activo o inactivo, que derive el conteo de intentos de
@@ -303,10 +358,20 @@ cambiar qué gestiones generan el ingreso de bodega por rechazo, ni su monto, ni
 instante en que se snapshotea. Esta feature solo puede cambiar CUÁNDO una orden
 alcanza el umbral, nunca cuánto se cobra por alcanzarlo.
 
-**R18 — El lazo del escalado se declara.** ⛔ **BLOQUEADO POR Q3.** El sistema
-DEBE declarar explícitamente si el resultado `rechazada` producido por el propio
-escalado del cron SLA suma un intento a la orden que lo causó, y DEBE comportarse
-de forma idéntica en cada corrida (sin depender de cuántas veces corra el cron).
+**R18 — El escalado del cron NO incrementa el contador.** *(DESBLOQUEADO por D13.
+**NO implementado en 7d9471c3** — ver R34.)*
+
+- (a) CUANDO el cron SLA escala una orden a `rechazada`, el sistema DEBE cambiar el
+  estado **sin** que el conteo de intentos de esa orden aumente por causa de ese
+  escalado, ni en ese momento ni más tarde.
+- (b) SI la gestión sintética creada por el escalado
+  (`DevolucionSlaRepository.escalarDevueltaSla`) queda vinculada a un cierre y ese
+  cierre se aprueba, ENTONCES el sistema NO DEBE contarla como intento de entrega.
+- (c) El sistema DEBE seguir comparando el conteo contra el umbral ANTES de escalar
+  (validar y, si ya lo alcanzó, transicionar), sin cambiar la condición de escalado.
+- (d) El sistema NO DEBE alterar por esto el ingreso de bodega por rechazo que esa
+  gestión sintética genera (R17): **deja de contar como INTENTO, sigue cobrando como
+  RECHAZO**. Son dos cosas distintas y solo cambia la primera.
 
 **R19 — Efecto retroactivo declarado y medido.** ⛔ **BLOQUEADO POR Q4.** ANTES
 de activar el criterio nuevo, el sistema DEBE poder informar cuántas órdenes en
@@ -393,6 +458,23 @@ observable respecto del comportamiento vigente, donde deshacer una gestión hac�
 BAJAR el número (`160/R5`): tras esta feature, una gestión solo puede contar
 cuando ya no es anulable.
 
+**R34 — Solo las gestiones de una VISITA REAL cuentan; las SINTÉTICAS no.**
+*(Generaliza R12 y R18-b. **NO implementado en 7d9471c3**.)*
+
+- (a) El sistema DEBE contar como intento únicamente el resultado de una gestión
+  originada por la **gestión de un mensajero sobre una orden en reparto**, y NO DEBE
+  contar las gestiones sintéticas que otros flujos crean para mover dinero o estado
+  —hoy: la del escalado SLA (`escalado_devuelta_sla`) y la de la reprogramación de
+  la tienda (`reprogramacion_tienda`)—.
+- (b) La distinción DEBE apoyarse en un dato ya persistido, **sin columna nueva y
+  sin migración** (R27).
+- (c) La distinción DEBE expresarse como lista de **INCLUSIÓN**: una familia futura
+  de gestión sintética NO DEBE empezar a contar sola. SI aparece una familia nueva,
+  ENTONCES no cuenta hasta que alguien lo decida explícitamente.
+- (d) SI el dato que distingue no existiera para una gestión antigua, ENTONCES el
+  sistema DEBE optar por NO contarla: contar de menos retrasa el escalado
+  (inofensivo); contar de más cobra un rechazo antes de tiempo.
+
 **R33 — `sin_gestionar` NO cuenta, y la limitación queda declarada (D6).** El
 sistema NO DEBE contar como intento el corte automático (`en_reparto →
 sin_gestionar`) ni su liberación al aprobar (`sin_gestionar → en_bodega_*`), y NO
@@ -411,12 +493,14 @@ Ningún requisito puede quedar sin dueño; el reviewer rechaza si falta uno.
 
 ---
 
-## PREGUNTAS CERRADAS (2026-08-13, segunda ronda)
+## PREGUNTAS CERRADAS (2026-08-13)
 
-Ocho de las doce. Cada una con quién la cerró y dónde vive ahora la decisión.
+Diez de las doce. Cada una con quién la cerró y dónde vive ahora la decisión.
 
 | Q | Respuesta | Quién | Dónde |
 | --- | --- | --- | --- |
+| **Q3** | El escalado del cron **no incrementa** el contador: la gestión sintética del escalado no cuenta como intento. Sigue cobrando como rechazo. | Humano | **D13**, R18, R34 |
+| **Q5** | **Riesgo ACEPTADO**, sin mitigación: «el cierre se cerrará en algún momento por un usuario». | Humano | **D14**, §Supuesto operativo declarado |
 | **Q1** | Se deriva de `gestion_orden` (`cierre_id` + `resultado` + `anulada_at`), SIN migración. `160/R7` se conserva; materializar queda prohibido. | Humano | **D7**, R27 |
 | **Q2** | Suma al **APROBAR** el cierre (`cierre_dia.estado = 'aprobado'`). No al crear/solicitar, no al vencer. | Humano | **D8**, R3 |
 | **Q6** | `sin_gestionar` NO cuenta. La lista se queda en `rechazada`/`devuelta`/`reprogramada`. | Humano | **D6**, R33 |
@@ -428,16 +512,12 @@ Ocho de las doce. Cada una con quién la cerró y dónde vive ahora la decisión
 
 ---
 
-## PREGUNTAS ABIERTAS (4) — van al humano
+## PREGUNTAS ABIERTAS (2)
 
-Ninguna se decide aquí. Cada una bloquea al menos un requisito. Las opciones con
-su coste están en `design.md §7` (Q4), `§7bis` (Q5) y `§8` (Q10).
+Ninguna se decide aquí. Q4 no es una decisión pendiente sino una **medición sin
+ejecutar**; Q10 sí es una decisión y bloquea R24. Las opciones con su coste están en
+`design.md §7.6` (Q4) y `§8` (Q10).
 
-- **Q3 — El lazo de `rechazada`.** ⛔ bloquea **R18**. El cron escala a `rechazada` cuando el conteo
-  alcanza el umbral y crea una gestión sintética `resultado: rechazada` con
-  `cierre_id NULL` (`DevolucionSlaRepository.ts:145-155`), que el PRÓXIMO cierre
-  vinculará y que, al aprobarse ese cierre (D8), sumaría +1 a la orden que lo
-  causó. ¿El escalado incrementa lo que lo causó?
 - **Q4 — Efecto retroactivo.** ⛔ bloquea **R19**. Al ser derivado, cambiar el
   criterio cambia el conteo de TODAS las órdenes históricas de golpe, incluidas las
   que hoy reposan en `devuelta` esperando el SLA. Con D8 el conteo de casi toda
@@ -445,16 +525,6 @@ su coste están en `design.md §7` (Q4), `§7bis` (Q5) y `§8` (Q10).
   adelanta. ¿Se acepta? **La consulta de medición, lista para pegar en una consola
   contra la base real, está escrita en `design.md §7.6`** (solo lectura); falta
   EJECUTARLA y pegar el resultado con fecha.
-- **Q5 — Una `devuelta` cuyo cierre nunca se aprueba. ⚠️ SE AGRAVA CON D8.**
-  ⛔ bloquea el cierre de la feature. Con el conteo anclado en `aprobado`, una
-  orden cuyo cierre queda `rechazado`, `vencido` sin resolver o `solicitado` sin
-  atender se queda **en 0 indefinidamente**: el cron SLA la libera a bodega una y
-  otra vez y **no escala jamás** ⇒ nunca se rechaza y nunca se cobra el rechazo.
-  Y no es un caso de laboratorio: solo `solicitado` es aprobable
-  (`ESTADOS_RESOLUBLES = ["solicitado"]`, `CierresAdminRepository.ts:39`), así que
-  un `vencido` o un `rechazado` necesitan un paso HUMANO extra antes de poder
-  aprobarse. Los caminos medidos, sus efectos y tres mitigaciones con su coste
-  están en **`design.md §7bis`**. ¿Se acepta el riesgo, o se añade mitigación?
 - **Q10 — Analítica: KPI persistido.** ⛔ bloquea **R24**. `primer_intento_ok` se calcula con este
   conteo (`AnaliticaRollupService.ts:238`) y se PERSISTE en `analytics_daily`
   (CHECK `primer_intento_ok <= entregas`,
@@ -475,3 +545,10 @@ Si al implementar aparece un camino que haga BAJAR el conteo de una orden
 —anulación administrativa fuera de la ventana, borrado físico de `gestion_orden`,
 o un cierre que salga de `aprobado`— **R32 se rompe y hay que volver a la puerta**,
 no parchear el test.
+
+**Hallazgo de la tercera ronda, del que sale R34.** Al buscar el discriminador que
+D13 exige para la gestión sintética del escalado, se encontró que **la misma laguna
+afecta a la reprogramación de la tienda** (R12): las DOS gestiones sintéticas del
+sistema entran hoy al conteo por la puerta de atrás. Q3 no era un caso aislado; era
+la primera mitad de un agujero. El discriminador que resuelve las dos existe y está
+en `design.md §3.4`.
