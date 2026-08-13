@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { componer, contraste, paleta, token } from "../../fixtures/contraste";
 import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 /**
@@ -222,5 +223,583 @@ describe("feature 217 — censo de fuente de la hoja de la factura", () => {
     // texto — es la deuda que la ficha 216 tiene abierta.
     expect(cuantas(hoja, /\bborder-foreground\b/)).toBeGreaterThanOrEqual(1);
     expect(hoja).not.toMatch(/\bborder-primary\b/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// EL INVENTARIO CERRADO DE PARES (tinta, fondo)  ·  R6, R7, R16
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Este inventario SUSTITUYE al barrido de navegador, que la puerta humana descartó (D9): no
+ * existe en el repo un script que barra la app, el único candidato disponible no tiene
+ * autocontroles, y esa jornada ya acumuló tres mediciones falsas de herramientas que rellenan
+ * lo que no saben.
+ *
+ * A cambio, se enumeran **los pares (tinta, fondo) que las dos hojas usan de verdad** y se miden
+ * con la aritmética validada, en los DOS temas. Tres reglas que no se pueden saltar:
+ *
+ *  1. **El hover cuenta como par propio.** La fila de gestión cambia de fondo bajo el cursor
+ *     (`hover:bg-muted/50`) y eso mueve tres pares. La 210 encontró un defecto que SÓLO existía
+ *     con el cursor encima; medir sólo lo estático es exactamente cómo se le escapó a la 208.
+ *  2. **Los exentos FIGURAN, marcados.** Un exento que desaparece de la lista es indistinguible
+ *     de un par que nadie miró.
+ *  3. **Suelo por par**, no sólo umbral: se anota lo medido al cerrar el inventario y ningún
+ *     cambio de token puede bajarlo. Es la lección de la 210 — `--warning-strong` pasaba AA por
+ *     una centésima, y una guardia de sólo umbral habría dejado revertirla sin ponerse roja.
+ *
+ * Y el CIERRE es parte del requisito, no un adorno: si mañana alguien pinta un texto de la hoja
+ * con una pareja que nadie listó, lo caza el cierre (una utilidad sin par = rojo), no la
+ * aritmética.
+ */
+
+/** El fondo real sobre el que se lee una tinta. */
+type Fondo =
+  | { clase: "opaco"; token: string }
+  | {
+      clase: "capa";
+      color: { de: "token" | "paleta"; nombre: string };
+      alpha: number;
+      sobre: string;
+    };
+
+interface Par {
+  id: string;
+  /** Qué pinta este par, en una línea. */
+  papel: string;
+  /** Token de tinta, tal como se declara en `app/globals.css`. */
+  tinta: string;
+  fondo: Fondo;
+  /**
+   * Cuando el fondo NO es el mismo en los dos temas porque una utilidad `dark:` lo cambia
+   * (`dark:bg-destructive/20` frente a `bg-destructive/10`). Sin esto, medir el tema oscuro con
+   * el fondo del claro daría un número plausible y falso.
+   */
+  fondoOscuro?: Fondo;
+  /**
+   * `4.5` para texto · `3` para un indicador de interfaz · `"exento"` para lo que WCAG no obliga
+   * a medir · `"ajeno"` para el color que la hoja NO pinta pero SÍ muestra, porque entra desde una
+   * primitiva o un componente compartido.
+   *
+   * Un par `"ajeno"` se MIDE y se le pone SUELO —no puede empeorar— pero no se le exige el
+   * umbral aquí: arreglarlo con una clase local de la factura dejaría la misma variante rota en
+   * las otras rutas que la montan y, encima, escondería la deuda. Es R17 y R18: se declara con su
+   * ancla y su medición fechada, y se remite a las fichas 210/216, que lo tratan para TODA la app.
+   */
+  umbral: number | "exento" | "ajeno";
+  /** Motivo, obligatorio cuando el par es exento o ajeno. */
+  motivo?: string;
+  /** Las utilidades de la hoja que caen en este par. El CIERRE se calcula con esta unión. */
+  utilidades: string[];
+  /** Dónde ocurre, para que el número se pueda volver a mirar a mano. */
+  anclas: string;
+}
+
+const CARD = "card";
+
+const INVENTARIO: Par[] = [
+  {
+    id: "P1",
+    papel: "el texto principal de la hoja sobre el papel: titulares, importes, datos realzados",
+    tinta: "foreground",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: 4.5,
+    utilidades: ["text-foreground", "hover:text-foreground"],
+    anclas:
+      "renglones :193/:208, caja de pago :271/:279, títulos :508/:1101, total :563, " +
+      "motivo :572/:1327, pestaña activa :857, dato de fila desplegada :885, fila :927/:931/:936",
+  },
+  {
+    id: "P2",
+    papel: "la cifra de la tarjeta de totales en su rama NEUTRA, sobre el panel apagado opaco",
+    tinta: "foreground",
+    fondo: { clase: "opaco", token: "muted" },
+    umbral: 4.5,
+    utilidades: ["bg-muted"],
+    anclas: ":805 dentro de :790",
+  },
+  {
+    id: "P3",
+    papel: "la cifra del KPI, dentro de su caja apagada al 40 %",
+    tinta: "foreground",
+    fondo: { clase: "capa", color: { de: "token", nombre: "muted" }, alpha: 0.4, sobre: CARD },
+    umbral: 4.5,
+    utilidades: ["bg-muted/40"],
+    anclas: ":249 dentro de :245",
+  },
+  {
+    id: "P4",
+    papel: "los datos realzados de los paneles apagados al 50 %: desplegable, pie, fila en hover",
+    tinta: "foreground",
+    fondo: { clase: "capa", color: { de: "token", nombre: "muted" }, alpha: 0.5, sobre: CARD },
+    umbral: 4.5,
+    utilidades: ["bg-muted/50", "hover:bg-muted/50"],
+    anclas:
+      ":348/:380 (panel :581), :667 (extra del panel), :1320/:1327 (pie :1317), " +
+      ":927/:931/:936 con el cursor encima (:925)",
+  },
+  {
+    id: "P5",
+    papel: "los rótulos y las notas apagadas sobre el papel",
+    tinta: "muted-foreground",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: 4.5,
+    utilidades: ["text-muted-foreground"],
+    anclas:
+      ":197, :230, :268, :276, :509, :540, :557, :571, :858, :932, :946, :953, :1106, :1114, " +
+      ":1288, :1300",
+  },
+  {
+    id: "P6",
+    papel: "el rótulo y la nota de la tarjeta neutra, y la píldora de conteo neutra",
+    tinta: "muted-foreground",
+    fondo: { clase: "opaco", token: "muted" },
+    umbral: 4.5,
+    utilidades: [],
+    anclas: ":796 y :817 (rama no-éxito de :790), :842 (píldora neutral)",
+  },
+  {
+    id: "P7",
+    papel: "el rótulo del KPI dentro de su caja apagada al 40 %",
+    tinta: "muted-foreground",
+    fondo: { clase: "capa", color: { de: "token", nombre: "muted" }, alpha: 0.4, sobre: CARD },
+    umbral: 4.5,
+    utilidades: [],
+    anclas: ":246 dentro de :245",
+  },
+  {
+    id: "P8",
+    papel: "los rótulos apagados de los paneles al 50 %: desplegable, pie, fila en hover",
+    tinta: "muted-foreground",
+    fondo: { clase: "capa", color: { de: "token", nombre: "muted" }, alpha: 0.5, sobre: CARD },
+    umbral: 4.5,
+    utilidades: [],
+    anclas: ":342, :347, :360, :379 (panel :581), :665, :1318, :1326 (pie :1317), :932 en hover",
+  },
+  {
+    id: "P9",
+    papel: "la tarjeta de PAGO A LA TIENDA y la píldora de entregadas: verde sobre verde al 15 %",
+    tinta: "success-strong",
+    fondo: { clase: "capa", color: { de: "paleta", nombre: "success" }, alpha: 0.15, sobre: CARD },
+    umbral: 4.5,
+    utilidades: ["bg-success/15"],
+    anclas: ":796, :805, :817 (la nota, ya sin el `/80` — R8), :840",
+  },
+  {
+    id: "P10",
+    papel: "las píldoras de conteo de reprogramadas e incidentes: ámbar sobre ámbar al 15 %",
+    tinta: "warning-strong",
+    fondo: { clase: "capa", color: { de: "paleta", nombre: "warning" }, alpha: 0.15, sobre: CARD },
+    umbral: 4.5,
+    utilidades: ["bg-warning/15", "text-warning-strong"],
+    anclas: ":841",
+  },
+  {
+    id: "P11",
+    papel: "el renglón de DEUDA de la liquidación, en rojo sobre el papel",
+    tinta: "danger-strong",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: 4.5,
+    utilidades: ["text-danger-strong"],
+    anclas: ":209 (`Renglon` con tone `danger`)",
+  },
+  {
+    id: "P12",
+    papel: "el INDICADOR de la pestaña seleccionada: un borde, no un texto",
+    tinta: "foreground",
+    fondo: { clase: "opaco", token: CARD },
+    // 3:1 y no 4.5: WCAG 1.4.11 (contraste de elementos NO textuales). La etiqueta de esa misma
+    // pestaña es texto y va por P1, que sí exige 4.5.
+    umbral: 3,
+    utilidades: ["border-foreground"],
+    anclas: ":857",
+  },
+  {
+    id: "P13",
+    papel: "el total de cada fila de gestión, en verde sobre el papel",
+    tinta: "success-strong",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: 4.5,
+    utilidades: ["text-success-strong"],
+    anclas: ":939",
+  },
+  {
+    id: "P14",
+    papel: "ese mismo total, con el cursor encima de la fila (el fondo cambia)",
+    tinta: "success-strong",
+    fondo: { clase: "capa", color: { de: "token", nombre: "muted" }, alpha: 0.5, sobre: CARD },
+    umbral: 4.5,
+    utilidades: [],
+    anclas: ":939 bajo el `hover:bg-muted/50` de :925",
+  },
+  {
+    id: "P19",
+    papel:
+      "la tinta POR DEFECTO de la hoja: todo texto sin clase de color, que hereda de la `Card`",
+    tinta: "card-foreground",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: 4.5,
+    // No hay ninguna utilidad `text-card-foreground` escrita en la hoja, y por eso este par es
+    // el que más fácil se olvida: lo pone `components/ui/card.tsx` (`bg-card
+    // text-card-foreground`) y lo hereda TODO lo que no declara color — los importes no
+    // enfatizados de los renglones, los títulos del desglose de tarifa, los valores de
+    // `DesgloseFila`. `design.md §6.3` no lo listaba.
+    utilidades: [],
+    anclas:
+      "valor de `Renglon` sin `emphasis` :215, `DesgloseFila` y los `h4` del desglose de " +
+      "tarifa (`cierre-detalle-shared.tsx`, montado en :1048)",
+  },
+  {
+    id: "P20",
+    papel: "el aviso «sin tarifa congelada» del desglose auditable de una orden",
+    tinta: "destructive",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: "ajeno",
+    motivo:
+      "PREEXISTENTE Y AJENO A ESTA FICHA (R17). Lo pinta `DesgloseIngresoOrdenex` en " +
+      "`cierre-detalle-shared.tsx:651`, un componente COMPARTIDO con las tablas del detalle: " +
+      "`--destructive` no tiene variante `-strong` y mide 3.76 sobre el papel claro. Arreglarlo " +
+      "con una clase local de la factura dejaría el mismo aviso roto en las otras vistas que " +
+      "montan ese componente y escondería la deuda, que es de la paleta (fichas 210/216). " +
+      "Medido el 2026-08-13: claro 3.76 · oscuro 5.89. Esta feature NO lo empeora — al contrario, " +
+      "antes se leía a 3.76 en los DOS temas porque la hoja estaba fijada a claro; ahora en " +
+      "oscuro pasa a 5.89. El suelo lo deja atornillado.",
+    utilidades: [],
+    anclas: "`cierre-detalle-shared.tsx:651`, montado desde `cierre-factura.tsx:1048`",
+  },
+  // ── Lo que entra a la hoja SIN estar escrito en `cierre-factura.tsx` (T13) ──────────────
+  // Las hojas montan primitivas (`Badge`, `Button`) y reciben subárboles ajenos por props
+  // (`acciones` desde `CierresAdminModule.tsx:749`). Un censo del archivo NO los ve, y sin
+  // embargo se leen sobre el papel. Se miden aquí y se declaran; NO se parchean (R18).
+  {
+    id: "P21",
+    papel: "`Button` variant `default` — «Ver / decidir» en la botonera `acciones`",
+    tinta: "primary-foreground",
+    fondo: { clase: "opaco", token: "primary" },
+    umbral: "ajeno",
+    motivo:
+      "DEUDA DE PALETA, ficha 216. `--primary` es el naranja de marca y su par con " +
+      "`--primary-foreground` no llega a 4.5:1 para texto normal en ninguno de los dos temas. " +
+      "Afecta a TODOS los botones primarios del portal, no a la factura: por eso esta ficha no " +
+      "lo toca —un parche local dejaría las otras quince rutas igual y taparía la deuda— y por " +
+      "eso tampoco se eligió `primary` para el indicador de la pestaña (§2b del design).",
+    utilidades: [],
+    anclas: "`CierresAdminModule.tsx:781` (variant `default` si el cierre está `solicitado`)",
+  },
+  {
+    id: "P22",
+    papel: "`Button` variant `destructive` — «Destrabar cierre vencido» en `acciones`",
+    tinta: "destructive",
+    fondo: { clase: "capa", color: { de: "token", nombre: "destructive" }, alpha: 0.1, sobre: CARD },
+    // `dark:bg-destructive/20`: el fondo NO es el mismo en los dos temas. Medir el oscuro con el
+    // alfa del claro daría un número plausible y falso, que es la única forma de fallar aquí.
+    fondoOscuro: {
+      clase: "capa",
+      color: { de: "token", nombre: "destructive" },
+      alpha: 0.2,
+      sobre: CARD,
+    },
+    umbral: "ajeno",
+    motivo:
+      "DEUDA DE PALETA, fichas 210/216. Es el mismo color como texto y como fondo a un 10 %: " +
+      "`--destructive` no tiene un par `-strong`, que es lo que la 210 sí arregló para el " +
+      "`Badge` (lo mandó al par de `danger`). El `Button` no se tocó en aquella ficha y sigue " +
+      "vivo. `button.tsx:24`.",
+    utilidades: [],
+    anclas: "`CierresAdminModule.tsx:770`, dentro de `acciones` de la hoja compacta",
+  },
+  {
+    id: "P23",
+    papel: "`Button` variant `outline` — «Ver detalles» y «Ver», sobre el fondo de la app",
+    tinta: "card-foreground",
+    fondo: { clase: "opaco", token: "background" },
+    // En oscuro la variante cambia el fondo con `dark:bg-input/30`, no con `bg-background`.
+    fondoOscuro: { clase: "capa", color: { de: "token", nombre: "input" }, alpha: 0.3, sobre: CARD },
+    umbral: "ajeno",
+    motivo:
+      "primitiva compartida: el `Button` `outline` no declara color de texto, así que HEREDA el " +
+      "de la hoja. Se mide y se le pone suelo para que no empeore, pero su umbral es de las " +
+      "fichas de paleta, no de ésta.",
+    utilidades: [],
+    anclas: "toggle de la hoja compacta :522, y «Ver evidencia» :1031",
+  },
+  {
+    id: "P24",
+    papel: "ese mismo `Button` `outline` cuando cuelga del panel apagado de una fila",
+    tinta: "muted-foreground",
+    fondo: { clase: "opaco", token: "background" },
+    fondoOscuro: { clase: "capa", color: { de: "token", nombre: "input" }, alpha: 0.3, sobre: CARD },
+    umbral: "ajeno",
+    motivo:
+      "el MISMO botón con OTRA tinta: «Ver evidencia» vive dentro de un contenedor que declara " +
+      "`text-muted-foreground` (:950), y el `outline` no pone color propio. Dos contextos de " +
+      "herencia distintos son dos pares distintos; medir sólo uno sería suponer el otro.",
+    utilidades: [],
+    anclas: ":1031 dentro de :950",
+  },
+  {
+    id: "P25",
+    papel: "`Badge` variant `secondary` — el estado «Solicitado» y el rótulo de rechazo por plazo",
+    tinta: "secondary-foreground",
+    fondo: { clase: "opaco", token: "secondary" },
+    umbral: "ajeno",
+    motivo:
+      "primitiva compartida (`badge.tsx`). Se mide y se le pone suelo; su umbral lo gobiernan " +
+      "las fichas 210/216 para toda la app.",
+    utilidades: [],
+    anclas: "`EstadoCierreBadge` (:516, :1101) y el badge de rechazo por plazo :1011",
+  },
+  {
+    id: "P15",
+    papel: "los separadores `|` entre las partes del comprobante compacto",
+    tinta: "border",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: "exento",
+    motivo:
+      "decorativos y `aria-hidden`: no son texto expuesto. WCAG no les pide contraste, y " +
+      "subírselo los convertiría en ruido visual entre datos que sí hay que leer.",
+    utilidades: ["text-border"],
+    anclas: ":544",
+  },
+  {
+    id: "P16",
+    papel: "el wordmark «Ordenex» de la hoja compacta",
+    tinta: "brand",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: "exento",
+    motivo:
+      "texto de una MARCA: WCAG 1.4.3 lo exime expresamente. Mide 3.18 sobre blanco y no se " +
+      "toca; el color de marca en texto normal es deuda abierta de la ficha 216, para toda la app.",
+    utilidades: ["text-brand"],
+    anclas: ":505",
+  },
+  {
+    id: "P17",
+    papel: "la franja de marca del detalle y el filete superior de la hoja compacta",
+    tinta: "brand",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: "exento",
+    motivo:
+      "superficies decorativas SIN texto encima: la franja es `aria-hidden` y el filete es el " +
+      "borde de la tarjeta. No hay nada que leer sobre ellas, así que no hay par que medir. " +
+      "(`design.md §6.4` sólo nombraba dos usos de `brand`; el filete de la hoja compacta es el " +
+      "tercero y se añade aquí en vez de heredar la omisión.)",
+    utilidades: ["bg-brand", "border-t-brand"],
+    anclas: ":311 (franja), :499 (filete)",
+  },
+  {
+    id: "P18",
+    papel: "los filetes y separadores estructurales de las dos hojas",
+    tinta: "border",
+    fondo: { clase: "opaco", token: CARD },
+    umbral: "exento",
+    motivo:
+      "separadores decorativos: guía punteada `aria-hidden`, divisores de bloque, bordes de " +
+      "caja y del panel apagado. Ninguno es el ÚNICO indicador del estado de un control —el de " +
+      "la pestaña seleccionada sí lo es, y por eso ese va aparte y MEDIDO, en P12—. " +
+      "(`design.md §6.3` no los listaba ni como medidos ni como exentos, y R16 dice que un " +
+      "exento ausente es indistinguible de un par que nadie miró.)",
+    utilidades: ["border-border", "border-border/60", "divide-border/60"],
+    anclas:
+      ":203, :233, :245, :267, :275, :339, :376, :581, :665, :913, :954, :1050, :1098, " +
+      ":1273, :1317",
+  },
+];
+
+/** El hex final del fondo de un par en un tema, componiendo la capa si la hay. */
+function hexDeFondo(tema: "claro" | "oscuro", par: Par): string {
+  const fondo = tema === "oscuro" && par.fondoOscuro ? par.fondoOscuro : par.fondo;
+  if (fondo.clase === "opaco") return token(tema, fondo.token);
+  const color =
+    fondo.color.de === "token" ? token(tema, fondo.color.nombre) : paleta(fondo.color.nombre);
+  return componer(color, token(tema, fondo.sobre), fondo.alpha);
+}
+
+/**
+ * Lo MEDIDO al cerrar el inventario (2026-08-13), con la aritmética del fixture. Ningún cambio de
+ * token puede bajar de aquí, aunque siga cumpliendo el umbral.
+ */
+const SUELO: Record<string, { claro: number; oscuro: number }> = {
+  P1: { claro: 15.7, oscuro: 13.74 }, //  #12233f/#ffffff   · #e6ecf8/#10203a
+  P2: { claro: 14.26, oscuro: 12.22 }, // #12233f/#f1f4fb   · #e6ecf8/#16294a
+  P3: { claro: 15.13, oscuro: 13.1 }, //  #12233f/#f9fbfd   · #e6ecf8/#122440
+  P4: { claro: 15.01, oscuro: 12.92 }, // #12233f/#f8fafd   · #e6ecf8/#132542
+  P5: { claro: 7.7, oscuro: 7.21 }, //    #4a5368/#ffffff   · #9fadc9/#10203a
+  P6: { claro: 6.99, oscuro: 6.41 }, //   #4a5368/#f1f4fb   · #9fadc9/#16294a
+  P7: { claro: 7.42, oscuro: 6.87 }, //   #4a5368/#f9fbfd   · #9fadc9/#122440
+  P8: { claro: 7.36, oscuro: 6.78 }, //   #4a5368/#f8fafd   · #9fadc9/#132542
+  P9: { claro: 4.77, oscuro: 6.6 }, //    #047857/#dbf5ec   · #34d399/#103745   ← el más justo
+  P10: { claro: 6.31, oscuro: 7.59 }, //  #92400e/#fef0da   · #fbbf24/#323333
+  P11: { claro: 6.47, oscuro: 5.89 }, //  #b91c1c/#ffffff   · #f87171/#10203a
+  P12: { claro: 15.7, oscuro: 13.74 }, // #12233f/#ffffff   · #e6ecf8/#10203a
+  P13: { claro: 5.48, oscuro: 8.47 }, //  #047857/#ffffff   · #34d399/#10203a
+  P14: { claro: 5.24, oscuro: 7.97 }, //  #047857/#f8fafd   · #34d399/#132542
+  P19: { claro: 15.7, oscuro: 13.74 }, // #12233f/#ffffff  · #e6ecf8/#10203a
+  P20: { claro: 3.76, oscuro: 5.89 }, //  #ef4444/#ffffff  · #f87171/#10203a  ← deuda ajena, R17
+  P21: { claro: 3.18, oscuro: 7.06 }, //  #ffffff/#f26419  · #0a1524/#ff7a33  ← bajo AA en claro
+  P22: { claro: 3.29, oscuro: 4.43 }, //  #ef4444/#fdecec  · #f87171/#3e3045  ← bajo AA en los dos
+  P23: { claro: 14.79, oscuro: 12.08 }, // #12233f/#f7f8fc · #e6ecf8/#172a4a
+  P24: { claro: 7.25, oscuro: 6.34 }, //  #4a5368/#f7f8fc  · #9fadc9/#172a4a
+  P25: { claro: 13.86, oscuro: 12.22 }, // #17233b/#eef1f8 · #e6ecf8/#16294a
+};
+
+/**
+ * SEIS de estos catorce números se pueden contrastar contra anotaciones que dejó OTRA feature en
+ * `app/globals.css`, escritas por una medición distinta y anteriores a esta guardia. Coinciden a
+ * la centésima, y por eso valen como comprobación cruzada del instrumento y no como adorno:
+ *
+ *   P13 claro 5.48  ↔ `--success-strong: #047857;  /* vs card 5.48 *\/`
+ *   P13 oscuro 8.47 ↔ `--success-strong: #34d399;  /* vs card 8.47 *\/`
+ *   P9  oscuro 6.60 ↔ `                            /* vs success/15 6.60 *\/`
+ *   P11 claro 6.47  ↔ `--danger-strong:  #b91c1c;  /* vs card 6.47 *\/`
+ *   P11 oscuro 5.89 ↔ `--danger-strong:  #f87171;  /* vs card 5.89 *\/`
+ *   P10 claro 6.31  ↔ `--warning-strong: #92400e;  /* vs warning/15 6.31 *\/`
+ */
+
+/** Tolerancia del suelo: absorbe el redondeo a dos decimales, nada más. */
+const EPSILON = 0.01;
+
+const MEDIBLES = INVENTARIO.filter((p) => typeof p.umbral === "number");
+const AJENOS = INVENTARIO.filter((p) => p.umbral === "ajeno");
+const EXENTOS = INVENTARIO.filter((p) => p.umbral === "exento");
+
+describe("feature 217 — el inventario CERRADO de pares de la hoja (R6, R7, R16)", () => {
+  it.each(MEDIBLES.map((p) => [p.id, p] as const))(
+    "%s cumple su umbral y su suelo en los DOS temas",
+    (_id, par) => {
+      const umbral = par.umbral as number;
+      for (const tema of ["claro", "oscuro"] as const) {
+        const medido = contraste(token(tema, par.tinta), hexDeFondo(tema, par));
+        expect(
+          medido,
+          `${par.id} en tema ${tema} — ${par.papel} (${par.anclas}) baja del umbral ${umbral}`,
+        ).toBeGreaterThanOrEqual(umbral);
+        expect(
+          medido,
+          `${par.id} en tema ${tema} EMPEORÓ: medía ${SUELO[par.id][tema]} al cerrar el ` +
+            "inventario. Aprobar por una centésima no es aprobar (lección de la 210): si el " +
+            "cambio es a mejor, sube el suelo A MANO y mira el número nuevo.",
+        ).toBeGreaterThanOrEqual(SUELO[par.id][tema] - EPSILON);
+      }
+    },
+  );
+
+  it.each(AJENOS.map((p) => [p.id, p] as const))(
+    "%s es deuda declarada (R17): no se exige el umbral, pero NO puede empeorar",
+    (_id, par) => {
+      expect(par.motivo, `${par.id} se declara preexistente sin decir por qué`).toBeTruthy();
+      for (const tema of ["claro", "oscuro"] as const) {
+        const medido = contraste(token(tema, par.tinta), hexDeFondo(tema, par));
+        expect(
+          medido,
+          `${par.id} en tema ${tema} EMPEORÓ respecto de lo declarado. Que un par esté declarado ` +
+            "como deuda ajena no lo deja libre: lo que no se puede es que caiga más.",
+        ).toBeGreaterThanOrEqual(SUELO[par.id][tema] - EPSILON);
+      }
+    },
+  );
+
+  /**
+   * R18 pide DEJAR CONSTANCIA de qué variantes quedan bajo el umbral dentro de la hoja, con su
+   * medición fechada. Esto lo hace ejecutable en vez de dejarlo en prosa: la lista está escrita y
+   * si alguna de las fichas 210/216 arregla una, este caso se pone rojo y obliga a actualizar la
+   * declaración. Un registro de deuda que no se entera de que la deuda se pagó es un registro
+   * falso, igual que uno que no se entera de que creció.
+   */
+  it("la deuda AJENA que hoy queda bajo AA dentro de la hoja está NOMBRADA (R17, R18)", () => {
+    const bajoUmbral = AJENOS.filter((par) =>
+      (["claro", "oscuro"] as const).some(
+        (tema) => contraste(token(tema, par.tinta), hexDeFondo(tema, par)) < 4.5,
+      ),
+    ).map((p) => p.id);
+
+    // Medido el 2026-08-13 con la aritmética del fixture:
+    //   P20 · aviso «sin tarifa congelada»  ·  claro 3.76 · oscuro 5.89
+    //   P21 · `Button` variant `default`    ·  claro 3.18 · oscuro 7.06
+    //   P22 · `Button` variant `destructive`·  claro 3.29 · oscuro 4.43
+    // Ninguna se corrige aquí: son de las fichas 210/216, que las tratan para TODA la app.
+    expect(bajoUmbral).toEqual(["P20", "P21", "P22"]);
+  });
+
+  it("los exentos están en la lista, MARCADOS, y con su motivo escrito", () => {
+    // R16: no se miden contra un umbral, pero no pueden desaparecer. Un exento ausente y un par
+    // que nadie miró se leen igual: como una lista más corta.
+    expect(EXENTOS.map((p) => p.id)).toEqual(["P15", "P16", "P17", "P18"]);
+    for (const par of EXENTOS) {
+      expect(par.motivo, `${par.id} está exento sin decir por qué`).toBeTruthy();
+      expect((par.motivo ?? "").length).toBeGreaterThan(40);
+    }
+  });
+
+  /**
+   * EL CIERRE (R7). Sin esto el inventario sería una lista de buenas intenciones: mediría lo que
+   * alguien se acordó de listar y no se enteraría de lo que llegue mañana. Aquí se recorren TODAS
+   * las utilidades con prefijo de color de la hoja y se exige que cada una caiga en un par
+   * declarado — medido o exento, pero declarado.
+   *
+   * El sentido de la exigencia es el seguro: lo que este censo no sabe clasificar, lo denuncia.
+   * Lo NO-color se declara por lista y por forma (`text-[13px]` es un tamaño, no un color), y
+   * cualquier cosa que no esté en ninguna de las dos listas se considera color y tiene que tener
+   * su par. Un `text-emerald-500` nuevo cae en rojo aunque nadie lo haya previsto.
+   */
+  it("CIERRE: toda utilidad de color de la hoja mapea a un par del inventario (R7)", () => {
+    const NO_SON_COLOR = new Set([
+      // tipografía y trazo: comparten prefijo con las de color, pero no pintan ninguno
+      "text-xs", "text-sm", "text-base", "text-lg", "text-xl", "text-2xl",
+      "text-left", "text-right", "text-center",
+      "border", "border-b", "border-t", "border-l", "border-r", "border-b-2",
+      "border-dashed", "border-dotted", "border-solid",
+      "divide-y", "divide-x",
+      // `transparent` no es un color que leer: es la ausencia de borde en la pestaña inactiva
+      "border-transparent",
+    ]);
+    /** `text-[13px]`, `text-[0.6875rem]`, `border-t-[3px]`: tamaños entre corchetes, no colores. */
+    const ES_TAMANO = /^(?:text|border(?:-[trblxy])?)-\[[\d.]+(?:px|rem|em)\]$/;
+
+    // El guion final es obligatorio: sin él, la palabra `from` de un `import … from "…"` entra al
+    // censo como si fuera el `from-` de un degradado. Una utilidad de color siempre lleva valor.
+    const CANDIDATO = /^(?:[a-z]+:)*(?:text|bg|border|ring|fill|stroke|divide|from|via|to)-/;
+    const palabras = hoja.match(/[A-Za-z0-9_:./#[\]%-]+/g) ?? [];
+    const halladas = [...new Set(palabras.filter((p) => CANDIDATO.test(p)))].sort();
+
+    const declaradas = new Set(INVENTARIO.flatMap((p) => p.utilidades));
+    const sinPar = halladas.filter((u) => {
+      const sinVariante = u.replace(/^(?:[a-z]+:)*/, "");
+      if (NO_SON_COLOR.has(sinVariante) || ES_TAMANO.test(sinVariante)) return false;
+      return !declaradas.has(u);
+    });
+
+    // Autocomprobación: si el extractor dejara de encontrar utilidades, `sinPar` saldría vacío y
+    // este caso pasaría sin haber cerrado nada.
+    expect(
+      halladas.length,
+      "el extractor de utilidades no encontró casi nada: está midiendo una cadena vacía",
+    ).toBeGreaterThan(20);
+
+    expect(
+      sinPar,
+      "estas utilidades de color de la hoja no caen en ningún par del inventario. O se añade el " +
+        "par con su medición (y su suelo), o se marca exento CON SU MOTIVO. Lo que no se puede es " +
+        "pintarlas y no medirlas: eso es exactamente lo que el inventario cerrado existe para " +
+        "impedir.",
+    ).toEqual([]);
+  });
+
+  it("ningún par del inventario quedó obsoleto: sus utilidades siguen en la hoja (R7)", () => {
+    // La otra mitad del cierre. Un par que ya no ocurre es ruido que da falsa sensación de
+    // cobertura: se mide algo que la hoja no pinta y el número tranquiliza sin cubrir nada.
+    const huerfanas = INVENTARIO.flatMap((p) => p.utilidades).filter(
+      (u) => !hoja.includes(u),
+    );
+    expect(huerfanas).toEqual([]);
+  });
+
+  it("cada par medible tiene su suelo anotado, y ninguno quedó en cero", () => {
+    // Un suelo en 0 pasa siempre: sería un par declarado que en realidad no vigila nada.
+    for (const par of [...MEDIBLES, ...AJENOS]) {
+      expect(SUELO[par.id], `${par.id} no tiene suelo anotado`).toBeDefined();
+      expect(SUELO[par.id].claro).toBeGreaterThan(1);
+      expect(SUELO[par.id].oscuro).toBeGreaterThan(1);
+    }
   });
 });

@@ -209,3 +209,130 @@ arriba del todo, para que su verde no se lea como «se ve bien».
 -> test:guardias       Test Files 96 passed (96)     Tests  1329 passed (1329)
 == init OK ==
 ```
+
+---
+
+## Tanda 3 — El inventario CERRADO de pares (T12, T13, T14)
+
+### T12 · El inventario, cerrado recorriendo el archivo (no transcrito del design)
+
+Se extrajo **toda** utilidad con prefijo de color de `cierre-factura.tsx` (código, sin
+prosa) y se mapeó una a una. Resultado: **20 utilidades distintas**, todas con par.
+
+Frente a la tabla de partida de `design.md §6.3`, el cierre encontró **tres cosas**:
+
+| Hallazgo | Qué era | Qué se hizo |
+| --- | --- | --- |
+| **P19 faltaba** | La tinta POR DEFECTO de la hoja. `components/ui/card.tsx` pinta `bg-card text-card-foreground`, y **todo** texto sin clase de color lo hereda: el importe no enfatizado de un renglón, los `h4` del desglose de tarifa, los valores de `DesgloseFila`. No hay ninguna utilidad `text-card-foreground` escrita en la hoja, y por eso un censo de utilidades no lo ve. Era **el par más usado de la hoja y no estaba en la lista**. | Añadido y medido: **15,70 claro · 13,74 oscuro** |
+| **`brand` tenía TRES usos, no dos** | `design.md §6.4` nombraba el wordmark (`:505`) y la franja (`:311`). Falta el `border-t-brand` de la `<Card>` compacta (`:499`). | Añadido como **P17**, exento con su motivo (decorativo, sin texto) |
+| **`border-border` no estaba ni como medido ni como exento** | R16 dice que un exento ausente es indistinguible de un par que nadie miró. | Añadido como **P18**, exento con su motivo. El borde que **sí** es indicador de estado —el de la pestaña seleccionada— va aparte y **medido**, en P12 |
+
+Ningún par quedó **indeterminado**: las cuatro capas de opacidad de la hoja
+(`muted/40`, `muted/50`, `success/15`, `warning/15`) componen sobre `card`, que es
+opaco. **No hay ninguna opacidad sobre otra opacidad** — el único caso que lo habría
+sido, `text-success-strong/80`, lo quitó R8/T9, y ése era justamente su segundo motivo.
+
+### T14 · Los 15 pares medibles, en los dos temas (2026-08-13)
+
+| Par | Qué pinta | Claro | Oscuro | Umbral |
+| --- | --- | --- | --- | --- |
+| P1 | `foreground` / `card` — la tinta principal | 15,70 | 13,74 | 4,5 |
+| P2 | `foreground` / `muted` opaco | 14,26 | 12,22 | 4,5 |
+| P3 | `foreground` / `muted@40` sobre `card` | 15,13 | 13,10 | 4,5 |
+| P4 | `foreground` / `muted@50` sobre `card` (incluye **hover**) | 15,01 | 12,92 | 4,5 |
+| P5 | `muted-foreground` / `card` | 7,70 | 7,21 | 4,5 |
+| P6 | `muted-foreground` / `muted` opaco | 6,99 | 6,41 | 4,5 |
+| P7 | `muted-foreground` / `muted@40` | 7,42 | 6,87 | 4,5 |
+| P8 | `muted-foreground` / `muted@50` (incluye **hover**) | 7,36 | 6,78 | 4,5 |
+| P9 | `success-strong` / `success@15` — incluye la nota ya sin `/80` | **4,77** | 6,60 | 4,5 |
+| P10 | `warning-strong` / `warning@15` | 6,31 | 7,59 | 4,5 |
+| P11 | `danger-strong` / `card` | 6,47 | 5,89 | 4,5 |
+| P12 | `foreground` **borde** / `card` — pestaña activa | 15,70 | 13,74 | **3,0** |
+| P13 | `success-strong` / `card` | 5,48 | 8,47 | 4,5 |
+| P14 | `success-strong` / `muted@50` — el mismo total **en hover** | 5,24 | 7,97 | 4,5 |
+| P19 | `card-foreground` / `card` — la tinta heredada | 15,70 | 13,74 | 4,5 |
+
+**El más justo es P9 en claro: 4,77.** Margen de 0,27 sobre AA. Es el par que la nota de
+«Ingreso bruto» pasa a usar tras quitarle el `/80`; con el `/80` medía 3,36. Queda con
+suelo, así que no puede bajar en silencio.
+
+Exentos, en la lista y marcados (R16): **P15** separadores `|` · **P16** wordmark ·
+**P17** franja y filete de marca · **P18** filetes y separadores estructurales.
+
+#### Comprobación cruzada del instrumento — **nueve** coincidencias
+
+No es autocomplacencia: son números que dejaron **otras features** en el repo, medidos
+por otra vía y anteriores a esta guardia. Coinciden **a la centésima**:
+
+| Medido aquí | Contra qué | Dónde estaba escrito |
+| --- | --- | --- |
+| P13 claro 5,48 | `--success-strong: #047857` vs card | `globals.css:185` |
+| P13 oscuro 8,47 | `--success-strong: #34d399` vs card | `globals.css:245` |
+| P9 oscuro 6,60 | `#34d399` vs `success/15` | `globals.css:245` |
+| P11 claro 6,47 | `--danger-strong: #b91c1c` vs card | `globals.css:190` |
+| P11 oscuro 5,89 | `--danger-strong: #f87171` vs card | `globals.css:247` |
+| P10 claro 6,31 | `#92400e` vs `warning/15` | `globals.css:189` |
+| P21 claro 3,18 | `--primary` sobre blanco | ficha 216 y `design.md §2b` |
+| P22 claro 3,29 · oscuro 4,43 | `bg-destructive/10` + `text-destructive` | `badge.tsx`, comentario de la 210 |
+| P23 claro 14,79 | `Button outline` | medición de la 208 |
+
+Nueve aciertos independientes es lo más parecido a un control externo que se puede tener
+sin navegador. **Y no es la única defensa**: la fórmula y el lector traen sus tres
+autocontroles (tres razones publicadas por WCAG, los dos extremos de la composición alfa,
+el parser leyendo el token vigente y no un hex de un comentario), que ahora corren sobre
+esta misma copia compartida.
+
+### T13 · Lo que entra a la hoja por props y por imports, clasificado
+
+El censo de T12 lee `cierre-factura.tsx`; las hojas **muestran color que no está escrito
+ahí**. Enumerado por llamador y por import, sin dejar ninguna pieza sin clasificar:
+
+| De dónde entra | Qué monta | Clasificación |
+| --- | --- | --- |
+| `CierresAdminModule.tsx:749` → `acciones` | un `div` sin color + `Button` variants `default` / `outline` / `destructive` | **(b) primitiva** → P21, P22, P23 |
+| `CierresAdminModule.tsx:827` → `CierreFacturaDetalle` | sólo datos y un callback `onVerEvidencia` | sin color |
+| `CierreDiaModule.tsx:730` → `CierreFacturaDetalle` | sólo datos (audiencia `mensajero`) | sin color |
+| `rotulo` (prop de la hoja compacta) | **ningún llamador la usa hoy** | nada que clasificar |
+| `extra` | sólo lo usa `CierreBodegaFacturaResumen`, dentro del propio archivo | ya censado (P4/P8) |
+| import `EstadoCierreBadge` | `Badge` variants `secondary` / `outline` / `destructive` | **(b) primitiva** → P25, P1, y el par de `danger` que ya vigila la 210 |
+| import `renderPagoMensajero` | `Badge variant="outline"` | **(b)** → cae en P1 |
+| import `DesgloseIngresoOrdenex` | `text-destructive`, `text-muted-foreground` y tinta heredada | **(a) tokens que giran** → **P20**, P5, P19 |
+| import `KpiValorAnimado` | sin color propio; hereda | cae en P3 |
+| `components/ui/card.tsx` | `bg-card text-card-foreground ring-foreground/10` | **(a)** → P19 (y el `ring`, decorativo) |
+
+**Cero casos (c)** — ninguna pieza entra con color propio fijo. No hubo que detenerse a
+consultar.
+
+### R17 / R18 — la deuda que se declara y NO se parchea
+
+Medido el 2026-08-13, dentro de la hoja, con la aritmética del fixture:
+
+| Id | Qué | Claro | Oscuro | De quién es |
+| --- | --- | --- | --- | --- |
+| **P20** | el aviso «sin tarifa congelada» del desglose auditable, `text-destructive` (`cierre-detalle-shared.tsx:651`) | **3,76** | 5,89 | **R17**: preexistente, ajeno al pin y ajeno a R8. Vive en un componente COMPARTIDO con las tablas del detalle |
+| **P21** | `Button` variant `default` (`button.tsx:12`) | **3,18** | 7,06 | **R18** — ficha 216 (`--primary` en texto normal) |
+| **P22** | `Button` variant `destructive` (`button.tsx:24`) | **3,29** | **4,43** | **R18** — fichas 210/216. La 210 arregló el `Badge` (lo mandó al par de `danger`); el `Button` no se tocó |
+
+Los que **sí** cumplen y quedan igualmente con suelo: P23 `Button outline` 14,79/12,08 ·
+P24 el mismo botón heredando `muted-foreground` 7,25/6,34 · P25 `Badge secondary`
+13,86/12,22.
+
+**Ninguna se corrigió con clases locales.** `git diff --name-only` no incluye
+`components/ui/` (T21 lo pega). Un parche local dejaría la misma variante rota en las
+otras rutas y, encima, escondería la deuda.
+
+Los tres quedan además **atornillados por su suelo**: si empeoran, la guardia se pone
+roja aunque nadie los esté mirando. Y la lista de «cuáles están bajo AA» es un caso
+ejecutable, no un párrafo: si la 210 o la 216 arreglan una, el caso se pone rojo y obliga
+a actualizar la declaración. Un registro de deuda que no se entera de que la deuda se
+pagó es tan falso como uno que no se entera de que creció.
+
+### Cierre de tanda 3 — `./init.sh --rapido`
+
+```
+✓ typecheck paso
+✓ lint paso
+-> test:cambiados      Test Files 17 passed (17)     Tests   311 passed (311)
+-> test:guardias       Test Files 96 passed (96)     Tests  1355 passed (1355)
+== init OK ==
+```
