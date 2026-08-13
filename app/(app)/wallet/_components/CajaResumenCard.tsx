@@ -304,10 +304,16 @@ export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) 
           {/* Feature 208 — LA CIFRA va en `text-foreground`, no en el color de aviso.
               El aviso lo siguen dando el icono, el rótulo, el borde y el fondo; el
               número es dinero y necesita margen, no el aprobado justo:
-              `text-warning-strong` sobre `bg-warning-soft` mide 4.51:1 en tema claro
+              `text-warning-strong` sobre `bg-warning-soft` medía 4.51:1 en tema claro
               (el umbral AA es 4.50), y quedarse a una centésima de la línea en el
               importe que se retiene de terceros no es aceptable. Medido después:
-              14.22:1 en claro y 15.1:1 en oscuro. */}
+              14.22:1 en claro y 15.1:1 en oscuro.
+
+              Feature 210 — ese 4.51 YA NO ES EL VIGENTE: `--warning-strong` pasó a
+              #92400e y el par mide 6.37:1. La decisión de arriba NO cambia —la cifra
+              sigue en `text-foreground`, que da 14.22— pero el motivo que la justificaba
+              está saldado, así que no vuelvas aquí buscando el 4.51. El contraste de
+              estos pares lo vigila ahora `contraste-tokens.guardia.test.ts`. */}
           <span className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">
             {money(resumen.deTerceros)}
           </span>
