@@ -19,7 +19,7 @@ import {
 // CierresAdminRepository/WalletMovimientoRepository). Las escrituras van por el `tx`.
 // Feature 149: `findOrigenesReversion` necesita `$queryRaw` (DISTINCT ON no se expresa con el
 // query builder de Prisma). Se ensancha el Pick, no la semantica: el cliente real ya lo tiene.
-// Feature 213 (design §3.1): el conteo de intentos deja de derivarse del historial y pasa a
+// Feature 215 (design §3.1): el conteo de intentos deja de derivarse del historial y pasa a
 // derivarse de `gestion_orden`. Se ensancha el Pick, no la semantica del repo: el cliente real
 // ya lo tiene, y los metodos de conteo se quedan AQUI a proposito (opcion (a) del design §3.1:
 // cero churn en los 11 call-sites; moverlos a un modulo propio es deuda NOMBRADA para otro PR,
@@ -88,7 +88,7 @@ function toEntradaDTO(row: HistorialRow): OrdenHistorialEntradaDTO {
 }
 
 /**
- * Feature 213 (T20) — el filtro de orden del predicado de intentos: un id suelto (lectura
+ * Feature 215 (T20) — el filtro de orden del predicado de intentos: un id suelto (lectura
  * individual) o un lote (`{ in: [...] }`). Es la interseccion EXACTA de lo que aceptan
  * `Prisma.GestionOrdenWhereInput["ordenId"]` y `Prisma.OrdenHistorialEstadoWhereInput["ordenId"]`
  * entre las formas que este repo usa, y existe porque el MISMO valor viaja a los DOS modelos: al
@@ -97,7 +97,7 @@ function toEntradaDTO(row: HistorialRow): OrdenHistorialEntradaDTO {
 export type FiltroOrdenIntentos = string | { in: string[] };
 
 /**
- * Feature 213 (design §3.1, R1/R3/R5/R29-R32) — PREDICADO UNICO de "intento de entrega", en UNA
+ * Feature 215 (design §3.1, R1/R3/R5/R29-R32) — PREDICADO UNICO de "intento de entrega", en UNA
  * sola funcion pura que consumen los DOS metodos de conteo (individual y en lote). Que este
  * extraido es lo que impide que el numero de la UI y el que dispara `rechazada` ->
  * `cobroRechazado` (56, dinero real) diverjan por copia-pega.
@@ -237,7 +237,7 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
   }
 
   /**
-   * Feature 213 (R1/R3/R8/R29/R30) — conteo de INTENTOS DE ENTREGA de UNA orden: el numero de
+   * Feature 215 (R1/R3/R8/R29/R30) — conteo de INTENTOS DE ENTREGA de UNA orden: el numero de
    * CIERRES APROBADOS distintos en los que la orden tuvo un resultado de gestion contable y
    * vigente, segun `whereIntentosVigentes`.
    *
@@ -261,7 +261,7 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
   }
 
   /**
-   * Feature 213 (R7/R8/R29/R30) — el MISMO conteo para un LOTE de ordenes, en UNA sola consulta
+   * Feature 215 (R7/R8/R29/R30) — el MISMO conteo para un LOTE de ordenes, en UNA sola consulta
    * sea cual sea N (`groupBy` por el par `(orden_id, cierre_id)` con el MISMO
    * `whereIntentosVigentes`). El listado de ordenes es paginado en servidor: una consulta por
    * fila seria un N+1 gratuito.

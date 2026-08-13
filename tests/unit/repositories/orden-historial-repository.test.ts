@@ -12,7 +12,7 @@ import {
 // wallet-movimiento-repository.test.ts). Cubre R6 (choke point centralizado), R7 (escribe
 // en el `tx` recibido), R27 (existeActuacionDe filtra por actor), y el mapeo a DTO legible (R26).
 //
-// Feature 213: el conteo de intentos deja de derivarse del historial y pasa a derivarse de
+// Feature 215: el conteo de intentos deja de derivarse del historial y pasa a derivarse de
 // `gestion_orden` con el cierre APROBADO. Aqui viven los tests del predicado UNICO
 // (`whereIntentosVigentes`) con su criterio nuevo: resultado contable + gestion vigente +
 // cierre `aprobado`, contando CIERRES DISTINTOS y no gestiones.
@@ -182,11 +182,11 @@ describe("findHistorialByOrden (R26/R5)", () => {
   });
 });
 
-// Feature 213 (T8) — helpers de las suites del conteo.
+// Feature 215 (T8) — helpers de las suites del conteo.
 
 /**
  * Fila de gestion CONTABLE por defecto: resultado `devuelta`, vigente, en cierre aprobado y —
- * feature 213/T21 — nacida de una VISITA REAL del mensajero (`origen_tipo = 'gestion'`). Los
+ * feature 215/T21 — nacida de una VISITA REAL del mensajero (`origen_tipo = 'gestion'`). Los
  * casos que prueban el discriminador de las sinteticas sobrescriben `origenTiposHistorial`.
  */
 function gestion(over: Partial<FilaGestionFake> = {}): FilaGestionFake {
@@ -219,7 +219,7 @@ async function whereIndividual(): Promise<Record<string, unknown>> {
   return prisma.gestionOrden.groupBy.mock.calls[0][0].where;
 }
 
-describe("contarIntentosVigentes — el criterio NUEVO (213/R1/R2/R3/R5/R8/R29/R30/R31/R33)", () => {
+describe("contarIntentosVigentes — el criterio NUEVO (215/R1/R2/R3/R5/R8/R29/R30/R31/R33)", () => {
   it("consulta `gestion_orden` acotando por ordenId (usa @@index([ordenId]))", async () => {
     const where = await whereIndividual();
     expect(where.ordenId).toBe("o1");
@@ -388,7 +388,7 @@ describe("contarIntentosVigentes — el criterio NUEVO (213/R1/R2/R3/R5/R8/R29/R
   });
 });
 
-describe("contarIntentosVigentesEnLote (213/R4/R7/R8/R29/R30)", () => {
+describe("contarIntentosVigentesEnLote (215/R4/R7/R8/R29/R30)", () => {
   it("R7: con N ids emite EXACTAMENTE 1 consulta (groupBy) y CERO count/findMany", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.groupBy.mockResolvedValue([
@@ -458,7 +458,7 @@ describe("contarIntentosVigentesEnLote (213/R4/R7/R8/R29/R30)", () => {
     const lote = { ...prisma.gestionOrden.groupBy.mock.calls[1][0].where };
     expect(individual.ordenId).toBe("o1");
     expect(lote.ordenId).toEqual({ in: ["o1", "o2"] });
-    // Feature 213/T20: el filtro de orden aparece DOS veces —fuera y repetido dentro del `some`
+    // Feature 215/T20: el filtro de orden aparece DOS veces —fuera y repetido dentro del `some`
     // de `historialEstados`, por rendimiento (design §3.4)— y las dos son el MISMO valor. Se
     // comprueba antes de normalizarlas para comparar el resto.
     expect(individual.historialEstados.some.ordenId).toBe(individual.ordenId);
@@ -475,10 +475,10 @@ describe("contarIntentosVigentesEnLote (213/R4/R7/R8/R29/R30)", () => {
   });
 });
 
-// Feature 213 — verificacion SEMANTICA extremo a extremo del predicado: el repo REAL sobre el
+// Feature 215 — verificacion SEMANTICA extremo a extremo del predicado: el repo REAL sobre el
 // doble que evalua el `where` contra filas de `gestion_orden`. Complementa a los tests de forma
 // de arriba: esos fijan la QUERY, este fija el SIGNIFICADO en escenarios mezclados.
-describe("whereIntentosVigentes — semantica del predicado (213/R1/R2/R3/R5/R29/R30)", () => {
+describe("whereIntentosVigentes — semantica del predicado (215/R1/R2/R3/R5/R29/R30)", () => {
   it("caso mixto: de 7 gestiones solo cuentan 2 cierres aprobados distintos", async () => {
     const { repo } = repoSobre([
       gestion({ cierreId: "c1", resultado: "devuelta" }), // cuenta
@@ -517,14 +517,14 @@ describe("whereIntentosVigentes — semantica del predicado (213/R1/R2/R3/R5/R29
   });
 });
 
-// Feature 213 (T21, design §3.4) — EL DISCRIMINADOR DE LAS GESTIONES SINTETICAS. [💰]
+// Feature 215 (T21, design §3.4) — EL DISCRIMINADOR DE LAS GESTIONES SINTETICAS. [💰]
 //
 // El sistema crea gestiones que NO son visitas de nadie y que entran al cierre del mensajero por
 // la puerta de atras: nacen con `cierre_id: null` y con el `mensajero_id` de la ultima `devuelta`
 // vigente, asi que `CierreDiaRepository.crearCierre` las vincula al siguiente cierre de ese
 // mensajero (`:480-483`). Sin la sexta condicion del predicado, al aprobarse ese cierre sumaban
 // +1 y adelantaban el escalado del cron SLA -> `rechazada` -> `cobroRechazado` (56, dinero real).
-describe("el discriminador de las gestiones SINTETICAS (213/R12/R18-b/R34) [💰]", () => {
+describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰]", () => {
   // R18-b: la gestion sintetica del escalado SLA (`DevolucionSlaRepository.escalarDevueltaSla`,
   // `resultado: rechazada`, historial `escalado_devuelta_sla`) NO cuenta como intento NI SIQUIERA
   // con su cierre APROBADO. Deja de contar como INTENTO; sigue cobrando como RECHAZO (R18-d, ver

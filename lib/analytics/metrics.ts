@@ -342,11 +342,11 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      // R11 (124) / R23 (213): se REMITE al criterio unico del repo
+      // R11 (124) / R23 (215): se REMITE al criterio unico del repo
       // (`OrdenHistorialService.contarIntentos`). No hay `umbral` ni parametro propio: el tipo
       // `DefinicionMetrica` ni siquiera admite uno, y este comentario existe para que nadie lo
       // anada "por comodidad".
-      // El id se RENOMBRO en la 213: el anterior (`intentos_vigentes_historial`) mentia — el
+      // El id se RENOMBRO en la 215: el anterior (`intentos_vigentes_historial`) mentia — el
       // conteo ya no sale del historial, sale de `gestion_orden` con el cierre aprobado.
       criterio: "intentos_por_cierre_aprobado",
       excluye: EXCLUYE_GESTIONES_ANULADAS,

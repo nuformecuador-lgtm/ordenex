@@ -88,7 +88,7 @@ export interface IOrdenHistorialRepository {
    */
   findHistorialByOrden(ordenId: string): Promise<OrdenHistorialEntradaDTO[]>;
   /**
-   * Feature 213 (R1/R3/R5/R8/R29/R30/R31/R32) — cuenta los INTENTOS DE ENTREGA de `ordenId`.
+   * Feature 215 (R1/R3/R5/R8/R29/R30/R31/R32) — cuenta los INTENTOS DE ENTREGA de `ordenId`.
    *
    * El criterio ya NO son destinos de transicion del historial: es el numero de CIERRES
    * APROBADOS DISTINTOS en los que la orden tuvo un resultado de gestion contable y vigente.
@@ -112,7 +112,7 @@ export interface IOrdenHistorialRepository {
    */
   contarIntentosVigentes(ordenId: string): Promise<number>;
   /**
-   * Feature 213 (R4/R7/R8) — el gemelo EN LOTE de `contarIntentosVigentes`: los conteos de N
+   * Feature 215 (R4/R7/R8) — el gemelo EN LOTE de `contarIntentosVigentes`: los conteos de N
    * ordenes en UNA sola consulta, sea cual sea N (una consulta por fila es un incumplimiento de
    * R7, no una nota menor).
    *

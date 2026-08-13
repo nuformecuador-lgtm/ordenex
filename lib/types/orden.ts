@@ -296,8 +296,8 @@ export type OrdenListItemDTO = OrdenDTO & {
   // reprogramacion vigente; en las tabs que no son "reprogramada" lo normal es null.
   fechaReprogramacion?: string | null;
   /**
-   * Feature 160 (R11/R14/R16) + 213 (R6/R20): intentos de entrega de la orden, resueltos EN EL
-   * MISMO LOTE de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 213 ese
+   * Feature 160 (R11/R14/R16) + 215 (R6/R20): intentos de entrega de la orden, resueltos EN EL
+   * MISMO LOTE de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 215 ese
    * criterio es el numero de CIERRES APROBADOS distintos en los que la orden tuvo un resultado
    * de gestion vigente `rechazada`/`devuelta`/`reprogramada`; ya no se deriva de los destinos
    * de las transiciones del historial.

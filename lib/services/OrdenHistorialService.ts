@@ -45,8 +45,8 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     // (consume el derivador de la 49) y el umbral configurable, para que la UI muestre
     // "intento X de N" sin fetchear datos sensibles en el cliente. La autz NO cambia: esta
     // lectura ya paso la visibilidad de la orden (R27/R17).
-    // Feature 213/R6/R10/R20: el numero que sale de aqui es EL MISMO que consume el cron SLA
-    // (mismo metodo, mismo punto unico). Lo que cambio con la 213 no es la forma —el drawer
+    // Feature 215/R6/R10/R20: el numero que sale de aqui es EL MISMO que consume el cron SLA
+    // (mismo metodo, mismo punto unico). Lo que cambio con la 215 no es la forma —el drawer
     // sigue exponiendo `intentos` + `umbral`— sino el VALOR: son los cierres APROBADOS
     // distintos en los que la orden tuvo un resultado contable, no las transiciones.
     const intentos = await this.contarIntentos(ordenId); // R1/R3
@@ -55,7 +55,7 @@ export class OrdenHistorialService implements IOrdenHistorialService {
   }
 
   /**
-   * Feature 213 (R1/R6/R9) — PUNTO UNICO del conteo de intentos. Delega directo en el
+   * Feature 215 (R1/R6/R9) — PUNTO UNICO del conteo de intentos. Delega directo en el
    * repositorio: ya no hay traduccion `value -> id` que hacer.
    *
    * R9 (degradacion segura) AHORA SE SOSTIENE SOBRE ENUMS DE POSTGRES, que no pueden faltar:

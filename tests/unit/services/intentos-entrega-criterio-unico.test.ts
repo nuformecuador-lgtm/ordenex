@@ -20,14 +20,14 @@ import {
 } from "@/tests/fixtures/intentos-entrega";
 import { ingresoBodegaPorResultado } from "@/lib/utils/ingreso-bodega";
 
-// Feature 213 (R6) — CRITERIO UNICO: el cron SLA (99), el drawer de historial (47) y el conteo
+// Feature 215 (R6) — CRITERIO UNICO: el cron SLA (99), el drawer de historial (47) y el conteo
 // EN LOTE de las superficies tienen que producir EL MISMO numero para la misma orden.
 //
 // Este test NO mockea el conteo: monta el repositorio REAL sobre un doble de Prisma que evalua
 // el predicado contra filas de `gestion_orden` de ejemplo. Si alguien introdujera una segunda
 // definicion de "intento" —una para la UI y otra para el dinero—, aqui se ve.
 //
-// Lo que cambio con la 213: los escenarios se expresan en clave de CIERRES. El intento ya no se
+// Lo que cambio con la 215: los escenarios se expresan en clave de CIERRES. El intento ya no se
 // gana al registrar la gestion, se gana cuando el admin APRUEBA el cierre que la agrupa.
 
 const NOW = new Date("2026-07-20T12:00:00.000Z");
@@ -48,7 +48,7 @@ const ORDEN = "o1";
 
 /**
  * Gestion contable de la orden, en el cierre `cierreId` con estado `cierreEstado`. Por defecto
- * nace de una VISITA REAL del mensajero (`origen_tipo = 'gestion'`, feature 213/T21): los casos
+ * nace de una VISITA REAL del mensajero (`origen_tipo = 'gestion'`, feature 215/T21): los casos
  * de las gestiones SINTETICAS lo sobrescriben con su familia real.
  */
 function gestion(
@@ -264,7 +264,7 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  // Feature 213 (T21, R18-a/b/c/d + R34) — LAS DOS MITADES DEL ESCALADO, EN EL MISMO ESCENARIO.
+  // Feature 215 (T21, R18-a/b/c/d + R34) — LAS DOS MITADES DEL ESCALADO, EN EL MISMO ESCENARIO.
   // [💰]
   //
   // La gestion sintetica que el cron crea al escalar (`DevolucionSlaRepository.escalarDevueltaSla`,

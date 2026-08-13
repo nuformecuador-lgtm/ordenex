@@ -3,6 +3,7 @@ import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { GestionUbicacionAusenciaValue } from "@/lib/types/gestion-orden";
+import type { LineaPago } from "@/lib/utils/pagos-recaudo";
 
 // Feature 36 — contrato del servicio del flujo del mensajero: listar mis
 // asignaciones, recoger (una o varias), escoger una para gestionar (bloqueo
@@ -64,8 +65,8 @@ export interface MiAsignacionDTO {
    */
   notaPrivada?: string | null;
   /**
-   * Feature 160 (R11/R14/R16/R24) + 213 (R6/R20): intentos de entrega de la orden, resueltos en
-   * el MISMO lote de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 213
+   * Feature 160 (R11/R14/R16/R24) + 215 (R6/R20): intentos de entrega de la orden, resueltos en
+   * el MISMO lote de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 215
    * ese criterio es el numero de CIERRES APROBADOS distintos en los que la orden tuvo un
    * resultado de gestion vigente `rechazada`/`devuelta`/`reprogramada`; ya no se deriva de los
    * destinos de las transiciones del historial.
@@ -222,7 +223,19 @@ export type GestionarInput = {
       ordenId: string;
       resultado: "entregada";
       montoRecibido: number;
-      metodoPago: MetodoPago;
+      /**
+       * Feature 212 (R12/R19): metodo ESCALAR de compatibilidad. `null` cuando el cliente ya
+       * manda desglose. NO es la fuente del reparto por metodo —eso es `pagos`—: sobrevive solo
+       * para la columna DEPRECADA `gestion_orden.metodo_pago`, que se retira en su propia ficha.
+       */
+      metodoPago: MetodoPago | null;
+      /**
+       * Feature 212 (R11/R12/R14): desglose YA NORMALIZADO por el borde (`normalizarPagos`).
+       * OBLIGATORIO y sin fallback al escalar: una entrega sin cobro llega como `[]`, y una
+       * cobrada con un solo metodo como UNA linea. El service revalida en `Prisma.Decimal` que
+       * la suma iguale `montoRecibido` (R18) antes de persistir.
+       */
+      pagos: LineaPago[];
       evidencias: EvidenciaArchivo[];
     }
   | { ordenId: string; resultado: "reprogramada"; fechaReprogramacion: string; motivo: string }

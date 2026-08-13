@@ -22,6 +22,8 @@ function detalleRow(overrides: Record<string, unknown> = {}) {
     motivo: null,
     fechaReprogramacion: null,
     evidenciaStoragePath: "o1/entregada-1.jpg",
+    // Feature 212/R21: las lineas del desglose tal como las lee WITH_DETALLE (Decimal).
+    pagos: [{ metodo: "efectivo", monto: new Prisma.Decimal("12.50") }],
     pagoMensajero: null, // feature 39: snapshot (null salvo override)
     ingresoBodegaRechazo: null, // feature 56: snapshot (null salvo override)
     orden: {

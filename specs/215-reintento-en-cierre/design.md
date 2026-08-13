@@ -1,8 +1,8 @@
-# Feature 213 — Diseño técnico
+# Feature 215 — Diseño técnico
 
 Cómo se mueve el punto de conteo del reintento desde la transición hasta el cierre.
 Todo anclaje de este documento se verificó abriendo el archivo en `C:/w213`
-(rama `feature/213-reintento-en-cierre`, creada desde `origin/dev` ca73e771).
+(rama `feature/215-reintento-en-cierre`, creada desde `origin/dev` ca73e771).
 
 > **Segunda ronda de decisiones incorporada (2026-08-13):** el conteo se deriva de
 > `gestion_orden` **sin migración** (D7), suma **al APROBAR** el cierre (D8),
@@ -19,7 +19,7 @@ Todo anclaje de este documento se verificó abriendo el archivo en `C:/w213`
 > en §7.6, lista para ejecutar) y **Q10** (KPI persistido, §8).
 >
 > **Estado del código:** el commit **7d9471c3** implementa §2 y §3.1–§3.3
-> (`progress/impl_213.md`). **§3.4 —el discriminador de las gestiones sintéticas—
+> (`progress/impl_215.md`). **§3.4 —el discriminador de las gestiones sintéticas—
 > NO está implementado**: es el trabajo que abre la tercera ronda, y corrige además
 > un incumplimiento de R12 que la implementación dejó abierto.
 
@@ -423,7 +423,7 @@ andamiaje, no lo que mide).
 | 14 | `tests/unit/services/devolucion-sla-dinero.test.ts` (4 casos, marcados `[💰]`) | Que la gestión sintética del escalado cobra `cobroRechazado` igual que un rechazo directo, y que dos sintéticas cobrarían dos veces | No depende del criterio de intentos | **VERDE sin tocar**, y es la evidencia de R17 |
 | 15 | Guardia de migraciones: `git diff --name-only -- db/` vacío | `160/R7` | **NO se pone rojo: D7 prohíbe migración.** Si aparece un cambio en `db/`, es un incumplimiento de R27 | **VERDE, y es una guardia de la feature** |
 | 16 | Casos de ANULACIÓN que hoy hacen BAJAR el conteo: `orden-historial-repository.test.ts:475` («R24: NO cuenta la de una gestión ANULADA») y `:489`; `orden-historial-service.test.ts:154` («67/R28: 2 devueltas, 1 anulada → 1»); `devolucion-sla-service.test.ts:184` («las MISMAS reprogramaciones ANULADAS → el conteo baja a 1 y la orden se LIBERA») | Que anular una gestión BAJA el número | **Cambio de comportamiento por D12/R32**: una gestión ya contada no puede anularse (la ventana muere antes de que el cierre se apruebe), así que el escenario deja de ser alcanzable tal cual | **REESCRIBIR como caso de MONOTONÍA**: la anulación antes del cierre impide que llegue a contar (el número no sube); nunca «baja». R5 sobrevive como «una gestión anulada no cuenta», no como «descuenta» |
-| 17 | *(nuevo)* Casos de D9/D10/D11 | — | Dos gestiones vigentes en el mismo cierre → 1 (R29); N cierres aprobados → N (R30); resultado contado aunque la orden ya cambió de estado (R31); `solicitado`/`vencido`/`rechazado` no cuentan (R3) | **HECHO en 7d9471c3** (`progress/impl_213.md §2`) |
+| 17 | *(nuevo)* Casos de D9/D10/D11 | — | Dos gestiones vigentes en el mismo cierre → 1 (R29); N cierres aprobados → N (R30); resultado contado aunque la orden ya cambió de estado (R31); `solicitado`/`vencido`/`rechazado` no cuentan (R3) | **HECHO en 7d9471c3** (`progress/impl_215.md §2`) |
 | 18 | *(nuevo, TERCERA RONDA)* Casos del discriminador §3.4 | — | Hay que CREARLOS: la gestión sintética del escalado SLA no cuenta aunque su cierre se apruebe (R18-b); la reprogramación de la tienda no cuenta aunque su cierre se apruebe (**R12, hoy INCUMPLIDO**); la lista de familias es de INCLUSIÓN (R34-c); una gestión sin fila de historial no cuenta (R34-d) | **AÑADIR** en `orden-historial-repository.test.ts` y `criterio-intento-entrega.test.ts`; **el fixture `tests/fixtures/intentos-entrega.ts` necesita filas de historial además de gestiones** |
 | 19 | `tests/unit/types/criterio-intento-entrega.test.ts` · «R12/R14: ninguna arista del mapa decide por sí sola un intento de entrega» | Que el mapa no decide intentos | **Verde, pero NO cubre R12**: mide el mapa, no el predicado. R12 exige que la reprogramación de la tienda no sume, y hoy suma | **CONSERVAR como R14** y **reasignar R12** al caso nuevo de la fila #18. Un requisito cuyo test mide otra cosa es un requisito sin dueño |
 
@@ -483,7 +483,7 @@ las órdenes que HOY reposan en `devuelta`, conteo viejo vs. conteo nuevo, y cu�
 cruzan el umbral en cada dirección.
 
 ```sql
--- Feature 213 / Q4 — efecto retroactivo del cambio de criterio de intentos.
+-- Feature 215 / Q4 — efecto retroactivo del cambio de criterio de intentos.
 -- SOLO LECTURA. Ejecutar contra la base real y pegar el resultado con FECHA en este design.
 WITH parametros AS (
   SELECT 3::int AS umbral                       -- REINTENTOS_MIN_INTENTOS
@@ -519,7 +519,7 @@ conteo_viejo AS (
                              AND g."anulada_at" IS NULL ) )
   GROUP BY v.orden_id
 ),
--- Criterio NUEVO (213/D2+D6+D7+D8+D9+D10): cierres APROBADOS distintos con resultado contable.
+-- Criterio NUEVO (215/D2+D6+D7+D8+D9+D10): cierres APROBADOS distintos con resultado contable.
 conteo_nuevo AS (
   SELECT v.orden_id, count(DISTINCT g."cierre_id") AS n_nuevo
   FROM en_vuelo v
@@ -669,25 +669,25 @@ Toca `CierreDiaService`, `CierreDiaRepository`, `CierresAdminRepository`,
 `db/schema.prisma` y una migración nueva (`20260812120000_gestion_orden_pago`).
 Solape con esta feature, por archivo:
 
-| Archivo | La 213 lo necesita para | Riesgo |
+| Archivo | La 215 lo necesita para | Riesgo |
 | --- | --- | --- |
-| `lib/repositories/CierreDiaRepository.ts` | Solo **leerlo** (`crearCierre:395`, `:480-483`) para fijar el ancla | **Bajo si la 213 no escribe ahí.** Con el enfoque derivado, no hace falta modificarlo |
+| `lib/repositories/CierreDiaRepository.ts` | Solo **leerlo** (`crearCierre:395`, `:480-483`) para fijar el ancla | **Bajo si la 215 no escribe ahí.** Con el enfoque derivado, no hace falta modificarlo |
 | `lib/repositories/CierresAdminRepository.ts` | Solo **leerlo** (`resolverCierre:616`) | Bajo, mismo motivo |
 | `lib/services/MisAsignacionesService.ts` | Es consumidor del conteo (`:168`), no se toca | Bajo; sí colisiona en `tests/unit/services/mis-asignaciones-service.test.ts` si ambas lo editan |
 | `db/schema.prisma` | **Nada: D7 prohíbe migración** | **NULO.** El solape con la migración sin mergear de la 208 (`20260812120000_gestion_orden_pago`) **desaparece por decisión** |
 | `lib/services/CierreDiaService.ts` | Solo leerlo (`solicitarCierre:391`, ventana de deshacer `:519-521`) | Bajo |
 
-**Conclusión operativa (firme tras D7):** el diff de la 213 vive en
+**Conclusión operativa (firme tras D7):** el diff de la 215 vive en
 `lib/repositories/OrdenHistorialRepository.ts`,
 `lib/services/OrdenHistorialService.ts`, `lib/types/orden-historial.ts`, las dos
 interfaces y sus tests. **Cero archivos compartidos con la 208 y cero solape en
 `db/`.** El único roce posible es `tests/unit/services/mis-asignaciones-service.test.ts`
-si ambas ramas lo editan, y la 213 solo debería tocarlo si se rompe (no debería:
+si ambas ramas lo editan, y la 215 solo debería tocarlo si se rompe (no debería:
 usa `fakeIntentosEnLote`, que no cambia).
 
 **Feature 208 y el ancla.** La 208 modifica `CierreDiaService`,
 `CierreDiaRepository` y `CierresAdminRepository`, que son exactamente los tres
-archivos donde vive el ciclo del cierre del que D8 depende. La 213 **no los
+archivos donde vive el ciclo del cierre del que D8 depende. La 215 **no los
 escribe**, pero sí depende de que la semántica de `cierre_dia.estado` y de
 `gestion_orden.cierre_id` no cambie. Al mergear, comprobar que la 208 no introduce
 un cuarto estado ni un segundo camino de vinculación.

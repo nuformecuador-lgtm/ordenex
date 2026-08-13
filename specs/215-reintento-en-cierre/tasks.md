@@ -1,10 +1,10 @@
-# Feature 213 — Tareas
+# Feature 215 — Tareas
 
 Checklist de pasos discretos y verificables. `[P]` = paralelizable con las tareas
 de su mismo grupo. Cada tarea lleva su criterio de **hecho**.
 
 > **ESTADO 2026-08-13 — los grupos 1, 2 y 3 YA ESTÁN IMPLEMENTADOS** (commit
-> `7d9471c3`; bitácora en `progress/impl_213.md`): 20 archivos modificados, 0 en
+> `7d9471c3`; bitácora en `progress/impl_215.md`): 20 archivos modificados, 0 en
 > `db/`, 30 requisitos con test real. Las tareas hechas van marcadas `[x]`.
 >
 > **Diez preguntas CERRADAS** (D6–D14). **Siguen abiertas Q4** (medición sin
@@ -14,7 +14,7 @@ de su mismo grupo. Cada tarea lleva su criterio de **hecho**.
 > las gestiones sintéticas. Implementa R18 y R34 y **corrige un incumplimiento de
 > R12** que la implementación dejó abierto.
 
-Baseline declarado: worktree `C:/w213`, rama `feature/213-reintento-en-cierre`
+Baseline declarado: worktree `C:/w213`, rama `feature/215-reintento-en-cierre`
 desde `origin/dev` (ca73e771), dependencias instaladas, cliente Prisma generado,
 **typecheck en VERDE**. Antes de afirmar cualquier delta, volver a medir (los
 baselines caducan con cualquier PR ajeno).
@@ -211,13 +211,13 @@ baselines caducan con cualquier PR ajeno).
   **Depende de:** T8–T14 (y T11b).
 
 - [x] **T17 — Cerrar la trazabilidad** (30 de 33 req; R18/R19/R24 sin dueño)**.** Rellenar el mapa R → test real en
-  `progress/impl_213.md §2` y en `requirements.md`.
+  `progress/impl_215.md §2` y en `requirements.md`.
   **Hecho:** ningún `R<n>` sin al menos un test con ruta y nombre de caso reales.
   **Depende de:** T16.
 
 - [ ] **T18 — Gate completo antes del PR.** `./init.sh --rapido` para cerrar cada
   tanda; **`./init.sh` completo antes del PR, sin excepción**.
-  **Hecho:** salida verde pegada en `progress/impl_213.md`, con el delta de rojos
+  **Hecho:** salida verde pegada en `progress/impl_215.md`, con el delta de rojos
   medido contra el baseline REMEDIDO de `dev` (no contra el citado en la bitácora),
   y el rojo declarado de Q10 (`analytics-daily-job.test.ts`) enumerado como tal.
   **Depende de:** T17, T22, T0b.
@@ -326,7 +326,7 @@ es un fallo de la feature.
 **Cobertura:** 34 requisitos, 34 con dueño.
 
 - **30 cerrados y verdes** en `7d9471c3` (mapa real con nombres de caso en
-  `progress/impl_213.md §2`).
+  `progress/impl_215.md §2`).
 - **R12, R18 y R34** → Grupo 4 (T19–T22). R12 figuraba como cubierto y **no lo
   estaba**: su test medía el mapa, no el predicado.
 - **R19** → depende de ejecutar la medición de T1 (Q4).

@@ -10,7 +10,7 @@ import { whereIntentosVigentes } from "@/lib/repositories/OrdenHistorialReposito
 import { TRANSICIONES } from "@/lib/types/order-status-transiciones";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
-// Feature 213 (T9) — la DECLARACION del criterio de intento de entrega y su coherencia con el
+// Feature 215 (T9) — la DECLARACION del criterio de intento de entrega y su coherencia con el
 // mapa cerrado de la 140. Estos tests no prueban una query: prueban la DECISION.
 //
 // Por que importan: el conteo que se deriva de aqui gobierna el escalado automatico del cron
@@ -29,7 +29,7 @@ const GESTION_RESULTADOS = [
   "incidente",
 ] as const;
 
-describe("RESULTADOS_QUE_CUENTAN_COMO_INTENTO — el criterio declarado (213/R1/R2/R33)", () => {
+describe("RESULTADOS_QUE_CUENTAN_COMO_INTENTO — el criterio declarado (215/R1/R2/R33)", () => {
   it("R1: la lista es EXACTAMENTE rechazada, devuelta y reprogramada", () => {
     expect(RESULTADOS_QUE_CUENTAN_COMO_INTENTO).toEqual([
       "rechazada",
@@ -80,12 +80,12 @@ describe("RESULTADOS_QUE_CUENTAN_COMO_INTENTO — el criterio declarado (213/R1/
   });
 });
 
-// Feature 213 (T19/T21, design §3.4) — la SEGUNDA lista de INCLUSION del criterio. La primera
+// Feature 215 (T19/T21, design §3.4) — la SEGUNDA lista de INCLUSION del criterio. La primera
 // (`RESULTADOS_QUE_CUENTAN_COMO_INTENTO`) dice QUE resultados cuentan; esta dice de QUIEN: solo
 // las gestiones de una VISITA REAL del mensajero. Las gestiones SINTETICAS —el escalado del cron
 // SLA y la reprogramacion de escritorio de la tienda— entran al cierre del mensajero por la
 // puerta de atras y, sin esta lista, sumarian un intento que nadie hizo. [💰]
-describe("ORIGEN_TIPOS_VISITA_REAL — el discriminador de las sinteticas (213/R34)", () => {
+describe("ORIGEN_TIPOS_VISITA_REAL — el discriminador de las sinteticas (215/R34)", () => {
   it("R34-a: la lista es EXACTAMENTE `gestion` (la visita del mensajero en calle)", () => {
     expect(ORIGEN_TIPOS_VISITA_REAL).toEqual(["gestion"]);
   });
@@ -132,7 +132,7 @@ describe("ORIGEN_TIPOS_VISITA_REAL — el discriminador de las sinteticas (213/R
   });
 });
 
-describe("sin criterio residual por transicion (213/R13/R25/R26)", () => {
+describe("sin criterio residual por transicion (215/R13/R25/R26)", () => {
   // R13: "el sistema NO DEBE conservar ningun camino de lectura, activo o inactivo, que derive
   // el conteo de los destinos de las transiciones". La lista blanca de familias de origen que
   // sostenia la rama B del criterio viejo (160) se retira; dejarla huerfana habria sido un
@@ -151,7 +151,7 @@ describe("sin criterio residual por transicion (213/R13/R25/R26)", () => {
   });
 });
 
-describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (213/R14)", () => {
+describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", () => {
   /** Todas las aristas del mapa, aplanadas a `(origen, destino, via)`. */
   const aristas = Object.entries(TRANSICIONES).flatMap(([origen, destinos]) =>
     (destinos as readonly { to: string; via: string }[]).map((d) => ({
@@ -206,7 +206,7 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (213/R14)", 
 
   // R14: `incidente` sigue siendo terminal en el sentido del negocio — todas sus salidas son
   // REVERSIONES (deshacer un reporte erroneo), nunca una continuacion del flujo. REESCRITO en
-  // la 213: el caso ya no deriva de aqui "no cuenta como intento" (eso lo decide ahora el
+  // la 215: el caso ya no deriva de aqui "no cuenta como intento" (eso lo decide ahora el
   // resultado `incidente`, que esta FUERA de la lista, ver R2 arriba); lo que sigue midiendo,
   // y sigue importando, es que ninguna arista se agrego, retiro ni redirigio.
   it("R14/158-Q-D: las salidas de `incidente` siguen siendo las 6 declaradas, todas reversiones", () => {

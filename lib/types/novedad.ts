@@ -19,8 +19,8 @@ export interface NovedadDTO {
   telefonoDest: string;
   causa: GestionCausaDevolucion | null;
   /**
-   * Feature 160 (R11/R14/R16/R26) + 213 (R6/R20): intentos de entrega de la orden, resueltos en
-   * el MISMO lote de la pagina con el criterio UNICO de `OrdenHistorialService`. Desde la 213
+   * Feature 160 (R11/R14/R16/R26) + 215 (R6/R20): intentos de entrega de la orden, resueltos en
+   * el MISMO lote de la pagina con el criterio UNICO de `OrdenHistorialService`. Desde la 215
    * ese criterio es el numero de CIERRES APROBADOS distintos en los que la orden tuvo un
    * resultado de gestion vigente `rechazada`/`devuelta`/`reprogramada`; ya no se deriva de los
    * destinos de las transiciones del historial.

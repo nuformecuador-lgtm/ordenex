@@ -1,6 +1,6 @@
-# Feature 213 — bitacora de implementacion
+# Feature 215 — bitacora de implementacion
 
-**Rama:** `feature/213-reintento-en-cierre` (worktree `C:/w213`, desde `origin/dev`).
+**Rama:** `feature/215-reintento-en-cierre` (worktree `C:/w213`, desde `origin/dev`).
 **Fecha:** 2026-08-13. **Alcance:** RECORTADO — ver §4.
 
 El intento de entrega deja de derivarse de `orden_historial_estado` (destinos de
@@ -292,7 +292,7 @@ materializada, y que ninguna otra metrica inventa un criterio distinto (R23).
    toco.
 3. **Al mergear la 208**, comprobar lo que `design.md` §9 exige: que no introduce
    un cuarto estado de `cierre_dia` ni un segundo camino de vinculacion de
-   `gestion_orden.cierre_id`. La 213 no escribe esos archivos, pero **depende de su
+   `gestion_orden.cierre_id`. La 215 no escribe esos archivos, pero **depende de su
    semantica**.
 4. **R32 es un cambio de comportamiento OBSERVABLE**: hoy deshacer una gestion
    BAJA el numero (160/R5); tras esta feature una gestion solo cuenta cuando ya no
@@ -345,7 +345,7 @@ umbral antes de escalar.
 | `lib/repositories/OrdenHistorialRepository.ts` | Sexta condicion en `whereIntentosVigentes`; **nuevo** `export type FiltroOrdenIntentos = string \| { in: string[] }` (interseccion exacta de lo que aceptan `GestionOrdenWhereInput["ordenId"]` y `OrdenHistorialEstadoWhereInput["ordenId"]`, porque el MISMO valor viaja a los dos modelos — sin `any` ni doble aserto); JSDoc con el bloque de rendimiento |
 | `tests/fixtures/intentos-entrega.ts` | El evaluador semantico UNICO aprende filas de historial: `FilaGestionFake` gana un campo **REQUERIDO** con las familias que enlazan la gestion (`[]` = legada sin historial). Requerido a proposito: el typecheck obliga a que cada fila declare su origen y ninguna suite queda verde por defecto silencioso. `fakeIntentosEnLote` **intacto** |
 | `tests/unit/repositories/orden-historial-repository.test.ts`, `tests/unit/types/criterio-intento-entrega.test.ts`, `tests/unit/services/intentos-entrega-criterio-unico.test.ts`, `tests/unit/services/devolucion-sla-service.test.ts` | Casos nuevos del discriminador + declaracion explicita de la familia en cada fila existente |
-| `specs/213-reintento-en-cierre/design.md` | §3.4: evidencia fechada de T22 |
+| `specs/215-reintento-en-cierre/design.md` | §3.4: evidencia fechada de T22 |
 
 **NO se toco** ninguno de los 5 archivos que la 208 tiene en vuelo
 (`CierreDiaService`, `CierreDiaRepository`, `CierresAdminRepository`,
@@ -422,7 +422,7 @@ fechado en `design.md §3.4`.
 
 | Viejo | Nuevo | Mutacion que sigue matando |
 | --- | --- | --- |
-| `criterio-intento-entrega.test.ts` · «**R12**/R14: ninguna arista del mapa decide por si sola un intento de entrega» | «**R14**: …» (mismo cuerpo, **ni una linea cambiada**; el `describe` pasa de `213/R12/R14` a `213/R14`) | Las MISMAS: devolver al mapa una arista con marca `cuentaComoIntento`, o reintroducir un `via` que coincida con un `GestionResultado`. Lo unico que se retira es la etiqueta R12, que apuntaba al MAPA y no al PREDICADO — un requisito cuyo test mide otra cosa es un requisito sin dueño. R12 tiene ahora 4 casos reales (§2) |
+| `criterio-intento-entrega.test.ts` · «**R12**/R14: ninguna arista del mapa decide por si sola un intento de entrega» | «**R14**: …» (mismo cuerpo, **ni una linea cambiada**; el `describe` pasa de `215/R12/R14` a `215/R14`) | Las MISMAS: devolver al mapa una arista con marca `cuentaComoIntento`, o reintroducir un `via` que coincida con un `GestionResultado`. Lo unico que se retira es la etiqueta R12, que apuntaba al MAPA y no al PREDICADO — un requisito cuyo test mide otra cosa es un requisito sin dueño. R12 tiene ahora 4 casos reales (§2) |
 | «R4: el `where` del LOTE es IDENTICO al del individual salvo `ordenId`» | Igual, normalizando tambien el `ordenId` anidado en el `some`, **mas 2 aserciones nuevas** (que el `ordenId` de dentro es el mismo que el de fuera, en individual y en lote) | Un segundo `where` copia-pegado; **y ademas**, ahora, quitar el `ordenId` redundante del `some` (la mutacion de rendimiento que degrada a seq scan) |
 
 Ningun test se borro ni se relajo.

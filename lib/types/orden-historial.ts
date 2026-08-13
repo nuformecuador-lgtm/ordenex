@@ -53,13 +53,13 @@ export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)
 //     fila HUERFANA: la gestion se borro (67/R26).
 // El `satisfies` rompe el build si un valor deja de existir en el enum.
 //
-// ALCANCE DE ESTA LISTA (feature 213, R28) — leer antes de anadirle un valor:
+// ALCANCE DE ESTA LISTA (feature 215, R28) — leer antes de anadirle un valor:
 //
 // (a) `ORIGEN_TIPOS_CON_GESTION` existe HOY para UNA sola cosa: desambiguar la NULIDAD del
 //     enlace `gestion_orden_id` en las filas del historial (67/R25-R26), como se explica arriba.
 //     NO decide intentos de entrega, y no los ha decidido nunca por si sola.
 //
-// (b) Desde la feature 213, el INTENTO DE ENTREGA **no se deriva de destinos de transicion**.
+// (b) Desde la feature 215, el INTENTO DE ENTREGA **no se deriva de destinos de transicion**.
 //     Se deriva de `gestion_orden`: resultado ∈ `RESULTADOS_QUE_CUENTAN_COMO_INTENTO`
 //     (`lib/types/gestion-orden.ts`) + gestion vigente + cierre APROBADO. El punto UNICO del
 //     criterio es `whereIntentosVigentes`, en `lib/repositories/OrdenHistorialRepository.ts`.
@@ -73,7 +73,7 @@ export const ORIGEN_TIPOS_CON_GESTION = [
   "deshacer_gestion",
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
-// Feature 213 (T19, design §3.4, R34-a/R34-c) — familias de historial que nacen de una VISITA
+// Feature 215 (T19, design §3.4, R34-a/R34-c) — familias de historial que nacen de una VISITA
 // REAL de un mensajero sobre una orden en reparto. Es la SEXTA condicion del predicado unico de
 // intentos (`whereIntentosVigentes`, `lib/repositories/OrdenHistorialRepository.ts`): una gestion
 // solo cuenta si alguna de sus filas de `orden_historial_estado` pertenece a una de estas
@@ -101,9 +101,9 @@ export const ORIGEN_TIPOS_VISITA_REAL = [
   "gestion", // feature 36: `crearGestionYTransicionar` — el mensajero gestiono la orden en calle
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
-// Feature 213 (T4, R13/R28): aqui vivia `ORIGEN_TIPOS_REPROGRAMADA_INTENTO`, la lista blanca de
+// Feature 215 (T4, R13/R28): aqui vivia `ORIGEN_TIPOS_REPROGRAMADA_INTENTO`, la lista blanca de
 // familias que, con destino `reprogramada`, contaban como intento. Se RETIRA: su unica funcion
-// era el criterio viejo, que la 213 sustituye. Dejarla habria sido un segundo derivador legado
+// era el criterio viejo, que la 215 sustituye. Dejarla habria sido un segundo derivador legado
 // —un incumplimiento de R6 ("no admitir una segunda definicion de intento"), no una
 // compatibilidad—. La lista de INCLUSION vigente es `RESULTADOS_QUE_CUENTAN_COMO_INTENTO`
 // (`lib/types/gestion-orden.ts`).

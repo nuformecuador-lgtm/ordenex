@@ -182,6 +182,7 @@ describe("Feature 73 · las otras ramas no emiten causa (R10/R19)", () => {
         resultado: "entregada",
         montoRecibido: 100,
         metodoPago: "efectivo",
+        pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
         evidencias: [{ contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) }],
       },
       MENSAJERO,

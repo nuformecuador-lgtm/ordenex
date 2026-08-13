@@ -29,6 +29,7 @@ import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
+import { toLineasPago } from "@/lib/utils/lineas-pago";
 
 // Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
 // Feature 111/R15 (Q1-B): se RETIRA `vencido` (revierte parcialmente la 41 R19). El approve/
@@ -117,6 +118,12 @@ export const GESTION_ADMIN_SELECT = {
   ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo
   causaIncidente: true, // feature 158/R9/R34: causa tipificada del incidente
   indemnizacion: true, // feature 158/R19/R22/R34: monto capturado al aprobar (null antes)
+  // Feature 212/R21/R22/R23: el DESGLOSE del recaudo. Esta proyeccion alimenta los DOS
+  // detalles de admin (cierres 38/40 y cierres de bodega, que la reusan con este mismo
+  // mapper), asi que el desglose llega a los tres caminos con una sola definicion. Sin
+  // fallback al par escalar: una proyeccion que lo olvide da CERO, no un total plausible.
+  // `orderBy` sobre el enum nativo = orden de declaracion (efectivo, SINPE, transferencia).
+  pagos: { select: { metodo: true, monto: true }, orderBy: { metodo: "asc" } },
   historialEstados: {
     where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA }, // feature 102/R1: solo la fila del cron SLA
     take: 1,
@@ -235,7 +242,11 @@ export function toPendienteRowDesdeSnapshot(
     tiendaNombre: d.tiendaNombre,
     resultado: g.resultado,
     montoRecibido: decimalToString(g.montoRecibido),
+    // Feature 212/R31: el par escalar se CONSERVA (la 213 decide su retiro)...
     metodoPago: g.metodoPago,
+    // ...y el desglose por metodo viaja al lado, money-safe STRING, ya ordenado por la
+    // consulta (R21/R22). Es lo unico que suma en `computeTotales`.
+    pagos: toLineasPago(g.pagos),
     motivo: g.motivo,
     fechaReprogramacion: g.fechaReprogramacion
       ? g.fechaReprogramacion.toISOString().slice(0, 10)

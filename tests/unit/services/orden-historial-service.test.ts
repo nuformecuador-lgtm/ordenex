@@ -10,7 +10,7 @@ import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
 // Cubre R26 (linea de tiempo cronologica), R27 (autorizacion por visibilidad de la orden,
 // por rol) y el derivador de intentos.
 //
-// Feature 213: el derivador dejo de traducir `value -> id` del catalogo (`resolverCriterio`
+// Feature 215: el derivador dejo de traducir `value -> id` del catalogo (`resolverCriterio`
 // desaparece) porque el criterio ya no se expresa con ids de `order_status`, sino con valores
 // de los enums `GestionResultado`/`CierreEstado`. El servicio delega DIRECTO en el repo.
 
@@ -70,7 +70,7 @@ type HistorialRepoMethods = Pick<
 >;
 
 // El catalogo de estados sigue existiendo para la AUTORIZACION y para otros consumidores; el
-// conteo de intentos ya NO lo consulta (feature 213/R9).
+// conteo de intentos ya NO lo consulta (feature 215/R9).
 const ESTATUS: Record<string, string> = {
   devuelta: "s-devuelta",
   reprogramada: "s-reprogramada",
@@ -141,7 +141,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     if (r.status !== "ok") return;
     expect(r.intentos).toBe(2); // consume el punto unico del conteo
     expect(r.umbral).toBe(3); // default por ley (reintentosConfig, env no seteado en test)
-    // Feature 213/R6: el drawer llama al punto unico con SOLO el id de la orden.
+    // Feature 215/R6: el drawer llama al punto unico con SOLO el id de la orden.
     expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1");
   });
 
@@ -153,7 +153,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     if (r.status === "ok") expect(r.intentos).toBe(0);
   });
 
-  // T11b (213/R5/R32) — REESCRITO. El caso viejo afirmaba que anular una gestion hacia BAJAR el
+  // T11b (215/R5/R32) — REESCRITO. El caso viejo afirmaba que anular una gestion hacia BAJAR el
   // numero ("2 devueltas, 1 anulada -> 1"). Con D12 el conteo es MONOTONO CRECIENTE: una gestion
   // con `cierre_id` poblado ya no se puede anular, y contar exige ademas que su cierre este
   // aprobado, asi que toda gestion que llega a contar es ya inmutable. Lo que la anulacion
@@ -170,7 +170,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1");
   });
 
-  // T11b (213/R32) — MONOTONIA observable desde el drawer: dos lecturas de la MISMA orden
+  // T11b (215/R32) — MONOTONIA observable desde el drawer: dos lecturas de la MISMA orden
   // separadas por un evento (se aprueba el cierre) y el segundo numero es >= el primero. Ningun
   // test de este repo afirma que el conteo pueda decrecer.
   it("R32: dos lecturas del drawer separadas por la aprobacion de un cierre -> el numero no baja", async () => {
@@ -190,7 +190,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     expect([primera.intentos, segunda.intentos]).toEqual([1, 2]);
   });
 
-  // 213/R10/R20: el drawer refleja el criterio NUEVO. Aqui la orden acumulo resultado contable
+  // 215/R10/R20: el drawer refleja el criterio NUEVO. Aqui la orden acumulo resultado contable
   // en 3 cierres APROBADOS: el repo devuelve 3, y ese 3 es el que ve el usuario — el MISMO que
   // compara el cron contra el umbral. La FORMA no cambia (sigue exponiendo `intentos` +
   // `umbral`, R20); lo que cambia es el VALOR.
@@ -326,9 +326,9 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
   });
 });
 
-// --- contarIntentos: el punto unico (213/R6/R8/R9) ---
+// --- contarIntentos: el punto unico (215/R6/R8/R9) ---
 
-describe("contarIntentos — punto unico del conteo (213/R6/R8/R9)", () => {
+describe("contarIntentos — punto unico del conteo (215/R6/R8/R9)", () => {
   it("N intentos -> N, delegando en el punto unico con SOLO el id de la orden", async () => {
     const o = ordenRepo();
     const h = historialRepo({ contarIntentosVigentes: vi.fn(async () => 3) });
@@ -389,9 +389,9 @@ describe("contarIntentos — punto unico del conteo (213/R6/R8/R9)", () => {
   });
 });
 
-// --- contarIntentosEnLote: el gemelo en lote (213/R4/R7/R8) ---
+// --- contarIntentosEnLote: el gemelo en lote (215/R4/R7/R8) ---
 
-describe("contarIntentosEnLote — conteo por lote (213/R4/R7/R8)", () => {
+describe("contarIntentosEnLote — conteo por lote (215/R4/R7/R8)", () => {
   it("R7: consulta el repo UNA vez para todo el lote, con los ids tal cual", async () => {
     const o = ordenRepo();
     const h = historialRepo({

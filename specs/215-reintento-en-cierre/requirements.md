@@ -1,4 +1,4 @@
-# Feature 213 — El reintento se cuenta en el CIERRE, no en cada gestión
+# Feature 215 — El reintento se cuenta en el CIERRE, no en cada gestión
 
 Requisitos en notación EARS. Cada `R<n>` es verificable con un test. Feature
 `backend`, complejidad **high**. `depends_on: 160`.
@@ -15,7 +15,7 @@ Requisitos en notación EARS. Cada `R<n>` es verificable con un test. Feature
 > persistido, bloquea R24). Ninguna de las dos se decide aquí.
 >
 > **Estado de la implementación:** el commit **7d9471c3** ya implementa el criterio
-> nuevo (30 requisitos; bitácora en `progress/impl_213.md`). De aquí en adelante
+> nuevo (30 requisitos; bitácora en `progress/impl_215.md`). De aquí en adelante
 > este documento describe lo que **EXISTE**, no un plan. Lo que la tercera ronda
 > añade —el **discriminador de las gestiones SINTÉTICAS** (R18, R12, R34)— **NO
 > está implementado** y va marcado como tal en cada requisito.
@@ -120,7 +120,7 @@ Cerrar ese agujero es **candidato a ficha aparte** (haría falta contar
 
 ---
 
-## Contexto VERIFICADO contra el código de `C:/w213` (rama `feature/213`, desde `origin/dev`)
+## Contexto VERIFICADO contra el código de `C:/w213` (rama `feature/215`, desde `origin/dev`)
 
 Todo anclaje de esta sección se comprobó abriendo el archivo. Donde el número de
 línea de la ficha no coincidía, se corrigió aquí.
@@ -487,7 +487,7 @@ lo cambia (§Limitación declarada).
 
 ## Trazabilidad R → test
 
-Se completa con rutas reales en `progress/impl_213.md §2` durante la
+Se completa con rutas reales en `progress/impl_215.md §2` durante la
 implementación (T14 de `tasks.md`). El mapa propuesto está en `tasks.md §3`.
 Ningún requisito puede quedar sin dueño; el reviewer rechaza si falta uno.
 

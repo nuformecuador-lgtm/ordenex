@@ -167,7 +167,7 @@ describe("ejecutar — wrong_number / wrong_address: 5 dias -> rechazo directo (
   );
 });
 
-// Feature 213 (T12) — EL BLOQUE DEL DINERO. El criterio de "intento" cambio de sitio y ese
+// Feature 215 (T12) — EL BLOQUE DEL DINERO. El criterio de "intento" cambio de sitio y ese
 // numero es el que decide entre liberar a bodega (reintento) y escalar a `rechazada`, que
 // dispara `cobroRechazado` (56) contra la tienda. El servicio NO cambio de codigo: consume
 // `contarIntentos`, que ahora devuelve el numero nuevo. Lo que se fija aqui es el DESENLACE.
@@ -176,12 +176,12 @@ describe("ejecutar — wrong_number / wrong_address: 5 dias -> rechazo directo (
 // el `OrdenHistorialService` REAL sobre el `OrdenHistorialRepository` REAL sobre el doble de
 // Prisma que evalua el predicado contra filas de `gestion_orden`. Con el conteo mockeado el
 // caso no probaria NADA del criterio nuevo — solo que 3 >= 3.
-describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado (213/R3/R10/R11/R15/R29) [💰]", () => {
+describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado (215/R3/R10/R11/R15/R29) [💰]", () => {
   const ORDEN = "o1";
 
   /**
    * Fila de `gestion_orden` de la orden bajo prueba. `origenTiposHistorial` declara de donde
-   * NACE la gestion (feature 213/T21): por defecto una VISITA REAL del mensajero
+   * NACE la gestion (feature 215/T21): por defecto una VISITA REAL del mensajero
    * (`origen_tipo = 'gestion'`), que es lo unico que cuenta como intento. Las gestiones
    * SINTETICAS (`escalado_devuelta_sla`, `reprogramacion_tienda`) lo pasan explicitamente.
    */
@@ -307,7 +307,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  // R12 — EL DESENLACE DE DINERO DEL DISCRIMINADOR (feature 213/T21). La orden tuvo DOS visitas
+  // R12 — EL DESENLACE DE DINERO DEL DISCRIMINADOR (feature 215/T21). La orden tuvo DOS visitas
   // reales (cierres aprobados) y ademas la tienda la reprogramo desde el escritorio; esa gestion
   // sintetica (`reprogramacion_tienda`) cayo en un TERCER cierre del mismo mensajero, tambien
   // aprobado. Sin la sexta condicion del predicado el conteo diria 3 = umbral y el cron ESCALARIA

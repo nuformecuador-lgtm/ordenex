@@ -22,19 +22,19 @@ export interface IOrdenHistorialService {
    */
   obtenerHistorial(ordenId: string, actor: Actor): Promise<ObtenerHistorialServiceResult>;
   /**
-   * Feature 213 (R1/R3/R6) — numero de intentos de entrega DERIVADO, sin columna materializada.
+   * Feature 215 (R1/R3/R6) — numero de intentos de entrega DERIVADO, sin columna materializada.
    * Es el PUNTO UNICO del criterio (R6): lo consumen el cron SLA (99, `DevolucionSlaService`),
    * el drawer de historial (47, `obtenerHistorial`) y —via `contarIntentosEnLote`— todas las
    * superficies que muestran la orden.
    *
    * Cuenta los CIERRES APROBADOS DISTINTOS en los que la orden tuvo un resultado de gestion
    * VIGENTE de los que cuentan (`rechazada`/`devuelta`/`reprogramada`). Ya NO cuenta
-   * transiciones del historial. La FIRMA no cambio con la 213; lo que cambio es el NUMERO que
+   * transiciones del historial. La FIRMA no cambio con la 215; lo que cambio es el NUMERO que
    * devuelve, y eso gobierna dinero real (`rechazada` -> `cobroRechazado`, 56).
    */
   contarIntentos(ordenId: string): Promise<number>;
   /**
-   * Feature 213 (R4/R7/R8) — el MISMO conteo para un LOTE de ordenes, resuelto con UNA sola
+   * Feature 215 (R4/R7/R8) — el MISMO conteo para un LOTE de ordenes, resuelto con UNA sola
    * consulta (ya no hace falta leer el catalogo de estados: el criterio se expresa sobre enums).
    * Lo consumen los servicios de lectura que alimentan las superficies paginadas.
    *

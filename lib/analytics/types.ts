@@ -149,7 +149,7 @@ export interface DefinicionMetrica<TMetricaId extends string = string> {
   readonly estados?: readonly OrderStatusValue[];
   /** categorias de enum del esquema (GestionResultado, MetodoPagoValue, wallet_*_categoria...) (R9). */
   readonly categorias?: readonly string[];
-  /** criterio derivado ya existente en el repo, si aplica (intentos; 124/R11, 213/R23). */
+  /** criterio derivado ya existente en el repo, si aplica (intentos; 124/R11, 215/R23). */
   readonly criterio?: "intentos_por_cierre_aprobado";
   /** numerador/denominador cuando la unidad es porcentaje. */
   readonly razon?: {

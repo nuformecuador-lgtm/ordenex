@@ -106,7 +106,7 @@ export class DevolucionSlaService implements IDevolucionSlaService {
         }
 
         if (orden.causa === "not_found") {
-          // Feature 213 (R15) — QUE cuenta este numero, con el criterio VIGENTE: los CIERRES
+          // Feature 215 (R15) — QUE cuenta este numero, con el criterio VIGENTE: los CIERRES
           // APROBADOS DISTINTOS en los que la orden tuvo un resultado de gestion vigente
           // `rechazada`, `devuelta` o `reprogramada`. Ya NO cuenta transiciones del historial:
           // la devolucion o la reprogramacion del mensajero no suman por si solas en el instante

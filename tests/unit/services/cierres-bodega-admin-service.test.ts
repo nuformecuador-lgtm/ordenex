@@ -9,6 +9,7 @@ import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/IC
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IngresoOrdenexDTO } from "@/lib/interfaces/services/ICierreDiaService";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 // Feature 40 — tests unit del CierresBodegaAdminService (lado maestro; dobles de
 // repo/signedUrls, sin DB/red). Cubre R2 (rol), R11 (detalle por cierre_dia con grupos
@@ -57,7 +58,11 @@ function detalleCierreRow(
 }
 
 function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
-  return {
+  // Feature 212/T9: el desglose es OBLIGATORIO en la fila. Por defecto se deriva del par
+  // escalar (UNA linea, igual que el backfill), asi que los casos previos no cambian; un
+  // caso que quiera un cobro MIXTO pasa sus propias lineas en `overrides.pagos`.
+  const { pagos, ...resto } = overrides;
+  const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
     gestionId: "g1",
     ordenId: "o1",
     numGuia: 10,
@@ -83,8 +88,9 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
     indemnizacion: null,
-    ...overrides,
+    ...resto,
   };
+  return conPagos(fila, pagos);
 }
 
 type Repo = ICierresBodegaAdminRepository;

@@ -26,6 +26,8 @@ import type {
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import type { MetodoPago } from "@/lib/types/metodo-pago";
+import type { LineaPago } from "@/lib/utils/pagos-recaudo";
 import {
   fechaCalendarioCR,
   inicioDelDiaCREnUtc,
@@ -360,6 +362,21 @@ export class MisAsignacionesService implements IMisAsignacionesService {
           },
         };
       }
+      // Feature 212 (R18): SEGUNDA barrera, independiente del borde zod y con aritmetica
+      // `Prisma.Decimal` (nunca `number` ni `parseFloat`, R30). El borde suma en centimos
+      // porque viaja al navegador; aqui, donde el dinero se persiste, se suma en Decimal. Un
+      // desglose descuadrado no da un numero feo en pantalla: descuadra la `E` del `min(P, E)`
+      // con el que se le paga al mensajero (feature 44).
+      const sumaPagos = input.pagos.reduce(
+        (acc, p) => acc.plus(new Prisma.Decimal(p.monto)),
+        new Prisma.Decimal(0),
+      );
+      if (!sumaPagos.equals(new Prisma.Decimal(input.montoRecibido))) {
+        return {
+          status: "validation_error",
+          fieldErrors: { pagos: ["el desglose debe sumar el monto recibido"] },
+        };
+      }
     }
 
     const nuevoEstatusId = await this.ordenRepo.findEstatusIdByValue(input.resultado);
@@ -537,6 +554,14 @@ export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
  * las ramas con foto pasan la LISTA `evidencias` (1..N); el repo deriva de ella la portada
  * (indice 0) hacia las columnas viejas (dual-write, R12) e inserta las N filas hijas.
  */
+/**
+ * Feature 212 (R19): valor de la columna DEPRECADA `gestion_orden.metodo_pago` derivado del
+ * desglose. 1 linea -> esa; 0 o >= 2 lineas -> `null`.
+ */
+function metodoPagoCompatibilidad(pagos: LineaPago[]): MetodoPago | null {
+  return pagos.length === 1 ? pagos[0].metodo : null;
+}
+
 function buildGestionData(
   input: GestionarInput,
   evidencias: { storagePath: string; contentType: string; indice: number }[],
@@ -560,7 +585,12 @@ function buildGestionData(
         ...geo,
         resultado: "entregada",
         montoRecibido: input.montoRecibido,
-        metodoPago: input.metodoPago,
+        // Feature 212 (R19): la columna DEPRECADA se deriva del DESGLOSE, no del escalar que
+        // mando el cliente: con una sola linea vale esa (y una entrega legacy escribe
+        // exactamente el mismo valor de antes); con cero o con dos o mas, NULL — porque no
+        // existe "el" metodo de una entrega mixta y elegir uno mentiria en los listados viejos.
+        metodoPago: metodoPagoCompatibilidad(input.pagos),
+        pagos: input.pagos,
         evidencias,
       };
     case "reprogramada":

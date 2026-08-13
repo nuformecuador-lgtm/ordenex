@@ -32,7 +32,19 @@ export interface CierreDetalleGestion {
   tiendaNombre: string;
   resultado: CierreResultado;
   montoRecibido: string | null; // Decimal->string; solo entregada (R6)
+  // Feature 212/R31: DEPRECADO pero VIVO. Se CONSERVA mientras la presentacion actual lo
+  // consuma; su retiro lo decide la 213. `null` cuando la entrega tiene 0 o >=2 metodos.
   metodoPago: MetodoPagoValue | null; // solo entregada (R6)
+  /**
+   * Feature 212/R31: DESGLOSE del recaudo de la entrega — 0..N lineas `(metodo, monto)`,
+   * money-safe STRING escala 2, en orden de declaracion del enum (`efectivo`, `SINPE`,
+   * `transferencia`). `[]` cuando la gestion no cobro nada o no es `entregada`.
+   *
+   * Convive con `metodoPago` A PROPOSITO: entre el merge de esta ficha y el de la 213 la
+   * pantalla sigue pintando el campo escalar, y el desglose es lo que la 213 consumira para
+   * pintar el detalle y para concatenar la celda de las dos descargas.
+   */
+  pagos: { metodo: MetodoPagoValue; monto: string }[];
   motivo: string | null; // reprogramada/devuelta/rechazada (R4)
   fechaReprogramacion: string | null; // ISO date (YYYY-MM-DD); solo reprogramada (R4)
   evidenciaUrl: string | null; // URL FIRMADA (R5), nunca el storage_path
