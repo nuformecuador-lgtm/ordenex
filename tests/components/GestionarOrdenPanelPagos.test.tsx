@@ -213,6 +213,28 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     expect(opcionLibre).not.toHaveAttribute("aria-disabled", "true");
   });
 
+  it("R3: se pueden añadir líneas mientras queden métodos; con 3 el control desaparece", async () => {
+    // La REGLA pura ya la fija `desglose-captura.test.ts`; lo que aquí se afirma es el CABLEADO:
+    // que al pulsar el control las líneas crecen de verdad y que el tope se alcanza POR LA UI, no
+    // solo en el módulo. Tres es el tamaño del catálogo (`METODO_PAGO_SEED`), no un número mágico:
+    // ofrecer una cuarta línea sería ofrecer un método repetido, y el desglose es dinero.
+    const user = userEvent.setup();
+    await abrirEntrega(user);
+
+    const anadir = () => screen.queryByRole("button", { name: "Añadir método" });
+    const lineas = () => screen.getAllByRole("group", { name: /^Línea de pago/ }).length;
+
+    expect(lineas()).toBe(1);
+    await user.click(anadir() as HTMLElement);
+    expect(lineas()).toBe(2);
+    // Con 2 de 3 métodos usados el control SIGUE ofreciéndose (la mitad viva de la regla).
+    expect(anadir()).toBeInTheDocument();
+
+    await user.click(anadir() as HTMLElement);
+    expect(lineas()).toBe(3);
+    expect(anadir()).toBeNull();
+  });
+
   it("R8: muestra monto a cobrar, suma capturada y diferencia, y se actualizan al teclear", async () => {
     const user = userEvent.setup();
     await abrirEntrega(user);

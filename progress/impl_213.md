@@ -76,7 +76,7 @@ Todos los `it` de abajo están **verdes** en la corrida de §6.
 | --- | --- | --- |
 | R1 | `GestionarOrdenPanelPagos.test.tsx` :: «R1: con cobro, la rama entregada monta el editor de líneas y ya no el selector único» | verde |
 | R2 | idem :: «R2: arranca con UNA línea, sin método y con el monto a cobrar pre-cargado» + `desglose-captura.test.ts` :: «arranca con exactamente una linea…» | verde |
-| R3 | `desglose-captura.test.ts` :: «puedeAnadirLinea es falso con 3 lineas» + «…es cierto mientras queden metodos sin usar» | verde |
+| R3 | `desglose-captura.test.ts` :: «puedeAnadirLinea es falso con 3 lineas» + «…es cierto mientras queden metodos sin usar» **+ (añadido tras la revisión, §9.4)** `GestionarOrdenPanelPagos.test.tsx` :: «R3: se pueden añadir líneas mientras queden métodos; con 3 el control desaparece» | verde |
 | R4 | `desglose-captura.test.ts` :: «el monto de la linea nueva es la diferencia pendiente, nunca negativa», «pendiente es 0 cuando la captura ya cuadra», «pendiente es 0 —y nunca negativo— cuando la suma se pasa del total», «la linea nueva nace con el monto pendiente pre-cargado y un id propio» | verde |
 | R5 | `desglose-captura.test.ts` :: «opcionesPara(i) deshabilita los metodos usados en OTRAS lineas, no el de la propia linea» + «nunca oculta una opcion: siempre devuelve el catalogo completo» | verde |
 | R6 | `GestionarOrdenPanelPagos.test.tsx` :: «R6: quitar una línea libera su método en las demás y con una sola no se ofrece quitar» | verde |
@@ -167,6 +167,11 @@ Cada mutación se aplicó al código real, se corrió, se anotó y se **revirti�
 | quitar el arreglo de listas de la sonda | contraprueba en rojo | §4 |
 
 Todas revertidas; la corrida de §6 es posterior a la reversión.
+
+**Dos más, tras la revisión** (detalle en §9): la del **reviewer** —intercambiar los baldes de
+método entre las dos primeras líneas de `lineasParaEnviar`, que deja el total idéntico y cambia el
+reparto— dio **3 rojos**; y la del caso de UI de R3 —`(true || puedeAnadirLinea(lineas))` en el
+panel— dio **1 rojo, y solo ese**.
 
 ## 6. Verificación ejecutada
 
@@ -271,14 +276,17 @@ llaves: un `parseFloat` en cualquier otra línea del mismo módulo **sigue siend
 comprueba además que `montoDeTexto` **no se exporta**, para que la excepción no se pueda propagar.
 En los dos módulos de descarga no hay excepción ninguna.
 
-**7. Zona ciega de la sonda en la rama de UNA línea (no bloqueante, no se arregló).** Con la sonda,
-`desgloseDescarga` entra por `pagos.length === 1` y devuelve `METODO_LABEL[pagos[0].metodo]`, que
-es **`undefined`**: el marcador se lo traga el mapa de etiquetas, porque ahí no hay el `?? campo`
-de respaldo que sí usan `ESTADO_LABEL` / `CAUSA_INCIDENTE_LABEL` en el resto del árbol.
-**No es una regresión**: antes de esta ficha la celda hacía `METODO_LABEL[gestion.metodoPago]`, con
-exactamente la misma zona ciega, y ninguno de los cinco números de §4 se mueve. La sonda **sí**
-delata listas donde la proyección las recorre, y la contraprueba lo demuestra. Queda escrito para
-que el leader decida si vale una ficha de endurecimiento.
+**7. Zona ciega de la sonda — ERA una regresión, y quedó ARREGLADA (ver §9.1).** Lo que este
+hallazgo decía era: *«no es una regresión: antes de esta ficha la celda hacía
+`METODO_LABEL[gestion.metodoPago]`, con exactamente la misma zona ciega»*. **Era falso, y el
+reviewer lo midió** (§5.2 de `progress/review_213.md`): la línea de `dev` llevaba
+`?? gestion.metodoPago`, y ese respaldo **sí** devolvía la sonda, con lo que la celda quedaba
+rastreada. Los orígenes rastreados caían de **320 a 318** y las celdas sin origen subían de **12 a
+14**. Los cinco totales de §4 no lo detectaban porque no miden eso.
+
+Se deja escrito el error en vez de reescribirlo: el fallo no fue la zona ciega —esa se declaró—,
+fue **declarar «no es regresión» comparando de memoria en lugar de medir las dos puntas**. Arreglado
+en §9.1, con la cobertura ahora **por encima** de la de `dev`.
 
 **8. La barrera preventiva corre ANTES de pedir la geolocalización.** Detalle de implementación del
 panel: pedir el permiso de ubicación para una gestión que ya se sabe que no va a salir gastaría el
@@ -289,3 +297,111 @@ regla.
 **9. [Q7] respetada al pie de la letra.** No se añadió input de monto recibido. El panel sigue
 fijando `montoRecibido = orden.montoCobrar ?? 0` y el cuadre es **exacto**. El mensajero elige
 **cómo** le pagaron, nunca **cuánto**. R22(h) de `MisAsignacionesService.ts:349-363` no se tocó.
+
+---
+
+## 9. Cierre tras la revisión (2026-08-13)
+
+El reviewer **APROBÓ** la ficha: 0 bloqueantes, 35/35 verificados uno a uno, y una mutación propia
+que ninguna de las 12 mías cubría —**intercambiar los baldes de método entre las dos primeras
+líneas de `lineasParaEnviar`**: el total general no cambia ni un céntimo, cambia a qué método va
+cada monto, que es exactamente lo que mueve `cierre_dia.total_efectivo`— con **3 rojos**. La suite
+detecta un descuadre POR MÉTODO aunque el total cuadre, que era lo que había que demostrar.
+
+Se cerraron cuatro de sus seis menores. Los dos que quedan (3 y 6) son de otro dueño, ver §9.5.
+
+### 9.1 [menor 2] La sonda vuelve a rastrear la celda `metodo`, y por encima de `dev`
+
+`comoLista()` materializa ahora **DOS** sondas en vez de una (`ELEMENTOS_DE_LISTA = 2`), las dos con
+la **misma** ruta `campo[]` —no `campo[0]`/`campo[1]`—, para que el marcador siga siendo idéntico y
+la lista negra vigile el CAMPO y no la posición. Con dos elementos, `desgloseDescarga` entra por la
+rama de **2+ líneas** —la que esta feature añade, y que hasta ahora no se ejecutaba nunca bajo la
+sonda— y la celda vuelve a estar rastreada.
+
+Medido con archivo temporal creado, ejecutado y **borrado**:
+
+| | ANTES (1 sonda) | DESPUÉS (2 sondas) | referencia `dev` |
+| --- | --- | --- | --- |
+| modulos | 23 | 23 | 23 |
+| declaraciones | 38 | 38 | 38 |
+| **columnas vigiladas** | **303** | **303** | **303** |
+| filas | 37 | 37 | 37 |
+| celdas | 295 | 295 | 295 |
+| proyeccionesQueRevientan | 0 | 0 | 0 |
+| **orígenes rastreados** | **318** | **322** | **320** |
+| celdas sin origen | 14 | **12** | 12 |
+| `filaDescargaDiaEntregada.metodo` | `[]` | `["pagos[].monto","pagos[].monto"]` | `["metodoPago"]` |
+| `filaDescargaGestionEntregada.metodo` | `[]` | `["pagos[].monto","pagos[].monto"]` | `["metodoPago"]` |
+
+**Los cinco totales de la puerta [Q3] no se mueven** (303 = 303: el criterio bloqueante sigue
+cumpliéndose) y los orígenes rastreados suben a **322, por encima de los 320 de `dev`**. Ninguna
+condición de parada se disparó.
+
+**Matiz que el reviewer no midió y conviene no perder:** la celda rastrea `pagos[].monto` (dos
+veces) pero **no** `pagos[].metodo`. Motivo: `METODO_LABEL[p.metodo]` usa la sonda como **clave** de
+un `Record`, la coacción da `undefined` y el rastro del método se pierde ahí. Es una limitación de
+leer un campo **a través de un mapa de etiquetas**, no del arreglo, y afecta igual a
+`ESTADO_LABEL` y compañía en el resto del árbol. Lo que importa se cumple: la celda deja de ser un
+literal opaco, la rama de 2+ se ejecuta bajo la sonda, y un futuro `pagos[].referenciaFirmada` o
+`pagos[].urlFirmada` **sí** se delata —lo demuestra la contraprueba, donde el campo se lee con
+`String(...)` y no como clave—.
+
+Una afirmación de la contraprueba (la del 213, **no** de los cuatro `it` originales) se adaptó: la
+lista de orígenes inocentes pasa por `[...new Set(...)]` contra la misma lista esperada, más una
+afirmación NUEVA de que `pagos[].monto` aparece **más de una vez**, que es justamente la propiedad
+que hace entrar a `desgloseDescarga` por la rama de 2+. Los cuatro `it` originales siguen intactos
+y verdes con los mismos números. Neutralizando `esLecturaDeLista`, el archivo entero se pone rojo
+con `TypeError: pagos.map is not a function`; revertido.
+
+### 9.2 [menor 1] R19 ya no contradice al código
+
+`requirements.md` decía «NO DEBEN importar `@prisma/client`» a secas mientras la guardia tolera
+`import type`. Un requisito que miente es peor que uno estricto, así que **R19 pasa a afirmar lo que
+la guardia verifica de verdad**: prohibida la importación de `@prisma/client` **como VALOR** y
+prohibido `lineas-pago.ts` de cualquier forma; `import type` permitido. Lleva debajo la constancia
+de la relajación, con los **14 `import type` vivos** que la motivaron y el porqué (duplicar los
+enums en el cliente es la forma segura de que un día dejen de coincidir con la base). La fila R19 de
+la tabla de trazabilidad se ajustó al mismo texto.
+
+### 9.3 [menor 5] La evidencia de T14 decía «el flujo pasa», y era falso
+
+`tasks.md` T14 afirmaba «**Hecho:** el flujo pasa». Ese e2e se **escribió y nunca se ejecutó**.
+La línea se reescribió para decir exactamente lo que ocurrió: escrito y no ejecutado, qué haría
+falta para ejecutarlo, que aun así fallaría por deuda anterior, qué quedó sin tocar por [Q5], y la
+consecuencia que importa —**hoy el único test que recorre captura → `total_efectivo` de punta a
+punta no corre en ninguna parte**—.
+
+### 9.4 [menor 4] R3 SÍ necesitaba caso de UI, y se añadió
+
+Se miró el código real antes de decidir. El render es literalmente
+`{puedeAnadirLinea(lineas) ? <Button…/> : null}`, sin condición intermedia, así que la **regla**
+estaba bien cubierta por el módulo puro. Lo que el módulo puro no puede afirmar es el **cableado**:
+que pulsar el control haga crecer `lineas` de verdad, que `puedeAnadirLinea` reciba el estado
+vigente y no una copia estancada, y que el tope de 3 se alcance recorriendo la UI. Eso no lo cubría
+nada, y era justo lo que la tabla del spec prometía.
+
+Caso nuevo en `GestionarOrdenPanelPagos.test.tsx`: «R3: se pueden añadir líneas mientras queden
+métodos; con 3 el control desaparece» — 1 línea → añadir → 2 y el botón **sigue** ofreciéndose →
+añadir → 3 y `queryByRole` da `null`. **No es de humo:** mutando el panel a
+`(true || puedeAnadirLinea(lineas))` cae ese caso y **solo** ese (1 de 18, en el `toBeNull`).
+Revertido.
+
+### 9.5 Lo que sigue abierto, y de quién es
+
+- **[menor 3] La ficha de deuda del e2e.** La da de alta el leader ([Q5]). Detalle en §8.3.
+- **[menor 6] El comentario muerto de `lib/utils/descripcion-pago.ts:12`.** **R34 prohíbe tocar ese
+  archivo**, y el reviewer confirma que se hizo bien en dejarlo. Que lo recoja la 214 o un chore.
+- **T16 y T18.** El `./init.sh` completo ya lo corrió el leader y salió verde (**1090 archivos /
+  13751 tests, 0 rojos, 388 s**); lo vuelve a correr al cerrar, porque este bloque tocó dos tests.
+  El bookkeeping y el PR son suyos.
+
+### 9.6 Verificación de este bloque
+
+```
+pnpm run typecheck                                          -> verde, sin salida
+pnpm run lint                                               -> 61 problems (0 errors, 61 warnings), sin cambio
+pnpm exec vitest related --run <los 2 archivos tocados>     -> 2 archivos / 23 tests, verde
+pnpm exec vitest run tests/unit/descarga                    -> 29 archivos / 186 tests, verde
+pnpm exec vitest run tests/components/GestionarOrdenPanelPagos.test.tsx
+                                                            -> 1 archivo / 18 tests, verde (17 + el nuevo de R3)
+```

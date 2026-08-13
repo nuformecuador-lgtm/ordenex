@@ -142,19 +142,32 @@ function esLecturaDeLista(propiedad: string | symbol): boolean {
  * **Campos de LISTA (feature 213, design §5).** Hasta la 213 todas las proyecciones leían
  * campos ESCALARES. `filaDescargaDiaEntregada` pasó a leer `gestion.pagos`, que es una
  * lista, y la sonda reventaba (`pagos.map is not a function`): su mecánica, no un hallazgo.
- * Se AMPLÍA en vez de esquivarse: una lectura de lista se atiende con un array REAL de UNA
- * sonda cuya ruta es `campo[]`, así que el rastro sobrevive a `map`/`filter`/`join` y un
+ * Se AMPLÍA en vez de esquivarse: una lectura de lista se atiende con un array REAL de
+ * sondas cuya ruta es `campo[]`, así que el rastro sobrevive a `map`/`filter`/`join` y un
  * futuro `pagos[].referenciaFirmada` sigue delatándose y la lista negra sigue mordiendo.
  * La alternativa —un `Array.isArray(...)` en producción— está rechazada en el design: es
  * código con forma de test en un camino de dinero.
+ *
+ * **Por qué DOS elementos y no uno.** Con UNO, una proyección que ramifica por el tamaño de
+ * la lista (`desgloseDescarga`: 0 → `null`, 1 → solo la etiqueta, 2+ → etiqueta + monto)
+ * entraba siempre por la rama de una línea, devolvía `METODO_LABEL[«sonda:pagos[]»]` —es
+ * decir `undefined`— y la celda `metodo` de los DOS módulos de descarga se quedaba SIN
+ * origen rastreado, justo la rama que la 213 añade. Medido: 318 orígenes / 14 celdas sin
+ * origen con una sonda, 322 / 12 con dos (`dev` daba 320 / 12). Los dos elementos comparten
+ * la MISMA ruta `campo[]` a propósito: la lista negra vigila el CAMPO, no la posición, y así
+ * el rastro es el mismo marcador se lea el elemento que se lea.
  */
 function sonda(ruta = ""): Record<string, unknown> {
   const marcador = `${MARCA_INICIO}${ruta}${MARCA_FIN}`;
-  // Se materializa PEREZOSAMENTE: crear el elemento en la construcción haría recursión
-  // infinita, porque cada sonda contendría otra sonda.
+  /** Elementos que materializa una lectura de lista (ver el porqué del DOS arriba). */
+  const ELEMENTOS_DE_LISTA = 2;
+  // Se materializa PEREZOSAMENTE: crear los elementos en la construcción haría recursión
+  // infinita, porque cada sonda contendría otras sondas.
   const lista: unknown[] = [];
   const comoLista = (): unknown[] => {
-    if (lista.length === 0) lista.push(sonda(`${ruta}[]`));
+    if (lista.length === 0) {
+      for (let i = 0; i < ELEMENTOS_DE_LISTA; i += 1) lista.push(sonda(`${ruta}[]`));
+    }
     return lista;
   };
   return new Proxy({} as Record<string, unknown>, {
@@ -344,7 +357,15 @@ describe("guardia de datos sensibles en las columnas de export", () => {
 
     // No-vacuidad: la lectura de lista deja rastro, y el rastro dice que vino de la LISTA.
     expect(origenesProhibidos).toContain("pagos[].urlFirmada");
-    expect(origenesInocentes).toEqual(["pagos[].metodo", "pagos[].monto"]);
+    expect([...new Set(origenesInocentes)]).toEqual(["pagos[].metodo", "pagos[].monto"]);
+
+    // La lista se materializa con MÁS DE UN elemento, que es lo que hace que una proyección
+    // que ramifica por `length` (`desgloseDescarga`) entre por su rama de 2+ líneas bajo la
+    // sonda en vez de por la de una. Sin esto la celda `metodo` de los dos módulos de
+    // descarga se quedaba sin origen rastreado (318 → 322 orígenes; ver el comentario de
+    // `sonda`). Se afirma sobre el RASTRO, no sobre el array, porque el rastro es lo que la
+    // lista negra muerde.
+    expect(origenesInocentes.filter((o) => o === "pagos[].monto").length).toBeGreaterThan(1);
 
     // Lo que la guardia haría con cada una: la de arriba MUERDE, la de abajo pasa.
     expect(origenesProhibidos.some((origen) => NOMBRES_PROHIBIDOS.test(origen))).toBe(true);

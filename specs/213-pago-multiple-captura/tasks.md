@@ -140,9 +140,20 @@ dando al fixture su línea coherente, NUNCA relajando la aserción.** 8 asercion
   5.000 efectivo + 3.000 transferencia) y comprobar que el cierre del día muestra
   `total_efectivo = 5.000` (R35). Su `elegirEnSelect(page, "Método de pago", …)` de `:128` muere
   con este cambio y hay que reescribirlo.
-  **Hecho:** el flujo pasa. **Ojo, y está en la puerta como [Q5]:** ese spec ya venía roto de antes
-  —`abrirGestionPrimeraOrden` (`:98`) espera un `dialog` «Gestionar orden» que el rediseño ux
-  retiró; el panel es INLINE—. Si se decide no arreglar el resto del archivo, dejarlo escrito.
+  **Hecho, con la evidencia REAL y no la prometida:** el bloque (d) del camino mixto y el helper
+  `capturarLineaDePago` están **ESCRITOS y NUNCA EJECUTADOS**. No es que pasen: es que no se
+  corrieron. Ejecutarlos exige `.env` con credenciales, base migrada, el bucket privado
+  `gestion-evidencias`, el fixture `e2e/fixtures/evidencia.jpg`, seed del mensajero con la primera
+  orden en `por_recoger` de 8.000 y `pnpm dev` levantado; y **aun con todo eso fallaría**, por
+  deuda ANTERIOR a esta ficha.
+  **[Q5], cerrada en la puerta:** aquí se arregló SOLO lo que este cambio rompe (el recaudo,
+  `:128`). Sigue obsoleto y **sin tocar**, para la ficha de deuda que da de alta el leader:
+  `recogerPrimeraOrden` asume el modal «Recoger órdenes» que retiró la 96;
+  `abrirGestionPrimeraOrden` (`:98`) espera un `dialog` «Gestionar orden» que la 113 convirtió en
+  panel INLINE —con lo que todo `expect(modal).toBeHidden()` cae—; y
+  `elegirEnSelect(page, "Resultado de la gestión", …)` está muerto porque hoy el resultado se elige
+  con botones. **Consecuencia que conviene no perder de vista:** hoy el único test que recorre
+  captura → `total_efectivo` de punta a punta no corre en ninguna parte (menor 3 del reviewer).
 
 > Cierre de tanda: `./init.sh --rapido`.
 

@@ -118,9 +118,23 @@ borde y, si falla, DEBE pintar los errores por campo sin invocar la Server Actio
 **R18.** CUANDO el servidor devuelve un `validation_error` con errores en el campo `pagos`, el
 panel DEBE mostrarlos asociados al editor de líneas, no perderlos en silencio.
 
-**R19.** El panel y todo módulo que él importe NO DEBEN importar `@prisma/client` ni
-`lib/utils/lineas-pago.ts` (que sí lo importa): el bundle del navegador no puede arrastrar runtime
-de servidor.
+**R19.** El panel y todo módulo que él importe NO DEBEN importar `@prisma/client` **como VALOR**, ni
+importar `lib/utils/lineas-pago.ts` de ninguna forma: el bundle del navegador no puede arrastrar
+runtime de servidor. Un `import type` de `@prisma/client` SÍ está permitido.
+
+> **R19 se relajó durante la implementación, tras medir (2026-08-13).** La redacción original
+> prohibía `@prisma/client` a secas, y su motivo —«no arrastrar runtime al bundle»— no encajaba con
+> la regla: un `import type` se borra al compilar, no emite `require` y no entra en el grafo del
+> bundler. Medido, el árbol transitivo del panel (87 archivos) tiene **14 `import type` vivos** de
+> `@prisma/client`, entre ellos `cierre-labels.ts`, por donde pasa el `METODO_LABEL` que R25 exige
+> como fuente única de etiquetas: cumplir la letra original obligaría a duplicar los enums en el
+> cliente, que es la forma segura de que un día dejen de coincidir con la base.
+> `lib/utils/lineas-pago.ts` sigue prohibido **por su rol** —serializador de las proyecciones
+> Prisma—, no por arrastrar runtime: medido, sus imports de Prisma también son de tipo. La guardia
+> verifica exactamente esta regla y es MÁS estricta que el texto original en todo lo demás (árbol
+> transitivo entero, cero especificadores sin resolver, corte solo en `"use server"` bajo
+> `lib/actions/`, control de no-vacuidad). Aceptado por el reviewer, §5.1 de
+> `progress/review_213.md`.
 
 ---
 
@@ -216,7 +230,7 @@ Archivos nuevos marcados **(nuevo)**; el resto se amplían sin relajar ninguna a
 | R16 | componente :: «orden SIN cobro: no hay editor, cero pares de pago y sin `metodoPago` escalar» | los tres `expect` a la vez; contraprueba con `montoCobrar > 0` |
 | R17 | componente :: «el panel valida con `gestionarSchema` antes de enviar (sin fotos → no envía)» | error de `evidencias` sin llamada a la action |
 | R18 | componente :: «un `validation_error` del servidor en `pagos` se pinta en el editor» | mock de `gestionar` devolviendo `fieldErrors.pagos` |
-| R19 | guardia `pagos-captura.guardia.test.ts` :: «el panel y su árbol de imports no nombran `@prisma/client` ni `lineas-pago`» + contraprueba con un import inyectado | barrido del grafo desde `GestionarOrdenPanel.tsx` |
+| R19 | guardia `pagos-captura.guardia.test.ts` :: «el árbol de imports del panel no importa `@prisma/client` COMO VALOR ni `lineas-pago` de ninguna forma» + contraprueba con un import inyectado | barrido transitivo del grafo desde `GestionarOrdenPanel.tsx`, distinguiendo `import type` de importación de valor |
 | R20 | `tests/components/CierreDiaModule.test.tsx` (ampliado) + `tests/components/CierreDetallePagos.test.tsx` **(nuevo)** :: «una sola línea se ve exactamente igual que antes» | el texto de la celda es `SINPE` a secas en los tres sitios |
 | R21 | mismos archivos :: «dos líneas: se ven los DOS métodos con su monto» | `Efectivo ₡5.000,00` y `Transferencia ₡3.000,00` visibles en la fila |
 | R22 | mismos archivos :: «sin líneas, la celda sigue siendo `—`» | los tres sitios |
