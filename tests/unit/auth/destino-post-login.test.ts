@@ -63,6 +63,9 @@ describe("R5 — destino post-login por rol (valores escritos a mano, NO derivad
     expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite");
   });
 
+  // 2026-08-12: el mensajero ya no ve "Analítica", así que su destino lo protege ahora el
+  // orden de SU barra ("Entregas" primero) además de la marca `destinoInicial`. El valor
+  // esperado no cambia — que es exactamente lo que este archivo existe para comprobar.
   it("mensajero aterriza en /mis-asignaciones/reparto (NO en /analitica; y es el SUBÍTEM, el padre no navega)", () => {
     expect(destinoDe("mensajero")).toBe("/mis-asignaciones/reparto");
   });
@@ -106,13 +109,18 @@ describe("R5 — destino post-login por rol (valores escritos a mano, NO derivad
     expect(noElegibles).toEqual(["/analitica", "/monitoreo"]);
   });
 
-  it("el ítem sigue siendo VISIBLE para los cinco: no elegible como aterrizaje ≠ oculto", () => {
+  // 2026-08-12: el `mensajero` sale del tablero, así que la afirmación «visible pero no
+  // elegible» ya sólo puede hacerse de los CUATRO roles que lo ven. La distinción que este
+  // caso protege sigue siendo la misma y sigue mordiendo con ellos: `adminTienda` y
+  // `adminSatelite` ven el ítem en PRIMERA posición de su barra y aun así no aterrizan ahí.
+  // El mensajero se afirma por el otro lado —no lo ve— para que su salida quede escrita aquí
+  // y no se lea como que este caso se recortó sin motivo.
+  it("el ítem sigue siendo VISIBLE para los cuatro con acceso: no elegible como aterrizaje ≠ oculto", () => {
     for (const rol of [
       "maestro",
       "admin",
       "adminTienda",
       "adminSatelite",
-      "mensajero",
     ] as RolValue[]) {
       expect(
         itemsVisibles(SIDEBAR_ITEMS, actor(rol)).some(
@@ -120,5 +128,10 @@ describe("R5 — destino post-login por rol (valores escritos a mano, NO derivad
         ),
       ).toBe(true);
     }
+    expect(
+      itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")).some(
+        (i) => i.href === "/analitica",
+      ),
+    ).toBe(false);
   });
 });
