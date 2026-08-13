@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { listarMetricas } from "@/lib/analytics/metrics";
 import type { IAnaliticaOperativaVivaRepository } from "@/lib/interfaces/repositories/IAnaliticaOperativaVivaRepository";
 import { consultaDe, cubo, rollupFalso, servicioCon, vivaFalso } from "./_fake-operativa";
@@ -23,10 +24,7 @@ const LECTOR_ROLLUP = "lib/repositories/AnaliticaOperativaRollupRepository.ts";
 const LECTOR_VIVO = "lib/repositories/AnaliticaOperativaVivaRepository.ts";
 
 function soloCodigo(rel: string): string {
-  return fs
-    .readFileSync(path.join(REPO_ROOT, rel), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8"));
 }
 
 const RANGO_CERRADO = {

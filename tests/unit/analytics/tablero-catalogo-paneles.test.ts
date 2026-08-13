@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 import {
   PANELES_OPERATIVOS,
@@ -131,10 +132,7 @@ describe("Feature 131 (R21) — el tablero no decide sus paneles por `estadoProd
   it("el catalogo de paneles no lee `estadoProduccion`", () => {
     // Direccion 2: aunque hoy las dos esten, nada impide que manana alguien anada el
     // filtro. El censo lee el FUENTE del catalogo (sin comentarios) y lo prohibe.
-    const codigo = fs
-      .readFileSync(RUTA_CATALOGO, "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|\s)\/\/.*$/gm, "$1");
+    const codigo = quitarComentarios(fs.readFileSync(RUTA_CATALOGO, "utf8"));
     expect(codigo).not.toContain("estadoProduccion");
     expect(codigo).not.toContain("listarMetricas");
     // Y tampoco importa el catalogo de servidor (R25).

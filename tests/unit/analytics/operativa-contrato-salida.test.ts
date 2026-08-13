@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { PENUMBRA, type SerieOperativa } from "@/lib/types/analitica-operativa";
 import { listarMetricas } from "@/lib/analytics/metrics";
 import { consultaDe, cubo, rollupFalso, servicioCon } from "./_fake-operativa";
@@ -81,7 +82,7 @@ describe("R34 · cobertura es obligatoria en toda respuesta ok", () => {
     // Se despiojan los comentarios antes de buscar: el propio contrato EXPLICA en prosa por
     // que no puede ser `cobertura?`, y esa mencion no es una declaracion. Mismo criterio que
     // usan los guardias de la 122/124 (`soloCodigo`).
-    const contrato = crudo.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+    const contrato = quitarComentarios(crudo);
     expect(contrato).toMatch(/readonly cobertura: Cobertura;/);
     expect(contrato).not.toMatch(/cobertura\?:/);
     // Y el despiojado DISCRIMINA: si se comiera el codigo, la primera asercion seria vacia.
