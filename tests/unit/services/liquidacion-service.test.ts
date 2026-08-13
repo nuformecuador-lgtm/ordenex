@@ -824,6 +824,7 @@ describe("R56/R14 — lo que cruza la frontera", () => {
         "registradoPorNombre",
         "registradoAt",
         "anulacion",
+        "esDeReparto", // feature 206: booleano, no el uuid del reparto (R56)
       ].sort(),
     );
     const serializado = JSON.stringify(r);
@@ -1315,6 +1316,7 @@ describe("R49/R50 — las listas de comprobantes", () => {
       nota: "Pago parcial de julio",
       fechaPago: "2026-07-30", // la fecha REAL del pago…
       registradoPorNombre: "Ana Admin", // …el NOMBRE, no el id (R56)…
+      esDeReparto: false, // feature 206: pago SUELTO
       registradoAt: "2026-08-02T15:04:05.000Z", // …y el instante de registro (R9)
       anulacion: null,
     });
@@ -1421,6 +1423,7 @@ describe("R56 — el comprobante que cruza no lleva ni un identificador interno"
     for (const pago of r.pagos) {
       expect(Object.keys(pago).sort()).toEqual([
         "anulacion",
+        "esDeReparto", // feature 206: booleano, no el uuid del reparto (R56)
         "fechaPago",
         "id",
         "metodo",

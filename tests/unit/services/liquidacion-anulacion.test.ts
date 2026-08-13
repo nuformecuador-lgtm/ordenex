@@ -681,8 +681,13 @@ describe("R69/R41 — anular AÑADE: no borra ni edita nada", () => {
     const r = await d.service.anularPago(anular(), ACTOR_MAESTRO);
 
     if (r.status !== "ok") throw new Error("esperaba ok");
+    // ⚠️ Feature 206 — la lista crece a DIEZ con `esDeReparto`, y este test hizo su trabajo: la
+    // primera versión de la 206 hacía viajar el `repartoId` (un uuid) y este caso la tumbó. R56
+    // tenía razón, y el arreglo salió mejor — un BOOLEANO dice lo único que la pantalla necesita
+    // («¿hay grupo?») sin filtrar el identificador de nada.
     expect(Object.keys(r.pago).sort()).toEqual([
       "anulacion",
+      "esDeReparto",
       "fechaPago",
       "id",
       "metodo",
@@ -1107,8 +1112,15 @@ describe("R82/R75 — no hay camino para anular una anulacion", () => {
     //
     // Ninguno edita, borra ni deshace nada — lo sigue afirmando el barrido de abajo, y R52 lo
     // exige: deshacer un reparto es anular sus pagos uno a uno (design §10.5).
+    // ⚠️ **Feature 206 — la lista crece a 18 con `anularReparto`, y este test volvió a hacer su
+    // trabajo: se puso rojo y obligó a justificar el nombre nuevo.** Tiene derecho a existir, y
+    // no contradice a R52: anular es APPEND-ONLY —inserta la anulación y su contraasiento— y deja
+    // el reparto y sus N imputaciones intactos y visibles. Lo que R52 prohíbe, y sigue prohibido,
+    // es EDITAR el acto o hacerlo desaparecer. El barrido de nombres de abajo no lo tapa: `anular`
+    // nunca estuvo en esa lista, precisamente porque anular es la forma legítima de corregir.
     expect(metodos).toEqual([
       "anularPago",
+      "anularReparto",
       "escribirContraasiento",
       "escribirPagoDeCierre",
       "imputablesDe",

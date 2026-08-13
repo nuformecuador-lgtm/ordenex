@@ -195,17 +195,18 @@ export const anularPagoSchema = z
   .strict();
 
 /**
- * Feature 206 — el borde de la anulación AGRUPADA. Misma forma que la individual y por los mismos
- * motivos: sin monto (sale de cada pago, en el servidor), `.strict()` para que una clave de más no
- * llegue al servicio, y UN motivo para todo el acto — que es la razón de ser de esta feature.
+ * Feature 206 — el borde de la anulación AGRUPADA. **Idéntico al individual**: `{ pagoId, motivo }`
+ * con `.strict()`. Lo que cambia no es la petición, es el ALCANCE del acto.
  *
- * No lleva lista de `pagoId`: el reparto YA sabe cuáles son sus imputaciones
- * (`liquidacion_pago.reparto_id`). Dejar que el cliente enumerase cuáles anular abriría
- * exactamente la anulación a medias que esto viene a cerrar.
+ * Que el input sea el PAGO y no el reparto es deliberado, y viene de que tres guardias de la 172
+ * rechazaron hacer viajar el uuid del reparto (R56, sin identificadores internos en el DTO). Salió
+ * mejor: el servidor deriva el reparto del pago, así que el cliente **no puede nombrar un reparto
+ * ajeno** ni enumerar qué imputaciones anular — y esa imposibilidad es justo lo que cierra la
+ * anulación a medias que esta feature viene a resolver.
  */
 export const anularRepartoSchema = z
   .object({
-    repartoId: z.string().uuid(),
+    pagoId: z.string().uuid(),
     motivo: z.string().trim().min(1, "El motivo de la anulacion es obligatorio."),
   })
   .strict();
@@ -247,13 +248,17 @@ export type PagoRegistradoDTO = {
   registradoAt: string; // ISO — instante de registro
   anulacion: AnulacionDTO | null; // null = vigente (R74)
   /**
-   * Feature 206 — el reparto del que nació esta imputación, o `null` si es un pago suelto contra
-   * UN cierre. Es lo ÚNICO que la pantalla necesita para ofrecer la anulación agrupada: no viaja
-   * el número de imputaciones porque contarlas exigiría una consulta más y el servidor ya informa
-   * cuántas anuló al terminar. `liquidacion_pago.reparto_id` (feature 205/R29) es el campo que
-   * hace posible esta feature; sin él, agrupar sería imposible.
+   * Feature 206 — ¿esta imputación nació de un reparto? Es lo único que la pantalla necesita para
+   * ofrecer la anulación agrupada.
+   *
+   * **Un BOOLEANO y no el `repartoId`, y no es un detalle.** La primera versión hacía viajar el
+   * uuid del reparto, y tres guardias de la 172 lo tumbaron: R56 prohíbe que este DTO lleve
+   * identificadores internos salvo el `id` del pago. Tenían razón, y el arreglo salió mejor que
+   * el original: el cliente pide «anula el reparto DE ESTE PAGO» mandando el `pagoId`, y el
+   * servidor resuelve cuál es. Así el cliente no puede nombrar un reparto ajeno ni enumerar sus
+   * imputaciones.
    */
-  repartoId: string | null;
+  esDeReparto: boolean;
 };
 
 /**

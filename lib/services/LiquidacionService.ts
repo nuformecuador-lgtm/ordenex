@@ -160,10 +160,9 @@ export function aPagoRegistradoDTO(pago: LiquidacionPagoDTO): PagoRegistradoDTO 
     registradoPorNombre: pago.registradoPorNombre,
     registradoAt: pago.registradoAt,
     anulacion: pago.anulacion,
-    // Feature 206: el unico id NUEVO que cruza la frontera, y no rompe R56 (que prohibe filtrar
-    // ids de PERSONAS): un reparto no identifica a nadie, es el acto. Sin el, la pantalla no
-    // puede ofrecer la anulacion agrupada porque no sabe que este pago pertenece a un grupo.
-    repartoId: pago.repartoId,
+    // Feature 206: un BOOLEANO, no el uuid del reparto. R56 prohibe identificadores internos en
+    // este DTO y tres guardias lo hicieron cumplir; el cliente solo necesita saber SI hay grupo.
+    esDeReparto: pago.repartoId !== null,
   };
 }
 
@@ -823,7 +822,12 @@ export class LiquidacionService implements ILiquidacionService {
   ): Promise<AnularRepartoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R81 — antes de leer nada
 
-    const pagos = await this.pagoRepo.listarPorReparto(input.repartoId);
+    // El reparto se DERIVA del pago, server-side (R56/R70): el cliente manda el pago que tiene
+    // en pantalla y no puede nombrar un reparto que no sea el suyo.
+    const pago = await this.pagoRepo.obtenerPorId(input.pagoId);
+    if (pago === null || pago.repartoId === null) return { status: "no_encontrado" };
+
+    const pagos = await this.pagoRepo.listarPorReparto(pago.repartoId);
     if (pagos.length === 0) return { status: "no_encontrado" };
 
     const vigentes = pagos.filter((p) => p.anulacion === null);

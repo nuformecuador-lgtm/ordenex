@@ -158,6 +158,12 @@ function montar(
       return opciones.pagosDelReparto ?? [];
     }),
     obtenerCierreParaPago: vi.fn(async () => null),
+    // Feature 206: `anularReparto` empieza leyendo EL PAGO para derivar su reparto. El doble
+    // devuelve el primero de la lista, que es el que los casos piden por id.
+    obtenerPorId: vi.fn(async () => {
+      log.push("leer:pago");
+      return opciones.pagosDelReparto?.[0] ?? null;
+    }),
     // Feature 206: por defecto ANULA de verdad, para que la anulación agrupada tenga algo que
     // medir. Los casos que necesitan el choque de `UNIQUE(pago_id)` lo sobrescriben.
     anular: vi.fn(async (_tx, input: { pagoId: string }) => {
@@ -172,7 +178,6 @@ function montar(
       };
     }),
     obtenerPorClave: vi.fn(async () => null),
-    obtenerPorId: vi.fn(async () => null),
     sumarVigentesPorTienda: vi.fn(async () => "0.00"),
     listarPorCierre: vi.fn(async () => []),
     listarPorTienda: vi.fn(async () => []),
@@ -421,9 +426,13 @@ describe("feature 206 — la anulación agrupada adquiere N candados en orden to
     ];
   }
 
+  /**
+   * Se pide por el PAGO, no por el reparto: el servidor deriva el grupo (R56 prohíbe que el uuid
+   * del reparto cruce la frontera, y tres guardias de la 172 lo hicieron cumplir).
+   */
   function anular(m: ReturnType<typeof montar>) {
     return m.service.anularReparto(
-      { repartoId: "rep-1", motivo: "reparto mal imputado" },
+      { pagoId: "pago-1", motivo: "reparto mal imputado" },
       ACTOR,
     );
   }

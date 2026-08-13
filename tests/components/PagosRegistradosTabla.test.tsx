@@ -48,7 +48,7 @@ const VIGENTE: PagoRegistradoDTO = {
   fechaPago: "2026-07-30",
   registradoPorNombre: "Ana Maestra",
   registradoAt: "2026-08-02T15:04:05.000Z",
-  repartoId: null, // feature 206: pago SUELTO, sin reparto
+  esDeReparto: false, // feature 206: pago SUELTO, sin reparto
   anulacion: null,
 };
 
@@ -63,7 +63,7 @@ const ANULADO: PagoRegistradoDTO = {
   fechaPago: "2026-07-28",
   registradoPorNombre: "Beto Admin",
   registradoAt: "2026-07-31T18:00:00.000Z",
-  repartoId: null, // feature 206: pago SUELTO, sin reparto
+  esDeReparto: false, // feature 206: pago SUELTO, sin reparto
   anulacion: {
     motivo: "Se tecleó el monto de otra tienda",
     anuladoPorNombre: "Ana Maestra",

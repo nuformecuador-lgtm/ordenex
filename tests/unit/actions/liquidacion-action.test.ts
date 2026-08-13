@@ -53,7 +53,7 @@ function comprobante(): PagoRegistradoDTO {
     fechaPago: HOY_CR,
     registradoPorNombre: "Ana Admin",
     registradoAt: "2026-08-02T15:04:05.000Z",
-    repartoId: null, // feature 206: pago SUELTO, sin reparto
+    esDeReparto: false, // feature 206: pago SUELTO, sin reparto
     anulacion: null,
   };
 }
@@ -626,6 +626,9 @@ describe("R65/R82 — NO se exporta ninguna accion de EDITAR ni de DESANULAR un 
     // decision escrita (design §10.5, Q3): deshacer un reparto es anular sus pagos uno a uno.
     expect(Object.keys(accionesLiquidacion).sort()).toEqual([
       "anularPagoAction",
+      // Feature 206: anular en grupo NO es editar ni desanular, así que el barrido de nombres de
+      // más abajo sigue en pie sin excepciones. Lo que cambia es el conteo de la superficie.
+      "anularRepartoAction",
       "listarPagosDeCierreAction",
       "listarPagosDeTiendaAction",
       "previsualizarRepartoMensajeroAction",

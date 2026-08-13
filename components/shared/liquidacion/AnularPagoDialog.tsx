@@ -5,12 +5,18 @@ import { useId, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/shared/FormField";
 import { Modal } from "@/components/shared/Modal";
-import type { AnularPagoResult, PagoRegistradoDTO } from "@/lib/types/liquidacion";
+import type {
+  AnularPagoResult,
+  AnularRepartoResult,
+  PagoRegistradoDTO,
+} from "@/lib/types/liquidacion";
 
 import {
   ANULAR_PAGO_ERROR,
   ANULAR_PAGO_RESPUESTA,
   ANULAR_PAGO_TEXTO,
+  ANULAR_REPARTO_RESPUESTA,
+  ANULAR_REPARTO_TEXTO,
   METODO_LIQUIDACION_LABEL,
   money,
 } from "./liquidacion-labels";
@@ -50,6 +56,12 @@ export type PagoAnuladoOk = Extract<
   { status: "ok" } | { status: "ya_anulado" }
 >;
 
+/** Feature 206 — las dos respuestas de la anulación agrupada que dejan el reparto deshecho. */
+export type RepartoAnuladoOk = Extract<
+  AnularRepartoResult,
+  { status: "ok" } | { status: "sin_vigentes" }
+>;
+
 export interface AnularPagoDialogProps {
   /** Visibilidad controlada por el padre (mismo contrato que `Modal`). */
   open: boolean;
@@ -62,6 +74,15 @@ export interface AnularPagoDialogProps {
   onAnular: (motivo: string) => Promise<AnularPagoResult>;
   /** Se invoca cuando el pago quedó anulado (también si ya lo estaba, R75). */
   onAnulado?: (resultado: PagoAnuladoOk) => void | Promise<void>;
+  /**
+   * Feature 206 — ejecuta la anulación AGRUPADA. **Opcional a propósito:** la opción solo se
+   * ofrece si quien monta la aporta Y el pago pertenece a un reparto (`pago.repartoId`). Las dos
+   * condiciones, no una: una pantalla puede tener el pago de un reparto y no querer ofrecer el
+   * acto agrupado.
+   */
+  onAnularReparto?: (motivo: string) => Promise<AnularRepartoResult>;
+  /** Se invoca cuando el reparto quedó deshecho (también si ya lo estaba). */
+  onRepartoAnulado?: (resultado: RepartoAnuladoOk) => void | Promise<void>;
 }
 
 /**
@@ -92,6 +113,8 @@ export function AnularPagoDialog({
   beneficiario,
   onAnular,
   onAnulado,
+  onAnularReparto,
+  onRepartoAnulado,
 }: Readonly<AnularPagoDialogProps>) {
   const idBase = useId();
   const motivoId = `${idBase}-motivo`;
@@ -99,10 +122,52 @@ export function AnularPagoDialog({
   const [motivo, setMotivo] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
   const [aviso, setAviso] = useState<string | null>(null);
+  /**
+   * Feature 206 — el ALCANCE, y arranca en `pago` a propósito: la anulación agrupada mueve N
+   * imputaciones, así que se pide, no se hereda.
+   */
+  const [alcance, setAlcance] = useState<"pago" | "reparto">("pago");
+
+  // Las DOS condiciones (ver la prop): el pago es de un reparto Y quien monta ofrece el acto.
+  const ofreceReparto = pago.esDeReparto && onAnularReparto !== undefined;
+  const enGrupo = ofreceReparto && alcance === "reparto";
 
   const motivoLimpio = motivo.trim();
   // R72: un motivo de solo espacios NO es un motivo.
   const motivoOk = motivoLimpio.length > 0;
+
+  /** Feature 206 — el camino agrupado, separado para que el `switch` de arriba siga exhaustivo. */
+  async function confirmarReparto() {
+    let resultado: AnularRepartoResult;
+    try {
+      resultado = await onAnularReparto!(motivoLimpio);
+    } catch {
+      setAviso(ANULAR_REPARTO_RESPUESTA.fallo);
+      return;
+    }
+
+    if (resultado.status === "ok" || resultado.status === "sin_vigentes") {
+      await onRepartoAnulado?.(resultado);
+      onOpenChange(false);
+      return;
+    }
+    if (resultado.status === "validation_error") {
+      const delCampo = resultado.fieldErrors.motivo?.[0];
+      setError(delCampo ?? undefined);
+      setAviso(delCampo ? null : ANULAR_PAGO_RESPUESTA.validacion);
+      return;
+    }
+    if (resultado.status === "no_encontrado") {
+      setAviso(ANULAR_REPARTO_RESPUESTA.noEncontrado);
+      return;
+    }
+    // `forbidden` y `unauthenticated` dicen lo mismo que en la anulación individual.
+    setAviso(
+      resultado.status === "forbidden"
+        ? ANULAR_PAGO_RESPUESTA.forbidden
+        : ANULAR_PAGO_RESPUESTA.unauthenticated,
+    );
+  }
 
   async function confirmar() {
     if (!motivoOk) {
@@ -113,6 +178,8 @@ export function AnularPagoDialog({
 
     setError(undefined);
     setAviso(null);
+
+    if (enGrupo) return confirmarReparto();
 
     let resultado: AnularPagoResult;
     try {
@@ -148,7 +215,9 @@ export function AnularPagoDialog({
       onOpenChange={onOpenChange}
       title={ANULAR_PAGO_TEXTO.titulo(beneficiario)}
       description={ANULAR_PAGO_TEXTO.descripcion}
-      confirmLabel={ANULAR_PAGO_TEXTO.confirmar}
+      confirmLabel={
+        enGrupo ? ANULAR_REPARTO_TEXTO.confirmar : ANULAR_PAGO_TEXTO.confirmar
+      }
       cancelLabel={ANULAR_PAGO_TEXTO.cancelar}
       confirmVariant="destructive"
       confirmDisabled={!motivoOk}
@@ -165,6 +234,36 @@ export function AnularPagoDialog({
             METODO_LIQUIDACION_LABEL[pago.metodo] ?? pago.metodo,
           )}
         </p>
+
+        {/* Feature 206: el alcance. Solo existe si el pago es de un reparto y quien monta ofrece
+            el acto agrupado. `radiogroup` y no un checkbox: son dos alternativas excluyentes y la
+            marcada por defecto tiene que leerse, no adivinarse. */}
+        {ofreceReparto ? (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm font-medium">{ANULAR_REPARTO_TEXTO.alcance}</legend>
+            <p className="text-xs text-muted-foreground">{ANULAR_REPARTO_TEXTO.ayuda}</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name={`${idBase}-alcance`}
+                value="pago"
+                checked={alcance === "pago"}
+                onChange={() => setAlcance("pago")}
+              />
+              {ANULAR_REPARTO_TEXTO.soloEstePago}
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name={`${idBase}-alcance`}
+                value="reparto"
+                checked={alcance === "reparto"}
+                onChange={() => setAlcance("reparto")}
+              />
+              {ANULAR_REPARTO_TEXTO.todoElReparto}
+            </label>
+          </fieldset>
+        ) : null}
 
         {aviso ? (
           <p role="alert" className="text-sm text-destructive">

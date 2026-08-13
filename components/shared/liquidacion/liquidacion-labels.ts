@@ -137,6 +137,36 @@ export const ANULAR_PAGO_RESPUESTA = {
   fallo: "No se pudo anular el pago. Vuelve a intentarlo.",
 } as const;
 
+/**
+ * Feature 206 — textos de la anulación AGRUPADA, que solo aparecen cuando el pago pertenece a un
+ * reparto. Se elige el ALCANCE, y el que viene marcado es «solo este pago»: la acción agrupada
+ * mueve N imputaciones y tiene que pedirse a propósito, no caer por defecto.
+ */
+export const ANULAR_REPARTO_TEXTO = {
+  alcance: "Qué se anula",
+  soloEstePago: "Solo este pago",
+  todoElReparto: "Todas las imputaciones de este reparto",
+  ayuda:
+    "Este pago se repartió entre varios cierres. Anular el reparto completo deshace todas sus imputaciones con este mismo motivo, en un solo acto.",
+  confirmar: "Anular el reparto",
+} as const;
+
+/**
+ * Mensajes de la respuesta del servidor a la anulación agrupada. `anuladas` y `yaEstaban` se
+ * dicen las DOS cuando el reparto estaba a medias: quien anula tiene que saber que se encontró
+ * trabajo ya hecho, no solo que «se anuló».
+ */
+export const ANULAR_REPARTO_RESPUESTA = {
+  ok: (anuladas: number, yaEstaban: number) =>
+    yaEstaban > 0
+      ? `Se anularon ${anuladas} imputaciones; ${yaEstaban} ya estaban anuladas.`
+      : `Se anularon ${anuladas} imputaciones del reparto.`,
+  sinVigentes: (yaEstaban: number) =>
+    `Este reparto ya estaba anulado por completo (${yaEstaban} imputaciones): no se movió nada.`,
+  noEncontrado: "No se encontró el reparto. Vuelve a abrir la pantalla e inténtalo de nuevo.",
+  fallo: "No se pudo anular el reparto. Vuelve a intentarlo.",
+} as const;
+
 /** Textos del diálogo de registro de pago. */
 export const REGISTRAR_PAGO_TEXTO = {
   abrir: "Registrar pago",

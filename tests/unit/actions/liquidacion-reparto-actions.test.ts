@@ -385,6 +385,7 @@ describe("R52 — la superficie del modulo tras la 205", () => {
     // que no se colo nada que edite, anule en bloque o deshaga un reparto (design §10.5, Q3).
     const delReparto = Object.keys(accionesLiquidacion).filter((n) => /reparto/i.test(n));
     expect(delReparto.sort()).toEqual([
+      "anularRepartoAction",
       "previsualizarRepartoMensajeroAction",
       "registrarRepartoMensajeroAction",
     ]);
