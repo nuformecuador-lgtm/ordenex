@@ -192,6 +192,78 @@
 }
 
 /*
+ * Feature 217 — AL IMPRIMIR, EL PAPEL ES CLARO.
+ *
+ * Las dos hojas del comprobante del cierre (`cierres-admin/_components/cierre-factura.tsx`)
+ * GIRAN con el tema en pantalla: son una superficie más del portal. En papel no: una
+ * factura que se imprime en oscuro gasta tóner y sale ilegible. Esta regla devuelve los
+ * valores claros al subárbol de la hoja SÓLO cuando el medio es impresión.
+ *
+ * POR QUÉ FIJA TOKENS Y NO PINTA UN FONDO. Es la lección medida de la 208, girada de
+ * lado: `bg-white` a secas dejó 116 textos bajo 4.5:1 porque pintó el papel y dejó la
+ * tinta del tema. Una regla de impresión que dijera `background: white` haría lo mismo en
+ * papel. Y hay un motivo más fuerte: los navegadores NO imprimen los fondos salvo que el
+ * usuario marque «gráficos de fondo», que viene DESMARCADO. Sin esta regla, imprimir
+ * desde tema oscuro daría tinta `#e6ecf8` sobre un fondo oscuro que no se imprime:
+ * blanco sobre blanco, la hoja sale en papel EN BLANCO. Fijando los tokens, la tinta
+ * vuelve a `#12233f` y el resultado no depende de que se imprima superficie alguna.
+ *
+ * POR ESO NO HAY `print-color-adjust: exact`: forzaría a imprimir el fondo… oscuro, que
+ * es exactamente el gasto de tóner que esta decisión descarta. Esta regla arregla la
+ * TINTA; el papel lo pone la hoja física.
+ *
+ * ACOTADA A LAS HOJAS: no toca `.dark`, ni `.tema-sistema`, ni `@custom-variant dark`.
+ * El resto del portal imprime hoy como imprimía ayer.
+ *
+ * LOS VALORES SON LOS MISMOS QUE LOS DE `:root, .tema-claro`, literalmente, por la misma
+ * razón que `.tema-sistema` repite a `.dark`: CSS no sabe reutilizar un bloque de
+ * declaraciones bajo otra condición. Y por eso hay una guardia que falla si divergen
+ * aunque sea en un hex, y que exige que esta regla viva DENTRO de `@media print`:
+ * `tests/unit/guards/tema-encendido.guardia.test.ts`. Si añadís un token arriba,
+ * añadidlo aquí; el test te lo dirá antes que una impresora.
+ */
+@media print {
+  .papel-al-imprimir {
+    --radius: 0.625rem;
+    --background: #f7f8fc;
+    --foreground: #12233f;
+    --card: #ffffff;
+    --card-foreground: #12233f;
+    --popover: #ffffff;
+    --popover-foreground: #12233f;
+    --primary: #f26419;
+    --primary-foreground: #ffffff;
+    --secondary: #eef1f8;
+    --secondary-foreground: #17233b;
+    --muted: #f1f4fb;
+    --muted-foreground: #4a5368;
+    --accent: #fff0e8;
+    --accent-foreground: #d4530d;
+    --destructive: #ef4444;
+    --border: #e3e8f2;
+    --input: #e3e8f2;
+    --ring: #f26419;
+    --chart-1: #f26419;
+    --chart-2: #0b2545;
+    --chart-3: #1a56db;
+    --chart-4: #10b981;
+    --chart-5: #f59e0b;
+    --sidebar: #0d2444;
+    --sidebar-foreground: #aab6d2;
+    --sidebar-primary: #f26419;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #14294a;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #1f3a63;
+    --sidebar-ring: #f26419;
+    --success-strong: #047857;
+    --warning-strong: #92400e;
+    --danger-strong: #b91c1c;
+    --info-strong: #1d4ed8;
+  }
+}
+
+/*
  * Feature 211 — LA FRANJA CLARA, y por qué `body:has()`.
  *
  * La clase del tema se estampa en un envoltorio DENTRO del `<body>`

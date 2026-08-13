@@ -74,3 +74,51 @@ sería un agujero, deja que la segunda copia se esconda justo donde nadie mira.
 -> test:guardias       Test Files 96 passed (96)     Tests  1317 passed (1317)
 == init OK ==
 ```
+
+---
+
+## Tanda 1 — El CSS (T5, T6)
+
+### T5 · El bloque `@media print` en `app/globals.css`
+
+`@media print { .papel-al-imprimir { … } }` con **las 36 declaraciones** del bloque
+`:root, .tema-claro`, sin excepción, colocado **inmediatamente después de ese bloque y
+antes de `.dark`**. Sin `print-color-adjust`.
+
+La colocación no es cosmética: es la segunda de las dos medidas contra la trampa del
+lector (T3 es la primera). Aunque alguien retirase el `quitarBloquesDeImpresion` del
+fixture, los valores que ganarían en la mitad «claro» son los que ya estaban ahí.
+
+`git diff --stat app/globals.css` → `1 file changed, 72 insertions(+)`. **Cero líneas
+quitadas**: no se tocó `.dark`, ni `.tema-sistema`, ni `@custom-variant dark` (D6).
+
+### T6 · Los casos del bloque de impresión, en `tema-encendido.guardia.test.ts`
+
+Van ahí y no en un archivo nuevo: ese archivo ya tiene el parser de reglas con ancestros
+(`reglasDe`), es el dueño del mecanismo del tema, y es el que hay que reexpresar de todas
+formas (R20). Un cuarto parser de CSS en `tests/` es lo que la 209 vino a cerrar.
+
+Cuatro casos: una sola regla `.papel-al-imprimir` con `@media print` entre sus ancestros ·
+espejo `toEqual` (claves y valores) contra `:root, .tema-claro` · fija la tinta
+(`--foreground`, `--card-foreground` y los cuatro `-strong`) y tiene > 20 declaraciones ·
+cero `print-color-adjust` en todo el archivo.
+
+```
+pnpm exec vitest run tests/unit/guards/tema-encendido.guardia.test.ts
+ Test Files  1 passed (1)
+      Tests  12 passed (12)      (eran 8; +4 de la 217, ninguno de los 8 tocado)
+```
+
+`tests/unit/components/analytics-paleta.test.ts` — el que `design.md §7` mandaba vigilar
+porque parte el CSS por reglas que incluyan `:root` — sigue verde sin tocarlo:
+`Test Files 1 passed (1) · Tests 6 passed (6)`.
+
+### Cierre de tanda 1 — `./init.sh --rapido`
+
+```
+✓ typecheck paso
+✓ lint paso
+-> test:cambiados      Test Files  3 passed (3)      Tests    28 passed (28)
+-> test:guardias       Test Files 96 passed (96)     Tests  1321 passed (1321)
+== init OK ==
+```

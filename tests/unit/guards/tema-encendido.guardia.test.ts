@@ -166,6 +166,65 @@ describe("feature 211 — el CSS que enciende el tema", () => {
   });
 });
 
+/**
+ * Feature 217 — la regla que hace que la factura del cierre salga BLANCA en papel.
+ *
+ * En pantalla las dos hojas giran con el tema (la 217 les quito el pin `tema-claro`). Al
+ * imprimir vuelven a los valores claros, y eso lo hace `.papel-al-imprimir` dentro de un
+ * `@media print`. Lo que estos casos vigilan es lo que se rompe EN SILENCIO:
+ *
+ *  - Si la regla pierde su `@media print`, la hoja se queda fija en claro EN PANTALLA: la 217
+ *    entera quedaria revertida sin que ningun otro test se entere.
+ *  - Si un hex diverge del bloque `:root, .tema-claro`, la hoja impresa deja de ser el tema
+ *    claro y nadie lo ve: no hay forma de mirar una impresion desde el gate.
+ *  - Si el bloque fija solo las superficies y no la TINTA, imprimir desde tema oscuro da
+ *    blanco sobre blanco — los navegadores no imprimen fondos salvo que se marque «graficos
+ *    de fondo», que viene desmarcado.
+ *
+ * Verificacion ESTRUCTURAL, y se llama asi: ninguna pieza del gate renderiza en papel.
+ */
+describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
+  it("hay UNA regla `.papel-al-imprimir` y vive dentro de `@media print`", () => {
+    const impresion = reglaCon(".papel-al-imprimir");
+    expect(
+      impresion.ancestros.join(" | "),
+      "sin `@media print` la regla aplica EN PANTALLA: la hoja volveria a estar fijada a claro",
+    ).toMatch(/@media\s+print/);
+  });
+
+  it("declara los MISMOS tokens y los MISMOS valores que el tema claro, hex a hex", () => {
+    const claro = reglaCon(".tema-claro");
+    const impresion = reglaCon(".papel-al-imprimir");
+
+    // Igualdad, no subconjunto: un token añadido a uno y no al otro tambien es divergencia.
+    expect(Object.keys(impresion.declaraciones)).toEqual(Object.keys(claro.declaraciones));
+    expect(impresion.declaraciones).toEqual(claro.declaraciones);
+  });
+
+  it("fija la TINTA y no solo la superficie (si no, en papel sale blanco sobre blanco)", () => {
+    const impresion = reglaCon(".papel-al-imprimir");
+    expect(impresion.declaraciones["--foreground"]).toBe("#12233f");
+    expect(impresion.declaraciones["--card-foreground"]).toBe("#12233f");
+    for (const familia of ["success", "warning", "danger", "info"]) {
+      expect(
+        impresion.declaraciones[`--${familia}-strong`],
+        `el bloque de impresion no fija --${familia}-strong: ese texto saldria con el valor de ` +
+          "tema oscuro sobre papel blanco",
+      ).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+    // Que no sea un bloque a medias que pase por casualidad.
+    expect(Object.keys(impresion.declaraciones).length).toBeGreaterThan(20);
+  });
+
+  it("NO fuerza la impresion de fondos: nada de `print-color-adjust`", () => {
+    expect(
+      css,
+      "`print-color-adjust: exact` obligaria a imprimir la superficie… oscura, que es justo el " +
+        "gasto de toner que la decision humana descarta",
+    ).not.toMatch(/print-color-adjust/);
+  });
+});
+
 describe("feature 211 — donde se estampa la clase", () => {
   const layout = codigoSinComentarios(LAYOUT);
 
