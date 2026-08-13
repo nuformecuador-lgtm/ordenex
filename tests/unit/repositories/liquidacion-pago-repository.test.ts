@@ -1,9 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import fs from "fs";
-import path from "path";
 import { CierreEstado, Prisma, type PrismaClient } from "@prisma/client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
 import type { CrearLiquidacionPagoInput } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 172 / T B.1 + T B.4 + T F.1 (mitad del repositorio) — tests unit del
 // LiquidacionPagoRepository (mockea Prisma, sin DB). Cubre R7 (las 10 columnas del documento),
@@ -981,10 +980,7 @@ describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
     // El test de arriba mide UNA llamada; este cierra el archivo entero, incluidos los caminos
     // que ningun test recorra. Tambien fija R82: no hay ningun `delete` de una anulacion, asi
     // que no existe forma de deshacerla.
-    const fuente = fs
-      .readFileSync(path.join(process.cwd(), "lib/repositories/LiquidacionPagoRepository.ts"), "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/.*$/gm, "");
+    const fuente = codigoSinComentarios("lib/repositories/LiquidacionPagoRepository.ts");
 
     for (const escritura of ["update", "updateMany", "delete", "deleteMany", "upsert"]) {
       expect(fuente, `liquidacionPago.${escritura}`).not.toContain(`liquidacionPago.${escritura}`);

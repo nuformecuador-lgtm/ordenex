@@ -725,8 +725,13 @@ model GestionOrden {
   ordenId              String                    @map("orden_id") // FK -> orden
   mensajeroId          String                    @map("mensajero_id") // FK -> usuario (el actor)
   resultado            GestionResultado
-  montoRecibido        Decimal?                  @map("monto_recibido") @db.Decimal(12, 2) // ENTREGADA
-  metodoPago           MetodoPagoValue?          @map("metodo_pago") // ENTREGADA
+  montoRecibido        Decimal?                  @map("monto_recibido") @db.Decimal(12, 2) // ENTREGADA — TOTAL snapshot (feature 212/R5): SOBREVIVE al desglose
+  // DEPRECADO por la feature 212 (R5/R19/R31): la fuente de verdad del recaudo pasa a ser
+  // `pagos` (0..N lineas metodo+monto). Esta columna se CONSERVA por retro-compat mientras
+  // la 213 (captura y presentacion) no aterrice: se escribe con el metodo de la UNICA linea
+  // si hay exactamente una, y con NULL si hay cero o dos o mas (R19). Su retiro se decide en
+  // la 213/214, NO aqui.
+  metodoPago           MetodoPagoValue?          @map("metodo_pago") // ENTREGADA (DEPRECADO, ver 213/214)
   evidenciaStoragePath String?                   @map("evidencia_storage_path") // ENTREGADA/RECHAZO: path bucket privado, NO URL
   evidenciaContentType String?                   @map("evidencia_content_type") // image/jpeg|png|webp
   motivo               String? // REPROGRAMAR/DEVOLUCION/RECHAZO
@@ -787,6 +792,9 @@ model GestionOrden {
   // Feature 119 (R1): evidencias 1..N de esta gestion (la portada = indice 0 se conserva
   // ademas denormalizada en evidencia_storage_path/_content_type por retro-compat, R12).
   evidencias        GestionOrdenEvidencia[]
+  // Feature 212 (R1): desglose del recaudo al cliente, 0..N lineas (metodo, monto).
+  // `monto_recibido` se conserva como TOTAL snapshot (R5).
+  pagos             GestionOrdenPago[]
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
@@ -825,6 +833,25 @@ model GestionOrdenEvidencia {
   @@unique([gestionId, indice]) // R2: no dos filas con el mismo indice por gestion
   @@index([gestionId]) // lectura de las evidencias de una gestion
   @@map("gestion_orden_evidencia")
+}
+
+// Feature 212 (R1-R4): DESGLOSE del recaudo al cliente de UNA entrega. 0..N lineas
+// (metodo, monto). `gestion_orden.monto_recibido` SOBREVIVE como TOTAL snapshot
+// (money-critical, patron 39/56); la invariante SUM(monto) = monto_recibido vive en el
+// BORDE (zod + revalidacion Decimal en el service), SIN CHECK en la base (patron 36/F1.4-b).
+// RLS habilitada sin policies (solo service role, patron gestion_orden/gestion_orden_evidencia).
+model GestionOrdenPago {
+  id        String          @id @default(uuid())
+  gestionId String          @map("gestion_id")
+  metodo    MetodoPagoValue // enum NATIVO conservado, NO tabla-catalogo
+  monto     Decimal         @db.Decimal(12, 2) // misma escala que monto_recibido
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  gestion GestionOrden @relation(fields: [gestionId], references: [id], onDelete: Cascade)
+
+  @@unique([gestionId, metodo]) // D2/R2: un metodo, como mucho una vez, con su monto ya sumado
+  @@index([gestionId]) // R1: lectura de las lineas de una gestion
+  @@map("gestion_orden_pago")
 }
 
 // Feature 158 (R38/R39, camino del ADMIN) — incidente reportado por un ADMIN sobre una orden que

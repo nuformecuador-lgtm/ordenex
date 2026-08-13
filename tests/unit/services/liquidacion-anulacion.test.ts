@@ -1,11 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import fs from "fs";
-import path from "path";
 import { CierreEstado, RolValue, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 import type {
   BeneficiarioBloqueo,
   CierreParaPagoDTO,
@@ -354,10 +353,7 @@ function bloqueoTomado(pagoRepo: ILiquidacionPagoRepository): BeneficiarioBloque
 
 /** Fuente del servicio SIN comentarios (los comentarios NOMBRAN lo que el codigo no hace). */
 function fuenteDelServicioSinComentarios(): string {
-  return fs
-    .readFileSync(path.join(process.cwd(), "lib/services/LiquidacionService.ts"), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/.*$/gm, "");
+  return codigoSinComentarios("lib/services/LiquidacionService.ts");
 }
 
 /**

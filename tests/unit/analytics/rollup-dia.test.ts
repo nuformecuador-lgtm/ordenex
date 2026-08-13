@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import {
   fechaComoDate,
   fechaObjetivo,
@@ -20,9 +21,7 @@ const ROOT = path.join(__dirname, "..", "..", "..");
  * El codigo del archivo SIN comentarios. La cabecera del modulo NOMBRA `startOfDayCR` a
  * proposito para explicar por que esta prohibida; esa prosa no es una importacion.
  */
-function sinComentarios(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-}
+const sinComentarios = quitarComentarios;
 
 const FUENTE_ROLLUP_DIA = sinComentarios(
   fs.readFileSync(path.join(ROOT, "lib/analytics/rollup-dia.ts"), "utf8"),

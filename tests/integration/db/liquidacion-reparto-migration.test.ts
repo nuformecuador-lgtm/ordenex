@@ -4,6 +4,7 @@ import path from "path";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 205 (T1.4) — cobertura de la migracion `*_liquidacion_reparto`. Cubre R29 (la barrera
 // de la idempotencia es DE DATOS) y R49 (aditiva, reversible, con RLS).
@@ -113,12 +114,12 @@ function sentenciasDe(ddl: string): string[] {
  * docstrings de estos dos modelos CITAN a proposito lo que las aserciones negativas buscan
  * («SIN updatedAt / deletedAt», «jamas UNIQUE»), asi que un barrido literal fallaria por la
  * documentacion en vez de por el codigo. Es la misma cicatriz que documenta
- * `tests/fixtures/money-safe.ts`.
+ * `tests/fixtures/sin-comentarios.ts`, que es de donde sale el quitador (feature 209).
  */
 function modeloSinComentarios(nombre: string): string {
   const bloque = new RegExp(`model ${nombre} \\{[\\s\\S]*?\\n\\}`).exec(schemaPrisma);
   if (!bloque) throw new Error(`No se encontro el modelo ${nombre} en db/schema.prisma`);
-  return bloque[0].replace(/\/\/.*$/gm, "");
+  return quitarComentarios(bloque[0]);
 }
 
 const CUERPO_REPARTO = /CREATE TABLE "liquidacion_reparto" \(([\s\S]*?)\n\);/.exec(upSql)![1];

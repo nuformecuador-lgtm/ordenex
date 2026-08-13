@@ -31,6 +31,7 @@ import {
   type ListarMisAsignacionesResult,
   type RecogerResult,
 } from "@/lib/types/gestion-orden";
+import { normalizarPagos } from "@/lib/utils/pagos-recaudo";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -211,6 +212,25 @@ function rawFromFormData(formData: FormData): Record<string, unknown> {
   // misma clave `evidencia` (`getAll`) —el panel hace `append("evidencia", file)` por foto— y
   // se filtran las strings (un File-like tiene `arrayBuffer`). Se expone como `raw.evidencias`.
   // El panel sin migrar (T11) aun manda UN solo `evidencia`: `getAll` lo lee como lista de 1.
+  // Feature 212 (R11/R12): el DESGLOSE viaja como campos REPETIDOS `pagoMetodo`/`pagoMonto`
+  // (mismo patron `getAll` que las evidencias de la 119) y se emparejan por INDICE. Si no viene
+  // ninguno, la clave `pagos` NO se crea: un FormData VIEJO (solo `metodoPago`) sigue parseando
+  // exactamente igual, que es lo que sostiene la ventana entre la 212 y la 213.
+  //
+  // Longitudes desparejas -> se arma la lista con el maximo de las dos y los huecos quedan
+  // `undefined`: zod los rechaza con un error de campo en vez de emparejar mal el dinero.
+  const pagoMetodos = formData.getAll("pagoMetodo");
+  const pagoMontos = formData.getAll("pagoMonto");
+  if (pagoMetodos.length > 0 || pagoMontos.length > 0) {
+    const n = Math.max(pagoMetodos.length, pagoMontos.length);
+    raw.pagos = Array.from({ length: n }, (_, i) => {
+      const monto = pagoMontos[i];
+      return {
+        metodo: pagoMetodos[i],
+        monto: monto === undefined || monto === "" ? undefined : Number(monto),
+      };
+    });
+  }
   const evidencias = formData
     .getAll("evidencia")
     .filter((v): v is Exclude<FormDataEntryValue, string> => typeof v !== "string");
@@ -250,7 +270,11 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
         ordenId: data.ordenId,
         resultado: "entregada",
         montoRecibido: data.montoRecibido,
-        metodoPago: data.metodoPago,
+        // Feature 212 (R12/R19): se CONSERVA el escalar para la columna deprecada `metodo_pago`
+        // (`null` cuando el cliente ya manda desglose), y el desglose normalizado —una linea por
+        // metodo, o CERO si no hubo cobro (R14)— viaja aparte hacia el service.
+        metodoPago: data.metodoPago ?? null,
+        pagos: normalizarPagos(data),
         evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]),
       };
     case "reprogramada":

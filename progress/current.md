@@ -9,6 +9,89 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🟢 2026-08-13 — feature **212** (antes 208): pago múltiple por entrega, APROBADA y en PR
+
+Una entrega cobrada mitad en efectivo y mitad por transferencia no se podía registrar sin mentir
+en los totales del cierre. Nace `gestion_orden_pago` (0..N líneas `metodo`+`monto`, único por
+`(gestion_id, metodo)`); `monto_recibido` sobrevive como TOTAL snapshot con la invariante
+`SUM(líneas) = monto_recibido` en el borde y revalidada con `Prisma.Decimal` en el servicio.
+33 requisitos EARS, mapa `R → test` 33/33, `./init.sh` completo verde (1081 archivos / 13579
+tests, 432 s, cero `unhandled errors`). Partida en **212** (backend, este PR), **213** (frontend:
+captura y presentación) y **214** (retirar la forma escalar, no antes de que la 213 esté
+desplegada).
+
+**Por qué los tests son de mutación y no de humo:** `cierre_dia.total_efectivo` es la **E** del
+`min(P, E)` del pago al mensajero (44). Un desglose mal sumado no da un número feo en pantalla,
+**le paga de menos o de más a una persona**. El reviewer añadió una mutación propia —intercambiar
+los baldes `SINPE` ↔ `transferencia`, que *no altera el total general* ni la invariante R28— y dio
+9 rojos. No hay agujero ahí.
+
+**Rechazada en la primera revisión, con razón:** la migración estaba cubierta solo por regex sobre
+el texto del SQL. Ahora el `migration.sql` y el `down.sql` **reales** corren sentencia a sentencia
+en un esquema temporal dentro de una transacción revertida (patrón de la 205,
+`tests/integration/db/_postgres-real.ts:127`). **Regla para toda migración: no aplicarla no es
+excusa para no ejecutarla.**
+
+### Tres cosas que costaron y conviene no re-descubrir
+
+1. **EL ID SE COMPRUEBA CONTRA `dev` JUSTO ANTES DE PUBLICAR, no al dar de alta la ficha.** Esta
+   ficha se renumeró **dos veces** (200→208→212). Entre el alta y el PR pasan horas y varias
+   sesiones. Se decidió primero renumerar las fichas ajenas, pero al ir a ejecutarlo la 208 de
+   `dev` ya estaba `done` y **mergeada**: renumerar una ficha publicada es peor que renumerar una
+   que aún no ha salido, así que cedió la nuestra. Coste: 107 ocurrencias en 75 archivos.
+2. **Una suite saturada no da veredicto, ni verde ni rojo.** Con otra sesión corriendo su suite en
+   el mismo checkout: 928 s en vez de 432, diez `Timeout waiting for worker`, y **siete archivos
+   omitidos** (1071 de 1078). Los 3 rojos de esa corrida pasaron en aislado —70 tests en 37 s—.
+   Comparar SIEMPRE el total de archivos antes de creerse el conteo.
+3. **`init.sh` pipeado se traga su código de salida.** `./init.sh | tail -40` devuelve el exit de
+   `tail`: una corrida fallida se reportó como «exit 0». Redirigir a fichero y leer `$?` aparte.
+
+**Convivencia:** otra sesión commiteó su analítica y sus novedades **encima de la rama de esta
+feature**. No se perdió nada: el PR sale de una rama limpia con solo los 64 archivos propios. Sin
+`jq` instalado, los pasos 3 y 4 de `init.sh` se omiten con `warn` y el `init OK` **no los cubre**.
+
+
+## 🏁 CIERRE DE JORNADA 2026-08-12/13 — **EMPIEZA A LEER POR AQUÍ**
+
+Todo lo de esta jornada está **mergeado en `dev`**. No queda nada a medias ni ningún PR abierto.
+
+**En producción** (releases #341, #343 y #352): las features **200** (rediseño de `/wallet`), **201**
+(un solo formato de dinero), **205** (pagar al mensajero desde su pantalla, con su migración
+`liquidacion_reparto` aplicada y verificada en prod) y las deudas **202**, **203**, **204**, **207**.
+
+**En `dev`, sin desplegar — 7 commits**: la tanda A de la **209** (quitadores de comentarios) y el
+**modo oscuro completo** (**208** el tema correcto + **211** el interruptor).
+
+### Lo que falta, por orden de valor
+
+1. **El diálogo de pago de la 205 nunca se ha visto en pantalla.** La tabla, el formato, el enlace
+   y el estado «nada que pagar» sí. El diálogo exige un cierre con **efectivo recaudado menor que
+   lo devengado** (regla `min(P,E)`); el de prueba tenía ₡52.500 en efectivo contra ₡5.100 de
+   ganancia, así que saldó entero. Para provocarlo hay que cobrar una jornada por SINPE.
+2. **Ficha 210** — dos variantes de `Badge` bajo el umbral (`warning` 4,51, `destructive` 3,30).
+   **No es deuda de modo oscuro: fallan igual o peor en claro.** Es paleta de marca y toca cada
+   insignia de la app.
+3. **Ficha 206** — anular un reparto entero de una vez. Feature pequeña; `reparto_id` ya deja la
+   puerta abierta.
+4. **Ficha 209, tanda B** — 50 quitadores de la semántica *correcta*, solo duplicada. Sin riesgo.
+5. **Desplegar** los 7 commits pendientes cuando convenga. Sin migraciones.
+
+### Lo que esta jornada enseñó, y conviene no re-aprender
+
+- **La herramienta de medir también miente, y en verde.** Pasó cuatro veces: un runner de
+  mutaciones que reportó supervivientes **sin ejecutar un solo test**; colores `lab()` parseados
+  como `rgb` que dieron una tabla entera de números plausibles e inventados; un barrido de dinero
+  con la regex rota que informó «4620 importes revisados, **0 detectados**»; y el dev server
+  sirviendo **CSS rancio**, que casi lleva a concluir que un mecanismo no funcionaba. Todo script
+  de verificación debe **abortar** si sus controles fallan.
+- **Un fixture cuyos dos valores coinciden tapa el defecto.** Apareció ocho veces. El caso grave:
+  `imputable === imputableTotal === cuentaPorPagar` hacía sobrevivir una mutación sobre **la cifra
+  que la pantalla propone como monto**.
+- **Los arreglos de las guardias no los sostienen las guardias.** De las mutaciones sobre los
+  parsers de censo, **9 eran invisibles** para las 178 suites: revertirlos no pondría nada en rojo.
+- **Medir antes de arreglar cambió el resultado dos veces**: la 204 parecía preventiva y era un bug
+  real en pantalla (14 de 66 filas); la 203 culpaba al `testTimeout` y la causa era `maxWorkers`.
+
 ## 🔴 EN CURSO 2026-08-11/12 — feature **205**, rechazada por el reviewer y en corrección
 
 Pagar la cuenta por pagar del mensajero **desde `/wallet/mensajeros`**, imputando el importe a

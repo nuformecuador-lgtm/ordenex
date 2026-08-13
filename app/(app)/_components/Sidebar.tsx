@@ -88,7 +88,11 @@ function SidebarUsuarioFooter({ usuario }: { usuario: SidebarUsuario }) {
           <span className="truncate text-sm font-medium text-sidebar-foreground">
             {usuario.nombre}
           </span>
-          <span className="truncate text-xs text-sidebar-foreground/70">
+          {/* Feature 208: el rol iba en `/70` y medía 4.47:1 sobre el navy del
+              sidebar en tema claro (4.54 en oscuro) — por debajo/al filo del 4.5
+              de AA. A `/85` da 5.94 / 6.01 y sigue leyéndose como secundario
+              frente al nombre, que va a opacidad plena. */}
+          <span className="truncate text-xs text-sidebar-foreground/85">
             {usuario.rolLabel}
           </span>
         </div>

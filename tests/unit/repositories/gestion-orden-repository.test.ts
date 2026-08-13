@@ -383,16 +383,43 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     const ordenUpdate = vi.fn(async () => ({}));
     const ordenFindFirst = vi.fn(async () => ({ estatusId: origenEstatusId }));
     const usuarioUpdate = vi.fn(async () => ({}));
+    // Feature 212 (R17): las lineas del desglose del recaudo se insertan por el cliente
+    // TRANSACCIONAL. `dentroDeTx` registra si la llamada ocurrio mientras la tx estaba abierta:
+    // un `createMany` fuera de ella dejaria lineas huerfanas si la transicion falla despues.
+    let txAbierta = false;
+    const dentroDeTx: boolean[] = [];
+    const pagoCreateMany = vi.fn(async () => {
+      dentroDeTx.push(txAbierta);
+      return { count: 0 };
+    });
     const tx = {
       gestionOrden: { create: gestionCreate },
+      gestionOrdenPago: { createMany: pagoCreateMany },
       orden: { update: ordenUpdate, findFirst: ordenFindFirst },
       usuario: { update: usuarioUpdate },
       ordenHistorialEstado: { createMany: historialCreateMany },
     };
-    const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<string>) => cb(tx));
+    const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<string>) => {
+      txAbierta = true;
+      try {
+        return await cb(tx);
+      } finally {
+        txAbierta = false;
+      }
+    });
     const cola = colaFake();
     const repo = new GestionOrdenRepository({ $transaction } as never, cola as never);
-    return { repo, gestionCreate, ordenUpdate, usuarioUpdate, historialCreateMany, cola, tx };
+    return {
+      repo,
+      gestionCreate,
+      ordenUpdate,
+      usuarioUpdate,
+      historialCreateMany,
+      pagoCreateMany,
+      dentroDeTx,
+      cola,
+      tx,
+    };
   }
 
   it("INSERT gestion + UPDATE estatus + limpiar puntero, todo bajo la misma tx", async () => {
@@ -691,5 +718,124 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.causaDevolucion).toBeNull();
+  });
+
+  // --- Feature 212 (R17/R20): el DESGLOSE del recaudo, en la MISMA transaccion --------------
+  // `monto_recibido` sobrevive como TOTAL snapshot; las lineas `(metodo, monto)` son la fuente
+  // del reparto por metodo del cierre —y por tanto de la `E` del `min(P, E)` con el que se le
+  // paga al mensajero (feature 44)—. Una linea escrita fuera de la tx, o un monto convertido a
+  // float, no da un numero feo en pantalla: le paga de menos o de mas a una persona.
+
+  it("212/R17: las lineas se insertan con el cliente de la MISMA tx, tras crear la gestion", async () => {
+    const { repo, pagoCreateMany, dentroDeTx } = buildTxRepo();
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: {
+        resultado: "entregada",
+        montoRecibido: 8000,
+        metodoPago: null, // R19: mixta -> la columna deprecada va NULL
+        pagos: [
+          { metodo: "efectivo", monto: 5000 },
+          { metodo: "transferencia", monto: 3000 },
+        ],
+      },
+      nuevoEstatusId: idEstado("entregada"),
+    });
+
+    expect(pagoCreateMany).toHaveBeenCalledTimes(1);
+    expect(dentroDeTx).toEqual([true]); // dentro de la transaccion abierta, no fuera
+    const arg = (pagoCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
+    expect(arg.data).toHaveLength(2);
+    expect(arg.data[0].gestionId).toBe("g1"); // enlazadas a la gestion recien creada
+    expect(arg.data[1].gestionId).toBe("g1");
+    expect(arg.data[0].metodo).toBe("efectivo");
+    expect(arg.data[1].metodo).toBe("transferencia");
+  });
+
+  it("212/R20: el monto de cada linea entra como Prisma.Decimal, nunca como float", async () => {
+    const { repo, pagoCreateMany } = buildTxRepo();
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: {
+        resultado: "entregada",
+        montoRecibido: 99.99,
+        metodoPago: null,
+        pagos: [
+          { metodo: "efectivo", monto: 66.66 },
+          { metodo: "SINPE", monto: 33.33 },
+        ],
+      },
+      nuevoEstatusId: idEstado("entregada"),
+    });
+
+    const arg = (pagoCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
+    for (const fila of arg.data) {
+      expect(fila.monto).toBeInstanceOf(Prisma.Decimal);
+    }
+    expect((arg.data[0].monto as Prisma.Decimal).toString()).toBe("66.66");
+    expect((arg.data[1].monto as Prisma.Decimal).toString()).toBe("33.33");
+    // Suma exacta en Decimal: 66.66 + 33.33 = 99.99 (con floats seria 99.99000000000001).
+    const suma = (arg.data[0].monto as Prisma.Decimal).plus(arg.data[1].monto as Prisma.Decimal);
+    expect(suma.toString()).toBe("99.99");
+  });
+
+  it("212/R17: si el append de la transicion falla, la tx se revierte con las lineas dentro", async () => {
+    const historialCreateMany = vi.fn(async () => {
+      throw new Error("append falla");
+    });
+    const { repo, pagoCreateMany, dentroDeTx } = buildTxRepo(idEstado("en_reparto"), historialCreateMany);
+
+    await expect(
+      repo.crearGestionYTransicionar({
+        ordenId: "o1",
+        mensajeroId: "m1",
+        gestion: {
+          resultado: "entregada",
+          montoRecibido: 5000,
+          metodoPago: "efectivo",
+          pagos: [{ metodo: "efectivo", monto: 5000 }],
+        },
+        nuevoEstatusId: idEstado("entregada"),
+      }),
+    ).rejects.toThrow("append falla");
+
+    // El insert de las lineas ocurrio DENTRO de la misma tx que despues aborta -> no queda
+    // ninguna linea huerfana (atomicidad todo-o-nada ya provista por $transaction).
+    expect(dentroDeTx).toEqual([true]);
+    expect(pagoCreateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("212/R14: lista de pagos VACIA -> no se inserta ninguna linea", async () => {
+    const { repo, pagoCreateMany, gestionCreate } = buildTxRepo();
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "entregada", montoRecibido: 0, metodoPago: null, pagos: [] },
+      nuevoEstatusId: idEstado("entregada"),
+    });
+
+    expect(pagoCreateMany).not.toHaveBeenCalled();
+    const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
+    // El TOTAL snapshot se escribe igual (0), y la columna deprecada va NULL (R19).
+    expect((gArg.data.montoRecibido as Prisma.Decimal).toString()).toBe("0");
+    expect(gArg.data.metodoPago).toBeNull();
+  });
+
+  it("212/R5: una gestion sin `pagos` (rama sin recaudo) no toca la tabla del desglose", async () => {
+    const { repo, pagoCreateMany } = buildTxRepo();
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "rechazada", motivo: "cliente rechazo" },
+      nuevoEstatusId: idEstado("rechazada"),
+    });
+
+    expect(pagoCreateMany).not.toHaveBeenCalled();
   });
 });

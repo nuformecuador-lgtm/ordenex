@@ -5,6 +5,10 @@ import { esFechaCalendarioValida, mananaCalendarioCR } from "@/lib/utils/fecha-c
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
 import { ubicacionSchema } from "@/lib/types/ruta-mensajero";
+// Feature 212 (R11/R30): la suma del borde se comprueba en CENTIMOS ENTEROS dentro de un util
+// PURO. Este archivo viaja al bundle del navegador (el panel valida con el MISMO schema), asi
+// que NO puede importar `@prisma/client` ni aritmetica `Decimal`.
+import { sumaCuadra } from "@/lib/utils/pagos-recaudo";
 import type {
   DetalleConflicto,
   MiAsignacionDTO,
@@ -208,6 +212,95 @@ const causaDevolucionSchema = z.enum(CAUSA_DEVOLUCION_SEED, { message: "causa re
 // `causaIncidente`. NO sustituye al `motivo` ni afloja su validacion (R11): son campos APARTE.
 const causaIncidenteSchema = z.enum(CAUSA_INCIDENTE_SEED, { message: "causa requerida" });
 
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// Feature 212 (R11-R16) — el DESGLOSE del recaudo al cliente.
+//
+// El contrato es ADITIVO: acepta la forma escalar historica (R12) y la lista de lineas (R11),
+// nunca las dos a la vez (R13). Las cinco reglas que las relacionan no se pueden expresar campo
+// a campo —dependen de `montoRecibido`, `metodoPago` y `pagos` a la vez— y viven en
+// `validarRecaudoEntrega`, igual que la disyuncion de ubicacion de la 193.
+
+/** R11: una linea por metodo, con su monto ya sumado (D2). Monto ESTRICTAMENTE positivo. */
+const pagosSchema = z.array(
+  z.object({
+    metodo: z.enum(METODO_PAGO_SEED),
+    monto: z.number().positive("monto invalido"),
+  }),
+);
+
+/**
+ * R11/R13/R14/R15 — las CINCO reglas del recaudo, cada una con su error DE CAMPO (el panel las
+ * pinta bajo el control que las provoca).
+ *
+ * Solo aplica a la rama `entregada`: R16 lo garantiza estructuralmente, porque ninguna otra
+ * variante de la `discriminatedUnion` declara `metodoPago` ni `pagos` y un cliente que los envie
+ * no los consigue persistir (mismo blindaje que la causa de la 73).
+ */
+function validarRecaudoEntrega(
+  valor: z.infer<typeof gestionarUnionSchema>,
+  ctx: z.RefinementCtx,
+): void {
+  if (valor.resultado !== "entregada") return;
+  const { montoRecibido, metodoPago, pagos } = valor;
+  const tieneEscalar = metodoPago !== undefined;
+  const tieneDesglose = pagos !== undefined;
+
+  // Regla 1 (R13): las dos formas a la vez son ambiguas —¿el escalar es el total o una linea
+  // mas?—. Se rechaza en vez de elegir por el cliente.
+  if (tieneEscalar && tieneDesglose) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pagos"],
+      message: "no se puede enviar un metodo unico y un desglose a la vez",
+    });
+    return;
+  }
+
+  // Regla 2 (R11): metodos repetidos. Espejo EXACTO del `@@unique(gestion_id, metodo)` [D2]:
+  // dos transferencias se registran como UNA linea con el monto ya sumado.
+  if (pagos && new Set(pagos.map((p) => p.metodo)).size !== pagos.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pagos"],
+      message: "cada metodo de pago puede aparecer una sola vez",
+    });
+    return;
+  }
+
+  // Regla 3 (R15): hubo cobro pero no se dijo COMO. El error va en `metodoPago` porque es el
+  // control que el panel viejo tiene en pantalla.
+  if (montoRecibido > 0 && !tieneEscalar && (!pagos || pagos.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["metodoPago"],
+      message: "metodo de pago requerido",
+    });
+    return;
+  }
+
+  // Regla 4 (R14): orden SIN cobro. Cero colones no se reparte entre metodos: son CERO lineas,
+  // no una linea de efectivo/0.
+  if (montoRecibido === 0 && pagos && pagos.length > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pagos"],
+      message: "una entrega sin cobro no admite desglose de pagos",
+    });
+    return;
+  }
+
+  // Regla 5 (R11): la invariante `SUM(pagos.monto) = montoRecibido`, en CENTIMOS enteros
+  // (R30). No hay CHECK en la base (patron 36/F1.4-b): esta es la barrera del borde, y el
+  // servicio la revalida en `Prisma.Decimal` (R18).
+  if (pagos && pagos.length > 0 && !sumaCuadra(pagos, montoRecibido)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pagos"],
+      message: "el desglose debe sumar el monto recibido",
+    });
+  }
+}
+
 // R22/R25/R27/R29: entrada de gestion DISCRIMINADA por `resultado` con las
 // obligatoriedades por rama (decision F1.4-i). La evidencia (File) va en el mismo
 // schema como file-like (obligatoria en entrega/rechazo).
@@ -218,7 +311,15 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
     // >= 0: una entrega SIN cobro (montoCobrar 0/null) recauda 0 y es válida. El
     // servicio revalida que el monto CUADRE con el `montoCobrar` de la orden (R22).
     montoRecibido: z.number().nonnegative("monto invalido"),
-    metodoPago: z.enum(METODO_PAGO_SEED),
+    // Feature 212 (R12) — FORMA A, ESCALAR e HISTORICA: un unico metodo para todo el monto.
+    // Pasa a OPCIONAL, no se retira: es la que sigue mandando el panel entre el merge de la
+    // 212 y el de la 213, y el panel valida con ESTE mismo schema en el navegador. Retirarla
+    // aqui deja la app rota en produccion durante esa ventana.
+    metodoPago: z.enum(METODO_PAGO_SEED).optional(),
+    // Feature 212 (R11) — FORMA B, el DESGLOSE: 0..N lineas (metodo, monto). Monto por linea
+    // ESTRICTAMENTE positivo: una fila vacia del editor de la 213 es un error de captura, no
+    // una linea de 0. Las reglas que RELACIONAN los tres campos viven en `validarRecaudoEntrega`.
+    pagos: pagosSchema.optional(),
     // Feature 119 (R5): lista de 1..N fotos (antes una sola). Validacion por archivo (R8).
     evidencias: evidenciasSchema,
     ...camposUbicacion, // feature 92/R22 + feature 193/R14
@@ -282,9 +383,14 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
 // dentro de cada rama. Ese es el punto: una rama nueva la hereda sin que nadie tenga que
 // acordarse. El `superRefine` corre DESPUES de que la union resuelva el discriminante, asi
 // que un `resultado` invalido sigue fallando por su propio error y no por este.
-export const gestionarSchema = gestionarUnionSchema.superRefine(
-  exigirUbicacionOAusencia,
-);
+//
+// Feature 212 (R11-R16): las reglas del recaudo se encadenan como un SEGUNDO `superRefine`, por
+// el mismo motivo: una rama nueva con cobro las hereda sin que nadie tenga que acordarse. Los
+// dos corren siempre (ningun `addIssue` aborta al otro), asi que una gestion con dos problemas
+// —sin ubicacion y con el desglose descuadrado— reporta los DOS campos de una vez.
+export const gestionarSchema = gestionarUnionSchema
+  .superRefine(exigirUbicacionOAusencia)
+  .superRefine(validarRecaudoEntrega);
 export type GestionarActionInput = z.infer<typeof gestionarSchema>;
 
 // --- Resultados expuestos por la Server Action (agregan `unauthenticated`) ---

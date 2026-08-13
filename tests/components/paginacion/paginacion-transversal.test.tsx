@@ -539,6 +539,10 @@ function gestion(i: number, resultado: CierreResultado): CierreDetalleGestion {
     resultado,
     montoRecibido: resultado === "entregada" ? "1000.10" : null,
     metodoPago: resultado === "entregada" ? "SINPE" : null,
+    // Feature 212/R31: el DTO gana el desglose y CONSERVA el escalar de arriba; una entrega
+    // de un solo metodo lleva UNA linea, y lo que no se entrego no lleva ninguna.
+    pagos:
+      resultado === "entregada" ? [{ metodo: "SINPE" as const, monto: "1000.10" }] : [],
     motivo: null,
     fechaReprogramacion: null,
     evidenciaUrl: null,

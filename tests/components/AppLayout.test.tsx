@@ -34,6 +34,20 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: () => resolveActorMock(),
 }));
 
+// Feature 211: el layout lee la cookie del tema con `cookies()` de next/headers para
+// estampar la clase del tema en el servidor. Fuera de una petición real esa API lanza
+// («`cookies` was called outside a request scope»), así que se mockea con un almacén
+// controlable. Por defecto: sin cookie -> tema «sistema».
+const cookieTemaMock = vi.fn<() => string | undefined>(() => undefined);
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (nombre: string) =>
+      nombre === "ordenex_tema" && cookieTemaMock() !== undefined
+        ? { name: nombre, value: cookieTemaMock() }
+        : undefined,
+  }),
+}));
+
 // El layout también resuelve el NOMBRE del usuario (para el footer del sidebar) vía
 // UserRepository.findById; se mockea el repo y el cliente Prisma para no tocar la BD.
 vi.mock("@/lib/db/prisma-client", () => ({ getPrismaClient: () => ({}) }));
@@ -106,6 +120,46 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     expect(
       screen.getByRole("button", { name: /toggle sidebar/i }),
     ).toBeInTheDocument();
+  });
+
+  // Feature 211 — el tema lo resuelve EL SERVIDOR. Es lo que hace que el HTML llegue ya
+  // con la clase puesta y no haya que corregir nada después del primer pintado: si esto
+  // se rompiera, el tema seguiría cambiando al pulsar y volvería a parpadear al recargar.
+  it("estampa la clase del tema que dice la COOKIE, sin esperar a que el cliente hidrate", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+
+    for (const [cookie, clase] of [
+      ["oscuro", "dark"],
+      ["claro", "tema-claro"],
+      ["sistema", "tema-sistema"],
+    ] as const) {
+      cookieTemaMock.mockReturnValue(cookie);
+      const { unmount } = await renderLayout(<div>Contenido</div>);
+
+      const envoltorio = document.querySelector(`[data-tema="${cookie}"]`);
+      expect(envoltorio, `sin envoltorio para la cookie ${cookie}`).not.toBeNull();
+      expect(envoltorio!.className.split(" ")).toContain(clase);
+      // `contents`: estampar el tema no puede alterar el layout de la aplicación.
+      expect(envoltorio!.className.split(" ")).toContain("contents");
+      unmount();
+    }
+    cookieTemaMock.mockReturnValue(undefined);
+  });
+
+  it("sin cookie —y con una cookie manipulada— cae en «sistema», que respeta la preferencia del SO", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+
+    for (const cookie of [undefined, "azul", ""]) {
+      cookieTemaMock.mockReturnValue(cookie);
+      const { unmount } = await renderLayout(<div>Contenido</div>);
+
+      const envoltorio = document.querySelector("[data-tema]");
+      expect(envoltorio!.getAttribute("data-tema"), `cookie=${String(cookie)}`).toBe("sistema");
+      expect(envoltorio!.className.split(" ")).toContain("tema-sistema");
+      expect(envoltorio!.className.split(" ")).not.toContain("dark");
+      unmount();
+    }
+    cookieTemaMock.mockReturnValue(undefined);
   });
 
   it("/login no incluye el sidebar (R15)", () => {

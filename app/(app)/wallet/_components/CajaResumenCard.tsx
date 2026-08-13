@@ -301,7 +301,14 @@ export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) 
           <span className="text-sm font-medium text-warning-strong">
             {CAJA_RESUMEN_LABEL.deTerceros}
           </span>
-          <span className="text-2xl font-semibold tracking-tight tabular-nums text-warning-strong">
+          {/* Feature 208 — LA CIFRA va en `text-foreground`, no en el color de aviso.
+              El aviso lo siguen dando el icono, el rótulo, el borde y el fondo; el
+              número es dinero y necesita margen, no el aprobado justo:
+              `text-warning-strong` sobre `bg-warning-soft` mide 4.51:1 en tema claro
+              (el umbral AA es 4.50), y quedarse a una centésima de la línea en el
+              importe que se retiene de terceros no es aceptable. Medido después:
+              14.22:1 en claro y 15.1:1 en oscuro. */}
+          <span className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">
             {money(resumen.deTerceros)}
           </span>
           <p role="note" className="text-xs text-muted-foreground">

@@ -100,6 +100,17 @@ export interface GestionOrdenData {
    * MISMA transaccion (R9) y DERIVA de la de indice 0 las columnas singulares (dual-write, R12).
    */
   evidencias?: { storagePath: string; contentType: string; indice: number }[];
+  /**
+   * Feature 212 (R17/R20): DESGLOSE del recaudo, 0..N lineas `(metodo, monto)`. El repo las
+   * inserta en `gestion_orden_pago` dentro de la MISMA transaccion que la gestion y la
+   * transicion (patron de las evidencias de la 119): viaja DENTRO de `GestionOrdenData`, asi
+   * que `crearGestionYTransicionar` NO cambia de firma y la atomicidad ya provista se conserva.
+   *
+   * `monto` entra como `number` y se persiste como `Decimal(12,2)` —la misma escala que
+   * `monto_recibido`— sin pasar por aritmetica de coma flotante (R20/R30). Lista vacia o
+   * ausente = ninguna linea (entrega SIN cobro, R14; o cualquier resultado que no sea entrega).
+   */
+  pagos?: { metodo: MetodoPagoValue; monto: number }[];
   motivo?: string | null;
   /** Fecha (YYYY-MM-DD) de reprogramacion; se persiste como columna DATE. */
   fechaReprogramacion?: string | null;

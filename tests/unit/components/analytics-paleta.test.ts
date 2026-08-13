@@ -24,6 +24,64 @@ function archivosDelPaquete(dir: string = PAQUETE): string[] {
   });
 }
 
+/**
+ * Corta por comas de PRIMER nivel: las de dentro de `:is(.a, .b)` o de un `[attr="x,y"]`
+ * no separan selectores.
+ */
+function selectoresDe(prelude: string): string[] {
+  const partes: string[] = [];
+  let actual = "";
+  let hondura = 0;
+  for (const c of prelude) {
+    if (c === "(" || c === "[") hondura += 1;
+    else if (c === ")" || c === "]") hondura -= 1;
+    if (c === "," && hondura === 0) {
+      partes.push(actual);
+      actual = "";
+      continue;
+    }
+    actual += c;
+  }
+  partes.push(actual);
+  return partes.map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean);
+}
+
+/**
+ * Cuerpos de TODAS las reglas cuya lista de selectores incluya `selector` como elemento
+ * propio, sin importar el orden, los vecinos ni el espaciado: `:root {`, `:root,\n
+ * .tema-claro {` y `.x, :root {` valen igual.
+ *
+ * Buscar la cadena literal `":root {"` no servía: el bloque de tokens se declara como
+ * `:root,\n.tema-claro { … }`, así que la búsqueda se saltaba el bloque real y se
+ * enganchaba al siguiente `:root {` del archivo (el de las variables de animación), donde
+ * ningún `--chart-*` existe. Rojo por trocear mal, no por token ausente.
+ *
+ * Los comentarios se quitan ANTES de trocear: si no, una declaración borrada pero
+ * mencionada en la prosa de al lado seguiría dando verde.
+ */
+function cuerposDeRegla(css: string, selector: string): string[] {
+  const limpio = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const cuerpos: string[] = [];
+  const abiertas: { prelude: string; desde: number }[] = [];
+  let marca = 0;
+  for (let i = 0; i < limpio.length; i += 1) {
+    const c = limpio[i];
+    if (c === "{") {
+      abiertas.push({ prelude: limpio.slice(marca, i), desde: i + 1 });
+      marca = i + 1;
+    } else if (c === "}") {
+      const regla = abiertas.pop();
+      marca = i + 1;
+      if (regla && selectoresDe(regla.prelude).includes(selector)) {
+        cuerpos.push(limpio.slice(regla.desde, i));
+      }
+    } else if (c === ";") {
+      marca = i + 1;
+    }
+  }
+  return cuerpos;
+}
+
 describe("paleta de series (R16-R19, R30)", () => {
   it("el color de una serie es determinista para el mismo indice", () => {
     for (let i = 0; i < MAX_SERIES; i += 1) {
@@ -52,14 +110,13 @@ describe("paleta de series (R16-R19, R30)", () => {
   it("los tokens declarados existen en app/globals.css, en :root y en .dark", () => {
     const css = readFileSync(path.join(RAIZ, "app", "globals.css"), "utf8");
     const bloque = (selector: string): string => {
-      const inicio = css.indexOf(selector);
-      expect(inicio, `no existe el bloque ${selector} en globals.css`).toBeGreaterThan(-1);
-      const abre = css.indexOf("{", inicio);
-      const cierra = css.indexOf("\n}", abre);
-      return css.slice(abre, cierra);
+      const cuerpos = cuerposDeRegla(css, selector);
+      expect(cuerpos.length, `no existe ninguna regla para ${selector} en globals.css`)
+        .toBeGreaterThan(0);
+      return cuerpos.join("\n");
     };
-    const root = bloque(":root {");
-    const oscuro = bloque(".dark {");
+    const root = bloque(":root");
+    const oscuro = bloque(".dark");
     for (const token of TOKENS_SERIE) {
       expect(root, `${token} falta en :root`).toContain(`${token}:`);
       expect(oscuro, `${token} falta en .dark`).toContain(`${token}:`);

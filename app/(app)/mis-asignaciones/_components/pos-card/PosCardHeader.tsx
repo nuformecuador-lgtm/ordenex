@@ -28,7 +28,11 @@ export function PosCardHeader({
   // R28: nº de parada en la ruta optimizada; "·" cuando aún no tiene posición.
   const parada = orden.secuenciaRuta;
   return (
-    <div className="flex items-center justify-between border-b-4 border-navy px-4 py-3">
+    // Feature 208 — REGLA de esta card: el navy que es SUPERFICIE se conserva (el
+    // cuadro de la parada de abajo es un bloque navy con texto blanco, 13.2:1 en los
+    // dos temas); el navy que es LÍNEA sobre la card —esta subrayada de 4px— se migra,
+    // porque la card gira con el tema y en oscuro la línea desaparecía.
+    <div className="flex items-center justify-between border-b-4 border-foreground px-4 py-3">
       <div className="flex items-center gap-2">
         {mostrarParada ? (
           <span
