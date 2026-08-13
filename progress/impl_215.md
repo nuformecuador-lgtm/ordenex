@@ -172,7 +172,13 @@ medido contra un baseline REMEDIDO de `dev`. Esta bitacora no lo sustituye.
 
 ---
 
-## 5. El unico rojo, y esta en la tabla de `design.md` §6 (fila #10)
+## 5. El unico rojo — CAIDO en la tanda del Grupo 5 (ver §9)
+
+> **Estado 2026-08-13 (segunda tanda):** este rojo ya **NO existe**. T13 lo cerro
+> reescribiendo la SEMILLA, con las aserciones intactas. Lo que sigue se conserva
+> como registro de la causa medida; el arreglo esta en **§9.1**.
+
+### Como estaba (registro historico)
 
     tests/integration/db/analytics-daily-job.test.ts
       > medidas (T6.4) > primer intento vs entrega tras una devolucion previa (R17)
@@ -187,6 +193,8 @@ contarse como `primer_intento_ok = 1`. Es **exactamente** el efecto que
 Arreglarlo = reescribir las semillas para que creen **cierres aprobados**, que es
 **T13, bloqueado por Q10/R24**. **No se toco.** El test corre CON datos (no
 retorna temprano): 28 de 29 casos del archivo pasan.
+
+**Desbloqueado por D15 y hecho: ver §9.1.** Hoy el archivo pasa 29 de 29.
 
 `analitica-operativa-equivalencia.test.ts` pasa **con datos**: 2/2, sin retorno
 temprano.
@@ -426,3 +434,203 @@ fechado en `design.md §3.4`.
 | «R4: el `where` del LOTE es IDENTICO al del individual salvo `ordenId`» | Igual, normalizando tambien el `ordenId` anidado en el `some`, **mas 2 aserciones nuevas** (que el `ordenId` de dentro es el mismo que el de fuera, en individual y en lote) | Un segundo `where` copia-pegado; **y ademas**, ahora, quitar el `ordenId` redundante del `some` (la mutacion de rendimiento que degrada a seq scan) |
 
 Ningun test se borro ni se relajo.
+
+---
+
+## 9. Grupo 5 (T13, T23, T24) — la DERIVA DECLARADA de `primer_intento_ok` (D15)
+
+Tanda del 2026-08-13 (segunda). Desbloqueada por **D15** («declara la deriva con
+fecha de corte», Q10 cerrada). Cierra **R24** (a/b/c/d/e) y **R35**, y con T13 cae
+**el ultimo rojo declarado** de la feature.
+
+**Diff de la tanda: 5 archivos. 0 en `db/`, 0 en `app/`, 0 en `components/`.**
+
+| Archivo | Tarea | Que cambia |
+| --- | --- | --- |
+| `tests/integration/db/_semilla-rollup.ts` | T13 | Helper nuevo `crearCierreAprobado` + `crearGestion` acepta `cierreId` opcional |
+| `tests/integration/db/analytics-daily-job.test.ts` | T13 | Solo el caso de R17: la `devuelta` se vincula a un cierre aprobado. **Aserciones intactas** |
+| `lib/analytics/metrics.ts` | T23 | Solo prosa: bloque de declaracion + `descripcion` de `primer_intento_ok` |
+| `lib/services/AnaliticaRollupService.ts` | T23 | Solo prosa: docblock de `contarPrimerIntento` |
+| `lib/services/AnaliticaOperativaService.ts` | T23 | Solo prosa: docblock de `completarPrimerIntentoEnCubos` |
+
+### 9.1 T13 — el ultimo rojo, cerrado por la SEMILLA (no por la asercion)
+
+`tests/integration/db/analytics-daily-job.test.ts` · «primer intento vs entrega
+tras una devolucion previa (R17)».
+
+**Causa:** la semilla creaba la `gestion_orden` con resultado `devuelta` **sin
+`cierre_id`** (`crearGestion` ni siquiera aceptaba uno, y el archivo no creaba
+ningun `cierre_dia`). Con el criterio nuevo esa devolucion no contaba, la entrega
+de hoy parecia primer intento y `primerIntentoOk` salia `1` donde el test espera `0`.
+
+**Arreglo, todo en la semilla:**
+
+- **Helper nuevo, exportado, en `_semilla-rollup.ts`** (no copiado en el test):
+  `crearCierreAprobado(tx, { mensajeroId, zonaId, at })` que devuelve el id. Crea un
+  `cierre_dia` con `estado: "aprobado"`, `destinoTipo: "bodega_central"`,
+  `destinoZonaId`, y `solicitadoAt`/`resueltoAt`/`createdAt` en el pasado aislado de
+  2001. Sin totales: los defaults son 0 y el rollup no los lee.
+- **`SemillaGestion` gana `readonly cierreId?: string | null`** y `crearGestion` lo
+  escribe (`g.cierreId ?? null`). Opcional y con default `null`, **exactamente como
+  `anuladaAt`**: los ~15 call-sites existentes no se tocan (typecheck verde lo
+  confirma).
+- En el caso, la `devuelta` de la orden `reintentada` se vincula a ese cierre.
+- **La sexta condicion del predicado (visita real, R34) se VERIFICO, no se asumio:**
+  la fila de `orden_historial_estado` con `origenTipo: "gestion"` y
+  `gestionOrdenId` ya estaba en la semilla. Como `whereIntentosVigentes` es un AND
+  de las seis, si el `EXISTS` fallara la devolucion no contaria y `primerIntentoOk`
+  seguiria en 1: el verde lo prueba.
+- **Prosa corregida (R28):** el comentario de la semilla decia «transicion a
+  `devuelta` de una gestion no anulada» — criterio VIEJO. Ahora dice gestion
+  `devuelta` vigente, de visita real y **en un cierre APROBADO**.
+
+**Las dos aserciones que NO se tocaron** (son la unica prueba de que el KPI
+distingue reintento de primer intento; relajarlas habria sido borrar lo que el test
+existe para medir):
+
+    expect([trasDevolucion?.entregas, trasDevolucion?.primerIntentoOk]).toEqual([1, 0]);
+    expect([alPrimerIntento?.entregas, alPrimerIntento?.primerIntentoOk]).toEqual([1, 1]);
+
+El CHECK de base `primer_intento_ok <= entregas` se respeta (0 <= 1 y 1 <= 1).
+
+**Que el test corre CON DATOS, y no pasa "por vacio"** — deuda conocida del repo,
+asi que se exigio evidencia POSITIVA, no el `passed`:
+
+1. **El early-return del archivo es un `skip`, no un `return`:**
+   `const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip` (`:45`),
+   con `HAY_BASE_DE_DATOS = urlDeBaseDeDatos() !== undefined`
+   (`_postgres-real.ts:32`). Sin base, vitest reportaria **skipped**, no **passed**.
+   Reporta `29 passed`, `0 skipped`.
+2. **Canario temporal:** se inserto una asercion imposible dentro del cuerpo del
+   caso, despues de los dos `toBeDefined` y ANTES de las aserciones del KPI. La
+   corrida fallo **en esa linea** con `1 failed | 28 passed`. Es decir: el cuerpo
+   **llega hasta ahi** con `trasDevolucion` y `alPrimerIntento` ya definidos, o sea
+   que las dos filas del rollup existen de verdad. Canario retirado y re-corrido en
+   verde.
+3. Refuerzo: el `expect(filas).toHaveLength(2)` del propio caso es incompatible con
+   "pasar por vacio".
+
+### 9.2 T23 — la declaracion de la deriva, en los TRES sitios de `design.md` §8.3
+
+Solo prosa. Cero cambios de logica, firma, tipo o calculo.
+
+| Sitio | Ruta | Lineas |
+| --- | --- | --- |
+| La DEFINICION de la metrica | `lib/analytics/metrics.ts` | bloque `:331-374` + `descripcion` `:378-379` (metrica `:375-396`) |
+| Quien PERSISTE las filas con el escalon | `lib/services/AnaliticaRollupService.ts` | docblock de `contarPrimerIntento`, `:223-262` |
+| La version VIVA del mismo KPI | `lib/services/AnaliticaOperativaService.ts` | docblock de `completarPrimerIntentoEnCubos`, `:886-935` |
+
+Los tres son **autosuficientes** —quien lee solo uno se entera de las tres cosas,
+que es el punto de R24-b— y los tres dicen:
+
+1. **El cambio de criterio, SIN re-backfill (R24-a).** `primer_intento_ok` cambio de
+   criterio con la 215 (el «intento previo» ya no sale de destinos de transicion,
+   sale de gestiones dentro de un cierre APROBADO) y el historico **no se
+   re-backfillea**: el escalon se ASUME. Con los dos motivos escritos: reescribiria
+   meses de KPI ya reportados, y **seria falso** —aquellos cierres no estaban
+   aprobados *en el momento de aquel calculo*.
+2. **La regla del corte, por `updated_at` y NO por `fecha` (R24-c, R35).** Textual:
+   *toda fila con `updated_at` anterior al despliegue de la 215 esta calculada con
+   el criterio viejo; toda fila con `updated_at` posterior, con el nuevo, **sea cual
+   sea su `fecha`***. Y la frase que R24-c exige con esas palabras: **una fila de una
+   fecha anterior al corte que se RECALCULA despues del corte pasa al criterio
+   NUEVO**. Con el motivo: el job recalcula dias pasados (backfill) y el upsert
+   refresca `updated_at` en cada recalculo (`AnaliticaRollupRepository.ts:434,453`),
+   asi que el corte es por **cuando se calculo**, no por **que dia mide**. Y con la
+   razon de que no haya constante ni columna: `updated_at` **ya existe**, luego sin
+   columna, tabla ni migracion (R27), y sin ninguna `FECHA_CORTE_*` que adivinar o
+   mantener (mecanismos M-B/M-C descartados en `design.md` §8.2).
+3. **El efecto INTRADIA, propiedad NUEVA y PERMANENTE (R24-d).** Una entrega cuya
+   orden tiene cierres **sin aprobar** reporta 0 intentos previos y cuenta como
+   primer intento, asi que el KPI **sube durante el dia y baja al aprobarse los
+   cierres**. Escrito explicitamente que **no es un artefacto de la migracion de
+   criterio y no desaparece con la deriva declarada**. Corolario incluido: el mismo
+   dia puede dar dos valores distintos segun cuando se recalcule.
+
+Los tres cierran recordando el invariante que NO cambia (R23/R24-e): el KPI sigue
+REMITIENDO al punto unico (`OrdenHistorialService.contarIntentos*`), sin `COUNT`
+propio, sin umbral propio, sin columna materializada, y `primer_intento_ok <=
+entregas` se mantiene.
+
+**Guardias que CONDICIONARON la redaccion (ninguna roja, ninguna relajada):**
+
+- `analytics-daily-guards.test.ts:641-652` exige que todo literal `analytics_daily`
+  en `metrics.ts` fuera de comentarios este dentro de `tablas: [...]`. Como
+  `descripcion` es codigo y no comentario, ahi la tabla se nombra «el rollup
+  diario»; el nombre real solo aparece en el comentario adyacente. **Queda escrito
+  en el propio comentario para que nadie lo "arregle".**
+- `metrics.test.ts:419` exige que toda `descripcion` cite las gestiones anuladas:
+  conservado.
+- `catalogo-universo.guardia.test.ts` (R7) prohibe el patron «numero + …
+  estados/estatus/values» en cualquier `descripcion`: se redacto evitando poner
+  «215» a menos de dos palabras de esos sustantivos.
+- `etiquetas-visibles.guardia.test.ts` fija que las `descripcion` van sin tildes:
+  respetado.
+- **No hay guardia de longitud maxima de `descripcion`**, asi que la declaracion
+  cabe en el propio dato y no hubo que degradarla a solo-comentario.
+
+**Lo que NO se toco, y es medido, no un olvido.** El aviso **no llega a la PANTALLA**
+de analitica: el texto visible sale de
+`app/(app)/analitica/_components/operativo/catalogo-paneles.ts` y `textos.ts`, y los
+`descripcion:` del catalogo «no llegan a pantalla»
+(`etiquetas-visibles.guardia.test.ts:32-34`). Escribirlo ahi tocaria `app/`, contra
+R20 y contra la guardia de la feature; un `COMMENT ON COLUMN` seria migracion,
+contra R27. **Llevar el aviso a la pantalla es ficha aparte**, declarada en
+`requirements.md` §Tension declarada de la cuarta ronda.
+
+### 9.3 T24 — LA ANOTACION DEL DESPLIEGUE (accion humana, PENDIENTE)
+
+> ## ⬜ INSTANTE REAL DEL DESPLIEGUE DE LA 215 — **SIN ANOTAR**
+>
+> **Fecha y hora, con zona horaria:** `__________________________`
+> *(rellenar UNA SOLA VEZ, DESPUES del despliegue, por quien lo ejecute)*
+>
+> **Commit desplegado:** `__________________________`
+
+**Hoy esa fecha NO SE CONOCE, y no se inventa.** El criterio nuevo empieza a regir
+cuando este codigo se **despliega**, no cuando se decide ni cuando se mergea el PR.
+Cualquier valor escrito aqui antes del hecho seria una fecha falsa, que es **peor
+que no tener ninguna** — es exactamente por lo que `design.md` §8.2 descarto la
+constante en codigo (M-B) y la variable de entorno (M-C) y eligio derivar el corte
+del dato (M-A).
+
+**Que se pierde si esta anotacion no llega a hacerse: solo la etiqueta comoda.**
+La serie **sigue siendo interpretable fila a fila** por `analytics_daily.updated_at`
+(R35): la regla del corte esta escrita en los tres sitios de §9.2 y no necesita esta
+casilla para aplicarse. Comparando el `updated_at` de una fila con la fecha del
+despliegue —que siempre se puede recuperar del historial de despliegues aunque nadie
+la anote aqui— se sabe con que criterio se calculo. Esta casilla solo ahorra ese
+paso.
+
+**Por eso T24 NO bloquea el PR**, no toca codigo y no exige re-desplegar.
+
+### 9.4 Verificacion — salida real (2026-08-13, worktree `C:/w213`)
+
+| # | Comando | Resultado |
+| --- | --- | --- |
+| 1 | `vitest run tests/integration/db/analytics-daily-job.test.ts` | **29 tests, 29 verdes** (antes: 1 failed / 28 passed). 0 skipped |
+| 2 | `vitest run` job + `analitica-operativa-equivalencia` | **2 files, 31 tests, 31 passed** |
+| 3 | `vitest run tests/integration/db/analytics-daily-` (los 4: job, backfill, guards, migration) | **4 files, 123 tests, 123 passed** |
+| 4 | `vitest run tests/unit/analytics/` + `criterio-intento-entrega` + `orden-historial-repository` + `intentos-entrega-criterio-unico` + `devolucion-sla-dinero` | **136 files, 1482 tests, 1482 passed** |
+| 5 | `pnpm exec tsc --noEmit -p tsconfig.json` | **exit 0**, sin salida |
+| 6 | `pnpm exec eslint` sobre los 5 archivos tocados | **exit 0**, sin salida |
+| 7 | `git diff --name-only -- db/` | **VACIO** (R27) |
+| 8 | `git diff --name-only -- app/ components/` | **VACIO** (R20) |
+
+`devolucion-sla-dinero.test.ts` entra en el punto 4 **sin haberse tocado**: sigue
+verde, o sea que el ingreso de bodega por rechazo no cambio (R17).
+
+**Ningun rojo. Ninguna guardia ajena en rojo. Ninguna guardia relajada.**
+
+### 9.5 Trazabilidad de la tanda
+
+| Req | Test / evidencia |
+| --- | --- |
+| R23 | `analytics-daily-job.test.ts` · «primer intento vs entrega tras una devolucion previa (R17)» verde **con las aserciones intactas** · `metrics.test.ts` (el KPI sigue remitiendo al punto unico) · CHECK `primer_intento_ok <= entregas` en base |
+| R24-a | §9.2 punto 1 escrito en los tres sitios; **cero filas de `analytics_daily` reescritas** (el diff no incluye ningun script de backfill) |
+| R24-b | Los tres sitios de `design.md` §8.3, con rango de lineas en §9.2 |
+| R24-c | §9.2 punto 2: la regla por `updated_at` y la frase de la fila recalculada, con esas palabras, en los tres sitios |
+| R24-d | §9.2 punto 3: el efecto intradia como propiedad nueva y permanente, en los tres sitios |
+| R24-e | `analytics-daily-job.test.ts` verde sin tocar aserciones + `metrics.test.ts` verde: sin `COUNT` propio, sin umbral propio, sin columna materializada |
+| R35 | La regla se apoya en `analytics_daily.updated_at`, columna **preexistente**; `git diff -- db/` VACIO (sin columna, tabla ni migracion) · **T24** = §9.3, la casilla del despliegue, sin anotar y declarada como tal |
+| R28 | El comentario de la semilla que afirmaba el criterio viejo, reescrito (§9.1) |

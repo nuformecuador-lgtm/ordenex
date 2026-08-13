@@ -15,8 +15,11 @@ Todo anclaje de este documento se verificó abriendo el archivo en `C:/w213`
 > el riesgo de que un cierre nunca se apruebe **se ACEPTA sin mitigación** (**D14**,
 > §7bis).
 >
-> **Siguen ABIERTAS dos:** **Q4** (efecto retroactivo → la consulta de medición está
-> en §7.6, lista para ejecutar) y **Q10** (KPI persistido, §8).
+> **Cuarta ronda (2026-08-13):** la deriva de `primer_intento_ok` **se DECLARA con
+> fecha de corte**, sin re-backfill y sin redefinir la métrica (**D15**, §8).
+>
+> **Queda ABIERTA una sola cosa, y no es una decisión:** **Q4**, la medición contra
+> la base real (§7.6, consulta lista para ejecutar).
 >
 > **Estado del código:** el commit **7d9471c3** implementa §2 y §3.1–§3.3
 > (`progress/impl_215.md`). **§3.4 —el discriminador de las gestiones sintéticas—
@@ -416,7 +419,7 @@ andamiaje, no lo que mide).
 | 7 | `tests/unit/services/orden-historial-service.test.ts:169` (`160/R10`) | Que el drawer refleja el criterio ampliado | Mismo motivo | **REESCRIBIR** |
 | 8 | `tests/unit/analytics/metrics.test.ts:198-224` (`R11 · los intentos no se redefinen`) | Que `primer_intento_ok.definicion.criterio === "intentos_vigentes_historial"` y que ninguna métrica inventa otro | El id de criterio sigue siendo un string estable ⇒ **verde por accidente**, pero **la `descripcion` de la métrica (`lib/analytics/metrics.ts:335`) afirma textualmente el criterio viejo** («destino devuelta, o destino reprogramada de familia gestion») | **ACTUALIZAR la prosa** (R28) y considerar renombrar el id de criterio; si se renombra, este test es **REESCRIBIR** |
 | 9 | `tests/unit/analytics/rollup-service.test.ts`, `tests/unit/analytics/agregado-*.test.ts`, `tests/unit/analytics/_fake-operativa.ts` | `primer_intento_ok` con el doble de `contarIntentosEnLote` | Solo mockean el conteo ⇒ **probablemente verdes**. Lo que cambia es el SIGNIFICADO del KPI | **REVISAR sin tocar**; el problema real es ⛔ Q10, no el test |
-| 10 | `tests/integration/db/analytics-daily-job.test.ts`, `tests/integration/db/analitica-operativa-equivalencia.test.ts`, `tests/integration/db/_semilla-rollup.ts` | Que el rollup persistido y la versión viva coinciden, y el CHECK `primer_intento_ok <= entregas` (`db/migrations/20260731120000_analytics_daily/migration.sql:90`) | Las semillas producen intentos vía historial; con el criterio nuevo una entrega cuyo cierre no se procesó cuenta como «primer intento OK» | **REESCRIBIR las semillas** para que creen cierres, no solo filas de historial. **Riesgo alto de verde falso**: con semilla vacía estos tests retornan temprano |
+| 10 | `tests/integration/db/analytics-daily-job.test.ts` · «primer intento vs entrega tras una devolucion previa (R17)» (`:602-663`) — **el único rojo declarado que queda** | «Una entrega tras una devolución previa NO es primer intento»: `primerIntentoOk` = 0 para la reintentada y 1 para la limpia (`:660-661`) | Su semilla crea la gestión `devuelta` **sin `cierre_id`** (`crearGestion` en `_semilla-rollup.ts:235-248` ni siquiera acepta uno, y ahí no se crea ningún `cierre_dia`), así que con el criterio nuevo esa devolución no cuenta y la entrega parece primer intento | **REESCRIBIR LA SEMILLA, NO LA ASERCIÓN** (T13). Lo que el test mide se CONSERVA intacto: hay que darle a esa `devuelta` un `cierre_dia` **APROBADO**. Cambiar el `0` esperado sería borrar la única prueba de que el KPI distingue un reintento de un primer intento |
 | 11 | `tests/unit/services/manifiesto-service.test.ts`, `mis-asignaciones-service.test.ts`, `NovedadesService.test.ts`, `orden-service.test.ts`, `recepcion-satelite-{service,paginado,completo,vigencia}.test.ts`, `rechazos-sla-tienda-service.test.ts`, `tests/unit/actions/liberacion-reprogramada-action.test.ts`, `orden-historial-action.test.ts` | R11/R12/R13/R14 de la 160: 1 llamada por listado, `0` explícito, sin consulta con lote vacío | Usan `fakeIntentosEnLote` (`tests/fixtures/intentos-entrega.ts:20`), que **no cambia** | **VERDES, y tienen que seguirlo** (R20). Si alguno se pone rojo, es una regresión real |
 | 12 | Suites de UI: `tests/unit/components/intentos-entrega.test.tsx`, `ordenes-columns.test.tsx`, `RecepcionSateliteModule.test.tsx`, `NovedadesModule.test.tsx`, `RechazosSlaModule.test.tsx`, `MisAsignacionesModule.test.tsx`, `BodegaLiberadasHoy.test.tsx`, los 5 modales, descargas | Pintado del dato (`IntentosDato`, columna «Intentos», `0` explícito, umbral no viaja) | Reciben el número por props | **VERDES sin tocar** (R20). Cero archivos de `components/` o `app/` en el diff de esta feature |
 | 13 | `tests/unit/types/intentos-no-alcance.test.ts` | R29/R30/R31 de la 160: no ordenable, no filtrable, fuera del OpenAPI y de los DTO excluidos | No depende del criterio | **VERDE sin tocar** (R22) |
@@ -432,10 +435,10 @@ casos de #16), **1 a ADAPTAR** (#4), **1 prosa a actualizar** (#8), **casos NUEV
 (#17), y **~40 archivos que deben seguir verdes** (#11,#12,#13,#14,#15). Cualquier
 rojo fuera de esta lista es un hallazgo, no un daño colateral.
 
-**Estado real (7d9471c3):** todo lo anterior está hecho salvo #10 (semillas de
-analítica, bloqueado por Q10: **1 rojo declarado** en
-`tests/integration/db/analytics-daily-job.test.ts`). **Las filas #18 y #19 son el
-trabajo que abre la tercera ronda y NO están hechas.**
+**Estado real (7d9471c3):** todo lo anterior está hecho salvo #10 (**1 rojo
+declarado**, ya DESBLOQUEADO por D15 → T13). Las filas **#18 y #19** son el trabajo
+de la tercera ronda y **NO están hechas**; la declaración de la deriva (§8.3) es el
+trabajo de la cuarta y **tampoco**.
 
 ---
 
@@ -649,15 +652,75 @@ medidos que convierten esto en decisión, no en detalle:
   (`db/migrations/20260731120000_analytics_daily/migration.sql:90`) y validación
   previa en el servicio (`AnaliticaRollupService.ts:248-254`).
 - Con D8, una entrega cuyo cierre aún no está **aprobado** tiene 0 intentos previos
-  ⇒ **el KPI subirá mecánicamente** para el día en curso (y para todo día cuyos
-  cierres tarden en aprobarse) y bajará cuando se aprueben. Las filas históricas ya
-  escritas miden otra cosa. Y como el rollup se escribe por fecha, **el mismo día
-  puede dar dos valores distintos según cuándo se recalcule**: eso es lo que Q10
-  tiene que decidir (dejar la deriva declarada, re-backfillear, o acotar la métrica).
+  ⇒ **el KPI sube mecánicamente** durante el día (y en todo día cuyos cierres tarden
+  en aprobarse) y **baja al aprobarse los cierres**. Las filas históricas ya escritas
+  miden otra cosa. Y como el rollup se escribe por fecha, **el mismo día puede dar
+  dos valores distintos según cuándo se recalcule**.
 
-Esto es ⛔ Q10. Sea cual sea la respuesta, R23 exige que el KPI siga sin `COUNT`
-propio ni umbral propio: la métrica REMITE al punto único
-(`lib/analytics/metrics.ts:344-352`) y esa propiedad no se negocia.
+### 8.1 Decisión: deriva DECLARADA con fecha de corte (D15 / Q10 CERRADA)
+
+> **Textual del humano (2026-08-13):** «declara la deriva con fecha de corte».
+
+Se ASUME el escalón en la serie. **No se re-backfillea** el histórico y **no se
+redefine** la métrica para que deje de depender del contador. Lo que hay que hacer
+es dejarlo escrito donde se lea. Las dos alternativas descartadas por esa decisión,
+con su coste, para que nadie las reabra por intuición:
+
+| Alternativa | Coste que evita D15 |
+| --- | --- |
+| **Re-backfillear `analytics_daily`** con el criterio nuevo | Reescribiría meses de KPI ya reportados; el histórico dejaría de coincidir con lo que la gente vio y decidió en su día. Y sería falso: los cierres de entonces no estaban aprobados **en el momento de aquel cálculo**. |
+| **Redefinir la métrica** para no depender del contador (p. ej. «entregas sin `devuelta` previa en el historial») | Reintroduce una SEGUNDA definición de intento: es exactamente lo que R6/R23 prohíben, y el precedente de la 124/R11 (la métrica REMITE, no define). |
+
+### 8.2 Mecanismo de la «fecha de corte»: derivado del dato, no adivinado (R35)
+
+**La trampa:** el criterio nuevo empieza a regir cuando este código se **despliega**,
+no cuando se decide ni cuando se mergea el PR. Nadie sabe hoy esa fecha, así que
+cualquier mecanismo que la exija por adelantado nace mintiendo.
+
+**Segunda trampa, medida:** el corte **no cae limpio sobre `fecha`**. El job
+recalcula días pasados (backfill, `tests/unit/analytics/backfill-guards.test.ts`) y
+el upsert refresca `updated_at` en cada recálculo
+(`AnaliticaRollupRepository.ts:434,453`). Una fila de una fecha antigua recalculada
+tras el despliegue queda con el criterio NUEVO. Por eso el corte es por **cuándo se
+calculó**, no por **qué día mide**.
+
+| Mecanismo | Veredicto |
+| --- | --- |
+| **(M-A) Derivar el corte de `analytics_daily.updated_at`** — columna que YA existe (`db/migrations/20260731120000_analytics_daily/migration.sql:83`) y que la escritura refresca en cada recálculo. Regla declarada: *«toda fila con `updated_at` anterior al despliegue de la 215 está calculada con el criterio viejo; toda fila con `updated_at` posterior, con el nuevo, sea cual sea su `fecha`»*. | **ELEGIDO.** No hay fecha que adivinar ni constante que mantener; el dato ya está por fila; sin migración (R27); y es la única formulación que sobrevive al backfill. |
+| (M-B) Constante en código (`FECHA_CORTE_*`) fijada al desplegar | **Descartado.** O se adivina antes (miente) o exige un **segundo commit y un segundo despliegue** después. Si alguien lo olvida —y se olvida—, la constante afirma una fecha falsa: peor que no tenerla. |
+| (M-C) Variable de entorno | **Descartado.** Misma trampa que M-B, y además invisible en el repo: quien lee la serie no puede saber qué valor tenía. |
+
+**¿Exige acción humana al desplegar?** **Sí, UNA, y es puramente documental:**
+anotar el instante real del despliegue en `progress/impl_215.md` (y como fecha
+legible en la descripción de la métrica). No toca código, no exige re-desplegar, no
+bloquea nada. **Y si se olvida, la serie sigue siendo interpretable fila a fila por
+`updated_at`** (R35): lo único que se pierde es la etiqueta cómoda. Esa es
+justamente la razón de elegir M-A sobre M-B.
+
+### 8.3 Dónde queda declarada la deriva (R24-b)
+
+| Sitio | Qué dice | Por qué ahí |
+| --- | --- | --- |
+| `lib/analytics/metrics.ts`, `descripcion` de `primer_intento_ok` (`:334-335`) | El cambio de criterio, la regla del corte por `updated_at`, y el efecto INTRADÍA | Es **la definición** de la métrica: quien pregunta «qué mide esto» llega aquí |
+| `lib/services/AnaliticaRollupService.ts` (junto a `contarPrimerIntento`, `:230-242`) | Lo mismo, en el punto donde se calcula y se PERSISTE | Es quien escribe las filas que tienen el escalón |
+| `lib/services/AnaliticaOperativaService.ts` (`:894-901`) | Lo mismo, en la versión VIVA | Para que nadie concluya que viva y rollup «se contradicen»: miden lo mismo, con criterios de épocas distintas |
+| `progress/impl_215.md` | El instante REAL del despliegue, anotado después | Es la etiqueta legible del corte (M-A) |
+
+**Lo que NO se toca, y es medido, no un olvido:** el aviso **no llega a la pantalla**
+de analítica. El texto visible sale de
+`app/(app)/analitica/_components/operativo/catalogo-paneles.ts` y `textos.ts`, y los
+`descripcion:` del catálogo «no llegan a pantalla»
+(`tests/unit/analytics/etiquetas-visibles.guardia.test.ts:32-34`). Escribirlo ahí
+tocaría `app/`, que choca con R20 y con la guardia de esta feature. Un
+`COMMENT ON COLUMN` sobre `analytics_daily` tampoco cabe: sería migración (R27).
+**Llevar el aviso a la pantalla es candidato a ficha aparte.**
+
+### 8.4 El invariante que NO se negocia (R23)
+
+Sea cual sea la deriva, el KPI sigue REMITIENDO al punto único
+(`lib/analytics/metrics.ts:344-355`), sin `COUNT` propio, sin umbral propio y sin
+columna materializada; y `primer_intento_ok <= entregas` se mantiene (CHECK en base
++ validación previa en `AnaliticaRollupService.ts:248-254`).
 
 ---
 

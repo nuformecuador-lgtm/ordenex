@@ -8,11 +8,10 @@ Requisitos en notación EARS. Cada `R<n>` es verificable con un test. Feature
 > automático del cron SLA (99) y, por esa vía, el `cobroRechazado` de la 56
 > (dinero real). El mapa de estados NO cambia.
 >
-> **Estado de las 12 preguntas (2026-08-13, tercera ronda):** **diez CERRADAS**
-> (Q1, Q2, Q3, Q5, Q6, Q7, Q8, Q9, Q11, Q12). **Siguen ABIERTAS dos:** **Q4**
-> (efecto retroactivo — no es una decisión, es una MEDICIÓN pendiente de ejecutar;
-> la consulta está lista en `design.md §7.6`) y **Q10** (KPI de analítica
-> persistido, bloquea R24). Ninguna de las dos se decide aquí.
+> **Estado de las 12 preguntas (2026-08-13, cuarta ronda):** **once CERRADAS**
+> (Q1, Q2, Q3, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12). **Queda UNA:** **Q4**, que no es
+> una decisión sino una **MEDICIÓN pendiente de ejecutar** (la consulta está lista
+> en `design.md §7.6`); bloquea R19 y nada más.
 >
 > **Estado de la implementación:** el commit **7d9471c3** ya implementa el criterio
 > nuevo (30 requisitos; bitácora en `progress/impl_215.md`). De aquí en adelante
@@ -63,6 +62,12 @@ contradice el código; se verificó abriendo los archivos):
 | --- | --- | --- | --- |
 | **D13** | «el cron debe validar y si ya esta en 3 actualizar el estado sin aumentar el conteo» | El escalado del cron SLA transiciona a `rechazada` **sin incrementar el contador**: la **gestión sintética** que crea ese escalado **NO cuenta como intento**. El cron valida el conteo contra el umbral y, si ya lo alcanzó, cambia el estado y nada más. | **Q3** → R18 |
 | **D14** | «el cierre se cerrara en algun momento por un usuario» | **Se ACEPTA el riesgo de Q5.** NO se implementa ninguna de las tres mitigaciones (M1 contar también al vencer/solicitar, M2 tope de liberaciones, M3 alerta). Se asume que toda cierre acaba resolviéndose por acción de una persona, y por tanto el conteo anclado en `aprobado` termina ocurriendo. → §Supuesto operativo declarado. | **Q5** |
+
+## Cuarta ronda (2026-08-13)
+
+| # | Decisión del humano, textual | Lectura | Cierra |
+| --- | --- | --- | --- |
+| **D15** | «declara la deriva con fecha de corte» | `primer_intento_ok` cambia de definición y **se ASUME el escalón en la serie**. NO se re-backfillea el histórico de `analytics_daily` y NO se redefine la métrica para dejar de depender del contador. Lo anterior al corte queda con el criterio viejo, lo posterior con el nuevo, y **eso se DECLARA por escrito** donde lo encuentre quien lea la serie. → R24. | **Q10** |
 
 ---
 
@@ -403,10 +408,37 @@ resolviendo `primer_intento_ok` con el punto único de conteo, sin `COUNT` propi
 sin umbral propio y sin columna materializada nueva para el KPI, y DEBE mantener
 el invariante `primer_intento_ok <= entregas`.
 
-**R24 — Deriva declarada del rollup histórico.** ⛔ **BLOQUEADO POR Q10.** El
-sistema DEBE declarar qué ocurre con las filas de `analytics_daily` ya escritas
-con el criterio viejo (se dejan, se re-backfillean o se marcan), y NO DEBE dejar
-que la versión VIVA y la PERSISTIDA del mismo KPI se contradigan en silencio.
+**R24 — La deriva de `primer_intento_ok` se DECLARA con fecha de corte.**
+*(DESBLOQUEADO por D15. **NO implementado**.)*
+
+- (a) **Sin re-backfill.** El sistema NO DEBE recalcular las filas de
+  `analytics_daily` ya escritas con el criterio viejo, y NO DEBE redefinir la
+  métrica para que deje de depender del conteo de intentos. El escalón en la serie
+  se ASUME.
+- (b) **La deriva DEBE quedar declarada por escrito** en la definición de la métrica
+  y en los dos servicios que la calculan, de modo que quien lea la serie tropiece
+  con el aviso **sin abrir esta especificación**.
+- (c) **El corte NO es una fecha de la serie: es el instante del DESPLIEGUE**, y el
+  sistema DEBE poder decir, fila a fila, con qué criterio se calculó cada una, sin
+  que nadie tenga que recordar ni adivinar esa fecha. SI una fila de una fecha
+  anterior al corte se recalcula después del corte, ENTONCES pasa a estar calculada
+  con el criterio nuevo, y la declaración DEBE decirlo con esas palabras.
+- (d) **La declaración DEBE incluir el efecto INTRADÍA**, ya medido: una entrega
+  cuya orden tiene cierres sin aprobar reporta 0 intentos previos, así que el KPI
+  **sube durante el día y baja al aprobarse los cierres**. Es una propiedad NUEVA de
+  la métrica, no un artefacto de la migración de criterio, y **no desaparece con la
+  deriva declarada**.
+- (e) **El invariante se mantiene** (R23): el KPI sigue remitiendo al punto único de
+  conteo, sin `COUNT` propio, sin umbral propio, sin columna materializada, y
+  `primer_intento_ok <= entregas` sigue siendo cierto.
+
+**R35 — La declaración del corte no exige adivinar una fecha.** El sistema DEBE
+sostener la trazabilidad del corte sobre un dato que YA se persiste por fila
+(`analytics_daily.updated_at`, que la escritura refresca en cada recálculo), y NO
+DEBE introducir para ello ninguna columna, tabla ni migración (R27). DONDE haga
+falta una etiqueta legible por humanos, el sistema DEBE admitir que se anote **una
+sola vez y después del hecho** (el instante real del despliegue), y SI esa anotación
+no llega a hacerse, ENTONCES la serie DEBE seguir siendo interpretable fila a fila.
 
 ---
 
@@ -501,6 +533,7 @@ Diez de las doce. Cada una con quién la cerró y dónde vive ahora la decisión
 | --- | --- | --- | --- |
 | **Q3** | El escalado del cron **no incrementa** el contador: la gestión sintética del escalado no cuenta como intento. Sigue cobrando como rechazo. | Humano | **D13**, R18, R34 |
 | **Q5** | **Riesgo ACEPTADO**, sin mitigación: «el cierre se cerrará en algún momento por un usuario». | Humano | **D14**, §Supuesto operativo declarado |
+| **Q10** | **Deriva DECLARADA con fecha de corte.** Sin re-backfill, sin redefinir la métrica; el escalón de la serie se asume y se escribe donde se lee la métrica. | Humano | **D15**, R24, R35 |
 | **Q1** | Se deriva de `gestion_orden` (`cierre_id` + `resultado` + `anulada_at`), SIN migración. `160/R7` se conserva; materializar queda prohibido. | Humano | **D7**, R27 |
 | **Q2** | Suma al **APROBAR** el cierre (`cierre_dia.estado = 'aprobado'`). No al crear/solicitar, no al vencer. | Humano | **D8**, R3 |
 | **Q6** | `sin_gestionar` NO cuenta. La lista se queda en `rechazada`/`devuelta`/`reprogramada`. | Humano | **D6**, R33 |
@@ -512,11 +545,10 @@ Diez de las doce. Cada una con quién la cerró y dónde vive ahora la decisión
 
 ---
 
-## PREGUNTAS ABIERTAS (2)
+## PREGUNTA ABIERTA (1)
 
-Ninguna se decide aquí. Q4 no es una decisión pendiente sino una **medición sin
-ejecutar**; Q10 sí es una decisión y bloquea R24. Las opciones con su coste están en
-`design.md §7.6` (Q4) y `§8` (Q10).
+**No queda ninguna decisión pendiente.** Lo único que falta es una **medición sin
+ejecutar**: la consulta está escrita y lista en `design.md §7.6`.
 
 - **Q4 — Efecto retroactivo.** ⛔ bloquea **R19**. Al ser derivado, cambiar el
   criterio cambia el conteo de TODAS las órdenes históricas de golpe, incluidas las
@@ -525,17 +557,8 @@ ejecutar**; Q10 sí es una decisión y bloquea R24. Las opciones con su coste es
   adelanta. ¿Se acepta? **La consulta de medición, lista para pegar en una consola
   contra la base real, está escrita en `design.md §7.6`** (solo lectura); falta
   EJECUTARLA y pegar el resultado con fecha.
-- **Q10 — Analítica: KPI persistido.** ⛔ bloquea **R24**. `primer_intento_ok` se calcula con este
-  conteo (`AnaliticaRollupService.ts:238`) y se PERSISTE en `analytics_daily`
-  (CHECK `primer_intento_ok <= entregas`,
-  `db/migrations/20260731120000_analytics_daily/migration.sql:90`). Cambiar el
-  criterio hace que las filas viejas y las nuevas midan cosas distintas, y que la
-  versión VIVA (`AnaliticaOperativaService.ts:462`) discrepe del rollup histórico
-  (hay un test de equivalencia: `tests/integration/db/analitica-operativa-equivalencia.test.ts`).
-  Con D8 el efecto es concreto y direccional: una entrega cuyo cierre aún no se
-  aprueba tiene 0 intentos previos ⇒ **`primer_intento_ok` sube mecánicamente** el
-  día en curso y baja al aprobarse los cierres. ¿Se deja la deriva declarada, se
-  re-backfillea o se acota la métrica?
+
+---
 
 ### Nota de proceso
 
@@ -545,6 +568,17 @@ Si al implementar aparece un camino que haga BAJAR el conteo de una orden
 —anulación administrativa fuera de la ventana, borrado físico de `gestion_orden`,
 o un cierre que salga de `aprobado`— **R32 se rompe y hay que volver a la puerta**,
 no parchear el test.
+
+**Tensión declarada de la cuarta ronda (R24-b).** El aviso de la deriva se escribe
+donde vive la métrica: el catálogo (`lib/analytics/metrics.ts`) y los dos servicios
+que la calculan. **NO llega a la pantalla de analítica**, y es medido, no un olvido:
+el texto que se ve sale de `app/(app)/analitica/_components/operativo/catalogo-paneles.ts`
+y `textos.ts` —los `descripcion:` del catálogo «no llegan a pantalla»
+(`tests/unit/analytics/etiquetas-visibles.guardia.test.ts:32-34`)—, y tocar `app/`
+chocaría con R20 y con la guardia de la feature («cero archivos de `app/` o
+`components/` en el diff»). Tampoco cabe un `COMMENT ON COLUMN` en
+`analytics_daily`: sería una migración y R27 la prohíbe. **Poner el aviso en la
+pantalla es candidato a ficha aparte**, no un pendiente de esta.
 
 **Hallazgo de la tercera ronda, del que sale R34.** Al buscar el discriminador que
 D13 exige para la gestión sintética del escalado, se encontró que **la misma laguna

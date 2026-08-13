@@ -2611,6 +2611,32 @@
       "branch": null,
       "depends_on": null,
       "status_note": "PEDIDO HUMANO del 2026-08-13, tras confirmarsele que el comportamiento actual era deliberado y medido. Revierte una decision de la 208, no arregla un olvido. || NO BASTA CON CAMBIAR EL PAPEL, y esta medido en el propio archivo (cierre-factura.tsx:85-98): quitar `tema-claro` y poner solo `bg-white` deja 116 textos bajo 4,5:1 -minimo 1,04-; sin tocar nada son 20; con `tema-claro` son 3. De los 143 textos de la hoja solo 16 son navy fijo: los otros ~127 son tokens que giran. Hay que convertir esos 16 `text-navy`/`border-navy` en tokens y re-medir la hoja entera. || TRES TEXTOS YA FALLAN HOY EN TEMA CLARO (minimo 3,36), preexistentes: entran en el alcance o se declaran fuera con su motivo. || TRAMPA REGISTRADA: el variant `dark:` de Tailwind se resuelve contra el ANCESTRO, no contra los tokens, asi que las utilidades `dark:` de Badge/Button SIGUEN disparando dentro de la hoja. Al quitar el pin eso cambia de sentido y hay que volver a medirlo. || REGLA QUE EL SPEC DEBE HONRAR (decision humana): al imprimir la hoja sigue BLANCA. Una factura que oscurece en pantalla y se imprime en oscuro gasta toner y sale ilegible, asi que el tema oscuro vive en pantalla y `@media print` fija el papel claro. || EXENTO y no hay que perseguirlo: el logotipo «Ordenex» mide 3,18 sobre el papel y WCAG 1.4.3 exime el texto de una marca."
+    },
+    {
+      "id": 218,
+      "name": "el corte automatico sigue sin sumar reintento (sin_gestionar)",
+      "spec_path": null,
+      "description": "Backend. EL AGUJERO QUE LA 215 NO CERRO, y hay que leerlo asi: la 215 nacio de preguntar por que una orden puede salir a reparto, no gestionarse, cortarse por el cron, volver a bodega y salir otra vez con el MISMO contador de reintentos. La 215 movio el conteo al cierre aprobado, pero ese caso SIGUE ABIERTO. Medido: el corte automatico hace en_reparto -> sin_gestionar (arista #16) y la aprobacion hace sin_gestionar -> en_bodega_* (#17/#18); las ordenes en sin_gestionar NO tienen `resultado`, y el humano decidio explicitamente (2026-08-13) NO incluir sin_gestionar en los resultados que suman. Esta ficha es donde se decide si eso cambia.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 215,
+      "status_note": "RENUMERADA DE 216 A 218 el 2026-08-13: otra sesion tomo ese id en dev mientras esta ficha se escribia, y dev manda. Conserva contenido y motivo intactos. || DADA DE ALTA el 2026-08-13 al cerrar la 215, por decision del leader: la limitacion estaba declarada en la pagina 1 de `specs/215-reintento-en-cierre/requirements.md` y marcada como candidata a ficha aparte, pero sin ficha se perdia en cuanto la 215 se cerrara. || NO ARRANCA hasta que la 215 este mergeada: comparte el predicado. || LOS DOS LADOS YA ESCRITOS, para no rediscutirlos desde cero: a favor de que NO cuente, que sin_gestionar significa que no hay constancia de que nadie tocara la puerta, y contarlo adelantaria el escalado a rechazada y con el un cobroRechazado (56, dinero real) basandose en que el mensajero no reporto; a favor de que SI cuente, que un mensajero que nunca gestiona puede tener una orden dando vueltas indefinidamente sin acumular un solo intento y sin que el cron SLA la vea nunca, porque ese cron solo mira ordenes que reposan en devuelta. || Si se decide que cuente, es una entrada mas en la lista de INCLUSION del predicado (feature 215, R34) mas su efecto en el cron SLA: poco codigo, pero toca dinero."
+    },
+    {
+      "id": 219,
+      "name": "el aviso de la deriva de primer_intento_ok no llega a la pantalla",
+      "spec_path": null,
+      "description": "Fullstack. La 215 cambio el criterio de `primer_intento_ok` y la decision humana fue DERIVA DECLARADA sin re-backfill: las filas anteriores al despliegue miden una cosa y las posteriores otra. Ese aviso quedo escrito en los tres sitios del CODIGO donde vive la metrica, pero NO llega a la pantalla de analitica: el texto visible sale de `app/(app)/analitica/_components/operativo/catalogo-paneles.ts` y `textos.ts`, y los `descripcion:` del catalogo no se pintan (`tests/unit/analytics/etiquetas-visibles.guardia.test.ts`). Quien mira el grafico no tiene forma de saber que la serie tiene un escalon.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 215,
+      "status_note": "RENUMERADA DE 217 A 219 el 2026-08-13: otra sesion tomo ese id en dev mientras esta ficha se escribia, y dev manda. Conserva contenido y motivo intactos. || DADA DE ALTA el 2026-08-13 al cerrar la 215. La tension quedo DECLARADA en su spec (`requirements.md` §Tension declarada y `design.md §8.3`) en vez de resuelta, por dos restricciones de esa feature: escribir el aviso en la pantalla toca `app/`, que su R20 prohibe, y un COMMENT ON COLUMN seria migracion, que su R27 prohibe. Ninguna de las dos restricciones aplica a esta ficha. || El efecto INTRADIA es parte del mismo aviso y es PERMANENTE, no transitorio: una entrega cuya orden tiene cierres sin aprobar reporta 0 intentos previos, asi que el KPI sube durante el dia y baja al aprobarse los cierres. Un lector que no lo sepa leera esa oscilacion como un cambio de operacion. || OJO al elegir donde escribirlo: el catalogo tiene guardias que fijan el estilo (sin tildes) y que prohiben nombrar tablas fuera de comentarios."
     }
   ]
 }
