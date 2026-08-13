@@ -30,6 +30,16 @@ Superficie clara **por diseño**: se marca con la clase `tema-claro`, que fija l
 
 **Papel blanco no es `bg-white`.** Si una superficie es fija pero su contenido usa tokens que giran, pintarla con `bg-white`/`bg-navy` a secas deja la tinta en el valor del otro tema y empeora el problema en vez de arreglarlo (medido en la factura: 20 textos bajo AA pasan a 116). La superficie fija se declara con `tema-claro`, que arrastra todos los tokens del subárbol. Límite conocido y medido: fija los tokens, **no apaga el variant `dark:`** —se define contra el ancestro, no contra los tokens—, así que las utilidades `dark:` de `Badge`/`Button` siguen disparando dentro (ver los números en el comentario de `globals.css`).
 
+### Cómo se ENCIENDE el tema (feature 211)
+Tres estados y no dos: **`sistema`** (por defecto), **`claro`** y **`oscuro`**. Con dos, quien elige una vez queda atrapado fuera de la preferencia de su sistema operativo para siempre. El control cicla `sistema → claro → oscuro → sistema` y vive en el `PageHeader`, junto a «Salir» (`components/shared/TemaToggle.tsx`).
+
+- **La elección se guarda en una COOKIE, no en `localStorage`.** Con cookie el servidor conoce el tema al renderizar y **no hay parpadeo por construcción**; con `localStorage` haría falta un script bloqueante en el `<head>`. La lee `app/(app)/layout.tsx`, que ya era dinámico por la sesión — **nunca el layout raíz**, que volvería dinámica la landing pública.
+- **La clase se estampa en un envoltorio del portal**, no en `<html>`: el variant es `&:is(.dark *)` (descendientes), así que un ancestro cualquiera basta. El envoltorio es `display: contents` para no crear caja ni tocar el layout.
+- **El `<body>` vive FUERA de ese envoltorio.** Si no toma los mismos tokens, queda una franja clara alrededor de una app oscura (y el lienzo del navegador con ella). Lo resuelve `body:has(> .dark)` en `globals.css`. Es el error más fácil de cometer al mover la clase de sitio.
+- **«Respetar el sistema» no usa cookie ni JS**: `@media (prefers-color-scheme: dark)` sobre `.tema-sistema`. Va **acotado al portal**, no a `:root`, para que la landing y las páginas de auth no cambien solas según el SO de quien mira.
+- **Los tokens y el variant `dark:` se encienden JUNTOS.** El `@custom-variant dark` tiene DOS ramas (clase y `prefers-color-scheme`): si solo giraran los tokens, medio árbol quedaría en el bug de «token que gira sobre fondo fijo».
+- Los valores del bloque `.tema-sistema` **son los mismos que los de `.dark`**, repetidos porque CSS no sabe reutilizar declaraciones bajo otra condición. Lo sostiene `tests/unit/guards/tema-encendido.guardia.test.ts`, que falla si divergen en un hex.
+
 ## Tipografía
 Una sola familia sans (`--font-sans`) para títulos, labels, botones, data y body. Escala **rem fija** (no `clamp` en product UI). Ratio 1.125–1.2 entre pasos. Prosa 65–75ch; tablas y UI compacta pueden ir más densas.
 
