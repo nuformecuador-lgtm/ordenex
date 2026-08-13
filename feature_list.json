@@ -2603,9 +2603,9 @@
     {
       "id": 217,
       "name": "la factura del cierre oscurece con el tema",
-      "spec_path": null,
+      "spec_path": "specs/217-factura-oscurece-con-el-tema/",
       "description": "Frontend. `cierre-factura.tsx` se fija a tema claro con la clase `tema-claro` -decision de la feature 208: es el facsimil de un comprobante en papel-. Por pedido humano pasa a GIRAR con el tema, de modo que en oscuro sea una superficie oscura legible. Al IMPRIMIR debe seguir saliendo blanca.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
