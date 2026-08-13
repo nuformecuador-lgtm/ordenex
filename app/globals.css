@@ -183,7 +183,10 @@
   /* Texto semántico contrast-safe (modo claro). Medido sobre #ffffff/#f7f8fc y
      sobre el -soft correspondiente: todos >=4.5:1. */
   --success-strong: #047857; /* vs card 5.48 · vs bg 5.17 · vs success-soft 4.84 */
-  --warning-strong: #b45309; /* vs card 5.02 · vs bg 4.73 · vs warning-soft 4.51 */
+  /* Feature 210: era #b45309, que daba 4.51 sobre `-soft` —AA por una centésima— y 4.09 sobre el
+     `warning/15` del icono de CajaResumenCard. #92400e sube los cuatro pares con margen. El de
+     oscuro (#fbbf24) NO se toca: mide 7.59. */
+  --warning-strong: #92400e; /* vs card 7.09 · vs bg 6.68 · vs warning-soft 6.37 · vs warning/15 6.31 */
   --danger-strong: #b91c1c; /* vs card 6.47 · vs bg 6.10 · vs danger-soft 5.30 */
   --info-strong: #1d4ed8; /* vs card 6.70 · vs bg 6.31 · vs info-soft 6.16 */
 }

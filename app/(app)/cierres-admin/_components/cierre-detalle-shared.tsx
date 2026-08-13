@@ -153,7 +153,8 @@ export function EstadoHistoricoRotulo({ estado }: { estado: CierreEstado }) {
 export function RechazadoBloqueanteBadge() {
   return (
     <Badge
-      variant="destructive"
+      // Feature 210: era `destructive` (3.29:1, por debajo de AA). Ver `components/ui/badge.tsx`.
+      variant="danger"
       title={RECHAZADO_BLOQUEANTE_NOTA}
       aria-label={RECHAZADO_BLOQUEANTE_NOTA}
     >
