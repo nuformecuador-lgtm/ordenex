@@ -122,3 +122,90 @@ porque parte el CSS por reglas que incluyan `:root` — sigue verde sin tocarlo:
 -> test:guardias       Test Files 96 passed (96)     Tests  1321 passed (1321)
 == init OK ==
 ```
+
+---
+
+## Tanda 2 — El componente (T7, T8, T9, T16, T10, T11)
+
+> **Reordenado a propósito, y aquí queda el motivo.** `tasks.md` pone T16 (la prosa de la
+> cabecera del `.tsx`) en la Tanda 4, pero **T10 no puede estar verde antes que T16**: su
+> censo exige **0 `tema-claro` en TODO el archivo, comentarios incluidos** (R19), y el
+> bloque de cabecera de la 208 nombraba el pin nueve veces. O se movía T16, o T10 se
+> quedaba rojo dos tandas. Se movió T16. El resto del orden se respeta.
+
+### T7 · El pin sale, la clase de impresión entra — en las DOS hojas
+
+`cierre-factura.tsx`: `tema-claro` → `papel-al-imprimir` en el `<Card>` de `HojaFactura`
+(el detalle) y en el de `HojaResumen` (el comprobante compacto). Las dos: el mismo
+documento no puede tener dos materiales.
+
+### T8 · Los 16 sitio a sitio, con la tabla de `design.md §2` delante
+
+Quince `text-navy` → `text-foreground` y el `border-navy` de la pestaña activa →
+`border-foreground`. **No se hizo un reemplazo en bloque**: cada sitio se abrió, se
+comprobó contra su ancla y su papel semántico en la tabla del design (titular, cifra,
+dato realzado, rótulo enfatizado, identificador, indicador de selección) y se editó solo.
+La convergencia de quince de los dieciséis en `text-foreground` es una **conclusión** —el
+navy era, en todos ellos, «el color del texto principal de la hoja»—, no un atajo.
+
+Ninguno pasó a `primary`/`brand` (R3) ni a un `-strong`. El indicador de la pestaña lleva
+además un comentario con el porqué: en ese condicional se pinta **borde y etiqueta a la
+vez**, y `--primary` (3.18 sobre blanco) cumple el 3:1 de componente pero **no** el 4.5:1
+de texto — es justo la deuda abierta de la ficha 216.
+
+**El diff sólo cambia utilidades de color (R5).** 18 líneas de código tocadas, y cada par
+`-`/`+` difiere únicamente en el token de color (o en la clase de la `<Card>`): ni un
+tamaño, ni un peso, ni un espaciado, ni un borde, ni un icono, ni la jerarquía.
+
+### T9 · La nota de «Ingreso bruto» pierde la opacidad (D5)
+
+`text-success-strong/80` → `text-success-strong`. Un token `-strong` existe para
+garantizar 4,5:1; ponerle alfa anula la garantía por la que se eligió. Con eso, la hoja
+entera queda cubierta por **pares ordinarios** y el inventario no necesita un caso
+especial de doble composición cuyo único consumidor sería esa nota.
+
+### T16 (adelantado) · La prosa de la cabecera
+
+Reescrito el bloque de la 208 (`:73-128`) y los comentarios de las dos `<Card>`. El bloque
+nuevo dice: que la hoja **gira**; que al imprimir vuelve a claro y **por qué el mecanismo
+es fijar tokens y no pintar un fondo** (los 116 de la 208 + los fondos que el navegador no
+imprime); **qué NO apaga** la regla de impresión (el variant `dark:`, con su razón: el
+resultado impreso es idéntico al que la hoja mostraba en pantalla antes de esta feature,
+statu quo y no regresión); **qué NO cubre** la impresión (sin botón, sin `@page`, y desde
+el modal se arrastra el resto de la página); y que `progress/impl_208_modo-oscuro.md`
+describe la decisión **anterior** y no se edita.
+
+Censo después: **0** `navy`, **0** `tema-claro` en todo el archivo, prosa incluida.
+
+### T10 · Censo de fuente — `factura-contraste.guardia.test.ts`
+
+Ocho casos, con el quitador **compartido** (feature 209) y una autocomprobación por
+delante (si la hoja se renombra o se mueve, todo lo demás censaría una cadena vacía y
+saldría verde sin mirar nada).
+
+La **excepción `brand`** va escrita en el código de la guardia con su motivo, no como un
+agujero en la expresión regular.
+
+**Hallazgo contra el design (T12 lo recoge):** `design.md §6.4` dice que `brand` tiene
+**dos** usos en las hojas (wordmark `:509` y franja `:315`). Son **tres**: falta
+`border-t-brand` en la `<Card>` de `HojaResumen` (`:503`), el filete superior de la hoja
+compacta. Misma naturaleza que la franja —decorativo, sin texto— así que **no cambia
+ninguna decisión**, pero el inventario lo lista aparte en vez de heredar el error.
+
+### T11 · Test de componente (jsdom) — `tests/components/CierreFacturaPapel.test.tsx`
+
+Cinco casos sobre las dos hojas, localizadas por `role="region"` + `aria-label` y **nunca
+por una clase** (localizarlas por la clase que se comprueba haría que el caso pasara por
+construcción). La advertencia de que **jsdom sólo lee la cadena de clases** —no compone
+color, no resuelve la cascada, no aplica `@media`— está escrita **en el propio archivo**,
+arriba del todo, para que su verde no se lea como «se ve bien».
+
+### Cierre de tanda 2 — `./init.sh --rapido`
+
+```
+✓ typecheck paso
+✓ lint paso
+-> test:cambiados      Test Files 17 passed (17)     Tests   285 passed (285)
+-> test:guardias       Test Files 96 passed (96)     Tests  1329 passed (1329)
+== init OK ==
+```

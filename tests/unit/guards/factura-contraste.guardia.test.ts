@@ -72,6 +72,46 @@ function codigoDe(relativa: string): string {
   return quitarComentarios(readFileSync(path.join(RAIZ, relativa), "utf8"));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// La hoja: el archivo que se censa
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+const HOJA = path.join("app", "(app)", "cierres-admin", "_components", "cierre-factura.tsx");
+
+/** El fuente TAL CUAL, prosa incluida. Sólo para lo que R19 prohíbe también en los comentarios. */
+const hojaCruda = readFileSync(path.join(RAIZ, HOJA), "utf8");
+
+/**
+ * El CÓDIGO de la hoja, con la prosa fuera (quitador compartido, feature 209). Un censo de
+ * prohibiciones sobre el texto crudo denuncia la EXPLICACIÓN y obliga a borrarla para pasar: la
+ * cabecera de este archivo explica a propósito, y con su nombre, lo que el código no puede hacer.
+ */
+const hoja = quitarComentarios(hojaCruda);
+
+/** Cuántas veces aparece `patron` en `texto`. */
+function cuantas(texto: string, patron: RegExp): number {
+  return (texto.match(new RegExp(patron.source, patron.flags.includes("g") ? patron.flags : patron.flags + "g")) ?? []).length;
+}
+
+/**
+ * Las utilidades de color de VALOR FIJO: las que no giran con el tema. Son las que la 217 vino a
+ * sacar de esta hoja, y la lista está abierta hacia arriba a propósito —cualquier hex arbitrario
+ * (`text-[#0b2545]`) es una forma de escribirlas a mano—.
+ *
+ * EXCEPCIÓN DECLARADA: `brand`. `--color-brand` es fijo y no tiene variante por tema, pero sus
+ * tres usos en las hojas no son texto que haya que leer sobre un fondo:
+ *   · el wordmark «Ordenex» — texto de una MARCA, exento por WCAG 1.4.3;
+ *   · la franja de marca del detalle — `aria-hidden`, decorativa, sin texto;
+ *   · el borde superior de la hoja compacta — decorativo, sin texto.
+ * Va escrita aquí, con su motivo, y no como un agujero silencioso en la expresión regular: los
+ * tres figuran además en el inventario de pares MARCADOS COMO EXENTOS, no ausentes.
+ */
+const PREFIJOS = "(?:text|bg|border|border-[trbl]|ring|fill|stroke|divide|from|via|to)";
+const UTILIDADES_FIJAS = new RegExp(
+  `\\b${PREFIJOS}-(?:navy(?:-deep)?|asfalto-\\d|kraft-[a-z]+|hivis|white)\\b|\\b${PREFIJOS}-\\[#`,
+  "g",
+);
+
 describe("feature 217 — el instrumento de medida: una sola aritmética (R25, R26)", () => {
   /**
    * Autocomprobación del propio censo. Sin esto, un barrido que no lea ningún archivo —una ruta
@@ -116,5 +156,71 @@ describe("feature 217 — el instrumento de medida: una sola aritmética (R25, R
         "Lo que sí está validado es `tests/fixtures/contraste.ts` (tres razones publicadas por " +
         "WCAG y los dos extremos de la composición alfa, en `contraste-tokens.guardia.test.ts`).",
     ).toEqual([]);
+  });
+});
+
+describe("feature 217 — censo de fuente de la hoja de la factura", () => {
+  /**
+   * Autocomprobación: si la hoja se renombra o se mueve, todo lo de abajo censaría una cadena
+   * vacía y saldría verde sin haber mirado nada. Se ancla a algo que la hoja SIEMPRE tiene.
+   */
+  it("el censo está leyendo la hoja de verdad", () => {
+    expect(hoja.length).toBeGreaterThan(20000);
+    expect(hoja).toContain("function HojaFactura(");
+    expect(hoja).toContain("function HojaResumen(");
+  });
+
+  it("cero tinta de valor fijo: ni un `text-navy`, ni un `border-navy` (R2)", () => {
+    expect(cuantas(hoja, /\btext-navy\b/)).toBe(0);
+    expect(cuantas(hoja, /\bborder-navy\b/)).toBe(0);
+  });
+
+  it("la hoja ya no se fija a tema claro, y ninguna prosa dice que lo haga (R1, R19)", () => {
+    // Sobre el fuente CRUDO, comentarios incluidos: R19 prohíbe que el código de producción siga
+    // AFIRMANDO el pin, no sólo que lo aplique. Una prosa que describe un mecanismo retirado es
+    // peor que ninguna: manda a quien la lee a buscar algo que ya no está.
+    expect(cuantas(hojaCruda, /tema-claro/)).toBe(0);
+  });
+
+  it("ninguna utilidad de color de valor fijo: el color de la hoja gira con el tema (R2, R3)", () => {
+    expect(hoja.match(UTILIDADES_FIJAS) ?? []).toEqual([]);
+  });
+
+  it("ninguna opacidad sobre un token `-strong`: eso anula su garantía de 4.5:1 (R8)", () => {
+    // `text-success-strong/80` medía 3.36 en los dos temas. Un `-strong` existe precisamente para
+    // garantizar el umbral; ponerle alfa lo convierte en un color cualquiera con nombre de token.
+    expect(hoja.match(/-strong\/\d+/g) ?? []).toEqual([]);
+  });
+
+  it("las DOS hojas llevan `papel-al-imprimir`, una por `<Card>` (R9)", () => {
+    expect(cuantas(hoja, /papel-al-imprimir/)).toBe(2);
+
+    const aperturas = hoja.split("<Card").slice(1).map((trozo) => trozo.slice(0, trozo.indexOf(">")));
+    expect(aperturas.length, "la hoja ya no monta exactamente dos `<Card>`").toBe(2);
+    for (const apertura of aperturas) {
+      expect(
+        apertura,
+        "una de las dos hojas no lleva la clase de impresión: ese comprobante saldría oscuro en " +
+          "papel, o —peor— casi en blanco, porque el navegador no imprime los fondos",
+      ).toContain("papel-al-imprimir");
+    }
+  });
+
+  it("no fuerza la impresión de fondos ni añade un flujo de impresión (R11, R14)", () => {
+    expect(hoja).not.toMatch(/print-color-adjust/);
+    // R14: esta feature garantiza el COLOR del papel, no el flujo. Ni botón, ni llamada a la API
+    // de impresión del navegador. La única vía sigue siendo el diálogo del navegador.
+    expect(hoja).not.toMatch(/window\s*\.\s*print/);
+    expect(hoja, "apareció un rótulo «Imprimir»: el flujo de impresión es otra ficha").not.toMatch(
+      /\bImprimir\b/,
+    );
+  });
+
+  it("el indicador de la pestaña activa usa un token que gira, no el de marca (R3)", () => {
+    // `border-foreground` y no `border-primary`: en ese mismo condicional se pinta el borde Y la
+    // etiqueta, y `--primary` (3.18 sobre blanco) cumple el 3:1 de componente pero no el 4.5:1 de
+    // texto — es la deuda que la ficha 216 tiene abierta.
+    expect(cuantas(hoja, /\bborder-foreground\b/)).toBeGreaterThanOrEqual(1);
+    expect(hoja).not.toMatch(/\bborder-primary\b/);
   });
 });
