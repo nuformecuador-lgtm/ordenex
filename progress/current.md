@@ -11,32 +11,50 @@
 
 ## 🏁 CIERRE DE JORNADA 2026-08-13 — **EMPIEZA A LEER POR AQUÍ**
 
-### ✅ RESUELTO — este aviso caducó el 2026-08-13 (se conserva por lo que enseña)
+### ✅ EL ROJO DE `dev` ESTÁ CERRADO (2026-08-13, tarde) — **medido, no supuesto**
 
-> **Ya no hace falta decidir nada: el rojo cayó en el PR #367** (`7205b2a1`, «cae el último rojo y
-> queda declarada la deriva del KPI, R24/R35»). Comprobado desde la rama de la 213 al remergear
-> `dev` para el PR #368: `analytics-daily-job.test.ts` pasa **29/29**.
+> Este bloque abría diciendo «`dev` está ROJO» y que era la primera decisión humana pendiente.
+> **Ya no hace falta decidir nada: cayó en el PR #367** (`7205b2a1`). Dos sesiones lo comprobaron
+> por caminos distintos: desde la rama de la 213 al remergear `dev` para el PR #368
+> (`analytics-daily-job.test.ts` pasa **29/29**), y con el gate completo que se detalla abajo.
 >
-> **Y se arregló por el lado correcto**, que era la mitad de la pregunta: el assert **sigue
-> esperando `[1, 0]`**. No se tapó cambiando la expectativa al criterio nuevo, se implementó el R24
-> que estaba bloqueado. Que el aviso de la deriva no llegue a la pantalla es la ficha **219**.
+> **Se arregló por el lado correcto**, que era la mitad de la pregunta: el assert **sigue esperando
+> `[1, 0]`**. No se tapó cambiando la expectativa al criterio nuevo.
+>
+> ⚠️ **Matiz que conviene fijar, porque la primera redacción decía otra cosa: NO se implementó el
+> R24.** Lo que cayó fue **la semilla** (ver abajo). El R24 se cerró **declarando la deriva** con
+> fecha de corte (Q10, `e811e7bf`), que es una decisión documental, no el KPI persistido en
+> `analytics_daily` — la ficha 215 lo sigue listando entre lo NO implementado, y por eso sigue
+> `in_progress`. Que el aviso de la deriva no llegue a la pantalla es la ficha **219**.
 >
 > Lo que sí sigue en pie es el párrafo del peaje: el rojo vivió **seis merges** sin que nadie lo
 > parara, y eso no lo arregla ningún PR.
 
-### 🔴 EL AVISO ORIGINAL, YA RESUELTO: **`dev` estaba ROJO**
-
 `tests/integration/db/analytics-daily-job.test.ts > primer intento vs entrega tras una devolucion
-previa (R17)` falla **en `dev` limpio** — verificado sin ningún cambio local encima. Entró con el
-**PR #363** (feature 215) y ya lleva **seis merges por encima**.
+previa (R17)` llevaba seis merges rojo en `dev` limpio. Lo cierra el **PR #367** (feature 215),
+mergeado en `4f8e5362`.
 
-**No es un misterio: es el R24 que la propia ficha 215 declara BLOQUEADO y sin implementar** («el
-KPI `primer_intento_ok` persistido en `analytics_daily`»). Mover el conteo del reintento al cierre
-cambió ese KPI y el requisito que lo cubría se dejó fuera a propósito. Hay que decidir: **implementar
-R24 o actualizar el test al criterio nuevo**, y dejarlo escrito.
+**Y la disyuntiva que esta nota planteaba —«implementar R24 o actualizar el test»— era falsa: era la
+semilla.** El fixture describía el mundo viejo. Con el criterio nuevo una devolución solo cuenta
+como intento si su gestión pertenece a un **cierre aprobado**, y la semilla la creaba sin cierre. Se
+corrigió ahí (`crearCierreAprobado`, y un `cierreId` opcional con default `null` en `crearGestion`,
+que no toca los ~15 call-sites). **Las dos cifras que prueban que el KPI distingue un reintento de
+un primer intento siguen literalmente intactas** (`[1,0]` y `[1,1]`): no se relajó ninguna aserción.
 
-> Mientras siga rojo, cada PR paga el peaje de declarar «este rojo no es mío» — que es exactamente
-> cómo se cuela el siguiente que sí lo sea. Es la deuda más cara del tablero ahora mismo.
+**Verificado desde esta sesión, y conviene saber cómo:** el rojo se reprodujo primero sobre `dev`
+limpio (`expected [1,1] to deeply equal [1,0]`); luego se reconstruyó el merge real —la rama iba
+**11 commits por detrás**— y se corrió `./init.sh` completo sobre ese árbol: **1087/1087 archivos,
+13.776/13.776 tests**, cero omitidos, 275 s, exit 0. `dev` se movió mientras corría (la otra sesión
+mergeó el #367), así que **se comparó el árbol**: el medido y el de `dev` son el **mismo objeto**
+(`e5b8936c`). Por eso el verde certifica el `dev` publicado y no una aproximación suya.
+
+> ⚠️ **Lo que el #367 NO cierra, y estaba solo en el cuerpo del PR:** `R19` (la consulta de medición
+> de `design.md §7.6` contra la base real — el reviewer avisa de que **le falta la sexta condición,
+> la visita real**, así que hoy sobreestimaría, y gobierna dinero); `R28` incumplido en 3 sitios,
+> con el comentario de `GestionOrdenRepository.ts:505` afirmando algo **hoy falso**; y `R24-b/c/d` +
+> `R35` **sin dueño ejecutable** — la guardia de prosa que `tasks.md` les asigna no existe, así que
+> las tres declaraciones se pueden borrar sin que nada se ponga rojo. La ficha **215** sigue
+> `in_progress` justamente por esto; no darla por cerrada.
 
 ### ✅ Lo que salió de esta jornada
 
@@ -54,7 +72,7 @@ R24 o actualizar el test al criterio nuevo**, y dejarlo escrito.
 
 ### ⏭️ Lo siguiente, en este orden
 
-1. **Decidir el rojo de `dev`** (arriba). Bloquea la lectura de todo lo demás.
+1. ~~Decidir el rojo de `dev`~~ — **hecho** (arriba). Ya no bloquea la lectura de nada.
 2. **Los 7 quitadores** de la tanda B, uno a uno. Media faena hecha: el mecanismo está identificado
    y la lista está en la ficha 209. Cada uno es una pregunta contestable — ¿el conteo nuevo es el
    correcto, o el ancla era legítima? **Empezar en frío**: son siete veredictos de guardias de
@@ -63,8 +81,9 @@ R24 o actualizar el test al criterio nuevo**, y dejarlo escrito.
    **al imprimir, la hoja sigue blanca**.
 4. **La 216** espera una **decisión de marca** (un hex para el primario, o pasar el texto a un
    `-strong` propio). No es un arreglo técnico.
-5. **La 213** la implementa **otro programador** desde sus sesiones; su spec está completo y su
-   puerta humana **sin pasar**.
+5. **El PR #368 (la 213)** está abierto y sin revisar: 34 archivos, del otro programador, y va
+   **11 commits por detrás de `dev`**. La **214 sigue bloqueada** hasta que la 213 esté
+   **desplegada**, no mergeada.
 
 ### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
 
