@@ -7,12 +7,15 @@ de su mismo grupo. Cada tarea lleva su criterio de **hecho**.
 > `7d9471c3`; bitácora en `progress/impl_215.md`): 20 archivos modificados, 0 en
 > `db/`, 30 requisitos con test real. Las tareas hechas van marcadas `[x]`.
 >
-> **Diez preguntas CERRADAS** (D6–D14). **Siguen abiertas Q4** (medición sin
-> ejecutar → T1) **y Q10** (decisión → bloquea R24 y T13).
+> **Once preguntas CERRADAS** (D6–D15). **Queda Q4**, que no es una decisión sino
+> una **medición sin ejecutar** (T1) y solo bloquea R19.
 >
-> **La tercera ronda abre trabajo NUEVO: el Grupo 4** (T19–T22), el discriminador de
-> las gestiones sintéticas. Implementa R18 y R34 y **corrige un incumplimiento de
-> R12** que la implementación dejó abierto.
+> **Trabajo NUEVO pendiente, en dos frentes:**
+> - **Grupo 4** (T19–T22), tercera ronda: el discriminador de las gestiones
+>   sintéticas. Implementa R18/R34 y **corrige un incumplimiento de R12** que la
+>   implementación dejó abierto.
+> - **Grupo 5** (T13, T23), cuarta ronda: la **deriva declarada** de
+>   `primer_intento_ok` y el **último rojo declarado**, ya desbloqueados por D15.
 
 Baseline declarado: worktree `C:/w213`, rama `feature/215-reintento-en-cierre`
 desde `origin/dev` (ca73e771), dependencias instaladas, cliente Prisma generado,
@@ -29,11 +32,11 @@ baselines caducan con cualquier PR ajeno).
   ronda, §Tercera ronda y §Preguntas cerradas, y como R29–R34.
   **Hecho:** R3, R18 y R27 desbloqueados con texto EARS definitivo.
 
-- [ ] **T0b — Volver a la puerta con las DOS que faltan.** **Q10** (KPI persistido,
-  única decisión pendiente) y **Q4** (no es decisión: es la medición de T1 sin
-  ejecutar).
-  **Hecho:** ni un `⛔` sin resolver en `requirements.md`; R19 y R24 con texto EARS
-  definitivo. **Depende de:** T1. **Bloquea:** T13, T18.
+- [ ] **T0b — Volver a la puerta con lo ÚNICO que falta: Q4.** No es una decisión;
+  es la medición de T1 sin ejecutar. **Q10 quedó cerrada por D15** (deriva declarada
+  con fecha de corte) y con ella R24 y R35.
+  **Hecho:** ni un `⛔` sin resolver en `requirements.md`; R19 con texto EARS
+  definitivo. **Depende de:** T1. **Bloquea:** T18.
 
 - [ ] **T1 — [P] Ejecutar la medición del efecto retroactivo (⛔ Q4).** La consulta
   ya está escrita en `design.md §7.6` (solo lectura, dos consultas: resumen y
@@ -174,14 +177,67 @@ baselines caducan con cualquier PR ajeno).
 - [x] ~~**T12b** — casos pendientes de Q3/Q5~~ → **Q3 se implementa en el Grupo 4;
   Q5 no genera trabajo (D14 acepta el riesgo sin mitigación).**
 
-- [ ] **T13 — ⛔ Semillas de analítica y equivalencia (Q10).**
-  `tests/integration/db/_semilla-rollup.ts`, `analytics-daily-job.test.ts`,
-  `analitica-operativa-equivalencia.test.ts`: las semillas deben crear cierres
-  **aprobados**, no solo filas de historial.
-  **Hecho:** el CHECK `primer_intento_ok <= entregas` se respeta; los tests
-  corren **con datos** (verificar que no retornan temprano: comparar el número de
-  aserciones ejecutadas, no el `passed`); la decisión de Q10 queda reflejada.
-  **R:** R23, R24. **Depende de:** T3, T0b (Q10).
+→ **T13 se mueve al Grupo 5** (desbloqueada por D15).
+
+---
+
+## Grupo 5 — CUARTA RONDA: la deriva declarada de `primer_intento_ok` (D15)
+
+Desbloqueado por D15 («declara la deriva con fecha de corte»). Diseño completo en
+`design.md §8`. **Nada de este grupo está implementado.**
+
+- [ ] **T13 — Arreglar el ÚLTIMO rojo declarado SIN tocar lo que el test mide. [💰]**
+  `tests/integration/db/analytics-daily-job.test.ts` · «primer intento vs entrega
+  tras una devolucion previa (R17)» (`:602-663`).
+
+  **La instrucción es explícita y no admite atajo: se REESCRIBE LA SEMILLA, NO LA
+  ASERCIÓN.** El test está rojo porque su semilla crea la gestión `devuelta`
+  **sin `cierre_id`** (`crearGestion` en `_semilla-rollup.ts:235-248` ni siquiera
+  acepta uno, y ahí no se crea ningún `cierre_dia`), así que con el criterio nuevo
+  esa devolución no cuenta y la entrega de hoy parece un primer intento. Lo que hay
+  que hacer es **darle a esa `devuelta` su `cierre_dia` APROBADO**: ampliar la
+  semilla con un helper que cree el cierre y vincule la gestión.
+
+  > ⛔ **PROHIBIDO cambiar el número esperado.** Las aserciones de `:660-661`
+  > —`primerIntentoOk` 0 para la reintentada, 1 para la limpia— son la ÚNICA prueba
+  > de que el KPI distingue un reintento de un primer intento. Relajarlas es borrar
+  > lo que el test existe para medir. Si alguien «lo arregla» así, el reviewer lo
+  > rechaza.
+
+  **Hecho:** el caso vuelve a verde **con las mismas aserciones**; el helper nuevo
+  vive en `_semilla-rollup.ts` (no copiado en el test); el CHECK
+  `primer_intento_ok <= entregas` se respeta; y se verifica que el test corre **con
+  datos** (comparar aserciones ejecutadas, no el `passed`: con tabla vacía estos
+  tests retornan temprano y pasan en falso).
+  **R:** R23, R24-e. **Depende de:** T3. **No depende de** T19–T22.
+
+- [ ] **T23 — Escribir la declaración de la deriva. [P]** Los cuatro sitios de
+  `design.md §8.3`: `lib/analytics/metrics.ts` (`descripcion` de `primer_intento_ok`,
+  `:334-335`), `AnaliticaRollupService.ts` (junto a `contarPrimerIntento`,
+  `:230-242`), `AnaliticaOperativaService.ts` (`:894-901`) y `progress/impl_215.md`.
+
+  Cada uno DEBE decir las tres cosas: (1) que el criterio cambió y el histórico **no
+  se re-backfillea**; (2) la regla del corte — *toda fila con `updated_at` anterior
+  al despliegue de la 215 está calculada con el criterio viejo; toda fila posterior,
+  con el nuevo, **sea cual sea su `fecha`**, porque el job recalcula días pasados*;
+  (3) el efecto **INTRADÍA**: una entrega cuya orden tiene cierres sin aprobar
+  reporta 0 intentos previos, así que el KPI **sube durante el día y baja al
+  aprobarse los cierres** — propiedad nueva y permanente, no un artefacto del cambio.
+
+  **Hecho:** los cuatro sitios escritos; `git diff --name-only` NO toca `app/`,
+  `components/` ni `db/` (R20/R27; el aviso en pantalla es ficha aparte, ver
+  `requirements.md` §Tensión declarada); `metrics.test.ts` sigue verde.
+  **R:** R24-a, R24-b, R24-c, R24-d, R35. **Depende de:** nada.
+
+- [ ] **T24 — ACCIÓN HUMANA EN EL DESPLIEGUE (documental).** Anotar el instante real
+  del despliegue en `progress/impl_215.md` y como fecha legible en la `descripcion`
+  de la métrica.
+  **No toca código, no exige re-desplegar, no bloquea el PR.** Si se olvida, la serie
+  **sigue siendo interpretable fila a fila** por `updated_at` (R35) — se pierde solo
+  la etiqueta cómoda. Esa es la razón de haber elegido el mecanismo derivado y no una
+  constante en código (`design.md §8.2`).
+  **Hecho:** la fecha/hora del despliegue escrita, con zona horaria.
+  **R:** R35. **Depende de:** el despliegue.
 
 ---
 
@@ -311,7 +367,7 @@ es un fallo de la feature.
 | R21 | Los casos de alcance por rol/zona/tienda ya existentes en los 6 servicios, verdes (T14) |
 | R22 | `intentos-no-alcance.test.ts` verde sin tocarse (T14) |
 | R23 | `metrics.test.ts` (`R11 · los intentos no se redefinen`, T6/T13) + CHECK de base |
-| R24 | `analitica-operativa-equivalencia.test.ts` + `analytics-daily-job.test.ts` (T13) — ⛔ **pendiente de Q10** |
+| R24 | **T13** · «primer intento vs entrega tras una devolucion previa (R17)» verde **con las aserciones intactas** (R24-e) · **T23** · guardia de prosa en los cuatro sitios de `design.md §8.3` (R24-a/b/c/d) |
 | R25 | `criterio-intento-entrega.test.ts` (T9) + la derogación escrita en `requirements.md` |
 | R26 | `criterio-intento-entrega.test.ts` (T9) + prosa retirada (T6) |
 | R27 | `git diff --name-only -- db/` **vacío** (T15). Sin rama alternativa: D7 prohíbe materializar |
@@ -322,13 +378,15 @@ es un fallo de la feature.
 | R32 | **T11b** (ningún test afirma que el conteo baje; caso explícito de monotonía) |
 | R33 | `criterio-intento-entrega.test.ts` (`sin_gestionar` no está y no puede estar en la lista, T9/T2) + `orden-historial-repository.test.ts` (una orden cortada sin gestión → 0, T8) |
 | R34 | **T19** (lista de INCLUSIÓN) + **T21** (a/b/c/d) + **T22** (conteo de gestiones legadas sin fila de historial) |
+| R35 | **T23** (la regla del corte escrita en los cuatro sitios, sin constante nueva) + **T24** (la anotación del despliegue) + guardia: `git diff -- db/` vacío |
 
-**Cobertura:** 34 requisitos, 34 con dueño.
+**Cobertura:** 35 requisitos, 35 con dueño.
 
 - **30 cerrados y verdes** en `7d9471c3` (mapa real con nombres de caso en
   `progress/impl_215.md §2`).
 - **R12, R18 y R34** → Grupo 4 (T19–T22). R12 figuraba como cubierto y **no lo
   estaba**: su test medía el mapa, no el predicado.
-- **R19** → depende de ejecutar la medición de T1 (Q4).
-- **R24** → ⛔ Q10, única decisión pendiente; su rojo declarado
-  (`tests/integration/db/analytics-daily-job.test.ts`) sigue en pie.
+- **R24 y R35** → Grupo 5 (T13, T23, T24), desbloqueados por D15. Con T13 se cierra
+  **el último rojo declarado** de la feature.
+- **R19** → lo único que sigue dependiendo de algo externo: ejecutar la medición de
+  T1 (Q4). No es una decisión, es una consulta sin correr.
