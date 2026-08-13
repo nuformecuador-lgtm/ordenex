@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 
 // Feature 89/99 (T13) — metodos de repo de la lista de NOVEDADES. Prisma se mockea con dobles
@@ -18,6 +18,36 @@ const NOVEDAD_WHERE = {
   deletedAt: null, // R8: excluye borradas
   estatus: { value: "devuelta" }, // R7: solo mientras REPOSE en `devuelta`
 };
+
+// 2026-08-13 (pedido humano) — fila TAL COMO LA DEVUELVE PRISMA para el `select` de
+// `findDevueltasByTienda`: catalogos como objetos anidados y los tres decimales como
+// `Prisma.Decimal` de verdad. Es el insumo que el repo tiene que traducir a `NovedadOrdenRow`
+// (nombres resueltos + `.toNumber()`), asi que el doble NO puede darlos ya convertidos: eso
+// haria pasar el test aunque el repo dejase filtrar un Decimal al service.
+function prismaRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "o1",
+    numGuia: 100,
+    numRemision: "REM-001",
+    destinatario: "Ana",
+    telefonoDest: "88887777",
+    direccion: "Calle 1, casa 2",
+    producto: "Cafe",
+    peso: new Prisma.Decimal("1.500"),
+    montoCobrar: new Prisma.Decimal("12500.00"),
+    latitud: new Prisma.Decimal("9.9333296"),
+    longitud: new Prisma.Decimal("-84.0833282"),
+    notas: "Tocar el timbre",
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    estatus: { value: "devuelta" },
+    tienda: { nombre: "Tienda Uno" },
+    zona: { nombre: "GAM" },
+    provincia: { nombre: "San Jose" },
+    canton: { nombre: "Central" },
+    distrito: { nombre: "Carmen" },
+    ...overrides,
+  };
+}
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
@@ -65,17 +95,9 @@ describe("OrdenRepository.countDevueltasByTienda (R7/R8)", () => {
 });
 
 describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
-  it("R7/R8: where anclado al estado, orderBy createdAt desc, skip/take y select minimo", async () => {
+  it("R7/R8: where anclado al estado, orderBy createdAt desc, skip/take y select de la orden completa", async () => {
     const prisma = buildPrisma();
-    prisma.orden.findMany.mockResolvedValue([
-      {
-        id: "o1",
-        numGuia: 100,
-        destinatario: "Ana",
-        telefonoDest: "88887777",
-        createdAt: new Date("2026-01-01T00:00:00Z"),
-      },
-    ]);
+    prisma.orden.findMany.mockResolvedValue([prismaRow()]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 20, take: 10 });
@@ -87,14 +109,166 @@ describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
     expect(arg.orderBy).toEqual({ createdAt: "desc" }); // fallback; el service reordena por recencia
     expect(arg.skip).toBe(20);
     expect(arg.take).toBe(10);
-    // Select minimo: no arrastra columnas pesadas ni deletedAt.
+    // El `select` cubre EXACTAMENTE `NovedadOrdenRow` (2026-08-13): columnas de la orden +
+    // los catalogos por NOMBRE. Sigue sin arrastrar `deletedAt` ni relaciones pesadas
+    // (gestiones, historial, evidencias) ni `busquedaTexto`.
     expect(arg.select).toEqual({
       id: true,
       numGuia: true,
+      numRemision: true,
       destinatario: true,
       telefonoDest: true,
+      direccion: true,
+      producto: true,
+      peso: true,
+      montoCobrar: true,
+      latitud: true,
+      longitud: true,
+      notas: true,
       createdAt: true,
+      estatus: { select: { value: true } },
+      tienda: { select: { nombre: true } },
+      zona: { select: { nombre: true } },
+      provincia: { select: { nombre: true } },
+      canton: { select: { nombre: true } },
+      distrito: { select: { nombre: true } },
     });
+    expect(arg.select).not.toHaveProperty("deletedAt");
+  });
+
+  // 2026-08-12 (pedido humano) — producto y peso salen de la orden, y el `peso` cruza como
+  // NUMBER: `Prisma.Decimal` no es serializable en el borde RSC y `formatPeso` espera
+  // `number | null`. La conversion es `.toNumber()`, nunca `parseFloat` sobre el Decimal.
+  it("producto y peso llegan a la fila; el peso Decimal sale como number", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      prismaRow({ producto: "Zapatos", peso: new Prisma.Decimal("1.500") }),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0].producto).toBe("Zapatos");
+    expect(rows[0].peso).toBe(1.5);
+    expect(typeof rows[0].peso).toBe("number");
+  });
+
+  it("peso nulo (carga masiva sin peso, feature 15/R4) sigue nulo: no se rellena con 0", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      prismaRow({ id: "o2", numGuia: null, destinatario: "Beto", telefonoDest: "22223333", producto: "Caja", peso: null }),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0].peso).toBeNull();
+  });
+
+  // --- 2026-08-13 (pedido humano): la fila trae la orden COMPLETA ---
+  // `NovedadDTO` extiende `MiAsignacionDTO` para que `/novedades` pinte las mismas cards POS
+  // que el portal del mensajero. La responsabilidad de ESTA capa es doble: resolver los
+  // nombres de catalogo (el DTO nunca ve IDs) y que NINGUN `Prisma.Decimal` la cruce.
+
+  it("resuelve los nombres de catalogo: ningun ID de catalogo sale en la fila", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([prismaRow()]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0]).toMatchObject({
+      numRemision: "REM-001",
+      estatusValue: "devuelta", // proyectado de la relacion, no hardcodeado
+      direccion: "Calle 1, casa 2",
+      notas: "Tocar el timbre",
+      tiendaNombre: "Tienda Uno",
+      zonaNombre: "GAM",
+      provinciaNombre: "San Jose",
+      cantonNombre: "Central",
+      distritoNombre: "Carmen",
+    });
+    // La fila expone NOMBRES, nunca los FKs de catalogo ni las relaciones crudas.
+    for (const prohibido of ["zonaId", "provinciaId", "cantonId", "distritoId", "estatusId", "tienda", "zona", "estatus"]) {
+      expect(rows[0]).not.toHaveProperty(prohibido);
+    }
+  });
+
+  it("los TRES Decimal (peso, montoCobrar, lat/lng) salen como number: nunca cruza un Prisma.Decimal", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      prismaRow({
+        peso: new Prisma.Decimal("2.750"),
+        montoCobrar: new Prisma.Decimal("12500.00"),
+        latitud: new Prisma.Decimal("9.9333296"),
+        longitud: new Prisma.Decimal("-84.0833282"),
+      }),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0].peso).toBe(2.75);
+    expect(rows[0].montoCobrar).toBe(12500);
+    expect(rows[0].latitud).toBe(9.9333296);
+    expect(rows[0].longitud).toBe(-84.0833282);
+    for (const valor of [rows[0].peso, rows[0].montoCobrar, rows[0].latitud, rows[0].longitud]) {
+      expect(typeof valor).toBe("number");
+      expect(valor).not.toBeInstanceOf(Prisma.Decimal);
+    }
+  });
+
+  it("un Decimal de valor 0 NO se pierde con la guarda de null (montoCobrar 0 != null)", async () => {
+    // La guarda es `row.x ? row.x.toNumber() : null` y una instancia Decimal es SIEMPRE
+    // truthy, incluida la de valor 0: solo `null` cae a `null`.
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      prismaRow({ montoCobrar: new Prisma.Decimal("0.00"), latitud: new Prisma.Decimal("0") }),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0].montoCobrar).toBe(0);
+    expect(rows[0].latitud).toBe(0);
+  });
+
+  it("orden PELADA: peso, direccion, monto, notas, distrito y coordenadas ausentes viajan como null", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      prismaRow({
+        id: "pelada",
+        peso: null,
+        direccion: null,
+        montoCobrar: null,
+        latitud: null,
+        longitud: null,
+        notas: null,
+        distrito: null, // `distrito_id` es el UNICO FK geografico nullable
+      }),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    for (const campo of [
+      "peso",
+      "direccion",
+      "montoCobrar",
+      "latitud",
+      "longitud",
+      "notas",
+      "distritoNombre",
+    ] as const) {
+      expect(rows[0][campo]).toBeNull();
+      // El hueco se dice, no se disfraza: ni `""` ni `0`.
+      expect(rows[0][campo]).not.toBe("");
+      expect(rows[0][campo]).not.toBe(0);
+    }
+    // Los NOT NULL del schema siguen ahi.
+    expect(rows[0].producto).toBe("Cafe");
+    expect(rows[0].numRemision).toBe("REM-001");
+    expect(rows[0].zonaNombre).toBe("GAM");
   });
 
   it("R8: el where NO tiene relacion `gestiones` (anclado SOLO al estado real)", async () => {
