@@ -336,3 +336,109 @@ pagó es tan falso como uno que no se entera de que creció.
 -> test:guardias       Test Files 96 passed (96)     Tests  1355 passed (1355)
 == init OK ==
 ```
+
+---
+
+## T15 — LA MUTACIÓN OBLIGATORIA (R24)
+
+Es el riesgo más caro de la ficha porque **rompe en verde**. La mutación, exactamente la
+que pide `design.md §6.2`: mover el bloque `@media print` **detrás** de `.dark` **y**
+revertir T3 (quitar `quitarBloquesDeImpresion` del fixture).
+
+**Antes de correrla, `git diff` confirmó que el árbol cambió de verdad** — una mutación
+que no se aplicó y un arreglo que funciona se leen igual de verdes:
+
+```
+ app/globals.css             | 82 +++++++++++++++++++-------------
+ tests/fixtures/contraste.ts |  2 +-
+-const cssDePantalla = quitarBloquesDeImpresion(cssSinComentarios);
++const cssDePantalla = cssSinComentarios; // MUTACION: T3 revertida
+```
+
+**Detalle que casi hace inútil la mutación, y que conviene dejar escrito:** colocar el
+bloque justo después de `.dark` **no basta**. El bloque `@media (prefers-color-scheme:
+dark)` que viene a continuación vuelve a declarar todos los tokens, y como gana **el
+último**, el veneno no llega. Hay que ponerlo **después de los dos** —que es, además,
+dónde acaba lo que uno añade al final de un archivo—. Una mutación mal colocada habría
+salido verde y me habría hecho concluir que la medida 1 no servía.
+
+### Resultado: **ROJA**, 10 casos en dos guardias
+
+```
+× tema oscuro: --success-strong sobre success/15 …  expected 4.774… >= 6.59
+× tema oscuro: --warning-strong sobre warning/15 …  expected 6.310… >= 7.58
+× tema oscuro: --info-strong   sobre info/15    …   expected 5.352… >= 6.96
+× P9  … EMPEORÓ: medía 6.6  … expected 4.774… >= 6.59
+× P10 … EMPEORÓ: medía 7.59 … expected 6.310… >= 7.58
+× P13 … EMPEORÓ: medía 8.47 … expected 5.483… >= 8.46
+× P14 … EMPEORÓ: medía 7.97 … expected 5.244… >= 7.96
+× P20 … EMPEORÓ … expected 3.763… >= 5.88
+× P21 … EMPEORÓ … expected 3.175… >= 7.05
+× P22 … EMPEORÓ … expected 2.899… >= 4.42
+
+ Test Files  2 failed (2)
+      Tests  10 failed | 40 passed (50)
+```
+
+**Y el rojo dice exactamente lo que la trampa predecía.** Los valores que devuelve «tema
+oscuro» envenenado son, uno a uno, **los del tema CLARO**: P9 oscuro devuelve 4,774 —el
+claro—, P13 devuelve 5,483 —el claro—, P20 devuelve 3,763, P21 devuelve 3,175. La
+guardia estaba midiendo el tema equivocado, y lo único que lo delata es el **suelo por
+par**: el umbral solo no habría bastado, porque casi todos los pares claros pasan de
+sobra el 4,5. Ésa es la lección de la 210, y aquí se ve funcionando.
+
+**Regalo de la mutación:** P22 envenenado da **2,89** — que es EXACTAMENTE lo que la 208
+midió en su día para `Button destructive` dentro de la hoja fijada a claro. No es
+casualidad: el envenenamiento reproduce el estado antiguo (tokens claros + variante
+`dark:` disparando), así que ese 2,89 es una medición real del ANTES. Sirve como prueba
+de que la 217 **no empeora** esa deuda: 2,89 antes → **4,43** hoy en pantalla oscura.
+
+Restaurado con `git checkout` de los dos archivos · `git status` limpio · las dos
+guardias verdes otra vez (50 tests).
+
+---
+
+## Tanda 4 — La prosa y la guardia que congelaba lo contrario (T17, T18)
+
+*(T16 se cerró en la Tanda 2; ver la nota de reordenado de allí.)*
+
+### T17 · `app/globals.css`
+
+**(a) La viñeta 2 y el párrafo «LÍMITE MEDIDO».** `.tema-claro` pasa de tener **tres**
+consumidores a **dos** (la landing y la elección «claro» del portal). La factura no se
+borra de la prosa sin más: queda un párrafo que dice **que estuvo y por qué se fue**, con
+la fecha del pedido humano. Un consumidor que desaparece en silencio manda al siguiente
+lector a buscar un olvido que no existe. El párrafo «LÍMITE MEDIDO» conserva el límite
+—fija tokens, no apaga `dark:`— porque sigue siendo cierto para los dos consumidores que
+quedan; lo que se quita es la tabla de números que se midió **dentro de la hoja**, que ya
+no describe nada, y se remite la deuda a las fichas 210/216.
+
+**(b) El límite declarado junto al bloque de impresión (R15).** Quien lea la regla
+encuentra ahí mismo, sin abrir el spec: que **no apaga** el variant `dark:` y por qué se
+acepta —el resultado impreso es el que la hoja ya mostraba antes de la 217, con el número
+del peor caso: 2,89 entonces / 4,43 hoy—; que el arreglo de raíz sale a **ficha propia**,
+con sus tres razones; y **qué NO cubre** la impresión (sin botón, sin `@page`, y desde el
+modal se arrastra el resto de la página).
+
+### T18 · `tema-encendido.guardia.test.ts` — reexpresado, no relajado
+
+El título decía «`.tema-claro` sigue fijando los valores claros (la landing y **la
+factura** dependen de ello)». Desde esta feature esa frase afirma algo falso. El título
+nuevo nombra a los **consumidores reales**, verificados abriendo los dos archivos:
+
+- `app/page.tsx:50` — `className="tema-claro min-h-dvh …"`
+- `lib/tema/tema.ts:64` — `return "tema-claro";`
+
+**Ni una aserción cambió**: el cuerpo comprueba la definición de la clase en el CSS y eso
+sigue siendo válido y sigue haciendo falta. Ningún caso borrado, ninguna aserción
+debilitada.
+
+### Cierre de tanda 4 — `./init.sh --rapido`
+
+```
+✓ typecheck paso
+✓ lint paso
+-> test:cambiados      Test Files 17 passed (17)     Tests   311 passed (311)
+-> test:guardias       Test Files 96 passed (96)     Tests  1355 passed (1355)
+== init OK ==
+```

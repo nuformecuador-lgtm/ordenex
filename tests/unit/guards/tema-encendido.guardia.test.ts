@@ -159,7 +159,12 @@ describe("feature 211 — el CSS que enciende el tema", () => {
     expect(cuerpo.match(/@slot/g) ?? []).toHaveLength(2);
   });
 
-  it("`.tema-claro` sigue fijando los valores claros (la landing y la factura dependen de ello)", () => {
+  // REEXPRESADO por la feature 217, no relajado: el titulo decia «la landing y la FACTURA
+  // dependen de ello» y desde la 217 eso es falso —la factura gira con el tema y solo vuelve a
+  // claro al imprimir, con su propia clase—. Lo que sigue siendo cierto son los otros dos
+  // consumidores, y son los que se nombran. Las aserciones del cuerpo NO cambian: comprueban la
+  // definicion de la clase, que sigue teniendo que existir intacta.
+  it("`.tema-claro` sigue fijando los valores claros (la landing `app/page.tsx` y la eleccion «claro» del portal `lib/tema/tema.ts` dependen de ello)", () => {
     const claro = reglaCon(".tema-claro");
     expect(claro.selectores).toContain(":root");
     expect(claro.declaraciones["--background"]).toBe("#f7f8fc");
