@@ -214,6 +214,10 @@ function buildDobles(opciones: Opciones = {}) {
         fechaPago: input.fechaPago.toISOString().slice(0, 10),
         registradoPorNombre: "Ana Admin",
         registradoAt: RELOJ,
+        // Feature 206: el doble devuelve el `repartoId` que el input trae, en vez de `null` fijo.
+        // Importa: es el campo por el que la anulacion agrupada reconoce el grupo, y un doble que
+        // lo perdiera dejaria pasar un servicio que no lo ata al crear.
+        repartoId: input.repartoId ?? null,
         anulacion: null,
       };
       pendientesDeCommit.push(() => confirmados.pagos.push(input));
@@ -1331,6 +1335,10 @@ function pagoDelReparto(
     fechaPago: FECHA_PAGO,
     registradoPorNombre: "Ana Admin",
     registradoAt,
+    // Feature 206: estos pagos vienen de `listarPorReparto`, asi que POR DEFINICION pertenecen a
+    // un reparto. Ponerlos con `repartoId` real —y no `null`— es lo que hace que el doble no
+    // pueda dar por bueno un codigo que confunda un pago suelto con una imputacion.
+    repartoId: "rep-1", // el mismo id que `repartoDTO`
     anulacion: null,
   };
 }

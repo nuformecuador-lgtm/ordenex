@@ -173,6 +173,7 @@ function makeStore(saldoTienda: string) {
         fechaPago: "2026-07-30",
         registradoPorNombre: "Ana Admin",
         registradoAt: "2026-07-30T15:04:05.000Z",
+        repartoId: null, // feature 206: esta cadena es de un pago a TIENDA, sin reparto
         anulacion: null,
       };
       aplicarAlCommit.push(() => pagos.push(pago));

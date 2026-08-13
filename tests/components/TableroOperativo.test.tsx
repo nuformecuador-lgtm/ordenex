@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { quitarComentarios } from "../fixtures/sin-comentarios";
 import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
@@ -877,7 +878,7 @@ describe("Feature 133 (R12/R13) — la ruta no decide paneles leyendo el catalog
   }
 
   function soloCodigo(fuente: string): string {
-    return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+    return quitarComentarios(fuente);
   }
 
   const CENSADOS = recorrer(DIR).map((archivo) => ({

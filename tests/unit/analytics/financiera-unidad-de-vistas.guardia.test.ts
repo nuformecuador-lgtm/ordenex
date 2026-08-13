@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -112,7 +113,7 @@ export function pintarianDineroConUnidadAjena(censadas: readonly MetricaCensada[
 
 /** El codigo sin comentarios: la prosa que explica una prohibicion no la infringe. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**

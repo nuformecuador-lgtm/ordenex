@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { listarMetricas } from "@/lib/analytics/metrics";
@@ -93,7 +94,7 @@ const OPERACIONES_PRISMA =
 
 /** Un comentario no es una consulta: la prosa que EXPLICA por que no se lee `orden` no infringe. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**

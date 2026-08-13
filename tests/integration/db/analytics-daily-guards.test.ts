@@ -90,7 +90,7 @@ function leer(rel: string): string {
  * silencioso de codigo real.
  */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**
@@ -117,7 +117,7 @@ function leerCodigo(rel: string): string {
   if (cacheado !== undefined) return cacheado;
   const codigo = soloCodigo(leer(rel));
   CODIGO_CACHE.set(rel, codigo);
-  return codigo;
+  return quitarComentarios(codigo);
 }
 
 /* -------------------------------------------------------------------------- */

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { ForbiddenError } from "@/lib/errors/app-error";
@@ -199,8 +200,7 @@ function archivosDeBorde(dir: string): string[] {
 function codigoDe(rel: string): string {
   return fs
     .readFileSync(path.join(REPO_ROOT_R29, rel), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|\s)\/\/.*$/gm, "$1");
+    ;
 }
 
 /** Un borde de analitica es el que pide la consulta a la 122. */

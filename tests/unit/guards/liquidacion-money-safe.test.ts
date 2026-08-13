@@ -265,7 +265,10 @@ describe("barrido transversal money-safe y de fuga de datos (feature 172)", () =
     const fuente = readFileSync(path.join(RAIZ, "lib/types/liquidacion.ts"), "utf8");
 
     const pago = camposDelTipo(fuente, "PagoRegistradoDTO");
-    expect(pago).toHaveLength(9);
+    // Feature 206: DIEZ campos con `esDeReparto`. Este caso tumbó la primera versión, que hacía
+    // viajar el `repartoId` —un uuid— y habría pasado por el filtro de abajo solo por llamarse
+    // distinto de «id». El booleano dice lo mismo que la pantalla necesita sin identificar nada.
+    expect(pago).toHaveLength(10);
     expect(pago.filter((campo) => IDENTIFICADOR_INTERNO.test(campo))).toEqual(["id"]);
 
     const anulacion = camposDelTipo(fuente, "AnulacionDTO");
@@ -286,6 +289,7 @@ describe("barrido transversal money-safe y de fuga de datos (feature 172)", () =
       fechaPago: "2026-07-30",
       registradoPorNombre: "Ana Maestra",
       registradoAt: "2026-08-02T15:04:05.000Z",
+      esDeReparto: false, // feature 206: pago SUELTO, sin reparto
       anulacion: {
         motivo: "44444444-4444-4444-8444-444444444444",
         anuladoPorNombre: "Beto Admin",

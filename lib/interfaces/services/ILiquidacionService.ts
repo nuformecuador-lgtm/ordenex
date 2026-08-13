@@ -11,6 +11,8 @@ import type { CajaPagoTiendaTxClient } from "@/lib/interfaces/services/ICajaPago
 import type {
   AnularPagoInput,
   AnularPagoResult,
+  AnularRepartoInput,
+  AnularRepartoResult,
   ListarPagosResult,
   RegistrarPagoMensajeroInput,
   RegistrarPagoResult,
@@ -98,6 +100,15 @@ export type AnularPagoServiceResult = Exclude<
 >;
 
 /**
+ * Feature 206 — resultado de DOMINIO de anular un REPARTO completo, con el mismo recorte que los
+ * de arriba: la sesión y la forma son del borde, no del servicio.
+ */
+export type AnularRepartoServiceResult = Exclude<
+  AnularRepartoResult,
+  { status: "validation_error" } | { status: "unauthenticated" }
+>;
+
+/**
  * Feature 205 (T3.1) — resultado de DOMINIO de PREVISUALIZAR un reparto, con el mismo recorte
  * que los tres de arriba y por el mismo motivo: la sesion y la forma son del borde.
  */
@@ -164,6 +175,20 @@ export interface ILiquidacionService {
    * y un registro simultaneos no lean el mismo disponible.
    */
   anularPago(input: AnularPagoInput, actor: Actor): Promise<AnularPagoServiceResult>;
+  /**
+   * Feature 206 — anula LAS N IMPUTACIONES de un reparto en un acto, con un motivo.
+   *
+   * Lo que este contrato impone por su forma, igual que el de arriba:
+   *
+   *  - **No se elige qué imputaciones anular**: el input es `{ repartoId, motivo }`. Dejar que el
+   *    cliente enumerara ids reabriría la anulación a medias que esta feature viene a cerrar.
+   *  - **No se acepta monto** (R70): el de cada contraasiento sale de su pago, en el servidor.
+   *  - **Mismo gate que pagar** (R81): `maestro` y `admin`.
+   *
+   * Toma UN candado POR CIERRE implicado y **en orden determinista**: R85 razonaba con un solo
+   * recurso y aquí hay N, así que el orden total es lo que descarta el interbloqueo.
+   */
+  anularReparto(input: AnularRepartoInput, actor: Actor): Promise<AnularRepartoServiceResult>;
   /**
    * Feature 205 (T3.1, R32-R38/R56/R57) — QUE PASARIA si se repartiera este importe. Solo
    * lectura y **sin efecto alguno** (R35): no abre transaccion, no toma ningun bloqueo y no

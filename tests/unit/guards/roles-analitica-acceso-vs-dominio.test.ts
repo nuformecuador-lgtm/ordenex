@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 import { describe, it, expect } from "vitest";
@@ -123,7 +124,7 @@ const RUTA_MENU_VISIBILITY = "lib/auth/menu-visibility.ts";
  * escrito en una violación.
  */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**

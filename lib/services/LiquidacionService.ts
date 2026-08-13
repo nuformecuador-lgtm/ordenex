@@ -13,6 +13,7 @@ import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/reposit
 import type { ICajaPagoTiendaFeedService } from "@/lib/interfaces/services/ICajaPagoTiendaFeedService";
 import type {
   AnularPagoServiceResult,
+  AnularRepartoServiceResult,
   ILiquidacionService,
   ListarPagosServiceResult,
   LiquidacionTx,
@@ -24,6 +25,7 @@ import type {
 import type {
   AnulacionDTO,
   AnularPagoInput,
+  AnularRepartoInput,
   MetodoLiquidacion,
   PagoRegistradoDTO,
   RegistrarPagoMensajeroInput,
@@ -158,6 +160,9 @@ export function aPagoRegistradoDTO(pago: LiquidacionPagoDTO): PagoRegistradoDTO 
     registradoPorNombre: pago.registradoPorNombre,
     registradoAt: pago.registradoAt,
     anulacion: pago.anulacion,
+    // Feature 206: un BOOLEANO, no el uuid del reparto. R56 prohibe identificadores internos en
+    // este DTO y tres guardias lo hicieron cumplir; el cliente solo necesita saber SI hay grupo.
+    esDeReparto: pago.repartoId !== null,
   };
 }
 
@@ -779,6 +784,113 @@ export class LiquidacionService implements ILiquidacionService {
       if (error instanceof YaAnuladoError) return this.responderYaAnulado(pago.id);
       throw error;
     }
+  }
+
+  /**
+   * Feature 206 — ANULA UN REPARTO COMPLETO: un acto, un motivo, sobre las N imputaciones que
+   * nacieron del mismo reparto (`liquidacion_pago.reparto_id`, feature 205/R29).
+   *
+   * Reusa PIEZA POR PIEZA el camino de `anularPago` —`pagoRepo.anular` y `escribirContraasiento`—
+   * en vez de reimplementarlo. Ninguna invariante de dinero se relaja: cada imputación sigue
+   * teniendo su contraasiento por su monto exacto (R70/R76), fechado el día de la ANULACIÓN
+   * (R77), y sigue siendo imposible anular una anulación (R82, el `UNIQUE(pago_id)`).
+   *
+   * ── EL ORDEN DE LOS CANDADOS NO ES UN DETALLE, ES LA CORRECCIÓN
+   * `bloquearBeneficiario` de un pago a mensajero bloquea la fila de SU `cierre_dia`
+   * (`LiquidacionPagoRepository.ts:147`). La interfaz declara «UNO por operación (R85): al no
+   * haber dos recursos que ordenar, no existe orden de adquisición capaz de producir un
+   * interbloqueo». **Un reparto imputa a N cierres distintos, así que este acto toma N candados
+   * y esa premisa deja de valer.** Dos anulaciones agrupadas simultáneas que compartieran cierres
+   * y los tomaran en orden distinto se interbloquearían.
+   *
+   * Por eso los candados se toman TODOS, de una vez y **ordenados por `cierreId`**, antes de
+   * escribir nada. Un orden total fijo sobre los recursos es lo que hace el interbloqueo
+   * imposible; no basta con que sean pocos.
+   *
+   * ── EL REPARTO A MEDIAS
+   * Decisión humana del 2026-08-13: si alguien ya anuló a mano algunas imputaciones, se anulan
+   * LAS QUE QUEDAN y se informa de las dos cifras. Rechazar dejaría a la persona con el trabajo
+   * manual que esta feature existe para quitarle, y saltarse las anuladas es seguro **por
+   * construcción**, no por disciplina: el `UNIQUE(pago_id)` de `liquidacion_anulacion` hace
+   * imposible anular dos veces, así que una carrera devuelve `ya_anulado` y solo suma al conteo.
+   *
+   * No se devuelve «el restante»: hay uno por cierre. La pantalla vuelve a leer el pendiente.
+   */
+  async anularReparto(
+    input: AnularRepartoInput,
+    actor: Actor,
+  ): Promise<AnularRepartoServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R81 — antes de leer nada
+
+    // El reparto se DERIVA del pago, server-side (R56/R70): el cliente manda el pago que tiene
+    // en pantalla y no puede nombrar un reparto que no sea el suyo.
+    const pago = await this.pagoRepo.obtenerPorId(input.pagoId);
+    if (pago === null || pago.repartoId === null) return { status: "no_encontrado" };
+
+    const pagos = await this.pagoRepo.listarPorReparto(pago.repartoId);
+    if (pagos.length === 0) return { status: "no_encontrado" };
+
+    const vigentes = pagos.filter((p) => p.anulacion === null);
+    const yaAnuladas = pagos.length - vigentes.length;
+    if (vigentes.length === 0) return { status: "sin_vigentes", yaEstaban: yaAnuladas };
+
+    // R77: una sola fecha para todo el acto. Anular en grupo es UN acto, no N actos seguidos.
+    const fechaAnulacion = medianocheUtcDelDia(fechaCalendarioCR(this.ahora()));
+
+    // Los candados, en orden determinista y ANTES de escribir (ver cabecera). `Set` porque dos
+    // imputaciones podrian compartir cierre y un candado repetido no aporta nada.
+    const beneficiarios = vigentes.map((p) => beneficiarioDelPago(p));
+    if (beneficiarios.some((b) => b === null)) return { status: "no_encontrado" };
+    // La clave es `<recurso>:<id>` para que el `sort()` produzca un orden TOTAL y estable sobre
+    // los recursos, que es lo que descarta el interbloqueo (ver cabecera). `bloquearBeneficiario`
+    // habla de `cierre`/`tienda`, no de `mensajero`: lo que se bloquea es la fila del cierre.
+    const candados = [
+      ...new Set(
+        beneficiarios.map((b) =>
+          b!.tipo === "mensajero" ? `cierre:${b!.cierreId}` : `tienda:${b!.tiendaId}`,
+        ),
+      ),
+    ].sort();
+
+    return await this.runTransaction(async (tx) => {
+      for (const candado of candados) {
+        const [tipo, id] = candado.split(":") as ["cierre" | "tienda", string];
+        await this.pagoRepo.bloquearBeneficiario(
+          tx,
+          tipo === "cierre" ? { tipo: "cierre", cierreId: id } : { tipo: "tienda", tiendaId: id },
+        );
+      }
+
+      let anuladas = 0;
+      let yaEstaban = yaAnuladas;
+      for (const pago of vigentes) {
+        const beneficiario = beneficiarioDelPago(pago);
+        if (beneficiario === null) continue; // la base lo impide; no se inventa un contraasiento
+        const anulada = await this.pagoRepo.anular(tx, {
+          pagoId: pago.id,
+          motivo: input.motivo,
+          anuladoPor: actor.usuarioId, // R73
+        });
+        if (anulada.status === "ya_anulado") {
+          // Carrera: alguien la anuló entre la lectura y el candado. No es un error del acto.
+          yaEstaban += 1;
+          continue;
+        }
+        const monto = new Prisma.Decimal(pago.monto).toDecimalPlaces(
+          2,
+          Prisma.Decimal.ROUND_HALF_UP,
+        );
+        await this.escribirContraasiento(tx, beneficiario, {
+          pago,
+          monto: monto.toFixed(2),
+          fechaMovimiento: fechaAnulacion,
+          registradoPor: actor.usuarioId,
+        });
+        anuladas += 1;
+      }
+
+      return { status: "ok", anuladas, yaEstaban };
+    });
   }
 
   /**

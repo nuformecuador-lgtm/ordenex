@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 
@@ -34,7 +35,7 @@ const RANGO_PATH = path.join(DIR_FINANCIERO, "rango.ts");
  * (y la misma funcion) de `tests/unit/analytics/modulo-puro.guardia.test.ts`.
  */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 function archivosDeLaFeature(): string[] {

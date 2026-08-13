@@ -9,7 +9,99 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🏁 2026-08-13 (tarde) — **EMPIEZA A LEER POR AQUÍ**: release #359 abierta y la 205 YA SE VIO
+## 🏁 CIERRE DE JORNADA 2026-08-13 — **EMPIEZA A LEER POR AQUÍ**
+
+### ✅ RESUELTO — este aviso caducó el 2026-08-13 (se conserva por lo que enseña)
+
+> **Ya no hace falta decidir nada: el rojo cayó en el PR #367** (`7205b2a1`, «cae el último rojo y
+> queda declarada la deriva del KPI, R24/R35»). Comprobado desde la rama de la 213 al remergear
+> `dev` para el PR #368: `analytics-daily-job.test.ts` pasa **29/29**.
+>
+> **Y se arregló por el lado correcto**, que era la mitad de la pregunta: el assert **sigue
+> esperando `[1, 0]`**. No se tapó cambiando la expectativa al criterio nuevo, se implementó el R24
+> que estaba bloqueado. Que el aviso de la deriva no llegue a la pantalla es la ficha **219**.
+>
+> Lo que sí sigue en pie es el párrafo del peaje: el rojo vivió **seis merges** sin que nadie lo
+> parara, y eso no lo arregla ningún PR.
+
+### 🔴 EL AVISO ORIGINAL, YA RESUELTO: **`dev` estaba ROJO**
+
+`tests/integration/db/analytics-daily-job.test.ts > primer intento vs entrega tras una devolucion
+previa (R17)` falla **en `dev` limpio** — verificado sin ningún cambio local encima. Entró con el
+**PR #363** (feature 215) y ya lleva **seis merges por encima**.
+
+**No es un misterio: es el R24 que la propia ficha 215 declara BLOQUEADO y sin implementar** («el
+KPI `primer_intento_ok` persistido en `analytics_daily`»). Mover el conteo del reintento al cierre
+cambió ese KPI y el requisito que lo cubría se dejó fuera a propósito. Hay que decidir: **implementar
+R24 o actualizar el test al criterio nuevo**, y dejarlo escrito.
+
+> Mientras siga rojo, cada PR paga el peaje de declarar «este rojo no es mío» — que es exactamente
+> cómo se cuela el siguiente que sí lo sea. Es la deuda más cara del tablero ahora mismo.
+
+### ✅ Lo que salió de esta jornada
+
+| | Qué |
+| --- | --- |
+| **Release #359** | desplegada **y verificada**: la migración `gestion_orden_pago` aplicada en prod a las 15:12:20 con las **16 filas** que predijo el pre-vuelo, `gestion_orden` intacta, 0 errores de runtime |
+| **205** | el **diálogo de pago se vio en pantalla** por fin, recorriendo el flujo real (no SQL a mano) |
+| **210** | contraste de insignias, **con guardia nueva** que calcula contraste desde los tokens del CSS |
+| **206** | anular un reparto entero en un acto, **y visto en pantalla** (`progress/impl_206_visto.md`) |
+| **209 tanda B** | 48 de 57 quitadores al helper compartido; **7 no pueden** y ahí está el hallazgo |
+| **Auditoría de tema** | 11 rutas nunca medidas + pasada de hover (`progress/impl_210_auditoria-tema.md`) |
+| **Bookkeeping** | **212** y **196** estaban mergeadas/desplegadas y seguían abiertas en el registro |
+| **Fichas nuevas** | **216** (naranja de marca) y **217** (factura oscura), las dos con su medición dentro |
+| **70** | **medida antes de especificar: es PREVENTIVA hoy**, y filtrar `status` no es la opción segura |
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **Decidir el rojo de `dev`** (arriba). Bloquea la lectura de todo lo demás.
+2. **Los 7 quitadores** de la tanda B, uno a uno. Media faena hecha: el mecanismo está identificado
+   y la lista está en la ficha 209. Cada uno es una pregunta contestable — ¿el conteo nuevo es el
+   correcto, o el ancla era legítima? **Empezar en frío**: son siete veredictos de guardias de
+   dinero y analítica, y el modo de fallo es cambiarlos sin mirarlos.
+3. **La 217** (factura oscura): aprobada por el humano, sin spec. Ojo a la regla que debe honrar:
+   **al imprimir, la hoja sigue blanca**.
+4. **La 216** espera una **decisión de marca** (un hex para el primario, o pasar el texto a un
+   `-strong` propio). No es un arreglo técnico.
+5. **La 213** la implementa **otro programador** desde sus sesiones; su spec está completo y su
+   puerta humana **sin pasar**.
+
+### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
+
+- **Un verificador que rellena lo que no sabe no es optimista: es FALSO.** El medidor de contraste
+  mintió **tres veces**, siempre igual —ante un dato irresoluble, inventaba uno—: dio un falso
+  **1,80 sobre una cifra de dinero** y un falso **1,00 sobre un botón legible**. La causa raíz era
+  que Chromium devuelve **`oklab()`** para las opacidades de Tailwind v4. Toda capa que no se pueda
+  resolver tiene que degradar a «no lo sé», nunca a un valor plausible.
+- **El compilador censa mejor que un grep.** Retirar una variante de `Badge` pareció tocar 2 sitios
+  y eran **11**: los otros nueve calculan la variante desde un mapa, y un grep con forma de JSX no
+  los ve. El typecheck los dio todos.
+- **Los guardias que te frenan suelen tener razón.** Tres de la 172 rechazaron que el `repartoId`
+  cruzara la frontera, y el arreglo salió **mejor** que el original: viaja un booleano y el servidor
+  deriva el grupo, así que el cliente ya no puede nombrar un reparto ajeno.
+- **Cuando una guardia congela lo contrario de lo que vas a hacer, se REEXPRESA, no se relaja.**
+  Cinco guardias afirmaban que nada podía deshacer un reparto; anular no es editar ni borrar, y eso
+  hay que escribirlo en cada una.
+- **No mutes trabajo sin commitear.** `git checkout` revierte tu arreglo, no la mutación. Pasó una
+  vez y el arnés de mutaciones ahora **aborta si `git diff` no ve el cambio**.
+- **Un PR mergeado deja huérfano lo que empujes después.** Pasó **dos veces**: commit en una rama con
+  PR cerrado, fuera de `dev` y sin ninguna señal. Los dos rescatados por cherry-pick. **Comprobar el
+  estado del PR antes de empujar.**
+- **Medir antes de arreglar volvió a cambiar el resultado**: la 70 es preventiva (0 tarifas
+  inactivas) y **filtrar `status` convertiría un cobro equivocado en un cobro CERO**, porque cada
+  tienda tiene una sola tarifa.
+
+### 🧪 Estado de la base LOCAL (nada de esto toca producción)
+
+Contraseñas QA —incluida la del **maestro**, que tiene su propio seed— alineadas con el `.env`. Dos
+cierres aprobados del 13/08 (pendientes ₡3.400 y ₡1.700, luego repartidos y anulados), un reparto de
+₡4.000 anulado entero y otro de ₡1.400. El **maestro no entra por UI**: su OTP lo dispara un
+RiskEngine por score y el código se guarda **hasheado**, así que `mi-wallet`, `recepcion-satelite`,
+`configuracion/*` y `novedades` quedaron **sin medir** en la auditoría de tema.
+
+---
+
+## 🏁 2026-08-13 (tarde) — release #359 y la 205 vista en pantalla
 
 ### 🚦 Lo único que espera decisión humana: **[PR #359](https://github.com/nuformecuador-lgtm/ordenex/pull/359) → `prod`**
 
@@ -142,6 +234,73 @@ según **[D4]** — sin columna nueva ni fila multiplicada.
 línea de 0. El panel **filtra sus filas vacías** antes de enviar (**[Q2]**): el borde de la 212
 rechaza todo monto no positivo. Y esta ficha **no** retira la forma escalar ni `metodo_pago` —
 eso es la **214** (**[Q3]**).
+
+---
+
+## 🟡 2026-08-13 — feature **215** (antes 213): el reintento se cuenta en el CIERRE, en PR #363
+
+El contador de reintentos deja de derivarse de las **transiciones** del historial y pasa a
+derivarse del **cierre aprobado**: 1 por cada cierre aprobado distinto en el que la orden tuvo un
+resultado de gestión vigente `rechazada`/`devuelta`/`reprogramada`, y sólo si esa gestión viene de
+una **visita real**. Sin migración: se deriva de `gestion_orden` con los índices que ya existen, así
+que `R7` de la 160 se conserva y `db/` queda intacto. 35 requisitos, 35 con dueño; `./init.sh`
+completo **verde** (1086 archivos / 13.693 tests). PR **#363** contra `dev`, reviewer en curso.
+
+**Nació de una pregunta, no de un plan:** «¿el cron que hace el cierre automático no suma un
+reintento, o el cierre manual al aprobar?». La respuesta medida era **no**, y la lista blanca de la
+160 nunca se había planteado el caso.
+
+### Lo que hay que saber antes de tocar esto
+
+1. **NO cierra el agujero que la originó, y está declarado en la página 1 de su
+   `requirements.md`.** El corte automático no aporta resultados nuevos —mueve órdenes a
+   `sin_gestionar`, que no tienen `resultado`— y el humano decidió dejar `sin_gestionar` fuera. El
+   caso «sale, se corta, vuelve a bodega y sale otra vez con el mismo contador» sigue vivo. Ficha
+   **216**.
+2. **`R12` figuraba cubierto y no lo estaba.** Al pasar a contar por *resultado*, el criterio nuevo
+   reabrió en silencio el doble conteo que `R2` de la 160 evitaba: la gestión sintética de la
+   reprogramación de la **tienda** entraba al siguiente cierre del mensajero y sumaba +1. El test
+   que figuraba como su dueño medía el **mapa de transiciones**, no el predicado. Lección: un
+   requisito «cubierto» por un test que mide otra capa no está cubierto.
+3. **El discriminador de «visita real» no necesitó esquema nuevo:** cada gestión produce, en su
+   misma transacción, una fila de `orden_historial_estado` con `origen_tipo` (`gestion` /
+   `escalado_devuelta_sla` / `reprogramacion_tienda`).
+4. **Supuesto operativo ACEPTADO (Q5):** el conteo ocurre al **aprobar**. Si un cierre nunca llega a
+   `aprobado`, la orden se queda en 0 y el cron la libera en bucle sin escalar jamás. Agravante
+   medido: `ESTADOS_RESOLUBLES = ["solicitado"]`, así que un `vencido` **no es aprobable directo**.
+   Tres mitigaciones escritas y **no elegidas** en `design.md §7bis`.
+5. **`primer_intento_ok` cambia de definición sin re-backfill (Q10).** El corte **no es una fecha de
+   la serie sino el instante del despliegue**, y se sostiene sobre `analytics_daily.updated_at`
+   porque el job recalcula días pasados: cualquier regla por `fecha` sería falsa a los pocos días.
+   El aviso **no llega a la pantalla** → ficha **219**.
+6. **Un rojo que no se arregló relajando la aserción.** El de `analytics-daily-job` se cerró dándole
+   a la devolución previa su cierre **aprobado** en la semilla; las dos cifras que prueban que el
+   KPI distingue un reintento de un primer intento siguen intactas. Y se demostró que ese test
+   **corre con datos** (canario + `describe.skip`), porque en este repo varios de integración pasan
+   en falso con la tabla vacía.
+
+**Pendiente y NO ejecutable por el agente:** `R19` (la consulta de medición de `design.md §7.6`
+contra la base real: cuántas órdenes en vuelo cambian de lado del umbral) y el `EXPLAIN` con volumen
+real —el que se corrió fue contra 78 órdenes locales—. Tras el despliegue, anotar su instante real
+(T24, documental).
+
+**Renumerada 213 → 215** al traer `dev`, que había renumerado la familia de pago múltiple a
+212/213/214 y cuya 213 llegó **mergeada**. Se aplicó el criterio de siempre: conserva el id quien ya
+está en `dev`.
+
+---
+
+## 🟢 2026-08-13 — PR **#364**: el mensajero sale de analítica + `/novedades` usa la card compartida
+
+Tres commits sin ficha ni spec (el de analítica salió de una decisión directa del humano). El
+mensajero deja de ver el ítem del sidebar **y** de pasar el gate de la ruta —`ROLES_ACCESO_ANALITICA`
+pasa a **derivarse restando** de `ROLES_ANALITICA`, no a ser una lista propia—, conservando su
+alcance en el catálogo. `/novedades` deja de pintar su fila y usa la card del mensajero, con las
+acciones bajando por la prop `acciones`. `./init.sh` verde (1081 archivos / 13.618 tests).
+
+**Ojo al revisar:** los botones «Habilitar» y «Devolver» son **maqueta declarada** —sin transición
+detrás— y serían visibles en producción al mergear; y el tercer commit (de otra sesión) **revisa una
+decisión escrita** por el anterior: engorda `NovedadDTO` con los campos que el adaptador rellenaba.
 
 ---
 

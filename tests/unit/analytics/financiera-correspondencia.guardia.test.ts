@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { getMetrica, listarMetricas } from "@/lib/analytics/metrics";
@@ -116,7 +117,7 @@ export function cuerpoDeMetodo(fuente: string, metodo: string): string | null {
 }
 
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /** Las tablas del universo que el texto consulta de verdad (no las que menciona en prosa). */

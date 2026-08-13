@@ -45,6 +45,7 @@
 // patron del bloque final de `tests/unit/analytics/modulo-puro.guardia.test.ts`.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 // Import de VALOR, no de tipo: el censo de R3 necesita los nombres de rol EN
@@ -100,7 +101,7 @@ function relativa(archivo: string): string {
  * mano viven precisamente dentro de comillas.
  */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 interface ArchivoCensado {
