@@ -2532,7 +2532,7 @@
       "id": 212,
       "name": "pago multiple por entrega (modelo y calculo del recaudo)",
       "description": "Backend. Hoy el recaudo vive en gestion_orden como un par UNICO (monto_recibido, metodo_pago), asi que una entrega cobrada en efectivo + transferencia no se puede registrar sin mentir en los totales por metodo del cierre. Crea la tabla hija gestion_orden_pago (gestion_id, metodo, monto) con @@unique([gestion_id, metodo]) [D2], migracion con backfill de una fila por cada gestion existente con monto_recibido, y adapta el borde de escritura (zod, action, service, repositorio) y el CALCULO (computeTotales + los tipos y select que lo alimentan). Conserva monto_recibido como TOTAL snapshot (money-critical, patron 39/56) con la invariante SUM(pagos.monto) = monto_recibido validada en el BORDE con zod y SIN CHECK en la base (patron 36/F1.4-b). Conserva el enum nativo MetodoPagoValue: NO se convierte en tabla-catalogo. metodo_pago singular queda deprecado; su retiro se decide en el PR.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "backend",
