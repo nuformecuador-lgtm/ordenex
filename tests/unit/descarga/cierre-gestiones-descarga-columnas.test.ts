@@ -6,7 +6,9 @@ import {
   COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
   COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
   COLUMNAS_DESCARGA_GESTIONES_INCIDENTES,
+  filaDescargaGestionEntregada,
 } from "@/app/(app)/cierres-admin/_components/cierre-gestiones-descarga-columnas";
+import type { CierreDetalleGestion } from "@/lib/interfaces/services/ICierreDiaService";
 
 // ORDEN y CENSO de las columnas de los cinco archivos descargables del DETALLE DE UN CIERRE
 // que ve el ADMIN (`DetalleSecciones`, feature 170 T E.5 / R5). Continúa la 189, que fijó las
@@ -206,5 +208,125 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Tiene evidencia",
       "Indemnización",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 213 [D4] — el DESGLOSE del recaudo en la celda escalar «Método»
+// ---------------------------------------------------------------------------
+//
+// Los cinco casos de arriba (censo y ORDEN) NO se tocan: son los que hacen cumplir R26 —el
+// desglose va en la celda que ya existía, sin columna nueva— y siguen verdes tal cual. Este
+// bloque amplía la PROYECCIÓN de la sección entregadas del archivo del ADMIN, que es OTRA
+// declaración que la del mensajero aunque el DTO sea el mismo: aquí la columna vecina se
+// llama «Recibido» y hay siete columnas más de dinero que allí no existen.
+
+/**
+ * Gestión `entregada` mínima. `ingresoOrdenex: null` a propósito: las columnas de ingreso
+ * de Ordenex no intervienen en la celda «Método» y así el fixture no finge un snapshot.
+ */
+function gestionEntregada(
+  pagos: CierreDetalleGestion["pagos"],
+  metodoPago: CierreDetalleGestion["metodoPago"] = null,
+): CierreDetalleGestion {
+  return {
+    gestionId: "g-1",
+    ordenId: "o-1",
+    numGuia: 1234,
+    numRemision: "REM-1234",
+    destinatario: "Ana Rojas",
+    direccion: "100 m sur",
+    zonaNombre: "GAM",
+    provinciaNombre: "San José",
+    cantonNombre: "Central",
+    distritoNombre: "Carmen",
+    producto: "Caja",
+    tiendaNombre: "Tienda Uno",
+    resultado: "entregada",
+    montoRecibido: "8000.00",
+    metodoPago,
+    pagos,
+    motivo: null,
+    fechaReprogramacion: null,
+    evidenciaUrl: null,
+    pagoMensajero: "1500.00",
+    ingresoBodegaRechazo: null,
+    tarifaFaltante: false,
+    esRechazoSla: false,
+    causaIncidente: null,
+    indemnizacion: null,
+    ingresoOrdenex: null,
+  };
+}
+
+describe("celda «Método» de la sección ENTREGADAS del detalle de un cierre (admin)", () => {
+  it("una gestión con pago MIXTO produce UNA sola fila, no un array (R27)", () => {
+    const fila = filaDescargaGestionEntregada(
+      gestionEntregada([
+        { metodo: "efectivo", monto: "5000.00" },
+        { metodo: "transferencia", monto: "3000.00" },
+      ]),
+    );
+
+    // Aquí multiplicar la fila sería peor que en el archivo del mensajero: se duplicarían
+    // «Flete + IVA», «Comisión + IVA» y «Total Ordenex», y el archivo dejaría de sumar.
+    expect(Array.isArray(fila)).toBe(false);
+    expect(Object.keys(fila)).toEqual(
+      COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS.map((c) => c.clave),
+    );
+    expect(fila.recibido).toBe("8000.00");
+    expect(fila.pagoMensajero).toBe("1500.00");
+  });
+
+  it("dos líneas se concatenan en la celda `metodo` con un ÚNICO separador (R28)", () => {
+    const fila = filaDescargaGestionEntregada(
+      gestionEntregada([
+        { metodo: "efectivo", monto: "5000.00" },
+        { metodo: "transferencia", monto: "3000.00" },
+      ]),
+    );
+
+    expect(fila.metodo).toBe("Efectivo 5000.00 + Transferencia 3000.00");
+    expect(String(fila.metodo).split(" + ")).toHaveLength(2);
+  });
+
+  it("respeta el ORDEN del DTO aunque difiera del alfabético (R28)", () => {
+    const fila = filaDescargaGestionEntregada(
+      gestionEntregada([
+        { metodo: "SINPE", monto: "2000.00" },
+        { metodo: "efectivo", monto: "6000.00" },
+      ]),
+    );
+
+    expect(fila.metodo).toBe("SINPE 2000.00 + Efectivo 6000.00");
+  });
+
+  it("una sola línea da SOLO la etiqueta, exactamente igual que hoy (R29)", () => {
+    // El importe ya viaja en la columna contigua «Recibido» ([Q2]).
+    const fila = filaDescargaGestionEntregada(
+      gestionEntregada([{ metodo: "SINPE", monto: "8000.00" }]),
+    );
+
+    expect(fila.metodo).toBe("SINPE");
+  });
+
+  it("sin líneas de pago la celda `metodo` queda VACÍA: `null`, ni «—» ni «» (R30)", () => {
+    // Con `metodoPago` escalar puesto: la celda ya no lo lee, así que sigue vacía.
+    const fila = filaDescargaGestionEntregada(gestionEntregada([], "efectivo"));
+
+    expect(fila.metodo).toBeNull();
+  });
+
+  it("los montos son el STRING money-safe del snapshot TAL CUAL (R31)", () => {
+    const fila = filaDescargaGestionEntregada(
+      gestionEntregada([
+        { metodo: "efectivo", monto: "1234567.89" },
+        { metodo: "SINPE", monto: "0.10" },
+      ]),
+    );
+
+    expect(fila.metodo).toBe("Efectivo 1234567.89 + SINPE 0.10");
+    expect(fila.metodo).not.toMatch(/[₡$]/);
+    expect(fila.metodo).not.toMatch(/1[.,]234[.,]567/);
   });
 });

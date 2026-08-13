@@ -11,7 +11,20 @@
 
 ## 🏁 CIERRE DE JORNADA 2026-08-13 — **EMPIEZA A LEER POR AQUÍ**
 
-### 🔴 LO PRIMERO, Y ES DECISIÓN HUMANA: **`dev` está ROJO**
+### ✅ RESUELTO — este aviso caducó el 2026-08-13 (se conserva por lo que enseña)
+
+> **Ya no hace falta decidir nada: el rojo cayó en el PR #367** (`7205b2a1`, «cae el último rojo y
+> queda declarada la deriva del KPI, R24/R35»). Comprobado desde la rama de la 213 al remergear
+> `dev` para el PR #368: `analytics-daily-job.test.ts` pasa **29/29**.
+>
+> **Y se arregló por el lado correcto**, que era la mitad de la pregunta: el assert **sigue
+> esperando `[1, 0]`**. No se tapó cambiando la expectativa al criterio nuevo, se implementó el R24
+> que estaba bloqueado. Que el aviso de la deriva no llegue a la pantalla es la ficha **219**.
+>
+> Lo que sí sigue en pie es el párrafo del peaje: el rojo vivió **seis merges** sin que nadie lo
+> parara, y eso no lo arregla ningún PR.
+
+### 🔴 EL AVISO ORIGINAL, YA RESUELTO: **`dev` estaba ROJO**
 
 `tests/integration/db/analytics-daily-job.test.ts > primer intento vs entrega tras una devolucion
 previa (R17)` falla **en `dev` limpio** — verificado sin ningún cambio local encima. Entró con el
@@ -165,6 +178,62 @@ Ahora coinciden con lo que el `.env` ya decía. Idempotente, no toca ids ni rela
 3. **Ficha 210** (contraste de `warning`/`destructive`) · **206** (anular un reparto entero) ·
    **209 tanda B** (50 sitios, sin riesgo).
 4. El **aviso de excluidos** de la 205, cuando exista un cierre no imputable.
+
+## 🟡 EN CURSO 2026-08-13 — feature **213** (antes 209): captura y presentación del pago múltiple, fase 2 (implementación)
+
+**PUERTA F1.4 SUPERADA el 2026-08-13.** Spec aprobado: 35 requisitos EARS, 18 tasks en 6 tandas,
+trazabilidad `R → test` 35/35. Las seis preguntas del spec se cerraron con la propuesta que traían
+—monto crudo en el CSV, etiqueta sola en la fila de un método, guardia `columnas-sensibles`
+ampliable midiendo totales, monto pre-cargado, e2e roto como deuda aparte, fila a medias = error
+visible— y viven completas en `specs/213-pago-multiple-captura/requirements.md`.
+
+**[Q7], la que abrió el humano en la puerta y conviene no re-descubrir: el total cuadra EXACTO, no
+«igual o superior».** La pregunta era si el desglose podía sumar *más* que el valor a cobrar. La
+respuesta la da el código, en tres capas: `MisAsignacionesService.ts:349-363` (R22-h) exige
+`montoRecibido == montoCobrar` en `Prisma.Decimal`; la 212 exige `SUM(pagos) = montoRecibido`; y el
+panel **ni siquiera tiene input de monto recibido** —lo fija a `orden.montoCobrar` (`:341`, `:395`)—.
+El mensajero elige **cómo** le pagaron, nunca **cuánto**. Por eso «cuadrar con el monto recibido» y
+«cuadrar con el valor a cobrar» son hoy la misma frase, y el spec no necesitaba cambiar. Admitir
+sobrepago no es aflojar un `if`: mueve `cierre_dia.total_efectivo`, que es la **E** del `min(P, E)`
+del pago al mensajero (44) —**cambiaría lo que cobra una persona**— y obliga a decidir qué es el
+excedente (vuelto, propina, abono). Ficha backend aparte el día que se quiera.
+
+**Tres correcciones del spec a la ficha, ya verificadas contra el código:** el util puro reusable es
+`lib/utils/pagos-recaudo.ts`, no `lineas-pago.ts` (importa `@prisma/client`); el borde de la 212 ya
+acepta desglose puro y cero líneas, así que el panel puede dejar de mandar la forma escalar **sin
+tocar backend** —lo que desactiva la trampa de «sin cobro» de `:331`—; y los números de línea de la
+presentación habían corrido (`CierreDiaModule:886`, `cierre-detalle-shared:898`,
+`cierre-factura:959`).
+
+### Contexto de la fase 1
+
+La mitad **frontend** de la partición. La 212 ya está en `dev` (PR #358, merge `bb4c3185`): el
+borde acepta el desglose y `computeTotales` reparte por método real. Pero el mensajero **sigue sin
+poder usarlo**: `GestionarOrdenPanel.tsx:717-733` pinta un `<Select>` único y manda un
+`metodoPago` escalar (`:342`, `:396`), que el borde normaliza a una sola línea. Esta ficha cierra
+esa ventana.
+
+Rama `feature/213-pago-multiple-captura`, nacida de `origin/dev` (`bb4c3185`), en el worktree
+`C:/w213b` — `C:/w213` estaba ocupado por `feature/213-reintento-en-cierre`, una rama de la
+numeración vieja: **comprobar `worktree list` antes de elegir ruta.** El checkout principal se dejó
+intacto porque tiene WIP de novedades sin commitear.
+
+**Bookkeeping que hubo que cerrar antes de arrancar:** la 212 seguía `in_progress` en
+`feature_list.json` con el código ya mergeado en `dev`. La 213 tiene `depends_on: 212` y la regla
+exige la dependencia en `done`, así que el leader la cerró aquí. El drift de sesiones paralelas de
+siempre.
+
+**Alcance, ya fijado por la ficha — no reabrir:** (a) el panel pasa a un editor de líneas
+`método+monto` que cuadra contra el monto recibido, con el error visible antes de enviar; (b)
+`CierreDiaModule.tsx`, `cierre-detalle-shared.tsx` y `cierre-factura.tsx` pintan el desglose en vez
+de `METODO_LABEL[g.metodoPago]`; (c) las dos descargas concatenan los métodos en la celda escalar
+según **[D4]** — sin columna nueva ni fila multiplicada.
+
+**Las tres trampas heredadas que el spec debe honrar:** `GestionarOrdenPanel.tsx:331` fuerza
+`"efectivo"` cuando la orden es **sin cobro**, y con desglose eso debe ser **cero líneas**, no una
+línea de 0. El panel **filtra sus filas vacías** antes de enviar (**[Q2]**): el borde de la 212
+rechaza todo monto no positivo. Y esta ficha **no** retira la forma escalar ni `metodo_pago` —
+eso es la **214** (**[Q3]**).
 
 ---
 

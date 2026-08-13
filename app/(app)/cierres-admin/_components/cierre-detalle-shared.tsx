@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { filasLocales } from "@/components/shared/descarga-resultado";
-import { money } from "@/lib/config/moneda";
+import { money, SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import { cn } from "@/lib/utils";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type {
@@ -28,7 +28,6 @@ import type { CierreEstado } from "@/lib/types/cierre";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import {
   RESULTADO_LABEL,
-  METODO_LABEL,
   ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -43,6 +42,8 @@ import {
   CAUSA_INCIDENTE_COL,
   INDEMNIZACION_COL,
 } from "./cierre-labels";
+// Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
+import { desglosePantalla } from "./desglose-pago";
 import {
   COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
   COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
@@ -69,9 +70,11 @@ import {
 // `cierre-labels.ts` (módulo PURO, sin React) y se RE-EXPORTAN desde aquí, sin cambiar ni un
 // texto: los consumidores que ya las importaban de este archivo siguen igual, y el módulo de
 // columnas de export puede leerlas sin arrastrar `Card`/`Badge`/`DataTable`.
+// Feature 213 (T7): la etiqueta de método YA NO se re-exporta desde aquí. Su único uso de
+// pantalla era componer la celda «Método», y eso lo hace ahora `desglose-pago.ts` a partir
+// del DESGLOSE (R23/R25): quien necesite la etiqueta la pide a ese módulo, no a este.
 export {
   RESULTADO_LABEL,
-  METODO_LABEL,
   ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -757,6 +760,23 @@ export function desgloseAriaLabel(g: CierreDetalleGestion): string {
   return `${DESGLOSE_TITULO} de la orden ${g.numRemision} · ${g.destinatario}`;
 }
 
+/**
+ * Feature 213 (T7/R21) — celda «Método» de las dos tablas del detalle (cierres de mensajero
+ * y de bodega comparten esta declaración). Deriva del DESGLOSE del DTO, nunca del campo
+ * escalar (R23), y sin líneas pinta el MISMO marcador de ausencia de siempre (R22).
+ *
+ * Es un componente y no un string suelto porque con 2+ métodos la celda es una lista corta:
+ * la columna es estrecha y `whitespace-pre-line` no es una opción sin meter el separador en
+ * el texto. El FORMATO —qué dice cada línea— vive en `desglose-pago.ts`, uno para los cinco
+ * consumidores; aquí solo se decide el envoltorio.
+ */
+function DesglosePagoCelda({
+  pagos,
+}: Readonly<{ pagos: CierreDetalleGestion["pagos"] }>) {
+  const texto = desglosePantalla(pagos);
+  return <span className="whitespace-normal">{texto ?? SIN_MONTO_RAYA}</span>;
+}
+
 // --- Columnas de dinero derivado por orden (solo el detalle admin las puebla) ---
 const COLUMNA_MONTO_COBRAR: Column<CierreDetalleGestion> = {
   id: "montoCobrar",
@@ -895,7 +915,7 @@ export function columnasPara(
       {
         id: "metodo",
         value: "Método",
-        render: (g) => (g.metodoPago ? METODO_LABEL[g.metodoPago] : "—"),
+        render: (g) => <DesglosePagoCelda pagos={g.pagos} />,
       },
       // Conceptos que aplican a una ENTREGA, cada uno CON su IVA (los de devolución no se
       // listan acá: serían una columna de "—" en todas las filas). El split flete/IVA vive

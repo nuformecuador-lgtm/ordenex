@@ -656,7 +656,10 @@ describe("RepartoModule", () => {
     await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Entregar" });
 
     // Monto viene prellenado con montoCobrar al elegir "Entregar".
-    await elegirEnSelect(user, "Método de pago", "Efectivo");
+    // Feature 213 (R1/R15): el método ya no se elige en un selector único sino en la LÍNEA 1 del
+    // desglose, y viaja como par `pagoMetodo`/`pagoMonto`. Lo que este caso vigila desde la 36
+    // —que el método SALE en el envío— se sigue vigilando, en la forma que ahora tiene.
+    await elegirEnSelect(user, "Método de pago línea 1", "Efectivo");
     await subirEvidencia(user, "Foto de evidencia de entrega");
 
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
@@ -666,11 +669,13 @@ describe("RepartoModule", () => {
     expect(fd.get("resultado")).toBe("entregada");
     expect(fd.get("ordenId")).toBe("g1");
     expect(fd.get("montoRecibido")).toBe("150");
-    expect(fd.get("metodoPago")).toBe("efectivo");
+    expect(fd.getAll("pagoMetodo")).toEqual(["efectivo"]);
+    expect(fd.getAll("pagoMonto")).toEqual(["150"]);
+    expect(fd.get("metodoPago")).toBeNull(); // R15: la forma escalar ya no sale del panel
     expect(fd.get("evidencia")).toBeInstanceOf(File);
   });
 
-  it("ENTREGAR sin cobro (montoCobrar 0): oculta el método y envía monto 0 + efectivo", async () => {
+  it("ENTREGAR sin cobro (montoCobrar 0): no monta el editor y envía monto 0 SIN líneas", async () => {
     const user = userEvent.setup();
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", montoCobrar: 0 })],
@@ -678,8 +683,9 @@ describe("RepartoModule", () => {
 
     await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Entregar" });
 
-    // Sin cobro: no se pide método de pago.
+    // Sin cobro: no se pide método de pago (feature 213/R16: tampoco se monta el editor).
     expect(screen.queryByRole("combobox", { name: "Método de pago" })).toBeNull();
+    expect(screen.queryAllByRole("group", { name: /^Línea de pago/ })).toHaveLength(0);
 
     await subirEvidencia(user, "Foto de evidencia de entrega");
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
@@ -688,7 +694,10 @@ describe("RepartoModule", () => {
     const fd = gestionarMock.mock.calls[0][0] as FormData;
     expect(fd.get("resultado")).toBe("entregada");
     expect(fd.get("montoRecibido")).toBe("0");
-    expect(fd.get("metodoPago")).toBe("efectivo");
+    // Feature 213 (R16): el `"efectivo"` que este panel FORZABA aquí se borró. Una entrega sin
+    // cobro son CERO líneas y ningún escalar; el borde ya acepta esa forma (reglas 3 y 4).
+    expect(fd.getAll("pagoMetodo")).toHaveLength(0);
+    expect(fd.get("metodoPago")).toBeNull();
     expect(fd.get("evidencia")).toBeInstanceOf(File);
   });
 
@@ -910,7 +919,7 @@ describe("RepartoModule", () => {
     });
 
     await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Entregar" });
-    await elegirEnSelect(user, "Método de pago", "Efectivo");
+    await elegirEnSelect(user, "Método de pago línea 1", "Efectivo");
     await subirEvidencia(user, "Foto de evidencia de entrega");
 
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
@@ -1006,7 +1015,7 @@ describe("RepartoModule", () => {
     await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Entregar" });
 
     // Entrega válida: método + evidencia + monto prellenado.
-    await elegirEnSelect(user, "Método de pago", "Efectivo");
+    await elegirEnSelect(user, "Método de pago línea 1", "Efectivo");
     await subirEvidencia(user, "Foto de evidencia de entrega");
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
 

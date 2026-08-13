@@ -328,6 +328,8 @@ function gruposConEvidencia(): CierreGrupos {
         resultado: "entregada",
         montoRecibido: "1000.10",
         metodoPago: "SINPE",
+        // Feature 213 (T8): desglose COHERENTE con el escalar ya declarado (R23).
+        pagos: [{ metodo: "SINPE", monto: "1000.10" }],
         ingresoOrdenex: ingreso(),
       }),
     ],

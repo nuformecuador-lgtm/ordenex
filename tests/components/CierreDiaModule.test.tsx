@@ -12,6 +12,9 @@ import {
   verCierrePasado,
 } from "@/lib/actions/cierre-dia";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
+// Feature 213 (T9/R25): las etiquetas de método se MUTAN en un caso para probar que la celda
+// las lee de aquí y no de una cadena escrita a mano en la pantalla.
+import { METODO_LABEL } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -239,6 +242,9 @@ describe("CierreDiaModule", () => {
         numRemision: "REM-ENT",
         montoRecibido: "1250.50",
         metodoPago: "SINPE",
+        // Feature 213 (T8): el fixture declara el desglose COHERENTE con su escalar. La
+        // presentación deriva del desglose (R23) y la aserción de abajo no se relaja.
+        pagos: [{ metodo: "SINPE", monto: "1250.50" }],
       }),
     ];
     renderModule({ grupos });
@@ -302,6 +308,7 @@ describe("CierreDiaModule", () => {
         numRemision: "REM-ENT",
         montoRecibido: "1250.50",
         metodoPago: "efectivo",
+        pagos: [{ metodo: "efectivo", monto: "1250.50" }], // feature 213 (T8)
         pagoMensajero: "1500.00",
       }),
     ];
@@ -448,6 +455,7 @@ describe("CierreDiaModule", () => {
             destinatario: "Ana Pérez",
             montoRecibido: "300.00",
             metodoPago: "efectivo",
+            pagos: [{ metodo: "efectivo", monto: "300.00" }], // feature 213 (T8)
             pagoMensajero: "45.00",
           }),
         ],
@@ -938,5 +946,94 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
         }),
       ).toBeEnabled(),
     );
+  });
+});
+
+/**
+ * Feature 213 (T9) — el TERCER sitio de presentación del desglose: la celda «Método» de la
+ * tabla del cierre del día. Los otros dos (la tabla del detalle compartido y el comprobante
+ * tipo factura) tienen sus casos gemelos en `CierreDetallePagos.test.tsx`; los tres afirman
+ * lo mismo, porque los tres leen del MISMO formateador.
+ */
+describe("Feature 213 — desglose de pago en la tabla del cierre del día", () => {
+  /**
+   * Texto de la celda «Método» de la primera fila, localizada por el ÍNDICE de su cabecera:
+   * así el caso no depende de la posición de la columna y el "—" no se confunde con el de
+   * otra celda de la misma fila.
+   */
+  function celdaMetodo(): string {
+    const region = screen.getByRole("region", { name: "Entregadas" });
+    const tabla = within(region).getByRole("table");
+    const encabezados = within(tabla)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent?.trim() ?? "");
+    const indice = encabezados.indexOf("Método");
+    expect(indice).toBeGreaterThanOrEqual(0);
+    const celdas = within(within(tabla).getAllByRole("row")[1]).getAllByRole("cell");
+    return celdas[indice].textContent?.trim() ?? "";
+  }
+
+  function renderEntrega(over: Partial<CierreDetalleGestion>) {
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({
+        gestionId: "g1",
+        resultado: "entregada",
+        numRemision: "REM-ENT",
+        montoRecibido: "8000.00",
+        ...over,
+      }),
+    ];
+    renderModule({ grupos });
+  }
+
+  it("R20: una sola línea se ve EXACTAMENTE igual que antes: la etiqueta a secas, sin monto", () => {
+    renderEntrega({ pagos: [{ metodo: "SINPE", monto: "8000.00" }] });
+
+    expect(celdaMetodo()).toBe("SINPE");
+  });
+
+  it("R21: dos líneas se ven las DOS, cada una con su monto en la moneda de configuración", () => {
+    renderEntrega({
+      pagos: [
+        { metodo: "efectivo", monto: "5000.00" },
+        { metodo: "transferencia", monto: "3000.00" },
+      ],
+    });
+
+    expect(celdaMetodo()).toBe("Efectivo ₡5.000,00 + Transferencia ₡3.000,00");
+  });
+
+  it("R22/R23: sin líneas la celda sigue siendo «—», aunque la gestión traiga el escalar", () => {
+    // El escalar sigue vivo en el DTO (R32): si la celda lo leyera, aquí diría «SINPE».
+    renderEntrega({ metodoPago: "SINPE", pagos: [] });
+
+    expect(celdaMetodo()).toBe("—");
+  });
+
+  it("R24: se pinta el ORDEN del DTO, no el alfabético", () => {
+    // Alfabéticamente sería Efectivo, SINPE, Transferencia; el DTO las manda al revés.
+    renderEntrega({
+      pagos: [
+        { metodo: "transferencia", monto: "3000.00" },
+        { metodo: "SINPE", monto: "2000.00" },
+        { metodo: "efectivo", monto: "3000.00" },
+      ],
+    });
+
+    expect(celdaMetodo()).toBe(
+      "Transferencia ₡3.000,00 + SINPE ₡2.000,00 + Efectivo ₡3.000,00",
+    );
+  });
+
+  it("R25: la etiqueta sale de METODO_LABEL (mutarla cambia lo pintado)", () => {
+    const original = METODO_LABEL.SINPE;
+    try {
+      METODO_LABEL.SINPE = "SINPE-MUTADO";
+      renderEntrega({ pagos: [{ metodo: "SINPE", monto: "8000.00" }] });
+      expect(celdaMetodo()).toBe("SINPE-MUTADO");
+    } finally {
+      METODO_LABEL.SINPE = original;
+    }
   });
 });
