@@ -222,13 +222,13 @@ export type GestionarInput = {
       resultado: "entregada";
       montoRecibido: number;
       /**
-       * Feature 208 (R12/R19): metodo ESCALAR de compatibilidad. `null` cuando el cliente ya
+       * Feature 212 (R12/R19): metodo ESCALAR de compatibilidad. `null` cuando el cliente ya
        * manda desglose. NO es la fuente del reparto por metodo —eso es `pagos`—: sobrevive solo
        * para la columna DEPRECADA `gestion_orden.metodo_pago`, que se retira en su propia ficha.
        */
       metodoPago: MetodoPago | null;
       /**
-       * Feature 208 (R11/R12/R14): desglose YA NORMALIZADO por el borde (`normalizarPagos`).
+       * Feature 212 (R11/R12/R14): desglose YA NORMALIZADO por el borde (`normalizarPagos`).
        * OBLIGATORIO y sin fallback al escalar: una entrega sin cobro llega como `[]`, y una
        * cobrada con un solo metodo como UNA linea. El service revalida en `Prisma.Decimal` que
        * la suma iguale `montoRecibido` (R18) antes de persistir.

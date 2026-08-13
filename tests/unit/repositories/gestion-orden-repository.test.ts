@@ -383,7 +383,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     const ordenUpdate = vi.fn(async () => ({}));
     const ordenFindFirst = vi.fn(async () => ({ estatusId: origenEstatusId }));
     const usuarioUpdate = vi.fn(async () => ({}));
-    // Feature 208 (R17): las lineas del desglose del recaudo se insertan por el cliente
+    // Feature 212 (R17): las lineas del desglose del recaudo se insertan por el cliente
     // TRANSACCIONAL. `dentroDeTx` registra si la llamada ocurrio mientras la tx estaba abierta:
     // un `createMany` fuera de ella dejaria lineas huerfanas si la transicion falla despues.
     let txAbierta = false;
@@ -720,13 +720,13 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(gArg.data.causaDevolucion).toBeNull();
   });
 
-  // --- Feature 208 (R17/R20): el DESGLOSE del recaudo, en la MISMA transaccion --------------
+  // --- Feature 212 (R17/R20): el DESGLOSE del recaudo, en la MISMA transaccion --------------
   // `monto_recibido` sobrevive como TOTAL snapshot; las lineas `(metodo, monto)` son la fuente
   // del reparto por metodo del cierre —y por tanto de la `E` del `min(P, E)` con el que se le
   // paga al mensajero (feature 44)—. Una linea escrita fuera de la tx, o un monto convertido a
   // float, no da un numero feo en pantalla: le paga de menos o de mas a una persona.
 
-  it("208/R17: las lineas se insertan con el cliente de la MISMA tx, tras crear la gestion", async () => {
+  it("212/R17: las lineas se insertan con el cliente de la MISMA tx, tras crear la gestion", async () => {
     const { repo, pagoCreateMany, dentroDeTx } = buildTxRepo();
 
     await repo.crearGestionYTransicionar({
@@ -754,7 +754,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(arg.data[1].metodo).toBe("transferencia");
   });
 
-  it("208/R20: el monto de cada linea entra como Prisma.Decimal, nunca como float", async () => {
+  it("212/R20: el monto de cada linea entra como Prisma.Decimal, nunca como float", async () => {
     const { repo, pagoCreateMany } = buildTxRepo();
 
     await repo.crearGestionYTransicionar({
@@ -783,7 +783,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(suma.toString()).toBe("99.99");
   });
 
-  it("208/R17: si el append de la transicion falla, la tx se revierte con las lineas dentro", async () => {
+  it("212/R17: si el append de la transicion falla, la tx se revierte con las lineas dentro", async () => {
     const historialCreateMany = vi.fn(async () => {
       throw new Error("append falla");
     });
@@ -809,7 +809,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(pagoCreateMany).toHaveBeenCalledTimes(1);
   });
 
-  it("208/R14: lista de pagos VACIA -> no se inserta ninguna linea", async () => {
+  it("212/R14: lista de pagos VACIA -> no se inserta ninguna linea", async () => {
     const { repo, pagoCreateMany, gestionCreate } = buildTxRepo();
 
     await repo.crearGestionYTransicionar({
@@ -826,7 +826,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(gArg.data.metodoPago).toBeNull();
   });
 
-  it("208/R5: una gestion sin `pagos` (rama sin recaudo) no toca la tabla del desglose", async () => {
+  it("212/R5: una gestion sin `pagos` (rama sin recaudo) no toca la tabla del desglose", async () => {
     const { repo, pagoCreateMany } = buildTxRepo();
 
     await repo.crearGestionYTransicionar({

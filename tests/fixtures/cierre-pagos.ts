@@ -2,7 +2,7 @@ import type { MetodoPagoValue } from "@prisma/client";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 
 /**
- * Feature 208 (T9) — constructor de fixtures para el DESGLOSE del recaudo.
+ * Feature 212 (T9) — constructor de fixtures para el DESGLOSE del recaudo.
  *
  * `CierreGestionPendienteRow.pagos` es OBLIGATORIO y sin fallback (design §3.1): el precio de
  * esa decisión son ≈15 archivos de test que construyen la fila. Este helper lo paga UNA vez.

@@ -102,7 +102,7 @@ function porSolicitadoDesc(a: FilaConDueno, b: FilaConDueno): number {
  * un adorno (la anti-vacuidad del caso R9).
  */
 function gestion(n: number): CierreGestionPendienteRow {
-  // Feature 208/T9: `pagos` es obligatorio; `conPagos` lo deriva del par escalar (UNA linea).
+  // Feature 212/T9: `pagos` es obligatorio; `conPagos` lo deriva del par escalar (UNA linea).
   return conPagos({
     gestionId: `g-${n}`,
     ordenId: `o-${n}`,

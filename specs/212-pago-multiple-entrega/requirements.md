@@ -1,7 +1,7 @@
-# 208 — Pago múltiple por entrega (modelo y cálculo del recaudo) — Requisitos
+# 212 — Pago múltiple por entrega (modelo y cálculo del recaudo) — Requisitos
 
-> Zona `backend` · complexity `high` · rama `feature/208-pago-multiple-entrega` (de `origin/dev`, `c23c118a`).
-> Mitad BACKEND de la partición 208/209. La mitad FRONTEND (captura y presentación) es la **209**.
+> Zona `backend` · complexity `high` · rama `feature/212-pago-multiple-entrega` (de `origin/dev`, `c23c118a`).
+> Mitad BACKEND de la partición 212/213. La mitad FRONTEND (captura y presentación) es la **213**.
 
 ## Contexto mínimo (no re-descubrir)
 
@@ -17,7 +17,7 @@ solo balde.
 - **[D2]** `@@unique([gestion_id, metodo])`: cada método aparece como mucho una vez, con su monto
   ya sumado. Dos transferencias distintas se registran como UNA línea.
 - **[D3]** Sin referencia: la línea lleva método y monto, nada más.
-- **[D4]** Descargas: los métodos se concatenan en la celda escalar (es de la 209, pero condiciona
+- **[D4]** Descargas: los métodos se concatenan en la celda escalar (es de la 213, pero condiciona
   el DTO que esta ficha sirve).
 - El enum nativo `MetodoPagoValue` se **conserva**; NO se convierte en tabla-catálogo.
 - `monto_recibido` sobrevive como **TOTAL snapshot** (money-critical, patrón 39/56). La invariante
@@ -76,7 +76,7 @@ persistir nada.
 
 **R12.** CUANDO llega una gestión con `resultado = entregada` en la forma ESCALAR histórica (un
 único `metodoPago`, sin desglose) y `montoRecibido > 0`, el sistema DEBE aceptarla y normalizarla a
-UNA línea `(metodoPago, montoRecibido)`. *(Sin esto, entre el merge de la 208 y el de la 209 el
+UNA línea `(metodoPago, montoRecibido)`. *(Sin esto, entre el merge de la 212 y el de la 213 el
 panel viejo —que sigue mandando un método escalar y valida en cliente con el MISMO schema— deja la
 app rota en producción.)*
 
@@ -159,14 +159,14 @@ revalidación del servicio).
 ## D. DTO de servicio y fronteras que NO se mueven
 
 **R31.** El DTO de gestión que el servicio de cierre expone a la UI DEBE incluir el desglose
-(lista `metodo`+`monto`) CONSERVANDO el campo escalar `metodoPago` mientras la 209 no lo retire, de
+(lista `metodo`+`monto`) CONSERVANDO el campo escalar `metodoPago` mientras la 213 no lo retire, de
 modo que la presentación actual siga funcionando sin cambios entre los dos merges.
 
 **R32.** El sistema NO DEBE alterar la forma de los totales `total_efectivo` / `total_simpe` /
 `total_transferencia` de `cierre_dia` ni de `cierre_bodega`: siguen siendo tres columnas; solo
 cambia CÓMO se llenan.
 
-> *Corrección del 2026-08-12 (revisión de la 208).* La redacción original decía `cierre_maestro`,
+> *Corrección del 2026-08-12 (revisión de la 212).* La redacción original decía `cierre_maestro`,
 > tabla que NO existe en `db/schema.prisma`: el segundo modelo con los tres `total_*` es
 > `CierreBodega` (feature 40). Solo cambia el nombre; el requisito es el mismo, y la guardia
 > `pagos-frontera.guardia.test.ts` lo cubre recorriendo TODOS los `model` del schema en vez de
@@ -207,10 +207,10 @@ cambia CÓMO se llenan.
    con `monto_recibido > 0`, ganaría una línea que el cálculo ignora igualmente (R25), así que los
    totales no cambian; pero el dato quedaría registrado. ¿Se prefiere fidelidad al dato (lo
    propuesto) o restringir el backfill a `resultado = 'entregada'`?
-2. **Línea de monto cero desde la 209.** R11 rechaza montos no positivos, de modo que una fila vacía
-   del futuro editor de desglose es un error de validación y no una línea de 0. ¿Confirma la 209 que
+2. **Línea de monto cero desde la 213.** R11 rechaza montos no positivos, de modo que una fila vacía
+   del futuro editor de desglose es un error de validación y no una línea de 0. ¿Confirma la 213 que
    el panel filtrará sus filas vacías antes de enviar, en vez de esperar que el borde las tolere?
 3. **Cierre de la puerta de compatibilidad.** R12 deja el borde aceptando la forma escalar a
-   propósito. La nota de la 209 dice que esa ficha «puede» retirarla. ¿El retiro de la forma escalar
-   —y el de la columna `metodo_pago`— se decide en el PR de la 209, o queda como ficha aparte? Este
+   propósito. La nota de la 213 dice que esa ficha «puede» retirarla. ¿El retiro de la forma escalar
+   —y el de la columna `metodo_pago`— se decide en el PR de la 213, o queda como ficha aparte? Este
    spec asume que NINGUNO de los dos ocurre aquí.

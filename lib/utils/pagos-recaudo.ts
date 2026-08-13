@@ -1,6 +1,6 @@
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 
-// Feature 208 (R11/R12/R14/R30) — util PURO del desglose del recaudo al cliente.
+// Feature 212 (R11/R12/R14/R30) — util PURO del desglose del recaudo al cliente.
 //
 // ⛔ Este archivo NO importa `@prisma/client` NI nada que arrastre runtime de servidor: lo usa
 // `lib/types/gestion-orden.ts`, que VIAJA AL BUNDLE DEL NAVEGADOR (`GestionarOrdenPanel.tsx`
@@ -45,7 +45,7 @@ export function sumaCuadra(pagos: readonly { monto: number }[], total: number): 
  * - solo `metodoPago` (forma ESCALAR historica) -> UNA linea `(metodoPago, montoRecibido)` (R12).
  *
  * Helper PURO y testeable a proposito, NO una rama escondida dentro de la Server Action: es
- * exactamente el punto que la 209 borrara cuando cierre la puerta de compatibilidad.
+ * exactamente el punto que la 213 borrara cuando cierre la puerta de compatibilidad.
  */
 export function normalizarPagos(input: {
   montoRecibido: number;

@@ -5,7 +5,7 @@ import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/IC
 import { conPagos, pagosDesdeEscalar } from "@/tests/fixtures/cierre-pagos";
 
 /**
- * Feature 208 (T11) — el reparto del recaudo por método, probado con MUTACIONES.
+ * Feature 212 (T11) — el reparto del recaudo por método, probado con MUTACIONES.
  *
  * `computeTotales` produce los cuatro totales que se congelan en `cierre_dia`, y uno de ellos,
  * `total_efectivo`, es la `E` del `min(P, E)` con el que se le paga al mensajero (feature 44,
@@ -288,7 +288,7 @@ describe("computeTotales — caso 6 (R28): la invariante de suma", () => {
 
 describe("computeTotales — caso 7 (R27): paridad al céntimo con el modelo escalar", () => {
   /**
-   * La implementación ESCALAR previa a la 208, copiada tal cual: un `switch` sobre
+   * La implementación ESCALAR previa a la 212, copiada tal cual: un `switch` sobre
    * `metodoPago` que mete `montoRecibido` entero en un solo balde. Es la referencia contra la
    * que se mide la paridad; si el cálculo nuevo se desviara un céntimo sobre datos
    * BACKFILLEADOS (una línea por gestión), este caso lo caza.

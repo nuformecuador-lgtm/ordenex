@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
 
-// Feature 208 — cobertura de la migracion `*_gestion_orden_pago`.
+// Feature 212 — cobertura de la migracion `*_gestion_orden_pago`.
 //
 // DOS BLOQUES, y la diferencia es la razon de ser del segundo (molde: la feature 205,
 // `liquidacion-reparto-migration.test.ts`):
@@ -377,7 +377,7 @@ interface Medicion {
   tablasTrasElDown: string[];
 }
 
-describeSiHayBase("208 / bloque B — la migracion HACE lo que dice (Postgres real)", () => {
+describeSiHayBase("212 / bloque B — la migracion HACE lo que dice (Postgres real)", () => {
   let prisma: PrismaClient;
   let medicion: Medicion;
 
@@ -396,7 +396,7 @@ describeSiHayBase("208 / bloque B — la migracion HACE lo que dice (Postgres re
    * clon, ni las filas sobreviven al test.
    */
   async function medir(tx: Tx): Promise<Medicion> {
-    const esquema = `t208_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const esquema = `t212_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     await tx.$executeRawUnsafe(`CREATE SCHEMA "${esquema}"`);
 
     // El CLON de `gestion_orden`. `INCLUDING ALL` trae columnas, tipos, defaults, CHECKs e

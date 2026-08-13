@@ -26,7 +26,7 @@ const ZONA_MENSAJERO = "z-cartago";
 const ZONA_CENTRAL = "z-central";
 
 function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
-  // Feature 208/T9: el desglose OBLIGATORIO se deriva del par escalar (una linea, como el
+  // Feature 212/T9: el desglose OBLIGATORIO se deriva del par escalar (una linea, como el
   // backfill) salvo que el caso pase el suyo — asi las aserciones previas no cambian.
   const { pagos, ...resto } = overrides;
   const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
@@ -1800,9 +1800,9 @@ describe("Feature 158 · listarCierreDia — la causa sí, el monto NO (R17, des
   });
 });
 
-// --- Feature 208 (T13, R31): el DTO lleva el desglose y CONSERVA el escalar ---------------
+// --- Feature 212 (T13, R31): el DTO lleva el desglose y CONSERVA el escalar ---------------
 
-describe("listarCierreDia — el DTO de gestion expone el desglose del recaudo (208/R31)", () => {
+describe("listarCierreDia — el DTO de gestion expone el desglose del recaudo (212/R31)", () => {
   const MIXTA = [
     { metodo: "efectivo" as const, monto: "5000.00" },
     { metodo: "transferencia" as const, monto: "3000.00" },
@@ -1822,8 +1822,8 @@ describe("listarCierreDia — el DTO de gestion expone el desglose del recaudo (
     expect(r.grupos.entregada[0].pagos).toEqual(MIXTA);
   });
 
-  it("R31: `metodoPago` NO desaparece — la 209 lo retira, no esta ficha", async () => {
-    // Entre el merge de la 208 y el de la 209 la pantalla sigue pintando el campo escalar.
+  it("R31: `metodoPago` NO desaparece — la 213 lo retira, no esta ficha", async () => {
+    // Entre el merge de la 212 y el de la 213 la pantalla sigue pintando el campo escalar.
     // Quitarlo aqui dejaria la app rota en esa ventana, y por eso este caso existe.
     const repo = fakeRepo({
       findGestionesPendientes: vi.fn(async () => [

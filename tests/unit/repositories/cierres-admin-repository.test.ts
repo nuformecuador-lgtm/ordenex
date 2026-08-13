@@ -157,7 +157,7 @@ function gestionRow(overrides: Record<string, unknown> = {}) {
     // `GESTION_ADMIN_SELECT`. `null` en un resultado que no sea `incidente`.
     causaIncidente: null,
     indemnizacion: null,
-    // Feature 208/R21: el desglose que lee GESTION_ADMIN_SELECT (Decimal, ya ordenado).
+    // Feature 212/R21: el desglose que lee GESTION_ADMIN_SELECT (Decimal, ya ordenado).
     pagos: [{ metodo: "efectivo", monto: new Prisma.Decimal("12.50") }],
     historialEstados: [], // feature 102: acotado al origen SLA (vacio = rechazo NO-SLA/otro resultado)
     ...overrides,

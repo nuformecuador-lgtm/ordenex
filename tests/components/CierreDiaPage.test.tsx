@@ -94,7 +94,7 @@ function gestionEntregada(): CierreDetalleGestion {
     resultado: "entregada",
     montoRecibido: "10.00",
     metodoPago: "efectivo",
-    // Feature 208/R31: el DTO gana el desglose y CONSERVA el escalar de arriba (aqui,
+    // Feature 212/R31: el DTO gana el desglose y CONSERVA el escalar de arriba (aqui,
     // un cobro de un solo metodo: una linea que cuadra con montoRecibido).
     pagos: [{ metodo: "efectivo" as const, monto: "10.00" }],
     motivo: null,

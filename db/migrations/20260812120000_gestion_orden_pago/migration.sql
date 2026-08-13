@@ -1,4 +1,4 @@
--- Feature 208 (R1/R2/R3/R4/R6/R7): DESGLOSE del recaudo al cliente de UNA entrega.
+-- Feature 212 (R1/R2/R3/R4/R6/R7): DESGLOSE del recaudo al cliente de UNA entrega.
 -- Tabla nueva ADITIVA con 0..N lineas (metodo, monto) por gestion. Patron
 -- "tabla nueva sin tocar columnas/policies previas" (precedente
 -- 20260723130000_gestion_orden_evidencia).

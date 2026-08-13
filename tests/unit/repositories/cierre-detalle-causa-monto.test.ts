@@ -39,7 +39,7 @@ function filaEnVivo(over: Record<string, unknown> = {}) {
     pagoMensajero: null,
     ingresoBodegaRechazo: null,
     causaIncidente: "danado" as const,
-    // Feature 208/R21: el desglose que pide `WITH_DETALLE`. Un `incidente` no cobra: cero lineas.
+    // Feature 212/R21: el desglose que pide `WITH_DETALLE`. Un `incidente` no cobra: cero lineas.
     pagos: [] as { metodo: string; monto: Prisma.Decimal }[],
     orden: {
       numGuia: 10,
@@ -72,7 +72,7 @@ function filaAdmin(over: Record<string, unknown> = {}) {
     ingresoBodegaRechazo: new Prisma.Decimal("0.00"),
     causaIncidente: "danado" as const,
     indemnizacion: new Prisma.Decimal("12500.75"),
-    // Feature 208/R21: el desglose que pide `GESTION_ADMIN_SELECT`. Un `incidente` no cobra.
+    // Feature 212/R21: el desglose que pide `GESTION_ADMIN_SELECT`. Un `incidente` no cobra.
     pagos: [] as { metodo: string; monto: Prisma.Decimal }[],
     historialEstados: [],
     ...over,

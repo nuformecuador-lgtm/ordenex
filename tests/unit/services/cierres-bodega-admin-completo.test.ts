@@ -100,7 +100,7 @@ function porSolicitadoDesc(a: CierreBodegaResumenRow, b: CierreBodegaResumenRow)
 
 /** Una gestión con evidencia, para que el espía de firmas tenga a quién dispararse. */
 function gestionConEvidencia(): CierreGestionPendienteRow {
-  // Feature 208/T9: `pagos` es obligatorio; `conPagos` lo deriva del par escalar (UNA linea).
+  // Feature 212/T9: `pagos` es obligatorio; `conPagos` lo deriva del par escalar (UNA linea).
   return conPagos({
     gestionId: "g-1",
     ordenId: "o-1",

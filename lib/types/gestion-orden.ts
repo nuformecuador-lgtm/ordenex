@@ -5,7 +5,7 @@ import { esFechaCalendarioValida, mananaCalendarioCR } from "@/lib/utils/fecha-c
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
 import { ubicacionSchema } from "@/lib/types/ruta-mensajero";
-// Feature 208 (R11/R30): la suma del borde se comprueba en CENTIMOS ENTEROS dentro de un util
+// Feature 212 (R11/R30): la suma del borde se comprueba en CENTIMOS ENTEROS dentro de un util
 // PURO. Este archivo viaja al bundle del navegador (el panel valida con el MISMO schema), asi
 // que NO puede importar `@prisma/client` ni aritmetica `Decimal`.
 import { sumaCuadra } from "@/lib/utils/pagos-recaudo";
@@ -213,7 +213,7 @@ const causaDevolucionSchema = z.enum(CAUSA_DEVOLUCION_SEED, { message: "causa re
 const causaIncidenteSchema = z.enum(CAUSA_INCIDENTE_SEED, { message: "causa requerida" });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
-// Feature 208 (R11-R16) — el DESGLOSE del recaudo al cliente.
+// Feature 212 (R11-R16) — el DESGLOSE del recaudo al cliente.
 //
 // El contrato es ADITIVO: acepta la forma escalar historica (R12) y la lista de lineas (R11),
 // nunca las dos a la vez (R13). Las cinco reglas que las relacionan no se pueden expresar campo
@@ -311,13 +311,13 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
     // >= 0: una entrega SIN cobro (montoCobrar 0/null) recauda 0 y es válida. El
     // servicio revalida que el monto CUADRE con el `montoCobrar` de la orden (R22).
     montoRecibido: z.number().nonnegative("monto invalido"),
-    // Feature 208 (R12) — FORMA A, ESCALAR e HISTORICA: un unico metodo para todo el monto.
+    // Feature 212 (R12) — FORMA A, ESCALAR e HISTORICA: un unico metodo para todo el monto.
     // Pasa a OPCIONAL, no se retira: es la que sigue mandando el panel entre el merge de la
-    // 208 y el de la 209, y el panel valida con ESTE mismo schema en el navegador. Retirarla
+    // 212 y el de la 213, y el panel valida con ESTE mismo schema en el navegador. Retirarla
     // aqui deja la app rota en produccion durante esa ventana.
     metodoPago: z.enum(METODO_PAGO_SEED).optional(),
-    // Feature 208 (R11) — FORMA B, el DESGLOSE: 0..N lineas (metodo, monto). Monto por linea
-    // ESTRICTAMENTE positivo: una fila vacia del editor de la 209 es un error de captura, no
+    // Feature 212 (R11) — FORMA B, el DESGLOSE: 0..N lineas (metodo, monto). Monto por linea
+    // ESTRICTAMENTE positivo: una fila vacia del editor de la 213 es un error de captura, no
     // una linea de 0. Las reglas que RELACIONAN los tres campos viven en `validarRecaudoEntrega`.
     pagos: pagosSchema.optional(),
     // Feature 119 (R5): lista de 1..N fotos (antes una sola). Validacion por archivo (R8).
@@ -384,7 +384,7 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
 // acordarse. El `superRefine` corre DESPUES de que la union resuelva el discriminante, asi
 // que un `resultado` invalido sigue fallando por su propio error y no por este.
 //
-// Feature 208 (R11-R16): las reglas del recaudo se encadenan como un SEGUNDO `superRefine`, por
+// Feature 212 (R11-R16): las reglas del recaudo se encadenan como un SEGUNDO `superRefine`, por
 // el mismo motivo: una rama nueva con cobro las hereda sin que nadie tenga que acordarse. Los
 // dos corren siempre (ningun `addIssue` aborta al otro), asi que una gestion con dos problemas
 // —sin ubicacion y con el desglose descuadrado— reporta los DOS campos de una vez.

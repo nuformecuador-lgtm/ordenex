@@ -362,7 +362,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
           },
         };
       }
-      // Feature 208 (R18): SEGUNDA barrera, independiente del borde zod y con aritmetica
+      // Feature 212 (R18): SEGUNDA barrera, independiente del borde zod y con aritmetica
       // `Prisma.Decimal` (nunca `number` ni `parseFloat`, R30). El borde suma en centimos
       // porque viaja al navegador; aqui, donde el dinero se persiste, se suma en Decimal. Un
       // desglose descuadrado no da un numero feo en pantalla: descuadra la `E` del `min(P, E)`
@@ -555,7 +555,7 @@ export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
  * (indice 0) hacia las columnas viejas (dual-write, R12) e inserta las N filas hijas.
  */
 /**
- * Feature 208 (R19): valor de la columna DEPRECADA `gestion_orden.metodo_pago` derivado del
+ * Feature 212 (R19): valor de la columna DEPRECADA `gestion_orden.metodo_pago` derivado del
  * desglose. 1 linea -> esa; 0 o >= 2 lineas -> `null`.
  */
 function metodoPagoCompatibilidad(pagos: LineaPago[]): MetodoPago | null {
@@ -585,7 +585,7 @@ function buildGestionData(
         ...geo,
         resultado: "entregada",
         montoRecibido: input.montoRecibido,
-        // Feature 208 (R19): la columna DEPRECADA se deriva del DESGLOSE, no del escalar que
+        // Feature 212 (R19): la columna DEPRECADA se deriva del DESGLOSE, no del escalar que
         // mando el cliente: con una sola linea vale esa (y una entrega legacy escribe
         // exactamente el mismo valor de antes); con cero o con dos o mas, NULL — porque no
         // existe "el" metodo de una entrega mixta y elegir uno mentiria en los listados viejos.

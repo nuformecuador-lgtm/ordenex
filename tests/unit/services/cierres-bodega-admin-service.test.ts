@@ -58,7 +58,7 @@ function detalleCierreRow(
 }
 
 function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
-  // Feature 208/T9: el desglose es OBLIGATORIO en la fila. Por defecto se deriva del par
+  // Feature 212/T9: el desglose es OBLIGATORIO en la fila. Por defecto se deriva del par
   // escalar (UNA linea, igual que el backfill), asi que los casos previos no cambian; un
   // caso que quiera un cobro MIXTO pasa sus propias lineas en `overrides.pagos`.
   const { pagos, ...resto } = overrides;

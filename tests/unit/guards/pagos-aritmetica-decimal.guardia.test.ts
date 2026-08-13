@@ -10,7 +10,7 @@ import { Prisma } from "@prisma/client";
 import { codigoSinComentarios, quitarComentarios } from "../../fixtures/money-safe";
 
 /**
- * Feature 208 / T15 (R30) — GUARDIA DE ARITMÉTICA: **en los caminos que esta feature toca, un
+ * Feature 212 / T15 (R30) — GUARDIA DE ARITMÉTICA: **en los caminos que esta feature toca, un
  * monto no se convierte a `number` ni se suma en coma flotante.**
  *
  * Por qué en un archivo aparte y por qué es de las que corren siempre. La batería de
@@ -65,13 +65,13 @@ function bloqueDesde(codigo: string, marcador: string): string {
  *
  * Los tres utils entran ENTEROS: son de esta feature de punta a punta. El repositorio y el
  * servicio entran ACOTADOS al tramo nuevo, y no por comodidad:
- *  · `GestionOrdenRepository.ts` trae `.toNumber()` anteriores a la 208 sobre `peso`, `latitud`,
+ *  · `GestionOrdenRepository.ts` trae `.toNumber()` anteriores a la 212 sobre `peso`, `latitud`,
  *    `longitud` y `montoCobrar` (`:137-142`, `:226`, `:248`);
  *  · `MisAsignacionesService.ts` trae la suma de KPIs de la barra del mensajero
  *    (`porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0)`, `:223`/`:232`), que suma
  *    montos con el operador `+` sobre `number` y es anterior a esta feature.
  * Los dos son deuda de otras features. Barrer los archivos enteros pondría esta guardia roja por
- * código que la 208 ni escribió ni puede arreglar — y una guardia que nace roja por algo ajeno se
+ * código que la 212 ni escribió ni puede arreglar — y una guardia que nace roja por algo ajeno se
  * acaba desactivando. Se vigila lo que esta feature introdujo.
  *
  * El tramo del servicio empieza en el `reduce` de R18 y llega hasta el `return` del rechazo: es
@@ -305,7 +305,7 @@ describe("R30 — la REVALIDACIÓN del servicio suma en `Decimal`, no en coma fl
     // Ni un `+` en el tramo. Es la forma más directa de decir «aquí no se suma con el operador»:
     // en cuanto alguien escriba `acc + p.monto` o un `+=`, esto cae. Y es también la razón de que
     // el tramo vaya ACOTADO: el mismo archivo suma los KPIs de la barra con `+` sobre `number`
-    // (código anterior a la 208), y prohibirlo ahí sería prohibir lo que esta feature no tocó.
+    // (código anterior a la 212), y prohibirlo ahí sería prohibir lo que esta feature no tocó.
     expect(tramo.includes("+"), "la revalidación usa el operador `+` sobre montos").toBe(false);
     // Y la comparación NO se hace convirtiendo: `.equals` sobre `Decimal`, nunca `===` entre
     // números, que es exactamente donde `0.1 + 0.2 !== 0.3` rechazaría un desglose legítimo.
@@ -356,7 +356,7 @@ describe("CONTRAPRUEBA — el barrido caza lo colado y no caza la cita", () => {
     expect(tramo.length).toBeLessThan(completo.length / 10);
     expect(tramo.length).toBeGreaterThan(120);
     expect(completo).toContain(tramo);
-    // El archivo completo SÍ trae conversiones anteriores a la 208; el tramo, no. Si el
+    // El archivo completo SÍ trae conversiones anteriores a la 212; el tramo, no. Si el
     // extractor devolviera de más, esta asimetría desaparecería.
     expect(CONVERSIONES_PROHIBIDAS.some((p) => p.test(completo))).toBe(true);
     expect(CONVERSIONES_PROHIBIDAS.some((p) => p.test(tramo))).toBe(false);

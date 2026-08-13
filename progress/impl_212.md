@@ -1,8 +1,34 @@
-# impl_208 — Pago multiple por entrega (modelo y calculo del recaudo)
+# impl_212 — Pago multiple por entrega (modelo y calculo del recaudo)
 
-> Zona `backend` · complexity `high` · rama `feature/208-pago-multiple-entrega` (de `origin/dev`, `c23c118a`).
+> Zona `backend` · complexity `high` · rama `feature/212-pago-multiple-entrega` (de `origin/dev`, `c23c118a`).
 > Spec aprobado por el humano el 2026-08-12. 18 tasks, 4 tandas. T1–T16 cerradas; T17 es este archivo.
 > **Sin commits y sin PR**: de eso se encarga el leader.
+
+> ### Renumeracion 208 -> 212 (2026-08-13)
+>
+> Esta ficha se implemento entera como **208** y se renumero a **212** justo antes del PR. Se
+> renumero LA NUESTRA, no las ajenas, y esa es la parte que importa: mientras se implementaba,
+> otra sesion publico y **mergeo** su propia feature 208 (`chore/208-navy-fijo`, "colores fijos
+> -navy", frontend, `done`), y 209/210/211 tambien quedaron ocupados. Renumerar una ficha ya
+> publicada es peor que renumerar una que aun no ha salido, asi que cedimos el id. La particion
+> se movio en bloque:
+>
+> | antes | ahora | que es |
+> | --- | --- | --- |
+> | 208 | **212** | esta ficha: modelo y calculo del recaudo (backend) |
+> | 209 | **213** | captura y presentacion (frontend) |
+> | 210 | **214** | retirar la forma escalar y la columna `metodo_pago` |
+>
+> Todo el texto de este archivo, del spec (`specs/212-pago-multiple-entrega/`) y de los 61 archivos
+> de la rama se barrio con patrones ANCLADOS (`feature 208`, `208/R`, `208/T`, `la 208`,
+> `ficha 208`), nunca con el numero suelto. Las referencias a OTRAS features (44, 205, 119, 172,
+> 39/56, 36, 40) se contaron antes y despues y NO se movieron ni una, y los 25 archivos ajenos que
+> dicen "feature 208" —los de la navy ya mergeada— quedaron intactos. Lo que NO lleva id y por
+> tanto no se renombro: la carpeta de la migracion (`20260812120000_gestion_orden_pago`) y los
+> nombres de los archivos de test. Detalle en la seccion 8.
+>
+> Las fechas de los gates y de las notas de revision que aparecen mas abajo son las del trabajo
+> real (2026-08-12), cuando la ficha todavia se llamaba 208.
 
 ---
 
@@ -11,7 +37,7 @@
 El recaudo al cliente deja de ser un par unico `(monto_recibido, metodo_pago)` en `gestion_orden` y
 pasa a ser un desglose de 0..N lineas `(metodo, monto)` en la tabla hija `gestion_orden_pago`.
 `monto_recibido` sobrevive como TOTAL snapshot y `metodo_pago` como columna DEPRECADA (su retiro es
-la ficha 210, no esta). El calculo del cierre (`computeTotales`) deja de meter todo el monto de una
+la ficha 214, no esta). El calculo del cierre (`computeTotales`) deja de meter todo el monto de una
 entrega en un solo balde y acumula **cada linea en el balde de SU metodo**.
 
 Las tres preguntas abiertas del spec llegaron ya resueltas por la puerta humana y se implementaron
@@ -99,7 +125,7 @@ Seis de estos diez requisitos dejaron de ser texto y son hechos del motor.
 | R5 | **A:** "R5: no elimina, renombra ni cambia el tipo de monto_recibido / metodo_pago" + cierre-pagos-lectura :: "R31: el par escalar sigue viajando al lado del desglose" |
 | R6 | **A:** "R6: inserta UNA linea (metodo_pago, monto_recibido) por gestion cobrada". **B:** "R6: el backfill escribe el conjunto exacto, AL CENTIMO, con el created_at de la gestion" |
 | R7 | **A:** "R7: el WHERE tiene las TRES condiciones — sin monto nulo, sin monto 0 y sin metodo nulo" / "R7: el backfill NO inventa filas para gestiones sin cobro". **B:** "R7: CERO lineas para las tres clases excluidas" (monto NULL, monto 0 con efectivo, metodo NULL) |
-| R8 | **A:** "R8: no altera cierre_dia, cierre_bodega, cierre_maestro ni cierre_detail" + guardia frontera :: "la migracion de la 208 no altera NINGUNA tabla de cierre" |
+| R8 | **A:** "R8: no altera cierre_dia, cierre_bodega, cierre_maestro ni cierre_detail" + guardia frontera :: "la migracion de la 212 no altera NINGUNA tabla de cierre" |
 | R9 | **A:** "R9: DROP TABLE de la tabla nueva" / "R9: el down NO altera ni borra columnas ni datos de gestion_orden" / "R9: el down es SOLO el drop, ninguna otra sentencia ejecutable" / "R9: documenta que revertir pierde los desgloses MIXTOS". **B:** "R9: tras el down REAL, gestion_orden queda IDENTICA" (columnas con tipo y nullabilidad + las mismas 6 filas sembradas) |
 | R10 | **A:** "R10: la invariante SUM(monto) = monto_recibido NO se expresa como CHECK ni trigger" |
 
@@ -110,13 +136,13 @@ Seis de estos diez requisitos dejaron de ser texto y son hechos del motor.
 | R11 | `gestion-orden-pagos-schema` :: "dos lineas que suman el monto recibido -> valido" / "regla 5: la suma NO iguala el monto recibido -> error en pagos" / "dos lineas del mismo metodo -> error en pagos aunque la suma cuadre" / "una linea con monto NO positivo (0) se rechaza en el propio campo"; action `mis-asignaciones-pagos` :: "dos pares pagoMetodo/pagoMonto -> dos lineas" / "un desglose que NO suma -> validation_error en pagos, sin persistir" |
 | R12 | `gestion-orden-pagos-schema` :: "solo metodoPago + monto > 0 -> valido y normaliza a UNA linea con el total"; `pagos-recaudo` :: "R12: forma ESCALAR historica -> UNA linea con el total"; action :: "una linea con el total, y el escalar CONSERVADO para la columna deprecada" |
 | R13 | `gestion-orden-pagos-schema` :: "metodoPago escalar + desglose -> error en pagos"; action :: "R13: escalar + desglose en el mismo FormData -> validation_error, service NO invocado" |
-| R14 | `gestion-orden-pagos-schema` :: "montoRecibido 0 con desglose no vacio -> error en pagos" / "montoRecibido 0 con desglose VACIO -> valido, normaliza a CERO lineas" / "montoRecibido 0 con el escalar efectivo que hoy fuerza el panel -> valido y CERO lineas"; `pagos-recaudo` :: "R14: montoRecibido 0 -> CERO lineas sea cual sea la forma"; action :: "R14: sin cobro con el escalar efectivo -> CERO lineas"; repo :: "208/R14: lista de pagos VACIA -> no se inserta ninguna linea" |
+| R14 | `gestion-orden-pagos-schema` :: "montoRecibido 0 con desglose no vacio -> error en pagos" / "montoRecibido 0 con desglose VACIO -> valido, normaliza a CERO lineas" / "montoRecibido 0 con el escalar efectivo que hoy fuerza el panel -> valido y CERO lineas"; `pagos-recaudo` :: "R14: montoRecibido 0 -> CERO lineas sea cual sea la forma"; action :: "R14: sin cobro con el escalar efectivo -> CERO lineas"; repo :: "212/R14: lista de pagos VACIA -> no se inserta ninguna linea" |
 | R15 | `gestion-orden-pagos-schema` :: "montoRecibido > 0 y ni escalar ni desglose -> error en metodoPago" / "montoRecibido > 0 con desglose VACIO -> error en metodoPago, no en pagos"; action :: "R15: sin desglose y sin escalar con cobro > 0 -> validation_error en metodoPago" |
 | R16 | `gestion-orden-pagos-schema` :: "R16: ninguna otra rama admite recaudo ni desglose" (4 ramas parametrizadas); action :: "R16: una rama sin recaudo (rechazada) no gana pagos aunque el FormData los traiga" |
-| R17 | `gestion-orden-repository` :: "208/R17: las lineas se insertan con el cliente de la MISMA tx" / "208/R17: si el append de la transicion falla, la tx se revierte"; service `mis-asignaciones-pagos` :: "las lineas llegan al repo en el mismo objeto que la gestion y el estado destino" |
+| R17 | `gestion-orden-repository` :: "212/R17: las lineas se insertan con el cliente de la MISMA tx" / "212/R17: si el append de la transicion falla, la tx se revierte"; service `mis-asignaciones-pagos` :: "las lineas llegan al repo en el mismo objeto que la gestion y el estado destino" |
 | R18 | service `mis-asignaciones-pagos` :: "la suma NO iguala montoRecibido -> validation_error en pagos, sin subir ni persistir" / "un desglose INFLADO tampoco pasa" / "R30: una suma con decimales que en float NO cuadraria SI cuadra en Decimal" |
 | R19 | idem :: "UNA linea -> metodoPago es esa" / "DOS lineas -> metodoPago NULL" / "CERO lineas, sin cobro -> metodoPago NULL, no efectivo" / "ignora el escalar que mando el cliente y usa el desglose como fuente" |
-| R20 | `gestion-orden-repository` :: "208/R20: el monto de cada linea entra como Prisma.Decimal, nunca como float" + migracion :: "R20: el monto usa la MISMA escala monetaria, DECIMAL(12,2), nunca float" |
+| R20 | `gestion-orden-repository` :: "212/R20: el monto de cada linea entra como Prisma.Decimal, nunca como float" + migracion :: "R20: el monto usa la MISMA escala monetaria, DECIMAL(12,2), nunca float" |
 
 ### C. Lectura y calculo
 
@@ -131,14 +157,14 @@ Seis de estos diez requisitos dejaron de ser texto y son hechos del motor.
 | R27 | idem :: "caso 7: un conjunto historico, 1 linea por gestion como el backfill, da los MISMOS 4 strings" / "caso 7: la entrega SIN cobro escalar no mueve ningun total". Ademas, los ~20 tests de totales preexistentes pasan con sus expectativas intactas |
 | R28 | idem :: "caso 6: general = efectivo + SINPE + transferencia, al centimo" / "caso 6: general = suma de montoRecibido de las entregadas CON lineas, al centimo" |
 | R29 | `cierre-dia-service-totales-mixtos` :: "un cierre con una entrega mixta de 8.000 snapshotea totalEfectivo = 5000.00" / "con P = 6.000 y E = 5.000, se le entregan 5.000 y quedan 1.000 pendientes" / "con la E INFLADA del modelo viejo (8.000) se le pagaria de mas y no quedaria deuda" / "el pendiente del cierre (172) hereda la misma E" / "una entrega de UN solo metodo sigue comportandose exactamente igual que antes" |
-| R30 | `cierre-totales-pagos` :: "caso 8: 33.33 x 3 repartido en dos metodos da 99.99 exacto" / "caso 8: 0.10 + 0.20 en dos lineas del MISMO metodo da 0.30" / "caso 8: todos los totales salen como STRING de escala 2"; `pagos-recaudo` :: "no importa @prisma/client ni usa parseFloat"; guardia `pagos-aritmetica-decimal.guardia`, que vigila CINCO tramos: `cierre-totales.ts`, `pagos-recaudo.ts`, `lineas-pago.ts`, el bloque del `createMany` del repositorio y —anadido tras la revision— **la revalidacion de la suma del servicio (R18)**, cada uno acotado con extractor de llaves balanceadas para no prohibir la aritmetica anterior a la 208 |
+| R30 | `cierre-totales-pagos` :: "caso 8: 33.33 x 3 repartido en dos metodos da 99.99 exacto" / "caso 8: 0.10 + 0.20 en dos lineas del MISMO metodo da 0.30" / "caso 8: todos los totales salen como STRING de escala 2"; `pagos-recaudo` :: "no importa @prisma/client ni usa parseFloat"; guardia `pagos-aritmetica-decimal.guardia`, que vigila CINCO tramos: `cierre-totales.ts`, `pagos-recaudo.ts`, `lineas-pago.ts`, el bloque del `createMany` del repositorio y —anadido tras la revision— **la revalidacion de la suma del servicio (R18)**, cada uno acotado con extractor de llaves balanceadas para no prohibir la aritmetica anterior a la 212 |
 
 ### D. DTO y fronteras
 
 | R | Test |
 | --- | --- |
-| R31 | `cierre-dia-service` :: "listarCierreDia: el DTO de gestion expone el desglose del recaudo (208/R31)", 4 casos, incluidos "R31: metodoPago NO desaparece, la 209 lo retira, no esta ficha" y el de la gestion sin lineas; guardia proyeccion :: "CONSERVA el par escalar junto al desglose (R31)" |
-| R32 | guardia `pagos-frontera.guardia` :: "el censo de modelos con totales por metodo esta CERRADO" / "declara las TRES columnas, cada una Decimal(12,2)" / "la migracion de la 208 no altera NINGUNA tabla de cierre"; `cierre-dia-service-totales-mixtos` :: "R32: la forma del snapshot no cambia, siguen siendo los mismos cuatro totales" |
+| R31 | `cierre-dia-service` :: "listarCierreDia: el DTO de gestion expone el desglose del recaudo (212/R31)", 4 casos, incluidos "R31: metodoPago NO desaparece, la 213 lo retira, no esta ficha" y el de la gestion sin lineas; guardia proyeccion :: "CONSERVA el par escalar junto al desglose (R31)" |
+| R32 | guardia `pagos-frontera.guardia` :: "el censo de modelos con totales por metodo esta CERRADO" / "declara las TRES columnas, cada una Decimal(12,2)" / "la migracion de la 212 no altera NINGUNA tabla de cierre"; `cierre-dia-service-totales-mixtos` :: "R32: la forma del snapshot no cambia, siguen siendo los mismos cuatro totales" |
 | R33 | guardia `pagos-frontera.guardia` :: "los seis modulos inmunes no mencionan el desglose", 6 casos parametrizados con control de no-vacuidad / "ningun camino de LiquidacionPago nombra el desglose [D1]", 9 archivos DESCUBIERTOS del arbol en vez de listados a mano / "CIERRE: los UNICOS modulos de lib/ que nombran el desglose son los del recaudo" / "MEDIDO: el ledger por tienda sigue proyectando de la gestion SOLO el total" / "MEDIDO: el repositorio del COD analitico sigue acotado a sus DOS tablas legales" / "CONTRAPRUEBA: el barrido caza una lectura inyectada en un inmune". Ademas, las guardias de analitica preexistentes siguen verdes SIN editarlas |
 
 **Los 33 requisitos tienen test. Ninguno queda sin cubrir.**
@@ -180,8 +206,8 @@ Ninguna mutacion quedo verde: no hubo agujeros de cobertura que tapar.
   esquema temporal, CLONA ahi `gestion_orden` con `LIKE ... INCLUDING ALL`, siembra SUS PROPIAS filas y
   ejecuta el `migration.sql` y el `down.sql` REALES, sentencia a sentencia, dentro de una transaccion que
   SIEMPRE se revierte. **No aplica la migracion, no toca `_prisma_migrations` y en `public` no queda nada**
-  (comprobado tras cada corrida: sin esquemas `t208%`, sin `public.gestion_orden_pago`, `gestion_orden` con
-  sus 44 filas y la 208 ausente de `_prisma_migrations`). La unica cosa que lo salta es la ausencia de
+  (comprobado tras cada corrida: sin esquemas `t212%`, sin `public.gestion_orden_pago`, `gestion_orden` con
+  sus 44 filas y la 212 ausente de `_prisma_migrations`). La unica cosa que lo salta es la ausencia de
   `DATABASE_URL`, y entonces vitest lo marca SKIPPED, nunca passed. En esta maquina **corrio de verdad**:
   31 passed, 0 skipped.
 
@@ -241,12 +267,12 @@ el porque quedo escrito en el docstring de la funcion.
 > **Nota sobre la tanda 3.** La corrida de `--rapido` inmediatamente posterior salio ROJA con 10-13
 > fallos en `tests/components/AnaliticaPage.test.tsx`, `tests/unit/auth/destino-post-login.test.ts`,
 > `tests/unit/auth/menu-visibility.test.ts` y
-> `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts`. **No eran de la 208.** Otra sesion
+> `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts`. **No eran de la 212.** Otra sesion
 > estaba editando EN PARALELO, en este mismo checkout, los siete archivos de analitica y roles
 > (`app/(app)/analitica/page.tsx`, `lib/auth/menu-visibility.ts`, `e2e/analitica-roles.spec.ts` y sus
 > tests), con mtime posterior al cierre de esa tanda. Los fallos cambiaban de archivo entre corridas y
 > desaparecieron solos cuando esa sesion termino: la suite completa posterior salio verde entera.
-> Ningun subagente de la 208 abrio ni edito esos siete archivos.
+> Ningun subagente de la 212 abrio ni edito esos siete archivos.
 
 ### Completo (`./init.sh`) — primera pasada, 2026-08-12 16:25
 
@@ -286,7 +312,7 @@ sdd en vuelo tiene su carpeta de specs") se OMITEN con un `warn` y la corrida ll
 `init OK`. No es un fallo de la feature, pero cantar victoria por ese verde seria cantarla por dos pasos
 que no corrieron. Se evaluaron A MANO sobre `feature_list.json`, con este resultado:
 
-- `in_progress` = 2 en total: **196** (zona `fullstack`) y **208** (zona `backend`). Una por zona: la regla
+- `in_progress` = 2 en total: **196** (zona `fullstack`) y **212** (zona `backend`). Una por zona: la regla
   de maximo 2 por zona se respeta.
 - Specs faltantes para features `sdd` en vuelo: **ninguna**.
 
@@ -295,7 +321,7 @@ que no corrieron. Se evaluaron A MANO sobre `feature_list.json`, con este result
 ## 6. Desvios del spec y decisiones que el spec no cubria
 
 1. **La migracion NO se aplico a `public`, y ya no hace falta que se aplique para demostrarla.**
-   `prisma migrate status` esta DIVERGENTE por causas ajenas a la 208 (`20260811140000_liquidacion_reparto`
+   `prisma migrate status` esta DIVERGENTE por causas ajenas a la 212 (`20260811140000_liquidacion_reparto`
    pendiente, y la base registra `20260728120000_orden_historial_origen_deshacer_asignacion` con otro
    timestamp local), asi que `migrate dev` pedia RESETEAR y se aborto. **Corregido tras la revision:** el
    `migration.sql` y el `down.sql` REALES se ejecutan ahora contra un Postgres de verdad en el BLOQUE B de
@@ -311,7 +337,7 @@ que no corrieron. Se evaluaron A MANO sobre `feature_list.json`, con este result
    SIN COBRO (`montoRecibido = 0` con el escalar `efectivo` que fuerza el panel) pasa de escribir
    `'efectivo'` a escribir `NULL`. Esta testeado y fue APROBADO a sabiendas en la puerta humana (aviso
    aceptado de R19), no es un defecto.
-   **Consecuencia que hay que llevarse a la 210:** la columna deprecada `metodo_pago` queda con DOS
+   **Consecuencia que hay que llevarse a la 214:** la columna deprecada `metodo_pago` queda con DOS
    SEMANTICAS conviviendo. Las gestiones historicas sin cobro conservan `'efectivo'` (el backfill no las
    toca, y R7 les da CERO lineas), mientras que las nuevas escriben `NULL`. Cualquier lectura que trate esa
    columna como fuente de verdad vera dos poblaciones distintas para el mismo hecho; es munición para
@@ -347,14 +373,14 @@ que no corrieron. Se evaluaron A MANO sobre `feature_list.json`, con este result
 | Que pedia la revision | Que se hizo |
 | --- | --- |
 | BLOQUEANTE: la migracion nunca toco un motor de Postgres, habiendo via para hacerlo sin aplicarla | bloque B de 10 tests contra Postgres real siguiendo el molde de la 205 (`enTransaccionRevertida`, esquema temporal, clon de `gestion_orden`, DDL real). R1, R2, R4, R6, R7 y R9 dejan de ser regex. Seccion 4.2 |
-| menor 1: `impl_208.md` 6.2 afirmaba de mas | corregido: con `montoRecibido = 0` y escalar `efectivo` el valor SI cambia (`'efectivo'` -> `NULL`), y queda anotada la consecuencia para la 210: la columna deprecada convive con DOS semanticas |
+| menor 1: `impl_212.md` 6.2 afirmaba de mas | corregido: con `montoRecibido = 0` y escalar `efectivo` el valor SI cambia (`'efectivo'` -> `NULL`), y queda anotada la consecuencia para la 214: la columna deprecada convive con DOS semanticas |
 | menor 2: `cierre_maestro` no existe | corregido en `requirements.md` R32 y `design.md` 6, con nota fechada |
 | menor 3: la guardia de R30 omitia la revalidacion del servicio | anadido el quinto tramo, acotado por llaves balanceadas, con control de no-vacuidad y contraprueba; mutacion comprobada |
 
 Lo que la revision aval y **no** se toco: `lib/utils/lineas-pago.ts` (justificado), el mapa R -> test
 (completo, 33/33), la bateria de mutacion del calculo (aguanto incluso una mutacion que se invento el
 reviewer: intercambiar los baldes SINPE y transferencia, que no altera el general ni la invariante R28,
-y aun asi da 9 rojos). El E2E del camino mixto es entregable de la 209.
+y aun asi da 9 rojos). El E2E del camino mixto es entregable de la 213.
 
 ---
 
@@ -362,9 +388,126 @@ y aun asi da 9 rojos). El E2E del camino mixto es entregable de la 209.
 
 T1 a T17 hechas. **T18 (bookkeeping en `feature_list.json` y `progress/current.md`, commit y PR) NO se
 hizo**: queda para el leader, por instruccion explicita. La decision sobre el retiro de la forma escalar
-del borde y de la columna `metodo_pago` ya esta tomada ([Q3]: ficha 210 aparte) y debe quedar escrita en
+del borde y de la columna `metodo_pago` ya esta tomada ([Q3]: ficha 214 aparte) y debe quedar escrita en
 el PR.
 
 **Aviso para el leader:** todo este trabajo esta SIN COMMITEAR en el checkout principal, y otra sesion
 esta usando ese mismo checkout a la vez. Un `git checkout` o un `git stash` ajeno se lo lleva por
 delante.
+
+---
+
+## 8. Renumeracion 208 -> 212 (2026-08-13)
+
+### 8.1 Que se movio
+
+| antes | ahora | ficha |
+| --- | --- | --- |
+| 208 | **212** | pago multiple por entrega — modelo y calculo del recaudo (backend, esta) |
+| 209 | **213** | pago multiple por entrega — captura y presentacion (frontend) |
+| 210 | **214** | retirar la forma escalar del recaudo (`metodo_pago` deprecado) |
+
+Ademas: rama `feature/208-pago-multiple-entrega` -> **`feature/212-pago-multiple-entrega`**;
+`specs/208-pago-multiple-entrega/` -> **`specs/212-pago-multiple-entrega/`** (con `git mv`, los tres
+archivos conservan su historia); `progress/impl_208.md` -> **`impl_212.md`** y
+`progress/review_208.md` -> **`review_212.md`**.
+
+### 8.2 El riesgo real de esta tanda, y como se evito
+
+Un `sed` sobre el numero suelto habria sido un desastre, y no por la razon obvia. En este arbol,
+**`feature 208` ya no es solo nuestra**: mientras se implementaba, otra sesion publico y MERGEO su
+propia 208 (`chore/208-navy-fijo`, "colores fijos -navy", frontend, `done`), que deja 30 menciones
+de "Feature 208" repartidas por **25 archivos** de `app/`, `components/`, `DESIGN.md` y
+`app/globals.css` —incluida una variable CSS `--sonda-208`—. Lo mismo con la **209** de `dev`
+("74 quitadores de comentarios", `pending`) y la **210** ("dos variantes de Badge"). Renumerar esas
+habria corrompido una feature ya mergeada y dos fichas ajenas vivas.
+
+Por eso el barrido se acoto a los **61 archivos de esta rama** (`git diff --name-only` contra la
+merge-base con `dev`, menos `feature_list.json`, `progress/current.md` y `.mios.txt`, que ya venian
+hechos), y dentro de ellos se aplicaron patrones **ANCLADOS**, nunca el numero suelto:
+`Feature 208`, `feature 208`, `ficha 208`, `la 208`, `208/R<n>`, `208/T<n>`, `208 / bloque`,
+`(208)`, `208-pago-multiple-entrega`, `impl_208.md`, `review_208.md`, `t208_` (el prefijo del
+esquema temporal del bloque B), y sus equivalentes de 209 y 210.
+
+Se comprobo ademas, archivo por archivo, que **ninguna** de las 108 ocurrencias dentro de nuestros
+61 archivos pertenecia a una ficha ajena: todas hablaban del desglose del recaudo.
+
+### 8.3 Cuentas
+
+| Medida | Antes | Despues |
+| --- | --- | --- |
+| `feature 208` en NUESTROS archivos | 77 | **0** en codigo, spec, tests y mapa de trazabilidad. Quedan 9 menciones DELIBERADAS, todas dentro de esta seccion 8 y de la nota de cabecera: es donde se cuenta la renumeracion, y borrarlas seria borrar la explicacion |
+| `feature 212` en el repo | 0 | **77** |
+| `feature 208` en archivos AJENOS (navy, ya mergeada) | 30 en 25 archivos | **30 en 25 archivos** (intactas) |
+| lineas cambiadas por el barrido | — | 181 en 60 archivos, + 11 restos a mano |
+
+Los 11 restos se corrigieron uno a uno porque el numero habia quedado partido por un corte de
+linea (`...entre el merge de la\n// 208 y el de la 213`) o en una forma que ningun patron anclado
+podia cazar sin volverse peligroso (`son la **209**`, `particion 208/209`, `pre-208`,
+`(id 208 -> done)`). **Uno se dejo a proposito**: `review_212.md:123` cita
+`lib/actions/mis-asignaciones.ts:210`, que es un NUMERO DE LINEA, no una ficha.
+
+### 8.4 Control de no-dano
+
+Recuento de referencias a otras features, ANTES y DESPUES del barrido, en todo el repo:
+
+| Referencia | Antes | Despues |
+| --- | --- | --- |
+| `feature 44` (el `min(P, E)` del pago al mensajero) | 94 | **94** |
+| `feature 205` (el molde del bloque B) | 146 | **146** |
+| `feature 119` (`gestion_orden_evidencia`, el precedente) | 59 | **59** |
+| `feature 172` (`LiquidacionPago`) | 176 | **176** |
+| `feature 39` | 141 | **141** |
+| `feature 36` | 174 | **174** |
+| `feature 56` | 154 | **154** |
+| `feature 40` (`CierreBodega`) | 97 | **97** |
+
+Ninguna se movio. Los patrones `patron 39/56`, `36/F1.4-b`, `[D1]`-`[D4]` y los montos con
+decimales tampoco: no hay ningun patron que los toque.
+
+### 8.5 Lo que NO lleva id y por tanto NO se renombro
+
+- La carpeta de la migracion: `db/migrations/20260812120000_gestion_orden_pago/` (marca de tiempo +
+  nombre de tabla, sin id de ficha). **Renombrarla seria un cambio de identidad de migracion**, que
+  es justo lo que no se debe tocar.
+- Los archivos de test: `gestion-orden-pago-migration.test.ts`, `cierre-totales-pagos.test.ts`,
+  `pagos-*.guardia.test.ts`, etc. Ninguno lleva id en el nombre.
+- `feature_list.json` y `progress/current.md`: ya venian renumerados por el leader.
+- `progress/impl_208_modo-oscuro.md` y `progress/impl_211_interruptor.md`: son de las fichas AJENAS
+  208 y 211. No se tocan.
+
+### 8.6 Gate tras la renumeracion
+
+`./init.sh` completo en el worktree `C:/w208` (ruta corta a proposito: en rutas largas
+`.prisma/client/package.json` pasa de 260 chars y ~300 suites caen al importar). Redirigido a
+fichero, **no pipeado**: un `./init.sh | tail` devuelve el exit de `tail` y una corrida fallida se
+leeria como exit 0.
+
+```
+./init.sh > gate212.log 2>&1  ->  EXIT=0
+
+! jq no esta instalado (recomendado para validar feature_list.json)
+✓ typecheck paso
+✓ lint paso
+ Test Files  1086 passed (1086)
+      Tests  13662 passed (13662)
+   Duration  785.37s
+✓ test paso
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+== init OK ==
+```
+
+**La corrida NO esta degradada, y esto se comprueba en vez de suponerse.** Tardo 785 s frente a los
+~430 s sanos, que es la señal de alarma; pero los dos sintomas de una corrida que omite archivos
+enteros NO aparecen: cero `unhandled errors`, cero `Timeout waiting for worker`, y el total de
+archivos es **1086**, por encima del ~1081 de referencia (los de mas son los tests nuevos de esta
+ficha). La lentitud es carga de la maquina —`pnpm install` + `db:generate` recien corridos en este
+worktree y varias sesiones en paralelo—, no omision. Cero rojos, asi que no hay nada que comprobar
+en aislado.
+
+El bloque B contra Postgres real tambien corrio aqui de verdad (se copio el `.env` al worktree):
+`gestion-orden-pago-migration.test.ts` -> **31 passed, 0 skipped**.
+
+Sigue en pie la salvedad de siempre: sin `jq`, los pasos 3 y 4 de `init.sh` se omiten con `warn` y
+la corrida llega a `init OK` sin evaluarlos. Se evaluaron a mano en la seccion 5.

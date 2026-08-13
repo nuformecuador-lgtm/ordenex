@@ -101,7 +101,7 @@ export interface GestionOrdenData {
    */
   evidencias?: { storagePath: string; contentType: string; indice: number }[];
   /**
-   * Feature 208 (R17/R20): DESGLOSE del recaudo, 0..N lineas `(metodo, monto)`. El repo las
+   * Feature 212 (R17/R20): DESGLOSE del recaudo, 0..N lineas `(metodo, monto)`. El repo las
    * inserta en `gestion_orden_pago` dentro de la MISMA transaccion que la gestion y la
    * transicion (patron de las evidencias de la 119): viaja DENTRO de `GestionOrdenData`, asi
    * que `crearGestionYTransicionar` NO cambia de firma y la atomicidad ya provista se conserva.

@@ -18,7 +18,7 @@ import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 /**
- * Feature 208 (T12, R29) — la `E` del `min(P, E)` con un cierre MIXTO.
+ * Feature 212 (T12, R29) — la `E` del `min(P, E)` con un cierre MIXTO.
  *
  * `cierre_dia.total_efectivo` no es un número de pantalla: es la `E` con la que la feature 44
  * decide cuánto del pago debido `P` se le entrega YA al mensajero (porque ya lo tiene en la

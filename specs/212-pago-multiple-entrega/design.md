@@ -1,9 +1,9 @@
-# 208 — Pago múltiple por entrega (backend) — Diseño
+# 212 — Pago múltiple por entrega (backend) — Diseño
 
 ## 0. Alcance y forma de la costura
 
 Esta ficha crea el MODELO y el CÁLCULO. La captura (panel) y la presentación (módulos de cierre,
-descargas) son la **209**. Entre el merge de una y otra hay una ventana en la que el panel viejo
+descargas) son la **213**. Entre el merge de una y otra hay una ventana en la que el panel viejo
 sigue mandando un método ESCALAR, y además lo valida **en el cliente con el MISMO
 `gestionarSchema`** (`GestionarOrdenPanel.tsx:334-344` hace `safeParse` con el schema del borde).
 Por eso el contrato nuevo es **aditivo**: acepta las dos formas y normaliza (R12), y el DTO de
@@ -25,7 +25,7 @@ Dos consecuencias que condicionan todo lo demás:
 ### 1.1 Tabla nueva `gestion_orden_pago`
 
 ```prisma
-// Feature 208 (R1-R4): DESGLOSE del recaudo al cliente de UNA entrega. 0..N lineas
+// Feature 212 (R1-R4): DESGLOSE del recaudo al cliente de UNA entrega. 0..N lineas
 // (metodo, monto). `gestion_orden.monto_recibido` SOBREVIVE como TOTAL snapshot
 // (money-critical, patron 39/56); la invariante SUM(monto) = monto_recibido vive en el
 // BORDE (zod + revalidacion Decimal en el service), SIN CHECK en la base (patron 36/F1.4-b).
@@ -102,7 +102,7 @@ a:
 
 ```ts
 montoRecibido: z.number().nonnegative("monto invalido"),
-// FORMA A (legacy, R12): la que manda el panel hasta que aterrice la 209.
+// FORMA A (legacy, R12): la que manda el panel hasta que aterrice la 213.
 metodoPago: z.enum(METODO_PAGO_SEED).optional(),
 // FORMA B (R11): el desglose. Monto por linea ESTRICTAMENTE positivo.
 pagos: z.array(z.object({
@@ -147,7 +147,7 @@ export function normalizarPagos(
   CERO filas, no una fila de efectivo/0 (R14).
 
 `normalizarPagos` es un helper puro y testeable, NO una rama escondida dentro de la Server Action:
-es exactamente el punto que la 209 borrará cuando cierre la puerta de compatibilidad.
+es exactamente el punto que la 213 borrará cuando cierre la puerta de compatibilidad.
 
 ### 2.1 El resto del camino de escritura
 
@@ -170,13 +170,13 @@ es exactamente el punto que la 209 borrará cuando cierre la puerta de compatibi
 `lib/interfaces/repositories/ICierreDiaRepository.ts:20-67` (`CierreGestionPendienteRow`) gana:
 
 ```ts
-/** Feature 208 (R21/R22): desglose del recaudo, money-safe STRING, en orden de enum. */
+/** Feature 212 (R21/R22): desglose del recaudo, money-safe STRING, en orden de enum. */
 pagos: { metodo: MetodoPagoValue; monto: string }[];
 ```
 
 **Obligatorio, no opcional, y sin fallback al par escalar.** El coste es real (≈15 archivos de
 fixtures lo tienen que construir) y se paga a propósito: ver §5, alternativa descartada B.
-`metodoPago` se CONSERVA en la fila mientras la 209 no lo retire (R31).
+`metodoPago` se CONSERVA en la fila mientras la 213 no lo retire (R31).
 
 ### 3.2 Proyecciones (dos definiciones cubren los tres caminos)
 
@@ -187,7 +187,7 @@ fixtures lo tienen que construir) y se paga a propósito: ver §5, alternativa d
 
 `orderBy: { metodo: "asc" }` sobre un enum nativo de Postgres ordena por **orden de declaración**
 (`efectivo`, `SINPE`, `transferencia`), que es justo el orden determinista que pide R22 y que la
-209 necesita para concatenar la celda de las descargas [D4] de forma estable.
+213 necesita para concatenar la celda de las descargas [D4] de forma estable.
 
 **Guardia (R23).** `tests/unit/guards/pagos-proyeccion.guardia.test.ts`: recorre los archivos que
 construyen un `CierreGestionPendienteRow` y afirma que cada proyección Prisma que los alimenta pide
@@ -198,7 +198,7 @@ normal (`docs/verification.md`).
 ### 3.3 DTO de servicio
 
 `ICierreDiaService.CierreGestionDTO` (`:34-35`) gana `pagos: { metodo, monto }[]` y **conserva**
-`metodoPago` (R31); `CierreDiaService:595-603` lo propaga desde la fila. Esto es lo que la 209
+`metodoPago` (R31); `CierreDiaService:595-603` lo propaga desde la fila. Esto es lo que la 213
 consume para pintar el desglose y para las dos descargas [D4].
 
 ---
@@ -316,7 +316,7 @@ se consideró y por qué no.
 La guardia `censo-simpe.test.ts` no estorba: escanea el literal viejo en mayúsculas y el valor
 actual del enum es el correcto.
 
-> *Corrección del 2026-08-12 (revisión de la 208).* Esta tabla decía `cierre_maestro`, que NO existe
+> *Corrección del 2026-08-12 (revisión de la 212).* Esta tabla decía `cierre_maestro`, que NO existe
 > en `db/schema.prisma`: el segundo modelo con los tres `total_*` es `CierreBodega` (feature 40).
 > Solo cambia el nombre. La guardia de frontera cierra el censo recorriendo TODOS los `model` y
 > exigiendo exactamente `["CierreBodega", "CierreDia"]`, así que R32 quedaba cubierto igual.

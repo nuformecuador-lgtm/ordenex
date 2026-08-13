@@ -5,7 +5,7 @@ import type { ZodError } from "zod";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { normalizarPagos } from "@/lib/utils/pagos-recaudo";
 
-// Feature 208 (R11-R16) — el BORDE (zod) del DESGLOSE del recaudo. MISMO schema en cliente
+// Feature 212 (R11-R16) — el BORDE (zod) del DESGLOSE del recaudo. MISMO schema en cliente
 // (el panel hace `safeParse` con el) y en servidor (Server Action): validarlo aqui valida las
 // dos defensas. Cada caso invalido afirma el CAMPO del error, no solo que falla: el panel
 // pinta el mensaje bajo el control que lo provoco, y un error en el campo equivocado es un

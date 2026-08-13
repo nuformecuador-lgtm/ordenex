@@ -32,11 +32,11 @@ export interface CierreGestionPendienteRow {
   tiendaNombre: string;
   resultado: GestionResultado;
   montoRecibido: string | null;
-  // Feature 208/R31: columna DEPRECADA (la 209 decide su retiro). Se CONSERVA mientras la
+  // Feature 212/R31: columna DEPRECADA (la 213 decide su retiro). Se CONSERVA mientras la
   // presentacion actual la consuma: `null` cuando la gestion tiene 0 o >=2 lineas de pago.
   metodoPago: MetodoPagoValue | null;
   /**
-   * Feature 208 (R21/R22): DESGLOSE del recaudo al cliente — 0..N lineas `(metodo, monto)`,
+   * Feature 212 (R21/R22): DESGLOSE del recaudo al cliente — 0..N lineas `(metodo, monto)`,
    * money-safe STRING escala 2, en el orden de declaracion del enum (`efectivo`, `SINPE`,
    * `transferencia`), que es el que devuelve `orderBy: { metodo: "asc" }` sobre un enum nativo.
    *

@@ -495,7 +495,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
 });
 
 describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
-  // Feature 208 (R11/R12): el desglose es OBLIGATORIO en el input del service y llega YA
+  // Feature 212 (R11/R12): el desglose es OBLIGATORIO en el input del service y llega YA
   // normalizado desde el borde. La forma escalar historica de este fixture equivale a UNA
   // linea con el total, que es exactamente lo que produce `normalizarPagos` (R12): lo que
   // cada caso de abajo AFIRMA sigue siendo lo mismo.
@@ -854,7 +854,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
         resultado: "entregada",
         montoRecibido: 100,
         metodoPago: "efectivo",
-        pagos: [{ metodo: "efectivo", monto: 100 }], // feature 208: desglose normalizado (R12)
+        pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
         evidencias: [evidencia()],
       },
       MENSAJERO,
@@ -946,7 +946,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     resultado: "entregada",
     montoRecibido: 100,
     metodoPago: "efectivo",
-    pagos: [{ metodo: "efectivo", monto: 100 }], // feature 208: desglose normalizado (R12)
+    pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
     evidencias: [evidencia()],
   });
 

@@ -14,7 +14,7 @@ import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesS
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
-// Feature 208 (T7 · R18/R19) — el SERVICE es la SEGUNDA barrera del desglose, independiente del
+// Feature 212 (T7 · R18/R19) — el SERVICE es la SEGUNDA barrera del desglose, independiente del
 // borde zod y con aritmetica `Prisma.Decimal`. Dobles del repo/storage (nada de DB): lo que se
 // afirma es el `GestionOrdenData` EMITIDO hacia `crearGestionYTransicionar`, y que una suma que
 // no cuadra NO llega a persistirse.

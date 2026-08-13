@@ -1,8 +1,15 @@
-# review_208 — Pago multiple por entrega (modelo y calculo del recaudo)
+# review_212 — Pago multiple por entrega (modelo y calculo del recaudo)
 
-> Reviewer, 2026-08-12. Rama `feature/208-pago-multiple-entrega`, trabajo SIN COMMITEAR en el
+> Reviewer, 2026-08-12. Rama `feature/212-pago-multiple-entrega`, trabajo SIN COMMITEAR en el
 > checkout principal, compartido con otra sesion. No se corrio `git checkout` / `stash` / `reset`.
 > No se aplico ni se revirtio ninguna migracion contra la base local.
+>
+> **Renumeracion 208 -> 212 (2026-08-13).** Esta revision se hizo cuando la ficha era la **208**;
+> se renumero a **212** antes del PR porque otra sesion publico y mergeo su propia 208
+> (`chore/208-navy-fijo`), y 209/210/211 tambien quedaron ocupados. La particion se movio en
+> bloque: 208 -> 212 (backend, esta), 209 -> 213 (frontend), 210 -> 214 (retiro del escalar). Solo
+> cambian los numeros; ningun hallazgo, ninguna medicion y ninguna fecha de este informe se tocan.
+> Detalle del barrido en `progress/impl_212.md`, seccion 8.
 
 ## Veredicto ronda 1: **RECHAZADO** — ronda 2 (abajo): **APROBADO**
 
@@ -16,23 +23,23 @@ el implementer NO habia probado.
 ## 1. Checklist de CHECKPOINTS.md
 
 ### Especificacion
-- [x] `specs/208-pago-multiple-entrega/requirements.md` con R1..R33 en EARS.
+- [x] `specs/212-pago-multiple-entrega/requirements.md` con R1..R33 en EARS.
 - [x] `design.md` con cuatro alternativas descartadas y su porque (parrafo 5, A/B/C/D).
 - [x] `tasks.md`: T1..T17 marcadas `[x]`. T18 (bookkeeping) sin marcar, es del leader por
       instruccion explicita.
 
 ### Trazabilidad
 - [x] Cada `R<n>` mapea a al menos un test concreto. **Los 33.**
-- [x] `progress/impl_208.md` contiene el mapa `R -> test`, por bloques A/B/C/D.
+- [x] `progress/impl_212.md` contiene el mapa `R -> test`, por bloques A/B/C/D.
 
 ### Calidad de codigo
 - [x] `pnpm run typecheck` verde.
 - [x] `pnpm run lint` verde (0 errors, 60 warnings preexistentes y ajenas).
 - [x] `pnpm test` verde: **1078 files / 13524 tests passed**, 0 failed, 0 skipped,
       0 unhandled errors, 563.86 s. Corrida NO degradada (1078 archivos = el total esperado).
-      El implementer reporto 13519; los +5 son de la otra sesion, no de la 208.
-- [~] E2E de flujo critico: **no hay E2E nuevo**. Defendible (la 208 no expone superficie de UI;
-      el desglose no se puede capturar hasta la 209) y los E2E preexistentes de entrega/cierre
+      El implementer reporto 13519; los +5 son de la otra sesion, no de la 212.
+- [~] E2E de flujo critico: **no hay E2E nuevo**. Defendible (la 212 no expone superficie de UI;
+      el desglose no se puede capturar hasta la 213) y los E2E preexistentes de entrega/cierre
       pasan sin cambios, pero el camino MIXTO queda sin E2E. Ver hallazgo menor 5.
 
 ### Datos y seguridad (Supabase)
@@ -56,7 +63,7 @@ el implementer NO habia probado.
 
 ### Verificacion final
 - [x] `./init.sh` completo en verde (corrido por el reviewer, no por la bitacora).
-- [x] `progress/review_208.md` existe (este).
+- [x] `progress/review_212.md` existe (este).
 - [ ] Entrada en `progress/history.md`: pendiente (T18, leader).
 
 ---
@@ -76,7 +83,7 @@ The migration from the database are not found locally in prisma/migrations:
 20260728120000_orden_historial_origen_deshacer_asignacion
 ```
 
-La migracion de la 208 figura como NO aplicada, y las dos causas de divergencia que el
+La migracion de la 212 figura como NO aplicada, y las dos causas de divergencia que el
 implementer alega son reales y ajenas a esta feature. No se reseteo nada. El reviewer tampoco
 toco la base.
 
@@ -89,7 +96,7 @@ sha256 del archivo antes de tocarlo:
 `13 failed | 15 passed` en 3 archivos. Entre ellos:
 
 - `cierre-totales.test.ts :: "suma solo entregadas con monto, por metodo"`, test **PREVIO** a la
-  208: `efectivo` "10.50" pasa a "17.00".
+  212: `efectivo` "10.50" pasa a "17.00".
 - los **5** de `cierre-dia-service-totales-mixtos.test.ts`, incluido
   `"con P = 6.000 y E = 5.000, se le entregan 5.000 y quedan 1.000 pendientes"`. La `E` del
   `min(P, E)` se infla de 5000.00 a 8000.00: dinero mal pagado a una persona, detectado.
@@ -104,7 +111,7 @@ Arbol restaurado: sha256 identico (`6b73aef...`) y los 3 archivos vuelven a `28 
 
 ### 2.3 R27 (paridad al centavo) — GENUINO
 
-`cierre-totales-pagos.test.ts` reimplementa el calculo ESCALAR previo a la 208 como oraculo
+`cierre-totales-pagos.test.ts` reimplementa el calculo ESCALAR previo a la 212 como oraculo
 independiente y suma en **centimos enteros** (no en `Prisma.Decimal`, que seria compararlo consigo
 mismo), sobre un conjunto generado filtrado a gestiones de metodo unico, que es lo que el backfill
 R6/R7 produce, con aserciones anti-vacuidad (`expect(escalares.general).not.toBe("0.00")`).
@@ -165,7 +172,7 @@ completo en `tests/integration/db/liquidacion-reparto-migration.test.ts`, que ej
 `migration.sql` REAL dentro de un esquema temporal, en una transaccion que SIEMPRE se revierte,
 **sin aplicar la migracion a ninguna base y sin tocar `_prisma_migrations` ni `public`**. Ese
 precedente es la migracion inmediatamente anterior en `db/migrations/`, esta igual de "pendiente"
-en la base local que la de la 208, y sus tests pasaron verdes en mi corrida completa: la
+en la base local que la de la 212, y sus tests pasaron verdes en mi corrida completa: la
 divergencia del historial no impide ese camino en absoluto.
 
 **Por que es bloqueante y no menor.** `docs/verification.md` lo pide literalmente ("Verifica
@@ -189,18 +196,18 @@ CASCADE (R1) y que el `down.sql` REAL deje el esquema y los datos de `gestion_or
 
 ### menor 1 — La bitacora afirma de mas sobre `metodo_pago` en la forma escalar
 
-`impl_208.md` parrafo 6.2 dice: "Para la forma escalar legacy el valor escrito es identico al de
+`impl_212.md` parrafo 6.2 dice: "Para la forma escalar legacy el valor escrito es identico al de
 hoy". Es cierto **solo** para `montoRecibido > 0`. Para `montoRecibido = 0` con el escalar
 `efectivo` que hoy fuerza `GestionarOrdenPanel.tsx:331`, `normalizarPagos` devuelve `[]` y
 `metodoPagoCompatibilidad([])` escribe `NULL` donde hoy se escribe `efectivo`.
 
 **No es un defecto**: R14 mas R19 lo exigen, esta testeado (`mis-asignaciones-pagos ::
-"CERO lineas (sin cobro) -> metodoPago NULL, no efectivo"`) y la ficha 208 lo aprueba
+"CERO lineas (sin cobro) -> metodoPago NULL, no efectivo"`) y la ficha 212 lo aprueba
 explicitamente ("AVISO ACEPTADO AL APROBAR... se aprobo a sabiendas, no es un defecto que
 reportar"). Lo que hay que corregir es la FRASE de la bitacora, que induce a leer una paridad
 total que no existe.
 
-Efecto colateral a dejar escrito para la **210**: tras la migracion, la columna deprecada queda
+Efecto colateral a dejar escrito para la **214**: tras la migracion, la columna deprecada queda
 con dos semanticas conviviendo. Las entregas sin cobro HISTORICAS conservan `efectivo` (el
 backfill R7 no las toca ni las limpia) y las NUEVAS escriben `NULL`. Sin impacto en ningun total
 (R25 y R26 las ignoran), pero quien retire la columna debe saberlo.
@@ -217,7 +224,7 @@ totales por metodo esta CERRADO"), mas la forma `Decimal(12,2)` de cada columna 
 una cuarta. Es una cobertura mejor que la que el spec pedia.
 
 Basta con **corregir el texto** de `requirements.md` R32 y de `design.md` parrafo 6
-(`cierre_maestro` pasa a `cierre_bodega`). Se puede hacer en el PR de la 208.
+(`cierre_maestro` pasa a `cierre_bodega`). Se puede hacer en el PR de la 212.
 
 ### menor 3 — `lib/utils/lineas-pago.ts` esta JUSTIFICADO, no es alcance de mas
 
@@ -241,19 +248,19 @@ mismo acotamiento por bloque que se uso para el repositorio.
 
 ### menor 5 — Sin E2E del camino mixto
 
-`CHECKPOINTS.md` pide E2E para flujos de pagos y recaudo. La 208 no tiene superficie de UI y el
-desglose no se puede capturar hasta la 209, asi que un E2E del camino mixto es literalmente
+`CHECKPOINTS.md` pide E2E para flujos de pagos y recaudo. La 212 no tiene superficie de UI y el
+desglose no se puede capturar hasta la 213, asi que un E2E del camino mixto es literalmente
 inescribible hoy; los E2E preexistentes (`mis-asignaciones`, `cierre-dia`, `cierres-admin`,
 `cierre-bodega-satelite`) cubren el camino escalar y no cambian. Aceptable **si queda escrito en
-el PR** que el E2E del cobro mixto es entregable de la 209, no deuda huerfana.
+el PR** que el E2E del cobro mixto es entregable de la 213, no deuda huerfana.
 
 ### menor 6 — Bookkeeping pendiente (T18)
 
-`feature_list.json` tiene la 208 en `in_progress` y no hay entrada en `progress/history.md`. Es
+`feature_list.json` tiene la 212 en `in_progress` y no hay entrada en `progress/history.md`. Es
 tarea del leader por instruccion explicita, pero los checkpoints correspondientes no estan
 cumplidos todavia y no se puede pasar a `done` sin ellos.
 
-### menor 7 — El gate cubre menos de lo que aparenta en esta maquina (ajeno a la 208)
+### menor 7 — El gate cubre menos de lo que aparenta en esta maquina (ajeno a la 212)
 
 `jq` no esta instalado, asi que los pasos 3 y 4 de `init.sh` (regla max-2-por-zona y "specs
 presentes para features sdd en vuelo") se omiten con `warn` y no aparecen en la salida. La corrida
@@ -315,7 +322,7 @@ reporta 0). Lo comprobado:
 
 **Ejecuta SQL de verdad, no es regex con otra cara.** El bloque llama a `$executeRawUnsafe` /
 `$queryRawUnsafe` sobre el `upSql` y el `downSql` LEIDOS DEL ARCHIVO, sentencia a sentencia
-(`aplicarDdl`), dentro de `enTransaccionRevertida` sobre un esquema temporal `t208_<uuid>` con un
+(`aplicarDdl`), dentro de `enTransaccionRevertida` sobre un esquema temporal `t212_<uuid>` con un
 clon `LIKE public."gestion_orden" INCLUDING ALL`. Las mediciones salen del catalogo
 (`pg_class.relrowsecurity`, `pg_policies`, `pg_index`, `pg_constraint.confdeltype`) y de los
 MENSAJES de error reales de Postgres, no del texto del `.sql`.
@@ -345,7 +352,7 @@ borrada:
 esquemas_t208 = []            <- el bloque B no deja residuo
 tabla_en_public = []          <- gestion_orden_pago NO existe en public
 filas_gestion_orden = 44      <- las 44 de siempre
-en _prisma_migrations = []    <- la 208 sigue sin aplicarse
+en _prisma_migrations = []    <- la 212 sigue sin aplicarse
 ```
 
 Y `HAY_BASE_DE_DATOS` **no esta saltando nada en silencio**: si lo estuviera, los 10 tests del
@@ -359,7 +366,7 @@ bloque saltado no se pone rojo.
 
 **menor 1 (bitacora §6.2).** Corregida. Dice ahora que con la forma escalar y `montoRecibido > 0`
 el valor es el mismo, y **explicita el caso en que NO lo es** (entrega sin cobro: `'efectivo'` pasa
-a `NULL`), marcandolo como aprobado a sabiendas. Y anota para la 210 la consecuencia de las **dos
+a `NULL`), marcandolo como aprobado a sabiendas. Y anota para la 214 la consecuencia de las **dos
 semanticas** conviviendo en la columna deprecada (historicas con `'efectivo'`, nuevas con `NULL`),
 con el razonamiento de por que eso es municion para retirarla. Es exactamente lo que faltaba.
 
@@ -377,7 +384,7 @@ que el proximo lector la tome por un descuido.
 
 **menor 3 (guardia de R30).** Hay quinto tramo:
 `lib/services/MisAsignacionesService.ts (revalidación de la suma, R18)`, acotado por llaves
-balanceadas para no barrer la aritmetica pre-208 del archivo. Trae anclas de no-vacuidad
+balanceadas para no barrer la aritmetica pre-212 del archivo. Trae anclas de no-vacuidad
 (`new Prisma.Decimal(p.monto)`, `sumaPagos.equals(`, `status: "validation_error"`), una asercion
 de que el extractor no se lleva el archivo entero medida por la asimetria del `+`, y un test
 propio de que la segunda barrera acumula con `Decimal.plus` y compara con `equals`.
@@ -400,7 +407,7 @@ Por que la 205 SI la necesitaba: su UP hace `ALTER TABLE "liquidacion_pago" ADD 
 Un clon tomado de un `public` ya migrado trae la columna, y el `ADD COLUMN` muere con «ya existe».
 De ahi que su molde aplique el `down.sql` al clon antes de medir.
 
-Por que la 208 NO la necesita:
+Por que la 212 NO la necesita:
 
 1. **El UP no toca `gestion_orden`.** Sus cinco sentencias son `CREATE TABLE`, dos `CREATE INDEX`,
    un `ALTER TABLE gestion_orden_pago ADD CONSTRAINT`, un `ALTER TABLE gestion_orden_pago ENABLE
@@ -446,7 +453,7 @@ nadie mira, y los pasos 3 y 4 (`max-2-por-zona` y `specs presentes para features
 **no se evaluan**; `== init OK ==` no los cubre. El implementer lo declara honestamente. Los
 reevalue yo por mi cuenta sobre `feature_list.json`:
 
-- `in_progress` = **2**: `196` (fullstack) y `208` (backend). Una por zona, dentro del limite.
+- `in_progress` = **2**: `196` (fullstack) y `212` (backend). Una por zona, dentro del limite.
 - Specs faltantes para features `sdd` en vuelo: **ninguna**.
 
 Los dos pasos habrian pasado. Pero conviene que el leader lo sepa: en esta maquina el gate afirma
@@ -456,7 +463,7 @@ menos de lo que su ultima linea sugiere.
 
 ## R2.5 — Mapa `R -> test`: SIGUE COMPLETO (33/33), y mejor
 
-La tabla del bloque A de `impl_208.md` ahora distingue **A** (estatico) de **B** (Postgres real) y
+La tabla del bloque A de `impl_212.md` ahora distingue **A** (estatico) de **B** (Postgres real) y
 R1, R2, R4, R6, R7 y R9 ganan cobertura de comportamiento ademas de la textual. R3, R5, R8 y R10
 siguen solo con la estatica, que es lo correcto: son afirmaciones sobre lo que el SQL **no dice**
 (sin columna `referencia`, sin `ALTER` de las tablas de cierre, sin `CHECK` de la suma), y eso se
@@ -470,16 +477,16 @@ Ningun requisito sin test, ningun test vacio.
 ## R2.6 — Residuos que quedan (ninguno bloqueante)
 
 1. **menor — `pnpm run db:rollback` sigue sin ejecutarse nunca para esta migracion.** El bloque B
-   ejecuta el `down.sql` REAL contra Postgres, que es la parte especifica de la 208 y la unica que
+   ejecuta el `down.sql` REAL contra Postgres, que es la parte especifica de la 212 y la unica que
    esta feature escribe. Lo que no se ha ejercido es el envoltorio de
    `scripts/db-rollback.ts` (`prisma db execute --file` mas el `DELETE FROM "_prisma_migrations"`),
    que es generico, preexistente y no cambia aqui. Residuo delgado; lo doy por aceptable.
 2. **menor — sin E2E del camino mixto.** Sigue igual que en la ronda 1: hoy es inescribible (no hay
-   UI que capture el desglose hasta la 209). Dejarlo escrito en el PR como entregable de la 209,
+   UI que capture el desglose hasta la 213). Dejarlo escrito en el PR como entregable de la 213,
    no como deuda huerfana.
-3. **menor — bookkeeping (T18) pendiente.** `feature_list.json` tiene la 208 en `in_progress` y no
+3. **menor — bookkeeping (T18) pendiente.** `feature_list.json` tiene la 212 en `in_progress` y no
    hay entrada en `progress/history.md`. Es del leader; sin eso no puede pasar a `done`.
-4. **menor, ajeno a la 208 — `jq` ausente**, ver R2.4. El gate omite dos comprobaciones sin que se
+4. **menor, ajeno a la 212 — `jq` ausente**, ver R2.4. El gate omite dos comprobaciones sin que se
    note. Vale la pena instalarlo o convertir el `warn` en `fail`.
 
 ---
@@ -495,5 +502,5 @@ Todo lo que toque quedo devuelto, verificado por sha256:
 | `lib/services/MisAsignacionesService.ts` | `2533ef10…` | restaurado |
 
 La sonda temporal (`tests/integration/db/__probe208.test.ts`) fue borrada. El unico archivo que
-este reviewer anade al arbol es `progress/review_208.md`. No se corrio `git checkout`, `git stash`
+este reviewer anade al arbol es `progress/review_212.md`. No se corrio `git checkout`, `git stash`
 ni `git reset`, y no se toco ningun archivo de la otra sesion.

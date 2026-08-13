@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { aCentimos, normalizarPagos, sumaCuadra } from "@/lib/utils/pagos-recaudo";
 
-// Feature 208 (T4) — util PURO del desglose del recaudo. Cubre R12 (forma escalar historica),
+// Feature 212 (T4) — util PURO del desglose del recaudo. Cubre R12 (forma escalar historica),
 // R14 (sin cobro -> cero lineas) y R30 (centimos enteros, cero float, cero parseFloat).
 
 describe("aCentimos / sumaCuadra (R30: centimos enteros, nunca float)", () => {

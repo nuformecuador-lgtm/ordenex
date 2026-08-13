@@ -3,10 +3,10 @@ import { gestionar } from "@/lib/actions/mis-asignaciones";
 import type { IMisAsignacionesService } from "@/lib/interfaces/services/IMisAsignacionesService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
-// Feature 208 (T6 · R11/R12) — el BORDE lee el DESGLOSE del FormData como campos REPETIDOS
+// Feature 212 (T6 · R11/R12) — el BORDE lee el DESGLOSE del FormData como campos REPETIDOS
 // `pagoMetodo`/`pagoMonto` (mismo patron `getAll` que las evidencias de la 119) y los empareja
-// por indice. Lo que este archivo protege de verdad es la VENTANA entre el merge de la 208 y el
-// de la 209: el panel viejo sigue mandando un metodo escalar y NO puede dejar de funcionar.
+// por indice. Lo que este archivo protege de verdad es la VENTANA entre el merge de la 212 y el
+// de la 213: el panel viejo sigue mandando un metodo escalar y NO puede dejar de funcionar.
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const actorMensajero = async () => MENSAJERO;

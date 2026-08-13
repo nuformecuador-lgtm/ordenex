@@ -121,7 +121,7 @@ export const WITH_DETALLE = {
     pagoMensajero: true, // feature 39: snapshot del pago al mensajero (reuso 38/40)
     ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo (reuso 38/40)
     causaIncidente: true, // feature 158/R9: causa tipificada del incidente (null en el resto)
-    // Feature 208/R21/R22/R23: el DESGLOSE del recaudo. Sin esto la fila de dominio no
+    // Feature 212/R21/R22/R23: el DESGLOSE del recaudo. Sin esto la fila de dominio no
     // compila, y si compilara los totales del cierre saldrian en CERO: `computeTotales` suma
     // EXCLUSIVAMENTE estas lineas, sin fallback al par escalar (design §3.1). `orderBy` sobre
     // un enum NATIVO ordena por orden de DECLARACION (efectivo, SINPE, transferencia): orden
@@ -173,7 +173,7 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     tiendaNombre: row.orden.tienda.nombre,
     resultado: row.resultado,
     montoRecibido: decimalToString(row.montoRecibido),
-    // Feature 208/R31: el par escalar se CONSERVA (la 209 decide su retiro)...
+    // Feature 212/R31: el par escalar se CONSERVA (la 213 decide su retiro)...
     metodoPago: row.metodoPago,
     // ...pero el dinero que suma es ESTE: el desglose por metodo, money-safe STRING, en el
     // orden que impuso el `orderBy` de la proyeccion (R21/R22).

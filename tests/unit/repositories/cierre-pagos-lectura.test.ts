@@ -14,7 +14,7 @@ import { CierresBodegaAdminRepository } from "@/lib/repositories/CierresBodegaAd
 import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 
 /**
- * Feature 208 (T10, R21/R22/R23) — el DESGLOSE del recaudo llega por los TRES caminos de
+ * Feature 212 (T10, R21/R22/R23) — el DESGLOSE del recaudo llega por los TRES caminos de
  * lectura que producen un `CierreGestionPendienteRow`.
  *
  * Por qué los tres, y no «uno representativo»: `pagos` es obligatorio y SIN fallback al par
@@ -146,7 +146,7 @@ describe("R23 — las dos proyecciones que producen la fila seleccionan `pagos`"
   it("R22: el orden es `asc` sobre el enum NATIVO = orden de declaración, no alfabético", () => {
     // Alfabéticamente sería SINPE < efectivo < transferencia. Sobre un enum nativo de
     // Postgres, `asc` es el orden de DECLARACIÓN: efectivo, SINPE, transferencia. Eso es lo
-    // que hace determinista la concatenación de las descargas de la 209 sin columna de orden.
+    // que hace determinista la concatenación de las descargas de la 213 sin columna de orden.
     expect(WITH_DETALLE.select.pagos.orderBy).toEqual({ metodo: "asc" });
     expect(GESTION_ADMIN_SELECT.pagos.orderBy).toEqual({ metodo: "asc" });
   });

@@ -118,7 +118,7 @@ export const GESTION_ADMIN_SELECT = {
   ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo
   causaIncidente: true, // feature 158/R9/R34: causa tipificada del incidente
   indemnizacion: true, // feature 158/R19/R22/R34: monto capturado al aprobar (null antes)
-  // Feature 208/R21/R22/R23: el DESGLOSE del recaudo. Esta proyeccion alimenta los DOS
+  // Feature 212/R21/R22/R23: el DESGLOSE del recaudo. Esta proyeccion alimenta los DOS
   // detalles de admin (cierres 38/40 y cierres de bodega, que la reusan con este mismo
   // mapper), asi que el desglose llega a los tres caminos con una sola definicion. Sin
   // fallback al par escalar: una proyeccion que lo olvide da CERO, no un total plausible.
@@ -242,7 +242,7 @@ export function toPendienteRowDesdeSnapshot(
     tiendaNombre: d.tiendaNombre,
     resultado: g.resultado,
     montoRecibido: decimalToString(g.montoRecibido),
-    // Feature 208/R31: el par escalar se CONSERVA (la 209 decide su retiro)...
+    // Feature 212/R31: el par escalar se CONSERVA (la 213 decide su retiro)...
     metodoPago: g.metodoPago,
     // ...y el desglose por metodo viaja al lado, money-safe STRING, ya ordenado por la
     // consulta (R21/R22). Es lo unico que suma en `computeTotales`.

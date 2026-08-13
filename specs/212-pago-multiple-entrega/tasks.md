@@ -1,6 +1,6 @@
-# 208 — Pago múltiple por entrega (backend) — Tasks
+# 212 — Pago múltiple por entrega (backend) — Tasks
 
-Rama: `feature/208-pago-multiple-entrega` (de `origin/dev`, `c23c118a`).
+Rama: `feature/212-pago-multiple-entrega` (de `origin/dev`, `c23c118a`).
 Convención: un commit por task lógica (`docs/conventions.md`). `[P]` = paralelizable con las tasks
 que comparten el mismo bloque de dependencias. `./init.sh --rapido` al cerrar cada tanda;
 `./init.sh` completo antes del PR (`docs/verification.md`).
@@ -15,7 +15,7 @@ que comparten el mismo bloque de dependencias. `./init.sh --rapido` al cerrar ca
   `monto Decimal @db.Decimal(12,2)`, `createdAt`, FK CASCADE, `@@unique([gestionId, metodo])`,
   `@@index([gestionId])`, `@@map("gestion_orden_pago")`) + `pagos GestionOrdenPago[]` en
   `GestionOrden`. `monto_recibido` y `metodo_pago` se CONSERVAN intactos (R5); comentario que marca
-  `metodoPago` como DEPRECADO y remite a la 209.
+  `metodoPago` como DEPRECADO y remite a la 213.
 - **Hecho:** `pnpm db:generate` limpio y `pnpm run typecheck` verde.
 - **Cubre:** R1, R2, R3, R5.
 
@@ -144,7 +144,7 @@ que comparten el mismo bloque de dependencias. `./init.sh --rapido` al cerrar ca
 - **Archivos:** `lib/interfaces/services/ICierreDiaService.ts` (`:34-35`),
   `lib/services/CierreDiaService.ts` (`:595-603`)
 - **Qué:** `CierreGestionDTO` gana `pagos` y CONSERVA `metodoPago` (R31); el mapper lo propaga.
-  Éste es el contrato que consume la 209 (panel, detalles y descargas [D4]).
+  Éste es el contrato que consume la 213 (panel, detalles y descargas [D4]).
 - **Hecho:** test de que el DTO lleva el desglose y sigue llevando `metodoPago`; ningún componente
   actual se rompe (typecheck de `app/` verde sin tocar `app/`).
 - **Cubre:** R31.
@@ -178,17 +178,17 @@ que comparten el mismo bloque de dependencias. `./init.sh --rapido` al cerrar ca
 - **Cubre:** R32, R33.
 
 ### [x] T17. Mapa de trazabilidad + evidencia — depende de todo lo anterior
-- **Archivos:** `progress/impl_208-pago-multiple-entrega.md`
+- **Archivos:** `progress/impl_212-pago-multiple-entrega.md`
 - **Qué:** tabla `R1..R33 → test concreto` con la salida real de la suite pegada.
 - **Hecho:** ningún requisito sin test; `./init.sh` COMPLETO en verde (no `--rapido`) antes de abrir
   el PR.
 - **Cubre:** el criterio del reviewer (`docs/verification.md`).
 
 ### T18. Bookkeeping — depende de T17
-- **Archivos:** `feature_list.json` (id 208 → `done`, `status_note` con la decisión sobre el retiro
+- **Archivos:** `feature_list.json` (id 212 → `done`, `status_note` con la decisión sobre el retiro
   de `metodo_pago`), `progress/current.md`
 - **Qué:** dejar escrito en el PR si la forma escalar del borde y la columna `metodo_pago` se
-  retiran en la 209 o quedan (pregunta abierta 3 de `requirements.md`).
+  retiran en la 213 o quedan (pregunta abierta 3 de `requirements.md`).
 - **Hecho:** `./init.sh` verde, PR abierto contra `dev`.
 
 ---

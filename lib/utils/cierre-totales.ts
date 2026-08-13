@@ -51,7 +51,7 @@ export function derivarIngresoBodega(
 // R7/R8/R9: suma con Prisma.Decimal (exacto). Solo `entregada` aporta;
 // reprogramada/devuelta/rechazada cuentan $0 (R8). Serializa a STRING (R9).
 //
-// Feature 208 (R24-R28/R30): la fuente del reparto por metodo son las LINEAS del desglose
+// Feature 212 (R24-R28/R30): la fuente del reparto por metodo son las LINEAS del desglose
 // (`g.pagos`), no el par escalar `montoRecibido`/`metodoPago`. Cada linea cae en el balde de
 // SU metodo, asi que una entrega cobrada 5.000 en efectivo + 3.000 por transferencia aporta
 // 5.000 a `efectivo` y 3.000 a `transferencia`, y no 8.000 a un solo balde.

@@ -7,7 +7,7 @@ import { GESTION_ADMIN_SELECT } from "@/lib/repositories/CierresAdminRepository"
 import { codigoSinComentarios } from "../../fixtures/money-safe";
 
 /**
- * Feature 208 / T14 (R23) — GUARDIA DE PROYECCIÓN: **toda proyección Prisma que alimente un
+ * Feature 212 / T14 (R23) — GUARDIA DE PROYECCIÓN: **toda proyección Prisma que alimente un
  * `CierreGestionPendienteRow` selecciona el desglose `pagos`.**
  *
  * Por qué esto es una guardia y no un test de repositorio. `pagos` es OBLIGATORIO en la fila de
@@ -115,7 +115,7 @@ describe("R23 — las proyecciones que producen la fila de cierre traen el desgl
     it(`\`${proyeccion.nombre}\` CONSERVA el par escalar junto al desglose (R31)`, () => {
       // Control de no-vacuidad de lo de arriba —si se estuviera midiendo un objeto vacío, la
       // ausencia de `pagos` no probaría nada— y a la vez R31: el desglose se AÑADE, no
-      // sustituye. `metodoPago` sobrevive hasta que la 209 decida retirarlo, y mientras tanto
+      // sustituye. `metodoPago` sobrevive hasta que la 213 decida retirarlo, y mientras tanto
       // la presentación actual sigue funcionando entre los dos merges.
       expect(proyeccion.select.montoRecibido).toBe(true);
       expect(proyeccion.select.metodoPago).toBe(true);

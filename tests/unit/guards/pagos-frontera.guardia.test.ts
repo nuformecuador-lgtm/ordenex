@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
 import { codigoSinComentarios } from "../../fixtures/money-safe";
 
 /**
- * Feature 208 / T16 (R32, R33) — GUARDIA DE FRONTERA: **el desglose del recaudo se queda dentro
+ * Feature 212 / T16 (R32, R33) — GUARDIA DE FRONTERA: **el desglose del recaudo se queda dentro
  * del cierre. Ni la caja, ni el ledger por tienda, ni la analítica, ni la liquidación se enteran
  * de que existe una tabla nueva.**
  *
@@ -141,7 +141,7 @@ describe("R33 — los módulos inmunes no nombran la tabla del desglose", () => 
         if (codigo.includes(nombre)) contaminados.push(`${ruta}: ${nombre}`);
       }
     }
-    expect(contaminados, "la liquidación (172) leyó el recaudo al cliente (208)").toEqual([]);
+    expect(contaminados, "la liquidación (172) leyó el recaudo al cliente (212)").toEqual([]);
   });
 
   it("CIERRE: los ÚNICOS módulos de `lib/` que nombran el desglose son los del recaudo", () => {
@@ -204,7 +204,7 @@ describe("R32 — `total_efectivo` / `total_simpe` / `total_transferencia`: tres
       .filter((m) => m.cuerpo.includes("total_efectivo"))
       .map((m) => m.nombre);
 
-    // Ni uno menos (nadie los borró) ni uno más (la 208 no creó un cuarto sitio donde vivan los
+    // Ni uno menos (nadie los borró) ni uno más (la 212 no creó un cuarto sitio donde vivan los
     // totales por método: los sigue habiendo donde los había).
     expect(conTotales.sort()).toEqual([...MODELOS_CON_TOTALES].sort());
   });
@@ -237,7 +237,7 @@ describe("R32 — `total_efectivo` / `total_simpe` / `total_transferencia`: tres
     });
   }
 
-  it("la migración de la 208 no altera NINGUNA tabla de cierre", () => {
+  it("la migración de la 212 no altera NINGUNA tabla de cierre", () => {
     // R32 en el SQL: la migración es aditiva (crea una tabla nueva). Si tocara `cierre_dia`
     // —aunque fuera para «recalcular»— los snapshots ya cerrados dejarían de ser snapshots.
     const up = readFileSync(
@@ -255,7 +255,7 @@ describe("R32 — `total_efectivo` / `total_simpe` / `total_transferencia`: tres
     }
     expect(sql).not.toContain("total_efectivo");
 
-    // Control de no-vacuidad: el SQL leído SÍ es el de la 208 y SÍ hace algo.
+    // Control de no-vacuidad: el SQL leído SÍ es el de la 212 y SÍ hace algo.
     expect(sql).toContain('CREATE TABLE "gestion_orden_pago"');
     expect(sql).toContain("ENABLE ROW LEVEL SECURITY");
   });

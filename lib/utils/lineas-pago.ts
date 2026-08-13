@@ -2,7 +2,7 @@ import type { Prisma, MetodoPagoValue } from "@prisma/client";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 
 /**
- * Feature 208 (T10, R21/R22) — serializador del DESGLOSE del recaudo, de la proyeccion Prisma
+ * Feature 212 (T10, R21/R22) — serializador del DESGLOSE del recaudo, de la proyeccion Prisma
  * a la fila de dominio.
  *
  * Vive aparte porque lo usan las DOS proyecciones que producen la fila (`WITH_DETALLE` de la

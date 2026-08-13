@@ -420,7 +420,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           })),
         });
       }
-      // Feature 208 (R17/R20): las 0..N lineas del DESGLOSE del recaudo se insertan en la MISMA
+      // Feature 212 (R17/R20): las 0..N lineas del DESGLOSE del recaudo se insertan en la MISMA
       // transaccion que la gestion y la transicion (todo-o-nada): si algo falla mas abajo, no
       // queda ninguna linea huerfana ni una gestion sin su desglose. Lista vacia (entrega sin
       // cobro, o cualquier otro resultado) no inserta nada. `monto` como `Prisma.Decimal`, mismo
