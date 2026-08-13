@@ -442,3 +442,184 @@ debilitada.
 -> test:guardias       Test Files 96 passed (96)     Tests  1355 passed (1355)
 == init OK ==
 ```
+
+---
+
+## Tanda 5 — Cerrar (T19, T20, T21, T22, T23)
+
+### Los cinco requisitos que no tenían dueño ejecutable
+
+Al montar el mapa `R → test` aparecieron **cinco** requisitos cuya única evidencia iba a
+ser «el diff lo demuestra» o «está escrito en la prosa». Eso no es verificación: nadie se
+entera el día que deja de ser cierto. Se les dio un test:
+
+| R | Antes | Ahora |
+| --- | --- | --- |
+| **R4** | «los dos azules están muy por encima de AA» (razonado) | se **mide**: `--foreground` sobre el papel no puede dar menos que el `--color-navy` al que sustituye. Medido: navy **15,39** → foreground **15,70**. El cambio de tono es visible y **no cuesta contraste** |
+| **R15** | la declaración del límite, en prosa | el comentario que precede a la regla de impresión **tiene que** nombrar el variant `dark:` |
+| **R19** | la viñeta reescrita a mano | el comentario de `.tema-claro` no puede volver a listar la factura como consumidora |
+| **R20** | el título reexpresado | vigilado por sus **dos** mitades: que no vuelva a atar la factura a la clase **y que no desaparezca** |
+| **R22** | `git diff --name-only` | ejecutable: la hoja no importa servicios ni repositorios, no hace `fetch`, no nombra `prisma`, y sus **tres contratos de entrada** siguen exportándose con el mismo nombre |
+
+### T20 · Bitácora de mutaciones — **18 aplicadas, 18 vistas rojas**
+
+`design.md §6.7` pedía diez. Salieron dieciocho porque los cinco dueños nuevos también
+necesitaban la suya (R24: una guardia que nadie vio morder no es evidencia).
+
+Todas con `git diff` comprobado **antes** de correr el gate: una mutación que no se
+aplicó y un arreglo que funciona se leen igual de verdes.
+
+| # | Mutación | Guardia que se puso roja | Casos |
+| --- | --- | --- | --- |
+| 1 | **`@media print` detrás de `.dark` + T3 revertida** — *la obligatoria* | inventario de pares + la guardia de la 210 | **10** |
+| 2 | devolver `tema-claro` a UNA de las dos hojas | censo de fuente + jsdom | 4 |
+| 3 | devolver UN `text-navy` | censo de fuente | 2 |
+| 4 | devolver el `/80` al `-strong` | censo de fuente | 1 |
+| 5 | meter un `bg-white` en la hoja | censo (lista negra) | 1 |
+| 6 | pintar un texto con un par no listado (`text-info-strong`) | **el CIERRE del inventario** | 1 |
+| 7 | borrar el bloque `@media print` entero | espejo / ancestro / tinta | 3 |
+| 8 | cambiar UN hex dentro del bloque (`--card: #fefefe`) | espejo `toEqual` | 1 |
+| 9 | quitar el `@media print` dejando la regla suelta | ancestro | 1 |
+| 10 | empeorar `--foreground` oscuro **en las dos declaraciones** | umbral **y** suelo | 5 |
+| 11 | degradar `--foreground` claro por debajo del navy | R4 + suelos | 6 |
+| 12 | romper la fórmula compartida (`+ 0.05` → `- 0.05`) | **el primer autocontrol de la 210** | 1 (y arrastra 8) |
+| 13 | borrar la declaración del límite `dark:` junto al bloque | R15 | 1 |
+| 14 | volver a listar la factura como consumidora de `.tema-claro` | R19 | 1 |
+| 15 | **borrar** el caso de `.tema-claro` (relajar por borrado) | R20 | 1 |
+| 16 | devolver «la factura» al título reexpresado | R20 | 1 |
+| 17 | la hoja importa un servicio (`@/lib/services/…`) | R22 | 1 |
+| 18 | empeorar `--foreground` oscuro **sólo en `.dark`** | *(ver abajo)* | 1 |
+
+#### Dos hallazgos que sólo aparecieron al mutar
+
+**(a) La mutación obligatoria mal colocada sale VERDE.** Poner el bloque `@media print`
+justo después de `.dark` **no envenena nada**: el bloque `@media (prefers-color-scheme:
+dark)` que viene a continuación vuelve a declarar todos los tokens y, como gana el
+último, el veneno no llega. Hay que ponerlo **después de los dos** —que es, además, donde
+uno añade cosas al final de un archivo—. Con la mutación mal colocada yo habría concluido
+que la medida de T3 no servía para nada. *(Documentado arriba, en la sección de T15.)*
+
+**(b) Mutación 18: empeorar `--foreground` sólo en `.dark` NO lo caza la guardia de
+contraste.** Por lo mismo: el lector se queda con la última declaración, que es la del
+bloque espejo. Quien lo caza es la guardia de la 211 («sistema toma EXACTAMENTE los
+mismos tokens que oscuro»). Es correcto y conviene saberlo: **las dos guardias se cubren
+los flancos**, ninguna sola habría bastado. Una regresión real de tokens tiene que pasar
+por las dos.
+
+#### Y un número que la mutación regaló
+
+Envenenado, P22 (`Button` variant `destructive`) da **2,89** — que es EXACTAMENTE lo que
+la 208 midió en su día para esa variante dentro de la hoja fijada a claro. No es
+casualidad: el envenenamiento reproduce el estado antiguo (tokens claros + variante
+`dark:` disparando). Sirve como medición del **antes**, y con ella se puede afirmar que
+esta feature **no empeora** esa deuda: **2,89 antes → 4,43 hoy** en pantalla oscura.
+
+### T21 · Frontera
+
+`git diff --name-only` de mis commits (`804b6b05..HEAD`):
+
+```
+app/(app)/cierres-admin/_components/cierre-factura.tsx
+app/globals.css
+progress/impl_217.md
+tests/components/CierreFacturaPapel.test.tsx
+tests/fixtures/contraste.ts
+tests/unit/guards/contraste-tokens.guardia.test.ts
+tests/unit/guards/factura-contraste.guardia.test.ts
+tests/unit/guards/tema-encendido.guardia.test.ts
+```
+
+Ocho archivos, **exactamente** el inventario de `design.md §0`. Cero `db/`, cero `lib/`,
+cero `app/api/`, cero `components/ui/` — comprobado con un `grep` sobre el listado.
+`feature_list.json` **no se tocó**: el bookkeeping es del leader.
+
+**Los tests preexistentes de la factura, verdes SIN modificar** (R23):
+
+```
+pnpm exec vitest run tests/components/{CierreDetallePagos,CierresAdminModule,
+  CierreDiaModule,CierresAdminPagoMensajero,CierreDetalleIncidente,
+  CierresAdminIndemnizacion,CierresAdminDeepLink}.test.tsx
+
+ Test Files  7 passed (7)
+      Tests  180 passed (180)
+```
+
+Ninguno aparece en el `git diff --name-only`. Localizan la factura por sus nombres
+accesibles y siguen encontrándola: R23 se cumple porque **no hizo falta tocarlos**.
+
+### T19 · Lo que queda fuera, declarado con ancla y número fechado (2026-08-13)
+
+*(La tabla completa está en la Tanda 3. Aquí, el resumen y a quién le toca.)*
+
+- **R17 — preexistente, ajeno al pin y a R8:** el aviso «sin tarifa congelada»
+  (`cierre-detalle-shared.tsx:651`, `text-destructive`) mide **3,76** en claro y **5,89**
+  en oscuro. Vive en un componente COMPARTIDO con las tablas del detalle. Declarado como
+  **P20**, con suelo. **No corregido**: un parche local lo dejaría roto en las demás
+  vistas que montan ese componente.
+- **R18 — variantes de primitiva bajo AA dentro de la hoja:** `Button` `default` (P21)
+  **3,18** claro / 7,06 oscuro, y `Button` `destructive` (P22) **3,29** claro / **4,43**
+  oscuro. Ambas de `components/ui/button.tsx`, que **no se tocó**.
+- **Lo que NO queda verificado**, y se dice por delante: el resultado impreso real
+  (ninguna pieza del gate renderiza en papel — la verificación es **estructural**), la
+  composición en ejecución de las primitivas, y «que la hoja se vea bien». Ninguna de las
+  cuatro piezas lo afirma.
+
+### T22 · Mapa `R → test` — los 26 con dueño
+
+| R | Test que lo cubre |
+| --- | --- |
+| **R1** | `factura-contraste` › «la hoja ya no se fija a tema claro, y ninguna prosa dice que lo haga (R1, R19)» · `CierreFacturaPapel` › «la hoja del DETALLE ya no fija su subárbol a tema claro» y «la hoja COMPACTA tampoco» |
+| **R2** | `factura-contraste` › «cero tinta de valor fijo: ni un `text-navy`, ni un `border-navy` (R2)» y «ninguna utilidad de color de valor fijo (R2, R3)» |
+| **R3** | `factura-contraste` › «el indicador de la pestaña activa usa un token que gira, no el de marca (R3)» · `CierreFacturaPapel` › «la pestaña seleccionada se marca con `border-foreground` y `text-foreground`» · inventario P1 y P12 |
+| **R4** | `factura-contraste` › «R4: en tema claro el tono nuevo no tiene menos contraste que el navy que sustituye» · inventario P1 en claro |
+| **R5** | los **7 archivos** de tests de componente preexistentes de cierres/factura, verdes **sin modificar** (180 tests) · el diff de T8: 18 líneas y cada par difiere sólo en el token de color |
+| **R6** | `factura-contraste` › «P1…P14, P19 cumple su umbral y su suelo en los DOS temas» — 15 casos × 2 temas, con las capas compuestas |
+| **R7** | `factura-contraste` › «CIERRE: toda utilidad de color de la hoja mapea a un par del inventario (R7)», «ningún par del inventario quedó obsoleto (R7)», «cada par medible tiene su suelo anotado» + el suelo dentro de cada caso |
+| **R8** | `factura-contraste` › «ninguna opacidad sobre un token `-strong` (R8)» · inventario P9 |
+| **R9** | `tema-encendido` › «hay UNA regla `.papel-al-imprimir` y vive dentro de `@media print`» · `factura-contraste` › «las DOS hojas llevan `papel-al-imprimir`, una por `<Card>` (R9)» · `CierreFacturaPapel` › los dos casos de la clase |
+| **R10** | `tema-encendido` › «fija la TINTA y no solo la superficie (si no, en papel sale blanco sobre blanco)» |
+| **R11** | `tema-encendido` › «NO fuerza la impresion de fondos: nada de `print-color-adjust`» · `factura-contraste` › «no fuerza la impresión de fondos ni añade un flujo de impresión (R11, R14)» |
+| **R12** | `tema-encendido` › «declara los MISMOS tokens y los MISMOS valores que el tema claro, hex a hex» (`toEqual`, claves y valores) |
+| **R13** | `tema-encendido` › «hay UNA regla … dentro de `@media print`» + los **4 casos de la 211** (`.dark`, `.tema-sistema`, `body:has`, el variant) verdes **sin tocarse** |
+| **R14** | `factura-contraste` › «no fuerza la impresión de fondos ni añade un flujo de impresión (R11, R14)» — cero `window.print`, cero rótulo «Imprimir» |
+| **R15** | `tema-encendido` › «el variant `dark:` dispara por CLASE y tambien por preferencia del sistema» (intacto) y «junto a la regla de impresion queda escrito su limite: no apaga el variant `dark:` (R15)» |
+| **R16** | `factura-contraste` › «los exentos están en la lista, MARCADOS, y con su motivo escrito» (P15-P18) + la excepción `brand` escrita con su motivo en el código de la guardia |
+| **R17** | `factura-contraste` › «la deuda AJENA que hoy queda bajo AA dentro de la hoja está NOMBRADA (R17, R18)» y «P20 es deuda declarada (R17): no se exige el umbral, pero NO puede empeorar» |
+| **R18** | los mismos + «P21…P25 es deuda declarada» · T21: `git diff --name-only` sin `components/ui/` |
+| **R19** | `factura-contraste` › «la hoja ya no se fija a tema claro, y ninguna prosa dice que lo haga (R1, R19)» y «ninguna guardia sigue afirmando que la factura depende de `.tema-claro` (R19, R20)» · `tema-encendido` › «la prosa de `.tema-claro` ya no lista la factura entre sus consumidores (R19)» |
+| **R20** | `factura-contraste` › «ninguna guardia sigue afirmando que la factura depende de `.tema-claro` (R19, R20)» — vigila que no vuelva a mentir **y** que no se borre · el caso reexpresado en `tema-encendido` |
+| **R21** | `tema-encendido` › «`.tema-claro` sigue fijando los valores claros (la landing … y la eleccion «claro» del portal …)» y «sistema toma EXACTAMENTE los mismos tokens que oscuro» |
+| **R22** | `factura-contraste` › «la hoja sigue siendo presentación pura: ni servidor, ni datos, ni contratos nuevos (R22)» · T21 |
+| **R23** | los 7 archivos preexistentes, verdes **sin modificar** · `CierreFacturaPapel`, que localiza las hojas por `role="region"` + `aria-label` y **nunca** por clase |
+| **R24** | esta bitácora: **18 mutaciones, 18 rojas**, con la de `@media print` detrás de `.dark` como obligatoria |
+| **R25** | `factura-contraste` › «ningún otro archivo de `tests/` tiene una segunda copia de la fórmula de contraste» y «el censo lee de verdad el árbol de `tests/` y encuentra la copia canónica» · la guardia de la 210 importando del fixture |
+| **R26** | `contraste-tokens.guardia.test.ts` › los **tres autocontroles**, ahora sobre la copia compartida · `factura-contraste` › «ninguna verificación de `tests/` se apoya en el detector de `.claude/skills`» |
+
+**26 de 26.** Ninguna fila «pendiente».
+
+### T23 · Lo que sale a ficha aparte
+
+1. **Apagar el variant `dark:` al imprimir en toda la app** — **ya está dada de alta: es
+   la ficha 221**, que nació de la puerta de ésta. No hace falta abrir otra.
+2. **Un flujo de impresión de la factura** (`@page`, ocultar el resto de la interfaz,
+   paginar los renglones, y decidir si se imprime desde el modal o desde una vista
+   propia). **No existe ficha.** Esta feature garantiza el color, no el formato (D8), y
+   desde el modal la hoja se imprimiría recortada por el `overflow-y-auto`.
+3. **Hallazgo que no tiene dueño:** `Button` variant `destructive` mide **3,29** en claro
+   y **4,43** en oscuro (`button.tsx:24`). La **210** está `done` y sólo arregló el
+   `Badge` —lo mandó al par de `danger`—; la **216** trata el naranja de marca, que es
+   otro par. Así que esta variante está **bajo AA y sin ficha que la reclame**. No entra
+   aquí (R18 lo prohíbe expresamente), pero queda medida, atornillada por su suelo, y
+   señalada.
+
+### Cierre de tanda 5 — `./init.sh --rapido`
+
+```
+✓ typecheck paso
+✓ lint paso
+-> test:cambiados      Test Files 17 passed (17)     Tests   316 passed (316)
+-> test:guardias       Test Files 96 passed (96)     Tests  1360 passed (1360)
+== init OK ==
+```
+
+`./init.sh` completo: **lo corre el leader antes del PR** (así se acordó en el encargo).
