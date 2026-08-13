@@ -9,7 +9,15 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 /** Etiqueta de estado que las cards del mensajero saben pintar. */
 export type PosEstado = "En gestión" | "En detalle" | "En reparto" | "Por recoger";
 
-/** Clases del badge para cada estado (fondo + texto), sobre fondo de card. */
+/**
+ * Clases del badge para cada estado (fondo + texto), sobre fondo de card.
+ *
+ * Feature 208 — estos `navy` se CONSERVAN a propósito: son chips SÓLIDOS, es decir
+ * superficie fija con tinta fija encima ("Regla" de DESIGN.md). Medido: blanco sobre
+ * `bg-navy` = 13.2:1 y `text-navy` sobre `bg-warning` = 8.1:1, idénticos en los dos
+ * temas porque ninguno de los dos colores gira. Lo que sí se migró en esta card fue
+ * el navy usado como LÍNEA o TINTA sobre la card (ver `PosCardHeader`, `PosAmountRow`).
+ */
 const ESTADO_CLASSNAME: Record<string, string> = {
   "En gestión": "bg-brand text-white",
   "En detalle": "bg-navy text-white",

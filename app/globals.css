@@ -88,7 +88,35 @@
   --color-kraft-inset: #f1f4fb;
 }
 
-:root {
+/*
+ * `.tema-claro` fija los valores CLAROS dentro de su subárbol, gane lo que gane
+ * arriba. Existe para las superficies que son claras POR DISEÑO y no deben girar
+ * con el tema. Dos consumidores hoy:
+ *
+ *  1. La landing pública (`app/page.tsx`), cuyo arte está compuesto sobre fotografías
+ *     y una paleta fija (`kraft-*`, `asfalto-*`, `navy-deep`).
+ *  2. Las dos hojas de la factura del cierre
+ *     (`cierres-admin/_components/cierre-factura.tsx`), que son el facsímil de un
+ *     comprobante en papel: papel blanco con tinta navy en los dos temas.
+ *
+ * Sin esto, la landing NO era inmune "de rebote": usa `text-success-strong`, y los
+ * cuatro `--*-strong` sí tienen variante en `.dark` — es decir, el día que la fase 2
+ * ponga `.dark` en <html>, ese texto verde oscuro se volvería verde claro sobre un
+ * fondo `-soft` que sigue siendo claro (medido: 1.7:1). Declararlo aquí lo resuelve
+ * de raíz y para cualquier token futuro, en vez de parche a parche.
+ *
+ * LÍMITE MEDIDO: fija los TOKENS, no apaga el variant `dark:`, que se define contra
+ * el ancestro (`@custom-variant dark (&:is(.dark *))`) y no contra los tokens. Las
+ * utilidades `dark:` de las primitivas (`Badge` success/warning/danger/destructive,
+ * `Button` outline/ghost/destructive) siguen disparando dentro de un subárbol
+ * `tema-claro`. Medido con las cadenas de clases exactas (claro → oscuro+tema-claro):
+ * Button outline 14.79→14.78, Badge success 4.84→4.76, danger 5.30→5.32,
+ * warning 4.51→4.48, destructive 3.30→2.89. Los dos que quedan bajo AA YA fallaban en
+ * tema claro (son deuda de paleta, no de esta clase). Si algún día pesa, el arreglo de
+ * raíz es el propio variant `dark:`, no un parche por componente.
+ */
+:root,
+.tema-claro {
   --radius: 0.625rem;
   --background: #f7f8fc;
   --foreground: #12233f;

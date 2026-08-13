@@ -376,11 +376,14 @@ export function Pagination({
             desborda también por los lados y se veía asomar en los costados de la barra.
             Es una franja propia justo ENCIMA (`bottom-full`) y del MISMO ancho
             (`inset-x-0`), que se difumina hacia arriba: no hay nada que pueda salirse por
-            los flancos. Sin bordes: la separación la da la franja. */}
+            los flancos. Sin bordes: la separación la da la franja.
+            Feature 208: la franja iba en `navy/10` fijo y en modo oscuro sombreaba
+            en un azul MÁS oscuro que la página (una mancha, no una sombra).
+            `foreground/10` gira: oscurece en claro y aclara en oscuro. */}
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute inset-x-0 bottom-full h-6 bg-gradient-to-t from-navy/10 to-transparent transition-opacity",
+            "pointer-events-none absolute inset-x-0 bottom-full h-6 bg-gradient-to-t from-foreground/10 to-transparent transition-opacity",
             pegada ? "opacity-100" : "opacity-0",
           )}
         />

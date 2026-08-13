@@ -80,9 +80,9 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
 };
 
 /**
- * Refuerzo de acento (solo TOKENS) para los estados que sobre la variante neutra
- * conservan su color de marca/navy o su borde hivis. Se combina sobre la variante
- * base vía `cn`/twMerge (la última clase gana).
+ * Refuerzo de acento (solo TOKENS QUE GIRAN CON EL TEMA) para los estados que sobre
+ * la variante neutra conservan su color de marca o su borde hivis. Se combina sobre
+ * la variante base vía `cn`/twMerge (la última clase gana).
  */
 const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
   // Feature 155/R28: se retira el refuerzo del estado de fulfillment en bodega junto
@@ -90,7 +90,10 @@ const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
   // gemelo de presentación desde la 153).
   en_reparto:
     "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light",
-  en_bodega_central: "text-navy dark:bg-navy/20 dark:text-asfalto-2",
+  // Feature 208: era `text-navy dark:bg-navy/20 dark:text-asfalto-2` — tres hex
+  // fijos para decir "tinta y realce del tema". `foreground` hace lo mismo con un
+  // solo token y en claro es el mismo azul (#12233f vs #0b2545).
+  en_bodega_central: "text-foreground dark:bg-foreground/10",
   reprogramada: "border-hivis/60 dark:border-hivis/40",
 };
 

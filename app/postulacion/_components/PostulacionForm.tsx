@@ -179,7 +179,7 @@ export function PostulacionForm({
     return (
       <Card className="w-full max-w-md border-t-4 border-t-brand p-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-center text-navy dark:text-foreground">
+          <h1 className="text-2xl font-semibold text-center text-foreground">
             Postulación enviada
           </h1>
           <p className="text-sm text-muted-foreground text-center mt-2">
@@ -197,7 +197,7 @@ export function PostulacionForm({
   return (
     <Card className="w-full max-w-xl border-t-4 border-t-brand p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-center text-navy dark:text-foreground">
+        <h1 className="text-2xl font-semibold text-center text-foreground">
           Postulación de mensajero
         </h1>
         <p className="text-sm text-muted-foreground text-center mt-2">
