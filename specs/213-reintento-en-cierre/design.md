@@ -275,6 +275,47 @@ WHERE g."resultado"::text IN ('rechazada','devuelta','reprogramada')
                    WHERE h."gestion_orden_id" = g."id");
 ```
 
+#### Medición de T22 — 2026-08-13, base LOCAL de desarrollo (NO producción)
+
+**Advertencia de validez, primero:** la única base alcanzable desde el worktree es la
+local (`localhost:5432/ordenex`) y es **minúscula**: 78 órdenes, 44 `gestion_orden`,
+278 `orden_historial_estado`, 7 `cierre_dia`. A ese tamaño el planner elige *seq
+scan* por coste, no por falta de índice, así que **estos planes NO son
+extrapolables a producción**. Se pegan por lo que sí demuestran, que es una cosa
+concreta y no trivial.
+
+**(1) El `orden_id` redundante dentro del `some` HACE lo que §3.4 dice.** Es lo
+único que la medición prueba de forma limpia, y lo prueba incluso a esta escala:
+
+| Consulta individual | Plan del `EXISTS` | Exec |
+| --- | --- | --- |
+| ANTES (5 condiciones) | — | 0.195 ms, 6 buffers |
+| DESPUÉS **con** `h.orden_id` repetido | `Index Scan using orden_historial_estado_orden_id_estatus_destino_id_idx` · `Index Cond: (orden_id = …)` · `origen_tipo` como filtro residual | 0.150 ms, 3 buffers |
+| DESPUÉS **sin** `h.orden_id` (solo `gestion_orden_id`) | **`Seq Scan on orden_historial_estado`** | 0.090 ms, 3 buffers *(tabla de 278 filas)* |
+
+Es decir: con el filtro repetido el planner entra por un índice prefijado por
+`orden_id`; sin él, recorre la tabla entera. Con 278 filas eso es gratis; sobre una
+tabla append-only que crece con cada transición del sistema, no. **El truco no es
+decorativo y hay que conservarlo.**
+
+**(2) La ruta de LOTE (100 ids) NO queda medida.** ANTES 0.486 ms / 24 buffers;
+DESPUÉS 2.800 ms / 164 buffers, pero el plan de DESPUÉS es un `Nested Loop Semi
+Join` con `Seq Scan` sobre `orden_historial_estado` repetido 23 veces — con 278
+filas el planner ni se plantea el índice. **No se puede concluir nada del coste real
+del lote a partir de este número, ni a favor ni en contra.** Queda pendiente de una
+medición contra datos de volumen (misma pregunta abierta que ⛔ Q4, §7.6).
+
+**(3) Filas legadas (R34-d): `0` en esta base.** `gestiones_sin_historial = 0`
+(`mas_antigua`/`mas_reciente` NULL) con la consulta de arriba. Es un dato de la base
+local, **no una medición de producción**: no autoriza a dar R34-d por inocuo en
+real. El predicado ya opta por la dirección segura si aparecieran.
+
+**(4) NO se pide índice nuevo.** Nada en lo medido obliga a un índice sobre
+`gestion_orden_id`: en la ruta individual el planner ya entra por un índice
+existente gracias al `orden_id` repetido. D7/R27 siguen intactos y `db/` no se toca.
+Si la medición de volumen del punto (2) dijera otra cosa, **eso es una migración y
+es decisión del humano**.
+
 #### Lo que este discriminador NO cambia (R17/R18-d)
 
 La gestión sintética del escalado **sigue cobrando** su `cobroRechazado`: el

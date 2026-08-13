@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import * as ordenHistorialModule from "@/lib/types/orden-historial";
-import { ORIGEN_TIPOS_CON_GESTION } from "@/lib/types/orden-historial";
+import {
+  ORDEN_HISTORIAL_ORIGEN_TIPO_SEED,
+  ORIGEN_TIPOS_CON_GESTION,
+  ORIGEN_TIPOS_VISITA_REAL,
+} from "@/lib/types/orden-historial";
 import { RESULTADOS_QUE_CUENTAN_COMO_INTENTO } from "@/lib/types/gestion-orden";
+import { whereIntentosVigentes } from "@/lib/repositories/OrdenHistorialRepository";
 import { TRANSICIONES } from "@/lib/types/order-status-transiciones";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
@@ -75,6 +80,58 @@ describe("RESULTADOS_QUE_CUENTAN_COMO_INTENTO — el criterio declarado (213/R1/
   });
 });
 
+// Feature 213 (T19/T21, design §3.4) — la SEGUNDA lista de INCLUSION del criterio. La primera
+// (`RESULTADOS_QUE_CUENTAN_COMO_INTENTO`) dice QUE resultados cuentan; esta dice de QUIEN: solo
+// las gestiones de una VISITA REAL del mensajero. Las gestiones SINTETICAS —el escalado del cron
+// SLA y la reprogramacion de escritorio de la tienda— entran al cierre del mensajero por la
+// puerta de atras y, sin esta lista, sumarian un intento que nadie hizo. [💰]
+describe("ORIGEN_TIPOS_VISITA_REAL — el discriminador de las sinteticas (213/R34)", () => {
+  it("R34-a: la lista es EXACTAMENTE `gestion` (la visita del mensajero en calle)", () => {
+    expect(ORIGEN_TIPOS_VISITA_REAL).toEqual(["gestion"]);
+  });
+
+  // EL CASO QUE PROTEGE EL DINERO (R34-c). Con lista NEGRA (`none`/`notIn` sobre las sinteticas
+  // conocidas), una familia sintetica FUTURA empezaria a contar SOLA en cuanto alguien la
+  // declarara: subiria el conteo, adelantaria el escalado del cron SLA a `rechazada` y cobraria
+  // `cobroRechazado` (56) a la tienda antes de tiempo, en silencio y sin romper ningun test. Con
+  // lista de INCLUSION, lo que una familia nueva hace por defecto es NO contar.
+  it("R34-c: es lista de INCLUSION — TODAS las demas familias del enum quedan FUERA", () => {
+    const dentro = ORIGEN_TIPOS_VISITA_REAL as readonly string[];
+    const fuera = (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(
+      (t) => !dentro.includes(t),
+    );
+    // Las DOS sinteticas medidas en design §3.4, nombradas una a una para que su exclusion sea
+    // una afirmacion y no un efecto colateral del filtro de arriba.
+    expect(fuera).toContain("escalado_devuelta_sla"); // R18-b: la del cron SLA
+    expect(fuera).toContain("reprogramacion_tienda"); // R12: la de la tienda
+    expect(fuera).toHaveLength(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.length - dentro.length);
+    // Y lo que esta dentro es una familia REAL del enum (el `satisfies` lo fuerza en compile
+    // time; aqui se comprueba en runtime para que el caso no dependa solo del tipo).
+    for (const t of dentro) {
+      expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).toContain(t);
+    }
+  });
+
+  // La lista no sirve de nada si el predicado no la usa como inclusion. Se mira el `where` REAL.
+  it("R34-c: el predicado usa la lista con `in` y NO contiene ningun `none` ni `notIn`", () => {
+    const where = whereIntentosVigentes("o1") as unknown as {
+      historialEstados: { some: { ordenId: string; origenTipo: { in: string[] } } };
+    };
+    expect(where.historialEstados.some.origenTipo).toEqual({ in: [...ORIGEN_TIPOS_VISITA_REAL] });
+    // El `ordenId` repetido dentro del `some` NO es decorativo: `orden_historial_estado` no tiene
+    // indice por `gestion_orden_id`, y repetirlo hace que el `EXISTS` entre por
+    // `@@index([ordenId, createdAt])` en vez de recorrer una tabla append-only entera.
+    expect(where.historialEstados.some.ordenId).toBe("o1");
+    const json = JSON.stringify(where);
+    expect(json).not.toContain("none");
+    expect(json).not.toContain("notIn");
+    // Las dos sinteticas conocidas no aparecen NOMBRADAS en el where: no se excluyen una a una
+    // (eso seria lista negra), quedan fuera por no estar en la lista blanca.
+    expect(json).not.toContain("escalado_devuelta_sla");
+    expect(json).not.toContain("reprogramacion_tienda");
+  });
+});
+
 describe("sin criterio residual por transicion (213/R13/R25/R26)", () => {
   // R13: "el sistema NO DEBE conservar ningun camino de lectura, activo o inactivo, que derive
   // el conteo de los destinos de las transiciones". La lista blanca de familias de origen que
@@ -94,7 +151,7 @@ describe("sin criterio residual por transicion (213/R13/R25/R26)", () => {
   });
 });
 
-describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (213/R12/R14)", () => {
+describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (213/R14)", () => {
   /** Todas las aristas del mapa, aplanadas a `(origen, destino, via)`. */
   const aristas = Object.entries(TRANSICIONES).flatMap(([origen, destinos]) =>
     (destinos as readonly { to: string; via: string }[]).map((d) => ({
@@ -118,12 +175,18 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (213/R12/R14
     );
   });
 
-  // R12: la conclusion de 160/R2 SOBREVIVE (la reprogramacion de la tienda no suma), pero su
-  // razonamiento se reescribe: ya no es "para no contar doble con la fila `devuelta` vigente",
-  // es que ninguna transicion suma — el intento se gana con el resultado de gestion del cierre
-  // aprobado. `reprogramarDesdeDevuelta` crea una gestion sintetica, pero esa gestion solo
-  // podria contar si su cierre llega a `aprobado`, que es el mismo listón que todas.
-  it("R12/R14: ninguna arista del mapa decide por si sola un intento de entrega", () => {
+  // REASIGNADO en el Grupo 4 (T21): este caso figuraba como el dueno de R12 y NO lo era. Afirma
+  // algo cierto —que el MAPA de transiciones no decide intentos— pero distinto de lo que R12
+  // exige, que es que la gestion sintetica de `reprogramarDesdeDevuelta` no sume aunque su cierre
+  // se apruebe. Eso lo cubre ahora el PREDICADO, en
+  // `orden-historial-repository.test.ts` · «R12: la reprogramacion de la TIENDA no cuenta...» y
+  // «R12: `devuelta` real + reprogramacion de la tienda en OTRO cierre aprobado -> 1, no 2».
+  //
+  // El caso se CONSERVA intacto en lo que mide (cubre R14) porque la mutacion que mataba sigue
+  // viva: si alguien devolviera al mapa una arista con marca de intento —`cuentaComoIntento`— o
+  // reintrodujera un `via` que coincidiera con un `GestionResultado`, este caso rompe. Solo se
+  // le retira la etiqueta R12, que era un requisito sin dueno real.
+  it("R14: ninguna arista del mapa decide por si sola un intento de entrega", () => {
     // La afirmacion es estructural: el modulo del mapa no exporta nada que hable de intentos.
     const aristasQueDeciden = aristas.filter((a) =>
       Object.prototype.hasOwnProperty.call(a, "cuentaComoIntento"),

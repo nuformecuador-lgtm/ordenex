@@ -10,7 +10,10 @@ import {
   type ChokePointTx,
 } from "@/lib/repositories/registrar-cambio-estado";
 import { RESULTADOS_QUE_CUENTAN_COMO_INTENTO } from "@/lib/types/gestion-orden";
-import { type OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
+import {
+  ORIGEN_TIPOS_VISITA_REAL,
+  type OrdenHistorialEntradaDTO,
+} from "@/lib/types/orden-historial";
 
 // Cliente Prisma acotado a lo que este repo necesita para las LECTURAS (patron
 // CierresAdminRepository/WalletMovimientoRepository). Las escrituras van por el `tx`.
@@ -85,15 +88,28 @@ function toEntradaDTO(row: HistorialRow): OrdenHistorialEntradaDTO {
 }
 
 /**
+ * Feature 213 (T20) — el filtro de orden del predicado de intentos: un id suelto (lectura
+ * individual) o un lote (`{ in: [...] }`). Es la interseccion EXACTA de lo que aceptan
+ * `Prisma.GestionOrdenWhereInput["ordenId"]` y `Prisma.OrdenHistorialEstadoWhereInput["ordenId"]`
+ * entre las formas que este repo usa, y existe porque el MISMO valor viaja a los DOS modelos: al
+ * `where` de `gestion_orden` y, repetido, al `some` de `orden_historial_estado`.
+ */
+export type FiltroOrdenIntentos = string | { in: string[] };
+
+/**
  * Feature 213 (design §3.1, R1/R3/R5/R29-R32) — PREDICADO UNICO de "intento de entrega", en UNA
  * sola funcion pura que consumen los DOS metodos de conteo (individual y en lote). Que este
  * extraido es lo que impide que el numero de la UI y el que dispara `rechazada` ->
  * `cobroRechazado` (56, dinero real) diverjan por copia-pega.
  *
- * `ordenId` acepta un id suelto (`string`) o un lote (`{ in: [...] }`): es el MISMO where.
+ * `ordenId` acepta un id suelto (`string`) o un lote (`{ in: [...] }`): es el MISMO where. El
+ * tipo es `FiltroOrdenIntentos` y no `Prisma.GestionOrdenWhereInput["ordenId"]` porque el MISMO
+ * filtro se reusa dentro del `some` de `historialEstados`, donde el modelo es otro
+ * (`OrdenHistorialEstadoWhereInput`): declarar la union exacta que los dos call-sites usan
+ * satisface a los dos sin `any` ni doble aserto.
  *
- * El intento ya NO se deriva de destinos de transicion del historial. Se deriva de la GESTION y
- * de su cierre:
+ * El intento ya NO se deriva de destinos de transicion del historial. Se deriva de la GESTION,
+ * de su cierre y de su ORIGEN:
  *
  *     conteo(orden) = nº de `cierre_id` DISTINTOS entre las `gestion_orden` tales que
  *         orden_id  = <orden>
@@ -101,6 +117,7 @@ function toEntradaDTO(row: HistorialRow): OrdenHistorialEntradaDTO {
  *   AND anulada_at IS NULL                                 (vigencia, filtro de LECTURA, R5)
  *   AND cierre_id IS NOT NULL
  *   AND cierre.estado = 'aprobado'                         (el instante que suma, D8/R3)
+ *   AND EXISTS fila de historial de familia de VISITA REAL (D13/R12/R18-b/R34)
  *
  * Cuatro propiedades de esa expresion, y las cuatro son REQUISITOS, no detalles de query:
  *
@@ -122,12 +139,42 @@ function toEntradaDTO(row: HistorialRow): OrdenHistorialEntradaDTO {
  *    `CierreDiaRepository.ts:728`). Ninguna de las dos condiciones puede volverse falsa una vez
  *    verdadera, asi que lo que la anulacion impide es que el conteo LLEGUE A SUBIR, no que baje.
  *
+ * SEXTA CONDICION — solo cuentan las gestiones de una VISITA REAL (D13/R34-a). El sistema crea
+ * gestiones SINTETICAS que no son visitas de nadie (el escalado del cron SLA y la reprogramacion
+ * de escritorio de la tienda) y que entran al cierre del mensajero por la puerta de atras: nacen
+ * con `cierre_id: null` y con el `mensajero_id` de la ultima `devuelta` vigente, asi que
+ * `CierreDiaRepository.crearCierre` las vincula al siguiente cierre de ese mensajero. Sin esta
+ * condicion, al aprobarse ese cierre sumaban +1 cada una: la del escalado incumplia R18-b y la de
+ * la tienda incumplia R12 (y, sumada a la `devuelta` real de la misma orden, reproducia el DOBLE
+ * CONTEO que `160/R2` evitaba). El discriminador es ESTRUCTURAL, no heuristico —nada de
+ * `motivo LIKE 'escalado SLA%'`—: toda gestion se crea en la MISMA transaccion que su fila de
+ * `orden_historial_estado`, y esa fila lleva el `origen_tipo` de la familia que la produjo
+ * (`gestion` la visita real; `escalado_devuelta_sla` y `reprogramacion_tienda` las sinteticas).
+ * La lista es de INCLUSION (`ORIGEN_TIPOS_VISITA_REAL`, R34-c): una familia sintetica futura NO
+ * empieza a contar sola.
+ *
+ * EL `ordenId` REPETIDO DENTRO DEL `some` NO ES DECORATIVO — es RENDIMIENTO, y sin el la ruta
+ * caliente del conteo degrada a seq scan. `orden_historial_estado` NO tiene indice por
+ * `gestion_orden_id`: los tres que existen son `[ordenId, createdAt]`, `[ordenId,
+ * estatusDestinoId]` y `[actorUsuarioId, origenTipo, createdAt]` (`db/schema.prisma:1546-1557`),
+ * y la FK **no** crea indice en Postgres. Repitiendo el filtro por `orden_id` dentro del `EXISTS`
+ * el planner entra por `@@index([ordenId, createdAt])` y `gestion_orden_id` queda como filtro
+ * residual sobre el punado de filas de esa orden. Sin ese truco el `EXISTS` recorre entera una
+ * tabla append-only que crece con CADA transicion del sistema. (D7/R27 prohiben la migracion, asi
+ * que un indice nuevo sobre `gestion_orden_id` no es una salida disponible aqui: si algun dia el
+ * plan lo pidiera, se para y se lleva al humano.)
+ *
  * Direccion del error, declarada: con el ancla en `aprobado` el conteo de casi toda orden BAJA
  * respecto del criterio anterior ⇒ el escalado se RETRASA. El riesgo de esta feature no es
- * cobrar de mas, es NO COBRAR (⛔ Q5, abierta, sin mitigacion implementada).
+ * cobrar de mas, es NO COBRAR (⛔ Q5, abierta, sin mitigacion implementada). La sexta condicion
+ * empuja en la MISMA direccion segura, y eso decide el caso limite de R34-d: una gestion LEGADA
+ * anterior al historial (feature 49) no tiene fila que la respalde y, por tanto, NO cuenta. Es
+ * deliberado: contar de menos retrasa el escalado (inofensivo para la tienda), contar de mas
+ * cobra un `cobroRechazado` (56, dinero real) antes de tiempo. Ante ausencia de dato, no se
+ * cuenta.
  */
 export function whereIntentosVigentes(
-  ordenId: Prisma.GestionOrdenWhereInput["ordenId"],
+  ordenId: FiltroOrdenIntentos,
 ): Prisma.GestionOrdenWhereInput {
   return {
     ordenId,
@@ -144,6 +191,13 @@ export function whereIntentosVigentes(
     // NO cuentan: el corte automatico deja de ser un instante que suma, y lo que suma es la
     // aprobacion posterior del cierre que el corte creo.
     cierre: { estado: "aprobado" },
+    // D13/R12/R18-b/R34: la gestion tiene que nacer de una VISITA REAL. El `ordenId` de dentro
+    // es el MISMO filtro de fuera, repetido a proposito para que el `EXISTS` entre por
+    // `@@index([ordenId, createdAt])` (ver el bloque de rendimiento del JSDoc). `in`, jamas
+    // `none`/`notIn`: lista de INCLUSION (R34-c).
+    historialEstados: {
+      some: { ordenId, origenTipo: { in: [...ORIGEN_TIPOS_VISITA_REAL] } },
+    },
   };
 }
 

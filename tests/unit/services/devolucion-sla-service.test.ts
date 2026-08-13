@@ -179,14 +179,20 @@ describe("ejecutar — wrong_number / wrong_address: 5 dias -> rechazo directo (
 describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado (213/R3/R10/R11/R15/R29) [💰]", () => {
   const ORDEN = "o1";
 
-  /** Fila de `gestion_orden` de la orden bajo prueba. */
+  /**
+   * Fila de `gestion_orden` de la orden bajo prueba. `origenTiposHistorial` declara de donde
+   * NACE la gestion (feature 213/T21): por defecto una VISITA REAL del mensajero
+   * (`origen_tipo = 'gestion'`), que es lo unico que cuenta como intento. Las gestiones
+   * SINTETICAS (`escalado_devuelta_sla`, `reprogramacion_tienda`) lo pasan explicitamente.
+   */
   function gestion(
     resultado: string,
     cierreId: string | null,
     cierreEstado: string | null = "aprobado",
     anuladaAt: Date | null = null,
+    origenTiposHistorial: string[] = ["gestion"],
   ): FilaGestionFake {
-    return { ordenId: ORDEN, resultado, anuladaAt, cierreId, cierreEstado };
+    return { ordenId: ORDEN, resultado, anuladaAt, cierreId, cierreEstado, origenTiposHistorial };
   }
 
   /** El derivador REAL (service + repo reales) sobre esas filas de gestion. */
@@ -295,6 +301,42 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
       gestion("rechazada", "c3", "aprobado", anulada),
     ]);
     expect(await service.contarIntentos(ORDEN)).toBe(1); // solo `c1`
+
+    const res = await svc.ejecutar(NOW);
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
+  });
+
+  // R12 — EL DESENLACE DE DINERO DEL DISCRIMINADOR (feature 213/T21). La orden tuvo DOS visitas
+  // reales (cierres aprobados) y ademas la tienda la reprogramo desde el escritorio; esa gestion
+  // sintetica (`reprogramacion_tienda`) cayo en un TERCER cierre del mismo mensajero, tambien
+  // aprobado. Sin la sexta condicion del predicado el conteo diria 3 = umbral y el cron ESCALARIA
+  // a `rechazada`, cobrando el `cobroRechazado` (56) a la tienda una vuelta antes de tiempo por
+  // una reprogramacion de escritorio que no fue una visita de nadie. Con ella son 2 y la orden se
+  // LIBERA para un reintento real.
+  it("R12: 2 visitas reales + la reprogramacion de la TIENDA (cierre aprobado) -> 2, LIBERA y NO cobra", async () => {
+    const { repo, svc, service } = correr([
+      gestion("devuelta", "c1"),
+      gestion("reprogramada", "c2"),
+      gestion("reprogramada", "c3", "aprobado", null, ["reprogramacion_tienda"]),
+    ]);
+    expect(await service.contarIntentos(ORDEN)).toBe(2); // no 3
+
+    const res = await svc.ejecutar(NOW);
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
+  });
+
+  // R18-b: lo mismo con la sintetica del PROPIO cron. Si contara, el escalado se auto-alimentaria:
+  // el cron escala una vez, su gestion sintetica sube el conteo y la siguiente vuelta encontraria
+  // el umbral ya cruzado por su propio efecto.
+  it("R18-b: 2 visitas reales + la sintetica del ESCALADO SLA (cierre aprobado) -> 2, LIBERA", async () => {
+    const { repo, svc, service } = correr([
+      gestion("devuelta", "c1"),
+      gestion("reprogramada", "c2"),
+      gestion("rechazada", "c3", "aprobado", null, ["escalado_devuelta_sla"]),
+    ]);
+    expect(await service.contarIntentos(ORDEN)).toBe(2); // no 3
 
     const res = await svc.ejecutar(NOW);
     expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });

@@ -184,7 +184,11 @@ describe("findHistorialByOrden (R26/R5)", () => {
 
 // Feature 213 (T8) — helpers de las suites del conteo.
 
-/** Fila de gestion CONTABLE por defecto: resultado `devuelta`, vigente, en cierre aprobado. */
+/**
+ * Fila de gestion CONTABLE por defecto: resultado `devuelta`, vigente, en cierre aprobado y —
+ * feature 213/T21 — nacida de una VISITA REAL del mensajero (`origen_tipo = 'gestion'`). Los
+ * casos que prueban el discriminador de las sinteticas sobrescriben `origenTiposHistorial`.
+ */
 function gestion(over: Partial<FilaGestionFake> = {}): FilaGestionFake {
   return {
     ordenId: "o1",
@@ -192,6 +196,7 @@ function gestion(over: Partial<FilaGestionFake> = {}): FilaGestionFake {
     anuladaAt: null,
     cierreId: "c1",
     cierreEstado: "aprobado",
+    origenTiposHistorial: ["gestion"],
     ...over,
   };
 }
@@ -453,9 +458,20 @@ describe("contarIntentosVigentesEnLote (213/R4/R7/R8/R29/R30)", () => {
     const lote = { ...prisma.gestionOrden.groupBy.mock.calls[1][0].where };
     expect(individual.ordenId).toBe("o1");
     expect(lote.ordenId).toEqual({ in: ["o1", "o2"] });
-    delete individual.ordenId;
-    delete lote.ordenId;
-    expect(lote).toEqual(individual);
+    // Feature 213/T20: el filtro de orden aparece DOS veces —fuera y repetido dentro del `some`
+    // de `historialEstados`, por rendimiento (design §3.4)— y las dos son el MISMO valor. Se
+    // comprueba antes de normalizarlas para comparar el resto.
+    expect(individual.historialEstados.some.ordenId).toBe(individual.ordenId);
+    expect(lote.historialEstados.some.ordenId).toEqual(lote.ordenId);
+    const sinOrden = (w: Record<string, never>) => {
+      const copia: Record<string, unknown> = { ...w };
+      const rel = copia.historialEstados as { some: Record<string, unknown> };
+      copia.historialEstados = { some: { ...rel.some } };
+      delete (copia.historialEstados as { some: Record<string, unknown> }).some.ordenId;
+      delete copia.ordenId;
+      return copia;
+    };
+    expect(sinOrden(lote)).toEqual(sinOrden(individual));
   });
 });
 
@@ -498,6 +514,127 @@ describe("whereIntentosVigentes — semantica del predicado (213/R1/R2/R3/R5/R29
     const lote = await repo.contarIntentosVigentesEnLote(["o1"]);
     expect(individual).toBe(2);
     expect(lote.get("o1") ?? 0).toBe(individual);
+  });
+});
+
+// Feature 213 (T21, design §3.4) — EL DISCRIMINADOR DE LAS GESTIONES SINTETICAS. [💰]
+//
+// El sistema crea gestiones que NO son visitas de nadie y que entran al cierre del mensajero por
+// la puerta de atras: nacen con `cierre_id: null` y con el `mensajero_id` de la ultima `devuelta`
+// vigente, asi que `CierreDiaRepository.crearCierre` las vincula al siguiente cierre de ese
+// mensajero (`:480-483`). Sin la sexta condicion del predicado, al aprobarse ese cierre sumaban
+// +1 y adelantaban el escalado del cron SLA -> `rechazada` -> `cobroRechazado` (56, dinero real).
+describe("el discriminador de las gestiones SINTETICAS (213/R12/R18-b/R34) [💰]", () => {
+  // R18-b: la gestion sintetica del escalado SLA (`DevolucionSlaRepository.escalarDevueltaSla`,
+  // `resultado: rechazada`, historial `escalado_devuelta_sla`) NO cuenta como intento NI SIQUIERA
+  // con su cierre APROBADO. Deja de contar como INTENTO; sigue cobrando como RECHAZO (R18-d, ver
+  // `devolucion-sla-dinero.test.ts`, verde sin tocarse).
+  it("R18-b: la sintetica del ESCALADO SLA no cuenta, aunque su cierre este APROBADO", async () => {
+    const { repo } = repoSobre([
+      gestion({
+        resultado: "rechazada",
+        cierreId: "c1",
+        cierreEstado: "aprobado",
+        origenTiposHistorial: ["escalado_devuelta_sla"],
+      }),
+    ]);
+    expect(await repo.contarIntentosVigentes("o1")).toBe(0);
+  });
+
+  // R12: la reprogramacion de ESCRITORIO de la tienda
+  // (`GestionOrdenRepository.reprogramarDesdeDevuelta`, `resultado: reprogramada`, historial
+  // `reprogramacion_tienda`) tampoco es una visita. Este es el caso que 7d9471c3 dejo INCUMPLIDO.
+  it("R12: la reprogramacion de la TIENDA no cuenta, aunque su cierre este APROBADO", async () => {
+    const { repo } = repoSobre([
+      gestion({
+        resultado: "reprogramada",
+        cierreId: "c1",
+        cierreEstado: "aprobado",
+        origenTiposHistorial: ["reprogramacion_tienda"],
+      }),
+    ]);
+    expect(await repo.contarIntentosVigentes("o1")).toBe(0);
+  });
+
+  // R12 — EL DOBLE CONTEO COMPLETO, que es lo que R12 existe para impedir. La orden se devolvio
+  // de verdad (visita real, cierre aprobado) y ADEMAS la tienda la reprogramo desde el escritorio;
+  // la sintetica cayo en OTRO cierre del mismo mensajero, tambien aprobado. Son 2 cierres
+  // aprobados con resultado contable: sin discriminador el conteo diria 2. La orden tuvo UNA
+  // visita, asi que es 1. Con 2 el cron llega al umbral una vuelta antes y cobra el rechazo antes
+  // de tiempo — exactamente el doble conteo que `160/R2` evitaba.
+  it("R12: `devuelta` real + reprogramacion de la tienda en OTRO cierre aprobado -> 1, no 2", async () => {
+    const { repo } = repoSobre([
+      gestion({ resultado: "devuelta", cierreId: "c1", origenTiposHistorial: ["gestion"] }),
+      gestion({
+        resultado: "reprogramada",
+        cierreId: "c2",
+        origenTiposHistorial: ["reprogramacion_tienda"],
+      }),
+    ]);
+    expect(await repo.contarIntentosVigentes("o1")).toBe(1);
+  });
+
+  it("R12: las dos en el MISMO cierre aprobado tambien -> 1 (R29 no lo tapa: es el origen)", async () => {
+    const { repo } = repoSobre([
+      gestion({ resultado: "devuelta", cierreId: "c1", origenTiposHistorial: ["gestion"] }),
+      gestion({
+        resultado: "reprogramada",
+        cierreId: "c1",
+        origenTiposHistorial: ["reprogramacion_tienda"],
+      }),
+    ]);
+    expect(await repo.contarIntentosVigentes("o1")).toBe(1);
+  });
+
+  // R34-d: una gestion LEGADA (anterior al historial de la feature 49) no tiene fila que la
+  // respalde. NO cuenta, y es deliberado: contar de menos retrasa el escalado (inofensivo para la
+  // tienda); contar de mas cobra un rechazo antes de tiempo. Ante ausencia de dato, no se cuenta.
+  it("R34-d: gestion contable, vigente y en cierre APROBADO pero SIN fila de historial -> 0", async () => {
+    const { repo } = repoSobre([
+      gestion({ resultado: "devuelta", cierreId: "c1", origenTiposHistorial: [] }),
+    ]);
+    expect(await repo.contarIntentosVigentes("o1")).toBe(0);
+  });
+
+  // El `some` es INCLUSION pura: `in` con la lista blanca, y el `ordenId` repetido dentro (que no
+  // es decorativo — es lo que hace que el `EXISTS` entre por `@@index([ordenId, createdAt])` en
+  // vez de por un `gestion_orden_id` SIN indice, design §3.4).
+  it("R34-c: el `some` filtra por familia con `in` y repite el `ordenId` (sin `none`/`notIn`)", async () => {
+    const where = await whereIndividual();
+    expect(where.historialEstados).toEqual({
+      some: { ordenId: "o1", origenTipo: { in: ["gestion"] } },
+    });
+    const json = JSON.stringify(where);
+    expect(json).not.toContain("none");
+    expect(json).not.toContain("notIn");
+  });
+
+  // La sexta condicion vale igual en el LOTE: un solo predicado para los dos conteos (R6).
+  it("R6/R12/R18-b: en el LOTE las sinteticas tampoco cuentan, con el mismo predicado", async () => {
+    const { repo } = repoSobre([
+      gestion({ ordenId: "o1", cierreId: "c1", origenTiposHistorial: ["gestion"] }),
+      gestion({
+        ordenId: "o1",
+        cierreId: "c2",
+        resultado: "reprogramada",
+        origenTiposHistorial: ["reprogramacion_tienda"],
+      }),
+      gestion({
+        ordenId: "o2",
+        cierreId: "c3",
+        resultado: "rechazada",
+        origenTiposHistorial: ["escalado_devuelta_sla"],
+      }),
+      gestion({ ordenId: "o3", cierreId: "c4", origenTiposHistorial: [] }), // legada (R34-d)
+    ]);
+    const mapa = await repo.contarIntentosVigentesEnLote(["o1", "o2", "o3"]);
+    expect(mapa.get("o1")).toBe(1); // solo la visita real
+    expect(mapa.get("o2")).toBeUndefined(); // solo la sintetica del cron -> `?? 0`
+    expect(mapa.get("o3")).toBeUndefined(); // legada sin historial -> `?? 0`
+    // Y el individual da EXACTAMENTE lo mismo (R6: una sola definicion).
+    expect(await repo.contarIntentosVigentes("o1")).toBe(1);
+    expect(await repo.contarIntentosVigentes("o2")).toBe(0);
+    expect(await repo.contarIntentosVigentes("o3")).toBe(0);
   });
 });
 

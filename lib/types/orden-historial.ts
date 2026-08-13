@@ -73,6 +73,34 @@ export const ORIGEN_TIPOS_CON_GESTION = [
   "deshacer_gestion",
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
+// Feature 213 (T19, design §3.4, R34-a/R34-c) — familias de historial que nacen de una VISITA
+// REAL de un mensajero sobre una orden en reparto. Es la SEXTA condicion del predicado unico de
+// intentos (`whereIntentosVigentes`, `lib/repositories/OrdenHistorialRepository.ts`): una gestion
+// solo cuenta si alguna de sus filas de `orden_historial_estado` pertenece a una de estas
+// familias.
+//
+// Por que hace falta: el sistema crea gestiones SINTETICAS que no son visitas de nadie y que hoy
+// entran al conteo por la puerta de atras, porque nacen con `cierre_id: null` y con el
+// `mensajero_id` de la ultima `devuelta` vigente, asi que `CierreDiaRepository.crearCierre` las
+// vincula al siguiente cierre de ese mensajero y al aprobarse suman +1:
+//   - el escalado del cron SLA (`escalado_devuelta_sla`, `DevolucionSlaRepository`) — R18-b;
+//   - la reprogramacion de escritorio de la tienda (`reprogramacion_tienda`,
+//     `GestionOrdenRepository.reprogramarDesdeDevuelta`), que ademas, sumada a la `devuelta` real
+//     de esa misma orden, produce el DOBLE CONTEO que `160/R2` evitaba — R12.
+//
+// LISTA DE INCLUSION, jamas de exclusion (R34-c), y no es una preferencia de estilo: con lista
+// negra (`none` / `notIn` sobre las sinteticas conocidas), una familia sintetica FUTURA empezaria
+// a contar SOLA en cuanto alguien la declarara. Ese conteo de mas subiria el numero, adelantaria
+// el escalado del cron SLA (99) a `rechazada` y cobraria un `cobroRechazado` (56, DINERO REAL)
+// a la tienda antes de tiempo, en silencio y sin que ningun test rompiera. Con lista de
+// inclusion, lo que una familia nueva hace por defecto es NO contar: la direccion segura del
+// error (R34-d), porque contar de menos solo retrasa el escalado.
+//
+// El `satisfies` rompe el build si un valor deja de existir en el SEED (y por tanto en el enum).
+export const ORIGEN_TIPOS_VISITA_REAL = [
+  "gestion", // feature 36: `crearGestionYTransicionar` — el mensajero gestiono la orden en calle
+] as const satisfies readonly OrdenHistorialOrigenTipo[];
+
 // Feature 213 (T4, R13/R28): aqui vivia `ORIGEN_TIPOS_REPROGRAMADA_INTENTO`, la lista blanca de
 // familias que, con destino `reprogramada`, contaban como intento. Se RETIRA: su unica funcion
 // era el criterio viejo, que la 213 sustituye. Dejarla habria sido un segundo derivador legado

@@ -77,13 +77,13 @@ vuelo (`CierreDiaService`, `CierreDiaRepository`, `CierresAdminRepository`,
 | R9 | `orden-historial-service.test.ts` · «R9: el conteo NO consulta el catalogo de estados ni una sola vez», «R9: con el catalogo VACIO el numero es el mismo (el criterio no se apoya en el)» |
 | R10 | `devolucion-sla-service.test.ts` · «R10: una `devuelta` del mensajero cuyo cierre AUN no esta aprobado no suma por si sola» |
 | R11 | `devolucion-sla-service.test.ts` · «R11: una `reprogramada` del mensajero cuyo cierre aun no esta aprobado no suma por si sola» |
-| R12 | `criterio-intento-entrega.test.ts` · «R12/R14: ninguna arista del mapa decide por si sola un intento de entrega» |
+| R12 | **REASIGNADO (Grupo 4).** `orden-historial-repository.test.ts` · «R12: la reprogramacion de la TIENDA no cuenta, aunque su cierre este APROBADO», «R12: `devuelta` real + reprogramacion de la tienda en OTRO cierre aprobado -> 1, no 2», «R12: las dos en el MISMO cierre aprobado tambien -> 1 (R29 no lo tapa: es el origen)» · `devolucion-sla-service.test.ts` · «R12: 2 visitas reales + la reprogramacion de la TIENDA (cierre aprobado) -> 2, LIBERA y NO cobra» [💰]. El caso viejo de `criterio-intento-entrega.test.ts` medía el MAPA, no el predicado: se reasigna a R14 |
 | R13 | `criterio-intento-entrega.test.ts` · «R13/R25: `ORIGEN_TIPOS_REPROGRAMADA_INTENTO` ya NO existe como export» + guardia de fuente: grep sin resultados en `lib/`, `app/`, `components/` + typecheck verde |
 | R14 | `criterio-intento-entrega.test.ts` · «R14: siguen existiendo EXACTAMENTE 2 aristas con destino `reprogramada` (#13 y #22)», «R14: `devuelta` sigue teniendo al menos una arista ...», «R14/158-Q-D: las salidas de `incidente` siguen siendo las 6 declaradas», «R14/D3: no existe ningun estado `indemnizada`» |
 | R15 | `devolucion-sla-service.test.ts` · «R15/R3: 3 cierres APROBADOS con resultado contable, umbral 3 -> ESCALA» · `intentos-entrega-criterio-unico.test.ts` · «R15: 1 devuelta + 2 reprogramadas en 3 cierres APROBADOS -> drawer 3 y el cron ESCALA» |
 | R16 | `devolucion-sla-service.test.ts` · bloques de ventana 24h, `wrong_*`, atribucion (R22), reloj inyectable y resiliencia/idempotencia — **verdes SIN cambio de asercion** + «R16: `wrong_number`/`wrong_address` siguen escalando DIRECTO, sin consultar el conteo», «R16: el conteo se consulta UNA vez por orden y con SU id» |
 | R17 | `tests/unit/services/devolucion-sla-dinero.test.ts` — **verde sin tocarse** (4 casos de dinero) |
-| R18 | **SIN DUEÑO — bloqueado por Q3.** No implementado |
+| R18 | **(a)+(c)+(d)** `intentos-entrega-criterio-unico.test.ts` · «R18-a/b/c/d: la sintetica del cron NO suma como INTENTO pero SI cobra como RECHAZO» (repo REAL sobre el doble de Prisma: el cron compara 3 >= umbral y escala; la sintetica en el cierre `c4` APROBADO deja el conteo en 3, no 4, en individual y en lote; `ingresoBodegaPorResultado("rechazada", tarifa)` sigue devolviendo el cobro) · **(b)** `orden-historial-repository.test.ts` · «R18-b: la sintetica del ESCALADO SLA no cuenta, aunque su cierre este APROBADO» y `devolucion-sla-service.test.ts` · «R18-b: 2 visitas reales + la sintetica del ESCALADO SLA (cierre aprobado) -> 2, LIBERA» · **(c)** los casos R15/R16 preexistentes de `devolucion-sla-service.test.ts`, verdes SIN cambio de asercion · **(d)** `devolucion-sla-dinero.test.ts`, **verde sin tocarse** |
 | R19 | **SIN DUEÑO — bloqueado por Q4.** La medicion contra la base real no se ejecuto |
 | R20 | Las ~40 suites de consumidores y UI, **verdes sin tocarse** (§3) · `orden-historial-service.test.ts` · «R10/R20: `intentos` sale del punto unico nuevo y el umbral sigue viajando» |
 | R21 | Los casos de alcance por rol/zona/tienda ya existentes, verdes sin tocarse: `orden-historial-service.test.ts` (bloque de autorizacion, 13 casos) + los 6 servicios consumidores |
@@ -99,9 +99,11 @@ vuelo (`CierreDiaService`, `CierreDiaRepository`, `CierresAdminRepository`,
 | R31 | `orden-historial-repository.test.ts` · «R31: el `where` no menciona el estado ACTUAL de la orden», «R31: el resultado cuenta aunque la orden ya haya cambiado de estado despues» |
 | R32 | `orden-historial-repository.test.ts` · «R32: anadir una gestion ANULADA no hace bajar el conteo (no sube, no baja)», «R32: cuando el cierre pasa de `solicitado` a `aprobado`, el conteo SUBE (nunca baja)» · `orden-historial-service.test.ts` · «R32: dos lecturas del drawer separadas por la aprobacion de un cierre -> el numero no baja» |
 | R33 | `criterio-intento-entrega.test.ts` · «R33: `sin_gestionar` no esta en la lista y NO PUEDE estar (no es un GestionResultado)» · `orden-historial-repository.test.ts` · «R33: una orden cortada por el cron (sin ninguna gestion) -> 0» |
+| R34 | **(a)** `orden-historial-repository.test.ts` · «R6/R12/R18-b: en el LOTE las sinteticas tampoco cuentan, con el mismo predicado» + los dos casos por familia (R12 y R18-b) · **(b)** sin columna nueva ni migracion: `git diff --name-only -- db/` **vacio** · **(c)** `criterio-intento-entrega.test.ts` · «R34-a: la lista es EXACTAMENTE `gestion`…», «R34-c: es lista de INCLUSION — TODAS las demas familias del enum quedan FUERA», «R34-c: el predicado usa la lista con `in` y NO contiene ningun `none` ni `notIn`» + `orden-historial-repository.test.ts` · «R34-c: el `some` filtra por familia con `in` y repite el `ordenId` (sin `none`/`notIn`)» · **(d)** `orden-historial-repository.test.ts` · «R34-d: gestion contable, vigente y en cierre APROBADO pero SIN fila de historial -> 0» |
 
-**Cobertura: 30 de 33 requisitos con test real. Tres sin dueño y sin implementar:
-R18 (Q3), R19 (Q4), R24 (Q10).**
+**Cobertura: 33 de 34 requisitos con test real** (tras el Grupo 4). **Sin dueño y sin
+implementar: R19 (Q4, medición no ejecutada contra la base real) y R24 (Q10).** R18,
+R34 y R12 —que figuraba como cubierto y NO lo estaba— quedan cerrados en §8.
 
 ---
 
@@ -151,7 +153,7 @@ medido contra un baseline REMEDIDO de `dev`. Esta bitacora no lo sustituye.
 
 | Req | Bloqueado por | Estado |
 | --- | --- | --- |
-| **R18** | **Q3** — si la gestion sintetica `rechazada` que crea el escalado SLA suma un intento a la orden que lo causo | No implementado, no preparado tras flag, no adivinado |
+| **R18** | ~~Q3~~ **CERRADA por D13** el 2026-08-13 | **IMPLEMENTADO en el Grupo 4 (§8).** Esta fila queda como historico |
 | **R19** | **Q4** — efecto retroactivo; falta EJECUTAR la consulta de `design.md §7.6` contra la base real y pegar el resultado con fecha | No se ejecuto ninguna consulta contra ninguna base |
 | **R24** | **Q10** — deriva del KPI `primer_intento_ok` PERSISTIDO en `analytics_daily` (CHECK `primer_intento_ok <= entregas`) | No implementado. Consecuencia medida en §5 |
 
@@ -297,3 +299,130 @@ materializada, y que ninguna otra metrica inventa un criterio distinto (R23).
    es anulable. Si aparece un camino que lo haga bajar —anulacion administrativa
    fuera de ventana, borrado fisico de `gestion_orden`, o un cierre que salga de
    `aprobado`— **R32 se rompe y hay que volver a la puerta**, no parchear el test.
+
+---
+
+## 8. Grupo 4 (T19–T22) — el discriminador de las gestiones SINTETICAS
+
+**Fecha:** 2026-08-13. **Cierra:** R18 (Q3/D13), R34 y el incumplimiento de **R12**
+que 7d9471c3 dejo abierto. Diseño: `design.md §3.4`. **Sin migracion** (R27).
+
+### 8.1 Que cambia
+
+El predicado unico gana una **SEXTA condicion**: la gestion tiene que nacer de una
+**VISITA REAL**, no ser sintetica.
+
+    AND EXISTS fila de `orden_historial_estado` de esa gestion
+        con `origen_tipo IN ORIGEN_TIPOS_VISITA_REAL`   (hoy: ["gestion"])
+
+El discriminador es **ESTRUCTURAL, no heuristico** (nada de `motivo LIKE 'escalado
+SLA%'`): toda gestion se crea en la MISMA transaccion que su fila de historial
+(verificado en `GestionOrdenRepository.ts:443-455`, append incondicional), y esa
+fila lleva el `origen_tipo` de la familia que la produjo. Las dos sinteticas del
+sistema —`escalado_devuelta_sla` (cron SLA) y `reprogramacion_tienda` (tramite de
+escritorio de la tienda)— quedan fuera.
+
+**Lista de INCLUSION, jamas de exclusion (R34-c):** con lista negra una familia
+sintetica FUTURA empezaria a contar sola, adelantaria el escalado y cobraria un
+`cobroRechazado` (56, dinero real) antes de tiempo, en silencio.
+
+**R34-d, ausencia de dato:** una gestion legada sin fila de historial NO cuenta. Es
+la direccion segura del error: contar de menos retrasa el escalado (inofensivo);
+contar de mas cobra un rechazo antes de tiempo.
+
+**R18-d — deja de contar como INTENTO, sigue cobrando como RECHAZO.** Son dos
+caminos independientes: el ingreso de bodega se deriva de `resultado` en
+`ingresoBodegaPorResultado` / `derivarIngresoBodega` (`lib/utils/ingreso-bodega.ts:18`,
+`lib/utils/cierre-totales.ts:44`), que **no** consultan el conteo. `R18-c`: la
+condicion de escalado del cron NO cambia — sigue comparando el conteo contra el
+umbral antes de escalar.
+
+### 8.2 Archivos modificados (8; **0 en `db/`**)
+
+| Archivo | Que cambia |
+| --- | --- |
+| `lib/types/orden-historial.ts` | **Nueva** `ORIGEN_TIPOS_VISITA_REAL` (`["gestion"]`, `satisfies readonly OrdenHistorialOrigenTipo[]`) con la prosa del porque |
+| `lib/repositories/OrdenHistorialRepository.ts` | Sexta condicion en `whereIntentosVigentes`; **nuevo** `export type FiltroOrdenIntentos = string \| { in: string[] }` (interseccion exacta de lo que aceptan `GestionOrdenWhereInput["ordenId"]` y `OrdenHistorialEstadoWhereInput["ordenId"]`, porque el MISMO valor viaja a los dos modelos — sin `any` ni doble aserto); JSDoc con el bloque de rendimiento |
+| `tests/fixtures/intentos-entrega.ts` | El evaluador semantico UNICO aprende filas de historial: `FilaGestionFake` gana un campo **REQUERIDO** con las familias que enlazan la gestion (`[]` = legada sin historial). Requerido a proposito: el typecheck obliga a que cada fila declare su origen y ninguna suite queda verde por defecto silencioso. `fakeIntentosEnLote` **intacto** |
+| `tests/unit/repositories/orden-historial-repository.test.ts`, `tests/unit/types/criterio-intento-entrega.test.ts`, `tests/unit/services/intentos-entrega-criterio-unico.test.ts`, `tests/unit/services/devolucion-sla-service.test.ts` | Casos nuevos del discriminador + declaracion explicita de la familia en cada fila existente |
+| `specs/213-reintento-en-cierre/design.md` | §3.4: evidencia fechada de T22 |
+
+**NO se toco** ninguno de los 5 archivos que la 208 tiene en vuelo
+(`CierreDiaService`, `CierreDiaRepository`, `CierresAdminRepository`,
+`GestionOrdenRepository`, `MisAsignacionesService`), ni `db/`, ni `components/`,
+ni `app/`, ni `intentos-no-alcance.test.ts`, ni `devolucion-sla-dinero.test.ts`.
+
+### 8.3 El `ordenId` repetido dentro del `some` no es decorativo
+
+`orden_historial_estado` **no tiene indice por `gestion_orden_id`** (los tres que
+existen son `[ordenId, createdAt]`, `[ordenId, estatusDestinoId]` y
+`[actorUsuarioId, origenTipo, createdAt]`, `db/schema.prisma:1546-1557`; la FK no
+crea indice en Postgres). Repitiendo el filtro por `orden_id` dentro del `EXISTS`,
+el planner entra por indice y `gestion_orden_id` queda como filtro residual. Medido
+(§8.5): **sin** repetirlo, `Seq Scan`.
+
+### 8.4 Verificacion — salida real (2026-08-13, worktree `C:/w213`)
+
+    $ pnpm exec tsc --noEmit -p tsconfig.json
+    (salida vacia)  exit=0
+
+    $ git diff --name-only -- db/
+    (vacio)                                <- R27, guardia de la feature
+
+    $ pnpm exec vitest run  <orden-historial-repository, criterio-intento-entrega,
+                             intentos-entrega-criterio-unico, orden-historial-service,
+                             devolucion-sla-service, devolucion-sla-dinero>
+     Test Files  6 passed (6)
+          Tests  128 passed (128)
+
+    $ pnpm exec vitest run  <11 consumidores + analytics + UI + intentos-no-alcance>
+     Test Files  146 passed (146)
+          Tests  1690 passed (1690)
+
+    $ pnpm exec vitest run tests/integration/db/analytics-daily-job.test.ts \
+                           tests/integration/db/analitica-operativa-equivalencia.test.ts
+     Test Files  1 failed | 1 passed (2)
+          Tests  1 failed | 30 passed (31)   <- EL MISMO rojo de §5 (R24/Q10), sin tocar
+
+    $ pnpm exec eslint <los 7 archivos tocados>
+    (sin salida)  exit=0
+
+**El unico rojo sigue siendo el de R24/Q10**, mismo archivo y mismo caso
+(«primer intento vs entrega tras una devolucion previa», `expected [1,1] to deeply
+equal [1,0]`). Delta de rojos del Grupo 4: **0**.
+
+**Verificacion de mutacion, hecha en caliente:** eliminando la condicion
+`historialEstados` del predicado, las suites del criterio pasan a
+`34 failed | 62 passed`; restaurada, `128 passed`. La sexta condicion esta
+realmente cubierta por tests, no por prosa.
+
+### 8.5 T22 — la medicion, y lo que NO demuestra
+
+**No hubo que parar: el plan NO pidio indice nuevo sobre `gestion_orden_id`**, y
+`db/` sigue intacto.
+
+⚠️ **Medido contra la base LOCAL de desarrollo, minuscula** (78 ordenes, 44
+`gestion_orden`, 278 `orden_historial_estado`, 7 `cierre_dia`). **No es produccion y
+los planes NO son extrapolables.** Lo que si demuestra limpio:
+
+- Con el `orden_id` repetido dentro del `some`: `Index Scan using
+  orden_historial_estado_orden_id_estatus_destino_id_idx` (`Index Cond: orden_id =
+  …`, `origen_tipo` residual). **Sin** repetirlo: `Seq Scan on
+  orden_historial_estado`. El truco de `design.md §3.4` se confirma.
+- Individual: 0.195 ms / 6 buffers -> 0.150 ms / 3 buffers.
+- Lote de 100: 0.486 ms / 24 buffers -> 2.800 ms / 164 buffers, con `Seq Scan`
+  repetido 23 veces sobre 278 filas ⇒ **NO CONCLUYENTE** a este volumen.
+- Filas legadas de R34-d (`gestiones_sin_historial`): **0** en local. **No es el
+  numero de produccion.**
+
+**Queda pendiente medir con volumen real**, por la misma puerta que Q4. Detalle
+fechado en `design.md §3.4`.
+
+### 8.6 Tests reexpresados en el Grupo 4
+
+| Viejo | Nuevo | Mutacion que sigue matando |
+| --- | --- | --- |
+| `criterio-intento-entrega.test.ts` · «**R12**/R14: ninguna arista del mapa decide por si sola un intento de entrega» | «**R14**: …» (mismo cuerpo, **ni una linea cambiada**; el `describe` pasa de `213/R12/R14` a `213/R14`) | Las MISMAS: devolver al mapa una arista con marca `cuentaComoIntento`, o reintroducir un `via` que coincida con un `GestionResultado`. Lo unico que se retira es la etiqueta R12, que apuntaba al MAPA y no al PREDICADO — un requisito cuyo test mide otra cosa es un requisito sin dueño. R12 tiene ahora 4 casos reales (§2) |
+| «R4: el `where` del LOTE es IDENTICO al del individual salvo `ordenId`» | Igual, normalizando tambien el `ordenId` anidado en el `some`, **mas 2 aserciones nuevas** (que el `ordenId` de dentro es el mismo que el de fuera, en individual y en lote) | Un segundo `where` copia-pegado; **y ademas**, ahora, quitar el `ordenId` redundante del `some` (la mutacion de rendimiento que degrada a seq scan) |
+
+Ningun test se borro ni se relajo.

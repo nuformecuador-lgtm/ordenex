@@ -230,7 +230,7 @@ baselines caducan con cualquier PR ajeno).
 corrige el incumplimiento de R12 que 7d9471c3 dejó abierto. Diseño completo, con
 archivo:línea, en `design.md §3.4`.
 
-- [ ] **T19 — Declarar la lista de familias de VISITA REAL.** Constante de
+- [x] **T19 — Declarar la lista de familias de VISITA REAL.** Constante de
   INCLUSIÓN sobre `OrdenHistorialOrigenTipo` (hoy: `["gestion"]`) con `satisfies`,
   en `lib/types/orden-historial.ts`, con la prosa del porqué: una familia sintética
   futura NO puede empezar a contar sola.
@@ -239,7 +239,7 @@ archivo:línea, en `design.md §3.4`.
   `escalado_devuelta_sla` y `reprogramacion_tienda` quedan fuera.
   **R:** R34-c. **Depende de:** nada.
 
-- [ ] **T20 — Añadir la condición al predicado único.** En `whereIntentosVigentes`
+- [x] **T20 — Añadir la condición al predicado único.** En `whereIntentosVigentes`
   (`lib/repositories/OrdenHistorialRepository.ts`), la sexta condición:
   `historialEstados: { some: { ordenId: <el mismo filtro>, origenTipo: { in: <lista> } } }`.
   El `ordenId` redundante dentro del `some` **no es decorativo**: es lo que hace que
@@ -249,7 +249,7 @@ archivo:línea, en `design.md §3.4`.
   sigue siendo UNA consulta (R7); typecheck verde. **NO toca `db/`** (R27).
   **R:** R12, R18-b, R34-a, R34-b. **Depende de:** T19.
 
-- [ ] **T21 — Tests del discriminador. [💰]** En
+- [x] **T21 — Tests del discriminador. [💰]** En
   `orden-historial-repository.test.ts` y `criterio-intento-entrega.test.ts`; el
   fixture `tests/fixtures/intentos-entrega.ts` necesita **filas de historial además
   de gestiones**.
@@ -261,7 +261,16 @@ archivo:línea, en `design.md §3.4`.
   («R12/R14: ninguna arista decide por sí sola…», que se queda cubriendo solo R14).
   **R:** R12, R18, R34. **Depende de:** T20.
 
-- [ ] **T22 — Medir el coste de la consulta. [💰]** `EXPLAIN (ANALYZE, BUFFERS)` de
+- [~] **T22 — Medir el coste de la consulta. [💰] — PARCIAL, medido solo contra la
+  base LOCAL de desarrollo (78 órdenes, 44 `gestion_orden`, 278
+  `orden_historial_estado`, 7 `cierre_dia`). NO es producción y los planes NO son
+  extrapolables.** Lo que sí quedó demostrado limpio: con el `orden_id` repetido
+  dentro del `some` el `EXISTS` entra por índice (`Index Cond: orden_id = …`,
+  `origen_tipo` residual) y SIN repetirlo el planner elige `Seq Scan` — el truco de
+  `design.md §3.4` se confirma. El plan **NO pidió índice nuevo**, así que no hubo
+  que parar. El lote de 100 no es concluyente a este volumen. Filas legadas de
+  R34-d: 0 en local (no en producción). Queda pendiente medir con volumen real,
+  misma puerta que Q4. Detalle fechado en `design.md §3.4`.** `EXPLAIN (ANALYZE, BUFFERS)` de
   las dos rutas (individual y lote de 100) antes y después de T20; y la consulta de
   filas legadas de `design.md §3.4` (gestiones contables sin fila de historial).
   **Hecho:** los planes y el conteo de legadas pegados en `design.md §3.4` con

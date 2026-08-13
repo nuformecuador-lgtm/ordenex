@@ -18,6 +18,7 @@ import {
   prismaGestionSobreFilas,
   type FilaGestionFake,
 } from "@/tests/fixtures/intentos-entrega";
+import { ingresoBodegaPorResultado } from "@/lib/utils/ingreso-bodega";
 
 // Feature 213 (R6) — CRITERIO UNICO: el cron SLA (99), el drawer de historial (47) y el conteo
 // EN LOTE de las superficies tienen que producir EL MISMO numero para la misma orden.
@@ -45,7 +46,11 @@ const ORDEN = "o1";
 
 // --- Filas de `gestion_orden` de la orden ----------------------------------------------------
 
-/** Gestion contable de la orden, en el cierre `cierreId` con estado `cierreEstado`. */
+/**
+ * Gestion contable de la orden, en el cierre `cierreId` con estado `cierreEstado`. Por defecto
+ * nace de una VISITA REAL del mensajero (`origen_tipo = 'gestion'`, feature 213/T21): los casos
+ * de las gestiones SINTETICAS lo sobrescriben con su familia real.
+ */
 function gestion(
   resultado: string,
   cierreId: string | null,
@@ -58,6 +63,7 @@ function gestion(
     anuladaAt: null,
     cierreId,
     cierreEstado,
+    origenTiposHistorial: ["gestion"],
     ...over,
   };
 }
@@ -256,6 +262,60 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
     const res = await svc.ejecutar(NOW);
     expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
+  });
+
+  // Feature 213 (T21, R18-a/b/c/d + R34) — LAS DOS MITADES DEL ESCALADO, EN EL MISMO ESCENARIO.
+  // [💰]
+  //
+  // La gestion sintetica que el cron crea al escalar (`DevolucionSlaRepository.escalarDevueltaSla`,
+  // `resultado: rechazada`, historial `escalado_devuelta_sla`) nace con `cierre_id: null` y con el
+  // `mensajero_id` de la ultima `devuelta` vigente, asi que acaba dentro del siguiente cierre de
+  // ese mensajero y ese cierre se aprueba. A partir de ahi hay DOS caminos independientes y esta
+  // feature solo toca el primero:
+  //   - INTENTO: la sintetica NO suma (R18-a/b). Si sumara, la orden pasaria de 3 a 4 por un
+  //     escalado que ella misma provoco — el conteo se auto-alimentaria.
+  //   - RECHAZO: la sintetica SIGUE cobrando (R18-d/R17). El ingreso de bodega se deriva del
+  //     `resultado` en `ingresoBodegaPorResultado` (`lib/utils/ingreso-bodega.ts`), una funcion
+  //     PURA que no consulta el conteo de intentos ni lo recibe. Por eso
+  //     `devolucion-sla-dinero.test.ts` sigue verde sin tocarse.
+  it("R18-a/b/c/d: la sintetica del cron NO suma como INTENTO pero SI cobra como RECHAZO", async () => {
+    const visitasReales: FilaGestionFake[] = [
+      gestion("devuelta", "c1"),
+      gestion("reprogramada", "c2"),
+      gestion("devuelta", "c3"),
+    ];
+
+    // (1) R18-c: el cron sigue comparando el conteo contra el umbral ANTES de escalar. 3 visitas
+    // reales en 3 cierres aprobados = 3 >= umbral 3 -> escala. La condicion NO cambia.
+    const antes = montar(visitasReales);
+    expect(await antes.service.contarIntentos(ORDEN)).toBe(
+      reintentosConfig.MIN_INTENTOS_ENTREGA,
+    );
+    const { repo, svc } = cron(antes.service, antes.ordenRepo);
+    expect(await svc.ejecutar(NOW)).toEqual({
+      evaluadas: 0,
+      liberadas: 0,
+      escaladas: 1,
+      omitidas: 0,
+    });
+    expect(repo.escalarDevueltaSla).toHaveBeenCalledTimes(1);
+
+    // (2) R18-a/b: el mundo DESPUES del escalado — la sintetica ya existe, cayo en el cierre `c4`
+    // del mensajero y ese cierre se APROBO. El conteo sigue siendo 3, no 4.
+    const sintetica = gestion("rechazada", "c4", "aprobado", {
+      origenTiposHistorial: ["escalado_devuelta_sla"],
+    });
+    const despues = montar([...visitasReales, sintetica]);
+    expect(await despues.service.contarIntentos(ORDEN)).toBe(3);
+    expect((await despues.service.contarIntentosEnLote([ORDEN])).get(ORDEN) ?? 0).toBe(3);
+
+    // (3) R18-d/R17: y esa MISMA gestion sintetica sigue cobrando el rechazo. El monto sale del
+    // `resultado` y de la tarifa; el conteo de intentos no entra en la formula por ningun lado.
+    const tarifa = { cobroEntregado: "2.00", cobroRechazado: "1.50" };
+    expect(ingresoBodegaPorResultado("rechazada", tarifa)).toBe("1.50");
+    // Y no cobra por lo que no es un rechazo: las visitas reales que si contaron aportan 0.00.
+    expect(ingresoBodegaPorResultado("devuelta", tarifa)).toBe("0.00");
+    expect(ingresoBodegaPorResultado("reprogramada", tarifa)).toBe("0.00");
   });
 
   // R7: el lote no es una comodidad, es un requisito. Con N ordenes se emite UNA consulta.
