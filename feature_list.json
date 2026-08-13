@@ -2605,11 +2605,11 @@
       "name": "la factura del cierre oscurece con el tema",
       "spec_path": "specs/217-factura-oscurece-con-el-tema/",
       "description": "Frontend. `cierre-factura.tsx` se fija a tema claro con la clase `tema-claro` -decision de la feature 208: es el facsimil de un comprobante en papel-. Por pedido humano pasa a GIRAR con el tema, de modo que en oscuro sea una superficie oscura legible. Al IMPRIMIR debe seguir saliendo blanca.",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
-      "branch": null,
+      "branch": "feature/217-factura-oscurece-con-el-tema",
       "depends_on": null,
       "status_note": "PEDIDO HUMANO del 2026-08-13, tras confirmarsele que el comportamiento actual era deliberado y medido. Revierte una decision de la 208, no arregla un olvido. || NO BASTA CON CAMBIAR EL PAPEL, y esta medido en el propio archivo (cierre-factura.tsx:85-98): quitar `tema-claro` y poner solo `bg-white` deja 116 textos bajo 4,5:1 -minimo 1,04-; sin tocar nada son 20; con `tema-claro` son 3. De los 143 textos de la hoja solo 16 son navy fijo: los otros ~127 son tokens que giran. Hay que convertir esos 16 `text-navy`/`border-navy` en tokens y re-medir la hoja entera. || TRES TEXTOS YA FALLAN HOY EN TEMA CLARO (minimo 3,36), preexistentes: entran en el alcance o se declaran fuera con su motivo. || TRAMPA REGISTRADA: el variant `dark:` de Tailwind se resuelve contra el ANCESTRO, no contra los tokens, asi que las utilidades `dark:` de Badge/Button SIGUEN disparando dentro de la hoja. Al quitar el pin eso cambia de sentido y hay que volver a medirlo. || REGLA QUE EL SPEC DEBE HONRAR (decision humana): al imprimir la hoja sigue BLANCA. Una factura que oscurece en pantalla y se imprime en oscuro gasta toner y sale ilegible, asi que el tema oscuro vive en pantalla y `@media print` fija el papel claro. || EXENTO y no hay que perseguirlo: el logotipo «Ordenex» mide 3,18 sobre el papel y WCAG 1.4.3 exime el texto de una marca."
     },
@@ -2651,6 +2651,19 @@
       "branch": null,
       "depends_on": null,
       "status_note": "RENUMERADA DE 218 A 220 el 2026-08-13 al remergear dev para el PR #368: otra sesion tomo 218 y 219 mientras este PR estaba abierto, y manda quien ya esta en dev. Conserva contenido y motivo intactos. Es la CUARTA colision de ids de esta familia; la leccion ya esta escrita en la 212 y se confirma otra vez: el id se comprueba contra dev justo antes de publicar, y OTRA VEZ al remergear. || DADA DE ALTA el 2026-08-13 por el leader de la 213, al cerrar su [Q5]. La deuda la detecto el implementer y la CONFIRMO el reviewer de forma independiente, que ademas subrayo la consecuencia: el unico camino de prueba que une la captura del mensajero con el dinero del cierre no se ejecuta. || NO ES CULPA DE LA 213 NI SE ARREGLA AHI: por decision humana [Q5] del 2026-08-13, la 213 se limito a la parte del recaudo para no arrastrar trabajo ajeno a su PR. Esta ficha recoge el resto. || ARRANCA POR LA PREGUNTA DE FONDO, no por los helpers: si ningun gate corre los e2e, arreglarlos los deja igual de muertos dentro de un mes. Decidir primero donde corren -y con que base de datos- y despues arreglarlos."
+    },
+    {
+      "id": 221,
+      "name": "el variant `dark:` tambien dispara al imprimir",
+      "spec_path": null,
+      "description": "Frontend. `@custom-variant dark` se resuelve contra el ANCESTRO, no contra los tokens, asi que las utilidades `dark:` de las primitivas siguen disparando dentro de `@media print`: en tema oscuro, cualquier pantalla que se imprima saca insignias y botones con su tinte oscuro sobre papel blanco. Envolver el variant en `@media not print` para que el papel salga claro en TODA la app, con una guardia que lo ate.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "NACE DE LA PUERTA HUMANA DE LA 217 (Q3, 2026-08-13). Se separo a proposito: el arreglo es de una linea pero cambia como imprime TODA la app, y la 217 solo cubre las dos hojas de la factura. || HOY NO ES REGRESION, y por eso no urge: lo impreso sale igual que lo que la hoja ya muestra en pantalla. El humano decidio aceptarlo alli y traer la raiz aqui. || MEDIDO EN LA 208 (claro -> oscuro+hoja): Button outline 14.79 -> 14.78, Badge success 4.84 -> 4.76, danger 5.30 -> 5.32. Dos filas de esa tabla -Badge warning y Badge destructive- CADUCARON con la 210 y solo sobrevive Button destructive; re-medir antes de tocar, no copiar la tabla vieja. || EL VEHICULO DE VERIFICACION YA EXISTE: contraste() y componer() de la 210, que la 217 saca a tests/fixtures/contraste.ts. Consumirlas desde ahi, sin una segunda copia."
     }
   ]
 }
