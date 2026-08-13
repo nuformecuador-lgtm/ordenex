@@ -217,6 +217,60 @@ describe("feature 217 — censo de fuente de la hoja de la factura", () => {
     );
   });
 
+  it("la hoja sigue siendo presentación pura: ni servidor, ni datos, ni contratos nuevos (R22)", () => {
+    // La frontera de la feature, hecha ejecutable. El cambio es de color: si algún día esta hoja
+    // empieza a traerse sus propios datos, deja de ser el sitio donde se decide sólo cómo se ve.
+    expect(hoja).not.toMatch(/["']use server["']/);
+    expect(hoja).not.toMatch(/\bfetch\s*\(/);
+    expect(hoja).not.toMatch(/@\/lib\/(?:services|repositories)/);
+    expect(hoja).not.toMatch(/prisma/i);
+
+    // Y los tres contratos de entrada siguen siendo los mismos, con el mismo nombre: los llamadores
+    // (`CierresAdminModule`, `CierreDiaModule`) y sus tests dependen de ellos.
+    for (const contrato of [
+      "export interface CierreFacturaResumenProps",
+      "export interface CierreFacturaCabecera",
+      "export interface CierreFacturaDetalleProps",
+    ]) {
+      expect(hoja, `desapareció el contrato \`${contrato}\``).toContain(contrato);
+    }
+  });
+
+  /**
+   * R20 — la guardia que afirmaba lo contrario se REEXPRESA, no se relaja. Su título decía «la
+   * landing y **la factura** dependen de ello», y desde esta feature eso es falso. Esto vigila las
+   * dos mitades: que ningún título vuelva a atar la factura a `.tema-claro`, y que el caso **siga
+   * existiendo** — relajar por borrado es la salida fácil y aquí cuesta rojo.
+   */
+  it("ninguna guardia sigue afirmando que la factura depende de `.tema-claro` (R19, R20)", () => {
+    const guardiaTema = readFileSync(
+      path.join(RAIZ, "tests", "unit", "guards", "tema-encendido.guardia.test.ts"),
+      "utf8",
+    );
+    const titulos = [...guardiaTema.matchAll(/\bit\(\s*"([^"]+)"/g)].map((m) => m[1]);
+
+    expect(titulos.length, "no se encontró ningún caso: el censo dejó de saber leer").toBeGreaterThan(
+      5,
+    );
+
+    const elCaso = titulos.find((t) => /`\.tema-claro` sigue fijando los valores claros/.test(t));
+    expect(
+      elCaso,
+      "el caso que defiende `.tema-claro` no puede desaparecer: la landing y la elección «claro» " +
+        "del portal siguen dependiendo de esa clase. Reexpresar no es borrar.",
+    ).toBeDefined();
+    expect(
+      elCaso,
+      "ese título vuelve a atar la factura a `.tema-claro`, y desde la 217 es falso: la hoja gira " +
+        "con el tema y sólo vuelve a claro al imprimir, con su propia clase",
+    ).not.toMatch(/factura/i);
+    expect(
+      elCaso,
+      "el título tiene que seguir nombrando a los consumidores que SÍ quedan, o deja de decir a " +
+        "quién protege",
+    ).toMatch(/landing/i);
+  });
+
   it("el indicador de la pestaña activa usa un token que gira, no el de marca (R3)", () => {
     // `border-foreground` y no `border-primary`: en ese mismo condicional se pinta el borde Y la
     // etiqueta, y `--primary` (3.18 sobre blanco) cumple el 3:1 de componente pero no el 4.5:1 de
@@ -719,6 +773,23 @@ describe("feature 217 — el inventario CERRADO de pares de la hoja (R6, R7, R16
     //   P22 · `Button` variant `destructive`·  claro 3.29 · oscuro 4.43
     // Ninguna se corrige aquí: son de las fichas 210/216, que las tratan para TODA la app.
     expect(bajoUmbral).toEqual(["P20", "P21", "P22"]);
+  });
+
+  /**
+   * R4 — el cambio de tono en tema CLARO, declarado y medido en vez de descubierto.
+   *
+   * Los 16 sitios pasan de `--color-navy` (`#0b2545`) a `--foreground` (`#12233f`): NO son el
+   * mismo azul, la hoja en claro queda ligerísimamente más fría, y eso es visible. Lo que R4
+   * exige es que ninguno quede con MENOS contraste del que tenía. Se comprueba, no se supone.
+   */
+  it("R4: en tema claro el tono nuevo no tiene menos contraste que el navy que sustituye", () => {
+    const antes = contraste(paleta("navy"), token("claro", CARD));
+    const ahora = contraste(token("claro", "foreground"), token("claro", CARD));
+    expect(
+      ahora,
+      `el navy fijo daba ${antes.toFixed(2)} sobre el papel y \`--foreground\` da ` +
+        `${ahora.toFixed(2)}: el cambio de tono de la 217 no puede costar contraste`,
+    ).toBeGreaterThanOrEqual(antes);
   });
 
   it("los exentos están en la lista, MARCADOS, y con su motivo escrito", () => {

@@ -14,6 +14,7 @@
 //  3. Si desaparece `body:has(...)`, vuelve la franja clara alrededor de la app oscura.
 //  4. Si el layout deja de montar el proveedor, el control sigue ahi y no enciende nada.
 
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -219,6 +220,56 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
     }
     // Que no sea un bloque a medias que pase por casualidad.
     expect(Object.keys(impresion.declaraciones).length).toBeGreaterThan(20);
+  });
+
+  /**
+   * R15 — el LIMITE de esta regla tiene que estar escrito JUNTO a ella, no solo en el spec.
+   *
+   * La regla de impresion NO apaga el variant `dark:`: se resuelve contra el ancestro, no contra
+   * los tokens, asi que al imprimir desde tema oscuro las utilidades `dark:` de las primitivas
+   * siguen disparando dentro de la hoja. Se acepta —el resultado impreso es el que la hoja ya
+   * mostraba antes de la 217— pero quien lea la regla tiene que encontrar ahi su limite. Un
+   * limite que solo vive en un spec es un limite que el siguiente no va a leer.
+   */
+  it("junto a la regla de impresion queda escrito su limite: no apaga el variant `dark:` (R15)", () => {
+    const crudo = readFileSync(path.join(__dirname, "../../..", GLOBALS), "utf8");
+    const donde = crudo.indexOf("@media print");
+    expect(donde, "no se encontro el bloque `@media print`").toBeGreaterThan(0);
+
+    const comentarioDeArriba = crudo.slice(Math.max(0, donde - 3000), donde);
+    expect(
+      comentarioDeArriba,
+      "el comentario que precede a la regla de impresion no nombra el variant `dark:`. Ese es su " +
+        "limite conocido y va declarado ahi, no solo en `specs/`.",
+    ).toMatch(/`dark:`/);
+  });
+
+  /**
+   * R19 — ninguna prosa del CSS puede seguir afirmando que la factura se fija a tema claro.
+   * La mencion que queda es la que explica que DEJO de usar la clase y por que; una que la
+   * vuelva a listar como consumidora manda al siguiente lector a buscar un olvido inexistente.
+   */
+  it("la prosa de `.tema-claro` ya no lista la factura entre sus consumidores (R19)", () => {
+    const crudo = readFileSync(path.join(__dirname, "../../..", GLOBALS), "utf8");
+    // El comentario que documenta la clase es el que precede a su declaracion. La regla de
+    // impresion tambien nombra la hoja, y ahi es correcto: dice a que se aplica.
+    const declaracion = crudo.indexOf(":root,\n.tema-claro");
+    expect(declaracion, "no se encontro la declaracion de `.tema-claro`").toBeGreaterThan(0);
+
+    const menciones = [...crudo.slice(0, declaracion).matchAll(/cierre-factura/g)];
+    expect(
+      menciones.length,
+      "el comentario de `.tema-claro` nombra la factura mas de una vez",
+    ).toBeLessThanOrEqual(1);
+
+    for (const m of menciones) {
+      const alrededor = crudo.slice(Math.max(0, m.index - 500), m.index + 500);
+      expect(
+        alrededor,
+        "si el comentario de `.tema-claro` nombra la factura, tiene que ser para decir que DEJO " +
+          "de usar la clase en la feature 217, no para listarla como consumidora",
+      ).toMatch(/feature 217/);
+    }
   });
 
   it("NO fuerza la impresion de fondos: nada de `print-color-adjust`", () => {
