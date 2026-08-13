@@ -8,7 +8,11 @@ import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
 
 // Feature 49 (T4.1/T4.2) — tests del OrdenHistorialService (sin DB, dobles de repos).
 // Cubre R26 (linea de tiempo cronologica), R27 (autorizacion por visibilidad de la orden,
-// por rol) y R24/R25 (derivador de intentos = conteo de destinos `devuelta`).
+// por rol) y el derivador de intentos.
+//
+// Feature 215: el derivador dejo de traducir `value -> id` del catalogo (`resolverCriterio`
+// desaparece) porque el criterio ya no se expresa con ids de `order_status`, sino con valores
+// de los enums `GestionResultado`/`CierreEstado`. El servicio delega DIRECTO en el repo.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" };
@@ -65,12 +69,12 @@ type HistorialRepoMethods = Pick<
   | "contarIntentosVigentesEnLote"
 >;
 
-// Feature 160: el catalogo de test resuelve los DOS estados del criterio.
+// El catalogo de estados sigue existiendo para la AUTORIZACION y para otros consumidores; el
+// conteo de intentos ya NO lo consulta (feature 215/R9).
 const ESTATUS: Record<string, string> = {
   devuelta: "s-devuelta",
   reprogramada: "s-reprogramada",
 };
-const CRITERIO = { devueltaId: "s-devuelta", reprogramadaId: "s-reprogramada" };
 
 function ordenRepo(overrides: Partial<OrdenRepoMethods> = {}): OrdenRepoMethods {
   return {
@@ -135,10 +139,10 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     const r = await newService(o, h).obtenerHistorial("o1", MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.intentos).toBe(2); // consume el derivador de la 49 (conteo VIGENTE)
+    expect(r.intentos).toBe(2); // consume el punto unico del conteo
     expect(r.umbral).toBe(3); // default por ley (reintentosConfig, env no seteado en test)
-    // Feature 160/R10: el drawer recibe el criterio COMPLETO (las dos ramas), no un destino.
-    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1", CRITERIO);
+    // Feature 215/R6: el drawer llama al punto unico con SOLO el id de la orden.
+    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1");
   });
 
   it("R15: sin devoluciones -> intentos 0 (no bloquea el ok)", async () => {
@@ -149,31 +153,55 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     if (r.status === "ok") expect(r.intentos).toBe(0);
   });
 
-  // Feature 67/R28: la linea de tiempo expone el conteo YA CORREGIDO (sin los anulados), el
-  // MISMO que usa la regla de escalado -> "intento X de N" coincide con la decision real.
-  it("67/R28: `intentos` de la linea de tiempo es el conteo VIGENTE (2 devueltas, 1 anulada -> 1)", async () => {
+  // T11b (215/R5/R32) — REESCRITO. El caso viejo afirmaba que anular una gestion hacia BAJAR el
+  // numero ("2 devueltas, 1 anulada -> 1"). Con D12 el conteo es MONOTONO CRECIENTE: una gestion
+  // con `cierre_id` poblado ya no se puede anular, y contar exige ademas que su cierre este
+  // aprobado, asi que toda gestion que llega a contar es ya inmutable. Lo que la anulacion
+  // impide es que el numero LLEGUE A SUBIR, no que baje. R5 sobrevive como "una gestion anulada
+  // NO CUENTA", nunca como "descuenta".
+  it("R5/R32: la gestion anulada NO cuenta (no descuenta): 2 cierres aprobados, 1 gestion anulada -> 1", async () => {
     const o = ordenRepo();
-    // El repo ya excluye la anulada en la LECTURA (design §4.2): de 2 filas destino `devuelta`
-    // devuelve 1 vigente.
+    // El repo excluye la anulada en la LECTURA: nunca llego a aportar su cierre.
     const h = historialRepo({ contarIntentosVigentes: vi.fn(async () => 1) });
     const r = await newService(o, h).obtenerHistorial("o1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.intentos).toBe(1);
-    // R28: es EXACTAMENTE el mismo derivador que alimenta el escalado (un solo call-site).
-    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1", CRITERIO);
+    // R6: es EXACTAMENTE el mismo derivador que alimenta el escalado (un solo call-site).
+    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1");
   });
 
-  // Feature 160/R10: el drawer refleja el criterio NUEVO. Aqui la orden tiene 2 reprogramaciones
-  // del mensajero + 1 devuelta: el repo (con el criterio completo) devuelve 3, y ese 3 es el que
-  // ve el usuario — el MISMO que compara el cron contra el umbral.
-  it("160/R10: `intentos` refleja el criterio ampliado y el umbral sigue viajando", async () => {
+  // T11b (215/R32) — MONOTONIA observable desde el drawer: dos lecturas de la MISMA orden
+  // separadas por un evento (se aprueba el cierre) y el segundo numero es >= el primero. Ningun
+  // test de este repo afirma que el conteo pueda decrecer.
+  it("R32: dos lecturas del drawer separadas por la aprobacion de un cierre -> el numero no baja", async () => {
+    const o = ordenRepo();
+    const contar = vi
+      .fn<(ordenId: string) => Promise<number>>()
+      .mockResolvedValueOnce(1) // antes: 1 cierre aprobado
+      .mockResolvedValueOnce(2); // despues: se aprobo otro cierre
+    const h = historialRepo({ contarIntentosVigentes: contar });
+    const svc = newService(o, h);
+
+    const primera = await svc.obtenerHistorial("o1", MAESTRO);
+    const segunda = await svc.obtenerHistorial("o1", MAESTRO);
+    if (primera.status !== "ok" || segunda.status !== "ok") throw new Error("esperaba ok");
+
+    expect(segunda.intentos).toBeGreaterThanOrEqual(primera.intentos);
+    expect([primera.intentos, segunda.intentos]).toEqual([1, 2]);
+  });
+
+  // 215/R10/R20: el drawer refleja el criterio NUEVO. Aqui la orden acumulo resultado contable
+  // en 3 cierres APROBADOS: el repo devuelve 3, y ese 3 es el que ve el usuario — el MISMO que
+  // compara el cron contra el umbral. La FORMA no cambia (sigue exponiendo `intentos` +
+  // `umbral`, R20); lo que cambia es el VALOR.
+  it("R10/R20: `intentos` sale del punto unico nuevo y el umbral sigue viajando", async () => {
     const o = ordenRepo();
     const h = historialRepo({ contarIntentosVigentes: vi.fn(async () => 3) });
     const r = await newService(o, h).obtenerHistorial("o1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.intentos).toBe(3);
     expect(r.umbral).toBe(3);
-    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1", CRITERIO);
+    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1");
   });
 
   // Feature 67/R23: el historial es append-only e INMUTABLE. La correccion del contador es un
@@ -298,66 +326,73 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
   });
 });
 
-// --- contarIntentos: derivador (R24/R25 + 160/R1/R4/R6) ---
+// --- contarIntentos: el punto unico (215/R6/R8/R9) ---
 
-describe("contarIntentos — derivador de intentos (R24/R25 + 160/R1/R6)", () => {
-  it("N intentos vigentes -> N, con el criterio de las DOS ramas ya resuelto", async () => {
+describe("contarIntentos — punto unico del conteo (215/R6/R8/R9)", () => {
+  it("N intentos -> N, delegando en el punto unico con SOLO el id de la orden", async () => {
     const o = ordenRepo();
     const h = historialRepo({ contarIntentosVigentes: vi.fn(async () => 3) });
     const n = await newService(o, h).contarIntentos("o1");
     expect(n).toBe(3);
-    // 160/R1: el servicio es el UNICO que conoce los `value`; resuelve los DOS.
-    expect(o.findEstatusIdByValue).toHaveBeenCalledWith("devuelta");
-    expect(o.findEstatusIdByValue).toHaveBeenCalledWith("reprogramada");
-    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1", CRITERIO);
+    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1");
   });
 
-  it("sin intentos -> 0", async () => {
+  it("R8: sin intentos -> 0 explicito", async () => {
     const o = ordenRepo();
     const h = historialRepo({ contarIntentosVigentes: vi.fn(async () => 0) });
     expect(await newService(o, h).contarIntentos("o1")).toBe(0);
   });
 
-  it("160/R6: catalogo sin `devuelta` (seed pendiente) -> 0, sin contar y sin excepcion", async () => {
+  // R9 REEXPRESADO (213) — el conteo YA NO DEPENDE DEL CATALOGO DE ESTADOS. Antes, un seed
+  // parcial de `order_status` degradaba el conteo a 0 (o a media rama); ahora el criterio se
+  // expresa con valores de los enums de Postgres `GestionResultado`/`CierreEstado`, que NO
+  // pueden faltar. La degradacion segura pasa a sostenerse sobre algo mas fuerte, no mas debil.
+  //
+  // Este caso mata la mutacion "reintroducir una traduccion de catalogo que devuelve null y
+  // degrada el conteo a 0": si alguien la volviera a meter, `findEstatusIdByValue` se llamaria
+  // y el numero cambiaria con el catalogo vacio.
+  it("R9: el conteo NO consulta el catalogo de estados ni una sola vez", async () => {
+    const o = ordenRepo();
+    const h = historialRepo({ contarIntentosVigentes: vi.fn(async () => 2) });
+    const svc = newService(o, h);
+
+    expect(await svc.contarIntentos("o1")).toBe(2);
+    await svc.contarIntentosEnLote(["o1", "o2"]);
+
+    expect(o.findEstatusIdByValue).not.toHaveBeenCalled();
+  });
+
+  it("R9: con el catalogo VACIO el numero es el mismo (el criterio no se apoya en el)", async () => {
     const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => null) });
-    const h = historialRepo();
-    expect(await newService(o, h).contarIntentos("o1")).toBe(0);
-    expect(h.contarIntentosVigentes).not.toHaveBeenCalled();
+    const h = historialRepo({
+      contarIntentosVigentes: vi.fn(async () => 2),
+      contarIntentosVigentesEnLote: vi.fn(async () => new Map([["o1", 2]])),
+    });
+    const svc = newService(o, h);
+
+    expect(await svc.contarIntentos("o1")).toBe(2); // NO degrada a 0
+    expect((await svc.contarIntentosEnLote(["o1"])).get("o1")).toBe(2);
+    expect(o.findEstatusIdByValue).not.toHaveBeenCalled();
   });
 
-  // 160/R6: seed PARCIAL. Con `devuelta` pero sin `reprogramada` se cuenta SOLO la rama A y la
-  // lectura no falla: el criterio degrada, no revienta.
-  it("160/R6: con `devuelta` y sin `reprogramada` -> criterio con `reprogramadaId: null`", async () => {
-    const o = ordenRepo({
-      findEstatusIdByValue: vi.fn(async (v: string) => (v === "devuelta" ? "s-devuelta" : null)),
-    });
-    const h = historialRepo({ contarIntentosVigentes: vi.fn(async () => 1) });
-    expect(await newService(o, h).contarIntentos("o1")).toBe(1);
-    expect(h.contarIntentosVigentes).toHaveBeenCalledWith("o1", {
-      devueltaId: "s-devuelta",
-      reprogramadaId: null,
-    });
-  });
-
-  // Feature 67/R24: el derivador consume el conteo VIGENTE, NUNCA el conteo crudo. Este test
-  // guarda la decision: si alguien volviera a un conteo sin filtro, el intento de una gestion
-  // deshecha volveria a contar y la orden escalaria sola a `rechazada` (dinero).
-  it("67/R24: consume `contarIntentosVigentes` (el conteo que excluye gestiones anuladas)", async () => {
+  // El servicio consume el conteo VIGENTE, NUNCA un conteo crudo. Este test guarda la decision:
+  // si alguien volviera a un conteo sin filtro, el intento de una gestion deshecha volveria a
+  // contar y la orden escalaria sola a `rechazada` (dinero).
+  it("R6: consume `contarIntentosVigentes`, y el contrato no expone un conteo sin filtrar", async () => {
     const o = ordenRepo();
     const h = historialRepo({ contarIntentosVigentes: vi.fn(async () => 1) });
     expect(await newService(o, h).contarIntentos("o1")).toBe(1);
     expect(h.contarIntentosVigentes).toHaveBeenCalledTimes(1);
-    // El contrato del repo ya no expone un conteo sin filtrar ni un conteo "por destino" suelto:
-    // no hay forma de elegir mal (160, design §3.3 — el renombre es deliberado).
+    // El contrato del repo no expone un conteo "por destino" suelto: no hay forma de elegir mal.
     expect("contarPorDestino" in h).toBe(false);
     expect("contarPorDestinoVigentes" in h).toBe(false);
   });
 });
 
-// --- contarIntentosEnLote: el gemelo en lote (160/R4/R6/R12/R13) ---
+// --- contarIntentosEnLote: el gemelo en lote (215/R4/R7/R8) ---
 
-describe("contarIntentosEnLote — conteo por lote (160/R12/R13/R6/R4)", () => {
-  it("R12: resuelve el catalogo UNA vez por llamada (no por orden) y consulta el historial UNA vez", async () => {
+describe("contarIntentosEnLote — conteo por lote (215/R4/R7/R8)", () => {
+  it("R7: consulta el repo UNA vez para todo el lote, con los ids tal cual", async () => {
     const o = ordenRepo();
     const h = historialRepo({
       contarIntentosVigentesEnLote: vi.fn(async () => new Map([["o1", 2]])),
@@ -366,12 +401,10 @@ describe("contarIntentosEnLote — conteo por lote (160/R12/R13/R6/R4)", () => {
 
     expect(mapa).toEqual(new Map([["o1", 2]]));
     expect(h.contarIntentosVigentesEnLote).toHaveBeenCalledTimes(1);
-    expect(h.contarIntentosVigentesEnLote).toHaveBeenCalledWith(["o1", "o2", "o3"], CRITERIO);
-    // 2 lecturas del catalogo en total (devuelta + reprogramada), NO 2 por orden.
-    expect(o.findEstatusIdByValue).toHaveBeenCalledTimes(2);
+    expect(h.contarIntentosVigentesEnLote).toHaveBeenCalledWith(["o1", "o2", "o3"]);
   });
 
-  it("R13: lote vacio -> Map vacio, sin tocar el historial NI el catalogo", async () => {
+  it("R7: lote vacio -> Map vacio, sin tocar el repo NI el catalogo", async () => {
     const o = ordenRepo();
     const h = historialRepo();
     const mapa = await newService(o, h).contarIntentosEnLote([]);
@@ -381,18 +414,20 @@ describe("contarIntentosEnLote — conteo por lote (160/R12/R13/R6/R4)", () => {
     expect(o.findEstatusIdByValue).not.toHaveBeenCalled();
   });
 
-  it("R6: catalogo sin `devuelta` -> Map vacio, sin consultar y sin excepcion", async () => {
-    const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => null) });
-    const h = historialRepo();
-    const mapa = await newService(o, h).contarIntentosEnLote(["o1"]);
-
-    expect(mapa.size).toBe(0);
-    expect(h.contarIntentosVigentesEnLote).not.toHaveBeenCalled();
+  it("R8: una orden sin intentos no viene en el Map (el llamador aplica `?? 0`)", async () => {
+    const o = ordenRepo();
+    const h = historialRepo({
+      contarIntentosVigentesEnLote: vi.fn(async () => new Map([["o1", 1]])),
+    });
+    const mapa = await newService(o, h).contarIntentosEnLote(["o1", "o2"]);
+    expect(mapa.has("o2")).toBe(false);
+    expect(mapa.get("o2") ?? 0).toBe(0);
   });
 
-  // R4: individual y lote comparten EL MISMO criterio. Es la garantia de que el numero de una
-  // superficie (lote) no puede divergir del numero que gobierna el dinero (individual).
-  it("R4: individual y lote reciben EXACTAMENTE el mismo criterio", async () => {
+  // R4: individual y lote consumen EL MISMO punto unico, con la MISMA firma (solo el id de la
+  // orden). Es la garantia de que el numero de una superficie (lote) no puede divergir del
+  // numero que gobierna el dinero (individual).
+  it("R4: individual y lote comparten el punto unico y dan el mismo numero", async () => {
     const o = ordenRepo();
     const h = historialRepo({
       contarIntentosVigentes: vi.fn(async () => 2),
@@ -403,11 +438,11 @@ describe("contarIntentosEnLote — conteo por lote (160/R12/R13/R6/R4)", () => {
     const individual = await svc.contarIntentos("o1");
     const lote = await svc.contarIntentosEnLote(["o1"]);
 
-    const criterioIndividual = (h.contarIntentosVigentes as ReturnType<typeof vi.fn>).mock
-      .calls[0][1];
-    const criterioLote = (h.contarIntentosVigentesEnLote as ReturnType<typeof vi.fn>).mock
-      .calls[0][1];
-    expect(criterioLote).toEqual(criterioIndividual);
+    const argsIndividual = (h.contarIntentosVigentes as ReturnType<typeof vi.fn>).mock.calls[0];
+    const argsLote = (h.contarIntentosVigentesEnLote as ReturnType<typeof vi.fn>).mock.calls[0];
+    // Ninguno de los dos recibe un "criterio" aparte que pudiera divergir: solo el/los id(s).
+    expect(argsIndividual).toEqual(["o1"]);
+    expect(argsLote).toEqual([["o1"]]);
     expect(lote.get("o1")).toBe(individual); // mismo numero para la misma orden
   });
 });

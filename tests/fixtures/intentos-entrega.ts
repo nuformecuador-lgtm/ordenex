@@ -36,70 +36,122 @@ export function llamadasIntentos(doble: IntentosSvcDoble): string[][] {
 //
 // Un mini-interprete del `where` de Prisma que produce `whereIntentosVigentes`, para poder
 // probar el SIGNIFICADO del criterio sin DB. Vive aqui, y no copiado en cada suite, porque el
-// criterio es UNO solo (160/R4): dos evaluadores que se desincronizaran harian exactamente el
+// criterio es UNO solo (215/R6): dos evaluadores que se desincronizaran harian exactamente el
 // daño que la feature vino a evitar.
+//
+// Feature 215: el predicado cambio de tabla. Antes desestructuraba filas de
+// `orden_historial_estado` (`AND: [{OR: destinos}, {OR: vigencia}]`); ahora evalua filas de
+// `gestion_orden` con resultado + vigencia + cierre aprobado.
 
-/** Fila de historial de ejemplo, con lo justo que el predicado mira. */
-export interface FilaHistorialFake {
+/** Fila de `gestion_orden` de ejemplo, con lo justo que el predicado mira. */
+export interface FilaGestionFake {
   ordenId: string;
-  estatusDestinoId: string;
-  origenTipo: string;
-  gestionOrdenId: string | null;
-  gestion: { anuladaAt: Date | null } | null;
+  /** valor del enum `GestionResultado`. */
+  resultado: string;
+  /** NULL = gestion VIGENTE; con fecha = gestion anulada (deshecha). */
+  anuladaAt: Date | null;
+  /** NULL = gestion del dia aun no cerrada (no pertenece a ningun cierre). */
+  cierreId: string | null;
+  /** estado del cierre al que pertenece; `null` cuando `cierreId` es null. */
+  cierreEstado: string | null;
+  /**
+   * Feature 215 (T21) — familias (`origen_tipo`) de las filas de `orden_historial_estado` que
+   * enlazan ESTA gestion por `gestion_orden_id`. Es el discriminador de la SEXTA condicion del
+   * predicado (design §3.4): `["gestion"]` = visita real del mensajero;
+   * `["escalado_devuelta_sla"]` = sintetica del cron SLA; `["reprogramacion_tienda"]` =
+   * reprogramacion de escritorio de la tienda; `[]` = gestion LEGADA sin fila de historial que
+   * la respalde (R34-d).
+   *
+   * REQUERIDO a proposito, sin default: asi el typecheck obliga a que CADA fila de test declare
+   * explicitamente de donde nace su gestion. Con un default (`["gestion"]` o `[]`) una suite
+   * entera podria quedarse verde por omision silenciosa, que es justo el modo de fallo que este
+   * discriminador existe para impedir — y el que cobra dinero de mas.
+   */
+  origenTiposHistorial: string[];
 }
 
-type RamaDestino = { estatusDestinoId: string; origenTipo?: { in: string[] } };
-type RamaVigencia = {
-  gestionOrdenId?: null;
-  origenTipo?: { notIn: string[] };
-  gestion?: { anuladaAt: null };
-};
+/** Forma del `where` que produce `whereIntentosVigentes` (feature 215). */
+interface WhereIntentos {
+  ordenId: FiltroOrdenFake;
+  resultado: { in: string[] };
+  anuladaAt: null;
+  cierreId: { not: null };
+  cierre: { estado: string };
+  historialEstados: { some: { ordenId: FiltroOrdenFake; origenTipo: { in: string[] } } };
+}
 
-/** `true` si la fila casa el `where` de `whereIntentosVigentes` (AND de destinos y vigencia). */
+/** El filtro de orden del predicado: id suelto o lote. */
+type FiltroOrdenFake = string | { in: string[] };
+
+/** `true` si ese filtro de orden alcanza a `ordenId`. */
+function filtroAlcanza(filtro: FiltroOrdenFake, ordenId: string): boolean {
+  return typeof filtro === "string" ? filtro === ordenId : filtro.in.includes(ordenId);
+}
+
+/** `true` si la fila de gestion casa el `where` de `whereIntentosVigentes`. */
 export function filaCasaIntento(
   where: Record<string, unknown>,
-  fila: FilaHistorialFake,
+  fila: FilaGestionFake,
 ): boolean {
-  const [ramaDestinos, ramaVigencia] = where.AND as [{ OR: RamaDestino[] }, { OR: RamaVigencia[] }];
-  const casaDestino = ramaDestinos.OR.some(
-    (r) =>
-      fila.estatusDestinoId === r.estatusDestinoId &&
-      (r.origenTipo === undefined || r.origenTipo.in.includes(fila.origenTipo)),
-  );
-  const casaVigencia = ramaVigencia.OR.some((r) => {
-    // `{ gestion: { anuladaAt: null } }` exige gestion ENLAZADA y no anulada: una fila con el
-    // enlace vacio no tiene relacion que casar.
-    if (r.gestion !== undefined) return fila.gestion !== null && fila.gestion.anuladaAt === null;
-    return (
-      fila.gestionOrdenId === null &&
-      !(r.origenTipo as { notIn: string[] }).notIn.includes(fila.origenTipo)
-    );
-  });
-  return casaDestino && casaVigencia;
+  const w = where as unknown as WhereIntentos;
+  // Lista de INCLUSION: `resultado.in`. Si alguien la reescribiera como `notIn`, esta
+  // desestructuracion fallaria en vez de dejar pasar resultados nuevos en silencio.
+  if (!w.resultado.in.includes(fila.resultado)) return false;
+  if (fila.anuladaAt !== null) return false; // R5: la anulada no cuenta
+  if (fila.cierreId === null) return false; // gestion del dia sin cerrar
+  if (fila.cierreEstado !== w.cierre.estado) return false; // D8/R3: solo `aprobado`
+  // Feature 215 (T21) — SEXTA condicion: la gestion tiene que nacer de una VISITA REAL (D13).
+  // Se evalua el `some` DE VERDAD, no su presencia: hay que leer `historialEstados.some` (si
+  // alguien lo reescribiera como `none`, esta lectura es `undefined` y el acceso siguiente
+  // REVIENTA en vez de dejar pasar las sinteticas) y su `origenTipo.in` (idem con `notIn`).
+  const familias = w.historialEstados.some.origenTipo.in;
+  // El `ordenId` repetido dentro del `some` es parte del predicado (rendimiento, design §3.4):
+  // si desapareciera o dejara de acotar a la orden, este evaluador lo nota.
+  if (!filtroAlcanza(w.historialEstados.some.ordenId, fila.ordenId)) return false;
+  // `some` = interseccion NO vacia. Sin filas de historial (gestion legada) no hay interseccion
+  // posible ⇒ no cuenta (R34-d, direccion segura del error).
+  return fila.origenTiposHistorial.some((t) => familias.includes(t));
 }
 
 /** `true` si el `where` acota a esa orden (id suelto o lote `{ in: [...] }`). */
 export function whereAlcanzaOrden(where: Record<string, unknown>, ordenId: string): boolean {
-  const filtro = where.ordenId as string | { in: string[] };
-  return typeof filtro === "string" ? filtro === ordenId : filtro.in.includes(ordenId);
+  return filtroAlcanza(where.ordenId as FiltroOrdenFake, ordenId);
 }
 
 /**
- * Doble de Prisma que EVALUA de verdad el predicado contra `filas`, en vez de devolver un
- * numero fijo. Con el, `OrdenHistorialRepository` deja de estar mockeado: `count` y `groupBy`
- * responden lo que el criterio realmente dice de esas filas.
+ * Doble de Prisma que EVALUA de verdad el predicado contra `filas`, en vez de devolver un numero
+ * fijo. Con el, `OrdenHistorialRepository` deja de estar mockeado: el `groupBy` responde lo que
+ * el criterio realmente dice de esas filas.
+ *
+ * El doble RESPETA el `by` del `groupBy`: con `by: ["cierreId"]` emite una fila por cierre
+ * distinto, y con `by: ["ordenId","cierreId"]` una por par. Eso es deliberado — si el doble
+ * ignorara el `by` y agrupara siempre por orden, regalaria el grano (R29/R30) y un `count()` de
+ * gestiones pasaria los tests. Aqui el grano se MIDE.
  */
-export function prismaHistorialSobreFilas(filas: FilaHistorialFake[]) {
-  const casan = (where: Record<string, unknown>): FilaHistorialFake[] =>
+export function prismaGestionSobreFilas(filas: FilaGestionFake[]) {
+  const casan = (where: Record<string, unknown>): FilaGestionFake[] =>
     filas.filter((f) => whereAlcanzaOrden(where, f.ordenId) && filaCasaIntento(where, f));
   return {
+    gestionOrden: {
+      groupBy: vi.fn(
+        async ({ by, where }: { by: string[]; where: Record<string, unknown> }) => {
+          const grupos = new Map<string, Record<string, unknown>>();
+          for (const f of casan(where)) {
+            const fila = f as unknown as Record<string, unknown>;
+            const clave = by.map((k) => String(fila[k])).join("\u0000");
+            if (!grupos.has(clave)) {
+              grupos.set(clave, Object.fromEntries(by.map((k) => [k, fila[k]])));
+            }
+          }
+          return [...grupos.values()];
+        },
+      ),
+      count: vi.fn(async () => 0),
+      findMany: vi.fn(async () => []),
+    },
     ordenHistorialEstado: {
-      count: vi.fn(async ({ where }: { where: Record<string, unknown> }) => casan(where).length),
-      groupBy: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
-        const porOrden = new Map<string, number>();
-        for (const f of casan(where)) porOrden.set(f.ordenId, (porOrden.get(f.ordenId) ?? 0) + 1);
-        return [...porOrden].map(([ordenId, n]) => ({ ordenId, _count: { _all: n } }));
-      }),
+      count: vi.fn(async () => 0),
+      groupBy: vi.fn(async () => []),
       findMany: vi.fn(async () => []),
       findFirst: vi.fn(async () => null),
       createMany: vi.fn(),
