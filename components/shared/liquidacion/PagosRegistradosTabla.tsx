@@ -65,9 +65,7 @@ function EstadoCelda({ pago }: { pago: PagoRegistradoDTO }) {
   }
   return (
     <div className="flex flex-col gap-1">
-      {/* Feature 210: era `destructive` (3.29:1, por debajo de AA). `danger` es la misma señal
-          con el par -soft/-strong correcto: 5.30:1 en claro, 5.20:1 en oscuro. */}
-      <Badge variant="danger">{PAGO_ESTADO_LABEL.anulado}</Badge>
+      <Badge variant="destructive">{PAGO_ESTADO_LABEL.anulado}</Badge>
       <span className="text-xs text-muted-foreground">
         {PAGOS_REGISTRADOS_TEXTO.anuladoPor(
           anulacion.anuladoPorNombre,

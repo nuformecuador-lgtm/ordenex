@@ -224,19 +224,30 @@ describe("Feature 210 — contraste de los tokens semánticos (guardia)", () => 
 
   /**
    * La regresión que esta ficha cierra, atornillada: la variante `destructive` del `Badge` pintaba
-   * `text-destructive` sobre `bg-destructive/10`, el mismo color como texto y como fondo. Medido:
-   * 3.29:1 en claro y 4.43:1 en oscuro. No se arregla con un token porque le falta la mitad del
-   * par, así que la variante SE RETIRÓ y sus dos consumidores usan `danger`.
+   * `text-destructive` sobre `bg-destructive/10`, el mismo color como texto y como fondo al 10%.
+   * Medido: 3.29:1 en claro y 4.43:1 en oscuro. No se arregla con un token porque `--destructive`
+   * no tiene `-strong`, así que la variante pasa a usar el par de `danger`.
    *
-   * Sin este caso, nada impide que alguien la reponga copiándola de shadcn.
+   * Lo que este caso vigila es que NO VUELVA a colgarse de `--destructive`. Copiar la variante de
+   * shadcn otra vez —el gesto más natural del mundo al actualizar un componente— reintroduce
+   * exactamente el 3.29:1.
+   *
+   * ⚠️ Se comprueba el par de CLASES, no la ausencia del nombre. La primera versión de esta
+   * guardia exigía que la clave `destructive:` no existiera, y con ella se retiró la variante:
+   * `typecheck` destapó NUEVE consumidores más que no escriben el literal en el JSX, sino que lo
+   * calculan desde un mapa de estados. El censo textual no podía verlos.
    */
-  it("el Badge NO reintroduce una variante `destructive` (le falta el par -strong/-soft)", () => {
+  it("la variante `destructive` del Badge NO usa el token sin par, sino el de `danger`", () => {
     const badge = quitarComentarios(
       readFileSync(path.join(RAIZ, "components", "ui", "badge.tsx"), "utf8"),
     );
-    expect(badge).not.toMatch(/\bdestructive:/);
-    // Y la prueba de que la alternativa vigente existe y es la correcta.
-    expect(badge).toMatch(/danger:\s*"bg-danger-soft text-danger-strong/);
+    const linea = badge.match(/destructive:\s*"([^"]*)"/);
+    expect(linea, "la variante `destructive` desapareció del Badge").not.toBeNull();
+    const clases = linea?.[1] ?? "";
+    expect(clases).toContain("text-danger-strong");
+    expect(clases).toContain("bg-danger-soft");
+    // Ni el texto ni el fondo pueden volver a salir de `--destructive`.
+    expect(clases).not.toMatch(/text-destructive|bg-destructive/);
   });
 
   it("el par que sustituye a `destructive` cumple AA en los DOS temas", () => {
