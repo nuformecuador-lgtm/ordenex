@@ -55,7 +55,18 @@ export function KpisMensajero({ kpis }: Readonly<KpisMensajeroProps>) {
           // Sombra permanente + degradado morado claro → blanco al pasar el
           // cursor. background-image no interpola, así que el degradado vive
           // siempre en un ::before y lo que se anima es su opacidad.
-          className="relative overflow-hidden shadow-xl transition-shadow duration-300 hover:shadow-lg before:pointer-events-none before:absolute before:inset-0 before:bg-linear-to-br before:from-purple-200 before:to-white before:opacity-0 before:transition-opacity before:duration-300 before:content-[''] hover:before:opacity-100"
+          //
+          // Feature 208 arregló la CIFRA de estas tarjetas (era `text-navy` fijo), pero midió
+          // pantallas ESTÁTICAS y este degradado solo existe con el cursor encima: `purple-200`
+          // y `white` son dos colores CLAROS a opacidad 100, así que en tema oscuro la lámina
+          // tapaba el texto —que ahí es claro— y la tarjeta se volvía ilegible al pasar por
+          // encima. En claro no se nota porque el texto ya es oscuro.
+          //
+          // El brillo se conserva en los dos temas cambiando de qué está hecho: en oscuro es
+          // blanco al 10% desvaneciéndose, que sobre la tarjeta (#10203a) compone #27364e y deja
+          // el `text-foreground` por encima de 7:1. La metáfora —un reflejo que cruza la
+          // tarjeta— es la misma; lo que cambia es que no blanquea el fondo.
+          className="relative overflow-hidden shadow-xl transition-shadow duration-300 hover:shadow-lg before:pointer-events-none before:absolute before:inset-0 before:bg-linear-to-br before:from-purple-200 before:to-white before:opacity-0 before:transition-opacity before:duration-300 before:content-[''] hover:before:opacity-100 dark:before:from-white/10 dark:before:to-transparent"
         >
           <CardContent className="relative flex items-center gap-3 py-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
