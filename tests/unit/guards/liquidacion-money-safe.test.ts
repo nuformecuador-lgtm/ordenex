@@ -286,6 +286,7 @@ describe("barrido transversal money-safe y de fuga de datos (feature 172)", () =
       fechaPago: "2026-07-30",
       registradoPorNombre: "Ana Maestra",
       registradoAt: "2026-08-02T15:04:05.000Z",
+      repartoId: null, // feature 206: pago SUELTO, sin reparto
       anulacion: {
         motivo: "44444444-4444-4444-8444-444444444444",
         anuladoPorNombre: "Beto Admin",

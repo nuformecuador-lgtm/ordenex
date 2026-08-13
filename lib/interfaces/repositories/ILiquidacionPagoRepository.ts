@@ -95,6 +95,13 @@ export interface LiquidacionPagoDTO {
   registradoPorNombre: string;
   registradoAt: string; // ISO — instante de registro
   anulacion: AnulacionDTO | null;
+  /**
+   * Feature 206 — el reparto del que nació esta imputación, `null` si es un pago suelto. Ya
+   * estaba en la tabla desde la 205 (R29) y en el input de creación; lo que faltaba era LEERLO.
+   * Sin él, la anulación agrupada no puede saber qué imputaciones forman el grupo ni la pantalla
+   * ofrecer la acción.
+   */
+  repartoId: string | null;
 }
 
 /**

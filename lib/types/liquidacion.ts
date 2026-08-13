@@ -195,6 +195,22 @@ export const anularPagoSchema = z
   .strict();
 
 /**
+ * Feature 206 — el borde de la anulación AGRUPADA. Misma forma que la individual y por los mismos
+ * motivos: sin monto (sale de cada pago, en el servidor), `.strict()` para que una clave de más no
+ * llegue al servicio, y UN motivo para todo el acto — que es la razón de ser de esta feature.
+ *
+ * No lleva lista de `pagoId`: el reparto YA sabe cuáles son sus imputaciones
+ * (`liquidacion_pago.reparto_id`). Dejar que el cliente enumerase cuáles anular abriría
+ * exactamente la anulación a medias que esto viene a cerrar.
+ */
+export const anularRepartoSchema = z
+  .object({
+    repartoId: z.string().uuid(),
+    motivo: z.string().trim().min(1, "El motivo de la anulacion es obligatorio."),
+  })
+  .strict();
+
+/**
  * R49 — el borde de la LISTA de comprobantes de un cierre. `.strict()` por el mismo motivo que
  * en los registros: una clave de mas es una peticion que nadie escribio a proposito.
  */
@@ -206,6 +222,7 @@ export const listarPagosDeTiendaSchema = z.object({ tiendaId: z.string().uuid() 
 export type RegistrarPagoMensajeroInput = z.infer<typeof registrarPagoMensajeroSchema>;
 export type RegistrarPagoTiendaInput = z.infer<typeof registrarPagoTiendaSchema>;
 export type AnularPagoInput = z.infer<typeof anularPagoSchema>;
+export type AnularRepartoInput = z.infer<typeof anularRepartoSchema>; // feature 206
 export type ListarPagosDeCierreInput = z.infer<typeof listarPagosDeCierreSchema>;
 export type ListarPagosDeTiendaInput = z.infer<typeof listarPagosDeTiendaSchema>;
 
@@ -229,6 +246,14 @@ export type PagoRegistradoDTO = {
   registradoPorNombre: string;
   registradoAt: string; // ISO — instante de registro
   anulacion: AnulacionDTO | null; // null = vigente (R74)
+  /**
+   * Feature 206 — el reparto del que nació esta imputación, o `null` si es un pago suelto contra
+   * UN cierre. Es lo ÚNICO que la pantalla necesita para ofrecer la anulación agrupada: no viaja
+   * el número de imputaciones porque contarlas exigiría una consulta más y el servidor ya informa
+   * cuántas anuló al terminar. `liquidacion_pago.reparto_id` (feature 205/R29) es el campo que
+   * hace posible esta feature; sin él, agrupar sería imposible.
+   */
+  repartoId: string | null;
 };
 
 /**
@@ -258,6 +283,30 @@ export type RegistrarPagoResult =
  */
 export type ListarPagosResult =
   | { status: "ok"; pagos: PagoRegistradoDTO[] }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+/**
+ * Feature 206 — resultado de anular UN REPARTO COMPLETO.
+ *
+ * Devuelve CUÁNTAS imputaciones anuló y cuántas ya estaban anuladas, en vez de un comprobante:
+ * un reparto son N documentos contra N cierres distintos, así que no hay «el» pago que devolver
+ * ni «el» restante que informar —cada cierre tiene el suyo—. La pantalla vuelve a leer el
+ * pendiente, que es lo que ya hacía tras anular uno.
+ *
+ * `yaEstaban > 0` con `anuladas > 0` es el caso del reparto A MEDIAS, que es justamente el que
+ * esta feature existe para resolver: por decisión humana del 2026-08-13 se anulan las que quedan
+ * y se informa de las dos cifras, en vez de rechazar la operación y devolver a la persona al
+ * trabajo manual de anular una por una.
+ *
+ * `sin_vigentes` = el reparto entero ya estaba anulado: no se movió un céntimo (misma semántica
+ * que `ya_anulado` de un pago suelto, R75).
+ */
+export type AnularRepartoResult =
+  | { status: "ok"; anuladas: number; yaEstaban: number }
+  | { status: "sin_vigentes"; yaEstaban: number }
+  | { status: "no_encontrado" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "unauthenticated" };

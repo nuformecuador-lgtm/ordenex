@@ -210,6 +210,7 @@ const COMPROBANTE: PagoRegistradoDTO = {
   fechaPago: "2026-07-30",
   registradoPorNombre: "Ana Maestra",
   registradoAt: "2026-08-02T15:04:05.000Z",
+  repartoId: null, // feature 206: pago SUELTO, sin reparto
   anulacion: null,
 };
 

@@ -13,11 +13,13 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ILiquidacionService } from "@/lib/interfaces/services/ILiquidacionService";
 import {
   anularPagoSchema,
+  anularRepartoSchema,
   listarPagosDeCierreSchema,
   listarPagosDeTiendaSchema,
   registrarPagoMensajeroSchema,
   registrarPagoTiendaSchema,
   type AnularPagoResult,
+  type AnularRepartoResult,
   type ListarPagosResult,
   type RegistrarPagoResult,
 } from "@/lib/types/liquidacion";
@@ -50,6 +52,8 @@ import type { AppErrorShape } from "@/lib/errors";
 export type RegistrarPagoActionResult = RegistrarPagoResult;
 export type ListarPagosActionResult = ListarPagosResult;
 export type AnularPagoActionResult = AnularPagoResult;
+/** Feature 206 — la anulacion AGRUPADA no aporta ramas nuevas al borde: es el mismo molde. */
+export type AnularRepartoActionResult = AnularRepartoResult;
 // Feature 205 (T4.2): las dos del REPARTO. Son SIETE acciones en total y la lista exacta esta
 // bajo test — anadir aqui un `editarRepartoAction` rompe la suite (R52).
 export type PrevisualizarRepartoActionResult = PrevisualizarRepartoResult;
@@ -225,6 +229,29 @@ export async function anularPagoAction(
     const data = anularPagoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.anularPago(data, actor);
+  });
+  return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
+}
+
+/**
+ * Feature 206 — ANULA UN REPARTO COMPLETO. Mismo molde y mismas dos únicas decisiones de borde
+ * que la anulación individual: la SESIÓN primero y la FORMA después.
+ *
+ * `anularRepartoSchema` es `{ repartoId, motivo }` con `.strict()`, y su forma es la primera
+ * barrera de dos cosas: **ni un `monto`** (que sale de cada pago en el servidor) **ni una lista
+ * de `pagoId`**. Lo segundo importa tanto como lo primero: si el cliente pudiera enumerar qué
+ * imputaciones anular, volvería a existir el reparto a medias que esta feature viene a cerrar.
+ */
+export async function anularRepartoAction(
+  input: unknown,
+  deps: LiquidacionDeps = {},
+): Promise<AnularRepartoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R3: antes de evaluar ningun otro dato
+    const data = anularRepartoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.anularReparto(data, actor);
   });
   return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
 }

@@ -80,6 +80,9 @@ function pagoATienda(over: Partial<LiquidacionPagoDTO> = {}): LiquidacionPagoDTO
     fechaPago: DIA_DEL_PAGO,
     registradoPorNombre: "Ana Admin",
     registradoAt: "2026-07-30T15:04:05.000Z",
+    // Feature 206: por defecto un pago SUELTO. Los casos de la anulacion agrupada lo sobrescriben,
+    // de modo que el caso de grupo se lee explicito en el test que lo prueba.
+    repartoId: null,
     anulacion: null,
     ...over,
   };

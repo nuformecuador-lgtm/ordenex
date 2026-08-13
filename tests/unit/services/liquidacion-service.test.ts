@@ -95,6 +95,10 @@ function pagoDTO(over: Partial<LiquidacionPagoDTO> = {}): LiquidacionPagoDTO {
     fechaPago: "2026-07-30",
     registradoPorNombre: "Ana Admin",
     registradoAt: "2026-08-02T15:04:05.000Z",
+    // Feature 206: por defecto un pago SUELTO. Los tests de la anulacion agrupada lo sobrescriben
+    // con un reparto; dejarlo `null` aqui es lo que hace que el caso agrupado se vea explicito en
+    // el test que lo necesita, en vez de venir de serie y no distinguir nada.
+    repartoId: null,
     anulacion: null,
     ...over,
   };

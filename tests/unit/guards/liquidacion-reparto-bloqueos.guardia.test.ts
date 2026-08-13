@@ -77,7 +77,17 @@ function cincoDesordenados(): CierreImputableDTO[] {
  * El montaje mínimo: un LOG ordenado de TODO lo que el servicio pide, con los candados marcados
  * por su grano. El log es el instrumento: sobre él se miden orden, número y posición relativa.
  */
-function montar(opciones: { cierres?: CierreImputableDTO[]; tope?: number } = {}) {
+function montar(
+  opciones: {
+    cierres?: CierreImputableDTO[];
+    tope?: number;
+    /**
+     * Feature 206 — las imputaciones que `listarPorReparto` devuelve, para medir la ANULACIÓN
+     * agrupada con el mismo instrumento (el log) que la registración.
+     */
+    pagosDelReparto?: LiquidacionPagoDTO[];
+  } = {},
+) {
   const log: string[] = [];
   const bloqueos: BeneficiarioBloqueo[] = [];
   const pagos: CrearLiquidacionPagoInput[] = [];
@@ -127,6 +137,9 @@ function montar(opciones: { cierres?: CierreImputableDTO[]; tope?: number } = {}
         fechaPago: "2026-07-30",
         registradoPorNombre: "Ana Admin",
         registradoAt: "2026-07-30T15:04:05.000Z",
+        // Feature 206: el doble devuelve el reparto que el input trae. Esta guardia vigila el
+        // ORDEN de los candados de un reparto, asi que perder el campo aqui la dejaria ciega.
+        repartoId: input.repartoId ?? null,
         anulacion: null,
       };
       return { status: "creado" as const, pago };
@@ -140,9 +153,24 @@ function montar(opciones: { cierres?: CierreImputableDTO[]; tope?: number } = {}
       return Object.fromEntries(ids.map((id) => [id, "0.00"]));
     }),
     contarCierresNoAprobadosPorEstado: vi.fn(async () => []),
-    listarPorReparto: vi.fn(async () => []),
+    listarPorReparto: vi.fn(async () => {
+      log.push("leer:pagos-del-reparto");
+      return opciones.pagosDelReparto ?? [];
+    }),
     obtenerCierreParaPago: vi.fn(async () => null),
-    anular: vi.fn(async () => ({ status: "ya_anulado" as const })),
+    // Feature 206: por defecto ANULA de verdad, para que la anulación agrupada tenga algo que
+    // medir. Los casos que necesitan el choque de `UNIQUE(pago_id)` lo sobrescriben.
+    anular: vi.fn(async (_tx, input: { pagoId: string }) => {
+      log.push(`escribir:anulacion:${input.pagoId}`);
+      return {
+        status: "anulado" as const,
+        anulacion: {
+          motivo: "reparto mal imputado",
+          anuladoPorNombre: "Ana Admin",
+          anuladoAt: "2026-08-13T15:04:05.000Z",
+        },
+      };
+    }),
     obtenerPorClave: vi.fn(async () => null),
     obtenerPorId: vi.fn(async () => null),
     sumarVigentesPorTienda: vi.fn(async () => "0.00"),
@@ -359,27 +387,221 @@ describe("R26 — los datos del cierre son de SOLO LECTURA", () => {
   });
 });
 
-describe("R52 — no existe forma de editar ni de borrar un reparto", () => {
-  it("ni el servicio ni el repositorio del acto exponen un método que lo deshaga", async () => {
+/**
+ * Feature 206 — LOS CANDADOS DE LA ANULACIÓN AGRUPADA.
+ *
+ * Aquí está la razón de ser de este bloque, y no es un resultado: **`bloquearBeneficiario` de un
+ * pago a mensajero bloquea la fila de SU `cierre_dia`**, y la interfaz del repositorio razonaba
+ * con UNO solo — «al no haber dos recursos que ordenar, no existe orden de adquisición capaz de
+ * producir un interbloqueo». Un reparto imputa a N cierres distintos, así que anularlo entero
+ * toma **N candados** y esa premisa deja de valer.
+ *
+ * La respuesta de `anularReparto` es IDÉNTICA con cualquier orden de adquisición. Lo que cambia es
+ * si dos anulaciones simultáneas con cierres compartidos se trban o no. Por eso se mide el log.
+ */
+describe("feature 206 — la anulación agrupada adquiere N candados en orden total", () => {
+  /** Tres imputaciones a tres cierres, devueltas DESORDENADAS a propósito. */
+  function tresImputaciones(): LiquidacionPagoDTO[] {
+    const base = {
+      mensajeroId: MENSAJERO,
+      tiendaId: null,
+      metodo: "SINPE" as const,
+      referencia: "1234567",
+      nota: null,
+      fechaPago: "2026-07-30",
+      registradoPorNombre: "Ana Admin",
+      registradoAt: "2026-07-30T15:04:05.000Z",
+      repartoId: "rep-1",
+      anulacion: null,
+    };
+    return [
+      { ...base, id: "pago-3", cierreId: "c-c", monto: "3000.00" },
+      { ...base, id: "pago-1", cierreId: "c-a", monto: "5000.00" },
+      { ...base, id: "pago-2", cierreId: "c-b", monto: "8000.00" },
+    ];
+  }
+
+  function anular(m: ReturnType<typeof montar>) {
+    return m.service.anularReparto(
+      { repartoId: "rep-1", motivo: "reparto mal imputado" },
+      ACTOR,
+    );
+  }
+
+  it("toma UN candado por cierre y NINGUNO de otro grano", async () => {
+    const m = montar({ pagosDelReparto: tresImputaciones() });
+    await anular(m);
+
+    expect(m.bloqueos.map((b) => b.tipo)).toEqual(["cierre", "cierre", "cierre"]);
+    expect(m.bloqueos.map((b) => (b.tipo === "cierre" ? b.cierreId : b.tiendaId))).toEqual([
+      "c-a",
+      "c-b",
+      "c-c",
+    ]);
+  });
+
+  it("el orden de adquisición es DETERMINISTA aunque la lista llegue desordenada", async () => {
+    const m = montar({ pagosDelReparto: tresImputaciones() });
+    await anular(m);
+
+    // La lista entró c-c, c-a, c-b. Los candados salen ordenados: eso es el orden total.
+    expect(m.log.filter((e) => e.startsWith("bloquear:"))).toEqual([
+      "bloquear:cierre:c-a",
+      "bloquear:cierre:c-b",
+      "bloquear:cierre:c-c",
+    ]);
+  });
+
+  it("dos ejecuciones sobre los mismos datos adquieren en el MISMO orden", async () => {
+    const primero = montar({ pagosDelReparto: tresImputaciones() });
+    await anular(primero);
+    // La segunda recibe la lista en OTRO orden: si el servicio siguiera la lista, divergiría.
+    const revuelto = tresImputaciones().reverse();
+    const segundo = montar({ pagosDelReparto: revuelto });
+    await anular(segundo);
+
+    expect(primero.log.filter((e) => e.startsWith("bloquear:"))).toEqual(
+      segundo.log.filter((e) => e.startsWith("bloquear:")),
+    );
+  });
+
+  it("TODOS los candados se toman antes de la primera escritura", async () => {
+    const m = montar({ pagosDelReparto: tresImputaciones() });
+    await anular(m);
+
+    const ultimoCandado = m.log.map((e) => e.startsWith("bloquear:")).lastIndexOf(true);
+    const primeraEscritura = m.log.findIndex((e) => e.startsWith("escribir:"));
+    expect(ultimoCandado).toBeGreaterThanOrEqual(0);
+    expect(primeraEscritura).toBeGreaterThan(ultimoCandado);
+  });
+
+  it("dos imputaciones al MISMO cierre toman UN solo candado", async () => {
+    const dosAlMismo = tresImputaciones().slice(0, 2).map((p) => ({ ...p, cierreId: "c-a" }));
+    const m = montar({ pagosDelReparto: dosAlMismo });
+    await anular(m);
+
+    expect(m.log.filter((e) => e.startsWith("bloquear:"))).toEqual(["bloquear:cierre:c-a"]);
+    // Pero SÍ se anulan las dos: el candado se deduplica, la anulación no.
+    expect(m.log.filter((e) => e.startsWith("escribir:anulacion:"))).toHaveLength(2);
+  });
+
+  it("el reparto A MEDIAS anula las que quedan e informa de las DOS cifras", async () => {
+    const [uno, dos, tres] = tresImputaciones();
+    const yaAnulada = {
+      ...uno,
+      anulacion: {
+        motivo: "a mano",
+        anuladoPorNombre: "Beto Admin",
+        anuladoAt: "2026-08-12T10:00:00.000Z",
+      },
+    };
+    const m = montar({ pagosDelReparto: [yaAnulada, dos, tres] });
+    const r = await anular(m);
+
+    expect(r).toEqual({ status: "ok", anuladas: 2, yaEstaban: 1 });
+    // Y la ya anulada NO se vuelve a tocar ni se bloquea su cierre.
+    expect(m.log).not.toContain(`escribir:anulacion:${uno.id}`);
+    expect(m.log.filter((e) => e.startsWith("bloquear:"))).not.toContain(
+      `bloquear:cierre:${uno.cierreId}`,
+    );
+  });
+
+  it("un reparto ENTERO anulado no toma candados ni escribe nada", async () => {
+    const anuladas = tresImputaciones().map((p) => ({
+      ...p,
+      anulacion: {
+        motivo: "a mano",
+        anuladoPorNombre: "Beto Admin",
+        anuladoAt: "2026-08-12T10:00:00.000Z",
+      },
+    }));
+    const m = montar({ pagosDelReparto: anuladas });
+    const r = await anular(m);
+
+    expect(r).toEqual({ status: "sin_vigentes", yaEstaban: 3 });
+    expect(m.log.filter((e) => e.startsWith("bloquear:"))).toEqual([]);
+    expect(m.log.filter((e) => e.startsWith("escribir:"))).toEqual([]);
+    expect(m.log).not.toContain("tx:abrir"); // ni se abre transacción
+  });
+
+  it("una CARRERA (el `UNIQUE` responde `ya_anulado`) suma al conteo y no revienta el acto", async () => {
+    const m = montar({ pagosDelReparto: tresImputaciones() });
+    let llamada = 0;
+    (m.pagoRepo.anular as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      llamada += 1;
+      // La segunda imputación la anuló otra sesión entre la lectura y el candado.
+      if (llamada === 2) return { status: "ya_anulado" as const };
+      return {
+        status: "anulado" as const,
+        anulacion: {
+          motivo: "reparto mal imputado",
+          anuladoPorNombre: "Ana Admin",
+          anuladoAt: "2026-08-13T15:04:05.000Z",
+        },
+      };
+    });
+
+    const r = await anular(m);
+    expect(r).toEqual({ status: "ok", anuladas: 2, yaEstaban: 1 });
+  });
+
+  it("el motivo es UNO para todo el acto: llega idéntico a las tres anulaciones", async () => {
+    const m = montar({ pagosDelReparto: tresImputaciones() });
+    await anular(m);
+
+    const motivos = (m.pagoRepo.anular as unknown as ReturnType<typeof vi.fn>).mock.calls.map(
+      (c: unknown[]) => (c[1] as { motivo: string }).motivo,
+    );
+    expect(motivos).toEqual([
+      "reparto mal imputado",
+      "reparto mal imputado",
+      "reparto mal imputado",
+    ]);
+  });
+});
+
+/**
+ * R52 — la fila del reparto es INMUTABLE.
+ *
+ * ⚠️ **Este bloque cambió con la feature 206, y el cambio es deliberado.** Tal como lo dejó la 205,
+ * prohibía por nombre cualquier método que sonara a deshacer un reparto, `anularReparto` incluido.
+ * La 206 añade exactamente ese método por decisión humana, así que la invariante hay que
+ * REEXPRESARLA en vez de relajarla — si no, la guardia solo diría «el código es el que era».
+ *
+ * **Anular no es editar ni borrar, y esa es toda la diferencia:** la anulación es APPEND-ONLY —
+ * inserta una fila en `liquidacion_anulacion` y su contraasiento en el libro— y deja el reparto y
+ * sus N imputaciones intactos y visibles. Lo que sigue prohibido, y es lo que R52 protegía de
+ * verdad, es que alguien EDITE el acto o lo haga desaparecer: eso reescribiría la historia del
+ * dinero en vez de compensarla.
+ */
+describe("R52 — la fila del reparto es inmutable (anular NO es editar ni borrar)", () => {
+  it("no existe método que EDITE ni que BORRE un reparto", async () => {
     const metodosServicio = Object.getOwnPropertyNames(LiquidacionService.prototype);
     for (const nombre of metodosServicio) {
+      // `anularReparto` YA NO está en la lista: es la feature 206. Los otros cinco siguen, y
+      // `deshacer` entre ellos, porque deshacer implicaría revertir sin dejar rastro.
       expect(nombre, `método sospechoso: ${nombre}`).not.toMatch(
-        /editarReparto|actualizarReparto|borrarReparto|eliminarReparto|anularReparto|deshacerReparto/i,
+        /editarReparto|actualizarReparto|borrarReparto|eliminarReparto|deshacerReparto/i,
       );
     }
 
     // El repositorio del acto tiene DOS métodos y ninguno más (design §1.1: la fila es inmutable).
+    // La 206 NO lo toca: la anulación escribe en `liquidacion_anulacion` y en los libros, nunca
+    // sobre `liquidacion_reparto`. Que este conteo siga en dos es lo que lo demuestra.
     const repo = fuente("lib/repositories/LiquidacionRepartoRepository.ts");
     const metodos = [...repo.matchAll(/^\s{2}async\s+(\w+)\(/gm)].map((m) => m[1]);
     expect(metodos.sort()).toEqual(["crear", "obtenerPorClave"]);
     expect(repo).not.toMatch(/liquidacionReparto\.(update|delete|upsert|updateMany|deleteMany)/);
   });
 
-  it("las Server Actions del reparto son DOS y ninguna corrige nada", async () => {
+  it("las Server Actions del reparto son TRES: dos que lo crean y UNA que lo anula", async () => {
     const acciones = fuente("lib/actions/liquidacion.ts");
     const exportadas = [...acciones.matchAll(/export async function (\w+)\(/g)].map((m) => m[1]);
     const delReparto = exportadas.filter((n) => /Reparto/i.test(n));
+    // Enumeradas a mano y no contadas: si mañana aparece una cuarta —«corregirReparto»,
+    // «reimputarReparto»— este test la ve, que es justo lo que R52 vigila.
     expect(delReparto.sort()).toEqual([
+      "anularRepartoAction", // feature 206
       "previsualizarRepartoMensajeroAction",
       "registrarRepartoMensajeroAction",
     ]);
