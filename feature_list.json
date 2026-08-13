@@ -2624,6 +2624,19 @@
       "branch": null,
       "depends_on": null,
       "status_note": "DADA DE ALTA el 2026-08-13 por el leader de la 213, al cerrar su [Q5]. La deuda la detecto el implementer y la CONFIRMO el reviewer de forma independiente, que ademas subrayo la consecuencia: el unico camino de prueba que une la captura del mensajero con el dinero del cierre no se ejecuta. || NO ES CULPA DE LA 213 NI SE ARREGLA AHI: por decision humana [Q5] del 2026-08-13, la 213 se limito a la parte del recaudo para no arrastrar trabajo ajeno a su PR. Esta ficha recoge el resto. || ARRANCA POR LA PREGUNTA DE FONDO, no por los helpers: si ningun gate corre los e2e, arreglarlos los deja igual de muertos dentro de un mes. Decidir primero donde corren -y con que base de datos- y despues arreglarlos."
+    },
+    {
+      "id": 219,
+      "name": "la 215 dejo dev en rojo: una entrega tras devolucion cuenta como primer intento",
+      "spec_path": null,
+      "description": "Backend. REGRESION VIVA EN dev, no una mejora. tests/integration/db/analytics-daily-job.test.ts (feature 124, R17, -primer intento vs entrega tras una devolucion previa-) esperaba [1, 0] y recibe [1, 1]: una orden entregada DESPUES de una devolucion previa se esta contando como entregada AL PRIMER INTENTO en analytics_daily.primer_intento_ok. Causa: la 215 movio el conteo de intentos de la transicion al CIERRE, asi que mientras el cierre de esa orden no se procese su contador es 0 y la orden parece virgen. Es exactamente la consecuencia que la propia ficha 215 declaro sin decidir -su Q4, efecto retroactivo, y su Q5, devuelta sin cierre-, solo que aterrizo en un KPI de analitica en vez de en el SLA. Hay que decidir si el KPI se deriva de otra fuente, si el test cambia de expectativa porque la definicion de -primer intento- cambio a proposito, o si el conteo necesita un puente para las ordenes sin cierre procesado.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 215,
+      "status_note": "BISECADO POR EL LEADER DE LA 213 el 2026-08-13, al encontrarse el gate en rojo antes de su PR. La evidencia, para que nadie la repita: en c334554c -el padre del merge de la 215- el archivo pasa 29/29; en 83e9f74e -dev limpio, sin una linea de la 213- falla 1 de 29; y falla igual en la rama de la 213, cuyo diff es SOLO frontend. Reproducible en aislado en las tres puntas: no es flake de saturacion. || dev LLEVA TRES PRs EN ROJO Y NADIE LO NOTO. Eso es lo que hay que mirar, mas que el assert: el PR #363 se mergeo sin que el rojo parara a nadie. || NO SE ARREGLO EN EL PR DE LA 213 por decision humana explicita del 2026-08-13: es backend, es de otra ficha, y esa ficha tiene preguntas abiertas SIN DECIDIR (Q4 efecto retroactivo, Q5 devuelta sin cierre) que son justo el fondo de esta regresion. Mezclarlo habria metido dos features en un diff y habria decidido por el humano una pregunta que le pertenece. || OJO AL DECIDIR: la respuesta facil -cambiar la expectativa del test a [1,1]- puede ser la correcta SI la definicion de primer intento cambio a proposito, pero entonces hay que decirlo en R17 de la 124 y en la 215, no callarlo en un assert."
     }
   ]
 }
