@@ -2584,6 +2584,32 @@
       "spec_files": "specs/215-reintento-en-cierre/ (R1-R34, 1 bloqueado: R24)",
       "spec_ready_at": "2026-08-13",
       "spec_approved_at": "2026-08-13"
+    },
+    {
+      "id": 216,
+      "name": "el naranja de marca no llega al umbral de contraste",
+      "spec_path": null,
+      "description": "Frontend. El texto blanco sobre el naranja primario `#f26419` mide 3,18:1 y no llega a AA para texto normal: afecta a TODO boton primario, insignia, avatar del encabezado y contador de notificaciones. Ademas el enlace «Descargar» en naranja sobre el fondo claro mide 2,99 y el hover del boton primario BAJA a 2,60. Es deuda de paleta de marca en tema CLARO, no de modo oscuro.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "NACE 2026-08-13 de una auditoria de tema oscuro pedida por el humano, y el hallazgo salio del lado contrario al que se buscaba: el modo OSCURO esta limpio y lo que falla es el naranja en CLARO. || MEDIDO en el navegador, 3 roles x 2 temas x 15 rutas, ~1.200 textos, 0 indeterminados: 45 textos bajo 4,5:1 y TODOS son de esta familia. blanco/#f26419 = 3,18 (botones, insignias, avatar, contador) · #f26419/#f7f8fc = 2,99 (enlace «Descargar») · blanco/#f38246 = 2,60 (el hover del primario, que EMPEORA) · #d4530d/#fff0e8 = 3,74 (el hover del «Descargar»). || DOS QUE NO SON VIOLACIONES y no hay que arreglar: el logotipo «Ordenex» a 3,18 (WCAG 1.4.3 exime el texto de una marca) y el separador «|» a 1,23 (decorativo). || MATIZ QUE DECIDE EL ALCANCE: 3,18 SI cumple el umbral de 3:1 de texto grande y de componentes de interfaz, asi que el incumplimiento es el texto de tamano NORMAL. Un boton con etiqueta grande no esta roto. || ES DECISION DE MARCA, NO UN ARREGLO TECNICO: cambiar `--primary` mueve cada accion primaria de la app. Alternativas a evaluar en el spec, no antes: oscurecer el primario solo para los fondos que llevan texto, o dejar el naranja y pasar el texto a un `-strong` propio. || MEDIRLO: `tests/unit/guards/contraste-tokens.guardia.test.ts` (feature 210) ya calcula contraste desde los tokens del CSS y es donde debe aterrizar el par nuevo, con su SUELO. Para el navegador, la receta y sus tres trampas quedaron en progress/impl_210_auditoria-tema.md."
+    },
+    {
+      "id": 217,
+      "name": "la factura del cierre oscurece con el tema",
+      "spec_path": null,
+      "description": "Frontend. `cierre-factura.tsx` se fija a tema claro con la clase `tema-claro` -decision de la feature 208: es el facsimil de un comprobante en papel-. Por pedido humano pasa a GIRAR con el tema, de modo que en oscuro sea una superficie oscura legible. Al IMPRIMIR debe seguir saliendo blanca.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "PEDIDO HUMANO del 2026-08-13, tras confirmarsele que el comportamiento actual era deliberado y medido. Revierte una decision de la 208, no arregla un olvido. || NO BASTA CON CAMBIAR EL PAPEL, y esta medido en el propio archivo (cierre-factura.tsx:85-98): quitar `tema-claro` y poner solo `bg-white` deja 116 textos bajo 4,5:1 -minimo 1,04-; sin tocar nada son 20; con `tema-claro` son 3. De los 143 textos de la hoja solo 16 son navy fijo: los otros ~127 son tokens que giran. Hay que convertir esos 16 `text-navy`/`border-navy` en tokens y re-medir la hoja entera. || TRES TEXTOS YA FALLAN HOY EN TEMA CLARO (minimo 3,36), preexistentes: entran en el alcance o se declaran fuera con su motivo. || TRAMPA REGISTRADA: el variant `dark:` de Tailwind se resuelve contra el ANCESTRO, no contra los tokens, asi que las utilidades `dark:` de Badge/Button SIGUEN disparando dentro de la hoja. Al quitar el pin eso cambia de sentido y hay que volver a medirlo. || REGLA QUE EL SPEC DEBE HONRAR (decision humana): al imprimir la hoja sigue BLANCA. Una factura que oscurece en pantalla y se imprime en oscuro gasta toner y sale ilegible, asi que el tema oscuro vive en pantalla y `@media print` fija el papel claro. || EXENTO y no hay que perseguirlo: el logotipo «Ordenex» mide 3,18 sobre el papel y WCAG 1.4.3 exime el texto de una marca."
     }
   ]
 }
