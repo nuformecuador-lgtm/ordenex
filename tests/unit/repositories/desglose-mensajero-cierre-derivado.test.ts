@@ -5,6 +5,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import type { ListarPorMensajeroFiltros } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 205 / T2.4 (R43, design §7.3) — el CIERRE de cada fila del desglose, DERIVADO.
 //
@@ -166,9 +167,9 @@ describe("205 / R43 — el cierre de cada fila del desglose se DERIVA", () => {
     // backfillear una tabla declarada INMUTABLE y crearia una segunda forma de decir de donde
     // viene un movimiento. Que el cierre sea derivado es la decision, y aqui queda fijada.
     const schema = fs.readFileSync(path.join(process.cwd(), "db/schema.prisma"), "utf8");
-    const modelo = /model PagoMensajeroMovimiento \{[\s\S]*?\n\}/
-      .exec(schema)![0]
-      .replace(/\/\/.*$/gm, "");
+    const modelo = quitarComentarios(
+      /model PagoMensajeroMovimiento \{[\s\S]*?\n\}/.exec(schema)![0],
+    );
 
     expect(modelo).not.toMatch(/cierreId/);
     expect(modelo).not.toMatch(/cierre_id/);

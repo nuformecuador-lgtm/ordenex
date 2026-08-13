@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 
@@ -98,10 +99,14 @@ function walk(dir: string): string[] {
  * Limitación conocida y con el fallo del lado seguro: también cortaría un `//` que viviera
  * DENTRO de un string literal. Ninguno de los dos archivos censados tiene uno, y si un día lo
  * tuviera el efecto sería un FALSO ROJO (se ve y se corrige), nunca un falso verde.
+ *
+ * Feature 209: pasa a ser el quitador COMPARTIDO. La copia local usaba `//.*$`, que se come el
+ * `//` de una URL y con él el resto de la línea; el compartido no. Medido sobre los dos
+ * archivos censados y sobre los cuatro de la allowlist: ningún veredicto se mueve. Los cuatro
+ * casos de «m6: `sinComentarios` DISCRIMINA» siguen siendo su contraprueba aquí, y ahora hay
+ * además una suite propia en `tests/unit/guards/quitador-comentarios.guardia.test.ts`.
  */
-function sinComentarios(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-}
+const sinComentarios = quitarComentarios;
 
 function ofensores(): string[] {
   const out: string[] = [];

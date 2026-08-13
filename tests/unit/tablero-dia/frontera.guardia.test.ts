@@ -107,9 +107,9 @@ const LEE_EL_ROL = /\.rol\b|\brol\s*(?:===|!==|==|!=)/;
 const ROLES = (() => {
   const enumBloque = /enum RolValue \{([\s\S]*?)\n\}/.exec(leer("db/schema.prisma"));
   if (!enumBloque) throw new Error("no se encontro `enum RolValue` en db/schema.prisma");
-  return enumBloque[1]
+  return sinComentarios(enumBloque[1])
     .split("\n")
-    .map((l) => l.replace(/\/\/.*$/, "").trim().split(/\s+/)[0])
+    .map((l) => l.trim().split(/\s+/)[0])
     .filter((v) => /^[a-zA-Z]+$/.test(v));
 })();
 /**

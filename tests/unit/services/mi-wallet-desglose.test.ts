@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 172 — T G.2 (R55) `[P5]` — la tienda y quien le paga leen la MISMA clasificación.
 //
@@ -170,20 +169,14 @@ describe("R55 — la pantalla de la tienda NO clasifica: solo pinta", () => {
     "app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx",
   ];
 
-  function fuente(rel: string): string {
-    return readFileSync(join(process.cwd(), rel), "utf8");
-  }
-
   it("ningún archivo de la cabecera decide en qué importe cae una categoría", () => {
     // Las categorías del ledger son vocabulario del SERVIDOR. Si aparecieran aquí, sería
     // porque alguien empezó a clasificar en el cliente — el error que R55 no puede permitirse.
     const enElServidor = WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED;
 
     for (const rel of ARCHIVOS) {
-      const codigo = fuente(rel)
-        // Los comentarios sí las nombran (explican de dónde viene el dato); el CÓDIGO no.
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "");
+      // Los comentarios sí las nombran (explican de dónde viene el dato); el CÓDIGO no.
+      const codigo = codigoSinComentarios(rel);
       for (const categoria of enElServidor) {
         expect(codigo, `${rel} nombra la categoría ${categoria}`).not.toContain(
           `"${categoria}"`,

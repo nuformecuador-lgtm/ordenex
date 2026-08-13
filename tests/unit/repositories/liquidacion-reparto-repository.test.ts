@@ -4,6 +4,7 @@ import path from "path";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { LiquidacionRepartoRepository } from "@/lib/repositories/LiquidacionRepartoRepository";
 import type { CrearLiquidacionRepartoInput } from "@/lib/interfaces/repositories/ILiquidacionRepartoRepository";
+import { codigoSinComentarios, quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 205 / T2.3 — tests unit del `LiquidacionRepartoRepository` (mockea Prisma, sin DB).
 // Cubre R28 (la relectura por clave es lo que reconstruye el resultado original) y R29 (la
@@ -184,7 +185,9 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     // responderia `no_encontrado` a un reparto legitimo. Es exactamente la trampa que
     // `liquidacion_pago` ya tiene documentada, y aqui se deja medida en vez de recordada.
     const schema = fs.readFileSync(path.join(process.cwd(), "db/schema.prisma"), "utf8");
-    const modelo = /model LiquidacionReparto \{[\s\S]*?\n\}/.exec(schema)![0].replace(/\/\/.*$/gm, "");
+    const modelo = quitarComentarios(
+      /model LiquidacionReparto \{[\s\S]*?\n\}/.exec(schema)![0],
+    );
 
     expect([...modelo.matchAll(/^\s*(\w+)\s+\S+\s+@unique/gm)].map((m) => m[1])).toEqual([
       "claveIdempotencia",
@@ -312,10 +315,7 @@ describe("LiquidacionRepartoRepository — el acto es INMUTABLE (R52)", () => {
   it("CONTRAPRUEBA ESTRUCTURAL: en todo el archivo no existe una escritura que no sea el INSERT", async () => {
     // El caso de arriba mide DOS llamadas; este cierra la clase entera, incluidos los caminos
     // que ningun test recorra. Es lo que impide que manana aparezca un `editarReparto` (R52).
-    const fuente = fs
-      .readFileSync(path.join(process.cwd(), "lib/repositories/LiquidacionRepartoRepository.ts"), "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/.*$/gm, "");
+    const fuente = codigoSinComentarios("lib/repositories/LiquidacionRepartoRepository.ts");
 
     for (const escritura of ["update", "updateMany", "delete", "deleteMany", "upsert"]) {
       expect(fuente, `liquidacionReparto.${escritura}`).not.toContain(

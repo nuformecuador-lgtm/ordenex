@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { METRICAS } from "@/lib/analytics/metrics";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 135 / T3.4 — GUARDA de los vocabularios que cita el catalogo (R8 / R9 / R34).
 //
@@ -33,9 +34,9 @@ function leerEnumDelEsquema(nombre: string): string[] {
   const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
   const bloque = new RegExp(`enum ${nombre} \\{([\\s\\S]*?)\\n\\}`).exec(schema);
   if (!bloque) throw new Error(`No se encontro el enum ${nombre} en db/schema.prisma`);
-  return bloque[1]
+  return quitarComentarios(bloque[1])
     .split("\n")
-    .map((linea) => linea.replace(/\/\/.*$/, "").trim())
+    .map((linea) => linea.trim())
     .filter((linea) => linea.length > 0 && !linea.startsWith("@@"))
     .map((linea) => linea.split(/\s+/)[0]);
 }
