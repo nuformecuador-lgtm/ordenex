@@ -16,6 +16,20 @@ App UI que **sirve a la tarea** (no marketing). Objetivo: familiaridad ganada (L
   - La primitiva `Badge` implementa esto en sus variantes `success`/`warning`/`info`/`danger` (`bg-{sem}-soft text-{sem}-strong dark:bg-{sem}/15`). `EstatusBadge` y demás chips de estado se construyen sobre esas variantes: sin hex.
 - **Restrained**: el acento es para acción primaria, selección y estado — nunca decoración. Nada de saturación fuerte en estados inactivos.
 
+### Tokens que GIRAN con el tema y tokens FIJOS (feature 208)
+No todos los tokens de `globals.css` son iguales, y confundirlos es el bug de modo oscuro más repetido del repo:
+- **Giran** los que se declaran en `:root` y se redefinen en `.dark`: `background`, `foreground`, `card`, `popover`, `muted`, `border`, `input`, `ring`, `sidebar-*` y los cuatro `-strong`.
+- **Son fijos** los del bloque `@theme` (un hex único): `navy`, `navy-deep`, la escala `asfalto-*`, `kraft-*`, `brand*`, `hivis` y los `-soft`.
+
+**Regla:** un color fijo solo puede ir sobre una **superficie fija**, y un color que gira solo sobre una superficie que gira. Emparejarlos al revés es lo que produce los 1.0–1.5:1.
+- Fijo sobre fijo, **correcto**: texto blanco sobre `bg-navy` (bloques de la POS card, panel de marca de login/postulación), `text-navy-deep` sobre `bg-warning`/`bg-brand-light` (chips de premio del podio), toda la landing pública.
+- Fijo sobre superficie que gira, **error**: `text-navy` sobre `bg-card`, `border-navy/30` sobre `bg-muted`, `from-navy/10` sobre la página.
+- Que gira sobre fijo, **también error**: `text-{sem}-strong` sobre `bg-{sem}-soft` sin `dark:bg-{sem}/15` — el fondo se queda claro y la tinta se aclara con él.
+
+Superficie clara **por diseño**: se marca con la clase `tema-claro`, que fija los valores claros en su subárbol. No se depende de "es que no usa tokens del tema". Hoy la usan la landing pública y las dos hojas de la factura del cierre (facsímil de papel: blanco con tinta navy en los dos temas).
+
+**Papel blanco no es `bg-white`.** Si una superficie es fija pero su contenido usa tokens que giran, pintarla con `bg-white`/`bg-navy` a secas deja la tinta en el valor del otro tema y empeora el problema en vez de arreglarlo (medido en la factura: 20 textos bajo AA pasan a 116). La superficie fija se declara con `tema-claro`, que arrastra todos los tokens del subárbol. Límite conocido y medido: fija los tokens, **no apaga el variant `dark:`** —se define contra el ancestro, no contra los tokens—, así que las utilidades `dark:` de `Badge`/`Button` siguen disparando dentro (ver los números en el comentario de `globals.css`).
+
 ## Tipografía
 Una sola familia sans (`--font-sans`) para títulos, labels, botones, data y body. Escala **rem fija** (no `clamp` en product UI). Ratio 1.125–1.2 entre pasos. Prosa 65–75ch; tablas y UI compacta pueden ir más densas.
 

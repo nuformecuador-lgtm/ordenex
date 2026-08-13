@@ -15,8 +15,11 @@ import { Button } from "@/components/ui/button";
  * deshabilitado ("Saliendo…") para impedir doble envío (R11). Si `logout()`
  * falla, NO se navega: se rehabilita el control y se avisa con un toast (R10).
  *
- * Las clases de contraste (border/texto navy) lo hacen legible sobre el
- * fondo claro del `PageHeader`.
+ * Color (feature 208): SOLO tokens que giran con el tema. Antes iba con `navy`
+ * fijo (`border-navy/40 text-navy hover:bg-navy/10`) y sobre el `PageHeader`
+ * oscuro el control quedaba en 1.03–1.09:1 de contraste — el encabezado se leía
+ * y su botón no. `text-foreground` es el mismo token del `<h1>` de al lado, así
+ * que ahora los dos se leen igual en los dos temas y en los cinco roles.
  */
 export function LogoutButton() {
   const router = useRouter();
@@ -42,7 +45,7 @@ export function LogoutButton() {
       onClick={handleLogout}
       loading={isPending}
       variant="outline"
-      className="cursor-pointer border-navy/40 bg-transparent text-navy hover:bg-navy/10 hover:text-navy"
+      className="cursor-pointer bg-transparent text-foreground hover:bg-foreground/10 hover:text-foreground"
     >
       {isPending ? null : <LogOut aria-hidden="true" />}
       {isPending ? "Saliendo…" : "Salir"}

@@ -68,6 +68,63 @@ import {
 // EXCEPCIÓN CONSCIENTE al money-safe: los KPIs superiores usan `KpiValorAnimado`
 // (react-countup), que sí parsea el monto a número para poder animarlo desde 0. Es
 // presentación pura y el valor exacto sigue estando en los renglones y en las tablas.
+//
+// ==============================================================================
+// LA HOJA ES PAPEL: SU SUPERFICIE ES FIJA A PROPÓSITO (feature 208)
+// ==============================================================================
+// Las dos hojas de este archivo —`HojaFactura` (el detalle) y `HojaResumen` (el
+// comprobante compacto)— llevan `tema-claro` en su `<Card>`. NO es un olvido de la
+// migración a tokens de tema: es la decisión, y hay que leerla antes de "arreglarla".
+//
+// POR QUÉ FIJA. Esta vista es el facsímil de un comprobante en papel: su lenguaje
+// entero (renglones con guía punteada, folio, franja de marca, liquidación) solo
+// significa algo sobre papel blanco con tinta navy. Que el papel se oscurezca con el
+// tema no lo hace más legible: lo deja sin metáfora. Por eso el papel no gira, y la
+// tinta —los 16 `text-navy` / `border-navy` de abajo— tampoco tiene por qué.
+//
+// POR QUÉ `tema-claro` Y NO `bg-white text-navy`. Esta era la recomendación anterior
+// escrita aquí, y MEDIRLA la descartó. Dentro de la hoja hay 143 textos: solo 16 son
+// navy fijo; los otros ~127 son tokens que GIRAN (`muted-foreground`, `border`,
+// `card-foreground`, los cuatro `-strong`, `Badge`, `Button`…). Medido en
+// /cierres-admin, en oscuro, sobre el detalle:
+//     sin tocar nada .................... 20 textos por debajo de 4.5:1 (mínimo 1.00)
+//     con `bg-white` a secas ............ 116 por debajo de 4.5:1 (mínimo 1.04)  ← PEOR
+//     con `tema-claro` .................. 3 por debajo (mínimo 3.36) = los MISMOS 3
+//                                          que ya fallan en tema claro, preexistentes.
+// `bg-white` pinta el papel pero deja la tinta del tema en su valor oscuro: mueve el
+// bug de 16 sitios a 116. `tema-claro` (declarada en `globals.css`) fija los valores
+// CLAROS de todos los tokens en el subárbol, así que la hoja entera —papel, tinta,
+// bordes, badges y botones— queda en tema claro y el navy vuelve a ser correcto.
+// Comprobado texto a texto: 143/143 con color y fondo IDÉNTICOS a los del tema claro.
+//
+// LO QUE `tema-claro` NO APAGA — MEDIDO, INCLUIDO LO QUE NO SALE BIEN. El variant
+// `dark:` de Tailwind se define contra el ANCESTRO (`&:is(.dark *)`), no contra los
+// tokens, así que las utilidades `dark:` de las primitivas SIGUEN disparando dentro de
+// la hoja. Los datos de QA no traen todos los estados, así que se midieron aparte
+// inyectando las cadenas de clases exactas de `Badge`/`Button` (claro → oscuro+hoja):
+//     Badge secondary (solicitado) · outline (aprobado) · Button default … idénticos
+//     Button outline ("Ver", "Ver detalles") ......... 14.79 → 14.78   (un tinte)
+//     Badge success / danger ......................... 4.84 → 4.76 · 5.30 → 5.32
+//     Badge warning .................................. 4.51 → 4.48  ← cruza el umbral
+//     Badge + Button destructive ..................... 3.30 → 2.89  ← ya fallaba antes
+// Los dos últimos no son daño NUEVO de esta clase: `text-destructive` sobre
+// `bg-destructive/10` ya da 3.30 en tema claro, y el `--warning-strong` que pasa AA por
+// 0.01 ya está anotado como recomendación abierta de la 208. La fuga los mueve 0.41 y
+// 0.03. Arreglarlos es cambiar esas variantes en TODA la app (decisión de diseño, no
+// de este archivo); si algún día pesa, el arreglo de raíz es el propio variant `dark:`,
+// no un parche acá. Lo que sí hay que mirar es cualquier pieza NUEVA con `dark:` propio
+// que se meta en la hoja.
+//
+// EL ENCARGO ORIGINAL DECÍA OTRA COSA, y conviene que quede el porqué: decía no tocar
+// nada porque "es un documento impreso y el papel siempre es blanco". Hoy NO se
+// imprime — no hay `window.print()`, ni `@media print`, ni hoja de impresión en el
+// repo (`app/(app)/ordenes/_components/etiquetas-pdf.ts` genera los PDF de etiquetas
+// por otra vía y dice explícitamente que NO usa print). "Factura" es el ASPECTO del
+// comprobante, no su medio. La conclusión (papel blanco) sobrevive; el argumento no.
+//
+// SI ALGÚN DÍA ESTA VISTA DEBE GIRAR CON EL TEMA, el cambio no es quitar `tema-claro`
+// y ya: hay que migrar además los 16 navy de abajo a `text-foreground`/`border-foreground`.
+// Quitar solo la clase devuelve exactamente los 1.00-1.06:1 que esto vino a cerrar.
 
 // --- Etiquetas propias de la factura (texto separado, i18n-ready) ---
 const FACTURA_TITULO = "Cierre del día";
@@ -246,10 +303,13 @@ function HojaFactura({
     // conserva su alto natural y quien scrollea es el contenedor del modal, que para eso
     // tiene su `overflow-y-auto`. `overflow-hidden` (el de `Card`) conserva el recorte
     // que redondea las esquinas. Fuera del modal no hay `max-h` y esto no cambia nada.
+    //
+    // `tema-claro`: el papel de la hoja NO gira con el tema. Ver la nota grande de la
+    // cabecera del archivo — no se quita sin migrar antes los 16 navy de más abajo.
     <Card
       aria-label={ariaLabel}
       role="region"
-      className="shrink-0 gap-0 py-0 shadow-sm"
+      className="tema-claro shrink-0 gap-0 py-0 shadow-sm"
     >
       <div aria-hidden="true" className="h-1.5 w-full shrink-0 bg-brand" />
       <div className="flex flex-col gap-5 p-5">{children}</div>
@@ -431,10 +491,15 @@ function HojaResumen({
   return (
     // gap-0/py-0: el padding lo ponen la cabecera y el panel; la franja de marca es el
     // borde superior de la card, así que no hay hueco que separar.
+    //
+    // `tema-claro`: mismo papel fijo que `HojaFactura`. Esta hoja es el MISMO
+    // comprobante en compacto (su nombre accesible lo dice: "Comprobante del cierre
+    // de…"), y abrirla lleva justo a la otra: si una fuera papel y la otra girara con
+    // el tema, el mismo documento tendría dos materiales. Ver la nota de la cabecera.
     <Card
       aria-label={ariaLabel}
       role="region"
-      className="gap-0 overflow-hidden border-t-[3px] border-t-brand py-0 shadow-sm"
+      className="tema-claro gap-0 overflow-hidden border-t-[3px] border-t-brand py-0 shadow-sm"
     >
       <div className="flex flex-col gap-2.5 px-4 py-3.5 md:gap-2 md:px-5">
         {/* Línea 1: marca · título · folio · estado — y a la derecha acciones + toggle. */}

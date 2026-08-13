@@ -71,7 +71,10 @@ export function KpisMensajero({ kpis }: Readonly<KpisMensajeroProps>) {
               <span className="text-xs font-medium text-muted-foreground">
                 {tile.label}
               </span>
-              <span className="text-2xl font-semibold text-navy">
+              {/* Feature 208: era `text-navy` fijo. Estos KPIs son DINERO ("Por
+                  cobrar", "Total a cobrar") sobre una `Card`, que sí gira con el
+                  tema: en oscuro la cifra medía 1.06:1, o sea no se veía. */}
+              <span className="text-2xl font-semibold text-foreground">
                 {tile.render(kpis)}
               </span>
             </div>

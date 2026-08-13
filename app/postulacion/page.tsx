@@ -77,7 +77,10 @@ export default async function PostulacionPage() {
       <div className="flex flex-1 flex-col items-center justify-center gap-8 bg-background px-6 py-12">
         {/* Wordmark compacto, solo visible en movil */}
         <div className="md:hidden">
-          <Logo className="text-xl text-navy" />
+          {/* Feature 208: el wordmark de móvil vive sobre `bg-background`, que gira
+            con el tema; en `navy` fijo medía 1.06:1 en oscuro. (El panel de marca de
+            escritorio, `bg-navy` con texto blanco, es superficie FIJA y se conserva.) */}
+          <Logo className="text-xl text-foreground" />
         </div>
         <PostulacionForm
           tiposIdentificacion={tipoOptions}

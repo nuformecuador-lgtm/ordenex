@@ -21,6 +21,14 @@ import { LandingServicios } from "./_landing/LandingServicios";
  * `navy-deep`, escala `asfalto`, `kraft-*`, `ink-blue`), sin CSS suelto ni hex
  * ad-hoc (DESIGN.md).
  *
+ * CLARA POR DISEÑO (feature 208). La landing no gira con el tema: su arte está
+ * compuesto sobre fotografías y una paleta FIJA (`kraft-*`, `asfalto-*`,
+ * `navy-deep`, `-soft`), que es exactamente lo que el sitio público muestra. La
+ * clase `tema-claro` (ver `globals.css`) lo hace cumplible en vez de aspiracional:
+ * fija los valores claros en este subárbol, así que el `.dark` que la fase 2 pondrá
+ * en <html> no la alcanza de rebote por ningún token — hoy le llegaba por
+ * `text-success-strong`, el único de la landing con variante oscura.
+ *
  * Los tres puntos donde el sitio pone fotografía ya las llevan, desde
  * `public/landing/`: fondo del hero (bodega), banda intermedia (paquetes) y
  * cabecera de las tarjetas de postulación (logística, bodega y mensajera). Todas
@@ -39,7 +47,7 @@ import { LandingServicios } from "./_landing/LandingServicios";
  */
 export default function LandingPage() {
   return (
-    <div className="min-h-dvh overflow-x-clip bg-kraft-canvas font-sans text-asfalto-9">
+    <div className="tema-claro min-h-dvh overflow-x-clip bg-kraft-canvas font-sans text-asfalto-9">
       <LandingNav />
       <main>
         <LandingHero />

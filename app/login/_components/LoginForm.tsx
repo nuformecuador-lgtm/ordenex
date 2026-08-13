@@ -203,7 +203,7 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
     return (
       <Card className="w-full max-w-md border-t-4 border-t-brand p-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-center text-navy dark:text-foreground">
+          <h1 className="text-2xl font-semibold text-center text-foreground">
             Iniciar sesión
           </h1>
         </div>
@@ -293,7 +293,7 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
   return (
     <Card className="w-full max-w-md border-t-4 border-t-brand p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-center text-navy dark:text-foreground">
+        <h1 className="text-2xl font-semibold text-center text-foreground">
           Verificar código
         </h1>
         <p className="text-sm text-muted-foreground text-center mt-2">
