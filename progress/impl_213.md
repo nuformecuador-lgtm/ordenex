@@ -405,3 +405,70 @@ pnpm exec vitest run tests/unit/descarga                    -> 29 archivos / 186
 pnpm exec vitest run tests/components/GestionarOrdenPanelPagos.test.tsx
                                                             -> 1 archivo / 18 tests, verde (17 + el nuevo de R3)
 ```
+
+---
+
+## 10. La excepción a R34 y el barrido de atribuciones (2026-08-13)
+
+Otra sesión había traspasado esta misma ficha con un segundo spec en `dev`
+(`specs/213-pago-multiple-presentacion/`, 23 requisitos, puerta sin pasar, cero código). El humano
+decidió que gana este spec y el leader retiró el rival, pero al compararlos requisito a requisito
+**el R20 del rival marcaba un hueco real del nuestro**: corregir los comentarios que atribuyen mal
+el retiro de la forma escalar. Se adoptó, con **excepción acotada a R34 autorizada el 2026-08-13**
+y constancia escrita junto a R34 en `requirements.md`.
+
+### 10.1 Lo que se corrigió
+
+**`lib/utils/descripcion-pago.ts`** (único archivo tocado bajo la excepción, y solo su comentario):
+citaba `METODO_PAGO_LABEL` de `app/(app)/mis-asignaciones/_components/metodo-pago-options.ts`,
+módulo que **esta misma ficha borró** al quedar huérfano (§8.1). La referencia muerta la creamos
+nosotros y R34 nos impedía limpiarla; el reviewer lo marcó como menor 6. El párrafo pasa a apuntar a
+`METODO_LABEL` (`cierre-labels.ts`), que es la fuente de pantalla viva, **conservando el argumento
+de fondo** —`lib/` no depende de `app/`, coinciden porque describen el mismo catálogo, no porque
+una sea fuente de la otra— y deja anotada la excepción en el propio comentario. **Ni una línea de
+lógica cambió.**
+
+### 10.2 Lo que NO se tocó: 7 archivos AJENOS con la atribución equivocada
+
+El barrido destapó bastante más de lo esperado, y **todo está fuera del diff de esta feature**, así
+que se lista en vez de tocarse. **Todos son de la 212** y dicen, con distintas palabras, que **«la
+213 retira / decide el retiro»** del escalar. Hoy eso es **falso**: la 213 es esta ficha y su R32
+lo **conserva** explícitamente. Quien retira es la **214**.
+
+| Archivo | Línea(s) | Qué dice hoy |
+| --- | --- | --- |
+| `lib/interfaces/repositories/ICierreDiaRepository.ts` | 35 | «columna DEPRECADA (la **213** decide su retiro)» |
+| `lib/interfaces/services/ICierreDiaService.ts` | 36, 43, 44 | «su retiro lo decide la **213**» y «entre el merge de esta ficha y el de la **213** la pantalla sigue pintando el campo escalar» — lo segundo ya ocurrió y es al revés |
+| `lib/repositories/CierreDiaRepository.ts` | 176 | «el par escalar se CONSERVA (la **213** decide su retiro)» |
+| `lib/repositories/CierresAdminRepository.ts` | 245 | ídem |
+| `tests/unit/guards/pagos-proyeccion.guardia.test.ts` | 118 | «`metodoPago` sobrevive hasta que la **213** decida retirarlo» |
+| `tests/unit/services/cierre-dia-service.test.ts` | 1825-1826 | nombre del `it`: «R31: `metodoPago` NO desaparece — **la 213 lo retira**, no esta ficha» |
+| `tests/unit/actions/mis-asignaciones-pagos.test.ts` | 9 | «hasta el merge de la 213 **el panel viejo sigue mandando un método escalar**» — el panel ya no lo manda (R15); el test sigue siendo válido y necesario (el borde debe seguir aceptando la forma escalar, R32), pero su motivación está caducada |
+
+**Cuatro de los siete son producción bajo `lib/`.** No es cosmético: son justo los comentarios que
+leerá quien implemente la 214 para saber qué puede retirar, y hoy le dicen que el trabajo ya está
+hecho. **Se propone recogerlos en la 214**, que es la ficha que de verdad los deja ciertos al
+cambiarlos: tocarlos aquí metería cuatro archivos de `lib/` en el diff de una feature `frontend`
+—contra R33— por una corrección de comentario.
+
+### 10.3 Falsa alarma comprobada: los `209`/`210` del árbol
+
+El barrido de «ficha 209 / 210» devuelve 22 coincidencias en 12 archivos, **ninguna relacionada con
+el recaudo**: son las features 209 (el quitador de comentarios compartido) y 210 (contraste de
+tokens semánticos), ajenas y vivas en `dev`, exactamente la colisión de ids que avisaba el encargo.
+**Cero cambios por este motivo.** Se deja escrito para que el próximo barrido no las vuelva a
+levantar.
+
+### 10.4 Verificación de este bloque
+
+```
+pnpm run typecheck                                 -> verde, sin salida
+pnpm run lint                                      -> 62 problems (0 errors, 62 warnings)
+pnpm exec vitest related --run lib/utils/descripcion-pago.ts
+                                                   -> 35 archivos / 758 tests, verde
+```
+
+**El lint subió de 61 a 62 warnings y NO es nuestro.** El warning nuevo es «Unused eslint-disable
+directive» en `app/(app)/configuracion/tarifas/_components/TiendasModule.tsx:63`, archivo que **no
+está en el diff de esta feature**: entró con el merge de `origin/dev` (`ba4f45f3`). Cero errores, y
+ninguno de los 62 cae en un archivo de la 213. Se anota y no se toca, según la regla del gate.

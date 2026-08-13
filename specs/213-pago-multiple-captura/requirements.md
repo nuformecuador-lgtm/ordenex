@@ -199,6 +199,23 @@ siendo válidos después de esta feature (su retiro es la ficha 214).
 `descripcion-pago.ts` ni ningún camino de `LiquidacionPago` (172), verificados inmunes por diseño
 en el censo de la 212 [D1].
 
+> **EXCEPCIÓN ACOTADA A R34, autorizada por el humano el 2026-08-13.** Se permite corregir **un
+> comentario** de `lib/utils/descripcion-pago.ts` —y nada más de ese archivo: la prohibición sigue
+> viva para su lógica, sus fuentes y su comportamiento—.
+>
+> **De dónde sale.** Otra sesión había traspasado esta misma ficha con un segundo spec en `dev`
+> (`specs/213-pago-multiple-presentacion/`, 23 requisitos, puerta sin pasar, cero código). El humano
+> decidió que gana este spec y retiró el rival, pero al compararlos requisito a requisito **su R20
+> marcaba un hueco real del nuestro**: corregir los comentarios que atribuyen mal el retiro de la
+> forma escalar. Se adoptó.
+>
+> **Por qué hacía falta la excepción.** El comentario citaba
+> `app/(app)/mis-asignaciones/_components/metodo-pago-options.ts`, módulo que **esta misma ficha
+> borró** al quedar huérfano (§8.1 de `progress/impl_213.md`). Es decir: la referencia muerta la
+> creamos nosotros, y R34 nos impedía limpiarla. El reviewer lo marcó como menor 6 y el implementer
+> hizo bien en no tocarlo sin permiso; el permiso es esto. Un requisito que se incumple sin registro
+> es peor que uno que se relaja a la vista.
+
 **R35.** El sistema NO DEBE cambiar la forma ni el cálculo de los totales del cierre
 (`total_efectivo` / `total_simpe` / `total_transferencia`): esta feature captura y presenta, no
 recalcula. La `E` del `min(P, E)` del pago al mensajero (feature 44) se ve afectada SOLO por lo que
