@@ -13,7 +13,10 @@ import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarUsuariosPorRol } from "@/lib/actions/usuarios-por-rol";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-import { ROLES_ACCESO_ANALITICA } from "@/lib/auth/menu-visibility";
+import {
+  ROLES_ACCESO_ANALITICA,
+  ROLES_SIN_ACCESO_ANALITICA,
+} from "@/lib/auth/menu-visibility";
 import { listarMetricas } from "@/lib/analytics/metrics";
 import { ROLES_ANALITICA } from "@/lib/analytics/types";
 import type { RolAnalitica } from "@/lib/analytics/types";
@@ -195,18 +198,26 @@ const TODOS_LOS_ROLES = [
 /** Entran Y ven la región financiera (`esAccesoTotal`). */
 const ROLES_ACCESO_TOTAL = ["maestro", "admin"] as RolValue[];
 
-/** Entran a la ruta (133) y NO ven ni un rastro del dinero (R6, R7, R8). */
-const ROLES_ACOTADOS_QUE_ENTRAN = [
-  "mensajero",
-  "adminTienda",
-  "adminSatelite",
-] as RolValue[];
+/**
+ * Entran a la ruta (133) y NO ven ni un rastro del dinero (R6, R7, R8).
+ *
+ * 2026-08-12 (decisión del humano): el `mensajero` SE VA de esta lista a la de abajo.
+ * Los dos que quedan siguen ejerciendo el camino completo —entran, se pinta el tablero
+ * operativo, no hay dinero—, así que ninguna de las mutaciones que este archivo mata
+ * deja de medirse: sigue habiendo al menos un rol que ENTRA sin acceso total, que es
+ * lo que la 133 hizo posible medir.
+ */
+const ROLES_ACOTADOS_QUE_ENTRAN = ["adminTienda", "adminSatelite"] as RolValue[];
 
 /**
- * No entran: siguen con `notFound()`. `apiKey` NUNCA consume analítica
+ * No entran: reciben `notFound()`. `apiKey` NUNCA consume analítica
  * (`ROLES_SIN_ANALITICA`, R11 de la 122) y la sesión ausente/inválida tampoco (R1).
+ *
+ * 2026-08-12: entra aquí el `mensajero`. Ojo con leerlo de más: NO pierde su alcance en
+ * el catálogo de la 135 (sigue declarado métrica a métrica), pierde la PUERTA — el ítem
+ * del sidebar y el gate de la ruta, que son la misma constante.
  */
-const ROLES_SIN_ENTRADA = ["apiKey"] as RolValue[];
+const ROLES_SIN_ENTRADA = ["apiKey", "mensajero"] as RolValue[];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -633,11 +644,19 @@ describe("Feature 132 (R3) — quién ve la región se DERIVA de esAccesoTotal",
 // sea idéntico) vive en `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts`,
 // casos (b1) y (b2), ya reexpresados por T2.2. Aquí basta con dejar el bloque diciendo la
 // verdad vigente.
-describe("Feature 132 (R5) / 133 (R2, R3) — las constantes de rol de analítica, tras la 133", () => {
-  it("ROLES_ACCESO_ANALITICA ya no es una lista propia: DERIVA de ROLES_ANALITICA", () => {
-    // Identidad referencial, no igualdad de contenido: dos arrays con los mismos cinco
-    // strings son exactamente el problema que D1 vino a quitar de en medio.
-    expect(ROLES_ACCESO_ANALITICA).toBe(ROLES_ANALITICA);
+describe("Feature 132 (R5) / 133 (R2, R3) — las constantes de rol de analítica, tras la 133 y la salida del mensajero", () => {
+  it("ROLES_ACCESO_ANALITICA sigue sin ser una lista propia: es ROLES_ANALITICA MENOS los excluidos", () => {
+    // Ya no puede afirmarse por identidad referencial (`toBe`): la resta del 2026-08-12
+    // devuelve un array nuevo por necesidad. Lo que se afirma es que la resta es exacta —el
+    // riesgo original (dos listas gemelas libres de divergir) se vigila igual, sólo desde el
+    // otro lado—. El censo del FUENTE que prohíbe escribir los roles a mano sigue viviendo
+    // en `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts`, caso (b2).
+    expect([...ROLES_ACCESO_ANALITICA].sort()).toEqual(
+      [...ROLES_ANALITICA]
+        .filter((rol) => !(ROLES_SIN_ACCESO_ANALITICA as readonly string[]).includes(rol))
+        .sort(),
+    );
+    expect([...ROLES_SIN_ACCESO_ANALITICA]).toEqual(["mensajero"]);
   });
 
   it("ROLES_ANALITICA sigue siendo los cinco lectores, sin apiKey", () => {
@@ -650,20 +669,23 @@ describe("Feature 132 (R5) / 133 (R2, R3) — las constantes de rol de analític
     ]);
   });
 
-  it("el acceso sigue siendo subconjunto del dominio, y ahora además lo agota", () => {
+  it("el acceso vuelve a ser subconjunto ESTRICTO del dominio (el mensajero tiene alcance, no puerta)", () => {
     const dominio = ROLES_ANALITICA as readonly string[];
     const acceso = ROLES_ACCESO_ANALITICA as readonly string[];
-    // Esta mitad se CONSERVA INTACTA: es el caso (a) del guard de no-convergencia, sigue
-    // siendo verdad y sigue siendo la red que queda debajo si alguien deshace la
-    // derivación.
+    // Esta mitad se CONSERVA INTACTA desde el primer día: es el caso (a) del guard de
+    // no-convergencia, sigue siendo verdad y sigue siendo la red que queda debajo si
+    // alguien deshace la derivación.
     for (const rol of acceso) {
       expect(dominio).toContain(rol);
     }
-    // Lo que era `toBeLessThan` pasa a ser la igualdad que la 133 decidió. `apiKey` sigue
-    // fuera de los dos conjuntos, que es lo que impide leer esto como «entra todo el
-    // mundo».
-    expect(acceso.length).toBe(dominio.length);
+    // La igualdad que decidió la 133 vuelve a ser desigualdad (2026-08-12). `apiKey` sigue
+    // fuera de los DOS conjuntos, que es lo que impide leer esto como «entra todo el mundo»;
+    // el `mensajero` está en el dominio y NO en el acceso, que es la decisión de hoy.
+    expect(acceso.length).toBeLessThan(dominio.length);
     expect(acceso).not.toContain("apiKey");
+    expect(dominio).not.toContain("apiKey");
+    expect(dominio).toContain("mensajero");
+    expect(acceso).not.toContain("mensajero");
   });
 });
 
@@ -755,7 +777,7 @@ describe("Feature 131 (T6.2, R26) — los dos slots ya están cableados", () => 
   // medir la mutación que hoy importa: que el gate sea el conjunto DECLARADO y no otro. Se
   // afirma por contenido y en las dos direcciones (los cinco están, `apiKey` no está), de
   // modo que tanto encoger el conjunto como abrirlo de más ponen esto rojo.
-  it("R26 — el gate de la ruta son los CINCO lectores (nunca `apiKey`) y la página sigue sin parámetros", () => {
+  it("R26 — el gate de la ruta son los CUATRO roles con acceso (nunca `apiKey` ni el `mensajero`) y la página sigue sin parámetros", () => {
     expect([...ROLES_ACCESO_ANALITICA].sort()).toEqual(
       [...ROLES_ACCESO_TOTAL, ...ROLES_ACOTADOS_QUE_ENTRAN].sort(),
     );
@@ -803,8 +825,11 @@ describe("Feature 133 (R9) — ver la región financiera equivale a tener financ
         veLaRegion =
           screen.queryByRole("region", { name: "Tablero financiero" }) !== null;
       } catch {
-        // Un lector de analítica que no entra sería un fallo de R1; se registra como «no
-        // ve la región» y el bloque de R1 es quien lo denuncia.
+        // Se registra como «no ve la región». Hasta el 2026-08-12 esto era además la
+        // firma de un fallo de R1 —los cinco lectores entraban— y el bloque de R1 era
+        // quien lo denunciaba. Desde que el `mensajero` perdió la puerta, este camino es
+        // legítimo PARA ÉL y sólo para él: quién entra lo sigue afirmando por separado el
+        // bloque de arriba, con las tres listas de roles.
         veLaRegion = false;
       }
 
@@ -984,8 +1009,11 @@ describe("Feature 133 (T6.5, R23) — para un alcance acotado no aparece nada aj
     });
   });
 
+  // 2026-08-12: la fila del `mensajero` SALE de aquí porque ya no renderiza esta página —el
+  // caso pasaría por `notFound()` y no comprobaría nada—. Lo que se prueba (que un alcance
+  // acotado no ve nombres ni uuids ajenos) sigue midiéndose con `adminSatelite` en este caso
+  // y con `adminTienda` en el de abajo, que son los dos alcances acotados que quedan.
   it.each([
-    ["mensajero", "u-mensajero", undefined],
     ["adminSatelite", "u-satelite", "zona-propia-del-actor"],
   ] as [RolValue, string, string | undefined][])(
     "el rol `%s` no ve ni el nombre ni el id de la zona, la tienda ni la persona ajenas",

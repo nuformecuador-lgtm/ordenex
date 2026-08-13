@@ -9,6 +9,86 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🏁 2026-08-13 (tarde) — **EMPIEZA A LEER POR AQUÍ**: release #359 abierta y la 205 YA SE VIO
+
+### 🚦 Lo único que espera decisión humana: **[PR #359](https://github.com/nuformecuador-lgtm/ordenex/pull/359) → `prod`**
+
+14 commits, y **ya NO es «sin migraciones»**: la 212 metió `20260812120000_gestion_orden_pago`,
+aditiva y con backfill. La nota de la mañana decía «7 commits, sin migraciones» y **caducó** —
+`dev` se movió mientras se leía (otra sesión mergeó la 212, PR #358).
+
+Lleva **208** (modo oscuro correcto), **211** (interruptor de tema), **209 tanda A** y el
+**backend de la 212**. Lo único que un usuario nota de inmediato es el tema.
+
+**Pre-vuelo hecho, medido contra la base de producción en solo lectura:** la tabla no existe
+allí, el enum `metodo_pago_value` y `gen_random_uuid()` sí, la última migración aplicada es la
+de la 205 (**sin drift**), el backfill insertará **16 filas de 57 gestiones**, y hay **0 filas
+con `monto_recibido = 0`**. Ese último número acota el riesgo declarado: el cambio a guion de la
+entrega «sin cobro» **no reescribe nada ya registrado**; solo afecta a entregas sin cobro nuevas
+hasta que entre la 213. Gate completo verde sobre `dev` @ `bb4c3185`: **1086/1086 archivos,
+13662/13662 tests**, cero omitidos.
+
+> ⚠️ El typecheck dio un rojo **falso** primero (`gestionOrdenPago` no existe en `PrismaClient`):
+> cliente Prisma rancio tras el merge. `pnpm run db:generate` y verde. Tras mergear hay que
+> aplicar la migración en local (`prisma migrate deploy`), ya hecho aquí.
+
+### ✅ El diálogo de pago de la 205 **se vio en pantalla**, con datos reales
+
+Era el punto 1 de «lo que falta» y llevaba dos sesiones pendiente. No se fabricó por SQL: se
+recorrió **el flujo real completo** — asignar 2 órdenes GAM → recogerlas → entregarlas **cobrando
+por SINPE** (para que el efectivo quede en 0) → solicitar cierre → aprobarlo como admin. El
+cierre salió con **E = ₡0, P = ₡3.400**, así que `min(P,E) = 0` y la cuenta por pagar nació
+positiva. Lo que se vio, citando el texto de la pantalla:
+
+- La fila pasa de «Al día» a **«Pendiente ₡3.400,00»**, y el panel de desglose muestra
+  **«Se puede pagar ahora ₡3.400,00 — sale del servidor»** más el libro con **«Ver el cierre»
+  por fila** (el enlace que faltaba comprobar).
+- El **diálogo**: «Registrar pago a Marco», *Disponible ₡3.400,00*, con el monto **precargado al
+  total** y la **previsualización**: «Cierre del 2026-08-13 · Se aplica ₡3.400,00 · Pendiente hoy:
+  ₡3.400,00 · Queda pendiente: ₡0,00».
+- Con un **pago parcial** de ₡1.400 la previsualización recalcula en vivo y aparece la insignia
+  **«Pago parcial»**: «Queda pendiente: ₡2.000,00». Registrado: la tabla queda en 13.600 / 11.600
+  / **2.000**, aritmética exacta.
+- En la base: `liquidacion_pago` con su `reparto_id`, **`liquidacion_reparto` con monto ₡1.400 y 1
+  imputación** —primera vez que la tabla de la migración de la 205 se ejerce desde la pantalla— y
+  el libro con un movimiento `pago`/`liquidacion`/`pago_mensajero`, la categoría que el esquema
+  tenía **reservada** para esto.
+
+**Lo único que sigue sin verse: el aviso de excluidos.** No es alcanzable con un solo cierre
+pendiente: hace falta un cierre que NO se pueda imputar. Queda dicho, no tapado.
+
+**La base local quedó con ese caso vivo a propósito** (Marco con ₡2.000 pendientes): la 213 y la
+214 van a necesitar la pantalla alcanzable.
+
+### 🔧 Tres cosas de la receta de conducir la app que costaron y no estaban escritas
+
+1. **La entrega no se envía sin permiso de ubicación.** `handleConfirm` pide la posición
+   (feature 193/R16/R19) y si el desenlace es `denegado` **no manda ni un POST**. En Chromium
+   headless viene denegado por defecto: el click «no hace nada» y no hay aviso que lo explique.
+   Hay que abrir el contexto con `permissions: ["geolocation"]` y una `geolocation` fijada.
+2. **La foto de evidencia es obligatoria** en `entregada` (feature 119, una lista vacía dispara
+   `min(1)`), y también frena el envío en el cliente. Se generó un PNG válido con zlib+CRC32 en
+   vez de pegar un base64 de memoria.
+3. **Asignar exige lat/lon** (feature 92/R2) y **aborta el LOTE ENTERO** si una sola orden no las
+   tiene (R8). Las 67 órdenes locales tienen `geocode_status` NULL y **no hay proveedor de
+   geocodificación en local**, así que solo son asignables las que ya traen coordenadas: de las 3
+   candidatas, 990013 no las tenía y tumbaba las otras dos.
+
+**Y un aviso: se rotaron las contraseñas de los 4 usuarios QA en la base LOCAL** con
+`scripts/seed-usuarios-qa.ts`, porque el hash guardado no coincidía con `QA_PASSWORD` del `.env`.
+Ahora coinciden con lo que el `.env` ya decía. Idempotente, no toca ids ni relaciones.
+
+### 📌 Lo que queda, con el orden actualizado
+
+1. **Mergear la #359** (o decidir esperar a la 213 para no soltar el guion de «sin cobro»).
+2. **Ficha 213** — el frontend del desglose. La 212 entregó capacidad sin superficie y la **214
+   está bloqueada hasta que la 213 esté desplegada**, no mergeada.
+3. **Ficha 210** (contraste de `warning`/`destructive`) · **206** (anular un reparto entero) ·
+   **209 tanda B** (50 sitios, sin riesgo).
+4. El **aviso de excluidos** de la 205, cuando exista un cierre no imputable.
+
+---
+
 ## 🟡 2026-08-13 — feature **215** (antes 213): el reintento se cuenta en el CIERRE, en PR #363
 
 El contador de reintentos deja de derivarse de las **transiciones** del historial y pasa a
@@ -44,7 +124,7 @@ reintento, o el cierre manual al aprobar?». La respuesta medida era **no**, y l
 5. **`primer_intento_ok` cambia de definición sin re-backfill (Q10).** El corte **no es una fecha de
    la serie sino el instante del despliegue**, y se sostiene sobre `analytics_daily.updated_at`
    porque el job recalcula días pasados: cualquier regla por `fecha` sería falsa a los pocos días.
-   El aviso **no llega a la pantalla** → ficha **217**.
+   El aviso **no llega a la pantalla** → ficha **219**.
 6. **Un rojo que no se arregló relajando la aserción.** El de `analytics-daily-job` se cerró dándole
    a la devolución previa su cierre **aprobado** en la semilla; las dos cifras que prueban que el
    KPI distingue un reintento de un primer intento siguen intactas. Y se demostró que ese test

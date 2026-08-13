@@ -74,11 +74,37 @@ export class NovedadesService implements INovedadesService {
     );
 
     // R6/R7/R10: mapea a NovedadDTO; causa = ultima gestion vigente, o null ("sin causa").
+    // 2026-08-13 (pedido humano): la proyeccion es AHORA la orden completa. `NovedadDTO`
+    // extiende `MiAsignacionDTO` (cabecera de `lib/types/novedad.ts`), asi que aqui no hay
+    // que elegir que campo merece viajar: viaja la fila entera del repo, que ya llega
+    // serializable (los tres decimales convertidos con `.toNumber()`, los catalogos con el
+    // nombre resuelto). Los ausentes viajan como `null` — nunca como `""` ni `0`.
+    //
+    // Lo unico que NO se propaga es `row.createdAt`: es de la fila del repo, se usa arriba
+    // para ordenar por recencia (R12) y muere aqui. Un `Date` no cruza el borde RSC.
     const items: NovedadDTO[] = ordered.map((row) => ({
       id: row.id,
       numGuia: row.numGuia,
+      // El REAL de la orden. La etiqueta «Guia N» del identificador visible (R9) la pone el
+      // front en su adaptador; el service entrega el dato, no la presentacion.
+      numRemision: row.numRemision,
+      estatusValue: row.estatusValue,
       destinatario: row.destinatario,
       telefonoDest: row.telefonoDest,
+      direccion: row.direccion,
+      producto: row.producto,
+      peso: row.peso,
+      montoCobrar: row.montoCobrar,
+      latitud: row.latitud,
+      longitud: row.longitud,
+      notas: row.notas,
+      tiendaNombre: row.tiendaNombre,
+      zonaNombre: row.zonaNombre,
+      provinciaNombre: row.provinciaNombre,
+      cantonNombre: row.cantonNombre,
+      distritoNombre: row.distritoNombre,
+      // SIEMPRE `null`: una novedad no es parada de ninguna ruta optimizada (feature 92/R28).
+      secuenciaRuta: null,
       causa: causas.get(row.id)?.causa ?? null,
       // Feature 160 (R14/R19): `?? 0` — el `0` SIEMPRE se expone.
       intentosEntrega: intentos.get(row.id) ?? 0,
