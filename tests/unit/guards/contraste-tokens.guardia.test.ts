@@ -3,6 +3,12 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import {
+  componer,
+  contraste,
+  paleta,
+  token,
+} from "../../fixtures/contraste";
 import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 /**
@@ -30,7 +36,6 @@ import { quitarComentarios } from "../../fixtures/sin-comentarios";
  */
 
 const RAIZ = path.resolve(__dirname, "../../..");
-const CSS = path.join(RAIZ, "app", "globals.css");
 
 /** Umbral AA para texto normal (WCAG 2.1, criterio 1.4.3). */
 const AA_TEXTO = 4.5;
@@ -64,110 +69,6 @@ const SUELO: Record<string, number> = {
 
 /** Tolerancia del suelo: absorbe el redondeo a dos decimales, nada más. */
 const EPSILON = 0.01;
-
-// ─────────────────────────────────────────────────────────────────────────────────────────
-// Aritmética de color (sRGB → luminancia relativa → razón de contraste)
-// ─────────────────────────────────────────────────────────────────────────────────────────
-
-function aRgb(hex: string): [number, number, number] {
-  const s = hex.replace("#", "");
-  const n = s.length === 3
-    ? s.split("").map((c) => c + c).join("")
-    : s;
-  return [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16)) as [number, number, number];
-}
-
-function luminancia([r, g, b]: [number, number, number]): number {
-  const canal = (v: number) => {
-    const x = v / 255;
-    return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-  };
-  return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
-}
-
-function contraste(a: string, b: string): number {
-  const la = luminancia(aRgb(a));
-  const lb = luminancia(aRgb(b));
-  const [alto, bajo] = la > lb ? [la, lb] : [lb, la];
-  return (alto + 0.05) / (bajo + 0.05);
-}
-
-/**
- * Compone `color` al `alpha` dado sobre un `fondo` OPACO. Es la técnica «soft-badge» que el
- * `Badge` usa en tema oscuro (`dark:bg-warning/15`): ahí no hay token `-soft`, el fondo se
- * compone en ejecución, y sin reproducir esa composición el número de oscuro no significa nada.
- */
-function componer(color: string, fondo: string, alpha: number): string {
-  const c = aRgb(color);
-  const f = aRgb(fondo);
-  return (
-    "#" +
-    c
-      .map((v, i) => Math.round(v * alpha + f[i] * (1 - alpha)).toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────────────────
-// Lectura de los tokens REALES del archivo
-// ─────────────────────────────────────────────────────────────────────────────────────────
-
-const cssSinComentarios = quitarComentarios(readFileSync(CSS, "utf8"));
-
-/**
- * Los `-strong` se declaran DOS veces: en `:root` (claro, :149) y en `.dark` + el bloque
- * `prefers-color-scheme` (oscuro, :210 y :269). Se parte por el selector `.dark` REAL a principio
- * de línea.
- *
- * ⚠️ No vale `indexOf(".dark")`: el archivo abre con `@custom-variant dark {` (:23), que menciona
- * `.dark` dentro. Cortar ahí dejaba el `:root` entero del lado «oscuro» y la primera versión de
- * esta guardia falló por eso — con un mensaje que culpaba al token, no al parser.
- */
-function partirPorTema(css: string): { claro: string; oscuro: string } {
-  const corte = css.match(/^\.dark[,\s{]/m);
-  if (!corte || corte.index === undefined) {
-    throw new Error(
-      "app/globals.css ya no declara un selector `.dark` a principio de línea: el parser de esta " +
-        "guardia caducó y hay que revisarlo a mano.",
-    );
-  }
-  return { claro: css.slice(0, corte.index), oscuro: css.slice(corte.index) };
-}
-
-const TEMAS = partirPorTema(cssSinComentarios);
-
-/** Un token con variante por tema (`--warning-strong`, `--card`): vive en `:root` y en `.dark`. */
-function token(tema: "claro" | "oscuro", nombre: string): string {
-  // La ÚLTIMA declaración gana, igual que en la cascada del navegador.
-  const encontrados = [
-    ...TEMAS[tema].matchAll(new RegExp(`--${nombre}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`, "g")),
-  ];
-  const ultimo = encontrados.at(-1);
-  if (!ultimo) {
-    throw new Error(
-      `--${nombre} no aparece como hex en el bloque ${tema} de app/globals.css. ` +
-        "Si el token cambió de nombre o pasó a otra notación de color, esta guardia hay que " +
-        "actualizarla A MANO: fallar es lo correcto, no adivinar.",
-    );
-  }
-  return ultimo[1];
-}
-
-/**
- * Un token de paleta SIN variante por tema: los `-soft` y los base viven una sola vez, en el
- * bloque `@theme inline` y con el prefijo `--color-` (`--color-warning-soft`, `--color-warning`).
- * Que no tengan variante oscura es justamente por lo que en oscuro el badge compone `base/15`.
- */
-function paleta(nombre: string): string {
-  const m = cssSinComentarios.match(new RegExp(`--color-${nombre}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`));
-  if (!m) {
-    throw new Error(
-      `--color-${nombre} no aparece como hex en app/globals.css. Esta guardia asume que los ` +
-        "tokens `-soft` y base viven en `@theme inline`; si eso cambió, revísala a mano.",
-    );
-  }
-  return m[1];
-}
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
