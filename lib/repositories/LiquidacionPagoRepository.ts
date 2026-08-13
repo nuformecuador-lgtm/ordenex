@@ -55,6 +55,9 @@ function toDTO(r: DocumentoRow): LiquidacionPagoDTO {
     fechaPago: r.fechaPago.toISOString().slice(0, 10),
     registradoPorNombre: r.registrador.nombre,
     registradoAt: r.createdAt.toISOString(),
+    // Feature 206: la columna existe desde la 205 y ya se ESCRIBIA (:179); lo que faltaba era
+    // leerla. Es lo que identifica al grupo en la anulacion agrupada.
+    repartoId: r.repartoId,
     anulacion:
       r.anulacion === null
         ? null

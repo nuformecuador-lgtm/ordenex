@@ -6,10 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { filasLocales } from "@/components/shared/descarga-resultado";
-import type { AnularPagoResult, PagoRegistradoDTO } from "@/lib/types/liquidacion";
+import type {
+  AnularPagoResult,
+  AnularRepartoResult,
+  PagoRegistradoDTO,
+} from "@/lib/types/liquidacion";
 import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
 
-import { AnularPagoDialog, type PagoAnuladoOk } from "./AnularPagoDialog";
+import {
+  AnularPagoDialog,
+  type PagoAnuladoOk,
+  type RepartoAnuladoOk,
+} from "./AnularPagoDialog";
 import {
   COLUMNAS_DESCARGA_PAGOS_REGISTRADOS,
   filaDescargaPagoRegistrado,
@@ -150,6 +158,14 @@ export interface PagosRegistradosTablaProps {
    * Action— y sin ella no hay control, aunque `puedeAnular` sea `true`.
    */
   onAnular?: (pago: PagoRegistradoDTO, motivo: string) => Promise<AnularPagoResult>;
+  /**
+   * Feature 206 — anula el REPARTO del pago. Opcional y con la misma regla que `onAnular`: sin
+   * ella el diálogo no ofrece el alcance agrupado, aunque el pago tenga `repartoId`. Las pantallas
+   * que listan pagos de TIENDA no la pasan, porque una tienda no tiene repartos.
+   */
+  onAnularReparto?: (pago: PagoRegistradoDTO, motivo: string) => Promise<AnularRepartoResult>;
+  /** Feature 206 — se invoca cuando el reparto quedó deshecho. */
+  onRepartoAnulado?: (resultado: RepartoAnuladoOk) => void | Promise<void>;
   /** Tras una anulación efectiva: quien monta refresca lo suyo y pinta el `restante`. */
   onAnulado?: (resultado: PagoAnuladoOk) => void | Promise<void>;
 }
@@ -162,6 +178,8 @@ export function PagosRegistradosTabla({
   puedeAnular = false,
   onAnular,
   onAnulado,
+  onAnularReparto,
+  onRepartoAnulado,
 }: PagosRegistradosTablaProps) {
   const titulo = PAGOS_REGISTRADOS_TEXTO.tabla(beneficiario);
 
@@ -173,6 +191,8 @@ export function PagosRegistradosTabla({
   // `const` (y no una expresión suelta en el JSX) para que TypeScript conserve el estrechado
   // dentro del callback que lo llama: sin permiso, aquí no hay función que invocar.
   const anular = puedeAnular ? onAnular : undefined;
+  // Feature 206: falla cerrado igual que `anular` — sin permiso no hay acto agrupado tampoco.
+  const anularEnGrupo = puedeAnular ? onAnularReparto : undefined;
   const ofreceAnular = anular !== undefined;
 
   const columnas: Column<PagoRegistradoDTO>[] = ofreceAnular
@@ -228,6 +248,12 @@ export function PagosRegistradosTabla({
           beneficiario={beneficiario}
           onAnular={(motivo) => anular(pagoAAnular, motivo)}
           onAnulado={onAnulado}
+          {...(anularEnGrupo
+            ? {
+                onAnularReparto: (motivo: string) => anularEnGrupo(pagoAAnular, motivo),
+                onRepartoAnulado,
+              }
+            : {})}
         />
       ) : null}
     </div>

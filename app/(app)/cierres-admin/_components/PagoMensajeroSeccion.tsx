@@ -6,10 +6,22 @@ import useSWR, { useSWRConfig } from "swr";
 import { Button } from "@/components/ui/button";
 import { PagosRegistradosTabla } from "@/components/shared/liquidacion/PagosRegistradosTabla";
 import { PAGOS_REGISTRADOS_TEXTO } from "@/components/shared/liquidacion/liquidacion-labels";
-import type { PagoAnuladoOk } from "@/components/shared/liquidacion/AnularPagoDialog";
+import type {
+  PagoAnuladoOk,
+  RepartoAnuladoOk,
+} from "@/components/shared/liquidacion/AnularPagoDialog";
+import { ANULAR_REPARTO_RESPUESTA } from "@/components/shared/liquidacion/liquidacion-labels";
 import { useToast } from "@/hooks/useToast";
-import { anularPagoAction, listarPagosDeCierreAction } from "@/lib/actions/liquidacion";
-import type { AnularPagoResult, PagoRegistradoDTO } from "@/lib/types/liquidacion";
+import {
+  anularPagoAction,
+  anularRepartoAction,
+  listarPagosDeCierreAction,
+} from "@/lib/actions/liquidacion";
+import type {
+  AnularPagoResult,
+  AnularRepartoResult,
+  PagoRegistradoDTO,
+} from "@/lib/types/liquidacion";
 
 import { PAGO_MENSAJERO_TEXTO } from "./pago-mensajero-labels";
 import {
@@ -109,6 +121,31 @@ export function PagoMensajeroSeccion({
     return anularPagoAction({ pagoId: pago.id, motivo });
   }
 
+  /**
+   * Feature 206 — anular EL REPARTO del que salió esta imputación. Al borde va **el pago** y el
+   * motivo: el servidor deriva de ahí cuál es el reparto y cuáles sus imputaciones. Ni el uuid del
+   * reparto ni la lista de pagos cruzan (R56/R70).
+   */
+  async function anularReparto(
+    pago: PagoRegistradoDTO,
+    motivo: string,
+  ): Promise<AnularRepartoResult> {
+    return anularRepartoAction({ pagoId: pago.id, motivo });
+  }
+
+  async function trasAnularReparto(resultado: RepartoAnuladoOk) {
+    if (resultado.status === "ok") {
+      toast.success(
+        ANULAR_REPARTO_RESPUESTA.ok(resultado.anuladas, resultado.yaEstaban),
+      );
+    } else {
+      toast.info(ANULAR_REPARTO_RESPUESTA.sinVigentes(resultado.yaEstaban));
+    }
+    // Un reparto toca VARIOS cierres, así que refrescar solo este deja los otros desfasados en
+    // pantalla hasta que se abran. Se avisa al padre, que es quien conoce la lista.
+    await trasRegistrar();
+  }
+
   async function trasAnular(resultado: PagoAnuladoOk) {
     if (resultado.status === "ok") {
       // R71: el pendiente vuelve a lo que era antes del pago. Lo dice el servidor.
@@ -155,6 +192,8 @@ export function PagoMensajeroSeccion({
         puedeAnular={puedeAnular}
         onAnular={anular}
         onAnulado={trasAnular}
+        onAnularReparto={anularReparto}
+        onRepartoAnulado={trasAnularReparto}
       />
 
       {/* El diálogo solo se monta si hay algo que pagar: sin pendiente no hay nada que abrir. */}
