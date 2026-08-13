@@ -534,6 +534,9 @@ describe("CierresAdminModule", () => {
         resultado: "entregada",
         montoRecibido: "1250.50",
         metodoPago: "SINPE",
+        // Feature 213 (T8): desglose COHERENTE con el escalar que este caso ya declaraba.
+        // La presentación deriva del desglose (R23); la aserción de abajo NO se relaja.
+        pagos: [{ metodo: "SINPE", monto: "1250.50" }],
       }),
     ];
     verDetalleMock.mockResolvedValue({
@@ -570,6 +573,7 @@ describe("CierresAdminModule", () => {
         numRemision: "REM-SINTARIFA",
         montoRecibido: "1000.00",
         metodoPago: "efectivo",
+        pagos: [{ metodo: "efectivo", monto: "1000.00" }], // feature 213 (T8)
         pagoMensajero: "0.00",
         tarifaFaltante: true,
       }),
@@ -604,6 +608,7 @@ describe("CierresAdminModule", () => {
         numRemision: "REM-ENT",
         montoRecibido: "1000.00",
         metodoPago: "efectivo",
+        pagos: [{ metodo: "efectivo", monto: "1000.00" }], // feature 213 (T8)
         pagoMensajero: "0.00",
         tarifaFaltante: false,
       }),

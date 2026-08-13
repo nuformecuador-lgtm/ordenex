@@ -7,7 +7,9 @@ import {
   COLUMNAS_DESCARGA_DIA_DEVUELTAS,
   COLUMNAS_DESCARGA_DIA_RECHAZADAS,
   COLUMNAS_DESCARGA_DIA_INCIDENTES,
+  filaDescargaDiaEntregada,
 } from "@/app/(app)/cierre-dia/_components/cierre-dia-descarga-columnas";
+import type { CierreDetalleGestion } from "@/lib/interfaces/services/ICierreDiaService";
 
 // Feature 189 — ORDEN y CENSO de las columnas de los archivos descargables del «Cierre del
 // día» del MENSAJERO (feature 170, T E.4 / R5).
@@ -195,5 +197,134 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "Motivo",
       "Tiene evidencia",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 213 [D4] — el DESGLOSE del recaudo en la celda escalar «Método»
+// ---------------------------------------------------------------------------
+//
+// Los seis casos de arriba (censo y ORDEN de columnas) NO se tocan: son justamente lo que
+// hace cumplir R26 —ni una columna nueva, ni un cambio de orden— y siguen verdes tal cual.
+// Lo que se amplía aquí es la PROYECCIÓN de la sección entregadas: qué acaba dentro de esa
+// única celda cuando la entrega se cobró con dos métodos.
+
+/**
+ * Gestión `entregada` mínima. Los campos que no intervienen en la celda «Método» se dejan
+ * en su valor neutro; lo que cada caso mueve es SOLO `pagos` (y `metodoPago`, para que se
+ * vea que la celda ya no depende de él).
+ */
+function gestionEntregada(
+  pagos: CierreDetalleGestion["pagos"],
+  metodoPago: CierreDetalleGestion["metodoPago"] = null,
+): CierreDetalleGestion {
+  return {
+    gestionId: "g-1",
+    ordenId: "o-1",
+    numGuia: 1234,
+    numRemision: "REM-1234",
+    destinatario: "Ana Rojas",
+    direccion: "100 m sur",
+    zonaNombre: "GAM",
+    provinciaNombre: "San José",
+    cantonNombre: "Central",
+    distritoNombre: "Carmen",
+    producto: "Caja",
+    tiendaNombre: "Tienda Uno",
+    resultado: "entregada",
+    montoRecibido: "8000.00",
+    metodoPago,
+    pagos,
+    motivo: null,
+    fechaReprogramacion: null,
+    evidenciaUrl: null,
+    pagoMensajero: "1500.00",
+    ingresoBodegaRechazo: null,
+    tarifaFaltante: false,
+    esRechazoSla: false,
+    causaIncidente: null,
+    indemnizacion: null,
+  };
+}
+
+describe("celda «Método» de la sección ENTREGADAS del cierre del día (mensajero)", () => {
+  it("una gestión con pago MIXTO produce UNA sola fila, no un array (R27)", () => {
+    const fila = filaDescargaDiaEntregada(
+      gestionEntregada([
+        { metodo: "efectivo", monto: "5000.00" },
+        { metodo: "transferencia", monto: "3000.00" },
+      ]),
+    );
+
+    // El archivo no se multiplica: dos líneas de pago siguen siendo una fila con las mismas
+    // claves de siempre. Multiplicarla duplicaría «Monto» y «Ganancia», y quien sumara la
+    // columna de ganancia pagaría dos veces al mensajero.
+    expect(Array.isArray(fila)).toBe(false);
+    expect(Object.keys(fila)).toEqual(
+      COLUMNAS_DESCARGA_DIA_ENTREGADAS.map((c) => c.clave),
+    );
+    expect(fila.monto).toBe("8000.00");
+    expect(fila.ganancia).toBe("1500.00");
+  });
+
+  it("dos líneas se concatenan en la celda `metodo` con un ÚNICO separador (R28)", () => {
+    const fila = filaDescargaDiaEntregada(
+      gestionEntregada([
+        { metodo: "efectivo", monto: "5000.00" },
+        { metodo: "transferencia", monto: "3000.00" },
+      ]),
+    );
+
+    // Cadena EXACTA: etiqueta legible + monto crudo, un solo « + » entre las dos ([Q1]).
+    expect(fila.metodo).toBe("Efectivo 5000.00 + Transferencia 3000.00");
+    expect(String(fila.metodo).split(" + ")).toHaveLength(2);
+  });
+
+  it("respeta el ORDEN del DTO aunque difiera del alfabético (R28)", () => {
+    // El DTO llega en orden de declaración del enum (`efectivo`, `SINPE`, `transferencia`).
+    // Aquí se le da un orden cuyo alfabético sería el contrario —«Efectivo» < «SINPE»—: si
+    // la proyección ordenara por su cuenta, esta cadena saldría al revés.
+    const fila = filaDescargaDiaEntregada(
+      gestionEntregada([
+        { metodo: "SINPE", monto: "2000.00" },
+        { metodo: "efectivo", monto: "6000.00" },
+      ]),
+    );
+
+    expect(fila.metodo).toBe("SINPE 2000.00 + Efectivo 6000.00");
+  });
+
+  it("una sola línea da SOLO la etiqueta, exactamente igual que hoy (R29)", () => {
+    // El importe ya viaja en la columna contigua «Monto», así que el archivo del 99 % de
+    // las filas no cambia con esta feature ([Q2]).
+    const fila = filaDescargaDiaEntregada(
+      gestionEntregada([{ metodo: "efectivo", monto: "8000.00" }]),
+    );
+
+    expect(fila.metodo).toBe("Efectivo");
+  });
+
+  it("sin líneas de pago la celda `metodo` queda VACÍA: `null`, ni «—» ni «» (R30)", () => {
+    // `null` es celda vacía en el archivo; el «—» es un marcador de PANTALLA y no debe
+    // filtrarse a una hoja de cálculo. Se pasa `metodoPago: "efectivo"` a propósito: la
+    // celda ya no lo lee (R23), así que sigue vacía aunque el escalar exista.
+    const fila = filaDescargaDiaEntregada(gestionEntregada([], "efectivo"));
+
+    expect(fila.metodo).toBeNull();
+  });
+
+  it("los montos son el STRING money-safe del servidor TAL CUAL (R31)", () => {
+    // Ni `toFixed`, ni separador de miles, ni símbolo de colón: el archivo lo consume una
+    // hoja de cálculo. Un monto de siete cifras es donde un formateo colado se vería.
+    const fila = filaDescargaDiaEntregada(
+      gestionEntregada([
+        { metodo: "efectivo", monto: "1234567.89" },
+        { metodo: "SINPE", monto: "0.10" },
+      ]),
+    );
+
+    expect(fila.metodo).toBe("Efectivo 1234567.89 + SINPE 0.10");
+    expect(fila.metodo).not.toMatch(/[₡$]/);
+    expect(fila.metodo).not.toMatch(/1[.,]234[.,]567/);
   });
 });
