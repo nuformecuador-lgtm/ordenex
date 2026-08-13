@@ -186,7 +186,11 @@ baselines caducan con cualquier PR ajeno).
 Desbloqueado por D15 («declara la deriva con fecha de corte»). Diseño completo en
 `design.md §8`. **Nada de este grupo está implementado.**
 
-- [ ] **T13 — Arreglar el ÚLTIMO rojo declarado SIN tocar lo que el test mide. [💰]**
+- [x] **T13 — Arreglar el ÚLTIMO rojo declarado SIN tocar lo que el test mide. [💰]**
+  ✅ **HECHO** (2026-08-13). Helper `crearCierreAprobado` en `_semilla-rollup.ts` +
+  `crearGestion` acepta `cierreId` opcional; la `devuelta` se vincula a un cierre
+  APROBADO. **Aserciones `:660-661` intactas.** 29/29 verdes, con datos verificados
+  por canario. Detalle en `progress/impl_215.md` §9.1.
   `tests/integration/db/analytics-daily-job.test.ts` · «primer intento vs entrega
   tras una devolucion previa (R17)» (`:602-663`).
 
@@ -211,7 +215,13 @@ Desbloqueado por D15 («declara la deriva con fecha de corte»). Diseño complet
   tests retornan temprano y pasan en falso).
   **R:** R23, R24-e. **Depende de:** T3. **No depende de** T19–T22.
 
-- [ ] **T23 — Escribir la declaración de la deriva. [P]** Los cuatro sitios de
+- [x] **T23 — Escribir la declaración de la deriva. [P]**
+  ✅ **HECHO** (2026-08-13). Los tres sitios de código escritos (`metrics.ts`
+  `:331-374` + `descripcion` `:378-379`; `AnaliticaRollupService.ts` `:223-262`;
+  `AnaliticaOperativaService.ts` `:886-935`), cada uno autosuficiente con las tres
+  cosas. `diff` sin `app/`, `components/` ni `db/`. El cuarto sitio
+  (`progress/impl_215.md`) es §9.2/§9.3. Detalle en `progress/impl_215.md` §9.2.
+  Los cuatro sitios de
   `design.md §8.3`: `lib/analytics/metrics.ts` (`descripcion` de `primer_intento_ok`,
   `:334-335`), `AnaliticaRollupService.ts` (junto a `contarPrimerIntento`,
   `:230-242`), `AnaliticaOperativaService.ts` (`:894-901`) y `progress/impl_215.md`.
@@ -229,7 +239,12 @@ Desbloqueado por D15 («declara la deriva con fecha de corte»). Diseño complet
   `requirements.md` §Tensión declarada); `metrics.test.ts` sigue verde.
   **R:** R24-a, R24-b, R24-c, R24-d, R35. **Depende de:** nada.
 
-- [ ] **T24 — ACCIÓN HUMANA EN EL DESPLIEGUE (documental).** Anotar el instante real
+- [~] **T24 — ACCIÓN HUMANA EN EL DESPLIEGUE (documental).**
+  ✅ **HUECO PREPARADO** (2026-08-13) en `progress/impl_215.md` §9.3, con la casilla
+  vacía, el commit desplegado y la zona horaria. ⬜ **PENDIENTE la fecha real**: hoy
+  no se conoce y **no se inventa**. Sin ella solo se pierde la etiqueta cómoda; la
+  serie sigue interpretable fila a fila por `updated_at` (R35). **No bloquea el PR.**
+  Anotar el instante real
   del despliegue en `progress/impl_215.md` y como fecha legible en la `descripcion`
   de la métrica.
   **No toca código, no exige re-desplegar, no bloquea el PR.** Si se olvida, la serie

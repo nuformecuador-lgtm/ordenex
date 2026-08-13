@@ -224,6 +224,44 @@ export class AnaliticaRollupService implements IAnaliticaRollupService {
    * R17 — las entregas del dia cuyo conteo de intentos previos VIGENTES es 0, resueltas con
    * UNA sola llamada al punto unico de la feature 160 para todo el lote (nada de N+1 y nada
    * de un `COUNT` propio sobre `orden_historial_estado`).
+   *
+   * -------------------------------------------------------------------------------------
+   * DERIVA DECLARADA DE `primer_intento_ok` (feature 215 / R24, R35). Este metodo es el que
+   * PERSISTE las filas que tienen el escalon, asi que el aviso vive aqui completo (tambien,
+   * autosuficiente, en `lib/analytics/metrics.ts` —la definicion— y en
+   * `AnaliticaOperativaService.completarPrimerIntentoEnCubos` —la version VIVA—).
+   *
+   * (1) CAMBIO DE CRITERIO, SIN RE-BACKFILL. Con la 215 el «intento previo» ya NO se deriva de
+   *     los destinos de transicion del historial: sale de las gestiones que viven dentro de un
+   *     cierre APROBADO. El historico ya escrito en `analytics_daily` NO se re-backfillea y la
+   *     metrica NO se redefine para dejar de depender del contador: el escalon de la serie se
+   *     ASUME, deliberadamente (D15). Por que no se re-backfillea: reescribiria meses de KPI ya
+   *     reportados, y ademas seria FALSO —los cierres de entonces no estaban aprobados EN EL
+   *     MOMENTO de aquel calculo—.
+   *
+   * (2) EL CORTE ES POR `updated_at`, NO POR `fecha`. Toda fila de `analytics_daily` cuyo
+   *     `updated_at` sea ANTERIOR al despliegue de la 215 esta calculada con el criterio VIEJO;
+   *     toda fila con `updated_at` posterior, con el NUEVO, SEA CUAL SEA SU `fecha`. Y, con
+   *     estas palabras: una fila de una fecha ANTERIOR al corte que se RECALCULA despues del
+   *     corte pasa a estar calculada con el criterio NUEVO. Motivo, visible desde este mismo
+   *     servicio: el job recalcula dias pasados (backfill) y el upsert refresca `updated_at` en
+   *     cada recalculo (`AnaliticaRollupRepository.ts:434,453`), asi que el corte es por CUANDO
+   *     SE CALCULO, no por QUE DIA MIDE. `updated_at` es una columna que YA existe
+   *     (`db/migrations/20260731120000_analytics_daily/migration.sql:83`): por eso no hace falta
+   *     columna, tabla ni migracion nuevas (R35/R27), ni una constante `FECHA_CORTE_*` en codigo
+   *     que habria que adivinar antes de desplegar o mantener despues.
+   *
+   * (3) EFECTO INTRADIA: PROPIEDAD NUEVA Y PERMANENTE, NO UN TRANSITORIO. Una entrega cuya orden
+   *     tiene cierres SIN aprobar reporta 0 intentos previos, asi que cuenta como primer intento:
+   *     el KPI SUBE durante el dia y BAJA al aprobarse los cierres. NO es un artefacto de la
+   *     migracion de criterio y NO desaparece con la deriva declarada: es una propiedad nueva y
+   *     permanente de la metrica bajo el criterio nuevo. Corolario que este servicio materializa:
+   *     el mismo dia puede dar DOS valores distintos segun cuando se recalcule.
+   *
+   * LO QUE NO CAMBIA (R23 / R24-e): se sigue REMITIENDO al punto unico de conteo
+   * (`contarIntentosEnLote`), sin `COUNT` propio, sin umbral propio y sin columna materializada;
+   * y `primer_intento_ok <= entregas` se mantiene (`asegurarPrimerIntentoCoherente` + CHECK).
+   * -------------------------------------------------------------------------------------
    */
   private async contarPrimerIntento(
     fecha: string,
