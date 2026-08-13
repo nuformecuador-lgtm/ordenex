@@ -12,6 +12,17 @@ import type {
 // en MisAsignacionesService). Los `estatusId` destino/origen los resuelve el
 // service via IOrdenRepository.findEstatusIdByValue.
 
+/**
+ * Ventana HALF-OPEN `[desde, hasta)` de un dia de Costa Rica, en instantes UTC. Half-open
+ * y no `<= hasta` a proposito: es la unica forma de cubrir el dia COMPLETO sin arrastrar el
+ * primer instante del siguiente. Misma convencion que `RankingRepository` y que
+ * `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` (`lib/utils/fecha-cr.ts`).
+ */
+export interface VentanaDia {
+  desde: Date;
+  hasta: Date;
+}
+
 // Fila de "mis asignaciones" con los nombres legibles ya resueltos (R11): el
 // mensajero ve el detalle completo sin exponer IDs de catalogo. Decimales
 // (montoCobrar) serializados a number|null. NUNCA expone deletedAt.
@@ -150,21 +161,40 @@ export interface IGestionOrdenRepository {
   findMisAsignaciones(mensajeroId: string, estados: string[]): Promise<MiAsignacionRow[]>;
 
   /**
+   * 2026-08-11: las MISMAS filas, resueltas por ID en vez de por estado, con las MISMAS dos
+   * guardias en el WHERE (propiedad + no borradas). La consume «Recolectadas hoy», que sale del
+   * historial —solo tiene ids— y desde que pinta la card compartida necesita el resto de los
+   * datos de la orden. Vacio si `ids` esta vacio.
+   */
+  findMisAsignacionesByIds(mensajeroId: string, ids: string[]): Promise<MiAsignacionRow[]>;
+
+  /**
    * Feature 61: # de ordenes ENTREGADAS del mensajero (`mensajero_asignado_id =
    * mensajeroId`, estado `entregada`, no borradas). Conteo puro para el KPI del
    * portal; no trae filas.
+   *
+   * ACOTADO AL DIA por `dia`: la misma formula de siempre mas la condicion de que la
+   * orden tenga una gestion VIGENTE (`anuladaAt IS NULL`) con resultado `entregada`
+   * registrada dentro de la ventana. La ventana es la del DIA de Costa Rica —half-open
+   * `[desde, hasta)`, misma convencion que `RankingRepository`— y la calcula el service,
+   * no el repo: asi el conteo es determinista y testeable sin congelar el reloj aqui.
+   * Se ancla en la GESTION y no en la orden porque la orden no tiene `entregada_at`:
+   * `updatedAt` la mueve cualquier edicion posterior y mentiria sobre el dia.
    */
-  contarEntregadas(mensajeroId: string): Promise<number>;
+  contarEntregadas(mensajeroId: string, dia: VentanaDia): Promise<number>;
 
   /**
-   * Suma de `montoCobrar` (COD) de las ordenes ENTREGADAS del mensajero (mismas
-   * condiciones que `contarEntregadas`: propias, `entregada`, no borradas). Alimenta el
-   * KPI "Total a cobrar" (acumulado): junto al COD de `en_reparto` mantiene el total
-   * estable al entregar (la orden sale de reparto pero sigue sumando aqui) y lo descuenta
-   * cuando se gestiona como reprogramada/devuelta/rechazada (no entra en ningun set).
-   * `null` (sin entregadas o montos nulos) cuenta 0.
+   * Suma de `montoCobrar` (COD) de las ordenes del mensajero YA GESTIONADAS dentro de
+   * `dia`, con CUALQUIER resultado (entregada, reprogramada, devuelta, rechazada,
+   * incidente) y ya fuera de `en_reparto`. Es la mitad "cerrada" del KPI "Total a
+   * cobrar"; la otra mitad —las que siguen en reparto— la calcula el service sumando la
+   * lista que ya tiene en memoria, sin volver a la base.
+   *
+   * Las dos mitades son DISJUNTAS por construccion (esta excluye `en_reparto`), asi que
+   * sumarlas no puede contar dos veces una orden gestionada y devuelta a reparto el mismo
+   * dia. `null` (sin gestionadas o montos nulos) cuenta 0.
    */
-  sumMontoCobrarEntregadas(mensajeroId: string): Promise<number>;
+  sumMontoCobrarGestionadas(mensajeroId: string, dia: VentanaDia): Promise<number>;
 
   /**
    * R27/R31: filas por id para validar transiciones. INCLUYE borradas; el service

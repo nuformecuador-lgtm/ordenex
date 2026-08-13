@@ -119,6 +119,59 @@ export function costoEnvioDeTarifa(tarifa: TarifaVigente | null, esCentral: bool
 }
 
 /**
+ * Feature 204 — los DOS importes derivados que el LISTADO de `/ordenes` muestra por fila:
+ * "Flete + IVA" y "Comision + IVA". Salida STRING escala 2, money-safe.
+ *
+ * Existe porque hasta la 204 esas dos cifras se calculaban EN EL NAVEGADOR, sobre los
+ * `number` de la tarifa, y NO daban lo mismo que el cierre. Medido contra las 66 ordenes
+ * con tarifa activa de la base: 14 de ellas mostraban un centimo de mas o de menos.
+ * Ejemplos reales (tarifa comisionCod 3.50%, ivaComisionCod 13.00%):
+ *
+ *   monto 14900.00 -> comision exacta 521.5; IVA exacto 67.795 -> HALF_UP -> 67.80 -> 589.30.
+ *                     El navegador hacia 521.5 * 1.13, que en binario es
+ *                     589.29499999999995907 (el medio exacto 589.295 no es representable) y
+ *                     `toFixed(2)` bajaba a 589.29. UN CENTIMO DE MENOS.
+ *   monto 16618.40 -> comision 581.644, que ESTA funcion redondea a 581.64 ANTES del IVA
+ *                     (581.64 * 13% = 75.6132 -> 75.61) -> 657.25. El navegador aplicaba el
+ *                     IVA a la comision SIN redondear (581.644 * 1.13 = 657.25772) y subia a
+ *                     657.26. UN CENTIMO DE MAS. Y ese ni siquiera es un problema de binario:
+ *                     es OTRA formula (un redondeo intermedio que el navegador no hacia).
+ *
+ * Por eso NO reimplementa nada: llama a `derivarIngresoOrden` con `resultado: "entregada"`,
+ * que es lo que se le facturara a la tienda si la orden se entrega. Si un dia cambia la
+ * formula del cierre, el listado cambia con ella; no pueden divergir por construccion.
+ *
+ * Los dos campos son SIEMPRE un STRING ("0.00" incluido), nunca `null`: la degradacion sin
+ * tarifa vigente es cero, no "desconocido" (R9), que es lo que la columna ya mostraba.
+ */
+export interface CostosListadoOrden {
+  fleteConIva: string; // flete (GAM o estandar segun zona) + su IVA; "0.00" sin tarifa
+  comisionConIva: string; // comision COD + su IVA; "0.00" sin tarifa o si no cobra comision
+}
+
+/** Datos de la ORDEN que entran en las dos cifras (la tarifa va aparte). */
+export interface CostosListadoOrdenInput {
+  esCentral: boolean; // zona de la orden: elige la COLUMNA de flete (GAM vs estandar)
+  montoCobrar: string | null; // COD a recaudar; null -> 0 (money-safe)
+  cobraComision: boolean;
+}
+
+export function costosListadoOrden(
+  tarifa: TarifaVigente | null,
+  orden: CostosListadoOrdenInput,
+): CostosListadoOrden {
+  const derivado = derivarIngresoOrden({ resultado: "entregada", ...orden }, tarifa);
+  // Un concepto ausente no aporta; los dos ausentes dan "0.00" (no `null`): esta columna
+  // nunca dice "no aplica", dice cero.
+  const conIva = (base?: Prisma.Decimal, iva?: Prisma.Decimal): string =>
+    (base ?? new Prisma.Decimal(0)).plus(iva ?? 0).toFixed(2);
+  return {
+    fleteConIva: conIva(derivado.ingreso_flete, derivado.ingreso_iva_flete),
+    comisionConIva: conIva(derivado.ingreso_comision_cod, derivado.ingreso_iva_comision_cod),
+  };
+}
+
+/**
  * Suma el desglose por orden de un cierre en 1 total por concepto, para la vista de
  * auditoria del admin. NO es `agregarIngresosPorConcepto`: aquel emite movimientos de wallet
  * y OMITE los conceptos en 0.00 (R10); este emite SIEMPRE los 8 campos, porque una tabla de

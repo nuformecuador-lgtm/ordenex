@@ -56,6 +56,7 @@ function makeFila(over: Partial<ManifiestoFilaDTO> = {}): ManifiestoFilaDTO {
     telefono: "88880000",
     direccion: "Calle 1, casa 2",
     zona: "Limón",
+    producto: "Camiseta talla M",
     monto: 15000,
     intentos: 0, // feature 160/R28a: numérico y NO nullable (sin intentos -> 0)
     origen: "Bodega central",
@@ -159,6 +160,7 @@ describe("manifiesto-xlsx (feature 148)", () => {
       "88880000",
       "Calle 1, casa 2",
       "Guápiles",
+      "Camiseta talla M",
       "12500.5",
       "0", // feature 160/R28a: intentos
       "Bodega central",

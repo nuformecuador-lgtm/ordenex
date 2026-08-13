@@ -28,6 +28,7 @@ function rawRow(overrides: Record<string, unknown> = {}) {
     destinatario: "Juan Perez",
     telefonoDest: "88880000",
     direccion: "Av. Siempre Viva 742",
+    producto: "Camiseta talla M",
     montoCobrar: new Prisma.Decimal("25.50"),
     tienda: { nombre: "Tienda Uno" },
     zona: { nombre: "Cartago", esCentral: false },
@@ -52,6 +53,7 @@ describe("R4 — findManifiestoByIds proyecta los datos de la orden para el mani
         destinatario: "Juan Perez",
         direccion: "Av. Siempre Viva 742",
         telefonoDest: "88880000",
+        producto: "Camiseta talla M", // dato propio de la orden (160/R28)
         montoCobrar: 25.5, // R7: Decimal -> number
         tiendaNombre: "Tienda Uno",
         zonaNombre: "Cartago", // R6: NOMBRE, no id
@@ -76,7 +78,7 @@ describe("R4 — findManifiestoByIds proyecta los datos de la orden para el mani
     expect(rows[0].direccion).toBeNull();
   });
 
-  it("R11: la proyeccion NO pide deleted_at, notas, producto ni geografia", async () => {
+  it("R11: la proyeccion NO pide deleted_at, notas ni geografia", async () => {
     const prisma = buildPrisma();
     await buildRepo(prisma).findManifiestoByIds(["o1"]);
 
@@ -90,13 +92,14 @@ describe("R4 — findManifiestoByIds proyecta los datos de la orden para el mani
         "montoCobrar",
         "numGuia",
         "numRemision",
+        "producto",
         "telefonoDest",
         "tienda",
         "tiendaId",
         "zona",
       ].sort(),
     );
-    for (const prohibido of ["deletedAt", "notas", "producto", "provincia", "canton", "distrito"]) {
+    for (const prohibido of ["deletedAt", "notas", "provincia", "canton", "distrito"]) {
       expect(select).not.toHaveProperty(prohibido);
     }
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -19,6 +19,7 @@ import type {
   PagoRegistradoDTO,
   RegistrarPagoResult,
 } from "@/lib/types/liquidacion";
+import type { RegistrarRepartoResult } from "@/lib/types/liquidacion-reparto";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 import { nuevaClaveIdempotencia } from "./clave-idempotencia";
@@ -67,6 +68,21 @@ export type PagoRegistradoOk = Extract<
   { status: "ok" } | { status: "ya_registrado" }
 >;
 
+/**
+ * Feature 205 (T5.1) — lo que este diálogo admite como respuesta del servidor.
+ *
+ * Se ensancha de UN tipo a DOS porque el reparto de la 205 responde con `RepartoAplicadoDTO`
+ * (N imputaciones) y no con un comprobante: no hay un `pago` que devolver, hay varios. Los dos
+ * contratos comparten los MISMOS nombres de estado a propósito (design §7.2 de la 205), así que
+ * el `switch` de `avisoDe` sigue siendo exhaustivo y aquí no se estrena vocabulario.
+ *
+ * **Es aditivo y no cambia nada de lo existente**: quien devuelve un `RegistrarPagoResult` sigue
+ * encajando, y `onRegistrado` —que es lo único que mira dentro del resultado— solo se invoca
+ * cuando la respuesta TRAE comprobante. Un reparto no lo trae, y su pantalla se entera por el
+ * valor que devuelve su propio `onRegistrar`.
+ */
+export type ResultadoDeRegistro = RegistrarPagoResult | RegistrarRepartoResult;
+
 export interface RegistrarPagoDialogProps {
   /** Visibilidad controlada por el padre (mismo contrato que `Modal`). */
   open: boolean;
@@ -79,8 +95,14 @@ export interface RegistrarPagoDialogProps {
    */
   disponible: string;
   /** Envía el registro. La devuelve quien monta, que es quien sabe a quién se paga. */
-  onRegistrar: (campos: RegistrarPagoCampos) => Promise<RegistrarPagoResult>;
-  /** Se invoca cuando el pago quedó registrado, con el comprobante que devolvió el servidor. */
+  onRegistrar: (campos: RegistrarPagoCampos) => Promise<ResultadoDeRegistro>;
+  /**
+   * Se invoca cuando el pago quedó registrado, con el comprobante que devolvió el servidor.
+   *
+   * Solo se invoca si la respuesta TRAE comprobante: el reparto de la 205 registra N pagos y
+   * responde con el reparto aplicado, así que su pantalla se entera por el valor que devuelve
+   * su propio `onRegistrar` y no por aquí.
+   */
   onRegistrado?: (pago: PagoRegistradoDTO, resultado: PagoRegistradoOk) => void;
   /**
    * Feature 172 (T E.1) — etiqueta del botón que cierra sin pagar. ADITIVA y opcional: por
@@ -93,6 +115,30 @@ export interface RegistrarPagoDialogProps {
    * R17/R18 existen para impedir.
    */
   cancelLabel?: string;
+  /**
+   * Feature 205 (T5.1, R27/R31/R34) — HUECO opcional bajo el campo de monto. Recibe el monto
+   * TAL CUAL se está tecleando y devuelve lo que haya que pintar debajo (en la 205, la
+   * previsualización del reparto entre cierres).
+   *
+   * ADITIVA y opcional: sin ella el diálogo se comporta exactamente como hasta hoy. Es un
+   * hueco y no una previsualización propia porque **este diálogo no sabe a quién se paga**
+   * (esa es la razón de que viva en `shared/`): quien lo monta es quien puede pedirle al
+   * servidor qué pasaría con ese monto. Aquí no se calcula nada, ni siquiera se lee el monto.
+   *
+   * Y no toca la clave de idempotencia (R27/R31): el hueco se pinta DENTRO de la solicitud
+   * viva, así que teclear, esperar la previsualización o reintentar tras un fallo siguen
+   * siendo la misma solicitud con la misma clave.
+   */
+  renderPrevisualizacion?: (monto: string) => ReactNode;
+  /**
+   * Feature 205 (T5.2) — el aviso de `sin_saldo`, por si el beneficiario no es una tienda.
+   *
+   * El texto por defecto habla de una tienda («Esta tienda no tiene saldo a favor…»), que es
+   * lo que este diálogo ha dicho desde la 172. Al pagarle a un MENSAJERO ese aviso sería falso
+   * en la única pantalla donde puede aparecer: `sin_saldo` significa ahí que ya no queda ningún
+   * cierre aprobado con saldo. Es un rótulo, no una regla: el estado y su semántica no cambian.
+   */
+  mensajeSinSaldo?: string;
   /** Instante «ahora». Inyectable para poder fijar el día en los tests. */
   ahora?: Date;
 }
@@ -137,7 +183,7 @@ interface ErroresCampo {
  * para que el `switch` sea exhaustivo sobre `RegistrarPagoResult`: un estado nuevo en el
  * contrato rompe el build en vez de caer en un `default` mudo.
  */
-function avisoDe(resultado: RegistrarPagoResult): string {
+function avisoDe(resultado: ResultadoDeRegistro, mensajeSinSaldo: string): string {
   switch (resultado.status) {
     case "ok":
       return REGISTRAR_PAGO_RESPUESTA.ok;
@@ -146,7 +192,7 @@ function avisoDe(resultado: RegistrarPagoResult): string {
     case "excede":
       return REGISTRAR_PAGO_RESPUESTA.excede(resultado.disponible);
     case "sin_saldo":
-      return REGISTRAR_PAGO_RESPUESTA.sinSaldo;
+      return mensajeSinSaldo;
     case "cierre_no_aprobado":
       return REGISTRAR_PAGO_RESPUESTA.cierreNoAprobado;
     case "no_encontrado":
@@ -180,6 +226,8 @@ export function RegistrarPagoDialog({
   onRegistrar,
   onRegistrado,
   cancelLabel = REGISTRAR_PAGO_TEXTO.cancelar,
+  renderPrevisualizacion,
+  mensajeSinSaldo = REGISTRAR_PAGO_RESPUESTA.sinSaldo,
   ahora = new Date(),
 }: RegistrarPagoDialogProps) {
   // Hoy en hora de COSTA RICA, no en UTC: entre las 18:00 y la medianoche de CR el día UTC
@@ -283,7 +331,7 @@ export function RegistrarPagoDialog({
       ...(nota.trim() ? { nota: nota.trim() } : {}),
     };
 
-    let resultado: RegistrarPagoResult;
+    let resultado: ResultadoDeRegistro;
     try {
       resultado = await onRegistrar(campos);
     } catch {
@@ -300,7 +348,9 @@ export function RegistrarPagoDialog({
       // legítimos con el mismo importe, método y día sean DOS pagos (R45) y no uno que
       // desaparece en silencio.
       setSesion(null);
-      onRegistrado?.(resultado.pago, resultado);
+      // Solo hay comprobante que entregar si la respuesta lo trae: el reparto de la 205
+      // registra N pagos y devuelve el reparto aplicado, no un comprobante único.
+      if ("pago" in resultado) onRegistrado?.(resultado.pago, resultado);
       onOpenChange(false);
       return;
     }
@@ -311,7 +361,7 @@ export function RegistrarPagoDialog({
       return;
     }
 
-    setAviso(avisoDe(resultado));
+    setAviso(avisoDe(resultado, mensajeSinSaldo));
   }
 
   return (
@@ -361,6 +411,11 @@ export function RegistrarPagoDialog({
             />
           )}
         </FormField>
+
+        {/* Feature 205 (T5.1) — el hueco de la previsualización, JUSTO bajo el monto que la
+            produce. Recibe el monto tal cual está tecleado; qué hacer con él lo decide quien
+            monta el diálogo, que es quien sabe a quién se paga. */}
+        {renderPrevisualizacion ? renderPrevisualizacion(monto) : null}
 
         <FormField
           id={campoId("metodo")}

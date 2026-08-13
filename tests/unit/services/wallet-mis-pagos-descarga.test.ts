@@ -44,6 +44,7 @@ function mov(
     monto: "1000.00",
     origenTipo: "cierre_dia",
     origenId: "c1",
+    cierreId: "c1", // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
     descripcion: null,
     fechaMovimiento: "2026-07-12T10:00:00.000Z",
     ...over,

@@ -20,6 +20,15 @@ import {
   CENSO_TABLAS_CRUDAS,
   type ArchivoCensado,
 } from "./censo-tablas";
+// Feature 207 — el lector vive ahora en su propio módulo, con su propio test (antes no tenía
+// ninguno). Lo que cambió al mudarse: quita los comentarios ANTES de escanear, para que una
+// mención de la etiqueta en prosa deje de contar como una tabla del archivo. Los totales de
+// abajo NO se movieron por ello — se midieron contra el árbol antes y después.
+import { etiquetasDataTable } from "./etiquetas-datatable";
+// Feature 207 — mismo tratamiento para el detector de montajes: se extrae el predicado (el
+// recorrido del árbol se queda aquí, que es quien sabe qué árboles se miran) y deja de leer
+// prosa. Los montajes de las dos tablas compartidas NO se movieron: 2 y 2, antes y después.
+import { montaComponente } from "./montajes-componente";
 
 const RAIZ = path.resolve(__dirname, "../../..");
 
@@ -92,52 +101,6 @@ function rutaRelativa(archivo: string): string {
   return path.relative(RAIZ, archivo).split(path.sep).join("/");
 }
 
-/**
- * Devuelve el TEXTO de la etiqueta de apertura de cada `<DataTable …>` del archivo.
- *
- * Hay que parsear de verdad y no partir por líneas: un archivo puede montar dos tablas
- * (`CierresAdminModule`) y solo una declarar `descarga`. Se respetan los parámetros
- * genéricos (`<DataTable<OrdenConError>`), las llaves anidadas de los atributos y las
- * cadenas, de modo que la etiqueta termina en el primer `>` de nivel cero.
- */
-export function etiquetasDataTable(fuente: string): string[] {
-  const etiquetas: string[] = [];
-  const inicio = /<DataTable[\s<>]/g;
-  let encontrado: RegExpExecArray | null;
-  while ((encontrado = inicio.exec(fuente)) !== null) {
-    let i = encontrado.index + "<DataTable".length;
-    // Parámetro genérico: `<DataTable<Foo>` — se salta contando `<` y `>`.
-    if (fuente[i] === "<") {
-      let anguloProfundidad = 0;
-      do {
-        if (fuente[i] === "<") anguloProfundidad++;
-        else if (fuente[i] === ">") anguloProfundidad--;
-        i++;
-      } while (i < fuente.length && anguloProfundidad > 0);
-    }
-    let llaveProfundidad = 0;
-    let comilla: string | null = null;
-    const desde = i;
-    while (i < fuente.length) {
-      const c = fuente[i];
-      if (comilla !== null) {
-        if (c === comilla && fuente[i - 1] !== "\\") comilla = null;
-      } else if (c === '"' || c === "'" || c === "`") {
-        comilla = c;
-      } else if (c === "{") {
-        llaveProfundidad++;
-      } else if (c === "}") {
-        llaveProfundidad--;
-      } else if (c === ">" && llaveProfundidad === 0) {
-        break;
-      }
-      i++;
-    }
-    etiquetas.push(fuente.slice(desde, i));
-  }
-  return etiquetas;
-}
-
 interface InstanciaEnArbol {
   ruta: string;
   indice: number;
@@ -165,21 +128,20 @@ function registroPorRuta(censo: ArchivoCensado[]): Map<string, ArchivoCensado> {
  *
  * Una tabla que vive en `components/` es UNA instancia de `<DataTable>` en el código y
  * tantas tablas como pantallas la monten para quien las usa. Se exige lo mismo que para
- * importar y para renderizar, porque solo con lo primero un comentario o un re-export
- * contarían como montaje, y solo con lo segundo lo haría cualquier archivo que nombre el
- * componente de pasada (`AnularPagoDialog` lo cita en su cabecera).
+ * importar y para renderizar, porque solo con lo primero un re-export contaría como montaje, y
+ * solo con lo segundo lo haría cualquier archivo que nombre el componente de pasada
+ * (`AnularPagoDialog` lo cita en su cabecera).
+ *
+ * Feature 207 — el predicado se mudó a `montajes-componente.ts` y ahora quita los comentarios
+ * antes de mirar: exigir import Y JSX mitigaba la prosa pero no la cerraba (un archivo que
+ * importe el componente de verdad y lo cite entre ángulos en un comentario colaba). Aquí queda
+ * solo el recorrido del árbol.
  */
 function montajesEnElArbol(rutaComponente: string): string[] {
-  const nombre = path.basename(rutaComponente).replace(/\.tsx$/, "");
-  const especificador = `@/${rutaComponente.replace(/\.tsx$/, "")}`;
-  const jsx = new RegExp(`<${nombre}[\\s/>]`);
   return ARBOLES_UI.flatMap((arbol) => listarTsx(path.join(RAIZ, arbol)))
     .map(rutaRelativa)
     .filter((ruta) => ruta !== rutaComponente)
-    .filter((ruta) => {
-      const fuente = readFileSync(path.join(RAIZ, ruta), "utf8");
-      return fuente.includes(`from "${especificador}"`) && jsx.test(fuente);
-    })
+    .filter((ruta) => montaComponente(readFileSync(path.join(RAIZ, ruta), "utf8"), rutaComponente))
     .sort();
 }
 

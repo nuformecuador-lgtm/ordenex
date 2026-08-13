@@ -90,6 +90,7 @@ const PAGOS_OK = {
         monto: "5000.00",
         origenTipo: "cierre_dia",
         origenId: "c1",
+        cierreId: "c1", // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
         descripcion: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
       },
@@ -101,6 +102,7 @@ const PAGOS_OK = {
         monto: "3000.00",
         origenTipo: "cierre_dia",
         origenId: "c1",
+        cierreId: "c1",
         descripcion: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
       },
@@ -242,6 +244,7 @@ function mov(over: Partial<PagoMensajeroMovimientoDTO>): PagoMensajeroMovimiento
     monto: "0.00",
     origenTipo: "cierre_dia",
     origenId: "c1",
+    cierreId: "c1", // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
     descripcion: null,
     fechaMovimiento: "2026-07-30T00:00:00.000Z",
     ...over,

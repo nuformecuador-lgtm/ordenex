@@ -41,6 +41,12 @@ export const COLUMNAS_MANIFIESTO: XlsxColumn[] = [
   { key: "telefono", header: "telefono" },
   { key: "direccion", header: "direccion" },
   { key: "zona", header: "zona" },
+  // Dato propio de la orden (`orden.producto`) -> columna propia del manifiesto, por la misma
+  // regla 160/R28 que trajo `intentos`. Va junto a `monto`: los dos describen la MERCANCIA,
+  // despues del bloque de entrega (destinatario/telefono/direccion/zona) y antes del de
+  // logistica del movimiento. Como la preferencia de columnas guarda las OCULTAS y no las
+  // visibles, sale visible por defecto sin migrar nada (194/R22).
+  { key: "producto", header: "producto" },
   { key: "monto", header: "monto" },
   // Feature 160 (R28a): dato propio de la orden -> columna propia del manifiesto. Va tras
   // `monto` y ANTES del bloque de logística del movimiento (origen/destino/responsable/fecha),

@@ -11,6 +11,7 @@ import type {
   ListarRecoleccionServiceResult,
   RecolectarEnTiendaServiceResult,
 } from "@/lib/interfaces/services/IRecoleccionTiendaService";
+import { toDTO } from "@/lib/services/MisAsignacionesService";
 import type { RecoleccionOrdenDTO } from "@/lib/types/recoleccion-tienda";
 import {
   fechaCalendarioCR,
@@ -67,7 +68,10 @@ type RecoleccionTiendaRepo = Pick<
 //   - `findRecoleccionesDeActor` (repo de historial) es la fuente de «Recolectadas hoy».
 // Los dos son REQUERIDOS a proposito (precedente de la 160): una dependencia opcional deja que
 // el wiring se la olvide y que el dato desaparezca en silencio de la pantalla del mensajero.
-type RecoleccionGestionRepo = Pick<IGestionOrdenRepository, "findMisAsignaciones">;
+type RecoleccionGestionRepo = Pick<
+  IGestionOrdenRepository,
+  "findMisAsignaciones" | "findMisAsignacionesByIds"
+>;
 type RecoleccionHistorialRepo = Pick<IOrdenHistorialRepository, "findRecoleccionesDeActor">;
 
 export class RecoleccionTiendaService implements IRecoleccionTiendaService {
@@ -193,42 +197,60 @@ export class RecoleccionTiendaService implements IRecoleccionTiendaService {
     ]);
 
     const recolectadasHoyRecortada = recolecciones.length > TOPE_RECOLECTADAS_HOY;
+    const mostradas = recolecciones.slice(0, TOPE_RECOLECTADAS_HOY);
+
+    // 2026-08-11 — «Recolectadas hoy» pinta la MISMA card, asi que sus filas necesitan los datos
+    // de la orden y no solo los cuatro del historial. Segunda lectura, acotada a los ids que YA
+    // se van a mostrar (nunca a los `+1` del sondeo de recorte) y con la guardia de propiedad en
+    // el WHERE del repo. Se pide DESPUES del `Promise.all` porque depende de su resultado.
+    const filas = await this.repoGestion.findMisAsignacionesByIds(
+      actor.usuarioId,
+      mostradas.map((r) => r.ordenId),
+    );
+    const porId = new Map(filas.map((row) => [row.id, row]));
 
     return {
       status: "ok",
       porRecolectar: pendientes.map(toRecoleccionOrdenDTO),
-      recolectadasHoy: recolecciones
-        .slice(0, TOPE_RECOLECTADAS_HOY)
-        .map((r) => ({
-          ordenId: r.ordenId,
-          numGuia: r.numGuia,
-          numRemision: r.numRemision,
-          tiendaNombre: r.tiendaNombre,
-          recolectadaAt: r.recolectadaAt,
-        })),
+      // El orden lo manda el HISTORIAL (R28: de la mas reciente a la mas antigua), no la
+      // segunda lectura. Una orden que el historial nombra pero que la lectura no devuelve
+      // —borrada, o reasignada a otro mensajero— se CAE de la lista en vez de pintarse a
+      // medias: la card no admite huecos.
+      recolectadasHoy: mostradas.flatMap((r) => {
+        const row = porId.get(r.ordenId);
+        return row ? [{ ...toRecoleccionOrdenDTO(row), recolectadaAt: r.recolectadaAt }] : [];
+      }),
       recolectadasHoyRecortada,
     };
   }
 }
 
 /**
- * Feature 167 (R18/R38) — proyeccion a un DTO DELIBERADAMENTE POBRE. `MiAsignacionRow` trae
- * `montoCobrar`, `latitud`, `longitud`, `direccion`, `notas` y la geografia completa; nada de
- * eso pertenece a una recoleccion en tienda y nada de eso debe VIAJAR al navegador en esta
- * superficie. El corte se hace AQUI, en el service, para que R38 sea verificable con un test de
- * contrato en vez de con una revision visual de la pantalla.
+ * Proyeccion a `RecoleccionOrdenDTO`.
+ *
+ * 2026-08-11 (decision del humano): el apartado pinta la MISMA card que «Por recoger», completa,
+ * asi que el DTO deja de recortar. Reutiliza `toDTO` de `MisAsignacionesService` —la MISMA
+ * proyeccion que alimenta esa card en Entregas— en vez de una copia local que podria divergir;
+ * la fila de origen ya traia todos estos campos, de modo que no hay lectura nueva contra la base.
+ *
+ * Esto RETIRA el corte de R38 (167), que existia para que la card no pudiera mostrar cobro ni
+ * ruta. El test de contrato que lo vigilaba pasa a verificar lo contrario: que la recoleccion
+ * transporta lo mismo que Entregas.
+ *
+ * Los tres campos que `toDTO` deja en su default son correctos aqui y no se re-derivan:
+ *   - `secuenciaRuta: null` — una orden por recolectar no es parada de ninguna ruta;
+ *   - `marcarLuego: false` / `notaPrivada: null` — la marca y la nota privadas se resuelven con
+ *     repos que esta lectura no consume; son de la gestion en reparto, no de la recoleccion.
+ * `intentosEntrega: 0` se fija explicito: una orden que todavia esta en la tienda no ha tenido
+ * ningun intento de entrega, asi que el `0` es el dato REAL y no un relleno.
  *
  * `tiendaTelefono` es `?: string | null` en la fila (patron aditivo de la 157), asi que el
  * `?? null` garantiza `null` —nunca `undefined`— tambien con un doble de test que no lo declare.
  */
 function toRecoleccionOrdenDTO(row: MiAsignacionRow): RecoleccionOrdenDTO {
   return {
-    id: row.id,
-    numGuia: row.numGuia,
-    numRemision: row.numRemision,
-    producto: row.producto,
-    destinatario: row.destinatario,
-    tiendaNombre: row.tiendaNombre,
+    ...toDTO(row),
     tiendaTelefono: row.tiendaTelefono ?? null, // R20: `null` = sin controles de contacto
+    intentosEntrega: 0,
   };
 }

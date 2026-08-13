@@ -20,6 +20,7 @@ const ETIQUETAS: Record<string, string> = {
   telefono: "Teléfono",
   direccion: "Dirección",
   zona: "Zona",
+  producto: "Producto",
   monto: "Monto a cobrar",
   intentos: "Intentos de entrega",
   origen: "Origen",

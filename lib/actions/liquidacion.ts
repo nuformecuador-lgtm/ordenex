@@ -2,6 +2,7 @@
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { LiquidacionPagoRepository } from "@/lib/repositories/LiquidacionPagoRepository";
+import { LiquidacionRepartoRepository } from "@/lib/repositories/LiquidacionRepartoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
@@ -20,6 +21,12 @@ import {
   type ListarPagosResult,
   type RegistrarPagoResult,
 } from "@/lib/types/liquidacion";
+import {
+  previsualizarRepartoSchema,
+  registrarRepartoMensajeroSchema,
+  type PrevisualizarRepartoResult,
+  type RegistrarRepartoResult,
+} from "@/lib/types/liquidacion-reparto";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -43,6 +50,10 @@ import type { AppErrorShape } from "@/lib/errors";
 export type RegistrarPagoActionResult = RegistrarPagoResult;
 export type ListarPagosActionResult = ListarPagosResult;
 export type AnularPagoActionResult = AnularPagoResult;
+// Feature 205 (T4.2): las dos del REPARTO. Son SIETE acciones en total y la lista exacta esta
+// bajo test — anadir aqui un `editarRepartoAction` rompe la suite (R52).
+export type PrevisualizarRepartoActionResult = PrevisualizarRepartoResult;
+export type RegistrarRepartoActionResult = RegistrarRepartoResult;
 
 /**
  * Traduce el `AppErrorShape` del borde: ZodError (VALIDATION_ERROR) o falta de sesion
@@ -88,6 +99,10 @@ function buildService(): ILiquidacionService {
     new PagoMensajeroMovimientoRepository(prisma),
     (fn) => prisma.$transaction((tx) => fn(tx)),
     new CajaPagoTiendaFeedService(new WalletMovimientoRepository(prisma)),
+    // Feature 205 (T4.2): el cableado suma EL REPOSITORIO DEL ACTO y nada mas. La caja sigue sin
+    // tocarse en la rama del mensajero ([P2] = (a)) y el `tope` no se pasa: lo pone el unico
+    // punto de configuracion por defecto (R53), sin que este archivo escriba ningun numero.
+    new LiquidacionRepartoRepository(prisma),
   );
 }
 
@@ -128,6 +143,64 @@ export async function registrarPagoTiendaAction(
     const data = registrarPagoTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.registrarPagoTienda(data, actor);
+  });
+  return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
+}
+
+/**
+ * Feature 205 (T4.2, R2/R9/R47) — PREVISUALIZA el reparto de un importe entre los cierres
+ * pendientes de un mensajero. Molde identico al de las cinco de arriba, y el orden de sus tres
+ * pasos es el contrato: SESION (R2, antes de evaluar ningun otro dato) -> FORMA -> servicio.
+ *
+ * `previsualizarRepartoSchema` es `.strict()` y **no tiene `cierreId`**: una peticion que intente
+ * elegir contra que cierre se imputa muere aqui con `validation_error` y sin que el servicio se
+ * construya siquiera (R9/R47). El rol lo decide el servicio (`forbidden`), como en las otras.
+ *
+ * SUPERFICIE (tanda 5): la monta `RepartoPrevisualizacion` en el desglose de
+ * `/wallet/mensajeros`, dentro del formulario de pago. La excepcion que esta accion llevo
+ * anotada mientras esa pantalla no existia quedo BORRADA al montarla: el guard
+ * `superficie-de-uso` exige que ninguna excepcion sobreviva a su motivo.
+ */
+export async function previsualizarRepartoMensajeroAction(
+  input: unknown,
+  deps: LiquidacionDeps = {},
+): Promise<PrevisualizarRepartoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R2: antes de evaluar ningun otro dato
+    const data = previsualizarRepartoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.previsualizarRepartoMensajero(data, actor);
+  });
+  return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
+}
+
+/**
+ * Feature 205 (T4.2, R2/R9/R27/R47/R58) — REGISTRA el reparto. Mismo molde y mismas tres
+ * barreras del borde:
+ *
+ *  - la SESION, antes que nada (R2);
+ *  - la FORMA, con `.strict()` y sin `cierreId` (R9): contra que cierres se imputa lo decide el
+ *    servidor, y un `cierreId` colado no llega al servicio;
+ *  - UNA clave de idempotencia que viene del CLIENTE (R27), acuñada al abrir el formulario. No se
+ *    genera aqui: una clave nacida en el servidor cambiaria en cada reintento y no protegeria de
+ *    nada.
+ *
+ * SUPERFICIE (tanda 5): la monta `PagoMensajeroAcciones` en el desglose de
+ * `/wallet/mensajeros`, que es quien le pone el `mensajeroId` al formulario compartido. La
+ * excepcion que esta accion llevo anotada mientras esa pantalla no existia quedo BORRADA al
+ * montarla: el guard `superficie-de-uso` exige que ninguna excepcion sobreviva a su motivo.
+ */
+export async function registrarRepartoMensajeroAction(
+  input: unknown,
+  deps: LiquidacionDeps = {},
+): Promise<RegistrarRepartoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R2: antes de evaluar ningun otro dato
+    const data = registrarRepartoMensajeroSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.registrarRepartoMensajero(data, actor);
   });
   return isAppErrorShape(r) ? toLiquidacionActionError(r) : r;
 }

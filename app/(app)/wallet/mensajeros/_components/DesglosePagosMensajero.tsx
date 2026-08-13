@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,13 +25,16 @@ import {
   COLUMNAS_DESCARGA_DESGLOSE_MENSAJERO,
   filaDescargaDesgloseMensajero,
 } from "./desglose-mensajero-descarga-columnas";
+import { PagoMensajeroAcciones } from "./PagoMensajeroAcciones";
+import { EnlaceCierre } from "./RepartoPrevisualizacion";
 import {
   CATEGORIA_PAGO_LABEL,
   CUENTA_COLOR,
-  DESGLOSE_AVISO_BRUTOS,
   DESGLOSE_COLUMNAS,
+  DESGLOSE_COLUMNA_CIERRE,
   DESGLOSE_FILTRO_LABEL,
   DESGLOSE_LABEL,
+  DESGLOSE_SIN_CIERRE,
   DESGLOSE_VACIO,
   SIGNO_BADGE,
   TIPO_PAGO_LABEL,
@@ -51,6 +54,23 @@ import {
 
 /** Tamaño de pagina del desglose por cierre (coincide con el default del schema zod). */
 const DESGLOSE_PAGE_SIZE = 20;
+
+/** Prefijo de la clave SWR de este desglose. Identifica la lectura entre todas las de la app. */
+const CLAVE_DESGLOSE = "wallet-mensajeros:desglose";
+
+/**
+ * Feature 205 (T5.3, design §8) — filtro de `mutate` que alcanza el desglose de UN mensajero
+ * en CUALQUIER página y con cualquier filtro, y ninguno de los demás.
+ *
+ * Es un filtro y no una clave literal porque la clave lleva la página y los tres filtros
+ * vigentes: tras registrar un pago hay que releer lo que ese mensajero tenga a la vista, sea
+ * cual sea. Un `mutate()` sin argumentos refrescaría también los desgloses de los otros
+ * mensajeros abiertos, y cada uno cuesta una consulta (R33 de la 172).
+ */
+function esClaveDesgloseDe(mensajeroId: string): (clave: unknown) => boolean {
+  return (clave) =>
+    Array.isArray(clave) && clave[0] === CLAVE_DESGLOSE && clave[1] === mensajeroId;
+}
 
 /** Borrador / conjunto aplicado de filtros del desglose (cierre + rango de fechas). */
 interface FiltrosDesglose {
@@ -155,6 +175,20 @@ const COLUMNS: Column<PagoMensajeroMovimientoDTO>[] = [
     value: DESGLOSE_COLUMNAS.origen,
     render: (m) => origenTexto(m),
   },
+  {
+    // Feature 205 (T6.2, R43) — el enlace al detalle del cierre de esta fila. La fila que NO
+    // identifica ningún cierre (un ajuste manual) NO lleva enlace: ni roto ni deshabilitado,
+    // sino la misma raya con la que esta pantalla dice «acá no hay dato». El `cierreId` lo
+    // DERIVA el servidor (design §7.3); acá no se adivina de qué cierre viene un movimiento.
+    id: "cierre",
+    value: DESGLOSE_COLUMNA_CIERRE,
+    render: (m) =>
+      m.cierreId === null ? (
+        <span className="text-muted-foreground">{DESGLOSE_SIN_CIERRE}</span>
+      ) : (
+        <EnlaceCierre cierreId={m.cierreId} />
+      ),
+  },
 ];
 
 export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroProps) {
@@ -164,9 +198,10 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
   const [filtros, setFiltros] = useState<FiltrosDesglose>(FILTROS_VACIOS);
   const [draft, setDraft] = useState<FiltrosDesglose>(FILTROS_VACIOS);
 
+  const { mutate } = useSWRConfig();
   const { data, error, isLoading } = useSWR(
     [
-      "wallet-mensajeros:desglose",
+      CLAVE_DESGLOSE,
       mensajeroId,
       page,
       filtros.cierreId,
@@ -204,6 +239,7 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
   }
 
   const cierreFiltroId = `desglose-${mensajeroId}-cierre`;
+  const cierreAyudaId = `${cierreFiltroId}-ayuda`;
   const desdeFiltroId = `desglose-${mensajeroId}-desde`;
   const hastaFiltroId = `desglose-${mensajeroId}-hasta`;
 
@@ -213,7 +249,15 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
       aria-label={`Desglose de ${mensajeroNombre}`}
       className="flex flex-col gap-4 rounded-lg bg-muted/40 p-4"
     >
-      {/* Saldo del conjunto filtrado (R22): se recalcula desde result.data.cuenta. */}
+      {/*
+        Saldo del conjunto filtrado (R22): se recalcula desde result.data.cuenta.
+
+        Deuda 203 — la limitación N1 (feature 172, T H.4) ya no se pinta acá como un párrafo
+        aparte: era el MISMO párrafo que la cabecera de la tabla, visible al mismo tiempo que
+        él, y una copia más por cada fila desplegada. La salvedad vive ahora en la pista de
+        cada importe (`DESGLOSE_LABEL.*Hint`), que es lo que sigue en pantalla cuando el
+        párrafo de la tabla queda arriba del todo.
+      */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="flex flex-col gap-0.5">
           <span className="text-sm text-muted-foreground">{DESGLOSE_LABEL.devengado}</span>
@@ -246,70 +290,91 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
       </div>
 
       {/*
-        Feature 172 (T H.4) — la limitación N1, junto a los dos importes AGREGADOS que afecta
-        y no dentro de la tabla de movimientos: allí el pago y su reverso se ven los dos y se
-        explican solos; aquí quedan sumados y nadie los podría distinguir.
+        Feature 205 (T5.3, R3) — PAGAR desde acá, sin ir a otra pantalla. Va en la cabecera del
+        desglose, junto a los importes que explica y encima de los movimientos que el pago va a
+        mover, y es el espejo de lo que hace la tienda en su propio desglose.
+
+        El refresco es DIRIGIDO y lo hace el dueño de la clave: el bloque de pago refresca sus
+        previsualizaciones y avisa acá, y acá se relee el desglose de ESTE mensajero —en la
+        página y con los filtros que tenga puestos— y ninguno más.
       */}
-      <p role="note" className="text-xs text-muted-foreground">
-        {DESGLOSE_AVISO_BRUTOS}
-      </p>
+      <PagoMensajeroAcciones
+        resumen={resumen}
+        onRegistrado={async () => {
+          await mutate(esClaveDesgloseDe(mensajeroId));
+        }}
+      />
 
       {/* Filtros server-side por fecha/cierre (R22). */}
       <form
         aria-label={`Filtros del desglose de ${mensajeroNombre}`}
-        className="flex flex-wrap items-end gap-4"
+        className="flex flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           aplicarFiltros();
         }}
       >
-        <div className="flex min-w-56 flex-col gap-1.5">
-          <Label htmlFor={cierreFiltroId}>{DESGLOSE_FILTRO_LABEL.cierre}</Label>
-          <Input
-            id={cierreFiltroId}
-            type="text"
-            value={draft.cierreId}
-            onChange={(e) => set("cierreId", e.target.value)}
-            placeholder={DESGLOSE_FILTRO_LABEL.cierrePlaceholder}
-            className="w-56"
-          />
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex min-w-56 flex-col gap-1.5">
+            <Label htmlFor={cierreFiltroId}>{DESGLOSE_FILTRO_LABEL.cierre}</Label>
+            <Input
+              id={cierreFiltroId}
+              type="text"
+              value={draft.cierreId}
+              onChange={(e) => set("cierreId", e.target.value)}
+              placeholder={DESGLOSE_FILTRO_LABEL.cierrePlaceholder}
+              aria-describedby={cierreAyudaId}
+              className="w-56"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={desdeFiltroId}>{DESGLOSE_FILTRO_LABEL.desde}</Label>
+            <Input
+              id={desdeFiltroId}
+              type="date"
+              value={draft.desde}
+              onChange={(e) => set("desde", e.target.value)}
+              className="w-40"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={hastaFiltroId}>{DESGLOSE_FILTRO_LABEL.hasta}</Label>
+            <Input
+              id={hastaFiltroId}
+              type="date"
+              value={draft.hasta}
+              onChange={(e) => set("hasta", e.target.value)}
+              className="w-40"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button type="submit" disabled={isLoading}>
+              {DESGLOSE_FILTRO_LABEL.aplicar}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isLoading}
+              onClick={limpiarFiltros}
+            >
+              {DESGLOSE_FILTRO_LABEL.limpiar}
+            </Button>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={desdeFiltroId}>{DESGLOSE_FILTRO_LABEL.desde}</Label>
-          <Input
-            id={desdeFiltroId}
-            type="date"
-            value={draft.desde}
-            onChange={(e) => set("desde", e.target.value)}
-            className="w-40"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={hastaFiltroId}>{DESGLOSE_FILTRO_LABEL.hasta}</Label>
-          <Input
-            id={hastaFiltroId}
-            type="date"
-            value={draft.hasta}
-            onChange={(e) => set("hasta", e.target.value)}
-            className="w-40"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button type="submit" disabled={isLoading}>
-            {DESGLOSE_FILTRO_LABEL.aplicar}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isLoading}
-            onClick={limpiarFiltros}
-          >
-            {DESGLOSE_FILTRO_LABEL.limpiar}
-          </Button>
-        </div>
+        {/*
+          Deuda 203 — de dónde sale el identificador que pide el campo «Cierre». Va DEBAJO de la
+          fila y no dentro de su columna para no descolgar ese campo de los otros dos (la fila
+          alinea por abajo); el vínculo con el campo lo hace `aria-describedby`, así que un
+          lector de pantalla lo anuncia al enfocarlo aunque en la pantalla esté una línea más
+          abajo.
+        */}
+        <p id={cierreAyudaId} className="text-xs text-muted-foreground">
+          {DESGLOSE_FILTRO_LABEL.cierreAyuda}
+        </p>
       </form>
 
       {/* Desglose por cierre (mas reciente primero: el backend lo devuelve ordenado). */}

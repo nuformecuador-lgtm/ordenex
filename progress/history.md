@@ -3111,3 +3111,73 @@ faltaba la llave de apertura de una ficha, resultado de resolver un conflicto a 
 valida y cualquier `JSON.parse` casca, así que el registro que lee el arnés entero estuvo
 inservible para todas las sesiones hasta el PR #329. **Un conflicto en este archivo no se resuelve a
 ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
+
+## 2026-08-11 — 200 (rediseño de la presentación de `/wallet`)
+- Las dos cifras de la caja pasan de una tarjeta monolítica a una grilla de tiles hermanos (más
+  un tercer tile de conteo), el dinero de terceros a banda destacada, y el libro a una card con
+  los filtros en cabecera —en una sola línea— y la paginación en el pie. El monto va a la
+  derecha, en `tabular-nums` y con color semántico. Sin SDD: presentación pura, sin tocar
+  actions, permisos, queries ni lógica financiera.
+- Único cambio en compartidos: `DataTable` gana `align?: "left" | "right"` por columna, aditiva
+  y apagada por defecto — el render de las otras 29 tablas no cambia en una sola clase.
+- **Mirar la app encontró lo que 13.000 tests daban por bueno**: un icono `inline` de 16×72 px
+  que se salía de su tarjeta (el mismo patrón funcionaba en los tiles *por accidente*, porque
+  allí el padre es flex), y los cuatro `Label htmlFor` de los filtros apuntando a ids
+  **inexistentes desde la feature 42**. Ninguno de los dos lo veía la suite.
+- Se descartó, con motivo: las barras de porcentaje del desglose (exigen convertir montos a
+  número en el cliente) y el reorden de columnas del libro (desalinearía el ledger hermano de
+  `/wallet/tiendas`, que fija su propio orden en otra aserción).
+- Deuda detectada y NO tocada: `PageHeader` usa `text-navy` fijo y es casi ilegible en modo
+  oscuro **en todas las páginas** (ficha 202).
+
+## 2026-08-11 — 201 (un solo formato de dinero en toda la app)
+- Los importes se pintaban sin separador de miles. Ahora todos usan punto para miles y coma para
+  decimales, y el formato vive en un solo sitio (`lib/config/moneda.ts`), con el símbolo y los
+  dos separadores en configuración.
+- **El problema no era «faltan separadores»**: barriendo el símbolo en vez de la firma apareció
+  que la app mostraba la misma moneda de **cuatro maneras distintas** según la pantalla, con la
+  coma y el punto intercambiados entre unas y otras. Trece copias del formateo mueren.
+- Se agrupa **por STRING**, nunca convirtiendo a número: medido, `Number("1500.50")` deja de ser
+  `"1500.50"` y `"0.10"` se vuelve `0.1`. Un `DECIMAL(12,2)` de once dígitos no cabe exacto en un
+  `number`.
+- Cambios de comportamiento visibles y deliberados: `MONEDA_CURRENCY` ya no decide el símbolo
+  (ahora `MONEDA_SIMBOLO`); `PriceLabel` deja de comerse los ceros finales y pierde su prop
+  `maxDecimals`, que no usaba nadie; el signo va delante del símbolo.
+- Encontrado por el camino: un fixture que mentía con `as never` (el `money` viejo devolvía
+  `"₡undefined"` sin que nadie se enterara), una aserción hueca (`not.toContain` contra un texto
+  que la app ya no emitía, verde para siempre), y `PriceLabel` sin un solo test pese a pintar
+  dinero en cinco llamadas — ahora tiene 21.
+- **El censo inicial estaba mal y se dejó escrito por qué**: se contó por firma
+  (`export function money`) en vez de por símbolo, lo que dejaba fuera una copia local no
+  exportada, cuatro con formato estadounidense, `PriceLabel` y una decena de literales.
+
+## 2026-08-12 — 205 (pagar la cuenta por pagar del mensajero desde `/wallet/mensajeros`)
+- La pantalla enseñaba la deuda de cada mensajero y no ofrecía ningún camino para actuar sobre
+  ella. Ahora se registra el pago desde ahí, imputándolo a sus cierres pendientes (FIFO por
+  `solicitado_at`, parcial permitido, todo o nada en una transacción con N candados por cierre
+  en orden determinista), y cada fila enlaza al detalle de su cierre vía `?cierre=<uuid>`.
+- Requisitos cubiertos: R1..R58. Trazabilidad en `progress/impl_205_mapa.md`.
+- **R21 no se toca**: cada imputación escribe su pago con su `cierreId` y su candado. La primera
+  versión de la ficha decía que no se podía pagar desde aquí — era leer un `.strict()` que exige
+  `cierreId` y confundir «exige elegir o repartir cierres» con «no se puede».
+- Decisiones: clave de idempotencia acuñada **al abrir el diálogo** (derivarla por cierre está
+  roto: tras un intento con éxito el FIFO empieza en otro cierre, la clave no colisiona y se
+  pagaría dos veces); la ventana **encoge** y no se rellena si un cierre se cae bajo candado
+  (rellenar obligaría a bloquear fuera de orden); la previsualización es advertencia y no
+  reserva; el aviso de excluidos es un **conteo** agregado en la base, no una lista sin tope.
+- **Lo que destaparon las mutaciones** (88 del implementer, 18 del reviewer): saltarse una
+  imputación devolvía `ok` por menos dinero del comprometido; `buildService` sin el repositorio
+  del acto dejaba el reparto **sin su `UNIQUE`** —doble pago— en la ruta que de verdad se
+  ejecuta; y **siete fixtures donde dos valores coincidían** y hacían sobrevivir mutaciones, el
+  peor de ellos sobre la cifra que la pantalla propone como monto.
+- **Aplicar la migración en local destapó que su test solo pasaba mientras NO estuviera
+  aplicada**: habría estallado para todo el mundo justo después del despliegue. De paso apareció
+  que su DOWN corría con `public` en el `search_path`, así que su `DROP TABLE IF EXISTS` habría
+  resuelto contra la tabla real.
+- **El reviewer rechazó la primera vuelta**, y ningún hallazgo era de código: el spec describía
+  otra conducta que la implementada —error del leader, que encargó el cambio a conteo acotado a
+  «código y tests» sin mandar plegarlo al spec— y la tanda 7 no estaba hecha.
+- **Deuda dejada**: la pantalla **no se ha visto nunca** (la base local no tiene mensajeros con
+  cuenta por pagar); cubierta por 44 tests de componente, que el reviewer considera suficientes
+  para el código y no para dar la pantalla por vista. Fichas 206 (anulación agrupada de un
+  reparto, que `reparto_id` deja posible) y 207 (el censo de tablas cuenta prosa como JSX).
