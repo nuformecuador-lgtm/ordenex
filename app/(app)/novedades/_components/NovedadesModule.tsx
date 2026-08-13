@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 
-import { ContactoButtons } from "@/components/shared/ContactoButtons";
-import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { Pagination } from "@/components/shared/Pagination";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import { listarNovedadesAction } from "@/lib/actions/novedades";
 import { CAUSA_DEVOLUCION_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-devolucion-options";
+import { PosOrderCardDetalle } from "@/app/(app)/mis-asignaciones/_components/pos-card/PosOrderCardDetalle";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
+import { HabilitarNovedadModal } from "./HabilitarNovedadModal";
+import { NovedadAcciones } from "./NovedadAcciones";
+import { novedadAOrdenCard, SECCIONES_NOVEDAD } from "./novedad-a-orden-card";
 import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 
 // Feature 87 (T12, design §3.2) — modulo cliente de `/novedades`. Recibe TODO por props
@@ -21,6 +22,27 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 // cambiar de pagina re-fetch por Server Action `listarNovedadesAction({ page })` (lectura
 // interna, NO fetch a /api; el telefono es PII), patron `MiWalletModule` (R22). Lista vacia
 // -> estado vacio legible (R10).
+//
+// 2026-08-12 (pedido humano) — LA FILA YA NO SE PINTA AQUÍ. Cada novedad se muestra con la
+// MISMA card que las órdenes del mensajero en su vista de DETALLE (`PosOrderCardDetalle`),
+// y las acciones de esta pantalla —WhatsApp, Llamar, Reprogramar, y las dos de MAQUETA
+// "Habilitar" y "Devolver"— bajan como un solo nodo por su prop `acciones`
+// (`NovedadAcciones`). Lo que eso cambia y lo que no:
+//
+//  - NO cambia lo que se ve: guía (o su placeholder, R9), destinatario, causa en etiqueta ES
+//    (R7/R11) e intentos (feature 160/R18/R19) siguen en pantalla, en los slots que la card
+//    ya tenía. La CAUSA viaja por la prop `estado` —el badge de la card—, que acepta texto
+//    libre por diseño (`pos-estado`: «cae a las clases de En reparto si es un texto libre»).
+//  - NO cambia la estructura de la lista: sigue siendo `<ul>/<li>`, no un `DataTable`, que
+//    es lo que la feature 160 (R26) verificó contra este componente. La card es un
+//    `<article>` DENTRO de cada `<li>`.
+//  - SÍ cambia de dónde sale el markup: de aquí a un componente compartido. Un cambio de
+//    presentación en las cards del mensajero llega ahora también a esta pantalla, que es
+//    exactamente lo que se pidió (una sola card, no dos que se parecen).
+//
+// Los campos que la card pide y esta pantalla no tiene los resuelve `novedad-a-orden-card`,
+// junto con las secciones que hay que apagar para que no los pinte. Ese archivo explica la
+// regla; no se apaga ni se enciende una sección sin leerla.
 
 export interface NovedadesModuleProps {
   items: NovedadDTO[];
@@ -50,6 +72,36 @@ export function NovedadesModule({
   const [ordenAReprogramar, setOrdenAReprogramar] = useState<NovedadDTO | null>(
     null,
   );
+  // 2026-08-12: lo mismo para "Habilitar", que pide una nota antes de confirmar. Dos
+  // estados y no uno con discriminante: son dos modales distintos, y fundirlos obligaría a
+  // preguntar cuál está abierto en cada render para nada.
+  const [ordenAHabilitar, setOrdenAHabilitar] = useState<NovedadDTO | null>(null);
+
+  /**
+   * MAQUETA (2026-08-12): "Devolver" está en la fila pero todavía no hace nada — su
+   * comportamiento no está decidido y no existe en el backend (ver la cabecera de
+   * `NovedadAcciones`). Avisa por toast en vez de callar: un botón que no responde se lee
+   * como una app rota, y el usuario de esta pantalla es una tienda, no quien pidió la
+   * maqueta. El día que se cablee, este handler desaparece.
+   */
+  function avisarNoDisponible() {
+    toast.info("Esta acción todavía no está disponible.");
+  }
+
+  /**
+   * MAQUETA (2026-08-12): "Habilitar" SÍ abre su modal y SÍ exige la nota —esa parte es
+   * real y está probada—, pero al confirmar no hay transición que ejecutar todavía. La nota
+   * ya validada llega hasta aquí y muere en el toast.
+   *
+   * Se deja el parámetro `nota` a la vista, y no una firma sin argumentos, porque es el
+   * dato que la Server Action va a necesitar: cuando exista, el cuerpo de esta función es
+   * lo único que cambia.
+   */
+  function habilitarPendiente(nota: string) {
+    void nota;
+    setOrdenAHabilitar(null);
+    toast.info("Esta acción todavía no está disponible.");
+  }
 
   /** T3.1: tras reprogramar con éxito la orden sale de `devuelta` -> se quita de la lista. */
   function handleReprogramada(ordenId: string) {
@@ -102,47 +154,32 @@ export function NovedadesModule({
     <div className="flex flex-col gap-4">
       <ul aria-label="Órdenes en devolución" className="flex flex-col gap-3">
         {items.map((novedad) => (
-          <li
-            key={novedad.id}
-            className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium text-foreground">
-                Guía{" "}
-                {novedad.numGuia !== null ? (
-                  novedad.numGuia
-                ) : (
-                  <span className="text-muted-foreground">sin asignar</span>
-                )}
-              </p>
-              <p className="text-sm text-foreground">{novedad.destinatario}</p>
-              <p className="text-sm text-muted-foreground">
-                {causaLabel(novedad.causa)}
-              </p>
-              {/* Feature 160 (R18/R19/R26): esta pestaña es una lista de cards
-                  (<ul>/<li>), NO un `DataTable`, así que el conteo va como DATO
-                  ETIQUETADO con el mismo markup que sus líneas hermanas. Siempre
-                  visible, `0` incluido; sin umbral (R20). */}
-              <p className="text-sm text-muted-foreground">
-                <IntentosDato intentos={valorIntentos(novedad)} />
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ContactoButtons
-                telefono={novedad.telefonoDest}
-                nombre={novedad.destinatario}
-              />
-              {/* T3.1 (R1): acción "Reprogramar" junto a los botones de contacto. */}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setOrdenAReprogramar(novedad)}
-                aria-label={`Reprogramar la orden de ${novedad.destinatario}`}
-              >
-                Reprogramar
-              </Button>
-            </div>
+          <li key={novedad.id}>
+            <PosOrderCardDetalle
+              orden={novedadAOrdenCard(novedad)}
+              // `total` alimenta el "parada N de total" de la cabecera, que aquí no se
+              // pinta (`mostrarRuta={false}`). Se pasa el tamaño de la página porque es el
+              // dato honesto que esta pantalla tiene, no un cero de relleno.
+              total={items.length}
+              // El badge de la card lleva la CAUSA de devolución, que es la señal de esta
+              // pantalla (R7/R11). No hay estado de reparto que anunciar: todas las órdenes
+              // de la lista están devueltas, así que repetirlo por fila no diría nada.
+              estado={causaLabel(novedad.causa)}
+              // Sin `onGestionar`: de aquí no se gestiona nada, así que la card es de
+              // solo-visualización — no clickeable ni enfocable (ver `pos-seleccion`).
+              mostrarRuta={false}
+              secciones={SECCIONES_NOVEDAD}
+              // Las tres acciones de esta pantalla, como UN nodo (pedido humano). La card
+              // les hace sitio al pie, dentro de su borde punteado, y no sabe qué son.
+              acciones={
+                <NovedadAcciones
+                  novedad={novedad}
+                  onReprogramar={setOrdenAReprogramar}
+                  onHabilitar={setOrdenAHabilitar}
+                  onDevolver={avisarNoDisponible}
+                />
+              }
+            />
           </li>
         ))}
       </ul>
@@ -166,6 +203,20 @@ export function NovedadesModule({
             if (!open) setOrdenAReprogramar(null);
           }}
           onReprogramada={handleReprogramada}
+        />
+      ) : null}
+
+      {/* 2026-08-12: modal de "Habilitar" (nota obligatoria). Mismo montaje condicional y
+          misma `key` que el de reprogramar: la nota arranca vacía en cada apertura sin que
+          nadie tenga que limpiarla. */}
+      {ordenAHabilitar ? (
+        <HabilitarNovedadModal
+          key={ordenAHabilitar.id}
+          orden={ordenAHabilitar}
+          onOpenChange={(open) => {
+            if (!open) setOrdenAHabilitar(null);
+          }}
+          onConfirmar={habilitarPendiente}
         />
       ) : null}
     </div>
