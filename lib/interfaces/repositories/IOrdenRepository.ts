@@ -501,15 +501,50 @@ export interface BodegaBloqueoResult {
   mensajerosConCierreIds?: string[];
 }
 
-// Feature 87 (T2, design §2.1) — fila liviana de una orden en `devuelta` para la lista
-// de NOVEDADES. Solo los campos que consume el DTO (R9) + `createdAt` para el
-// reordenamiento por fecha de gestion (R21, fallback). NO expone `deletedAt` (el repo ya
-// filtra `deletedAt: null`, R4) ni relaciones pesadas.
+// Feature 87 (T2, design §2.1) — fila de una orden en `devuelta` para la lista de NOVEDADES.
+// Los campos que consume el DTO (R9) + `createdAt` para el reordenamiento por fecha de
+// gestion (R21, fallback). NO expone `deletedAt` (el repo ya filtra `deletedAt: null`, R4).
+//
+// 2026-08-13 (pedido humano): deja de ser una fila "liviana". `NovedadDTO` pasa a extender
+// `MiAsignacionDTO` porque `/novedades` pinta las MISMAS cards POS que el portal del
+// mensajero (ver la cabecera de `lib/types/novedad.ts`), asi que esta fila espeja a
+// `MiAsignacionRow` (`lib/interfaces/repositories/IGestionOrdenRepository.ts`): nombres de
+// catalogo YA RESUELTOS (nunca IDs) y decimales YA serializados a `number | null` con
+// `.toNumber()` (`montoCobrar` es `Decimal(12,2)?`; `latitud`/`longitud`, `Decimal(10,7)?`;
+// `peso`, `Decimal(10,3)?`). Ningun `Prisma.Decimal` cruza la frontera de capa.
+//
+// `createdAt` es lo UNICO que no viaja al DTO: lo consume el service para ordenar por
+// recencia (R12, fallback) y ahi muere — un `Date` no sobrevive al borde RSC.
 export interface NovedadOrdenRow {
   id: string;
   numGuia: number | null;
+  /** REAL de la orden (`num_remision`, NOT NULL). Que el front lo tape con la etiqueta «Guia N» (R9) es cosa suya. */
+  numRemision: string;
+  /** Proyectado de la relacion `estatus`, no hardcodeado: el predicado ya lo ancla a `devuelta`, pero el dato es el dato. */
+  estatusValue: string;
   destinatario: string;
   telefonoDest: string;
+  /** `orden.direccion` es NULLABLE (feature 15/R1): `null` = sin direccion, nunca `""`. */
+  direccion: string | null;
+  /** NOT NULL en el schema. */
+  producto: string;
+  /** `Decimal(10,3)?` NULLABLE (feature 15/R4: la carga masiva no trae peso) -> `.toNumber()` o `null`. */
+  peso: number | null;
+  /** `Decimal(12,2)?` NULLABLE -> `.toNumber()` o `null`. `null` = sin cobro, NUNCA `0`. */
+  montoCobrar: number | null;
+  /** Feature 91: geocodificacion de `direccion`, `Decimal(10,7)?` -> `.toNumber()` o `null` (aun sin geocodificar). */
+  latitud: number | null;
+  longitud: number | null;
+  /** Nota de la TIENDA (`orden.notas`, nullable). */
+  notas: string | null;
+  /** Tienda DUEÑA de la orden = la tienda que mira esta pantalla; no es PII de un tercero. */
+  tiendaNombre: string;
+  /** `zona_id`/`provincia_id`/`canton_id` son NOT NULL -> sus nombres siempre existen. */
+  zonaNombre: string;
+  provinciaNombre: string;
+  cantonNombre: string;
+  /** `distrito_id` es el UNICO FK geografico nullable -> `null` cuando la orden no lo tiene. */
+  distritoNombre: string | null;
   createdAt: Date;
 }
 

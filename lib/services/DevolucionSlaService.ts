@@ -106,15 +106,23 @@ export class DevolucionSlaService implements IDevolucionSlaService {
         }
 
         if (orden.causa === "not_found") {
-          // Q4: `contarIntentos` YA incluye la devolucion vigente (la orden reposa en `devuelta`).
-          // Feature 160 (D1/D2, R8): ademas de las devoluciones, ese conteo YA incluye las
-          // transiciones VIGENTES `en_reparto -> reprogramada` de familia `gestion` (la visita
-          // real del mensajero que no entrego y acordo fecha). NO incluye la reprogramacion de
-          // la TIENDA (`reprogramacion_tienda`), cuyo intento ya lo aporto la fila `devuelta`.
-          // Consecuencia aceptada y reafirmada por el humano: una orden con reprogramaciones
-          // alcanza el umbral ANTES, escala a `rechazada` antes y se le cobra el
-          // `cobroRechazado` (56) antes. Es dinero: no se relaja el criterio sin decision.
-          const intentos = await this.historial.contarIntentos(orden.ordenId); // R3
+          // Feature 215 (R15) — QUE cuenta este numero, con el criterio VIGENTE: los CIERRES
+          // APROBADOS DISTINTOS en los que la orden tuvo un resultado de gestion vigente
+          // `rechazada`, `devuelta` o `reprogramada`. Ya NO cuenta transiciones del historial:
+          // la devolucion o la reprogramacion del mensajero no suman por si solas en el instante
+          // de la gestion (R10/R11); suman cuando el admin APRUEBA el cierre que las agrupa.
+          //
+          // CONSECUENCIA DIRECCIONAL, declarada y aceptada: con el ancla en `aprobado` el conteo
+          // de casi toda orden BAJA respecto del criterio anterior, asi que el escalado se
+          // RETRASA. El riesgo de esta feature NO es cobrar de mas: es NO COBRAR. Una orden cuyo
+          // cierre queda `solicitado` sin atender, `vencido` sin re-solicitar o `rechazado` se
+          // queda en 0 indefinidamente, y este cron la libera a bodega una y otra vez sin
+          // escalar jamas -> el `cobroRechazado` (56) nunca se emite.
+          //
+          // Eso es la pregunta **Q5, ABIERTA**: no hay mitigacion implementada aqui ni en
+          // ninguna otra parte (las tres candidatas estan medidas en `design.md §7bis` y
+          // ninguna esta elegida). El servicio NO cambia de logica por ello; se declara.
+          const intentos = await this.historial.contarIntentos(orden.ordenId); // R15
           if (intentos >= umbral) {
             // R16: alcanzo el umbral -> escala a `rechazada`.
             const ok = await this.escalar(orden, estatusDevueltaId, estatusRechazadaId);

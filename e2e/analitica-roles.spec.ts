@@ -11,11 +11,12 @@ import { test, expect, type Page } from "@playwright/test";
  * aserción de este archivo lo prueba ni lo sustituye
  * (`specs/133-analitica-recortes-por-rol/requirements.md §0`, R20/R21).
  *
- * Recorrido de CUATRO roles (Q6, cerrada):
+ * Recorrido de CUATRO roles (Q6, cerrada; reajustado el 2026-08-12 con la salida del
+ * `mensajero`):
  *
- *  1. `adminTienda`, `adminSatelite` y `mensajero` entran a `/analitica` —la 133 les abre la
- *     ruta (R1)—, ven el TABLERO OPERATIVO con sus SEIS paneles (R11) y NO queda RASTRO de la
- *     región financiera (R6/R7): ni la región, ni su encabezado, ni una etiqueta de métrica
+ *  1. `adminTienda` y `adminSatelite` entran a `/analitica` —la 133 les abre la ruta (R1)—,
+ *     ven el TABLERO OPERATIVO con sus SEIS paneles (R11) y NO queda RASTRO de la región
+ *     financiera (R6/R7): ni la región, ni su encabezado, ni una etiqueta de métrica
  *     financiera, ni cifras de dinero, ni símbolo de moneda, ni un «sin movimientos» en su
  *     lugar, ni un enlace o botón que anuncie que la región existe (R10).
  *  2. `maestro` SI la ve. Es el CONTROL POSITIVO y no es decorado: sin él, el caso 1 podría
@@ -24,8 +25,13 @@ import { test, expect, type Page } from "@playwright/test";
  *     arriba es una ausencia CON SIGNIFICADO: esos mismos textos SI llegan al documento
  *     cuando el rol tiene acceso.
  *  3. Las FACETAS que la 133 recorta (R14/R15/R17): `adminTienda` sin «Tienda» ni
- *     «Mensajero», `adminSatelite` sin «Zona», `mensajero` sin «Mensajero»; y los CUATRO
- *     con «Rango», que no se le quita a nadie.
+ *     «Mensajero», `adminSatelite` sin «Zona»; y los TRES que entran con «Rango», que no se
+ *     le quita a nadie.
+ *  4. `mensajero` NO entra (decisión del humano, 2026-08-12): ni ve la entrada en el menú ni
+ *     alcanza la pantalla escribiendo la ruta a mano. El caso mide LAS DOS capas a la vez,
+ *     porque ocultar el enlace sin cerrar la ruta es el error fácil de cometer aquí. Ojo con
+ *     leerlo de más: el mensajero conserva su ALCANCE en el catálogo de la 135 (lo que vería
+ *     si entrara sigue declarado métrica a métrica); lo que pierde es la puerta.
  *
  * R27 — OJO CON LEER DE MAS EL CASO DE `adminTienda`: que no se le ofrezca el selector
  * «Mensajero» NO cierra el oráculo residual contra R39 de la 122 (hallazgo M-4 de
@@ -85,10 +91,10 @@ const MENSAJERO_EMAIL = "mensajero@example.com";
 /** Nombre accesible de la región que la 133 prohíbe a los roles acotados. */
 const REGION_FINANCIERA = "Tablero financiero";
 
-/** Nombre accesible de la región que los CINCO lectores SI ven. */
+/** Nombre accesible de la región que ven todos los que superan el gate. */
 const REGION_OPERATIVA = "Tablero operativo";
 
-/** Los SEIS paneles operativos: se pintan para los cinco roles (R11). */
+/** Los SEIS paneles operativos: se pintan para todo rol que entra (R11). */
 const PANELES_OPERATIVOS = [
   "Órdenes creadas",
   "Órdenes por estado",
@@ -119,11 +125,13 @@ const ETIQUETAS_FINANCIERAS = [
  */
 const SIMBOLOS_MONEDA = ["₡", "$", "€", "CRC", "USD"] as const;
 
-/** Los tres roles que la 133 deja entrar SIN dinero. */
+/**
+ * Los roles que entran SIN dinero. Eran tres (133); son DOS desde que el `mensajero` dejó
+ * de entrar (2026-08-12): su caso vive abajo, en el bloque de la puerta cerrada.
+ */
 const ROLES_ACOTADOS = [
   { rol: "adminTienda", email: ADMIN_TIENDA_EMAIL },
   { rol: "adminSatelite", email: ADMIN_SATELITE_EMAIL },
-  { rol: "mensajero", email: MENSAJERO_EMAIL },
 ] as const;
 
 /* -------------------------------------------------------------------------- */
@@ -270,14 +278,6 @@ test.describe("Analítica por rol — las facetas fijadas por el alcance no se o
     await expect(page.getByRole("button", { name: /^Zona:/ })).toHaveCount(0);
   });
 
-  test("`mensajero` no ve «Mensajero», y sí «Rango» (R14, R17)", async ({ page }) => {
-    await login(page, MENSAJERO_EMAIL, PASSWORD);
-    await irAAnalitica(page);
-
-    await expect(page.getByRole("combobox", { name: "Rango" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Mensajero:/ })).toHaveCount(0);
-  });
-
   test("`maestro` conserva «Rango» (R17) — el selector de rango no se le quita a nadie", async ({
     page,
   }) => {
@@ -285,5 +285,34 @@ test.describe("Analítica por rol — las facetas fijadas por el alcance no se o
     await irAAnalitica(page);
 
     await expect(page.getByRole("combobox", { name: "Rango" })).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 4 — el mensajero: puerta cerrada en las DOS capas (2026-08-12)              */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Analítica — el mensajero no la ve ni la alcanza", () => {
+  test("`mensajero` no tiene entrada en el menú y escribir /analitica no le abre la pantalla", async ({
+    page,
+  }) => {
+    await login(page, MENSAJERO_EMAIL, PASSWORD);
+
+    // CAPA 1 — el menú no la ofrece. Con `exact: true` para no cazar de rebote otra
+    // etiqueta que la contenga.
+    await expect(
+      page.getByRole("link", { name: "Analítica", exact: true }),
+    ).toHaveCount(0);
+
+    // ANTI-VACÍO: la sesión está viva y el menú SÍ está pintado. Sin esto, un login roto
+    // haría pasar todo lo de arriba y lo de abajo por «no hay página».
+    await expect(page.getByRole("link", { name: /^Reparto$/ }).first()).toBeVisible();
+
+    // CAPA 2 — la ruta a mano tampoco. Ocultar el enlace sin cerrar el gate es
+    // exactamente la mutación que este caso mata.
+    await page.goto("/analitica");
+    await expect(page.getByRole("heading", { name: "Analítica" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: REGION_OPERATIVA })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: REGION_FINANCIERA })).toHaveCount(0);
   });
 });

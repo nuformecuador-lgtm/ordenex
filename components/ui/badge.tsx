@@ -12,8 +12,30 @@ const badgeVariants = cva(
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
         secondary:
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
-        destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+        // Feature 210 — `destructive` pintaba `text-destructive` sobre `bg-destructive/10`: el
+        // MISMO color como texto y como fondo al 10%. Medido: 3.29:1 en claro y 4.43:1 en oscuro,
+        // cuando AA pide 4.5. No tenía arreglo por token porque le faltaba la mitad del par: a
+        // diferencia de las semánticas de abajo, `--destructive` no tiene un `-strong`.
+        //
+        // Así que la variante APUNTA AL PAR DE `danger`, que es la misma señal con la forma
+        // correcta del repo (5.30 en claro, 5.20 en oscuro). No se le inventa un token nuevo.
+        //
+        // ── POR QUÉ SIGUE EXISTIENDO EL NOMBRE, y no se retiró
+        // El primer intento la borró y pasó a `danger` sus dos consumidores... que eran los DOS
+        // ÚNICOS que un censo textual encontraba. `typecheck` destapó NUEVE más que no escriben
+        // el literal en el JSX: lo calculan desde un mapa de estados (`CuentasPorPagarTable`,
+        // `SaldosTiendasTable`, `DesgloseMovimientosTienda`, `DesglosePagosMensajero`,
+        // `SaldoTiendaCard`, `CuentaPorPagarCard`, `DesgloseTiendaLedger`, …). Corregir las clases
+        // arregla los ONCE de una vez; retirar el nombre obligaba a tocar nueve archivos más para
+        // el mismo resultado visual.
+        //
+        // DEUDA VIVA, dicha y no escondida: `destructive` y `danger` quedan como dos nombres del
+        // mismo aspecto, que es la duplicación que la 188/R16 persigue. Unificarlos es mecánico
+        // (11 sitios) y no entra aquí: esta ficha es de contraste, no de renombrado.
+        //
+        // `--destructive` sigue vivo y sin tocar para Button, Alert y los `aria-invalid` de
+        // arriba, que no son texto sobre un tinte de sí mismos.
+        destructive: "bg-danger-soft text-danger-strong dark:bg-danger/15",
         // Semánticos: fondo suave (-soft) + texto contrast-safe (-strong, >=4.5:1).
         // En dark el -soft es demasiado claro, se usa la técnica soft-badge base/15;
         // el texto -strong ya trae su variante dark vía token.

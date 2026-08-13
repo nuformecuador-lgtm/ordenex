@@ -22,23 +22,24 @@ export interface IOrdenHistorialService {
    */
   obtenerHistorial(ordenId: string, actor: Actor): Promise<ObtenerHistorialServiceResult>;
   /**
-   * R24/R25 + feature 160/R1/R4: numero de intentos de entrega DERIVADO del historial, sin
-   * columna materializada. Es el PUNTO UNICO del criterio (160/R4): lo consumen el cron SLA
-   * (99, `DevolucionSlaService`), el drawer de historial (47, `obtenerHistorial`) y —via
-   * `contarIntentosEnLote`— todas las superficies que muestran la orden.
+   * Feature 215 (R1/R3/R6) — numero de intentos de entrega DERIVADO, sin columna materializada.
+   * Es el PUNTO UNICO del criterio (R6): lo consumen el cron SLA (99, `DevolucionSlaService`),
+   * el drawer de historial (47, `obtenerHistorial`) y —via `contarIntentosEnLote`— todas las
+   * superficies que muestran la orden.
    *
-   * Cuenta una transicion VIGENTE por cada (a) destino `devuelta` o (b) destino `reprogramada`
-   * con familia de origen `gestion`. La FIRMA no cambio con la 160; lo que cambio es el NUMERO
-   * que devuelve, y eso gobierna dinero real (`rechazada` -> `cobroRechazado`, 56).
+   * Cuenta los CIERRES APROBADOS DISTINTOS en los que la orden tuvo un resultado de gestion
+   * VIGENTE de los que cuentan (`rechazada`/`devuelta`/`reprogramada`). Ya NO cuenta
+   * transiciones del historial. La FIRMA no cambio con la 215; lo que cambio es el NUMERO que
+   * devuelve, y eso gobierna dinero real (`rechazada` -> `cobroRechazado`, 56).
    */
   contarIntentos(ordenId: string): Promise<number>;
   /**
-   * Feature 160/R12/R13/R14 — el MISMO conteo para un LOTE de ordenes, resuelto con UNA sola
-   * consulta al historial (mas la lectura del catalogo, que es por LLAMADA y no por orden).
+   * Feature 215 (R4/R7/R8) — el MISMO conteo para un LOTE de ordenes, resuelto con UNA sola
+   * consulta (ya no hace falta leer el catalogo de estados: el criterio se expresa sobre enums).
    * Lo consumen los servicios de lectura que alimentan las superficies paginadas.
    *
-   * Las ordenes sin intentos NO vienen en el Map; el llamador emite `?? 0` (R14: el `0` es un
-   * valor conocido, no un dato ausente). `ordenIds` vacio -> Map vacio sin consultar (R13).
+   * Las ordenes sin intentos NO vienen en el Map; el llamador emite `?? 0` (R8: el `0` es un
+   * valor conocido, no un dato ausente). `ordenIds` vacio -> Map vacio sin consultar (R7).
    */
   contarIntentosEnLote(ordenIds: string[]): Promise<Map<string, number>>;
 }
