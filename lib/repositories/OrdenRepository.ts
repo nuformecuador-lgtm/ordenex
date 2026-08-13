@@ -2850,8 +2850,16 @@ export class OrdenRepository implements IOrdenRepository {
   /**
    * Feature 99/R7/R8/R9: una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado central
    * que `countDevueltasByTienda` (R8), ordenada por `Orden.createdAt` desc (fallback documentado;
-   * el service reordena por la fecha de la ultima gestion `devuelta` vigente, R9). Select minimo:
-   * solo lo que consume el DTO + `createdAt`.
+   * el service reordena por la fecha de la ultima gestion `devuelta` vigente, R9). El `select`
+   * proyecta lo que consume el DTO + `createdAt`.
+   *
+   * 2026-08-13 (pedido humano): el `select` se ancha para cubrir TODO `NovedadOrdenRow`, que
+   * desde hoy espeja a `MiAsignacionRow` (`/novedades` pinta las mismas cards POS que el portal
+   * del mensajero; ver la cabecera de `lib/types/novedad.ts`). Sigue siendo UNA sola query sobre
+   * las MISMAS filas: lo que cambia son las columnas y los cuatro joins de catalogo, no el
+   * universo. Los nombres se resuelven aqui (el DTO nunca ve IDs de catalogo) y los tres
+   * decimales se convierten con `.toNumber()` —nunca `parseFloat`— para que ningun
+   * `Prisma.Decimal` cruce al service ni al borde RSC.
    */
   async findDevueltasByTienda(
     tiendaId: string,
@@ -2865,12 +2873,50 @@ export class OrdenRepository implements IOrdenRepository {
       select: {
         id: true,
         numGuia: true,
+        numRemision: true,
         destinatario: true,
         telefonoDest: true,
+        direccion: true,
+        producto: true,
+        peso: true,
+        montoCobrar: true,
+        latitud: true,
+        longitud: true,
+        notas: true,
         createdAt: true,
+        // Catalogos: se traen los NOMBRES, no los IDs (mismo molde que `WITH_ASIGNACION` en
+        // `GestionOrdenRepository`). `distrito` es el unico opcional -> `?.nombre ?? null`.
+        estatus: { select: { value: true } },
+        tienda: { select: { nombre: true } },
+        zona: { select: { nombre: true } },
+        provincia: { select: { nombre: true } },
+        canton: { select: { nombre: true } },
+        distrito: { select: { nombre: true } },
       },
     });
-    return rows;
+    return rows.map((row) => ({
+      id: row.id,
+      numGuia: row.numGuia,
+      numRemision: row.numRemision,
+      estatusValue: row.estatus.value,
+      destinatario: row.destinatario,
+      telefonoDest: row.telefonoDest,
+      direccion: row.direccion,
+      producto: row.producto,
+      // Decimal -> number|null con guarda de null. Una instancia `Decimal` es SIEMPRE truthy,
+      // incluida la de valor 0, asi que un `0.00` NO se pierde: solo `null` cae a `null`.
+      peso: row.peso ? row.peso.toNumber() : null,
+      montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+      latitud: row.latitud ? row.latitud.toNumber() : null,
+      longitud: row.longitud ? row.longitud.toNumber() : null,
+      notas: row.notas,
+      tiendaNombre: row.tienda.nombre,
+      zonaNombre: row.zona.nombre,
+      provinciaNombre: row.provincia.nombre,
+      cantonNombre: row.canton.nombre,
+      distritoNombre: row.distrito?.nombre ?? null,
+      createdAt: row.createdAt,
+    }));
   }
 
   /**
