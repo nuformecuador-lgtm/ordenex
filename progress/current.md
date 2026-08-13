@@ -9,6 +9,48 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🟢 2026-08-13 — feature **212** (antes 208): pago múltiple por entrega, APROBADA y en PR
+
+Una entrega cobrada mitad en efectivo y mitad por transferencia no se podía registrar sin mentir
+en los totales del cierre. Nace `gestion_orden_pago` (0..N líneas `metodo`+`monto`, único por
+`(gestion_id, metodo)`); `monto_recibido` sobrevive como TOTAL snapshot con la invariante
+`SUM(líneas) = monto_recibido` en el borde y revalidada con `Prisma.Decimal` en el servicio.
+33 requisitos EARS, mapa `R → test` 33/33, `./init.sh` completo verde (1081 archivos / 13579
+tests, 432 s, cero `unhandled errors`). Partida en **212** (backend, este PR), **213** (frontend:
+captura y presentación) y **214** (retirar la forma escalar, no antes de que la 213 esté
+desplegada).
+
+**Por qué los tests son de mutación y no de humo:** `cierre_dia.total_efectivo` es la **E** del
+`min(P, E)` del pago al mensajero (44). Un desglose mal sumado no da un número feo en pantalla,
+**le paga de menos o de más a una persona**. El reviewer añadió una mutación propia —intercambiar
+los baldes `SINPE` ↔ `transferencia`, que *no altera el total general* ni la invariante R28— y dio
+9 rojos. No hay agujero ahí.
+
+**Rechazada en la primera revisión, con razón:** la migración estaba cubierta solo por regex sobre
+el texto del SQL. Ahora el `migration.sql` y el `down.sql` **reales** corren sentencia a sentencia
+en un esquema temporal dentro de una transacción revertida (patrón de la 205,
+`tests/integration/db/_postgres-real.ts:127`). **Regla para toda migración: no aplicarla no es
+excusa para no ejecutarla.**
+
+### Tres cosas que costaron y conviene no re-descubrir
+
+1. **EL ID SE COMPRUEBA CONTRA `dev` JUSTO ANTES DE PUBLICAR, no al dar de alta la ficha.** Esta
+   ficha se renumeró **dos veces** (200→208→212). Entre el alta y el PR pasan horas y varias
+   sesiones. Se decidió primero renumerar las fichas ajenas, pero al ir a ejecutarlo la 208 de
+   `dev` ya estaba `done` y **mergeada**: renumerar una ficha publicada es peor que renumerar una
+   que aún no ha salido, así que cedió la nuestra. Coste: 107 ocurrencias en 75 archivos.
+2. **Una suite saturada no da veredicto, ni verde ni rojo.** Con otra sesión corriendo su suite en
+   el mismo checkout: 928 s en vez de 432, diez `Timeout waiting for worker`, y **siete archivos
+   omitidos** (1071 de 1078). Los 3 rojos de esa corrida pasaron en aislado —70 tests en 37 s—.
+   Comparar SIEMPRE el total de archivos antes de creerse el conteo.
+3. **`init.sh` pipeado se traga su código de salida.** `./init.sh | tail -40` devuelve el exit de
+   `tail`: una corrida fallida se reportó como «exit 0». Redirigir a fichero y leer `$?` aparte.
+
+**Convivencia:** otra sesión commiteó su analítica y sus novedades **encima de la rama de esta
+feature**. No se perdió nada: el PR sale de una rama limpia con solo los 64 archivos propios. Sin
+`jq` instalado, los pasos 3 y 4 de `init.sh` se omiten con `warn` y el `init OK` **no los cubre**.
+
+
 ## 🏁 CIERRE DE JORNADA 2026-08-12/13 — **EMPIEZA A LEER POR AQUÍ**
 
 Todo lo de esta jornada está **mergeado en `dev`**. No queda nada a medias ni ningún PR abierto.

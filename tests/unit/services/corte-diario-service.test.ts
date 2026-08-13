@@ -14,6 +14,7 @@ import type {
   ITarifaZonaMensajeroRepository,
   PagoTarifa,
 } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 
 // Feature 41/C3 (R6/R7/R9/R10/P2 + R4) — logica del corte diario con dobles (sin DB).
 // Crea un `vencido` por mensajero que "debia cerrar", omite el sin zona (P2), no duplica
@@ -23,7 +24,11 @@ const TARIFA: PagoTarifa = { cobroEntregado: "5.00", cobroRechazado: "3.00" };
 const ZONA_CENTRAL = "z-central";
 
 function gestion(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
-  return {
+  // Feature 212/T9: el desglose es OBLIGATORIO en la fila. Por defecto se deriva del par
+  // escalar (UNA linea, igual que el backfill), asi que los casos previos no cambian; un
+  // caso que quiera un cobro MIXTO pasa sus propias lineas en `overrides.pagos`.
+  const { pagos, ...resto } = overrides;
+  const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
     gestionId: "g1",
     ordenId: "o1",
     numGuia: 1,
@@ -49,8 +54,9 @@ function gestion(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGest
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
     indemnizacion: null,
-    ...overrides,
+    ...resto,
   };
+  return conPagos(fila, pagos);
 }
 
 // Feature 109 (T1.3): ids del catalogo que el service resuelve UNA vez por corrida para la

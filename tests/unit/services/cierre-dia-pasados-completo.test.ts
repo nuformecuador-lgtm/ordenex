@@ -10,6 +10,7 @@ import type { ITarifaZonaMensajeroRepository } from "@/lib/interfaces/repositori
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { conPagos } from "@/tests/fixtures/cierre-pagos";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { descargaConfig } from "@/lib/config/descarga";
 import { listarCierresPasadosSchema } from "@/lib/types/cierre";
@@ -101,7 +102,8 @@ function porSolicitadoDesc(a: FilaConDueno, b: FilaConDueno): number {
  * un adorno (la anti-vacuidad del caso R9).
  */
 function gestion(n: number): CierreGestionPendienteRow {
-  return {
+  // Feature 212/T9: `pagos` es obligatorio; `conPagos` lo deriva del par escalar (UNA linea).
+  return conPagos({
     gestionId: `g-${n}`,
     ordenId: `o-${n}`,
     numGuia: n,
@@ -125,7 +127,7 @@ function gestion(n: number): CierreGestionPendienteRow {
     esRechazoSla: false,
     causaIncidente: null,
     indemnizacion: null,
-  };
+  });
 }
 
 const GESTIONES_DEL_DIA: CierreGestionPendienteRow[] = [gestion(1), gestion(2), gestion(3)];

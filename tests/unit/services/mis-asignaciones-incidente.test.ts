@@ -418,6 +418,7 @@ describe("Feature 158 · R35 — los cuatro resultados previos no cambian", () =
         resultado: "entregada",
         montoRecibido: 100,
         metodoPago: "efectivo",
+        pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
         evidencias: [{ contentType: "image/jpeg", bytes: new Uint8Array([1]) }],
       },
       MENSAJERO,
