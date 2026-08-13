@@ -101,8 +101,25 @@ describe("R23 — `LiquidacionService` NO recibe el repositorio de la caja", () 
 
     // Y la contraprueba de QUE es la sexta, leida del propio constructor: el nombre del tipo
     // esta ahi, asi que colar un repositorio de caja en esa posicion no pasaria por aqui.
+    //
+    // El corte arranca en la CLASE, no en el primer `constructor(` del archivo: por delante hay
+    // CUATRO clases de error con el suyo, asi que anclar en el primero empezaba en la de arriba
+    // del todo y se tragaba 96 lineas ajenas (109 en vez de 13). Medido: con ese corte, renombrar
+    // el sexto parametro Y dejar el texto `repartoRepo: ILiquidacionRepartoRepository` en el
+    // constructor de una de esas clases de error dejaba este caso en VERDE. Mismo patron y misma
+    // razon que `tests/unit/config/reparto-mensajero-config.test.ts`.
     const codigo = codigoSinComentarios(FUENTE_SERVICIO);
-    const constructor = codigo.slice(codigo.indexOf("constructor("), codigo.indexOf(") {}"));
+    const clase = codigo.slice(codigo.indexOf("export class LiquidacionService"));
+    const abre = clase.indexOf("constructor(");
+    const constructor = clase.slice(abre, clase.indexOf(") {}", abre));
+
+    // Autocomprobaciones del CORTE: sin ellas, un ancla que no encuentra nada dejaria las dos
+    // aserciones de abajo pasando sobre la cadena vacia, que es un verde que no comprueba nada.
+    expect(codigo).toContain("export class LiquidacionService");
+    expect(abre).toBeGreaterThan(-1);
+    expect(constructor).toContain("private readonly pagoRepo");
+    expect(constructor).not.toContain("class ");
+
     expect(constructor).toMatch(/repartoRepo: ILiquidacionRepartoRepository/);
     expect(constructor).toMatch(/caja: ICajaPagoTiendaFeedService/);
   });

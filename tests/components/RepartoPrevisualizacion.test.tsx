@@ -280,8 +280,9 @@ describe("R56/R37 — los DOS avisos de deuda son dos, y se distinguen", () => {
   it("con deuda no imputable lo dice, y sin ella no lo dice", async () => {
     // Cada mitad FIJA los dos interruptores, no solo el suyo: heredar el otro del fixture es lo
     // que dejaba pasar una confusión entre los dos avisos.
-    // Primera mitad: los cuatro cierres del mensajero caben en la ventana (sin recorte) y suman
-    // ₡12.400 de los ₡14.900 que se le deben; los ₡2.500 restantes no cuelgan de ninguno.
+    // Primera mitad: los tres cierres del mensajero caben en la ventana (`enVentana: 3`,
+    // `fuera: 0`, sin recorte) y suman ₡12.400 —4.000 + 5.000 + 3.400— de los ₡14.900 que se
+    // le deben; los ₡2.500 restantes no cuelgan de ninguno.
     previsualizarMock.mockResolvedValue({
       status: "ok",
       previsualizacion: previsualizacion({
