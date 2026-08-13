@@ -15,25 +15,27 @@ import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHis
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO } from "@/lib/types/orden";
 import {
-  prismaHistorialSobreFilas,
-  type FilaHistorialFake,
+  prismaGestionSobreFilas,
+  type FilaGestionFake,
 } from "@/tests/fixtures/intentos-entrega";
 
-// Feature 160 (R4) — CRITERIO UNICO: el cron SLA (99), el drawer de historial (47) y el conteo
+// Feature 213 (R6) — CRITERIO UNICO: el cron SLA (99), el drawer de historial (47) y el conteo
 // EN LOTE de las superficies tienen que producir EL MISMO numero para la misma orden.
 //
 // Este test NO mockea el conteo: monta el repositorio REAL sobre un doble de Prisma que evalua
-// el predicado contra filas de historial de ejemplo. Si alguien introdujera una segunda
-// definicion de "intento vigente" —una para la UI y otra para el dinero—, aqui se ve.
+// el predicado contra filas de `gestion_orden` de ejemplo. Si alguien introdujera una segunda
+// definicion de "intento" —una para la UI y otra para el dinero—, aqui se ve.
+//
+// Lo que cambio con la 213: los escenarios se expresan en clave de CIERRES. El intento ya no se
+// gana al registrar la gestion, se gana cuando el admin APRUEBA el cierre que la agrupa.
 
 const NOW = new Date("2026-07-20T12:00:00.000Z");
 const HORA = 60 * 60 * 1000;
 
 const ID_DEVUELTA = "os-devuelta";
-const ID_REPROGRAMADA = "os-reprogramada";
 const ESTATUS: Record<string, string> = {
   devuelta: ID_DEVUELTA,
-  reprogramada: ID_REPROGRAMADA,
+  reprogramada: "os-reprogramada",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
   rechazada: "os-rechazada",
@@ -41,32 +43,24 @@ const ESTATUS: Record<string, string> = {
 
 const ORDEN = "o1";
 
-// --- Filas de historial de la orden, una por arista relevante del mapa de la 140 ------------
+// --- Filas de `gestion_orden` de la orden ----------------------------------------------------
 
-/** #14 `en_reparto -> devuelta` via `gestion`: la devolucion del mensajero. */
-const devuelta = (g: string): FilaHistorialFake => ({
-  ordenId: ORDEN,
-  estatusDestinoId: ID_DEVUELTA,
-  origenTipo: "gestion",
-  gestionOrdenId: g,
-  gestion: { anuladaAt: null },
-});
-/** #13 `en_reparto -> reprogramada` via `gestion`: el mensajero fue y no entrego. VISITA real. */
-const reprogramadaMensajero = (g: string): FilaHistorialFake => ({
-  ordenId: ORDEN,
-  estatusDestinoId: ID_REPROGRAMADA,
-  origenTipo: "gestion",
-  gestionOrdenId: g,
-  gestion: { anuladaAt: null },
-});
-/** #22 `devuelta -> reprogramada` via `reprogramacion_tienda`: tramite de escritorio. */
-const reprogramadaTienda = (g: string): FilaHistorialFake => ({
-  ordenId: ORDEN,
-  estatusDestinoId: ID_REPROGRAMADA,
-  origenTipo: "reprogramacion_tienda",
-  gestionOrdenId: g,
-  gestion: { anuladaAt: null },
-});
+/** Gestion contable de la orden, en el cierre `cierreId` con estado `cierreEstado`. */
+function gestion(
+  resultado: string,
+  cierreId: string | null,
+  cierreEstado: string | null = "aprobado",
+  over: Partial<FilaGestionFake> = {},
+): FilaGestionFake {
+  return {
+    ordenId: ORDEN,
+    resultado,
+    anuladaAt: null,
+    cierreId,
+    cierreEstado,
+    ...over,
+  };
+}
 
 // --- Wiring: un SOLO OrdenHistorialService sobre el repositorio real ------------------------
 
@@ -102,8 +96,8 @@ function ordenRepoFake(): Pick<
   };
 }
 
-function montar(filas: FilaHistorialFake[]) {
-  const prisma = prismaHistorialSobreFilas(filas);
+function montar(filas: FilaGestionFake[]) {
+  const prisma = prismaGestionSobreFilas(filas);
   const ordenRepo = ordenRepoFake();
   const historialRepo = new OrdenHistorialRepository(prisma as unknown as PrismaClient);
   const service = new OrdenHistorialService(
@@ -143,20 +137,37 @@ const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
 // --- Los tests -----------------------------------------------------------------------------
 
-describe("R4 — el cron SLA y el drawer ven EL MISMO numero", () => {
+describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
   it.each([
-    { caso: "solo devoluciones", filas: [devuelta("g1"), devuelta("g2")], esperado: 2 },
     {
-      caso: "devolucion + 2 reprogramaciones del mensajero (#13)",
-      filas: [devuelta("g1"), reprogramadaMensajero("g2"), reprogramadaMensajero("g3")],
+      caso: "2 cierres APROBADOS con `devuelta`",
+      filas: [gestion("devuelta", "c1"), gestion("devuelta", "c2")],
+      esperado: 2,
+    },
+    {
+      caso: "1 `devuelta` + 2 `reprogramada` en 3 cierres aprobados",
+      filas: [
+        gestion("devuelta", "c1"),
+        gestion("reprogramada", "c2"),
+        gestion("reprogramada", "c3"),
+      ],
       esperado: 3,
     },
     {
-      caso: "devolucion + reprogramacion de la TIENDA (#22): no hay doble conteo",
-      filas: [devuelta("g1"), reprogramadaTienda("g2")],
+      caso: "las mismas 3 gestiones con los cierres en `solicitado`",
+      filas: [
+        gestion("devuelta", "c1", "solicitado"),
+        gestion("reprogramada", "c2", "solicitado"),
+        gestion("reprogramada", "c3", "solicitado"),
+      ],
+      esperado: 0,
+    },
+    {
+      caso: "R29: 2 gestiones vigentes en el MISMO cierre aprobado",
+      filas: [gestion("devuelta", "c1"), gestion("reprogramada", "c1")],
       esperado: 1,
     },
-    { caso: "orden sin historial contable", filas: [], esperado: 0 },
+    { caso: "orden sin gestiones", filas: [], esperado: 0 },
   ])("$caso -> $esperado, identico en drawer, cron y lote", async ({ filas, esperado }) => {
     const { service } = montar(filas);
 
@@ -167,23 +178,23 @@ describe("R4 — el cron SLA y el drawer ven EL MISMO numero", () => {
     // (2) el numero que consume el cron SLA (feature 99) — el mismo metodo, el mismo criterio
     const delCron = await service.contarIntentos(ORDEN);
 
-    // (3) el conteo EN LOTE que alimenta las superficies (feature 160)
+    // (3) el conteo EN LOTE que alimenta las superficies
     const lote = await service.contarIntentosEnLote([ORDEN]);
 
     expect(drawer.intentos).toBe(esperado);
     expect(delCron).toBe(esperado);
-    expect(lote.get(ORDEN) ?? 0).toBe(esperado); // R14: sin filas -> 0, no ausencia
+    expect(lote.get(ORDEN) ?? 0).toBe(esperado); // R8: sin filas -> 0, no ausencia
     // La afirmacion que importa: los tres son EL MISMO numero.
     expect(new Set([drawer.intentos, delCron, lote.get(ORDEN) ?? 0]).size).toBe(1);
   });
 
-  // El desenlace de dinero, extremo a extremo: mismo historial -> el drawer muestra 3 y el cron
-  // escala a `rechazada` (que es lo que dispara `cobroRechazado` de la 56).
-  it("160/R8: con 2 reprogramaciones del mensajero + 1 devuelta, el drawer muestra 3 y el cron ESCALA", async () => {
+  // El desenlace de dinero, extremo a extremo: 3 cierres APROBADOS con resultado contable ->
+  // el drawer muestra 3 y el cron ESCALA a `rechazada` (lo que dispara `cobroRechazado`, 56).
+  it("R15: 1 devuelta + 2 reprogramadas en 3 cierres APROBADOS -> drawer 3 y el cron ESCALA", async () => {
     const { service, ordenRepo } = montar([
-      devuelta("g1"),
-      reprogramadaMensajero("g2"),
-      reprogramadaMensajero("g3"),
+      gestion("devuelta", "c1"),
+      gestion("reprogramada", "c2"),
+      gestion("reprogramada", "c3"),
     ]);
 
     const drawer = await service.obtenerHistorial(ORDEN, MAESTRO);
@@ -198,19 +209,27 @@ describe("R4 — el cron SLA y el drawer ven EL MISMO numero", () => {
     expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  // El contrapunto: la reprogramacion de la TIENDA no cuenta, asi que la MISMA orden con una
-  // devolucion y dos reprogramaciones de escritorio NO llega al umbral y se libera. Si esto
-  // fallara, se le estaria cobrando un rechazo a la tienda por un tramite suyo.
-  it("160/R2: 1 devuelta + 2 reprogramaciones de la TIENDA -> el drawer muestra 1 y el cron LIBERA", async () => {
+  // ⛔ Q5, ABIERTA Y SIN MITIGACION — DOCUMENTADO A PROPOSITO, NO TAPADO.
+  //
+  // Las MISMAS tres gestiones, pero con sus cierres en `solicitado`: el conteo es 0 y el cron
+  // LIBERA la orden a bodega. Si esos cierres nunca llegan a `aprobado` —el admin no los
+  // resuelve, el mensajero se desvincula, el `vencido` no se re-solicita— la orden se queda en
+  // 0 PARA SIEMPRE: sale, se devuelve, el cron la libera, y otra vez, en bucle operativo. Nunca
+  // escala, nunca se rechaza y el `cobroRechazado` (56) NUNCA se emite.
+  //
+  // Este test AFIRMA ese comportamiento porque es el que la feature tiene hoy, no porque sea
+  // deseable. Las tres mitigaciones posibles estan medidas en `design.md §7bis` (M1/M2/M3) y
+  // NINGUNA se implementa: Q5 sigue abierta y es decision del humano.
+  it("Q5 (ABIERTA): con los cierres en `solicitado` el conteo es 0 y el cron LIBERA en bucle", async () => {
     const { service, ordenRepo } = montar([
-      devuelta("g1"),
-      reprogramadaTienda("g2"),
-      reprogramadaTienda("g3"),
+      gestion("devuelta", "c1", "solicitado"),
+      gestion("reprogramada", "c2", "solicitado"),
+      gestion("reprogramada", "c3", "solicitado"),
     ]);
 
     const drawer = await service.obtenerHistorial(ORDEN, MAESTRO);
     if (drawer.status !== "ok") throw new Error("esperaba ok");
-    expect(drawer.intentos).toBe(1);
+    expect(drawer.intentos).toBe(0);
 
     const { repo, svc } = cron(service, ordenRepo);
     const res = await svc.ejecutar(NOW);
@@ -219,17 +238,13 @@ describe("R4 — el cron SLA y el drawer ven EL MISMO numero", () => {
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  // 160/R5: la vigencia aplica a las DOS ramas. Anular las gestiones de reprogramacion baja el
-  // conteo y devuelve el desenlace a "liberar" — sin tocar el historial (67/R23).
-  it("160/R5: con las reprogramaciones del mensajero ANULADAS, drawer y cron bajan a 1 y LIBERA", async () => {
-    const anulada = (f: FilaHistorialFake): FilaHistorialFake => ({
-      ...f,
-      gestion: { anuladaAt: new Date("2026-07-19T10:00:00.000Z") },
-    });
+  // R29 (D9): el grano es la ORDEN dentro del cierre. Dos gestiones vigentes contables en el
+  // MISMO cierre aprobado suman 1. Si sumaran 2, el cron escalaria antes de tiempo y se cobraria
+  // el rechazo a la tienda de mas.
+  it("R29: 2 gestiones vigentes en el MISMO cierre aprobado -> 1, y el cron LIBERA", async () => {
     const { service, ordenRepo } = montar([
-      devuelta("g1"),
-      anulada(reprogramadaMensajero("g2")),
-      anulada(reprogramadaMensajero("g3")),
+      gestion("devuelta", "c1"),
+      gestion("reprogramada", "c1"),
     ]);
 
     const drawer = await service.obtenerHistorial(ORDEN, MAESTRO);
@@ -243,23 +258,23 @@ describe("R4 — el cron SLA y el drawer ven EL MISMO numero", () => {
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  // R12: el lote no es una comodidad, es un requisito. Con N ordenes se emite UNA consulta.
-  it("R12: el lote de N ordenes emite UNA sola consulta al historial", async () => {
-    const otras: FilaHistorialFake[] = [
-      { ...devuelta("g1"), ordenId: "o2" },
-      { ...reprogramadaMensajero("g2"), ordenId: "o3" },
-      { ...reprogramadaTienda("g3"), ordenId: "o4" },
+  // R7: el lote no es una comodidad, es un requisito. Con N ordenes se emite UNA consulta.
+  it("R7: el lote de N ordenes emite UNA sola consulta", async () => {
+    const otras: FilaGestionFake[] = [
+      { ...gestion("devuelta", "c1"), ordenId: "o2" },
+      { ...gestion("reprogramada", "c2"), ordenId: "o3" },
+      { ...gestion("entregada", "c3"), ordenId: "o4" },
     ];
-    const { service, prisma } = montar([devuelta("g0"), ...otras]);
+    const { service, prisma } = montar([gestion("devuelta", "c0"), ...otras]);
 
     const mapa = await service.contarIntentosEnLote([ORDEN, "o2", "o3", "o4", "o5"]);
 
-    expect(prisma.ordenHistorialEstado.groupBy).toHaveBeenCalledTimes(1);
-    expect(prisma.ordenHistorialEstado.count).not.toHaveBeenCalled();
+    expect(prisma.gestionOrden.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.gestionOrden.count).not.toHaveBeenCalled();
     expect(mapa.get(ORDEN)).toBe(1);
     expect(mapa.get("o2")).toBe(1);
-    expect(mapa.get("o3")).toBe(1); // #13 cuenta
-    expect(mapa.get("o4")).toBeUndefined(); // #22 no cuenta -> `?? 0` en el llamador
-    expect(mapa.get("o5")).toBeUndefined(); // sin historial -> `?? 0`
+    expect(mapa.get("o3")).toBe(1);
+    expect(mapa.get("o4")).toBeUndefined(); // `entregada` no cuenta (R2) -> `?? 0`
+    expect(mapa.get("o5")).toBeUndefined(); // sin gestiones -> `?? 0`
   });
 });

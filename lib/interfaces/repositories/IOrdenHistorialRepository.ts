@@ -51,23 +51,6 @@ export interface OrigenReversionItem {
 }
 
 /**
- * Feature 160 (design §1.1/§3.2, R1/R6) — ids de catalogo que materializan el criterio de
- * "intento de entrega". El repositorio NO conoce los `value` del catalogo (eso vive en
- * `OrdenHistorialService`, unico dueño de la traduccion value -> id): recibe los ids ya
- * resueltos.
- *
- *   intento = VIGENTE  AND  ( destino = devueltaId
- *                             OR (destino = reprogramadaId AND origen ∈ ORIGEN_TIPOS_REPROGRAMADA_INTENTO) )
- *
- * `reprogramadaId: null` = el catalogo no tiene `reprogramada` (seed parcial): se cuenta
- * SOLO la rama A y la lectura no falla (R6).
- */
-export interface CriterioIntento {
-  devueltaId: string;
-  reprogramadaId: string | null;
-}
-
-/**
  * Feature 167 (design §5.3, R24/R25/R28) — una recoleccion en tienda YA HECHA, leida del
  * HISTORIAL. `recolectadaAt` es el `created_at` de la fila de historial: el instante REAL de la
  * transicion, que es el unico dato que no miente sobre lo ya hecho (el historial es append-only
@@ -105,37 +88,42 @@ export interface IOrdenHistorialRepository {
    */
   findHistorialByOrden(ordenId: string): Promise<OrdenHistorialEntradaDTO[]>;
   /**
-   * R24 (49) + feature 67/R24-R26 + feature 160/R1: cuenta los INTENTOS DE ENTREGA VIGENTES de
-   * `ordenId` segun el `criterio` (design 160 §1.1). Usa el indice
-   * (orden_id, estatus_destino_id); `origen_tipo` y `gestion.anulada_at` quedan como filtros
-   * residuales sobre el puñado de filas ya recuperadas, y el join a `gestion_orden` es por PK.
+   * Feature 213 (R1/R3/R5/R8/R29/R30/R31/R32) — cuenta los INTENTOS DE ENTREGA de `ordenId`.
    *
-   * "Vigente" EXCLUYE las transiciones causadas por una gestion ANULADA (67/R24) y las
-   * HUERFANAS (67/R26), pero SIGUE contando las que nunca vinieron de una gestion (67/R25).
-   * Es un filtro de LECTURA: el historial NO se modifica jamas (49/R2, 67/R23).
+   * El criterio ya NO son destinos de transicion del historial: es el numero de CIERRES
+   * APROBADOS DISTINTOS en los que la orden tuvo un resultado de gestion contable y vigente.
    *
-   * Sustituye a `contarPorDestinoVigentes` (features 49/67), que contaba "por destino" suelto.
-   * El RENOMBRE es deliberado (160, design §3.3): el metodo ya no cuenta un destino, cuenta
-   * intentos segun un criterio COMPUESTO. Conservar el nombre viejo invitaria a un call-site
-   * futuro a pasarle un destino a secas y obtener un numero que NO es el que gobierna el
-   * escalado a `rechazada` -> `cobroRechazado` (56, dinero real).
+   *   intento = nº de `cierre_id` DISTINTOS de las `gestion_orden` de la orden con
+   *             resultado ∈ {rechazada, devuelta, reprogramada}  (lista de INCLUSION, R1/R2)
+   *             AND anulada_at IS NULL                            (vigencia, R5)
+   *             AND cierre_id IS NOT NULL AND cierre.estado = 'aprobado'   (D8/R3)
+   *
+   *   - El grano es la ORDEN dentro del cierre (R29): dos gestiones vigentes contables en el
+   *     MISMO cierre aprobado suman **1**, no 2. Por eso es `DISTINCT cierre_id` y no un
+   *     `COUNT(*)` de gestiones.
+   *   - ACUMULA sobre todos los cierres aprobados de la orden (R30): N cierres -> N.
+   *   - NO mira el estado ACTUAL de la orden (R31): cuenta el hecho ocurrido.
+   *   - Es MONOTONO CRECIENTE (R32): un cierre aprobado no sale de `aprobado` y una gestion
+   *     con `cierre_id` poblado ya no se puede anular. La anulacion impide que el numero SUBA;
+   *     nunca lo hace bajar.
+   *   - Vigencia = filtro de LECTURA (R5). No se modifica ningun registro para excluir una
+   *     gestion anulada, y el historial sigue siendo append-only e inmutable (49/R2).
+   *   - Sin gestiones contables -> `0` explicito, no ausencia ni error (R8).
    */
-  contarIntentosVigentes(ordenId: string, criterio: CriterioIntento): Promise<number>;
+  contarIntentosVigentes(ordenId: string): Promise<number>;
   /**
-   * Feature 160/R12/R13/R14 — el gemelo EN LOTE de `contarIntentosVigentes`: los conteos de N
-   * ordenes en UNA sola consulta al historial, sea cual sea N (una consulta por fila es un
-   * incumplimiento de R12, no una nota menor).
+   * Feature 213 (R4/R7/R8) — el gemelo EN LOTE de `contarIntentosVigentes`: los conteos de N
+   * ordenes en UNA sola consulta, sea cual sea N (una consulta por fila es un incumplimiento de
+   * R7, no una nota menor).
    *
-   * MISMO predicado que la version individual (una sola definicion de "intento vigente", R4).
+   * MISMO predicado que la version individual (una sola definicion de "intento", R4/R6): lo
+   * unico que cambia entre los dos `where` es `ordenId`.
    *   - Las ordenes SIN filas que cumplan el criterio NO aparecen en el Map: el llamador
-   *     resuelve el default con `?? 0` (R14).
-   *   - `ordenIds` vacio -> Map vacio SIN emitir consulta alguna (R13), patron
+   *     resuelve el default con `?? 0` (R8).
+   *   - `ordenIds` vacio -> Map vacio SIN emitir consulta alguna (R7), patron
    *     `OrdenRepository.findMensajerosBloqueados`.
    */
-  contarIntentosVigentesEnLote(
-    ordenIds: string[],
-    criterio: CriterioIntento,
-  ): Promise<Map<string, number>>;
+  contarIntentosVigentesEnLote(ordenIds: string[]): Promise<Map<string, number>>;
   /**
    * R27: `true` si existe al menos una transicion de `ordenId` cuyo actor sea `usuarioId`
    * (la orden estuvo actuada por ese usuario). Sostiene la autorizacion del mensajero: ve

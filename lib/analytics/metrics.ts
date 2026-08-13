@@ -332,7 +332,7 @@ const CATALOGO = [
     id: "primer_intento_ok",
     etiqueta: "Entrega al primer intento",
     descripcion:
-      "Entregas logradas sin intento previo, contadas con el criterio UNICO ya existente en el repo (transiciones vigentes del historial con destino devuelta, o destino reprogramada de familia gestion), que excluye las causadas por gestiones anuladas; esta metrica NO define umbral propio ni columna materializada.",
+      "Entregas logradas sin intento previo, contadas con el criterio UNICO ya existente en el repo (numero de cierres APROBADOS distintos en los que la orden tuvo un resultado de gestion rechazada, devuelta o reprogramada), que excluye las gestiones anuladas; esta metrica NO define umbral propio ni columna materializada.",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "porcentaje",
@@ -342,10 +342,13 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      // R11: se REMITE al criterio de la feature 160 (`OrdenHistorialService.contarIntentos`).
-      // No hay `umbral` ni parametro propio: el tipo `DefinicionMetrica` ni siquiera
-      // admite uno, y este comentario existe para que nadie lo anada "por comodidad".
-      criterio: "intentos_vigentes_historial",
+      // R11 (124) / R23 (213): se REMITE al criterio unico del repo
+      // (`OrdenHistorialService.contarIntentos`). No hay `umbral` ni parametro propio: el tipo
+      // `DefinicionMetrica` ni siquiera admite uno, y este comentario existe para que nadie lo
+      // anada "por comodidad".
+      // El id se RENOMBRO en la 213: el anterior (`intentos_vigentes_historial`) mentia — el
+      // conteo ya no sale del historial, sale de `gestion_orden` con el cierre aprobado.
+      criterio: "intentos_por_cierre_aprobado",
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
