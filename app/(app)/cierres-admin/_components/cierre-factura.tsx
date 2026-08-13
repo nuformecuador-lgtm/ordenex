@@ -31,7 +31,6 @@ import {
   ubicacion,
   esMontoNegativo,
   EstadoCierreBadge,
-  METODO_LABEL,
   ORDEN_RESULTADOS,
   RESULTADO_LABEL,
   RESULTADO_VACIO,
@@ -58,6 +57,8 @@ import {
   INGRESO_TOTAL_LABEL,
   INGRESO_PANEL_LABEL,
 } from "./cierre-detalle-shared";
+// Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
+import { desglosePantalla } from "./desglose-pago";
 
 // Vista TIPO FACTURA de un cierre (exploración de UX, feature 38/40). Es una lectura
 // alternativa de los MISMOS datos que ya pintan las tablas: el resumen de la cola /
@@ -901,6 +902,9 @@ function FilaGestion({
 }>) {
   const [open, setOpen] = useState(false);
   const ing = g.ingresoOrdenex ?? null;
+  // Feature 213 (T7): un método -> su etiqueta, como siempre; dos o más -> cada uno con su
+  // monto, en el orden del DTO. `null` cuando la entrega no tiene líneas de pago.
+  const desglose = desglosePantalla(g.pagos);
 
   return (
     <div className="mb-2 overflow-hidden rounded-[10px] border border-border">
@@ -952,11 +956,15 @@ function FilaGestion({
             <DatoFila value={ubicacion(g) || null} />
             <DatoFila
               label={FILA_RECIBIDO_LABEL}
+              // Feature 213/R23: el método sale del DESGLOSE, no del campo escalar. Sin
+              // líneas la fila queda EXACTAMENTE como hoy —solo el monto—, sin texto nuevo
+              // (R22); el marcador de ausencia de esta fila es que no se pinta (`DatoFila`
+              // con `value` nulo), y eso no cambia.
               value={
                 g.montoRecibido === null
                   ? null
                   : `${money(g.montoRecibido)}${
-                      g.metodoPago ? ` · ${METODO_LABEL[g.metodoPago]}` : ""
+                      desglose ? ` · ${desglose}` : ""
                     }`
               }
             />

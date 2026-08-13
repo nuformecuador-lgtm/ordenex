@@ -32,13 +32,13 @@ import {
   INDEMNIZACION_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
   INGRESO_TOTAL_COL,
-  METODO_LABEL,
   MONTO_COBRAR_COL,
   PAGO_MENSAJERO_COL,
   RECHAZO_MANUAL_BADGE_LABEL,
   RECHAZO_ORIGEN_COL,
   RECHAZO_SLA_BADGE_LABEL,
 } from "./cierre-labels";
+import { desgloseDescarga } from "./desglose-pago";
 
 /** Encabezado de la marca de evidencia: dice SI la hay, nunca dónde está (R22). */
 export const TIENE_EVIDENCIA_COL = "Tiene evidencia";
@@ -105,14 +105,18 @@ export const COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS: DescargaColumna[] = [
   { clave: "pagoMensajero", encabezado: PAGO_MENSAJERO_COL },
 ];
 
-/** El método de pago sale como ETIQUETA LEGIBLE (R8), nunca el value del enum. */
+/**
+ * El método de pago sale como ETIQUETA LEGIBLE (R8), nunca el value del enum. Feature 213
+ * (R26-R31): la celda «Método» lleva el DESGLOSE completo —una sola celda, una sola fila, sin
+ * columna nueva— y los montos van MONEY-SAFE, el STRING del snapshot tal cual.
+ */
 export function filaDescargaGestionEntregada(gestion: CierreDetalleGestion): DescargaFila {
   const ingreso = gestion.ingresoOrdenex;
   return {
     ...celdasComunes(gestion),
     montoCobrar: ingreso ? ingreso.montoCobrar : null,
     recibido: gestion.montoRecibido,
-    metodo: gestion.metodoPago ? METODO_LABEL[gestion.metodoPago] ?? gestion.metodoPago : null,
+    metodo: desgloseDescarga(gestion.pagos),
     fleteConIva: ingreso ? ingreso.fleteConIva : null,
     comisionConIva: ingreso ? ingreso.comisionConIva : null,
     ingresoTotal: ingreso ? ingreso.total : null,

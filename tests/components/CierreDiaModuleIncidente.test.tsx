@@ -236,6 +236,8 @@ describe("R17 — el incidente no muestra dinero en la vista del mensajero", () 
           resultado: "entregada",
           montoRecibido: "150.00",
           metodoPago: "efectivo",
+          // Feature 213 (T8): desglose COHERENTE con el escalar ya declarado (R23).
+          pagos: [{ metodo: "efectivo", monto: "150.00" }],
           pagoMensajero: "12.00",
         }),
       ],

@@ -115,20 +115,75 @@ function rutasMarcadas(texto: string): string[] {
 }
 
 /**
+ * Lecturas que solo tienen sentido sobre una LISTA: los métodos de `Array.prototype`, la
+ * longitud y los índices numéricos. `constructor` y `toString` se excluyen a propósito
+ * —los atiende el bloque de coacción a texto de arriba—.
+ */
+const LECTURAS_DE_LISTA = new Set<string | symbol>([
+  ...Object.getOwnPropertyNames(Array.prototype).filter(
+    (nombre) => nombre !== "constructor" && nombre !== "toString",
+  ),
+  Symbol.iterator,
+]);
+
+function esLecturaDeLista(propiedad: string | symbol): boolean {
+  return (
+    LECTURAS_DE_LISTA.has(propiedad) ||
+    (typeof propiedad === "string" && /^\d+$/.test(propiedad))
+  );
+}
+
+/**
  * Objeto que responde a CUALQUIER lectura de propiedad con otra sonda, encadenando la
  * ruta leída (`relaciones.tienda.nombre`). Al coaccionarse a texto devuelve
  * `«sonda:relaciones.tienda.nombre»`, así que el rastro sobrevive a un `String(x)`, a un
  * `new Date(x)` o a un uso como clave de un mapa de etiquetas.
+ *
+ * **Campos de LISTA (feature 213, design §5).** Hasta la 213 todas las proyecciones leían
+ * campos ESCALARES. `filaDescargaDiaEntregada` pasó a leer `gestion.pagos`, que es una
+ * lista, y la sonda reventaba (`pagos.map is not a function`): su mecánica, no un hallazgo.
+ * Se AMPLÍA en vez de esquivarse: una lectura de lista se atiende con un array REAL de
+ * sondas cuya ruta es `campo[]`, así que el rastro sobrevive a `map`/`filter`/`join` y un
+ * futuro `pagos[].referenciaFirmada` sigue delatándose y la lista negra sigue mordiendo.
+ * La alternativa —un `Array.isArray(...)` en producción— está rechazada en el design: es
+ * código con forma de test en un camino de dinero.
+ *
+ * **Por qué DOS elementos y no uno.** Con UNO, una proyección que ramifica por el tamaño de
+ * la lista (`desgloseDescarga`: 0 → `null`, 1 → solo la etiqueta, 2+ → etiqueta + monto)
+ * entraba siempre por la rama de una línea, devolvía `METODO_LABEL[«sonda:pagos[]»]` —es
+ * decir `undefined`— y la celda `metodo` de los DOS módulos de descarga se quedaba SIN
+ * origen rastreado, justo la rama que la 213 añade. Medido: 318 orígenes / 14 celdas sin
+ * origen con una sonda, 322 / 12 con dos (`dev` daba 320 / 12). Los dos elementos comparten
+ * la MISMA ruta `campo[]` a propósito: la lista negra vigila el CAMPO, no la posición, y así
+ * el rastro es el mismo marcador se lea el elemento que se lea.
  */
 function sonda(ruta = ""): Record<string, unknown> {
   const marcador = `${MARCA_INICIO}${ruta}${MARCA_FIN}`;
+  /** Elementos que materializa una lectura de lista (ver el porqué del DOS arriba). */
+  const ELEMENTOS_DE_LISTA = 2;
+  // Se materializa PEREZOSAMENTE: crear los elementos en la construcción haría recursión
+  // infinita, porque cada sonda contendría otras sondas.
+  const lista: unknown[] = [];
+  const comoLista = (): unknown[] => {
+    if (lista.length === 0) {
+      for (let i = 0; i < ELEMENTOS_DE_LISTA; i += 1) lista.push(sonda(`${ruta}[]`));
+    }
+    return lista;
+  };
   return new Proxy({} as Record<string, unknown>, {
     get(_destino, propiedad) {
       if (propiedad === Symbol.toPrimitive) return () => marcador;
       if (propiedad === "toString" || propiedad === "valueOf") return () => marcador;
       if (propiedad === CLAVE_RUTA) return ruta;
-      // Símbolos internos (React, iterables, `then` de las promesas): la sonda no los
-      // simula; devolver una sonda ahí rompería el `await` y el renderizado.
+      if (esLecturaDeLista(propiedad)) {
+        const real = comoLista();
+        const valor = Reflect.get(real, propiedad);
+        return typeof valor === "function"
+          ? (valor as (...args: unknown[]) => unknown).bind(real)
+          : valor;
+      }
+      // Símbolos internos (React, `then` de las promesas): la sonda no los simula;
+      // devolver una sonda ahí rompería el `await` y el renderizado.
       if (typeof propiedad === "symbol" || propiedad === "then") return undefined;
       return sonda(ruta === "" ? String(propiedad) : `${ruta}.${String(propiedad)}`);
     },
@@ -273,6 +328,48 @@ describe("guardia de datos sensibles en las columnas de export", () => {
         }
       }
     }
+  });
+
+  it("la sonda delata un campo prohibido leído DENTRO de una lista (contraprueba)", () => {
+    // Feature 213 (design §5). La sonda se amplió para campos de lista; esta contraprueba
+    // es lo que impide que la ampliación se convierta en un agujero. Sin el arreglo, las
+    // dos proyecciones de juguete de aquí abajo revientan con `pagos.map is not a
+    // function` y el caso se pone ROJO; con el arreglo, la ruta marcada es `pagos[].…` y
+    // la lista negra la muerde igual que a un campo escalar.
+    const filaConCampoProhibido = (gestion: Record<string, unknown>): DescargaFila => ({
+      metodo: (gestion.pagos as Array<Record<string, unknown>>)
+        .map((pago) => `${String(pago.metodo)} ${String(pago.urlFirmada)}`)
+        .join(" + "),
+    });
+
+    const filaInocente = (gestion: Record<string, unknown>): DescargaFila => ({
+      metodo: (gestion.pagos as Array<Record<string, unknown>>)
+        .map((pago) => `${String(pago.metodo)} ${String(pago.monto)}`)
+        .join(" + "),
+    });
+
+    const origenesProhibidos = Object.values(proyectarConSonda(
+      filaConCampoProhibido as (...args: unknown[]) => unknown,
+    )).flatMap(origenesDe);
+    const origenesInocentes = Object.values(proyectarConSonda(
+      filaInocente as (...args: unknown[]) => unknown,
+    )).flatMap(origenesDe);
+
+    // No-vacuidad: la lectura de lista deja rastro, y el rastro dice que vino de la LISTA.
+    expect(origenesProhibidos).toContain("pagos[].urlFirmada");
+    expect([...new Set(origenesInocentes)]).toEqual(["pagos[].metodo", "pagos[].monto"]);
+
+    // La lista se materializa con MÁS DE UN elemento, que es lo que hace que una proyección
+    // que ramifica por `length` (`desgloseDescarga`) entre por su rama de 2+ líneas bajo la
+    // sonda en vez de por la de una. Sin esto la celda `metodo` de los dos módulos de
+    // descarga se quedaba sin origen rastreado (318 → 322 orígenes; ver el comentario de
+    // `sonda`). Se afirma sobre el RASTRO, no sobre el array, porque el rastro es lo que la
+    // lista negra muerde.
+    expect(origenesInocentes.filter((o) => o === "pagos[].monto").length).toBeGreaterThan(1);
+
+    // Lo que la guardia haría con cada una: la de arriba MUERDE, la de abajo pasa.
+    expect(origenesProhibidos.some((origen) => NOMBRES_PROHIBIDOS.test(origen))).toBe(true);
+    expect(origenesInocentes.some((origen) => NOMBRES_PROHIBIDOS.test(origen))).toBe(false);
   });
 
   it("ninguna fila de export emite un identificador interno con forma de uuid", () => {
