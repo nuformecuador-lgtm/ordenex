@@ -9,6 +9,73 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🟡 2026-08-13 — feature **215** (antes 213): el reintento se cuenta en el CIERRE, en PR #363
+
+El contador de reintentos deja de derivarse de las **transiciones** del historial y pasa a
+derivarse del **cierre aprobado**: 1 por cada cierre aprobado distinto en el que la orden tuvo un
+resultado de gestión vigente `rechazada`/`devuelta`/`reprogramada`, y sólo si esa gestión viene de
+una **visita real**. Sin migración: se deriva de `gestion_orden` con los índices que ya existen, así
+que `R7` de la 160 se conserva y `db/` queda intacto. 35 requisitos, 35 con dueño; `./init.sh`
+completo **verde** (1086 archivos / 13.693 tests). PR **#363** contra `dev`, reviewer en curso.
+
+**Nació de una pregunta, no de un plan:** «¿el cron que hace el cierre automático no suma un
+reintento, o el cierre manual al aprobar?». La respuesta medida era **no**, y la lista blanca de la
+160 nunca se había planteado el caso.
+
+### Lo que hay que saber antes de tocar esto
+
+1. **NO cierra el agujero que la originó, y está declarado en la página 1 de su
+   `requirements.md`.** El corte automático no aporta resultados nuevos —mueve órdenes a
+   `sin_gestionar`, que no tienen `resultado`— y el humano decidió dejar `sin_gestionar` fuera. El
+   caso «sale, se corta, vuelve a bodega y sale otra vez con el mismo contador» sigue vivo. Ficha
+   **216**.
+2. **`R12` figuraba cubierto y no lo estaba.** Al pasar a contar por *resultado*, el criterio nuevo
+   reabrió en silencio el doble conteo que `R2` de la 160 evitaba: la gestión sintética de la
+   reprogramación de la **tienda** entraba al siguiente cierre del mensajero y sumaba +1. El test
+   que figuraba como su dueño medía el **mapa de transiciones**, no el predicado. Lección: un
+   requisito «cubierto» por un test que mide otra capa no está cubierto.
+3. **El discriminador de «visita real» no necesitó esquema nuevo:** cada gestión produce, en su
+   misma transacción, una fila de `orden_historial_estado` con `origen_tipo` (`gestion` /
+   `escalado_devuelta_sla` / `reprogramacion_tienda`).
+4. **Supuesto operativo ACEPTADO (Q5):** el conteo ocurre al **aprobar**. Si un cierre nunca llega a
+   `aprobado`, la orden se queda en 0 y el cron la libera en bucle sin escalar jamás. Agravante
+   medido: `ESTADOS_RESOLUBLES = ["solicitado"]`, así que un `vencido` **no es aprobable directo**.
+   Tres mitigaciones escritas y **no elegidas** en `design.md §7bis`.
+5. **`primer_intento_ok` cambia de definición sin re-backfill (Q10).** El corte **no es una fecha de
+   la serie sino el instante del despliegue**, y se sostiene sobre `analytics_daily.updated_at`
+   porque el job recalcula días pasados: cualquier regla por `fecha` sería falsa a los pocos días.
+   El aviso **no llega a la pantalla** → ficha **217**.
+6. **Un rojo que no se arregló relajando la aserción.** El de `analytics-daily-job` se cerró dándole
+   a la devolución previa su cierre **aprobado** en la semilla; las dos cifras que prueban que el
+   KPI distingue un reintento de un primer intento siguen intactas. Y se demostró que ese test
+   **corre con datos** (canario + `describe.skip`), porque en este repo varios de integración pasan
+   en falso con la tabla vacía.
+
+**Pendiente y NO ejecutable por el agente:** `R19` (la consulta de medición de `design.md §7.6`
+contra la base real: cuántas órdenes en vuelo cambian de lado del umbral) y el `EXPLAIN` con volumen
+real —el que se corrió fue contra 78 órdenes locales—. Tras el despliegue, anotar su instante real
+(T24, documental).
+
+**Renumerada 213 → 215** al traer `dev`, que había renumerado la familia de pago múltiple a
+212/213/214 y cuya 213 llegó **mergeada**. Se aplicó el criterio de siempre: conserva el id quien ya
+está en `dev`.
+
+---
+
+## 🟢 2026-08-13 — PR **#364**: el mensajero sale de analítica + `/novedades` usa la card compartida
+
+Tres commits sin ficha ni spec (el de analítica salió de una decisión directa del humano). El
+mensajero deja de ver el ítem del sidebar **y** de pasar el gate de la ruta —`ROLES_ACCESO_ANALITICA`
+pasa a **derivarse restando** de `ROLES_ANALITICA`, no a ser una lista propia—, conservando su
+alcance en el catálogo. `/novedades` deja de pintar su fila y usa la card del mensajero, con las
+acciones bajando por la prop `acciones`. `./init.sh` verde (1081 archivos / 13.618 tests).
+
+**Ojo al revisar:** los botones «Habilitar» y «Devolver» son **maqueta declarada** —sin transición
+detrás— y serían visibles en producción al mergear; y el tercer commit (de otra sesión) **revisa una
+decisión escrita** por el anterior: engorda `NovedadDTO` con los campos que el adaptador rellenaba.
+
+---
+
 ## 🟢 2026-08-13 — feature **212** (antes 208): pago múltiple por entrega, APROBADA y en PR
 
 Una entrega cobrada mitad en efectivo y mitad por transferencia no se podía registrar sin mentir
