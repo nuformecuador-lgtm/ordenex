@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import {
   derivarIngresoOrden,
   agregarIngresosPorConcepto,
+  costosListadoOrden,
   pagoTiendaOrdenex,
   costoEnvioDeTarifa,
   type OrdenIngresoInput,
@@ -215,5 +216,181 @@ describe("costoEnvioDeTarifa (feature 98)", () => {
     const c = costoEnvioDeTarifa(TARIFA, false);
     expect(typeof c).toBe("string");
     expect(c).toMatch(/^\d+\.\d{2}$/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 204 — `costosListadoOrden`: los dos importes derivados de las columnas
+// "Flete + IVA" y "Comisión + IVA" de `/ordenes`, que hasta ahora calculaba el NAVEGADOR.
+//
+// Los importes esperados de este bloque NO están elegidos por su estética: son los que
+// midieron la ficha. Se comparó, orden a orden, lo que la tabla pintaba contra lo que
+// factura el cierre, sobre las 66 órdenes con tarifa activa de la base. 14 no coincidían.
+// Cada caso de abajo lleva ANOTADO lo que daba el navegador, y el último test lo COMPRUEBA
+// ejecutando la fórmula vieja: si un día alguien "arregla" el servidor para que coincida con
+// el navegador, este bloque se pone rojo en vez de dejar pasar el céntimo.
+// ---------------------------------------------------------------------------------------
+
+// La tarifa REAL de la base (la única fila `activo`), no una inventada.
+const TARIFA_REAL: TarifaVigente = {
+  valorFlete: "3000.00",
+  valorFleteGam: "2000.00",
+  valorFleteDevuelto: "1500.00",
+  valorFleteDevueltoGam: "1000.00",
+  comisionCod: "3.50",
+  ivaFlete: "13.00",
+  ivaComisionCod: "13.00",
+};
+
+function orden(montoCobrar: string | null, extra: { esCentral?: boolean; cobraComision?: boolean } = {}) {
+  return { esCentral: false, montoCobrar, cobraComision: true, ...extra };
+}
+
+describe("costosListadoOrden (feature 204) — comisión + IVA, con los montos reales", () => {
+  // Medio exacto en el tercer decimal: la comisión es 521.50 clavada y su IVA, 67.795.
+  // Decimal HALF_UP sube a 67.80; el navegador hacía 521.5 * 1.13, que en binario vale
+  // 589.29499999999995907, y `toFixed(2)` BAJABA a 589.29.
+  it("14900.00 al 3.50% + IVA 13% -> 589.30 (el navegador pintaba 589.29)", () => {
+    expect(costosListadoOrden(TARIFA_REAL, orden("14900.00")).comisionConIva).toBe("589.30");
+  });
+
+  // Doble redondeo: la comisión exacta es 581.644 y el servidor la REDONDEA a 581.64 antes
+  // de aplicarle el IVA. El navegador se lo aplicaba sin redondear (581.644 * 1.13) y subía.
+  // Este caso no es de binario: es otra fórmula.
+  it("16618.40 al 3.50% + IVA 13% -> 657.25 (el navegador pintaba 657.26)", () => {
+    expect(costosListadoOrden(TARIFA_REAL, orden("16618.40")).comisionConIva).toBe("657.25");
+  });
+
+  it("6500.00 -> 257.08 (el navegador pintaba 257.07)", () => {
+    expect(costosListadoOrden(TARIFA_REAL, orden("6500.00")).comisionConIva).toBe("257.08");
+  });
+
+  it("12900.00 -> 510.20 (el navegador pintaba 510.19)", () => {
+    expect(costosListadoOrden(TARIFA_REAL, orden("12900.00")).comisionConIva).toBe("510.20");
+  });
+
+  it("14618.40 -> 578.15 (el navegador pintaba 578.16)", () => {
+    expect(costosListadoOrden(TARIFA_REAL, orden("14618.40")).comisionConIva).toBe("578.15");
+  });
+
+  it("17700.00 -> 700.04, donde los dos caminos YA coincidían", () => {
+    // Contrapeso: la mayoría de las órdenes no cambian de valor. Si este caso se moviera,
+    // el arreglo habría desplazado importes que estaban bien.
+    expect(costosListadoOrden(TARIFA_REAL, orden("17700.00")).comisionConIva).toBe("700.04");
+  });
+
+  it("es EXACTAMENTE lo que factura el cierre: comisión + su IVA de derivarIngresoOrden", () => {
+    // La garantía estructural, no por valor: el listado no puede divergir del cierre porque
+    // sale de la misma función.
+    for (const monto of ["14900.00", "16618.40", "6500.00", "0.00", "33.33"]) {
+      const d = derivarIngresoOrden(
+        { resultado: "entregada", esCentral: false, montoCobrar: monto, cobraComision: true },
+        TARIFA_REAL,
+      );
+      const esperado = d.ingreso_comision_cod!.plus(d.ingreso_iva_comision_cod!).toFixed(2);
+      expect(costosListadoOrden(TARIFA_REAL, orden(monto)).comisionConIva).toBe(esperado);
+    }
+  });
+});
+
+describe("costosListadoOrden (feature 204) — flete + IVA", () => {
+  it("con la tarifa REAL (flete redondo) los dos caminos coincidían: 3000 + 13% = 3390.00", () => {
+    expect(costosListadoOrden(TARIFA_REAL, orden("0.00")).fleteConIva).toBe("3390.00");
+  });
+
+  it("esCentral elige la columna GAM: 2000 + 13% = 2260.00", () => {
+    expect(costosListadoOrden(TARIFA_REAL, orden("0.00", { esCentral: true })).fleteConIva).toBe(
+      "2260.00",
+    );
+  });
+
+  // El fallo del flete estaba LATENTE: no aparece con 3000.00, aparece con cualquier flete
+  // acabado en .50 al 13% (2500.50 * 13% = 325.065, medio exacto que HALF_UP sube).
+  it("2500.50 al 13% -> 2825.57 (el navegador habría pintado 2825.56)", () => {
+    const t: TarifaVigente = { ...TARIFA_REAL, valorFlete: "2500.50" };
+    expect(costosListadoOrden(t, orden("0.00")).fleteConIva).toBe("2825.57");
+  });
+
+  it("coincide con costoEnvioDeTarifa, que ya derivaba esta misma cifra en el servidor", () => {
+    for (const flete of ["3000.00", "2500.50", "0.10", "1.00"]) {
+      const t: TarifaVigente = { ...TARIFA_REAL, valorFlete: flete };
+      expect(costosListadoOrden(t, orden("0.00")).fleteConIva).toBe(costoEnvioDeTarifa(t, false));
+    }
+  });
+});
+
+describe("costosListadoOrden (feature 204) — degradación y contrato de salida", () => {
+  it("sin tarifa vigente los dos importes son '0.00' (R9), no null ni error", () => {
+    expect(costosListadoOrden(null, orden("14900.00"))).toEqual({
+      fleteConIva: "0.00",
+      comisionConIva: "0.00",
+    });
+  });
+
+  it("orden que NO cobra comisión: comisión 0.00 y el flete intacto", () => {
+    const c = costosListadoOrden(TARIFA_REAL, orden("14900.00", { cobraComision: false }));
+    expect(c.comisionConIva).toBe("0.00");
+    expect(c.fleteConIva).toBe("3390.00");
+  });
+
+  it("montoCobrar null (orden sin COD) -> comisión 0.00", () => {
+    expect(costosListadoOrden(TARIFA_REAL, orden(null)).comisionConIva).toBe("0.00");
+  });
+
+  it("los dos campos son SIEMPRE STRING de escala 2", () => {
+    for (const t of [TARIFA_REAL, null]) {
+      const c = costosListadoOrden(t, orden("14900.00"));
+      expect(c.fleteConIva).toMatch(/^\d+\.\d{2}$/);
+      expect(c.comisionConIva).toMatch(/^\d+\.\d{2}$/);
+    }
+  });
+});
+
+describe("costosListadoOrden (feature 204) — CONTRAPRUEBA: la fórmula del navegador difería", () => {
+  // Sin esto, los valores de arriba podrían ser los mismos que ya daba el navegador y todo
+  // el arreglo sería decorativo. Aquí se EJECUTA la aritmética que vivía en
+  // `ordenes-columns.tsx` y se afirma, monto a monto, que da otra cosa.
+  const comisionEnElNavegador = (monto: number, pct: number, iva: number): string =>
+    (monto * (pct / 100) * (1 + iva / 100)).toFixed(2);
+  const fleteEnElNavegador = (flete: number, iva: number): string =>
+    (flete * (1 + iva / 100)).toFixed(2);
+
+  it.each([
+    { caso: "14900.00 -> 589.30, no 589.29", monto: "14900.00", montoNum: 14900, servidorEsperado: "589.30", navegadorEsperado: "589.29" },
+    { caso: "16618.40 -> 657.25, no 657.26", monto: "16618.40", montoNum: 16618.4, servidorEsperado: "657.25", navegadorEsperado: "657.26" },
+    { caso: "6500.00 -> 257.08, no 257.07", monto: "6500.00", montoNum: 6500, servidorEsperado: "257.08", navegadorEsperado: "257.07" },
+    { caso: "12900.00 -> 510.20, no 510.19", monto: "12900.00", montoNum: 12900, servidorEsperado: "510.20", navegadorEsperado: "510.19" },
+    { caso: "14618.40 -> 578.15, no 578.16", monto: "14618.40", montoNum: 14618.4, servidorEsperado: "578.15", navegadorEsperado: "578.16" },
+  ])("comisión de $caso — y NO son el mismo número", ({
+    monto,
+    montoNum,
+    servidorEsperado: esperadoServidor,
+    navegadorEsperado: esperadoNavegador,
+  }) => {
+    const servidor = costosListadoOrden(TARIFA_REAL, orden(monto)).comisionConIva;
+    const navegador = comisionEnElNavegador(montoNum, 3.5, 13);
+    expect(servidor).toBe(esperadoServidor);
+    expect(navegador).toBe(esperadoNavegador);
+    expect(servidor).not.toBe(navegador);
+    // Y la desviación es de un céntimo, en los dos sentidos.
+    expect(new Prisma.Decimal(navegador).minus(servidor).abs().toFixed(2)).toBe("0.01");
+  });
+
+  it("flete 2500.50 al 13%: servidor 2825.57, navegador 2825.56", () => {
+    const t: TarifaVigente = { ...TARIFA_REAL, valorFlete: "2500.50" };
+    expect(costosListadoOrden(t, orden("0.00")).fleteConIva).toBe("2825.57");
+    expect(fleteEnElNavegador(2500.5, 13)).toBe("2825.56");
+  });
+
+  it("y donde el navegador ya acertaba, el servidor da lo MISMO (no se movió nada más)", () => {
+    for (const [monto, montoNum] of [
+      ["17700.00", 17700],
+      ["10900.00", 10900],
+      ["21000.00", 21000],
+    ] as const) {
+      expect(costosListadoOrden(TARIFA_REAL, orden(monto)).comisionConIva).toBe(
+        comisionEnElNavegador(montoNum, 3.5, 13),
+      );
+    }
   });
 });

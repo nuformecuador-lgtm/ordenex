@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { CajaCodFeedService } from "@/lib/services/CajaCodFeedService";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
 
 /**
@@ -326,12 +325,15 @@ describeSiHayBase("173/T C.4 — idempotencia del PAGO A TIENDA y de su ANULACIO
 });
 
 describe("173/T B.4 — R48: la idempotencia no es un `if` (estructural)", () => {
-  /** Codigo sin comentarios: lo que se afirma es lo que se EJECUTA, no lo que se explica. */
-  function codigoDe(ruta: string): string {
-    return readFileSync(resolve(process.cwd(), ruta), "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
-  }
+  /**
+   * Codigo sin comentarios: lo que se afirma es lo que se EJECUTA, no lo que se explica.
+   *
+   * Feature 209 — quitador COMPARTIDO. La copia local dejaba vivo el comentario de cola, asi
+   * que un `findFirst` citado al final de una linea de codigo ponia ROJA esta guardia de
+   * idempotencia sin que hubiera un check-then-insert. Medido: los tres patrones que afirma
+   * sobre los dos repositorios dan lo mismo antes y despues.
+   */
+  const codigoDe = codigoSinComentarios;
 
   it("el repositorio de la caja inserta con `skipDuplicates` y NO consulta antes de escribir", () => {
     const codigo = codigoDe("lib/repositories/WalletMovimientoRepository.ts");

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 123 / T7 — los dos guards de la feature. Cubren R29 y R44.
 // Feature 124 / T5.2 y T5.3 (D6-E1) — los dos se RE-ALCANZAN, no se retiran ni se aflojan.
@@ -640,7 +641,7 @@ describe("R42 — frontera re-alcanzada: solo el escritor declarado escribe, y n
   it("en el catalogo de la 135 el literal es una DECLARACION de fuente, no una consulta", () => {
     // Sin las lineas de comentario: la cabecera del catalogo EXPLICA que ninguna metrica
     // financiera puede citar `analytics_daily`, y esa prosa no es una referencia al codigo.
-    const metrics = leer("lib/analytics/metrics.ts").replace(/^\s*\/\/.*$/gm, "");
+    const metrics = quitarComentarios(leer("lib/analytics/metrics.ts"));
     const ocurrencias = metrics.match(/analytics_daily/g) ?? [];
     const declaraciones = metrics.match(/tablas: \["analytics_daily"\]/g) ?? [];
     expect(ocurrencias.length).toBeGreaterThan(0);
