@@ -119,6 +119,49 @@ la misma PEGADA, quitador VIEJO          ROJO                       -> octavo fa
 Y no es una guardia menor: vigila que **Entregas no vuelva a arrastrar las órdenes en
 `recolectando`** a sus KPIs, su mapa y su filtro (R34/R36 de la 167).
 
+### 5.4 Y una QUINTA semántica, en el gemelo del anterior
+
+El octavo declaraba en su propio docstring estar hecho «como en
+`recoleccion-no-contamina.test.ts`». Se fue a mirar el molde, y el molde era **peor**:
+
+```ts
+function sinComentarios(src: string): string {
+  return src
+    .split("\n")
+    .filter((linea) => !linea.trimStart().startsWith("//"))
+    .join("\n");
+}
+```
+
+**No quita bloques en absoluto.** Un docstring `/* … */` que nombre
+`por_recolectar_en_tienda` en el archivo vigilado la pone **roja**. Y no es una guardia menor:
+protege que la recolección no contamine el cierre del día ni el **denominador del ranking** —el
+porcentaje que decide la plata de los mensajeros—.
+
+```
+antes / despues                            5 tests verdes en los dos casos
+infraccion en CODIGO                       ROJO con el helper nuevo   -> muerde
+la misma en un BLOQUE /* … */              VERDE con el helper nuevo
+la misma en bloque, quitador VIEJO         ROJO                       -> noveno falso positivo
+```
+
+### 5.5 Lo que el detector ancho encontró y NO se ha tocado
+
+El censo estrecho —formas de regex— daba 2 supervivientes. Uno **ancho**, que además busca
+`startsWith("//")` y cualquier regex de bloque, da 17, de los cuales 12 son ruido (uno de ellos,
+instructivo: el detector se marcó a sí mismo al leer una **mención en un comentario**). Quedan
+**tres casos reales que este cierre NO toca**, y se nombran para que no haya que redescubrirlos:
+
+| Archivo | Qué hace | Por qué no se tocó aquí |
+| --- | --- | --- |
+| `tests/integration/db/job-tipo-analitica-invalidacion-migration.test.ts` | filtra líneas `//` y `@@` al parsear `schema.prisma` | parser estructural de Prisma; migrarlo es un juicio propio, no un swap |
+| `tests/integration/db/schema-drift-saneamiento.test.ts` | busca la línea de `@map("updated_at")` que no empiece por `//` | ídem |
+| `tests/unit/analytics/export-csv-frontera.guardia.test.ts` | toma la primera línea no vacía que no empiece por `//` | ídem |
+
+Los tres comparten la semántica débil (`^\s*//`), así que **un `// nota` al final de una línea
+sobrevive** en los tres. Ninguno es hoy un falso positivo demostrado; son deuda **acotada y con
+nombre**, no un riesgo abierto.
+
 ### 5.3 Por qué `analytics-paleta` se queda como está, y no es deuda
 
 Quita bloques `/* … */` de **CSS**. Pasarle `quitarComentarios` sería un error: su pasada de línea
@@ -128,9 +171,21 @@ es legítima y no va precedida de `:`. El helper declara su alcance en su propio
 
 ## 6. Estado final
 
-- **56 quitadores** con una sola semántica: los 48 de la tanda B, los 7 de este cierre y el
-  octavo de la cuarta semántica.
+- **57 quitadores** con una sola semántica: los 48 de la tanda B, los 7 de este cierre, y los dos
+  gemelos de la cuarta y la quinta semántica.
 - **Dos exclusiones declaradas**, cada una con su motivo: la guardia de los quitadores (regex
   como dato) y la de CSS (fuera del alcance del helper).
-- **Ocho falsos positivos cerrados**, cada uno demostrado por mutación en las dos direcciones.
+- **Tres casos acotados y con nombre** que no se tocan (§5.5), los tres parsers estructurales.
+- **Nueve falsos positivos cerrados**, cada uno demostrado por mutación en las dos direcciones.
 - Ningún veredicto de guardia cambia de valor: **nada de lo que hoy está protegido deja de estarlo**.
+
+## 7. La lección, que es la misma de siempre por tercera vez
+
+La ficha 209 nació de un censo. El censo buscaba **formas de regex**, así que dio 74 archivos y
+cinco semánticas — y las dos semánticas peores del árbol **no estaban escritas como regex**, sino
+con `split`/`filter`. Ninguna de las dos era visible desde el número que fundó la ficha.
+
+> **Un censo mide la forma que sabe buscar, no el fenómeno.** El 07-ago costó tres mediciones
+> falsas seguidas; hoy vuelve, y la única defensa que ha funcionado las dos veces es la misma:
+> **un detector ancho, y triaje a mano de lo que devuelve**. El ancho dio 12 falsos positivos de
+> 17 — y aun así encontró las dos que importaban.
