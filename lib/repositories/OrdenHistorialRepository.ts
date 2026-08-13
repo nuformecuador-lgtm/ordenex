@@ -9,9 +9,9 @@ import {
   appendCambioEstado,
   type ChokePointTx,
 } from "@/lib/repositories/registrar-cambio-estado";
-import { RESULTADOS_QUE_CUENTAN_COMO_INTENTO } from "@/lib/types/gestion-orden";
 import {
   ORIGEN_TIPOS_VISITA_REAL,
+  RESULTADOS_QUE_CUENTAN_COMO_INTENTO,
   type OrdenHistorialEntradaDTO,
 } from "@/lib/types/orden-historial";
 

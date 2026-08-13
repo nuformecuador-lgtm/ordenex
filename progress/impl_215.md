@@ -27,7 +27,7 @@ Ninguno creado. **20 modificados, 0 en `db/`.**
 
 | Archivo | Que cambia |
 | --- | --- |
-| `lib/types/gestion-orden.ts` | **Nueva** `RESULTADOS_QUE_CUENTAN_COMO_INTENTO` (+ `ResultadoIntentoEntrega`), lista de INCLUSION con `satisfies readonly GestionResultado[]` |
+| `lib/types/orden-historial.ts` | **Nueva** `RESULTADOS_QUE_CUENTAN_COMO_INTENTO` (+ `ResultadoIntentoEntrega`), lista de INCLUSION con `satisfies readonly GestionResultado[]`. Vive aqui y no en `lib/types/gestion-orden.ts` porque ese archivo viaja al bundle del cliente y no puede importar `@prisma/client` |
 | `lib/repositories/OrdenHistorialRepository.ts` | `whereIntentosVigentes` cambia de tabla; los dos conteos pasan a `groupBy` sobre `gestionOrden`; el `Pick` del cliente gana `gestionOrden` |
 | `lib/interfaces/repositories/IOrdenHistorialRepository.ts` | Se RETIRA `CriterioIntento`; las dos firmas pierden el parametro `criterio` |
 | `lib/services/OrdenHistorialService.ts` | Se BORRAN `resolverCriterio`, `ESTATUS_DEVUELTA`, `ESTATUS_REPROGRAMADA`; los dos metodos delegan directo |

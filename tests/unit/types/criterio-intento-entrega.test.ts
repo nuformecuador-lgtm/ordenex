@@ -4,8 +4,8 @@ import {
   ORDEN_HISTORIAL_ORIGEN_TIPO_SEED,
   ORIGEN_TIPOS_CON_GESTION,
   ORIGEN_TIPOS_VISITA_REAL,
+  RESULTADOS_QUE_CUENTAN_COMO_INTENTO,
 } from "@/lib/types/orden-historial";
-import { RESULTADOS_QUE_CUENTAN_COMO_INTENTO } from "@/lib/types/gestion-orden";
 import { whereIntentosVigentes } from "@/lib/repositories/OrdenHistorialRepository";
 import { TRANSICIONES } from "@/lib/types/order-status-transiciones";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";

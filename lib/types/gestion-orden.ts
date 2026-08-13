@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { GestionResultado } from "@prisma/client";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 import { esFechaCalendarioValida, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
@@ -16,40 +15,6 @@ import type {
   MisAsignacionesKpis,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
-
-/**
- * Feature 215 (T2, R1/R2/R33) — los RESULTADOS de gestion que cuentan como INTENTO DE ENTREGA.
- *
- * Desde la 215 el intento ya NO se deriva de los destinos de las transiciones del historial: se
- * deriva de `gestion_orden` (resultado + cierre APROBADO + vigencia). El predicado que la
- * consume es `whereIntentosVigentes` (`lib/repositories/OrdenHistorialRepository.ts`), punto
- * UNICO del criterio.
- *
- * Es una lista de **INCLUSION**, y eso es un REQUISITO, no un gusto: con una lista negra
- * (`resultado NOT IN (...)`) cualquier `resultado` FUTURO del enum empezaria a contar SOLO,
- * subiria el conteo, adelantaria el escalado del cron SLA (99) y cobraria un `cobroRechazado`
- * (56) antes de tiempo — en silencio, contra la tienda. Con lista blanca, un resultado nuevo NO
- * cuenta hasta que alguien lo decida aqui explicitamente. Contar de menos retrasa el escalado
- * (inofensivo para la tienda); contar de mas es dinero mal cobrado.
- *
- * Que queda FUERA y por que:
- *   - `entregada` e `incidente` (R2): la entrega lograda no es un intento fallido, y el paquete
- *     danado/perdido/robado es un desenlace terminal propio, no una visita mas.
- *   - `sin_gestionar` NO PUEDE entrar (D6/R33) porque **no es un `resultado` de gestion**: una
- *     orden cortada por el cron no tiene fila de `gestion_orden` (el corte solo transiciona
- *     `en_reparto -> sin_gestionar`). Consecuencia DECLARADA y aceptada: el agujero que dio
- *     origen a la ficha —la orden que sale, la corta el cron, vuelve a bodega y sale otra vez
- *     con el mismo contador— **SIGUE ABIERTO** tras esta feature. Cerrarlo es ficha aparte.
- *
- * El `satisfies` rompe el build si un valor deja de existir en el enum `GestionResultado`.
- */
-export const RESULTADOS_QUE_CUENTAN_COMO_INTENTO = [
-  "rechazada",
-  "devuelta",
-  "reprogramada",
-] as const satisfies readonly GestionResultado[];
-
-export type ResultadoIntentoEntrega = (typeof RESULTADOS_QUE_CUENTAN_COMO_INTENTO)[number];
 
 // Feature 36 — validacion de borde (zod) del flujo del mensajero. Los schemas se
 // usan en la Server Action (borde) y las reglas de foto se reutilizan en cliente
