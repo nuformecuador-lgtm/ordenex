@@ -370,6 +370,10 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(rel.tienda!.tarifa).toMatchObject({ id: "tar-1", valorFlete: 3.5, comisionCod: 5 });
     expect(rel.tienda!.tarifa).not.toHaveProperty("deletedAt");
 
+    // Feature 204: la fila trae ADEMÁS los dos importes derivados, ya en STRING.
+    expect(res.items[0].fleteConIva).toBe("4.52"); // GAM 4.00 + 13%
+    expect(res.items[0].comisionConIva).toBe("0.00"); // este fixture no lleva montoCobrar
+
     // El include filtra las tarifas borradas/inactivas (solo la ACTIVA) y
     // selecciona la relacion tienda.tarifasTienda.
     const arg = prisma.orden.findMany.mock.calls[0][0];
@@ -488,6 +492,106 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
     expect(res.items[0].prioridad).toBe(true);
     expect(res.items[1].prioridad).toBe(false);
+  });
+
+  // -----------------------------------------------------------------------------------
+  // Feature 204 — las columnas "Flete + IVA" y "Comisión + IVA" del listado se DERIVAN
+  // aquí, en Decimal, y viajan como STRING. Antes las multiplicaba el navegador sobre los
+  // `number` de `relaciones.tienda.tarifa`, y sobre las órdenes reales de la base 14 de 66
+  // se veían un céntimo desviadas de lo que factura el cierre.
+  //
+  // Los casos son los MISMOS que midió la ficha, montados sobre la tarifa real (comisión
+  // 3.50%, IVA 13%), y entran por donde entran de verdad: `Prisma.Decimal` en la fila.
+  // -----------------------------------------------------------------------------------
+  const TARIFA_REAL = {
+    valorFlete: new Prisma.Decimal("3000.00"),
+    valorFleteGam: new Prisma.Decimal("2000.00"),
+    comisionCod: new Prisma.Decimal("3.50"),
+    ivaFlete: new Prisma.Decimal("13.00"),
+    ivaComisionCod: new Prisma.Decimal("13.00"),
+  };
+
+  async function derivadosDe(overrides: Record<string, unknown>) {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow({
+        // no-central: usa `valorFlete`, no la variante GAM.
+        zona: { id: "z1", nombre: "Limón", esCentral: false },
+        tienda: {
+          id: "t1",
+          nombre: "Tienda Uno",
+          email: "tienda1@ordenex.co",
+          telefono: "0990000001",
+          tarifasTienda: [tarifaRow(TARIFA_REAL)],
+        },
+        cobraComision: true,
+        ...overrides,
+      }),
+    ]);
+    prisma.orden.count.mockResolvedValue(1);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+    const res = await repo.list({
+      where: {},
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+    return res.items[0];
+  }
+
+  it("204: comisión + IVA de 14900.00 -> '589.30' (el navegador pintaba 589.29)", async () => {
+    const item = await derivadosDe({ montoCobrar: new Prisma.Decimal("14900.00") });
+    expect(item.comisionConIva).toBe("589.30");
+  });
+
+  it("204: comisión + IVA de 16618.40 -> '657.25' (el navegador pintaba 657.26)", async () => {
+    const item = await derivadosDe({ montoCobrar: new Prisma.Decimal("16618.40") });
+    expect(item.comisionConIva).toBe("657.25");
+  });
+
+  it("204: el flete sale de la columna que elige la zona, con su IVA", async () => {
+    const noCentral = await derivadosDe({ montoCobrar: new Prisma.Decimal("100.00") });
+    expect(noCentral.fleteConIva).toBe("3390.00"); // 3000 + 13%
+
+    const central = await derivadosDe({
+      montoCobrar: new Prisma.Decimal("100.00"),
+      zona: { id: "z1", nombre: "GAM", esCentral: true },
+    });
+    expect(central.fleteConIva).toBe("2260.00"); // 2000 (GAM) + 13%
+  });
+
+  it("204: sin tarifa activa los dos importes son '0.00' (R9), no null", async () => {
+    const item = await derivadosDe({
+      montoCobrar: new Prisma.Decimal("14900.00"),
+      tienda: {
+        id: "t1",
+        nombre: "Tienda Uno",
+        email: "tienda1@ordenex.co",
+        telefono: "0990000001",
+        tarifasTienda: [], // el include no resolvió ninguna tarifa activa
+      },
+    });
+    expect(item.fleteConIva).toBe("0.00");
+    expect(item.comisionConIva).toBe("0.00");
+    expect(item.relaciones!.tienda!.tarifa).toBeNull();
+  });
+
+  it("204: una orden que no cobra comisión la trae en '0.00', con el flete intacto", async () => {
+    const item = await derivadosDe({
+      montoCobrar: new Prisma.Decimal("14900.00"),
+      cobraComision: false,
+    });
+    expect(item.comisionConIva).toBe("0.00");
+    expect(item.fleteConIva).toBe("3390.00");
+  });
+
+  it("204: son STRING de escala 2, nunca number (el dinero cruza así la frontera)", async () => {
+    const item = await derivadosDe({ montoCobrar: new Prisma.Decimal("16618.40") });
+    expect(typeof item.fleteConIva).toBe("string");
+    expect(typeof item.comisionConIva).toBe("string");
+    expect(item.fleteConIva).toMatch(/^\d+\.\d{2}$/);
+    expect(item.comisionConIva).toMatch(/^\d+\.\d{2}$/);
   });
 });
 

@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { METRICAS, getMetrica } from "@/lib/analytics/metrics";
 import { NOTA_SIN_GESTIONAR } from "@/lib/types/analitica-operativa";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 175 / T4.3 — GUARDA del UNIVERSO temporal del catalogo (R5, R6, R7, R9, R10, R11, R12).
 //
@@ -48,8 +49,8 @@ function leerColumnasDelModelo(nombre: string): Set<string> {
   const bloque = new RegExp(`model ${nombre} \\{([\\s\\S]*?)\\n\\}`).exec(schema);
   if (!bloque) throw new Error(`No se encontro el modelo ${nombre} en db/schema.prisma`);
   const columnas = new Set<string>();
-  for (const linea of bloque[1].split("\n")) {
-    const limpia = linea.replace(/\/\/.*$/, "").trim();
+  for (const linea of quitarComentarios(bloque[1]).split("\n")) {
+    const limpia = linea.trim();
     if (limpia.length === 0 || limpia.startsWith("@@")) continue;
     columnas.add(limpia.split(/\s+/)[0]);
     const mapeada = /@map\("([^"]+)"\)/.exec(limpia);

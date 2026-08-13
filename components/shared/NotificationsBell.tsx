@@ -53,7 +53,9 @@ const TYPE_ICON: Record<
   { Icon: ComponentType<LucideProps>; className: string; label: string }
 > = {
   alert: { Icon: CircleAlert, className: "text-danger", label: "Alerta" },
-  box: { Icon: Package, className: "text-navy", label: "Paquete" },
+  // Feature 208: era `text-navy` (fijo) y sobre el popover oscuro desaparecía.
+  // `-strong` es la variante contrast-safe del semántico y trae su valor dark.
+  box: { Icon: Package, className: "text-info-strong", label: "Paquete" },
   warning: {
     Icon: TriangleAlert,
     className: "text-warning",
@@ -82,6 +84,11 @@ function datosIniciales(
  * leer (R41–R43); al abrir revalida (R47) y despliega la cabecera (campana + total +
  * "marcar todas como leídas", R45) y la lista, cada una con su icono según
  * `notification_type`, descripción, anexo (R49) y una X para descartar (R46).
+ *
+ * Color (feature 208): SOLO tokens que giran con el tema. Todo el componente iba
+ * con `navy` fijo (icono, popover, chips, anillos de foco) y en modo oscuro el
+ * disparador medía 1.03–1.11:1: la campana del encabezado desaparecía. El anillo de
+ * foco pasa además al estándar de `DESIGN.md` (`ring-3 ring-ring/50`).
  */
 export function NotificationsBell({ notifications }: NotificationsBellProps) {
   const { items, noLeidas, error, isLoading, mutate, mutateOptimista } =
@@ -150,11 +157,16 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
     >
       <Popover.Trigger
         aria-label={`Notificaciones${noLeidas > 0 ? `, ${noLeidas} sin leer` : ""}`}
-        className="relative flex cursor-pointer items-center rounded-md p-1 text-navy outline-none transition-colors hover:bg-navy/5 focus-visible:ring-2 focus-visible:ring-navy/40"
+        className="relative flex cursor-pointer items-center rounded-md p-1 text-foreground outline-none transition-colors hover:bg-foreground/10 focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <Bell className="size-5" aria-hidden="true" />
         {noLeidas > 0 ? (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold leading-none text-white">
+          // El distintivo es TEXTO, no un punto: la cifra tiene que leerse. Con
+          // `bg-danger` (#ef4444) el blanco encima daba 3.76:1 en los DOS temas —
+          // por debajo del 4.5 de AA. `-strong` es la variante contrast-safe del
+          // semántico y `text-background` acompaña su giro: rojo oscuro con texto
+          // claro en tema claro, rojo claro con texto oscuro en tema oscuro.
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger-strong px-1 text-[10px] font-semibold leading-none text-background">
             {badge}
           </span>
         ) : null}
@@ -162,13 +174,13 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
 
       <Popover.Portal>
         <Popover.Positioner sideOffset={8} align="end" className="z-50">
-          <Popover.Popup className="flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-border bg-background text-navy shadow-lg outline-none">
+          <Popover.Popup className="flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg outline-none">
             {/* Cabecera: campana + total + marcar todas como leídas */}
             <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <Bell className="size-4" aria-hidden="true" />
                 <span className="text-sm font-semibold">Notificaciones</span>
-                <span className="rounded-full bg-navy/10 px-1.5 py-0.5 text-xs font-medium">
+                <span className="rounded-full bg-foreground/10 px-1.5 py-0.5 text-xs font-medium">
                   {total}
                 </span>
               </div>
@@ -177,7 +189,7 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
                   type="button"
                   onClick={() => void marcarTodas()}
                   disabled={noLeidas === 0}
-                  className="text-xs font-medium text-navy/70 outline-none transition-colors hover:text-navy focus-visible:underline disabled:pointer-events-none disabled:opacity-40"
+                  className="text-xs font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:underline disabled:pointer-events-none disabled:opacity-40"
                 >
                   Marcar todas como leídas
                 </button>
@@ -192,7 +204,7 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
                       ? "Silenciar el sonido de las notificaciones"
                       : "Activar el sonido de las notificaciones"
                   }
-                  className="shrink-0 cursor-pointer rounded-md p-1 text-navy/70 outline-none transition-colors hover:bg-navy/5 hover:text-navy focus-visible:ring-2 focus-visible:ring-navy/40"
+                  className="shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   {sonidoActivado ? (
                     <Volume2 className="size-4" aria-hidden="true" />
@@ -217,7 +229,7 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
                       key={n.id}
                       className={cn(
                         "flex items-start gap-3 px-4 py-3",
-                        n.read ? "opacity-60" : "bg-navy/[0.03]",
+                        n.read ? "opacity-60" : "bg-foreground/5",
                       )}
                     >
                       <Icon
@@ -236,7 +248,7 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
                         type="button"
                         onClick={() => void dismiss(n.id)}
                         aria-label="Descartar notificación"
-                        className="shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-navy/40"
+                        className="shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
                       >
                         <X className="size-4" aria-hidden="true" />
                       </button>

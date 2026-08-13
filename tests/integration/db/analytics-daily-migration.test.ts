@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 123 / T6 — cobertura ESTATICA de la migracion `*_analytics_daily` (patron
 // `notificacion-migration` / `zonas-migration`): lee `migration.sql`, `down.sql` y
@@ -225,7 +226,7 @@ describe("R14/R15 — el unico del grano deduplica los NULL, o la migracion fall
     // la clausula `NULLS NOT DISTINCT` y los tres CHECK estructurales.
     // La negativa se hace sobre el modelo SIN comentarios: los comentarios inline SI nombran
     // `NULLS NOT DISTINCT`, y deben hacerlo — lo que no puede existir es un atributo.
-    const modeloSinComentarios = MODELO.replace(/\/\/.*$/gm, "");
+    const modeloSinComentarios = quitarComentarios(MODELO);
     expect(modeloSinComentarios).not.toMatch(/NULLS NOT DISTINCT/);
     expect(modeloSinComentarios).not.toMatch(/CHECK/);
     expect(MODELO_DOC).toContain("NULLS NOT DISTINCT");

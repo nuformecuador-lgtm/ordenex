@@ -1,11 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import fs from "fs";
-import path from "path";
 import { CierreEstado, RolValue, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { CajaPagoTiendaFeedService } from "@/lib/services/CajaPagoTiendaFeedService";
 import { LiquidacionService } from "@/lib/services/LiquidacionService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 import type {
   CierreParaPagoDTO,
   ILiquidacionPagoRepository,
@@ -342,11 +341,7 @@ function filaDeCaja(tx: ReturnType<typeof buildTx>): Record<string, unknown> {
  * [P2]). Un barrido sobre el texto crudo confundiria la explicacion con el defecto.
  */
 function fuenteDelServicioSinComentarios(): string {
-  const fuente = fs.readFileSync(
-    path.join(process.cwd(), "lib/services/LiquidacionService.ts"),
-    "utf8",
-  );
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  return codigoSinComentarios("lib/services/LiquidacionService.ts");
 }
 
 /** El movimiento que el servicio mando escribir en el ledger de la tienda. */
@@ -1210,11 +1205,7 @@ describe("R39/R40/R41/R42 — atomicidad, y donde NO se escribe (camino del mens
     // El unico modulo que puede tocar `cierre_dia` en esta feature es el repositorio: si el
     // servicio no lo hace pero el repositorio expusiera un `update`, R42 dependeria de que nadie
     // lo llame. Aqui se afirma que ese metodo NO EXISTE.
-    const fuente = fs.readFileSync(
-      path.join(process.cwd(), "lib/repositories/LiquidacionPagoRepository.ts"),
-      "utf8",
-    );
-    const codigo = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const codigo = codigoSinComentarios("lib/repositories/LiquidacionPagoRepository.ts");
     for (const escritura of ["update", "updateMany", "create", "delete", "deleteMany", "upsert"]) {
       expect(codigo, `cierreDia.${escritura}`).not.toMatch(
         new RegExp(`cierreDia\\.${escritura}\\b`),

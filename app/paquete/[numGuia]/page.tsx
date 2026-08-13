@@ -58,7 +58,10 @@ export default async function PaquetePage({
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 px-5 py-10">
       <header className="flex flex-col gap-1">
-        <Logo className="text-lg text-navy" />
+        {/* Feature 208: la página de seguimiento usa tokens de tema (`bg-card`,
+            `border-border`, `text-muted-foreground`), así que gira con él; el
+            wordmark en `navy` fijo era lo único que se quedaba atrás. */}
+        <Logo className="text-lg text-foreground" />
         <div className="h-1 w-10 rounded-full bg-brand" />
       </header>
 

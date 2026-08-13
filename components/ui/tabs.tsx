@@ -50,12 +50,17 @@ function TabsTrigger({
         "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none",
         "focus-visible:ring-3 focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
-        // Tabs = botones NAVY (--color-navy) con borde/outline y texto navy.
-        // Inactiva: fondo transparente; el hover rellena suave (bg-navy/10).
-        // Activa: MISMO fondo del hover (bg-navy/10, incluso al pasar el mouse),
-        // distinguida por peso y sombra en vez de un relleno sólido.
-        "border border-navy bg-transparent text-navy hover:bg-navy/10",
-        "aria-selected:bg-navy/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-navy/10",
+        // Tabs = botones de CONTORNO con la tinta del tema y relleno suave.
+        // Inactiva: fondo transparente; el hover rellena suave (foreground/10).
+        // Activa: MISMO fondo del hover (incluso al pasar el mouse), distinguida
+        // por peso y sombra en vez de un relleno sólido.
+        //
+        // Feature 208: iban con `navy` fijo (borde, tinta y relleno). En claro
+        // `--foreground` (#12233f) es prácticamente el mismo azul que `navy`
+        // (#0b2545), así que el aspecto no cambia; en oscuro la tab pasa de 1.06:1
+        // —invisible— a leerse, porque ahora la tinta gira con el tema.
+        "border border-foreground bg-transparent text-foreground hover:bg-foreground/10",
+        "aria-selected:bg-foreground/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-foreground/10",
         className,
       )}
       {...props}

@@ -61,7 +61,9 @@ export function ColumnasManifiestoPopover({
 
       <Popover.Portal>
         <Popover.Positioner sideOffset={8} align="end" className="z-50">
-          <Popover.Popup className="flex w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-border bg-background text-navy shadow-lg outline-none">
+          {/* Feature 208: `bg-background text-navy` no giraba con el tema (el popover
+              oscuro con tinta navy quedaba en 1.06:1). Los tokens del popover sí. */}
+          <Popover.Popup className="flex w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg outline-none">
             <div className="border-b border-border px-4 py-3">
               <span className="text-sm font-semibold">
                 Columnas del manifiesto

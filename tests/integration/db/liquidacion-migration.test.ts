@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios, quitarComentariosSql } from "../../fixtures/sin-comentarios";
 
 // Feature 172 / T A.2 — cobertura ESTATICA de la migracion `*_liquidacion_pago` (molde
 // `wallet-tienda-migration.test.ts`: lee migration.sql/down.sql y afirma sobre el SQL; NO
@@ -46,16 +47,14 @@ const schemaPrisma = fs.readFileSync(path.join(ROOT, "db", "schema.prisma"), "ut
 function valoresDelEnum(nombre: string): string[] {
   const m = schemaPrisma.match(new RegExp(`enum ${nombre} \\{([\\s\\S]*?)\\n\\}`));
   if (!m) throw new Error(`No se encontro el enum ${nombre} en db/schema.prisma`);
-  return m[1]
+  return quitarComentarios(m[1])
     .split("\n")
-    .map((linea) => linea.replace(/\/\/.*$/, "").trim())
+    .map((linea) => linea.trim())
     .filter((linea) => linea.length > 0 && !linea.startsWith("@@"));
 }
 
 /** El SQL sin comentarios: la prosa que EXPLICA `NOT VALID` no es `NOT VALID` ejecutable. */
-function sinComentarios(sql: string): string {
-  return sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "");
-}
+const sinComentarios = quitarComentariosSql;
 
 /**
  * `NOT VALID` tal y como Postgres lo acepta de verdad: sin distinguir mayusculas y con

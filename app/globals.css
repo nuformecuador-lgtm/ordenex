@@ -2,7 +2,34 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * Feature 211 — cuándo dispara el variant `dark:`.
+ *
+ * DOS caminos, no uno, y el segundo no es un lujo:
+ *
+ * 1. `.dark` en un ancestro = elección EXPLÍCITA del usuario («oscuro»). La clase la
+ *    estampa `providers/TemaProvider.tsx` desde la cookie que lee `(app)/layout.tsx`.
+ *
+ * 2. `.tema-sistema` + `prefers-color-scheme: dark` = «respetar el sistema», que es el
+ *    estado POR DEFECTO. Si sólo giraran los tokens y las utilidades `dark:` no
+ *    dispararan, la mitad de la app quedaría en el bug que la feature 208 documentó como
+ *    el más repetido del repo: un token que gira sobre un fondo que no («Badge`
+ *    success/warning/danger, `Button` outline/destructive, `EstatusBadge`…). El variant
+ *    y los tokens tienen que encenderse JUNTOS.
+ *
+ * Las dos vías miran a un ANCESTRO (`*`), nunca al propio elemento: por eso la clase
+ * puede vivir en un envoltorio del portal y no hace falta tocar `<html>`.
+ */
+@custom-variant dark {
+  &:is(.dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:is(.tema-sistema *) {
+      @slot;
+    }
+  }
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -88,7 +115,39 @@
   --color-kraft-inset: #f1f4fb;
 }
 
-:root {
+/*
+ * `.tema-claro` fija los valores CLAROS dentro de su subárbol, gane lo que gane
+ * arriba. Existe para las superficies que son claras POR DISEÑO y no deben girar
+ * con el tema. Tres consumidores hoy:
+ *
+ *  1. La landing pública (`app/page.tsx`), cuyo arte está compuesto sobre fotografías
+ *     y una paleta fija (`kraft-*`, `asfalto-*`, `navy-deep`).
+ *  2. Las dos hojas de la factura del cierre
+ *     (`cierres-admin/_components/cierre-factura.tsx`), que son el facsímil de un
+ *     comprobante en papel: papel blanco con tinta navy en los dos temas.
+ *  3. Feature 211: el envoltorio del portal cuando el usuario elige «claro» a mano. Es
+ *     la misma necesidad —fijar los valores claros pase lo que pase— y por eso reusa
+ *     esta clase en vez de inventar otra: al no haber `.dark` ni `.tema-sistema` en el
+ *     árbol, las utilidades `dark:` tampoco disparan.
+ *
+ * Sin esto, la landing NO era inmune "de rebote": usa `text-success-strong`, y los
+ * cuatro `--*-strong` sí tienen variante en `.dark` — es decir, el día que la fase 2
+ * ponga `.dark` en <html>, ese texto verde oscuro se volvería verde claro sobre un
+ * fondo `-soft` que sigue siendo claro (medido: 1.7:1). Declararlo aquí lo resuelve
+ * de raíz y para cualquier token futuro, en vez de parche a parche.
+ *
+ * LÍMITE MEDIDO: fija los TOKENS, no apaga el variant `dark:`, que se define contra
+ * el ancestro (`@custom-variant dark (&:is(.dark *))`) y no contra los tokens. Las
+ * utilidades `dark:` de las primitivas (`Badge` success/warning/danger/destructive,
+ * `Button` outline/ghost/destructive) siguen disparando dentro de un subárbol
+ * `tema-claro`. Medido con las cadenas de clases exactas (claro → oscuro+tema-claro):
+ * Button outline 14.79→14.78, Badge success 4.84→4.76, danger 5.30→5.32,
+ * warning 4.51→4.48, destructive 3.30→2.89. Los dos que quedan bajo AA YA fallaban en
+ * tema claro (son deuda de paleta, no de esta clase). Si algún día pesa, el arreglo de
+ * raíz es el propio variant `dark:`, no un parche por componente.
+ */
+:root,
+.tema-claro {
   --radius: 0.625rem;
   --background: #f7f8fc;
   --foreground: #12233f;
@@ -129,7 +188,24 @@
   --info-strong: #1d4ed8; /* vs card 6.70 · vs bg 6.31 · vs info-soft 6.16 */
 }
 
-.dark {
+/*
+ * Feature 211 — LA FRANJA CLARA, y por qué `body:has()`.
+ *
+ * La clase del tema se estampa en un envoltorio DENTRO del `<body>`
+ * (`providers/TemaProvider.tsx`), no en `<html>`. Los tokens son propiedades
+ * heredadas, así que giran para todo el subárbol… pero el `<body>` está FUERA de ese
+ * subárbol, y su `bg-background` (ver `@layer base`) seguiría resolviendo el valor
+ * CLARO: quedaría una franja clara alrededor de una app oscura —y el lienzo del
+ * navegador, que hereda el fondo del `<body>`, también—. Se ve peor que no tener tema.
+ *
+ * `:has()` es lo único que deja a un ancestro reaccionar a su descendiente, y es
+ * exactamente el caso. Así el `<body>` toma los MISMOS tokens que el envoltorio y el
+ * lienzo entero queda oscuro. La alternativa era pintar un `<div>` de fondo, que obliga
+ * a que ese div cubra siempre todo el alto — precisamente lo que falla en cuanto una
+ * página crece o encoge.
+ */
+.dark,
+body:has(> .dark) {
   --background: #0a1524;
   --foreground: #e6ecf8;
   --card: #10203a;
@@ -167,6 +243,65 @@
   --warning-strong: #fbbf24; /* vs bg 10.98 · vs card 9.75 · vs warning/15 7.59 */
   --danger-strong: #f87171; /* vs bg 6.63 · vs card 5.89 · vs danger/15 5.20 */
   --info-strong: #93b4f7; /* vs bg 8.83 · vs card 7.84 · vs info/15 6.97 */
+}
+
+/*
+ * Feature 211 — «respetar el sistema», el estado POR DEFECTO.
+ *
+ * Cero JS, cero cookie, cero parpadeo: lo resuelve el navegador antes del primer
+ * pintado. El envoltorio del portal lleva `tema-sistema` y es el navegador quien decide.
+ *
+ * ESTÁ ACOTADO AL PORTAL a propósito, no colgado de `:root`. Colgarlo de `:root` haría
+ * que la landing pública y las tres páginas de auth cambiaran solas según el sistema
+ * operativo de quien mira, y esas páginas son claras por diseño (feature 208): la
+ * landing está compuesta sobre fotografía y paleta fija. Con la clase en el envoltorio
+ * de `(app)/layout.tsx`, nada fuera del portal se entera.
+ *
+ * LOS VALORES SON LOS MISMOS QUE LOS DE `.dark`, literalmente. CSS no tiene forma de
+ * reutilizar un bloque de declaraciones bajo otra condición, así que están repetidos —y
+ * por eso hay una guardia que falla si divergen aunque sea en un hex:
+ * `tests/unit/guards/tema-sistema-espeja-dark.guardia.test.ts`. Si añadís un token a
+ * `.dark`, añadilo aquí; el test te lo dirá antes que un usuario.
+ */
+@media (prefers-color-scheme: dark) {
+  .tema-sistema,
+  body:has(> .tema-sistema) {
+    --background: #0a1524;
+    --foreground: #e6ecf8;
+    --card: #10203a;
+    --card-foreground: #e6ecf8;
+    --popover: #10203a;
+    --popover-foreground: #e6ecf8;
+    --primary: #ff7a33;
+    --primary-foreground: #0a1524;
+    --secondary: #16294a;
+    --secondary-foreground: #e6ecf8;
+    --muted: #16294a;
+    --muted-foreground: #9fadc9;
+    --accent: #2a1710;
+    --accent-foreground: #ffb27f;
+    --destructive: #f87171;
+    --border: #22345a;
+    --input: #26406e;
+    --ring: #ff7a33;
+    --chart-1: #ff7a33;
+    --chart-2: #3b82f6;
+    --chart-3: #1a56db;
+    --chart-4: #10b981;
+    --chart-5: #f59e0b;
+    --sidebar: #071627;
+    --sidebar-foreground: #9fadc9;
+    --sidebar-primary: #ff7a33;
+    --sidebar-primary-foreground: #071627;
+    --sidebar-accent: #12233f;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #22345a;
+    --sidebar-ring: #ff7a33;
+    --success-strong: #34d399;
+    --warning-strong: #fbbf24;
+    --danger-strong: #f87171;
+    --info-strong: #93b4f7;
+  }
 }
 
 @layer base {

@@ -25,10 +25,21 @@ import {
 // Nota: es solo-lectura. La edición de premios sigue viviendo en `RankingModule`.
 
 /** Paleta de cada escalón del podio, en tokens de marca (DESIGN.md: nada de hex sueltos
- * ni utilidades crudas de Tailwind). Oro → warning/hivis, plata → asfalto, bronce → brand. */
+ * ni utilidades crudas de Tailwind). Oro → warning/hivis, plata → asfalto, bronce → brand.
+ *
+ * Feature 208 — los `fondo` llevan variante oscura y los `texto` la acompañan. El defecto
+ * era una pareja mal casada: los `-soft`/`asfalto` son tokens FIJOS (no giran) y los
+ * `-strong` SÍ giran, así que en modo oscuro el pedestal seguía siendo crema y la tinta se
+ * volvía amarillo claro: «1º lugar» medía 1.50:1 y el porcentaje 1.23:1 — el podio era el
+ * bloque más ilegible de la app. Se aplica la técnica soft-badge de `DESIGN.md`
+ * (`dark:bg-{sem}/15`), la misma que ya usa la primitiva `Badge`.
+ *
+ * Los `premio` NO cambian: viven sobre fondos fijos y saturados (`bg-warning`,
+ * `bg-brand-light`, `bg-asfalto-2`) donde `navy-deep` es tinta fija sobre superficie fija —
+ * 7.3:1 y 12.7:1, idénticos en los dos temas. */
 const ESCALONES = {
   1: {
-    fondo: "bg-warning-soft",
+    fondo: "bg-warning-soft dark:bg-warning/15",
     aro: "ring-warning",
     texto: "text-warning-strong",
     premio: "bg-warning text-navy-deep",
@@ -38,9 +49,9 @@ const ESCALONES = {
     nombre: "text-sm",
   },
   2: {
-    fondo: "bg-asfalto-1",
+    fondo: "bg-asfalto-1 dark:bg-foreground/10",
     aro: "ring-asfalto-4",
-    texto: "text-asfalto-7",
+    texto: "text-asfalto-7 dark:text-foreground",
     premio: "bg-asfalto-2 text-asfalto-9",
     alto: "h-24",
     avatar: "size-14 text-base",
@@ -48,9 +59,9 @@ const ESCALONES = {
     nombre: "text-[13px]",
   },
   3: {
-    fondo: "bg-brand-soft",
+    fondo: "bg-brand-soft dark:bg-brand/15",
     aro: "ring-brand-light",
-    texto: "text-brand-dark",
+    texto: "text-brand-dark dark:text-brand-light",
     premio: "bg-brand-light text-navy-deep",
     alto: "h-20",
     avatar: "size-14 text-base",
