@@ -270,6 +270,23 @@ export type OrdenListItemDTO = OrdenDTO & {
   direccion?: string | null;
   montoCobrar?: number | null;
   cobraComision?: boolean;
+  /**
+   * Feature 204 — los dos importes DERIVADOS de las columnas "Flete + IVA" y "Comisión +
+   * IVA", ya calculados en el servidor con `Prisma.Decimal` y serializados como STRING
+   * escala 2 (`costosListadoOrden`, lib/utils/ingreso-ordenex.ts).
+   *
+   * Son STRING y no `number` por la misma razon que el resto del dinero de esta app: el
+   * navegador solo tiene que PINTARLOS. Cuando los derivaba el (los multiplicaba sobre los
+   * `number` de `relaciones.tienda.tarifa`), 14 de las 66 ordenes con tarifa activa de la
+   * base se veian un centimo desviadas de lo que factura el cierre.
+   *
+   * SIEMPRE traen un importe, "0.00" incluido: sin tarifa vigente el importe es cero, no
+   * "desconocido" (R9), que es lo que la columna ya mostraba. Opcionales (`?`) por el mismo
+   * patron aditivo que los campos de arriba: no romper los fixtures de UI que construyen el
+   * DTO sin ellos; el repositorio SIEMPRE los envia.
+   */
+  fleteConIva?: string;
+  comisionConIva?: string;
   // Fecha (`YYYY-MM-DD`) para la que quedo reprogramada la orden: el dia en que el
   // cron de liberacion (feature 46) la desbloquea. Sale de la gestion VIGENTE
   // (`gestion_orden.fecha_reprogramacion` de la mas reciente no anulada), no de la

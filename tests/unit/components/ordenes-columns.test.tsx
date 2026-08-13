@@ -478,3 +478,197 @@ describe("ordenesColumns — columna Mensajero (159/R16, R17)", () => {
     expect(celdaMensajero("REM-MSG-3")).toHaveTextContent(/^—$/);
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// Feature 204 — las dos columnas de dinero DERIVADO pintan el STRING del servidor y NO lo
+// recalculan.
+//
+// El bug que cierra esta ficha no era teórico: sobre las 66 órdenes con tarifa activa de la
+// base, 14 se veían un céntimo desviadas de lo que factura el cierre, porque estas dos
+// celdas multiplicaban aquí los `number` de la tarifa. Por eso el bloque no se conforma con
+// comprobar que se pinta el valor bueno: monta filas cuya TARIFA daría otro número si
+// alguien volviera a calcular en el navegador, y afirma que la celda no se inmuta.
+// ---------------------------------------------------------------------------------------
+describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del servidor)", () => {
+  const IDX_FLETE = ordenesColumns.findIndex((c) => c.id === "flete");
+  const IDX_COMISION = ordenesColumns.findIndex((c) => c.id === "comision");
+  const IDX_MONTO = ordenesColumns.findIndex((c) => c.id === "montoCobrar");
+  const IDX_FULFILLMENT = ordenesColumns.findIndex((c) => c.id === "fulfillment");
+
+  /** La tarifa REAL de la base, tal y como la sirve el DTO (Decimal -> number). */
+  function conTarifa(): OrdenListItemRelaciones {
+    return {
+      estatus: null,
+      tienda: {
+        id: "t1",
+        nombre: "Tienda Uno",
+        email: "t@ordenex.co",
+        telefono: "0990000001",
+        tarifa: {
+          id: "tar-1",
+          tiendaId: "t1",
+          status: "activo",
+          valorFlete: 3000,
+          valorFleteDevuelto: 1500,
+          valorFleteGam: 2000,
+          valorFleteDevueltoGam: 1000,
+          fulfillment: 250.5,
+          comisionCod: 3.5,
+          ivaFlete: 13,
+          ivaComisionCod: 13,
+          createdAt: new Date("2026-01-01T00:00:00Z"),
+          updatedAt: new Date("2026-01-01T00:00:00Z"),
+        },
+      },
+      zona: { id: "z1", nombre: "Limón", esCentral: false },
+      provincia: null,
+      canton: null,
+      distrito: null,
+      mensajeroAsignado: null,
+    };
+  }
+
+  const celdas = (rem: string) =>
+    within(screen.getByRole("row", { name: new RegExp(rem) })).getAllByRole("cell");
+
+  it("pinta el STRING derivado del servidor, con el formato de la app", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({
+            id: "o1",
+            numRemision: "REM-204-A",
+            montoCobrar: 14900,
+            cobraComision: true,
+            relaciones: conTarifa(),
+            fleteConIva: "3390.00",
+            comisionConIva: "589.30",
+          }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const fila = celdas("REM-204-A");
+    expect(fila[IDX_FLETE]).toHaveTextContent(/^₡3\.390,00$/);
+    expect(fila[IDX_COMISION]).toHaveTextContent(/^₡589,30$/);
+  });
+
+  it("NO recalcula: con la MISMA tarifa, la celda sigue al servidor aunque el número cambie", () => {
+    // Las dos filas comparten tarifa y monto. Solo cambia lo que dice el servidor. Si la
+    // celda volviera a derivar en el navegador, las dos pintarían lo mismo y este test caería.
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({
+            id: "o1",
+            numRemision: "REM-204-B1",
+            montoCobrar: 16618.4,
+            cobraComision: true,
+            relaciones: conTarifa(),
+            fleteConIva: "3390.00",
+            comisionConIva: "657.25", // lo que factura el cierre
+          }),
+          makeOrden({
+            id: "o2",
+            numRemision: "REM-204-B2",
+            montoCobrar: 16618.4,
+            cobraComision: true,
+            relaciones: conTarifa(),
+            fleteConIva: "1.23",
+            comisionConIva: "4.56",
+          }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    expect(celdas("REM-204-B1")[IDX_COMISION]).toHaveTextContent(/^₡657,25$/);
+    // Y NO el 657,26 que salía de multiplicar en el navegador.
+    expect(celdas("REM-204-B1")[IDX_COMISION]).not.toHaveTextContent("657,26");
+    expect(celdas("REM-204-B2")[IDX_FLETE]).toHaveTextContent(/^₡1,23$/);
+    expect(celdas("REM-204-B2")[IDX_COMISION]).toHaveTextContent(/^₡4,56$/);
+  });
+
+  it("NO recalcula: destrozar la tarifa de la fila no mueve ninguna de las dos celdas", () => {
+    // Misma fila, tarifa absurda. Antes de la 204 esto cambiaba los dos importes.
+    const rota = conTarifa();
+    rota.tienda!.tarifa = {
+      ...rota.tienda!.tarifa!,
+      valorFlete: 999999,
+      comisionCod: 99,
+      ivaFlete: 99,
+      ivaComisionCod: 99,
+    };
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({
+            id: "o1",
+            numRemision: "REM-204-C",
+            montoCobrar: 14900,
+            cobraComision: true,
+            relaciones: rota,
+            fleteConIva: "3390.00",
+            comisionConIva: "589.30",
+          }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const fila = celdas("REM-204-C");
+    expect(fila[IDX_FLETE]).toHaveTextContent(/^₡3\.390,00$/);
+    expect(fila[IDX_COMISION]).toHaveTextContent(/^₡589,30$/);
+  });
+
+  it("un DTO viejo sin los campos cae a ₡0,00, no a un cálculo de emergencia", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({
+            id: "o1",
+            numRemision: "REM-204-D",
+            montoCobrar: 14900,
+            cobraComision: true,
+            relaciones: conTarifa(), // hay tarifa, pero el DTO no trae los derivados
+          }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const fila = celdas("REM-204-D");
+    expect(fila[IDX_FLETE]).toHaveTextContent(/^₡0,00$/);
+    expect(fila[IDX_COMISION]).toHaveTextContent(/^₡0,00$/);
+  });
+
+  it("las otras dos columnas de dinero (monto y fulfillment) siguen intactas", () => {
+    // R21 de la 204: la ficha toca las dos DERIVADAS. `montoCobrar` y `fulfillment` son
+    // valores de la fila que solo se formatean, y se quedan como estaban.
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({
+            id: "o1",
+            numRemision: "REM-204-E",
+            montoCobrar: 16618.4,
+            relaciones: conTarifa(),
+            fleteConIva: "3390.00",
+            comisionConIva: "657.25",
+          }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const fila = celdas("REM-204-E");
+    expect(fila[IDX_MONTO]).toHaveTextContent(/^₡16\.618,40$/);
+    expect(fila[IDX_FULFILLMENT]).toHaveTextContent(/^₡250,50$/);
+  });
+});

@@ -40,31 +40,31 @@ function tiempoTranscurrido(value: Date | string): string {
 }
 
 /**
- * Flete + IVA de la orden. Espeja `derivarIngresoOrden` (lib/utils/ingreso-ordenex.ts):
- * flete = esCentral ? valorFleteGam : valorFlete; total = flete + IVA del flete, donde
- * IVA = flete · ivaFlete% (ivaFlete es porcentaje 0..100). Sin tarifa activa → 0 (misma
- * degradación segura que el backend, R9).
+ * Feature 204 — DINERO DERIVADO: aquí ya no se calcula ninguno.
+ *
+ * Hasta la 204 este archivo tenía dos funciones —`calcularFleteConIva` y
+ * `calcularComisionConIva`— que multiplicaban en el NAVEGADOR los `number` de la tarifa
+ * (`flete * (1 + ivaFlete/100)`, `montoCobrar * comisionCod% * (1 + ivaComisionCod%)`).
+ * Decían espejar `derivarIngresoOrden`, y no lo hacían. Medido contra las 66 órdenes con
+ * tarifa activa de la base, 14 se veían un céntimo desviadas de lo que factura el cierre:
+ *
+ *   monto 14900.00 (comisión 3.50%, IVA 13%): el cierre cobra ₡589,30 y la tabla pintaba
+ *   ₡589,29 — el medio exacto 589.295 no existe en binario y `toFixed(2)` bajaba.
+ *   monto 16618.40: el cierre cobra ₡657,25 y la tabla pintaba ₡657,26 — el servidor
+ *   redondea la comisión (581.644 → 581.64) ANTES de aplicarle el IVA y el navegador no.
+ *
+ * Ahora las dos cifras llegan DERIVADAS del servidor, como STRING de escala 2
+ * (`OrdenListItemDTO.fleteConIva` / `.comisionConIva`, que salen de `costosListadoOrden` y
+ * por tanto de la misma `derivarIngresoOrden` que factura el cierre). Este archivo las
+ * pinta. No las opera, y no vuelve a nombrar `valorFlete`, `ivaFlete`, `comisionCod` ni
+ * `ivaComisionCod`: si reaparecen aquí, es que alguien volvió a calcular en el navegador, y
+ * eso es exactamente lo que vigila `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts`.
+ *
+ * Las otras dos columnas de dinero (`montoCobrar` y `fulfillment`) siguen con
+ * `toValidNumber`: son PASO A PASO de un `DECIMAL(12,2)` que solo se formatea, sin ninguna
+ * operación en medio, y ese viaje sí es exacto (medido: `Number(s).toFixed(2) === s` para
+ * los 2.000.001 importes de 0,00 a 20.000,00 y hasta `9999999999.99`).
  */
-function calcularFleteConIva(row: OrdenListItemDTO): number {
-  const tarifa = row.relaciones?.tienda?.tarifa;
-  if (!tarifa) return 0;
-  const esCentral = row.relaciones?.zona?.esCentral;
-  const flete = toValidNumber(esCentral ? tarifa.valorFleteGam : tarifa.valorFlete);
-  return flete * (1 + toValidNumber(tarifa.ivaFlete) / 100);
-}
-
-/**
- * Comisión COD + su IVA. Espeja `derivarIngresoOrden`: base = `montoCobrar` (valor de
- * cobro COD de la orden); comisión = base · comisionCod%; total = comisión + su IVA
- * (comisión · ivaComisionCod%). Si la orden NO cobra comisión (`cobraComision === false`)
- * o no hay tarifa → 0, igual que el backend, que en ese caso NO emite el concepto.
- */
-function calcularComisionConIva(row: OrdenListItemDTO): number {
-  const tarifa = row.relaciones?.tienda?.tarifa;
-  if (!tarifa || row.cobraComision === false) return 0;
-  const comision = toValidNumber(row.montoCobrar) * (toValidNumber(tarifa.comisionCod) / 100);
-  return comision * (1 + toValidNumber(tarifa.ivaComisionCod) / 100);
-}
 
 /**
  * Columnas concretas de `/ordenes`. La tabla genérica NO conoce el dominio orden:
@@ -161,9 +161,10 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   {
     id: "flete",
     value: "Flete + IVA",
-    // Flete GAM o estándar según la zona, RECARGADO con el % de IVA de flete de la
-    // tarifa. PriceLabel formatea a ₡ y resuelve el caso sin tarifa (→ ₡0).
-    render: (row) => <PriceLabel value={calcularFleteConIva(row)} />,
+    // STRING ya derivado por el servidor (flete GAM o estándar según la zona + su IVA).
+    // Sin tarifa activa el servidor manda "0.00", y un DTO viejo sin el campo cae al ₡0,00
+    // de PriceLabel: la misma degradación segura de siempre (R9).
+    render: (row) => <PriceLabel value={row.fleteConIva} />,
   },
   {
     id: "fulfillment",
@@ -176,8 +177,9 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   {
     id: "comision",
     value: "Comisión + IVA",
-    // Comisión COD sobre el valor de cobro + su IVA (ver calcularComisionConIva).
-    render: (row) => <PriceLabel value={calcularComisionConIva(row)} />,
+    // STRING ya derivado por el servidor (comisión COD sobre el valor de cobro + su IVA).
+    // Sin tarifa, o si la orden NO cobra comisión, el servidor manda "0.00".
+    render: (row) => <PriceLabel value={row.comisionConIva} />,
   },
   {
     id: "mensajero",
