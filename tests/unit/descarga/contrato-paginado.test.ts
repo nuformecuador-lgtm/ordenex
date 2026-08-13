@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 import { describe, it, expect, vi } from "vitest";
 
@@ -131,7 +132,7 @@ describe("contrato de listado paginado — conducta (T H.2, R41)", () => {
 
 /** Quita comentarios: en este repo la prosa habla de `page`/`pageSize` y falsearia el scan. */
 function sinComentarios(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 function listarTs(dir: string, acc: string[] = []): string[] {

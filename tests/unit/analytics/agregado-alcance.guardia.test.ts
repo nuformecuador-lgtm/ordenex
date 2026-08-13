@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { listarMetricas } from "@/lib/analytics/metrics";
@@ -22,7 +23,7 @@ const ACCION = "lib/actions/analitica-operativa.ts";
 const INTERFAZ_ROLLUP = "lib/interfaces/repositories/IAnaliticaOperativaRollupRepository.ts";
 
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 function leerCodigo(rel: string): string {

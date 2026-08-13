@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { listarMetricas, sonSumables, type MetricaId } from "@/lib/analytics/metrics";
@@ -17,8 +18,7 @@ const SERVICIO = "lib/services/AnaliticaOperativaService.ts";
 function soloCodigo(rel: string): string {
   return fs
     .readFileSync(path.join(REPO_ROOT, rel), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|\s)\/\/.*$/gm, "$1");
+    ;
 }
 
 /**

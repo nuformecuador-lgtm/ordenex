@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 
@@ -35,7 +36,7 @@ const CUBO_TEMPORAL_PATH = path.join(REPO_ROOT, "lib", "analytics", "cubo-tempor
 
 /** Quita comentarios de bloque, de linea y trailing, para censar solo el codigo. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /** Especificadores de modulo de todo import/export/require del codigo dado. */

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 // Import de VALOR, no de tipo: los censos (6) y (7) necesitan los nombres EN RUNTIME, y
@@ -93,7 +94,7 @@ function relativa(archivo: string): string {
  * precisamente dentro de comillas.
  */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 interface ArchivoCensado {

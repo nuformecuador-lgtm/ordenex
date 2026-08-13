@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { listarMetricas } from "@/lib/analytics/metrics";
@@ -25,7 +26,7 @@ const DATABASE_URL_ORIGINAL = process.env.DATABASE_URL;
 
 /** El codigo sin comentarios: la PROSA que explica una prohibicion no la infringe. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 beforeAll(() => {
@@ -380,8 +381,7 @@ describe("R28 · misma entrada, misma salida, con mas de una fila", () => {
     const infractores = ARCHIVOS.filter((rel) => {
       const codigo = fs
         .readFileSync(path.join(REPO_ROOT, rel), "utf8")
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/(^|\s)\/\/.*$/gm, "$1");
+        ;
       return /Date\.now\s*\(|Math\.random\s*\(|new Date\s*\(\s*\)/.test(codigo);
     });
     expect(infractores).toEqual([]);
