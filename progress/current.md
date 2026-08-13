@@ -9,6 +9,47 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🏁 CIERRE DE JORNADA 2026-08-12/13 — **EMPIEZA A LEER POR AQUÍ**
+
+Todo lo de esta jornada está **mergeado en `dev`**. No queda nada a medias ni ningún PR abierto.
+
+**En producción** (releases #341, #343 y #352): las features **200** (rediseño de `/wallet`), **201**
+(un solo formato de dinero), **205** (pagar al mensajero desde su pantalla, con su migración
+`liquidacion_reparto` aplicada y verificada en prod) y las deudas **202**, **203**, **204**, **207**.
+
+**En `dev`, sin desplegar — 7 commits**: la tanda A de la **209** (quitadores de comentarios) y el
+**modo oscuro completo** (**208** el tema correcto + **211** el interruptor).
+
+### Lo que falta, por orden de valor
+
+1. **El diálogo de pago de la 205 nunca se ha visto en pantalla.** La tabla, el formato, el enlace
+   y el estado «nada que pagar» sí. El diálogo exige un cierre con **efectivo recaudado menor que
+   lo devengado** (regla `min(P,E)`); el de prueba tenía ₡52.500 en efectivo contra ₡5.100 de
+   ganancia, así que saldó entero. Para provocarlo hay que cobrar una jornada por SINPE.
+2. **Ficha 210** — dos variantes de `Badge` bajo el umbral (`warning` 4,51, `destructive` 3,30).
+   **No es deuda de modo oscuro: fallan igual o peor en claro.** Es paleta de marca y toca cada
+   insignia de la app.
+3. **Ficha 206** — anular un reparto entero de una vez. Feature pequeña; `reparto_id` ya deja la
+   puerta abierta.
+4. **Ficha 209, tanda B** — 50 quitadores de la semántica *correcta*, solo duplicada. Sin riesgo.
+5. **Desplegar** los 7 commits pendientes cuando convenga. Sin migraciones.
+
+### Lo que esta jornada enseñó, y conviene no re-aprender
+
+- **La herramienta de medir también miente, y en verde.** Pasó cuatro veces: un runner de
+  mutaciones que reportó supervivientes **sin ejecutar un solo test**; colores `lab()` parseados
+  como `rgb` que dieron una tabla entera de números plausibles e inventados; un barrido de dinero
+  con la regex rota que informó «4620 importes revisados, **0 detectados**»; y el dev server
+  sirviendo **CSS rancio**, que casi lleva a concluir que un mecanismo no funcionaba. Todo script
+  de verificación debe **abortar** si sus controles fallan.
+- **Un fixture cuyos dos valores coinciden tapa el defecto.** Apareció ocho veces. El caso grave:
+  `imputable === imputableTotal === cuentaPorPagar` hacía sobrevivir una mutación sobre **la cifra
+  que la pantalla propone como monto**.
+- **Los arreglos de las guardias no los sostienen las guardias.** De las mutaciones sobre los
+  parsers de censo, **9 eran invisibles** para las 178 suites: revertirlos no pondría nada en rojo.
+- **Medir antes de arreglar cambió el resultado dos veces**: la 204 parecía preventiva y era un bug
+  real en pantalla (14 de 66 filas); la 203 culpaba al `testTimeout` y la causa era `maxWorkers`.
+
 ## 🔴 EN CURSO 2026-08-11/12 — feature **205**, rechazada por el reviewer y en corrección
 
 Pagar la cuenta por pagar del mensajero **desde `/wallet/mensajeros`**, imputando el importe a
