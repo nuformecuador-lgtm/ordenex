@@ -181,7 +181,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Analítica + Entregas + Recolección + Ranking + Cierre del día, NO Órdenes, Novedades ni Configuración", () => {
+  it("mensajero ve Entregas + Recolección + Ranking + Cierre del día, NO Analítica, Órdenes, Novedades ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
@@ -191,20 +191,20 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // mensajero DEJA de verlo.
     // Feature 167 (R4): "Recolección" es el apartado propio de la recolección en
     // tienda, que dejó de vivir dentro de "Entregas". Va justo debajo de ella.
-    // Feature 133 (T2.3, R1): "Analítica" entra PRIMERA en la lista del mensajero (es la
-    // posición 2 de SIDEBAR_ITEMS y este rol no ve "Inicio"). Comparación por IGUALDAD
-    // intacta: no se relajó nada, se añadió el ítem que la feature abre. Ojo: ser el
-    // primero de la barra NO la convierte en su aterrizaje post-login — el ítem está
-    // marcado `destinoInicial: false` (T5.1) y el mensajero sigue cayendo en
-    // `/mis-asignaciones/reparto` (ver el bloque de `primerDestino` de abajo y
-    // `tests/unit/auth/destino-post-login.test.ts`).
+    // 2026-08-12 (decisión del humano): "Analítica" SALE de la barra del mensajero. La 133
+    // (T2.3, R1) la había puesto PRIMERA en su lista —posición 2 de SIDEBAR_ITEMS, y este
+    // rol no ve "Inicio"—; hoy el mensajero no la ve en ninguna posición y tampoco pasa el
+    // `notFound()` de la ruta (las dos capas leen `ROLES_ACCESO_ANALITICA`, ver R10 abajo).
+    // Su aterrizaje post-login no se mueve: ya era `/mis-asignaciones/reparto` por el
+    // `destinoInicial: false` del ítem, y ahora lo es porque "Entregas" es su primer ítem.
+    // Comparación por IGUALDAD intacta: la lista sigue siendo exhaustiva.
     expect(visibles).toEqual([
-      "Analítica",
       "Entregas",
       "Recolección",
       "Ranking",
       "Cierre del día",
     ]);
+    expect(visibles).not.toContain("Analítica");
     expect(visibles).not.toContain("Órdenes");
     expect(visibles).not.toContain("Novedades");
     expect(visibles).not.toContain("Configuración");
@@ -251,10 +251,12 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
 // Aterrizaje de `/dashboard` para los roles sin inicio propio (pedido humano): el primer
 // ítem ELEGIBLE de SU sidebar, no un "Bienvenido" vacío.
 //
-// Feature 133 (T5.1, Q2): desde que "Analítica" es visible para `mensajero` y
+// Feature 133 (T5.1, Q2): desde que "Analítica" es visible para `adminTienda` y
 // `adminSatelite`, es el primer ítem de su barra — y aun así NO es su aterrizaje: el ítem
-// está marcado `destinoInicial: false` y `primerDestino` lo salta. Los dos casos de abajo
-// siguen verdes por eso, y no por casualidad. El test que enumera los cinco destinos POR
+// está marcado `destinoInicial: false` y `primerDestino` lo salta. El caso del
+// `adminSatelite` sigue verde por eso, y no por casualidad. El del `mensajero` ya no
+// depende de la marca desde que dejó de ver el ítem (2026-08-12): su primer ítem es
+// "Entregas". El test que enumera los cinco destinos POR
 // VALOR (sin derivarlos de `primerDestino`) vive en `tests/unit/auth/destino-post-login.test.ts`.
 describe("primerDestino (aterrizaje de /dashboard)", () => {
   const destinoDe = (rol: RolValue) =>
@@ -358,16 +360,16 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     expect(conEseHref[0].label).toBe("Analítica");
   });
 
-  // Feature 133 (T2.3, R1): el bloque R8 pasa de dos roles a los CINCO lectores. No es
-  // una relajación: es el otro lado del reparto que hace el R9 de abajo — los tres roles
-  // se MUEVEN de la lista de excluidos a la de incluidos, y ninguna lista pierde fuerza.
-  it("R8 (+133 R1): puedeVer e itemsVisibles incluyen el ítem para los CINCO roles lectores", () => {
+  // Feature 133 (T2.3, R1): el bloque R8 pasó de dos roles a los CINCO lectores.
+  // 2026-08-12: vuelve a CUATRO — el `mensajero` se mueve de esta lista a la de excluidos
+  // del R9 de abajo, que es el otro lado exacto del reparto. Ninguna lista pierde fuerza y
+  // ningún rol deja de estar enumerado: los seis siguen repartidos entre los dos casos.
+  it("R8 (+133 R1, −mensajero 2026-08-12): puedeVer e itemsVisibles incluyen el ítem para los CUATRO roles con acceso", () => {
     for (const rol of [
       "maestro",
       "admin",
       "adminTienda",
       "adminSatelite",
-      "mensajero",
     ] as RolValue[]) {
       expect(puedeVer(analitica, actor(rol))).toBe(true);
       expect(
@@ -384,13 +386,18 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
   // sesión de UI: `lib/analytics/types.ts` la deja fuera de los cinco lectores a propósito)
   // y el actor ausente o inválido. La lista de excluidos se ENCOGE porque tres roles se
   // pasaron a la de incluidos (R8, arriba); no porque se haya dejado de comprobar nada.
-  it("R9 (reexpresado por la 133): apiKey y el actor ausente siguen SIN ver el ítem", () => {
-    expect(puedeVer(analitica, actor("apiKey"))).toBe(false);
-    expect(
-      itemsVisibles(SIDEBAR_ITEMS, actor("apiKey")).some(
-        (i) => i.href === "/analitica",
-      ),
-    ).toBe(false);
+  it("R9 (reexpresado por la 133; +mensajero 2026-08-12): apiKey, el mensajero y el actor ausente NO ven el ítem", () => {
+    // El `mensajero` vuelve a esta lista por decisión del humano (2026-08-12). No es una
+    // vuelta atrás de la 133 entera: `adminTienda` y `adminSatelite` siguen entrando, y el
+    // mensajero conserva su ALCANCE en el catálogo de la 135 — lo que pierde es la puerta.
+    for (const rol of ["apiKey", "mensajero"] as RolValue[]) {
+      expect(puedeVer(analitica, actor(rol))).toBe(false);
+      expect(
+        itemsVisibles(SIDEBAR_ITEMS, actor(rol)).some(
+          (i) => i.href === "/analitica",
+        ),
+      ).toBe(false);
+    }
     expect(puedeVer(analitica, null)).toBe(false);
     expect(
       itemsVisibles(SIDEBAR_ITEMS, null).some((i) => i.href === "/analitica"),

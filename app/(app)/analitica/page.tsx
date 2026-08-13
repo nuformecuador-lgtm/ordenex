@@ -19,10 +19,11 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
  * (`lib/auth/menu-visibility.ts`) sólo decide qué se MUESTRA, la defensa real
  * es este `notFound()`.
  *
- * Entran los cinco roles lectores de analítica (D1 de la 133,
- * `ROLES_ACCESO_ANALITICA`, que ahora se DERIVA del conjunto del dominio). El
- * ítem de menú consume esa misma constante, así que las dos capas no pueden
- * divergir (R10 de la 129).
+ * Entran los roles de `ROLES_ACCESO_ANALITICA`: los lectores del dominio de la
+ * analítica (D1 de la 133) MENOS los que la decisión del 2026-08-12 dejó fuera
+ * —hoy el `mensajero`, que conserva su alcance en el catálogo pero ya no tiene
+ * puerta—. El ítem de menú consume esa misma constante, así que las dos capas no
+ * pueden divergir (R10 de la 129).
  *
  * ─── FEATURE 133: EL RECORTE DE PRESENTACIÓN ─────────────────────────────────
  *
@@ -70,10 +71,10 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
  */
 export default async function AnaliticaPage() {
   const actor = await resolveActorFromSession();
-  // `ROLES_ACCESO_ANALITICA` es una tupla de literales de rol —la del dominio de
-  // analítica, del que ahora deriva (D1 de la 133)— y su `.includes` sólo acepta
-  // esos literales, no cualquier `RolValue`. Se ensancha el tipo del ARRAY (no el
-  // de `actor.rol`) en este único punto de uso.
+  // `ROLES_ACCESO_ANALITICA` es un array de literales de rol —los del dominio de
+  // analítica, del que deriva restando (D1 de la 133 + la decisión del 2026-08-12)—
+  // y su `.includes` sólo acepta esos literales, no cualquier `RolValue`. Se
+  // ensancha el tipo del ARRAY (no el de `actor.rol`) en este único punto de uso.
   //
   // Ojo con lo que este conjunto NO decide: quién ve el DINERO lo sigue decidiendo
   // `esAccesoTotal` unas líneas más abajo, que es otro concepto y otra fuente.
