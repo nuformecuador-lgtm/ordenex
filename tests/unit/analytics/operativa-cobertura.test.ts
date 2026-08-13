@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { HORIZONTE_HISTORIAL_CR, esNoComparable } from "@/lib/analytics/backfill-rango";
 import { PENUMBRA } from "@/lib/types/analitica-operativa";
 import { consultaDe, cubo, rollupFalso, servicioCon } from "./_fake-operativa";
@@ -75,10 +76,7 @@ describe("R19 · el rango que cruza el horizonte declara sus fechas no comparabl
           if (e.name === "node_modules" || e.name.startsWith(".")) continue;
           recorrer(rel);
         } else if (EXT.has(path.extname(e.name))) {
-          const codigo = fs
-            .readFileSync(path.join(REPO_ROOT, rel), "utf8")
-            .replace(/\/\*[\s\S]*?\*\//g, "")
-            .replace(/(^|\s)\/\/.*$/gm, "$1");
+          const codigo = quitarComentarios(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8"));
           if (codigo.includes(HORIZONTE_HISTORIAL_CR)) conLaFecha.push(rel);
         }
       }

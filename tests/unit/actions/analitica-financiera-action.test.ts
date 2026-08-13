@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { consultarMetricaFinanciera } from "@/lib/actions/analitica-financiera";
 import type { AnaliticaFinancieraActionDeps } from "@/lib/actions/analitica-financiera";
 import type { ErrorLogger } from "@/lib/errors/logger";
@@ -146,10 +147,7 @@ describe("E.1 / R11 · el forbidden se audita con una llamada explicita, antes d
 });
 
 describe("E.1 / R15 · el actor sale de resolveActorFromSession y de ningun otro sitio", () => {
-  const codigo = fs
-    .readFileSync(path.join(REPO_ROOT, ARCHIVO_ACCION), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|\s)\/\/.*$/gm, "$1");
+  const codigo = quitarComentarios(fs.readFileSync(path.join(REPO_ROOT, ARCHIVO_ACCION), "utf8"));
 
   it("el borde importa `resolveActorFromSession`", () => {
     expect(codigo).toContain("resolveActorFromSession");
