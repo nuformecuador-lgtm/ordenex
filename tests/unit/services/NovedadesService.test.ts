@@ -29,12 +29,31 @@ type RepoMethods = Pick<
   "countDevueltasByTienda" | "findDevueltasByTienda" | "findCausasDevueltaVigentes"
 >;
 
+// 2026-08-13 (pedido humano): la fila del repo es AHORA la orden completa (`NovedadOrdenRow`
+// espeja a `MiAsignacionRow`), porque `NovedadDTO` extiende `MiAsignacionDTO` y `/novedades`
+// pinta las MISMAS cards POS que el portal del mensajero. El repo ya entrega todo
+// serializable: los tres decimales (peso, monto, lat/lng) como `number | null` y los
+// catalogos con el nombre resuelto.
 function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
   return {
     id: "o1",
     numGuia: 100,
+    numRemision: "REM-001",
+    estatusValue: "devuelta",
     destinatario: "Ana",
     telefonoDest: "88887777",
+    direccion: "Calle 1, casa 2",
+    producto: "Zapatos",
+    peso: 1.5,
+    montoCobrar: 12500,
+    latitud: 9.9333296,
+    longitud: -84.0833282,
+    notas: "Tocar el timbre",
+    tiendaNombre: "Tienda Uno",
+    zonaNombre: "GAM",
+    provinciaNombre: "San Jose",
+    cantonNombre: "Central",
+    distritoNombre: "Carmen",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
   };
@@ -272,5 +291,210 @@ describe("NovedadesService.listar — intentos de entrega en lote (160/R11-R15/R
     );
     expect(res).toEqual({ status: "forbidden" });
     expect(doble.contarIntentosEnLote).not.toHaveBeenCalled();
+  });
+});
+
+// --- 2026-08-12 (pedido humano): producto y peso en el DTO ---
+// `/novedades` monta la card POS en su vista MOSAICO, que pinta el producto (junto al icono
+// de paquete) y el peso (`formatPeso`) SIN compuerta. La decision fue TRAER el dato real de
+// la orden, no apagar la seccion. El servicio proyecta ambos campos SIEMPRE (patron aditivo:
+// opcionales en el tipo para no romper fixtures, pero emitidos en cada item).
+
+describe("NovedadesService.listar — producto y peso al DTO", () => {
+  it("proyecta producto y peso de la orden en cada item", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 1),
+      findDevueltasByTienda: vi.fn(async () => [
+        ordenRow({ id: "o1", producto: "Licuadora", peso: 2.75 }),
+      ]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      ADMIN,
+    );
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    expect(res.items[0].producto).toBe("Licuadora");
+    expect(res.items[0].peso).toBe(2.75);
+  });
+
+  it("peso ausente viaja como null: ni 0, ni cadena vacia (la card pinta la raya)", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 1),
+      findDevueltasByTienda: vi.fn(async () => [
+        ordenRow({ id: "sin-peso", producto: "Caja", peso: null }),
+      ]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      ADMIN,
+    );
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    const item = res.items[0];
+    expect(item.peso).toBeNull();
+    expect(item.peso).not.toBe(0);
+    // `producto` es NOT NULL en el schema: siempre hay texto que pintar al lado del icono.
+    expect(item.producto).toBe("Caja");
+  });
+
+  it("los campos son SIEMPRE emitidos y 100% serializables (borde RSC)", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 2),
+      findDevueltasByTienda: vi.fn(async () => [
+        ordenRow({ id: "a", producto: "Uno", peso: 0.5 }),
+        ordenRow({ id: "b", producto: "Dos", peso: null }),
+      ]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      ADMIN,
+    );
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    for (const item of res.items) {
+      expect(Object.keys(item)).toEqual(expect.arrayContaining(["producto", "peso"]));
+      expect(typeof item.producto).toBe("string");
+      expect(item.peso === null || typeof item.peso === "number").toBe(true);
+      // Sin Decimal ni Date: el DTO sobrevive a un round-trip JSON sin perder nada.
+      expect(JSON.parse(JSON.stringify(item))).toEqual(item);
+    }
+  });
+});
+
+// --- 2026-08-13 (pedido humano): la orden COMPLETA al DTO ---
+// `NovedadDTO` extiende `MiAsignacionDTO`, asi que `/novedades` pinta las mismas cards POS
+// que «En reparto»/«Entregas» con datos REALES y no con los rellenos que el adaptador de
+// front inventaba. Aqui se afirma que cada campo de la fila llega al DTO con su valor, que
+// los ausentes viajan como `null` (nunca `""` ni `0`), y las dos unicas cosas que el service
+// decide por si mismo: `secuenciaRuta` fijo en `null` y `createdAt` que NO viaja.
+
+describe("NovedadesService.listar — la orden completa al DTO (card POS compartida)", () => {
+  it("propaga TODOS los campos de la fila con su valor real", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 1),
+      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      ADMIN,
+    );
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    expect(res.items[0]).toMatchObject({
+      id: "o1",
+      numGuia: 100,
+      // El REAL de la orden, NO la etiqueta «Guia N»: esa la pone el front (R9).
+      numRemision: "REM-001",
+      estatusValue: "devuelta",
+      destinatario: "Ana",
+      telefonoDest: "88887777",
+      direccion: "Calle 1, casa 2",
+      producto: "Zapatos",
+      peso: 1.5,
+      montoCobrar: 12500,
+      latitud: 9.9333296,
+      longitud: -84.0833282,
+      notas: "Tocar el timbre",
+      tiendaNombre: "Tienda Uno",
+      zonaNombre: "GAM",
+      provinciaNombre: "San Jose",
+      cantonNombre: "Central",
+      distritoNombre: "Carmen",
+    });
+  });
+
+  it("los campos AUSENTES viajan como null: ni cadena vacia ni cero", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 1),
+      findDevueltasByTienda: vi.fn(async () => [
+        ordenRow({
+          id: "pelada",
+          peso: null,
+          direccion: null,
+          montoCobrar: null,
+          latitud: null,
+          longitud: null,
+          notas: null,
+          distritoNombre: null,
+        }),
+      ]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      ADMIN,
+    );
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    const item = res.items[0];
+    for (const campo of [
+      "peso",
+      "direccion",
+      "montoCobrar",
+      "latitud",
+      "longitud",
+      "notas",
+      "distritoNombre",
+    ] as const) {
+      expect(item[campo]).toBeNull();
+      // Un dato ausente NO se disfraza: ni `""` (que la card leeria como etiqueta vacia)
+      // ni `0` (que en `montoCobrar` seria una cifra inventada).
+      expect(item[campo]).not.toBe("");
+      expect(item[campo]).not.toBe(0);
+    }
+    // Los NOT NULL del schema siguen presentes en la misma orden.
+    expect(item.producto).toBe("Zapatos");
+    expect(item.numRemision).toBe("REM-001");
+    expect(item.zonaNombre).toBe("GAM");
+  });
+
+  it("`secuenciaRuta` es SIEMPRE null: una novedad no es parada de ninguna ruta", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 2),
+      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "a" }), ordenRow({ id: "b" })]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      ADMIN,
+    );
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    for (const item of res.items) expect(item.secuenciaRuta).toBeNull();
+  });
+
+  it("`estatusValue` sale de la fila (proyectado), no hardcodeado en el service", async () => {
+    // El predicado del repo ya ancla la lista a `devuelta`; el service NO reafirma el valor
+    // por su cuenta. Si la fila trae otra cosa, el DTO la refleja: es un dato, no una constante.
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 1),
+      findDevueltasByTienda: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "otro_valor" }),
+      ]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      ADMIN,
+    );
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    expect(res.items[0].estatusValue).toBe("otro_valor");
+  });
+
+  it("`createdAt` NO viaja al DTO: es de la fila del repo y muere en el ordenamiento", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 1),
+      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      ADMIN,
+    );
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    const item = res.items[0];
+    expect(item).not.toHaveProperty("createdAt");
+    // Ni un solo `Date` en el DTO: el borde RSC no lo transporta.
+    for (const valor of Object.values(item)) expect(valor).not.toBeInstanceOf(Date);
+    expect(JSON.parse(JSON.stringify(item))).toEqual(item);
   });
 });
