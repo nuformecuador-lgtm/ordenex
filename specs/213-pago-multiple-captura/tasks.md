@@ -166,10 +166,14 @@ dando al fixture su línea coherente, NUNCA relajando la aserción.** 8 asercion
   en el diff (R33); `pagos-frontera.guardia.test.ts` y los tests de la 212 verdes **sin editarlos**
   (R34). **Hecho:** `git diff --name-only origin/dev` revisado archivo por archivo y pegado en
   `impl_213.md`.
-- [ ] **T16.** **`./init.sh` COMPLETO**, redirigido a fichero (no pipeado: `./init.sh | tail`
+- [x] **T16.** **`./init.sh` COMPLETO**, redirigido a fichero (no pipeado: `./init.sh | tail`
   devuelve el exit de `tail`) y comparando el TOTAL de archivos con el de `dev` antes de creerse el
   conteo —una corrida degradada omite archivos enteros y parece casi verde—.
   **Hecho:** `== init OK ==` con `EXIT=0`, sin `unhandled errors` y con el nº de archivos esperado.
+  Corrida sobre `704705fe`: **1090 archivos / 13752 tests, 0 rojos**, 543 s, lint 0 errores. El
+  baseline de la 212 era 1081/13579, así que el árbol CRECIÓ —no es una corrida degradada—. Una
+  corrida anterior se cortó al arrancar `vitest` y **no se contó como verde**: matada no es fallida,
+  pero tampoco es un veredicto. Se repite el gate tras el merge de `dev` y la excepción a R34.
 - [x] **T17.** `progress/impl_213.md` con el mapa **R1..R35 → test**, la evidencia de mutación de la
   captura (descuadre, no de humo) y los desvíos del spec.
   **Hecho:** los 35 requisitos con su test; el reviewer rechaza si falta uno.
