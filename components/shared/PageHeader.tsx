@@ -1,6 +1,7 @@
 import { LogoutButton } from "@/app/_components/LogoutButton";
 import { InstalarPwaButton } from "@/components/shared/InstalarPwaButton";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
+import { TemaToggle } from "@/components/shared/TemaToggle";
 import { Calendar } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -82,6 +83,11 @@ export function PageHeader({
             estrechas se queda en icono, que es donde el hueco escasea. */}
         <InstalarPwaButton soloIcono className="sm:hidden" />
         <InstalarPwaButton className="hidden sm:inline-flex" />
+        {/* Feature 211: el interruptor de tema. Vive aquí —y no en el sidebar ni en un
+            menú de preferencias— porque es el único sitio presente en TODA página
+            autenticada, que es donde el tema se nota. Estampa la clase a través del
+            `TemaProvider` del layout del portal. */}
+        <TemaToggle />
         <NotificationsBell />
         <LogoutButton />
       </div>
