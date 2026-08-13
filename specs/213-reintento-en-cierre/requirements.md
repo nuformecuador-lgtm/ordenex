@@ -8,10 +8,12 @@ Requisitos en notación EARS. Cada `R<n>` es verificable con un test. Feature
 > automático del cron SLA (99) y, por esa vía, el `cobroRechazado` de la 56
 > (dinero real). El mapa de estados NO cambia.
 >
-> **Hay requisitos BLOQUEADOS.** Seis preguntas de la ficha y seis descubiertas al
-> medir el código siguen abiertas (§Preguntas abiertas). Los requisitos que
-> dependen de ellas están marcados `⛔ BLOQUEADO POR Qn` y NO deben implementarse
-> hasta que el humano decida. Ninguna de esas decisiones se toma en este documento.
+> **Estado de las 12 preguntas (2026-08-13, segunda ronda):** ocho **CERRADAS**
+> (Q1, Q2, Q6, Q7, Q8, Q9, Q11, Q12); **cuatro siguen ABIERTAS y bloquean
+> requisitos**: **Q3** (lazo de `rechazada`), **Q4** (efecto retroactivo), **Q5**
+> (cierre que nunca se aprueba — **se AGRAVA con la decisión de Q2**) y **Q10**
+> (KPI de analítica persistido). Los requisitos que dependen de ellas siguen
+> marcados `⛔ BLOQUEADO POR Qn`. Ninguna de esas cuatro se decide aquí.
 
 ## La decisión del humano, textual (2026-08-13)
 
@@ -29,6 +31,51 @@ sugerencia:
 | **D3** | Las dos aristas que hoy suman (#14 `→ devuelta` y #13 `→ reprogramada`, familia `gestion`) dejan de sumar por sí solas. |
 | **D4** | El mapa cerrado de transiciones NO cambia: ninguna arista se agrega, se quita ni se redirige. |
 | **D5** | Consecuencias declaradas y aceptadas por la ficha: (a) `rechazada` **empieza** a contar (hoy no cuenta por ninguna vía); (b) el contador de una orden **deja de existir** hasta que su cierre se procese. |
+
+## Segunda ronda de decisiones (2026-08-13) — ENTRADA, no sugerencia
+
+Del **humano**, cerrando tres preguntas abiertas:
+
+| # | Decisión | Cierra |
+| --- | --- | --- |
+| **D6** | **`sin_gestionar` NO cuenta.** La lista se mantiene tal cual: `rechazada`, `devuelta`, `reprogramada`. El humano ACEPTA, sabiéndolo, que el caso «sale, se corta, vuelve a bodega y sale otra vez con el mismo contador» **siga abierto** tras esta feature. → §Limitación declarada. | **Q6, Q9** |
+| **D7** | **El conteo se deriva de `gestion_orden`** (`cierre_id` + `resultado` + `anulada_at`), con los índices que ya existen. **SIN migración.** `160/R7` se **CONSERVA** y no se deroga. Queda **PROHIBIDO** materializar el contador en esta feature; `db/schema.prisma` no se toca. | **Q1** |
+| **D8** | **Suma al APROBAR el cierre.** Ancla = `CierresAdminService.aprobarCierre` (`lib/services/CierresAdminService.ts:421`) → `CierresAdminRepository.resolverCierre` (`:616`), condición observable `cierre_dia.estado = 'aprobado'`. **NO** al crear/solicitar (`CierreDiaRepository.crearCierre:395`) ni al vencer. | **Q2** |
+
+Del **leader**, decisiones rutinarias derivadas de las anteriores (ninguna
+contradice el código; se verificó abriendo los archivos):
+
+| # | Decisión | Motivo | Cierra |
+| --- | --- | --- | --- |
+| **D9** | **Grano por ORDEN, no por gestión.** Dos gestiones vigentes de la misma orden en el mismo cierre aprobado suman **1**, con el mismo dedupe que ya usa `cierre_detail` (`@@unique([cierreId, ordenId])`, `db/schema.prisma:1633`). | El texto del humano dice «1 por cada orden del cierre». | **Q7** |
+| **D10** | **El conteo ACUMULA sobre todos los cierres aprobados de la orden**, no solo el último. | Sin acumulación ninguna orden alcanzaría el umbral (default 3) y la feature dejaría el escalado muerto. | **Q8** |
+| **D11** | **Cuenta el RESULTADO ya ocurrido, no dónde está la orden ahora.** SI entre la gestión y la aprobación la orden se reprogramó por la tienda (#22), se liberó por SLA (#19/#20) o se recuperó a mano (#23/#24), el resultado sigue contando. | El conteo mide lo que pasó, no el estado actual. El predicado no mira `orden.estatus_id`. | **Q11** |
+| **D12** | **El contador es MONÓTONO CRECIENTE: se declara como propiedad.** | Verificado: `aprobado` no está en `ESTADOS_RESOLUBLES` (`CierresAdminRepository.ts:39`) ni en `ESTADOS_REABRIBLES` (`:44`) ⇒ un cierre aprobado no puede salir de ese estado; y la anulación de una gestión está guardada por `cierre_id: null` (`CierreDiaRepository.ts:728`) ⇒ una gestión ya contada no puede anularse. **Es un cambio de comportamiento observable**: hoy el número BAJA al deshacer una gestión (`160/R5`). | **Q12** |
+
+---
+
+## ⚠️ LIMITACIÓN DECLARADA — esta feature NO cierra el agujero que la originó (D6)
+
+La pregunta que dio origen a la ficha fue *«¿el cron que hace el cierre automático
+no suma un reintento, o el cierre manual al aprobar?»*, y el problema detrás era
+que **una orden puede salir a reparto, ser cortada por el cron, volver a bodega y
+salir otra vez con el mismo contador**. Con las decisiones D2 + D6, ese caso
+**SIGUE ABIERTO** después de esta feature.
+
+El motivo, medido: **el corte automático no aporta resultados nuevos.** Un cierre
+`vencido` creado por el corte puede vincular **0 gestiones** y limitarse a
+transicionar órdenes `en_reparto → sin_gestionar`
+(`lib/repositories/CierreDiaRepository.ts:484-491`), y **una orden `sin_gestionar`
+no tiene gestión y por tanto no tiene `resultado`**
+(`gestion_orden.resultado` es NOT NULL y solo existe si hubo gestión,
+`db/schema.prisma:727`). Como `sin_gestionar` no está en la lista que cuenta (D6),
+el corte automático **no suma nada que el cierre del mensajero no sumara igual**.
+
+Quien lea esta feature esperando que el conteo empiece a castigar las órdenes
+cortadas por el cron se va a llevar una sorpresa: **no lo hace, y es deliberado.**
+Cerrar ese agujero es **candidato a ficha aparte** (haría falta contar
+`sin_gestionar`, o contar la transición #16, o contar las liberaciones
+`liberacion_sin_gestionar` del historial). Requisito que lo fija: **R33**.
 
 ---
 
@@ -101,26 +148,43 @@ línea de la ficha no coincidía, se corrigió aquí.
 | **Solicitud del mensajero** | `CierreDiaService.solicitarCierre` (`lib/services/CierreDiaService.ts:391`) → el MISMO `crearCierre` (`:475`) | `estado='solicitado'` y **el mismo `cierre_id` sobre las gestiones** (`CierreDiaRepository.ts:480`). |
 | **Aprobación del admin** | `CierresAdminService.aprobarCierre` (`lib/services/CierresAdminService.ts:421`) → `CierresAdminRepository.resolverCierre` (`lib/repositories/CierresAdminRepository.ts:616`) | **Solo cambia `cierre_dia.estado` a `aprobado`** (`:632-640`) + wallets + libera `sin_gestionar` (`:733-793`) + dispara la devolución de `rechazada` (`:805-858`). **NO toca `gestion_orden.cierre_id`.** |
 
-Consecuencias medidas de esa tabla, que las preguntas abiertas necesitan:
+Consecuencias medidas de esa tabla:
 
 1. **`gestion_orden.cierre_id` se puebla en `crearCierre`, no al aprobar.** El
    corte automático y la SOLICITUD del mensajero son el mismo código; la
-   APROBACIÓN es otro momento y otro repositorio.
+   APROBACIÓN es otro momento y otro repositorio. Con **D8**, el vínculo
+   `cierre_id` es condición NECESARIA pero NO SUFICIENTE: hace falta además
+   `cierre_dia.estado = 'aprobado'`.
 2. **La contraparte simétrica del corte automático es `solicitarCierre`, no
-   `aprobarCierre`** (los dos crean el cierre y vinculan; la aprobación resuelve
-   uno ya creado). La ficha interpreta «cierre manual» como la aprobación: eso es
-   exactamente **Q2**.
-3. **Una orden `sin_gestionar` del corte no tiene gestión y por tanto no tiene
+   `aprobarCierre`.** El humano lo sabe y elige la aprobación igualmente (D8).
+   Consecuencia: el corte automático **no es** un instante que sume; lo que suma
+   es la aprobación posterior del cierre que el corte creó.
+3. **Solo `solicitado` es aprobable.** `ESTADOS_RESOLUBLES = ["solicitado"]`
+   (`CierresAdminRepository.ts:39`, feature 111/R15 retiró `vencido`). Un cierre
+   `vencido` **no se puede aprobar directamente**: tiene que pasar antes por
+   `solicitado`, sea porque el mensajero lo re-solicita
+   (`CierreDiaService.ts:401-407`) o porque el admin usa la válvula de escape
+   `forzarSolicitudVencido` (`CierresAdminRepository.ts:879`). Igual para un
+   `rechazado` (`CierreDiaService.ts:414-419`, `ESTADOS_REABRIBLES`, `:44`).
+   **Esto multiplica los caminos por los que un cierre nunca llega a `aprobado`
+   ⇒ agrava Q5.**
+   *(Aviso: el JSDoc de `resolverCierre` en `CierresAdminRepository.ts:630-631`
+   dice «`solicitado` o `vencido`» — prosa DESACTUALIZADA respecto de la constante
+   de `:39`. No es el criterio.)*
+4. **Una orden `sin_gestionar` del corte no tiene gestión y por tanto no tiene
    `resultado`.** Un `vencido` money-neutral puede vincular 0 gestiones y solo
-   transicionar órdenes a `sin_gestionar` (`CierreDiaRepository.ts:484-491`). Con
-   D2 tal cual, ese cierre no suma nada: el corte automático solo «suma» por las
-   gestiones que el mensajero ya había registrado. Ver **Q6** y **Q9**.
-4. **La ventana de deshacer muere cuando `cierre_id` se puebla**
-   (`CierreDiaService.ts:519-521`, `MSG_YA_EN_CIERRE`): a partir de ese instante
-   la gestión ya no puede anularse. Es el primer instante en que el resultado de
-   una orden es INMUTABLE.
+   transicionar órdenes a `sin_gestionar` (`CierreDiaRepository.ts:484-491`). Es
+   el fundamento de la **§Limitación declarada** y de **D6**.
+5. **La ventana de deshacer muere cuando `cierre_id` se puebla**
+   (`CierreDiaService.ts:519-521`, `MSG_YA_EN_CIERRE`; guarda en el repo,
+   `CierreDiaRepository.ts:728`): a partir de ese instante la gestión ya no puede
+   anularse. Como contar exige además la aprobación (posterior), **toda gestión
+   que llega a contar es ya inmutable ⇒ D12 (monotonía) se sostiene sin código
+   nuevo.** No hay ningún borrado físico de `gestion_orden` en producción
+   (verificado: los únicos escritores son `updateMany` en
+   `CierreDiaRepository.ts:480,502,518,727` y `CierresAdminRepository.ts:654`).
 
-### ¿El detalle del cierre basta para derivar el conteo? (respuesta a Q1, medida)
+### De dónde se deriva el conteo (Q1 CERRADA por D7: `gestion_orden`, sin migración)
 
 - **`cierre_detail` NO guarda el resultado.** El modelo (`db/schema.prisma:1583`)
   congela las entradas de la fórmula del dinero (`montoCobrar`, `cobraComision`,
@@ -132,13 +196,15 @@ Consecuencias medidas de esa tabla, que las preguntas abiertas necesitan:
   `devuelta`, `rechazada`, `incidente`, `:654-662`), `cierreId` (`:752`),
   `anuladaAt` (`:776`), e índices `@@index([ordenId])` (`:791`) y
   `@@index([cierreId])` (`:793`).
-- Por tanto **hay de dónde derivar el conteo sin columna nueva y sin migración**,
-  y `160/R7` puede sobrevivir. El diseño lo desarrolla en `design.md §4`; la
-  elección del ancla sigue siendo **Q2**.
-- **OJO con el grano:** una orden puede acumular VARIAS gestiones vigentes en el
-  mismo cierre (declarado en `db/schema.prisma:1562-1563` y `:721-722`, y por eso
-  el detalle deduplica). «1 por cada ORDEN» y «1 por cada GESTIÓN» no son lo
-  mismo. Ver **Q7**.
+- **Estado del cierre:** `cierre_dia.estado` (`db/schema.prisma:928`) con
+  `@@index([estado])` (`:956`) y `@@index([mensajeroId, estado])` (`:959`).
+- Por tanto se deriva **sin columna nueva y sin migración** (D7) y **`160/R7` se
+  CONSERVA**. El predicado resultante está en `design.md §3`.
+- **El grano importa y está decidido:** una orden puede acumular VARIAS gestiones
+  vigentes en el mismo cierre (declarado en `db/schema.prisma:1562-1563` y
+  `:721-722`, y por eso `cierre_detail` deduplica). **D9** fija el grano en la
+  ORDEN: dos gestiones vigentes de la misma orden en el mismo cierre aprobado
+  suman 1. Requisito: **R29**.
 
 ---
 
@@ -153,16 +219,16 @@ pertenezca a un cierre del día procesado según R3, y (b) sea `rechazada`,
 una orden en un cierre es `entregada` o `incidente`, ENTONCES el sistema NO DEBE
 contarlo como intento.
 
-**R3 — El instante que suma.** ⛔ **BLOQUEADO POR Q2.** El sistema DEBE contar el
-intento a partir de UN único instante declarado del ciclo del cierre, y el mismo
-para el corte automático y para el cierre manual. MIENTRAS ese instante no se haya
-producido para una orden, el sistema DEBE reportar para ella el conteo que tenía
-antes de ese cierre.
+**R3 — El instante que suma es la APROBACIÓN del cierre.** *(DESBLOQUEADO por D8.)*
+CUANDO un cierre del día pasa a estado `aprobado`, el sistema DEBE contar un
+intento por cada orden de ese cierre que cumpla R1. MIENTRAS un cierre no esté
+`aprobado` —esté `solicitado`, `vencido` o `rechazado`— el sistema NO DEBE contar
+ningún intento por las gestiones vinculadas a él.
 
-**R4 — Se cuenta UNA vez.** CUANDO una misma orden pasa por el corte automático y
-después por el cierre manual (o cuando cualquiera de los dos caminos se reintenta,
-reejecuta o se resuelve dos veces), el sistema NO DEBE sumar más de un intento por
-el mismo resultado de gestión.
+**R4 — Se cuenta UNA vez.** CUANDO un cierre se aprueba, se re-aprueba, se
+reintenta su aprobación, o cuando una orden recorre corte automático →
+re-solicitud → aprobación, el sistema NO DEBE sumar más de un intento por ese
+cierre a esa orden.
 
 **R5 — Vigencia conservada.** El sistema NO DEBE contar el resultado de una
 gestión ANULADA (deshecha), y NO DEBE modificar ningún registro para excluirla: la
@@ -290,16 +356,50 @@ tienda no cuenta) sobrevive en R12; el razonamiento del doble conteo desaparece
 con el criterio viejo y NO DEBE conservarse como justificación en código ni en
 tests.
 
-**R27 — `160/R7` se conserva o se deroga explícitamente.** ⛔ **BLOQUEADO POR
-Q1.** El sistema DEBE sostener el conteo sin columna, tabla, enum, índice ni
-migración nuevos; SI el diseño aprobado exige persistirlo, ENTONCES `160/R7` DEBE
-declararse DEROGADO en este documento, con su coste (migración up/down, backfill,
-riesgo de drift) escrito antes de escribir código.
+**R27 — `160/R7` se CONSERVA: sin estado persistido nuevo y sin migración.**
+*(DESBLOQUEADO por D7.)* El sistema NO DEBE introducir columnas de base de datos,
+tablas, enums, índices ni migraciones para sostener este conteo: DEBE seguir
+derivándolo en tiempo de lectura de datos que ya existen. Materializar el contador
+queda PROHIBIDO en esta feature.
 
 **R28 — La prosa que justifica el criterio se actualiza.** CUANDO el criterio
 cambie, el sistema NO DEBE dejar en el código comentarios, listas o descripciones
 de métrica que afirmen el criterio viejo. Una lista de familias de origen cuya
 única función era decidir intentos NO DEBE sobrevivir sin dueño.
+
+---
+
+## Grupo F — Las decisiones de la segunda ronda, como requisitos
+
+**R29 — Grano por ORDEN (D9).** SI una orden tiene DOS o más gestiones vigentes
+que cumplen R1 dentro del MISMO cierre aprobado, ENTONCES el sistema DEBE contar
+**un solo** intento por ese cierre, no uno por gestión.
+
+**R30 — Acumulación sobre todos los cierres aprobados (D10).** El sistema DEBE
+sumar los intentos de una orden a lo largo de TODOS los cierres `aprobado` en los
+que esa orden aparece con un resultado de R1, no solo del más reciente. SI una
+orden aparece con resultado contable en N cierres aprobados distintos, ENTONCES su
+conteo DEBE ser N.
+
+**R31 — Cuenta el resultado, no el estado actual (D11).** SI entre la gestión y la
+aprobación del cierre la orden cambió de estado —reprogramada por la tienda,
+liberada por el cron SLA, recuperada a mano por bodega o cualquier otra
+transición— ENTONCES el sistema DEBE contar igual ese resultado. El sistema NO DEBE
+condicionar el conteo al estado actual de la orden.
+
+**R32 — El contador es MONÓTONO CRECIENTE (D12).** El sistema NO DEBE reportar
+para una orden un conteo menor que el que reportó antes. Esto es un CAMBIO
+observable respecto del comportamiento vigente, donde deshacer una gestión hacía
+BAJAR el número (`160/R5`): tras esta feature, una gestión solo puede contar
+cuando ya no es anulable.
+
+**R33 — `sin_gestionar` NO cuenta, y la limitación queda declarada (D6).** El
+sistema NO DEBE contar como intento el corte automático (`en_reparto →
+sin_gestionar`) ni su liberación al aprobar (`sin_gestionar → en_bodega_*`), y NO
+DEBE contar ninguna orden de un cierre que no tenga un resultado de gestión de los
+de R1. **Consecuencia declarada y aceptada:** una orden que sale a reparto, es
+cortada por el cron y vuelve a bodega conserva el mismo conteo, y esta feature no
+lo cambia (§Limitación declarada).
 
 ---
 
@@ -311,80 +411,67 @@ Ningún requisito puede quedar sin dueño; el reviewer rechaza si falta uno.
 
 ---
 
-## PREGUNTAS ABIERTAS
+## PREGUNTAS CERRADAS (2026-08-13, segunda ronda)
 
-Ninguna está decidida aquí. **Q1–Q6 vienen de la ficha** (`feature_list.json`,
-id 213); **Q7–Q12 se descubrieron midiendo el código** y son igual de
-bloqueantes. Las respuestas hay que llevarlas a la puerta de aprobación.
+Ocho de las doce. Cada una con quién la cerró y dónde vive ahora la decisión.
 
-### De la ficha
+| Q | Respuesta | Quién | Dónde |
+| --- | --- | --- | --- |
+| **Q1** | Se deriva de `gestion_orden` (`cierre_id` + `resultado` + `anulada_at`), SIN migración. `160/R7` se conserva; materializar queda prohibido. | Humano | **D7**, R27 |
+| **Q2** | Suma al **APROBAR** el cierre (`cierre_dia.estado = 'aprobado'`). No al crear/solicitar, no al vencer. | Humano | **D8**, R3 |
+| **Q6** | `sin_gestionar` NO cuenta. La lista se queda en `rechazada`/`devuelta`/`reprogramada`. | Humano | **D6**, R33 |
+| **Q7** | Grano por **ORDEN**: dos gestiones vigentes de la misma orden en el mismo cierre suman 1. | Leader | **D9**, R29 |
+| **Q8** | **SÍ acumula** sobre todos los cierres aprobados de la orden. | Leader | **D10**, R30 |
+| **Q9** | Aceptado: el corte automático no aporta resultados nuevos y el agujero original **sigue abierto**. Candidato a ficha aparte. | Humano | **D6**, §Limitación declarada, R33 |
+| **Q11** | Cuenta el **resultado** ya ocurrido, no dónde está la orden ahora. | Leader | **D11**, R31 |
+| **Q12** | **Monotonía creciente declarada** como propiedad, con test. | Leader | **D12**, R32 |
 
-- **Q1 — ¿De dónde se deriva el conteo?** Medido: `cierre_detail` NO guarda el
-  `resultado` (`db/schema.prisma:1583-1636`); `gestion_orden` sí, con `cierre_id`,
-  `resultado` y `anuladaAt` e índices ya existentes. ¿Se acepta derivar de
-  `gestion_orden` (sin migración, `160/R7` intacto) o se quiere una columna
-  materializada (y entonces `160/R7` queda derogado con su coste)?
-- **Q2 — ¿Qué instante suma, y cuál de los dos caminos cuando ambos aplican?**
-  Los tres candidatos medidos son: (i) `gestion_orden.cierre_id` poblado (corte
-  automático Y solicitud del mensajero, mismo código, `CierreDiaRepository.ts:480`);
-  (ii) `cierre_dia.estado='vencido'` (solo el corte); (iii)
-  `cierre_dia.estado='aprobado'` (solo la aprobación del admin,
-  `CierresAdminRepository.ts:632`). La ficha dice «aprobación manual», pero la
-  contraparte simétrica del corte automático es `solicitarCierre`, no
-  `aprobarCierre`. ¿Cuál es el instante?
-- **Q3 — El lazo de `rechazada`.** El cron escala a `rechazada` cuando el conteo
+---
+
+## PREGUNTAS ABIERTAS (4) — van al humano
+
+Ninguna se decide aquí. Cada una bloquea al menos un requisito. Las opciones con
+su coste están en `design.md §7` (Q4), `§7bis` (Q5) y `§8` (Q10).
+
+- **Q3 — El lazo de `rechazada`.** ⛔ bloquea **R18**. El cron escala a `rechazada` cuando el conteo
   alcanza el umbral y crea una gestión sintética `resultado: rechazada` con
   `cierre_id NULL` (`DevolucionSlaRepository.ts:145-155`), que el PRÓXIMO cierre
-  vinculará. Con el criterio nuevo, ese resultado sumaría +1 a la orden que lo
+  vinculará y que, al aprobarse ese cierre (D8), sumaría +1 a la orden que lo
   causó. ¿El escalado incrementa lo que lo causó?
-- **Q4 — Efecto retroactivo.** Al ser derivado, cambiar el criterio cambia el
-  conteo de TODAS las órdenes históricas de golpe, incluidas las que hoy reposan
-  en `devuelta` esperando el SLA. ¿Se acepta? ¿Se mide antes a cuántas órdenes en
-  vuelo les mueve el escalado (patrón `160/D7`: consulta contra producción, solo
-  lectura, con fecha)?
-- **Q5 — `devuelta` sin cierre.** Una orden gestionada como `devuelta` cuya
-  gestión se deshace, o cuyo cierre nunca se aprueba (rechazado, o vencido nunca
-  resuelto), no llegaría a contar nunca; hoy contaba en el acto. Con el ancla
-  (iii) de Q2 esa orden queda con conteo 0 indefinidamente y el cron SLA la
-  liberaría en bucle sin escalar jamás. ¿Se acepta? ¿Hay tope?
-- **Q6 — `sin_gestionar` sigue sin contar.** El humano listó
-  `rechazada`/`devuelta`/`reprogramada` y no lo incluyó. Queda así salvo decisión
-  nueva. Ver también Q9.
-
-### Descubiertas al medir
-
-- **Q7 — Grano: ¿por ORDEN o por GESTIÓN?** El texto dice «1 por cada orden del
-  cierre», pero una orden puede tener VARIAS gestiones vigentes en el mismo
-  cierre (`db/schema.prisma:721-722` y `:1562-1563`; el detalle deduplica por eso).
-  ¿Dos gestiones vigentes `reprogramada` + `devuelta` de la misma orden en el
-  mismo cierre suman 1 o 2?
-- **Q8 — ¿Y las gestiones de cierres ANTERIORES?** Con el criterio nuevo el
-  conteo pasa a ser acumulativo sobre TODOS los cierres procesados de la orden, no
-  solo el último. Se asume que sí (si no, ninguna orden llegaría nunca al umbral
-  de 3), pero no está escrito en la decisión. ¿Confirmado?
-- **Q9 — El corte automático no aporta resultados nuevos.** Medido: un `vencido`
-  puede vincular 0 gestiones y solo transicionar órdenes a `sin_gestionar`
-  (`CierreDiaRepository.ts:484-491`); esas órdenes no tienen `resultado`. Con D2 +
-  Q6 tal cual, el corte automático **no suma nada que la solicitud del mensajero
-  no sumara igual**, y el agujero que abrió esta ficha (salir, cortarse, volver a
-  bodega y salir otra vez con el mismo contador) **sigue abierto**. ¿Es esto lo
-  que se quiere, o `sin_gestionar` debía contar (Q6) precisamente para taparlo?
-- **Q10 — Analítica: KPI persistido.** `primer_intento_ok` se calcula con este
+- **Q4 — Efecto retroactivo.** ⛔ bloquea **R19**. Al ser derivado, cambiar el
+  criterio cambia el conteo de TODAS las órdenes históricas de golpe, incluidas las
+  que hoy reposan en `devuelta` esperando el SLA. Con D8 el conteo de casi toda
+  orden **BAJA** (solo cuentan cierres aprobados) ⇒ el escalado se RETRASA, no se
+  adelanta. ¿Se acepta? **La consulta de medición, lista para pegar en una consola
+  contra la base real, está escrita en `design.md §7.6`** (solo lectura); falta
+  EJECUTARLA y pegar el resultado con fecha.
+- **Q5 — Una `devuelta` cuyo cierre nunca se aprueba. ⚠️ SE AGRAVA CON D8.**
+  ⛔ bloquea el cierre de la feature. Con el conteo anclado en `aprobado`, una
+  orden cuyo cierre queda `rechazado`, `vencido` sin resolver o `solicitado` sin
+  atender se queda **en 0 indefinidamente**: el cron SLA la libera a bodega una y
+  otra vez y **no escala jamás** ⇒ nunca se rechaza y nunca se cobra el rechazo.
+  Y no es un caso de laboratorio: solo `solicitado` es aprobable
+  (`ESTADOS_RESOLUBLES = ["solicitado"]`, `CierresAdminRepository.ts:39`), así que
+  un `vencido` o un `rechazado` necesitan un paso HUMANO extra antes de poder
+  aprobarse. Los caminos medidos, sus efectos y tres mitigaciones con su coste
+  están en **`design.md §7bis`**. ¿Se acepta el riesgo, o se añade mitigación?
+- **Q10 — Analítica: KPI persistido.** ⛔ bloquea **R24**. `primer_intento_ok` se calcula con este
   conteo (`AnaliticaRollupService.ts:238`) y se PERSISTE en `analytics_daily`
   (CHECK `primer_intento_ok <= entregas`,
   `db/migrations/20260731120000_analytics_daily/migration.sql:90`). Cambiar el
   criterio hace que las filas viejas y las nuevas midan cosas distintas, y que la
   versión VIVA (`AnaliticaOperativaService.ts:462`) discrepe del rollup histórico
   (hay un test de equivalencia: `tests/integration/db/analitica-operativa-equivalencia.test.ts`).
-  ¿Se deja la deriva declarada, se re-backfillea o se acota la métrica?
-- **Q11 — ¿Cuenta un resultado cuya orden ya salió de ese estado?** Con el ancla
-  (iii) de Q2 pasan horas o días entre la gestión y la aprobación; en ese intervalo
-  la orden puede haber sido reprogramada por la tienda (#22), liberada por el cron
-  (#19/#20) o recuperada a mano (#23/#24). ¿El intento se cuenta igual (es un
-  hecho pasado) o se condiciona al estado actual?
-- **Q12 — ¿El conteo se «congela» al aprobar?** Hoy el número puede BAJAR si se
-  deshace una gestión (`160/R5`). Con el criterio nuevo, la ventana de deshacer
-  muere justo cuando `cierre_id` se puebla (`CierreDiaService.ts:519-521`), así
-  que el conteo pasaría a ser monótono creciente por construcción. ¿Se declara esa
-  monotonía como propiedad (y se testea), o hay algún camino que aún pueda bajarlo
-  (anulaciones administrativas, borrado de gestiones) que haya que enumerar?
+  Con D8 el efecto es concreto y direccional: una entrega cuyo cierre aún no se
+  aprueba tiene 0 intentos previos ⇒ **`primer_intento_ok` sube mecánicamente** el
+  día en curso y baja al aprobarse los cierres. ¿Se deja la deriva declarada, se
+  re-backfillea o se acota la métrica?
+
+### Nota de proceso
+
+Q11 y Q12 se cerraron como llamadas de juicio del leader (D11/D12) y se
+verificaron contra el código antes de escribirlas: ninguna contradice lo medido.
+Si al implementar aparece un camino que haga BAJAR el conteo de una orden
+—anulación administrativa fuera de la ventana, borrado físico de `gestion_orden`,
+o un cierre que salga de `aprobado`— **R32 se rompe y hay que volver a la puerta**,
+no parchear el test.
