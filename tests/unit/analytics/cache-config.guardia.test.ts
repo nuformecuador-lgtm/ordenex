@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { ANALITICA_CACHE_TTL_SEGUNDOS } from "@/lib/config/analitica-cache";
@@ -50,7 +51,7 @@ function archivos(dir: string): string[] {
 }
 
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /** El numero desnudo, con o sin separador de millares. */

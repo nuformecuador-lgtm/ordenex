@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 
@@ -45,7 +46,7 @@ const leer = (rel: string) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8")
 
 /** El codigo sin comentarios: la PROSA que explica una prohibicion no la infringe. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /** El cuerpo de un metodo privado del servicio, hasta el siguiente. Misma tecnica que la 173. */

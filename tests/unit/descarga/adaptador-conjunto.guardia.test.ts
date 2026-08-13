@@ -28,6 +28,7 @@
 // los dos censos. La selecciona `pnpm exec vitest run guard` por el nombre del archivo, sin estar
 // registrada en ninguna lista.
 import { readFileSync, readdirSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 
@@ -45,7 +46,7 @@ const ADAPTADOR_DEDICADO = "filasDesdeResultado";
  * como código. Es el mismo helper que usan los dos censos.
  */
 function sinComentarios(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /** `nombre(` como LLAMADA: no la casa un `import { nombre }` ni una mención suelta. */
