@@ -9,7 +9,86 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🏁 2026-08-13 (tarde) — **EMPIEZA A LEER POR AQUÍ**: release #359 abierta y la 205 YA SE VIO
+## 🏁 CIERRE DE JORNADA 2026-08-13 — **EMPIEZA A LEER POR AQUÍ**
+
+### 🔴 LO PRIMERO, Y ES DECISIÓN HUMANA: **`dev` está ROJO**
+
+`tests/integration/db/analytics-daily-job.test.ts > primer intento vs entrega tras una devolucion
+previa (R17)` falla **en `dev` limpio** — verificado sin ningún cambio local encima. Entró con el
+**PR #363** (feature 215) y ya lleva **seis merges por encima**.
+
+**No es un misterio: es el R24 que la propia ficha 215 declara BLOQUEADO y sin implementar** («el
+KPI `primer_intento_ok` persistido en `analytics_daily`»). Mover el conteo del reintento al cierre
+cambió ese KPI y el requisito que lo cubría se dejó fuera a propósito. Hay que decidir: **implementar
+R24 o actualizar el test al criterio nuevo**, y dejarlo escrito.
+
+> Mientras siga rojo, cada PR paga el peaje de declarar «este rojo no es mío» — que es exactamente
+> cómo se cuela el siguiente que sí lo sea. Es la deuda más cara del tablero ahora mismo.
+
+### ✅ Lo que salió de esta jornada
+
+| | Qué |
+| --- | --- |
+| **Release #359** | desplegada **y verificada**: la migración `gestion_orden_pago` aplicada en prod a las 15:12:20 con las **16 filas** que predijo el pre-vuelo, `gestion_orden` intacta, 0 errores de runtime |
+| **205** | el **diálogo de pago se vio en pantalla** por fin, recorriendo el flujo real (no SQL a mano) |
+| **210** | contraste de insignias, **con guardia nueva** que calcula contraste desde los tokens del CSS |
+| **206** | anular un reparto entero en un acto, **y visto en pantalla** (`progress/impl_206_visto.md`) |
+| **209 tanda B** | 48 de 57 quitadores al helper compartido; **7 no pueden** y ahí está el hallazgo |
+| **Auditoría de tema** | 11 rutas nunca medidas + pasada de hover (`progress/impl_210_auditoria-tema.md`) |
+| **Bookkeeping** | **212** y **196** estaban mergeadas/desplegadas y seguían abiertas en el registro |
+| **Fichas nuevas** | **216** (naranja de marca) y **217** (factura oscura), las dos con su medición dentro |
+| **70** | **medida antes de especificar: es PREVENTIVA hoy**, y filtrar `status` no es la opción segura |
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **Decidir el rojo de `dev`** (arriba). Bloquea la lectura de todo lo demás.
+2. **Los 7 quitadores** de la tanda B, uno a uno. Media faena hecha: el mecanismo está identificado
+   y la lista está en la ficha 209. Cada uno es una pregunta contestable — ¿el conteo nuevo es el
+   correcto, o el ancla era legítima? **Empezar en frío**: son siete veredictos de guardias de
+   dinero y analítica, y el modo de fallo es cambiarlos sin mirarlos.
+3. **La 217** (factura oscura): aprobada por el humano, sin spec. Ojo a la regla que debe honrar:
+   **al imprimir, la hoja sigue blanca**.
+4. **La 216** espera una **decisión de marca** (un hex para el primario, o pasar el texto a un
+   `-strong` propio). No es un arreglo técnico.
+5. **La 213** la implementa **otro programador** desde sus sesiones; su spec está completo y su
+   puerta humana **sin pasar**.
+
+### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
+
+- **Un verificador que rellena lo que no sabe no es optimista: es FALSO.** El medidor de contraste
+  mintió **tres veces**, siempre igual —ante un dato irresoluble, inventaba uno—: dio un falso
+  **1,80 sobre una cifra de dinero** y un falso **1,00 sobre un botón legible**. La causa raíz era
+  que Chromium devuelve **`oklab()`** para las opacidades de Tailwind v4. Toda capa que no se pueda
+  resolver tiene que degradar a «no lo sé», nunca a un valor plausible.
+- **El compilador censa mejor que un grep.** Retirar una variante de `Badge` pareció tocar 2 sitios
+  y eran **11**: los otros nueve calculan la variante desde un mapa, y un grep con forma de JSX no
+  los ve. El typecheck los dio todos.
+- **Los guardias que te frenan suelen tener razón.** Tres de la 172 rechazaron que el `repartoId`
+  cruzara la frontera, y el arreglo salió **mejor** que el original: viaja un booleano y el servidor
+  deriva el grupo, así que el cliente ya no puede nombrar un reparto ajeno.
+- **Cuando una guardia congela lo contrario de lo que vas a hacer, se REEXPRESA, no se relaja.**
+  Cinco guardias afirmaban que nada podía deshacer un reparto; anular no es editar ni borrar, y eso
+  hay que escribirlo en cada una.
+- **No mutes trabajo sin commitear.** `git checkout` revierte tu arreglo, no la mutación. Pasó una
+  vez y el arnés de mutaciones ahora **aborta si `git diff` no ve el cambio**.
+- **Un PR mergeado deja huérfano lo que empujes después.** Pasó **dos veces**: commit en una rama con
+  PR cerrado, fuera de `dev` y sin ninguna señal. Los dos rescatados por cherry-pick. **Comprobar el
+  estado del PR antes de empujar.**
+- **Medir antes de arreglar volvió a cambiar el resultado**: la 70 es preventiva (0 tarifas
+  inactivas) y **filtrar `status` convertiría un cobro equivocado en un cobro CERO**, porque cada
+  tienda tiene una sola tarifa.
+
+### 🧪 Estado de la base LOCAL (nada de esto toca producción)
+
+Contraseñas QA —incluida la del **maestro**, que tiene su propio seed— alineadas con el `.env`. Dos
+cierres aprobados del 13/08 (pendientes ₡3.400 y ₡1.700, luego repartidos y anulados), un reparto de
+₡4.000 anulado entero y otro de ₡1.400. El **maestro no entra por UI**: su OTP lo dispara un
+RiskEngine por score y el código se guarda **hasheado**, así que `mi-wallet`, `recepcion-satelite`,
+`configuracion/*` y `novedades` quedaron **sin medir** en la auditoría de tema.
+
+---
+
+## 🏁 2026-08-13 (tarde) — release #359 y la 205 vista en pantalla
 
 ### 🚦 Lo único que espera decisión humana: **[PR #359](https://github.com/nuformecuador-lgtm/ordenex/pull/359) → `prod`**
 
