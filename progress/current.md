@@ -26,13 +26,51 @@
 >     en la base, pero ninguna en `devuelta` hoy. **Nadie fue cobrado antes de tiempo.** El número
 >     **caduca** en cuanto entre una orden, y **nada lo vigila**: eso es la ficha **219**.
 >   - **La 218 queda desbloqueada**: su condición era «no arranca hasta que la 215 esté mergeada».
-> - **La 224 está en vuelo** (`frontend`), en el worktree aislado `C:/w224`, rama
->   `feature/224-tokens-al-imprimir`. Auditada antes de empezar contra el código: **sin empezar**, y
->   con una contradicción viva que la ficha enunciaba al revés — las guardias exigen que todo
->   `@media print` vaya **ANTES** de `.dark`, y ahí es justo donde un `@media print { .dark {…} }`
->   **pierde la cascada**. Resolver eso es el corazón de la feature.
-> - **Gate completo verde sobre `dev`** el 14-ago: **1096/1096 archivos, 14044/14044 tests**, 301 s,
->   exit 0.
+> - **La 224 también está `done` y mergeada** (PR **#384**). Tres rondas de revisión y **33
+>   mutaciones** (19 letales rojas, 14 inocuas verdes). **La ficha enunciaba la contradicción AL
+>   REVÉS y se corrigió**: detrás de `.dark` también gana; lo que lo prohíbe es el **lector de tokens
+>   de los tests**, no la cascada. El problema real era la **especificidad** (`.dark` 0-1-0 empata y
+>   pierde por orden; `html .dark` 0-1-1 gana esté donde esté), medido en Chromium sobre **la hoja
+>   real compilada**. Y eran **35** declaraciones, no 34.
+>   - Compra lo que prometía: `--foreground` en papel **1,19 → 15,70**, y con «gráficos de fondo»
+>     marcado las insignias **1,70 → 4,84**, que era el precio que la 221 dejaba pagado.
+>   - **Lo que NO compra está declarado y es ejecutable**: `--destructive` 3,76 y `--primary` 3,18
+>     siguen bajo AA (paleta, 210/216), y **seis tokens EMPEORAN** al imprimir desde oscuro
+>     (`P1`–`P6`; el peor `--primary-foreground` **18,33 → 1,00** en 15 usos). **Sin ficha todavía**
+>     — ver «Lo siguiente».
+> - **Gate completo verde tres veces** el 14-ago, con el baseline **remedido y no citado**: sobre
+>   `dev` limpio (1096/1096 archivos, 14044/14044 tests, 301 s), sobre la rama de la 215
+>   (1096/1096, 14044/14044, 349 s) y sobre el árbol de la 224 **ya mergeado con `dev`**
+>   (**1097/1097, 14093/14093**, 0 saltados, 283 s). Los tres exit 0.
+
+### 🧠 Lo que la tarde enseñó, y no estaba en el cierre de la mañana
+
+- **Un cero sobre un universo vacío no es un resultado: es una consulta sin sujeto.** R19 salió 0 en
+  las nueve columnas, y la mitad del trabajo fue **demostrar por qué**: 141 órdenes vivas, ninguna en
+  `devuelta` **ni contando las borradas**, y 11/8/32 de materia en el dominio. Sin esos cuatro
+  controles, ese 0 es indistinguible de un `JOIN` que no casa. Y el número **caduca**: se escribió
+  con su fecha de caducidad dentro, igual que había caducado el 0 de `160/D7`.
+- **Una afirmación falsa puede quedar ATORNILLADA por un test verde.** La guardia F4 exigía
+  `toContain("1.19 → 11.39")`: la frase del CSS no se podía corregir **sin poner el test rojo**. Un
+  pin de prosa protege de que alguien la borre, y a la vez la fosiliza cuando deja de ser cierta.
+  Al pinear una frase, pinear también **lo que la hace verdad**.
+- **Los defectos ENCAJADOS sobreviven a los barridos.** F4 escapó a un barrido que sí cazó a sus dos
+  hermanas porque tenía **dos**: estaba mal clasificada (como «paleta fija») **y** medida con el
+  lector ciego. Cada uno solo se ve; juntos se tapan.
+- **Un arreglo puede abrir el agujero que el arreglo anterior cerró.** Al cambiar una lista escrita a
+  mano por una **derivada**, el caso central pasó a poder cumplirse **por vacuidad**. La
+  anti-vacuidad va **dentro** del caso: uno que necesita que otro se ponga rojo para no mentir,
+  miente igual si lo corren solo.
+- **La mutación INOCUA volvió a ser la que encontró algo**, dos veces: destapó que la guardia
+  rechazaba una implementación igual de correcta, y que una «inocua» mal elegida no lo era.
+- **El gate de un worktree recién creado NO es el gate.** `./init.sh` salió rojo con 3 tests y **240
+  saltados** en `C:/w224`: faltaba el `.env`, y `prisma migrate diff` no podía derivar el DDL. Con
+  `.env`, ese archivo da **62/62**. Lo correcto lo hizo la guardia: **falló en vez de saltarse**.
+  Antes de leer un rojo de worktree como regresión, comprobar `.env` y el recuento de saltados.
+- **Medir en el CSS fuente no es medir.** La contradicción de la 224 sólo se resolvió mirando **la
+  hoja compilada** en el navegador: el fuente no dice quién gana la cascada.
+
+---
 
 ## 🏁 CIERRE DE JORNADA 2026-08-14
 
@@ -66,9 +104,15 @@ del cierre ya no sale recortada ni en blanco sobre negro al imprimirla**.
 ### ⏭️ Lo siguiente, en este orden
 
 1. ~~**Decidir la release**~~ — **HECHA**: PR #381, en producción y sin errores de runtime.
-2. **La 224** — al imprimir, los tokens tampoco giran a claro. Es `low` y **borra un precio que hoy
-   se paga**: con «gráficos de fondo» marcado, `Badge` success cae de 6,60 a 1,70. **← EN VUELO**
-   (`C:/w224`, `feature/224-tokens-al-imprimir`).
+2. ~~**La 224**~~ — **CERRADA y mergeada el 14-ago** (PR #384). Ver arriba.
+2b. **SIN FICHA TODAVÍA, y es lo primero de la cola:** los **seis tokens que EMPEORAN al imprimir
+   desde oscuro** que destapó la 224 (`P1`–`P6`; el peor, `--primary-foreground` **18,33 → 1,00** en
+   15 usos: tinta blanca sobre un fondo que la impresora no pone). Está **medido y con guardia
+   ejecutable** en `impresion-tokens.guardia.test.ts`, y **declarado** en `app/globals.css`, pero
+   **nadie lo reclama**. No se arregla dentro de la 224 por una razón de fondo: el papel **iguala al
+   tema claro por construcción** —el bloque espeja los 35 tokens hex a hex—, así que darles un valor
+   propio rompería ese espejo y dejaría el papel de «oscuro» **mejor** que el de «claro». La
+   decisión de fondo es de **paleta**, y emparenta con la 216 y la 210.
 3. **La 225** — 19 avisos hechos a mano en 15 archivos repiten el par que la 222 arregló. Decidir al
    empezar si van a un componente compartido o sólo se les cambia el par; lo segundo reabre la ficha.
 4. **La 226** — el anillo de foco mide 1,30 contra el **3:1** que pide 1.4.11. No es estética: es la
