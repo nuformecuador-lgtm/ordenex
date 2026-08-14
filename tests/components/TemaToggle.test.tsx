@@ -1,21 +1,50 @@
 // @vitest-environment jsdom
 // Feature 211 — el interruptor de tema del encabezado.
 //
-// Las tres cosas que este test existe para que no se rompan en silencio, porque las tres
-// se ven bien en una captura y fallan en uso: que el ciclo VUELVA a «sistema», que la
-// eleccion se ESCRIBA en la cookie (si no, la proxima carga vuelve al tema anterior y
-// aparece el parpadeo que todo esto evita) y que el estado se ANUNCIE (con tres estados,
-// un icono mudo no dice ni en cual estas ni a cual vas).
+// Las cosas que este test existe para que no se rompan en silencio, porque todas se ven
+// bien en una captura y fallan en uso: que «sistema» NO vuelva a colarse como opcion, que
+// sin eleccion previa mande la preferencia del SO, que la eleccion se ESCRIBA en la cookie
+// (si no, la proxima carga vuelve al tema anterior y aparece el parpadeo que todo esto
+// evita) y que el estado se ANUNCIE.
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TemaToggle } from "@/components/shared/TemaToggle";
 import { TemaProvider } from "@/providers/TemaProvider";
-import { COOKIE_TEMA, type Tema } from "@/lib/tema/tema";
+import { COOKIE_TEMA, type TemaElegido } from "@/lib/tema/tema";
 
-function montar(temaInicial: Tema = "sistema") {
+/** Oyentes vivos del `change` de la media query, para poder disparar un cambio de SO. */
+let oyentesSO: (() => void)[] = [];
+let soEnOscuro = false;
+
+/** jsdom no trae `matchMedia`: sin esto el proveedor no puede resolver «sin elegir». */
+function preferenciaDelSO(oscuro: boolean) {
+  soEnOscuro = oscuro;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn((query: string) => ({
+      get matches() {
+        return soEnOscuro && query.includes("dark");
+      },
+      media: query,
+      addEventListener: (_evento: string, cb: () => void) => oyentesSO.push(cb),
+      removeEventListener: (_evento: string, cb: () => void) => {
+        oyentesSO = oyentesSO.filter((o) => o !== cb);
+      },
+    })),
+  });
+}
+
+/** Simula que el SO gira su tema con la pestaña abierta (macOS/Windows lo hacen solos). */
+function elSOCambiaA(oscuro: boolean) {
+  soEnOscuro = oscuro;
+  for (const oyente of [...oyentesSO]) oyente();
+}
+
+function montar(temaInicial: TemaElegido = null) {
   return render(
     <TemaProvider temaInicial={temaInicial}>
       <TemaToggle />
@@ -46,30 +75,46 @@ beforeEach(() => {
     const nombre = par.split("=")[0]?.trim();
     if (nombre) document.cookie = `${nombre}=; path=/; max-age=0`;
   }
+  oyentesSO = [];
+  preferenciaDelSO(false);
 });
 
-describe("TemaToggle — el ciclo de tres estados", () => {
-  it("cicla sistema -> claro -> oscuro y VUELVE a sistema", async () => {
+describe("TemaToggle — SOLO dos estados", () => {
+  it("alterna claro <-> oscuro y vuelve al primero en DOS pulsaciones", async () => {
     const user = userEvent.setup();
-    montar("sistema");
+    montar("claro");
     const boton = screen.getByRole("button");
 
     const recorrido = [temaDelEnvoltorio()];
-    for (let i = 0; i < 3; i += 1) {
+    for (let i = 0; i < 2; i += 1) {
       await user.click(boton);
       recorrido.push(temaDelEnvoltorio());
     }
 
-    expect(recorrido).toEqual(["sistema", "claro", "oscuro", "sistema"]);
+    expect(recorrido).toEqual(["claro", "oscuro", "claro"]);
+  });
+
+  it("«sistema» NO aparece nunca como estado del control", async () => {
+    // La regresion que se protege: si alguien repone el tercer estado, el ciclo vuelve a
+    // tener dos posiciones que pintan lo mismo y el boton parece roto.
+    const user = userEvent.setup();
+    montar("claro");
+    const boton = screen.getByRole("button");
+
+    const vistos = new Set<string>();
+    for (let i = 0; i < 4; i += 1) {
+      vistos.add(boton.getAttribute("data-tema-actual") ?? "");
+      await user.click(boton);
+    }
+
+    expect([...vistos].sort()).toEqual(["claro", "oscuro"]);
   });
 
   it("estampa la clase que enciende cada tema en el envoltorio", async () => {
     const user = userEvent.setup();
-    montar("sistema");
+    montar("claro");
     const boton = screen.getByRole("button");
 
-    expect(claseDelEnvoltorio()).toContain("tema-sistema");
-    await user.click(boton);
     expect(claseDelEnvoltorio()).toContain("tema-claro");
     await user.click(boton);
     // `dark` es la clase contra la que se define el variant `dark:` de Tailwind.
@@ -81,32 +126,97 @@ describe("TemaToggle — el ciclo de tres estados", () => {
     expect(claseDelEnvoltorio().split(" ")).toContain("contents");
   });
 
-  it("arranca en el tema que resolvio el SERVIDOR, no siempre en el por defecto", () => {
+  it("arranca en el tema que resolvio el SERVIDOR, no siempre en el mismo", () => {
     montar("oscuro");
     expect(temaDelEnvoltorio()).toBe("oscuro");
     expect(screen.getByRole("button").getAttribute("aria-label")).toContain("Oscuro");
   });
 });
 
+describe("TemaToggle — sin eleccion previa manda el SISTEMA", () => {
+  it("con el SO en oscuro, quien nunca eligio acaba en «oscuro»", async () => {
+    preferenciaDelSO(true);
+    montar(null);
+
+    await waitFor(() => expect(temaDelEnvoltorio()).toBe("oscuro"));
+    expect(claseDelEnvoltorio().split(" ")).toContain("dark");
+  });
+
+  it("con el SO en claro, acaba en «claro»", async () => {
+    preferenciaDelSO(false);
+    montar(null);
+
+    await waitFor(() => expect(temaDelEnvoltorio()).toBe("claro"));
+  });
+
+  it("resolver la preferencia del SO NO escribe cookie: manana el SO puede cambiar", async () => {
+    // Si se guardara, quien nunca eligio quedaria congelado en el tema que tenia el dia que
+    // entro por primera vez — exactamente lo que «sin elegir» debe evitar.
+    preferenciaDelSO(true);
+    montar(null);
+
+    await waitFor(() => expect(temaDelEnvoltorio()).toBe("oscuro"));
+    expect(cookieTema()).toBeUndefined();
+  });
+
+  it("si el SO gira con la pestana abierta, la app le SIGUE mientras no haya eleccion", async () => {
+    // macOS y Windows cambian a oscuro al anochecer. Con una lectura unica al montar, quien
+    // no ha elegido se quedaria con el tema que hubiera al abrir la pestana.
+    preferenciaDelSO(false);
+    montar(null);
+    await waitFor(() => expect(temaDelEnvoltorio()).toBe("claro"));
+
+    act(() => elSOCambiaA(true));
+
+    expect(temaDelEnvoltorio()).toBe("oscuro");
+  });
+
+  it("una vez ELEGIDO, el SO deja de mandar: la eleccion es la eleccion", async () => {
+    const user = userEvent.setup();
+    preferenciaDelSO(false);
+    montar(null);
+    await waitFor(() => expect(temaDelEnvoltorio()).toBe("claro"));
+
+    await user.click(screen.getByRole("button")); // elige oscuro a mano
+    expect(temaDelEnvoltorio()).toBe("oscuro");
+
+    act(() => elSOCambiaA(false)); // el SO insiste en claro
+
+    expect(temaDelEnvoltorio()).toBe("oscuro");
+  });
+
+  it("la PRIMERA pulsacion va al contrario de lo que se esta VIENDO", async () => {
+    // Con el SO en oscuro se ve oscuro, asi que pulsar tiene que llevar a claro. Si el
+    // control supusiera «claro» como punto de partida, la primera pulsacion no cambiaria
+    // nada visible y pareceria que el boton no responde.
+    preferenciaDelSO(true);
+    const user = userEvent.setup();
+    montar(null);
+
+    await waitFor(() => expect(temaDelEnvoltorio()).toBe("oscuro"));
+    await user.click(screen.getByRole("button"));
+
+    expect(temaDelEnvoltorio()).toBe("claro");
+    expect(cookieTema()).toBe("claro");
+  });
+});
+
 describe("TemaToggle — la eleccion se recuerda", () => {
   it("escribe la eleccion en la cookie en CADA pulsacion", async () => {
     const user = userEvent.setup();
-    montar("sistema");
+    montar("claro");
     const boton = screen.getByRole("button");
 
     expect(cookieTema()).toBeUndefined();
     await user.click(boton);
-    expect(cookieTema()).toBe("claro");
-    await user.click(boton);
     expect(cookieTema()).toBe("oscuro");
     await user.click(boton);
-    expect(cookieTema()).toBe("sistema");
+    expect(cookieTema()).toBe("claro");
   });
 
   it("la cookie vale para todo el portal y sobrevive a cerrar la pestana", async () => {
     const user = userEvent.setup();
-    montar("sistema");
-    await user.click(screen.getByRole("button"));
+    montar("claro");
 
     // jsdom no expone los atributos al leer `document.cookie`, asi que se espia la
     // escritura: sin `path=/` la preferencia solo valdria en la ruta actual, y sin
@@ -132,27 +242,26 @@ describe("TemaToggle — la eleccion se recuerda", () => {
 });
 
 describe("TemaToggle — accesibilidad", () => {
-  it("el nombre accesible dice en cual estas y a cual vas, en los tres estados", async () => {
+  it("el nombre accesible dice en cual estas y a cual vas, en los DOS estados", async () => {
     const user = userEvent.setup();
-    montar("sistema");
+    montar("claro");
     const boton = screen.getByRole("button");
 
     const nombres: string[] = [];
-    for (let i = 0; i < 3; i += 1) {
+    for (let i = 0; i < 2; i += 1) {
       nombres.push(boton.getAttribute("aria-label") ?? "");
       await user.click(boton);
     }
 
-    expect(nombres[0]).toBe("Tema: Sistema. Cambiar a Claro.");
-    expect(nombres[1]).toBe("Tema: Claro. Cambiar a Oscuro.");
-    expect(nombres[2]).toBe("Tema: Oscuro. Cambiar a Sistema.");
+    expect(nombres[0]).toBe("Tema: Claro. Cambiar a Oscuro.");
+    expect(nombres[1]).toBe("Tema: Oscuro. Cambiar a Claro.");
     // No basta con que cambie el icono: el estado tiene que estar en el NOMBRE.
-    expect(new Set(nombres).size).toBe(3);
+    expect(new Set(nombres).size).toBe(2);
   });
 
   it("anuncia el estado aplicado por una region viva, y el anuncio CAMBIA al cambiar el tema", async () => {
     const user = userEvent.setup();
-    montar("sistema");
+    montar("claro");
 
     const region = document.querySelector("[data-tema-anuncio]");
     expect(region, "no hay region viva que anuncie el tema").not.toBeNull();
@@ -166,12 +275,12 @@ describe("TemaToggle — accesibilidad", () => {
     await user.click(screen.getByRole("button"));
 
     expect(region!.textContent).not.toBe(antes);
-    expect(region!.textContent?.toLowerCase()).toContain("claro");
+    expect(region!.textContent?.toLowerCase()).toContain("oscuro");
   });
 
   it("es un <button> nativo: enfocable y operable con teclado (Enter y Espacio)", async () => {
     const user = userEvent.setup();
-    montar("sistema");
+    montar("claro");
     const boton = screen.getByRole("button");
 
     expect(boton.tagName).toBe("BUTTON");
@@ -182,9 +291,9 @@ describe("TemaToggle — accesibilidad", () => {
     expect(document.activeElement).toBe(boton);
 
     await user.keyboard("{Enter}");
-    expect(temaDelEnvoltorio()).toBe("claro");
-    await user.keyboard(" ");
     expect(temaDelEnvoltorio()).toBe("oscuro");
+    await user.keyboard(" ");
+    expect(temaDelEnvoltorio()).toBe("claro");
   });
 
   it("muestra el estado tambien en texto visible, no solo en un icono", () => {
