@@ -3267,3 +3267,45 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
 - **Deuda dejada, con nombre**: el harness de impresión en Chromium se borró a propósito (queda a
   ficha aparte); **Gecko y WebKit no están medidos**; y las pestañas no visitadas y el KPI animado
   llevan su límite **declarado**, no omitido.
+
+## 2026-08-14 — 224 (al imprimir, los tokens también giran a claro)
+- Tercer `@media print` en `app/globals.css` con los **35** tokens claros para `.dark`,
+  `body:has(> .dark)`, `.tema-sistema` y su espejo, más la guardia espejo
+  (`impresion-tokens.guardia.test.ts`) y `tokenAlImprimir()` en `tests/fixtures/contraste.ts`.
+  Cierra la mitad que la 221 dejó abierta y **borra el precio que ella dejaba pagado**.
+- Requisitos: ficha `sdd: false`, sin `specs/`; el contrato es la ficha. **3 rondas de revisión**,
+  **33 mutaciones** (19 letales rojas, 14 inocuas verdes). Detalle en `progress/impl_224.md`.
+- **Lo compra, medido**: `--foreground` en papel **1,19 → 15,70**; Badge success 1,92 → 5,48; y con
+  «gráficos de fondo» marcado —el precio de la 221— success **1,70 → 4,84**, con warning, danger e
+  info también sobre AA.
+- **La ficha enunciaba la contradicción AL REVÉS, y sólo lo dijo medirlo.** Decía que un
+  `@media print` detrás de `.dark` «no hace nada»: detrás **también gana**; lo que lo prohíbe es el
+  **lector de tokens de los tests**, no la cascada. El problema real era la **especificidad**:
+  `.dark` a secas (0-1-0) empata y pierde por orden; `html .dark` (0-1-1) gana esté donde esté.
+  Medido en Chromium con `emulateMedia({media:"print"})` sobre **la hoja real compilada**, no sobre
+  el CSS fuente — y la descripción de la ficha se corrigió en vez de dejarla afirmando lo falso.
+- **La misma ceguera apareció por TERCERA vez, y la tercera estaba atornillada en verde.** Guardias
+  que afirman sobre el **papel** midiendo con `token()`, que lee el CSS con los `@media print` ya
+  borrados. La tercera —F4, el tercer puesto del ranking— sobrevivió al barrido por **dos defectos
+  encajados** (mal clasificada como «paleta fija» **y** medida con el lector ciego), y su frase falsa
+  estaba sostenida por un `toContain` que **exigía que siguiera escrita**. Hoy afirma lo contrario y
+  es cierto: con la 224 dentro, **la 221 BAJA esa fila** (15,70 → 11,39, las dos sobre AAA).
+- **Una mutación INOCUA salió roja, y ése fue el hallazgo de la primera ronda**: la guardia
+  identificaba el bloque por la cadena literal `"html .dark"` y rechazaba una implementación **igual
+  de correcta** escrita con `:root`. Sin la variante inocua, esa rigidez no se ve. En la tercera
+  ronda volvió a pasar y el implementador lo dijo: su primera «inocua» **no lo era**, y la rehízo.
+- **Un arreglo abrió un agujero y lo cazó el reviewer**: al pasar de lista escrita a mano a lista
+  **derivada**, el caso central —el que da nombre a la ficha— podía **pasar por vacuidad** con cero
+  selectores. Cerrado con anti-vacuidad **dentro** del propio caso: uno que necesita que otro se
+  ponga rojo para no mentir, sigue mintiendo si lo corren solo.
+- **Lo que NO compra, declarado y ejecutable**: `--destructive` 3,76 y `--primary` 3,18 siguen bajo
+  AA (deuda de paleta, 210/216), y **seis tokens empeoran** al imprimir desde oscuro (`P1`–`P6`; el
+  peor, `--primary-foreground` **18,33 → 1,00** en 15 usos, tinta blanca sobre un fondo que la
+  impresora no pone). **No se arregla aquí**: el papel **iguala al tema claro por construcción** —el
+  bloque espeja los 35 hex a hex—, y un valor propio rompería ese espejo. Ficha aparte.
+- **Deuda dejada, con nombre**: sólo **Chromium** (no hay Gecko ni WebKit en el entorno);
+  `.papel-al-imprimir` de la 217 queda redundante en la práctica pero **no se retira** —sigue siendo
+  la única defensa si un subárbol fija tokens oscuros por otra vía—; y el rebote de una mutación que
+  mata cuatro guardias en el `import` (122 tests que ni se cargan) se **acepta declarado**: cerrarlo
+  exigiría desacoplar un fixture que comparten seis guardias para ganar un mensaje mejor en un
+  escenario que ya falla a gritos.
