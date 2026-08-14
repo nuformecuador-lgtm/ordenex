@@ -4,6 +4,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { componer, contraste, paleta, token } from "../../fixtures/contraste";
+// Feature 223 (R24/R32): el localizador POR CONTENIDO vive en el fixture compartido, para que las
+// dos guardias que localizan el bloque de la 217 no tengan dos ideas distintas de dónde está.
+import { atReglaQueContiene } from "../../fixtures/css-reglas";
 import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 
 /**
@@ -173,23 +176,35 @@ describe("feature 221 — el variant `dark:` no emite en papel", () => {
   });
 
   /**
-   * Por qué la guardia de la 217 tuvo que reexpresar su ancla, dicho aquí y comprobable.
+   * Por qué la guardia de la 217 tuvo que dejar de anclar por POSICIÓN, dicho aquí y comprobable.
    *
-   * `tema-encendido.guardia.test.ts` localizaba la regla de impresión de la 217 con «la primera
-   * at-rule que MENCIONE `print`». Desde esta ficha hay dos, y la primera es la de aquí, 200
-   * líneas más arriba: aquel ancla habría seguido en verde apuntando al bloque equivocado. El
-   * ancla es ahora `@media print` con `print` pegado. Este caso deja escrito el motivo y se pone
-   * rojo si el orden de los dos bloques deja de ser el que obligó al cambio.
+   * La historia, en tres pasos, y cada uno costó un ancla:
+   *
+   *  1. La 217 localizaba su regla con «la primera at-rule que MENCIONE `print`». Con una sola en
+   *     el archivo, era exacto.
+   *  2. Esta ficha (221) añadió `@media not print` 200 líneas MÁS ARRIBA y aquel ancla pasó a
+   *     enganchar este bloque: los casos de la 217 seguían verdes mirando lo que no era. Se afinó
+   *     a «`print` pegado al `@media`» — que seguía siendo posicional.
+   *  3. La 223 añade un SEGUNDO `@media print`. «El primero» vuelve a ser un ancla que mueve
+   *     cualquiera con sólo escribir su bloque delante.
+   *
+   * Por eso el ancla es ahora de CONTENIDO: el bloque de la 217 es «el que contiene la regla que
+   * declara los tokens de `.papel-al-imprimir`» (`tests/fixtures/css-reglas.ts`). Este caso
+   * conserva su punto —las dos at-rules viejas siguen enganchando lo que no es— y lo mide contra
+   * el bloque localizado de verdad, no contra el primero que aparezca.
    */
   it("el ancla vieja («cualquier at-rule con `print`») engancharía ESTE bloque, no el de la 217", () => {
     const vieja = css.search(/^\s*@media\b[^{}]*\bprint\b[^{}]*\{/m);
-    const precisa = css.search(/^\s*@media\s+print\b[^{}]*\{/m);
+    // Feature 223 (R24): por CONTENIDO. Con `css.search(/@media print/)` este caso seguía verde
+    // aunque el bloque de tokens de la 217 se fuera al final del archivo, porque desde la 223 hay
+    // otro `@media print` antes que también satisface el patrón.
+    const precisa = atReglaQueContiene(css, /^\s*\.papel-al-imprimir\s*\{/m).indice;
     expect(vieja, "no se encontró ninguna at-rule de medio con `print`").toBeGreaterThan(-1);
     expect(precisa, "no se encontró la regla `@media print` de la 217").toBeGreaterThan(-1);
     expect(
       vieja,
       "el ancla vieja ya no engancha este bloque: si los dos bloques cambiaron de orden, hay que " +
-        "releer `tema-encendido.guardia.test.ts` — su ancla precisa existe por esta razón.",
+        "releer `tema-encendido.guardia.test.ts` — su ancla por contenido existe por esta razón.",
     ).toBeLessThan(precisa);
   });
 });

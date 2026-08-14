@@ -19,80 +19,15 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+// Feature 223 (R32): el parser de reglas con ancestros vivia AQUI y ahora vive en el fixture
+// compartido. Ningun caso de este archivo cambia: cambia de donde salen `reglasDe`,
+// `selectoresDe` y `declaracionesDe`.
+import { atReglaQueContiene, reglasDe, type Regla } from "../../fixtures/css-reglas";
 import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 
 const GLOBALS = "app/globals.css";
 const LAYOUT = path.join("app", "(app)", "layout.tsx");
 const HEADER = "components/shared/PageHeader.tsx";
-
-interface Regla {
-  selectores: string[];
-  ancestros: string[];
-  declaraciones: Record<string, string>;
-}
-
-/** Corta por comas de PRIMER nivel: las de `:is(a, b)` o `[attr="x,y"]` no separan. */
-function selectoresDe(prelude: string): string[] {
-  const partes: string[] = [];
-  let actual = "";
-  let hondura = 0;
-  for (const c of prelude) {
-    if (c === "(" || c === "[") hondura += 1;
-    else if (c === ")" || c === "]") hondura -= 1;
-    if (c === "," && hondura === 0) {
-      partes.push(actual);
-      actual = "";
-      continue;
-    }
-    actual += c;
-  }
-  partes.push(actual);
-  return partes.map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean);
-}
-
-function declaracionesDe(cuerpo: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const trozo of cuerpo.split(";")) {
-    if (trozo.includes("{")) continue;
-    const i = trozo.indexOf(":");
-    if (i < 0) continue;
-    const nombre = trozo.slice(0, i).trim();
-    if (!nombre || /[{}]/.test(nombre)) continue;
-    out[nombre] = trozo.slice(i + 1).trim().replace(/\s+/g, " ");
-  }
-  return out;
-}
-
-/**
- * Todas las reglas del CSS con su prelude, sus ancestros (`@media`, `@layer`…) y sus
- * declaraciones propias. Los comentarios se quitan ANTES con el quitador compartido del
- * repo (feature 209): sin eso, esta misma guardia daria verde con el mecanismo entero
- * borrado, porque `globals.css` explica en prosa todo lo que declara.
- */
-function reglasDe(css: string): Regla[] {
-  const reglas: Regla[] = [];
-  const pila: { prelude: string; desde: number }[] = [];
-  let marca = 0;
-  for (let i = 0; i < css.length; i += 1) {
-    const c = css[i];
-    if (c === "{") {
-      pila.push({ prelude: css.slice(marca, i).trim(), desde: i + 1 });
-      marca = i + 1;
-    } else if (c === "}") {
-      const regla = pila.pop();
-      marca = i + 1;
-      if (!regla) continue;
-      reglas.push({
-        selectores: selectoresDe(regla.prelude),
-        ancestros: pila.map((p) => p.prelude.replace(/\s+/g, " ")),
-        declaraciones: declaracionesDe(css.slice(regla.desde, i)),
-      });
-    } else if (c === ";") {
-      marca = i + 1;
-    }
-  }
-  return reglas;
-}
 
 const css = codigoSinComentarios(GLOBALS);
 const reglas = reglasDe(css);
@@ -173,16 +108,35 @@ describe("feature 211 — el CSS que enciende el tema", () => {
 });
 
 /**
- * La apertura de LA regla de impresion de la 217: `@media print`, con `print` PEGADO al `@media`.
+ * DONDE ESTA EL BLOQUE DE IMPRESION DE LA 217. Se localiza por lo que CONTIENE.
  *
- * REEXPRESADA por la feature 221, no relajada. Hasta la 221 bastaba `@media …print…{` porque en
- * todo el archivo habia una sola at-rule que nombrara `print`. La 221 añade OTRA —`@media not
- * print`, que envuelve el `@custom-variant dark` y vive 200 lineas MAS ARRIBA— y el patron viejo
- * pasaba a engancharla a ella: los dos casos que la usan seguian VERDES sin mirar el bloque que
- * dicen vigilar. Comprobado plantando la mutacion: con el patron viejo, el caso del orden movia su
- * ancla al variant y aprobaba aunque el bloque de impresion se fuera al final del archivo.
+ * ── Historia de este ancla, porque explica por que ya no es posicional (feature 223, R24/C3)
+ *
+ * 1. Feature 217: bastaba `@media …print…{`, porque en todo el archivo habia UNA sola at-rule que
+ *    nombrara `print`.
+ * 2. Feature 221: añade `@media not print` envolviendo el `@custom-variant dark`, 200 lineas MAS
+ *    ARRIBA. El patron viejo pasaba a engancharla a ella y los dos casos que lo usan seguian
+ *    VERDES sin mirar el bloque que dicen vigilar. Se afino a «`print` pegado al `@media`».
+ * 3. Feature 223: añade un SEGUNDO `@media print` —el flujo de impresion— y con el, «el primero
+ *    del archivo» vuelve a ser un ancla que puede mover cualquiera. Bastaba escribir el bloque
+ *    nuevo DELANTE para que estos casos vigilaran el bloque equivocado **en verde**.
+ *
+ * La leccion, dos veces pagada: un ancla POSICIONAL caduca cada vez que alguien añade algo. El
+ * bloque de la 217 es «el que contiene la regla que declara los tokens de `.papel-al-imprimir`», y
+ * asi se busca. Da igual cuantos bloques haya y en que orden esten.
  */
-const APERTURA_MEDIA_PRINT = String.raw`^\s*@media\s+print\b[^{}]*\{`;
+const REGLA_DE_TOKENS_DE_LA_HOJA = /^\s*\.papel-al-imprimir\s*\{/m;
+
+/** El `@media` que envuelve la regla de tokens de la 217, con su indice y su linea. */
+function bloqueDeLa217() {
+  const bloque = atReglaQueContiene(css, REGLA_DE_TOKENS_DE_LA_HOJA);
+  expect(
+    bloque.prelude,
+    "la regla de tokens de la 217 dejo de vivir dentro de un `@media print`: o se movio, o " +
+      "quedo envuelta en otra at-rule, y en los dos casos la hoja deja de volver a claro en papel",
+  ).toMatch(/^@media\s+print\b/);
+  return bloque;
+}
 
 /**
  * Feature 217 — la regla que hace que la factura del cierre salga BLANCA en papel.
@@ -261,10 +215,17 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
     const lineasCodigo = css.split("\n"); // mismo recuento de lineas que `crudo` (feature 209)
     expect(lineasCodigo.length).toBe(lineasCrudas.length);
 
-    const regla = lineasCodigo.findIndex((l) => new RegExp(APERTURA_MEDIA_PRINT).test(l));
+    // Feature 223 (R24): la linea sale del bloque que CONTIENE la regla de tokens de la 217, no de
+    // «el primer `@media print`». Con dos bloques en el archivo, lo segundo es un ancla que mueve
+    // cualquiera sin que nada se ponga rojo.
+    const regla = bloqueDeLa217().linea;
     expect(regla, "no se encontro la REGLA `@media print` en el codigo de " + GLOBALS).toBeGreaterThan(
       -1,
     );
+    expect(
+      lineasCodigo[regla],
+      "la linea localizada no es la apertura del bloque de impresion de la 217",
+    ).toMatch(/@media\s+print\b/);
 
     // El comentario ATADO a la regla: el bloque `/* … */` que la precede inmediatamente. Si no hay
     // ninguno, o si hay codigo en medio, es que la declaracion no esta donde R15 la pide.
@@ -349,7 +310,10 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
    * retirar sola sin que el gate dijese nada. Esto clava el segundo tirante.
    */
   it("el bloque de impresion va ANTES de `.dark`, o el lector de tokens mide el tema equivocado", () => {
-    const impresion = css.search(new RegExp(APERTURA_MEDIA_PRINT, "m"));
+    // Feature 223 (R24): por CONTENIDO. Con el ancla posicional, escribir el bloque del flujo
+    // delante del de la 217 dejaba este caso midiendo el bloque nuevo —que no declara ni un
+    // token— y aprobando aunque el de la 217 se hubiera ido al final del archivo.
+    const impresion = bloqueDeLa217().indice;
     const oscuro = css.search(/^\.dark[,\s{]/m);
     expect(impresion, "no se encontro la regla `@media print`").toBeGreaterThan(-1);
     expect(oscuro, "no se encontro el selector `.dark` a principio de linea").toBeGreaterThan(-1);
