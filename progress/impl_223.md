@@ -483,6 +483,18 @@ R11 pasa de «estructural + una ruta» a **evaluado en las dos**, dentro del gat
 | **22** | Quitar de `globals.css` la mención de la 223 en el párrafo de la 217 *(m3)* | 🔴 |
 | **23** | Declarar `table-header-group` en el bloque del flujo *(m5)* | 🔴 |
 | **24** | Que `CierreDiaModule` monte otro componente en vez de `CierreFacturaDetalle` *(m4)* | 🔴 |
-| **25** | Colgar el popup del envoltorio de la app en vez del `<body>` *(m2: el tripwire que el CSS ahora nombra)* | 🔴 |
+| **25** | Colgar el popup del envoltorio de la app en vez del `<body>` *(m2: el tripwire que el CSS ahora nombra)* | 🔴 3, y **una de ellas es el caso que el comentario cita** |
+
+> ⚠️ **La primera versión de la mutación 25 salió VERDE, y era la mutación la que estaba mal.**
+> Usaba `container={document.querySelector("main")}`, y los escenarios de ese archivo no montan
+> ningún `<main>`: el `querySelector` devolvía `null`, el `container` caía al valor por defecto y
+> **el portal no se movió**. Es decir: 20 verdes que no significaban nada. Se rehízo con
+> `document.body.firstElementChild` —que sí existe— y entonces muerde: **3 rojas**, y las dos que
+> importan son «el popup se monta en un contenedor propio COLGADO del `<body>`» —el tripwire que
+> el comentario del CSS nombra por su nombre— y «sale la hoja del diálogo y NO la compacta de
+> detrás», que es **exactamente** el escenario que m2 describía: con el portal dentro del
+> envoltorio de la app, el nivel 1 deja de podar las N compactas. Queda anotado porque una
+> mutación inerte reportada como verde es indistinguible de una guardia que no muerde, y este
+> repo ya pagó un arnés que informaba supervivientes sin haber ejecutado un test.
 
 **m7** (`progress/history.md`) es paso de cierre del leader y **no se toca desde aquí**.
