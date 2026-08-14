@@ -35,12 +35,20 @@ baselines caducan con cualquier PR ajeno).
 - [ ] **T0b — Volver a la puerta con lo ÚNICO que falta: Q4.** No es una decisión;
   es la medición de T1 sin ejecutar. **Q10 quedó cerrada por D15** (deriva declarada
   con fecha de corte) y con ella R24 y R35.
-  **Hecho:** ni un `⛔` sin resolver en `requirements.md`; R19 con texto EARS
-  definitivo. **Depende de:** T1. **Bloquea:** T18.
+  ✅ **R19 ya tiene texto EARS definitivo** (reexpresado el 2026-08-14: la premisa
+  «ANTES de activar» caducó porque el criterio ya corre en `prod`; ahora pide una
+  medición POSTERIOR, fechada). Lo que sigue faltando es **ejecutarla**.
+  **Hecho:** ni un `⛔` sin resolver en `requirements.md`. **Depende de:** T1.
+  **Bloquea:** T18.
 
 - [ ] **T1 — [P] Ejecutar la medición del efecto retroactivo (⛔ Q4).** La consulta
   ya está escrita en `design.md §7.6` (solo lectura, dos consultas: resumen y
   detalle con `LIMIT 100`). Solo hay que correrla contra la base real.
+  ⚠️ **Corregida el 2026-08-14:** al CTE `n_nuevo` le faltaba la **sexta** condición
+  (la visita real, §3.4/R34), que sí está en el código vivo; tal como estaba contaba
+  las gestiones sintéticas y **sobreestimaba** `n_nuevo`. Y su marco cambió: ya no es
+  medición **previa** (el criterio está desplegado en `prod`), es la cuenta
+  **posterior** de a cuántas órdenes movió el cambio.
   **Hecho:** resultado pegado en `design.md §7.6` **con fecha y base**; si
   `empiezan_a_escalar > 0`, la lista de esas órdenes se le enseña al humano una por
   una. **Depende de:** nada. **Informa:** T0b.
@@ -239,6 +247,25 @@ Desbloqueado por D15 («declara la deriva con fecha de corte»). Diseño complet
   `requirements.md` §Tensión declarada); `metrics.test.ts` sigue verde.
   **R:** R24-a, R24-b, R24-c, R24-d, R35. **Depende de:** nada.
 
+- [x] **T25 — La guardia de la declaración. ESCRITA el 2026-08-14.** T23 dejó los
+  cuatro sitios escritos pero **sin dueño ejecutable**: se midió sobre `dev` que
+  borrar las **42 líneas** del bloque de `metrics.ts` dejaba `tests/unit/guards` +
+  `tests/unit/analytics` en **169 archivos / 1966 tests VERDES**, y que borrar los
+  **1458 caracteres** de la deriva dentro del `descripcion` —el dato exportado—
+  también. Prosa y dato podían evaporarse en silencio.
+  **Hecho:** `tests/unit/guards/deriva-primer-intento.guardia.test.ts` (22 casos)
+  vigila los **cuatro** puntos donde la deriva está declarada —el bloque de
+  `lib/analytics/metrics.ts`, el `descripcion` de `primer_intento_ok` **leído del
+  catálogo importado** (no del fuente), y los docblocks vecinos de
+  `AnaliticaRollupService.contarPrimerIntento` y
+  `AnaliticaOperativaService.completarPrimerIntentoEnCubos`— y exige en cada uno las
+  tres afirmaciones, por señales sinonímicas: **reformular es verde, quitar una
+  afirmación es rojo**. Anclaje por CONTENIDO (marcador `id: "primer_intento_ok"`,
+  docblock vecino inmediato de la función), nunca por línea ni por posición. Es la
+  excepción declarada a «ningún censo ancla en un comentario»: aquí el objeto
+  vigilado ES el comentario (R24-b), y así lo dice su propio docstring.
+  **R:** R24-b, R24-c, R24-d, R35. **Depende de:** T23.
+
 - [~] **T24 — ACCIÓN HUMANA EN EL DESPLIEGUE (documental).**
   ✅ **HUECO PREPARADO** (2026-08-13) en `progress/impl_215.md` §9.3, con la casilla
   vacía, el commit desplegado y la zona horaria. ⬜ **PENDIENTE la fecha real**: hoy
@@ -377,31 +404,37 @@ es un fallo de la feature.
 | R16 | `devolucion-sla-service.test.ts`, bloques `:83-131`, `:234-268`, `:269-330` verdes SIN cambios de aserción (T12/T14) |
 | R17 | `devolucion-sla-dinero.test.ts` verde **sin tocarse** (T14) |
 | R18 | **T21** · (a) la gestión sintética del escalado SLA no cuenta aunque su cierre esté aprobado; (c) el cron sigue validando el umbral antes de escalar (`devolucion-sla-service.test.ts`, casos existentes de R15/R16); (d) `devolucion-sla-dinero.test.ts` verde sin tocarse = sigue cobrando como rechazo |
-| R19 | La medición fechada de **T1** en `design.md §7.6` (evidencia documental, no test) — ⛔ **pendiente de Q4** |
+| R19 | La medición fechada de **T1** en `design.md §7.6` (evidencia documental, no test) — ⛔ **SIGUE PENDIENTE**: no se ha ejecutado contra ninguna base. Reexpresado el 2026-08-14 como medición POSTERIOR (la premisa «antes de activar» caducó: el criterio ya corre en `prod`) y la consulta corregida con la sexta condición |
 | R20 | Las ~40 suites de consumidores y UI verdes sin tocarse (T14) |
 | R21 | Los casos de alcance por rol/zona/tienda ya existentes en los 6 servicios, verdes (T14) |
 | R22 | `intentos-no-alcance.test.ts` verde sin tocarse (T14) |
 | R23 | `metrics.test.ts` (`R11 · los intentos no se redefinen`, T6/T13) + CHECK de base |
-| R24 | **T13** · «primer intento vs entrega tras una devolucion previa (R17)» verde **con las aserciones intactas** (R24-e) · **T23** · guardia de prosa en los cuatro sitios de `design.md §8.3` (R24-a/b/c/d) |
+| R24 | **T13** · «primer intento vs entrega tras una devolucion previa (R17)» verde **con las aserciones intactas** (R24-e) · **T23** (los cuatro sitios escritos) · **T25** · `tests/unit/guards/deriva-primer-intento.guardia.test.ts` — la guardia real de R24-b/c/d, 22 casos, con autocomprobación |
 | R25 | `criterio-intento-entrega.test.ts` (T9) + la derogación escrita en `requirements.md` |
 | R26 | `criterio-intento-entrega.test.ts` (T9) + prosa retirada (T6) |
 | R27 | `git diff --name-only -- db/` **vacío** (T15). Sin rama alternativa: D7 prohíbe materializar |
-| R28 | Revisión de prosa (T6) + `metrics.test.ts` (T6) |
+| R28 | Revisión de prosa (T6) + `metrics.test.ts` (T6). **2026-08-14:** se reescribieron los tres comentarios que aún afirmaban el criterio VIEJO — `GestionOrdenRepository.reprogramarDesdeDevuelta` (docstring), `IGestionOrdenRepository.reprogramarDesdeDevuelta` y la nota de la rama `incidente` en `GestionOrdenRepository` (citaba un derivador por `estatus_destino_id` que ya no existe) |
 | R29 | `orden-historial-repository.test.ts` (dos gestiones vigentes en el MISMO cierre aprobado → 1, T8); `devolucion-sla-service.test.ts` (T12) |
 | R30 | `orden-historial-repository.test.ts` (N cierres aprobados con resultado contable → N, T8) |
 | R31 | `orden-historial-repository.test.ts` (el resultado cuenta aunque la orden ya cambió de estado; el `where` no menciona `estatus_id`, T8) |
 | R32 | **T11b** (ningún test afirma que el conteo baje; caso explícito de monotonía) |
 | R33 | `criterio-intento-entrega.test.ts` (`sin_gestionar` no está y no puede estar en la lista, T9/T2) + `orden-historial-repository.test.ts` (una orden cortada sin gestión → 0, T8) |
 | R34 | **T19** (lista de INCLUSIÓN) + **T21** (a/b/c/d) + **T22** (conteo de gestiones legadas sin fila de historial) |
-| R35 | **T23** (la regla del corte escrita en los cuatro sitios, sin constante nueva) + **T24** (la anotación del despliegue) + guardia: `git diff -- db/` vacío |
+| R35 | **T23** (la regla del corte escrita en los cuatro sitios, sin constante nueva) + **T25** (`deriva-primer-intento.guardia.test.ts`, afirmación «R24-c/R35»: `updated_at` sí, `fecha` no) + **T24** (la anotación del despliegue) + guardia: `git diff -- db/` vacío |
 
 **Cobertura:** 35 requisitos, 35 con dueño.
 
 - **30 cerrados y verdes** en `7d9471c3` (mapa real con nombres de caso en
   `progress/impl_215.md §2`).
-- **R12, R18 y R34** → Grupo 4 (T19–T22). R12 figuraba como cubierto y **no lo
+- **R12, R18 y R34** → Grupo 4 (T19–T22), **cerrados** y desplegados en `dev` y en
+  `origin/prod` (verificado el 2026-08-14). R12 figuraba como cubierto y **no lo
   estaba**: su test medía el mapa, no el predicado.
 - **R24 y R35** → Grupo 5 (T13, T23, T24), desbloqueados por D15. Con T13 se cierra
-  **el último rojo declarado** de la feature.
+  **el último rojo declarado** de la feature. Su **dueño ejecutable** es **T25**
+  (2026-08-14): hasta entonces R24-b/c/d y R35 no tenían más respaldo que la prosa, y
+  se midió que la prosa podía borrarse entera —comentario y dato exportado— sin un
+  solo test rojo.
 - **R19** → lo único que sigue dependiendo de algo externo: ejecutar la medición de
-  T1 (Q4). No es una decisión, es una consulta sin correr.
+  T1 (Q4). No es una decisión, es una consulta sin correr. Su premisa se reexpresó el
+  2026-08-14 (de medición previa a posterior) y la consulta se corrigió con la sexta
+  condición que le faltaba.

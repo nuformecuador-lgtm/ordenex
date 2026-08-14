@@ -449,12 +449,22 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
       //
       // Feature 158 (Q-G, R8): la rama `incidente` escribe la familia `incidente`, NO `gestion`.
       // La 154 dio de alta ese valor del enum y lo dejo «declarado SIN PRODUCTOR hasta la 158»
-      // (`lib/types/orden-historial.ts`); esta es la linea que lo produce. Verificado que es
-      // inocuo donde importa: el derivador de intentos de entrega (67/160) filtra por
-      // `estatus_destino_id IN (devuelta, reprogramada)` — `incidente` no es ninguno, asi que
-      // esta fila NO cuenta como intento ni adelanta el escalado del cron SLA. Y NO hace falta
-      // anadir `incidente` a `ORIGEN_TIPOS_CON_GESTION`: ese conjunto solo desambigua filas SIN
-      // enlace a gestion, y esta nace CON `gestion_orden_id` poblado.
+      // (`lib/types/orden-historial.ts`); esta es la linea que lo produce.
+      //
+      // Feature 215 (R25/R28) — CORREGIDO: aqui se leia que era inocuo porque «el derivador de
+      // intentos de entrega (67/160) filtra por `estatus_destino_id IN (devuelta, reprogramada)`».
+      // ESE DERIVADOR YA NO EXISTE. La 215 lo sustituyo por el conteo de CIERRES APROBADOS sobre
+      // `gestion_orden` (`whereIntentosVigentes`, `lib/repositories/OrdenHistorialRepository.ts`),
+      // que no mira NINGUN destino de transicion. Sigue siendo inocuo, pero por dos razones
+      // independientes y ninguna de ellas el destino:
+      //   (a) por el RESULTADO: `incidente` no esta en `RESULTADOS_QUE_CUENTAN_COMO_INTENTO`
+      //       (lista de INCLUSION, 215/R2) — un desenlace terminal no es una visita fallida mas;
+      //   (b) por el ORIGEN: la familia `incidente` no esta en `ORIGEN_TIPOS_VISITA_REAL`
+      //       (215/R34), la sexta condicion del predicado.
+      // Con cualquiera de las dos basta: esta fila no cuenta como intento, no adelanta el
+      // escalado del cron SLA (99) y no adelanta por esa via el `cobroRechazado` de la 56. Y NO
+      // hace falta anadir `incidente` a `ORIGEN_TIPOS_CON_GESTION`: ese conjunto solo desambigua
+      // filas SIN enlace a gestion, y esta nace CON `gestion_orden_id` poblado.
       await appendCambioEstado(tx, [
         {
           ordenId,
@@ -501,8 +511,25 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
    * `resultado = reprogramada` con `fecha_reprogramacion` (patron `crearGestionYTransicionar`) y
    * `motivo` opcional, `cierre_id NULL` (entra al proximo cierre pero aporta $0.00: el cierre solo
    * acredita `entregada`/`rechazada`, R10). (d) Appendea la transicion via el choke point
-   * (`actor = adminTienda`, `origen_tipo = reprogramacion_tienda`, enlazando la gestion, R11). El
-   * destino es `reprogramada`, NO `devuelta`, asi que NO cuenta como intento (R8).
+   * (`actor = adminTienda`, `origen_tipo = reprogramacion_tienda`, enlazando la gestion, R11).
+   *
+   * NO CUENTA COMO INTENTO DE ENTREGA — y desde la feature 215 (R12/R28/R34) el motivo es el
+   * ORIGEN, NO el destino. Lo que decia antes esta linea («el destino es `reprogramada`, no
+   * `devuelta`, asi que no cuenta») es FALSO hoy: `reprogramada` SI esta en
+   * `RESULTADOS_QUE_CUENTAN_COMO_INTENTO` (`lib/types/orden-historial.ts`), y el criterio ya no
+   * mira destinos de transicion sino la gestion, su cierre APROBADO y su origen. Lo que deja
+   * fuera a esta gestion sintetica es la SEXTA condicion de `whereIntentosVigentes`
+   * (`lib/repositories/OrdenHistorialRepository.ts`): la fila de historial que se appendea aqui
+   * nace con `origen_tipo = reprogramacion_tienda`, y ese valor NO esta en
+   * `ORIGEN_TIPOS_VISITA_REAL` (hoy solo `gestion`, la visita del mensajero en calle).
+   *
+   * POR QUE IMPORTA LA DIFERENCIA, y no es una precision academica: quien anada
+   * `reprogramacion_tienda` a `ORIGEN_TIPOS_VISITA_REAL` creyendo que «el destino ya protege»
+   * hace que esta orden sume +1 de mas —su `devuelta` real MAS este tramite de escritorio, el
+   * doble conteo que `160/R2` evitaba—, alcance antes el umbral del cron SLA (99), escale antes
+   * de tiempo a `rechazada` y dispare el `cobroRechazado` de la 56: DINERO REAL cobrado a la
+   * tienda antes de lo debido, en silencio. (Esto reemplaza la justificacion de `100/R8`: la
+   * conclusion sobrevive, el razonamiento se reescribe.)
    */
   async reprogramarDesdeDevuelta(input: ReprogramarDesdeDevueltaInput): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
