@@ -244,9 +244,17 @@ function medir(tinta: string, fondo: string): number {
 const PAPEL = "#ffffff";
 
 /**
- * FAMILIA 1 — la tinta es de PALETA FIJA (`--color-brand-light`, `--color-asfalto-7`, un
- * `color-mix` literal). No tiene variante por tema, así que apagar el variant CAMBIA la tinta y el
- * papel mejora de verdad. Esto es lo que la ficha compra.
+ * FAMILIA 1 — la tinta es de PALETA FIJA **por los dos lados**: las dos ramas de la utilidad
+ * (`text-brand` y `dark:text-brand-light`, por ejemplo) apuntan a un `--color-*` sin variante de
+ * tema. Apagar el variant CAMBIA la tinta y el papel mejora de verdad. Esto es lo que la 221
+ * compra, y sigue siendo cierto con la 224 dentro: ningún token entra en estos pares, así que
+ * redeclarar tokens al imprimir no los mueve.
+ *
+ * ⚠️ LO QUE ESTA LISTA EXIGE, y por qué se dice: que **ninguna de las dos** ramas sea un token.
+ * Aquí vivía una cuarta fila —`RankingPodio` 3.º, `text-asfalto-7` / `dark:text-foreground`—
+ * cuya rama `dark:` SÍ es un token. Estaba mal clasificada y medida con el lector ciego al papel,
+ * y con la 224 dentro resultó que la 221 **no la mejora: la baja**. Vive ahora en la FAMILIA 3,
+ * con su medición honesta. Antes de añadir una fila aquí, mirá las dos ramas.
  */
 const TINTA_FIJA: (FilaPapel & { antes: number; despues: number })[] = [
   {
@@ -272,14 +280,6 @@ const TINTA_FIJA: (FilaPapel & { antes: number; despues: number })[] = [
     tintaDespues: componer(paleta("success"), "#000000", 0.55),
     antes: 2.13,
     despues: 6.99,
-  },
-  {
-    id: "F4",
-    que: "`RankingPodio` tercer puesto (text-asfalto-7 / dark:text-foreground)",
-    tintaAntes: token("oscuro", "foreground"),
-    tintaDespues: paleta("asfalto-7"),
-    antes: 1.19,
-    despues: 11.39,
   },
 ];
 
@@ -344,6 +344,65 @@ describe("feature 221 — en papel, la tinta de PALETA FIJA mejora (y el CSS lo 
         "quién lo levantó. Un límite retirado que sigue escrito manda a buscar un agujero que ya " +
         "no existe.",
     ).toContain("1.92 → 5.48");
+  });
+
+  /**
+   * FAMILIA 3 — LA FILA MIXTA, y la única en la que esta regla NO compra: la BAJA.
+   *
+   * `RankingPodio` tercer puesto es `text-asfalto-7 dark:text-foreground` (`RankingPodio.tsx:54`).
+   * Sus dos ramas NO son de la misma clase, y ahí estaba el error:
+   *   · la rama `dark:` es un TOKEN (`--foreground`), así que la 224 la mueve;
+   *   · la rama base es PALETA FIJA (`--color-asfalto-7`), así que no la mueve nada.
+   *
+   * ⚠️ ESTABA MAL CLASIFICADA Y MAL MEDIDA, y las dos cosas juntas la dejaban en verde afirmando
+   * lo contrario de lo que pasa. Vivía en la FAMILIA 1 («la tinta es de paleta fija») y su «antes»
+   * se medía con `token("oscuro", "foreground")` — el lector que NO ve el papel—, así que daba
+   * 1.19 pase lo que pase dentro de `@media print`. Con ese número, la 221 parecía comprar
+   * 1.19 → 11.39. Con el lector que sí ve el papel, el «antes» de HOY es 15.70 y la aserción
+   * `despues > antes` es FALSA.
+   *
+   * ── QUÉ SE AFIRMA AHORA, dicho sin adornos
+   * Con la 224 dentro, la 221 **empeora** esta fila en papel: si el variant `dark:` siguiera
+   * disparando, imprimiría `--foreground` ya CLARO (`#12233f`, 15.70); como no dispara, imprime
+   * `asfalto-7` (`#1f3a63`, 11.39). **No es un defecto de legibilidad**: las dos están muy por
+   * encima de AA y por encima de AAA (7.0), y el texto se lee igual de bien. Lo que deja de ser
+   * cierto es la FRASE «esta regla mejora el papel», para esta fila y sólo para ésta. Se dice, se
+   * mide, y se congela en las dos direcciones: si alguien vuelve a medir el «antes» con el lector
+   * ciego, el 1.19 no casa con el 15.70 y esto se pone rojo.
+   *
+   * Y por qué NO se «arregla» dándole la vuelta a la 221 aquí: apagar el variant al imprimir es
+   * una decisión de toda la app, medida en cuatro familias, y esta fila es la única que pierde —
+   * 4.31 puntos de contraste sobre un suelo de 11.39—. Revertirla por ella sería cambiar el papel
+   * de las quince rutas para ganar nada legible.
+   */
+  it("F4 la fila MIXTA: con la 224 dentro, esta regla NO mejora el papel — lo BAJA (15.70 → 11.39)", () => {
+    const conVariant = medir(tokenAlImprimir("foreground"), PAPEL);
+    const sinVariant = medir(paleta("asfalto-7"), PAPEL);
+
+    expect(
+      conVariant,
+      "el «antes» de F4 se movió. Se mide con `tokenAlImprimir`, que lee el bloque de la 224: si " +
+        "vuelve a medirse con `token(\"oscuro\", …)` da 1.19 y esta guardia estaría opinando sobre " +
+        "el papel con el lector que no lo ve.",
+    ).toBe(15.7);
+    expect(sinVariant, "el «después» de F4 se movió: `--color-asfalto-7` cambió").toBe(11.39);
+
+    expect(
+      sinVariant,
+      "F4 volvió a ser una mejora en papel. Si eso pasó, o cambió `--color-asfalto-7` o cambió el " +
+        "bloque de la 224: en los dos casos hay que reescribir el bullet del CSS, que hoy dice lo " +
+        "contrario.",
+    ).toBeLessThan(conVariant);
+
+    // Y lo que hace que esto sea una IMPRECISIÓN de la prosa y no un bug: las dos se leen.
+    expect(sinVariant, "F4 cayó por debajo de AAA: deja de ser sólo una cuestión de prosa").toBeGreaterThan(7);
+
+    expect(
+      crudo,
+      "el comentario de la regla ya no anota «15.70 → 11.39» para F4, o sigue listándola entre lo " +
+        "que la regla compra. Es la única fila que la 221 baja, y una prosa que dice lo contrario " +
+        "manda a quien la lea a decidir sobre un dato falso.",
+    ).toContain("15.70 → 11.39");
   });
 });
 

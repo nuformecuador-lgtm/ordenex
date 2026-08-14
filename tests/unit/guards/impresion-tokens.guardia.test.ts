@@ -140,7 +140,17 @@ function especificidadDe(selector: string): Especificidad {
 // Las piezas: la regla de impresión, las dos de pantalla, y dónde cae cada una
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
-/** Los CUATRO caminos por los que entran los tokens OSCUROS. Cada uno necesita su gemelo. */
+/**
+ * Los CUATRO caminos por los que se encienden los tokens OSCUROS, escritos A MANO y a propósito.
+ * Es el INVENTARIO: si mañana aparece una quinta forma de encender el tema oscuro, esta lista es
+ * lo que se pone rojo, y el rojo dice que el bloque de impresión no la conoce.
+ *
+ * NO se usa para comprobar que el bloque GANA. Eso se mide contra los selectores REALES de las
+ * reglas de pantalla (`selectoresOscurosReales`), que es otra cosa: con esta lista, el caso
+ * demostraba que le gana «a esos cuatro textos», no «a la regla que hoy existe», y subir la
+ * especificidad de la regla de PANTALLA —que devuelve el papel a oscuro sin tocar este bloque—
+ * no lo ponía rojo por su propio cálculo.
+ */
 const SELECTORES_OSCUROS = [
   ".dark",
   "body:has(> .dark)",
@@ -148,12 +158,36 @@ const SELECTORES_OSCUROS = [
   "body:has(> .tema-sistema)",
 ] as const;
 
+/**
+ * Las reglas de PANTALLA que encienden el tema oscuro, localizadas por lo que DECLARAN
+ * (`--foreground: #e6ecf8`) y no por su selector. Son las que este bloque tiene que vencer, y si
+ * alguien las reescribe —o les sube la especificidad— hay que vencerlas en su forma nueva.
+ */
+const reglasOscurasDePantalla = reglas.filter(
+  (r) =>
+    r.declaraciones["--foreground"] === "#e6ecf8" &&
+    // Una at-rule NO es una regla de estilo. `reglasDe` devuelve también el `@media
+    // (prefers-color-scheme: dark)` que ENVUELVE al espejo, y sus «declaraciones» son las de su
+    // hijo: sin este filtro entraba como un tercer «selector» al que ganar, y no selecciona nada.
+    !r.selectores.some((s) => s.startsWith("@")) &&
+    !r.ancestros.some((a) => /^@media\s+print\b/.test(a)),
+);
+const selectoresOscurosReales = reglasOscurasDePantalla.flatMap((r) => r.selectores);
+
 /** La regla de esta ficha: la única dentro de `@media print` que nombra `.dark`. */
 const impresion = reglas.filter(
   (r) =>
     r.ancestros.some((a) => /^@media\s+print\b/.test(a)) &&
-    r.selectores.some((s) => /(^|[\s>+~])(html\s+)?\.dark\b/.test(s)),
+    r.selectores.some((s) => /(^|[\s>+~])\.dark\b/.test(s)),
 );
+
+/**
+ * El gemelo de impresión de un selector de pantalla: el que selecciona los MISMOS elementos, o un
+ * subconjunto (el original con un ancestro delante). `undefined` si no hay ninguno.
+ */
+function gemeloDeImpresion(oscuro: string): string | undefined {
+  return impresion[0]?.selectores.find((s) => s === oscuro || s.endsWith(` ${oscuro}`));
+}
 
 function reglaUnica(selector: string): Regla {
   const hallazgos = reglas.filter((r) => r.selectores.includes(selector));
@@ -243,11 +277,30 @@ describe("feature 224 — el bloque existe, y cubre los cuatro caminos", () => {
     ).toHaveLength(1);
   });
 
+  /**
+   * El INVENTARIO de caminos, y va antes que todo lo demás: si aparece una quinta forma de
+   * encender el tema oscuro —o desaparece una— el bloque de impresión no puede enterarse solo.
+   * Las reglas se localizan por lo que DECLARAN, no por su selector, para que reescribirlas no
+   * esconda el cambio.
+   */
+  it("los caminos que encienden el tema oscuro son los CUATRO conocidos, en DOS reglas", () => {
+    expect(
+      reglasOscurasDePantalla,
+      "el CÓDIGO dejó de tener exactamente dos reglas de pantalla que declaren la tinta oscura " +
+        "(`.dark` y el espejo de «sistema»). Todo este censo mide contra ellas.",
+    ).toHaveLength(2);
+    expect(
+      [...selectoresOscurosReales].sort(),
+      "cambió la lista de selectores por los que se enciende el tema oscuro. El bloque de " +
+        "impresión tiene un gemelo por cada uno: si aparece un camino nuevo, hay que darle el suyo " +
+        "o media app seguirá imprimiendo en oscuro por ahí.",
+    ).toEqual([...SELECTORES_OSCUROS].sort());
+  });
+
   it("cubre los CUATRO selectores por los que entran los tokens oscuros", () => {
-    for (const oscuro of SELECTORES_OSCUROS) {
-      const gemelo = impresion[0]!.selectores.filter((s) => s === oscuro || s.endsWith(` ${oscuro}`));
+    for (const oscuro of selectoresOscurosReales) {
       expect(
-        gemelo,
+        impresion[0]!.selectores.filter((s) => s === oscuro || s.endsWith(` ${oscuro}`)),
         `el bloque de impresión no cubre \`${oscuro}\`. Los tokens oscuros entran por CUATRO ` +
           "caminos —la clase explícita, el `<body>` que la espeja, y los dos de «sistema»— y basta " +
           "que falte uno para que media app siga imprimiendo en oscuro.",
@@ -257,7 +310,7 @@ describe("feature 224 — el bloque existe, y cubre los cuatro caminos", () => {
       impresion[0]!.selectores,
       "el bloque de impresión enganchó un selector de más: cada uno tiene que ser el gemelo de " +
         "uno de los cuatro caminos, no una superficie nueva.",
-    ).toHaveLength(SELECTORES_OSCUROS.length);
+    ).toHaveLength(selectoresOscurosReales.length);
   });
 
   it("vive dentro de `@media print` y de NINGÚN `@layer`", () => {
@@ -287,9 +340,17 @@ describe("feature 224 — EL CASO: el bloque GANA, y no por casualidad", () => {
    * La salida es subir la especificidad, y por eso los selectores llevan `html` delante. Esto lo
    * comprueba: para cada camino, el gemelo de impresión tiene que ganarle a su original.
    *
+   * ⚠️ SE MIDE CONTRA LOS SELECTORES **REALES** de las reglas de pantalla, no contra una lista
+   * escrita aquí. La diferencia no es de estilo: con la lista escrita, esto demostraba que el
+   * bloque le gana «a esos cuatro TEXTOS», y una mutación que suba la especificidad de la regla de
+   * PANTALLA —`.dark` → `html .dark`, que devuelve el papel a oscuro sin tocar este bloque— salía
+   * roja sólo DE REBOTE, por anclajes `^\.dark` de otras guardias. Anclado en las reglas reales,
+   * el empate lo canta este mismo cálculo y con su mensaje.
+   *
    * MUERDE, comprobado plantando las mutaciones (ver `progress/impl_224.md`):
    *  · quitar el `html ` de los cuatro selectores → rojo aquí (empate, no gana).
    *  · quitar el `html ` de UNO solo → rojo, con el nombre del camino que dejó de ganar.
+   *  · subir la especificidad de la regla de PANTALLA → rojo aquí, por el mismo empate.
    */
   it("cada selector de impresión le gana en especificidad al que redeclara los tokens oscuros", () => {
     const orden = indiceDelBloque() > css.search(/^\.dark[,\s{]/m);
@@ -300,9 +361,17 @@ describe("feature 224 — EL CASO: el bloque GANA, y no por casualidad", () => {
         "de verdad se movió a propósito, hay que releer las tres a la vez.",
     ).toBe(false);
 
-    for (const oscuro of SELECTORES_OSCUROS) {
-      const gemelo = impresion[0]!.selectores.find((s) => s === oscuro || s.endsWith(` ${oscuro}`))!;
-      const suyo = especificidadDe(gemelo);
+    for (const oscuro of selectoresOscurosReales) {
+      const gemelo = gemeloDeImpresion(oscuro);
+      // Sin este `expect`, el `!` de abajo revienta con un `TypeError` cuando falta el gemelo y el
+      // diagnóstico redactado no llega a imprimirse nunca.
+      expect(
+        gemelo,
+        `el bloque de impresión no tiene gemelo para \`${oscuro}\`, así que ese camino imprime ` +
+          "todavía con la tinta del tema oscuro. Falla aquí antes de intentar medirlo.",
+      ).toBeDefined();
+
+      const suyo = especificidadDe(gemelo!);
       const original = especificidadDe(oscuro);
       expect(
         mayor(suyo, original),
@@ -460,6 +529,75 @@ describe("feature 224 — en papel sin fondos, la tinta pasa a ser la clara", ()
       "el comentario del bloque dejó de declarar su límite con los números medidos. Un límite que " +
         "sólo vive en un informe no lo lee nadie.",
     ).toMatch(/3\.76[\s\S]{0,200}3\.18/);
+  });
+});
+
+/**
+ * LO QUE ESTA FICHA **EMPEORA**, con caso ejecutable y no como nota al pie.
+ *
+ * Es el mismo estándar que se le aplicó al límite de arriba, y por honestidad tiene que aplicarse
+ * también aquí: hay tinta que se apoyaba en un fondo de color y en papel ese fondo NO se imprime.
+ * `--primary-foreground` era `#0a1524` en oscuro —casi negro, legible por ACCIDENTE sobre papel
+ * blanco— y pasa a `#ffffff`: blanco sobre blanco, desaparece. Son 15 usos (`Badge` default,
+ * `Button` default, `Pagination`, `RankingPodio`).
+ *
+ * ── POR QUÉ NO SE ARREGLA AQUÍ, y por qué el caso mide las DOS columnas
+ * Los mismos pares miden EXACTAMENTE lo mismo imprimiendo desde «claro», hoy y desde antes de esta
+ * ficha. O sea: no es una regresión CONTRA el tema claro, es el tema claro. Darles un valor propio
+ * en el bloque de impresión rompería el espejo exacto —que es lo que la ficha compra y lo que su
+ * guardia exige— y dejaría el papel de «oscuro» mejor que el de «claro». El arreglo de raíz es el
+ * patrón de la 208 llevado al papel y toca `Badge`/`Button`/`Pagination`: ficha propia.
+ *
+ * La segunda columna (`claro`) no es adorno: es la que convierte «esto empeora» en «esto iguala al
+ * tema claro». Si algún día dejaran de coincidir, una de las dos afirmaciones sería falsa.
+ */
+const SE_PIERDE_EN_PAPEL = [
+  { id: "P1", que: "`Badge`/`Button` default y `Pagination` (`--primary-foreground`)", cual: "primary-foreground", antes: 18.33, despues: 1 },
+  { id: "P2", que: "el ítem activo de la barra lateral (`--sidebar-primary-foreground`)", cual: "sidebar-primary-foreground", antes: 18.21, despues: 1 },
+  { id: "P3", que: "los bordes (`--border`)", cual: "border", antes: 12.3, despues: 1.23 },
+  { id: "P4", que: "el borde de los campos (`--input`)", cual: "input", antes: 10.29, despues: 1.23 },
+] as const;
+
+describe("feature 224 — LO QUE EMPEORA: la tinta que se apoyaba en un fondo que no se imprime", () => {
+  it.each(SE_PIERDE_EN_PAPEL.map((f) => [f.id, f] as const))(
+    "%s se pierde sobre papel blanco, y es EXACTAMENTE lo que ya hacía el tema claro",
+    (_id, fila) => {
+      const antes = medir(token("oscuro", fila.cual), PAPEL);
+      const despues = medir(tokenAlImprimir(fila.cual), PAPEL);
+
+      expect(antes, `${fila.id} — ${fila.que}: la medida de ANTES se movió`).toBe(fila.antes);
+      expect(despues, `${fila.id} — ${fila.que}: la medida de DESPUÉS se movió`).toBe(fila.despues);
+      expect(
+        despues,
+        `${fila.id} dejó de empeorar. Si eso pasó es una buena noticia, pero la prosa del bloque ` +
+          "dice lo contrario y hay que reescribirla: un límite retirado que sigue escrito manda a " +
+          "buscar un agujero que ya no existe.",
+      ).toBeLessThan(antes);
+
+      // LA MITAD QUE LO HACE HONESTO: imprimiendo desde «claro» da el MISMO número. No es una
+      // regresión contra el tema claro; es el tema claro, que es lo que esta ficha compra.
+      expect(
+        medir(token("claro", fila.cual), PAPEL),
+        `${fila.id} dejó de coincidir con el tema claro en pantalla. Eso rompe la razón por la que ` +
+          "esto se declara en vez de arreglarse aquí: si el papel de «oscuro» y el de «claro» ya " +
+          "no miden lo mismo, el espejo dejó de ser exacto y hay que releer el bloque entero.",
+      ).toBe(despues);
+    },
+  );
+
+  it("y queda declarado JUNTO al bloque, con sus números y con por qué no se arregla aquí", () => {
+    expect(
+      crudo,
+      "el comentario del bloque ya no declara que `--primary-foreground` se pierde en papel " +
+        "(18.33 → 1.00). Es lo que esta ficha EMPEORA, y una ficha que sólo publica lo que mejora " +
+        "no está midiendo: está vendiendo.",
+    ).toMatch(/18\.33 → 1\.00/);
+    expect(crudo, "falta el segundo par que se pierde entero").toMatch(/18\.21 → 1\.00/);
+    expect(
+      crudo,
+      "falta la RAZÓN por la que no se arregla en este bloque: los mismos pares miden lo mismo " +
+        "imprimiendo desde «claro», así que un valor propio aquí rompería el espejo exacto.",
+    ).toMatch(/espejo exacto/);
   });
 });
 

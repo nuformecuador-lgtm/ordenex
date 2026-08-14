@@ -217,11 +217,25 @@ export function token(tema: "claro" | "oscuro", nombre: string): string {
  * verdad lo comprueba `tests/unit/guards/impresion-tokens.guardia.test.ts`, que sí calcula la
  * especificidad; aquí sólo se LEE.
  */
-export function tokenAlImprimir(nombre: string): string {
+let declaracionesDeImpresion: Record<string, string> | null = null;
+
+/**
+ * El cuerpo de esa regla, parseado UNA vez. El archivo calcula `cssDePantalla` y `TEMAS` a nivel
+ * de módulo por la misma razón: reparsear `globals.css` en cada llamada es trabajo repetido en un
+ * fixture que consumen varias guardias.
+ *
+ * Se hace PEREZOSO y no a nivel de módulo, a diferencia de los otros dos, y la diferencia importa:
+ * esto LANZA si la regla no está, y a nivel de módulo esa excepción caería en el `import` de todos
+ * los consumidores del fixture —incluidos los que no miden papel—, convirtiendo un defecto de la
+ * regla de impresión en un rojo de guardias que no hablan de ella. Perezoso, el fallo llega a
+ * quien lo provoca y con su mensaje.
+ */
+function reglaDeImpresion(): Record<string, string> {
+  if (declaracionesDeImpresion) return declaracionesDeImpresion;
   const candidatas = reglasDe(cssSinComentarios).filter(
     (r) =>
       r.ancestros.some((a) => /^@media\s+print\b/.test(a)) &&
-      r.selectores.some((s) => /(^|[\s>+~])(html\s+)?\.dark\b/.test(s)),
+      r.selectores.some((s) => /(^|[\s>+~])\.dark\b/.test(s)),
   );
   if (candidatas.length !== 1) {
     throw new Error(
@@ -231,7 +245,12 @@ export function tokenAlImprimir(nombre: string): string {
         "resuelve. Fallar es lo correcto, no devolver la primera.",
     );
   }
-  const valor = candidatas[0]!.declaraciones[`--${nombre}`];
+  declaracionesDeImpresion = candidatas[0]!.declaraciones;
+  return declaracionesDeImpresion;
+}
+
+export function tokenAlImprimir(nombre: string): string {
+  const valor = reglaDeImpresion()[`--${nombre}`];
   if (!valor || !/^#[0-9a-fA-F]{3,8}$/.test(valor)) {
     throw new Error(
       `--${nombre} no aparece como hex en el bloque de impresión de tokens de app/globals.css. ` +

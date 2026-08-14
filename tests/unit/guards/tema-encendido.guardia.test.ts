@@ -14,7 +14,7 @@
 //  3. Si desaparece `body:has(...)`, vuelve la franja clara alrededor de la app oscura.
 //  4. Si el layout deja de montar el proveedor, el control sigue ahi y no enciende nada.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -106,6 +106,39 @@ describe("feature 211 — el CSS que enciende el tema", () => {
     const claro = reglaCon(".tema-claro");
     expect(claro.selectores).toContain(":root");
     expect(claro.declaraciones["--background"]).toBe("#f7f8fc");
+  });
+
+  /**
+   * Feature 224 — LAS CITAS DE LA PROSA APUNTAN A ARCHIVOS QUE EXISTEN.
+   *
+   * `globals.css` es el archivo mas comentado del repo y su prosa manda al lector a una guardia
+   * concreta varias veces («hay una guardia que falla si divergen…», «su guardia es…»). Esas rutas
+   * NADIE las comprobaba, y una habia caducado sin que nada lo notara: el comentario de
+   * `.tema-sistema` citaba `tema-sistema-espeja-dark.guardia.test.ts`, que **no existe** — la
+   * comprobacion vive en ESTE archivo, en el primer caso de este mismo `describe`. Quien fuera a
+   * buscarla no la habria encontrado, y habria concluido que no existe: peor que no citar nada.
+   *
+   * La autocomprobacion es la mitad importante: sin ella, una expresion regular que dejara de
+   * encontrar citas reportaria CERO rotas y pasaria en verde sin haber mirado nada.
+   */
+  it("cada ruta de `tests/` que cita la prosa de `globals.css` existe en el disco (224)", () => {
+    const crudo = readFileSync(path.join(__dirname, "../../..", GLOBALS), "utf8");
+    const citas = [...new Set([...crudo.matchAll(/tests\/[\w./-]+\.tsx?/g)].map((m) => m[0]!))];
+
+    expect(
+      citas.length,
+      "el censo no encontro citas a `tests/` en la prosa de globals.css. O la prosa dejo de " +
+        "remitir a sus guardias, o este censo dejo de saber que busca: en los dos casos estaba " +
+        "dando verde sin mirar.",
+    ).toBeGreaterThan(3);
+
+    const rotas = citas.filter((ruta) => !existsSync(path.join(__dirname, "../../..", ruta)));
+    expect(
+      rotas,
+      "la prosa de globals.css cita archivos de `tests/` que no existen. Quien lea la regla va a " +
+        "buscar ahi la comprobacion que la sostiene, no la va a encontrar, y va a concluir que no " +
+        "existe. Si la guardia se movio, actualiza la cita; si desaparecio, di quien la cubre.",
+    ).toEqual([]);
   });
 });
 
