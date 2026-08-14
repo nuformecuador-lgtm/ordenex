@@ -571,3 +571,142 @@ filas de lo que se pierde, su declaración en prosa y el censo de citas).
    Mismo caso, misma ficha, menor gravedad (son líneas, no texto).
 8. **La mutación Rm3 no la caza esta guardia con su propio mensaje** (ver R4). Declarado, con la
    razón y con el coste de cerrarlo.
+
+---
+---
+
+# TERCERA RONDA — aprobado con menores (n1, n2, n3, n4)
+
+Todo remedido con la aritmética canónica y con el instrumento controlado antes de usarlo
+(negro/blanco **21.00**, blanco/blanco **1.00**). Ninguna cifra copiada del informe.
+
+## N1 · La vacuidad que introdujo mi propio arreglo de m3 — OBLIGATORIO, cerrado
+
+El reanclaje de la ronda anterior cambió una lista **escrita a mano** (que no podía quedar vacía)
+por una **derivada** del CSS (que sí puede). Con eso, el caso que da nombre a la ficha —«cada
+selector de impresión le gana en especificidad»— pasaba a poder aprobar **sin comparar nada**.
+
+No es hipotético: replantada la mutación **RN4** (los dos `#e6ecf8` de pantalla → `#e6ecf9`), el
+censo devolvía `[]`, el bucle no iteraba y el caso salía **verde**, cercado por tres rojos del
+mismo archivo. Tres rojos alrededor no son excusa: un caso que necesita que otro se ponga rojo
+para no mentir **sigue mintiendo cuando lo corren solo**.
+
+**Cerrado** con anti-vacuidad **dentro del caso** (no delegada al de al lado):
+
+```ts
+expect(selectoresOscurosReales, "…pasaría por VACUIDAD…").toHaveLength(SELECTORES_OSCUROS.length);
+```
+
+**RN4 replantada por mí, después del arreglo** — el caso central ahora es de los que caen:
+
+```
+×  cada selector de impresión le gana en especificidad al que redeclara los tokens oscuros
+AssertionError: el censo de reglas de pantalla se quedó sin selectores, así que el bucle de
+abajo no compararía NADA y este caso —el que da nombre a la ficha— pasaría por VACUIDAD. Lo
+más probable es que el ancla `--foreground: #e6ecf8` dejara de casar: si la tinta oscura
+cambió de hex, hay que actualizar el ancla, no dar el verde por bueno.
+```
+
+Antes del arreglo: 3 rojos y el central en verde. Después: **5 rojos, el central entre ellos.**
+
+## N3 · La lista de «lo que empeora» pasa a DERIVARSE — cifras recalculadas
+
+`--sidebar-foreground` **2.26 → 2.03** (`#9fadc9` → `#aab6d2`), tercera columna 2.03. Confirmado.
+
+Pero añadirla a mano habría repetido el defecto: barriendo los 35 tokens salió que **también
+faltaba `--sidebar-border`** (12.30 → 11.39). Una lista escrita a mano que dice ser «el censo de
+lo que empeora» es una afirmación de censo sin censo — lo mismo que esta ficha ya pagó con F4.
+
+**Ahora se deriva**, y el barrido descarta por ROL. Es imprescindible: un barrido ciego marca
+**14 de 35**, y **ocho son SUPERFICIES** —`--card` 16.28 → 1.00 significa que la tarjeta ya sale
+blanca, o sea *lo que la ficha compra*—. Llamar «pérdida» a eso sería tan falso como esconder las
+que sí lo son. El ROL (tinta / superficie / línea / gráfico) va declarado a mano porque **no está
+en el hex**, con autocomprobación de que cubre los 35 exactos.
+
+Las **seis** que de verdad bajan:
+
+| id | token | antes | después | desde «claro» |
+| --- | --- | --- | --- | --- |
+| P1 | `--primary-foreground` | 18.33 | 1.00 | 1.00 |
+| P2 | `--sidebar-primary-foreground` | 18.21 | 1.00 | 1.00 |
+| P3 | `--border` | 12.30 | 1.23 | 1.23 |
+| P4 | `--input` | 10.29 | 1.23 | 1.23 |
+| **P5** | `--sidebar-foreground` *(faltaba)* | 2.26 | **2.03** | 2.03 |
+| **P6** | `--sidebar-border` *(faltaba, y no estaba en el informe)* | 12.30 | **11.39** | 11.39 |
+
+Anotado también el apunte del reviewer: la tercera columna está **garantizada por construcción**
+(el espejo compara los 35 hexes contra `:root, .tema-claro`), así que «iguala al tema claro» vale
+para todos. Se conserva fila a fila porque es el argumento del que cuelga la decisión de no
+arreglarlo, y en la fila concreta se lee mejor que en un `toEqual` de 35 claves.
+
+## N4 · El censo de citas mira más allá de `tests/`
+
+Ampliado a `tests|app|components|lib|providers|hooks|db|scripts`. Hoy cubre **12 citas** y las 12
+existen.
+
+**El `(?<![\w./-])` no es cosmético, y se midió antes de escribir el caso**: sin él,
+`_components/CierresAdminModule.tsx` casa por su mitad derecha como si fuera
+`components/CierresAdminModule.tsx`, y el censo denunciaba **tres citas rotas que no existen**.
+
+**Límite declarado**: no cubre las rutas escritas relativas a `app/(app)/` («`cierres-admin/…`»,
+que usa la prosa de la 223); verificarlas exige conocer esa base implícita. Va dicho en el caso
+en vez de dejar creer que están cubiertas.
+
+## N2 · DECISIÓN: **ejecutable**, no declarado
+
+La frase «ésta es la única que pierde» era una afirmación de censo sin censo — el patrón exacto
+que esta ficha acaba de pagar con F4. Se hizo **ejecutable**, y el porqué de esa elección:
+
+- **El censo sale barato y sin ambigüedad.** Medido antes de decidir: en todo el árbol hay
+  `dark:text-asfalto-2` ×1, `dark:text-brand-light` ×3 y `dark:text-foreground` ×1. Sólo el
+  último apunta a un token con variante de tema. Cero casos dudosos.
+- **Se censa lo que importa y nada más.** En papel manda la TINTA (no se imprimen fondos), y la
+  tinta sale de `text-*`. La condición para que una fila pueda perder es que la rama `dark:` sea
+  un TOKEN —ésa la mueve la 224— mientras la base no se mueve. Los tokens con variante se
+  derivan de lo que declara `.dark`, no de una lista escrita.
+- **Es una SOBREAPROXIMACIÓN a propósito, y va dicho**: no clasifica la rama base. Hacerlo
+  exigiría parsear cadenas de clases (`cn()`, condicionales, variantes responsive) y ahí es donde
+  un censo empieza a dar falsos positivos y a enseñar a la gente a silenciarlo. Si aparece un
+  `dark:text-<token>` nuevo, esto se pone rojo y le pide a un humano que mire su base. Falla
+  hacia el lado ruidoso.
+- **Lo que NO cubre, dicho**: `dark:bg-*` y `dark:border-*` con token (`dark:bg-input` ×11,
+  `dark:bg-foreground/10` ×2, `dark:border-input` ×1). Son superficie y línea: en papel no
+  deciden legibilidad porque el fondo no se imprime.
+
+La frase del CSS se reescribió para afirmar exactamente lo que se vigila, incluido el hecho de
+que es una sobreaproximación.
+
+## Las mutaciones de esta ronda
+
+| # | mutación | archivo | esperado | resultado |
+| --- | --- | --- | --- | --- |
+| **RN4** | *(replantada)* mover el hex de la tinta oscura de pantalla | `globals.css` | ROJO | **ROJA** — 5 casos, el central entre ellos |
+| **Rn3a** | quitar la fila P5 de la lista, como estaba antes | la guardia | ROJO | **ROJA** — el censo derivado la echa de menos |
+| **Rn3b** | que `--sidebar-foreground` deje de bajar (valor propio) | `globals.css` | ROJO | **ROJA** — 3 casos (espejo, censo y P5) |
+| **Rn4a** | romper una cita que **no** es de `tests/` | `globals.css` | ROJO | **ROJA** — `['components/ui/badges.tsx']` |
+| **Rn2a** | una SEGUNDA utilidad `dark:text-<token>` | `RankingPodio.tsx` | ROJO | **ROJA** — el inventario cambió |
+| **RN4i** | INOCUA: reformatear el ancla (mismo hex, otro espaciado) | `globals.css` | VERDE | **VERDE** ✓ |
+| **Rn3i** | INOCUA: reordenar P5 y P6 en la lista | la guardia | VERDE | **VERDE** ✓ |
+| **Rn4i** | INOCUA: citar otra ruta de código que sí existe | `globals.css` | VERDE | **VERDE** ✓ |
+| **Rn2i** | INOCUA: un `dark:text-*` nuevo pero de PALETA FIJA | `RankingPodio.tsx` | VERDE | **VERDE** ✓ |
+
+`RN4i` se reescribió sobre la marcha: la primera versión movía el hex de la tinta CLARA, y eso
+**no es inocuo** —cambia T1 (15.70) y las seis filas de «lo que empeora»—. La inocua de verdad es
+la que toca el formato y no el valor, y de paso prueba que el ancla compara el valor normalizado
+y no el texto crudo.
+
+## El gate, tras la tercera ronda
+
+```
+✓ typecheck paso · ✓ lint paso (0 errores; 0 warnings en lo tocado)
+  test:guardias    Test Files 100 passed (100)   ·  Tests   1521 passed (1521)
+== init OK ==   (EXIT=0)
+```
+
+1.509 → 1.516 → **1.521** casos de guardia.
+
+## Lo que se añade a «lo que queda abierto»
+
+9. **El censo de n2 es una sobreaproximación.** Puede pedir una revisión innecesaria (un
+   `dark:text-<token>` cuya base sea otro token no pierde nada). Se prefirió a parsear `cn()`.
+10. **El censo de citas no cubre las rutas relativas a `app/(app)/`** que usa la prosa de la 223.
