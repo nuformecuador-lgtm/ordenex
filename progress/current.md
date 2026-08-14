@@ -9,7 +9,96 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🏁 CIERRE DE JORNADA 2026-08-13 — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 CIERRE DE JORNADA 2026-08-14 — **EMPIEZA A LEER POR AQUÍ**
+
+### 🚦 Lo único que espera decisión humana: **la release a `prod`**
+
+**95 commits, y CERO migraciones** — no es una estimación: el árbol `db/` de `dev` y el de `prod`
+son **idénticos byte a byte** (116 migraciones en ambos), así que mergear **no aplica nada** contra
+la base. La última que se desplegó fue la de la 212, en la release #359.
+
+Lleva **206** (anulación agrupada), **209** (un solo quitador de comentarios), **210** (contraste de
+insignias), **213** (pago múltiple en pantalla), **215** (el reintento se cuenta en el cierre),
+**217** (la factura gira con el tema), **221** (`dark:` no dispara al imprimir), **222** (el botón
+destructive cumple AA) y **223** (la factura se imprime entera).
+
+Lo que un usuario nota de inmediato: **puede cobrar una entrega con varios métodos**, y **la factura
+del cierre ya no sale recortada ni en blanco sobre negro al imprimirla**.
+
+### ✅ Lo que salió de esta jornada
+
+| | Qué |
+| --- | --- |
+| **El rojo de `dev`** | cerrado. Y la disyuntiva que la nota planteaba —«¿implementar R24 o cambiar el test?»— **era falsa: era la semilla** |
+| **209** | cerrada. 7 quitadores migrados **sin mover un veredicto**, 9 falsos positivos cerrados, y 2 semánticas que el censo no podía ver |
+| **217** | la factura gira con el tema, con inventario **cerrado** de 26 pares y la grieta declarada en tres sedes |
+| **221** | el variant `dark:` deja de disparar al imprimir; 4 pares de paleta fija mejoran de 1,87 a 3,18-11,39 |
+| **222** | el botón `destructive` cumple en los **cuatro** estados — el peor era el **hover**, y no estaba en la ficha |
+| **223** | la factura se imprime entera y sólo la factura, **sin una línea de JavaScript** |
+| **Bookkeeping** | la **213** llevaba `in_progress` con su PR mergeado: la única tarea sin marcar era **su propio bookkeeping**, y ocupaba un hueco de la regla de zona |
+| **Fichas nuevas** | **221**, **222**, **223** (las tres implementadas hoy) y **224**, **225**, **226** registradas con su medición dentro |
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **Decidir la release** (arriba). Sin migraciones, así que el riesgo es de código, no de datos.
+2. **La 224** — al imprimir, los tokens tampoco giran a claro. Es `low` y **borra un precio que hoy
+   se paga**: con «gráficos de fondo» marcado, `Badge` success cae de 6,60 a 1,70.
+3. **La 225** — 19 avisos hechos a mano en 15 archivos repiten el par que la 222 arregló. Decidir al
+   empezar si van a un componente compartido o sólo se les cambia el par; lo segundo reabre la ficha.
+4. **La 226** — el anillo de foco mide 1,30 contra el **3:1** que pide 1.4.11. No es estética: es la
+   señal de dónde está el teclado.
+5. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+6. **La 215** sigue `in_progress` con R18/R19/R24 abiertos, y es de otra sesión.
+
+### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
+
+- **La misma enfermedad apareció CINCO veces, y una en código escrito el mismo día que se erradicó.**
+  Un censo que lee **prosa como si fuera código**: los 9 quitadores de la 209, la guardia de R15 de
+  la 217, el docstring que prometía más que su mecanismo, y el parser de CSS que aplicaba el
+  quitador de TypeScript. La 209 la cerró por la mañana y por la tarde reapareció en la 217.
+- **Un censo mide la forma que sabe buscar, no el fenómeno.** El de la 209 buscaba regex, y las **dos
+  peores semánticas del árbol** estaban escritas con `split`/`filter`. El detector ancho dio 12
+  falsos positivos de 17 — y encontró las dos que importaban. **Ancho + triaje a mano** es lo único
+  que ha funcionado las dos veces que se ha intentado.
+- **«Un total que se mueve es un hallazgo» sólo vale si el total es el que la guardia AFIRMA.** Los
+  siete quitadores de la tanda B se apartaron por un derivado intermedio que se mueve **por diseño**.
+  No había ningún veredicto que dar.
+- **Tres mutaciones salieron VERDES y eran las mutaciones las que estaban mal**: la que la bitácora
+  de la 217 daba por roja no podía ocurrir, la del spec de la 223 dejaba la página en blanco, y una
+  con `querySelector("main")` devolvía `null` y sus veinte verdes no significaban nada. **Una
+  mutación inerte reportada en verde es indistinguible de una guardia que no muerde**, y la única
+  defensa que funcionó fue **plantarla uno mismo** y exigir su **variante inocua**.
+- **Medir antes de especificar volvió a cambiar el encargo, dos veces más.** En la 217 no existía
+  **ninguna** vía de impresión en el repo, así que la regla del papel blanco hubo que **crearla**;
+  y el medidor que el spec daba por inexistente **sí estaba commiteado**, dentro de una guardia y sin
+  exportar.
+- **El CSS de un spec aprobado puede estar roto, y sólo lo dice medirlo**: el de la 223 imprimía una
+  página **en blanco** —PDF de 652 bytes—. Leerlo no bastaba.
+- **Cuando una decisión humana va contra la recomendación, la objeción que la motivaba NO desaparece:
+  hay que resolverla.** La hoja compacta imprimible obligó a inventar el mecanismo de candidatura, y
+  salió **sin una línea de JavaScript**.
+- **Los backticks en un `-m` inline, y dentro de `node -e`, los ejecuta el shell antes de que nadie
+  los lea, y se comen el texto EN SILENCIO.** Pasó **dos veces hoy**, y la T18 de la 213 ya lo tenía
+  escrito. Usar `-F -` con heredoc citado, siempre.
+- **El registro se desincroniza en la dirección que nadie mira**: la 213 estaba mergeada, aprobada y
+  desplegada, y su ficha decía `in_progress` porque **su propia tarea de bookkeeping** era la única
+  sin marcar. Y con ella ocupaba un hueco de la regla de max-2-por-zona.
+
+### 🧾 Deuda declarada hoy, toda con ficha o con número
+
+- **224**, **225** y **226** (arriba), las tres con su medición dentro.
+- El **harness de impresión** de la 223 se borró a propósito → ficha aparte.
+- **Gecko y WebKit no están medidos** en la 223; sólo Chromium.
+- La **grieta del inventario** de la 217 —recombinar una tinta y un fondo ya declarados— no la caza
+  nada, **por decisión**: cerrar por par exige recorrer el JSX y eso aprueba con números falsos.
+  Verificada con una mutación de **control que sale verde a propósito**.
+- Las **pestañas no visitadas** y el **KPI animado** de la factura llevan su límite escrito.
+- La 215 deja **R19** (una consulta de medición a la que le falta una condición, y gobierna dinero),
+  **R28** en 3 sitios y **R24-b/c/d + R35** sin guardia que los sostenga.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-13
 
 ### ✅ EL ROJO DE `dev` ESTÁ CERRADO (2026-08-13, tarde) — **medido, no supuesto**
 
