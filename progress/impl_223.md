@@ -41,11 +41,20 @@ a
 > *:not(:has([role="dialog"] .hoja-imprimible)):not(:has(.hoja-imprimible))
 ```
 
-**Por qué esto NO es cambiar una decisión.** (a) Implementa la prosa que el propio diseño escribe
-sobre A.1 —«fuera del diálogo: se poda todo lo que no lleva al diálogo»—, que el selector literal
-contradecía; (b) A.2 y A.3 **ya llevan** un segundo `:not()` con esa misma función, A.1 era la
-única sin él: es un desliz de transcripción, no una postura; (c) R6, sus dos niveles, la lista
-blanca, el `:not()` con selectores simples y «CSS puro, sin JavaScript» quedan **intactos**.
+**Por qué esto NO es cambiar una decisión.** (a) Implementa **la prosa que el propio diseño
+escribe sobre A.1** —«fuera del diálogo: se poda todo lo que no lleva al diálogo»—, que su
+selector literal contradecía: el popup **lleva** a la hoja, y aun así se ocultaba; (b) R6, sus dos
+niveles, la lista blanca, el `:not()` con selectores simples y «CSS puro, sin JavaScript» quedan
+**intactos**.
+
+> **Corrección tras la revisión (m1).** Una versión anterior de esta bitácora añadía un tercer
+> argumento —«A.2 y A.3 ya llevan un segundo `:not()` con esa misma función»— y **era inexacto**:
+> el *segundo* `:not()` de A.2 y A.3 es `:not(.hoja-imprimible)` —la clase, que salva a la hoja de
+> su propia poda—, mientras que a A.1 se le añade `:not(:has(.hoja-imprimible))` —el `:has()`—,
+> que en A.2 y A.3 es el **primer** predicado y allí hace otro trabajo. Lo único cierto de la
+> comparación es que A.1 tenía **un** `:not()` donde las otras dos tienen **dos**. El argumento se
+> retira: la conclusión se sostiene por (a) y por la medición, y un razonamiento apoyado en un
+> parecido falso envejece mal aunque acierte hoy.
 
 **No se borró la versión del spec:** vive como **variante inocua de la mutación 3-bis**, para que
 la regresión no pueda volver en silencio.
@@ -390,7 +399,7 @@ está corrido es `./init.sh --rapido` al cierre de cada tanda, todas en verde.
 | **R8** | `FLUJO` «una hoja por página… `break-before: page`» + `PAPEL` «dos compactas desplegadas…» | estructural + motor (T21-5) |
 | **R9** | `PAPEL` «el popup expone `role="dialog"`» y «dentro del diálogo hay EXACTAMENTE una candidata» | ejecutado |
 | R10 | `FLUJO` «declara las TRECE propiedades» + `PAPEL` «el scroll lock, medido» + `PAPEL` «la regla de la cadena cubre TODOS los ancestros» | estructural + evaluado + motor (T21-2) |
-| R11 | `FLUJO` «sin nombrar ningún contenedor» + `PAPEL` «cubre TODOS los ancestros» (ruta admin) + T21 (ruta mensajero) | evaluado + motor |
+| R11 | `FLUJO` «sin nombrar ningún contenedor» + `PAPEL` «cubre TODOS los ancestros» (admin) **y el bloque «la ruta del MENSAJERO, con la misma regla» (3 casos)** | evaluado, **las dos rutas en el gate** |
 | R12 | `FLUJO` «el módulo del admin conserva…», «el `Modal` conserva…», «ninguno estrena `print:`» | estructural |
 | R13 | `FLUJO` «lleva `!important` EXACTAMENTE en las cinco…» + `PAPEL` «el scroll lock, medido» | estructural + **medido** |
 | R14 | `FLUJO` «declara las TRECE…» (incluye `display`) + «la regla que OCULTA va DESPUÉS» | estructural |
@@ -400,14 +409,14 @@ está corrido es `./init.sh --rapido` al cierre de cada tanda, todas en verde.
 | R18 | `FLUJO` «la hoja elegida deja de recortarse a sí misma» + R20 (sin `break-inside` en las raíces) | estructural + motor (T21-3) |
 | R19 | `FLUJO` «`break-inside-avoid` está EXACTAMENTE en las cinco piezas» | estructural |
 | R20 | `FLUJO` «NO se evita el corte en…» (×4) + la misma lista congelada | estructural |
-| R21 | `FLUJO` «declara que las cabeceras de columna NO se repiten, y por qué» | estructural — **no hay test que pueda afirmar más** |
+| R21 | `FLUJO` «declara que las cabeceras… y por qué» **+ «y NADIE intenta arreglarlo: cero `table-header-group`»** | estructural, **las dos mitades** |
 | R22 | `FLUJO` «declara que lo plegado y las pestañas no visitadas NO se imprimen» | estructural — ídem |
 | R23 | `TEMA` (los tres casos de `.papel-al-imprimir`, **verdes sin tocarse**) + `FLUJO` «no nombra `.papel-al-imprimir`» + `CONTRASTE` | estructural |
 | R24 | `TEMA` «junto a la regla… su límite» y «el bloque va ANTES de `.dark`» (**anclas por contenido**) + `SINDARK` «el ancla vieja…» + `FLUJO` «hay EXACTAMENTE dos `@media print`» | estructural |
 | R25 | `FLUJO` «no nombra `.papel-al-imprimir` ni declara ningún token» | estructural |
 | R26 | `FLUJO` «las reglas del bloque cuelgan de `@media print` y de NINGÚN `@layer`» | estructural |
 | R27 | `CONTRASTE` «no fuerza la impresión de fondos ni añade un flujo» (**verde sin tocarse**) + `FLUJO` «sigue sin haber botón» | estructural |
-| R28 | `TEMA` «el formato de página no se mezcla…» (REEXPRESADO) + `FLUJO` «la cabecera ya no afirma que no hay `@page`» y «conserva lo que sigue siendo cierto» | estructural |
+| R28 | `TEMA` «el formato de página no se mezcla…» (REEXPRESADO) + `FLUJO` «la cabecera ya no afirma que no hay `@page`», «conserva lo que sigue siendo cierto» **y «la prosa de la 217 en el CSS… cada mención remite a la 223»** — las **dos** anclas de R28 | estructural |
 | R29 | `FLUJO` «junto a `KpiFactura` está escrito que una impresión puede llevar una cifra intermedia» | estructural |
 | R30 | Los censos usan `codigoSinComentarios`; autocomprobado en `FLUJO` «el censo lee el CÓDIGO… no su prosa» (CSS y `.tsx`); mutaciones 6i y 8i rojas | estructural |
 | R31 | Esta bitácora, §T20: 19 + 19, **ninguna inocua verde** | evidencia |
@@ -431,3 +440,49 @@ reales contra el DOM real—, que es más de lo que `design.md §6.6` daba por p
    alcance de R10 por decisión escrita; medido y congelado, no verificado en papel.
 7. **La app corriendo.** T21 usa datos de fixture y DOM serializado. Mirar la aplicación de
    verdad sigue encontrando cosas que ninguna suite ve.
+
+---
+
+## Ronda de revisión — 2026-08-14
+
+El reviewer **RECHAZÓ** por **B1** (registro) y dejó seis menores. Plantó 8 mutaciones, 8 rojas,
+**cero discrepancias** con esta bitácora, y midió por su cuenta el `11442 = 11442`. Todo cerrado:
+
+| # | Qué | Cómo se cerró |
+| --- | --- | --- |
+| **B1** | Las 23 tareas de `tasks.md` sin marcar | 22 marcadas; **T23 se deja SIN marcar a propósito** —el gate completo lo corre el leader— y lo dice en su propia nota. Las desviaciones de **T18** (adelantada a la Tanda 1) y **T21** (motor real por script, no a mano) quedan anotadas **en el propio `tasks.md`**, junto a su tarea, no sólo aquí. |
+| **m1** | El argumento (b) se apoyaba en un parecido falso | Retirado, con la corrección escrita arriba. |
+| **m2** | El arreglo de A.1 perdona **cualquier** subárbol con candidata, y ese vínculo no estaba en el CSS | Escrito **junto a la regla**: qué se asume (el portal cuelga del `<body>`, así que las N compactas mueren en el PRIMER selector de A.1) y **qué caso lo vigila** («el popup se monta en un contenedor propio COLGADO del `<body>`»), con la instrucción de releer esta rama si ese caso se pone rojo. |
+| **m3** | La mitad de R28 que vive en el CSS no estaba congelada | Caso nuevo en `FLUJO`, con el patrón que la 217 ya usa para `.tema-claro`: el párrafo puede contar su historia, pero **cada mención** de `@page` / paginación / ocultamiento / recortada debe llevar la 223 cerca. Con autocomprobación: si el párrafo deja de nombrarlas, rojo en vez de pasar sobre un texto vacío. |
+| **m4** | R11 decía «las dos rutas» y el gate ejercía una | **La segunda ruta entra al gate.** Ver abajo. |
+| **m5** | La mitad negativa de R21 sin censo | Caso nuevo: cero `table-header-group` en el CSS y en la hoja, **y** cero `<thead>`/`<tbody>` — la puerta de atrás sería convertir el marcado en una tabla de verdad, que es rediseñar la hoja. |
+| **m6** | `requirements.md` R19 decía «rejilla» y el código protege la tarjeta | Plegado al articulado como **C4**, con el motivo del desempate y el puntero a dónde vive congelado. |
+
+### m4 — se decidió **meter la ruta del mensajero al gate**, no bajar lo que R11 afirma
+
+R11 no es una promesa de más: es **la razón de ser de la forma de la regla**. `H1` midió que las
+dos rutas no montan los mismos contenedores —la del admin trae un `div.max-h-[70vh].overflow-y-auto`
+que la del mensajero no tiene— y de ahí sale la decisión de atacar **las capas** en vez del `:822`.
+Bajar R11 a «se verifica la del admin» habría dejado sin dueño ejecutable **justo la propiedad que
+justifica el diseño**, y encima apoyada en una evidencia que se borró con el harness. Costaba tres
+casos y se pagan:
+
+1. **Las dos rutas montan el mismo componente** — censo de los dos módulos, con la asimetría
+   congelada (`max-h-[70vh]` está en el admin y **no** en el mensajero). Si algún día se igualaran,
+   este caso avisa de que hay que buscar otra asimetría real en vez de dar R11 por bueno.
+2. **En la ruta del mensajero sale la hoja y su nota de pantalla no** — la regla de elección
+   evaluada sobre el DOM de `CierreDiaModule`.
+3. **La cadena la cubre entera, con un contenedor menos** — que es la afirmación literal de R11.
+
+R11 pasa de «estructural + una ruta» a **evaluado en las dos**, dentro del gate.
+
+### Mutaciones de esta ronda — 4 plantadas, 4 rojas
+
+| # | Mutación | Resultado |
+| --- | --- | --- |
+| **22** | Quitar de `globals.css` la mención de la 223 en el párrafo de la 217 *(m3)* | 🔴 |
+| **23** | Declarar `table-header-group` en el bloque del flujo *(m5)* | 🔴 |
+| **24** | Que `CierreDiaModule` monte otro componente en vez de `CierreFacturaDetalle` *(m4)* | 🔴 |
+| **25** | Colgar el popup del envoltorio de la app en vez del `<body>` *(m2: el tripwire que el CSS ahora nombra)* | 🔴 |
+
+**m7** (`progress/history.md`) es paso de cierre del leader y **no se toca desde aquí**.

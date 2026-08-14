@@ -32,25 +32,25 @@ de ser **posicionales** (**T5**, y va **antes** de tocar el CSS).
 
 No toca código de producción.
 
-- [ ] **T1.** Crear `tests/fixtures/css-reglas.ts` exportando `reglasDe`, `selectoresDe` y
+- [x] **T1.** Crear `tests/fixtures/css-reglas.ts` exportando `reglasDe`, `selectoresDe` y
   `declaracionesDe` tal como viven hoy en `tema-encendido.guardia.test.ts:34-95`, **sin cambiar
   una línea de su lógica**, leyendo con `codigoSinComentarios`.
   **Hecho:** `pnpm run typecheck` verde; el fixture no importa nada de `app/`; no ejecuta nada
   al importarse salvo la lectura del CSS. *(R32, R30)*
-- [ ] **T2.** `tema-encendido.guardia.test.ts` pasa a **importar** del fixture y borra sus
+- [x] **T2.** `tema-encendido.guardia.test.ts` pasa a **importar** del fixture y borra sus
   copias locales. Depende de T1.
   **Hecho:** la guardia entera verde **sin que ningún caso cambie de nombre ni de aserción**;
   el `git diff` sólo quita definiciones y añade un `import`. *(R32)*
-- [ ] **T3.** `[P]` Censo: **cero** segundas copias del parser en `tests/`. Depende de T2.
+- [x] **T3.** `[P]` Censo: **cero** segundas copias del parser en `tests/`. Depende de T2.
   **Hecho:** queda **como aserción de una guardia**, no como comprobación manual de una vez.
   *(R32)*
-- [ ] **T4.** **MEDIR el scroll lock** (`design.md §4.4`, la única incógnita técnica): un caso
+- [x] **T4.** **MEDIR el scroll lock** (`design.md §4.4`, la única incógnita técnica): un caso
   que abre el `Modal` en jsdom y **lee** `document.body.style` y
   `document.documentElement.style`.
   **Hecho:** el caso afirma, con el valor medido, qué estilos en línea deja el diálogo abierto;
   el resultado queda en `progress/impl_223.md` y **decide** si `overflow` entra en la lista de
   `!important` de R13. Si no aparece ninguno, el caso lo congela igual. *(R10, R13)*
-- [ ] **T5.** **Los anclajes dejan de ser posicionales** *(C3)*. Reexpresar
+- [x] **T5.** **Los anclajes dejan de ser posicionales** *(C3)*. Reexpresar
   `tema-encendido.guardia.test.ts:185` (y sus usos en `:264` y `:352`) e
   `impresion-sin-dark.guardia.test.ts:184` para que localicen el bloque de la 217 **por su
   contenido** —la regla que declara los tokens de `.papel-al-imprimir`—, no por ser el primer
@@ -59,7 +59,7 @@ No toca código de producción.
   **Hecho:** las dos guardias verdes **con el CSS de hoy**, y vistas **rojas** al mover el
   bloque de tokens de la 217 detrás de `.dark` — que es justo lo que el ancla posicional
   dejaba de detectar en cuanto hubiera dos bloques. *(R24, R31)*
-- [ ] **T6.** `[P]` Verificar que la utilidad **`break-inside-avoid` existe en la versión de
+- [x] **T6.** `[P]` Verificar que la utilidad **`break-inside-avoid` existe en la versión de
   Tailwind instalada** y sale al CSS compilado.
   **Hecho:** anotado con la versión exacta en `progress/impl_223.md`; si no existiera, se
   decide la alternativa **antes** de la Tanda 2 (`design.md §7-G`). *(R19)*
@@ -70,7 +70,7 @@ No toca código de producción.
 
 ## Tanda 1 — El CSS (depende de la Tanda 0: primero el parser y los anclajes)
 
-- [ ] **T7.** `app/globals.css`: el bloque `@media print` del flujo tal como `design.md §3.4`
+- [x] **T7.** `app/globals.css`: el bloque `@media print` del flujo tal como `design.md §3.4`
   —cadena (B), ocultamiento (A) con sus **tres ramas** (nivel 1 fuera y dentro del diálogo,
   nivel 2), hoja (C) y `~` entre candidatas (D)—, colocado **después del bloque de la 217 y
   antes de `.dark`**. Sin tocar `.papel-al-imprimir`, `.dark`, `.tema-sistema`, `.tema-claro`
@@ -80,11 +80,11 @@ No toca código de producción.
   **Hecho:** `pnpm run lint` verde; el `git diff` de `globals.css` **no muestra ni una línea**
   de los bloques de la 217, `.dark`, `.tema-sistema` ni el variant. *(R1-R3, R6-R8, R10-R14,
   R18, R20, R23-R26)*
-- [ ] **T8.** `@page { size: portrait; margin: 12mm }` **dentro** de ese bloque (D2, D3).
+- [x] **T8.** `@page { size: portrait; margin: 12mm }` **dentro** de ese bloque (D2, D3).
   Depende de T7.
   **Hecho:** una sola `@page` en el archivo, sus ancestros contienen `@media print`, sin nombre
   de papel y sin `margin: 0`. *(R15, R16)*
-- [ ] **T9.** El comentario **pegado encima** del bloque: qué hace, **cómo se elige la hoja**
+- [x] **T9.** El comentario **pegado encima** del bloque: qué hace, **cómo se elige la hoja**
   (candidata + elegida, y qué pasa con cero y con varias), por qué lista blanca, de dónde sale
   el margen, **qué `@page` no controla** (encabezado/pie del navegador, escala, «gráficos de
   fondo», papel del usuario) y **qué no se promete** (cabeceras de columna repetidas; lo
@@ -92,7 +92,7 @@ No toca código de producción.
   **Hecho:** existe, está pegado a la regla —el patrón que la 217 ya exige para su límite
   (`tema-encendido.guardia.test.ts:258-289`)— y sus afirmaciones tienen su caso en T10.
   *(R4, R17, R21, R22)*
-- [ ] **T10.** `tests/unit/guards/impresion-flujo.guardia.test.ts` (nueva): el **censo del CSS**
+- [x] **T10.** `tests/unit/guards/impresion-flujo.guardia.test.ts` (nueva): el **censo del CSS**
   completo de `design.md §6.4`, consumiendo el fixture de T1. Depende de T7, T8, T9.
   **Hecho:** las catorce aserciones verdes, **y las filas 1-4 y 6-14 y 17 de la tabla de
   mutaciones (§6.7) vistas rojas, cada una con su variante inocua**, con el resultado anotado.
@@ -107,35 +107,35 @@ No toca código de producción.
 
 ## Tanda 2 — El componente y la candidatura (depende de la Tanda 1)
 
-- [ ] **T11.** Comprobación de una línea de `design.md §3.4`/H4: **dónde monta
+- [x] **T11.** Comprobación de una línea de `design.md §3.4`/H4: **dónde monta
   `Dialog.Portal`** (`popup.parentElement`). `[P]`.
   **Hecho:** el dato queda en `progress/impl_223.md`; si el contenedor no es `document.body`,
   se releen las ramas A.1/A.2 **antes** de T14 y se añade la fila que falte a la enumeración de
   R4. *(R4, R6)*
-- [ ] **T12.** `cierre-factura.tsx`: estampar `hoja-imprimible` en el `<Card>` de `HojaFactura`
+- [x] **T12.** `cierre-factura.tsx`: estampar `hoja-imprimible` en el `<Card>` de `HojaFactura`
   (`:306-310`) **siempre**, y en el de `HojaResumen` (`:496-500`) **condicionada a `open`**
   (`open && "hoja-imprimible"`). Depende de T7.
   **Hecho:** typecheck y lint verdes; exactamente dos apariciones en el archivo, una de ellas
   dentro de la condición; las dos `<Card>` conservan `papel-al-imprimir`. *(R5)*
-- [ ] **T13.** `cierre-factura.tsx`: `break-inside-avoid` en las **cinco** piezas de la lista
+- [x] **T13.** `cierre-factura.tsx`: `break-inside-avoid` en las **cinco** piezas de la lista
   cerrada (`design.md §6.1`): fila de orden (`:913`), bloque de renglones, rejilla de KPI
   (`:249`), cabecera de la hoja y franja del pie (`:1317`). **En ninguna otra**, y en particular
   **no** en los `<Card>`, ni en la sección de órdenes (`:1272`), ni en el panel de la pestaña
   (`:1287`). Depende de T6.
   **Hecho:** el recuento coincide con la lista y el diff **no toca ninguna utilidad de color**
   —si el inventario cerrado de la 217 se pone rojo, se movió algo que no tocaba—. *(R19, R20)*
-- [ ] **T14.** `impresion-flujo.guardia.test.ts`: el **censo del `.tsx`** y el de los dos
+- [x] **T14.** `impresion-flujo.guardia.test.ts`: el **censo del `.tsx`** y el de los dos
   módulos (`design.md §6.5`), con `codigoSinComentarios`. Depende de T11, T12, T13.
   **Hecho:** verde, y **las filas 5, 15, 16 y 18 de §6.7 vistas rojas con su variante inocua**.
   Incluye el caso de R12 (`max-h-[70vh]` y `overflow-y-auto` siguen en el módulo,
   `overflow-auto` sigue en `Modal.tsx`, ninguno estrena `print:`) y el que congela que dentro de
   `HojaResumen` haya **un solo** `aria-expanded`. *(R5, R12, R19, R20, R27, R31)*
-- [ ] **T15.** `CierreFacturaPapel.test.tsx`: **la candidatura ejecutándose** — la hoja compacta
+- [x] **T15.** `CierreFacturaPapel.test.tsx`: **la candidatura ejecutándose** — la hoja compacta
   plegada **no** lleva `hoja-imprimible`; tras pulsar su toggle («Ver detalles»), **sí**; la del
   detalle la lleva siempre. Depende de T12.
   **Hecho:** los casos de la 217 (`:135-151`) siguen verdes **sin ser tocados**; el archivo
   declara en su cabecera qué **no** demuestra jsdom. *(R5, R23, R33)*
-- [ ] **T16.** **La forma del DOM que la regla de elección supone** (`design.md §6.6`): con el
+- [x] **T16.** **La forma del DOM que la regla de elección supone** (`design.md §6.6`): con el
   modal del detalle abierto y una compacta desplegada detrás — (a) el popup expone
   `role="dialog"`; (b) dentro del diálogo hay **exactamente una** candidata; (c) hay ≥1
   candidata **fuera**; (d) la de dentro **no** es descendiente de la de fuera. Depende de T12,
@@ -153,7 +153,7 @@ No toca código de producción.
 Va **después** de que el flujo exista: reexpresar antes deja una ventana en la que nada
 defiende nada.
 
-- [ ] **T17.** `cierre-factura.tsx`: (a) reescribir el párrafo `:111-117` —hoy dice que no hay
+- [x] **T17.** `cierre-factura.tsx`: (a) reescribir el párrafo `:111-117` —hoy dice que no hay
   `@page`, ni márgenes, ni paginación, ni ocultamiento—, remitiendo al bloque de esta ficha y
   conservando **lo que sigue siendo cierto** (no hay botón, la única vía es `Ctrl+P`); (b)
   escribir junto a `KpiFactura` (`:249-253`) el **límite de la cifra animada** (D6): una
@@ -162,13 +162,19 @@ defiende nada.
   Depende de T12.
   **Hecho:** el censo de T14 afirma las dos cosas; el resto del bloque de cabecera —color,
   217, inventario cerrado— **no se toca**. *(R28, R29)*
-- [ ] **T18.** **REEXPRESAR** `tema-encendido.guardia.test.ts:331-339` («nada de `@page`»)
+- [x] **T18.** **REEXPRESAR** `tema-encendido.guardia.test.ts:331-339` («nada de `@page`»)
   *(C2)*. No se borra ni se relaja: pasa a defender que el formato **no se mezcla** con el
   bloque de tokens de la 217 y que **no aparece en un tercer sitio**, y remite a la guardia
   nueva. Depende de T10.
   **Hecho:** el caso sigue existiendo, con nombre nuevo, y **muerde**: rojo al meter un `@page`
   dentro de la regla `.papel-al-imprimir` y rojo al añadir un segundo `@page`. *(R28, R31)*
-- [ ] **T19.** `[P]` `app/globals.css:281-287`: reescribir el párrafo «LO QUE ESTA REGLA NO
+  > ⚠️ **DESVIACIÓN DE ORDEN — ejecutada en la TANDA 1, no en ésta (2026-08-14).** No es una
+  > licencia: **T8 escribe un `@page` y este mismo caso lo prohibía**, así que la Tanda 1 no
+  > podía cerrar en verde —como exige su propia nota de cierre— sin reexpresarlo antes. Se hizo
+  > al final de la Tanda 1, después de T10, que es de quien T18 depende, así que la dependencia
+  > escrita se respeta. **Es un conflicto de orden dentro de este archivo**, no una decisión del
+  > implementador. Detalle en `progress/impl_223.md § Tanda 1`.
+- [x] **T19.** `[P]` `app/globals.css:281-287`: reescribir el párrafo «LO QUE ESTA REGLA NO
   CUBRE» de la 217, remitiendo al bloque nuevo y conservando lo que sigue siendo cierto (la 217
   garantiza el color; el resto del portal imprime como antes). Depende de T7.
   **Hecho:** el caso de la 217 que exige un comentario pegado a **su** regla nombrando
@@ -181,12 +187,12 @@ defiende nada.
 
 ## Tanda 4 — Cierre: evidencia, mutaciones y lo que no se promete
 
-- [ ] **T20.** Bitácora de mutaciones en `progress/impl_223.md`: las **19 filas** de
+- [x] **T20.** Bitácora de mutaciones en `progress/impl_223.md`: las **19 filas** de
   `design.md §6.7`, **cada una con su variante inocua** y con el resultado de las dos. Depende
   de T10, T14, T16, T18.
   **Hecho:** ninguna fila queda sin su par; si alguna variante inocua sale **verde**, la
   guardia **no está terminada** y se arregla antes de seguir. *(R31)*
-- [ ] **T21.** **UNA comprobación MANUAL fechada** en al menos un motor real (D7,
+- [x] **T21.** **UNA comprobación MANUAL fechada** en al menos un motor real (D7,
   `design.md §6.8`): abrir el detalle en las **dos** rutas, `Ctrl+P` → «Guardar como PDF», y
   mirar **seis** cosas: (1) sale sólo la hoja; (2) no está recortada; (3) un cierre con muchas
   órdenes continúa en la página siguiente; (4) **con el detalle abierto, las hojas compactas de
@@ -197,13 +203,26 @@ defiende nada.
   **declarado como fuera del gate** y con la frase que impida leerlo como cobertura permanente.
   Si algo no coincide con el diseño, **se vuelve a la puerta**: no se ajusta el spec para que
   encaje con lo que salió. *(R33 — y es la única comprobación de R1, R6, R7 y R8 en un motor)*
-- [ ] **T22.** Mapa **R → test** completo en `progress/impl_223.md`. Depende de todas.
+  > ⚠️ **DESVIACIÓN DE MÉTODO — hecha con Chromium/Blink por script, no a mano (2026-08-14).**
+  > Los seis puntos se comprobaron en un motor de impresión real (Playwright 1.61.1, build 1228,
+  > ya instalado) sobre el DOM que rinden los componentes de verdad y el CSS compilado,
+  > terminando en un `page.pdf()`. Más alcance que lo pedido —se añadió la ruta del mensajero— y
+  > **reproducible**, que es la misma evidencia sin depender de que alguien recuerde qué miró.
+  > **Menos, en un punto que importa: no es la aplicación corriendo** (datos de fixture, DOM
+  > serializado, sin servidor ni sesión), y **el harness se borró** —montarlo en el gate es ficha
+  > aparte, `design.md §10`—, así que nada de esto se vuelve a comprobar solo. Nada contradijo al
+  > diseño, así que no hubo que volver a la puerta. Salidas literales en
+  > `progress/impl_223.md § T21`.
+- [x] **T22.** Mapa **R → test** completo en `progress/impl_223.md`. Depende de todas.
   **Hecho:** los 33 requisitos con su archivo y su caso; los que sólo tienen verificación
   **estructural** marcados como tales, y los que **no se verifican** (R33) listados con su
   motivo, no omitidos. *(R33)*
 - [ ] **T23.** `./init.sh` **completo** antes del PR. Depende de todas.
   **Hecho:** verde entero, con la salida pegada en `progress/impl_223.md`. Un check de Vercel
   en verde **no cuenta**: es un build y no corre tests.
+  > **PENDIENTE, y a propósito: la corre el leader.** El implementador cerró cada tanda con
+  > `./init.sh --rapido` en verde (última: 98 archivos / 1448 tests). El gate completo es paso
+  > de cierre y no se marca hasta que alguien lo haya visto pasar entero.
 
 ---
 

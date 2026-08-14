@@ -502,6 +502,17 @@
    *   oculta el diálogo entero. Es decir: la página sale EN BLANCO, que es el fallo más
    *   caro de esta ficha. Medido sobre el DOM real, no razonado
    *   (`tests/components/CierreFacturaPapel.test.tsx`).
+   *
+   *   Y LO QUE ESE `:not()` DA POR SUPUESTO, dicho aquí porque no se ve leyendo el
+   *   selector: perdona **cualquier** subárbol que contenga una candidata, no sólo el que
+   *   lleva al diálogo. Hoy eso no cambia nada porque **el portal cuelga directamente del
+   *   `<body>`**, así que las N hojas compactas mueren en el PRIMER selector de A.1, a
+   *   nivel de hijo del `<body>`, antes de que esta segunda rama las alcance. Si algún día
+   *   Base UI montara el popup DENTRO del envoltorio de la app —junto a las compactas—,
+   *   esta rama dejaría de podarlas y volveríamos a imprimir las N. **No sería silencioso**:
+   *   ese supuesto es exactamente lo que vigila el caso «el popup se monta en un contenedor
+   *   propio COLGADO del `<body>`, no en el `<body>`» de `CierreFacturaPapel.test.tsx`, que
+   *   se pondría rojo. Si ese caso se pone rojo, hay que releer esta rama antes que nada.
    */
   body:has([role="dialog"] .hoja-imprimible) > *:not(:has([role="dialog"] .hoja-imprimible)),
   body:has([role="dialog"] .hoja-imprimible)

@@ -252,9 +252,26 @@ traen las **dos** hojas), ni `break-inside: avoid` en la raíz.
 
 **R19 — Se evita el corte dentro de las piezas de una lista CERRADA.** El sistema DEBE evitar
 el salto de página **dentro** de: la fila de una orden (`:913`), cada bloque de renglones de
-la liquidación, la rejilla de KPI (`:249`), el bloque de cabecera de la hoja y la franja del
-pie (`:1317`). La lista DEBE ser **enumerada y cerrada**: una pieza que la reciba sin estar en
-la lista, o una de la lista que la pierda, DEBE poner la verificación en rojo.
+la liquidación, **la tarjeta de KPI** (`KpiFactura`, `:245` — *ver la corrección C4*), el bloque
+de cabecera de la hoja y la franja del pie (`:1317`). La lista DEBE ser **enumerada y cerrada**:
+una pieza que la reciba sin estar en la lista, o una de la lista que la pierda, DEBE poner la
+verificación en rojo.
+
+> **C4 — CORRECCIÓN DEL LEADER, 2026-08-14: es la TARJETA de KPI, no la rejilla.**
+> Esta línea decía «la **rejilla** de KPI (`:249`)», y era impreciso **dos veces**: la palabra
+> dice «rejilla» pero el ancla `:249` cae **dentro de la tarjeta**, y no es la raíz de ninguna de
+> las dos (`KpiFactura` abre en `:245`, la rejilla que las agrupa en `:1165`). Los otros cuatro
+> anclajes de la lista sí son exactos, así que la imprecisión es sólo de esta pieza.
+>
+> **Se desempata por el EFECTO sobre el documento, no por la etiqueta.** Partida la **tarjeta**,
+> el rótulo («Total general») queda en una página y su cifra en la siguiente: eso es un **dato
+> partido**, un comprobante roto. Partida la **rejilla**, el corte cae **entre** tarjetas, que es
+> un corte natural y no rompe ningún dato. Gana la tarjeta; la rejilla NO lleva la marca, y eso
+> también está congelado.
+>
+> El mismo razonamiento vive junto a la lista cerrada en
+> `tests/unit/guards/impresion-flujo.guardia.test.ts` y junto a la pieza en `cierre-factura.tsx`.
+> La mutación 20 de `progress/impl_223.md` —devolverla a la rejilla— pone la lista en rojo.
 
 **R20 — Prohibido evitar el corte donde no cabe.** El sistema NO DEBE aplicar
 `break-inside: avoid` a ningún contenedor que pueda superar el alto de una página —las dos

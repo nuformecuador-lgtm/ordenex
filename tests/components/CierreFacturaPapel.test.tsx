@@ -2,7 +2,10 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
+import path from "node:path";
+
 import { reglasDeArchivo } from "../fixtures/css-reglas";
+import { codigoSinComentarios } from "../fixtures/sin-comentarios";
 import { Modal } from "@/components/shared/Modal";
 import {
   CierreFacturaDetalle,
@@ -528,6 +531,108 @@ describe("Feature 223 — ELEGIDA: la forma del DOM y a qué engancha la regla (
       ).toBe(true);
     }
     expect(cubiertos.has(document.body), "el `<body>` tiene que estar en la cadena").toBe(true);
+  });
+});
+
+/**
+ * Feature 223 — R11: LA MISMA REGLA, LAS DOS RUTAS, SIN UNA LÍNEA PARA CADA UNA.
+ *
+ * `H1` del spec: la ruta del admin y la del mensajero **no montan los mismos contenedores** —la
+ * del admin mete un `div.max-h-[70vh].overflow-y-auto` que la del mensajero no tiene—, y esa es
+ * la razón por la que R11 exige que la regla recorra la cadena en vez de nombrar contenedores.
+ *
+ * Hasta la revisión, en el gate sólo se ejercía la del admin: la del mensajero vivía únicamente en
+ * la comprobación con motor real, cuyo harness se borró a propósito. Un requisito que dice «vale
+ * igual en las dos» verificado sobre una sola dice más de lo que nadie comprueba, así que la
+ * segunda ruta entra aquí.
+ */
+describe("Feature 223 — la ruta del MENSAJERO, con la misma regla (R11)", () => {
+  /** Los contenedores de `CierreDiaModule`: el mismo componente, en otro modal y sin el `max-h`. */
+  function escenarioMensajero(): { hoja: HTMLElement; nota: HTMLElement } {
+    render(
+      <div>
+        <nav aria-label="Barra lateral">lateral</nav>
+        <Modal open onOpenChange={() => {}} title="Detalle de tu cierre">
+          <div className="flex flex-col gap-4">
+            <CierreFacturaDetalle
+              audiencia="mensajero"
+              cierre={CABECERA}
+              grupos={{ ...emptyGrupos(), entregada: [gestion()] }}
+            />
+            <p role="note">Solo lectura</p>
+          </div>
+        </Modal>
+      </div>,
+    );
+    return {
+      hoja: screen.getByRole("region", {
+        name: "Comprobante detallado del cierre de Ana Pérez",
+      }),
+      nota: screen.getByRole("note"),
+    };
+  }
+
+  it("las DOS rutas montan el MISMO componente: por eso una sola regla puede cubrirlas", () => {
+    const mensajero = codigoSinComentarios(
+      path.join("app", "(app)", "cierre-dia", "_components", "CierreDiaModule.tsx"),
+    );
+    const admin = codigoSinComentarios(
+      path.join("app", "(app)", "cierres-admin", "_components", "CierresAdminModule.tsx"),
+    );
+    for (const [ruta, codigo] of [
+      ["CierreDiaModule", mensajero],
+      ["CierresAdminModule", admin],
+    ] as const) {
+      expect(
+        codigo,
+        `${ruta} dejó de montar \`CierreFacturaDetalle\`. Si una de las dos rutas pasa a montar ` +
+          "otra hoja, R11 deja de significar lo que dice y hay que releer la regla entera.",
+      ).toMatch(/<CierreFacturaDetalle\b/);
+    }
+    // Y la asimetría que obliga a que la regla sea genérica: el `max-h` es SÓLO del admin.
+    expect(admin).toContain("max-h-[70vh]");
+    expect(
+      mensajero,
+      "la ruta del mensajero estrenó el `max-h-[70vh]` del admin: si las dos cadenas se " +
+        "igualaran, este caso dejaría de comprobar lo que R11 pide y habría que buscar otra " +
+        "asimetría real",
+    ).not.toContain("max-h-[70vh]");
+  });
+
+  it("en la ruta del mensajero: sale la hoja, y su nota de pantalla NO", () => {
+    const { hoja, nota } = escenarioMensajero();
+    const ocultos = conjuntoOculto();
+
+    expect(
+      noLlegaAlPapel(hoja, ocultos),
+      "la hoja del mensajero no llegaría al papel con la misma regla que sí funciona en el admin",
+    ).toBe(false);
+    expect(
+      noLlegaAlPapel(nota, ocultos),
+      "la nota «solo lectura» es texto de la pantalla, no del comprobante: está declarada entre " +
+        "las piezas que dejan de imprimirse",
+    ).toBe(true);
+    expect(
+      noLlegaAlPapel(screen.getByRole("navigation", { name: "Barra lateral", hidden: true }), ocultos),
+    ).toBe(true);
+  });
+
+  it("y la cadena la cubre entera, aunque tenga un contenedor MENOS que la del admin", () => {
+    const { hoja } = escenarioMensajero();
+    const cubiertos = new Set<Element>();
+    for (const selector of selectoresDeLaCadena()) {
+      for (const el of document.querySelectorAll(selector)) cubiertos.add(el);
+    }
+    const ancestros = ancestrosHastaBody(hoja);
+    expect(ancestros.length).toBeGreaterThan(3);
+    for (const ancestro of ancestros) {
+      expect(
+        cubiertos.has(ancestro),
+        `el ancestro <${ancestro.tagName.toLowerCase()} class="${ancestro.className}"> de la ruta ` +
+          "del mensajero NO queda cubierto: la regla habría dejado de ser genérica y necesitaría " +
+          "una línea propia por ruta, que es exactamente lo que R11 prohíbe",
+      ).toBe(true);
+    }
   });
 });
 

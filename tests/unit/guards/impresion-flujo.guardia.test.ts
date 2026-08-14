@@ -704,6 +704,27 @@ describe("feature 223 — lo que el bloque declara junto a si mismo (R4, R17, R2
     ).toMatch(/no es una tabla/i);
   });
 
+  /**
+   * R21, LA MITAD NEGATIVA. Declarar el limite no basta: hay que impedir que alguien lo
+   * «arregle». `display: table-header-group` sobre la fila de rotulos es lo primero que se
+   * intenta al leer «las cabeceras no se repiten», y aqui NO funciona: la lista no es una tabla
+   * —`:1288` es una rejilla de `<span>` HERMANA de las filas— asi que convertirla en grupo de
+   * cabecera de tabla la saca de su rejilla y **desincroniza las columnas**, porque cada fila es
+   * su propia rejilla. El sintoma es una hoja con las columnas descuadradas, y solo en papel.
+   */
+  it("y NADIE intenta «arreglarlo»: cero `table-header-group` en el CSS y en la hoja (R21)", () => {
+    expect(
+      css,
+      "aparecio `table-header-group` en `app/globals.css`. La fila de rotulos NO es la cabecera " +
+        "de una tabla: sacarla de su rejilla desincroniza las columnas de todas las filas, y eso " +
+        "no se ve en pantalla.",
+    ).not.toMatch(/table-header-group/);
+    expect(hoja, "aparecio `table-header-group` en la hoja").not.toMatch(/table-header-group/);
+    // Y tampoco por la puerta de atras: convertir el marcado en una tabla de verdad.
+    expect(hoja, "la lista de ordenes paso a ser un `<table>`: eso es rediseñar la hoja, y el " +
+      "inventario cerrado de la 217 vigila su DOM").not.toMatch(/<thead\b|<tbody\b/);
+  });
+
   /** R22 / D4 — lo que no esta montado no se imprime. */
   it("declara que lo plegado y las pestañas no visitadas NO se imprimen (R22)", () => {
     expect(comentarioDelBloque.texto).toMatch(/plegad/i);
@@ -963,6 +984,56 @@ describe("feature 223 — la prosa que esta ficha vuelve falsa se REEXPRESA (R28
   it("y conserva lo que sigue siendo cierto: sin boton, la unica via es Ctrl+P", () => {
     expect(hojaCruda).toMatch(/Ctrl\+P/);
     expect(hojaCruda).toMatch(/no hay bot[oó]n/i);
+  });
+
+  /**
+   * R28, LA OTRA ANCLA: `app/globals.css` (el parrafo «LO QUE ESTA REGLA NO CUBRE» de la 217).
+   *
+   * R28 nombra DOS sitios donde la prosa afirmaba que no existe flujo de impresion. El del `.tsx`
+   * lo cubre el caso de arriba; este cubre el del CSS, que hasta la revision estaba **bien
+   * reescrito y sin ningun caso que lo afirmara** — o sea, podia volver a mentir en verde, que es
+   * exactamente el fallo que esta ficha vino a cerrar.
+   *
+   * El patron es el que la 217 ya usa para `.tema-claro` (`tema-encendido.guardia.test.ts`): no se
+   * prohibe MENCIONAR lo que falta —el parrafo tiene que poder contar su historia—, se exige que
+   * cada mencion vaya ACOMPAÑADA de quien lo cubrio. Una mencion suelta manda al siguiente lector
+   * a buscar un agujero que ya no existe.
+   */
+  it("la prosa de la 217 en el CSS ya no afirma que falte el flujo: cada mencion remite a la 223", () => {
+    const comentario = (() => {
+      const i = cssCrudo.indexOf("LO QUE ESTA REGLA NO CUBRE");
+      expect(
+        i,
+        "no se encontro el parrafo de la 217 que R28 manda reexpresar. Si se borro entero, R28 " +
+          "no se cumple borrando: se cumple diciendo quien lo cubrio.",
+      ).toBeGreaterThan(-1);
+      const cierra = cssCrudo.indexOf("*/", i);
+      return cssCrudo.slice(i, cierra);
+    })();
+
+    expect(
+      comentario,
+      "el parrafo de la 217 no remite a la ficha que cubrio lo que le faltaba. Quien lea la regla " +
+        "del color tiene que poder llegar al bloque del flujo, que esta JUSTO debajo.",
+    ).toMatch(/223/);
+
+    for (const que of [/@page/g, /paginaci[oó]n/gi, /ocultamiento/gi, /recortad/gi]) {
+      const menciones = [...comentario.matchAll(que)];
+      expect(
+        menciones.length,
+        `el parrafo dejo de nombrar «${que.source}». Si se reescribio de otra forma, este censo ` +
+          "dejo de saber que mira y hay que releerlo en vez de darlo por bueno.",
+      ).toBeGreaterThan(0);
+      for (const m of menciones) {
+        const alrededor = comentario.slice(Math.max(0, m.index - 600), m.index + 600);
+        expect(
+          alrededor,
+          `el parrafo nombra «${m[0]}» sin decir cerca que la FEATURE 223 lo cubrio. Una prosa ` +
+            "que describe una carencia retirada manda a quien la lea a buscar algo que ya no " +
+            "falta: es el mismo defecto que R28 vino a cerrar, sobrevivido.",
+        ).toMatch(/223/);
+      }
+    }
   });
 
   /**
