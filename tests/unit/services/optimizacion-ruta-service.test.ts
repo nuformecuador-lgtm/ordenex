@@ -57,6 +57,7 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     huellaSet: null,
     ultimoError: null,
     trazado: null,
+    tramoPorOrden: new Map(),
     secuenciaPorOrden: new Map(),
     ...over,
   };
@@ -283,7 +284,12 @@ describe("R36 — huella del conjunto de paradas + origen", () => {
     });
     const r = await segunda.service.ejecutar(MENSAJERO, { motivo: "manual" });
 
-    expect(r).toEqual({ status: "omitida", razon: "sin_cambios", trazado: cacheado });
+    // `tramos` vacio: la ruta cacheada de este doble no trae tramos por parada.
+    expect(r).toEqual({
+      status: "omitida",
+      razon: "sin_cambios",
+      trazado: { ...cacheado, tramos: [] },
+    });
     expect(segunda.client.optimizar).not.toHaveBeenCalled();
   });
 

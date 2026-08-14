@@ -201,6 +201,10 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     // Con una sola línea no hay nada que quitar (R6).
     expect(screen.queryByRole("button", { name: /^Quitar línea/ })).toBeNull();
 
+    // El editor arranca CUADRADO (la línea 1 trae el total), y con la suma ya cubierta el control
+    // de añadir está deshabilitado (pedido 2026-08-14). Bajar la línea 1 es lo que abre el hueco
+    // para partir el cobro — que es justo lo que este caso necesita para llegar a dos líneas.
+    escribirMonto(1, "5000");
     await user.click(screen.getByRole("button", { name: "Añadir método" }));
     await elegirMetodo(user, 1, "Efectivo");
     expect(screen.getAllByRole("group", { name: /^Línea de pago/ })).toHaveLength(2);
@@ -236,14 +240,48 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     const lineas = () => screen.getAllByRole("group", { name: /^Línea de pago/ }).length;
 
     expect(lineas()).toBe(1);
+    // Cada paso baja el monto de la última línea para dejar pendiente: sin él, el control queda
+    // deshabilitado (pedido 2026-08-14) y no se llegaría al tope que este caso quiere alcanzar.
+    escribirMonto(1, "1000");
     await user.click(anadir() as HTMLElement);
     expect(lineas()).toBe(2);
     // Con 2 de 3 métodos usados el control SIGUE ofreciéndose (la mitad viva de la regla).
     expect(anadir()).toBeInTheDocument();
 
+    escribirMonto(2, "1000");
     await user.click(anadir() as HTMLElement);
     expect(lineas()).toBe(3);
     expect(anadir()).toBeNull();
+  });
+
+  // Pedido humano (2026-08-14). Sustituye al caso «añadir con la suma ya cubierta pre-carga 0»:
+  // esa pre-carga sigue existiendo en el módulo puro (`pendiente` acotado a 0, R4) pero YA NO se
+  // alcanza desde la UI, porque el control no deja pulsarse sin nada pendiente. Se afirman los
+  // dos lados del interruptor y que el control NO desaparece: el tope de catálogo (R3) esconde,
+  // esto solo deshabilita.
+  it("«Añadir método» se deshabilita cuando lo capturado ya iguala o supera el monto a cobrar", async () => {
+    const user = userEvent.setup();
+    await abrirEntrega(user);
+
+    const anadir = () => screen.getByRole("button", { name: "Añadir método" });
+
+    // Arranque: la línea 1 trae el total, así que la suma ya está cubierta.
+    expect(anadir()).toBeDisabled();
+
+    // Pasarse tampoco lo habilita: de más no se arregla añadiendo, se arregla corrigiendo.
+    escribirMonto(1, "9000");
+    expect(anadir()).toBeDisabled();
+
+    // En cuanto queda pendiente, se puede partir el cobro.
+    escribirMonto(1, "5000");
+    expect(anadir()).toBeEnabled();
+    await user.click(anadir());
+    expect(screen.getAllByRole("group", { name: /^Línea de pago/ })).toHaveLength(2);
+
+    // La línea nueva nace con lo pendiente (R4), así que la suma vuelve a cuadrar y el control
+    // se apaga otra vez sin que nadie lo toque.
+    expect(inputMonto(2).value).toBe("3000");
+    expect(anadir()).toBeDisabled();
   });
 
   it("R8: muestra monto a cobrar, suma capturada y diferencia, y se actualizan al teclear", async () => {
@@ -301,15 +339,11 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     expect(inputMonto(1).value).toBe("");
   });
 
-  it("añadir método con la suma ya cubierta pre-carga 0, nunca un negativo", async () => {
-    const user = userEvent.setup();
-    await abrirEntrega(user);
-
-    escribirMonto(1, "9000"); // ya se pasó del monto a cobrar
-    await user.click(screen.getByRole("button", { name: "Añadir método" }));
-
-    expect(inputMonto(2).value).toBe("0");
-  });
+  // RETIRADO (2026-08-14): «añadir método con la suma ya cubierta pre-carga 0, nunca un negativo».
+  // El control ya no se deja pulsar sin nada pendiente, así que ese camino no existe en la UI. La
+  // regla que protegía —`pendiente` acotado a 0, R4— sigue viva y probada en
+  // `tests/unit/utils/desglose-captura.test.ts` :: «el monto de la linea nueva es la diferencia
+  // pendiente, nunca negativa», que es donde vive sin depender de un gesto que ya no se puede dar.
 
   it("R13: método sin monto → la suma no cuadra y «Guardar gestión» queda deshabilitado", async () => {
     const user = userEvent.setup();

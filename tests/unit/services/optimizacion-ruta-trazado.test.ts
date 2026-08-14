@@ -15,6 +15,11 @@ import { decodificarPolilinea } from "@/lib/geo/polilinea";
 
 const T0 = new Date("2026-08-14T12:00:00.000Z");
 const POLILINEA = "gfo}EtohhUxD@bAxJmGF";
+/** Dos tramos: el doble de Routes se monta siempre sobre DOS paradas (o-1 y o-2). */
+const TRAMOS = [
+  { encodedPolyline: "gfo}EtohhUxD@", distanciaM: 2400, duracionS: 400 },
+  { encodedPolyline: "bAxJmGF", distanciaM: 3000, duracionS: 530 },
+];
 
 const CONFIG: RouteOptimizationConfig = {
   GOOGLE_ROUTE_OPT_PROJECT_ID: "p",
@@ -71,6 +76,7 @@ describe("trazado enchufado", () => {
         encodedPolyline: POLILINEA,
         distanciaM: 5400,
         duracionS: 930,
+        tramos: TRAMOS,
       }),
     };
     const { service } = montar(routes);
@@ -84,6 +90,7 @@ describe("trazado enchufado", () => {
         distanciaM: 5400,
         duracionS: 930,
         fuente: "routes",
+        tramos: TRAMOS,
       },
     });
   });
@@ -96,6 +103,7 @@ describe("trazado enchufado", () => {
       encodedPolyline: POLILINEA,
       distanciaM: null,
       duracionS: null,
+      tramos: TRAMOS,
     }));
     const { service } = montar({ trazar }, ["o-2", "o-1"]);
     await service.ejecutar("m-1", { motivo: "manual" });
@@ -143,6 +151,7 @@ describe("persistencia del trazado (cache de la guarda R36)", () => {
         encodedPolyline: POLILINEA,
         distanciaM: 5400,
         duracionS: 930,
+        tramos: TRAMOS,
       }),
     };
     const { service, guardarTrazado, reemplazarSecuencia } = montar(routes);
@@ -183,6 +192,7 @@ describe("persistencia del trazado (cache de la guarda R36)", () => {
         encodedPolyline: POLILINEA,
         distanciaM: 1,
         duracionS: 1,
+        tramos: TRAMOS,
       }),
     };
     const { service, guardarTrazado } = montar(routes);
@@ -193,6 +203,43 @@ describe("persistencia del trazado (cache de la guarda R36)", () => {
     expect(res.status).toBe("ok");
     if (res.status !== "ok") return;
     expect(res.trazado?.fuente).toBe("routes");
+  });
+});
+
+describe("tramos por parada", () => {
+  it("los tramos suben en el resultado y se persisten con el trazado", async () => {
+    const routes: IRoutesClient = {
+      trazar: async () => ({
+        status: "ok",
+        encodedPolyline: POLILINEA,
+        distanciaM: 5400,
+        duracionS: 930,
+        tramos: TRAMOS,
+      }),
+    };
+    const { service, guardarTrazado } = montar(routes);
+    const res = await service.ejecutar("m-1", { motivo: "manual" });
+
+    if (res.status !== "ok") throw new Error("se esperaba ok");
+    expect(res.trazado?.tramos).toEqual(TRAMOS);
+    // Van EN ORDEN DE VISITA: el repositorio los reparte por secuencia (i -> secuencia i+1),
+    // asi que un orden distinto aqui pegaria cada tramo en la parada equivocada.
+    const [, , , tramos] = vi.mocked(guardarTrazado).mock.calls[0] as unknown as [
+      string,
+      string,
+      unknown,
+      typeof TRAMOS,
+    ];
+    expect(tramos).toEqual(TRAMOS);
+  });
+
+  it("el trazado LOCAL no produce tramos: una recta no describe ningun recorrido", async () => {
+    const { service } = montar(null);
+    const res = await service.ejecutar("m-1", { motivo: "manual" });
+
+    if (res.status !== "ok") throw new Error("se esperaba ok");
+    expect(res.trazado?.fuente).toBe("local");
+    expect(res.trazado?.tramos).toEqual([]);
   });
 });
 

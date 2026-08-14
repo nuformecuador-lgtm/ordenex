@@ -35,6 +35,7 @@ import type {
   EjecutarOptimizacionResult,
   IOptimizacionRutaService,
   TrazadoRuta,
+  TrazadoTramo,
 } from "@/lib/interfaces/services/IOptimizacionRutaService";
 import { codificarPolilinea, distanciaTotalM } from "@/lib/geo/polilinea";
 import { optlog, opterror } from "@/lib/logging/optimizer-log";
@@ -187,7 +188,7 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
       // columnas del trazado.
       const sinCambios = ruta?.huellaSet === huellaSet && ruta.estado === "vigente";
       if (unica === undefined || origen === null || sinCambios) {
-        const cacheado = sinCambios ? (ruta?.trazado ?? null) : null;
+        const cacheado = sinCambios && ruta !== null ? this.trazadoDesdeCache(ruta) : null;
         optlog("service — R35: no se redibuja", {
           conCoordenadas: conCoordenadas.length,
           sinOrigen: origen === null,
@@ -244,13 +245,15 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
       // Nada que RECALCULAR, pero el mapa sigue necesitando su linea. El trazado persistido
       // corresponde a esta misma huella —la DB solo lo conserva mientras la secuencia no
       // cambie— asi que se devuelve tal cual, sin llamar ni pagar nada.
+      const cacheado = this.trazadoDesdeCache(ruta);
       optlog("service — guarda R36: mismo conjunto y origen, 0 llamadas facturadas", {
-        trazadoEnCache: ruta.trazado !== null,
+        trazadoEnCache: cacheado !== null,
+        tramosEnCache: cacheado?.tramos.length ?? 0,
       });
       return {
         status: "omitida",
         razon: "sin_cambios",
-        ...(ruta.trazado !== null ? { trazado: ruta.trazado } : {}),
+        ...(cacheado !== null ? { trazado: cacheado } : {}),
       };
     }
 
@@ -314,6 +317,25 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
    * guardar el DIBUJO provocaria un reintento que volveria a pagar la OPTIMIZACION —la cara—
    * para arreglar lo accesorio. Mismo criterio que `trazar`.
    */
+  /**
+   * Rearma el trazado del dominio a partir de lo persistido. La cabecera guarda la polilinea
+   * entera; los tramos viven repartidos por las filas de las paradas, asi que hay que volver a
+   * ordenarlos POR SECUENCIA — el `Map` no tiene orden util.
+   *
+   * TODO O NADA con los tramos, igual que en el cliente: se consumen por indice, asi que si a
+   * alguna parada le falta el suyo se devuelven vacios. La polilinea entera sigue sirviendo.
+   */
+  private trazadoDesdeCache(ruta: RutaOptimizadaDTO): TrazadoRuta | null {
+    if (ruta.trazado === null) return null;
+    const enOrden = [...ruta.secuenciaPorOrden.entries()].sort((a, b) => a[1] - b[1]);
+    const tramos = enOrden.map(([ordenId]) => ruta.tramoPorOrden.get(ordenId));
+    const completos = tramos.every((t) => t !== undefined);
+    return {
+      ...ruta.trazado,
+      tramos: completos && tramos.length > 0 ? (tramos as TrazadoTramo[]) : [],
+    };
+  }
+
   private async persistirTrazado(
     mensajeroId: string,
     huellaSet: string,
@@ -324,8 +346,11 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
       return;
     }
     try {
-      await this.rutas.guardarTrazado(mensajeroId, huellaSet, trazado);
-      optlog("service — trazado persistido", { fuente: trazado.fuente });
+      await this.rutas.guardarTrazado(mensajeroId, huellaSet, trazado, trazado.tramos);
+      optlog("service — trazado persistido", {
+        fuente: trazado.fuente,
+        tramos: trazado.tramos.length,
+      });
     } catch (error) {
       opterror("service — no se pudo persistir el trazado; se sigue igual", error);
     }
@@ -384,12 +409,14 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
           distanciaM: outcome.distanciaM,
           duracionS: outcome.duracionS,
           polilineaChars: outcome.encodedPolyline.length,
+          tramos: outcome.tramos.length,
         });
         return {
           encodedPolyline: outcome.encodedPolyline,
           distanciaM: outcome.distanciaM,
           duracionS: outcome.duracionS,
           fuente: "routes",
+          tramos: outcome.tramos,
         };
       }
       optlog("service — Routes no dio polilinea; se cae al trazado local", {
@@ -414,7 +441,9 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
     });
     // `duracionS` va a null a proposito: sin calles no hay tiempo de viaje que estimar, y
     // una cifra inventada acabaria mostrandose al mensajero como si fuera real.
-    return { encodedPolyline, distanciaM, duracionS: null, fuente: "local" };
+    // `tramos` vacio: el trazado local es UNA recta continua por todos los puntos. Partirla
+    // daria segmentos que no describen ningun recorrido, solo la cuerda entre dos domicilios.
+    return { encodedPolyline, distanciaM, duracionS: null, fuente: "local", tramos: [] };
   }
 
   /**

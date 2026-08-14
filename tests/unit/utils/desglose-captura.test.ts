@@ -10,6 +10,7 @@ import {
   opcionesPara,
   pendiente,
   puedeAnadirLinea,
+  sinPendiente,
   totalCapturado,
   type LineaEnEdicion,
 } from "@/app/(app)/mis-asignaciones/_components/desglose-captura";
@@ -53,6 +54,44 @@ describe("desglose-captura — puedeAnadirLinea (R3)", () => {
     expect(puedeAnadirLinea([])).toBe(true);
     expect(puedeAnadirLinea(lineasIniciales(8000))).toBe(true);
     expect(puedeAnadirLinea([linea("efectivo", "5000"), linea("SINPE", "3000")])).toBe(true);
+  });
+});
+
+// Pedido humano (2026-08-14). `sinPendiente` es la OTRA mitad del control «Anadir metodo»: R3
+// decide si el control EXISTE (tope de catalogo) y esto decide si se puede PULSAR. Son reglas
+// distintas a proposito y por eso se prueban aparte.
+describe("desglose-captura — sinPendiente (anadir con la suma ya cubierta)", () => {
+  it("es falso mientras falte por capturar: partir el cobro sigue siendo posible", () => {
+    expect(sinPendiente([linea("efectivo", "5000")], 8000)).toBe(false);
+    expect(sinPendiente([linea("efectivo", "")], 8000)).toBe(false);
+    expect(sinPendiente([], 8000)).toBe(false);
+  });
+
+  it("es cierto cuando lo capturado IGUALA el total: la linea nueva naceria en 0", () => {
+    expect(sinPendiente(lineasIniciales(8000), 8000)).toBe(true);
+    expect(sinPendiente([linea("efectivo", "5000"), linea("SINPE", "3000")], 8000)).toBe(true);
+  });
+
+  it("es cierto cuando lo capturado SUPERA el total: el arreglo es corregir, no anadir", () => {
+    expect(sinPendiente([linea("efectivo", "9000")], 8000)).toBe(true);
+  });
+
+  it("con una orden sin cobro no hay nada que repartir", () => {
+    // El editor ni se monta en ese caso (R16), pero la regla pura no depende de quien la llame.
+    expect(sinPendiente([], 0)).toBe(true);
+  });
+
+  it("coincide SIEMPRE con que `pendiente` sea 0: una sola fuente de verdad", () => {
+    const casos: [LineaEnEdicion[], number][] = [
+      [[linea("efectivo", "5000")], 8000],
+      [[linea("efectivo", "8000")], 8000],
+      [[linea("efectivo", "9000")], 8000],
+      [[], 8000],
+    ];
+
+    for (const [lineas, total] of casos) {
+      expect(sinPendiente(lineas, total)).toBe(pendiente(lineas, total) === 0);
+    }
   });
 });
 

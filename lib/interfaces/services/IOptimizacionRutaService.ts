@@ -44,6 +44,22 @@ export interface TrazadoRuta {
   /** Segundos. Siempre `null` con `fuente: "local"`: sin calles no hay tiempo que estimar. */
   duracionS: number | null;
   fuente: TrazadoFuente;
+  /**
+   * El recorrido partido en TRAMOS, uno por parada y en orden de visita: el `i` va del punto
+   * `i` al `i+1`, empezando en el origen. Permite resaltar el trayecto a la siguiente parada
+   * sin pedirle nada mas al proveedor — vienen en la misma respuesta ya pagada.
+   *
+   * Vacio con `fuente: "local"`: el trazado local es una sola recta continua entre todos los
+   * puntos y partirlo daria tramos que no describen ningun recorrido real.
+   */
+  tramos: TrazadoTramo[];
+}
+
+/** Un tramo del recorrido: lo que hay entre dos puntos consecutivos. */
+export interface TrazadoTramo {
+  encodedPolyline: string;
+  distanciaM: number | null;
+  duracionS: number | null;
 }
 
 export type EjecutarOptimizacionResult =

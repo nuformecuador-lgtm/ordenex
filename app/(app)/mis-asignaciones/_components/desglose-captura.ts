@@ -126,6 +126,27 @@ export function puedeAnadirLinea(lineas: readonly LineaEnEdicion[]): boolean {
 }
 
 /**
+ * Pedido humano (2026-08-14): no queda NADA que repartir, porque lo capturado ya iguala —o
+ * supera— el total. La linea nueva nace de `pendiente`, que se acota a 0 (R4), asi que aqui
+ * solo podria nacer una linea de monto 0: una que no cobra nada y que, al enviarse, se para
+ * sola en `erroresDeLinea` con «Monto requerido». Ofrecerla es ofrecer un callejon sin salida.
+ *
+ * Es un `>=` deliberado, no un `>`: con la captura PASADA de rosca el problema no se arregla
+ * anadiendo otra linea, se arregla corrigiendo las que ya hay. Se lee del mismo `pendiente`
+ * que pre-carga el monto, para que el boton y lo que el boton haria no puedan divergir.
+ *
+ * DESHABILITA, no oculta —a diferencia del tope de catalogo (R3), que si esconde el control—:
+ * el mensajero tiene que poder ver que partir el cobro sigue siendo posible en cuanto baje el
+ * monto de una linea, no que la opcion desaparecio sin explicacion.
+ */
+export function sinPendiente(
+  lineas: readonly LineaEnEdicion[],
+  totalACobrar: number,
+): boolean {
+  return pendiente(lineas, totalACobrar) === 0;
+}
+
+/**
  * R4: diferencia entre el total a cobrar y lo ya capturado, en centimos enteros. Nunca negativa:
  * si la suma ya cuadra —o se pasa— lo pendiente es `0`, porque una linea nueva con monto negativo
  * seria una resta disfrazada de cobro.

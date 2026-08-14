@@ -133,6 +133,20 @@ export interface RutaResumenDTO {
     duracionS: number | null;
     fuente: "routes" | "local";
   } | null;
+  /**
+   * Tramo que lleva a la SIGUIENTE parada: la primera de `porGestionar`, que ya viene ordenado
+   * por secuencia. Es el trozo del recorrido que el mensajero tiene delante ahora mismo, y la
+   * UI lo resalta sobre el resto de la linea.
+   *
+   * NO CUESTA UNA LLAMADA APARTE: sale de los `legs` que Google devuelve en la misma respuesta
+   * del trazado. `null` mientras no se haya dibujado la ruta, si el dibujo salio del fallback
+   * local (que no produce tramos) o si no queda ninguna parada por gestionar.
+   */
+  tramoSiguiente: {
+    encodedPolyline: string;
+    distanciaM: number | null;
+    duracionS: number | null;
+  } | null;
 }
 
 // Feature 61: KPIs del portal del mensajero, calculados SERVER-SIDE (autoritativos).

@@ -31,6 +31,7 @@ import { ChatFlotante } from "./chat/ChatFlotante";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
 import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
 import { RutaMapa } from "./RutaMapa";
+import { useSeguimientoUbicacion } from "./useSeguimientoUbicacion";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
 import { CarruselCards } from "@/components/shared/CarruselCards";
 
@@ -234,6 +235,15 @@ export function RepartoModule({
   // R24: aviso de que el punto de partida usado es aproximado (no GPS reciente).
   const origenAproximado =
     ruta.origenFuente === "centroide" || ruta.origenFuente === "ultima_conocida";
+
+  // Feature 92 (seguimiento): posición EN VIVO. No cuesta ninguna llamada facturada —la da el
+  // navegador— y solo arranca si el permiso ya consta concedido (R25: nunca se fuerza).
+  // `ubicacionActual !== null` es la prueba de que el botón ya lo obtuvo, para los navegadores
+  // sin Permissions API.
+  const ubicacionVivo = useSeguimientoUbicacion(ubicacionActual !== null);
+  // La del seguimiento MANDA sobre la del último botón: es más reciente por definición. Se
+  // cae a la del botón mientras el GPS no haya dado su primer fix bueno.
+  const origenMapa = ubicacionVivo ?? ubicacionActual;
 
   // Orden que el mensajero eligió explícitamente para el panel de detalle. Es
   // solo una PREFERENCIA: la orden mostrada se DERIVA (ver `detalleOrden`) para
@@ -508,8 +518,9 @@ export function RepartoModule({
                     ) : null}
                     <RutaMapa
                       paradas={paradasMapa}
-                      origen={ubicacionActual}
+                      origen={origenMapa}
                       trazado={trazadoRuta}
+                      tramoSiguiente={ruta.tramoSiguiente?.encodedPolyline}
                     />
                   </div>
                 ) : null}

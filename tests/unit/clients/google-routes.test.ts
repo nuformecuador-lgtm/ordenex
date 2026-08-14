@@ -54,7 +54,109 @@ describe("trazado ok", () => {
       encodedPolyline: POLILINEA,
       distanciaM: 5400,
       duracionS: 930,
+      tramos: [], // sin `legs` en la respuesta no hay tramos que devolver
     });
+  });
+
+  it("los TRAMOS salen de los `legs`, sin una llamada aparte", async () => {
+    // El punto entero de pedirlos: vienen en la MISMA respuesta ya pagada.
+    const fetchImpl = vi.fn(async () =>
+      respuestaOk({
+        routes: [
+          {
+            distanceMeters: 5400,
+            duration: "930s",
+            polyline: { encodedPolyline: POLILINEA },
+            legs: [
+              { distanceMeters: 1000, duration: "100s", polyline: { encodedPolyline: "aaa" } },
+              { distanceMeters: 2000, duration: "200s", polyline: { encodedPolyline: "bbb" } },
+              { distanceMeters: 2400, duration: "630s", polyline: { encodedPolyline: "ccc" } },
+            ],
+          },
+        ],
+      }),
+    ) as unknown as typeof fetch;
+
+    const outcome = await clienteCon(fetchImpl).trazar({
+      origen: ORIGEN,
+      paradasEnOrden: PARADAS,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // UNA sola llamada
+    if (outcome.status !== "ok") throw new Error("se esperaba ok");
+    expect(outcome.tramos).toEqual([
+      { encodedPolyline: "aaa", distanciaM: 1000, duracionS: 100 },
+      { encodedPolyline: "bbb", distanciaM: 2000, duracionS: 200 },
+      { encodedPolyline: "ccc", distanciaM: 2400, duracionS: 630 },
+    ]);
+  });
+
+  it("el FieldMask pide `legs.polyline` y NUNCA `legs.steps` (R14)", async () => {
+    // Los `steps` traerian las instrucciones giro a giro CON coordenadas: mucho mas dato
+    // personal circulando para algo que no se usa.
+    const fetchImpl = vi.fn(async () =>
+      respuestaOk({ routes: [{ polyline: { encodedPolyline: POLILINEA } }] }),
+    ) as unknown as typeof fetch;
+
+    await clienteCon(fetchImpl).trazar({ origen: ORIGEN, paradasEnOrden: PARADAS });
+
+    const init = vi.mocked(fetchImpl).mock.calls[0][1] as RequestInit;
+    const mask = (init.headers as Record<string, string>)["x-goog-fieldmask"];
+    expect(mask).toContain("routes.legs.polyline.encodedPolyline");
+    expect(mask).not.toContain("steps");
+  });
+
+  it("una lista de `legs` incompleta se descarta ENTERA: se consume por indice", async () => {
+    // Tres paradas, dos legs. Devolver los dos desplazaria las posiciones y resaltaria el
+    // tramo equivocado, que es peor que no resaltar ninguno.
+    const fetchImpl = vi.fn(async () =>
+      respuestaOk({
+        routes: [
+          {
+            polyline: { encodedPolyline: POLILINEA },
+            legs: [
+              { polyline: { encodedPolyline: "aaa" } },
+              { polyline: { encodedPolyline: "bbb" } },
+            ],
+          },
+        ],
+      }),
+    ) as unknown as typeof fetch;
+
+    const outcome = await clienteCon(fetchImpl).trazar({
+      origen: ORIGEN,
+      paradasEnOrden: PARADAS,
+    });
+
+    if (outcome.status !== "ok") throw new Error("se esperaba ok");
+    expect(outcome.tramos).toEqual([]);
+    // La polilinea entera SIGUE sirviendo: perder los tramos no pierde el dibujo.
+    expect(outcome.encodedPolyline).toBe(POLILINEA);
+  });
+
+  it("un leg SIN geometria tambien descarta la lista entera", async () => {
+    const fetchImpl = vi.fn(async () =>
+      respuestaOk({
+        routes: [
+          {
+            polyline: { encodedPolyline: POLILINEA },
+            legs: [
+              { polyline: { encodedPolyline: "aaa" } },
+              { distanceMeters: 10 }, // sin polyline
+              { polyline: { encodedPolyline: "ccc" } },
+            ],
+          },
+        ],
+      }),
+    ) as unknown as typeof fetch;
+
+    const outcome = await clienteCon(fetchImpl).trazar({
+      origen: ORIGEN,
+      paradasEnOrden: PARADAS,
+    });
+
+    if (outcome.status !== "ok") throw new Error("se esperaba ok");
+    expect(outcome.tramos).toEqual([]);
   });
 
   it("respeta el ORDEN recibido y NO deja que Routes reordene", async () => {
@@ -87,9 +189,11 @@ describe("trazado ok", () => {
 
     await clienteCon(fetchImpl).trazar({ origen: ORIGEN, paradasEnOrden: PARADAS });
 
-    expect(cabeceras["x-goog-fieldmask"]).toBe(
-      "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
-    );
+    // Se comprueban las piezas y no la cadena entera: afirmar el literal completo obliga a
+    // reescribir el test cada vez que se pide un campo mas, sin comprobar nada nuevo.
+    expect(cabeceras["x-goog-fieldmask"]).toContain("routes.polyline.encodedPolyline");
+    expect(cabeceras["x-goog-fieldmask"]).toContain("routes.distanceMeters");
+    expect(cabeceras["x-goog-fieldmask"]).toContain("routes.duration");
     expect(cabeceras.authorization).toBe("Bearer tok");
   });
 

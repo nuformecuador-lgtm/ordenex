@@ -110,6 +110,7 @@ const RUTA_VIGENTE: RutaResumenDTO = {
   origenFuente: "gps",
   paradasSinOptimizar: 0,
   trazado: null,
+  tramoSiguiente: null,
 };
 
 beforeEach(() => {

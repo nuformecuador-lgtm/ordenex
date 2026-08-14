@@ -80,9 +80,16 @@ export interface RutaMapaInnerProps {
    * calles; si falta, se cae a unir las paradas en recto (comportamiento original).
    */
   trazado?: RutaMapaTrazado | null;
+  /** Polilinea codificada del tramo a la SIGUIENTE parada, resaltado sobre el resto. */
+  tramoSiguiente?: string | null;
 }
 
-export function RutaMapaInner({ paradas, origen, trazado }: RutaMapaInnerProps) {
+export function RutaMapaInner({
+  paradas,
+  origen,
+  trazado,
+  tramoSiguiente,
+}: RutaMapaInnerProps) {
   // La ruta (Polyline) conecta SOLO las paradas ya optimizadas, en orden de secuencia.
   // Las pendientes (sin secuencia) se muestran como marcador pero no entran a la línea:
   // todavía no tienen una posición real en el recorrido.
@@ -114,6 +121,15 @@ export function RutaMapaInner({ paradas, origen, trazado }: RutaMapaInnerProps) 
   // un vistazo si lo que tiene delante es navegable o solo el orden de visita.
   const esPorCalles = trazado?.fuente === "routes";
 
+  // Tramo a la siguiente parada. Se dibuja ENCIMA del recorrido completo, en naranja: es lo
+  // que el mensajero tiene delante ahora, y el resto de la ruta es contexto.
+  const lineaTramo = useMemo<LatLngTuple[]>(() => {
+    if (!tramoSiguiente) return [];
+    const puntos = decodificarPolilinea(tramoSiguiente);
+    // Un tramo de un solo punto no es una línea: se descarta en vez de pintar nada visible.
+    return puntos.length >= 2 ? puntos.map<LatLngTuple>((p) => [p.lat, p.lng]) : [];
+  }, [tramoSiguiente]);
+
   const puntosEncuadre = useMemo<LatLngTuple[]>(() => {
     const base = paradas.map<LatLngTuple>((p) => [p.lat, p.lng]);
     return origen ? [...base, [origen.lat, origen.lng]] : base;
@@ -136,8 +152,21 @@ export function RutaMapaInner({ paradas, origen, trazado }: RutaMapaInnerProps) 
           pathOptions={{
             color: "#2563eb",
             weight: 4,
+            // El resto de la ruta se atenúa cuando hay un tramo destacado: si los dos se
+            // pintaran igual de fuertes, resaltar no resaltaría nada.
+            ...(lineaTramo.length >= 2 ? { opacity: 0.45 } : {}),
             ...(esPorCalles ? {} : { dashArray: "8 8", opacity: 0.75 }),
           }}
+        />
+      ) : null}
+
+      {/* Tramo a la SIGUIENTE parada, encima del resto. Va después en el JSX a propósito:
+          Leaflet apila por orden de montaje, así que este queda por encima de la línea
+          completa sin tener que pelearse con z-index. */}
+      {lineaTramo.length >= 2 ? (
+        <Polyline
+          positions={lineaTramo}
+          pathOptions={{ color: "#f26419", weight: 6, opacity: 0.95 }}
         />
       ) : null}
 

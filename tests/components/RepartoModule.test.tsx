@@ -183,6 +183,7 @@ const RUTA_VIGENTE: RutaResumenDTO = {
   origenFuente: "gps",
   paradasSinOptimizar: 0,
   trazado: null,
+  tramoSiguiente: null,
 };
 
 function renderModule(props?: Partial<Parameters<typeof RepartoModule>[0]>) {

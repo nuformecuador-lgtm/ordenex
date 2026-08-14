@@ -60,6 +60,7 @@ import {
   opcionesPara,
   pendiente,
   puedeAnadirLinea,
+  sinPendiente,
   soloDigitos,
   totalCapturado,
   type LineaEnEdicion,
@@ -1132,6 +1133,10 @@ function DesglosePagoField({
           variant="outline"
           size="sm"
           className="self-start gap-1.5"
+          // Pedido humano (2026-08-14): sin nada pendiente, la línea que nacería sería de monto 0
+          // —`pendiente` se acota a 0— y solo serviría para descuadrar. Se DESHABILITA (no se
+          // esconde, a diferencia del tope de catálogo): baja el monto de una línea y vuelve.
+          disabled={sinPendiente(lineas, montoACobrar)}
           // R4 [Q4]: la línea nueva nace con lo que FALTA, no en blanco. `pendiente` ya acota a 0
           // cuando lo capturado iguala o supera el total: nunca se pre-carga un negativo.
           onClick={() => onChange([...lineas, lineaNueva(pendiente(lineas, montoACobrar))])}

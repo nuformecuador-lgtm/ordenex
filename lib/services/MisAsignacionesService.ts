@@ -249,6 +249,13 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         // aqui: esta es una lectura de listado y no puede quedar colgada de una llamada
         // facturada a Routes. Si la fila no lo tiene, el mapa dibuja rectas como siempre.
         trazado: ruta?.trazado ?? null,
+        // La siguiente parada es la PRIMERA de `porGestionar`, que se acaba de ordenar por
+        // secuencia justo arriba. Si esa orden no tiene tramo —ruta sin dibujar, o dibujada
+        // en local— no hay nada que resaltar y va `null`.
+        tramoSiguiente:
+          porGestionar.length > 0
+            ? (ruta?.tramoPorOrden.get(porGestionar[0].id) ?? null)
+            : null,
       },
     }; // R10
   }

@@ -33,8 +33,17 @@ export interface RutaMapaProps {
   origen?: RutaMapaOrigen | null;
   /** Geometría de la ruta devuelta por la sincronización (feature 92). */
   trazado?: RutaMapaTrazado | null;
+  /** Polilinea codificada del tramo a la SIGUIENTE parada, resaltado sobre el resto. */
+  tramoSiguiente?: string | null;
 }
 
-export function RutaMapa({ paradas, origen, trazado }: RutaMapaProps) {
-  return <RutaMapaInner paradas={paradas} origen={origen} trazado={trazado} />;
+export function RutaMapa({ paradas, origen, trazado, tramoSiguiente }: RutaMapaProps) {
+  return (
+    <RutaMapaInner
+      paradas={paradas}
+      origen={origen}
+      trazado={trazado}
+      tramoSiguiente={tramoSiguiente}
+    />
+  );
 }

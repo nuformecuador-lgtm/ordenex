@@ -22,6 +22,7 @@ import type {
   IRoutesClient,
   TrazarRutaInput,
   TrazarRutaOutcome,
+  TramoTrazado,
 } from "@/lib/interfaces/external/IRoutesClient";
 import { optlog, opterror, describirToken, cronometro } from "@/lib/logging/optimizer-log";
 
@@ -35,7 +36,22 @@ const OPERACION = "trazar ruta";
  * se consumen. Pedir `*` traeria, entre otras cosas, los pasos de navegacion con sus
  * instrucciones y coordenadas — mucho mas dato personal circulando para nada.
  */
-const FIELD_MASK = "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline";
+const FIELD_MASK = [
+  "routes.duration",
+  "routes.distanceMeters",
+  "routes.polyline.encodedPolyline",
+  // Los TRAMOS (`legs`) vienen en la MISMA respuesta y en la misma llamada facturada: pedirlos
+  // no cuesta un centimo mas, solo unos KB de cuerpo. Con ellos se puede resaltar el trayecto
+  // a la siguiente parada sin volver a llamar a nadie.
+  //
+  // ⚠️ SE PIDE `legs.polyline`, NO `legs.steps`. Los `steps` traerian las instrucciones de
+  // navegacion giro a giro CON sus coordenadas: mucho mas dato personal circulando para algo
+  // que no se usa (R14). El FieldMask es aqui una herramienta de minimizacion, no de ancho de
+  // banda.
+  "routes.legs.polyline.encodedPolyline",
+  "routes.legs.distanceMeters",
+  "routes.legs.duration",
+].join(",");
 
 /**
  * Tope de paradas INTERMEDIAS que admite una peticion de `computeRoutes`. Es un limite del
@@ -49,10 +65,17 @@ const MAX_INTERMEDIOS = 25;
 /** `duration` viaja como string de protobuf: `"1234s"`. */
 const DURACION_RE = /^(\d+(?:\.\d+)?)s$/;
 
+const legSchema = z.object({
+  distanceMeters: z.number().nonnegative().optional(),
+  duration: z.string().optional(),
+  polyline: z.object({ encodedPolyline: z.string().optional() }).optional(),
+});
+
 const rutaSchema = z.object({
   distanceMeters: z.number().nonnegative().optional(),
   duration: z.string().optional(),
   polyline: z.object({ encodedPolyline: z.string().optional() }).optional(),
+  legs: z.array(legSchema).optional(),
 });
 
 const respuestaSchema = z.object({
@@ -80,6 +103,36 @@ function parsearDuracion(duration: string | undefined): number | null {
   if (duration === undefined) return null;
   const m = DURACION_RE.exec(duration);
   return m === null ? null : Number.parseFloat(m[1]);
+}
+
+/**
+ * Normaliza los `legs` de la respuesta a `TramoTrazado[]`.
+ *
+ * TODO O NADA. Los tramos se consumen POR INDICE —«resalta el tramo que lleva a la parada
+ * 3»—, asi que una lista a la que le falta uno no es una lista incompleta: es una lista que
+ * senala mal. Ante cualquier discrepancia (numero distinto del esperado, o un tramo sin
+ * geometria) se devuelve vacia y el consumidor se queda con la polilinea global, que sigue
+ * siendo correcta.
+ *
+ * `esperados` es `paradasEnOrden.length`: Routes emite un leg por cada salto entre puntos
+ * consecutivos, y los puntos son origen + N paradas, o sea N saltos.
+ */
+function extraerTramos(
+  legs: z.infer<typeof legSchema>[] | undefined,
+  esperados: number,
+): TramoTrazado[] {
+  if (legs === undefined || legs.length !== esperados) return [];
+  const tramos: TramoTrazado[] = [];
+  for (const leg of legs) {
+    const encodedPolyline = leg.polyline?.encodedPolyline;
+    if (encodedPolyline === undefined || encodedPolyline === "") return [];
+    tramos.push({
+      encodedPolyline,
+      distanciaM: leg.distanceMeters ?? null,
+      duracionS: parsearDuracion(leg.duration),
+    });
+  }
+  return tramos;
 }
 
 /** Envuelve un punto en la forma `Waypoint` que espera Routes. */
@@ -235,12 +288,15 @@ export class GoogleRoutesClient implements IRoutesClient {
 
     const distanciaM = ruta?.distanceMeters ?? null;
     const duracionS = parsearDuracion(ruta?.duration);
+    const tramos = extraerTramos(ruta?.legs, paradasEnOrden.length);
+    // Se loguean CUENTAS y TAMANOS, jamas la geometria: decodificar una polilinea devuelve las
+    // coordenadas de los domicilios de entrega una por una (R14).
     optlog("client/routes — SALIDA: ok", {
       distanciaM,
       duracionS,
       polilineaChars: encodedPolyline.length,
-      encodedPolyline,
+      tramos: tramos.length,
     });
-    return { status: "ok", encodedPolyline, distanciaM, duracionS };
+    return { status: "ok", encodedPolyline, distanciaM, duracionS, tramos };
   }
 }

@@ -21,6 +21,19 @@ export interface TrazarRutaInput {
 }
 
 /**
+ * Un TRAMO del recorrido: lo que hay entre dos puntos consecutivos de la ruta. Sirve para
+ * resaltar el trayecto a la siguiente parada sin volver a pedirle nada al proveedor.
+ */
+export interface TramoTrazado {
+  /** Polilinea codificada de ESTE tramo, no de la ruta entera. */
+  encodedPolyline: string;
+  /** Metros del tramo. `null` si el proveedor no los devolvio. */
+  distanciaM: number | null;
+  /** Segundos del tramo. `null` si el proveedor no los devolvio. */
+  duracionS: number | null;
+}
+
+/**
  * Desenlace del trazado. Mismo vocabulario que `OptimizarOutcome` para que el service no
  * tenga que aprender dos tablas distintas, mas un `omitida` que aquel no necesita: el
  * trazado tiene un limite de paradas por peticion mas bajo que la optimizacion.
@@ -34,6 +47,20 @@ export type TrazarRutaOutcome =
       distanciaM: number | null;
       /** Duracion total en segundos. `null` si el proveedor no la devolvio. */
       duracionS: number | null;
+      /**
+       * El recorrido partido en TRAMOS, uno por cada par de puntos consecutivos: el tramo `i`
+       * va del punto `i` al `i+1`, empezando en el origen. Es decir, `tramos[0]` es
+       * origen -> primera parada, y su longitud siempre es `paradasEnOrden.length`.
+       *
+       * NO CUESTA UNA LLAMADA APARTE: Google los devuelve en la MISMA respuesta que la
+       * polilinea global, solo hay que pedirlos en el `FieldMask`. Por eso se piden siempre:
+       * lo unico que ahorraria no hacerlo son unos KB de respuesta.
+       *
+       * Vacio si el proveedor no los devolvio, o si alguno vino sin geometria — los tramos se
+       * usan para resaltar UNO concreto, y una lista incompleta desplazaria las posiciones y
+       * resaltaria el tramo equivocado.
+       */
+      tramos: TramoTrazado[];
     }
   /** No se pidio el trazado (pocas paradas, o mas de las que admite una peticion). */
   | { status: "omitida"; razon: string }

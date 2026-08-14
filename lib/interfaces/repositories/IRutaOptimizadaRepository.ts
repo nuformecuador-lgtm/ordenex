@@ -28,6 +28,12 @@ export interface RutaOptimizadaDTO {
   trazado: TrazadoPersistido | null;
   /** Posicion por `ordenId`. Una orden en reparto AUSENTE de este mapa esta sin optimizar. */
   secuenciaPorOrden: Map<string, number>;
+  /**
+   * Tramo que LLEGA a cada parada, por `ordenId`. Vacio mientras no se haya dibujado la ruta.
+   * Una orden puede estar en `secuenciaPorOrden` y no aqui: tiene posicion, pero su tramo aun
+   * no se calculo (o el trazado salio del fallback local, que no los produce).
+   */
+  tramoPorOrden: Map<string, TramoPersistido>;
 }
 
 /**
@@ -44,6 +50,13 @@ export interface TrazadoPersistido {
    * porque la columna es TEXT y una fila escrita por otra version del codigo podria traerlo.
    */
   fuente: "routes" | "local";
+}
+
+/** Un tramo del recorrido, guardado en la fila de la parada A LA QUE LLEGA. */
+export interface TramoPersistido {
+  encodedPolyline: string;
+  distanciaM: number | null;
+  duracionS: number | null;
 }
 
 /** Metadatos que acompanan a una secuencia recien calculada. */
@@ -104,11 +117,15 @@ export interface IRutaOptimizadaRepository {
    * pegaria encima de una secuencia que ya no es la suya.
    *
    * No lanza si no aplica: que la ruta haya cambiado no es un error, es una carrera perdida.
+   *
+   * `tramos` va EN ORDEN DE VISITA y con exactamente un elemento por parada: el `i` se guarda
+   * en la parada de secuencia `i + 1`. Vacio deja las columnas de tramo como esten.
    */
   guardarTrazado(
     mensajeroId: string,
     huellaSet: string,
     trazado: TrazadoPersistido,
+    tramos?: TramoPersistido[],
   ): Promise<void>;
 
   /**

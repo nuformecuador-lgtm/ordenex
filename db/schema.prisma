@@ -1851,6 +1851,12 @@ model RutaOptimizadaParada {
   rutaId    String @map("ruta_id")
   ordenId   String @map("orden_id")
   secuencia Int
+  // Tramo que LLEGA a esta parada (20260814140000_ruta_parada_tramo). La fila 1 guarda el
+  // origen -> primera parada. No necesita invalidacion propia: `reemplazarSecuencia` borra e
+  // reinserta estas filas enteras en cada recalculo.
+  tramoPolilinea  String? @map("tramo_polilinea")
+  tramoDistanciaM Int?    @map("tramo_distancia_m")
+  tramoDuracionS  Int?    @map("tramo_duracion_s")
 
   ruta  RutaOptimizada @relation(fields: [rutaId], references: [id], onDelete: Cascade)
   orden Orden          @relation(fields: [ordenId], references: [id], onDelete: Cascade)

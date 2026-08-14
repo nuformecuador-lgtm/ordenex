@@ -8,6 +8,7 @@ import type {
   ReemplazarSecuenciaMeta,
   RutaOptimizadaDTO,
   TrazadoPersistido,
+  TramoPersistido,
 } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 
 // Cliente Prisma MINIMO consumido (patron `GestionOrdenRepository`): las dos tablas de la
@@ -54,7 +55,17 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
   async findByMensajero(mensajeroId: string): Promise<RutaOptimizadaDTO | null> {
     const row = await this.prisma.rutaOptimizada.findUnique({
       where: { mensajeroId },
-      include: { paradas: { select: { ordenId: true, secuencia: true } } },
+      include: {
+        paradas: {
+          select: {
+            ordenId: true,
+            secuencia: true,
+            tramoPolilinea: true,
+            tramoDistanciaM: true,
+            tramoDuracionS: true,
+          },
+        },
+      },
     });
     if (row === null) return null;
     return {
@@ -72,6 +83,20 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
       ultimoError: row.ultimoError,
       trazado: toTrazado(row),
       secuenciaPorOrden: new Map(row.paradas.map((p) => [p.ordenId, p.secuencia])),
+      // Solo las paradas que YA tienen tramo entran al mapa: una entrada con la polilinea
+      // vacia obligaria a cada consumidor a distinguir «no hay tramo» de «hay uno invisible».
+      tramoPorOrden: new Map(
+        row.paradas
+          .filter((p) => p.tramoPolilinea !== null && p.tramoPolilinea !== "")
+          .map((p) => [
+            p.ordenId,
+            {
+              encodedPolyline: p.tramoPolilinea as string,
+              distanciaM: p.tramoDistanciaM,
+              duracionS: p.tramoDuracionS,
+            },
+          ]),
+      ),
     };
   }
 
@@ -158,18 +183,45 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
     mensajeroId: string,
     huellaSet: string,
     trazado: TrazadoPersistido,
+    tramos: TramoPersistido[] = [],
   ): Promise<void> {
-    await this.prisma.rutaOptimizada.updateMany({
-      where: { mensajeroId, huellaSet },
-      data: {
-        trazadoPolilinea: trazado.encodedPolyline,
-        // Las columnas son INTEGER: la distancia viene en metros enteros de Routes, pero el
-        // trazado local la calcula en coma flotante. Se redondea aqui, que es la frontera
-        // con la DB, en vez de dejar que Prisma reviente con un decimal.
-        trazadoDistanciaM: trazado.distanciaM !== null ? Math.round(trazado.distanciaM) : null,
-        trazadoDuracionS: trazado.duracionS !== null ? Math.round(trazado.duracionS) : null,
-        trazadoFuente: trazado.fuente,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const actualizadas = await tx.rutaOptimizada.updateMany({
+        where: { mensajeroId, huellaSet },
+        data: {
+          trazadoPolilinea: trazado.encodedPolyline,
+          // Las columnas son INTEGER: la distancia viene en metros enteros de Routes, pero el
+          // trazado local la calcula en coma flotante. Se redondea aqui, que es la frontera
+          // con la DB, en vez de dejar que Prisma reviente con un decimal.
+          trazadoDistanciaM: trazado.distanciaM !== null ? Math.round(trazado.distanciaM) : null,
+          trazadoDuracionS: trazado.duracionS !== null ? Math.round(trazado.duracionS) : null,
+          trazadoFuente: trazado.fuente,
+        },
+      });
+      // La huella ya no encaja: la ruta se recalculo mientras Routes respondia. Ni la cabecera
+      // ni los tramos son suyos. Se sale sin tocar nada mas — escribir los tramos aqui seria
+      // pegarlos sobre una secuencia ajena, que es justo lo que la condicion evita.
+      if (actualizadas.count === 0 || tramos.length === 0) return;
+
+      const ruta = await tx.rutaOptimizada.findUnique({
+        where: { mensajeroId },
+        select: { id: true },
+      });
+      if (ruta === null) return;
+
+      // Un UPDATE por tramo. Son <= RUTA_MAX_PARADAS filas dentro de una transaccion que ya
+      // esta abierta, y `updateMany` no admite un valor distinto por fila. La alternativa
+      // —un CASE gigante en SQL crudo— cambiaria varias lineas legibles por una ilegible.
+      for (const [i, tramo] of tramos.entries()) {
+        await tx.rutaOptimizadaParada.updateMany({
+          where: { rutaId: ruta.id, secuencia: i + 1 }, // 1-based, como la escribe reemplazar
+          data: {
+            tramoPolilinea: tramo.encodedPolyline,
+            tramoDistanciaM: tramo.distanciaM !== null ? Math.round(tramo.distanciaM) : null,
+            tramoDuracionS: tramo.duracionS !== null ? Math.round(tramo.duracionS) : null,
+          },
+        });
+      }
     });
   }
 
