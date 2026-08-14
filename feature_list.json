@@ -2605,7 +2605,7 @@
       "name": "la factura del cierre oscurece con el tema",
       "spec_path": "specs/217-factura-oscurece-con-el-tema/",
       "description": "Frontend. `cierre-factura.tsx` se fija a tema claro con la clase `tema-claro` -decision de la feature 208: es el facsimil de un comprobante en papel-. Por pedido humano pasa a GIRAR con el tema, de modo que en oscuro sea una superficie oscura legible. Al IMPRIMIR debe seguir saliendo blanca.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
@@ -2664,6 +2664,32 @@
       "branch": null,
       "depends_on": null,
       "status_note": "NACE DE LA PUERTA HUMANA DE LA 217 (Q3, 2026-08-13). Se separo a proposito: el arreglo es de una linea pero cambia como imprime TODA la app, y la 217 solo cubre las dos hojas de la factura. || HOY NO ES REGRESION, y por eso no urge: lo impreso sale igual que lo que la hoja ya muestra en pantalla. El humano decidio aceptarlo alli y traer la raiz aqui. || MEDIDO EN LA 208 (claro -> oscuro+hoja): Button outline 14.79 -> 14.78, Badge success 4.84 -> 4.76, danger 5.30 -> 5.32. Dos filas de esa tabla -Badge warning y Badge destructive- CADUCARON con la 210 y solo sobrevive Button destructive; re-medir antes de tocar, no copiar la tabla vieja. || EL VEHICULO DE VERIFICACION YA EXISTE: contraste() y componer() de la 210, que la 217 saca a tests/fixtures/contraste.ts. Consumirlas desde ahi, sin una segunda copia."
+    },
+    {
+      "id": 222,
+      "name": "el boton `destructive` no llega al umbral en NINGUNO de los dos temas",
+      "spec_path": null,
+      "description": "Frontend. `Button` variant `destructive` (`components/ui/button.tsx:24`) mide 3,29 en tema claro y 4,43 en oscuro: bajo AA para texto normal en los DOS. Afecta a todo boton de accion destructiva de la app -anular, eliminar, rechazar-. Llevar el par a un token que cumpla en ambos temas y atarlo con suelo en la guardia de contraste.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "SIN DUENO HASTA HOY, y por eso se registra: la 210 midio el par y solo arreglo el BADGE -esta done-, y la 216 trata el naranja de marca, que es OTRO par. El boton se quedo en tierra de nadie entre las dos. || MEDIDO por el implementador y RE-MEDIDO por el reviewer con aritmetica independiente durante la 217 (2026-08-13): 3,29 claro / 4,43 oscuro. La 217 lo declara fuera de alcance con su motivo y su numero (R17/R18), no lo omite. || NO ES UN PARCHE LOCAL: cambiar la variante toca cada boton destructivo de la app, asi que es decision de diseno como la 216, no un arreglo de un archivo. || EL VEHICULO YA EXISTE: contraste() y componer() en tests/fixtures/contraste.ts, con sus autocontroles contra razones publicadas de WCAG. Consumirlas, no reescribirlas."
+    },
+    {
+      "id": 223,
+      "name": "la factura se imprime recortada por el scroll del modal",
+      "spec_path": null,
+      "description": "Frontend. La 217 garantiza que la hoja salga BLANCA en papel, pero no el flujo: hoy, imprimiendo el detalle del cierre desde su modal, la hoja sale RECORTADA por el `overflow-y-auto` del dialogo y arrastra el resto de la pagina. Falta la mitad de flujo: `@page`, ocultar lo que no es la hoja, y paginar cuando el cierre tiene muchas ordenes.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": [217],
+      "status_note": "NACE DE LA Q4 DE LA PUERTA DE LA 217 (2026-08-13): el humano decidio que esa feature garantiza el COLOR y no el flujo, y que el flujo iba aparte. Se registra para que no se pierda, que es lo que acaba de pasar con las deudas del PR #367. || LO QUE LA 217 YA DEJO HECHO y no hay que rehacer: la regla `@media print` acotada a las dos hojas, con los tokens claros fijados, y su guardia. Esta ficha es la mitad que falta. || QUEDA ESCRITO EN design.md 4.6 de la 217 que imprimir el detalle arrastra el modal con su overflow: no es un hallazgo nuevo, es la mitad declarada. || OJO AL EMPEZAR: no hay ningun E2E de impresion y jsdom no compone estilos, asi que la verificacion honesta es un censo del CSS con mutacion que lo demuestre, como se hizo en la 217."
     }
   ]
 }
