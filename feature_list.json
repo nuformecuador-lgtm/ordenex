@@ -2657,11 +2657,11 @@
       "name": "el variant `dark:` tambien dispara al imprimir",
       "spec_path": null,
       "description": "Frontend. `@custom-variant dark` se resuelve contra el ANCESTRO, no contra los tokens, asi que las utilidades `dark:` de las primitivas siguen disparando dentro de `@media print`: en tema oscuro, cualquier pantalla que se imprima saca insignias y botones con su tinte oscuro sobre papel blanco. Envolver el variant en `@media not print` para que el papel salga claro en TODA la app, con una guardia que lo ate.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "low",
       "zone": "frontend",
-      "branch": null,
+      "branch": "feature/221-dark-al-imprimir",
       "depends_on": null,
       "status_note": "NACE DE LA PUERTA HUMANA DE LA 217 (Q3, 2026-08-13). Se separo a proposito: el arreglo es de una linea pero cambia como imprime TODA la app, y la 217 solo cubre las dos hojas de la factura. || HOY NO ES REGRESION, y por eso no urge: lo impreso sale igual que lo que la hoja ya muestra en pantalla. El humano decidio aceptarlo alli y traer la raiz aqui. || MEDIDO EN LA 208 (claro -> oscuro+hoja): Button outline 14.79 -> 14.78, Badge success 4.84 -> 4.76, danger 5.30 -> 5.32. Dos filas de esa tabla -Badge warning y Badge destructive- CADUCARON con la 210 y solo sobrevive Button destructive; re-medir antes de tocar, no copiar la tabla vieja. || EL VEHICULO DE VERIFICACION YA EXISTE: contraste() y componer() de la 210, que la 217 saca a tests/fixtures/contraste.ts. Consumirlas desde ahi, sin una segunda copia."
     },
