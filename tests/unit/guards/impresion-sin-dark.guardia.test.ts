@@ -194,7 +194,12 @@ describe("feature 221 — el variant `dark:` no emite en papel", () => {
    * el bloque localizado de verdad, no contra el primero que aparezca.
    */
   it("el ancla vieja («cualquier at-rule con `print`») engancharía ESTE bloque, no el de la 217", () => {
-    const vieja = css.search(/^\s*@media\b[^{}]*\bprint\b[^{}]*\{/m);
+    // Sin `^\s*`: ese prefijo hacía que el índice cayera en el salto de línea ANTERIOR al `@`,
+    // así que cuando las dos anclas enganchaban el MISMO bloque `vieja` salía 1-2 caracteres por
+    // delante de `precisa` y el caso pasaba en verde. Medido plantando la mutación (2026-08-14):
+    // con el bloque de la 217 movido delante del `@media not print` —justo lo que este caso
+    // existe para detectar— seguía verde. Los dos índices apuntan ahora a su `@`.
+    const vieja = css.search(/@media\b[^{}]*\bprint\b[^{}]*\{/);
     // Feature 223 (R24): por CONTENIDO. Con `css.search(/@media print/)` este caso seguía verde
     // aunque el bloque de tokens de la 217 se fuera al final del archivo, porque desde la 223 hay
     // otro `@media print` antes que también satisface el patrón.

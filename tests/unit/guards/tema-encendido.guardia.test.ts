@@ -289,13 +289,61 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
     ).not.toMatch(/print-color-adjust/);
   });
 
-  it("no se cuela un flujo de impresion por el CSS: nada de `@page` (R14)", () => {
-    // La otra mitad de R14. El censo del `.tsx` caza el boton y `window.print`, pero el formato
-    // de pagina se añade en CSS y por ahi no pasaba nadie. La 217 garantiza el COLOR del papel;
-    // margenes, tamaño y paginacion son otra ficha, y esto lo mantiene asi.
+  /**
+   * REEXPRESADO por la feature 223, NO borrado ni relajado. Y conviene leer por que.
+   *
+   * Este caso decia: «no se cuela un flujo de impresion por el CSS: **nada de `@page`**… el
+   * formato de impresion es otra ficha, no esta». **Esa otra ficha llego, y es la 223**: hoy hay
+   * un `@page`, y borrar el caso porque «ya no aplica» habria retirado la unica vigilancia que
+   * existia sobre el formato de pagina.
+   *
+   * Lo que sigue siendo cierto —y es lo que este caso defiende ahora— son DOS cosas:
+   *
+   *  1. **El formato NO se mezcla con el bloque de tokens de la 217.** Ese bloque tiene un unico
+   *     trabajo, el COLOR, y su regla `.papel-al-imprimir` se compara `toEqual` contra
+   *     `.tema-claro`: una declaracion de formato ahi dentro la pondria roja sin que nada
+   *     estuviera mal, y peor, un `@page` colgado de la regla de tokens se llevaria el formato a
+   *     donde nadie lo busca.
+   *  2. **No aparece por sorpresa en un tercer sitio.** Hay UNA `@page` en todo el archivo, y
+   *     vive en el bloque de la 223. Dos formatos compitiendo es la clase de bug que solo se ve
+   *     en papel.
+   *
+   * Su censo completo —orientacion, margen, que no fuerza papel— vive en
+   * `tests/unit/guards/impresion-flujo.guardia.test.ts`. Aqui queda el limite entre las dos
+   * fichas, que es lo que esta guardia sabe vigilar.
+   */
+  it("el formato de pagina no se mezcla con el bloque de COLOR de la 217, ni aparece en un tercer sitio (R14, 223/R28)", () => {
+    const paginas = css.match(/@page\b/g) ?? [];
     expect(
-      css,
-      "aparecio una regla `@page`: el formato de impresion es otra ficha, no esta",
+      paginas,
+      "hay mas de una regla `@page` en el archivo, o ninguna. Dos formatos de pagina compitiendo " +
+        "solo se ven en papel; cero significa que el flujo de la 223 se fue sin que nadie lo note.",
+    ).toHaveLength(1);
+
+    const tokens = reglaCon(".papel-al-imprimir");
+    expect(
+      Object.keys(tokens.declaraciones).filter((d) => !d.startsWith("--")),
+      "la regla de tokens de la 217 declara algo que no es un token. Su unico trabajo es el " +
+        "COLOR: el formato vive en el bloque de la 223, y mezclarlos rompe la comparacion " +
+        "`toEqual` contra `.tema-claro` sin que nada este mal de verdad.",
+    ).toEqual([]);
+
+    // Y el `@page` no cuelga del bloque de la 217: se busca dentro de SU cuerpo, localizado por
+    // contenido (no por posicion), igual que todo lo demas de esta seccion.
+    const bloque = bloqueDeLa217();
+    let hondura = 0;
+    let i = css.indexOf("{", bloque.indice);
+    for (; i < css.length; i += 1) {
+      if (css[i] === "{") hondura += 1;
+      else if (css[i] === "}") {
+        hondura -= 1;
+        if (hondura === 0) break;
+      }
+    }
+    expect(
+      css.slice(bloque.indice, i + 1),
+      "aparecio un `@page` DENTRO del bloque de color de la 217. El formato es de la 223 y vive " +
+        "en su propio bloque: ahi es donde lo busca quien lea el archivo.",
     ).not.toMatch(/@page\b/);
   });
 

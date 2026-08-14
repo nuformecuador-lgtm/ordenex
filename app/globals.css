@@ -334,6 +334,207 @@
 }
 
 /*
+ * Feature 223 — EL FLUJO DE IMPRESIÓN DE LA FACTURA DEL CIERRE.
+ *
+ * La regla de arriba (217) pone el COLOR: la hoja sale blanca en papel. Ésta pone el
+ * FORMATO, que era la otra mitad y estaba declarada como pendiente, no olvidada. Antes de
+ * este bloque la hoja se imprimía RECORTADA: vive dentro de un modal con `max-h` y
+ * `overflow`, y lo que no cabía en la caja no llegaba al papel.
+ *
+ * Sigue sin haber botón y sin `window.print()`: la única vía es Ctrl+P (decisión humana D1,
+ * confirmada dos veces). Esto es CSS puro.
+ *
+ * ── CÓMO SE ELIGE LA HOJA QUE SE IMPRIME. Dos conceptos, y hacen falta los dos.
+ *
+ * 1. CANDIDATA — la marca `.hoja-imprimible`, que estampa
+ *    `cierres-admin/_components/cierre-factura.tsx`. La lleva SIEMPRE la hoja del detalle;
+ *    la hoja compacta la lleva **sólo desplegada**, porque su desglose (métodos, ajustes y
+ *    fechas) se monta con `{open ? … : null}` y plegada le faltan tres bloques: imprimirla
+ *    sería emitir un comprobante incompleto. Desplegar es además el gesto por el que alguien
+ *    dice «ésta me interesa», y ya existía: no hubo que inventar ninguno.
+ *
+ * 2. ELEGIDA — la decide el CONTEXTO, y manda el diálogo:
+ *      · Si hay una candidata dentro de un `[role="dialog"]`, esa es la única que se imprime
+ *        y todo lo demás desaparece, incluidas las N hojas compactas de detrás. Un diálogo
+ *        modal es, por definición, lo único con lo que el usuario está interactuando.
+ *      · Si no hay ninguna en un diálogo, se imprimen TODAS las candidatas, cada una
+ *        empezando en página nueva. Desplegar tres es pedir tres comprobantes.
+ *      · Si no hay NINGUNA candidata, no se oculta ni se altera nada: esa página imprime
+ *        exactamente como imprimía antes de esta feature. Es lo que garantiza la guarda
+ *        `body:has(…)` de cada selector, y no es un detalle: sin ella, CUALQUIER página del
+ *        portal saldría EN BLANCO y ninguna pantalla lo mostraría.
+ *
+ * ── LISTA BLANCA, NO LISTA NEGRA, Y SU PRECIO
+ * Se oculta todo lo que no lleva a la hoja elegida, en vez de enumerar barra lateral,
+ * cabecera, modal y backdrop para esconderlos uno a uno. Una lista negra se queda corta con
+ * cada componente nuevo y falla EN SILENCIO: alguien se entera meses después mirando un
+ * papel. La lista blanca falla al revés —puede tragarse algo que sí debía salir— y eso se ve
+ * la primera vez que alguien imprime. Por eso ningún selector de aquí nombra una pieza del
+ * portal: se decide por PERTENENCIA.
+ *
+ * Y como el modo de fallo de la lista blanca es «falta algo», va enumerado lo que DEJA de
+ * imprimirse, con su ancla, en vez de descubrirse:
+ *   · título, descripción y botonera del diálogo ....... `components/shared/Modal.tsx`
+ *   · fondo oscuro del diálogo (backdrop) ............... `components/shared/Modal.tsx`
+ *   · el contenedor del portal es un `<div data-base-ui-portal>` colgado del `<body>`,
+ *     no el `<body>`: por eso hace falta podar a lo largo de la cadena y no sólo los
+ *     hijos del `<body>` ................................ medido, `progress/impl_223.md`
+ *   · sección de pago al mensajero y botonera Aprobar/Rechazar
+ *     ................. `cierres-admin/_components/CierresAdminModule.tsx`
+ *   · nota «solo lectura» del portal del mensajero (la más discutible: es texto de la
+ *     pantalla, no del comprobante) ... `cierre-dia/_components/CierreDiaModule.tsx`
+ *   · barra lateral y cabecera del portal .............. `app/(app)/layout.tsx`
+ *   · las N hojas compactas de detrás, al imprimir el detalle
+ *     ................. `cierres-admin/_components/CierresAdminModule.tsx`
+ *
+ * ── LOS `!important`, UNO A UNO Y CON SU MOTIVO MEDIDO
+ * Un estilo EN LÍNEA sólo se vence con `!important`, y uno de más es un martillo que rompe
+ * excepciones legítimas futuras. Hay exactamente cinco, y los cinco compiten contra un
+ * estilo en línea que existe y está medido (2026-08-14, `progress/impl_223.md`):
+ *   · `max-width` .. contra `style={{ maxWidth: "75%" }}` del popup (`Modal.tsx`).
+ *   · `overflow`, `position`, `height`, `width` .. contra el BLOQUEO DE SCROLL que
+ *     `@base-ui/react` escribe en línea sobre el `<body>` al abrir el diálogo:
+ *     `position: relative; height: calc(100dvh - …); width: calc(100vw - …);
+ *      overflow: hidden`. Sin `!important` la cadena perdía contra ellos y la hoja volvía a
+ *     salir recortada — con la declaración escrita, es decir, en verde para cualquier censo.
+ * Las otras nueve declaraciones no tienen rival en línea y ganan por la cascada.
+ *
+ * LÍMITE MEDIDO: ese bloqueo también escribe `overflow-y/x: hidden` EN LÍNEA sobre el
+ * `<html>`, y este bloque NO lo alcanza: su cadena arranca en `body:has(…)` porque el
+ * alcance decidido es «todo contenedor situado ENTRE el `<body>` y la hoja». Queda
+ * congelado por un caso; si algún motor recortara por ahí, el arreglo es una línea y una
+ * decisión que no se toma sola.
+ *
+ * ── EL MARGEN: 12 mm, EN UN SOLO SITIO
+ * Suelo: las impresoras de oficina tienen un borde no imprimible de 3-5 mm, y por debajo se
+ * pierde texto sin que lo vea quien lo escribió (su impresora es otra). Techo: con 12 mm por
+ * lado quedan 186 mm útiles en A4 y 191,9 en Carta, así que el mismo número sirve para los
+ * dos papeles y no hay que decidir cuál es. La hoja ya trae su propio `p-5`, así que el aire
+ * no se duplica. Cambiarlo mañana es esta línea, y sólo ésta.
+ *
+ * ── LO QUE `@page` **NO** CONTROLA (no es un olvido, y no hay CSS que lo arregle)
+ *   · El ENCABEZADO Y EL PIE que imprime el navegador —URL, fecha, «1/3»—: los pone su
+ *     diálogo de impresión y no hay forma de quitarlos desde aquí.
+ *   · La ESCALA y la opción «GRÁFICOS DE FONDO»: las elige el usuario. La segunda tiene un
+ *     precio ya medido en otra ficha (`tests/unit/guards/impresion-sin-dark.guardia.test.ts`).
+ *   · El TAMAÑO DE PAPEL REAL. `size` declara la ORIENTACIÓN y nada más: forzar `A4` o
+ *     `Letter` haría que el navegador reescale y encoja el texto cuando el papel cargado sea
+ *     el otro. El papel lo decide quien imprime.
+ *
+ * ── LO QUE ESTE BLOQUE **NO** PROMETE
+ *   · CABECERAS DE COLUMNA REPETIDAS en cada página. La lista de órdenes NO es una tabla:
+ *     su fila de rótulos es una rejilla de `<span>` hermana de las filas, así que
+ *     `table-header-group` no aplica. Conseguirlo exigiría reescribir el marcado y sus
+ *     nombres accesibles, y eso es rediseñar la hoja.
+ *   · IMPRIMIR LO QUE NO ESTÁ MONTADO. Al papel va sólo lo que está en el DOM: en el
+ *     detalle, las filas plegadas y las CUATRO pestañas no visitadas no existen y no salen.
+ *     Traerlas exige cambiar qué se monta —o disparar algo al imprimir— y es decisión de
+ *     producto, no de CSS. Esta feature se queda en CSS.
+ *   · DÓNDE CAE CADA CORTE ni cuántas páginas salen: depende del motor, del papel, de la
+ *     escala y de la fuente.
+ *
+ * ── POR QUÉ VIVE AQUÍ, Y NO DENTRO DE UN `@layer`
+ * Fuera de toda capa a propósito: dentro de un `@layer` este bloque COMPILARÍA, no rompería
+ * nada y dejaría de hacer su trabajo, porque las utilidades de Tailwind viven en
+ * `@layer utilities` y le ganarían. Y antes de `.dark`, como el bloque de la 217, por la
+ * trampa del lector de tokens (`tests/fixtures/contraste.ts`): hoy aquí no se declara ni un
+ * token —y una guardia lo exige—, pero el día que alguien declare uno la defensa ya está
+ * puesta. Su guardia es `tests/unit/guards/impresion-flujo.guardia.test.ts`.
+ */
+@media print {
+  @page {
+    size: portrait;
+    margin: 12mm;
+  }
+
+  /*
+   * (B) LA CADENA que lleva a una candidata deja de recortar, de flotar y de acolchar.
+   *     Va ANTES de (A) a propósito: si un elemento cayera en las dos reglas, tiene que
+   *     mandar el ocultamiento, y así gana por orden además de por especificidad.
+   *     Es genérica —recorre ancestros, no nombra ninguno— y por eso vale igual para la
+   *     ruta del admin y para la del mensajero, que NO tienen los mismos contenedores.
+   */
+  body:has(.hoja-imprimible),
+  body:has(.hoja-imprimible) *:has(.hoja-imprimible) {
+    display: block;
+    position: static !important;
+    inset: auto;
+    transform: none;
+    overflow: visible !important;
+    max-height: none;
+    height: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: none;
+  }
+
+  /*
+   * (A) NADA que no lleve a la ELEGIDA llega al papel.
+   *
+   * Dentro de todos los `:not()` hay SÓLO selectores simples (una pseudo-clase `:has()` o
+   * una clase): hay motores que soportan `:has()` y no soportan `:not()` con compuestos o
+   * complejos, y esto se escribe para el suelo, no para el techo.
+   *
+   * Si un motor no soportara `:has()`, ninguna regla engancha y el resultado es el de
+   * antes de esta feature: se imprime todo, recortado. Feo, pero nunca una página en
+   * blanco. Esa asimetría es la que hace aceptable la apuesta.
+   *
+   * A.1 — NIVEL 1, FUERA del diálogo: se poda todo lo que no lleva al diálogo.
+   *
+   *   ⚠️ El segundo `:not()` de la segunda rama NO es decorativo. `E:has(A B)` significa
+   *   «E tiene un descendiente que casa con `:scope A B`», así que `A` tiene que ser
+   *   descendiente de E: el popup ES el `[role="dialog"]`, no lo CONTIENE, y sin ese
+   *   segundo `:not()` el propio popup casa con `*:not(:has([role="dialog"] …))` y se
+   *   oculta el diálogo entero. Es decir: la página sale EN BLANCO, que es el fallo más
+   *   caro de esta ficha. Medido sobre el DOM real, no razonado
+   *   (`tests/components/CierreFacturaPapel.test.tsx`).
+   */
+  body:has([role="dialog"] .hoja-imprimible) > *:not(:has([role="dialog"] .hoja-imprimible)),
+  body:has([role="dialog"] .hoja-imprimible)
+    *:has([role="dialog"] .hoja-imprimible)
+    > *:not(:has([role="dialog"] .hoja-imprimible)):not(:has(.hoja-imprimible)),
+
+  /* A.2 — NIVEL 1, DENTRO del diálogo: se poda todo lo que no lleva a la hoja. */
+  body:has([role="dialog"] .hoja-imprimible)
+    :is([role="dialog"], [role="dialog"] *):has(.hoja-imprimible)
+    > *:not(:has(.hoja-imprimible)):not(.hoja-imprimible),
+
+  /* A.3 — NIVEL 2: sin candidata en un diálogo, cada candidata es un documento. */
+  body:not(:has([role="dialog"] .hoja-imprimible)):has(.hoja-imprimible)
+    > *:not(:has(.hoja-imprimible)):not(.hoja-imprimible),
+  body:not(:has([role="dialog"] .hoja-imprimible)):has(.hoja-imprimible)
+    *:has(.hoja-imprimible)
+    > *:not(:has(.hoja-imprimible)):not(.hoja-imprimible) {
+    display: none;
+  }
+
+  /*
+   * (C) La hoja deja de recortarse a sí misma: las DOS `<Card>` traen `overflow-hidden`
+   *     (redondea sus esquinas en pantalla), y la especificación de fragmentación trata a
+   *     un contenedor de scroll como una pieza INDIVISIBLE. Eso, y no otra cosa, es lo que
+   *     hoy corta la hoja larga en seco en vez de continuarla en la página siguiente.
+   */
+  .hoja-imprimible {
+    overflow: visible;
+    box-shadow: none;
+  }
+
+  /*
+   * (D) Una hoja por página cuando hay varias elegidas. Las compactas son hermanas en la
+   *     rejilla del admin y sólo llevan la marca las desplegadas, así que `~` cuenta
+   *     exactamente las candidatas: la primera abre el papel y cada siguiente empieza en
+   *     una página nueva.
+   */
+  .hoja-imprimible ~ .hoja-imprimible {
+    break-before: page;
+  }
+}
+
+/*
  * Feature 211 — LA FRANJA CLARA, y por qué `body:has()`.
  *
  * La clase del tema se estampa en un envoltorio DENTRO del `<body>`
