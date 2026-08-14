@@ -222,3 +222,159 @@ nota en la bitácora aunque no se toque el código.
 
 *Revisado el 2026-08-13. Ningún archivo de código ni de tests fue modificado en esta
 revisión; `git status` quedó limpio.*
+
+---
+---
+
+# SEGUNDA RONDA — 2026-08-13, sobre `b245545b`, `c2eab71c`, `0cbe06cd`
+
+La primera ronda queda arriba **sin tocar**. Esto es sólo lo que rechacé, lo que se movió
+a raíz del informe, y lo que encontré nuevo al mirar el plegado al spec.
+
+**VEREDICTO: APROBADO.** Los dos bloqueantes están cerrados —el de R15 **plantando yo
+mismo las dos variantes de la mutación y viéndolas rojas**— y los siete menores atendidos.
+Quedan tres residuos menores, ninguno bloqueante, listados al final.
+
+Los tres commits **no tocan una sola línea de `app/globals.css` ni del `.tsx`**: sólo
+tests, specs y bitácora. Comprobado con `git diff --stat 10cd55a7..HEAD`.
+
+## B1 — R15: cerrado, y esta vez lo vi morder yo
+
+El caso se reancla localizando la **regla** en el código —comentarios fuera, con el
+quitador compartido— y aprovechando que ese quitador conserva los saltos de línea para
+volver al crudo y leer el bloque de comentario **pegado encima**. Añade además una
+autocomprobación (`lineasCodigo.length === lineasCrudas.length`) que es justo la propiedad
+de la que depende.
+
+**Planté las dos variantes sobre el árbol real y restauré con `git checkout`:**
+
+- **13a** — `sed -i "221,238d" app/globals.css`: borra el párrafo «LO QUE ESTA REGLA NO
+  APAGA» (18 líneas; el conteo de dark-dos-puntos baja de 9 a 6). → **ROJA**, 1 fallo,
+  15 pasando; falla en el `toMatch` del variant.
+- **13b** — `sed -i "197,253d" app/globals.css`: borra el comentario **entero** de la
+  regla (57 líneas), que es el escenario con el que en la primera ronda demostré que el
+  caso era hueco. → **ROJA**, 1 fallo, con el mensaje «la regla de impresion no lleva un
+  comentario pegado encima» y el `expected } to be fin-de-comentario`.
+- **control** — árbol restaurado → **16 passed (16)**.
+
+Es el mensaje exacto que la coordinación reportó, y es el escenario que antes salía verde.
+El caso ya no puede aprobarse con prosa ajena.
+
+La fila 13 original quedó **tachada por falsa** en `progress/impl_217.md:486`, con el
+porqué escrito y con `indexOf("@media print") = 5635 → línea 134` frente a
+`indexOf("@media print {") = 12132 → línea 254` como evidencia. La bitácora llama al fallo
+por su nombre —feature 209, leer prosa como si fuera código— y reconoce que el rojo que
+creyó ver era otro caso fallando por otra razón. Eso es lo que hace revisable a un
+implementador.
+
+## B2 — `tasks.md`: 23 de 23, y la marca se corresponde con el árbol
+
+`grep -c` da **23 `- [x]` y 0 `- [ ]`**. Verifiqué que lo marcado esté de verdad hecho, no
+sólo marcado:
+
+- Las dos desviaciones están **declaradas en una nota al principio del archivo**, no
+  escondidas: T16 adelantada de la Tanda 4 a la Tanda 2 (T10 no podía estar verde antes) y
+  **T20 dada por hecha una vez sin estarlo** (la fila 13), con remisión a la bitácora.
+- T14 tiene su «Hecho» **actualizado** al mecanismo real (tinta no listada **y** superficie
+  no listada), no al que decía el plan.
+- T20 es hoy legítimamente `[x]`: de las nueve mutaciones nuevas de la tabla, **planté
+  siete yo mismo** y todas mordieron.
+- T22 se apoya en el `./init.sh` completo de la coordinación (1093/1093 archivos,
+  13.923/13.923 tests).
+
+## Las mutaciones nuevas, plantadas por mí
+
+Además de 13a y 13b, sobre el árbol real y restaurando después de cada una:
+
+| Mutación | Qué se puso rojo | Resultado |
+| --- | --- | --- |
+| mover el bloque `@media print` **al final del archivo** | «el bloque de impresion va ANTES de `.dark`…» (`expected 8732 to be less than 4134`) **y** R15 | **ROJA**, 2 fallos |
+| ↳ y en esa misma corrida, **las dos guardias de contraste siguieron VERDES** | — | **la defensa 1 (`quitarBloquesDeImpresion`) funciona sobre el archivo real, no sólo en laboratorio** |
+| `@page` al final del CSS | «no se cuela un flujo de impresion por el CSS: nada de `@page` (R14)» | **ROJA** |
+| relistar la factura como consumidora **sin escribir la ruta** | «la prosa de `.tema-claro` ya no lista la factura entre sus consumidores (R19)» | **ROJA** |
+| `p-5` → `p-6` en la hoja | «el resto de la hoja no se rediseña… (R5)» | **ROJA** |
+| estrenar una superficie (`bg-primary` en una fila) | el cierre por **utilidad** y el cierre por **fondo** | **ROJA**, 2 fallos |
+| **recombinar** dos declaradas (`text-warning-strong` sobre `bg-success/15`) | *(nada — es la grieta declarada)* | **verde**, 44/44 |
+
+La última no es un fallo: es la comprobación de que **la grieta declarada es exactamente la
+grieta real**, ni mayor ni menor de lo que el spec dice. Un límite declarado que resultara
+ser más grande que el declarado sería otro bloqueante; no lo es.
+
+Suite completa de guardias tras restaurar: **96 archivos / 1366 tests, verde**, y
+`git status` limpio.
+
+## Los menores de la primera ronda
+
+1. **Cerrado.** `Badge destructive` entra como **P26**. Lo remedí por mi cuenta: **5,30
+   claro** (`#b91c1c` sobre `#fee2e2`) y **5,20 oscuro** (`#f87171` sobre `danger` al 15 %
+   compuesto en la tarjeta). Coincide con la 210.
+2. **Cerrado por otra vía, y la vía es mejor que la que yo insinuaba.** Ver el plegado.
+3. **Cerrado, y comprobado en vivo.** Las dos defensas tienen ahora caso propio: la 1 sobre
+   un CSS de laboratorio que reproduce la trampa (sin la pasada, el último `--card` de la
+   mitad «oscuro» es `#ffffff`; con ella vuelve a `#10203a`), la 2 exigiendo el orden. Y la
+   corrida de arriba demuestra que no son teatro: con el bloque movido al final, la defensa
+   2 se pone roja **y** la 1 sostiene las mediciones.
+4. **Cerrado.** R4 se mide sobre los cuatro fondos (`card`, `muted`, `muted/40`,
+   `muted/50`), con el argumento monotónico escrito en el caso.
+5. **Cerrado, y de paso reforzado.** Busca la palabra «factura», no la ruta. Y el cambio de
+   `toBeLessThanOrEqual(1)` a `toBeGreaterThan(0)` **no relaja**: ahora borrar el párrafo
+   entero también es rojo, cosa que antes pasaba en verde.
+6. **Cerrado.** `@page` censado en el CSS (visto rojo).
+7. **Cerrado.** R5 estrena dueño: la foto congelada de **83** utilidades no cromáticas.
+
+## El plegado al spec — mirado con lupa
+
+Es honesto, y en un punto **mejora** lo que yo había pedido.
+
+- **`design.md §6.3`** cita **literalmente** el texto anterior dentro de un bloque de
+  corrección fechado, en vez de reescribirlo en silencio. Un spec que se corrige borrando
+  su error deja al siguiente sin saber que hubo uno.
+- **`requirements.md` R7** es el único requisito reescrito, y **no se rebajó más allá de la
+  grieta real**: pierde la promesa «un par nuevo no puede colarse» —que ninguna
+  verificación de esta ficha podía sostener— y **gana** una obligación que antes no tenía:
+  fallar si alguna de las hojas estrena una **superficie**. Conserva intactas la lista
+  exhaustiva, el fallo por utilidad sin par y el suelo por par. Comprobé que el mecanismo
+  implementado cubre exactamente los dos supuestos del requisito nuevo, y que la grieta que
+  declara es la que medí arriba.
+- **La decisión de no cerrar por par la comparto**, y no por deferencia: resolver el fondo
+  efectivo recorriendo el JSX —condicionales, `cn()`, props, `children` de otros archivos—
+  es la fábrica de respuestas plausibles y falsas que esta ficha existe para no repetir, y
+  un cierre por par que se equivoque **aprueba con un número**. El cierre por fondos, en
+  cambio, sí es total: los fondos se escriben como utilidad y son ellos los que crean pares.
+- **Arrastres:** `§6.4` suma la fila del cierre por fondos, `§6.7` parte la mutación en dos
+  (tinta y superficie), `tasks.md` corrige el «Hecho» de T14 y la fila R7 del mapa. No quedó
+  ningún otro requisito con la promesa vieja: lo comprobé por censo sobre `specs/217/` y
+  sobre la guardia.
+
+## Residuos menores de esta ronda (no bloquean)
+
+1. **menor — la grieta está declarada en la guardia dos veces, y una tercera la contradice.**
+   `tests/unit/guards/factura-contraste.guardia.test.ts:407-409`, el docstring de la
+   **sección** del inventario, sigue diciendo «si mañana alguien pinta un texto de la hoja
+   con una pareja que nadie listó, lo caza el cierre (una utilidad sin par = rojo)». Es la
+   frase corregida en las otras dos sedes y en el docstring del propio caso, 40 líneas más
+   abajo. Quien lee de arriba abajo se queda con la primera. Una frase, mismo archivo.
+2. **menor — un hex mal escrito en un comentario de la tabla de suelos.**
+   `tests/unit/guards/factura-contraste.guardia.test.ts:826`, `P26: … // #f87171/#2c2a3f`.
+   El fondo compuesto real es **`#31253c`** (lo remedí: `danger` al 15 % sobre `#10203a`).
+   Con el hex del comentario la razón daría **5,03**, no 5,20. El suelo y la aserción son
+   correctos —se calculan, no se leen del comentario—; lo que engaña es la anotación, en un
+   archivo donde el resto de las anotaciones sí sirven para volver a mirar a mano.
+3. **menor — R5 congela un CONJUNTO, y su título promete «intactos».** El caso caza que
+   aparezca o desaparezca una utilidad no cromática (visto rojo con `p-5` → `p-6`), pero no
+   caza **reubicarla**: cambiar un `text-sm` por un `text-base` en un sitio donde los dos ya
+   existen en otro deja el conjunto igual. Es la misma clase de límite que la guardia ya
+   declara para el cierre, y ahí se declaró bien; aquí el título dice «tamaños, pesos,
+   espaciados y bordes intactos» mientras el cuerpo dice «se congela el conjunto». Basta con
+   que el título no prometa más que el cuerpo.
+
+Los tres son de una línea cada uno y ninguno cambia lo que la verificación cubre.
+
+## Veredicto de la segunda ronda
+
+**APROBADO.** Bloqueantes: ninguno. La ficha puede pasar a `done` cuando el leader añada la
+entrada de `progress/history.md`.
+
+*Cerrada el 2026-08-13. Planté siete mutaciones sobre el árbol real y restauré con
+`git checkout` después de cada una; `git status` quedó limpio y la suite de guardias verde
+(96/96 archivos, 1366/1366 tests).*
