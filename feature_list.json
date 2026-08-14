@@ -2548,7 +2548,7 @@
       "id": 213,
       "name": "pago multiple por entrega (captura y presentacion)",
       "description": "Frontend. Adopta el desglose que crea la 212. (a) GestionarOrdenPanel: el selector unico de metodo pasa a un desglose de lineas metodo+monto cuya suma debe cuadrar contra el monto recibido, con el error a la vista antes de enviar. (b) Presentacion por gestion: CierreDiaModule.tsx:886, cierre-detalle-shared.tsx:898 y cierre-factura.tsx:959 hoy pintan METODO_LABEL[g.metodoPago] o un guion; pasan a mostrar el desglose. (c) Las dos descargas (cierre-dia-descarga-columnas.ts:101, cierre-gestiones-descarga-columnas.ts:115) concatenan los metodos en la celda escalar segun [D4].",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
