@@ -172,7 +172,16 @@ function reglaUnica(selector: string): Regla {
  */
 function indiceDelBloque(): number {
   const primero = impresion[0]!.selectores[0]!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return atReglaQueContiene(css, new RegExp(`^\\s*${primero}\\s*[,{]`, "m")).indice;
+  // `[^\S\n]*` y no `\s*`: `\s` cruza saltos de línea, así que el ancla podía empezar a casar
+  // varias líneas ANTES del bloque —fuera de su `@media print`— y devolver un índice plausible
+  // de otra at-rule. Aquí la sangría es sangría, no cualquier blanco.
+  const bloque = atReglaQueContiene(css, new RegExp(`^[^\\S\\n]*${primero}[^\\S\\n]*[,{]`, "m"));
+  expect(
+    bloque.prelude,
+    "el ancla del bloque de tokens de impresión enganchó otra at-rule. Un índice plausible de " +
+      "otro sitio es peor que no encontrarlo: los casos de orden compararían contra otra cosa.",
+  ).toMatch(/^@media\s+print\b/);
+  return bloque.indice;
 }
 
 describe("feature 224 — el instrumento: la especificidad de un selector", () => {
@@ -315,15 +324,30 @@ describe("feature 224 — EL CASO: el bloque GANA, y no por casualidad", () => {
    */
   it("y NO gana por orden: está antes que todo lo que pisa, y ésa es la razón de la especificidad", () => {
     const bloque = indiceDelBloque();
-    const oscuro = css.search(/^\.dark[,\s{]/m);
-    // El espejo de «sistema» se localiza por lo que CONTIENE, no por el primer
-    // `prefers-color-scheme` del archivo: el primero es la rama del `@custom-variant dark`, 500
-    // líneas más arriba, y anclar ahí dejaba este caso comparando contra otra cosa (medido).
-    const sistema = atReglaQueContiene(css, /^\s*\.tema-sistema\s*,/m).indice;
-    expect(oscuro, "no se encontró el selector `.dark` a principio de línea").toBeGreaterThan(-1);
-    expect(sistema, "no se encontró el espejo `prefers-color-scheme: dark`").toBeGreaterThan(-1);
-    expect(bloque).toBeLessThan(oscuro);
-    expect(bloque).toBeLessThan(sistema);
+
+    /*
+     * Se ancla en LA TINTA OSCURA, no en los selectores que la declaran. Es la lección de la 221
+     * y la 223 aplicada una vez más: un ancla que nombra un selector caduca en cuanto alguien lo
+     * escribe distinto, y devuelve un índice plausible de otro sitio en vez de no encontrar nada.
+     * `--foreground: #e6ecf8` sólo aparece dos veces en el CÓDIGO —`.dark` y su espejo de
+     * «sistema»— y son exactamente las dos declaraciones que este bloque tiene que vencer.
+     */
+    const declaracionesOscuras = [...css.matchAll(/--foreground:\s*#e6ecf8/g)].map((m) => m.index!);
+    expect(
+      declaracionesOscuras,
+      "el CÓDIGO dejó de declarar la tinta oscura dos veces (`.dark` y el espejo de «sistema»). " +
+        "Este censo mide contra ellas: si cambiaron, hay que releerlo en vez de darlo por bueno.",
+    ).toHaveLength(2);
+
+    for (const donde of declaracionesOscuras) {
+      expect(
+        bloque,
+        "el bloque de tokens de impresión quedó DESPUÉS de una declaración de la tinta oscura. " +
+          "Ganaría por orden, sí, pero envenena el lector de tokens de pantalla: sus 35 hexes " +
+          'claros pasan a ser los últimos de la mitad «oscuro» y `token("oscuro", …)` empieza a ' +
+          "devolverlos, con toda la verificación de tema oscuro midiendo el tema claro EN VERDE.",
+      ).toBeLessThan(donde);
+    }
   });
 });
 

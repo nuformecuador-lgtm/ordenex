@@ -308,7 +308,13 @@ describe("feature 223 — el bloque del flujo existe y vive donde debe (R24, R26
   const INVENTARIO_PRINT = [
     { ficha: "217 — el COLOR de la hoja del cierre", marca: ".papel-al-imprimir" },
     { ficha: "223 — el FLUJO de impresion de la hoja", marca: `.${CANDIDATA}` },
-    { ficha: "224 — los TOKENS claros del portal al imprimir", marca: "html .dark" },
+    // La marca de la 224 es `.dark` A SECAS, no su selector entero. Su bloque lleva `html`
+    // delante para GANAR la cascada, y hay otras formas de ganarla que tambien valen
+    // (`:root .dark`, la clase duplicada). Con el selector completo escrito aqui, cambiar de una
+    // a otra ponia este censo rojo por no encontrar el bloque — un rojo que no señala ningun
+    // defecto. Medido plantando esa variante inocua (`progress/impl_224.md`). Que el bloque GANE
+    // lo comprueba su propia guardia, que calcula la especificidad en vez de leer un literal.
+    { ficha: "224 — los TOKENS claros del portal al imprimir", marca: ".dark" },
   ] as const;
 
   it("cada `@media print` del archivo tiene dueño en el inventario, y todos van ANTES de `.dark`", () => {
