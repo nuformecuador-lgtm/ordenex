@@ -3,7 +3,14 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { componer, contraste, paleta, token } from "../../fixtures/contraste";
+import {
+  componer,
+  contraste,
+  paleta,
+  partirPorTema,
+  quitarBloquesDeImpresion,
+  token,
+} from "../../fixtures/contraste";
 import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 /**
@@ -148,6 +155,54 @@ describe("feature 217 — el instrumento de medida: una sola aritmética (R25, R
     ).toEqual([]);
   });
 
+  /**
+   * La PRIMERA de las dos defensas contra la trampa del lector, probada por su cuenta.
+   *
+   * Hoy, con el bloque de impresión colocado antes de `.dark`, `quitarBloquesDeImpresion` es un
+   * **no-op sobre el archivo real**: borrarlo entero no pondría nada rojo. Las dos defensas sólo
+   * se podían ver fallar JUNTAS, así que cada una se podía retirar sola en silencio. La segunda
+   * —que el bloque siga antes de `.dark`— tiene su caso en `tema-encendido.guardia.test.ts`;
+   * ésta tiene el suyo aquí, sobre un CSS de laboratorio que reproduce el escenario que se teme:
+   * el bloque de impresión AL FINAL del archivo, que es donde uno añade cosas.
+   */
+  it("`quitarBloquesDeImpresion` desactiva la trampa del lector aunque el bloque quede al final", () => {
+    const cssDeLaboratorio = [
+      ":root, .tema-claro {",
+      "  --foreground: #12233f;",
+      "  --card: #ffffff;",
+      "}",
+      ".dark, body:has(> .dark) {",
+      "  --foreground: #e6ecf8;",
+      "  --card: #10203a;",
+      "}",
+      "@media print {",
+      "  .papel-al-imprimir {",
+      "    --foreground: #12233f;",
+      "    --card: #ffffff;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+
+    // Sin la pasada: los hexes CLAROS del bloque de impresión caen en la mitad «oscuro» y ganan
+    // por ser los últimos. Esto es la trampa, reproducida.
+    const envenenado = partirPorTema(cssDeLaboratorio).oscuro;
+    expect(
+      [...envenenado.matchAll(/--card:\s*(#[0-9a-f]{6})/gi)].at(-1)?.[1],
+      "el CSS de laboratorio ya no reproduce la trampa: este caso dejó de probar nada",
+    ).toBe("#ffffff");
+
+    // Con la pasada: el bloque de impresión desaparece antes de partir, y el último `--card` de
+    // la mitad «oscuro» vuelve a ser el oscuro de verdad.
+    const limpio = partirPorTema(quitarBloquesDeImpresion(cssDeLaboratorio)).oscuro;
+    expect(
+      [...limpio.matchAll(/--card:\s*(#[0-9a-f]{6})/gi)].at(-1)?.[1],
+      "`quitarBloquesDeImpresion` dejó pasar el bloque de impresión: el lector de tokens mediría " +
+        "los pares CLAROS creyendo que son los oscuros, y en verde",
+    ).toBe("#10203a");
+    expect(limpio).not.toMatch(/papel-al-imprimir/);
+  });
+
   it("ninguna verificación de `tests/` se apoya en el detector de `.claude/skills`", () => {
     const apoyadas = FUENTES.filter((relativa) => MEDIDOR_PROHIBIDO.test(codigoDe(relativa)));
 
@@ -215,6 +270,53 @@ describe("feature 217 — censo de fuente de la hoja de la factura", () => {
     expect(hoja, "apareció un rótulo «Imprimir»: el flujo de impresión es otra ficha").not.toMatch(
       /\bImprimir\b/,
     );
+  });
+
+  /**
+   * R5 — «el resto de la hoja no se rediseña». Esta feature cambia **de qué depende el color**,
+   * no cómo se ve la factura: ni un tamaño, ni un peso, ni un espaciado, ni un borde, ni la
+   * jerarquía visual. Hasta aquí eso se sostenía leyendo el diff, y un diff no falla solo.
+   *
+   * Se congela el conjunto de utilidades NO cromáticas de la hoja: tipografía, pesos, espaciados,
+   * anchos y estilos de borde, radios, interlineado. El color no aparece en esta lista, así que
+   * la 217 entera es invisible para ella — que es justo lo que la hace un dueño honesto de R5.
+   *
+   * Es una FOTO, igual que los suelos del inventario, y se mantiene igual: si un día hay que
+   * cambiar el layout de verdad, esta lista se actualiza a mano y ese rojo es el momento de
+   * revisión que R5 quiere provocar. Lo que no puede pasar es que se mueva sin que nadie lo vea.
+   */
+  it("el resto de la hoja no se rediseña: tamaños, pesos, espaciados y bordes intactos (R5)", () => {
+    const FAMILIAS =
+      /^(?:text-(?:xs|sm|base|lg|xl|2xl|left|right|center|\[)|font-(?:medium|semibold|bold|normal|mono|sans)|(?:p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|gap|gap-x|gap-y|space-x|space-y)-|border(?:-[trblxy])?(?:-\d|-\[|$)|border-(?:dashed|dotted|solid)$|rounded|tracking-|leading-|uppercase$|tabular-nums$|divide-y$)/;
+
+    const palabras = hoja.match(/[A-Za-z0-9_:./#[\]%()_-]+/g) ?? [];
+    const halladas = [
+      ...new Set(palabras.filter((p) => FAMILIAS.test(p.replace(/^(?:[a-z]+:)*/, "")))),
+    ].sort();
+
+    // Foto tomada el 2026-08-13, con la 217 ya aplicada.
+    expect(halladas).toEqual([
+      "border", "border-b", "border-b-2", "border-dashed", "border-dotted", "border-t",
+      "border-t-[3px]", "divide-y",
+      "font-medium", "font-mono", "font-semibold",
+      "gap-0", "gap-0.5", "gap-1", "gap-1.5", "gap-2", "gap-2.5", "gap-3", "gap-3.5", "gap-4",
+      "gap-5", "gap-x-1", "gap-x-3", "gap-x-3.5", "gap-x-5", "gap-y-0.5", "gap-y-1", "gap-y-1.5",
+      "gap-y-2",
+      "mb-1", "mb-1.5", "mb-2",
+      "md:gap-2", "md:gap-2.5", "md:gap-4", "md:gap-5", "md:px-5", "md:text-[11px]",
+      "md:text-[22px]",
+      "mt-3", "mt-auto",
+      "p-5", "pb-3", "pb-4", "pl-12", "pt-2", "pt-2.5",
+      "px-1.5", "px-2", "px-3", "px-4", "px-5",
+      "py-0", "py-0.5", "py-1", "py-1.5", "py-2", "py-2.5", "py-3", "py-3.5", "py-4",
+      "rounded-[10px]", "rounded-full", "rounded-md", "rounded-xl",
+      "tabular-nums",
+      "text-2xl", "text-[0.6875rem]", "text-[10px]", "text-[11px]", "text-[12.5px]",
+      "text-[13px]", "text-[20px]", "text-base", "text-left", "text-lg", "text-right", "text-sm",
+      "text-xs",
+      "tracking-[0.12em]", "tracking-wide", "tracking-wider",
+      "uppercase",
+    ]);
   });
 
   it("la hoja sigue siendo presentación pura: ni servidor, ni datos, ni contratos nuevos (R22)", () => {
@@ -310,6 +412,8 @@ describe("feature 217 — censo de fuente de la hoja de la factura", () => {
 /** El fondo real sobre el que se lee una tinta. */
 type Fondo =
   | { clase: "opaco"; token: string }
+  /** Un token de PALETA (`--color-danger-soft`): un hex fijo, sin variante por tema. */
+  | { clase: "paleta"; nombre: string }
   | {
       clase: "capa";
       color: { de: "token" | "paleta"; nombre: string };
@@ -592,6 +696,29 @@ const INVENTARIO: Par[] = [
     anclas: ":1031 dentro de :950",
   },
   {
+    id: "P26",
+    papel: "`Badge` variant `destructive` — el estado «Rechazado» y «Vencido» del comprobante",
+    tinta: "danger-strong",
+    // La 210 movió esta variante al par de `danger`: `-soft` opaco en claro, `danger/15` compuesto
+    // sobre la tarjeta en oscuro (en oscuro no hay `-soft`: es un hex claro fijo sin variante).
+    fondo: { clase: "paleta", nombre: "danger-soft" },
+    fondoOscuro: {
+      clase: "capa",
+      color: { de: "paleta", nombre: "danger" },
+      alpha: 0.15,
+      sobre: CARD,
+    },
+    umbral: "ajeno",
+    motivo:
+      "primitiva compartida, y este par SÍ tiene dueño: es el que la feature 210 arregló y dejó " +
+      "con umbral y suelo en `contraste-tokens.guardia.test.ts`. Figura aquí porque el " +
+      "inventario de la 217 es CERRADO y R16 no admite ausencias: un par que no está en la " +
+      "lista y un par que nadie miró se leen igual. Entra medido y con suelo, remitiendo a su " +
+      "guardia; el umbral lo exige allí, no aquí, para no duplicar el criterio en dos sitios.",
+    utilidades: [],
+    anclas: "`EstadoCierreBadge` en las DOS hojas (:516 y :1104), estados `rechazado` y `vencido`",
+  },
+  {
     id: "P25",
     papel: "`Badge` variant `secondary` — el estado «Solicitado» y el rótulo de rechazo por plazo",
     tinta: "secondary-foreground",
@@ -664,6 +791,7 @@ const INVENTARIO: Par[] = [
 function hexDeFondo(tema: "claro" | "oscuro", par: Par): string {
   const fondo = tema === "oscuro" && par.fondoOscuro ? par.fondoOscuro : par.fondo;
   if (fondo.clase === "opaco") return token(tema, fondo.token);
+  if (fondo.clase === "paleta") return paleta(fondo.nombre);
   const color =
     fondo.color.de === "token" ? token(tema, fondo.color.nombre) : paleta(fondo.color.nombre);
   return componer(color, token(tema, fondo.sobre), fondo.alpha);
@@ -695,6 +823,7 @@ const SUELO: Record<string, { claro: number; oscuro: number }> = {
   P23: { claro: 14.79, oscuro: 12.08 }, // #12233f/#f7f8fc · #e6ecf8/#172a4a
   P24: { claro: 7.25, oscuro: 6.34 }, //  #4a5368/#f7f8fc  · #9fadc9/#172a4a
   P25: { claro: 13.86, oscuro: 12.22 }, // #17233b/#eef1f8 · #e6ecf8/#16294a
+  P26: { claro: 5.3, oscuro: 5.2 }, //   #b91c1c/#fee2e2  · #f87171/#2c2a3f  ← coincide con la 210
 };
 
 /**
@@ -783,13 +912,31 @@ describe("feature 217 — el inventario CERRADO de pares de la hoja (R6, R7, R16
    * exige es que ninguno quede con MENOS contraste del que tenía. Se comprueba, no se supone.
    */
   it("R4: en tema claro el tono nuevo no tiene menos contraste que el navy que sustituye", () => {
-    const antes = contraste(paleta("navy"), token("claro", CARD));
-    const ahora = contraste(token("claro", "foreground"), token("claro", CARD));
-    expect(
-      ahora,
-      `el navy fijo daba ${antes.toFixed(2)} sobre el papel y \`--foreground\` da ` +
-        `${ahora.toFixed(2)}: el cambio de tono de la 217 no puede costar contraste`,
-    ).toBeGreaterThanOrEqual(antes);
+    /**
+     * Se comprueba sobre LOS CUATRO fondos en los que viven los dieciséis sitios migrados, no
+     * sólo sobre el papel. El argumento de que bastaría uno es correcto y monotónico —`#12233f`
+     * tiene MENOS luminancia que `#0b2545`, así que gana contraste contra cualquier fondo más
+     * claro que los dos, y los cuatro lo son— pero un argumento que hay que reconstruir de
+     * memoria no es una verificación, y quien lea esto mañana no sabría si el fondo único fue
+     * decisión o descuido. Medirlos los cuatro cuesta cuatro líneas.
+     */
+    const fondos: { nombre: string; hex: string }[] = [
+      { nombre: "card", hex: token("claro", CARD) },
+      { nombre: "muted (opaco)", hex: token("claro", "muted") },
+      { nombre: "muted/40 sobre card", hex: componer(token("claro", "muted"), token("claro", CARD), 0.4) },
+      { nombre: "muted/50 sobre card", hex: componer(token("claro", "muted"), token("claro", CARD), 0.5) },
+    ];
+
+    for (const fondo of fondos) {
+      const antes = contraste(paleta("navy"), fondo.hex);
+      const ahora = contraste(token("claro", "foreground"), fondo.hex);
+      expect(
+        ahora,
+        `sobre ${fondo.nombre} (${fondo.hex}) el navy fijo daba ${antes.toFixed(2)} y ` +
+          `\`--foreground\` da ${ahora.toFixed(2)}: el cambio de tono de la 217 no puede costar ` +
+          "contraste en ninguno de los sitios migrados",
+      ).toBeGreaterThanOrEqual(antes);
+    }
   });
 
   it("los exentos están en la lista, MARCADOS, y con su motivo escrito", () => {
@@ -812,6 +959,21 @@ describe("feature 217 — el inventario CERRADO de pares de la hoja (R6, R7, R16
    * Lo NO-color se declara por lista y por forma (`text-[13px]` es un tamaño, no un color), y
    * cualquier cosa que no esté en ninguna de las dos listas se considera color y tiene que tener
    * su par. Un `text-emerald-500` nuevo cae en rojo aunque nadie lo haya previsto.
+   *
+   * ⚠️ HASTA DÓNDE LLEGA ESTE CIERRE, dicho al tamaño real y no al que gustaría.
+   * Cierra por **UTILIDAD**, no por **PAR**. Caza toda tinta nueva y todo fondo nuevo, que es de
+   * donde salen los pares que nadie midió. Lo que **NO** caza es una RECOMBINACIÓN de dos
+   * utilidades que ya están en la lista: mover un `text-muted-foreground` —declarado— dentro de
+   * un `bg-success/15` —declarado— produce un par que nadie midió y este caso lo deja pasar.
+   *
+   * No se cierra por par a propósito, y el motivo es el de toda la ficha: resolver el fondo
+   * efectivo de cada texto exige recorrer el árbol JSX y decidir de qué ancestro hereda cada
+   * nodo. Eso es precisamente la clase de análisis que produce respuestas plausibles y falsas
+   * —el fallo que esta jornada ya pagó tres veces—, y un cierre por par que se equivoque al
+   * resolver el fondo es PEOR que este, porque aprueba con un número.
+   *
+   * La cobertura que queda descubierta es la recombinación, y su red es humana: el `design.md`
+   * §6.3 pide releer el inventario cuando se muevan piezas de sitio.
    */
   it("CIERRE: toda utilidad de color de la hoja mapea a un par del inventario (R7)", () => {
     const NO_SON_COLOR = new Set([
@@ -852,8 +1014,33 @@ describe("feature 217 — el inventario CERRADO de pares de la hoja (R6, R7, R16
       "estas utilidades de color de la hoja no caen en ningún par del inventario. O se añade el " +
         "par con su medición (y su suelo), o se marca exento CON SU MOTIVO. Lo que no se puede es " +
         "pintarlas y no medirlas: eso es exactamente lo que el inventario cerrado existe para " +
-        "impedir.",
+        "impedir. (Ojo: esto cierra por UTILIDAD; recombinar dos ya declaradas sobre un fondo " +
+        "nuevo no lo caza — hay que releer el inventario a mano al mover piezas de sitio.)",
     ).toEqual([]);
+  });
+
+  /**
+   * La mitad del cierre que sí se puede automatizar del todo: los FONDOS. Son pocos, se escriben
+   * como utilidad, y **son ellos los que crean pares** — una tinta nueva sobre un fondo conocido
+   * la caza el caso de arriba, y un fondo nuevo bajo una tinta conocida, éste. Lo único que se
+   * escapa a los dos es recombinar tinta y fondo ya declarados, que es lo que el comentario de
+   * arriba dice sin adornos.
+   */
+  it("CIERRE: la hoja no estrena superficies — los fondos son exactamente los medidos (R7)", () => {
+    const fondos = [...new Set((hoja.match(/(?:[a-z]+:)?bg-[a-z][a-z0-9-]*(?:\/\d+)?/g) ?? []))].sort();
+    expect(fondos, "el extractor de fondos no encontró nada: está midiendo una cadena vacía")
+      .not.toEqual([]);
+
+    // Los cinco fondos de las dos hojas, más la franja de marca (exenta, sin texto encima).
+    expect(fondos).toEqual([
+      "bg-brand",
+      "bg-muted",
+      "bg-muted/40",
+      "bg-muted/50",
+      "bg-success/15",
+      "bg-warning/15",
+      "hover:bg-muted/50",
+    ]);
   });
 
   it("ningún par del inventario quedó obsoleto: sus utilidades siguen en la hoja (R7)", () => {

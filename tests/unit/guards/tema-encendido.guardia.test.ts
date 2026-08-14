@@ -230,17 +230,49 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
    * siguen disparando dentro de la hoja. Se acepta —el resultado impreso es el que la hoja ya
    * mostraba antes de la 217— pero quien lea la regla tiene que encontrar ahi su limite. Un
    * limite que solo vive en un spec es un limite que el siguiente no va a leer.
+   *
+   * ⚠️ LA PRIMERA VERSION DE ESTE CASO NO PODIA PONERSE ROJA, y conviene que quede escrito.
+   * Anclaba en `crudo.indexOf("@media print")`, y ese literal aparece ANTES en la PROSA del
+   * comentario de `.tema-claro` (:134), 120 lineas por encima de la regla real. La ventana que
+   * inspeccionaba no era la del bloque de impresion sino la de otro comentario, y el `` `dark:` ``
+   * que lo satisfacia era prosa de la feature 211. Se podia borrar entera la declaracion que R15
+   * exige y el caso seguia verde.
+   *
+   * Es EXACTAMENTE el fallo que la feature 209 vino a cerrar: leer prosa como si fuera codigo. La
+   * localizacion va ahora sobre el CODIGO —comentarios fuera, con el quitador compartido— y se usa
+   * que ese quitador CONSERVA LOS SALTOS DE LINEA: el numero de linea de la regla en el codigo es
+   * el mismo que en el archivo crudo, asi que se puede volver al crudo a leer su comentario.
    */
   it("junto a la regla de impresion queda escrito su limite: no apaga el variant `dark:` (R15)", () => {
     const crudo = readFileSync(path.join(__dirname, "../../..", GLOBALS), "utf8");
-    const donde = crudo.indexOf("@media print");
-    expect(donde, "no se encontro el bloque `@media print`").toBeGreaterThan(0);
+    const lineasCrudas = crudo.split("\n");
+    const lineasCodigo = css.split("\n"); // mismo recuento de lineas que `crudo` (feature 209)
+    expect(lineasCodigo.length).toBe(lineasCrudas.length);
 
-    const comentarioDeArriba = crudo.slice(Math.max(0, donde - 3000), donde);
+    const regla = lineasCodigo.findIndex((l) => /^\s*@media\b[^{}]*\bprint\b[^{}]*\{/.test(l));
+    expect(regla, "no se encontro la REGLA `@media print` en el codigo de " + GLOBALS).toBeGreaterThan(
+      -1,
+    );
+
+    // El comentario ATADO a la regla: el bloque `/* … */` que la precede inmediatamente. Si no hay
+    // ninguno, o si hay codigo en medio, es que la declaracion no esta donde R15 la pide.
+    let i = regla - 1;
+    while (i >= 0 && lineasCrudas[i].trim() === "") i -= 1;
     expect(
-      comentarioDeArriba,
-      "el comentario que precede a la regla de impresion no nombra el variant `dark:`. Ese es su " +
-        "limite conocido y va declarado ahi, no solo en `specs/`.",
+      lineasCrudas[i]?.trim(),
+      "la regla de impresion no lleva un comentario pegado encima. R15 pide que su limite este " +
+        "declarado JUNTO a ella, no en `specs/`: quien lee la regla tiene que encontrarlo ahi.",
+    ).toBe("*/");
+
+    const fin = i;
+    while (i >= 0 && !lineasCrudas[i].trimStart().startsWith("/*")) i -= 1;
+    expect(i, "el comentario de la regla de impresion no abre en ningun sitio").toBeGreaterThan(-1);
+
+    const comentarioDeLaRegla = lineasCrudas.slice(i, fin + 1).join("\n");
+    expect(
+      comentarioDeLaRegla,
+      "el comentario de la regla de impresion no nombra el variant `dark:`. Ese es su limite " +
+        "conocido —no lo apaga— y va declarado ahi con su razon.",
     ).toMatch(/`dark:`/);
   });
 
@@ -256,11 +288,15 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
     const declaracion = crudo.indexOf(":root,\n.tema-claro");
     expect(declaracion, "no se encontro la declaracion de `.tema-claro`").toBeGreaterThan(0);
 
-    const menciones = [...crudo.slice(0, declaracion).matchAll(/cierre-factura/g)];
+    // Se busca la PALABRA, no la ruta del archivo. Contar solo `cierre-factura` dejaba pasar un
+    // «2. Las dos hojas de la factura del cierre», que es exactamente la afirmacion que R19
+    // prohibe: la lista de consumidores no se escribe con rutas, se escribe en prosa.
+    const menciones = [...crudo.slice(0, declaracion).matchAll(/factura/gi)];
     expect(
       menciones.length,
-      "el comentario de `.tema-claro` nombra la factura mas de una vez",
-    ).toBeLessThanOrEqual(1);
+      "el comentario de `.tema-claro` no deberia nombrar la factura fuera del parrafo que explica " +
+        "que dejo de usar la clase",
+    ).toBeGreaterThan(0);
 
     for (const m of menciones) {
       const alrededor = crudo.slice(Math.max(0, m.index - 500), m.index + 500);
@@ -278,6 +314,39 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
       "`print-color-adjust: exact` obligaria a imprimir la superficie… oscura, que es justo el " +
         "gasto de toner que la decision humana descarta",
     ).not.toMatch(/print-color-adjust/);
+  });
+
+  it("no se cuela un flujo de impresion por el CSS: nada de `@page` (R14)", () => {
+    // La otra mitad de R14. El censo del `.tsx` caza el boton y `window.print`, pero el formato
+    // de pagina se añade en CSS y por ahi no pasaba nadie. La 217 garantiza el COLOR del papel;
+    // margenes, tamaño y paginacion son otra ficha, y esto lo mantiene asi.
+    expect(
+      css,
+      "aparecio una regla `@page`: el formato de impresion es otra ficha, no esta",
+    ).not.toMatch(/@page\b/);
+  });
+
+  /**
+   * La colocacion del bloque de impresion ANTES de `.dark` no es cosmetica: es la SEGUNDA de las
+   * dos defensas contra la trampa del lector de tokens (la primera es `quitarBloquesDeImpresion`,
+   * en el fixture). Si el bloque cae detras del `.dark` Y del espejo `prefers-color-scheme`, sus
+   * hexes CLAROS pasan a ser los ultimos de la mitad «oscuro» y ganan: toda la verificacion de
+   * tema oscuro pasaria a medir los pares claros, en verde.
+   *
+   * Hasta ahora las dos defensas solo se podian ver fallar JUNTAS, asi que cada una se podia
+   * retirar sola sin que el gate dijese nada. Esto clava el segundo tirante.
+   */
+  it("el bloque de impresion va ANTES de `.dark`, o el lector de tokens mide el tema equivocado", () => {
+    const impresion = css.search(/^\s*@media\b[^{}]*\bprint\b[^{}]*\{/m);
+    const oscuro = css.search(/^\.dark[,\s{]/m);
+    expect(impresion, "no se encontro la regla `@media print`").toBeGreaterThan(-1);
+    expect(oscuro, "no se encontro el selector `.dark` a principio de linea").toBeGreaterThan(-1);
+    expect(
+      impresion,
+      "el bloque `@media print` quedo DESPUES de `.dark`. Sus hexes son los del tema CLARO: si " +
+        "caen en esa mitad del archivo, `token(\"oscuro\", …)` empieza a devolverlos y todas las " +
+        "comprobaciones de tema oscuro pasan a medir el tema claro EN VERDE.",
+    ).toBeLessThan(oscuro);
   });
 });
 
