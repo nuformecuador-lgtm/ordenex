@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 import { componer, contraste, paleta, token, tokenAlImprimir } from "../../fixtures/contraste";
 // Feature 223 (R24/R32): el localizador POR CONTENIDO vive en el fixture compartido, para que las
 // dos guardias que localizan el bloque de la 217 no tengan dos ideas distintas de dónde está.
-import { atReglaQueContiene } from "../../fixtures/css-reglas";
-import { codigoCssSinComentarios } from "../../fixtures/sin-comentarios";
+import { atReglaQueContiene, reglasDe } from "../../fixtures/css-reglas";
+import { codigoCssSinComentarios, quitarComentarios } from "../../fixtures/sin-comentarios";
 
 /**
  * Feature 221 — GUARDIA de «al imprimir, el variant `dark:` no dispara».
@@ -403,6 +403,92 @@ describe("feature 221 — en papel, la tinta de PALETA FIJA mejora (y el CSS lo 
         "que la regla compra. Es la única fila que la 221 baja, y una prosa que dice lo contrario " +
         "manda a quien la lea a decidir sobre un dato falso.",
     ).toContain("15.70 → 11.39");
+  });
+
+  /**
+   * «F4 ES LA ÚNICA QUE PIERDE» — hecho CENSO en vez de afirmación.
+   *
+   * El CSS dice, junto a la regla, que ésta es la única fila que la 221 baja en papel. Eso es una
+   * afirmación de CENSO, y una afirmación de censo sin censo se pudre exactamente igual que se
+   * pudrió F4: basta que alguien escriba mañana un segundo `dark:text-<token>` sobre una base de
+   * paleta fija para que la frase sea falsa y **nada se ponga rojo**.
+   *
+   * ── QUÉ SE CENSA, Y POR QUÉ ESO Y NO MÁS
+   * En papel manda la TINTA (los navegadores no imprimen fondos), y la tinta de una utilidad sale
+   * de `text-*`. El riesgo es la rama `dark:` que apunta a un TOKEN: ésa la mueve la 224, mientras
+   * que la rama base, si es de paleta fija, no la mueve nadie — y ahí es donde el par puede
+   * bajar. Así que se censan los `dark:text-<x>` cuyo `<x>` es un token con variante de tema.
+   *
+   * Es una SOBREAPROXIMACIÓN a propósito: no se intenta clasificar la rama base. Hacerlo exigiría
+   * parsear la cadena de clases —`cn()`, condicionales, variantes responsive— y ahí es donde un
+   * censo empieza a producir falsos positivos y a enseñar a la gente a silenciarlo. Si aparece un
+   * `dark:text-<token>` nuevo, esto se pone rojo y le pide a un humano que mire su base. Falla
+   * hacia el lado ruidoso, que es el correcto.
+   *
+   * Lo que este censo NO cubre, dicho: `dark:bg-*` y `dark:border-*` con token (hoy
+   * `dark:bg-input` ×11, `dark:bg-foreground/10` ×2, `dark:border-input` ×1). Son superficie y
+   * línea, no tinta: en papel no deciden legibilidad porque el fondo no se imprime.
+   */
+  const RAIZ_REPO = path.join(__dirname, "../../..");
+  const CARPETAS_DE_UI = ["app", "components", "providers", "hooks"];
+
+  /** Los `.ts`/`.tsx` de las carpetas de interfaz, con su ruta relativa a la raíz. */
+  function fuentesDeUi(dir: string, salida: string[] = []): string[] {
+    for (const entrada of readdirSync(path.join(RAIZ_REPO, dir), { withFileTypes: true })) {
+      const relativa = `${dir}/${entrada.name}`;
+      if (entrada.isDirectory()) fuentesDeUi(relativa, salida);
+      else if (/\.tsx?$/.test(entrada.name)) salida.push(relativa);
+    }
+    return salida;
+  }
+
+  it("F4 es la ÚNICA fila mixta del árbol: censo de `dark:text-<token>`, no promesa", () => {
+    // Los tokens CON variante de tema son los que `.dark` redeclara. Un `dark:text-brand-light`
+    // no cuenta: `--color-brand-light` es paleta fija y no lo mueve ni la 221 ni la 224.
+    const reglaOscura = reglasDe(css).find((r) => r.selectores.includes(".dark"));
+    expect(reglaOscura, "no se encontró la regla `.dark` para saber qué tokens tienen variante")
+      .toBeDefined();
+    const conVariante = new Set(
+      Object.keys(reglaOscura!.declaraciones).map((clave) => clave.slice(2)),
+    );
+
+    const fuentes = CARPETAS_DE_UI.flatMap((carpeta) => fuentesDeUi(carpeta));
+    const todas: { utilidad: string; archivo: string }[] = [];
+    for (const relativa of fuentes) {
+      const codigo = quitarComentarios(readFileSync(path.join(RAIZ_REPO, relativa), "utf8"));
+      for (const m of codigo.matchAll(/dark:text-([a-z0-9-]+)/g)) {
+        todas.push({ utilidad: m[0]!, archivo: relativa });
+      }
+    }
+
+    // Autocomprobación del censo: si el recorrido o el patrón dejaran de encontrar nada, el
+    // `toEqual` de abajo pasaría con la lista vacía y esto sería una promesa otra vez.
+    expect(fuentes.length, "el recorrido de las carpetas de interfaz no leyó nada").toBeGreaterThan(
+      100,
+    );
+    expect(
+      todas.length,
+      "el censo no encontró NINGUNA utilidad `dark:text-*` en el árbol. O desaparecieron todas, o " +
+        "el patrón dejó de saber qué busca: en los dos casos estaba a punto de dar verde sin mirar.",
+    ).toBeGreaterThan(3);
+    expect(conVariante.size, "el juego de tokens con variante salió vacío").toBeGreaterThan(20);
+    expect(
+      conVariante.has("foreground") && !conVariante.has("brand-light"),
+      "la clasificación token/paleta dejó de distinguir: `--foreground` tiene variante de tema y " +
+        "`--color-brand-light` no. Si esto se rompe, el censo de abajo mide cualquier cosa.",
+    ).toBe(true);
+
+    const mixtas = todas.filter((u) => conVariante.has(u.utilidad.replace("dark:text-", "")));
+    expect(
+      mixtas,
+      "cambió el inventario de utilidades cuya rama `dark:` es un TOKEN. El CSS afirma junto a la " +
+        "regla que `RankingPodio` es la ÚNICA fila que la 221 baja en papel: con otra en el árbol " +
+        "esa frase pasa a ser falsa. Mirá si la rama BASE de la nueva es de paleta fija —si lo " +
+        "es, es otra fila mixta y hay que medirla y declararla; si es otro token, no pierde nada " +
+        "y basta con añadirla aquí con su motivo.",
+    ).toEqual([
+      { utilidad: "dark:text-foreground", archivo: "app/(app)/ranking/_components/RankingPodio.tsx" },
+    ]);
   });
 });
 

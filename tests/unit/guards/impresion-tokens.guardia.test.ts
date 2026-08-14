@@ -347,10 +347,19 @@ describe("feature 224 — EL CASO: el bloque GANA, y no por casualidad", () => {
    * roja sólo DE REBOTE, por anclajes `^\.dark` de otras guardias. Anclado en las reglas reales,
    * el empate lo canta este mismo cálculo y con su mensaje.
    *
+   * ⚠️ Y POR ESO LLEVA ANTI-VACUIDAD, que es la deuda que ese mismo reanclaje trajo. Cuando la
+   * lista estaba escrita a mano NO podía quedar vacía; derivada, sí puede: basta que el ancla
+   * (`--foreground: #e6ecf8`) deje de casar —alguien retoca el hex de la tinta oscura— para que
+   * `selectoresOscurosReales` sea `[]`, el bucle no itere y ESTE CASO, el que da nombre a la
+   * ficha, pase EN VERDE sin haber comparado nada. Medido plantando esa mutación: los otros tres
+   * casos del archivo se ponían rojos y éste pasaba. Tres rojos alrededor no son excusa: el patrón
+   * es exactamente el que este repo persigue.
+   *
    * MUERDE, comprobado plantando las mutaciones (ver `progress/impl_224.md`):
    *  · quitar el `html ` de los cuatro selectores → rojo aquí (empate, no gana).
    *  · quitar el `html ` de UNO solo → rojo, con el nombre del camino que dejó de ganar.
    *  · subir la especificidad de la regla de PANTALLA → rojo aquí, por el mismo empate.
+   *  · mover el hex de la tinta oscura → rojo aquí, por la anti-vacuidad.
    */
   it("cada selector de impresión le gana en especificidad al que redeclara los tokens oscuros", () => {
     const orden = indiceDelBloque() > css.search(/^\.dark[,\s{]/m);
@@ -360,6 +369,16 @@ describe("feature 224 — EL CASO: el bloque GANA, y no por casualidad", () => {
         "pero envenena el lector de tokens de pantalla: hay dos guardias más que lo prohíben. Si " +
         "de verdad se movió a propósito, hay que releer las tres a la vez.",
     ).toBe(false);
+
+    // ANTI-VACUIDAD. Va DENTRO del caso a propósito, y no delegada al de arriba: un caso que
+    // depende de que otro se ponga rojo para no mentir sigue mintiendo cuando lo corren solo.
+    expect(
+      selectoresOscurosReales,
+      "el censo de reglas de pantalla se quedó sin selectores, así que el bucle de abajo no " +
+        "compararía NADA y este caso —el que da nombre a la ficha— pasaría por VACUIDAD. Lo más " +
+        "probable es que el ancla `--foreground: #e6ecf8` dejara de casar: si la tinta oscura " +
+        "cambió de hex, hay que actualizar el ancla, no dar el verde por bueno.",
+    ).toHaveLength(SELECTORES_OSCUROS.length);
 
     for (const oscuro of selectoresOscurosReales) {
       const gemelo = gemeloDeImpresion(oscuro);
@@ -533,6 +552,55 @@ describe("feature 224 — en papel sin fondos, la tinta pasa a ser la clara", ()
 });
 
 /**
+ * EL ROL de cada uno de los 35 tokens, escrito a mano porque NO está en el CSS y no se puede
+ * derivar de él: que `--card` sea una superficie y `--card-foreground` una tinta es un hecho de
+ * diseño, no una propiedad del hex.
+ *
+ * Hace falta para no mentir en la dirección contraria. Un barrido ciego «todo token que baje sobre
+ * papel blanco» marca CATORCE de los 35, y ocho de ellos son SUPERFICIES: `--card` pasa de 16.28 a
+ * 1.00 porque la tarjeta deja de ser azul oscuro y pasa a ser blanca, que es EXACTAMENTE lo que
+ * esta ficha compra. Medir un fondo contra el papel no es una cifra de legibilidad; llamar a eso
+ * «pérdida» sería tan falso como esconder las que sí lo son.
+ */
+const ROL: Record<string, "tinta" | "superficie" | "linea" | "grafico"> = {
+  "--background": "superficie",
+  "--foreground": "tinta",
+  "--card": "superficie",
+  "--card-foreground": "tinta",
+  "--popover": "superficie",
+  "--popover-foreground": "tinta",
+  "--primary": "tinta",
+  "--primary-foreground": "tinta",
+  "--secondary": "superficie",
+  "--secondary-foreground": "tinta",
+  "--muted": "superficie",
+  "--muted-foreground": "tinta",
+  "--accent": "superficie",
+  "--accent-foreground": "tinta",
+  "--destructive": "tinta",
+  "--border": "linea",
+  "--input": "linea",
+  "--ring": "linea",
+  "--chart-1": "grafico",
+  "--chart-2": "grafico",
+  "--chart-3": "grafico",
+  "--chart-4": "grafico",
+  "--chart-5": "grafico",
+  "--sidebar": "superficie",
+  "--sidebar-foreground": "tinta",
+  "--sidebar-primary": "tinta",
+  "--sidebar-primary-foreground": "tinta",
+  "--sidebar-accent": "superficie",
+  "--sidebar-accent-foreground": "tinta",
+  "--sidebar-border": "linea",
+  "--sidebar-ring": "linea",
+  "--success-strong": "tinta",
+  "--warning-strong": "tinta",
+  "--danger-strong": "tinta",
+  "--info-strong": "tinta",
+};
+
+/**
  * LO QUE ESTA FICHA **EMPEORA**, con caso ejecutable y no como nota al pie.
  *
  * Es el mismo estándar que se le aplicó al límite de arriba, y por honestidad tiene que aplicarse
@@ -541,6 +609,12 @@ describe("feature 224 — en papel sin fondos, la tinta pasa a ser la clara", ()
  * blanco— y pasa a `#ffffff`: blanco sobre blanco, desaparece. Son 15 usos (`Badge` default,
  * `Button` default, `Pagination`, `RankingPodio`).
  *
+ * ⚠️ ESTA LISTA SE DERIVA, NO SE ELIGE. La primera versión la escribí a mano con cuatro filas y
+ * **le faltaban dos** (`--sidebar-foreground` y `--sidebar-border`): una lista escrita a mano que
+ * dice ser «lo que empeora» es una afirmación de censo sin censo, que es el mismo defecto que esta
+ * ficha ya pagó con F4. Ahora el caso barre los 35 tokens, descarta los roles que no son
+ * legibilidad, y **exige que lo que baje sea exactamente esta lista**.
+ *
  * ── POR QUÉ NO SE ARREGLA AQUÍ, y por qué el caso mide las DOS columnas
  * Los mismos pares miden EXACTAMENTE lo mismo imprimiendo desde «claro», hoy y desde antes de esta
  * ficha. O sea: no es una regresión CONTRA el tema claro, es el tema claro. Darles un valor propio
@@ -548,17 +622,55 @@ describe("feature 224 — en papel sin fondos, la tinta pasa a ser la clara", ()
  * guardia exige— y dejaría el papel de «oscuro» mejor que el de «claro». El arreglo de raíz es el
  * patrón de la 208 llevado al papel y toca `Badge`/`Button`/`Pagination`: ficha propia.
  *
- * La segunda columna (`claro`) no es adorno: es la que convierte «esto empeora» en «esto iguala al
- * tema claro». Si algún día dejaran de coincidir, una de las dos afirmaciones sería falsa.
+ * La segunda columna (`claro`) no es adorno, aunque hoy esté GARANTIZADA POR CONSTRUCCIÓN: el caso
+ * del espejo compara los 35 hexes contra `:root, .tema-claro`, así que «iguala al tema claro» vale
+ * para todos y no sólo para éstos. Se repite aquí, fila a fila, porque es el argumento del que
+ * cuelga la decisión de NO arreglarlo: si alguna vez dejara de valer, esto lo dice en la fila
+ * concreta en vez de en un `toEqual` de 35 claves.
  */
 const SE_PIERDE_EN_PAPEL = [
   { id: "P1", que: "`Badge`/`Button` default y `Pagination` (`--primary-foreground`)", cual: "primary-foreground", antes: 18.33, despues: 1 },
   { id: "P2", que: "el ítem activo de la barra lateral (`--sidebar-primary-foreground`)", cual: "sidebar-primary-foreground", antes: 18.21, despues: 1 },
   { id: "P3", que: "los bordes (`--border`)", cual: "border", antes: 12.3, despues: 1.23 },
   { id: "P4", que: "el borde de los campos (`--input`)", cual: "input", antes: 10.29, despues: 1.23 },
+  { id: "P5", que: "el texto de la barra lateral (`--sidebar-foreground`)", cual: "sidebar-foreground", antes: 2.26, despues: 2.03 },
+  { id: "P6", que: "el borde de la barra lateral (`--sidebar-border`)", cual: "sidebar-border", antes: 12.3, despues: 11.39 },
 ] as const;
 
 describe("feature 224 — LO QUE EMPEORA: la tinta que se apoyaba en un fondo que no se imprime", () => {
+  /**
+   * Autocomprobación del ROL: tiene que cubrir los 35 tokens del bloque, ni uno más ni uno menos.
+   * Sin esto, un token nuevo se quedaría sin rol, el barrido de abajo lo saltaría y la lista
+   * volvería a estar incompleta EN VERDE — que es justo lo que pasó la primera vez.
+   */
+  it("el mapa de roles cubre EXACTAMENTE los tokens del bloque de impresión", () => {
+    expect(
+      Object.keys(ROL).sort(),
+      "el mapa de ROL y el bloque de impresión dejaron de cubrir el mismo juego de tokens. Un " +
+        "token sin rol no entra en el barrido de «lo que empeora»: hay que decidir si es tinta, " +
+        "superficie, línea o gráfico, y eso no se puede derivar del hex.",
+    ).toEqual(Object.keys(impresion[0]!.declaraciones).sort());
+  });
+
+  /**
+   * EL CENSO. Lo que baja y es legibilidad (tinta o línea) tiene que ser exactamente la lista
+   * declarada. Ni una de menos —esconder una pérdida— ni una de más sin su fila.
+   */
+  it("los tokens de legibilidad que BAJAN en papel son exactamente los declarados", () => {
+    const bajan = Object.keys(impresion[0]!.declaraciones)
+      .filter((clave) => ROL[clave] === "tinta" || ROL[clave] === "linea")
+      .map((clave) => clave.slice(2))
+      .filter((cual) => medir(tokenAlImprimir(cual), PAPEL) < medir(token("oscuro", cual), PAPEL));
+
+    expect(
+      bajan.sort(),
+      "la lista de lo que EMPEORA dejó de coincidir con lo que de verdad baja. Si sobra una, se " +
+        "está declarando una pérdida que ya no existe; si falta una, la lista dice ser el censo de " +
+        "lo que empeora y esconde algo. La primera versión de esta lista se escribió a mano y le " +
+        "faltaban dos: por eso ahora se deriva.",
+    ).toEqual([...SE_PIERDE_EN_PAPEL].map((f) => f.cual).sort());
+  });
+
   it.each(SE_PIERDE_EN_PAPEL.map((f) => [f.id, f] as const))(
     "%s se pierde sobre papel blanco, y es EXACTAMENTE lo que ya hacía el tema claro",
     (_id, fila) => {

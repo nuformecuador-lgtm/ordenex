@@ -120,24 +120,46 @@ describe("feature 211 — el CSS que enciende el tema", () => {
    *
    * La autocomprobacion es la mitad importante: sin ella, una expresion regular que dejara de
    * encontrar citas reportaria CERO rotas y pasaria en verde sin haber mirado nada.
+   *
+   * ── ALCANCE, y sus dos bordes, dichos porque el censo se leeria como mas amplio de lo que es
+   *
+   * 1. NO son solo las de `tests/`. La prosa manda tambien a componentes (`components/ui/badge.tsx`),
+   *    al proveedor del tema (`providers/TemaProvider.tsx`) y al layout: si una guardia caduca en
+   *    silencio, un componente renombrado tambien. Por eso el censo cubre las carpetas de codigo.
+   * 2. NO cubre las rutas escritas RELATIVAS a `app/(app)/` —«`cierres-admin/_components/…`»—,
+   *    que la prosa de la 223 usa. Verificarlas exige conocer esa base implicita; queda fuera a
+   *    proposito y dicho, en vez de dar a entender que estan cubiertas.
+   *
+   * El `(?<![\w./-])` NO es cosmetico: sin el, `_components/CierresAdminModule.tsx` casa por su
+   * mitad derecha como si fuera `components/CierresAdminModule.tsx`, y el censo denuncia TRES
+   * citas rotas que no existen. Medido antes de escribir el caso.
    */
-  it("cada ruta de `tests/` que cita la prosa de `globals.css` existe en el disco (224)", () => {
+  it("cada ruta del repo que cita la prosa de `globals.css` existe en el disco (224)", () => {
     const crudo = readFileSync(path.join(__dirname, "../../..", GLOBALS), "utf8");
-    const citas = [...new Set([...crudo.matchAll(/tests\/[\w./-]+\.tsx?/g)].map((m) => m[0]!))];
+    const RUTA =
+      /(?<![\w./-])(?:tests|app|components|lib|providers|hooks|db|scripts)\/[\w.()/-]*?\.(?:tsx?|css|sql)/g;
+    const citas = [...new Set([...crudo.matchAll(RUTA)].map((m) => m[0]!))];
 
     expect(
       citas.length,
-      "el censo no encontro citas a `tests/` en la prosa de globals.css. O la prosa dejo de " +
-        "remitir a sus guardias, o este censo dejo de saber que busca: en los dos casos estaba " +
-        "dando verde sin mirar.",
-    ).toBeGreaterThan(3);
+      "el censo no encontro citas a archivos del repo en la prosa de globals.css. O la prosa dejo " +
+        "de remitir a sus guardias y a sus componentes, o este censo dejo de saber que busca: en " +
+        "los dos casos estaba dando verde sin mirar.",
+    ).toBeGreaterThan(8);
+    // Y que mira MAS ALLA de `tests/`: si el patron volviera a estar anclado ahi, estas dos
+    // familias desaparecerian del censo sin que nada lo dijera.
+    expect(
+      citas.filter((r) => !r.startsWith("tests/")).length,
+      "el censo volvio a mirar solo `tests/`. La prosa cita ademas componentes y el proveedor del " +
+        "tema, y esos tambien se renombran.",
+    ).toBeGreaterThan(2);
 
     const rotas = citas.filter((ruta) => !existsSync(path.join(__dirname, "../../..", ruta)));
     expect(
       rotas,
-      "la prosa de globals.css cita archivos de `tests/` que no existen. Quien lea la regla va a " +
-        "buscar ahi la comprobacion que la sostiene, no la va a encontrar, y va a concluir que no " +
-        "existe. Si la guardia se movio, actualiza la cita; si desaparecio, di quien la cubre.",
+      "la prosa de globals.css cita archivos que no existen. Quien lea la regla va a buscar ahi la " +
+        "comprobacion —o el componente— que la sostiene, no lo va a encontrar, y va a concluir que " +
+        "no existe. Si se movio, actualiza la cita; si desaparecio, di quien lo cubre.",
     ).toEqual([]);
   });
 });
