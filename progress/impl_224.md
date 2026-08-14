@@ -361,3 +361,213 @@ El gate completo (`./init.sh` sin flags) lo corre el leader antes del PR.
    hace nada»). Lo cierto es lo contrario: detrás gana, y lo que lo prohíbe es el lector de
    tokens, no la cascada. Queda anotado por si alguien vuelve al `feature_list.json` — el
    bookkeeping no se tocó, es del leader.
+
+---
+---
+
+# RONDA DE REVISIÓN — 1 bloqueante y 5 menores
+
+El reviewer dio el MECANISMO por bueno y lo verificó por su cuenta. Lo que falló fue la
+**exhaustividad del barrido de §5**: quedó una tercera guardia con la misma ceguera al papel, y
+un límite medido sin declarar. Lo que sigue es lo que se cambió, con sus números recalculados.
+
+**Todos los números de esta sección se REMIDIERON con la aritmética canónica; ninguno se copió
+del informe del reviewer.** El instrumento se controló antes de usarlo: negro/blanco = **21.00**,
+blanco/blanco = **1.00**, y la razón es simétrica (`contraste(a,b) === contraste(b,a)` = 21.00).
+Sin ese control, un medidor roto rellena la tabla entera con números plausibles.
+
+---
+
+## R1 · BLOQUEANTE B1 — la TERCERA guardia ciega al papel
+
+**Dónde estaba:** `impresion-sin-dark.guardia.test.ts`, fila **F4**, dentro de la lista
+`TINTA_FIJA` («la tinta es de PALETA FIJA»).
+
+Dos defectos encajados, y por eso sobrevivió a la ronda anterior:
+
+1. **Clasificación falsa.** `RankingPodio` 3.º es `text-asfalto-7 dark:text-foreground`
+   (`RankingPodio.tsx:54`). La rama base ES paleta fija; la rama `dark:` es un **TOKEN**. La
+   fila no pertenecía a esa familia, y precisamente por eso la 224 la mueve.
+2. **Medida con el lector ciego.** Su `tintaAntes` era `token("oscuro","foreground")`, que lee el
+   CSS con los `@media print` ya borrados. Da 1.19 pase lo que pase dentro de `@media print`.
+
+Y el cierre del círculo: el caso exigía `crudo.toContain("1.19 → 11.39")`, así que **la frase
+falsa del CSS no se podía corregir sin poner la guardia roja**. Una afirmación falsa atornillada
+por un test verde.
+
+### Recalculado (aritmética canónica, control 21.00 verificado)
+
+| F4 «antes» | hex | vs papel blanco |
+| --- | --- | --- |
+| lo que medía la guardia — `token("oscuro","foreground")` | `#e6ecf8` | **1.19** |
+| lo que de verdad sale hoy — `tokenAlImprimir("foreground")` | `#12233f` | **15.70** |
+| «después» — `paleta("asfalto-7")` | `#1f3a63` | **11.39** |
+
+Confirmado además en el navegador, sobre la hoja real compilada (Chromium 149,
+`emulateMedia({media:"print"})`): la sonda `text-asfalto-7 dark:text-foreground` computa
+`rgb(31,58,99)` = `#1f3a63` al imprimir desde `.dark` — el variant está apagado, gana la rama
+base. Y en `screen` sigue computando `rgb(230,236,248)`, o sea que la pantalla no se toca.
+
+### QUÉ SE AFIRMA AHORA en esa fila
+
+> **Con la 224 dentro, la 221 no mejora F4 en papel: la BAJA, 15.70 → 11.39.**
+> Si el variant `dark:` siguiera disparando imprimiría `--foreground` ya CLARO (15.70); como no
+> dispara, imprime `asfalto-7` (11.39).
+>
+> **No es un defecto de legibilidad**: las dos pasan AAA (≥7.0) con margen y el texto se lee
+> igual de bien. Lo que deja de ser cierto es la FRASE «esta regla mejora el papel», para esta
+> fila y sólo para ésta.
+>
+> **Y no se revierte la 221 por ella**: apagar el variant al imprimir es una decisión de toda la
+> app, medida en cuatro familias, y ésta es la única que pierde — 4.31 puntos sobre un suelo de
+> 11.39. Revertirla cambiaría el papel de las quince rutas para no ganar nada legible.
+
+### Dónde vive ahora
+
+- `impresion-sin-dark.guardia.test.ts` — F4 sale de `TINTA_FIJA` y pasa a una **FAMILIA 3**
+  propia, con las tres medidas y el `toContain("15.70 → 11.39")`. Y la cabecera de `TINTA_FIJA`
+  dice ahora, con su motivo, que exige paleta fija **por las dos ramas**.
+- `app/globals.css:45-56` — el bullet se parte en dos: el de paleta fija pierde a `RankingPodio`,
+  y hay un bullet nuevo «Y HAY UNA FILA MIXTA, EN LA QUE ESTA REGLA NO COMPRA: LA BAJA».
+
+---
+
+## R2 · m1 — el límite MEDIDO que no se había declarado, y es el que más cae
+
+Recalculado, imprimiendo desde tema oscuro, sobre papel blanco:
+
+| token | antes | después | mismo par imprimiendo desde «claro» |
+| --- | --- | --- | --- |
+| `--primary-foreground` (`Badge`/`Button` default, `Pagination`, 15 usos) | 18.33 | **1.00** | 1.00 |
+| `--sidebar-primary-foreground` | 18.21 | **1.00** | 1.00 |
+| `--border` | 12.30 | **1.23** | 1.23 |
+| `--input` (**no estaba en el informe; salió al barrer los 16 tokens**) | 10.29 | **1.23** | 1.23 |
+| `--sidebar-foreground` | 2.26 | 2.03 | 2.03 |
+| `--sidebar-border` | 12.30 | 11.39 | 11.39 |
+
+Confirmado en el navegador: la sonda `bg-primary text-primary-foreground` computa al imprimir
+desde `.dark` una tinta `rgb(255,255,255)` — y el fondo naranja que la sostiene es justo lo que
+la impresora **no** pone. Blanco sobre blanco.
+
+**Por qué se declara en vez de arreglarse aquí, y por qué el caso mide DOS columnas:** la última
+columna es idéntica a la de «después». Es decir, **no es una regresión contra el tema claro: es
+el tema claro**. Lo legible que era en oscuro lo era por ACCIDENTE (una tinta clara pensada para
+un fondo de color, sobre un papel que no lo lleva). Darle un valor propio en el bloque rompería
+el espejo exacto —lo que la ficha compra y lo que su guardia exige— y dejaría el papel de
+«oscuro» mejor que el de «claro», que es incoherente. El arreglo de raíz es el patrón de la 208
+llevado al papel y toca `Badge`/`Button`/`Pagination`: **ficha propia**.
+
+Queda con **caso ejecutable** (`impresion-tokens.guardia.test.ts`, cuatro filas `P1`-`P4`, cada
+una con su columna «claro») y declarado junto al bloque (`globals.css:645-664`), con el mismo
+estándar que ya se le aplicaba a `--destructive`/`--primary`.
+
+---
+
+## R3 · Los menores
+
+| # | qué | cerrado |
+| --- | --- | --- |
+| **m2** | `.find(...)!` reventaba con `TypeError` antes de imprimir el diagnóstico | **sí** — `expect(gemelo).toBeDefined()` con su mensaje; comprobado con `Rm2`, que ahora falla con `AssertionError: el bloque de impresión no tiene gemelo para \`body:has(> .dark)\`` |
+| **m3** | el «gana» se comparaba contra una lista escrita a mano | **sí** — se ancla en `reglasOscurasDePantalla`, localizadas por lo que DECLARAN (`--foreground: #e6ecf8`). La lista a mano se queda, pero sólo como INVENTARIO de caminos, en un caso propio |
+| **m4** | `tokenAlImprimir` reparseaba el CSS en cada llamada | **sí** — memoización **perezosa** (ver abajo) |
+| **m5** | la prosa citaba `tema-sistema-espeja-dark.guardia.test.ts`, inexistente | **sí** — corregida, y con censo nuevo |
+
+**m4, y por qué perezosa y no a nivel de módulo:** el archivo calcula `cssDePantalla` y `TEMAS`
+eagerly, pero esos no lanzan por un defecto de UNA regla. `tokenAlImprimir` sí lanza si el bloque
+de impresión no está, y a nivel de módulo esa excepción caería en el `import` de **todos** los
+consumidores del fixture —incluidos `contraste-tokens` y `factura-contraste`, que no miden papel—
+convirtiendo un defecto de la regla de impresión en un rojo de guardias que no hablan de ella.
+Perezoso, el fallo llega a quien lo provoca y con su mensaje. Se aprovechó para relajar el patrón
+del selector de `(html\s+)?\.dark` a `\.dark`: era la misma rigidez que la variante inocua I2
+destapó en el inventario la ronda anterior, viva también aquí.
+
+**m5, y la guardia que lo impide de raíz:** la cita se corrigió a `tema-encendido.guardia.test.ts`
+(el caso «sistema toma EXACTAMENTE los mismos tokens que oscuro»). Y como **ninguna guardia
+censaba las citas dentro del CSS** —por eso pudo caducar— se añadió una:
+`tema-encendido.guardia.test.ts`, caso «cada ruta de `tests/` que cita la prosa de `globals.css`
+existe en el disco», con su autocomprobación (exige encontrar más de 3 citas, para que un regex
+roto no reporte cero rotas en verde).
+
+---
+
+## R4 · LAS MUTACIONES DE ESTA RONDA
+
+Mismo arnés: ABORTA si el texto no cambia, `git diff --stat` real, `vitest run guard` **entero**,
+log completo a disco, y revertido comprobado byte a byte.
+
+### Las letales — las nueve muerden
+
+| # | mutación | archivo | resultado |
+| --- | --- | --- | --- |
+| **RB1a** | borrar del CSS el bullet de la fila MIXTA | `globals.css` | **ROJA** — `toContain("15.70 → 11.39")` |
+| **RB1b** | volver a medir el «antes» de F4 con el lector CIEGO | la guardia | **ROJA** — `expected 1.19 to be 15.7` |
+| **Rm1a** | borrar del CSS «18.33 → 1.00» | `globals.css` | **ROJA** |
+| **Rm1b** | «arreglar» `--primary-foreground` con un valor propio | `globals.css` | **ROJA** — 2 casos: el espejo y `P1` |
+| **Rm2** | quitar un selector del bloque | `globals.css` | **ROJA** con `AssertionError` (antes: `TypeError`) |
+| **Rm3b** | re-oscurecer el papel con una regla NUEVA que le gana al bloque | `globals.css` | **ROJA** — 4 casos, incluido el cálculo propio |
+| **Rm5a** | volver a citar una guardia que no existe | `globals.css` | **ROJA** |
+| **X1 / X2 / X4** | re-corridas de M1, M2 y M4 de la ronda anterior | `globals.css` | **ROJAS** — el reanclaje de m3 no aflojó nada |
+
+La de **Rm3b** es la que cierra m3, y su mensaje sale del cálculo de esta guardia, no de rebote:
+
+```
+AssertionError: `html .dark` (0-1-1) NO le gana a `html .dark` (0-1-1). Un `@media` NO suma
+especificidad: con un empate manda el ORDEN, y este bloque vive ANTES a propósito, así que
+perdería. […]
+```
+
+### Las inocuas — las cinco sobreviven
+
+| # | variante | resultado |
+| --- | --- | --- |
+| **RB1i** | reformular la frase del bullet de F4 conservando sus números | **VERDE** ✓ |
+| **Rm1i** | reformular el porqué de m1 sin tocar ningún número | **VERDE** ✓ |
+| **Rm3i** | reordenar los dos selectores de la regla de pantalla (misma semántica) | **VERDE** ✓ |
+| **Rm5i** | citar otra ruta de `tests/` que sí existe | **VERDE** ✓ |
+| **XI2** | re-corrida de I2 (`:root ` en vez de `html `) | **VERDE** ✓ |
+
+### La mutación que NO muerde donde debería, y va dicha
+
+**Rm3 — subir la especificidad de la regla de PANTALLA en su sitio** (`\n.dark,` → `\nhtml .dark,`).
+Sale **ROJA**, pero **de rebote y no por el cálculo de esta guardia**: `partirPorTema`
+(`tests/fixtures/contraste.ts`) exige un `.dark` a principio de línea y lanza, así que **cuatro
+archivos de guardia mueren en el `import`** —incluido el de la 224— antes de que nada mida nada.
+La salida real: `Tests 5 failed | 1389 passed (1394)`, con 1.516 → 1.394 tests porque cuatro
+ficheros ni se cargan.
+
+No se «arregla»: el mensaje de `partirPorTema` es explícito («el parser de esta guardia caducó y
+hay que revisarlo a mano») y nadie mergea eso. Pero **no es el rojo que uno querría**, y la razón
+está declarada aquí y en el comentario del caso. Lo que sí se consiguió es que la misma intención
+—devolver el papel a oscuro por el lado de la pantalla— tenga un camino que esta guardia caza
+directamente y con su mensaje: **Rm3b**. Hacer que el caso *in situ* también lo cazara exigiría
+que `impresion-tokens` dejara de depender de `contraste.ts`, y eso mueve un fixture compartido
+por seis guardias para ganar un mensaje mejor en un escenario que ya falla ruidosamente: no
+compensa, y se deja declarado en vez de forzarlo.
+
+---
+
+## R5 · EL GATE, tras la revisión
+
+```
+✓ typecheck paso · ✓ lint paso (65 warnings preexistentes, 0 en lo tocado)
+  test:cambiados   Test Files   6 passed (6)     ·  Tests    195 passed (195)
+  test:guardias    Test Files 100 passed (100)   ·  Tests   1516 passed (1516)
+== init OK ==   (EXIT=0)
+```
+
+1.509 → **1.516** casos de guardia (+7: la FAMILIA 3 de F4, el inventario de caminos, las cuatro
+filas de lo que se pierde, su declaración en prosa y el censo de citas).
+
+---
+
+## R6 · LO QUE SE AÑADE A «LO QUE QUEDA ABIERTO»
+
+6. **`--primary-foreground` y `--sidebar-primary-foreground` se pierden en papel (1.00).** Tinta
+   que se apoya en un fondo que el navegador no imprime — el patrón de la 208 llevado al papel.
+   No se arregla en este bloque sin romper el espejo con el tema claro; el arreglo toca `Badge`,
+   `Button` y `Pagination`. **Ficha propia recomendada**, `frontend`, y afecta también a quien
+   imprime desde tema claro (o sea: no lo introdujo esta ficha, lo hizo visible).
+7. **`--border` 12.30 → 1.23 y `--input` 10.29 → 1.23**: los bordes casi desaparecen del papel.
+   Mismo caso, misma ficha, menor gravedad (son líneas, no texto).
+8. **La mutación Rm3 no la caza esta guardia con su propio mensaje** (ver R4). Declarado, con la
+   razón y con el coste de cerrarlo.
