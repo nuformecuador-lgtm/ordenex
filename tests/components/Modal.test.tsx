@@ -132,7 +132,12 @@ describe("Modal — contenido y acciones (R5, R6, R7, R8, R8b, R9, R10)", () => 
     renderModal({ confirmVariant: "destructive" });
     await screen.findByRole("dialog");
     const btn = confirmBtn();
-    expect(btn).toHaveClass("text-destructive");
+    // Feature 222: la variante dejó de colgarse de `--destructive` —el mismo color como tinta y
+    // como fondo, 3.29 en claro y 4.43 en oscuro— y usa el par de `danger`, igual que el `Badge`
+    // desde la 210. Lo que este caso comprueba sigue siendo lo mismo: que el modal PROPAGA la
+    // variante destructiva y no la por defecto. El umbral de ese par lo vigila
+    // `tests/unit/guards/contraste-tokens.guardia.test.ts`, no este archivo.
+    expect(btn).toHaveClass("text-danger-strong");
     expect(btn).not.toHaveClass("bg-primary");
   });
 

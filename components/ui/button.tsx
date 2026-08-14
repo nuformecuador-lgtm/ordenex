@@ -20,8 +20,44 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+        // Feature 222 — el par de este botón NO puede salir de `--destructive`, y aquí está el
+        // porqué con los números medidos (`tests/fixtures/contraste.ts`, aritmética validada
+        // contra razones publicadas de WCAG; guardia en `contraste-tokens.guardia.test.ts`).
+        //
+        // Pintaba `text-destructive` sobre `bg-destructive/10`: el MISMO color como texto y como
+        // fondo a un 10 %. Medido sobre la tarjeta — 3.29 en claro y 4.43 en oscuro, cuando AA
+        // para texto normal pide 4.5. Bajo umbral en los DOS temas, y con el cursor encima
+        // todavía peor, porque el fondo se hunde hacia la propia tinta: 2.90 y 3.68.
+        //
+        // Se sigue el precedente de la feature 210, que resolvió ESTE MISMO par para el `Badge`
+        // (`badge.tsx`): `--destructive` no tiene un `-strong` —a diferencia de las semánticas de
+        // al lado— así que no había arreglo por token, y la variante pasa al par de `danger`, que
+        // sí lo tiene. No se inventa un token nuevo ni se toca `--destructive`, del que dependen
+        // `Alert` y los `aria-invalid` de media app (los de la clase base, aquí arriba).
+        //
+        // ── EL HOVER ES OPACO A PROPÓSITO, y no un tinte más hondo
+        // Una capa `hover:bg-danger/20` mide 4.99 sobre la tarjeta pero 4.44 sobre `secondary` y
+        // 4.44 sobre el `muted` oscuro: un fondo con alfa vale lo que valga la superficie que
+        // tenga debajo, y el botón no sabe dónde lo montan. `--danger-strong` opaco NO depende de
+        // ella: 6.47 en claro y 5.89 en oscuro, en cualquier sitio. `text-card` acompaña al vuelco
+        // porque gira con el tema igual que el fondo (blanco sobre rojo oscuro en claro; azul
+        // oscuro sobre rojo claro en oscuro), así que un solo par de clases sirve para los dos.
+        //
+        // `dark:hover:bg-danger-strong` repite al `hover:` de arriba por especificidad, no por
+        // gusto: `dark:bg-danger/15` empata con `hover:bg-danger-strong` (dos clases cada una) y
+        // el desempate sería el orden del CSS compilado. Escrito así, gana siempre el hover.
+        //
+        // El borde y el anillo de foco SIGUEN en `--destructive`: son indicadores no textuales
+        // (WCAG 1.4.11), no caen bajo el 1.4.3 que esta ficha viene a cumplir, y son los mismos
+        // que la clase base usa para `aria-invalid`. Cambiarlos sería otra decisión, sin medición
+        // que la respalde en esta ficha.
+        //
+        // DEUDA VIVA, la misma que dejó dicha la 210 y que esta ficha NO cierra: `destructive` y
+        // `danger` quedan como dos nombres del mismo aspecto (en claro `--destructive` y
+        // `--color-danger` son el mismo hex; en oscuro `--destructive` y `--danger-strong` lo
+        // son). Unificarlos es limpieza de paleta, no contraste.
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+          "bg-danger-soft text-danger-strong hover:bg-danger-strong hover:text-card focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-danger/15 dark:hover:bg-danger-strong dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

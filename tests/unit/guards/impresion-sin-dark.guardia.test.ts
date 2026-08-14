@@ -312,18 +312,27 @@ describe("feature 221 — en papel, la tinta de PALETA FIJA mejora (y el CSS lo 
  *
  * COMPROBACIÓN CRUZADA, y no es adorno: los tres números de «después» son, a la centésima, los
  * suelos `claro` que dejó otra feature con otra medición en
- * `factura-contraste.guardia.test.ts` (P22 3.29 · P23 14.79 · P26 5.30). Que coincidan es la forma
+ * `factura-contraste.guardia.test.ts` (P22 5.30 · P23 14.79 · P26 5.30). Que coincidan es la forma
  * ejecutable de decir «el papel es ahora el tema claro».
+ *
+ * P22 y P26 dan hoy el MISMO número, y no es una errata: desde la feature 222 el `Button` y el
+ * `Badge` destructivos pintan el mismo par de `danger`. Dos filas para dos componentes que ahora
+ * comparten par; el día que uno de los dos cambie, sólo se moverá su fila.
  */
 const EN_LA_FACTURA = [
   {
+    // Feature 222 — esta fila SE REESCRIBIÓ, no se borró. Medía las clases viejas de la variante
+    // (`bg-destructive/10` / `dark:bg-destructive/20`, 2.90 → 3.29) y su aritmética es de tokens:
+    // habría seguido en VERDE describiendo un componente que ya no existe, que es la forma más
+    // silenciosa de mentir de una guardia. Hoy la variante usa el par de `danger`, y lo que esta
+    // ficha compra sigue siendo lo mismo: al imprimir dentro de la hoja, manda la rama base.
     id: "P22",
-    que: "`Button` variant `destructive` (bg-destructive/10 / dark:bg-destructive/20)",
-    tinta: () => token("claro", "destructive"),
-    fondoAntes: () => componer(token("claro", "destructive"), token("claro", "card"), 0.2),
-    fondoDespues: () => componer(token("claro", "destructive"), token("claro", "card"), 0.1),
-    antes: 2.9,
-    despues: 3.29,
+    que: "`Button` variant `destructive` (bg-danger-soft / dark:bg-danger/15)",
+    tinta: () => token("claro", "danger-strong"),
+    fondoAntes: () => componer(paleta("danger"), token("claro", "card"), 0.15),
+    fondoDespues: () => paleta("danger-soft"),
+    antes: 5.32,
+    despues: 5.3,
   },
   {
     id: "P23",

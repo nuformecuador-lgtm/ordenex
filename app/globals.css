@@ -44,8 +44,9 @@
    *    `Toast` success 2.13 → 6.99, `RankingPodio` 1.19 → 11.39.
    *  · Dentro de `.papel-al-imprimir`, donde los tokens YA son claros, esto COMPLETA la 217: lo
    *    impreso pasa a ser EXACTAMENTE el tema claro, y deja de depender del tema de pantalla.
-   *    `Button` destructive 2.90 → 3.29, `Button` outline 14.78 → 14.79, `Badge` destructive
-   *    5.32 → 5.30.
+   *    `Button` destructive 5.32 → 5.30, `Button` outline 14.78 → 14.79, `Badge` destructive
+   *    5.32 → 5.30. (El destructivo decía 2.90 → 3.29 hasta la feature 222, con la variante
+   *    colgada de `--destructive`; hoy usa el par de `danger`, el mismo que el `Badge`.)
    *
    * Y el precio, dicho y no escondido: si el usuario marca «gráficos de fondo» —viene DESMARCADO
    * en los tres navegadores—, los cuatro `Badge` semánticos pasan a imprimir su fondo `-soft`
@@ -259,24 +260,23 @@
  * ACOTADA A LAS HOJAS: no toca `.dark`, ni `.tema-sistema`, ni `@custom-variant dark`.
  * El resto del portal imprime hoy como imprimía ayer.
  *
- * ── LO QUE ESTA REGLA **NO** APAGA, Y POR QUÉ SE ACEPTA
- * No apaga el variant `dark:`. Se resuelve contra el ANCESTRO (`&:is(.dark *)`), no
- * contra los tokens, así que al imprimir DESDE tema oscuro las utilidades `dark:` de
- * `Badge` y `Button` siguen disparando dentro de la hoja y esta regla no las alcanza.
+ * ── LO QUE ESTA REGLA **NO** APAGA, Y QUIÉN LO APAGÓ DESPUÉS
+ * Esta regla no apaga el variant `dark:`: se resuelve contra el ANCESTRO
+ * (`&:is(.dark *)`), no contra los tokens, así que no lo alcanza. Hasta la feature 221,
+ * eso significaba que al imprimir DESDE tema oscuro las utilidades `dark:` de `Badge` y
+ * `Button` seguían disparando dentro de la hoja. Se aceptaba porque no era una regresión:
+ * «tokens claros + `dark:` disparando» es EXACTAMENTE lo que la hoja mostraba en pantalla
+ * antes de la 217, cuando llevaba `tema-claro`, así que lo impreso salía igual a lo que se
+ * veía entonces, no peor. El «arreglo de raíz» que este comentario mandaba a FICHA PROPIA
+ * —envolver las dos ramas de `@custom-variant dark` en `@media not print`, apagando el
+ * variant al imprimir en toda la app— es la feature 221, y YA ENTRÓ: está arriba, con su
+ * medición y su guardia. Hoy, dentro de esta hoja, lo impreso es exactamente el tema
+ * claro.
  *
- * No es una regresión, y eso es lo que lo hace aceptable: «tokens claros + `dark:`
- * disparando» es EXACTAMENTE lo que la hoja mostraba en pantalla antes de la 217, cuando
- * llevaba `tema-claro`. Lo impreso será igual a lo que se veía entonces, no peor.
- * Medido con la aritmética de `tests/fixtures/contraste.ts`: el peor caso, `Button`
- * variant `destructive`, daba 2.89 en aquel estado y hoy en pantalla oscura da 4.43.
- *
- * El arreglo de raíz —envolver las dos ramas de `@custom-variant dark` en
- * `@media not print`— apagaría el variant al imprimir en TODA la app, que probablemente
- * es lo correcto porque imprimir en oscuro no tiene sentido en ninguna pantalla. No
- * entra aquí por tres razones: cambiaría el comportamiento de impresión de las quince
- * rutas del portal y no de una; exige su propia medición, que esta regla no puede
- * firmar; y mezclado con la reversión del pin haría imposible saber cuál de los dos
- * cambios movió qué. Sale a FICHA PROPIA.
+ * Medido con la aritmética de `tests/fixtures/contraste.ts`: el peor caso era `Button`
+ * variant `destructive`, que daba 2.89 con el variant disparando y 4.43 en pantalla
+ * oscura, con la variante colgada de `--destructive`. La feature 222 la pasó al par de
+ * `danger` y hoy mide 5.32 y 5.20; ya no es el peor caso.
  *
  * ── LO QUE ESTA REGLA NO CUBRE (no es un olvido)
  * Garantiza el COLOR, no el formato. No hay botón de imprimir ni llamada a la API de

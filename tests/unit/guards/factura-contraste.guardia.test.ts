@@ -657,22 +657,32 @@ const INVENTARIO: Par[] = [
   {
     id: "P22",
     papel: "`Button` variant `destructive` — «Destrabar cierre vencido» en `acciones`",
-    tinta: "destructive",
-    fondo: { clase: "capa", color: { de: "token", nombre: "destructive" }, alpha: 0.1, sobre: CARD },
-    // `dark:bg-destructive/20`: el fondo NO es el mismo en los dos temas. Medir el oscuro con el
-    // alfa del claro daría un número plausible y falso, que es la única forma de fallar aquí.
+    // Feature 222 — ESTA DEUDA SE PAGÓ, y la ficha entera de la 217 lo dejaba escrito así: «un
+    // registro de deuda que no se entera de que la deuda se pagó es un registro falso». La
+    // variante ya no se cuelga de `--destructive` —que no tiene `-strong`— sino del par de
+    // `danger`, igual que el `Badge` desde la 210. Por eso este par pasa a ser, hex a hex, el
+    // mismo que P26: es literalmente el mismo par.
+    tinta: "danger-strong",
+    fondo: { clase: "paleta", nombre: "danger-soft" },
+    // En oscuro no hay `-soft` (es un hex claro fijo, sin variante): el fondo se compone en
+    // ejecución con `dark:bg-danger/15`. Medir el oscuro con el fondo del claro daría un número
+    // plausible y falso, que es la única forma de fallar aquí.
     fondoOscuro: {
       clase: "capa",
-      color: { de: "token", nombre: "destructive" },
-      alpha: 0.2,
+      color: { de: "paleta", nombre: "danger" },
+      alpha: 0.15,
       sobre: CARD,
     },
     umbral: "ajeno",
     motivo:
-      "DEUDA DE PALETA, fichas 210/216. Es el mismo color como texto y como fondo a un 10 %: " +
-      "`--destructive` no tiene un par `-strong`, que es lo que la 210 sí arregló para el " +
-      "`Badge` (lo mandó al par de `danger`). El `Button` no se tocó en aquella ficha y sigue " +
-      "vivo. `button.tsx:24`.",
+      "primitiva compartida, y desde la feature 222 este par SÍ tiene dueño: su umbral y su " +
+      "suelo —los CUATRO estados, reposo y hover, en los dos temas y sobre seis superficies— " +
+      "viven en `contraste-tokens.guardia.test.ts`, junto al del `Badge` que arregló la 210. " +
+      "Sigue como «ajeno» porque la hoja no lo pinta: entra por `acciones` desde " +
+      "`CierresAdminModule`, y exigirle aquí el umbral duplicaría el criterio en dos sitios. " +
+      "Medido el 2026-08-13, DESPUÉS de la 222: claro 5.30 · oscuro 5.20 (antes 3.29 y 4.43, " +
+      "bajo AA en los dos temas). El HOVER —que en esta hoja no se mide, igual que no se miden " +
+      "los de P21/P23/P24— pasó de 2.90/3.68 a 6.47/5.89 y es opaco: ya no depende del fondo.",
     utilidades: [],
     anclas: "`CierresAdminModule.tsx:770`, dentro de `acciones` de la hoja compacta",
   },
@@ -836,7 +846,7 @@ const SUELO: Record<string, { claro: number; oscuro: number }> = {
   P19: { claro: 15.7, oscuro: 13.74 }, // #12233f/#ffffff  · #e6ecf8/#10203a
   P20: { claro: 3.76, oscuro: 5.89 }, //  #ef4444/#ffffff  · #f87171/#10203a  ← deuda ajena, R17
   P21: { claro: 3.18, oscuro: 7.06 }, //  #ffffff/#f26419  · #0a1524/#ff7a33  ← bajo AA en claro
-  P22: { claro: 3.29, oscuro: 4.43 }, //  #ef4444/#fdecec  · #f87171/#3e3045  ← bajo AA en los dos
+  P22: { claro: 5.3, oscuro: 5.2 }, //   #b91c1c/#fee2e2  · #f87171/#31253c  ← la 222 lo arregló
   P23: { claro: 14.79, oscuro: 12.08 }, // #12233f/#f7f8fc · #e6ecf8/#172a4a
   P24: { claro: 7.25, oscuro: 6.34 }, //  #4a5368/#f7f8fc  · #9fadc9/#172a4a
   P25: { claro: 13.86, oscuro: 12.22 }, // #17233b/#eef1f8 · #e6ecf8/#16294a
@@ -916,9 +926,13 @@ describe("feature 217 — el inventario CERRADO de pares de la hoja (R6, R7, R16
     // Medido el 2026-08-13 con la aritmética del fixture:
     //   P20 · aviso «sin tarifa congelada»  ·  claro 3.76 · oscuro 5.89
     //   P21 · `Button` variant `default`    ·  claro 3.18 · oscuro 7.06
-    //   P22 · `Button` variant `destructive`·  claro 3.29 · oscuro 4.43
     // Ninguna se corrige aquí: son de las fichas 210/216, que las tratan para TODA la app.
-    expect(bajoUmbral).toEqual(["P20", "P21", "P22"]);
+    //
+    // P22 —`Button` variant `destructive`, 3.29 y 4.43— SALIÓ de esta lista el mismo día: lo
+    // pagó la feature 222 y hoy mide 5.30 y 5.20. Este caso se puso rojo al hacerlo, que es
+    // exactamente para lo que se escribió: un registro de deuda que no se entera de que la deuda
+    // se pagó es tan falso como uno que no se entera de que creció.
+    expect(bajoUmbral).toEqual(["P20", "P21"]);
   });
 
   /**
