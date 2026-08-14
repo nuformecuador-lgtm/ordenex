@@ -176,4 +176,223 @@ contenedor del portal— queda escrita junto al bloque.
 
 ---
 
-*(Las tandas siguientes se anotan según se cierran.)*
+## Tanda 1 — El CSS
+
+### T7-T9 · `app/globals.css` — el bloque del flujo
+
+Después del bloque de la 217 y antes de `.dark`, fuera de todo `@layer`, sin un solo token.
+Cadena (B) → ocultamiento (A) con sus tres ramas → hoja (C) → `~` entre candidatas (D), y el
+`@page` dentro. El comentario pegado encima lleva lo que T9 pide: cómo se elige la hoja
+(candidata + elegida, cero y varias), por qué lista blanca, la enumeración de lo que deja de
+imprimirse **con su ancla**, el motivo medido de cada `!important`, de dónde sale el margen, lo
+que `@page` **no** controla y lo que el bloque **no** promete.
+
+Compilado contra el compilador real antes de creerlo:
+
+```
+compilado OK, bytes: 15797
+@page presente: true
+contexto: "…--info-strong: #1d4ed8; } } @media print { @page { size: portrait; margin: 12mm; } …"
+```
+
+### T18 · ADELANTADA a esta tanda *(desviación del orden de `tasks.md`, y su motivo)*
+
+`tasks.md` pone T18 en la Tanda 3, pero **T8 escribe un `@page` y el caso
+`tema-encendido.guardia.test.ts:331` lo prohíbe explícitamente**: la Tanda 1 no puede cerrar en
+verde —como su propia nota de cierre exige— sin reexpresarlo antes. Se hizo al final de la
+tanda, después de T10, que es de quien T18 depende. **Es un conflicto de orden dentro del spec,
+no una decisión que me haya tomado**: el caso se REEXPRESA, no se borra ni se relaja.
+
+Lo que defiende ahora, y sigue siendo cierto: (a) el formato **no se mezcla** con el bloque de
+tokens de la 217 —cero declaraciones que no sean tokens en `.papel-al-imprimir`, y cero `@page`
+dentro de ese bloque—; (b) **no aparece en un tercer sitio** —hay exactamente una `@page` en el
+archivo—.
+
+---
+
+## Tanda 2 y 3 — El componente, la candidatura y la prosa
+
+- **T12** — `hoja-imprimible` en el `<Card>` de `HojaFactura` **siempre** y en el de
+  `HojaResumen` **condicionada a `open`**.
+- **T13** — `break-inside-avoid` en las **cinco** piezas de la lista cerrada.
+- **T15/T16** — ver abajo: aquí es donde la verificación excede lo que el diseño esperaba.
+- **T17/T19** — la prosa de `cierre-factura.tsx` y la de `globals.css:281-287` reexpresadas;
+  el límite del KPI animado escrito junto a `KpiFactura`.
+
+### Una lectura del spec que conviene revisar: «la rejilla de KPI»
+
+`R19` y `design.md §6.1` piden `break-inside-avoid` en «la **rejilla** de KPI (`:249`)». Los
+otros cuatro anclajes de esa tabla son exactos (`:913` la fila, `:1272` la sección, `:1287` el
+panel, `:1317` el pie); **`:249` no lo es**: no es la raíz de `KpiFactura` (`:245`) ni la de la
+rejilla (`:1165`), es un `<span>` interior. Se estampó en **la rejilla** (`:1165`), porque es lo
+que dice la palabra normativa y lo que justifica `design.md` («bloque corto y cerrado» — una
+tarjeta suelta no es un bloque cerrado, las cuatro juntas sí), y porque protegida la rejilla
+ninguna tarjeta puede partirse tampoco. **Si la intención era `KpiFactura`, es un cambio de una
+línea y de un renglón en la lista congelada de la guardia.**
+
+### Y una que no se pudo verificar como el diseño suponía: jsdom **sí** resuelve `:has()`
+
+`design.md §6.6` da por hecho que «jsdom no compone estilos, no resuelve `@media print` ni
+`:has()`». Lo primero y lo segundo son ciertos; **lo tercero no**: jsdom 29.1.1 resuelve `:has()`
+en `querySelectorAll`. Eso permite algo que el diseño no contemplaba y que es mucho más fuerte
+que un censo de texto: **leer los selectores reales de `app/globals.css` con el parser compartido
+y evaluarlos contra el DOM montado**. Los selectores **no se copian** al test — copiarlos sería
+el fallo que la 222 encontró en una guardia que describía clases retiradas.
+
+Es lo que caza el defecto de A.1 que abre esta bitácora, y lo que da dueño ejecutable a R6, R7 y
+R8 dentro del gate. **Sigue sin ser el papel**: no hay cascada, no hay `@media print` y no hay
+paginación. Dicho con esas palabras en la cabecera del archivo.
+
+---
+
+## Tanda 4 — Mutaciones, motor real y mapa
+
+### T20 · Las 19 mutaciones, **cada una con su variante inocua** — 38 corridas, 38 ROJAS
+
+Método, y sin él ningún número de aquí valdría: se **commiteó antes de mutar**; cada mutación se
+aplicó con un script con **autocomprobación** (si su ancla no aparecía, abortaba sin escribir) y
+**se comprobó con `git diff` que estaba en el árbol** antes de correr nada. Una corrida sin
+mutación en el árbol es un verde que no significa nada.
+
+| # | Mutación | Resultado | Variante INOCUA | Resultado |
+| --- | --- | --- | --- | --- |
+| 1 | Borrar el bloque entero | 🔴 6 | Dejarlo fuera de `@media print` | 🔴 5 |
+| 2 | Quitar la guarda `:has()` de una regla | 🔴 3 | Dejarla sólo en el primer selector | 🔴 2 |
+| 3 | Borrar el `:not(:has([role=dialog]…))` del nivel 2 | 🔴 1 | Sustituirlo por `:not(:has(.hoja-imprimible))` (existe y no aplica nunca) | 🔴 2 |
+| **3-bis** | *(nueva)* — | — | **A.1 tal como la escribe `design.md §3.4`** | 🔴 2 |
+| 4 | Borrar la rama de nivel 1 | 🔴 4 | Anclarla en `[role="alertdialog"]` | 🔴 4 |
+| 5 | Quitar la condición `open &&` | 🔴 4 | Marcarla con `!open &&` | 🔴 10 |
+| 6 | Quitar `overflow: visible` de la cadena | 🔴 3 | Escribirlo en el comentario | 🔴 3 |
+| 7 | Quitar `position: static` | 🔴 3 | Ponerlo en la regla de la hoja (C), donde no sirve | 🔴 3 |
+| 8 | Borrar el `@page` | 🔴 5 | Escribirlo dentro de un comentario | 🔴 5 |
+| 9 | `margin: 0` | 🔴 1 | `margin: 1px` | 🔴 1 |
+| 10 | `size: A4 portrait` | 🔴 1 | `size: 21cm 29.7cm` | 🔴 1 |
+| 11 | Anidar en `@layer utilities` | 🔴 2 | Anidar en `@layer` a secas | 🔴 2 |
+| 12 | `--foo: #fff` dentro del bloque | 🔴 2 | Declararlo dentro del `@page` | 🔴 2 |
+| 13 | Mover el bloque delante del de la 217 | 🔴 12 | Tercer `@media print` vacío al final | 🔴 1 |
+| 14 | Poner (A) antes que (B) | 🔴 1 | Igualar especificidades dejando (A) después | 🔴 1 |
+| 15 | Quitar la marca de `HojaFactura` | 🔴 6 | Estamparla en un `<div>` interior | 🔴 4 |
+| 16 | Quitar `break-inside-avoid` de la fila | 🔴 1 | Ponerlo **también** en la sección de órdenes | 🔴 2 |
+| 17 | Quitar el `!important` de `max-width` | 🔴 1 | `!important` en **todas** las declaraciones | 🔴 16 |
+| 18 | Borrar `overflow-y-auto` de `CierresAdminModule` | 🔴 1 | Borrar `overflow-auto` de `Modal.tsx` | 🔴 1 |
+| 19 | Montar dos hojas en el mismo `Modal` | 🔴 1 | Quitar el `role="dialog"` del popup | 🔴 6 |
+
+**Ninguna variante inocua salió verde**, que es la condición que `tasks.md` T20 pone para dar la
+guardia por terminada. Las dos que más importan:
+
+- **#2 inocua** (guarda `:has()` sólo en el primer selector) pone roja, además del censo, la
+  evaluación en jsdom **«sin ninguna candidata, la regla NO engancha nada»** — el caso de la
+  página en blanco, atrapado por comportamiento y no por forma.
+- **#3-bis** es el CSS que el diseño escribió, y muerde por dos vías distintas: el censo de la
+  forma escrita **y** la evaluación contra el DOM real.
+
+### T21 · La comprobación en un MOTOR REAL — **hecha, y con más alcance del prometido**
+
+`tasks.md` T21 pide UNA comprobación **manual y fechada** en al menos un motor. No se hizo a
+mano: se hizo **reproducible en Chromium/Blink** (Playwright 1.61.1, build 1228, ya instalado),
+que es la misma evidencia sin depender de que alguien recuerde qué miró.
+
+**Cómo, y qué es exactamente lo que se midió.** Se serializó el DOM que rinden **los componentes
+de verdad** en los cuatro escenarios —incluidos el portal de Base UI y **los estilos en línea del
+scroll lock**—, se le puso el CSS **compilado** de `app/globals.css`, y se le pidió a Chromium
+resolver `@media print`, `:has()`, la cascada y los `!important`, terminando en un `page.pdf()`
+real. **Fecha: 2026-08-14.**
+
+| # | Lo que T21 manda mirar | Medido |
+| --- | --- | --- |
+| 1 | Sale **sólo** la hoja | 2 hojas en el DOM → **1** llega al papel. Barra lateral, cabecera, backdrop y botonera de decisión: `display: none`. El diálogo, visible. |
+| 2 | **No** está recortada | Los **cinco** ancestros hasta el `<body>` computan `overflow: visible`, `max-height: none`, `max-width: none`, `position: static`, `transform: none`. `cadenaRecorta: false`. La hoja crece a **2382 px** en vez de quedarse en el `max-h-[70vh]`. |
+| 3 | Un cierre largo continúa en la siguiente página | 28 órdenes → **PDF de 3 páginas** (ruta admin y ruta mensajero). |
+| 4 | Con el detalle abierto, las compactas de detrás **no** salen | `hojasEnDom: 2 · hojasVisiblesEnPapel: 1`. |
+| 5 | Dos compactas desplegadas, sin modal → salen las dos, una por página | **2** visibles, `break-before: page` computado en la segunda, **PDF de 2 páginas**. |
+| 6 | Lista sin nada desplegado → imprime como antes | Barra lateral y cabecera **visibles**, PDF de 1 página. Nada oculto. |
+| — | *(añadido)* la ruta del **mensajero**, con la misma regla y sin una línea propia | Hoja visible, nota «solo lectura» oculta, PDF de 3 páginas. **R11 en un motor.** |
+
+**Y la contraprueba, que es lo que convierte el defecto de A.1 en un hecho.** Con el selector tal
+como lo escribe `design.md §3.4`, en el mismo motor y el mismo escenario 1:
+
+```
+hojasEnDom = 2   hojasVisiblesEnPapel = 0   dialogoVisible = false
+paginasPdf = 1   bytesPdf = 652        ← exactamente el tamaño del PDF «no se imprimió nada»
+```
+
+**Lo que esta comprobación NO es, y no puede leerse como si lo fuera:** no es la aplicación
+corriendo. Los datos son de fixture, el DOM viene serializado de jsdom y no hay servidor, sesión
+ni base. **No sustituye a mirar la app**, y no es cobertura permanente: **el harness se borró a
+propósito** —montarlo en el gate es ficha aparte (`design.md §10`)— así que **nada de esto se
+volverá a comprobar solo**. Lo que sí queda vivo en el gate es la forma del CSS y la evaluación
+de sus selectores en jsdom.
+
+**Lo que sigue sin verificarse, ni aquí ni en el gate:** el papel físico (márgenes reales de una
+impresora, encabezado/pie del navegador, «gráficos de fondo»), otros motores (Gecko, WebKit),
+cómo fragmenta cada uno el interior flex de la hoja, y la cifra del KPI en el instante de
+imprimir (R29).
+
+### T23 · `./init.sh` completo
+
+**No corrido**: el encargo dice explícitamente que el gate completo lo corre el leader. Lo que sí
+está corrido es `./init.sh --rapido` al cierre de cada tanda, todas en verde.
+
+---
+
+## T22 · Mapa R → test — **los 33 con dueño**
+
+`FLUJO` = `tests/unit/guards/impresion-flujo.guardia.test.ts` ·
+`PAPEL` = `tests/components/CierreFacturaPapel.test.tsx` ·
+`TEMA` = `tests/unit/guards/tema-encendido.guardia.test.ts` ·
+`SINDARK` = `tests/unit/guards/impresion-sin-dark.guardia.test.ts` ·
+`CONTRASTE` = `tests/unit/guards/factura-contraste.guardia.test.ts`
+
+| R | Dueño | Tipo |
+| --- | --- | --- |
+| R1 | `FLUJO` «TODOS los selectores… llevan su guarda» + `PAPEL` «sale la hoja del diálogo y NO la compacta» y «tampoco llegan al papel los controles» | evaluado en jsdom + motor (T21-1) |
+| R2 | `FLUJO` «TODOS los selectores…» + **`PAPEL` «sin ninguna candidata, la regla NO engancha nada»** | evaluado + motor (T21-6) |
+| R3 | `FLUJO` «recorre la cadena sin nombrar ningún contenedor, y sin nombrar ninguna pieza del portal» | estructural |
+| R4 | `FLUJO` «enumera, con su ancla, qué deja de imprimirse» (×4) + `PAPEL` «tampoco llegan al papel los controles» | estructural + evaluado |
+| **R5** | `FLUJO` «aparece EXACTAMENTE dos veces…», «la del DETALLE va sin condición; la COMPACTA, condicionada a `open`» + `PAPEL` «plegada NO la lleva» / «y la lleva en cuanto se despliega» | estructural + **ejecutado** |
+| **R6** | `FLUJO` «existe la rama de NIVEL 1» / «de NIVEL 2» / «conserva su segundo `:not(:has(…))`» + `PAPEL` «sale la hoja del diálogo…» y «dos compactas desplegadas…» | estructural + evaluado + motor (T21-4,5) |
+| **R7** | **`PAPEL` «sin ninguna candidata…»** + `FLUJO` guarda `:has()` | evaluado + motor (T21-6) |
+| **R8** | `FLUJO` «una hoja por página… `break-before: page`» + `PAPEL` «dos compactas desplegadas…» | estructural + motor (T21-5) |
+| **R9** | `PAPEL` «el popup expone `role="dialog"`» y «dentro del diálogo hay EXACTAMENTE una candidata» | ejecutado |
+| R10 | `FLUJO` «declara las TRECE propiedades» + `PAPEL` «el scroll lock, medido» + `PAPEL` «la regla de la cadena cubre TODOS los ancestros» | estructural + evaluado + motor (T21-2) |
+| R11 | `FLUJO` «sin nombrar ningún contenedor» + `PAPEL` «cubre TODOS los ancestros» (ruta admin) + T21 (ruta mensajero) | evaluado + motor |
+| R12 | `FLUJO` «el módulo del admin conserva…», «el `Modal` conserva…», «ninguno estrena `print:`» | estructural |
+| R13 | `FLUJO` «lleva `!important` EXACTAMENTE en las cinco…» + `PAPEL` «el scroll lock, medido» | estructural + **medido** |
+| R14 | `FLUJO` «declara las TRECE…» (incluye `display`) + «la regla que OCULTA va DESPUÉS» | estructural |
+| R15 | `FLUJO` «hay EXACTAMENTE una `@page`…», «declara `size` con ORIENTACIÓN y sin nombre de papel» | estructural |
+| R16 | `FLUJO` «el margen es 12mm, está en UN solo sitio y no es cero» | estructural |
+| R17 | `FLUJO` «declara que `@page` no controla…» (×4) | estructural |
+| R18 | `FLUJO` «la hoja elegida deja de recortarse a sí misma» + R20 (sin `break-inside` en las raíces) | estructural + motor (T21-3) |
+| R19 | `FLUJO` «`break-inside-avoid` está EXACTAMENTE en las cinco piezas» | estructural |
+| R20 | `FLUJO` «NO se evita el corte en…» (×4) + la misma lista congelada | estructural |
+| R21 | `FLUJO` «declara que las cabeceras de columna NO se repiten, y por qué» | estructural — **no hay test que pueda afirmar más** |
+| R22 | `FLUJO` «declara que lo plegado y las pestañas no visitadas NO se imprimen» | estructural — ídem |
+| R23 | `TEMA` (los tres casos de `.papel-al-imprimir`, **verdes sin tocarse**) + `FLUJO` «no nombra `.papel-al-imprimir`» + `CONTRASTE` | estructural |
+| R24 | `TEMA` «junto a la regla… su límite» y «el bloque va ANTES de `.dark`» (**anclas por contenido**) + `SINDARK` «el ancla vieja…» + `FLUJO` «hay EXACTAMENTE dos `@media print`» | estructural |
+| R25 | `FLUJO` «no nombra `.papel-al-imprimir` ni declara ningún token» | estructural |
+| R26 | `FLUJO` «las reglas del bloque cuelgan de `@media print` y de NINGÚN `@layer`» | estructural |
+| R27 | `CONTRASTE` «no fuerza la impresión de fondos ni añade un flujo» (**verde sin tocarse**) + `FLUJO` «sigue sin haber botón» | estructural |
+| R28 | `TEMA` «el formato de página no se mezcla…» (REEXPRESADO) + `FLUJO` «la cabecera ya no afirma que no hay `@page`» y «conserva lo que sigue siendo cierto» | estructural |
+| R29 | `FLUJO` «junto a `KpiFactura` está escrito que una impresión puede llevar una cifra intermedia» | estructural |
+| R30 | Los censos usan `codigoSinComentarios`; autocomprobado en `FLUJO` «el censo lee el CÓDIGO… no su prosa» (CSS y `.tsx`); mutaciones 6i y 8i rojas | estructural |
+| R31 | Esta bitácora, §T20: 19 + 19, **ninguna inocua verde** | evidencia |
+| R32 | `FLUJO` «un solo parser de reglas CSS» (3 casos) | estructural |
+| R33 | Cabeceras de `FLUJO` y `PAPEL` + §T21 de aquí (lo no verificado, listado) | declaración |
+
+**33 de 33 con dueño. Ninguno huérfano.** Diez de ellos (R1, R2, R4, R5, R6, R7, R9, R10, R11 y
+parcialmente R3) tienen además verificación **por comportamiento** —evaluación de los selectores
+reales contra el DOM real—, que es más de lo que `design.md §6.6` daba por posible.
+
+### Lo que NO queda verificado por el gate, listado y no omitido *(R33)*
+
+1. **El papel físico.** Márgenes reales de una impresora, encabezado/pie del navegador, escala y
+   «gráficos de fondo». Ninguna pieza del gate imprime.
+2. **Otros motores.** Lo de T21 es Blink. Gecko y WebKit **no están medidos** y no se afirman.
+3. **Dónde caen los cortes** y cuántas páginas salen con datos reales.
+4. **La fragmentación del interior flex** de la hoja.
+5. **La cifra del KPI** en el instante de imprimir (R29): declarada junto a la pieza, no
+   arreglada.
+6. **El `<html>` bloqueado por el scroll lock** (`overflow-y/x: hidden` en línea): fuera del
+   alcance de R10 por decisión escrita; medido y congelado, no verificado en papel.
+7. **La app corriendo.** T21 usa datos de fixture y DOM serializado. Mirar la aplicación de
+   verdad sigue encontrando cosas que ninguna suite ve.
