@@ -32,16 +32,17 @@ baselines caducan con cualquier PR ajeno).
   ronda, §Tercera ronda y §Preguntas cerradas, y como R29–R34.
   **Hecho:** R3, R18 y R27 desbloqueados con texto EARS definitivo.
 
-- [ ] **T0b — Volver a la puerta con lo ÚNICO que falta: Q4.** No es una decisión;
+- [x] **T0b — Volver a la puerta con lo ÚNICO que falta: Q4.** No es una decisión;
   es la medición de T1 sin ejecutar. **Q10 quedó cerrada por D15** (deriva declarada
   con fecha de corte) y con ella R24 y R35.
   ✅ **R19 ya tiene texto EARS definitivo** (reexpresado el 2026-08-14: la premisa
   «ANTES de activar» caducó porque el criterio ya corre en `prod`; ahora pide una
-  medición POSTERIOR, fechada). Lo que sigue faltando es **ejecutarla**.
-  **Hecho:** ni un `⛔` sin resolver en `requirements.md`. **Depende de:** T1.
-  **Bloquea:** T18.
+  medición POSTERIOR, fechada).
+  **Hecho (2026-08-14):** la medición se ejecutó (T1) y **no queda ni un `⛔` sin
+  resolver en `requirements.md`** — el último era el de Q4, ahora cerrado con su
+  resultado. **Depende de:** T1. **Bloquea:** T18.
 
-- [ ] **T1 — [P] Ejecutar la medición del efecto retroactivo (⛔ Q4).** La consulta
+- [x] **T1 — [P] Ejecutar la medición del efecto retroactivo (Q4).** La consulta
   ya está escrita en `design.md §7.6` (solo lectura, dos consultas: resumen y
   detalle con `LIMIT 100`). Solo hay que correrla contra la base real.
   ⚠️ **Corregida el 2026-08-14:** al CTE `n_nuevo` le faltaba la **sexta** condición
@@ -49,16 +50,25 @@ baselines caducan con cualquier PR ajeno).
   las gestiones sintéticas y **sobreestimaba** `n_nuevo`. Y su marco cambió: ya no es
   medición **previa** (el criterio está desplegado en `prod`), es la cuenta
   **posterior** de a cuántas órdenes movió el cambio.
-  **Hecho:** resultado pegado en `design.md §7.6` **con fecha y base**; si
-  `empiezan_a_escalar > 0`, la lista de esas órdenes se le enseña al humano una por
-  una. **Depende de:** nada. **Informa:** T0b.
+  **Hecho (2026-08-14):** resultado pegado en `design.md §7.6-bis` **con fecha y
+  base** (producción `scfnwxqbsgkzwsdntdvd`, vía MCP, solo lectura). Salió
+  `ordenes_en_devuelta = 0` ⇒ 0 en las nueve columnas, y **`empiezan_a_escalar = 0`,
+  así que la cláusula del «una por una» no se dispara**. Va con el control que
+  demuestra que el cero es de **universo vacío** y no de consulta rota (141 órdenes
+  vivas; 11 pasaron por `devuelta`; 8 llegaron a `rechazada`; 32 gestiones contables
+  en cierre aprobado) y con su fecha de caducidad escrita.
+  **Depende de:** nada. **Informa:** T0b.
 
-- [ ] **T1b — [P] Dimensionar el riesgo ACEPTADO de Q5.** Ejecutar la consulta de
+- [x] **T1b — [P] Dimensionar el riesgo ACEPTADO de Q5.** Ejecutar la consulta de
   cierres no aprobados por estado y antigüedad (`design.md §7bis`, final). **Ya no
   informa ninguna decisión** (D14 cerró Q5 aceptando el riesgo): sirve para saber si
   el supuesto operativo se sostiene en producción.
-  **Hecho:** resultado pegado en `design.md §7bis` con fecha; cuántos cierres
-  `vencido`/`rechazado`/`solicitado` llevan más de 7 y más de 30 días.
+  **Hecho (2026-08-14):** resultado pegado en `design.md §7bis` con fecha —**cero
+  filas**: no hay ni un cierre sin aprobar. Con su control, porque un vacío tampoco
+  se cita solo: **12 cierres en total y los 12 `aprobado`** (2026-07-22 → 2026-08-12),
+  ninguno en `solicitado`/`vencido`/`rechazado` y por tanto **ninguno con más de 7 ni
+  de 30 días**. El supuesto operativo de D14 se sostiene hoy, sobre 12 de 12; el
+  riesgo queda **dimensionado en 0 casos**, no eliminado.
   **Depende de:** nada. **No bloquea nada.**
 
 ---
@@ -313,11 +323,16 @@ Desbloqueado por D15 («declara la deriva con fecha de corte»). Diseño complet
   **Hecho:** ningún `R<n>` sin al menos un test con ruta y nombre de caso reales.
   **Depende de:** T16.
 
-- [ ] **T18 — Gate completo antes del PR.** `./init.sh --rapido` para cerrar cada
+- [x] **T18 — Gate completo antes del PR.** `./init.sh --rapido` para cerrar cada
   tanda; **`./init.sh` completo antes del PR, sin excepción**.
-  **Hecho:** salida verde pegada en `progress/impl_215.md`, con el delta de rojos
-  medido contra el baseline REMEDIDO de `dev` (no contra el citado en la bitácora),
-  y el rojo declarado de Q10 (`analytics-daily-job.test.ts`) enumerado como tal.
+  **Hecho (2026-08-14, tanda de R19):** `./init.sh` **completo** dos veces, con el
+  baseline REMEDIDO en vez de citado: primero sobre `dev` limpio **antes** de tocar
+  nada (**1096/1096 archivos, 14044/14044 tests, 301 s, exit 0**) y luego sobre esta
+  rama (**1096/1096, 14044/14044, 349 s, exit 0**). **Delta de rojos: 0 → 0.** El
+  rojo declarado de Q10 (`analytics-daily-job.test.ts`) **ya no existe**: lo cerró el
+  PR #367 y las dos corridas lo confirman en verde. Se corrió entero aunque el diff
+  sea prosa, porque `init.sh` valida además el **registro** —max-2-por-zona y specs
+  de las features en vuelo—, que es justo lo que esta tanda mueve.
   **Depende de:** T17, T22, T0b.
 
 ---

@@ -3268,6 +3268,34 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   ficha aparte); **Gecko y WebKit no están medidos**; y las pestañas no visitadas y el KPI animado
   llevan su límite **declarado**, no omitido.
 
+## 2026-08-14 — 215 (el reintento se cuenta en el cierre) · **CIERRE: R19 ejecutado**
+- Se cierra la ficha corriendo lo único que le faltaba: la medición de **R19** contra la base
+  **real de producción** (`design.md §7.6`, escrita el 13-ago y **nunca ejecutada**). **Cero código
+  tocado**: el diff es spec + registro. Detalle completo en `progress/impl_215_r19.md`.
+- Requisitos cubiertos: **R19** (el último abierto). Con él caen **Q4** —la última de las 12
+  preguntas— y las tareas **T0b/T1/T1b/T18**. `spec_files` pasa de «1 bloqueado» a **0**.
+- **Resultado: 0 en las nueve columnas.** `empiezan_a_escalar = 0` ⇒ **nadie se rechazó ni se cobró
+  antes de tiempo** por el cambio de criterio.
+- **Y el cero es de UNIVERSO VACÍO, que es la mitad que importa.** Un 0 sobre un conjunto vacío es
+  indistinguible de una consulta rota, así que se comprobó por separado: la base tiene **141 órdenes
+  vivas**, el estado `devuelta` existe en el catálogo, no hay ninguna orden en él **ni contando las
+  borradas** (luego no es el filtro `deleted_at`), y el dominio **sí** tiene materia (**11** órdenes
+  pasaron por `devuelta`, **8** llegaron a `rechazada`, **32** gestiones contables en cierre
+  aprobado). Lo que está vacío es la foto de hoy, no la consulta.
+- **Y hay una razón por la que nadie pudo ser cobrado antes de tiempo, más fuerte que el cero**: las
+  8 rechazadas son **anteriores** al criterio nuevo — 7 por gestión manual (última el **12-ago**) y
+  **una sola** por `escalado_devuelta_sla` (**26-jul**), contra una release #381 del **14-ago**. El
+  cron ha escalado **una vez en toda la vida de la base**.
+- **De regalo, T1b:** el riesgo que D14 aceptó queda **dimensionado en 0 casos** — **12 cierres, los
+  12 `aprobado`**, ninguno con más de 7 ni de 30 días. El supuesto operativo del humano se sostiene
+  hoy, sobre 12 de 12.
+- **Deuda dejada, con nombre:** **el número caduca en cuanto una orden entre en `devuelta`**, igual
+  que caducó el 0 de `160/D7` —que el propio design ya declaraba no reutilizable—, y **nada lo
+  vigila**: la superficie que haría visible el efecto real es la ficha **219**, `pending`. Quien
+  vuelva a esto **vuelve a correr la consulta**; no cita esta tabla.
+- Y una que se destraba sola: la **218** condicionaba su arranque a «que la 215 esté mergeada». Lo
+  está, y en producción.
+
 ## 2026-08-14 — 224 (al imprimir, los tokens también giran a claro)
 - Tercer `@media print` en `app/globals.css` con los **35** tokens claros para `.dark`,
   `body:has(> .dark)`, `.tema-sistema` y su espejo, más la guardia espejo
