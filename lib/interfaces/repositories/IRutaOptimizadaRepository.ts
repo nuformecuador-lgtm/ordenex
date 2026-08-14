@@ -20,8 +20,30 @@ export interface RutaOptimizadaDTO {
   origenFuente: OrigenFuente | null;
   huellaSet: string | null;
   ultimoError: string | null;
+  /**
+   * Trazado persistido de ESTA `huellaSet`. `null` si nunca se dibujo, si la secuencia se
+   * reemplazo despues (se limpia en la misma transaccion) o si el ultimo dibujo salio del
+   * fallback local, que NO se cachea.
+   */
+  trazado: TrazadoPersistido | null;
   /** Posicion por `ordenId`. Una orden en reparto AUSENTE de este mapa esta sin optimizar. */
   secuenciaPorOrden: Map<string, number>;
+}
+
+/**
+ * Trazado tal y como vive en la fila. Es un ESPEJO de `TrazadoRuta` (capa de servicio), no el
+ * mismo tipo: el repositorio no debe importar de `lib/interfaces/services/`, y que la DB y el
+ * dominio compartan forma hoy no obliga a que la compartan siempre.
+ */
+export interface TrazadoPersistido {
+  encodedPolyline: string;
+  distanciaM: number | null;
+  duracionS: number | null;
+  /**
+   * Solo `"routes"` llega a persistirse (ver la migracion), pero el tipo admite `"local"`
+   * porque la columna es TEXT y una fila escrita por otra version del codigo podria traerlo.
+   */
+  fuente: "routes" | "local";
 }
 
 /** Metadatos que acompanan a una secuencia recien calculada. */
@@ -63,11 +85,30 @@ export interface IRutaOptimizadaRepository {
    * persistir posiciones repetidas o la misma orden dos veces.
    *
    * `secuencia` son los `ordenId` EN ORDEN DE VISITA; la posicion es su indice + 1.
+   *
+   * LIMPIA el trazado persistido, en la MISMA transaccion. La polilinea vieja describe el
+   * orden viejo: servirla junto a una secuencia nueva seria peor que no tener linea, porque
+   * parece correcta. Se vuelve a llenar con `guardarTrazado` cuando el dibujo salga.
    */
   reemplazarSecuencia(
     mensajeroId: string,
     secuencia: string[],
     meta: ReemplazarSecuenciaMeta,
+  ): Promise<void>;
+
+  /**
+   * Persiste el trazado recien obtenido. `huellaSet` NO es informativo: la escritura solo se
+   * aplica si la cabecera SIGUE teniendo esa huella. Entre `reemplazarSecuencia` y esta
+   * llamada hay una llamada de red a Routes, y en esa ventana otro disparo (el cron, otra
+   * pestana) puede haber recalculado la ruta; sin la condicion, este trazado tardio se
+   * pegaria encima de una secuencia que ya no es la suya.
+   *
+   * No lanza si no aplica: que la ruta haya cambiado no es un error, es una carrera perdida.
+   */
+  guardarTrazado(
+    mensajeroId: string,
+    huellaSet: string,
+    trazado: TrazadoPersistido,
   ): Promise<void>;
 
   /**

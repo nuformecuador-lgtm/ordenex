@@ -245,6 +245,10 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         calculadaAt: ruta?.calculadaAt ?? null,
         origenFuente: ruta?.origenFuente ?? null,
         paradasSinOptimizar,
+        // El trazado se sirve TAL CUAL lo tenga la fila. No se recalcula ni se pide nada
+        // aqui: esta es una lectura de listado y no puede quedar colgada de una llamada
+        // facturada a Routes. Si la fila no lo tiene, el mapa dibuja rectas como siempre.
+        trazado: ruta?.trazado ?? null,
       },
     }; // R10
   }

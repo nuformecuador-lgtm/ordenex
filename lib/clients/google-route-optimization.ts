@@ -25,6 +25,7 @@ import type {
   OptimizarInput,
   OptimizarOutcome,
 } from "@/lib/interfaces/external/IRouteOptimizationClient";
+import { optlog, opterror, describirToken, cronometro } from "@/lib/logging/optimizer-log";
 
 const ENDPOINT_BASE = "https://routeoptimization.googleapis.com/v1/projects";
 
@@ -100,10 +101,20 @@ export class GoogleRouteOptimizationClient implements IRouteOptimizationClient {
     // envia al proveedor: no hace falta y reduce lo que sale del sistema.
     const { origen, paradas } = input;
 
+    // ⚠️ AQUI SE IMPRIMEN COORDENADAS DE ENTREGA (dato personal). Es el override consciente
+    // de R14 documentado en `lib/logging/optimizer-log.ts`; se apaga con RUTA_DEBUG_LOG=0.
+    optlog("client/google — ENTRADA", {
+      projectId: this.projectId,
+      origen,
+      paradas: paradas.map((p, i) => ({ i, ordenId: p.ordenId, lat: p.lat, lng: p.lng })),
+      totalParadas: paradas.length,
+    });
+
     let token: string;
     try {
       token = await this.getToken();
     } catch (error) {
+      opterror("client/google — no se pudo obtener el token; no se llama al proveedor", error);
       // La credencial ausente (`RutaNoConfiguradoError`) y el fallo del endpoint de token
       // se propagan TAL CUAL: sus mensajes ya estan saneados en `google-sa-token.ts`.
       throw error;
@@ -129,9 +140,19 @@ export class GoogleRouteOptimizationClient implements IRouteOptimizationClient {
       },
     };
 
+    const url = `${ENDPOINT_BASE}/${this.projectId}:optimizeTours`;
+    optlog("client/google — POST optimizeTours", {
+      url,
+      timeoutMs: this.timeoutMs,
+      ...describirToken(token),
+      body,
+    });
+
+    const medir = cronometro();
     let respuesta: Response;
     try {
-      respuesta = await this.fetchImpl(`${ENDPOINT_BASE}/${this.projectId}:optimizeTours`, {
+      console.log('optimizer***: token', token, url)
+      respuesta = await this.fetchImpl(url, {
         method: "POST",
         headers: {
           authorization: `Bearer ${token}`,
@@ -140,15 +161,24 @@ export class GoogleRouteOptimizationClient implements IRouteOptimizationClient {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-    } catch {
+    } catch (error) {
+      opterror("client/google — fallo de red o timeout", error, { ms: medir() });
       // R15: red o timeout -> transitorio. El detalle NO incluye la URL (lleva el
       // projectId) ni el cuerpo (lleva las coordenadas de entrega).
       return { status: "transitorio", detalle: `${OPERACION}: fallo de red o timeout` };
     }
 
+    optlog("client/google — respuesta HTTP", { status: respuesta.status, ms: medir() });
+
     // R15: credencial, scope o facturacion rotos. Reintentar no lo arregla solo, pero se
     // propaga como error para que la cola lo haga VISIBLE en el dead-letter.
     if (respuesta.status === 401 || respuesta.status === 403) {
+      optlog("client/google — SALIDA: config_invalida (credencial rechazada)", {
+        status: respuesta.status,
+        pista:
+          "en WIF suele ser el principal del pool sin roles/iam.workloadIdentityUser, " +
+          "o la SA sin roles/routeoptimization.editor",
+      });
       return {
         status: "config_invalida",
         detalle: `${OPERACION}: credencial rechazada (HTTP ${respuesta.status})`,
@@ -156,29 +186,41 @@ export class GoogleRouteOptimizationClient implements IRouteOptimizationClient {
     }
     // R15: cuota agotada y errores de servidor -> transitorio, la cola aplica su backoff.
     if (respuesta.status === 429 || respuesta.status >= 500) {
+      optlog("client/google — SALIDA: transitorio", { status: respuesta.status });
       return { status: "transitorio", detalle: `${OPERACION}: HTTP ${respuesta.status}` };
     }
     // Cualquier otro no-2xx (tipicamente 400 por modelo mal formado) es un fallo NUESTRO,
     // no del proveedor ni de la red: ruidoso a proposito, no se disfraza de transitorio.
     if (!respuesta.ok) {
+      optlog("client/google — SALIDA: peticion rechazada (modelo mal formado?)", {
+        status: respuesta.status,
+      });
       throw new RutaPeticionRechazadaError(respuesta.status);
     }
 
     let json: unknown;
     try {
       json = await respuesta.json();
-    } catch {
+    } catch (error) {
+      opterror("client/google — el cuerpo 2xx no es JSON", error);
       throw new RutaRespuestaInvalidaError("cuerpo no es JSON");
     }
+
+    // Respuesta CRUDA, antes de que zod haga strip. Es la unica forma de ver los campos que
+    // el contrato de aqui descarta (`metrics`, `routePolyline`) cuando algo no cuadra.
+    optlog("client/google — respuesta cruda del proveedor", { json });
 
     const parsed = respuestaSchema.safeParse(json);
     if (!parsed.success) {
       // Se citan los CAMPOS que fallan, NUNCA sus valores (serian coordenadas).
       const campos = parsed.error.issues.map((i) => i.path.join(".")).join(", ");
+      optlog("client/google — SALIDA: respuesta invalida", { campos });
       throw new RutaRespuestaInvalidaError(`campos invalidos: ${campos}`);
     }
 
-    return { status: "ok", secuencia: this.traducirSecuencia(parsed.data, paradas) };
+    const secuencia = this.traducirSecuencia(parsed.data, paradas);
+    optlog("client/google — SALIDA: ok", { secuencia, totalParadas: secuencia.length });
+    return { status: "ok", secuencia };
   }
 
   /**

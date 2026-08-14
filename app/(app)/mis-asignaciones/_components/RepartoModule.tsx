@@ -37,7 +37,11 @@ import { CarruselCards } from "@/components/shared/CarruselCards";
 import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
 import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
 import { useSeccionColapsable } from "./useSeccionColapsable";
-import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
+import type {
+  RutaMapaOrigen,
+  RutaMapaParada,
+  RutaMapaTrazado,
+} from "./ruta-mapa-tipos";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano): pantalla de REPARTO del mensajero.
 // Recibe el grupo ya resuelto por el Server Component padre (datos sensibles por props,
@@ -113,6 +117,16 @@ export function RepartoModule({
   // se fuerza el permiso; solo se captura cuando el mensajero pulsa "Sincronizar ruta").
   const [ubicacionActual, setUbicacionActual] = useState<RutaMapaOrigen | null>(
     null,
+  );
+  // Feature 92 (seguimiento): geometría de la ruta. Arranca con la PERSISTIDA que trae el
+  // servidor (migración `20260814120000_ruta_optimizada_trazado`), así que el mapa pinta las
+  // calles reales ya en el primer render y sobrevive a un F5 — antes cada recarga lo devolvía
+  // a la línea recta. La sincronización la sustituye por la recién calculada; ese valor es
+  // estado de cliente y sobrevive a `router.refresh()`, que no remonta el componente.
+  const [trazadoRuta, setTrazadoRuta] = useState<RutaMapaTrazado | null>(
+    ruta.trazado !== null
+      ? { encodedPolyline: ruta.trazado.encodedPolyline, fuente: ruta.trazado.fuente }
+      : null,
   );
   // Mapa de ruta como ACORDEÓN: abierto de entrada, se pliega y despliega con animación
   // desde un control que no se mueve de su sitio (ver el bloque del mapa, más abajo).
@@ -440,7 +454,10 @@ export function RepartoModule({
               </h2>
               {/* R31/R32: sincronización manual de la ruta. El botón captura el GPS del
                   navegador (best-effort) y lo eleva aquí para dibujar el origen en el mapa. */}
-              <SincronizarRutaButton onUbicacion={setUbicacionActual} />
+              <SincronizarRutaButton
+                onUbicacion={setUbicacionActual}
+                onTrazado={setTrazadoRuta}
+              />
             </div>
 
             {/* R30: aviso VISIBLE de que el orden mostrado no está actualizado. */}
@@ -489,7 +506,11 @@ export function RepartoModule({
                         GPS reciente).
                       </p>
                     ) : null}
-                    <RutaMapa paradas={paradasMapa} origen={ubicacionActual} />
+                    <RutaMapa
+                      paradas={paradasMapa}
+                      origen={ubicacionActual}
+                      trazado={trazadoRuta}
+                    />
                   </div>
                 ) : null}
               </div>

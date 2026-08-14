@@ -1824,6 +1824,13 @@ model RutaOptimizada {
   origenFuente String?    @map("origen_fuente")
   huellaSet    String?    @map("huella_set")
   ultimoError  String?    @map("ultimo_error")
+  // Trazado persistido (20260814120000_ruta_optimizada_trazado). Las cuatro se escriben y se
+  // limpian SIEMPRE juntas: valen para la huella_set de esta misma fila y para ninguna otra.
+  // Solo se cachea `trazado_fuente = 'routes'` — ver la migracion.
+  trazadoPolilinea  String? @map("trazado_polilinea")
+  trazadoDistanciaM Int?    @map("trazado_distancia_m")
+  trazadoDuracionS  Int?    @map("trazado_duracion_s")
+  trazadoFuente     String? @map("trazado_fuente")
   createdAt    DateTime   @default(now()) @map("created_at")
   // Default declarado para que coincida con `20260720130000_ruta_optimizada`.
   updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at")

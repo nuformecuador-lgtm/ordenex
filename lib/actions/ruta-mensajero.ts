@@ -112,7 +112,14 @@ export async function sincronizarRuta(
         motivo: "la ruta se sincronizo hace muy poco; intenta de nuevo en unos segundos",
       };
     }
-    return { status: "ok" as const, omitida: resultado.status === "omitida" };
+    // El trazado (polilinea + distancia) sube al cliente para que el mapa lo pinte al
+    // instante. No va atado a `status`: con UNA sola parada la optimizacion se OMITE (R35)
+    // y aun asi hay linea que dibujar. Se reenvia siempre que el service lo produzca.
+    return {
+      status: "ok" as const,
+      omitida: resultado.status === "omitida",
+      ...(resultado.trazado !== undefined ? { trazado: resultado.trazado } : {}),
+    };
   });
   return isAppErrorShape(r) ? toRutaActionError(r) : r;
 }

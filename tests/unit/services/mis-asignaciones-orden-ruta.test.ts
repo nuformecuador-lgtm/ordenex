@@ -66,6 +66,7 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     origenFuente: "gps",
     huellaSet: "h",
     ultimoError: null,
+    trazado: null,
     secuenciaPorOrden: new Map(),
     ...over,
   };
@@ -232,6 +233,7 @@ describe("bloque `ruta` del resultado y KPIs", () => {
       calculadaAt: calculada,
       origenFuente: "centroide",
       paradasSinOptimizar: 1,
+      trazado: null,
     });
   });
 

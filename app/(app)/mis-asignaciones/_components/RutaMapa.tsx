@@ -11,7 +11,7 @@
 // poder usar `{ ssr: false }`.
 import dynamic from "next/dynamic";
 
-import type { RutaMapaParada, RutaMapaOrigen } from "./ruta-mapa-tipos";
+import type { RutaMapaParada, RutaMapaOrigen, RutaMapaTrazado } from "./ruta-mapa-tipos";
 
 const RutaMapaInner = dynamic(
   () => import("./RutaMapaInner").then((m) => m.RutaMapaInner),
@@ -31,8 +31,10 @@ const RutaMapaInner = dynamic(
 export interface RutaMapaProps {
   paradas: RutaMapaParada[];
   origen?: RutaMapaOrigen | null;
+  /** Geometría de la ruta devuelta por la sincronización (feature 92). */
+  trazado?: RutaMapaTrazado | null;
 }
 
-export function RutaMapa({ paradas, origen }: RutaMapaProps) {
-  return <RutaMapaInner paradas={paradas} origen={origen} />;
+export function RutaMapa({ paradas, origen, trazado }: RutaMapaProps) {
+  return <RutaMapaInner paradas={paradas} origen={origen} trazado={trazado} />;
 }

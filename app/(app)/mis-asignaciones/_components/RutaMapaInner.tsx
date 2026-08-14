@@ -22,7 +22,9 @@ import {
   useMap,
 } from "react-leaflet";
 
-import type { RutaMapaParada, RutaMapaOrigen } from "./ruta-mapa-tipos";
+import { decodificarPolilinea } from "@/lib/geo/polilinea";
+
+import type { RutaMapaParada, RutaMapaOrigen, RutaMapaTrazado } from "./ruta-mapa-tipos";
 
 // Atribución obligatoria de OSM (condición de uso de sus tiles públicos).
 const OSM_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -73,9 +75,14 @@ export interface RutaMapaInnerProps {
   paradas: RutaMapaParada[];
   /** Punto de partida del mensajero (GPS), si se conoce. */
   origen?: RutaMapaOrigen | null;
+  /**
+   * Geometría de la ruta devuelta por la sincronización. Si viene de `routes`, sigue las
+   * calles; si falta, se cae a unir las paradas en recto (comportamiento original).
+   */
+  trazado?: RutaMapaTrazado | null;
 }
 
-export function RutaMapaInner({ paradas, origen }: RutaMapaInnerProps) {
+export function RutaMapaInner({ paradas, origen, trazado }: RutaMapaInnerProps) {
   // La ruta (Polyline) conecta SOLO las paradas ya optimizadas, en orden de secuencia.
   // Las pendientes (sin secuencia) se muestran como marcador pero no entran a la línea:
   // todavía no tienen una posición real en el recorrido.
@@ -87,13 +94,25 @@ export function RutaMapaInner({ paradas, origen }: RutaMapaInnerProps) {
     [paradas],
   );
 
+  // La línea que se pinta. Con `trazado` se usa su geometría —decenas o cientos de puntos
+  // que siguen las calles si vino de Routes—; sin él se unen las paradas en recto, que es
+  // como se dibujaba antes de la feature 92.
   const lineaRuta = useMemo<LatLngTuple[]>(() => {
+    if (trazado !== null && trazado !== undefined && trazado.encodedPolyline !== "") {
+      const puntos = decodificarPolilinea(trazado.encodedPolyline);
+      // Una polilínea corrupta o vacía no debe dejar el mapa sin ruta: se cae al recto.
+      if (puntos.length >= 2) return puntos.map<LatLngTuple>((p) => [p.lat, p.lng]);
+    }
     const desdeOrigen: LatLngTuple[] = origen ? [[origen.lat, origen.lng]] : [];
     return [
       ...desdeOrigen,
       ...optimizadas.map<LatLngTuple>((p) => [p.lat, p.lng]),
     ];
-  }, [optimizadas, origen]);
+  }, [optimizadas, origen, trazado]);
+
+  // Punteada mientras la línea NO sea un recorrido real por calles: así el mensajero ve de
+  // un vistazo si lo que tiene delante es navegable o solo el orden de visita.
+  const esPorCalles = trazado?.fuente === "routes";
 
   const puntosEncuadre = useMemo<LatLngTuple[]>(() => {
     const base = paradas.map<LatLngTuple>((p) => [p.lat, p.lng]);
@@ -112,7 +131,14 @@ export function RutaMapaInner({ paradas, origen }: RutaMapaInnerProps) {
       <TileLayer url={OSM_URL} attribution={OSM_ATTRIBUTION} />
 
       {lineaRuta.length >= 2 ? (
-        <Polyline positions={lineaRuta} pathOptions={{ color: "#2563eb", weight: 4 }} />
+        <Polyline
+          positions={lineaRuta}
+          pathOptions={{
+            color: "#2563eb",
+            weight: 4,
+            ...(esPorCalles ? {} : { dashArray: "8 8", opacity: 0.75 }),
+          }}
+        />
       ) : null}
 
       {origen ? (

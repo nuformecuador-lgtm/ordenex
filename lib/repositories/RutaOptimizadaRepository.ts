@@ -7,6 +7,7 @@ import type {
   OrigenUbicacion,
   ReemplazarSecuenciaMeta,
   RutaOptimizadaDTO,
+  TrazadoPersistido,
 } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 
 // Cliente Prisma MINIMO consumido (patron `GestionOrdenRepository`): las dos tablas de la
@@ -19,6 +20,32 @@ type RutaPrismaClient = Pick<
 /** Convierte un `Decimal` de Prisma a `number`, tolerando el null de la columna. */
 function toNumber(value: Prisma.Decimal | null): number | null {
   return value !== null ? value.toNumber() : null;
+}
+
+/** Las cuatro columnas del trazado, tal y como salen de la fila. */
+interface TrazadoColumnas {
+  trazadoPolilinea: string | null;
+  trazadoDistanciaM: number | null;
+  trazadoDuracionS: number | null;
+  trazadoFuente: string | null;
+}
+
+/**
+ * Arma el trazado del DTO. La polilinea es la pieza IMPRESCINDIBLE: sin ella no hay nada que
+ * pintar, asi que su ausencia (o una cadena vacia, que un dia pudo escribirse) anula el
+ * trazado entero en vez de producir un objeto a medias que el mapa tendria que resolver.
+ */
+function toTrazado(row: TrazadoColumnas): TrazadoPersistido | null {
+  if (row.trazadoPolilinea === null || row.trazadoPolilinea === "") return null;
+  return {
+    encodedPolyline: row.trazadoPolilinea,
+    distanciaM: row.trazadoDistanciaM,
+    duracionS: row.trazadoDuracionS,
+    // Mismo criterio que `origen_fuente`: columna TEXT con vocabulario propio, se estrecha
+    // sin validar. `local` es el default defensivo — si el valor fuera basura, tratarlo como
+    // el trazado degradado hace que la UI lo pinte punteado en vez de prometer calles.
+    fuente: row.trazadoFuente === "routes" ? "routes" : "local",
+  };
 }
 
 export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
@@ -43,6 +70,7 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
       origenFuente: row.origenFuente as OrigenFuente | null,
       huellaSet: row.huellaSet,
       ultimoError: row.ultimoError,
+      trazado: toTrazado(row),
       secuenciaPorOrden: new Map(row.paradas.map((p) => [p.ordenId, p.secuencia])),
     };
   }
@@ -89,6 +117,14 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
         // R27 a la inversa: una optimizacion exitosa LIMPIA el error anterior; si no, un
         // fallo viejo seguiria alimentando el aviso de la UI para siempre.
         ultimoError: null,
+        // El trazado viejo describe el orden VIEJO. Se limpia AQUI, dentro de la misma
+        // transaccion que reemplaza las paradas, para que no exista ningun instante visible
+        // en el que la polilinea y la secuencia se contradigan. `guardarTrazado` lo repone
+        // despues, ya condicionado a esta `huellaSet`.
+        trazadoPolilinea: null,
+        trazadoDistanciaM: null,
+        trazadoDuracionS: null,
+        trazadoFuente: null,
       };
       const ruta = await tx.rutaOptimizada.upsert({
         where: { mensajeroId },
@@ -109,6 +145,31 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
           })),
         });
       }
+    });
+  }
+
+  /**
+   * Escritura CONDICIONADA a la huella. `updateMany` y no `update` a proposito: admite un
+   * `where` compuesto y no lanza cuando no encaja ninguna fila, que es justo la semantica
+   * que se busca — si la ruta se recalculo mientras Routes respondia, este trazado ya no le
+   * corresponde a nadie y se descarta en silencio.
+   */
+  async guardarTrazado(
+    mensajeroId: string,
+    huellaSet: string,
+    trazado: TrazadoPersistido,
+  ): Promise<void> {
+    await this.prisma.rutaOptimizada.updateMany({
+      where: { mensajeroId, huellaSet },
+      data: {
+        trazadoPolilinea: trazado.encodedPolyline,
+        // Las columnas son INTEGER: la distancia viene en metros enteros de Routes, pero el
+        // trazado local la calcula en coma flotante. Se redondea aqui, que es la frontera
+        // con la DB, en vez de dejar que Prisma reviente con un decimal.
+        trazadoDistanciaM: trazado.distanciaM !== null ? Math.round(trazado.distanciaM) : null,
+        trazadoDuracionS: trazado.duracionS !== null ? Math.round(trazado.duracionS) : null,
+        trazadoFuente: trazado.fuente,
+      },
     });
   }
 

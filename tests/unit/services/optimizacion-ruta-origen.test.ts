@@ -26,11 +26,16 @@ const CONFIG: RouteOptimizationConfig = {
   GOOGLE_ROUTE_OPT_PROJECT_ID: "p",
   GOOGLE_ROUTE_OPT_SA_EMAIL: "sa@x",
   GOOGLE_ROUTE_OPT_SA_PRIVATE_KEY: "pem",
+  GOOGLE_WIF_PROJECT_NUMBER: null,
+  GOOGLE_WIF_POOL_ID: null,
+  GOOGLE_WIF_PROVIDER_ID: null,
+  GOOGLE_ROUTE_OPT_USE_ADC: false,
   ROUTE_OPT_TIMEOUT_MS: 20_000,
   RUTA_DEBOUNCE_S: 60,
   RUTA_ORIGEN_TTL_MIN: 120,
   RUTA_SYNC_MIN_INTERVALO_S: 10,
   RUTA_MAX_PARADAS: 100,
+  ROUTES_ROUTING_PREFERENCE: "TRAFFIC_UNAWARE",
 };
 
 function parada(id: string, lat: number, lng: number): ParadaRutaRow {
@@ -49,6 +54,7 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     origenFuente: null,
     huellaSet: null,
     ultimoError: null,
+    trazado: null,
     secuenciaPorOrden: new Map(),
     ...over,
   };
@@ -59,6 +65,7 @@ function build(rutaPrevia: RutaOptimizadaDTO | null, paradas: ParadaRutaRow[]) {
     findByMensajero: vi.fn<(m: string) => Promise<RutaOptimizadaDTO | null>>(async () => rutaPrevia),
     upsertOrigen: vi.fn<(m: string, u: unknown) => Promise<void>>(async () => {}),
     reemplazarSecuencia: vi.fn<(m: string, s: string[], meta: unknown) => Promise<void>>(async () => {}),
+    guardarTrazado: vi.fn<(m: string, h: string, t: unknown) => Promise<void>>(async () => {}),
     marcarDesactualizada: vi.fn<(m: string, e: string) => Promise<void>>(async () => {}),
   };
   const paradasRepo: ParadasRepo = { findParadasEnReparto: vi.fn(async () => paradas) };
