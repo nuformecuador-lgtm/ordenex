@@ -278,12 +278,22 @@
  * oscura, con la variante colgada de `--destructive`. La feature 222 la pasó al par de
  * `danger` y hoy mide 5.32 y 5.20; ya no es el peor caso.
  *
- * ── LO QUE ESTA REGLA NO CUBRE (no es un olvido)
- * Garantiza el COLOR, no el formato. No hay botón de imprimir ni llamada a la API de
- * impresión del navegador: la única vía es Ctrl+P. No hay `@page`, ni márgenes, ni
- * saltos de página, ni ocultamiento del resto de la interfaz — y el detalle vive dentro
- * de un modal con `overflow-y-auto`, así que es muy probable que salga recortado. Un
- * flujo de impresión de verdad es otra ficha; ésta pone su primera pieza.
+ * ── LO QUE ESTA REGLA NO CUBRE, Y QUIÉN LO CUBRIÓ DESPUÉS
+ * Esta regla garantiza el COLOR, no el formato. Cuando se escribió, no había `@page`, ni
+ * márgenes, ni saltos de página, ni ocultamiento del resto de la interfaz, y el detalle
+ * —que vive dentro de un modal con `overflow-y-auto`— salía RECORTADO en papel. Eso quedó
+ * dicho aquí como lo que era: la mitad que faltaba, no un olvido.
+ *
+ * Esa mitad es la FEATURE 223, y está JUSTO DEBAJO: el bloque `@media print` del flujo,
+ * con su `@page`, su ocultamiento por pertenencia y su paginación. Las dos reglas conviven
+ * y hacen cosas distintas — ésta pone el color del papel, aquélla decide qué llega a él —
+ * y por eso no se fusionan: la comparación `toEqual` contra `.tema-claro` que vigila esta
+ * regla se rompería con la primera declaración de formato que entrara aquí dentro.
+ *
+ * Lo que SIGUE siendo cierto, y no lo cambia la 223: no hay botón de imprimir ni llamada a
+ * la API de impresión del navegador. La única vía es Ctrl+P. Y el resto del portal —las
+ * quince rutas que no son la hoja del cierre— imprime hoy como imprimía antes de las dos:
+ * ninguna de ellas monta la hoja, así que ni el color ni el flujo las alcanzan.
  *
  * LOS VALORES SON LOS MISMOS QUE LOS DE `:root, .tema-claro`, literalmente, por la misma
  * razón que `.tema-sistema` repite a `.dark`: CSS no sabe reutilizar un bloque de

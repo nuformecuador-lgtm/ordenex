@@ -108,13 +108,21 @@ import { desglosePantalla } from "./desglose-pago";
 // las dos ramas de `@custom-variant dark` en `@media not print`— cambia el
 // comportamiento de impresión de TODA la app y sale a ficha propia; no se parchea acá.
 //
-// LO QUE ESTA FEATURE **NO** CUBRE DE LA IMPRESIÓN, dicho para que nadie lo lea como un
-// olvido: no hay botón, no se llama a la API de impresión del navegador, y la única
-// forma de imprimir sigue siendo el diálogo del navegador (Ctrl+P). El detalle vive
-// dentro de un modal con `max-h`/`overflow-y-auto` (`CierresAdminModule.tsx`), y no hay
-// `@page`, ni márgenes, ni paginación, ni ocultamiento del resto de la interfaz: es
-// muy probable que salga recortado. Lo que la 217 garantiza es el COLOR de la tinta y
-// del papel; un flujo de impresión de verdad es otra ficha.
+// EL FLUJO DE IMPRESIÓN YA EXISTE, Y ES LA FEATURE 223. Este párrafo decía, con razón en
+// su momento, que no había `@page`, ni márgenes, ni paginación, ni ocultamiento del resto
+// de la interfaz, y que por eso la hoja salía recortada dentro del modal. Eso dejó de ser
+// cierto: el bloque `@media print` del flujo vive en `app/globals.css`, justo debajo del
+// de color de la 217, y su guardia es
+// `tests/unit/guards/impresion-flujo.guardia.test.ts`.
+//
+// LO QUE SIGUE SIENDO CIERTO, y no cambia: **no hay botón** y **no se llama a la API de
+// impresión del navegador**. La única forma de imprimir sigue siendo Ctrl+P (decisión
+// humana, tomada dos veces). Lo que la 223 añadió es CSS puro.
+//
+// LO QUE SIGUE SIN CUBRIRSE, dicho para que nadie lo lea como un olvido: al papel va sólo
+// lo que está montado. Las filas plegadas y las CUATRO pestañas no visitadas no están en
+// el DOM y no se imprimen; traerlas exige cambiar qué se monta y es decisión de producto,
+// no de CSS. Está declarado junto al bloque, en `app/globals.css`.
 //
 // LO QUE SÍ HAY QUE MIRAR AL AÑADIR ALGO A LA HOJA. Cualquier pieza nueva con color
 // propio: la guardia `tests/unit/guards/factura-contraste.guardia.test.ts` mantiene el
@@ -226,7 +234,10 @@ function BloqueRenglones({
   ariaLabel,
 }: Readonly<{ titulo: string; children: ReactNode; ariaLabel?: string }>) {
   return (
-    <section aria-label={ariaLabel} className="flex flex-col">
+    // `break-inside-avoid` (feature 223, pieza 2 de 5): un renglón `concepto ….. monto`
+    // partido por un salto de página es ilegible —el concepto queda en una hoja y su monto
+    // en la siguiente—. Es inerte fuera de un medio paginado: en pantalla no hace nada.
+    <section aria-label={ariaLabel} className="flex break-inside-avoid flex-col">
       <h4 className="mb-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
         {titulo}
       </h4>
@@ -235,7 +246,24 @@ function BloqueRenglones({
   );
 }
 
-/** KPI animado del comprobante (contador desde 0, igual que el portal del mensajero). */
+/**
+ * KPI animado del comprobante (contador desde 0, igual que el portal del mensajero).
+ *
+ * ⚠️ LÍMITE CONOCIDO AL IMPRIMIR (feature 223, D6). El valor se ANIMA al montar
+ * (`KpiValorAnimado` cuenta desde 0 hasta la cifra real), así que **una impresión disparada
+ * dentro de esa ventana de milisegundos puede llevar al papel una cifra INTERMEDIA** — un
+ * número que no es el del cierre. La ventana es corta y hace falta pulsar Ctrl+P justo al
+ * abrir la hoja, pero el caso existe.
+ *
+ * No se arregla aquí, y no es pereza: quitar la animación al imprimir toca el DOM de la
+ * hoja, y el DOM de la hoja lo vigila el inventario CERRADO de pares de la 217
+ * (`tests/unit/guards/factura-contraste.guardia.test.ts`), que se pondría rojo por un
+ * cambio que no es de color. Sale a ficha propia.
+ *
+ * Queda escrito porque un límite conocido y no escrito es indistinguible de un bug que
+ * nadie ha visto todavía: el monto exacto, STRING y money-safe, sigue estando en los
+ * renglones y en las tablas, que es donde se compara.
+ */
 function KpiFactura({
   label,
   value,
@@ -303,10 +331,15 @@ function HojaFactura({
     //
     // `papel-al-imprimir`: en pantalla la hoja gira con el tema; al IMPRIMIR vuelve a los
     // valores claros. Ver la nota grande de la cabecera del archivo.
+    //
+    // `hoja-imprimible` (feature 223): marca esta hoja como CANDIDATA a ser el documento que
+    // se imprime. La lleva SIEMPRE, porque el detalle es un comprobante completo por sí
+    // mismo. Cuál de las candidatas acaba en el papel no lo dice la clase: lo decide el
+    // contexto, y una hoja dentro de un diálogo gana (`app/globals.css`, bloque del flujo).
     <Card
       aria-label={ariaLabel}
       role="region"
-      className="papel-al-imprimir shrink-0 gap-0 py-0 shadow-sm"
+      className="hoja-imprimible papel-al-imprimir shrink-0 gap-0 py-0 shadow-sm"
     >
       <div aria-hidden="true" className="h-1.5 w-full shrink-0 bg-brand" />
       <div className="flex flex-col gap-5 p-5">{children}</div>
@@ -493,10 +526,22 @@ function HojaResumen({
     // comprobante en compacto (su nombre accesible lo dice: "Comprobante del cierre
     // de…"), y abrirla lleva justo a la otra: si una girara con el tema y la otra no, el
     // mismo documento tendría dos materiales. Ver la nota de la cabecera.
+    //
+    // `hoja-imprimible` CONDICIONADA a `open` (feature 223): esta hoja sólo es candidata a
+    // imprimirse mientras su desglose está desplegado, y no es un truco para poder elegir
+    // una: PLEGADA NO ES UN DOCUMENTO. Sus tres bloques —métodos, ajustes y fechas— se
+    // montan con `{open ? … : null}` aquí abajo, así que plegada le falta la mitad de los
+    // datos e imprimirla emitiría un comprobante incompleto. Es la misma regla que hace que
+    // las filas plegadas del detalle no salgan al papel: lo que no está en el DOM no se
+    // imprime. De rebote resuelve la designación sin inventar un gesto nuevo — desplegar ya
+    // era el acto por el que alguien dice «ésta me interesa».
     <Card
       aria-label={ariaLabel}
       role="region"
-      className="papel-al-imprimir gap-0 overflow-hidden border-t-[3px] border-t-brand py-0 shadow-sm"
+      className={cn(
+        "papel-al-imprimir gap-0 overflow-hidden border-t-[3px] border-t-brand py-0 shadow-sm",
+        open && "hoja-imprimible",
+      )}
     >
       <div className="flex flex-col gap-2.5 px-4 py-3.5 md:gap-2 md:px-5">
         {/* Línea 1: marca · título · folio · estado — y a la derecha acciones + toggle. */}
@@ -910,7 +955,10 @@ function FilaGestion({
   const desglose = desglosePantalla(g.pagos);
 
   return (
-    <div className="mb-2 overflow-hidden rounded-[10px] border border-border">
+    // `break-inside-avoid` (feature 223, pieza 1 de 5, y la que más importa): esta fila se
+    // repite N veces y es la que decide dónde caen los cortes de un cierre largo. Partida,
+    // deja la guía en una página y el monto en la siguiente.
+    <div className="mb-2 break-inside-avoid overflow-hidden rounded-[10px] border border-border">
       <button
         type="button"
         aria-expanded={open}
@@ -1094,8 +1142,11 @@ export function CierreFacturaDetalle({
           : "Comprobante detallado de tu cierre"
       }
     >
-      {/* Encabezado: estado + de quién es el cierre y a qué bodega va. */}
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+      {/* Encabezado: estado + de quién es el cierre y a qué bodega va.
+          `break-inside-avoid` (feature 223, pieza 4 de 5): es la identidad del comprobante
+          —marca, folio, estado, fechas—. Partida en dos páginas, la primera hoja deja de
+          identificar de qué cierre habla. */}
+      <div className="flex flex-wrap items-start justify-between gap-3 break-inside-avoid border-b border-border pb-4">
         <div className="flex flex-col gap-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-lg font-medium text-foreground">
@@ -1162,7 +1213,11 @@ export function CierreFacturaDetalle({
       </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* `break-inside-avoid` (feature 223, pieza 3 de 5): la REJILLA de KPI, no cada tarjeta.
+          Es un bloque corto y cerrado —cuatro cifras que se leen juntas— y partirlo entre dos
+          páginas deja media lectura en cada una. Protegido el contenedor, ninguna tarjeta
+          puede partirse por dentro tampoco. */}
+      <div className="grid grid-cols-2 break-inside-avoid gap-3 sm:grid-cols-4">
         <KpiFactura
           label={FACTURA_TOTAL_GENERAL_LABEL}
           value={cierre.totales.general}
@@ -1313,8 +1368,10 @@ export function CierreFacturaDetalle({
         </section>
       </section>
 
-      {/* Pie: lo recaudado del cierre y cuántas entregas lo produjeron. */}
-      <div className="-mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-muted/50 px-5 py-3">
+      {/* Pie: lo recaudado del cierre y cuántas entregas lo produjeron.
+          `break-inside-avoid` (feature 223, pieza 5 de 5): franja corta y con el total; no
+          debe quedar huérfana ni partida al final del comprobante. */}
+      <div className="-mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 break-inside-avoid border-t border-border bg-muted/50 px-5 py-3">
         <span className="text-xs text-muted-foreground">
           {FOOTER_RECAUDADO_LABEL}{" "}
           <b className="font-medium text-foreground tabular-nums">

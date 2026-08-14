@@ -35,14 +35,40 @@ const RAIZ = path.resolve(__dirname, "../../..");
 const TESTS = path.join(RAIZ, "tests");
 const GLOBALS = "app/globals.css";
 
+const HOJA = path.join("app", "(app)", "cierres-admin", "_components", "cierre-factura.tsx");
+const MODULO_ADMIN = path.join(
+  "app",
+  "(app)",
+  "cierres-admin",
+  "_components",
+  "CierresAdminModule.tsx",
+);
+const MODULO_MENSAJERO = path.join(
+  "app",
+  "(app)",
+  "cierre-dia",
+  "_components",
+  "CierreDiaModule.tsx",
+);
+const MODAL = path.join("components", "shared", "Modal.tsx");
+
 /** El CODIGO del CSS, con la prosa fuera (quitador COMPARTIDO, feature 209 — R30). */
 const css = codigoSinComentarios(GLOBALS);
 /** El fuente TAL CUAL. SOLO para los casos que exigen que algo este escrito en un COMENTARIO. */
 const cssCrudo = readFileSync(path.join(RAIZ, GLOBALS), "utf8");
 const reglas = reglasDe(css);
 
+/** El fuente de la hoja TAL CUAL, y su CODIGO. La cabecera nombra lo que el codigo no hace. */
+const hojaCruda = readFileSync(path.join(RAIZ, HOJA), "utf8");
+const hoja = quitarComentarios(hojaCruda);
+
 /** La clase de CANDIDATURA de esta ficha. No se reusa `.papel-al-imprimir` (R23). */
 const CANDIDATA = "hoja-imprimible";
+
+/** Cuantas veces aparece `patron` en `texto`. */
+function cuantas(texto: string, patron: RegExp): number {
+  return (texto.match(new RegExp(patron.source, patron.flags.replace("g", "") + "g")) ?? []).length;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // R32 — UN SOLO parser de reglas CSS en todo `tests/`
@@ -704,5 +730,238 @@ describe("feature 223 — lo que el bloque declara junto a si mismo (R4, R17, R2
       "falta el hecho MEDIDO que obliga a cuatro de los cinco: el dialogo bloquea el scroll con " +
         "estilos en linea sobre el `<body>`",
     ).toMatch(/scroll/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// §6.5 — CENSO DEL `.tsx`: la candidatura, la lista cerrada de piezas y la prosa
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** Las aperturas `<Card …>` de la hoja: el texto entre `<Card` y su `>`. */
+const APERTURAS_CARD = hoja
+  .split("<Card")
+  .slice(1)
+  .map((trozo) => trozo.slice(0, trozo.indexOf(">")));
+
+/** El cuerpo de `HojaResumen`, para poder censar DENTRO de ella y no en todo el archivo. */
+const CUERPO_HOJA_RESUMEN = (() => {
+  const desde = hoja.indexOf("function HojaResumen(");
+  const hasta = hoja.indexOf("const BODEGA_TITULO");
+  return desde > -1 && hasta > desde ? hoja.slice(desde, hasta) : "";
+})();
+
+describe("feature 223 — la CANDIDATURA se estampa donde y cuando debe (R5, R23)", () => {
+  it("el censo lee el CODIGO de la hoja, no su prosa, y encuentra sus dos `<Card>`", () => {
+    expect(hoja.length).toBeGreaterThan(10000);
+    expect(hojaCruda, "la cabecera de la hoja dejo de explicar la impresion").toMatch(/impresi[oó]n/i);
+    expect(
+      hoja,
+      "el quitador no esta pasando: se estaria censando PROSA, y la cabecera de este archivo " +
+        "nombra a proposito `@page`, `hoja-imprimible` y `break-inside-avoid`",
+    ).not.toMatch(/LO QUE SIGUE SIENDO CIERTO/);
+    expect(APERTURAS_CARD, "la hoja ya no monta exactamente dos `<Card>`").toHaveLength(2);
+    expect(CUERPO_HOJA_RESUMEN.length, "no se localizo el cuerpo de `HojaResumen`").toBeGreaterThan(
+      1000,
+    );
+  });
+
+  it("`hoja-imprimible` aparece EXACTAMENTE dos veces, y las dos en un `<Card>`", () => {
+    expect(
+      cuantas(hoja, new RegExp(CANDIDATA)),
+      "la marca de candidatura dejo de estar exactamente dos veces: una por hoja",
+    ).toBe(2);
+    expect(
+      cuantas(APERTURAS_CARD.join("\n"), new RegExp(CANDIDATA)),
+      "una de las marcas se fue de la apertura del `<Card>`. Estampada en un `<div>` interior la " +
+        "clase EXISTE y la hoja se ve igual, pero la regla elige un elemento que no es la hoja: " +
+        "al papel iria un trozo, y el censo de la cadena seguiria verde.",
+    ).toBe(2);
+  });
+
+  /**
+   * R5 — la del detalle SIEMPRE; la compacta SOLO desplegada.
+   *
+   * El `(?<![!\w])` no es cosmetico: sin el, `!open && "hoja-imprimible"` —marcar la hoja
+   * justo cuando esta PLEGADA, que es la variante inocua de la mutacion 5— contiene la cadena
+   * `open && "hoja-imprimible"` y pasaria en verde marcando exactamente la hoja equivocada.
+   */
+  it("la del DETALLE va sin condicion; la COMPACTA, condicionada a `open`", () => {
+    const condicional = APERTURAS_CARD.filter((a) =>
+      new RegExp(`(?<![!\\w])open\\s*&&\\s*"${CANDIDATA}"`).test(a),
+    );
+    const incondicional = APERTURAS_CARD.filter(
+      (a) => a.includes(CANDIDATA) && !new RegExp(`open\\s*&&\\s*"${CANDIDATA}"`).test(a),
+    );
+
+    expect(
+      condicional,
+      "la hoja compacta perdio su condicion `open &&`, o la cambio por una que marca la hoja " +
+        "PLEGADA. Plegada le faltan sus tres bloques —metodos, ajustes y fechas, montados con " +
+        "`{open ? … : null}`—: imprimirla emite un comprobante incompleto.",
+    ).toHaveLength(1);
+    expect(
+      incondicional,
+      "la hoja del detalle tiene que llevar la marca SIEMPRE: es un comprobante completo por si " +
+        "mismo y es la que se abre desde las dos rutas",
+    ).toHaveLength(1);
+  });
+
+  /**
+   * Congela el supuesto sobre el que se eligio la clase condicional en vez de un `data-*`: hoy
+   * `HojaResumen` tiene UN solo desplegable. Con dos, `open` dejaria de significar «la hoja esta
+   * completa» y la decision hay que releerla.
+   */
+  it("dentro de `HojaResumen` hay UN solo desplegable (`aria-expanded`)", () => {
+    expect(cuantas(CUERPO_HOJA_RESUMEN, /aria-expanded/)).toBe(1);
+  });
+
+  /** R23 — lo de la 217 sigue intacto: las dos hojas conservan su clase de color. */
+  it("las dos `<Card>` conservan `papel-al-imprimir` (217, verde sin tocarse)", () => {
+    expect(cuantas(hoja, /papel-al-imprimir/)).toBe(2);
+    for (const apertura of APERTURAS_CARD) {
+      expect(apertura).toContain("papel-al-imprimir");
+    }
+  });
+
+  /** R27 / D1 — sigue sin haber boton ni llamada a la API de impresion. */
+  it("sigue sin haber boton «Imprimir» ni `window.print()` (D1, 217 verde sin tocarse)", () => {
+    expect(hoja).not.toMatch(/window\s*\.\s*print/);
+    expect(hoja).not.toMatch(/\bImprimir\b/);
+  });
+});
+
+describe("feature 223 — que NO se parte, y donde NO se aplica (R19, R20)", () => {
+  /**
+   * La LISTA CERRADA de las cinco piezas, cada una por la cadena de clases que la identifica.
+   *
+   * Es una FOTO a proposito, y es lo que R19/R20 piden con esas palabras: «una pieza que la
+   * reciba sin estar en la lista, o una de la lista que la pierda, DEBE poner la verificacion en
+   * rojo». Las dos direcciones importan: `break-inside: avoid` en un contenedor que no cabe en
+   * una pagina es la forma mas rapida de reintroducir el recorte que esta ficha cierra.
+   */
+  const PIEZAS = [
+    // 1 — la fila de una orden. La que mas importa: se repite N veces y decide los cortes.
+    "mb-2 break-inside-avoid overflow-hidden rounded-[10px] border border-border",
+    // 2 — el bloque de renglones de la liquidacion.
+    "flex break-inside-avoid flex-col",
+    // 3 — la rejilla de KPI.
+    "grid grid-cols-2 break-inside-avoid gap-3 sm:grid-cols-4",
+    // 4 — la cabecera de la hoja (marca / folio / estado / fechas).
+    "flex flex-wrap items-start justify-between gap-3 break-inside-avoid border-b border-border pb-4",
+    // 5 — la franja del pie, con el total.
+    "-mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 break-inside-avoid border-t border-border bg-muted/50 px-5 py-3",
+  ];
+
+  it("`break-inside-avoid` esta EXACTAMENTE en las cinco piezas de la lista cerrada", () => {
+    const cadenas = [...hoja.matchAll(/"([^"]*break-inside-avoid[^"]*)"/g)].map((m) => m[1]!);
+    expect(
+      cadenas.sort(),
+      "la lista de piezas que no se parten cambio. Si una pieza la PERDIO, se partira por la " +
+        "mitad en papel; si una la GANO sin estar en la lista, puede ser un contenedor mas alto " +
+        "que una pagina y entonces vuelve el recorte que esta ficha viene a cerrar.",
+    ).toEqual([...PIEZAS].sort());
+    expect(cuantas(hoja, /break-inside-avoid/)).toBe(PIEZAS.length);
+  });
+
+  /** R20 — prohibido donde no cabe. Estos cuatro pueden superar el alto de una pagina. */
+  it.each([
+    ["la `<Card>` de la hoja del detalle", () => APERTURAS_CARD[0]!],
+    ["la `<Card>` de la hoja compacta", () => APERTURAS_CARD[1]!],
+    [
+      "la seccion de ordenes",
+      () => {
+        const i = hoja.indexOf("aria-label={FACTURA_ORDENES_TITULO}");
+        return hoja.slice(i, hoja.indexOf(">", i));
+      },
+    ],
+    [
+      "el panel de la pestaña activa",
+      () => {
+        const i = hoja.indexOf("aria-label={RESULTADO_LABEL[tab]}");
+        return hoja.slice(i, hoja.indexOf(">", i));
+      },
+    ],
+  ])("NO se evita el corte en %s: puede superar el alto de una pagina (R20)", (que, tomar) => {
+    const texto = tomar();
+    expect(texto.length, `no se localizo ${que}`).toBeGreaterThan(10);
+    expect(
+      texto,
+      `${que} recibio \`break-inside-avoid\`. Un contenedor infragmentable mas alto que una ` +
+        "pagina es exactamente el recorte que esta ficha cierra, reintroducido por la puerta de " +
+        "atras y sin que nada mas cambie.",
+    ).not.toContain("break-inside-avoid");
+  });
+});
+
+describe("feature 223 — la pantalla no se toca (R12)", () => {
+  /**
+   * El arreglo del papel NO puede pagarse rompiendo la pantalla. Es la alternativa que el diseño
+   * descarto por escrito: quitar el `max-h`/`overflow` del modal arregla la impresion y deja el
+   * detalle sin barra de desplazamiento, con el contenido saliendose de la caja.
+   */
+  it("el modulo del admin conserva su `max-h-[70vh]` y su `overflow-y-auto`", () => {
+    const modulo = codigoSinComentarios(MODULO_ADMIN);
+    expect(modulo, "desaparecio `max-h-[70vh]` del detalle del admin").toContain("max-h-[70vh]");
+    expect(
+      modulo,
+      "desaparecio `overflow-y-auto`: el papel no se arregla rompiendo el desplazamiento en " +
+        "pantalla. La cadena de ancestros se neutraliza SOLO para el medio impresion.",
+    ).toContain("overflow-y-auto");
+  });
+
+  it("el `Modal` conserva su `overflow-auto`", () => {
+    expect(codigoSinComentarios(MODAL)).toContain("overflow-auto");
+  });
+
+  it("ninguno de los cuatro archivos estrena utilidades `print:`", () => {
+    for (const archivo of [HOJA, MODULO_ADMIN, MODULO_MENSAJERO, MODAL]) {
+      expect(
+        codigoSinComentarios(archivo),
+        `${archivo} estrena una utilidad \`print:\`. El flujo se decide por PERTENENCIA en un ` +
+          "solo bloque de CSS: un parche `print:` por contenedor no arregla ninguna de las dos " +
+          "rutas —no tienen los mismos contenedores— y habria que repetirlo en cada modal futuro.",
+      ).not.toMatch(/\bprint:/);
+    }
+  });
+});
+
+describe("feature 223 — la prosa que esta ficha vuelve falsa se REEXPRESA (R28, R29)", () => {
+  /** R28 — ninguna afirmacion de que no existe flujo de impresion puede quedar en el codigo. */
+  it("la cabecera de la hoja ya no afirma que no hay `@page` ni ocultamiento", () => {
+    expect(
+      hojaCruda,
+      "la cabecera sigue afirmando que no hay flujo de impresion. Una prosa que describe un " +
+        "estado retirado manda a quien la lee a buscar algo que ya no falta.",
+    ).not.toMatch(/no hay\s+`?@page`?/i);
+    expect(
+      hojaCruda,
+      "la cabecera no remite al sitio donde vive el flujo: quien lea este archivo tiene que " +
+        "poder llegar al bloque y a su guardia",
+    ).toMatch(/impresion-flujo\.guardia\.test\.ts/);
+  });
+
+  /** Y lo que SIGUE siendo cierto se conserva: sin boton, y la unica via es Ctrl+P (D1). */
+  it("y conserva lo que sigue siendo cierto: sin boton, la unica via es Ctrl+P", () => {
+    expect(hojaCruda).toMatch(/Ctrl\+P/);
+    expect(hojaCruda).toMatch(/no hay bot[oó]n/i);
+  });
+
+  /**
+   * R29 / D6 — el limite del KPI animado, escrito JUNTO a la pieza y no en un spec. Se mide la
+   * ventana ANTES de `function KpiFactura` para que no valga con mencionarlo en cualquier sitio.
+   */
+  it("junto a `KpiFactura` esta escrito que una impresion puede llevar una cifra intermedia", () => {
+    const i = hojaCruda.indexOf("function KpiFactura");
+    expect(i, "no se encontro `KpiFactura`").toBeGreaterThan(-1);
+    const ventana = hojaCruda.slice(Math.max(0, i - 2000), i);
+
+    expect(ventana, "el limite del KPI no nombra la animacion").toMatch(/KpiValorAnimado/);
+    expect(
+      ventana,
+      "falta lo que de verdad hay que saber: que una impresion disparada mientras el contador " +
+        "sube puede llevar al papel una cifra INTERMEDIA. Un limite conocido y no escrito es " +
+        "indistinguible de un bug que nadie ha visto.",
+    ).toMatch(/intermedia/i);
+    expect(ventana, "el limite no dice que es AL IMPRIMIR").toMatch(/imprim/i);
   });
 });
