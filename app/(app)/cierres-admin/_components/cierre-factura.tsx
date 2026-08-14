@@ -31,7 +31,6 @@ import {
   ubicacion,
   esMontoNegativo,
   EstadoCierreBadge,
-  METODO_LABEL,
   ORDEN_RESULTADOS,
   RESULTADO_LABEL,
   RESULTADO_VACIO,
@@ -58,6 +57,8 @@ import {
   INGRESO_TOTAL_LABEL,
   INGRESO_PANEL_LABEL,
 } from "./cierre-detalle-shared";
+// Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
+import { desglosePantalla } from "./desglose-pago";
 
 // Vista TIPO FACTURA de un cierre (exploración de UX, feature 38/40). Es una lectura
 // alternativa de los MISMOS datos que ya pintan las tablas: el resumen de la cola /
@@ -70,61 +71,65 @@ import {
 // presentación pura y el valor exacto sigue estando en los renglones y en las tablas.
 //
 // ==============================================================================
-// LA HOJA ES PAPEL: SU SUPERFICIE ES FIJA A PROPÓSITO (feature 208)
+// LA HOJA GIRA CON EL TEMA, Y EN PAPEL SALE BLANCA (feature 217)
 // ==============================================================================
 // Las dos hojas de este archivo —`HojaFactura` (el detalle) y `HojaResumen` (el
-// comprobante compacto)— llevan `tema-claro` en su `<Card>`. NO es un olvido de la
-// migración a tokens de tema: es la decisión, y hay que leerla antes de "arreglarla".
+// comprobante compacto)— son una superficie más del portal: en oscuro se pintan
+// oscuras, sobre `bg-card`, como cualquier otra tarjeta. Al IMPRIMIR vuelven a los
+// valores claros, y eso lo hace la clase `papel-al-imprimir` que llevan sus `<Card>`.
 //
-// POR QUÉ FIJA. Esta vista es el facsímil de un comprobante en papel: su lenguaje
-// entero (renglones con guía punteada, folio, franja de marca, liquidación) solo
-// significa algo sobre papel blanco con tinta navy. Que el papel se oscurezca con el
-// tema no lo hace más legible: lo deja sin metáfora. Por eso el papel no gira, y la
-// tinta —los 16 `text-navy` / `border-navy` de abajo— tampoco tiene por qué.
+// Esto REVIERTE una decisión anterior, no arregla un olvido. Hasta la 217 las dos
+// hojas se fijaban a los valores claros con un pin en su `<Card>` («la hoja es papel»)
+// y su tinta eran 16 utilidades de valor fijo. El pedido humano del 2026-08-13 cambió
+// esa decisión: la hoja gira, y al imprimir sigue saliendo blanca.
+// `progress/impl_208_modo-oscuro.md` describe la decisión ANTERIOR y no se edita: es
+// una foto de lo que era cierto ese día, como un `down.sql`.
 //
-// POR QUÉ `tema-claro` Y NO `bg-white text-navy`. Esta era la recomendación anterior
-// escrita aquí, y MEDIRLA la descartó. Dentro de la hoja hay 143 textos: solo 16 son
-// navy fijo; los otros ~127 son tokens que GIRAN (`muted-foreground`, `border`,
-// `card-foreground`, los cuatro `-strong`, `Badge`, `Button`…). Medido en
-// /cierres-admin, en oscuro, sobre el detalle:
-//     sin tocar nada .................... 20 textos por debajo de 4.5:1 (mínimo 1.00)
-//     con `bg-white` a secas ............ 116 por debajo de 4.5:1 (mínimo 1.04)  ← PEOR
-//     con `tema-claro` .................. 3 por debajo (mínimo 3.36) = los MISMOS 3
-//                                          que ya fallan en tema claro, preexistentes.
-// `bg-white` pinta el papel pero deja la tinta del tema en su valor oscuro: mueve el
-// bug de 16 sitios a 116. `tema-claro` (declarada en `globals.css`) fija los valores
-// CLAROS de todos los tokens en el subárbol, así que la hoja entera —papel, tinta,
-// bordes, badges y botones— queda en tema claro y el navy vuelve a ser correcto.
-// Comprobado texto a texto: 143/143 con color y fondo IDÉNTICOS a los del tema claro.
+// POR QUÉ LA IMPRESIÓN FIJA TOKENS Y NO PINTA UN FONDO. Es la medición de la 208
+// girada de lado. Dentro de la hoja hay 143 textos: los tokens que GIRAN
+// (`muted-foreground`, `border`, `card-foreground`, los cuatro `-strong`, `Badge`,
+// `Button`…) son la inmensa mayoría. Medido en su momento sobre el detalle en oscuro:
+//     sin tocar nada .................... 20 textos por debajo de 4.5:1
+//     con `bg-white` a secas ............ 116 por debajo de 4.5:1   ← PEOR
+// Pintar el papel y dejar la tinta del tema mueve el bug de 16 sitios a 116. Por eso la
+// regla de impresión (`app/globals.css`, bloque `@media print`) fija los TOKENS —papel,
+// tinta, bordes, muted y los cuatro `-strong`— en vez de pintar un fondo. Y hay un
+// motivo más duro: los navegadores no imprimen los fondos salvo que el usuario marque
+// «gráficos de fondo», que viene DESMARCADO; sin fijar la tinta, imprimir desde tema
+// oscuro daría casi-blanco sobre un fondo que no se imprime, es decir, la hoja saldría
+// EN BLANCO.
 //
-// LO QUE `tema-claro` NO APAGA — MEDIDO, INCLUIDO LO QUE NO SALE BIEN. El variant
-// `dark:` de Tailwind se define contra el ANCESTRO (`&:is(.dark *)`), no contra los
-// tokens, así que las utilidades `dark:` de las primitivas SIGUEN disparando dentro de
-// la hoja. Los datos de QA no traen todos los estados, así que se midieron aparte
-// inyectando las cadenas de clases exactas de `Badge`/`Button` (claro → oscuro+hoja):
-//     Badge secondary (solicitado) · outline (aprobado) · Button default … idénticos
-//     Button outline ("Ver", "Ver detalles") ......... 14.79 → 14.78   (un tinte)
-//     Badge success / danger ......................... 4.84 → 4.76 · 5.30 → 5.32
-//     Badge warning .................................. 4.51 → 4.48  ← cruza el umbral
-//     Badge + Button destructive ..................... 3.30 → 2.89  ← ya fallaba antes
-// Los dos últimos no son daño NUEVO de esta clase: `text-destructive` sobre
-// `bg-destructive/10` ya da 3.30 en tema claro, y el `--warning-strong` que pasa AA por
-// 0.01 ya está anotado como recomendación abierta de la 208. La fuga los mueve 0.41 y
-// 0.03. Arreglarlos es cambiar esas variantes en TODA la app (decisión de diseño, no
-// de este archivo); si algún día pesa, el arreglo de raíz es el propio variant `dark:`,
-// no un parche acá. Lo que sí hay que mirar es cualquier pieza NUEVA con `dark:` propio
-// que se meta en la hoja.
+// LO QUE LA REGLA DE IMPRESIÓN **NO** APAGA, Y POR QUÉ SE ACEPTA. El variant `dark:` de
+// Tailwind se resuelve contra el ANCESTRO (`&:is(.dark *)`), no contra los tokens: al
+// imprimir desde tema oscuro, las utilidades `dark:` de las primitivas (`Badge`,
+// `Button`) siguen disparando dentro de la hoja. NO es una regresión: «tokens claros +
+// `dark:` disparando» es exactamente lo que la hoja mostraba en pantalla ANTES de esta
+// feature, así que el resultado impreso es el statu quo. El arreglo de raíz —envolver
+// las dos ramas de `@custom-variant dark` en `@media not print`— cambia el
+// comportamiento de impresión de TODA la app y sale a ficha propia; no se parchea acá.
 //
-// EL ENCARGO ORIGINAL DECÍA OTRA COSA, y conviene que quede el porqué: decía no tocar
-// nada porque "es un documento impreso y el papel siempre es blanco". Hoy NO se
-// imprime — no hay `window.print()`, ni `@media print`, ni hoja de impresión en el
-// repo (`app/(app)/ordenes/_components/etiquetas-pdf.ts` genera los PDF de etiquetas
-// por otra vía y dice explícitamente que NO usa print). "Factura" es el ASPECTO del
-// comprobante, no su medio. La conclusión (papel blanco) sobrevive; el argumento no.
+// EL FLUJO DE IMPRESIÓN YA EXISTE, Y ES LA FEATURE 223. Este párrafo decía, con razón en
+// su momento, que no había `@page`, ni márgenes, ni paginación, ni ocultamiento del resto
+// de la interfaz, y que por eso la hoja salía recortada dentro del modal. Eso dejó de ser
+// cierto: el bloque `@media print` del flujo vive en `app/globals.css`, justo debajo del
+// de color de la 217, y su guardia es
+// `tests/unit/guards/impresion-flujo.guardia.test.ts`.
 //
-// SI ALGÚN DÍA ESTA VISTA DEBE GIRAR CON EL TEMA, el cambio no es quitar `tema-claro`
-// y ya: hay que migrar además los 16 navy de abajo a `text-foreground`/`border-foreground`.
-// Quitar solo la clase devuelve exactamente los 1.00-1.06:1 que esto vino a cerrar.
+// LO QUE SIGUE SIENDO CIERTO, y no cambia: **no hay botón** y **no se llama a la API de
+// impresión del navegador**. La única forma de imprimir sigue siendo Ctrl+P (decisión
+// humana, tomada dos veces). Lo que la 223 añadió es CSS puro.
+//
+// LO QUE SIGUE SIN CUBRIRSE, dicho para que nadie lo lea como un olvido: al papel va sólo
+// lo que está montado. Las filas plegadas y las CUATRO pestañas no visitadas no están en
+// el DOM y no se imprimen; traerlas exige cambiar qué se monta y es decisión de producto,
+// no de CSS. Está declarado junto al bloque, en `app/globals.css`.
+//
+// LO QUE SÍ HAY QUE MIRAR AL AÑADIR ALGO A LA HOJA. Cualquier pieza nueva con color
+// propio: la guardia `tests/unit/guards/factura-contraste.guardia.test.ts` mantiene el
+// inventario CERRADO de pares (tinta, fondo) de las dos hojas y se pone roja si aparece
+// una utilidad de color que no mapee a un par medido. Una utilidad de valor fijo (que
+// no gire con el tema) también la caza. La deuda de paleta de las primitivas es de las
+// fichas 210/216 y se arregla en ellas, para toda la app, no con clases locales acá.
 
 // --- Etiquetas propias de la factura (texto separado, i18n-ready) ---
 const FACTURA_TITULO = "Cierre del día";
@@ -193,7 +198,7 @@ function Renglon({
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5">
       <span className="flex flex-col gap-0.5">
-        <span className={cn("text-sm", emphasis && "font-medium text-navy")}>
+        <span className={cn("text-sm", emphasis && "font-medium text-foreground")}>
           {label}
         </span>
         {nota ? (
@@ -208,7 +213,7 @@ function Renglon({
       <span
         className={cn(
           "tabular-nums text-sm",
-          emphasis && "text-base font-semibold text-navy",
+          emphasis && "text-base font-semibold text-foreground",
           tone === "danger" && "text-danger-strong",
         )}
       >
@@ -229,7 +234,10 @@ function BloqueRenglones({
   ariaLabel,
 }: Readonly<{ titulo: string; children: ReactNode; ariaLabel?: string }>) {
   return (
-    <section aria-label={ariaLabel} className="flex flex-col">
+    // `break-inside-avoid` (feature 223, pieza 2 de 5): un renglón `concepto ….. monto`
+    // partido por un salto de página es ilegible —el concepto queda en una hoja y su monto
+    // en la siguiente—. Es inerte fuera de un medio paginado: en pantalla no hace nada.
+    <section aria-label={ariaLabel} className="flex break-inside-avoid flex-col">
       <h4 className="mb-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
         {titulo}
       </h4>
@@ -238,18 +246,40 @@ function BloqueRenglones({
   );
 }
 
-/** KPI animado del comprobante (contador desde 0, igual que el portal del mensajero). */
+/**
+ * KPI animado del comprobante (contador desde 0, igual que el portal del mensajero).
+ *
+ * ⚠️ LÍMITE CONOCIDO AL IMPRIMIR (feature 223, D6). El valor se ANIMA al montar
+ * (`KpiValorAnimado` cuenta desde 0 hasta la cifra real), así que **una impresión disparada
+ * dentro de esa ventana de milisegundos puede llevar al papel una cifra INTERMEDIA** — un
+ * número que no es el del cierre. La ventana es corta y hace falta pulsar Ctrl+P justo al
+ * abrir la hoja, pero el caso existe.
+ *
+ * No se arregla aquí, y no es pereza: quitar la animación al imprimir toca el DOM de la
+ * hoja, y el DOM de la hoja lo vigila el inventario CERRADO de pares de la 217
+ * (`tests/unit/guards/factura-contraste.guardia.test.ts`), que se pondría rojo por un
+ * cambio que no es de color. Sale a ficha propia.
+ *
+ * Queda escrito porque un límite conocido y no escrito es indistinguible de un bug que
+ * nadie ha visto todavía: el monto exacto, STRING y money-safe, sigue estando en los
+ * renglones y en las tablas, que es donde se compara.
+ */
 function KpiFactura({
   label,
   value,
   moneda = false,
 }: Readonly<{ label: string; value: string | number; moneda?: boolean }>) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-md border border-border/60 bg-muted/40 px-3 py-2">
+    // `break-inside-avoid` (feature 223, pieza 3 de 5): la TARJETA, no la rejilla que las
+    // agrupa. Partida, el rótulo («Total general») queda en una página y su cifra en la
+    // siguiente: eso es un dato roto. Partir la rejilla, en cambio, corta ENTRE tarjetas, que
+    // es un corte natural. El criterio es el efecto sobre el documento, no el tamaño del
+    // bloque. Ver la nota de la lista congelada en `impresion-flujo.guardia.test.ts`.
+    <div className="flex break-inside-avoid flex-col gap-0.5 rounded-md border border-border/60 bg-muted/40 px-3 py-2">
       <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
-      <span className="text-lg font-semibold text-navy">
+      <span className="text-lg font-semibold text-foreground">
         <KpiValorAnimado value={value} moneda={moneda} />
       </span>
     </div>
@@ -271,7 +301,7 @@ function ParPagoIngreso({
         <span className="text-xs font-medium text-muted-foreground">
           {PAGO_MENSAJERO_LABEL}
         </span>
-        <span className="text-base font-semibold tabular-nums text-navy">
+        <span className="text-base font-semibold tabular-nums text-foreground">
           {money(pagoMensajero)}
         </span>
       </div>
@@ -279,7 +309,7 @@ function ParPagoIngreso({
         <span className="text-xs font-medium text-muted-foreground">
           {INGRESO_BODEGA_RECHAZOS_LABEL}
         </span>
-        <span className="text-base font-semibold tabular-nums text-navy">
+        <span className="text-base font-semibold tabular-nums text-foreground">
           {money(ingresoBodegaRechazos)}
         </span>
       </div>
@@ -304,12 +334,17 @@ function HojaFactura({
     // tiene su `overflow-y-auto`. `overflow-hidden` (el de `Card`) conserva el recorte
     // que redondea las esquinas. Fuera del modal no hay `max-h` y esto no cambia nada.
     //
-    // `tema-claro`: el papel de la hoja NO gira con el tema. Ver la nota grande de la
-    // cabecera del archivo — no se quita sin migrar antes los 16 navy de más abajo.
+    // `papel-al-imprimir`: en pantalla la hoja gira con el tema; al IMPRIMIR vuelve a los
+    // valores claros. Ver la nota grande de la cabecera del archivo.
+    //
+    // `hoja-imprimible` (feature 223): marca esta hoja como CANDIDATA a ser el documento que
+    // se imprime. La lleva SIEMPRE, porque el detalle es un comprobante completo por sí
+    // mismo. Cuál de las candidatas acaba en el papel no lo dice la clase: lo decide el
+    // contexto, y una hoja dentro de un diálogo gana (`app/globals.css`, bloque del flujo).
     <Card
       aria-label={ariaLabel}
       role="region"
-      className="tema-claro shrink-0 gap-0 py-0 shadow-sm"
+      className="hoja-imprimible papel-al-imprimir shrink-0 gap-0 py-0 shadow-sm"
     >
       <div aria-hidden="true" className="h-1.5 w-full shrink-0 bg-brand" />
       <div className="flex flex-col gap-5 p-5">{children}</div>
@@ -348,7 +383,7 @@ function LineaMonto({
           "tabular-nums",
           esMontoCero(monto)
             ? "text-muted-foreground"
-            : "font-medium text-navy",
+            : "font-medium text-foreground",
         )}
       >
         {money(monto)}
@@ -380,7 +415,7 @@ function LineaFecha({
       )}
     >
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-navy tabular-nums">{value}</span>
+      <span className="font-medium text-foreground tabular-nums">{value}</span>
     </div>
   );
 }
@@ -492,14 +527,26 @@ function HojaResumen({
     // gap-0/py-0: el padding lo ponen la cabecera y el panel; la franja de marca es el
     // borde superior de la card, así que no hay hueco que separar.
     //
-    // `tema-claro`: mismo papel fijo que `HojaFactura`. Esta hoja es el MISMO
+    // `papel-al-imprimir`: mismo comportamiento que `HojaFactura`. Esta hoja es el MISMO
     // comprobante en compacto (su nombre accesible lo dice: "Comprobante del cierre
-    // de…"), y abrirla lleva justo a la otra: si una fuera papel y la otra girara con
-    // el tema, el mismo documento tendría dos materiales. Ver la nota de la cabecera.
+    // de…"), y abrirla lleva justo a la otra: si una girara con el tema y la otra no, el
+    // mismo documento tendría dos materiales. Ver la nota de la cabecera.
+    //
+    // `hoja-imprimible` CONDICIONADA a `open` (feature 223): esta hoja sólo es candidata a
+    // imprimirse mientras su desglose está desplegado, y no es un truco para poder elegir
+    // una: PLEGADA NO ES UN DOCUMENTO. Sus tres bloques —métodos, ajustes y fechas— se
+    // montan con `{open ? … : null}` aquí abajo, así que plegada le falta la mitad de los
+    // datos e imprimirla emitiría un comprobante incompleto. Es la misma regla que hace que
+    // las filas plegadas del detalle no salgan al papel: lo que no está en el DOM no se
+    // imprime. De rebote resuelve la designación sin inventar un gesto nuevo — desplegar ya
+    // era el acto por el que alguien dice «ésta me interesa».
     <Card
       aria-label={ariaLabel}
       role="region"
-      className="tema-claro gap-0 overflow-hidden border-t-[3px] border-t-brand py-0 shadow-sm"
+      className={cn(
+        "papel-al-imprimir gap-0 overflow-hidden border-t-[3px] border-t-brand py-0 shadow-sm",
+        open && "hoja-imprimible",
+      )}
     >
       <div className="flex flex-col gap-2.5 px-4 py-3.5 md:gap-2 md:px-5">
         {/* Línea 1: marca · título · folio · estado — y a la derecha acciones + toggle. */}
@@ -508,7 +555,7 @@ function HojaResumen({
             <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand">
               Ordenex
             </span>
-            <span className="text-base font-semibold text-navy">{titulo}</span>
+            <span className="text-base font-semibold text-foreground">{titulo}</span>
             <span className="font-mono text-xs text-muted-foreground">
               #{numeroFolio}
             </span>
@@ -563,7 +610,7 @@ function HojaResumen({
             {/* Sin contador animado: esto es una FILA de la lista de cierres. Animar el
                 total en cada tarjeta pondría a correr un contador por cierre en pantalla,
                 y además el valor exacto (STRING) es lo que se compara con la tabla. */}
-            <span className="text-[20px] font-semibold text-navy tabular-nums md:text-[22px]">
+            <span className="text-[20px] font-semibold text-foreground tabular-nums md:text-[22px]">
               {money(totales.general)}
             </span>
           </div>
@@ -667,7 +714,7 @@ export function CierreBodegaFacturaResumen({
       extra={
         <p className="mt-3 border-t border-border pt-2 text-[13px] text-muted-foreground">
           {BODEGA_CIERRES_LABEL}:{" "}
-          <b className="font-medium text-navy tabular-nums">
+          <b className="font-medium text-foreground tabular-nums">
             {cierre.cantidadCierres}
           </b>
         </p>
@@ -805,7 +852,7 @@ function TarjetaTotal({
       <span
         className={cn(
           "text-2xl font-medium tabular-nums",
-          esExito ? "text-success-strong" : "text-navy",
+          esExito ? "text-success-strong" : "text-foreground",
         )}
       >
         {value}
@@ -813,8 +860,11 @@ function TarjetaTotal({
       {nota ? (
         <span
           className={cn(
+            // Sin `/80`: un token `-strong` existe para garantizar 4.5:1, y aplicarle una
+            // opacidad anula justo la garantía por la que se eligió (medido: 3.36 en los
+            // dos temas). Feature 217/R8.
             "text-[0.6875rem]",
-            esExito ? "text-success-strong/80" : "text-muted-foreground",
+            esExito ? "text-success-strong" : "text-muted-foreground",
           )}
         >
           {nota}
@@ -848,9 +898,13 @@ function TabResultado({
       aria-selected={active}
       onClick={onSelect}
       className={cn(
+        // El indicador de selección NO va a `primary`: acá el mismo condicional pinta el
+        // borde Y la etiqueta, y `--primary` mide 3.18 sobre blanco — cumple el 3:1 de
+        // componente pero NO el 4.5:1 de texto (es la deuda abierta de la ficha 216).
+        // `foreground` mantiene los dos por encima del umbral.
         "flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors",
         active
-          ? "border-navy font-medium text-navy"
+          ? "border-foreground font-medium text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
@@ -901,9 +955,15 @@ function FilaGestion({
 }>) {
   const [open, setOpen] = useState(false);
   const ing = g.ingresoOrdenex ?? null;
+  // Feature 213 (T7): un método -> su etiqueta, como siempre; dos o más -> cada uno con su
+  // monto, en el orden del DTO. `null` cuando la entrega no tiene líneas de pago.
+  const desglose = desglosePantalla(g.pagos);
 
   return (
-    <div className="mb-2 overflow-hidden rounded-[10px] border border-border">
+    // `break-inside-avoid` (feature 223, pieza 1 de 5, y la que más importa): esta fila se
+    // repite N veces y es la que decide dónde caen los cortes de un cierre largo. Partida,
+    // deja la guía en una página y el monto en la siguiente.
+    <div className="mb-2 break-inside-avoid overflow-hidden rounded-[10px] border border-border">
       <button
         type="button"
         aria-expanded={open}
@@ -917,7 +977,7 @@ function FilaGestion({
         onClick={() => setOpen((v) => !v)}
         className="grid w-full grid-cols-[40px_1.4fr_1fr_1fr_24px] items-center gap-2 px-2 py-2.5 text-left transition-colors hover:bg-muted/50"
       >
-        <span className="text-[13px] font-medium text-navy">
+        <span className="text-[13px] font-medium text-foreground">
           {g.numGuia ?? "—"}
         </span>
         <span className="flex flex-col">
@@ -952,11 +1012,15 @@ function FilaGestion({
             <DatoFila value={ubicacion(g) || null} />
             <DatoFila
               label={FILA_RECIBIDO_LABEL}
+              // Feature 213/R23: el método sale del DESGLOSE, no del campo escalar. Sin
+              // líneas la fila queda EXACTAMENTE como hoy —solo el monto—, sin texto nuevo
+              // (R22); el marcador de ausencia de esta fila es que no se pinta (`DatoFila`
+              // con `value` nulo), y eso no cambia.
               value={
                 g.montoRecibido === null
                   ? null
                   : `${money(g.montoRecibido)}${
-                      g.metodoPago ? ` · ${METODO_LABEL[g.metodoPago]}` : ""
+                      desglose ? ` · ${desglose}` : ""
                     }`
               }
             />
@@ -1083,11 +1147,14 @@ export function CierreFacturaDetalle({
           : "Comprobante detallado de tu cierre"
       }
     >
-      {/* Encabezado: estado + de quién es el cierre y a qué bodega va. */}
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+      {/* Encabezado: estado + de quién es el cierre y a qué bodega va.
+          `break-inside-avoid` (feature 223, pieza 4 de 5): es la identidad del comprobante
+          —marca, folio, estado, fechas—. Partida en dos páginas, la primera hoja deja de
+          identificar de qué cierre habla. */}
+      <div className="flex flex-wrap items-start justify-between gap-3 break-inside-avoid border-b border-border pb-4">
         <div className="flex flex-col gap-1">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="text-lg font-medium text-navy">
+            <span className="text-lg font-medium text-foreground">
               {FACTURA_TITULO}
             </span>
             <EstadoCierreBadge estado={cierre.estado} />
@@ -1151,6 +1218,9 @@ export function CierreFacturaDetalle({
       </div>
       )}
 
+      {/* La rejilla de KPI NO lleva `break-inside-avoid`, y es deliberado: partirla entre dos
+          páginas corta ENTRE tarjetas, que es un corte natural y no rompe ningún dato. Lo que
+          no puede partirse es cada tarjeta, y ahí es donde va la protección (`KpiFactura`). */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiFactura
           label={FACTURA_TOTAL_GENERAL_LABEL}
@@ -1302,11 +1372,13 @@ export function CierreFacturaDetalle({
         </section>
       </section>
 
-      {/* Pie: lo recaudado del cierre y cuántas entregas lo produjeron. */}
-      <div className="-mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-muted/50 px-5 py-3">
+      {/* Pie: lo recaudado del cierre y cuántas entregas lo produjeron.
+          `break-inside-avoid` (feature 223, pieza 5 de 5): franja corta y con el total; no
+          debe quedar huérfana ni partida al final del comprobante. */}
+      <div className="-mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 break-inside-avoid border-t border-border bg-muted/50 px-5 py-3">
         <span className="text-xs text-muted-foreground">
           {FOOTER_RECAUDADO_LABEL}{" "}
-          <b className="font-medium text-navy tabular-nums">
+          <b className="font-medium text-foreground tabular-nums">
             {money(cierre.totales.general)}
           </b>{" "}
           · {grupos.entregada?.length ?? 0} {FOOTER_ENTREGAS_LABEL}

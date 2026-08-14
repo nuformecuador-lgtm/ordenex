@@ -196,10 +196,10 @@ describe("R10 · granos declarados", () => {
 });
 
 describe("R11 · los intentos de entrega no se redefinen", () => {
-  it("primer_intento_ok remite al criterio de intentos vigentes del historial", () => {
+  it("primer_intento_ok remite al criterio de intentos por cierre aprobado", () => {
     const metrica = getMetrica("primer_intento_ok");
     expect(metrica).toBeDefined();
-    expect(metrica!.definicion.criterio).toBe("intentos_vigentes_historial");
+    expect(metrica!.definicion.criterio).toBe("intentos_por_cierre_aprobado");
   });
 
   it("primer_intento_ok no declara umbral propio ni columna materializada", () => {
@@ -217,7 +217,7 @@ describe("R11 · los intentos de entrega no se redefinen", () => {
     for (const metrica of METRICAS) {
       if (metrica.definicion.criterio !== undefined) {
         expect(metrica.definicion.criterio, `metrica ${metrica.id}`).toBe(
-          "intentos_vigentes_historial",
+          "intentos_por_cierre_aprobado",
         );
       }
     }

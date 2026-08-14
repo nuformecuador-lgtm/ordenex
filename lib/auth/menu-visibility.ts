@@ -5,7 +5,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // un módulo sin runtime —sólo `import type` en su cabecera (R1 de la 135)—, así que
 // esta arista no arrastra Prisma, `next/headers` ni nada de servidor al Sidebar
 // cliente, que importa este módulo.
-import { ROLES_ANALITICA } from "@/lib/analytics/types";
+import { ROLES_ANALITICA, type RolAnalitica } from "@/lib/analytics/types";
 
 /**
  * Clave string del icono de un item. El icono real (componente de lucide) NO
@@ -123,8 +123,38 @@ export interface MenuItem {
  *
  * Sigue siendo una WHITELIST (R4): un `RolValue` nuevo del esquema no entra por
  * defecto — sólo entra si se le declara alcance en el catálogo de la analítica.
+ *
+ * 2026-08-12 (decisión del humano): el `mensajero` SALE del tablero — ni ve el ítem
+ * del sidebar ni pasa el `notFound()` de la ruta. Con eso el conjunto de ACCESO
+ * vuelve a ser un subconjunto ESTRICTO del del DOMINIO, como antes de la 133: el
+ * mensajero sigue teniendo ALCANCE definido en el catálogo de la 135 (`metrics.ts`
+ * le declara `acotado`/`prohibido` métrica a métrica, y `oraculo-mensajero.ts` sigue
+ * midiendo ese recorte), simplemente ya no tiene puerta por la que entrar. Las dos
+ * preguntas siempre fueron distintas; hoy vuelven a tener respuestas distintas.
+ *
+ * POR QUÉ UNA RESTA Y NO UNA LISTA PROPIA. Escribir aquí `["maestro","admin",
+ * "adminSatelite","adminTienda"]` compilaría y pasaría todos los tests de
+ * comportamiento, y devolvería el repo a las DOS listas gemelas que el guard de
+ * `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts` existe para impedir:
+ * un `RolValue` que mañana entre al dominio de la analítica no aparecería aquí y se
+ * quedaría sin puerta en silencio. La resta mantiene UNA sola enumeración de roles
+ * lectores (la del dominio) y declara APARTE, en una línea que se lee como la
+ * decisión que es, a quién se le cierra la puerta. El guard vigila las dos mitades.
  */
-export const ROLES_ACCESO_ANALITICA = ROLES_ANALITICA;
+
+/**
+ * Roles que TIENEN alcance en la analítica pero NO acceden al tablero. Es la
+ * excepción declarada, no un olvido: cada nombre de esta lista es una decisión
+ * humana con fecha (hoy sólo `mensajero`, 2026-08-12).
+ *
+ * Quitar un nombre de aquí le DEVUELVE el tablero; añadirlo se lo quita. No hay
+ * tercer sitio donde tocar.
+ */
+export const ROLES_SIN_ACCESO_ANALITICA = ["mensajero"] as const satisfies readonly RolAnalitica[];
+
+export const ROLES_ACCESO_ANALITICA: readonly RolAnalitica[] = ROLES_ANALITICA.filter(
+  (rol) => !(ROLES_SIN_ACCESO_ANALITICA as readonly string[]).includes(rol),
+);
 
 /**
  * Fuente de verdad del menu. Vive en este modulo server-safe (NO en el
@@ -148,17 +178,19 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     roles: ["maestro", "admin"],
   },
   {
-    // Feature 129: tablero de analítica (ruta/shell). Feature 133 (T2.1): ya está
-    // ampliado a los CINCO roles lectores — `roles` apunta a la CONSTANTE (nunca a
-    // un literal copiado: R10 de la 129 lo castiga), y la constante deriva de
-    // `ROLES_ANALITICA`. Este ítem solo decide qué se MUESTRA; la defensa real es el
-    // `notFound()` de la página. Quién ve la región financiera de dentro es OTRA
-    // pregunta y la responde `esAccesoTotal` (D2 de la 133).
+    // Feature 129: tablero de analítica (ruta/shell). Feature 133 (T2.1) lo amplió a
+    // los CINCO roles lectores y la decisión del 2026-08-12 le quitó el `mensajero`:
+    // hoy son CUATRO. `roles` apunta a la CONSTANTE (nunca a un literal copiado: R10
+    // de la 129 lo castiga), y la constante se deriva RESTANDO de `ROLES_ANALITICA`.
+    // Este ítem solo decide qué se MUESTRA; la defensa real es el `notFound()` de la
+    // página, que lee esa misma constante. Quién ve la región financiera de dentro es
+    // OTRA pregunta y la responde `esAccesoTotal` (D2 de la 133).
     //
     // `destinoInicial: false` (T5.1, Q2): visible sí, aterrizaje post-login NO. Va
-    // en posición 2, así que sin esta marca `mensajero` y `adminSatelite` habrían
-    // dejado de aterrizar en `/mis-asignaciones/reparto` y `/recepcion-satelite`
-    // para caer aquí, sin que nada se pusiera rojo (R5).
+    // en posición 2, así que sin esta marca `adminSatelite` habría dejado de aterrizar
+    // en `/recepcion-satelite` para caer aquí, sin que nada se pusiera rojo (R5). La
+    // marca SIGUE HACIENDO FALTA aunque el mensajero ya no vea el ítem: `adminTienda`
+    // y `adminSatelite` lo siguen viendo en primera posición de su barra.
     label: "Analítica",
     href: "/analitica",
     iconKey: "chartColumn",

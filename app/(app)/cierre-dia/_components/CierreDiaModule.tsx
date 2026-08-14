@@ -39,9 +39,11 @@ import { CierreFacturaDetalle } from "@/app/(app)/cierres-admin/_components/cier
 import {
   DESTINO_TIPO_LABEL,
   ESTADO_LABEL,
-  METODO_LABEL,
   RESULTADO_LABEL,
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
+// Feature 213 (T7): el desglose de pago se formatea en UN solo sitio para los cinco
+// consumidores que lo pintan; esta pantalla ya no compone la etiqueta por su cuenta.
+import { desglosePantalla } from "@/app/(app)/cierres-admin/_components/desglose-pago";
 import {
   filasLocales,
   filasDesdeResultado,
@@ -173,8 +175,9 @@ function deshacerAriaLabel(g: CierreDetalleGestion): string {
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
 //
-// Feature 170 (T E.4): `RESULTADO_LABEL`, `METODO_LABEL`, `ESTADO_LABEL` y `DESTINO_LABEL`
-// estaban DUPLICADAS palabra por palabra aquí y en `cierre-detalle-shared`. Ahora las dos
+// Feature 170 (T E.4): `RESULTADO_LABEL`, las etiquetas de método, `ESTADO_LABEL` y
+// `DESTINO_LABEL` estaban DUPLICADAS palabra por palabra aquí y en `cierre-detalle-shared`.
+// (Feature 213: las de método ya solo se leen desde `desglose-pago`.) Ahora las dos
 // pantallas —y el archivo de la descarga, que no puede importar React— leen del módulo PURO
 // `cierre-labels`. Ni un texto cambió; lo que cambia es que ya no pueden divergir (R8).
 
@@ -883,7 +886,9 @@ function columnasPara(
       {
         id: "metodo",
         value: "Método",
-        render: (g) => (g.metodoPago ? METODO_LABEL[g.metodoPago] : "—"),
+        // Feature 213/R23: lo que se pinta sale del DESGLOSE, no del campo escalar.
+        // Sin líneas, el mismo marcador de ausencia de siempre (R22).
+        render: (g) => desglosePantalla(g.pagos) ?? "—",
       },
       columnaPago,
       columnaAcciones,

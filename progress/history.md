@@ -3181,3 +3181,89 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   cuenta por pagar); cubierta por 44 tests de componente, que el reviewer considera suficientes
   para el código y no para dar la pantalla por vista. Fichas 206 (anulación agrupada de un
   reparto, que `reparto_id` deja posible) y 207 (el censo de tablas cuenta prosa como JSX).
+
+## 2026-08-13 — 217: la factura del cierre gira con el tema
+
+- La hoja de la factura del cierre (`cierre-factura.tsx`, sus **dos** hojas: la factura y el
+  comprobante compacto) deja de estar fijada a tema claro con `tema-claro` y **gira con el tema**;
+  al **imprimir** sigue saliendo blanca, por una regla `@media print` acotada a las hojas.
+  Revierte una decisión deliberada de la 208 por pedido humano, no arregla un olvido.
+- **Requisitos cubiertos: R1–R26**, mapa `R → test` en `progress/impl_217.md`. Verificación:
+  `./init.sh` completo **1093/1093 archivos, 13.923/13.923 tests**, cero omitidos.
+- **Medir antes de especificar volvió a cambiar el encargo**, tercera vez esta jornada. Tres cosas
+  que la ficha no traía y que salieron de mirar el árbol: **no existía ninguna vía de impresión en
+  el repo** —ni `window.print()`, ni `@media print`, ni hoja— así que la regla del papel blanco
+  hubo que **crearla, no preservarla**; **ningún test congelaba el pin**, sólo el TÍTULO de un caso
+  lo afirmaba; y el medidor de contraste de la 210 **sí estaba commiteado**, dentro de la guardia,
+  sólo que sin exportar.
+- **La verificación cambió de raíz en la puerta humana.** Fuera el barrido de navegador —no es
+  reproducible, luego no puede ser criterio de aceptación—; dentro un **inventario CERRADO de
+  pares (tinta, fondo)** medido con la aritmética que ya estaba commiteada, sacada a
+  `tests/fixtures/contraste.ts` sin tocar los tres autocontroles de la 210. **Cero segundas copias
+  de la fórmula.**
+- **Cero pares indeterminados**, y por un motivo verificable: las cuatro capas de opacidad componen
+  sobre `card`, que es opaco. El único caso que lo habría sido lo eliminó el R8 aprobado en la
+  puerta — y ése era precisamente su segundo motivo.
+- **El reviewer rechazó la primera vuelta, y el bloqueante era el fallo de la 209 reaparecido en
+  código escrito el mismo día**: la guardia de R15 anclaba en `indexOf("@media print")`, que caía
+  en una **mención dentro de un comentario**, no en la regla. Lo demostró borrando el comentario
+  entero: el caso seguía verde, luego la mutación que la bitácora daba por roja **no pudo ocurrir**.
+  Arreglado con el quitador compartido; ahora muerde en las dos variantes.
+- **Decisión tomada, no limitación sufrida: el inventario NO se cierra por par.** Resolver el fondo
+  efectivo exige recorrer el árbol JSX, y eso produce respuestas plausibles y falsas; **un cierre
+  por par que se equivoque aprueba con un número**, que es peor que no cerrar. Se cierra por
+  **utilidad** y por **fondo** (siete), y la grieta —recombinar tinta y fondo ya declarados— queda
+  declarada en **tres sedes**: R7, `design.md §6.3` y la propia guardia. El reviewer la verificó
+  con una mutación de **control que sale verde a propósito**: ni mayor ni menor de lo que promete.
+- **El único número escrito de memoria fue el único que salió mal**: el hex de P26 oscuro. Volcados
+  de nuevo los 22 pares desde la aritmética, los otros 21 coincidían. El docstring dice ahora que
+  esos hexes **se vuelcan, no se escriben**.
+- **Deuda dejada, con nombre**: ficha **221** (el variant `dark:` también dispara al imprimir, en
+  toda la app), el **flujo de impresión** de la factura —hoy, desde el modal, la hoja saldría
+  recortada por el `overflow-y-auto`— y `Button` variant `destructive`, **bajo AA en los dos
+  temas** (3,29 / 4,43) y sin ficha que lo reclame: la 210 sólo arregló el `Badge` y la 216 trata
+  otro par.
+
+## 2026-08-14 — 223: la factura se imprime entera, y sólo la factura
+
+- La **217** garantizó que la hoja saliera **blanca** en papel; ésta añade el **flujo**: `@page`
+  (vertical, sin nombre de papel, 12 mm), se oculta lo que no es la hoja, y se pagina. Antes la
+  hoja se imprimía **recortada** por las capas de scroll del modal.
+- **Requisitos cubiertos: R1–R33**, mapa `R → test` en `progress/impl_223.md`. Verificación:
+  `./init.sh` completo, y **21 mutaciones con su variante inocua cada una**.
+- **El CSS del propio spec dejaba la página EN BLANCO**, y lo destapó medirlo en Chromium: PDF de
+  **652 bytes**, el tamaño exacto de una página que no imprime nada. `E:has(A B)` exige que `A` sea
+  descendiente de `E`, y el popup **es** el `[role="dialog"]`, no lo contiene, así que la rama A.1
+  ocultaba el diálogo entero. La versión del spec quedó viva como **mutación inocua** y muerde.
+- **Una decisión humana fue contra la recomendación, y eso obligó a resolver de verdad un problema
+  que el spec rodeaba**: la hoja compacta imprimible como documento propio. La objeción —que
+  imprimir el detalle emitiría además las N hojas de detrás— no desaparecía con la decisión.
+  Mecanismo: **candidata** es la hoja completa (la compacta sólo cuenta desplegada, porque su
+  desglose es `{open ? … : null}`), y la **elegida** la decide el contexto: una dentro de
+  `[role="dialog"]` gana y poda las demás por su ancestro; sin diálogo, se imprimen todas, cada una
+  a partir de la segunda en página nueva; cero candidatas, la página imprime como hoy. **Sin una
+  línea de JavaScript**, que era la condición de retorno escrita en el spec.
+- **`jsdom` sí resuelve `:has()`** (29.1.1), contra lo que el diseño daba por hecho. Eso convirtió
+  diez requisitos de censo de cadenas en **verificación por comportamiento**: los selectores se leen
+  del CSS con el parser compartido y se **evalúan contra el DOM montado**, lanzando si la regla no
+  aparece en vez de evaluar vacío.
+- **El riesgo de los anclajes posicionales era real, y está medido**: tres casos anclaban en «el
+  primer `@media print`». Con el ancla vieja, mover el bloque de tokens de la 217 habría salido
+  **VERDE** (`idx 4141 < 5775`); con la nueva, cuatro rojos. Se identifican por **contenido**.
+- **La guardia que prohibía `@page` se REEXPRESÓ, no se borró.** Decía «el formato de impresión es
+  otra ficha, no ésta» — y esa otra ficha era ésta.
+- **Nace `quitarComentariosCss`**, y cierra por la raíz lo que la 209 había dejado como excepción
+  declarada: el parser de CSS aplicaba el quitador de **TypeScript**, cuya pasada `//` se come una
+  `url(//cdn/x)` **y la declaración que le siga**. Hoy no había daño (0 ocurrencias, medido), era
+  latente. Migrados **los cinco** lectores de CSS del repo con salida **byte a byte idéntica**
+  (`11442 = 11442`), y con **contraprueba permanente**: un caso exige que el de TypeScript **sí** se
+  la lleve, para que la separación siga significando algo.
+- **`!important` son cinco, no uno**: Base UI escribe `position`, `height`, `width` y `overflow` en
+  línea sobre el `<body>`. Cada uno compite con un estilo en línea, que es el criterio del requisito.
+- **Dos mutaciones que salieron verdes y eran las mutaciones las que estaban mal**, cazadas y
+  rehechas: la del spec (A.1) y una del implementador que usaba `querySelector("main")` y devolvía
+  `null`, así que sus veinte verdes no significaban nada. **Una mutación inerte reportada en verde es
+  indistinguible de una guardia que no muerde.**
+- **Deuda dejada, con nombre**: el harness de impresión en Chromium se borró a propósito (queda a
+  ficha aparte); **Gecko y WebKit no están medidos**; y las pestañas no visitadas y el KPI animado
+  llevan su límite **declarado**, no omitido.

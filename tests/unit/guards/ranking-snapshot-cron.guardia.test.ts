@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { RankingSnapshotService } from "@/lib/services/RankingSnapshotService";
@@ -40,7 +41,7 @@ function leerVercel(): VercelConfig {
 
 /** Quita comentarios de bloque y de linea: se censa el CODIGO, no la prosa que lo explica. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /** Arboles de PRODUCCION donde vive toda superficie de usuario (paginas + Server Actions). */

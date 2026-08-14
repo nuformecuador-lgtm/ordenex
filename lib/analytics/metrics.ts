@@ -328,11 +328,56 @@ const CATALOGO = [
       atribucionZona: "orden",
     },
   },
+  // ---------------------------------------------------------------------------------------
+  // DERIVA DECLARADA DE `primer_intento_ok` (feature 215 / R24, R35). Esto es la DEFINICION de
+  // la metrica: quien pregunta «que mide esto» llega aqui, y tiene que enterarse de las tres
+  // cosas sin abrir la spec. El mismo aviso vive, autosuficiente, en los dos servicios que la
+  // calculan (`AnaliticaRollupService.contarPrimerIntento`, que PERSISTE las filas, y
+  // `AnaliticaOperativaService.completarPrimerIntentoEnCubos`, la version VIVA del dia en curso).
+  //
+  // (1) CAMBIO DE CRITERIO, SIN RE-BACKFILL. Con la 215 el «intento previo» ya NO se deriva de
+  //     los destinos de transicion de `orden_historial_estado`: sale de las gestiones que viven
+  //     dentro de un cierre APROBADO. El historico ya escrito en `analytics_daily` NO se
+  //     re-backfillea y la metrica NO se redefine para dejar de depender del contador: el
+  //     escalon de la serie se ASUME, deliberadamente (D15). Por que no se re-backfillea:
+  //     reescribiria meses de KPI ya reportados —el historico dejaria de coincidir con lo que la
+  //     gente vio y decidio en su dia— y ademas seria FALSO, porque aquellos cierres no estaban
+  //     aprobados EN EL MOMENTO de aquel calculo.
+  //
+  // (2) EL CORTE ES POR `updated_at`, NO POR `fecha`. Regla declarada: toda fila de
+  //     `analytics_daily` cuyo `updated_at` sea ANTERIOR al despliegue de la 215 esta calculada
+  //     con el criterio VIEJO; toda fila con `updated_at` posterior, con el NUEVO, SEA CUAL SEA
+  //     SU `fecha`. Consecuencia que hay que decir con estas palabras: una fila de una fecha
+  //     ANTERIOR al corte que se RECALCULA despues del corte pasa a estar calculada con el
+  //     criterio NUEVO. Motivo: el job recalcula dias pasados (backfill) y el upsert refresca
+  //     `updated_at` en cada recalculo (`AnaliticaRollupRepository.ts:434,453`), asi que el corte
+  //     es por CUANDO SE CALCULO, no por QUE DIA MIDE. `updated_at` es una columna que YA existe
+  //     (`db/migrations/20260731120000_analytics_daily/migration.sql:83`): por eso la trazabilidad
+  //     del corte no necesita columna, tabla ni migracion nuevas (R35/R27) ni ninguna constante
+  //     `FECHA_CORTE_*` en codigo, que habria que adivinar antes de tiempo o mantener despues.
+  //
+  // (3) EFECTO INTRADIA: PROPIEDAD NUEVA Y PERMANENTE, NO UN TRANSITORIO. Una entrega cuya orden
+  //     tiene cierres SIN aprobar reporta 0 intentos previos, asi que cuenta como primer intento:
+  //     el KPI SUBE durante el dia y BAJA al aprobarse los cierres. Esto NO es un artefacto de la
+  //     migracion de criterio y NO desaparece con la deriva declarada: es una propiedad nueva y
+  //     permanente de la metrica bajo el criterio nuevo. Corolario: el mismo dia puede dar dos
+  //     valores distintos segun cuando se recalcule.
+  //
+  // LO QUE NO CAMBIA (R23 / R24-e): el KPI sigue REMITIENDO al punto unico de conteo
+  // (`OrdenHistorialService.contarIntentos*`), sin `COUNT` propio, sin umbral propio y sin
+  // columna materializada; y `primer_intento_ok <= entregas` se mantiene (CHECK en base +
+  // validacion previa en `AnaliticaRollupService`).
+  //
+  // El texto de `descripcion` repite las tres cosas a proposito: el comentario no viaja con el
+  // dato, y el catalogo es lo que se exporta. Ahi NO puede nombrarse la tabla por su nombre (el
+  // censo de `analytics-daily-guards.test.ts` exige que ese literal aparezca en este archivo
+  // SOLO dentro de `tablas: [...]`), asi que la nocion se dice como «el rollup diario».
+  // ---------------------------------------------------------------------------------------
   {
     id: "primer_intento_ok",
     etiqueta: "Entrega al primer intento",
     descripcion:
-      "Entregas logradas sin intento previo, contadas con el criterio UNICO ya existente en el repo (transiciones vigentes del historial con destino devuelta, o destino reprogramada de familia gestion), que excluye las causadas por gestiones anuladas; esta metrica NO define umbral propio ni columna materializada.",
+      "Entregas logradas sin intento previo, contadas con el criterio UNICO ya existente en el repo (numero de cierres APROBADOS distintos en los que la orden tuvo un resultado de gestion rechazada, devuelta o reprogramada), que excluye las gestiones anuladas; esta metrica NO define umbral propio ni columna materializada. DERIVA DECLARADA (feature 215): el criterio de «intento previo» CAMBIO —antes se derivaba de los destinos de transicion del historial, ahora de las gestiones dentro de un cierre APROBADO— y el historico ya escrito en el rollup diario NO se re-backfillea: el escalon de la serie se ASUME a proposito, porque reescribirlo falsearia meses de KPI ya reportados y aquellos cierres no estaban aprobados en el momento de aquel calculo. CORTE POR `updated_at`, NO POR `fecha`: toda fila del rollup diario cuyo `updated_at` sea ANTERIOR al despliegue de la 215 esta calculada con el criterio VIEJO y toda fila con `updated_at` posterior, con el NUEVO, sea cual sea su `fecha`; una fila de una fecha ANTERIOR al corte que se RECALCULA despues del corte pasa a estar calculada con el criterio NUEVO, porque el job recalcula dias pasados y el upsert refresca `updated_at` en cada recalculo, de modo que el corte es por cuando se calculo, no por que dia mide (`updated_at` ya existe por fila: no hace falta columna, tabla ni migracion nuevas, ni una constante de fecha de corte en codigo). EFECTO INTRADIA, propiedad NUEVA y PERMANENTE: una entrega cuya orden tiene cierres sin aprobar reporta 0 intentos previos y cuenta como primer intento, asi que el KPI SUBE durante el dia y BAJA al aprobarse los cierres; no es un artefacto de la migracion de criterio ni desaparece con la deriva declarada, y el mismo dia puede dar dos valores distintos segun cuando se recalcule. El KPI sigue remitiendo al punto unico de conteo del repo, sin COUNT propio, y se mantiene primer_intento_ok <= entregas.",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "porcentaje",
@@ -342,10 +387,13 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      // R11: se REMITE al criterio de la feature 160 (`OrdenHistorialService.contarIntentos`).
-      // No hay `umbral` ni parametro propio: el tipo `DefinicionMetrica` ni siquiera
-      // admite uno, y este comentario existe para que nadie lo anada "por comodidad".
-      criterio: "intentos_vigentes_historial",
+      // R11 (124) / R23 (215): se REMITE al criterio unico del repo
+      // (`OrdenHistorialService.contarIntentos`). No hay `umbral` ni parametro propio: el tipo
+      // `DefinicionMetrica` ni siquiera admite uno, y este comentario existe para que nadie lo
+      // anada "por comodidad".
+      // El id se RENOMBRO en la 215: el anterior (`intentos_vigentes_historial`) mentia — el
+      // conteo ya no sale del historial, sale de `gestion_orden` con el cierre aprobado.
+      criterio: "intentos_por_cierre_aprobado",
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",

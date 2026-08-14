@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -77,7 +78,7 @@ function relativa(archivo: string): string {
 
 /** Se censa solo el CODIGO: la cabecera del subarbol esta obligada a nombrar lo que no usa. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 interface ArchivoCensado {

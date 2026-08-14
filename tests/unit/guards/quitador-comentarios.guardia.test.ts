@@ -5,6 +5,7 @@ import {
   codigoSinComentarios,
   lineasSinComentarios,
   quitarComentarios,
+  quitarComentariosCss,
   quitarComentariosSql,
 } from "../../fixtures/sin-comentarios";
 
@@ -170,6 +171,83 @@ describe("209 — quitarComentariosSql", () => {
     const ts = "for (let i = n; i-- > 0; ) { prisma.orden.deleteMany(); }";
     expect(quitarComentarios(ts)).toMatch(/deleteMany/);
     expect(quitarComentariosSql(ts)).not.toMatch(/deleteMany/);
+  });
+});
+
+/**
+ * Feature 223 — LA PASADA DE CSS, y por que no puede ser la de TypeScript.
+ *
+ * En CSS **no existe el comentario de linea `//`**. Aplicarle la pasada de `//` a una hoja de
+ * estilos no quita ni un comentario —no hay ninguno que quitar— y en cambio se lleva por delante
+ * una URL protocolo-relativa `url(//cdn/x)` **y todo lo que le siga en esa linea**. Lo que
+ * desaparece es una DECLARACION, y a un censo al que le falta una declaracion no le pasa nada
+ * ruidoso: **afirma de menos y sigue verde**.
+ *
+ * Es la misma familia que la 209 dejo fijada arriba («un `//` que abre una cadena si se lo
+ * lleva»), girada de lado, y es la razon por la que la 209 dejo `analytics-paleta.test.ts` fuera
+ * de su alcance. Desde la 223 ese archivo consume el parser de reglas CSS compartido, asi que la
+ * puerta se cierra aqui.
+ *
+ * Medido en `app/globals.css` el 2026-08-14: **cero** `//` fuera de comentario de bloque, o sea
+ * que hoy las dos pasadas dan el mismo resultado byte a byte. Riesgo LATENTE, no vivo — que es
+ * justo cuando sale barato cerrarlo.
+ */
+describe("223 — quitarComentariosCss: en CSS, la pasada de `//` solo puede hacer daño", () => {
+  /** Una hoja con una URL protocolo-relativa y, detras, una declaracion que tiene que vivir. */
+  const HOJA = [
+    "/* prosa que menciona --color-inventado */",
+    "@font-face { src: url(//cdn.ordenex.app/f.woff2); font-weight: 700; }",
+    ".x { color: #123456; }",
+  ].join("\n");
+
+  it("EL CASO: la declaracion que sigue a `url(//…)` SOBREVIVE", () => {
+    const limpio = quitarComentariosCss(HOJA);
+    expect(limpio, "se perdio la URL protocolo-relativa").toContain("url(//cdn.ordenex.app/f.woff2)");
+    expect(
+      limpio,
+      "se perdio `font-weight: 700`, que iba DETRAS de la URL en la misma linea. Un censo que " +
+        "leyera esta hoja diria que la declaracion no existe, y lo diria en verde.",
+    ).toContain("font-weight: 700");
+    expect(limpio).toContain("color: #123456");
+  });
+
+  it("CONTRAPRUEBA: el quitador de TypeScript SI se la lleva (por eso van aparte)", () => {
+    const conElDeTs = quitarComentarios(HOJA);
+    expect(conElDeTs, "la URL sobrevive al quitador de TS: entonces este caso no prueba nada")
+      .not.toContain("cdn.ordenex.app");
+    expect(
+      conElDeTs,
+      "si `font-weight: 700` sobreviviera al quitador de TypeScript, las dos pasadas serian " +
+        "equivalentes y esta separacion no compraria nada",
+    ).not.toContain("font-weight: 700");
+  });
+
+  it("y si quita los comentarios de BLOQUE, que son los unicos que hay en CSS", () => {
+    const limpio = quitarComentariosCss(HOJA);
+    expect(limpio).not.toMatch(/--color-inventado/);
+    expect(limpio).not.toMatch(/prosa/);
+  });
+
+  it("conserva el numero de lineas: los censos que vuelven al fuente crudo dependen de ello", () => {
+    const multilinea = ["/* uno", "   dos", "   tres */", ".a { color: red; }"].join("\n");
+    expect(quitarComentariosCss(multilinea).split("\n")).toHaveLength(4);
+    expect(quitarComentariosCss(HOJA).split("\n")).toHaveLength(HOJA.split("\n").length);
+  });
+
+  it("CONTRAPRUEBA: un quitador que devolviera vacio fallaria estos casos", () => {
+    const vacio = (_fuente: string) => "";
+    expect(vacio(HOJA)).not.toContain("color: #123456");
+    expect(quitarComentariosCss(HOJA)).toContain("color: #123456");
+  });
+
+  it("y sobre el CSS de HOY las dos pasadas coinciden: el riesgo era latente, no vivo", () => {
+    const crudo = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+    expect(
+      quitarComentariosCss(crudo),
+      "dejaron de coincidir: `app/globals.css` estrenó un `//` fuera de comentario. Con el " +
+        "quitador viejo, lo que hubiera detrás en esa línea habría desaparecido de todos los " +
+        "censos que leen este archivo, en verde. Ya no, pero conviene mirar qué se añadió.",
+    ).toBe(quitarComentarios(crudo));
   });
 });
 

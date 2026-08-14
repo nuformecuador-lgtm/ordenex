@@ -7,6 +7,7 @@
 // llamador en produccion (H1), asi que este es justo el momento de poner la valla.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -30,7 +31,7 @@ function archivos(dir: string, extensiones = [".ts", ".tsx"]): string[] {
  * que castiga explicar las cosas.
  */
 function sinComentarios(codigo: string): string {
-  return codigo.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(codigo);
 }
 
 const DEL_PAQUETE = archivos(PAQUETE).map((archivo) => ({

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { METRICAS } from "@/lib/analytics/metrics";
@@ -29,7 +30,7 @@ const ACTOR: Record<string, ActorAnalitica> = {
 };
 
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /** Firma de una tabla "granos por rol": un rol mapeado a una lista. */

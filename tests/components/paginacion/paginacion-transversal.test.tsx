@@ -27,6 +27,7 @@
 // que ni un listado nuevo puede colarse sin decidir, ni una entrada puede sobrevivir a su
 // archivo.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
@@ -453,7 +454,7 @@ const CONVIVEN_ANEXO_III_Y_IV = new Set([
 
 /** Quita comentarios: en este repo la prosa nombra los adaptadores y falsearía el scan. */
 function sinComentarios(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 function listarTsx(dir: string, acc: string[] = []): string[] {

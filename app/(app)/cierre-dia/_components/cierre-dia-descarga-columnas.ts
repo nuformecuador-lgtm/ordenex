@@ -28,8 +28,8 @@ import {
   CAUSA_INCIDENTE_COL,
   DESTINO_TIPO_LABEL,
   ESTADO_LABEL,
-  METODO_LABEL,
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
+import { desgloseDescarga } from "@/app/(app)/cierres-admin/_components/desglose-pago";
 
 /**
  * Encabezado del pago al mensajero EN SU PANTALLA. Aquí se llama "Ganancia" (y no "Pago
@@ -93,12 +93,16 @@ export const COLUMNAS_DESCARGA_DIA_ENTREGADAS: DescargaColumna[] = [
   { clave: "ganancia", encabezado: GANANCIA_COL },
 ];
 
-/** El método de pago sale como ETIQUETA LEGIBLE (R8), nunca el value del enum. */
+/**
+ * El método de pago sale como ETIQUETA LEGIBLE (R8), nunca el value del enum. Feature 213
+ * (R26-R31): la celda «Método» lleva el DESGLOSE completo —una sola celda, una sola fila, sin
+ * columna nueva— y los montos van MONEY-SAFE, el STRING del servidor tal cual.
+ */
 export function filaDescargaDiaEntregada(gestion: CierreDetalleGestion): DescargaFila {
   return {
     ...celdasComunes(gestion),
     monto: gestion.montoRecibido,
-    metodo: gestion.metodoPago ? METODO_LABEL[gestion.metodoPago] ?? gestion.metodoPago : null,
+    metodo: desgloseDescarga(gestion.pagos),
     ganancia: gestion.pagoMensajero,
   };
 }

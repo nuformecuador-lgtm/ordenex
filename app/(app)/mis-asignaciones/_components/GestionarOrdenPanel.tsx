@@ -7,9 +7,11 @@ import {
   Navigation,
   PackageCheck,
   Phone,
+  Plus,
   QrCode,
   RotateCcw,
   ShieldAlert,
+  Trash2,
   Truck,
   Undo2,
   X,
@@ -25,6 +27,11 @@ import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
+import {
+  formatMonto as formatMontoConfigurado,
+  SIN_MONTO_RAYA,
+} from "@/lib/config/moneda";
+import { aCentimos } from "@/lib/utils/pagos-recaudo";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import {
   capturarUbicacion,
@@ -41,7 +48,19 @@ import { NotaPrivadaMensajero } from "./NotaPrivadaMensajero";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
-import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
+import {
+  ERRORES_LINEA,
+  capturaCuadra,
+  erroresDeLinea,
+  lineaNueva,
+  lineasIniciales,
+  lineasParaEnviar,
+  opcionesPara,
+  pendiente,
+  puedeAnadirLinea,
+  totalCapturado,
+  type LineaEnEdicion,
+} from "./desglose-captura";
 import { VerificarGuiaGate } from "./VerificarGuiaGate";
 import { UbicacionTrigger } from "./UbicacionTrigger";
 import { useSeccionColapsable } from "./useSeccionColapsable";
@@ -54,6 +73,44 @@ import { useSeccionColapsable } from "./useSeccionColapsable";
 const MSG_UBICACION_DENEGADA =
   "Para registrar la gestión hace falta tu ubicación. Activá el permiso desde el candado " +
   "de la barra de direcciones (Permisos del sitio → Ubicación) y volvé a intentarlo.";
+
+// Feature 213 (R8/R9) — textos del editor de líneas de pago, en un solo sitio (i18n-ready) y
+// FUERA del JSX, igual que los avisos de la 158/193.
+const DESGLOSE_TEXTOS = {
+  titulo: "Método de pago",
+  linea: "Línea de pago",
+  metodoLinea: "Método de pago línea",
+  montoLinea: "Monto línea",
+  quitarLinea: "Quitar línea",
+  resumen: "Resumen del cobro",
+  aCobrar: "A cobrar",
+  capturado: "Capturado",
+  diferencia: "Diferencia",
+  anadir: "Añadir método",
+  /**
+   * R9: el descuadre se dice ANTES de pulsar. No es un "revisa los datos": el mensajero
+   * necesita saber QUÉ no cuadra, porque este número acaba siendo la `E` del `min(P, E)` con
+   * el que se le paga (feature 44).
+   */
+  noCuadra: "El desglose debe sumar exactamente el monto a cobrar.",
+} as const;
+
+/**
+ * R2/R16: con qué líneas arranca —y a qué vuelve— el editor. Una entrega SIN cobro son CERO
+ * líneas (nada que repartir); con cobro, UNA línea con el total ya pre-cargado, para que el
+ * caso de un solo método siga costando un solo gesto [Q4].
+ */
+function lineasDeArranque(montoCobrar: number | null): LineaEnEdicion[] {
+  return montoCobrar ? lineasIniciales(montoCobrar) : [];
+}
+
+/**
+ * R8: los tres importes del resumen, con la moneda de CONFIGURACIÓN. Mismo formateador que ya
+ * usa `AsignacionDetalle` en esta carpeta; aquí no se escribe ningún símbolo de moneda.
+ */
+function money(monto: number): string {
+  return formatMontoConfigurado(monto, SIN_MONTO_RAYA);
+}
 
 /**
  * La captura, ya descartada la denegación: es el único desenlace que no llega a los
@@ -257,7 +314,15 @@ export function GestionarOrdenPanel({
   // los 4 botones; si no, en el detalle.
   const [paso, setPaso] = useState<Paso>(yaActiva ? "resultados" : "detalle");
   const [resultado, setResultado] = useState<Resultado>("entregada");
-  const [metodoPago, setMetodoPago] = useState("");
+  // Feature 213 (R1/R2): el método ÚNICO del recaudo pasa a ser un DESGLOSE de líneas
+  // (método + monto). El estado es la lista EN EDICIÓN; lo que viaja al servidor lo derivan
+  // `lineasParaEnviar` (R12) y `buildFormData` (R15).
+  const [lineas, setLineas] = useState<LineaEnEdicion[]>(() =>
+    lineasDeArranque(orden.montoCobrar),
+  );
+  // R13: los errores POR LÍNEA solo se pintan tras un intento de envío. Mostrarlos mientras se
+  // teclea marcaría en rojo la línea recién nacida (que aún no tiene método) en cada gestión.
+  const [erroresLineas, setErroresLineas] = useState<(string | undefined)[]>([]);
   const [fechaReprogramacion, setFechaReprogramacion] = useState(mananaISO());
   const [motivo, setMotivo] = useState("");
   // Feature 73 (R4): causa TIPIFICADA de la rama `devuelta`. `""` = sin elegir; el mensajero
@@ -324,11 +389,18 @@ export function GestionarOrdenPanel({
     });
   }
 
-  // Orden SIN cobro (montoCobrar 0 o null): no hay COD que recaudar, así que el
-  // método de pago no aplica. Se oculta el selector y la entrega se envía con
-  // recaudo 0 y método "efectivo" (valor neutro para el enum del backend).
+  // Orden SIN cobro (montoCobrar 0 o null): no hay COD que recaudar, así que no se monta el
+  // editor de líneas. Feature 213/R16: la entrega se envía con recaudo 0 y CERO líneas —el
+  // `"efectivo"` que este panel forzaba se ha borrado—; el borde ya acepta esa forma
+  // (`validarRecaudoEntrega`, reglas 3 y 4: con `montoRecibido === 0` ninguna dispara).
   const sinCobro = !orden.montoCobrar;
-  const metodoPagoEfectivo = sinCobro ? "efectivo" : metodoPago;
+  const montoACobrar = orden.montoCobrar ?? 0;
+
+  /** R13: cambiar una línea invalida los errores del intento anterior. */
+  function actualizarLineas(next: LineaEnEdicion[]) {
+    setLineas(next);
+    setErroresLineas([]);
+  }
 
   /** Construye el objeto crudo para validar en cliente con gestionarSchema. */
   function buildRaw(captura: CapturaConDesenlace): Record<string, unknown> {
@@ -336,10 +408,12 @@ export function GestionarOrdenPanel({
     switch (resultado) {
       case "entregada":
         // Feature 119 (R5/R6): la evidencia es una LISTA; una lista vacía dispara `min(1)`.
+        // Feature 213 (R15/R17): se envía el DESGLOSE puro y NINGÚN `metodoPago` escalar. El
+        // borde acepta las dos formas pero no juntas (regla 1 de `validarRecaudoEntrega`).
         return {
           ...base,
-          montoRecibido: orden.montoCobrar ?? 0,
-          metodoPago: metodoPagoEfectivo || undefined,
+          montoRecibido: montoACobrar,
+          pagos: lineasParaEnviar(lineas),
           evidencias,
         };
       case "reprogramada":
@@ -392,8 +466,15 @@ export function GestionarOrdenPanel({
       for (const foto of evidencias) fd.append("evidencia", foto);
     };
     if (resultado === "entregada") {
-      fd.set("montoRecibido", String(orden.montoCobrar ?? 0));
-      fd.set("metodoPago", metodoPagoEfectivo);
+      fd.set("montoRecibido", String(montoACobrar));
+      // Feature 213 (R15): el desglose viaja como pares REPETIDOS emparejados por índice, en el
+      // orden en que se capturaron (mismo patrón `append` que las evidencias de la 119, y
+      // exactamente lo que lee `rawFromFormData`). Sin líneas no se crea ninguna clave, que es
+      // la forma de una entrega sin cobro (R16). El escalar `metodoPago` YA NO SE ENVÍA.
+      for (const linea of lineasParaEnviar(lineas)) {
+        fd.append("pagoMetodo", linea.metodo);
+        fd.append("pagoMonto", String(linea.monto));
+      }
       anexarEvidencias();
     } else if (resultado === "reprogramada") {
       fd.set("fechaReprogramacion", fechaReprogramacion);
@@ -436,7 +517,8 @@ export function GestionarOrdenPanel({
   function elegirResultado(next: Resultado) {
     setResultado(next);
     setFieldErrors({});
-    setMetodoPago("");
+    setLineas(lineasDeArranque(orden.montoCobrar)); // feature 213/R10
+    setErroresLineas([]);
     setFechaReprogramacion(mananaISO());
     setMotivo("");
     setCausaDevolucion(""); // feature 73/R4: cambiar de resultado no arrastra la causa anterior
@@ -445,8 +527,38 @@ export function GestionarOrdenPanel({
     setPaso("formulario");
   }
 
+  /**
+   * Feature 213 — la barrera PREVENTIVA del desglose. `true` = se puede seguir.
+   *
+   * R13: una línea a medias se señala EN SU LÍNEA y no se descarta en silencio ([Q6]).
+   * R14: sin ninguna línea y con cobro, el error cuelga de `metodoPago`, que es donde la regla 3
+   * del borde pone el suyo (así el mismo mensaje sirva venga de donde venga).
+   * R9: el descuadre lo pinta el resumen de forma continua; aquí solo corta el envío.
+   */
+  function revisarDesglose(): boolean {
+    const errores = erroresDeLinea(lineas);
+    if (errores.some((e) => e !== undefined)) {
+      setErroresLineas(errores);
+      return false;
+    }
+    setErroresLineas([]);
+    if (lineasParaEnviar(lineas).length === 0) {
+      setFieldErrors({ metodoPago: [ERRORES_LINEA.metodoRequerido] });
+      return false;
+    }
+    if (!capturaCuadra(lineas, montoACobrar)) return false;
+    return true;
+  }
+
   async function handleConfirm() {
     if (enviando || comprimiendo || ubicando) return; // feature 193/R21
+
+    // Feature 213 (R9/R13/R14): el desglose se comprueba ANTES incluso de pedir la ubicación.
+    // Pedir el permiso para una gestión que ya se sabe que no sale sería gastar el único gesto
+    // que el mensajero concede de buena gana. El `gestionarSchema` de más abajo sigue siendo la
+    // segunda barrera (R17) y el borde del servidor la tercera: aquí no se duplica la REGLA
+    // —la suma la decide el mismo `sumaCuadra` de la 212—, solo el MOMENTO en que se dice.
+    if (resultado === "entregada" && !sinCobro && !revisarDesglose()) return;
 
     // Feature 193 (R16/R22): la ubicación se pide AQUÍ, al confirmar, y no al abrir el panel
     // ni al navegar. Pedir el permiso sin una acción que lo justifique es como se consigue
@@ -505,7 +617,17 @@ export function GestionarOrdenPanel({
     }
   }
 
+  // R14: la regla 3 del borde cuelga «método de pago requerido» de `metodoPago`, así que el
+  // editor sigue pintando ese campo aunque ya no exista el selector único.
   const metodoError = firstError(fieldErrors, "metodoPago");
+  // R18: un `validation_error` del servidor con errores en `pagos` se pinta EN el editor, no se
+  // pierde en silencio (es el camino por el que llegan las reglas 1, 2, 4 y 5 del borde).
+  const pagosError = firstError(fieldErrors, "pagos");
+  // R9: la diferencia se calcula y se dice de forma CONTINUA, no al pulsar.
+  const cuadreError =
+    sinCobro || capturaCuadra(lineas, montoACobrar)
+      ? undefined
+      : DESGLOSE_TEXTOS.noCuadra;
   // Feature 119: la evidencia es una LISTA -> tanto el cliente (`safeParse`) como el servidor
   // cuelgan sus errores del campo `evidencias`.
   const evidenciaError = firstError(fieldErrors, "evidencias");
@@ -712,24 +834,18 @@ export function GestionarOrdenPanel({
 
           {resultado === "entregada" ? (
             <>
-              {/* Sin cobro (montoCobrar 0/null): no se pide método de pago; la
-                  entrega se registra con recaudo 0 y método "efectivo". */}
+              {/* Sin cobro (montoCobrar 0/null): no hay nada que repartir, así que no se monta
+                  el editor y la entrega se registra con recaudo 0 y CERO líneas (213/R16). */}
               {sinCobro ? null : (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="gestion-metodo">Método de pago</Label>
-                  <Select
-                    value={metodoPago}
-                    onValueChange={setMetodoPago}
-                    options={METODO_PAGO_OPTIONS}
-                    placeholder="Selecciona un método"
-                    aria-label="Método de pago"
-                  />
-                  {metodoError ? (
-                    <p role="alert" className="text-sm text-destructive">
-                      {metodoError}
-                    </p>
-                  ) : null}
-                </div>
+                <DesglosePagoField
+                  lineas={lineas}
+                  montoACobrar={montoACobrar}
+                  errores={erroresLineas}
+                  errorCuadre={cuadreError}
+                  errorMetodo={metodoError}
+                  errorServidor={pagosError}
+                  onChange={actualizarLineas}
+                />
               )}
               <EvidenciasField
                 inputId="gestion-evidencia"
@@ -887,6 +1003,164 @@ export function GestionarOrdenPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Feature 213 (R1-R9) — EDITOR DE LÍNEAS del recaudo, en el hueco que ocupaba el selector único
+ * de método. Hermano de `CausaField` / `EvidenciasField`: vive en este archivo porque tiene UN
+ * solo consumidor (`docs/architecture.md`, «sin sobre-ingeniería»).
+ *
+ * Cada línea es un grupo con nombre accesible propio («Línea de pago N») y DOS controles y nada
+ * más [D3/R7]: el método y el monto. Sin referencia y sin nota — un campo más en la calle, con
+ * una mano, es un campo que se rellena mal.
+ *
+ * La lógica (opciones deshabilitadas, pendiente, cuadre, errores por línea) NO está aquí: está
+ * en `desglose-captura.ts`, que se testea sin montar React. Aquí solo se pinta.
+ */
+function DesglosePagoField({
+  lineas,
+  montoACobrar,
+  errores,
+  errorCuadre,
+  errorMetodo,
+  errorServidor,
+  onChange,
+}: {
+  lineas: LineaEnEdicion[];
+  montoACobrar: number;
+  /** R13: error por línea, en la MISMA posición que la línea que lo provoca. */
+  errores: (string | undefined)[];
+  /** R9: la suma no iguala exactamente el monto a cobrar. */
+  errorCuadre: string | undefined;
+  /** R14: «método de pago requerido» (regla 3 del borde, campo `metodoPago`). */
+  errorMetodo: string | undefined;
+  /** R18: error del servidor en el campo `pagos`. */
+  errorServidor: string | undefined;
+  onChange: (lineas: LineaEnEdicion[]) => void;
+}) {
+  const capturado = totalCapturado(lineas);
+  // R11: la diferencia se saca en CÉNTIMOS ENTEROS. `pendiente` no sirve aquí porque se acota a
+  // 0: en el resumen hay que poder ver que se capturó de MÁS, y eso es una diferencia negativa.
+  const diferencia = (aCentimos(montoACobrar) - aCentimos(capturado)) / 100;
+
+  function cambiar(indice: number, cambio: Partial<LineaEnEdicion>) {
+    onChange(lineas.map((l, i) => (i === indice ? { ...l, ...cambio } : l)));
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>{DESGLOSE_TEXTOS.titulo}</Label>
+
+      {lineas.map((linea, i) => {
+        const errorLinea = errores[i];
+        return (
+          <div
+            key={linea.id}
+            role="group"
+            aria-label={`${DESGLOSE_TEXTOS.linea} ${i + 1}`}
+            className="flex flex-col gap-1.5"
+          >
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <Select
+                  value={linea.metodo}
+                  onValueChange={(next) =>
+                    cambiar(i, { metodo: next as LineaEnEdicion["metodo"] })
+                  }
+                  options={opcionesPara(lineas, i)}
+                  placeholder="Selecciona un método"
+                  aria-label={`${DESGLOSE_TEXTOS.metodoLinea} ${i + 1}`}
+                  aria-invalid={errorLinea ? true : undefined}
+                />
+              </div>
+              <Input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={linea.monto}
+                onChange={(e) => cambiar(i, { monto: e.target.value })}
+                aria-label={`${DESGLOSE_TEXTOS.montoLinea} ${i + 1}`}
+                aria-invalid={errorLinea ? true : undefined}
+                className="w-28"
+              />
+              {/* R6: quitar se ofrece mientras quede más de una línea. Con una sola no hay nada
+                  que quitar: el recaudo de un método es la línea, no un extra. */}
+              {lineas.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => onChange(lineas.filter((_, j) => j !== i))}
+                  aria-label={`${DESGLOSE_TEXTOS.quitarLinea} ${i + 1}`}
+                  className="rounded-md p-2 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+            {errorLinea ? (
+              <p role="alert" className="text-sm text-destructive">
+                {errorLinea}
+              </p>
+            ) : null}
+          </div>
+        );
+      })}
+
+      {/* R3: no se ofrecen más líneas que métodos hay en el catálogo. */}
+      {puedeAnadirLinea(lineas) ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start gap-1.5"
+          // R4 [Q4]: la línea nueva nace con lo que FALTA, no en blanco.
+          onClick={() => onChange([...lineas, lineaNueva(pendiente(lineas, montoACobrar))])}
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          {DESGLOSE_TEXTOS.anadir}
+        </Button>
+      ) : null}
+
+      {/* R8: los tres importes, siempre visibles y recalculados en cada tecla. */}
+      <dl
+        aria-label={DESGLOSE_TEXTOS.resumen}
+        className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground"
+      >
+        <div className="flex gap-1.5">
+          <dt>{DESGLOSE_TEXTOS.aCobrar}</dt>
+          <dd className="font-semibold text-foreground">{money(montoACobrar)}</dd>
+        </div>
+        <div className="flex gap-1.5">
+          <dt>{DESGLOSE_TEXTOS.capturado}</dt>
+          <dd className="font-semibold text-foreground">{money(capturado)}</dd>
+        </div>
+        <div className="flex gap-1.5">
+          <dt>{DESGLOSE_TEXTOS.diferencia}</dt>
+          <dd
+            className={`font-semibold ${diferencia === 0 ? "text-foreground" : "text-destructive"}`}
+          >
+            {money(diferencia)}
+          </dd>
+        </div>
+      </dl>
+
+      {errorCuadre ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorCuadre}
+        </p>
+      ) : null}
+      {errorMetodo ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMetodo}
+        </p>
+      ) : null}
+      {errorServidor ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorServidor}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

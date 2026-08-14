@@ -12,6 +12,7 @@ import {
   FECHA_D_MENOS_1,
   agregarTransicion,
   claveOrden,
+  crearCierreAprobado,
   crearGestion,
   crearOrden,
   crearRepositorio,
@@ -617,8 +618,9 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           at: instanteCR(FECHA_D, "12:00:00"),
         });
 
-        // La segunda ya acumulaba un intento VIGENTE (transicion a `devuelta` de una gestion
-        // no anulada), asi que su entrega de hoy NO es primer intento.
+        // La segunda ya acumulaba un intento VIGENTE (feature 215: una gestion `devuelta` no
+        // anulada, nacida de una visita real y perteneciente a un cierre APROBADO), asi que su
+        // entrega de hoy NO es primer intento.
         const reintentada = await crearOrden(tx, base, {
           clave: "tras-devolucion",
           zonaId: base.zonaA,
@@ -630,11 +632,17 @@ describeSiHayBase("job de agregacion diaria contra Postgres (feature 124)", () =
           at: instanteCR("2001-06-13", "09:00:00"),
           destino: "pendiente",
         });
+        const cierreAprobado = await crearCierreAprobado(tx, {
+          mensajeroId: base.mensajero1,
+          zonaId: base.zonaB, // `mensajero1` es de la zona B (ver `sembrarBase`)
+          at: instanteCR("2001-06-13", "18:00:00"),
+        });
         const devolucion = await crearGestion(tx, {
           ordenId: reintentada,
           mensajeroId: base.mensajero1,
           resultado: "devuelta",
           at: instanteCR("2001-06-13", "13:00:00"),
+          cierreId: cierreAprobado,
         });
         await agregarTransicion(tx, base, reintentada, {
           at: instanteCR("2001-06-13", "13:00:00"),

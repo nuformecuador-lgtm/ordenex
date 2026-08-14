@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -135,7 +136,7 @@ const RUTAS_CENSADAS: readonly string[] = [
  * Los STRINGS no se ignoran: un id decidiendo algo vive precisamente dentro de comillas.
  */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 interface ArchivoCensado {

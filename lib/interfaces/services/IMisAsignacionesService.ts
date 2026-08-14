@@ -65,9 +65,11 @@ export interface MiAsignacionDTO {
    */
   notaPrivada?: string | null;
   /**
-   * Feature 160 (R11/R14/R16/R24): intentos de entrega VIGENTES de la orden, derivados del
-   * historial en el MISMO lote de la lectura (criterio unico de `OrdenHistorialService`,
-   * design §1.1: destino `devuelta`, o destino `reprogramada` con familia `gestion`).
+   * Feature 160 (R11/R14/R16/R24) + 215 (R6/R20): intentos de entrega de la orden, resueltos en
+   * el MISMO lote de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 215
+   * ese criterio es el numero de CIERRES APROBADOS distintos en los que la orden tuvo un
+   * resultado de gestion vigente `rechazada`/`devuelta`/`reprogramada`; ya no se deriva de los
+   * destinos de las transiciones del historial.
    *
    * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`/`notaPrivada?`: no rompe los
    * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo envia, `0`

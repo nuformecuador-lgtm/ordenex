@@ -313,11 +313,11 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
     montoRecibido: z.number().nonnegative("monto invalido"),
     // Feature 212 (R12) — FORMA A, ESCALAR e HISTORICA: un unico metodo para todo el monto.
     // Pasa a OPCIONAL, no se retira: es la que sigue mandando el panel entre el merge de la
-    // 212 y el de la 213, y el panel valida con ESTE mismo schema en el navegador. Retirarla
+    // 212 y el de la 215, y el panel valida con ESTE mismo schema en el navegador. Retirarla
     // aqui deja la app rota en produccion durante esa ventana.
     metodoPago: z.enum(METODO_PAGO_SEED).optional(),
     // Feature 212 (R11) — FORMA B, el DESGLOSE: 0..N lineas (metodo, monto). Monto por linea
-    // ESTRICTAMENTE positivo: una fila vacia del editor de la 213 es un error de captura, no
+    // ESTRICTAMENTE positivo: una fila vacia del editor de la 215 es un error de captura, no
     // una linea de 0. Las reglas que RELACIONAN los tres campos viven en `validarRecaudoEntrega`.
     pagos: pagosSchema.optional(),
     // Feature 119 (R5): lista de 1..N fotos (antes una sola). Validacion por archivo (R8).

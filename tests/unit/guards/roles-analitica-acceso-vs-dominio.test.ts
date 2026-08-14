@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 import { describe, it, expect } from "vitest";
 
 import { ROLES_ANALITICA as ROLES_DOMINIO_ANALITICA } from "@/lib/analytics/types";
-import { ROLES_ACCESO_ANALITICA } from "@/lib/auth/menu-visibility";
+import {
+  ROLES_ACCESO_ANALITICA,
+  ROLES_SIN_ACCESO_ANALITICA,
+} from "@/lib/auth/menu-visibility";
 
 // GUARD DE NO-CONVERGENCIA (deuda técnica saldada el 2026-07-31).
 // REEXPRESADO por la feature 133 el 2026-08-04 (Q1, puerta CERRADA). Ver más abajo.
@@ -72,6 +76,39 @@ import { ROLES_ACCESO_ANALITICA } from "@/lib/auth/menu-visibility";
 // El caso (a) —acceso ⊆ dominio— y el caso «no vacío» quedan INTACTOS: siguen
 // siendo verdad y siguen siendo necesarios (hoy los implica la derivación; el día
 // que alguien la deshaga, son la red que queda debajo).
+//
+// QUÉ CAMBIÓ EL 2026-08-12 (decisión del humano: el mensajero SALE del tablero)
+// ----------------------------------------------------------------------------
+// El `mensajero` deja de ver el ítem del sidebar y deja de pasar el `notFound()`
+// de la ruta, pero CONSERVA su alcance en el catálogo de la 135 (`metrics.ts` le
+// declara métrica a métrica qué vería si entrara; `oraculo-mensajero.ts` lo mide).
+// Es decir: acceso vuelve a ser subconjunto ESTRICTO del dominio, que es la forma
+// que este archivo tenía antes de la 133 — sólo que ahora con UNA sola enumeración
+// de roles debajo.
+//
+// La derivación NO se deshace: se convierte en una RESTA. `ROLES_ACCESO_ANALITICA`
+// sigue naciendo de `ROLES_ANALITICA`, y lo que se le quita vive en su propia
+// constante, `ROLES_SIN_ACCESO_ANALITICA`, escrita para leerse como la decisión que
+// es. Por eso (b1) ya NO puede ser identidad referencial (`toBe`): el filtro
+// devuelve un array nuevo por necesidad. Lo que se vigila en su lugar es que la
+// resta sea EXACTA en las dos direcciones —ni un rol de más, ni uno de menos— y que
+// la lista de excluidos no esté vacía (una resta vacía sería la igualdad de ayer
+// disfrazada de decisión).
+//
+// LAS MUTACIONES QUE (b1) Y (b2) SIGUEN MATANDO
+// ---------------------------------------------
+//   - «volver a escribir la lista a mano», ahora en su forma corta:
+//         export const ROLES_ACCESO_ANALITICA =
+//           ["maestro","admin","adminSatelite","adminTienda"] as const;
+//     Mismo contenido, typecheck verde, todos los tests de comportamiento verdes, y
+//     otra vez dos listas gemelas libres de divergir: un `RolValue` que mañana entre
+//     al dominio de la analítica se quedaría sin puerta sin que nada se ponga rojo.
+//     La caza (b2), censando el fuente: el lado derecho tiene que MENCIONAR
+//     `ROLES_ANALITICA` y no puede contener literales de rol.
+//   - «cerrarle la puerta a alguien más (o reabrirla) sin declararlo»: cambiar el
+//     filtro para que excluya a `adminTienda`, o dejar de aplicar la resta. La caza
+//     (b1), exigiendo que la diferencia dominio∖acceso sea EXACTAMENTE
+//     `ROLES_SIN_ACCESO_ANALITICA`.
 
 const acceso = new Set<string>(ROLES_ACCESO_ANALITICA);
 const dominio = new Set<string>(ROLES_DOMINIO_ANALITICA);
@@ -87,7 +124,7 @@ const RUTA_MENU_VISIBILITY = "lib/auth/menu-visibility.ts";
  * escrito en una violación.
  */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**
@@ -103,15 +140,26 @@ function ladoDerechoDeLaDeclaracion(fuente: string): string | null {
 }
 
 /**
- * ¿El lado derecho es una REFERENCIA (deriva) o una lista propia (copia)?
- * Referencia = un identificador suelto, opcionalmente con `as const` o con
- * calificador de módulo (`Modulo.ROLES_ANALITICA`). Cualquier `[` es una lista
- * escrita en este archivo, aunque sea un spread de la otra constante: un spread
- * crea un array NUEVO que ya puede editarse por su cuenta.
+ * ¿El lado derecho DERIVA de `ROLES_ANALITICA` o es una lista propia?
+ *
+ * Dos condiciones, y las dos hacen falta:
+ *  (1) MENCIONA el identificador `ROLES_ANALITICA` — si no, no deriva de nada;
+ *  (2) NO contiene ni una comilla. Un nombre de rol sólo puede llegar aquí como
+ *      literal de string, así que prohibir las comillas prohíbe exactamente eso:
+ *      la lista escrita a mano (`["maestro", …]`) y la mezcla
+ *      (`[...ROLES_ANALITICA, "otro"]`), que pasaría (1) y seguiría siendo una
+ *      segunda enumeración de roles.
+ *
+ * Lo que SÍ se admite ahora y antes no: los corchetes. La declaración ya no puede
+ * ser un identificador suelto —el `mensajero` se resta con un `.filter`, que
+ * devuelve un array nuevo por necesidad—, así que la regla dejó de poder ser
+ * «ninguna estructura» y pasó a ser «ningún nombre de rol». A quién se le resta se
+ * declara en `ROLES_SIN_ACCESO_ANALITICA`, cuya exactitud vigila el caso (b1).
  */
-function derivaDeUnaReferencia(ladoDerecho: string | null): boolean {
+function derivaDeRolesAnalitica(ladoDerecho: string | null): boolean {
   if (ladoDerecho === null) return false;
-  return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?: as const)?$/.test(ladoDerecho);
+  if (!/\bROLES_ANALITICA\b/.test(ladoDerecho)) return false;
+  return !/['"`]/.test(ladoDerecho);
 }
 
 const fuenteMenuVisibility = readFileSync(
@@ -130,19 +178,28 @@ describe("guard: ROLES_ACCESO_ANALITICA DERIVA de ROLES_ANALITICA (una sola decl
     ).toEqual([]);
   });
 
-  it("(b1) el acceso y el dominio son el MISMO objeto, no dos listas con el mismo contenido", () => {
+  it("(b1) el acceso es el dominio MENOS exactamente ROLES_SIN_ACCESO_ANALITICA, ni un rol más ni uno menos", () => {
+    const excluidos = new Set<string>(ROLES_SIN_ACCESO_ANALITICA);
+    const diferencia = [...dominio].filter((rol) => !acceso.has(rol)).sort();
+
     expect(
-      ROLES_ACCESO_ANALITICA,
-      `ROLES_ACCESO_ANALITICA ya no ES ROLES_ANALITICA: alguien deshizo la derivación ` +
-        `que la feature 133 (Q1, 2026-08-04) puso en su lugar y volvió a tener DOS listas ` +
-        `de roles. Aunque hoy tengan el mismo contenido, son dos sitios que mañana dirán ` +
-        `cosas distintas sin que nada se ponga rojo — la colisión exacta que este guard ` +
-        `existe para impedir. Remedio: en ${RUTA_MENU_VISIBILITY}, ` +
-        `\`export const ROLES_ACCESO_ANALITICA = ROLES_ANALITICA;\`.`,
-    ).toBe(ROLES_DOMINIO_ANALITICA);
+      diferencia,
+      `La resta dominio∖acceso ya no coincide con ROLES_SIN_ACCESO_ANALITICA ` +
+        `(${[...excluidos].sort().join(", ") || "vacía"}). O alguien le cerró/abrió la ` +
+        `puerta del tablero a un rol sin declararlo en esa constante, o el \`.filter\` de ` +
+        `${RUTA_MENU_VISIBILITY} dejó de aplicarse. Quién NO entra es una decisión humana ` +
+        `y tiene que estar escrita en un solo sitio, legible: esa constante.`,
+    ).toEqual([...excluidos].sort());
+
+    // La otra mitad, explícita: nadie EXCLUIDO conserva la puerta.
+    for (const rol of excluidos) {
+      expect(acceso.has(rol), `El rol ${rol} está excluido y aun así tiene acceso.`).toBe(
+        false,
+      );
+    }
   });
 
-  it("(b2) la declaración del fuente es una REFERENCIA, nunca una lista de roles escrita a mano", () => {
+  it("(b2) la declaración del fuente DERIVA de ROLES_ANALITICA, nunca una lista de roles escrita a mano", () => {
     const ladoDerecho = ladoDerechoDeLaDeclaracion(fuenteMenuVisibility);
     expect(
       ladoDerecho,
@@ -151,13 +208,14 @@ describe("guard: ROLES_ACCESO_ANALITICA DERIVA de ROLES_ANALITICA (una sola decl
         `reapuntarlo — no borrarlo.`,
     ).not.toBeNull();
     expect(
-      derivaDeUnaReferencia(ladoDerecho),
+      derivaDeRolesAnalitica(ladoDerecho),
       `En ${RUTA_MENU_VISIBILITY}, ROLES_ACCESO_ANALITICA se declara como ` +
-        `\`${ladoDerecho}\`, que no es una referencia sino una lista propia. Escribir ` +
-        `los roles a mano compila, pasa el typecheck y pasa todos los tests de ` +
+        `\`${ladoDerecho}\`, que no deriva de ROLES_ANALITICA o nombra roles a mano. ` +
+        `Escribir los roles a mano compila, pasa el typecheck y pasa todos los tests de ` +
         `comportamiento, y aun así reintroduce el problema: dos listas gemelas con ` +
         `significados distintos ("quién entra" y "quién ve qué"), libres de divergir en ` +
-        `silencio. Debe DERIVARSE: \`export const ROLES_ACCESO_ANALITICA = ROLES_ANALITICA;\`.`,
+        `silencio — un rol nuevo del dominio se quedaría sin puerta sin que nada se ponga ` +
+        `rojo. Debe DERIVARSE del dominio restándole ROLES_SIN_ACCESO_ANALITICA.`,
     ).toBe(true);
   });
 
@@ -165,47 +223,71 @@ describe("guard: ROLES_ACCESO_ANALITICA DERIVA de ROLES_ANALITICA (una sola decl
     expect(acceso.size).toBeGreaterThan(0);
   });
 
+  // Contrapesos de (b1): sin ellos, una resta VACÍA (la igualdad de la 133 disfrazada de
+  // decisión) o una que se comiera el dominio entero pasarían (b1) sin decir nada.
+  it("la lista de excluidos no está vacía y todos sus roles pertenecen al dominio", () => {
+    expect(ROLES_SIN_ACCESO_ANALITICA.length).toBeGreaterThan(0);
+    for (const rol of ROLES_SIN_ACCESO_ANALITICA) {
+      expect(
+        dominio.has(rol),
+        `${rol} se excluye del acceso pero no está en ROLES_ANALITICA: no resta nada.`,
+      ).toBe(true);
+    }
+    // Subconjunto ESTRICTO: la resta muerde de verdad, y no se lo lleva todo.
+    expect(acceso.size).toBeLessThan(dominio.size);
+  });
+
   // AUTOCOMPROBACIÓN del censo (b2). Sin esto, un regex que dejara de casar —o una
   // ruta mal calculada— dejaría el caso (b2) en verde para siempre por vacío, que es
   // justo la forma en que un guard muere sin que nadie se entere. Mismo patrón que el
   // bloque final de `tests/unit/analytics/modulo-puro.guardia.test.ts`.
   describe("autocomprobación: el censo (b2) detecta de verdad la mutación", () => {
-    const derivado = `export const ROLES_ACCESO_ANALITICA = ROLES_ANALITICA;`;
+    const restado =
+      `export const ROLES_ACCESO_ANALITICA: readonly RolAnalitica[] = ROLES_ANALITICA.filter(` +
+      `(rol) => !(ROLES_SIN_ACCESO_ANALITICA as readonly string[]).includes(rol));`;
     const copiado =
       `export const ROLES_ACCESO_ANALITICA = ` +
-      `["maestro", "admin", "adminSatelite", "adminTienda", "mensajero"] as const;`;
+      `["maestro", "admin", "adminSatelite", "adminTienda"] as const;`;
 
-    it("acepta la derivación", () => {
-      expect(derivaDeUnaReferencia(ladoDerechoDeLaDeclaracion(derivado))).toBe(true);
+    it("acepta la resta (con y sin anotación de tipo) y la derivación desnuda", () => {
+      expect(derivaDeRolesAnalitica(ladoDerechoDeLaDeclaracion(restado))).toBe(true);
       expect(
-        derivaDeUnaReferencia(
-          ladoDerechoDeLaDeclaracion(`export const ROLES_ACCESO_ANALITICA = ROLES_ANALITICA as const;`),
+        derivaDeRolesAnalitica(
+          ladoDerechoDeLaDeclaracion(`export const ROLES_ACCESO_ANALITICA = ROLES_ANALITICA;`),
         ),
       ).toBe(true);
     });
 
-    it("rechaza la lista escrita a mano, aunque su contenido sea idéntico", () => {
-      expect(derivaDeUnaReferencia(ladoDerechoDeLaDeclaracion(copiado))).toBe(false);
+    it("rechaza la lista escrita a mano, aunque su contenido sea el correcto de hoy", () => {
+      expect(derivaDeRolesAnalitica(ladoDerechoDeLaDeclaracion(copiado))).toBe(false);
     });
 
-    it("rechaza la copia por spread (array nuevo, editable por su cuenta)", () => {
+    it("rechaza la MEZCLA: derivar y además nombrar un rol a mano", () => {
+      // Pasa la mitad (1) del predicado —menciona `ROLES_ANALITICA`— y sigue siendo una
+      // segunda enumeración de roles. La comilla es lo que la delata.
       expect(
-        derivaDeUnaReferencia(
-          ladoDerechoDeLaDeclaracion(`export const ROLES_ACCESO_ANALITICA = [...ROLES_ANALITICA] as const;`),
+        derivaDeRolesAnalitica(
+          ladoDerechoDeLaDeclaracion(
+            `export const ROLES_ACCESO_ANALITICA = [...ROLES_ANALITICA, "apiKey"] as const;`,
+          ),
         ),
       ).toBe(false);
     });
 
-    it("rechaza el fuente donde la declaración no existe", () => {
+    it("rechaza el fuente donde la declaración no existe, y el que no menciona el dominio", () => {
       expect(ladoDerechoDeLaDeclaracion(`export const OTRA_COSA = 1;`)).toBeNull();
-      expect(derivaDeUnaReferencia(null)).toBe(false);
+      expect(derivaDeRolesAnalitica(null)).toBe(false);
+      expect(
+        derivaDeRolesAnalitica(
+          ladoDerechoDeLaDeclaracion(`export const ROLES_ACCESO_ANALITICA = OTRA_LISTA;`),
+        ),
+      ).toBe(false);
     });
 
     it("ignora los comentarios: la cabecera puede citar la forma prohibida", () => {
       const conComentario =
-        `// no escribir ["maestro","admin","adminSatelite","adminTienda","mensajero"]\n` +
-        derivado;
-      expect(derivaDeUnaReferencia(ladoDerechoDeLaDeclaracion(conComentario))).toBe(true);
+        `// no escribir ["maestro","admin","adminSatelite","adminTienda"]\n` + restado;
+      expect(derivaDeRolesAnalitica(ladoDerechoDeLaDeclaracion(conComentario))).toBe(true);
     });
   });
 });

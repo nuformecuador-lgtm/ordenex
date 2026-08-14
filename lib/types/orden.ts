@@ -296,9 +296,11 @@ export type OrdenListItemDTO = OrdenDTO & {
   // reprogramacion vigente; en las tabs que no son "reprogramada" lo normal es null.
   fechaReprogramacion?: string | null;
   /**
-   * Feature 160 (R11/R14/R16): intentos de entrega VIGENTES de la orden, derivados del
-   * historial EN EL MISMO LOTE de la lectura (criterio unico de `OrdenHistorialService`,
-   * design §1.1: destino `devuelta`, o destino `reprogramada` con familia `gestion`).
+   * Feature 160 (R11/R14/R16) + 215 (R6/R20): intentos de entrega de la orden, resueltos EN EL
+   * MISMO LOTE de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 215 ese
+   * criterio es el numero de CIERRES APROBADOS distintos en los que la orden tuvo un resultado
+   * de gestion vigente `rechazada`/`devuelta`/`reprogramada`; ya no se deriva de los destinos
+   * de las transiciones del historial.
    *
    * Opcional (`?`) por el patron aditivo del repo (`zonaEsGam?`/`prioridad?`): no rompe los
    * fixtures ni los mocks que construyen el DTO sin el. El servicio SIEMPRE lo envia, `0`

@@ -23,6 +23,7 @@
 //
 // El plano (b) importa tanto como el (a): un test de conducta solo puede cubrir lo que monta.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync, readdirSync } from "node:fs";
@@ -320,7 +321,7 @@ function rutaRelativa(archivo: string): string {
 
 /** Quita comentarios para que una FRASE no dispare —ni silencie— un patrón de código. */
 function sinComentarios(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /** Todos los módulos de `app/`, con su fuente sin comentarios. */

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 
 import { Prisma } from "@prisma/client";
@@ -306,7 +307,7 @@ const REPOSITORIOS_CON_ALCANCE = [
 
 /** Un comentario no es codigo: la prosa que EXPLICA de donde salen los 15 s no infringe. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**

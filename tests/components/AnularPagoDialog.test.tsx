@@ -9,7 +9,11 @@ import { render, screen, cleanup, within, waitFor } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 
 import { AnularPagoDialog } from "@/components/shared/liquidacion/AnularPagoDialog";
-import type { AnularPagoResult, PagoRegistradoDTO } from "@/lib/types/liquidacion";
+import type {
+  AnularPagoResult,
+  AnularRepartoResult,
+  PagoRegistradoDTO,
+} from "@/lib/types/liquidacion";
 import {
   LLAMADAS_PROHIBIDAS_EN_DINERO,
   codigoSinComentarios,
@@ -26,6 +30,7 @@ const PAGO: PagoRegistradoDTO = {
   fechaPago: "2026-07-30",
   registradoPorNombre: "Ana Maestra",
   registradoAt: "2026-08-02T15:04:05.000Z",
+  esDeReparto: false, // feature 206: pago SUELTO, sin reparto
   anulacion: null,
 };
 
@@ -257,5 +262,139 @@ describe("R14 — money-safe", () => {
     expect(
       within(dialogo()).getByText(/₡9\.999\.999\.999,99/),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * Feature 206 — EL ALCANCE.
+ *
+ * La opción agrupada existe si y solo si se cumplen LAS DOS condiciones: el pago pertenece a un
+ * reparto y quien monta ofrece el acto. Se prueban las dos por separado, porque una sola de ellas
+ * pasando por «la condición» dejaría que la otra se rompiera sin que nada lo dijera.
+ */
+describe("feature 206 — anular el reparto completo", () => {
+  const DEL_REPARTO: PagoRegistradoDTO = { ...PAGO, esDeReparto: true };
+  const repartoMock = vi.fn<(motivo: string) => Promise<AnularRepartoResult>>();
+  const repartoAnuladoMock = vi.fn();
+
+  function montarConReparto(extra: Record<string, unknown> = {}) {
+    return montar({
+      pago: DEL_REPARTO,
+      onAnularReparto: repartoMock,
+      onRepartoAnulado: repartoAnuladoMock,
+      ...extra,
+    });
+  }
+
+  const opcionGrupo = () =>
+    within(dialogo()).getByRole("radio", { name: /Todas las imputaciones/ });
+
+  beforeEach(() => {
+    repartoMock.mockResolvedValue({ status: "ok", anuladas: 3, yaEstaban: 0 });
+  });
+
+  it("un pago SUELTO no ofrece el alcance, aunque se pase la función", () => {
+    montar({ onAnularReparto: repartoMock, onRepartoAnulado: repartoAnuladoMock });
+    expect(within(dialogo()).queryByRole("radio")).not.toBeInTheDocument();
+  });
+
+  it("un pago DE UN REPARTO sin la función tampoco lo ofrece", () => {
+    montar({ pago: DEL_REPARTO });
+    expect(within(dialogo()).queryByRole("radio")).not.toBeInTheDocument();
+  });
+
+  it("con las dos condiciones ofrece el alcance, y viene marcado «solo este pago»", () => {
+    montarConReparto();
+    expect(
+      within(dialogo()).getByRole("radio", { name: /Solo este pago/ }),
+    ).toBeChecked();
+    expect(opcionGrupo()).not.toBeChecked();
+  });
+
+  it("POR DEFECTO anula solo el pago: el acto agrupado hay que pedirlo", async () => {
+    const user = userEvent.setup();
+    montarConReparto();
+    await user.type(motivo(), "Reparto mal imputado");
+    await user.click(confirmar());
+
+    await waitFor(() => expect(anularMock).toHaveBeenCalledTimes(1));
+    expect(repartoMock).not.toHaveBeenCalled();
+  });
+
+  it("al elegir el grupo manda el motivo por el camino agrupado y NO por el individual", async () => {
+    const user = userEvent.setup();
+    montarConReparto();
+    await user.click(opcionGrupo());
+    await user.type(motivo(), "Reparto mal imputado");
+    await within(dialogo()).getByRole("button", { name: "Anular el reparto" }).click();
+
+    await waitFor(() => expect(repartoMock).toHaveBeenCalledWith("Reparto mal imputado"));
+    expect(anularMock).not.toHaveBeenCalled();
+  });
+
+  it("el botón cambia de etiqueta con el alcance: dice QUÉ va a pasar", async () => {
+    const user = userEvent.setup();
+    montarConReparto();
+    expect(confirmar()).toBeInTheDocument(); // «Anular pago»
+    await user.click(opcionGrupo());
+    expect(
+      within(dialogo()).getByRole("button", { name: "Anular el reparto" }),
+    ).toBeInTheDocument();
+  });
+
+  it("el reparto A MEDIAS informa de las DOS cifras", async () => {
+    const user = userEvent.setup();
+    repartoMock.mockResolvedValue({ status: "ok", anuladas: 2, yaEstaban: 1 });
+    montarConReparto();
+    await user.click(opcionGrupo());
+    await user.type(motivo(), "Reparto mal imputado");
+    await within(dialogo()).getByRole("button", { name: "Anular el reparto" }).click();
+
+    await waitFor(() =>
+      expect(repartoAnuladoMock).toHaveBeenCalledWith({
+        status: "ok",
+        anuladas: 2,
+        yaEstaban: 1,
+      }),
+    );
+  });
+
+  it("un reparto ya anulado por completo también cierra, y avisa", async () => {
+    const user = userEvent.setup();
+    repartoMock.mockResolvedValue({ status: "sin_vigentes", yaEstaban: 3 });
+    montarConReparto();
+    await user.click(opcionGrupo());
+    await user.type(motivo(), "Reparto mal imputado");
+    await within(dialogo()).getByRole("button", { name: "Anular el reparto" }).click();
+
+    await waitFor(() =>
+      expect(repartoAnuladoMock).toHaveBeenCalledWith({ status: "sin_vigentes", yaEstaban: 3 }),
+    );
+    expect(openChangeMock).toHaveBeenCalledWith(false);
+  });
+
+  it("SIN MOTIVO no sale nada por el camino agrupado tampoco", async () => {
+    const user = userEvent.setup();
+    montarConReparto();
+    await user.click(opcionGrupo());
+    // El confirmar sigue deshabilitado: la barrera del motivo no depende del alcance.
+    expect(within(dialogo()).getByRole("button", { name: "Anular el reparto" })).toBeDisabled();
+    expect(repartoMock).not.toHaveBeenCalled();
+  });
+
+  it("un fallo del servidor deja el diálogo ABIERTO y lo dice", async () => {
+    const user = userEvent.setup();
+    repartoMock.mockRejectedValue(new Error("red"));
+    montarConReparto();
+    await user.click(opcionGrupo());
+    await user.type(motivo(), "Reparto mal imputado");
+    await within(dialogo()).getByRole("button", { name: "Anular el reparto" }).click();
+
+    await waitFor(() =>
+      expect(within(dialogo()).getByRole("alert")).toHaveTextContent(
+        /No se pudo anular el reparto/,
+      ),
+    );
+    expect(openChangeMock).not.toHaveBeenCalledWith(false);
   });
 });

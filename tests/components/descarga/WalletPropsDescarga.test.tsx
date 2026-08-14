@@ -13,6 +13,7 @@
 // está viendo, y (c) que el tope de 5000 deje de aplicarse y se entregue un archivo gigante
 // —o peor, uno truncado en silencio—.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
@@ -161,7 +162,7 @@ function envolver(ui: ReactElement) {
  * (los datos ya llegaron por props)»), que es justo lo contrario de lo que vigila.
  */
 function sinComentarios(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**

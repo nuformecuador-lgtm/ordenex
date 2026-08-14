@@ -45,6 +45,7 @@
 // `cobertura-tablas.guardia.test.ts`. La selecciona `pnpm exec vitest run guard` por el nombre
 // del archivo, sin estar registrada en ninguna lista.
 import { readFileSync } from "node:fs";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 
@@ -57,7 +58,7 @@ const RAIZ = path.resolve(__dirname, "../../..");
  * que usan los dos censos y la guardia del adaptador.
  */
 function sinComentarios(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**

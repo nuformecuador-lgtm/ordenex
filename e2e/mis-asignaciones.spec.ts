@@ -17,6 +17,26 @@ import { test, expect, type Page } from "@playwright/test";
  *     → order becomes `rechazada`.
  * (c) Reschedule: result "Reprogramar" + future date + motivo → "Guardar
  *     gestión" → order becomes `reprogramada`.
+ * (d) Feature 213 (R35) — MIXED delivery: an 8.000 collection split into 5.000
+ *     cash + 3.000 transfer, followed by a check that the day's closing screen
+ *     shows `total_efectivo` = 5.000. This is the full capture → totals path,
+ *     which is what actually protects the `E` of the `min(P, E)` used to pay the
+ *     mensajero (feature 44): whatever the mensajero captures here IS that `E`.
+ *
+ * FEATURE 213 SCOPE ([Q5], closed at the approval gate on 2026-08-13):
+ * this spec was ALREADY out of date before feature 213. Only the RECAUDO part
+ * was updated here — the single "Método de pago" select became one accessible
+ * "Método de pago línea N" per payment line. Everything else was left ALONE on
+ * purpose, as separate debt:
+ *   · `recogerPrimeraOrden` still assumes the per-row "Recoger" button and the
+ *     "Recoger órdenes" confirmation modal, both removed by feature 96 (pick-up
+ *     is now the guide input or the scanner);
+ *   · `abrirGestionPrimeraOrden` still waits for a `dialog` named "Gestionar
+ *     orden" that the ux redesign (feature 113) replaced with an INLINE panel,
+ *     so every `expect(modal).toBeHidden()` is obsolete too;
+ *   · `elegirEnSelect(page, "Resultado de la gestión", …)` is obsolete as well:
+ *     the result is now chosen with buttons, not with a select.
+ * Fixing those is a separate ticket, not this one.
  *
  * EXECUTION NOTE:
  * These tests require:
@@ -24,6 +44,9 @@ import { test, expect, type Page } from "@playwright/test";
  * - A test database with Supabase/Postgres
  * - A seeded `mensajero` user with several orders in `por_recoger`
  *   assigned to them (so "Por recoger" is non-empty)
+ * - For (d): the FIRST of those orders must have `montoCobrar` = 8000 and the
+ *   day's `cierre_dia` must start empty, so that `total_efectivo` = 5.000 is
+ *   attributable to this delivery and to nothing else
  * - The private Supabase Storage bucket `gestion-evidencias` created (evidence
  *   uploads target it)
  * - An evidence image fixture at `e2e/fixtures/evidencia.jpg`
@@ -110,6 +133,30 @@ async function elegirEnSelect(
   await page.getByRole("option", { name: optionName }).click();
 }
 
+/**
+ * Feature 213 (R1/R2) — fills payment LINE `n` of the delivery breakdown.
+ *
+ * There is no single "Método de pago" select any more: a delivery with a
+ * collection shows one line per payment method, each line a
+ * "Método de pago línea N" combobox plus a "Monto línea N" amount input.
+ *
+ * `monto` is optional because the editor PRE-FILLS it ([Q4]: line 1 with the
+ * full amount to collect, a new line with what is still pending), so the
+ * single-method case is still a single gesture and the test must not pretend
+ * otherwise by always typing.
+ */
+async function capturarLineaDePago(
+  page: Page,
+  n: number,
+  metodo: string,
+  monto?: string,
+) {
+  await elegirEnSelect(page, `Método de pago línea ${n}`, metodo);
+  if (monto !== undefined) {
+    await page.getByLabel(`Monto línea ${n}`).fill(monto);
+  }
+}
+
 test.describe("Mis asignaciones — recaudo E2E flow", () => {
   test.beforeEach(async ({ page }) => {
     await loginMensajero(page);
@@ -125,7 +172,9 @@ test.describe("Mis asignaciones — recaudo E2E flow", () => {
       // Result defaults to "Entregada"; ensure it explicitly.
       await elegirEnSelect(page, "Resultado de la gestión", "Entregada");
 
-      await elegirEnSelect(page, "Método de pago", "Efectivo");
+      // Feature 213: one line, method only — the amount comes pre-filled with the
+      // full amount to collect, so a single-method delivery is still one gesture.
+      await capturarLineaDePago(page, 1, "Efectivo");
 
       await modal
         .getByLabel("Foto de evidencia de entrega")
@@ -173,6 +222,62 @@ test.describe("Mis asignaciones — recaudo E2E flow", () => {
       await modal.getByRole("button", { name: "Guardar gestión" }).click();
 
       await expect(modal).toBeHidden();
+    });
+  });
+  test.describe("(d) Feature 213 (R35): entrega MIXTA → totales del cierre", () => {
+    test("8.000 = 5.000 efectivo + 3.000 transferencia → total_efectivo 5.000", async ({
+      page,
+    }) => {
+      await recogerPrimeraOrden(page);
+
+      const modal = await abrirGestionPrimeraOrden(page);
+
+      await elegirEnSelect(page, "Resultado de la gestión", "Entregada");
+
+      // R1/R2: line 1 arrives pre-filled with the whole 8.000; the mixed case is
+      // the one where the mensajero has to correct it down to what was paid in cash.
+      await capturarLineaDePago(page, 1, "Efectivo", "5000");
+
+      // R3/R4: the new line is born with what is still PENDING (3.000). It is
+      // typed anyway: the test must not depend on the pre-fill to reach the
+      // amount it is going to assert on the closing screen.
+      await modal.getByRole("button", { name: "Añadir método" }).click();
+      await capturarLineaDePago(page, 2, "Transferencia", "3000");
+
+      // R8: the breakdown adds up, so the difference is zero and the panel lets
+      // the gestión through (R9 would block it otherwise, before any request).
+      const resumen = modal.locator('[aria-label="Resumen del cobro"]');
+      await expect(resumen).toContainText(/8[.,]000/);
+      await expect(resumen).toContainText(/5[.,]000|3[.,]000/);
+
+      await modal
+        .getByLabel("Foto de evidencia de entrega")
+        .setInputFiles(EVIDENCIA_FIXTURE);
+
+      await modal.getByRole("button", { name: "Guardar gestión" }).click();
+      await expect(modal).toBeHidden();
+
+      // R35 — THE POINT OF THIS TEST: the totals of the day are not recalculated
+      // by this feature, they are FED by what was captured above. 5.000 of the
+      // 8.000 went in as cash, so `total_efectivo` must be 5.000 and not 8.000.
+      // That number is the `E` of the `min(P, E)` the mensajero gets paid with.
+      await page.goto("/cierre-dia");
+
+      const totales = page.getByRole("region", { name: "Totales del día" });
+      await expect(totales).toBeVisible();
+
+      const efectivo = totales.locator("div").filter({ hasText: /^Efectivo/ }).first();
+      const transferencia = totales
+        .locator("div")
+        .filter({ hasText: /^Transferencia/ })
+        .first();
+
+      // Amounts are asserted with a loose separator: the currency symbol and the
+      // thousands separator come from configuration (`lib/config/moneda.ts`), so
+      // hardcoding "₡5.000,00" here would pin the test to one deployment.
+      await expect(efectivo).toContainText(/5[.,]000/);
+      await expect(efectivo).not.toContainText(/8[.,]000/);
+      await expect(transferencia).toContainText(/3[.,]000/);
     });
   });
 });

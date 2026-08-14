@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 157 (R36/R37/R38) — GUARD de NO-CONTAMINACION. Patron de los censos del repo:
 // verifica por lectura del fuente lo que la feature NO debe tocar, que es justo lo que ningun
@@ -20,12 +21,16 @@ function leer(rel: string): string {
   return fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
 }
 
-/** Fuente sin comentarios `//`: se juzga lo que el codigo EJECUTA, no lo que documenta. */
+/**
+ * Fuente sin comentarios: se juzga lo que el codigo EJECUTA, no lo que documenta.
+ *
+ * Feature 209 — pasa al quitador compartido. El propio de este archivo solo quitaba las lineas
+ * que EMPIEZAN por `//`: ni los bloques `/* … *\/` ni un `// nota` al final de una linea de
+ * codigo, asi que un docstring que nombrara el estado ponia roja una guardia que vigila el
+ * denominador del ranking —es decir, la plata de los mensajeros—.
+ */
 function sinComentarios(src: string): string {
-  return src
-    .split("\n")
-    .filter((linea) => !linea.trimStart().startsWith("//"))
-    .join("\n");
+  return quitarComentarios(src);
 }
 
 describe("Feature 157 — la recoleccion no contamina el cierre del dia (R37)", () => {

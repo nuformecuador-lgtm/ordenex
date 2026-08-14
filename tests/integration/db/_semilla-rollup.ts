@@ -223,6 +223,41 @@ export async function agregarTransicion(
   return fila.id;
 }
 
+export interface SemillaCierre {
+  readonly mensajeroId: string;
+  /** Zona destino del cierre: la del mensajero que cierra. */
+  readonly zonaId: string;
+  readonly at: Date;
+}
+
+/**
+ * Feature 215 — un `cierre_dia` ya APROBADO. Existe porque el criterio de "intento de entrega"
+ * dejo de derivarse de los DESTINOS del historial y pasa por la gestion: solo cuenta la gestion
+ * vigente que pertenece a un cierre en estado `aprobado` (`whereIntentosVigentes`,
+ * `lib/repositories/OrdenHistorialRepository.ts`). Una devolucion sembrada SIN cierre ya no
+ * acumula intento, asi que el caso que distingue un reintento de un primer intento necesita
+ * poder crear ese cierre.
+ *
+ * Valores minimos y coherentes con el aislamiento: sin totales (los defaults son 0, y el rollup
+ * no los lee) y con las fechas del ano 2001 de la siembra. `bodega_central` como destino porque
+ * ninguna medida de este archivo depende del destino del cierre.
+ */
+export async function crearCierreAprobado(tx: TxDeTest, c: SemillaCierre): Promise<string> {
+  const fila = await tx.cierreDia.create({
+    data: {
+      mensajeroId: c.mensajeroId,
+      estado: "aprobado",
+      destinoTipo: "bodega_central",
+      destinoZonaId: c.zonaId,
+      solicitadoAt: c.at,
+      resueltoAt: c.at,
+      createdAt: c.at,
+    },
+    select: { id: true },
+  });
+  return fila.id;
+}
+
 export interface SemillaGestion {
   readonly ordenId: string;
   readonly mensajeroId: string;
@@ -230,6 +265,11 @@ export interface SemillaGestion {
   readonly at: Date;
   readonly causaDevolucion?: GestionCausaDevolucion | null;
   readonly anuladaAt?: Date | null;
+  /**
+   * Feature 215 — cierre al que pertenece la gestion. Opcional y `null` por defecto (como
+   * `anuladaAt`): una gestion sin cierre NO cuenta como intento de entrega.
+   */
+  readonly cierreId?: string | null;
 }
 
 export async function crearGestion(tx: TxDeTest, g: SemillaGestion): Promise<string> {
@@ -240,6 +280,7 @@ export async function crearGestion(tx: TxDeTest, g: SemillaGestion): Promise<str
       resultado: g.resultado,
       causaDevolucion: g.causaDevolucion ?? null,
       anuladaAt: g.anuladaAt ?? null,
+      cierreId: g.cierreId ?? null,
       createdAt: g.at,
     },
     select: { id: true },

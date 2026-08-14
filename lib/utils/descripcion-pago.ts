@@ -9,9 +9,16 @@ import type { MetodoLiquidacion } from "@/lib/types/liquidacion";
  * `metodo_pago_value` ganara un valor, el build rompe aqui en vez de emitir una descripcion
  * vacia en el libro.
  *
- * No se importa `METODO_PAGO_LABEL` de `app/(app)/mis-asignaciones/_components/`: es un modulo
- * de PANTALLA y `lib/` no depende de `app/`. Coinciden en contenido porque describen el mismo
- * catalogo, no porque uno sea la fuente del otro.
+ * No se importa la etiqueta de ningun modulo de PANTALLA: `lib/` no depende de `app/`. La fuente
+ * de pantalla es hoy `METODO_LABEL` (`app/(app)/cierres-admin/_components/cierre-labels.ts`).
+ * Coinciden en contenido porque describen el mismo catalogo, no porque una sea la fuente de la
+ * otra.
+ *
+ * Feature 213: este parrafo citaba `METODO_PAGO_LABEL` de
+ * `app/(app)/mis-asignaciones/_components/metodo-pago-options.ts`, modulo que la 213 borro al
+ * quedar huerfano tras sustituir el selector unico por el editor de lineas. La referencia muerta
+ * se corrige con EXCEPCION AUTORIZADA a R34 —que prohibe tocar este archivo—, concedida por el
+ * humano el 2026-08-13. La prohibicion sigue viva para la LOGICA: aqui solo cambia el comentario.
  */
 const ETIQUETA_METODO: Record<MetodoLiquidacion, string> = {
   efectivo: "Efectivo",

@@ -53,6 +53,7 @@ function comprobante(): PagoRegistradoDTO {
     fechaPago: HOY_CR,
     registradoPorNombre: "Ana Admin",
     registradoAt: "2026-08-02T15:04:05.000Z",
+    esDeReparto: false, // feature 206: pago SUELTO, sin reparto
     anulacion: null,
   };
 }
@@ -75,6 +76,14 @@ function fakeService(overrides: Partial<ILiquidacionService> = {}): ILiquidacion
       status: "ok" as const,
       pago: { ...comprobante(), anulacion: ANULACION },
       restante: "50000.00",
+    })),
+    // Feature 206: la anulacion AGRUPADA. Por defecto informa de un reparto de 3 imputaciones
+    // con una ya anulada, que es el caso del reparto A MEDIAS y el que la ficha existe para
+    // resolver: asi las aserciones de forma no miran el caso trivial.
+    anularReparto: vi.fn(async () => ({
+      status: "ok" as const,
+      anuladas: 2,
+      yaEstaban: 1,
     })),
     // T C.1: los dos listados de comprobantes. Por defecto devuelven UN pago vigente, para que
     // las aserciones de forma tengan algo que mirar.
@@ -617,6 +626,9 @@ describe("R65/R82 — NO se exporta ninguna accion de EDITAR ni de DESANULAR un 
     // decision escrita (design §10.5, Q3): deshacer un reparto es anular sus pagos uno a uno.
     expect(Object.keys(accionesLiquidacion).sort()).toEqual([
       "anularPagoAction",
+      // Feature 206: anular en grupo NO es editar ni desanular, así que el barrido de nombres de
+      // más abajo sigue en pie sin excepciones. Lo que cambia es el conteo de la superficie.
+      "anularRepartoAction",
       "listarPagosDeCierreAction",
       "listarPagosDeTiendaAction",
       "previsualizarRepartoMensajeroAction",

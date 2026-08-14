@@ -57,7 +57,7 @@ const IDS_CATALOGO = new Set(METRICAS.map((m) => m.id));
 
 /** Quita comentarios de bloque, de linea y trailing, para censar solo el codigo. */
 function soloCodigo(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+  return quitarComentarios(fuente);
 }
 
 /**

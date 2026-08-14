@@ -9,6 +9,409 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🏁 CIERRE DE JORNADA 2026-08-14 — **EMPIEZA A LEER POR AQUÍ**
+
+### 🚦 Lo único que espera decisión humana: **la release a `prod`**
+
+**95 commits, y CERO migraciones** — no es una estimación: el árbol `db/` de `dev` y el de `prod`
+son **idénticos byte a byte** (116 migraciones en ambos), así que mergear **no aplica nada** contra
+la base. La última que se desplegó fue la de la 212, en la release #359.
+
+Lleva **206** (anulación agrupada), **209** (un solo quitador de comentarios), **210** (contraste de
+insignias), **213** (pago múltiple en pantalla), **215** (el reintento se cuenta en el cierre),
+**217** (la factura gira con el tema), **221** (`dark:` no dispara al imprimir), **222** (el botón
+destructive cumple AA) y **223** (la factura se imprime entera).
+
+Lo que un usuario nota de inmediato: **puede cobrar una entrega con varios métodos**, y **la factura
+del cierre ya no sale recortada ni en blanco sobre negro al imprimirla**.
+
+### ✅ Lo que salió de esta jornada
+
+| | Qué |
+| --- | --- |
+| **El rojo de `dev`** | cerrado. Y la disyuntiva que la nota planteaba —«¿implementar R24 o cambiar el test?»— **era falsa: era la semilla** |
+| **209** | cerrada. 7 quitadores migrados **sin mover un veredicto**, 9 falsos positivos cerrados, y 2 semánticas que el censo no podía ver |
+| **217** | la factura gira con el tema, con inventario **cerrado** de 26 pares y la grieta declarada en tres sedes |
+| **221** | el variant `dark:` deja de disparar al imprimir; 4 pares de paleta fija mejoran de 1,87 a 3,18-11,39 |
+| **222** | el botón `destructive` cumple en los **cuatro** estados — el peor era el **hover**, y no estaba en la ficha |
+| **223** | la factura se imprime entera y sólo la factura, **sin una línea de JavaScript** |
+| **Bookkeeping** | la **213** llevaba `in_progress` con su PR mergeado: la única tarea sin marcar era **su propio bookkeeping**, y ocupaba un hueco de la regla de zona |
+| **Fichas nuevas** | **221**, **222**, **223** (las tres implementadas hoy) y **224**, **225**, **226** registradas con su medición dentro |
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **Decidir la release** (arriba). Sin migraciones, así que el riesgo es de código, no de datos.
+2. **La 224** — al imprimir, los tokens tampoco giran a claro. Es `low` y **borra un precio que hoy
+   se paga**: con «gráficos de fondo» marcado, `Badge` success cae de 6,60 a 1,70.
+3. **La 225** — 19 avisos hechos a mano en 15 archivos repiten el par que la 222 arregló. Decidir al
+   empezar si van a un componente compartido o sólo se les cambia el par; lo segundo reabre la ficha.
+4. **La 226** — el anillo de foco mide 1,30 contra el **3:1** que pide 1.4.11. No es estética: es la
+   señal de dónde está el teclado.
+5. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+6. **La 215** sigue `in_progress` con R18/R19/R24 abiertos, y es de otra sesión.
+
+### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
+
+- **La misma enfermedad apareció CINCO veces, y una en código escrito el mismo día que se erradicó.**
+  Un censo que lee **prosa como si fuera código**: los 9 quitadores de la 209, la guardia de R15 de
+  la 217, el docstring que prometía más que su mecanismo, y el parser de CSS que aplicaba el
+  quitador de TypeScript. La 209 la cerró por la mañana y por la tarde reapareció en la 217.
+- **Un censo mide la forma que sabe buscar, no el fenómeno.** El de la 209 buscaba regex, y las **dos
+  peores semánticas del árbol** estaban escritas con `split`/`filter`. El detector ancho dio 12
+  falsos positivos de 17 — y encontró las dos que importaban. **Ancho + triaje a mano** es lo único
+  que ha funcionado las dos veces que se ha intentado.
+- **«Un total que se mueve es un hallazgo» sólo vale si el total es el que la guardia AFIRMA.** Los
+  siete quitadores de la tanda B se apartaron por un derivado intermedio que se mueve **por diseño**.
+  No había ningún veredicto que dar.
+- **Tres mutaciones salieron VERDES y eran las mutaciones las que estaban mal**: la que la bitácora
+  de la 217 daba por roja no podía ocurrir, la del spec de la 223 dejaba la página en blanco, y una
+  con `querySelector("main")` devolvía `null` y sus veinte verdes no significaban nada. **Una
+  mutación inerte reportada en verde es indistinguible de una guardia que no muerde**, y la única
+  defensa que funcionó fue **plantarla uno mismo** y exigir su **variante inocua**.
+- **Medir antes de especificar volvió a cambiar el encargo, dos veces más.** En la 217 no existía
+  **ninguna** vía de impresión en el repo, así que la regla del papel blanco hubo que **crearla**;
+  y el medidor que el spec daba por inexistente **sí estaba commiteado**, dentro de una guardia y sin
+  exportar.
+- **El CSS de un spec aprobado puede estar roto, y sólo lo dice medirlo**: el de la 223 imprimía una
+  página **en blanco** —PDF de 652 bytes—. Leerlo no bastaba.
+- **Cuando una decisión humana va contra la recomendación, la objeción que la motivaba NO desaparece:
+  hay que resolverla.** La hoja compacta imprimible obligó a inventar el mecanismo de candidatura, y
+  salió **sin una línea de JavaScript**.
+- **Los backticks en un `-m` inline, y dentro de `node -e`, los ejecuta el shell antes de que nadie
+  los lea, y se comen el texto EN SILENCIO.** Pasó **dos veces hoy**, y la T18 de la 213 ya lo tenía
+  escrito. Usar `-F -` con heredoc citado, siempre.
+- **El registro se desincroniza en la dirección que nadie mira**: la 213 estaba mergeada, aprobada y
+  desplegada, y su ficha decía `in_progress` porque **su propia tarea de bookkeeping** era la única
+  sin marcar. Y con ella ocupaba un hueco de la regla de max-2-por-zona.
+
+### 🧾 Deuda declarada hoy, toda con ficha o con número
+
+- **224**, **225** y **226** (arriba), las tres con su medición dentro.
+- El **harness de impresión** de la 223 se borró a propósito → ficha aparte.
+- **Gecko y WebKit no están medidos** en la 223; sólo Chromium.
+- La **grieta del inventario** de la 217 —recombinar una tinta y un fondo ya declarados— no la caza
+  nada, **por decisión**: cerrar por par exige recorrer el JSX y eso aprueba con números falsos.
+  Verificada con una mutación de **control que sale verde a propósito**.
+- Las **pestañas no visitadas** y el **KPI animado** de la factura llevan su límite escrito.
+- La 215 deja **R19** (una consulta de medición a la que le falta una condición, y gobierna dinero),
+  **R28** en 3 sitios y **R24-b/c/d + R35** sin guardia que los sostenga.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-13
+
+### ✅ EL ROJO DE `dev` ESTÁ CERRADO (2026-08-13, tarde) — **medido, no supuesto**
+
+> Este bloque abría diciendo «`dev` está ROJO» y que era la primera decisión humana pendiente.
+> **Ya no hace falta decidir nada: cayó en el PR #367** (`7205b2a1`). Dos sesiones lo comprobaron
+> por caminos distintos: desde la rama de la 213 al remergear `dev` para el PR #368
+> (`analytics-daily-job.test.ts` pasa **29/29**), y con el gate completo que se detalla abajo.
+>
+> **Se arregló por el lado correcto**, que era la mitad de la pregunta: el assert **sigue esperando
+> `[1, 0]`**. No se tapó cambiando la expectativa al criterio nuevo.
+>
+> ⚠️ **Matiz que conviene fijar, porque la primera redacción decía otra cosa: NO se implementó el
+> R24.** Lo que cayó fue **la semilla** (ver abajo). El R24 se cerró **declarando la deriva** con
+> fecha de corte (Q10, `e811e7bf`), que es una decisión documental, no el KPI persistido en
+> `analytics_daily` — la ficha 215 lo sigue listando entre lo NO implementado, y por eso sigue
+> `in_progress`. Que el aviso de la deriva no llegue a la pantalla es la ficha **219**.
+>
+> Lo que sí sigue en pie es el párrafo del peaje: el rojo vivió **seis merges** sin que nadie lo
+> parara, y eso no lo arregla ningún PR.
+
+`tests/integration/db/analytics-daily-job.test.ts > primer intento vs entrega tras una devolucion
+previa (R17)` llevaba seis merges rojo en `dev` limpio. Lo cierra el **PR #367** (feature 215),
+mergeado en `4f8e5362`.
+
+**Y la disyuntiva que esta nota planteaba —«implementar R24 o actualizar el test»— era falsa: era la
+semilla.** El fixture describía el mundo viejo. Con el criterio nuevo una devolución solo cuenta
+como intento si su gestión pertenece a un **cierre aprobado**, y la semilla la creaba sin cierre. Se
+corrigió ahí (`crearCierreAprobado`, y un `cierreId` opcional con default `null` en `crearGestion`,
+que no toca los ~15 call-sites). **Las dos cifras que prueban que el KPI distingue un reintento de
+un primer intento siguen literalmente intactas** (`[1,0]` y `[1,1]`): no se relajó ninguna aserción.
+
+**Verificado desde esta sesión, y conviene saber cómo:** el rojo se reprodujo primero sobre `dev`
+limpio (`expected [1,1] to deeply equal [1,0]`); luego se reconstruyó el merge real —la rama iba
+**11 commits por detrás**— y se corrió `./init.sh` completo sobre ese árbol: **1087/1087 archivos,
+13.776/13.776 tests**, cero omitidos, 275 s, exit 0. `dev` se movió mientras corría (la otra sesión
+mergeó el #367), así que **se comparó el árbol**: el medido y el de `dev` son el **mismo objeto**
+(`e5b8936c`). Por eso el verde certifica el `dev` publicado y no una aproximación suya.
+
+> ⚠️ **Lo que el #367 NO cierra, y estaba solo en el cuerpo del PR:** `R19` (la consulta de medición
+> de `design.md §7.6` contra la base real — el reviewer avisa de que **le falta la sexta condición,
+> la visita real**, así que hoy sobreestimaría, y gobierna dinero); `R28` incumplido en 3 sitios,
+> con el comentario de `GestionOrdenRepository.ts:505` afirmando algo **hoy falso**; y `R24-b/c/d` +
+> `R35` **sin dueño ejecutable** — la guardia de prosa que `tasks.md` les asigna no existe, así que
+> las tres declaraciones se pueden borrar sin que nada se ponga rojo. La ficha **215** sigue
+> `in_progress` justamente por esto; no darla por cerrada.
+
+### ✅ Lo que salió de esta jornada
+
+| | Qué |
+| --- | --- |
+| **Release #359** | desplegada **y verificada**: la migración `gestion_orden_pago` aplicada en prod a las 15:12:20 con las **16 filas** que predijo el pre-vuelo, `gestion_orden` intacta, 0 errores de runtime |
+| **205** | el **diálogo de pago se vio en pantalla** por fin, recorriendo el flujo real (no SQL a mano) |
+| **210** | contraste de insignias, **con guardia nueva** que calcula contraste desde los tokens del CSS |
+| **206** | anular un reparto entero en un acto, **y visto en pantalla** (`progress/impl_206_visto.md`) |
+| **209 tanda B** | 48 de 57 quitadores al helper compartido; **7 no pueden** y ahí está el hallazgo |
+| **Auditoría de tema** | 11 rutas nunca medidas + pasada de hover (`progress/impl_210_auditoria-tema.md`) |
+| **Bookkeeping** | **212** y **196** estaban mergeadas/desplegadas y seguían abiertas en el registro |
+| **Fichas nuevas** | **216** (naranja de marca) y **217** (factura oscura), las dos con su medición dentro |
+| **70** | **medida antes de especificar: es PREVENTIVA hoy**, y filtrar `status` no es la opción segura |
+
+### ⏭️ Lo siguiente, en este orden
+
+1. ~~Decidir el rojo de `dev`~~ — **hecho** (arriba). Ya no bloquea la lectura de nada.
+2. **Los 7 quitadores** de la tanda B, uno a uno. Media faena hecha: el mecanismo está identificado
+   y la lista está en la ficha 209. Cada uno es una pregunta contestable — ¿el conteo nuevo es el
+   correcto, o el ancla era legítima? **Empezar en frío**: son siete veredictos de guardias de
+   dinero y analítica, y el modo de fallo es cambiarlos sin mirarlos.
+3. **La 217** (factura oscura): aprobada por el humano, sin spec. Ojo a la regla que debe honrar:
+   **al imprimir, la hoja sigue blanca**.
+4. **La 216** espera una **decisión de marca** (un hex para el primario, o pasar el texto a un
+   `-strong` propio). No es un arreglo técnico.
+5. **El PR #368 (la 213)** está abierto y sin revisar: 34 archivos, del otro programador, y va
+   **11 commits por detrás de `dev`**. La **214 sigue bloqueada** hasta que la 213 esté
+   **desplegada**, no mergeada.
+
+### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
+
+- **Un verificador que rellena lo que no sabe no es optimista: es FALSO.** El medidor de contraste
+  mintió **tres veces**, siempre igual —ante un dato irresoluble, inventaba uno—: dio un falso
+  **1,80 sobre una cifra de dinero** y un falso **1,00 sobre un botón legible**. La causa raíz era
+  que Chromium devuelve **`oklab()`** para las opacidades de Tailwind v4. Toda capa que no se pueda
+  resolver tiene que degradar a «no lo sé», nunca a un valor plausible.
+- **El compilador censa mejor que un grep.** Retirar una variante de `Badge` pareció tocar 2 sitios
+  y eran **11**: los otros nueve calculan la variante desde un mapa, y un grep con forma de JSX no
+  los ve. El typecheck los dio todos.
+- **Los guardias que te frenan suelen tener razón.** Tres de la 172 rechazaron que el `repartoId`
+  cruzara la frontera, y el arreglo salió **mejor** que el original: viaja un booleano y el servidor
+  deriva el grupo, así que el cliente ya no puede nombrar un reparto ajeno.
+- **Cuando una guardia congela lo contrario de lo que vas a hacer, se REEXPRESA, no se relaja.**
+  Cinco guardias afirmaban que nada podía deshacer un reparto; anular no es editar ni borrar, y eso
+  hay que escribirlo en cada una.
+- **No mutes trabajo sin commitear.** `git checkout` revierte tu arreglo, no la mutación. Pasó una
+  vez y el arnés de mutaciones ahora **aborta si `git diff` no ve el cambio**.
+- **Un PR mergeado deja huérfano lo que empujes después.** Pasó **dos veces**: commit en una rama con
+  PR cerrado, fuera de `dev` y sin ninguna señal. Los dos rescatados por cherry-pick. **Comprobar el
+  estado del PR antes de empujar.**
+- **Medir antes de arreglar volvió a cambiar el resultado**: la 70 es preventiva (0 tarifas
+  inactivas) y **filtrar `status` convertiría un cobro equivocado en un cobro CERO**, porque cada
+  tienda tiene una sola tarifa.
+
+### 🧪 Estado de la base LOCAL (nada de esto toca producción)
+
+Contraseñas QA —incluida la del **maestro**, que tiene su propio seed— alineadas con el `.env`. Dos
+cierres aprobados del 13/08 (pendientes ₡3.400 y ₡1.700, luego repartidos y anulados), un reparto de
+₡4.000 anulado entero y otro de ₡1.400. El **maestro no entra por UI**: su OTP lo dispara un
+RiskEngine por score y el código se guarda **hasheado**, así que `mi-wallet`, `recepcion-satelite`,
+`configuracion/*` y `novedades` quedaron **sin medir** en la auditoría de tema.
+
+---
+
+## 🏁 2026-08-13 (tarde) — release #359 y la 205 vista en pantalla
+
+### 🚦 Lo único que espera decisión humana: **[PR #359](https://github.com/nuformecuador-lgtm/ordenex/pull/359) → `prod`**
+
+14 commits, y **ya NO es «sin migraciones»**: la 212 metió `20260812120000_gestion_orden_pago`,
+aditiva y con backfill. La nota de la mañana decía «7 commits, sin migraciones» y **caducó** —
+`dev` se movió mientras se leía (otra sesión mergeó la 212, PR #358).
+
+Lleva **208** (modo oscuro correcto), **211** (interruptor de tema), **209 tanda A** y el
+**backend de la 212**. Lo único que un usuario nota de inmediato es el tema.
+
+**Pre-vuelo hecho, medido contra la base de producción en solo lectura:** la tabla no existe
+allí, el enum `metodo_pago_value` y `gen_random_uuid()` sí, la última migración aplicada es la
+de la 205 (**sin drift**), el backfill insertará **16 filas de 57 gestiones**, y hay **0 filas
+con `monto_recibido = 0`**. Ese último número acota el riesgo declarado: el cambio a guion de la
+entrega «sin cobro» **no reescribe nada ya registrado**; solo afecta a entregas sin cobro nuevas
+hasta que entre la 213. Gate completo verde sobre `dev` @ `bb4c3185`: **1086/1086 archivos,
+13662/13662 tests**, cero omitidos.
+
+> ⚠️ El typecheck dio un rojo **falso** primero (`gestionOrdenPago` no existe en `PrismaClient`):
+> cliente Prisma rancio tras el merge. `pnpm run db:generate` y verde. Tras mergear hay que
+> aplicar la migración en local (`prisma migrate deploy`), ya hecho aquí.
+
+### ✅ El diálogo de pago de la 205 **se vio en pantalla**, con datos reales
+
+Era el punto 1 de «lo que falta» y llevaba dos sesiones pendiente. No se fabricó por SQL: se
+recorrió **el flujo real completo** — asignar 2 órdenes GAM → recogerlas → entregarlas **cobrando
+por SINPE** (para que el efectivo quede en 0) → solicitar cierre → aprobarlo como admin. El
+cierre salió con **E = ₡0, P = ₡3.400**, así que `min(P,E) = 0` y la cuenta por pagar nació
+positiva. Lo que se vio, citando el texto de la pantalla:
+
+- La fila pasa de «Al día» a **«Pendiente ₡3.400,00»**, y el panel de desglose muestra
+  **«Se puede pagar ahora ₡3.400,00 — sale del servidor»** más el libro con **«Ver el cierre»
+  por fila** (el enlace que faltaba comprobar).
+- El **diálogo**: «Registrar pago a Marco», *Disponible ₡3.400,00*, con el monto **precargado al
+  total** y la **previsualización**: «Cierre del 2026-08-13 · Se aplica ₡3.400,00 · Pendiente hoy:
+  ₡3.400,00 · Queda pendiente: ₡0,00».
+- Con un **pago parcial** de ₡1.400 la previsualización recalcula en vivo y aparece la insignia
+  **«Pago parcial»**: «Queda pendiente: ₡2.000,00». Registrado: la tabla queda en 13.600 / 11.600
+  / **2.000**, aritmética exacta.
+- En la base: `liquidacion_pago` con su `reparto_id`, **`liquidacion_reparto` con monto ₡1.400 y 1
+  imputación** —primera vez que la tabla de la migración de la 205 se ejerce desde la pantalla— y
+  el libro con un movimiento `pago`/`liquidacion`/`pago_mensajero`, la categoría que el esquema
+  tenía **reservada** para esto.
+
+**Lo único que sigue sin verse: el aviso de excluidos.** No es alcanzable con un solo cierre
+pendiente: hace falta un cierre que NO se pueda imputar. Queda dicho, no tapado.
+
+**La base local quedó con ese caso vivo a propósito** (Marco con ₡2.000 pendientes): la 213 y la
+214 van a necesitar la pantalla alcanzable.
+
+### 🔧 Tres cosas de la receta de conducir la app que costaron y no estaban escritas
+
+1. **La entrega no se envía sin permiso de ubicación.** `handleConfirm` pide la posición
+   (feature 193/R16/R19) y si el desenlace es `denegado` **no manda ni un POST**. En Chromium
+   headless viene denegado por defecto: el click «no hace nada» y no hay aviso que lo explique.
+   Hay que abrir el contexto con `permissions: ["geolocation"]` y una `geolocation` fijada.
+2. **La foto de evidencia es obligatoria** en `entregada` (feature 119, una lista vacía dispara
+   `min(1)`), y también frena el envío en el cliente. Se generó un PNG válido con zlib+CRC32 en
+   vez de pegar un base64 de memoria.
+3. **Asignar exige lat/lon** (feature 92/R2) y **aborta el LOTE ENTERO** si una sola orden no las
+   tiene (R8). Las 67 órdenes locales tienen `geocode_status` NULL y **no hay proveedor de
+   geocodificación en local**, así que solo son asignables las que ya traen coordenadas: de las 3
+   candidatas, 990013 no las tenía y tumbaba las otras dos.
+
+**Y un aviso: se rotaron las contraseñas de los 4 usuarios QA en la base LOCAL** con
+`scripts/seed-usuarios-qa.ts`, porque el hash guardado no coincidía con `QA_PASSWORD` del `.env`.
+Ahora coinciden con lo que el `.env` ya decía. Idempotente, no toca ids ni relaciones.
+
+### 📌 Lo que queda, con el orden actualizado
+
+1. **Mergear la #359** (o decidir esperar a la 213 para no soltar el guion de «sin cobro»).
+2. **Ficha 213** — el frontend del desglose. La 212 entregó capacidad sin superficie y la **214
+   está bloqueada hasta que la 213 esté desplegada**, no mergeada.
+3. **Ficha 210** (contraste de `warning`/`destructive`) · **206** (anular un reparto entero) ·
+   **209 tanda B** (50 sitios, sin riesgo).
+4. El **aviso de excluidos** de la 205, cuando exista un cierre no imputable.
+
+## 🟡 EN CURSO 2026-08-13 — feature **213** (antes 209): captura y presentación del pago múltiple, fase 2 (implementación)
+
+**PUERTA F1.4 SUPERADA el 2026-08-13.** Spec aprobado: 35 requisitos EARS, 18 tasks en 6 tandas,
+trazabilidad `R → test` 35/35. Las seis preguntas del spec se cerraron con la propuesta que traían
+—monto crudo en el CSV, etiqueta sola en la fila de un método, guardia `columnas-sensibles`
+ampliable midiendo totales, monto pre-cargado, e2e roto como deuda aparte, fila a medias = error
+visible— y viven completas en `specs/213-pago-multiple-captura/requirements.md`.
+
+**[Q7], la que abrió el humano en la puerta y conviene no re-descubrir: el total cuadra EXACTO, no
+«igual o superior».** La pregunta era si el desglose podía sumar *más* que el valor a cobrar. La
+respuesta la da el código, en tres capas: `MisAsignacionesService.ts:349-363` (R22-h) exige
+`montoRecibido == montoCobrar` en `Prisma.Decimal`; la 212 exige `SUM(pagos) = montoRecibido`; y el
+panel **ni siquiera tiene input de monto recibido** —lo fija a `orden.montoCobrar` (`:341`, `:395`)—.
+El mensajero elige **cómo** le pagaron, nunca **cuánto**. Por eso «cuadrar con el monto recibido» y
+«cuadrar con el valor a cobrar» son hoy la misma frase, y el spec no necesitaba cambiar. Admitir
+sobrepago no es aflojar un `if`: mueve `cierre_dia.total_efectivo`, que es la **E** del `min(P, E)`
+del pago al mensajero (44) —**cambiaría lo que cobra una persona**— y obliga a decidir qué es el
+excedente (vuelto, propina, abono). Ficha backend aparte el día que se quiera.
+
+**Tres correcciones del spec a la ficha, ya verificadas contra el código:** el util puro reusable es
+`lib/utils/pagos-recaudo.ts`, no `lineas-pago.ts` (importa `@prisma/client`); el borde de la 212 ya
+acepta desglose puro y cero líneas, así que el panel puede dejar de mandar la forma escalar **sin
+tocar backend** —lo que desactiva la trampa de «sin cobro» de `:331`—; y los números de línea de la
+presentación habían corrido (`CierreDiaModule:886`, `cierre-detalle-shared:898`,
+`cierre-factura:959`).
+
+### Contexto de la fase 1
+
+La mitad **frontend** de la partición. La 212 ya está en `dev` (PR #358, merge `bb4c3185`): el
+borde acepta el desglose y `computeTotales` reparte por método real. Pero el mensajero **sigue sin
+poder usarlo**: `GestionarOrdenPanel.tsx:717-733` pinta un `<Select>` único y manda un
+`metodoPago` escalar (`:342`, `:396`), que el borde normaliza a una sola línea. Esta ficha cierra
+esa ventana.
+
+Rama `feature/213-pago-multiple-captura`, nacida de `origin/dev` (`bb4c3185`), en el worktree
+`C:/w213b` — `C:/w213` estaba ocupado por `feature/213-reintento-en-cierre`, una rama de la
+numeración vieja: **comprobar `worktree list` antes de elegir ruta.** El checkout principal se dejó
+intacto porque tiene WIP de novedades sin commitear.
+
+**Bookkeeping que hubo que cerrar antes de arrancar:** la 212 seguía `in_progress` en
+`feature_list.json` con el código ya mergeado en `dev`. La 213 tiene `depends_on: 212` y la regla
+exige la dependencia en `done`, así que el leader la cerró aquí. El drift de sesiones paralelas de
+siempre.
+
+**Alcance, ya fijado por la ficha — no reabrir:** (a) el panel pasa a un editor de líneas
+`método+monto` que cuadra contra el monto recibido, con el error visible antes de enviar; (b)
+`CierreDiaModule.tsx`, `cierre-detalle-shared.tsx` y `cierre-factura.tsx` pintan el desglose en vez
+de `METODO_LABEL[g.metodoPago]`; (c) las dos descargas concatenan los métodos en la celda escalar
+según **[D4]** — sin columna nueva ni fila multiplicada.
+
+**Las tres trampas heredadas que el spec debe honrar:** `GestionarOrdenPanel.tsx:331` fuerza
+`"efectivo"` cuando la orden es **sin cobro**, y con desglose eso debe ser **cero líneas**, no una
+línea de 0. El panel **filtra sus filas vacías** antes de enviar (**[Q2]**): el borde de la 212
+rechaza todo monto no positivo. Y esta ficha **no** retira la forma escalar ni `metodo_pago` —
+eso es la **214** (**[Q3]**).
+
+---
+
+## 🟡 2026-08-13 — feature **215** (antes 213): el reintento se cuenta en el CIERRE, en PR #363
+
+El contador de reintentos deja de derivarse de las **transiciones** del historial y pasa a
+derivarse del **cierre aprobado**: 1 por cada cierre aprobado distinto en el que la orden tuvo un
+resultado de gestión vigente `rechazada`/`devuelta`/`reprogramada`, y sólo si esa gestión viene de
+una **visita real**. Sin migración: se deriva de `gestion_orden` con los índices que ya existen, así
+que `R7` de la 160 se conserva y `db/` queda intacto. 35 requisitos, 35 con dueño; `./init.sh`
+completo **verde** (1086 archivos / 13.693 tests). PR **#363** contra `dev`, reviewer en curso.
+
+**Nació de una pregunta, no de un plan:** «¿el cron que hace el cierre automático no suma un
+reintento, o el cierre manual al aprobar?». La respuesta medida era **no**, y la lista blanca de la
+160 nunca se había planteado el caso.
+
+### Lo que hay que saber antes de tocar esto
+
+1. **NO cierra el agujero que la originó, y está declarado en la página 1 de su
+   `requirements.md`.** El corte automático no aporta resultados nuevos —mueve órdenes a
+   `sin_gestionar`, que no tienen `resultado`— y el humano decidió dejar `sin_gestionar` fuera. El
+   caso «sale, se corta, vuelve a bodega y sale otra vez con el mismo contador» sigue vivo. Ficha
+   **216**.
+2. **`R12` figuraba cubierto y no lo estaba.** Al pasar a contar por *resultado*, el criterio nuevo
+   reabrió en silencio el doble conteo que `R2` de la 160 evitaba: la gestión sintética de la
+   reprogramación de la **tienda** entraba al siguiente cierre del mensajero y sumaba +1. El test
+   que figuraba como su dueño medía el **mapa de transiciones**, no el predicado. Lección: un
+   requisito «cubierto» por un test que mide otra capa no está cubierto.
+3. **El discriminador de «visita real» no necesitó esquema nuevo:** cada gestión produce, en su
+   misma transacción, una fila de `orden_historial_estado` con `origen_tipo` (`gestion` /
+   `escalado_devuelta_sla` / `reprogramacion_tienda`).
+4. **Supuesto operativo ACEPTADO (Q5):** el conteo ocurre al **aprobar**. Si un cierre nunca llega a
+   `aprobado`, la orden se queda en 0 y el cron la libera en bucle sin escalar jamás. Agravante
+   medido: `ESTADOS_RESOLUBLES = ["solicitado"]`, así que un `vencido` **no es aprobable directo**.
+   Tres mitigaciones escritas y **no elegidas** en `design.md §7bis`.
+5. **`primer_intento_ok` cambia de definición sin re-backfill (Q10).** El corte **no es una fecha de
+   la serie sino el instante del despliegue**, y se sostiene sobre `analytics_daily.updated_at`
+   porque el job recalcula días pasados: cualquier regla por `fecha` sería falsa a los pocos días.
+   El aviso **no llega a la pantalla** → ficha **219**.
+6. **Un rojo que no se arregló relajando la aserción.** El de `analytics-daily-job` se cerró dándole
+   a la devolución previa su cierre **aprobado** en la semilla; las dos cifras que prueban que el
+   KPI distingue un reintento de un primer intento siguen intactas. Y se demostró que ese test
+   **corre con datos** (canario + `describe.skip`), porque en este repo varios de integración pasan
+   en falso con la tabla vacía.
+
+**Pendiente y NO ejecutable por el agente:** `R19` (la consulta de medición de `design.md §7.6`
+contra la base real: cuántas órdenes en vuelo cambian de lado del umbral) y el `EXPLAIN` con volumen
+real —el que se corrió fue contra 78 órdenes locales—. Tras el despliegue, anotar su instante real
+(T24, documental).
+
+**Renumerada 213 → 215** al traer `dev`, que había renumerado la familia de pago múltiple a
+212/213/214 y cuya 213 llegó **mergeada**. Se aplicó el criterio de siempre: conserva el id quien ya
+está en `dev`.
+
+---
+
+## 🟢 2026-08-13 — PR **#364**: el mensajero sale de analítica + `/novedades` usa la card compartida
+
+Tres commits sin ficha ni spec (el de analítica salió de una decisión directa del humano). El
+mensajero deja de ver el ítem del sidebar **y** de pasar el gate de la ruta —`ROLES_ACCESO_ANALITICA`
+pasa a **derivarse restando** de `ROLES_ANALITICA`, no a ser una lista propia—, conservando su
+alcance en el catálogo. `/novedades` deja de pintar su fila y usa la card del mensajero, con las
+acciones bajando por la prop `acciones`. `./init.sh` verde (1081 archivos / 13.618 tests).
+
+**Ojo al revisar:** los botones «Habilitar» y «Devolver» son **maqueta declarada** —sin transición
+detrás— y serían visibles en producción al mergear; y el tercer commit (de otra sesión) **revisa una
+decisión escrita** por el anterior: engorda `NovedadDTO` con los campos que el adaptador rellenaba.
+
+---
+
 ## 🟢 2026-08-13 — feature **212** (antes 208): pago múltiple por entrega, APROBADA y en PR
 
 Una entrega cobrada mitad en efectivo y mitad por transferencia no se podía registrar sin mentir
