@@ -57,6 +57,7 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     huellaSet: null,
     ultimoError: null,
     trazado: null,
+    tramoVivoAt: null,
     tramoPorOrden: new Map(),
     secuenciaPorOrden: new Map(),
     ...over,
@@ -75,6 +76,7 @@ function build(opts: {
     upsertOrigen: vi.fn<(m: string, u: unknown) => Promise<void>>(async () => {}),
     reemplazarSecuencia: vi.fn<(m: string, s: string[], meta: unknown) => Promise<void>>(async () => {}),
     guardarTrazado: vi.fn<(m: string, h: string, t: unknown) => Promise<void>>(async () => {}),
+    marcarTramoVivo: vi.fn<(m: string, a: Date) => Promise<void>>(async () => {}),
     marcarDesactualizada: vi.fn<(m: string, e: string) => Promise<void>>(async () => {}),
   };
 
@@ -478,6 +480,7 @@ describe("R12 — credencial ausente corta ANTES de cualquier red", () => {
       upsertOrigen: vi.fn(async () => {}),
       reemplazarSecuencia: vi.fn(async () => {}),
       guardarTrazado: vi.fn(async () => {}),
+      marcarTramoVivo: vi.fn(async () => {}),
       marcarDesactualizada: vi.fn(async () => {}),
     };
     const client: IRouteOptimizationClient = {

@@ -36,6 +36,7 @@ import type {
   IOptimizacionRutaService,
   TrazadoRuta,
   TrazadoTramo,
+  TrazarTramoVivoResult,
 } from "@/lib/interfaces/services/IOptimizacionRutaService";
 import { codificarPolilinea, distanciaTotalM } from "@/lib/geo/polilinea";
 import { optlog, opterror } from "@/lib/logging/optimizer-log";
@@ -317,6 +318,86 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
    * guardar el DIBUJO provocaria un reintento que volveria a pagar la OPTIMIZACION —la cara—
    * para arreglar lo accesorio. Mismo criterio que `trazar`.
    */
+  /**
+   * Trayecto EN VIVO desde la posicion actual hasta UNA parada. Ver el contrato para el
+   * porque de que esto no se pueda cachear.
+   *
+   * ═══ EL ORDEN DE LAS GUARDAS ES EL DE SIEMPRE: LO BARATO PRIMERO ═══
+   *   1. intervalo minimo  -> 0 llamadas, 0 lecturas de paradas
+   *   2. sin cliente Routes-> 0 llamadas
+   *   3. la parada es suya -> 0 llamadas si no lo es
+   * Solo despues se llama al proveedor.
+   *
+   * LA COMPROBACION DE PERTENENCIA ES LA AUTORIZACION, no una validacion de forma.
+   * `findParadasEnReparto` devuelve EXACTAMENTE las paradas en reparto de ESTE mensajero, asi
+   * que buscar el `ordenId` ahi dentro responde de una vez «¿existe?» y «¿es suya?». Sin esto,
+   * cualquier mensajero con sesion podria pedir el trayecto a la guia de otro y, de paso,
+   * averiguar sus coordenadas de entrega (R14).
+   */
+  async trazarTramoVivo(
+    mensajeroId: string,
+    input: { ubicacion: { lat: number; lng: number }; ordenId: string },
+  ): Promise<TrazarTramoVivoResult> {
+    const ahora = this.now();
+    const ruta = await this.rutas.findByMensajero(mensajeroId);
+
+    if (ruta?.tramoVivoAt != null) {
+      const transcurridoS = (ahora.getTime() - ruta.tramoVivoAt.getTime()) / 1000;
+      if (transcurridoS < this.config.RUTA_SYNC_MIN_INTERVALO_S) {
+        optlog("service — tramo vivo: intervalo minimo, 0 llamadas facturadas", {
+          transcurridoS,
+          minimoS: this.config.RUTA_SYNC_MIN_INTERVALO_S,
+        });
+        return { status: "intervalo_minimo" };
+      }
+    }
+
+    if (this.routes === null) {
+      optlog("service — tramo vivo: sin cliente de Routes");
+      return { status: "no_disponible" };
+    }
+
+    const paradas = await this.paradasRepo.findParadasEnReparto(mensajeroId);
+    const destino = paradas.find((p) => p.ordenId === input.ordenId);
+    if (destino === undefined || destino.latitud === null || destino.longitud === null) {
+      // Una parada suya pero SIN geocodificar cae aqui tambien. Es correcto: no hay punto al
+      // que trazar, y el mensajero no puede distinguir ese caso del de una guia ajena — ni
+      // falta que le hace.
+      optlog("service — tramo vivo: la parada no es suya o no tiene coordenadas");
+      return { status: "no_autorizada" };
+    }
+
+    optlog("service — tramo vivo: ninguna guarda corto, se LLAMA a Routes (esto se factura)");
+    let outcome;
+    try {
+      outcome = await this.routes.trazar({
+        origen: input.ubicacion,
+        paradasEnOrden: [
+          { ordenId: destino.ordenId, lat: destino.latitud, lng: destino.longitud },
+        ],
+      });
+    } catch (error) {
+      // Se traga la excepcion como en `trazar`: esto es apoyo visual, no una operacion.
+      opterror("service — tramo vivo: el proveedor lanzo", error);
+      return { status: "no_disponible" };
+    }
+
+    if (outcome.status !== "ok") {
+      optlog("service — tramo vivo: el proveedor no dio geometria", { status: outcome.status });
+      return { status: "no_disponible" };
+    }
+
+    // Se sella DESPUES del exito: cobrarle el intervalo por un intento que no le devolvio nada
+    // dejaria al mensajero esperando sin haber recibido su trayecto.
+    await this.rutas.marcarTramoVivo(mensajeroId, ahora);
+    return {
+      status: "ok",
+      encodedPolyline: outcome.encodedPolyline,
+      distanciaM: outcome.distanciaM,
+      duracionS: outcome.duracionS,
+    };
+  }
+
   /**
    * Rearma el trazado del dominio a partir de lo persistido. La cabecera guarda la polilinea
    * entera; los tramos viven repartidos por las filas de las paradas, asi que hay que volver a

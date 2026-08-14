@@ -82,6 +82,7 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
       huellaSet: row.huellaSet,
       ultimoError: row.ultimoError,
       trazado: toTrazado(row),
+      tramoVivoAt: row.tramoVivoAt,
       secuenciaPorOrden: new Map(row.paradas.map((p) => [p.ordenId, p.secuencia])),
       // Solo las paradas que YA tienen tramo entran al mapa: una entrada con la polilinea
       // vacia obligaria a cada consumidor a distinguir «no hay tramo» de «hay uno invisible».
@@ -222,6 +223,17 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
           },
         });
       }
+    });
+  }
+
+  /**
+   * `updateMany` y no `update`: si la cabecera no existe todavia no hay nada que sellar y
+   * tampoco hay que crearla — un mensajero sin ruta no puede haber pedido un trayecto.
+   */
+  async marcarTramoVivo(mensajeroId: string, at: Date): Promise<void> {
+    await this.prisma.rutaOptimizada.updateMany({
+      where: { mensajeroId },
+      data: { tramoVivoAt: at },
     });
   }
 

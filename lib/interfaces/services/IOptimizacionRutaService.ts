@@ -75,9 +75,40 @@ export type EjecutarOptimizacionResult =
       trazado?: TrazadoRuta;
     };
 
+/**
+ * Desenlace del trayecto EN VIVO (ubicacion actual -> una parada concreta).
+ *
+ *   `no_autorizada`   — esa orden no es una parada en reparto de este mensajero. Se devuelve
+ *                       el MISMO valor que si no existiera: distinguirlos convertiria la
+ *                       action en un oraculo para saber si una guia ajena esta en reparto.
+ *   `intervalo_minimo`— se pidio demasiado pronto. CERO llamadas.
+ *   `no_disponible`   — sin cliente de trazado, o el proveedor no dio geometria.
+ */
+export type TrazarTramoVivoResult =
+  | { status: "ok"; encodedPolyline: string; distanciaM: number | null; duracionS: number | null }
+  | { status: "no_autorizada" }
+  | { status: "intervalo_minimo" }
+  | { status: "no_disponible" };
+
 export interface IOptimizacionRutaService {
   ejecutar(
     mensajeroId: string,
     opts: EjecutarOptimizacionOpts,
   ): Promise<EjecutarOptimizacionResult>;
+
+  /**
+   * Trayecto por calles desde donde el mensajero ESTA hasta una parada concreta.
+   *
+   * Es lo unico de esta feature que NO se puede cachear: en cuanto se mueve, el resultado
+   * anterior deja de empezar donde el esta. Cada llamada se FACTURA, y por eso lleva su propia
+   * guarda de intervalo minimo persistida (`tramoVivoAt`) — el cerrojo del cliente no cuenta,
+   * porque una Server Action se puede invocar en bucle sin pasar por el boton.
+   *
+   * NO toca la ruta optimizada: ni la secuencia, ni el origen, ni el trazado guardado. Es una
+   * consulta de apoyo, no un recalculo.
+   */
+  trazarTramoVivo(
+    mensajeroId: string,
+    input: { ubicacion: { lat: number; lng: number }; ordenId: string },
+  ): Promise<TrazarTramoVivoResult>;
 }

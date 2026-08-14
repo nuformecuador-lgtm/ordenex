@@ -26,6 +26,12 @@ export interface RutaOptimizadaDTO {
    * fallback local, que NO se cachea.
    */
   trazado: TrazadoPersistido | null;
+  /**
+   * Instante del ultimo trayecto EN VIVO servido. `null` = nunca. Es el unico estado que
+   * acota ese gasto: a diferencia del trazado de la ruta, un trayecto que arranca en la
+   * posicion actual no se puede cachear, asi que cada peticion es una llamada facturada.
+   */
+  tramoVivoAt: Date | null;
   /** Posicion por `ordenId`. Una orden en reparto AUSENTE de este mapa esta sin optimizar. */
   secuenciaPorOrden: Map<string, number>;
   /**
@@ -135,4 +141,11 @@ export interface IRutaOptimizadaRepository {
    * no existia (un fallo en la primera optimizacion tambien debe quedar registrado).
    */
   marcarDesactualizada(mensajeroId: string, ultimoError: string): Promise<void>;
+
+  /**
+   * Sella el instante del ultimo trayecto en vivo. Se llama DESPUES de que la llamada al
+   * proveedor haya salido bien: sellar antes cobraria el intervalo por un intento fallido y
+   * dejaria al mensajero esperando sin haber recibido nada.
+   */
+  marcarTramoVivo(mensajeroId: string, at: Date): Promise<void>;
 }

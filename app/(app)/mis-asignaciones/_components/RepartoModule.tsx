@@ -33,6 +33,7 @@ import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
 import { RutaMapa } from "./RutaMapa";
 import { useSeguimientoUbicacion } from "./useSeguimientoUbicacion";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
+import { TrayectoVivoButton } from "./TrayectoVivoButton";
 import { CarruselCards } from "@/components/shared/CarruselCards";
 
 import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
@@ -244,6 +245,12 @@ export function RepartoModule({
   // La del seguimiento MANDA sobre la del último botón: es más reciente por definición. Se
   // cae a la del botón mientras el GPS no haya dado su primer fix bueno.
   const origenMapa = ubicacionVivo ?? ubicacionActual;
+
+  // Trayecto en vivo pedido a mano. Cuando existe MANDA sobre el tramo persistido: el
+  // mensajero acaba de pedir explícitamente «desde donde estoy», y seguir resaltando el
+  // tramo que arranca en el origen de la optimización sería ignorar lo que pidió.
+  const [trayectoVivo, setTrayectoVivo] = useState<string | null>(null);
+  const tramoResaltado = trayectoVivo ?? ruta.tramoSiguiente?.encodedPolyline ?? null;
 
   // Orden que el mensajero eligió explícitamente para el panel de detalle. Es
   // solo una PREFERENCIA: la orden mostrada se DERIVA (ver `detalleOrden`) para
@@ -464,10 +471,21 @@ export function RepartoModule({
               </h2>
               {/* R31/R32: sincronización manual de la ruta. El botón captura el GPS del
                   navegador (best-effort) y lo eleva aquí para dibujar el origen en el mapa. */}
-              <SincronizarRutaButton
-                onUbicacion={setUbicacionActual}
-                onTrazado={setTrazadoRuta}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <SincronizarRutaButton
+                  onUbicacion={setUbicacionActual}
+                  onTrazado={setTrazadoRuta}
+                />
+                {/* Trayecto EN VIVO: cada pulsación es una llamada facturada (no se puede
+                    cachear algo que arranca donde el mensajero está AHORA), por eso es un
+                    botón aparte y explícito. La siguiente parada es la primera de la lista,
+                    que ya viene ordenada por secuencia desde el servidor. */}
+                <TrayectoVivoButton
+                  ubicacion={origenMapa}
+                  ordenId={porGestionar[0]?.id ?? null}
+                  onTrayecto={setTrayectoVivo}
+                />
+              </div>
             </div>
 
             {/* R30: aviso VISIBLE de que el orden mostrado no está actualizado. */}
@@ -520,7 +538,7 @@ export function RepartoModule({
                       paradas={paradasMapa}
                       origen={origenMapa}
                       trazado={trazadoRuta}
-                      tramoSiguiente={ruta.tramoSiguiente?.encodedPolyline}
+                      tramoSiguiente={tramoResaltado}
                     />
                   </div>
                 ) : null}

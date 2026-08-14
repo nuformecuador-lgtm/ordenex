@@ -67,6 +67,7 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     huellaSet: "h",
     ultimoError: null,
     trazado: null,
+    tramoVivoAt: null,
     tramoPorOrden: new Map(),
     secuenciaPorOrden: new Map(),
     ...over,

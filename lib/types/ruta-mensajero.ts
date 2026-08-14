@@ -56,3 +56,38 @@ export type SincronizarRutaResult =
   | { status: "forbidden" }
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+/**
+ * Entrada del TRAYECTO EN VIVO. A diferencia de la sincronizacion, aqui la ubicacion es
+ * OBLIGATORIA: el trayecto es «desde donde estoy», y sin ese punto no hay nada que pedir.
+ * Eso NO contradice R25 —el permiso sigue sin forzarse—: sin ubicacion la UI simplemente no
+ * ofrece el boton, en vez de llamar y fallar.
+ */
+export const trazarTramoVivoSchema = z.object({
+  ubicacion: ubicacionSchema,
+  ordenId: z.string().min(1),
+});
+
+export type TrazarTramoVivoActionInput = z.infer<typeof trazarTramoVivoSchema>;
+
+/**
+ * Resultado de `trazarTramoVivo`.
+ *  - `ok`       : hay trayecto. `encodedPolyline` es SOLO ese tramo, no la ruta entera.
+ *  - `conflict` : intervalo minimo, o el proveedor no dio geometria. NO se distingue el uno
+ *                 del otro hacia el cliente: los dos se resuelven esperando y reintentando,
+ *                 y el motivo ya va en el texto.
+ *  - `forbidden`: no es mensajero (R33), o la orden no es una parada suya. El MISMO valor a
+ *                 proposito — separarlos convertiria la action en un oraculo para saber si
+ *                 una guia ajena esta en reparto.
+ */
+export type TrazarTramoVivoResultUI =
+  | {
+      status: "ok";
+      encodedPolyline: string;
+      distanciaM: number | null;
+      duracionS: number | null;
+    }
+  | { status: "conflict"; motivo: string }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };

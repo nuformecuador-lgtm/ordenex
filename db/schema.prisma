@@ -1831,6 +1831,9 @@ model RutaOptimizada {
   trazadoDistanciaM Int?    @map("trazado_distancia_m")
   trazadoDuracionS  Int?    @map("trazado_duracion_s")
   trazadoFuente     String? @map("trazado_fuente")
+  // Guarda de coste del trayecto EN VIVO (20260814160000_ruta_tramo_vivo_at). Contador de
+  // gasto, no dato de negocio: solo lo lee la guarda del intervalo minimo.
+  tramoVivoAt       DateTime? @map("tramo_vivo_at")
   createdAt    DateTime   @default(now()) @map("created_at")
   // Default declarado para que coincida con `20260720130000_ruta_optimizada`.
   updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at")
