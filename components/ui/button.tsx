@@ -44,8 +44,11 @@ const buttonVariants = cva(
         // oscuro sobre rojo claro en oscuro), así que un solo par de clases sirve para los dos.
         //
         // `dark:hover:bg-danger-strong` repite al `hover:` de arriba por especificidad, no por
-        // gusto: `dark:bg-danger/15` empata con `hover:bg-danger-strong` (dos clases cada una) y
-        // el desempate sería el orden del CSS compilado. Escrito así, gana siempre el hover.
+        // gusto, y esto está COMPROBADO contra el compilador real (tailwindcss 4.3.2, corriendo
+        // `@tailwindcss/postcss` sobre este mismo `globals.css`): `.dark\:bg-danger\/15:is(.dark *)`
+        // y `.hover\:bg-danger-strong:hover` valen lo mismo —dos clases cada una— y en el CSS
+        // emitido la de `dark:` sale DESPUÉS. Sin esta línea, en tema oscuro el hover no se vería:
+        // ganaría el reposo por orden. Con ella son tres clases y gana siempre el hover.
         //
         // El borde y el anillo de foco SIGUEN en `--destructive`: son indicadores no textuales
         // (WCAG 1.4.11), no caen bajo el 1.4.3 que esta ficha viene a cumplir, y son los mismos
