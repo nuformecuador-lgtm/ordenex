@@ -65,9 +65,27 @@ function centimosDeLinea(linea: LineaEnEdicion): number {
   return aCentimos(montoDeTexto(linea.monto));
 }
 
-/** Texto que se pre-carga en el input a partir de un monto ya calculado. */
+/**
+ * UX de calle: la captura NO maneja decimales. El mensajero teclea con una mano y de pie, y un
+ * punto de mas convierte 8.000 en 8. Por eso lo que se pre-carga se redondea a unidad entera y
+ * lo que se teclea se filtra a digitos (`soloDigitos`).
+ *
+ * La aritmetica interna sigue en centimos (R11): el redondeo es de ENTRADA, no de calculo, para
+ * que este modulo siga cuadrando igual que `sumaCuadra` del borde si algun dia entran decimales
+ * por otra via.
+ */
 function textoDeMonto(monto: number): string {
-  return String(monto);
+  return String(Math.round(monto));
+}
+
+/**
+ * Filtra a digitos lo que se teclea en el input de monto: sin punto, sin coma, sin signo. Devuelve
+ * `""` para el campo vacio (que es un estado legitimo mientras se edita) y come los ceros a la
+ * izquierda para que no quede «08000» en pantalla.
+ */
+export function soloDigitos(texto: string): string {
+  const digitos = texto.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  return digitos;
 }
 
 /** `true` si la linea no tiene NI metodo NI monto: la unica que se descarta ([Q2] de la 212). */

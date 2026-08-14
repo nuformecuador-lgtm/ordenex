@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
+  Camera,
   ChevronUp,
+  ImagePlus,
   MessageCircle,
   Navigation,
   PackageCheck,
@@ -58,6 +60,7 @@ import {
   opcionesPara,
   pendiente,
   puedeAnadirLinea,
+  soloDigitos,
   totalCapturado,
   type LineaEnEdicion,
 } from "./desglose-captura";
@@ -156,6 +159,15 @@ type Resultado =
 type Paso = "detalle" | "resultados" | "formulario";
 
 const ACCEPT_MIME = GESTION_ALLOWED_MIME.join(",");
+
+/**
+ * Formatos admitidos, en la letra del usuario y DERIVADOS del mismo catálogo que valida el borde
+ * (`GESTION_ALLOWED_MIME`). Escritos a mano se desincronizarían el día que entre —o salga— un
+ * formato, y la zona de carga prometería algo que el servidor rechaza.
+ */
+const FORMATOS_EVIDENCIA = GESTION_ALLOWED_MIME.map((mime) =>
+  mime.replace("image/", "").toUpperCase(),
+).join(" · ");
 
 // Feature 119 (R16): tope de fotos por gestion. El schema (cliente y servidor) usa el
 // mismo `gestionConfig.MAX_EVIDENCIAS_POR_GESTION`; en el navegador la env no es visible
@@ -628,6 +640,10 @@ export function GestionarOrdenPanel({
     sinCobro || capturaCuadra(lineas, montoACobrar)
       ? undefined
       : DESGLOSE_TEXTOS.noCuadra;
+  // El desglose que no cuadra no llega ni a intentarlo: «Guardar gestión» se deshabilita mientras
+  // la suma no iguale el monto a cobrar. `revisarDesglose` (:538) sigue siendo la barrera de
+  // verdad —el botón puede habilitarse con las líneas a medias—; esto solo evita el pulso inútil.
+  const desgloseBloquea = resultado === "entregada" && cuadreError !== undefined;
   // Feature 119: la evidencia es una LISTA -> tanto el cliente (`safeParse`) como el servidor
   // cuelgan sus errores del campo `evidencias`.
   const evidenciaError = firstError(fieldErrors, "evidencias");
@@ -964,7 +980,7 @@ export function GestionarOrdenPanel({
               type="button"
               onClick={handleConfirm}
               loading={enviando || ubicando}
-              disabled={comprimiendo}
+              disabled={comprimiendo || desgloseBloquea}
             >
               {comprimiendo
                 ? "Procesando foto…"
@@ -1074,13 +1090,15 @@ function DesglosePagoField({
                   aria-invalid={errorLinea ? true : undefined}
                 />
               </div>
+              {/* Sin decimales: `text` + `inputMode="numeric"` en vez de `type="number"`, porque
+                  un input numerico devuelve "" ante un "." a medio teclear y se perderia lo ya
+                  escrito. El filtro real es `soloDigitos`; el `pattern` solo abre el teclado. */}
               <Input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={linea.monto}
-                onChange={(e) => cambiar(i, { monto: e.target.value })}
+                onChange={(e) => cambiar(i, { monto: soloDigitos(e.target.value) })}
                 aria-label={`${DESGLOSE_TEXTOS.montoLinea} ${i + 1}`}
                 aria-invalid={errorLinea ? true : undefined}
                 className="w-28"
@@ -1114,7 +1132,8 @@ function DesglosePagoField({
           variant="outline"
           size="sm"
           className="self-start gap-1.5"
-          // R4 [Q4]: la línea nueva nace con lo que FALTA, no en blanco.
+          // R4 [Q4]: la línea nueva nace con lo que FALTA, no en blanco. `pendiente` ya acota a 0
+          // cuando lo capturado iguala o supera el total: nunca se pre-carga un negativo.
           onClick={() => onChange([...lineas, lineaNueva(pendiente(lineas, montoACobrar))])}
         >
           <Plus className="size-4" aria-hidden="true" />
@@ -1311,6 +1330,14 @@ function EvidenciasField({
           ))}
         </ul>
       ) : null}
+      {/* Zona de carga: el `input[type=file]` crudo pintaba un botón gris de sistema que en el
+          móvil no se lee como «aquí van las fotos». El input sigue existiendo y sigue siendo el
+          control (mismo id, mismo `aria-label`, misma validez): sólo se oculta VISUALMENTE con
+          `sr-only` —nunca con `hidden`/`display:none`, que lo sacaría del foco y del teclado— y
+          la superficie visible es su `<label>`, que le traslada el clic y el tap.
+
+          El foco vive en el input, así que el anillo se pinta con `has-[:focus-visible]` sobre
+          la zona: quien navega con teclado ve resaltado el área, no un input invisible. */}
       <input
         id={inputId}
         type="file"
@@ -1319,12 +1346,34 @@ function EvidenciasField({
         onChange={onSelect}
         aria-invalid={error ? true : undefined}
         aria-label={ariaLabel}
-        aria-describedby={ayuda ? `${inputId}-ayuda` : undefined}
-        className="text-sm"
+        aria-describedby={`${inputId}-limite${ayuda ? ` ${inputId}-ayuda` : ""}`}
+        className="sr-only"
       />
-      <p className="text-xs text-muted-foreground">
-        {`Puedes adjuntar hasta ${MAX_EVIDENCIAS} fotos (${files.length}/${MAX_EVIDENCIAS}).`}
-      </p>
+      <label
+        htmlFor={inputId}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50 ${
+          error
+            ? "border-destructive/60 bg-destructive/5"
+            : "border-input bg-muted/30 hover:border-ring hover:bg-muted/60"
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className="flex size-10 items-center justify-center rounded-full bg-background text-muted-foreground shadow-xs"
+        >
+          {files.length > 0 ? (
+            <ImagePlus className="size-5" />
+          ) : (
+            <Camera className="size-5" />
+          )}
+        </span>
+        <span className="text-sm font-medium text-foreground">
+          {files.length > 0 ? "Añadir otra foto" : "Toca para tomar o subir fotos"}
+        </span>
+        <span id={`${inputId}-limite`} className="text-xs text-muted-foreground">
+          {`${FORMATOS_EVIDENCIA} · hasta ${MAX_EVIDENCIAS} fotos (${files.length}/${MAX_EVIDENCIAS})`}
+        </span>
+      </label>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}

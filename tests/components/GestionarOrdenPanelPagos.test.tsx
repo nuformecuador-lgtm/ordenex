@@ -103,10 +103,19 @@ function selectorMetodo(n: number) {
   return screen.getByRole("combobox", { name: `Método de pago línea ${n}` });
 }
 
+/**
+ * El monto es un `textbox` (no un `spinbutton`): la captura NO admite decimales, así que el campo
+ * es texto con `inputMode="numeric"` y filtro a dígitos. Un `type="number"` devolvía "" ante un
+ * "." a medio teclear y se comía lo ya escrito.
+ */
 function inputMonto(n: number): HTMLInputElement {
-  return screen.getByRole("spinbutton", {
+  return screen.getByRole("textbox", {
     name: `Monto línea ${n}`,
   }) as HTMLInputElement;
+}
+
+function botonGuardar(): HTMLButtonElement {
+  return screen.getByRole("button", { name: "Guardar gestión" }) as HTMLButtonElement;
 }
 
 /** Elige un método en la línea `n` (Select de base-ui: trigger → listbox → opción). */
@@ -178,9 +187,11 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     await abrirEntrega(user);
 
     const linea = screen.getByRole("group", { name: "Línea de pago 1" });
+    // DOS controles y nada más: el método y el monto. El único `textbox` es el monto — si
+    // apareciera un segundo (referencia, nota) este conteo lo caza.
     expect(within(linea).getAllByRole("combobox")).toHaveLength(1);
-    expect(within(linea).getAllByRole("spinbutton")).toHaveLength(1);
-    expect(within(linea).queryAllByRole("textbox")).toHaveLength(0);
+    expect(within(linea).getAllByRole("textbox")).toHaveLength(1);
+    expect(inputMonto(1)).toHaveAttribute("inputmode", "numeric");
   });
 
   it("R6: quitar una línea libera su método en las demás y con una sola no se ofrece quitar", async () => {
@@ -258,9 +269,8 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
   it.each([
     ["de menos", "5000"],
     ["de más", "9000"],
-    ["por un céntimo", "8000.01"],
   ])(
-    "R9: una suma que NO cuadra (%s) pinta el error y NO llama a la action",
+    "R9: una suma que NO cuadra (%s) pinta el error, DESHABILITA «Guardar gestión» y no llama a la action",
     async (_caso, monto) => {
       const user = userEvent.setup();
       await abrirEntrega(user);
@@ -268,25 +278,50 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
       await elegirMetodo(user, 1, "Efectivo");
       escribirMonto(1, monto);
       await subirFoto(user); // lo único que falla es el cuadre
-      await guardar(user);
 
       const alertas = screen.getAllByRole("alert").map((a) => a.textContent);
       expect(alertas).toContain("El desglose debe sumar exactamente el monto a cobrar.");
+      // El descuadre no se descubre al pulsar: el CTA está muerto mientras exista.
+      expect(botonGuardar()).toBeDisabled();
+      fireEvent.click(botonGuardar());
       expect(gestionarMock).not.toHaveBeenCalled();
     },
   );
 
-  it("R13: método sin monto → error EN ESA LÍNEA y no se envía", async () => {
+  it("el monto NO admite decimales: lo tecleado se filtra a dígitos", async () => {
+    const user = userEvent.setup();
+    await abrirEntrega(user);
+
+    // Punto, coma y signo caen; los dígitos sobreviven en su orden.
+    escribirMonto(1, "8000.01");
+    expect(inputMonto(1).value).toBe("800001");
+    escribirMonto(1, "-1.5");
+    expect(inputMonto(1).value).toBe("15");
+    escribirMonto(1, "");
+    expect(inputMonto(1).value).toBe("");
+  });
+
+  it("añadir método con la suma ya cubierta pre-carga 0, nunca un negativo", async () => {
+    const user = userEvent.setup();
+    await abrirEntrega(user);
+
+    escribirMonto(1, "9000"); // ya se pasó del monto a cobrar
+    await user.click(screen.getByRole("button", { name: "Añadir método" }));
+
+    expect(inputMonto(2).value).toBe("0");
+  });
+
+  it("R13: método sin monto → la suma no cuadra y «Guardar gestión» queda deshabilitado", async () => {
     const user = userEvent.setup();
     await abrirEntrega(user);
 
     await elegirMetodo(user, 1, "Efectivo");
     escribirMonto(1, "");
     await subirFoto(user);
-    await guardar(user);
 
-    const linea = screen.getByRole("group", { name: "Línea de pago 1" });
-    expect(within(linea).getByRole("alert")).toHaveTextContent("Monto requerido");
+    // Un monto vacío es una suma INFERIOR (0 < 8.000): mismo bloqueo que cualquier descuadre.
+    expect(botonGuardar()).toBeDisabled();
+    fireEvent.click(botonGuardar());
     expect(gestionarMock).not.toHaveBeenCalled();
   });
 
@@ -303,16 +338,17 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     expect(gestionarMock).not.toHaveBeenCalled();
   });
 
-  it("R14: con cobro y todas las líneas vacías, error de método requerido y no se envía", async () => {
+  it("R14: con cobro y todas las líneas vacías, el cuadre bloquea el envío", async () => {
     const user = userEvent.setup();
     await abrirEntrega(user);
 
     escribirMonto(1, ""); // línea COMPLETAMENTE vacía: se descarta (R12) y no queda ninguna
     await subirFoto(user);
-    await guardar(user);
 
     const alertas = screen.getAllByRole("alert").map((a) => a.textContent);
-    expect(alertas).toContain("Método de pago requerido");
+    expect(alertas).toContain("El desglose debe sumar exactamente el monto a cobrar.");
+    expect(botonGuardar()).toBeDisabled();
+    fireEvent.click(botonGuardar());
     expect(gestionarMock).not.toHaveBeenCalled();
   });
 
