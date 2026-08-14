@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { componer, contraste, paleta, token } from "../../fixtures/contraste";
+import { componer, contraste, paleta, token, tokenAlImprimir } from "../../fixtures/contraste";
 // Feature 223 (R24/R32): el localizador POR CONTENIDO vive en el fixture compartido, para que las
 // dos guardias que localizan el bloque de la 217 no tengan dos ideas distintas de dónde está.
 import { atReglaQueContiene } from "../../fixtures/css-reglas";
@@ -310,18 +310,40 @@ describe("feature 221 — en papel, la tinta de PALETA FIJA mejora (y el CSS lo 
   );
 
   /**
-   * FAMILIA 2 — EL LÍMITE, hecho ejecutable. La tinta sale de un TOKEN, y `.dark` no está acotado
-   * a pantalla: al imprimir sigue valiendo el hex oscuro. Apagar el variant no toca esa tinta, así
-   * que en papel NO cambia nada. Está aquí para que nadie lea la ficha como «el papel ya sale
-   * claro»: fuera de `.papel-al-imprimir`, no sale.
+   * FAMILIA 2 — EL LÍMITE de ESTA regla, y QUIÉN LO LEVANTÓ DESPUÉS.
+   *
+   * La tinta sale de un TOKEN, y apagar el variant no toca un token: en eso esta regla no cambia
+   * el papel, y nunca pretendió hacerlo. Lo que sí cambió el papel es la FEATURE 224, con su
+   * `@media print` que redeclara los tokens claros para `.dark` y `.tema-sistema`.
+   *
+   * ⚠️ ESTE CASO ESTUVO CIEGO, Y HABRÍA SEGUIDO VERDE MINTIENDO. Medía
+   * `token("oscuro", "success-strong")` contra papel blanco y de ahí concluía «el papel NO
+   * cambia». Pero `token()` lee de `cssDePantalla`, que es el archivo con TODAS las at-rules de
+   * impresión ya borradas (`quitarBloquesDeImpresion`): esa medida da 1.92 pase lo que pase
+   * dentro de `@media print`. Cuando llegó la 224 y el papel cambió de verdad, este caso habría
+   * seguido en verde afirmando lo contrario. Ahora se miden las DOS cosas, cada una con el lector
+   * que la ve: `token()` para la pantalla y `tokenAlImprimir()` para el papel.
    */
-  it("LÍMITE: donde la tinta sale de un token, el papel NO cambia (`Badge` success sigue en 1.92)", () => {
-    const tinta = token("oscuro", "success-strong");
-    expect(medir(tinta, PAPEL)).toBe(1.92);
+  it("LÍMITE de esta regla, levantado por la 224: `Badge` success 1.92 → 5.48 en papel", () => {
+    // Lo que ESTA regla no toca: en pantalla, el tema oscuro sigue teniendo su tinta oscura.
+    expect(
+      medir(token("oscuro", "success-strong"), PAPEL),
+      "la tinta de tema oscuro en PANTALLA se movió: el límite de esta regla se medía contra ella",
+    ).toBe(1.92);
+
+    // Lo que de verdad sale hoy por la impresora, leído del bloque que lo decide (feature 224).
+    expect(
+      medir(tokenAlImprimir("success-strong"), PAPEL),
+      "el papel dejó de imprimir la tinta clara. O el bloque de la 224 se fue, o dejó de ganar la " +
+        "cascada: en los dos casos vuelve la tinta `#34d399` sobre papel blanco, 1.92:1.",
+    ).toBe(5.48);
+
     expect(
       crudo,
-      "el comentario de la regla dejó de declarar su límite con el número medido",
-    ).toContain("1.92");
+      "el comentario de la regla dejó de declarar su límite con los números medidos, y de decir " +
+        "quién lo levantó. Un límite retirado que sigue escrito manda a buscar un agujero que ya " +
+        "no existe.",
+    ).toContain("1.92 → 5.48");
   });
 });
 
@@ -391,28 +413,45 @@ describe("feature 221 — dentro de la hoja del cierre, el papel pasa a ser el t
   );
 
   /**
-   * EL PRECIO, declarado y medido en vez de descubierto. Si el usuario marca «gráficos de fondo»
-   * —desmarcado por defecto—, los cuatro `Badge` semánticos imprimen su fondo `-soft` CLARO bajo
-   * una tinta que sigue siendo la OSCURA, y caen muy por debajo de AA. No se arregla aquí: el
-   * arreglo es fijar los tokens claros al imprimir fuera de la hoja del cierre, que cambia el
-   * papel de las quince rutas del portal y es decisión propia. Queda medido para que la próxima
-   * ficha no tenga que redescubrirlo, y rojo si alguien lo mueve sin mirar.
+   * EL PRECIO QUE ESTA REGLA COBRÓ, Y LA FICHA QUE LO BORRÓ. Se REEXPRESA, no se borra.
+   *
+   * Con «gráficos de fondo» marcado —desmarcado por defecto—, los cuatro `Badge` semánticos
+   * imprimen su fondo `-soft` CLARO. Hasta la feature 224 la tinta seguía siendo la OSCURA y el
+   * par se hundía muy por debajo de AA: era el patrón de la 208, un token que gira sobre un fondo
+   * que no. La 224 redeclara también los tokens al imprimir, así que las dos mitades del par son
+   * ahora claras y vuelve a ser el par del tema claro.
+   *
+   * Se conservan las DOS columnas a propósito. Borrar la de «antes» dejaría el caso sin decir qué
+   * se arregló; y si mañana alguien retira el bloque de la 224, la de «después» se hunde a la de
+   * «antes» y esto se pone rojo con el número exacto.
    */
-  it("PRECIO declarado: con «gráficos de fondo», los cuatro `Badge` semánticos caen", () => {
-    const caidas = (["success", "warning", "danger", "info"] as const).map((familia) => {
-      const tinta = token("oscuro", `${familia}-strong`);
-      const antes = medir(tinta, componer(paleta(familia), token("oscuro", "card"), 0.15));
-      const despues = medir(tinta, paleta(`${familia}-soft`));
-      return `${antes.toFixed(2)} → ${despues.toFixed(2)}`;
-    });
+  it("el PRECIO que esta regla cobraba lo BORRÓ la 224: los cuatro `Badge` vuelven a AA", () => {
+    const FAMILIAS = ["success", "warning", "danger", "info"] as const;
+    const conLa221 = FAMILIAS.map((f) => medir(token("oscuro", `${f}-strong`), paleta(`${f}-soft`)));
+    const conLa224 = FAMILIAS.map((f) => medir(tokenAlImprimir(`${f}-strong`), paleta(`${f}-soft`)));
 
-    expect(caidas).toEqual(["6.60 → 1.70", "7.59 → 1.50", "5.20 → 2.26", "6.97 → 1.91"]);
-    for (const caida of caidas) {
+    expect(
+      conLa221,
+      "la caída que esta regla producía se movió. Es el «antes» del arreglo de la 224: si cambió, " +
+        "una de las dos fichas dejó de describir lo que hace.",
+    ).toEqual([1.7, 1.5, 2.26, 1.91]);
+    expect(
+      conLa224,
+      "el par impreso dejó de ser el del tema claro. Lo más probable es que el bloque `@media " +
+        "print` de la 224 se haya ido, o que haya dejado de ganar la cascada: mirá primero " +
+        "`tests/unit/guards/impresion-tokens.guardia.test.ts`.",
+    ).toEqual([4.84, 6.37, 5.3, 6.16]);
+
+    FAMILIAS.forEach((familia, i) => {
+      expect(conLa224[i], `\`Badge\` ${familia} volvió a caer bajo AA en papel`).toBeGreaterThanOrEqual(
+        4.5,
+      );
+      const par = `${conLa221[i]!.toFixed(2)} → ${conLa224[i]!.toFixed(2)}`;
       expect(
         crudo,
-        `el comentario de la regla ya no declara la caída «${caida}». El precio de esta decisión ` +
-          "va escrito junto a ella: un límite que sólo vive en un informe no lo lee nadie.",
-      ).toContain(caida);
-    }
+        `el CSS ya no anota «${par}» para ${familia}. El precio y su retirada van escritos junto a ` +
+          "las reglas: un dato que sólo vive en un informe no lo lee nadie.",
+      ).toContain(par);
+    });
   });
 });

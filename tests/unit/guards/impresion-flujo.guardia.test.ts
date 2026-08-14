@@ -287,18 +287,57 @@ describe("feature 223 — el bloque del flujo existe y vive donde debe (R24, R26
   });
 
   /**
-   * R24 — el INVARIANTE. Dos bloques, los dos antes de `.dark`.
+   * R24 — el INVARIANTE, REEXPRESADO por la feature 224. Conviene leer por que, porque el cambio
+   * es de forma y NO de exigencia.
    *
-   * Un tercero, o uno detras de `.dark`, envenena el lector de tokens de pantalla
-   * (`tests/fixtures/contraste.ts`): sus hexes claros pasarian a ser los ultimos de la mitad
-   * «oscuro» y TODAS las comprobaciones de tema oscuro medirian el tema claro, EN VERDE.
+   * Este caso decia: «hay EXACTAMENTE dos `@media print`». La 224 añade el tercero —el que
+   * redeclara los tokens claros para `.dark` y `.tema-sistema`, para que el portal entero salga
+   * en tema claro al imprimir— asi que el numero dejo de ser cierto. Cambiar el 2 por un 3 habria
+   * sido relajarlo sin ganar nada: lo que este caso protege no es el numero, son DOS cosas.
+   *
+   *  1. **Ningun bloque de impresion sin dueño.** Cada `@media print` del archivo tiene que ser
+   *     uno de los del INVENTARIO, identificado por lo que CONTIENE. Un bloque nuevo ya no se
+   *     legaliza tocando una constante: hay que darle nombre aqui, y quien lo lea sabe cual es.
+   *  2. **Ninguno detras de `.dark`.** Si uno cae ahi, sus hexes claros pasan a ser los ultimos
+   *     de la mitad «oscuro» del archivo y `token("oscuro", …)` empieza a devolverlos: TODAS las
+   *     comprobaciones de tema oscuro medirian el tema claro, EN VERDE.
+   *
+   * Es estrictamente mas fuerte que lo que habia: antes, un tercer bloque cualquiera se aceptaba
+   * con solo alargar el `toEqual`; ahora hay que decir de quien es.
    */
-  it("hay EXACTAMENTE dos `@media print` y los dos van ANTES de `.dark`", () => {
+  const INVENTARIO_PRINT = [
+    { ficha: "217 — el COLOR de la hoja del cierre", marca: ".papel-al-imprimir" },
+    { ficha: "223 — el FLUJO de impresion de la hoja", marca: `.${CANDIDATA}` },
+    { ficha: "224 — los TOKENS claros del portal al imprimir", marca: "html .dark" },
+  ] as const;
+
+  it("cada `@media print` del archivo tiene dueño en el inventario, y todos van ANTES de `.dark`", () => {
     expect(
       BLOQUES_PRINT.map((b) => b.prelude),
-      "el archivo dejo de tener exactamente dos bloques `@media print` (color de la 217 + flujo " +
-        "de la 223). Un tercero es un sitio mas donde puede colarse un token de impresion.",
-    ).toEqual(["@media print", "@media print"]);
+      `el archivo dejo de tener los ${INVENTARIO_PRINT.length} bloques \`@media print\` del ` +
+        "inventario (color de la 217, flujo de la 223, tokens de la 224), o alguno estrena una " +
+        "condicion de medio. Cada bloque de impresion es un sitio mas donde puede colarse un " +
+        "token que el lector de pantalla no ve.",
+    ).toEqual(INVENTARIO_PRINT.map(() => "@media print"));
+
+    for (const { ficha, marca } of INVENTARIO_PRINT) {
+      expect(
+        BLOQUES_PRINT.filter((b) => b.cuerpo.includes(marca)),
+        `no hay exactamente UN bloque \`@media print\` que contenga \`${marca}\` (${ficha}). O se ` +
+          "fue, o se duplico, o dos fichas se fusionaron en un bloque: en los tres casos hay que " +
+          "releer el inventario antes de tocar nada.",
+      ).toHaveLength(1);
+    }
+
+    const huerfanos = BLOQUES_PRINT.filter(
+      (b) => !INVENTARIO_PRINT.some((entrada) => b.cuerpo.includes(entrada.marca)),
+    );
+    expect(
+      huerfanos.map((b) => b.cuerpo.trim().slice(0, 120)),
+      "aparecio un bloque `@media print` que no es de ninguna de las fichas del inventario. No se " +
+        "arregla borrando este censo: se le pone nombre arriba, con lo que contiene, para que el " +
+        "siguiente sepa quien lo puso y por que.",
+    ).toEqual([]);
 
     const oscuro = css.search(/^\.dark[,\s{]/m);
     expect(oscuro, "no se encontro el selector `.dark` a principio de linea").toBeGreaterThan(-1);

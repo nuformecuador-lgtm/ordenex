@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { reglasDe } from "./css-reglas";
 import { quitarComentariosCss } from "./sin-comentarios";
 
 /**
@@ -193,6 +194,52 @@ export function token(tema: "claro" | "oscuro", nombre: string): string {
     );
   }
   return ultimo[1];
+}
+
+/**
+ * ⚠️ Feature 224 — EL TOKEN QUE SE IMPRIME. El complemento de `token()`, y hace falta.
+ *
+ * `token()` lee de `cssDePantalla`, que es el archivo CON las at-rules de impresión BORRADAS. Eso
+ * es correcto y deliberado (ver `quitarBloquesDeImpresion`), pero deja un agujero que ya mordió:
+ * hasta la 224, la guardia de la 221 afirmaba «al imprimir, la tinta del `Badge` success sigue
+ * siendo `#34d399`» midiendo `token("oscuro", "success-strong")`. Esa aserción es CIEGA al papel:
+ * seguiría verde diciendo exactamente lo mismo el día que un bloque `@media print` cambie el
+ * token —que es el día que llegó—. Un lector que no puede ver lo que afirma no falla: MIENTE.
+ *
+ * Esta función lee el otro lado: el valor que el token toma DENTRO del bloque `@media print` que
+ * redeclara los tokens de `.dark` / `.tema-sistema` (feature 224, `app/globals.css`). Es el valor
+ * que sale por la impresora cuando se imprime desde tema oscuro, y por eso es con el que hay que
+ * medir el papel.
+ *
+ * NO resuelve la cascada —eso no lo hace ningún lector de este archivo, ver la cabecera—: exige
+ * que haya EXACTAMENTE UNA regla así y lanza si hay cero o más de una. Con dos, cuál gana depende
+ * de especificidad y orden, y devolver la primera sería inventarse una respuesta. Que gane de
+ * verdad lo comprueba `tests/unit/guards/impresion-tokens.guardia.test.ts`, que sí calcula la
+ * especificidad; aquí sólo se LEE.
+ */
+export function tokenAlImprimir(nombre: string): string {
+  const candidatas = reglasDe(cssSinComentarios).filter(
+    (r) =>
+      r.ancestros.some((a) => /^@media\s+print\b/.test(a)) &&
+      r.selectores.some((s) => /(^|[\s>+~])(html\s+)?\.dark\b/.test(s)),
+  );
+  if (candidatas.length !== 1) {
+    throw new Error(
+      `se esperaba UNA regla \`@media print\` que redeclare los tokens de \`.dark\` en ` +
+        `app/globals.css, y hay ${candidatas.length}. Con cero, el papel volvió a salir con la ` +
+        "tinta del tema oscuro; con dos, cuál gana depende de la cascada y este lector no la " +
+        "resuelve. Fallar es lo correcto, no devolver la primera.",
+    );
+  }
+  const valor = candidatas[0]!.declaraciones[`--${nombre}`];
+  if (!valor || !/^#[0-9a-fA-F]{3,8}$/.test(valor)) {
+    throw new Error(
+      `--${nombre} no aparece como hex en el bloque de impresión de tokens de app/globals.css. ` +
+        "O el token no se redeclara al imprimir —y entonces en papel sale con su valor de tema " +
+        "oscuro—, o cambió de notación y esta lectura hay que revisarla A MANO.",
+    );
+  }
+  return valor;
 }
 
 /**
