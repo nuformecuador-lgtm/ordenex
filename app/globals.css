@@ -21,12 +21,53 @@
  * puede vivir en un envoltorio del portal y no hace falta tocar `<html>`.
  */
 @custom-variant dark {
-  &:is(.dark *) {
-    @slot;
-  }
-  @media (prefers-color-scheme: dark) {
-    &:is(.tema-sistema *) {
+  /*
+   * Feature 221 — AL IMPRIMIR, EL VARIANT `dark:` NO DISPARA.
+   *
+   * El variant se resuelve contra el ANCESTRO (`&:is(.dark *)`), no contra los tokens, así que
+   * hasta aquí las utilidades `dark:` de las primitivas seguían emitiendo también dentro de
+   * `@media print`: quien imprimía desde tema oscuro sacaba insignias y botones con su tinte
+   * oscuro sobre papel blanco. Envolver las DOS ramas apaga eso en toda la app de una vez, en vez
+   * de parche por componente. Comprobado contra el compilador real (tailwindcss 4.3.2): cada
+   * utilidad `dark:*` sale ya envuelta en `@media not print { … }`, las dos ramas dentro.
+   *
+   * ── ESTO APAGA EL VARIANT, NO LOS TOKENS. Es su límite, y hay que leerlo entero.
+   * `.dark` no está acotado a pantalla: al imprimir desde «oscuro», `--foreground` sigue siendo
+   * `#e6ecf8` en todas partes salvo dentro de `.papel-al-imprimir` —las dos hojas del comprobante
+   * del cierre, feature 217, aquí abajo—. Medido el 2026-08-13 con `tests/fixtures/contraste.ts`:
+   *
+   *  · Donde la tinta sale de un TOKEN, el papel NO cambia. `Badge` success medía 1.92 sobre papel
+   *    blanco (`#34d399`) y sigue midiendo 1.92: el token no gira al imprimir. Esta regla no lo
+   *    arregla y no pretende hacerlo.
+   *  · Donde la tinta es de PALETA FIJA, el papel mejora de verdad, y eso es lo que esta regla
+   *    compra: `Button` brand-outline 1.87 → 3.18, `EstatusBadge` «en reparto» 1.87 → 4.16,
+   *    `Toast` success 2.13 → 6.99, `RankingPodio` 1.19 → 11.39.
+   *  · Dentro de `.papel-al-imprimir`, donde los tokens YA son claros, esto COMPLETA la 217: lo
+   *    impreso pasa a ser EXACTAMENTE el tema claro, y deja de depender del tema de pantalla.
+   *    `Button` destructive 2.90 → 3.29, `Button` outline 14.78 → 14.79, `Badge` destructive
+   *    5.32 → 5.30.
+   *
+   * Y el precio, dicho y no escondido: si el usuario marca «gráficos de fondo» —viene DESMARCADO
+   * en los tres navegadores—, los cuatro `Badge` semánticos pasan a imprimir su fondo `-soft`
+   * claro bajo una tinta que sigue siendo la oscura: success 6.60 → 1.70, warning 7.59 → 1.50,
+   * danger 5.20 → 2.26, info 6.97 → 1.91. Es el patrón que la 208 documentó —un token que gira
+   * sobre un fondo que no— y su arreglo es fijar los tokens claros al imprimir FUERA de la hoja
+   * del cierre, que cambia el papel de las quince rutas del portal y es decisión propia.
+   *
+   * NO DECLARES TOKENS AQUÍ DENTRO. `quitarBloquesDeImpresion()` borra toda at-rule que nombre
+   * `print` antes de leer los tokens de pantalla, así que un token metido aquí desaparecería del
+   * lector y las medidas de tema oscuro pasarían a medir otra cosa, en verde.
+   *
+   * Guardia: `tests/unit/guards/impresion-sin-dark.guardia.test.ts`.
+   */
+  @media not print {
+    &:is(.dark *) {
       @slot;
+    }
+    @media (prefers-color-scheme: dark) {
+      &:is(.tema-sistema *) {
+        @slot;
+      }
     }
   }
 }

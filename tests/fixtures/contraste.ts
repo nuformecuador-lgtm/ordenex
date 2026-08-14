@@ -115,9 +115,14 @@ export const cssSinComentarios = quitarComentarios(readFileSync(CSS, "utf8"));
  * ancestro `@media print` obligatorio, en `tema-encendido.guardia.test.ts`—. El lector de tokens
  * no debe verlo: aquí se leen los tokens de PANTALLA.
  *
- * Nota de alcance: quita cualquier at-rule de medio que nombre `print`, incluido un hipotético
- * `@media not print`. Hoy no existe ninguno así; si algún día se añade, esta pasada lo ignora
- * también, que es lo correcto para un lector de tokens de pantalla.
+ * Nota de alcance, CORREGIDA por la feature 221: quita cualquier at-rule de medio que nombre
+ * `print`, y desde la 221 eso incluye el `@media not print` que envuelve al `@custom-variant
+ * dark`. Aquella nota decía «hoy no existe ninguno así» y ya no es cierto. Ese bloque SÍ aplica en
+ * pantalla, así que borrarlo aquí es inocuo SÓLO mientras no declare ningún token, y hoy no
+ * declara ninguno: dentro sólo viven las dos ramas del variant. Lo sostiene un caso propio en
+ * `tests/unit/guards/impresion-sin-dark.guardia.test.ts`. El día que haga falta declarar un token
+ * bajo `@media not print`, esta pasada hay que afinarla —distinguir `print` de `not print`— y no
+ * darla por buena: ese token es de los de PANTALLA y este lector se lo estaría comiendo.
  */
 export function quitarBloquesDeImpresion(css: string): string {
   const apertura = /@media[^{}]*\bprint\b[^{}]*\{/g;

@@ -173,6 +173,18 @@ describe("feature 211 — el CSS que enciende el tema", () => {
 });
 
 /**
+ * La apertura de LA regla de impresion de la 217: `@media print`, con `print` PEGADO al `@media`.
+ *
+ * REEXPRESADA por la feature 221, no relajada. Hasta la 221 bastaba `@media …print…{` porque en
+ * todo el archivo habia una sola at-rule que nombrara `print`. La 221 añade OTRA —`@media not
+ * print`, que envuelve el `@custom-variant dark` y vive 200 lineas MAS ARRIBA— y el patron viejo
+ * pasaba a engancharla a ella: los dos casos que la usan seguian VERDES sin mirar el bloque que
+ * dicen vigilar. Comprobado plantando la mutacion: con el patron viejo, el caso del orden movia su
+ * ancla al variant y aprobaba aunque el bloque de impresion se fuera al final del archivo.
+ */
+const APERTURA_MEDIA_PRINT = String.raw`^\s*@media\s+print\b[^{}]*\{`;
+
+/**
  * Feature 217 — la regla que hace que la factura del cierre salga BLANCA en papel.
  *
  * En pantalla las dos hojas giran con el tema (la 217 les quito el pin `tema-claro`). Al
@@ -249,7 +261,7 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
     const lineasCodigo = css.split("\n"); // mismo recuento de lineas que `crudo` (feature 209)
     expect(lineasCodigo.length).toBe(lineasCrudas.length);
 
-    const regla = lineasCodigo.findIndex((l) => /^\s*@media\b[^{}]*\bprint\b[^{}]*\{/.test(l));
+    const regla = lineasCodigo.findIndex((l) => new RegExp(APERTURA_MEDIA_PRINT).test(l));
     expect(regla, "no se encontro la REGLA `@media print` en el codigo de " + GLOBALS).toBeGreaterThan(
       -1,
     );
@@ -337,7 +349,7 @@ describe("feature 217 — al imprimir, la hoja de la factura es clara", () => {
    * retirar sola sin que el gate dijese nada. Esto clava el segundo tirante.
    */
   it("el bloque de impresion va ANTES de `.dark`, o el lector de tokens mide el tema equivocado", () => {
-    const impresion = css.search(/^\s*@media\b[^{}]*\bprint\b[^{}]*\{/m);
+    const impresion = css.search(new RegExp(APERTURA_MEDIA_PRINT, "m"));
     const oscuro = css.search(/^\.dark[,\s{]/m);
     expect(impresion, "no se encontro la regla `@media print`").toBeGreaterThan(-1);
     expect(oscuro, "no se encontro el selector `.dark` a principio de linea").toBeGreaterThan(-1);

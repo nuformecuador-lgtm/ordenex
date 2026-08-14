@@ -177,7 +177,7 @@ dando al fixture su línea coherente, NUNCA relajando la aserción.** 8 asercion
 - [x] **T17.** `progress/impl_213.md` con el mapa **R1..R35 → test**, la evidencia de mutación de la
   captura (descuadre, no de humo) y los desvíos del spec.
   **Hecho:** los 35 requisitos con su test; el reviewer rechaza si falta uno.
-- [ ] **T18.** Bookkeeping: `feature_list.json` (213 → `done`, `spec_path`, fechas) y
+- [x] **T18.** Bookkeeping: `feature_list.json` (213 → `done`, `spec_path`, fechas) y
   `progress/current.md`. Commit por task lógica (`-F` o heredoc citado: **backticks en un `-m`
   inline se EJECUTAN**) y PR **después** de T16, nunca antes.
 
