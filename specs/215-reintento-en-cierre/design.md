@@ -18,9 +18,11 @@ Todo anclaje de este documento se verificó abriendo el archivo en `C:/w213`
 > **Cuarta ronda (2026-08-13):** la deriva de `primer_intento_ok` **se DECLARA con
 > fecha de corte**, sin re-backfill y sin redefinir la métrica (**D15**, §8).
 >
-> **Queda ABIERTA una sola cosa, y no es una decisión:** **Q4**, la medición contra
-> la base real (§7.6, consulta lista para ejecutar — y **corregida el 2026-08-14**:
-> le faltaba la sexta condición).
+> **Q4 CERRADA el 2026-08-14: la medición se EJECUTÓ.** Se corrió contra la base
+> **real de producción** y su resultado, su control y su límite están pegados en
+> **§7.6**. Salió **0 en todas las direcciones**, y el cero **no significa que el
+> cambio sea inocuo**: significa que hoy no hay ninguna orden en `devuelta`. Léase
+> §7.6 antes de citarlo. **No queda ninguna pregunta abierta.**
 >
 > **Estado del código (corregido el 2026-08-14, auditado contra el árbol):** el
 > commit **7d9471c3** implementó §2 y §3.1–§3.3, y el **Grupo 4** implementó después
@@ -613,6 +615,63 @@ LIMIT 100;
 que se cobrarían hoy: eso hay que enseñárselo al humano orden por orden con la
 segunda consulta antes de activar nada.
 
+### 7.6-bis RESULTADO EJECUTADO — 2026-08-14
+
+**Dónde se corrió:** base de **producción**, proyecto Supabase
+`scfnwxqbsgkzwsdntdvd`, por el MCP de Supabase (solo lectura: la consulta es `WITH` +
+`SELECT`, sin `INSERT`/`UPDATE`/`DELETE`/DDL). **Se corrió la consulta tal cual está
+escrita arriba**, con la sexta condición ya dentro.
+
+**Que la base es la que decimos, y no otra, está comprobado:** `_prisma_migrations`
+tiene **116 migraciones aplicadas** y la última es `20260812120000_gestion_orden_pago`
+— exactamente las 116 de `db/migrations` en `dev` y en `prod`. No se leyó ninguna
+credencial para saberlo.
+
+| columna | valor |
+| --- | --- |
+| `ordenes_en_devuelta` | **0** |
+| `empiezan_a_escalar` ⚠ cobra antes | **0** |
+| `dejan_de_escalar` | **0** |
+| `conteo_baja` / `conteo_sube` / `conteo_igual` | 0 / 0 / 0 |
+| `pierden_todo_el_conteo` | 0 |
+| `max_viejo` / `max_nuevo` | `null` / `null` |
+
+**La segunda consulta (los casos uno por uno) no se corrió, y no debía:** su
+disparador es `empiezan_a_escalar > 0`, y salió 0.
+
+#### El cero es de UNIVERSO VACÍO — el control que lo demuestra
+
+Un 0 sobre un conjunto vacío es indistinguible de una consulta mal escrita, así que
+se comprobó por separado, y este es el párrafo que hay que leer antes de citar el
+cero:
+
+- **El estado existe y el join es correcto:** `devuelta` está en el catálogo
+  `order_status` (`39095102-9ec0-427d-92ca-2c7e599110e3`).
+- **La base tiene datos:** **141 órdenes vivas**.
+- **Nadie está en `devuelta` ahora mismo:** 0 órdenes con ese `estatus_id`, **incluso
+  contando las borradas** — o sea, no es el filtro `deleted_at` el que vacía el
+  universo.
+- **El dominio SÍ tiene materia:** **11** órdenes pasaron alguna vez por `devuelta`,
+  **8** llegaron a `rechazada`, y hay **32** gestiones contables (`resultado` en
+  `rechazada`/`devuelta`/`reprogramada`, no anuladas) colgadas de un cierre
+  **aprobado**. El mecanismo se ha usado; lo que está vacío es la foto de hoy.
+- **Ninguna de esas 8 se rechazó bajo el criterio nuevo:** 7 llegaron a `rechazada`
+  por `origen_tipo = gestion` (manual, la última el **2026-08-12**) y **una sola** por
+  `escalado_devuelta_sla` (**2026-07-26**). Las dos fechas son **anteriores** a que el
+  criterio nuevo llegara a producción (release #381, 2026-08-14). El cron ha escalado
+  **una vez en toda la vida de la base**.
+
+**Qué se puede afirmar, entonces:** al corte del 2026-08-14 el cambio de criterio
+**no movió de lado del umbral a ninguna orden**, y **nadie ha sido cobrado antes de
+tiempo por él** — porque bajo el criterio nuevo todavía no ha escalado nadie.
+
+**Qué NO se puede afirmar, y por eso queda escrito aquí:** que el cambio sea inocuo.
+Este número **caduca en cuanto una orden entre en `devuelta`**. Es el mismo cero que
+midió `160/D7` en su día, y por el que este documento ya declaraba que **aquel número
+no era reutilizable**: este tampoco lo es. El efecto real se verá en la primera
+tanda de devoluciones que viva entera bajo el criterio nuevo, y la superficie que lo
+haría visible es la ficha **219**.
+
 ---
 
 ## 7bis. Q5 — La orden cuyo cierre nunca se aprueba. **CERRADA: riesgo ACEPTADO (D14)**
@@ -688,6 +747,21 @@ WHERE c."estado"::text <> 'aprobado'
 GROUP BY c."estado"
 ORDER BY cierres DESC;
 ```
+
+**RESULTADO (2026-08-14, misma base de producción, misma vía):** **cero filas.** No
+existe hoy ni un solo cierre que no esté aprobado.
+
+Con su control, porque un conjunto vacío tampoco se cita solo: la tabla `cierre_dia`
+tiene **12 cierres**, y los **12 están `aprobado`** (del 2026-07-22 al 2026-08-12).
+No hay ninguno en `solicitado`, `vencido` ni `rechazado`, así que **ninguno lleva más
+de 7 ni más de 30 días abierto**.
+
+**Qué dice esto del riesgo que D14 aceptó:** el supuesto operativo del humano —«el
+cierre se cerrará en algún momento por un usuario»— **se sostiene en producción a
+fecha de hoy**, sobre 12 de 12. Es la primera vez que se mide, y es una foto: el
+riesgo no desaparece, queda **dimensionado en 0 casos**. Si algún día esa consulta
+devuelve filas con antigüedad alta, esas órdenes son las que se quedan sin escalar
+—y sin cobrar— indefinidamente, que es exactamente lo que M1/M2/M3 mitigaban.
 
 ---
 
