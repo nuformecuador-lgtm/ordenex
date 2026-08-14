@@ -2690,6 +2690,45 @@
       "branch": null,
       "depends_on": [217],
       "status_note": "NACE DE LA Q4 DE LA PUERTA DE LA 217 (2026-08-13): el humano decidio que esa feature garantiza el COLOR y no el flujo, y que el flujo iba aparte. Se registra para que no se pierda, que es lo que acaba de pasar con las deudas del PR #367. || LO QUE LA 217 YA DEJO HECHO y no hay que rehacer: la regla `@media print` acotada a las dos hojas, con los tokens claros fijados, y su guardia. Esta ficha es la mitad que falta. || QUEDA ESCRITO EN design.md 4.6 de la 217 que imprimir el detalle arrastra el modal con su overflow: no es un hallazgo nuevo, es la mitad declarada. || OJO AL EMPEZAR: no hay ningun E2E de impresion y jsdom no compone estilos, asi que la verificacion honesta es un censo del CSS con mutacion que lo demuestre, como se hizo en la 217."
+    },
+    {
+      "id": 224,
+      "name": "al imprimir, los tokens tampoco giran a claro",
+      "spec_path": null,
+      "description": "Frontend. La 221 apago el variant `dark:` al imprimir, pero NO los tokens: `.dark` no esta acotado a pantalla, asi que fuera de `.papel-al-imprimir` quien imprime desde tema oscuro sigue sacando tinta #e6ecf8 sobre papel blanco (1,19:1). Falta un `@media print` que redeclare los valores claros para `.dark` y `.tema-sistema`, con su guardia espejo.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": [221],
+      "status_note": "NACE DE LA 221 (2026-08-13), y de corregir la descripcion de esa ficha: prometia 'que el papel salga claro en TODA la app' y su cambio no da eso. Esta es la mitad que falta. || EL IMPLEMENTADOR DE LA 221 PARO EN EL BORDE Y LO DIJO, en vez de expandirse: redeclarar los tokens triplica un bloque de 34 declaraciones, pide su guardia espejo y cambia el papel de QUINCE rutas. Por eso es ficha aparte y no un anexo. || MEDIDO: donde la tinta sale de un TOKEN el papel no cambia hoy (Badge success 1,92 -> 1,92 con la 221 dentro). Donde es de paleta fija, la 221 ya lo arreglo. || BORRA UN PRECIO QUE HOY SE PAGA: con la 221, si el usuario marca 'graficos de fondo' -viene DESMARCADO- las insignias pierden contraste (Badge success 6,60 -> 1,70). Redeclarar los tokens lo elimina. || OJO AL ORDEN: la 217 descubrio que un `@media print` colocado detras de `.dark` NO HACE NADA, porque el espejo de prefers-color-scheme vuelve a declarar los tokens y gana el ultimo. Hay guardia que lo exige."
+    },
+    {
+      "id": 225,
+      "name": "19 avisos hechos a mano repiten el par que la 222 arreglo",
+      "spec_path": null,
+      "description": "Frontend. Arreglar la variante `destructive` del Button no arregla lo que la copio a mano: 19 avisos en 15 archivos repiten el par defectuoso `bg-destructive/10` + `text-destructive` -3,29 sobre tarjeta y 3,12 sobre el fondo de pagina-, y `FieldError`/`Alert` usan `text-destructive` suelto (3,76). Llevarlos al par de `danger` o a un componente compartido, y atarlos con guardia.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": [222],
+      "status_note": "CENSADO POR LA 222 (2026-08-13) con la aritmetica de tests/fixtures/contraste.ts; los numeros y la lista de archivos estan en progress/impl_222.md. || ES LA MISMA FAMILIA QUE EL BUG DE LA CONCILIACION del 07-ago: la capacidad correcta existe en una primitiva y la pantalla la reimplemento a mano al lado. Arreglar la primitiva deja intactas las copias. || DECIDIR AL EMPEZAR, no despues: si esos 19 avisos pasan a un componente compartido -que es lo que evita la vigesima copia- o solo se les cambia el par. Lo segundo es mas barato hoy y reabre la ficha manana. || VIGILA QUE NO NAZCA LA 20: la guardia que se escriba tiene que censar el par prohibido en todo el arbol, no solo en los 15 archivos de hoy."
+    },
+    {
+      "id": 226,
+      "name": "el anillo de foco no llega al 3:1 que pide 1.4.11",
+      "spec_path": null,
+      "description": "Frontend. El anillo de foco de TODAS las variantes de Button -`ring-ring/50`- mide 1,30 contra el fondo, y `ring-destructive/20` 1,33: muy por debajo del 3:1 que el criterio WCAG 1.4.11 exige a un indicador de interfaz. Afecta a toda la navegacion por teclado de la app. Subir la opacidad o el token del anillo hasta cumplir, y atarlo con suelo en la guardia de contraste.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "MEDIDO POR LA 222 (2026-08-13) al revisar el foco de la variante que arreglaba; es APP-WIDE y no de esa variante, por eso ficha propia. || NO ES ESTETICA: 1.4.11 es criterio de accesibilidad para componentes de interfaz, y el anillo de foco es LA senal de donde esta el teclado. Un usuario que no usa raton depende de eso. || OJO AL UMBRAL, que NO es el 4,5 de texto: 1.4.11 pide 3:1, y se mide el anillo contra lo que tiene al lado -el fondo adyacente-, no contra el texto del boton. Escribirlo en la guardia para que nadie lo copie del umbral de texto. || EL VEHICULO YA EXISTE: contraste() y componer() en tests/fixtures/contraste.ts, con sus autocontroles. Consumirlas, no reescribirlas."
     }
   ]
 }
