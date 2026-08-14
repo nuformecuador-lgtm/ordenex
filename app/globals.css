@@ -31,29 +31,51 @@
    * de parche por componente. Comprobado contra el compilador real (tailwindcss 4.3.2): cada
    * utilidad `dark:*` sale ya envuelta en `@media not print { … }`, las dos ramas dentro.
    *
-   * ── ESTO APAGA EL VARIANT, NO LOS TOKENS. Es su límite, y hay que leerlo entero.
-   * `.dark` no está acotado a pantalla: al imprimir desde «oscuro», `--foreground` sigue siendo
-   * `#e6ecf8` en todas partes salvo dentro de `.papel-al-imprimir` —las dos hojas del comprobante
-   * del cierre, feature 217, aquí abajo—. Medido el 2026-08-13 con `tests/fixtures/contraste.ts`:
+   * ── ESTO APAGA EL VARIANT, NO LOS TOKENS. Era su límite, y LO LEVANTÓ LA FEATURE 224.
+   * `.dark` no estaba acotado a pantalla: hasta la 224, al imprimir desde «oscuro» `--foreground`
+   * seguía siendo `#e6ecf8` en todas partes salvo dentro de `.papel-al-imprimir` —las dos hojas
+   * del comprobante del cierre, feature 217, aquí abajo—. Medido el 2026-08-13 con
+   * `tests/fixtures/contraste.ts`:
    *
-   *  · Donde la tinta sale de un TOKEN, el papel NO cambia. `Badge` success medía 1.92 sobre papel
-   *    blanco (`#34d399`) y sigue midiendo 1.92: el token no gira al imprimir. Esta regla no lo
-   *    arregla y no pretende hacerlo.
-   *  · Donde la tinta es de PALETA FIJA, el papel mejora de verdad, y eso es lo que esta regla
-   *    compra: `Button` brand-outline 1.87 → 3.18, `EstatusBadge` «en reparto» 1.87 → 4.16,
-   *    `Toast` success 2.13 → 6.99, `RankingPodio` 1.19 → 11.39.
+   *  · Donde la tinta sale de un TOKEN, esta regla NO cambia el papel: `Badge` success medía 1.92
+   *    sobre papel blanco (`#34d399`) antes y después, porque el token no gira al imprimir. Esta
+   *    regla no lo arregla y nunca pretendió hacerlo — lo arregla el bloque `@media print` de la
+   *    FEATURE 224, aquí abajo y pegado encima de `.dark`, que redeclara los tokens claros para
+   *    `.dark` y `.tema-sistema`: 1.92 → 5.48.
+   *  · Donde la tinta es de PALETA FIJA POR LAS DOS RAMAS, el papel mejora de verdad, y eso es lo
+   *    que esta regla compra: `Button` brand-outline 1.87 → 3.18, `EstatusBadge` «en reparto»
+   *    1.87 → 4.16, `Toast` success 2.13 → 6.99.
+   *  · Y HAY UNA FILA MIXTA, EN LA QUE ESTA REGLA NO COMPRA: LA BAJA. `RankingPodio` 3.º es
+   *    `text-asfalto-7 dark:text-foreground`: paleta fija por un lado, TOKEN por el otro. Estuvo
+   *    listada arriba como paleta fija y medida con el lector que no ve el papel, y así parecía
+   *    comprar «1.19 → 11.39». Con la 224 dentro y midiendo el papel de verdad: si el variant
+   *    disparara imprimiría `--foreground` ya claro (`#12233f`, 15.70) y como no dispara imprime
+   *    `asfalto-7` (`#1f3a63`, 11.39). O sea **15.70 → 11.39**. No es un problema de lectura —las
+   *    dos pasan AAA— pero la frase «esta regla mejora el papel» no vale para esta fila, y no se
+   *    revierte la regla por ella: apagar el variant se decidió para toda la app y ésta es la
+   *    única que pierde, sobre un suelo de 11.39.
+   *
+   *    «LA ÚNICA» ESTÁ CENSADA, no prometida: hoy hay UNA sola utilidad `dark:text-<token>` en
+   *    todo el árbol (`dark:text-foreground`, en `RankingPodio`), y ésa es la condición para que
+   *    una fila pueda perder — la rama `dark:` la mueve la 224 y la base, si es paleta fija, no la
+   *    mueve nadie. Si aparece una segunda, la guardia se pone roja y pide medirla antes de que
+   *    esta frase envejezca. Es a propósito una sobreaproximación: no clasifica la rama base
+   *    —eso exige parsear `cn()` y ahí empiezan los falsos positivos—, así que puede pedir una
+   *    revisión que resulte innecesaria. Falla hacia el lado ruidoso.
    *  · Dentro de `.papel-al-imprimir`, donde los tokens YA son claros, esto COMPLETA la 217: lo
    *    impreso pasa a ser EXACTAMENTE el tema claro, y deja de depender del tema de pantalla.
    *    `Button` destructive 5.32 → 5.30, `Button` outline 14.78 → 14.79, `Badge` destructive
    *    5.32 → 5.30. (El destructivo decía 2.90 → 3.29 hasta la feature 222, con la variante
    *    colgada de `--destructive`; hoy usa el par de `danger`, el mismo que el `Badge`.)
    *
-   * Y el precio, dicho y no escondido: si el usuario marca «gráficos de fondo» —viene DESMARCADO
-   * en los tres navegadores—, los cuatro `Badge` semánticos pasan a imprimir su fondo `-soft`
-   * claro bajo una tinta que sigue siendo la oscura: success 6.60 → 1.70, warning 7.59 → 1.50,
-   * danger 5.20 → 2.26, info 6.97 → 1.91. Es el patrón que la 208 documentó —un token que gira
-   * sobre un fondo que no— y su arreglo es fijar los tokens claros al imprimir FUERA de la hoja
-   * del cierre, que cambia el papel de las quince rutas del portal y es decisión propia.
+   * Y EL PRECIO QUE ESTA REGLA COBRÓ, dicho cuando se cobraba y dicho ahora que YA NO SE COBRA:
+   * si el usuario marcaba «gráficos de fondo» —viene DESMARCADO en los tres navegadores—, los
+   * cuatro `Badge` semánticos imprimían su fondo `-soft` claro bajo una tinta que seguía siendo
+   * la oscura, y caían muy por debajo de AA. Era el patrón que la 208 documentó —un token que
+   * gira sobre un fondo que no— y su arreglo era fijar los tokens claros al imprimir FUERA de la
+   * hoja del cierre, que cambia el papel de las quince rutas del portal y por eso fue decisión
+   * propia. Esa decisión es la FEATURE 224 y YA ENTRÓ: está aquí abajo, con los cuatro pares
+   * medidos y por encima de AA junto a su bloque.
    *
    * NO DECLARES TOKENS AQUÍ DENTRO. `quitarBloquesDeImpresion()` borra toda at-rule que nombre
    * `print` antes de leer los tokens de pantalla, así que un token metido aquí desaparecería del
@@ -257,8 +279,13 @@
  * es exactamente el gasto de tóner que esta decisión descarta. Esta regla arregla la
  * TINTA; el papel lo pone la hoja física.
  *
- * ACOTADA A LAS HOJAS: no toca `.dark`, ni `.tema-sistema`, ni `@custom-variant dark`.
- * El resto del portal imprime hoy como imprimía ayer.
+ * ACOTADA A LAS HOJAS: no toca `.dark`, ni `.tema-sistema`, ni `@custom-variant dark`. Cuando
+ * se escribió, eso quería decir además que «el resto del portal imprime hoy como imprimía
+ * ayer», y eso YA NO ES CIERTO: la feature 224 añadió aquí abajo un `@media print` que sí
+ * redeclara los tokens claros para `.dark` y `.tema-sistema`, y con él el portal entero sale
+ * en tema claro. De ESTA regla sigue siendo cierto lo primero —su alcance es la hoja—, y por
+ * eso no sobra: es la que garantiza el color de la hoja aunque algún subárbol futuro fije
+ * tokens oscuros por otra vía.
  *
  * ── LO QUE ESTA REGLA **NO** APAGA, Y QUIÉN LO APAGÓ DESPUÉS
  * Esta regla no apaga el variant `dark:`: se resuelve contra el ANCESTRO
@@ -291,9 +318,14 @@
  * regla se rompería con la primera declaración de formato que entrara aquí dentro.
  *
  * Lo que SIGUE siendo cierto, y no lo cambia la 223: no hay botón de imprimir ni llamada a
- * la API de impresión del navegador. La única vía es Ctrl+P. Y el resto del portal —las
- * quince rutas que no son la hoja del cierre— imprime hoy como imprimía antes de las dos:
- * ninguna de ellas monta la hoja, así que ni el color ni el flujo las alcanzan.
+ * la API de impresión del navegador. La única vía es Ctrl+P.
+ *
+ * Lo que DEJÓ de ser cierto, y va dicho porque estaba escrito aquí: «el resto del portal —las
+ * quince rutas que no son la hoja del cierre— imprime como imprimía antes de las dos». De
+ * estas dos reglas sigue siéndolo, porque ninguna de esas rutas monta la hoja y ni el color de
+ * aquí ni el flujo de abajo las alcanzan. Del PAPEL ya no: la feature 224 redeclara los tokens
+ * claros para `.dark` y `.tema-sistema` al imprimir, así que esas quince rutas salen hoy en
+ * tema claro. Su bloque está más abajo, pegado encima de `.dark`.
  *
  * LOS VALORES SON LOS MISMOS QUE LOS DE `:root, .tema-claro`, literalmente, por la misma
  * razón que `.tema-sistema` repite a `.dark`: CSS no sabe reutilizar un bloque de
@@ -425,8 +457,10 @@
  * ── LO QUE `@page` **NO** CONTROLA (no es un olvido, y no hay CSS que lo arregle)
  *   · El ENCABEZADO Y EL PIE que imprime el navegador —URL, fecha, «1/3»—: los pone su
  *     diálogo de impresión y no hay forma de quitarlos desde aquí.
- *   · La ESCALA y la opción «GRÁFICOS DE FONDO»: las elige el usuario. La segunda tiene un
- *     precio ya medido en otra ficha (`tests/unit/guards/impresion-sin-dark.guardia.test.ts`).
+ *   · La ESCALA y la opción «GRÁFICOS DE FONDO»: las elige el usuario. La segunda TUVO un
+ *     precio medido —el fondo `-soft` claro bajo la tinta oscura del tema— y la feature 224 lo
+ *     borró redeclarando también los tokens al imprimir; queda medido en
+ *     `tests/unit/guards/impresion-sin-dark.guardia.test.ts`.
  *   · El TAMAÑO DE PAPEL REAL. `size` declara la ORIENTACIÓN y nada más: forzar `A4` o
  *     `Letter` haría que el navegador reescale y encoja el texto cuando el papel cargado sea
  *     el otro. El papel lo decide quien imprime.
@@ -556,6 +590,153 @@
 }
 
 /*
+ * Feature 224 — AL IMPRIMIR, LOS TOKENS TAMPOCO GIRAN. EL PAPEL ES EL TEMA CLARO.
+ *
+ * La 221 —arriba, en `@custom-variant dark`— apagó el VARIANT en papel. Ésta apaga los TOKENS,
+ * que era la otra mitad y quedó declarada como abierta en `progress/impl_221.md §6`. Hasta aquí,
+ * `.dark` no estaba acotado a pantalla: quien imprimía desde tema oscuro sacaba tinta `#e6ecf8`
+ * sobre papel blanco —1.19:1— en las quince rutas del portal. Dentro de `.papel-al-imprimir` no,
+ * porque la 217 ya fija ahí los valores claros; fuera de esa hoja, sí.
+ *
+ * ── EL SELECTOR LLEVA `html` DELANTE, Y NO ES ESTILO: SIN ÉL ESTE BLOQUE NO HACE NADA.
+ *
+ * Un `@media` NO suma especificidad. Un `@media print { .dark { … } }` escrito aquí —pegado
+ * encima de `.dark`, que es donde este bloque TIENE que vivir; ver el párrafo siguiente— empata
+ * con la regla de abajo (las dos, 0-1-0) y PIERDE por orden: gana la última. Con `html` delante
+ * sube a 0-1-1 y gana sin `!important` y sin depender de dónde esté escrito. Lo mismo en la rama
+ * del `<body>`: `body:has(> .dark)` es 0-1-1 y `html body:has(> .dark)` es 0-1-2.
+ *
+ * MEDIDO, no razonado (2026-08-14): se compiló ESTE archivo con tailwindcss 4.3.2, se montó el
+ * DOM del portal (`<body> > div.contents.dark`, que es lo que estampa `providers/TemaProvider.tsx`)
+ * y se leyó `getComputedStyle` en Chromium 149.0.7827.55 con `emulateMedia({ media: "print" })`:
+ *
+ *   selector del bloque de impresión         al imprimir           en pantalla
+ *   `.dark`                       (0-1-0)      #e6ecf8  ← PIERDE     #e6ecf8
+ *   `html .dark`                  (0-1-1)      #12233f  ← GANA       #e6ecf8
+ *   `.dark` con `!important`                   #12233f              #e6ecf8
+ *   `.dark.dark`                  (0-2-0)      #12233f              #e6ecf8
+ *
+ * Las tres últimas ganan, así que la elección entre ellas es de estilo y va dicha: `!important`
+ * en 35 declaraciones rompe cualquier excepción legítima futura, y la clase duplicada no se
+ * puede leer. Ninguna de las cuatro toca la PANTALLA, que es la otra mitad de la medición.
+ *
+ * ── POR QUÉ VIVE AQUÍ ARRIBA SI NO GANA POR ORDEN
+ * Porque el orden lo pide otra cosa: que ningún bloque de impresión caiga DETRÁS de `.dark`. Si
+ * cayera, sus 35 hexes CLAROS serían los últimos de la mitad «oscuro» del archivo y
+ * `token("oscuro", …)` empezaría a devolverlos: toda la verificación de tema oscuro pasaría a
+ * medir el tema claro, EN VERDE (`tests/fixtures/contraste.ts`). Es la segunda de las dos
+ * defensas del lector de tokens, y ganar por ESPECIFICIDAD es lo que permite cumplir las dos
+ * cosas a la vez en vez de elegir una.
+ *
+ * ── QUÉ COMPRA, EN NÚMEROS (aritmética canónica de `tests/fixtures/contraste.ts`)
+ * Papel por defecto —sin «gráficos de fondo», que viene DESMARCADO—, imprimiendo desde `.dark`.
+ * Ahí lo que decide la legibilidad es la TINTA, y ahora es la clara:
+ *   · texto `--foreground` ............ 1.19 → 15.70
+ *   · `Badge` success ................. 1.92 → 5.48
+ *   · `Badge` warning ................. 1.67 → 7.09
+ *   · `Badge` danger .................. 2.77 → 6.47
+ *   · `Badge` info .................... 2.08 → 6.70
+ *   · `--muted-foreground` ............ 2.26 → 7.70
+ *
+ * Y BORRA EL PRECIO QUE COBRABA LA 221: con «gráficos de fondo» marcado, los cuatro `Badge`
+ * imprimían su fondo `-soft` CLARO bajo una tinta que seguía siendo la OSCURA (1.70, 1.50, 2.26
+ * y 1.91). Ahora las dos mitades del par son claras y vuelve a ser el par del tema claro, por
+ * encima de AA: success 1.70 → 4.84, warning 1.50 → 6.37, danger 2.26 → 5.30, info 1.91 → 6.16.
+ *
+ * ── LO QUE **NO** COMPRA, dicho y no escondido
+ * El papel pasa a ser EXACTAMENTE el tema claro, con los límites que ese tema ya tiene en
+ * pantalla: `--destructive` (`#ef4444`) mide 3.76 sobre blanco y `--primary` (`#f26419`) 3.18.
+ * Son acentos, no texto de lectura; miden lo mismo hoy en «claro» y esta ficha ni los mejora ni
+ * los empeora. Es deuda de PALETA (fichas 210/216).
+ *
+ * ── Y LO QUE **EMPEORA**, que es la mitad que cuesta escribir: LA TINTA QUE SE APOYABA EN UN
+ *    FONDO QUE NO SE IMPRIME.
+ * `--primary-foreground` era `#0a1524` en oscuro y pasa a `#ffffff`. Sobre el `bg-primary` que la
+ * sostiene se lee en las dos; en PAPEL, donde ese fondo NO se imprime, mide **18.33 → 1.00**:
+ * blanco sobre blanco, desaparece. Afecta a `Badge` default (`components/ui/badge.tsx`), `Button`
+ * default (`components/ui/button.tsx`), `Pagination` y `RankingPodio` — 15 usos. Igual
+ * `--sidebar-primary-foreground`, **18.21 → 1.00**, y el texto de la barra lateral
+ * `--sidebar-foreground`, **2.26 → 2.03** (el menos grave: los dos números son ilegibles igual).
+ * En LÍNEA, no en tinta: `--border` 12.30 → 1.23, `--input` 10.29 → 1.23 y `--sidebar-border`
+ * 12.30 → 11.39, o sea que los bordes casi se van del papel.
+ *
+ * SON SEIS, Y ESTÁN CENSADAS EN VEZ DE ELEGIDAS A MANO: la guardia barre los 35 tokens y exige
+ * que lo que baje sea exactamente esta lista. Descarta los que son SUPERFICIE porque ahí el
+ * número no es legibilidad — que `--card` pase de 16.28 a 1.00 es que la tarjeta ya salió blanca,
+ * o sea lo que esta ficha compra. La primera versión de esta lista se escribió a mano y le
+ * faltaban dos.
+ *
+ * NO ES UNA REGRESIÓN CONTRA EL TEMA CLARO, y ahí está la razón de no «arreglarlo» aquí: esos
+ * seis pares miden EXACTAMENTE lo mismo imprimiendo desde «claro», hoy y desde antes de esta
+ * ficha — y no por casualidad, sino POR CONSTRUCCIÓN: este bloque es idéntico hex a hex a
+ * `:root, .tema-claro` en los 35 tokens, y hay guardia que lo compara. Lo legible que era en
+ * oscuro lo era por accidente —una tinta
+ * clara pensada para un fondo de color, sobre un papel que no lo lleva—. Darle un valor propio
+ * aquí rompería el espejo exacto con el tema claro (que es lo que esta ficha compra y lo que su
+ * guardia exige) y dejaría el papel de «oscuro» MEJOR que el de «claro», que es incoherente.
+ * El arreglo de raíz es el patrón de la 208 llevado al papel —tinta que depende de un fondo que
+ * no se imprime— y es ficha propia: toca `Badge`, `Button` y `Pagination`, no este bloque.
+ * Queda medido y con caso ejecutable en `impresion-tokens.guardia.test.ts`.
+ *
+ * ── LOS VALORES, Y POR QUÉ ESTÁN REPETIDOS
+ * Las CLAVES son exactamente las de `.dark` —lo que el tema oscuro pisa es lo que hay que
+ * devolver, ni uno más ni uno menos— y los VALORES son los de `:root, .tema-claro`, hex a hex.
+ * CSS no sabe reutilizar un bloque de declaraciones bajo otra condición, igual que le pasa a
+ * `.tema-sistema` con `.dark` y al bloque de la 217 con `.tema-claro`. Por eso hay una guardia
+ * que se pone roja si divergen aunque sea en un hex, si `.dark` estrena un token que aquí no
+ * está, o si el selector pierde su `html` y el bloque deja de ganar:
+ * `tests/unit/guards/impresion-tokens.guardia.test.ts`.
+ *
+ * ── LÍMITES DE LA MEDICIÓN, por delante
+ * Medido en Chromium; en este entorno no hay Firefox ni WebKit. Lo que se apoya en el motor es el
+ * desempate por especificidad, que es de la especificación de selectores y no del navegador, y la
+ * guardia lo vuelve a comprobar por su cuenta calculando (a-b-c). Y aquí no imprime nadie:
+ * ninguna pieza del gate saca papel.
+ */
+@media print {
+  html .dark,
+  html body:has(> .dark),
+  html .tema-sistema,
+  html body:has(> .tema-sistema) {
+    --background: #f7f8fc;
+    --foreground: #12233f;
+    --card: #ffffff;
+    --card-foreground: #12233f;
+    --popover: #ffffff;
+    --popover-foreground: #12233f;
+    --primary: #f26419;
+    --primary-foreground: #ffffff;
+    --secondary: #eef1f8;
+    --secondary-foreground: #17233b;
+    --muted: #f1f4fb;
+    --muted-foreground: #4a5368;
+    --accent: #fff0e8;
+    --accent-foreground: #d4530d;
+    --destructive: #ef4444;
+    --border: #e3e8f2;
+    --input: #e3e8f2;
+    --ring: #f26419;
+    --chart-1: #f26419;
+    --chart-2: #0b2545;
+    --chart-3: #1a56db;
+    --chart-4: #10b981;
+    --chart-5: #f59e0b;
+    --sidebar: #0d2444;
+    --sidebar-foreground: #aab6d2;
+    --sidebar-primary: #f26419;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #14294a;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #1f3a63;
+    --sidebar-ring: #f26419;
+    --success-strong: #047857;
+    --warning-strong: #92400e;
+    --danger-strong: #b91c1c;
+    --info-strong: #1d4ed8;
+  }
+}
+
+/*
  * Feature 211 — LA FRANJA CLARA, y por qué `body:has()`.
  *
  * La clase del tema se estampa en un envoltorio DENTRO del `<body>`
@@ -627,8 +808,9 @@ body:has(> .dark) {
  * LOS VALORES SON LOS MISMOS QUE LOS DE `.dark`, literalmente. CSS no tiene forma de
  * reutilizar un bloque de declaraciones bajo otra condición, así que están repetidos —y
  * por eso hay una guardia que falla si divergen aunque sea en un hex:
- * `tests/unit/guards/tema-sistema-espeja-dark.guardia.test.ts`. Si añadís un token a
- * `.dark`, añadilo aquí; el test te lo dirá antes que un usuario.
+ * `tests/unit/guards/tema-encendido.guardia.test.ts` («sistema toma EXACTAMENTE los
+ * mismos tokens que oscuro»). Si añadís un token a `.dark`, añadilo aquí; el test te lo
+ * dirá antes que un usuario.
  */
 @media (prefers-color-scheme: dark) {
   .tema-sistema,
