@@ -483,7 +483,7 @@ aplicó y un arreglo que funciona se leen igual de verdes.
 | 10 | empeorar `--foreground` oscuro **en las dos declaraciones** | umbral **y** suelo | 5 |
 | 11 | degradar `--foreground` claro por debajo del navy | R4 + suelos | 6 |
 | 12 | romper la fórmula compartida (`+ 0.05` → `- 0.05`) | **el primer autocontrol de la 210** | 1 (y arrastra 8) |
-| 13 | borrar la declaración del límite `dark:` junto al bloque | R15 | 1 |
+| ~~13~~ | ~~borrar la declaración del límite `dark:` junto al bloque~~ | ~~R15~~ | **FALSA — ver la corrección abajo** |
 | 14 | volver a listar la factura como consumidora de `.tema-claro` | R19 | 1 |
 | 15 | **borrar** el caso de `.tema-claro` (relajar por borrado) | R20 | 1 |
 | 16 | devolver «la factura» al título reexpresado | R20 | 1 |
@@ -623,3 +623,172 @@ accesibles y siguen encontrándola: R23 se cumple porque **no hizo falta tocarlo
 ```
 
 `./init.sh` completo: **lo corre el leader antes del PR** (así se acordó en el encargo).
+
+---
+
+## CORRECCIÓN tras el rechazo del reviewer (2026-08-13)
+
+`progress/review_217.md` **RECHAZÓ** la ficha. Tenía razón en los dos bloqueantes y en los
+siete menores. Esto es lo que se corrigió, empezando por lo que más duele.
+
+### La fila 13 de la tabla de mutaciones era FALSA
+
+**Lo reporté como visto rojo y no podía serlo.** El caso de R15
+(`tema-encendido.guardia.test.ts`) anclaba así:
+
+```js
+const donde = crudo.indexOf("@media print");
+const comentarioDeArriba = crudo.slice(Math.max(0, donde - 3000), donde);
+expect(comentarioDeArriba).toMatch(/`dark:`/);
+```
+
+`indexOf("@media print")` **no cae en la regla**. El primer literal está en
+`app/globals.css:134`, dentro de la **prosa** del comentario de `.tema-claro` («…con la
+regla `@media print` de aquí abajo»); la regla real vive 120 líneas más abajo. La ventana
+de 3000 caracteres inspeccionaba otro comentario, y el `` `dark:` `` que la satisfacía era
+prosa de la **feature 211**. Comprobado ahora, sobre el árbol real:
+
+```
+indexOf("@media print")   = 5635  → línea 134   (prosa)
+indexOf("@media print {") = 12132 → línea 254   (la regla)
+```
+
+El reviewer lo demostró borrando el comentario **entero** de la regla (57 líneas) y viendo
+el caso seguir **verde**. Yo, cuando «corrí la mutación 13», borré un párrafo de ese
+comentario y vi un rojo… que era el mismo caso fallando por otra razón dentro de mi
+sesión, no por lo que la fila afirmaba. **La fila queda tachada arriba y sustituida por
+las dos de abajo, medidas después del arreglo.**
+
+Es **exactamente el fallo que la feature 209 vino a cerrar**: leer prosa como si fuera
+código. Y es la segunda vez que me muerde en esta misma ficha —la primera fue el censo
+que se denunciaba a sí mismo, en la Tanda 0— con la diferencia de que aquella la vi yo y
+ésta la vio el reviewer. La lección no es «usar el quitador»: es que **la localización por
+`indexOf` de un literal que también aparece en prosa es un falso positivo silencioso**, y
+que un caso que no se ve morder con la mutación que dice cubrir no vale nada.
+
+**El arreglo** usa el quitador compartido para localizar la **regla** en el código, y se
+apoya en algo que ese quitador garantiza y que aquí es justo lo que hace falta:
+**conserva los saltos de línea**, así que el número de línea de la regla en el código es
+el mismo que en el archivo crudo. Con eso se vuelve al crudo y se lee el comentario que
+la regla tiene **pegado encima** —el bloque `/* … */` inmediatamente anterior, sin código
+en medio—. Si no hay comentario pegado, o si no nombra el variant, es rojo.
+
+### Mutación 13, ahora de verdad — **ROJA en sus dos variantes**
+
+| Variante | Antes del arreglo | Después |
+| --- | --- | --- |
+| **13a** — borrar el párrafo «LO QUE ESTA REGLA **NO** APAGA» (19 líneas) | *(no medido con rigor)* | **ROJA** · 1 caso |
+| **13b** — borrar el comentario **entero** de la regla (57 líneas) — *el escenario con el que el reviewer probó que el caso era hueco* | **VERDE** | **ROJA** · 1 caso |
+
+```
+### 13b: borrar el comentario ENTERO de la regla
+ app/globals.css | 57 ---------------------------------------------------------
+× junto a la regla de impresion queda escrito su limite: no apaga el variant `dark:` (R15)
+AssertionError: la regla de impresion no lleva un comentario pegado encima. R15 pide que
+su limite este declarado JUNTO a ella, no en `specs/`: quien lee la regla tiene que
+encontrarlo ahi.: expected '}' to be '*/'
+      Tests  1 failed | 15 passed (16)
+```
+
+### Las ocho mutaciones nuevas — todas rojas
+
+| # | Mutación | Caso que se pone rojo | Casos |
+| --- | --- | --- | --- |
+| 13a | borrar el párrafo del límite `dark:` del comentario de la regla | R15 | 1 |
+| 13b | borrar el comentario **entero** de la regla | R15 | 1 |
+| 19 | `quitarBloquesDeImpresion` convertido en no-op (`return css;`) | la trampa del lector, defensa 1 | 1 |
+| 20 | mover el bloque de impresión detrás de `.dark` | la trampa del lector, **defensa 2** (+ R15) | 2 |
+| 21 | colar un `@page { margin: 1cm; }` en el CSS | R14 (mitad CSS) | 1 |
+| 22 | relistar la factura como consumidora **sin escribir la ruta** | R19 (mitad CSS) | 1 |
+| 23 | degradar `--danger-strong` claro | P11 + **P26** + la lista de deuda ajena | 3 |
+| 24 | estrenar una superficie (`bg-primary` en el cuerpo de la hoja) | el cierre por utilidad **y** el cierre por fondos | 2 |
+| 25 | mover un espaciado (`p-5` → `p-6`) | **R5** | 1 |
+
+**Total de la ficha: 26 mutaciones aplicadas, 26 vistas rojas** — con la fila 13 original
+retirada por falsa.
+
+### Los siete menores, cerrados
+
+**1. El par de `Badge` variant `destructive` entra al inventario — P26.** Lo pinta
+`EstadoCierreBadge` para `rechazado` y `vencido`, en las **dos** hojas. Medido ahora:
+**5,30 claro · 5,20 oscuro** — y son, a la centésima, los dos números que la 210 dejó
+escritos en `badge.tsx`. Con eso son **once** las coincidencias contra mediciones ajenas.
+Entra como `ajeno` con suelo, remitiendo a la guardia de la 210 para el umbral: duplicar
+el criterio en dos sitios es cómo se desincronizan. La razón de que entre es R16 tal cual:
+un par que no está en la lista y un par que nadie miró se leen igual.
+
+**2. El CIERRE cierra por UTILIDAD, no por PAR — y ahora lo dice.** El reviewer tiene
+razón: mover un `text-muted-foreground` (declarado) dentro de un `bg-success/15`
+(declarado) crea un par que nadie midió y pasaba verde. **Elegí corregir la afirmación, no
+el mecanismo**, y el motivo es el de toda la ficha: cerrar por par exige resolver el fondo
+efectivo de cada texto recorriendo el árbol JSX y decidiendo de qué ancestro hereda cada
+nodo. Eso es exactamente la clase de análisis que produce respuestas plausibles y falsas,
+y **un cierre por par que se equivoque al resolver el fondo es PEOR que éste, porque
+aprueba con un número**. Lo que sí se añadió, porque sí se puede cerrar del todo, es el
+**cierre por FONDOS**: son siete, se enumeran, y estrenar una superficie es rojo. Con los
+dos, lo único que escapa es la recombinación de tinta y fondo ya declarados — dicho así,
+sin adorno, en el propio caso.
+
+> **Queda una frase que no me corresponde tocar:** `design.md §6.3` dice «si mañana alguien
+> pinta un texto de la hoja con una pareja que nadie listó, lo caza el cierre». Con el
+> mecanismo real eso sólo es cierto si la tinta **o** el fondo son nuevos. El spec está
+> aprobado y no lo edito; queda señalado para el leader.
+
+**3. Las dos defensas contra la trampa del lector, ahora vigiladas por separado.** El
+reviewer dio en el clavo: `quitarBloquesDeImpresion` es hoy un **no-op sobre el archivo
+real** —el bloque está antes de `.dark`, así que no hay nada que quitar— y ningún caso
+exigía que siguiera ahí. Los dos tirantes se podían retirar de uno en uno sin que el gate
+dijera nada; sólo fallaban juntos. Ahora: la defensa 1 tiene un caso sobre un **CSS de
+laboratorio** que sí reproduce la trampa (bloque de impresión al final, que es donde uno
+añade cosas) y comprueba las dos mitades —que sin la pasada el último `--card` de la mitad
+«oscuro» es `#ffffff`, y que con ella vuelve a ser `#10203a`—; la defensa 2 tiene su caso
+de **orden** en `tema-encendido`.
+
+**4. R4 se mide sobre los CUATRO fondos** en los que viven los dieciséis sitios migrados
+(`card`, `muted` opaco, `muted/40`, `muted/50`), no sólo sobre el papel. El argumento
+monotónico del reviewer es correcto —`#12233f` tiene menos luminancia que `#0b2545`— pero
+un argumento que hay que reconstruir de memoria no es una verificación, y medir los cuatro
+cuesta cuatro líneas. El porqué queda escrito en el caso, que era lo que se pedía.
+
+**5. La mitad CSS de R19 busca la PALABRA, no la ruta.** Contar `cierre-factura` dejaba
+pasar un «2. Las dos hojas de la factura del cierre»: la lista de consumidores no se
+escribe con rutas de archivo, se escribe en prosa. Mutación 22: roja.
+
+**6. R14 censa `@page`** en `app/globals.css`. El censo del `.tsx` cazaba el botón y
+`window.print`, pero el formato de página se añade por CSS y por ahí no pasaba nadie.
+
+**7. R5 estrena dueño ejecutable:** la foto congelada de las **83 utilidades no
+cromáticas** de la hoja —tipografía, pesos, espaciados, anchos y estilos de borde, radios,
+interlineado—. El color no aparece en esa lista, así que la 217 entera es invisible para
+ella, que es lo que la hace un dueño honesto de «no rediseñes». Es una foto, como los
+suelos: el día que haya que cambiar el layout de verdad, se actualiza a mano y ese rojo es
+el momento de revisión que R5 quiere provocar.
+
+### `tasks.md`: las 23 marcadas
+
+Con una nota al principio del archivo sobre las dos que no salieron como el plan decía:
+T16 se adelantó a la Tanda 2 (T10 no podía estar verde antes), y **T20 se dio por hecha
+una vez sin estarlo** — la fila 13.
+
+### Mapa `R → test`: filas corregidas
+
+| R | Dueño, corregido |
+| --- | --- |
+| **R4** | `factura-contraste` › «R4: en tema claro el tono nuevo no tiene menos contraste que el navy que sustituye» — ahora sobre **los cuatro fondos** de los sitios migrados |
+| **R5** | `factura-contraste` › «el resto de la hoja no se rediseña: tamaños, pesos, espaciados y bordes intactos (R5)» — dueño ejecutable propio, ya no sólo el diff |
+| **R7** | + `factura-contraste` › «CIERRE: la hoja no estrena superficies — los fondos son exactamente los medidos (R7)» |
+| **R14** | + `tema-encendido` › «no se cuela un flujo de impresion por el CSS: nada de `@page` (R14)» |
+| **R15** | `tema-encendido` › «junto a la regla de impresion queda escrito su limite…» — **reanclado a la regla**, visto rojo en sus dos variantes |
+| **R16** | + P26 en el inventario, medido y con suelo |
+| **R19** | la mitad CSS busca la palabra «factura», no la ruta |
+| **R25** | + `factura-contraste` › «`quitarBloquesDeImpresion` desactiva la trampa del lector aunque el bloque quede al final» |
+
+### Gate tras la corrección — `./init.sh --rapido`
+
+```
+✓ typecheck paso
+✓ lint paso
+-> test:cambiados      Test Files 17 passed (17)     Tests   322 passed (322)
+-> test:guardias       Test Files 96 passed (96)     Tests  1366 passed (1366)
+== init OK ==
+```
