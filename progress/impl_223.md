@@ -59,7 +59,8 @@ la regresión no pueda volver en silencio.
 `reglasDe`, `selectoresDe`, `declaracionesDe` y el tipo `Regla`, **copiados sin tocar una línea de
 su lógica** desde `tema-encendido.guardia.test.ts:34-95`. Añadidos dos ayudantes:
 
-- `reglasDeArchivo(ruta)` — lee con `codigoSinComentarios` (R30).
+- `reglasDeArchivo(ruta)` — lee con el quitador de comentarios **de CSS** compartido (R30; ver
+  la nota del leader más abajo: al principio usaba el de TypeScript, que en CSS sólo hace daño).
 - `atReglaQueContiene(css, /regex/)` — **el localizador por CONTENIDO** que necesitan T5 y R24.
   Devuelve la at-rule abierta más interna que envuelve a la primera regla que case. Vive en el
   fixture y no en una guardia porque **dos** guardias lo consumen; con una copia en cada una,
@@ -219,16 +220,48 @@ archivo—.
 - **T17/T19** — la prosa de `cierre-factura.tsx` y la de `globals.css:281-287` reexpresadas;
   el límite del KPI animado escrito junto a `KpiFactura`.
 
-### Una lectura del spec que conviene revisar: «la rejilla de KPI»
+### «La rejilla de KPI» — el spec decía dos cosas, y el leader desempató *(2026-08-14)*
 
-`R19` y `design.md §6.1` piden `break-inside-avoid` en «la **rejilla** de KPI (`:249`)». Los
-otros cuatro anclajes de esa tabla son exactos (`:913` la fila, `:1272` la sección, `:1287` el
-panel, `:1317` el pie); **`:249` no lo es**: no es la raíz de `KpiFactura` (`:245`) ni la de la
-rejilla (`:1165`), es un `<span>` interior. Se estampó en **la rejilla** (`:1165`), porque es lo
-que dice la palabra normativa y lo que justifica `design.md` («bloque corto y cerrado» — una
-tarjeta suelta no es un bloque cerrado, las cuatro juntas sí), y porque protegida la rejilla
-ninguna tarjeta puede partirse tampoco. **Si la intención era `KpiFactura`, es un cambio de una
-línea y de un renglón en la lista congelada de la guardia.**
+`R19` y `design.md §6.1` piden `break-inside-avoid` en «la **rejilla** de KPI (`:249`)», y eso es
+impreciso **dos veces**: la tabla dice «rejilla» pero la línea cae **dentro de la tarjeta**, y
+`:249` no es la raíz de ninguna de las dos (`KpiFactura` abre en `:245`, la rejilla en `:1165`).
+Los otros cuatro anclajes de esa tabla sí son exactos.
+
+**Resuelto por el leader, por el EFECTO y no por la etiqueta: va en la TARJETA (`KpiFactura`).**
+Partida la tarjeta, el rótulo («Total general») queda en una página y su cifra en la siguiente —
+un **dato partido**, un comprobante roto. Partida la rejilla, el corte cae **entre** tarjetas, que
+es un corte natural y no rompe ningún dato. El desempate está escrito junto a la lista congelada
+en `impresion-flujo.guardia.test.ts`, para que el siguiente no tenga que re-deducirlo.
+
+*(Primera implementación: la rejilla. Corregido tras la revisión del leader; mutación
+comprobada — devolverla a la rejilla pone roja la lista cerrada.)*
+
+### El quitador de comentarios de CSS *(hallazgo del leader, cerrado por la raíz)*
+
+`tests/fixtures/css-reglas.ts` leía el CSS con `codigoSinComentarios`, que aplica la pasada de
+línea `(^|[^:])//`. **En CSS no existe el comentario `//`**: esa pasada no quita ni un comentario
+y en cambio se come una URL protocolo-relativa `url(//cdn/x)` **y todo lo que le siga en la
+línea**. Lo que desaparece es una **declaración**, y a un censo al que le falta una declaración no
+le pasa nada ruidoso: **afirma de menos, en verde**. Es exactamente el motivo por el que la 209
+dejó `analytics-paleta.test.ts` fuera de su alcance — y desde esta ficha ese archivo consume el
+parser compartido.
+
+**Medido antes de tocar nada** (2026-08-14): sobre `app/globals.css` las dos pasadas dan el mismo
+resultado **byte a byte** (11 442 = 11 442; **0** ocurrencias de `//` fuera de comentario de
+bloque). Riesgo **latente, no vivo** — y por eso el cambio es provablemente inocuo hoy.
+
+Cerrado por la raíz: `quitarComentariosCss` + `codigoCssSinComentarios` en
+`tests/fixtures/sin-comentarios.ts` (sólo bloques `/* … */`, conservando saltos, con la misma
+forma y el mismo porqué que `quitarComentariosSql`), y lo consumen **los cinco** lectores de CSS
+de `tests/`: `css-reglas.ts`, `impresion-flujo`, `tema-encendido`, `impresion-sin-dark` y el
+lector de tokens de `contraste.ts`.
+
+**Con su caso, y con su contraprueba permanente** (`quitador-comentarios.guardia.test.ts`,
+bloque «223»): `url(//cdn.ordenex.app/f.woff2)` seguido de `font-weight: 700`, y la declaración
+debe sobrevivir. Mutación comprobada — con `quitarComentariosCss` delegando en el quitador de
+TypeScript, **rojo exactamente en ese caso**; restaurado, verde. Y un caso extra vigila que las
+dos pasadas sigan coincidiendo sobre el CSS real, para que el día que dejen de hacerlo alguien
+mire qué se añadió.
 
 ### Y una que no se pudo verificar como el diseño suponía: jsdom **sí** resuelve `:has()`
 
@@ -276,6 +309,8 @@ mutación en el árbol es un verde que no significa nada.
 | 17 | Quitar el `!important` de `max-width` | 🔴 1 | `!important` en **todas** las declaraciones | 🔴 16 |
 | 18 | Borrar `overflow-y-auto` de `CierresAdminModule` | 🔴 1 | Borrar `overflow-auto` de `Modal.tsx` | 🔴 1 |
 | 19 | Montar dos hojas en el mismo `Modal` | 🔴 1 | Quitar el `role="dialog"` del popup | 🔴 6 |
+| **20** | *(revisión del leader)* Devolver `break-inside-avoid` de la tarjeta de KPI a la rejilla | 🔴 1 | — | — |
+| **21** | *(revisión del leader)* `quitarComentariosCss` delegando en el quitador de TypeScript | 🔴 1 | — | — |
 
 **Ninguna variante inocua salió verde**, que es la condición que `tasks.md` T20 pone para dar la
 guardia por terminada. Las dos que más importan:
