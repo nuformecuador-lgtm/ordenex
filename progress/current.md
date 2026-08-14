@@ -9,9 +9,34 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🏁 CIERRE DE JORNADA 2026-08-14 — **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-14, tarde. **EMPIEZA A LEER POR AQUÍ**
 
-### 🚦 Lo único que espera decisión humana: **la release a `prod`**
+> Lo de abajo (el cierre de jornada) **ya no describe el presente en dos puntos**, y se conserva
+> entero porque su razonamiento sigue valiendo. Lo que cambió:
+>
+> - **La release SALIÓ.** PR **#381** (`dev → prod`, 109 commits, cero migraciones), mergeado y
+>   **desplegado en producción** (`31c36d61`, deployment `READY`). **Cero errores de runtime en 24 h.**
+>   Ya no hay ninguna decisión humana esperando. `dev` va 4 commits por delante de `prod`: sólo el
+>   chore #382 de la deuda de la 215.
+> - **La 215 está `done`.** Se cerró corriendo **R19** contra la base real de producción — lo único
+>   que le faltaba. **R18 y R34 no eran deuda** (el código los cumple, verificado el 14-ago) y **R24
+>   se cerró** declarando la deriva con fecha de corte, así que el punto 6 de «Lo siguiente» estaba
+>   caducado en sus tres cargos. Detalle en `progress/impl_215_r19.md`.
+>   - Resultado: **0 en las nueve columnas**, y **el cero es de universo vacío** — 141 órdenes vivas
+>     en la base, pero ninguna en `devuelta` hoy. **Nadie fue cobrado antes de tiempo.** El número
+>     **caduca** en cuanto entre una orden, y **nada lo vigila**: eso es la ficha **219**.
+>   - **La 218 queda desbloqueada**: su condición era «no arranca hasta que la 215 esté mergeada».
+> - **La 224 está en vuelo** (`frontend`), en el worktree aislado `C:/w224`, rama
+>   `feature/224-tokens-al-imprimir`. Auditada antes de empezar contra el código: **sin empezar**, y
+>   con una contradicción viva que la ficha enunciaba al revés — las guardias exigen que todo
+>   `@media print` vaya **ANTES** de `.dark`, y ahí es justo donde un `@media print { .dark {…} }`
+>   **pierde la cascada**. Resolver eso es el corazón de la feature.
+> - **Gate completo verde sobre `dev`** el 14-ago: **1096/1096 archivos, 14044/14044 tests**, 301 s,
+>   exit 0.
+
+## 🏁 CIERRE DE JORNADA 2026-08-14
+
+### 🚦 ~~Lo único que espera decisión humana: **la release a `prod`**~~ — **HECHA, ver arriba**
 
 **95 commits, y CERO migraciones** — no es una estimación: el árbol `db/` de `dev` y el de `prod`
 son **idénticos byte a byte** (116 migraciones en ambos), así que mergear **no aplica nada** contra
@@ -40,15 +65,19 @@ del cierre ya no sale recortada ni en blanco sobre negro al imprimirla**.
 
 ### ⏭️ Lo siguiente, en este orden
 
-1. **Decidir la release** (arriba). Sin migraciones, así que el riesgo es de código, no de datos.
+1. ~~**Decidir la release**~~ — **HECHA**: PR #381, en producción y sin errores de runtime.
 2. **La 224** — al imprimir, los tokens tampoco giran a claro. Es `low` y **borra un precio que hoy
-   se paga**: con «gráficos de fondo» marcado, `Badge` success cae de 6,60 a 1,70.
+   se paga**: con «gráficos de fondo» marcado, `Badge` success cae de 6,60 a 1,70. **← EN VUELO**
+   (`C:/w224`, `feature/224-tokens-al-imprimir`).
 3. **La 225** — 19 avisos hechos a mano en 15 archivos repiten el par que la 222 arregló. Decidir al
    empezar si van a un componente compartido o sólo se les cambia el par; lo segundo reabre la ficha.
 4. **La 226** — el anillo de foco mide 1,30 contra el **3:1** que pide 1.4.11. No es estética: es la
    señal de dónde está el teclado.
 5. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
-6. **La 215** sigue `in_progress` con R18/R19/R24 abiertos, y es de otra sesión.
+6. ~~**La 215** sigue `in_progress` con R18/R19/R24 abiertos~~ — **CERRADA el 14-ago**: R18/R34 no
+   eran deuda, R24 se cerró declarando la deriva, y **R19 se ejecutó** contra producción. Ver arriba.
+7. **La 218**, recién desbloqueada: el corte automático sigue sin sumar reintento en `sin_gestionar`.
+   Comparte predicado con la 215, que ya está en `prod`.
 
 ### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
 
