@@ -277,15 +277,22 @@ describe("feature 217 — censo de fuente de la hoja de la factura", () => {
    * no cómo se ve la factura: ni un tamaño, ni un peso, ni un espaciado, ni un borde, ni la
    * jerarquía visual. Hasta aquí eso se sostenía leyendo el diff, y un diff no falla solo.
    *
-   * Se congela el conjunto de utilidades NO cromáticas de la hoja: tipografía, pesos, espaciados,
+   * Se congela el CONJUNTO de utilidades NO cromáticas de la hoja: tipografía, pesos, espaciados,
    * anchos y estilos de borde, radios, interlineado. El color no aparece en esta lista, así que
    * la 217 entera es invisible para ella — que es justo lo que la hace un dueño honesto de R5.
+   *
+   * ⚠️ CONJUNTO, no reparto: caza que aparezca una utilidad nueva (`p-6`, `text-xl`,
+   * `font-bold`) o que desaparezca una que estaba, pero **NO caza reubicar una que ya está** —
+   * mover un `py-3` de un bloque a otro deja el conjunto idéntico—. Para eso haría falta anclar
+   * cada utilidad a su nodo del JSX, que es la misma clase de análisis frágil que el CIERRE
+   * descarta más abajo y por el mismo motivo. El título dice «conjunto» a propósito: un caso que
+   * prometa «la hoja no se rediseña» estaría afirmando más de lo que mira.
    *
    * Es una FOTO, igual que los suelos del inventario, y se mantiene igual: si un día hay que
    * cambiar el layout de verdad, esta lista se actualiza a mano y ese rojo es el momento de
    * revisión que R5 quiere provocar. Lo que no puede pasar es que se mueva sin que nadie lo vea.
    */
-  it("el resto de la hoja no se rediseña: tamaños, pesos, espaciados y bordes intactos (R5)", () => {
+  it("el CONJUNTO de utilidades no cromáticas de la hoja es el mismo: ni una nueva, ni una menos (R5)", () => {
     const FAMILIAS =
       /^(?:text-(?:xs|sm|base|lg|xl|2xl|left|right|center|\[)|font-(?:medium|semibold|bold|normal|mono|sans)|(?:p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|gap|gap-x|gap-y|space-x|space-y)-|border(?:-[trblxy])?(?:-\d|-\[|$)|border-(?:dashed|dotted|solid)$|rounded|tracking-|leading-|uppercase$|tabular-nums$|divide-y$)/;
 
@@ -404,9 +411,12 @@ describe("feature 217 — censo de fuente de la hoja de la factura", () => {
  *     cambio de token puede bajarlo. Es la lección de la 210 — `--warning-strong` pasaba AA por
  *     una centésima, y una guardia de sólo umbral habría dejado revertirla sin ponerse roja.
  *
- * Y el CIERRE es parte del requisito, no un adorno: si mañana alguien pinta un texto de la hoja
- * con una pareja que nadie listó, lo caza el cierre (una utilidad sin par = rojo), no la
- * aritmética.
+ * Y el CIERRE es parte del requisito, no un adorno — con su alcance exacto, que es el mismo que
+ * declaran R7 y `design.md §6.3`: atrapa **toda tinta nueva y toda superficie nueva**, que es de
+ * donde salen los pares sin medir. NO atrapa la **recombinación** de una tinta y un fondo ya
+ * declarados. Lo caza el cierre, no la aritmética; y lo que el cierre no ve, no lo ve nadie: al
+ * mover una pieza de sitio dentro de la hoja hay que releer el inventario. El porqué de no ir
+ * más allá está donde la decisión: en el caso del CIERRE, aquí abajo.
  */
 
 /** El fondo real sobre el que se lee una tinta. */
@@ -800,6 +810,13 @@ function hexDeFondo(tema: "claro" | "oscuro", par: Par): string {
 /**
  * Lo MEDIDO al cerrar el inventario (2026-08-13), con la aritmética del fixture. Ningún cambio de
  * token puede bajar de aquí, aunque siga cumpliendo el umbral.
+ *
+ * ⚠️ Los hexes de cada comentario —tinta/fondo en los dos temas— **se vuelcan desde la propia
+ * aritmética, no se escriben a mano**: son el `hexDeFondo()` ya compuesto. Se dice porque el
+ * único de esta tabla que se tecleó de memoria (`P26` oscuro) salió **mal** y lo cazó el
+ * reviewer: la aserción y el suelo eran correctos, pero el comentario anunciaba un fondo que no
+ * era, y el siguiente que lo lea lo va a usar. Para regenerarlos, medir con `contraste()` y
+ * `hexDeFondo()` sobre `INVENTARIO`; no reconstruirlos mentalmente.
  */
 const SUELO: Record<string, { claro: number; oscuro: number }> = {
   P1: { claro: 15.7, oscuro: 13.74 }, //  #12233f/#ffffff   · #e6ecf8/#10203a
@@ -823,7 +840,7 @@ const SUELO: Record<string, { claro: number; oscuro: number }> = {
   P23: { claro: 14.79, oscuro: 12.08 }, // #12233f/#f7f8fc · #e6ecf8/#172a4a
   P24: { claro: 7.25, oscuro: 6.34 }, //  #4a5368/#f7f8fc  · #9fadc9/#172a4a
   P25: { claro: 13.86, oscuro: 12.22 }, // #17233b/#eef1f8 · #e6ecf8/#16294a
-  P26: { claro: 5.3, oscuro: 5.2 }, //   #b91c1c/#fee2e2  · #f87171/#2c2a3f  ← coincide con la 210
+  P26: { claro: 5.3, oscuro: 5.2 }, //   #b91c1c/#fee2e2  · #f87171/#31253c  ← coincide con la 210
 };
 
 /**
