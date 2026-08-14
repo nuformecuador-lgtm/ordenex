@@ -2670,11 +2670,11 @@
       "name": "el boton `destructive` no llega al umbral en NINGUNO de los dos temas",
       "spec_path": null,
       "description": "Frontend. `Button` variant `destructive` (`components/ui/button.tsx:24`) mide 3,29 en tema claro y 4,43 en oscuro: bajo AA para texto normal en los DOS. Afecta a todo boton de accion destructiva de la app -anular, eliminar, rechazar-. Llevar el par a un token que cumpla en ambos temas y atarlo con suelo en la guardia de contraste.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "medium",
       "zone": "frontend",
-      "branch": null,
+      "branch": "feature/222-boton-destructive",
       "depends_on": null,
       "status_note": "SIN DUENO HASTA HOY, y por eso se registra: la 210 midio el par y solo arreglo el BADGE -esta done-, y la 216 trata el naranja de marca, que es OTRO par. El boton se quedo en tierra de nadie entre las dos. || MEDIDO por el implementador y RE-MEDIDO por el reviewer con aritmetica independiente durante la 217 (2026-08-13): 3,29 claro / 4,43 oscuro. La 217 lo declara fuera de alcance con su motivo y su numero (R17/R18), no lo omite. || NO ES UN PARCHE LOCAL: cambiar la variante toca cada boton destructivo de la app, asi que es decision de diseno como la 216, no un arreglo de un archivo. || EL VEHICULO YA EXISTE: contraste() y componer() en tests/fixtures/contraste.ts, con sus autocontroles contra razones publicadas de WCAG. Consumirlas, no reescribirlas."
     },
