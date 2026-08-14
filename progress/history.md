@@ -3223,3 +3223,47 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   recortada por el `overflow-y-auto`— y `Button` variant `destructive`, **bajo AA en los dos
   temas** (3,29 / 4,43) y sin ficha que lo reclame: la 210 sólo arregló el `Badge` y la 216 trata
   otro par.
+
+## 2026-08-14 — 223: la factura se imprime entera, y sólo la factura
+
+- La **217** garantizó que la hoja saliera **blanca** en papel; ésta añade el **flujo**: `@page`
+  (vertical, sin nombre de papel, 12 mm), se oculta lo que no es la hoja, y se pagina. Antes la
+  hoja se imprimía **recortada** por las capas de scroll del modal.
+- **Requisitos cubiertos: R1–R33**, mapa `R → test` en `progress/impl_223.md`. Verificación:
+  `./init.sh` completo, y **21 mutaciones con su variante inocua cada una**.
+- **El CSS del propio spec dejaba la página EN BLANCO**, y lo destapó medirlo en Chromium: PDF de
+  **652 bytes**, el tamaño exacto de una página que no imprime nada. `E:has(A B)` exige que `A` sea
+  descendiente de `E`, y el popup **es** el `[role="dialog"]`, no lo contiene, así que la rama A.1
+  ocultaba el diálogo entero. La versión del spec quedó viva como **mutación inocua** y muerde.
+- **Una decisión humana fue contra la recomendación, y eso obligó a resolver de verdad un problema
+  que el spec rodeaba**: la hoja compacta imprimible como documento propio. La objeción —que
+  imprimir el detalle emitiría además las N hojas de detrás— no desaparecía con la decisión.
+  Mecanismo: **candidata** es la hoja completa (la compacta sólo cuenta desplegada, porque su
+  desglose es `{open ? … : null}`), y la **elegida** la decide el contexto: una dentro de
+  `[role="dialog"]` gana y poda las demás por su ancestro; sin diálogo, se imprimen todas, cada una
+  a partir de la segunda en página nueva; cero candidatas, la página imprime como hoy. **Sin una
+  línea de JavaScript**, que era la condición de retorno escrita en el spec.
+- **`jsdom` sí resuelve `:has()`** (29.1.1), contra lo que el diseño daba por hecho. Eso convirtió
+  diez requisitos de censo de cadenas en **verificación por comportamiento**: los selectores se leen
+  del CSS con el parser compartido y se **evalúan contra el DOM montado**, lanzando si la regla no
+  aparece en vez de evaluar vacío.
+- **El riesgo de los anclajes posicionales era real, y está medido**: tres casos anclaban en «el
+  primer `@media print`». Con el ancla vieja, mover el bloque de tokens de la 217 habría salido
+  **VERDE** (`idx 4141 < 5775`); con la nueva, cuatro rojos. Se identifican por **contenido**.
+- **La guardia que prohibía `@page` se REEXPRESÓ, no se borró.** Decía «el formato de impresión es
+  otra ficha, no ésta» — y esa otra ficha era ésta.
+- **Nace `quitarComentariosCss`**, y cierra por la raíz lo que la 209 había dejado como excepción
+  declarada: el parser de CSS aplicaba el quitador de **TypeScript**, cuya pasada `//` se come una
+  `url(//cdn/x)` **y la declaración que le siga**. Hoy no había daño (0 ocurrencias, medido), era
+  latente. Migrados **los cinco** lectores de CSS del repo con salida **byte a byte idéntica**
+  (`11442 = 11442`), y con **contraprueba permanente**: un caso exige que el de TypeScript **sí** se
+  la lleve, para que la separación siga significando algo.
+- **`!important` son cinco, no uno**: Base UI escribe `position`, `height`, `width` y `overflow` en
+  línea sobre el `<body>`. Cada uno compite con un estilo en línea, que es el criterio del requisito.
+- **Dos mutaciones que salieron verdes y eran las mutaciones las que estaban mal**, cazadas y
+  rehechas: la del spec (A.1) y una del implementador que usaba `querySelector("main")` y devolvía
+  `null`, así que sus veinte verdes no significaban nada. **Una mutación inerte reportada en verde es
+  indistinguible de una guardia que no muerde.**
+- **Deuda dejada, con nombre**: el harness de impresión en Chromium se borró a propósito (queda a
+  ficha aparte); **Gecko y WebKit no están medidos**; y las pestañas no visitadas y el KPI animado
+  llevan su límite **declarado**, no omitido.
