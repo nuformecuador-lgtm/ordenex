@@ -155,17 +155,34 @@ utilidad de opacidad (`bg-muted/40`, `bg-muted/50`, `bg-success/15`, `bg-warning
 el par se mide componiendo esa capa sobre la superficie que hay debajo, no sobre un
 fondo supuesto.
 
-**R7 — El inventario de pares DEBE ser CERRADO, y un par nuevo no puede colarse.** El
-sistema DEBE mantener el inventario de pares de R6 como una lista **exhaustiva y
-enumerada**, y DEBE fallar SI alguna de las hojas usa una utilidad de color que no
-mapea a un par del inventario. Además, ningún par DEBE quedar por debajo del **suelo**
-que se mida al cerrarlo: un cambio de token que empeore un par existente DEBE poner la
-verificación en rojo, aunque siga cumpliendo el umbral.
+**R7 — El inventario de pares DEBE ser CERRADO por tinta y por fondo.** El sistema DEBE
+mantener el inventario de pares de R6 como una lista **exhaustiva y enumerada**, y DEBE
+fallar (a) SI alguna de las hojas usa una **utilidad de color** que no mapea a un par del
+inventario, y (b) SI alguna de las hojas estrena una **superficie** —un fondo que no esté
+entre los enumerados—. Además, ningún par DEBE quedar por debajo del **suelo** que se mida
+al cerrarlo: un cambio de token que empeore un par existente DEBE poner la verificación en
+rojo, aunque siga cumpliendo el umbral.
 
 > **Por qué el suelo y no sólo el umbral.** Es la lección de la 210, escrita en
 > `contraste-tokens.guardia.test.ts:41-45`: `--warning-strong` pasaba AA **por una
 > centésima**, así que una guardia que sólo comprobara `>= 4.5` habría dejado revertir
 > aquella ficha sin poner nada en rojo. Aprobar por una centésima no es aprobar.
+
+> **Hasta dónde llega este cierre, y por qué no más allá *(precisado el 2026-08-13, tras la
+> primera revisión)*.** El encabezado de este requisito decía «un par nuevo no puede
+> colarse», y eso prometía más de lo que ninguna verificación de esta ficha puede sostener.
+> El cierre atrapa **toda tinta nueva y toda superficie nueva**, que es de donde salen los
+> pares sin medir. Lo que NO atrapa es la **recombinación** de una tinta y un fondo **ya
+> declarados** —mover un `text-muted-foreground` dentro de un `bg-success/15`—.
+>
+> Cerrarlo del todo exigiría resolver el fondo efectivo de cada texto recorriendo el árbol
+> JSX y decidiendo de qué ancestro hereda cada nodo, a través de condicionales, `cn()`,
+> props y `children` de otros archivos. Es la clase de análisis que da respuestas
+> **plausibles y falsas**, justo el fallo que D9 descartó por nombre; y **un cierre por par
+> que se equivoque al resolver el fondo es peor que no tenerlo, porque aprueba con un
+> número**. Es una **decisión tomada**, no un límite que no se pudo superar: la red de la
+> recombinación es humana —al mover una pieza de sitio se relee el inventario— y DEBE quedar
+> declarada en la propia guardia, no sólo aquí. Detalle en `design.md §6.3`.
 
 **R8 — La nota de «Ingreso bruto» pierde la opacidad *(D5)*.** El sistema NO DEBE
 aplicar una utilidad de opacidad sobre un token `-strong` en las hojas. Concretamente,

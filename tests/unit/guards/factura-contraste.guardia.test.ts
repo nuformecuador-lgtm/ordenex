@@ -966,14 +966,16 @@ describe("feature 217 — el inventario CERRADO de pares de la hoja (R6, R7, R16
    * utilidades que ya están en la lista: mover un `text-muted-foreground` —declarado— dentro de
    * un `bg-success/15` —declarado— produce un par que nadie midió y este caso lo deja pasar.
    *
-   * No se cierra por par a propósito, y el motivo es el de toda la ficha: resolver el fondo
-   * efectivo de cada texto exige recorrer el árbol JSX y decidir de qué ancestro hereda cada
-   * nodo. Eso es precisamente la clase de análisis que produce respuestas plausibles y falsas
-   * —el fallo que esta jornada ya pagó tres veces—, y un cierre por par que se equivoque al
-   * resolver el fondo es PEOR que este, porque aprueba con un número.
+   * No se cierra por par **a propósito, y está escrito como decisión en el spec** (R7 y
+   * `design.md §6.3`, precisados el 2026-08-13): resolver el fondo efectivo de cada texto exige
+   * recorrer el árbol JSX y decidir de qué ancestro hereda cada nodo, a través de condicionales,
+   * `cn()`, props y `children` de otros archivos. Eso es precisamente la clase de análisis que
+   * produce respuestas plausibles y falsas —el fallo que esta jornada ya pagó tres veces—, y un
+   * cierre por par que se equivoque al resolver el fondo es PEOR que éste, porque **aprueba con
+   * un número**.
    *
-   * La cobertura que queda descubierta es la recombinación, y su red es humana: el `design.md`
-   * §6.3 pide releer el inventario cuando se muevan piezas de sitio.
+   * La cobertura que queda descubierta es la recombinación, y su red es humana: al mover una
+   * pieza de sitio dentro de la hoja hay que releer el inventario.
    */
   it("CIERRE: toda utilidad de color de la hoja mapea a un par del inventario (R7)", () => {
     const NO_SON_COLOR = new Set([

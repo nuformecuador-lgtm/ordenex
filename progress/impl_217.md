@@ -476,7 +476,7 @@ aplicó y un arreglo que funciona se leen igual de verdes.
 | 3 | devolver UN `text-navy` | censo de fuente | 2 |
 | 4 | devolver el `/80` al `-strong` | censo de fuente | 1 |
 | 5 | meter un `bg-white` en la hoja | censo (lista negra) | 1 |
-| 6 | pintar un texto con un par no listado (`text-info-strong`) | **el CIERRE del inventario** | 1 |
+| 6 | pintar un texto con una **tinta** no listada (`text-info-strong`) | **el CIERRE por utilidad** | 1 |
 | 7 | borrar el bloque `@media print` entero | espejo / ancestro / tinta | 3 |
 | 8 | cambiar UN hex dentro del bloque (`--card: #fefefe`) | espejo `toEqual` | 1 |
 | 9 | quitar el `@media print` dejando la regla suelta | ancestro | 1 |

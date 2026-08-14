@@ -176,8 +176,9 @@ Es el corazón de la verificación. Sustituye al barrido de navegador que D9 des
   **suelo por par** con el valor medido al cerrarlo. Depende de T12.
   **Hecho:** todos los pares verdes con umbral **y** suelo; los exentos aparecen en la
   salida marcados como exentos y no como aprobados; **vista roja** al empeorar
-  `--foreground` oscuro por debajo de 4,5 sobre `--card`, y al pintar un texto de la
-  hoja con un par no listado. *(R4, R6, R7, R8, R16, R24)*
+  `--foreground` oscuro por debajo de 4,5 sobre `--card`, al pintar un texto de la hoja
+  con una **tinta** no listada, y al estrenar una **superficie** no listada. *(R4, R6,
+  R7, R8, R16, R24)*
 - [x] **T15.** **La mutación obligatoria de esta ficha.** Mover el bloque `@media print`
   **detrás** de `.dark` y revertir T3; comprobar que la guardia de contraste se pone
   **roja**. Restaurar. **No correr en paralelo con nada.** Depende de T14.
@@ -260,7 +261,7 @@ Es el corazón de la verificación. Sustituye al barrido de navegador que D9 des
 | R4 | par P1 en **claro** con umbral y suelo | T14 |
 | R5 | el diff sólo cambia utilidades de color · tests de componente existentes verdes sin tocar | T8, T21 |
 | R6 | **el inventario cerrado, medido en los dos temas**, con composición de capas | T12, T14 |
-| R7 | cierre del inventario (utilidad sin par = rojo) + lo que entra por props + **suelo por par** | T12, T13, T14 |
+| R7 | cierre por **tinta** (utilidad sin par = rojo) y por **fondo** (superficie no listada = rojo) + lo que entra por props + **suelo por par**. La recombinación de tinta y fondo ya declarados queda fuera **por decisión**, ver R7 | T12, T13, T14 |
 | R8 | censo: 0 `text-*-strong/NN` · par P9 medible sin caso especial | T9, T10, T14 |
 | R9 | regla `.papel-al-imprimir` única + 2 apariciones en el TSX + jsdom | T6, T10, T11 |
 | R10 | el bloque declara `--foreground` y `--card-foreground`, no sólo `--card` | T6 |

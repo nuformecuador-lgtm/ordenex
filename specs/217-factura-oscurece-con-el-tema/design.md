@@ -418,11 +418,45 @@ Tres reglas del inventario que no se pueden saltar:
    `dark:` propio que se meta en la hoja», `cierre-factura.tsx:116-117`— sólo que ahora
    aplica a todo color, no sólo a `dark:`.
 
+### Hasta dónde llega el CIERRE — *(corregido el 2026-08-13, tras la primera revisión)*
+
+> **La versión anterior de este párrafo prometía de más**, y conviene que quede el texto de
+> lo que decía: «si mañana alguien pinta un texto de la hoja con una pareja que nadie listó,
+> lo caza el **cierre** del inventario». Con el mecanismo que la ficha implementó eso sólo
+> es cierto **si la tinta o el fondo son nuevos**. Se corrige aquí para que el spec no exija
+> lo que el test no puede probar.
+
 **Lo que este método cubre y lo que no**, dicho como ya lo dice el archivo del que sale
-(`contraste-tokens.guardia.test.ts:18-20`): cubre **los pares declarados**. Si mañana
-alguien pinta un texto de la hoja con una pareja que nadie listó, lo caza el **cierre**
-del inventario (una utilidad sin par mapeado = rojo), no la aritmética. Por eso el
-cierre es parte del requisito y no un adorno.
+(`contraste-tokens.guardia.test.ts:18-20`): la aritmética cubre **los pares declarados**;
+lo que impide que aparezca uno sin declarar es el **cierre**, y el cierre opera en dos
+planos, los dos ejecutables:
+
+1. **Cierre por UTILIDAD.** Se recorre toda utilidad con prefijo de color de la hoja y cada
+   una debe caer en un par del inventario —medido o exento, pero declarado—. Lo que el
+   censo no sabe clasificar, lo denuncia: un `text-emerald-500` nuevo es rojo aunque nadie
+   lo hubiera previsto.
+2. **Cierre por FONDO.** Los fondos son pocos, se escriben como utilidad y **son ellos los
+   que crean pares**, así que se enumeran y se congelan. Son **siete**: `bg-brand`,
+   `bg-muted`, `bg-muted/40`, `bg-muted/50`, `bg-success/15`, `bg-warning/15` y
+   `hover:bg-muted/50`. Estrenar una superficie es rojo.
+
+**Lo que NO cubre, y es la única grieta: la RECOMBINACIÓN.** Mover una tinta ya declarada
+—`text-muted-foreground`— dentro de un fondo ya declarado —`bg-success/15`— produce un par
+que nadie midió, y ninguno de los dos planos lo ve: las dos utilidades están en la lista.
+
+**Por qué se acepta esa grieta en vez de cerrarla — DECISIÓN, no limitación heredada.**
+Cerrar por par exigiría resolver el **fondo efectivo** de cada texto: recorrer el árbol JSX
+y decidir de qué ancestro hereda cada nodo, a través de condicionales, `cn()`, props y
+`children` que llegan de otros archivos. Eso es exactamente la clase de análisis que
+produce respuestas **plausibles y falsas**, que es el fallo que esta ficha existe para no
+repetir (D9, tres mediciones falsas el 2026-08-13). Y hay una asimetría que decide el
+asunto: **un cierre por par que se equivoque al resolver el fondo es PEOR que no tenerlo,
+porque aprueba con un número** — y un número, en este repo, es lo que la gente cree.
+
+La red de la recombinación es humana y va escrita como tal: **al mover una pieza de sitio
+dentro de la hoja hay que releer el inventario**. La grieta queda declarada en el propio
+caso de la guardia, no sólo aquí, para que quien lea su verde no lo lea como más de lo que
+es.
 
 ### 6.4 Censo de fuente — misma guardia, `factura-contraste.guardia.test.ts`
 
@@ -436,6 +470,7 @@ Lee `cierre-factura.tsx` con el quitador **compartido** (`quitarComentarios`, fe
 | **0** utilidades de color de valor fijo de la lista negra: `navy`, `navy-deep`, `asfalto-*`, `kraft-*`, `bg-white`, `text-white`, y arbitrarias `text-[#…]` / `bg-[#…]` | R2, R3 |
 | **0** utilidades de opacidad sobre un token `-strong` (`text-*-strong/NN`) | **R8** |
 | toda utilidad de color hallada mapea a un par del inventario de §6.3 | **R7** |
+| los **fondos** de la hoja son exactamente los siete enumerados en §6.3 | **R7** |
 | **exactamente 2** apariciones de `papel-al-imprimir`, una en cada `<Card>` | R9 |
 | **0** apariciones de `print-color-adjust` | R11 |
 | **0** apariciones de `window.print` y de un rótulo «Imprimir» | R14 |
@@ -485,7 +520,8 @@ Ninguna guardia cuenta hasta verla roja. Mínimo, con su resultado anotado en
 | devolver `tema-claro` a **una** de las dos hojas | §6.4 y §6.6 |
 | devolver **un** `text-navy` | §6.4 |
 | devolver el `/80` a `:818` | §6.4 |
-| pintar un texto de la hoja con un par no listado | §6.4 (cierre del inventario) |
+| pintar un texto de la hoja con una **tinta** no listada | §6.4 (cierre por utilidad) |
+| estrenar una **superficie** en la hoja (un `bg-*` no listado) | §6.4 (cierre por fondo) |
 | borrar el bloque `@media print` entero | §6.5 |
 | cambiar **un** hex dentro del bloque de impresión | §6.5 (espejo) |
 | quitarle el `@media print` dejando la regla suelta | §6.5 (ancestro) |
