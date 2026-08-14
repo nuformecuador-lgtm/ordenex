@@ -3181,3 +3181,45 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   cuenta por pagar); cubierta por 44 tests de componente, que el reviewer considera suficientes
   para el código y no para dar la pantalla por vista. Fichas 206 (anulación agrupada de un
   reparto, que `reparto_id` deja posible) y 207 (el censo de tablas cuenta prosa como JSX).
+
+## 2026-08-13 — 217: la factura del cierre gira con el tema
+
+- La hoja de la factura del cierre (`cierre-factura.tsx`, sus **dos** hojas: la factura y el
+  comprobante compacto) deja de estar fijada a tema claro con `tema-claro` y **gira con el tema**;
+  al **imprimir** sigue saliendo blanca, por una regla `@media print` acotada a las hojas.
+  Revierte una decisión deliberada de la 208 por pedido humano, no arregla un olvido.
+- **Requisitos cubiertos: R1–R26**, mapa `R → test` en `progress/impl_217.md`. Verificación:
+  `./init.sh` completo **1093/1093 archivos, 13.923/13.923 tests**, cero omitidos.
+- **Medir antes de especificar volvió a cambiar el encargo**, tercera vez esta jornada. Tres cosas
+  que la ficha no traía y que salieron de mirar el árbol: **no existía ninguna vía de impresión en
+  el repo** —ni `window.print()`, ni `@media print`, ni hoja— así que la regla del papel blanco
+  hubo que **crearla, no preservarla**; **ningún test congelaba el pin**, sólo el TÍTULO de un caso
+  lo afirmaba; y el medidor de contraste de la 210 **sí estaba commiteado**, dentro de la guardia,
+  sólo que sin exportar.
+- **La verificación cambió de raíz en la puerta humana.** Fuera el barrido de navegador —no es
+  reproducible, luego no puede ser criterio de aceptación—; dentro un **inventario CERRADO de
+  pares (tinta, fondo)** medido con la aritmética que ya estaba commiteada, sacada a
+  `tests/fixtures/contraste.ts` sin tocar los tres autocontroles de la 210. **Cero segundas copias
+  de la fórmula.**
+- **Cero pares indeterminados**, y por un motivo verificable: las cuatro capas de opacidad componen
+  sobre `card`, que es opaco. El único caso que lo habría sido lo eliminó el R8 aprobado en la
+  puerta — y ése era precisamente su segundo motivo.
+- **El reviewer rechazó la primera vuelta, y el bloqueante era el fallo de la 209 reaparecido en
+  código escrito el mismo día**: la guardia de R15 anclaba en `indexOf("@media print")`, que caía
+  en una **mención dentro de un comentario**, no en la regla. Lo demostró borrando el comentario
+  entero: el caso seguía verde, luego la mutación que la bitácora daba por roja **no pudo ocurrir**.
+  Arreglado con el quitador compartido; ahora muerde en las dos variantes.
+- **Decisión tomada, no limitación sufrida: el inventario NO se cierra por par.** Resolver el fondo
+  efectivo exige recorrer el árbol JSX, y eso produce respuestas plausibles y falsas; **un cierre
+  por par que se equivoque aprueba con un número**, que es peor que no cerrar. Se cierra por
+  **utilidad** y por **fondo** (siete), y la grieta —recombinar tinta y fondo ya declarados— queda
+  declarada en **tres sedes**: R7, `design.md §6.3` y la propia guardia. El reviewer la verificó
+  con una mutación de **control que sale verde a propósito**: ni mayor ni menor de lo que promete.
+- **El único número escrito de memoria fue el único que salió mal**: el hex de P26 oscuro. Volcados
+  de nuevo los 22 pares desde la aritmética, los otros 21 coincidían. El docstring dice ahora que
+  esos hexes **se vuelcan, no se escriben**.
+- **Deuda dejada, con nombre**: ficha **221** (el variant `dark:` también dispara al imprimir, en
+  toda la app), el **flujo de impresión** de la factura —hoy, desde el modal, la hoja saldría
+  recortada por el `overflow-y-auto`— y `Button` variant `destructive`, **bajo AA en los dos
+  temas** (3,29 / 4,43) y sin ficha que lo reclame: la 210 sólo arregló el `Badge` y la 216 trata
+  otro par.

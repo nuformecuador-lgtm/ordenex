@@ -118,17 +118,21 @@
 /*
  * `.tema-claro` fija los valores CLAROS dentro de su subárbol, gane lo que gane
  * arriba. Existe para las superficies que son claras POR DISEÑO y no deben girar
- * con el tema. Tres consumidores hoy:
+ * con el tema. DOS consumidores hoy:
  *
  *  1. La landing pública (`app/page.tsx`), cuyo arte está compuesto sobre fotografías
  *     y una paleta fija (`kraft-*`, `asfalto-*`, `navy-deep`).
- *  2. Las dos hojas de la factura del cierre
- *     (`cierres-admin/_components/cierre-factura.tsx`), que son el facsímil de un
- *     comprobante en papel: papel blanco con tinta navy en los dos temas.
- *  3. Feature 211: el envoltorio del portal cuando el usuario elige «claro» a mano. Es
+ *  2. Feature 211: el envoltorio del portal cuando el usuario elige «claro» a mano. Es
  *     la misma necesidad —fijar los valores claros pase lo que pase— y por eso reusa
  *     esta clase en vez de inventar otra: al no haber `.dark` ni `.tema-sistema` en el
  *     árbol, las utilidades `dark:` tampoco disparan.
+ *
+ * HUBO UN TERCERO Y YA NO ESTÁ, que es la clase de dato que conviene no perder: las dos
+ * hojas de la factura del cierre (`cierres-admin/_components/cierre-factura.tsx`) la
+ * llevaron hasta la feature 217 porque se leían como el facsímil de un comprobante en
+ * papel. El pedido humano del 2026-08-13 cambió esa decisión: la hoja GIRA con el tema
+ * en pantalla y sólo vuelve a claro AL IMPRIMIR, con la regla `@media print` de aquí
+ * abajo. Si buscás por qué la factura ya no usa esta clase, es eso, no un olvido.
  *
  * Sin esto, la landing NO era inmune "de rebote": usa `text-success-strong`, y los
  * cuatro `--*-strong` sí tienen variante en `.dark` — es decir, el día que la fase 2
@@ -136,15 +140,14 @@
  * fondo `-soft` que sigue siendo claro (medido: 1.7:1). Declararlo aquí lo resuelve
  * de raíz y para cualquier token futuro, en vez de parche a parche.
  *
- * LÍMITE MEDIDO: fija los TOKENS, no apaga el variant `dark:`, que se define contra
- * el ancestro (`@custom-variant dark (&:is(.dark *))`) y no contra los tokens. Las
- * utilidades `dark:` de las primitivas (`Badge` success/warning/danger/destructive,
- * `Button` outline/ghost/destructive) siguen disparando dentro de un subárbol
- * `tema-claro`. Medido con las cadenas de clases exactas (claro → oscuro+tema-claro):
- * Button outline 14.79→14.78, Badge success 4.84→4.76, danger 5.30→5.32,
- * warning 4.51→4.48, destructive 3.30→2.89. Los dos que quedan bajo AA YA fallaban en
- * tema claro (son deuda de paleta, no de esta clase). Si algún día pesa, el arreglo de
- * raíz es el propio variant `dark:`, no un parche por componente.
+ * LÍMITE: fija los TOKENS, no apaga el variant `dark:`, que se define contra el ancestro
+ * (`@custom-variant dark (&:is(.dark *))`) y no contra los tokens. Las utilidades
+ * `dark:` de las primitivas (`Badge` success/warning/danger/destructive, `Button`
+ * outline/ghost/destructive) siguen disparando dentro de un subárbol `tema-claro`, así
+ * que ahí el resultado es «tokens claros + variante oscura». Los pares que eso produce
+ * y los que quedan bajo AA son deuda de PALETA (fichas 210/216), no de esta clase: se
+ * tratan para toda la app y no con un parche por componente. Si algún día pesa, el
+ * arreglo de raíz es el propio variant `dark:`.
  */
 :root,
 .tema-claro {
@@ -189,6 +192,104 @@
   --warning-strong: #92400e; /* vs card 7.09 · vs bg 6.68 · vs warning-soft 6.37 · vs warning/15 6.31 */
   --danger-strong: #b91c1c; /* vs card 6.47 · vs bg 6.10 · vs danger-soft 5.30 */
   --info-strong: #1d4ed8; /* vs card 6.70 · vs bg 6.31 · vs info-soft 6.16 */
+}
+
+/*
+ * Feature 217 — AL IMPRIMIR, EL PAPEL ES CLARO.
+ *
+ * Las dos hojas del comprobante del cierre (`cierres-admin/_components/cierre-factura.tsx`)
+ * GIRAN con el tema en pantalla: son una superficie más del portal. En papel no: una
+ * factura que se imprime en oscuro gasta tóner y sale ilegible. Esta regla devuelve los
+ * valores claros al subárbol de la hoja SÓLO cuando el medio es impresión.
+ *
+ * POR QUÉ FIJA TOKENS Y NO PINTA UN FONDO. Es la lección medida de la 208, girada de
+ * lado: `bg-white` a secas dejó 116 textos bajo 4.5:1 porque pintó el papel y dejó la
+ * tinta del tema. Una regla de impresión que dijera `background: white` haría lo mismo en
+ * papel. Y hay un motivo más fuerte: los navegadores NO imprimen los fondos salvo que el
+ * usuario marque «gráficos de fondo», que viene DESMARCADO. Sin esta regla, imprimir
+ * desde tema oscuro daría tinta `#e6ecf8` sobre un fondo oscuro que no se imprime:
+ * blanco sobre blanco, la hoja sale en papel EN BLANCO. Fijando los tokens, la tinta
+ * vuelve a `#12233f` y el resultado no depende de que se imprima superficie alguna.
+ *
+ * POR ESO NO HAY `print-color-adjust: exact`: forzaría a imprimir el fondo… oscuro, que
+ * es exactamente el gasto de tóner que esta decisión descarta. Esta regla arregla la
+ * TINTA; el papel lo pone la hoja física.
+ *
+ * ACOTADA A LAS HOJAS: no toca `.dark`, ni `.tema-sistema`, ni `@custom-variant dark`.
+ * El resto del portal imprime hoy como imprimía ayer.
+ *
+ * ── LO QUE ESTA REGLA **NO** APAGA, Y POR QUÉ SE ACEPTA
+ * No apaga el variant `dark:`. Se resuelve contra el ANCESTRO (`&:is(.dark *)`), no
+ * contra los tokens, así que al imprimir DESDE tema oscuro las utilidades `dark:` de
+ * `Badge` y `Button` siguen disparando dentro de la hoja y esta regla no las alcanza.
+ *
+ * No es una regresión, y eso es lo que lo hace aceptable: «tokens claros + `dark:`
+ * disparando» es EXACTAMENTE lo que la hoja mostraba en pantalla antes de la 217, cuando
+ * llevaba `tema-claro`. Lo impreso será igual a lo que se veía entonces, no peor.
+ * Medido con la aritmética de `tests/fixtures/contraste.ts`: el peor caso, `Button`
+ * variant `destructive`, daba 2.89 en aquel estado y hoy en pantalla oscura da 4.43.
+ *
+ * El arreglo de raíz —envolver las dos ramas de `@custom-variant dark` en
+ * `@media not print`— apagaría el variant al imprimir en TODA la app, que probablemente
+ * es lo correcto porque imprimir en oscuro no tiene sentido en ninguna pantalla. No
+ * entra aquí por tres razones: cambiaría el comportamiento de impresión de las quince
+ * rutas del portal y no de una; exige su propia medición, que esta regla no puede
+ * firmar; y mezclado con la reversión del pin haría imposible saber cuál de los dos
+ * cambios movió qué. Sale a FICHA PROPIA.
+ *
+ * ── LO QUE ESTA REGLA NO CUBRE (no es un olvido)
+ * Garantiza el COLOR, no el formato. No hay botón de imprimir ni llamada a la API de
+ * impresión del navegador: la única vía es Ctrl+P. No hay `@page`, ni márgenes, ni
+ * saltos de página, ni ocultamiento del resto de la interfaz — y el detalle vive dentro
+ * de un modal con `overflow-y-auto`, así que es muy probable que salga recortado. Un
+ * flujo de impresión de verdad es otra ficha; ésta pone su primera pieza.
+ *
+ * LOS VALORES SON LOS MISMOS QUE LOS DE `:root, .tema-claro`, literalmente, por la misma
+ * razón que `.tema-sistema` repite a `.dark`: CSS no sabe reutilizar un bloque de
+ * declaraciones bajo otra condición. Y por eso hay una guardia que falla si divergen
+ * aunque sea en un hex, y que exige que esta regla viva DENTRO de `@media print`:
+ * `tests/unit/guards/tema-encendido.guardia.test.ts`. Si añadís un token arriba,
+ * añadidlo aquí; el test te lo dirá antes que una impresora.
+ */
+@media print {
+  .papel-al-imprimir {
+    --radius: 0.625rem;
+    --background: #f7f8fc;
+    --foreground: #12233f;
+    --card: #ffffff;
+    --card-foreground: #12233f;
+    --popover: #ffffff;
+    --popover-foreground: #12233f;
+    --primary: #f26419;
+    --primary-foreground: #ffffff;
+    --secondary: #eef1f8;
+    --secondary-foreground: #17233b;
+    --muted: #f1f4fb;
+    --muted-foreground: #4a5368;
+    --accent: #fff0e8;
+    --accent-foreground: #d4530d;
+    --destructive: #ef4444;
+    --border: #e3e8f2;
+    --input: #e3e8f2;
+    --ring: #f26419;
+    --chart-1: #f26419;
+    --chart-2: #0b2545;
+    --chart-3: #1a56db;
+    --chart-4: #10b981;
+    --chart-5: #f59e0b;
+    --sidebar: #0d2444;
+    --sidebar-foreground: #aab6d2;
+    --sidebar-primary: #f26419;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #14294a;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #1f3a63;
+    --sidebar-ring: #f26419;
+    --success-strong: #047857;
+    --warning-strong: #92400e;
+    --danger-strong: #b91c1c;
+    --info-strong: #1d4ed8;
+  }
 }
 
 /*
