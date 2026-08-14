@@ -23,13 +23,15 @@ import { describe, expect, it } from "vitest";
 // compartido. Ningun caso de este archivo cambia: cambia de donde salen `reglasDe`,
 // `selectoresDe` y `declaracionesDe`.
 import { atReglaQueContiene, reglasDe, type Regla } from "../../fixtures/css-reglas";
-import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
+import { codigoCssSinComentarios, codigoSinComentarios } from "../../fixtures/sin-comentarios";
 
 const GLOBALS = "app/globals.css";
 const LAYOUT = path.join("app", "(app)", "layout.tsx");
 const HEADER = "components/shared/PageHeader.tsx";
 
-const css = codigoSinComentarios(GLOBALS);
+// Con el quitador de CSS, no con el de TypeScript: la pasada de `//` no quita nada en una hoja
+// de estilos y en cambio se comeria una `url(//cdn/x)` y la declaracion siguiente (feature 223).
+const css = codigoCssSinComentarios(GLOBALS);
 const reglas = reglasDe(css);
 
 function reglaCon(selector: string): Regla {

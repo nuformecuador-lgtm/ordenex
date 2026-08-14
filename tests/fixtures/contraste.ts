@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { quitarComentarios } from "./sin-comentarios";
+import { quitarComentariosCss } from "./sin-comentarios";
 
 /**
  * Feature 217 — LA aritmética de contraste del repo, y EL lector de tokens. Una sola copia.
@@ -87,7 +87,7 @@ export function componer(color: string, fondo: string, alpha: number): string {
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
 /** `app/globals.css` con los comentarios fuera (quitador COMPARTIDO, feature 209). */
-export const cssSinComentarios = quitarComentarios(readFileSync(CSS, "utf8"));
+export const cssSinComentarios = quitarComentariosCss(readFileSync(CSS, "utf8"));
 
 /**
  * ⚠️ Feature 217 — QUITA LOS BLOQUES `@media print { … }` ANTES DE LEER NINGÚN TOKEN.

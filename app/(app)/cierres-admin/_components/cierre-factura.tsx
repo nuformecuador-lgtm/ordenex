@@ -270,7 +270,12 @@ function KpiFactura({
   moneda = false,
 }: Readonly<{ label: string; value: string | number; moneda?: boolean }>) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-md border border-border/60 bg-muted/40 px-3 py-2">
+    // `break-inside-avoid` (feature 223, pieza 3 de 5): la TARJETA, no la rejilla que las
+    // agrupa. Partida, el rótulo («Total general») queda en una página y su cifra en la
+    // siguiente: eso es un dato roto. Partir la rejilla, en cambio, corta ENTRE tarjetas, que
+    // es un corte natural. El criterio es el efecto sobre el documento, no el tamaño del
+    // bloque. Ver la nota de la lista congelada en `impresion-flujo.guardia.test.ts`.
+    <div className="flex break-inside-avoid flex-col gap-0.5 rounded-md border border-border/60 bg-muted/40 px-3 py-2">
       <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
@@ -1213,11 +1218,10 @@ export function CierreFacturaDetalle({
       </div>
       )}
 
-      {/* `break-inside-avoid` (feature 223, pieza 3 de 5): la REJILLA de KPI, no cada tarjeta.
-          Es un bloque corto y cerrado —cuatro cifras que se leen juntas— y partirlo entre dos
-          páginas deja media lectura en cada una. Protegido el contenedor, ninguna tarjeta
-          puede partirse por dentro tampoco. */}
-      <div className="grid grid-cols-2 break-inside-avoid gap-3 sm:grid-cols-4">
+      {/* La rejilla de KPI NO lleva `break-inside-avoid`, y es deliberado: partirla entre dos
+          páginas corta ENTRE tarjetas, que es un corte natural y no rompe ningún dato. Lo que
+          no puede partirse es cada tarjeta, y ahí es donde va la protección (`KpiFactura`). */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiFactura
           label={FACTURA_TOTAL_GENERAL_LABEL}
           value={cierre.totales.general}

@@ -7,7 +7,7 @@ import { componer, contraste, paleta, token } from "../../fixtures/contraste";
 // Feature 223 (R24/R32): el localizador POR CONTENIDO vive en el fixture compartido, para que las
 // dos guardias que localizan el bloque de la 217 no tengan dos ideas distintas de dónde está.
 import { atReglaQueContiene } from "../../fixtures/css-reglas";
-import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
+import { codigoCssSinComentarios } from "../../fixtures/sin-comentarios";
 
 /**
  * Feature 221 — GUARDIA de «al imprimir, el variant `dark:` no dispara».
@@ -33,7 +33,7 @@ const GLOBALS = "app/globals.css";
 const RAIZ = path.resolve(__dirname, "../../..");
 
 /** El CÓDIGO del CSS, con la prosa fuera (quitador compartido, feature 209). */
-const css = codigoSinComentarios(GLOBALS);
+const css = codigoCssSinComentarios(GLOBALS);
 /** El fuente TAL CUAL. Sólo para el caso que exige que el comentario diga los números medidos. */
 const crudo = readFileSync(path.join(RAIZ, GLOBALS), "utf8");
 

@@ -1,4 +1,4 @@
-import { codigoSinComentarios } from "./sin-comentarios";
+import { codigoCssSinComentarios } from "./sin-comentarios";
 
 /**
  * Feature 223 — EL parser de reglas CSS del repo. Uno solo.
@@ -99,9 +99,15 @@ export function reglasDe(css: string): Regla[] {
   return reglas;
 }
 
-/** Las reglas de un archivo del repo, leido con el quitador de comentarios COMPARTIDO (R30). */
+/**
+ * Las reglas de un archivo del repo, leido con el quitador de comentarios COMPARTIDO (R30).
+ *
+ * Con el quitador de **CSS**, no con el de TypeScript: en CSS no existe el comentario `//`, y esa
+ * pasada se come una `url(//cdn/x)` y todo lo que le siga en la linea. Ver el porque entero en
+ * `quitarComentariosCss`.
+ */
 export function reglasDeArchivo(rutaRelativa: string): Regla[] {
-  return reglasDe(codigoSinComentarios(rutaRelativa));
+  return reglasDe(codigoCssSinComentarios(rutaRelativa));
 }
 
 /** Una at-rule localizada por lo que CONTIENE, no por su posicion en el archivo. */

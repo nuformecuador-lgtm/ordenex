@@ -4,7 +4,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { reglasDe, selectoresDe, type Regla } from "../../fixtures/css-reglas";
-import { codigoSinComentarios, quitarComentarios } from "../../fixtures/sin-comentarios";
+import {
+  codigoCssSinComentarios,
+  codigoSinComentarios,
+  quitarComentarios,
+} from "../../fixtures/sin-comentarios";
 
 /**
  * Feature 223 — GUARDIA del FLUJO de impresion de la factura del cierre.
@@ -52,8 +56,8 @@ const MODULO_MENSAJERO = path.join(
 );
 const MODAL = path.join("components", "shared", "Modal.tsx");
 
-/** El CODIGO del CSS, con la prosa fuera (quitador COMPARTIDO, feature 209 — R30). */
-const css = codigoSinComentarios(GLOBALS);
+/** El CODIGO del CSS, con la prosa fuera (quitador de CSS COMPARTIDO, feature 209 — R30). */
+const css = codigoCssSinComentarios(GLOBALS);
 /** El fuente TAL CUAL. SOLO para los casos que exigen que algo este escrito en un COMENTARIO. */
 const cssCrudo = readFileSync(path.join(RAIZ, GLOBALS), "utf8");
 const reglas = reglasDe(css);
@@ -838,14 +842,29 @@ describe("feature 223 — que NO se parte, y donde NO se aplica (R19, R20)", () 
    * reciba sin estar en la lista, o una de la lista que la pierda, DEBE poner la verificacion en
    * rojo». Las dos direcciones importan: `break-inside: avoid` en un contenedor que no cabe en
    * una pagina es la forma mas rapida de reintroducir el recorte que esta ficha cierra.
+   *
+   * ── LA PIEZA 3: LA TARJETA DE KPI, NO LA REJILLA. El desempate, escrito para que el siguiente
+   * no tenga que re-deducirlo.
+   *
+   * El spec dice las DOS cosas y no coinciden: `R19` y `design.md §6.1` la llaman «la **rejilla**
+   * de KPI», pero la linea que citan (`:249`) cae DENTRO de la tarjeta — y no es la raiz de
+   * ninguna de las dos (`KpiFactura` abre en `:245`, la rejilla en `:1165`). Los otros cuatro
+   * anclajes de esa tabla si son exactos, asi que la imprecision es de esta fila.
+   *
+   * Se desempata por el EFECTO sobre el documento, no por la etiqueta:
+   *  · En la TARJETA, `break-inside: avoid` impide que el rotulo («Total general») quede en una
+   *    pagina y su cifra en la siguiente. Eso es un DATO PARTIDO: un comprobante roto.
+   *  · En la REJILLA, solo evita que la banda se parta ENTRE tarjetas, que es un corte natural y
+   *    no rompe ningun dato.
+   * Gana la tarjeta. Decision del leader, 2026-08-14.
    */
   const PIEZAS = [
     // 1 — la fila de una orden. La que mas importa: se repite N veces y decide los cortes.
     "mb-2 break-inside-avoid overflow-hidden rounded-[10px] border border-border",
     // 2 — el bloque de renglones de la liquidacion.
     "flex break-inside-avoid flex-col",
-    // 3 — la rejilla de KPI.
-    "grid grid-cols-2 break-inside-avoid gap-3 sm:grid-cols-4",
+    // 3 — la TARJETA de KPI (ver el desempate de arriba). La rejilla que las agrupa NO la lleva.
+    "flex break-inside-avoid flex-col gap-0.5 rounded-md border border-border/60 bg-muted/40 px-3 py-2",
     // 4 — la cabecera de la hoja (marca / folio / estado / fechas).
     "flex flex-wrap items-start justify-between gap-3 break-inside-avoid border-b border-border pb-4",
     // 5 — la franja del pie, con el total.
