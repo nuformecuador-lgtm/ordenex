@@ -7,6 +7,7 @@ import {
   SubtituloSeccion,
   TituloSeccion,
 } from "./primitivas";
+import { PostularRecursoModal, type RecursoTipo } from "./PostularRecursoModal";
 
 interface Tarjeta {
   readonly titulo: string;
@@ -15,6 +16,12 @@ interface Tarjeta {
   readonly Icono: LucideIcon;
   /** Foto de cabecera (168px). Decorativa: el título ya dice de qué va la tarjeta. */
   readonly foto: string;
+  /**
+   * Si está, el CTA abre el modal de postulación de recurso en vez de navegar a
+   * `/postulacion`. Solo lo llevan vehículo y bodega: la tercera tarjeta es una
+   * postulación de persona y sigue yendo al formulario completo.
+   */
+  readonly modal?: RecursoTipo;
 }
 
 const TARJETAS: readonly Tarjeta[] = [
@@ -24,6 +31,7 @@ const TARJETAS: readonly Tarjeta[] = [
     cta: "Postular mi vehículo",
     Icono: Truck,
     foto: "/landing/logistica.jpg",
+    modal: "vehiculo",
   },
   {
     titulo: "Tenés una bodega",
@@ -35,6 +43,7 @@ const TARJETAS: readonly Tarjeta[] = [
     cta: "Postular mi bodega",
     Icono: Warehouse,
     foto: "/landing/hero-bodega.jpg",
+    modal: "bodega",
   },
   {
     titulo: "Querés trabajar con nosotros",
@@ -48,8 +57,13 @@ const TARJETAS: readonly Tarjeta[] = [
 /**
  * Bloque de reclutamiento (`.lp-postular-section`). Cada tarjeta abre con su foto
  * de 168px y el cuadro naranja del icono encima, en la esquina, que es el remate
- * que la foto lleva en el sitio. Las tres llamadas van a `/postulacion`, la ruta
- * pública que ya existe.
+ * que la foto lleva en el sitio.
+ *
+ * Vehículo y bodega abren `PostularRecursoModal` —un formulario corto en la misma
+ * página, sin sacar a nadie de la landing— porque lo que se postula ahí es un
+ * recurso, no una persona: no hay cuenta que crear ni documentos que adjuntar. La
+ * tercera, «Quiero postularme», sigue yendo a `/postulacion`, que es el alta real
+ * de mensajero.
  */
 export function LandingPostular() {
   return (
@@ -92,13 +106,17 @@ export function LandingPostular() {
                   {tarjeta.titulo}
                 </h3>
                 <p className="flex-1 text-sm leading-snug text-asfalto-5">{tarjeta.copy}</p>
-                <Link
-                  href="/postulacion"
-                  className="mt-1 inline-flex items-center gap-1.5 self-start rounded-md border border-brand bg-brand px-3.5 py-2.5 text-[13px] font-semibold text-white transition hover:border-brand-dark hover:bg-brand-dark"
-                >
-                  {tarjeta.cta}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
+                {tarjeta.modal ? (
+                  <PostularRecursoModal tipo={tarjeta.modal} cta={tarjeta.cta} />
+                ) : (
+                  <Link
+                    href="/postulacion"
+                    className="mt-1 inline-flex items-center gap-1.5 self-start rounded-md border border-brand bg-brand px-3.5 py-2.5 text-[13px] font-semibold text-white transition hover:border-brand-dark hover:bg-brand-dark"
+                  >
+                    {tarjeta.cta}
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                )}
               </div>
             </article>
           ))}
