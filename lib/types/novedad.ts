@@ -29,8 +29,17 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 //
 // Que NO viaja, y por que (son opcionales en `MiAsignacionDTO`, asi que no emitirlos es
 // contrato honesto y no un hueco):
-//   - `marcarLuego?` / `notaPrivada?`: marcas PRIVADAS de un mensajero. El actor aqui es el
-//     adminTienda; no tiene ninguna, y un `false`/`null` fijo seria inventarlas.
+//   - `marcarLuego?`: marca PRIVADA de un mensajero. El actor aqui es el adminTienda; no tiene
+//     ninguna, y un `false` fijo seria inventarla.
+//
+// Feature 227: aqui vivia tambien `notaPrivada?`, con el razonamiento de que el adminTienda «no
+// tiene ninguna». Ese razonamiento MURIO: la nota privada del mensajero YA NO EXISTE (se retiro
+// con la columna `orden_mensajero_meta.nota`). Lo que la tienda y el mensajero se dicen sobre una
+// orden vive ahora en `orden_nota`, un HILO compartido en el que el adminTienda si escribe.
+// Ese hilo NO es un campo de este DTO y no lo sera: `/novedades` es un listado PAGINADO y el
+// hilo es de tamaño variable, asi que incluirlo costaria una consulta por orden de la pagina
+// (N+1) para un dato que solo se mira al ABRIR una orden. Se carga bajo demanda con su propia
+// accion de lectura (design §4, R28).
 //   - `tiendaTelefono?`: sostiene la cabecera por tienda de `/recoleccion`. Esta pantalla ES
 //     la de la tienda dueña: no hay a quien contactar que no sea uno mismo.
 // Y `secuenciaRuta` viaja SIEMPRE `null` (es requerido): estas ordenes no son paradas de

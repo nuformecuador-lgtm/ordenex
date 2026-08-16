@@ -142,6 +142,43 @@ export async function enTransaccionRevertida<T>(
   throw new Error("la transaccion termino sin revertirse: imposible");
 }
 
+/**
+ * Feature 227 — clave del lock de aviso que SERIALIZA a los tests que escriben en las tablas
+ * REALES de `public` (`usuario`, `orden`, y el DDL que las referencia por FK).
+ *
+ * POR QUE HACE FALTA. Varios archivos de test corren EN PARALELO (vitest usa un worker por
+ * archivo) y cada uno abre una transaccion larga que inserta en `public."usuario"` y
+ * `public."orden"` y ejecuta DDL cuyas FK apuntan ahi. Cada transaccion toma los mismos locks
+ * (los `KEY SHARE` de las FK sobre los catalogos, y el `SHARE ROW EXCLUSIVE` que un
+ * `ADD CONSTRAINT ... REFERENCES public."usuario"` toma sobre la tabla referenciada) pero en
+ * ORDEN DISTINTO. Eso es la receta exacta de un deadlock, y Postgres mata a una de las dos con
+ * `40P01`. Medido: en aislado cada archivo pasa siempre; los tres juntos fallaban 2 de cada 3
+ * corridas, y al reventar el `beforeAll` vitest marcaba los tests como SKIPPED —es decir, la
+ * evidencia de varios requisitos dejaba de ejecutarse y la suite parecia casi verde.
+ *
+ * POR QUE ESTE REMEDIO Y NO UN REINTENTO. Reintentar un deadlock lo esconde. Serializar las
+ * secciones criticas lo ELIMINA: si nunca hay dos de estas transacciones a la vez, no hay ciclo
+ * de espera posible. Y no toca la fidelidad de lo que se mide: las FK siguen apuntando a las
+ * tablas REALES, el DDL sigue siendo el REAL y el rollback sigue siendo el mismo.
+ *
+ * POR QUE `pg_advisory_xact_lock` Y NO UN `LOCK TABLE`. El lock de aviso no bloquea a la
+ * aplicacion ni a ningun otro test que no lo pida (los demas siguen corriendo en paralelo), y
+ * se suelta SOLO al terminar la transaccion —incluido el rollback y la muerte del proceso—, sin
+ * un `finally` que mantener.
+ */
+export const CLAVE_LOCK_ESCRITURA_REAL = 227_0815_00;
+
+/**
+ * Toma el lock de aviso. DEBE ser la PRIMERA sentencia de la transaccion: si se toma despues de
+ * haber tocado ya una tabla, la transaccion habra adquirido locks antes de serializarse y el
+ * ciclo vuelve a ser posible.
+ */
+export async function serializarEscriturasReales(tx: {
+  $executeRawUnsafe: (sql: string, ...args: unknown[]) => Promise<number>;
+}): Promise<void> {
+  await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${CLAVE_LOCK_ESCRITURA_REAL})`);
+}
+
 /** FKs obligatorias de `orden`, tomadas de una fila existente. `null` si la tabla esta vacia. */
 export interface FksDeOrden {
   estatusId: string;

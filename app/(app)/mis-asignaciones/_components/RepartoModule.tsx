@@ -320,7 +320,7 @@ export function RepartoModule({
    *
    * Rediseño POS (rama ux): las dos vistas comparten interfaz de props con la card completa
    * (`PosOrderCardMosaico`, que "Por recoger" también usa en su propia pantalla). Conserva
-   * las señales del módulo (parada/ruta, "gestionar más tarde", nota privada, intentos) y el
+   * las señales del módulo (parada/ruta, "gestionar más tarde", intentos) y el
    * gate de selección: pulsar la card fija esta orden en el panel de gestión de arriba
    * (R19/R20), donde vive el detalle completo. Pedido humano: el toggle "gestionar más tarde"
    * va DENTRO de la card (slot `acciones`, al pie), no como hermano suelto debajo. La card es

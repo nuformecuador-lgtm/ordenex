@@ -479,11 +479,10 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
         provinciaNombre: "San Jose",
         cantonNombre: "Escazu",
         distritoNombre: "San Rafael",
-        // Una orden que sigue en la tienda no es parada de ninguna ruta, no tiene marca ni nota
-        // privadas (son de la gestion en reparto) y no ha tenido ningun intento de entrega.
+        // Una orden que sigue en la tienda no es parada de ninguna ruta, no tiene marca privada
+        // (es de la gestion en reparto) y no ha tenido ningun intento de entrega.
         secuenciaRuta: null,
         marcarLuego: false,
-        notaPrivada: null,
         intentosEntrega: 0,
       },
     ]);
@@ -504,7 +503,6 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
       "longitud",
       "secuenciaRuta",
       "marcarLuego",
-      "notaPrivada",
       "intentosEntrega",
       "direccion",
       "notas",
