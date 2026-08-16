@@ -25,18 +25,19 @@
   **Hecho:** `requirements.md` §Decisiones del gate registra G1–G14 con su fecha y su porqué; las
   alternativas descartadas quedan reducidas a una línea para que nadie las re-abra. *Ya no bloquea
   nada.*
-- [ ] **T0.2 [P] — Corregir la ficha `feature_list.json` (id 229).** Su `description` dice
+- [x] **T0.2 [P] — Corregir la ficha `feature_list.json` (id 229).** Su `description` dice
   «`ORDER_STATUS_SEED` son 19 estados internos»; son **20** (`lib/types/order-status.ts:54-79`,
   `tests/unit/types/order-status.test.ts:78` afirma `toHaveLength(20)`). La ficha es anterior a
   `recolectando` (feature 157).
   **Hecho:** la ficha dice 20. *Lo hace el leader.* No bloquea, pero se hace antes de T2.2 para que
-  el mapeo no nazca corto.
-- [ ] **T0.3 [P] — Registrar las consecuencias y riesgos aceptados** en `progress/impl_229.md`: F2,
+  el mapeo no nazca corto. *(Verificado el 2026-08-15: la ficha ya decía 20 —el leader la corrigió al
+  renumerar 223→229—, así que no hizo falta editarla.)*
+- [x] **T0.3 [P] — Registrar las consecuencias y riesgos aceptados** en `progress/impl_229.md`: F2,
   F3, F4, F6 (design §0) **más los dos riesgos firmados**, §5.bis (limitador en memoria: acota al
   torpe, no al decidido) y §5.ter (`sin_gestionar` se ve como «En reparto»).
   **Hecho:** los seis están escritos como decisiones, no como pendientes. Cubre la parte documental
   de **R5** y **R35**.
-- [ ] **T0.4 — Medir cuántas órdenes tienen `telefono_dest` con menos de 4 dígitos** (G1/G2):
+- [x] **T0.4 — Medir cuántas órdenes tienen `telefono_dest` con menos de 4 dígitos** (G1/G2):
   `SELECT count(*) FROM orden WHERE length(regexp_replace(telefono_dest,'\D','','g')) < 4;`
   **Hecho:** la salida está en `progress/impl_229.md` con fecha y entorno. *Es informativa: NO
   reabre G2, cuantifica cuántos destinatarios quedan sin rastreo (design §8.3).*
@@ -45,22 +46,22 @@
 
 ## Bloque 1 — Tipos, configuración y mapeo (DESBLOQUEADO: T0.1 pasada)
 
-- [ ] **T1.1 — `lib/types/rastreo-publico.ts`**: `HitoPublico`, `HitoPublicoEntrada`,
+- [x] **T1.1 — `lib/types/rastreo-publico.ts`**: `HitoPublico`, `HitoPublicoEntrada`,
   `RastreoPublicoDTO`, `ResultadoRastreoPublico` y `consultaRastreoSchema` (design §3.1/§3.2).
   **Hecho:** typecheck verde; ningún `any`; el módulo NO importa `repositories/`, `services/`,
   `@/lib/db` ni `next/headers` (debe ser usable desde el Client Component).
-- [ ] **T1.2 — `HITO_POR_ESTATUS` como `Record<OrderStatusValue, HitoPublico>` TOTAL** + `HITO_POR_DEFECTO`
+- [x] **T1.2 — `HITO_POR_ESTATUS` como `Record<OrderStatusValue, HitoPublico>` TOTAL** + `HITO_POR_DEFECTO`
   + `hitoDeEstatus(value: string)` (design §3.3), transcribiendo **literalmente** la tabla firmada de
   `requirements.md` §D2 (incluidos `recolectando → registrado`, `incidente → no_entregado` y
   `sin_gestionar → en_reparto`).
   **Hecho:** los 20 values del seed tienen hito y coinciden uno a uno con la tabla firmada; typecheck
   verde; `hitoDeEstatus` acepta `string`.
-- [ ] **T1.3 — Guardia de exhaustividad del mapeo**
+- [x] **T1.3 — Guardia de exhaustividad del mapeo**
   `tests/unit/guards/rastreo-hitos-exhaustivo.guardia.test.ts`.
   **Hecho:** recorre `ORDER_STATUS_SEED` y falla si falta un value; comprueba que un value huérfano
   (fuera del seed) cae en `HITO_POR_DEFECTO`; y verifica que ningún texto público del vocabulario
   coincide con un `order_status.value`. Cubre **R16, R17**.
-- [ ] **T1.4 [P] — `lib/config/rastreo-publico.ts`**: máximo de intentos (**defecto 8**), ventana
+- [x] **T1.4 [P] — `lib/config/rastreo-publico.ts`**: máximo de intentos (**defecto 8**), ventana
   (**defecto 10 min**) y dígitos del segundo factor (**defecto 4**), por variable de entorno con
   defecto en código (patrón `lib/config/auth.ts:37-51`).
   **Hecho:** con la variable puesta, el valor efectivo cambia; sin ella, el defecto. Cubre **R10**.
@@ -71,32 +72,32 @@ Dependencias: T1.2 ← T1.1; T1.3 ← T1.2.
 
 ## Bloque 2 — Backend (depende del Bloque 1)
 
-- [ ] **T2.1 [P] — Interfaces** `lib/interfaces/services/IRastreoPublicoService.ts` y
+- [x] **T2.1 [P] — Interfaces** `lib/interfaces/services/IRastreoPublicoService.ts` y
   `lib/interfaces/repositories/IRastreoPublicoRepository.ts`.
   **Hecho:** typecheck verde; un archivo por interfaz, sin implementación dentro.
-- [ ] **T2.2 — `lib/repositories/RastreoPublicoRepository.ts`**: `buscarPorGuia(numGuia)` (select
+- [x] **T2.2 — `lib/repositories/RastreoPublicoRepository.ts`**: `buscarPorGuia(numGuia)` (select
   explícito: `id`, `numGuia`, `telefonoDest`, `deletedAt`) y `listarTransiciones(ordenId)` (select
   explícito: `createdAt` + `estatusDestino.value`), design §1.
   **Hecho:** solo Prisma, sin lógica de negocio; ningún `select` menciona `actorUsuarioId`,
   `origenTipo`, `motivo`, `gestionOrdenId`, `direccion`, `montoCobrar`, `producto`, `notas`,
   `destinatario` ni `mensajeroAsignadoId`.
-- [ ] **T2.3 — `lib/services/RastreoPublicoService.ts`**: identificación, comparación de los **4
+- [x] **T2.3 — `lib/services/RastreoPublicoService.ts`**: identificación, comparación de los **4
   últimos dígitos** normalizados **sin corte temprano** (design §2.3, paso 5), orden con teléfono
   de menos de 4 dígitos tratada como **no consultable** (G2), mapeo de hitos, colapso de rachas
   (G9) y construcción del DTO de 4 campos.
   **Hecho:** construible con dobles; sin import de Prisma ni `next/headers`; el DTO se construye
   campo a campo, nunca por *spread* de una fila.
-- [ ] **T2.4 — Tests unitarios del service** `tests/unit/services/rastreo-publico-service.test.ts`.
+- [x] **T2.4 — Tests unitarios del service** `tests/unit/services/rastreo-publico-service.test.ts`.
   **Hecho:** cubre **R6, R7, R8, R11, R14, R18, R20, R21, R33**.
-- [ ] **T2.5 — `lib/actions/rastreo-publico.ts`** (`'use server'`): zod, IP de `x-forwarded-for`
+- [x] **T2.5 — `lib/actions/rastreo-publico.ts`** (`'use server'`): zod, IP de `x-forwarded-for`
   (patrón `postulacion-mensajero.ts:38-45`), `ResetRateLimiter` a nivel de módulo con clave
   `rastreo:<ip>` — **solo la IP, la guía NO entra en la clave** (G4) —, resultado discriminado.
   **Hecho:** no importa `resolveActorFromSession`; sin `catch` vacíos; el limitador y sus umbrales
   vienen de T1.4; una guardia comprueba que la clave no incorpora el `numGuia`.
-- [ ] **T2.6 — Tests de la action** `tests/unit/actions/rastreo-publico-action.test.ts`.
+- [x] **T2.6 — Tests de la action** `tests/unit/actions/rastreo-publico-action.test.ts`.
   **Hecho:** cubre **R2, R9, R10, R32**; superado el límite, el doble del service **no** recibe
   llamadas.
-- [ ] **T2.7 — Test de integración del repositorio**
+- [x] **T2.7 — Test de integración del repositorio**
   `tests/integration/repositories/rastreo-publico.int.test.ts`.
   **Hecho:** con datos reales, la línea de tiempo sale ordenada asc y una sola consulta; la orden con
   `deleted_at` no se encuentra. Cubre **R21** (parte de datos) y **R7** (caso c).
@@ -107,20 +108,20 @@ Dependencias: T2.2 ← T2.1; T2.3 ← T2.2/T1.2; T2.5 ← T2.3/T1.4.
 
 ## Bloque 3 — UI (depende del Bloque 2)
 
-- [ ] **T3.1 — `app/_landing/RastreoDialog.tsx`** (`"use client"`): `Dialog` + formulario +
+- [x] **T3.1 — `app/_landing/RastreoDialog.tsx`** (`"use client"`): `Dialog` + formulario +
   resultado en el mismo diálogo, estado de carga, mensaje único de rechazo, limpieza al cerrar
   (design §4.2).
   **Hecho:** solo primitivas de `components/ui/dialog.tsx`; `DialogContent` lleva `tema-claro`
   explícito (se portalea fuera del subárbol claro de la landing); `pnpm run lint` verde.
-- [ ] **T3.2 — Tests del diálogo** `tests/components/RastreoDialog.test.tsx`.
+- [x] **T3.2 — Tests del diálogo** `tests/components/RastreoDialog.test.tsx`.
   **Hecho:** cubre **R26, R27, R28, R30, R31**; incluye el caso «con `.dark` en `<html>`, el
   diálogo conserva la paleta clara».
-- [ ] **T3.3 — Activar el disparador en `app/_landing/LandingNav.tsx`**: quitar `disabled`,
+- [x] **T3.3 — Activar el disparador en `app/_landing/LandingNav.tsx`**: quitar `disabled`,
   envolver en `DialogTrigger`, **y corregir el comentario de las líneas 17-19** (ya no es cierto que
   «el seguimiento real vive en `/paquete/[numGuia]`»).
   **Hecho:** el botón abre el diálogo; el comentario describe lo que hay; la nav sigue siendo Server
   Component (solo el diálogo es isla cliente). Cubre **R1**.
-- [ ] **T3.4 — Guardia de estilo** `tests/unit/guards/rastreo-modal-tema.guardia.test.ts`: los
+- [x] **T3.4 — Guardia de estilo** `tests/unit/guards/rastreo-modal-tema.guardia.test.ts`: los
   archivos de UI de la feature no contienen literales hexadecimales, `rgb(`, clases `dark:`,
   `localStorage`, `sessionStorage`, `useSearchParams` ni `router.push`.
   **Hecho:** la guardia pasa y falla si se introduce cualquiera de esos. Cubre **R29, R30**.
@@ -131,29 +132,29 @@ Dependencias: T3.3 ← T3.1.
 
 ## Bloque 4 — Guardias de frontera (paralelo al Bloque 3, depende del Bloque 2)
 
-- [ ] **T4.1 — Guardia de no-fuga de PII**
+- [x] **T4.1 — Guardia de no-fuga de PII**
   `tests/unit/guards/rastreo-dto-lista-blanca.guardia.test.ts`: con una orden poblada con
   dirección, monto, producto, notas, teléfono, mensajero y un historial con actor/motivo/origen,
   compara el **conjunto exacto de claves** del DTO (y de cada entrada de la línea) contra la lista
   blanca, y busca los **valores** sensibles en el resultado serializado.
   **Hecho:** falla si aparece una clave de más o cualquiera de esos valores. Cubre **R22, R23**.
-- [ ] **T4.2 [P] — Guardia de aislamiento del borde**
+- [x] **T4.2 [P] — Guardia de aislamiento del borde**
   `tests/unit/guards/rastreo-frontera.guardia.test.ts`: ningún módulo de la feature importa
   `OrdenHistorialService`, `IOrdenHistorialService`, `OrdenHistorialEntradaDTO`,
   `resolveActorFromSession`, `obtenerEtiquetaPorGuia` ni `paquete-url`; el schema zod tiene
   exactamente dos claves; el `select` del repositorio no nombra campos prohibidos; sin `console.*`
   de la entrada y sin `catch {}`.
   **Hecho:** la guardia pasa. Cubre **R4 (parte), R12, R13, R24, R25**.
-- [ ] **T4.3 [P] — Guardia de no-fuga de estatus internos**
+- [x] **T4.3 [P] — Guardia de no-fuga de estatus internos**
   `tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts`: proyecta un historial que atraviesa
   los 20 values del seed y falla si alguno aparece en el resultado.
   **Hecho:** la guardia pasa. Cubre **R15**.
-- [ ] **T4.4 [P] — Guardia de invariantes de ruta**
+- [x] **T4.4 [P] — Guardia de invariantes de ruta**
   `tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts`: `PUBLIC_ROUTES`, `SELF_AUTH_ROUTES` y
   `REDIRECT_TO_ROOT` conservan su contenido; no hay `page.tsx` nuevo; `db/migrations/` no gana
   carpeta y `db/schema.prisma` no cambia.
   **Hecho:** la guardia pasa. Cubre **R3, R34**.
-- [ ] **T4.5 — Verificar que la feature 79 sigue intacta.**
+- [x] **T4.5 — Verificar que la feature 79 sigue intacta.**
   **Hecho:** `tests/unit/auth/middleware.test.ts` (líneas 116-131 incluidas) pasa **sin
   modificarlo**; los tests de `paquete-url` pasan sin modificarlos. Cubre **R4, R35**.
 
@@ -161,14 +162,14 @@ Dependencias: T3.3 ← T3.1.
 
 ## Bloque 5 — Cierre
 
-- [ ] **T5.1 — Test E2E (Playwright) del flujo sin sesión.**
+- [x] **T5.1 — Test E2E (Playwright) del flujo sin sesión.**
   **Hecho:** con contexto limpio (sin cookie), abrir `/`, pulsar «Rastrear envío», consultar una guía
   sembrada con su segundo factor, y ver la línea de tiempo **dentro del modal**, sin navegar. Segundo
   caso: guía inexistente y factor errado producen el **mismo** texto. Cubre **R2, R7, R26** de punta
   a punta. *Es flujo con superficie pública sin auth → `CHECKPOINTS.md` pide E2E.*
-- [ ] **T5.2 — Mapa `R<n> → test` en `progress/impl_229.md`** con la salida real de los tests.
+- [x] **T5.2 — Mapa `R<n> → test` en `progress/impl_229.md`** con la salida real de los tests.
   **Hecho:** los 35 requisitos tienen test nombrado y salida pegada (`docs/verification.md`).
-- [ ] **T5.3 — `./init.sh` COMPLETO antes del PR.**
+- [x] **T5.3 — `./init.sh` COMPLETO antes del PR.**
   **Hecho:** verde, comparando el total de archivos de la suite contra el baseline (una corrida
   degradada reporta de menos).
 
