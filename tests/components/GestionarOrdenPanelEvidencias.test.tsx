@@ -16,15 +16,21 @@ vi.mock("@/lib/actions/mis-asignaciones", () => ({
   gestionar: vi.fn(),
 }));
 
-// Feature 116: el panel monta `NotaPrivadaMensajero`, que usa `useRouter` e importa estas
-// Server Actions (`"use server"` con Prisma detrás). Se mockean el router y las actions para no
-// cargar Prisma en jsdom; el comportamiento del editor se prueba en `NotaPrivadaMensajero.test.tsx`.
+// Feature 227 (T3.4): el panel monta el HILO de notas y lo lee al abrir la orden. Es otra
+// Server Action (`"use server"` con Prisma detrás) y se mockea igual que `gestionar`: sin
+// esto la lectura falla en jsdom y el bloque pinta su aviso de error, que no es lo que estos
+// casos miden. Hilo vacío y de solo lectura = el mínimo DOM que no interfiere.
+vi.mock("@/lib/actions/orden-notas", () => ({
+  listarNotasOrden: vi
+    .fn()
+    .mockResolvedValue({ status: "ok", notas: [], puedeEscribir: false }),
+  publicarNotaOrden: vi.fn(),
+  borrarNotaOrden: vi.fn(),
+}));
+
+// El panel y sus hijos usan `useRouter`; se mockea para montarlo en jsdom sin el router real.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
-}));
-vi.mock("@/lib/actions/notas-privadas-mensajero", () => ({
-  guardarNotaPrivada: vi.fn(),
-  limpiarNotaPrivada: vi.fn(),
 }));
 
 const { successMock, errorMock } = vi.hoisted(() => ({

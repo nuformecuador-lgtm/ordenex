@@ -74,7 +74,6 @@ function newService(repo: IGestionOrdenRepository) {
   };
   const metaRepo = {
     findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
-    findNotasByMensajero: vi.fn(async () => new Map<string, string>()),
   };
   const service = new MisAsignacionesService(
     repo,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Power, RotateCcw, Undo2 } from "lucide-react";
+import { MessageSquareText, Power, RotateCcw, Undo2 } from "lucide-react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,11 @@ export interface NovedadAccionesProps {
   onHabilitar: (novedad: NovedadDTO) => void;
   /** MAQUETA: sin comportamiento decidido (ver la cabecera de este archivo). */
   onDevolver: (novedad: NovedadDTO) => void;
+  /**
+   * Feature 227 (T3.3): abre el HILO de notas de esta orden. Es la puerta —y la única— por
+   * la que se pide el hilo: la card no lo trae, la lista no lo pide (design §4/A6).
+   */
+  onNotas: (novedad: NovedadDTO) => void;
 }
 
 export function NovedadAcciones({
@@ -57,6 +62,7 @@ export function NovedadAcciones({
   onReprogramar,
   onHabilitar,
   onDevolver,
+  onNotas,
 }: NovedadAccionesProps) {
   // Los tres botones de acción comparten forma (outline · icono) y patrón de `aria-label`
   // («<Verbo> la orden de <destinatario>»), que es lo que los distingue entre sí cuando la
@@ -91,6 +97,17 @@ export function NovedadAcciones({
     },
     { etiqueta: "Habilitar", Icono: Power, onClick: () => onHabilitar(novedad) },
     { etiqueta: "Devolver", Icono: Undo2, onClick: () => onDevolver(novedad) },
+    // Feature 227 (T3.3): "Notas" NO es maqueta —abre el hilo real y lo carga en ese
+    // momento—. Va con los demás y con el mismo patrón de `aria-label` porque es una acción
+    // más de la fila; el icono es propio (`MessageSquareText`) para no chocar con el
+    // `MessageCircle` que el panel del mensajero usa para el CHAT con el cliente, que es
+    // otra conversación y otro canal.
+    //
+    // ⚠️ D3: esto es lo ÚNICO que se añade a la pantalla. NO hay badge, punto ni contador de
+    // "hay notas" en ninguna card: esta feature acaba de RETIRAR los de la nota privada de
+    // esas mismas cards (R21) y no se retiran unos para poner otros. La señal llega con la
+    // ficha 228; hasta entonces, el hilo se descubre abriéndolo.
+    { etiqueta: "Notas", Icono: MessageSquareText, onClick: () => onNotas(novedad) },
   ];
 
   return (

@@ -6,7 +6,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { ChevronDown, Package, StickyNote } from "lucide-react";
+import { ChevronDown, Package } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -27,8 +27,8 @@ import { seccionesVisibles, type PosSecciones } from "./pos-secciones";
 // referencia (terminal de reparto: navegación primero, targets grandes, alto
 // contraste, paleta navy/brand del rebrand). Ensambla las piezas separadas
 // (cabecera, navegación, cobro) y conserva las señales del módulo del mensajero:
-// badges de ruta/"gestionar más tarde", preview de la nota privada y el detalle
-// COMPLETO inline (feature 113/R1) plegado para no perder información.
+// badges de ruta/"gestionar más tarde" y el detalle COMPLETO inline
+// (feature 113/R1) plegado para no perder información.
 //
 // Pedido humano (rama ux): la card NO lleva acciones de contacto ("Llamar" /
 // "WhatsApp") ni el CTA "Gestionar orden". El contacto vive en el panel de gestión;
@@ -196,19 +196,6 @@ export function PosOrderCard({
                 Gestionar más tarde
               </Badge>
             ) : null}
-          </div>
-        ) : null}
-
-        {/* Feature 116/R12: indicador de la NOTA PRIVADA del mensajero (badge + preview). */}
-        {orden.notaPrivada ? (
-          <div className="flex items-center gap-1.5">
-            <Badge variant="secondary" className="shrink-0">
-              <StickyNote aria-hidden="true" />
-              Mi nota
-            </Badge>
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              {orden.notaPrivada}
-            </span>
           </div>
         ) : null}
 

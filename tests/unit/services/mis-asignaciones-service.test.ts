@@ -138,12 +138,11 @@ function fakeRutaRepo(
 // en todas las cards, que es el estado previo a la 115; los tests heredados miden lo mismo.
 function fakeMetaRepo(
   over: Partial<
-    Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero" | "findNotasByMensajero">
+    Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero">
   > = {},
-): Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero" | "findNotasByMensajero"> {
+): Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero"> {
   return {
     findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
-    findNotasByMensajero: vi.fn(async () => new Map<string, string>()), // feature 116
     ...over,
   };
 }
@@ -336,6 +335,36 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     if (r.status !== "ok") return;
     expect(r.porRecoger[0]).toMatchObject({ latitud: 9.9, longitud: -84.1 });
     expect(r.porGestionar[0]).toMatchObject({ latitud: null, longitud: null });
+  });
+
+  // Feature 227 (R21) — la nota privada del mensajero (feature 116) se retiro entera junto con
+  // la columna `orden_mensajero_meta.nota`. Esta asercion es sobre la AUSENCIA, y por eso no se
+  // escribe con `toMatchObject` (que ignora lo que no nombra) sino sobre las CLAVES REALES del
+  // objeto: un `notaPrivada: null` reintroducido por descuido pasaria desapercibido con la
+  // primera forma y aqui no.
+  //
+  // Se comprueba en los DOS grupos porque el campo se emitia en ambos, y con `in` ademas de
+  // `undefined`: el contrato es que la clave NO EXISTE, no que exista valiendo `undefined`
+  // (que es lo que cruzaria el borde RSC como un hueco).
+  it("el DTO no emite el campo de nota privada", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "r", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "g", estatusValue: "en_reparto" }),
+      ]),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    for (const dto of [...r.porRecoger, ...r.porGestionar]) {
+      expect(Object.keys(dto)).not.toContain("notaPrivada");
+      expect("notaPrivada" in dto).toBe(false);
+    }
+    // Y lo que SI sigue viajando, para que este test no pueda quedar verde sobre un DTO vacio:
+    // `marcarLuego` es de la feature 115 y R24 exige que no se lo lleve la retirada.
+    expect(r.porRecoger[0].marcarLuego).toBe(false);
+    expect(r.porGestionar[0].marcarLuego).toBe(false);
   });
 });
 

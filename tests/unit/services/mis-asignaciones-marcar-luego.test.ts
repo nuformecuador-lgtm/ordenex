@@ -69,10 +69,9 @@ const fakeRutaRepo = {
 function build(rows: MiAsignacionRow[], marcadas: Set<string>) {
   const metaRepo: Pick<
     IOrdenMensajeroMetaRepository,
-    "findMarcarLuegoByMensajero" | "findNotasByMensajero"
+    "findMarcarLuegoByMensajero"
   > = {
     findMarcarLuegoByMensajero: vi.fn(async () => marcadas),
-    findNotasByMensajero: vi.fn(async () => new Map<string, string>()), // feature 116
   };
   const service = new MisAsignacionesService(
     fakeRepo(rows),
